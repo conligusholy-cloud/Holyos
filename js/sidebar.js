@@ -18,11 +18,21 @@ function renderSidebar(activeModule) {
   // Compute base path to root
   var basePath = getBasePath();
 
+  var logoSvg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="36" height="36">' +
+    '<defs><linearGradient id="logoGrad" x1="0%" y1="0%" x2="100%" y2="100%">' +
+    '<stop offset="0%" style="stop-color:#6C5CE7"/><stop offset="50%" style="stop-color:#0984E3"/><stop offset="100%" style="stop-color:#00B894"/>' +
+    '</linearGradient></defs>' +
+    '<rect width="100" height="100" rx="22" fill="url(#logoGrad)"/>' +
+    '<rect x="22" y="22" width="10" height="56" rx="4" fill="white"/>' +
+    '<rect x="68" y="22" width="10" height="56" rx="4" fill="white"/>' +
+    '<rect x="32" y="42" width="36" height="10" rx="4" fill="white"/>' +
+    '</svg>';
+
   var html = '' +
     '<div class="sidebar-header">' +
-      '<div class="sidebar-logo">V</div>' +
+      '<div class="sidebar-logo">' + logoSvg + '</div>' +
       '<div>' +
-        '<h1>Výroba</h1>' +
+        '<h1>HOLYOS</h1>' +
         '<p>Řízení výroby</p>' +
       '</div>' +
     '</div>' +
@@ -55,7 +65,7 @@ function renderSidebar(activeModule) {
   html += '  </a>';
   html += '</div>';
 
-  html += '<div class="sidebar-footer">Výroba v0.1 — Best Series</div>';
+  html += '<div class="sidebar-footer">HOLYOS v0.1 — Best Series</div>';
 
   var sidebar = document.getElementById('sidebar');
   if (sidebar) sidebar.innerHTML = html;

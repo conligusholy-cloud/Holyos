@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 120" width="400" height="120">
+  <defs>
+    <linearGradient id="accentGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#A29BFE;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#74B9FF;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#55EFC4;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="hexGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#A29BFE;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#55EFC4;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="400" height="120" rx="12" fill="#1A1A2E"/>
+
+  <!-- Icon -->
+  <g transform="translate(20, 12)">
+    <!-- Hexagon outline -->
+    <polygon points="48,2 86,24 86,68 48,90 10,68 10,24" fill="none" stroke="url(#hexGrad)" stroke-width="2.5"/>
+
+    <!-- H letterform -->
+    <rect x="24" y="22" width="7" height="46" rx="2.5" fill="url(#hexGrad)"/>
+    <rect x="61" y="22" width="7" height="46" rx="2.5" fill="url(#hexGrad)"/>
+    <rect x="31" y="40" width="30" height="7" rx="2.5" fill="url(#hexGrad)"/>
+
+    <!-- Corner accents -->
+    <circle cx="48" cy="10" r="2.5" fill="#55EFC4" opacity="0.8"/>
+    <circle cx="48" cy="82" r="2.5" fill="#A29BFE" opacity="0.8"/>
+  </g>
+
+  <!-- HOLYOS text -->
+  <text x="125" y="63" font-family="'Segoe UI', 'SF Pro Display', -apple-system, Arial, sans-serif" font-size="44" font-weight="700" letter-spacing="5">
+    <tspan fill="#FAFAFA">HOLY</tspan><tspan fill="url(#accentGrad)">OS</tspan>
+  </text>
+
+  <!-- Tagline -->
+  <text x="127" y="83" font-family="'Segoe UI', 'SF Pro Display', -apple-system, Arial, sans-serif" font-size="10" font-weight="400" letter-spacing="5.5" fill="#636E72">
+    PRODUCTION MANAGEMENT
+  </text>
+
+  <!-- Subtle bottom accent line -->
+  <rect x="20" y="104" width="360" height="2" rx="1" fill="url(#accentGrad)" opacity="0.3"/>
+</svg>
