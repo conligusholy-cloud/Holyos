@@ -1,0 +1,5 @@
+.env
+data/users.json
+data/storage/
+node_modules/
+*.xlsx

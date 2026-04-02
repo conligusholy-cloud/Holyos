@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Vytvoření areálu — Správa areálů</title>
+  <base href="../../">
+  <link rel="stylesheet" href="css/dashboard.css">
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<aside id="sidebar" class="sidebar"></aside>
+
+<!-- MAIN -->
+<div class="main-wrapper">
+  <div class="main-header">
+    <h2>Vytvoření areálu</h2>
+    <div class="main-header-right">
+      <span id="current-date"></span>
+    </div>
+  </div>
+  <div class="main-content">
+
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:20px;">
+      <span style="font-size:14px; color:var(--text2);">Uložené areály</span>
+      <a id="btn-new-sim" class="btn btn-primary">+ Nový areál</a>
+    </div>
+
+    <div id="sim-list" class="sim-list"></div>
+
+  </div>
+</div>
+
+<!-- Confirm Dialog -->
+<div id="confirm-dialog" class="modal-overlay" style="display:none;">
+  <div class="modal-box">
+    <h3 id="confirm-title">Smazat areál?</h3>
+    <p id="confirm-text">Tato akce je nevratná.</p>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeConfirm()">Zrušit</button>
+      <button class="btn btn-danger" onclick="doConfirm()">Smazat</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div id="toast" class="toast"></div>
+
+<script src="js/sidebar.js"></script>
+<script src="js/persistent-storage.js"></script>
+<script>
+  var STORAGE_KEY = 'vyroba_simulations';
+  // Použít cestu s trailing slash (ne index.html) aby serve neztrácelo URL parametry
+  var EDITOR_URL = 'modules/vytvoreni-arealu/';
+
+  // Set "new simulation" button href
+  document.getElementById('btn-new-sim').href = EDITOR_URL;
+
+  function getAllSimulations() {
+    try {
+      var raw = (typeof PersistentStorage !== 'undefined')
+        ? PersistentStorage.getItemSync(STORAGE_KEY)
+        : localStorage.getItem(STORAGE_KEY);
+      return raw ? JSON.parse(raw) : [];
+    } catch (e) { return []; }
+  }
+
+  function saveAllSimulations(sims) {
+    if (typeof PersistentStorage !== 'undefined') {
+      PersistentStorage.setItem(STORAGE_KEY, JSON.stringify(sims));
+    } else {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(sims));
+    }
+  }
+
+  function renderList() {
+    var container = document.getElementById('sim-list');
+    var sims = getAllSimulations();
+
+    if (sims.length === 0) {
+      container.innerHTML =
+        '<div class="empty-state">' +
+          '<div class="empty-icon">&#128466;</div>' +
+          '<p>Žádné uložené areály.<br>Otevřete editor, nakreslete půdorys a uložte areál.</p>' +
+          '<a href="' + EDITOR_URL + '" class="btn btn-primary">+ Nová simulace</a>' +
+        '</div>';
+      return;
+    }
+
+    container.innerHTML = sims.map(function(sim) {
+      // Dvojitý zápis: query param + hash fallback (serve občas ztrácí query params)
+      var editUrl = EDITOR_URL + '?sim=' + sim.id + '#sim=' + sim.id;
+      return '<div class="sim-card" data-id="' + sim.id + '">' +
+        '<div class="sim-icon">&#9998;</div>' +
+        '<div class="sim-info">' +
+          '<div class="sim-name" id="name-' + sim.id + '">' + escapeHtml(sim.name) + '</div>' +
+          '<div class="sim-meta">' +
+            '<span>' + (sim.objectCount || 0) + ' objektů</span>' +
+            '<span>' + (sim.connectionCount || 0) + ' spojení</span>' +
+            '<span>Upraveno: ' + formatDate(sim.updatedAt) + '</span>' +
+          '</div>' +
+        '</div>' +
+        '<div class="sim-actions">' +
+          '<a href="' + editUrl + '" class="btn btn-primary btn-sm">Otevřít</a>' +
+          '<button class="btn btn-sm" onclick="startRename(\'' + sim.id + '\')">Přejmenovat</button>' +
+          '<button class="btn btn-sm" onclick="duplicateSim(\'' + sim.id + '\')">Kopie</button>' +
+          '<button class="btn btn-sm" onclick="exportSim(\'' + sim.id + '\')">JSON</button>' +
+          '<button class="btn btn-danger btn-sm" onclick="confirmDelete(\'' + sim.id + '\')">Smazat</button>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+  }
+
+  function startRename(id) {
+    var sims = getAllSimulations();
+    var sim = sims.find(function(s) { return s.id === id; });
+    if (!sim) return;
+    var nameEl = document.getElementById('name-' + id);
+    var oldName = sim.name;
+    nameEl.innerHTML = '<input class="rename-input" value="' + escapeHtml(oldName) + '" ' +
+      'onblur="finishRename(\'' + id + '\', this.value)" ' +
+      'onkeydown="if(event.key===\'Enter\')this.blur();">';
+    var input = nameEl.querySelector('input');
+    input.focus();
+    input.select();
+  }
+
+  function finishRename(id, newName) {
+    newName = newName.trim();
+    if (!newName) { renderList(); return; }
+    var sims = getAllSimulations();
+    var sim = sims.find(function(s) { return s.id === id; });
+    if (sim) {
+      sim.name = newName;
+      sim.updatedAt = new Date().toISOString();
+      saveAllSimulations(sims);
+    }
+    renderList();
+  }
+
+  function duplicateSim(id) {
+    var sims = getAllSimulations();
+    var sim = sims.find(function(s) { return s.id === id; });
+    if (!sim) return;
+    var copy = JSON.parse(JSON.stringify(sim));
+    copy.id = 'sim_' + Date.now();
+    copy.name = sim.name + ' (kopie)';
+    copy.createdAt = new Date().toISOString();
+    copy.updatedAt = copy.createdAt;
+    sims.unshift(copy);
+    saveAllSimulations(sims);
+    renderList();
+    showToast('Areál duplikován');
+  }
+
+  function exportSim(id) {
+    var sims = getAllSimulations();
+    var sim = sims.find(function(s) { return s.id === id; });
+    if (!sim) return;
+    var blob = new Blob([JSON.stringify(sim, null, 2)], { type: 'application/json' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = sim.name.replace(/[^a-zA-Z0-9 _-]/g, '') + '.json';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+
+  var pendingDeleteId = null;
+
+  function confirmDelete(id) {
+    var sims = getAllSimulations();
+    var sim = sims.find(function(s) { return s.id === id; });
+    if (!sim) return;
+    pendingDeleteId = id;
+    document.getElementById('confirm-title').textContent = 'Smazat areál?';
+    document.getElementById('confirm-text').textContent = 'Opravdu chcete smazat "' + sim.name + '"? Tato akce je nevratná.';
+    document.getElementById('confirm-dialog').style.display = 'flex';
+  }
+
+  function doConfirm() {
+    if (pendingDeleteId) {
+      var sims = getAllSimulations();
+      sims = sims.filter(function(s) { return s.id !== pendingDeleteId; });
+      saveAllSimulations(sims);
+      pendingDeleteId = null;
+      closeConfirm();
+      renderList();
+      showToast('Areál smazán');
+    }
+  }
+
+  function closeConfirm() {
+    document.getElementById('confirm-dialog').style.display = 'none';
+    pendingDeleteId = null;
+  }
+
+  function formatDate(iso) {
+    if (!iso) return '—';
+    var d = new Date(iso);
+    return d.toLocaleDateString('cs-CZ', { day: 'numeric', month: 'short', year: 'numeric' })
+      + ' ' + d.toLocaleTimeString('cs-CZ', { hour: '2-digit', minute: '2-digit' });
+  }
+
+  function escapeHtml(s) {
+    var div = document.createElement('div');
+    div.textContent = s;
+    return div.innerHTML;
+  }
+
+  function showToast(message) {
+    var toast = document.getElementById('toast');
+    toast.textContent = message;
+    toast.classList.add('show');
+    setTimeout(function() { toast.classList.remove('show'); }, 2500);
+  }
+
+  // Init
+  renderSidebar('vytvoreni-arealu');
+  initDate();
+  // Načíst data ze souboru, pak zobrazit seznam
+  if (typeof PersistentStorage !== 'undefined') {
+    PersistentStorage.migrateFromLocalStorage([STORAGE_KEY]).then(function() {
+      return PersistentStorage.init([STORAGE_KEY]);
+    }).then(function() { renderList(); }).catch(function() { renderList(); });
+  } else {
+    renderList();
+  }
+
+  window.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') closeConfirm();
+  });
+</script>
+
+</body>
+</html>

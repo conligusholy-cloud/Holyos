@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Programování výroby — Výběr areálu</title>
+  <base href="../../">
+  <link rel="stylesheet" href="css/dashboard.css">
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<aside id="sidebar" class="sidebar"></aside>
+
+<!-- MAIN -->
+<div class="main-wrapper">
+  <div class="main-header">
+    <h2>Programování výroby</h2>
+    <div class="main-header-right">
+      <span id="current-date"></span>
+    </div>
+  </div>
+  <div class="main-content">
+
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:20px;">
+      <span style="font-size:14px; color:var(--text2);">Vyberte areál pro programování pracovišť a logistiky</span>
+    </div>
+
+    <div id="areal-list" class="sim-list"></div>
+
+  </div>
+</div>
+
+<!-- Toast -->
+<div id="toast" class="toast"></div>
+
+<script src="js/sidebar.js"></script>
+<script src="js/persistent-storage.js"></script>
+<script>
+  var STORAGE_KEY = 'vyroba_simulations';
+  var EDITOR_URL = 'modules/programovani-vyroby/';
+
+  function getAllSimulations() {
+    try {
+      var raw = (typeof PersistentStorage !== 'undefined')
+        ? PersistentStorage.getItemSync(STORAGE_KEY)
+        : localStorage.getItem(STORAGE_KEY);
+      return raw ? JSON.parse(raw) : [];
+    } catch (e) { return []; }
+  }
+
+  function renderList() {
+    var container = document.getElementById('areal-list');
+    var sims = getAllSimulations();
+
+    if (sims.length === 0) {
+      container.innerHTML =
+        '<div class="empty-state">' +
+          '<div class="empty-icon">&#128466;</div>' +
+          '<p>Žádné uložené areály.<br>Nejprve vytvořte areál v modulu <strong>Vytvoření areálu</strong>.</p>' +
+          '<a href="modules/vytvoreni-arealu/simulace.html" class="btn btn-primary">Přejít na Vytvoření areálu</a>' +
+        '</div>';
+      return;
+    }
+
+    container.innerHTML = sims.map(function(sim) {
+      var editUrl = EDITOR_URL + '?areal=' + sim.id + '#areal=' + sim.id;
+      return '<div class="sim-card" data-id="' + sim.id + '">' +
+        '<div class="sim-icon" style="background:rgba(139,92,246,0.15); color:#8b5cf6;">&#9998;</div>' +
+        '<div class="sim-info">' +
+          '<div class="sim-name">' + escapeHtml(sim.name) + '</div>' +
+          '<div class="sim-meta">' +
+            '<span>' + (sim.objectCount || 0) + ' objektů</span>' +
+            '<span>Upraveno: ' + formatDate(sim.updatedAt) + '</span>' +
+          '</div>' +
+        '</div>' +
+        '<div class="sim-actions">' +
+          '<a href="' + editUrl + '" class="btn btn-primary btn-sm">Programovat</a>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+  }
+
+  function formatDate(iso) {
+    if (!iso) return '—';
+    var d = new Date(iso);
+    return d.toLocaleDateString('cs-CZ', { day: 'numeric', month: 'short', year: 'numeric' })
+      + ' ' + d.toLocaleTimeString('cs-CZ', { hour: '2-digit', minute: '2-digit' });
+  }
+
+  function escapeHtml(s) {
+    var div = document.createElement('div');
+    div.textContent = s;
+    return div.innerHTML;
+  }
+
+  function showToast(message) {
+    var toast = document.getElementById('toast');
+    toast.textContent = message;
+    toast.classList.add('show');
+    setTimeout(function() { toast.classList.remove('show'); }, 2500);
+  }
+
+  // Init
+  renderSidebar('programovani-vyroby');
+  initDate();
+  if (typeof PersistentStorage !== 'undefined') {
+    PersistentStorage.migrateFromLocalStorage([STORAGE_KEY]).then(function() {
+      return PersistentStorage.init([STORAGE_KEY]);
+    }).then(function() { renderList(); }).catch(function() { renderList(); });
+  } else {
+    renderList();
+  }
+</script>
+
+</body>
+</html>

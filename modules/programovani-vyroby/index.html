@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Programování výroby — Editor</title>
+  <script>
+    if (!window.location.pathname.endsWith('/') && !window.location.pathname.endsWith('.html')) {
+      window.location.replace(window.location.pathname + '/' + window.location.search + window.location.hash);
+    }
+  </script>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+<!-- TOOLBAR -->
+<div id="toolbar">
+  <a href="simulace.html" class="btn btn-back" title="Zpět na výběr areálu">&#8592;</a>
+  <h1>Programování výroby</h1>
+  <div class="toolbar-group">
+    <button class="btn btn-icon" onclick="zoomIn()" title="Přiblížit">+</button>
+    <span id="zoom-display">100%</span>
+    <button class="btn btn-icon" onclick="zoomOut()" title="Oddálit">−</button>
+    <button class="btn btn-icon" onclick="zoomFit()" title="Zobrazit vše">⊞</button>
+  </div>
+  <div class="toolbar-group">
+    <button class="btn btn-icon" onclick="undo()" title="Zpět (Ctrl+Z)">↩</button>
+    <button class="btn btn-icon" onclick="redo()" title="Znovu (Ctrl+Y)">↪</button>
+  </div>
+  <div class="toolbar-group">
+    <button class="btn" onclick="toggleGrid()" id="btn-grid" title="Přepnout mřížku">Mřížka</button>
+    <button class="btn" onclick="toggleSnap()" id="btn-snap" title="Přichytávání">Snap</button>
+  </div>
+  <div class="toolbar-group">
+    <button class="btn" onclick="saveProject()" title="Uložit konfiguraci (Ctrl+S)">💾 Uložit</button>
+    <button class="btn" onclick="saveProjectAs()" title="Uložit jako novou kopii">Uložit jako…</button>
+    <button class="btn" onclick="loadProject()" title="Načíst ze souboru">Načíst</button>
+    <button class="btn" onclick="exportJSON()" title="Stáhnout jako JSON">JSON</button>
+    <button class="btn" onclick="exportPNG()" title="Export jako PNG">PNG</button>
+  </div>
+  <span id="coords-display">X: 0.0 m &nbsp; Y: 0.0 m</span>
+</div>
+
+<!-- MAIN — vertikální split: nahoře plán, dole pracoviště -->
+<div id="main">
+
+  <!-- HORNÍ ČÁST: PLÁTNO + PROPERTIES -->
+  <div id="top-section">
+    <!-- CANVAS -->
+    <div id="canvas-container">
+      <svg id="canvas" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <pattern id="grid-small" width="20" height="20" patternUnits="userSpaceOnUse">
+            <path d="M 20 0 L 0 0 0 20" fill="none" class="grid-line"/>
+          </pattern>
+          <pattern id="grid-large" width="100" height="100" patternUnits="userSpaceOnUse">
+            <rect width="100" height="100" fill="url(#grid-small)"/>
+            <path d="M 100 0 L 0 0 0 100" fill="none" class="grid-line-major"/>
+          </pattern>
+        </defs>
+        <g id="grid-layer">
+          <rect id="grid-rect" width="10000" height="10000" fill="url(#grid-large)" x="-5000" y="-5000"/>
+        </g>
+        <g id="connection-layer"></g>
+        <g id="object-layer"></g>
+        <g id="draw-layer"></g>
+        <g id="snap-layer"></g>
+        <g id="label-layer"></g>
+      </svg>
+      <div id="draw-status" style="display:none;"></div>
+      <div id="draw-distance-input" style="display:none;">
+        <label>Délka hrany:</label>
+        <input type="number" id="draw-dist-field" step="0.5" min="0.1" placeholder="m"
+          onkeydown="if(event.key==='Enter'){confirmDistanceAndPlace(); event.preventDefault();} if(event.key==='Escape'){hideDistanceInput(); event.stopPropagation();}">
+        <button class="btn btn-small" onclick="confirmDistanceAndPlace()">OK</button>
+      </div>
+    </div>
+
+    <!-- PROPERTIES (pravý panel) -->
+    <div id="properties" class="empty-state">
+      <p>Vyber objekt na plátně<br>nebo přetáhni z palety</p>
+    </div>
+  </div>
+
+  <!-- RESIZE HANDLE -->
+  <div id="split-handle" title="Táhni pro změnu velikosti">
+    <div class="split-handle-line"></div>
+  </div>
+
+  <!-- DOLNÍ ČÁST: PRACOVIŠTĚ Z FACTORIFY -->
+  <div id="bottom-panel">
+    <div id="bottom-panel-header">
+      <div class="bottom-panel-title">
+        <span style="color:#60a5fa;">☁</span>
+        <span>Pracoviště z Factorify</span>
+        <span id="ws-count" class="ws-count"></span>
+      </div>
+      <div class="bottom-panel-tools">
+        <button class="btn btn-small-tool btn-ws-config" onclick="openWsConfigDialog()" title="Konfigurace pracovišť a rozměrů">
+          ⚙ Pracoviště a rozměry
+        </button>
+        <div class="tools-separator"></div>
+        <div class="palette-item-mini" draggable="true" data-type="sklad" title="Přetáhni sklad na plán">
+          <span class="mini-icon" style="color:var(--cesta);">▦</span> Sklad
+        </div>
+        <div class="palette-item-mini" draggable="true" data-type="vstup" title="Přetáhni vstup/výstup na plán">
+          <span class="mini-icon" style="color:var(--accent);">⇥</span> Vstup/Výstup
+        </div>
+        <button class="btn btn-small-tool" id="connect-mode-btn" onclick="toggleConnectMode()" title="Propojit 2 objekty">
+          ⟶ Propojit
+        </button>
+        <input type="text" id="ws-search" placeholder="Hledat pracoviště…" class="ws-search-input">
+        <button class="btn btn-small-tool" onclick="FactorifyAPI.loadWorkstations()" title="Znovu načíst">↻</button>
+      </div>
+    </div>
+    <div id="workstation-grid">
+      <!-- Sem se vygenerují karty pracovišť -->
+      <div id="factorify-panel"></div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Drag ghost -->
+<div id="drag-ghost"></div>
+
+<!-- Hidden file input -->
+<input type="file" id="file-input" accept=".json" style="display:none">
+
+<!-- Save Dialog -->
+<div id="save-dialog" class="modal-overlay" style="display:none;">
+  <div class="modal-box">
+    <h3>Uložit konfiguraci</h3>
+    <div class="prop-group">
+      <label>Název konfigurace</label>
+      <input type="text" id="save-name" placeholder="Např. Varianta A" onkeydown="if(event.key==='Enter')confirmSave()">
+    </div>
+    <div id="save-existing-list" class="save-existing-list"></div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeSaveDialog()">Zrušit</button>
+      <button class="btn btn-primary" onclick="confirmSave()">Uložit</button>
+    </div>
+  </div>
+</div>
+
+<!-- Workstation Config Dialog -->
+<div id="ws-config-dialog" class="modal-overlay" style="display:none;">
+  <div class="modal-box modal-box-wide">
+    <h3>Pracoviště a základní rozměry</h3>
+    <div class="ws-config-defaults">
+      <label>Výchozí rozměry pro nová pracoviště:</label>
+      <div style="display:flex;align-items:center;gap:6px;margin-top:4px;">
+        <input type="number" id="ws-cfg-default-w" value="2" min="0.5" max="50" step="0.5" style="width:65px;" title="Šířka (m)">
+        <span>×</span>
+        <input type="number" id="ws-cfg-default-h" value="2" min="0.5" max="50" step="0.5" style="width:65px;" title="Výška (m)">
+        <span style="font-size:12px;color:var(--text2);">m</span>
+        <button class="btn btn-small" onclick="wsConfigApplyDefaults()" title="Nastavit na všechna nepoužitá" style="margin-left:8px;">Aplikovat na vše</button>
+      </div>
+    </div>
+    <div class="ws-config-table-wrap">
+      <table class="ws-config-table" id="ws-config-table">
+        <thead>
+          <tr>
+            <th style="width:36px;"><input type="checkbox" id="ws-cfg-check-all" onchange="wsConfigToggleAll(this.checked)" title="Vybrat/odebrat vše"></th>
+            <th>Pracoviště</th>
+            <th>Kód</th>
+            <th style="width:70px;">Šířka (m)</th>
+            <th style="width:70px;">Výška (m)</th>
+            <th style="width:60px;">Stav</th>
+          </tr>
+        </thead>
+        <tbody id="ws-config-tbody"></tbody>
+      </table>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeWsConfigDialog()">Zrušit</button>
+      <button class="btn btn-primary" onclick="saveWsConfig()">Uložit</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div id="toast" class="toast"></div>
+
+<!-- JS moduly (pořadí je důležité) -->
+<script src="js/config.js"></script>
+<script src="js/state.js"></script>
+<script src="js/history.js"></script>
+<script src="js/renderer.js"></script>
+<script src="js/objects.js"></script>
+<script src="js/properties.js"></script>
+<script src="js/interactions.js"></script>
+<script src="js/factorify-api.js"></script>
+<script src="../../js/persistent-storage.js"></script>
+<script src="js/storage.js"></script>
+<script src="js/app.js"></script>
+
+</body>
+</html>

@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pracovní postup | Výroba</title>
+  <base href="../../">
+  <link rel="stylesheet" href="css/dashboard.css">
+  <link rel="stylesheet" href="modules/pracovni-postup/css/styles.css">
+</head>
+<body>
+  <aside id="sidebar" class="sidebar"></aside>
+
+  <div class="main-wrapper" style="display:flex;flex-direction:column;height:100vh;">
+
+    <!-- Toolbar -->
+    <div class="toolbar">
+      <h1>Pracovní postup</h1>
+      <div class="search-box">
+        <span class="search-icon">🔍</span>
+        <input type="text" id="search-input" placeholder="Hledat výrobek (název, kód)...">
+      </div>
+      <span class="count-badge" id="count-badge">—</span>
+      <button class="btn" onclick="loadProducts()">↻ Obnovit</button>
+    </div>
+
+    <!-- Status bar -->
+    <div class="status-bar">
+      <span class="status-dot disconnected" id="status-dot"></span>
+      <span id="status-text">Nepřipojeno</span>
+    </div>
+
+    <!-- Product list -->
+    <div class="product-list" id="product-list">
+      <div class="empty-state">
+        <p>Načítám...</p>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Toast -->
+  <div id="toast" class="toast"></div>
+
+  <!-- Skripty — pořadí je důležité -->
+  <script src="js/sidebar.js"></script>
+  <script src="modules/pracovni-postup/js/factorify-api.js"></script>
+  <script src="modules/pracovni-postup/js/app.js"></script>
+  <script>renderSidebar('pracovni-postup');</script>
+</body>
+</html>

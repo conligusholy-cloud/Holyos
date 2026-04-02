@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Simulace výroby</title>
+  <script>
+    // Fix relative paths when URL doesn't have trailing slash or .html
+    (function() {
+      var path = window.location.pathname;
+      if (!path.endsWith('/') && !path.endsWith('.html')) {
+        var base = document.createElement('base');
+        base.href = path + '/';
+        document.head.appendChild(base);
+      }
+    })();
+  </script>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <div id="app">
+
+    <!-- TOOLBAR -->
+    <div id="toolbar">
+      <h1>Simulace výroby</h1>
+      <div class="toolbar-group">
+        <button class="btn" onclick="openProductDialog()" title="Vybrat zboží k simulaci">🏭 Zboží</button>
+        <button class="btn" onclick="openConfigDialog()" title="Nastavení simulace">⚙ Nastavení</button>
+      </div>
+      <div class="toolbar-group">
+        <button class="btn btn-primary" id="btn-play" onclick="startSimulation()" title="Spustit simulaci">▶ Spustit</button>
+        <button class="btn" id="btn-pause" onclick="pauseSimulation()" title="Pozastavit" disabled>⏸ Pauza</button>
+        <button class="btn" id="btn-stop" onclick="stopSimulation()" title="Zastavit" disabled>⏹ Stop</button>
+        <button class="btn" id="btn-step" onclick="stepSimulation()" title="Jeden krok">⏭ Krok</button>
+      </div>
+      <div class="toolbar-group">
+        <label class="speed-label" title="Rychlost simulace">
+          Rychlost:
+          <input type="range" id="sim-speed" min="0.1" max="10" step="0.1" value="1" oninput="setSimSpeed(this.value)">
+          <span id="speed-display">1×</span>
+        </label>
+      </div>
+      <div class="toolbar-group" style="margin-left:auto;">
+        <span id="sim-time" class="sim-time">00:00:00</span>
+        <span id="sim-status" class="sim-status">Připraveno</span>
+      </div>
+    </div>
+
+    <!-- MAIN CONTENT -->
+    <div id="main">
+      <!-- LEFT: Floor plan with animation -->
+      <div id="canvas-section">
+        <div id="canvas-container">
+          <svg id="canvas" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <pattern id="grid-small" patternUnits="userSpaceOnUse"><path fill="none" stroke="rgba(255,255,255,0.03)"/></pattern>
+              <pattern id="grid-large" patternUnits="userSpaceOnUse"><rect fill="url(#grid-small)"/><path fill="none" stroke="rgba(255,255,255,0.06)"/></pattern>
+            </defs>
+            <rect id="grid-rect" x="-5000" y="-5000" width="15000" height="15000" fill="url(#grid-large)"/>
+            <g id="object-layer"></g>
+            <g id="connection-layer"></g>
+            <g id="animation-layer"></g>
+          </svg>
+        </div>
+        <div id="canvas-footer">
+          <span id="zoom-display">100%</span>
+          <span id="coords-display">X: 0 Y: 0</span>
+        </div>
+      </div>
+
+      <!-- RIGHT: Metrics panel -->
+      <div id="metrics-panel">
+        <div class="metrics-section">
+          <h3>Vybrané zboží</h3>
+          <div id="product-info" class="empty-state">Vyberte zboží tlačítkem "Zboží"</div>
+        </div>
+        <div class="metrics-section">
+          <h3>Pracovní postup</h3>
+          <div id="route-info" class="empty-state">—</div>
+        </div>
+        <div class="metrics-section">
+          <h3>Průběh simulace</h3>
+          <div id="sim-progress"></div>
+        </div>
+        <div class="metrics-section">
+          <h3>Metriky</h3>
+          <div id="metrics-summary">
+            <div class="metric-card">
+              <div class="metric-label">Celkový čas</div>
+              <div class="metric-value" id="metric-total-time">—</div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-label">Produktivní čas</div>
+              <div class="metric-value" id="metric-productive-time">—</div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-label">Čekání</div>
+              <div class="metric-value" id="metric-wait-time">—</div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-label">Přesuny</div>
+              <div class="metric-value" id="metric-move-time">—</div>
+            </div>
+          </div>
+        </div>
+        <div class="metrics-section">
+          <h3>Vytížení pracovišť</h3>
+          <div id="utilization-chart"></div>
+        </div>
+        <div class="metrics-section">
+          <h3>Úzká místa</h3>
+          <div id="bottleneck-info" class="empty-state">Spusťte simulaci</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Product Selection Dialog -->
+  <div id="product-dialog" class="modal-overlay" style="display:none;">
+    <div class="modal-box modal-box-wide">
+      <h3>Vybrat zboží</h3>
+      <div style="margin-bottom:12px;">
+        <input type="text" id="product-search" placeholder="Hledat zboží…" class="search-input" oninput="filterProducts(this.value)">
+      </div>
+      <div class="product-table-wrap">
+        <table class="data-table" id="product-table">
+          <thead>
+            <tr>
+              <th>Název</th>
+              <th>Kód</th>
+              <th>Typ</th>
+              <th style="width:80px;">Akce</th>
+            </tr>
+          </thead>
+          <tbody id="product-tbody">
+            <tr><td colspan="4" class="empty-state">Načítám…</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="modal-actions">
+        <button class="btn" onclick="closeProductDialog()">Zavřít</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Simulation Config Dialog -->
+  <div id="config-dialog" class="modal-overlay" style="display:none;">
+    <div class="modal-box">
+      <h3>Nastavení simulace</h3>
+      <div class="prop-group">
+        <label>Počet kusů k výrobě</label>
+        <input type="number" id="cfg-batch-size" value="1" min="1" max="1000" step="1">
+      </div>
+      <div class="prop-group">
+        <label>Rychlost přesunu mezi pracovišti (m/s)</label>
+        <input type="number" id="cfg-move-speed" value="1" min="0.1" max="10" step="0.1">
+      </div>
+      <div class="prop-group">
+        <label>Zdrojová konfigurace pracovišť</label>
+        <select id="cfg-prog-select"></select>
+      </div>
+      <div class="modal-actions">
+        <button class="btn" onclick="closeConfigDialog()">Zrušit</button>
+        <button class="btn btn-primary" onclick="applyConfig()">Použít</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div id="toast" class="toast"></div>
+
+  <script src="../../js/persistent-storage.js"></script>
+  <script src="js/state.js"></script>
+  <script src="js/factorify-sim.js"></script>
+  <script src="js/renderer.js"></script>
+  <script src="js/simulation.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
