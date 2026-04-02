@@ -213,7 +213,7 @@ function getLoginPage(error) {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Přihlášení — Výroba</title>
+  <title>Přihlášení — HOLYOS</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     :root {
@@ -232,10 +232,11 @@ function getLoginPage(error) {
       box-shadow: 0 8px 32px rgba(0,0,0,0.3);
     }
     .login-logo {
-      width: 56px; height: 56px; background: var(--accent);
+      width: 56px; height: 56px;
       border-radius: 14px; display: flex; align-items: center; justify-content: center;
-      font-size: 28px; font-weight: 700; color: #fff; margin: 0 auto 16px;
+      margin: 0 auto 16px; overflow: hidden;
     }
+    .login-logo svg { width: 56px; height: 56px; }
     h1 { text-align: center; font-size: 22px; margin-bottom: 4px; }
     .subtitle { text-align: center; color: var(--text2); font-size: 14px; margin-bottom: 28px; }
     label { display: block; font-size: 13px; color: var(--text2); margin-bottom: 6px; margin-top: 16px; }
@@ -261,8 +262,8 @@ function getLoginPage(error) {
 </head>
 <body>
   <div class="login-card">
-    <div class="login-logo">V</div>
-    <h1>Výroba</h1>
+    <div class="login-logo"><svg viewBox="0 0 100 100"><defs><linearGradient id="lg" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" style="stop-color:#6C5CE7"/><stop offset="50%" style="stop-color:#0984E3"/><stop offset="100%" style="stop-color:#00B894"/></linearGradient></defs><rect width="100" height="100" rx="22" fill="url(#lg)"/><rect x="22" y="22" width="10" height="56" rx="4" fill="white"/><rect x="68" y="22" width="10" height="56" rx="4" fill="white"/><rect x="32" y="42" width="36" height="10" rx="4" fill="white"/></svg></div>
+    <h1>HOLYOS</h1>
     <p class="subtitle">Přihlaste se pro přístup do systému</p>
     ${errorHtml}
     <form method="POST" action="/auth/login">
@@ -272,7 +273,7 @@ function getLoginPage(error) {
       <input type="password" id="password" name="password" required autocomplete="current-password">
       <button type="submit">Přihlásit se</button>
     </form>
-    <div class="footer">Výroba v0.1 — Best Series</div>
+    <div class="footer">HOLYOS v0.1 — Best Series</div>
   </div>
 </body>
 </html>`;
@@ -288,7 +289,7 @@ function getAdminPage(session) {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Správa uživatelů — Výroba</title>
+  <title>Správa uživatelů — HOLYOS</title>
   <link rel="stylesheet" href="/css/dashboard.css">
   <style>
     .admin-container { max-width: 800px; margin: 0 auto; padding: 20px; }
