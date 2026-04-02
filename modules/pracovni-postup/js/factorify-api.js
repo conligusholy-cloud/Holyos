@@ -18,7 +18,7 @@ const FactorifyAPI = {
 
   config: {
     baseUrl: 'https://bs.factorify.cloud',
-    proxyUrl: 'http://localhost:3001',
+    proxyUrl: window.location.origin,
     useProxy: true,
     securityToken: '',
     headers: {

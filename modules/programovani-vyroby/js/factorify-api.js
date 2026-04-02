@@ -23,7 +23,7 @@ const FactorifyAPI = {
   // Konfigurace (načtená z .env)
   config: {
     baseUrl: 'https://bs.factorify.cloud',
-    proxyUrl: 'http://localhost:3001',  // CORS proxy
+    proxyUrl: window.location.origin,  // CORS proxy
     useProxy: true,                      // true = volat přes proxy
     securityToken: '',
     workstationEntity: 'Stage',

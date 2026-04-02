@@ -11,7 +11,7 @@
    ============================================ */
 
 var PersistentStorage = (function() {
-  var SERVER_URL = 'http://localhost:3001';
+  var SERVER_URL = window.location.origin;
   var _cache = {};
   var _serverAvailable = null; // null = neznámo, true/false
 
