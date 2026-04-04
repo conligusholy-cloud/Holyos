@@ -91,6 +91,7 @@
       <div class="tab" data-tab="materials" onclick="switchTab('materials')">📦 Zboží</div>
       <div class="tab" data-tab="warehouses" onclick="switchTab('warehouses')">🏭 Sklady</div>
       <div class="tab" data-tab="movements" onclick="switchTab('movements')">🔄 Pohyby</div>
+      <div class="tab" data-tab="inventories" onclick="switchTab('inventories')">📋 Inventury</div>
     </div>
 
     <div class="stats-bar" id="stats-bar"></div>
@@ -180,6 +181,22 @@
         </div>
         <div id="movements-table"></div>
       </div>
+
+      <!-- TAB: Inventury -->
+      <div class="tab-content" id="tab-inventories">
+        <div class="toolbar">
+          <select id="inv-status-filter" onchange="loadInventories()">
+            <option value="">Všechny stavy</option>
+            <option value="draft">Připraveno</option>
+            <option value="in_progress">Probíhá</option>
+            <option value="completed">Dokončeno</option>
+          </select>
+          <select id="inv-wh-filter" onchange="loadInventories()"></select>
+          <div style="flex:1"></div>
+          <button class="btn btn-primary" onclick="openInventoryModal()">+ Nová inventura</button>
+        </div>
+        <div id="inventories-table"></div>
+      </div>
     </div>
   </div>
 
@@ -223,6 +240,7 @@
       if (tab === 'materials') loadMaterials();
       if (tab === 'warehouses') loadWarehouses();
       if (tab === 'movements') { loadMovements(); populateMovementFilters(); }
+      if (tab === 'inventories') { loadInventories(); initInvWhFilter(); }
     }
 
     function switchOrderTab(type) {
@@ -801,6 +819,184 @@
       data.unit_price = parseFloat(data.unit_price) || 0;
       await fetch('/api/wh/movements', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(data) });
       closeModal(); loadMovements(); loadStats(); loadMaterials();
+    }
+
+    // ============================================================
+    // INVENTURY
+    // ============================================================
+    let inventories = [];
+    const INV_STATUSES = { draft: { label: 'Připraveno', color: '#64748b' }, in_progress: { label: 'Probíhá', color: '#f59e0b' }, completed: { label: 'Dokončeno', color: '#10b981' } };
+
+    async function loadInventories() {
+      const params = new URLSearchParams();
+      const st = document.getElementById('inv-status-filter')?.value;
+      const wh = document.getElementById('inv-wh-filter')?.value;
+      if (st) params.set('status', st);
+      if (wh) params.set('warehouse_id', wh);
+      const res = await fetch('/api/wh/inventories?' + params);
+      inventories = await res.json();
+      renderInventories();
+    }
+
+    function renderInventories() {
+      const el = document.getElementById('inventories-table');
+      if (!inventories.length) { el.innerHTML = '<div class="empty-state"><div class="empty-icon">📋</div><h3>Žádné inventury</h3><p>Vytvořte první inventuru</p></div>'; return; }
+      let h = '<table class="data-table"><thead><tr><th>Název</th><th>Sklad</th><th>Stav</th><th>Položky</th><th>Rozdíl</th><th>Vytvořeno</th><th></th></tr></thead><tbody>';
+      for (const inv of inventories) {
+        const st = INV_STATUSES[inv.status] || { label: inv.status, color: '#64748b' };
+        const progress = inv.items_total ? Math.round(inv.items_counted / inv.items_total * 100) : 0;
+        const diff = inv.value_difference ? (inv.value_difference > 0 ? '+' : '') + inv.value_difference.toFixed(2) + ' Kč' : '—';
+        const diffColor = inv.value_difference > 0 ? '#10b981' : inv.value_difference < 0 ? '#ef4444' : 'var(--text2)';
+        h += '<tr onclick="openInventoryDetail(' + inv.id + ')">' +
+          '<td class="person-name">' + (inv.name || '—') + '</td>' +
+          '<td>' + (inv.warehouse_name || '—') + '</td>' +
+          '<td><span class="badge" style="background:' + st.color + '22;color:' + st.color + '">' + st.label + '</span></td>' +
+          '<td>' + inv.items_counted + '/' + inv.items_total + ' <span style="color:var(--text2);font-size:11px">(' + progress + '%)</span></td>' +
+          '<td style="color:' + diffColor + ';font-weight:600">' + diff + '</td>' +
+          '<td style="color:var(--text2);font-size:12px">' + new Date(inv.created_at).toLocaleDateString('cs-CZ') + '</td>' +
+          '<td style="text-align:right">' +
+            (inv.status === 'draft' ? '<button class="btn btn-sm btn-primary" onclick="event.stopPropagation();startInventory(' + inv.id + ')">▶ Zahájit</button> ' : '') +
+            (inv.status === 'draft' ? '<button class="btn btn-sm btn-danger" onclick="event.stopPropagation();deleteInventory(' + inv.id + ')">✕</button>' : '') +
+          '</td></tr>';
+      }
+      h += '</tbody></table>';
+      el.innerHTML = h;
+    }
+
+    function initInvWhFilter() {
+      const sel = document.getElementById('inv-wh-filter');
+      if (!sel) return;
+      sel.innerHTML = '<option value="">Všechny sklady</option>' + warehouses.map(w => '<option value="' + w.id + '">' + w.name + '</option>').join('');
+    }
+
+    function openInventoryModal() {
+      const whOpts = warehouses.map(w => '<option value="' + w.id + '">' + w.name + '</option>').join('');
+      document.getElementById('modal-root').innerHTML = '<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal" style="max-width:500px;"><h2>📋 Nová inventura</h2>' +
+        '<form onsubmit="saveInventory(event)"><div class="form-grid">' +
+          '<div class="form-group full"><label>Název</label><input type="text" name="name" placeholder="Inventura ' + new Date().toLocaleDateString('cs-CZ') + '"></div>' +
+          '<div class="form-group"><label>Sklad *</label><select name="warehouse_id" required>' + whOpts + '</select></div>' +
+          '<div class="form-group full"><label>Poznámka</label><textarea name="note"></textarea></div>' +
+        '</div><div class="modal-actions"><button type="button" class="btn btn-secondary" onclick="closeModal()">Zrušit</button><button type="submit" class="btn btn-primary">Vytvořit</button></div></form></div></div>';
+    }
+
+    async function saveInventory(e) {
+      e.preventDefault();
+      const f = new FormData(e.target);
+      const data = { warehouse_id: parseInt(f.get('warehouse_id')), name: f.get('name'), note: f.get('note') };
+      await fetch('/api/wh/inventories', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(data) });
+      closeModal(); loadInventories();
+    }
+
+    async function startInventory(id) {
+      if (!confirm('Zahájit inventuru? Po zahájení se začne počítat.')) return;
+      await fetch('/api/wh/inventories/' + id + '/start', { method: 'PUT' });
+      loadInventories();
+    }
+
+    async function deleteInventory(id) {
+      if (!confirm('Smazat inventuru?')) return;
+      await fetch('/api/wh/inventories/' + id, { method: 'DELETE' });
+      loadInventories();
+    }
+
+    async function openInventoryDetail(id) {
+      const res = await fetch('/api/wh/inventories/' + id);
+      const inv = await res.json();
+      const st = INV_STATUSES[inv.status] || { label: inv.status, color: '#64748b' };
+      const isActive = inv.status === 'in_progress';
+      const isDraft = inv.status === 'draft';
+      const isCompleted = inv.status === 'completed';
+
+      let itemsHtml = '';
+      if (inv.items && inv.items.length) {
+        itemsHtml = '<div style="max-height:400px;overflow-y:auto;margin-top:16px;"><table class="data-table"><thead><tr><th>Zboží</th><th>Kód</th><th>Pozice</th><th>Očekáváno</th><th>Skutečnost</th><th>Rozdíl</th>' + (isActive ? '<th></th>' : '') + '</tr></thead><tbody>';
+        for (const it of inv.items) {
+          const diffVal = it.actual_qty !== null ? it.difference : null;
+          const diffStr = diffVal !== null ? (diffVal > 0 ? '+' : '') + diffVal : '—';
+          const diffColor = diffVal > 0 ? '#10b981' : diffVal < 0 ? '#ef4444' : 'var(--text2)';
+          const countedBg = it.actual_qty !== null ? 'rgba(16,185,129,0.06)' : '';
+          itemsHtml += '<tr style="background:' + countedBg + ';cursor:default">' +
+            '<td class="person-name">' + it.material_name + '</td>' +
+            '<td style="color:var(--text2);font-size:12px">' + (it.material_code || '') + '</td>' +
+            '<td style="font-size:12px">' + (it.location_label || '—') + '</td>' +
+            '<td>' + (it.expected_qty != null ? it.expected_qty : 0) + '</td>' +
+            '<td style="font-weight:600">' + (it.actual_qty !== null ? it.actual_qty : '<span style="color:var(--text2)">—</span>') + '</td>' +
+            '<td style="color:' + diffColor + ';font-weight:600">' + diffStr + '</td>';
+          if (isActive) {
+            itemsHtml += '<td style="text-align:right"><button class="btn btn-sm btn-secondary" onclick="countItem(' + inv.id + ',' + it.id + ',' + (it.expected_qty || 0) + ',\'' + (it.material_name || '').replace(/'/g, "\\'") + '\',' + (it.actual_qty !== null ? it.actual_qty : 'null') + ')">✏️ Počítat</button></td>';
+          }
+          itemsHtml += '</tr>';
+        }
+        itemsHtml += '</tbody></table></div>';
+      } else {
+        itemsHtml = '<div class="empty-state" style="padding:30px"><div class="empty-icon">📦</div><h3>Žádné položky</h3><p>Přegenerujte položky</p></div>';
+      }
+
+      const counted = inv.items ? inv.items.filter(i => i.actual_qty !== null).length : 0;
+      const total = inv.items ? inv.items.length : 0;
+      const progress = total ? Math.round(counted / total * 100) : 0;
+      const totalDiff = inv.items ? inv.items.reduce((s, i) => s + (i.value_difference || 0), 0) : 0;
+
+      let actionsHtml = '<button class="btn btn-secondary" onclick="closeModal()">Zavřít</button>';
+      if (isDraft) {
+        actionsHtml += ' <button class="btn btn-primary" onclick="closeModal();startInventory(' + inv.id + ')">▶ Zahájit inventuru</button>';
+      }
+      if (isActive) {
+        actionsHtml += ' <button class="btn btn-secondary" onclick="regenerateItems(' + inv.id + ')">🔄 Přegenerovat</button>';
+        actionsHtml += ' <button class="btn btn-primary" onclick="completeInventory(' + inv.id + ')" style="background:#10b981;border-color:#10b981">✅ Dokončit</button>';
+      }
+
+      document.getElementById('modal-root').innerHTML = '<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal" style="max-width:800px;">' +
+        '<div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:16px;">' +
+          '<div><h2 style="margin-bottom:4px">' + (inv.name || 'Inventura') + '</h2>' +
+          '<span style="color:var(--text2);font-size:13px">' + (inv.warehouse_name || '') + '</span></div>' +
+          '<span class="badge" style="background:' + st.color + '22;color:' + st.color + ';font-size:13px;padding:4px 12px">' + st.label + '</span>' +
+        '</div>' +
+        '<div style="display:flex;gap:24px;margin-bottom:8px;">' +
+          '<div style="font-size:13px"><span style="color:var(--text2)">Postup:</span> <strong>' + counted + '/' + total + '</strong> <span style="color:var(--text2)">(' + progress + '%)</span></div>' +
+          '<div style="font-size:13px"><span style="color:var(--text2)">Hodnotový rozdíl:</span> <strong style="color:' + (totalDiff > 0 ? '#10b981' : totalDiff < 0 ? '#ef4444' : 'var(--text)') + '">' + (totalDiff > 0 ? '+' : '') + totalDiff.toFixed(2) + ' Kč</strong></div>' +
+        '</div>' +
+        (progress > 0 ? '<div style="background:var(--bg);border-radius:6px;height:6px;margin-bottom:12px;overflow:hidden"><div style="background:#f59e0b;height:100%;width:' + progress + '%;border-radius:6px;transition:width 0.3s"></div></div>' : '') +
+        (inv.note ? '<div style="color:var(--text2);font-size:12px;margin-bottom:8px">📝 ' + inv.note + '</div>' : '') +
+        itemsHtml +
+        '<div class="modal-actions">' + actionsHtml + '</div>' +
+      '</div></div>';
+    }
+
+    function countItem(invId, itemId, expected, matName, currentActual) {
+      const currentVal = currentActual !== null && currentActual !== undefined ? currentActual : '';
+      document.getElementById('modal-root').innerHTML = '<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal" style="max-width:400px;">' +
+        '<h2>✏️ Počítání položky</h2>' +
+        '<div style="margin-bottom:16px;padding:12px;background:var(--bg);border-radius:8px;">' +
+          '<div style="font-weight:600;font-size:14px">' + matName + '</div>' +
+          '<div style="color:var(--text2);font-size:13px;margin-top:4px">Očekávané množství: <strong style="color:var(--text)">' + expected + '</strong></div>' +
+        '</div>' +
+        '<form onsubmit="saveCount(event,' + invId + ',' + itemId + ')">' +
+          '<div class="form-group"><label>Skutečné množství *</label><input type="number" name="actual_qty" step="0.01" min="0" required value="' + currentVal + '" autofocus style="font-size:18px;padding:12px;text-align:center"></div>' +
+          '<div class="form-group" style="margin-top:8px"><label>Poznámka</label><textarea name="note" rows="2"></textarea></div>' +
+          '<div class="modal-actions"><button type="button" class="btn btn-secondary" onclick="openInventoryDetail(' + invId + ')">Zpět</button><button type="submit" class="btn btn-primary">Uložit</button></div>' +
+        '</form></div></div>';
+      setTimeout(() => { const inp = document.querySelector('input[name="actual_qty"]'); if(inp) inp.focus(); }, 100);
+    }
+
+    async function saveCount(e, invId, itemId) {
+      e.preventDefault();
+      const f = new FormData(e.target);
+      const data = { actual_qty: parseFloat(f.get('actual_qty')), note: f.get('note') || '' };
+      await fetch('/api/wh/inventory-items/' + itemId, { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(data) });
+      openInventoryDetail(invId);
+    }
+
+    async function regenerateItems(id) {
+      if (!confirm('Přegenerovat položky? Tím se resetují všechna dosavadní počítání.')) return;
+      await fetch('/api/wh/inventories/' + id + '/regenerate', { method: 'POST' });
+      openInventoryDetail(id);
+    }
+
+    async function completeInventory(id) {
+      const apply = confirm('Dokončit inventuru a aplikovat rozdíly do skladu?\n\nStiskněte OK pro aplikování korekčních pohybů,\nnebo Zrušit pro dokončení bez změn.');
+      await fetch('/api/wh/inventories/' + id + '/complete', { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ apply_differences: apply }) });
+      closeModal(); loadInventories(); loadStats();
     }
 
     // ============================================================
