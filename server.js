@@ -883,6 +883,66 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // --- CUSTOM MODULES (add / update / remove) ---
+  if (pathname === '/api/mindmap/modules' && req.method === 'GET') {
+    const current = loadMindmapData();
+    sendJSON(res, 200, current.customModules || []);
+    return;
+  }
+
+  if (pathname === '/api/mindmap/modules' && req.method === 'POST') {
+    try {
+      const body = JSON.parse(await readBody(req));
+      const { id, icon, label, color, phase, desc, features, connections } = body;
+      if (!id || !label) { sendJSON(res, 400, { error: 'id and label required' }); return; }
+      const current = loadMindmapData();
+      if (!current.customModules) current.customModules = [];
+      const existing = current.customModules.findIndex(m => m.id === id);
+      const mod = { id, icon: icon || '📦', label, color: color || '#6c5ce7', phase: phase || 3, desc: desc || '', features: features || [], connections: connections || [] };
+      if (existing >= 0) current.customModules[existing] = mod;
+      else current.customModules.push(mod);
+      saveMindmapData(current);
+      sendJSON(res, 200, { ok: true, module: mod });
+    } catch (e) { sendJSON(res, 500, { error: e.message }); }
+    return;
+  }
+
+  const modDeleteMatch = pathname.match(/^\/api\/mindmap\/modules\/([a-z0-9_-]+)$/);
+  if (modDeleteMatch && req.method === 'DELETE') {
+    try {
+      const modId = modDeleteMatch[1];
+      const current = loadMindmapData();
+      if (!current.customModules) current.customModules = [];
+      const idx = current.customModules.findIndex(m => m.id === modId);
+      if (idx < 0) { sendJSON(res, 404, { error: 'Custom module not found' }); return; }
+      current.customModules.splice(idx, 1);
+      // Also mark as hidden if it's a built-in
+      if (!current.hiddenModules) current.hiddenModules = [];
+      saveMindmapData(current);
+      sendJSON(res, 200, { ok: true });
+    } catch (e) { sendJSON(res, 500, { error: e.message }); }
+    return;
+  }
+
+  // HIDE / SHOW built-in module
+  if (pathname === '/api/mindmap/modules/toggle-visibility' && req.method === 'POST') {
+    try {
+      const body = JSON.parse(await readBody(req));
+      const { moduleId, hidden } = body;
+      if (!moduleId) { sendJSON(res, 400, { error: 'moduleId required' }); return; }
+      const current = loadMindmapData();
+      if (!current.hiddenModules) current.hiddenModules = [];
+      if (hidden) {
+        if (!current.hiddenModules.includes(moduleId)) current.hiddenModules.push(moduleId);
+      } else {
+        current.hiddenModules = current.hiddenModules.filter(id => id !== moduleId);
+      }
+      saveMindmapData(current);
+      sendJSON(res, 200, { ok: true });
+    } catch (e) { sendJSON(res, 500, { error: e.message }); }
+    return;
+  }
+
   // GET version history
   if (pathname === '/api/mindmap/versions' && req.method === 'GET') {
     sendJSON(res, 200, loadVersions().map(v => ({ id: v.id, date: v.date, description: v.description })));
