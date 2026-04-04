@@ -58,6 +58,21 @@
       font-family: 'Consolas', monospace; white-space: pre-wrap; line-height: 1.5; max-height: 400px; overflow-y: auto; }
 
     .screenshot-modal img { max-width: 100%; max-height: 80vh; border-radius: 8px; }
+
+    @media (max-width: 768px) {
+      .main-wrapper { margin-left: 0 !important; }
+      .module-header { padding: 14px 16px 12px 56px !important; }
+      .module-header h1 { font-size: 17px !important; }
+      .module-body { padding: 12px 14px !important; }
+      .stats-bar { flex-wrap: nowrap; overflow-x: auto; }
+      .stat-mini { flex-shrink: 0; }
+      .task-card { padding: 12px 14px; }
+      .task-header { flex-direction: column; gap: 6px; }
+      .task-actions { flex-wrap: wrap; }
+      .task-screenshot { max-width: 100%; }
+      .modal-overlay { align-items: flex-end; }
+      .modal { max-width: 100% !important; width: 100% !important; border-radius: 14px 14px 0 0 !important; }
+    }
   </style>
 </head>
 <body>
