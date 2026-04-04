@@ -136,60 +136,78 @@
     .att-card .att-status { font-size: 11px; color: var(--text2); }
 
     /* Org chart */
-    /* Org chart — Factorify-style hierarchical layout */
-    .org-chart-wrapper { position: relative; overflow-x: auto; overflow-y: visible; padding: 20px 0; }
-    .org-chart { display: flex; flex-direction: column; gap: 0; min-width: fit-content; }
+    /* Org chart — Tree layout with SVG connectors */
+    .org-tree-wrapper { overflow-x: auto; overflow-y: visible; padding: 24px 0; -webkit-overflow-scrolling: touch; }
+    .org-tree-inner { display: inline-block; min-width: 100%; }
 
-    .org-level { display: flex; align-items: flex-start; min-height: 80px; position: relative; }
-    .org-level-num {
-      width: 48px; flex-shrink: 0; font-size: 36px; font-weight: 800; color: rgba(108,92,231,0.12);
-      display: flex; align-items: flex-start; justify-content: center; padding-top: 16px; user-select: none;
-    }
-    .org-level-cards { display: flex; gap: 16px; flex-wrap: wrap; padding: 12px 0; flex: 1; position: relative; }
+    .org-tree-node { display: flex; flex-direction: column; align-items: center; }
+    .org-tree-children { display: flex; gap: 20px; justify-content: center; position: relative; padding-top: 24px; }
 
-    /* Connecting lines */
-    .org-level-cards::before {
-      content: ''; position: absolute; left: 0; right: 0; top: 0;
-      border-top: 2px solid var(--border); opacity: 0.4;
+    /* Connector lines via CSS */
+    .org-tree-children::before {
+      content: ''; position: absolute; top: 0; left: 50%; width: 0; height: 24px;
+      border-left: 2px solid rgba(108,92,231,0.3);
     }
-    .org-level:first-child .org-level-cards::before { display: none; }
+    .org-tree-children > .org-tree-node { position: relative; }
+    .org-tree-children > .org-tree-node::before {
+      content: ''; position: absolute; top: -24px; left: 50%; width: 0; height: 24px;
+      border-left: 2px solid rgba(108,92,231,0.3);
+    }
+    /* Horizontal connector between siblings */
+    .org-tree-children > .org-tree-node:not(:only-child)::after {
+      content: ''; position: absolute; top: -24px; height: 0; border-top: 2px solid rgba(108,92,231,0.3);
+    }
+    .org-tree-children > .org-tree-node:first-child:not(:only-child)::after {
+      left: 50%; right: -10px;
+    }
+    .org-tree-children > .org-tree-node:last-child:not(:only-child)::after {
+      right: 50%; left: -10px;
+    }
+    .org-tree-children > .org-tree-node:not(:first-child):not(:last-child)::after {
+      left: -10px; right: -10px;
+    }
+
+    /* Vertical line from parent to horizontal bar */
+    .org-tree-node > .org-tree-children::before {
+      content: ''; position: absolute; top: 0; left: 50%; width: 0; height: 24px;
+      border-left: 2px solid rgba(108,92,231,0.3);
+    }
 
     .org-card {
       background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
-      min-width: 200px; max-width: 260px; overflow: hidden; transition: all 0.2s; flex-shrink: 0;
+      width: 240px; overflow: hidden; transition: all 0.2s; flex-shrink: 0;
     }
     .org-card:hover { border-color: rgba(108,92,231,0.4); box-shadow: 0 4px 16px rgba(0,0,0,0.2); }
 
     .org-card-header {
-      padding: 8px 12px; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: space-between;
-      text-transform: uppercase; letter-spacing: 0.3px;
+      padding: 8px 12px; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: space-between;
+      color: #e0e0f0; /* readable on dark bg */
     }
     .org-card-header-actions { display: flex; gap: 4px; }
-    .org-card-header-actions button { background: none; border: none; cursor: pointer; font-size: 11px; opacity: 0.6; padding: 0 2px; }
+    .org-card-header-actions button { background: none; border: none; cursor: pointer; font-size: 11px; opacity: 0.7; padding: 0 2px; color: inherit; }
     .org-card-header-actions button:hover { opacity: 1; }
 
-    .org-card-badge { font-size: 10px; display: flex; align-items: center; gap: 3px; opacity: 0.8; font-weight: 400; text-transform: none; }
+    .org-card-badge { font-size: 10px; display: flex; align-items: center; gap: 3px; opacity: 0.7; font-weight: 400; }
 
-    .org-card-people { padding: 6px 0; }
+    .org-card-people { padding: 4px 0; }
     .org-card-person {
-      display: flex; align-items: center; gap: 10px; padding: 6px 12px; cursor: pointer; transition: background 0.15s;
+      display: flex; align-items: center; gap: 10px; padding: 7px 12px; cursor: pointer; transition: background 0.15s;
     }
     .org-card-person:hover { background: rgba(108,92,231,0.08); }
 
     .org-card-avatar {
-      width: 36px; height: 36px; border-radius: 50%; flex-shrink: 0; overflow: hidden;
+      width: 40px; height: 40px; border-radius: 50%; flex-shrink: 0; overflow: hidden;
       background: var(--surface2); display: flex; align-items: center; justify-content: center;
-      font-size: 14px; font-weight: 600; color: var(--text2); border: 2px solid var(--border);
+      font-size: 15px; font-weight: 600; color: var(--text2); border: 2px solid var(--border);
     }
     .org-card-avatar img { width: 100%; height: 100%; object-fit: cover; }
 
     .org-card-info { flex: 1; min-width: 0; }
     .org-card-name { font-size: 13px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .org-card-detail { font-size: 11px; color: var(--text2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .org-card-email { font-size: 11px; color: #a78bfa; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .org-card-phone { font-size: 11px; color: var(--text2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
     .org-card-empty { padding: 10px 12px; font-size: 11px; color: var(--text2); font-style: italic; }
-
-    .org-connector { width: 2px; height: 20px; background: var(--border); margin: 0 auto; opacity: 0.4; }
 
     .tab-content { display: none; }
     .tab-content.active { display: block; }
@@ -227,7 +245,9 @@
       .modal-overlay { align-items: flex-end; }
       .modal { width: 100% !important; max-width: 100% !important; border-radius: 14px 14px 0 0; }
       .data-table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
-      .org-level-cards { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+      .org-tree-wrapper { overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 16px; }
+      .org-tree-children { flex-wrap: nowrap; }
+      .org-tree-node { min-width: 180px; }
       .perm-table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
       .person-name { white-space: nowrap; }
     }
@@ -944,20 +964,15 @@
         return;
       }
 
-      // Build role hierarchy using parent_role_id
-      // Each "card" is a role with its people
+      // Build role hierarchy
       const roleMap = {};
       for (const r of roles) roleMap[r.id] = { ...r, children: [], people: [] };
 
-      // Assign people to their roles
       const activePeople = people.filter(p => p.active === 1);
       for (const p of activePeople) {
-        if (p.role_id && roleMap[p.role_id]) {
-          roleMap[p.role_id].people.push(p);
-        }
+        if (p.role_id && roleMap[p.role_id]) roleMap[p.role_id].people.push(p);
       }
 
-      // Build parent-child relationships
       const rootRoles = [];
       for (const r of roles) {
         if (r.parent_role_id && roleMap[r.parent_role_id]) {
@@ -967,89 +982,87 @@
         }
       }
 
-      // Build levels by BFS
-      const levels = [];
-      let currentLevel = rootRoles;
-      while (currentLevel.length > 0) {
-        levels.push(currentLevel);
-        const nextLevel = [];
-        for (const role of currentLevel) {
-          nextLevel.push(...role.children);
-        }
-        currentLevel = nextLevel;
-      }
-
-      // Also add people without roles (unassigned)
       const unassigned = activePeople.filter(p => !p.role_id || !roleMap[p.role_id]);
 
-      // Count all subordinates for a role (recursive)
       function countSubs(role) {
         let count = role.people.length;
         for (const c of role.children) count += countSubs(c);
         return count;
       }
 
-      // Render
-      let html = '<div class="org-chart-wrapper"><div class="org-chart">';
+      function renderCard(role) {
+        const dept = role.department_id ? departments.find(d => d.id === role.department_id) : null;
+        const bgColor = dept ? dept.color : '#6c5ce7';
+        const totalSubs = countSubs(role);
 
-      levels.forEach((levelRoles, levelIdx) => {
-        html += `<div class="org-level">
-          <div class="org-level-num">${levelIdx + 1}</div>
-          <div class="org-level-cards">`;
-
-        for (const role of levelRoles) {
-          const dept = role.department_id ? departments.find(d => d.id === role.department_id) : null;
-          const color = dept ? dept.color : '#6c5ce7';
-          const totalSubs = countSubs(role);
-          const directCount = role.people.length;
-
-          html += `<div class="org-card">
-            <div class="org-card-header" style="background:${color}22; color:${color};">
-              <span>${role.name}${dept ? ',' + dept.name : ''}</span>
-              <div style="display:flex;align-items:center;gap:8px;">
-                <span class="org-card-badge">👥 ${totalSubs}${directCount !== totalSubs ? ' (' + directCount + ')' : ''}</span>
-                <div class="org-card-header-actions">
-                  <button onclick="event.stopPropagation();openRoleModal(${role.id})" title="Upravit roli">✏️</button>
-                </div>
+        let html = `<div class="org-card">
+          <div class="org-card-header" style="background:${bgColor}33;">
+            <span>${role.name}</span>
+            <div style="display:flex;align-items:center;gap:6px;">
+              <span class="org-card-badge">👥 ${totalSubs}</span>
+              <div class="org-card-header-actions">
+                <button onclick="event.stopPropagation();openRoleModal(${role.id})" title="Upravit roli">✏️</button>
               </div>
             </div>
-            <div class="org-card-people">`;
+          </div>
+          <div class="org-card-people">`;
 
-          if (role.people.length > 0) {
-            for (const p of role.people) {
-              const avatar = p.photo_url
-                ? `<img src="${p.photo_url}">`
-                : `<span>${p.first_name.charAt(0).toUpperCase()}</span>`;
-              const detail = [p.email, p.phone].filter(Boolean).join(' · ');
-              html += `<div class="org-card-person" onclick="openPersonModal(${p.id})">
-                <div class="org-card-avatar">${avatar}</div>
-                <div class="org-card-info">
-                  <div class="org-card-name">${p.last_name} ${p.first_name}</div>
-                  <div class="org-card-detail">${detail || '—'}</div>
-                </div>
-              </div>`;
-            }
-          } else {
-            html += '<div class="org-card-empty">Žádní zaměstnanci</div>';
+        if (role.people.length > 0) {
+          for (const p of role.people) {
+            const avatar = p.photo_url
+              ? `<img src="${p.photo_url}">`
+              : `<span>${p.first_name.charAt(0).toUpperCase()}</span>`;
+            html += `<div class="org-card-person" onclick="openPersonModal(${p.id})">
+              <div class="org-card-avatar">${avatar}</div>
+              <div class="org-card-info">
+                <div class="org-card-name">${p.last_name} ${p.first_name}</div>
+                ${p.email ? '<div class="org-card-email">' + p.email + '</div>' : ''}
+                ${p.phone ? '<div class="org-card-phone">' + p.phone + '</div>' : ''}
+              </div>
+            </div>`;
           }
-
-          html += '</div></div>';
+        } else {
+          html += '<div class="org-card-empty">Žádní zaměstnanci</div>';
         }
-
         html += '</div></div>';
-      });
+        return html;
+      }
+
+      function renderTreeNode(role) {
+        let html = '<div class="org-tree-node">';
+        html += renderCard(role);
+        if (role.children.length > 0) {
+          html += '<div class="org-tree-children">';
+          for (const child of role.children) {
+            html += renderTreeNode(child);
+          }
+          html += '</div>';
+        }
+        html += '</div>';
+        return html;
+      }
+
+      // Render tree
+      let html = '<div class="org-tree-wrapper"><div class="org-tree-inner">';
+      if (rootRoles.length === 1) {
+        html += renderTreeNode(rootRoles[0]);
+      } else {
+        // Multiple roots — wrap in a virtual container
+        html += '<div class="org-tree-children" style="padding-top:0;">';
+        for (const root of rootRoles) html += renderTreeNode(root);
+        html += '</div>';
+      }
+      html += '</div></div>';
 
       // Unassigned people
       if (unassigned.length > 0) {
-        html += `<div class="org-level">
-          <div class="org-level-num">?</div>
-          <div class="org-level-cards">
-            <div class="org-card">
-              <div class="org-card-header" style="background:rgba(156,163,175,0.15); color:#9ca3af;">
-                <span>Bez přiřazené role</span>
-                <span class="org-card-badge">👥 ${unassigned.length}</span>
-              </div>
-              <div class="org-card-people">`;
+        html += `<div style="margin-top:24px;">
+          <div class="org-card" style="max-width:280px;">
+            <div class="org-card-header" style="background:rgba(156,163,175,0.15);">
+              <span>Bez přiřazené role</span>
+              <span class="org-card-badge">👥 ${unassigned.length}</span>
+            </div>
+            <div class="org-card-people">`;
         for (const p of unassigned) {
           const avatar = p.photo_url
             ? `<img src="${p.photo_url}">`
@@ -1058,16 +1071,14 @@
             <div class="org-card-avatar">${avatar}</div>
             <div class="org-card-info">
               <div class="org-card-name">${p.last_name} ${p.first_name}</div>
-              <div class="org-card-detail">${p.email || '—'}</div>
+              ${p.email ? '<div class="org-card-email">' + p.email + '</div>' : ''}
             </div>
           </div>`;
         }
-        html += '</div></div></div></div>';
+        html += '</div></div></div>';
       }
 
-      html += '</div></div>';
-
-      // Also render department management below
+      // Department management
       html += '<div style="margin-top:32px;"><h3 style="font-size:15px;margin-bottom:12px;color:var(--text2);">📂 Oddělení</h3>';
       html += '<div style="display:flex;flex-wrap:wrap;gap:10px;">';
       for (const d of departments) {

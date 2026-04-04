@@ -314,6 +314,20 @@ function analyzeRequest(description, pageTitle) {
   // Build a contextual analysis
   var analysis = { response: '', followups: [] };
 
+  // ---- Org chart / organizační struktura ----
+  if (d.match(/organi[čz]|struktur|strom|hierar|schéma|propoj|čár|větv|úrovn|nadřaz|podříz/) && !d.match(/responsiv|mobil|telefon|tablet/)) {
+    analysis.response = 'Rozumím — chcete upravit organizační strukturu. ';
+    if (page.includes('hr')) {
+      analysis.response += 'Teď máme stromovou strukturu s rolemi propojenými čarami. ';
+    }
+    analysis.response += 'Co konkrétně potřebujete změnit?\n\n';
+    analysis.response += '• <strong>Vizuální stránka</strong> — barvy, velikost karet, propojovací čáry, fotky lidí?\n';
+    analysis.response += '• <strong>Hierarchie</strong> — přidat/změnit nadřazené role, nové úrovně?\n';
+    analysis.response += '• <strong>Informace na kartách</strong> — jméno, email, telefon, foto, pozice?\n\n';
+    analysis.response += 'Popište mi, jak by to mělo vypadat — ideálně přiložte screenshot, pokud máte vzor.';
+    return analysis;
+  }
+
   // ---- Responsivita / mobilní přístup ----
   if (d.match(/responsiv|mobil|telefon|tablet|phone|touch/)) {
     var affectedPages = [];
