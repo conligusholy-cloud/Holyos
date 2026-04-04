@@ -932,7 +932,7 @@ const DEPLOY_STATUS = {
     0: 'full',    // Evidence lidí ✅
     1: 'full',    // Organizační struktura a role ✅
     2: 'full',    // Docházka ✅ (kiosek, směny, absence, export, přesčasy, dovolené, celozávodní, nastavení)
-    3: 'partial', // Pracovní poměry
+    3: 'full',    // Pracovní poměry ✅ (smlouvy, dokumenty, šablony, generování, upozornění)
     4: 'none',    // Mzdy a výplaty
     // Sub-features: "parentIndex.subIndex"
     '0.0': 'full',    // Lidé obecně — kontakty, dodavatelé, zákazníci ✅
@@ -944,7 +944,7 @@ const DEPLOY_STATUS = {
     '2.1': 'full',    // Přesčasy a dovolené ✅ (leave requests, absence types, overtime dashboard, leave balances, company-wide leave, settings)
     '2.2': 'full',    // Přiřazení čipů k zaměstnancům ✅ (chip_card_id pole v person, findPersonByChip)
     '2.3': 'full',    // Export docházkových listů pro účetní ✅ (CSV surová + upravená data, souhrn s přesčasy)
-    '3.0': 'none',    // Smlouvy a dokumenty
+    '3.0': 'full',    // Smlouvy a dokumenty ✅ (CRUD, šablony s proměnnými, generování, soubory, upozornění na expirace)
     '3.1': 'full',    // Začátek a konec pracovního poměru ✅
     '3.2': 'full',    // Definice pracovních pozic ✅
   }

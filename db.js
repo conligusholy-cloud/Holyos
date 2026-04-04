@@ -15,7 +15,7 @@ const DB_FILE = path.join(DATA_DIR, 'hr.json');
 const AUDIT_FILE = path.join(DATA_DIR, 'audit-log.json');
 
 const DEFAULT_DATA = {
-  _nextId: { people: 1, departments: 1, roles: 1, attendance: 1, admin_tasks: 1, shifts: 1, absence_types: 1, leave_requests: 1, company_leave: 1 },
+  _nextId: { people: 1, departments: 1, roles: 1, attendance: 1, admin_tasks: 1, shifts: 1, absence_types: 1, leave_requests: 1, company_leave: 1, documents: 1, document_templates: 1, document_notifications: 1 },
   people: [],
   departments: [],
   roles: [],
@@ -47,6 +47,9 @@ const DEFAULT_DATA = {
     surcharge_percent: 25,
     allow_monthly_transfer: true,  // převod hodin mezi měsíci
   },
+  documents: [],              // { id, person_id, title, type, category, file_data (base64), file_name, file_type, file_size, valid_from, valid_to, status, tags, note, created_at, updated_at }
+  document_templates: [],     // { id, name, category, content (HTML with {{placeholders}}), variables: [], description, created_at, updated_at }
+  document_notifications: [], // { id, document_id, person_id, type: 'expiring'|'expired'|'custom', trigger_days_before, message, sent_at, dismissed, created_at }
 };
 
 // Load or initialize
@@ -880,6 +883,266 @@ const db = {
 // ============================================
 // Audit Log API
 // ============================================
+// ============================================
+// Documents
+// ============================================
+db.getDocuments = function(filters = {}) {
+  let results = [...data.documents];
+  if (filters.person_id) results = results.filter(d => d.person_id === parseInt(filters.person_id));
+  if (filters.category) results = results.filter(d => d.category === filters.category);
+  if (filters.status) results = results.filter(d => d.status === filters.status);
+  if (filters.search) {
+    const s = filters.search.toLowerCase();
+    results = results.filter(d => (d.title || '').toLowerCase().includes(s) || (d.note || '').toLowerCase().includes(s));
+  }
+  // Join person name
+  return results.map(d => {
+    const p = data.people.find(x => x.id === d.person_id);
+    return { ...d, person_name: p ? (p.first_name + ' ' + p.last_name) : '—', file_data: undefined };
+  }).sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+};
+
+db.getDocumentById = function(id) {
+  return data.documents.find(d => d.id === id) || null;
+};
+
+db.createDocument = function(fields) {
+  const doc = {
+    id: nextId('documents'),
+    person_id: fields.person_id ? parseInt(fields.person_id) : null,
+    title: fields.title,
+    type: fields.type || 'other',
+    category: fields.category || 'general',
+    file_data: fields.file_data || null,
+    file_name: fields.file_name || null,
+    file_type: fields.file_type || null,
+    file_size: fields.file_size || 0,
+    valid_from: fields.valid_from || null,
+    valid_to: fields.valid_to || null,
+    status: fields.status || 'active',
+    tags: fields.tags || [],
+    note: fields.note || '',
+    created_at: now(),
+    updated_at: now(),
+  };
+  data.documents.push(doc);
+  save();
+  logChange('create', 'document', doc.id, `Dokument "${doc.title}" vytvořen`, null, doc);
+  return doc;
+};
+
+db.updateDocument = function(id, fields) {
+  const doc = data.documents.find(d => d.id === id);
+  if (!doc) return null;
+  const oldData = { ...doc };
+  for (const key of Object.keys(fields)) {
+    if (key !== 'id' && key !== 'created_at') doc[key] = fields[key];
+  }
+  doc.updated_at = now();
+  save();
+  logChange('update', 'document', id, `Dokument "${doc.title}" upraven`, oldData, doc);
+  return doc;
+};
+
+db.deleteDocument = function(id) {
+  const idx = data.documents.findIndex(d => d.id === id);
+  if (idx < 0) return false;
+  const doc = data.documents[idx];
+  data.documents.splice(idx, 1);
+  // Also delete notifications for this document
+  data.document_notifications = data.document_notifications.filter(n => n.document_id !== id);
+  save();
+  logChange('delete', 'document', id, `Dokument "${doc.title}" smazán`, doc, null);
+  return true;
+};
+
+db.getDocumentFile = function(id) {
+  const doc = data.documents.find(d => d.id === id);
+  if (!doc || !doc.file_data) return null;
+  return { file_data: doc.file_data, file_name: doc.file_name, file_type: doc.file_type };
+};
+
+// ============================================
+// Document Templates
+// ============================================
+db.getDocumentTemplates = function() {
+  return data.document_templates.map(t => ({ ...t })).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+};
+
+db.getDocumentTemplateById = function(id) {
+  return data.document_templates.find(t => t.id === id) || null;
+};
+
+db.createDocumentTemplate = function(fields) {
+  const tmpl = {
+    id: nextId('document_templates'),
+    name: fields.name,
+    category: fields.category || 'general',
+    content: fields.content || '',
+    variables: fields.variables || [],
+    description: fields.description || '',
+    created_at: now(),
+    updated_at: now(),
+  };
+  data.document_templates.push(tmpl);
+  save();
+  logChange('create', 'document_template', tmpl.id, `Šablona "${tmpl.name}" vytvořena`, null, tmpl);
+  return tmpl;
+};
+
+db.updateDocumentTemplate = function(id, fields) {
+  const tmpl = data.document_templates.find(t => t.id === id);
+  if (!tmpl) return null;
+  const oldData = { ...tmpl };
+  for (const key of Object.keys(fields)) {
+    if (key !== 'id' && key !== 'created_at') tmpl[key] = fields[key];
+  }
+  tmpl.updated_at = now();
+  save();
+  logChange('update', 'document_template', id, `Šablona "${tmpl.name}" upravena`, oldData, tmpl);
+  return tmpl;
+};
+
+db.deleteDocumentTemplate = function(id) {
+  const idx = data.document_templates.findIndex(t => t.id === id);
+  if (idx < 0) return false;
+  const tmpl = data.document_templates[idx];
+  data.document_templates.splice(idx, 1);
+  save();
+  logChange('delete', 'document_template', id, `Šablona "${tmpl.name}" smazána`, tmpl, null);
+  return true;
+};
+
+db.generateFromTemplate = function(templateId, personId, variables = {}) {
+  const tmpl = data.document_templates.find(t => t.id === templateId);
+  if (!tmpl) return null;
+  const person = data.people.find(p => p.id === parseInt(personId));
+  if (!person) return null;
+  const dept = data.departments.find(d => d.id === person.department_id);
+  const role = data.roles.find(r => r.id === person.role_id);
+
+  // Build variable map with person data auto-fill
+  const vars = {
+    jmeno: person.first_name,
+    prijmeni: person.last_name,
+    cele_jmeno: person.first_name + ' ' + person.last_name,
+    email: person.email || '',
+    telefon: person.phone || '',
+    osobni_cislo: person.employee_number || '',
+    datum_nastupu: person.hire_date || '',
+    typ_smlouvy: person.contract_type || '',
+    pozice: role ? role.name : '',
+    oddeleni: dept ? dept.name : '',
+    hodinova_sazba: person.hourly_rate ? String(person.hourly_rate) : '',
+    mesicni_mzda: person.monthly_salary ? String(person.monthly_salary) : '',
+    datum: new Date().toLocaleDateString('cs-CZ'),
+    rok: String(new Date().getFullYear()),
+    ...variables,
+  };
+
+  // Replace placeholders
+  let content = tmpl.content;
+  for (const [key, val] of Object.entries(vars)) {
+    content = content.replace(new RegExp('\\{\\{' + key + '\\}\\}', 'g'), val || '');
+  }
+
+  return { content, person_name: person.first_name + ' ' + person.last_name, template_name: tmpl.name };
+};
+
+// ============================================
+// Document Notifications
+// ============================================
+db.getDocumentNotifications = function(filters = {}) {
+  let results = [...data.document_notifications];
+  if (filters.person_id) results = results.filter(n => n.person_id === parseInt(filters.person_id));
+  if (filters.dismissed === false) results = results.filter(n => !n.dismissed);
+  // Join document and person info
+  return results.map(n => {
+    const doc = data.documents.find(d => d.id === n.document_id);
+    const p = data.people.find(x => x.id === n.person_id);
+    return {
+      ...n,
+      document_title: doc ? doc.title : '—',
+      document_valid_to: doc ? doc.valid_to : null,
+      person_name: p ? (p.first_name + ' ' + p.last_name) : '—',
+    };
+  }).sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+};
+
+db.createDocumentNotification = function(fields) {
+  const notif = {
+    id: nextId('document_notifications'),
+    document_id: fields.document_id ? parseInt(fields.document_id) : null,
+    person_id: fields.person_id ? parseInt(fields.person_id) : null,
+    type: fields.type || 'custom',
+    trigger_days_before: fields.trigger_days_before || 30,
+    message: fields.message || '',
+    sent_at: null,
+    dismissed: false,
+    created_at: now(),
+  };
+  data.document_notifications.push(notif);
+  save();
+  return notif;
+};
+
+db.dismissNotification = function(id) {
+  const n = data.document_notifications.find(x => x.id === id);
+  if (!n) return false;
+  n.dismissed = true;
+  n.sent_at = now();
+  save();
+  return true;
+};
+
+db.checkExpiringDocuments = function(daysAhead = 30) {
+  const today = new Date();
+  const ahead = new Date(today);
+  ahead.setDate(ahead.getDate() + daysAhead);
+  const todayStr = today.toISOString().slice(0, 10);
+  const aheadStr = ahead.toISOString().slice(0, 10);
+
+  const expiring = data.documents.filter(d =>
+    d.valid_to && d.status === 'active' && d.valid_to >= todayStr && d.valid_to <= aheadStr
+  );
+
+  // Auto-create notifications if not already existing
+  for (const doc of expiring) {
+    const existing = data.document_notifications.find(n =>
+      n.document_id === doc.id && n.type === 'expiring' && !n.dismissed
+    );
+    if (!existing) {
+      db.createDocumentNotification({
+        document_id: doc.id,
+        person_id: doc.person_id,
+        type: 'expiring',
+        trigger_days_before: daysAhead,
+        message: `Dokument "${doc.title}" vyprší ${doc.valid_to}`,
+      });
+    }
+  }
+
+  // Also flag expired documents
+  const expired = data.documents.filter(d =>
+    d.valid_to && d.status === 'active' && d.valid_to < todayStr
+  );
+  for (const doc of expired) {
+    const existing = data.document_notifications.find(n =>
+      n.document_id === doc.id && n.type === 'expired' && !n.dismissed
+    );
+    if (!existing) {
+      db.createDocumentNotification({
+        document_id: doc.id,
+        person_id: doc.person_id,
+        type: 'expired',
+        message: `Dokument "${doc.title}" vypršel ${doc.valid_to}!`,
+      });
+    }
+  }
+
+  return { expiring: expiring.length, expired: expired.length };
+};
+
 db.setCurrentUser = setCurrentUser;
 
 db.getAuditLog = function(filters = {}) {
