@@ -599,6 +599,74 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
+  // ---- ADMIN TASKS API ----
+  if (pathname.startsWith('/api/admin-tasks')) {
+    // GET /api/admin-tasks — list tasks (anyone can create, only admin sees all)
+    if (pathname === '/api/admin-tasks' && req.method === 'GET') {
+      const url = new URL(req.url, `http://${req.headers.host}`);
+      const filters = {
+        status: url.searchParams.get('status') || undefined,
+        page: url.searchParams.get('page') || undefined,
+      };
+      const tasks = db.getAdminTasks(filters);
+      sendJSON(res, 200, tasks);
+      return;
+    }
+
+    // POST /api/admin-tasks — create a new task (any authenticated user)
+    if (pathname === '/api/admin-tasks' && req.method === 'POST') {
+      let body = '';
+      req.on('data', c => body += c);
+      req.on('end', () => {
+        try {
+          const task = JSON.parse(body);
+          task.created_by = { username: session.username, displayName: session.displayName };
+          const result = db.createAdminTask(task);
+          sendJSON(res, 201, result);
+        } catch (e) {
+          sendJSON(res, 400, { error: e.message });
+        }
+      });
+      return;
+    }
+
+    // GET /api/admin-tasks/:id
+    const taskGetMatch = pathname.match(/^\/api\/admin-tasks\/(\d+)$/);
+    if (taskGetMatch && req.method === 'GET') {
+      const task = db.getAdminTask(parseInt(taskGetMatch[1]));
+      if (!task) { sendJSON(res, 404, { error: 'Požadavek nenalezen' }); return; }
+      sendJSON(res, 200, task);
+      return;
+    }
+
+    // PUT /api/admin-tasks/:id — update task (super admin only)
+    if (taskGetMatch && req.method === 'PUT') {
+      if (!session.is_super_admin) { sendJSON(res, 403, { error: 'Přístup odepřen' }); return; }
+      let body = '';
+      req.on('data', c => body += c);
+      req.on('end', () => {
+        try {
+          const updates = JSON.parse(body);
+          const result = db.updateAdminTask(parseInt(taskGetMatch[1]), updates);
+          if (!result) { sendJSON(res, 404, { error: 'Požadavek nenalezen' }); return; }
+          sendJSON(res, 200, result);
+        } catch (e) {
+          sendJSON(res, 400, { error: e.message });
+        }
+      });
+      return;
+    }
+
+    // DELETE /api/admin-tasks/:id — delete task (super admin only)
+    if (taskGetMatch && req.method === 'DELETE') {
+      if (!session.is_super_admin) { sendJSON(res, 403, { error: 'Přístup odepřen' }); return; }
+      const ok = db.deleteAdminTask(parseInt(taskGetMatch[1]));
+      if (!ok) { sendJSON(res, 404, { error: 'Požadavek nenalezen' }); return; }
+      sendJSON(res, 200, { ok: true });
+      return;
+    }
+  }
+
   // ---- AUDIT LOG API (super admin only) ----
   if (pathname.startsWith('/api/audit')) {
     // Check super admin

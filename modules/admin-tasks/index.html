@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Požadavky | HOLYOS</title>
+  <link rel="icon" type="image/svg+xml" href="../../logo-holyos-icon.svg">
+  <base href="../../">
+  <link rel="stylesheet" href="css/dashboard.css">
+  <style>
+    .main-wrapper { margin-left: var(--sidebar-w); flex: 1; min-height: 100vh; display: flex; flex-direction: column; }
+
+    .tasks-toolbar { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; align-items: center; }
+    .tasks-toolbar select { padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 12px; }
+
+    .task-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px 20px; margin-bottom: 12px; transition: all 0.2s; }
+    .task-card:hover { border-color: rgba(108,92,231,0.3); }
+    .task-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+    .task-title { font-size: 14px; font-weight: 600; color: var(--text); line-height: 1.4; flex: 1; }
+    .task-meta { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; }
+
+    .task-badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 10px; font-weight: 600; }
+    .task-badge.new { background: rgba(108,92,231,0.15); color: #a78bfa; }
+    .task-badge.in_progress { background: rgba(59,130,246,0.15); color: #3b82f6; }
+    .task-badge.done { background: rgba(34,197,94,0.15); color: #22c55e; }
+    .task-badge.cancelled { background: rgba(156,163,175,0.15); color: #9ca3af; }
+
+    .task-page-badge { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 10px; background: rgba(108,92,231,0.1); color: #a78bfa; }
+    .task-time { font-size: 11px; color: var(--text2); }
+    .task-user { font-size: 11px; color: var(--text2); }
+
+    .task-desc { font-size: 13px; color: var(--text); line-height: 1.5; white-space: pre-line; margin-bottom: 10px; }
+    .task-screenshot { border-radius: 8px; overflow: hidden; border: 1px solid var(--border); max-width: 300px; margin-bottom: 10px; cursor: pointer; }
+    .task-screenshot img { width: 100%; height: auto; display: block; }
+
+    .task-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .task-btn { padding: 5px 12px; border-radius: 6px; font-size: 11px; font-weight: 600; cursor: pointer; border: 1px solid; transition: all 0.2s; }
+    .task-btn-deploy { background: rgba(108,92,231,0.15); color: #a78bfa; border-color: rgba(108,92,231,0.3); }
+    .task-btn-deploy:hover { background: rgba(108,92,231,0.3); }
+    .task-btn-status { background: rgba(59,130,246,0.1); color: #3b82f6; border-color: rgba(59,130,246,0.2); }
+    .task-btn-status:hover { background: rgba(59,130,246,0.2); }
+    .task-btn-delete { background: rgba(239,68,68,0.1); color: #ef4444; border-color: rgba(239,68,68,0.2); }
+    .task-btn-delete:hover { background: rgba(239,68,68,0.2); }
+
+    .stats-bar { display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+    .stat-mini { padding: 8px 14px; border-radius: 8px; background: var(--surface); border: 1px solid var(--border); font-size: 12px; }
+    .stat-mini strong { font-size: 16px; }
+
+    .empty-tasks { text-align: center; padding: 60px 20px; color: var(--text2); }
+    .empty-tasks-icon { font-size: 48px; margin-bottom: 12px; }
+
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 999; }
+    .modal { background: var(--bg); border: 1px solid var(--border); border-radius: 12px; padding: 24px; max-width: 700px; width: 95%; max-height: 85vh; overflow-y: auto; }
+    .modal h3 { margin-bottom: 12px; }
+    .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 16px; }
+
+    .spec-box { background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 14px; font-size: 12px;
+      font-family: 'Consolas', monospace; white-space: pre-wrap; line-height: 1.5; max-height: 400px; overflow-y: auto; }
+
+    .screenshot-modal img { max-width: 100%; max-height: 80vh; border-radius: 8px; }
+  </style>
+</head>
+<body>
+  <aside id="sidebar" class="sidebar"></aside>
+  <div class="main-wrapper">
+    <div class="module-header">
+      <div class="module-icon" style="background: linear-gradient(135deg, #6c5ce7, #ef4444);">📋</div>
+      <div>
+        <h1>Požadavky na úpravy</h1>
+        <p>Přehled požadavků z AI asistenta — zadání, screenshoty, nasazení</p>
+      </div>
+    </div>
+
+    <div class="module-body" style="padding: 20px 32px;">
+      <div class="stats-bar" id="stats-bar"></div>
+
+      <div class="tasks-toolbar">
+        <select id="filter-status" onchange="loadTasks()">
+          <option value="">Všechny stavy</option>
+          <option value="new">Nové</option>
+          <option value="in_progress">Rozpracované</option>
+          <option value="done">Hotové</option>
+          <option value="cancelled">Zrušené</option>
+        </select>
+      </div>
+
+      <div id="tasks-list"></div>
+    </div>
+  </div>
+
+  <div id="modal-root"></div>
+
+  <script>
+    var s = document.createElement('script');
+    s.src = 'js/sidebar.js';
+    s.onload = function() { renderSidebar('admin-tasks'); };
+    document.head.appendChild(s);
+  </script>
+
+  <script>
+    let tasks = [];
+
+    async function loadTasks() {
+      const status = document.getElementById('filter-status').value;
+      const params = status ? '?status=' + status : '';
+      const res = await fetch('/api/admin-tasks' + params);
+      tasks = await res.json();
+      renderStats();
+      renderTasks();
+    }
+
+    function renderStats() {
+      const newCount = tasks.filter(t => t.status === 'new').length;
+      const inProgress = tasks.filter(t => t.status === 'in_progress').length;
+      const done = tasks.filter(t => t.status === 'done').length;
+      document.getElementById('stats-bar').innerHTML = `
+        <div class="stat-mini"><strong style="color:#a78bfa">${tasks.length}</strong> celkem</div>
+        <div class="stat-mini"><strong style="color:#a78bfa">${newCount}</strong> nových</div>
+        <div class="stat-mini"><strong style="color:#3b82f6">${inProgress}</strong> rozpracovaných</div>
+        <div class="stat-mini"><strong style="color:#22c55e">${done}</strong> hotových</div>
+      `;
+    }
+
+    function renderTasks() {
+      const el = document.getElementById('tasks-list');
+      if (tasks.length === 0) {
+        el.innerHTML = `<div class="empty-tasks"><div class="empty-tasks-icon">📋</div><h3>Žádné požadavky</h3><p>Požadavky se vytvářejí přes AI tlačítko (vpravo nahoře) na každé stránce.</p></div>`;
+        return;
+      }
+
+      let html = '';
+      for (const t of tasks) {
+        const desc = t.description.length > 200 ? t.description.substring(0, 200) + '…' : t.description;
+        const time = new Date(t.created_at).toLocaleString('cs-CZ');
+        const user = t.created_by ? (t.created_by.displayName || t.created_by.username) : '—';
+
+        html += `<div class="task-card">
+          <div class="task-header">
+            <div class="task-title">#${t.id} — ${escapeHtml(desc.split('\n')[0])}</div>
+          </div>
+          <div class="task-meta">
+            <span class="task-badge ${t.status}">${statusLabel(t.status)}</span>
+            <span class="task-page-badge">📍 ${t.page_title || t.page}</span>
+            <span class="task-time">🕐 ${time}</span>
+            <span class="task-user">👤 ${user}</span>
+          </div>
+          <div class="task-desc">${escapeHtml(desc)}</div>`;
+
+        if (t.screenshot) {
+          html += `<div class="task-screenshot" onclick="showScreenshot(${t.id})"><img src="${t.screenshot}" loading="lazy"></div>`;
+        }
+
+        html += `<div class="task-actions">
+            <button class="task-btn task-btn-deploy" onclick="deployTask(${t.id})">🚀 Nasadit s Claude</button>
+            <button class="task-btn task-btn-status" onclick="cycleStatus(${t.id})">📌 Změnit stav</button>
+            <button class="task-btn task-btn-delete" onclick="deleteTask(${t.id})">✕ Smazat</button>
+          </div>
+        </div>`;
+      }
+      el.innerHTML = html;
+    }
+
+    function statusLabel(s) {
+      return { new: '🆕 Nový', in_progress: '🔧 Rozpracovaný', done: '✅ Hotový', cancelled: '❌ Zrušený' }[s] || s;
+    }
+
+    function escapeHtml(str) {
+      return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    function showScreenshot(id) {
+      const t = tasks.find(x => x.id === id);
+      if (!t || !t.screenshot) return;
+      document.getElementById('modal-root').innerHTML = `
+        <div class="modal-overlay" onclick="closeModal()">
+          <div class="screenshot-modal" onclick="event.stopPropagation()">
+            <img src="${t.screenshot}">
+          </div>
+        </div>`;
+    }
+
+    function generateTaskSpec(task) {
+      let spec = '═══════════════════════════════════════\n';
+      spec += 'POŽADAVEK NA ÚPRAVU #' + task.id + '\n';
+      spec += '═══════════════════════════════════════\n\n';
+
+      spec += '📍 STRÁNKA: ' + (task.page_title || task.page) + '\n';
+      spec += '   URL: ' + task.page + '\n\n';
+
+      spec += '📝 POPIS POŽADAVKU:\n';
+      spec += task.description + '\n\n';
+
+      if (task.screenshot) {
+        spec += '📸 SCREENSHOT: Přiložen (uživatel nahrál vizuální referenci)\n\n';
+      }
+
+      if (task.ai_answers && Object.keys(task.ai_answers).length > 0) {
+        spec += '💬 UPŘESNĚNÍ OD UŽIVATELE:\n';
+        for (const [key, val] of Object.entries(task.ai_answers)) {
+          spec += '   • ' + val + '\n';
+        }
+        spec += '\n';
+      }
+
+      // Add page-specific context
+      spec += '🔗 KONTEXT STRÁNKY:\n';
+      var pageContextMap = {
+        'Lidé a HR': 'Modul Lidé a HR — evidence zaměstnanců, docházka, org. struktura, role a oprávnění. Soubory: modules/lide-hr/index.html, api/hr.js, db.js',
+        'Dashboard': 'Hlavní dashboard — index.html, zobrazuje přehled celého systému',
+        'Vytvoření areálu': 'Modul pro tvorbu 2D/3D areálu — modules/vytvoreni-arealu/',
+        'Programování výroby': 'Modul programování výroby — modules/programovani-vyroby/',
+        'Simulace výroby': 'Modul simulace — modules/simulace-vyroby/',
+        'Pracovní postup': 'Modul pracovní postupy — modules/pracovni-postup/',
+        'Historie změn': 'Audit log — modules/audit-log/index.html',
+        'Myšlenková mapa': 'Mindmap přehled celého systému — modules/holyos-mindmap.html',
+      };
+      var ctx = pageContextMap[task.page_title] || ('Stránka: ' + task.page);
+      spec += '   ' + ctx + '\n\n';
+
+      spec += '⚙️ TECHNICKÝ KONTEXT:\n';
+      spec += '   • Server: Node.js (http.createServer), bez frameworku\n';
+      spec += '   • DB: JSON soubor přes db.js, auto-increment ID\n';
+      spec += '   • Frontend: Vanilla JS, inline HTML, tmavý motiv\n';
+      spec += '   • Auth: Session-based, cookie, is_super_admin flag\n';
+      spec += '   • Audit: Automatický log všech změn v db.js\n';
+      spec += '   • Hosting: Railway, persistent volume /app/data\n\n';
+
+      spec += '💡 POŽADAVKY:\n';
+      spec += '   • Zachovat konzistentní UI s existujícími moduly\n';
+      spec += '   • Všechny CRUD operace musí procházet přes db.js (audit log)\n';
+      spec += '   • Udržet provázanost s ostatními sekcemi systému\n';
+      spec += '   • Po dokončení aktualizovat deploy status v myšlenkové mapě\n';
+
+      return spec;
+    }
+
+    function deployTask(id) {
+      const task = tasks.find(x => x.id === id);
+      if (!task) return;
+
+      const spec = generateTaskSpec(task);
+      document.getElementById('modal-root').innerHTML = `
+        <div class="modal-overlay" onclick="closeModal()">
+          <div class="modal" onclick="event.stopPropagation()">
+            <h3>🚀 Nasadit požadavek #${task.id}</h3>
+            <p style="font-size:13px;color:var(--text2);margin-bottom:12px;">Zkontrolujte zadání a zkopírujte ho do Claude chatu.</p>
+            <div class="spec-box">${escapeHtml(spec)}</div>
+            <div class="modal-actions">
+              <button class="btn btn-secondary" onclick="closeModal()">Zavřít</button>
+              <button class="btn btn-primary" onclick="copyTaskSpec(${task.id})" id="btn-copy-spec">📋 Zkopírovat zadání</button>
+            </div>
+          </div>
+        </div>`;
+    }
+
+    function copyTaskSpec(id) {
+      const task = tasks.find(x => x.id === id);
+      if (!task) return;
+      const spec = generateTaskSpec(task);
+      navigator.clipboard.writeText(spec).then(() => {
+        const btn = document.getElementById('btn-copy-spec');
+        if (btn) {
+          btn.textContent = '✅ Zkopírováno!';
+          btn.style.background = '#00b894';
+          btn.style.borderColor = '#00b894';
+        }
+        // Update task status
+        updateTaskStatus(id, 'in_progress');
+      });
+    }
+
+    async function cycleStatus(id) {
+      const task = tasks.find(x => x.id === id);
+      if (!task) return;
+      const order = ['new', 'in_progress', 'done', 'cancelled'];
+      const nextIdx = (order.indexOf(task.status) + 1) % order.length;
+      await updateTaskStatus(id, order[nextIdx]);
+    }
+
+    async function updateTaskStatus(id, status) {
+      await fetch('/api/admin-tasks/' + id, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status })
+      });
+      loadTasks();
+    }
+
+    async function deleteTask(id) {
+      if (!confirm('Smazat požadavek #' + id + '?')) return;
+      await fetch('/api/admin-tasks/' + id, { method: 'DELETE' });
+      loadTasks();
+    }
+
+    function closeModal() {
+      document.getElementById('modal-root').innerHTML = '';
+    }
+
+    // Init
+    loadTasks();
+  </script>
+</body>
+</html>
