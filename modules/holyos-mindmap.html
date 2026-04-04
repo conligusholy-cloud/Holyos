@@ -929,24 +929,24 @@ function updateApplyButton() {
 const DEPLOY_STATUS = {
   hr: {
     // Top-level features
-    0: 'full',    // Evidence lidí
-    1: 'full', // Organizační struktura a role
-    2: 'partial', // Docházka
+    0: 'full',    // Evidence lidí ✅
+    1: 'full',    // Organizační struktura a role ✅
+    2: 'partial', // Docházka (kiosek, směny, absence, export hotovy — chybí: plánování směn, statistiky, automatické přesčasy)
     3: 'partial', // Pracovní poměry
     4: 'none',    // Mzdy a výplaty
     // Sub-features: "parentIndex.subIndex"
-    '0.0': 'full',    // Lidé obecně — kontakty, dodavatelé, zákazníci
-    '0.1': 'full', // Zaměstnanci — základní data, přihlašovací údaje, kontaktní údaje, fotka ✅
-    '1.0': 'full', // Vizualizace org. struktury s fotografiemi ✅
-    '1.1': 'full',    // Hierarchie pozic a podřízenosti
+    '0.0': 'full',    // Lidé obecně — kontakty, dodavatelé, zákazníci ✅
+    '0.1': 'full',    // Zaměstnanci — základní data, přihlašovací údaje, kontaktní údaje, fotka ✅
+    '1.0': 'full',    // Vizualizace org. struktury s fotografiemi ✅
+    '1.1': 'full',    // Hierarchie pozic a podřízenosti ✅
     '1.2': 'full',    // Správa oprávnění na úrovni rolí (čtení/úprava pro moduly) ✅
-    '2.0': 'partial', // Příchody a odchody — čipová karta/vzdáleně (jen ruční zápis)
-    '2.1': 'partial', // Přesčasy a dovolené (typ docházky ano, zůstatky ne)
-    '2.2': 'none',    // Přiřazení čipů k zaměstnancům
-    '2.3': 'none',    // Export docházkových listů pro účetní
+    '2.0': 'full',    // Příchody a odchody — kiosek s čipem + vzdálený klik v systému ✅ (kiosk.html, clockAction, kiosk/identify API)
+    '2.1': 'partial', // Přesčasy a dovolené — leave requests + absence types hotové, chybí: auto-detekce přesčasů, zůstatky dovolené, kalendář
+    '2.2': 'full',    // Přiřazení čipů k zaměstnancům ✅ (chip_card_id pole v person, findPersonByChip)
+    '2.3': 'full',    // Export docházkových listů pro účetní ✅ (CSV surová + upravená data, souhrn s přesčasy)
     '3.0': 'none',    // Smlouvy a dokumenty
-    '3.1': 'full', // Začátek a konec pracovního poměru ✅
-    '3.2': 'full',    // Definice pracovních pozic
+    '3.1': 'full',    // Začátek a konec pracovního poměru ✅
+    '3.2': 'full',    // Definice pracovních pozic ✅
   }
 };
 
