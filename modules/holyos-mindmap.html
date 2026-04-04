@@ -931,7 +931,7 @@ const DEPLOY_STATUS = {
     // Top-level features
     0: 'full',    // Evidence lidí ✅
     1: 'full',    // Organizační struktura a role ✅
-    2: 'partial', // Docházka (kiosek, směny, absence, export hotovy — chybí: plánování směn, statistiky, automatické přesčasy)
+    2: 'full',    // Docházka ✅ (kiosek, směny, absence, export, přesčasy, dovolené, celozávodní, nastavení)
     3: 'partial', // Pracovní poměry
     4: 'none',    // Mzdy a výplaty
     // Sub-features: "parentIndex.subIndex"
@@ -941,7 +941,7 @@ const DEPLOY_STATUS = {
     '1.1': 'full',    // Hierarchie pozic a podřízenosti ✅
     '1.2': 'full',    // Správa oprávnění na úrovni rolí (čtení/úprava pro moduly) ✅
     '2.0': 'full',    // Příchody a odchody — kiosek s čipem + vzdálený klik v systému ✅ (kiosk.html, clockAction, kiosk/identify API)
-    '2.1': 'partial', // Přesčasy a dovolené — leave requests + absence types hotové, chybí: auto-detekce přesčasů, zůstatky dovolené, kalendář
+    '2.1': 'full',    // Přesčasy a dovolené ✅ (leave requests, absence types, overtime dashboard, leave balances, company-wide leave, settings)
     '2.2': 'full',    // Přiřazení čipů k zaměstnancům ✅ (chip_card_id pole v person, findPersonByChip)
     '2.3': 'full',    // Export docházkových listů pro účetní ✅ (CSV surová + upravená data, souhrn s přesčasy)
     '3.0': 'none',    // Smlouvy a dokumenty

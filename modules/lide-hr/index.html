@@ -357,6 +357,10 @@
           <div class="sub-tab" data-subtab="absence-types" onclick="switchAttSubTab('absence-types')">🏷️ Typy nepřítomnosti</div>
           <div class="sub-tab" data-subtab="leave" onclick="switchAttSubTab('leave')">📝 Žádosti o volno</div>
           <div class="sub-tab" data-subtab="export" onclick="switchAttSubTab('export')">📊 Export pro účetní</div>
+          <div class="sub-tab" data-subtab="overtime" onclick="switchAttSubTab('overtime')">⏱️ Přesčasy</div>
+          <div class="sub-tab" data-subtab="leave-balance" onclick="switchAttSubTab('leave-balance')">🏖️ Dovolené</div>
+          <div class="sub-tab" data-subtab="company-leave" onclick="switchAttSubTab('company-leave')">🏢 Celozávodní</div>
+          <div class="sub-tab" data-subtab="att-settings" onclick="switchAttSubTab('att-settings')">⚙️ Nastavení</div>
         </div>
 
         <!-- Sub: Přehled přítomnosti (real-time) -->
@@ -438,6 +442,97 @@
             <button class="btn" style="background:#10b981;color:#fff;border-color:#10b981" onclick="downloadExportCSV('adjusted')">📥 Export pro účetní</button>
           </div>
           <div id="export-preview" style="margin-top:16px;"></div>
+        </div>
+
+        <!-- Sub: Přesčasy -->
+        <div class="att-subtab" id="att-overtime">
+          <div style="margin-bottom:16px; padding:14px 18px; background:rgba(245,158,11,0.08); border-left:3px solid #f59e0b; border-radius:0 8px 8px 0; line-height:1.6;">
+            <strong style="color:#f59e0b;">⏱️ Přehled přesčasů</strong><br>
+            <span style="color:var(--text2); font-size:13px;">Automatický výpočet přesčasů dle odpracovaných hodin vs. fond směny. Limity dle zákoníku práce: 150 h/rok (bez souhlasu), 416 h/rok (absolutní max).</span>
+          </div>
+          <div class="toolbar">
+            <div class="form-group" style="margin:0">
+              <label style="font-size:12px;margin-bottom:4px;display:block;color:var(--text2)">Rok</label>
+              <select id="ot-year" onchange="loadOvertimeAll()" style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:13px;"></select>
+            </div>
+            <div class="form-group" style="margin:0">
+              <label style="font-size:12px;margin-bottom:4px;display:block;color:var(--text2)">Měsíc</label>
+              <select id="ot-month" onchange="loadOvertimeAll()" style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:13px;">
+                <option value="">Celý rok</option>
+                <option value="1">Leden</option><option value="2">Únor</option><option value="3">Březen</option>
+                <option value="4">Duben</option><option value="5">Květen</option><option value="6">Červen</option>
+                <option value="7">Červenec</option><option value="8">Srpen</option><option value="9">Září</option>
+                <option value="10">Říjen</option><option value="11">Listopad</option><option value="12">Prosinec</option>
+              </select>
+            </div>
+            <div style="flex:1"></div>
+            <button class="btn btn-secondary" onclick="loadOvertimeAll()">🔄 Obnovit</button>
+          </div>
+          <div id="overtime-dashboard" style="margin-top:16px;"></div>
+        </div>
+
+        <!-- Sub: Dovolené / zůstatky -->
+        <div class="att-subtab" id="att-leave-balance">
+          <div style="margin-bottom:16px; padding:14px 18px; background:rgba(16,185,129,0.08); border-left:3px solid #10b981; border-radius:0 8px 8px 0; line-height:1.6;">
+            <strong style="color:#10b981;">🏖️ Přehled dovolených</strong><br>
+            <span style="color:var(--text2); font-size:13px;">Zůstatky dovolené všech zaměstnanců — nárok, čerpaná, zbývající. Výchozí nárok: 4 týdny (20 dní) dle zákoníku práce.</span>
+          </div>
+          <div class="toolbar">
+            <div class="form-group" style="margin:0">
+              <label style="font-size:12px;margin-bottom:4px;display:block;color:var(--text2)">Rok</label>
+              <select id="lb-year" onchange="loadLeaveBalances()" style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:13px;"></select>
+            </div>
+            <div style="flex:1"></div>
+            <button class="btn btn-secondary" onclick="loadLeaveBalances()">🔄 Obnovit</button>
+          </div>
+          <div id="leave-balances-table" style="margin-top:16px;"></div>
+        </div>
+
+        <!-- Sub: Celozávodní dovolená -->
+        <div class="att-subtab" id="att-company-leave">
+          <div style="margin-bottom:16px; padding:14px 18px; background:rgba(59,130,246,0.08); border-left:3px solid #3b82f6; border-radius:0 8px 8px 0; line-height:1.6;">
+            <strong style="color:#3b82f6;">🏢 Celozávodní dovolená</strong><br>
+            <span style="color:var(--text2); font-size:13px;">Celozávodní dovolená se automaticky propíše všem zaměstnancům. Můžete nastavit výjimky — zaměstnance, na které se nevztahuje.</span>
+          </div>
+          <div class="toolbar">
+            <div style="flex:1"></div>
+            <button class="btn btn-primary" onclick="openCompanyLeaveModal()">+ Nová celozávodní dovolená</button>
+          </div>
+          <div id="company-leave-table" style="margin-top:16px;"></div>
+        </div>
+
+        <!-- Sub: Nastavení docházky -->
+        <div class="att-subtab" id="att-att-settings">
+          <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+            <!-- Leave settings -->
+            <div style="background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:20px;">
+              <h3 style="font-size:15px; margin-bottom:16px; display:flex; align-items:center; gap:8px;">🏖️ Nastavení dovolených</h3>
+              <form id="leave-settings-form" onsubmit="saveLeaveSettings(event)">
+                <div class="form-grid">
+                  <div class="form-group"><label>Výchozí nárok (dní/rok)</label><input type="number" name="default_entitlement_days" min="0" max="50"></div>
+                  <div class="form-group"><label>Rok</label><input type="number" name="year" min="2020" max="2035"></div>
+                  <div class="form-group"><label>Převod do dalšího roku</label><select name="carryover_allowed"><option value="true">Ano</option><option value="false">Ne</option></select></div>
+                  <div class="form-group"><label>Max. převod (dní)</label><input type="number" name="carryover_max_days" min="0" max="50"></div>
+                </div>
+                <div class="modal-actions" style="margin-top:16px;"><button type="submit" class="btn btn-primary">💾 Uložit nastavení</button></div>
+              </form>
+            </div>
+            <!-- Overtime settings -->
+            <div style="background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:20px;">
+              <h3 style="font-size:15px; margin-bottom:16px; display:flex; align-items:center; gap:8px;">⏱️ Nastavení přesčasů</h3>
+              <form id="overtime-settings-form" onsubmit="saveOvertimeSettings(event)">
+                <div class="form-grid">
+                  <div class="form-group"><label>Roční limit (h) bez souhlasu</label><input type="number" name="yearly_limit_hours" min="0" max="500"></div>
+                  <div class="form-group"><label>Absolutní roční max (h)</label><input type="number" name="yearly_absolute_max" min="0" max="1000"></div>
+                  <div class="form-group"><label>Upozornit při (%)</label><input type="number" name="alert_threshold_percent" min="0" max="100"></div>
+                  <div class="form-group"><label>Příplatek (%)</label><input type="number" name="surcharge_percent" min="0" max="100"></div>
+                  <div class="form-group"><label>Kompenzace</label><select name="compensation"><option value="surcharge">Příplatek</option><option value="timeoff">Náhradní volno</option></select></div>
+                  <div class="form-group"><label>Měsíční převod</label><select name="allow_monthly_transfer"><option value="true">Ano</option><option value="false">Ne</option></select></div>
+                </div>
+                <div class="modal-actions" style="margin-top:16px;"><button type="submit" class="btn btn-primary">💾 Uložit nastavení</button></div>
+              </form>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -1126,6 +1221,10 @@
       if (tab === 'absence-types') loadAbsenceTypes();
       if (tab === 'leave') loadLeaveRequests();
       if (tab === 'export') { loadPeopleData().then(() => populateExportFilters()); }
+      if (tab === 'overtime') loadOvertimeAll();
+      if (tab === 'leave-balance') loadLeaveBalances();
+      if (tab === 'company-leave') loadCompanyLeave();
+      if (tab === 'att-settings') loadAllSettings();
     }
 
     // ============================================================
@@ -2050,6 +2149,344 @@
     }
 
     // renderPermissions and savePerm removed — permissions are now managed inside the role modal
+
+    // ============================================================
+    // OVERTIME DASHBOARD
+    // ============================================================
+    function initOvertimeFilters() {
+      const sel = document.getElementById('ot-year');
+      if (sel.options.length > 0) return;
+      const yr = new Date().getFullYear();
+      for (let y = yr - 2; y <= yr + 1; y++) {
+        const opt = document.createElement('option');
+        opt.value = y; opt.textContent = y;
+        if (y === yr) opt.selected = true;
+        sel.appendChild(opt);
+      }
+    }
+
+    async function loadOvertimeAll() {
+      initOvertimeFilters();
+      const year = document.getElementById('ot-year').value;
+      const month = document.getElementById('ot-month').value;
+      let url = '/api/hr/overtime-all?year=' + year;
+      if (month) url += '&month=' + month;
+      try {
+        const [otRes, setRes] = await Promise.all([
+          fetch(url),
+          fetch('/api/hr/overtime-settings')
+        ]);
+        const data = await otRes.json();
+        const settings = await setRes.json();
+        renderOvertimeDashboard(data, settings, month);
+      } catch (e) { console.error(e); }
+    }
+
+    function renderOvertimeDashboard(data, settings, month) {
+      const el = document.getElementById('overtime-dashboard');
+      if (!data || data.length === 0) {
+        el.innerHTML = '<div class="empty-state"><div class="empty-icon">⏱️</div><h3>Žádná data</h3><p>Nejsou k dispozici žádné záznamy docházky pro výpočet přesčasů.</p></div>';
+        return;
+      }
+      const limit = settings.yearly_limit_hours || 150;
+      const absMax = settings.yearly_absolute_max || 416;
+      const alertPct = settings.alert_threshold_percent || 80;
+      const surcharge = settings.surcharge_percent || 25;
+
+      let html = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr>';
+      html += '<th>Zaměstnanec</th>';
+      if (month) {
+        html += '<th>Odpracováno (h)</th><th>Fond (h)</th><th>Přesčas (h)</th>';
+      } else {
+        html += '<th>Celkem odpracováno (h)</th><th>Celkem fond (h)</th><th>Celkem přesčas (h)</th>';
+      }
+      html += '<th>Limit ' + limit + ' h</th><th>Stav</th></tr></thead><tbody>';
+
+      for (const item of data) {
+        const workedH = (item.total_worked_mins / 60).toFixed(1);
+        const fundH = (item.total_fund_mins / 60).toFixed(1);
+        const otH = (item.overtime_mins / 60).toFixed(1);
+        const otYearH = item.overtime_year_total_mins ? (item.overtime_year_total_mins / 60).toFixed(1) : otH;
+        const pctOfLimit = ((parseFloat(otYearH) / limit) * 100).toFixed(0);
+        let statusBadge = '';
+        if (pctOfLimit >= 100) {
+          statusBadge = '<span class="badge" style="background:rgba(239,68,68,0.2);color:#f87171;">⚠️ Překročen limit</span>';
+        } else if (pctOfLimit >= alertPct) {
+          statusBadge = '<span class="badge" style="background:rgba(245,158,11,0.2);color:#fbbf24;">⚡ Blízko limitu (' + pctOfLimit + '%)</span>';
+        } else {
+          statusBadge = '<span class="badge" style="background:rgba(34,197,94,0.2);color:#4ade80;">✅ OK (' + pctOfLimit + '%)</span>';
+        }
+
+        const barPct = Math.min(parseFloat(pctOfLimit), 100);
+        const barColor = pctOfLimit >= 100 ? '#ef4444' : (pctOfLimit >= alertPct ? '#f59e0b' : '#10b981');
+
+        html += '<tr>';
+        html += '<td class="person-name">' + item.person_name + '</td>';
+        html += '<td>' + workedH + '</td>';
+        html += '<td>' + fundH + '</td>';
+        html += '<td style="font-weight:600;color:' + (parseFloat(otH) > 0 ? '#f59e0b' : 'var(--text)') + '">' + otH + '</td>';
+        html += '<td><div style="display:flex;align-items:center;gap:8px;"><div style="flex:1;height:8px;background:var(--border);border-radius:4px;overflow:hidden;"><div style="width:' + barPct + '%;height:100%;background:' + barColor + ';border-radius:4px;"></div></div><span style="font-size:11px;color:var(--text2);white-space:nowrap;">' + otYearH + '/' + limit + '</span></div></td>';
+        html += '<td>' + statusBadge + '</td>';
+        html += '</tr>';
+      }
+      html += '</tbody></table></div>';
+
+      // Summary cards at top
+      const totalOT = data.reduce((s, d) => s + (d.overtime_mins || 0), 0);
+      const avgOT = data.length ? totalOT / data.length : 0;
+      const overLimit = data.filter(d => {
+        const hrs = (d.overtime_year_total_mins || d.overtime_mins || 0) / 60;
+        return hrs >= limit;
+      }).length;
+
+      const summaryHTML = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px;">'
+        + '<div class="stat-card"><div class="stat-value" style="color:#f59e0b;">' + (totalOT / 60).toFixed(1) + ' h</div><div class="stat-label">Celkem přesčasů</div></div>'
+        + '<div class="stat-card"><div class="stat-value" style="color:#6c5ce7;">' + (avgOT / 60).toFixed(1) + ' h</div><div class="stat-label">Průměr na zaměstnance</div></div>'
+        + '<div class="stat-card"><div class="stat-value" style="color:' + (overLimit > 0 ? '#ef4444' : '#10b981') + ';">' + overLimit + '</div><div class="stat-label">Překročení limitu</div></div>'
+        + '<div class="stat-card"><div class="stat-value" style="color:#3b82f6;">' + surcharge + '%</div><div class="stat-label">Příplatek za přesčas</div></div>'
+        + '</div>';
+
+      el.innerHTML = summaryHTML + html;
+    }
+
+    // ============================================================
+    // LEAVE BALANCES
+    // ============================================================
+    function initLeaveBalanceFilters() {
+      const sel = document.getElementById('lb-year');
+      if (sel.options.length > 0) return;
+      const yr = new Date().getFullYear();
+      for (let y = yr - 2; y <= yr + 1; y++) {
+        const opt = document.createElement('option');
+        opt.value = y; opt.textContent = y;
+        if (y === yr) opt.selected = true;
+        sel.appendChild(opt);
+      }
+    }
+
+    async function loadLeaveBalances() {
+      initLeaveBalanceFilters();
+      const year = document.getElementById('lb-year').value;
+      try {
+        const res = await fetch('/api/hr/leave-balances?year=' + year);
+        const data = await res.json();
+        renderLeaveBalances(data);
+      } catch (e) { console.error(e); }
+    }
+
+    function renderLeaveBalances(data) {
+      const el = document.getElementById('leave-balances-table');
+      if (!data || data.length === 0) {
+        el.innerHTML = '<div class="empty-state"><div class="empty-icon">🏖️</div><h3>Žádní zaměstnanci</h3><p>Přidejte zaměstnance pro zobrazení zůstatků dovolené.</p></div>';
+        return;
+      }
+      let html = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr>';
+      html += '<th>Zaměstnanec</th><th>Nárok (dní)</th><th>Převod</th><th>Celkem</th><th>Čerpaná</th><th>Celozávodní</th><th>Zbývá</th><th>Stav</th>';
+      html += '</tr></thead><tbody>';
+
+      for (const item of data) {
+        const total = item.entitlement + item.carryover;
+        const remaining = item.remaining;
+        let statusBadge;
+        if (remaining <= 0) {
+          statusBadge = '<span class="badge" style="background:rgba(239,68,68,0.2);color:#f87171;">⚠️ Vyčerpáno</span>';
+        } else if (remaining <= 3) {
+          statusBadge = '<span class="badge" style="background:rgba(245,158,11,0.2);color:#fbbf24;">⚡ Málo</span>';
+        } else {
+          statusBadge = '<span class="badge" style="background:rgba(34,197,94,0.2);color:#4ade80;">✅ OK</span>';
+        }
+
+        const barPct = total > 0 ? Math.min(((total - remaining) / total) * 100, 100) : 0;
+        const barColor = remaining <= 0 ? '#ef4444' : (remaining <= 3 ? '#f59e0b' : '#10b981');
+
+        html += '<tr>';
+        html += '<td class="person-name">' + item.person_name + '</td>';
+        html += '<td>' + item.entitlement + '</td>';
+        html += '<td>' + item.carryover + '</td>';
+        html += '<td style="font-weight:600;">' + total + '</td>';
+        html += '<td>' + item.used + '</td>';
+        html += '<td>' + item.company_leave_days + '</td>';
+        html += '<td><div style="display:flex;align-items:center;gap:8px;"><div style="flex:1;height:8px;background:var(--border);border-radius:4px;overflow:hidden;"><div style="width:' + barPct + '%;height:100%;background:' + barColor + ';border-radius:4px;"></div></div><strong style="white-space:nowrap;">' + remaining + ' dní</strong></div></td>';
+        html += '<td>' + statusBadge + '</td>';
+        html += '</tr>';
+      }
+      html += '</tbody></table></div>';
+
+      // Summary
+      const totalEntitlement = data.reduce((s, d) => s + d.entitlement + d.carryover, 0);
+      const totalUsed = data.reduce((s, d) => s + d.used + d.company_leave_days, 0);
+      const totalRemaining = data.reduce((s, d) => s + d.remaining, 0);
+      const exhausted = data.filter(d => d.remaining <= 0).length;
+
+      const summaryHTML = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px;">'
+        + '<div class="stat-card"><div class="stat-value" style="color:#10b981;">' + totalEntitlement + '</div><div class="stat-label">Celkový nárok (dní)</div></div>'
+        + '<div class="stat-card"><div class="stat-value" style="color:#6c5ce7;">' + totalUsed + '</div><div class="stat-label">Celkem čerpaná</div></div>'
+        + '<div class="stat-card"><div class="stat-value" style="color:#3b82f6;">' + totalRemaining + '</div><div class="stat-label">Celkem zbývá</div></div>'
+        + '<div class="stat-card"><div class="stat-value" style="color:' + (exhausted > 0 ? '#ef4444' : '#10b981') + ';">' + exhausted + '</div><div class="stat-label">Vyčerpáno kompletně</div></div>'
+        + '</div>';
+
+      el.innerHTML = summaryHTML + html;
+    }
+
+    // ============================================================
+    // COMPANY-WIDE LEAVE
+    // ============================================================
+    async function loadCompanyLeave() {
+      try {
+        const res = await fetch('/api/hr/company-leave');
+        const data = await res.json();
+        renderCompanyLeave(data);
+      } catch (e) { console.error(e); }
+    }
+
+    function renderCompanyLeave(data) {
+      const el = document.getElementById('company-leave-table');
+      if (!data || data.length === 0) {
+        el.innerHTML = '<div class="empty-state"><div class="empty-icon">🏢</div><h3>Žádná celozávodní dovolená</h3><p>Přidejte celozávodní dovolenou — automaticky se propíše všem zaměstnancům.</p></div>';
+        return;
+      }
+      let html = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr>';
+      html += '<th>Název</th><th>Od</th><th>Do</th><th>Dní</th><th>Výjimky</th><th>Akce</th>';
+      html += '</tr></thead><tbody>';
+
+      for (const item of data) {
+        const from = new Date(item.date_from);
+        const to = new Date(item.date_to);
+        const days = Math.ceil((to - from) / 86400000) + 1;
+        const excluded = item.excluded_person_ids && item.excluded_person_ids.length > 0
+          ? item.excluded_person_ids.length + ' zaměstnanců'
+          : 'Žádné';
+
+        html += '<tr>';
+        html += '<td class="person-name">' + item.name + '</td>';
+        html += '<td>' + item.date_from + '</td>';
+        html += '<td>' + item.date_to + '</td>';
+        html += '<td style="font-weight:600;">' + days + '</td>';
+        html += '<td>' + excluded + '</td>';
+        html += '<td><button class="btn btn-danger btn-sm" onclick="deleteCompanyLeave(' + item.id + ')">🗑️ Smazat</button></td>';
+        html += '</tr>';
+      }
+      html += '</tbody></table></div>';
+      el.innerHTML = html;
+    }
+
+    async function openCompanyLeaveModal() {
+      await loadPeopleData();
+      const employees = people.filter(p => p.type === 'employee');
+      let checkboxes = employees.map(p =>
+        '<label style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:13px;cursor:pointer;">' +
+        '<input type="checkbox" name="exclude_' + p.id + '" value="' + p.id + '"> ' + p.first_name + ' ' + p.last_name + '</label>'
+      ).join('');
+
+      document.getElementById('modal-root').innerHTML = `<div class="modal-overlay" onclick="if(event.target===this)closeModal()">
+        <div class="modal" style="max-width:520px;">
+          <h2>➕ Nová celozávodní dovolená</h2>
+          <form onsubmit="saveCompanyLeave(event)">
+            <div class="form-grid">
+              <div class="form-group full"><label>Název *</label><input type="text" name="name" required placeholder="např. Vánoční celozávodní dovolená"></div>
+              <div class="form-group"><label>Od *</label><input type="date" name="date_from" required></div>
+              <div class="form-group"><label>Do *</label><input type="date" name="date_to" required></div>
+            </div>
+            <div style="margin-top:16px;border-top:1px solid var(--border);padding-top:16px;">
+              <label style="font-size:12px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;display:block;">Výjimky (zaměstnanci, na které se nevztahuje)</label>
+              <div style="max-height:200px;overflow-y:auto;padding:4px;">${checkboxes}</div>
+            </div>
+            <div class="modal-actions">
+              <button type="button" class="btn btn-secondary" onclick="closeModal()">Zrušit</button>
+              <button type="submit" class="btn btn-primary">Vytvořit</button>
+            </div>
+          </form>
+        </div>
+      </div>`;
+    }
+
+    async function saveCompanyLeave(e) {
+      e.preventDefault();
+      const form = new FormData(e.target);
+      const excluded = [];
+      for (const [key, val] of form.entries()) {
+        if (key.startsWith('exclude_')) excluded.push(parseInt(val));
+      }
+      const data = {
+        name: form.get('name'),
+        date_from: form.get('date_from'),
+        date_to: form.get('date_to'),
+        excluded_person_ids: excluded,
+      };
+      await fetch('/api/hr/company-leave', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+      closeModal();
+      loadCompanyLeave();
+    }
+
+    async function deleteCompanyLeave(id) {
+      if (!confirm('Smazat celozávodní dovolenou?')) return;
+      await fetch('/api/hr/company-leave/' + id, { method: 'DELETE' });
+      loadCompanyLeave();
+    }
+
+    // ============================================================
+    // SETTINGS (Leave + Overtime)
+    // ============================================================
+    async function loadAllSettings() {
+      try {
+        const [leaveRes, otRes] = await Promise.all([
+          fetch('/api/hr/leave-settings'),
+          fetch('/api/hr/overtime-settings'),
+        ]);
+        const leaveS = await leaveRes.json();
+        const otS = await otRes.json();
+        fillLeaveSettingsForm(leaveS);
+        fillOvertimeSettingsForm(otS);
+      } catch (e) { console.error(e); }
+    }
+
+    function fillLeaveSettingsForm(s) {
+      const f = document.getElementById('leave-settings-form');
+      if (!f) return;
+      f.elements.default_entitlement_days.value = s.default_entitlement_days ?? 20;
+      f.elements.year.value = s.year ?? new Date().getFullYear();
+      f.elements.carryover_allowed.value = String(s.carryover_allowed !== false);
+      f.elements.carryover_max_days.value = s.carryover_max_days ?? 5;
+    }
+
+    function fillOvertimeSettingsForm(s) {
+      const f = document.getElementById('overtime-settings-form');
+      if (!f) return;
+      f.elements.yearly_limit_hours.value = s.yearly_limit_hours ?? 150;
+      f.elements.yearly_absolute_max.value = s.yearly_absolute_max ?? 416;
+      f.elements.alert_threshold_percent.value = s.alert_threshold_percent ?? 80;
+      f.elements.surcharge_percent.value = s.surcharge_percent ?? 25;
+      f.elements.compensation.value = s.compensation ?? 'surcharge';
+      f.elements.allow_monthly_transfer.value = String(s.allow_monthly_transfer !== false);
+    }
+
+    async function saveLeaveSettings(e) {
+      e.preventDefault();
+      const form = new FormData(e.target);
+      const data = {
+        default_entitlement_days: parseInt(form.get('default_entitlement_days')),
+        year: parseInt(form.get('year')),
+        carryover_allowed: form.get('carryover_allowed') === 'true',
+        carryover_max_days: parseInt(form.get('carryover_max_days')),
+      };
+      await fetch('/api/hr/leave-settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+      alert('Nastavení dovolených uloženo ✅');
+    }
+
+    async function saveOvertimeSettings(e) {
+      e.preventDefault();
+      const form = new FormData(e.target);
+      const data = {
+        yearly_limit_hours: parseInt(form.get('yearly_limit_hours')),
+        yearly_absolute_max: parseInt(form.get('yearly_absolute_max')),
+        alert_threshold_percent: parseInt(form.get('alert_threshold_percent')),
+        surcharge_percent: parseInt(form.get('surcharge_percent')),
+        compensation: form.get('compensation'),
+        allow_monthly_transfer: form.get('allow_monthly_transfer') === 'true',
+      };
+      await fetch('/api/hr/overtime-settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+      alert('Nastavení přesčasů uloženo ✅');
+    }
 
     // ============================================================
     // HELPERS
