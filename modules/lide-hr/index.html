@@ -136,25 +136,60 @@
     .att-card .att-status { font-size: 11px; color: var(--text2); }
 
     /* Org chart */
-    .org-tree { padding: 20px; }
-    .org-node {
-      background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
-      padding: 16px; margin: 10px 0; display: flex; flex-direction: column; gap: 10px; max-width: 400px;
+    /* Org chart — Factorify-style hierarchical layout */
+    .org-chart-wrapper { position: relative; overflow-x: auto; overflow-y: visible; padding: 20px 0; }
+    .org-chart { display: flex; flex-direction: column; gap: 0; min-width: fit-content; }
+
+    .org-level { display: flex; align-items: flex-start; min-height: 80px; position: relative; }
+    .org-level-num {
+      width: 48px; flex-shrink: 0; font-size: 36px; font-weight: 800; color: rgba(108,92,231,0.12);
+      display: flex; align-items: flex-start; justify-content: center; padding-top: 16px; user-select: none;
     }
-    .org-node-header { display: flex; align-items: center; gap: 10px; }
-    .org-node-actions { display: flex; gap: 4px; margin-left: auto; }
-    .org-people { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
-    .org-person {
-      display: flex; align-items: center; gap: 6px; padding: 4px 8px; border-radius: 6px;
-      background: var(--bg); font-size: 11px; color: var(--text2); cursor: pointer; transition: background 0.15s;
+    .org-level-cards { display: flex; gap: 16px; flex-wrap: wrap; padding: 12px 0; flex: 1; position: relative; }
+
+    /* Connecting lines */
+    .org-level-cards::before {
+      content: ''; position: absolute; left: 0; right: 0; top: 0;
+      border-top: 2px solid var(--border); opacity: 0.4;
     }
-    .org-person:hover { background: rgba(108,92,231,0.1); color: var(--text); }
-    .org-avatar {
-      width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
-      font-size: 9px; font-weight: 600; flex-shrink: 0; overflow: hidden; background: var(--surface2); color: var(--text2);
+    .org-level:first-child .org-level-cards::before { display: none; }
+
+    .org-card {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+      min-width: 200px; max-width: 260px; overflow: hidden; transition: all 0.2s; flex-shrink: 0;
     }
-    .org-avatar img { width: 100%; height: 100%; object-fit: cover; }
-    .org-children { margin-left: 32px; border-left: 2px solid var(--border); padding-left: 16px; }
+    .org-card:hover { border-color: rgba(108,92,231,0.4); box-shadow: 0 4px 16px rgba(0,0,0,0.2); }
+
+    .org-card-header {
+      padding: 8px 12px; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: space-between;
+      text-transform: uppercase; letter-spacing: 0.3px;
+    }
+    .org-card-header-actions { display: flex; gap: 4px; }
+    .org-card-header-actions button { background: none; border: none; cursor: pointer; font-size: 11px; opacity: 0.6; padding: 0 2px; }
+    .org-card-header-actions button:hover { opacity: 1; }
+
+    .org-card-badge { font-size: 10px; display: flex; align-items: center; gap: 3px; opacity: 0.8; font-weight: 400; text-transform: none; }
+
+    .org-card-people { padding: 6px 0; }
+    .org-card-person {
+      display: flex; align-items: center; gap: 10px; padding: 6px 12px; cursor: pointer; transition: background 0.15s;
+    }
+    .org-card-person:hover { background: rgba(108,92,231,0.08); }
+
+    .org-card-avatar {
+      width: 36px; height: 36px; border-radius: 50%; flex-shrink: 0; overflow: hidden;
+      background: var(--surface2); display: flex; align-items: center; justify-content: center;
+      font-size: 14px; font-weight: 600; color: var(--text2); border: 2px solid var(--border);
+    }
+    .org-card-avatar img { width: 100%; height: 100%; object-fit: cover; }
+
+    .org-card-info { flex: 1; min-width: 0; }
+    .org-card-name { font-size: 13px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .org-card-detail { font-size: 11px; color: var(--text2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+    .org-card-empty { padding: 10px 12px; font-size: 11px; color: var(--text2); font-style: italic; }
+
+    .org-connector { width: 2px; height: 20px; background: var(--border); margin: 0 auto; opacity: 0.4; }
 
     .tab-content { display: none; }
     .tab-content.active { display: block; }
@@ -199,6 +234,7 @@
       <div class="tab active" data-tab="people" onclick="switchTab('people')">👥 Lidé</div>
       <div class="tab" data-tab="attendance" onclick="switchTab('attendance')">🕐 Docházka</div>
       <div class="tab" data-tab="org" onclick="switchTab('org')">🏢 Organizační struktura</div>
+
       <div class="tab" data-tab="roles" onclick="switchTab('roles')">🔑 Role a oprávnění</div>
     </div>
 
@@ -880,61 +916,153 @@
     }
 
     async function loadDepartments() {
-      await loadDepartmentsData();
+      await Promise.all([loadDepartmentsData(), loadRolesData(), loadPeopleData()]);
       renderDepartments();
     }
 
     function renderDepartments() {
       const el = document.getElementById('org-tree');
-      if (departments.length === 0) {
-        el.innerHTML = `<div class="empty-state"><div class="empty-icon">🏢</div><h3>Žádná oddělení</h3><p>Vytvořte první oddělení</p></div>`;
+      if (departments.length === 0 && roles.length === 0) {
+        el.innerHTML = `<div class="empty-state"><div class="empty-icon">🏢</div><h3>Žádná oddělení</h3><p>Vytvořte první oddělení a role pro organizační strukturu</p></div>`;
         return;
       }
 
-      // Build tree
-      const roots = departments.filter(d => !d.parent_id);
-      const getChildren = (parentId) => departments.filter(d => d.parent_id === parentId);
+      // Build role hierarchy using parent_role_id
+      // Each "card" is a role with its people
+      const roleMap = {};
+      for (const r of roles) roleMap[r.id] = { ...r, children: [], people: [] };
 
-      function renderNode(dept) {
-        const children = getChildren(dept.id);
-        const deptPeople = people.filter(p => p.department_id === dept.id && p.active === 1);
-        let html = `<div class="org-node" style="border-left: 3px solid ${dept.color}">
-          <div class="org-node-header">
-            <div style="width:10px;height:10px;border-radius:50%;background:${dept.color};flex-shrink:0;"></div>
-            <div style="flex:1;">
-              <strong>${dept.name}</strong>
-              <div style="font-size:11px;color:var(--text2)">${deptPeople.length} zaměstnanců</div>
-            </div>
-            <div class="org-node-actions">
-              <button class="btn btn-sm btn-secondary" onclick="event.stopPropagation();openDeptModal(${dept.id})">✏️</button>
-              <button class="btn btn-sm btn-danger" onclick="event.stopPropagation();deleteDept(${dept.id})">✕</button>
-            </div>
-          </div>`;
-        if (deptPeople.length > 0) {
-          html += '<div class="org-people">';
-          for (const p of deptPeople) {
-            const avatar = p.photo_url
-              ? '<img src="' + p.photo_url + '">'
-              : p.first_name.charAt(0).toUpperCase();
-            const roleName = p.role_name ? ' <span style="opacity:0.6;">· ' + p.role_name + '</span>' : '';
-            html += `<div class="org-person" onclick="openPersonModal(${p.id})">
-              <span class="org-avatar">${avatar}</span>
-              ${p.first_name} ${p.last_name}${roleName}
-            </div>`;
-          }
-          html += '</div>';
+      // Assign people to their roles
+      const activePeople = people.filter(p => p.active === 1);
+      for (const p of activePeople) {
+        if (p.role_id && roleMap[p.role_id]) {
+          roleMap[p.role_id].people.push(p);
         }
-        html += '</div>';
-        if (children.length) {
-          html += '<div class="org-children">';
-          for (const c of children) html += renderNode(c);
-          html += '</div>';
-        }
-        return html;
       }
 
-      let html = '';
-      for (const r of roots) html += renderNode(r);
+      // Build parent-child relationships
+      const rootRoles = [];
+      for (const r of roles) {
+        if (r.parent_role_id && roleMap[r.parent_role_id]) {
+          roleMap[r.parent_role_id].children.push(roleMap[r.id]);
+        } else {
+          rootRoles.push(roleMap[r.id]);
+        }
+      }
+
+      // Build levels by BFS
+      const levels = [];
+      let currentLevel = rootRoles;
+      while (currentLevel.length > 0) {
+        levels.push(currentLevel);
+        const nextLevel = [];
+        for (const role of currentLevel) {
+          nextLevel.push(...role.children);
+        }
+        currentLevel = nextLevel;
+      }
+
+      // Also add people without roles (unassigned)
+      const unassigned = activePeople.filter(p => !p.role_id || !roleMap[p.role_id]);
+
+      // Count all subordinates for a role (recursive)
+      function countSubs(role) {
+        let count = role.people.length;
+        for (const c of role.children) count += countSubs(c);
+        return count;
+      }
+
+      // Render
+      let html = '<div class="org-chart-wrapper"><div class="org-chart">';
+
+      levels.forEach((levelRoles, levelIdx) => {
+        html += `<div class="org-level">
+          <div class="org-level-num">${levelIdx + 1}</div>
+          <div class="org-level-cards">`;
+
+        for (const role of levelRoles) {
+          const dept = role.department_id ? departments.find(d => d.id === role.department_id) : null;
+          const color = dept ? dept.color : '#6c5ce7';
+          const totalSubs = countSubs(role);
+          const directCount = role.people.length;
+
+          html += `<div class="org-card">
+            <div class="org-card-header" style="background:${color}22; color:${color};">
+              <span>${role.name}${dept ? ',' + dept.name : ''}</span>
+              <div style="display:flex;align-items:center;gap:8px;">
+                <span class="org-card-badge">👥 ${totalSubs}${directCount !== totalSubs ? ' (' + directCount + ')' : ''}</span>
+                <div class="org-card-header-actions">
+                  <button onclick="event.stopPropagation();openRoleModal(${role.id})" title="Upravit roli">✏️</button>
+                </div>
+              </div>
+            </div>
+            <div class="org-card-people">`;
+
+          if (role.people.length > 0) {
+            for (const p of role.people) {
+              const avatar = p.photo_url
+                ? `<img src="${p.photo_url}">`
+                : `<span>${p.first_name.charAt(0).toUpperCase()}</span>`;
+              const detail = [p.email, p.phone].filter(Boolean).join(' · ');
+              html += `<div class="org-card-person" onclick="openPersonModal(${p.id})">
+                <div class="org-card-avatar">${avatar}</div>
+                <div class="org-card-info">
+                  <div class="org-card-name">${p.last_name} ${p.first_name}</div>
+                  <div class="org-card-detail">${detail || '—'}</div>
+                </div>
+              </div>`;
+            }
+          } else {
+            html += '<div class="org-card-empty">Žádní zaměstnanci</div>';
+          }
+
+          html += '</div></div>';
+        }
+
+        html += '</div></div>';
+      });
+
+      // Unassigned people
+      if (unassigned.length > 0) {
+        html += `<div class="org-level">
+          <div class="org-level-num">?</div>
+          <div class="org-level-cards">
+            <div class="org-card">
+              <div class="org-card-header" style="background:rgba(156,163,175,0.15); color:#9ca3af;">
+                <span>Bez přiřazené role</span>
+                <span class="org-card-badge">👥 ${unassigned.length}</span>
+              </div>
+              <div class="org-card-people">`;
+        for (const p of unassigned) {
+          const avatar = p.photo_url
+            ? `<img src="${p.photo_url}">`
+            : `<span>${p.first_name.charAt(0).toUpperCase()}</span>`;
+          html += `<div class="org-card-person" onclick="openPersonModal(${p.id})">
+            <div class="org-card-avatar">${avatar}</div>
+            <div class="org-card-info">
+              <div class="org-card-name">${p.last_name} ${p.first_name}</div>
+              <div class="org-card-detail">${p.email || '—'}</div>
+            </div>
+          </div>`;
+        }
+        html += '</div></div></div></div>';
+      }
+
+      html += '</div></div>';
+
+      // Also render department management below
+      html += '<div style="margin-top:32px;"><h3 style="font-size:15px;margin-bottom:12px;color:var(--text2);">📂 Oddělení</h3>';
+      html += '<div style="display:flex;flex-wrap:wrap;gap:10px;">';
+      for (const d of departments) {
+        const parent = d.parent_id ? departments.find(x => x.id === d.parent_id) : null;
+        html += `<div style="background:var(--surface);border:1px solid var(--border);border-left:3px solid ${d.color};border-radius:8px;padding:10px 14px;min-width:180px;display:flex;align-items:center;gap:10px;">
+          <div style="flex:1;"><strong style="font-size:13px;">${d.name}</strong>${parent ? '<div style="font-size:11px;color:var(--text2);">↑ ' + parent.name + '</div>' : ''}</div>
+          <button class="btn btn-sm btn-secondary" onclick="openDeptModal(${d.id})" style="font-size:11px;">✏️</button>
+          <button class="btn btn-sm btn-danger" onclick="deleteDept(${d.id})" style="font-size:11px;">✕</button>
+        </div>`;
+      }
+      html += '</div></div>';
+
       el.innerHTML = html;
     }
 
