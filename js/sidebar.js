@@ -371,7 +371,7 @@ function analyzeRequest(description, pageTitle) {
 function getPageContext(page) {
   var ctx = { elements: [] };
   if (page.includes('hr') || page.includes('lidé')) {
-    ctx.elements = ['tabulku zaměstnanců', 'docházku', 'org. strukturu (strom rolí)', 'správu rolí s oprávněními', 'oddělení'];
+    ctx.elements = ['tabulku zaměstnanců', 'docházku', 'org. strukturu (strom rolí)', 'správu rolí s oprávněními', 'společnosti'];
   } else if (page.includes('mindmap') || page.includes('myšlenk')) {
     ctx.elements = ['myšlenkovou mapu modulů', 'deploy wizard', 'statusy nasazení'];
   } else if (page.includes('dashboard') || page.includes('přehled')) {

@@ -230,7 +230,7 @@ const db = {
     };
     data.departments.push(dept);
     save();
-    logChange('create', 'department', dept.id, `Vytvořeno oddělení: ${dept.name}`, null, dept);
+    logChange('create', 'department', dept.id, `Vytvořena společnost: ${dept.name}`, null, dept);
     return dept;
   },
 
@@ -242,7 +242,7 @@ const db = {
     if (fields.parent_id !== undefined) dept.parent_id = fields.parent_id ? parseInt(fields.parent_id) : null;
     if (fields.color !== undefined) dept.color = fields.color;
     save();
-    logChange('update', 'department', id, `Upraveno oddělení: ${dept.name}`, oldCopy, dept);
+    logChange('update', 'department', id, `Upravena společnost: ${dept.name}`, oldCopy, dept);
     return dept;
   },
 
@@ -252,7 +252,7 @@ const db = {
     const deleted = data.departments[idx];
     data.departments.splice(idx, 1);
     save();
-    logChange('delete', 'department', id, `Smazáno oddělení: ${deleted.name}`, deleted, null);
+    logChange('delete', 'department', id, `Smazána společnost: ${deleted.name}`, deleted, null);
     return true;
   },
 

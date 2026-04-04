@@ -315,7 +315,7 @@
       <!-- TAB: Organizační struktura -->
       <div class="tab-content" id="tab-org">
         <div class="toolbar">
-          <button class="btn btn-primary" onclick="openDeptModal()">+ Nové oddělení</button>
+          <button class="btn btn-primary" onclick="openDeptModal()">+ Nová společnost</button>
         </div>
         <div id="org-tree"></div>
       </div>
@@ -372,7 +372,7 @@
         document.getElementById('stats-bar').innerHTML = `
           <div class="stat-card"><div class="stat-value">${s.employees}</div><div class="stat-label">Zaměstnanců</div></div>
           <div class="stat-card"><div class="stat-value">${s.contacts}</div><div class="stat-label">Kontaktů</div></div>
-          <div class="stat-card"><div class="stat-value">${s.departments}</div><div class="stat-label">Oddělení</div></div>
+          <div class="stat-card"><div class="stat-value">${s.departments}</div><div class="stat-label">Společností</div></div>
           <div class="stat-card"><div class="stat-value">${s.presentToday}</div><div class="stat-label">Dnes přítomno</div></div>
         `;
       } catch (e) { console.error('Stats error:', e); }
@@ -410,7 +410,7 @@
       }
 
       let html = `<table class="data-table"><thead><tr>
-        <th>Jméno</th><th>Typ</th><th>E-mail</th><th>Telefon</th><th>Oddělení</th><th>Pozice</th><th>Smlouva</th><th>Účet</th><th></th>
+        <th>Jméno</th><th>Typ</th><th>E-mail</th><th>Telefon</th><th>Společnost</th><th>Pozice</th><th>Smlouva</th><th>Účet</th><th></th>
       </tr></thead><tbody>`;
 
       for (const p of people) {
@@ -443,7 +443,7 @@
       const p = person || {};
       const isEdit = !!id;
 
-      let deptOptions = '<option value="">— Bez oddělení —</option>';
+      let deptOptions = '<option value="">— Bez společnosti —</option>';
       for (const d of departments) deptOptions += `<option value="${d.id}" ${p.department_id == d.id ? 'selected' : ''}>${d.name}</option>`;
 
       let roleOptions = '<option value="">— Bez pozice —</option>';
@@ -521,7 +521,7 @@
                   </select>
                 </div>
                 <div class="form-group">
-                  <label>Oddělení</label>
+                  <label>Společnost</label>
                   <select name="department_id">${deptOptions}</select>
                 </div>
                 <div class="form-group">
@@ -985,7 +985,7 @@
     function renderDepartments() {
       const el = document.getElementById('org-tree');
       if (departments.length === 0 && roles.length === 0) {
-        el.innerHTML = `<div class="empty-state"><div class="empty-icon">🏢</div><h3>Žádná oddělení</h3><p>Vytvořte první oddělení a role pro organizační strukturu</p></div>`;
+        el.innerHTML = `<div class="empty-state"><div class="empty-icon">🏢</div><h3>Žádné společnosti</h3><p>Vytvořte první společnost a role pro organizační strukturu</p></div>`;
         return;
       }
 
@@ -1104,7 +1104,7 @@
       }
 
       // Department management
-      html += '<div style="margin-top:32px;"><h3 style="font-size:15px;margin-bottom:12px;color:var(--text2);">📂 Oddělení</h3>';
+      html += '<div style="margin-top:32px;"><h3 style="font-size:15px;margin-bottom:12px;color:var(--text2);">🏢 Společnosti</h3>';
       html += '<div style="display:flex;flex-wrap:wrap;gap:10px;">';
       for (const d of departments) {
         const parent = d.parent_id ? departments.find(x => x.id === d.parent_id) : null;
@@ -1128,11 +1128,11 @@
 
       document.getElementById('modal-root').innerHTML = `<div class="modal-overlay" onclick="if(event.target===this)closeModal()">
         <div class="modal">
-          <h2>${id ? '✏️ Upravit oddělení' : '➕ Nové oddělení'}</h2>
+          <h2>${id ? '✏️ Upravit společnost' : '➕ Nová společnost'}</h2>
           <form onsubmit="saveDept(event, ${id || 'null'})">
             <div class="form-grid">
               <div class="form-group"><label>Název *</label><input type="text" name="name" value="${dept.name || ''}" required></div>
-              <div class="form-group"><label>Nadřazené oddělení</label><select name="parent_id">${parentOptions}</select></div>
+              <div class="form-group"><label>Nadřazená společnost</label><select name="parent_id">${parentOptions}</select></div>
               <div class="form-group"><label>Barva</label><input type="color" name="color" value="${dept.color || '#6c5ce7'}"></div>
             </div>
             <div class="modal-actions">
@@ -1157,7 +1157,7 @@
     }
 
     async function deleteDept(id) {
-      if (!confirm('Smazat oddělení?')) return;
+      if (!confirm('Smazat společnost?')) return;
       await fetch('/api/hr/departments/' + id, { method: 'DELETE' });
       loadDepartments();
       loadStats();
@@ -1183,7 +1183,7 @@
         return;
       }
 
-      let html = `<table class="data-table"><thead><tr><th>Role</th><th>Oddělení</th><th>Nadřazená role</th><th>Popis</th><th></th></tr></thead><tbody>`;
+      let html = `<table class="data-table"><thead><tr><th>Role</th><th>Společnost</th><th>Nadřazená role</th><th>Popis</th><th></th></tr></thead><tbody>`;
       for (const r of roles) {
         const parentRole = r.parent_role_id ? roles.find(x => x.id === r.parent_role_id) : null;
         html += `<tr>
@@ -1207,7 +1207,7 @@
       const role = id ? roles.find(r => r.id === id) : {};
       const rolePerms = id ? (allPermissions[String(id)] || {}) : {};
 
-      let deptOptions = '<option value="">— Bez oddělení —</option>';
+      let deptOptions = '<option value="">— Bez společnosti —</option>';
       for (const d of departments) deptOptions += `<option value="${d.id}" ${role.department_id == d.id ? 'selected' : ''}>${d.name}</option>`;
 
       let parentRoleOptions = '<option value="">— Bez nadřazené role —</option>';
@@ -1236,7 +1236,7 @@
           <form onsubmit="saveRole(event, ${id || 'null'})">
             <div class="form-grid">
               <div class="form-group"><label>Název role *</label><input type="text" name="name" value="${role.name || ''}" required></div>
-              <div class="form-group"><label>Oddělení</label><select name="department_id">${deptOptions}</select></div>
+              <div class="form-group"><label>Společnost</label><select name="department_id">${deptOptions}</select></div>
               <div class="form-group"><label>Nadřazená role</label><select name="parent_role_id">${parentRoleOptions}</select></div>
               <div class="form-group full"><label>Popis</label><textarea name="description">${role.description || ''}</textarea></div>
             </div>
