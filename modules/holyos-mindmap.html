@@ -1204,157 +1204,230 @@ function copyClaudeCommand(text, btnEl) {
 
 // Question templates per feature keyword
 // ============================================================
-// WIZARD QUESTIONS — Expert-level, topic-specific
-// Každá kategorie má otázky přímo relevantní k danému tématu
-// s profesionálními doporučeními a best practices v hintech
+// WIZARD QUESTIONS — Dynamicky generované na základě kontextu
+// Analyzuje PŘESNĚ co se nasazuje a generuje cílené otázky
 // ============================================================
-const WIZARD_QUESTIONS = {
-  _default: [
-    { id: 'priority', label: 'Priorita nasazení', type: 'select', options: ['Vysoká — potřebuji hned', 'Střední — tento týden', 'Nízká — může počkat'] },
-    { id: 'specifics', label: 'Co je pro vás u této funkce nejdůležitější?', hint: 'Popište hlavní problém, který řešíte, nebo cíl, kterého chcete dosáhnout. Čím konkrétnější, tím lépe.', type: 'textarea' },
-  ],
-  // --- DOCHÁZKA: obecné příchody/odchody ---
-  dochazka: [
-    { id: 'tracking_method', label: 'Způsob záznamu docházky', hint: '💡 Doporučení: Čipová karta + USB čtečka je nejspolehlivější pro výrobu. QR kód/mobilní app je vhodný pro terénní pracovníky. Ruční zadání ponechte jako zálohu. Zvažte kombinaci metod pro různé typy zaměstnanců.', type: 'textarea' },
-    { id: 'shift_types', label: 'Typy směn ve vaší firmě', hint: '💡 Doporučení: Rozlišujte pevné směny (fixní začátek/konec, typicky výroba) a pružné (jen povinný fond hodin, typicky kancelář). U vícesměnného provozu definujte ranní/odpolední/noční cykly. Každá směna potřebuje: název, hodinový fond, přestávky, příplatky.', type: 'textarea' },
-    { id: 'break_rules', label: 'Pravidla přestávek', hint: '💡 Zákoník práce: po 6h nepřetržité práce min. 30min přestávka. Zvažte: automatické odečtení přestávky vs. manuální evidence? Placené vs. neplacené přestávky? Noční směna = 30min placená přestávka.', type: 'textarea' },
-    { id: 'reports', label: 'Jaké výstupy potřebujete?', hint: '💡 Doporučení: Měsíční výkaz pro mzdovou účtárnu (odpracované hodiny, přesčasy, příplatky). Denní přehled přítomnosti pro vedoucí. Export do Excelu/CSV pro účetní software. Statistiky absence a pozdních příchodů.', type: 'textarea' },
-  ],
-  // --- PŘESČASY ---
-  prescasy: [
-    { id: 'overtime_rules', label: 'Pravidla pro přesčasy', hint: '💡 Zákoník práce ČR: max 8h/týden průměrně (26 týdnů), max 150h/rok bez souhlasu zaměstnance, absolutní max 416h/rok. Příplatek min. 25% průměrného výdělku, nebo náhradní volno. Definujte: Jak se přesčas eviduje — automaticky z docházky (práce nad fond), nebo ho musí schválit vedoucí?', type: 'textarea' },
-    { id: 'overtime_approval', label: 'Schvalování přesčasů', hint: '💡 Best practice: Přesčas by měl být vždy předem nařízen nebo schválen vedoucím — jinak hrozí spory. Doporučený workflow: zaměstnanec podá žádost → vedoucí schválí → přesčas se projeví v docházce. Retroaktivní schválení ponechte jen pro nouzové situace.', type: 'textarea' },
-    { id: 'overtime_compensation', label: 'Kompenzace přesčasů', hint: '💡 Zákon nabízí 2 varianty: příplatek 25%+ k průměrnému výdělku, NEBO náhradní volno (po dohodě). Vedoucí zaměstnanci mají přesčas obvykle zahrnutý v platu. Jakou variantu preferujete? Potřebujete sledovat čerpání náhradního volna za přesčasy?', type: 'textarea' },
-    { id: 'overtime_limits', label: 'Sledování limitů a upozornění', hint: '💡 Doporučení: Systém by měl automaticky hlídat 150h/rok limit a upozornit vedoucího i HR. Dashboard s přehledem vytíženosti pomůže předcházet vyhoření. Chcete upozornění při 80% limitu? Měsíční report přesčasů po odděleních?', type: 'textarea' },
-  ],
-  // --- DOVOLENÁ ---
-  dovolena: [
-    { id: 'leave_entitlement', label: 'Nároky na dovolenou', hint: '💡 Zákoník práce ČR 2024+: min. 4 týdny (160h při 40h/týden). Můžete nastavit i více (5 týdnů je běžné). U DPČ/DPP se nárok počítá poměrně. Potřebujete automatický výpočet nároku podle úvazku a data nástupu? Převod nevyčerpané dovolené do dalšího roku?', type: 'textarea' },
-    { id: 'leave_approval', label: 'Schvalovací proces dovolené', hint: '💡 Best practice: Zaměstnanec podá žádost → přímý nadřízený schválí/zamítne → HR dostane notifikaci. Nadřízený by měl vidět kalendář týmu (kdo už má dovolenou) aby nedošlo ke kolizi. Zvažte: min. počet přítomných na směně, blokované termíny (sezóna, uzávěrky).', type: 'textarea' },
-    { id: 'leave_types', label: 'Typy volna které potřebujete', hint: '💡 Běžné kategorie: Řádná dovolená (placená), Sick days (obvykle 3-5 dní/rok, bez neschopenky), Neplacené volno, Studijní volno, Překážky v práci (svatba, pohřeb, stěhování — ze zákona). Které z těchto typů chcete evidovat? Máte firemní benefity jako sick days nebo home office dny?', type: 'textarea' },
-    { id: 'leave_calendar', label: 'Týmový kalendář a plánování', hint: '💡 Doporučení: Vizuální kalendář s barevným odlišením typů nepřítomnosti je základ. Vedoucí potřebuje vidět obsazenost týmu na první pohled. Zaměstnanec by měl vidět svůj zůstatek a historii čerpání. Chcete plánování dovolených na rok dopředu? Hromadné zadání celozávodní dovolené?', type: 'textarea' },
-  ],
-  // --- NEPŘÍTOMNOST (oběd, lékař, soukromě) ---
-  nepritomnost: [
-    { id: 'absence_categories', label: 'Kategorie krátkodobých nepřítomností', hint: '💡 Typické kategorie: Oběd (neplacená pauza), Lékař (placené — zákon), Soukromě (neplacené), Služební cesta, Školení. U lékaře: zaměstnanec má nárok na nezbytně nutnou dobu + cestu. Které kategorie potřebujete? Rozlišujete placené vs. neplacené?', type: 'textarea' },
-    { id: 'absence_evidence', label: 'Evidence a kontrola', hint: '💡 Best practice: Evidence přes kiosek (čip při odchodu, typ nepřítomnosti, čip při návratu) = automatický záznam doby. U lékaře zvažte povinnost doložit potvrzení. Chcete limit na počet soukromých odchodů za měsíc? Upozornění při nadměrné absenci?', type: 'textarea' },
-    { id: 'absence_impact', label: 'Dopad na mzdu a přehledy', hint: '💡 Doporučení: Automatický přepočet odpracované doby po odečtení nepřítomností. Lékař = placený, ale zvažte rozlišení: zákonné minimum (půlden) vs. celý den. Měsíční přehled nepřítomností po osobách pomůže HR identifikovat vzorce.', type: 'textarea' },
-  ],
-  // --- NEMOCENSKÁ ---
-  nemocenska: [
-    { id: 'sick_workflow', label: 'Workflow neschopenky', hint: '💡 Zákon ČR: Prvních 14 dní platí zaměstnavatel (náhrada mzdy 60% DVZ od 4. dne), od 15. dne ČSSZ. Systém by měl: evidence začátku/konce neschopenky, automatický výpočet náhrady, propojení s docházkou (automatické zápisy „nemoc"). Kdo zadává neschopenku — HR, vedoucí, nebo zaměstnanec?', type: 'textarea' },
-    { id: 'sick_tracking', label: 'Sledování a statistiky', hint: '💡 Doporučení: Sledujte průměrnou nemocnost po odděleních — pomůže identifikovat problémy. Upozornění pro HR při opakovaných krátkých neschopenách. Dashboard: aktuálně nemocní, celková nemocnost v %, trend oproti minulému roku.', type: 'textarea' },
-  ],
-  // --- HOME OFFICE ---
-  homeoffice: [
-    { id: 'ho_rules', label: 'Pravidla home office', hint: '💡 Zákoník práce 2024: práce na dálku vyžaduje písemnou dohodu. Zvažte: max. dny/týden (typicky 2-3), povinné dny v kanceláři, schvalování vedoucím. Systém by měl evidovat kdo kde pracuje pro přehled přítomnosti.', type: 'textarea' },
-    { id: 'ho_evidence', label: 'Evidence a kontrola výkonu', hint: '💡 Doporučení: Zaměstnanec si zapíše HO v systému (plánovaně nebo ad-hoc). Některé firmy vyžadují „check-in" ráno a „check-out" večer. Chcete integraci s komunikačními nástroji (Teams/Slack status)? Potřebujete reporty využití HO?', type: 'textarea' },
-  ],
-  // --- EVIDENCE ZAMĚSTNANCŮ ---
-  evidence: [
-    { id: 'fields', label: 'Klíčová data zaměstnance', hint: '💡 Doporučení: Osobní údaje (jméno, rodné číslo, adresa), pracovní údaje (pozice, oddělení, nadřízený, úvazek), mzdové údaje (tarif, příplatky, číslo účtu), dokumenty (smlouva, certifikáty). GDPR: citlivé údaje šifrujte a logujte přístupy. Které skupiny dat potřebujete?', type: 'textarea' },
-    { id: 'lifecycle', label: 'Životní cyklus zaměstnance', hint: '💡 Best practice: Nástup → zkušební doba → běžný stav → výpověď → výstup. Každá fáze má úkoly (onboarding checklist, hodnocení po zkušební době, exit interview). Chcete automatizovat onboarding proces? Připomínky konce zkušební doby?', type: 'textarea' },
-    { id: 'import_export', label: 'Import/export a propojení', hint: '💡 Doporučení: CSV import pro hromadné založení, Excel export pro reporting, PDF karta zaměstnance. Propojení s docházkovým systémem (chip ID), mzdovým SW. Potřebujete API pro propojení s externím systémem?', type: 'textarea' },
-  ],
-  // --- SMLOUVY ---
-  smlouvy: [
-    { id: 'doc_types', label: 'Typy pracovněprávních dokumentů', hint: '💡 Běžné typy: Pracovní smlouva (HPP), DPP (max 300h/rok u jednoho zaměstnavatele), DPČ (max 20h/týden), Dodatky ke smlouvě, Výpověď/dohoda o ukončení, Dohoda o hmotné odpovědnosti, Konkurenční doložka. Které dokumenty potřebujete spravovat?', type: 'textarea' },
-    { id: 'templates', label: 'Šablony a generování', hint: '💡 Best practice: Šablony s placeholdery (jméno, datum, plat) → automatické vyplnění z karty zaměstnance → PDF ke schválení → elektronický nebo ruční podpis. Šetří hodiny práce HR. Potřebujete generování smluv ze šablon?', type: 'textarea' },
-    { id: 'alerts', label: 'Upozornění a termíny', hint: '💡 Klíčové upomínky: konec zkušební doby (3 měsíce), konec smlouvy na dobu určitou (60 dní předem — jinak se automaticky prodlouží), výročí pro přepočet dovolené, konec DPP (300h limit). Které termíny chcete sledovat?', type: 'textarea' },
-  ],
-  // --- MZDY ---
-  mzdy: [
-    { id: 'calc_method', label: 'Způsob výpočtu mezd', hint: '💡 Varianty: Hodinová mzda × odpracované hodiny (typicky výroba), měsíční plat (THP), kombinace (základ + prémie). Příplatky ze zákona: noc 10%+, So/Ne 10%+, svátek 100%, přesčas 25%+, ztížené prostředí 10%+. Jaká je vaše mzdová struktura?', type: 'textarea' },
-    { id: 'deductions', label: 'Srážky, odvody a benefity', hint: '💡 Povinné odvody: sociální 6.5% zaměstnanec + 24.8% zaměstnavatel, zdravotní 4.5% + 9%. Záloha na daň 15%/23%. Běžné srážky: stravenky, penzijní připojištění, životní pojištění, exekuce. Které benefity/srážky potřebujete evidovat?', type: 'textarea' },
-    { id: 'payslip', label: 'Výplatní páska a distribuce', hint: '💡 Doporučení: Automatické generování PDF výplatních pásek → odeslání emailem nebo přístup přes portál zaměstnance. Povinné údaje: hrubá mzda, odvody, daň, čistá mzda, odpracované hodiny, dovolená. Jak chcete distribuovat výplatní pásky?', type: 'textarea' },
-    { id: 'accounting', label: 'Propojení s účetnictvím', hint: '💡 Nejčastější SW v ČR: Pohoda, Money S3, Helios, ABRA. Export obvykle přes CSV/XML ve formátu daného SW. Potřebujete: mzdové rekapitulace, podklady pro banku (hromadný příkaz), přehledy pro ČSSZ a zdravotní pojišťovny. Jaký účetní SW používáte?', type: 'text' },
-  ],
-  // --- FAKTURACE ---
-  faktur: [
-    { id: 'invoice_types', label: 'Typy dokladů', hint: '💡 Standardní sada: Vydaná faktura, přijatá faktura, zálohová faktura, dobropis, vrubopis, proforma faktura. EET/KH DPH: kontrolní hlášení vyžaduje správnou evidenci. Které typy potřebujete?', type: 'textarea' },
-    { id: 'numbering', label: 'Číselné řady a automatizace', hint: '💡 Doporučení: Oddělené řady pro vydané (FV2024001) a přijaté (FP2024001). Automatická splatnost (14/30/60 dní), automatické penále, QR kód pro platbu na faktuře. Jaký formát číslování preferujete?', type: 'textarea' },
-    { id: 'payment', label: 'Sledování plateb a párování', hint: '💡 Best practice: Import bankovních výpisů → automatické párování s fakturami (podle VS, částky). Upomínky při překročení splatnosti (1. upomínka, 2. upomínka, předžalobní výzva). Přehled pohledávek/závazků po splatnosti.', type: 'textarea' },
-  ],
-  // --- SKLAD ---
-  sklad: [
-    { id: 'stock_method', label: 'Oceňování a evidence', hint: '💡 Metody: FIFO (první dovnitř, první ven — nejběžnější), vážený průměr, pevná cena. Zákon o účetnictví vyžaduje konzistentní metodu. Pro výrobu doporučuji FIFO. Potřebujete šarže, sériová čísla, datum expirace?', type: 'textarea' },
-    { id: 'locations', label: 'Skladová struktura', hint: '💡 Úrovně: Sklad → Sekce → Regál → Pozice. Pro malou firmu stačí sklad + pozice. Při více skladech (hlavní, výroba, expedice) potřebujete meziskladové převody. Jak vypadá vaše fyzická struktura skladů?', type: 'textarea' },
-    { id: 'min_stock', label: 'Automatizace a objednávky', hint: '💡 Best practice: Min/max zásoby → automatické upozornění nebo návrh objednávky při dosažení minima. ABC analýza (A=80% hodnoty, málo položek — sledujte denně). Inventura: cyklická (průběžně) je efektivnější než roční.', type: 'textarea' },
-  ],
-  // --- PROJEKTY ---
-  projekt: [
-    { id: 'project_types', label: 'Typy a struktura projektů', hint: '💡 Doporučení: Definujte šablony projektů podle typu (výrobní zakázka, servis, vývoj). Každý projekt: zodpovědná osoba, termín, rozpočet, fáze. Hierarchie: projekt → etapa → úkol. Ganttův diagram pro vizualizaci. Jaké typy projektů řešíte?', type: 'textarea' },
-    { id: 'resources', label: 'Kapacity a přidělování zdrojů', hint: '💡 Best practice: Kapacitní plánování = kdo, kdy, na čem pracuje. Sledujte vytížení zaměstnanců (zamezíte přetížení i nevyužití). Propojení s docházkou = skutečně odpracovaný čas na projektu. Potřebujete timesheet / výkaz práce?', type: 'textarea' },
-    { id: 'budget', label: 'Rozpočet a controlling', hint: '💡 Doporučení: Plán vs. skutečnost pro: materiál, práce (hodiny × sazba), subdodávky, režie. Průběžné sledování marže. Upozornění při překročení rozpočtu o X%. Fakturace z projektu (milníky, hodinově, fixně). Jak kalkulujete zakázky?', type: 'textarea' },
-  ],
-  // --- HODNOCENÍ ---
-  hodnoceni: [
-    { id: 'eval_method', label: 'Způsob hodnocení', hint: '💡 Běžné metody: 360° hodnocení (nadřízený + kolegové + podřízení), KPI cíle (měřitelné ukazatele), kompetenční model (škála 1-5 pro klíčové kompetence). Pro výrobu doporučuji kombinaci KPI (produktivita, kvalita, docházka) + kompetence. Jaký přístup preferujete?', type: 'textarea' },
-    { id: 'eval_frequency', label: 'Frekvence a proces', hint: '💡 Best practice: Roční hodnocení + pololetní check-in. Průběh: sebehodnocení zaměstnance → hodnocení vedoucím → osobní pohovor → stanovení cílů na další období. Výstup: protokol podepsaný oběma stranami, navázání na odměňování.', type: 'textarea' },
-  ],
-  // --- ŠKOLENÍ / CERTIFIKÁTY ---
-  skoleni: [
-    { id: 'training_types', label: 'Typy školení a certifikací', hint: '💡 Povinná školení: BOZP (roční), PO (roční), řidiči referenti, práce ve výškách, elektro. Profesní: svařování, jeřábnický průkaz, vazačský průkaz. Rozvojová: soft skills, jazyky, IT. Které certifikáty potřebujete sledovat?', type: 'textarea' },
-    { id: 'training_alerts', label: 'Upozornění a plánování', hint: '💡 Klíčové: Automatické upozornění 30/60 dní před expirací certifikátu. Hromadné plánování periodických školení. Evidence: kdo, kdy, co, platnost do, certifikát (scan). Doporučuji matici kvalifikací (kdo co umí) pro plánování směn.', type: 'textarea' },
-  ],
-  // --- NÁBOR ---
-  nabor: [
-    { id: 'recruitment_flow', label: 'Náborový proces', hint: '💡 Typický workflow: Požadavek od vedoucího → schválení HR → inzerát → sběr CV → screening → pohovor → nabídka → nástup. Kanban board (sloupce = fáze) je nejpřehlednější. Potřebujete propojení s pracovními portály (Jobs.cz, LinkedIn)?', type: 'textarea' },
-    { id: 'candidate_tracking', label: 'Evidence kandidátů', hint: '💡 GDPR důležité: souhlas se zpracováním OÚ, maximální doba uchovávání (typicky 6 měsíců po ukončení VŘ). Klíčová data: CV, hodnocení z pohovorů, nabídnutý plat, důvod odmítnutí. Talent pool pro budoucí pozice.', type: 'textarea' },
-  ],
-  // --- ORGANIZAČNÍ STRUKTURA ---
-  org_struktura: [
-    { id: 'org_type', label: 'Typ organizační struktury', hint: '💡 Varianty: Liniová (klasická pyramida — jednoduchá, jasné vztahy), maticová (zaměstnanec patří do oddělení + projektu), plochá (málo úrovní, velké týmy). Pro výrobní firmu je typická liniová s funkčními odděleními. Jaká je vaše struktura?', type: 'textarea' },
-    { id: 'org_rules', label: 'Pravidla a automatizace', hint: '💡 Doporučení: Org chart propojený s HR daty (automatická aktualizace). Vedoucí oddělení = schvalovatel dovolených/přesčasů svých podřízených. Při změně pozice automaticky aktualizovat oprávnění v systému. Potřebujete historii organizačních změn?', type: 'textarea' },
-  ],
-};
 
-// ============================================================
-// Inteligentní matching — vybere PŘESNĚ relevantní kategorie
-// podle klíčových slov v názvu funkce/podfunkce
-// ============================================================
-function getQuestionsForFeature(featureText) {
-  const t = featureText.toLowerCase();
+function getQuestionsForFeature(targetText, fullPath, item, fi, si, level) {
+  const t = targetText.toLowerCase();
+  const path = (fullPath || '').toLowerCase();
+
+  // Analyzuj kontext — co přesně se nasazuje
+  const context = {
+    hasChip: t.includes('čip') || t.includes('čtečk') || t.includes('kiosek') || t.includes('kiosk'),
+    hasRemote: t.includes('vzdálen') || t.includes('home office') || t.includes('z domova') || t.includes('remote') || t.includes('odklikn'),
+    hasExport: t.includes('export') || t.includes('výstup') || t.includes('účetní') || t.includes('report'),
+    hasApproval: t.includes('schval') || t.includes('workflow') || t.includes('žádost'),
+    isArrivalDeparture: t.includes('příchod') || t.includes('odchod'),
+    isOvertime: t.includes('přesčas') || t.includes('nadčas'),
+    isLeave: t.includes('dovolen') || t.includes('volno'),
+    isAbsence: t.includes('nepřítomnost') || t.includes('oběd') || t.includes('lékař') || t.includes('pauza'),
+    isSick: t.includes('nemocen') || t.includes('neschopen'),
+    isShifts: t.includes('směn') || t.includes('rozvrh'),
+    isHomeOffice: t.includes('home office') || t.includes('homeoffice') || t.includes('z domova'),
+    isSalary: t.includes('mzd') || t.includes('výplat') || t.includes('odměn'),
+    isContract: t.includes('smlouv') || t.includes('pracovní poměr'),
+    isEvaluation: t.includes('hodnocen') || t.includes('výkon'),
+    isTraining: t.includes('školen') || t.includes('certifik'),
+    isRecruitment: t.includes('nábor') || t.includes('pohovor'),
+    isOrgStructure: t.includes('struktur') || t.includes('hierarchi') || t.includes('organiz'),
+    isEvidence: t.includes('evidence') || t.includes('databáz'),
+    isInvoice: t.includes('faktur') || t.includes('platb'),
+    isStock: t.includes('sklad') || t.includes('zásob'),
+    isProject: t.includes('projekt') || t.includes('zakázk'),
+    // parent context
+    parentIsAttendance: path.includes('docházka') || path.includes('příchod'),
+    parentIsHR: path.includes('lidé') || path.includes('hr'),
+  };
+
   let questions = [];
-  let matched = false;
 
-  // Specific topics first (more specific = higher priority)
-  const matchers = [
-    { keys: ['přesčas', 'overtime', 'nadčas'], cat: 'prescasy' },
-    { keys: ['dovolen', 'volno', 'leave', 'absence'], cat: 'dovolena' },
-    { keys: ['nepřítomnost', 'oběd', 'lékař', 'soukrom', 'pauza', 'přestávk'], cat: 'nepritomnost' },
-    { keys: ['nemocen', 'neschopen', 'sick', 'nemoc'], cat: 'nemocenska' },
-    { keys: ['home office', 'homeoffice', 'práce na dálku', 'remote', 'hybridn'], cat: 'homeoffice' },
-    { keys: ['docház', 'příchod', 'odchod', 'kiosek', 'čtečk', 'čip'], cat: 'dochazka' },
-    { keys: ['hodnocen', 'review', 'výkon', 'kpi', 'kompetenc'], cat: 'hodnoceni' },
-    { keys: ['školen', 'certifik', 'kvalifikac', 'bozp', 'kurz'], cat: 'skoleni' },
-    { keys: ['nábor', 'recruit', 'kandidát', 'inzerát', 'pohovor', 'výběrov'], cat: 'nabor' },
-    { keys: ['org', 'struktur', 'hierarchi', 'oddělení', 'společnost'], cat: 'org_struktura' },
-    { keys: ['evidence', 'databáz', 'kontakt', 'zaměstnan', 'osobní údaj', 'karta zaměst'], cat: 'evidence' },
-    { keys: ['smlouv', 'dokument', 'pracovní poměr', 'dpp', 'dpč', 'dodatek'], cat: 'smlouvy' },
-    { keys: ['mzd', 'výplat', 'odvod', 'plat', 'odměn', 'srážk'], cat: 'mzdy' },
-    { keys: ['faktur', 'platb', 'pohledáv', 'závaz'], cat: 'faktur' },
-    { keys: ['sklad', 'zásob', 'materiál', 'inventur'], cat: 'sklad' },
-    { keys: ['projekt', 'zakázk', 'harmon', 'kapacit', 'gantt'], cat: 'projekt' },
-  ];
-
-  for (const m of matchers) {
-    if (m.keys.some(k => t.includes(k))) {
-      const catQuestions = WIZARD_QUESTIONS[m.cat];
-      if (catQuestions) {
-        questions.push(...catQuestions);
-        matched = true;
-      }
+  // ====== PŘÍCHODY / ODCHODY ======
+  if (context.isArrivalDeparture) {
+    if (context.hasChip) {
+      questions.push(
+        { id: 'kiosk_setup', label: 'Nastavení kiosku / čtečky', hint: '💡 Doporučení: Kiosek = tablet nebo monitor s USB čtečkou u vchodu. Čtečka simuluje klávesnici (HID) — po přiložení čipu pošle ID + Enter. Kolik vstupních bodů potřebujete? Jeden centrální, nebo na každém patře/hale? Potřebujete i mobilní čtečku?', type: 'textarea' },
+        { id: 'chip_flow', label: 'Co se stane po přiložení čipu?', hint: '💡 Best practice: Čip → systém rozpozná zaměstnance → zobrazí jméno, foto, aktuální stav (přítomen/nepřítomen) → nabídne akci (příchod/odchod/pauza). Automatická detekce: pokud ještě není příchod, nabídni příchod jako výchozí. Chcete potvrzení, nebo rovnou zapsat?', type: 'textarea' },
+        { id: 'forgotten_checkout', label: 'Zapomenutý odchod / chybný záznam', hint: '💡 Častý problém: Zaměstnanec zapomene „odpípnout" odchod. Řešení: automatické uzavření po X hodinách (např. 12h), upozornění vedoucímu o otevřených záznamech, ruční korekce vedoucím v systému. Jak chcete řešit chybné záznamy?', type: 'textarea' },
+      );
     }
+    if (context.hasRemote) {
+      questions.push(
+        { id: 'remote_checkin', label: 'Vzdálené přihlášení (pro práci z domova)', hint: '💡 Varianty: Tlačítko „Příchod" v systému (nejjednodušší), mobilní app s GPS ověřením (pro terénní pracovníky), automaticky podle přihlášení do VPN. Potřebujete ověřit lokaci, nebo stačí důvěra? U home office obvykle stačí klik v systému.', type: 'textarea' },
+        { id: 'remote_rules', label: 'Pravidla pro vzdálenou docházku', hint: '💡 Zvažte: Je povinný ranní check-in v určitý čas? Toleranční okno (např. ±15 min)? Musí zaměstnanec být „online" celou pracovní dobu, nebo stačí odpracovat fond hodin? Liší se pravidla pro HO a terénní práci?', type: 'textarea' },
+      );
+    }
+    if (!context.hasChip && !context.hasRemote) {
+      questions.push(
+        { id: 'checkin_method', label: 'Jak budou zaměstnanci zaznamenávat příchod/odchod?', hint: '💡 Hlavní metody: 1) Čipová karta + čtečka (nejspolehlivější pro výrobu), 2) Klik v aplikaci/intranetu (pro kancelář), 3) Mobilní app (pro terén), 4) QR kód na pracovišti. Můžete kombinovat — jiná metoda pro výrobu, jiná pro kancelář.', type: 'textarea' },
+      );
+    }
+    questions.push(
+      { id: 'rounding_rules', label: 'Zaokrouhlování času', hint: '💡 Důležité rozhodnutí: Evidovat přesný čas (07:03), nebo zaokrouhlit na 5/15/30 min? Zákoník práce ČR: zaokrouhlování vždy ve prospěch zaměstnance (příchod dolů, odchod nahoru). Většina firem eviduje přesně a zaokrouhluje až při výpočtu mzdy.', type: 'textarea' },
+      { id: 'arrival_screen', label: 'Co zobrazit na obrazovce po záznamu?', hint: '💡 Doporučení: Po příchodu — „Vítejte, [jméno], příchod zaznamenán v [čas]". Po odchodu — „Nashledanou, dnes jste odpracoval/a [X]h [Y]m". Chcete zobrazit i aktuální stav fondu za měsíc? Upozornění na blížící se přesčas?', type: 'textarea' },
+    );
   }
 
-  // Always add priority + open-ended question at the end
-  const existingIds = new Set(questions.map(q => q.id));
-  for (const q of WIZARD_QUESTIONS._default) {
-    if (!existingIds.has(q.id)) questions.push(q);
+  // ====== PŘESČASY ======
+  if (context.isOvertime) {
+    questions.push(
+      { id: 'overtime_detection', label: 'Jak se přesčas detekuje?', hint: '💡 Varianty: 1) Automaticky z docházky — práce nad denní/týdenní fond = přesčas, 2) Nařízený — vedoucí předem schválí přesčas, 3) Kombinace — systém detekuje + vedoucí potvrdí. Zákon ČR: max 150h/rok bez souhlasu, 416h/rok absolutní max. Přesčas musí být nařízen/schválen.', type: 'textarea' },
+      { id: 'overtime_compensation', label: 'Kompenzace přesčasů', hint: '💡 Zákon nabízí 2 varianty: příplatek min. 25% průměrného výdělku, NEBO náhradní volno (po dohodě se zaměstnancem). Vedoucí zaměstnanci mívají přesčas zahrnutý v platu (max 150h/rok). Jakou kompenzaci používáte? Potřebujete sledovat čerpání náhradního volna?', type: 'textarea' },
+      { id: 'overtime_alerts', label: 'Upozornění a limity', hint: '💡 Best practice: Automatický alert při 80% ročního limitu (120h z 150h). Dashboard: přesčasy po odděleních, trend, TOP 10 zaměstnanců. Alert vedoucímu když podřízený překročí X hodin přesčasu za měsíc. Chcete blokovat zápis přesčasu po dosažení limitu?', type: 'textarea' },
+      { id: 'overtime_approval_flow', label: 'Schvalovací workflow', hint: '💡 Doporučený flow: Vedoucí nařídí přesčas předem → zaměstnanec potvrdí → systém zapíše. Alternativně: zaměstnanec odpracuje → vedoucí schválí zpětně. U plánovaného přesčasu je lepší předem — méně sporů. Kdo u vás schvaluje přesčasy?', type: 'textarea' },
+    );
   }
 
-  // If nothing matched, provide the defaults only
+  // ====== DOVOLENÁ ======
+  if (context.isLeave) {
+    questions.push(
+      { id: 'leave_entitlement', label: 'Nároky na dovolenou', hint: '💡 Zákon ČR 2024+: min. 4 týdny/rok (160h při 40h/týden), pedagogové 8 týdnů. Můžete dát více (5 týdnů je standard ve výrobě). Výpočet: nárok vzniká poměrně — 1/12 za každý odpracovaný měsíc. Převod do dalšího roku: ze zákona možný, zaměstnavatel může omezit. Kolik týdnů dáváte?', type: 'textarea' },
+      { id: 'leave_approval', label: 'Schvalování dovolené', hint: '💡 Best practice: Zaměstnanec → žádost v systému → přímý nadřízený schválí → HR notifikace. Nadřízený vidí kalendář týmu (kolize). Pravidla: min. přítomných na směně, blokované termíny (sezóna, audit, uzávěrky). Povinné čerpání: zaměstnavatel MUSÍ určit dovolenou, pokud ji zaměstnanec nečerpá.', type: 'textarea' },
+      { id: 'leave_types', label: 'Typy volna k evidenci', hint: '💡 Zákonné: řádná dovolená, překážky v práci (svatba 2 dny, pohřeb 1-2 dny, stěhování 1-2 dny, narození dítěte 1 den). Firemní benefity: sick days (3-5 dní bez neschopenky), osobní volno, studijní volno. Které typy evidujete?', type: 'textarea' },
+      { id: 'leave_calendar', label: 'Vizualizace a plánování', hint: '💡 Doporučení: Týmový kalendář (kdo kdy chybí) — barevně podle typu. Roční plán dovolených (zákon: schválit do 30.6.). Widget na dashboardu: zůstatek dovolené, nadcházející schválené volno. Chcete hromadné zadání celozávodní dovolené?', type: 'textarea' },
+    );
+  }
+
+  // ====== NEPŘÍTOMNOST ======
+  if (context.isAbsence) {
+    questions.push(
+      { id: 'absence_types', label: 'Typy krátkodobých nepřítomností', hint: '💡 Typické: Oběd (neplacená pauza, zákon 30min po 6h), Lékař (placené, nezbytně nutná doba + cesta), Soukromě (neplacené), Služební cesta (placené), Školení (placené). U lékaře: zaměstnanec má zákonný nárok. Které kategorie potřebujete?', type: 'textarea' },
+      { id: 'absence_flow', label: 'Jak se nepřítomnost zaznamenává?', hint: '💡 Na kiosku: čip → „Odcházím" → výběr typu (oběd/lékař/soukromě) → čip při návratu = automatický záznam doby. V systému: tlačítko odchod + typ. Chcete povinnost předem oznámit soukromý odchod vedoucímu?', type: 'textarea' },
+      { id: 'absence_limits', label: 'Limity a kontroly', hint: '💡 Zvažte: Max. soukromých odchodů za měsíc? Automatické upozornění vedoucímu při nadměrné absenci? Report: průměrná doba nepřítomnosti po zaměstnancích. U lékaře: povinnost doložit potvrzení od lékaře?', type: 'textarea' },
+    );
+  }
+
+  // ====== NEMOCENSKÁ ======
+  if (context.isSick) {
+    questions.push(
+      { id: 'sick_workflow', label: 'Workflow neschopenky', hint: '💡 Zákon ČR: Prvních 14 dní platí zaměstnavatel (náhrada 60% DVZ od 4. dne), od 15. dne ČSSZ. eNeschopenka od lékaře přijde na ČSSZ automaticky. Kdo v systému zadává neschopenku — HR, vedoucí, nebo zaměstnanec? Chcete propojení s eNeschopenka API?', type: 'textarea' },
+      { id: 'sick_tracking', label: 'Statistiky nemocnosti', hint: '💡 Doporučení: Dashboard — aktuálně nemocní, nemocnost v % po odděleních, trend (měsíc/rok). Alert pro HR při opakovaných krátkých neschopenách (pondělí/pátek pattern). Porovnání s odvětvovým průměrem. Tyto data pomáhají HR s prevencí.', type: 'textarea' },
+    );
+  }
+
+  // ====== HOME OFFICE ======
+  if (context.isHomeOffice) {
+    questions.push(
+      { id: 'ho_rules', label: 'Firemní pravidla pro home office', hint: '💡 Zákon 2024: HO vyžaduje písemnou dohodu. Běžná pravidla: max 2-3 dny/týden, povinné dny v kanceláři (úterý, středa), schválení vedoucím. Náhrada nákladů: zákon neukládá, ale praxe 2.80 Kč/h (paušál). Jaká pravidla máte?', type: 'textarea' },
+      { id: 'ho_evidence', label: 'Evidence a check-in', hint: '💡 Varianty: Plánovaný HO (žádost předem v kalendáři) vs. ad-hoc (ráno klik „pracuji z domova"). Check-in: tlačítko v systému, automaticky při přihlášení do VPN, nebo na důvěře. Chcete evidovat i odpracované hodiny, nebo jen přítomnost?', type: 'textarea' },
+    );
+  }
+
+  // ====== SMĚNY ======
+  if (context.isShifts) {
+    questions.push(
+      { id: 'shift_types', label: 'Typy směn ve vaší firmě', hint: '💡 Pevná směna: fixní začátek/konec (6:00-14:00 ranní, 14:00-22:00 odpolední, 22:00-6:00 noční). Pružná: jen fond hodin (8h), zaměstnanec si volí začátek. Kombinovaná: povinné jádro (9:00-14:00) + volný zbytek. Jaké směny máte?', type: 'textarea' },
+      { id: 'shift_planning', label: 'Plánování a rozvrhy směn', hint: '💡 Doporučení: Měsíční rozpis směn předem. U rotačních směn: pravidelný cyklus (ranní-ranní-odpolední-odpolední-noční-noční-volno-volno). Vedoucí vytvoří rozvrh → zaměstnanci vidí svůj plán. Chcete možnost výměny směn mezi zaměstnanci?', type: 'textarea' },
+      { id: 'shift_supplements', label: 'Příplatky ke směnám', hint: '💡 Ze zákona: Noční příplatek min. 10% průměrného výdělku, So/Ne min. 10%, svátek 100% + náhradní volno. Ztížené prostředí min. 10%. Chcete tyto příplatky automaticky počítat z docházky? Máte vlastní sazby nad zákonné minimum?', type: 'textarea' },
+    );
+  }
+
+  // ====== EXPORT / REPORTY ======
+  if (context.hasExport) {
+    questions.push(
+      { id: 'export_format', label: 'Formát a obsah exportu', hint: '💡 Doporučení: CSV se středníky (český Excel), nebo přímo XLSX. Typický obsah: datum, jméno, příchod, odchod, přestávka, odpracováno, typ. Dvě verze: surová data (jak načipováno) a upravená (po korekci vedoucím pro mzdy). Jaký formát používá vaše účetní?', type: 'textarea' },
+      { id: 'export_adjustments', label: 'Úpravy dat před exportem', hint: '💡 Best practice: Vedoucí zkontroluje docházku za měsíc, opraví chyby (zapomenutý odchod, špatný čas), schválí → teprve pak export pro účetní. Systém by měl logovat kdo co upravil (audit trail). Chcete schvalovací krok před exportem?', type: 'textarea' },
+      { id: 'export_accounting_sw', label: 'Cílový účetní software', hint: '💡 Nejčastější v ČR: Pohoda (CSV import), Money S3 (XML), Helios (specifický formát), ABRA, Premier. Každý má jiný formát importu. Jaký SW používá vaše mzdová účtárna? Podle toho přizpůsobíme formát exportu.', type: 'textarea' },
+    );
+  }
+
+  // ====== MZDY ======
+  if (context.isSalary) {
+    questions.push(
+      { id: 'calc_method', label: 'Způsob výpočtu mezd', hint: '💡 Varianty: Hodinová mzda × odpracované hodiny (výroba), měsíční plat (THP), kombinace (základ + výkonnostní prémie). Příplatky ze zákona: noc 10%+, So/Ne 10%+, svátek 100%, přesčas 25%+, ztížené prostředí 10%+. Jaká je vaše mzdová struktura?', type: 'textarea' },
+      { id: 'deductions', label: 'Srážky, odvody a benefity', hint: '💡 Povinné: sociální 6.5%+24.8%, zdravotní 4.5%+9%, záloha na daň 15%/23%. Volitelné: stravenky, penzijní, životní pojištění, exekuce (pořadí ze zákona). Které srážky/benefity potřebujete?', type: 'textarea' },
+      { id: 'payslip', label: 'Výplatní páska', hint: '💡 Povinné údaje: hrubá mzda, odvody, daň, čistá mzda, odpracované hodiny, dovolená. Distribuce: PDF emailem, přístup v portálu zaměstnance, tisk. Jak chcete distribuovat výplatní pásky?', type: 'textarea' },
+    );
+  }
+
+  // ====== SMLOUVY ======
+  if (context.isContract) {
+    questions.push(
+      { id: 'doc_types', label: 'Typy dokumentů', hint: '💡 Běžné: Pracovní smlouva (HPP), DPP (max 300h/rok), DPČ (max 20h/týden), Dodatky, Výpověď, Dohoda o hmotné odpovědnosti. Které spravujete?', type: 'textarea' },
+      { id: 'templates', label: 'Šablony a generování', hint: '💡 Šablony s placeholdery → automatické vyplnění z karty zaměstnance → PDF → podpis. Potřebujete?', type: 'textarea' },
+      { id: 'alerts', label: 'Upozornění', hint: '💡 Klíčové: konec zkušební doby (3 měsíce), konec smlouvy na dobu určitou (60 dní předem), DPP limit 300h. Které termíny sledovat?', type: 'textarea' },
+    );
+  }
+
+  // ====== HODNOCENÍ ======
+  if (context.isEvaluation) {
+    questions.push(
+      { id: 'eval_method', label: 'Způsob hodnocení', hint: '💡 Metody: 360° (nadřízený + kolegové + podřízení), KPI (měřitelné ukazatele), kompetenční model (škála 1-5). Pro výrobu: KPI (produktivita, kvalita, docházka) + kompetence. Jaký přístup?', type: 'textarea' },
+      { id: 'eval_frequency', label: 'Frekvence a proces', hint: '💡 Roční hodnocení + pololetní check-in. Flow: sebehodnocení → hodnocení vedoucím → pohovor → cíle. Navázání na odměňování.', type: 'textarea' },
+    );
+  }
+
+  // ====== ŠKOLENÍ ======
+  if (context.isTraining) {
+    questions.push(
+      { id: 'training_types', label: 'Typy školení', hint: '💡 Povinná: BOZP, PO, řidiči referenti. Profesní: svařování, jeřáb, vazač. Rozvojová: soft skills, jazyky. Které sledujete?', type: 'textarea' },
+      { id: 'training_alerts', label: 'Upozornění', hint: '💡 Alert 30/60 dní před expirací certifikátu. Matice kvalifikací (kdo co umí) pro plánování směn.', type: 'textarea' },
+    );
+  }
+
+  // ====== NÁBOR ======
+  if (context.isRecruitment) {
+    questions.push(
+      { id: 'recruitment_flow', label: 'Náborový proces', hint: '💡 Flow: Požadavek → inzerát → CV → screening → pohovor → nabídka → nástup. Kanban board je nejpřehlednější. Propojení s Jobs.cz/LinkedIn?', type: 'textarea' },
+      { id: 'candidate_tracking', label: 'Evidence kandidátů', hint: '💡 GDPR: souhlas, max. 6 měsíců uchovávání. Data: CV, hodnocení, nabídnutý plat, důvod odmítnutí. Talent pool.', type: 'textarea' },
+    );
+  }
+
+  // ====== ORG STRUKTURA ======
+  if (context.isOrgStructure) {
+    questions.push(
+      { id: 'org_type', label: 'Typ struktury', hint: '💡 Liniová (pyramida, výroba), maticová (oddělení + projekt), plochá (málo úrovní). Jaká je vaše?', type: 'textarea' },
+      { id: 'org_rules', label: 'Automatizace', hint: '💡 Org chart propojený s HR daty. Vedoucí = schvalovatel pro své podřízené. Změna pozice → aktualizace oprávnění.', type: 'textarea' },
+    );
+  }
+
+  // ====== FAKTURACE ======
+  if (context.isInvoice) {
+    questions.push(
+      { id: 'invoice_types', label: 'Typy dokladů', hint: '💡 Vydané, přijaté, zálohové, dobropisy, proforma. EET/KH DPH. Které typy?', type: 'textarea' },
+      { id: 'payment', label: 'Platby a párování', hint: '💡 Import bankovních výpisů → automatické párování (VS, částka). Upomínky po splatnosti. QR kód na faktuře.', type: 'textarea' },
+    );
+  }
+
+  // ====== SKLAD ======
+  if (context.isStock) {
+    questions.push(
+      { id: 'stock_method', label: 'Metoda ocenění', hint: '💡 FIFO (nejběžnější), vážený průměr, pevná cena. Šarže, sériová čísla, expirace?', type: 'textarea' },
+      { id: 'stock_structure', label: 'Skladová struktura', hint: '💡 Sklad → Sekce → Regál → Pozice. Více skladů = meziskladové převody. Min/max zásoby → auto upozornění.', type: 'textarea' },
+    );
+  }
+
+  // ====== PROJEKTY ======
+  if (context.isProject) {
+    questions.push(
+      { id: 'project_types', label: 'Typy projektů', hint: '💡 Šablony podle typu (zakázka, servis, vývoj). Hierarchie: projekt → etapa → úkol. Gantt diagram.', type: 'textarea' },
+      { id: 'project_budget', label: 'Rozpočet a controlling', hint: '💡 Plán vs. skutečnost: materiál, práce (hodiny × sazba), subdodávky. Alert při překročení rozpočtu.', type: 'textarea' },
+    );
+  }
+
+  // ====== EVIDENCE (obecná) ======
+  if (context.isEvidence) {
+    questions.push(
+      { id: 'evidence_fields', label: 'Klíčová data', hint: '💡 Osobní, pracovní, mzdové údaje. GDPR: šifrování citlivých dat, logování přístupů. Které skupiny?', type: 'textarea' },
+      { id: 'evidence_lifecycle', label: 'Životní cyklus', hint: '💡 Nástup → zkušební doba → běžný stav → výstup. Onboarding checklist? Připomínky konce zkušební doby?', type: 'textarea' },
+    );
+  }
+
+  // ====== FALLBACK — nic se nematchlo ======
+  if (questions.length === 0) {
+    questions.push(
+      { id: 'goal', label: 'Jaký problém touto funkcí řešíte?', hint: '💡 Popište konkrétní situaci — co vám dnes chybí, co děláte ručně, kde vznikají chyby. Čím přesnější popis, tím lépe systém navrhneme.', type: 'textarea' },
+      { id: 'users', label: 'Kdo bude tuto funkci používat?', hint: '💡 Různí uživatelé potřebují různá rozhraní — vedoucí chce dashboard a schvalování, zaměstnanec chce jednoduchost, účetní chce exporty. Kdo jsou hlavní uživatelé?', type: 'textarea' },
+      { id: 'workflow', label: 'Jak má proces fungovat krok po kroku?', hint: '💡 Popište ideální workflow: Kdo začne → co udělá → co se stane → kdo pokračuje → jaký je výstup. Př: „Zaměstnanec podá žádost → vedoucí schválí → HR dostane notifikaci → export do účetnictví."', type: 'textarea' },
+    );
+  }
+
+  // Vždy na konci: priorita
+  questions.push(
+    { id: 'priority', label: 'Priorita nasazení', type: 'select', options: ['Vysoká — potřebuji hned', 'Střední — tento týden', 'Nízká — může počkat'] },
+    { id: 'extra', label: 'Ještě něco důležitého?', hint: 'Cokoliv dalšího co byste chtěli zmínit — omezení, speciální požadavky, integrace s jiným systémem…', type: 'textarea' },
+  );
+
   return questions;
 }
 
@@ -1459,7 +1532,7 @@ function renderWizard() {
     fullPath += ' > ' + featureText(f) + ' > ' + targetText;
   }
 
-  const questions = getQuestionsForFeature(targetText);
+  const questions = getQuestionsForFeature(targetText, fullPath, item, fi, si, level);
   const recs = buildRecommendations(item, targetText);
   const related = getRelatedModules(item);
   const totalSteps = 3;
