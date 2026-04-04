@@ -1,0 +1,818 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nákup a sklad | HOLYOS</title>
+  <link rel="icon" type="image/svg+xml" href="../../logo-holyos-icon.svg">
+  <base href="../../">
+  <link rel="stylesheet" href="css/dashboard.css">
+  <style>
+    .main-wrapper { margin-left: var(--sidebar-w); flex: 1; min-height: 100vh; display: flex; flex-direction: column; }
+    .module-header { background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); padding: 28px 32px 20px; display: flex; align-items: center; gap: 16px; }
+    .module-header-icon { font-size: 36px; }
+    .module-header h1 { font-size: 22px; font-weight: 700; }
+    .module-header p { font-size: 13px; color: rgba(255,255,255,0.7); margin-top: 2px; }
+
+    .tabs { display: flex; gap: 0; background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 24px; flex-wrap: wrap; }
+    .tab { padding: 12px 20px; font-size: 13px; font-weight: 500; color: var(--text2); cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.2s; }
+    .tab:hover { color: var(--text); }
+    .tab.active { color: #f59e0b; border-bottom-color: #f59e0b; }
+
+    .stats-bar { display: flex; gap: 16px; padding: 20px 24px; flex-wrap: wrap; }
+    .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px 20px; min-width: 150px; flex: 1; }
+    .stat-card .stat-value { font-size: 28px; font-weight: 700; color: #f59e0b; }
+    .stat-card .stat-label { font-size: 12px; color: var(--text2); margin-top: 4px; }
+
+    .content { padding: 0 24px 24px; flex: 1; }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    .toolbar { display: flex; gap: 12px; margin-bottom: 16px; align-items: center; flex-wrap: wrap; }
+    .toolbar input[type="text"], .toolbar input[type="search"] { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 8px 14px; color: var(--text); font-size: 13px; width: 240px; }
+    .toolbar input::placeholder { color: var(--text2); }
+    .toolbar select { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; color: var(--text); font-size: 13px; }
+
+    .btn { padding: 8px 18px; border-radius: 8px; border: 1px solid var(--border); font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.15s; display: inline-flex; align-items: center; gap: 6px; }
+    .btn-primary { background: #f59e0b; color: #000; border-color: #f59e0b; }
+    .btn-primary:hover { background: #d97706; }
+    .btn-secondary { background: var(--surface2); color: var(--text); }
+    .btn-secondary:hover { background: var(--border); }
+    .btn-danger { background: rgba(239,68,68,0.15); color: #ef4444; border-color: rgba(239,68,68,0.3); }
+    .btn-danger:hover { background: rgba(239,68,68,0.25); }
+    .btn-sm { padding: 5px 12px; font-size: 12px; }
+
+    .data-table { width: 100%; border-collapse: separate; border-spacing: 0; }
+    .data-table thead { position: sticky; top: 0; z-index: 1; }
+    .data-table th { background: var(--surface2); padding: 10px 14px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text2); border-bottom: 1px solid var(--border); }
+    .data-table td { padding: 10px 14px; font-size: 13px; border-bottom: 1px solid rgba(255,255,255,0.04); vertical-align: middle; }
+    .data-table tr:hover td { background: rgba(245,158,11,0.06); }
+    .data-table tr { cursor: pointer; }
+    .person-name { font-weight: 600; }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 500; }
+
+    .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); z-index: 200; display: flex; align-items: center; justify-content: center; }
+    .modal { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 28px; width: 600px; max-width: 95vw; max-height: 90vh; overflow-y: auto; }
+    .modal h2 { font-size: 18px; margin-bottom: 20px; }
+    .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 24px; }
+
+    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .form-group { display: flex; flex-direction: column; gap: 4px; }
+    .form-group.full { grid-column: 1 / -1; }
+    .form-group label { font-size: 12px; font-weight: 500; color: var(--text2); }
+    .form-group input, .form-group select, .form-group textarea { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; color: var(--text); font-size: 13px; font-family: inherit; }
+    .form-group textarea { resize: vertical; min-height: 60px; }
+
+    .empty-state { text-align: center; padding: 60px 20px; color: var(--text2); }
+    .empty-state .empty-icon { font-size: 48px; margin-bottom: 12px; }
+    .empty-state h3 { font-size: 16px; color: var(--text); margin-bottom: 6px; }
+
+    .sub-tabs { display: flex; gap: 0; border-bottom: 1px solid var(--border); margin-bottom: 16px; }
+    .sub-tab { padding: 10px 16px; font-size: 12px; font-weight: 500; color: var(--text2); cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.2s; }
+    .sub-tab:hover { color: var(--text); }
+    .sub-tab.active { color: #f59e0b; border-bottom-color: #f59e0b; }
+  </style>
+</head>
+<body>
+  <div id="sidebar"></div>
+  <div class="main-wrapper">
+    <div class="module-header">
+      <div class="module-header-icon">📦</div>
+      <div>
+        <h1>Nákup a sklad</h1>
+        <p>Dodavatelé, objednávky, sklady, zásoby, pohyby</p>
+      </div>
+    </div>
+
+    <div class="tabs">
+      <div class="tab active" data-tab="dashboard" onclick="switchTab('dashboard')">📊 Přehled</div>
+      <div class="tab" data-tab="companies" onclick="switchTab('companies')">🏢 Společnosti</div>
+      <div class="tab" data-tab="orders" onclick="switchTab('orders')">📋 Objednávky</div>
+      <div class="tab" data-tab="materials" onclick="switchTab('materials')">🧱 Materiály</div>
+      <div class="tab" data-tab="warehouses" onclick="switchTab('warehouses')">🏭 Sklady</div>
+      <div class="tab" data-tab="movements" onclick="switchTab('movements')">🔄 Pohyby</div>
+    </div>
+
+    <div class="stats-bar" id="stats-bar"></div>
+
+    <div class="content">
+      <!-- TAB: Dashboard -->
+      <div class="tab-content active" id="tab-dashboard">
+        <div id="dashboard-content"></div>
+      </div>
+
+      <!-- TAB: Společnosti -->
+      <div class="tab-content" id="tab-companies">
+        <div class="toolbar">
+          <input type="text" id="company-search" placeholder="Hledat společnost..." onkeyup="loadCompanies()">
+          <select id="company-type-filter" onchange="loadCompanies()">
+            <option value="">Všechny typy</option>
+            <option value="supplier">Dodavatelé</option>
+            <option value="customer">Odběratelé</option>
+            <option value="cooperation">Kooperace</option>
+          </select>
+          <div style="flex:1"></div>
+          <button class="btn btn-primary" onclick="openCompanyModal()">+ Nová společnost</button>
+        </div>
+        <div id="companies-table"></div>
+      </div>
+
+      <!-- TAB: Objednávky -->
+      <div class="tab-content" id="tab-orders">
+        <div class="sub-tabs">
+          <div class="sub-tab active" data-ordertab="all" onclick="switchOrderTab('all')">Všechny</div>
+          <div class="sub-tab" data-ordertab="purchase" onclick="switchOrderTab('purchase')">🛒 Nákupní</div>
+          <div class="sub-tab" data-ordertab="sales" onclick="switchOrderTab('sales')">💰 Prodejní</div>
+          <div class="sub-tab" data-ordertab="cooperation" onclick="switchOrderTab('cooperation')">🤝 Kooperační</div>
+        </div>
+        <div class="toolbar">
+          <input type="text" id="order-search" placeholder="Hledat objednávku..." onkeyup="loadOrders()">
+          <select id="order-status-filter" onchange="loadOrders()">
+            <option value="">Všechny stavy</option>
+            <option value="new">Nový</option>
+            <option value="quoted">Poptáno</option>
+            <option value="ordered">Objednáno</option>
+            <option value="confirmed">Potvrzeno</option>
+            <option value="delivered">Doručeno</option>
+            <option value="cancelled">Zrušeno</option>
+          </select>
+          <div style="flex:1"></div>
+          <button class="btn btn-primary" onclick="openOrderModal()">+ Nová objednávka</button>
+        </div>
+        <div id="orders-table"></div>
+      </div>
+
+      <!-- TAB: Materiály -->
+      <div class="tab-content" id="tab-materials">
+        <div class="toolbar">
+          <input type="text" id="mat-search" placeholder="Hledat materiál..." onkeyup="loadMaterials()">
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text2);cursor:pointer;">
+            <input type="checkbox" id="mat-low-stock" onchange="loadMaterials()"> Pod minimem
+          </label>
+          <div style="flex:1"></div>
+          <button class="btn btn-primary" onclick="openMaterialModal()">+ Nový materiál</button>
+        </div>
+        <div id="materials-table"></div>
+      </div>
+
+      <!-- TAB: Sklady -->
+      <div class="tab-content" id="tab-warehouses">
+        <div class="toolbar">
+          <div style="flex:1"></div>
+          <button class="btn btn-primary" onclick="openWarehouseModal()">+ Nový sklad</button>
+        </div>
+        <div id="warehouses-grid"></div>
+      </div>
+
+      <!-- TAB: Pohyby -->
+      <div class="tab-content" id="tab-movements">
+        <div class="toolbar">
+          <select id="mv-type-filter" onchange="loadMovements()">
+            <option value="">Všechny typy</option>
+            <option value="receipt">Příjem</option>
+            <option value="issue">Výdej</option>
+            <option value="transfer">Převod</option>
+            <option value="adjustment">Korekce</option>
+          </select>
+          <select id="mv-wh-filter" onchange="loadMovements()"></select>
+          <div style="flex:1"></div>
+          <button class="btn btn-primary" onclick="openMovementModal()">+ Nový pohyb</button>
+        </div>
+        <div id="movements-table"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="modal-root"></div>
+
+  <script>
+    var s = document.createElement('script');
+    s.src = 'js/sidebar.js';
+    s.onload = function() { renderSidebar('nakup-sklad'); };
+    document.head.appendChild(s);
+  </script>
+
+  <script>
+    let companies = [];
+    let materials = [];
+    let warehouses = [];
+    let currentOrderType = '';
+
+    const ORDER_STATUSES = {
+      new: { label: 'Nový', color: '#9ca3af' },
+      quoted: { label: 'Poptáno', color: '#3b82f6' },
+      ordered: { label: 'Objednáno', color: '#8b5cf6' },
+      confirmed: { label: 'Potvrzeno', color: '#f59e0b' },
+      delivered: { label: 'Doručeno', color: '#10b981' },
+      cancelled: { label: 'Zrušeno', color: '#ef4444' },
+    };
+    const ORDER_TYPES = { purchase: '🛒 Nákupní', sales: '💰 Prodejní', cooperation: '🤝 Kooperační' };
+    const COMPANY_TYPES = { supplier: 'Dodavatel', customer: 'Odběratel', cooperation: 'Kooperace', both: 'Dodavatel/Odběratel' };
+    const WH_TYPES = { main: 'Hlavní', raw: 'Materiál', finished: 'Hotové výrobky', wip: 'Rozpracovaná výroba', external: 'Externí' };
+    const MV_TYPES = { receipt: { label: '📥 Příjem', color: '#10b981' }, issue: { label: '📤 Výdej', color: '#ef4444' }, transfer: { label: '🔄 Převod', color: '#3b82f6' }, adjustment: { label: '📝 Korekce', color: '#f59e0b' } };
+
+    // ============================================================
+    // TAB SWITCHING
+    // ============================================================
+    function switchTab(tab) {
+      document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+      document.querySelectorAll('.tab-content').forEach(t => t.classList.toggle('active', t.id === 'tab-' + tab));
+      if (tab === 'dashboard') loadDashboard();
+      if (tab === 'companies') loadCompanies();
+      if (tab === 'orders') loadOrders();
+      if (tab === 'materials') loadMaterials();
+      if (tab === 'warehouses') loadWarehouses();
+      if (tab === 'movements') { loadMovements(); populateMovementFilters(); }
+    }
+
+    function switchOrderTab(type) {
+      document.querySelectorAll('[data-ordertab]').forEach(t => t.classList.toggle('active', t.dataset.ordertab === type));
+      currentOrderType = type === 'all' ? '' : type;
+      loadOrders();
+    }
+
+    // ============================================================
+    // STATS & DASHBOARD
+    // ============================================================
+    async function loadStats() {
+      try {
+        const res = await fetch('/api/wh/stats');
+        const s = await res.json();
+        document.getElementById('stats-bar').innerHTML =
+          '<div class="stat-card"><div class="stat-value">' + s.companyCount + '</div><div class="stat-label">Společností</div></div>' +
+          '<div class="stat-card"><div class="stat-value">' + s.activeOrders + '</div><div class="stat-label">Aktivních objednávek</div></div>' +
+          '<div class="stat-card"><div class="stat-value">' + s.totalMaterials + '</div><div class="stat-label">Materiálů</div></div>' +
+          '<div class="stat-card"><div class="stat-value">' + s.warehouseCount + '</div><div class="stat-label">Skladů</div></div>' +
+          '<div class="stat-card"><div class="stat-value" style="color:' + (s.lowStock > 0 ? '#ef4444' : '#10b981') + '">' + s.lowStock + '</div><div class="stat-label">Pod minimem</div></div>' +
+          '<div class="stat-card"><div class="stat-value">' + Math.round(s.totalValue).toLocaleString('cs-CZ') + ' Kč</div><div class="stat-label">Hodnota zásob</div></div>';
+      } catch(e) { console.error(e); }
+    }
+
+    async function loadDashboard() {
+      const el = document.getElementById('dashboard-content');
+      try {
+        const [ordersRes, matsRes, movsRes] = await Promise.all([
+          fetch('/api/wh/orders?status=new'), fetch('/api/wh/materials?low_stock=true'), fetch('/api/wh/movements')
+        ]);
+        const newOrders = await ordersRes.json();
+        const lowStock = await matsRes.json();
+        const recentMoves = (await movsRes.json()).slice(0, 10);
+
+        let html = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">';
+
+        // New orders
+        html += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px;">';
+        html += '<h3 style="font-size:15px;margin-bottom:12px;">📋 Nové objednávky (' + newOrders.length + ')</h3>';
+        if (newOrders.length === 0) {
+          html += '<div style="color:var(--text2);font-size:13px;">Žádné nové objednávky</div>';
+        } else {
+          for (const o of newOrders.slice(0,5)) {
+            html += '<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px;">';
+            html += '<span class="person-name">' + o.order_number + '</span>';
+            html += '<span style="color:var(--text2);">' + (o.company_name || '—') + '</span>';
+            html += '<span style="font-weight:600;">' + (o.total_amount || 0).toLocaleString('cs-CZ') + ' Kč</span>';
+            html += '</div>';
+          }
+        }
+        html += '</div>';
+
+        // Low stock alerts
+        html += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px;">';
+        html += '<h3 style="font-size:15px;margin-bottom:12px;color:' + (lowStock.length > 0 ? '#ef4444' : '#10b981') + ';">⚠️ Pod minimální zásobou (' + lowStock.length + ')</h3>';
+        if (lowStock.length === 0) {
+          html += '<div style="color:var(--text2);font-size:13px;">Všechny materiály jsou nad minimem ✅</div>';
+        } else {
+          for (const m of lowStock.slice(0,5)) {
+            html += '<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px;">';
+            html += '<span class="person-name">' + m.name + '</span>';
+            html += '<span style="color:#ef4444;font-weight:600;">' + m.current_stock + ' / ' + m.min_stock + ' ' + m.unit + '</span>';
+            html += '</div>';
+          }
+        }
+        html += '</div>';
+
+        // Recent movements
+        html += '<div style="grid-column:1/-1;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px;">';
+        html += '<h3 style="font-size:15px;margin-bottom:12px;">🔄 Poslední pohyby</h3>';
+        if (recentMoves.length === 0) {
+          html += '<div style="color:var(--text2);font-size:13px;">Zatím žádné skladové pohyby</div>';
+        } else {
+          html += '<table class="data-table"><thead><tr><th>Typ</th><th>Materiál</th><th>Sklad</th><th>Množství</th><th>Datum</th></tr></thead><tbody>';
+          for (const mv of recentMoves) {
+            const t = MV_TYPES[mv.type] || { label: mv.type, color: '#9ca3af' };
+            html += '<tr><td><span class="badge" style="background:' + t.color + '22;color:' + t.color + ';">' + t.label + '</span></td>';
+            html += '<td class="person-name">' + (mv.material_name || '—') + '</td>';
+            html += '<td>' + (mv.warehouse_name || '—') + '</td>';
+            html += '<td style="font-weight:600;">' + mv.quantity + '</td>';
+            html += '<td style="color:var(--text2);">' + new Date(mv.created_at).toLocaleString('cs-CZ') + '</td></tr>';
+          }
+          html += '</tbody></table>';
+        }
+        html += '</div></div>';
+        el.innerHTML = html;
+      } catch(e) { el.innerHTML = '<div class="empty-state"><div class="empty-icon">📊</div><h3>Dashboard</h3><p>Začněte přidáním společností a materiálů.</p></div>'; }
+    }
+
+    // ============================================================
+    // COMPANIES
+    // ============================================================
+    async function loadCompanies() {
+      const search = document.getElementById('company-search')?.value || '';
+      const type = document.getElementById('company-type-filter')?.value || '';
+      let url = '/api/wh/companies?';
+      if (search) url += 'search=' + encodeURIComponent(search) + '&';
+      if (type) url += 'type=' + type;
+      try {
+        const res = await fetch(url);
+        companies = await res.json();
+        renderCompanies(companies);
+      } catch(e) { console.error(e); }
+    }
+
+    function renderCompanies(list) {
+      const el = document.getElementById('companies-table');
+      if (!list.length) { el.innerHTML = '<div class="empty-state"><div class="empty-icon">🏢</div><h3>Žádné společnosti</h3><p>Přidejte dodavatele nebo odběratele.</p></div>'; return; }
+      let html = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr><th>Název</th><th>IČO</th><th>Typ</th><th>Kontakt</th><th>Splatnost</th><th>Akce</th></tr></thead><tbody>';
+      for (const c of list) {
+        const typeColor = c.type === 'supplier' ? '#f59e0b' : c.type === 'customer' ? '#10b981' : '#3b82f6';
+        html += '<tr onclick="openCompanyModal(' + c.id + ')">';
+        html += '<td class="person-name">' + c.name + '</td>';
+        html += '<td>' + (c.ico || '—') + '</td>';
+        html += '<td><span class="badge" style="background:' + typeColor + '22;color:' + typeColor + ';">' + (COMPANY_TYPES[c.type] || c.type) + '</span></td>';
+        html += '<td>' + (c.email || c.phone || '—') + '</td>';
+        html += '<td>' + (c.payment_terms_days || 14) + ' dní</td>';
+        html += '<td><button class="btn btn-danger btn-sm" onclick="event.stopPropagation();deleteCompany(' + c.id + ')">🗑️</button></td>';
+        html += '</tr>';
+      }
+      html += '</tbody></table></div>';
+      el.innerHTML = html;
+    }
+
+    async function openCompanyModal(id) {
+      let c = {};
+      if (id) { try { const r = await fetch('/api/wh/companies/' + id); c = await r.json(); } catch(e) {} }
+      const typeOpts = Object.entries(COMPANY_TYPES).map(([k,v]) => '<option value="' + k + '"' + (c.type===k?' selected':'') + '>' + v + '</option>').join('');
+      document.getElementById('modal-root').innerHTML = '<div class="modal-overlay" onclick="if(event.target===this)closeModal()">' +
+        '<div class="modal" style="max-width:650px;"><h2>' + (id ? '✏️ Upravit společnost' : '➕ Nová společnost') + '</h2>' +
+        '<form onsubmit="saveCompany(event,' + (id||'null') + ')">' +
+          '<div style="margin-bottom:14px;display:flex;gap:8px;align-items:end;">' +
+            '<div class="form-group" style="flex:1;"><label>IČO (dohledání z ARES)</label><input type="text" name="ico" value="' + (c.ico||'') + '" placeholder="Zadejte IČO..."></div>' +
+            '<button type="button" class="btn btn-secondary" onclick="lookupARES(this.form)" style="margin-bottom:0;">🔍 ARES</button>' +
+          '</div>' +
+          '<div class="form-grid">' +
+            '<div class="form-group full"><label>Název *</label><input type="text" name="name" value="' + (c.name||'') + '" required></div>' +
+            '<div class="form-group"><label>Typ</label><select name="type">' + typeOpts + '</select></div>' +
+            '<div class="form-group"><label>DIČ</label><input type="text" name="dic" value="' + (c.dic||'') + '"></div>' +
+            '<div class="form-group full"><label>Adresa</label><input type="text" name="address" value="' + (c.address||'') + '"></div>' +
+            '<div class="form-group"><label>Město</label><input type="text" name="city" value="' + (c.city||'') + '"></div>' +
+            '<div class="form-group"><label>PSČ</label><input type="text" name="zip" value="' + (c.zip||'') + '"></div>' +
+            '<div class="form-group"><label>Kontaktní osoba</label><input type="text" name="contact_person" value="' + (c.contact_person||'') + '"></div>' +
+            '<div class="form-group"><label>Email</label><input type="text" name="email" value="' + (c.email||'') + '"></div>' +
+            '<div class="form-group"><label>Telefon</label><input type="text" name="phone" value="' + (c.phone||'') + '"></div>' +
+            '<div class="form-group"><label>Web</label><input type="text" name="web" value="' + (c.web||'') + '"></div>' +
+            '<div class="form-group"><label>Bankovní účet</label><input type="text" name="bank_account" value="' + (c.bank_account||'') + '"></div>' +
+            '<div class="form-group"><label>Splatnost (dní)</label><input type="number" name="payment_terms_days" value="' + (c.payment_terms_days||14) + '" min="0"></div>' +
+            '<div class="form-group full"><label>Poznámky</label><textarea name="notes">' + (c.notes||'') + '</textarea></div>' +
+          '</div>' +
+          '<div class="modal-actions"><button type="button" class="btn btn-secondary" onclick="closeModal()">Zrušit</button><button type="submit" class="btn btn-primary">' + (id?'Uložit':'Vytvořit') + '</button></div>' +
+        '</form></div></div>';
+    }
+
+    async function lookupARES(form) {
+      const ico = form.querySelector('[name="ico"]').value.trim();
+      if (!ico) { alert('Zadejte IČO'); return; }
+      try {
+        const res = await fetch('/api/wh/ares/' + ico);
+        const data = await res.json();
+        if (data.error) { alert(data.error); return; }
+        if (data.name) form.querySelector('[name="name"]').value = data.name;
+        if (data.dic) form.querySelector('[name="dic"]').value = data.dic;
+        if (data.address) form.querySelector('[name="address"]').value = data.address;
+        if (data.city) form.querySelector('[name="city"]').value = data.city;
+        if (data.zip) form.querySelector('[name="zip"]').value = data.zip;
+      } catch(e) { alert('Chyba při vyhledávání v ARES'); }
+    }
+
+    async function saveCompany(e, id) {
+      e.preventDefault();
+      const f = new FormData(e.target);
+      const data = {};
+      for (const [k,v] of f.entries()) data[k] = v;
+      if (data.payment_terms_days) data.payment_terms_days = parseInt(data.payment_terms_days);
+      await fetch(id ? '/api/wh/companies/' + id : '/api/wh/companies', { method: id ? 'PUT' : 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(data) });
+      closeModal(); loadCompanies(); loadStats();
+    }
+
+    async function deleteCompany(id) {
+      if (!confirm('Smazat společnost?')) return;
+      await fetch('/api/wh/companies/' + id, { method: 'DELETE' });
+      loadCompanies(); loadStats();
+    }
+
+    // ============================================================
+    // ORDERS
+    // ============================================================
+    async function loadOrders() {
+      const search = document.getElementById('order-search')?.value || '';
+      const status = document.getElementById('order-status-filter')?.value || '';
+      let url = '/api/wh/orders?';
+      if (currentOrderType) url += 'type=' + currentOrderType + '&';
+      if (status) url += 'status=' + status + '&';
+      if (search) url += 'search=' + encodeURIComponent(search);
+      try {
+        const res = await fetch(url);
+        const orders = await res.json();
+        renderOrders(orders);
+      } catch(e) { console.error(e); }
+    }
+
+    function renderOrders(list) {
+      const el = document.getElementById('orders-table');
+      if (!list.length) { el.innerHTML = '<div class="empty-state"><div class="empty-icon">📋</div><h3>Žádné objednávky</h3><p>Vytvořte první objednávku.</p></div>'; return; }
+      let html = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr><th>Číslo</th><th>Typ</th><th>Společnost</th><th>Stav</th><th>Položek</th><th>Celkem</th><th>Dodání</th><th>Akce</th></tr></thead><tbody>';
+      for (const o of list) {
+        const st = ORDER_STATUSES[o.status] || { label: o.status, color: '#9ca3af' };
+        html += '<tr onclick="openOrderDetail(' + o.id + ')">';
+        html += '<td class="person-name">' + o.order_number + '</td>';
+        html += '<td>' + (ORDER_TYPES[o.type] || o.type) + '</td>';
+        html += '<td>' + (o.company_name || '—') + '</td>';
+        html += '<td><span class="badge" style="background:' + st.color + '22;color:' + st.color + ';">' + st.label + '</span></td>';
+        html += '<td>' + (o.items_count || 0) + '</td>';
+        html += '<td style="font-weight:600;">' + (o.total_amount || 0).toLocaleString('cs-CZ') + ' ' + (o.currency||'CZK') + '</td>';
+        html += '<td>' + (o.expected_delivery || '—') + '</td>';
+        html += '<td><button class="btn btn-danger btn-sm" onclick="event.stopPropagation();deleteOrder(' + o.id + ')">🗑️</button></td>';
+        html += '</tr>';
+      }
+      html += '</tbody></table></div>';
+      el.innerHTML = html;
+    }
+
+    async function openOrderModal(id) {
+      if (companies.length === 0) { try { const r = await fetch('/api/wh/companies'); companies = await r.json(); } catch(e) {} }
+      let o = {};
+      if (id) { try { const r = await fetch('/api/wh/orders/' + id); o = await r.json(); } catch(e) {} }
+      const compOpts = companies.map(c => '<option value="' + c.id + '"' + (o.company_id===c.id?' selected':'') + '>' + c.name + '</option>').join('');
+      const typeOpts = Object.entries(ORDER_TYPES).map(([k,v]) => '<option value="' + k + '"' + (o.type===k?' selected':'') + '>' + v + '</option>').join('');
+      const statusOpts = Object.entries(ORDER_STATUSES).map(([k,v]) => '<option value="' + k + '"' + (o.status===k?' selected':'') + '>' + v.label + '</option>').join('');
+
+      document.getElementById('modal-root').innerHTML = '<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal"><h2>' + (id?'✏️ Upravit objednávku':'➕ Nová objednávka') + '</h2>' +
+        '<form onsubmit="saveOrder(event,' + (id||'null') + ')">' +
+          '<div class="form-grid">' +
+            '<div class="form-group"><label>Typ *</label><select name="type">' + typeOpts + '</select></div>' +
+            '<div class="form-group"><label>Společnost</label><select name="company_id"><option value="">—</option>' + compOpts + '</select></div>' +
+            '<div class="form-group"><label>Stav</label><select name="status">' + statusOpts + '</select></div>' +
+            '<div class="form-group"><label>Očekávané dodání</label><input type="date" name="expected_delivery" value="' + (o.expected_delivery||'') + '"></div>' +
+            '<div class="form-group full"><label>Poznámka</label><textarea name="note">' + (o.note||'') + '</textarea></div>' +
+          '</div>' +
+          '<div class="modal-actions"><button type="button" class="btn btn-secondary" onclick="closeModal()">Zrušit</button><button type="submit" class="btn btn-primary">' + (id?'Uložit':'Vytvořit') + '</button></div>' +
+        '</form></div></div>';
+    }
+
+    async function openOrderDetail(id) {
+      try {
+        const res = await fetch('/api/wh/orders/' + id);
+        const order = await res.json();
+        if (materials.length === 0) { const r2 = await fetch('/api/wh/materials'); materials = await r2.json(); }
+        const st = ORDER_STATUSES[order.status] || { label: order.status, color: '#9ca3af' };
+        const statusOpts = Object.entries(ORDER_STATUSES).map(([k,v]) => '<option value="' + k + '"' + (order.status===k?' selected':'') + '>' + v.label + '</option>').join('');
+
+        let itemsHtml = '';
+        if (order.items && order.items.length > 0) {
+          itemsHtml = '<table class="data-table"><thead><tr><th>Položka</th><th>Množství</th><th>Jednotka</th><th>Cena/ks</th><th>Celkem</th><th></th></tr></thead><tbody>';
+          for (const it of order.items) {
+            itemsHtml += '<tr><td class="person-name">' + (it.name || it.material_name || '—') + '</td>';
+            itemsHtml += '<td>' + it.quantity + '</td><td>' + it.unit + '</td>';
+            itemsHtml += '<td>' + (it.unit_price||0).toLocaleString('cs-CZ') + ' Kč</td>';
+            itemsHtml += '<td style="font-weight:600;">' + (it.total_price||0).toLocaleString('cs-CZ') + ' Kč</td>';
+            itemsHtml += '<td><button class="btn btn-danger btn-sm" onclick="deleteOrderItem(' + it.id + ',' + id + ')">🗑️</button></td></tr>';
+          }
+          itemsHtml += '</tbody></table>';
+        } else {
+          itemsHtml = '<div style="color:var(--text2);font-size:13px;padding:12px;">Zatím žádné položky</div>';
+        }
+
+        const matOpts = materials.map(m => '<option value="' + m.id + '">' + m.code + ' — ' + m.name + ' (' + m.unit_price + ' Kč/' + m.unit + ')</option>').join('');
+
+        document.getElementById('modal-root').innerHTML = '<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal" style="max-width:750px;">' +
+          '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">' +
+            '<h2 style="margin:0;">' + order.order_number + '</h2>' +
+            '<div style="display:flex;gap:8px;align-items:center;">' +
+              '<select onchange="updateOrderStatus(' + id + ',this.value)" style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:6px 10px;color:var(--text);font-size:12px;">' + statusOpts + '</select>' +
+              '<span class="badge" style="background:' + st.color + '22;color:' + st.color + ';font-size:13px;padding:4px 12px;">' + st.label + '</span>' +
+            '</div>' +
+          '</div>' +
+          '<div style="font-size:13px;color:var(--text2);margin-bottom:16px;">' + (ORDER_TYPES[order.type]||order.type) + ' · ' + (order.company_name||'—') + ' · Celkem: <strong style="color:var(--text);">' + (order.total_amount||0).toLocaleString('cs-CZ') + ' ' + (order.currency||'CZK') + '</strong></div>' +
+          '<div style="border-top:1px solid var(--border);padding-top:16px;margin-bottom:12px;"><h3 style="font-size:14px;margin-bottom:8px;">📦 Položky</h3>' + itemsHtml + '</div>' +
+          '<div style="border-top:1px solid var(--border);padding-top:16px;">' +
+            '<h3 style="font-size:14px;margin-bottom:8px;">➕ Přidat položku</h3>' +
+            '<form onsubmit="addOrderItem(event,' + id + ')" style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;">' +
+              '<div class="form-group" style="flex:2;"><label>Materiál</label><select name="material_id" onchange="fillItemPrice(this)"><option value="">— Ruční zadání —</option>' + matOpts + '</select></div>' +
+              '<div class="form-group" style="flex:1;"><label>Název</label><input type="text" name="name" placeholder="Nebo ruční název"></div>' +
+              '<div class="form-group" style="width:80px;"><label>Množství</label><input type="number" name="quantity" value="1" min="0.01" step="0.01" required></div>' +
+              '<div class="form-group" style="width:60px;"><label>Jedn.</label><input type="text" name="unit" value="ks"></div>' +
+              '<div class="form-group" style="width:100px;"><label>Cena/ks</label><input type="number" name="unit_price" value="0" step="0.01"></div>' +
+              '<button type="submit" class="btn btn-primary btn-sm" style="margin-bottom:4px;">+ Přidat</button>' +
+            '</form>' +
+          '</div>' +
+          '<div class="modal-actions" style="margin-top:20px;"><button class="btn btn-secondary" onclick="closeModal()">Zavřít</button></div>' +
+        '</div></div>';
+      } catch(e) { console.error(e); }
+    }
+
+    function fillItemPrice(sel) {
+      const mat = materials.find(m => m.id === parseInt(sel.value));
+      if (mat) {
+        const form = sel.closest('form');
+        form.querySelector('[name="unit_price"]').value = mat.unit_price || 0;
+        form.querySelector('[name="unit"]').value = mat.unit || 'ks';
+        if (!form.querySelector('[name="name"]').value) form.querySelector('[name="name"]').value = mat.name;
+      }
+    }
+
+    async function addOrderItem(e, orderId) {
+      e.preventDefault();
+      const f = new FormData(e.target);
+      const data = { material_id: f.get('material_id')||null, name: f.get('name'), quantity: f.get('quantity'), unit: f.get('unit'), unit_price: f.get('unit_price') };
+      await fetch('/api/wh/orders/' + orderId + '/items', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(data) });
+      openOrderDetail(orderId); loadStats();
+    }
+
+    async function deleteOrderItem(itemId, orderId) {
+      await fetch('/api/wh/order-items/' + itemId, { method: 'DELETE' });
+      openOrderDetail(orderId); loadStats();
+    }
+
+    async function updateOrderStatus(orderId, status) {
+      await fetch('/api/wh/orders/' + orderId, { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ status }) });
+      loadOrders(); loadStats();
+    }
+
+    async function saveOrder(e, id) {
+      e.preventDefault();
+      const f = new FormData(e.target);
+      const data = {};
+      for (const [k,v] of f.entries()) data[k] = v;
+      if (data.company_id) data.company_id = parseInt(data.company_id);
+      await fetch(id ? '/api/wh/orders/' + id : '/api/wh/orders', { method: id ? 'PUT' : 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(data) });
+      closeModal(); loadOrders(); loadStats();
+    }
+
+    async function deleteOrder(id) {
+      if (!confirm('Smazat objednávku?')) return;
+      await fetch('/api/wh/orders/' + id, { method: 'DELETE' });
+      loadOrders(); loadStats();
+    }
+
+    // ============================================================
+    // MATERIALS
+    // ============================================================
+    async function loadMaterials() {
+      const search = document.getElementById('mat-search')?.value || '';
+      const lowStock = document.getElementById('mat-low-stock')?.checked;
+      let url = '/api/wh/materials?';
+      if (search) url += 'search=' + encodeURIComponent(search) + '&';
+      if (lowStock) url += 'low_stock=true';
+      try { const r = await fetch(url); materials = await r.json(); renderMaterials(materials); } catch(e) { console.error(e); }
+    }
+
+    function renderMaterials(list) {
+      const el = document.getElementById('materials-table');
+      if (!list.length) { el.innerHTML = '<div class="empty-state"><div class="empty-icon">🧱</div><h3>Žádné materiály</h3><p>Přidejte první materiál do katalogu.</p></div>'; return; }
+      let html = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr><th>Kód</th><th>Název</th><th>Jedn.</th><th>Cena</th><th>Váž. prům.</th><th>Stav skladu</th><th>Min.</th><th>Akce</th></tr></thead><tbody>';
+      for (const m of list) {
+        const isLow = m.min_stock > 0 && m.current_stock < m.min_stock;
+        html += '<tr onclick="openMaterialModal(' + m.id + ')">';
+        html += '<td style="font-family:monospace;color:var(--text2);">' + m.code + '</td>';
+        html += '<td class="person-name">' + m.name + '</td>';
+        html += '<td>' + m.unit + '</td>';
+        html += '<td>' + (m.unit_price||0).toLocaleString('cs-CZ') + ' Kč</td>';
+        html += '<td>' + (m.weighted_avg_price||0).toFixed(2) + ' Kč</td>';
+        html += '<td style="font-weight:600;color:' + (isLow ? '#ef4444' : '#10b981') + ';">' + (m.current_stock||0) + ' ' + m.unit + (isLow ? ' ⚠️' : '') + '</td>';
+        html += '<td>' + (m.min_stock||0) + '</td>';
+        html += '<td><button class="btn btn-danger btn-sm" onclick="event.stopPropagation();deleteMaterial(' + m.id + ')">🗑️</button></td>';
+        html += '</tr>';
+      }
+      html += '</tbody></table></div>';
+      el.innerHTML = html;
+    }
+
+    async function openMaterialModal(id) {
+      if (companies.length === 0) { try { const r = await fetch('/api/wh/companies?type=supplier'); companies = await r.json(); } catch(e) {} }
+      let m = {};
+      if (id) { try { const r = await fetch('/api/wh/materials/' + id); m = await r.json(); } catch(e) {} }
+      const supOpts = companies.filter(c => c.type==='supplier'||c.type==='both').map(c => '<option value="' + c.id + '"' + (m.supplier_id===c.id?' selected':'') + '>' + c.name + '</option>').join('');
+      document.getElementById('modal-root').innerHTML = '<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal"><h2>' + (id?'✏️ Upravit materiál':'➕ Nový materiál') + '</h2>' +
+        '<form onsubmit="saveMaterial(event,' + (id||'null') + ')"><div class="form-grid">' +
+          '<div class="form-group"><label>Kód</label><input type="text" name="code" value="' + (m.code||'') + '" placeholder="Auto"></div>' +
+          '<div class="form-group"><label>Název *</label><input type="text" name="name" value="' + (m.name||'') + '" required></div>' +
+          '<div class="form-group"><label>Kategorie</label><select name="category"><option value="general"' + (m.category==='general'?' selected':'') + '>Obecný</option><option value="raw"' + (m.category==='raw'?' selected':'') + '>Surovina</option><option value="component"' + (m.category==='component'?' selected':'') + '>Komponenta</option><option value="finished"' + (m.category==='finished'?' selected':'') + '>Hotový výrobek</option><option value="consumable"' + (m.category==='consumable'?' selected':'') + '>Spotřební</option></select></div>' +
+          '<div class="form-group"><label>Jednotka</label><input type="text" name="unit" value="' + (m.unit||'ks') + '"></div>' +
+          '<div class="form-group"><label>Nákupní cena</label><input type="number" name="unit_price" value="' + (m.unit_price||0) + '" step="0.01"></div>' +
+          '<div class="form-group"><label>Min. zásoba</label><input type="number" name="min_stock" value="' + (m.min_stock||0) + '" step="0.01"></div>' +
+          '<div class="form-group"><label>Dodavatel</label><select name="supplier_id"><option value="">—</option>' + supOpts + '</select></div>' +
+          '<div class="form-group"><label>Čárový kód</label><input type="text" name="barcode" value="' + (m.barcode||'') + '"></div>' +
+          '<div class="form-group full"><label>Popis</label><textarea name="description">' + (m.description||'') + '</textarea></div>' +
+        '</div><div class="modal-actions"><button type="button" class="btn btn-secondary" onclick="closeModal()">Zrušit</button><button type="submit" class="btn btn-primary">' + (id?'Uložit':'Vytvořit') + '</button></div></form></div></div>';
+    }
+
+    async function saveMaterial(e, id) {
+      e.preventDefault();
+      const f = new FormData(e.target);
+      const data = {};
+      for (const [k,v] of f.entries()) data[k] = v;
+      if (data.unit_price) data.unit_price = parseFloat(data.unit_price);
+      if (data.min_stock) data.min_stock = parseFloat(data.min_stock);
+      if (data.supplier_id) data.supplier_id = parseInt(data.supplier_id);
+      await fetch(id ? '/api/wh/materials/' + id : '/api/wh/materials', { method: id ? 'PUT' : 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(data) });
+      closeModal(); loadMaterials(); loadStats();
+    }
+
+    async function deleteMaterial(id) {
+      if (!confirm('Smazat materiál?')) return;
+      await fetch('/api/wh/materials/' + id, { method: 'DELETE' });
+      loadMaterials(); loadStats();
+    }
+
+    // ============================================================
+    // WAREHOUSES
+    // ============================================================
+    async function loadWarehouses() {
+      try { const r = await fetch('/api/wh/warehouses'); warehouses = await r.json(); renderWarehouses(warehouses); } catch(e) { console.error(e); }
+    }
+
+    function renderWarehouses(list) {
+      const el = document.getElementById('warehouses-grid');
+      if (!list.length) { el.innerHTML = '<div class="empty-state"><div class="empty-icon">🏭</div><h3>Žádné sklady</h3><p>Vytvořte první sklad.</p></div>'; return; }
+      let html = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px;">';
+      for (const w of list) {
+        const typeLabel = WH_TYPES[w.type] || w.type;
+        html += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px;cursor:pointer;" onclick="openWarehouseDetail(' + w.id + ')">';
+        html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">';
+        html += '<div style="font-weight:700;font-size:16px;">' + w.name + '</div>';
+        html += '<span class="badge" style="background:#f59e0b22;color:#f59e0b;">' + typeLabel + '</span>';
+        html += '</div>';
+        html += '<div style="font-size:12px;color:var(--text2);">' + (w.code ? 'Kód: ' + w.code + ' · ' : '') + (w.locations_count || 0) + ' pozic</div>';
+        html += '<div style="display:flex;gap:8px;margin-top:12px;">';
+        html += '<button class="btn btn-sm btn-secondary" onclick="event.stopPropagation();openWarehouseModal(' + w.id + ')">✏️</button>';
+        html += '<button class="btn btn-sm btn-danger" onclick="event.stopPropagation();deleteWarehouse(' + w.id + ')">🗑️</button>';
+        html += '</div></div>';
+      }
+      html += '</div>';
+      el.innerHTML = html;
+    }
+
+    async function openWarehouseModal(id) {
+      let w = {};
+      if (id) { try { const r = await fetch('/api/wh/warehouses/' + id); w = await r.json(); } catch(e) {} }
+      const typeOpts = Object.entries(WH_TYPES).map(([k,v]) => '<option value="' + k + '"' + (w.type===k?' selected':'') + '>' + v + '</option>').join('');
+      document.getElementById('modal-root').innerHTML = '<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal" style="max-width:480px;"><h2>' + (id?'✏️ Upravit sklad':'➕ Nový sklad') + '</h2>' +
+        '<form onsubmit="saveWarehouse(event,' + (id||'null') + ')"><div class="form-grid">' +
+          '<div class="form-group"><label>Název *</label><input type="text" name="name" value="' + (w.name||'') + '" required></div>' +
+          '<div class="form-group"><label>Kód</label><input type="text" name="code" value="' + (w.code||'') + '"></div>' +
+          '<div class="form-group"><label>Typ</label><select name="type">' + typeOpts + '</select></div>' +
+          '<div class="form-group"><label>Adresa</label><input type="text" name="address" value="' + (w.address||'') + '"></div>' +
+        '</div><div class="modal-actions"><button type="button" class="btn btn-secondary" onclick="closeModal()">Zrušit</button><button type="submit" class="btn btn-primary">' + (id?'Uložit':'Vytvořit') + '</button></div></form></div></div>';
+    }
+
+    async function openWarehouseDetail(id) {
+      try {
+        const res = await fetch('/api/wh/warehouses/' + id);
+        const wh = await res.json();
+        let locsHtml = '';
+        if (wh.locations && wh.locations.length > 0) {
+          locsHtml = '<table class="data-table"><thead><tr><th>Sekce</th><th>Regál</th><th>Pozice</th><th>Označení</th><th></th></tr></thead><tbody>';
+          for (const loc of wh.locations) {
+            locsHtml += '<tr><td>' + (loc.section||'—') + '</td><td>' + (loc.rack||'—') + '</td><td>' + (loc.position||'—') + '</td><td>' + (loc.label||'—') + '</td>';
+            locsHtml += '<td><button class="btn btn-danger btn-sm" onclick="deleteLocation(' + loc.id + ',' + id + ')">🗑️</button></td></tr>';
+          }
+          locsHtml += '</tbody></table>';
+        } else {
+          locsHtml = '<div style="color:var(--text2);font-size:13px;padding:12px;">Zatím žádné pozice</div>';
+        }
+        document.getElementById('modal-root').innerHTML = '<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal" style="max-width:650px;">' +
+          '<h2>🏭 ' + wh.name + ' <span style="font-size:13px;color:var(--text2);">(' + (WH_TYPES[wh.type]||wh.type) + ')</span></h2>' +
+          '<div style="border-bottom:1px solid var(--border);padding-bottom:16px;margin-bottom:16px;"><h3 style="font-size:14px;margin-bottom:8px;">📍 Skladové pozice (' + (wh.locations?.length||0) + ')</h3>' + locsHtml + '</div>' +
+          '<h3 style="font-size:14px;margin-bottom:8px;">➕ Přidat pozici</h3>' +
+          '<form onsubmit="addLocation(event,' + id + ')" style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;">' +
+            '<div class="form-group" style="width:100px;"><label>Sekce</label><input type="text" name="section" placeholder="A"></div>' +
+            '<div class="form-group" style="width:100px;"><label>Regál</label><input type="text" name="rack" placeholder="1"></div>' +
+            '<div class="form-group" style="width:100px;"><label>Pozice</label><input type="text" name="position" placeholder="01"></div>' +
+            '<div class="form-group" style="flex:1;"><label>Označení</label><input type="text" name="label" placeholder="A-1-01"></div>' +
+            '<button type="submit" class="btn btn-primary btn-sm" style="margin-bottom:4px;">+ Přidat</button>' +
+          '</form>' +
+          '<div class="modal-actions" style="margin-top:20px;"><button class="btn btn-secondary" onclick="closeModal()">Zavřít</button></div>' +
+        '</div></div>';
+      } catch(e) { console.error(e); }
+    }
+
+    async function addLocation(e, whId) {
+      e.preventDefault();
+      const f = new FormData(e.target);
+      const data = {};
+      for (const [k,v] of f.entries()) data[k] = v;
+      await fetch('/api/wh/warehouses/' + whId + '/locations', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(data) });
+      openWarehouseDetail(whId);
+    }
+
+    async function deleteLocation(locId, whId) {
+      await fetch('/api/wh/locations/' + locId, { method: 'DELETE' });
+      openWarehouseDetail(whId);
+    }
+
+    async function saveWarehouse(e, id) {
+      e.preventDefault();
+      const f = new FormData(e.target);
+      const data = {};
+      for (const [k,v] of f.entries()) data[k] = v;
+      await fetch(id ? '/api/wh/warehouses/' + id : '/api/wh/warehouses', { method: id ? 'PUT' : 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(data) });
+      closeModal(); loadWarehouses(); loadStats();
+    }
+
+    async function deleteWarehouse(id) {
+      if (!confirm('Smazat sklad a všechny jeho pozice?')) return;
+      await fetch('/api/wh/warehouses/' + id, { method: 'DELETE' });
+      loadWarehouses(); loadStats();
+    }
+
+    // ============================================================
+    // INVENTORY MOVEMENTS
+    // ============================================================
+    async function loadMovements() {
+      const type = document.getElementById('mv-type-filter')?.value || '';
+      const wh = document.getElementById('mv-wh-filter')?.value || '';
+      let url = '/api/wh/movements?';
+      if (type) url += 'type=' + type + '&';
+      if (wh) url += 'warehouse_id=' + wh;
+      try { const r = await fetch(url); renderMovements(await r.json()); } catch(e) { console.error(e); }
+    }
+
+    function renderMovements(list) {
+      const el = document.getElementById('movements-table');
+      if (!list.length) { el.innerHTML = '<div class="empty-state"><div class="empty-icon">🔄</div><h3>Žádné pohyby</h3><p>Zaznamenejte první příjem nebo výdej.</p></div>'; return; }
+      let html = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr><th>Datum</th><th>Typ</th><th>Materiál</th><th>Sklad</th><th>Množství</th><th>Cena/ks</th><th>Poznámka</th></tr></thead><tbody>';
+      for (const mv of list) {
+        const t = MV_TYPES[mv.type] || { label: mv.type, color: '#9ca3af' };
+        html += '<tr><td style="color:var(--text2);">' + new Date(mv.created_at).toLocaleString('cs-CZ') + '</td>';
+        html += '<td><span class="badge" style="background:' + t.color + '22;color:' + t.color + ';">' + t.label + '</span></td>';
+        html += '<td class="person-name">' + (mv.material_name || '—') + '</td>';
+        html += '<td>' + (mv.warehouse_name || '—') + '</td>';
+        html += '<td style="font-weight:600;">' + mv.quantity + '</td>';
+        html += '<td>' + (mv.unit_price||0).toLocaleString('cs-CZ') + ' Kč</td>';
+        html += '<td style="color:var(--text2);">' + (mv.note||'') + '</td></tr>';
+      }
+      html += '</tbody></table></div>';
+      el.innerHTML = html;
+    }
+
+    async function populateMovementFilters() {
+      if (warehouses.length === 0) { try { const r = await fetch('/api/wh/warehouses'); warehouses = await r.json(); } catch(e) {} }
+      const sel = document.getElementById('mv-wh-filter');
+      if (sel.options.length <= 1) {
+        sel.innerHTML = '<option value="">Všechny sklady</option>' + warehouses.map(w => '<option value="' + w.id + '">' + w.name + '</option>').join('');
+      }
+    }
+
+    async function openMovementModal() {
+      if (materials.length === 0) { try { const r = await fetch('/api/wh/materials'); materials = await r.json(); } catch(e) {} }
+      if (warehouses.length === 0) { try { const r = await fetch('/api/wh/warehouses'); warehouses = await r.json(); } catch(e) {} }
+      const matOpts = materials.map(m => '<option value="' + m.id + '">' + m.code + ' — ' + m.name + '</option>').join('');
+      const whOpts = warehouses.map(w => '<option value="' + w.id + '">' + w.name + '</option>').join('');
+      const typeOpts = Object.entries(MV_TYPES).map(([k,v]) => '<option value="' + k + '">' + v.label + '</option>').join('');
+
+      document.getElementById('modal-root').innerHTML = '<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal" style="max-width:500px;"><h2>➕ Nový skladový pohyb</h2>' +
+        '<form onsubmit="saveMovement(event)"><div class="form-grid">' +
+          '<div class="form-group"><label>Typ *</label><select name="type" required>' + typeOpts + '</select></div>' +
+          '<div class="form-group"><label>Sklad *</label><select name="warehouse_id" required>' + whOpts + '</select></div>' +
+          '<div class="form-group full"><label>Materiál *</label><select name="material_id" required>' + matOpts + '</select></div>' +
+          '<div class="form-group"><label>Množství *</label><input type="number" name="quantity" required min="0.01" step="0.01"></div>' +
+          '<div class="form-group"><label>Cena/ks</label><input type="number" name="unit_price" step="0.01" value="0"></div>' +
+          '<div class="form-group full"><label>Poznámka</label><textarea name="note"></textarea></div>' +
+        '</div><div class="modal-actions"><button type="button" class="btn btn-secondary" onclick="closeModal()">Zrušit</button><button type="submit" class="btn btn-primary">Zaznamenat</button></div></form></div></div>';
+    }
+
+    async function saveMovement(e) {
+      e.preventDefault();
+      const f = new FormData(e.target);
+      const data = {};
+      for (const [k,v] of f.entries()) data[k] = v;
+      data.material_id = parseInt(data.material_id);
+      data.warehouse_id = parseInt(data.warehouse_id);
+      data.quantity = parseFloat(data.quantity);
+      data.unit_price = parseFloat(data.unit_price) || 0;
+      await fetch('/api/wh/movements', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(data) });
+      closeModal(); loadMovements(); loadStats(); loadMaterials();
+    }
+
+    // ============================================================
+    // HELPERS
+    // ============================================================
+    function closeModal() { document.getElementById('modal-root').innerHTML = ''; }
+
+    // ============================================================
+    // INIT
+    // ============================================================
+    loadStats();
+    loadDashboard();
+  </script>
+</body>
+</html>
