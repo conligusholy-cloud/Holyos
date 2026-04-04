@@ -524,8 +524,8 @@ function removeAiScreenshot() {
 
 // Ctrl+V paste support for AI chat screenshots
 document.addEventListener('paste', function(e) {
-  // Only handle if AI chat is open
-  var chatEl = document.getElementById('ai-chat');
+  // Only handle if AI chat is open (root wrapper has id='ai-chat-root')
+  var chatEl = document.getElementById('ai-chat-root');
   if (!chatEl) return;
   var items = (e.clipboardData || e.originalEvent.clipboardData).items;
   for (var i = 0; i < items.length; i++) {
