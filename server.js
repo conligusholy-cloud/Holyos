@@ -594,43 +594,128 @@ const server = http.createServer(async (req, res) => {
     if (handled) return;
   }
 
-  // ---- MINDMAP NOTES API ----
+  // ---- MINDMAP NOTES & VERSIONS API ----
   const MINDMAP_FILE = path.join(__dirname, 'data', 'mindmap-notes.json');
+  const MINDMAP_VERSIONS_FILE = path.join(__dirname, 'data', 'mindmap-versions.json');
 
+  function loadMindmapData() {
+    try { return JSON.parse(fs.readFileSync(MINDMAP_FILE, 'utf-8')); }
+    catch (e) { return { notes: {}, featuresOverride: {}, descOverride: {}, connectionsOverride: {} }; }
+  }
+
+  function saveMindmapData(data) {
+    const dataDir = path.join(__dirname, 'data');
+    if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
+    fs.writeFileSync(MINDMAP_FILE, JSON.stringify(data, null, 2), 'utf-8');
+  }
+
+  function loadVersions() {
+    try { return JSON.parse(fs.readFileSync(MINDMAP_VERSIONS_FILE, 'utf-8')); }
+    catch (e) { return []; }
+  }
+
+  function saveVersion(description, snapshot) {
+    const versions = loadVersions();
+    versions.push({
+      id: versions.length + 1,
+      date: new Date().toISOString(),
+      description,
+      snapshot, // full copy of mindmap-notes.json data
+    });
+    // Keep max 50 versions
+    while (versions.length > 50) versions.shift();
+    const dataDir = path.join(__dirname, 'data');
+    if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
+    fs.writeFileSync(MINDMAP_VERSIONS_FILE, JSON.stringify(versions, null, 2), 'utf-8');
+    return versions[versions.length - 1];
+  }
+
+  // GET current mindmap data
   if (pathname === '/api/mindmap/notes' && req.method === 'GET') {
-    try {
-      const data = fs.readFileSync(MINDMAP_FILE, 'utf-8');
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(data);
-    } catch (e) {
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ notes: {}, applied: {} }));
-    }
+    sendJSON(res, 200, loadMindmapData());
     return;
   }
 
+  // SAVE mindmap data (notes only — no structural changes)
   if (pathname === '/api/mindmap/notes' && req.method === 'POST') {
-    const body = await readBody(req);
     try {
-      const dataDir = path.join(__dirname, 'data');
-      if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
-      fs.writeFileSync(MINDMAP_FILE, body, 'utf-8');
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ ok: true }));
+      const body = JSON.parse(await readBody(req));
+      const current = loadMindmapData();
+      // Only update notes, preserve overrides
+      current.notes = body.notes || current.notes;
+      saveMindmapData(current);
+      sendJSON(res, 200, { ok: true });
     } catch (e) {
-      res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: e.message }));
+      sendJSON(res, 500, { error: e.message });
     }
     return;
   }
 
-  // Reset mindmap notes (clear old applied data)
-  if (pathname === '/api/mindmap/notes/reset' && req.method === 'POST') {
+  // COMMIT AI changes — saves features + creates version
+  if (pathname === '/api/mindmap/commit' && req.method === 'POST') {
     try {
-      const dataDir = path.join(__dirname, 'data');
-      if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
-      fs.writeFileSync(MINDMAP_FILE, JSON.stringify({ notes: {}, applied: {}, featuresOverride: {}, descOverride: {}, connectionsOverride: {} }, null, 2), 'utf-8');
-      sendJSON(res, 200, { ok: true });
+      const body = JSON.parse(await readBody(req));
+      const { moduleId, features, desc, connections, changes } = body;
+      if (!moduleId || !features) {
+        sendJSON(res, 400, { error: 'moduleId and features required' });
+        return;
+      }
+
+      // Save snapshot of current state BEFORE change
+      const currentData = loadMindmapData();
+      saveVersion('Před změnou: ' + (changes || moduleId), JSON.parse(JSON.stringify(currentData)));
+
+      // Apply the change
+      if (!currentData.featuresOverride) currentData.featuresOverride = {};
+      if (!currentData.descOverride) currentData.descOverride = {};
+      if (!currentData.connectionsOverride) currentData.connectionsOverride = {};
+
+      currentData.featuresOverride[moduleId] = features;
+      if (desc) currentData.descOverride[moduleId] = desc;
+      if (connections) currentData.connectionsOverride[moduleId] = connections;
+
+      // Clear the note for this module (it's been applied)
+      if (currentData.notes && currentData.notes[moduleId]) {
+        currentData.notes[moduleId] = '';
+      }
+
+      // Remove old legacy applied
+      if (currentData.applied) delete currentData.applied[moduleId];
+
+      saveMindmapData(currentData);
+
+      // Save snapshot AFTER change
+      const ver = saveVersion('AI: ' + (changes || 'Struktura aktualizována — ' + moduleId), JSON.parse(JSON.stringify(currentData)));
+
+      sendJSON(res, 200, { ok: true, version: ver.id });
+    } catch (e) {
+      sendJSON(res, 500, { error: e.message });
+    }
+    return;
+  }
+
+  // GET version history
+  if (pathname === '/api/mindmap/versions' && req.method === 'GET') {
+    sendJSON(res, 200, loadVersions().map(v => ({ id: v.id, date: v.date, description: v.description })));
+    return;
+  }
+
+  // RESTORE a specific version
+  const versionMatch = pathname.match(/^\/api\/mindmap\/versions\/(\d+)\/restore$/);
+  if (versionMatch && req.method === 'POST') {
+    try {
+      const versionId = parseInt(versionMatch[1]);
+      const versions = loadVersions();
+      const version = versions.find(v => v.id === versionId);
+      if (!version) { sendJSON(res, 404, { error: 'Version not found' }); return; }
+
+      // Save current as version before restoring
+      const currentData = loadMindmapData();
+      saveVersion('Před obnovením verze #' + versionId, JSON.parse(JSON.stringify(currentData)));
+
+      // Restore
+      saveMindmapData(version.snapshot);
+      sendJSON(res, 200, { ok: true, restored: versionId });
     } catch (e) {
       sendJSON(res, 500, { error: e.message });
     }

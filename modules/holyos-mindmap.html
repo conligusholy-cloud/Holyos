@@ -748,21 +748,11 @@ async function loadFromServer() {
 async function saveToServer() {
   state.saving = true;
   try {
-    // Build featuresOverride from current module state (only for modules that were AI-modified)
-    const featuresOverride = state.featuresOverride || {};
-    const descOverride = state.descOverride || {};
-    const connectionsOverride = state.connectionsOverride || {};
-
+    // Only save notes (feature overrides are saved via /api/mindmap/commit)
     await fetch('/api/mindmap/notes', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        notes: state.notes,
-        applied: state.applied,
-        featuresOverride,
-        descOverride,
-        connectionsOverride,
-      }),
+      body: JSON.stringify({ notes: state.notes }),
     });
     state.lastSaved = new Date();
   } catch (e) {
@@ -1106,6 +1096,9 @@ function applyAllNotes() {
   modal.innerHTML = html;
 }
 
+// Pending AI results waiting for approval
+let pendingAIResults = [];
+
 async function confirmApply() {
   const allItems = [...DATA.modules, DATA.ai, DATA.tech].filter(Boolean);
   const notesToApply = [];
@@ -1118,32 +1111,22 @@ async function confirmApply() {
 
   if (notesToApply.length === 0) { closeModal(); return; }
 
-  // Show loading state
-  const btn = document.getElementById('btn-ai-apply');
-  if (btn) {
-    btn.disabled = true;
-    btn.innerHTML = '<span class="ai-spinner"></span> AI zpracovává...';
-  }
+  // Show loading modal
+  const modal = document.getElementById('modal-root');
+  modal.innerHTML = `<div class="modal-overlay"><div class="modal" style="max-width:700px;">
+    <h2>🤖 AI zpracovává poznámky...</h2>
+    <div id="ai-progress" style="padding:12px;background:rgba(108,92,231,0.08);border-radius:8px;font-size:13px;">
+      <div style="font-weight:600;"><span class="ai-spinner"></span> Analyzuji...</div>
+    </div>
+  </div></div>`;
 
-  // Show progress in modal
-  const modal = document.querySelector('#modal-root .modal');
-  let progressHtml = '<div id="ai-progress" style="margin-top:16px;padding:12px;background:rgba(108,92,231,0.08);border-radius:8px;font-size:13px;">';
-  progressHtml += '<div style="font-weight:600;margin-bottom:8px;">🔄 Zpracování...</div>';
-  progressHtml += '</div>';
-  if (modal) {
-    const actions = modal.querySelector('.modal-actions');
-    if (actions) actions.insertAdjacentHTML('beforebegin', progressHtml);
-  }
+  pendingAIResults = [];
 
-  const progressEl = document.getElementById('ai-progress');
-  let successCount = 0;
-  let errorCount = 0;
-  const changes = [];
-
+  // Call AI for each module
   for (const { item, noteText } of notesToApply) {
+    const progressEl = document.getElementById('ai-progress');
     if (progressEl) {
-      progressEl.innerHTML = `<div style="font-weight:600;margin-bottom:4px;">🔄 Zpracovávám: ${item.icon} ${item.label}...</div>
-        <div style="color:var(--text2);font-size:12px;">${successCount} hotovo, ${notesToApply.length - successCount - 1} zbývá</div>`;
+      progressEl.innerHTML = `<div style="font-weight:600;"><span class="ai-spinner"></span> Zpracovávám: ${item.icon} ${item.label}...</div>`;
     }
 
     try {
@@ -1151,73 +1134,205 @@ async function confirmApply() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          moduleData: {
-            id: item.id,
-            label: item.label,
-            desc: item.desc,
-            features: item.features,
-            connections: item.connections || [],
-          },
+          moduleData: { id: item.id, label: item.label, desc: item.desc, features: item.features, connections: item.connections || [] },
           notes: noteText,
         }),
       });
 
       const data = await response.json();
-      if (!data.ok || !data.result) {
-        throw new Error(data.error || 'Unknown error');
-      }
+      if (!data.ok || !data.result) throw new Error(data.error || 'Unknown error');
 
-      const result = data.result;
-
-      // Apply AI results to module
-      if (result.features) item.features = result.features;
-      if (result.connections) item.connections = result.connections;
-      if (result.desc) item.desc = result.desc;
-
-      // Save the full AI-restructured features as override (persists across reloads)
-      if (!state.featuresOverride) state.featuresOverride = {};
-      if (!state.descOverride) state.descOverride = {};
-      if (!state.connectionsOverride) state.connectionsOverride = {};
-
-      if (result.features) state.featuresOverride[item.id] = result.features;
-      if (result.desc) state.descOverride[item.id] = result.desc;
-      if (result.connections) state.connectionsOverride[item.id] = result.connections;
-
-      // Clear old flat applied data for this module (no longer needed)
-      delete state.applied[item.id];
-
-      // Clear the note
-      state.notes[item.id] = '';
-
-      changes.push({ module: item.label, icon: item.icon, changes: result.changes || 'Struktura aktualizována' });
-      successCount++;
+      pendingAIResults.push({
+        item,
+        noteText,
+        result: data.result,
+        approved: true, // default to approved
+      });
     } catch (e) {
       console.error(`AI apply error for ${item.id}:`, e);
-      changes.push({ module: item.label, icon: item.icon, changes: '❌ Chyba: ' + e.message });
-      errorCount++;
+      pendingAIResults.push({ item, noteText, error: e.message, approved: false });
     }
   }
 
-  // Save and re-render
-  saveToServer();
+  // Show preview for approval
+  showAIPreview();
+}
+
+function renderFeatureText(f) {
+  if (typeof f === 'string') return f;
+  if (typeof f === 'object' && f.text) {
+    let t = f.text;
+    if (f.sub && f.sub.length) t += ' → ' + f.sub.map(s => typeof s === 'string' ? s : s.text).join(', ');
+    return t;
+  }
+  return JSON.stringify(f);
+}
+
+function showAIPreview() {
+  const modal = document.getElementById('modal-root');
+  let html = '<div class="modal-overlay" onclick="if(event.target===this)closeModal()">';
+  html += '<div class="modal" style="max-width:800px;">';
+  html += '<h2>📋 Náhled změn — schválte před uložením</h2>';
+  html += '<p style="font-size:12px;color:var(--text2);margin-bottom:16px;">AI navrhla následující změny. Zaškrtněte moduly, které chcete uložit. Neuložené změny se zahodí.</p>';
+
+  for (let i = 0; i < pendingAIResults.length; i++) {
+    const p = pendingAIResults[i];
+    if (p.error) {
+      html += `<div style="padding:12px;margin-bottom:12px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.2);border-radius:8px;">
+        <strong>${p.item.icon} ${p.item.label}:</strong> <span style="color:#ef4444;">❌ ${p.error}</span>
+      </div>`;
+      continue;
+    }
+
+    const result = p.result;
+    const oldFeatures = p.item.features.map(f => renderFeatureText(f));
+    const newFeatures = (result.features || []).map(f => renderFeatureText(f));
+
+    html += `<div style="padding:14px;margin-bottom:12px;background:var(--surface);border:1px solid var(--border);border-radius:10px;">`;
+    html += `<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+      <input type="checkbox" id="approve-${i}" ${p.approved ? 'checked' : ''} onchange="pendingAIResults[${i}].approved=this.checked" style="width:18px;height:18px;accent-color:#6c5ce7;">
+      <label for="approve-${i}" style="font-weight:600;font-size:15px;cursor:pointer;">${p.item.icon} ${p.item.label}</label>
+    </div>`;
+
+    if (result.changes) {
+      html += `<div style="font-size:12px;color:#a78bfa;margin-bottom:10px;font-style:italic;">💡 ${result.changes}</div>`;
+    }
+
+    // Side by side diff
+    html += `<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">`;
+
+    // OLD
+    html += `<div><div style="font-size:11px;font-weight:600;color:var(--text2);margin-bottom:6px;text-transform:uppercase;">Před</div>`;
+    html += `<div style="font-size:12px;background:var(--bg);padding:8px;border-radius:6px;max-height:200px;overflow-y:auto;">`;
+    for (const f of oldFeatures) {
+      html += `<div style="padding:2px 0;color:var(--text2);">• ${f}</div>`;
+    }
+    html += `</div></div>`;
+
+    // NEW
+    html += `<div><div style="font-size:11px;font-weight:600;color:#4ade80;margin-bottom:6px;text-transform:uppercase;">Po změně</div>`;
+    html += `<div style="font-size:12px;background:var(--bg);padding:8px;border-radius:6px;max-height:200px;overflow-y:auto;">`;
+    for (const f of newFeatures) {
+      const isNew = !oldFeatures.includes(f);
+      html += `<div style="padding:2px 0;${isNew ? 'color:#4ade80;font-weight:500;' : ''}">• ${f}${isNew ? ' ✨' : ''}</div>`;
+    }
+    html += `</div></div>`;
+
+    html += `</div></div>`;
+  }
+
+  html += '<div class="modal-actions">';
+  html += '<button class="modal-btn cancel" onclick="closeModal()">Zrušit vše</button>';
+  html += '<button class="modal-btn" onclick="showVersionHistory()" style="background:var(--surface2);color:var(--text);">📜 Historie verzí</button>';
+  html += '<button class="modal-btn confirm" onclick="commitApprovedChanges()">✅ Uložit schválené změny</button>';
+  html += '</div>';
+  html += '</div></div>';
+  modal.innerHTML = html;
+}
+
+async function commitApprovedChanges() {
+  const approved = pendingAIResults.filter(p => p.approved && !p.error);
+  if (approved.length === 0) { closeModal(); return; }
+
+  for (const p of approved) {
+    const { item, result } = p;
+
+    // Apply to runtime
+    if (result.features) item.features = result.features;
+    if (result.connections) item.connections = result.connections;
+    if (result.desc) item.desc = result.desc;
+
+    // Commit to server (creates version automatically)
+    try {
+      await fetch('/api/mindmap/commit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          moduleId: item.id,
+          features: result.features,
+          desc: result.desc || null,
+          connections: result.connections || null,
+          changes: result.changes || 'AI restrukturalizace',
+        }),
+      });
+    } catch (e) {
+      console.error('Commit error:', e);
+    }
+
+    // Clear the note locally
+    state.notes[item.id] = '';
+  }
+
+  // Update local state overrides
+  if (!state.featuresOverride) state.featuresOverride = {};
+  if (!state.descOverride) state.descOverride = {};
+  if (!state.connectionsOverride) state.connectionsOverride = {};
+  for (const p of approved) {
+    if (p.result.features) state.featuresOverride[p.item.id] = p.result.features;
+    if (p.result.desc) state.descOverride[p.item.id] = p.result.desc;
+    if (p.result.connections) state.connectionsOverride[p.item.id] = p.result.connections;
+  }
+
+  pendingAIResults = [];
+  closeModal();
   renderTree();
   renderDetail();
+  updateApplyButton();
+}
 
-  // Show results
-  if (progressEl) {
-    let resultHtml = `<div style="font-weight:600;margin-bottom:8px;">✅ Dokončeno (${successCount} OK${errorCount ? ', ' + errorCount + ' chyb' : ''})</div>`;
-    for (const c of changes) {
-      const color = c.changes.startsWith('❌') ? '#ef4444' : 'var(--text2)';
-      resultHtml += `<div style="margin-bottom:4px;"><strong>${c.icon} ${c.module}:</strong> <span style="color:${color}">${c.changes}</span></div>`;
+// ============================================================
+// VERSION HISTORY
+// ============================================================
+async function showVersionHistory() {
+  try {
+    const resp = await fetch('/api/mindmap/versions');
+    const versions = await resp.json();
+
+    const modal = document.getElementById('modal-root');
+    let html = '<div class="modal-overlay" onclick="if(event.target===this)closeModal()">';
+    html += '<div class="modal" style="max-width:600px;">';
+    html += '<h2>📜 Historie verzí myšlenkové mapy</h2>';
+
+    if (versions.length === 0) {
+      html += '<p style="color:var(--text2);padding:20px 0;text-align:center;">Zatím žádné verze. Verze se vytváří automaticky při každém AI zapracování.</p>';
+    } else {
+      html += '<div style="max-height:400px;overflow-y:auto;">';
+      for (const v of [...versions].reverse()) {
+        const d = new Date(v.date);
+        const dateStr = d.toLocaleDateString('cs') + ' ' + d.toLocaleTimeString('cs', {hour:'2-digit',minute:'2-digit'});
+        html += `<div style="display:flex;align-items:center;gap:12px;padding:10px 12px;border-bottom:1px solid var(--border);">
+          <div style="flex:1;">
+            <div style="font-size:13px;font-weight:500;">${v.description}</div>
+            <div style="font-size:11px;color:var(--text2);">${dateStr} • Verze #${v.id}</div>
+          </div>
+          <button class="modal-btn" onclick="restoreVersion(${v.id})" style="padding:4px 12px;font-size:12px;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;cursor:pointer;">Obnovit</button>
+        </div>`;
+      }
+      html += '</div>';
     }
-    progressEl.innerHTML = resultHtml;
-  }
 
-  // Update button
-  if (btn) {
-    btn.disabled = false;
-    btn.innerHTML = '✓ Hotovo';
-    btn.onclick = closeModal;
+    html += '<div class="modal-actions"><button class="modal-btn cancel" onclick="closeModal()">Zavřít</button></div>';
+    html += '</div></div>';
+    modal.innerHTML = html;
+  } catch (e) {
+    alert('Chyba načtení historie: ' + e.message);
+  }
+}
+
+async function restoreVersion(id) {
+  if (!confirm('Opravdu obnovit verzi #' + id + '? Aktuální stav bude uložen jako záloha.')) return;
+  try {
+    const resp = await fetch('/api/mindmap/versions/' + id + '/restore', { method: 'POST' });
+    const data = await resp.json();
+    if (!data.ok) throw new Error(data.error || 'Failed');
+    // Reload everything
+    await loadFromServer();
+    renderTree();
+    renderDetail();
+    closeModal();
+    alert('Verze #' + id + ' obnovena!');
+  } catch (e) {
+    alert('Chyba: ' + e.message);
   }
 }
 
