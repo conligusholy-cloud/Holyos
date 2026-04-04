@@ -644,6 +644,42 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
+  // ---- PERMISSIONS API ----
+  if (pathname.startsWith('/api/hr/permissions')) {
+    // GET /api/hr/permissions — get all permissions
+    if (pathname === '/api/hr/permissions' && req.method === 'GET') {
+      sendJSON(res, 200, db.getPermissions());
+      return;
+    }
+
+    // GET /api/hr/permissions/:roleId — get permissions for a role
+    const rolePermMatch = pathname.match(/^\/api\/hr\/permissions\/(\d+)$/);
+    if (rolePermMatch && req.method === 'GET') {
+      sendJSON(res, 200, db.getPermissionsForRole(parseInt(rolePermMatch[1])));
+      return;
+    }
+
+    // POST /api/hr/permissions/:roleId — set permissions for a role (admin only)
+    if (rolePermMatch && req.method === 'POST') {
+      if (session.role !== 'admin' && !session.is_super_admin) {
+        sendJSON(res, 403, { error: 'Přístup odepřen' });
+        return;
+      }
+      let body = '';
+      req.on('data', c => body += c);
+      req.on('end', () => {
+        try {
+          const perms = JSON.parse(body);
+          const result = db.setPermissions(parseInt(rolePermMatch[1]), perms);
+          sendJSON(res, 200, result);
+        } catch (e) {
+          sendJSON(res, 400, { error: e.message });
+        }
+      });
+      return;
+    }
+  }
+
   // ---- HR MODULE API ----
   if (pathname.startsWith('/api/hr/')) {
     const handleHR = require('./api/hr');

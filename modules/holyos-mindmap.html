@@ -854,22 +854,22 @@ const DEPLOY_STATUS = {
   hr: {
     // Top-level features
     0: 'full',    // Evidence lidí
-    1: 'partial', // Organizační struktura a role
+    1: 'full', // Organizační struktura a role
     2: 'partial', // Docházka
     3: 'partial', // Pracovní poměry
     4: 'none',    // Mzdy a výplaty
     // Sub-features: "parentIndex.subIndex"
     '0.0': 'full',    // Lidé obecně — kontakty, dodavatelé, zákazníci
     '0.1': 'full', // Zaměstnanci — základní data, přihlašovací údaje, kontaktní údaje, fotka ✅
-    '1.0': 'partial', // Vizualizace org. struktury s fotografiemi (struktura ano, fotky ne)
+    '1.0': 'full', // Vizualizace org. struktury s fotografiemi ✅
     '1.1': 'full',    // Hierarchie pozic a podřízenosti
-    '1.2': 'none',    // Správa oprávnění na úrovni rolí (čtení/úprava pro moduly)
+    '1.2': 'full',    // Správa oprávnění na úrovni rolí (čtení/úprava pro moduly) ✅
     '2.0': 'partial', // Příchody a odchody — čipová karta/vzdáleně (jen ruční zápis)
     '2.1': 'partial', // Přesčasy a dovolené (typ docházky ano, zůstatky ne)
     '2.2': 'none',    // Přiřazení čipů k zaměstnancům
     '2.3': 'none',    // Export docházkových listů pro účetní
     '3.0': 'none',    // Smlouvy a dokumenty
-    '3.1': 'partial', // Začátek a konec pracovního poměru (hire_date ano, end_date ne)
+    '3.1': 'full', // Začátek a konec pracovního poměru ✅
     '3.2': 'full',    // Definice pracovních pozic
   }
 };
