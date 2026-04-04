@@ -47,9 +47,10 @@
 <!-- Toast -->
 <div id="toast" class="toast"></div>
 
-<script src="js/sidebar.js"></script>
-<script src="js/persistent-storage.js"></script>
-<script>
+<script type="module">
+  import { renderSidebar, initDate } from '../../dist/client/client/js/sidebar.js';
+  import { PersistentStorage } from '../../dist/client/client/js/persistent-storage.js';
+
   var STORAGE_KEY = 'vyroba_simulations';
   // Použít cestu s trailing slash (ne index.html) aby serve neztrácelo URL parametry
   var EDITOR_URL = 'modules/vytvoreni-arealu/';

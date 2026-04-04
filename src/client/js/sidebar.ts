@@ -1,9 +1,17 @@
 /* ============================================
-   sidebar.js — Shared sidebar navigation
+   sidebar.ts — Shared sidebar navigation
    ============================================ */
 
-function renderSidebar(activeModule) {
-  var modules = [
+interface SidebarModule {
+  id: string;
+  name: string;
+  icon: string;
+  color: string;
+  active: boolean;
+}
+
+export function renderSidebar(activeModule: string): void {
+  const modules: SidebarModule[] = [
     { id: 'vytvoreni-arealu',    name: 'Vytvoření areálu',    icon: '&#9998;', color: '#8b5cf6', active: true },
     { id: 'programovani-vyroby', name: 'Programování výroby', icon: '&#9881;', color: '#f59e0b', active: true },
     { id: 'simulace-vyroby',    name: 'Simulace výroby',     icon: '&#9654;', color: '#22c55e', active: true },
@@ -16,9 +24,9 @@ function renderSidebar(activeModule) {
   ];
 
   // Compute base path to root
-  var basePath = getBasePath();
+  const basePath = getBasePath();
 
-  var logoSvg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="36" height="36">' +
+  const logoSvg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="36" height="36">' +
     '<defs><linearGradient id="logoGrad" x1="0%" y1="0%" x2="100%" y2="100%">' +
     '<stop offset="0%" style="stop-color:#6C5CE7"/><stop offset="50%" style="stop-color:#0984E3"/><stop offset="100%" style="stop-color:#00B894"/>' +
     '</linearGradient></defs>' +
@@ -28,7 +36,7 @@ function renderSidebar(activeModule) {
     '<rect x="32" y="42" width="36" height="10" rx="4" fill="white"/>' +
     '</svg>';
 
-  var html = '' +
+  let html = '' +
     '<div class="sidebar-header">' +
       '<div class="sidebar-logo">' + logoSvg + '</div>' +
       '<div>' +
@@ -39,13 +47,13 @@ function renderSidebar(activeModule) {
     '<div class="sidebar-label">Moduly</div>' +
     '<nav class="sidebar-nav">';
 
-  modules.forEach(function(m) {
-    var isActive = m.id === activeModule;
-    var cls = 'sidebar-item' + (isActive ? ' active' : '') + (!m.active ? ' disabled' : '');
+  modules.forEach((m: SidebarModule) => {
+    const isActive = m.id === activeModule;
+    const cls = 'sidebar-item' + (isActive ? ' active' : '') + (!m.active ? ' disabled' : '');
     // Moduly s výběrovou stránkou (simulace.html) odkazují na ni, ostatní na index.html
-    var entryPage = (m.id === 'vytvoreni-arealu' || m.id === 'programovani-vyroby') ? 'simulace.html' : 'index.html';
-    var href = m.active ? (basePath + 'modules/' + m.id + '/' + entryPage) : '#';
-    var tag = m.active ? '' : '<div class="sidebar-item-tag">Připravuje se</div>';
+    const entryPage = (m.id === 'vytvoreni-arealu' || m.id === 'programovani-vyroby') ? 'simulace.html' : 'index.html';
+    const href = m.active ? (basePath + 'modules/' + m.id + '/' + entryPage) : '#';
+    const tag = m.active ? '' : '<div class="sidebar-item-tag">Připravuje se</div>';
 
     html += '<a class="' + cls + '" href="' + href + '">' +
       '<div class="sidebar-icon" style="background:' + m.color + '22; color:' + m.color + ';">' + m.icon + '</div>' +
@@ -67,51 +75,71 @@ function renderSidebar(activeModule) {
   html += '  </a>';
   html += '</div>';
 
+  // Datový model — úplně dole, oddělený
+  const dmActive = activeModule === 'datovy-model';
+  const dmCls = 'sidebar-item' + (dmActive ? ' active' : '');
+  html += '<a class="' + dmCls + '" href="' + basePath + 'modules/datovy-model/index.html" style="margin-top:auto; opacity:0.6; font-size:12px;">' +
+    '<div class="sidebar-icon" style="background:rgba(100,116,139,0.15); color:#64748b;">&#128451;</div>' +
+    '<div class="sidebar-item-info"><div class="sidebar-item-name">Datový model</div></div>' +
+  '</a>';
+
   html += '<div class="sidebar-footer">HOLYOS v0.1 — Best Series</div>';
 
-  var sidebar = document.getElementById('sidebar');
+  const sidebar = document.getElementById('sidebar');
   if (sidebar) sidebar.innerHTML = html;
 
   // Načíst info o přihlášeném uživateli
-  fetch('/auth/me').then(function(r) { return r.json(); }).then(function(u) {
-    var el = document.getElementById('sidebar-user-info');
-    if (el) el.textContent = u.displayName || u.username || '';
-    // Pokud je admin, přidat odkaz na správu uživatelů
-    if (u.role === 'admin') {
-      var nav = document.querySelector('.sidebar-nav');
-      if (nav) {
-        var adminLink = document.createElement('a');
-        adminLink.className = 'sidebar-item' + (activeModule === 'nastaveni' ? ' active' : '');
-        adminLink.href = '/admin/users';
-        adminLink.innerHTML = '<div class="sidebar-icon" style="background:rgba(108,140,255,0.15); color:#6c8cff;">&#9881;</div>' +
-          '<div class="sidebar-item-info"><div class="sidebar-item-name">Správa uživatelů</div></div>';
-        nav.appendChild(adminLink);
+  fetch('/auth/me')
+    .then((r) => r.json())
+    .then((u: any) => {
+      const el = document.getElementById('sidebar-user-info');
+      if (el) el.textContent = u.displayName || u.username || '';
+      // Pokud je admin, přidat odkaz na správu uživatelů
+      if (u.role === 'admin') {
+        const nav = document.querySelector('.sidebar-nav');
+        if (nav) {
+          const adminLink = document.createElement('a');
+          adminLink.className = 'sidebar-item' + (activeModule === 'nastaveni' ? ' active' : '');
+          adminLink.href = '/admin/users';
+          adminLink.innerHTML = '<div class="sidebar-icon" style="background:rgba(108,140,255,0.15); color:#6c8cff;">&#9881;</div>' +
+            '<div class="sidebar-item-info"><div class="sidebar-item-name">Správa uživatelů</div></div>';
+          nav.appendChild(adminLink);
+        }
       }
-    }
-  }).catch(function() {});
+    })
+    .catch(() => {});
 }
 
-// Compute base path from current location to project root
-function getBasePath() {
+/**
+ * Compute base path from current location to project root
+ */
+export function getBasePath(): string {
   // Always use absolute path to root
   return '/';
 }
 
-// Get path to module editor
-function getEditorPath(simId) {
-  var basePath = getBasePath();
-  var url = basePath + 'modules/vytvoreni-arealu/index.html';
+/**
+ * Get path to module editor
+ */
+export function getEditorPath(simId?: string): string {
+  const basePath = getBasePath();
+  let url = basePath + 'modules/vytvoreni-arealu/index.html';
   if (simId) url += '?sim=' + simId;
   return url;
 }
 
-// Init date display
-function initDate() {
-  var el = document.getElementById('current-date');
+/**
+ * Init date display
+ */
+export function initDate(): void {
+  const el = document.getElementById('current-date');
   if (el) {
-    var d = new Date();
+    const d = new Date();
     el.textContent = d.toLocaleDateString('cs-CZ', {
-      weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
     });
   }
 }

@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Factorify Browser | HOLYOS</title>
+  <link rel="icon" type="image/svg+xml" href="../../logo-holyos-icon.svg">
+  <base href="../../">
+  <link rel="stylesheet" href="css/dashboard.css">
+  <link rel="stylesheet" href="modules/datovy-model/css/styles.css">
+</head>
+<body>
+  <aside id="sidebar" class="sidebar"></aside>
+
+  <div class="main-wrapper">
+
+    <!-- Status bar -->
+    <div class="fy-status-bar">
+      <span class="fy-status-dot loading" id="status-dot"></span>
+      <span id="status-text">Připojuji se k Factorify...</span>
+    </div>
+
+    <div class="browser-layout">
+      <!-- Factorify navigation sidebar -->
+      <div class="fy-sidebar">
+        <div class="fy-sidebar-header">
+          <span class="fy-sidebar-hamburger">&#9776;</span>
+          <span class="fy-sidebar-logo">FACTORIFY</span>
+        </div>
+        <div class="fy-sidebar-search">
+          <input type="text" id="entity-search" placeholder="Hledat...">
+        </div>
+        <div class="fy-nav" id="fy-nav"></div>
+      </div>
+
+      <!-- Main content area -->
+      <div class="fy-main" id="fy-main">
+        <div class="fy-welcome">
+          <div class="fy-welcome-icon">&#128451;</div>
+          <h2>Factorify Browser</h2>
+          <p>Vyberte položku z navigace vlevo</p>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Sidebar -->
+  <script type="module">
+    import { renderSidebar, initDate } from '../../dist/client/client/js/sidebar.js';
+    renderSidebar('datovy-model');
+    initDate();
+  </script>
+
+  <!-- TS moduly -->
+  <script type="module" src="../../dist/client/client/modules/datovy-model/app.js"></script>
+</body>
+</html>

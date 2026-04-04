@@ -1,14 +1,28 @@
 {
   "name": "vyroba",
-  "version": "0.1.0",
-  "description": "Výroba — Řízení výroby (Best Series)",
+  "version": "0.2.0",
+  "description": "HOLYOS — Řízení výroby (Best Series)",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node server.js"
+    "dev": "tsc -b && node --watch dist/server/server.js",
+    "build": "tsc -b",
+    "start": "node dist/server/server.js",
+    "typecheck": "tsc --noEmit",
+    "watch": "tsc -b --watch"
   },
   "engines": {
     "node": ">=18.0.0"
   },
-  "private": true
+  "private": true,
+  "dependencies": {
+    "cookie-parser": "^1.4.6",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.0"
+  },
+  "devDependencies": {
+    "@types/cookie-parser": "^1.4.7",
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.0.0",
+    "typescript": "^5.9.3"
+  }
 }

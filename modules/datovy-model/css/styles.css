@@ -1,0 +1,723 @@
+/* ============================================
+   Factorify Browser — styles
+   Exact clone of Factorify UI (bs.factorify.cloud)
+   ============================================ */
+
+/* Override dark theme for Factorify-style light content area */
+.main-wrapper {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+  background: #fafafa;
+}
+
+.browser-layout {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* === FACTORIFY SIDEBAR (left nav) === */
+.fy-sidebar {
+  width: 220px;
+  background: #fff;
+  border-right: 1px solid #e0e0e0;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  overflow: hidden;
+  color: #333;
+}
+
+.fy-sidebar-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border-bottom: 1px solid #e0e0e0;
+  background: #fff;
+}
+.fy-sidebar-hamburger {
+  font-size: 20px;
+  cursor: pointer;
+  color: #666;
+  width: 24px;
+  text-align: center;
+}
+.fy-sidebar-logo {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: #1976d2;
+  text-transform: uppercase;
+}
+
+.fy-sidebar-search {
+  padding: 8px 12px;
+  border-bottom: 1px solid #e0e0e0;
+}
+.fy-sidebar-search input {
+  width: 100%;
+  padding: 6px 10px;
+  font-size: 13px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  outline: none;
+  font-family: inherit;
+  background: #fafafa;
+  color: #333;
+}
+.fy-sidebar-search input:focus {
+  border-color: #1976d2;
+}
+.fy-sidebar-search input::placeholder {
+  color: #999;
+}
+
+.fy-nav {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 0;
+}
+
+/* Top items (Denní report, Workspace) */
+.fy-nav-top-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 16px;
+  font-size: 13px;
+  color: #333;
+  cursor: pointer;
+  transition: background 0.15s;
+  border-left: 3px solid transparent;
+}
+.fy-nav-top-item:hover {
+  background: #f5f5f5;
+}
+.fy-nav-top-item.active {
+  background: #e3f2fd;
+  border-left-color: #1976d2;
+  color: #1976d2;
+  font-weight: 500;
+}
+.fy-nav-top-icon {
+  font-size: 16px;
+  width: 20px;
+  text-align: center;
+  color: #757575;
+}
+
+/* Category headers */
+.fy-cat-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  color: #9e9e9e;
+  text-transform: uppercase;
+  cursor: pointer;
+  user-select: none;
+}
+.fy-cat-header:hover {
+  color: #616161;
+}
+.fy-cat-arrow {
+  font-size: 9px;
+  width: 12px;
+  text-align: center;
+  transition: transform 0.15s;
+}
+
+/* Menu items */
+.fy-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 16px 7px 20px;
+  font-size: 13px;
+  color: #424242;
+  cursor: pointer;
+  transition: background 0.15s;
+  border-left: 3px solid transparent;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.fy-nav-item:hover {
+  background: #f5f5f5;
+}
+.fy-nav-item.active {
+  background: #e3f2fd;
+  border-left-color: #1976d2;
+  color: #1976d2;
+  font-weight: 500;
+}
+.fy-nav-item-icon {
+  font-size: 14px;
+  width: 18px;
+  text-align: center;
+  color: #757575;
+  flex-shrink: 0;
+}
+.fy-nav-item.active .fy-nav-item-icon {
+  color: #1976d2;
+}
+
+/* === MAIN CONTENT === */
+.fy-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #fafafa;
+  color: #333;
+}
+
+/* Welcome screen */
+.fy-welcome {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: #999;
+  gap: 8px;
+}
+.fy-welcome-icon {
+  font-size: 64px;
+  opacity: 0.3;
+}
+.fy-welcome h2 {
+  font-size: 20px;
+  color: #666;
+  font-weight: 400;
+}
+.fy-welcome p {
+  font-size: 14px;
+  color: #999;
+}
+
+/* Loading */
+.fy-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  gap: 12px;
+}
+.fy-spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid #e0e0e0;
+  border-top-color: #1976d2;
+  border-radius: 50%;
+  animation: fyspin 0.7s linear infinite;
+}
+@keyframes fyspin { to { transform: rotate(360deg); } }
+
+/* === ENTITY TOOLBAR (top bar above table) === */
+.fy-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  background: #fff;
+  border-bottom: 1px solid #e0e0e0;
+  flex-shrink: 0;
+  min-height: 48px;
+}
+.fy-toolbar-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 16px;
+  font-weight: 500;
+  color: #333;
+  flex-shrink: 0;
+}
+.fy-toolbar-title-icon {
+  font-size: 18px;
+  color: #757575;
+}
+.fy-toolbar-spacer {
+  flex: 1;
+}
+.fy-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.fy-toolbar-btn {
+  background: none;
+  border: none;
+  color: #757575;
+  cursor: pointer;
+  font-size: 18px;
+  padding: 6px;
+  border-radius: 4px;
+  transition: background 0.15s;
+  font-family: inherit;
+  line-height: 1;
+}
+.fy-toolbar-btn:hover {
+  background: #f5f5f5;
+  color: #333;
+}
+.fy-toolbar-btn.active {
+  color: #1976d2;
+  background: #e3f2fd;
+}
+
+/* === TAB BAR === */
+.fy-tabs {
+  display: flex;
+  background: #fff;
+  border-bottom: 1px solid #e0e0e0;
+  flex-shrink: 0;
+  overflow-x: auto;
+}
+.fy-tab {
+  padding: 10px 20px;
+  font-size: 13px;
+  color: #666;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: all 0.15s;
+  white-space: nowrap;
+  font-weight: 500;
+}
+.fy-tab:hover {
+  color: #333;
+  background: #fafafa;
+}
+.fy-tab.active {
+  color: #1976d2;
+  border-bottom-color: #1976d2;
+}
+
+/* === DATA TABLE === */
+.fy-table-wrapper {
+  flex: 1;
+  overflow: auto;
+  background: #fff;
+}
+
+.fy-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+/* Column headers */
+.fy-table thead th {
+  position: sticky;
+  top: 0;
+  background: #fafafa;
+  padding: 8px 12px;
+  text-align: left;
+  font-size: 12px;
+  font-weight: 600;
+  color: #666;
+  border-bottom: 1px solid #e0e0e0;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+  z-index: 10;
+}
+.fy-table thead th:hover {
+  color: #1976d2;
+}
+.fy-sort-icon {
+  font-size: 10px;
+  margin-left: 4px;
+  color: #1976d2;
+}
+
+/* Filter row */
+.fy-table .filter-row th {
+  position: sticky;
+  top: 33px;
+  background: #fff;
+  padding: 4px 6px;
+  border-bottom: 2px solid #e0e0e0;
+  z-index: 9;
+  cursor: default;
+}
+.fy-filter-input {
+  width: 100%;
+  padding: 4px 6px;
+  font-size: 12px;
+  border: 1px solid #ddd;
+  border-radius: 3px;
+  outline: none;
+  font-family: inherit;
+  background: #fff;
+  color: #333;
+}
+.fy-filter-input:focus {
+  border-color: #1976d2;
+}
+.fy-filter-input::placeholder {
+  color: #bbb;
+}
+
+/* Data rows */
+.fy-table tbody td {
+  padding: 7px 12px;
+  border-bottom: 1px solid #f0f0f0;
+  max-width: 250px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #333;
+}
+.fy-table tbody tr {
+  cursor: pointer;
+  transition: background 0.1s;
+}
+.fy-table tbody tr:hover {
+  background: #e3f2fd;
+}
+.fy-table tbody tr:nth-child(even) {
+  background: #fafafa;
+}
+.fy-table tbody tr:nth-child(even):hover {
+  background: #e3f2fd;
+}
+
+/* Cell styles */
+.fy-null { color: #bbb; font-style: italic; font-size: 12px; }
+.fy-ref {
+  color: #1976d2;
+  cursor: pointer;
+  text-decoration: none;
+  font-weight: 500;
+}
+.fy-ref:hover { text-decoration: underline; }
+.fy-bool-true { color: #4caf50; font-weight: 600; }
+.fy-bool-false { color: #bbb; }
+.fy-array { color: #999; font-size: 12px; }
+.fy-no-data {
+  text-align: center;
+  padding: 40px 20px !important;
+  color: #999;
+  font-style: italic;
+}
+
+/* === PAGINATION / STATUS BAR (bottom) === */
+.fy-bottom-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 16px;
+  background: #fff;
+  border-top: 1px solid #e0e0e0;
+  flex-shrink: 0;
+  font-size: 12px;
+  color: #666;
+}
+.fy-page-btn {
+  background: none;
+  color: #666;
+  border: 1px solid #ddd;
+  border-radius: 3px;
+  padding: 3px 8px;
+  cursor: pointer;
+  font-size: 12px;
+  font-family: inherit;
+  transition: all 0.15s;
+}
+.fy-page-btn:hover:not(:disabled) {
+  background: #1976d2;
+  color: #fff;
+  border-color: #1976d2;
+}
+.fy-page-btn:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+.fy-page-info {
+  font-size: 12px;
+  color: #333;
+  font-weight: 500;
+}
+.fy-page-spacer { flex: 1; }
+.fy-page-secondary {
+  font-size: 11px;
+  color: #999;
+}
+.fy-page-size {
+  background: #fff;
+  color: #333;
+  border: 1px solid #ddd;
+  border-radius: 3px;
+  padding: 2px 6px;
+  font-size: 11px;
+  font-family: inherit;
+}
+
+/* === RECORD DETAIL VIEW === */
+.fy-detail-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 16px;
+  background: #fff;
+  border-bottom: 1px solid #e0e0e0;
+  flex-shrink: 0;
+}
+.fy-back-btn {
+  background: none;
+  border: 1px solid #ddd;
+  color: #666;
+  border-radius: 4px;
+  padding: 6px 14px;
+  cursor: pointer;
+  font-size: 13px;
+  font-family: inherit;
+  transition: all 0.15s;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.fy-back-btn:hover {
+  background: #1976d2;
+  color: #fff;
+  border-color: #1976d2;
+}
+.fy-detail-title {
+  font-size: 16px;
+  font-weight: 500;
+  color: #333;
+}
+
+/* Detail tabs */
+.fy-detail-tabs {
+  display: flex;
+  background: #fff;
+  border-bottom: 1px solid #e0e0e0;
+  flex-shrink: 0;
+}
+.fy-detail-tab {
+  padding: 10px 20px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  color: #666;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: all 0.15s;
+}
+.fy-detail-tab:hover {
+  color: #333;
+}
+.fy-detail-tab.active {
+  color: #1976d2;
+  border-bottom-color: #1976d2;
+}
+
+/* Detail form grid */
+.fy-detail-form {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  background: #fafafa;
+}
+.fy-detail-section {
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  margin-bottom: 16px;
+  overflow: hidden;
+}
+.fy-detail-section-header {
+  padding: 10px 16px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  color: #666;
+  background: #fafafa;
+  border-bottom: 1px solid #e0e0e0;
+  cursor: pointer;
+  user-select: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.fy-detail-section-header:hover {
+  background: #f5f5f5;
+}
+.fy-detail-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 0;
+  padding: 0;
+}
+.fy-field {
+  display: flex;
+  flex-direction: column;
+  padding: 8px 16px;
+  border-bottom: 1px solid #f0f0f0;
+  border-right: 1px solid #f0f0f0;
+}
+.fy-field-label {
+  font-size: 11px;
+  color: #999;
+  margin-bottom: 2px;
+  font-weight: 500;
+}
+.fy-field-value {
+  font-size: 13px;
+  color: #333;
+  word-break: break-word;
+  min-height: 20px;
+  display: flex;
+  align-items: center;
+}
+.fy-field-value input[type="text"],
+.fy-field-value input[type="number"],
+.fy-field-value select {
+  width: 100%;
+  padding: 4px 8px;
+  font-size: 13px;
+  border: 1px solid #ddd;
+  border-radius: 3px;
+  outline: none;
+  font-family: inherit;
+  background: #fff;
+  color: #333;
+  pointer-events: none;
+}
+
+/* Detail action bar (bottom) */
+.fy-action-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: #fff;
+  border-top: 1px solid #e0e0e0;
+  flex-shrink: 0;
+}
+.fy-action-btn {
+  padding: 7px 18px;
+  font-size: 13px;
+  font-weight: 500;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.15s;
+  background: #fff;
+  color: #333;
+}
+.fy-action-btn:hover {
+  background: #f5f5f5;
+}
+.fy-action-btn.primary {
+  background: #1976d2;
+  color: #fff;
+  border-color: #1976d2;
+}
+.fy-action-btn.primary:hover {
+  background: #1565c0;
+}
+.fy-action-spacer { flex: 1; }
+.fy-action-timestamp {
+  font-size: 11px;
+  color: #999;
+}
+
+/* === STATUS BAR (top) === */
+.fy-status-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 16px;
+  background: #fff;
+  border-bottom: 1px solid #e0e0e0;
+  font-size: 11px;
+  color: #999;
+  flex-shrink: 0;
+}
+.fy-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #bbb;
+}
+.fy-status-dot.connected { background: #4caf50; }
+.fy-status-dot.loading { background: #ff9800; animation: fypulse 1s infinite; }
+.fy-status-dot.disconnected { background: #f44336; }
+@keyframes fypulse { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
+
+/* === SCROLLBARS (thin, light) === */
+.fy-nav::-webkit-scrollbar,
+.fy-table-wrapper::-webkit-scrollbar,
+.fy-detail-form::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.fy-nav::-webkit-scrollbar-track,
+.fy-table-wrapper::-webkit-scrollbar-track,
+.fy-detail-form::-webkit-scrollbar-track {
+  background: transparent;
+}
+.fy-nav::-webkit-scrollbar-thumb,
+.fy-table-wrapper::-webkit-scrollbar-thumb,
+.fy-detail-form::-webkit-scrollbar-thumb {
+  background: #ccc;
+  border-radius: 3px;
+}
+
+/* Search bar in toolbar */
+.fy-search-box {
+  display: flex;
+  align-items: center;
+  gap: 0;
+}
+.fy-search-box input {
+  padding: 5px 10px;
+  font-size: 13px;
+  border: 1px solid #ddd;
+  border-radius: 4px 0 0 4px;
+  outline: none;
+  font-family: inherit;
+  width: 200px;
+  background: #fff;
+  color: #333;
+}
+.fy-search-box input:focus {
+  border-color: #1976d2;
+}
+.fy-search-box input::placeholder {
+  color: #bbb;
+}
+.fy-search-box button {
+  padding: 5px 10px;
+  border: 1px solid #ddd;
+  border-left: none;
+  border-radius: 0 4px 4px 0;
+  background: #fafafa;
+  color: #666;
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.15s;
+}
+.fy-search-box button:hover {
+  background: #1976d2;
+  color: #fff;
+}
+.fy-record-count {
+  font-size: 12px;
+  color: #999;
+  white-space: nowrap;
+}

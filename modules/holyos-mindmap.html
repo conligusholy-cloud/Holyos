@@ -1,0 +1,1117 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HolyOS — Myšlenková mapa</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+:root {
+  --bg: #0f0f1a;
+  --surface: #1a1a2e;
+  --surface2: #222240;
+  --text: #e8e8f0;
+  --text2: #8888aa;
+  --accent: #6c5ce7;
+  --blue: #0984e3;
+  --green: #00b894;
+  --orange: #f59e0b;
+  --red: #ef4444;
+  --pink: #e84393;
+  --cyan: #00cec9;
+  --teal: #10b981;
+  --purple: #8b5cf6;
+  --yellow: #fbbf24;
+}
+body {
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* Header */
+.header {
+  background: linear-gradient(135deg, #6c5ce7, #0984e3, #00b894);
+  padding: 24px 32px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+}
+.header h1 { font-size: 24px; font-weight: 700; letter-spacing: 1px; }
+.header p { font-size: 13px; opacity: 0.85; }
+.header-right { margin-left: auto; display: flex; gap: 10px; }
+.header-btn {
+  background: rgba(255,255,255,0.15);
+  border: 1px solid rgba(255,255,255,0.2);
+  color: #fff;
+  padding: 7px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  font-family: inherit;
+  transition: all 0.2s;
+}
+.header-btn:hover { background: rgba(255,255,255,0.25); }
+
+/* Controls */
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 32px;
+  background: var(--surface);
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  flex-wrap: wrap;
+}
+.phase-filter {
+  display: flex;
+  gap: 6px;
+}
+.phase-btn {
+  background: var(--surface2);
+  border: 1px solid rgba(255,255,255,0.08);
+  color: var(--text2);
+  padding: 5px 14px;
+  border-radius: 20px;
+  cursor: pointer;
+  font-size: 12px;
+  font-family: inherit;
+  transition: all 0.2s;
+}
+.phase-btn:hover { border-color: rgba(255,255,255,0.2); color: var(--text); }
+.phase-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+.search-box {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.search-box input {
+  background: var(--surface2);
+  border: 1px solid rgba(255,255,255,0.08);
+  color: var(--text);
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-family: inherit;
+  outline: none;
+  width: 220px;
+}
+.search-box input:focus { border-color: var(--accent); }
+.search-box input::placeholder { color: var(--text2); }
+
+/* Layout */
+.main {
+  display: flex;
+  gap: 0;
+  min-height: calc(100vh - 120px);
+}
+
+/* Left: Mind map tree */
+.tree-panel {
+  width: 420px;
+  flex-shrink: 0;
+  overflow-y: auto;
+  padding: 20px 0 20px 24px;
+  border-right: 1px solid rgba(255,255,255,0.06);
+}
+
+/* Right: Detail panel */
+.detail-panel {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px 32px;
+}
+
+/* Mind map tree nodes */
+.node {
+  margin-bottom: 2px;
+}
+.node-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s;
+  user-select: none;
+  position: relative;
+}
+.node-header:hover { background: rgba(255,255,255,0.04); }
+.node-header.selected { background: rgba(108,92,231,0.15); }
+
+.node-toggle {
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  color: var(--text2);
+  flex-shrink: 0;
+  transition: transform 0.2s;
+}
+.node-toggle.expanded { transform: rotate(90deg); }
+.node-toggle.leaf { visibility: hidden; }
+
+.node-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  flex-shrink: 0;
+}
+.node-label {
+  font-size: 14px;
+  font-weight: 500;
+  flex: 1;
+}
+.node-badge {
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+}
+
+.node-children {
+  margin-left: 24px;
+  border-left: 1px solid rgba(255,255,255,0.06);
+  padding-left: 8px;
+  overflow: hidden;
+  transition: max-height 0.3s ease;
+}
+.node-children.collapsed {
+  max-height: 0;
+  overflow: hidden;
+}
+
+/* Sub-items in tree */
+.sub-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px 5px 20px;
+  font-size: 13px;
+  color: var(--text2);
+  cursor: pointer;
+  border-radius: 6px;
+  transition: all 0.15s;
+}
+.sub-item:hover { background: rgba(255,255,255,0.04); color: var(--text); }
+.sub-item.selected { color: var(--accent); background: rgba(108,92,231,0.1); }
+.sub-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* Detail panel content */
+.detail-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 60vh;
+  color: var(--text2);
+  gap: 12px;
+}
+.detail-empty-icon { font-size: 64px; opacity: 0.3; }
+.detail-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+.detail-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+}
+.detail-title { font-size: 24px; font-weight: 700; }
+.detail-subtitle { font-size: 13px; color: var(--text2); margin-top: 2px; }
+.detail-phase-tag {
+  display: inline-block;
+  padding: 3px 12px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  margin-left: auto;
+}
+
+.detail-section {
+  margin-bottom: 24px;
+}
+.detail-section h3 {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text2);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 12px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.detail-features {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 10px;
+}
+.feature-card {
+  background: var(--surface);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 8px;
+  padding: 12px 16px;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  transition: all 0.15s;
+}
+.feature-card:hover { border-color: rgba(255,255,255,0.12); background: var(--surface2); }
+.feature-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-top: 5px;
+  flex-shrink: 0;
+}
+.feature-text { font-size: 13px; line-height: 1.5; }
+
+/* Connections / dependencies */
+.connections {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.conn-tag {
+  background: var(--surface2);
+  border: 1px solid rgba(255,255,255,0.08);
+  padding: 5px 14px;
+  border-radius: 20px;
+  font-size: 12px;
+  color: var(--text2);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.conn-tag:hover { border-color: var(--accent); color: var(--accent); }
+
+/* Stats cards */
+.stats-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 10px;
+  margin-bottom: 24px;
+}
+.stat-card {
+  background: var(--surface);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 10px;
+  padding: 14px;
+  text-align: center;
+}
+.stat-val { font-size: 28px; font-weight: 700; }
+.stat-label { font-size: 11px; color: var(--text2); margin-top: 4px; }
+
+/* Notes textarea */
+.notes-area {
+  width: 100%;
+  min-height: 100px;
+  background: var(--surface);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 8px;
+  padding: 12px;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 13px;
+  resize: vertical;
+  outline: none;
+}
+.notes-area:focus { border-color: var(--accent); }
+.notes-area::placeholder { color: var(--text2); }
+.notes-save {
+  margin-top: 8px;
+  background: var(--accent);
+  border: none;
+  color: #fff;
+  padding: 6px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  font-family: inherit;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
+
+/* Highlight search */
+.highlight { background: rgba(251,191,36,0.3); border-radius: 2px; padding: 0 2px; }
+
+/* Applied note items */
+.feature-card.from-note {
+  border-left: 3px solid #fbbf24;
+  background: rgba(251,191,36,0.06);
+}
+.feature-card.from-note .feature-dot { background: #fbbf24 !important; }
+.sub-item.from-note { color: #fbbf24; }
+.sub-item.from-note .sub-dot { background: #fbbf24 !important; }
+.applied-tag {
+  display: inline-block;
+  font-size: 9px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: rgba(251,191,36,0.2);
+  color: #fbbf24;
+  margin-left: 6px;
+  font-weight: 600;
+}
+.notes-status {
+  font-size: 11px;
+  color: var(--text2);
+  margin-top: 6px;
+}
+.notes-status.saved { color: #00b894; }
+
+/* Apply modal */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.7);
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.modal {
+  background: var(--surface);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 12px;
+  width: 600px;
+  max-width: 90vw;
+  max-height: 80vh;
+  overflow-y: auto;
+  padding: 24px;
+}
+.modal h2 { font-size: 18px; margin-bottom: 16px; }
+.modal-module {
+  margin-bottom: 16px;
+  padding: 12px;
+  background: var(--surface2);
+  border-radius: 8px;
+}
+.modal-module h4 { font-size: 14px; margin-bottom: 8px; }
+.modal-note-line {
+  font-size: 13px;
+  color: var(--text2);
+  padding: 4px 0 4px 12px;
+  border-left: 2px solid #fbbf24;
+  margin-bottom: 4px;
+}
+.modal-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 20px;
+  justify-content: flex-end;
+}
+.modal-btn {
+  padding: 8px 20px;
+  border-radius: 6px;
+  border: 1px solid rgba(255,255,255,0.1);
+  cursor: pointer;
+  font-size: 13px;
+  font-family: inherit;
+  transition: all 0.2s;
+}
+.modal-btn.cancel { background: var(--surface2); color: var(--text2); }
+.modal-btn.cancel:hover { background: rgba(255,255,255,0.1); }
+.modal-btn.confirm { background: #fbbf24; color: #000; border-color: #fbbf24; font-weight: 600; }
+.modal-btn.confirm:hover { background: #f59e0b; }
+
+@media (max-width: 900px) {
+  .main { flex-direction: column; }
+  .tree-panel { width: 100%; border-right: none; border-bottom: 1px solid rgba(255,255,255,0.06); max-height: 50vh; }
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <h1>HolyOS — Myšlenková mapa</h1>
+    <p>Kompletní přehled firemního OS • 12 modulů • 4 fáze realizace</p>
+  </div>
+  <div class="header-right">
+    <button class="header-btn" id="btn-apply-notes" onclick="applyAllNotes()" style="background:rgba(251,191,36,0.3);border-color:rgba(251,191,36,0.4);display:none">⚡ Zapracovat poznámky</button>
+    <button class="header-btn" onclick="expandAll()">Rozbalit vše</button>
+    <button class="header-btn" onclick="collapseAll()">Sbalit vše</button>
+  </div>
+</div>
+
+<div class="controls">
+  <div class="phase-filter">
+    <button class="phase-btn active" data-phase="all" onclick="filterPhase('all', this)">Vše</button>
+    <button class="phase-btn" data-phase="1" onclick="filterPhase('1', this)" style="--c:#6c5ce7">Fáze 1 — Jádro</button>
+    <button class="phase-btn" data-phase="2" onclick="filterPhase('2', this)">Fáze 2 — Operativa</button>
+    <button class="phase-btn" data-phase="3" onclick="filterPhase('3', this)">Fáze 3 — Byznys</button>
+    <button class="phase-btn" data-phase="4" onclick="filterPhase('4', this)">Fáze 4 — Inteligence</button>
+  </div>
+  <div class="search-box">
+    <input type="text" id="search" placeholder="Hledat v mapě..." oninput="onSearch(this.value)">
+  </div>
+</div>
+
+<div class="main">
+  <div class="tree-panel" id="tree"></div>
+  <div class="detail-panel" id="detail"></div>
+</div>
+
+<div id="modal-root"></div>
+
+<script>
+// ============================================================
+// DATA — HolyOS mind map
+// ============================================================
+const DATA = {
+  core: {
+    id: 'core', icon: '🧠', label: 'HolyOS', color: '#6c5ce7',
+    desc: 'Firemní operační systém pro řízení celé firmy na jednom místě',
+    info: '30+ zaměstnanců • 5 oborů • Strojírenská výroba, Stavební činnost, Prádlomaty, Servis, E-shop',
+  },
+  modules: [
+    {
+      id: 'hr', icon: '👥', label: '1. Lidé a HR', color: '#6c5ce7', phase: 1,
+      desc: 'Evidence zaměstnanců, docházka, mzdy, organizační struktura',
+      features: [
+        'Evidence zaměstnanců (osobní údaje, smlouvy, dokumenty)',
+        'Docházka (příchody, odchody, přesčasy, dovolené)',
+        'Mzdy a výplaty (výpočet, výplatní pásky, odvody)',
+        'Organizační struktura a role',
+      ],
+      connections: ['finance', 'tasks', 'production'],
+      notes: '',
+    },
+    {
+      id: 'production', icon: '🏭', label: '2. Výroba a projekty', color: '#0984e3', phase: 2,
+      desc: 'Řízení výroby, stavebních projektů, harmonogramy, kapacity',
+      features: [
+        'Tvorba projektu (název, typ, termín, tým, rozpočet)',
+        'Harmonogram — Gantt, fáze, milníky',
+        'Kapacity a zdroje (lidé, stroje, obsazenost)',
+        'Výkazy práce (odpracované hodiny, spotřeba materiálu, fotodokumentace)',
+        'Dokumenty (výkresy, smlouvy, předávací protokoly)',
+        'Stav a průběh (% splnění, zpoždění, alerty)',
+        'Rozpočet vs. realita',
+        'Propojení se skladem a nákupem',
+        'Podporuje: strojírenská výroba + stavební projekty',
+      ],
+      connections: ['warehouse', 'tasks', 'finance', 'hr'],
+      notes: '',
+    },
+    {
+      id: 'service', icon: '🔧', label: '3. Zakázky a servis', color: '#00b894', phase: 2,
+      desc: 'Příjem zakázek, dispečink, sledování stavu, SLA, protokoly',
+      features: [
+        'Příjem zakázky / servisního požadavku',
+        'Dispečink a přidělení technikovi',
+        'Sledování stavu (přijato → v řešení → hotovo)',
+        'SLA hlídání a alerty',
+        'Servisní protokoly a podpis zákazníka',
+        'Historie zakázek na zákazníka',
+      ],
+      connections: ['crm', 'tasks', 'fleet', 'warehouse'],
+      notes: '',
+    },
+    {
+      id: 'laundry', icon: '🧺', label: '4. Prádlomaty', color: '#e84393', phase: 3,
+      desc: 'Řízení provozoven, strojů, tržeb, servisu, IoT napojení',
+      features: [
+        'Přehled všech provozoven a strojů',
+        'Tržby a obsazenost v reálném čase (IoT napojení)',
+        'Servis strojů — plánovaná údržba, poruchy',
+        'Spotřeba pracích prostředků a zásob',
+        'Výkonnostní reporting na provozovnu',
+      ],
+      connections: ['finance', 'warehouse', 'reporting'],
+      notes: '',
+    },
+    {
+      id: 'fleet', icon: '🚗', label: '5. Vozový park', color: '#f59e0b', phase: 3,
+      desc: 'Evidence vozidel, STK, pojištění, rezervace, kniha jízd',
+      features: [
+        'Evidence vozidel (SPZ, typ, stav)',
+        'STK, pojištění, servisní termíny — hlídání a alerty',
+        'Rezervace vozidla zaměstnancem',
+        'Kniha jízd (manuální i GPS)',
+        'Náklady na vozidlo (PHM, opravy, pojistka)',
+      ],
+      connections: ['service', 'hr', 'finance'],
+      notes: '',
+    },
+    {
+      id: 'warehouse', icon: '📦', label: '6. Nákup a sklad', color: '#10b981', phase: 2,
+      desc: 'Dodavatelé, objednávky, příjem, výdej, minimální zásoby',
+      features: [
+        'Evidence dodavatelů a ceníků',
+        'Vytváření a schvalování objednávek',
+        'Příjem zboží na sklad',
+        'Výdej materiálu na projekt / zakázku',
+        'Minimální zásoby a automatické objednávky (AI)',
+        'Propojení s výrobou a stavbou',
+      ],
+      connections: ['production', 'service', 'eshop', 'finance'],
+      notes: '',
+    },
+    {
+      id: 'tasks', icon: '✅', label: '7. Úkoly a plánování', color: '#8b5cf6', phase: 1,
+      desc: 'Úkoly, Kanban, kalendář, AI prioritizace, notifikace',
+      features: [
+        'Vytváření úkolů s přidělením, termínem, prioritou',
+        'Zobrazení: seznam, Kanban, kalendář',
+        'AI návrhy prioritizace',
+        'Notifikace a připomenutí',
+        'Propojení s projekty a zakázkami',
+      ],
+      connections: ['production', 'service', 'hr'],
+      notes: '',
+    },
+    {
+      id: 'crm', icon: '🤝', label: '8. CRM a zákazníci', color: '#00cec9', phase: 3,
+      desc: 'Kontakty, komunikace, nabídky, pipeline, segmentace',
+      features: [
+        'Databáze kontaktů (firmy, osoby)',
+        'Historie komunikace a zakázek',
+        'Nabídky a obchodní pipeline',
+        'Segmentace zákazníků',
+        'Propojení se servisem a e-shopem',
+      ],
+      connections: ['service', 'eshop', 'finance'],
+      notes: '',
+    },
+    {
+      id: 'eshop', icon: '🛒', label: '9. E-shop a prodej', color: '#ef4444', phase: 3,
+      desc: 'Katalog, objednávky, platební brána, zákaznická zóna',
+      features: [
+        'Katalog produktů a ceníky',
+        'Správa objednávek (příjem → expedice → doručení)',
+        'Platební brána',
+        'Propojení se skladem (automatické odečítání zásob)',
+        'Zákaznická zóna (stav objednávky, faktura)',
+      ],
+      connections: ['warehouse', 'crm', 'finance'],
+      notes: '',
+    },
+    {
+      id: 'finance', icon: '💰', label: '10. Finance a fakturace', color: '#fbbf24', phase: 1,
+      desc: 'Faktury, platby, cash flow, náklady, marže, DPH',
+      features: [
+        'Vystavování faktur (odběratelské i dodavatelské)',
+        'Sledování plateb a upomínky',
+        'Cash flow přehled',
+        'Náklady a marže na projekt / zakázku / obor',
+        'DPH výkazy',
+        'Propojení se mzdami, nákupem, prodejem',
+      ],
+      connections: ['hr', 'warehouse', 'eshop', 'production'],
+      notes: '',
+    },
+    {
+      id: 'reporting', icon: '📊', label: '11. Reporting a AI analýzy', color: '#ef4444', phase: 4,
+      desc: 'CEO dashboard, KPI, trendy, AI identifikace problémů',
+      features: [
+        'CEO dashboard — přehled celé firmy na jedné obrazovce',
+        'KPI na každý obor (výroba, stavba, servis, prádlomaty, e-shop)',
+        'Trendy a předpovědi (AI)',
+        'Identifikace problémů (AI upozorní na odchylky)',
+        'Doporučení a akční kroky (AI)',
+        'Export reportů (PDF, Excel)',
+      ],
+      connections: ['finance', 'production', 'service', 'laundry', 'eshop'],
+      notes: '',
+    },
+    {
+      id: 'automation', icon: '⚡', label: '12. Automatizace a workflow', color: '#e84393', phase: 4,
+      desc: 'Automatické rutiny, integrace API, plánované úlohy',
+      features: [
+        'Definice automatických rutin (spouštěč → akce)',
+        'Nová zakázka → přidělit technika → notifikovat zákazníka',
+        'Zásoby pod minimum → objednat u dodavatele',
+        'STK za 30 dní → upozornit odpovědnou osobu',
+        'Integrace externích API (účetní systém, dopravci, platební brána)',
+        'Plánované úlohy (denní, týdenní, měsíční rutiny)',
+      ],
+      connections: ['service', 'warehouse', 'fleet', 'finance'],
+      notes: '',
+    },
+  ],
+  ai: {
+    id: 'ai', icon: '🤖', label: 'AI jádro', color: '#6c5ce7', phase: 4,
+    desc: 'Mozek HolyOS — plánování, řízení, automatizace, doporučení',
+    features: [
+      'Plánování: navrhuje harmonogramy, hlídá kapacity, upozorňuje na konflikty',
+      'Řízení: sleduje stav všech modulů, eskaluje problémy',
+      'Automatizace: spouští rutiny bez zásahu člověka',
+      'Identifikace problémů: detekuje odchylky od plánu, upozorňuje včas',
+      'Doporučení: navrhuje konkrétní kroky šéfovi na základě dat',
+    ],
+    connections: ['reporting', 'automation', 'tasks', 'production'],
+    notes: '',
+  },
+  tech: {
+    id: 'tech', icon: '⚙️', label: 'Technické požadavky', color: '#64748b',
+    features: [
+      'Webová aplikace (prohlížeč) + mobilní aplikace',
+      'Role a oprávnění (šéf vidí vše, technik vidí svoje zakázky…)',
+      'Offline režim pro mobilní app (technici v terénu)',
+      'Responzivní design',
+      'API pro napojení externích systémů',
+      'Bezpečnost a zálohování dat',
+    ],
+  },
+};
+
+const PHASE_NAMES = {
+  1: 'Fáze 1 — Jádro',
+  2: 'Fáze 2 — Operativa',
+  3: 'Fáze 3 — Byznys',
+  4: 'Fáze 4 — Inteligence',
+};
+const PHASE_COLORS = { 1: '#6c5ce7', 2: '#0984e3', 3: '#00b894', 4: '#e84393' };
+
+// ============================================================
+// STATE
+// ============================================================
+let state = {
+  expanded: new Set(['core']),
+  selected: null,
+  phaseFilter: 'all',
+  search: '',
+  notes: {},         // moduleId → string (current notes being edited)
+  applied: {},       // moduleId → string[] (applied note lines, now part of the map)
+  saving: false,
+  lastSaved: null,
+};
+
+// ============================================================
+// SERVER PERSISTENCE
+// ============================================================
+async function loadFromServer() {
+  try {
+    const resp = await fetch('/api/mindmap/notes');
+    const data = await resp.json();
+    state.notes = data.notes || {};
+    state.applied = data.applied || {};
+    // Merge applied items into DATA.modules features
+    for (const mod of DATA.modules) {
+      if (state.applied[mod.id] && state.applied[mod.id].length) {
+        // Remove old applied items first (avoid duplicates on reload)
+        mod.features = mod.features.filter(f => !f.__applied);
+        for (const line of state.applied[mod.id]) {
+          mod.features.push({ text: line, __applied: true });
+        }
+      }
+    }
+    // Also for AI and tech
+    for (const special of [DATA.ai, DATA.tech]) {
+      if (special && state.applied[special.id] && state.applied[special.id].length) {
+        special.features = special.features.filter(f => !f.__applied);
+        for (const line of state.applied[special.id]) {
+          special.features.push({ text: line, __applied: true });
+        }
+      }
+    }
+    updateApplyButton();
+  } catch (e) {
+    console.warn('Cannot load notes from server, using empty:', e);
+  }
+}
+
+async function saveToServer() {
+  state.saving = true;
+  try {
+    await fetch('/api/mindmap/notes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ notes: state.notes, applied: state.applied }),
+    });
+    state.lastSaved = new Date();
+  } catch (e) {
+    console.error('Failed to save notes:', e);
+  }
+  state.saving = false;
+}
+
+let saveTimer = null;
+function debounceSave() {
+  if (saveTimer) clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => saveToServer(), 800);
+  updateApplyButton();
+}
+
+function updateApplyButton() {
+  const btn = document.getElementById('btn-apply-notes');
+  if (!btn) return;
+  // Show button if there are any non-empty notes
+  const hasNotes = Object.values(state.notes).some(n => n && n.trim().length > 0);
+  btn.style.display = hasNotes ? 'inline-block' : 'none';
+}
+
+// ============================================================
+// RENDER TREE
+// ============================================================
+function renderTree() {
+  const tree = document.getElementById('tree');
+  let html = '';
+
+  // Core node
+  html += renderNode(DATA.core, [
+    ...DATA.modules.filter(m => state.phaseFilter === 'all' || String(m.phase) === state.phaseFilter),
+    DATA.ai,
+    DATA.tech,
+  ]);
+
+  tree.innerHTML = html;
+}
+
+function featureText(f) { return typeof f === 'object' ? f.text : f; }
+function featureIsApplied(f) { return typeof f === 'object' && f.__applied; }
+
+function renderNode(item, children) {
+  const hasChildren = children && children.length > 0;
+  const isExpanded = state.expanded.has(item.id);
+  const isSelected = state.selected === item.id;
+  const matchesSearch = !state.search || item.label.toLowerCase().includes(state.search) ||
+    (item.features && item.features.some(f => featureText(f).toLowerCase().includes(state.search)));
+
+  if (state.search && !matchesSearch && (!children || !children.some(c =>
+    c.label.toLowerCase().includes(state.search) || (c.features && c.features.some(f => featureText(f).toLowerCase().includes(state.search)))
+  ))) {
+    return '';
+  }
+
+  const noteCount = state.notes[item.id] ? state.notes[item.id].trim().split('\n').filter(l => l.trim()).length : 0;
+  const phaseTag = item.phase ?
+    `<span class="node-badge" style="background:${PHASE_COLORS[item.phase]}22;color:${PHASE_COLORS[item.phase]}">F${item.phase}</span>` : '';
+  const noteTag = noteCount > 0 ?
+    `<span class="node-badge" style="background:rgba(251,191,36,0.2);color:#fbbf24">📝 ${noteCount}</span>` : '';
+
+  let html = `<div class="node" data-id="${item.id}">`;
+  html += `<div class="node-header ${isSelected ? 'selected' : ''}" onclick="selectNode('${item.id}')">`;
+  html += `<span class="node-toggle ${hasChildren ? (isExpanded ? 'expanded' : '') : 'leaf'}" onclick="event.stopPropagation(); toggleNode('${item.id}')">▶</span>`;
+  html += `<span class="node-icon" style="background:${item.color}22;color:${item.color}">${item.icon}</span>`;
+  html += `<span class="node-label">${highlightText(item.label)}</span>`;
+  html += phaseTag + noteTag;
+  html += `</div>`;
+
+  if (hasChildren) {
+    html += `<div class="node-children ${isExpanded ? '' : 'collapsed'}">`;
+    for (const child of children) {
+      if (child.features) {
+        html += renderNode(child, null);
+      }
+    }
+    html += `</div>`;
+  }
+
+  // Show features as sub-items when expanded
+  if (item.features && isExpanded) {
+    html += `<div class="node-children">`;
+    for (const f of item.features) {
+      const txt = featureText(f);
+      const isApplied = featureIsApplied(f);
+      if (state.search && !txt.toLowerCase().includes(state.search)) continue;
+      html += `<div class="sub-item ${isApplied ? 'from-note' : ''}" onclick="selectNode('${item.id}')">`;
+      html += `<span class="sub-dot" style="background:${isApplied ? '#fbbf24' : item.color}"></span>`;
+      html += `<span>${highlightText(txt)}${isApplied ? '<span class="applied-tag">z poznámky</span>' : ''}</span>`;
+      html += `</div>`;
+    }
+    html += `</div>`;
+  }
+
+  html += `</div>`;
+  return html;
+}
+
+function highlightText(text) {
+  if (!state.search) return text;
+  const regex = new RegExp(`(${state.search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+  return text.replace(regex, '<span class="highlight">$1</span>');
+}
+
+// ============================================================
+// RENDER DETAIL
+// ============================================================
+function renderDetail() {
+  const detail = document.getElementById('detail');
+
+  if (!state.selected) {
+    detail.innerHTML = `
+      <div class="detail-empty">
+        <div class="detail-empty-icon">🗺️</div>
+        <h2>HolyOS — Myšlenková mapa</h2>
+        <p style="color:var(--text2)">Klikni na modul vlevo pro zobrazení detailu</p>
+        <div class="stats-row" style="margin-top:24px;width:100%;max-width:600px">
+          <div class="stat-card"><div class="stat-val" style="color:#6c5ce7">12</div><div class="stat-label">Modulů</div></div>
+          <div class="stat-card"><div class="stat-val" style="color:#0984e3">4</div><div class="stat-label">Fáze realizace</div></div>
+          <div class="stat-card"><div class="stat-val" style="color:#00b894">5</div><div class="stat-label">Oborů</div></div>
+          <div class="stat-card"><div class="stat-val" style="color:#e84393">30+</div><div class="stat-label">Zaměstnanců</div></div>
+        </div>
+      </div>`;
+    return;
+  }
+
+  // Find the item
+  let item = DATA.modules.find(m => m.id === state.selected);
+  if (!item && state.selected === 'ai') item = DATA.ai;
+  if (!item && state.selected === 'tech') item = DATA.tech;
+  if (!item && state.selected === 'core') item = DATA.core;
+  if (!item) { detail.innerHTML = ''; return; }
+
+  const phaseTag = item.phase ?
+    `<span class="detail-phase-tag" style="background:${PHASE_COLORS[item.phase]}22;color:${PHASE_COLORS[item.phase]}">${PHASE_NAMES[item.phase]}</span>` : '';
+
+  let html = '';
+
+  // Header
+  html += `<div class="detail-header">
+    <div class="detail-icon" style="background:${item.color}22;color:${item.color}">${item.icon}</div>
+    <div>
+      <div class="detail-title">${item.label}</div>
+      <div class="detail-subtitle">${item.desc || ''}</div>
+    </div>
+    ${phaseTag}
+  </div>`;
+
+  // Features
+  if (item.features && item.features.length) {
+    html += `<div class="detail-section">
+      <h3>Funkce a vlastnosti</h3>
+      <div class="detail-features">`;
+    for (const f of item.features) {
+      const txt = featureText(f);
+      const isApplied = featureIsApplied(f);
+      html += `<div class="feature-card ${isApplied ? 'from-note' : ''}">
+        <span class="feature-dot" style="background:${isApplied ? '#fbbf24' : item.color}"></span>
+        <span class="feature-text">${txt}${isApplied ? '<span class="applied-tag">z poznámky</span>' : ''}</span>
+      </div>`;
+    }
+    html += `</div></div>`;
+  }
+
+  // Connections
+  if (item.connections && item.connections.length) {
+    html += `<div class="detail-section">
+      <h3>Propojení s moduly</h3>
+      <div class="connections">`;
+    for (const connId of item.connections) {
+      const conn = DATA.modules.find(m => m.id === connId) || (connId === 'ai' ? DATA.ai : null);
+      if (conn) {
+        html += `<span class="conn-tag" onclick="selectNode('${conn.id}')">${conn.icon} ${conn.label}</span>`;
+      }
+    }
+    html += `</div></div>`;
+  }
+
+  // Notes
+  const currentNotes = state.notes[item.id] || '';
+  html += `<div class="detail-section">
+    <h3>Poznámky a nápady</h3>
+    <p style="font-size:12px;color:var(--text2);margin-bottom:8px">Každý řádek = nová funkce/vlastnost. Tlačítkem <strong>⚡ Zapracovat poznámky</strong> nahoře se zapíšou do mapy.</p>
+    <textarea class="notes-area" id="notes-input" placeholder="Napiš poznámky k tomuto modulu...&#10;Každý řádek = jedna nová položka.&#10;&#10;Příklad:&#10;Přidat sledování přesčasů v reálném čase&#10;Napojení na biometrický terminál" oninput="onNoteInput('${item.id}')">${currentNotes}</textarea>
+    <div style="display:flex;align-items:center;gap:12px;margin-top:8px">
+      <button class="notes-save" onclick="saveNote('${item.id}')">💾 Uložit</button>
+      <span class="notes-status" id="notes-status">${state.lastSaved ? '✓ Uloženo ' + state.lastSaved.toLocaleTimeString('cs-CZ') : ''}</span>
+    </div>
+  </div>`;
+
+  detail.innerHTML = html;
+}
+
+// ============================================================
+// ACTIONS
+// ============================================================
+function selectNode(id) {
+  if (state.selected === id) {
+    // Already selected — toggle expand/collapse
+    if (state.expanded.has(id)) {
+      state.expanded.delete(id);
+    } else {
+      state.expanded.add(id);
+    }
+  } else {
+    // New selection — select and expand
+    state.selected = id;
+    if (!state.expanded.has(id)) state.expanded.add(id);
+  }
+  renderTree();
+  renderDetail();
+}
+
+function toggleNode(id) {
+  if (state.expanded.has(id)) {
+    state.expanded.delete(id);
+  } else {
+    state.expanded.add(id);
+  }
+  renderTree();
+}
+
+function expandAll() {
+  state.expanded.add('core');
+  for (const m of DATA.modules) state.expanded.add(m.id);
+  state.expanded.add('ai');
+  state.expanded.add('tech');
+  renderTree();
+}
+
+function collapseAll() {
+  state.expanded.clear();
+  state.expanded.add('core');
+  renderTree();
+}
+
+function filterPhase(phase, btn) {
+  state.phaseFilter = phase;
+  document.querySelectorAll('.phase-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderTree();
+}
+
+function onSearch(val) {
+  state.search = val.toLowerCase();
+  if (state.search) expandAll();
+  renderTree();
+}
+
+function onNoteInput(id) {
+  const textarea = document.getElementById('notes-input');
+  if (textarea) {
+    state.notes[id] = textarea.value;
+    debounceSave();
+  }
+}
+
+function saveNote(id) {
+  const textarea = document.getElementById('notes-input');
+  if (textarea) {
+    state.notes[id] = textarea.value;
+    saveToServer().then(() => {
+      const status = document.getElementById('notes-status');
+      if (status) {
+        status.textContent = '✓ Uloženo';
+        status.className = 'notes-status saved';
+      }
+      const btn = document.querySelector('.notes-save');
+      if (btn) { btn.textContent = '✓ Uloženo!'; setTimeout(() => btn.textContent = '💾 Uložit', 1500); }
+      renderTree(); // update note badges
+    });
+  }
+}
+
+// ============================================================
+// APPLY NOTES — zapracovat poznámky do mapy
+// ============================================================
+function applyAllNotes() {
+  // Collect all modules with non-empty notes
+  const notesToApply = [];
+  const allItems = [...DATA.modules, DATA.ai, DATA.tech].filter(Boolean);
+
+  for (const item of allItems) {
+    const noteText = state.notes[item.id];
+    if (!noteText || !noteText.trim()) continue;
+    const lines = noteText.trim().split('\n').map(l => l.trim()).filter(l => l.length > 0);
+    if (lines.length === 0) continue;
+    notesToApply.push({ item, lines });
+  }
+
+  if (notesToApply.length === 0) return;
+
+  // Show confirmation modal
+  const modal = document.getElementById('modal-root');
+  let html = '<div class="modal-overlay" onclick="if(event.target===this)closeModal()">';
+  html += '<div class="modal">';
+  html += '<h2>⚡ Zapracovat poznámky do mapy</h2>';
+  html += '<p style="font-size:13px;color:var(--text2);margin-bottom:16px">Tyto poznámky budou přidány jako nové funkce/vlastnosti do příslušných modulů:</p>';
+
+  for (const { item, lines } of notesToApply) {
+    html += `<div class="modal-module">`;
+    html += `<h4>${item.icon} ${item.label} <span style="color:var(--text2);font-weight:400">(+${lines.length} položek)</span></h4>`;
+    for (const line of lines) {
+      html += `<div class="modal-note-line">${line}</div>`;
+    }
+    html += `</div>`;
+  }
+
+  html += '<div class="modal-actions">';
+  html += '<button class="modal-btn cancel" onclick="closeModal()">Zrušit</button>';
+  html += '<button class="modal-btn confirm" onclick="confirmApply()">⚡ Zapracovat</button>';
+  html += '</div>';
+  html += '</div></div>';
+
+  modal.innerHTML = html;
+}
+
+function confirmApply() {
+  const allItems = [...DATA.modules, DATA.ai, DATA.tech].filter(Boolean);
+
+  for (const item of allItems) {
+    const noteText = state.notes[item.id];
+    if (!noteText || !noteText.trim()) continue;
+    const lines = noteText.trim().split('\n').map(l => l.trim()).filter(l => l.length > 0);
+    if (lines.length === 0) continue;
+
+    // Add to applied storage
+    if (!state.applied[item.id]) state.applied[item.id] = [];
+    for (const line of lines) {
+      // Avoid duplicates
+      if (!state.applied[item.id].includes(line)) {
+        state.applied[item.id].push(line);
+      }
+      // Add to runtime features (avoid duplicates)
+      const alreadyExists = item.features.some(f => featureText(f) === line);
+      if (!alreadyExists) {
+        item.features.push({ text: line, __applied: true });
+      }
+    }
+
+    // Clear the note (it's been applied)
+    state.notes[item.id] = '';
+  }
+
+  // Save and re-render
+  saveToServer();
+  closeModal();
+  renderTree();
+  renderDetail();
+}
+
+function closeModal() {
+  document.getElementById('modal-root').innerHTML = '';
+}
+
+// ============================================================
+// INIT
+// ============================================================
+loadFromServer().then(() => {
+  renderTree();
+  renderDetail();
+});
+</script>
+
+</body>
+</html>

@@ -43,10 +43,14 @@
   <!-- Toast -->
   <div id="toast" class="toast"></div>
 
-  <!-- Skripty — pořadí je důležité -->
-  <script src="js/sidebar.js"></script>
-  <script src="modules/pracovni-postup/js/factorify-api.js"></script>
-  <script src="modules/pracovni-postup/js/app.js"></script>
-  <script>renderSidebar('pracovni-postup');</script>
+  <!-- Sidebar -->
+  <script type="module">
+    import { renderSidebar, initDate } from '../../dist/client/client/js/sidebar.js';
+    renderSidebar('pracovni-postup');
+    initDate();
+  </script>
+
+  <!-- TS moduly (zkompilované) -->
+  <script type="module" src="../../dist/client/client/modules/pracovni-postup/app.js"></script>
 </body>
 </html>

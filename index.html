@@ -28,6 +28,16 @@
   <div class="main-content">
     <p style="color:var(--text2); margin-bottom: 20px; font-size: 14px;">Vyberte modul v levém panelu nebo klikněte na kartu níže.</p>
 
+    <!-- Myšlenková mapa — rychlý přístup -->
+    <a href="modules/holyos-mindmap.html" style="display:flex;align-items:center;gap:14px;background:linear-gradient(135deg,rgba(108,92,231,0.15),rgba(9,132,227,0.10));border:1px solid rgba(108,92,231,0.25);border-radius:12px;padding:14px 20px;margin-bottom:20px;text-decoration:none;color:var(--text);transition:all 0.2s;" onmouseover="this.style.borderColor='#6c5ce7';this.style.background='linear-gradient(135deg,rgba(108,92,231,0.25),rgba(9,132,227,0.15))'" onmouseout="this.style.borderColor='rgba(108,92,231,0.25)';this.style.background='linear-gradient(135deg,rgba(108,92,231,0.15),rgba(9,132,227,0.10))'">
+      <span style="font-size:28px">🗺️</span>
+      <div>
+        <div style="font-weight:600;font-size:15px;">Myšlenková mapa HolyOS</div>
+        <div style="font-size:12px;color:var(--text2);margin-top:2px;">Kompletní přehled projektu • 12 modulů • Poznámky a plánování</div>
+      </div>
+      <span style="margin-left:auto;font-size:12px;color:var(--text2);">Otevřít →</span>
+    </a>
+
     <div class="welcome-grid">
       <a href="modules/vytvoreni-arealu/simulace.html" class="welcome-card">
         <div class="sidebar-icon" style="background:rgba(139,92,246,0.15); color:#8b5cf6;">&#9998;</div>
@@ -68,8 +78,8 @@
   </div>
 </div>
 
-<script src="js/sidebar.js"></script>
-<script>
+<script type="module">
+  import { renderSidebar, initDate } from './dist/client/client/js/sidebar.js';
   renderSidebar(null);
   initDate();
 </script>

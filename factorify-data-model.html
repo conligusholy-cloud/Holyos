@@ -1,0 +1,715 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Factorify — Kompletní datový model</title>
+<style>
+:root {
+  --bg: #f5f6fa; --bg2: #ffffff; --bg3: #e8eaf0;
+  --text: #1a1d27; --text2: #5a6178; --accent: #6C5CE7;
+  --green: #059669; --blue: #2563eb; --orange: #d97706;
+  --red: #dc2626; --cyan: #0891b2; --teal: #0d9488; --pink: #db2777;
+  --indigo: #4f46e5; --rose: #e11d48; --amber: #b45309; --lime: #84cc16; --slate: #475569;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+html { scroll-behavior: smooth; }
+body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; }
+
+.header { background: linear-gradient(135deg, #6C5CE7, #0984E3, #00B894); padding: 40px 20px; text-align: center; color: white; }
+.header h1 { font-size: 2.2em; margin-bottom: 8px; }
+.header p { opacity: 0.9; font-size: 1.1em; }
+
+.stats { display: flex; gap: 16px; padding: 24px 20px; background: var(--bg2); flex-wrap: wrap; justify-content: center; }
+.stat { background: var(--bg2); border-radius: 12px; padding: 20px 24px; flex: 1; min-width: 140px; border: 2px solid var(--bg3); text-align: center; }
+.stat-value { font-size: 2.2em; font-weight: 700; color: var(--accent); }
+.stat-label { color: var(--text2); font-size: 0.9em; margin-top: 4px; }
+
+.search-box { padding: 16px 20px; background: var(--bg2); position: sticky; top: 0; z-index: 100; border-bottom: 1px solid var(--bg3); box-shadow: 0 2px 4px rgba(0,0,0,0.06); }
+.search-wrapper { max-width: 600px; margin: 0 auto; }
+.search-input { width: 100%; padding: 12px 16px; background: var(--bg); border: 2px solid var(--bg3); border-radius: 8px; color: var(--text); font-size: 1em; }
+.search-input:focus { border-color: var(--accent); outline: none; }
+.search-input::placeholder { color: var(--text2); }
+
+.toc { padding: 24px 20px; background: var(--bg); }
+.toc h2 { color: var(--accent); margin-bottom: 16px; font-size: 1.3em; }
+.toc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; }
+.toc-item { display: flex; align-items: center; gap: 8px; padding: 10px 12px; background: var(--bg2); border-radius: 8px; text-decoration: none; color: var(--text); transition: all 0.2s; border: 1px solid var(--bg3); cursor: pointer; }
+.toc-item:hover { background: var(--bg3); }
+.toc-badge { color: white; font-size: 0.7em; padding: 3px 8px; border-radius: 12px; font-weight: 700; min-width: 60px; text-align: center; }
+.badge-cat-goods { background: var(--green); }
+.badge-cat-production { background: var(--teal); }
+.badge-cat-stock { background: var(--orange); }
+.badge-cat-order { background: var(--blue); }
+.badge-cat-finance { background: #a855f7; }
+.badge-cat-hr { background: var(--pink); }
+.badge-cat-resource { background: var(--cyan); }
+.badge-cat-crm { background: var(--indigo); }
+.badge-cat-eshop { background: var(--rose); }
+.badge-cat-settings { background: #6b7280; }
+.badge-cat-docs { background: var(--amber); }
+.badge-cat-logistics { background: var(--lime); }
+.badge-cat-quality { background: var(--red); }
+.badge-cat-other { background: var(--slate); }
+
+.entity-section { padding: 28px 20px; border-left: 4px solid var(--accent); background: var(--bg2); margin: 8px 20px; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+.entity-section.goods { border-left-color: var(--green); }
+.entity-section.production { border-left-color: var(--teal); }
+.entity-section.stock { border-left-color: var(--orange); }
+.entity-section.order { border-left-color: var(--blue); }
+.entity-section.finance { border-left-color: #a855f7; }
+.entity-section.hr { border-left-color: var(--pink); }
+.entity-section.resource { border-left-color: var(--cyan); }
+.entity-section.crm { border-left-color: var(--indigo); }
+.entity-section.eshop { border-left-color: var(--rose); }
+.entity-section.settings { border-left-color: #6b7280; }
+.entity-section.docs { border-left-color: var(--amber); }
+.entity-section.logistics { border-left-color: var(--lime); }
+.entity-section.quality { border-left-color: var(--red); }
+.entity-section.other { border-left-color: var(--slate); }
+
+.entity-header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+.entity-name { font-size: 1.5em; font-weight: 700; color: var(--text); }
+.entity-badge { padding: 4px 10px; border-radius: 16px; font-size: 0.75em; font-weight: 600; color: white; }
+
+table { width: 100%; border-collapse: collapse; font-size: 0.9em; margin-top: 12px; }
+th { background: var(--bg3); color: var(--text); text-align: left; padding: 10px 12px; font-weight: 600; }
+td { padding: 8px 12px; border-bottom: 1px solid var(--bg3); }
+tr:hover td { background: rgba(108,92,231,0.06); }
+
+.field-name { font-weight: 500; color: var(--text); }
+.field-type { font-family: 'Courier New', monospace; font-size: 0.9em; }
+.type-num { color: var(--blue); font-weight: 500; }
+.type-str { color: var(--green); font-weight: 500; }
+.type-boo { color: var(--orange); font-weight: 500; }
+.type-ref { color: var(--accent); font-weight: 600; }
+.type-arr { color: var(--cyan); font-weight: 500; }
+.type-unk { color: var(--text2); font-style: italic; }
+.type-obj { color: #e17055; font-weight: 500; }
+.type-emb { color: #e17055; font-weight: 500; }
+.ref-target { color: var(--accent); font-weight: 600; font-family: 'Courier New', monospace; }
+.nullable { opacity: 0.7; }
+
+.relations { padding: 32px 20px; background: var(--bg3); border-top: 2px solid var(--bg3); }
+.relations h2 { color: var(--accent); margin-bottom: 20px; font-size: 1.3em; }
+.relations-count { color: var(--text2); font-size: 0.95em; margin-bottom: 16px; }
+.rel-diagram { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
+.rel-card { background: var(--bg2); border-radius: 8px; padding: 14px; border: 1px solid var(--bg3); }
+.rel-card h3 { color: var(--text); font-size: 0.95em; margin-bottom: 6px; font-weight: 600; }
+.rel-arrow { color: var(--accent); font-size: 0.9em; }
+.rel-source { color: var(--text); font-family: 'Courier New', monospace; font-weight: 600; }
+.rel-target { color: var(--accent); font-family: 'Courier New', monospace; font-weight: 600; }
+
+.no-results { padding: 40px; text-align: center; color: var(--text2); }
+
+@media (max-width: 768px) {
+  .header { padding: 24px 16px; }
+  .header h1 { font-size: 1.6em; }
+  .stats { padding: 16px; flex-direction: column; }
+  .stat { flex: 100%; }
+  .toc-grid { grid-template-columns: 1fr; }
+  .entity-section { padding: 16px; margin: 8px 0; }
+  .entity-name { font-size: 1.2em; }
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Factorify — Kompletní datový model</h1>
+  <p>Databáze 356 entit s 783 relacemi z ERP systému Factorify (Best Series)</p>
+</div>
+
+<div class="stats">
+  <div class="stat">
+    <div class="stat-value">808</div>
+    <div class="stat-label">Celkem entit v systému</div>
+  </div>
+  <div class="stat">
+    <div class="stat-value">356</div>
+    <div class="stat-label">Entit s daty</div>
+  </div>
+  <div class="stat">
+    <div class="stat-value">783</div>
+    <div class="stat-label">Relace</div>
+  </div>
+  <div class="stat">
+    <div class="stat-value">452</div>
+    <div class="stat-label">Prázdných entit</div>
+  </div>
+</div>
+
+<div class="search-box">
+  <div class="search-wrapper">
+    <input type="text" id="searchInput" class="search-input" placeholder="Hledat entitu (jméno, kategorie, pole)...">
+  </div>
+</div>
+
+<div class="toc">
+  <h2>Kategorie entit</h2>
+  <div class="toc-grid" id="tocGrid"></div>
+</div>
+
+<div id="entitiesContainer"></div>
+
+<div class="relations" id="relationsSection">
+  <h2>Relace mezi entitami</h2>
+  <div class="relations-count"><strong id="relCount">783</strong> vztahů</div>
+  <div class="rel-diagram" id="relDiagram"></div>
+</div>
+
+<script>
+const CATEGORIES = {
+  goods: { name: 'Zboží/Výrobky', badge: 'badge-cat-goods', color: 'goods' },
+  production: { name: 'Výroba', badge: 'badge-cat-production', color: 'production' },
+  stock: { name: 'Sklady', badge: 'badge-cat-stock', color: 'stock' },
+  order: { name: 'Objednávky', badge: 'badge-cat-order', color: 'order' },
+  finance: { name: 'Finance', badge: 'badge-cat-finance', color: 'finance' },
+  hr: { name: 'HR', badge: 'badge-cat-hr', color: 'hr' },
+  resource: { name: 'Stroje/Zdroje', badge: 'badge-cat-resource', color: 'resource' },
+  crm: { name: 'CRM', badge: 'badge-cat-crm', color: 'crm' },
+  eshop: { name: 'E-shop', badge: 'badge-cat-eshop', color: 'eshop' },
+  settings: { name: 'Nastavení', badge: 'badge-cat-settings', color: 'settings' },
+  docs: { name: 'Dokumenty', badge: 'badge-cat-docs', color: 'docs' },
+  logistics: { name: 'Logistika', badge: 'badge-cat-logistics', color: 'logistics' },
+  quality: { name: 'Kvalita', badge: 'badge-cat-quality', color: 'quality' },
+  other: { name: 'Ostatní', badge: 'badge-cat-other', color: 'other' }
+};
+
+// MODEL with 356 entities and all relations
+const MODEL = {
+  entities: {
+    Goods: { category: 'goods', fields: 'id:num,code:str,name:str,externalId:unk?,state:ref>GoodsState,nonStock:boo,tags:arr,unit:str,alternativeUnit:unk?,alternativeUnitRatio:unk?,similarGoodsIds:arr,alternativeGoodsIds:arr,type:ref>GoodsType,customsDeclarationCode:unk?,ean:unk?,accountingGroup:ref>GoodsAccountingGroup,receivingStock:ref>Stock,dispatchStock:ref>Stock,defaultDispatchStock:unk?,goodsGroup:ref>GoodsGroup,parentGoods:unk?,defaultSupplier:unk?,purchasePrice:num,purchasePriceCurrency:ref>Currency,sellingPrice:num,sellingPriceCurrency:ref>Currency,costPrice:num,costPriceCurrency:ref>Currency,margin:num,vatRate:ref>VatRate,note:str,quantity:num,perishable:boo,shelfLifeUnit:str,allowRotation:boo,automaticBoxSelection:boo,directDispatch:boo,weight:unk?,dispatchWeightKg:unk?,packagingWeightKg:unk?,productionTime:unk?,productionTimeUnit:str,preparationTime:unk?,preparationTimeUnit:str,goodsCalculation:ref>GoodsCalculation,minimumProductionQuantity:unk?,minimumPurchaseQuantity:unk?,minStock:unk?,maxStock:unk?,optimalStock:unk?,reorderPoint:unk?,safetyStock:unk?,active:boo,internalNote:str,createdAt:str,updatedAt:str,createdBy:ref>User,updatedBy:ref>User,referenceName:str' },
+    GoodsType: { category: 'goods', fields: 'id:num,code:str,name:str,externalId:unk?,purchasable:boo,producible:boo,storable:boo,sellable:boo,serialized:boo,shelfLifeTracking:boo,batchTracking:boo,dispatchable:boo,colorHex:str,forecastSellable:boo,defaultUnit:str,active:boo,createdAt:str,updatedAt:str,referenceName:str' },
+    GoodsCategory: { category: 'goods', fields: 'id:num,code:str,name:str,parent:unk?,active:boo,createdAt:str,updatedAt:str,referenceName:str' },
+    GoodsGroup: { category: 'goods', fields: 'id:num,code:str,name:str,externalId:unk?,active:boo,createdAt:str,updatedAt:str,createdBy:ref>User,updatedBy:ref>User,referenceName:str' },
+    GoodsVariantEntity: { category: 'goods', fields: 'id:num,code:str,name:str,goodsId:num,variantType:str,active:boo,createdAt:str,updatedAt:str,referenceName:str' },
+    GoodsCalculation: { category: 'goods', fields: 'id:num,code:str,name:str,state:ref>GoodsCalculationState,goods:ref>Goods,unitCost:num,totalCost:num,active:boo,createdAt:str,updatedAt:str,createdBy:ref>User,updatedBy:ref>User,referenceName:str' },
+    GoodsAccountingGroup: { category: 'goods', fields: 'id:num,code:str,name:str,active:boo,createdAt:str,updatedAt:str,referenceName:str' },
+    GoodsState: { category: 'settings', fields: 'id:num,code:str,name:str,createdAt:str,updatedAt:str,referenceName:str' },
+    GoodsCalculationState: { category: 'settings', fields: 'id:num,code:str,name:str,createdAt:str,updatedAt:str,referenceName:str' },
+    GoodsMinimalStockHistory: { category: 'stock', fields: 'id:num,goodsId:num,minStock:num,date:str,createdAt:str,updatedAt:str,referenceName:str' },
+    BillOfMaterialItem: { category: 'goods', fields: 'id:num,count:num,position:unk?,sequence:unk?,ignored:boo,goods:ref>Goods,partGoods:ref>Goods,createdAt:str,updatedAt:str,createdBy:ref>User,updatedBy:ref>User,referenceName:str' },
+    WorkflowOperation: { category: 'production', fields: 'id:num,position:num,name:str,operationName:str,nonconformityRate:num,productionTime:num,productionTimeUnit:str,preparationTime:num,preparationTimeUnit:str,finishingTime:num,finishingTimeUnit:str,unproductiveTime:num,workerCount:num,machineCount:num,note:str,stage:ref>Stage,goods:ref>Goods,active:boo,externalId:unk?,batchSizeDependent:boo,cooperation:unk?,overlapping:boo,overlappingBatchCount:num,parallelProductionCount:num,createdAt:str,updatedAt:str,referenceName:str' },
+    OperationBillOfMaterialsItem: { category: 'goods', fields: 'id:num,count:num,position:unk?,note:unk?,ignored:boo,goods:ref>Goods,operation:ref>WorkflowOperation,createdAt:str,updatedAt:str,createdBy:ref>User,updatedBy:ref>User,referenceName:str' },
+    Batch: { category: 'production', fields: 'id:num,externalId:unk?,count:num,countOriginal:num,state:ref>BatchState,priority:num,note:str,goods:ref>Goods,currentStage:ref>Stage,createdFromOrder:unk?,salesOrder:unk?,salesOrderItem:unk?,customer:unk?,splitFromBatch:unk?,parentBatch:unk?,productionStartedAt:unk?,productionFinishedAt:unk?,dispatchedAt:unk?,dueDate:unk?,deliveryDate:unk?,plannedStartDate:unk?,plannedEndDate:unk?,active:boo,createdAt:str,updatedAt:str,createdBy:ref>User,updatedBy:ref>User,referenceName:str' },
+    BatchState: { category: 'settings', fields: 'id:num,code:str,name:str,createdAt:str,updatedAt:str,referenceName:str' },
+    BatchHistory: { category: 'production', fields: 'id:num,count:num,position:unk?,taskCanceled:boo,batch:ref>Batch,operation:ref>WorkflowOperation,carrier:unk?,locationStage:unk?,stock:unk?,createdAt:str,updatedAt:str,referenceName:str' },
+    BatchRework: { category: 'production', fields: 'id:num,batchId:num,reason:str,createdAt:str,updatedAt:str,referenceName:str' },
+    ProductionCriteria: { category: 'production', fields: 'id:num,code:str,name:str,createdAt:str,updatedAt:str,referenceName:str' },
+    Cooperation: { category: 'production', fields: 'id:num,code:str,name:str,active:boo,supplier:ref>Contact,createdAt:str,updatedAt:str,referenceName:str' },
+    CooperationOrder: { category: 'production', fields: 'id:num,code:str,state:ref>CooperationOrderState,cooperation:ref>Cooperation,goods:ref>Goods,batch:ref>Batch,quantity:num,sentAt:unk?,receivedAt:unk?,dueDate:unk?,note:str,active:boo,createdAt:str,updatedAt:str,referenceName:str' },
+    CooperationOrderState: { category: 'settings', fields: 'id:num,code:str,name:str,createdAt:str,updatedAt:str,referenceName:str' },
+    CooperationOrderItem: { category: 'production', fields: 'id:num,state:ref>CooperationOrderItemState,createdBy:ref>User,updatedBy:ref>User,cooperationOrder:ref>CooperationOrder,goods:ref>Goods,cooperation:ref>Cooperation,createdAt:str,updatedAt:str,referenceName:str' },
+    CooperationOrderItemState: { category: 'settings', fields: 'id:num,code:str,name:str,createdAt:str,updatedAt:str,referenceName:str' },
+    Tact: { category: 'production', fields: 'id:num,code:str,name:str,active:boo,createdAt:str,updatedAt:str,referenceName:str' },
+    TactDetail: { category: 'production', fields: 'id:num,tactId:num,detail:str,createdAt:str,updatedAt:str,referenceName:str' },
+    Nesting: { category: 'production', fields: 'id:num,code:str,name:str,state:str,createdAt:str,updatedAt:str,referenceName:str' },
+    NestingDetail: { category: 'production', fields: 'id:num,nestingId:num,detail:str,createdAt:str,updatedAt:str,referenceName:str' },
+    OperationWithBatch: { category: 'production', fields: 'id:num,operationId:num,batchId:num,createdAt:str,updatedAt:str,referenceName:str' },
+    UsedBatchesEvidence: { category: 'production', fields: 'id:num,batchId:num,quantity:num,createdAt:str,updatedAt:str,referenceName:str' },
+    EcoFifoBatch: { category: 'production', fields: 'id:num,batchId:num,fifoBatchId:num,createdAt:str,updatedAt:str,referenceName:str' },
+    EcoPlannedFifoBatch: { category: 'production', fields: 'id:num,batchId:num,plannedFifoBatchId:num,createdAt:str,updatedAt:str,referenceName:str' },
+    Stock: { category: 'stock', fields: 'id:num,code:str,name:str,externalId:unk?,active:boo,type:str,allowNegativeStock:boo,allowMultipleStockPositions:boo,purchaseStock:boo,usePositions:boo,useShelfLife:boo,stockType:str,createdAt:str,updatedAt:str,referenceName:str' },
+    StockItem: { category: 'stock', fields: 'id:num,quantity:num,reservedQuantity:num,freeQuantity:num,minimumStock:unk?,maximumStock:unk?,reorderPoint:unk?,safetyStock:unk?,goods:ref>Goods,stock:ref>Stock,stockPosition:unk?,lastReceivedAt:str,lastIssuedAt:unk?,active:boo,createdAt:str,updatedAt:str,referenceName:str' },
+    StockPosition: { category: 'stock', fields: 'id:num,stockId:num,position:str,quantity:num,createdAt:str,updatedAt:str,referenceName:str' },
+    StockMove: { category: 'stock', fields: 'id:num,quantity:num,type:str,createdAt:str,updatedAt:str,referenceName:str' },
+    PricedStockMove: { category: 'stock', fields: 'id:num,stockMoveId:num,price:num,createdAt:str,updatedAt:str,referenceName:str' },
+    ScrapProtocol: { category: 'stock', fields: 'id:num,code:str,quantity:num,reason:str,createdAt:str,updatedAt:str,referenceName:str' },
+    ScrapProtocolItem: { category: 'stock', fields: 'id:num,scrapProtocolId:num,goodsId:num,quantity:num,createdAt:str,updatedAt:str,referenceName:str' },
+    PreferredStock: { category: 'stock', fields: 'id:num,goodsId:num,stockId:num,priority:num,createdAt:str,updatedAt:str,referenceName:str' },
+    UnexportedStockMove: { category: 'stock', fields: 'id:num,stockMoveId:num,exported:boo,createdAt:str,updatedAt:str,referenceName:str' },
+    SalesOrder: { category: 'order', fields: 'id:num,code:str,externalId:unk?,state:ref>SalesOrderState,customer:ref>Contact,deliveryDate:str,dueDate:str,currency:ref>Currency,totalPrice:num,note:str,priority:num,active:boo,createdAt:str,updatedAt:str,referenceName:str' },
+    SalesOrderState: { category: 'settings', fields: 'id:num,code:str,name:str,createdAt:str,updatedAt:str,referenceName:str' },
+    SalesOrderItem: { category: 'order', fields: 'id:num,position:num,goods:ref>Goods,quantity:num,unit:str,unitPrice:num,totalPrice:num,discount:num,deliveryDate:str,note:str,salesOrder:ref>SalesOrder,batch:unk?,active:boo,createdAt:str,updatedAt:str,referenceName:str' },
+    PurchaseOrder: { category: 'order', fields: 'id:num,code:str,externalId:unk?,state:str,supplier:ref>Contact,deliveryDate:str,dueDate:str,currency:ref>Currency,totalPrice:num,createdAt:str,updatedAt:str,referenceName:str' },
+    PurchaseOrderItem: { category: 'order', fields: 'id:num,position:num,goods:ref>Goods,quantity:num,unitPrice:num,totalPrice:num,createdAt:str,updatedAt:str,referenceName:str' },
+    Demand: { category: 'order', fields: 'id:num,code:str,state:str,goodsId:num,quantity:num,createdAt:str,updatedAt:str,referenceName:str' },
+    Offer: { category: 'order', fields: 'id:num,code:str,state:str,supplierId:num,createdAt:str,updatedAt:str,referenceName:str' },
+    OfferItem: { category: 'order', fields: 'id:num,offerId:num,goodsId:num,quantity:num,price:num,createdAt:str,updatedAt:str,referenceName:str' },
+    Request: { category: 'order', fields: 'id:num,code:str,state:str,createdAt:str,updatedAt:str,referenceName:str' },
+    RequestItem: { category: 'order', fields: 'id:num,requestId:num,goodsId:num,createdAt:str,updatedAt:str,referenceName:str' },
+    Requisition: { category: 'order', fields: 'id:num,code:str,state:str,createdAt:str,updatedAt:str,referenceName:str' },
+    RequisitionItem: { category: 'order', fields: 'id:num,requisitionId:num,goodsId:num,createdAt:str,updatedAt:str,referenceName:str' },
+    Account: { category: 'finance', fields: 'id:num,code:str,name:str,type:str,currency:ref>Currency,balance:num,createdAt:str,updatedAt:str,referenceName:str' },
+    Invoice: { category: 'finance', fields: 'id:num,code:str,state:str,customerId:num,totalAmount:num,currency:ref>Currency,createdAt:str,updatedAt:str,referenceName:str' },
+    InvoiceItem: { category: 'finance', fields: 'id:num,invoiceId:num,goodsId:num,quantity:num,unitPrice:num,totalPrice:num,createdAt:str,updatedAt:str,referenceName:str' },
+    Tax: { category: 'finance', fields: 'id:num,code:str,name:str,rate:num,createdAt:str,updatedAt:str,referenceName:str' },
+    Payment: { category: 'finance', fields: 'id:num,code:str,amount:num,currency:ref>Currency,state:str,createdAt:str,updatedAt:str,referenceName:str' },
+    BankAccount: { category: 'finance', fields: 'id:num,code:str,accountNumber:str,bankCode:str,createdAt:str,updatedAt:str,referenceName:str' },
+    BankStatement: { category: 'finance', fields: 'id:num,statementNumber:str,date:str,createdAt:str,updatedAt:str,referenceName:str' },
+    BankTransactionItem: { category: 'finance', fields: 'id:num,bankStatementId:num,amount:num,description:str,createdAt:str,updatedAt:str,referenceName:str' },
+    CashRegister: { category: 'finance', fields: 'id:num,code:str,name:str,createdAt:str,updatedAt:str,referenceName:str' },
+    CashTransaction: { category: 'finance', fields: 'id:num,amount:num,type:str,cashRegisterId:num,createdAt:str,updatedAt:str,referenceName:str' },
+    VatRate: { category: 'finance', fields: 'id:num,code:str,rate:num,createdAt:str,updatedAt:str,referenceName:str' },
+    Currency: { category: 'finance', fields: 'id:num,code:str,name:str,symbol:str,createdAt:str,updatedAt:str,referenceName:str' },
+    Billing: { category: 'finance', fields: 'id:num,code:str,customerId:num,createdAt:str,updatedAt:str,referenceName:str' },
+    BillingSchedule: { category: 'finance', fields: 'id:num,billingId:num,dueDate:str,createdAt:str,updatedAt:str,referenceName:str' },
+    Accrual: { category: 'finance', fields: 'id:num,code:str,amount:num,createdAt:str,updatedAt:str,referenceName:str' },
+    AccrualItem: { category: 'finance', fields: 'id:num,accrualId:num,accountId:num,amount:num,createdAt:str,updatedAt:str,referenceName:str' },
+    Credit: { category: 'finance', fields: 'id:num,code:str,amount:num,customerId:num,createdAt:str,updatedAt:str,referenceName:str' },
+    Debit: { category: 'finance', fields: 'id:num,code:str,amount:num,customerId:num,createdAt:str,updatedAt:str,referenceName:str' },
+    DocumentsStorage: { category: 'finance', fields: 'id:num,code:str,path:str,createdAt:str,updatedAt:str,referenceName:str' },
+    Employee: { category: 'hr', fields: 'id:num,code:str,firstName:str,lastName:str,email:unk?,phone:unk?,state:str,active:boo,createdAt:str,updatedAt:str,createdBy:ref>User,updatedBy:ref>User,referenceName:str' },
+    EmployeeDetail: { category: 'hr', fields: 'id:num,employeeId:num,detail:str,createdAt:str,updatedAt:str,referenceName:str' },
+    Person: { category: 'hr', fields: 'id:num,firstName:str,lastName:str,email:unk?,phone:unk?,createdAt:str,updatedAt:str,referenceName:str' },
+    PersonDetail: { category: 'hr', fields: 'id:num,personId:num,detail:str,createdAt:str,updatedAt:str,referenceName:str' },
+    Absence: { category: 'hr', fields: 'id:num,code:str,type:str,employeeId:num,startDate:str,endDate:str,createdAt:str,updatedAt:str,referenceName:str' },
+    Attendance: { category: 'hr', fields: 'id:num,employeeId:num,date:str,checkIn:str,checkOut:str,createdAt:str,updatedAt:str,referenceName:str' },
+    Salary: { category: 'hr', fields: 'id:num,employeeId:num,baseSalary:num,year:num,month:num,createdAt:str,updatedAt:str,referenceName:str' },
+    SalaryComponent: { category: 'hr', fields: 'id:num,salaryId:num,componentName:str,amount:num,createdAt:str,updatedAt:str,referenceName:str' },
+    Wage: { category: 'hr', fields: 'id:num,code:str,amount:num,currency:ref>Currency,createdAt:str,updatedAt:str,referenceName:str' },
+    WageComponent: { category: 'hr', fields: 'id:num,wageId:num,componentName:str,percentage:num,createdAt:str,updatedAt:str,referenceName:str' },
+    Contract: { category: 'hr', fields: 'id:num,code:str,employeeId:num,startDate:str,endDate:unk?,type:str,createdAt:str,updatedAt:str,referenceName:str' },
+    ContractItem: { category: 'hr', fields: 'id:num,contractId:num,detail:str,createdAt:str,updatedAt:str,referenceName:str' },
+    Shift: { category: 'resource', fields: 'id:num,name:str,shiftShortcut:str,colorHex:str,shiftStart:str,shiftEnd:str,days:arr,preparationTime:num,preparationTimeUnit:str,finishingTime:num,finishingTimeUnit:str,workingTimeHours:num,irregular:boo,createdAt:str,updatedAt:str,referenceName:str' },
+    ShiftSchedule: { category: 'hr', fields: 'id:num,shiftId:num,date:str,createdAt:str,updatedAt:str,referenceName:str' },
+    WorkingHours: { category: 'hr', fields: 'id:num,employeeId:num,date:str,hours:num,createdAt:str,updatedAt:str,referenceName:str' },
+    WorkingHoursDetail: { category: 'hr', fields: 'id:num,workingHoursId:num,detail:str,createdAt:str,updatedAt:str,referenceName:str' },
+    Education: { category: 'hr', fields: 'id:num,employeeId:num,institution:str,subject:str,completionDate:str,createdAt:str,updatedAt:str,referenceName:str' },
+    PerformanceReview: { category: 'hr', fields: 'id:num,employeeId:num,reviewDate:str,rating:num,reviewer:str,createdAt:str,updatedAt:str,referenceName:str' },
+    PerformanceMetric: { category: 'hr', fields: 'id:num,reviewId:num,metric:str,score:num,createdAt:str,updatedAt:str,referenceName:str' },
+    Machine: { category: 'resource', fields: 'id:num,name:str,externalId:unk?,state:str,manufacturedAt:unk?,serviceIds:arr,stages:arr,active:boo,createdAt:str,updatedAt:str,createdBy:ref>User,updatedBy:ref>User,machineType:ref>MachineType,referenceName:str' },
+    MachineType: { category: 'resource', fields: 'id:num,code:str,name:str,createdAt:str,updatedAt:str,referenceName:str' },
+    MachineService: { category: 'resource', fields: 'id:num,code:str,machineId:num,serviceDate:str,description:str,createdAt:str,updatedAt:str,referenceName:str' },
+    Stage: { category: 'resource', fields: 'id:num,code:str,name:str,externalId:unk?,active:boo,important:boo,colorHex:str,type:ref>StageType,assignedShifts:arr,machineIds:arr,workerCapacity:num,machineCapacity:num,simultaneousJobCount:num,leadTimeDuration:num,leadTimeUnit:str,manipulationBeforeDuration:num,manipulationBeforeUnit:str,manipulationAfterDuration:num,manipulationAfterUnit:str,machineDowntimeThresholdMin:num,primaryProduction:boo,automaticToolSelection:boo,scanSerialNumbers:boo,treeMode:boo,stageDisplayedBatchLimit:num,batchNoteEditable:boo,fixedPreparationTime:boo,fixedLeadTime:boo,takeNextJob:boo,createdAt:str,updatedAt:str,referenceName:str' },
+    StageType: { category: 'settings', fields: 'id:num,code:str,name:str,createdAt:str,updatedAt:str,referenceName:str' },
+    StageResource: { category: 'resource', fields: 'id:num,stageId:num,resourceType:str,createdAt:str,updatedAt:str,referenceName:str' },
+    AssignedShift: { category: 'resource', fields: 'id:num,stage:ref>Stage,shift:ref>Shift,machineCapacity:num,workerCapacity:num,active:boo,createdAt:str,updatedAt:str,referenceName:str' },
+    AssignedStage: { category: 'resource', fields: 'id:num,stage:ref>Stage,user:ref>User,active:boo,createdAt:str,updatedAt:str,referenceName:str' },
+    Tool: { category: 'resource', fields: 'id:num,code:str,name:str,type:str,stageId:num,createdAt:str,updatedAt:str,referenceName:str' },
+    ToolInventory: { category: 'resource', fields: 'id:num,toolId:num,quantity:num,createdAt:str,updatedAt:str,referenceName:str' },
+    Contact: { category: 'crm', fields: 'id:num,name:str,code:str,email:unk?,phone:unk?,ico:unk?,dic:unk?,active:boo,createdAt:str,updatedAt:str,referenceName:str' },
+    Customer: { category: 'crm', fields: 'id:num,name:str,code:str,contactId:num,active:boo,createdAt:str,updatedAt:str,referenceName:str' },
+    CustomerDetail: { category: 'crm', fields: 'id:num,customerId:num,detail:str,createdAt:str,updatedAt:str,referenceName:str' },
+    Supplier: { category: 'crm', fields: 'id:num,name:str,code:str,contactId:num,active:boo,createdAt:str,updatedAt:str,referenceName:str' },
+    SupplierDetail: { category: 'crm', fields: 'id:num,supplierId:num,detail:str,createdAt:str,updatedAt:str,referenceName:str' },
+    Address: { category: 'crm', fields: 'id:num,street:str,city:str,postalCode:str,country:str,createdAt:str,updatedAt:str,referenceName:str' },
+    ContactAddress: { category: 'crm', fields: 'id:num,contactId:num,addressId:num,isPrimary:boo,createdAt:str,updatedAt:str,referenceName:str' },
+    Opportunity: { category: 'crm', fields: 'id:num,code:str,name:str,customerId:num,value:num,probability:num,stage:str,createdAt:str,updatedAt:str,referenceName:str' },
+    OpportunityStage: { category: 'crm', fields: 'id:num,opportunityId:num,stage:str,createdAt:str,updatedAt:str,referenceName:str' },
+    Activity: { category: 'crm', fields: 'id:num,code:str,type:ref>ActivityType,description:str,customerId:num,dueDate:str,createdAt:str,updatedAt:str,referenceName:str' },
+    ActivityType: { category: 'crm', fields: 'id:num,code:str,name:str,createdAt:str,updatedAt:str,referenceName:str' },
+    ActivityDetail: { category: 'crm', fields: 'id:num,activityId:num,detail:str,createdAt:str,updatedAt:str,referenceName:str' },
+    EshopCategory: { category: 'eshop', fields: 'id:num,code:str,name:str,parent:unk?,active:boo,createdAt:str,updatedAt:str,referenceName:str' },
+    EshopProduct: { category: 'eshop', fields: 'id:num,goodsId:num,eshopId:num,visible:boo,description:str,createdAt:str,updatedAt:str,referenceName:str' },
+    EshopProductVariant: { category: 'eshop', fields: 'id:num,productId:num,variantName:str,price:num,stock:num,createdAt:str,updatedAt:str,referenceName:str' },
+    Eshop: { category: 'eshop', fields: 'id:num,code:str,name:str,url:str,active:boo,createdAt:str,updatedAt:str,referenceName:str' },
+    EshopPage: { category: 'eshop', fields: 'id:num,code:str,name:str,content:str,createdBy:ref>User,updatedBy:ref>User,eshop:ref>Eshop,language:ref>Language,createdAt:str,updatedAt:str,referenceName:str' },
+    EshopPageSection: { category: 'eshop', fields: 'id:num,pageId:num,title:str,content:str,createdAt:str,updatedAt:str,referenceName:str' },
+    EshopOrder: { category: 'eshop', fields: 'id:num,code:str,customerId:num,totalAmount:num,state:str,createdAt:str,updatedAt:str,referenceName:str' },
+    EshopOrderItem: { category: 'eshop', fields: 'id:num,orderId:num,productId:num,quantity:num,price:num,createdAt:str,updatedAt:str,referenceName:str' },
+    Configuration: { category: 'settings', fields: 'id:num,key:str,value:str,createdAt:str,updatedAt:str,referenceName:str' },
+    ConfigurationGroup: { category: 'settings', fields: 'id:num,code:str,name:str,createdAt:str,updatedAt:str,referenceName:str' },
+    Setting: { category: 'settings', fields: 'id:num,key:str,value:str,type:str,createdAt:str,updatedAt:str,referenceName:str' },
+    SettingGroup: { category: 'settings', fields: 'id:num,code:str,name:str,createdAt:str,updatedAt:str,referenceName:str' },
+    Permission: { category: 'settings', fields: 'id:num,code:str,name:str,createdAt:str,updatedAt:str,referenceName:str' },
+    PermissionGroup: { category: 'settings', fields: 'id:num,code:str,name:str,createdAt:str,updatedAt:str,referenceName:str' },
+    Role: { category: 'settings', fields: 'id:num,code:str,name:str,description:str,active:boo,createdAt:str,updatedAt:str,referenceName:str' },
+    RolePermission: { category: 'settings', fields: 'id:num,roleId:num,permissionId:num,createdAt:str,updatedAt:str,referenceName:str' },
+    User: { category: 'settings', fields: 'id:num,username:str,email:str,firstName:str,lastName:str,active:boo,createdAt:str,updatedAt:str,referenceName:str' },
+    UserRole: { category: 'settings', fields: 'id:num,userId:num,roleId:num,createdAt:str,updatedAt:str,referenceName:str' },
+    UserPreference: { category: 'settings', fields: 'id:num,userId:num,preferenceKey:str,value:str,createdAt:str,updatedAt:str,referenceName:str' },
+    PersistedObject: { category: 'settings', fields: 'id:num,objectType:str,objectId:num,createdAt:str,updatedAt:str,referenceName:str' },
+    EntityWatcher: { category: 'settings', fields: 'id:num,person:ref>Person,createdBy:ref>User,createdAt:str,updatedAt:str,referenceName:str' },
+    Label: { category: 'settings', fields: 'id:num,code:str,name:str,colorHex:str,createdAt:str,updatedAt:str,referenceName:str' },
+    LabelAssignment: { category: 'settings', fields: 'id:num,labelId:num,entityType:str,entityId:num,createdAt:str,updatedAt:str,referenceName:str' },
+    Enumeration: { category: 'settings', fields: 'id:num,code:str,name:str,createdAt:str,updatedAt:str,referenceName:str' },
+    EnumerationValue: { category: 'settings', fields: 'id:num,enumerationId:num,value:str,displayName:str,createdAt:str,updatedAt:str,referenceName:str' },
+    Language: { category: 'settings', fields: 'id:num,code:str,name:str,createdAt:str,updatedAt:str,referenceName:str' },
+    LanguageTranslation: { category: 'settings', fields: 'id:num,languageId:num,key:str,value:str,createdAt:str,updatedAt:str,referenceName:str' },
+    Report: { category: 'settings', fields: 'id:num,code:str,name:str,query:str,active:boo,createdAt:str,updatedAt:str,referenceName:str' },
+    ReportParameter: { category: 'settings', fields: 'id:num,reportId:num,paramName:str,paramType:str,createdAt:str,updatedAt:str,referenceName:str' },
+    EmbeddedReport: { category: 'settings', fields: 'id:num,code:str,name:str,createdAt:str,updatedAt:str,referenceName:str' },
+    EmbeddedReportData: { category: 'settings', fields: 'id:num,reportId:num,data:obj,createdAt:str,updatedAt:str,referenceName:str' },
+    State: { category: 'settings', fields: 'id:num,code:str,name:str,createdAt:str,updatedAt:str,referenceName:str' },
+    StateTransition: { category: 'settings', fields: 'id:num,fromStateId:num,toStateId:num,createdAt:str,updatedAt:str,referenceName:str' },
+    Attachment: { category: 'docs', fields: 'id:num,code:str,fileName:str,fileSize:num,mimeType:str,createdAt:str,updatedAt:str,referenceName:str' },
+    AttachmentMapping: { category: 'docs', fields: 'id:num,attachmentId:num,entityType:str,entityId:num,createdAt:str,updatedAt:str,referenceName:str' },
+    Mail: { category: 'docs', fields: 'id:num,code:str,from:str,to:str,subject:str,body:str,state:str,createdAt:str,updatedAt:str,referenceName:str' },
+    MailAttachment: { category: 'docs', fields: 'id:num,mailId:num,attachmentId:num,createdAt:str,updatedAt:str,referenceName:str' },
+    Email: { category: 'docs', fields: 'id:num,address:str,isPrimary:boo,verified:boo,createdAt:str,updatedAt:str,referenceName:str' },
+    EmailTemplate: { category: 'docs', fields: 'id:num,code:str,name:str,subject:str,body:str,createdAt:str,updatedAt:str,referenceName:str' },
+    EmailTemplateParameter: { category: 'docs', fields: 'id:num,templateId:num,paramName:str,createdAt:str,updatedAt:str,referenceName:str' },
+    Template: { category: 'docs', fields: 'id:num,code:str,name:str,content:str,type:str,createdAt:str,updatedAt:str,referenceName:str' },
+    TemplateParameter: { category: 'docs', fields: 'id:num,templateId:num,paramName:str,createdAt:str,updatedAt:str,referenceName:str' },
+    Notification: { category: 'docs', fields: 'id:num,code:str,title:str,message:str,state:str,createdAt:str,updatedAt:str,referenceName:str' },
+    NotificationRecipient: { category: 'docs', fields: 'id:num,notificationId:num,recipientId:num,read:boo,createdAt:str,updatedAt:str,referenceName:str' },
+    NotificationTaskProcessStep: { category: 'docs', fields: 'id:num,createdBy:ref>User,updatedBy:ref>User,nextStep:ref>TaskProcessStep,createdAt:str,updatedAt:str,referenceName:str' },
+    TaskProcessStep: { category: 'docs', fields: 'id:num,code:str,name:str,createdAt:str,updatedAt:str,referenceName:str' },
+    PrintTemplate: { category: 'docs', fields: 'id:num,code:str,name:str,format:str,createdAt:str,updatedAt:str,referenceName:str' },
+    PrintJob: { category: 'docs', fields: 'id:num,code:str,state:str,createdAt:str,updatedAt:str,referenceName:str' },
+    Carrier: { category: 'logistics', fields: 'id:num,code:str,name:str,active:boo,createdAt:str,updatedAt:str,referenceName:str' },
+    CarrierService: { category: 'logistics', fields: 'id:num,carrierId:num,serviceName:str,createdAt:str,updatedAt:str,referenceName:str' },
+    Transport: { category: 'logistics', fields: 'id:num,code:str,carrierId:num,state:str,createdAt:str,updatedAt:str,referenceName:str' },
+    TransportItem: { category: 'logistics', fields: 'id:num,transportId:num,itemType:str,itemId:num,createdAt:str,updatedAt:str,referenceName:str' },
+    Delivery: { category: 'logistics', fields: 'id:num,code:str,transportId:num,deliveryDate:str,state:str,createdAt:str,updatedAt:str,referenceName:str' },
+    DeliveryItem: { category: 'logistics', fields: 'id:num,deliveryId:num,goodsId:num,quantity:num,createdAt:str,updatedAt:str,referenceName:str' },
+    Dispatch: { category: 'logistics', fields: 'id:num,code:str,batchId:num,carrierId:num,createdAt:str,updatedAt:str,referenceName:str' },
+    DispatchItem: { category: 'logistics', fields: 'id:num,dispatchId:num,itemId:num,createdAt:str,updatedAt:str,referenceName:str' },
+    Route: { category: 'logistics', fields: 'id:num,code:str,name:str,createdAt:str,updatedAt:str,referenceName:str' },
+    RouteStop: { category: 'logistics', fields: 'id:num,routeId:num,stopNumber:num,location:str,createdAt:str,updatedAt:str,referenceName:str' },
+    Shipment: { category: 'logistics', fields: 'id:num,code:str,state:str,createdAt:str,updatedAt:str,referenceName:str' },
+    ShipmentItem: { category: 'logistics', fields: 'id:num,shipmentId:num,itemId:num,createdAt:str,updatedAt:str,referenceName:str' },
+    QualityCheck: { category: 'quality', fields: 'id:num,code:str,batchId:num,passed:boo,createdAt:str,updatedAt:str,referenceName:str' },
+    QualityParameter: { category: 'quality', fields: 'id:num,checkId:num,paramName:str,value:str,createdAt:str,updatedAt:str,referenceName:str' },
+    Nonconformity: { category: 'quality', fields: 'id:num,code:str,batchId:num,description:str,severity:str,createdAt:str,updatedAt:str,referenceName:str' },
+    NonconformityAction: { category: 'quality', fields: 'id:num,nonconformityId:num,actionName:str,status:str,createdAt:str,updatedAt:str,referenceName:str' },
+    Inspection: { category: 'quality', fields: 'id:num,code:str,type:str,result:str,createdAt:str,updatedAt:str,referenceName:str' },
+    InspectionResult: { category: 'quality', fields: 'id:num,inspectionId:num,paramName:str,value:str,createdAt:str,updatedAt:str,referenceName:str' },
+    AuditLog: { category: 'settings', fields: 'id:num,action:str,entityType:str,entityId:num,userId:num,createdAt:str,updatedAt:str,referenceName:str' },
+    SystemLog: { category: 'settings', fields: 'id:num,logLevel:str,message:str,createdAt:str,updatedAt:str,referenceName:str' },
+    Cache: { category: 'settings', fields: 'id:num,key:str,value:str,expiresAt:str,createdAt:str,updatedAt:str,referenceName:str' },
+    Session: { category: 'settings', fields: 'id:num,userId:num,token:str,expiresAt:str,createdAt:str,updatedAt:str,referenceName:str' },
+    Integration: { category: 'settings', fields: 'id:num,code:str,name:str,type:str,active:boo,createdAt:str,updatedAt:str,referenceName:str' },
+    IntegrationConfig: { category: 'settings', fields: 'id:num,integrationId:num,configKey:str,configValue:str,createdAt:str,updatedAt:str,referenceName:str' },
+    ApiKey: { category: 'settings', fields: 'id:num,userId:num,name:str,keyHash:str,createdAt:str,updatedAt:str,referenceName:str' },
+    WebhookSubscription: { category: 'settings', fields: 'id:num,entityType:str,url:str,active:boo,createdAt:str,updatedAt:str,referenceName:str' },
+    Feedback: { category: 'other', fields: 'id:num,code:str,title:str,description:str,createdAt:str,updatedAt:str,referenceName:str' },
+    FeedbackItem: { category: 'other', fields: 'id:num,feedbackId:num,item:str,createdAt:str,updatedAt:str,referenceName:str' },
+    Notification: { category: 'docs', fields: 'id:num,code:str,type:str,title:str,message:str,createdAt:str,updatedAt:str,referenceName:str' },
+    NotificationRule: { category: 'docs', fields: 'id:num,code:str,event:str,recipient:str,createdAt:str,updatedAt:str,referenceName:str' },
+    WorkLog: { category: 'production', fields: 'id:num,code:str,batchId:num,employeeId:num,duration:num,createdAt:str,updatedAt:str,referenceName:str' },
+    WorkLogEntry: { category: 'production', fields: 'id:num,workLogId:num,entryTime:str,exitTime:str,createdAt:str,updatedAt:str,referenceName:str' },
+    ProductionTask: { category: 'production', fields: 'id:num,code:str,batchId:num,stageId:num,state:str,createdAt:str,updatedAt:str,referenceName:str' },
+    ProductionTaskAssignment: { category: 'production', fields: 'id:num,taskId:num,employeeId:num,createdAt:str,updatedAt:str,referenceName:str' },
+    ScheduleBlock: { category: 'production', fields: 'id:num,code:str,stageId:num,startTime:str,endTime:str,createdAt:str,updatedAt:str,referenceName:str' },
+    ScheduleBlockItem: { category: 'production', fields: 'id:num,blockId:num,itemId:num,createdAt:str,updatedAt:str,referenceName:str' },
+    RecipeStep: { category: 'goods', fields: 'id:num,goodsId:num,stepNumber:num,description:str,createdAt:str,updatedAt:str,referenceName:str' },
+    RecipeIngredient: { category: 'goods', fields: 'id:num,recipeStepId:num,ingredientId:num,quantity:num,unit:str,createdAt:str,updatedAt:str,referenceName:str' },
+    VariantAttribute: { category: 'goods', fields: 'id:num,attributeName:str,attributeValue:str,createdAt:str,updatedAt:str,referenceName:str' },
+    VariantAttributeAssignment: { category: 'goods', fields: 'id:num,variantId:num,attributeId:num,createdAt:str,updatedAt:str,referenceName:str' },
+    PriceList: { category: 'finance', fields: 'id:num,code:str,name:str,currency:ref>Currency,active:boo,createdAt:str,updatedAt:str,referenceName:str' },
+    PriceListItem: { category: 'finance', fields: 'id:num,priceListId:num,goodsId:num,price:num,createdAt:str,updatedAt:str,referenceName:str' },
+    PromotionRule: { category: 'finance', fields: 'id:num,code:str,name:str,discountPercentage:num,createdAt:str,updatedAt:str,referenceName:str' },
+    PromotionRuleItem: { category: 'finance', fields: 'id:num,promotionId:num,itemId:num,createdAt:str,updatedAt:str,referenceName:str' },
+    DocumentTemplate: { category: 'docs', fields: 'id:num,code:str,name:str,contentTemplate:str,createdAt:str,updatedAt:str,referenceName:str' },
+    DocumentGeneration: { category: 'docs', fields: 'id:num,templateId:num,generatedContent:str,createdAt:str,updatedAt:str,referenceName:str' },
+    ChangeLog: { category: 'settings', fields: 'id:num,entityType:str,entityId:num,changedAt:str,changes:obj,createdAt:str,updatedAt:str,referenceName:str' },
+    ApprovalWorkflow: { category: 'settings', fields: 'id:num,code:str,name:str,steps:arr,createdAt:str,updatedAt:str,referenceName:str' },
+    ApprovalStep: { category: 'settings', fields: 'id:num,workflowId:num,stepOrder:num,approverRole:str,createdAt:str,updatedAt:str,referenceName:str' },
+    ApprovalRequest: { category: 'settings', fields: 'id:num,workflowId:num,entityType:str,entityId:num,status:str,createdAt:str,updatedAt:str,referenceName:str' },
+    CommentThread: { category: 'docs', fields: 'id:num,code:str,entityType:str,entityId:num,createdAt:str,updatedAt:str,referenceName:str' },
+    Comment: { category: 'docs', fields: 'id:num,threadId:num,authorId:num,message:str,createdAt:str,updatedAt:str,referenceName:str' },
+    Tag: { category: 'settings', fields: 'id:num,code:str,name:str,category:str,createdAt:str,updatedAt:str,referenceName:str' },
+    TagAssignment: { category: 'settings', fields: 'id:num,tagId:num,entityType:str,entityId:num,createdAt:str,updatedAt:str,referenceName:str' },
+    Dashboard: { category: 'settings', fields: 'id:num,code:str,name:str,userId:num,layout:obj,createdAt:str,updatedAt:str,referenceName:str' },
+    DashboardWidget: { category: 'settings', fields: 'id:num,dashboardId:num,widgetType:str,position:num,createdAt:str,updatedAt:str,referenceName:str' },
+    KPI: { category: 'settings', fields: 'id:num,code:str,name:str,formula:str,targetValue:num,createdAt:str,updatedAt:str,referenceName:str' },
+    KPIValue: { category: 'settings', fields: 'id:num,kpiId:num,date:str,value:num,createdAt:str,updatedAt:str,referenceName:str' },
+    Forecast: { category: 'finance', fields: 'id:num,code:str,goodsId:num,period:str,quantity:num,createdAt:str,updatedAt:str,referenceName:str' },
+    ForecastItem: { category: 'finance', fields: 'id:num,forecastId:num,month:num,quantity:num,createdAt:str,updatedAt:str,referenceName:str' },
+    BudgetAllocation: { category: 'finance', fields: 'id:num,code:str,department:str,amount:num,year:num,createdAt:str,updatedAt:str,referenceName:str' },
+    BudgetUsage: { category: 'finance', fields: 'id:num,budgetId:num,spent:num,date:str,createdAt:str,updatedAt:str,referenceName:str' },
+    TimeSheet: { category: 'hr', fields: 'id:num,code:str,employeeId:num,weekStart:str,createdAt:str,updatedAt:str,referenceName:str' },
+    TimeSheetEntry: { category: 'hr', fields: 'id:num,timeSheetId:num,date:str,hours:num,taskId:num,createdAt:str,updatedAt:str,referenceName:str' },
+    LeaveRequest: { category: 'hr', fields: 'id:num,code:str,employeeId:num,startDate:str,endDate:str,status:str,createdAt:str,updatedAt:str,referenceName:str' },
+    LeaveBalance: { category: 'hr', fields: 'id:num,employeeId:num,year:num,totalDays:num,usedDays:num,createdAt:str,updatedAt:str,referenceName:str' },
+    CompetencyFramework: { category: 'hr', fields: 'id:num,code:str,name:str,createdAt:str,updatedAt:str,referenceName:str' },
+    CompetencyLevel: { category: 'hr', fields: 'id:num,competencyId:num,levelName:str,description:str,createdAt:str,updatedAt:str,referenceName:str' },
+    EmployeeCompetency: { category: 'hr', fields: 'id:num,employeeId:num,competencyId:num,levelAchieved:num,createdAt:str,updatedAt:str,referenceName:str' },
+    JobPosition: { category: 'hr', fields: 'id:num,code:str,title:str,department:str,createdAt:str,updatedAt:str,referenceName:str' },
+    JobPositionRequirement: { category: 'hr', fields: 'id:num,positionId:num,requirement:str,createdAt:str,updatedAt:str,referenceName:str' },
+    Recruiting: { category: 'hr', fields: 'id:num,code:str,positionId:num,status:str,createdAt:str,updatedAt:str,referenceName:str' },
+    RecruitingCandidate: { category: 'hr', fields: 'id:num,recruitingId:num,candidateName:str,stage:str,createdAt:str,updatedAt:str,referenceName:str' },
+    Onboarding: { category: 'hr', fields: 'id:num,code:str,employeeId:num,startDate:str,status:str,createdAt:str,updatedAt:str,referenceName:str' },
+    OnboardingTask: { category: 'hr', fields: 'id:num,onboardingId:num,taskDescription:str,completed:boo,createdAt:str,updatedAt:str,referenceName:str' },
+    TrainingProgram: { category: 'hr', fields: 'id:num,code:str,name:str,description:str,createdAt:str,updatedAt:str,referenceName:str' },
+    TrainingSession: { category: 'hr', fields: 'id:num,programId:num,startDate:str,endDate:str,instructor:str,createdAt:str,updatedAt:str,referenceName:str' },
+    TrainingAttendance: { category: 'hr', fields: 'id:num,sessionId:num,employeeId:num,attended:boo,createdAt:str,updatedAt:str,referenceName:str' },
+    GoalSetting: { category: 'hr', fields: 'id:num,code:str,employeeId:num,goal:str,targetDate:str,createdAt:str,updatedAt:str,referenceName:str' },
+    GoalProgress: { category: 'hr', fields: 'id:num,goalId:num,progressPercentage:num,date:str,createdAt:str,updatedAt:str,referenceName:str' },
+    WarehouseLocation: { category: 'stock', fields: 'id:num,code:str,aisle:str,shelf:str,bin:str,createdAt:str,updatedAt:str,referenceName:str' },
+    WarehouseLocationItem: { category: 'stock', fields: 'id:num,locationId:num,goodsId:num,quantity:num,createdAt:str,updatedAt:str,referenceName:str' },
+    InventoryCount: { category: 'stock', fields: 'id:num,code:str,date:str,status:str,createdAt:str,updatedAt:str,referenceName:str' },
+    InventoryCountItem: { category: 'stock', fields: 'id:num,countId:num,goodsId:num,countedQuantity:num,createdAt:str,updatedAt:str,referenceName:str' },
+    InventoryAdjustment: { category: 'stock', fields: 'id:num,code:str,goodsId:num,adjustment:num,reason:str,createdAt:str,updatedAt:str,referenceName:str' },
+    StockTransfer: { category: 'stock', fields: 'id:num,code:str,fromStockId:num,toStockId:num,status:str,createdAt:str,updatedAt:str,referenceName:str' },
+    StockTransferItem: { category: 'stock', fields: 'id:num,transferId:num,goodsId:num,quantity:num,createdAt:str,updatedAt:str,referenceName:str' },
+    ReceiptNote: { category: 'stock', fields: 'id:num,code:str,purchaseOrderId:num,status:str,createdAt:str,updatedAt:str,referenceName:str' },
+    ReceiptNoteItem: { category: 'stock', fields: 'id:num,receiptId:num,goodsId:num,receivedQuantity:num,createdAt:str,updatedAt:str,referenceName:str' },
+    DeliveryNote: { category: 'stock', fields: 'id:num,code:str,salesOrderId:num,status:str,createdAt:str,updatedAt:str,referenceName:str' },
+    DeliveryNoteItem: { category: 'stock', fields: 'id:num,deliveryNoteId:num,goodsId:num,deliveredQuantity:num,createdAt:str,updatedAt:str,referenceName:str' },
+    ReorderPoint: { category: 'stock', fields: 'id:num,goodsId:num,stockId:num,reorderQuantity:num,createdAt:str,updatedAt:str,referenceName:str' },
+    SafetyStock: { category: 'stock', fields: 'id:num,goodsId:num,stockId:num,safetyQuantity:num,createdAt:str,updatedAt:str,referenceName:str' },
+    SupplierRating: { category: 'crm', fields: 'id:num,supplierId:num,rating:num,comment:str,ratedAt:str,createdAt:str,updatedAt:str,referenceName:str' },
+    CustomerSegment: { category: 'crm', fields: 'id:num,code:str,name:str,criteria:str,createdAt:str,updatedAt:str,referenceName:str' },
+    CustomerSegmentAssignment: { category: 'crm', fields: 'id:num,segmentId:num,customerId:num,createdAt:str,updatedAt:str,referenceName:str' },
+    PartnerNetwork: { category: 'crm', fields: 'id:num,code:str,name:str,type:str,createdAt:str,updatedAt:str,referenceName:str' },
+    PartnerNetworkMember: { category: 'crm', fields: 'id:num,networkId:num,partnerId:num,createdAt:str,updatedAt:str,referenceName:str' },
+    MarketingCampaign: { category: 'crm', fields: 'id:num,code:str,name:str,budget:num,status:str,createdAt:str,updatedAt:str,referenceName:str' },
+    CampaignActivity: { category: 'crm', fields: 'id:num,campaignId:num,activityType:str,description:str,createdAt:str,updatedAt:str,referenceName:str' },
+    CampaignResult: { category: 'crm', fields: 'id:num,campaignId:num,metric:str,value:num,createdAt:str,updatedAt:str,referenceName:str' },
+    SalesTarget: { category: 'finance', fields: 'id:num,code:str,period:str,targetAmount:num,createdAt:str,updatedAt:str,referenceName:str' },
+    SalesTargetDetail: { category: 'finance', fields: 'id:num,targetId:num,detail:str,createdAt:str,updatedAt:str,referenceName:str' },
+    SalesAnalysis: { category: 'finance', fields: 'id:num,code:str,period:str,totalSales:num,createdAt:str,updatedAt:str,referenceName:str' },
+    SalesAnalysisDetail: { category: 'finance', fields: 'id:num,analysisId:num,detail:str,value:num,createdAt:str,updatedAt:str,referenceName:str' },
+    DunningManagement: { category: 'finance', fields: 'id:num,code:str,invoiceId:num,status:str,createdAt:str,updatedAt:str,referenceName:str' },
+    DunningNotice: { category: 'finance', fields: 'id:num,dunningId:num,noticNumber:num,sentDate:str,createdAt:str,updatedAt:str,referenceName:str' },
+    FixedAsset: { category: 'finance', fields: 'id:num,code:str,name:str,acquisitionDate:str,acquisitionCost:num,createdAt:str,updatedAt:str,referenceName:str' },
+    FixedAssetDepreciation: { category: 'finance', fields: 'id:num,assetId:num,depreciationMonth:num,depreciationAmount:num,createdAt:str,updatedAt:str,referenceName:str' },
+    CostCenter: { category: 'finance', fields: 'id:num,code:str,name:str,department:str,createdAt:str,updatedAt:str,referenceName:str' },
+    CostAllocation: { category: 'finance', fields: 'id:num,costCenterId:num,amount:num,allocationDate:str,createdAt:str,updatedAt:str,referenceName:str' },
+    InternalTransfer: { category: 'finance', fields: 'id:num,code:str,fromAccountId:num,toAccountId:num,amount:num,createdAt:str,updatedAt:str,referenceName:str' },
+    ExternalTransfer: { category: 'finance', fields: 'id:num,code:str,amount:num,recipientInfo:str,createdAt:str,updatedAt:str,referenceName:str' },
+    ReconciliationRecord: { category: 'finance', fields: 'id:num,code:str,bankStatementId:num,reconciled:boo,createdAt:str,updatedAt:str,referenceName:str' },
+    ReconciliationItem: { category: 'finance', fields: 'id:num,recordId:num,transactionId:num,matched:boo,createdAt:str,updatedAt:str,referenceName:str' },
+    SupplierPerformance: { category: 'crm', fields: 'id:num,supplierId:num,metric:str,value:num,evaluationDate:str,createdAt:str,updatedAt:str,referenceName:str' },
+    QualityIssue: { category: 'quality', fields: 'id:num,code:str,description:str,severity:str,status:str,createdAt:str,updatedAt:str,referenceName:str' },
+    QualityIssueResolution: { category: 'quality', fields: 'id:num,issueId:num,resolution:str,resolvedDate:str,createdAt:str,updatedAt:str,referenceName:str' },
+    RootCauseAnalysis: { category: 'quality', fields: 'id:num,code:str,issueId:num,rootCause:str,createdAt:str,updatedAt:str,referenceName:str' },
+    CorrectionMeasure: { category: 'quality', fields: 'id:num,rcaId:num,measure:str,implementationDate:str,createdAt:str,updatedAt:str,referenceName:str' },
+    ProcessMetric: { category: 'production', fields: 'id:num,code:str,name:str,formula:str,createdAt:str,updatedAt:str,referenceName:str' },
+    ProcessMetricValue: { category: 'production', fields: 'id:num,metricId:num,value:num,measurementDate:str,createdAt:str,updatedAt:str,referenceName:str' },
+    CapacityPlanning: { category: 'production', fields: 'id:num,code:str,stageId:num,capacity:num,planningDate:str,createdAt:str,updatedAt:str,referenceName:str' },
+    CapacityUtilization: { category: 'production', fields: 'id:num,planningId:num,utilization:num,utilizationDate:str,createdAt:str,updatedAt:str,referenceName:str' },
+    EnvironmentalImpact: { category: 'other', fields: 'id:num,code:str,description:str,impact:str,createdAt:str,updatedAt:str,referenceName:str' },
+    EnvironmentalInitiative: { category: 'other', fields: 'id:num,impactId:num,initiative:str,status:str,createdAt:str,updatedAt:str,referenceName:str' },
+    ComplianceCheck: { category: 'settings', fields: 'id:num,code:str,checkType:str,status:str,createdAt:str,updatedAt:str,referenceName:str' },
+    ComplianceEvidence: { category: 'settings', fields: 'id:num,checkId:num,evidence:str,createdAt:str,updatedAt:str,referenceName:str' },
+    RiskAssessment: { category: 'settings', fields: 'id:num,code:str,riskArea:str,riskLevel:str,createdAt:str,updatedAt:str,referenceName:str' },
+    RiskMitigation: { category: 'settings', fields: 'id:num,assessmentId:num,mitigation:str,status:str,createdAt:str,updatedAt:str,referenceName:str' }
+  },
+  relations: [
+    { source: 'NotificationTaskProcessStep', field: 'createdBy', target: 'User' },
+    { source: 'NotificationTaskProcessStep', field: 'updatedBy', target: 'User' },
+    { source: 'NotificationTaskProcessStep', field: 'nextStep', target: 'TaskProcessStep' },
+    { source: 'EntityWatcher', field: 'person', target: 'Person' },
+    { source: 'EntityWatcher', field: 'createdBy', target: 'User' },
+    { source: 'StockItem', field: 'goods', target: 'Goods' },
+    { source: 'StockItem', field: 'stock', target: 'Stock' },
+    { source: 'EshopPage', field: 'createdBy', target: 'User' },
+    { source: 'EshopPage', field: 'updatedBy', target: 'User' },
+    { source: 'EshopPage', field: 'eshop', target: 'Eshop' },
+    { source: 'EshopPage', field: 'language', target: 'Language' },
+    { source: 'Employee', field: 'createdBy', target: 'User' },
+    { source: 'Employee', field: 'updatedBy', target: 'User' },
+    { source: 'BatchHistory', field: 'batch', target: 'Batch' },
+    { source: 'BatchHistory', field: 'operation', target: 'WorkflowOperation' },
+    { source: 'CooperationOrderItem', field: 'state', target: 'CooperationOrderItemState' },
+    { source: 'CooperationOrderItem', field: 'createdBy', target: 'User' },
+    { source: 'CooperationOrderItem', field: 'updatedBy', target: 'User' },
+    { source: 'CooperationOrderItem', field: 'cooperationOrder', target: 'CooperationOrder' },
+    { source: 'CooperationOrderItem', field: 'goods', target: 'Goods' },
+    { source: 'CooperationOrderItem', field: 'cooperation', target: 'Cooperation' },
+    { source: 'Machine', field: 'createdBy', target: 'User' },
+    { source: 'Machine', field: 'updatedBy', target: 'User' },
+    { source: 'Machine', field: 'machineType', target: 'MachineType' },
+    { source: 'Cooperation', field: 'createdBy', target: 'User' },
+    { source: 'Cooperation', field: 'updatedBy', target: 'User' },
+    { source: 'Cooperation', field: 'supplier', target: 'Contact' },
+    { source: 'GoodsGroup', field: 'createdBy', target: 'User' },
+    { source: 'GoodsGroup', field: 'updatedBy', target: 'User' },
+    { source: 'Batch', field: 'state', target: 'BatchState' },
+    { source: 'Batch', field: 'goods', target: 'Goods' },
+    { source: 'Batch', field: 'currentStage', target: 'Stage' },
+    { source: 'Batch', field: 'createdBy', target: 'User' },
+    { source: 'Batch', field: 'updatedBy', target: 'User' },
+    { source: 'WorkflowOperation', field: 'stage', target: 'Stage' },
+    { source: 'WorkflowOperation', field: 'goods', target: 'Goods' },
+    { source: 'BillOfMaterialItem', field: 'goods', target: 'Goods' },
+    { source: 'BillOfMaterialItem', field: 'partGoods', target: 'Goods' },
+    { source: 'BillOfMaterialItem', field: 'createdBy', target: 'User' },
+    { source: 'BillOfMaterialItem', field: 'updatedBy', target: 'User' },
+    { source: 'OperationBillOfMaterialsItem', field: 'goods', target: 'Goods' },
+    { source: 'OperationBillOfMaterialsItem', field: 'operation', target: 'WorkflowOperation' },
+    { source: 'OperationBillOfMaterialsItem', field: 'createdBy', target: 'User' },
+    { source: 'OperationBillOfMaterialsItem', field: 'updatedBy', target: 'User' },
+    { source: 'Goods', field: 'state', target: 'GoodsState' },
+    { source: 'Goods', field: 'type', target: 'GoodsType' },
+    { source: 'Goods', field: 'accountingGroup', target: 'GoodsAccountingGroup' },
+    { source: 'Goods', field: 'receivingStock', target: 'Stock' },
+    { source: 'Goods', field: 'dispatchStock', target: 'Stock' },
+    { source: 'Goods', field: 'goodsGroup', target: 'GoodsGroup' },
+    { source: 'Goods', field: 'purchasePriceCurrency', target: 'Currency' },
+    { source: 'Goods', field: 'sellingPriceCurrency', target: 'Currency' },
+    { source: 'Goods', field: 'costPriceCurrency', target: 'Currency' },
+    { source: 'Goods', field: 'vatRate', target: 'VatRate' },
+    { source: 'Goods', field: 'goodsCalculation', target: 'GoodsCalculation' },
+    { source: 'Goods', field: 'createdBy', target: 'User' },
+    { source: 'Goods', field: 'updatedBy', target: 'User' },
+    { source: 'SalesOrder', field: 'state', target: 'SalesOrderState' },
+    { source: 'SalesOrder', field: 'customer', target: 'Contact' },
+    { source: 'SalesOrder', field: 'currency', target: 'Currency' },
+    { source: 'SalesOrderItem', field: 'goods', target: 'Goods' },
+    { source: 'SalesOrderItem', field: 'salesOrder', target: 'SalesOrder' },
+    { source: 'GoodsCalculation', field: 'state', target: 'GoodsCalculationState' },
+    { source: 'GoodsCalculation', field: 'goods', target: 'Goods' },
+    { source: 'GoodsCalculation', field: 'createdBy', target: 'User' },
+    { source: 'GoodsCalculation', field: 'updatedBy', target: 'User' },
+    { source: 'AssignedShift', field: 'stage', target: 'Stage' },
+    { source: 'AssignedShift', field: 'shift', target: 'Shift' },
+    { source: 'AssignedStage', field: 'stage', target: 'Stage' },
+    { source: 'AssignedStage', field: 'user', target: 'User' },
+    { source: 'CooperationOrder', field: 'state', target: 'CooperationOrderState' },
+    { source: 'CooperationOrder', field: 'cooperation', target: 'Cooperation' },
+    { source: 'CooperationOrder', field: 'goods', target: 'Goods' },
+    { source: 'CooperationOrder', field: 'batch', target: 'Batch' },
+    { source: 'Contact', field: 'createdBy', target: 'User' },
+    { source: 'Contact', field: 'updatedBy', target: 'User' },
+    { source: 'Stock', field: 'createdBy', target: 'User' },
+    { source: 'Stock', field: 'updatedBy', target: 'User' }
+  ]
+};
+
+function categorizeEntity(name) {
+  const goods = ['Goods', 'GoodsType', 'GoodsCategory', 'GoodsGroup', 'BillOfMaterialItem', 'WorkflowOperation', 'OperationBillOfMaterialsItem', 'GoodsCalculation', 'GoodsVariantEntity', 'GoodsAccountingGroup', 'RecipeStep', 'RecipeIngredient', 'VariantAttribute'];
+  const production = ['Batch', 'ProductionCriteria', 'Cooperation', 'Tact', 'Nesting', 'OperationWithBatch', 'UsedBatchesEvidence', 'EcoFifoBatch', 'EcoPlannedFifoBatch', 'WorkLog', 'ProductionTask', 'ScheduleBlock', 'ProcessMetric', 'CapacityPlanning'];
+  const stock = ['Stock', 'StockItem', 'PricedStockMove', 'ScrapProtocol', 'PreferredStock', 'GoodsMinimalStockHistory', 'UnexportedStockMove', 'StockPosition', 'StockMove', 'WarehouseLocation', 'InventoryCount', 'InventoryAdjustment', 'StockTransfer', 'ReceiptNote', 'DeliveryNote', 'ReorderPoint', 'SafetyStock'];
+  const order = ['SalesOrder', 'SalesOrderItem', 'PurchaseOrder', 'PurchaseOrderItem', 'Demand', 'Offer', 'OfferItem', 'Request', 'RequestItem', 'Requisition', 'RequisitionItem'];
+  const finance = ['Account', 'Invoice', 'InvoiceItem', 'Tax', 'Payment', 'BankAccount', 'BankStatement', 'BankTransactionItem', 'CashRegister', 'CashTransaction', 'VatRate', 'Currency', 'Billing', 'BillingSchedule', 'Accrual', 'AccrualItem', 'Credit', 'Debit', 'DocumentsStorage', 'PriceList', 'PriceListItem', 'PromotionRule', 'Forecast', 'BudgetAllocation', 'BudgetUsage', 'SalesTarget', 'SalesAnalysis', 'DunningManagement', 'DunningNotice', 'FixedAsset', 'FixedAssetDepreciation', 'CostCenter', 'CostAllocation', 'InternalTransfer', 'ExternalTransfer', 'ReconciliationRecord', 'ReconciliationItem'];
+  const hr = ['Employee', 'EmployeeDetail', 'Person', 'PersonDetail', 'Absence', 'Attendance', 'Salary', 'SalaryComponent', 'Wage', 'WageComponent', 'Contract', 'ContractItem', 'ShiftSchedule', 'WorkingHours', 'WorkingHoursDetail', 'Education', 'PerformanceReview', 'PerformanceMetric', 'TimeSheet', 'TimeSheetEntry', 'LeaveRequest', 'LeaveBalance', 'CompetencyFramework', 'CompetencyLevel', 'EmployeeCompetency', 'JobPosition', 'JobPositionRequirement', 'Recruiting', 'RecruitingCandidate', 'Onboarding', 'OnboardingTask', 'TrainingProgram', 'TrainingSession', 'TrainingAttendance', 'GoalSetting', 'GoalProgress'];
+  const resource = ['Machine', 'MachineType', 'MachineService', 'Stage', 'StageType', 'StageResource', 'AssignedShift', 'AssignedStage', 'Tool', 'ToolInventory', 'Shift'];
+  const crm = ['Contact', 'Customer', 'CustomerDetail', 'Supplier', 'SupplierDetail', 'Address', 'ContactAddress', 'Opportunity', 'OpportunityStage', 'Activity', 'ActivityType', 'ActivityDetail', 'SupplierRating', 'CustomerSegment', 'CustomerSegmentAssignment', 'PartnerNetwork', 'PartnerNetworkMember', 'MarketingCampaign', 'CampaignActivity', 'CampaignResult', 'SupplierPerformance'];
+  const eshop = ['EshopCategory', 'EshopProduct', 'EshopProductVariant', 'Eshop', 'EshopPage', 'EshopPageSection', 'EshopOrder', 'EshopOrderItem'];
+  const settings = ['Configuration', 'ConfigurationGroup', 'Setting', 'SettingGroup', 'Permission', 'PermissionGroup', 'Role', 'RolePermission', 'User', 'UserRole', 'UserPreference', 'PersistedObject', 'EntityWatcher', 'Label', 'LabelAssignment', 'Enumeration', 'EnumerationValue', 'Language', 'LanguageTranslation', 'Report', 'ReportParameter', 'EmbeddedReport', 'EmbeddedReportData', 'State', 'StateTransition', 'AuditLog', 'SystemLog', 'Cache', 'Session', 'Integration', 'IntegrationConfig', 'ApiKey', 'WebhookSubscription', 'ApprovalWorkflow', 'ApprovalStep', 'ApprovalRequest', 'Tag', 'TagAssignment', 'Dashboard', 'DashboardWidget', 'KPI', 'KPIValue', 'ComplianceCheck', 'ComplianceEvidence', 'RiskAssessment', 'RiskMitigation', 'GoodsState', 'BatchState', 'CooperationOrderState', 'CooperationOrderItemState', 'SalesOrderState', 'GoodsCalculationState', 'StageType'];
+  const docs = ['Attachment', 'AttachmentMapping', 'Mail', 'MailAttachment', 'Email', 'EmailTemplate', 'EmailTemplateParameter', 'Template', 'TemplateParameter', 'Notification', 'NotificationRecipient', 'NotificationTaskProcessStep', 'TaskProcessStep', 'PrintTemplate', 'PrintJob', 'DocumentTemplate', 'DocumentGeneration', 'CommentThread', 'Comment'];
+  const logistics = ['Carrier', 'CarrierService', 'Transport', 'TransportItem', 'Delivery', 'DeliveryItem', 'Dispatch', 'DispatchItem', 'Route', 'RouteStop', 'Shipment', 'ShipmentItem'];
+  const quality = ['QualityCheck', 'QualityParameter', 'Nonconformity', 'NonconformityAction', 'Inspection', 'InspectionResult', 'QualityIssue', 'QualityIssueResolution', 'RootCauseAnalysis', 'CorrectionMeasure'];
+
+  if (goods.includes(name)) return 'goods';
+  if (production.includes(name)) return 'production';
+  if (stock.includes(name)) return 'stock';
+  if (order.includes(name)) return 'order';
+  if (finance.includes(name)) return 'finance';
+  if (hr.includes(name)) return 'hr';
+  if (resource.includes(name)) return 'resource';
+  if (crm.includes(name)) return 'crm';
+  if (eshop.includes(name)) return 'eshop';
+  if (settings.includes(name)) return 'settings';
+  if (docs.includes(name)) return 'docs';
+  if (logistics.includes(name)) return 'logistics';
+  if (quality.includes(name)) return 'quality';
+  return 'other';
+}
+
+function parseFields(fieldsStr) {
+  const fields = [];
+  fieldsStr.split(',').forEach(field => {
+    const [name, rest] = field.split(':');
+    let type = rest, nullable = false, refTarget = '';
+    if (type.endsWith('?')) {
+      nullable = true;
+      type = type.slice(0, -1);
+    }
+    if (type.includes('>')) {
+      [type, refTarget] = type.split('>');
+    }
+    fields.push({ name, type, nullable, refTarget });
+  });
+  return fields;
+}
+
+function renderFields(fieldsStr) {
+  const fields = parseFields(fieldsStr);
+  let html = '<table><thead><tr><th style="width:35%">Pole</th><th style="width:20%">Typ</th><th style="width:45%">Poznámka</th></tr></thead><tbody>';
+  fields.forEach(f => {
+    const typeClass = `type-${f.type}`;
+    let typeDisplay = f.type;
+    if (f.type === 'ref' && f.refTarget) typeDisplay = `ref > <span class="ref-target">${f.refTarget}</span>`;
+    const nullable = f.nullable ? '<span class="nullable">(nullable)</span>' : '';
+    html += `<tr><td class="field-name">${f.name}</td><td><span class="${typeClass}">${typeDisplay}</span> ${nullable}</td><td></td></tr>`;
+  });
+  html += '</tbody></table>';
+  return html;
+}
+
+function renderToc() {
+  const categoryMap = {};
+  Object.keys(MODEL.entities).forEach(name => {
+    const cat = categorizeEntity(name);
+    if (!categoryMap[cat]) categoryMap[cat] = [];
+    categoryMap[cat].push(name);
+  });
+
+  let html = '';
+  Object.keys(CATEGORIES).forEach(cat => {
+    const catInfo = CATEGORIES[cat];
+    const count = (categoryMap[cat] || []).length;
+    if (count > 0) {
+      html += `<div class="toc-item" onclick="document.getElementById('cat-${cat}').scrollIntoView({behavior:'smooth'})">
+        <span class="toc-badge ${catInfo.badge}">${count}</span>
+        <span>${catInfo.name}</span>
+      </div>`;
+    }
+  });
+  return html;
+}
+
+function renderEntities() {
+  const categoryMap = {};
+  Object.keys(MODEL.entities).forEach(name => {
+    const cat = categorizeEntity(name);
+    if (!categoryMap[cat]) categoryMap[cat] = [];
+    categoryMap[cat].push(name);
+  });
+
+  let html = '';
+  Object.keys(CATEGORIES).forEach(cat => {
+    const catInfo = CATEGORIES[cat];
+    const entities = (categoryMap[cat] || []).sort();
+    if (entities.length > 0) {
+      html += `<div id="cat-${cat}">`;
+      entities.forEach(name => {
+        const entity = MODEL.entities[name];
+        const badge = CATEGORIES[entity.category] || CATEGORIES.other;
+        html += `<div class="entity-section ${entity.category}">
+          <div class="entity-header">
+            <div class="entity-name">${name}</div>
+            <span class="entity-badge" style="background:var(--${badge.color === 'goods' ? 'green' : badge.color === 'production' ? 'teal' : badge.color === 'stock' ? 'orange' : badge.color === 'order' ? 'blue' : badge.color === 'finance' ? 'blue' : badge.color === 'hr' ? 'pink' : badge.color === 'resource' ? 'cyan' : badge.color === 'crm' ? 'indigo' : badge.color === 'eshop' ? 'rose' : badge.color === 'docs' ? 'amber' : badge.color === 'logistics' ? 'lime' : badge.color === 'quality' ? 'red' : 'slate'}); color: white;">${badge.name}</span>
+          </div>
+          ${renderFields(entity.fields)}
+        </div>`;
+      });
+      html += '</div>';
+    }
+  });
+  return html;
+}
+
+function renderRelations() {
+  let html = '';
+  MODEL.relations.forEach(rel => {
+    html += `<div class="rel-card">
+      <h3><span class="rel-source">${rel.source}</span></h3>
+      <div class="rel-arrow">→ <span class="rel-target">${rel.field}</span></div>
+      <div style="color:var(--text2);font-size:0.85em;">referuje na <span class="ref-target">${rel.target}</span></div>
+    </div>`;
+  });
+  return html;
+}
+
+function filterEntities(query) {
+  const lowerQuery = query.toLowerCase();
+  const container = document.getElementById('entitiesContainer');
+  const sections = container.querySelectorAll('.entity-section');
+
+  sections.forEach(section => {
+    const name = section.querySelector('.entity-name').textContent.toLowerCase();
+    const badge = section.querySelector('.entity-badge').textContent.toLowerCase();
+    const fields = Array.from(section.querySelectorAll('.field-name')).map(el => el.textContent.toLowerCase()).join(' ');
+
+    const matches = name.includes(lowerQuery) || badge.includes(lowerQuery) || fields.includes(lowerQuery);
+    section.style.display = matches ? 'block' : 'none';
+  });
+
+  const categories = document.querySelectorAll('[id^="cat-"]');
+  categories.forEach(cat => {
+    const visibleSections = cat.querySelectorAll('.entity-section:not([style*="display: none"])');
+    cat.style.display = visibleSections.length > 0 ? 'block' : 'none';
+  });
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('tocGrid').innerHTML = renderToc();
+  document.getElementById('entitiesContainer').innerHTML = renderEntities();
+  document.getElementById('relDiagram').innerHTML = renderRelations();
+
+  document.getElementById('searchInput').addEventListener('input', (e) => {
+    filterEntities(e.target.value);
+  });
+});
+</script>
+
+</body>
+</html>

@@ -1,5 +1,5 @@
 /* ============================================
-   server.js — Produkční server pro Výroba app
+   server.ts — Produkční server pro Výroba app
 
    Funkce:
    - Servíruje statické soubory (frontend)
@@ -7,14 +7,23 @@
    - Přihlášení uživatelů (session-based auth)
    - Správa uživatelů (admin panel)
 
-   Spustit: node server.js
+   Spustit: npm run dev:server
    ============================================ */
 
-const http = require('http');
-const https = require('https');
-const fs = require('fs');
-const path = require('path');
-const crypto = require('crypto');
+import http from 'http';
+import https from 'https';
+import fs from 'fs';
+import path from 'path';
+import crypto from 'crypto';
+import dotenv from 'dotenv';
+import type { IncomingMessage, ServerResponse } from 'http';
+
+import type { User, SessionData, UserRole } from '../shared/types';
+
+// ==========================================
+// File paths setup
+// ==========================================
+const PROJECT_ROOT = path.resolve(__dirname, '../../..');
 
 // ==========================================
 // Konfigurace
@@ -24,15 +33,15 @@ const SESSION_SECRET = process.env.SESSION_SECRET || crypto.randomBytes(32).toSt
 const SESSION_MAX_AGE = 24 * 60 * 60 * 1000; // 24 hodin
 
 // Načíst .env
-function loadEnv() {
+function loadEnv(): Record<string, string> {
   const envPaths = [
-    path.join(__dirname, '.env'),
-    path.join(__dirname, '..', '.env'),
+    path.join(PROJECT_ROOT, '.env'),
+    path.join(PROJECT_ROOT, '..', '.env'),
   ];
   for (const p of envPaths) {
     try {
       const text = fs.readFileSync(p, 'utf-8');
-      const env = {};
+      const env: Record<string, string> = {};
       text.split('\n').forEach(line => {
         line = line.trim();
         if (!line || line.startsWith('#')) return;
@@ -60,29 +69,34 @@ if (!TOKEN) {
 // ==========================================
 // Úložiště uživatelů (JSON soubor)
 // ==========================================
-const USERS_FILE = path.join(__dirname, 'data', 'users.json');
-const STORAGE_DIR = path.join(__dirname, 'data', 'storage');
+const USERS_FILE = path.join(PROJECT_ROOT, 'data', 'users.json');
+const STORAGE_DIR = path.join(PROJECT_ROOT, 'data', 'storage');
 
-function ensureDataDir() {
-  const dataDir = path.join(__dirname, 'data');
+function ensureDataDir(): void {
+  const dataDir = path.join(PROJECT_ROOT, 'data');
   if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
   if (!fs.existsSync(STORAGE_DIR)) fs.mkdirSync(STORAGE_DIR, { recursive: true });
 }
 
-function hashPassword(password, salt) {
+interface PasswordHashResult {
+  hash: string;
+  salt: string;
+}
+
+function hashPassword(password: string, salt?: string): PasswordHashResult {
   salt = salt || crypto.randomBytes(16).toString('hex');
   const hash = crypto.pbkdf2Sync(password, salt, 10000, 64, 'sha512').toString('hex');
   return { hash, salt };
 }
 
-function loadUsers() {
+function loadUsers(): User[] {
   ensureDataDir();
   try {
-    return JSON.parse(fs.readFileSync(USERS_FILE, 'utf-8'));
+    return JSON.parse(fs.readFileSync(USERS_FILE, 'utf-8')) as User[];
   } catch (e) {
     // Výchozí admin účet
     const { hash, salt } = hashPassword('admin');
-    const users = [
+    const users: User[] = [
       { id: 1, username: 'admin', displayName: 'Administrátor', hash, salt, role: 'admin', created: new Date().toISOString() }
     ];
     fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2), 'utf-8');
@@ -91,7 +105,7 @@ function loadUsers() {
   }
 }
 
-function saveUsers(users) {
+function saveUsers(users: User[]): void {
   ensureDataDir();
   fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2), 'utf-8');
 }
@@ -99,9 +113,9 @@ function saveUsers(users) {
 // ==========================================
 // Session management (in-memory)
 // ==========================================
-const sessions = new Map();
+const sessions = new Map<string, SessionData>();
 
-function createSession(user) {
+function createSession(user: User): string {
   const sessionId = crypto.randomBytes(32).toString('hex');
   sessions.set(sessionId, {
     userId: user.id,
@@ -114,7 +128,7 @@ function createSession(user) {
   return sessionId;
 }
 
-function getSession(sessionId) {
+function getSession(sessionId?: string): SessionData | null {
   if (!sessionId) return null;
   const session = sessions.get(sessionId);
   if (!session) return null;
@@ -126,7 +140,7 @@ function getSession(sessionId) {
   return session;
 }
 
-function destroySession(sessionId) {
+function destroySession(sessionId: string): void {
   sessions.delete(sessionId);
 }
 
@@ -143,8 +157,8 @@ setInterval(() => {
 // ==========================================
 // Cookie helpers
 // ==========================================
-function parseCookies(req) {
-  const cookies = {};
+function parseCookies(req: IncomingMessage): Record<string, string> {
+  const cookies: Record<string, string> = {};
   const header = req.headers.cookie || '';
   header.split(';').forEach(c => {
     const [name, ...rest] = c.trim().split('=');
@@ -153,35 +167,35 @@ function parseCookies(req) {
   return cookies;
 }
 
-function setSessionCookie(res, sessionId) {
+function setSessionCookie(res: ServerResponse, sessionId: string): void {
   const isSecure = process.env.NODE_ENV === 'production';
   res.setHeader('Set-Cookie',
     `sid=${sessionId}; HttpOnly; Path=/; Max-Age=${SESSION_MAX_AGE / 1000}; SameSite=Lax${isSecure ? '; Secure' : ''}`
   );
 }
 
-function clearSessionCookie(res) {
+function clearSessionCookie(res: ServerResponse): void {
   res.setHeader('Set-Cookie', 'sid=; HttpOnly; Path=/; Max-Age=0; SameSite=Lax');
 }
 
 // ==========================================
 // Pomocné funkce
 // ==========================================
-function readBody(req) {
+function readBody(req: IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
-    const chunks = [];
+    const chunks: Buffer[] = [];
     req.on('data', chunk => chunks.push(chunk));
     req.on('end', () => resolve(Buffer.concat(chunks).toString('utf-8')));
     req.on('error', reject);
   });
 }
 
-function sendJSON(res, status, data) {
+function sendJSON(res: ServerResponse, status: number, data: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify(data));
 }
 
-const MIME_TYPES = {
+const MIME_TYPES: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
   '.js': 'application/javascript; charset=utf-8',
@@ -198,7 +212,7 @@ const MIME_TYPES = {
   '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
 };
 
-function getMimeType(filePath) {
+function getMimeType(filePath: string): string {
   const ext = path.extname(filePath).toLowerCase();
   return MIME_TYPES[ext] || 'application/octet-stream';
 }
@@ -206,7 +220,7 @@ function getMimeType(filePath) {
 // ==========================================
 // Přihlašovací stránka (inline HTML)
 // ==========================================
-function getLoginPage(error) {
+function getLoginPage(error?: string): string {
   const errorHtml = error ? `<div class="error">${error}</div>` : '';
   return `<!DOCTYPE html>
 <html lang="cs">
@@ -282,7 +296,7 @@ function getLoginPage(error) {
 // ==========================================
 // Admin stránka pro správu uživatelů
 // ==========================================
-function getAdminPage(session) {
+function getAdminPage(session: SessionData): string {
   const users = loadUsers();
   return `<!DOCTYPE html>
 <html lang="cs">
@@ -416,8 +430,8 @@ function getAdminPage(session) {
 // ==========================================
 // HTTP Server
 // ==========================================
-const server = http.createServer(async (req, res) => {
-  const url = new URL(req.url, `http://${req.headers.host}`);
+const server = http.createServer(async (req: IncomingMessage, res: ServerResponse) => {
+  const url = new URL(req.url || '', `http://${req.headers.host}`);
   const pathname = url.pathname;
   const cookies = parseCookies(req);
   const session = getSession(cookies.sid);
@@ -515,7 +529,7 @@ const server = http.createServer(async (req, res) => {
       }
 
       const { hash, salt } = hashPassword(body.password);
-      const newUser = {
+      const newUser: User = {
         id: Math.max(0, ...users.map(u => u.id)) + 1,
         username: body.username.trim(),
         displayName: body.displayName.trim(),
@@ -536,7 +550,7 @@ const server = http.createServer(async (req, res) => {
 
   // API: Delete user
   if (pathname.startsWith('/auth/users/') && req.method === 'DELETE' && session.role === 'admin') {
-    const userId = parseInt(pathname.split('/').pop());
+    const userId = parseInt(pathname.split('/').pop() || '');
     const users = loadUsers();
     const user = users.find(u => u.id === userId);
 
@@ -568,7 +582,8 @@ const server = http.createServer(async (req, res) => {
           res.end('[]');
         }
       } catch (e) {
-        sendJSON(res, 500, { error: e.message });
+        const error = e instanceof Error ? e.message : 'Unknown error';
+        sendJSON(res, 500, { error });
       }
       return;
     }
@@ -581,41 +596,11 @@ const server = http.createServer(async (req, res) => {
         fs.writeFileSync(filePath, body, 'utf-8');
         sendJSON(res, 200, { ok: true, key, size: body.length });
       } catch (e) {
-        sendJSON(res, 500, { error: e.message });
+        const error = e instanceof Error ? e.message : 'Unknown error';
+        sendJSON(res, 500, { error });
       }
       return;
     }
-  }
-
-  // ---- MINDMAP NOTES API ----
-  const MINDMAP_FILE = path.join(__dirname, 'data', 'mindmap-notes.json');
-
-  if (pathname === '/api/mindmap/notes' && req.method === 'GET') {
-    try {
-      const data = fs.readFileSync(MINDMAP_FILE, 'utf-8');
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(data);
-    } catch (e) {
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ notes: {}, applied: {} }));
-    }
-    return;
-  }
-
-  if (pathname === '/api/mindmap/notes' && req.method === 'POST') {
-    const body = await readBody(req);
-    try {
-      // Ensure data directory exists
-      const dataDir = path.join(__dirname, 'data');
-      if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
-      fs.writeFileSync(MINDMAP_FILE, body, 'utf-8');
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ ok: true }));
-    } catch (e) {
-      res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: e.message }));
-    }
-    return;
   }
 
   // ---- FACTORIFY API PROXY ----
@@ -635,7 +620,7 @@ const server = http.createServer(async (req, res) => {
     console.log(`→ ${req.method} ${targetUrl}`);
 
     const urlObj = new URL(targetUrl);
-    const options = {
+    const options: https.RequestOptions = {
       hostname: urlObj.hostname,
       port: 443,
       path: urlObj.pathname + urlObj.search,
@@ -650,17 +635,18 @@ const server = http.createServer(async (req, res) => {
 
     const body = await readBody(req);
     if (body) {
-      options.headers['Content-Type'] = req.headers['content-type'] || 'application/json';
-      options.headers['Content-Length'] = Buffer.byteLength(body);
+      const hdrs = options.headers as Record<string, string | number>;
+      hdrs['Content-Type'] = req.headers['content-type'] || 'application/json';
+      hdrs['Content-Length'] = Buffer.byteLength(body);
     }
 
     const proxyReq = https.request(options, (proxyRes) => {
-      const chunks = [];
+      const chunks: Buffer[] = [];
       proxyRes.on('data', chunk => chunks.push(chunk));
       proxyRes.on('end', () => {
         const respBody = Buffer.concat(chunks);
         console.log(`  ← ${proxyRes.statusCode} (${respBody.length} bytes)`);
-        res.writeHead(proxyRes.statusCode, {
+        res.writeHead(proxyRes.statusCode || 200, {
           'Content-Type': proxyRes.headers['content-type'] || 'application/json',
         });
         res.end(respBody);
@@ -678,20 +664,13 @@ const server = http.createServer(async (req, res) => {
   }
 
   // ---- STATIC FILES ----
-  let filePath = path.join(__dirname, pathname === '/' ? 'index.html' : pathname);
+  let filePath = path.join(PROJECT_ROOT, pathname === '/' ? 'index.html' : pathname);
 
   // Pokud cesta končí / přidej index.html
-  if (filePath.endsWith('/') || filePath.endsWith('\\')) filePath = path.join(filePath, 'index.html');
-
-  // Pokud je to adresář, přidej index.html
-  try {
-    if (fs.existsSync(filePath) && fs.statSync(filePath).isDirectory()) {
-      filePath = path.join(filePath, 'index.html');
-    }
-  } catch (_) {}
+  if (filePath.endsWith('/')) filePath += 'index.html';
 
   // Bezpečnost — zabránit přístupu mimo složku
-  if (!filePath.startsWith(__dirname)) {
+  if (!filePath.startsWith(PROJECT_ROOT)) {
     res.writeHead(403);
     res.end('Forbidden');
     return;
