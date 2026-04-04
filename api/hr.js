@@ -5,6 +5,27 @@
    ============================================ */
 
 const db = require('../db');
+const fs = require('fs');
+const path = require('path');
+const crypto = require('crypto');
+
+// Auth helpers (same as server.js)
+const USERS_FILE = path.join(__dirname, '..', 'data', 'users.json');
+
+function hashPassword(password, salt) {
+  salt = salt || crypto.randomBytes(16).toString('hex');
+  const hash = crypto.pbkdf2Sync(password, salt, 10000, 64, 'sha512').toString('hex');
+  return { hash, salt };
+}
+
+function loadUsers() {
+  try { return JSON.parse(fs.readFileSync(USERS_FILE, 'utf-8')); }
+  catch (e) { return []; }
+}
+
+function saveUsers(users) {
+  fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2), 'utf-8');
+}
 
 function sendJSON(res, status, data) {
   res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' });
@@ -180,6 +201,70 @@ async function handleHR(req, res, pathname) {
         sendJSON(res, 200, { ok: true });
         return true;
       }
+    }
+
+    // --- USER ACCOUNT (create login for a person) ---
+    const userAccMatch = pathname.match(/^\/api\/hr\/people\/(\d+)\/account$/);
+    if (userAccMatch && method === 'POST') {
+      const personId = parseInt(userAccMatch[1]);
+      const person = db.getPersonById(personId);
+      if (!person) { sendJSON(res, 404, { error: 'Person not found' }); return true; }
+
+      const body = JSON.parse(await readBody(req));
+      const { username, password, role } = body;
+      if (!username || !password) {
+        sendJSON(res, 400, { error: 'username and password are required' });
+        return true;
+      }
+
+      const users = loadUsers();
+      if (users.find(u => u.username === username)) {
+        sendJSON(res, 400, { error: 'Uživatelské jméno již existuje' });
+        return true;
+      }
+
+      const { hash, salt } = hashPassword(password);
+      const newUser = {
+        id: Math.max(0, ...users.map(u => u.id)) + 1,
+        username: username.trim(),
+        displayName: (person.first_name + ' ' + person.last_name).trim(),
+        hash, salt,
+        role: role || 'user',
+        personId: personId,
+        created: new Date().toISOString(),
+      };
+      users.push(newUser);
+      saveUsers(users);
+
+      // Link user to person
+      db.updatePerson(personId, { user_id: newUser.id, username: newUser.username });
+
+      console.log(`✅ Vytvořen účet: ${newUser.displayName} (${newUser.username}) pro osobu #${personId}`);
+      sendJSON(res, 201, { ok: true, user_id: newUser.id, username: newUser.username });
+      return true;
+    }
+
+    // --- UPDATE PASSWORD ---
+    const pwdMatch = pathname.match(/^\/api\/hr\/people\/(\d+)\/password$/);
+    if (pwdMatch && method === 'PUT') {
+      const personId = parseInt(pwdMatch[1]);
+      const person = db.getPersonById(personId);
+      if (!person || !person.user_id) { sendJSON(res, 404, { error: 'No account linked' }); return true; }
+
+      const body = JSON.parse(await readBody(req));
+      if (!body.password) { sendJSON(res, 400, { error: 'password is required' }); return true; }
+
+      const users = loadUsers();
+      const user = users.find(u => u.id === person.user_id);
+      if (!user) { sendJSON(res, 404, { error: 'User not found' }); return true; }
+
+      const { hash, salt } = hashPassword(body.password);
+      user.hash = hash;
+      user.salt = salt;
+      saveUsers(users);
+
+      sendJSON(res, 200, { ok: true });
+      return true;
     }
 
     return false; // not handled

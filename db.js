@@ -99,6 +99,9 @@ const db = {
       birth_date: fields.birth_date || null,
       address: fields.address || null,
       bank_account: fields.bank_account || null,
+      // Auth link
+      user_id: fields.user_id || null,
+      username: fields.username || null,
       created_at: now(),
       updated_at: now(),
     };

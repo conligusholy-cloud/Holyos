@@ -307,7 +307,7 @@
       }
 
       let html = `<table class="data-table"><thead><tr>
-        <th>Jméno</th><th>Typ</th><th>E-mail</th><th>Telefon</th><th>Oddělení</th><th>Pozice</th><th>Smlouva</th><th></th>
+        <th>Jméno</th><th>Typ</th><th>E-mail</th><th>Telefon</th><th>Oddělení</th><th>Pozice</th><th>Smlouva</th><th>Účet</th><th></th>
       </tr></thead><tbody>`;
 
       for (const p of people) {
@@ -319,6 +319,7 @@
           <td>${p.department_name || '—'}</td>
           <td>${p.role_name || '—'}</td>
           <td>${p.contract_type ? '<span class="badge badge-' + p.contract_type + '">' + (CONTRACT_LABELS[p.contract_type] || p.contract_type) + '</span>' : '—'}</td>
+          <td>${p.username ? '<span class="badge badge-active">' + p.username + '</span>' : '<span style="color:var(--text2);font-size:11px">—</span>'}</td>
           <td><button class="btn btn-sm btn-secondary" onclick="event.stopPropagation();deletePerson(${p.id},'${p.first_name} ${p.last_name}')">✕</button></td>
         </tr>`;
       }
@@ -436,6 +437,50 @@
               </div>
             </div>
 
+            <div id="account-section" style="${showEmp ? '' : 'display:none'}">
+              <div style="font-size:12px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px;margin:20px 0 10px;padding-top:16px;border-top:1px solid var(--border);">Přihlašovací údaje</div>
+              ${p.username
+                ? `<div style="margin-bottom:12px;">
+                    <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:rgba(34,197,94,0.1);border:1px solid rgba(34,197,94,0.2);border-radius:8px;">
+                      <span style="color:#4ade80;font-size:16px;">✓</span>
+                      <div>
+                        <div style="font-size:13px;font-weight:500;">Účet vytvořen</div>
+                        <div style="font-size:12px;color:var(--text2);">Uživatelské jméno: <strong>${p.username}</strong></div>
+                      </div>
+                    </div>
+                    <div class="form-grid" style="margin-top:10px;">
+                      <div class="form-group">
+                        <label>Nové heslo (ponechte prázdné = beze změny)</label>
+                        <input type="password" id="new-password" placeholder="••••••••">
+                      </div>
+                      <div class="form-group" style="align-self:end;">
+                        <button type="button" class="btn btn-secondary" onclick="changePassword(${id})">Změnit heslo</button>
+                      </div>
+                    </div>
+                  </div>`
+                : `<div class="form-grid">
+                    <div class="form-group">
+                      <label>Uživatelské jméno *</label>
+                      <input type="text" id="acc-username" placeholder="např. jan.holly" value="${p.first_name ? (p.first_name.toLowerCase() + '.' + (p.last_name || '').toLowerCase()) : ''}">
+                    </div>
+                    <div class="form-group">
+                      <label>Heslo *</label>
+                      <input type="password" id="acc-password" placeholder="Heslo pro přihlášení" value="">
+                    </div>
+                    <div class="form-group">
+                      <label>Role v systému</label>
+                      <select id="acc-role">
+                        <option value="user">Uživatel</option>
+                        <option value="admin">Administrátor</option>
+                      </select>
+                    </div>
+                    <div class="form-group" style="align-self:end;">
+                      <label style="font-size:11px;color:var(--text2);">Účet bude vytvořen při uložení</label>
+                    </div>
+                  </div>`
+              }
+            </div>
+
             <div style="margin-top:16px">
               <div class="form-grid">
                 <div class="form-group full">
@@ -458,7 +503,9 @@
 
     function toggleEmployeeFields(type) {
       const el = document.getElementById('employee-fields');
+      const acc = document.getElementById('account-section');
       if (el) el.style.display = type === 'employee' ? '' : 'none';
+      if (acc) acc.style.display = type === 'employee' ? '' : 'none';
     }
 
     async function savePerson(e, id) {
@@ -480,10 +527,58 @@
 
       try {
         const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
-        if (!res.ok) throw new Error((await res.json()).error);
+        const resData = await res.json();
+        if (!res.ok) throw new Error(resData.error || 'Unknown error');
+
+        // Get the person ID (for new records it's in the response)
+        let personId = id || (resData.id ? resData.id : null);
+
+        // Create account if credentials provided and this is an employee
+        if ((data.type || 'employee') === 'employee' && personId) {
+          const accUsername = document.getElementById('acc-username');
+          const accPassword = document.getElementById('acc-password');
+          const accRole = document.getElementById('acc-role');
+
+          if (accUsername && accPassword && accUsername.value && accPassword.value) {
+            try {
+              const accRes = await fetch('/api/hr/people/' + personId + '/account', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  username: accUsername.value,
+                  password: accPassword.value,
+                  role: accRole ? accRole.value : 'user',
+                }),
+              });
+              const accData = await accRes.json();
+              if (!accRes.ok) {
+                alert('Osoba uložena, ale účet se nepodařilo vytvořit: ' + (accData.error || 'Neznámá chyba'));
+              }
+            } catch (accErr) {
+              alert('Osoba uložena, ale účet se nepodařilo vytvořit: ' + accErr.message);
+            }
+          }
+        }
+
         closeModal();
         loadPeople();
         loadStats();
+      } catch (e) { alert('Chyba: ' + e.message); }
+    }
+
+    async function changePassword(personId) {
+      const pwdInput = document.getElementById('new-password');
+      if (!pwdInput || !pwdInput.value) { alert('Zadejte nové heslo'); return; }
+
+      try {
+        const res = await fetch('/api/hr/people/' + personId + '/password', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password: pwdInput.value }),
+        });
+        if (!res.ok) throw new Error((await res.json()).error);
+        pwdInput.value = '';
+        alert('Heslo bylo změněno');
       } catch (e) { alert('Chyba: ' + e.message); }
     }
 
