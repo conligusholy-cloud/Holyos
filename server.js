@@ -600,7 +600,7 @@ const server = http.createServer(async (req, res) => {
 
   function loadMindmapData() {
     try { return JSON.parse(fs.readFileSync(MINDMAP_FILE, 'utf-8')); }
-    catch (e) { return { notes: {}, featuresOverride: {}, descOverride: {}, connectionsOverride: {} }; }
+    catch (e) { return { notes: {}, featuresOverride: {}, descOverride: {}, connectionsOverride: {}, reviewed: {} }; }
   }
 
   function saveMindmapData(data) {
@@ -694,6 +694,27 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // TOGGLE reviewed/locked status for a feature
+  if (pathname === '/api/mindmap/reviewed' && req.method === 'POST') {
+    try {
+      const body = JSON.parse(await readBody(req));
+      const { moduleId, featureIndex, value } = body;
+      if (!moduleId || featureIndex === undefined) {
+        sendJSON(res, 400, { error: 'moduleId and featureIndex required' });
+        return;
+      }
+      const current = loadMindmapData();
+      if (!current.reviewed) current.reviewed = {};
+      if (!current.reviewed[moduleId]) current.reviewed[moduleId] = {};
+      current.reviewed[moduleId][String(featureIndex)] = !!value;
+      saveMindmapData(current);
+      sendJSON(res, 200, { ok: true });
+    } catch (e) {
+      sendJSON(res, 500, { error: e.message });
+    }
+    return;
+  }
+
   // GET version history
   if (pathname === '/api/mindmap/versions' && req.method === 'GET') {
     sendJSON(res, 200, loadVersions().map(v => ({ id: v.id, date: v.date, description: v.description })));
@@ -726,7 +747,7 @@ const server = http.createServer(async (req, res) => {
   if (pathname === '/api/mindmap/ai-apply' && req.method === 'POST') {
     const body = await readBody(req);
     try {
-      const { moduleData, notes } = JSON.parse(body);
+      const { moduleData, notes, lockedFeatures } = JSON.parse(body);
       if (!moduleData || !notes) {
         sendJSON(res, 400, { error: 'Missing moduleData or notes' });
         return;
@@ -753,6 +774,10 @@ Dostáváš modul myšlenkové mapy a poznámky uživatele. Tvým úkolem je INT
 ## Poznámky uživatele k zapracování:
 ${notes}
 
+## ZAMČENÉ FEATURES (NESMÍŠ MĚNIT):
+${lockedFeatures && lockedFeatures.length > 0 ? lockedFeatures.map(f => '- ' + f).join('\n') : '(žádné)'}
+Zamčené features musíš zachovat PŘESNĚ tak jak jsou — nesmíš je přejmenovávat, mazat, slučovat ani měnit jejich sub-items!
+
 ## Instrukce:
 1. Analyzuj poznámky a porozuměj záměru uživatele
 2. Restrukturalizuj features modulu tak, aby odrážely požadavky z poznámek
@@ -760,7 +785,8 @@ ${notes}
 4. Pokud poznámka zmiňuje propojení s jiným modulem, přidej do connections
 5. Pokud poznámka mění popis modulu, uprav desc
 6. Zachovej existující features které nejsou v rozporu s poznámkami
-7. Features mohou být:
+7. DŮLEŽITÉ: Zamčené features MUSÍŠ zachovat beze změny ve výstupu!
+8. Features mohou být:
    - Prostý string: "Evidence zaměstnanců"
    - Objekt s podkategoriemi: {"text": "Evidence lidí", "sub": ["Lidé obecně — kontakty, dodavatelé, zákazníci", "Zaměstnanci — smlouvy, docházka, mzdy"]}
 

@@ -388,6 +388,47 @@ body {
 }
 .notes-status.saved { color: #00b894; }
 
+/* Deploy status dot */
+.deploy-dot {
+  width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+}
+.deploy-dot.full { background: #00b894; box-shadow: 0 0 6px rgba(0,184,148,0.4); }
+.deploy-dot.partial { background: #fbbf24; box-shadow: 0 0 6px rgba(251,191,36,0.3); }
+.deploy-dot.none { background: rgba(255,255,255,0.12); }
+
+/* Review checkbox */
+.review-check {
+  width: 15px; height: 15px; border-radius: 3px;
+  border: 1.5px solid rgba(255,255,255,0.2);
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; font-size: 9px; transition: all 0.15s ease; user-select: none;
+}
+.review-check:hover { border-color: #0984e3; background: rgba(9,132,227,0.1); }
+.review-check.locked {
+  background: rgba(9,132,227,0.15); border-color: #0984e3; color: #0984e3;
+}
+.review-check.locked::after { content: '🔒'; font-size: 8px; }
+
+/* Status tags */
+.status-tag {
+  display: inline-block; font-size: 9px; padding: 1px 6px; border-radius: 8px;
+  margin-left: 6px; font-weight: 600;
+}
+.status-tag.deployed { background: rgba(0,184,148,0.2); color: #00b894; }
+.status-tag.partial { background: rgba(251,191,36,0.2); color: #fbbf24; }
+.status-tag.locked { background: rgba(9,132,227,0.15); color: #0984e3; }
+
+/* Feature card locked state */
+.feature-card.is-locked {
+  border-color: rgba(9,132,227,0.2); background: rgba(9,132,227,0.04);
+}
+
+.impl-legend {
+  display: flex; align-items: center; gap: 12px; font-size: 11px;
+  color: var(--text2); margin-bottom: 8px; flex-wrap: wrap;
+}
+.impl-legend span { display: flex; align-items: center; gap: 4px; }
+
 /* Apply modal */
 .modal-overlay {
   position: fixed;
@@ -454,6 +495,28 @@ body {
 @media (max-width: 900px) {
   .main { flex-direction: column; }
   .tree-panel { width: 100%; border-right: none; border-bottom: 1px solid rgba(255,255,255,0.06); max-height: 50vh; }
+}
+
+/* Claude deploy buttons */
+.btn-claude-module {
+  margin-left: auto; padding: 6px 14px; font-size: 12px; font-weight: 600;
+  background: linear-gradient(135deg, rgba(108,92,231,0.2), rgba(167,139,250,0.2));
+  color: #a78bfa; border: 1px solid rgba(108,92,231,0.4); border-radius: 8px;
+  cursor: pointer; transition: all 0.2s; white-space: nowrap;
+}
+.btn-claude-module:hover { background: linear-gradient(135deg, rgba(108,92,231,0.35), rgba(167,139,250,0.35)); }
+
+.btn-claude-feature {
+  margin-left: auto; padding: 3px 10px; font-size: 11px;
+  background: rgba(108,92,231,0.15); color: #a78bfa;
+  border: 1px solid rgba(108,92,231,0.3); border-radius: 6px;
+  cursor: pointer; white-space: nowrap; transition: all 0.2s;
+}
+.btn-claude-feature:hover { background: rgba(108,92,231,0.3); }
+
+.btn-claude-copied {
+  background: rgba(0,184,148,0.2) !important; color: #00b894 !important;
+  border-color: rgba(0,184,148,0.3) !important;
 }
 </style>
 </head>
@@ -714,6 +777,8 @@ let state = {
   featuresOverride: {},   // moduleId → features[] (AI-restructured, replaces original features)
   descOverride: {},       // moduleId → string (AI-updated description)
   connectionsOverride: {}, // moduleId → string[] (AI-updated connections)
+  reviewed: {},            // moduleId → { featureIndex: true/false } — user-reviewed & locked
+  deployed: {},            // moduleId → { featureIndex: 'full'|'partial'|false } — AI-detected status
   saving: false,
   lastSaved: null,
 };
@@ -728,6 +793,7 @@ async function loadFromServer() {
     state.notes = data.notes || {};
     state.applied = data.applied || {};
     state.featuresOverride = data.featuresOverride || {};
+    state.reviewed = data.reviewed || {};
 
     const allItems = [...DATA.modules, DATA.ai, DATA.tech].filter(Boolean);
     for (const mod of allItems) {
@@ -777,6 +843,81 @@ function updateApplyButton() {
 }
 
 // ============================================================
+// DEPLOYED STATUS (AI-detected) & REVIEW/LOCK
+// ============================================================
+
+// AI-detected deployment status for each module's features
+// This is a static map — updated when AI analyzes the codebase
+const DEPLOY_STATUS = {
+  hr: {
+    // Top-level features
+    0: 'full',    // Evidence lidí
+    1: 'partial', // Organizační struktura a role
+    2: 'partial', // Docházka
+    3: 'partial', // Pracovní poměry
+    4: 'none',    // Mzdy a výplaty
+    // Sub-features: "parentIndex.subIndex"
+    '0.0': 'full',    // Lidé obecně — kontakty, dodavatelé, zákazníci
+    '0.1': 'partial', // Zaměstnanci — základní data, přihlašovací údaje... (fotka chybí)
+    '1.0': 'partial', // Vizualizace org. struktury s fotografiemi (struktura ano, fotky ne)
+    '1.1': 'full',    // Hierarchie pozic a podřízenosti
+    '1.2': 'none',    // Správa oprávnění na úrovni rolí (čtení/úprava pro moduly)
+    '2.0': 'partial', // Příchody a odchody — čipová karta/vzdáleně (jen ruční zápis)
+    '2.1': 'partial', // Přesčasy a dovolené (typ docházky ano, zůstatky ne)
+    '2.2': 'none',    // Přiřazení čipů k zaměstnancům
+    '2.3': 'none',    // Export docházkových listů pro účetní
+    '3.0': 'none',    // Smlouvy a dokumenty
+    '3.1': 'partial', // Začátek a konec pracovního poměru (hire_date ano, end_date ne)
+    '3.2': 'full',    // Definice pracovních pozic
+  }
+};
+
+function getSubDeployStatus(moduleId, parentIndex, subIndex) {
+  const key = parentIndex + '.' + subIndex;
+  return (DEPLOY_STATUS[moduleId] && DEPLOY_STATUS[moduleId][key]) || 'none';
+}
+
+function getDeployStatus(moduleId, featureIndex) {
+  return (DEPLOY_STATUS[moduleId] && DEPLOY_STATUS[moduleId][featureIndex]) || 'none';
+}
+
+function isReviewed(moduleId, featureIndex) {
+  return !!(state.reviewed[moduleId] && state.reviewed[moduleId][String(featureIndex)]);
+}
+
+async function toggleReviewed(moduleId, featureIndex, event) {
+  if (event) event.stopPropagation();
+  const newVal = !isReviewed(moduleId, featureIndex);
+  if (!state.reviewed[moduleId]) state.reviewed[moduleId] = {};
+  state.reviewed[moduleId][String(featureIndex)] = newVal;
+  renderTree();
+  renderDetail();
+  try {
+    await fetch('/api/mindmap/reviewed', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ moduleId, featureIndex, value: newVal })
+    });
+  } catch (e) {
+    console.warn('Failed to save reviewed status:', e);
+  }
+}
+
+function getModuleStats(moduleId) {
+  const mod = DATA.modules.find(m => m.id === moduleId) || (moduleId === 'ai' ? DATA.ai : null) || (moduleId === 'tech' ? DATA.tech : null);
+  if (!mod || !mod.features) return { deployed: 0, partial: 0, locked: 0, total: 0 };
+  const total = mod.features.length;
+  let deployed = 0, partial = 0, locked = 0;
+  for (let i = 0; i < total; i++) {
+    const ds = getDeployStatus(moduleId, i);
+    if (ds === 'full') deployed++;
+    else if (ds === 'partial') partial++;
+    if (isReviewed(moduleId, i)) locked++;
+  }
+  return { deployed, partial, locked, total };
+}
+
+// ============================================================
 // RENDER TREE
 // ============================================================
 function renderTree() {
@@ -814,13 +955,26 @@ function renderNode(item, children) {
     `<span class="node-badge" style="background:${PHASE_COLORS[item.phase]}22;color:${PHASE_COLORS[item.phase]}">F${item.phase}</span>` : '';
   const noteTag = noteCount > 0 ?
     `<span class="node-badge" style="background:rgba(251,191,36,0.2);color:#fbbf24">📝 ${noteCount}</span>` : '';
+  const stats = getModuleStats(item.id);
+  let implTag = '';
+  if (stats.total > 0) {
+    const fullCount = stats.deployed;
+    const partialCount = stats.partial;
+    const lockCount = stats.locked;
+    if (fullCount + partialCount > 0) {
+      implTag = `<span class="node-badge" style="background:rgba(0,184,148,0.2);color:#00b894">${fullCount > 0 ? '●' + fullCount : ''}${partialCount > 0 ? ' ◐' + partialCount : ''}</span>`;
+    }
+    if (lockCount > 0) {
+      implTag += `<span class="node-badge" style="background:rgba(9,132,227,0.15);color:#0984e3">🔒${lockCount}</span>`;
+    }
+  }
 
   let html = `<div class="node" data-id="${item.id}">`;
   html += `<div class="node-header ${isSelected ? 'selected' : ''}" onclick="selectNode('${item.id}')">`;
   html += `<span class="node-toggle ${hasChildren ? (isExpanded ? 'expanded' : '') : 'leaf'}" onclick="event.stopPropagation(); toggleNode('${item.id}')">▶</span>`;
   html += `<span class="node-icon" style="background:${item.color}22;color:${item.color}">${item.icon}</span>`;
   html += `<span class="node-label">${highlightText(item.label)}</span>`;
-  html += phaseTag + noteTag;
+  html += phaseTag + implTag + noteTag;
   html += `</div>`;
 
   if (hasChildren) {
@@ -836,21 +990,27 @@ function renderNode(item, children) {
   // Show features as sub-items when expanded (supports hierarchical sub-features)
   if (item.features && isExpanded) {
     html += `<div class="node-children">`;
-    for (const f of item.features) {
+    for (let fi = 0; fi < item.features.length; fi++) {
+      const f = item.features[fi];
       const txt = featureText(f);
       const isApplied = featureIsApplied(f);
       const hasSub = typeof f === 'object' && f.sub && f.sub.length;
+      const deployS = getDeployStatus(item.id, fi);
+      const isLocked = isReviewed(item.id, fi);
       if (state.search && !txt.toLowerCase().includes(state.search)) continue;
       html += `<div class="sub-item ${isApplied ? 'from-note' : ''}" onclick="selectNode('${item.id}')" ${hasSub ? 'style="flex-direction:column;align-items:stretch;"' : ''}>`;
       html += `<div style="display:flex;align-items:center;gap:6px;">`;
-      html += `<span class="sub-dot" style="background:${isApplied ? '#fbbf24' : item.color}"></span>`;
-      html += `<span>${highlightText(txt)}${isApplied ? '<span class="applied-tag">z poznámky</span>' : ''}</span>`;
+      html += `<span class="deploy-dot ${deployS}" title="${deployS === 'full' ? 'Nasazeno' : deployS === 'partial' ? 'Částečně' : 'Nenasazeno'}"></span>`;
+      html += `<span style="${isLocked ? 'opacity:0.55;' : ''}">${highlightText(txt)}</span>`;
+      if (isLocked) html += `<span style="font-size:10px;opacity:0.5">🔒</span>`;
       html += `</div>`;
       if (hasSub) {
-        for (const sub of f.sub) {
+        for (let si = 0; si < f.sub.length; si++) {
+          const sub = f.sub[si];
           const subTxt = typeof sub === 'object' ? sub.text : sub;
+          const subDeploy = getSubDeployStatus(item.id, fi, si);
           html += `<div style="display:flex;align-items:center;gap:6px;margin-left:18px;font-size:11px;color:var(--text2);margin-top:2px;">`;
-          html += `<span style="width:4px;height:4px;border-radius:50%;background:${item.color}55;"></span>`;
+          html += `<span class="deploy-dot ${subDeploy}" style="width:6px;height:6px;" title="${subDeploy === 'full' ? 'Nasazeno' : subDeploy === 'partial' ? 'Částečně' : 'Nenasazeno'}"></span>`;
           html += `<span>${highlightText(subTxt)}</span>`;
           html += `</div>`;
         }
@@ -871,6 +1031,95 @@ function highlightText(text) {
 }
 
 // ============================================================
+// CLAUDE DEPLOY — helper to get currently selected item
+function getSelectedItem() {
+  let item = DATA.modules.find(m => m.id === state.selected);
+  if (!item && state.selected === 'ai') item = DATA.ai;
+  if (!item && state.selected === 'tech') item = DATA.tech;
+  if (!item && state.selected === 'core') item = DATA.core;
+  return item;
+}
+
+// CLAUDE DEPLOY — copy structured deploy command to clipboard
+function buildFeatureClipboard(item, fi) {
+  const f = item.features[fi];
+  const txt = featureText(f);
+  const deployS = getDeployStatus(item.id, fi);
+  const statusCz = deployS === 'full' ? 'nasazeno' : deployS === 'partial' ? 'castecne' : 'nenasazeno';
+  const conns = (item.connections || []).map(cid => {
+    const c = DATA.modules.find(m => m.id === cid);
+    return c ? c.label : cid;
+  }).join(', ');
+  let subText = '';
+  if (typeof f === 'object' && f.sub && f.sub.length) {
+    subText = '\nPod-funkce:\n' + f.sub.map((s, si) => {
+      const st = typeof s === 'object' ? s.text : s;
+      const sd = getSubDeployStatus(item.id, fi, si);
+      const sdCz = sd === 'full' ? 'nasazeno' : sd === 'partial' ? 'castecne' : 'nenasazeno';
+      return '  - ' + st + ' [' + sdCz + ']';
+    }).join('\n');
+  }
+  return `Nasadit: ${item.label} > ${txt}\nStav: ${statusCz}\nFaze: ${item.phase ? PHASE_NAMES[item.phase] : 'N/A'}\nModul: ${item.label} — ${item.desc}\n${subText}\nPropojeni: ${conns}`;
+}
+
+function buildModuleClipboard(item) {
+  const conns = (item.connections || []).map(cid => {
+    const c = DATA.modules.find(m => m.id === cid);
+    return c ? c.label : cid;
+  }).join(', ');
+  const allFeatures = (item.features || []).map((f, fi) => {
+    const txt = featureText(f);
+    const ds = getDeployStatus(item.id, fi);
+    const dsCz = ds === 'full' ? 'nasazeno' : ds === 'partial' ? 'castecne' : 'nenasazeno';
+    let line = '- ' + txt + ' [' + dsCz + ']';
+    if (typeof f === 'object' && f.sub) {
+      f.sub.forEach((s, si) => {
+        const st = typeof s === 'object' ? s.text : s;
+        const sd = getSubDeployStatus(item.id, fi, si);
+        const sdCz = sd === 'full' ? 'nasazeno' : sd === 'partial' ? 'castecne' : 'nenasazeno';
+        line += '\n  - ' + st + ' [' + sdCz + ']';
+      });
+    }
+    return line;
+  }).join('\n');
+  return `Nasadit cely modul: ${item.label}\nFaze: ${item.phase ? PHASE_NAMES[item.phase] : 'N/A'}\nPopis: ${item.desc}\nPropojeni: ${conns}\n\nFunkce:\n${allFeatures}`;
+}
+
+function buildSubFeatureClipboard(item, fi, si) {
+  const f = item.features[fi];
+  const parentTxt = featureText(f);
+  const sub = f.sub[si];
+  const subTxt = typeof sub === 'object' ? sub.text : sub;
+  const subDeploy = getSubDeployStatus(item.id, fi, si);
+  const statusCz = subDeploy === 'full' ? 'nasazeno' : subDeploy === 'partial' ? 'castecne' : 'nenasazeno';
+  const parentDeploy = getDeployStatus(item.id, fi);
+  const parentStatusCz = parentDeploy === 'full' ? 'nasazeno' : parentDeploy === 'partial' ? 'castecne' : 'nenasazeno';
+  const conns = (item.connections || []).map(cid => {
+    const c = DATA.modules.find(m => m.id === cid);
+    return c ? c.label : cid;
+  }).join(', ');
+  // Include all sibling sub-features for context
+  const siblings = f.sub.map((s, idx) => {
+    const st = typeof s === 'object' ? s.text : s;
+    const sd = getSubDeployStatus(item.id, fi, idx);
+    const sdCz = sd === 'full' ? 'nasazeno' : sd === 'partial' ? 'castecne' : 'nenasazeno';
+    return '  ' + (idx === si ? '>>> ' : '- ') + st + ' [' + sdCz + ']';
+  }).join('\n');
+  return `Nasadit: ${item.label} > ${parentTxt} > ${subTxt}\nStav: ${statusCz}\nFaze: ${item.phase ? PHASE_NAMES[item.phase] : 'N/A'}\nModul: ${item.label} — ${item.desc}\nNadrazena funkce: ${parentTxt} [${parentStatusCz}]\nVsechny pod-funkce:\n${siblings}\nPropojeni: ${conns}`;
+}
+
+function copyClaudeCommand(text, btnEl) {
+  navigator.clipboard.writeText(text).then(() => {
+    const orig = btnEl.textContent;
+    btnEl.textContent = '\u2705 Zkopirovano!';
+    btnEl.classList.add('btn-claude-copied');
+    setTimeout(() => {
+      btnEl.textContent = orig;
+      btnEl.classList.remove('btn-claude-copied');
+    }, 2000);
+  });
+}
+
 // RENDER DETAIL
 // ============================================================
 function renderDetail() {
@@ -912,29 +1161,47 @@ function renderDetail() {
       <div class="detail-subtitle">${item.desc || ''}</div>
     </div>
     ${phaseTag}
+    ${item.features ? '<button class="btn-claude-module" onclick="copyClaudeCommand(buildModuleClipboard(getSelectedItem()), this)">\uD83D\uDE80 Nasadit modul s Claude</button>' : ''}
   </div>`;
 
   // Features (supports hierarchical sub-features from AI)
   if (item.features && item.features.length) {
+    const mStats = getModuleStats(item.id);
     html += `<div class="detail-section">
       <h3>Funkce a vlastnosti</h3>
+      <div class="impl-legend">
+        <span><span class="deploy-dot full" style="display:inline-block"></span> nasazeno</span>
+        <span><span class="deploy-dot partial" style="display:inline-block"></span> částečně</span>
+        <span><span class="deploy-dot none" style="display:inline-block"></span> nenasazeno</span>
+        <span><span class="review-check locked" style="display:inline-flex;width:12px;height:12px;font-size:7px;pointer-events:none"></span> zkontrolováno &amp; zamčeno</span>
+      </div>
       <div class="detail-features">`;
-    for (const f of item.features) {
+    for (let fi = 0; fi < item.features.length; fi++) {
+      const f = item.features[fi];
       const txt = featureText(f);
       const isApplied = featureIsApplied(f);
       const hasSub = typeof f === 'object' && f.sub && f.sub.length;
-      html += `<div class="feature-card ${isApplied ? 'from-note' : ''}" ${hasSub ? 'style="flex-direction:column;align-items:stretch;"' : ''}>
+      const deployS = getDeployStatus(item.id, fi);
+      const isLocked = isReviewed(item.id, fi);
+      const deployLabel = deployS === 'full' ? 'Nasazeno' : deployS === 'partial' ? 'Částečně nasazeno' : '';
+      html += `<div class="feature-card ${isApplied ? 'from-note' : ''} ${isLocked ? 'is-locked' : ''}" ${hasSub ? 'style="flex-direction:column;align-items:stretch;"' : ''}>
         <div style="display:flex;align-items:center;gap:8px;">
-          <span class="feature-dot" style="background:${isApplied ? '#fbbf24' : item.color}"></span>
-          <span class="feature-text" style="${hasSub ? 'font-weight:600;' : ''}">${txt}${isApplied ? '<span class="applied-tag">z poznámky</span>' : ''}</span>
+          <span class="review-check ${isLocked ? 'locked' : ''}" onclick="toggleReviewed('${item.id}', ${fi}, event)" title="${isLocked ? 'Zamčeno — klikni pro odemčení' : 'Zkontrolováno? Klikni pro zamčení'}"></span>
+          <span class="deploy-dot ${deployS}"></span>
+          <span class="feature-text" style="${hasSub ? 'font-weight:600;' : ''}${isLocked ? 'opacity:0.55;' : ''}">${txt}${deployLabel ? '<span class="status-tag deployed">' + deployLabel + '</span>' : ''}${isLocked ? '<span class="status-tag locked">🔒 Zamčeno</span>' : ''}</span>
+          <button class="btn-claude-feature" onclick="event.stopPropagation(); copyClaudeCommand(buildFeatureClipboard(getSelectedItem(), ${fi}), this)">\uD83D\uDCCB Nasadit s Claude</button>
         </div>`;
       if (hasSub) {
         html += `<div style="margin-left:20px;margin-top:6px;display:flex;flex-direction:column;gap:4px;">`;
-        for (const sub of f.sub) {
+        for (let si = 0; si < f.sub.length; si++) {
+          const sub = f.sub[si];
           const subTxt = typeof sub === 'object' ? sub.text : sub;
+          const subDeploy = getSubDeployStatus(item.id, fi, si);
+          const subLabel = subDeploy === 'full' ? 'Nasazeno' : subDeploy === 'partial' ? 'Částečně' : '';
           html += `<div style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text2);">
-            <span style="width:6px;height:6px;border-radius:50%;background:${item.color}55;flex-shrink:0;"></span>
-            ${subTxt}
+            <span class="deploy-dot ${subDeploy}" style="width:6px;height:6px;flex-shrink:0;"></span>
+            ${subTxt}${subLabel ? '<span class="status-tag ' + (subDeploy === 'full' ? 'deployed' : 'partial') + '">' + subLabel + '</span>' : ''}
+            <button class="btn-claude-feature" style="font-size:10px;padding:2px 7px;" onclick="event.stopPropagation(); copyClaudeCommand(buildSubFeatureClipboard(getSelectedItem(), ${fi}, ${si}), this)">\uD83D\uDCCB Nasadit</button>
           </div>`;
         }
         html += `</div>`;
@@ -1130,12 +1397,22 @@ async function confirmApply() {
     }
 
     try {
+      // Mark which features are locked (reviewed) — AI should not modify them
+      const lockedFeatures = [];
+      if (state.reviewed[item.id]) {
+        for (let li = 0; li < (item.features || []).length; li++) {
+          if (state.reviewed[item.id][String(li)]) {
+            lockedFeatures.push(featureText(item.features[li]));
+          }
+        }
+      }
       const response = await fetch('/api/mindmap/ai-apply', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           moduleData: { id: item.id, label: item.label, desc: item.desc, features: item.features, connections: item.connections || [] },
           notes: noteText,
+          lockedFeatures,
         }),
       });
 

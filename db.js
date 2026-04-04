@@ -99,6 +99,9 @@ const db = {
       birth_date: fields.birth_date || null,
       address: fields.address || null,
       bank_account: fields.bank_account || null,
+      photo_url: fields.photo_url || null,
+      chip_number: fields.chip_number || null,
+      is_super_admin: fields.is_super_admin ? 1 : 0,
       // Auth link
       user_id: fields.user_id || null,
       username: fields.username || null,

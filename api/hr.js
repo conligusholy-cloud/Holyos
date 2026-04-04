@@ -267,6 +267,41 @@ async function handleHR(req, res, pathname) {
       return true;
     }
 
+    // ---- PHOTO UPLOAD (base64) ----
+    const photoMatch = pathname.match(/^\/api\/hr\/people\/(\d+)\/photo$/);
+    if (photoMatch && req.method === 'POST') {
+      const personId = parseInt(photoMatch[1]);
+      const body = JSON.parse(await readBody(req));
+      if (!body.photo_url) {
+        sendJSON(res, 400, { error: 'photo_url required' });
+        return true;
+      }
+      // Validate it's a data URL (base64 image)
+      if (!body.photo_url.startsWith('data:image/')) {
+        sendJSON(res, 400, { error: 'Invalid image format' });
+        return true;
+      }
+      const updated = db.updatePerson(personId, { photo_url: body.photo_url });
+      if (!updated) {
+        sendJSON(res, 404, { error: 'Person not found' });
+        return true;
+      }
+      sendJSON(res, 200, { ok: true });
+      return true;
+    }
+
+    // ---- DELETE PHOTO ----
+    if (photoMatch && req.method === 'DELETE') {
+      const personId = parseInt(photoMatch[1]);
+      const updated = db.updatePerson(personId, { photo_url: null });
+      if (!updated) {
+        sendJSON(res, 404, { error: 'Person not found' });
+        return true;
+      }
+      sendJSON(res, 200, { ok: true });
+      return true;
+    }
+
     return false; // not handled
   } catch (e) {
     console.error('HR API error:', e);
