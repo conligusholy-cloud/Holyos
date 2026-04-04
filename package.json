@@ -4,9 +4,9 @@
   "description": "HOLYOS — Řízení výroby (Best Series)",
   "main": "server.js",
   "scripts": {
-    "dev": "tsc -b && node --watch dist/server/server.js",
+    "dev": "tsc -b && node --watch server.js",
     "build": "tsc -b",
-    "start": "node dist/server/server.js",
+    "start": "node server.js",
     "typecheck": "tsc --noEmit",
     "watch": "tsc -b --watch"
   },
