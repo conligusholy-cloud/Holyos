@@ -446,18 +446,86 @@
                   <input type="number" name="monthly_salary" value="${p.monthly_salary || ''}" step="1">
                 </div>
                 <div class="form-group">
+                  <label>Datum konce prac. poměru</label>
+                  <input type="date" name="end_date" value="${p.end_date || ''}">
+                </div>
+                <div class="form-group">
+                  <label>Číslo čipu</label>
+                  <input type="text" name="chip_number" value="${p.chip_number || ''}" placeholder="např. 0004812653">
+                </div>
+              </div>
+            </div>
+
+            <div id="personal-fields" style="${showEmp ? '' : 'display:none'}">
+              <div style="font-size:12px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px;margin:20px 0 10px;padding-top:16px;border-top:1px solid var(--border);">Osobní údaje</div>
+              <div class="form-grid">
+                <div class="form-group">
                   <label>Datum narození</label>
                   <input type="date" name="birth_date" value="${p.birth_date || ''}">
                 </div>
                 <div class="form-group">
-                  <label>Adresa</label>
-                  <input type="text" name="address" value="${p.address || ''}">
+                  <label>Rodné číslo</label>
+                  <input type="text" name="birth_number" value="${p.birth_number || ''}" placeholder="000000/0000">
                 </div>
                 <div class="form-group">
-                  <label>\u010c\u00edslo \u010dipu</label>
-                  <input type="text" name="chip_number" value="${p.chip_number || ''}" placeholder="nap\u0159. 0004812653">
+                  <label>Číslo OP</label>
+                  <input type="text" name="id_card_number" value="${p.id_card_number || ''}" placeholder="např. 204587631">
                 </div>
-                <div class="form-group" style="display:flex;align-items:center;gap:10px;padding-top:22px;">
+                <div class="form-group">
+                  <label>Pohlaví</label>
+                  <select name="gender">
+                    <option value="">—</option>
+                    <option value="male" ${p.gender === 'male' ? 'selected' : ''}>Muž</option>
+                    <option value="female" ${p.gender === 'female' ? 'selected' : ''}>Žena</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label>Adresa</label>
+                  <input type="text" name="address" value="${p.address || ''}" placeholder="Ulice, č.p.">
+                </div>
+                <div class="form-group">
+                  <label>Město</label>
+                  <input type="text" name="city" value="${p.city || ''}">
+                </div>
+                <div class="form-group">
+                  <label>PSČ</label>
+                  <input type="text" name="zip" value="${p.zip || ''}" placeholder="000 00">
+                </div>
+                <div class="form-group">
+                  <label>Číslo účtu</label>
+                  <input type="text" name="bank_account" value="${p.bank_account || ''}" placeholder="000000-0000000000/0000">
+                </div>
+              </div>
+            </div>
+
+            <div id="emergency-fields" style="${showEmp ? '' : 'display:none'}">
+              <div style="font-size:12px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px;margin:20px 0 10px;padding-top:16px;border-top:1px solid var(--border);">Nouzový kontakt</div>
+              <div class="form-grid">
+                <div class="form-group">
+                  <label>Jméno nouzového kontaktu</label>
+                  <input type="text" name="emergency_name" value="${p.emergency_name || ''}" placeholder="např. manželka, rodič">
+                </div>
+                <div class="form-group">
+                  <label>Telefon nouzového kontaktu</label>
+                  <input type="text" name="emergency_phone" value="${p.emergency_phone || ''}" placeholder="+420...">
+                </div>
+                <div class="form-group">
+                  <label>Vztah</label>
+                  <select name="emergency_relation">
+                    <option value="">—</option>
+                    <option value="spouse" ${p.emergency_relation === 'spouse' ? 'selected' : ''}>Manžel/ka</option>
+                    <option value="parent" ${p.emergency_relation === 'parent' ? 'selected' : ''}>Rodič</option>
+                    <option value="sibling" ${p.emergency_relation === 'sibling' ? 'selected' : ''}>Sourozenec</option>
+                    <option value="child" ${p.emergency_relation === 'child' ? 'selected' : ''}>Dítě</option>
+                    <option value="other" ${p.emergency_relation === 'other' ? 'selected' : ''}>Jiný</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div id="admin-fields" style="${showEmp ? '' : 'display:none'}">
+              <div class="form-grid" style="margin-top:12px;">
+                <div class="form-group" style="display:flex;align-items:center;gap:10px;padding-top:8px;">
                   <input type="checkbox" name="is_super_admin" id="chk-super-admin" value="1" ${p.is_super_admin ? 'checked' : ''} style="width:18px;height:18px;accent-color:var(--primary);cursor:pointer;">
                   <label for="chk-super-admin" style="cursor:pointer;margin:0;">Super Admin</label>
                 </div>
@@ -549,10 +617,11 @@
     }
 
     function toggleEmployeeFields(type) {
-      const el = document.getElementById('employee-fields');
-      const acc = document.getElementById('account-section');
-      if (el) el.style.display = type === 'employee' ? '' : 'none';
-      if (acc) acc.style.display = type === 'employee' ? '' : 'none';
+      const show = type === 'employee';
+      ['employee-fields', 'personal-fields', 'emergency-fields', 'admin-fields', 'account-section'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.style.display = show ? '' : 'none';
+      });
     }
 
     async function savePerson(e, id) {
