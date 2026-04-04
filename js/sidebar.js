@@ -471,8 +471,12 @@ function submitAiTask() {
 }
 
 // Auto-init AI button when sidebar loads
+// Runs immediately if DOM is ready, or waits for it
 if (typeof document !== 'undefined') {
-  document.addEventListener('DOMContentLoaded', function() {
-    setTimeout(initAiButton, 500);
-  });
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', function() { initAiButton(); });
+  } else {
+    // DOM already loaded (script loaded dynamically after page load)
+    initAiButton();
+  }
 }
