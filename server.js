@@ -587,6 +587,13 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
+  // ---- HR MODULE API ----
+  if (pathname.startsWith('/api/hr/')) {
+    const handleHR = require('./api/hr');
+    const handled = await handleHR(req, res, pathname);
+    if (handled) return;
+  }
+
   // ---- MINDMAP NOTES API ----
   const MINDMAP_FILE = path.join(__dirname, 'data', 'mindmap-notes.json');
 
