@@ -114,7 +114,7 @@ const db = {
   getAllPeople(filters = {}) {
     let results = data.people.filter(p => {
       if (filters.type && p.type !== filters.type) return false;
-      if (filters.active !== undefined && filters.active !== '' && p.active !== parseInt(filters.active)) return false;
+      if (filters.active != null && filters.active !== '' && p.active != parseInt(filters.active)) return false;
       if (filters.search) {
         const s = filters.search.toLowerCase();
         if (!((p.first_name || '').toLowerCase().includes(s) ||
