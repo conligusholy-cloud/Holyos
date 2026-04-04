@@ -15,13 +15,23 @@ const DB_FILE = path.join(DATA_DIR, 'hr.json');
 const AUDIT_FILE = path.join(DATA_DIR, 'audit-log.json');
 
 const DEFAULT_DATA = {
-  _nextId: { people: 1, departments: 1, roles: 1, attendance: 1, admin_tasks: 1 },
+  _nextId: { people: 1, departments: 1, roles: 1, attendance: 1, admin_tasks: 1, shifts: 1, absence_types: 1, leave_requests: 1 },
   people: [],
   departments: [],
   roles: [],
   attendance: [],
   permissions: {}, // roleId → { moduleId: 'read'|'write'|'none' }
   admin_tasks: [], // AI-generated improvement tasks
+  shifts: [],         // Shift definitions: { id, name, type: 'fixed'|'flexible', start, end, hours_fund, break_minutes }
+  absence_types: [    // Default absence types
+    { id: 1, name: 'Oběd', code: 'lunch', color: '#f59e0b', paid: false },
+    { id: 2, name: 'Lékař', code: 'doctor', color: '#ef4444', paid: true },
+    { id: 3, name: 'Soukromě', code: 'personal', color: '#8b5cf6', paid: false },
+    { id: 4, name: 'Dovolená', code: 'vacation', color: '#3b82f6', paid: true },
+    { id: 5, name: 'Nemocenská', code: 'sick', color: '#10b981', paid: true },
+    { id: 6, name: 'Home office', code: 'homeoffice', color: '#06b6d4', paid: true },
+  ],
+  leave_requests: [], // { id, person_id, type, date_from, date_to, status: 'pending'|'approved'|'rejected', approved_by, note }
 };
 
 // Load or initialize
@@ -432,6 +442,220 @@ const db = {
     save();
     logChange('delete', 'admin_task', id, `Smazán požadavek: ${task.description.substring(0, 60)}`, task, null);
     return true;
+  },
+
+  // --- Shifts ---
+  getShifts() { return data.shifts || []; },
+  getShift(id) { return (data.shifts || []).find(s => s.id === id); },
+  createShift(fields) {
+    if (!data._nextId.shifts) data._nextId.shifts = 1;
+    const shift = {
+      id: data._nextId.shifts++,
+      name: fields.name,
+      type: fields.type || 'fixed', // 'fixed' | 'flexible'
+      start: fields.start || null,   // HH:MM for fixed
+      end: fields.end || null,       // HH:MM for fixed
+      hours_fund: fields.hours_fund ? parseFloat(fields.hours_fund) : 8, // daily hours for flexible
+      break_minutes: fields.break_minutes ? parseInt(fields.break_minutes) : 30,
+      created_at: now(),
+    };
+    if (!data.shifts) data.shifts = [];
+    data.shifts.push(shift);
+    save();
+    logChange('create', 'shift', shift.id, `Vytvořena směna: ${shift.name}`, null, shift);
+    return shift;
+  },
+  updateShift(id, fields) {
+    const s = (data.shifts || []).find(x => x.id === id);
+    if (!s) return null;
+    const old = { ...s };
+    for (const [k, v] of Object.entries(fields)) { if (v !== undefined && k !== 'id') s[k] = v; }
+    save();
+    logChange('update', 'shift', id, `Upravena směna: ${s.name}`, old, s);
+    return s;
+  },
+  deleteShift(id) {
+    const idx = (data.shifts || []).findIndex(s => s.id === id);
+    if (idx === -1) return false;
+    const del = data.shifts[idx];
+    data.shifts.splice(idx, 1);
+    save();
+    logChange('delete', 'shift', id, `Smazána směna: ${del.name}`, del, null);
+    return true;
+  },
+
+  // --- Absence Types ---
+  getAbsenceTypes() { return data.absence_types || []; },
+  createAbsenceType(fields) {
+    if (!data._nextId.absence_types) data._nextId.absence_types = 7; // after defaults
+    const at = {
+      id: data._nextId.absence_types++,
+      name: fields.name,
+      code: fields.code || fields.name.toLowerCase().replace(/\s+/g, '_'),
+      color: fields.color || '#6c5ce7',
+      paid: !!fields.paid,
+    };
+    if (!data.absence_types) data.absence_types = [];
+    data.absence_types.push(at);
+    save();
+    return at;
+  },
+  updateAbsenceType(id, fields) {
+    const at = (data.absence_types || []).find(x => x.id === id);
+    if (!at) return null;
+    for (const [k, v] of Object.entries(fields)) { if (v !== undefined && k !== 'id') at[k] = v; }
+    save();
+    return at;
+  },
+  deleteAbsenceType(id) {
+    const idx = (data.absence_types || []).findIndex(x => x.id === id);
+    if (idx === -1) return false;
+    data.absence_types.splice(idx, 1);
+    save();
+    return true;
+  },
+
+  // --- Leave Requests ---
+  getLeaveRequests(filters = {}) {
+    let reqs = data.leave_requests || [];
+    if (filters.person_id) reqs = reqs.filter(r => r.person_id === parseInt(filters.person_id));
+    if (filters.status) reqs = reqs.filter(r => r.status === filters.status);
+    return reqs.sort((a, b) => b.id - a.id);
+  },
+  createLeaveRequest(fields) {
+    if (!data._nextId.leave_requests) data._nextId.leave_requests = 1;
+    const req = {
+      id: data._nextId.leave_requests++,
+      person_id: parseInt(fields.person_id),
+      type: fields.type || 'vacation',
+      date_from: fields.date_from,
+      date_to: fields.date_to,
+      note: fields.note || '',
+      status: 'pending',
+      approved_by: null,
+      created_at: now(),
+    };
+    if (!data.leave_requests) data.leave_requests = [];
+    data.leave_requests.push(req);
+    save();
+    logChange('create', 'leave_request', req.id, `Žádost o volno: osoba #${req.person_id} (${req.date_from} - ${req.date_to})`, null, req);
+    return req;
+  },
+  approveLeaveRequest(id, approvedBy) {
+    const req = (data.leave_requests || []).find(r => r.id === id);
+    if (!req) return null;
+    const old = { ...req };
+    req.status = 'approved';
+    req.approved_by = approvedBy;
+    save();
+    logChange('update', 'leave_request', id, `Schváleno volno: osoba #${req.person_id}`, old, req);
+    return req;
+  },
+  rejectLeaveRequest(id, rejectedBy) {
+    const req = (data.leave_requests || []).find(r => r.id === id);
+    if (!req) return null;
+    const old = { ...req };
+    req.status = 'rejected';
+    req.approved_by = rejectedBy;
+    save();
+    logChange('update', 'leave_request', id, `Zamítnuto volno: osoba #${req.person_id}`, old, req);
+    return req;
+  },
+
+  // --- Kiosk: Find person by chip card ---
+  findPersonByChip(chipId) {
+    return data.people.find(p => p.chip_card_id === chipId && p.active == 1) || null;
+  },
+
+  // --- Kiosk: Clock action (arrival/departure/absence) ---
+  clockAction(personId, action, absenceType) {
+    const today = new Date().toISOString().split('T')[0];
+    const timeNow = new Date().toTimeString().slice(0, 5); // HH:MM
+
+    // Find today's attendance for this person
+    let record = data.attendance.find(a => a.person_id === personId && a.date === today && a.type === 'work');
+
+    if (action === 'clock_in') {
+      if (!record) {
+        // Create new attendance record for today
+        record = {
+          id: nextId('attendance'),
+          person_id: personId,
+          date: today,
+          clock_in: timeNow,
+          clock_out: null,
+          break_minutes: 0,
+          type: 'work',
+          note: '',
+          created_at: now(),
+        };
+        data.attendance.push(record);
+      } else {
+        record.clock_in = record.clock_in || timeNow;
+      }
+    } else if (action === 'clock_out') {
+      if (record) {
+        record.clock_out = timeNow;
+      }
+    } else if (action === 'absence_out') {
+      // Going on absence (e.g., lunch, doctor)
+      const absRec = {
+        id: nextId('attendance'),
+        person_id: personId,
+        date: today,
+        clock_in: timeNow, // absence start
+        clock_out: null,
+        break_minutes: 0,
+        type: absenceType || 'other',
+        note: '',
+        created_at: now(),
+      };
+      data.attendance.push(absRec);
+      record = absRec;
+    } else if (action === 'absence_in') {
+      // Returning from absence — find the open absence record
+      const openAbsence = data.attendance.find(a => a.person_id === personId && a.date === today && a.type !== 'work' && !a.clock_out);
+      if (openAbsence) {
+        openAbsence.clock_out = timeNow;
+        record = openAbsence;
+      }
+    }
+
+    save();
+    return record;
+  },
+
+  // --- Today's presence overview ---
+  getTodayPresence() {
+    const today = new Date().toISOString().split('T')[0];
+    const todayRecords = data.attendance.filter(a => a.date === today);
+    const activePeople = data.people.filter(p => p.active == 1 && p.type === 'employee');
+
+    return activePeople.map(p => {
+      const workRec = todayRecords.find(a => a.person_id === p.id && a.type === 'work');
+      const absRecs = todayRecords.filter(a => a.person_id === p.id && a.type !== 'work');
+      const openAbsence = absRecs.find(a => !a.clock_out);
+
+      let status = 'absent'; // hasn't arrived
+      if (workRec && workRec.clock_in && !workRec.clock_out) {
+        status = openAbsence ? 'on_break' : 'present';
+      } else if (workRec && workRec.clock_out) {
+        status = 'left';
+      }
+
+      return {
+        person_id: p.id,
+        first_name: p.first_name,
+        last_name: p.last_name,
+        photo_url: p.photo_url || null,
+        role_name: (data.roles.find(r => r.id === p.role_id) || {}).name || null,
+        status,
+        clock_in: workRec ? workRec.clock_in : null,
+        clock_out: workRec ? workRec.clock_out : null,
+        current_absence: openAbsence ? openAbsence.type : null,
+        absences: absRecs,
+      };
+    });
   },
 
   // --- Stats ---

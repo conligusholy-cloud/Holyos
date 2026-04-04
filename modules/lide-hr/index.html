@@ -212,6 +212,54 @@
     .tab-content { display: none; }
     .tab-content.active { display: block; }
 
+    /* Sub-tabs */
+    .sub-tabs { display: flex; gap: 0; border-bottom: 1px solid var(--border); margin-bottom: 16px; }
+    .sub-tab {
+      padding: 10px 16px; font-size: 12px; font-weight: 500; color: var(--text2);
+      cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.2s;
+    }
+    .sub-tab:hover { color: var(--text); }
+    .sub-tab.active { color: #6c5ce7; border-bottom-color: #6c5ce7; }
+    .att-subtab { display: none; }
+    .att-subtab.active { display: block; }
+
+    /* Presence grid */
+    .presence-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
+    .presence-card {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+      padding: 14px; display: flex; align-items: center; gap: 12px; transition: all 0.2s;
+    }
+    .presence-card:hover { border-color: #6c5ce7; }
+    .presence-avatar {
+      width: 44px; height: 44px; border-radius: 50%; background: var(--bg);
+      display: flex; align-items: center; justify-content: center; font-size: 18px;
+      overflow: hidden; flex-shrink: 0;
+    }
+    .presence-avatar img { width: 100%; height: 100%; object-fit: cover; }
+    .presence-info { flex: 1; min-width: 0; }
+    .presence-name { font-weight: 600; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .presence-role { font-size: 11px; color: var(--text2); }
+    .presence-time { font-size: 11px; color: var(--text2); margin-top: 2px; }
+    .presence-status {
+      padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 600;
+      white-space: nowrap;
+    }
+    .presence-status.present { background: #10b98120; color: #10b981; }
+    .presence-status.absent { background: #64748b20; color: #64748b; }
+    .presence-status.on_break { background: #f59e0b20; color: #f59e0b; }
+    .presence-status.left { background: #ef444420; color: #ef4444; }
+
+    /* Shift type badge */
+    .shift-type { padding: 2px 8px; border-radius: 6px; font-size: 11px; font-weight: 500; }
+    .shift-type.fixed { background: #3b82f620; color: #3b82f6; }
+    .shift-type.flexible { background: #8b5cf620; color: #8b5cf6; }
+
+    /* Leave status badge */
+    .leave-status { padding: 2px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; }
+    .leave-status.pending { background: #f59e0b20; color: #f59e0b; }
+    .leave-status.approved { background: #10b98120; color: #10b981; }
+    .leave-status.rejected { background: #ef444420; color: #ef4444; }
+
     /* Permissions matrix */
     .perm-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 13px; }
     .perm-table th { background: var(--surface2); padding: 10px 12px; text-align: left; font-weight: 600; color: var(--text1); border-bottom: 2px solid var(--border); white-space: nowrap; }
@@ -301,15 +349,70 @@
 
       <!-- TAB: Docházka -->
       <div class="tab-content" id="tab-attendance">
-        <div class="toolbar">
-          <input type="month" id="att-month" onchange="loadAttendance()" style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:13px;">
-          <select id="att-person" onchange="loadAttendance()">
-            <option value="">Všichni zaměstnanci</option>
-          </select>
-          <div style="flex:1"></div>
-          <button class="btn btn-primary" onclick="openAttendanceModal()">+ Záznam docházky</button>
+        <!-- Sub-tabs within attendance -->
+        <div class="sub-tabs">
+          <div class="sub-tab active" data-subtab="presence" onclick="switchAttSubTab('presence')">📡 Přehled přítomnosti</div>
+          <div class="sub-tab" data-subtab="records" onclick="switchAttSubTab('records')">📋 Záznamy</div>
+          <div class="sub-tab" data-subtab="shifts" onclick="switchAttSubTab('shifts')">⏰ Směny</div>
+          <div class="sub-tab" data-subtab="absence-types" onclick="switchAttSubTab('absence-types')">🏷️ Typy nepřítomnosti</div>
+          <div class="sub-tab" data-subtab="leave" onclick="switchAttSubTab('leave')">📝 Žádosti o volno</div>
         </div>
-        <div id="attendance-table"></div>
+
+        <!-- Sub: Přehled přítomnosti (real-time) -->
+        <div class="att-subtab active" id="att-presence">
+          <div class="toolbar">
+            <button class="btn btn-primary" onclick="loadPresence()">🔄 Obnovit</button>
+            <div style="flex:1"></div>
+            <a href="modules/lide-hr/kiosk.html" target="_blank" class="btn btn-secondary">📱 Otevřít kiosek</a>
+          </div>
+          <div id="presence-grid"></div>
+        </div>
+
+        <!-- Sub: Záznamy docházky -->
+        <div class="att-subtab" id="att-records">
+          <div class="toolbar">
+            <input type="month" id="att-month" onchange="loadAttendance()" style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:13px;">
+            <select id="att-person" onchange="loadAttendance()">
+              <option value="">Všichni zaměstnanci</option>
+            </select>
+            <div style="flex:1"></div>
+            <button class="btn btn-primary" onclick="openAttendanceModal()">+ Záznam docházky</button>
+          </div>
+          <div id="attendance-table"></div>
+        </div>
+
+        <!-- Sub: Směny -->
+        <div class="att-subtab" id="att-shifts">
+          <div class="toolbar">
+            <div style="flex:1"></div>
+            <button class="btn btn-primary" onclick="openShiftModal()">+ Nová směna</button>
+          </div>
+          <div id="shifts-table"></div>
+        </div>
+
+        <!-- Sub: Typy nepřítomnosti -->
+        <div class="att-subtab" id="att-absence-types">
+          <div class="toolbar">
+            <div style="flex:1"></div>
+            <button class="btn btn-primary" onclick="openAbsenceTypeModal()">+ Nový typ</button>
+          </div>
+          <div id="absence-types-table"></div>
+        </div>
+
+        <!-- Sub: Žádosti o volno -->
+        <div class="att-subtab" id="att-leave">
+          <div class="toolbar">
+            <select id="leave-status-filter" onchange="loadLeaveRequests()" style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:13px;">
+              <option value="">Všechny žádosti</option>
+              <option value="pending">Čekající</option>
+              <option value="approved">Schválené</option>
+              <option value="rejected">Zamítnuté</option>
+            </select>
+            <div style="flex:1"></div>
+            <button class="btn btn-primary" onclick="openLeaveRequestModal()">+ Nová žádost</button>
+          </div>
+          <div id="leave-table"></div>
+        </div>
       </div>
 
       <!-- TAB: Organizační struktura -->
@@ -357,7 +460,7 @@
     function switchTab(tab) {
       document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
       document.querySelectorAll('.tab-content').forEach(t => t.classList.toggle('active', t.id === 'tab-' + tab));
-      if (tab === 'attendance') loadAttendance();
+      if (tab === 'attendance') loadPresence();
       if (tab === 'org') loadDepartments();
       if (tab === 'roles') loadRoles();
     }
@@ -448,6 +551,14 @@
 
       let roleOptions = '<option value="">— Bez pozice —</option>';
       for (const r of roles) roleOptions += `<option value="${r.id}" ${p.role_id == r.id ? 'selected' : ''}>${r.name}</option>`;
+
+      // Load shifts for shift_id dropdown
+      let shiftOptions = '<option value="">— Bez přiřazené směny —</option>';
+      try {
+        const res = await fetch('/api/hr/shifts');
+        const shifts = await res.json();
+        for (const s of shifts) shiftOptions += `<option value="${s.id}" ${p.shift_id == s.id ? 'selected' : ''}>${s.name}</option>`;
+      } catch (e) {}
 
 
       const showEmp = (p.type || 'employee') === 'employee';
@@ -547,6 +658,14 @@
                 <div class="form-group">
                   <label>Číslo čipu</label>
                   <input type="text" name="chip_number" value="${p.chip_number || ''}" placeholder="např. 0004812653">
+                </div>
+                <div class="form-group">
+                  <label>ID čipové karty</label>
+                  <input type="text" name="chip_card_id" value="${p.chip_card_id || ''}" placeholder="Naskenujte čip...">
+                </div>
+                <div class="form-group">
+                  <label>Směna</label>
+                  <select name="shift_id">${shiftOptions}</select>
                 </div>
               </div>
             </div>
@@ -967,6 +1086,395 @@
       if (!confirm('Smazat záznam?')) return;
       await fetch('/api/hr/attendance/' + id, { method: 'DELETE' });
       loadAttendance();
+    }
+
+    // ============================================================
+    // ATTENDANCE SUB-TABS
+    // ============================================================
+    function switchAttSubTab(tab) {
+      document.querySelectorAll('.sub-tab').forEach(t => t.classList.toggle('active', t.dataset.subtab === tab));
+      document.querySelectorAll('.att-subtab').forEach(t => t.classList.toggle('active', t.id === 'att-' + tab));
+      if (tab === 'presence') loadPresence();
+      if (tab === 'records') loadAttendance();
+      if (tab === 'shifts') loadShifts();
+      if (tab === 'absence-types') loadAbsenceTypes();
+      if (tab === 'leave') loadLeaveRequests();
+    }
+
+    // ============================================================
+    // PRESENCE (real-time)
+    // ============================================================
+    async function loadPresence() {
+      try {
+        const res = await fetch('/api/hr/presence');
+        const list = await res.json();
+        renderPresence(list);
+      } catch (e) { console.error(e); }
+    }
+
+    function renderPresence(list) {
+      const el = document.getElementById('presence-grid');
+      if (!list || list.length === 0) {
+        el.innerHTML = '<div class="empty-state"><div class="empty-icon">📡</div><h3>Žádní zaměstnanci</h3><p>Přidejte zaměstnance v záložce Lidé</p></div>';
+        return;
+      }
+      const statusLabels = { present: 'Přítomen', absent: 'Nepřítomen', on_break: 'Pauza', left: 'Odešel' };
+      el.innerHTML = '<div class="presence-grid">' + list.map(p => {
+        const avatar = p.photo_url
+          ? `<img src="${p.photo_url}" alt="">`
+          : (p.first_name[0] + p.last_name[0]);
+        const timeInfo = p.clock_in ? `Příchod: ${p.clock_in}${p.clock_out ? ' → Odchod: ' + p.clock_out : ''}` : 'Dosud nepřítomen';
+        const absInfo = p.current_absence ? ` (${p.current_absence})` : '';
+        return `<div class="presence-card">
+          <div class="presence-avatar">${avatar}</div>
+          <div class="presence-info">
+            <div class="presence-name">${p.first_name} ${p.last_name}</div>
+            <div class="presence-role">${p.role_name || '—'}</div>
+            <div class="presence-time">${timeInfo}</div>
+          </div>
+          <div class="presence-status ${p.status}">${statusLabels[p.status] || p.status}${absInfo}</div>
+        </div>`;
+      }).join('') + '</div>';
+    }
+
+    // ============================================================
+    // SHIFTS
+    // ============================================================
+    async function loadShifts() {
+      try {
+        const res = await fetch('/api/hr/shifts');
+        const shifts = await res.json();
+        renderShifts(shifts);
+      } catch (e) { console.error(e); }
+    }
+
+    function renderShifts(shifts) {
+      const el = document.getElementById('shifts-table');
+      if (!shifts || shifts.length === 0) {
+        el.innerHTML = '<div class="empty-state"><div class="empty-icon">⏰</div><h3>Žádné směny</h3><p>Vytvořte směny pro zaměstnance</p></div>';
+        return;
+      }
+      let html = '<table class="data-table"><thead><tr><th>Název</th><th>Typ</th><th>Čas</th><th>Fond hodin</th><th>Přestávka</th><th></th></tr></thead><tbody>';
+      for (const s of shifts) {
+        const typeLabel = s.type === 'fixed' ? 'Pevná' : 'Pružná';
+        const timeStr = s.type === 'fixed' && s.start && s.end ? `${s.start} – ${s.end}` : '—';
+        html += `<tr>
+          <td><strong>${s.name}</strong></td>
+          <td><span class="shift-type ${s.type}">${typeLabel}</span></td>
+          <td>${timeStr}</td>
+          <td>${s.hours_fund || 8}h</td>
+          <td>${s.break_minutes || 30} min</td>
+          <td>
+            <button class="btn btn-sm" onclick="openShiftModal(${s.id})">✏️</button>
+            <button class="btn btn-sm btn-danger" onclick="deleteShift(${s.id})">✕</button>
+          </td>
+        </tr>`;
+      }
+      html += '</tbody></table>';
+      el.innerHTML = html;
+    }
+
+    async function openShiftModal(editId) {
+      let shift = { name: '', type: 'fixed', start: '07:00', end: '15:30', hours_fund: 8, break_minutes: 30 };
+      if (editId) {
+        try {
+          const res = await fetch('/api/hr/shifts');
+          const shifts = await res.json();
+          shift = shifts.find(s => s.id === editId) || shift;
+        } catch (e) {}
+      }
+      document.getElementById('modal-root').innerHTML = `<div class="modal-overlay" onclick="if(event.target===this)closeModal()">
+        <div class="modal">
+          <h2>${editId ? '✏️ Upravit směnu' : '➕ Nová směna'}</h2>
+          <form onsubmit="saveShift(event, ${editId || 0})">
+            <div class="form-grid">
+              <div class="form-group">
+                <label>Název *</label>
+                <input type="text" name="name" value="${shift.name}" required>
+              </div>
+              <div class="form-group">
+                <label>Typ</label>
+                <select name="type" onchange="toggleShiftTime(this.value)">
+                  <option value="fixed" ${shift.type==='fixed'?'selected':''}>Pevná</option>
+                  <option value="flexible" ${shift.type==='flexible'?'selected':''}>Pružná</option>
+                </select>
+              </div>
+              <div class="form-group shift-time-fields" ${shift.type==='flexible'?'style="display:none"':''}>
+                <label>Začátek</label>
+                <input type="time" name="start" value="${shift.start || '07:00'}">
+              </div>
+              <div class="form-group shift-time-fields" ${shift.type==='flexible'?'style="display:none"':''}>
+                <label>Konec</label>
+                <input type="time" name="end" value="${shift.end || '15:30'}">
+              </div>
+              <div class="form-group">
+                <label>Hodinový fond (h/den)</label>
+                <input type="number" name="hours_fund" value="${shift.hours_fund || 8}" step="0.5">
+              </div>
+              <div class="form-group">
+                <label>Přestávka (min)</label>
+                <input type="number" name="break_minutes" value="${shift.break_minutes || 30}">
+              </div>
+            </div>
+            <div class="modal-actions">
+              <button type="button" class="btn btn-secondary" onclick="closeModal()">Zrušit</button>
+              <button type="submit" class="btn btn-primary">Uložit</button>
+            </div>
+          </form>
+        </div>
+      </div>`;
+    }
+
+    function toggleShiftTime(type) {
+      document.querySelectorAll('.shift-time-fields').forEach(el => {
+        el.style.display = type === 'fixed' ? '' : 'none';
+      });
+    }
+
+    async function saveShift(e, editId) {
+      e.preventDefault();
+      const form = new FormData(e.target);
+      const data = {};
+      for (const [k, v] of form.entries()) data[k] = v;
+      if (data.hours_fund) data.hours_fund = parseFloat(data.hours_fund);
+      if (data.break_minutes) data.break_minutes = parseInt(data.break_minutes);
+
+      if (editId) {
+        await fetch('/api/hr/shifts/' + editId, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+      } else {
+        await fetch('/api/hr/shifts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+      }
+      closeModal();
+      loadShifts();
+    }
+
+    async function deleteShift(id) {
+      if (!confirm('Smazat směnu?')) return;
+      await fetch('/api/hr/shifts/' + id, { method: 'DELETE' });
+      loadShifts();
+    }
+
+    // ============================================================
+    // ABSENCE TYPES
+    // ============================================================
+    async function loadAbsenceTypes() {
+      try {
+        const res = await fetch('/api/hr/absence-types');
+        const types = await res.json();
+        renderAbsenceTypes(types);
+      } catch (e) { console.error(e); }
+    }
+
+    function renderAbsenceTypes(types) {
+      const el = document.getElementById('absence-types-table');
+      if (!types || types.length === 0) {
+        el.innerHTML = '<div class="empty-state"><div class="empty-icon">🏷️</div><h3>Žádné typy nepřítomnosti</h3></div>';
+        return;
+      }
+      let html = '<table class="data-table"><thead><tr><th>Název</th><th>Kód</th><th>Barva</th><th>Placená</th><th></th></tr></thead><tbody>';
+      for (const t of types) {
+        html += `<tr>
+          <td><strong>${t.name}</strong></td>
+          <td><code>${t.code}</code></td>
+          <td><span style="display:inline-flex;align-items:center;gap:6px"><span style="width:14px;height:14px;border-radius:4px;background:${t.color};display:inline-block"></span>${t.color}</span></td>
+          <td>${t.paid ? '✅ Ano' : '❌ Ne'}</td>
+          <td>
+            <button class="btn btn-sm" onclick="openAbsenceTypeModal(${t.id})">✏️</button>
+            <button class="btn btn-sm btn-danger" onclick="deleteAbsenceType(${t.id})">✕</button>
+          </td>
+        </tr>`;
+      }
+      html += '</tbody></table>';
+      el.innerHTML = html;
+    }
+
+    async function openAbsenceTypeModal(editId) {
+      let at = { name: '', code: '', color: '#6c5ce7', paid: false };
+      if (editId) {
+        try {
+          const res = await fetch('/api/hr/absence-types');
+          const types = await res.json();
+          at = types.find(t => t.id === editId) || at;
+        } catch (e) {}
+      }
+      document.getElementById('modal-root').innerHTML = `<div class="modal-overlay" onclick="if(event.target===this)closeModal()">
+        <div class="modal">
+          <h2>${editId ? '✏️ Upravit typ' : '➕ Nový typ nepřítomnosti'}</h2>
+          <form onsubmit="saveAbsenceType(event, ${editId || 0})">
+            <div class="form-grid">
+              <div class="form-group">
+                <label>Název *</label>
+                <input type="text" name="name" value="${at.name}" required>
+              </div>
+              <div class="form-group">
+                <label>Kód</label>
+                <input type="text" name="code" value="${at.code}" placeholder="auto">
+              </div>
+              <div class="form-group">
+                <label>Barva</label>
+                <input type="color" name="color" value="${at.color}">
+              </div>
+              <div class="form-group">
+                <label>Placená</label>
+                <select name="paid">
+                  <option value="true" ${at.paid?'selected':''}>Ano</option>
+                  <option value="false" ${!at.paid?'selected':''}>Ne</option>
+                </select>
+              </div>
+            </div>
+            <div class="modal-actions">
+              <button type="button" class="btn btn-secondary" onclick="closeModal()">Zrušit</button>
+              <button type="submit" class="btn btn-primary">Uložit</button>
+            </div>
+          </form>
+        </div>
+      </div>`;
+    }
+
+    async function saveAbsenceType(e, editId) {
+      e.preventDefault();
+      const form = new FormData(e.target);
+      const data = {};
+      for (const [k, v] of form.entries()) data[k] = v;
+      data.paid = data.paid === 'true';
+
+      if (editId) {
+        await fetch('/api/hr/absence-types/' + editId, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+      } else {
+        await fetch('/api/hr/absence-types', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+      }
+      closeModal();
+      loadAbsenceTypes();
+    }
+
+    async function deleteAbsenceType(id) {
+      if (!confirm('Smazat typ nepřítomnosti?')) return;
+      await fetch('/api/hr/absence-types/' + id, { method: 'DELETE' });
+      loadAbsenceTypes();
+    }
+
+    // ============================================================
+    // LEAVE REQUESTS
+    // ============================================================
+    async function loadLeaveRequests() {
+      const status = document.getElementById('leave-status-filter').value;
+      let url = '/api/hr/leave-requests?';
+      if (status) url += 'status=' + status;
+      try {
+        const res = await fetch(url);
+        const reqs = await res.json();
+        await loadPeopleData();
+        renderLeaveRequests(reqs);
+      } catch (e) { console.error(e); }
+    }
+
+    function renderLeaveRequests(reqs) {
+      const el = document.getElementById('leave-table');
+      if (!reqs || reqs.length === 0) {
+        el.innerHTML = '<div class="empty-state"><div class="empty-icon">📝</div><h3>Žádné žádosti o volno</h3></div>';
+        return;
+      }
+      const statusLabels = { pending: 'Čekající', approved: 'Schváleno', rejected: 'Zamítnuto' };
+      let html = '<table class="data-table"><thead><tr><th>Zaměstnanec</th><th>Typ</th><th>Od</th><th>Do</th><th>Poznámka</th><th>Stav</th><th></th></tr></thead><tbody>';
+      for (const r of reqs) {
+        const person = people.find(p => p.id === r.person_id);
+        const personName = person ? `${person.first_name} ${person.last_name}` : `#${r.person_id}`;
+        const actions = r.status === 'pending' ? `
+          <button class="btn btn-sm" style="background:#10b981;color:#fff;border-color:#10b981" onclick="approveLeave(${r.id})">✓ Schválit</button>
+          <button class="btn btn-sm btn-danger" onclick="rejectLeave(${r.id})">✕ Zamítnout</button>
+        ` : '';
+        html += `<tr>
+          <td class="person-name">${personName}</td>
+          <td>${r.type}</td>
+          <td>${formatDate(r.date_from)}</td>
+          <td>${formatDate(r.date_to)}</td>
+          <td>${r.note || ''}</td>
+          <td><span class="leave-status ${r.status}">${statusLabels[r.status] || r.status}</span></td>
+          <td>${actions}</td>
+        </tr>`;
+      }
+      html += '</tbody></table>';
+      el.innerHTML = html;
+    }
+
+    async function openLeaveRequestModal() {
+      await loadPeopleData();
+      let options = '';
+      for (const p of people.filter(x => x.type === 'employee')) {
+        options += `<option value="${p.id}">${p.first_name} ${p.last_name}</option>`;
+      }
+      // Fetch absence types for type select
+      let typeOptions = '<option value="vacation">Dovolená</option><option value="sick">Nemocenská</option>';
+      try {
+        const res = await fetch('/api/hr/absence-types');
+        const types = await res.json();
+        typeOptions = types.filter(t => t.code !== 'lunch').map(t => `<option value="${t.code}">${t.name}</option>`).join('');
+      } catch (e) {}
+
+      const today = new Date().toISOString().split('T')[0];
+      document.getElementById('modal-root').innerHTML = `<div class="modal-overlay" onclick="if(event.target===this)closeModal()">
+        <div class="modal">
+          <h2>➕ Nová žádost o volno</h2>
+          <form onsubmit="saveLeaveRequest(event)">
+            <div class="form-grid">
+              <div class="form-group">
+                <label>Zaměstnanec *</label>
+                <select name="person_id" required>${options}</select>
+              </div>
+              <div class="form-group">
+                <label>Typ *</label>
+                <select name="type" required>${typeOptions}</select>
+              </div>
+              <div class="form-group">
+                <label>Od *</label>
+                <input type="date" name="date_from" value="${today}" required>
+              </div>
+              <div class="form-group">
+                <label>Do *</label>
+                <input type="date" name="date_to" value="${today}" required>
+              </div>
+              <div class="form-group full">
+                <label>Poznámka</label>
+                <input type="text" name="note">
+              </div>
+            </div>
+            <div class="modal-actions">
+              <button type="button" class="btn btn-secondary" onclick="closeModal()">Zrušit</button>
+              <button type="submit" class="btn btn-primary">Odeslat žádost</button>
+            </div>
+          </form>
+        </div>
+      </div>`;
+    }
+
+    async function saveLeaveRequest(e) {
+      e.preventDefault();
+      const form = new FormData(e.target);
+      const data = {};
+      for (const [k, v] of form.entries()) data[k] = v || null;
+      data.person_id = parseInt(data.person_id);
+      await fetch('/api/hr/leave-requests', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+      closeModal();
+      loadLeaveRequests();
+    }
+
+    async function approveLeave(id) {
+      await fetch('/api/hr/leave-requests/' + id + '/approve', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ approved_by: 'admin' })
+      });
+      loadLeaveRequests();
+    }
+
+    async function rejectLeave(id) {
+      if (!confirm('Zamítnout žádost o volno?')) return;
+      await fetch('/api/hr/leave-requests/' + id + '/reject', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rejected_by: 'admin' })
+      });
+      loadLeaveRequests();
     }
 
     // ============================================================
