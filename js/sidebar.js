@@ -307,115 +307,101 @@ function getCurrentPageInfo() {
 }
 
 function analyzeRequest(description, pageTitle) {
-  // Analyze the user's request in context and generate a specific, thoughtful response
   var d = (description || '').toLowerCase();
   var page = (pageTitle || '').toLowerCase();
-
-  // Build a contextual analysis
   var analysis = { response: '', followups: [] };
 
-  // ---- Org chart / organizační struktura ----
-  if (d.match(/organi[čz]|struktur|strom|hierar|schéma|propoj|čár|větv|úrovn|nadřaz|podříz/) && !d.match(/responsiv|mobil|telefon|tablet/)) {
-    analysis.response = 'Rozumím — chcete upravit organizační strukturu. ';
-    if (page.includes('hr')) {
-      analysis.response += 'Teď máme stromovou strukturu s rolemi propojenými čarami. ';
+  // Page context — what elements exist on current page
+  var pageContext = getPageContext(page);
+
+  // Extract key action words from the request
+  var wantsReplace = d.match(/místo|nahrad|změn|přejmenuj|přepiš|zamění|vyměn/);
+  var wantsAdd = d.match(/přidej|přidat|doplnit|dej|přidání|nové|nový|novou|chybí|chci|chtěl/);
+  var wantsRemove = d.match(/odeber|smaž|zruš|odstraň|nechci|schovat|skrýt/);
+  var wantsMove = d.match(/přesuň|přesunou|posun|přemíst/);
+  var wantsChange = d.match(/uprav|změn|oprav|předělej|jinak|jiný/);
+
+  // Extract what the user is talking about — the object of the request
+  var mentions = extractMentions(d);
+
+  // Build a specific, thoughtful response
+  var r = '';
+
+  // Specific understanding of the request
+  if (wantsReplace) {
+    var parts = d.split(/místo|nahrad|namísto|zamění/);
+    r += 'Rozumím — na stránce <strong>' + pageTitle + '</strong> chcete ';
+    if (parts.length >= 2) {
+      r += 'nahradit jednu věc za druhou. ';
+    } else {
+      r += 'provést záměnu. ';
     }
-    analysis.response += 'Co konkrétně potřebujete změnit?\n\n';
-    analysis.response += '• <strong>Vizuální stránka</strong> — barvy, velikost karet, propojovací čáry, fotky lidí?\n';
-    analysis.response += '• <strong>Hierarchie</strong> — přidat/změnit nadřazené role, nové úrovně?\n';
-    analysis.response += '• <strong>Informace na kartách</strong> — jméno, email, telefon, foto, pozice?\n\n';
-    analysis.response += 'Popište mi, jak by to mělo vypadat — ideálně přiložte screenshot, pokud máte vzor.';
-    return analysis;
-  }
-
-  // ---- Responsivita / mobilní přístup ----
-  if (d.match(/responsiv|mobil|telefon|tablet|phone|touch/)) {
-    var affectedPages = [];
-    if (page.includes('dashboard') || d.match(/všech|celý|každ/)) affectedPages.push('všechny stránky');
-    if (page.includes('hr') || d.match(/lidé|hr|zaměst/)) affectedPages.push('Lidé a HR');
-    if (d.match(/sidebar|menu|navigac/)) affectedPages.push('sidebar navigaci');
-
-    analysis.response = 'Rozumím — chcete, aby ' + (affectedPages.length ? affectedPages.join(', ') : 'aplikace') + ' fungoval/a na mobilních zařízeních. ';
-    analysis.response += 'Teď mám v hlavě toto:\n\n';
-    analysis.response += '• <strong>Sidebar</strong> — na mobilu se musí schovat do hamburger menu\n';
-    analysis.response += '• <strong>Tabulky</strong> — široké tabulky (lidé, docházka, role) musí být horizontálně scrollovatelné nebo se přeložit do karet\n';
-    analysis.response += '• <strong>Modální okna</strong> — formuláře musí být na 100% šířky displeje\n';
-    analysis.response += '• <strong>Dashboard karty</strong> — přeskládat do jednoho sloupce\n\n';
-    analysis.response += 'Na čem vám záleží nejvíc — chcete hlavně <strong>prohlížet data</strong> na telefonu, nebo i <strong>editovat</strong> (přidávat lidi, zapisovat docházku)?';
-    return analysis;
-  }
-
-  // ---- Tabulky / seznamy ----
-  if (d.match(/tabulk|seznam|výpis|sloup|řádk/)) {
-    analysis.response = 'Jakou tabulku máte na mysli? ';
-    if (page.includes('hr')) {
-      analysis.response += 'Na stránce Lidé a HR máme tabulku zaměstnanců, docházky a rolí. ';
+    r += 'Řekněte mi přesně: co tam je teď a co tam má být místo toho? ';
+    if (pageContext.elements.length > 0) {
+      r += 'Na této stránce teď vidím: ' + pageContext.elements.join(', ') + '.';
     }
-    analysis.response += 'Co přesně vám na současné tabulce nevyhovuje — chybí sloupce, špatné řazení, nebo chcete úplně jiné rozložení?';
-    return analysis;
-  }
-
-  // ---- Přidání funkce / pole ----
-  if (d.match(/přidat|doplnit|chybí|nové pole|nová funkc/)) {
-    analysis.response = 'Co přesně vám chybí na stránce <strong>' + pageTitle + '</strong>? ';
-    analysis.response += 'Popište mi to konkrétně — např. "chybí mi pole pro bankovní účet u zaměstnance" nebo "chtěl bych tlačítko pro export do PDF". ';
-    analysis.response += 'Čím konkrétnější budete, tím přesnější bude výsledek.';
-    return analysis;
-  }
-
-  // ---- Design / vzhled ----
-  if (d.match(/barv|styl|design|vzhled|hezč|oškli|font|motiv/)) {
-    analysis.response = 'Rozumím, chcete vizuální změnu. Co konkrétně vám vadí na současném vzhledu? ';
-    analysis.response += 'Zkuste nahrát screenshot a zakroužkovat místo, které chcete změnit — nebo popište, jak by to mělo vypadat jinak.';
-    return analysis;
-  }
-
-  // ---- Export / tisk ----
-  if (d.match(/export|pdf|tisk|csv|excel|vytisknout/)) {
-    analysis.response = 'Jaká data chcete exportovat a v jakém formátu? ';
-    if (page.includes('hr')) {
-      analysis.response += 'Z modulu Lidé a HR můžeme exportovat seznam zaměstnanců, docházkové listy, nebo výplatní přehledy. ';
+  } else if (wantsAdd) {
+    r += 'Chcete přidat něco na stránku <strong>' + pageTitle + '</strong>. ';
+    r += 'Zachytil jsem: <em>"' + description + '"</em>. ';
+    r += 'Abych to uměl přesně realizovat — kam přesně to chcete umístit a jak to má vypadat?';
+  } else if (wantsRemove) {
+    r += 'Rozumím — chcete něco odebrat nebo skrýt na stránce <strong>' + pageTitle + '</strong>. ';
+    r += 'Co přesně má zmizet? Úplně smazat, nebo jen schovat pro určité role?';
+  } else if (wantsMove) {
+    r += 'Chcete přemístit prvek na stránce <strong>' + pageTitle + '</strong>. ';
+    r += 'Odkud a kam přesně? Klidně přiložte screenshot a zakroužkujte.';
+  } else if (wantsChange) {
+    r += 'Chcete upravit něco na stránce <strong>' + pageTitle + '</strong>. ';
+    r += 'Zachytil jsem: <em>"' + description + '"</em>. ';
+    r += 'Jak přesně by to mělo vypadat po úpravě?';
+  } else {
+    // No clear action — paraphrase and ask
+    r += 'Zachytil jsem váš požadavek: <em>"' + description + '"</em>.\n\n';
+    r += 'Pracujete na stránce <strong>' + pageTitle + '</strong>';
+    if (pageContext.elements.length > 0) {
+      r += ', kde teď máme: ' + pageContext.elements.join(', ');
     }
-    analysis.response += 'Pro koho je export určený — pro vás, pro účetní, nebo pro někoho dalšího?';
-    return analysis;
+    r += '. Co přesně chcete změnit?';
   }
 
-  // ---- Notifikace / upozornění ----
-  if (d.match(/notifik|upozorn|alert|připomín|email/)) {
-    analysis.response = 'Na co přesně chcete být upozorněni? ';
-    analysis.response += 'Důležité je vědět: kdo má upozornění dostat, kdy se má spustit (okamžitě, denně, před termínem?), a jakým kanálem (v aplikaci, emailem, nebo obojí)?';
-    return analysis;
-  }
-
-  // ---- Oprávnění / přístupy ----
-  if (d.match(/oprávn|přístup|role|práv|viditelnost|zakáz/)) {
-    analysis.response = 'Teď máme systém oprávnění na úrovni rolí (čtení/úprava/žádný přístup k modulům). ';
-    analysis.response += 'Co přesně chcete omezit nebo povolit — a pro koho? Např. "technici by neměli vidět mzdy" nebo "vedoucí výroby potřebuje editovat jen svůj tým".';
-    return analysis;
-  }
-
-  // ---- Docházka ----
-  if (d.match(/docházk|příchod|odchod|směn|přesčas|dovolen/)) {
-    analysis.response = 'Teď máme základní záznam docházky (ruční). Co potřebujete? ';
-    analysis.response += 'Například: čipové karty, schvalování dovolených, přehled přesčasů, export pro účetní? ';
-    analysis.response += 'Popište mi svůj ideální workflow — jak by to mělo denně fungovat.';
-    return analysis;
-  }
-
-  // ---- Graf / dashboard / statistiky ----
-  if (d.match(/graf|dashboard|statistik|přehled|report|analýz|chart/)) {
-    analysis.response = 'Jaká data chcete vidět v grafickém přehledu? ';
-    analysis.response += 'Je to pro vás jako šéfa (CEO dashboard), nebo pro vedoucí jednotlivých úseků? ';
-    analysis.response += 'Popište mi, jaká čísla nebo trendy jsou pro vás nejdůležitější.';
-    return analysis;
-  }
-
-  // ---- Obecný požadavek — ptáme se na kontext ----
-  analysis.response = 'Rozumím vašemu požadavku. Abych mohl vytvořit přesné zadání, potřebuji vědět pár věcí:\n\n';
-  analysis.response += '1. <strong>Jak přesně</strong> by to mělo vypadat nebo fungovat?\n';
-  analysis.response += '2. <strong>Kdo</strong> s tím bude pracovat — vy, všichni zaměstnanci, nebo specifická role?\n\n';
-  analysis.response += 'Čím víc detailů mi dáte (klidně i screenshot), tím přesnější bude výsledek na první dobrou.';
+  analysis.response = r;
   return analysis;
+}
+
+function getPageContext(page) {
+  var ctx = { elements: [] };
+  if (page.includes('hr') || page.includes('lidé')) {
+    ctx.elements = ['tabulku zaměstnanců', 'docházku', 'org. strukturu (strom rolí)', 'správu rolí s oprávněními', 'oddělení'];
+  } else if (page.includes('mindmap') || page.includes('myšlenk')) {
+    ctx.elements = ['myšlenkovou mapu modulů', 'deploy wizard', 'statusy nasazení'];
+  } else if (page.includes('dashboard') || page.includes('přehled')) {
+    ctx.elements = ['karty modulů', 'sidebar navigaci', 'statistiky'];
+  } else if (page.includes('areál')) {
+    ctx.elements = ['editor půdorysu', 'kreslení hal a cest'];
+  } else if (page.includes('výrob') || page.includes('programov')) {
+    ctx.elements = ['rozmísťování pracovišť', 'logistické trasy'];
+  } else if (page.includes('audit') || page.includes('historie')) {
+    ctx.elements = ['seznam změn', 'rollback', 'filtry'];
+  } else if (page.includes('požadav') || page.includes('task')) {
+    ctx.elements = ['seznam požadavků', 'statusy', 'deploy specifikace'];
+  }
+  return ctx;
+}
+
+function extractMentions(text) {
+  var found = [];
+  var keywords = {
+    'oddělení': 'oddělení', 'společnost': 'společnost', 'firma': 'firma',
+    'tabulk': 'tabulku', 'fotk': 'fotku', 'obrázek': 'obrázek',
+    'sidebar': 'sidebar', 'menu': 'menu', 'tlačítk': 'tlačítko',
+    'pole': 'pole', 'formulář': 'formulář', 'modal': 'modální okno',
+    'role': 'role', 'oprávnění': 'oprávnění', 'barv': 'barvy',
+    'graf': 'graf', 'docházk': 'docházku', 'export': 'export'
+  };
+  for (var key in keywords) {
+    if (text.includes(key)) found.push(keywords[key]);
+  }
+  return found;
 }
 
 function openAiChat() {
@@ -592,27 +578,21 @@ function sendAiMessage() {
 
 function analyzeFollowup(newText, allText, pageTitle) {
   var d = newText.toLowerCase();
-  var all = allText.toLowerCase();
 
-  // If user answered about mobile/responsive
-  if (all.match(/responsiv|mobil/) && d.match(/editovat|zapisovat|přidáv/)) {
-    return 'Takže potřebujete na mobilu i editaci — to znamená, že formuláře musí být dotykově ovládatelné, s většími poli a tlačítky. Budete na telefonu zapisovat docházku nebo spíš upravovat záznamy zaměstnanců?';
-  }
-  if (all.match(/responsiv|mobil/) && d.match(/prohlíž|jen se díva|přehled/)) {
-    return 'Jasně, hlavně prohlížení — to je jednodušší. Tabulky převedu do přehledných karet, sidebar schováme do menu. Chcete mít na mobilní verzi i dashboard se statistikami?';
-  }
+  // Build response that references what was said before
+  var r = 'Zachytil jsem: <em>"' + newText + '"</em>.\n\n';
 
-  // If talking about specific data
-  if (d.match(/všech|celý|komplet/)) {
-    return 'Rozumím, uplatníme to na celou aplikaci. Máte ještě nějaké specifické požadavky na konkrétní stránky, nebo to stačí? Pokud ano, klidně odešlete požadavek.';
-  }
-
-  // If user is adding more detail
-  if (d.length > 30) {
-    return 'Díky za upřesnění, tohle pomůže. Máte ještě něco, nebo můžeme požadavek odeslat?';
+  // Check if user is confirming or adding detail
+  if (d.match(/ano|jo|přesně|správně|souhlasí|ok|jasně|jojo/)) {
+    r = 'Dobře, mám to. Chcete ještě něco doplnit, nebo odešleme požadavek?';
+  } else if (d.match(/ne\b|nikoliv|špatně|blbě|jinak/)) {
+    r = 'Rozumím, tak to upřesněte — co přesně máte na mysli?';
+  } else {
+    // User is adding more context — acknowledge specifically
+    r += 'Tohle doplním k původnímu požadavku. Máte ještě něco, nebo to můžeme odeslat?';
   }
 
-  return 'Zachytil jsem. Chcete ještě něco doplnit, nebo to odešleme?';
+  return r;
 }
 
 function submitAiTask() {
