@@ -356,6 +356,7 @@
           <div class="sub-tab" data-subtab="shifts" onclick="switchAttSubTab('shifts')">⏰ Směny</div>
           <div class="sub-tab" data-subtab="absence-types" onclick="switchAttSubTab('absence-types')">🏷️ Typy nepřítomnosti</div>
           <div class="sub-tab" data-subtab="leave" onclick="switchAttSubTab('leave')">📝 Žádosti o volno</div>
+          <div class="sub-tab" data-subtab="export" onclick="switchAttSubTab('export')">📊 Export pro účetní</div>
         </div>
 
         <!-- Sub: Přehled přítomnosti (real-time) -->
@@ -412,6 +413,31 @@
             <button class="btn btn-primary" onclick="openLeaveRequestModal()">+ Nová žádost</button>
           </div>
           <div id="leave-table"></div>
+        </div>
+
+        <!-- Sub: Export pro účetní -->
+        <div class="att-subtab" id="att-export">
+          <div style="margin-bottom:16px; padding:14px 18px; background:rgba(108,92,231,0.08); border-left:3px solid #6c5ce7; border-radius:0 8px 8px 0; line-height:1.6;">
+            <strong style="color:#6c5ce7;">📊 Export docházkových listů</strong><br>
+            <span style="color:var(--text2); font-size:13px;">Dva režimy exportu: <strong>Surová data</strong> (přesně jak bylo načipováno/zaznamenáno) a <strong>Upravená data</strong> (po korekci vedoucím — pro mzdovou účtárnu). Export ve formátu CSV pro import do účetního SW.</span>
+          </div>
+          <div class="toolbar">
+            <div class="form-group" style="margin:0">
+              <label style="font-size:12px;margin-bottom:4px;display:block;color:var(--text2)">Měsíc</label>
+              <input type="month" id="export-month" style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:13px;">
+            </div>
+            <div class="form-group" style="margin:0">
+              <label style="font-size:12px;margin-bottom:4px;display:block;color:var(--text2)">Zaměstnanec</label>
+              <select id="export-person" style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:13px;">
+                <option value="">Všichni zaměstnanci</option>
+              </select>
+            </div>
+            <div style="flex:1"></div>
+            <button class="btn btn-secondary" onclick="generateExportPreview()">👁️ Náhled</button>
+            <button class="btn btn-primary" onclick="downloadExportCSV('raw')">📥 Export surová data</button>
+            <button class="btn" style="background:#10b981;color:#fff;border-color:#10b981" onclick="downloadExportCSV('adjusted')">📥 Export pro účetní</button>
+          </div>
+          <div id="export-preview" style="margin-top:16px;"></div>
         </div>
       </div>
 
@@ -1099,6 +1125,7 @@
       if (tab === 'shifts') loadShifts();
       if (tab === 'absence-types') loadAbsenceTypes();
       if (tab === 'leave') loadLeaveRequests();
+      if (tab === 'export') { loadPeopleData().then(() => populateExportFilters()); }
     }
 
     // ============================================================
@@ -1475,6 +1502,200 @@
         body: JSON.stringify({ rejected_by: 'admin' })
       });
       loadLeaveRequests();
+    }
+
+    // ============================================================
+    // ATTENDANCE EXPORT
+    // ============================================================
+    async function generateExportPreview() {
+      const month = document.getElementById('export-month').value;
+      const personId = document.getElementById('export-person').value;
+      if (!month) {
+        document.getElementById('export-preview').innerHTML = '<div class="empty-state"><div class="empty-icon">📅</div><h3>Vyberte měsíc</h3></div>';
+        return;
+      }
+      let url = '/api/hr/attendance?month=' + month;
+      if (personId) url += '&person_id=' + personId;
+      try {
+        const res = await fetch(url);
+        const records = await res.json();
+        await loadPeopleData();
+        renderExportPreview(records, month);
+      } catch (e) { console.error(e); }
+    }
+
+    function renderExportPreview(records, month) {
+      const el = document.getElementById('export-preview');
+      if (!records || records.length === 0) {
+        el.innerHTML = '<div class="empty-state"><div class="empty-icon">📊</div><h3>Žádné záznamy pro vybraný měsíc</h3></div>';
+        return;
+      }
+      // Group by person
+      const byPerson = {};
+      for (const r of records) {
+        if (!byPerson[r.person_id]) byPerson[r.person_id] = { name: r.first_name + ' ' + r.last_name, records: [] };
+        byPerson[r.person_id].records.push(r);
+      }
+
+      let html = '<div style="font-size:13px;color:var(--text2);margin-bottom:12px;">Náhled exportu za <strong>' + month + '</strong> — ' + records.length + ' záznamů, ' + Object.keys(byPerson).length + ' zaměstnanců</div>';
+      html += '<table class="data-table"><thead><tr><th>Datum</th><th>Jméno</th><th>Příchod (čip)</th><th>Odchod (čip)</th><th>Příchod (uprav.)</th><th>Odchod (uprav.)</th><th>Přestávka</th><th>Odprac. (čip)</th><th>Odprac. (uprav.)</th><th>Typ</th><th style="width:40px"></th></tr></thead><tbody>';
+
+      for (const r of records.sort((a,b) => a.date.localeCompare(b.date) || a.person_id - b.person_id)) {
+        const rawWorked = calcWorked(r.clock_in, r.clock_out, r.break_minutes);
+        const adjIn = r.adjusted_clock_in || r.clock_in;
+        const adjOut = r.adjusted_clock_out || r.clock_out;
+        const adjBreak = r.adjusted_break != null ? r.adjusted_break : r.break_minutes;
+        const adjWorked = calcWorked(adjIn, adjOut, adjBreak);
+        const changed = (r.adjusted_clock_in || r.adjusted_clock_out || r.adjusted_break != null);
+        const typeLabels = { work: 'Práce', vacation: 'Dovolená', sick: 'Nemoc', holiday: 'Svátek', lunch: 'Oběd', doctor: 'Lékař', personal: 'Soukromě', other: 'Jiné' };
+
+        html += `<tr${changed ? ' style="background:rgba(16,185,129,0.05)"' : ''}>
+          <td>${formatDate(r.date)}</td>
+          <td class="person-name">${r.first_name} ${r.last_name}</td>
+          <td>${r.clock_in || '—'}</td><td>${r.clock_out || '—'}</td>
+          <td><input type="time" value="${adjIn || ''}" onchange="updateAdjusted(${r.id},'adjusted_clock_in',this.value)" style="background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:3px 6px;color:var(--text);font-size:12px;width:90px"></td>
+          <td><input type="time" value="${adjOut || ''}" onchange="updateAdjusted(${r.id},'adjusted_clock_out',this.value)" style="background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:3px 6px;color:var(--text);font-size:12px;width:90px"></td>
+          <td><input type="number" value="${adjBreak}" onchange="updateAdjusted(${r.id},'adjusted_break',parseInt(this.value))" style="background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:3px 6px;color:var(--text);font-size:12px;width:55px" min="0"> min</td>
+          <td>${rawWorked}</td>
+          <td><strong>${adjWorked}</strong></td>
+          <td>${typeLabels[r.type] || r.type}</td>
+          <td>${changed ? '<span title="Upraveno vedoucím" style="color:#10b981">✎</span>' : ''}</td>
+        </tr>`;
+      }
+      html += '</tbody></table>';
+
+      // Summary per person
+      html += '<div style="margin-top:20px"><h3 style="font-size:14px;margin-bottom:10px;">📊 Souhrn za měsíc</h3>';
+      html += '<table class="data-table"><thead><tr><th>Zaměstnanec</th><th>Dní</th><th>Odprac. (čip)</th><th>Odprac. (uprav.)</th><th>Přesčas</th></tr></thead><tbody>';
+      for (const [pid, info] of Object.entries(byPerson)) {
+        const workRecords = info.records.filter(r => r.type === 'work');
+        let rawTotal = 0, adjTotal = 0;
+        for (const r of workRecords) {
+          rawTotal += calcWorkedMins(r.clock_in, r.clock_out, r.break_minutes);
+          const adjIn = r.adjusted_clock_in || r.clock_in;
+          const adjOut = r.adjusted_clock_out || r.clock_out;
+          const adjBreak = r.adjusted_break != null ? r.adjusted_break : r.break_minutes;
+          adjTotal += calcWorkedMins(adjIn, adjOut, adjBreak);
+        }
+        // Assume 8h/day standard fund
+        const fundMins = workRecords.length * 8 * 60;
+        const overtime = Math.max(0, adjTotal - fundMins);
+        html += `<tr>
+          <td class="person-name">${info.name}</td>
+          <td>${workRecords.length}</td>
+          <td>${formatMins(rawTotal)}</td>
+          <td><strong>${formatMins(adjTotal)}</strong></td>
+          <td style="color:${overtime > 0 ? '#f59e0b' : 'var(--text2)'}">${overtime > 0 ? '+' + formatMins(overtime) : '—'}</td>
+        </tr>`;
+      }
+      html += '</tbody></table></div>';
+      el.innerHTML = html;
+    }
+
+    function calcWorkedMins(clockIn, clockOut, breakMins) {
+      if (!clockIn || !clockOut) return 0;
+      const [ih, im] = clockIn.split(':').map(Number);
+      const [oh, om] = clockOut.split(':').map(Number);
+      return Math.max(0, (oh * 60 + om) - (ih * 60 + im) - (breakMins || 0));
+    }
+
+    function calcWorked(clockIn, clockOut, breakMins) {
+      const mins = calcWorkedMins(clockIn, clockOut, breakMins);
+      if (mins <= 0) return '—';
+      return Math.floor(mins / 60) + 'h ' + (mins % 60) + 'm';
+    }
+
+    function formatMins(totalMins) {
+      if (totalMins <= 0) return '0h';
+      return Math.floor(totalMins / 60) + 'h ' + (totalMins % 60) + 'm';
+    }
+
+    async function updateAdjusted(recordId, field, value) {
+      try {
+        const body = {};
+        body[field] = value;
+        await fetch('/api/hr/attendance/' + recordId, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+      } catch (e) { console.error(e); }
+    }
+
+    async function downloadExportCSV(mode) {
+      const month = document.getElementById('export-month').value;
+      const personId = document.getElementById('export-person').value;
+      if (!month) { alert('Vyberte měsíc pro export'); return; }
+
+      let url = '/api/hr/attendance?month=' + month;
+      if (personId) url += '&person_id=' + personId;
+      try {
+        const res = await fetch(url);
+        const records = await res.json();
+
+        // Build CSV
+        const sep = ';'; // Czech Excel uses semicolon
+        const headers = ['Datum', 'Příjmení', 'Jméno', 'Příchod', 'Odchod', 'Přestávka (min)', 'Odpracováno (min)', 'Odpracováno', 'Typ', 'Poznámka'];
+        let csv = headers.join(sep) + '\n';
+
+        for (const r of records.sort((a,b) => a.date.localeCompare(b.date) || (a.last_name||'').localeCompare(b.last_name||''))) {
+          let clockIn, clockOut, breakMins;
+          if (mode === 'adjusted') {
+            clockIn = r.adjusted_clock_in || r.clock_in;
+            clockOut = r.adjusted_clock_out || r.clock_out;
+            breakMins = r.adjusted_break != null ? r.adjusted_break : (r.break_minutes || 0);
+          } else {
+            clockIn = r.clock_in;
+            clockOut = r.clock_out;
+            breakMins = r.break_minutes || 0;
+          }
+          const workedMins = calcWorkedMins(clockIn, clockOut, breakMins);
+          const workedStr = calcWorked(clockIn, clockOut, breakMins);
+          const typeLabels = { work: 'Práce', vacation: 'Dovolená', sick: 'Nemoc', holiday: 'Svátek', lunch: 'Oběd', doctor: 'Lékař', personal: 'Soukromě', homeoffice: 'Home office', other: 'Jiné' };
+
+          csv += [
+            r.date,
+            r.last_name || '',
+            r.first_name || '',
+            clockIn || '',
+            clockOut || '',
+            breakMins,
+            workedMins,
+            workedStr,
+            typeLabels[r.type] || r.type,
+            (r.note || '').replace(/;/g, ',')
+          ].join(sep) + '\n';
+        }
+
+        // Download
+        const BOM = '\uFEFF'; // UTF-8 BOM for Excel
+        const blob = new Blob([BOM + csv], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        const modeLabel = mode === 'adjusted' ? 'upravena' : 'surova';
+        link.download = 'dochazka_' + month + '_' + modeLabel + '.csv';
+        link.click();
+        URL.revokeObjectURL(link.href);
+      } catch (e) {
+        console.error(e);
+        alert('Chyba při exportu: ' + e.message);
+      }
+    }
+
+    // Populate export person filter when switching to export tab
+    function populateExportFilters() {
+      const sel = document.getElementById('export-person');
+      if (sel && sel.options.length <= 1 && people.length > 0) {
+        for (const p of people.filter(x => x.type === 'employee')) {
+          sel.add(new Option(p.first_name + ' ' + p.last_name, p.id));
+        }
+      }
+      // Default to current month
+      const monthInput = document.getElementById('export-month');
+      if (monthInput && !monthInput.value) {
+        const now = new Date();
+        monthInput.value = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+      }
     }
 
     // ============================================================
