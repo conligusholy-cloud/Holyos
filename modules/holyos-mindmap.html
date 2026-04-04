@@ -594,6 +594,46 @@ body {
 }
 .wiz-chip.selected { border-color: var(--accent); background: rgba(108,92,231,0.15); color: var(--accent); }
 .wiz-chip:hover { border-color: var(--accent); }
+
+/* Module management */
+.add-module-btn {
+  display: flex; align-items: center; gap: 8px; padding: 8px 12px; margin: 4px 0 4px 32px;
+  border-radius: 8px; cursor: pointer; color: var(--text2); font-size: 13px;
+  border: 1px dashed rgba(255,255,255,0.1); transition: all 0.2s; background: none;
+  font-family: inherit;
+}
+.add-module-btn:hover { color: var(--accent); border-color: var(--accent); background: rgba(108,92,231,0.06); }
+
+.node-actions {
+  display: none; position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+  gap: 4px;
+}
+.node-header:hover .node-actions { display: flex; }
+.node-action-btn {
+  width: 24px; height: 24px; border-radius: 6px; border: none;
+  background: rgba(255,255,255,0.06); color: var(--text2); cursor: pointer;
+  font-size: 12px; display: flex; align-items: center; justify-content: center;
+  transition: all 0.15s;
+}
+.node-action-btn:hover { background: rgba(239,68,68,0.15); color: #ef4444; }
+.node-action-btn.edit-btn:hover { background: rgba(108,92,231,0.15); color: var(--accent); }
+
+.mod-modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); z-index: 300; display: flex; align-items: center; justify-content: center; }
+.mod-modal { background: var(--surface); border: 1px solid rgba(255,255,255,0.1); border-radius: 14px; padding: 28px; width: 520px; max-width: 95vw; max-height: 90vh; overflow-y: auto; }
+.mod-modal h2 { font-size: 18px; margin-bottom: 20px; }
+.mod-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.mod-form-group { display: flex; flex-direction: column; gap: 4px; }
+.mod-form-group.full { grid-column: 1 / -1; }
+.mod-form-group label { font-size: 12px; font-weight: 500; color: var(--text2); }
+.mod-form-group input, .mod-form-group select, .mod-form-group textarea {
+  background: var(--bg); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px;
+  padding: 8px 12px; color: var(--text); font-size: 13px; font-family: inherit;
+}
+.mod-form-group textarea { resize: vertical; min-height: 60px; }
+.mod-form-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 24px; }
+.color-picker-row { display: flex; gap: 6px; flex-wrap: wrap; }
+.color-dot { width: 28px; height: 28px; border-radius: 50%; cursor: pointer; border: 2px solid transparent; transition: all 0.15s; }
+.color-dot:hover, .color-dot.active { border-color: #fff; transform: scale(1.15); }
 </style>
 </head>
 <body>
@@ -872,6 +912,21 @@ async function loadFromServer() {
     state.applied = data.applied || {};
     state.featuresOverride = data.featuresOverride || {};
     state.reviewed = data.reviewed || {};
+    state.hiddenModules = data.hiddenModules || [];
+    state.customModuleIds = [];
+
+    // Load and merge custom modules
+    const customModules = data.customModules || [];
+    for (const cm of customModules) {
+      const existing = DATA.modules.findIndex(m => m.id === cm.id);
+      if (existing >= 0) {
+        // Update existing
+        Object.assign(DATA.modules[existing], cm);
+      } else {
+        DATA.modules.push(cm);
+      }
+      state.customModuleIds.push(cm.id);
+    }
 
     const allItems = [...DATA.modules, DATA.ai, DATA.tech].filter(Boolean);
     for (const mod of allItems) {
@@ -884,9 +939,16 @@ async function loadFromServer() {
       }
     }
     updateApplyButton();
+    updateHeaderStats();
   } catch (e) {
     console.warn('Cannot load notes from server, using empty:', e);
   }
+}
+
+function updateHeaderStats() {
+  const visible = DATA.modules.filter(m => !state.hiddenModules || !state.hiddenModules.includes(m.id));
+  const headerP = document.querySelector('.header p');
+  if (headerP) headerP.textContent = 'Kompletní přehled firemního OS • ' + visible.length + ' modulů • 4 fáze realizace';
 }
 
 async function saveToServer() {
@@ -1028,12 +1090,26 @@ function renderTree() {
   const tree = document.getElementById('tree');
   let html = '';
 
+  const visibleModules = DATA.modules.filter(m => {
+    if (state.hiddenModules && state.hiddenModules.includes(m.id)) return false;
+    if (state.phaseFilter !== 'all' && String(m.phase) !== state.phaseFilter) return false;
+    return true;
+  });
+
   // Core node
   html += renderNode(DATA.core, [
-    ...DATA.modules.filter(m => state.phaseFilter === 'all' || String(m.phase) === state.phaseFilter),
+    ...visibleModules,
     DATA.ai,
     DATA.tech,
   ]);
+
+  // Add module button
+  html += `<button class="add-module-btn" onclick="openModuleModal()">＋ Přidat modul</button>`;
+
+  // Show hidden modules toggle
+  if (state.hiddenModules && state.hiddenModules.length > 0) {
+    html += `<button class="add-module-btn" onclick="showHiddenModules()" style="font-size:11px;margin-top:0">👁 Zobrazit skryté (${state.hiddenModules.length})</button>`;
+  }
 
   tree.innerHTML = html;
 }
@@ -1079,6 +1155,15 @@ function renderNode(item, children) {
   html += `<span class="node-icon" style="background:${item.color}22;color:${item.color}">${item.icon}</span>`;
   html += `<span class="node-label">${highlightText(item.label)}</span>`;
   html += phaseTag + implTag + noteTag;
+  // Module action buttons (not for core/ai/tech built-in specials)
+  const isModule = DATA.modules.some(m => m.id === item.id);
+  const isCustom = state.customModuleIds && state.customModuleIds.includes(item.id);
+  if (isModule) {
+    html += `<span class="node-actions">`;
+    html += `<button class="node-action-btn edit-btn" onclick="event.stopPropagation(); openModuleModal('${item.id}')" title="Upravit modul">✏</button>`;
+    html += `<button class="node-action-btn" onclick="event.stopPropagation(); removeModule('${item.id}', ${isCustom})" title="${isCustom ? 'Smazat modul' : 'Skrýt modul'}">✕</button>`;
+    html += `</span>`;
+  }
   html += `</div>`;
 
   if (hasChildren) {
@@ -1811,7 +1896,7 @@ function renderDetail() {
         <h2>HolyOS — Myšlenková mapa</h2>
         <p style="color:var(--text2)">Klikni na modul vlevo pro zobrazení detailu</p>
         <div class="stats-row" style="margin-top:24px;width:100%;max-width:600px">
-          <div class="stat-card"><div class="stat-val" style="color:#6c5ce7">12</div><div class="stat-label">Modulů</div></div>
+          <div class="stat-card"><div class="stat-val" style="color:#6c5ce7">${DATA.modules.filter(m => !state.hiddenModules || !state.hiddenModules.includes(m.id)).length}</div><div class="stat-label">Modulů</div></div>
           <div class="stat-card"><div class="stat-val" style="color:#0984e3">4</div><div class="stat-label">Fáze realizace</div></div>
           <div class="stat-card"><div class="stat-val" style="color:#00b894">5</div><div class="stat-label">Oborů</div></div>
           <div class="stat-card"><div class="stat-val" style="color:#e84393">30+</div><div class="stat-label">Zaměstnanců</div></div>
@@ -2294,6 +2379,174 @@ async function restoreVersion(id) {
 
 function closeModal() {
   document.getElementById('modal-root').innerHTML = '';
+}
+
+// ============================================================
+// MODULE MANAGEMENT (add / edit / remove / hide)
+// ============================================================
+const MODULE_COLORS = ['#6c5ce7','#0984e3','#00b894','#f59e0b','#e84393','#ef4444','#10b981','#8b5cf6','#00cec9','#fbbf24','#64748b','#ec4899'];
+const MODULE_ICONS = ['📦','🏭','🔧','🧺','🚗','💰','✅','🤝','🛒','📊','⚡','🤖','📋','🎯','💎','🔬','📡','🏗️','🎓','🛡️'];
+
+function openModuleModal(editId) {
+  let mod = null;
+  if (editId) {
+    mod = DATA.modules.find(m => m.id === editId);
+  }
+
+  const selColor = mod ? mod.color : '#6c5ce7';
+  const selIcon = mod ? mod.icon : '📦';
+
+  let colorDots = MODULE_COLORS.map(c => `<div class="color-dot ${c === selColor ? 'active' : ''}" style="background:${c}" onclick="selectModColor(this, '${c}')"></div>`).join('');
+  let iconDots = MODULE_ICONS.map(ic => `<div class="color-dot ${ic === selIcon ? 'active' : ''}" style="background:var(--surface2);font-size:16px;display:flex;align-items:center;justify-content:center" onclick="selectModIcon(this, '${ic}')">${ic}</div>`).join('');
+
+  document.getElementById('modal-root').innerHTML = `<div class="mod-modal-overlay" onclick="if(event.target===this)closeModal()">
+    <div class="mod-modal">
+      <h2>${mod ? '✏ Upravit modul' : '＋ Nový modul'}</h2>
+      <form onsubmit="saveModule(event, ${mod ? "'" + mod.id + "'" : 'null'})">
+        <div class="mod-form-grid">
+          <div class="mod-form-group full"><label>Název modulu *</label><input type="text" name="label" required value="${mod ? mod.label.replace(/^\d+\.\s*/, '') : ''}" placeholder="Např. Kvalita a kontrola"></div>
+          <div class="mod-form-group full"><label>Popis</label><input type="text" name="desc" value="${mod ? (mod.desc || '') : ''}" placeholder="Krátký popis modulu..."></div>
+          <div class="mod-form-group"><label>Fáze realizace</label>
+            <select name="phase">
+              <option value="1" ${mod && mod.phase === 1 ? 'selected' : ''}>Fáze 1 — Jádro</option>
+              <option value="2" ${mod && mod.phase === 2 ? 'selected' : ''}>Fáze 2 — Operativa</option>
+              <option value="3" ${!mod || mod.phase === 3 ? 'selected' : ''}>Fáze 3 — Byznys</option>
+              <option value="4" ${mod && mod.phase === 4 ? 'selected' : ''}>Fáze 4 — Inteligence</option>
+            </select>
+          </div>
+          <div class="mod-form-group"><label>ID (unikátní)</label><input type="text" name="id" value="${mod ? mod.id : ''}" placeholder="napr-kvalita" pattern="[a-z0-9_-]+" ${mod ? 'readonly style="opacity:0.5"' : ''}></div>
+          <div class="mod-form-group full"><label>Barva</label><div class="color-picker-row" id="color-picker">${colorDots}</div><input type="hidden" name="color" value="${selColor}"></div>
+          <div class="mod-form-group full"><label>Ikona</label><div class="color-picker-row" id="icon-picker">${iconDots}</div><input type="hidden" name="icon" value="${selIcon}"></div>
+          <div class="mod-form-group full"><label>Funkce (každý řádek = 1 funkce)</label><textarea name="features" rows="4" placeholder="Funkce 1&#10;Funkce 2&#10;Funkce 3">${mod && mod.features ? mod.features.map(f => typeof f === 'object' ? f.text : f).join('\n') : ''}</textarea></div>
+        </div>
+        <div class="mod-form-actions">
+          <button type="button" class="wiz-btn wiz-btn-secondary" onclick="closeModal()">Zrušit</button>
+          <button type="submit" class="wiz-btn wiz-btn-primary">${mod ? 'Uložit změny' : 'Přidat modul'}</button>
+        </div>
+      </form>
+    </div>
+  </div>`;
+}
+
+function selectModColor(el, color) {
+  document.querySelectorAll('#color-picker .color-dot').forEach(d => d.classList.remove('active'));
+  el.classList.add('active');
+  document.querySelector('input[name="color"]').value = color;
+}
+
+function selectModIcon(el, icon) {
+  document.querySelectorAll('#icon-picker .color-dot').forEach(d => d.classList.remove('active'));
+  el.classList.add('active');
+  document.querySelector('input[name="icon"]').value = icon;
+}
+
+async function saveModule(e, existingId) {
+  e.preventDefault();
+  const f = new FormData(e.target);
+  const id = existingId || f.get('id') || f.get('label').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/-+$/, '');
+  const featuresRaw = f.get('features') || '';
+  const features = featuresRaw.split('\n').map(l => l.trim()).filter(l => l);
+
+  // Determine label number
+  let label = f.get('label');
+  if (!existingId) {
+    const visible = DATA.modules.filter(m => !state.hiddenModules || !state.hiddenModules.includes(m.id));
+    const maxNum = visible.reduce((max, m) => {
+      const match = m.label.match(/^(\d+)\./);
+      return match ? Math.max(max, parseInt(match[1])) : max;
+    }, 0);
+    label = (maxNum + 1) + '. ' + label;
+  }
+
+  const body = {
+    id,
+    icon: f.get('icon'),
+    label: existingId ? (DATA.modules.find(m => m.id === existingId)?.label.match(/^\d+\.\s*/) || [''])[0] + f.get('label') : label,
+    color: f.get('color'),
+    phase: parseInt(f.get('phase')),
+    desc: f.get('desc'),
+    features,
+    connections: [],
+  };
+
+  try {
+    const resp = await fetch('/api/mindmap/modules', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+    const result = await resp.json();
+    if (!result.ok) throw new Error(result.error);
+
+    // Update local data
+    const existing = DATA.modules.findIndex(m => m.id === id);
+    if (existing >= 0) {
+      Object.assign(DATA.modules[existing], body);
+    } else {
+      DATA.modules.push(body);
+      if (!state.customModuleIds) state.customModuleIds = [];
+      state.customModuleIds.push(id);
+    }
+    closeModal();
+    updateHeaderStats();
+    renderTree();
+    renderDetail();
+  } catch (err) {
+    alert('Chyba: ' + err.message);
+  }
+}
+
+async function removeModule(moduleId, isCustom) {
+  const mod = DATA.modules.find(m => m.id === moduleId);
+  const name = mod ? mod.label : moduleId;
+
+  if (isCustom) {
+    if (!confirm('Smazat modul "' + name + '"? Tato akce je nevratná.')) return;
+    try {
+      await fetch('/api/mindmap/modules/' + moduleId, { method: 'DELETE' });
+      DATA.modules = DATA.modules.filter(m => m.id !== moduleId);
+      state.customModuleIds = (state.customModuleIds || []).filter(id => id !== moduleId);
+      if (state.selected === moduleId) state.selected = null;
+    } catch (e) { alert('Chyba: ' + e.message); return; }
+  } else {
+    if (!confirm('Skrýt modul "' + name + '"? Můžete jej kdykoliv znovu zobrazit.')) return;
+    try {
+      await fetch('/api/mindmap/modules/toggle-visibility', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ moduleId, hidden: true }) });
+      if (!state.hiddenModules) state.hiddenModules = [];
+      state.hiddenModules.push(moduleId);
+      if (state.selected === moduleId) state.selected = null;
+    } catch (e) { alert('Chyba: ' + e.message); return; }
+  }
+  updateHeaderStats();
+  renderTree();
+  renderDetail();
+}
+
+function showHiddenModules() {
+  const hidden = (state.hiddenModules || []).map(id => {
+    const m = DATA.modules.find(mod => mod.id === id);
+    return m ? m : { id, label: id, icon: '❓' };
+  });
+  let list = hidden.map(m => `<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:8px;background:var(--bg);margin-bottom:6px;">
+    <span style="font-size:20px">${m.icon}</span>
+    <span style="flex:1;font-size:14px">${m.label}</span>
+    <button class="wiz-btn wiz-btn-primary" style="padding:4px 12px;font-size:12px" onclick="unhideModule('${m.id}')">👁 Zobrazit</button>
+  </div>`).join('');
+
+  document.getElementById('modal-root').innerHTML = `<div class="mod-modal-overlay" onclick="if(event.target===this)closeModal()">
+    <div class="mod-modal" style="max-width:420px">
+      <h2>👁 Skryté moduly</h2>
+      ${list || '<p style="color:var(--text2)">Žádné skryté moduly</p>'}
+      <div class="mod-form-actions"><button class="wiz-btn wiz-btn-secondary" onclick="closeModal()">Zavřít</button></div>
+    </div>
+  </div>`;
+}
+
+async function unhideModule(moduleId) {
+  try {
+    await fetch('/api/mindmap/modules/toggle-visibility', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ moduleId, hidden: false }) });
+    state.hiddenModules = (state.hiddenModules || []).filter(id => id !== moduleId);
+    closeModal();
+    updateHeaderStats();
+    renderTree();
+    renderDetail();
+  } catch (e) { alert('Chyba: ' + e.message); }
 }
 
 // ============================================================
