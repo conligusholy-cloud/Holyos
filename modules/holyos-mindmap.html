@@ -523,10 +523,12 @@ body {
 <body>
 
 <div class="header">
-  <div>
+  <div style="display:flex;align-items:center;gap:14px;">
+    <a href="/" style="display:flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:8px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.1);text-decoration:none;color:var(--text2);font-size:18px;transition:all 0.2s;flex-shrink:0;" onmouseover="this.style.background='rgba(255,255,255,0.15)';this.style.color='#fff'" onmouseout="this.style.background='rgba(255,255,255,0.08)';this.style.color='var(--text2)'">&larr;</a>
+    <div>
     <h1>HolyOS — Myšlenková mapa</h1>
     <p>Kompletní přehled firemního OS • 12 modulů • 4 fáze realizace</p>
-  </div>
+  </div></div>
   <div class="header-right">
     <button class="header-btn" id="btn-apply-notes" onclick="applyAllNotes()" style="background:rgba(251,191,36,0.3);border-color:rgba(251,191,36,0.4);display:none">🤖 Zapracovat poznámky (AI)</button>
     <button class="header-btn" onclick="expandAll()">Rozbalit vše</button>
