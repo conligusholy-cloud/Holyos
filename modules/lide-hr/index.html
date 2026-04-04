@@ -1,0 +1,832 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lidé a HR | HOLYOS</title>
+  <link rel="icon" type="image/svg+xml" href="../../logo-holyos-icon.svg">
+  <base href="../../">
+  <link rel="stylesheet" href="css/dashboard.css">
+  <style>
+    .main-wrapper { margin-left: var(--sidebar-w); flex: 1; min-height: 100vh; display: flex; flex-direction: column; }
+
+    /* Header */
+    .module-header {
+      background: linear-gradient(135deg, #6c5ce7 0%, #4834d4 100%);
+      padding: 28px 32px 20px;
+      display: flex; align-items: center; gap: 16px;
+    }
+    .module-header-icon { font-size: 36px; }
+    .module-header h1 { font-size: 22px; font-weight: 700; }
+    .module-header p { font-size: 13px; color: rgba(255,255,255,0.7); margin-top: 2px; }
+
+    /* Tabs */
+    .tabs { display: flex; gap: 0; background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 24px; }
+    .tab {
+      padding: 12px 20px; font-size: 13px; font-weight: 500; color: var(--text2);
+      cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.2s;
+    }
+    .tab:hover { color: var(--text); }
+    .tab.active { color: #6c5ce7; border-bottom-color: #6c5ce7; }
+
+    /* Stats bar */
+    .stats-bar { display: flex; gap: 16px; padding: 20px 24px; flex-wrap: wrap; }
+    .stat-card {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+      padding: 16px 20px; min-width: 150px; flex: 1;
+    }
+    .stat-card .stat-value { font-size: 28px; font-weight: 700; color: #6c5ce7; }
+    .stat-card .stat-label { font-size: 12px; color: var(--text2); margin-top: 4px; }
+
+    /* Content area */
+    .content { padding: 0 24px 24px; flex: 1; }
+
+    /* Toolbar */
+    .toolbar { display: flex; gap: 12px; margin-bottom: 16px; align-items: center; flex-wrap: wrap; }
+    .toolbar input[type="text"] {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+      padding: 8px 14px; color: var(--text); font-size: 13px; width: 260px;
+    }
+    .toolbar input[type="text"]::placeholder { color: var(--text2); }
+    .toolbar select {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+      padding: 8px 12px; color: var(--text); font-size: 13px;
+    }
+    .btn {
+      padding: 8px 18px; border-radius: 8px; border: 1px solid var(--border);
+      font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.15s;
+      display: inline-flex; align-items: center; gap: 6px;
+    }
+    .btn-primary { background: #6c5ce7; color: #fff; border-color: #6c5ce7; }
+    .btn-primary:hover { background: #5a4bd6; }
+    .btn-secondary { background: var(--surface2); color: var(--text); }
+    .btn-secondary:hover { background: var(--border); }
+    .btn-danger { background: rgba(239,68,68,0.15); color: #ef4444; border-color: rgba(239,68,68,0.3); }
+    .btn-danger:hover { background: rgba(239,68,68,0.25); }
+    .btn-sm { padding: 5px 12px; font-size: 12px; }
+
+    /* Table */
+    .data-table { width: 100%; border-collapse: separate; border-spacing: 0; }
+    .data-table thead { position: sticky; top: 0; z-index: 1; }
+    .data-table th {
+      background: var(--surface2); padding: 10px 14px; text-align: left;
+      font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;
+      color: var(--text2); border-bottom: 1px solid var(--border);
+    }
+    .data-table td {
+      padding: 10px 14px; font-size: 13px; border-bottom: 1px solid rgba(255,255,255,0.04);
+      vertical-align: middle;
+    }
+    .data-table tr:hover td { background: rgba(108,92,231,0.06); }
+    .data-table tr { cursor: pointer; }
+    .person-name { font-weight: 600; }
+    .badge {
+      display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 500;
+    }
+    .badge-employee { background: rgba(108,92,231,0.2); color: #a78bfa; }
+    .badge-contact { background: rgba(59,130,246,0.2); color: #60a5fa; }
+    .badge-supplier { background: rgba(245,158,11,0.2); color: #fbbf24; }
+    .badge-customer { background: rgba(16,185,129,0.2); color: #34d399; }
+    .badge-external { background: rgba(156,163,175,0.2); color: #9ca3af; }
+    .badge-active { background: rgba(34,197,94,0.2); color: #4ade80; }
+    .badge-inactive { background: rgba(239,68,68,0.2); color: #f87171; }
+    .badge-HPP { background: rgba(108,92,231,0.2); color: #a78bfa; }
+    .badge-DPP { background: rgba(245,158,11,0.2); color: #fbbf24; }
+    .badge-DPC { background: rgba(14,165,233,0.2); color: #38bdf8; }
+
+    /* Modal */
+    .modal-overlay {
+      position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.6); z-index: 200; display: flex;
+      align-items: center; justify-content: center;
+    }
+    .modal {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+      padding: 28px; width: 560px; max-width: 95vw; max-height: 90vh; overflow-y: auto;
+    }
+    .modal h2 { font-size: 18px; margin-bottom: 20px; }
+    .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 24px; }
+
+    /* Form */
+    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .form-group { display: flex; flex-direction: column; gap: 4px; }
+    .form-group.full { grid-column: 1 / -1; }
+    .form-group label { font-size: 12px; font-weight: 500; color: var(--text2); }
+    .form-group input, .form-group select, .form-group textarea {
+      background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+      padding: 8px 12px; color: var(--text); font-size: 13px; font-family: inherit;
+    }
+    .form-group textarea { resize: vertical; min-height: 60px; }
+
+    /* Empty state */
+    .empty-state {
+      text-align: center; padding: 60px 20px; color: var(--text2);
+    }
+    .empty-state .empty-icon { font-size: 48px; margin-bottom: 12px; }
+    .empty-state h3 { font-size: 16px; color: var(--text); margin-bottom: 6px; }
+
+    /* Attendance */
+    .att-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; }
+    .att-card {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+      padding: 14px; font-size: 13px;
+    }
+    .att-card .att-name { font-weight: 600; margin-bottom: 6px; }
+    .att-card .att-time { color: #4ade80; font-size: 14px; font-weight: 600; }
+    .att-card .att-status { font-size: 11px; color: var(--text2); }
+
+    /* Org chart */
+    .org-tree { padding: 20px; }
+    .org-node {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+      padding: 12px 16px; margin: 8px 0; display: inline-flex; align-items: center; gap: 10px;
+    }
+    .org-children { margin-left: 32px; border-left: 2px solid var(--border); padding-left: 16px; }
+
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    @media (max-width: 768px) {
+      .form-grid { grid-template-columns: 1fr; }
+      .stats-bar { flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+  <aside id="sidebar" class="sidebar"></aside>
+
+  <div class="main-wrapper">
+    <!-- Module header -->
+    <div class="module-header">
+      <div class="module-header-icon">👥</div>
+      <div>
+        <h1>Lidé a HR</h1>
+        <p>Evidence zaměstnanců, docházka, mzdy, organizační struktura</p>
+      </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="tabs">
+      <div class="tab active" data-tab="people" onclick="switchTab('people')">👥 Lidé</div>
+      <div class="tab" data-tab="attendance" onclick="switchTab('attendance')">🕐 Docházka</div>
+      <div class="tab" data-tab="org" onclick="switchTab('org')">🏢 Organizační struktura</div>
+      <div class="tab" data-tab="roles" onclick="switchTab('roles')">🔑 Role a oprávnění</div>
+    </div>
+
+    <!-- Stats bar -->
+    <div class="stats-bar" id="stats-bar"></div>
+
+    <!-- Content -->
+    <div class="content">
+
+      <!-- TAB: Lidé -->
+      <div class="tab-content active" id="tab-people">
+        <div class="toolbar">
+          <input type="text" id="search-people" placeholder="🔍 Hledat osobu..." oninput="loadPeople()">
+          <select id="filter-type" onchange="loadPeople()">
+            <option value="">Všechny typy</option>
+            <option value="employee">Zaměstnanci</option>
+            <option value="contact">Kontakty</option>
+            <option value="customer">Zákazníci</option>
+            <option value="supplier">Dodavatelé</option>
+            <option value="external">Externí</option>
+          </select>
+          <div style="flex:1"></div>
+          <button class="btn btn-primary" onclick="openPersonModal()">+ Nová osoba</button>
+        </div>
+        <div id="people-table"></div>
+      </div>
+
+      <!-- TAB: Docházka -->
+      <div class="tab-content" id="tab-attendance">
+        <div class="toolbar">
+          <input type="month" id="att-month" onchange="loadAttendance()" style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:13px;">
+          <select id="att-person" onchange="loadAttendance()">
+            <option value="">Všichni zaměstnanci</option>
+          </select>
+          <div style="flex:1"></div>
+          <button class="btn btn-primary" onclick="openAttendanceModal()">+ Záznam docházky</button>
+        </div>
+        <div id="attendance-table"></div>
+      </div>
+
+      <!-- TAB: Organizační struktura -->
+      <div class="tab-content" id="tab-org">
+        <div class="toolbar">
+          <button class="btn btn-primary" onclick="openDeptModal()">+ Nové oddělení</button>
+        </div>
+        <div id="org-tree"></div>
+      </div>
+
+      <!-- TAB: Role -->
+      <div class="tab-content" id="tab-roles">
+        <div class="toolbar">
+          <button class="btn btn-primary" onclick="openRoleModal()">+ Nová role</button>
+        </div>
+        <div id="roles-table"></div>
+      </div>
+
+    </div>
+  </div>
+
+  <div id="modal-root"></div>
+
+  <!-- Sidebar -->
+  <script>
+    // Load sidebar (non-module for compatibility)
+    var s = document.createElement('script');
+    s.src = 'js/sidebar.js';
+    s.onload = function() { renderSidebar('lide-hr'); };
+    document.head.appendChild(s);
+  </script>
+
+  <script>
+    // ============================================================
+    // STATE
+    // ============================================================
+    let people = [];
+    let departments = [];
+    let roles = [];
+
+    // ============================================================
+    // TAB SWITCHING
+    // ============================================================
+    function switchTab(tab) {
+      document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+      document.querySelectorAll('.tab-content').forEach(t => t.classList.toggle('active', t.id === 'tab-' + tab));
+      if (tab === 'attendance') loadAttendance();
+      if (tab === 'org') loadDepartments();
+      if (tab === 'roles') loadRoles();
+    }
+
+    // ============================================================
+    // STATS
+    // ============================================================
+    async function loadStats() {
+      try {
+        const res = await fetch('/api/hr/stats');
+        const s = await res.json();
+        document.getElementById('stats-bar').innerHTML = `
+          <div class="stat-card"><div class="stat-value">${s.employees}</div><div class="stat-label">Zaměstnanců</div></div>
+          <div class="stat-card"><div class="stat-value">${s.contacts}</div><div class="stat-label">Kontaktů</div></div>
+          <div class="stat-card"><div class="stat-value">${s.departments}</div><div class="stat-label">Oddělení</div></div>
+          <div class="stat-card"><div class="stat-value">${s.presentToday}</div><div class="stat-label">Dnes přítomno</div></div>
+        `;
+      } catch (e) { console.error('Stats error:', e); }
+    }
+
+    // ============================================================
+    // PEOPLE — list, create, edit, delete
+    // ============================================================
+    async function loadPeople() {
+      const search = document.getElementById('search-people').value;
+      const type = document.getElementById('filter-type').value;
+      let url = '/api/hr/people?active=1';
+      if (search) url += '&search=' + encodeURIComponent(search);
+      if (type) url += '&type=' + encodeURIComponent(type);
+
+      try {
+        const res = await fetch(url);
+        people = await res.json();
+        renderPeopleTable();
+      } catch (e) { console.error('Load people error:', e); }
+    }
+
+    const TYPE_LABELS = { employee: 'Zaměstnanec', contact: 'Kontakt', customer: 'Zákazník', supplier: 'Dodavatel', external: 'Externí' };
+    const CONTRACT_LABELS = { HPP: 'HPP', DPP: 'DPP', DPC: 'DPČ', 'OSVČ': 'OSVČ', other: 'Jiný' };
+
+    function renderPeopleTable() {
+      const el = document.getElementById('people-table');
+      if (people.length === 0) {
+        el.innerHTML = `<div class="empty-state">
+          <div class="empty-icon">👥</div>
+          <h3>Zatím žádné osoby</h3>
+          <p>Klikněte na "+ Nová osoba" pro přidání prvního záznamu</p>
+        </div>`;
+        return;
+      }
+
+      let html = `<table class="data-table"><thead><tr>
+        <th>Jméno</th><th>Typ</th><th>E-mail</th><th>Telefon</th><th>Oddělení</th><th>Pozice</th><th>Smlouva</th><th></th>
+      </tr></thead><tbody>`;
+
+      for (const p of people) {
+        html += `<tr onclick="openPersonModal(${p.id})">
+          <td class="person-name">${p.first_name} ${p.last_name}${!p.active ? ' <span style="color:var(--text2)">(neaktivní)</span>' : ''}</td>
+          <td><span class="badge badge-${p.type}">${TYPE_LABELS[p.type] || p.type}</span></td>
+          <td>${p.email || '—'}</td>
+          <td>${p.phone || '—'}</td>
+          <td>${p.department_name || '—'}</td>
+          <td>${p.role_name || '—'}</td>
+          <td>${p.contract_type ? '<span class="badge badge-' + p.contract_type + '">' + (CONTRACT_LABELS[p.contract_type] || p.contract_type) + '</span>' : '—'}</td>
+          <td><button class="btn btn-sm btn-secondary" onclick="event.stopPropagation();deletePerson(${p.id},'${p.first_name} ${p.last_name}')">✕</button></td>
+        </tr>`;
+      }
+      html += '</tbody></table>';
+      el.innerHTML = html;
+    }
+
+    async function openPersonModal(id) {
+      let person = null;
+      if (id) {
+        const res = await fetch('/api/hr/people/' + id);
+        person = await res.json();
+      }
+
+      // Load deps for dropdowns
+      await Promise.all([loadDepartmentsData(), loadRolesData()]);
+
+      const p = person || {};
+      const isEdit = !!id;
+
+      let deptOptions = '<option value="">— Bez oddělení —</option>';
+      for (const d of departments) deptOptions += `<option value="${d.id}" ${p.department_id == d.id ? 'selected' : ''}>${d.name}</option>`;
+
+      let roleOptions = '<option value="">— Bez pozice —</option>';
+      for (const r of roles) roleOptions += `<option value="${r.id}" ${p.role_id == r.id ? 'selected' : ''}>${r.name}</option>`;
+
+      let supervisorOptions = '<option value="">— Bez nadřízeného —</option>';
+      for (const pp of people.filter(x => x.id !== id)) {
+        supervisorOptions += `<option value="${pp.id}" ${p.supervisor_id == pp.id ? 'selected' : ''}>${pp.first_name} ${pp.last_name}</option>`;
+      }
+
+      const html = `<div class="modal-overlay" onclick="if(event.target===this)closeModal()">
+        <div class="modal">
+          <h2>${isEdit ? '✏️ Upravit osobu' : '➕ Nová osoba'}</h2>
+          <form id="person-form" onsubmit="savePerson(event, ${id || 'null'})">
+            <div class="form-grid">
+              <div class="form-group">
+                <label>Typ *</label>
+                <select name="type" onchange="toggleEmployeeFields(this.value)">
+                  <option value="employee" ${p.type === 'employee' || !p.type ? 'selected' : ''}>Zaměstnanec</option>
+                  <option value="contact" ${p.type === 'contact' ? 'selected' : ''}>Kontakt</option>
+                  <option value="customer" ${p.type === 'customer' ? 'selected' : ''}>Zákazník</option>
+                  <option value="supplier" ${p.type === 'supplier' ? 'selected' : ''}>Dodavatel</option>
+                  <option value="external" ${p.type === 'external' ? 'selected' : ''}>Externí spolupracovník</option>
+                </select>
+              </div>
+              <div class="form-group" style="visibility:hidden"></div>
+              <div class="form-group">
+                <label>Jméno *</label>
+                <input type="text" name="first_name" value="${p.first_name || ''}" required>
+              </div>
+              <div class="form-group">
+                <label>Příjmení *</label>
+                <input type="text" name="last_name" value="${p.last_name || ''}" required>
+              </div>
+              <div class="form-group">
+                <label>E-mail</label>
+                <input type="email" name="email" value="${p.email || ''}">
+              </div>
+              <div class="form-group">
+                <label>Telefon</label>
+                <input type="text" name="phone" value="${p.phone || ''}">
+              </div>
+
+              <div id="employee-fields" style="${(p.type || 'employee') === 'employee' ? '' : 'display:none;'}" class="form-grid full">
+                <div class="form-group">
+                  <label>Osobní číslo</label>
+                  <input type="text" name="employee_number" value="${p.employee_number || ''}">
+                </div>
+                <div class="form-group">
+                  <label>Typ smlouvy</label>
+                  <select name="contract_type">
+                    <option value="">—</option>
+                    <option value="HPP" ${p.contract_type === 'HPP' ? 'selected' : ''}>HPP (hlavní pracovní poměr)</option>
+                    <option value="DPP" ${p.contract_type === 'DPP' ? 'selected' : ''}>DPP (dohoda o provedení práce)</option>
+                    <option value="DPC" ${p.contract_type === 'DPC' ? 'selected' : ''}>DPČ (dohoda o pracovní činnosti)</option>
+                    <option value="OSVČ" ${p.contract_type === 'OSVČ' ? 'selected' : ''}>OSVČ</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label>Oddělení</label>
+                  <select name="department_id">${deptOptions}</select>
+                </div>
+                <div class="form-group">
+                  <label>Pozice / Role</label>
+                  <select name="role_id">${roleOptions}</select>
+                </div>
+                <div class="form-group">
+                  <label>Nadřízený</label>
+                  <select name="supervisor_id">${supervisorOptions}</select>
+                </div>
+                <div class="form-group">
+                  <label>Datum nástupu</label>
+                  <input type="date" name="hire_date" value="${p.hire_date || ''}">
+                </div>
+                <div class="form-group">
+                  <label>Hodinová sazba (Kč)</label>
+                  <input type="number" name="hourly_rate" value="${p.hourly_rate || ''}" step="0.01">
+                </div>
+                <div class="form-group">
+                  <label>Měsíční mzda (Kč)</label>
+                  <input type="number" name="monthly_salary" value="${p.monthly_salary || ''}" step="1">
+                </div>
+                <div class="form-group">
+                  <label>Datum narození</label>
+                  <input type="date" name="birth_date" value="${p.birth_date || ''}">
+                </div>
+                <div class="form-group">
+                  <label>Adresa</label>
+                  <input type="text" name="address" value="${p.address || ''}">
+                </div>
+              </div>
+
+              <div class="form-group full">
+                <label>Poznámky</label>
+                <textarea name="notes">${p.notes || ''}</textarea>
+              </div>
+            </div>
+            <div class="modal-actions">
+              <button type="button" class="btn btn-secondary" onclick="closeModal()">Zrušit</button>
+              <button type="submit" class="btn btn-primary">${isEdit ? 'Uložit změny' : 'Vytvořit'}</button>
+            </div>
+          </form>
+        </div>
+      </div>`;
+
+      document.getElementById('modal-root').innerHTML = html;
+    }
+
+    function toggleEmployeeFields(type) {
+      const el = document.getElementById('employee-fields');
+      if (el) el.style.display = type === 'employee' ? '' : 'none';
+    }
+
+    async function savePerson(e, id) {
+      e.preventDefault();
+      const form = new FormData(e.target);
+      const data = {};
+      for (const [k, v] of form.entries()) {
+        data[k] = v === '' ? null : v;
+      }
+      // Convert numeric fields
+      if (data.hourly_rate) data.hourly_rate = parseFloat(data.hourly_rate);
+      if (data.monthly_salary) data.monthly_salary = parseFloat(data.monthly_salary);
+      if (data.department_id) data.department_id = parseInt(data.department_id);
+      if (data.role_id) data.role_id = parseInt(data.role_id);
+      if (data.supervisor_id) data.supervisor_id = parseInt(data.supervisor_id);
+
+      const url = id ? '/api/hr/people/' + id : '/api/hr/people';
+      const method = id ? 'PUT' : 'POST';
+
+      try {
+        const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+        if (!res.ok) throw new Error((await res.json()).error);
+        closeModal();
+        loadPeople();
+        loadStats();
+      } catch (e) { alert('Chyba: ' + e.message); }
+    }
+
+    async function deletePerson(id, name) {
+      if (!confirm(`Opravdu smazat "${name}"?`)) return;
+      await fetch('/api/hr/people/' + id, { method: 'DELETE' });
+      loadPeople();
+      loadStats();
+    }
+
+    // ============================================================
+    // ATTENDANCE
+    // ============================================================
+    async function loadAttendance() {
+      const month = document.getElementById('att-month').value;
+      const personId = document.getElementById('att-person').value;
+
+      let url = '/api/hr/attendance?';
+      if (month) url += 'month=' + month + '&';
+      if (personId) url += 'person_id=' + personId;
+
+      try {
+        const res = await fetch(url);
+        const records = await res.json();
+        renderAttendanceTable(records);
+      } catch (e) { console.error(e); }
+    }
+
+    function renderAttendanceTable(records) {
+      const el = document.getElementById('attendance-table');
+      if (records.length === 0) {
+        el.innerHTML = `<div class="empty-state">
+          <div class="empty-icon">🕐</div><h3>Žádné záznamy docházky</h3>
+          <p>Přidejte záznam tlačítkem nahoře</p>
+        </div>`;
+        return;
+      }
+
+      let html = `<table class="data-table"><thead><tr>
+        <th>Datum</th><th>Jméno</th><th>Příchod</th><th>Odchod</th><th>Přestávka</th><th>Odpracováno</th><th>Typ</th><th>Poznámka</th><th></th>
+      </tr></thead><tbody>`;
+
+      for (const r of records) {
+        let worked = '—';
+        if (r.clock_in && r.clock_out) {
+          const [ih, im] = r.clock_in.split(':').map(Number);
+          const [oh, om] = r.clock_out.split(':').map(Number);
+          const mins = (oh * 60 + om) - (ih * 60 + im) - (r.break_minutes || 0);
+          if (mins > 0) worked = Math.floor(mins / 60) + 'h ' + (mins % 60) + 'm';
+        }
+        const typeLabels = { work: 'Práce', vacation: 'Dovolená', sick: 'Nemoc', holiday: 'Svátek', other: 'Jiné' };
+        html += `<tr>
+          <td>${formatDate(r.date)}</td>
+          <td class="person-name">${r.first_name} ${r.last_name}</td>
+          <td>${r.clock_in || '—'}</td><td>${r.clock_out || '—'}</td>
+          <td>${r.break_minutes || 0} min</td><td><strong>${worked}</strong></td>
+          <td>${typeLabels[r.type] || r.type}</td>
+          <td>${r.note || ''}</td>
+          <td><button class="btn btn-sm btn-danger" onclick="deleteAttendance(${r.id})">✕</button></td>
+        </tr>`;
+      }
+      html += '</tbody></table>';
+      el.innerHTML = html;
+    }
+
+    function formatDate(d) {
+      if (!d) return '—';
+      const [y, m, day] = d.split('-');
+      return `${day}.${m}.${y}`;
+    }
+
+    async function openAttendanceModal() {
+      await loadPeopleData();
+      let options = '';
+      for (const p of people.filter(x => x.type === 'employee')) {
+        options += `<option value="${p.id}">${p.first_name} ${p.last_name}</option>`;
+      }
+      const today = new Date().toISOString().split('T')[0];
+
+      document.getElementById('modal-root').innerHTML = `<div class="modal-overlay" onclick="if(event.target===this)closeModal()">
+        <div class="modal">
+          <h2>➕ Záznam docházky</h2>
+          <form onsubmit="saveAttendance(event)">
+            <div class="form-grid">
+              <div class="form-group">
+                <label>Zaměstnanec *</label>
+                <select name="person_id" required>${options}</select>
+              </div>
+              <div class="form-group">
+                <label>Datum *</label>
+                <input type="date" name="date" value="${today}" required>
+              </div>
+              <div class="form-group">
+                <label>Příchod</label>
+                <input type="time" name="clock_in" value="07:00">
+              </div>
+              <div class="form-group">
+                <label>Odchod</label>
+                <input type="time" name="clock_out" value="15:30">
+              </div>
+              <div class="form-group">
+                <label>Přestávka (min)</label>
+                <input type="number" name="break_minutes" value="30">
+              </div>
+              <div class="form-group">
+                <label>Typ</label>
+                <select name="type">
+                  <option value="work">Práce</option>
+                  <option value="vacation">Dovolená</option>
+                  <option value="sick">Nemoc</option>
+                  <option value="holiday">Svátek</option>
+                  <option value="other">Jiné</option>
+                </select>
+              </div>
+              <div class="form-group full">
+                <label>Poznámka</label>
+                <input type="text" name="note">
+              </div>
+            </div>
+            <div class="modal-actions">
+              <button type="button" class="btn btn-secondary" onclick="closeModal()">Zrušit</button>
+              <button type="submit" class="btn btn-primary">Uložit</button>
+            </div>
+          </form>
+        </div>
+      </div>`;
+    }
+
+    async function saveAttendance(e) {
+      e.preventDefault();
+      const form = new FormData(e.target);
+      const data = {};
+      for (const [k, v] of form.entries()) data[k] = v || null;
+      if (data.person_id) data.person_id = parseInt(data.person_id);
+      if (data.break_minutes) data.break_minutes = parseInt(data.break_minutes);
+
+      await fetch('/api/hr/attendance', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+      closeModal();
+      loadAttendance();
+      loadStats();
+    }
+
+    async function deleteAttendance(id) {
+      if (!confirm('Smazat záznam?')) return;
+      await fetch('/api/hr/attendance/' + id, { method: 'DELETE' });
+      loadAttendance();
+    }
+
+    // ============================================================
+    // DEPARTMENTS
+    // ============================================================
+    async function loadDepartmentsData() {
+      const res = await fetch('/api/hr/departments');
+      departments = await res.json();
+    }
+
+    async function loadDepartments() {
+      await loadDepartmentsData();
+      renderDepartments();
+    }
+
+    function renderDepartments() {
+      const el = document.getElementById('org-tree');
+      if (departments.length === 0) {
+        el.innerHTML = `<div class="empty-state"><div class="empty-icon">🏢</div><h3>Žádná oddělení</h3><p>Vytvořte první oddělení</p></div>`;
+        return;
+      }
+
+      // Build tree
+      const roots = departments.filter(d => !d.parent_id);
+      const getChildren = (parentId) => departments.filter(d => d.parent_id === parentId);
+
+      function renderNode(dept) {
+        const children = getChildren(dept.id);
+        const empCount = people.filter(p => p.department_id === dept.id).length;
+        let html = `<div class="org-node" style="border-left: 3px solid ${dept.color}">
+          <div>
+            <strong>${dept.name}</strong>
+            <div style="font-size:11px;color:var(--text2)">${empCount} zaměstnanců</div>
+          </div>
+          <button class="btn btn-sm btn-secondary" onclick="event.stopPropagation();openDeptModal(${dept.id})">✏️</button>
+          <button class="btn btn-sm btn-danger" onclick="event.stopPropagation();deleteDept(${dept.id})">✕</button>
+        </div>`;
+        if (children.length) {
+          html += '<div class="org-children">';
+          for (const c of children) html += renderNode(c);
+          html += '</div>';
+        }
+        return html;
+      }
+
+      let html = '';
+      for (const r of roots) html += renderNode(r);
+      el.innerHTML = html;
+    }
+
+    async function openDeptModal(id) {
+      const dept = id ? departments.find(d => d.id === id) : {};
+      let parentOptions = '<option value="">— Žádné nadřazené —</option>';
+      for (const d of departments.filter(d => d.id !== id)) {
+        parentOptions += `<option value="${d.id}" ${dept.parent_id == d.id ? 'selected' : ''}>${d.name}</option>`;
+      }
+
+      document.getElementById('modal-root').innerHTML = `<div class="modal-overlay" onclick="if(event.target===this)closeModal()">
+        <div class="modal">
+          <h2>${id ? '✏️ Upravit oddělení' : '➕ Nové oddělení'}</h2>
+          <form onsubmit="saveDept(event, ${id || 'null'})">
+            <div class="form-grid">
+              <div class="form-group"><label>Název *</label><input type="text" name="name" value="${dept.name || ''}" required></div>
+              <div class="form-group"><label>Nadřazené oddělení</label><select name="parent_id">${parentOptions}</select></div>
+              <div class="form-group"><label>Barva</label><input type="color" name="color" value="${dept.color || '#6c5ce7'}"></div>
+            </div>
+            <div class="modal-actions">
+              <button type="button" class="btn btn-secondary" onclick="closeModal()">Zrušit</button>
+              <button type="submit" class="btn btn-primary">${id ? 'Uložit' : 'Vytvořit'}</button>
+            </div>
+          </form>
+        </div>
+      </div>`;
+    }
+
+    async function saveDept(e, id) {
+      e.preventDefault();
+      const form = new FormData(e.target);
+      const data = { name: form.get('name'), parent_id: form.get('parent_id') || null, color: form.get('color') };
+
+      const url = id ? '/api/hr/departments/' + id : '/api/hr/departments';
+      await fetch(url, { method: id ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+      closeModal();
+      loadDepartments();
+      loadStats();
+    }
+
+    async function deleteDept(id) {
+      if (!confirm('Smazat oddělení?')) return;
+      await fetch('/api/hr/departments/' + id, { method: 'DELETE' });
+      loadDepartments();
+      loadStats();
+    }
+
+    // ============================================================
+    // ROLES
+    // ============================================================
+    async function loadRolesData() {
+      const res = await fetch('/api/hr/roles');
+      roles = await res.json();
+    }
+
+    async function loadRoles() {
+      await loadRolesData();
+      renderRoles();
+    }
+
+    function renderRoles() {
+      const el = document.getElementById('roles-table');
+      if (roles.length === 0) {
+        el.innerHTML = `<div class="empty-state"><div class="empty-icon">🔑</div><h3>Žádné role</h3><p>Vytvořte první roli</p></div>`;
+        return;
+      }
+
+      let html = `<table class="data-table"><thead><tr><th>Role</th><th>Oddělení</th><th>Popis</th><th></th></tr></thead><tbody>`;
+      for (const r of roles) {
+        html += `<tr>
+          <td class="person-name">${r.name}</td>
+          <td>${r.department_name || '—'}</td>
+          <td>${r.description || '—'}</td>
+          <td>
+            <button class="btn btn-sm btn-secondary" onclick="openRoleModal(${r.id})">✏️</button>
+            <button class="btn btn-sm btn-danger" onclick="deleteRole(${r.id})">✕</button>
+          </td>
+        </tr>`;
+      }
+      html += '</tbody></table>';
+      el.innerHTML = html;
+    }
+
+    async function openRoleModal(id) {
+      await loadDepartmentsData();
+      const role = id ? roles.find(r => r.id === id) : {};
+      let deptOptions = '<option value="">— Bez oddělení —</option>';
+      for (const d of departments) deptOptions += `<option value="${d.id}" ${role.department_id == d.id ? 'selected' : ''}>${d.name}</option>`;
+
+      document.getElementById('modal-root').innerHTML = `<div class="modal-overlay" onclick="if(event.target===this)closeModal()">
+        <div class="modal">
+          <h2>${id ? '✏️ Upravit roli' : '➕ Nová role'}</h2>
+          <form onsubmit="saveRole(event, ${id || 'null'})">
+            <div class="form-grid">
+              <div class="form-group"><label>Název role *</label><input type="text" name="name" value="${role.name || ''}" required></div>
+              <div class="form-group"><label>Oddělení</label><select name="department_id">${deptOptions}</select></div>
+              <div class="form-group full"><label>Popis</label><textarea name="description">${role.description || ''}</textarea></div>
+            </div>
+            <div class="modal-actions">
+              <button type="button" class="btn btn-secondary" onclick="closeModal()">Zrušit</button>
+              <button type="submit" class="btn btn-primary">${id ? 'Uložit' : 'Vytvořit'}</button>
+            </div>
+          </form>
+        </div>
+      </div>`;
+    }
+
+    async function saveRole(e, id) {
+      e.preventDefault();
+      const form = new FormData(e.target);
+      const data = { name: form.get('name'), department_id: form.get('department_id') || null, description: form.get('description') };
+
+      const url = id ? '/api/hr/roles/' + id : '/api/hr/roles';
+      await fetch(url, { method: id ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+      closeModal();
+      loadRoles();
+    }
+
+    async function deleteRole(id) {
+      if (!confirm('Smazat roli?')) return;
+      await fetch('/api/hr/roles/' + id, { method: 'DELETE' });
+      loadRoles();
+    }
+
+    // ============================================================
+    // HELPERS
+    // ============================================================
+    async function loadPeopleData() {
+      const res = await fetch('/api/hr/people');
+      people = await res.json();
+    }
+
+    function closeModal() {
+      document.getElementById('modal-root').innerHTML = '';
+    }
+
+    // Populate attendance person filter
+    async function populateAttendanceFilter() {
+      await loadPeopleData();
+      const sel = document.getElementById('att-person');
+      for (const p of people.filter(x => x.type === 'employee')) {
+        const opt = document.createElement('option');
+        opt.value = p.id;
+        opt.textContent = p.first_name + ' ' + p.last_name;
+        sel.appendChild(opt);
+      }
+    }
+
+    // ============================================================
+    // INIT
+    // ============================================================
+    const now = new Date();
+    document.getElementById('att-month').value = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+
+    loadStats();
+    loadPeople();
+    populateAttendanceFilter();
+  </script>
+
+</body>
+</html>
