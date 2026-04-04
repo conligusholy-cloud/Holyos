@@ -15,7 +15,7 @@ const DB_FILE = path.join(DATA_DIR, 'hr.json');
 const AUDIT_FILE = path.join(DATA_DIR, 'audit-log.json');
 
 const DEFAULT_DATA = {
-  _nextId: { people: 1, departments: 1, roles: 1, attendance: 1, admin_tasks: 1, shifts: 1, absence_types: 1, leave_requests: 1 },
+  _nextId: { people: 1, departments: 1, roles: 1, attendance: 1, admin_tasks: 1, shifts: 1, absence_types: 1, leave_requests: 1, company_leave: 1 },
   people: [],
   departments: [],
   roles: [],
@@ -32,6 +32,21 @@ const DEFAULT_DATA = {
     { id: 6, name: 'Home office', code: 'homeoffice', color: '#06b6d4', paid: true },
   ],
   leave_requests: [], // { id, person_id, type, date_from, date_to, status: 'pending'|'approved'|'rejected', approved_by, note }
+  leave_settings: {
+    default_entitlement_days: 20, // 4 týdny = 20 dní
+    year: new Date().getFullYear(),
+    carryover_allowed: true,
+    carryover_max_days: 5,
+  },
+  company_leave: [], // { id, date_from, date_to, name, excluded_person_ids: [] }
+  overtime_settings: {
+    yearly_limit_hours: 150,       // zákonný limit bez souhlasu
+    yearly_absolute_max: 416,      // absolutní max
+    alert_threshold_percent: 80,   // upozornění při 80%
+    compensation: 'surcharge',     // 'surcharge' (příplatek 25%) | 'timeoff' (náhradní volno)
+    surcharge_percent: 25,
+    allow_monthly_transfer: true,  // převod hodin mezi měsíci
+  },
 };
 
 // Load or initialize
@@ -51,6 +66,19 @@ function save() {
 }
 
 function now() { return new Date().toISOString(); }
+
+// Count workdays between two dates (Mon-Fri, excluding weekends)
+function countWorkdays(dateFrom, dateTo) {
+  let count = 0;
+  const d = new Date(dateFrom);
+  const end = new Date(dateTo);
+  while (d <= end) {
+    const day = d.getDay();
+    if (day !== 0 && day !== 6) count++;
+    d.setDate(d.getDate() + 1);
+  }
+  return count;
+}
 
 function nextId(collection) {
   if (!data._nextId[collection]) data._nextId[collection] = 1;
@@ -655,6 +683,178 @@ const db = {
         current_absence: openAbsence ? openAbsence.type : null,
         absences: absRecs,
       };
+    });
+  },
+
+  // --- Leave Settings ---
+  getLeaveSettings() { return data.leave_settings || DEFAULT_DATA.leave_settings; },
+  updateLeaveSettings(fields) {
+    if (!data.leave_settings) data.leave_settings = { ...DEFAULT_DATA.leave_settings };
+    const old = { ...data.leave_settings };
+    Object.assign(data.leave_settings, fields);
+    save();
+    logChange('update', 'leave_settings', 0, 'Upraveno nastavení dovolených', old, data.leave_settings);
+    return data.leave_settings;
+  },
+
+  // --- Overtime Settings ---
+  getOvertimeSettings() { return data.overtime_settings || DEFAULT_DATA.overtime_settings; },
+  updateOvertimeSettings(fields) {
+    if (!data.overtime_settings) data.overtime_settings = { ...DEFAULT_DATA.overtime_settings };
+    const old = { ...data.overtime_settings };
+    Object.assign(data.overtime_settings, fields);
+    save();
+    logChange('update', 'overtime_settings', 0, 'Upraveno nastavení přesčasů', old, data.overtime_settings);
+    return data.overtime_settings;
+  },
+
+  // --- Company-wide Leave (celozávodní dovolená) ---
+  getCompanyLeave(year) {
+    const cl = data.company_leave || [];
+    if (year) return cl.filter(c => c.date_from.startsWith(String(year)));
+    return cl;
+  },
+  createCompanyLeave(fields) {
+    if (!data._nextId.company_leave) data._nextId.company_leave = 1;
+    const cl = {
+      id: data._nextId.company_leave++,
+      name: fields.name || 'Celozávodní dovolená',
+      date_from: fields.date_from,
+      date_to: fields.date_to,
+      excluded_person_ids: (fields.excluded_person_ids || []).map(Number),
+      created_at: now(),
+    };
+    if (!data.company_leave) data.company_leave = [];
+    data.company_leave.push(cl);
+    save();
+    logChange('create', 'company_leave', cl.id, `Celozávodní dovolená: ${cl.date_from} – ${cl.date_to}`, null, cl);
+    return cl;
+  },
+  deleteCompanyLeave(id) {
+    const idx = (data.company_leave || []).findIndex(c => c.id === id);
+    if (idx === -1) return false;
+    const del = data.company_leave[idx];
+    data.company_leave.splice(idx, 1);
+    save();
+    logChange('delete', 'company_leave', id, `Smazána celozávodní dovolená: ${del.date_from} – ${del.date_to}`, del, null);
+    return true;
+  },
+
+  // --- Leave Balance (zůstatek dovolené) ---
+  getLeaveBalance(personId, year) {
+    year = year || new Date().getFullYear();
+    const person = data.people.find(p => p.id === parseInt(personId));
+    if (!person) return null;
+
+    const settings = data.leave_settings || DEFAULT_DATA.leave_settings;
+    // Personal entitlement overrides default
+    const entitlementDays = person.leave_entitlement_days || settings.default_entitlement_days || 20;
+
+    // Count approved leave days for this year
+    const approvedLeaves = (data.leave_requests || []).filter(r =>
+      r.person_id === parseInt(personId) &&
+      r.status === 'approved' &&
+      r.date_from.startsWith(String(year))
+    );
+
+    let usedDays = 0;
+    for (const leave of approvedLeaves) {
+      usedDays += countWorkdays(leave.date_from, leave.date_to);
+    }
+
+    // Count company-wide leave days (unless excluded)
+    const companyLeaves = (data.company_leave || []).filter(c =>
+      c.date_from.startsWith(String(year)) &&
+      !c.excluded_person_ids.includes(parseInt(personId))
+    );
+    for (const cl of companyLeaves) {
+      usedDays += countWorkdays(cl.date_from, cl.date_to);
+    }
+
+    // Carryover from last year (stored on person record)
+    const carryover = person.leave_carryover || 0;
+
+    return {
+      person_id: parseInt(personId),
+      year,
+      entitlement: entitlementDays,
+      carryover,
+      total: entitlementDays + carryover,
+      used: usedDays,
+      remaining: entitlementDays + carryover - usedDays,
+      approved_requests: approvedLeaves.length,
+    };
+  },
+
+  // Get leave balances for all employees
+  getAllLeaveBalances(year) {
+    year = year || new Date().getFullYear();
+    const employees = data.people.filter(p => p.active == 1 && p.type === 'employee');
+    return employees.map(p => this.getLeaveBalance(p.id, year));
+  },
+
+  // --- Overtime Calculation ---
+  getOvertimeSummary(personId, year, month) {
+    year = year || new Date().getFullYear();
+    const person = data.people.find(p => p.id === parseInt(personId));
+    if (!person) return null;
+
+    const shift = (data.shifts || []).find(s => s.id === person.shift_id);
+    const dailyFund = shift ? shift.hours_fund : 8;
+
+    // Get attendance records
+    let records = data.attendance.filter(a =>
+      a.person_id === parseInt(personId) &&
+      a.type === 'work' &&
+      a.date.startsWith(String(year))
+    );
+    if (month) {
+      const monthStr = String(year) + '-' + String(month).padStart(2, '0');
+      records = records.filter(a => a.date.startsWith(monthStr));
+    }
+
+    let totalWorkedMins = 0;
+    let totalFundMins = 0;
+
+    for (const r of records) {
+      const clockIn = r.adjusted_clock_in || r.clock_in;
+      const clockOut = r.adjusted_clock_out || r.clock_out;
+      const breakMins = r.adjusted_break != null ? r.adjusted_break : (r.break_minutes || 0);
+
+      if (clockIn && clockOut) {
+        const [ih, im] = clockIn.split(':').map(Number);
+        const [oh, om] = clockOut.split(':').map(Number);
+        const worked = (oh * 60 + om) - (ih * 60 + im) - breakMins;
+        totalWorkedMins += Math.max(0, worked);
+      }
+      totalFundMins += dailyFund * 60;
+    }
+
+    const overtimeMins = Math.max(0, totalWorkedMins - totalFundMins);
+    const settings = data.overtime_settings || DEFAULT_DATA.overtime_settings;
+
+    return {
+      person_id: parseInt(personId),
+      year,
+      month: month || null,
+      daily_fund_hours: dailyFund,
+      work_days: records.length,
+      total_worked_hours: +(totalWorkedMins / 60).toFixed(2),
+      total_fund_hours: +(totalFundMins / 60).toFixed(2),
+      overtime_hours: +(overtimeMins / 60).toFixed(2),
+      yearly_limit: settings.yearly_limit_hours,
+      compensation: settings.compensation,
+      surcharge_percent: settings.surcharge_percent,
+    };
+  },
+
+  // Get overtime for all employees
+  getAllOvertimeSummaries(year, month) {
+    year = year || new Date().getFullYear();
+    const employees = data.people.filter(p => p.active == 1 && p.type === 'employee');
+    return employees.map(p => {
+      const summary = this.getOvertimeSummary(p.id, year, month);
+      return { ...summary, first_name: p.first_name, last_name: p.last_name };
     });
   },
 

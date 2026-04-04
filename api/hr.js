@@ -452,6 +452,93 @@ async function handleHR(req, res, pathname) {
       return true;
     }
 
+    // --- LEAVE SETTINGS ---
+    if (pathname === '/api/hr/leave-settings' && method === 'GET') {
+      sendJSON(res, 200, db.getLeaveSettings());
+      return true;
+    }
+
+    if (pathname === '/api/hr/leave-settings' && method === 'POST') {
+      const body = JSON.parse(await readBody(req));
+      sendJSON(res, 200, db.updateLeaveSettings(body));
+      return true;
+    }
+
+    // --- OVERTIME SETTINGS ---
+    if (pathname === '/api/hr/overtime-settings' && method === 'GET') {
+      sendJSON(res, 200, db.getOvertimeSettings());
+      return true;
+    }
+
+    if (pathname === '/api/hr/overtime-settings' && method === 'POST') {
+      const body = JSON.parse(await readBody(req));
+      sendJSON(res, 200, db.updateOvertimeSettings(body));
+      return true;
+    }
+
+    // --- LEAVE BALANCE ---
+    const leaveBalanceMatch = pathname.match(/^\/api\/hr\/leave-balance\/(\d+)$/);
+    if (leaveBalanceMatch && method === 'GET') {
+      const personId = parseInt(leaveBalanceMatch[1]);
+      const url = new URL(req.url, 'http://localhost');
+      const year = parseInt(url.searchParams.get('year')) || new Date().getFullYear();
+      sendJSON(res, 200, db.getLeaveBalance(personId, year));
+      return true;
+    }
+
+    if (pathname === '/api/hr/leave-balances' && method === 'GET') {
+      const url = new URL(req.url, 'http://localhost');
+      const year = parseInt(url.searchParams.get('year')) || new Date().getFullYear();
+      sendJSON(res, 200, db.getAllLeaveBalances(year));
+      return true;
+    }
+
+    // --- OVERTIME SUMMARY ---
+    const overtimeMatch = pathname.match(/^\/api\/hr\/overtime\/(\d+)$/);
+    if (overtimeMatch && method === 'GET') {
+      const personId = parseInt(overtimeMatch[1]);
+      const url = new URL(req.url, 'http://localhost');
+      const year = parseInt(url.searchParams.get('year')) || new Date().getFullYear();
+      const month = url.searchParams.get('month') ? parseInt(url.searchParams.get('month')) : null;
+      sendJSON(res, 200, db.getOvertimeSummary(personId, year, month));
+      return true;
+    }
+
+    if (pathname === '/api/hr/overtime-all' && method === 'GET') {
+      const url = new URL(req.url, 'http://localhost');
+      const year = parseInt(url.searchParams.get('year')) || new Date().getFullYear();
+      const month = url.searchParams.get('month') ? parseInt(url.searchParams.get('month')) : null;
+      sendJSON(res, 200, db.getAllOvertimeSummaries(year, month));
+      return true;
+    }
+
+    // --- COMPANY-WIDE LEAVE ---
+    if (pathname === '/api/hr/company-leave' && method === 'GET') {
+      const url = new URL(req.url, 'http://localhost');
+      const year = url.searchParams.get('year') ? parseInt(url.searchParams.get('year')) : undefined;
+      sendJSON(res, 200, db.getCompanyLeave(year));
+      return true;
+    }
+
+    if (pathname === '/api/hr/company-leave' && method === 'POST') {
+      const body = JSON.parse(await readBody(req));
+      if (!body.date_from || !body.date_to || !body.name) {
+        sendJSON(res, 400, { error: 'date_from, date_to, and name are required' });
+        return true;
+      }
+      sendJSON(res, 201, db.createCompanyLeave(body));
+      return true;
+    }
+
+    const companyLeaveMatch = pathname.match(/^\/api\/hr\/company-leave\/(\d+)$/);
+    if (companyLeaveMatch && method === 'DELETE') {
+      const id = parseInt(companyLeaveMatch[1]);
+      const ok = db.deleteCompanyLeave(id);
+      if (!ok) { sendJSON(res, 404, { error: 'Not found' }); return true; }
+      sendJSON(res, 200, { ok: true });
+      return true;
+    }
+
     return false; // not handled
   } catch (e) {
     console.error('HR API error:', e);
