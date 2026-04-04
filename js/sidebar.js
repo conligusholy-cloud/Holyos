@@ -9,7 +9,7 @@ function renderSidebar(activeModule) {
     { id: 'programovani-vyroby', name: 'Programování výroby', icon: '&#9881;', color: '#f59e0b', active: true },
     { id: 'simulace-vyroby',    name: 'Simulace výroby',     icon: '&#9654;', color: '#22c55e', active: true },
     { id: 'pracovni-postup',    name: 'Pracovní postup',     icon: '&#128295;', color: '#06b6d4', active: true },
-    { id: 'nakup-sklad',          name: 'Nákup a sklad',       icon: '&#128230;', color: '#f59e0b', active: true },
+    { id: 'nakup-sklad',          name: 'Nákup a sklad',       icon: '&#128230;', color: '#10b981', active: true },
     { id: 'planovani',           name: 'Plánování výroby',    icon: '&#128197;', color: '#3b82f6', active: false },
     { id: 'material',            name: 'Materiálový tok',     icon: '&#128666;', color: '#10b981', active: false },
     { id: 'reporty',             name: 'Reporty a analýzy',   icon: '&#128202;', color: '#ef4444', active: false },
@@ -71,7 +71,10 @@ function renderSidebar(activeModule) {
   html += '<div class="sidebar-footer">HOLYOS v0.1 — Best Series</div>';
 
   var sidebar = document.getElementById('sidebar');
-  if (sidebar) sidebar.innerHTML = html;
+  if (sidebar) {
+    sidebar.className = 'sidebar';
+    sidebar.innerHTML = html;
+  }
 
   // Načíst info o přihlášeném uživateli
   fetch('/auth/me').then(function(r) { return r.json(); }).then(function(u) {
