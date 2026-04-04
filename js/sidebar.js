@@ -89,6 +89,22 @@ function renderSidebar(activeModule) {
         nav.appendChild(adminLink);
       }
     }
+    // Pokud je super admin, přidat sekci Super Admin
+    if (u.is_super_admin) {
+      var userSection = document.querySelector('.sidebar-user');
+      if (userSection) {
+        var saSection = document.createElement('div');
+        saSection.className = 'sidebar-sa-section';
+        saSection.innerHTML = '<div class="sidebar-label" style="margin-top:8px; color:#ef4444;">Super Admin</div>' +
+          '<nav class="sidebar-nav">' +
+            '<a class="sidebar-item' + (activeModule === 'mindmap' ? ' active' : '') + '" href="' + basePath + 'modules/holyos-mindmap.html">' +
+              '<div class="sidebar-icon" style="background:rgba(239,68,68,0.15); color:#ef4444;">&#129504;</div>' +
+              '<div class="sidebar-item-info"><div class="sidebar-item-name">Myšlenková mapa</div></div>' +
+            '</a>' +
+          '</nav>';
+        userSection.parentNode.insertBefore(saSection, userSection);
+      }
+    }
   }).catch(function() {});
 }
 

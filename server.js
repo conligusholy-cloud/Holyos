@@ -108,6 +108,7 @@ function createSession(user) {
     username: user.username,
     displayName: user.displayName,
     role: user.role,
+    is_super_admin: user.is_super_admin || 0,
     created: Date.now(),
     lastAccess: Date.now(),
   });
@@ -457,11 +458,16 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    // Check if user is super admin (from people DB)
+    const allPeople = db.getAllPeople({});
+    const personRecord = allPeople.find(p => p.username === user.username);
+    user.is_super_admin = personRecord && personRecord.is_super_admin ? 1 : 0;
+
     const sessionId = createSession(user);
     setSessionCookie(res, sessionId);
     res.writeHead(302, { Location: '/' });
     res.end();
-    console.log(`Přihlášen: ${user.displayName} (${user.username})`);
+    console.log(`Přihlášen: ${user.displayName} (${user.username})${user.is_super_admin ? ' [SUPER ADMIN]' : ''}`);
     return;
   }
 
@@ -476,7 +482,7 @@ const server = http.createServer(async (req, res) => {
 
   // Current user info (AJAX)
   if (pathname === '/auth/me' && session) {
-    sendJSON(res, 200, { username: session.username, displayName: session.displayName, role: session.role });
+    sendJSON(res, 200, { username: session.username, displayName: session.displayName, role: session.role, is_super_admin: session.is_super_admin || 0 });
     return;
   }
 
