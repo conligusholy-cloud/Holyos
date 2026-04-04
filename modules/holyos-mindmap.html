@@ -709,8 +709,11 @@ let state = {
   selected: null,
   phaseFilter: 'all',
   search: '',
-  notes: {},         // moduleId → string (current notes being edited)
-  applied: {},       // moduleId → string[] (applied note lines, now part of the map)
+  notes: {},              // moduleId → string (current notes being edited)
+  applied: {},            // moduleId → string[] (legacy flat applied — being phased out)
+  featuresOverride: {},   // moduleId → features[] (AI-restructured, replaces original features)
+  descOverride: {},       // moduleId → string (AI-updated description)
+  connectionsOverride: {}, // moduleId → string[] (AI-updated connections)
   saving: false,
   lastSaved: null,
 };
@@ -724,23 +727,16 @@ async function loadFromServer() {
     const data = await resp.json();
     state.notes = data.notes || {};
     state.applied = data.applied || {};
-    // Merge applied items into DATA.modules features
-    for (const mod of DATA.modules) {
-      if (state.applied[mod.id] && state.applied[mod.id].length) {
-        // Remove old applied items first (avoid duplicates on reload)
-        mod.features = mod.features.filter(f => !f.__applied);
-        for (const line of state.applied[mod.id]) {
-          mod.features.push({ text: line, __applied: true });
-        }
-      }
-    }
-    // Also for AI and tech
-    for (const special of [DATA.ai, DATA.tech]) {
-      if (special && state.applied[special.id] && state.applied[special.id].length) {
-        special.features = special.features.filter(f => !f.__applied);
-        for (const line of state.applied[special.id]) {
-          special.features.push({ text: line, __applied: true });
-        }
+    state.featuresOverride = data.featuresOverride || {};
+
+    const allItems = [...DATA.modules, DATA.ai, DATA.tech].filter(Boolean);
+    for (const mod of allItems) {
+      // If AI has overridden features for this module, use those
+      if (state.featuresOverride[mod.id]) {
+        mod.features = state.featuresOverride[mod.id];
+        // Also update desc/connections if saved
+        if (data.descOverride && data.descOverride[mod.id]) mod.desc = data.descOverride[mod.id];
+        if (data.connectionsOverride && data.connectionsOverride[mod.id]) mod.connections = data.connectionsOverride[mod.id];
       }
     }
     updateApplyButton();
@@ -752,10 +748,21 @@ async function loadFromServer() {
 async function saveToServer() {
   state.saving = true;
   try {
+    // Build featuresOverride from current module state (only for modules that were AI-modified)
+    const featuresOverride = state.featuresOverride || {};
+    const descOverride = state.descOverride || {};
+    const connectionsOverride = state.connectionsOverride || {};
+
     await fetch('/api/mindmap/notes', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ notes: state.notes, applied: state.applied }),
+      body: JSON.stringify({
+        notes: state.notes,
+        applied: state.applied,
+        featuresOverride,
+        descOverride,
+        connectionsOverride,
+      }),
     });
     state.lastSaved = new Date();
   } catch (e) {
@@ -1167,14 +1174,17 @@ async function confirmApply() {
       if (result.connections) item.connections = result.connections;
       if (result.desc) item.desc = result.desc;
 
-      // Mark notes as applied
-      if (!state.applied[item.id]) state.applied[item.id] = [];
-      const lines = noteText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-      for (const line of lines) {
-        if (!state.applied[item.id].includes(line)) {
-          state.applied[item.id].push(line);
-        }
-      }
+      // Save the full AI-restructured features as override (persists across reloads)
+      if (!state.featuresOverride) state.featuresOverride = {};
+      if (!state.descOverride) state.descOverride = {};
+      if (!state.connectionsOverride) state.connectionsOverride = {};
+
+      if (result.features) state.featuresOverride[item.id] = result.features;
+      if (result.desc) state.descOverride[item.id] = result.desc;
+      if (result.connections) state.connectionsOverride[item.id] = result.connections;
+
+      // Clear old flat applied data for this module (no longer needed)
+      delete state.applied[item.id];
 
       // Clear the note
       state.notes[item.id] = '';

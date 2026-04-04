@@ -612,7 +612,6 @@ const server = http.createServer(async (req, res) => {
   if (pathname === '/api/mindmap/notes' && req.method === 'POST') {
     const body = await readBody(req);
     try {
-      // Ensure data directory exists
       const dataDir = path.join(__dirname, 'data');
       if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
       fs.writeFileSync(MINDMAP_FILE, body, 'utf-8');
@@ -621,6 +620,19 @@ const server = http.createServer(async (req, res) => {
     } catch (e) {
       res.writeHead(500, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: e.message }));
+    }
+    return;
+  }
+
+  // Reset mindmap notes (clear old applied data)
+  if (pathname === '/api/mindmap/notes/reset' && req.method === 'POST') {
+    try {
+      const dataDir = path.join(__dirname, 'data');
+      if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
+      fs.writeFileSync(MINDMAP_FILE, JSON.stringify({ notes: {}, applied: {}, featuresOverride: {}, descOverride: {}, connectionsOverride: {} }, null, 2), 'utf-8');
+      sendJSON(res, 200, { ok: true });
+    } catch (e) {
+      sendJSON(res, 500, { error: e.message });
     }
     return;
   }
