@@ -442,6 +442,14 @@ body {
 .modal-btn.cancel:hover { background: rgba(255,255,255,0.1); }
 .modal-btn.confirm { background: #fbbf24; color: #000; border-color: #fbbf24; font-weight: 600; }
 .modal-btn.confirm:hover { background: #f59e0b; }
+.modal-btn.confirm:disabled { opacity: 0.7; cursor: wait; }
+.ai-spinner {
+  display: inline-block; width: 14px; height: 14px;
+  border: 2px solid rgba(0,0,0,0.2); border-top-color: #000;
+  border-radius: 50%; animation: spin 0.8s linear infinite;
+  vertical-align: middle; margin-right: 6px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
 
 @media (max-width: 900px) {
   .main { flex-direction: column; }
@@ -457,7 +465,7 @@ body {
     <p>Kompletní přehled firemního OS • 12 modulů • 4 fáze realizace</p>
   </div>
   <div class="header-right">
-    <button class="header-btn" id="btn-apply-notes" onclick="applyAllNotes()" style="background:rgba(251,191,36,0.3);border-color:rgba(251,191,36,0.4);display:none">⚡ Zapracovat poznámky</button>
+    <button class="header-btn" id="btn-apply-notes" onclick="applyAllNotes()" style="background:rgba(251,191,36,0.3);border-color:rgba(251,191,36,0.4);display:none">🤖 Zapracovat poznámky (AI)</button>
     <button class="header-btn" onclick="expandAll()">Rozbalit vše</button>
     <button class="header-btn" onclick="collapseAll()">Sbalit vše</button>
   </div>
@@ -828,16 +836,28 @@ function renderNode(item, children) {
     html += `</div>`;
   }
 
-  // Show features as sub-items when expanded
+  // Show features as sub-items when expanded (supports hierarchical sub-features)
   if (item.features && isExpanded) {
     html += `<div class="node-children">`;
     for (const f of item.features) {
       const txt = featureText(f);
       const isApplied = featureIsApplied(f);
+      const hasSub = typeof f === 'object' && f.sub && f.sub.length;
       if (state.search && !txt.toLowerCase().includes(state.search)) continue;
-      html += `<div class="sub-item ${isApplied ? 'from-note' : ''}" onclick="selectNode('${item.id}')">`;
+      html += `<div class="sub-item ${isApplied ? 'from-note' : ''}" onclick="selectNode('${item.id}')" ${hasSub ? 'style="flex-direction:column;align-items:stretch;"' : ''}>`;
+      html += `<div style="display:flex;align-items:center;gap:6px;">`;
       html += `<span class="sub-dot" style="background:${isApplied ? '#fbbf24' : item.color}"></span>`;
       html += `<span>${highlightText(txt)}${isApplied ? '<span class="applied-tag">z poznámky</span>' : ''}</span>`;
+      html += `</div>`;
+      if (hasSub) {
+        for (const sub of f.sub) {
+          const subTxt = typeof sub === 'object' ? sub.text : sub;
+          html += `<div style="display:flex;align-items:center;gap:6px;margin-left:18px;font-size:11px;color:var(--text2);margin-top:2px;">`;
+          html += `<span style="width:4px;height:4px;border-radius:50%;background:${item.color}55;"></span>`;
+          html += `<span>${highlightText(subTxt)}</span>`;
+          html += `</div>`;
+        }
+      }
       html += `</div>`;
     }
     html += `</div>`;
@@ -897,7 +917,7 @@ function renderDetail() {
     ${phaseTag}
   </div>`;
 
-  // Features
+  // Features (supports hierarchical sub-features from AI)
   if (item.features && item.features.length) {
     html += `<div class="detail-section">
       <h3>Funkce a vlastnosti</h3>
@@ -905,10 +925,24 @@ function renderDetail() {
     for (const f of item.features) {
       const txt = featureText(f);
       const isApplied = featureIsApplied(f);
-      html += `<div class="feature-card ${isApplied ? 'from-note' : ''}">
-        <span class="feature-dot" style="background:${isApplied ? '#fbbf24' : item.color}"></span>
-        <span class="feature-text">${txt}${isApplied ? '<span class="applied-tag">z poznámky</span>' : ''}</span>
-      </div>`;
+      const hasSub = typeof f === 'object' && f.sub && f.sub.length;
+      html += `<div class="feature-card ${isApplied ? 'from-note' : ''}" ${hasSub ? 'style="flex-direction:column;align-items:stretch;"' : ''}>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span class="feature-dot" style="background:${isApplied ? '#fbbf24' : item.color}"></span>
+          <span class="feature-text" style="${hasSub ? 'font-weight:600;' : ''}">${txt}${isApplied ? '<span class="applied-tag">z poznámky</span>' : ''}</span>
+        </div>`;
+      if (hasSub) {
+        html += `<div style="margin-left:20px;margin-top:6px;display:flex;flex-direction:column;gap:4px;">`;
+        for (const sub of f.sub) {
+          const subTxt = typeof sub === 'object' ? sub.text : sub;
+          html += `<div style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text2);">
+            <span style="width:6px;height:6px;border-radius:50%;background:${item.color}55;flex-shrink:0;"></span>
+            ${subTxt}
+          </div>`;
+        }
+        html += `</div>`;
+      }
+      html += `</div>`;
     }
     html += `</div></div>`;
   }
@@ -931,7 +965,7 @@ function renderDetail() {
   const currentNotes = state.notes[item.id] || '';
   html += `<div class="detail-section">
     <h3>Poznámky a nápady</h3>
-    <p style="font-size:12px;color:var(--text2);margin-bottom:8px">Každý řádek = nová funkce/vlastnost. Tlačítkem <strong>⚡ Zapracovat poznámky</strong> nahoře se zapíšou do mapy.</p>
+    <p style="font-size:12px;color:var(--text2);margin-bottom:8px">Napište své požadavky přirozeným jazykem. AI je analyzuje a inteligentně restrukturalizuje modul — vytvoří podkategorie, hierarchii a propojení.</p>
     <textarea class="notes-area" id="notes-input" placeholder="Napiš poznámky k tomuto modulu...&#10;Každý řádek = jedna nová položka.&#10;&#10;Příklad:&#10;Přidat sledování přesčasů v reálném čase&#10;Napojení na biometrický terminál" oninput="onNoteInput('${item.id}')">${currentNotes}</textarea>
     <div style="display:flex;align-items:center;gap:12px;margin-top:8px">
       <button class="notes-save" onclick="saveNote('${item.id}')">💾 Uložit</button>
@@ -1024,7 +1058,7 @@ function saveNote(id) {
 }
 
 // ============================================================
-// APPLY NOTES — zapracovat poznámky do mapy
+// APPLY NOTES — AI-powered zapracování poznámek do mapy
 // ============================================================
 function applyAllNotes() {
   // Collect all modules with non-empty notes
@@ -1034,9 +1068,7 @@ function applyAllNotes() {
   for (const item of allItems) {
     const noteText = state.notes[item.id];
     if (!noteText || !noteText.trim()) continue;
-    const lines = noteText.trim().split('\n').map(l => l.trim()).filter(l => l.length > 0);
-    if (lines.length === 0) continue;
-    notesToApply.push({ item, lines });
+    notesToApply.push({ item, noteText: noteText.trim() });
   }
 
   if (notesToApply.length === 0) return;
@@ -1045,12 +1077,13 @@ function applyAllNotes() {
   const modal = document.getElementById('modal-root');
   let html = '<div class="modal-overlay" onclick="if(event.target===this)closeModal()">';
   html += '<div class="modal">';
-  html += '<h2>⚡ Zapracovat poznámky do mapy</h2>';
-  html += '<p style="font-size:13px;color:var(--text2);margin-bottom:16px">Tyto poznámky budou přidány jako nové funkce/vlastnosti do příslušných modulů:</p>';
+  html += '<h2>🤖 Zapracovat poznámky pomocí AI</h2>';
+  html += '<p style="font-size:13px;color:var(--text2);margin-bottom:16px">AI analyzuje vaše poznámky a inteligentně restrukturalizuje příslušné moduly — vytvoří podkategorie, hierarchii a propojení:</p>';
 
-  for (const { item, lines } of notesToApply) {
+  for (const { item, noteText } of notesToApply) {
+    const lines = noteText.split('\n').filter(l => l.trim());
     html += `<div class="modal-module">`;
-    html += `<h4>${item.icon} ${item.label} <span style="color:var(--text2);font-weight:400">(+${lines.length} položek)</span></h4>`;
+    html += `<h4>${item.icon} ${item.label}</h4>`;
     for (const line of lines) {
       html += `<div class="modal-note-line">${line}</div>`;
     }
@@ -1059,45 +1092,123 @@ function applyAllNotes() {
 
   html += '<div class="modal-actions">';
   html += '<button class="modal-btn cancel" onclick="closeModal()">Zrušit</button>';
-  html += '<button class="modal-btn confirm" onclick="confirmApply()">⚡ Zapracovat</button>';
+  html += '<button class="modal-btn confirm" id="btn-ai-apply" onclick="confirmApply()">🤖 Zapracovat s AI</button>';
   html += '</div>';
   html += '</div></div>';
 
   modal.innerHTML = html;
 }
 
-function confirmApply() {
+async function confirmApply() {
   const allItems = [...DATA.modules, DATA.ai, DATA.tech].filter(Boolean);
+  const notesToApply = [];
 
   for (const item of allItems) {
     const noteText = state.notes[item.id];
     if (!noteText || !noteText.trim()) continue;
-    const lines = noteText.trim().split('\n').map(l => l.trim()).filter(l => l.length > 0);
-    if (lines.length === 0) continue;
+    notesToApply.push({ item, noteText: noteText.trim() });
+  }
 
-    // Add to applied storage
-    if (!state.applied[item.id]) state.applied[item.id] = [];
-    for (const line of lines) {
-      // Avoid duplicates
-      if (!state.applied[item.id].includes(line)) {
-        state.applied[item.id].push(line);
-      }
-      // Add to runtime features (avoid duplicates)
-      const alreadyExists = item.features.some(f => featureText(f) === line);
-      if (!alreadyExists) {
-        item.features.push({ text: line, __applied: true });
-      }
+  if (notesToApply.length === 0) { closeModal(); return; }
+
+  // Show loading state
+  const btn = document.getElementById('btn-ai-apply');
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<span class="ai-spinner"></span> AI zpracovává...';
+  }
+
+  // Show progress in modal
+  const modal = document.querySelector('#modal-root .modal');
+  let progressHtml = '<div id="ai-progress" style="margin-top:16px;padding:12px;background:rgba(108,92,231,0.08);border-radius:8px;font-size:13px;">';
+  progressHtml += '<div style="font-weight:600;margin-bottom:8px;">🔄 Zpracování...</div>';
+  progressHtml += '</div>';
+  if (modal) {
+    const actions = modal.querySelector('.modal-actions');
+    if (actions) actions.insertAdjacentHTML('beforebegin', progressHtml);
+  }
+
+  const progressEl = document.getElementById('ai-progress');
+  let successCount = 0;
+  let errorCount = 0;
+  const changes = [];
+
+  for (const { item, noteText } of notesToApply) {
+    if (progressEl) {
+      progressEl.innerHTML = `<div style="font-weight:600;margin-bottom:4px;">🔄 Zpracovávám: ${item.icon} ${item.label}...</div>
+        <div style="color:var(--text2);font-size:12px;">${successCount} hotovo, ${notesToApply.length - successCount - 1} zbývá</div>`;
     }
 
-    // Clear the note (it's been applied)
-    state.notes[item.id] = '';
+    try {
+      const response = await fetch('/api/mindmap/ai-apply', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          moduleData: {
+            id: item.id,
+            label: item.label,
+            desc: item.desc,
+            features: item.features,
+            connections: item.connections || [],
+          },
+          notes: noteText,
+        }),
+      });
+
+      const data = await response.json();
+      if (!data.ok || !data.result) {
+        throw new Error(data.error || 'Unknown error');
+      }
+
+      const result = data.result;
+
+      // Apply AI results to module
+      if (result.features) item.features = result.features;
+      if (result.connections) item.connections = result.connections;
+      if (result.desc) item.desc = result.desc;
+
+      // Mark notes as applied
+      if (!state.applied[item.id]) state.applied[item.id] = [];
+      const lines = noteText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+      for (const line of lines) {
+        if (!state.applied[item.id].includes(line)) {
+          state.applied[item.id].push(line);
+        }
+      }
+
+      // Clear the note
+      state.notes[item.id] = '';
+
+      changes.push({ module: item.label, icon: item.icon, changes: result.changes || 'Struktura aktualizována' });
+      successCount++;
+    } catch (e) {
+      console.error(`AI apply error for ${item.id}:`, e);
+      changes.push({ module: item.label, icon: item.icon, changes: '❌ Chyba: ' + e.message });
+      errorCount++;
+    }
   }
 
   // Save and re-render
   saveToServer();
-  closeModal();
   renderTree();
   renderDetail();
+
+  // Show results
+  if (progressEl) {
+    let resultHtml = `<div style="font-weight:600;margin-bottom:8px;">✅ Dokončeno (${successCount} OK${errorCount ? ', ' + errorCount + ' chyb' : ''})</div>`;
+    for (const c of changes) {
+      const color = c.changes.startsWith('❌') ? '#ef4444' : 'var(--text2)';
+      resultHtml += `<div style="margin-bottom:4px;"><strong>${c.icon} ${c.module}:</strong> <span style="color:${color}">${c.changes}</span></div>`;
+    }
+    progressEl.innerHTML = resultHtml;
+  }
+
+  // Update button
+  if (btn) {
+    btn.disabled = false;
+    btn.innerHTML = '✓ Hotovo';
+    btn.onclick = closeModal;
+  }
 }
 
 function closeModal() {

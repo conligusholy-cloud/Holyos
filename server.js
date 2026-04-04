@@ -618,6 +618,111 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // ---- MINDMAP AI APPLY — intelligent note processing ----
+  if (pathname === '/api/mindmap/ai-apply' && req.method === 'POST') {
+    const body = await readBody(req);
+    try {
+      const { moduleData, notes } = JSON.parse(body);
+      if (!moduleData || !notes) {
+        sendJSON(res, 400, { error: 'Missing moduleData or notes' });
+        return;
+      }
+
+      const apiKey = process.env.ANTHROPIC_API_KEY;
+      if (!apiKey) {
+        sendJSON(res, 500, { error: 'ANTHROPIC_API_KEY not configured' });
+        return;
+      }
+
+      // Build prompt for Claude
+      const prompt = `Jsi expert na strukturování myšlenkových map pro firemní systém HOLYOS.
+
+Dostáváš modul myšlenkové mapy a poznámky uživatele. Tvým úkolem je INTELIGENTNĚ zapracovat poznámky do struktury modulu.
+
+## Aktuální modul:
+- ID: ${moduleData.id}
+- Název: ${moduleData.label}
+- Popis: ${moduleData.desc}
+- Aktuální features: ${JSON.stringify(moduleData.features, null, 2)}
+- Connections: ${JSON.stringify(moduleData.connections || [])}
+
+## Poznámky uživatele k zapracování:
+${notes}
+
+## Instrukce:
+1. Analyzuj poznámky a porozuměj záměru uživatele
+2. Restrukturalizuj features modulu tak, aby odrážely požadavky z poznámek
+3. Pokud uživatel chce rozdělit něco na části, vytvoř hierarchickou strukturu (features mohou být stringy nebo objekty {text, sub: [...]})
+4. Pokud poznámka zmiňuje propojení s jiným modulem, přidej do connections
+5. Pokud poznámka mění popis modulu, uprav desc
+6. Zachovej existující features které nejsou v rozporu s poznámkami
+7. Features mohou být:
+   - Prostý string: "Evidence zaměstnanců"
+   - Objekt s podkategoriemi: {"text": "Evidence lidí", "sub": ["Lidé obecně — kontakty, dodavatelé, zákazníci", "Zaměstnanci — smlouvy, docházka, mzdy"]}
+
+Vrať POUZE validní JSON objekt (bez markdown, bez komentářů) s touto strukturou:
+{
+  "features": [...],
+  "connections": [...],
+  "desc": "...",
+  "changes": "Stručný popis provedených změn v češtině (1-2 věty)"
+}`;
+
+      // Call Anthropic API
+      const requestBody = JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 4096,
+        messages: [{ role: 'user', content: prompt }]
+      });
+
+      const aiResult = await new Promise((resolve, reject) => {
+        const aiReq = https.request({
+          hostname: 'api.anthropic.com',
+          path: '/v1/messages',
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': apiKey,
+            'anthropic-version': '2023-06-01',
+            'Content-Length': Buffer.byteLength(requestBody),
+          }
+        }, (aiRes) => {
+          let data = '';
+          aiRes.on('data', chunk => data += chunk);
+          aiRes.on('end', () => {
+            try {
+              const parsed = JSON.parse(data);
+              if (aiRes.statusCode !== 200) {
+                reject(new Error(parsed.error?.message || `API error ${aiRes.statusCode}`));
+                return;
+              }
+              const text = parsed.content?.[0]?.text || '';
+              // Extract JSON from response (strip potential markdown fences)
+              const jsonMatch = text.match(/\{[\s\S]*\}/);
+              if (!jsonMatch) {
+                reject(new Error('AI response did not contain valid JSON'));
+                return;
+              }
+              resolve(JSON.parse(jsonMatch[0]));
+            } catch (e) {
+              reject(new Error('Failed to parse AI response: ' + e.message));
+            }
+          });
+        });
+        aiReq.on('error', reject);
+        aiReq.setTimeout(30000, () => { aiReq.destroy(); reject(new Error('AI request timeout')); });
+        aiReq.write(requestBody);
+        aiReq.end();
+      });
+
+      sendJSON(res, 200, { ok: true, result: aiResult });
+    } catch (e) {
+      console.error('AI apply error:', e.message);
+      sendJSON(res, 500, { error: e.message });
+    }
+    return;
+  }
+
   // ---- FACTORIFY API PROXY ----
   if (pathname.startsWith('/api/')) {
     // CORS headers

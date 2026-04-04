@@ -29,13 +29,13 @@ function renderSidebar(activeModule) {
     '</svg>';
 
   var html = '' +
-    '<div class="sidebar-header">' +
+    '<a href="' + basePath + '" class="sidebar-header" style="text-decoration:none; color:inherit;">' +
       '<div class="sidebar-logo">' + logoSvg + '</div>' +
       '<div>' +
         '<h1>HOLYOS</h1>' +
         '<p>Řízení výroby</p>' +
       '</div>' +
-    '</div>' +
+    '</a>' +
     '<div class="sidebar-label">Moduly</div>' +
     '<nav class="sidebar-nav">';
 
