@@ -15,11 +15,13 @@ const DB_FILE = path.join(DATA_DIR, 'hr.json');
 const AUDIT_FILE = path.join(DATA_DIR, 'audit-log.json');
 
 const DEFAULT_DATA = {
-  _nextId: { people: 1, departments: 1, roles: 1, attendance: 1 },
+  _nextId: { people: 1, departments: 1, roles: 1, attendance: 1, admin_tasks: 1 },
   people: [],
   departments: [],
   roles: [],
   attendance: [],
+  permissions: {}, // roleId → { moduleId: 'read'|'write'|'none' }
+  admin_tasks: [], // AI-generated improvement tasks
 };
 
 // Load or initialize
@@ -353,6 +355,80 @@ const db = {
     data.attendance.splice(idx, 1);
     save();
     logChange('delete', 'attendance', id, `Smazána docházka: ${deleted.date} (osoba #${deleted.person_id})`, deleted, null);
+    return true;
+  },
+
+  // --- Permissions ---
+  getPermissions() {
+    return data.permissions || {};
+  },
+
+  getPermissionsForRole(roleId) {
+    return (data.permissions || {})[String(roleId)] || {};
+  },
+
+  setPermissions(roleId, modulePerms) {
+    if (!data.permissions) data.permissions = {};
+    const oldPerms = data.permissions[String(roleId)] || {};
+    data.permissions[String(roleId)] = modulePerms;
+    save();
+    logChange('update', 'permissions', roleId, `Upravena oprávnění pro roli #${roleId}`, oldPerms, modulePerms);
+    return modulePerms;
+  },
+
+  // --- Admin Tasks ---
+  getAdminTasks(filters = {}) {
+    let tasks = data.admin_tasks || [];
+    if (filters.status) tasks = tasks.filter(t => t.status === filters.status);
+    if (filters.page) tasks = tasks.filter(t => t.page === filters.page);
+    return [...tasks].reverse();
+  },
+
+  getAdminTask(id) {
+    return (data.admin_tasks || []).find(t => t.id === id) || null;
+  },
+
+  createAdminTask(task) {
+    if (!data._nextId.admin_tasks) data._nextId.admin_tasks = 1;
+    const newTask = {
+      id: data._nextId.admin_tasks++,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      status: 'new', // new, in_progress, done, cancelled
+      page: task.page || '',
+      page_title: task.page_title || '',
+      description: task.description || '',
+      ai_questions: task.ai_questions || [],
+      ai_answers: task.ai_answers || {},
+      screenshot: task.screenshot || null,
+      priority: task.priority || 'medium',
+      spec: task.spec || '',
+      created_by: task.created_by || null,
+    };
+    if (!data.admin_tasks) data.admin_tasks = [];
+    data.admin_tasks.push(newTask);
+    save();
+    logChange('create', 'admin_task', newTask.id, `Nový požadavek: ${newTask.description.substring(0, 60)}`, null, newTask);
+    return newTask;
+  },
+
+  updateAdminTask(id, updates) {
+    const task = (data.admin_tasks || []).find(t => t.id === id);
+    if (!task) return null;
+    const before = { ...task };
+    Object.assign(task, updates, { updated_at: new Date().toISOString() });
+    save();
+    logChange('update', 'admin_task', id, `Upraven požadavek #${id}`, before, task);
+    return task;
+  },
+
+  deleteAdminTask(id) {
+    const idx = (data.admin_tasks || []).findIndex(t => t.id === id);
+    if (idx === -1) return false;
+    const task = data.admin_tasks[idx];
+    data.admin_tasks.splice(idx, 1);
+    save();
+    logChange('delete', 'admin_task', id, `Smazán požadavek: ${task.description.substring(0, 60)}`, task, null);
     return true;
   },
 
