@@ -158,10 +158,21 @@ const db = {
       supervisor_id: fields.supervisor_id ? parseInt(fields.supervisor_id) : null,
       birth_date: fields.birth_date || null,
       address: fields.address || null,
+      end_date: fields.end_date || null,
       bank_account: fields.bank_account || null,
       photo_url: fields.photo_url || null,
       chip_number: fields.chip_number || null,
       is_super_admin: fields.is_super_admin ? 1 : 0,
+      // Osobní údaje
+      birth_number: fields.birth_number || null,
+      id_card_number: fields.id_card_number || null,
+      gender: fields.gender || null,
+      city: fields.city || null,
+      zip: fields.zip || null,
+      // Nouzový kontakt
+      emergency_name: fields.emergency_name || null,
+      emergency_phone: fields.emergency_phone || null,
+      emergency_relation: fields.emergency_relation || null,
       // Auth link
       user_id: fields.user_id || null,
       username: fields.username || null,
