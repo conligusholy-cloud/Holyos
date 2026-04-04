@@ -749,6 +749,7 @@
       if (data.monthly_salary) data.monthly_salary = parseFloat(data.monthly_salary);
       if (data.department_id) data.department_id = parseInt(data.department_id);
       if (data.role_id) data.role_id = parseInt(data.role_id);
+      if (data.active !== null && data.active !== undefined) data.active = parseInt(data.active);
 
       const url = id ? '/api/hr/people/' + id : '/api/hr/people';
       const method = id ? 'PUT' : 'POST';
@@ -979,7 +980,7 @@
       const roleMap = {};
       for (const r of roles) roleMap[r.id] = { ...r, children: [], people: [] };
 
-      const activePeople = people.filter(p => p.active === 1);
+      const activePeople = people.filter(p => p.active == 1);
       for (const p of activePeople) {
         if (p.role_id && roleMap[p.role_id]) roleMap[p.role_id].people.push(p);
       }

@@ -436,7 +436,7 @@ const db = {
 
   // --- Stats ---
   getStats() {
-    const activePeople = data.people.filter(p => p.active === 1);
+    const activePeople = data.people.filter(p => p.active == 1);
     const employees = activePeople.filter(p => p.type === 'employee').length;
     const contacts = activePeople.filter(p => p.type !== 'employee').length;
     const today = new Date().toISOString().split('T')[0];
