@@ -539,6 +539,137 @@ async function handleHR(req, res, pathname) {
       return true;
     }
 
+    // --- DOCUMENTS ---
+    if (pathname === '/api/hr/documents' && method === 'GET') {
+      const url = new URL(req.url, 'http://localhost');
+      const filters = {
+        person_id: url.searchParams.get('person_id') || undefined,
+        category: url.searchParams.get('category') || undefined,
+        status: url.searchParams.get('status') || undefined,
+        search: url.searchParams.get('search') || undefined,
+      };
+      sendJSON(res, 200, db.getDocuments(filters));
+      return true;
+    }
+
+    if (pathname === '/api/hr/documents' && method === 'POST') {
+      const body = JSON.parse(await readBody(req));
+      if (!body.title) {
+        sendJSON(res, 400, { error: 'title is required' });
+        return true;
+      }
+      sendJSON(res, 201, db.createDocument(body));
+      return true;
+    }
+
+    const docMatch = pathname.match(/^\/api\/hr\/documents\/(\d+)$/);
+    if (docMatch) {
+      const id = parseInt(docMatch[1]);
+      if (method === 'GET') {
+        const doc = db.getDocumentById(id);
+        if (!doc) { sendJSON(res, 404, { error: 'Not found' }); return true; }
+        sendJSON(res, 200, doc);
+        return true;
+      }
+      if (method === 'PUT') {
+        const body = JSON.parse(await readBody(req));
+        const updated = db.updateDocument(id, body);
+        if (!updated) { sendJSON(res, 404, { error: 'Not found' }); return true; }
+        sendJSON(res, 200, { ok: true });
+        return true;
+      }
+      if (method === 'DELETE') {
+        const ok = db.deleteDocument(id);
+        if (!ok) { sendJSON(res, 404, { error: 'Not found' }); return true; }
+        sendJSON(res, 200, { ok: true });
+        return true;
+      }
+    }
+
+    const docFileMatch = pathname.match(/^\/api\/hr\/documents\/(\d+)\/file$/);
+    if (docFileMatch && method === 'GET') {
+      const id = parseInt(docFileMatch[1]);
+      const file = db.getDocumentFile(id);
+      if (!file) { sendJSON(res, 404, { error: 'No file' }); return true; }
+      sendJSON(res, 200, file);
+      return true;
+    }
+
+    // --- DOCUMENT TEMPLATES ---
+    if (pathname === '/api/hr/document-templates' && method === 'GET') {
+      sendJSON(res, 200, db.getDocumentTemplates());
+      return true;
+    }
+
+    if (pathname === '/api/hr/document-templates' && method === 'POST') {
+      const body = JSON.parse(await readBody(req));
+      if (!body.name) {
+        sendJSON(res, 400, { error: 'name is required' });
+        return true;
+      }
+      sendJSON(res, 201, db.createDocumentTemplate(body));
+      return true;
+    }
+
+    const tmplMatch = pathname.match(/^\/api\/hr\/document-templates\/(\d+)$/);
+    if (tmplMatch) {
+      const id = parseInt(tmplMatch[1]);
+      if (method === 'GET') {
+        const tmpl = db.getDocumentTemplateById(id);
+        if (!tmpl) { sendJSON(res, 404, { error: 'Not found' }); return true; }
+        sendJSON(res, 200, tmpl);
+        return true;
+      }
+      if (method === 'PUT') {
+        const body = JSON.parse(await readBody(req));
+        const updated = db.updateDocumentTemplate(id, body);
+        if (!updated) { sendJSON(res, 404, { error: 'Not found' }); return true; }
+        sendJSON(res, 200, { ok: true });
+        return true;
+      }
+      if (method === 'DELETE') {
+        const ok = db.deleteDocumentTemplate(id);
+        if (!ok) { sendJSON(res, 404, { error: 'Not found' }); return true; }
+        sendJSON(res, 200, { ok: true });
+        return true;
+      }
+    }
+
+    // --- GENERATE FROM TEMPLATE ---
+    if (pathname === '/api/hr/document-templates/generate' && method === 'POST') {
+      const body = JSON.parse(await readBody(req));
+      if (!body.template_id || !body.person_id) {
+        sendJSON(res, 400, { error: 'template_id and person_id are required' });
+        return true;
+      }
+      const result = db.generateFromTemplate(body.template_id, body.person_id, body.variables || {});
+      if (!result) { sendJSON(res, 404, { error: 'Template or person not found' }); return true; }
+      sendJSON(res, 200, result);
+      return true;
+    }
+
+    // --- DOCUMENT NOTIFICATIONS ---
+    if (pathname === '/api/hr/document-notifications' && method === 'GET') {
+      const url = new URL(req.url, 'http://localhost');
+      const filters = {
+        person_id: url.searchParams.get('person_id') || undefined,
+        dismissed: url.searchParams.get('dismissed') === 'false' ? false : undefined,
+      };
+      // Also trigger expiration check
+      db.checkExpiringDocuments(30);
+      sendJSON(res, 200, db.getDocumentNotifications(filters));
+      return true;
+    }
+
+    const notifDismissMatch = pathname.match(/^\/api\/hr\/document-notifications\/(\d+)\/dismiss$/);
+    if (notifDismissMatch && method === 'PUT') {
+      const id = parseInt(notifDismissMatch[1]);
+      const ok = db.dismissNotification(id);
+      if (!ok) { sendJSON(res, 404, { error: 'Not found' }); return true; }
+      sendJSON(res, 200, { ok: true });
+      return true;
+    }
+
     return false; // not handled
   } catch (e) {
     console.error('HR API error:', e);

@@ -211,6 +211,8 @@
 
     .tab-content { display: none; }
     .tab-content.active { display: block; }
+    .doc-subtab { display: none; }
+    .doc-subtab.active { display: block; }
 
     /* Sub-tabs */
     .sub-tabs { display: flex; gap: 0; border-bottom: 1px solid var(--border); margin-bottom: 16px; }
@@ -321,6 +323,7 @@
       <div class="tab" data-tab="org" onclick="switchTab('org')">🏢 Organizační struktura</div>
 
       <div class="tab" data-tab="roles" onclick="switchTab('roles')">🔑 Role a oprávnění</div>
+      <div class="tab" data-tab="documents" onclick="switchTab('documents')">📄 Dokumenty</div>
     </div>
 
     <!-- Stats bar -->
@@ -553,6 +556,94 @@
 
       </div>
 
+      <!-- TAB: Dokumenty -->
+      <div class="tab-content" id="tab-documents">
+        <div class="sub-tabs">
+          <div class="sub-tab active" data-docsubtab="doc-list" onclick="switchDocSubTab('doc-list')">📋 Dokumenty</div>
+          <div class="sub-tab" data-docsubtab="doc-templates" onclick="switchDocSubTab('doc-templates')">📝 Šablony</div>
+          <div class="sub-tab" data-docsubtab="doc-generate" onclick="switchDocSubTab('doc-generate')">⚡ Generování</div>
+          <div class="sub-tab" data-docsubtab="doc-notifications" onclick="switchDocSubTab('doc-notifications')">🔔 Upozornění</div>
+        </div>
+
+        <!-- Sub: Seznam dokumentů -->
+        <div class="doc-subtab active" id="doc-list">
+          <div class="toolbar">
+            <input type="text" id="doc-search" placeholder="Hledat dokument..." onkeyup="loadDocuments()" style="width:220px;">
+            <select id="doc-category-filter" onchange="loadDocuments()" style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:13px;">
+              <option value="">Všechny kategorie</option>
+              <option value="contract">Smlouvy</option>
+              <option value="amendment">Dodatky</option>
+              <option value="agreement">Dohody</option>
+              <option value="certificate">Certifikáty</option>
+              <option value="id_document">Osobní doklady</option>
+              <option value="medical">Zdravotní</option>
+              <option value="training">Školení</option>
+              <option value="general">Ostatní</option>
+            </select>
+            <select id="doc-person-filter" onchange="loadDocuments()" style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:13px;">
+              <option value="">Všichni zaměstnanci</option>
+            </select>
+            <div style="flex:1"></div>
+            <button class="btn btn-primary" onclick="openDocumentModal()">+ Nový dokument</button>
+          </div>
+          <div id="documents-table"></div>
+        </div>
+
+        <!-- Sub: Šablony -->
+        <div class="doc-subtab" id="doc-templates">
+          <div style="margin-bottom:16px; padding:14px 18px; background:rgba(108,92,231,0.08); border-left:3px solid #6c5ce7; border-radius:0 8px 8px 0; line-height:1.6;">
+            <strong style="color:#6c5ce7;">📝 Šablony dokumentů</strong><br>
+            <span style="color:var(--text2); font-size:13px;">Vytvářejte šablony s proměnnými <code>{{jmeno}}</code>, <code>{{prijmeni}}</code>, <code>{{pozice}}</code>, <code>{{datum}}</code> atd. Systém automaticky doplní údaje zaměstnance při generování.</span>
+          </div>
+          <div class="toolbar">
+            <div style="flex:1"></div>
+            <button class="btn btn-primary" onclick="openTemplateModal()">+ Nová šablona</button>
+          </div>
+          <div id="templates-table"></div>
+        </div>
+
+        <!-- Sub: Generování z šablony -->
+        <div class="doc-subtab" id="doc-generate">
+          <div style="margin-bottom:16px; padding:14px 18px; background:rgba(16,185,129,0.08); border-left:3px solid #10b981; border-radius:0 8px 8px 0; line-height:1.6;">
+            <strong style="color:#10b981;">⚡ Generování dokumentů</strong><br>
+            <span style="color:var(--text2); font-size:13px;">Vyberte šablonu a zaměstnance — systém automaticky doplní všechny údaje a vygeneruje dokument k náhledu nebo tisku.</span>
+          </div>
+          <div style="background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:20px; margin-bottom:16px;">
+            <div class="form-grid">
+              <div class="form-group">
+                <label>Šablona *</label>
+                <select id="gen-template" onchange="updateGenVariables()" style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:13px;"></select>
+              </div>
+              <div class="form-group">
+                <label>Zaměstnanec *</label>
+                <select id="gen-person" style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:13px;"></select>
+              </div>
+            </div>
+            <div id="gen-extra-vars" style="margin-top:12px;"></div>
+            <div style="margin-top:16px; display:flex; gap:10px;">
+              <button class="btn btn-primary" onclick="generateDocument()">⚡ Generovat náhled</button>
+              <button class="btn btn-secondary" onclick="generateAndSave()">💾 Generovat a uložit</button>
+            </div>
+          </div>
+          <div id="gen-preview" style="background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:24px; min-height:200px; display:none;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+              <h3 style="font-size:15px;">📄 Náhled dokumentu</h3>
+              <button class="btn btn-sm btn-secondary" onclick="printPreview()">🖨️ Tisk</button>
+            </div>
+            <div id="gen-preview-content" style="background:white; color:#1a1a2e; padding:32px; border-radius:8px; font-family:serif; line-height:1.8; font-size:14px;"></div>
+          </div>
+        </div>
+
+        <!-- Sub: Upozornění -->
+        <div class="doc-subtab" id="doc-notifications">
+          <div style="margin-bottom:16px; padding:14px 18px; background:rgba(245,158,11,0.08); border-left:3px solid #f59e0b; border-radius:0 8px 8px 0; line-height:1.6;">
+            <strong style="color:#f59e0b;">🔔 Upozornění na dokumenty</strong><br>
+            <span style="color:var(--text2); font-size:13px;">Automatická upozornění na blížící se a prošlé dokumenty (smlouvy, certifikáty, školení). Systém kontroluje platnost 30 dní předem.</span>
+          </div>
+          <div id="notifications-list"></div>
+        </div>
+      </div>
+
     </div>
   </div>
 
@@ -584,6 +675,7 @@
       if (tab === 'attendance') loadPresence();
       if (tab === 'org') loadDepartments();
       if (tab === 'roles') loadRoles();
+      if (tab === 'documents') { loadDocuments(); populateDocPersonFilter(); }
     }
 
     // ============================================================
@@ -2486,6 +2578,401 @@
       };
       await fetch('/api/hr/overtime-settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
       alert('Nastavení přesčasů uloženo ✅');
+    }
+
+    // ============================================================
+    // DOCUMENTS TAB
+    // ============================================================
+    function switchDocSubTab(tab) {
+      document.querySelectorAll('[data-docsubtab]').forEach(t => t.classList.toggle('active', t.dataset.docsubtab === tab));
+      document.querySelectorAll('.doc-subtab').forEach(t => t.classList.toggle('active', t.id === tab));
+      if (tab === 'doc-list') loadDocuments();
+      if (tab === 'doc-templates') loadTemplates();
+      if (tab === 'doc-generate') loadGenerateForm();
+      if (tab === 'doc-notifications') loadNotifications();
+    }
+
+    const DOC_CATEGORIES = {
+      contract: 'Smlouva', amendment: 'Dodatek', agreement: 'Dohoda',
+      certificate: 'Certifikát', id_document: 'Osobní doklad', medical: 'Zdravotní',
+      training: 'Školení', general: 'Ostatní'
+    };
+    const DOC_CATEGORY_COLORS = {
+      contract: '#6c5ce7', amendment: '#3b82f6', agreement: '#8b5cf6',
+      certificate: '#f59e0b', id_document: '#ef4444', medical: '#10b981',
+      training: '#06b6d4', general: '#9ca3af'
+    };
+
+    async function loadDocuments() {
+      const search = document.getElementById('doc-search')?.value || '';
+      const category = document.getElementById('doc-category-filter')?.value || '';
+      const person_id = document.getElementById('doc-person-filter')?.value || '';
+      let url = '/api/hr/documents?';
+      if (search) url += 'search=' + encodeURIComponent(search) + '&';
+      if (category) url += 'category=' + category + '&';
+      if (person_id) url += 'person_id=' + person_id + '&';
+      try {
+        const res = await fetch(url);
+        const docs = await res.json();
+        renderDocuments(docs);
+      } catch (e) { console.error(e); }
+    }
+
+    function renderDocuments(docs) {
+      const el = document.getElementById('documents-table');
+      if (!docs || docs.length === 0) {
+        el.innerHTML = '<div class="empty-state"><div class="empty-icon">📄</div><h3>Žádné dokumenty</h3><p>Přidejte první dokument tlačítkem výše.</p></div>';
+        return;
+      }
+      let html = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr>';
+      html += '<th>Název</th><th>Kategorie</th><th>Zaměstnanec</th><th>Platnost od</th><th>Platnost do</th><th>Stav</th><th>Akce</th>';
+      html += '</tr></thead><tbody>';
+      for (const d of docs) {
+        const catColor = DOC_CATEGORY_COLORS[d.category] || '#9ca3af';
+        const catLabel = DOC_CATEGORIES[d.category] || d.category;
+        const isExpired = d.valid_to && d.valid_to < new Date().toISOString().slice(0,10);
+        const isExpiring = d.valid_to && !isExpired && d.valid_to <= new Date(Date.now() + 30*86400000).toISOString().slice(0,10);
+        let statusBadge = '';
+        if (d.status === 'archived') statusBadge = '<span class="badge" style="background:rgba(156,163,175,0.2);color:#9ca3af;">Archiv</span>';
+        else if (isExpired) statusBadge = '<span class="badge" style="background:rgba(239,68,68,0.2);color:#f87171;">Prošlý</span>';
+        else if (isExpiring) statusBadge = '<span class="badge" style="background:rgba(245,158,11,0.2);color:#fbbf24;">Vyprší brzy</span>';
+        else statusBadge = '<span class="badge" style="background:rgba(34,197,94,0.2);color:#4ade80;">Aktivní</span>';
+
+        html += '<tr onclick="openDocumentModal(' + d.id + ')" style="cursor:pointer;">';
+        html += '<td class="person-name">' + d.title + (d.file_name ? ' <span style="color:var(--text2);font-size:11px;">📎 ' + d.file_name + '</span>' : '') + '</td>';
+        html += '<td><span class="badge" style="background:' + catColor + '22;color:' + catColor + ';">' + catLabel + '</span></td>';
+        html += '<td>' + (d.person_name || '—') + '</td>';
+        html += '<td>' + (d.valid_from || '—') + '</td>';
+        html += '<td>' + (d.valid_to || '—') + '</td>';
+        html += '<td>' + statusBadge + '</td>';
+        html += '<td><button class="btn btn-danger btn-sm" onclick="event.stopPropagation();deleteDocument(' + d.id + ')">🗑️</button></td>';
+        html += '</tr>';
+      }
+      html += '</tbody></table></div>';
+      el.innerHTML = html;
+    }
+
+    async function populateDocPersonFilter() {
+      await loadPeopleData();
+      const sel = document.getElementById('doc-person-filter');
+      if (!sel || sel.options.length > 1) return;
+      for (const p of people.filter(x => x.type === 'employee')) {
+        const opt = document.createElement('option');
+        opt.value = p.id;
+        opt.textContent = p.first_name + ' ' + p.last_name;
+        sel.appendChild(opt);
+      }
+    }
+
+    async function openDocumentModal(id) {
+      await loadPeopleData();
+      let doc = {};
+      if (id) {
+        try { const r = await fetch('/api/hr/documents/' + id); doc = await r.json(); } catch(e) {}
+      }
+      const personOptions = people.filter(p => p.type === 'employee').map(p =>
+        '<option value="' + p.id + '"' + (doc.person_id === p.id ? ' selected' : '') + '>' + p.first_name + ' ' + p.last_name + '</option>'
+      ).join('');
+      const catOptions = Object.entries(DOC_CATEGORIES).map(([k,v]) =>
+        '<option value="' + k + '"' + (doc.category === k ? ' selected' : '') + '>' + v + '</option>'
+      ).join('');
+
+      document.getElementById('modal-root').innerHTML = '<div class="modal-overlay" onclick="if(event.target===this)closeModal()">' +
+        '<div class="modal" style="max-width:600px;">' +
+          '<h2>' + (id ? '✏️ Upravit dokument' : '➕ Nový dokument') + '</h2>' +
+          '<form onsubmit="saveDocument(event, ' + (id || 'null') + ')">' +
+            '<div class="form-grid">' +
+              '<div class="form-group full"><label>Název dokumentu *</label><input type="text" name="title" value="' + (doc.title || '') + '" required></div>' +
+              '<div class="form-group"><label>Kategorie</label><select name="category">' + catOptions + '</select></div>' +
+              '<div class="form-group"><label>Zaměstnanec</label><select name="person_id"><option value="">— Bez přiřazení —</option>' + personOptions + '</select></div>' +
+              '<div class="form-group"><label>Platnost od</label><input type="date" name="valid_from" value="' + (doc.valid_from || '') + '"></div>' +
+              '<div class="form-group"><label>Platnost do</label><input type="date" name="valid_to" value="' + (doc.valid_to || '') + '"></div>' +
+              '<div class="form-group"><label>Stav</label><select name="status"><option value="active"' + (doc.status === 'active' ? ' selected' : '') + '>Aktivní</option><option value="archived"' + (doc.status === 'archived' ? ' selected' : '') + '>Archivovaný</option></select></div>' +
+              '<div class="form-group"><label>Tagy (oddělte čárkou)</label><input type="text" name="tags" value="' + (doc.tags ? doc.tags.join(', ') : '') + '"></div>' +
+              '<div class="form-group full"><label>Poznámka</label><textarea name="note">' + (doc.note || '') + '</textarea></div>' +
+              '<div class="form-group full"><label>Soubor (PDF, DOCX, obrázek)</label><input type="file" name="file" accept=".pdf,.doc,.docx,.png,.jpg,.jpeg" onchange="handleDocFile(this)"><input type="hidden" name="file_data" value=""><input type="hidden" name="file_name" value="' + (doc.file_name || '') + '"><input type="hidden" name="file_type" value="' + (doc.file_type || '') + '">' +
+              (doc.file_name ? '<div style="margin-top:4px;font-size:12px;color:var(--text2);">Aktuální: 📎 ' + doc.file_name + '</div>' : '') + '</div>' +
+            '</div>' +
+            '<div class="modal-actions">' +
+              '<button type="button" class="btn btn-secondary" onclick="closeModal()">Zrušit</button>' +
+              '<button type="submit" class="btn btn-primary">' + (id ? 'Uložit' : 'Vytvořit') + '</button>' +
+            '</div>' +
+          '</form>' +
+        '</div>' +
+      '</div>';
+    }
+
+    function handleDocFile(input) {
+      const file = input.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const form = input.closest('form');
+        form.querySelector('[name="file_data"]').value = e.target.result;
+        form.querySelector('[name="file_name"]').value = file.name;
+        form.querySelector('[name="file_type"]').value = file.type;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    async function saveDocument(e, id) {
+      e.preventDefault();
+      const form = new FormData(e.target);
+      const docData = {
+        title: form.get('title'),
+        category: form.get('category'),
+        person_id: form.get('person_id') ? parseInt(form.get('person_id')) : null,
+        valid_from: form.get('valid_from') || null,
+        valid_to: form.get('valid_to') || null,
+        status: form.get('status'),
+        tags: form.get('tags') ? form.get('tags').split(',').map(t => t.trim()).filter(Boolean) : [],
+        note: form.get('note'),
+      };
+      // Only include file if new one uploaded
+      const fileData = form.get('file_data');
+      if (fileData) {
+        docData.file_data = fileData;
+        docData.file_name = form.get('file_name');
+        docData.file_type = form.get('file_type');
+        docData.file_size = fileData.length;
+      }
+      const url = id ? '/api/hr/documents/' + id : '/api/hr/documents';
+      await fetch(url, { method: id ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(docData) });
+      closeModal();
+      loadDocuments();
+    }
+
+    async function deleteDocument(id) {
+      if (!confirm('Smazat dokument?')) return;
+      await fetch('/api/hr/documents/' + id, { method: 'DELETE' });
+      loadDocuments();
+    }
+
+    // --- TEMPLATES ---
+    async function loadTemplates() {
+      try {
+        const res = await fetch('/api/hr/document-templates');
+        const tmpls = await res.json();
+        renderTemplates(tmpls);
+      } catch (e) { console.error(e); }
+    }
+
+    function renderTemplates(tmpls) {
+      const el = document.getElementById('templates-table');
+      if (!tmpls || tmpls.length === 0) {
+        el.innerHTML = '<div class="empty-state"><div class="empty-icon">📝</div><h3>Žádné šablony</h3><p>Vytvořte první šablonu s proměnnými pro automatické generování dokumentů.</p></div>';
+        return;
+      }
+      let html = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px;">';
+      for (const t of tmpls) {
+        const catLabel = DOC_CATEGORIES[t.category] || t.category || 'Ostatní';
+        const catColor = DOC_CATEGORY_COLORS[t.category] || '#9ca3af';
+        const varList = (t.variables || []).map(v => '<code style="background:rgba(108,92,231,0.15);padding:1px 6px;border-radius:4px;font-size:11px;">{{' + v + '}}</code>').join(' ');
+        html += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;cursor:pointer;" onclick="openTemplateModal(' + t.id + ')">';
+        html += '<div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:8px;">';
+        html += '<div style="font-weight:600;font-size:14px;">' + t.name + '</div>';
+        html += '<span class="badge" style="background:' + catColor + '22;color:' + catColor + ';">' + catLabel + '</span>';
+        html += '</div>';
+        html += '<div style="font-size:12px;color:var(--text2);margin-bottom:8px;">' + (t.description || 'Bez popisu') + '</div>';
+        if (varList) html += '<div style="margin-top:6px;">' + varList + '</div>';
+        html += '<div style="display:flex;justify-content:flex-end;gap:6px;margin-top:12px;">';
+        html += '<button class="btn btn-danger btn-sm" onclick="event.stopPropagation();deleteTemplate(' + t.id + ')">🗑️</button>';
+        html += '</div></div>';
+      }
+      html += '</div>';
+      el.innerHTML = html;
+    }
+
+    async function openTemplateModal(id) {
+      let tmpl = {};
+      if (id) {
+        try { const r = await fetch('/api/hr/document-templates/' + id); tmpl = await r.json(); } catch(e) {}
+      }
+      const catOptions = Object.entries(DOC_CATEGORIES).map(([k,v]) =>
+        '<option value="' + k + '"' + (tmpl.category === k ? ' selected' : '') + '>' + v + '</option>'
+      ).join('');
+
+      const availableVars = 'jmeno, prijmeni, cele_jmeno, email, telefon, osobni_cislo, datum_nastupu, typ_smlouvy, pozice, oddeleni, hodinova_sazba, mesicni_mzda, datum, rok';
+
+      document.getElementById('modal-root').innerHTML = '<div class="modal-overlay" onclick="if(event.target===this)closeModal()">' +
+        '<div class="modal" style="max-width:700px;">' +
+          '<h2>' + (id ? '✏️ Upravit šablonu' : '➕ Nová šablona') + '</h2>' +
+          '<form onsubmit="saveTemplate(event, ' + (id || 'null') + ')">' +
+            '<div class="form-grid">' +
+              '<div class="form-group"><label>Název šablony *</label><input type="text" name="name" value="' + (tmpl.name || '') + '" required></div>' +
+              '<div class="form-group"><label>Kategorie</label><select name="category">' + catOptions + '</select></div>' +
+              '<div class="form-group full"><label>Popis</label><input type="text" name="description" value="' + (tmpl.description || '') + '"></div>' +
+              '<div class="form-group full"><label>Vlastní proměnné (oddělte čárkou, např.: misto_vykonu, zkusebni_doba)</label><input type="text" name="variables" value="' + (tmpl.variables ? tmpl.variables.join(', ') : '') + '"></div>' +
+              '<div class="form-group full">' +
+                '<label>Obsah šablony (HTML, používejte {{proměnná}})</label>' +
+                '<div style="font-size:11px;color:var(--text2);margin-bottom:6px;">Dostupné proměnné: ' + availableVars + '</div>' +
+                '<textarea name="content" style="min-height:250px;font-family:monospace;font-size:12px;line-height:1.6;">' + (tmpl.content || '<h1 style=\"text-align:center;\">PRACOVNÍ SMLOUVA</h1>\n<p>uzavřená mezi zaměstnavatelem a zaměstnancem:</p>\n<p><strong>Zaměstnanec:</strong> {{cele_jmeno}}</p>\n<p><strong>Pozice:</strong> {{pozice}}</p>\n<p><strong>Oddělení:</strong> {{oddeleni}}</p>\n<p><strong>Datum nástupu:</strong> {{datum_nastupu}}</p>\n<p><strong>Typ smlouvy:</strong> {{typ_smlouvy}}</p>\n<hr>\n<p>V __________ dne {{datum}}</p>\n<p style=\"margin-top:40px;\">_______________________&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;_______________________</p>\n<p>Zaměstnavatel&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Zaměstnanec</p>') + '</textarea>' +
+              '</div>' +
+            '</div>' +
+            '<div class="modal-actions">' +
+              '<button type="button" class="btn btn-secondary" onclick="closeModal()">Zrušit</button>' +
+              '<button type="submit" class="btn btn-primary">' + (id ? 'Uložit' : 'Vytvořit') + '</button>' +
+            '</div>' +
+          '</form>' +
+        '</div>' +
+      '</div>';
+    }
+
+    async function saveTemplate(e, id) {
+      e.preventDefault();
+      const form = new FormData(e.target);
+      const tmplData = {
+        name: form.get('name'),
+        category: form.get('category'),
+        description: form.get('description'),
+        content: form.get('content'),
+        variables: form.get('variables') ? form.get('variables').split(',').map(v => v.trim()).filter(Boolean) : [],
+      };
+      const url = id ? '/api/hr/document-templates/' + id : '/api/hr/document-templates';
+      await fetch(url, { method: id ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(tmplData) });
+      closeModal();
+      loadTemplates();
+    }
+
+    async function deleteTemplate(id) {
+      if (!confirm('Smazat šablonu?')) return;
+      await fetch('/api/hr/document-templates/' + id, { method: 'DELETE' });
+      loadTemplates();
+    }
+
+    // --- GENERATE FROM TEMPLATE ---
+    async function loadGenerateForm() {
+      await loadPeopleData();
+      // Load templates
+      try {
+        const res = await fetch('/api/hr/document-templates');
+        const tmpls = await res.json();
+        const tSel = document.getElementById('gen-template');
+        tSel.innerHTML = '<option value="">— Vyberte šablonu —</option>' +
+          tmpls.map(t => '<option value="' + t.id + '">' + t.name + ' (' + (DOC_CATEGORIES[t.category] || t.category) + ')</option>').join('');
+      } catch(e) {}
+      // Load people
+      const pSel = document.getElementById('gen-person');
+      pSel.innerHTML = '<option value="">— Vyberte zaměstnance —</option>' +
+        people.filter(p => p.type === 'employee').map(p => '<option value="' + p.id + '">' + p.first_name + ' ' + p.last_name + '</option>').join('');
+    }
+
+    async function updateGenVariables() {
+      const tmplId = document.getElementById('gen-template').value;
+      const el = document.getElementById('gen-extra-vars');
+      if (!tmplId) { el.innerHTML = ''; return; }
+      try {
+        const res = await fetch('/api/hr/document-templates/' + tmplId);
+        const tmpl = await res.json();
+        if (tmpl.variables && tmpl.variables.length > 0) {
+          el.innerHTML = '<div class="form-grid" style="margin-top:8px;">' +
+            tmpl.variables.map(v => '<div class="form-group"><label>' + v + '</label><input type="text" id="gen-var-' + v + '" placeholder="Hodnota pro ' + v + '"></div>').join('') +
+            '</div>';
+        } else {
+          el.innerHTML = '<div style="font-size:12px;color:var(--text2);padding:8px;">Šablona nemá žádné vlastní proměnné.</div>';
+        }
+      } catch(e) {}
+    }
+
+    async function generateDocument() {
+      const tmplId = document.getElementById('gen-template').value;
+      const personId = document.getElementById('gen-person').value;
+      if (!tmplId || !personId) { alert('Vyberte šablonu a zaměstnance'); return; }
+      // Collect extra variables
+      const vars = {};
+      document.querySelectorAll('[id^="gen-var-"]').forEach(input => {
+        const key = input.id.replace('gen-var-', '');
+        vars[key] = input.value;
+      });
+      try {
+        const res = await fetch('/api/hr/document-templates/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ template_id: parseInt(tmplId), person_id: parseInt(personId), variables: vars }),
+        });
+        const result = await res.json();
+        if (result.error) { alert(result.error); return; }
+        document.getElementById('gen-preview').style.display = 'block';
+        document.getElementById('gen-preview-content').innerHTML = result.content;
+      } catch(e) { console.error(e); }
+    }
+
+    async function generateAndSave() {
+      const tmplId = document.getElementById('gen-template').value;
+      const personId = document.getElementById('gen-person').value;
+      if (!tmplId || !personId) { alert('Vyberte šablonu a zaměstnance'); return; }
+      const vars = {};
+      document.querySelectorAll('[id^="gen-var-"]').forEach(input => {
+        const key = input.id.replace('gen-var-', '');
+        vars[key] = input.value;
+      });
+      try {
+        const res = await fetch('/api/hr/document-templates/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ template_id: parseInt(tmplId), person_id: parseInt(personId), variables: vars }),
+        });
+        const result = await res.json();
+        if (result.error) { alert(result.error); return; }
+        // Save as document
+        await fetch('/api/hr/documents', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title: result.template_name + ' — ' + result.person_name,
+            category: 'contract',
+            person_id: parseInt(personId),
+            status: 'active',
+            note: 'Vygenerováno ze šablony',
+          }),
+        });
+        alert('Dokument vygenerován a uložen ✅');
+        document.getElementById('gen-preview').style.display = 'block';
+        document.getElementById('gen-preview-content').innerHTML = result.content;
+      } catch(e) { console.error(e); }
+    }
+
+    function printPreview() {
+      const content = document.getElementById('gen-preview-content').innerHTML;
+      const win = window.open('', '_blank');
+      win.document.write('<html><head><title>Tisk dokumentu</title><style>body{font-family:serif;padding:40px;line-height:1.8;color:#000;}h1,h2,h3{text-align:center;}hr{margin:20px 0;}@media print{body{padding:20mm;}}</style></head><body>' + content + '</body></html>');
+      win.document.close();
+      win.print();
+    }
+
+    // --- NOTIFICATIONS ---
+    async function loadNotifications() {
+      try {
+        const res = await fetch('/api/hr/document-notifications?dismissed=false');
+        const notifs = await res.json();
+        renderNotifications(notifs);
+      } catch (e) { console.error(e); }
+    }
+
+    function renderNotifications(notifs) {
+      const el = document.getElementById('notifications-list');
+      if (!notifs || notifs.length === 0) {
+        el.innerHTML = '<div class="empty-state"><div class="empty-icon">🔔</div><h3>Žádná upozornění</h3><p>Všechny dokumenty jsou v pořádku — žádné blížící se expirace.</p></div>';
+        return;
+      }
+      let html = '';
+      for (const n of notifs) {
+        const typeIcon = n.type === 'expired' ? '🔴' : (n.type === 'expiring' ? '🟡' : '🔵');
+        const typeBg = n.type === 'expired' ? 'rgba(239,68,68,0.08)' : (n.type === 'expiring' ? 'rgba(245,158,11,0.08)' : 'rgba(59,130,246,0.08)');
+        const typeBorder = n.type === 'expired' ? '#ef4444' : (n.type === 'expiring' ? '#f59e0b' : '#3b82f6');
+        html += '<div style="background:' + typeBg + ';border-left:3px solid ' + typeBorder + ';border-radius:0 10px 10px 0;padding:14px 18px;margin-bottom:10px;display:flex;align-items:center;gap:14px;">';
+        html += '<div style="font-size:20px;">' + typeIcon + '</div>';
+        html += '<div style="flex:1;"><div style="font-weight:600;font-size:13px;">' + n.message + '</div>';
+        html += '<div style="font-size:12px;color:var(--text2);margin-top:2px;">' + n.person_name + ' · ' + (n.document_valid_to || '—') + '</div></div>';
+        html += '<button class="btn btn-sm btn-secondary" onclick="dismissNotif(' + n.id + ')">✓ Vzít na vědomí</button>';
+        html += '</div>';
+      }
+      el.innerHTML = html;
+    }
+
+    async function dismissNotif(id) {
+      await fetch('/api/hr/document-notifications/' + id + '/dismiss', { method: 'PUT' });
+      loadNotifications();
     }
 
     // ============================================================
