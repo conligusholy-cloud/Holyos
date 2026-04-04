@@ -101,6 +101,10 @@ function renderSidebar(activeModule) {
               '<div class="sidebar-icon" style="background:rgba(239,68,68,0.15); color:#ef4444;">&#129504;</div>' +
               '<div class="sidebar-item-info"><div class="sidebar-item-name">Myšlenková mapa</div></div>' +
             '</a>' +
+            '<a class="sidebar-item' + (activeModule === 'audit-log' ? ' active' : '') + '" href="' + basePath + 'modules/audit-log/index.html">' +
+              '<div class="sidebar-icon" style="background:rgba(245,158,11,0.15); color:#f59e0b;">&#128220;</div>' +
+              '<div class="sidebar-item-info"><div class="sidebar-item-name">Historie změn</div></div>' +
+            '</a>' +
           '</nav>';
         userSection.parentNode.insertBefore(saSection, userSection);
       }

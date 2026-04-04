@@ -487,6 +487,11 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // Set current user context for audit logging
+  if (session) {
+    db.setCurrentUser({ username: session.username, displayName: session.displayName });
+  }
+
   // ---- REQUIRE AUTH for everything below ----
   if (!session) {
     // Allow static assets for login page
@@ -590,6 +595,51 @@ const server = http.createServer(async (req, res) => {
       } catch (e) {
         sendJSON(res, 500, { error: e.message });
       }
+      return;
+    }
+  }
+
+  // ---- AUDIT LOG API (super admin only) ----
+  if (pathname.startsWith('/api/audit')) {
+    // Check super admin
+    if (!session.is_super_admin) {
+      sendJSON(res, 403, { error: 'Přístup odepřen — vyžaduje Super Admin' });
+      return;
+    }
+
+    // GET /api/audit — list audit entries
+    if (pathname === '/api/audit' && req.method === 'GET') {
+      const url = new URL(req.url, `http://${req.headers.host}`);
+      const filters = {
+        entity: url.searchParams.get('entity') || undefined,
+        user: url.searchParams.get('user') || undefined,
+        from: url.searchParams.get('from') || undefined,
+        to: url.searchParams.get('to') || undefined,
+      };
+      const entries = db.getAuditLog(filters);
+      sendJSON(res, 200, entries);
+      return;
+    }
+
+    // GET /api/audit/:id — get single entry with snapshot
+    const entryMatch = pathname.match(/^\/api\/audit\/(\d+)$/);
+    if (entryMatch && req.method === 'GET') {
+      const entry = db.getAuditEntry(parseInt(entryMatch[1]));
+      if (!entry) { sendJSON(res, 404, { error: 'Záznam nenalezen' }); return; }
+      // Return without full snapshot (just metadata)
+      const { snapshot, ...rest } = entry;
+      rest.hasSnapshot = !!snapshot;
+      sendJSON(res, 200, rest);
+      return;
+    }
+
+    // POST /api/audit/:id/rollback — rollback to this point
+    const rollbackMatch = pathname.match(/^\/api\/audit\/(\d+)\/rollback$/);
+    if (rollbackMatch && req.method === 'POST') {
+      const id = parseInt(rollbackMatch[1]);
+      const success = db.rollbackToEntry(id);
+      if (!success) { sendJSON(res, 404, { error: 'Záznam nenalezen nebo nemá snapshot' }); return; }
+      sendJSON(res, 200, { ok: true, message: `Systém vrácen do bodu #${id}` });
       return;
     }
   }

@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Historie změn | HOLYOS</title>
+  <link rel="icon" type="image/svg+xml" href="../../logo-holyos-icon.svg">
+  <base href="../../">
+  <link rel="stylesheet" href="css/dashboard.css">
+  <style>
+    .main-wrapper { margin-left: var(--sidebar-w); flex: 1; min-height: 100vh; display: flex; flex-direction: column; }
+    .audit-filters { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
+    .audit-filters select, .audit-filters input { padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 12px; }
+    .timeline { display: flex; flex-direction: column; gap: 0; }
+    .timeline-entry { display: flex; gap: 14px; padding: 14px 0; border-bottom: 1px solid var(--border); position: relative; }
+    .timeline-entry:hover { background: rgba(108,92,231,0.04); }
+    .timeline-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; margin-top: 5px; }
+    .timeline-dot.create { background: #22c55e; }
+    .timeline-dot.update { background: #3b82f6; }
+    .timeline-dot.delete { background: #ef4444; }
+    .timeline-dot.rollback { background: #f59e0b; }
+    .timeline-body { flex: 1; min-width: 0; }
+    .timeline-desc { font-size: 13px; font-weight: 500; }
+    .timeline-meta { font-size: 11px; color: var(--text2); margin-top: 3px; display: flex; gap: 12px; flex-wrap: wrap; }
+    .timeline-changes { margin-top: 8px; font-size: 12px; background: var(--surface2); border-radius: 6px; padding: 8px 10px; }
+    .timeline-change-row { display: flex; gap: 6px; padding: 2px 0; }
+    .timeline-change-key { color: var(--text2); font-weight: 500; min-width: 120px; }
+    .timeline-change-from { color: #ef4444; text-decoration: line-through; }
+    .timeline-change-to { color: #22c55e; }
+    .btn-rollback { padding: 4px 10px; font-size: 11px; background: rgba(245,158,11,0.15); color: #f59e0b; border: 1px solid rgba(245,158,11,0.3); border-radius: 5px; cursor: pointer; transition: all 0.2s; flex-shrink: 0; }
+    .btn-rollback:hover { background: rgba(245,158,11,0.3); }
+    .action-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; }
+    .action-badge.create { background: rgba(34,197,94,0.15); color: #22c55e; }
+    .action-badge.update { background: rgba(59,130,246,0.15); color: #3b82f6; }
+    .action-badge.delete { background: rgba(239,68,68,0.15); color: #ef4444; }
+    .action-badge.rollback { background: rgba(245,158,11,0.15); color: #f59e0b; }
+    .entity-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 10px; background: rgba(108,92,231,0.12); color: #a78bfa; }
+    .stats-bar { display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+    .stat-mini { padding: 8px 14px; border-radius: 8px; background: var(--surface); border: 1px solid var(--border); font-size: 12px; }
+    .stat-mini strong { font-size: 16px; }
+    .empty-audit { text-align: center; padding: 60px 20px; color: var(--text2); }
+    .empty-audit-icon { font-size: 48px; margin-bottom: 12px; }
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 999; }
+    .modal { background: var(--bg); border: 1px solid var(--border); border-radius: 12px; padding: 24px; max-width: 500px; width: 90%; }
+    .modal h3 { margin-bottom: 12px; }
+    .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 16px; }
+  </style>
+</head>
+<body>
+  <aside id="sidebar" class="sidebar"></aside>
+  <div class="main-wrapper">
+    <div class="main-header">
+      <div>
+        <h1 style="display:flex;align-items:center;gap:10px;">
+          <span style="font-size:24px;">📜</span> Historie změn
+        </h1>
+        <p style="color:var(--text2);font-size:13px;">Kompletní log všech změn v systému s možností vrácení</p>
+      </div>
+    </div>
+    <div class="main-content">
+      <div class="stats-bar" id="stats-bar"></div>
+      <div class="audit-filters">
+        <select id="filter-entity" onchange="loadAudit()">
+          <option value="">Všechny entity</option>
+          <option value="person">Osoby</option>
+          <option value="department">Oddělení</option>
+          <option value="role">Role</option>
+          <option value="attendance">Docházka</option>
+          <option value="system">Systém</option>
+        </select>
+        <select id="filter-action" onchange="filterLocally()">
+          <option value="">Všechny akce</option>
+          <option value="create">Vytvoření</option>
+          <option value="update">Úprava</option>
+          <option value="delete">Smazání</option>
+          <option value="rollback">Rollback</option>
+        </select>
+        <input type="date" id="filter-from" onchange="loadAudit()" placeholder="Od">
+        <input type="date" id="filter-to" onchange="loadAudit()" placeholder="Do">
+        <button class="btn btn-secondary" onclick="clearFilters()" style="padding:6px 12px;font-size:12px;">Vyčistit filtry</button>
+      </div>
+      <div id="timeline"></div>
+    </div>
+  </div>
+  <div id="modal-root"></div>
+
+  <script src="js/sidebar.js"></script>
+  <script>
+    renderSidebar('audit-log');
+    initDate();
+
+    const ENTITY_LABELS = { person: 'Osoba', department: 'Oddělení', role: 'Role', attendance: 'Docházka', system: 'Systém' };
+    const ACTION_LABELS = { create: 'Vytvořeno', update: 'Upraveno', delete: 'Smazáno', rollback: 'Rollback' };
+    const FIELD_LABELS = {
+      first_name: 'Jméno', last_name: 'Příjmení', email: 'E-mail', phone: 'Telefon',
+      type: 'Typ', active: 'Aktivní', employee_number: 'Osobní číslo', department_id: 'Oddělení',
+      role_id: 'Pozice', hire_date: 'Nástup', contract_type: 'Smlouva', hourly_rate: 'Hodinová sazba',
+      monthly_salary: 'Měsíční mzda', supervisor_id: 'Nadřízený', birth_date: 'Datum narození',
+      address: 'Adresa', chip_number: 'Číslo čipu', is_super_admin: 'Super Admin',
+      name: 'Název', color: 'Barva', description: 'Popis',
+      clock_in: 'Příchod', clock_out: 'Odchod', break_minutes: 'Přestávka', note: 'Poznámka',
+      date: 'Datum',
+    };
+
+    let allEntries = [];
+
+    async function loadAudit() {
+      const entity = document.getElementById('filter-entity').value;
+      const from = document.getElementById('filter-from').value;
+      const to = document.getElementById('filter-to').value;
+
+      let url = '/api/audit?';
+      if (entity) url += 'entity=' + entity + '&';
+      if (from) url += 'from=' + from + 'T00:00:00.000Z&';
+      if (to) url += 'to=' + to + 'T23:59:59.999Z&';
+
+      try {
+        const res = await fetch(url);
+        if (res.status === 403) {
+          document.getElementById('timeline').innerHTML = '<div class="empty-audit"><div class="empty-audit-icon">🔒</div><h3>Přístup odepřen</h3><p>Tato sekce vyžaduje práva Super Admin.</p></div>';
+          return;
+        }
+        allEntries = await res.json();
+        renderStats();
+        filterLocally();
+      } catch (e) {
+        console.error('Failed to load audit log:', e);
+      }
+    }
+
+    function filterLocally() {
+      const actionFilter = document.getElementById('filter-action').value;
+      let entries = allEntries;
+      if (actionFilter) entries = entries.filter(e => e.action === actionFilter);
+      renderTimeline(entries);
+    }
+
+    function renderStats() {
+      const total = allEntries.length;
+      const creates = allEntries.filter(e => e.action === 'create').length;
+      const updates = allEntries.filter(e => e.action === 'update').length;
+      const deletes = allEntries.filter(e => e.action === 'delete').length;
+      const rollbacks = allEntries.filter(e => e.action === 'rollback').length;
+
+      document.getElementById('stats-bar').innerHTML = `
+        <div class="stat-mini"><strong>${total}</strong> celkem</div>
+        <div class="stat-mini" style="border-left:3px solid #22c55e;"><strong>${creates}</strong> vytvořeno</div>
+        <div class="stat-mini" style="border-left:3px solid #3b82f6;"><strong>${updates}</strong> upraveno</div>
+        <div class="stat-mini" style="border-left:3px solid #ef4444;"><strong>${deletes}</strong> smazáno</div>
+        ${rollbacks ? '<div class="stat-mini" style="border-left:3px solid #f59e0b;"><strong>' + rollbacks + '</strong> rollbacků</div>' : ''}
+      `;
+    }
+
+    function renderTimeline(entries) {
+      const el = document.getElementById('timeline');
+
+      if (entries.length === 0) {
+        el.innerHTML = '<div class="empty-audit"><div class="empty-audit-icon">📜</div><h3>Zatím žádné záznamy</h3><p>Změny v systému se začnou zaznamenávat automaticky.</p></div>';
+        return;
+      }
+
+      let html = '<div class="timeline">';
+      for (const e of entries) {
+        const d = new Date(e.timestamp);
+        const dateStr = d.toLocaleDateString('cs-CZ') + ' ' + d.toLocaleTimeString('cs-CZ', {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+
+        html += `<div class="timeline-entry">
+          <div class="timeline-dot ${e.action}"></div>
+          <div class="timeline-body">
+            <div class="timeline-desc">${escHtml(e.description)}</div>
+            <div class="timeline-meta">
+              <span class="action-badge ${e.action}">${ACTION_LABELS[e.action] || e.action}</span>
+              <span class="entity-badge">${ENTITY_LABELS[e.entity] || e.entity}</span>
+              <span>👤 ${escHtml(e.user.displayName || e.user.username)}</span>
+              <span>🕐 ${dateStr}</span>
+              <span style="color:var(--text2);">#${e.id}</span>
+            </div>`;
+
+        // Show changes diff
+        if (e.changes && Object.keys(e.changes).length > 0) {
+          html += '<div class="timeline-changes">';
+          for (const [key, val] of Object.entries(e.changes)) {
+            const label = FIELD_LABELS[key] || key;
+            const fromStr = val.from === null ? '(prázdné)' : String(val.from);
+            const toStr = val.to === null ? '(prázdné)' : String(val.to);
+            html += `<div class="timeline-change-row">
+              <span class="timeline-change-key">${label}:</span>
+              <span class="timeline-change-from">${escHtml(fromStr)}</span>
+              <span style="color:var(--text2);">→</span>
+              <span class="timeline-change-to">${escHtml(toStr)}</span>
+            </div>`;
+          }
+          html += '</div>';
+        }
+
+        html += `</div>
+          <button class="btn-rollback" onclick="confirmRollback(${e.id}, '${escAttr(dateStr)}', '${escAttr(e.description)}')">↩ Vrátit sem</button>
+        </div>`;
+      }
+      html += '</div>';
+      el.innerHTML = html;
+    }
+
+    function confirmRollback(id, dateStr, desc) {
+      document.getElementById('modal-root').innerHTML = `
+        <div class="modal-overlay" onclick="if(event.target===this)closeModal()">
+          <div class="modal">
+            <h3>↩ Vrátit systém do bodu #${id}</h3>
+            <p style="font-size:13px;color:var(--text2);margin-bottom:8px;">${escHtml(desc)}</p>
+            <p style="font-size:12px;color:var(--text2);">${dateStr}</p>
+            <div style="margin-top:12px;padding:10px;background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.2);border-radius:8px;font-size:12px;">
+              ⚠️ Tato akce vrátí databázi do stavu v tomto bodě. Všechny pozdější změny budou ztraceny (ale zálohovány v logu).
+            </div>
+            <div class="modal-actions">
+              <button class="btn btn-secondary" onclick="closeModal()">Zrušit</button>
+              <button class="btn btn-primary" style="background:#f59e0b;" onclick="executeRollback(${id})">↩ Vrátit systém</button>
+            </div>
+          </div>
+        </div>`;
+    }
+
+    async function executeRollback(id) {
+      try {
+        const res = await fetch('/api/audit/' + id + '/rollback', { method: 'POST' });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error);
+        closeModal();
+        loadAudit();
+        alert('Systém úspěšně vrácen do bodu #' + id);
+      } catch (e) {
+        alert('Chyba: ' + e.message);
+      }
+    }
+
+    function closeModal() {
+      document.getElementById('modal-root').innerHTML = '';
+    }
+
+    function clearFilters() {
+      document.getElementById('filter-entity').value = '';
+      document.getElementById('filter-action').value = '';
+      document.getElementById('filter-from').value = '';
+      document.getElementById('filter-to').value = '';
+      loadAudit();
+    }
+
+    function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+    function escAttr(s) { return String(s).replace(/'/g, "\\'").replace(/"/g, '\\"'); }
+
+    // Init
+    loadAudit();
+  </script>
+</body>
+</html>
