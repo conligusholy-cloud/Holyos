@@ -1,0 +1,15 @@
+import type { Point } from '../../../shared/types.js';
+export declare function isPointInPolygon(x: number, y: number, points: Point[]): boolean;
+export declare function initSplitHandle(): void;
+export declare function initPaletteDrag(): void;
+export declare function initCanvasMouse(): void;
+export declare function initZoom(): void;
+export declare function zoomIn(): void;
+export declare function zoomOut(): void;
+export declare function zoomFit(): void;
+export declare function toggleGrid(): void;
+export declare function toggleSnap(): void;
+export declare function toggleConnectMode(): void;
+export declare function confirmDistanceAndPlace(): void;
+export declare function hideDistanceInput(): void;
+export declare function initKeyboard(): void;

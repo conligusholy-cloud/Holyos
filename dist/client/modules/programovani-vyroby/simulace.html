@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Programování výroby — Výběr areálu</title>
+  <base href="../../">
+  <link rel="stylesheet" href="css/dashboard.css">
+  <script type="module" crossorigin src="/assets/programovani-vyroby-simulace-DQOoE36U.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/modulepreload-polyfill-B5Qt9EMX.js">
+  <link rel="modulepreload" crossorigin href="/assets/sidebar-BRsKpUMS.js">
+  <link rel="modulepreload" crossorigin href="/assets/persistent-storage-C49qMWAO.js">
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<aside id="sidebar" class="sidebar"></aside>
+
+<!-- MAIN -->
+<div class="main-wrapper">
+  <div class="main-header">
+    <h2>Programování výroby</h2>
+    <div class="main-header-right">
+      <span id="current-date"></span>
+    </div>
+  </div>
+  <div class="main-content">
+
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:20px;">
+      <span style="font-size:14px; color:var(--text2);">Vyberte areál pro programování pracovišť a logistiky</span>
+    </div>
+
+    <div id="areal-list" class="sim-list"></div>
+
+  </div>
+</div>
+
+<!-- Toast -->
+<div id="toast" class="toast"></div>
+
+
+</body>
+</html>

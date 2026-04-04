@@ -1,0 +1,28 @@
+import type { SavedSimulation } from '../../../shared/types.js';
+export declare function getAllSimulations(): SavedSimulation[];
+export declare function saveAllSimulations(sims: SavedSimulation[]): void;
+export declare function initPersistentStorage(): Promise<void>;
+export declare function saveProject(): void;
+export declare function saveProjectAs(): void;
+declare function selectExistingSave(id: string, name: string): void;
+export declare function confirmSave(): void;
+export declare function closeSaveDialog(): void;
+export declare function loadProject(): void;
+export declare function initFileLoader(): void;
+export declare function updateTitleBar(): void;
+export declare function exportJSON(): void;
+export declare function exportPNG(): void;
+export declare function showToast(message: string): void;
+export declare function checkUrlParams(): boolean;
+export declare function getGlobalAPI(): {
+    checkUrlParams: typeof checkUrlParams;
+    loadProject: typeof loadProject;
+    saveProject: typeof saveProject;
+    saveProjectAs: typeof saveProjectAs;
+    exportJSON: typeof exportJSON;
+    exportPNG: typeof exportPNG;
+    confirmSave: typeof confirmSave;
+    closeSaveDialog: typeof closeSaveDialog;
+    selectExistingSave: typeof selectExistingSave;
+};
+export {};

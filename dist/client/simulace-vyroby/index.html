@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Simulace výroby — Editor půdorysu</title>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+<!-- TOOLBAR -->
+<div id="toolbar">
+  <h1>Simulace výroby</h1>
+  <div class="toolbar-group">
+    <button class="btn btn-icon" onclick="zoomIn()" title="Přiblížit">+</button>
+    <span id="zoom-display">100%</span>
+    <button class="btn btn-icon" onclick="zoomOut()" title="Oddálit">−</button>
+    <button class="btn btn-icon" onclick="zoomFit()" title="Zobrazit vše">⊞</button>
+  </div>
+  <div class="toolbar-group">
+    <button class="btn" onclick="toggleGrid()" id="btn-grid" title="Přepnout mřížku">Mřížka</button>
+    <button class="btn" onclick="toggleSnap()" id="btn-snap" title="Přichytávání">Snap</button>
+  </div>
+  <div class="toolbar-group">
+    <button class="btn" onclick="saveProject()" title="Uložit projekt">Uložit</button>
+    <button class="btn" onclick="loadProject()" title="Načíst projekt">Načíst</button>
+    <button class="btn" onclick="exportPNG()" title="Export jako PNG">PNG</button>
+  </div>
+  <span id="coords-display">X: 0.0 m &nbsp; Y: 0.0 m</span>
+</div>
+
+<!-- MAIN -->
+<div id="main">
+
+  <!-- PALETTE -->
+  <div id="palette">
+    <h2>Objekty</h2>
+    <h2 style="margin-top:4px; margin-bottom:6px; font-size:11px; color:var(--accent);">Kreslit bod po bodu</h2>
+    <div class="palette-item palette-draw" data-draw="areal">
+      <div class="palette-icon" style="background:rgba(139,92,246,0.2); color:var(--areal);">&#9998;</div>
+      <div><div class="palette-label">Areál</div><div class="palette-desc">Kresli obrys klikáním</div></div>
+    </div>
+    <div class="palette-item palette-draw" data-draw="hala">
+      <div class="palette-icon" style="background:rgba(59,130,246,0.2); color:var(--hala);">&#9998;</div>
+      <div><div class="palette-label">Hala</div><div class="palette-desc">Kresli obrys klikáním</div></div>
+    </div>
+
+    <h2 style="margin-top:12px; margin-bottom:6px; font-size:11px; color:var(--text2);">Přetáhni na plátno</h2>
+    <div class="palette-item" draggable="true" data-type="pracoviste">
+      <div class="palette-icon" style="background:rgba(245,158,11,0.2); color:var(--pracoviste);">⚙</div>
+      <div><div class="palette-label">Pracoviště</div><div class="palette-desc">Stroj / stanoviště</div></div>
+    </div>
+    <div class="palette-item" draggable="true" data-type="sklad">
+      <div class="palette-icon" style="background:rgba(16,185,129,0.2); color:var(--cesta);">▦</div>
+      <div><div class="palette-label">Sklad</div><div class="palette-desc">Skladovací plocha</div></div>
+    </div>
+    <div class="palette-item" draggable="true" data-type="cesta">
+      <div class="palette-icon" style="background:rgba(16,185,129,0.15); color:var(--cesta);">⟿</div>
+      <div><div class="palette-label">Cesta</div><div class="palette-desc">Transportní koridor</div></div>
+    </div>
+    <div class="palette-item" draggable="true" data-type="vstup">
+      <div class="palette-icon" style="background:rgba(108,140,255,0.2); color:var(--accent);">⇥</div>
+      <div><div class="palette-label">Vstup / Výstup</div><div class="palette-desc">Vstup/výstup materiálu</div></div>
+    </div>
+
+    <h2 style="margin-top:20px;">Návaznosti</h2>
+    <div class="palette-item" id="connect-mode-btn" onclick="toggleConnectMode()">
+      <div class="palette-icon" style="background:rgba(78,205,196,0.2); color:var(--accent2);">⟶</div>
+      <div><div class="palette-label">Propojit</div><div class="palette-desc">Klikni na 2 objekty</div></div>
+    </div>
+  </div>
+
+  <!-- CANVAS -->
+  <div id="canvas-container">
+    <svg id="canvas" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <pattern id="grid-small" width="20" height="20" patternUnits="userSpaceOnUse">
+          <path d="M 20 0 L 0 0 0 20" fill="none" class="grid-line"/>
+        </pattern>
+        <pattern id="grid-large" width="100" height="100" patternUnits="userSpaceOnUse">
+          <rect width="100" height="100" fill="url(#grid-small)"/>
+          <path d="M 100 0 L 0 0 0 100" fill="none" class="grid-line-major"/>
+        </pattern>
+      </defs>
+      <g id="grid-layer">
+        <rect id="grid-rect" width="10000" height="10000" fill="url(#grid-large)" x="-5000" y="-5000"/>
+      </g>
+      <g id="connection-layer"></g>
+      <g id="object-layer"></g>
+      <g id="draw-layer"></g>
+      <g id="snap-layer"></g>
+      <g id="label-layer"></g>
+    </svg>
+    <div id="draw-status" style="display:none;"></div>
+  </div>
+
+  <!-- PROPERTIES -->
+  <div id="properties" class="empty-state">
+    <p>Vyber objekt na plátně<br>nebo přetáhni z palety</p>
+  </div>
+
+</div>
+
+<!-- Drag ghost -->
+<div id="drag-ghost"></div>
+
+<!-- Hidden file input -->
+<input type="file" id="file-input" accept=".json" style="display:none">
+
+<!-- JS moduly (pořadí je důležité) -->
+<script src="js/config.js"></script>
+<script src="js/state.js"></script>
+<script src="js/renderer.js"></script>
+<script src="js/objects.js"></script>
+<script src="js/properties.js"></script>
+<script src="js/interactions.js"></script>
+<script src="js/storage.js"></script>
+<script src="js/app.js"></script>
+
+</body>
+</html>

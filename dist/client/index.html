@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HOLYOS — Řízení výroby</title>
+  <link rel="icon" type="image/svg+xml" href="/assets/logo-holyos-icon-B5dOOhZA.svg">
+  <script>
+    if (!window.location.pathname.endsWith('/') && !window.location.pathname.endsWith('.html')) {
+      window.location.replace(window.location.pathname + '/' + window.location.search + window.location.hash);
+    }
+  </script>
+  <script type="module" crossorigin src="/assets/main-B0bYNwNu.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/modulepreload-polyfill-B5Qt9EMX.js">
+  <link rel="modulepreload" crossorigin href="/assets/sidebar-BRsKpUMS.js">
+  <link rel="stylesheet" crossorigin href="/assets/main-unMmF039.css">
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<aside id="sidebar" class="sidebar"></aside>
+
+<!-- MAIN -->
+<div class="main-wrapper">
+  <div class="main-header">
+    <h2>Přehled modulů</h2>
+    <div class="main-header-right">
+      <span id="current-date"></span>
+    </div>
+  </div>
+  <div class="main-content">
+    <p style="color:var(--text2); margin-bottom: 20px; font-size: 14px;">Vyberte modul v levém panelu nebo klikněte na kartu níže.</p>
+
+    <div class="welcome-grid">
+      <a href="modules/vytvoreni-arealu/simulace.html" class="welcome-card">
+        <div class="sidebar-icon" style="background:rgba(139,92,246,0.15); color:#8b5cf6;">&#9998;</div>
+        <div class="welcome-card-title">Vytvoření areálu</div>
+        <div class="welcome-card-desc">Editor půdorysu výrobního areálu. Kreslení hal, cest, vjezdů a výjezdů s reálnými rozměry v metrech.</div>
+      </a>
+      <a href="modules/programovani-vyroby/simulace.html" class="welcome-card">
+        <div class="sidebar-icon" style="background:rgba(245,158,11,0.15); color:#f59e0b;">&#9881;</div>
+        <div class="welcome-card-title">Programování výroby</div>
+        <div class="welcome-card-desc">Rozmísťování pracovišť, skladů a logistických tras do vytvořeného areálu.</div>
+      </a>
+      <div class="welcome-card placeholder">
+        <div class="sidebar-icon" style="background:rgba(59,130,246,0.15); color:#3b82f6;">&#128197;</div>
+        <div class="welcome-card-title">Plánování výroby</div>
+        <div class="welcome-card-desc">Plánování zakázek, kapacit a výrobních operací.</div>
+      </div>
+      <div class="welcome-card placeholder">
+        <div class="sidebar-icon" style="background:rgba(16,185,129,0.15); color:#10b981;">&#128666;</div>
+        <div class="welcome-card-title">Materiálový tok</div>
+        <div class="welcome-card-desc">Simulace toku materiálu mezi pracovišti.</div>
+      </div>
+      <div class="welcome-card placeholder">
+        <div class="sidebar-icon" style="background:rgba(245,158,11,0.15); color:#f59e0b;">&#128230;</div>
+        <div class="welcome-card-title">Správa skladů</div>
+        <div class="welcome-card-desc">Evidence skladových zásob, příjem a výdej materiálu.</div>
+      </div>
+      <div class="welcome-card placeholder">
+        <div class="sidebar-icon" style="background:rgba(239,68,68,0.15); color:#ef4444;">&#128202;</div>
+        <div class="welcome-card-title">Reporty a analýzy</div>
+        <div class="welcome-card-desc">Přehledy výrobních dat a KPI ukazatele.</div>
+      </div>
+      <div class="welcome-card placeholder">
+        <div class="sidebar-icon" style="background:rgba(108,140,255,0.15); color:#6c8cff;">&#9881;</div>
+        <div class="welcome-card-title">Nastavení</div>
+        <div class="welcome-card-desc">Konfigurace systému a obecné nastavení.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+</body>
+</html>
