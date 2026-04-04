@@ -381,10 +381,6 @@
       let roleOptions = '<option value="">— Bez pozice —</option>';
       for (const r of roles) roleOptions += `<option value="${r.id}" ${p.role_id == r.id ? 'selected' : ''}>${r.name}</option>`;
 
-      let supervisorOptions = '<option value="">— Bez nadřízeného —</option>';
-      for (const pp of people.filter(x => x.id !== id)) {
-        supervisorOptions += `<option value="${pp.id}" ${p.supervisor_id == pp.id ? 'selected' : ''}>${pp.first_name} ${pp.last_name}</option>`;
-      }
 
       const showEmp = (p.type || 'employee') === 'employee';
       const html = `<div class="modal-overlay" onclick="if(event.target===this)closeModal()">
@@ -463,10 +459,6 @@
                 <div class="form-group">
                   <label>Pozice / Role</label>
                   <select name="role_id">${roleOptions}</select>
-                </div>
-                <div class="form-group">
-                  <label>Nadřízený</label>
-                  <select name="supervisor_id">${supervisorOptions}</select>
                 </div>
                 <div class="form-group">
                   <label>Datum nástupu</label>
@@ -673,7 +665,6 @@
       if (data.monthly_salary) data.monthly_salary = parseFloat(data.monthly_salary);
       if (data.department_id) data.department_id = parseInt(data.department_id);
       if (data.role_id) data.role_id = parseInt(data.role_id);
-      if (data.supervisor_id) data.supervisor_id = parseInt(data.supervisor_id);
 
       const url = id ? '/api/hr/people/' + id : '/api/hr/people';
       const method = id ? 'PUT' : 'POST';
@@ -1012,11 +1003,13 @@
         return;
       }
 
-      let html = `<table class="data-table"><thead><tr><th>Role</th><th>Oddělení</th><th>Popis</th><th></th></tr></thead><tbody>`;
+      let html = `<table class="data-table"><thead><tr><th>Role</th><th>Oddělení</th><th>Nadřazená role</th><th>Popis</th><th></th></tr></thead><tbody>`;
       for (const r of roles) {
+        const parentRole = r.parent_role_id ? roles.find(x => x.id === r.parent_role_id) : null;
         html += `<tr>
           <td class="person-name">${r.name}</td>
           <td>${r.department_name || '—'}</td>
+          <td>${parentRole ? parentRole.name : '—'}</td>
           <td>${r.description || '—'}</td>
           <td>
             <button class="btn btn-sm btn-secondary" onclick="openRoleModal(${r.id})">✏️</button>
@@ -1034,6 +1027,11 @@
       let deptOptions = '<option value="">— Bez oddělení —</option>';
       for (const d of departments) deptOptions += `<option value="${d.id}" ${role.department_id == d.id ? 'selected' : ''}>${d.name}</option>`;
 
+      let parentRoleOptions = '<option value="">— Bez nadřazené role —</option>';
+      for (const r of roles.filter(r => r.id !== id)) {
+        parentRoleOptions += `<option value="${r.id}" ${role.parent_role_id == r.id ? 'selected' : ''}>${r.name}${r.department_name ? ' (' + r.department_name + ')' : ''}</option>`;
+      }
+
       document.getElementById('modal-root').innerHTML = `<div class="modal-overlay" onclick="if(event.target===this)closeModal()">
         <div class="modal">
           <h2>${id ? '✏️ Upravit roli' : '➕ Nová role'}</h2>
@@ -1041,6 +1039,7 @@
             <div class="form-grid">
               <div class="form-group"><label>Název role *</label><input type="text" name="name" value="${role.name || ''}" required></div>
               <div class="form-group"><label>Oddělení</label><select name="department_id">${deptOptions}</select></div>
+              <div class="form-group"><label>Nadřazená role</label><select name="parent_role_id">${parentRoleOptions}</select></div>
               <div class="form-group full"><label>Popis</label><textarea name="description">${role.description || ''}</textarea></div>
             </div>
             <div class="modal-actions">
@@ -1055,7 +1054,12 @@
     async function saveRole(e, id) {
       e.preventDefault();
       const form = new FormData(e.target);
-      const data = { name: form.get('name'), department_id: form.get('department_id') || null, description: form.get('description') };
+      const data = {
+        name: form.get('name'),
+        department_id: form.get('department_id') || null,
+        parent_role_id: form.get('parent_role_id') ? parseInt(form.get('parent_role_id')) : null,
+        description: form.get('description')
+      };
 
       const url = id ? '/api/hr/roles/' + id : '/api/hr/roles';
       await fetch(url, { method: id ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
