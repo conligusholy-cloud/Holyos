@@ -12,6 +12,7 @@ const DATA_DIR = path.join(__dirname, 'data');
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 
 const DB_FILE = path.join(DATA_DIR, 'hr.json');
+const AUDIT_FILE = path.join(DATA_DIR, 'audit-log.json');
 
 const DEFAULT_DATA = {
   _nextId: { people: 1, departments: 1, roles: 1, attendance: 1 },
@@ -42,6 +43,65 @@ function now() { return new Date().toISOString(); }
 function nextId(collection) {
   if (!data._nextId[collection]) data._nextId[collection] = 1;
   return data._nextId[collection]++;
+}
+
+// ============================================
+// Audit Log — records every change with snapshots for rollback
+// ============================================
+let auditLog;
+try {
+  auditLog = JSON.parse(fs.readFileSync(AUDIT_FILE, 'utf-8'));
+  if (!Array.isArray(auditLog)) auditLog = [];
+} catch (e) {
+  auditLog = [];
+}
+
+function saveAuditLog() {
+  fs.writeFileSync(AUDIT_FILE, JSON.stringify(auditLog, null, 2), 'utf-8');
+}
+
+// Current user context (set by server.js before each request)
+let _currentUser = null;
+
+function setCurrentUser(user) {
+  _currentUser = user;
+}
+
+function logChange(action, entity, entityId, description, oldData, newData) {
+  // Create deep copy of current DB state for snapshot (exclude photo_url to save space)
+  const snapshotData = JSON.parse(JSON.stringify(data));
+  // Strip photo_url from snapshot to keep file size manageable
+  if (snapshotData.people) {
+    snapshotData.people.forEach(p => { delete p.photo_url; });
+  }
+
+  const entry = {
+    id: auditLog.length + 1,
+    timestamp: now(),
+    user: _currentUser ? { username: _currentUser.username, displayName: _currentUser.displayName } : { username: 'system', displayName: 'Systém' },
+    action,       // 'create' | 'update' | 'delete'
+    entity,       // 'person' | 'department' | 'role' | 'attendance'
+    entityId,
+    description,
+    changes: null,
+    snapshot: snapshotData,
+  };
+
+  // Compute diff for updates
+  if (action === 'update' && oldData && newData) {
+    const changes = {};
+    for (const key of Object.keys(newData)) {
+      if (key === 'updated_at' || key === 'photo_url') continue;
+      if (JSON.stringify(oldData[key]) !== JSON.stringify(newData[key])) {
+        changes[key] = { from: oldData[key], to: newData[key] };
+      }
+    }
+    if (Object.keys(changes).length > 0) entry.changes = changes;
+  }
+
+  auditLog.push(entry);
+  saveAuditLog();
+  return entry;
 }
 
 // ============================================
@@ -110,6 +170,7 @@ const db = {
     };
     data.people.push(person);
     save();
+    logChange('create', 'person', person.id, `Vytvořena osoba: ${person.first_name} ${person.last_name}`, null, person);
     return person;
   },
 
@@ -117,6 +178,7 @@ const db = {
     const idx = data.people.findIndex(p => p.id === id);
     if (idx === -1) return null;
     const existing = data.people[idx];
+    const oldCopy = { ...existing };
     for (const [k, v] of Object.entries(fields)) {
       if (v !== undefined && k !== 'id' && k !== 'created_at') {
         existing[k] = v;
@@ -125,16 +187,18 @@ const db = {
     existing.updated_at = now();
     data.people[idx] = existing;
     save();
+    logChange('update', 'person', id, `Upravena osoba: ${existing.first_name} ${existing.last_name}`, oldCopy, existing);
     return existing;
   },
 
   deletePerson(id) {
     const idx = data.people.findIndex(p => p.id === id);
     if (idx === -1) return false;
+    const deleted = data.people[idx];
     data.people.splice(idx, 1);
-    // Also delete attendance records
     data.attendance = data.attendance.filter(a => a.person_id !== id);
     save();
+    logChange('delete', 'person', id, `Smazána osoba: ${deleted.first_name} ${deleted.last_name}`, deleted, null);
     return true;
   },
 
@@ -153,24 +217,29 @@ const db = {
     };
     data.departments.push(dept);
     save();
+    logChange('create', 'department', dept.id, `Vytvořeno oddělení: ${dept.name}`, null, dept);
     return dept;
   },
 
   updateDepartment(id, fields) {
     const dept = data.departments.find(d => d.id === id);
     if (!dept) return null;
+    const oldCopy = { ...dept };
     if (fields.name !== undefined) dept.name = fields.name;
     if (fields.parent_id !== undefined) dept.parent_id = fields.parent_id ? parseInt(fields.parent_id) : null;
     if (fields.color !== undefined) dept.color = fields.color;
     save();
+    logChange('update', 'department', id, `Upraveno oddělení: ${dept.name}`, oldCopy, dept);
     return dept;
   },
 
   deleteDepartment(id) {
     const idx = data.departments.findIndex(d => d.id === id);
     if (idx === -1) return false;
+    const deleted = data.departments[idx];
     data.departments.splice(idx, 1);
     save();
+    logChange('delete', 'department', id, `Smazáno oddělení: ${deleted.name}`, deleted, null);
     return true;
   },
 
@@ -192,24 +261,29 @@ const db = {
     };
     data.roles.push(role);
     save();
+    logChange('create', 'role', role.id, `Vytvořena role: ${role.name}`, null, role);
     return role;
   },
 
   updateRole(id, fields) {
     const role = data.roles.find(r => r.id === id);
     if (!role) return null;
+    const oldCopy = { ...role };
     if (fields.name !== undefined) role.name = fields.name;
     if (fields.department_id !== undefined) role.department_id = fields.department_id ? parseInt(fields.department_id) : null;
     if (fields.description !== undefined) role.description = fields.description;
     save();
+    logChange('update', 'role', id, `Upravena role: ${role.name}`, oldCopy, role);
     return role;
   },
 
   deleteRole(id) {
     const idx = data.roles.findIndex(r => r.id === id);
     if (idx === -1) return false;
+    const deleted = data.roles[idx];
     data.roles.splice(idx, 1);
     save();
+    logChange('delete', 'role', id, `Smazána role: ${deleted.name}`, deleted, null);
     return true;
   },
 
@@ -243,26 +317,31 @@ const db = {
     };
     data.attendance.push(record);
     save();
+    logChange('create', 'attendance', record.id, `Docházka: ${record.date} (osoba #${record.person_id})`, null, record);
     return record;
   },
 
   updateAttendance(id, fields) {
     const record = data.attendance.find(a => a.id === id);
     if (!record) return null;
+    const oldCopy = { ...record };
     for (const [k, v] of Object.entries(fields)) {
       if (v !== undefined && k !== 'id' && k !== 'created_at' && k !== 'person_id') {
         record[k] = v;
       }
     }
     save();
+    logChange('update', 'attendance', id, `Upravena docházka: ${record.date} (osoba #${record.person_id})`, oldCopy, record);
     return record;
   },
 
   deleteAttendance(id) {
     const idx = data.attendance.findIndex(a => a.id === id);
     if (idx === -1) return false;
+    const deleted = data.attendance[idx];
     data.attendance.splice(idx, 1);
     save();
+    logChange('delete', 'attendance', id, `Smazána docházka: ${deleted.date} (osoba #${deleted.person_id})`, deleted, null);
     return true;
   },
 
@@ -285,6 +364,71 @@ const db = {
   },
 };
 
-console.log('✅ HR Database loaded:', DB_FILE, `(${data.people.length} people, ${data.departments.length} depts)`);
+// ============================================
+// Audit Log API
+// ============================================
+db.setCurrentUser = setCurrentUser;
+
+db.getAuditLog = function(filters = {}) {
+  let results = [...auditLog];
+  if (filters.entity) results = results.filter(e => e.entity === filters.entity);
+  if (filters.user) results = results.filter(e => e.user.username === filters.user);
+  if (filters.from) results = results.filter(e => e.timestamp >= filters.from);
+  if (filters.to) results = results.filter(e => e.timestamp <= filters.to);
+  // Return without snapshots (too large for list view)
+  return results.map(e => {
+    const { snapshot, ...rest } = e;
+    return rest;
+  }).reverse();
+};
+
+db.getAuditEntry = function(id) {
+  return auditLog.find(e => e.id === id) || null;
+};
+
+db.rollbackToEntry = function(id) {
+  const entry = auditLog.find(e => e.id === id);
+  if (!entry || !entry.snapshot) return false;
+
+  // Save current state as a rollback entry first
+  const snapshotNow = JSON.parse(JSON.stringify(data));
+  if (snapshotNow.people) snapshotNow.people.forEach(p => { delete p.photo_url; });
+
+  // Restore data from snapshot
+  const restored = JSON.parse(JSON.stringify(entry.snapshot));
+  // Preserve _nextId to avoid ID conflicts
+  restored._nextId = data._nextId;
+  // Restore photo_url from current data (not in snapshot)
+  if (restored.people && data.people) {
+    for (const rp of restored.people) {
+      const current = data.people.find(p => p.id === rp.id);
+      if (current && current.photo_url) rp.photo_url = current.photo_url;
+    }
+  }
+
+  // Apply
+  for (const key of Object.keys(DEFAULT_DATA)) {
+    data[key] = restored[key] || DEFAULT_DATA[key];
+  }
+  save();
+
+  // Log the rollback itself
+  auditLog.push({
+    id: auditLog.length + 1,
+    timestamp: now(),
+    user: _currentUser ? { username: _currentUser.username, displayName: _currentUser.displayName } : { username: 'system', displayName: 'Systém' },
+    action: 'rollback',
+    entity: 'system',
+    entityId: id,
+    description: `Systém vrácen do bodu #${id} (${entry.timestamp})`,
+    changes: null,
+    snapshot: snapshotNow, // snapshot of state BEFORE rollback
+  });
+  saveAuditLog();
+
+  return true;
+};
+
+console.log('✅ HR Database loaded:', DB_FILE, `(${data.people.length} people, ${data.departments.length} depts, ${auditLog.length} audit entries)`);
 
 module.exports = db;
