@@ -522,7 +522,7 @@ function closeAiChat() {
 function handleAiScreenshot(input) {
   if (!input.files || !input.files[0]) return;
   var file = input.files[0];
-  if (file.size > 2 * 1024 * 1024) { alert('Max 2 MB'); return; }
+  if (file.size > 20 * 1024 * 1024) { alert('Max 20 MB'); return; }
   var reader = new FileReader();
   reader.onload = function(e) {
     _aiChatState.screenshot = e.target.result;
@@ -535,6 +535,29 @@ function removeAiScreenshot() {
   _aiChatState.screenshot = null;
   renderAiChat();
 }
+
+// Ctrl+V paste support for AI chat screenshots
+document.addEventListener('paste', function(e) {
+  // Only handle if AI chat is open
+  var chatEl = document.getElementById('ai-chat');
+  if (!chatEl) return;
+  var items = (e.clipboardData || e.originalEvent.clipboardData).items;
+  for (var i = 0; i < items.length; i++) {
+    if (items[i].type.indexOf('image') !== -1) {
+      e.preventDefault();
+      var file = items[i].getAsFile();
+      if (!file) return;
+      if (file.size > 20 * 1024 * 1024) { alert('Max 20 MB'); return; }
+      var reader = new FileReader();
+      reader.onload = function(ev) {
+        _aiChatState.screenshot = ev.target.result;
+        renderAiChat();
+      };
+      reader.readAsDataURL(file);
+      return;
+    }
+  }
+});
 
 function sendAiMessage() {
   var input = document.getElementById('ai-input');
