@@ -269,6 +269,7 @@ const db = {
       id: nextId('roles'),
       name: fields.name,
       department_id: fields.department_id ? parseInt(fields.department_id) : null,
+      parent_role_id: fields.parent_role_id ? parseInt(fields.parent_role_id) : null,
       description: fields.description || null,
       created_at: now(),
     };
@@ -284,6 +285,7 @@ const db = {
     const oldCopy = { ...role };
     if (fields.name !== undefined) role.name = fields.name;
     if (fields.department_id !== undefined) role.department_id = fields.department_id ? parseInt(fields.department_id) : null;
+    if (fields.parent_role_id !== undefined) role.parent_role_id = fields.parent_role_id ? parseInt(fields.parent_role_id) : null;
     if (fields.description !== undefined) role.description = fields.description;
     save();
     logChange('update', 'role', id, `Upravena role: ${role.name}`, oldCopy, role);
