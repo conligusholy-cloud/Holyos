@@ -327,11 +327,6 @@
         </div>
         <div id="roles-table"></div>
 
-        <div id="permissions-section" style="margin-top:32px;">
-          <h3 style="margin-bottom:16px; font-size:16px; color:var(--text1);">🔐 Oprávnění podle rolí</h3>
-          <p style="color:var(--text2); font-size:13px; margin-bottom:12px;">Nastavte přístup k jednotlivým modulům pro každou roli. Změny se ukládají automaticky.</p>
-          <div id="permissions-matrix"></div>
-        </div>
       </div>
 
     </div>
@@ -1165,7 +1160,6 @@
     async function loadRoles() {
       await loadRolesData();
       renderRoles();
-      renderPermissions();
     }
 
     function renderRoles() {
@@ -1195,7 +1189,10 @@
 
     async function openRoleModal(id) {
       await loadDepartmentsData();
+      await loadPermissions();
       const role = id ? roles.find(r => r.id === id) : {};
+      const rolePerms = id ? (allPermissions[String(id)] || {}) : {};
+
       let deptOptions = '<option value="">— Bez oddělení —</option>';
       for (const d of departments) deptOptions += `<option value="${d.id}" ${role.department_id == d.id ? 'selected' : ''}>${d.name}</option>`;
 
@@ -1204,8 +1201,23 @@
         parentRoleOptions += `<option value="${r.id}" ${role.parent_role_id == r.id ? 'selected' : ''}>${r.name}${r.department_name ? ' (' + r.department_name + ')' : ''}</option>`;
       }
 
+      let permRows = '';
+      for (const m of PERM_MODULES) {
+        const val = rolePerms[m.id] || 'none';
+        permRows += `<tr>
+          <td><div class="perm-module-name"><span class="perm-module-dot" style="background:${m.color}"></span>${m.name}</div></td>
+          <td style="text-align:right;">
+            <select class="perm-select" name="perm_${m.id}">
+              <option value="none" ${val === 'none' ? 'selected' : ''}>⛔ Žádný</option>
+              <option value="read" ${val === 'read' ? 'selected' : ''}>👁 Čtení</option>
+              <option value="write" ${val === 'write' ? 'selected' : ''}>✏️ Úprava</option>
+            </select>
+          </td>
+        </tr>`;
+      }
+
       document.getElementById('modal-root').innerHTML = `<div class="modal-overlay" onclick="if(event.target===this)closeModal()">
-        <div class="modal">
+        <div class="modal" style="max-width:520px;">
           <h2>${id ? '✏️ Upravit roli' : '➕ Nová role'}</h2>
           <form onsubmit="saveRole(event, ${id || 'null'})">
             <div class="form-grid">
@@ -1214,7 +1226,14 @@
               <div class="form-group"><label>Nadřazená role</label><select name="parent_role_id">${parentRoleOptions}</select></div>
               <div class="form-group full"><label>Popis</label><textarea name="description">${role.description || ''}</textarea></div>
             </div>
-            <div class="modal-actions">
+            <div style="font-size:12px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px;margin:20px 0 10px;padding-top:16px;border-top:1px solid var(--border);">🔐 Oprávnění k modulům</div>
+            <div style="overflow-x:auto;">
+              <table class="perm-table">
+                <thead><tr><th>Modul</th><th style="text-align:right;">Přístup</th></tr></thead>
+                <tbody>${permRows}</tbody>
+              </table>
+            </div>
+            <div class="modal-actions" style="margin-top:20px;">
               <button type="button" class="btn btn-secondary" onclick="closeModal()">Zrušit</button>
               <button type="submit" class="btn btn-primary">${id ? 'Uložit' : 'Vytvořit'}</button>
             </div>
@@ -1234,7 +1253,24 @@
       };
 
       const url = id ? '/api/hr/roles/' + id : '/api/hr/roles';
-      await fetch(url, { method: id ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+      const res = await fetch(url, { method: id ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+      const savedRole = await res.json();
+      const roleId = id || savedRole.id;
+
+      // Save permissions for this role
+      const perms = {};
+      for (const m of PERM_MODULES) {
+        perms[m.id] = form.get('perm_' + m.id) || 'none';
+      }
+      try {
+        await fetch('/api/hr/permissions/' + roleId, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(perms)
+        });
+        allPermissions[String(roleId)] = perms;
+      } catch (e) { console.error('Permissions save error:', e); }
+
       closeModal();
       loadRoles();
     }
@@ -1270,71 +1306,7 @@
       } catch (e) { allPermissions = {}; }
     }
 
-    async function renderPermissions() {
-      await loadPermissions();
-      const el = document.getElementById('permissions-matrix');
-      if (!el) return;
-
-      if (roles.length === 0) {
-        el.innerHTML = '<p style="color:var(--text2); font-size:13px;">Nejprve vytvořte alespoň jednu roli.</p>';
-        return;
-      }
-
-      let html = '<div style="overflow-x:auto;"><table class="perm-table"><thead><tr><th>Modul</th>';
-      for (const r of roles) {
-        html += `<th style="text-align:center;">${r.name}</th>`;
-      }
-      html += '</tr></thead><tbody>';
-
-      for (const m of PERM_MODULES) {
-        html += `<tr><td><div class="perm-module-name"><span class="perm-module-dot" style="background:${m.color}"></span>${m.name}</div></td>`;
-        for (const r of roles) {
-          const rolePerms = allPermissions[String(r.id)] || {};
-          const val = rolePerms[m.id] || 'none';
-          html += `<td style="text-align:center;">
-            <select class="perm-select" data-role="${r.id}" data-module="${m.id}" onchange="savePerm(this)">
-              <option value="none" ${val === 'none' ? 'selected' : ''}>⛔ Žádný</option>
-              <option value="read" ${val === 'read' ? 'selected' : ''}>👁 Čtení</option>
-              <option value="write" ${val === 'write' ? 'selected' : ''}>✏️ Úprava</option>
-            </select>
-            <span class="perm-saved" id="perm-saved-${r.id}-${m.id}">✓</span>
-          </td>`;
-        }
-        html += '</tr>';
-      }
-
-      html += '</tbody></table></div>';
-      el.innerHTML = html;
-    }
-
-    async function savePerm(selectEl) {
-      const roleId = selectEl.dataset.role;
-      const moduleId = selectEl.dataset.module;
-      const value = selectEl.value;
-
-      // Build full permissions for this role from current UI state
-      const perms = {};
-      document.querySelectorAll(`.perm-select[data-role="${roleId}"]`).forEach(sel => {
-        perms[sel.dataset.module] = sel.value;
-      });
-
-      try {
-        await fetch('/api/hr/permissions/' + roleId, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(perms)
-        });
-        allPermissions[String(roleId)] = perms;
-
-        // Show saved indicator
-        const indicator = document.getElementById(`perm-saved-${roleId}-${moduleId}`);
-        if (indicator) {
-          indicator.classList.add('show');
-          setTimeout(() => indicator.classList.remove('show'), 1500);
-        }
-      } catch (e) {
-        alert('Chyba při ukládání oprávnění: ' + e.message);
-      }
+    // renderPermissions and savePerm removed — permissions are now managed inside the role modal
     }
 
     // ============================================================
