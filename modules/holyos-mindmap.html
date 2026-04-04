@@ -518,6 +518,71 @@ body {
   background: rgba(0,184,148,0.2) !important; color: #00b894 !important;
   border-color: rgba(0,184,148,0.3) !important;
 }
+
+/* Deploy Wizard */
+.wizard-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 9999;
+  display: flex; align-items: center; justify-content: center; backdrop-filter: blur(4px);
+}
+.wizard {
+  background: var(--surface); border: 1px solid rgba(108,92,231,0.3); border-radius: 16px;
+  width: 680px; max-width: 95vw; max-height: 90vh; overflow: hidden; display: flex; flex-direction: column;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+}
+.wizard-header {
+  padding: 20px 24px; background: linear-gradient(135deg, rgba(108,92,231,0.15), rgba(9,132,227,0.1));
+  border-bottom: 1px solid rgba(108,92,231,0.2); flex-shrink: 0;
+}
+.wizard-header h2 { font-size: 18px; margin-bottom: 4px; }
+.wizard-header p { font-size: 13px; color: var(--text2); }
+.wizard-body { padding: 20px 24px; overflow-y: auto; flex: 1; }
+.wizard-footer {
+  padding: 16px 24px; border-top: 1px solid var(--surface2); display: flex; justify-content: space-between;
+  align-items: center; flex-shrink: 0;
+}
+.wizard-steps { display: flex; gap: 8px; margin-bottom: 16px; }
+.wizard-step {
+  padding: 4px 12px; border-radius: 12px; font-size: 11px; font-weight: 600;
+  background: var(--surface2); color: var(--text2); transition: all 0.2s;
+}
+.wizard-step.active { background: var(--accent); color: #fff; }
+.wizard-step.done { background: rgba(0,184,148,0.2); color: #00b894; }
+
+.wiz-context { background: var(--surface2); border-radius: 10px; padding: 14px 16px; margin-bottom: 16px; font-size: 13px; }
+.wiz-context-label { font-weight: 600; color: var(--accent); margin-bottom: 6px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; }
+.wiz-context-row { display: flex; gap: 8px; align-items: center; margin-bottom: 4px; }
+.wiz-context-row .label { color: var(--text2); min-width: 80px; }
+
+.wiz-q { margin-bottom: 16px; }
+.wiz-q label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; color: var(--text); }
+.wiz-q .hint { font-size: 11px; color: var(--text2); margin-bottom: 6px; }
+.wiz-q input, .wiz-q textarea, .wiz-q select {
+  width: 100%; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--surface2);
+  background: var(--bg); color: var(--text); font-size: 13px; font-family: inherit;
+}
+.wiz-q textarea { min-height: 60px; resize: vertical; }
+.wiz-q input:focus, .wiz-q textarea:focus, .wiz-q select:focus { outline: none; border-color: var(--accent); }
+
+.wiz-rec { background: rgba(108,92,231,0.08); border: 1px solid rgba(108,92,231,0.2); border-radius: 10px; padding: 12px 14px; margin-bottom: 12px; font-size: 13px; }
+.wiz-rec-title { font-weight: 600; color: var(--accent); margin-bottom: 4px; display: flex; align-items: center; gap: 6px; }
+
+.wiz-spec { background: var(--bg); border: 1px solid var(--surface2); border-radius: 10px; padding: 14px; font-size: 12px; font-family: 'Consolas', monospace; white-space: pre-wrap; line-height: 1.5; max-height: 400px; overflow-y: auto; }
+
+.wiz-btn { padding: 8px 18px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; border: none; transition: all 0.2s; }
+.wiz-btn-primary { background: var(--accent); color: #fff; }
+.wiz-btn-primary:hover { background: #5b4bd4; }
+.wiz-btn-secondary { background: var(--surface2); color: var(--text); }
+.wiz-btn-secondary:hover { background: rgba(108,92,231,0.2); }
+.wiz-btn-success { background: var(--green); color: #fff; }
+.wiz-btn-success:hover { background: #00a383; }
+
+.wiz-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.wiz-chip {
+  padding: 4px 10px; border-radius: 14px; font-size: 11px; cursor: pointer;
+  border: 1px solid var(--surface2); background: var(--bg); color: var(--text2); transition: all 0.2s;
+}
+.wiz-chip.selected { border-color: var(--accent); background: rgba(108,92,231,0.15); color: var(--accent); }
+.wiz-chip:hover { border-color: var(--accent); }
 </style>
 </head>
 <body>
@@ -1113,13 +1178,434 @@ function buildSubFeatureClipboard(item, fi, si) {
 function copyClaudeCommand(text, btnEl) {
   navigator.clipboard.writeText(text).then(() => {
     const orig = btnEl.textContent;
-    btnEl.textContent = '\u2705 Zkopirovano!';
+    btnEl.textContent = '\u2705 Zkopírováno!';
     btnEl.classList.add('btn-claude-copied');
     setTimeout(() => {
       btnEl.textContent = orig;
       btnEl.classList.remove('btn-claude-copied');
     }, 2000);
   });
+}
+
+// ============================================================
+// DEPLOY WIZARD
+// ============================================================
+
+// Question templates per feature keyword
+const WIZARD_QUESTIONS = {
+  _default: [
+    { id: 'ui_detail', label: 'Jak má vypadat UI?', hint: 'Popište rozvržení, tabulky, formuláře, modály…', type: 'textarea' },
+    { id: 'data_fields', label: 'Jaká data / pole potřebujete?', hint: 'Vyjmenujte klíčová pole, typy, validace', type: 'textarea' },
+    { id: 'behavior', label: 'Jaké chování očekáváte?', hint: 'Co se stane po kliknutí, uložení, smazání? Notifikace?', type: 'textarea' },
+    { id: 'permissions', label: 'Kdo má mít přístup?', hint: 'Všichni zaměstnanci? Jen admin? Specifická role?', type: 'text' },
+    { id: 'priority', label: 'Priorita', type: 'select', options: ['Vysoká — potřebuji hned', 'Střední — tento týden', 'Nízká — může počkat'] },
+  ],
+  evidence: [
+    { id: 'fields', label: 'Jaká pole má záznam obsahovat?', hint: 'Např. jméno, typ, datum, kontakt…', type: 'textarea' },
+    { id: 'list_view', label: 'Jak má vypadat seznam?', hint: 'Tabulka, karty, filtry, řazení, vyhledávání…', type: 'textarea' },
+    { id: 'detail_view', label: 'Co zobrazit v detailu?', hint: 'Modální okno, samostatná stránka, záložky…', type: 'textarea' },
+    { id: 'import_export', label: 'Potřebujete import/export?', hint: 'CSV, Excel, PDF export?', type: 'text' },
+  ],
+  dochazka: [
+    { id: 'tracking_method', label: 'Způsob záznamu docházky', hint: 'Čip, ruční zadání, GPS, QR kód, mobilní app?', type: 'textarea' },
+    { id: 'shift_types', label: 'Typy směn', hint: 'Ranní, odpolední, noční? Flexibilní?', type: 'text' },
+    { id: 'approvals', label: 'Schvalovací proces', hint: 'Kdo schvaluje dovolené, přesčasy? Workflow?', type: 'textarea' },
+    { id: 'reports', label: 'Jaké výstupy / reporty?', hint: 'Měsíční přehled, export pro účetní, statistiky?', type: 'textarea' },
+  ],
+  smlouvy: [
+    { id: 'doc_types', label: 'Typy dokumentů', hint: 'Pracovní smlouva, DPP, DPČ, dodatky, výpověď…', type: 'textarea' },
+    { id: 'templates', label: 'Potřebujete šablony?', hint: 'Generování smluv ze šablon?', type: 'text' },
+    { id: 'signing', label: 'Elektronický podpis?', hint: 'Digitální podpis, upload naskenované smlouvy?', type: 'text' },
+    { id: 'alerts', label: 'Upozornění', hint: 'Konec smlouvy, zkušební doba, výročí?', type: 'textarea' },
+  ],
+  mzdy: [
+    { id: 'calc_method', label: 'Způsob výpočtu', hint: 'Hodinová sazba × docházka? Fixní měsíční? Kombinace?', type: 'textarea' },
+    { id: 'deductions', label: 'Srážky a odvody', hint: 'Zdravotní, sociální, daně, stravenky, penzijní…', type: 'textarea' },
+    { id: 'payslip', label: 'Výplatní páska', hint: 'PDF generování? E-mail zaměstnanci? Portál?', type: 'textarea' },
+    { id: 'accounting', label: 'Propojení s účetním SW', hint: 'Export do Pohody, Money S3, jiný?', type: 'text' },
+  ],
+  faktur: [
+    { id: 'invoice_types', label: 'Typy faktur', hint: 'Vydané, přijaté, zálohové, dobropisy?', type: 'textarea' },
+    { id: 'numbering', label: 'Číselná řada', hint: 'Automatická? Formát?', type: 'text' },
+    { id: 'payment', label: 'Sledování plateb', hint: 'Párování s bankou? Upomínky? QR kód na faktuře?', type: 'textarea' },
+  ],
+  sklad: [
+    { id: 'stock_method', label: 'Metoda ocenění', hint: 'FIFO, průměrná cena, pevná cena?', type: 'text' },
+    { id: 'locations', label: 'Skladové lokace', hint: 'Jeden sklad, více skladů, regály, pozice?', type: 'textarea' },
+    { id: 'min_stock', label: 'Minimální zásoby', hint: 'Automatické objednávky? Upozornění?', type: 'textarea' },
+  ],
+  projekt: [
+    { id: 'project_types', label: 'Typy projektů', hint: 'Strojírenský, stavební, servisní? Jiné?', type: 'textarea' },
+    { id: 'phases', label: 'Fáze projektu', hint: 'Nabídka → Příprava → Realizace → Předání? Jiné?', type: 'textarea' },
+    { id: 'team', label: 'Přidělování týmu', hint: 'Ručně? Podle kapacity? Role?', type: 'textarea' },
+    { id: 'budget', label: 'Rozpočet a sledování nákladů', hint: 'Plán vs. skutečnost? Materiál, práce, subdodávky?', type: 'textarea' },
+  ],
+};
+
+function getQuestionsForFeature(featureText) {
+  const t = featureText.toLowerCase();
+  let questions = [];
+
+  if (t.includes('evidence') || t.includes('databáz') || t.includes('kontakt') || t.includes('zaměstnan'))
+    questions.push(...WIZARD_QUESTIONS.evidence);
+  if (t.includes('docház') || t.includes('příchod') || t.includes('přesčas') || t.includes('dovolen'))
+    questions.push(...WIZARD_QUESTIONS.dochazka);
+  if (t.includes('smlouv') || t.includes('dokument') || t.includes('pracovní poměr'))
+    questions.push(...WIZARD_QUESTIONS.smlouvy);
+  if (t.includes('mzd') || t.includes('výplat') || t.includes('odvod'))
+    questions.push(...WIZARD_QUESTIONS.mzdy);
+  if (t.includes('faktur') || t.includes('platb'))
+    questions.push(...WIZARD_QUESTIONS.faktur);
+  if (t.includes('sklad') || t.includes('zásob') || t.includes('materiál'))
+    questions.push(...WIZARD_QUESTIONS.sklad);
+  if (t.includes('projekt') || t.includes('harmon') || t.includes('kapacit'))
+    questions.push(...WIZARD_QUESTIONS.projekt);
+
+  // Always add default questions that aren't duplicates
+  const existingIds = new Set(questions.map(q => q.id));
+  for (const q of WIZARD_QUESTIONS._default) {
+    if (!existingIds.has(q.id)) questions.push(q);
+  }
+  return questions;
+}
+
+function getRelatedModules(item) {
+  const conns = item.connections || [];
+  return conns.map(cid => {
+    const m = DATA.modules.find(x => x.id === cid);
+    return m ? { id: m.id, label: m.label, desc: m.desc, features: m.features } : null;
+  }).filter(Boolean);
+}
+
+function getDeployedFeaturesSummary() {
+  const deployed = [];
+  for (const mod of DATA.modules) {
+    if (!mod.features) continue;
+    mod.features.forEach((f, fi) => {
+      const ds = getDeployStatus(mod.id, fi);
+      if (ds === 'full' || ds === 'partial') {
+        deployed.push({ module: mod.label, feature: featureText(f), status: ds });
+      }
+    });
+  }
+  return deployed;
+}
+
+function buildRecommendations(item, featureText) {
+  const recs = [];
+  const related = getRelatedModules(item);
+  const deployed = getDeployedFeaturesSummary();
+  const t = featureText.toLowerCase();
+
+  // Connection recommendations
+  if (related.length > 0) {
+    recs.push({
+      icon: '🔗',
+      title: 'Propojené moduly',
+      text: 'Tato funkce by měla zohlednit napojení na: ' + related.map(r => r.label).join(', ') + '. Zvažte sdílení dat a konzistentní UI.'
+    });
+  }
+
+  // Already deployed features that might be affected
+  const relatedDeployed = deployed.filter(d => {
+    const dl = d.feature.toLowerCase();
+    return (t.includes('docház') && dl.includes('zaměstnan')) ||
+           (t.includes('mzd') && (dl.includes('docház') || dl.includes('zaměstnan'))) ||
+           (t.includes('faktur') && dl.includes('projekt')) ||
+           (t.includes('sklad') && dl.includes('projekt')) ||
+           (t.includes('role') && dl.includes('evidence')) ||
+           (t.includes('oprávn') && dl.includes('role'));
+  });
+  if (relatedDeployed.length > 0) {
+    recs.push({
+      icon: '⚠️',
+      title: 'Již nasazené závislosti',
+      text: 'Tyto funkce jsou již nasazené a mohou být ovlivněny: ' + relatedDeployed.map(d => d.module + ' → ' + d.feature + ' (' + (d.status === 'full' ? 'plně' : 'částečně') + ')').join('; ')
+    });
+  }
+
+  // UI consistency
+  recs.push({
+    icon: '🎨',
+    title: 'Konzistence UI',
+    text: 'Zachovejte stávající design: tmavý motiv, modální okna pro editaci, tabulky s řazením, sidebar navigace. Stávající styl: var(--accent) #6c5ce7.'
+  });
+
+  // Data model
+  recs.push({
+    icon: '💾',
+    title: 'Datový model',
+    text: 'Data se ukládají do JSON souboru přes db.js. Nová pole přidejte do příslušné entity. Audit log zachytí všechny změny automaticky.'
+  });
+
+  return recs;
+}
+
+let wizardState = { step: 0, item: null, featureIndex: null, subIndex: null, answers: {}, level: '' };
+
+function openDeployWizard(level, itemGetter, fi, si) {
+  const item = typeof itemGetter === 'function' ? itemGetter() : itemGetter;
+  if (!item) return;
+
+  wizardState = { step: 0, item, featureIndex: fi, subIndex: si, answers: {}, level };
+  renderWizard();
+}
+
+function renderWizard() {
+  const { step, item, featureIndex: fi, subIndex: si, level } = wizardState;
+
+  // Determine what we're deploying
+  let targetText = '';
+  let fullPath = item.label;
+  if (level === 'module') {
+    targetText = item.label;
+  } else if (level === 'feature') {
+    const f = item.features[fi];
+    targetText = featureText(f);
+    fullPath += ' > ' + targetText;
+  } else if (level === 'sub') {
+    const f = item.features[fi];
+    const sub = f.sub[si];
+    targetText = typeof sub === 'object' ? sub.text : sub;
+    fullPath += ' > ' + featureText(f) + ' > ' + targetText;
+  }
+
+  const questions = getQuestionsForFeature(targetText);
+  const recs = buildRecommendations(item, targetText);
+  const related = getRelatedModules(item);
+  const totalSteps = 3;
+
+  let html = `<div class="wizard-overlay" onclick="if(event.target===this)closeWizard()">
+    <div class="wizard" onclick="event.stopPropagation()">
+      <div class="wizard-header">
+        <h2>🚀 Průvodce nasazením</h2>
+        <p>${fullPath}</p>
+      </div>
+      <div class="wizard-body">
+        <div class="wizard-steps">
+          <span class="wizard-step ${step === 0 ? 'active' : step > 0 ? 'done' : ''}">1. Kontext</span>
+          <span class="wizard-step ${step === 1 ? 'active' : step > 1 ? 'done' : ''}">2. Upřesnění</span>
+          <span class="wizard-step ${step === 2 ? 'active' : ''}">3. Zadání</span>
+        </div>`;
+
+  if (step === 0) {
+    // Step 1: Context + Recommendations
+    const deployStatus = level === 'sub' ? getSubDeployStatus(item.id, fi, si) :
+                         level === 'feature' ? getDeployStatus(item.id, fi) : 'none';
+    const statusLabel = deployStatus === 'full' ? '🟢 Nasazeno' : deployStatus === 'partial' ? '🟡 Částečně' : '🔴 Nenasazeno';
+
+    html += `<div class="wiz-context">
+      <div class="wiz-context-label">Co nasazujeme</div>
+      <div class="wiz-context-row"><span class="label">Cíl:</span> <strong>${targetText}</strong></div>
+      <div class="wiz-context-row"><span class="label">Modul:</span> ${item.label} — ${item.desc}</div>
+      <div class="wiz-context-row"><span class="label">Stav:</span> ${statusLabel}</div>
+      <div class="wiz-context-row"><span class="label">Fáze:</span> ${item.phase ? PHASE_NAMES[item.phase] : 'N/A'}</div>
+      ${related.length ? '<div class="wiz-context-row"><span class="label">Propojení:</span> ' + related.map(r => r.label).join(', ') + '</div>' : ''}
+    </div>`;
+
+    // Show sub-features context if deploying a feature
+    if (level === 'feature' && typeof item.features[fi] === 'object' && item.features[fi].sub) {
+      html += `<div class="wiz-context" style="margin-top:8px;">
+        <div class="wiz-context-label">Pod-funkce</div>`;
+      item.features[fi].sub.forEach((s, idx) => {
+        const st = typeof s === 'object' ? s.text : s;
+        const sd = getSubDeployStatus(item.id, fi, idx);
+        const icon = sd === 'full' ? '🟢' : sd === 'partial' ? '🟡' : '🔴';
+        html += `<div class="wiz-context-row">${icon} ${st}</div>`;
+      });
+      html += '</div>';
+    }
+
+    // Show all module features if deploying whole module
+    if (level === 'module' && item.features) {
+      html += `<div class="wiz-context" style="margin-top:8px;">
+        <div class="wiz-context-label">Funkce modulu</div>`;
+      item.features.forEach((f, idx) => {
+        const ds = getDeployStatus(item.id, idx);
+        const icon = ds === 'full' ? '🟢' : ds === 'partial' ? '🟡' : '🔴';
+        html += `<div class="wiz-context-row">${icon} ${featureText(f)}</div>`;
+      });
+      html += '</div>';
+    }
+
+    // Recommendations
+    html += '<div style="margin-top:16px;">';
+    for (const r of recs) {
+      html += `<div class="wiz-rec"><div class="wiz-rec-title">${r.icon} ${r.title}</div>${r.text}</div>`;
+    }
+    html += '</div>';
+
+  } else if (step === 1) {
+    // Step 2: Questions
+    html += '<div style="margin-bottom:12px; color:var(--text2); font-size:13px;">Odpovězte na otázky, aby bylo zadání co nejpřesnější. Přeskočit můžete — vyplňte jen to, co je důležité.</div>';
+    for (const q of questions) {
+      const val = wizardState.answers[q.id] || '';
+      html += `<div class="wiz-q"><label>${q.label}</label>`;
+      if (q.hint) html += `<div class="hint">${q.hint}</div>`;
+      if (q.type === 'textarea') {
+        html += `<textarea id="wiz-${q.id}" oninput="wizardState.answers['${q.id}']=this.value">${val}</textarea>`;
+      } else if (q.type === 'select') {
+        html += `<select id="wiz-${q.id}" onchange="wizardState.answers['${q.id}']=this.value">
+          <option value="">— Vyberte —</option>`;
+        for (const opt of q.options) html += `<option value="${opt}" ${val === opt ? 'selected' : ''}>${opt}</option>`;
+        html += '</select>';
+      } else {
+        html += `<input type="text" id="wiz-${q.id}" value="${val}" oninput="wizardState.answers['${q.id}']=this.value">`;
+      }
+      html += '</div>';
+    }
+
+  } else if (step === 2) {
+    // Step 3: Generated specification
+    const spec = generateSpec();
+    html += `<div style="margin-bottom:12px; color:var(--text2); font-size:13px;">Zkontrolujte zadání a zkopírujte ho do Claude chatu.</div>
+      <div class="wiz-spec" id="wiz-spec-text">${escapeHtml(spec)}</div>`;
+  }
+
+  html += `</div>
+      <div class="wizard-footer">
+        <button class="wiz-btn wiz-btn-secondary" onclick="closeWizard()">Zavřít</button>
+        <div style="display:flex;gap:8px;">
+          ${step > 0 ? '<button class="wiz-btn wiz-btn-secondary" onclick="wizardState.step--;renderWizard()">← Zpět</button>' : ''}
+          ${step < totalSteps - 1
+            ? '<button class="wiz-btn wiz-btn-primary" onclick="wizardState.step++;renderWizard()">Další →</button>'
+            : '<button class="wiz-btn wiz-btn-success" onclick="copySpec()">📋 Zkopírovat zadání</button>'}
+        </div>
+      </div>
+    </div>
+  </div>`;
+
+  let container = document.getElementById('wizard-root');
+  if (!container) {
+    container = document.createElement('div');
+    container.id = 'wizard-root';
+    document.body.appendChild(container);
+  }
+  container.innerHTML = html;
+}
+
+function escapeHtml(str) {
+  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function generateSpec() {
+  const { item, featureIndex: fi, subIndex: si, level, answers } = wizardState;
+  const related = getRelatedModules(item);
+  const deployed = getDeployedFeaturesSummary();
+
+  let targetText = '';
+  if (level === 'module') targetText = item.label;
+  else if (level === 'feature') targetText = featureText(item.features[fi]);
+  else if (level === 'sub') {
+    const sub = item.features[fi].sub[si];
+    targetText = typeof sub === 'object' ? sub.text : sub;
+  }
+
+  let spec = `═══════════════════════════════════════\n`;
+  spec += `NASAZENÍ: ${item.label} > ${targetText}\n`;
+  spec += `═══════════════════════════════════════\n\n`;
+
+  // Context
+  spec += `📦 MODUL: ${item.label}\n`;
+  spec += `   ${item.desc}\n`;
+  spec += `   Fáze: ${item.phase ? PHASE_NAMES[item.phase] : 'N/A'}\n\n`;
+
+  // What to deploy
+  spec += `🎯 CÍL NASAZENÍ:\n`;
+  if (level === 'module' && item.features) {
+    item.features.forEach((f, idx) => {
+      const ds = getDeployStatus(item.id, idx);
+      const statusCz = ds === 'full' ? '✅ nasazeno' : ds === 'partial' ? '🟡 částečně' : '🔴 nenasazeno';
+      spec += `   ${statusCz} ${featureText(f)}\n`;
+      if (typeof f === 'object' && f.sub) {
+        f.sub.forEach((s, sIdx) => {
+          const sd = getSubDeployStatus(item.id, idx, sIdx);
+          const sc = sd === 'full' ? '✅' : sd === 'partial' ? '🟡' : '🔴';
+          spec += `      ${sc} ${typeof s === 'object' ? s.text : s}\n`;
+        });
+      }
+    });
+  } else if (level === 'feature') {
+    const f = item.features[fi];
+    spec += `   ${targetText}\n`;
+    if (typeof f === 'object' && f.sub) {
+      spec += `   Pod-funkce:\n`;
+      f.sub.forEach((s, idx) => {
+        const sd = getSubDeployStatus(item.id, fi, idx);
+        const sc = sd === 'full' ? '✅' : sd === 'partial' ? '🟡' : '🔴';
+        spec += `      ${sc} ${typeof s === 'object' ? s.text : s}\n`;
+      });
+    }
+  } else {
+    spec += `   ${targetText}\n`;
+    spec += `   (součást: ${featureText(item.features[fi])})\n`;
+  }
+  spec += '\n';
+
+  // User specifications
+  const filledAnswers = Object.entries(answers).filter(([k, v]) => v && v.trim());
+  if (filledAnswers.length > 0) {
+    spec += `📝 SPECIFIKACE OD UŽIVATELE:\n`;
+    const questions = getQuestionsForFeature(targetText);
+    for (const [key, val] of filledAnswers) {
+      const q = questions.find(q => q.id === key);
+      spec += `   ${q ? q.label : key}: ${val}\n`;
+    }
+    spec += '\n';
+  }
+
+  // Connected modules
+  if (related.length > 0) {
+    spec += `🔗 PROPOJENÉ MODULY (zohlednit při implementaci):\n`;
+    for (const r of related) {
+      spec += `   • ${r.label} — ${r.desc}\n`;
+    }
+    spec += '\n';
+  }
+
+  // Already deployed features for context
+  const relevantDeployed = deployed.filter(d => d.status === 'full' || d.status === 'partial');
+  if (relevantDeployed.length > 0) {
+    spec += `✅ JIŽ NASAZENÉ FUNKCE (kontext pro konzistenci):\n`;
+    for (const d of relevantDeployed) {
+      spec += `   ${d.status === 'full' ? '✅' : '🟡'} ${d.module} → ${d.feature}\n`;
+    }
+    spec += '\n';
+  }
+
+  // Technical context
+  spec += `⚙️ TECHNICKÝ KONTEXT:\n`;
+  spec += `   • Server: Node.js (http.createServer), bez frameworku\n`;
+  spec += `   • DB: JSON soubor přes db.js, auto-increment ID\n`;
+  spec += `   • Frontend: Vanilla JS, inline HTML, tmavý motiv\n`;
+  spec += `   • Auth: Session-based, cookie, is_super_admin flag\n`;
+  spec += `   • Audit: Automatický log všech změn v db.js\n`;
+  spec += `   • Hosting: Railway, persistent volume /app/data\n\n`;
+
+  spec += `💡 POŽADAVKY:\n`;
+  spec += `   • Zachovat konzistentní UI s existujícími moduly\n`;
+  spec += `   • Všechny CRUD operace musí procházet přes db.js (audit log)\n`;
+  spec += `   • API endpointy v server.js, UI v modules/\n`;
+  spec += `   • Po dokončení aktualizovat deploy status v myšlenkové mapě\n`;
+
+  return spec;
+}
+
+function copySpec() {
+  const spec = generateSpec();
+  navigator.clipboard.writeText(spec).then(() => {
+    const btn = document.querySelector('.wiz-btn-success');
+    if (btn) {
+      btn.textContent = '✅ Zkopírováno! Vložte do Claude chatu.';
+      btn.style.background = '#00b894';
+      setTimeout(() => closeWizard(), 2000);
+    }
+  });
+}
+
+function closeWizard() {
+  const el = document.getElementById('wizard-root');
+  if (el) el.innerHTML = '';
 }
 
 // RENDER DETAIL
@@ -1163,7 +1649,7 @@ function renderDetail() {
       <div class="detail-subtitle">${item.desc || ''}</div>
     </div>
     ${phaseTag}
-    ${item.features ? '<button class="btn-claude-module" onclick="copyClaudeCommand(buildModuleClipboard(getSelectedItem()), this)">\uD83D\uDE80 Nasadit modul s Claude</button>' : ''}
+    ${item.features ? '<button class="btn-claude-module" onclick="openDeployWizard(\'module\', getSelectedItem)">\uD83D\uDE80 Nasadit modul s Claude</button>' : ''}
   </div>`;
 
   // Features (supports hierarchical sub-features from AI)
@@ -1191,7 +1677,7 @@ function renderDetail() {
           <span class="review-check ${isLocked ? 'locked' : ''}" onclick="toggleReviewed('${item.id}', ${fi}, event)" title="${isLocked ? 'Zamčeno — klikni pro odemčení' : 'Zkontrolováno? Klikni pro zamčení'}"></span>
           <span class="deploy-dot ${deployS}"></span>
           <span class="feature-text" style="${hasSub ? 'font-weight:600;' : ''}${isLocked ? 'opacity:0.55;' : ''}">${txt}${deployLabel ? '<span class="status-tag deployed">' + deployLabel + '</span>' : ''}${isLocked ? '<span class="status-tag locked">🔒 Zamčeno</span>' : ''}</span>
-          <button class="btn-claude-feature" onclick="event.stopPropagation(); copyClaudeCommand(buildFeatureClipboard(getSelectedItem(), ${fi}), this)">\uD83D\uDCCB Nasadit s Claude</button>
+          <button class="btn-claude-feature" onclick="event.stopPropagation(); openDeployWizard('feature', getSelectedItem, ${fi})">\uD83D\uDCCB Nasadit s Claude</button>
         </div>`;
       if (hasSub) {
         html += `<div style="margin-left:20px;margin-top:6px;display:flex;flex-direction:column;gap:4px;">`;
@@ -1203,7 +1689,7 @@ function renderDetail() {
           html += `<div style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text2);">
             <span class="deploy-dot ${subDeploy}" style="width:6px;height:6px;flex-shrink:0;"></span>
             ${subTxt}${subLabel ? '<span class="status-tag ' + (subDeploy === 'full' ? 'deployed' : 'partial') + '">' + subLabel + '</span>' : ''}
-            <button class="btn-claude-feature" style="font-size:10px;padding:2px 7px;" onclick="event.stopPropagation(); copyClaudeCommand(buildSubFeatureClipboard(getSelectedItem(), ${fi}, ${si}), this)">\uD83D\uDCCB Nasadit</button>
+            <button class="btn-claude-feature" style="font-size:10px;padding:2px 7px;" onclick="event.stopPropagation(); openDeployWizard('sub', getSelectedItem, ${fi}, ${si})">\uD83D\uDCCB Nasadit</button>
           </div>`;
         }
         html += `</div>`;
