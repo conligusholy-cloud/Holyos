@@ -44,6 +44,19 @@
     .modal { background: var(--bg); border: 1px solid var(--border); border-radius: 12px; padding: 24px; max-width: 500px; width: 90%; }
     .modal h3 { margin-bottom: 12px; }
     .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 16px; }
+
+    @media (max-width: 768px) {
+      .main-wrapper { margin-left: 0 !important; }
+      .main-header { padding-left: 56px !important; }
+      .main-content { padding: 16px !important; }
+      .audit-filters { flex-direction: column; }
+      .audit-filters select, .audit-filters input { width: 100%; }
+      .stats-bar { flex-wrap: nowrap; overflow-x: auto; }
+      .stat-mini { flex-shrink: 0; }
+      .timeline-entry { flex-direction: column; gap: 8px; }
+      .modal-overlay { align-items: flex-end; }
+      .modal { max-width: 100%; width: 100%; border-radius: 14px 14px 0 0; }
+    }
   </style>
 </head>
 <body>

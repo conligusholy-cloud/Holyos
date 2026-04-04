@@ -367,3 +367,254 @@ body {
   opacity: 1;
   transform: translateX(-50%) translateY(0);
 }
+
+/* === HAMBURGER MENU BUTTON === */
+.hamburger-btn {
+  display: none; /* hidden on desktop */
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  z-index: 200;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text);
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.sidebar-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  z-index: 99;
+}
+
+/* ============================================
+   RESPONSIVE — Mobile & Tablet
+   ============================================ */
+@media (max-width: 768px) {
+  :root {
+    --sidebar-w: 0px;
+  }
+
+  /* Hamburger visible */
+  .hamburger-btn {
+    display: flex;
+  }
+
+  /* Sidebar slides in/out */
+  .sidebar {
+    width: 260px;
+    transform: translateX(-100%);
+    transition: transform 0.3s ease;
+    z-index: 150;
+  }
+  .sidebar.open {
+    transform: translateX(0);
+  }
+  .sidebar-overlay.open {
+    display: block;
+  }
+
+  /* Main content full width */
+  .main-wrapper {
+    margin-left: 0 !important;
+  }
+
+  /* Header */
+  .main-header {
+    padding: 14px 16px;
+    padding-left: 56px; /* space for hamburger */
+  }
+  .main-header h2 {
+    font-size: 16px;
+  }
+
+  /* Content */
+  .main-content {
+    padding: 16px;
+  }
+
+  /* Welcome grid — single column */
+  .welcome-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  .welcome-card {
+    padding: 16px;
+  }
+
+  /* Buttons — larger touch targets */
+  .btn {
+    padding: 10px 16px;
+    font-size: 14px;
+    min-height: 40px;
+  }
+  .btn-sm {
+    padding: 8px 12px;
+    font-size: 13px;
+    min-height: 36px;
+  }
+
+  /* Simulation cards */
+  .sim-card {
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 14px;
+  }
+  .sim-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+
+  /* Modal — full width */
+  .modal-overlay {
+    align-items: flex-end;
+  }
+  .modal-box {
+    width: 100%;
+    max-width: 100%;
+    border-radius: 14px 14px 0 0;
+    max-height: 85vh;
+    overflow-y: auto;
+  }
+
+  /* AI button — adjust position */
+  .ai-fab {
+    top: 12px;
+    right: 12px;
+    width: 40px;
+    height: 40px;
+  }
+}
+
+/* Module page specific responsive */
+@media (max-width: 768px) {
+  /* Module header */
+  .module-header {
+    padding: 16px !important;
+    padding-left: 56px !important; /* hamburger space */
+  }
+  .module-header h1 {
+    font-size: 18px !important;
+  }
+  .module-header-icon,
+  .module-icon {
+    font-size: 28px !important;
+    width: 40px !important;
+    height: 40px !important;
+  }
+
+  /* Tabs — scrollable */
+  .tabs {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: 0 12px !important;
+    scrollbar-width: none;
+  }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tab {
+    white-space: nowrap;
+    padding: 10px 14px !important;
+    font-size: 12px !important;
+  }
+
+  /* Stats bar */
+  .stats-bar {
+    padding: 12px !important;
+    gap: 8px !important;
+    overflow-x: auto;
+    flex-wrap: nowrap !important;
+  }
+  .stat-card {
+    min-width: 120px !important;
+    padding: 12px !important;
+    flex-shrink: 0;
+  }
+  .stat-card .stat-value {
+    font-size: 22px !important;
+  }
+
+  /* Content */
+  .content {
+    padding: 0 12px 16px !important;
+  }
+
+  /* Toolbar */
+  .toolbar {
+    flex-direction: column;
+    align-items: stretch !important;
+    gap: 8px !important;
+  }
+  .toolbar input[type="text"] {
+    width: 100% !important;
+  }
+
+  /* Data tables — horizontal scroll */
+  .data-table {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    white-space: nowrap;
+  }
+
+  /* Form grids — single column */
+  .form-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Modal on module pages */
+  .modal {
+    width: 100% !important;
+    max-width: 100% !important;
+    border-radius: 14px 14px 0 0 !important;
+    max-height: 85vh !important;
+    overflow-y: auto !important;
+  }
+
+  /* Permissions matrix scroll */
+  .perm-table {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Org chart scroll */
+  .org-chart-wrapper {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .org-level-cards {
+    flex-wrap: nowrap !important;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 8px;
+  }
+  .org-card {
+    min-width: 220px;
+  }
+}
+
+/* Small phones */
+@media (max-width: 400px) {
+  .main-header {
+    padding: 10px 12px 10px 52px;
+  }
+  .main-content {
+    padding: 12px;
+  }
+  .welcome-card {
+    padding: 14px;
+  }
+  .welcome-card-title {
+    font-size: 14px;
+  }
+}

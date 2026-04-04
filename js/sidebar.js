@@ -114,6 +114,58 @@ function renderSidebar(activeModule) {
       }
     }
   }).catch(function() {});
+
+  // Create hamburger button for mobile
+  initHamburger();
+}
+
+function initHamburger() {
+  if (document.getElementById('hamburger-btn')) return; // already exists
+
+  // Hamburger button
+  var btn = document.createElement('button');
+  btn.id = 'hamburger-btn';
+  btn.className = 'hamburger-btn';
+  btn.innerHTML = '☰';
+  btn.setAttribute('aria-label', 'Menu');
+  btn.onclick = function() { toggleSidebar(); };
+  document.body.appendChild(btn);
+
+  // Overlay
+  var overlay = document.createElement('div');
+  overlay.id = 'sidebar-overlay';
+  overlay.className = 'sidebar-overlay';
+  overlay.onclick = function() { toggleSidebar(false); };
+  document.body.appendChild(overlay);
+
+  // Close sidebar when clicking a link (mobile)
+  var sidebar = document.getElementById('sidebar');
+  if (sidebar) {
+    sidebar.addEventListener('click', function(e) {
+      if (e.target.closest('.sidebar-item') && window.innerWidth <= 768) {
+        toggleSidebar(false);
+      }
+    });
+  }
+}
+
+function toggleSidebar(forceState) {
+  var sidebar = document.getElementById('sidebar');
+  var overlay = document.getElementById('sidebar-overlay');
+  if (!sidebar) return;
+
+  var isOpen = sidebar.classList.contains('open');
+  var shouldOpen = forceState !== undefined ? forceState : !isOpen;
+
+  if (shouldOpen) {
+    sidebar.classList.add('open');
+    if (overlay) overlay.classList.add('open');
+    document.body.style.overflow = 'hidden';
+  } else {
+    sidebar.classList.remove('open');
+    if (overlay) overlay.classList.remove('open');
+    document.body.style.overflow = '';
+  }
 }
 
 // Compute base path from current location to project root
@@ -201,6 +253,16 @@ function initAiButton() {
 
     .ai-page-badge { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 11px;
       background: rgba(108,92,231,0.15); color: #a78bfa; margin-bottom: 8px; }
+
+    @media (max-width: 768px) {
+      .ai-fab { top: 12px; right: 12px; width: 38px; height: 38px; }
+      .ai-fab svg { width: 18px; height: 18px; }
+      .ai-chat { top: 0; right: 0; width: 100vw; max-width: 100vw; max-height: 100vh; border-radius: 0; }
+      .ai-chat-body { padding: 12px 16px; }
+      .ai-chat-footer { padding: 10px 12px; }
+      .ai-input { font-size: 16px; } /* prevents iOS zoom */
+      .ai-msg-user { margin-left: 10px; }
+    }
   `;
   document.head.appendChild(style);
 
@@ -244,46 +306,102 @@ function getCurrentPageInfo() {
   return { path: path, title: title || path };
 }
 
-function getSmartQuestions(description) {
+function analyzeRequest(description, pageTitle) {
+  // Analyze the user's request in context and generate a specific, thoughtful response
   var d = (description || '').toLowerCase();
-  var questions = [];
+  var page = (pageTitle || '').toLowerCase();
 
-  if (d.match(/tabulk|seznam|výpis|přehled/)) {
-    questions.push('Jaké sloupce má tabulka obsahovat?');
-    questions.push('Chcete filtrování nebo řazení?');
-  }
-  if (d.match(/formulář|pole|vstup|editac/)) {
-    questions.push('Jaká pole má formulář obsahovat?');
-    questions.push('Jsou některá pole povinná?');
-  }
-  if (d.match(/tlačítko|akce|klik/)) {
-    questions.push('Co se má stát po kliknutí?');
-    questions.push('Kde přesně má být tlačítko umístěno?');
-  }
-  if (d.match(/barv|styl|design|vzhled/)) {
-    questions.push('Máte konkrétní barvu nebo styl?');
-  }
-  if (d.match(/graf|statistik|report|přehled/)) {
-    questions.push('Jaký typ grafu? (sloupcový, koláčový, čárový…)');
-    questions.push('Jaká data se mají zobrazovat?');
-  }
-  if (d.match(/notifik|upozorn|alert/)) {
-    questions.push('Kdy se má upozornění zobrazit?');
-    questions.push('Komu má být odesláno?');
-  }
-  if (d.match(/export|pdf|csv|excel/)) {
-    questions.push('V jakém formátu? (PDF, Excel, CSV)');
+  // Build a contextual analysis
+  var analysis = { response: '', followups: [] };
+
+  // ---- Responsivita / mobilní přístup ----
+  if (d.match(/responsiv|mobil|telefon|tablet|phone|touch/)) {
+    var affectedPages = [];
+    if (page.includes('dashboard') || d.match(/všech|celý|každ/)) affectedPages.push('všechny stránky');
+    if (page.includes('hr') || d.match(/lidé|hr|zaměst/)) affectedPages.push('Lidé a HR');
+    if (d.match(/sidebar|menu|navigac/)) affectedPages.push('sidebar navigaci');
+
+    analysis.response = 'Rozumím — chcete, aby ' + (affectedPages.length ? affectedPages.join(', ') : 'aplikace') + ' fungoval/a na mobilních zařízeních. ';
+    analysis.response += 'Teď mám v hlavě toto:\n\n';
+    analysis.response += '• <strong>Sidebar</strong> — na mobilu se musí schovat do hamburger menu\n';
+    analysis.response += '• <strong>Tabulky</strong> — široké tabulky (lidé, docházka, role) musí být horizontálně scrollovatelné nebo se přeložit do karet\n';
+    analysis.response += '• <strong>Modální okna</strong> — formuláře musí být na 100% šířky displeje\n';
+    analysis.response += '• <strong>Dashboard karty</strong> — přeskládat do jednoho sloupce\n\n';
+    analysis.response += 'Na čem vám záleží nejvíc — chcete hlavně <strong>prohlížet data</strong> na telefonu, nebo i <strong>editovat</strong> (přidávat lidi, zapisovat docházku)?';
+    return analysis;
   }
 
-  // Always add general questions
-  if (questions.length === 0) {
-    questions.push('Kde přesně to chcete vidět na stránce?');
-    questions.push('Jak by to mělo vypadat?');
+  // ---- Tabulky / seznamy ----
+  if (d.match(/tabulk|seznam|výpis|sloup|řádk/)) {
+    analysis.response = 'Jakou tabulku máte na mysli? ';
+    if (page.includes('hr')) {
+      analysis.response += 'Na stránce Lidé a HR máme tabulku zaměstnanců, docházky a rolí. ';
+    }
+    analysis.response += 'Co přesně vám na současné tabulce nevyhovuje — chybí sloupce, špatné řazení, nebo chcete úplně jiné rozložení?';
+    return analysis;
   }
-  questions.push('Ovlivní to nějakou jinou část systému?');
-  questions.push('Jak urgentní je tento požadavek?');
 
-  return questions;
+  // ---- Přidání funkce / pole ----
+  if (d.match(/přidat|doplnit|chybí|nové pole|nová funkc/)) {
+    analysis.response = 'Co přesně vám chybí na stránce <strong>' + pageTitle + '</strong>? ';
+    analysis.response += 'Popište mi to konkrétně — např. "chybí mi pole pro bankovní účet u zaměstnance" nebo "chtěl bych tlačítko pro export do PDF". ';
+    analysis.response += 'Čím konkrétnější budete, tím přesnější bude výsledek.';
+    return analysis;
+  }
+
+  // ---- Design / vzhled ----
+  if (d.match(/barv|styl|design|vzhled|hezč|oškli|font|motiv/)) {
+    analysis.response = 'Rozumím, chcete vizuální změnu. Co konkrétně vám vadí na současném vzhledu? ';
+    analysis.response += 'Zkuste nahrát screenshot a zakroužkovat místo, které chcete změnit — nebo popište, jak by to mělo vypadat jinak.';
+    return analysis;
+  }
+
+  // ---- Export / tisk ----
+  if (d.match(/export|pdf|tisk|csv|excel|vytisknout/)) {
+    analysis.response = 'Jaká data chcete exportovat a v jakém formátu? ';
+    if (page.includes('hr')) {
+      analysis.response += 'Z modulu Lidé a HR můžeme exportovat seznam zaměstnanců, docházkové listy, nebo výplatní přehledy. ';
+    }
+    analysis.response += 'Pro koho je export určený — pro vás, pro účetní, nebo pro někoho dalšího?';
+    return analysis;
+  }
+
+  // ---- Notifikace / upozornění ----
+  if (d.match(/notifik|upozorn|alert|připomín|email/)) {
+    analysis.response = 'Na co přesně chcete být upozorněni? ';
+    analysis.response += 'Důležité je vědět: kdo má upozornění dostat, kdy se má spustit (okamžitě, denně, před termínem?), a jakým kanálem (v aplikaci, emailem, nebo obojí)?';
+    return analysis;
+  }
+
+  // ---- Oprávnění / přístupy ----
+  if (d.match(/oprávn|přístup|role|práv|viditelnost|zakáz/)) {
+    analysis.response = 'Teď máme systém oprávnění na úrovni rolí (čtení/úprava/žádný přístup k modulům). ';
+    analysis.response += 'Co přesně chcete omezit nebo povolit — a pro koho? Např. "technici by neměli vidět mzdy" nebo "vedoucí výroby potřebuje editovat jen svůj tým".';
+    return analysis;
+  }
+
+  // ---- Docházka ----
+  if (d.match(/docházk|příchod|odchod|směn|přesčas|dovolen/)) {
+    analysis.response = 'Teď máme základní záznam docházky (ruční). Co potřebujete? ';
+    analysis.response += 'Například: čipové karty, schvalování dovolených, přehled přesčasů, export pro účetní? ';
+    analysis.response += 'Popište mi svůj ideální workflow — jak by to mělo denně fungovat.';
+    return analysis;
+  }
+
+  // ---- Graf / dashboard / statistiky ----
+  if (d.match(/graf|dashboard|statistik|přehled|report|analýz|chart/)) {
+    analysis.response = 'Jaká data chcete vidět v grafickém přehledu? ';
+    analysis.response += 'Je to pro vás jako šéfa (CEO dashboard), nebo pro vedoucí jednotlivých úseků? ';
+    analysis.response += 'Popište mi, jaká čísla nebo trendy jsou pro vás nejdůležitější.';
+    return analysis;
+  }
+
+  // ---- Obecný požadavek — ptáme se na kontext ----
+  analysis.response = 'Rozumím vašemu požadavku. Abych mohl vytvořit přesné zadání, potřebuji vědět pár věcí:\n\n';
+  analysis.response += '1. <strong>Jak přesně</strong> by to mělo vypadat nebo fungovat?\n';
+  analysis.response += '2. <strong>Kdo</strong> s tím bude pracovat — vy, všichni zaměstnanci, nebo specifická role?\n\n';
+  analysis.response += 'Čím víc detailů mi dáte (klidně i screenshot), tím přesnější bude výsledek na první dobrou.';
+  return analysis;
 }
 
 function openAiChat() {
@@ -343,19 +461,14 @@ function renderAiChat() {
     body.appendChild(div);
   });
 
-  // Smart question chips (after first user message)
-  if (_aiChatState.step === 1) {
-    var qDiv = document.createElement('div');
-    qDiv.className = 'ai-msg';
-    var questions = getSmartQuestions(_aiChatState.description);
-    var chipsHtml = '<div class="ai-msg-label">🤖 AI</div><div class="ai-msg-bot">Díky! Ještě pár otázek pro upřesnění:<div class="ai-q-chips">';
-    questions.forEach(function(q) {
-      chipsHtml += '<span class="ai-q-chip" onclick="answerAiQuestion(this, \'' + q.replace(/'/g, "\\'") + '\')">' + q + '</span>';
-    });
-    chipsHtml += '</div><div style="margin-top:10px;font-size:12px;color:#8888aa;">Klikněte na otázku a odpovězte, nebo rovnou odešlete požadavek.</div>';
-    chipsHtml += '<div style="margin-top:10px;"><button class="ai-send-btn" style="width:auto;padding:8px 16px;border-radius:8px;font-size:12px;" onclick="submitAiTask()">✅ Odeslat požadavek</button></div></div>';
-    qDiv.innerHTML = chipsHtml;
-    body.appendChild(qDiv);
+  // Contextual AI response after user messages
+  if (_aiChatState.step >= 1 && _aiChatState.step < 2) {
+    // Show submit button area
+    var submitDiv = document.createElement('div');
+    submitDiv.style.cssText = 'padding:10px 0; display:flex; gap:8px; align-items:center;';
+    submitDiv.innerHTML = '<button class="ai-send-btn" style="width:auto;padding:8px 16px;border-radius:8px;font-size:12px;background:#6c5ce7;" onclick="submitAiTask()">✅ Odeslat požadavek</button>' +
+      '<span style="font-size:11px;color:#8888aa;">nebo pokračujte v popisu</span>';
+    body.appendChild(submitDiv);
   }
 
   // Screenshot preview
@@ -415,44 +528,72 @@ function sendAiMessage() {
   var text = input.value.trim();
   if (!text && !_aiChatState.screenshot) return;
 
+  // Add user message
+  _aiChatState.messages.push({ role: 'user', text: text });
+
   if (_aiChatState.step === 0) {
-    // First message — this is the main description
+    // First message — analyze and respond contextually
     _aiChatState.description = text;
-    _aiChatState.messages.push({ role: 'user', text: text });
+    var analysis = analyzeRequest(text, _aiChatState.pageTitle);
+    _aiChatState.messages.push({ role: 'bot', text: analysis.response });
     _aiChatState.step = 1;
   } else {
-    // Additional detail
-    _aiChatState.messages.push({ role: 'user', text: text });
-    var aKey = 'detail_' + Object.keys(_aiChatState.answers).length;
-    _aiChatState.answers[aKey] = text;
+    // Follow-up messages — acknowledge and ask for more if needed
+    var allText = _aiChatState.messages.filter(function(m) { return m.role === 'user'; }).map(function(m) { return m.text; }).join(' ');
+    var msgCount = _aiChatState.messages.filter(function(m) { return m.role === 'user'; }).length;
+
+    if (msgCount <= 3) {
+      // Still gathering info — respond to the new details
+      var analysis = analyzeFollowup(text, allText, _aiChatState.pageTitle);
+      _aiChatState.messages.push({ role: 'bot', text: analysis });
+    }
+    // After 3+ messages, just let user keep adding context or submit
   }
 
   renderAiChat();
 }
 
-function answerAiQuestion(chip, question) {
-  // Highlight chip and focus input with question context
-  var input = document.getElementById('ai-input');
-  if (input) {
-    input.placeholder = question;
-    input.focus();
+function analyzeFollowup(newText, allText, pageTitle) {
+  var d = newText.toLowerCase();
+  var all = allText.toLowerCase();
+
+  // If user answered about mobile/responsive
+  if (all.match(/responsiv|mobil/) && d.match(/editovat|zapisovat|přidáv/)) {
+    return 'Takže potřebujete na mobilu i editaci — to znamená, že formuláře musí být dotykově ovládatelné, s většími poli a tlačítky. Budete na telefonu zapisovat docházku nebo spíš upravovat záznamy zaměstnanců?';
   }
+  if (all.match(/responsiv|mobil/) && d.match(/prohlíž|jen se díva|přehled/)) {
+    return 'Jasně, hlavně prohlížení — to je jednodušší. Tabulky převedu do přehledných karet, sidebar schováme do menu. Chcete mít na mobilní verzi i dashboard se statistikami?';
+  }
+
+  // If talking about specific data
+  if (d.match(/všech|celý|komplet/)) {
+    return 'Rozumím, uplatníme to na celou aplikaci. Máte ještě nějaké specifické požadavky na konkrétní stránky, nebo to stačí? Pokud ano, klidně odešlete požadavek.';
+  }
+
+  // If user is adding more detail
+  if (d.length > 30) {
+    return 'Díky za upřesnění, tohle pomůže. Máte ještě něco, nebo můžeme požadavek odeslat?';
+  }
+
+  return 'Zachytil jsem. Chcete ještě něco doplnit, nebo to odešleme?';
 }
 
 function submitAiTask() {
+  // Collect user messages and AI conversation as context
+  var userMessages = _aiChatState.messages.filter(function(m) { return m.role === 'user'; }).map(function(m) { return m.text; });
+  var conversationLog = _aiChatState.messages.map(function(m) {
+    return (m.role === 'bot' ? 'AI: ' : 'Uživatel: ') + m.text.replace(/<[^>]*>/g, '');
+  }).join('\n');
+
   var task = {
     page: _aiChatState.pagePath,
     page_title: _aiChatState.pageTitle,
-    description: _aiChatState.description,
-    ai_questions: getSmartQuestions(_aiChatState.description),
-    ai_answers: _aiChatState.answers,
+    description: userMessages.join('\n---\n'),
+    ai_questions: [],
+    ai_answers: { conversation: conversationLog },
     screenshot: _aiChatState.screenshot,
     priority: 'medium',
   };
-
-  // Collect all user messages as context
-  var allMessages = _aiChatState.messages.filter(function(m) { return m.role === 'user'; }).map(function(m) { return m.text; });
-  task.description = allMessages.join('\n---\n');
 
   fetch('/api/admin-tasks', {
     method: 'POST',
