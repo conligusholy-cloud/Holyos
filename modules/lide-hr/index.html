@@ -350,14 +350,15 @@
         supervisorOptions += `<option value="${pp.id}" ${p.supervisor_id == pp.id ? 'selected' : ''}>${pp.first_name} ${pp.last_name}</option>`;
       }
 
+      const showEmp = (p.type || 'employee') === 'employee';
       const html = `<div class="modal-overlay" onclick="if(event.target===this)closeModal()">
         <div class="modal">
           <h2>${isEdit ? '✏️ Upravit osobu' : '➕ Nová osoba'}</h2>
           <form id="person-form" onsubmit="savePerson(event, ${id || 'null'})">
             <div class="form-grid">
-              <div class="form-group">
+              <div class="form-group full">
                 <label>Typ *</label>
-                <select name="type" onchange="toggleEmployeeFields(this.value)">
+                <select name="type" onchange="toggleEmployeeFields(this.value)" style="max-width:280px">
                   <option value="employee" ${p.type === 'employee' || !p.type ? 'selected' : ''}>Zaměstnanec</option>
                   <option value="contact" ${p.type === 'contact' ? 'selected' : ''}>Kontakt</option>
                   <option value="customer" ${p.type === 'customer' ? 'selected' : ''}>Zákazník</option>
@@ -365,7 +366,6 @@
                   <option value="external" ${p.type === 'external' ? 'selected' : ''}>Externí spolupracovník</option>
                 </select>
               </div>
-              <div class="form-group" style="visibility:hidden"></div>
               <div class="form-group">
                 <label>Jméno *</label>
                 <input type="text" name="first_name" value="${p.first_name || ''}" required>
@@ -382,8 +382,11 @@
                 <label>Telefon</label>
                 <input type="text" name="phone" value="${p.phone || ''}">
               </div>
+            </div>
 
-              <div id="employee-fields" style="${(p.type || 'employee') === 'employee' ? '' : 'display:none;'}" class="form-grid full">
+            <div id="employee-fields" style="${showEmp ? '' : 'display:none'}">
+              <div style="font-size:12px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px;margin:20px 0 10px;padding-top:16px;border-top:1px solid var(--border);">Zaměstnanecké údaje</div>
+              <div class="form-grid">
                 <div class="form-group">
                   <label>Osobní číslo</label>
                   <input type="text" name="employee_number" value="${p.employee_number || ''}">
@@ -431,12 +434,17 @@
                   <input type="text" name="address" value="${p.address || ''}">
                 </div>
               </div>
+            </div>
 
-              <div class="form-group full">
-                <label>Poznámky</label>
-                <textarea name="notes">${p.notes || ''}</textarea>
+            <div style="margin-top:16px">
+              <div class="form-grid">
+                <div class="form-group full">
+                  <label>Poznámky</label>
+                  <textarea name="notes">${p.notes || ''}</textarea>
+                </div>
               </div>
             </div>
+
             <div class="modal-actions">
               <button type="button" class="btn btn-secondary" onclick="closeModal()">Zrušit</button>
               <button type="submit" class="btn btn-primary">${isEdit ? 'Uložit změny' : 'Vytvořit'}</button>
