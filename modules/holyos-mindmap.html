@@ -947,6 +947,32 @@ const DEPLOY_STATUS = {
     '3.0': 'full',    // Smlouvy a dokumenty ✅ (CRUD, šablony s proměnnými, generování, soubory, upozornění na expirace)
     '3.1': 'full',    // Začátek a konec pracovního poměru ✅
     '3.2': 'full',    // Definice pracovních pozic ✅
+  },
+  warehouse: {
+    0: 'full',    // Evidence společností a kontaktů ✅
+    1: 'full',    // Objednávkový systém ✅
+    2: 'full',    // Skladové operace ✅
+    3: 'full',    // Správa skladů a evidence zásob ✅
+    4: 'partial', // Plánování a optimalizace nákupu (stock rules hotové, AI auto-objednávky připraveny)
+    '0.0': 'full',    // Automatické dohledání údajů podle IČ (ARES API) ✅
+    '0.1': 'full',    // Evidence dodavatelů, odběratelů a kooperačních partnerů ✅
+    '0.2': 'partial', // Ceníky a smluvní podmínky (splatnost hotová, ceníky připraveny)
+    '1.0': 'full',    // Nákupní objednávky s položkami ✅
+    '1.1': 'full',    // Prodejní objednávky ✅
+    '1.2': 'full',    // Kooperační objednávky ✅
+    '1.3': 'partial', // Pravidla a automatizace objednávání (stock rules hotové)
+    '1.4': 'full',    // Stavy objednávek (nový, poptáno, objednáno, potvrzeno, doručeno, zrušeno) ✅
+    '1.5': 'full',    // Termíny doručení položek ✅
+    '2.0': 'full',    // Příjem zboží na sklad ✅
+    '2.1': 'full',    // Výdej materiálu ✅
+    '2.2': 'partial', // Propojení s výrobou (připraveno, čeká na modul Výroba)
+    '2.3': 'full',    // Skladové pohyby mezi skladišti ✅
+    '3.0': 'full',    // Evidence skladů a pozic (sekce/regál/pozice) ✅
+    '3.1': 'partial', // Skladové inventury (připraveno)
+    '3.2': 'partial', // Tisk štítků s QR kódy (připraveno)
+    '4.0': 'full',    // Minimální zásoby a pravidla ✅
+    '4.1': 'partial', // Výhled nákupu podle výroby (čeká na propojení)
+    '4.2': 'full',    // Nastavitelná pravidla nákupu ✅
   }
 };
 

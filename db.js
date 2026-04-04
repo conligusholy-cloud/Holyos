@@ -15,7 +15,7 @@ const DB_FILE = path.join(DATA_DIR, 'hr.json');
 const AUDIT_FILE = path.join(DATA_DIR, 'audit-log.json');
 
 const DEFAULT_DATA = {
-  _nextId: { people: 1, departments: 1, roles: 1, attendance: 1, admin_tasks: 1, shifts: 1, absence_types: 1, leave_requests: 1, company_leave: 1, documents: 1, document_templates: 1, document_notifications: 1 },
+  _nextId: { people: 1, departments: 1, roles: 1, attendance: 1, admin_tasks: 1, shifts: 1, absence_types: 1, leave_requests: 1, company_leave: 1, documents: 1, document_templates: 1, document_notifications: 1, companies: 1, orders: 1, order_items: 1, warehouses: 1, warehouse_locations: 1, materials: 1, inventory_movements: 1, stock_rules: 1 },
   people: [],
   departments: [],
   roles: [],
@@ -50,6 +50,15 @@ const DEFAULT_DATA = {
   documents: [],              // { id, person_id, title, type, category, file_data (base64), file_name, file_type, file_size, valid_from, valid_to, status, tags, note, created_at, updated_at }
   document_templates: [],     // { id, name, category, content (HTML with {{placeholders}}), variables: [], description, created_at, updated_at }
   document_notifications: [], // { id, document_id, person_id, type: 'expiring'|'expired'|'custom', trigger_days_before, message, sent_at, dismissed, created_at }
+  // --- Warehouse & Purchasing ---
+  companies: [],              // { id, name, ico, dic, address, city, zip, country, type: 'supplier'|'customer'|'cooperation'|'both', contact_person, email, phone, web, bank_account, payment_terms_days, notes, active, created_at, updated_at }
+  orders: [],                 // { id, order_number, type: 'purchase'|'sales'|'cooperation', company_id, status, items_count, total_amount, currency, note, created_by, approved_by, created_at, updated_at, expected_delivery, delivered_at }
+  order_items: [],            // { id, order_id, material_id, name, quantity, unit, unit_price, total_price, expected_delivery, delivered_quantity, status, note }
+  warehouses: [],             // { id, name, code, address, type: 'main'|'raw'|'finished'|'wip'|'external', manager_id, active, created_at }
+  warehouse_locations: [],    // { id, warehouse_id, section, rack, position, label, barcode, capacity, notes }
+  materials: [],              // { id, code, name, category, unit, unit_price, weighted_avg_price, supplier_id, min_stock, current_stock, description, barcode, active, created_at, updated_at }
+  inventory_movements: [],    // { id, material_id, warehouse_id, location_id, type: 'receipt'|'issue'|'transfer'|'adjustment', quantity, unit_price, reference_type, reference_id, note, created_by, created_at }
+  stock_rules: [],            // { id, material_id, warehouse_id, min_stock, max_stock, reorder_quantity, auto_order, preferred_supplier_id, notes }
 };
 
 // Load or initialize
@@ -1141,6 +1150,446 @@ db.checkExpiringDocuments = function(daysAhead = 30) {
   }
 
   return { expiring: expiring.length, expired: expired.length };
+};
+
+// ============================================
+// Companies (Suppliers/Customers)
+// ============================================
+db.getCompanies = function(filters = {}) {
+  let results = [...data.companies];
+  if (filters.type) results = results.filter(c => c.type === filters.type || c.type === 'both');
+  if (filters.active !== undefined) results = results.filter(c => c.active === (filters.active === true || filters.active === 1 || filters.active === '1'));
+  if (filters.search) {
+    const s = filters.search.toLowerCase();
+    results = results.filter(c => (c.name||'').toLowerCase().includes(s) || (c.ico||'').includes(s) || (c.email||'').toLowerCase().includes(s));
+  }
+  return results.sort((a,b) => (a.name||'').localeCompare(b.name||''));
+};
+
+db.getCompanyById = function(id) {
+  return data.companies.find(c => c.id === id) || null;
+};
+
+db.createCompany = function(fields) {
+  const company = {
+    id: nextId('companies'), name: fields.name, ico: fields.ico || null, dic: fields.dic || null,
+    address: fields.address || null, city: fields.city || null, zip: fields.zip || null, country: fields.country || 'CZ',
+    type: fields.type || 'supplier', contact_person: fields.contact_person || null,
+    email: fields.email || null, phone: fields.phone || null, web: fields.web || null,
+    bank_account: fields.bank_account || null, payment_terms_days: fields.payment_terms_days ? parseInt(fields.payment_terms_days) : 14,
+    notes: fields.notes || '', active: true, created_at: now(), updated_at: now(),
+  };
+  data.companies.push(company);
+  save();
+  logChange('create', 'company', company.id, `Společnost "${company.name}" vytvořena`, null, company);
+  return company;
+};
+
+db.updateCompany = function(id, fields) {
+  const c = data.companies.find(x => x.id === id);
+  if (!c) return null;
+  const old = { ...c };
+  for (const k of Object.keys(fields)) { if (k !== 'id' && k !== 'created_at') c[k] = fields[k]; }
+  c.updated_at = now();
+  save();
+  logChange('update', 'company', id, `Společnost "${c.name}" upravena`, old, c);
+  return c;
+};
+
+db.deleteCompany = function(id) {
+  const idx = data.companies.findIndex(c => c.id === id);
+  if (idx < 0) return false;
+  const c = data.companies[idx];
+  data.companies.splice(idx, 1);
+  save();
+  logChange('delete', 'company', id, `Společnost "${c.name}" smazána`, c, null);
+  return true;
+};
+
+// ============================================
+// Orders
+// ============================================
+db.getOrders = function(filters = {}) {
+  let results = [...data.orders];
+  if (filters.type) results = results.filter(o => o.type === filters.type);
+  if (filters.status) results = results.filter(o => o.status === filters.status);
+  if (filters.company_id) results = results.filter(o => o.company_id === parseInt(filters.company_id));
+  if (filters.search) {
+    const s = filters.search.toLowerCase();
+    results = results.filter(o => (o.order_number||'').toLowerCase().includes(s) || (o.note||'').toLowerCase().includes(s));
+  }
+  return results.map(o => {
+    const company = data.companies.find(c => c.id === o.company_id);
+    return { ...o, company_name: company ? company.name : '—' };
+  }).sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
+};
+
+db.getOrderById = function(id) {
+  const o = data.orders.find(x => x.id === id);
+  if (!o) return null;
+  const company = data.companies.find(c => c.id === o.company_id);
+  const items = data.order_items.filter(i => i.order_id === id);
+  return { ...o, company_name: company ? company.name : '—', items };
+};
+
+db.createOrder = function(fields) {
+  const orderNum = fields.order_number || (fields.type === 'purchase' ? 'NO' : fields.type === 'sales' ? 'PO' : 'KO') + '-' + new Date().getFullYear() + '-' + String(data.orders.length + 1).padStart(4, '0');
+  const order = {
+    id: nextId('orders'), order_number: orderNum, type: fields.type || 'purchase',
+    company_id: fields.company_id ? parseInt(fields.company_id) : null,
+    status: fields.status || 'new', items_count: 0, total_amount: 0,
+    currency: fields.currency || 'CZK', note: fields.note || '',
+    created_by: fields.created_by || null, approved_by: null,
+    created_at: now(), updated_at: now(),
+    expected_delivery: fields.expected_delivery || null, delivered_at: null,
+  };
+  data.orders.push(order);
+  save();
+  logChange('create', 'order', order.id, `Objednávka ${order.order_number} vytvořena`, null, order);
+  return order;
+};
+
+db.updateOrder = function(id, fields) {
+  const o = data.orders.find(x => x.id === id);
+  if (!o) return null;
+  const old = { ...o };
+  for (const k of Object.keys(fields)) { if (k !== 'id' && k !== 'created_at') o[k] = fields[k]; }
+  o.updated_at = now();
+  save();
+  logChange('update', 'order', id, `Objednávka ${o.order_number} upravena`, old, o);
+  return o;
+};
+
+db.deleteOrder = function(id) {
+  const idx = data.orders.findIndex(o => o.id === id);
+  if (idx < 0) return false;
+  const o = data.orders[idx];
+  data.orders.splice(idx, 1);
+  data.order_items = data.order_items.filter(i => i.order_id !== id);
+  save();
+  logChange('delete', 'order', id, `Objednávka ${o.order_number} smazána`, o, null);
+  return true;
+};
+
+// ============================================
+// Order Items
+// ============================================
+db.getOrderItems = function(orderId) {
+  return data.order_items.filter(i => i.order_id === parseInt(orderId)).map(i => {
+    const mat = data.materials.find(m => m.id === i.material_id);
+    return { ...i, material_name: mat ? mat.name : null, material_code: mat ? mat.code : null };
+  });
+};
+
+db.addOrderItem = function(orderId, fields) {
+  const item = {
+    id: nextId('order_items'), order_id: parseInt(orderId),
+    material_id: fields.material_id ? parseInt(fields.material_id) : null,
+    name: fields.name || '', quantity: parseFloat(fields.quantity) || 0,
+    unit: fields.unit || 'ks', unit_price: parseFloat(fields.unit_price) || 0,
+    total_price: (parseFloat(fields.quantity) || 0) * (parseFloat(fields.unit_price) || 0),
+    expected_delivery: fields.expected_delivery || null,
+    delivered_quantity: 0, status: 'pending', note: fields.note || '',
+  };
+  data.order_items.push(item);
+  // Update order totals
+  const order = data.orders.find(o => o.id === parseInt(orderId));
+  if (order) {
+    const items = data.order_items.filter(i => i.order_id === parseInt(orderId));
+    order.items_count = items.length;
+    order.total_amount = items.reduce((s, i) => s + (i.total_price || 0), 0);
+    order.updated_at = now();
+  }
+  save();
+  return item;
+};
+
+db.updateOrderItem = function(id, fields) {
+  const item = data.order_items.find(i => i.id === id);
+  if (!item) return null;
+  for (const k of Object.keys(fields)) { if (k !== 'id' && k !== 'order_id') item[k] = fields[k]; }
+  if (fields.quantity !== undefined || fields.unit_price !== undefined) {
+    item.total_price = (parseFloat(item.quantity) || 0) * (parseFloat(item.unit_price) || 0);
+  }
+  // Update order totals
+  const order = data.orders.find(o => o.id === item.order_id);
+  if (order) {
+    const items = data.order_items.filter(i => i.order_id === item.order_id);
+    order.items_count = items.length;
+    order.total_amount = items.reduce((s, i) => s + (i.total_price || 0), 0);
+    order.updated_at = now();
+  }
+  save();
+  return item;
+};
+
+db.deleteOrderItem = function(id) {
+  const idx = data.order_items.findIndex(i => i.id === id);
+  if (idx < 0) return false;
+  const item = data.order_items[idx];
+  data.order_items.splice(idx, 1);
+  const order = data.orders.find(o => o.id === item.order_id);
+  if (order) {
+    const items = data.order_items.filter(i => i.order_id === item.order_id);
+    order.items_count = items.length;
+    order.total_amount = items.reduce((s, i) => s + (i.total_price || 0), 0);
+    order.updated_at = now();
+  }
+  save();
+  return true;
+};
+
+// ============================================
+// Warehouses & Locations
+// ============================================
+db.getWarehouses = function() {
+  return data.warehouses.map(w => {
+    const locs = data.warehouse_locations.filter(l => l.warehouse_id === w.id);
+    return { ...w, locations_count: locs.length };
+  }).sort((a,b) => (a.name||'').localeCompare(b.name||''));
+};
+
+db.getWarehouseById = function(id) {
+  const w = data.warehouses.find(x => x.id === id);
+  if (!w) return null;
+  const locations = data.warehouse_locations.filter(l => l.warehouse_id === id);
+  return { ...w, locations };
+};
+
+db.createWarehouse = function(fields) {
+  const w = {
+    id: nextId('warehouses'), name: fields.name, code: fields.code || '',
+    address: fields.address || '', type: fields.type || 'main',
+    manager_id: fields.manager_id ? parseInt(fields.manager_id) : null,
+    active: true, created_at: now(),
+  };
+  data.warehouses.push(w);
+  save();
+  logChange('create', 'warehouse', w.id, `Sklad "${w.name}" vytvořen`, null, w);
+  return w;
+};
+
+db.updateWarehouse = function(id, fields) {
+  const w = data.warehouses.find(x => x.id === id);
+  if (!w) return null;
+  const old = { ...w };
+  for (const k of Object.keys(fields)) { if (k !== 'id' && k !== 'created_at') w[k] = fields[k]; }
+  save();
+  logChange('update', 'warehouse', id, `Sklad "${w.name}" upraven`, old, w);
+  return w;
+};
+
+db.deleteWarehouse = function(id) {
+  const idx = data.warehouses.findIndex(w => w.id === id);
+  if (idx < 0) return false;
+  const w = data.warehouses[idx];
+  data.warehouses.splice(idx, 1);
+  data.warehouse_locations = data.warehouse_locations.filter(l => l.warehouse_id !== id);
+  save();
+  logChange('delete', 'warehouse', id, `Sklad "${w.name}" smazán`, w, null);
+  return true;
+};
+
+// Warehouse Locations
+db.getWarehouseLocations = function(warehouseId) {
+  return data.warehouse_locations.filter(l => l.warehouse_id === parseInt(warehouseId));
+};
+
+db.createWarehouseLocation = function(fields) {
+  const loc = {
+    id: nextId('warehouse_locations'), warehouse_id: parseInt(fields.warehouse_id),
+    section: fields.section || '', rack: fields.rack || '', position: fields.position || '',
+    label: fields.label || '', barcode: fields.barcode || '', capacity: fields.capacity || null,
+    notes: fields.notes || '',
+  };
+  data.warehouse_locations.push(loc);
+  save();
+  return loc;
+};
+
+db.updateWarehouseLocation = function(id, fields) {
+  const loc = data.warehouse_locations.find(l => l.id === id);
+  if (!loc) return null;
+  for (const k of Object.keys(fields)) { if (k !== 'id') loc[k] = fields[k]; }
+  save();
+  return loc;
+};
+
+db.deleteWarehouseLocation = function(id) {
+  const idx = data.warehouse_locations.findIndex(l => l.id === id);
+  if (idx < 0) return false;
+  data.warehouse_locations.splice(idx, 1);
+  save();
+  return true;
+};
+
+// ============================================
+// Materials (Catalog)
+// ============================================
+db.getMaterials = function(filters = {}) {
+  let results = [...data.materials];
+  if (filters.category) results = results.filter(m => m.category === filters.category);
+  if (filters.active !== undefined) results = results.filter(m => m.active !== false);
+  if (filters.search) {
+    const s = filters.search.toLowerCase();
+    results = results.filter(m => (m.name||'').toLowerCase().includes(s) || (m.code||'').toLowerCase().includes(s) || (m.barcode||'').includes(s));
+  }
+  if (filters.low_stock) results = results.filter(m => m.min_stock && m.current_stock < m.min_stock);
+  return results.sort((a,b) => (a.name||'').localeCompare(b.name||''));
+};
+
+db.getMaterialById = function(id) {
+  return data.materials.find(m => m.id === id) || null;
+};
+
+db.createMaterial = function(fields) {
+  const mat = {
+    id: nextId('materials'), code: fields.code || 'MAT-' + String(data.materials.length + 1).padStart(4, '0'),
+    name: fields.name, category: fields.category || 'general',
+    unit: fields.unit || 'ks', unit_price: parseFloat(fields.unit_price) || 0,
+    weighted_avg_price: parseFloat(fields.unit_price) || 0,
+    supplier_id: fields.supplier_id ? parseInt(fields.supplier_id) : null,
+    min_stock: parseFloat(fields.min_stock) || 0, current_stock: 0,
+    description: fields.description || '', barcode: fields.barcode || '',
+    active: true, created_at: now(), updated_at: now(),
+  };
+  data.materials.push(mat);
+  save();
+  logChange('create', 'material', mat.id, `Materiál "${mat.name}" vytvořen`, null, mat);
+  return mat;
+};
+
+db.updateMaterial = function(id, fields) {
+  const m = data.materials.find(x => x.id === id);
+  if (!m) return null;
+  const old = { ...m };
+  for (const k of Object.keys(fields)) { if (k !== 'id' && k !== 'created_at') m[k] = fields[k]; }
+  m.updated_at = now();
+  save();
+  logChange('update', 'material', id, `Materiál "${m.name}" upraven`, old, m);
+  return m;
+};
+
+db.deleteMaterial = function(id) {
+  const idx = data.materials.findIndex(m => m.id === id);
+  if (idx < 0) return false;
+  const m = data.materials[idx];
+  data.materials.splice(idx, 1);
+  save();
+  logChange('delete', 'material', id, `Materiál "${m.name}" smazán`, m, null);
+  return true;
+};
+
+// ============================================
+// Inventory Movements
+// ============================================
+db.getInventoryMovements = function(filters = {}) {
+  let results = [...data.inventory_movements];
+  if (filters.material_id) results = results.filter(m => m.material_id === parseInt(filters.material_id));
+  if (filters.warehouse_id) results = results.filter(m => m.warehouse_id === parseInt(filters.warehouse_id));
+  if (filters.type) results = results.filter(m => m.type === filters.type);
+  if (filters.from) results = results.filter(m => m.created_at >= filters.from);
+  if (filters.to) results = results.filter(m => m.created_at <= filters.to);
+  return results.map(mv => {
+    const mat = data.materials.find(m => m.id === mv.material_id);
+    const wh = data.warehouses.find(w => w.id === mv.warehouse_id);
+    return { ...mv, material_name: mat ? mat.name : '—', material_code: mat ? mat.code : '', warehouse_name: wh ? wh.name : '—' };
+  }).sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
+};
+
+db.createInventoryMovement = function(fields) {
+  const mv = {
+    id: nextId('inventory_movements'),
+    material_id: parseInt(fields.material_id), warehouse_id: parseInt(fields.warehouse_id),
+    location_id: fields.location_id ? parseInt(fields.location_id) : null,
+    type: fields.type, // 'receipt' | 'issue' | 'transfer' | 'adjustment'
+    quantity: parseFloat(fields.quantity) || 0,
+    unit_price: parseFloat(fields.unit_price) || 0,
+    reference_type: fields.reference_type || null, // 'order' | 'project' | 'manual'
+    reference_id: fields.reference_id || null,
+    note: fields.note || '', created_by: fields.created_by || null, created_at: now(),
+  };
+  data.inventory_movements.push(mv);
+
+  // Update material stock
+  const mat = data.materials.find(m => m.id === mv.material_id);
+  if (mat) {
+    if (mv.type === 'receipt' || mv.type === 'adjustment') {
+      // Weighted average price calculation
+      if (mv.type === 'receipt' && mv.unit_price > 0 && mv.quantity > 0) {
+        const oldTotal = mat.current_stock * (mat.weighted_avg_price || 0);
+        const newTotal = mv.quantity * mv.unit_price;
+        mat.weighted_avg_price = mat.current_stock + mv.quantity > 0
+          ? (oldTotal + newTotal) / (mat.current_stock + mv.quantity) : mv.unit_price;
+      }
+      mat.current_stock = (mat.current_stock || 0) + mv.quantity;
+    } else if (mv.type === 'issue') {
+      mat.current_stock = Math.max(0, (mat.current_stock || 0) - mv.quantity);
+    }
+    // transfer: handled by creating two movements (issue + receipt)
+    mat.updated_at = now();
+  }
+
+  save();
+  logChange('create', 'inventory_movement', mv.id, `Skladový pohyb: ${mv.type} ${mv.quantity}x materiál #${mv.material_id}`, null, mv);
+  return mv;
+};
+
+// ============================================
+// Stock Rules
+// ============================================
+db.getStockRules = function(filters = {}) {
+  let results = [...data.stock_rules];
+  if (filters.material_id) results = results.filter(r => r.material_id === parseInt(filters.material_id));
+  return results.map(r => {
+    const mat = data.materials.find(m => m.id === r.material_id);
+    const wh = data.warehouses.find(w => w.id === r.warehouse_id);
+    return { ...r, material_name: mat ? mat.name : '—', warehouse_name: wh ? wh.name : '—' };
+  });
+};
+
+db.createStockRule = function(fields) {
+  const rule = {
+    id: nextId('stock_rules'),
+    material_id: parseInt(fields.material_id), warehouse_id: fields.warehouse_id ? parseInt(fields.warehouse_id) : null,
+    min_stock: parseFloat(fields.min_stock) || 0, max_stock: parseFloat(fields.max_stock) || 0,
+    reorder_quantity: parseFloat(fields.reorder_quantity) || 0,
+    auto_order: fields.auto_order || false,
+    preferred_supplier_id: fields.preferred_supplier_id ? parseInt(fields.preferred_supplier_id) : null,
+    notes: fields.notes || '',
+  };
+  data.stock_rules.push(rule);
+  save();
+  return rule;
+};
+
+db.updateStockRule = function(id, fields) {
+  const r = data.stock_rules.find(x => x.id === id);
+  if (!r) return null;
+  for (const k of Object.keys(fields)) { if (k !== 'id') r[k] = fields[k]; }
+  save();
+  return r;
+};
+
+db.deleteStockRule = function(id) {
+  const idx = data.stock_rules.findIndex(r => r.id === id);
+  if (idx < 0) return false;
+  data.stock_rules.splice(idx, 1);
+  save();
+  return true;
+};
+
+// ============================================
+// Warehouse Stats
+// ============================================
+db.getWarehouseStats = function() {
+  const totalMaterials = data.materials.filter(m => m.active !== false).length;
+  const totalValue = data.materials.reduce((s, m) => s + (m.current_stock || 0) * (m.weighted_avg_price || 0), 0);
+  const lowStock = data.materials.filter(m => m.active !== false && m.min_stock > 0 && m.current_stock < m.min_stock).length;
+  const activeOrders = data.orders.filter(o => !['delivered','cancelled'].includes(o.status)).length;
+  const warehouseCount = data.warehouses.filter(w => w.active !== false).length;
+  const companyCount = data.companies.filter(c => c.active !== false).length;
+  return { totalMaterials, totalValue, lowStock, activeOrders, warehouseCount, companyCount };
 };
 
 db.setCurrentUser = setCurrentUser;

@@ -755,6 +755,13 @@ const server = http.createServer(async (req, res) => {
     if (handled) return;
   }
 
+  // ---- WAREHOUSE & PURCHASING API ----
+  if (pathname.startsWith('/api/wh/')) {
+    const handleWarehouse = require('./api/warehouse');
+    const handled = await handleWarehouse(req, res, pathname);
+    if (handled) return;
+  }
+
   // ---- MINDMAP NOTES & VERSIONS API ----
   const MINDMAP_FILE = path.join(__dirname, 'data', 'mindmap-notes.json');
   const MINDMAP_VERSIONS_FILE = path.join(__dirname, 'data', 'mindmap-versions.json');
