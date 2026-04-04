@@ -302,6 +302,156 @@ async function handleHR(req, res, pathname) {
       return true;
     }
 
+    // --- SHIFTS ---
+    if (pathname === '/api/hr/shifts' && method === 'GET') {
+      sendJSON(res, 200, db.getShifts());
+      return true;
+    }
+
+    if (pathname === '/api/hr/shifts' && method === 'POST') {
+      const body = JSON.parse(await readBody(req));
+      if (!body.name) {
+        sendJSON(res, 400, { error: 'name is required' });
+        return true;
+      }
+      sendJSON(res, 201, db.createShift(body));
+      return true;
+    }
+
+    const shiftMatch = pathname.match(/^\/api\/hr\/shifts\/(\d+)$/);
+    if (shiftMatch) {
+      const id = parseInt(shiftMatch[1]);
+      if (method === 'PUT') {
+        const body = JSON.parse(await readBody(req));
+        const updated = db.updateShift(id, body);
+        if (!updated) { sendJSON(res, 404, { error: 'Not found' }); return true; }
+        sendJSON(res, 200, { ok: true });
+        return true;
+      }
+      if (method === 'DELETE') {
+        const ok = db.deleteShift(id);
+        if (!ok) { sendJSON(res, 404, { error: 'Not found' }); return true; }
+        sendJSON(res, 200, { ok: true });
+        return true;
+      }
+    }
+
+    // --- ABSENCE TYPES ---
+    if (pathname === '/api/hr/absence-types' && method === 'GET') {
+      sendJSON(res, 200, db.getAbsenceTypes());
+      return true;
+    }
+
+    if (pathname === '/api/hr/absence-types' && method === 'POST') {
+      const body = JSON.parse(await readBody(req));
+      if (!body.name) {
+        sendJSON(res, 400, { error: 'name is required' });
+        return true;
+      }
+      sendJSON(res, 201, db.createAbsenceType(body));
+      return true;
+    }
+
+    const absenceTypeMatch = pathname.match(/^\/api\/hr\/absence-types\/(\d+)$/);
+    if (absenceTypeMatch) {
+      const id = parseInt(absenceTypeMatch[1]);
+      if (method === 'PUT') {
+        const body = JSON.parse(await readBody(req));
+        const updated = db.updateAbsenceType(id, body);
+        if (!updated) { sendJSON(res, 404, { error: 'Not found' }); return true; }
+        sendJSON(res, 200, { ok: true });
+        return true;
+      }
+      if (method === 'DELETE') {
+        const ok = db.deleteAbsenceType(id);
+        if (!ok) { sendJSON(res, 404, { error: 'Not found' }); return true; }
+        sendJSON(res, 200, { ok: true });
+        return true;
+      }
+    }
+
+    // --- LEAVE REQUESTS ---
+    if (pathname === '/api/hr/leave-requests' && method === 'GET') {
+      const url = new URL(req.url, 'http://localhost');
+      const filters = {
+        person_id: url.searchParams.get('person_id') || undefined,
+        status: url.searchParams.get('status') || undefined,
+      };
+      sendJSON(res, 200, db.getLeaveRequests(filters));
+      return true;
+    }
+
+    if (pathname === '/api/hr/leave-requests' && method === 'POST') {
+      const body = JSON.parse(await readBody(req));
+      if (!body.person_id || !body.date_from || !body.date_to) {
+        sendJSON(res, 400, { error: 'person_id, date_from, and date_to are required' });
+        return true;
+      }
+      sendJSON(res, 201, db.createLeaveRequest(body));
+      return true;
+    }
+
+    const leaveApproveMatch = pathname.match(/^\/api\/hr\/leave-requests\/(\d+)\/approve$/);
+    if (leaveApproveMatch && method === 'PUT') {
+      const id = parseInt(leaveApproveMatch[1]);
+      const body = JSON.parse(await readBody(req));
+      if (!body.approved_by) {
+        sendJSON(res, 400, { error: 'approved_by is required' });
+        return true;
+      }
+      const result = db.approveLeaveRequest(id, body.approved_by);
+      if (!result) { sendJSON(res, 404, { error: 'Not found' }); return true; }
+      sendJSON(res, 200, { ok: true });
+      return true;
+    }
+
+    const leaveRejectMatch = pathname.match(/^\/api\/hr\/leave-requests\/(\d+)\/reject$/);
+    if (leaveRejectMatch && method === 'PUT') {
+      const id = parseInt(leaveRejectMatch[1]);
+      const body = JSON.parse(await readBody(req));
+      if (!body.rejected_by) {
+        sendJSON(res, 400, { error: 'rejected_by is required' });
+        return true;
+      }
+      const result = db.rejectLeaveRequest(id, body.rejected_by);
+      if (!result) { sendJSON(res, 404, { error: 'Not found' }); return true; }
+      sendJSON(res, 200, { ok: true });
+      return true;
+    }
+
+    // --- KIOSK ---
+    if (pathname === '/api/hr/kiosk/identify' && method === 'POST') {
+      const body = JSON.parse(await readBody(req));
+      if (!body.chip_id) {
+        sendJSON(res, 400, { error: 'chip_id is required' });
+        return true;
+      }
+      const person = db.findPersonByChip(body.chip_id);
+      if (!person) {
+        sendJSON(res, 404, { error: 'Person not found' });
+        return true;
+      }
+      sendJSON(res, 200, person);
+      return true;
+    }
+
+    if (pathname === '/api/hr/kiosk/clock' && method === 'POST') {
+      const body = JSON.parse(await readBody(req));
+      if (!body.person_id || !body.action) {
+        sendJSON(res, 400, { error: 'person_id and action are required' });
+        return true;
+      }
+      const result = db.clockAction(body.person_id, body.action, body.absence_type);
+      sendJSON(res, 200, result);
+      return true;
+    }
+
+    // --- PRESENCE ---
+    if (pathname === '/api/hr/presence' && method === 'GET') {
+      sendJSON(res, 200, db.getTodayPresence());
+      return true;
+    }
+
     return false; // not handled
   } catch (e) {
     console.error('HR API error:', e);
