@@ -416,6 +416,151 @@ function getAdminPage(session) {
 }
 
 // ==========================================
+// AI Voice Assistant — Data Gatherer
+// ==========================================
+function gatherDataContext(message, context) {
+  const msg = (message || '').toLowerCase();
+  const parts = [];
+  const MAX_ITEMS = 30; // Limit items to keep prompt manageable
+
+  // --- People & HR ---
+  if (msg.match(/lid[ií]|zaměstnan|osob|pracovn|hr|docház|absenc|dovolená|nemocn|směn/)) {
+    const people = db.getPeople ? db.getPeople({}) : [];
+    parts.push('=== LIDÉ A HR ===');
+    parts.push('Celkem zaměstnanců: ' + people.length);
+    if (people.length > 0) {
+      const active = people.filter(p => p.active !== false);
+      parts.push('Aktivních: ' + active.length);
+      const sample = active.slice(0, MAX_ITEMS).map(p =>
+        '- ' + (p.first_name || '') + ' ' + (p.last_name || '') + ' (ID:' + p.id + ', pozice:' + (p.position || '?') + ', oddělení:' + (p.department_id || '?') + ')'
+      );
+      parts.push(sample.join('\n'));
+    }
+    // Attendance
+    if (msg.match(/docház/)) {
+      const att = db.getAttendance ? db.getAttendance({}) : [];
+      parts.push('Docházkových záznamů: ' + att.length);
+      if (att.length) parts.push('Posledních 10: ' + JSON.stringify(att.slice(-10).map(a => ({ id: a.person_id, date: a.date, type: a.type }))));
+    }
+    // Leave requests
+    if (msg.match(/dovolená|absenc|nemocn/)) {
+      const leaves = db.getLeaveRequests ? db.getLeaveRequests({}) : [];
+      parts.push('Žádostí o volno: ' + leaves.length);
+      if (leaves.length) parts.push('Posledních 10: ' + JSON.stringify(leaves.slice(-10)));
+    }
+  }
+
+  // --- Companies ---
+  if (msg.match(/společnost|firma|dodavatel|odběratel|kontakt|supplier/)) {
+    const companies = db.getCompanies ? db.getCompanies({}) : [];
+    parts.push('=== SPOLEČNOSTI ===');
+    parts.push('Celkem: ' + companies.length);
+    const sample = companies.slice(0, MAX_ITEMS).map(c =>
+      '- ' + c.name + ' (ID:' + c.id + ', typ:' + (c.type || '?') + ', IČO:' + (c.ico || '?') + ')'
+    );
+    parts.push(sample.join('\n'));
+  }
+
+  // --- Materials / Goods ---
+  if (msg.match(/zboží|materiál|polotovar|výrob|produkt|sklad|záso[hb]|stock|kód|min.*stock|import/)) {
+    const mats = db.getMaterials ? db.getMaterials({}) : [];
+    parts.push('=== ZBOŽÍ / MATERIÁLY ===');
+    parts.push('Celkem položek: ' + mats.length);
+    const byType = {};
+    mats.forEach(m => { byType[m.type] = (byType[m.type] || 0) + 1; });
+    parts.push('Podle typu: ' + JSON.stringify(byType));
+    const byStatus = {};
+    mats.forEach(m => { byStatus[m.status] = (byStatus[m.status] || 0) + 1; });
+    parts.push('Podle stavu: ' + JSON.stringify(byStatus));
+    // Search by name/code if specific query
+    const searchTerms = msg.match(/(?:profil|tyč|plech|šroub|matice|trub|deska|lak|barva|ocel|\d+x\d+)/g);
+    if (searchTerms) {
+      const found = mats.filter(m => searchTerms.some(t => (m.name || '').toLowerCase().includes(t) || (m.code || '').toLowerCase().includes(t)));
+      parts.push('Nalezeno pro "' + searchTerms.join(', ') + '": ' + found.length + ' položek');
+      found.slice(0, MAX_ITEMS).forEach(m => {
+        parts.push('- [' + m.code + '] ' + m.name + ' (typ:' + m.type + ', sklad:' + (m.current_stock || 0) + ' ' + (m.unit || 'ks') + ', min:' + (m.min_stock || 0) + ')');
+      });
+    } else {
+      // Show some sample data
+      mats.slice(0, 15).forEach(m => {
+        parts.push('- [' + m.code + '] ' + m.name + ' (typ:' + m.type + ', sklad:' + (m.current_stock || 0) + ')');
+      });
+    }
+    // Low stock warning
+    const lowStock = mats.filter(m => m.min_stock > 0 && (m.current_stock || 0) < m.min_stock);
+    if (lowStock.length) {
+      parts.push('Položky pod minimálním stavem: ' + lowStock.length);
+      lowStock.slice(0, 10).forEach(m => {
+        parts.push('  ⚠ [' + m.code + '] ' + m.name + ': stav=' + (m.current_stock || 0) + ', min=' + m.min_stock);
+      });
+    }
+  }
+
+  // --- Orders ---
+  if (msg.match(/objednáv|order|nákup|faktur/)) {
+    const orders = db.getOrders ? db.getOrders({}) : [];
+    parts.push('=== OBJEDNÁVKY ===');
+    parts.push('Celkem: ' + orders.length);
+    const byStatus = {};
+    orders.forEach(o => { byStatus[o.status] = (byStatus[o.status] || 0) + 1; });
+    parts.push('Podle stavu: ' + JSON.stringify(byStatus));
+    orders.slice(-MAX_ITEMS).forEach(o => {
+      parts.push('- OBJ#' + o.id + ' ' + (o.supplier_name || o.company_id || '?') + ' stav:' + o.status + ' celkem:' + (o.total_price || 0) + ' Kč (' + (o.created_at || '?') + ')');
+    });
+  }
+
+  // --- Warehouses ---
+  if (msg.match(/sklad[ůy]?[\s,]|warehouse|lokac|umístění/)) {
+    const wh = db.getWarehouses ? db.getWarehouses({}) : [];
+    parts.push('=== SKLADY ===');
+    parts.push('Celkem skladů: ' + wh.length);
+    wh.forEach(w => {
+      parts.push('- ' + w.name + ' (' + w.code + ') typ:' + w.type + ' aktivní:' + w.active);
+    });
+  }
+
+  // --- Inventory movements ---
+  if (msg.match(/pohyb|příjem|výdej|převod|movement/)) {
+    const moves = db.getInventoryMovements ? db.getInventoryMovements({}) : [];
+    parts.push('=== SKLADOVÉ POHYBY ===');
+    parts.push('Celkem pohybů: ' + moves.length);
+    moves.slice(-15).forEach(mv => {
+      parts.push('- ' + mv.type + ' mat_id:' + mv.material_id + ' qty:' + mv.quantity + ' (' + (mv.created_at || '?') + ')');
+    });
+  }
+
+  // --- Inventories ---
+  if (msg.match(/inventur/)) {
+    const invs = db.getInventories ? db.getInventories({}) : [];
+    parts.push('=== INVENTURY ===');
+    parts.push('Celkem: ' + invs.length);
+    invs.forEach(inv => {
+      parts.push('- ' + inv.name + ' stav:' + inv.status + ' sklad_id:' + inv.warehouse_id);
+    });
+  }
+
+  // --- General stats (always include brief overview) ---
+  if (parts.length === 0) {
+    const people = db.getPeople ? db.getPeople({}) : [];
+    const mats = db.getMaterials ? db.getMaterials({}) : [];
+    const orders = db.getOrders ? db.getOrders({}) : [];
+    const companies = db.getCompanies ? db.getCompanies({}) : [];
+    const wh = db.getWarehouses ? db.getWarehouses({}) : [];
+    parts.push('=== PŘEHLED SYSTÉMU ===');
+    parts.push('Zaměstnanci: ' + people.length);
+    parts.push('Zboží/Materiály: ' + mats.length);
+    parts.push('Objednávky: ' + orders.length);
+    parts.push('Společnosti: ' + companies.length);
+    parts.push('Sklady: ' + wh.length);
+    // Low stock
+    const lowStock = mats.filter(m => m.min_stock > 0 && (m.current_stock || 0) < m.min_stock);
+    if (lowStock.length) parts.push('Položky pod minimum: ' + lowStock.length);
+  }
+
+  return parts.join('\n');
+}
+
+// ==========================================
 // HTTP Server
 // ==========================================
 const server = http.createServer(async (req, res) => {
@@ -1076,6 +1221,83 @@ Vrať POUZE validní JSON objekt (bez markdown, bez komentářů) s touto strukt
       sendJSON(res, 200, { ok: true, result: aiResult });
     } catch (e) {
       console.error('AI apply error:', e.message);
+      sendJSON(res, 500, { error: e.message });
+    }
+    return;
+  }
+
+  // ---- AI VOICE ASSISTANT ----
+  if (pathname === '/api/ai/voice' && req.method === 'POST') {
+    const body = await readBody(req);
+    try {
+      const { message, context } = JSON.parse(body);
+      if (!message) { sendJSON(res, 400, { error: 'Missing message' }); return; }
+
+      const apiKey = process.env.ANTHROPIC_API_KEY;
+      if (!apiKey) { sendJSON(res, 500, { error: 'ANTHROPIC_API_KEY not configured' }); return; }
+
+      // Gather relevant data from all modules based on user's message
+      const dataContext = gatherDataContext(message, context);
+
+      const systemPrompt = `Jsi AI asistent systému HOLYOS — firemní systém pro řízení výroby firmy Best Series.
+Komunikuješ ČESKY. Jsi přátelský, stručný a přesný. Uživatel s tebou mluví hlasem.
+
+PRAVIDLA:
+1. VŽDY odpovídej na základě reálných dat, která dostáváš v kontextu. NIKDY si nevymýšlej data.
+2. Pokud data nenajdeš, řekni to upřímně: "Tato data v systému nemám" nebo "K tomuto nemám přístup".
+3. Odpovídej stručně a jasně — odpovědi se čtou nahlas.
+4. Pokud uživatel chce vytvořit/upravit/smazat něco, vysvětli co uděláš a vrať v JSON poli "action" instrukci.
+5. Nepoužívej markdown formátování (žádné hvězdičky, hashtagy apod.) — odpověď je pro hlasový výstup.
+6. Čísla a statistiky uváděj přesně z dat.
+7. Pokud uživatel nespecifikuje modul, zkus najít odpověď ve všech dostupných datech.
+
+DOSTUPNÉ MODULY:
+- Lidé a HR: zaměstnanci, docházka, absence, dokumenty
+- Nákup a sklad: společnosti, objednávky, zboží/materiály, sklady, pohyby, inventury
+- Pracovní postup: výrobní postupy
+- Programování výroby: výrobní programy
+
+AKTUÁLNÍ KONTEXT: Uživatel je v modulu "${context || 'hlavní stránka'}"`;
+
+      const userPrompt = `DATA ZE SYSTÉMU:
+${dataContext}
+
+DOTAZ UŽIVATELE: ${message}`;
+
+      const requestBody = JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1024,
+        system: systemPrompt,
+        messages: [{ role: 'user', content: userPrompt }]
+      });
+
+      const aiResult = await new Promise((resolve, reject) => {
+        const aiReq = https.request({
+          hostname: 'api.anthropic.com', path: '/v1/messages', method: 'POST',
+          headers: {
+            'Content-Type': 'application/json', 'x-api-key': apiKey,
+            'anthropic-version': '2023-06-01', 'Content-Length': Buffer.byteLength(requestBody),
+          }
+        }, (aiRes) => {
+          let d = '';
+          aiRes.on('data', chunk => d += chunk);
+          aiRes.on('end', () => {
+            try {
+              const parsed = JSON.parse(d);
+              if (aiRes.statusCode !== 200) { reject(new Error(parsed.error?.message || 'API error ' + aiRes.statusCode)); return; }
+              resolve(parsed.content?.[0]?.text || 'Omlouvám se, nedokázal jsem zpracovat odpověď.');
+            } catch (e) { reject(new Error('Parse error: ' + e.message)); }
+          });
+        });
+        aiReq.on('error', reject);
+        aiReq.setTimeout(30000, () => { aiReq.destroy(); reject(new Error('Timeout')); });
+        aiReq.write(requestBody);
+        aiReq.end();
+      });
+
+      sendJSON(res, 200, { ok: true, response: aiResult });
+    } catch (e) {
+      console.error('AI voice error:', e.message);
       sendJSON(res, 500, { error: e.message });
     }
     return;

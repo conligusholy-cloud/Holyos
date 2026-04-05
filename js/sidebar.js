@@ -120,6 +120,14 @@ function renderSidebar(activeModule) {
 
   // Create hamburger button for mobile
   initHamburger();
+
+  // Load AI Voice Assistant
+  if (!document.getElementById('ai-assistant-script')) {
+    var aiScript = document.createElement('script');
+    aiScript.id = 'ai-assistant-script';
+    aiScript.src = basePath + 'js/ai-assistant.js';
+    document.body.appendChild(aiScript);
+  }
 }
 
 function initHamburger() {
