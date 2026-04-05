@@ -1668,6 +1668,20 @@ db.bulkCreateMaterials = function(itemsArray) {
   return results;
 };
 
+db.deduplicateMaterials = function() {
+  const seen = new Map();
+  const before = data.materials.length;
+  data.materials = data.materials.filter(m => {
+    if (!m.factorify_id) return true;
+    if (seen.has(m.factorify_id)) return false;
+    seen.set(m.factorify_id, m.id);
+    return true;
+  });
+  const removed = before - data.materials.length;
+  if (removed > 0) save();
+  return { before, after: data.materials.length, removed };
+};
+
 db.updateMaterial = function(id, fields) {
   const m = data.materials.find(x => x.id === id);
   if (!m) return null;
