@@ -251,6 +251,8 @@ async function handleWarehouse(req, res, pathname) {
     if (pathname === '/api/wh/materials' && method === 'GET') {
       const filters = {
         category: url.searchParams.get('category') || undefined,
+        type: url.searchParams.get('type') || undefined,
+        status: url.searchParams.get('status') || undefined,
         search: url.searchParams.get('search') || undefined,
         low_stock: url.searchParams.get('low_stock') === 'true' || undefined,
       };
@@ -340,6 +342,167 @@ async function handleWarehouse(req, res, pathname) {
         sendJSON(res, 200, { ok: true });
         return true;
       }
+    }
+
+    // --- INVENTORIES ---
+    if (pathname === '/api/wh/inventories' && method === 'GET') {
+      const filters = {
+        warehouse_id: url.searchParams.get('warehouse_id') || undefined,
+        status: url.searchParams.get('status') || undefined,
+      };
+      sendJSON(res, 200, db.getInventories(filters));
+      return true;
+    }
+
+    if (pathname === '/api/wh/inventories' && method === 'POST') {
+      const body = JSON.parse(await readBody(req));
+      if (!body.warehouse_id) { sendJSON(res, 400, { error: 'warehouse_id is required' }); return true; }
+      const inv = db.createInventory(body);
+      // Auto-generate items
+      db.generateInventoryItems(inv.id);
+      sendJSON(res, 201, inv);
+      return true;
+    }
+
+    const invMatch = pathname.match(/^\/api\/wh\/inventories\/(\d+)$/);
+    if (invMatch) {
+      const id = parseInt(invMatch[1]);
+      if (method === 'GET') {
+        const inv = db.getInventoryById(id);
+        if (!inv) { sendJSON(res, 404, { error: 'Not found' }); return true; }
+        sendJSON(res, 200, inv);
+        return true;
+      }
+      if (method === 'PUT') {
+        const body = JSON.parse(await readBody(req));
+        const updated = db.updateInventory(id, body);
+        if (!updated) { sendJSON(res, 404, { error: 'Not found' }); return true; }
+        sendJSON(res, 200, { ok: true });
+        return true;
+      }
+      if (method === 'DELETE') {
+        const ok = db.deleteInventory(id);
+        if (!ok) { sendJSON(res, 404, { error: 'Not found' }); return true; }
+        sendJSON(res, 200, { ok: true });
+        return true;
+      }
+    }
+
+    const invStartMatch = pathname.match(/^\/api\/wh\/inventories\/(\d+)\/start$/);
+    if (invStartMatch && method === 'PUT') {
+      const id = parseInt(invStartMatch[1]);
+      const inv = db.startInventory(id);
+      if (!inv) { sendJSON(res, 404, { error: 'Not found' }); return true; }
+      sendJSON(res, 200, { ok: true });
+      return true;
+    }
+
+    const invCompleteMatch = pathname.match(/^\/api\/wh\/inventories\/(\d+)\/complete$/);
+    if (invCompleteMatch && method === 'PUT') {
+      const id = parseInt(invCompleteMatch[1]);
+      const body = JSON.parse(await readBody(req));
+      const inv = db.completeInventory(id, body.apply_differences !== false);
+      if (!inv) { sendJSON(res, 404, { error: 'Not found' }); return true; }
+      sendJSON(res, 200, { ok: true });
+      return true;
+    }
+
+    const invRegenerateMatch = pathname.match(/^\/api\/wh\/inventories\/(\d+)\/regenerate$/);
+    if (invRegenerateMatch && method === 'POST') {
+      const id = parseInt(invRegenerateMatch[1]);
+      const items = db.generateInventoryItems(id);
+      if (!items) { sendJSON(res, 404, { error: 'Not found' }); return true; }
+      sendJSON(res, 200, { ok: true, count: items.length });
+      return true;
+    }
+
+    // --- INVENTORY ITEMS ---
+    const invItemMatch = pathname.match(/^\/api\/wh\/inventory-items\/(\d+)$/);
+    if (invItemMatch && method === 'PUT') {
+      const id = parseInt(invItemMatch[1]);
+      const body = JSON.parse(await readBody(req));
+      const updated = db.updateInventoryItem(id, body);
+      if (!updated) { sendJSON(res, 404, { error: 'Not found' }); return true; }
+      sendJSON(res, 200, { ok: true });
+      return true;
+    }
+
+    // --- FACTORIFY IMPORT ---
+    if (pathname === '/api/wh/factorify/goods' && method === 'GET') {
+      const https = require('https');
+      const baseUrl = process.env.FACTORIFY_BASE_URL || 'https://bs.factorify.cloud';
+      const token = process.env.FACTORIFY_TOKEN || '';
+      const skip = parseInt(url.searchParams.get('skip')) || 0;
+      const take = parseInt(url.searchParams.get('take')) || 100;
+      const search = url.searchParams.get('search') || '';
+
+      const postData = JSON.stringify({ skip, take, filter: search ? { Name: { contains: search } } : undefined });
+      const fUrl = new URL(baseUrl + '/api/query/Goods');
+
+      const options = {
+        hostname: fUrl.hostname, port: 443, path: fUrl.pathname, method: 'POST',
+        headers: {
+          'Content-Type': 'application/json', 'X-FySerialization': 'ui2', 'X-AccountingUnit': '1',
+          'Cookie': 'securityToken=' + token, 'Content-Length': Buffer.byteLength(postData),
+        },
+      };
+
+      try {
+        const body = await new Promise((resolve, reject) => {
+          const req2 = https.request(options, (res2) => {
+            let d = '';
+            res2.on('data', chunk => d += chunk);
+            res2.on('end', () => resolve(d));
+          });
+          req2.on('error', reject);
+          req2.write(postData);
+          req2.end();
+        });
+        sendJSON(res, 200, JSON.parse(body));
+      } catch (e) {
+        sendJSON(res, 502, { error: 'Factorify unreachable: ' + e.message });
+      }
+      return true;
+    }
+
+    if (pathname === '/api/wh/factorify/import' && method === 'POST') {
+      const body = JSON.parse(await readBody(req));
+      const items = body.items || [];
+      if (!items.length) { sendJSON(res, 400, { error: 'No items to import' }); return true; }
+
+      const TYPE_MAP = { 'Výrobek': 'product', 'Materiál': 'material', 'Zboží': 'goods', 'Polotovar': 'semi_product' };
+      const STATUS_MAP = { 'Aktivní': 'active', 'Nový': 'new', 'První běh': 'first_run', 'Smazáno': 'deleted' };
+
+      let imported = 0, skipped = 0;
+      for (const item of items) {
+        // Check if already imported by factorify_id
+        const existing = db.getMaterials({}).find(m => m.factorify_id === item.Id);
+        if (existing) { skipped++; continue; }
+
+        db.createMaterial({
+          code: item.Code || '',
+          name: item.Name || 'Bez názvu',
+          type: TYPE_MAP[item.TypeLabel] || TYPE_MAP[item.Type] || 'material',
+          status: STATUS_MAP[item.StatusLabel] || STATUS_MAP[item.Status] || 'active',
+          category: item.Classification || 'general',
+          classification: item.Classification || '',
+          unit: item.Unit || 'ks',
+          factorify_id: item.Id,
+          external_id: item.ExternalId || '',
+          weight: item.Weight || 0,
+          min_stock: item.MinStock || 0,
+          max_stock: item.MaxStock || 0,
+          barcode: item.Barcode || '',
+          description: item.Note || '',
+          production_note: item.ProductionNote || '',
+          keywords: item.Keywords || '',
+          photo_url: item.PhotoUrl || '',
+          non_stock: !!item.NonStock,
+        });
+        imported++;
+      }
+      sendJSON(res, 200, { ok: true, imported, skipped });
+      return true;
     }
 
     return false;
