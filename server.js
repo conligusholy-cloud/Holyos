@@ -420,10 +420,8 @@ function getAdminPage(session) {
 // ==========================================
 function gatherDataContext(message, context) {
   const msg = (message || '').toLowerCase();
-  const parts = [];
-  const MAX = 25;
 
-  // === VŽDY: celkový přehled systému ===
+  // Fetch ALL data from ALL modules — full JSON, no filtering
   const people = db.getAllPeople({});
   const companies = db.getCompanies({});
   const mats = db.getMaterials({});
@@ -434,129 +432,82 @@ function gatherDataContext(message, context) {
   const leaves = db.getLeaveRequests({});
   const attendance = db.getAttendance({});
   const documents = db.getDocuments({});
+  const shifts = db.getShifts();
+  const absenceTypes = db.getAbsenceTypes();
 
-  parts.push('=== PŘEHLED SYSTÉMU ===');
-  parts.push('Zaměstnanci/Lidé: ' + people.length);
-  parts.push('Společnosti: ' + companies.length);
-  parts.push('Zboží/Materiály: ' + mats.length);
-  parts.push('Objednávky: ' + orders.length);
-  parts.push('Sklady: ' + warehouses.length);
-  parts.push('Skladové pohyby: ' + movements.length);
-  parts.push('Inventury: ' + inventories.length);
-  parts.push('Žádosti o volno: ' + leaves.length);
-  parts.push('Docházkové záznamy: ' + attendance.length);
-  parts.push('Dokumenty: ' + documents.length);
+  // Strip large binary fields (photos, file_data) to save tokens
+  const cleanPeople = people.map(p => {
+    const c = { ...p };
+    delete c.photo_url; // base64 photos are huge
+    return c;
+  });
+  const cleanDocs = documents.map(d => {
+    const c = { ...d };
+    delete c.file_data; // base64 file content
+    return c;
+  });
 
-  // Low stock
-  const lowStock = mats.filter(m => m.min_stock > 0 && (m.current_stock || 0) < m.min_stock);
-  if (lowStock.length) parts.push('Položky pod minimem: ' + lowStock.length);
-
-  // === LIDÉ (vždy pokud jsou) ===
-  if (people.length > 0) {
-    parts.push('\n=== LIDÉ ===');
-    const active = people.filter(p => p.active !== 0 && p.active !== false);
-    const inactive = people.length - active.length;
-    parts.push('Aktivních: ' + active.length + (inactive ? ', neaktivních: ' + inactive : ''));
-    const byType = {};
-    people.forEach(p => { byType[p.type || 'employee'] = (byType[p.type || 'employee'] || 0) + 1; });
-    parts.push('Podle typu: ' + JSON.stringify(byType));
-    people.slice(0, MAX).forEach(p => {
-      parts.push('- ' + (p.first_name || '') + ' ' + (p.last_name || '') + ' (ID:' + p.id + ', typ:' + (p.type || 'employee') + ', pozice:' + (p.position || '-') + ', odd:' + (p.department_name || '-') + ', role:' + (p.role_name || '-') + ')');
-    });
-    if (people.length > MAX) parts.push('... a dalších ' + (people.length - MAX));
-  }
-
-  // === SPOLEČNOSTI ===
-  if (companies.length > 0 && msg.match(/společnost|firma|dodavatel|odběratel|kontakt|supplier|ič[oo]/)) {
-    parts.push('\n=== SPOLEČNOSTI (detail) ===');
-    companies.slice(0, MAX).forEach(c => {
-      parts.push('- ' + c.name + ' (ID:' + c.id + ', typ:' + (c.type || '?') + ', IČO:' + (c.ico || '-') + ')');
-    });
-  }
-
-  // === ZBOŽÍ / MATERIÁLY ===
-  if (mats.length > 0) {
-    parts.push('\n=== ZBOŽÍ / MATERIÁLY ===');
-    const byType = {};
-    mats.forEach(m => { byType[m.type] = (byType[m.type] || 0) + 1; });
-    parts.push('Podle typu: ' + JSON.stringify(byType));
-    const byStatus = {};
-    mats.forEach(m => { byStatus[m.status] = (byStatus[m.status] || 0) + 1; });
-    parts.push('Podle stavu: ' + JSON.stringify(byStatus));
-
-    // Search by keywords
-    const searchTerms = msg.match(/(?:profil|tyč|plech|šroub|matice|trub|deska|lak|barva|ocel|\d+x\d+)/gi);
-    if (searchTerms) {
-      const found = mats.filter(m => searchTerms.some(t => (m.name || '').toLowerCase().includes(t.toLowerCase()) || (m.code || '').toLowerCase().includes(t.toLowerCase())));
-      parts.push('Hledání "' + searchTerms.join(', ') + '": ' + found.length + ' výsledků');
-      found.slice(0, MAX).forEach(m => {
-        parts.push('- [' + m.code + '] ' + m.name + ' (typ:' + m.type + ', sklad:' + (m.current_stock || 0) + ' ' + (m.unit || 'ks') + ')');
-      });
+  // For materials: full data is too large (3000+ items), send summary + relevant subset
+  const matSummary = {
+    total: mats.length,
+    byType: {},
+    byStatus: {},
+    lowStock: [],
+  };
+  mats.forEach(m => {
+    matSummary.byType[m.type] = (matSummary.byType[m.type] || 0) + 1;
+    matSummary.byStatus[m.status] = (matSummary.byStatus[m.status] || 0) + 1;
+    if (m.min_stock > 0 && (m.current_stock || 0) < m.min_stock) {
+      matSummary.lowStock.push({ id: m.id, code: m.code, name: m.name, current: m.current_stock || 0, min: m.min_stock, unit: m.unit });
     }
+  });
 
-    // Low stock detail
-    if (lowStock.length > 0 && msg.match(/pod.*min|minimum|málo|dochází|low.*stock|chybí/)) {
-      parts.push('Položky pod minimem (detail):');
-      lowStock.slice(0, MAX).forEach(m => {
-        parts.push('- [' + m.code + '] ' + m.name + ': stav=' + (m.current_stock || 0) + ', min=' + m.min_stock + ' ' + (m.unit || 'ks'));
-      });
-    }
+  // Find materials matching the query
+  let relevantMats = [];
+  const matSearch = msg.match(/[a-záčďéěíňóřšťúůýž]{3,}/gi) || [];
+  if (matSearch.length > 0) {
+    relevantMats = mats.filter(m => {
+      const hay = ((m.name || '') + ' ' + (m.code || '')).toLowerCase();
+      return matSearch.some(t => hay.includes(t));
+    }).slice(0, 30).map(m => ({
+      id: m.id, code: m.code, name: m.name, type: m.type, status: m.status,
+      unit: m.unit, current_stock: m.current_stock, min_stock: m.min_stock,
+      supplier_id: m.supplier_id, weight: m.weight, description: m.description,
+    }));
   }
 
-  // === OBJEDNÁVKY ===
-  if (orders.length > 0 && msg.match(/objednáv|order|nákup|faktur|dodávk/)) {
-    parts.push('\n=== OBJEDNÁVKY (detail) ===');
-    const byStatus = {};
-    orders.forEach(o => { byStatus[o.status] = (byStatus[o.status] || 0) + 1; });
-    parts.push('Podle stavu: ' + JSON.stringify(byStatus));
-    orders.slice(-MAX).forEach(o => {
-      parts.push('- OBJ#' + o.id + ' ' + (o.supplier_name || 'firma:' + o.company_id) + ' stav:' + o.status + ' celkem:' + (o.total_price || 0) + ' Kč (' + (o.created_at || '?') + ')');
-    });
-  }
+  // Build complete context object
+  const ctx = {
+    systemOverview: {
+      lide: people.length,
+      spolecnosti: companies.length,
+      zbozi_materialy: mats.length,
+      objednavky: orders.length,
+      sklady: warehouses.length,
+      pohyby: movements.length,
+      inventury: inventories.length,
+      zadosti_o_volno: leaves.length,
+      dochazka: attendance.length,
+      dokumenty: documents.length,
+      polozky_pod_minimem: matSummary.lowStock.length,
+    },
+    lide: cleanPeople,
+    spolecnosti: companies,
+    objednavky: orders.slice(-50),
+    sklady: warehouses,
+    smeny: shifts,
+    typy_absenci: absenceTypes,
+    zadosti_o_volno: leaves.slice(-30),
+    dochazka: attendance.slice(-30),
+    dokumenty: cleanDocs.slice(-30),
+    inventury: inventories,
+    pohyby: movements.slice(-30),
+    zbozi_souhrn: matSummary,
+    zbozi_relevantni: relevantMats,
+    zbozi_pod_minimem: matSummary.lowStock.slice(0, 30),
+  };
 
-  // === SKLADY ===
-  if (warehouses.length > 0 && msg.match(/sklad|warehouse|lokac/)) {
-    parts.push('\n=== SKLADY (detail) ===');
-    warehouses.forEach(w => {
-      parts.push('- ' + w.name + ' (' + w.code + ') typ:' + w.type + ' aktivní:' + w.active);
-    });
-  }
-
-  // === POHYBY ===
-  if (movements.length > 0 && msg.match(/pohyb|příjem|výdej|převod/)) {
-    parts.push('\n=== SKLADOVÉ POHYBY (posledních 15) ===');
-    movements.slice(-15).forEach(mv => {
-      parts.push('- ' + mv.type + ' mat:' + mv.material_id + ' qty:' + mv.quantity + ' (' + (mv.created_at || '?') + ')');
-    });
-  }
-
-  // === INVENTURY ===
-  if (inventories.length > 0 && msg.match(/inventur/)) {
-    parts.push('\n=== INVENTURY ===');
-    inventories.forEach(inv => {
-      parts.push('- ' + inv.name + ' stav:' + inv.status + ' sklad:' + inv.warehouse_id);
-    });
-  }
-
-  // === DOCHÁZKA ===
-  if (attendance.length > 0 && msg.match(/docház|příchod|odchod/)) {
-    parts.push('\n=== DOCHÁZKA (posledních 15) ===');
-    attendance.slice(-15).forEach(a => {
-      const person = people.find(p => p.id === a.person_id);
-      parts.push('- ' + (person ? person.first_name + ' ' + person.last_name : 'ID:' + a.person_id) + ' ' + a.date + ' ' + (a.type || '') + ' ' + (a.check_in || '') + '-' + (a.check_out || ''));
-    });
-  }
-
-  // === VOLNO/ABSENCE ===
-  if (leaves.length > 0 && msg.match(/dovolená|volno|absenc|nemocn/)) {
-    parts.push('\n=== ŽÁDOSTI O VOLNO ===');
-    leaves.slice(-15).forEach(l => {
-      const person = people.find(p => p.id === l.person_id);
-      parts.push('- ' + (person ? person.first_name + ' ' + person.last_name : 'ID:' + l.person_id) + ' ' + l.date_from + ' - ' + l.date_to + ' typ:' + l.type + ' stav:' + l.status);
-    });
-  }
-
-  return parts.join('\n');
+  return JSON.stringify(ctx, null, 0);
 }
 
 // ==========================================
@@ -1225,7 +1176,14 @@ Vrať POUZE validní JSON objekt (bez markdown, bez komentářů) s touto strukt
     return;
   }
 
-  // ---- AI WHISPER TRANSCRIPTION (for iOS/Safari) ----
+  // ---- AI STT MODE CHECK ----
+  if (pathname === '/api/ai/stt-check' && req.method === 'GET') {
+    const hasWhisper = !!process.env.OPENAI_API_KEY;
+    sendJSON(res, 200, { whisper: hasWhisper });
+    return;
+  }
+
+  // ---- AI WHISPER TRANSCRIPTION ----
   if (pathname === '/api/ai/transcribe' && req.method === 'POST') {
     try {
       const openaiKey = process.env.OPENAI_API_KEY;
