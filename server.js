@@ -421,140 +421,139 @@ function getAdminPage(session) {
 function gatherDataContext(message, context) {
   const msg = (message || '').toLowerCase();
   const parts = [];
-  const MAX_ITEMS = 30; // Limit items to keep prompt manageable
+  const MAX = 25;
 
-  // --- People & HR ---
-  if (msg.match(/lid[ií]|zaměstnan|osob|pracovn|hr|docház|absenc|dovolená|nemocn|směn/)) {
-    const people = db.getPeople ? db.getPeople({}) : [];
-    parts.push('=== LIDÉ A HR ===');
-    parts.push('Celkem zaměstnanců: ' + people.length);
-    if (people.length > 0) {
-      const active = people.filter(p => p.active !== false);
-      parts.push('Aktivních: ' + active.length);
-      const sample = active.slice(0, MAX_ITEMS).map(p =>
-        '- ' + (p.first_name || '') + ' ' + (p.last_name || '') + ' (ID:' + p.id + ', pozice:' + (p.position || '?') + ', oddělení:' + (p.department_id || '?') + ')'
-      );
-      parts.push(sample.join('\n'));
-    }
-    // Attendance
-    if (msg.match(/docház/)) {
-      const att = db.getAttendance ? db.getAttendance({}) : [];
-      parts.push('Docházkových záznamů: ' + att.length);
-      if (att.length) parts.push('Posledních 10: ' + JSON.stringify(att.slice(-10).map(a => ({ id: a.person_id, date: a.date, type: a.type }))));
-    }
-    // Leave requests
-    if (msg.match(/dovolená|absenc|nemocn/)) {
-      const leaves = db.getLeaveRequests ? db.getLeaveRequests({}) : [];
-      parts.push('Žádostí o volno: ' + leaves.length);
-      if (leaves.length) parts.push('Posledních 10: ' + JSON.stringify(leaves.slice(-10)));
-    }
+  // === VŽDY: celkový přehled systému ===
+  const people = db.getAllPeople({});
+  const companies = db.getCompanies({});
+  const mats = db.getMaterials({});
+  const orders = db.getOrders({});
+  const warehouses = db.getWarehouses();
+  const movements = db.getInventoryMovements({});
+  const inventories = db.getInventories({});
+  const leaves = db.getLeaveRequests({});
+  const attendance = db.getAttendance({});
+  const documents = db.getDocuments({});
+
+  parts.push('=== PŘEHLED SYSTÉMU ===');
+  parts.push('Zaměstnanci/Lidé: ' + people.length);
+  parts.push('Společnosti: ' + companies.length);
+  parts.push('Zboží/Materiály: ' + mats.length);
+  parts.push('Objednávky: ' + orders.length);
+  parts.push('Sklady: ' + warehouses.length);
+  parts.push('Skladové pohyby: ' + movements.length);
+  parts.push('Inventury: ' + inventories.length);
+  parts.push('Žádosti o volno: ' + leaves.length);
+  parts.push('Docházkové záznamy: ' + attendance.length);
+  parts.push('Dokumenty: ' + documents.length);
+
+  // Low stock
+  const lowStock = mats.filter(m => m.min_stock > 0 && (m.current_stock || 0) < m.min_stock);
+  if (lowStock.length) parts.push('Položky pod minimem: ' + lowStock.length);
+
+  // === LIDÉ (vždy pokud jsou) ===
+  if (people.length > 0) {
+    parts.push('\n=== LIDÉ ===');
+    const active = people.filter(p => p.active !== 0 && p.active !== false);
+    const inactive = people.length - active.length;
+    parts.push('Aktivních: ' + active.length + (inactive ? ', neaktivních: ' + inactive : ''));
+    const byType = {};
+    people.forEach(p => { byType[p.type || 'employee'] = (byType[p.type || 'employee'] || 0) + 1; });
+    parts.push('Podle typu: ' + JSON.stringify(byType));
+    people.slice(0, MAX).forEach(p => {
+      parts.push('- ' + (p.first_name || '') + ' ' + (p.last_name || '') + ' (ID:' + p.id + ', typ:' + (p.type || 'employee') + ', pozice:' + (p.position || '-') + ', odd:' + (p.department_name || '-') + ', role:' + (p.role_name || '-') + ')');
+    });
+    if (people.length > MAX) parts.push('... a dalších ' + (people.length - MAX));
   }
 
-  // --- Companies ---
-  if (msg.match(/společnost|firma|dodavatel|odběratel|kontakt|supplier/)) {
-    const companies = db.getCompanies ? db.getCompanies({}) : [];
-    parts.push('=== SPOLEČNOSTI ===');
-    parts.push('Celkem: ' + companies.length);
-    const sample = companies.slice(0, MAX_ITEMS).map(c =>
-      '- ' + c.name + ' (ID:' + c.id + ', typ:' + (c.type || '?') + ', IČO:' + (c.ico || '?') + ')'
-    );
-    parts.push(sample.join('\n'));
+  // === SPOLEČNOSTI ===
+  if (companies.length > 0 && msg.match(/společnost|firma|dodavatel|odběratel|kontakt|supplier|ič[oo]/)) {
+    parts.push('\n=== SPOLEČNOSTI (detail) ===');
+    companies.slice(0, MAX).forEach(c => {
+      parts.push('- ' + c.name + ' (ID:' + c.id + ', typ:' + (c.type || '?') + ', IČO:' + (c.ico || '-') + ')');
+    });
   }
 
-  // --- Materials / Goods ---
-  if (msg.match(/zboží|materiál|polotovar|výrob|produkt|sklad|záso[hb]|stock|kód|min.*stock|import/)) {
-    const mats = db.getMaterials ? db.getMaterials({}) : [];
-    parts.push('=== ZBOŽÍ / MATERIÁLY ===');
-    parts.push('Celkem položek: ' + mats.length);
+  // === ZBOŽÍ / MATERIÁLY ===
+  if (mats.length > 0) {
+    parts.push('\n=== ZBOŽÍ / MATERIÁLY ===');
     const byType = {};
     mats.forEach(m => { byType[m.type] = (byType[m.type] || 0) + 1; });
     parts.push('Podle typu: ' + JSON.stringify(byType));
     const byStatus = {};
     mats.forEach(m => { byStatus[m.status] = (byStatus[m.status] || 0) + 1; });
     parts.push('Podle stavu: ' + JSON.stringify(byStatus));
-    // Search by name/code if specific query
-    const searchTerms = msg.match(/(?:profil|tyč|plech|šroub|matice|trub|deska|lak|barva|ocel|\d+x\d+)/g);
+
+    // Search by keywords
+    const searchTerms = msg.match(/(?:profil|tyč|plech|šroub|matice|trub|deska|lak|barva|ocel|\d+x\d+)/gi);
     if (searchTerms) {
-      const found = mats.filter(m => searchTerms.some(t => (m.name || '').toLowerCase().includes(t) || (m.code || '').toLowerCase().includes(t)));
-      parts.push('Nalezeno pro "' + searchTerms.join(', ') + '": ' + found.length + ' položek');
-      found.slice(0, MAX_ITEMS).forEach(m => {
-        parts.push('- [' + m.code + '] ' + m.name + ' (typ:' + m.type + ', sklad:' + (m.current_stock || 0) + ' ' + (m.unit || 'ks') + ', min:' + (m.min_stock || 0) + ')');
-      });
-    } else {
-      // Show some sample data
-      mats.slice(0, 15).forEach(m => {
-        parts.push('- [' + m.code + '] ' + m.name + ' (typ:' + m.type + ', sklad:' + (m.current_stock || 0) + ')');
+      const found = mats.filter(m => searchTerms.some(t => (m.name || '').toLowerCase().includes(t.toLowerCase()) || (m.code || '').toLowerCase().includes(t.toLowerCase())));
+      parts.push('Hledání "' + searchTerms.join(', ') + '": ' + found.length + ' výsledků');
+      found.slice(0, MAX).forEach(m => {
+        parts.push('- [' + m.code + '] ' + m.name + ' (typ:' + m.type + ', sklad:' + (m.current_stock || 0) + ' ' + (m.unit || 'ks') + ')');
       });
     }
-    // Low stock warning
-    const lowStock = mats.filter(m => m.min_stock > 0 && (m.current_stock || 0) < m.min_stock);
-    if (lowStock.length) {
-      parts.push('Položky pod minimálním stavem: ' + lowStock.length);
-      lowStock.slice(0, 10).forEach(m => {
-        parts.push('  ⚠ [' + m.code + '] ' + m.name + ': stav=' + (m.current_stock || 0) + ', min=' + m.min_stock);
+
+    // Low stock detail
+    if (lowStock.length > 0 && msg.match(/pod.*min|minimum|málo|dochází|low.*stock|chybí/)) {
+      parts.push('Položky pod minimem (detail):');
+      lowStock.slice(0, MAX).forEach(m => {
+        parts.push('- [' + m.code + '] ' + m.name + ': stav=' + (m.current_stock || 0) + ', min=' + m.min_stock + ' ' + (m.unit || 'ks'));
       });
     }
   }
 
-  // --- Orders ---
-  if (msg.match(/objednáv|order|nákup|faktur/)) {
-    const orders = db.getOrders ? db.getOrders({}) : [];
-    parts.push('=== OBJEDNÁVKY ===');
-    parts.push('Celkem: ' + orders.length);
+  // === OBJEDNÁVKY ===
+  if (orders.length > 0 && msg.match(/objednáv|order|nákup|faktur|dodávk/)) {
+    parts.push('\n=== OBJEDNÁVKY (detail) ===');
     const byStatus = {};
     orders.forEach(o => { byStatus[o.status] = (byStatus[o.status] || 0) + 1; });
     parts.push('Podle stavu: ' + JSON.stringify(byStatus));
-    orders.slice(-MAX_ITEMS).forEach(o => {
-      parts.push('- OBJ#' + o.id + ' ' + (o.supplier_name || o.company_id || '?') + ' stav:' + o.status + ' celkem:' + (o.total_price || 0) + ' Kč (' + (o.created_at || '?') + ')');
+    orders.slice(-MAX).forEach(o => {
+      parts.push('- OBJ#' + o.id + ' ' + (o.supplier_name || 'firma:' + o.company_id) + ' stav:' + o.status + ' celkem:' + (o.total_price || 0) + ' Kč (' + (o.created_at || '?') + ')');
     });
   }
 
-  // --- Warehouses ---
-  if (msg.match(/sklad[ůy]?[\s,]|warehouse|lokac|umístění/)) {
-    const wh = db.getWarehouses ? db.getWarehouses({}) : [];
-    parts.push('=== SKLADY ===');
-    parts.push('Celkem skladů: ' + wh.length);
-    wh.forEach(w => {
+  // === SKLADY ===
+  if (warehouses.length > 0 && msg.match(/sklad|warehouse|lokac/)) {
+    parts.push('\n=== SKLADY (detail) ===');
+    warehouses.forEach(w => {
       parts.push('- ' + w.name + ' (' + w.code + ') typ:' + w.type + ' aktivní:' + w.active);
     });
   }
 
-  // --- Inventory movements ---
-  if (msg.match(/pohyb|příjem|výdej|převod|movement/)) {
-    const moves = db.getInventoryMovements ? db.getInventoryMovements({}) : [];
-    parts.push('=== SKLADOVÉ POHYBY ===');
-    parts.push('Celkem pohybů: ' + moves.length);
-    moves.slice(-15).forEach(mv => {
-      parts.push('- ' + mv.type + ' mat_id:' + mv.material_id + ' qty:' + mv.quantity + ' (' + (mv.created_at || '?') + ')');
+  // === POHYBY ===
+  if (movements.length > 0 && msg.match(/pohyb|příjem|výdej|převod/)) {
+    parts.push('\n=== SKLADOVÉ POHYBY (posledních 15) ===');
+    movements.slice(-15).forEach(mv => {
+      parts.push('- ' + mv.type + ' mat:' + mv.material_id + ' qty:' + mv.quantity + ' (' + (mv.created_at || '?') + ')');
     });
   }
 
-  // --- Inventories ---
-  if (msg.match(/inventur/)) {
-    const invs = db.getInventories ? db.getInventories({}) : [];
-    parts.push('=== INVENTURY ===');
-    parts.push('Celkem: ' + invs.length);
-    invs.forEach(inv => {
-      parts.push('- ' + inv.name + ' stav:' + inv.status + ' sklad_id:' + inv.warehouse_id);
+  // === INVENTURY ===
+  if (inventories.length > 0 && msg.match(/inventur/)) {
+    parts.push('\n=== INVENTURY ===');
+    inventories.forEach(inv => {
+      parts.push('- ' + inv.name + ' stav:' + inv.status + ' sklad:' + inv.warehouse_id);
     });
   }
 
-  // --- General stats (always include brief overview) ---
-  if (parts.length === 0) {
-    const people = db.getPeople ? db.getPeople({}) : [];
-    const mats = db.getMaterials ? db.getMaterials({}) : [];
-    const orders = db.getOrders ? db.getOrders({}) : [];
-    const companies = db.getCompanies ? db.getCompanies({}) : [];
-    const wh = db.getWarehouses ? db.getWarehouses({}) : [];
-    parts.push('=== PŘEHLED SYSTÉMU ===');
-    parts.push('Zaměstnanci: ' + people.length);
-    parts.push('Zboží/Materiály: ' + mats.length);
-    parts.push('Objednávky: ' + orders.length);
-    parts.push('Společnosti: ' + companies.length);
-    parts.push('Sklady: ' + wh.length);
-    // Low stock
-    const lowStock = mats.filter(m => m.min_stock > 0 && (m.current_stock || 0) < m.min_stock);
-    if (lowStock.length) parts.push('Položky pod minimum: ' + lowStock.length);
+  // === DOCHÁZKA ===
+  if (attendance.length > 0 && msg.match(/docház|příchod|odchod/)) {
+    parts.push('\n=== DOCHÁZKA (posledních 15) ===');
+    attendance.slice(-15).forEach(a => {
+      const person = people.find(p => p.id === a.person_id);
+      parts.push('- ' + (person ? person.first_name + ' ' + person.last_name : 'ID:' + a.person_id) + ' ' + a.date + ' ' + (a.type || '') + ' ' + (a.check_in || '') + '-' + (a.check_out || ''));
+    });
+  }
+
+  // === VOLNO/ABSENCE ===
+  if (leaves.length > 0 && msg.match(/dovolená|volno|absenc|nemocn/)) {
+    parts.push('\n=== ŽÁDOSTI O VOLNO ===');
+    leaves.slice(-15).forEach(l => {
+      const person = people.find(p => p.id === l.person_id);
+      parts.push('- ' + (person ? person.first_name + ' ' + person.last_name : 'ID:' + l.person_id) + ' ' + l.date_from + ' - ' + l.date_to + ' typ:' + l.type + ' stav:' + l.status);
+    });
   }
 
   return parts.join('\n');
