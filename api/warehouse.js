@@ -427,6 +427,16 @@ async function handleWarehouse(req, res, pathname) {
       return true;
     }
 
+    // --- BULK MATERIALS ---
+    if (pathname === '/api/wh/materials/bulk' && method === 'POST') {
+      const body = JSON.parse(await readBody(req));
+      const items = body.items || [];
+      if (!items.length) { sendJSON(res, 400, { error: 'No items' }); return true; }
+      const created = db.bulkCreateMaterials(items);
+      sendJSON(res, 201, { ok: true, count: created.length });
+      return true;
+    }
+
     // --- FACTORIFY IMPORT ---
     if (pathname === '/api/wh/factorify/goods' && method === 'GET') {
       const https = require('https');
@@ -470,36 +480,111 @@ async function handleWarehouse(req, res, pathname) {
       const items = body.items || [];
       if (!items.length) { sendJSON(res, 400, { error: 'No items to import' }); return true; }
 
+      // Factorify type/state are objects with label – also handle raw strings
       const TYPE_MAP = { 'Výrobek': 'product', 'Materiál': 'material', 'Zboží': 'goods', 'Polotovar': 'semi_product' };
       const STATUS_MAP = { 'Aktivní': 'active', 'Nový': 'new', 'První běh': 'first_run', 'Smazáno': 'deleted' };
 
+      const allMats = db.getMaterials({});
+      const existingIds = new Set(allMats.filter(m => m.factorify_id).map(m => m.factorify_id));
+
       let imported = 0, skipped = 0;
       for (const item of items) {
-        // Check if already imported by factorify_id
-        const existing = db.getMaterials({}).find(m => m.factorify_id === item.Id);
-        if (existing) { skipped++; continue; }
+        const fyId = item.id || item.Id;
+        if (existingIds.has(fyId)) { skipped++; continue; }
+
+        // Resolve type/state – may be object {label} or string
+        const typeLabel = (item.type && typeof item.type === 'object') ? item.type.label : (item.type || item.Type || '');
+        const stateLabel = (item.state && typeof item.state === 'object') ? item.state.label : (item.state || item.State || '');
 
         db.createMaterial({
-          code: item.Code || '',
-          name: item.Name || 'Bez názvu',
-          type: TYPE_MAP[item.TypeLabel] || TYPE_MAP[item.Type] || 'material',
-          status: STATUS_MAP[item.StatusLabel] || STATUS_MAP[item.Status] || 'active',
-          category: item.Classification || 'general',
-          classification: item.Classification || '',
-          unit: item.Unit || 'ks',
-          factorify_id: item.Id,
-          external_id: item.ExternalId || '',
-          weight: item.Weight || 0,
-          min_stock: item.MinStock || 0,
-          max_stock: item.MaxStock || 0,
-          barcode: item.Barcode || '',
-          description: item.Note || '',
-          production_note: item.ProductionNote || '',
-          keywords: item.Keywords || '',
-          photo_url: item.PhotoUrl || '',
-          non_stock: !!item.NonStock,
+          code: item.code || item.Code || '',
+          name: item.name || item.Name || 'Bez názvu',
+          type: TYPE_MAP[typeLabel] || 'material',
+          status: STATUS_MAP[stateLabel] || 'active',
+          category: 'general',
+          classification: '',
+          unit: (item.unit && typeof item.unit === 'object') ? (item.unit.label || 'ks') : (item.unit || item.Unit || 'ks'),
+          factorify_id: fyId,
+          external_id: item.externalId || item.ExternalId || '',
+          weight: item.CAD_Hmotnost || item.Weight || 0,
+          min_stock: item.minimalStock || item.MinStock || 0,
+          max_stock: item.maximalStock || item.MaxStock || 0,
+          barcode: item.barcode || '',
+          description: item.description || '',
+          production_note: item.productionNote || item.ProductionNote || '',
+          keywords: item.tags || item.Keywords || '',
+          photo_url: item.photoUrl || item.PhotoUrl || '',
+          non_stock: !!(item.nonStock || item.NonStock),
+          // General fields
+          sn_mask: item.snMask || '',
+          color: item.colorHex || '',
+          secondary_color: item.secondaryColorHex || '',
+          internal_value: item.internalValue || '',
+          family: (item.productFamily && typeof item.productFamily === 'object') ? (item.productFamily.label || '') : (item.productFamily || ''),
+          active_flag: item.AKT !== undefined ? !!item.AKT : true,
+          alt_unit: (item.alternativeUnit && typeof item.alternativeUnit === 'object') ? (item.alternativeUnit.label || '') : (item.alternativeUnit || ''),
+          alt_unit_coeff: item.alternativeUnitRatio || 0,
+          similar_goods: item.similarGoodsIds || '',
+          alt_goods: item.alternativeGoodsIds || '',
+          alt_goods_forecast: item.forecastAlternativeGoodsIds || '',
+          target_warehouse: (item.receiveStockPosition && typeof item.receiveStockPosition === 'object') ? (item.receiveStockPosition.label || '') : (item.receiveStockPosition || ''),
+          wait_after_stock_hours: item.waitAfterFinishHours || 0,
+          material_ref: item.CAD_Materiál || '',
+          semi_product_ref: item.CAD_Polotovar || '',
+          route: item.CAD_PATH || '',
+          revision_number: item.CAD_cislo_revize || '',
+          order_number: item.CAD_cislo_zakazky || '',
+          position: item.CAD_pozice || '',
+          drawn_by: item.CAD_kreslil || '',
+          toolbox_name: item.CAD_Název || '',
+          dimension: item.CAD_Rozmer || '',
+          solid_name: item.CAD_Popis || '',
+          supplier_id: (item.supplier && typeof item.supplier === 'object') ? (item.supplier.id || '') : (item.supplier || ''),
+          group: item.CAD_skupina || '',
+          norm: item.CAD_norma || '',
+          note: item.note || '',
+          // Planning
+          internal_status: item.internalState || '',
+          valid_from: item.internalStateFrom || '',
+          valid_to: item.internalStateTo || '',
+          expedition_reserve_days: item.dispatchReserveDays || 0,
+          delivery_tolerance_pct: item.underdeliveryTolerancePct || 0,
+          batch_size_min: item.minimalBatchSize || 0,
+          batch_size_max: item.maximalBatchSize || 0,
+          batch_size_default: item.commonBatchSize || 0,
+          processed_in_multiples: item.processingInMultiples || 0,
+          min_stock_type: item.minimalStockType || '',
+          max_stock_type: item.maximalStockType || '',
+          priority: item.priority || 0,
+          release_before_dispatch_days: item.releaseBeforeDispatchDays || 0,
+          forecast_pct: item.forecastsPct || 0,
+          sort_weight: item.orderWeight || 0,
+          daily_target: item.dailyTarget || 0,
+          // Checkboxes
+          distinguish_batches: !!item.distinguishBatches,
+          interchangeable_batches: !!item.interchangeableBatches,
+          no_availability_check: !!item.dontCheckStockSupplies,
+          check_availability_stage: !!item.availabilityOnStage,
+          check_availability_expedition: !!item.availabilityOnDispatch,
+          plan_orders: !!item.planOrders,
+          mandatory_scan: !!item.mandatoryScan,
+          save_sn_first_scan: !!item.persistSnOnFirstScan,
+          temp_barcode: !!item.temporaryBarcode,
+          auto_complete_after_bom_scan: !!item.automaticallyFinishAfterBomScanned,
+          stock_substitution: !!item.supplyReplacement,
+          exact_consumption: !!item.exactConsumption,
+          ignore_forecast_eval: !!item.ignoreInForecastStats,
+          ignore: !!item.ignoreBomImport,
+          split_receipt_by_sales_items: !!item.splitOnReceiveBySalesOrderItems,
+          // Expiration
+          expirable: !!item.perishable,
+          shelf_life: item.shelfLife || 0,
+          shelf_life_unit: item.shelfLifeUnit || '',
+          max_acceptable_shelf_life_pct: item.maxAcceptableShelfLifePct || 0,
+          allow_rotation: !!item.allowRotation,
         });
         imported++;
+        existingIds.add(fyId);
       }
       sendJSON(res, 200, { ok: true, imported, skipped });
       return true;
