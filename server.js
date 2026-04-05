@@ -1239,34 +1239,16 @@ Vrať POUZE validní JSON objekt (bez markdown, bez komentářů) s touto strukt
       // Gather relevant data from all modules based on user's message
       const dataContext = gatherDataContext(message, context);
 
-      const systemPrompt = `Jsi AI asistent systému HOLYOS — firemní systém pro řízení výroby firmy Best Series.
-Komunikuješ ČESKY. Jsi přátelský, stručný a přesný. Uživatel s tebou mluví hlasem.
+      const systemPrompt = `Jsi AI asistent HOLYOS (řízení výroby, Best Series). Mluv česky, stručně, bez markdownu — odpovědi se čtou nahlas.
+Pravidla: Odpovídej POUZE z dat v kontextu. Nemáš-li data, řekni to. Čísla uváděj přesně. Pokud uživatel chce navigovat, řekni kam jdeš.
+Moduly: Lidé a HR, Nákup a sklad (zboží, objednávky, sklady), Pracovní postup, Programování výroby.
+Uživatel je v: "${context || 'hlavní stránka'}"`;
 
-PRAVIDLA:
-1. VŽDY odpovídej na základě reálných dat, která dostáváš v kontextu. NIKDY si nevymýšlej data.
-2. Pokud data nenajdeš, řekni to upřímně: "Tato data v systému nemám" nebo "K tomuto nemám přístup".
-3. Odpovídej stručně a jasně — odpovědi se čtou nahlas.
-4. Pokud uživatel chce vytvořit/upravit/smazat něco, vysvětli co uděláš a vrať v JSON poli "action" instrukci.
-5. Nepoužívej markdown formátování (žádné hvězdičky, hashtagy apod.) — odpověď je pro hlasový výstup.
-6. Čísla a statistiky uváděj přesně z dat.
-7. Pokud uživatel nespecifikuje modul, zkus najít odpověď ve všech dostupných datech.
-
-DOSTUPNÉ MODULY:
-- Lidé a HR: zaměstnanci, docházka, absence, dokumenty
-- Nákup a sklad: společnosti, objednávky, zboží/materiály, sklady, pohyby, inventury
-- Pracovní postup: výrobní postupy
-- Programování výroby: výrobní programy
-
-AKTUÁLNÍ KONTEXT: Uživatel je v modulu "${context || 'hlavní stránka'}"`;
-
-      const userPrompt = `DATA ZE SYSTÉMU:
-${dataContext}
-
-DOTAZ UŽIVATELE: ${message}`;
+      const userPrompt = `DATA:\n${dataContext}\n\nDOTAZ: ${message}`;
 
       const requestBody = JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 1024,
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 512,
         system: systemPrompt,
         messages: [{ role: 'user', content: userPrompt }]
       });
