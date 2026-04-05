@@ -437,6 +437,13 @@ async function handleWarehouse(req, res, pathname) {
       return true;
     }
 
+    // --- DEDUPLICATE ---
+    if (pathname === '/api/wh/materials/deduplicate' && method === 'POST') {
+      const result = db.deduplicateMaterials();
+      sendJSON(res, 200, result);
+      return true;
+    }
+
     // --- FACTORIFY IMPORT ---
     if (pathname === '/api/wh/factorify/goods' && method === 'GET') {
       const https = require('https');
