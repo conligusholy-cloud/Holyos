@@ -421,93 +421,121 @@ function getAdminPage(session) {
 function gatherDataContext(message, context) {
   const msg = (message || '').toLowerCase();
 
-  // Fetch ALL data from ALL modules — full JSON, no filtering
+  // ---- Detect what topics the user is asking about ----
+  const wantsPeople = /zaměstnan|lidi|lidé|osob|pracovník|kolega|tým|hr|člověk|kdo |jméno|telefon|email|kontakt/.test(msg);
+  const wantsCompanies = /společnost|firma|firmy|dodavatel|odběratel|partner/.test(msg);
+  const wantsOrders = /objednáv|nákup|nakup|faktur|dodávk/.test(msg);
+  const wantsMaterials = /zboží|zbozi|materiál|material|produkt|polož|sklad|záso|stock|minimum|pod minim|výrob/.test(msg);
+  const wantsWarehouses = /sklad|warehouse|umístěn/.test(msg);
+  const wantsAttendance = /docházk|dochazk|příchod|odchod|přítom/.test(msg);
+  const wantsLeaves = /volno|dovolená|nemoc|absenc/.test(msg);
+  const wantsDocuments = /dokument|soubor|příloha/.test(msg);
+  const wantsMovements = /pohyb|příjem|výdej|převod|inventur/.test(msg);
+  const wantsOverview = /kolik|přehled|souhrn|celk|systém|všech|stav |statistik|report/.test(msg);
+
+  // Always load basic counts
   const people = db.getAllPeople({});
   const companies = db.getCompanies({});
   const mats = db.getMaterials({});
   const orders = db.getOrders({});
   const warehouses = db.getWarehouses();
-  const movements = db.getInventoryMovements({});
-  const inventories = db.getInventories({});
-  const leaves = db.getLeaveRequests({});
-  const attendance = db.getAttendance({});
-  const documents = db.getDocuments({});
-  const shifts = db.getShifts();
-  const absenceTypes = db.getAbsenceTypes();
 
-  // Strip large binary fields (photos, file_data) to save tokens
-  const cleanPeople = people.map(p => {
-    const c = { ...p };
-    delete c.photo_url; // base64 photos are huge
-    return c;
-  });
-  const cleanDocs = documents.map(d => {
-    const c = { ...d };
-    delete c.file_data; // base64 file content
-    return c;
-  });
-
-  // For materials: full data is too large (3000+ items), send summary + relevant subset
-  const matSummary = {
-    total: mats.length,
-    byType: {},
-    byStatus: {},
-    lowStock: [],
+  // Build compact overview (always included, ~200 tokens)
+  const matLowStock = mats.filter(m => m.min_stock > 0 && (m.current_stock || 0) < m.min_stock);
+  const ctx = {
+    prehled: {
+      lide: people.length, spolecnosti: companies.length,
+      zbozi_materialy: mats.length, objednavky: orders.length,
+      sklady: warehouses.length, polozky_pod_minimem: matLowStock.length,
+    },
   };
-  mats.forEach(m => {
-    matSummary.byType[m.type] = (matSummary.byType[m.type] || 0) + 1;
-    matSummary.byStatus[m.status] = (matSummary.byStatus[m.status] || 0) + 1;
-    if (m.min_stock > 0 && (m.current_stock || 0) < m.min_stock) {
-      matSummary.lowStock.push({ id: m.id, code: m.code, name: m.name, current: m.current_stock || 0, min: m.min_stock, unit: m.unit });
-    }
-  });
 
-  // Find materials matching the query
-  let relevantMats = [];
-  const matSearch = msg.match(/[a-záčďéěíňóřšťúůýž]{3,}/gi) || [];
-  if (matSearch.length > 0) {
-    relevantMats = mats.filter(m => {
-      const hay = ((m.name || '') + ' ' + (m.code || '')).toLowerCase();
-      return matSearch.some(t => hay.includes(t));
-    }).slice(0, 30).map(m => ({
-      id: m.id, code: m.code, name: m.name, type: m.type, status: m.status,
-      unit: m.unit, current_stock: m.current_stock, min_stock: m.min_stock,
-      supplier_id: m.supplier_id, weight: m.weight, description: m.description,
+  // ---- Add detailed data ONLY for relevant topics ----
+
+  if (wantsPeople || wantsOverview) {
+    ctx.lide = people.map(p => {
+      const c = { ...p }; delete c.photo_url; return c;
+    });
+  }
+
+  if (wantsCompanies || wantsOverview) {
+    ctx.spolecnosti = companies;
+  }
+
+  if (wantsOrders) {
+    ctx.objednavky = orders.slice(-20).map(o => ({
+      id: o.id, code: o.order_number || o.code, supplier: o.supplier_name || o.supplier_id,
+      status: o.status, date: o.date || o.created_at, total: o.total_amount,
+      items_count: (o.items || []).length,
     }));
   }
 
-  // Build complete context object
-  const ctx = {
-    systemOverview: {
-      lide: people.length,
-      spolecnosti: companies.length,
-      zbozi_materialy: mats.length,
-      objednavky: orders.length,
-      sklady: warehouses.length,
-      pohyby: movements.length,
-      inventury: inventories.length,
-      zadosti_o_volno: leaves.length,
-      dochazka: attendance.length,
-      dokumenty: documents.length,
-      polozky_pod_minimem: matSummary.lowStock.length,
-    },
-    lide: cleanPeople,
-    spolecnosti: companies,
-    objednavky: orders.slice(-50),
-    sklady: warehouses,
-    smeny: shifts,
-    typy_absenci: absenceTypes,
-    zadosti_o_volno: leaves.slice(-30),
-    dochazka: attendance.slice(-30),
-    dokumenty: cleanDocs.slice(-30),
-    inventury: inventories,
-    pohyby: movements.slice(-30),
-    zbozi_souhrn: matSummary,
-    zbozi_relevantni: relevantMats,
-    zbozi_pod_minimem: matSummary.lowStock.slice(0, 30),
-  };
+  if (wantsMaterials || wantsOverview) {
+    // Summary by type/status
+    const byType = {}, byStatus = {};
+    mats.forEach(m => {
+      byType[m.type || 'neuvedeno'] = (byType[m.type || 'neuvedeno'] || 0) + 1;
+      byStatus[m.status || 'neuvedeno'] = (byStatus[m.status || 'neuvedeno'] || 0) + 1;
+    });
+    ctx.zbozi_souhrn = { total: mats.length, byType, byStatus, pod_minimem: matLowStock.length };
 
-  return JSON.stringify(ctx, null, 0);
+    // Low stock items (always useful)
+    ctx.zbozi_pod_minimem = matLowStock.slice(0, 20).map(m => ({
+      id: m.id, code: m.code, name: m.name, current: m.current_stock || 0, min: m.min_stock, unit: m.unit,
+    }));
+
+    // Keyword search in materials
+    const keywords = msg.match(/[a-záčďéěíňóřšťúůýž]{3,}/gi) || [];
+    const skipWords = new Set(['kolik','máme','zboží','zbozi','materiál','material','produkt','položek','sklad','skladu','celkem','všech','jaké','které','jsou','pod','minimem','zásoby','stock','stav','mají','jaký']);
+    const searchTerms = keywords.filter(w => !skipWords.has(w.toLowerCase()));
+    if (searchTerms.length > 0) {
+      const found = mats.filter(m => {
+        const hay = ((m.name || '') + ' ' + (m.code || '') + ' ' + (m.type || '')).toLowerCase();
+        return searchTerms.some(t => hay.includes(t.toLowerCase()));
+      }).slice(0, 15);
+      if (found.length > 0) {
+        ctx.zbozi_nalezene = found.map(m => ({
+          id: m.id, code: m.code, name: m.name, type: m.type, status: m.status,
+          unit: m.unit, current_stock: m.current_stock, min_stock: m.min_stock,
+          supplier_id: m.supplier_id, price: m.price, weight: m.weight,
+        }));
+      }
+    }
+  }
+
+  if (wantsWarehouses) {
+    ctx.sklady = warehouses;
+  }
+
+  if (wantsAttendance) {
+    const attendance = db.getAttendance({});
+    ctx.dochazka = attendance.slice(-20);
+  }
+
+  if (wantsLeaves) {
+    const leaves = db.getLeaveRequests({});
+    ctx.zadosti_o_volno = leaves.slice(-15);
+  }
+
+  if (wantsDocuments) {
+    const documents = db.getDocuments({});
+    ctx.dokumenty = documents.slice(-15).map(d => {
+      const c = { ...d }; delete c.file_data; return c;
+    });
+  }
+
+  if (wantsMovements) {
+    const movements = db.getInventoryMovements({});
+    ctx.pohyby = movements.slice(-15);
+    const inventories = db.getInventories({});
+    if (inventories.length) ctx.inventury = inventories.slice(-5);
+  }
+
+  const json = JSON.stringify(ctx, null, 0);
+  console.log('[AI] Context size:', json.length, 'chars, topics:',
+    [wantsPeople&&'people', wantsCompanies&&'companies', wantsOrders&&'orders',
+     wantsMaterials&&'materials', wantsOverview&&'overview'].filter(Boolean).join(',') || 'general');
+  return json;
 }
 
 // ==========================================
