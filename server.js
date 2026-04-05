@@ -1225,6 +1225,100 @@ Vrať POUZE validní JSON objekt (bez markdown, bez komentářů) s touto strukt
     return;
   }
 
+  // ---- AI WHISPER TRANSCRIPTION (for iOS/Safari) ----
+  if (pathname === '/api/ai/transcribe' && req.method === 'POST') {
+    try {
+      const openaiKey = process.env.OPENAI_API_KEY;
+      if (!openaiKey) {
+        sendJSON(res, 500, { error: 'OPENAI_API_KEY not configured for Whisper transcription' });
+        return;
+      }
+
+      // Parse multipart form data manually (audio file)
+      const chunks = [];
+      for await (const chunk of req) { chunks.push(chunk); }
+      const body = Buffer.concat(chunks);
+
+      // Extract boundary from content-type
+      const contentType = req.headers['content-type'] || '';
+      const boundaryMatch = contentType.match(/boundary=(.+)/);
+      if (!boundaryMatch) { sendJSON(res, 400, { error: 'Missing multipart boundary' }); return; }
+      const boundary = '--' + boundaryMatch[1];
+
+      // Find audio part
+      const bodyStr = body.toString('latin1');
+      const parts = bodyStr.split(boundary);
+      let audioBuffer = null;
+      let fileName = 'voice.webm';
+      for (const part of parts) {
+        if (part.includes('name="audio"')) {
+          const fnMatch = part.match(/filename="([^"]+)"/);
+          if (fnMatch) fileName = fnMatch[1];
+          const headerEnd = part.indexOf('\r\n\r\n');
+          if (headerEnd !== -1) {
+            const dataStart = headerEnd + 4;
+            const dataEnd = part.lastIndexOf('\r\n');
+            audioBuffer = Buffer.from(part.substring(dataStart, dataEnd), 'latin1');
+          }
+        }
+      }
+
+      if (!audioBuffer || audioBuffer.length < 1000) {
+        sendJSON(res, 200, { text: '' });
+        return;
+      }
+
+      // Call OpenAI Whisper API
+      const whisperBoundary = '----WhisperBoundary' + Date.now();
+      const fileMime = fileName.includes('mp4') ? 'audio/mp4' : 'audio/webm';
+      const formParts = [];
+      formParts.push(Buffer.from(
+        '--' + whisperBoundary + '\r\n' +
+        'Content-Disposition: form-data; name="file"; filename="' + fileName + '"\r\n' +
+        'Content-Type: ' + fileMime + '\r\n\r\n', 'utf8'));
+      formParts.push(audioBuffer);
+      formParts.push(Buffer.from(
+        '\r\n--' + whisperBoundary + '\r\n' +
+        'Content-Disposition: form-data; name="model"\r\n\r\nwhisper-1\r\n', 'utf8'));
+      formParts.push(Buffer.from(
+        '--' + whisperBoundary + '\r\n' +
+        'Content-Disposition: form-data; name="language"\r\n\r\ncs\r\n', 'utf8'));
+      formParts.push(Buffer.from('--' + whisperBoundary + '--\r\n', 'utf8'));
+      const formBody = Buffer.concat(formParts);
+
+      const whisperResult = await new Promise((resolve, reject) => {
+        const whisperReq = https.request({
+          hostname: 'api.openai.com', path: '/v1/audio/transcriptions', method: 'POST',
+          headers: {
+            'Authorization': 'Bearer ' + openaiKey,
+            'Content-Type': 'multipart/form-data; boundary=' + whisperBoundary,
+            'Content-Length': formBody.length,
+          }
+        }, (wRes) => {
+          let d = '';
+          wRes.on('data', c => d += c);
+          wRes.on('end', () => {
+            try {
+              const parsed = JSON.parse(d);
+              if (wRes.statusCode !== 200) reject(new Error(parsed.error?.message || 'Whisper error'));
+              else resolve(parsed.text || '');
+            } catch(e) { reject(e); }
+          });
+        });
+        whisperReq.on('error', reject);
+        whisperReq.setTimeout(15000, () => { whisperReq.destroy(); reject(new Error('Whisper timeout')); });
+        whisperReq.write(formBody);
+        whisperReq.end();
+      });
+
+      sendJSON(res, 200, { text: whisperResult });
+    } catch (e) {
+      console.error('Transcribe error:', e.message);
+      sendJSON(res, 500, { error: e.message });
+    }
+    return;
+  }
+
   // ---- AI VOICE ASSISTANT ----
   if (pathname === '/api/ai/voice' && req.method === 'POST') {
     const body = await readBody(req);

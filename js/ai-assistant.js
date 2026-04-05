@@ -1,6 +1,6 @@
 /* ============================================
    ai-assistant.js — AI Voice Assistant for HOLYOS
-   Continuous listening + action execution + sidebar button
+   Continuous listening + iOS support + Whisper fallback
    ============================================ */
 
 (function() {
@@ -14,15 +14,22 @@
   var currentModule = '';
   var messages = [];
   var speechSynth = window.speechSynthesis;
-  var sessionActive = false; // continuous voice session
+  var sessionActive = false;
+  var mediaRecorder = null;
+  var audioChunks = [];
 
   var pathMatch = window.location.pathname.match(/modules\/([^/]+)/);
   currentModule = pathMatch ? pathMatch[1] : 'hlavní stránka';
 
   var SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  var hasSpeech = !!SpeechRecognition;
+  var isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  var isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+  var hasBrowserSTT = !!SpeechRecognition;
+  // iOS Safari STT is unreliable — prefer Whisper fallback
+  var useWhisperFallback = isIOS || (isSafari && !window.SpeechRecognition);
+  var hasMediaRecorder = typeof MediaRecorder !== 'undefined';
 
-  // Module navigation map
+  // Navigation map
   var NAV_MAP = {
     'lide': '/modules/lide-hr/index.html', 'hr': '/modules/lide-hr/index.html',
     'lidé': '/modules/lide-hr/index.html', 'zaměstnanc': '/modules/lide-hr/index.html',
@@ -41,7 +48,6 @@
   // ---- CSS ----
   var style = document.createElement('style');
   style.textContent = `
-    /* Sidebar AI button */
     .ai-sidebar-btn {
       display: flex; align-items: center; gap: 10px;
       padding: 10px 16px; margin: 4px 12px 8px; border-radius: 10px;
@@ -78,8 +84,6 @@
       0%, 100% { box-shadow: 0 0 8px rgba(239,68,68,0.3); }
       50% { box-shadow: 0 0 20px rgba(239,68,68,0.6); }
     }
-
-    /* Chat Panel — anchored bottom-left next to sidebar */
     .ai-panel {
       position: fixed; bottom: 16px; left: 266px; z-index: 9998;
       width: 420px; max-height: 75vh;
@@ -89,7 +93,6 @@
       overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     }
     .ai-panel.open { display: flex; }
-
     .ai-panel-header {
       padding: 14px 18px; display: flex; align-items: center; gap: 10px;
       background: linear-gradient(135deg, #6C5CE7, #0984E3); color: #fff;
@@ -105,7 +108,6 @@
       font-size: 13px; display: flex; align-items: center; justify-content: center;
     }
     .ai-panel-close:hover { background: rgba(255,255,255,0.3); }
-
     .ai-messages {
       flex: 1; overflow-y: auto; padding: 14px; display: flex;
       flex-direction: column; gap: 10px; min-height: 180px; max-height: 55vh;
@@ -114,25 +116,15 @@
       padding: 9px 13px; border-radius: 12px; font-size: 13px; line-height: 1.5;
       max-width: 88%; word-wrap: break-word;
     }
-    .ai-msg.user {
-      align-self: flex-end; background: #6C5CE7; color: #fff;
-      border-bottom-right-radius: 4px;
-    }
-    .ai-msg.assistant {
-      align-self: flex-start; background: var(--surface2, #32324e);
-      color: var(--text, #e0e0e0); border-bottom-left-radius: 4px;
-    }
-    .ai-msg.system {
-      align-self: center; color: var(--text2, #8888aa); font-size: 11px;
-      font-style: italic; background: none; padding: 3px;
-    }
+    .ai-msg.user { align-self: flex-end; background: #6C5CE7; color: #fff; border-bottom-right-radius: 4px; }
+    .ai-msg.assistant { align-self: flex-start; background: var(--surface2, #32324e); color: var(--text, #e0e0e0); border-bottom-left-radius: 4px; }
+    .ai-msg.system { align-self: center; color: var(--text2, #8888aa); font-size: 11px; font-style: italic; background: none; padding: 3px; }
     .ai-msg.error { color: #ef4444; }
     .ai-msg.action-msg {
       background: rgba(108,92,231,0.15); border: 1px solid rgba(108,92,231,0.3);
       color: #a78bfa; font-size: 12px; cursor: pointer;
     }
     .ai-msg.action-msg:hover { background: rgba(108,92,231,0.25); }
-
     .ai-input-row {
       padding: 10px 14px; display: flex; gap: 8px; align-items: center;
       border-top: 1px solid var(--border, #3a3a5c); background: var(--bg, #1e1e2e);
@@ -144,23 +136,18 @@
     }
     .ai-input:focus { border-color: #6C5CE7; }
     .ai-input::placeholder { color: var(--text2, #8888aa); }
-
     .ai-mic-btn, .ai-send-btn {
       width: 36px; height: 36px; border-radius: 50%; border: none;
       cursor: pointer; display: flex; align-items: center; justify-content: center;
       transition: background 0.2s;
     }
-    .ai-mic-btn {
-      background: var(--surface2, #32324e); color: var(--text, #e0e0e0);
-    }
+    .ai-mic-btn { background: var(--surface2, #32324e); color: var(--text, #e0e0e0); }
     .ai-mic-btn:hover { background: #6C5CE7; color: #fff; }
     .ai-mic-btn.active { background: #ef4444; color: #fff; }
     .ai-mic-btn svg, .ai-send-btn svg { width: 18px; height: 18px; fill: currentColor; }
-
     .ai-send-btn { background: #6C5CE7; color: #fff; }
     .ai-send-btn:hover { background: #5a4bd6; }
     .ai-send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-
     .ai-typing { display: flex; gap: 4px; padding: 6px 12px; }
     .ai-typing span {
       width: 7px; height: 7px; background: var(--text2, #8888aa);
@@ -168,10 +155,7 @@
     }
     .ai-typing span:nth-child(2) { animation-delay: 0.2s; }
     .ai-typing span:nth-child(3) { animation-delay: 0.4s; }
-    @keyframes ai-bounce {
-      0%, 80%, 100% { transform: scale(0); } 40% { transform: scale(1); }
-    }
-
+    @keyframes ai-bounce { 0%, 80%, 100% { transform: scale(0); } 40% { transform: scale(1); } }
     .ai-welcome {
       display: flex; flex-direction: column; align-items: center; justify-content: center;
       padding: 28px 20px; text-align: center; color: var(--text2, #8888aa);
@@ -186,32 +170,29 @@
       color: var(--text, #e0e0e0); text-align: left; transition: border-color 0.2s;
     }
     .ai-hint:hover { border-color: #6C5CE7; }
-
     .ai-tts-btn {
       background: none; border: none; cursor: pointer; padding: 1px 4px;
       font-size: 14px; opacity: 0.4; transition: opacity 0.2s; display: inline;
     }
     .ai-tts-btn:hover { opacity: 1; }
-
     @media (max-width: 768px) {
       .ai-panel { left: 12px; right: 12px; width: auto; bottom: 12px; }
     }
   `;
   document.head.appendChild(style);
 
-  // ---- SVG Icons ----
+  // Icons
   var micIcon = '<svg viewBox="0 0 24 24"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm-1-9c0-.55.45-1 1-1s1 .45 1 1v6c0 .55-.45 1-1 1s-1-.45-1-1V5z"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>';
   var sendIcon = '<svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>';
   var aiIcon = '<svg viewBox="0 0 24 24"><path d="M12 2a2 2 0 012 2c0 .74-.4 1.39-1 1.73V7h1a7 7 0 017 7h1a2 2 0 110 4h-1.17A7 7 0 0113 23h-2a7 7 0 01-6.83-5H3a2 2 0 110-4h1a7 7 0 017-7h1V5.73c-.6-.34-1-.99-1-1.73a2 2 0 012-2zm-1 9a5 5 0 00-5 5 5 5 0 005 5h2a5 5 0 005-5 5 5 0 00-5-5h-2zm-1 3a1.5 1.5 0 110 3 1.5 1.5 0 010-3zm4 0a1.5 1.5 0 110 3 1.5 1.5 0 010-3z"/></svg>';
   var stopIcon = '<svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1"/></svg>';
 
-  // ---- Sidebar button (inserted under logo) ----
+  // ---- Sidebar button ----
   function insertSidebarButton() {
     var sidebar = document.getElementById('sidebar');
     if (!sidebar || document.getElementById('ai-sidebar-btn')) return;
     var header = sidebar.querySelector('.sidebar-header');
     if (!header) return;
-
     var btn = document.createElement('button');
     btn.id = 'ai-sidebar-btn';
     btn.className = 'ai-sidebar-btn';
@@ -225,12 +206,8 @@
     window._aiSidebarBtn = btn;
   }
 
-  // Wait for sidebar to render, then insert button
   var sidebarCheck = setInterval(function() {
-    if (document.querySelector('.sidebar-header')) {
-      clearInterval(sidebarCheck);
-      insertSidebarButton();
-    }
+    if (document.querySelector('.sidebar-header')) { clearInterval(sidebarCheck); insertSidebarButton(); }
   }, 100);
   setTimeout(function() { clearInterval(sidebarCheck); }, 5000);
 
@@ -251,7 +228,6 @@
       '<button class="ai-send-btn" id="ai-send-btn" title="Odeslat">' + sendIcon + '</button>' +
     '</div>';
   document.body.appendChild(panel);
-
   panel.querySelector('.ai-panel-close').onclick = function() { closePanel(); };
 
   var messagesEl = document.getElementById('ai-messages');
@@ -267,17 +243,14 @@
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
   };
   micBtn.onclick = function() {
-    if (isListening) stopRecognition();
-    else startRecognition();
+    if (isListening) stopAllListening();
+    else startListening();
   };
 
-  // ---- Toggle voice session (sidebar button) ----
+  // ---- Session control ----
   function toggleSession() {
-    if (sessionActive) {
-      endSession();
-    } else {
-      startSession();
-    }
+    if (sessionActive) endSession();
+    else startSession();
   }
 
   function startSession() {
@@ -289,17 +262,17 @@
     if (messages.length === 0) {
       messagesEl.innerHTML = '';
       addMessage('assistant', 'Ahoj! Jsem tvůj AI asistent. S čím ti mohu pomoct? Mluv volně, poslouchám tě.');
-      speak('Ahoj! Jsem tvůj AI asistent. S čím ti mohu pomoct?');
+      speak('Ahoj! Jsem tvůj AI asistent. S čím ti mohu pomoct?', function() {
+        startListening();
+      });
+    } else {
+      startListening();
     }
-    // Start continuous listening after TTS finishes
-    waitForSpeechEnd(function() {
-      startRecognition();
-    });
   }
 
   function endSession() {
     sessionActive = false;
-    stopRecognition();
+    stopAllListening();
     speechSynth.cancel();
     if (window._aiSidebarBtn) window._aiSidebarBtn.classList.remove('active');
     setStatus('ukončeno');
@@ -312,17 +285,15 @@
     if (sessionActive) endSession();
   }
 
-  function setStatus(text) {
-    if (statusEl) statusEl.textContent = text;
-  }
+  function setStatus(text) { if (statusEl) statusEl.textContent = text; }
 
   function showWelcome() {
     messagesEl.innerHTML =
       '<div class="ai-welcome">' +
         '<div class="ai-welcome-icon">&#129302;</div>' +
         '<h4>AI Asistent HOLYOS</h4>' +
-        '<p>Klikni na tlačítko v sidebaru pro zahájení hlasové konverzace. ' +
-        'Můžeš také psát přímo sem.</p>' +
+        '<p>Klikni na tlačítko v sidebaru pro zahájení hlasové konverzace.' +
+        (useWhisperFallback ? ' (Whisper mód pro iOS)' : '') + '</p>' +
         '<div class="ai-welcome-hints">' +
           '<div class="ai-hint" onclick="window._aiSendHint(this.textContent)">Kolik máme zboží na skladě?</div>' +
           '<div class="ai-hint" onclick="window._aiSendHint(this.textContent)">Otevři modul Nákup a sklad</div>' +
@@ -338,105 +309,197 @@
     sendMessage();
   };
 
-  // ---- Speech Recognition — CONTINUOUS MODE ----
-  function createRecognition() {
-    if (!hasSpeech) return null;
-    var rec = new SpeechRecognition();
-    rec.lang = 'cs-CZ';
-    rec.continuous = true;
-    rec.interimResults = true;
-    rec.maxAlternatives = 1;
+  // ====================================================
+  // LISTENING — Browser STT or MediaRecorder+Whisper
+  // ====================================================
+
+  function startListening() {
+    if (isListening) return;
+    if (useWhisperFallback && hasMediaRecorder) {
+      startMediaRecorder();
+    } else if (hasBrowserSTT) {
+      startBrowserSTT();
+    } else {
+      addMessage('system error', 'Hlasové ovládání není v tomto prohlížeči dostupné. Použijte Chrome nebo nastavte OPENAI_API_KEY pro Whisper.');
+    }
+  }
+
+  function stopAllListening() {
+    isListening = false;
+    micBtn.classList.remove('active');
+    micBtn.innerHTML = micIcon;
+    // Stop browser STT
+    if (recognition) { try { recognition.stop(); } catch(e) {} recognition = null; }
+    // Stop MediaRecorder
+    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+      mediaRecorder.requestData();
+      mediaRecorder.stop();
+    }
+  }
+
+  // ---- Browser Speech Recognition (Chrome, desktop) ----
+  function startBrowserSTT() {
+    recognition = new SpeechRecognition();
+    recognition.lang = 'cs-CZ';
+    recognition.continuous = !isIOS; // iOS needs continuous=false
+    recognition.interimResults = !isIOS;
+    recognition.maxAlternatives = 1;
 
     var finalTranscript = '';
-    var interimTranscript = '';
     var silenceTimer = null;
 
-    rec.onstart = function() {
+    recognition.onstart = function() {
       isListening = true;
       micBtn.classList.add('active');
       micBtn.innerHTML = stopIcon;
       setStatus('naslouchám');
     };
 
-    rec.onresult = function(e) {
-      interimTranscript = '';
+    recognition.onresult = function(e) {
+      var interim = '';
       for (var i = e.resultIndex; i < e.results.length; i++) {
         if (e.results[i].isFinal) {
           finalTranscript += e.results[i][0].transcript;
         } else {
-          interimTranscript += e.results[i][0].transcript;
+          interim += e.results[i][0].transcript;
         }
       }
-      inputEl.value = finalTranscript + interimTranscript;
+      inputEl.value = finalTranscript + interim;
 
-      // Reset silence timer — send after 1.5s of silence after final result
       clearTimeout(silenceTimer);
       if (finalTranscript.trim()) {
         silenceTimer = setTimeout(function() {
           var text = finalTranscript.trim();
           finalTranscript = '';
-          interimTranscript = '';
-          if (text) {
-            inputEl.value = '';
-            processVoiceInput(text);
-          }
+          inputEl.value = '';
+          if (text) processVoiceInput(text);
         }, 1500);
       }
-    };
 
-    rec.onerror = function(e) {
-      if (e.error === 'not-allowed') {
-        addMessage('system error', 'Mikrofon zamítnut. Povolte přístup v prohlížeči.');
-        sessionActive = false;
-        if (window._aiSidebarBtn) window._aiSidebarBtn.classList.remove('active');
-      } else if (e.error === 'no-speech') {
-        // Restart if in session
-        if (sessionActive && !isProcessing && !isSpeaking) {
-          setTimeout(function() { startRecognition(); }, 300);
-        }
+      // iOS: single result mode — send immediately on final
+      if (isIOS && e.results[e.results.length - 1].isFinal) {
+        clearTimeout(silenceTimer);
+        var text = finalTranscript.trim();
+        finalTranscript = '';
+        inputEl.value = '';
+        if (text) processVoiceInput(text);
       }
     };
 
-    rec.onend = function() {
+    recognition.onerror = function(e) {
+      if (e.error === 'not-allowed') {
+        addMessage('system error', 'Mikrofon zamítnut. Povolte přístup v nastavení prohlížeče.');
+        endSession();
+      } else if (e.error === 'no-speech' && sessionActive) {
+        setTimeout(function() { if (sessionActive && !isProcessing && !isSpeaking) startListening(); }, 300);
+      }
+    };
+
+    recognition.onend = function() {
       isListening = false;
       micBtn.classList.remove('active');
       micBtn.innerHTML = micIcon;
-      // Auto-restart if session still active and not speaking/processing
       if (sessionActive && !isProcessing && !isSpeaking) {
-        setTimeout(function() { startRecognition(); }, 300);
+        setTimeout(function() { startListening(); }, 300);
       }
     };
 
-    return rec;
-  }
-
-  function startRecognition() {
-    if (!hasSpeech) {
-      addMessage('system error', 'Prohlížeč nepodporuje rozpoznávání řeči. Použijte Chrome.');
-      return;
-    }
-    if (isListening) return;
-    speechSynth.cancel();
-    // Always create fresh recognition instance
-    recognition = createRecognition();
     try { recognition.start(); } catch(e) {}
   }
 
-  function stopRecognition() {
-    isListening = false;
-    micBtn.classList.remove('active');
-    micBtn.innerHTML = micIcon;
-    if (recognition) {
-      try { recognition.stop(); } catch(e) {}
-      recognition = null;
-    }
+  // ---- MediaRecorder + Whisper API (iOS, Safari, fallback) ----
+  function startMediaRecorder() {
+    audioChunks = [];
+    setStatus('naslouchám (mic)');
+
+    navigator.mediaDevices.getUserMedia({ audio: true }).then(function(stream) {
+      // Use webm if supported, else mp4 (iOS)
+      var mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' :
+                     MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' : '';
+      var options = mimeType ? { mimeType: mimeType } : {};
+      mediaRecorder = new MediaRecorder(stream, options);
+
+      mediaRecorder.ondataavailable = function(e) {
+        if (e.data.size > 0) audioChunks.push(e.data);
+      };
+
+      mediaRecorder.onstop = function() {
+        stream.getTracks().forEach(function(t) { t.stop(); });
+        isListening = false;
+        micBtn.classList.remove('active');
+        micBtn.innerHTML = micIcon;
+
+        if (audioChunks.length === 0) {
+          if (sessionActive) setTimeout(function() { startListening(); }, 500);
+          return;
+        }
+
+        var blob = new Blob(audioChunks, { type: mimeType || 'audio/webm' });
+        audioChunks = [];
+
+        // Only transcribe if >0.5s of audio (small blobs are silence)
+        if (blob.size < 5000) {
+          if (sessionActive) setTimeout(function() { startListening(); }, 500);
+          return;
+        }
+
+        setStatus('přepisuji...');
+        transcribeAudio(blob);
+      };
+
+      mediaRecorder.start(1000); // collect chunks every 1s
+      isListening = true;
+      micBtn.classList.add('active');
+      micBtn.innerHTML = stopIcon;
+
+      // Auto-stop after silence detection (5s max recording per utterance)
+      var autoStopTimer = setTimeout(function() {
+        if (mediaRecorder && mediaRecorder.state === 'recording') {
+          mediaRecorder.stop();
+        }
+      }, 8000);
+
+      // Store for cleanup
+      mediaRecorder._autoStop = autoStopTimer;
+
+    }).catch(function(e) {
+      console.error('Mic access error:', e);
+      addMessage('system error', 'Nelze přistoupit k mikrofonu: ' + e.message);
+      if (sessionActive) endSession();
+    });
+  }
+
+  function transcribeAudio(blob) {
+    var formData = new FormData();
+    var ext = blob.type.includes('mp4') ? 'mp4' : 'webm';
+    formData.append('audio', blob, 'voice.' + ext);
+
+    fetch('/api/ai/transcribe', {
+      method: 'POST',
+      body: formData
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data.text && data.text.trim()) {
+        processVoiceInput(data.text.trim());
+      } else {
+        if (sessionActive && !isProcessing && !isSpeaking) {
+          setStatus('naslouchám');
+          startListening();
+        }
+      }
+    })
+    .catch(function(e) {
+      console.error('Transcribe error:', e);
+      addMessage('system error', 'Chyba přepisu hlasu. Zkontrolujte OPENAI_API_KEY.');
+      resumeListening();
+    });
   }
 
   // ---- Process voice input ----
   function processVoiceInput(text) {
-    // Check for stop commands
     var lower = text.toLowerCase().trim();
-    if (lower.match(/^(stop|konec|ukonči|zavři asistent|dost|skonči|přestaň)/)) {
+    if (lower.match(/^(stop|konec|ukonči|zavři asistent|dost|skonči|přestaň)$/)) {
       endSession();
       closePanel();
       return;
@@ -444,7 +507,6 @@
     sendMessageText(text);
   }
 
-  // ---- Send Message ----
   function sendMessage() {
     var text = (inputEl.value || '').trim();
     if (!text) return;
@@ -455,14 +517,11 @@
 
   function sendMessageText(text) {
     if (isProcessing) return;
-
     addMessage('user', text);
     isProcessing = true;
     sendBtn.disabled = true;
     setStatus('přemýšlím...');
-
-    // Pause listening while processing
-    if (isListening) { stopRecognition(); }
+    stopAllListening();
 
     var typingEl = document.createElement('div');
     typingEl.className = 'ai-msg assistant';
@@ -484,15 +543,11 @@
       } else {
         var response = data.response || '';
         addMessage('assistant', response);
-
-        // Check for navigation actions in the response
         var navAction = detectNavigation(text, response);
         if (navAction) {
           addActionMessage('Otevírám: ' + navAction.label, navAction.url);
           setTimeout(function() { window.location.href = navAction.url; }, 1200);
         }
-
-        // Speak and then resume listening
         setStatus('mluvím...');
         isSpeaking = true;
         speak(response, function() {
@@ -515,20 +570,16 @@
   function resumeListening() {
     if (sessionActive && !isProcessing && !isSpeaking) {
       setStatus('naslouchám');
-      setTimeout(function() { startRecognition(); }, 500);
+      setTimeout(function() { startListening(); }, 500);
     }
   }
 
-  // ---- Detect navigation intent ----
   function detectNavigation(userMsg, aiResponse) {
     var combined = (userMsg + ' ' + aiResponse).toLowerCase();
-    // Direct commands: "otevři", "jdi na/do", "přejdi", "ukaž"
     if (!combined.match(/(otevři|jdi na|jdi do|přejdi|ukaž|naviguj|přepni na|zobraz modul)/)) return null;
-
     for (var key in NAV_MAP) {
       if (combined.includes(key)) {
-        var label = key.charAt(0).toUpperCase() + key.slice(1);
-        return { url: NAV_MAP[key], label: label };
+        return { url: NAV_MAP[key], label: key.charAt(0).toUpperCase() + key.slice(1) };
       }
     }
     return null;
@@ -543,14 +594,12 @@
     messagesEl.scrollTop = messagesEl.scrollHeight;
   }
 
-  // ---- Add message ----
   function addMessage(type, text) {
     var cls = type.includes('user') ? 'user' : type.includes('system') ? 'system' : 'assistant';
     if (type.includes('error')) cls += ' error';
     var el = document.createElement('div');
     el.className = 'ai-msg ' + cls;
     el.textContent = text;
-
     if (cls === 'assistant' && !type.includes('error')) {
       var ttsBtn = document.createElement('button');
       ttsBtn.className = 'ai-tts-btn';
@@ -559,7 +608,6 @@
       ttsBtn.onclick = function(e) { e.stopPropagation(); speak(text); };
       el.appendChild(ttsBtn);
     }
-
     messagesEl.appendChild(el);
     messagesEl.scrollTop = messagesEl.scrollHeight;
     messages.push({ role: cls, text: text });
@@ -583,19 +631,12 @@
     speechSynth.speak(utterance);
   }
 
-  function waitForSpeechEnd(cb) {
-    var check = setInterval(function() {
-      if (!speechSynth.speaking) { clearInterval(check); cb(); }
-    }, 100);
-    setTimeout(function() { clearInterval(check); cb(); }, 8000);
-  }
-
   if (speechSynth) {
     speechSynth.getVoices();
     speechSynth.onvoiceschanged = function() { speechSynth.getVoices(); };
   }
 
-  // ---- Keyboard shortcut ----
+  // Keyboard shortcut
   document.addEventListener('keydown', function(e) {
     if (e.ctrlKey && e.shiftKey && e.key === 'A') {
       e.preventDefault();
