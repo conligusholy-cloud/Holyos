@@ -619,7 +619,7 @@
     function renderMaterials(list) {
       const el = document.getElementById('materials-table');
       if (!list.length) { el.innerHTML = '<div class="empty-state"><div class="empty-icon">📦</div><h3>Žádné zboží</h3><p>Přidejte první zboží nebo importujte z Factorify.</p></div>'; return; }
-      let html = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr><th>Typ</th><th>Kód</th><th>Název</th><th>Stav</th><th>Jedn.</th><th>Cena</th><th>Sklad</th><th>Min.</th><th>Dodavatel</th><th></th></tr></thead><tbody>';
+      let html = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr><th>ID</th><th>Typ</th><th>Kód</th><th>Název</th><th>Stav</th><th>Jedn.</th><th>Cena</th><th>Sklad</th><th>Min.</th><th>Dodavatel</th><th></th></tr></thead><tbody>';
       for (const m of list) {
         const isLow = m.min_stock > 0 && m.current_stock < m.min_stock;
         const tLabel = MAT_TYPES[m.type] || m.type || '—';
@@ -627,6 +627,7 @@
         const sLabel = MAT_STATUSES[m.status] || m.status || '—';
         const sColor = MAT_STATUS_COLORS[m.status] || '#64748b';
         html += '<tr onclick="openMaterialModal(' + m.id + ')">';
+        html += '<td style="font-family:monospace;color:var(--text2);font-size:12px">' + m.id + '</td>';
         html += '<td><span class="badge" style="background:' + tColor + '22;color:' + tColor + '">' + tLabel + '</span></td>';
         html += '<td style="font-family:monospace;color:var(--text2);font-size:12px">' + (m.code||'—') + '</td>';
         html += '<td class="person-name">' + m.name + (m.factorify_id ? ' <span style="font-size:10px;color:var(--text2)" title="Factorify #' + m.factorify_id + '">🔗</span>' : '') + '</td>';
