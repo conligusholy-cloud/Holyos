@@ -143,14 +143,28 @@
         <div id="orders-table"></div>
       </div>
 
-      <!-- TAB: Materiály -->
+      <!-- TAB: Zboží -->
       <div class="tab-content" id="tab-materials">
         <div class="toolbar">
-          <input type="text" id="mat-search" placeholder="Hledat zboží..." onkeyup="loadMaterials()">
+          <input type="text" id="mat-search" placeholder="Hledat zboží (název, kód, klíč. slova)..." onkeyup="loadMaterials()" style="width:280px">
+          <select id="mat-type-filter" onchange="loadMaterials()">
+            <option value="">Všechny typy</option>
+            <option value="material">Materiál</option>
+            <option value="product">Výrobek</option>
+            <option value="goods">Zboží</option>
+            <option value="semi_product">Polotovar</option>
+          </select>
+          <select id="mat-status-filter" onchange="loadMaterials()">
+            <option value="">Všechny stavy</option>
+            <option value="active">Aktivní</option>
+            <option value="new">Nový</option>
+            <option value="first_run">První běh</option>
+          </select>
           <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text2);cursor:pointer;">
             <input type="checkbox" id="mat-low-stock" onchange="loadMaterials()"> Pod minimem
           </label>
           <div style="flex:1"></div>
+          <button class="btn btn-secondary" onclick="openFactorifyImport()">📥 Import z Factorify</button>
           <button class="btn btn-primary" onclick="openMaterialModal()">+ Nové zboží</button>
         </div>
         <div id="materials-table"></div>
@@ -584,30 +598,45 @@
     // ============================================================
     // MATERIALS
     // ============================================================
+    const MAT_TYPES = { material: 'Materiál', product: 'Výrobek', goods: 'Zboží', semi_product: 'Polotovar' };
+    const MAT_TYPE_COLORS = { material: '#3b82f6', product: '#10b981', goods: '#f59e0b', semi_product: '#8b5cf6' };
+    const MAT_STATUSES = { active: 'Aktivní', new: 'Nový', first_run: 'První běh', deleted: 'Smazáno' };
+    const MAT_STATUS_COLORS = { active: '#10b981', new: '#64748b', first_run: '#f59e0b', deleted: '#ef4444' };
+
     async function loadMaterials() {
       const search = document.getElementById('mat-search')?.value || '';
+      const type = document.getElementById('mat-type-filter')?.value || '';
+      const status = document.getElementById('mat-status-filter')?.value || '';
       const lowStock = document.getElementById('mat-low-stock')?.checked;
-      let url = '/api/wh/materials?';
-      if (search) url += 'search=' + encodeURIComponent(search) + '&';
-      if (lowStock) url += 'low_stock=true';
-      try { const r = await fetch(url); materials = await r.json(); renderMaterials(materials); } catch(e) { console.error(e); }
+      const params = new URLSearchParams();
+      if (search) params.set('search', search);
+      if (type) params.set('type', type);
+      if (status) params.set('status', status);
+      if (lowStock) params.set('low_stock', 'true');
+      try { const r = await fetch('/api/wh/materials?' + params); materials = await r.json(); renderMaterials(materials); } catch(e) { console.error(e); }
     }
 
     function renderMaterials(list) {
       const el = document.getElementById('materials-table');
-      if (!list.length) { el.innerHTML = '<div class="empty-state"><div class="empty-icon">🧱</div><h3>Žádné zboží</h3><p>Přidejte první zboží do katalogu.</p></div>'; return; }
-      let html = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr><th>Kód</th><th>Název</th><th>Jedn.</th><th>Cena</th><th>Váž. prům.</th><th>Stav skladu</th><th>Min.</th><th>Akce</th></tr></thead><tbody>';
+      if (!list.length) { el.innerHTML = '<div class="empty-state"><div class="empty-icon">📦</div><h3>Žádné zboží</h3><p>Přidejte první zboží nebo importujte z Factorify.</p></div>'; return; }
+      let html = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr><th>Typ</th><th>Kód</th><th>Název</th><th>Stav</th><th>Jedn.</th><th>Cena</th><th>Sklad</th><th>Min.</th><th>Dodavatel</th><th></th></tr></thead><tbody>';
       for (const m of list) {
         const isLow = m.min_stock > 0 && m.current_stock < m.min_stock;
+        const tLabel = MAT_TYPES[m.type] || m.type || '—';
+        const tColor = MAT_TYPE_COLORS[m.type] || '#64748b';
+        const sLabel = MAT_STATUSES[m.status] || m.status || '—';
+        const sColor = MAT_STATUS_COLORS[m.status] || '#64748b';
         html += '<tr onclick="openMaterialModal(' + m.id + ')">';
-        html += '<td style="font-family:monospace;color:var(--text2);">' + m.code + '</td>';
-        html += '<td class="person-name">' + m.name + '</td>';
-        html += '<td>' + m.unit + '</td>';
+        html += '<td><span class="badge" style="background:' + tColor + '22;color:' + tColor + '">' + tLabel + '</span></td>';
+        html += '<td style="font-family:monospace;color:var(--text2);font-size:12px">' + (m.code||'—') + '</td>';
+        html += '<td class="person-name">' + m.name + (m.factorify_id ? ' <span style="font-size:10px;color:var(--text2)" title="Factorify #' + m.factorify_id + '">🔗</span>' : '') + '</td>';
+        html += '<td><span class="badge" style="background:' + sColor + '22;color:' + sColor + '">' + sLabel + '</span></td>';
+        html += '<td>' + (m.unit||'ks') + '</td>';
         html += '<td>' + (m.unit_price||0).toLocaleString('cs-CZ') + ' Kč</td>';
-        html += '<td>' + (m.weighted_avg_price||0).toFixed(2) + ' Kč</td>';
-        html += '<td style="font-weight:600;color:' + (isLow ? '#ef4444' : '#10b981') + ';">' + (m.current_stock||0) + ' ' + m.unit + (isLow ? ' ⚠️' : '') + '</td>';
+        html += '<td style="font-weight:600;color:' + (isLow ? '#ef4444' : '#10b981') + '">' + (m.current_stock||0) + (isLow ? ' ⚠️' : '') + '</td>';
         html += '<td>' + (m.min_stock||0) + '</td>';
-        html += '<td><button class="btn btn-danger btn-sm" onclick="event.stopPropagation();deleteMaterial(' + m.id + ')">🗑️</button></td>';
+        html += '<td style="font-size:12px;color:var(--text2)">' + (m.supplier_name||'—') + '</td>';
+        html += '<td style="text-align:right"><button class="btn btn-danger btn-sm" onclick="event.stopPropagation();deleteMaterial(' + m.id + ')">✕</button></td>';
         html += '</tr>';
       }
       html += '</tbody></table></div>';
@@ -619,17 +648,40 @@
       let m = {};
       if (id) { try { const r = await fetch('/api/wh/materials/' + id); m = await r.json(); } catch(e) {} }
       const supOpts = companies.filter(c => c.type==='supplier'||c.type==='both').map(c => '<option value="' + c.id + '"' + (m.supplier_id===c.id?' selected':'') + '>' + c.name + '</option>').join('');
-      document.getElementById('modal-root').innerHTML = '<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal"><h2>' + (id?'✏️ Upravit zboží':'➕ Nové zboží') + '</h2>' +
+      const sel = (field, val) => m[field] === val ? ' selected' : '';
+
+      document.getElementById('modal-root').innerHTML = '<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal" style="max-width:700px"><h2>' + (id?'✏️ Upravit zboží':'➕ Nové zboží') + '</h2>' +
         '<form onsubmit="saveMaterial(event,' + (id||'null') + ')"><div class="form-grid">' +
           '<div class="form-group"><label>Kód</label><input type="text" name="code" value="' + (m.code||'') + '" placeholder="Auto"></div>' +
           '<div class="form-group"><label>Název *</label><input type="text" name="name" value="' + (m.name||'') + '" required></div>' +
-          '<div class="form-group"><label>Kategorie</label><select name="category"><option value="general"' + (m.category==='general'?' selected':'') + '>Obecný</option><option value="raw"' + (m.category==='raw'?' selected':'') + '>Surovina</option><option value="component"' + (m.category==='component'?' selected':'') + '>Komponenta</option><option value="finished"' + (m.category==='finished'?' selected':'') + '>Hotový výrobek</option><option value="consumable"' + (m.category==='consumable'?' selected':'') + '>Spotřební</option></select></div>' +
-          '<div class="form-group"><label>Jednotka</label><input type="text" name="unit" value="' + (m.unit||'ks') + '"></div>' +
+          '<div class="form-group"><label>Typ *</label><select name="type"><option value="material"' + sel('type','material') + '>Materiál</option><option value="product"' + sel('type','product') + '>Výrobek</option><option value="goods"' + sel('type','goods') + '>Zboží</option><option value="semi_product"' + sel('type','semi_product') + '>Polotovar</option></select></div>' +
+          '<div class="form-group"><label>Stav</label><select name="status"><option value="active"' + sel('status','active') + '>Aktivní</option><option value="new"' + sel('status','new') + '>Nový</option><option value="first_run"' + sel('status','first_run') + '>První běh</option></select></div>' +
+          '<div class="form-group"><label>Jednotka *</label><input type="text" name="unit" value="' + (m.unit||'ks') + '"></div>' +
+          '<div class="form-group"><label>Alt. jednotka</label><input type="text" name="alt_unit" value="' + (m.alt_unit||'') + '" placeholder="např. m, kg"></div>' +
+          '<div class="form-group"><label>Koef. alt. jedn.</label><input type="number" name="alt_unit_coeff" value="' + (m.alt_unit_coeff||0) + '" step="0.001"></div>' +
+          '<div class="form-group"><label>Klasifikace</label><input type="text" name="classification" value="' + (m.classification||'') + '" placeholder="Výrobek, Materiál..."></div>' +
           '<div class="form-group"><label>Nákupní cena</label><input type="number" name="unit_price" value="' + (m.unit_price||0) + '" step="0.01"></div>' +
           '<div class="form-group"><label>Min. zásoba</label><input type="number" name="min_stock" value="' + (m.min_stock||0) + '" step="0.01"></div>' +
+          '<div class="form-group"><label>Max. zásoba</label><input type="number" name="max_stock" value="' + (m.max_stock||0) + '" step="0.01"></div>' +
+          '<div class="form-group"><label>Hmotnost (kg)</label><input type="number" name="weight" value="' + (m.weight||0) + '" step="0.001"></div>' +
           '<div class="form-group"><label>Dodavatel</label><select name="supplier_id"><option value="">—</option>' + supOpts + '</select></div>' +
+          '<div class="form-group"><label>Skupina</label><input type="text" name="group" value="' + (m.group||'') + '"></div>' +
+          '<div class="form-group"><label>Rodina</label><input type="text" name="family" value="' + (m.family||'') + '"></div>' +
+          '<div class="form-group"><label>Barva</label><input type="text" name="color" value="' + (m.color||'') + '"></div>' +
+          '<div class="form-group"><label>Rozměr</label><input type="text" name="dimension" value="' + (m.dimension||'') + '"></div>' +
+          '<div class="form-group"><label>Norma</label><input type="text" name="norm" value="' + (m.norm||'') + '"></div>' +
           '<div class="form-group"><label>Čárový kód</label><input type="text" name="barcode" value="' + (m.barcode||'') + '"></div>' +
+          '<div class="form-group"><label>Klíčová slova</label><input type="text" name="keywords" value="' + (m.keywords||'') + '" placeholder="oddělené čárkou"></div>' +
+          '<div class="form-group"><label>Externí ID</label><input type="text" name="external_id" value="' + (m.external_id||'') + '"></div>' +
+          '<div class="form-group"><label>Min. velikost dávky</label><input type="number" name="batch_size_min" value="' + (m.batch_size_min||0) + '" step="1"></div>' +
+          '<div class="form-group"><label>Výchozí vel. dávky</label><input type="number" name="batch_size_default" value="' + (m.batch_size_default||0) + '" step="1"></div>' +
+          '<div class="form-group"><label>Max. velikost dávky</label><input type="number" name="batch_size_max" value="' + (m.batch_size_max||0) + '" step="1"></div>' +
+          '<div class="form-group"><label>Doba dodání (dny)</label><input type="number" name="lead_time_days" value="' + (m.lead_time_days||0) + '" step="1"></div>' +
+          '<div class="form-group"><label style="display:flex;align-items:center;gap:6px"><input type="checkbox" name="non_stock"' + (m.non_stock ? ' checked' : '') + '> Neskladové</label></div>' +
+          '<div class="form-group"><label style="display:flex;align-items:center;gap:6px"><input type="checkbox" name="expirable"' + (m.expirable ? ' checked' : '') + '> Expiruje</label></div>' +
           '<div class="form-group full"><label>Popis</label><textarea name="description">' + (m.description||'') + '</textarea></div>' +
+          '<div class="form-group full"><label>Poznámka pro výrobu</label><textarea name="production_note">' + (m.production_note||'') + '</textarea></div>' +
+          (m.factorify_id ? '<div class="form-group full"><label>Factorify</label><div style="padding:8px;background:var(--bg);border-radius:8px;font-size:12px;color:var(--text2)">🔗 Propojeno s Factorify ID: <strong>' + m.factorify_id + '</strong></div></div>' : '') +
         '</div><div class="modal-actions"><button type="button" class="btn btn-secondary" onclick="closeModal()">Zrušit</button><button type="submit" class="btn btn-primary">' + (id?'Uložit':'Vytvořit') + '</button></div></form></div></div>';
     }
 
@@ -638,9 +690,18 @@
       const f = new FormData(e.target);
       const data = {};
       for (const [k,v] of f.entries()) data[k] = v;
-      if (data.unit_price) data.unit_price = parseFloat(data.unit_price);
-      if (data.min_stock) data.min_stock = parseFloat(data.min_stock);
+      data.unit_price = parseFloat(data.unit_price) || 0;
+      data.min_stock = parseFloat(data.min_stock) || 0;
+      data.max_stock = parseFloat(data.max_stock) || 0;
+      data.weight = parseFloat(data.weight) || 0;
+      data.alt_unit_coeff = parseFloat(data.alt_unit_coeff) || 0;
+      data.batch_size_min = parseFloat(data.batch_size_min) || 0;
+      data.batch_size_max = parseFloat(data.batch_size_max) || 0;
+      data.batch_size_default = parseFloat(data.batch_size_default) || 0;
+      data.lead_time_days = parseFloat(data.lead_time_days) || 0;
       if (data.supplier_id) data.supplier_id = parseInt(data.supplier_id);
+      data.non_stock = f.has('non_stock');
+      data.expirable = f.has('expirable');
       await fetch(id ? '/api/wh/materials/' + id : '/api/wh/materials', { method: id ? 'PUT' : 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(data) });
       closeModal(); loadMaterials(); loadStats();
     }
@@ -649,6 +710,73 @@
       if (!confirm('Smazat zboží?')) return;
       await fetch('/api/wh/materials/' + id, { method: 'DELETE' });
       loadMaterials(); loadStats();
+    }
+
+    // ============================================================
+    // FACTORIFY IMPORT
+    // ============================================================
+    async function openFactorifyImport() {
+      document.getElementById('modal-root').innerHTML = '<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal" style="max-width:800px"><h2>📥 Import zboží z Factorify</h2>' +
+        '<p style="color:var(--text2);font-size:13px;margin-bottom:16px">Stáhne zboží z Factorify a naimportuje ho do HolyOS. Již importované položky (podle Factorify ID) budou přeskočeny.</p>' +
+        '<div class="toolbar" style="margin-bottom:12px"><input type="text" id="fy-search" placeholder="Hledat v Factorify..." style="width:250px"><button class="btn btn-secondary" onclick="loadFactorifyGoods()">🔍 Hledat</button><div style="flex:1"></div><button class="btn btn-primary" onclick="importAllFactorify()">📥 Importovat vše</button></div>' +
+        '<div id="fy-results" style="max-height:400px;overflow-y:auto"><div class="empty-state" style="padding:30px"><p>Klikněte Hledat pro načtení zboží z Factorify</p></div></div>' +
+        '<div class="modal-actions"><button class="btn btn-secondary" onclick="closeModal()">Zavřít</button></div></div></div>';
+    }
+
+    let fyGoods = [];
+    async function loadFactorifyGoods() {
+      const search = document.getElementById('fy-search')?.value || '';
+      const el = document.getElementById('fy-results');
+      el.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text2)">⏳ Načítám z Factorify...</div>';
+      try {
+        const params = new URLSearchParams({ take: 100 });
+        if (search) params.set('search', search);
+        const r = await fetch('/api/wh/factorify/goods?' + params);
+        const data = await r.json();
+        fyGoods = data.Data || data.data || data || [];
+        if (!Array.isArray(fyGoods)) fyGoods = [];
+        renderFactorifyGoods();
+      } catch (e) {
+        el.innerHTML = '<div style="text-align:center;padding:20px;color:#ef4444">❌ Chyba: ' + e.message + '</div>';
+      }
+    }
+
+    function renderFactorifyGoods() {
+      const el = document.getElementById('fy-results');
+      if (!fyGoods.length) { el.innerHTML = '<div class="empty-state" style="padding:20px"><p>Žádné zboží nenalezeno</p></div>'; return; }
+      let h = '<table class="data-table"><thead><tr><th><input type="checkbox" id="fy-sel-all" onchange="toggleFyAll(this.checked)" checked></th><th>ID</th><th>Typ</th><th>Kód</th><th>Název</th><th>Stav</th></tr></thead><tbody>';
+      for (let i = 0; i < fyGoods.length; i++) {
+        const g = fyGoods[i];
+        h += '<tr><td><input type="checkbox" class="fy-cb" data-idx="' + i + '" checked></td>';
+        h += '<td style="color:var(--text2);font-size:12px">' + (g.Id || '') + '</td>';
+        h += '<td>' + (g.TypeLabel || g.Type || '—') + '</td>';
+        h += '<td style="font-family:monospace;font-size:12px">' + (g.Code || '—') + '</td>';
+        h += '<td class="person-name">' + (g.Name || '') + '</td>';
+        h += '<td>' + (g.StatusLabel || g.Status || '—') + '</td></tr>';
+      }
+      h += '</tbody></table>';
+      el.innerHTML = h;
+    }
+
+    function toggleFyAll(checked) {
+      document.querySelectorAll('.fy-cb').forEach(cb => cb.checked = checked);
+    }
+
+    async function importAllFactorify() {
+      const selected = [];
+      document.querySelectorAll('.fy-cb:checked').forEach(cb => {
+        selected.push(fyGoods[parseInt(cb.dataset.idx)]);
+      });
+      if (!selected.length) { alert('Vyberte alespoň jedno zboží'); return; }
+      if (!confirm('Importovat ' + selected.length + ' položek z Factorify?')) return;
+      try {
+        const r = await fetch('/api/wh/factorify/import', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ items: selected }) });
+        const result = await r.json();
+        alert('Import dokončen!\n\nImportováno: ' + result.imported + '\nPřeskočeno (již existuje): ' + result.skipped);
+        closeModal(); loadMaterials(); loadStats();
+      } catch (e) {
+        alert('Chyba importu: ' + e.message);
+      }
     }
 
     // ============================================================

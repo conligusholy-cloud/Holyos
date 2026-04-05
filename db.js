@@ -15,7 +15,7 @@ const DB_FILE = path.join(DATA_DIR, 'hr.json');
 const AUDIT_FILE = path.join(DATA_DIR, 'audit-log.json');
 
 const DEFAULT_DATA = {
-  _nextId: { people: 1, departments: 1, roles: 1, attendance: 1, admin_tasks: 1, shifts: 1, absence_types: 1, leave_requests: 1, company_leave: 1, documents: 1, document_templates: 1, document_notifications: 1, companies: 1, orders: 1, order_items: 1, warehouses: 1, warehouse_locations: 1, materials: 1, inventory_movements: 1, stock_rules: 1 },
+  _nextId: { people: 1, departments: 1, roles: 1, attendance: 1, admin_tasks: 1, shifts: 1, absence_types: 1, leave_requests: 1, company_leave: 1, documents: 1, document_templates: 1, document_notifications: 1, companies: 1, orders: 1, order_items: 1, warehouses: 1, warehouse_locations: 1, materials: 1, inventory_movements: 1, stock_rules: 1, inventories: 1, inventory_items: 1 },
   people: [],
   departments: [],
   roles: [],
@@ -59,6 +59,8 @@ const DEFAULT_DATA = {
   materials: [],              // { id, code, name, category, unit, unit_price, weighted_avg_price, supplier_id, min_stock, current_stock, description, barcode, active, created_at, updated_at }
   inventory_movements: [],    // { id, material_id, warehouse_id, location_id, type: 'receipt'|'issue'|'transfer'|'adjustment', quantity, unit_price, reference_type, reference_id, note, created_by, created_at }
   stock_rules: [],            // { id, material_id, warehouse_id, min_stock, max_stock, reorder_quantity, auto_order, preferred_supplier_id, notes }
+  inventories: [],            // { id, warehouse_id, name, status: 'draft'|'in_progress'|'completed'|'cancelled', started_at, completed_at, created_by, note, created_at }
+  inventory_items: [],        // { id, inventory_id, material_id, location_id, expected_qty, actual_qty, difference, unit_price, value_difference, counted_by, counted_at, note }
 };
 
 // Load or initialize
@@ -1429,13 +1431,19 @@ db.deleteWarehouseLocation = function(id) {
 db.getMaterials = function(filters = {}) {
   let results = [...data.materials];
   if (filters.category) results = results.filter(m => m.category === filters.category);
+  if (filters.type) results = results.filter(m => m.type === filters.type);
+  if (filters.status) results = results.filter(m => m.status === filters.status);
   if (filters.active !== undefined) results = results.filter(m => m.active !== false);
   if (filters.search) {
     const s = filters.search.toLowerCase();
-    results = results.filter(m => (m.name||'').toLowerCase().includes(s) || (m.code||'').toLowerCase().includes(s) || (m.barcode||'').includes(s));
+    results = results.filter(m => (m.name||'').toLowerCase().includes(s) || (m.code||'').toLowerCase().includes(s) || (m.barcode||'').includes(s) || (m.keywords||'').toLowerCase().includes(s));
   }
   if (filters.low_stock) results = results.filter(m => m.min_stock && m.current_stock < m.min_stock);
-  return results.sort((a,b) => (a.name||'').localeCompare(b.name||''));
+  // Enrich with supplier name
+  return results.map(m => {
+    const sup = m.supplier_id ? data.companies.find(c => c.id === m.supplier_id) : null;
+    return { ...m, supplier_name: sup ? sup.name : '' };
+  }).sort((a,b) => (a.name||'').localeCompare(b.name||''));
 };
 
 db.getMaterialById = function(id) {
@@ -1444,18 +1452,51 @@ db.getMaterialById = function(id) {
 
 db.createMaterial = function(fields) {
   const mat = {
-    id: nextId('materials'), code: fields.code || 'MAT-' + String(data.materials.length + 1).padStart(4, '0'),
-    name: fields.name, category: fields.category || 'general',
-    unit: fields.unit || 'ks', unit_price: parseFloat(fields.unit_price) || 0,
+    id: nextId('materials'),
+    code: fields.code || 'MAT-' + String(data.materials.length + 1).padStart(4, '0'),
+    name: fields.name,
+    type: fields.type || 'material',          // material | product | goods | semi_product
+    status: fields.status || 'active',         // new | first_run | active | deleted
+    category: fields.category || 'general',
+    classification: fields.classification || '',
+    unit: fields.unit || 'ks',
+    alt_unit: fields.alt_unit || '',
+    alt_unit_coeff: parseFloat(fields.alt_unit_coeff) || 0,
+    unit_price: parseFloat(fields.unit_price) || 0,
     weighted_avg_price: parseFloat(fields.unit_price) || 0,
     supplier_id: fields.supplier_id ? parseInt(fields.supplier_id) : null,
-    min_stock: parseFloat(fields.min_stock) || 0, current_stock: 0,
-    description: fields.description || '', barcode: fields.barcode || '',
-    active: true, created_at: now(), updated_at: now(),
+    min_stock: parseFloat(fields.min_stock) || 0,
+    max_stock: parseFloat(fields.max_stock) || 0,
+    current_stock: 0,
+    // Factorify fields
+    external_id: fields.external_id || '',
+    factorify_id: fields.factorify_id || null,
+    family: fields.family || '',
+    color: fields.color || '',
+    keywords: fields.keywords || '',
+    weight: parseFloat(fields.weight) || 0,
+    dimension: fields.dimension || '',
+    group: fields.group || '',
+    norm: fields.norm || '',
+    batch_size_min: parseFloat(fields.batch_size_min) || 0,
+    batch_size_max: parseFloat(fields.batch_size_max) || 0,
+    batch_size_default: parseFloat(fields.batch_size_default) || 0,
+    lead_time_days: parseFloat(fields.lead_time_days) || 0,
+    non_stock: !!fields.non_stock,
+    expirable: !!fields.expirable,
+    shelf_life: fields.shelf_life || '',
+    shelf_life_unit: fields.shelf_life_unit || 'month',
+    photo_url: fields.photo_url || '',
+    description: fields.description || '',
+    production_note: fields.production_note || '',
+    barcode: fields.barcode || '',
+    active: fields.status !== 'deleted',
+    created_at: now(),
+    updated_at: now(),
   };
   data.materials.push(mat);
   save();
-  logChange('create', 'material', mat.id, `Materiál "${mat.name}" vytvořen`, null, mat);
+  logChange('create', 'material', mat.id, `Zboží "${mat.name}" vytvořeno`, null, mat);
   return mat;
 };
 
@@ -1577,6 +1618,158 @@ db.deleteStockRule = function(id) {
   data.stock_rules.splice(idx, 1);
   save();
   return true;
+};
+
+// ============================================
+// Inventories (Inventury)
+// ============================================
+db.getInventories = function(filters = {}) {
+  let results = [...data.inventories];
+  if (filters.warehouse_id) results = results.filter(i => i.warehouse_id === parseInt(filters.warehouse_id));
+  if (filters.status) results = results.filter(i => i.status === filters.status);
+  return results.map(inv => {
+    const wh = data.warehouses.find(w => w.id === inv.warehouse_id);
+    const items = data.inventory_items.filter(it => it.inventory_id === inv.id);
+    const counted = items.filter(it => it.actual_qty !== null && it.actual_qty !== undefined).length;
+    const totalDiff = items.reduce((s, it) => s + (it.value_difference || 0), 0);
+    return { ...inv, warehouse_name: wh ? wh.name : '—', items_total: items.length, items_counted: counted, value_difference: totalDiff };
+  }).sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+};
+
+db.getInventoryById = function(id) {
+  const inv = data.inventories.find(i => i.id === id);
+  if (!inv) return null;
+  const wh = data.warehouses.find(w => w.id === inv.warehouse_id);
+  const items = data.inventory_items.filter(it => it.inventory_id === id).map(it => {
+    const mat = data.materials.find(m => m.id === it.material_id);
+    const loc = data.warehouse_locations.find(l => l.id === it.location_id);
+    return { ...it, material_name: mat ? mat.name : '—', material_code: mat ? mat.code : '', location_label: loc ? loc.label || (loc.section + '-' + loc.rack + '-' + loc.position) : '—' };
+  });
+  return { ...inv, warehouse_name: wh ? wh.name : '—', items };
+};
+
+db.createInventory = function(fields) {
+  const inv = {
+    id: nextId('inventories'),
+    warehouse_id: parseInt(fields.warehouse_id),
+    name: fields.name || 'Inventura ' + new Date().toLocaleDateString('cs-CZ'),
+    status: 'draft',
+    started_at: null, completed_at: null,
+    created_by: fields.created_by || null,
+    note: fields.note || '',
+    created_at: now(),
+  };
+  data.inventories.push(inv);
+  save();
+  logChange('create', 'inventory', inv.id, `Inventura "${inv.name}" vytvořena`, null, inv);
+  return inv;
+};
+
+db.updateInventory = function(id, fields) {
+  const inv = data.inventories.find(i => i.id === id);
+  if (!inv) return null;
+  const old = { ...inv };
+  for (const k of Object.keys(fields)) { if (k !== 'id' && k !== 'created_at') inv[k] = fields[k]; }
+  save();
+  logChange('update', 'inventory', id, `Inventura "${inv.name}" upravena`, old, inv);
+  return inv;
+};
+
+db.deleteInventory = function(id) {
+  const idx = data.inventories.findIndex(i => i.id === id);
+  if (idx < 0) return false;
+  const inv = data.inventories[idx];
+  data.inventories.splice(idx, 1);
+  data.inventory_items = data.inventory_items.filter(it => it.inventory_id !== id);
+  save();
+  logChange('delete', 'inventory', id, `Inventura "${inv.name}" smazána`, inv, null);
+  return true;
+};
+
+db.startInventory = function(id) {
+  const inv = data.inventories.find(i => i.id === id);
+  if (!inv) return null;
+  inv.status = 'in_progress';
+  inv.started_at = now();
+  save();
+  logChange('update', 'inventory', id, `Inventura "${inv.name}" zahájena`, null, inv);
+  return inv;
+};
+
+db.generateInventoryItems = function(inventoryId) {
+  const inv = data.inventories.find(i => i.id === inventoryId);
+  if (!inv) return null;
+  // Remove existing items
+  data.inventory_items = data.inventory_items.filter(it => it.inventory_id !== inventoryId);
+  // Generate items from all active materials
+  const mats = data.materials.filter(m => m.active !== false);
+  for (const mat of mats) {
+    const item = {
+      id: nextId('inventory_items'),
+      inventory_id: inventoryId,
+      material_id: mat.id,
+      location_id: null,
+      expected_qty: mat.current_stock || 0,
+      actual_qty: null,
+      difference: null,
+      unit_price: mat.weighted_avg_price || mat.unit_price || 0,
+      value_difference: null,
+      counted_by: null,
+      counted_at: null,
+      note: '',
+    };
+    data.inventory_items.push(item);
+  }
+  save();
+  return data.inventory_items.filter(it => it.inventory_id === inventoryId);
+};
+
+db.updateInventoryItem = function(id, fields) {
+  const item = data.inventory_items.find(i => i.id === id);
+  if (!item) return null;
+  if (fields.actual_qty !== undefined) {
+    item.actual_qty = parseFloat(fields.actual_qty);
+    item.difference = item.actual_qty - (item.expected_qty || 0);
+    item.value_difference = item.difference * (item.unit_price || 0);
+    item.counted_at = now();
+  }
+  if (fields.counted_by !== undefined) item.counted_by = fields.counted_by;
+  if (fields.note !== undefined) item.note = fields.note;
+  if (fields.location_id !== undefined) item.location_id = fields.location_id ? parseInt(fields.location_id) : null;
+  save();
+  return item;
+};
+
+db.completeInventory = function(id, applyDifferences) {
+  const inv = data.inventories.find(i => i.id === id);
+  if (!inv) return null;
+  inv.status = 'completed';
+  inv.completed_at = now();
+
+  if (applyDifferences) {
+    const items = data.inventory_items.filter(it => it.inventory_id === id && it.actual_qty !== null);
+    for (const item of items) {
+      const mat = data.materials.find(m => m.id === item.material_id);
+      if (mat && item.difference !== 0) {
+        // Create adjustment movement
+        db.createInventoryMovement({
+          material_id: item.material_id,
+          warehouse_id: inv.warehouse_id,
+          location_id: item.location_id,
+          type: 'adjustment',
+          quantity: item.difference,
+          unit_price: item.unit_price || 0,
+          reference_type: 'inventory',
+          reference_id: inv.id,
+          note: 'Inventura: ' + inv.name,
+        });
+      }
+    }
+  }
+
+  save();
+  logChange('update', 'inventory', id, `Inventura "${inv.name}" dokončena` + (applyDifferences ? ' (rozdíly aplikovány)' : ''), null, inv);
+  return inv;
 };
 
 // ============================================
