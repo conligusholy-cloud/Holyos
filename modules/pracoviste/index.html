@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pracoviště | HOLYOS</title>
+  <link rel="icon" type="image/svg+xml" href="../../logo-holyos-icon.svg">
+  <base href="../../">
+  <link rel="stylesheet" href="css/dashboard.css">
+  <style>
+    .page-header {
+      display:flex; align-items:center; gap:12px; padding:20px 24px;
+      border-bottom:1px solid var(--border); flex-wrap:wrap;
+    }
+    .page-header h1 { font-size:18px; font-weight:700; margin:0; }
+    .page-header .count { font-size:13px; color:var(--text2); margin-left:4px; }
+    .search-box {
+      margin-left:auto; padding:8px 14px; background:var(--surface2); color:var(--text);
+      border:1px solid var(--border); border-radius:8px; font-size:13px; width:240px;
+    }
+    .search-box:focus { border-color:var(--accent); outline:none; }
+    .btn { padding:8px 16px; border-radius:8px; border:1px solid var(--border); cursor:pointer; font-size:13px; background:var(--surface2); color:var(--text); transition:all 0.15s; }
+    .btn:hover { border-color:var(--accent); }
+    .btn-primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+    .btn-primary:hover { opacity:0.9; }
+    .btn-danger { background:#ef4444; color:#fff; border-color:#ef4444; }
+    .btn-sm { font-size:11px; padding:5px 10px; }
+
+    .ws-grid {
+      display:grid; grid-template-columns:repeat(auto-fill, minmax(340px, 1fr));
+      gap:16px; padding:20px 24px;
+    }
+    .ws-card {
+      background:var(--surface); border:1px solid var(--border); border-radius:12px;
+      padding:20px; transition: border-color 0.15s, box-shadow 0.15s;
+    }
+    .ws-card:hover { border-color:var(--accent); box-shadow:0 2px 12px rgba(99,102,241,0.08); }
+    .ws-card-header { display:flex; align-items:center; gap:12px; margin-bottom:10px; }
+    .ws-icon {
+      width:42px; height:42px; border-radius:10px; background:rgba(20,184,166,0.15);
+      display:flex; align-items:center; justify-content:center;
+      font-size:20px; color:#14b8a6; flex-shrink:0;
+    }
+    .ws-name { font-size:15px; font-weight:600; flex:1; }
+    .ws-code { font-size:12px; color:var(--text2); }
+
+    .ws-meta { display:flex; gap:12px; font-size:12px; color:var(--text2); margin-bottom:10px; flex-wrap:wrap; }
+    .ws-meta span { display:flex; align-items:center; gap:4px; }
+    .ws-meta .dim-badge {
+      background:rgba(20,184,166,0.1); color:#14b8a6; padding:2px 8px; border-radius:6px; font-weight:600;
+    }
+
+    /* Sklady */
+    .ws-warehouses { display:flex; gap:10px; margin-bottom:10px; flex-wrap:wrap; }
+    .ws-wh-badge {
+      font-size:11px; padding:4px 10px; border-radius:6px; display:flex; align-items:center; gap:4px;
+    }
+    .ws-wh-in { background:rgba(59,130,246,0.12); color:#3b82f6; }
+    .ws-wh-out { background:rgba(249,115,22,0.12); color:#f97316; }
+
+    /* Pracovníci */
+    .ws-workers { border-top:1px solid var(--border); padding-top:10px; margin-top:4px; }
+    .ws-workers-title { font-size:11px; color:var(--text2); margin-bottom:6px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; }
+    .ws-worker-item {
+      display:flex; align-items:center; gap:8px; padding:4px 0;
+      border-bottom:1px solid rgba(255,255,255,0.03); font-size:13px;
+    }
+    .ws-worker-item:last-child { border-bottom:none; }
+    .ws-worker-avatar {
+      width:28px; height:28px; border-radius:50%; background:var(--surface2);
+      display:flex; align-items:center; justify-content:center; font-size:12px;
+      color:var(--text2); flex-shrink:0; overflow:hidden;
+    }
+    .ws-worker-avatar img { width:100%; height:100%; object-fit:cover; }
+    .ws-worker-name { flex:1; }
+    .ws-worker-role { font-size:11px; color:var(--text2); }
+    .ws-worker-primary { font-size:10px; background:rgba(20,184,166,0.15); color:#14b8a6; padding:1px 6px; border-radius:4px; }
+
+    .ws-actions { display:flex; gap:6px; margin-top:12px; }
+
+    .empty-state { text-align:center; padding:80px 20px; color:var(--text2); }
+    .empty-state .icon { font-size:48px; margin-bottom:12px; }
+
+    /* Modal */
+    .modal-overlay {
+      position:fixed; top:0; left:0; right:0; bottom:0;
+      background:rgba(0,0,0,0.6); z-index:1000; display:flex;
+      align-items:center; justify-content:center;
+    }
+    .modal-box {
+      background:var(--surface); border:1px solid var(--border); border-radius:14px;
+      padding:24px; min-width:500px; max-width:580px; max-height:90vh; overflow-y:auto;
+    }
+    .modal-box h3 { margin:0 0 16px; font-size:16px; }
+    .form-group { margin-bottom:14px; }
+    .form-group label { display:block; font-size:12px; color:var(--text2); margin-bottom:4px; }
+    .form-group input, .form-group select {
+      width:100%; padding:8px 12px; background:var(--bg); color:var(--text);
+      border:1px solid var(--border); border-radius:8px; font-size:13px;
+      font-family:inherit; box-sizing:border-box;
+    }
+    .form-group input:focus, .form-group select:focus { border-color:var(--accent); outline:none; }
+    .form-row { display:flex; gap:12px; }
+    .form-row .form-group { flex:1; }
+    .modal-actions { display:flex; justify-content:flex-end; gap:8px; margin-top:16px; }
+    .section-title { font-size:14px; font-weight:600; margin:16px 0 10px; padding-top:14px; border-top:1px solid var(--border); }
+
+    /* Workers in modal */
+    .worker-add-row { display:flex; gap:8px; margin-bottom:10px; }
+    .worker-add-row select { flex:1; }
+    .worker-add-row input { width:140px; }
+    .modal-worker-list { max-height:200px; overflow-y:auto; }
+    .modal-worker-item {
+      display:flex; align-items:center; gap:8px; padding:6px 8px;
+      background:var(--bg); border-radius:8px; margin-bottom:4px; font-size:13px;
+    }
+    .modal-worker-item .name { flex:1; font-weight:500; }
+    .modal-worker-item .role { color:var(--text2); font-size:12px; }
+    .modal-worker-item .remove { cursor:pointer; color:var(--text2); padding:2px 6px; }
+    .modal-worker-item .remove:hover { color:#ef4444; }
+    .primary-star { color:#14b8a6; cursor:pointer; font-size:16px; }
+    .primary-star.inactive { color:var(--text2); opacity:0.4; }
+
+    .toast { position:fixed; bottom:20px; right:20px; padding:10px 20px; border-radius:8px; background:#22c55e; color:#fff; font-size:13px; opacity:0; transition:opacity 0.3s; z-index:9999; pointer-events:none; }
+    .toast.show { opacity:1; }
+    .toast.error { background:#ef4444; }
+  </style>
+</head>
+<body>
+  <aside id="sidebar" class="sidebar"></aside>
+
+  <div class="main-wrapper" style="display:flex;flex-direction:column;height:100vh;">
+    <div class="page-header">
+      <h1>&#127981; Pracoviště <span class="count" id="ws-count"></span></h1>
+      <button class="btn btn-primary" onclick="openAddModal()">+ Nové pracoviště</button>
+      <input type="text" class="search-box" id="search" placeholder="Hledat pracoviště..." oninput="renderList()">
+    </div>
+
+    <div style="flex:1;overflow-y:auto;">
+      <div class="ws-grid" id="ws-grid">
+        <div class="empty-state"><div class="icon">&#9203;</div><p>Načítám...</p></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal -->
+  <div id="ws-modal" class="modal-overlay" style="display:none;" onclick="if(event.target===this)closeModal()">
+    <div class="modal-box">
+      <h3 id="modal-title">Nové pracoviště</h3>
+      <input type="hidden" id="ws-id">
+
+      <div class="form-group">
+        <label>Název pracoviště *</label>
+        <input type="text" id="ws-name" placeholder="Např. Frézka CNC, Montáž, Svařovna...">
+      </div>
+      <div class="form-group">
+        <label>Kód (volitelný)</label>
+        <input type="text" id="ws-code" placeholder="Např. FR-01, CNC-02, MON-01...">
+      </div>
+
+      <!-- Rozměry -->
+      <div class="section-title">&#128207; Rozměry</div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Šířka (m)</label>
+          <input type="number" id="ws-width" placeholder="0.00" step="0.01" min="0">
+        </div>
+        <div class="form-group">
+          <label>Délka (m)</label>
+          <input type="number" id="ws-length" placeholder="0.00" step="0.01" min="0">
+        </div>
+      </div>
+
+      <!-- Sklady -->
+      <div class="section-title">&#128230; Sklady</div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Vstupní sklad</label>
+          <select id="ws-input-wh"><option value="">— bez skladu —</option></select>
+        </div>
+        <div class="form-group">
+          <label>Výstupní sklad</label>
+          <select id="ws-output-wh"><option value="">— bez skladu —</option></select>
+        </div>
+      </div>
+
+      <!-- Pracovníci -->
+      <div class="section-title">&#128101; Pracovníci</div>
+      <div class="worker-add-row">
+        <select id="worker-select"><option value="">— vyberte pracovníka —</option></select>
+        <input type="text" id="worker-role" placeholder="Role (volitelné)">
+        <button class="btn btn-sm" onclick="addWorkerToModal()">+ Přidat</button>
+      </div>
+      <div class="modal-worker-list" id="modal-worker-list"></div>
+
+      <div class="modal-actions">
+        <button class="btn" onclick="closeModal()">Zrušit</button>
+        <button class="btn btn-primary" onclick="saveWs()">Uložit</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <script src="../../js/sidebar.js"></script>
+  <script>renderSidebar('pracoviste'); initDate();</script>
+
+  <script>
+    // =========================================================================
+    // HolyOS — Pracoviště (správa pracovišť, rozměry, sklady, pracovníci)
+    // =========================================================================
+
+    const token = sessionStorage.getItem('token');
+    let allWorkstations = [];
+    let allPeople = [];
+    let allWarehouses = [];
+    let modalWorkers = [];
+
+    async function api(path, opts = {}) {
+      const headers = { 'Accept': 'application/json', 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = 'Bearer ' + token;
+      const r = await fetch(path, { ...opts, headers });
+      if (!r.ok) {
+        const text = await r.text().catch(() => '');
+        throw new Error('API ' + r.status + ': ' + text.substring(0, 200));
+      }
+      return r.json();
+    }
+
+    // === Inicializace ===
+    document.addEventListener('DOMContentLoaded', async () => {
+      try {
+        const [wsList, people, warehouses] = await Promise.all([
+          api('/api/production/workstations'),
+          api('/api/hr/people?active=true'),
+          api('/api/wh/warehouses'),
+        ]);
+
+        allPeople = (Array.isArray(people) ? people : people.data || [])
+          .sort((a, b) => (a.last_name || '').localeCompare(b.last_name || '', 'cs'));
+
+        allWarehouses = (Array.isArray(warehouses) ? warehouses : warehouses.data || [])
+          .sort((a, b) => (a.name || '').localeCompare(b.name || '', 'cs'));
+
+        allWorkstations = wsList;
+        renderList();
+      } catch (err) {
+        document.getElementById('ws-grid').innerHTML =
+          '<div class="empty-state"><p style="color:#ef4444;">' + esc(err.message) + '</p></div>';
+      }
+    });
+
+    // === Render ===
+    function renderList() {
+      const grid = document.getElementById('ws-grid');
+      const q = (document.getElementById('search').value || '').toLowerCase().trim();
+
+      const filtered = allWorkstations.filter(ws => {
+        if (!q) return true;
+        return (ws.name || '').toLowerCase().includes(q) || (ws.code || '').toLowerCase().includes(q);
+      });
+
+      document.getElementById('ws-count').textContent = '(' + filtered.length + ')';
+
+      if (filtered.length === 0) {
+        grid.innerHTML = '<div class="empty-state"><div class="icon">&#127981;</div>' +
+          '<p>' + (q ? 'Žádné pracoviště nenalezeno' : 'Zatím žádná pracoviště') + '</p>' +
+          (!q ? '<p style="font-size:12px;">Klikněte na "+ Nové pracoviště"</p>' : '') + '</div>';
+        return;
+      }
+
+      grid.innerHTML = filtered.map(ws => {
+        const workers = ws.workers || [];
+        const opsCount = ws._count ? ws._count.operations : 0;
+
+        // Rozměry
+        let dimHtml = '';
+        if (ws.width_m || ws.length_m) {
+          const w = ws.width_m ? parseFloat(ws.width_m) : 0;
+          const l = ws.length_m ? parseFloat(ws.length_m) : 0;
+          dimHtml = '<span class="dim-badge">' + w + ' × ' + l + ' m</span>';
+          if (w > 0 && l > 0) dimHtml += '<span>' + (w * l).toFixed(1) + ' m²</span>';
+        }
+
+        // Sklady
+        let whHtml = '';
+        if (ws.input_warehouse || ws.output_warehouse) {
+          whHtml = '<div class="ws-warehouses">';
+          if (ws.input_warehouse) whHtml += '<span class="ws-wh-badge ws-wh-in">&#8594; ' + esc(ws.input_warehouse.name) + '</span>';
+          if (ws.output_warehouse) whHtml += '<span class="ws-wh-badge ws-wh-out">&#8592; ' + esc(ws.output_warehouse.name) + '</span>';
+          whHtml += '</div>';
+        }
+
+        // Pracovníci
+        let workersHtml = '';
+        if (workers.length > 0) {
+          workersHtml = '<div class="ws-workers"><div class="ws-workers-title">Pracovníci (' + workers.length + ')</div>';
+          workers.slice(0, 5).forEach(ww => {
+            const p = ww.person;
+            const avatar = p.photo_url
+              ? '<img src="' + esc(p.photo_url) + '" alt="">'
+              : (p.first_name || '?').charAt(0) + (p.last_name || '?').charAt(0);
+            workersHtml += '<div class="ws-worker-item">' +
+              '<div class="ws-worker-avatar">' + avatar + '</div>' +
+              '<span class="ws-worker-name">' + esc(p.first_name + ' ' + p.last_name) + '</span>' +
+              (ww.role ? '<span class="ws-worker-role">' + esc(ww.role) + '</span>' : '') +
+              (ww.is_primary ? '<span class="ws-worker-primary">hlavní</span>' : '') +
+            '</div>';
+          });
+          if (workers.length > 5) workersHtml += '<div style="font-size:11px;color:var(--text2);padding:4px 0;">... a dalších ' + (workers.length - 5) + '</div>';
+          workersHtml += '</div>';
+        }
+
+        return '<div class="ws-card">' +
+          '<div class="ws-card-header">' +
+            '<div class="ws-icon">&#127981;</div>' +
+            '<div>' +
+              '<div class="ws-name">' + esc(ws.name) + '</div>' +
+              (ws.code ? '<div class="ws-code">' + esc(ws.code) + '</div>' : '') +
+            '</div>' +
+          '</div>' +
+          '<div class="ws-meta">' +
+            dimHtml +
+            '<span>&#9881; ' + opsCount + ' operací</span>' +
+            '<span>&#128101; ' + workers.length + ' pracovníků</span>' +
+          '</div>' +
+          whHtml +
+          workersHtml +
+          '<div class="ws-actions">' +
+            '<button class="btn btn-sm" onclick="openEditModal(' + ws.id + ')">&#9998; Upravit</button>' +
+            '<button class="btn btn-sm btn-danger" onclick="deleteWs(' + ws.id + ')">&#128465; Smazat</button>' +
+          '</div>' +
+        '</div>';
+      }).join('');
+    }
+
+    // === Warehouse selects ===
+    function populateWarehouseSelects(inputId, outputId) {
+      ['ws-input-wh', 'ws-output-wh'].forEach(selId => {
+        const sel = document.getElementById(selId);
+        sel.innerHTML = '<option value="">— bez skladu —</option>';
+        allWarehouses.forEach(wh => {
+          const selected = (selId === 'ws-input-wh' && wh.id === inputId) ||
+                           (selId === 'ws-output-wh' && wh.id === outputId);
+          sel.innerHTML += '<option value="' + wh.id + '"' + (selected ? ' selected' : '') + '>' +
+            esc(wh.name) + (wh.code ? ' (' + esc(wh.code) + ')' : '') + '</option>';
+        });
+      });
+    }
+
+    // === Worker modal ===
+    function populateWorkerSelect() {
+      const sel = document.getElementById('worker-select');
+      const assignedIds = new Set(modalWorkers.map(w => w.person_id));
+      sel.innerHTML = '<option value="">— vyberte pracovníka —</option>';
+      allPeople.forEach(p => {
+        if (assignedIds.has(p.id)) return;
+        sel.innerHTML += '<option value="' + p.id + '">' +
+          esc(p.last_name + ' ' + p.first_name) +
+          (p.department ? ' (' + esc(p.department.name) + ')' : '') + '</option>';
+      });
+    }
+
+    function renderModalWorkers() {
+      const list = document.getElementById('modal-worker-list');
+      if (modalWorkers.length === 0) {
+        list.innerHTML = '<div style="color:var(--text2);font-size:12px;padding:8px;">Žádní přiřazení pracovníci</div>';
+        return;
+      }
+      list.innerHTML = modalWorkers.map((mw, idx) => {
+        const p = mw.person || allPeople.find(pp => pp.id === mw.person_id) || {};
+        const name = (p.first_name || '') + ' ' + (p.last_name || '');
+        return '<div class="modal-worker-item">' +
+          '<span class="primary-star ' + (mw.is_primary ? '' : 'inactive') + '" onclick="togglePrimary(' + idx + ')" title="Hlavní pracovník">&#9733;</span>' +
+          '<span class="name">' + esc(name) + '</span>' +
+          (mw.role ? '<span class="role">' + esc(mw.role) + '</span>' : '') +
+          '<span class="remove" onclick="removeModalWorker(' + idx + ')" title="Odebrat">&#10005;</span>' +
+        '</div>';
+      }).join('');
+    }
+
+    function addWorkerToModal() {
+      const sel = document.getElementById('worker-select');
+      const personId = parseInt(sel.value);
+      if (!personId) return;
+      const role = document.getElementById('worker-role').value.trim() || null;
+      const person = allPeople.find(p => p.id === personId);
+      modalWorkers.push({ person_id: personId, person, role, is_primary: modalWorkers.length === 0 });
+      document.getElementById('worker-role').value = '';
+      populateWorkerSelect();
+      renderModalWorkers();
+    }
+
+    function removeModalWorker(idx) { modalWorkers.splice(idx, 1); populateWorkerSelect(); renderModalWorkers(); }
+    function togglePrimary(idx) { modalWorkers[idx].is_primary = !modalWorkers[idx].is_primary; renderModalWorkers(); }
+
+    // === Modal open/close ===
+    function openAddModal() {
+      document.getElementById('modal-title').textContent = 'Nové pracoviště';
+      document.getElementById('ws-id').value = '';
+      document.getElementById('ws-name').value = '';
+      document.getElementById('ws-code').value = '';
+      document.getElementById('ws-width').value = '';
+      document.getElementById('ws-length').value = '';
+      modalWorkers = [];
+      populateWarehouseSelects(null, null);
+      populateWorkerSelect();
+      renderModalWorkers();
+      document.getElementById('ws-modal').style.display = 'flex';
+      document.getElementById('ws-name').focus();
+    }
+
+    function openEditModal(id) {
+      const ws = allWorkstations.find(w => w.id === id);
+      if (!ws) return;
+      document.getElementById('modal-title').textContent = 'Upravit pracoviště';
+      document.getElementById('ws-id').value = ws.id;
+      document.getElementById('ws-name').value = ws.name;
+      document.getElementById('ws-code').value = ws.code || '';
+      document.getElementById('ws-width').value = ws.width_m ? parseFloat(ws.width_m) : '';
+      document.getElementById('ws-length').value = ws.length_m ? parseFloat(ws.length_m) : '';
+
+      populateWarehouseSelects(
+        ws.input_warehouse ? ws.input_warehouse.id : ws.input_warehouse_id || null,
+        ws.output_warehouse ? ws.output_warehouse.id : ws.output_warehouse_id || null
+      );
+
+      modalWorkers = (ws.workers || []).map(ww => ({
+        id: ww.id,
+        person_id: ww.person_id || (ww.person && ww.person.id),
+        person: ww.person,
+        role: ww.role,
+        is_primary: ww.is_primary,
+      }));
+      populateWorkerSelect();
+      renderModalWorkers();
+      document.getElementById('ws-modal').style.display = 'flex';
+      document.getElementById('ws-name').focus();
+    }
+
+    function closeModal() { document.getElementById('ws-modal').style.display = 'none'; }
+
+    // === Save ===
+    async function saveWs() {
+      const id = document.getElementById('ws-id').value;
+      const name = document.getElementById('ws-name').value.trim();
+      const code = document.getElementById('ws-code').value.trim() || null;
+      const width_m = document.getElementById('ws-width').value || null;
+      const length_m = document.getElementById('ws-length').value || null;
+      const input_warehouse_id = document.getElementById('ws-input-wh').value || null;
+      const output_warehouse_id = document.getElementById('ws-output-wh').value || null;
+      if (!name) return showToast('Vyplňte název pracoviště', true);
+
+      try {
+        let wsId;
+        const body = { name, code, width_m, length_m, input_warehouse_id, output_warehouse_id };
+        if (id) {
+          await api('/api/production/workstations/' + id, { method: 'PUT', body: JSON.stringify(body) });
+          wsId = parseInt(id);
+        } else {
+          const created = await api('/api/production/workstations', { method: 'POST', body: JSON.stringify(body) });
+          wsId = created.id;
+        }
+        await syncWorkers(wsId);
+        showToast(id ? 'Pracoviště aktualizováno' : 'Pracoviště vytvořeno');
+        closeModal();
+        await reloadData();
+      } catch (err) {
+        showToast('Chyba: ' + err.message, true);
+      }
+    }
+
+    async function syncWorkers(wsId) {
+      const current = await api('/api/production/workstations/' + wsId);
+      const existing = current.workers || [];
+      const existingMap = {};
+      existing.forEach(w => { existingMap[w.person_id || (w.person && w.person.id)] = w; });
+      const targetIds = new Set(modalWorkers.map(w => w.person_id));
+      const existingIds = new Set(existing.map(w => w.person_id || (w.person && w.person.id)));
+
+      for (const ew of existing) {
+        const pid = ew.person_id || (ew.person && ew.person.id);
+        if (!targetIds.has(pid)) {
+          await api('/api/production/workstations/' + wsId + '/workers/' + ew.id, { method: 'DELETE' });
+        }
+      }
+      for (const mw of modalWorkers) {
+        if (existingIds.has(mw.person_id) && mw.id) {
+          const old = existingMap[mw.person_id];
+          if (old && (old.role !== mw.role || old.is_primary !== mw.is_primary)) {
+            await api('/api/production/workstations/' + wsId + '/workers/' + old.id, {
+              method: 'PUT', body: JSON.stringify({ role: mw.role, is_primary: mw.is_primary }),
+            });
+          }
+        } else if (!existingIds.has(mw.person_id)) {
+          await api('/api/production/workstations/' + wsId + '/workers', {
+            method: 'POST', body: JSON.stringify({ person_id: mw.person_id, role: mw.role, is_primary: mw.is_primary }),
+          });
+        }
+      }
+    }
+
+    async function deleteWs(id) {
+      const ws = allWorkstations.find(w => w.id === id);
+      const opsCount = ws && ws._count ? ws._count.operations : 0;
+      const msg = 'Smazat pracoviště "' + (ws ? ws.name : '') + '"?' +
+        (opsCount > 0 ? '\n\nPozor: má ' + opsCount + ' přiřazených operací!' : '');
+      if (!confirm(msg)) return;
+      try {
+        await api('/api/production/workstations/' + id, { method: 'DELETE' });
+        showToast('Pracoviště smazáno');
+        await reloadData();
+      } catch (err) { showToast('Chyba: ' + err.message, true); }
+    }
+
+    async function reloadData() {
+      allWorkstations = await api('/api/production/workstations');
+      renderList();
+    }
+
+    function esc(s) { if (!s) return ''; const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+    function showToast(msg, isError) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.className = 'toast show' + (isError ? ' error' : '');
+      setTimeout(() => t.className = 'toast', 2500);
+    }
+  </script>
+</body>
+</html>

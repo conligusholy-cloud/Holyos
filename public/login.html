@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HOLYOS — Přihlášení</title>
+  <link rel="icon" type="image/svg+xml" href="/logo-holyos-icon.svg">
+  <style>
+    :root {
+      --bg: #1e1e2e;
+      --surface: #282840;
+      --surface2: #313150;
+      --text: #e0e0f0;
+      --text2: #a0a0c0;
+      --accent: #6c8cff;
+      --accent2: #4ecdc4;
+      --border: #3a3a5c;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .login-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 48px 40px;
+      width: 100%;
+      max-width: 400px;
+      text-align: center;
+    }
+    .login-logo {
+      margin-bottom: 8px;
+    }
+    .login-card h1 {
+      font-size: 28px;
+      font-weight: 700;
+      background: linear-gradient(135deg, #6C5CE7, #0984E3, #00B894);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 4px;
+    }
+    .login-card .subtitle {
+      color: var(--text2);
+      font-size: 14px;
+      margin-bottom: 32px;
+    }
+    .form-group {
+      text-align: left;
+      margin-bottom: 16px;
+    }
+    .form-group label {
+      display: block;
+      font-size: 13px;
+      color: var(--text2);
+      margin-bottom: 6px;
+    }
+    .form-group input {
+      width: 100%;
+      padding: 10px 14px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-size: 15px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .form-group input:focus {
+      border-color: var(--accent);
+    }
+    .login-btn {
+      width: 100%;
+      padding: 12px;
+      background: linear-gradient(135deg, #6C5CE7, #0984E3);
+      border: none;
+      border-radius: 8px;
+      color: #fff;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      margin-top: 8px;
+      transition: opacity 0.2s;
+    }
+    .login-btn:hover { opacity: 0.9; }
+    .login-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .login-error {
+      background: rgba(239,68,68,0.15);
+      color: #ef4444;
+      padding: 10px 14px;
+      border-radius: 8px;
+      font-size: 13px;
+      margin-bottom: 16px;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="login-card">
+    <div class="login-logo">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="56" height="56">
+        <defs><linearGradient id="logoGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" style="stop-color:#6C5CE7"/>
+          <stop offset="50%" style="stop-color:#0984E3"/>
+          <stop offset="100%" style="stop-color:#00B894"/>
+        </linearGradient></defs>
+        <rect width="100" height="100" rx="22" fill="url(#logoGrad)"/>
+        <rect x="22" y="22" width="10" height="56" rx="4" fill="white"/>
+        <rect x="68" y="22" width="10" height="56" rx="4" fill="white"/>
+        <rect x="32" y="42" width="36" height="10" rx="4" fill="white"/>
+      </svg>
+    </div>
+    <h1>HOLYOS</h1>
+    <p class="subtitle" id="subtitle">Přihlaste se pro přístup do systému</p>
+
+    <div class="login-error" id="login-error"></div>
+
+    <form id="login-form" onsubmit="return doLogin(event)">
+      <div class="form-group">
+        <label for="username">Uživatelské jméno</label>
+        <input type="text" id="username" name="username" required autofocus autocomplete="username">
+      </div>
+      <div class="form-group" id="display-name-group" style="display:none">
+        <label for="displayName">Zobrazované jméno</label>
+        <input type="text" id="displayName" name="displayName" placeholder="např. Tomáš Holý" autocomplete="name">
+      </div>
+      <div class="form-group">
+        <label for="password">Heslo</label>
+        <input type="password" id="password" name="password" required autocomplete="current-password">
+      </div>
+      <button type="submit" class="login-btn" id="login-btn">Přihlásit se</button>
+    </form>
+  </div>
+
+  <script>
+    var isSetupMode = false;
+
+    // Pokud už je přihlášen, přesměruj na dashboard
+    fetch('/api/auth/me', { credentials: 'include' })
+      .then(function(r) { if (r.ok) window.location.href = '/'; })
+      .catch(function() {});
+
+    // Zkontroluj jestli je potřeba prvotní setup (žádní uživatelé v DB)
+    fetch('/api/auth/setup')
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (data.needsSetup) {
+          isSetupMode = true;
+          document.getElementById('subtitle').textContent = 'Vytvořte prvního administrátora';
+          document.getElementById('display-name-group').style.display = 'block';
+          document.getElementById('login-btn').textContent = 'Vytvořit účet a přihlásit se';
+        }
+      })
+      .catch(function() {});
+
+    function doLogin(e) {
+      e.preventDefault();
+      var btn = document.getElementById('login-btn');
+      var errEl = document.getElementById('login-error');
+      errEl.style.display = 'none';
+      btn.disabled = true;
+      btn.textContent = isSetupMode ? 'Vytvářím účet...' : 'Přihlašuji...';
+
+      var username = document.getElementById('username').value.trim();
+      var password = document.getElementById('password').value;
+      var displayName = document.getElementById('displayName') ? document.getElementById('displayName').value.trim() : '';
+
+      var url = isSetupMode ? '/api/auth/setup' : '/api/auth/login';
+      var body = { username: username, password: password };
+      if (isSetupMode && displayName) body.displayName = displayName;
+
+      fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(body)
+      })
+      .then(function(r) {
+        if (!r.ok) return r.json().then(function(d) { throw new Error(d.error || 'Chyba přihlášení'); });
+        return r.json();
+      })
+      .then(function(data) {
+        // Token je nastaven jako httpOnly cookie serverem
+        // Přesměruj na původní stránku nebo dashboard
+        var redirect = new URLSearchParams(window.location.search).get('redirect') || '/';
+        window.location.href = redirect;
+      })
+      .catch(function(err) {
+        errEl.textContent = err.message;
+        errEl.style.display = 'block';
+        btn.disabled = false;
+        btn.textContent = isSetupMode ? 'Vytvořit účet a přihlásit se' : 'Přihlásit se';
+      });
+
+      return false;
+    }
+  </script>
+</body>
+</html>

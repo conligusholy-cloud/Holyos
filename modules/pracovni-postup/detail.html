@@ -3,46 +3,467 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Pracovní postup | HOLYOS</title>
+  <title>Pracovní postup — Detail | HOLYOS</title>
   <link rel="icon" type="image/svg+xml" href="../../logo-holyos-icon.svg">
   <base href="../../">
   <link rel="stylesheet" href="css/dashboard.css">
-  <link rel="stylesheet" href="modules/pracovni-postup/css/styles.css">
+  <style>
+    /* === Layout === */
+    .detail-header {
+      display:flex; align-items:center; gap:16px; padding:14px 24px;
+      background:var(--surface); border-bottom:1px solid var(--border); flex-shrink:0;
+    }
+    .back-btn {
+      font-size:20px; text-decoration:none; color:var(--text2);
+      width:36px; height:36px; display:flex; align-items:center; justify-content:center;
+      border-radius:8px; transition: background 0.15s;
+    }
+    .back-btn:hover { background:var(--surface2); color:var(--text); }
+    .detail-header-info { flex:1; }
+    .detail-header-info h1 { font-size:16px; font-weight:600; margin:0; }
+    .detail-code { font-size:12px; color:var(--text2); }
+    .detail-meta { display:flex; gap:16px; font-size:12px; color:var(--text2); }
+    .detail-meta span { display:flex; align-items:center; gap:4px; }
+
+    /* === Tabs === */
+    .tabs {
+      display:flex; gap:0; border-bottom:2px solid var(--border); padding:0 24px;
+      background:var(--surface); flex-shrink:0;
+    }
+    .tab {
+      padding:10px 20px; font-size:13px; font-weight:600; cursor:pointer;
+      color:var(--text2); background:none; border:none; border-bottom:2px solid transparent;
+      margin-bottom:-2px; transition: color 0.2s, border-color 0.2s;
+    }
+    .tab:hover { color:var(--text); }
+    .tab.active { color:var(--accent); border-bottom-color:var(--accent); }
+
+    /* === Content === */
+    .tab-content { flex:1; overflow-y:auto; }
+
+    /* === Workflow editor === */
+    .wf-toolbar {
+      display:flex; align-items:center; gap:10px; margin-bottom:16px; flex-wrap:wrap;
+    }
+    .wf-toolbar .btn { font-size:12px; padding:6px 14px; }
+    .wf-summary {
+      display:flex; gap:20px; margin-bottom:20px; flex-wrap:wrap;
+    }
+    .wf-summary-card {
+      background:var(--surface2); border:1px solid var(--border); border-radius:10px;
+      padding:12px 18px; min-width:120px;
+    }
+    .wf-summary-card .label { font-size:11px; color:var(--text2); margin-bottom:4px; }
+    .wf-summary-card .value { font-size:20px; font-weight:700; color:var(--text); }
+    .wf-summary-card .unit { font-size:12px; color:var(--text2); margin-left:4px; }
+
+    /* === Operation cards === */
+    .op-list { display:flex; flex-direction:column; gap:0; }
+    .op-card {
+      display:flex; align-items:stretch; gap:0; background:var(--surface);
+      border:1px solid var(--border); border-radius:10px; margin-bottom:8px;
+      overflow:hidden; transition: box-shadow 0.15s, border-color 0.15s;
+    }
+    .op-card:hover { border-color:var(--accent); box-shadow:0 2px 12px rgba(99,102,241,0.08); }
+    .op-card.dragging { opacity:0.5; }
+    .op-card.drag-over { border-color:var(--accent); border-style:dashed; }
+
+    .op-handle {
+      width:36px; display:flex; align-items:center; justify-content:center;
+      background:var(--surface2); cursor:grab; color:var(--text2); font-size:16px;
+      flex-shrink:0; user-select:none;
+    }
+    .op-handle:active { cursor:grabbing; }
+
+    .op-step {
+      width:40px; display:flex; align-items:center; justify-content:center;
+      font-size:18px; font-weight:800; color:var(--accent); flex-shrink:0;
+    }
+
+    .op-body { flex:1; padding:12px 16px; display:flex; flex-direction:column; gap:6px; }
+    .op-row { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+    .op-name { font-weight:600; font-size:14px; }
+    .op-ws {
+      font-size:11px; padding:2px 8px; border-radius:6px;
+      background:var(--accent); color:#fff; opacity:0.85;
+    }
+    .op-meta { display:flex; gap:14px; font-size:12px; color:var(--text2); flex-wrap:wrap; }
+    .op-meta span { display:flex; align-items:center; gap:4px; }
+
+    .op-materials {
+      margin-top:4px; padding-top:6px; border-top:1px solid var(--border);
+      font-size:12px; color:var(--text2);
+    }
+    .op-materials .mat-toggle {
+      cursor:pointer; user-select:none; display:flex; align-items:center; gap:6px;
+      padding:4px 0; font-size:12px; color:var(--text2);
+    }
+    .op-materials .mat-toggle:hover { color:var(--text); }
+    .op-materials .mat-toggle .arrow { transition: transform 0.2s; display:inline-block; }
+    .op-materials .mat-toggle .arrow.open { transform: rotate(90deg); }
+    .mat-table {
+      width:100%; border-collapse:collapse; margin-top:6px; font-size:12px;
+    }
+    .mat-table th {
+      text-align:left; padding:6px 10px; color:var(--text2); font-weight:600;
+      border-bottom:1px solid var(--border); font-size:11px;
+    }
+    .mat-table td { padding:6px 10px; border-bottom:1px solid rgba(255,255,255,0.04); }
+    .mat-table tr:last-child td { border-bottom:none; }
+    .mat-table .mat-link {
+      color:var(--accent); text-decoration:none; cursor:pointer; font-weight:600;
+    }
+    .mat-table .mat-link:hover { text-decoration:underline; }
+    .mat-table .mat-type-badge {
+      display:inline-block; font-size:10px; padding:1px 6px; border-radius:4px;
+      font-weight:600; margin-left:6px;
+    }
+    .mat-type-badge.semi { background:#f59e0b30; color:#f59e0b; }
+    .mat-type-badge.prod { background:#6366f130; color:#6366f1; }
+    .mat-table .stock-warn { color:#ef4444; font-weight:600; }
+    .mat-table .stock-ok { color:#22c55e; }
+
+    /* === Inline sub-workflow === */
+    .sub-wf {
+      background:var(--bg); border:1px solid var(--border); border-radius:8px;
+      margin:6px 0 6px 20px; padding:10px 14px; font-size:12px;
+    }
+    .sub-wf-header {
+      display:flex; align-items:center; gap:10px; margin-bottom:8px;
+    }
+    .sub-wf-header .sub-wf-title { font-weight:600; font-size:13px; }
+    .sub-wf-header .sub-wf-link {
+      font-size:11px; padding:3px 10px; border-radius:6px; cursor:pointer;
+      background:var(--accent); color:#fff; border:none; text-decoration:none;
+    }
+    .sub-wf-header .sub-wf-link:hover { opacity:0.85; }
+    .sub-wf-summary {
+      display:flex; gap:14px; margin-bottom:8px; font-size:11px; color:var(--text2);
+    }
+    .sub-wf-summary span { display:flex; align-items:center; gap:3px; }
+    .sub-wf-ops { border-top:1px solid var(--border); padding-top:6px; }
+    .sub-wf-op {
+      display:flex; align-items:center; gap:10px; padding:4px 0;
+      border-bottom:1px solid rgba(255,255,255,0.03);
+    }
+    .sub-wf-op:last-child { border-bottom:none; }
+    .sub-wf-op .sub-step {
+      width:22px; height:22px; border-radius:50%; background:var(--surface2);
+      display:flex; align-items:center; justify-content:center;
+      font-size:10px; font-weight:700; color:var(--accent); flex-shrink:0;
+    }
+    .sub-wf-op .sub-name { flex:1; }
+    .sub-wf-op .sub-dur { color:var(--text2); }
+    .sub-wf-op.sub-over-takt { color:#ef4444; }
+    .sub-wf-op.sub-over-takt .sub-step { background:#ef444420; color:#ef4444; }
+
+    .op-actions {
+      display:flex; flex-direction:column; gap:4px; padding:8px;
+      justify-content:center; flex-shrink:0;
+    }
+    .op-actions button {
+      width:28px; height:28px; border:none; border-radius:6px; cursor:pointer;
+      background:var(--surface2); color:var(--text2); font-size:13px;
+      display:flex; align-items:center; justify-content:center;
+      transition: background 0.15s, color 0.15s;
+    }
+    .op-actions button:hover { background:var(--accent); color:#fff; }
+    .op-actions button.btn-del:hover { background:#ef4444; }
+
+    /* === Arrow between ops === */
+    .op-arrow {
+      display:flex; justify-content:center; padding:2px 0;
+      color:var(--text2); font-size:16px; opacity:0.4;
+    }
+
+    /* === Modal === */
+    .modal-overlay {
+      position:fixed; top:0; left:0; right:0; bottom:0;
+      background:rgba(0,0,0,0.6); z-index:1000; display:flex;
+      align-items:center; justify-content:center;
+    }
+    .modal-box {
+      background:var(--surface); border:1px solid var(--border); border-radius:14px;
+      padding:24px; min-width:480px; max-width:640px; max-height:80vh; overflow-y:auto;
+    }
+    .modal-box h3 { margin:0 0 16px; font-size:16px; }
+    .form-group { margin-bottom:14px; }
+    .form-group label { display:block; font-size:12px; color:var(--text2); margin-bottom:4px; }
+    .form-group input, .form-group select, .form-group textarea {
+      width:100%; padding:8px 12px; background:var(--bg); color:var(--text);
+      border:1px solid var(--border); border-radius:8px; font-size:13px;
+      font-family:inherit; box-sizing:border-box;
+    }
+    .form-group textarea { min-height:60px; resize:vertical; }
+    .form-row { display:flex; gap:12px; }
+    .form-row .form-group { flex:1; }
+    .modal-actions { display:flex; justify-content:flex-end; gap:8px; margin-top:16px; }
+    .btn { padding:8px 16px; border-radius:8px; border:1px solid var(--border); cursor:pointer; font-size:13px; background:var(--surface2); color:var(--text); }
+    .btn-primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+    .btn-primary:hover { opacity:0.9; }
+    .btn-danger { background:#ef4444; color:#fff; border-color:#ef4444; }
+
+    /* === Material rows in modal === */
+    .mat-rows { margin-top:8px; }
+    .mat-row {
+      display:flex; gap:8px; align-items:center; margin-bottom:6px;
+    }
+    .mat-row input { font-size:12px; padding:6px 8px; }
+    .mat-row input { flex:1; }
+    .mat-row button { flex-shrink:0; }
+
+    /* === Searchable select === */
+    .search-select {
+      position:relative; flex:2;
+    }
+    .search-select input {
+      width:100%; padding:6px 8px; font-size:12px; background:var(--bg); color:var(--text);
+      border:1px solid var(--border); border-radius:6px; box-sizing:border-box;
+    }
+    .search-select input:focus { border-color:var(--accent); outline:none; }
+    .search-select .ss-dropdown {
+      position:absolute; top:100%; left:0; right:0; z-index:100;
+      background:var(--surface); border:1px solid var(--border); border-radius:8px;
+      max-height:220px; overflow-y:auto; margin-top:2px; box-shadow:0 8px 24px rgba(0,0,0,0.4);
+      display:none;
+    }
+    .search-select .ss-dropdown.open { display:block; }
+    .search-select .ss-item {
+      padding:6px 10px; cursor:pointer; font-size:12px; display:flex; align-items:center; gap:8px;
+      border-bottom:1px solid rgba(255,255,255,0.03);
+    }
+    .search-select .ss-item:hover { background:var(--surface2); }
+    .search-select .ss-item .ss-name { flex:1; }
+    .search-select .ss-item .ss-code { color:var(--text2); font-size:11px; }
+    .search-select .ss-item .ss-type {
+      font-size:10px; padding:1px 5px; border-radius:4px; font-weight:600;
+    }
+    .ss-type.t-material { background:rgba(255,255,255,0.08); color:var(--text2); }
+    .ss-type.t-semi { background:#f59e0b30; color:#f59e0b; }
+    .ss-type.t-prod { background:#6366f130; color:#6366f1; }
+    .search-select .ss-empty { padding:10px; text-align:center; color:var(--text2); font-size:12px; }
+
+    /* === Takt === */
+    .takt-setting {
+      display:flex; align-items:center; gap:8px; margin-left:auto;
+    }
+    .takt-setting label { font-size:12px; color:var(--text2); white-space:nowrap; }
+    .takt-setting input {
+      width:80px; padding:6px 10px; background:var(--bg); color:var(--text);
+      border:1px solid var(--border); border-radius:8px; font-size:13px; text-align:center;
+    }
+    .takt-setting input:focus { border-color:var(--accent); outline:none; }
+    .takt-setting .takt-unit { font-size:12px; color:var(--text2); }
+
+    .op-card.over-takt { border-color:#ef4444; border-width:2px; }
+    .op-card.over-takt .op-step { color:#ef4444; }
+    .op-card.under-takt { border-color:#ef4444; border-width:2px; border-style:dashed; }
+    .op-card.under-takt .op-step { color:#ef4444; }
+    .takt-warn {
+      display:inline-block; font-size:11px; padding:2px 8px; border-radius:6px;
+      background:#ef444420; color:#ef4444; font-weight:600; margin-left:8px;
+    }
+    .takt-badge {
+      display:inline-block; font-size:10px; padding:2px 7px; border-radius:5px;
+      font-weight:700; margin-left:6px; white-space:nowrap;
+    }
+    .takt-badge.takt-green { background:#22c55e25; color:#22c55e; }
+    .takt-badge.takt-orange { background:#f59e0b25; color:#f59e0b; }
+    .takt-badge.takt-red { background:#ef444425; color:#ef4444; }
+    .takt-badge.takt-over { background:#ef444435; color:#ef4444; }
+
+    .wf-summary-card.takt-card { border-color:var(--accent); }
+    .wf-summary-card.takt-card input {
+      width:60px; background:var(--bg); color:var(--text); border:1px solid var(--border);
+      border-radius:6px; font-size:18px; font-weight:700; text-align:center; padding:2px 4px;
+    }
+    .wf-summary-card.takt-card input:focus { border-color:var(--accent); outline:none; }
+
+    /* === Empty state === */
+    .empty-ops {
+      text-align:center; padding:60px 20px; color:var(--text2);
+    }
+    .empty-ops .icon { font-size:48px; margin-bottom:12px; }
+
+    /* === Split layout === */
+    .split-container { display:flex; flex:1; overflow:hidden; }
+    .split-left { flex:1; overflow-y:auto; padding:20px 24px; }
+    .split-right {
+      width:320px; min-width:260px; border-left:1px solid var(--border);
+      background:var(--surface); display:flex; flex-direction:column; overflow:hidden;
+      transition: width 0.2s;
+    }
+    .split-right.collapsed { width:40px; min-width:40px; }
+    .split-right.collapsed .history-body,
+    .split-right.collapsed .history-header-title,
+    .split-right.collapsed .history-actions { display:none; }
+
+    .history-header {
+      display:flex; align-items:center; gap:8px; padding:12px 14px;
+      border-bottom:1px solid var(--border); flex-shrink:0;
+    }
+    .history-header-title { font-size:13px; font-weight:600; flex:1; }
+    .history-toggle {
+      width:28px; height:28px; border:none; border-radius:6px; cursor:pointer;
+      background:var(--surface2); color:var(--text2); font-size:14px;
+      display:flex; align-items:center; justify-content:center;
+    }
+    .history-toggle:hover { color:var(--text); background:var(--accent); }
+    .history-actions { display:flex; gap:6px; }
+    .history-actions button { font-size:11px; padding:4px 8px; }
+
+    .history-body { flex:1; overflow-y:auto; padding:8px 0; }
+
+    .history-item {
+      padding:10px 14px; border-bottom:1px solid rgba(255,255,255,0.03);
+      font-size:12px; position:relative;
+    }
+    .history-item:hover { background:var(--surface2); }
+    .history-item .hi-time { color:var(--text2); font-size:10px; margin-bottom:3px; }
+    .history-item .hi-action { color:var(--text); }
+    .history-item .hi-detail { color:var(--text2); font-size:11px; margin-top:2px; }
+    .history-item .hi-undo {
+      position:absolute; right:10px; top:50%; transform:translateY(-50%);
+      font-size:11px; padding:3px 8px; border-radius:5px; cursor:pointer;
+      background:var(--surface2); border:1px solid var(--border); color:var(--text2);
+      display:none;
+    }
+    .history-item:hover .hi-undo { display:block; }
+    .history-item .hi-undo:hover { background:var(--accent); color:#fff; border-color:var(--accent); }
+
+    .hi-icon {
+      display:inline-block; width:20px; height:20px; border-radius:50%;
+      text-align:center; line-height:20px; font-size:11px; margin-right:6px;
+    }
+    .hi-icon.add { background:#22c55e30; color:#22c55e; }
+    .hi-icon.edit { background:#6366f130; color:#6366f1; }
+    .hi-icon.delete { background:#ef444430; color:#ef4444; }
+    .hi-icon.reorder { background:#f59e0b30; color:#f59e0b; }
+    .hi-icon.takt { background:#8b5cf630; color:#8b5cf6; }
+
+    .history-empty {
+      padding:40px 14px; text-align:center; color:var(--text2); font-size:12px;
+    }
+
+    /* === Toast === */
+    .toast { position:fixed; bottom:20px; right:20px; padding:10px 20px; border-radius:8px; background:#22c55e; color:#fff; font-size:13px; opacity:0; transition:opacity 0.3s; z-index:9999; pointer-events:none; }
+    .toast.show { opacity:1; }
+    .toast.error { background:#ef4444; }
+  </style>
 </head>
 <body>
   <aside id="sidebar" class="sidebar"></aside>
 
   <div class="main-wrapper" style="display:flex;flex-direction:column;height:100vh;">
 
-    <!-- Header s názvem výrobku -->
+    <!-- Header -->
     <div class="detail-header">
-      <a href="modules/pracovni-postup/index.html" class="back-btn" title="Zpět na seznam">←</a>
+      <a href="modules/pracovni-postup/index.html" class="back-btn" title="Zpět na seznam">&larr;</a>
       <div class="detail-header-info">
         <h1 id="product-name">Načítám...</h1>
         <span class="detail-code" id="product-code"></span>
       </div>
-      <div class="detail-header-right">
-        <span class="status-dot disconnected" id="status-dot"></span>
-        <span id="status-text">Načítám</span>
-      </div>
+      <div class="detail-meta" id="detail-meta"></div>
     </div>
 
-    <!-- Záložky -->
+    <!-- Tabs -->
     <div class="tabs">
-      <button class="tab active" data-tab="sestava" onclick="switchTab('sestava')">Sestava zboží</button>
-      <button class="tab" data-tab="postup" onclick="switchTab('postup')">Pracovní postup</button>
-      <button class="tab" data-tab="normovane" onclick="switchTab('normovane')">Normované</button>
-      <button class="tab" data-tab="vizualizace" onclick="switchTab('vizualizace')">Vizualizace</button>
+      <button class="tab active" data-tab="postup" onclick="switchTab('postup')">Pracovní postup</button>
+      <button class="tab" data-tab="souhrn" onclick="switchTab('souhrn')">Souhrn materiálů</button>
     </div>
 
-    <!-- Tab content -->
-    <div class="tab-content" id="tab-content">
-      <div class="loading-state" id="loading">
-        <div class="loading-spinner"></div>
-        <p>Načítám data z Factorify...</p>
+    <!-- Split: editor + historie -->
+    <div class="split-container">
+      <!-- Levá strana: editor -->
+      <div class="split-left" id="tab-content">
+        <div class="empty-ops"><div class="loading-spinner"></div><p>Načítám...</p></div>
+      </div>
+
+      <!-- Pravá strana: historie změn -->
+      <div class="split-right" id="history-panel">
+        <div class="history-header">
+          <button class="history-toggle" onclick="toggleHistory()" title="Sbalit/Rozbalit">&#9776;</button>
+          <span class="history-header-title">Historie změn</span>
+        </div>
+        <div class="history-body" id="history-body">
+          <div class="history-empty">Zatím žádné změny</div>
+        </div>
       </div>
     </div>
 
+  </div>
+
+  <!-- Operation modal -->
+  <div id="op-modal" class="modal-overlay" style="display:none;" onclick="if(event.target===this)closeModal()">
+    <div class="modal-box">
+      <h3 id="modal-title">Nová operace</h3>
+      <input type="hidden" id="op-id">
+
+      <div class="form-row">
+        <div class="form-group" style="flex:2;">
+          <label>Název operace *</label>
+          <input type="text" id="op-name" placeholder="Např. Řezání, Svařování...">
+        </div>
+        <div class="form-group" style="flex:1;">
+          <label>Pořadí</label>
+          <input type="number" id="op-step" min="1" value="1">
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label>Pracoviště</label>
+          <select id="op-ws"><option value="">— bez pracoviště —</option></select>
+        </div>
+        <div class="form-group">
+          <label>Fáze</label>
+          <input type="text" id="op-phase" placeholder="Volitelná fáze">
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label>Doba trvání (norma pro 1 osobu)</label>
+          <input type="number" id="op-duration" min="0" placeholder="0">
+        </div>
+        <div class="form-group">
+          <label>Jednotka</label>
+          <select id="op-duration-unit">
+            <option value="MINUTE">Minuty</option>
+            <option value="HOUR">Hodiny</option>
+            <option value="SECOND">Sekundy</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Přípravný čas (min)</label>
+          <input type="number" id="op-prep" min="0" value="0">
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label>Počet pracovníků</label>
+          <input type="number" id="op-workers" min="1" value="1">
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>Popis</label>
+        <textarea id="op-desc" placeholder="Volitelný popis operace..."></textarea>
+      </div>
+
+      <!-- Materiály -->
+      <div class="form-group">
+        <label>Spotřeba materiálu</label>
+        <div class="mat-rows" id="mat-rows"></div>
+        <button class="btn" type="button" onclick="addMatRow()" style="font-size:11px;padding:4px 10px;margin-top:4px;">+ Přidat materiál</button>
+      </div>
+
+      <div class="modal-actions">
+        <button class="btn" onclick="closeModal()">Zrušit</button>
+        <button class="btn btn-primary" onclick="saveOperation()">Uložit</button>
+      </div>
+    </div>
   </div>
 
   <!-- Toast -->
@@ -55,7 +476,1008 @@
     initDate();
   </script>
 
-  <!-- TS moduly (zkompilované) -->
-  <script type="module" src="../../dist/client/client/modules/pracovni-postup/detail.js"></script>
+  <script>
+    // =========================================================================
+    // Pracovní postup — Detail výrobku s workflow editorem
+    // =========================================================================
+
+    const token = sessionStorage.getItem('token');
+    let product = null;
+    let workstations = [];
+    let allMaterials = [];
+    let allProductsList = []; // pro mapování material → product
+    let currentTab = 'postup';
+    let dragSrcId = null;
+
+    // Dekóduj uživatele z JWT
+    let currentUser = 'Neznámý';
+    try {
+      if (token) {
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        currentUser = payload.display_name || payload.username || 'Uživatel #' + payload.id;
+      }
+    } catch(e) {}
+
+    // === API helper ===
+    async function api(path, opts = {}) {
+      const headers = { 'Accept': 'application/json', 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = 'Bearer ' + token;
+      const r = await fetch(path, { ...opts, headers });
+      if (!r.ok) {
+        const text = await r.text().catch(() => '');
+        throw new Error('API ' + r.status + ': ' + text.substring(0, 200));
+      }
+      return r.json();
+    }
+
+    // === Inicializace ===
+    document.addEventListener('DOMContentLoaded', async () => {
+      const params = new URLSearchParams(window.location.search);
+      const id = params.get('id');
+      if (!id) {
+        document.getElementById('product-name').textContent = 'Chybí ID výrobku';
+        document.getElementById('tab-content').innerHTML = '<div class="empty-ops"><p>V URL chybí parametr ?id=</p><a href="modules/pracovni-postup/index.html" class="btn">Zpět</a></div>';
+        return;
+      }
+
+      try {
+        // Načti paralelně produkt, pracoviště a materiály
+        const [prod, ws, mats, prods] = await Promise.all([
+          api('/api/production/products/' + id),
+          api('/api/production/workstations'),
+          api('/api/production/materials'),
+          api('/api/production/products'),
+        ]);
+        product = prod;
+        workstations = ws;
+        allMaterials = mats;
+        allProductsList = prods;
+
+        document.getElementById('product-name').textContent = product.name;
+        document.getElementById('product-code').textContent = product.code;
+        updateMeta();
+        renderTab();
+      } catch (err) {
+        document.getElementById('product-name').textContent = 'Chyba';
+        document.getElementById('tab-content').innerHTML = '<div class="empty-ops"><p>' + esc(err.message) + '</p><a href="modules/pracovni-postup/index.html" class="btn">Zpět</a></div>';
+      }
+    });
+
+    // === Meta info ===
+    function updateMeta() {
+      const ops = product.operations || [];
+      const total = calcTotalTime(ops);
+      const totalWorkers = ops.reduce((s, o) => Math.max(s, o.workers_count || 1), 0);
+      const meta = document.getElementById('detail-meta');
+      meta.innerHTML =
+        '<span>&#9881; ' + ops.length + ' operací</span>' +
+        '<span>&#9202; ' + formatDuration(total.real) + ' reálně</span>' +
+        '<span>&#128101; max ' + totalWorkers + ' prac.</span>';
+    }
+
+    // Normovaný čas v minutách (pro 1 osobu)
+    function normMinutes(op) {
+      const d = op.duration || 0;
+      if (op.duration_unit === 'HOUR') return d * 60;
+      if (op.duration_unit === 'SECOND') return d / 60;
+      return d;
+    }
+
+    // Reálný čas = norma / počet pracovníků
+    function realMinutes(op) {
+      const workers = op.workers_count || 1;
+      return normMinutes(op) / workers;
+    }
+
+    function formatDuration(min) {
+      if (min < 60) return Math.round(min) + ' min';
+      const h = Math.floor(min / 60);
+      const m = Math.round(min % 60);
+      return h + 'h ' + (m > 0 ? m + 'min' : '');
+    }
+
+    // Takt utilization badge: ≤80% červená, 80-90% oranžová, 90-100% zelená, >100% červená s překročením
+    function taktBadge(realMin, taktMin) {
+      if (!taktMin || !realMin) return '';
+      const pct = Math.round((realMin / taktMin) * 100);
+      let cls, icon;
+      if (pct > 100) { cls = 'takt-over'; icon = '&#9888;'; }
+      else if (pct >= 90) { cls = 'takt-green'; icon = '&#10003;'; }
+      else if (pct >= 80) { cls = 'takt-orange'; icon = ''; }
+      else { cls = 'takt-red'; icon = '&#9660;'; }
+      const tooltip = 'Využití taktu: ' + formatDuration(realMin) + ' z ' + formatDuration(taktMin) + ' (' + pct + '%)';
+      return '<span class="takt-badge ' + cls + '" title="' + tooltip + '">Takt ' + pct + '%' + (icon ? ' ' + icon : '') + '</span>';
+    }
+
+    // === Tab switch ===
+    function switchTab(tab) {
+      currentTab = tab;
+      document.querySelectorAll('.tab').forEach(t => {
+        t.classList.toggle('active', t.dataset.tab === tab);
+      });
+      renderTab();
+    }
+
+    function renderTab() {
+      if (currentTab === 'postup') renderWorkflow();
+      else if (currentTab === 'souhrn') renderMaterialSummary();
+    }
+
+    // === Render workflow ===
+    function renderWorkflow() {
+      const content = document.getElementById('tab-content');
+      const ops = product.operations || [];
+
+      // Toolbar
+      let html = '<div class="wf-toolbar">' +
+        '<button class="btn btn-primary" onclick="openAddOp()">+ Nová operace</button>' +
+        '</div>';
+
+      // Summary cards — včetně rekurzivních sub-produktů
+      const totalDirect = { norm: ops.reduce((s, o) => s + normMinutes(o), 0), real: ops.reduce((s, o) => s + realMinutes(o), 0) };
+      const totalWithSubs = calcTotalTime(ops);
+      const totalPrep = ops.reduce((s, o) => s + (o.preparation_time || 0), 0);
+      const maxWorkers = ops.reduce((s, o) => Math.max(s, o.workers_count || 1), 0);
+      const totalMats = ops.reduce((s, o) => s + (o.materials || []).length, 0);
+      const hasSubs = totalWithSubs.norm > totalDirect.norm;
+
+      const taktVal = product.takt_time || '';
+      const overTaktCount = taktVal ? ops.filter(o => realMinutes(o) > taktVal).length : 0;
+
+      html += '<div class="wf-summary">' +
+        summaryCard('Operací', ops.length, '') +
+        summaryCard('Norma (1 os.)', formatDuration(totalWithSubs.norm), hasSubs ? '(vč. sub)' : '') +
+        summaryCard('Reálný čas', formatDuration(totalWithSubs.real), hasSubs ? '(vč. sub)' : '') +
+        summaryCard('Příprava', totalPrep, 'min') +
+        summaryCard('Max pracovníků', maxWorkers, '') +
+        summaryCard('Materiálů', totalMats, '') +
+        '<div class="wf-summary-card takt-card">' +
+          '<div class="label">Linkový takt</div>' +
+          '<div class="value"><input type="number" id="takt-input" min="1" value="' + taktVal + '" placeholder="—" onchange="saveTakt(this.value)" title="Maximální čas na operaci v minutách"><span class="unit">min</span></div>' +
+          (overTaktCount > 0 ? '<div style="font-size:11px;color:#ef4444;margin-top:4px;">' + overTaktCount + ' operací překračuje takt!</div>' : '') +
+        '</div>' +
+        '</div>';
+
+      if (ops.length === 0) {
+        html += '<div class="empty-ops"><div class="icon">&#128736;</div>' +
+          '<p>Žádné operace v pracovním postupu</p>' +
+          '<p style="font-size:12px;">Klikněte na "+ Nová operace" pro přidání prvního kroku</p></div>';
+      } else {
+        html += '<div class="op-list" id="op-list">';
+        ops.forEach((op, i) => {
+          if (i > 0) html += '<div class="op-arrow">&#9660;</div>';
+          html += renderOpCard(op, i);
+        });
+        html += '</div>';
+      }
+
+      content.innerHTML = html;
+      initDragDrop();
+    }
+
+    function summaryCard(label, value, unit) {
+      return '<div class="wf-summary-card"><div class="label">' + label + '</div>' +
+        '<div class="value">' + value + '<span class="unit">' + unit + '</span></div></div>';
+    }
+
+    function renderOpCard(op, idx) {
+      const wsName = op.workstation ? op.workstation.name : '—';
+      const norm = op.duration ? op.duration + ' ' + unitLabel(op.duration_unit) : '—';
+      const workers = op.workers_count || 1;
+      const realMin = realMinutes(op);
+      const real = op.duration ? formatDuration(realMin) : '—';
+      const takt = product.takt_time;
+      const overTakt = takt && realMin > takt;
+      const underTakt = takt && realMin > 0 && (realMin / takt) < 0.8;
+      const mats = op.materials || [];
+
+      let html = '<div class="op-card' + (overTakt ? ' over-takt' : '') + (underTakt ? ' under-takt' : '') + '" draggable="true" data-op-id="' + op.id + '">' +
+        '<div class="op-handle" title="Přetáhni pro změnu pořadí">&#8942;&#8942;</div>' +
+        '<div class="op-step">' + op.step_number + '</div>' +
+        '<div class="op-body">' +
+          '<div class="op-row">' +
+            '<span class="op-name">' + esc(op.name) + '</span>' +
+            (op.workstation ? '<span class="op-ws">' + esc(wsName) + '</span>' : '') +
+          '</div>' +
+          '<div class="op-meta">' +
+            '<span>&#9202; Norma: ' + norm + '</span>' +
+            (workers > 1 ? '<span>&#9989; Reálně: ' + real + '</span>' : '') +
+            (op.preparation_time ? '<span>&#128260; Příprava: ' + op.preparation_time + ' min</span>' : '') +
+            '<span>&#128101; ' + workers + (workers > 1 ? ' prac.' : ' os.') + '</span>' +
+            (takt ? taktBadge(realMin, takt) : '') +
+          '</div>';
+
+      if (op.description) {
+        html += '<div style="font-size:12px;color:var(--text2);margin-top:2px;">' + esc(op.description) + '</div>';
+      }
+
+      if (mats.length > 0) {
+        const matId = 'mat-' + op.id;
+        html += '<div class="op-materials">' +
+          '<div class="mat-toggle" onclick="toggleMats(\'' + matId + '\', this)">' +
+            '<span class="arrow">&#9654;</span> Materiál (' + mats.length + ')' +
+          '</div>' +
+          '<div id="' + matId + '" style="display:none;">' +
+            '<table class="mat-table">' +
+              '<thead><tr><th>Materiál</th><th>Kód</th><th>Typ</th><th>Norma</th><th>Reálně</th><th>Pracovníků</th><th style="text-align:right;">Množství</th><th>Jedn.</th></tr></thead>' +
+              '<tbody>';
+        mats.forEach(m => {
+          const mat = m.material || {};
+          const lp = m.linked_product;
+          const matType = (mat.type || 'material').toLowerCase();
+
+          // Je to polotovar nebo výrobek? (z materiálu NEBO z linked_product)
+          const isSemi = matType.includes('semi') || matType.includes('polotovar');
+          const isProd = matType.includes('product') || matType.includes('výrobek') || matType.includes('vyrobek');
+          const isComposite = isSemi || isProd;
+
+          const hasOps = lp && lp.operations && lp.operations.length > 0;
+          const subWfId = 'sub-wf-' + op.id + '-' + m.id;
+
+          // Název — proklikávací pokud je to výrobek/polotovar
+          let nameCell;
+          if (hasOps) {
+            nameCell = '<span class="mat-link" onclick="toggleSubWf(\'' + subWfId + '\', this)" style="cursor:pointer;">' + esc(mat.name) + '</span>' +
+              ' <span style="font-size:10px;color:var(--text2);">(' + lp.operations.length + ' op.)</span>';
+          } else if (lp) {
+            nameCell = '<a class="mat-link" href="modules/pracovni-postup/detail.html?id=' + lp.id + '">' + esc(mat.name) + '</a>' +
+              ' <span style="font-size:10px;color:#ef4444;">(bez postupu)</span>';
+          } else if (isComposite) {
+            nameCell = '<span style="font-weight:600;">' + esc(mat.name) + '</span>' +
+              ' <span style="font-size:10px;color:#ef4444;">(nemá postup)</span>';
+          } else {
+            nameCell = esc(mat.name);
+          }
+
+          // Typ badge
+          let typeBadge;
+          if (isSemi) typeBadge = '<span class="mat-type-badge semi">Polotovar</span>';
+          else if (isProd) typeBadge = '<span class="mat-type-badge prod">Výrobek</span>';
+          else typeBadge = '<span style="font-size:11px;color:var(--text2);">Materiál</span>';
+
+          // Norma, reálně, pracovníci — jen pro polotovary/výrobky + takt badge
+          let normCell = '';
+          let realCell = '';
+          let workersCell = '';
+          if (hasOps) {
+            const subTimes = calcTotalTime(lp.operations);
+            const taktRef = lp.takt_time || product.takt_time;
+            normCell = '<span style="font-weight:600;">' + formatDuration(subTimes.norm) + '</span>';
+            realCell = '<span style="font-weight:600;">' + formatDuration(subTimes.real) + '</span>' + (taktRef ? taktBadge(subTimes.real, taktRef) : '');
+            const maxW = lp.operations.reduce((mx, o) => Math.max(mx, o.workers_count || 1), 0);
+            workersCell = '<span style="font-weight:600;">' + maxW + '</span>';
+          } else if (isComposite) {
+            normCell = '<span style="color:#ef4444;font-size:11px;">—</span>';
+            realCell = '<span style="color:#ef4444;font-size:11px;">—</span>';
+            workersCell = '<span style="color:#ef4444;font-size:11px;">—</span>';
+          }
+
+          html += '<tr>' +
+            '<td>' + nameCell + '</td>' +
+            '<td style="color:var(--text2);">' + esc(mat.code || '') + '</td>' +
+            '<td>' + typeBadge + '</td>' +
+            '<td>' + normCell + '</td>' +
+            '<td>' + realCell + '</td>' +
+            '<td>' + workersCell + '</td>' +
+            '<td style="text-align:right;font-weight:600;">' + m.quantity + '</td>' +
+            '<td>' + esc(m.unit) + '</td>' +
+          '</tr>';
+
+          // Inline sub-workflow — rekurzivní (polotovar v polotovaru atd.)
+          if (hasOps) {
+            html += '<tr id="' + subWfId + '" style="display:none;"><td colspan="8" style="padding:0;">' +
+              renderSubWorkflow(lp, 0) +
+            '</td></tr>';
+          }
+        });
+        html += '</tbody></table></div></div>';
+      }
+
+      html += '</div>' +
+        '<div class="op-actions">' +
+          '<button onclick="openEditOp(' + op.id + ')" title="Upravit">&#9998;</button>' +
+          '<button class="btn-del" onclick="deleteOp(' + op.id + ')" title="Smazat">&#128465;</button>' +
+        '</div>' +
+        '</div>';
+
+      return html;
+    }
+
+    // === Rekurzivní výpočet celkového času (včetně sub-produktů) ===
+    // Vrátí { norm: minuty, real: minuty } — zahrnuje časy operací + sub-produkty do 30 úrovní
+    function calcTotalTime(operations, depth) {
+      if (!depth) depth = 0;
+      if (depth >= 30) return { norm: 0, real: 0 };
+      let totalNorm = 0;
+      let totalReal = 0;
+      (operations || []).forEach(op => {
+        totalNorm += normMinutes(op);
+        totalReal += realMinutes(op);
+        // Přičti časy sub-produktů z materiálů
+        (op.materials || []).forEach(m => {
+          const lp = m.linked_product;
+          if (lp && lp.operations && lp.operations.length > 0) {
+            const sub = calcTotalTime(lp.operations, depth + 1);
+            totalNorm += sub.norm * (parseFloat(m.quantity) || 1);
+            totalReal += sub.real * (parseFloat(m.quantity) || 1);
+          }
+        });
+      });
+      return { norm: totalNorm, real: totalReal };
+    }
+
+    // === Rekurzivní render sub-workflow ===
+    function renderSubWorkflow(linkedProduct, depth) {
+      const subOps = linkedProduct.operations || [];
+      const subTakt = linkedProduct.takt_time;
+      const times = calcTotalTime(subOps);
+      const maxSubWorkers = subOps.reduce((mx, o) => Math.max(mx, o.workers_count || 1), 0);
+      const indent = Math.min(depth, 4) * 10; // odsazení podle hloubky
+
+      let html = '<div class="sub-wf" style="margin-left:' + (20 + indent) + 'px;">' +
+        '<div class="sub-wf-header">' +
+          '<span class="sub-wf-title">' + esc(linkedProduct.name) + '</span>' +
+          (subTakt ? '<span style="font-size:11px;color:var(--text2);">Takt: ' + subTakt + ' min</span>' : '') +
+          '<a class="sub-wf-link" href="modules/pracovni-postup/detail.html?id=' + linkedProduct.id + '">&#9998; Upravit postup</a>' +
+        '</div>' +
+        '<div class="sub-wf-summary">' +
+          '<span>&#9881; ' + subOps.length + ' operací</span>' +
+          '<span>&#9202; Norma: ' + formatDuration(times.norm) + '</span>' +
+          '<span>&#9989; Reálně: ' + formatDuration(times.real) + '</span>' +
+          '<span>&#128101; ' + maxSubWorkers + (maxSubWorkers > 1 ? ' prac.' : ' os.') + '</span>' +
+          ((subTakt || product.takt_time) ? taktBadge(times.real, subTakt || product.takt_time) : '') +
+        '</div>' +
+        '<div class="sub-wf-ops">';
+
+      subOps.forEach(so => {
+        const w = so.workers_count || 1;
+        const realMin = realMinutes(so);
+        const effectiveTakt = subTakt || product.takt_time;
+        html += '<div class="sub-wf-op' + (effectiveTakt && realMin > effectiveTakt ? ' sub-over-takt' : '') + '">' +
+          '<span class="sub-step">' + so.step_number + '</span>' +
+          '<span class="sub-name">' + esc(so.name) + '</span>' +
+          '<span class="sub-dur">' + (so.duration || 0) + ' ' + unitLabel(so.duration_unit) +
+            (w > 1 ? ' / ' + w + ' prac. = ' + formatDuration(realMin) : '') +
+          '</span>' +
+          (effectiveTakt ? taktBadge(realMin, effectiveTakt) : '') +
+        '</div>';
+
+        // Materiály sub-operace
+        const soMats = so.materials || [];
+        if (soMats.length > 0) {
+          const subMatId = 'sub-mat-' + linkedProduct.id + '-' + so.id + '-' + depth;
+          html += '<div style="margin-left:32px;margin-bottom:4px;">' +
+            '<div class="mat-toggle" onclick="toggleMats(\'' + subMatId + '\', this)" style="font-size:11px;">' +
+              '<span class="arrow">&#9654;</span> Materiál (' + soMats.length + ')' +
+            '</div>' +
+            '<div id="' + subMatId + '" style="display:none;">' +
+              '<table class="mat-table" style="margin-left:0;">' +
+                '<thead><tr><th>Materiál</th><th>Kód</th><th>Typ</th><th>Norma</th><th>Reálně</th><th>Pracovníků</th><th style="text-align:right;">Množství</th><th>Jedn.</th></tr></thead>' +
+                '<tbody>';
+          soMats.forEach(sm => {
+            const smat = sm.material || {};
+            const slp = sm.linked_product;
+            const smatType = (smat.type || 'material').toLowerCase();
+            const sIsSemi = smatType.includes('semi') || smatType.includes('polotovar');
+            const sIsProd = smatType.includes('product') || smatType.includes('výrobek') || smatType.includes('vyrobek');
+            const sIsComposite = sIsSemi || sIsProd;
+            const sHasOps = slp && slp.operations && slp.operations.length > 0;
+            const sSubWfId = 'sub-wf-deep-' + linkedProduct.id + '-' + so.id + '-' + sm.id + '-' + depth;
+
+            // Název
+            let sNameCell;
+            if (sHasOps) {
+              sNameCell = '<span class="mat-link" onclick="toggleSubWf(\'' + sSubWfId + '\', this)" style="cursor:pointer;">' + esc(smat.name) + '</span>' +
+                ' <span style="font-size:10px;color:var(--text2);">(' + slp.operations.length + ' op.)</span>';
+            } else if (slp) {
+              sNameCell = '<a class="mat-link" href="modules/pracovni-postup/detail.html?id=' + slp.id + '">' + esc(smat.name) + '</a>' +
+                ' <span style="font-size:10px;color:#ef4444;">(bez postupu)</span>';
+            } else if (sIsComposite) {
+              sNameCell = '<span style="font-weight:600;">' + esc(smat.name) + '</span>' +
+                ' <span style="font-size:10px;color:#ef4444;">(nemá postup)</span>';
+            } else {
+              sNameCell = esc(smat.name);
+            }
+
+            // Typ badge
+            let sTypeBadge;
+            if (sIsSemi) sTypeBadge = '<span class="mat-type-badge semi">Polotovar</span>';
+            else if (sIsProd) sTypeBadge = '<span class="mat-type-badge prod">Výrobek</span>';
+            else sTypeBadge = '<span style="font-size:11px;color:var(--text2);">Materiál</span>';
+
+            // Norma, reálně, pracovníci — jen pro polotovary/výrobky + takt badge
+            let sNormCell = '';
+            let sRealCell = '';
+            let sWorkersCell = '';
+            if (sHasOps) {
+              const sTimes = calcTotalTime(slp.operations);
+              const sTaktRef = slp.takt_time || linkedProduct.takt_time || product.takt_time;
+              sNormCell = '<span style="font-weight:600;">' + formatDuration(sTimes.norm) + '</span>';
+              sRealCell = '<span style="font-weight:600;">' + formatDuration(sTimes.real) + '</span>' + (sTaktRef ? taktBadge(sTimes.real, sTaktRef) : '');
+              const sMaxW = slp.operations.reduce((mx, o) => Math.max(mx, o.workers_count || 1), 0);
+              sWorkersCell = '<span style="font-weight:600;">' + sMaxW + '</span>';
+            } else if (sIsComposite) {
+              sNormCell = '<span style="color:#ef4444;font-size:11px;">—</span>';
+              sRealCell = '<span style="color:#ef4444;font-size:11px;">—</span>';
+              sWorkersCell = '<span style="color:#ef4444;font-size:11px;">—</span>';
+            }
+
+            html += '<tr>' +
+              '<td>' + sNameCell + '</td>' +
+              '<td style="color:var(--text2);">' + esc(smat.code || '') + '</td>' +
+              '<td>' + sTypeBadge + '</td>' +
+              '<td>' + sNormCell + '</td>' +
+              '<td>' + sRealCell + '</td>' +
+              '<td>' + sWorkersCell + '</td>' +
+              '<td style="text-align:right;font-weight:600;">' + sm.quantity + '</td>' +
+              '<td>' + esc(sm.unit) + '</td>' +
+            '</tr>';
+
+            // Rekurzivní sub-workflow pro další úroveň
+            if (sHasOps) {
+              html += '<tr id="' + sSubWfId + '" style="display:none;"><td colspan="8" style="padding:0;">' +
+                renderSubWorkflow(slp, depth + 1) +
+              '</td></tr>';
+            }
+          });
+          html += '</tbody></table></div></div>';
+        }
+      });
+
+      html += '</div></div>';
+      return html;
+    }
+
+    function unitLabel(u) {
+      if (u === 'HOUR') return 'hod';
+      if (u === 'SECOND') return 'sek';
+      return 'min';
+    }
+
+    // === Drag & drop pro přeřazení ===
+    function initDragDrop() {
+      const cards = document.querySelectorAll('.op-card');
+      cards.forEach(card => {
+        card.addEventListener('dragstart', e => {
+          dragSrcId = parseInt(card.dataset.opId);
+          card.classList.add('dragging');
+          e.dataTransfer.effectAllowed = 'move';
+        });
+        card.addEventListener('dragend', () => {
+          card.classList.remove('dragging');
+          document.querySelectorAll('.op-card').forEach(c => c.classList.remove('drag-over'));
+        });
+        card.addEventListener('dragover', e => {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'move';
+          card.classList.add('drag-over');
+        });
+        card.addEventListener('dragleave', () => card.classList.remove('drag-over'));
+        card.addEventListener('drop', async e => {
+          e.preventDefault();
+          card.classList.remove('drag-over');
+          const targetId = parseInt(card.dataset.opId);
+          if (dragSrcId === targetId) return;
+          await reorderOps(dragSrcId, targetId);
+        });
+      });
+    }
+
+    async function reorderOps(srcId, targetId) {
+      const ops = [...product.operations];
+      const srcIdx = ops.findIndex(o => o.id === srcId);
+      const tgtIdx = ops.findIndex(o => o.id === targetId);
+      if (srcIdx < 0 || tgtIdx < 0) return;
+
+      // Přesuň
+      const [moved] = ops.splice(srcIdx, 1);
+      ops.splice(tgtIdx, 0, moved);
+
+      // Nové pořadí
+      const order = ops.map((o, i) => ({ id: o.id, step_number: i + 1 }));
+
+      // Předchozí pořadí pro undo
+      const prevOrder = product.operations.map(o => ({ id: o.id, step_number: o.step_number }));
+      const movedName = moved.name;
+
+      try {
+        const updated = await api('/api/production/products/' + product.id + '/reorder-operations', {
+          method: 'PUT',
+          body: JSON.stringify({ order }),
+        });
+        product = updated;
+        updateMeta();
+        renderTab();
+        addHistory('reorder', 'Přeřazení: ' + movedName, 'Krok ' + (srcIdx+1) + ' → ' + (tgtIdx+1), { type: 'reorder', prevOrder });
+        toast('Pořadí aktualizováno');
+      } catch (err) {
+        toast('Chyba: ' + err.message, true);
+      }
+    }
+
+    // === Modal: Add / Edit operation ===
+    function openAddOp() {
+      document.getElementById('modal-title').textContent = 'Nová operace';
+      document.getElementById('op-id').value = '';
+      document.getElementById('op-name').value = '';
+      const nextStep = (product.operations || []).length + 1;
+      document.getElementById('op-step').value = nextStep;
+      document.getElementById('op-phase').value = '';
+      document.getElementById('op-duration').value = '';
+      document.getElementById('op-duration-unit').value = 'MINUTE';
+      document.getElementById('op-prep').value = '0';
+      document.getElementById('op-workers').value = '1';
+      document.getElementById('op-desc').value = '';
+
+      populateWsSelect('');
+      document.getElementById('mat-rows').innerHTML = '';
+      document.getElementById('op-modal').style.display = 'flex';
+    }
+
+    function openEditOp(opId) {
+      const op = product.operations.find(o => o.id === opId);
+      if (!op) return;
+
+      document.getElementById('modal-title').textContent = 'Upravit operaci';
+      document.getElementById('op-id').value = op.id;
+      document.getElementById('op-name').value = op.name;
+      document.getElementById('op-step').value = op.step_number;
+      document.getElementById('op-phase').value = op.phase || '';
+      document.getElementById('op-duration').value = op.duration || '';
+      document.getElementById('op-duration-unit').value = op.duration_unit || 'MINUTE';
+      document.getElementById('op-prep').value = op.preparation_time || 0;
+      document.getElementById('op-workers').value = op.workers_count || 1;
+      document.getElementById('op-desc').value = op.description || '';
+
+      populateWsSelect(op.workstation_id || '');
+
+      // Materiály
+      const matRows = document.getElementById('mat-rows');
+      matRows.innerHTML = '';
+      (op.materials || []).forEach(m => {
+        // Předej product_id z linked_product (pokud je napojený)
+        const lpId = m.linked_product ? m.linked_product.id : (m.product_id || null);
+        addMatRow(m.material_id, m.quantity, m.unit, m.id, lpId);
+      });
+
+      document.getElementById('op-modal').style.display = 'flex';
+    }
+
+    function closeModal() {
+      document.getElementById('op-modal').style.display = 'none';
+    }
+
+    function populateWsSelect(selectedId) {
+      const sel = document.getElementById('op-ws');
+      sel.innerHTML = '<option value="">— bez pracoviště —</option>';
+      workstations.forEach(ws => {
+        sel.innerHTML += '<option value="' + ws.id + '"' + (ws.id == selectedId ? ' selected' : '') + '>' + esc(ws.name) + (ws.code ? ' (' + esc(ws.code) + ')' : '') + '</option>';
+      });
+    }
+
+    // === Material rows ===
+    function addMatRow(materialId, quantity, unit, existingId, productId) {
+      const container = document.getElementById('mat-rows');
+      const row = document.createElement('div');
+      row.className = 'mat-row';
+      row.dataset.materialId = materialId || '';
+      // Nastav product_id — z parametru, nebo z allMaterials (API linked_product_id)
+      if (productId) {
+        row.dataset.productId = productId;
+      } else if (materialId) {
+        const matData = allMaterials.find(m => m.id == materialId);
+        row.dataset.productId = (matData && matData.linked_product_id) ? matData.linked_product_id : '';
+      }
+
+      // Najdi jméno vybraného materiálu
+      const selectedMat = materialId ? allMaterials.find(m => m.id == materialId) : null;
+      const displayName = selectedMat ? selectedMat.name + ' (' + selectedMat.code + ')' : '';
+
+      row.innerHTML =
+        '<div class="search-select">' +
+          '<input type="text" class="ss-input" placeholder="Hledat zboží..." value="' + esc(displayName) + '" onfocus="openSearchSelect(this)" oninput="filterSearchSelect(this)">' +
+          '<input type="hidden" class="mat-select" value="' + (materialId || '') + '">' +
+          '<div class="ss-dropdown"></div>' +
+        '</div>' +
+        '<input type="number" class="mat-qty" min="0.001" step="0.001" value="' + (quantity || 1) + '" placeholder="Množství">' +
+        '<input type="text" class="mat-unit" value="' + esc(unit || 'ks') + '" placeholder="jed." style="flex:0.5;">' +
+        '<button class="btn" onclick="this.parentElement.remove()" style="padding:4px 8px;font-size:11px;">&times;</button>';
+
+      container.appendChild(row);
+    }
+
+    function openSearchSelect(input) {
+      // Vyber text pro snadné přepsání
+      input.select();
+      filterSearchSelect(input);
+      const dd = input.parentElement.querySelector('.ss-dropdown');
+      dd.classList.add('open');
+
+      // Zavři dropdown při kliknutí jinam
+      setTimeout(() => {
+        const close = (e) => {
+          if (!input.parentElement.contains(e.target)) {
+            dd.classList.remove('open');
+            document.removeEventListener('mousedown', close);
+          }
+        };
+        document.addEventListener('mousedown', close);
+      }, 10);
+    }
+
+    function filterSearchSelect(input) {
+      const q = (input.value || '').toLowerCase().trim();
+      const dd = input.parentElement.querySelector('.ss-dropdown');
+      dd.classList.add('open');
+
+      const filtered = allMaterials.filter(m => {
+        if (!q) return true;
+        return (m.name || '').toLowerCase().includes(q) ||
+               (m.code || '').toLowerCase().includes(q);
+      }).slice(0, 50); // max 50 výsledků
+
+      if (filtered.length === 0) {
+        dd.innerHTML = '<div class="ss-empty">Nic nenalezeno</div>';
+        return;
+      }
+
+      dd.innerHTML = filtered.map(m => {
+        const t = (m.type || 'material').toLowerCase();
+        let typeCls = 't-material', typeLabel = 'Materiál';
+        if (t.includes('semi') || t.includes('polotovar')) { typeCls = 't-semi'; typeLabel = 'Polotovar'; }
+        else if (t.includes('product') || t.includes('výrobek') || t.includes('vyrobek')) { typeCls = 't-prod'; typeLabel = 'Výrobek'; }
+
+        // Předej linked_product_id z API (spolehlivé propojení materiál → výrobek)
+        const lpId = m.linked_product_id || '';
+        return '<div class="ss-item" onmousedown="selectSearchItem(this, ' + m.id + ', \'' + esc(m.name).replace(/'/g, "\\'") + '\', \'' + esc(m.code).replace(/'/g, "\\'") + '\', \'' + esc(m.unit || 'ks') + '\', \'' + lpId + '\')">' +
+          '<span class="ss-name">' + esc(m.name) + '</span>' +
+          '<span class="ss-code">' + esc(m.code) + '</span>' +
+          '<span class="ss-type ' + typeCls + '">' + typeLabel + '</span>' +
+          (lpId ? '<span style="font-size:9px;color:#22c55e;margin-left:2px;">&#10003;</span>' : '') +
+        '</div>';
+      }).join('');
+    }
+
+    function selectSearchItem(item, id, name, code, unit, linkedProductId) {
+      const ss = item.closest('.search-select');
+      const row = ss.closest('.mat-row');
+      ss.querySelector('.ss-input').value = name + ' (' + code + ')';
+      ss.querySelector('.mat-select').value = id;
+      ss.querySelector('.ss-dropdown').classList.remove('open');
+      row.dataset.materialId = id;
+      // Ulož linked_product_id přímo z API dat (spolehlivější než hledání)
+      row.dataset.productId = linkedProductId || '';
+      // Nastav výchozí jednotku ze zboží
+      const unitInput = row.querySelector('.mat-unit');
+      if (unitInput && (!unitInput.value || unitInput.value === 'ks')) unitInput.value = unit;
+    }
+
+    // === Save operation ===
+    async function saveOperation() {
+      const opId = document.getElementById('op-id').value;
+      const name = document.getElementById('op-name').value.trim();
+      if (!name) return toast('Vyplňte název operace', true);
+
+      // Sesbírej materiály z modálu — s product_id pokud existuje
+      const matRows = document.querySelectorAll('#mat-rows .mat-row');
+      const materials = [];
+      matRows.forEach(row => {
+        const materialId = parseInt(row.querySelector('.mat-select').value);
+        const qty = parseFloat(row.querySelector('.mat-qty').value);
+        const unit = row.querySelector('.mat-unit').value || 'ks';
+        if (!materialId || !qty) return;
+        // Použij linked_product_id přímo z dat (uložen v dataset.productId při výběru)
+        // Fallback: hledej přes allProductsList a allMaterials
+        let productId = row.dataset.productId ? parseInt(row.dataset.productId) : null;
+        if (!productId) {
+          // Zkus najít přes Product.material_id
+          const linkedProd = allProductsList.find(p => p.material_id === materialId);
+          if (linkedProd) productId = linkedProd.id;
+        }
+        if (!productId) {
+          // Zkus najít přes linked_product_id v allMaterials (z API)
+          const matData = allMaterials.find(m => m.id === materialId);
+          if (matData && matData.linked_product_id) productId = matData.linked_product_id;
+        }
+        materials.push({
+          material_id: materialId,
+          product_id: productId,
+          quantity: qty,
+          unit,
+        });
+      });
+
+      const data = {
+        product_id: product.id,
+        name,
+        step_number: parseInt(document.getElementById('op-step').value) || 1,
+        workstation_id: parseInt(document.getElementById('op-ws').value) || null,
+        phase: document.getElementById('op-phase').value || null,
+        duration: parseInt(document.getElementById('op-duration').value) || 0,
+        duration_unit: document.getElementById('op-duration-unit').value,
+        preparation_time: parseInt(document.getElementById('op-prep').value) || 0,
+        workers_count: parseInt(document.getElementById('op-workers').value) || 1,
+        description: document.getElementById('op-desc').value || null,
+        materials,
+      };
+
+      try {
+        let prevOpData = null;
+        if (opId) {
+          // Snapshot pro undo edit
+          const prevOp = product.operations.find(o => o.id == opId);
+          if (prevOp) {
+            prevOpData = {
+              name: prevOp.name, step_number: prevOp.step_number,
+              workstation_id: prevOp.workstation_id, phase: prevOp.phase,
+              duration: prevOp.duration, duration_unit: prevOp.duration_unit,
+              preparation_time: prevOp.preparation_time, workers_count: prevOp.workers_count,
+              description: prevOp.description,
+              materials: (prevOp.materials || []).map(m => ({
+                material_id: m.material_id,
+                product_id: m.product_id || (m.linked_product ? m.linked_product.id : null),
+                quantity: m.quantity,
+                unit: m.unit,
+              })),
+            };
+          }
+          await api('/api/production/operations/' + opId, { method: 'PUT', body: JSON.stringify(data) });
+        } else {
+          var result = await api('/api/production/operations', { method: 'POST', body: JSON.stringify(data) });
+        }
+
+        // Reload product
+        product = await api('/api/production/products/' + product.id);
+        closeModal();
+        updateMeta();
+        renderTab();
+
+        if (opId) {
+          addHistory('edit', 'Upravena: ' + name, 'Krok ' + data.step_number, { type: 'edit-op', opId: parseInt(opId), prevData: prevOpData });
+          toast('Operace aktualizována');
+        } else {
+          const newOpId = result ? result.id : null;
+          addHistory('add', 'Přidána: ' + name, 'Krok ' + data.step_number + (data.duration ? ', ' + data.duration + ' ' + data.duration_unit : ''), newOpId ? { type: 'add-op', opId: newOpId } : null);
+          toast('Operace přidána');
+        }
+      } catch (err) {
+        toast('Chyba: ' + err.message, true);
+      }
+    }
+
+    // === Delete operation ===
+    async function deleteOp(opId) {
+      const op = product.operations.find(o => o.id === opId);
+      if (!confirm('Smazat operaci "' + (op ? op.name : '') + '"?')) return;
+
+      // Snapshot pro undo
+      const undoOpData = op ? {
+        product_id: product.id, name: op.name, step_number: op.step_number,
+        workstation_id: op.workstation_id, phase: op.phase,
+        duration: op.duration, duration_unit: op.duration_unit,
+        preparation_time: op.preparation_time, workers_count: op.workers_count,
+        description: op.description,
+        materials: (op.materials || []).map(m => ({
+          material_id: m.material_id,
+          product_id: m.product_id || (m.linked_product ? m.linked_product.id : null),
+          quantity: parseFloat(m.quantity),
+          unit: m.unit,
+        })),
+      } : null;
+      const opName = op ? op.name : '';
+
+      try {
+        await api('/api/production/operations/' + opId, { method: 'DELETE' });
+        product = await api('/api/production/products/' + product.id);
+        updateMeta();
+        renderTab();
+        addHistory('delete', 'Smazána: ' + opName, '', undoOpData ? { type: 'delete-op', opData: undoOpData } : null);
+        toast('Operace smazána');
+      } catch (err) {
+        toast('Chyba: ' + err.message, true);
+      }
+    }
+
+    // === Material summary tab ===
+    function renderMaterialSummary() {
+      const content = document.getElementById('tab-content');
+      const ops = product.operations || [];
+
+      // Agreguj materiály ze všech operací
+      const matMap = {};
+      ops.forEach(op => {
+        (op.materials || []).forEach(m => {
+          const key = m.material_id + '_' + m.unit;
+          if (!matMap[key]) {
+            matMap[key] = {
+              material: m.material,
+              unit: m.unit,
+              totalQty: 0,
+              operations: [],
+            };
+          }
+          matMap[key].totalQty += parseFloat(m.quantity);
+          matMap[key].operations.push(op.name);
+        });
+      });
+
+      const matList = Object.values(matMap);
+
+      if (matList.length === 0) {
+        content.innerHTML = '<div class="empty-ops"><div class="icon">&#128230;</div><p>Žádné materiály v operacích</p><p style="font-size:12px;">Přidejte materiály k operacím v záložce "Pracovní postup"</p></div>';
+        return;
+      }
+
+      let html = '<h3 style="margin-bottom:16px;">Celková spotřeba materiálu na 1 výrobek</h3>';
+      html += '<table style="width:100%;border-collapse:collapse;font-size:13px;">' +
+        '<thead><tr style="border-bottom:2px solid var(--border);text-align:left;">' +
+        '<th style="padding:8px;">Materiál</th><th style="padding:8px;">Kód</th>' +
+        '<th style="padding:8px;text-align:right;">Množství</th><th style="padding:8px;">Jednotka</th>' +
+        '<th style="padding:8px;">Sklad</th><th style="padding:8px;">Operace</th>' +
+        '</tr></thead><tbody>';
+
+      matList.forEach(m => {
+        const mat = m.material || {};
+        const stock = mat.current_stock != null ? parseFloat(mat.current_stock) : '—';
+        const stockColor = (typeof stock === 'number' && stock < m.totalQty) ? 'color:#ef4444;font-weight:600;' : '';
+        html += '<tr style="border-bottom:1px solid var(--border);">' +
+          '<td style="padding:8px;">' + esc(mat.name || '?') + '</td>' +
+          '<td style="padding:8px;color:var(--text2);">' + esc(mat.code || '') + '</td>' +
+          '<td style="padding:8px;text-align:right;font-weight:600;">' + m.totalQty.toFixed(3) + '</td>' +
+          '<td style="padding:8px;">' + esc(m.unit) + '</td>' +
+          '<td style="padding:8px;' + stockColor + '">' + stock + '</td>' +
+          '<td style="padding:8px;color:var(--text2);font-size:11px;">' + m.operations.join(', ') + '</td>' +
+          '</tr>';
+      });
+
+      html += '</tbody></table>';
+      content.innerHTML = html;
+    }
+
+    // =========================================================================
+    // HISTORIE ZMĚN
+    // =========================================================================
+    const history = [];
+
+    function addHistory(type, action, detail, undoData) {
+      history.unshift({
+        type,
+        action,
+        detail,
+        undoData,
+        user: currentUser,
+        time: new Date(),
+        id: Date.now(),
+      });
+      renderHistory();
+    }
+
+    function renderHistory() {
+      const body = document.getElementById('history-body');
+      if (history.length === 0) {
+        body.innerHTML = '<div class="history-empty">Zatím žádné změny</div>';
+        return;
+      }
+      body.innerHTML = history.map((h, i) => {
+        const icons = { add: '+', edit: '&#9998;', delete: '&#128465;', reorder: '&#8645;', takt: '&#9202;' };
+        const icon = icons[h.type] || '?';
+        const time = h.time.toLocaleTimeString('cs-CZ', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        const canUndo = h.undoData && i === 0;
+        return '<div class="history-item">' +
+          '<div class="hi-time">' + time + ' &middot; <strong>' + esc(h.user) + '</strong></div>' +
+          '<div class="hi-action"><span class="hi-icon ' + h.type + '">' + icon + '</span>' + esc(h.action) + '</div>' +
+          (h.detail ? '<div class="hi-detail">' + esc(h.detail) + '</div>' : '') +
+          (canUndo ? '<button class="hi-undo" onclick="undoChange(' + h.id + ')">&#8617; Vrátit</button>' : '') +
+        '</div>';
+      }).join('');
+    }
+
+    async function undoChange(historyId) {
+      const entry = history.find(h => h.id === historyId);
+      if (!entry || !entry.undoData) return;
+
+      try {
+        const ud = entry.undoData;
+
+        if (ud.type === 'delete-op') {
+          // Znovu vytvořit smazanou operaci
+          await api('/api/production/operations', {
+            method: 'POST',
+            body: JSON.stringify(ud.opData),
+          });
+        } else if (ud.type === 'add-op') {
+          // Smazat nově vytvořenou operaci
+          await api('/api/production/operations/' + ud.opId, { method: 'DELETE' });
+        } else if (ud.type === 'edit-op') {
+          // Vrátit operaci na předchozí stav
+          await api('/api/production/operations/' + ud.opId, {
+            method: 'PUT',
+            body: JSON.stringify(ud.prevData),
+          });
+        } else if (ud.type === 'takt') {
+          // Vrátit takt
+          await api('/api/production/products/' + product.id, {
+            method: 'PUT',
+            body: JSON.stringify({ takt_time: ud.prevTakt }),
+          });
+          product.takt_time = ud.prevTakt;
+        } else if (ud.type === 'reorder') {
+          // Vrátit pořadí
+          await api('/api/production/products/' + product.id + '/reorder-operations', {
+            method: 'PUT',
+            body: JSON.stringify({ order: ud.prevOrder }),
+          });
+        }
+
+        // Odstraň z historie
+        const idx = history.findIndex(h => h.id === historyId);
+        if (idx >= 0) history.splice(idx, 1);
+
+        // Reload
+        product = await api('/api/production/products/' + product.id);
+        updateMeta();
+        renderTab();
+        renderHistory();
+        toast('Změna vrácena');
+      } catch (err) {
+        toast('Chyba undo: ' + err.message, true);
+      }
+    }
+
+    function toggleHistory() {
+      document.getElementById('history-panel').classList.toggle('collapsed');
+    }
+
+    // === Materiály toggle ===
+    function toggleMats(id, toggleEl) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      const isOpen = el.style.display !== 'none';
+      el.style.display = isOpen ? 'none' : '';
+      const arrow = toggleEl.querySelector('.arrow');
+      if (arrow) arrow.classList.toggle('open', !isOpen);
+    }
+
+    function toggleSubWf(id, clickEl) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      const isOpen = el.style.display !== 'none';
+      el.style.display = isOpen ? 'none' : 'table-row';
+    }
+
+    // === Takt ===
+    async function saveTakt(val) {
+      const taktTime = parseInt(val) || null;
+      const prevTakt = product.takt_time;
+      try {
+        await api('/api/production/products/' + product.id, {
+          method: 'PUT',
+          body: JSON.stringify({ takt_time: taktTime }),
+        });
+        product.takt_time = taktTime;
+        updateMeta();
+        renderTab();
+        addHistory('takt', 'Takt: ' + (taktTime ? taktTime + ' min' : 'odstraněn'), prevTakt ? 'Předchozí: ' + prevTakt + ' min' : '', { type: 'takt', prevTakt });
+        toast(taktTime ? 'Takt nastaven na ' + taktTime + ' min' : 'Takt odstraněn');
+      } catch (err) {
+        toast('Chyba: ' + err.message, true);
+      }
+    }
+
+    // === Helpers ===
+    function esc(s) {
+      if (!s) return '';
+      const d = document.createElement('div');
+      d.textContent = s;
+      return d.innerHTML;
+    }
+
+    function toast(msg, isError) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.className = 'toast show' + (isError ? ' error' : '');
+      setTimeout(() => t.className = 'toast', 2500);
+    }
+  </script>
 </body>
 </html>

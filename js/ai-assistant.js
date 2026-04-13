@@ -357,9 +357,11 @@
     // Stop browser STT
     if (recognition) { try { recognition.stop(); } catch(e) {} recognition = null; }
     // Stop MediaRecorder
-    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-      mediaRecorder.requestData();
-      mediaRecorder.stop();
+    if (mediaRecorder) {
+      if (mediaRecorder._recordTimer) clearTimeout(mediaRecorder._recordTimer);
+      if (mediaRecorder.state !== 'inactive') {
+        try { mediaRecorder.stop(); } catch(e) {}
+      }
     }
   }
 
@@ -434,8 +436,8 @@
   }
 
   // ---- MediaRecorder + Whisper API (all platforms) ----
-  var _audioContext = null;
-  var _analyser = null;
+  // Uses simple timed recording — Whisper handles silence filtering
+  var RECORD_DURATION = 6000; // 6s per recording chunk
 
   function startMediaRecorder() {
     audioChunks = [];
@@ -448,50 +450,28 @@
       var options = mimeType ? { mimeType: mimeType } : {};
       mediaRecorder = new MediaRecorder(stream, options);
 
-      // Set up audio level analysis for silence detection
-      try {
-        _audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        var source = _audioContext.createMediaStreamSource(stream);
-        _analyser = _audioContext.createAnalyser();
-        _analyser.fftSize = 512;
-        source.connect(_analyser);
-      } catch(e) { console.log('[AI] AudioContext not available, using timer fallback'); }
-
-      var hasSpoken = false;
-      var silenceStart = 0;
-      var SILENCE_THRESHOLD = 15; // audio level below this = silence
-      var SILENCE_DURATION = 2000; // 2s silence after speech = send
-      var MAX_RECORD_TIME = 30000; // max 30s per utterance
-
       mediaRecorder.ondataavailable = function(e) {
         if (e.data.size > 0) audioChunks.push(e.data);
       };
 
       mediaRecorder.onstop = function() {
         stream.getTracks().forEach(function(t) { t.stop(); });
-        if (_audioContext) { try { _audioContext.close(); } catch(e) {} _audioContext = null; }
-        clearInterval(vadInterval);
-        clearTimeout(maxTimer);
+        clearTimeout(recordTimer);
         isListening = false;
         micBtn.classList.remove('active');
         micBtn.innerHTML = micIcon;
 
         if (audioChunks.length === 0) {
-          if (sessionActive) setTimeout(function() { startListening(); }, 500);
+          console.log('[AI] No audio chunks, restarting');
+          if (sessionActive && !isProcessing && !isSpeaking) setTimeout(function() { startListening(); }, 300);
           return;
         }
 
         var blob = new Blob(audioChunks, { type: mimeType || 'audio/webm' });
         audioChunks = [];
+        console.log('[AI] Recording stopped, blob size:', blob.size, 'type:', blob.type);
 
-        // Only transcribe if enough audio data (>1KB = some speech likely)
-        if (blob.size < 1000) {
-          console.log('[AI] Audio too small (' + blob.size + 'B), restarting');
-          if (sessionActive) setTimeout(function() { startListening(); }, 500);
-          return;
-        }
-
-        console.log('[AI] Sending audio to Whisper, size:', blob.size);
+        // Send to Whisper — it handles silence detection itself
         setStatus('přepisuji...');
         transcribeAudio(blob);
       };
@@ -500,49 +480,18 @@
       isListening = true;
       micBtn.classList.add('active');
       micBtn.innerHTML = stopIcon;
+      console.log('[AI] MediaRecorder started, will stop in', RECORD_DURATION, 'ms');
 
-      // Voice Activity Detection via AudioContext
-      var vadInterval = setInterval(function() {
-        if (!_analyser || !mediaRecorder || mediaRecorder.state !== 'recording') return;
-        var data = new Uint8Array(_analyser.frequencyBinCount);
-        _analyser.getByteFrequencyData(data);
-        var avg = 0;
-        for (var i = 0; i < data.length; i++) avg += data[i];
-        avg = avg / data.length;
-
-        if (avg > SILENCE_THRESHOLD) {
-          // Speech detected
-          if (!hasSpoken) {
-            hasSpoken = true;
-            setStatus('nahrávám řeč...');
-          }
-          silenceStart = 0;
-        } else if (hasSpoken) {
-          // Silence after speech
-          if (!silenceStart) silenceStart = Date.now();
-          else if (Date.now() - silenceStart > SILENCE_DURATION) {
-            console.log('[AI] Silence detected after speech, stopping recording');
-            if (mediaRecorder.state === 'recording') mediaRecorder.stop();
-          }
-        }
-      }, 100);
-
-      // Max recording time fallback
-      var maxTimer = setTimeout(function() {
+      // Stop after fixed duration — Whisper ignores silence in audio
+      var recordTimer = setTimeout(function() {
         if (mediaRecorder && mediaRecorder.state === 'recording') {
-          console.log('[AI] Max record time reached, stopping');
+          console.log('[AI] Timer reached, stopping recording');
           mediaRecorder.stop();
         }
-      }, MAX_RECORD_TIME);
+      }, RECORD_DURATION);
 
-      // If no AudioContext (VAD unavailable), use simple 8s timeout
-      if (!_analyser) {
-        clearInterval(vadInterval);
-        clearTimeout(maxTimer);
-        setTimeout(function() {
-          if (mediaRecorder && mediaRecorder.state === 'recording') mediaRecorder.stop();
-        }, 8000);
-      }
+      // Store for cleanup
+      mediaRecorder._recordTimer = recordTimer;
 
     }).catch(function(e) {
       console.error('[AI] Mic access error:', e);
@@ -562,9 +511,17 @@
     })
     .then(function(r) { return r.json(); })
     .then(function(data) {
-      if (data.text && data.text.trim()) {
+      if (data.error) {
+        console.error('[AI] Whisper API error:', data.error);
+        addMessage('system error', 'Whisper chyba: ' + data.error.substring(0, 100));
+        // Fall back to browser STT if Whisper fails
+        useWhisperFallback = false;
+        whisperAvailable = false;
+        resumeListening();
+      } else if (data.text && data.text.trim()) {
         processVoiceInput(data.text.trim());
       } else {
+        // No speech detected — restart listening
         if (sessionActive && !isProcessing && !isSpeaking) {
           setStatus('naslouchám');
           startListening();
@@ -572,8 +529,11 @@
       }
     })
     .catch(function(e) {
-      console.error('Transcribe error:', e);
-      addMessage('system error', 'Chyba přepisu hlasu. Zkontrolujte OPENAI_API_KEY.');
+      console.error('[AI] Transcribe fetch error:', e);
+      addMessage('system error', 'Chyba přepisu: ' + e.message);
+      // Fall back to browser STT
+      useWhisperFallback = false;
+      whisperAvailable = false;
       resumeListening();
     });
   }

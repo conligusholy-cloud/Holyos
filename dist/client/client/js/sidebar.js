@@ -3,10 +3,13 @@
    ============================================ */
 export function renderSidebar(activeModule) {
     const modules = [
+        { id: 'lide-hr', name: 'Lidé a HR', icon: '&#128101;', color: '#6c5ce7', active: true },
         { id: 'vytvoreni-arealu', name: 'Vytvoření areálu', icon: '&#9998;', color: '#8b5cf6', active: true },
         { id: 'programovani-vyroby', name: 'Programování výroby', icon: '&#9881;', color: '#f59e0b', active: true },
         { id: 'simulace-vyroby', name: 'Simulace výroby', icon: '&#9654;', color: '#22c55e', active: true },
         { id: 'pracovni-postup', name: 'Pracovní postup', icon: '&#128295;', color: '#06b6d4', active: true },
+        { id: 'nakup-sklad', name: 'Nákup a sklad', icon: '&#128176;', color: '#f59e0b', active: true },
+        { id: 'ai-agenti', name: 'AI Agenti', icon: '&#129302;', color: '#8b5cf6', active: true },
         { id: 'planovani', name: 'Plánování výroby', icon: '&#128197;', color: '#3b82f6', active: false },
         { id: 'material', name: 'Materiálový tok', icon: '&#128666;', color: '#10b981', active: false },
         { id: 'sklady', name: 'Správa skladů', icon: '&#128230;', color: '#f59e0b', active: false },
@@ -25,13 +28,13 @@ export function renderSidebar(activeModule) {
         '<rect x="32" y="42" width="36" height="10" rx="4" fill="white"/>' +
         '</svg>';
     let html = '' +
-        '<div class="sidebar-header">' +
+        '<a href="' + basePath + '" class="sidebar-header" style="text-decoration:none; color:inherit;">' +
         '<div class="sidebar-logo">' + logoSvg + '</div>' +
         '<div>' +
         '<h1>HOLYOS</h1>' +
         '<p>Řízení výroby</p>' +
         '</div>' +
-        '</div>' +
+        '</a>' +
         '<div class="sidebar-label">Moduly</div>' +
         '<nav class="sidebar-nav">';
     modules.forEach((m) => {
@@ -90,6 +93,13 @@ export function renderSidebar(activeModule) {
         }
     })
         .catch(() => { });
+    // --- AI Chat Panel: dynamicky načíst, pokud ještě není ---
+    if (!document.getElementById('ai-chat-script')) {
+        const chatScript = document.createElement('script');
+        chatScript.id = 'ai-chat-script';
+        chatScript.src = '/js/ai-chat-panel.js';
+        document.body.appendChild(chatScript);
+    }
 }
 /**
  * Compute base path from current location to project root

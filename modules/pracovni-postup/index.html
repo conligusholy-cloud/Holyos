@@ -8,6 +8,22 @@
   <base href="../../">
   <link rel="stylesheet" href="css/dashboard.css">
   <link rel="stylesheet" href="modules/pracovni-postup/css/styles.css">
+  <style>
+    .tab-bar { display:flex; gap:0; border-bottom:2px solid var(--border, #2a2d35); padding:0 20px; }
+    .tab-btn {
+      padding:10px 24px; font-size:13px; font-weight:600; cursor:pointer;
+      color:var(--text2, #8b8fa3); background:none; border:none; border-bottom:2px solid transparent;
+      margin-bottom:-2px; transition: color 0.2s, border-color 0.2s;
+    }
+    .tab-btn:hover { color:var(--text, #e2e4e9); }
+    .tab-btn.active { color:var(--accent, #6366f1); border-bottom-color:var(--accent, #6366f1); }
+    .tab-btn .tab-count {
+      display:inline-block; min-width:20px; padding:1px 6px; margin-left:8px;
+      font-size:11px; font-weight:700; border-radius:10px;
+      background:var(--bg2, #1e2028); color:var(--text2, #8b8fa3);
+    }
+    .tab-btn.active .tab-count { background:var(--accent, #6366f1); color:#fff; }
+  </style>
 </head>
 <body>
   <aside id="sidebar" class="sidebar"></aside>
@@ -18,11 +34,11 @@
     <div class="toolbar">
       <h1>Pracovní postup</h1>
       <div class="search-box">
-        <span class="search-icon">🔍</span>
-        <input type="text" id="search-input" placeholder="Hledat výrobek (název, kód)...">
+        <span class="search-icon">&#128270;</span>
+        <input type="text" id="search-input" placeholder="Hledat (název, kód)..." oninput="filterProducts(this.value)">
       </div>
-      <span class="count-badge" id="count-badge">—</span>
-      <button class="btn" onclick="loadProducts()">↻ Obnovit</button>
+      <span class="count-badge" id="count-badge">&mdash;</span>
+      <button class="btn" onclick="loadProducts()">&#8635; Obnovit</button>
     </div>
 
     <!-- Status bar -->
@@ -31,11 +47,19 @@
       <span id="status-text">Nepřipojeno</span>
     </div>
 
+    <!-- Tabs -->
+    <div class="tab-bar">
+      <button class="tab-btn active" id="tab-products" onclick="switchTab('product')">
+        Výrobky <span class="tab-count" id="count-products">&mdash;</span>
+      </button>
+      <button class="tab-btn" id="tab-semi" onclick="switchTab('semi-product')">
+        Polotovary <span class="tab-count" id="count-semi">&mdash;</span>
+      </button>
+    </div>
+
     <!-- Product list -->
     <div class="product-list" id="product-list">
-      <div class="empty-state">
-        <p>Načítám...</p>
-      </div>
+      <div class="empty-state"><p>Načítám...</p></div>
     </div>
 
   </div>
@@ -50,7 +74,107 @@
     initDate();
   </script>
 
-  <!-- TS moduly (zkompilované) -->
-  <script type="module" src="../../dist/client/client/modules/pracovni-postup/app.js"></script>
+  <script>
+    // === Stav ===
+    let allProducts = [];
+    let currentType = 'product';
+    const token = sessionStorage.getItem('token');
+
+    // === API ===
+    async function api(path) {
+      const headers = { 'Accept': 'application/json' };
+      if (token) headers['Authorization'] = 'Bearer ' + token;
+      const r = await fetch(path, { headers });
+      if (!r.ok) throw new Error('API ' + r.status);
+      return r.json();
+    }
+
+    // === Načíst výrobky z HolyOS API ===
+    async function loadProducts() {
+      const list = document.getElementById('product-list');
+      list.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p>Načítám výrobky...</p></div>';
+      updateStatus('loading', 'Připojuji se...');
+
+      try {
+        allProducts = await api('/api/production/products');
+        updateStatus('connected', 'Připojeno — ' + allProducts.length + ' výrobků');
+        updateCounts();
+        renderProducts();
+      } catch (err) {
+        updateStatus('disconnected', 'Chyba: ' + err.message);
+        list.innerHTML = '<div class="error-state"><div class="error-icon">&#9888;&#65039;</div><div class="error-msg">' + err.message + '</div><button class="btn" onclick="loadProducts()">Zkusit znovu</button></div>';
+      }
+    }
+
+    function updateCounts() {
+      const products = allProducts.filter(p => p.type === 'product');
+      const semi = allProducts.filter(p => p.type === 'semi-product');
+      document.getElementById('count-products').textContent = products.length;
+      document.getElementById('count-semi').textContent = semi.length;
+      document.getElementById('count-badge').textContent = allProducts.length;
+    }
+
+    function switchTab(type) {
+      currentType = type;
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      document.getElementById(type === 'product' ? 'tab-products' : 'tab-semi').classList.add('active');
+      renderProducts();
+    }
+
+    function renderProducts() {
+      const list = document.getElementById('product-list');
+      const filtered = allProducts.filter(p => p.type === currentType);
+      const q = (document.getElementById('search-input').value || '').toLowerCase().trim();
+
+      const visible = filtered.filter(p => {
+        if (!q) return true;
+        return (p.name || '').toLowerCase().includes(q) || (p.code || '').toLowerCase().includes(q);
+      });
+
+      if (visible.length === 0) {
+        list.innerHTML = '<div class="empty-state"><div class="empty-icon">&#128230;</div><p>Žádné ' + (currentType === 'product' ? 'výrobky' : 'polotovary') + '</p></div>';
+        return;
+      }
+
+      let html = '<div class="product-grid">';
+      visible.forEach(p => {
+        const opCount = (p.operations || []).length;
+        const badge = opCount > 0 ? '<span style="font-size:11px;color:var(--accent);margin-left:8px;">' + opCount + ' op.</span>' : '<span style="font-size:11px;color:var(--text2);margin-left:8px;">bez postupu</span>';
+        html += '<div class="product-card" onclick="openProduct(' + p.id + ')">' +
+          '<div class="product-card-icon">' + (currentType === 'product' ? '&#128295;' : '&#9881;') + '</div>' +
+          '<div class="product-card-info">' +
+            '<div class="product-card-name">' + esc(p.name) + badge + '</div>' +
+            '<div class="product-card-meta"><span>' + esc(p.code) + '</span></div>' +
+          '</div>' +
+          '<div class="product-card-arrow">&rarr;</div>' +
+        '</div>';
+      });
+      html += '</div>';
+      list.innerHTML = html;
+    }
+
+    function filterProducts(q) { renderProducts(); }
+
+    function openProduct(id) {
+      window.location.href = 'modules/pracovni-postup/detail.html?id=' + id;
+    }
+
+    function updateStatus(state, text) {
+      const dot = document.getElementById('status-dot');
+      const txt = document.getElementById('status-text');
+      if (dot) dot.className = 'status-dot ' + state;
+      if (txt) txt.textContent = text;
+    }
+
+    function esc(s) {
+      if (!s) return '';
+      const d = document.createElement('div');
+      d.textContent = s;
+      return d.innerHTML;
+    }
+
+    // === Init ===
+    document.addEventListener('DOMContentLoaded', loadProducts);
+  </script>
 </body>
 </html>

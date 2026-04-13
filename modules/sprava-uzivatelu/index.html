@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Správa uživatelů | HOLYOS</title>
+  <link rel="icon" type="image/svg+xml" href="../../logo-holyos-icon.svg">
+  <base href="../../">
+  <link rel="stylesheet" href="css/dashboard.css">
+  <style>
+    .page-header {
+      display:flex; align-items:center; gap:12px; padding:20px 24px;
+      border-bottom:1px solid var(--border); flex-wrap:wrap;
+    }
+    .page-header h1 { font-size:18px; font-weight:700; margin:0; }
+    .page-header .count { font-size:13px; color:var(--text2); margin-left:4px; }
+    .btn { padding:8px 16px; border-radius:8px; border:1px solid var(--border); cursor:pointer; font-size:13px; background:var(--surface2); color:var(--text); transition:all 0.15s; }
+    .btn:hover { border-color:var(--accent); }
+    .btn-primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+    .btn-primary:hover { opacity:0.9; }
+    .btn-danger { background:#ef4444; color:#fff; border-color:#ef4444; }
+    .btn-sm { font-size:11px; padding:5px 10px; }
+
+    .users-table-wrap { padding:20px 24px; overflow-x:auto; }
+    table { width:100%; border-collapse:collapse; font-size:13px; }
+    th { text-align:left; padding:10px 12px; color:var(--text2); font-weight:600; font-size:11px; text-transform:uppercase; letter-spacing:0.5px; border-bottom:2px solid var(--border); }
+    td { padding:10px 12px; border-bottom:1px solid var(--border); }
+    tr:hover td { background:var(--surface2); }
+    .user-avatar {
+      width:32px; height:32px; border-radius:50%; background:var(--accent);
+      display:inline-flex; align-items:center; justify-content:center;
+      font-size:13px; color:#fff; font-weight:600; vertical-align:middle; margin-right:8px;
+    }
+    .role-badge {
+      font-size:11px; padding:2px 8px; border-radius:6px; font-weight:600;
+    }
+    .role-admin { background:rgba(239,68,68,0.12); color:#ef4444; }
+    .role-user { background:rgba(59,130,246,0.12); color:#3b82f6; }
+    .role-super { background:rgba(168,85,247,0.12); color:#a855f7; }
+
+    .empty-state { text-align:center; padding:80px 20px; color:var(--text2); }
+
+    /* Modal */
+    .modal-overlay {
+      position:fixed; top:0; left:0; right:0; bottom:0;
+      background:rgba(0,0,0,0.6); z-index:1000; display:flex;
+      align-items:center; justify-content:center;
+    }
+    .modal-box {
+      background:var(--surface); border:1px solid var(--border); border-radius:14px;
+      padding:24px; min-width:440px; max-width:500px;
+    }
+    .modal-box h3 { margin:0 0 16px; font-size:16px; }
+    .form-group { margin-bottom:14px; }
+    .form-group label { display:block; font-size:12px; color:var(--text2); margin-bottom:4px; }
+    .form-group input, .form-group select {
+      width:100%; padding:8px 12px; background:var(--bg); color:var(--text);
+      border:1px solid var(--border); border-radius:8px; font-size:13px;
+      font-family:inherit; box-sizing:border-box;
+    }
+    .form-group input:focus, .form-group select:focus { border-color:var(--accent); outline:none; }
+    .modal-actions { display:flex; justify-content:flex-end; gap:8px; margin-top:16px; }
+
+    .toast { position:fixed; bottom:20px; right:20px; padding:10px 20px; border-radius:8px; background:#22c55e; color:#fff; font-size:13px; opacity:0; transition:opacity 0.3s; z-index:9999; pointer-events:none; }
+    .toast.show { opacity:1; }
+    .toast.error { background:#ef4444; }
+  </style>
+</head>
+<body>
+  <aside id="sidebar" class="sidebar"></aside>
+
+  <div class="main-wrapper" style="display:flex;flex-direction:column;height:100vh;">
+    <div class="page-header">
+      <h1>&#9881; Správa uživatelů <span class="count" id="user-count"></span></h1>
+      <button class="btn btn-primary" onclick="openAddModal()">+ Nový uživatel</button>
+    </div>
+
+    <div style="flex:1;overflow-y:auto;">
+      <div class="users-table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Uživatel</th>
+              <th>Uživatelské jméno</th>
+              <th>Role</th>
+              <th>Vytvořen</th>
+              <th style="width:120px;"></th>
+            </tr>
+          </thead>
+          <tbody id="users-tbody">
+            <tr><td colspan="5" class="empty-state">Načítám...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal -->
+  <div id="user-modal" class="modal-overlay" style="display:none;" onclick="if(event.target===this)closeModal()">
+    <div class="modal-box">
+      <h3 id="modal-title">Nový uživatel</h3>
+      <input type="hidden" id="user-id">
+      <div class="form-group">
+        <label>Zobrazované jméno *</label>
+        <input type="text" id="u-name" placeholder="Např. Jan Novák">
+      </div>
+      <div class="form-group">
+        <label>Uživatelské jméno *</label>
+        <input type="text" id="u-username" placeholder="Např. jan.novak">
+      </div>
+      <div class="form-group" id="pw-group">
+        <label>Heslo *</label>
+        <input type="password" id="u-password" placeholder="Minimálně 6 znaků">
+      </div>
+      <div class="form-group">
+        <label>Role</label>
+        <select id="u-role">
+          <option value="user">Uživatel</option>
+          <option value="admin">Administrátor</option>
+        </select>
+      </div>
+      <div class="modal-actions">
+        <button class="btn" onclick="closeModal()">Zrušit</button>
+        <button class="btn btn-primary" onclick="saveUser()">Uložit</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <script src="../../js/sidebar.js"></script>
+  <script>renderSidebar('sprava-uzivatelu'); initDate();</script>
+
+  <script>
+    const token = sessionStorage.getItem('token');
+    let allUsers = [];
+
+    async function api(path, opts = {}) {
+      const headers = { 'Accept': 'application/json', 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = 'Bearer ' + token;
+      const r = await fetch(path, { ...opts, headers });
+      if (!r.ok) {
+        const text = await r.text().catch(() => '');
+        throw new Error('API ' + r.status + ': ' + text.substring(0, 200));
+      }
+      return r.json();
+    }
+
+    document.addEventListener('DOMContentLoaded', async () => {
+      try {
+        allUsers = await api('/api/auth/users');
+        renderUsers();
+      } catch (err) {
+        document.getElementById('users-tbody').innerHTML =
+          '<tr><td colspan="5" style="color:#ef4444;text-align:center;padding:40px;">' + esc(err.message) + '</td></tr>';
+      }
+    });
+
+    function renderUsers() {
+      const tbody = document.getElementById('users-tbody');
+      document.getElementById('user-count').textContent = '(' + allUsers.length + ')';
+
+      if (allUsers.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="empty-state">Žádní uživatelé</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = allUsers.map(u => {
+        const initials = (u.display_name || u.username || '??').split(' ').map(w => w.charAt(0)).join('').substring(0, 2).toUpperCase();
+        let roleBadge = '<span class="role-badge role-user">Uživatel</span>';
+        if (u.is_super_admin) roleBadge = '<span class="role-badge role-super">Super Admin</span>';
+        else if (u.role === 'admin') roleBadge = '<span class="role-badge role-admin">Admin</span>';
+
+        return '<tr>' +
+          '<td><span class="user-avatar">' + esc(initials) + '</span>' + esc(u.display_name || '') + '</td>' +
+          '<td>' + esc(u.username) + '</td>' +
+          '<td>' + roleBadge + '</td>' +
+          '<td>' + formatDate(u.created_at) + '</td>' +
+          '<td>' +
+            '<button class="btn btn-sm" onclick="openEditModal(' + u.id + ')">&#9998;</button> ' +
+            (u.is_super_admin ? '' : '<button class="btn btn-sm btn-danger" onclick="deleteUser(' + u.id + ')">&#128465;</button>') +
+          '</td>' +
+        '</tr>';
+      }).join('');
+    }
+
+    function openAddModal() {
+      document.getElementById('modal-title').textContent = 'Nový uživatel';
+      document.getElementById('user-id').value = '';
+      document.getElementById('u-name').value = '';
+      document.getElementById('u-username').value = '';
+      document.getElementById('u-password').value = '';
+      document.getElementById('u-role').value = 'user';
+      document.getElementById('pw-group').style.display = '';
+      document.getElementById('u-password').required = true;
+      document.getElementById('user-modal').style.display = 'flex';
+      document.getElementById('u-name').focus();
+    }
+
+    function openEditModal(id) {
+      const u = allUsers.find(x => x.id === id);
+      if (!u) return;
+      document.getElementById('modal-title').textContent = 'Upravit uživatele';
+      document.getElementById('user-id').value = u.id;
+      document.getElementById('u-name').value = u.display_name || '';
+      document.getElementById('u-username').value = u.username;
+      document.getElementById('u-password').value = '';
+      document.getElementById('u-role').value = u.role || 'user';
+      // Heslo je volitelné při editaci
+      document.getElementById('pw-group').querySelector('label').textContent = 'Nové heslo (nepovinné)';
+      document.getElementById('u-password').required = false;
+      document.getElementById('user-modal').style.display = 'flex';
+      document.getElementById('u-name').focus();
+    }
+
+    function closeModal() {
+      document.getElementById('user-modal').style.display = 'none';
+      document.getElementById('pw-group').querySelector('label').textContent = 'Heslo *';
+    }
+
+    async function saveUser() {
+      const id = document.getElementById('user-id').value;
+      const display_name = document.getElementById('u-name').value.trim();
+      const username = document.getElementById('u-username').value.trim();
+      const password = document.getElementById('u-password').value;
+      const role = document.getElementById('u-role').value;
+
+      if (!display_name || !username) return showToast('Vyplňte jméno a uživatelské jméno', true);
+      if (!id && !password) return showToast('Vyplňte heslo', true);
+      if (password && password.length < 6) return showToast('Heslo musí mít alespoň 6 znaků', true);
+
+      try {
+        const body = { display_name, username, role };
+        if (password) body.password = password;
+
+        if (id) {
+          await api('/api/auth/users/' + id, { method: 'PUT', body: JSON.stringify(body) });
+          showToast('Uživatel aktualizován');
+        } else {
+          await api('/api/auth/users', { method: 'POST', body: JSON.stringify(body) });
+          showToast('Uživatel vytvořen');
+        }
+        closeModal();
+        allUsers = await api('/api/auth/users');
+        renderUsers();
+      } catch (err) {
+        showToast('Chyba: ' + err.message, true);
+      }
+    }
+
+    async function deleteUser(id) {
+      const u = allUsers.find(x => x.id === id);
+      if (!confirm('Smazat uživatele "' + (u ? u.display_name : '') + '"?')) return;
+      try {
+        await api('/api/auth/users/' + id, { method: 'DELETE' });
+        showToast('Uživatel smazán');
+        allUsers = await api('/api/auth/users');
+        renderUsers();
+      } catch (err) { showToast('Chyba: ' + err.message, true); }
+    }
+
+    function esc(s) { if (!s) return ''; const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+    function formatDate(d) { return d ? new Date(d).toLocaleDateString('cs-CZ') : '—'; }
+    function showToast(msg, isError) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.className = 'toast show' + (isError ? ' error' : '');
+      setTimeout(() => t.className = 'toast', 2500);
+    }
+  </script>
+</body>
+</html>

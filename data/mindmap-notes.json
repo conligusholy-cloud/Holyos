@@ -1,0 +1,8 @@
+{
+  "notes": {
+    "hr": "Evidence lidé chci v základu dělit na dvě části, lidé obecně a lidé jako zaměstnanci. U zaměstnance potřebuji nastavit základní data, přihlašovací údaje, kontaktní údaje.\nChci vidět nakreslenou organizační strukturu, takže u zaměstnanců potřebuji mít i fotku a vytvoření hierarchie, která role komu podřazená, či nadřazená.\nDocházka se eviduje buď čipem na docházkové dotykové obrazovce na hale (kiosek) a nebo pro některé zaměstnance budu mít možnost zvolit docházku klikat z aplikace HOLYOS na dálku.\nCo se týká rolí, tak chci nastavovat u člověka oprávnění na úrovni role (pracovní pozice). Chci vypsat všechny moduly a zaškrtnout tam, kde člověk má přístup, nebo vidí jen ke čtení nebo může plně upravovat.\nNa základě docházky každý měsíc budeme moci vygenerovat docházkový list jako export pro účetní.\nU zaměstnanců chci nastavit začátek pracovního poměru a konec v případě, že daný zaměstnanec nemám na neurčito. Dál potřebuji k zaměstnanci přiřadit konkrétní čip na přihlášení."
+  },
+  "featuresOverride": {},
+  "descOverride": {},
+  "connectionsOverride": {}
+}

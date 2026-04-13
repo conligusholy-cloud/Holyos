@@ -670,8 +670,8 @@ function initPaletteDrag() {
     const world = screenToWorld(e.clientX, e.clientY);
     const sz = DEFAULT_SIZES[type];
 
-    // Factorify pracoviště — přenést metadata a rozměry z karty
-    const wsData = e.dataTransfer.getData('application/x-factorify-ws');
+    // Production pracoviště — přenést metadata a rozměry z karty
+    const wsData = e.dataTransfer.getData('application/x-production-ws');
     if (wsData && type === 'pracoviste') {
       try {
         const ws = JSON.parse(wsData);
@@ -682,16 +682,16 @@ function initPaletteDrag() {
           obj.name = ws.name || obj.name;
           obj.w = wsW;
           obj.h = wsH;
-          obj.factorifyId = ws.id;
-          obj.factorifyCode = ws.code || '';
-          obj.factorifyData = ws;
+          obj.workstationId = ws.id;
+          obj.workstationCode = ws.code || '';
+          obj.workstationData = ws;
           renderAll();
           showProperties(obj.id);
           // Označit pracoviště jako použité
           if (typeof markUsedWorkstations === 'function') markUsedWorkstations();
         }
       } catch (err) {
-        console.error('Drop factorify WS error:', err);
+        console.error('Drop production WS error:', err);
       }
       return;
     }

@@ -4,3 +4,5 @@ data/storage/
 node_modules/
 dist/server/
 *.xlsx
+~$*
+*.docx
