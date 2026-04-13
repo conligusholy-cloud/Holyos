@@ -1,0 +1,671 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dev Hub | HOLYOS</title>
+  <link rel="icon" type="image/svg+xml" href="../../logo-holyos-icon.svg">
+  <base href="../../">
+  <link rel="stylesheet" href="css/dashboard.css">
+  <style>
+    .dev-page { padding: 24px 32px; }
+    .dev-page h1 { font-size: 22px; margin: 0 0 4px; }
+    .dev-page .subtitle { color: var(--text2); font-size: 13px; margin-bottom: 24px; }
+
+    /* Agent selector */
+    .agent-selector { display: flex; gap: 10px; margin-bottom: 24px; flex-wrap: wrap; }
+    .agent-btn {
+      padding: 10px 18px; border-radius: 10px; border: 1px solid var(--border);
+      background: var(--surface); color: var(--text2); cursor: pointer; font-size: 13px;
+      display: flex; align-items: center; gap: 8px; transition: all 0.2s;
+    }
+    .agent-btn:hover { border-color: #8b5cf6; color: var(--text); }
+    .agent-btn.active { background: rgba(139,92,246,0.15); border-color: #8b5cf6; color: #a78bfa; }
+    .agent-btn .agent-icon { font-size: 20px; }
+
+    /* Layout */
+    .dev-layout { display: grid; grid-template-columns: 1fr 340px; gap: 20px; height: calc(100vh - 200px); }
+
+    /* Chat area */
+    .dev-chat {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+      display: flex; flex-direction: column; overflow: hidden;
+    }
+    .dev-chat-header {
+      padding: 14px 18px; border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; gap: 10px; font-size: 14px; font-weight: 600;
+    }
+    .dev-chat-messages {
+      flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px;
+    }
+    .dev-msg { max-width: 85%; padding: 10px 14px; border-radius: 12px; font-size: 13px; line-height: 1.6; }
+    .dev-msg.user { align-self: flex-end; background: rgba(99,102,241,0.2); color: var(--text); border-bottom-right-radius: 4px; }
+    .dev-msg.assistant { align-self: flex-start; background: var(--surface2); color: var(--text); border-bottom-left-radius: 4px; }
+    .dev-msg.assistant pre { background: rgba(0,0,0,0.3); padding: 10px; border-radius: 8px; overflow-x: auto; font-size: 12px; margin: 8px 0; }
+    .dev-msg.assistant code { font-family: 'JetBrains Mono', monospace; font-size: 12px; }
+    .dev-msg-meta { font-size: 10px; color: var(--text2); margin-top: 6px; display: flex; gap: 8px; flex-wrap: wrap; }
+    .dev-msg-meta .tool-badge { background: rgba(139,92,246,0.15); color: #a78bfa; padding: 2px 6px; border-radius: 4px; }
+    .dev-msg-meta .proposal-badge { background: rgba(245,158,11,0.15); color: #f59e0b; padding: 2px 6px; border-radius: 4px; }
+
+    .dev-chat-input {
+      padding: 12px; border-top: 1px solid var(--border); display: flex; gap: 8px;
+    }
+    .dev-chat-input textarea {
+      flex: 1; background: var(--surface2); border: 1px solid var(--border); border-radius: 10px;
+      padding: 10px 14px; color: var(--text); font-size: 13px; resize: none; min-height: 44px; max-height: 120px;
+      font-family: inherit; outline: none;
+    }
+    .dev-chat-input textarea:focus { border-color: #8b5cf6; }
+    .dev-chat-input button {
+      padding: 0 18px; background: linear-gradient(135deg, #6366f1, #8b5cf6);
+      border: none; border-radius: 10px; color: #fff; font-size: 13px; cursor: pointer; font-weight: 600;
+    }
+    .dev-chat-input button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    /* Sidebar — module info */
+    .dev-sidebar {
+      display: flex; flex-direction: column; gap: 14px;
+    }
+    .dev-info-card {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px;
+    }
+    .dev-info-card h3 { font-size: 13px; color: var(--text2); margin: 0 0 10px; text-transform: uppercase; letter-spacing: 0.5px; }
+    .dev-info-item { display: flex; justify-content: space-between; font-size: 12px; padding: 4px 0; color: var(--text); }
+    .dev-info-item .label { color: var(--text2); }
+
+    .proposal-card {
+      background: var(--surface); border: 1px solid rgba(245,158,11,0.3); border-radius: 12px; padding: 14px;
+    }
+    .proposal-card h3 { font-size: 13px; color: #f59e0b; margin: 0 0 8px; }
+    .proposal-card .proposal-desc { font-size: 12px; color: var(--text); margin-bottom: 10px; }
+    .proposal-card pre { background: rgba(0,0,0,0.3); padding: 8px; border-radius: 6px; font-size: 11px; overflow-x: auto; color: var(--text); }
+    .proposal-actions { display: flex; gap: 8px; margin-top: 10px; }
+    .proposal-actions button { padding: 6px 12px; border-radius: 6px; font-size: 11px; border: none; cursor: pointer; }
+    .btn-approve { background: rgba(34,197,94,0.2); color: #22c55e; }
+    .btn-reject { background: rgba(239,68,68,0.2); color: #ef4444; }
+
+    /* Agent management */
+    .agent-mgmt-bar { display: flex; gap: 8px; margin-bottom: 12px; }
+    .agent-mgmt-bar button {
+      padding: 6px 14px; border-radius: 8px; font-size: 12px; border: 1px solid var(--border);
+      background: var(--surface); color: var(--text2); cursor: pointer; transition: all 0.2s;
+    }
+    .agent-mgmt-bar button:hover { border-color: #8b5cf6; color: var(--text); }
+
+    /* Agent modal overlay */
+    .agent-modal-overlay {
+      position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center;
+      z-index: 1000; backdrop-filter: blur(4px);
+    }
+    .agent-modal-overlay.hidden { display: none; }
+    .agent-modal {
+      background: var(--bg); border: 1px solid var(--border); border-radius: 16px;
+      padding: 24px; width: 520px; max-height: 85vh; overflow-y: auto;
+    }
+    .agent-modal h2 { font-size: 18px; margin: 0 0 16px; }
+    .agent-modal .form-group { margin-bottom: 14px; }
+    .agent-modal label { display: block; font-size: 12px; color: var(--text2); margin-bottom: 4px; font-weight: 500; }
+    .agent-modal input, .agent-modal textarea, .agent-modal select {
+      width: 100%; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border);
+      background: var(--surface); color: var(--text); font-size: 13px; font-family: inherit;
+      box-sizing: border-box;
+    }
+    .agent-modal textarea { min-height: 100px; resize: vertical; }
+    .agent-modal input:focus, .agent-modal textarea:focus { border-color: #8b5cf6; outline: none; }
+    .agent-modal .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .agent-modal .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 18px; }
+    .agent-modal .modal-actions button {
+      padding: 8px 18px; border-radius: 8px; font-size: 13px; border: none; cursor: pointer;
+    }
+    .btn-save { background: rgba(139,92,246,0.2); color: #a78bfa; font-weight: 600; }
+    .btn-save:hover { background: rgba(139,92,246,0.35); }
+    .btn-cancel { background: var(--surface); color: var(--text2); border: 1px solid var(--border) !important; }
+    .btn-delete-agent { background: rgba(239,68,68,0.15); color: #ef4444; }
+    .btn-delete-agent:hover { background: rgba(239,68,68,0.3); }
+
+    /* Empty state */
+    .dev-empty { text-align: center; padding: 60px 20px; color: var(--text2); }
+    .dev-empty .icon { font-size: 48px; margin-bottom: 12px; }
+
+    /* Typing indicator */
+    .dev-typing { display: flex; gap: 4px; padding: 10px 14px; align-self: flex-start; }
+    .dev-typing span { width: 6px; height: 6px; border-radius: 50%; background: #8b5cf6; animation: devBounce 1.4s ease infinite; }
+    .dev-typing span:nth-child(2) { animation-delay: 0.2s; }
+    .dev-typing span:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes devBounce { 0%,80%,100% { transform: scale(0); } 40% { transform: scale(1); } }
+  </style>
+</head>
+<body>
+
+<aside id="sidebar" class="sidebar"></aside>
+
+<div class="main-wrapper">
+  <div class="dev-page">
+    <h1>Dev Hub</h1>
+    <p class="subtitle">Vývojářští agenti — zadávej úkoly, analyzuj kód, navrhuj vylepšení</p>
+
+    <!-- Agent management bar -->
+    <div class="agent-mgmt-bar">
+      <button onclick="openAgentModal('new')">+ Nový agent</button>
+      <button onclick="openAgentModal('edit')">Upravit vybraného</button>
+      <button onclick="deleteSelectedAgent()" style="color:#ef4444;">Smazat vybraného</button>
+    </div>
+
+    <!-- Agent selector -->
+    <div class="agent-selector" id="agent-selector"></div>
+
+    <!-- Agent modal -->
+    <div class="agent-modal-overlay hidden" id="agent-modal-overlay" onclick="if(event.target===this)closeAgentModal()">
+      <div class="agent-modal">
+        <h2 id="agent-modal-title">Nový agent</h2>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Slug (unikátní ID)</label>
+            <input id="af-slug" placeholder="my-agent" />
+          </div>
+          <div class="form-group">
+            <label>Název</label>
+            <input id="af-name" placeholder="Můj Agent" />
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Ikona (emoji)</label>
+            <input id="af-icon" placeholder="🤖" maxlength="4" />
+          </div>
+          <div class="form-group">
+            <label>Barva</label>
+            <input id="af-color" type="color" value="#8b5cf6" />
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Modul (volitelné)</label>
+            <input id="af-module" placeholder="lide-hr, nakup-sklad, ..." />
+          </div>
+          <div class="form-group">
+            <label>Kontextový soubor</label>
+            <input id="af-context" placeholder="my-agent.md" />
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Model</label>
+          <select id="af-model">
+            <option value="claude-sonnet-4-6">Claude Sonnet 4.6</option>
+            <option value="claude-opus-4-6">Claude Opus 4.6</option>
+            <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>System prompt</label>
+          <textarea id="af-prompt" placeholder="Jsi vývojářský agent pro..."></textarea>
+        </div>
+        <div class="modal-actions">
+          <button class="btn-cancel" onclick="closeAgentModal()">Zrušit</button>
+          <button class="btn-save" onclick="saveAgent()">Uložit</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main layout -->
+    <div class="dev-layout">
+      <!-- Chat -->
+      <div class="dev-chat">
+        <div class="dev-chat-header">
+          <span id="dev-agent-icon">🎨</span>
+          <span id="dev-agent-name">Frontend Developer</span>
+          <span style="flex:1"></span>
+          <span id="dev-agent-module" style="font-size:11px;color:var(--text2);font-weight:400;"></span>
+        </div>
+        <div class="dev-chat-messages" id="dev-messages">
+          <div class="dev-empty">
+            <div class="icon">🛠️</div>
+            <p>Vyber agenta a zadej úkol</p>
+            <p style="font-size:12px; margin-top:8px;">Např: "Analyzuj HR modul a navrhni vylepšení"</p>
+          </div>
+        </div>
+        <div class="dev-chat-input">
+          <textarea id="dev-input" placeholder="Zadej úkol pro vývojářského agenta..." rows="1"></textarea>
+          <button id="dev-send" onclick="sendDevMessage()">Odeslat</button>
+        </div>
+      </div>
+
+      <!-- Sidebar -->
+      <div class="dev-sidebar">
+        <div class="dev-info-card" id="module-info">
+          <h3>Modul</h3>
+          <div style="color:var(--text2);font-size:12px;">Vyber agenta pro zobrazení info</div>
+        </div>
+        <div id="proposals-container"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Sidebar -->
+<script>
+  var s = document.createElement('script');
+  s.src = '/js/sidebar.js';
+  s.onload = function() { renderSidebar('dev-hub'); };
+  document.head.appendChild(s);
+</script>
+
+<!-- Marked.js for markdown -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.0/marked.min.js"></script>
+
+<script>
+(function() {
+  'use strict';
+
+  let selectedAgent = '';
+  let devHistory = [];
+  let isLoading = false;
+  let proposals = [];
+  let DEV_AGENTS = [];
+  let editingSlug = null; // null = nový, string = editace
+
+  // Načíst agenty z API
+  async function loadAgents() {
+    try {
+      const r = await fetch('/api/dev/agents', { credentials: 'include' });
+      DEV_AGENTS = await r.json();
+      // Pokud žádný vybraný nebo vybraný neexistuje, vyber prvního
+      if (!selectedAgent || !DEV_AGENTS.find(a => a.slug === selectedAgent)) {
+        selectedAgent = DEV_AGENTS.length ? DEV_AGENTS[0].slug : '';
+      }
+    } catch (e) {
+      console.error('Nepodařilo se načíst agenty:', e);
+    }
+  }
+
+  // Agent selector
+  function renderAgentSelector() {
+    const container = document.getElementById('agent-selector');
+    container.innerHTML = DEV_AGENTS
+      .filter(a => a.is_active !== false)
+      .map(a =>
+        `<div class="agent-btn ${a.slug === selectedAgent ? 'active' : ''}" data-slug="${a.slug}" onclick="selectAgent('${a.slug}')" style="${a.slug === selectedAgent && a.color ? 'border-color:' + a.color + ';background:' + a.color + '22;color:' + a.color : ''}">
+          <span class="agent-icon">${a.icon}</span> ${a.name}
+        </div>`
+      ).join('');
+  }
+
+  window.selectAgent = function(slug) {
+    selectedAgent = slug;
+    renderAgentSelector();
+    updateHeader();
+    loadModuleInfo();
+    devHistory = [];
+    proposals = [];
+    const agent = DEV_AGENTS.find(a => a.slug === slug);
+    document.getElementById('dev-messages').innerHTML =
+      '<div class="dev-empty"><div class="icon">🛠️</div><p>Připraven. Zadej úkol pro ' +
+      (agent ? agent.name : slug) + '</p></div>';
+    document.getElementById('proposals-container').innerHTML = '';
+  };
+
+  function updateHeader() {
+    const agent = DEV_AGENTS.find(a => a.slug === selectedAgent);
+    if (!agent) return;
+    document.getElementById('dev-agent-icon').textContent = agent.icon;
+    document.getElementById('dev-agent-name').textContent = agent.name;
+    document.getElementById('dev-agent-module').textContent = agent.module ? 'modul: ' + agent.module : 'globální';
+  }
+
+  // ─── Agent CRUD ──────────────────────────────────────────────────────────
+
+  window.openAgentModal = function(mode) {
+    const overlay = document.getElementById('agent-modal-overlay');
+    overlay.classList.remove('hidden');
+
+    if (mode === 'edit') {
+      const agent = DEV_AGENTS.find(a => a.slug === selectedAgent);
+      if (!agent) return alert('Nejdříve vyber agenta');
+      editingSlug = agent.slug;
+      document.getElementById('agent-modal-title').textContent = 'Upravit agenta: ' + agent.name;
+      document.getElementById('af-slug').value = agent.slug;
+      document.getElementById('af-slug').disabled = true;
+      document.getElementById('af-name').value = agent.name;
+      document.getElementById('af-icon').value = agent.icon;
+      document.getElementById('af-color').value = agent.color || '#8b5cf6';
+      document.getElementById('af-module').value = agent.module || '';
+      document.getElementById('af-context').value = agent.context_file || '';
+      document.getElementById('af-model').value = agent.model || 'claude-sonnet-4-6';
+      document.getElementById('af-prompt').value = agent.system_prompt || '';
+    } else {
+      editingSlug = null;
+      document.getElementById('agent-modal-title').textContent = 'Nový agent';
+      document.getElementById('af-slug').value = '';
+      document.getElementById('af-slug').disabled = false;
+      document.getElementById('af-name').value = '';
+      document.getElementById('af-icon').value = '🤖';
+      document.getElementById('af-color').value = '#8b5cf6';
+      document.getElementById('af-module').value = '';
+      document.getElementById('af-context').value = '';
+      document.getElementById('af-model').value = 'claude-sonnet-4-6';
+      document.getElementById('af-prompt').value = '';
+    }
+  };
+
+  window.closeAgentModal = function() {
+    document.getElementById('agent-modal-overlay').classList.add('hidden');
+  };
+
+  window.saveAgent = async function() {
+    const data = {
+      slug: document.getElementById('af-slug').value.trim(),
+      name: document.getElementById('af-name').value.trim(),
+      icon: document.getElementById('af-icon').value.trim() || '🤖',
+      color: document.getElementById('af-color').value,
+      module: document.getElementById('af-module').value.trim() || null,
+      context_file: document.getElementById('af-context').value.trim() || null,
+      model: document.getElementById('af-model').value,
+      system_prompt: document.getElementById('af-prompt').value.trim(),
+    };
+
+    if (!data.slug || !data.name || !data.system_prompt) {
+      return alert('Vyplň povinná pole: slug, název a system prompt');
+    }
+
+    try {
+      let r;
+      if (editingSlug) {
+        // PUT — editace
+        r = await fetch('/api/dev/agents/' + editingSlug, {
+          method: 'PUT', credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data),
+        });
+      } else {
+        // POST — nový
+        r = await fetch('/api/dev/agents', {
+          method: 'POST', credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data),
+        });
+      }
+
+      const result = await r.json();
+      if (!r.ok) return alert('Chyba: ' + (result.error || 'Neznámá'));
+
+      closeAgentModal();
+      await loadAgents();
+      selectedAgent = data.slug;
+      renderAgentSelector();
+      updateHeader();
+      loadModuleInfo();
+    } catch (err) {
+      alert('Chyba při ukládání: ' + err.message);
+    }
+  };
+
+  window.deleteSelectedAgent = async function() {
+    const agent = DEV_AGENTS.find(a => a.slug === selectedAgent);
+    if (!agent) return alert('Nejdříve vyber agenta');
+    if (!confirm('Opravdu smazat agenta "' + agent.name + '"?')) return;
+
+    try {
+      const r = await fetch('/api/dev/agents/' + agent.slug, {
+        method: 'DELETE', credentials: 'include',
+      });
+      const data = await r.json();
+      if (!r.ok) return alert('Chyba: ' + (data.error || 'Neznámá'));
+
+      await loadAgents();
+      renderAgentSelector();
+      updateHeader();
+      loadModuleInfo();
+    } catch (err) {
+      alert('Chyba: ' + err.message);
+    }
+  };
+
+  // ─── Module info ─────────────────────────────────────────────────────────
+
+  async function loadModuleInfo() {
+    const agent = DEV_AGENTS.find(a => a.slug === selectedAgent);
+    const el = document.getElementById('module-info');
+    if (!agent || !agent.module) {
+      el.innerHTML = '<h3>Globální</h3><div class="dev-info-item"><span class="label">Rozsah</span><span>Celý frontend</span></div>';
+      return;
+    }
+    try {
+      const r = await fetch('/api/dev/analyze', {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ module: agent.module }),
+      });
+      if (!r.ok) throw new Error('Chyba');
+      const data = await r.json();
+      el.innerHTML = '<h3>Modul: ' + agent.module + '</h3>' +
+        '<div class="dev-info-item"><span class="label">Souborů</span><span>' + data.totalFiles + '</span></div>' +
+        '<div class="dev-info-item"><span class="label">Velikost</span><span>' + Math.round(data.totalSize / 1024) + ' KB</span></div>' +
+        '<div class="dev-info-item"><span class="label">Route</span><span>' + (data.routeFile || '—') + '</span></div>' +
+        '<div class="dev-info-item"><span class="label">Endpointů</span><span>' + data.endpointCount + '</span></div>' +
+        '<div class="dev-info-item"><span class="label">MCP server</span><span>' + (data.mcpServer || '—') + '</span></div>';
+    } catch (e) {
+      el.innerHTML = '<h3>Modul</h3><div style="color:var(--text2);font-size:12px;">Chyba načtení: ' + e.message + '</div>';
+    }
+  }
+
+  // Send message
+  window.sendDevMessage = async function() {
+    const input = document.getElementById('dev-input');
+    const text = (input.value || '').trim();
+    if (!text || isLoading) return;
+
+    input.value = '';
+    const messagesEl = document.getElementById('dev-messages');
+
+    // Clear empty state
+    const empty = messagesEl.querySelector('.dev-empty');
+    if (empty) empty.remove();
+
+    // Add user message
+    addDevMessage('user', text);
+    devHistory.push({ role: 'user', content: text });
+
+    // Typing
+    isLoading = true;
+    document.getElementById('dev-send').disabled = true;
+    const typing = document.createElement('div');
+    typing.className = 'dev-typing';
+    typing.innerHTML = '<span></span><span></span><span></span>';
+    messagesEl.appendChild(typing);
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+
+    try {
+      const r = await fetch('/api/dev/chat', {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: text,
+          agent: selectedAgent,
+          history: devHistory.slice(-3),
+        }),
+      });
+      typing.remove();
+
+      // Pokud server vrátil chybu, pokus se přečíst body
+      if (!r.ok) {
+        let errMsg = 'HTTP ' + r.status;
+        try {
+          const errData = await r.json();
+          errMsg = errData.error || errData.message || JSON.stringify(errData);
+        } catch (_) {
+          try { errMsg = await r.text(); } catch (_2) {}
+        }
+        addDevMessage('assistant', '⚠️ Chyba serveru (' + r.status + '): ' + errMsg);
+      } else {
+        const data = await r.json();
+        if (data.ok && data.response) {
+          addDevMessage('assistant', data.response, {
+            tools: data.toolsUsed,
+            duration: data.duration,
+            proposals: data.proposals,
+          });
+          devHistory.push({ role: 'assistant', content: data.response });
+
+          if (data.proposals && data.proposals.length) {
+            proposals = [...proposals, ...data.proposals];
+            renderProposals();
+          }
+        } else {
+          addDevMessage('assistant', '⚠️ ' + (data.error || data.message || 'Agent nevrátil odpověď'));
+        }
+      }
+    } catch (e) {
+      typing.remove();
+      addDevMessage('assistant', '⚠️ Chyba připojení: ' + e.message);
+    }
+
+    isLoading = false;
+    document.getElementById('dev-send').disabled = false;
+  };
+
+  function addDevMessage(role, text, meta) {
+    const messagesEl = document.getElementById('dev-messages');
+    const div = document.createElement('div');
+    div.className = 'dev-msg ' + role;
+
+    if (role === 'assistant' && window.marked) {
+      div.innerHTML = marked.parse(text);
+    } else {
+      div.textContent = text;
+    }
+
+    if (meta) {
+      const metaDiv = document.createElement('div');
+      metaDiv.className = 'dev-msg-meta';
+      if (meta.tools && meta.tools.length) {
+        metaDiv.innerHTML += meta.tools.map(t => '<span class="tool-badge">' + t + '</span>').join('');
+      }
+      if (meta.proposals && meta.proposals.length) {
+        metaDiv.innerHTML += '<span class="proposal-badge">' + meta.proposals.length + ' návrh(ů)</span>';
+      }
+      if (meta.duration) {
+        metaDiv.innerHTML += '<span style="color:var(--text2)">' + meta.duration + ' ms</span>';
+      }
+      div.appendChild(metaDiv);
+    }
+
+    messagesEl.appendChild(div);
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+  }
+
+  function renderProposals() {
+    const container = document.getElementById('proposals-container');
+    container.innerHTML = proposals.map((p, i) => {
+      const typeLabel = { bugfix: '🐛 Bugfix', feature: '✨ Feature', refactor: '♻️ Refactor', optimization: '⚡ Optimalizace', test: '🧪 Test' };
+      const removedLines = (p.diff?.removed || '').split('\n').slice(0, 8).map(l => '- ' + l).join('\n');
+      const addedLines = (p.diff?.added || '').split('\n').slice(0, 8).map(l => '+ ' + l).join('\n');
+      return '<div class="proposal-card">' +
+        '<h3>' + (typeLabel[p.type] || '📝 Změna') + ' — ' + p.file + '</h3>' +
+        '<div class="proposal-desc">' + p.description + '</div>' +
+        '<pre><code>' +
+          '<span style="color:#ef4444">' + removedLines + '</span>\n' +
+          '<span style="color:#22c55e">' + addedLines + '</span>' +
+        '</code></pre>' +
+        '<div class="proposal-actions">' +
+          '<button class="btn-approve" onclick="approveProposal(' + i + ')">✅ Schválit</button>' +
+          '<button class="btn-reject" onclick="rejectProposal(' + i + ')">❌ Zamítnout</button>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+  }
+
+  window.approveProposal = async function(idx) {
+    const p = proposals[idx];
+    if (!p) return;
+
+    // Potvrzení
+    const doCommit = confirm(
+      'Schválit změnu?\n\n' +
+      'Soubor: ' + p.file + '\n' +
+      'Popis: ' + p.description + '\n\n' +
+      'Klikni OK pro aplikaci (+ git commit)\nnebo Storno pro aplikaci bez commitu.'
+    );
+
+    // Najdi tlačítko a ukaž stav
+    const btns = document.querySelectorAll('.btn-approve');
+    const btn = btns[idx];
+    if (btn) { btn.textContent = 'Aplikuji...'; btn.disabled = true; }
+
+    // Debug — ukaž strukturu proposal v konzoli
+    console.log('Proposal data:', JSON.stringify(p, null, 2));
+
+    try {
+      const payload = {
+        file: p.file,
+        old_code: p.diff?.removed || p.old_code || '',
+        new_code: p.diff?.added || p.new_code || '',
+        description: p.description,
+        autoCommit: doCommit,
+      };
+      console.log('Sending payload:', JSON.stringify(payload));
+
+      const resp = await fetch('/api/dev/apply-proposal', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(payload),
+      });
+
+      const data = await resp.json();
+
+      if (!resp.ok) {
+        alert('Chyba: ' + (data.error || 'Neznámá chyba') + (data.hint ? '\n' + data.hint : ''));
+        if (btn) { btn.textContent = 'Schválit'; btn.disabled = false; }
+        return;
+      }
+
+      // Úspěch — zobrazit výsledek v chatu
+      const commitInfo = data.commit?.committed
+        ? '\nGit commit: ✅ ' + data.commit.message
+        : (data.commit ? '\nGit commit: ❌ ' + data.commit.error : '');
+
+      addMessage({
+        role: 'system',
+        content: '✅ **Změna aplikována**\n\n' +
+          '**Soubor:** `' + data.file + '`\n' +
+          '**Řádků změněno:** ' + data.linesChanged + commitInfo,
+      }, {});
+
+      proposals.splice(idx, 1);
+      renderProposals();
+    } catch (err) {
+      alert('Chyba při aplikaci: ' + err.message);
+      if (btn) { btn.textContent = 'Schválit'; btn.disabled = false; }
+    }
+  };
+
+  window.rejectProposal = function(idx) {
+    const p = proposals[idx];
+    addMessage({
+      role: 'system',
+      content: '❌ **Návrh zamítnut:** ' + (p?.description || 'Neznámý návrh'),
+    }, {});
+    proposals.splice(idx, 1);
+    renderProposals();
+  };
+
+  // Keyboard
+  document.addEventListener('keydown', function(e) {
+    if (e.target.id === 'dev-input' && e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendDevMessage();
+    }
+  });
+
+  // Init — načti agenty z API, pak vykresli UI
+  (async function init() {
+    await loadAgents();
+    renderAgentSelector();
+    updateHeader();
+    loadModuleInfo();
+  })();
+})();
+</script>
+</body>
+</html>

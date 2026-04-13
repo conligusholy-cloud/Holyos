@@ -1,0 +1,917 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Agenti | HOLYOS</title>
+  <link rel="icon" type="image/svg+xml" href="../../logo-holyos-icon.svg">
+  <base href="../../">
+  <link rel="stylesheet" href="css/dashboard.css">
+  <style>
+    /* ─── Layout ─── */
+    .agents-page { padding: 24px 32px; }
+    .agents-page h1 { font-size: 22px; margin: 0 0 4px; color: var(--text1); }
+    .agents-page .subtitle { color: var(--text2); font-size: 13px; margin-bottom: 24px; }
+
+    /* ─── Tabs ─── */
+    .tabs { display: flex; gap: 4px; margin-bottom: 24px; border-bottom: 1px solid var(--border); }
+    .tab {
+      padding: 10px 20px; font-size: 13px; font-weight: 500; cursor: pointer;
+      color: var(--text2); border: none; background: none; border-bottom: 2px solid transparent;
+      transition: all 0.2s;
+    }
+    .tab:hover { color: var(--text1); }
+    .tab.active { color: #8b5cf6; border-bottom-color: #8b5cf6; }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    /* ─── Cards Grid ─── */
+    .agents-grid {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+      gap: 20px; margin-bottom: 24px;
+    }
+    .agent-card {
+      background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+      padding: 20px; transition: all 0.2s; position: relative; cursor: pointer;
+    }
+    .agent-card:hover { border-color: #8b5cf6; box-shadow: 0 4px 20px rgba(139,92,246,0.15); }
+    .agent-card .card-header { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+    .agent-card .card-icon {
+      width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center;
+      justify-content: center; font-size: 24px;
+    }
+    .agent-card .card-title { font-size: 16px; font-weight: 600; color: var(--text1); }
+    .agent-card .card-role { font-size: 12px; color: var(--text2); margin-top: 2px; }
+    .agent-card .card-model {
+      font-size: 10px; padding: 2px 8px; border-radius: 6px;
+      background: rgba(139,92,246,0.1); color: #8b5cf6; position: absolute; top: 14px; right: 14px;
+    }
+    .skills-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+    .skill-badge {
+      padding: 4px 10px; border-radius: 8px; font-size: 11px;
+      background: rgba(99,102,241,0.1); color: #818cf8; border: 1px solid rgba(99,102,241,0.2);
+    }
+    .module-badge {
+      padding: 4px 10px; border-radius: 8px; font-size: 11px;
+      background: rgba(34,197,94,0.1); color: #22c55e; border: 1px solid rgba(34,197,94,0.2);
+    }
+    .card-stats {
+      display: flex; gap: 16px; margin-top: 14px; padding-top: 14px;
+      border-top: 1px solid var(--border); font-size: 11px; color: var(--text2);
+    }
+    .stat-value { font-weight: 600; color: var(--text1); }
+    .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 4px; }
+    .status-dot.active { background: #22c55e; }
+    .status-dot.inactive { background: #6b7280; }
+
+    /* ─── Add Agent Button ─── */
+    .add-agent-card {
+      background: var(--card); border: 2px dashed var(--border); border-radius: 12px;
+      padding: 20px; display: flex; align-items: center; justify-content: center;
+      flex-direction: column; gap: 8px; cursor: pointer; transition: all 0.2s;
+      min-height: 180px;
+    }
+    .add-agent-card:hover { border-color: #8b5cf6; background: rgba(139,92,246,0.05); }
+    .add-agent-card .add-icon { font-size: 32px; color: var(--text2); }
+    .add-agent-card .add-text { font-size: 13px; color: var(--text2); }
+
+    /* ─── Modal ─── */
+    .modal-overlay {
+      display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+      z-index: 10000; align-items: center; justify-content: center;
+    }
+    .modal-overlay.open { display: flex; }
+    .modal {
+      background: var(--card); border: 1px solid var(--border); border-radius: 16px;
+      width: 640px; max-height: 85vh; overflow-y: auto; padding: 28px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+    }
+    .modal h2 { margin: 0 0 20px; font-size: 18px; color: var(--text1); }
+    .modal .form-group { margin-bottom: 16px; }
+    .modal label {
+      display: block; font-size: 12px; font-weight: 600; color: var(--text2);
+      margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px;
+    }
+    .modal input, .modal select, .modal textarea {
+      width: 100%; padding: 10px 14px; border: 1px solid var(--border); border-radius: 8px;
+      background: var(--bg); color: var(--text1); font-size: 13px; font-family: inherit;
+      outline: none; box-sizing: border-box;
+    }
+    .modal input:focus, .modal select:focus, .modal textarea:focus { border-color: #8b5cf6; }
+    .modal textarea { resize: vertical; min-height: 100px; }
+    .modal .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .modal .form-row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+    .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--border); }
+    .btn {
+      padding: 10px 20px; border-radius: 8px; font-size: 13px; font-weight: 500;
+      cursor: pointer; border: none; transition: all 0.2s;
+    }
+    .btn-primary { background: #8b5cf6; color: #fff; }
+    .btn-primary:hover { background: #7c3aed; }
+    .btn-secondary { background: var(--border); color: var(--text1); }
+    .btn-secondary:hover { background: rgba(139,92,246,0.2); }
+    .btn-danger { background: rgba(239,68,68,0.15); color: #ef4444; }
+    .btn-danger:hover { background: rgba(239,68,68,0.25); }
+
+    /* ─── Checkboxes ─── */
+    .checkbox-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+    .checkbox-item {
+      display: flex; align-items: center; gap: 8px; padding: 6px 10px;
+      border-radius: 6px; cursor: pointer; font-size: 12px; color: var(--text1);
+      background: var(--bg); border: 1px solid var(--border); transition: all 0.15s;
+    }
+    .checkbox-item:hover { border-color: #8b5cf6; }
+    .checkbox-item.checked { background: rgba(139,92,246,0.1); border-color: #8b5cf6; }
+    .checkbox-item.module-checked { background: rgba(34,197,94,0.1); border-color: #22c55e; }
+    .checkbox-item input { display: none; }
+    .section-label {
+      font-size: 11px; font-weight: 700; color: var(--text2); text-transform: uppercase;
+      letter-spacing: 0.5px; margin: 16px 0 8px; padding-bottom: 4px;
+      border-bottom: 1px solid var(--border);
+    }
+    .section-label:first-child { margin-top: 0; }
+
+    /* ─── Collaboration ─── */
+    .collab-container {
+      background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+      padding: 24px; min-height: 500px;
+    }
+    .collab-container h3 { margin: 0 0 8px; font-size: 15px; color: var(--text1); }
+    .collab-subtitle { font-size: 12px; color: var(--text2); margin-bottom: 20px; }
+    #collab-canvas { width: 100%; height: 480px; }
+
+    /* ─── Flow ─── */
+    .flow-container {
+      background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+      padding: 24px; margin-bottom: 24px;
+    }
+    .flow-container h3 { margin: 0 0 16px; font-size: 15px; color: var(--text1); }
+    .flow-steps { display: flex; align-items: center; gap: 0; flex-wrap: wrap; justify-content: center; }
+    .flow-step {
+      padding: 12px 20px; border-radius: 10px; font-size: 12px; text-align: center; min-width: 130px;
+    }
+    .flow-step .step-icon { font-size: 24px; margin-bottom: 6px; }
+    .flow-step .step-label { font-weight: 600; color: var(--text1); }
+    .flow-step .step-desc { font-size: 10px; color: var(--text2); margin-top: 2px; }
+    .flow-step.user { background: rgba(99,102,241,0.1); border: 1px solid rgba(99,102,241,0.3); }
+    .flow-step.orchestrator { background: rgba(139,92,246,0.1); border: 1px solid rgba(139,92,246,0.3); }
+    .flow-step.assistant { background: rgba(6,182,212,0.1); border: 1px solid rgba(6,182,212,0.3); }
+    .flow-step.skill { background: rgba(245,158,11,0.1); border: 1px solid rgba(245,158,11,0.3); }
+    .flow-step.db { background: rgba(34,197,94,0.1); border: 1px solid rgba(34,197,94,0.3); }
+    .flow-arrow { font-size: 20px; color: var(--text2); padding: 0 8px; }
+
+    .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 16px; }
+    .legend-item { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text2); }
+    .legend-color { width: 12px; height: 12px; border-radius: 3px; }
+
+    /* ─── Skills Table ─── */
+    .admin-table {
+      width: 100%; border-collapse: collapse; font-size: 13px;
+      background: var(--card); border: 1px solid var(--border); border-radius: 12px; overflow: hidden;
+    }
+    .admin-table th {
+      text-align: left; padding: 12px 16px; font-weight: 600; font-size: 11px;
+      text-transform: uppercase; letter-spacing: 0.5px; color: var(--text2);
+      background: rgba(139,92,246,0.05); border-bottom: 1px solid var(--border);
+    }
+    .admin-table td { padding: 10px 16px; border-bottom: 1px solid var(--border); color: var(--text1); }
+    .admin-table tr:last-child td { border-bottom: none; }
+    .admin-table tr:hover td { background: rgba(139,92,246,0.03); }
+    .category-badge { padding: 3px 8px; border-radius: 6px; font-size: 10px; font-weight: 500; }
+    .category-badge.hr { background: rgba(108,92,231,0.15); color: #6c5ce7; }
+    .category-badge.warehouse { background: rgba(245,158,11,0.15); color: #f59e0b; }
+    .category-badge.production { background: rgba(6,182,212,0.15); color: #06b6d4; }
+    .category-badge.system { background: rgba(107,114,128,0.15); color: #6b7280; }
+
+    .loading-text { color: var(--text2); font-size: 13px; text-align: center; padding: 40px; }
+
+    /* ─── Monitoring ─── */
+    .stats-grid {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      gap: 14px;
+    }
+    .stat-card {
+      background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+      padding: 18px 16px; text-align: center;
+    }
+    .stat-value { font-size: 28px; font-weight: 700; color: var(--text1); }
+    .stat-label { font-size: 11px; color: var(--text2); margin-top: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
+    .monitoring-section {
+      background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 18px;
+    }
+    .skill-bar {
+      display: flex; align-items: center; gap: 10px; margin-bottom: 10px;
+    }
+    .skill-bar-name { font-size: 12px; color: var(--text1); min-width: 120px; }
+    .skill-bar-track {
+      flex: 1; height: 22px; background: rgba(139,92,246,0.08); border-radius: 6px; overflow: hidden;
+    }
+    .skill-bar-fill {
+      height: 100%; background: linear-gradient(90deg, #8b5cf6, #6366f1); border-radius: 6px;
+      display: flex; align-items: center; padding-left: 8px; font-size: 11px; color: #fff; font-weight: 600;
+      min-width: 30px; transition: width 0.5s ease;
+    }
+    .skill-bar-avg { font-size: 11px; color: var(--text2); min-width: 60px; text-align: right; }
+    .exec-row {
+      display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 8px;
+      font-size: 12px; border-bottom: 1px solid var(--border);
+    }
+    .exec-row:last-child { border-bottom: none; }
+    .exec-status {
+      width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+    }
+    .exec-status.success { background: #22c55e; }
+    .exec-status.error { background: #ef4444; }
+    .exec-status.timeout { background: #f59e0b; }
+    .exec-name { flex: 1; color: var(--text1); font-weight: 500; }
+    .exec-duration { color: var(--text2); font-size: 11px; }
+    .exec-time { color: var(--text2); font-size: 10px; min-width: 80px; text-align: right; }
+
+    /* Toast */
+    .toast {
+      position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+      background: #22c55e; color: #fff; padding: 10px 24px; border-radius: 10px;
+      font-size: 13px; z-index: 10001; box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+      animation: fadeInUp 0.3s ease;
+    }
+    .toast.error { background: #ef4444; }
+    @keyframes fadeInUp { from { opacity:0; transform:translateX(-50%) translateY(20px); } to { opacity:1; transform:translateX(-50%) translateY(0); } }
+  </style>
+</head>
+<body>
+<aside id="sidebar" class="sidebar"></aside>
+<div class="main-wrapper">
+  <div class="agents-page">
+    <h1>🤖 AI Agenti</h1>
+    <p class="subtitle">Správa specializovaných AI asistentů, skillů a jejich spolupráce</p>
+
+    <div class="tabs">
+      <button class="tab active" data-tab="overview">Přehled agentů</button>
+      <button class="tab" data-tab="monitoring">Monitoring</button>
+      <button class="tab" data-tab="collaboration">Spolupráce & tok</button>
+      <button class="tab" data-tab="skills">Správa skillů</button>
+    </div>
+
+    <!-- Tab 1: Overview + Admin -->
+    <div class="tab-content active" id="tab-overview">
+      <div class="agents-grid" id="agents-grid">
+        <div class="loading-text">Načítám agenty...</div>
+      </div>
+    </div>
+
+    <!-- Tab 2: Monitoring Dashboard -->
+    <div class="tab-content" id="tab-monitoring">
+      <div class="stats-grid" id="monitoring-stats">
+        <div class="stat-card"><div class="stat-value" id="stat-conversations">—</div><div class="stat-label">Konverzací</div></div>
+        <div class="stat-card"><div class="stat-value" id="stat-messages">—</div><div class="stat-label">Zpráv</div></div>
+        <div class="stat-card"><div class="stat-value" id="stat-executions-success">—</div><div class="stat-label">Úspěšných skillů</div></div>
+        <div class="stat-card"><div class="stat-value" id="stat-executions-error">—</div><div class="stat-label">Chyb</div></div>
+        <div class="stat-card"><div class="stat-value" id="stat-avg-duration">—</div><div class="stat-label">Ø doba (ms)</div></div>
+        <div class="stat-card"><div class="stat-value" id="stat-conversations-7d">—</div><div class="stat-label">Za 7 dní</div></div>
+      </div>
+
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-top:20px;">
+        <!-- Top Skills -->
+        <div class="monitoring-section">
+          <h3 style="font-size:15px; margin-bottom:12px; color:var(--text1);">Top skilly podle použití</h3>
+          <div id="top-skills-chart" style="min-height:200px;">
+            <div class="loading-text">Načítám...</div>
+          </div>
+        </div>
+
+        <!-- Recent Executions -->
+        <div class="monitoring-section">
+          <h3 style="font-size:15px; margin-bottom:12px; color:var(--text1);">Poslední volání skillů</h3>
+          <div id="recent-executions" style="max-height:400px; overflow-y:auto;">
+            <div class="loading-text">Načítám...</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab 3: Collaboration -->
+    <div class="tab-content" id="tab-collaboration">
+      <div class="flow-container">
+        <h3>Jak to funguje: tok zprávy</h3>
+        <div class="flow-steps">
+          <div class="flow-step user"><div class="step-icon">👤</div><div class="step-label">Uživatel</div><div class="step-desc">Zadá dotaz v chatu</div></div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-step orchestrator"><div class="step-icon">🧠</div><div class="step-label">Orchestrátor</div><div class="step-desc">Detekce záměru</div></div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-step assistant"><div class="step-icon">🤖</div><div class="step-label">Agent</div><div class="step-desc">Claude + prompt</div></div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-step skill"><div class="step-icon">⚡</div><div class="step-label">Skilly</div><div class="step-desc">tool_use</div></div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-step db"><div class="step-icon">🗄️</div><div class="step-label">PostgreSQL</div><div class="step-desc">Data</div></div>
+        </div>
+      </div>
+      <div class="collab-container">
+        <h3>Mapa spolupráce agentů</h3>
+        <p class="collab-subtitle">Agenti sdílejí skilly a mohou doporučovat jiného agenta. Tloušťka čáry = počet sdílených skillů.</p>
+        <canvas id="collab-canvas"></canvas>
+        <div class="legend">
+          <div class="legend-item"><div class="legend-color" style="background:#8b5cf6;"></div> Agent</div>
+          <div class="legend-item"><div class="legend-color" style="background:#f59e0b;"></div> Sdílený skill</div>
+          <div class="legend-item"><div class="legend-color" style="background:rgba(139,92,246,0.3);"></div> Propojení</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab 3: Skills -->
+    <div class="tab-content" id="tab-skills">
+      <table class="admin-table" id="skills-table">
+        <thead><tr><th>Skill</th><th>Slug</th><th>Kategorie</th><th>Typ</th><th>Agenti</th><th>Stav</th></tr></thead>
+        <tbody id="skills-tbody"><tr><td colspan="6" class="loading-text">Načítám...</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ─── MODAL: Editace / Nový agent ─── -->
+<div class="modal-overlay" id="modal-overlay">
+  <div class="modal">
+    <h2 id="modal-title">Nový agent</h2>
+    <form id="agent-form">
+      <input type="hidden" id="agent-id">
+
+      <div class="form-row">
+        <div class="form-group">
+          <label>Jméno agenta</label>
+          <input type="text" id="agent-name" required placeholder="např. Mistr">
+        </div>
+        <div class="form-group">
+          <label>Slug (URL identifikátor)</label>
+          <input type="text" id="agent-slug" required placeholder="např. mistr" pattern="[a-z0-9-]+">
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>Role / Popis</label>
+        <input type="text" id="agent-role" placeholder="Výrobní procesy, pracovní postupy, operace...">
+      </div>
+
+      <div class="form-group">
+        <label>System prompt</label>
+        <textarea id="agent-prompt" rows="6" placeholder="Jsi [Jméno] — AI asistent pro [oblast] v systému HolyOS..."></textarea>
+      </div>
+
+      <div class="form-row-3">
+        <div class="form-group">
+          <label>Model</label>
+          <select id="agent-model">
+            <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5</option>
+            <option value="claude-sonnet-4-6">Claude Sonnet 4</option>
+            <option value="claude-opus-4-6">Claude Opus 4</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Teplota</label>
+          <input type="number" id="agent-temp" min="0" max="1" step="0.1" value="0.3">
+        </div>
+        <div class="form-group">
+          <label>Ikona (emoji)</label>
+          <input type="text" id="agent-icon" placeholder="🔧" maxlength="4">
+        </div>
+      </div>
+
+      <div class="form-group">
+        <div class="section-label">Přístup k modulům</div>
+        <div class="checkbox-grid" id="modules-checkboxes">
+          <div class="loading-text" style="padding:10px;">Načítám moduly...</div>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <div class="section-label">Přiřazené skilly</div>
+        <div class="checkbox-grid" id="skills-checkboxes">
+          <div class="loading-text" style="padding:10px;">Načítám skilly...</div>
+        </div>
+      </div>
+
+      <div class="modal-actions">
+        <button type="button" class="btn btn-danger" id="btn-delete" style="margin-right:auto;display:none;">Smazat agenta</button>
+        <button type="button" class="btn btn-secondary" id="btn-cancel">Zrušit</button>
+        <button type="submit" class="btn btn-primary" id="btn-save">Uložit agenta</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script type="module">
+  import { renderSidebar, initDate } from '../../dist/client/client/js/sidebar.js';
+  renderSidebar('ai-agenti');
+  initDate();
+</script>
+
+<script>
+(function() {
+  'use strict';
+
+  let assistants = [];
+  let allSkills = [];
+  let allModules = [];
+  let editingId = null;
+  const API_HEADERS = { 'Content-Type': 'application/json' };
+
+  // ─── Tabs ───
+  document.querySelectorAll('.tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+      tab.classList.add('active');
+      document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
+      if (tab.dataset.tab === 'collaboration') setTimeout(drawCollabGraph, 50);
+      if (tab.dataset.tab === 'monitoring') loadMonitoringData();
+    });
+  });
+
+  // ─── Load Data ───
+  async function loadData() {
+    try {
+      const [aRes, sRes, mRes] = await Promise.all([
+        fetch('/api/ai/assistants', { credentials: 'include' }),
+        fetch('/api/ai/skills', { credentials: 'include' }),
+        fetch('/api/ai/modules', { credentials: 'include' }),
+      ]);
+
+      if (aRes.ok) assistants = await aRes.json();
+      else {
+        const pubRes = await fetch('/api/ai/assistants-public');
+        if (pubRes.ok) assistants = await pubRes.json();
+      }
+      if (sRes.ok) allSkills = await sRes.json();
+      if (mRes.ok) allModules = await mRes.json();
+
+      renderAgentCards();
+      renderSkillsTable();
+    } catch (e) {
+      document.getElementById('agents-grid').innerHTML =
+        '<div class="loading-text">Chyba: ' + e.message + '</div>';
+    }
+  }
+
+  // ─── Render Agent Cards ───
+  function renderAgentCards() {
+    const grid = document.getElementById('agents-grid');
+    const colors = { mistr:'#06b6d4', personalista:'#6c5ce7', skladnik:'#f59e0b', koordinator:'#3b82f6', technik:'#ef4444' };
+
+    let html = assistants.map(a => {
+      const icon = a.config?.icon || '🤖';
+      const color = colors[a.slug] || '#8b5cf6';
+      const skillBadges = (a.skills || []).map(s =>
+        '<span class="skill-badge">' + esc(s.skill?.name || s.skill?.slug || '') + '</span>'
+      ).join('');
+      const moduleBadges = (a.config?.modules || []).map(m => {
+        const mod = allModules.find(x => x.slug === m);
+        return '<span class="module-badge">' + esc(mod?.title || m) + '</span>';
+      }).join('');
+
+      return '<div class="agent-card" data-id="' + a.id + '" onclick="window.__agents.edit(\'' + a.id + '\')">' +
+        '<div class="card-model">' + esc(a.model || '') + '</div>' +
+        '<div class="card-header">' +
+          '<div class="card-icon" style="background:' + color + '22;">' + icon + '</div>' +
+          '<div><div class="card-title">' + esc(a.name) + '</div>' +
+          '<div class="card-role">' + esc(a.role || '') + '</div></div>' +
+        '</div>' +
+        (moduleBadges ? '<div class="skills-list" style="margin-bottom:6px;">' + moduleBadges + '</div>' : '') +
+        '<div class="skills-list">' + (skillBadges || '<em style="color:var(--text2)">Žádné skilly</em>') + '</div>' +
+        '<div class="card-stats">' +
+          '<div><span class="status-dot ' + (a.is_active !== false ? 'active' : 'inactive') + '"></span>' +
+            (a.is_active !== false ? 'Aktivní' : 'Neaktivní') + '</div>' +
+          '<div>Skillů: <span class="stat-value">' + (a.skills?.length || 0) + '</span></div>' +
+          '<div>Modulů: <span class="stat-value">' + (a.config?.modules?.length || 0) + '</span></div>' +
+          '<div>Temp: <span class="stat-value">' + (a.config?.temperature || 0.3) + '</span></div>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+
+    html += '<div class="add-agent-card" onclick="window.__agents.create()">' +
+      '<div class="add-icon">➕</div>' +
+      '<div class="add-text">Přidat nového agenta</div></div>';
+
+    grid.innerHTML = html;
+  }
+
+  // ─── Render Skills Table ───
+  function renderSkillsTable() {
+    const tbody = document.getElementById('skills-tbody');
+    const data = allSkills.length > 0 ? allSkills : extractSkillsFromAssistants();
+
+    if (data.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="6" class="loading-text">Žádné skilly</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = data.map(s => {
+      const cat = s.category || 'system';
+      const agents = findAgentsForSkill(s.slug || s.id);
+      return '<tr>' +
+        '<td><strong>' + esc(s.name) + '</strong></td>' +
+        '<td><code style="font-size:11px;color:var(--text2);">' + esc(s.slug || '') + '</code></td>' +
+        '<td><span class="category-badge ' + cat + '">' + cat + '</span></td>' +
+        '<td>' + esc(s.handler_type || 'db_query') + '</td>' +
+        '<td style="font-size:12px;">' + esc(agents) + '</td>' +
+        '<td><span class="status-dot ' + (s.is_active !== false ? 'active' : 'inactive') + '"></span>' +
+          (s.is_active !== false ? 'Aktivní' : 'Neaktivní') + '</td></tr>';
+    }).join('');
+  }
+
+  function extractSkillsFromAssistants() {
+    const map = {};
+    assistants.forEach(a => (a.skills || []).forEach(as => {
+      const s = as.skill || {};
+      if (s.slug && !map[s.slug]) map[s.slug] = { ...s, _agents: [] };
+      if (s.slug) map[s.slug]._agents.push(a.name);
+    }));
+    return Object.values(map);
+  }
+
+  function findAgentsForSkill(skillIdOrSlug) {
+    return assistants
+      .filter(a => (a.skills || []).some(s => (s.skill?.slug || s.skill?.id) === skillIdOrSlug))
+      .map(a => a.name).join(', ') || '—';
+  }
+
+  // ─── Modal: Open / Close ───
+  function openModal() { document.getElementById('modal-overlay').classList.add('open'); }
+  function closeModal() { document.getElementById('modal-overlay').classList.remove('open'); editingId = null; }
+
+  document.getElementById('btn-cancel').addEventListener('click', closeModal);
+  document.getElementById('modal-overlay').addEventListener('click', function(e) {
+    if (e.target === this) closeModal();
+  });
+
+  // ─── Modal: Create new agent ───
+  function createAgent() {
+    editingId = null;
+    document.getElementById('modal-title').textContent = 'Nový agent';
+    document.getElementById('btn-delete').style.display = 'none';
+    document.getElementById('agent-form').reset();
+    document.getElementById('agent-id').value = '';
+    document.getElementById('agent-temp').value = '0.3';
+    document.getElementById('agent-model').value = 'claude-haiku-4-5-20251001';
+    renderModuleCheckboxes([]);
+    renderSkillCheckboxes([]);
+    openModal();
+  }
+
+  // ─── Modal: Edit existing agent ───
+  function editAgent(id) {
+    const agent = assistants.find(a => a.id === id || a.id === parseInt(id));
+    if (!agent) {
+      toast('Agent nenalezen (id: ' + id + ')', true);
+      return;
+    }
+
+    editingId = agent.id;
+    document.getElementById('modal-title').textContent = 'Upravit: ' + agent.name;
+    document.getElementById('btn-delete').style.display = 'block';
+    document.getElementById('agent-id').value = agent.id;
+    document.getElementById('agent-name').value = agent.name || '';
+    document.getElementById('agent-slug').value = agent.slug || '';
+    document.getElementById('agent-role').value = agent.role || '';
+    document.getElementById('agent-prompt').value = agent.system_prompt || '';
+    document.getElementById('agent-model').value = agent.model || 'claude-haiku-4-5-20251001';
+    document.getElementById('agent-temp').value = agent.config?.temperature ?? 0.3;
+    document.getElementById('agent-icon').value = agent.config?.icon || '';
+
+    const assignedModules = agent.config?.modules || [];
+    renderModuleCheckboxes(assignedModules);
+
+    const assignedSlugs = (agent.skills || []).map(s => s.skill?.slug || s.skill?.id).filter(Boolean);
+    renderSkillCheckboxes(assignedSlugs);
+    openModal();
+  }
+
+  // ─── Module Checkboxes ───
+  function renderModuleCheckboxes(checkedSlugs) {
+    const container = document.getElementById('modules-checkboxes');
+
+    if (allModules.length === 0) {
+      container.innerHTML = '<div style="padding:10px;color:var(--text2);font-size:12px;">Žádné moduly k dispozici</div>';
+      return;
+    }
+
+    container.innerHTML = allModules.map(m => {
+      const checked = checkedSlugs.includes(m.slug);
+      return '<label class="checkbox-item' + (checked ? ' module-checked' : '') + '">' +
+        '<input type="checkbox" name="modules" value="' + esc(m.slug) + '"' + (checked ? ' checked' : '') + '>' +
+        '<span>' + esc(m.title) + '</span>' +
+      '</label>';
+    }).join('');
+
+    container.querySelectorAll('.checkbox-item').forEach(label => {
+      label.addEventListener('click', function() {
+        const cb = this.querySelector('input');
+        setTimeout(() => this.classList.toggle('module-checked', cb.checked), 10);
+      });
+    });
+  }
+
+  // ─── Skill Checkboxes ───
+  function renderSkillCheckboxes(checkedSlugs) {
+    const container = document.getElementById('skills-checkboxes');
+    const data = allSkills.length > 0 ? allSkills : extractSkillsFromAssistants();
+
+    if (data.length === 0) {
+      container.innerHTML = '<div style="padding:10px;color:var(--text2);font-size:12px;">Žádné skilly k dispozici</div>';
+      return;
+    }
+
+    container.innerHTML = data.map(s => {
+      const checked = checkedSlugs.includes(s.slug) || checkedSlugs.includes(s.id);
+      return '<label class="checkbox-item' + (checked ? ' checked' : '') + '">' +
+        '<input type="checkbox" name="skills" value="' + (s.id || s.slug) + '"' + (checked ? ' checked' : '') + '>' +
+        '<span>' + esc(s.name) + '</span>' +
+      '</label>';
+    }).join('');
+
+    container.querySelectorAll('.checkbox-item').forEach(label => {
+      label.addEventListener('click', function() {
+        const cb = this.querySelector('input');
+        setTimeout(() => this.classList.toggle('checked', cb.checked), 10);
+      });
+    });
+  }
+
+  // ─── Save Agent ───
+  document.getElementById('agent-form').addEventListener('submit', async function(e) {
+    e.preventDefault();
+
+    const selectedModules = Array.from(document.querySelectorAll('#modules-checkboxes input:checked'))
+      .map(cb => cb.value);
+
+    const data = {
+      name: document.getElementById('agent-name').value.trim(),
+      slug: document.getElementById('agent-slug').value.trim(),
+      role: document.getElementById('agent-role').value.trim(),
+      system_prompt: document.getElementById('agent-prompt').value.trim(),
+      model: document.getElementById('agent-model').value,
+      config: {
+        temperature: parseFloat(document.getElementById('agent-temp').value) || 0.3,
+        max_tokens: 2048,
+        icon: document.getElementById('agent-icon').value.trim() || '🤖',
+        modules: selectedModules,
+      },
+    };
+
+    if (!data.name || !data.slug) { toast('Vyplňte jméno a slug', true); return; }
+
+    try {
+      let res;
+      if (editingId) {
+        res = await fetch('/api/ai/assistants/' + editingId, {
+          method: 'PUT', headers: API_HEADERS, credentials: 'include',
+          body: JSON.stringify(data),
+        });
+      } else {
+        res = await fetch('/api/ai/assistants', {
+          method: 'POST', headers: API_HEADERS, credentials: 'include',
+          body: JSON.stringify(data),
+        });
+      }
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || err.message || 'HTTP ' + res.status);
+      }
+
+      const savedAgent = await res.json();
+
+      // Aktualizovat skilly — smazat staré, přidat nové
+      const selectedSkillIds = Array.from(document.querySelectorAll('#skills-checkboxes input:checked'))
+        .map(cb => cb.value);
+
+      if (editingId) {
+        const existing = assistants.find(a => a.id === editingId);
+        if (existing?.skills) {
+          for (const as of existing.skills) {
+            try {
+              await fetch('/api/ai/assistants/' + editingId + '/skills/' + (as.skill?.id || as.skill_id), {
+                method: 'DELETE', credentials: 'include',
+              });
+            } catch (e) { /* ignore */ }
+          }
+        }
+      }
+
+      for (let i = 0; i < selectedSkillIds.length; i++) {
+        try {
+          await fetch('/api/ai/assistants/' + savedAgent.id + '/skills', {
+            method: 'POST', headers: API_HEADERS, credentials: 'include',
+            body: JSON.stringify({ skill_id: selectedSkillIds[i], priority: selectedSkillIds.length - i }),
+          });
+        } catch (e) { /* ignore */ }
+      }
+
+      toast(editingId ? 'Agent aktualizován' : 'Agent vytvořen');
+      closeModal();
+      await loadData();
+    } catch (e) {
+      toast('Chyba: ' + e.message, true);
+    }
+  });
+
+  // ─── Delete Agent ───
+  document.getElementById('btn-delete').addEventListener('click', async function() {
+    if (!editingId) return;
+    if (!confirm('Opravdu smazat tohoto agenta?')) return;
+
+    try {
+      const res = await fetch('/api/ai/assistants/' + editingId, {
+        method: 'DELETE', credentials: 'include',
+      });
+      if (!res.ok) {
+        // Fallback: deaktivovat
+        await fetch('/api/ai/assistants/' + editingId, {
+          method: 'PUT', headers: API_HEADERS, credentials: 'include',
+          body: JSON.stringify({ is_active: false }),
+        });
+        toast('Agent deaktivován (má konverzace, nelze smazat)');
+      } else {
+        const result = await res.json();
+        toast(result.deactivated ? 'Agent deaktivován (má konverzace)' : 'Agent smazán');
+      }
+      closeModal();
+      await loadData();
+    } catch (e) {
+      toast('Chyba: ' + e.message, true);
+    }
+  });
+
+  // ─── Toast ───
+  function toast(msg, isError) {
+    const t = document.createElement('div');
+    t.className = 'toast' + (isError ? ' error' : '');
+    t.textContent = msg;
+    document.body.appendChild(t);
+    setTimeout(() => t.remove(), 3000);
+  }
+
+  // ─── Collaboration Graph ───
+  function drawCollabGraph() {
+    const canvas = document.getElementById('collab-canvas');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const rect = canvas.parentElement.getBoundingClientRect();
+    canvas.width = rect.width - 48;
+    canvas.height = 480;
+    const W = canvas.width, H = canvas.height, cx = W / 2, cy = H / 2;
+    ctx.clearRect(0, 0, W, H);
+
+    const agentData = assistants.map(a => ({
+      name: a.name,
+      icon: a.config?.icon || '🤖',
+      color: { mistr:'#06b6d4', personalista:'#6c5ce7', skladnik:'#f59e0b', koordinator:'#3b82f6', technik:'#ef4444' }[a.slug] || '#8b5cf6',
+      skills: (a.skills || []).map(s => s.skill?.slug || ''),
+      modules: a.config?.modules || [],
+    }));
+
+    if (agentData.length === 0) {
+      ctx.font = '14px system-ui'; ctx.fillStyle = '#6b7280'; ctx.textAlign = 'center';
+      ctx.fillText('Žádní agenti', cx, cy);
+      return;
+    }
+
+    const radius = Math.min(W, H) * 0.33;
+    const positions = agentData.map((a, i) => {
+      const angle = (i / agentData.length) * Math.PI * 2 - Math.PI / 2;
+      return { ...a, x: cx + Math.cos(angle) * radius, y: cy + Math.sin(angle) * radius };
+    });
+
+    // Connections (shared skills + shared modules)
+    for (let i = 0; i < positions.length; i++) {
+      for (let j = i + 1; j < positions.length; j++) {
+        const sharedSkills = positions[i].skills.filter(s => s && positions[j].skills.includes(s));
+        const sharedModules = positions[i].modules.filter(m => m && positions[j].modules.includes(m));
+        const total = sharedSkills.length + sharedModules.length;
+        if (total > 0) {
+          ctx.beginPath();
+          ctx.moveTo(positions[i].x, positions[i].y);
+          ctx.lineTo(positions[j].x, positions[j].y);
+          ctx.strokeStyle = 'rgba(139,92,246,' + (0.1 + total * 0.1) + ')';
+          ctx.lineWidth = Math.max(1, total * 1.2);
+          ctx.stroke();
+          const mx = (positions[i].x + positions[j].x) / 2;
+          const my = (positions[i].y + positions[j].y) / 2;
+          ctx.font = '9px system-ui'; ctx.fillStyle = 'rgba(139,92,246,0.6)'; ctx.textAlign = 'center';
+          let label = '';
+          if (sharedSkills.length) label += sharedSkills.length + ' skill';
+          if (sharedModules.length) label += (label ? ', ' : '') + sharedModules.length + ' modul';
+          ctx.fillText(label, mx, my - 4);
+        }
+      }
+    }
+
+    // Orchestrator
+    ctx.beginPath(); ctx.arc(cx, cy, 32, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(139,92,246,0.1)'; ctx.fill();
+    ctx.strokeStyle = '#8b5cf6'; ctx.lineWidth = 2; ctx.stroke();
+    ctx.font = '22px system-ui'; ctx.textAlign = 'center'; ctx.fillText('🧠', cx, cy + 3);
+    ctx.font = 'bold 10px system-ui'; ctx.fillStyle = '#8b5cf6'; ctx.fillText('Orchestrátor', cx, cy + 24);
+
+    // Lines to orchestrator
+    positions.forEach(a => {
+      ctx.beginPath(); ctx.setLineDash([4, 4]);
+      ctx.moveTo(cx, cy); ctx.lineTo(a.x, a.y);
+      ctx.strokeStyle = 'rgba(139,92,246,0.2)'; ctx.lineWidth = 1; ctx.stroke();
+      ctx.setLineDash([]);
+    });
+
+    // Agent nodes
+    const textColor = getComputedStyle(document.body).getPropertyValue('--text1') || '#e2e4e9';
+    positions.forEach(a => {
+      ctx.beginPath(); ctx.arc(a.x, a.y, 36, 0, Math.PI * 2);
+      ctx.fillStyle = a.color + '15'; ctx.fill();
+      ctx.strokeStyle = a.color; ctx.lineWidth = 2; ctx.stroke();
+      ctx.font = '24px system-ui'; ctx.textAlign = 'center'; ctx.fillText(a.icon, a.x, a.y + 4);
+      ctx.font = 'bold 12px system-ui'; ctx.fillStyle = textColor; ctx.fillText(a.name, a.x, a.y + 52);
+      ctx.font = '10px system-ui'; ctx.fillStyle = a.color;
+      ctx.fillText(a.skills.length + ' skillů · ' + a.modules.length + ' modulů', a.x, a.y + 66);
+    });
+  }
+
+  // ─── Helpers ───
+  function esc(str) {
+    if (!str) return '';
+    const d = document.createElement('div'); d.textContent = str; return d.innerHTML;
+  }
+
+  // Auto-slug from name
+  document.getElementById('agent-name').addEventListener('input', function() {
+    if (!editingId) {
+      document.getElementById('agent-slug').value = this.value.toLowerCase()
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    }
+  });
+
+  // Public API
+  window.__agents = { edit: editAgent, create: createAgent };
+
+  // Resize
+  window.addEventListener('resize', () => {
+    if (document.getElementById('tab-collaboration').classList.contains('active')) drawCollabGraph();
+  });
+
+  // ─── Monitoring ───
+  async function loadMonitoringData() {
+    try {
+      const r = await fetch('/api/ai/dashboard/stats', { credentials: 'include' });
+      if (!r.ok) throw new Error('Chyba ' + r.status);
+      const data = await r.json();
+      const o = data.overview;
+
+      // Stats cards
+      document.getElementById('stat-conversations').textContent = o.totalConversations.toLocaleString('cs-CZ');
+      document.getElementById('stat-messages').textContent = o.totalMessages.toLocaleString('cs-CZ');
+      document.getElementById('stat-executions-success').textContent = (data.executionsByStatus.success || 0).toLocaleString('cs-CZ');
+      document.getElementById('stat-executions-error').textContent = (data.executionsByStatus.error || 0).toLocaleString('cs-CZ');
+      document.getElementById('stat-avg-duration').textContent = o.avgDurationMs.toLocaleString('cs-CZ');
+      document.getElementById('stat-conversations-7d').textContent = o.conversationsLast7Days.toLocaleString('cs-CZ');
+
+      // Top skills bar chart
+      const topEl = document.getElementById('top-skills-chart');
+      if (!data.topSkills.length) {
+        topEl.innerHTML = '<div style="text-align:center;color:var(--text2);padding:30px;">Zatím žádné volání skillů</div>';
+      } else {
+        const maxCount = Math.max(...data.topSkills.map(s => s.count), 1);
+        topEl.innerHTML = data.topSkills.map(s => {
+          const pct = Math.round((s.count / maxCount) * 100);
+          const name = s.skill ? s.skill.name : 'Neznámý';
+          return '<div class="skill-bar">' +
+            '<div class="skill-bar-name">' + name + '</div>' +
+            '<div class="skill-bar-track"><div class="skill-bar-fill" style="width:' + pct + '%">' + s.count + '×</div></div>' +
+            '<div class="skill-bar-avg">' + s.avgDurationMs + ' ms</div>' +
+          '</div>';
+        }).join('');
+      }
+
+      // Recent executions
+      const recentEl = document.getElementById('recent-executions');
+      if (!data.recentExecutions.length) {
+        recentEl.innerHTML = '<div style="text-align:center;color:var(--text2);padding:30px;">Zatím žádné záznamy</div>';
+      } else {
+        recentEl.innerHTML = data.recentExecutions.map(e => {
+          const time = new Date(e.createdAt).toLocaleString('cs-CZ', { day:'numeric', month:'numeric', hour:'2-digit', minute:'2-digit' });
+          return '<div class="exec-row">' +
+            '<div class="exec-status ' + e.status + '"></div>' +
+            '<div class="exec-name">' + e.skill + '</div>' +
+            '<span class="category-badge ' + (e.category||'system') + '">' + (e.category||'system') + '</span>' +
+            '<div class="exec-duration">' + (e.durationMs || '—') + ' ms</div>' +
+            '<div class="exec-time">' + time + '</div>' +
+          '</div>';
+        }).join('');
+      }
+    } catch (e) {
+      document.getElementById('monitoring-stats').innerHTML =
+        '<div class="loading-text" style="grid-column:1/-1;">Monitoring nedostupný: ' + e.message + '</div>';
+    }
+  }
+
+  // Init
+  loadData();
+})();
+</script>
+</body>
+</html>

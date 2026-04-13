@@ -11,9 +11,9 @@ document.addEventListener('DOMContentLoaded', () => {
   // Inicializace pan & zoom
   initCanvasInteraction();
 
-  // Načíst Factorify konfiguraci
-  FactorifyAPI.loadEnv().then(() => {
-    console.log('Factorify config načten');
+  // Načíst konfiguraci produkce
+  ProductionAPI.loadEnv().then(() => {
+    console.log('Production config načten');
   });
 
   // Zkusit načíst poslední programování

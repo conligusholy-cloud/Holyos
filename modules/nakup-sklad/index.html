@@ -164,7 +164,7 @@
             <input type="checkbox" id="mat-low-stock" onchange="loadMaterials()"> Pod minimem
           </label>
           <div style="flex:1"></div>
-          <button class="btn btn-secondary" onclick="openFactorifyImport()">📥 Import z Factorify</button>
+          <button class="btn btn-secondary" onclick="openCSVImport()">📥 Import z CSV</button>
           <button class="btn btn-primary" onclick="openMaterialModal()">+ Nové zboží</button>
         </div>
         <div id="materials-table"></div>
@@ -218,12 +218,27 @@
 
   <script>
     var s = document.createElement('script');
-    s.src = 'js/sidebar.js';
+    s.src = '/js/sidebar.js';
     s.onload = function() { renderSidebar('nakup-sklad'); };
     document.head.appendChild(s);
   </script>
 
   <script>
+    // Auth check — pokud není přihlášen, přesměruj na login
+    fetch('/api/auth/me', { credentials: 'include' }).then(function(r) {
+      if (r.status === 401) {
+        window.location.href = '/login.html?redirect=' + encodeURIComponent(window.location.pathname);
+      }
+    }).catch(function() {});
+
+    // Globální override fetch — vždy posílat auth cookie
+    const _origFetch = window.fetch;
+    window.fetch = function(url, opts) {
+      opts = opts || {};
+      opts.credentials = opts.credentials || 'include';
+      return _origFetch.call(this, url, opts);
+    };
+
     let companies = [];
     let materials = [];
     let warehouses = [];
@@ -618,25 +633,29 @@
 
     function renderMaterials(list) {
       const el = document.getElementById('materials-table');
-      if (!list.length) { el.innerHTML = '<div class="empty-state"><div class="empty-icon">📦</div><h3>Žádné zboží</h3><p>Přidejte první zboží nebo importujte z Factorify.</p></div>'; return; }
+      if (!list.length) { el.innerHTML = '<div class="empty-state"><div class="empty-icon">📦</div><h3>Žádné zboží</h3><p>Přidejte první zboží nebo importujte z CSV.</p></div>'; return; }
       let html = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr><th>ID</th><th>Typ</th><th>Kód</th><th>Název</th><th>Stav</th><th>Jedn.</th><th>Cena</th><th>Sklad</th><th>Min.</th><th>Dodavatel</th><th></th></tr></thead><tbody>';
       for (const m of list) {
-        const isLow = m.min_stock > 0 && m.current_stock < m.min_stock;
+        const stock = Number(m.current_stock) || 0;
+        const minStock = Number(m.min_stock) || 0;
+        const price = Number(m.unit_price) || 0;
+        const isLow = minStock > 0 && stock < minStock;
         const tLabel = MAT_TYPES[m.type] || m.type || '—';
         const tColor = MAT_TYPE_COLORS[m.type] || '#64748b';
         const sLabel = MAT_STATUSES[m.status] || m.status || '—';
         const sColor = MAT_STATUS_COLORS[m.status] || '#64748b';
+        const supplierName = m.supplier_name || m.supplier?.name || '—';
         html += '<tr onclick="openMaterialModal(' + m.id + ')">';
         html += '<td style="font-family:monospace;color:var(--text2);font-size:12px">' + m.id + '</td>';
         html += '<td><span class="badge" style="background:' + tColor + '22;color:' + tColor + '">' + tLabel + '</span></td>';
         html += '<td style="font-family:monospace;color:var(--text2);font-size:12px">' + (m.code||'—') + '</td>';
-        html += '<td class="person-name">' + m.name + (m.factorify_id ? ' <span style="font-size:10px;color:var(--text2)" title="Factorify #' + m.factorify_id + '">🔗</span>' : '') + '</td>';
+        html += '<td class="person-name">' + m.name + '</td>';
         html += '<td><span class="badge" style="background:' + sColor + '22;color:' + sColor + '">' + sLabel + '</span></td>';
         html += '<td>' + (m.unit||'ks') + '</td>';
-        html += '<td>' + (m.unit_price||0).toLocaleString('cs-CZ') + ' Kč</td>';
-        html += '<td style="font-weight:600;color:' + (isLow ? '#ef4444' : '#10b981') + '">' + (m.current_stock||0) + (isLow ? ' ⚠️' : '') + '</td>';
-        html += '<td>' + (m.min_stock||0) + '</td>';
-        html += '<td style="font-size:12px;color:var(--text2)">' + (m.supplier_name||'—') + '</td>';
+        html += '<td>' + price.toLocaleString('cs-CZ') + ' Kč</td>';
+        html += '<td style="font-weight:600;color:' + (isLow ? '#ef4444' : '#10b981') + '">' + stock + (isLow ? ' ⚠️' : '') + '</td>';
+        html += '<td>' + minStock + '</td>';
+        html += '<td style="font-size:12px;color:var(--text2)">' + supplierName + '</td>';
         html += '<td style="text-align:right"><button class="btn btn-danger btn-sm" onclick="event.stopPropagation();deleteMaterial(' + m.id + ')">✕</button></td>';
         html += '</tr>';
       }
@@ -661,7 +680,6 @@
       const v = (f, def) => m[f] !== undefined && m[f] !== null ? m[f] : (def !== undefined ? def : '');
 
       document.getElementById('modal-root').innerHTML = '<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal" style="max-width:820px"><h2>' + (id?'✏️ Upravit zboží':'➕ Nové zboží') + '</h2>' +
-        (m.factorify_id ? '<div style="padding:6px 12px;background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.3);border-radius:8px;font-size:12px;color:#10b981;margin-bottom:12px">🔗 Propojeno s Factorify ID: <strong>' + m.factorify_id + '</strong></div>' : '') +
         '<div class="sub-tabs" style="margin-bottom:12px">' +
           '<div class="sub-tab mat-tab active" data-tab="general" onclick="switchMatTab(\'general\')">Obecné</div>' +
           '<div class="sub-tab mat-tab" data-tab="technical" onclick="switchMatTab(\'technical\')">Výkres / Tech</div>' +
@@ -798,68 +816,64 @@
     // ============================================================
     // FACTORIFY IMPORT
     // ============================================================
-    async function openFactorifyImport() {
-      document.getElementById('modal-root').innerHTML = '<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal" style="max-width:800px"><h2>📥 Import zboží z Factorify</h2>' +
-        '<p style="color:var(--text2);font-size:13px;margin-bottom:16px">Stáhne zboží z Factorify a naimportuje ho do HolyOS. Již importované položky (podle Factorify ID) budou přeskočeny.</p>' +
-        '<div class="toolbar" style="margin-bottom:12px"><input type="text" id="fy-search" placeholder="Hledat v Factorify..." style="width:250px"><button class="btn btn-secondary" onclick="loadFactorifyGoods()">🔍 Hledat</button><div style="flex:1"></div><button class="btn btn-primary" onclick="importAllFactorify()">📥 Importovat vše</button></div>' +
-        '<div id="fy-results" style="max-height:400px;overflow-y:auto"><div class="empty-state" style="padding:30px"><p>Klikněte Hledat pro načtení zboží z Factorify</p></div></div>' +
-        '<div class="modal-actions"><button class="btn btn-secondary" onclick="closeModal()">Zavřít</button></div></div></div>';
+    // CSV IMPORT
+    // ============================================================
+    function openCSVImport() {
+      document.getElementById('modal-root').innerHTML = '<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal" style="max-width:600px"><h2>📥 Import zboží z CSV</h2>' +
+        '<p style="color:var(--text2);font-size:13px;margin-bottom:16px">Nahrajte CSV soubor s materiály. Očekávané sloupce: <code>code, name, type, unit, unit_price, min_stock, category</code></p>' +
+        '<input type="file" id="csv-file" accept=".csv,.txt" style="margin-bottom:16px;width:100%">' +
+        '<div id="csv-preview" style="max-height:300px;overflow-y:auto;margin-bottom:16px"></div>' +
+        '<div class="modal-actions"><button class="btn btn-secondary" onclick="closeModal()">Zrušit</button><button class="btn btn-primary" id="csv-import-btn" onclick="importCSV()" disabled>📥 Importovat</button></div></div></div>';
+      document.getElementById('csv-file').addEventListener('change', previewCSV);
     }
 
-    let fyGoods = [];
-    async function loadFactorifyGoods() {
-      const search = document.getElementById('fy-search')?.value || '';
-      const el = document.getElementById('fy-results');
-      el.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text2)">⏳ Načítám z Factorify...</div>';
-      try {
-        const params = new URLSearchParams({ take: 100 });
-        if (search) params.set('search', search);
-        const r = await fetch('/api/wh/factorify/goods?' + params);
-        const data = await r.json();
-        fyGoods = data.Data || data.data || data || [];
-        if (!Array.isArray(fyGoods)) fyGoods = [];
-        renderFactorifyGoods();
-      } catch (e) {
-        el.innerHTML = '<div style="text-align:center;padding:20px;color:#ef4444">❌ Chyba: ' + e.message + '</div>';
+    let csvRows = [];
+    function previewCSV(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function(ev) {
+        const lines = ev.target.result.split('\n').filter(l => l.trim());
+        if (lines.length < 2) { document.getElementById('csv-preview').innerHTML = '<p style="color:#ef4444">Soubor je prázdný nebo nemá dostatek řádků</p>'; return; }
+        const headers = lines[0].split(';').map(h => h.trim().toLowerCase().replace(/"/g, ''));
+        csvRows = [];
+        for (let i = 1; i < lines.length; i++) {
+          const vals = lines[i].split(';').map(v => v.trim().replace(/"/g, ''));
+          const row = {};
+          headers.forEach((h, idx) => row[h] = vals[idx] || '');
+          csvRows.push(row);
+        }
+        let h = '<table class="data-table"><thead><tr><th>Kód</th><th>Název</th><th>Typ</th><th>Jedn.</th></tr></thead><tbody>';
+        csvRows.slice(0, 20).forEach(r => {
+          h += '<tr><td style="font-family:monospace;font-size:12px">' + (r.code||'—') + '</td><td>' + (r.name||'—') + '</td><td>' + (r.type||'material') + '</td><td>' + (r.unit||'ks') + '</td></tr>';
+        });
+        if (csvRows.length > 20) h += '<tr><td colspan="4" style="color:var(--text2)">... a dalších ' + (csvRows.length - 20) + ' řádků</td></tr>';
+        h += '</tbody></table>';
+        document.getElementById('csv-preview').innerHTML = '<p style="color:var(--text2);font-size:12px;margin-bottom:8px">Náhled (' + csvRows.length + ' řádků):</p>' + h;
+        document.getElementById('csv-import-btn').disabled = false;
+      };
+      reader.readAsText(file);
+    }
+
+    async function importCSV() {
+      if (!csvRows.length) return;
+      if (!confirm('Importovat ' + csvRows.length + ' položek?')) return;
+      let imported = 0, errors = 0;
+      for (const row of csvRows) {
+        try {
+          await fetch('/api/wh/materials', {
+            method: 'POST', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({
+              code: row.code || '', name: row.name || 'Bez názvu', type: row.type || 'material',
+              unit: row.unit || 'ks', unit_price: parseFloat(row.unit_price) || 0,
+              min_stock: parseFloat(row.min_stock) || 0, category: row.category || 'general', status: 'active',
+            })
+          });
+          imported++;
+        } catch(e) { errors++; }
       }
-    }
-
-    function renderFactorifyGoods() {
-      const el = document.getElementById('fy-results');
-      if (!fyGoods.length) { el.innerHTML = '<div class="empty-state" style="padding:20px"><p>Žádné zboží nenalezeno</p></div>'; return; }
-      let h = '<table class="data-table"><thead><tr><th><input type="checkbox" id="fy-sel-all" onchange="toggleFyAll(this.checked)" checked></th><th>ID</th><th>Typ</th><th>Kód</th><th>Název</th><th>Stav</th></tr></thead><tbody>';
-      for (let i = 0; i < fyGoods.length; i++) {
-        const g = fyGoods[i];
-        h += '<tr><td><input type="checkbox" class="fy-cb" data-idx="' + i + '" checked></td>';
-        h += '<td style="color:var(--text2);font-size:12px">' + (g.Id || '') + '</td>';
-        h += '<td>' + (g.TypeLabel || g.Type || '—') + '</td>';
-        h += '<td style="font-family:monospace;font-size:12px">' + (g.Code || '—') + '</td>';
-        h += '<td class="person-name">' + (g.Name || '') + '</td>';
-        h += '<td>' + (g.StatusLabel || g.Status || '—') + '</td></tr>';
-      }
-      h += '</tbody></table>';
-      el.innerHTML = h;
-    }
-
-    function toggleFyAll(checked) {
-      document.querySelectorAll('.fy-cb').forEach(cb => cb.checked = checked);
-    }
-
-    async function importAllFactorify() {
-      const selected = [];
-      document.querySelectorAll('.fy-cb:checked').forEach(cb => {
-        selected.push(fyGoods[parseInt(cb.dataset.idx)]);
-      });
-      if (!selected.length) { alert('Vyberte alespoň jedno zboží'); return; }
-      if (!confirm('Importovat ' + selected.length + ' položek z Factorify?')) return;
-      try {
-        const r = await fetch('/api/wh/factorify/import', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ items: selected }) });
-        const result = await r.json();
-        alert('Import dokončen!\n\nImportováno: ' + result.imported + '\nPřeskočeno (již existuje): ' + result.skipped);
-        closeModal(); loadMaterials(); loadStats();
-      } catch (e) {
-        alert('Chyba importu: ' + e.message);
-      }
+      alert('Import dokončen!\n\nImportováno: ' + imported + (errors ? '\nChyby: ' + errors : ''));
+      closeModal(); loadMaterials(); loadStats();
     }
 
     // ============================================================

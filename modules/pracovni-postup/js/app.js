@@ -26,10 +26,10 @@ document.addEventListener('DOMContentLoaded', () => {
 // ---- Načíst výrobky ----
 async function loadProducts() {
   showLoading();
-  updateStatus('loading', 'Připojuji se k Factorify...');
+  updateStatus('loading', 'Načítám data...');
 
   try {
-    const products = await FactorifyAPI.loadProducts();
+    const products = await ProductionAPI.loadProducts();
     updateStatus('connected', `Připojeno — ${products.length} výrobků`);
     dom.countBadge.textContent = products.length;
     renderProducts(products);
@@ -89,7 +89,7 @@ function filterProducts(query) {
     if (match) visible++;
   });
 
-  dom.countBadge.textContent = q ? `${visible}/${FactorifyAPI.products.length}` : FactorifyAPI.products.length;
+  dom.countBadge.textContent = q ? `${visible}/${ProductionAPI.products.length}` : ProductionAPI.products.length;
 }
 
 // ---- Otevřít detail výrobku ----
@@ -102,7 +102,7 @@ function showLoading() {
   dom.productList.innerHTML = `
     <div class="loading-state">
       <div class="loading-spinner"></div>
-      <p>Načítám výrobky z Factorify...</p>
+      <p>Načítám výrobky...</p>
     </div>`;
 }
 

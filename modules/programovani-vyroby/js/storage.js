@@ -271,8 +271,8 @@ function loadSimulationData(data) {
   if (typeof markUsedWorkstations === 'function') {
     markUsedWorkstations();
   }
-  if (typeof updateFactorifyUI === 'function') {
-    updateFactorifyUI();
+  if (typeof updateProductionUI === 'function') {
+    updateProductionUI();
   }
 }
 

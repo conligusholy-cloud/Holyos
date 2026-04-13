@@ -50,13 +50,7 @@ function loadEnv() {
 }
 
 const envFile = loadEnv();
-const BASE_URL = process.env.FACTORIFY_BASE_URL || envFile.FACTORIFY_BASE_URL || 'https://bs.factorify.cloud';
-const TOKEN = process.env.FACTORIFY_TOKEN || envFile.FACTORIFY_TOKEN || '';
-
-if (!TOKEN) {
-  console.error('CHYBA: FACTORIFY_TOKEN není nastaven!');
-  process.exit(1);
-}
+// Factorify proxy odstraněn (Fáze 3) — data jdou z vlastní PostgreSQL DB přes app.js
 
 // ==========================================
 // Úložiště uživatelů (JSON soubor)
@@ -1364,62 +1358,11 @@ Uživatel je v: "${context || 'hlavní stránka'}"`;
     return;
   }
 
-  // ---- FACTORIFY API PROXY ----
+  // ---- FACTORIFY API PROXY (ODSTRANĚNO — Fáze 3) ----
+  // Data nyní servíruje app.js přes /api/production/* z vlastní PostgreSQL DB
+  // Pokud někdo volá /api/* na server.js, vrátíme 404
   if (pathname.startsWith('/api/')) {
-    // CORS headers
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept, X-FySerialization, X-AccountingUnit');
-
-    if (req.method === 'OPTIONS') {
-      res.writeHead(204);
-      res.end();
-      return;
-    }
-
-    const targetUrl = BASE_URL + pathname + url.search;
-    console.log(`→ ${req.method} ${targetUrl}`);
-
-    const urlObj = new URL(targetUrl);
-    const options = {
-      hostname: urlObj.hostname,
-      port: 443,
-      path: urlObj.pathname + urlObj.search,
-      method: req.method,
-      headers: {
-        'Accept': 'application/json',
-        'Cookie': 'securityToken=' + TOKEN,
-        'X-AccountingUnit': '1',
-        'X-FySerialization': 'ui2',
-      },
-    };
-
-    const body = await readBody(req);
-    if (body) {
-      options.headers['Content-Type'] = req.headers['content-type'] || 'application/json';
-      options.headers['Content-Length'] = Buffer.byteLength(body);
-    }
-
-    const proxyReq = https.request(options, (proxyRes) => {
-      const chunks = [];
-      proxyRes.on('data', chunk => chunks.push(chunk));
-      proxyRes.on('end', () => {
-        const respBody = Buffer.concat(chunks);
-        console.log(`  ← ${proxyRes.statusCode} (${respBody.length} bytes)`);
-        res.writeHead(proxyRes.statusCode, {
-          'Content-Type': proxyRes.headers['content-type'] || 'application/json',
-        });
-        res.end(respBody);
-      });
-    });
-
-    proxyReq.on('error', (err) => {
-      console.error('  ✗ Proxy chyba:', err.message);
-      sendJSON(res, 502, { error: 'Proxy chyba: ' + err.message });
-    });
-
-    if (body) proxyReq.write(body);
-    proxyReq.end();
+    sendJSON(res, 404, { error: 'API endpointy jsou dostupné přes app.js (Express)' });
     return;
   }
 
@@ -1470,8 +1413,7 @@ server.listen(PORT, () => {
   console.log('');
   console.log('=== Výroba — Produkční server ===');
   console.log(`Běží na: http://localhost:${PORT}`);
-  console.log(`Factorify API: ${BASE_URL}`);
-  console.log(`Token: ${TOKEN.substring(0, 8)}...`);
+  console.log('API: vlastní PostgreSQL (přes app.js)');
   console.log('');
   console.log('Výchozí přihlášení: admin / admin');
   console.log('Správa uživatelů: /admin/users');

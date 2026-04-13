@@ -10,6 +10,9 @@ function renderSidebar(activeModule) {
     { id: 'simulace-vyroby',    name: 'Simulace výroby',     icon: '&#9654;', color: '#22c55e', active: true },
     { id: 'pracovni-postup',    name: 'Pracovní postup',     icon: '&#128295;', color: '#06b6d4', active: true },
     { id: 'nakup-sklad',          name: 'Nákup a sklad',       icon: '&#128230;', color: '#10b981', active: true },
+    { id: 'ai-agenti',            name: 'AI Agenti',           icon: '&#129302;', color: '#8b5cf6', active: true },
+    { id: 'pracoviste',           name: 'Pracoviště',          icon: '&#127981;', color: '#14b8a6', active: true },
+    { id: 'dev-hub',              name: 'Dev Hub',             icon: '&#128736;', color: '#f97316', active: true },
     { id: 'planovani',           name: 'Plánování výroby',    icon: '&#128197;', color: '#3b82f6', active: false },
     { id: 'material',            name: 'Materiálový tok',     icon: '&#128666;', color: '#10b981', active: false },
     { id: 'reporty',             name: 'Reporty a analýzy',   icon: '&#128202;', color: '#ef4444', active: false },
@@ -62,7 +65,7 @@ function renderSidebar(activeModule) {
   // Přihlášený uživatel + odhlášení
   html += '<div class="sidebar-user">';
   html += '  <div id="sidebar-user-info" style="padding:12px 20px; color:var(--text2); font-size:12px;">Načítám...</div>';
-  html += '  <a href="/auth/logout" class="sidebar-item" style="color:var(--text2); font-size:13px;">';
+  html += '  <a href="#" onclick="logoutUser(); return false;" class="sidebar-item" style="color:var(--text2); font-size:13px;">';
   html += '    <div class="sidebar-icon" style="background:rgba(239,68,68,0.15); color:#ef4444;">&#10005;</div>';
   html += '    <div class="sidebar-item-info"><div class="sidebar-item-name">Odhlásit se</div></div>';
   html += '  </a>';
@@ -77,7 +80,17 @@ function renderSidebar(activeModule) {
   }
 
   // Načíst info o přihlášeném uživateli
-  fetch('/auth/me').then(function(r) { return r.json(); }).then(function(u) {
+  fetch('/api/auth/me', { credentials: 'include' }).then(function(r) {
+    if (r.status === 401) {
+      // Nepřihlášen — přesměruj na login
+      var currentPath = window.location.pathname + window.location.search;
+      window.location.href = '/login.html?redirect=' + encodeURIComponent(currentPath);
+      return null;
+    }
+    return r.json();
+  }).then(function(data) {
+    if (!data) return; // redirected
+    var u = data.user || data;
     var el = document.getElementById('sidebar-user-info');
     if (el) el.textContent = u.displayName || u.username || '';
     // Pokud je admin, přidat odkaz na správu uživatelů
@@ -127,6 +140,14 @@ function renderSidebar(activeModule) {
     aiScript.id = 'ai-assistant-script';
     aiScript.src = basePath + 'js/ai-assistant.js';
     document.body.appendChild(aiScript);
+  }
+
+  // Load AI Chat Panel (Claude-powered)
+  if (!document.getElementById('ai-chat-panel-script')) {
+    var chatScript = document.createElement('script');
+    chatScript.id = 'ai-chat-panel-script';
+    chatScript.src = basePath + 'js/ai-chat-panel.js';
+    document.body.appendChild(chatScript);
   }
 }
 
@@ -636,6 +657,16 @@ function submitAiTask() {
     renderAiChat();
   }).catch(function(e) {
     alert('Chyba při ukládání: ' + e.message);
+  });
+}
+
+// Odhlášení přes API
+function logoutUser() {
+  fetch('/api/auth/logout', { method: 'POST' }).then(function() {
+    localStorage.removeItem('token');
+    window.location.href = '/';
+  }).catch(function() {
+    window.location.href = '/';
   });
 }
 

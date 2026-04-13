@@ -29,7 +29,7 @@
 <body>
 
 <h1>Koncept: Rozebírání výrobku zprava doleva</h1>
-<p class="subtitle">Vpravo hotový výrobek → poslední operace → předposlední → ... → vlevo první materiál. Polotovary vstupují do operací podle vazeb z Factorify.</p>
+<p class="subtitle">Vpravo hotový výrobek → poslední operace → předposlední → ... → vlevo první materiál. Polotovary vstupují do operací podle vazeb z databáze.</p>
 
 <!-- ============================== -->
 <!-- HLAVNÍ DIAGRAM                 -->
@@ -179,7 +179,7 @@
 
   <!-- Annotation: polotovary končí přesně na začátku operace -->
   <text x="650" y="430" text-anchor="middle" fill="#44ff44" font-size="12" font-weight="bold">Polotovar se dokončí PŘESNĚ na začátku operace, do které vstupuje (JIT)</text>
-  <text x="650" y="448" text-anchor="middle" fill="#88cc88" font-size="10">Vazba polotovar → operace je vždy z Factorify (nikdy se nehádá)</text>
+  <text x="650" y="448" text-anchor="middle" fill="#88cc88" font-size="10">Vazba polotovar → operace je vždy z databáze (nikdy se nehádá)</text>
 
   <!-- Label: MATERIÁL vlevo -->
   <rect x="10" y="280" width="90" height="30" rx="5" fill="#3a2a10" stroke="#c0a030" stroke-width="1"/>

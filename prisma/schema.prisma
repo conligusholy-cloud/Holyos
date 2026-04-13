@@ -1,0 +1,1023 @@
+// =============================================================================
+// HolyOS — Prisma Schema v1.0
+// Kompletní datový model pro výrobní systém
+// Generováno: 2026-04-13
+// =============================================================================
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [pgvector(map: "vector"), uuidOssp(map: "uuid-ossp")]
+}
+
+// =============================================================================
+// AUTENTIZACE & UŽIVATELÉ
+// =============================================================================
+
+model User {
+  id            Int       @id @default(autoincrement())
+  username      String    @unique @db.VarChar(100)
+  display_name  String    @db.VarChar(255)
+  password_hash String    @db.VarChar(255) // bcrypt hash (nahrazuje PBKDF2)
+  role          String    @default("user") @db.VarChar(20)
+  is_super_admin Boolean  @default(false)
+  created_at    DateTime  @default(now())
+  updated_at    DateTime  @updatedAt
+
+  // Vztahy
+  person        Person?   @relation("UserPerson")
+  sessions      Session[]
+
+  @@map("users")
+}
+
+model Session {
+  id         String   @id @default(uuid())
+  user_id    Int
+  token      String   @unique @db.VarChar(500)
+  expires_at DateTime
+  created_at DateTime @default(now())
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([token])
+  @@index([expires_at])
+  @@map("sessions")
+}
+
+// =============================================================================
+// HR — LIDÉ & ORGANIZACE
+// =============================================================================
+
+model Person {
+  id              Int       @id @default(autoincrement())
+  type            String    @default("employee") @db.VarChar(50)
+  first_name      String    @db.VarChar(255)
+  last_name       String    @db.VarChar(255)
+  email           String?   @db.VarChar(255)
+  phone           String?   @db.VarChar(20)
+  notes           String?   @db.Text
+  active          Boolean   @default(true)
+
+  // Zaměstnanecké údaje
+  employee_number String?   @db.VarChar(50)
+  hire_date       DateTime? @db.Date
+  end_date        DateTime? @db.Date
+  contract_type   String?   @db.VarChar(50)
+  hourly_rate     Decimal?  @db.Decimal(10, 2)
+  monthly_salary  Decimal?  @db.Decimal(10, 2)
+  bank_account    String?   @db.VarChar(50)
+
+  // Osobní údaje
+  birth_date      DateTime? @db.Date
+  birth_number    String?   @db.VarChar(20)
+  id_card_number  String?   @db.VarChar(20)
+  gender          String?   @db.VarChar(10)
+  address         String?   @db.VarChar(255)
+  city            String?   @db.VarChar(100)
+  zip             String?   @db.VarChar(10)
+
+  // Kontakt pro případ nouze
+  emergency_name     String? @db.VarChar(255)
+  emergency_phone    String? @db.VarChar(20)
+  emergency_relation String? @db.VarChar(100)
+
+  // Systémové
+  photo_url       String?   @db.Text
+  chip_number     String?   @db.VarChar(50)
+  chip_card_id    String?   @db.VarChar(50)
+  is_super_admin  Boolean   @default(false)
+  username        String?   @db.VarChar(100)
+
+  // Dovolená
+  leave_entitlement_days Int?
+  leave_carryover        Int?
+
+  // FK
+  department_id   Int?
+  role_id         Int?
+  supervisor_id   Int?
+  shift_id        Int?
+  user_id         Int?      @unique
+
+  created_at      DateTime  @default(now())
+  updated_at      DateTime  @updatedAt
+
+  // Vztahy
+  department      Department?   @relation(fields: [department_id], references: [id])
+  role            Role?         @relation(fields: [role_id], references: [id])
+  supervisor      Person?       @relation("PersonSupervisor", fields: [supervisor_id], references: [id])
+  subordinates    Person[]      @relation("PersonSupervisor")
+  shift           Shift?        @relation(fields: [shift_id], references: [id])
+  user            User?         @relation("UserPerson", fields: [user_id], references: [id])
+
+  attendance         Attendance[]
+  leave_requests     LeaveRequest[]      @relation("LeaveRequestPerson")
+  approved_leaves    LeaveRequest[]      @relation("LeaveRequestApprover")
+  documents          Document[]
+  doc_notifications  DocumentNotification[]
+  orders_created     Order[]             @relation("OrderCreatedBy")
+  orders_approved    Order[]             @relation("OrderApprovedBy")
+  inventory_movements InventoryMovement[] @relation("MovementCreatedBy")
+  managed_warehouses Warehouse[]         @relation("WarehouseManager")
+  inventories_created Inventory[]        @relation("InventoryCreatedBy")
+  inventory_counted  InventoryItem[]     @relation("InventoryCountedBy")
+  workstation_assignments WorkstationWorker[]
+
+  @@index([department_id])
+  @@index([role_id])
+  @@index([active])
+  @@index([chip_number])
+  @@index([chip_card_id])
+  @@map("people")
+}
+
+model Department {
+  id        Int       @id @default(autoincrement())
+  name      String    @db.VarChar(255)
+  color     String?   @db.VarChar(7)
+  parent_id Int?
+
+  created_at DateTime @default(now())
+
+  // Vztahy
+  parent    Department?  @relation("DepartmentHierarchy", fields: [parent_id], references: [id])
+  children  Department[] @relation("DepartmentHierarchy")
+  people    Person[]
+  roles     Role[]
+
+  @@map("departments")
+}
+
+model Role {
+  id             Int     @id @default(autoincrement())
+  name           String  @db.VarChar(255)
+  description    String? @db.Text
+  department_id  Int?
+  parent_role_id Int?
+
+  created_at DateTime @default(now())
+
+  // Vztahy
+  department  Department? @relation(fields: [department_id], references: [id])
+  parent_role Role?       @relation("RoleHierarchy", fields: [parent_role_id], references: [id])
+  child_roles Role[]      @relation("RoleHierarchy")
+  people      Person[]
+  permissions Permission[]
+
+  @@map("roles")
+}
+
+model Shift {
+  id            Int     @id @default(autoincrement())
+  name          String  @db.VarChar(255)
+  type          String  @default("fixed") @db.VarChar(20) // fixed, flexible
+  start_time    String? @db.VarChar(5) // HH:MM
+  end_time      String? @db.VarChar(5) // HH:MM
+  hours_fund    Decimal @default(8.0) @db.Decimal(5, 2)
+  break_minutes Int     @default(30)
+
+  created_at DateTime @default(now())
+
+  people Person[]
+
+  @@map("shifts")
+}
+
+// =============================================================================
+// HR — DOCHÁZKA & DOVOLENÁ
+// =============================================================================
+
+model Attendance {
+  id                 Int      @id @default(autoincrement())
+  person_id          Int
+  date               DateTime @db.Date
+  clock_in           String?  @db.VarChar(5) // HH:MM
+  clock_out          String?  @db.VarChar(5)
+  break_minutes      Int      @default(30)
+  type               String   @default("work") @db.VarChar(50)
+  note               String?  @db.Text
+  adjusted_clock_in  String?  @db.VarChar(5)
+  adjusted_clock_out String?  @db.VarChar(5)
+  adjusted_break     Int?
+
+  created_at DateTime @default(now())
+
+  person Person @relation(fields: [person_id], references: [id])
+
+  @@index([person_id, date])
+  @@index([date])
+  @@map("attendance")
+}
+
+model AbsenceType {
+  id    Int     @id @default(autoincrement())
+  name  String  @db.VarChar(255)
+  code  String  @unique @db.VarChar(50)
+  color String? @db.VarChar(7)
+  paid  Boolean @default(false)
+
+  @@map("absence_types")
+}
+
+model LeaveRequest {
+  id          Int      @id @default(autoincrement())
+  person_id   Int
+  type        String   @db.VarChar(50) // vacation, sick, etc.
+  date_from   DateTime @db.Date
+  date_to     DateTime @db.Date
+  note        String?  @db.Text
+  status      String   @default("pending") @db.VarChar(20)
+  approved_by Int?
+
+  created_at DateTime @default(now())
+
+  person   Person  @relation("LeaveRequestPerson", fields: [person_id], references: [id])
+  approver Person? @relation("LeaveRequestApprover", fields: [approved_by], references: [id])
+
+  @@index([person_id])
+  @@index([status])
+  @@map("leave_requests")
+}
+
+model CompanyLeave {
+  id                  Int      @id @default(autoincrement())
+  name                String   @db.VarChar(255)
+  date_from           DateTime @db.Date
+  date_to             DateTime @db.Date
+  excluded_person_ids Json?    // int[]
+
+  created_at DateTime @default(now())
+
+  @@map("company_leave")
+}
+
+model Permission {
+  id           Int    @id @default(autoincrement())
+  role_id      Int
+  module_id    String @db.VarChar(100)
+  access_level String @default("none") @db.VarChar(20) // none, read, write
+
+  role Role @relation(fields: [role_id], references: [id], onDelete: Cascade)
+
+  @@unique([role_id, module_id])
+  @@map("permissions")
+}
+
+// =============================================================================
+// HR — NASTAVENÍ
+// =============================================================================
+
+model LeaveSettings {
+  id                      Int     @id @default(1)
+  default_entitlement_days Int    @default(20)
+  year                    Int     @default(2026)
+  carryover_allowed       Boolean @default(true)
+  carryover_max_days      Int     @default(5)
+
+  @@map("leave_settings")
+}
+
+model OvertimeSettings {
+  id                      Int     @id @default(1)
+  yearly_limit_hours      Int     @default(150)
+  yearly_absolute_max     Int     @default(416)
+  alert_threshold_percent Int     @default(80)
+  compensation            String  @default("surcharge") @db.VarChar(20) // surcharge, timeoff
+  surcharge_percent       Int     @default(25)
+  allow_monthly_transfer  Boolean @default(true)
+
+  @@map("overtime_settings")
+}
+
+// =============================================================================
+// DOKUMENTY
+// =============================================================================
+
+model Document {
+  id         Int       @id @default(autoincrement())
+  person_id  Int
+  title      String    @db.VarChar(255)
+  type       String    @db.VarChar(50) // contract, certificate, medical
+  category   String?   @db.VarChar(50)
+  file_data  String?   @db.Text // base64
+  file_name  String?   @db.VarChar(255)
+  file_type  String?   @db.VarChar(50)
+  file_size  Int?
+  valid_from DateTime? @db.Date
+  valid_to   DateTime? @db.Date
+  status     String    @default("active") @db.VarChar(20)
+  tags       Json?     // string[]
+  note       String?   @db.Text
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  person        Person                 @relation(fields: [person_id], references: [id])
+  notifications DocumentNotification[]
+
+  @@index([person_id])
+  @@index([valid_to])
+  @@map("documents")
+}
+
+model DocumentTemplate {
+  id          Int     @id @default(autoincrement())
+  name        String  @db.VarChar(255)
+  category    String? @db.VarChar(50)
+  content     String  @db.Text // HTML s {{placeholder}}
+  variables   Json?   // string[]
+  description String? @db.Text
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@map("document_templates")
+}
+
+model DocumentNotification {
+  id                    Int       @id @default(autoincrement())
+  document_id           Int
+  person_id             Int
+  type                  String    @db.VarChar(20) // expiring, expired, custom
+  trigger_days_before   Int?
+  message               String?   @db.VarChar(255)
+  sent_at               DateTime?
+  dismissed             Boolean   @default(false)
+
+  created_at DateTime @default(now())
+
+  document Document @relation(fields: [document_id], references: [id], onDelete: Cascade)
+  person   Person   @relation(fields: [person_id], references: [id])
+
+  @@map("document_notifications")
+}
+
+// =============================================================================
+// SKLAD — FIRMY & OBJEDNÁVKY
+// =============================================================================
+
+model Company {
+  id                 Int     @id @default(autoincrement())
+  name               String  @db.VarChar(255)
+  ico                String? @db.VarChar(20)
+  dic                String? @db.VarChar(20)
+  address            String? @db.VarChar(255)
+  city               String? @db.VarChar(100)
+  zip                String? @db.VarChar(10)
+  country            String  @default("CZ") @db.VarChar(2)
+  type               String  @db.VarChar(50) // supplier, customer, cooperation, both
+  contact_person     String? @db.VarChar(255)
+  email              String? @db.VarChar(255)
+  phone              String? @db.VarChar(20)
+  web                String? @db.VarChar(255)
+  bank_account       String? @db.VarChar(50)
+  payment_terms_days Int     @default(14)
+  notes              String? @db.Text
+  active             Boolean @default(true)
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  orders              Order[]
+  supplied_materials  Material[]   @relation("MaterialSupplier")
+  preferred_for_rules StockRule[]  @relation("StockRuleSupplier")
+
+  @@index([ico])
+  @@index([type])
+  @@map("companies")
+}
+
+model Order {
+  id                Int       @id @default(autoincrement())
+  order_number      String    @unique @db.VarChar(50)
+  type              String    @db.VarChar(20) // purchase, sales, cooperation
+  company_id        Int
+  status            String    @default("new") @db.VarChar(20)
+  items_count       Int       @default(0)
+  total_amount      Decimal   @default(0) @db.Decimal(12, 2)
+  currency          String    @default("CZK") @db.VarChar(3)
+  note              String?   @db.Text
+  created_by        Int?
+  approved_by       Int?
+  expected_delivery DateTime? @db.Date
+  delivered_at      DateTime? @db.Date
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  company  Company     @relation(fields: [company_id], references: [id])
+  creator  Person?     @relation("OrderCreatedBy", fields: [created_by], references: [id])
+  approver Person?     @relation("OrderApprovedBy", fields: [approved_by], references: [id])
+  items    OrderItem[]
+
+  @@index([type])
+  @@index([status])
+  @@index([company_id])
+  @@map("orders")
+}
+
+model OrderItem {
+  id                 Int       @id @default(autoincrement())
+  order_id           Int
+  material_id        Int?
+  name               String    @db.VarChar(255)
+  quantity           Decimal   @db.Decimal(10, 2)
+  unit               String    @default("ks") @db.VarChar(20)
+  unit_price         Decimal   @default(0) @db.Decimal(10, 2)
+  total_price        Decimal   @default(0) @db.Decimal(12, 2)
+  expected_delivery  DateTime? @db.Date
+  delivered_quantity Decimal   @default(0) @db.Decimal(10, 2)
+  status             String    @default("pending") @db.VarChar(20)
+  note               String?   @db.Text
+
+  order    Order     @relation(fields: [order_id], references: [id], onDelete: Cascade)
+  material Material? @relation(fields: [material_id], references: [id])
+
+  @@index([order_id])
+  @@map("order_items")
+}
+
+// =============================================================================
+// SKLAD — SKLADY & MATERIÁLY
+// =============================================================================
+
+model Warehouse {
+  id         Int     @id @default(autoincrement())
+  name       String  @db.VarChar(255)
+  code       String? @db.VarChar(50)
+  address    String? @db.VarChar(255)
+  type       String  @default("main") @db.VarChar(50)
+  manager_id Int?
+  active     Boolean @default(true)
+
+  created_at DateTime @default(now())
+
+  manager    Person?             @relation("WarehouseManager", fields: [manager_id], references: [id])
+  locations  WarehouseLocation[]
+  movements  InventoryMovement[]
+  stock_rules StockRule[]
+  inventories Inventory[]
+  workstations_input  Workstation[] @relation("WorkstationInputWarehouse")
+  workstations_output Workstation[] @relation("WorkstationOutputWarehouse")
+
+  @@map("warehouses")
+}
+
+model WarehouseLocation {
+  id           Int     @id @default(autoincrement())
+  warehouse_id Int
+  section      String? @db.VarChar(50)
+  rack         String? @db.VarChar(50)
+  position     String? @db.VarChar(50)
+  label        String? @db.VarChar(255)
+  barcode      String? @db.VarChar(100)
+  capacity     Decimal? @db.Decimal(10, 2)
+  notes        String? @db.Text
+
+  warehouse       Warehouse         @relation(fields: [warehouse_id], references: [id])
+  movements       InventoryMovement[]
+  inventory_items InventoryItem[]
+
+  @@index([warehouse_id])
+  @@index([barcode])
+  @@map("warehouse_locations")
+}
+
+model Material {
+  id          Int     @id @default(autoincrement())
+  code        String  @unique @db.VarChar(50)
+  name        String  @db.VarChar(255)
+  external_id String? @db.VarChar(100)
+  status      String  @default("active") @db.VarChar(20)
+  type        String  @default("material") @db.VarChar(50)
+  unit        String  @default("ks") @db.VarChar(20)
+  barcode     String? @db.VarChar(100)
+
+  // Ceny & zásoby
+  unit_price         Decimal? @db.Decimal(10, 2)
+  weighted_avg_price Decimal? @db.Decimal(10, 2)
+  current_stock      Decimal  @default(0) @db.Decimal(10, 2)
+  min_stock          Decimal? @db.Decimal(10, 2)
+  max_stock          Decimal? @db.Decimal(10, 2)
+  min_stock_type     String?  @db.VarChar(20)
+  max_stock_type     String?  @db.VarChar(20)
+
+  // Dodavatel & dodací lhůta
+  supplier_id    Int?
+  lead_time_days Decimal? @db.Decimal(5, 2)
+
+  // Dávky & objednávky
+  batch_size_min         Decimal? @db.Decimal(10, 2)
+  batch_size_max         Decimal? @db.Decimal(10, 2)
+  batch_size_default     Decimal? @db.Decimal(10, 2)
+  processed_in_multiples Decimal? @db.Decimal(10, 2)
+  reorder_quantity       Decimal? @db.Decimal(10, 2)
+  expedition_reserve_days Decimal? @db.Decimal(5, 2)
+  delivery_tolerance_pct Decimal? @db.Decimal(5, 2)
+  plan_orders            Boolean  @default(false)
+
+  // Klasifikace
+  classification String? @db.VarChar(50)
+  family         String? @db.VarChar(100)
+  material_group String? @db.VarChar(100) // "group" je reserved
+  norm           String? @db.VarChar(100)
+
+  // Fyzické vlastnosti
+  weight          Decimal? @db.Decimal(10, 3)
+  dimension       String?  @db.VarChar(255)
+  color           String?  @db.VarChar(7)
+  secondary_color String?  @db.VarChar(7)
+
+  // Výroba / design
+  material_ref     String? @db.VarChar(100)
+  semi_product_ref String? @db.VarChar(100)
+  route            String? @db.VarChar(100)
+  revision_number  String? @db.VarChar(50)
+  order_number     String? @db.VarChar(100)
+  position         String? @db.VarChar(100)
+  drawn_by         String? @db.VarChar(100)
+  toolbox_name     String? @db.VarChar(255)
+  solid_name       String? @db.VarChar(100)
+
+  // Skladové příznaky
+  non_stock                      Boolean @default(false)
+  distinguish_batches            Boolean @default(false)
+  interchangeable_batches        Boolean @default(false)
+  no_availability_check          Boolean @default(false)
+  check_availability_stage       Boolean @default(false)
+  check_availability_expedition  Boolean @default(false)
+  mandatory_scan                 Boolean @default(false)
+  save_sn_first_scan             Boolean @default(false)
+  temp_barcode                   Boolean @default(false)
+  auto_complete_after_bom_scan   Boolean @default(false)
+  exact_consumption              Boolean @default(false)
+  ignore                         Boolean @default(false)
+  ignore_forecast_eval           Boolean @default(false)
+  split_receipt_by_sales_items   Boolean @default(false)
+
+  // Expirace
+  expirable                     Boolean  @default(false)
+  shelf_life                    String?  @db.VarChar(20)
+  shelf_life_unit               String?  @db.VarChar(20)
+  max_acceptable_shelf_life_pct Decimal? @db.Decimal(5, 2)
+  allow_rotation                Boolean  @default(false)
+
+  // Plánování
+  priority                       Int?
+  release_before_dispatch_days   Decimal? @db.Decimal(5, 2)
+  forecast_pct                   Decimal? @db.Decimal(5, 2)
+  sort_weight                    Decimal? @db.Decimal(10, 2)
+  daily_target                   Decimal? @db.Decimal(10, 2)
+
+  // Ostatní
+  stock_substitution  String?  @db.VarChar(50)
+  internal_status     String?  @db.VarChar(50)
+  valid_from          DateTime? @db.Date
+  valid_to            DateTime? @db.Date
+  customers           String?  @db.Text
+  internal_value      String?  @db.VarChar(100)
+  active_flag         String?  @db.VarChar(20)
+  export_state        String?  @db.VarChar(50)
+  accounting_unit     String?  @db.VarChar(50)
+  goods_template      String?  @db.VarChar(100)
+  sn_mask             String?  @db.VarChar(50)
+  uses_service_eshop  Boolean  @default(false)
+  alt_unit            String?  @db.VarChar(20)
+  alt_unit_coeff      Decimal? @db.Decimal(10, 2)
+  similar_goods       String?  @db.VarChar(255)
+  alt_goods           String?  @db.VarChar(255)
+  alt_goods_forecast  String?  @db.VarChar(255)
+  target_warehouse    String?  @db.VarChar(50)
+  wait_after_stock_hours Decimal? @db.Decimal(5, 2)
+  keywords            String?  @db.Text
+  photo_url           String?  @db.Text
+  description         String?  @db.Text
+  production_note     String?  @db.Text
+  factorify_id        String?  @db.VarChar(100)
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  // Vztahy
+  supplier    Company?            @relation("MaterialSupplier", fields: [supplier_id], references: [id])
+  movements   InventoryMovement[]
+  order_items OrderItem[]
+  stock_rules StockRule[]
+  inventory_items InventoryItem[]
+  operation_materials OperationMaterial[]
+
+  @@index([code])
+  @@index([barcode])
+  @@index([supplier_id])
+  @@index([factorify_id])
+  @@map("materials")
+}
+
+model InventoryMovement {
+  id             Int     @id @default(autoincrement())
+  material_id    Int
+  warehouse_id   Int
+  location_id    Int?
+  type           String  @db.VarChar(20) // receipt, issue, transfer, adjustment
+  quantity       Decimal @db.Decimal(10, 2)
+  unit_price     Decimal? @db.Decimal(10, 2)
+  reference_type String? @db.VarChar(50) // order, project, inventory, manual
+  reference_id   Int?
+  note           String? @db.Text
+  created_by     Int?
+
+  created_at DateTime @default(now())
+
+  material  Material           @relation(fields: [material_id], references: [id])
+  warehouse Warehouse          @relation(fields: [warehouse_id], references: [id])
+  location  WarehouseLocation? @relation(fields: [location_id], references: [id])
+  creator   Person?            @relation("MovementCreatedBy", fields: [created_by], references: [id])
+
+  @@index([material_id])
+  @@index([warehouse_id])
+  @@index([created_at])
+  @@map("inventory_movements")
+}
+
+model StockRule {
+  id                    Int      @id @default(autoincrement())
+  material_id           Int
+  warehouse_id          Int?
+  min_stock             Decimal? @db.Decimal(10, 2)
+  max_stock             Decimal? @db.Decimal(10, 2)
+  reorder_quantity      Decimal? @db.Decimal(10, 2)
+  auto_order            Boolean  @default(false)
+  preferred_supplier_id Int?
+  notes                 String?  @db.Text
+
+  material  Material   @relation(fields: [material_id], references: [id])
+  warehouse Warehouse? @relation(fields: [warehouse_id], references: [id])
+  supplier  Company?   @relation("StockRuleSupplier", fields: [preferred_supplier_id], references: [id])
+
+  @@map("stock_rules")
+}
+
+// =============================================================================
+// SKLAD — INVENTURY
+// =============================================================================
+
+model Inventory {
+  id           Int       @id @default(autoincrement())
+  warehouse_id Int
+  name         String    @db.VarChar(255)
+  status       String    @default("draft") @db.VarChar(20)
+  started_at   DateTime?
+  completed_at DateTime?
+  created_by   Int?
+  note         String?   @db.Text
+
+  created_at DateTime @default(now())
+
+  warehouse Warehouse       @relation(fields: [warehouse_id], references: [id])
+  creator   Person?         @relation("InventoryCreatedBy", fields: [created_by], references: [id])
+  items     InventoryItem[]
+
+  @@map("inventories")
+}
+
+model InventoryItem {
+  id             Int      @id @default(autoincrement())
+  inventory_id   Int
+  material_id    Int
+  location_id    Int?
+  expected_qty   Decimal  @db.Decimal(10, 2)
+  actual_qty     Decimal? @db.Decimal(10, 2)
+  difference     Decimal? @db.Decimal(10, 2)
+  unit_price     Decimal? @db.Decimal(10, 2)
+  value_difference Decimal? @db.Decimal(12, 2)
+  counted_by     Int?
+  counted_at     DateTime?
+  note           String?  @db.Text
+
+  inventory Inventory          @relation(fields: [inventory_id], references: [id], onDelete: Cascade)
+  material  Material           @relation(fields: [material_id], references: [id])
+  location  WarehouseLocation? @relation(fields: [location_id], references: [id])
+  counter   Person?            @relation("InventoryCountedBy", fields: [counted_by], references: [id])
+
+  @@index([inventory_id])
+  @@map("inventory_items")
+}
+
+// =============================================================================
+// ADMIN & AUDIT
+// =============================================================================
+
+model AdminTask {
+  id          Int     @id @default(autoincrement())
+  status      String  @default("new") @db.VarChar(20)
+  priority    String  @default("medium") @db.VarChar(20)
+  page        String? @db.VarChar(255)
+  page_title  String? @db.VarChar(255)
+  description String? @db.Text
+  spec        String? @db.Text
+  ai_questions Json?
+  ai_answers   Json?
+  screenshot  String? @db.Text // base64
+  created_by  Int?
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@map("admin_tasks")
+}
+
+model AuditLog {
+  id          Int      @id @default(autoincrement())
+  timestamp   DateTime @default(now())
+  user_name   String?  @db.VarChar(100)
+  user_display String? @db.VarChar(255)
+  action      String   @db.VarChar(20) // create, update, delete, rollback
+  entity      String   @db.VarChar(50)
+  entity_id   Int?
+  description String?  @db.Text
+  changes     Json?    // { field: { from, to } }
+  snapshot    Json?    // Kompletní snapshot entity
+
+  @@index([entity, entity_id])
+  @@index([timestamp])
+  @@map("audit_log")
+}
+
+// =============================================================================
+// MINDMAPA
+// =============================================================================
+
+model MindmapNote {
+  id       Int    @id @default(autoincrement())
+  key      String @unique @db.VarChar(255) // identifikátor uzlu
+  content  Json   // obsah uzlu
+  version  Int    @default(1)
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@map("mindmap_notes")
+}
+
+// =============================================================================
+// VÝROBA — PRODUKTY & PRACOVIŠTĚ (nahrazuje Factorify)
+// =============================================================================
+
+model Product {
+  id            Int     @id @default(autoincrement())
+  code          String  @unique @db.VarChar(50) // BS-M-xxxx
+  name          String  @db.VarChar(255)
+  type          String  @default("product") @db.VarChar(50) // product, semi-product
+  takt_time     Int?    // linkový takt v minutách (max čas na operaci)
+  factorify_id  Int?    // původní ID z Factorify
+  material_id   Int?    // vazba na Material pokud existuje
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  operations ProductOperation[]
+  bom_usages OperationMaterial[]  // kde se tento produkt používá jako BOM položka
+
+  @@index([factorify_id])
+  @@map("products")
+}
+
+model Workstation {
+  id           Int     @id @default(autoincrement())
+  name         String  @db.VarChar(255)
+  code         String? @db.VarChar(50)
+  factorify_id Int?    // původní Stage ID z Factorify
+
+  // Rozměry pracoviště v metrech
+  width_m      Decimal? @db.Decimal(8, 2) // šířka v m
+  length_m     Decimal? @db.Decimal(8, 2) // délka v m
+
+  // Vstupní a výstupní sklad
+  input_warehouse_id  Int?
+  output_warehouse_id Int?
+
+  created_at DateTime @default(now())
+
+  input_warehouse  Warehouse? @relation("WorkstationInputWarehouse", fields: [input_warehouse_id], references: [id])
+  output_warehouse Warehouse? @relation("WorkstationOutputWarehouse", fields: [output_warehouse_id], references: [id])
+  operations       ProductOperation[]
+  workers          WorkstationWorker[]
+
+  @@index([factorify_id])
+  @@index([input_warehouse_id])
+  @@index([output_warehouse_id])
+  @@map("workstations")
+}
+
+// Vazební tabulka: pracovníci přiřazení k pracovišti
+model WorkstationWorker {
+  id             Int     @id @default(autoincrement())
+  workstation_id Int
+  person_id      Int
+  role           String? @db.VarChar(100) // role na pracovišti (operátor, seřizovač, kontrolor...)
+  is_primary     Boolean @default(false)  // hlavní pracovník pracoviště
+
+  created_at DateTime @default(now())
+
+  workstation Workstation @relation(fields: [workstation_id], references: [id], onDelete: Cascade)
+  person      Person      @relation(fields: [person_id], references: [id], onDelete: Cascade)
+
+  @@unique([workstation_id, person_id])
+  @@index([person_id])
+  @@map("workstation_workers")
+}
+
+model ProductOperation {
+  id              Int     @id @default(autoincrement())
+  product_id      Int
+  workstation_id  Int?
+  step_number     Int     // pořadí operace
+  name            String  @db.VarChar(255)
+  phase           String? @db.VarChar(255)
+  duration        Int?    // trvání v minutách
+  duration_unit   String  @default("MINUTE") @db.VarChar(20) // MINUTE, SECOND, HOUR
+  preparation_time Int    @default(0)
+  workers_count   Int     @default(1) // počet pracovníků na operaci
+  description     String? @db.Text    // popis operace
+  bom_count       Int?    // počet BOM položek
+
+  product    Product      @relation(fields: [product_id], references: [id], onDelete: Cascade)
+  workstation Workstation? @relation(fields: [workstation_id], references: [id])
+  materials  OperationMaterial[]
+
+  @@index([product_id])
+  @@map("product_operations")
+}
+
+// Materiály spotřebované v operaci (BOM per operation)
+model OperationMaterial {
+  id           Int     @id @default(autoincrement())
+  operation_id Int
+  material_id  Int
+  product_id   Int?    // přímá vazba na Product (pokud je to výrobek/polotovar)
+  quantity     Decimal @db.Decimal(10, 3) // spotřeba materiálu
+  unit         String  @default("ks") @db.VarChar(20)
+
+  operation ProductOperation @relation(fields: [operation_id], references: [id], onDelete: Cascade)
+  material  Material         @relation(fields: [material_id], references: [id])
+  product   Product?         @relation(fields: [product_id], references: [id])
+
+  @@index([operation_id])
+  @@index([material_id])
+  @@index([product_id])
+  @@map("operation_materials")
+}
+
+// =============================================================================
+// VÝROBA — SIMULACE
+// =============================================================================
+
+model Simulation {
+  id       String @id @default(uuid())
+  name     String @db.VarChar(255)
+  version  Int    @default(1)
+  objects  Json   // pole objektů (areály, stroje, atd.)
+  connections Json? // pole propojení
+  viewport Json?  // { zoom, panX, panY }
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@map("simulations")
+}
+
+// =============================================================================
+// AI ASISTENTI & SKILLY
+// =============================================================================
+
+model Assistant {
+  id            String  @id @default(uuid())
+  name          String  @db.VarChar(255)
+  slug          String  @unique @db.VarChar(100)
+  role          String  @db.Text
+  system_prompt String  @db.Text
+  model         String  @default("claude-sonnet-4-6") @db.VarChar(100)
+  avatar_url    String? @db.VarChar(255)
+  is_active     Boolean @default(true)
+  config        Json?
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  skills        AssistantSkill[]
+  conversations Conversation[]
+
+  @@map("assistants")
+}
+
+model Skill {
+  id             String  @id @default(uuid())
+  name           String  @db.VarChar(255)
+  slug           String  @unique @db.VarChar(100)
+  description    String  @db.Text
+  category       String  @db.VarChar(50) // system, hr, warehouse, production, tasks
+  handler_type   String  @db.VarChar(50) // mcp_tool, api_call, db_query, external
+  handler_config Json?
+  input_schema   Json?   // JSON Schema
+  output_schema  Json?   // JSON Schema
+  requires_auth  Boolean @default(true)
+  is_active      Boolean @default(true)
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  assistants  AssistantSkill[]
+  executions  SkillExecution[]
+
+  @@map("skills")
+}
+
+model AssistantSkill {
+  assistant_id  String
+  skill_id      String
+  priority      Int    @default(0)
+  config_override Json?
+
+  assistant Assistant @relation(fields: [assistant_id], references: [id], onDelete: Cascade)
+  skill     Skill     @relation(fields: [skill_id], references: [id], onDelete: Cascade)
+
+  @@id([assistant_id, skill_id])
+  @@map("assistant_skills")
+}
+
+model Conversation {
+  id           String  @id @default(uuid())
+  user_id      Int
+  assistant_id String
+  title        String? @db.VarChar(255)
+  context      Json?   // { module, page, extra_data }
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  assistant Assistant @relation(fields: [assistant_id], references: [id])
+  messages  Message[]
+
+  @@index([user_id])
+  @@index([assistant_id])
+  @@map("conversations")
+}
+
+model Message {
+  id              String @id @default(uuid())
+  conversation_id String
+  role            String @db.VarChar(20) // user, assistant, system
+  content         String @db.Text
+  skill_calls     Json?  // [{ skill_id, input, output }]
+
+  created_at DateTime @default(now())
+
+  conversation Conversation   @relation(fields: [conversation_id], references: [id], onDelete: Cascade)
+  executions   SkillExecution[]
+
+  @@index([conversation_id])
+  @@map("messages")
+}
+
+model SkillExecution {
+  id          String @id @default(uuid())
+  message_id  String
+  skill_id    String
+  input       Json?
+  output      Json?
+  status      String @db.VarChar(20) // success, error, timeout
+  duration_ms Int?
+
+  created_at DateTime @default(now())
+
+  message Message @relation(fields: [message_id], references: [id], onDelete: Cascade)
+  skill   Skill   @relation(fields: [skill_id], references: [id])
+
+  @@index([skill_id])
+  @@index([created_at])
+  @@map("skill_executions")
+}
+
+model DevAgent {
+  id            String  @id @default(uuid())
+  slug          String  @unique @db.VarChar(100)
+  name          String  @db.VarChar(255)
+  icon          String  @default("🤖") @db.VarChar(10)
+  module        String? @db.VarChar(100)   // mapování na modul (lide-hr, nakup-sklad, ...)
+  context_file  String? @db.VarChar(255)   // cesta ke kontextovému souboru (.claude/agents/*.md)
+  system_prompt String  @db.Text           // system prompt pro Claude
+  model         String  @default("claude-sonnet-4-6") @db.VarChar(100)
+  is_active     Boolean @default(true)
+  color         String  @default("#8b5cf6") @db.VarChar(20)
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@map("dev_agents")
+}

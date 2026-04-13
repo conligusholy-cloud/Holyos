@@ -16,7 +16,7 @@ const state = {
   loading: false,
   manualAssignments: {},  // code → { stage, stageName, norm, unit }
   stagesLoaded: false,
-  stagesList: [],         // Seznam pracovišť z Factorify
+  stagesList: [],         // Seznam pracovišť z databáze
 };
 
 const dom = {};
@@ -63,7 +63,7 @@ async function fetchGoodsDetail(goodsId) {
 
   for (const ep of endpoints) {
     try {
-      const resp = await FactorifyAPI.fetchAPI(ep.path, {
+      const resp = await ProductionAPI.fetchAPI(ep.path, {
         method: ep.method,
         body: ep.body,
       });
@@ -74,7 +74,7 @@ async function fetchGoodsDetail(goodsId) {
         return resp;
       }
       // Pokud to je seznam — najít odpovídající záznam
-      const rows = FactorifyAPI.extractArray(resp);
+      const rows = ProductionAPI.extractArray(resp);
       if (rows.length > 0) {
         const match = rows.find(r => r.id == goodsId) || rows[0];
         state.goodsCache[goodsId] = match;
@@ -194,7 +194,7 @@ async function loadProductDetail(goodsId) {
   state.loading = true;
 
   try {
-    if (!FactorifyAPI.configLoaded) await FactorifyAPI.loadEnv();
+    if (!ProductionAPI.configLoaded) await ProductionAPI.loadEnv();
 
     const mainData = await fetchGoodsDetail(goodsId);
     if (!mainData) throw new Error('Výrobek nenalezen');
@@ -1511,8 +1511,8 @@ function showToast(message) {
 async function loadStagesForAssignment() {
   if (state.stagesLoaded) return;
   try {
-    if (!FactorifyAPI.configLoaded) await FactorifyAPI.loadEnv();
-    const stages = await FactorifyAPI.loadStages();
+    if (!ProductionAPI.configLoaded) await ProductionAPI.loadEnv();
+    const stages = await ProductionAPI.loadStages();
     state.stagesList = stages.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'cs'));
     state.stagesLoaded = true;
     // Načíst uložené přiřazení z localStorage
