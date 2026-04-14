@@ -78,9 +78,13 @@
   </div>
   <div id="modal-root"></div>
 
-  <script src="js/sidebar.js"></script>
   <script>
-    renderSidebar('sklady');
+    var s = document.createElement('script');
+    s.src = 'js/sidebar.js?v=' + Date.now();
+    s.onload = function() { renderSidebar('sklady'); };
+    document.head.appendChild(s);
+  </script>
+  <script>
 
     const WH_TYPES = { main: 'Hlavní', raw: 'Suroviny', finished: 'Hotové výrobky', wip: 'Rozpracovaná výroba', tools: 'Nářadí', consumables: 'Spotřební', external: 'Externí' };
     let warehouses = [];

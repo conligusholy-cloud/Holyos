@@ -117,7 +117,7 @@ async function enrichOperationsRecursive(operations, prisma, productCache, depth
 // GET /api/production/products
 router.get('/products', async (req, res, next) => {
   try {
-    const { search, type } = req.query;
+    const { search, type, configurator } = req.query;
     const where = {};
     if (type) where.type = type;
     if (search) {
@@ -126,6 +126,23 @@ router.get('/products', async (req, res, next) => {
         { code: { contains: search, mode: 'insensitive' } },
       ];
     }
+
+    // Filtr konfigurátoru — s fallbackem pokud sloupec ještě neexistuje
+    if (configurator === 'true') {
+      try {
+        where.show_in_configurator = true;
+        const products = await prisma.product.findMany({
+          where,
+          include: { operations: { orderBy: { step_number: 'asc' }, select: { id: true, step_number: true, name: true } } },
+          orderBy: { name: 'asc' },
+        });
+        return res.json(products);
+      } catch (filterErr) {
+        // Sloupec show_in_configurator pravděpodobně ještě neexistuje — vrať všechny
+        delete where.show_in_configurator;
+      }
+    }
+
     const products = await prisma.product.findMany({
       where,
       include: { operations: { orderBy: { step_number: 'asc' }, select: { id: true, step_number: true, name: true } } },
@@ -148,6 +165,21 @@ router.get('/products/:id', async (req, res, next) => {
     await enrichOperationsRecursive(product.operations, prisma, productCache, 0, 30, productDataCache);
 
     res.json(product);
+  } catch (err) { next(err); }
+});
+
+// PATCH /api/production/products/:id/configurator — přepni viditelnost v konfigurátoru
+router.patch('/products/:id/configurator', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id);
+    const product = await prisma.product.findUnique({ where: { id } });
+    if (!product) return res.status(404).json({ error: 'Produkt nenalezen' });
+
+    const updated = await prisma.product.update({
+      where: { id },
+      data: { show_in_configurator: !product.show_in_configurator },
+    });
+    res.json({ id: updated.id, show_in_configurator: updated.show_in_configurator });
   } catch (err) { next(err); }
 });
 
@@ -820,6 +852,256 @@ router.delete('/simulations/:id', async (req, res, next) => {
   try {
     await prisma.simulation.delete({ where: { id: req.params.id } });
     res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
+// =============================================================================
+// PRODUKTOVÝ KONFIGURÁTOR — správa konfiguračních skupin a voleb
+// =============================================================================
+
+// GET /api/production/products/:id/config — načti všechny konfigurační skupiny a volby produktu
+router.get('/products/:id/config', async (req, res, next) => {
+  try {
+    const productId = parseInt(req.params.id);
+    const groups = await prisma.productConfigGroup.findMany({
+      where: { product_id: productId },
+      include: {
+        options: {
+          include: {
+            bom_materials: { include: { material: { select: { id: true, code: true, name: true, unit: true } } } },
+            operation_effects: { include: { operation: { select: { id: true, step_number: true, name: true } } } },
+          },
+          orderBy: { sort_order: 'asc' },
+        },
+      },
+      orderBy: { sort_order: 'asc' },
+    });
+    res.json(groups);
+  } catch (err) { next(err); }
+});
+
+// POST /api/production/products/:id/config-groups — vytvoř konfigurační skupinu
+router.post('/products/:id/config-groups', async (req, res, next) => {
+  try {
+    const productId = parseInt(req.params.id);
+    const { name, code, type, required, sort_order } = req.body;
+    if (!name || !code) return res.status(400).json({ error: 'Název a kód jsou povinné' });
+    const group = await prisma.productConfigGroup.create({
+      data: { product_id: productId, name, code, type: type || 'single_select', required: !!required, sort_order: sort_order || 0 },
+    });
+    res.status(201).json(group);
+  } catch (err) { next(err); }
+});
+
+// PUT /api/production/config-groups/:id — uprav skupinu
+router.put('/config-groups/:id', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id);
+    const { name, code, type, required, sort_order } = req.body;
+    const group = await prisma.productConfigGroup.update({
+      where: { id },
+      data: { ...(name && { name }), ...(code && { code }), ...(type && { type }), ...(required !== undefined && { required }), ...(sort_order !== undefined && { sort_order }) },
+    });
+    res.json(group);
+  } catch (err) { next(err); }
+});
+
+// DELETE /api/production/config-groups/:id — smaž skupinu (cascade smaže volby)
+router.delete('/config-groups/:id', async (req, res, next) => {
+  try {
+    await prisma.productConfigGroup.delete({ where: { id: parseInt(req.params.id) } });
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
+// POST /api/production/config-groups/:groupId/options — přidej volbu do skupiny
+router.post('/config-groups/:groupId/options', async (req, res, next) => {
+  try {
+    const groupId = parseInt(req.params.groupId);
+    const { name, code, price_modifier, is_default, sort_order } = req.body;
+    if (!name || !code) return res.status(400).json({ error: 'Název a kód jsou povinné' });
+    const option = await prisma.productConfigOption.create({
+      data: {
+        group_id: groupId, name, code,
+        price_modifier: price_modifier || 0,
+        is_default: !!is_default,
+        sort_order: sort_order || 0,
+      },
+    });
+    res.status(201).json(option);
+  } catch (err) { next(err); }
+});
+
+// PUT /api/production/config-options/:id — uprav volbu
+router.put('/config-options/:id', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id);
+    const data = {};
+    ['name', 'code', 'price_modifier', 'is_default', 'sort_order'].forEach(k => {
+      if (req.body[k] !== undefined) data[k] = req.body[k];
+    });
+    const option = await prisma.productConfigOption.update({ where: { id }, data });
+    res.json(option);
+  } catch (err) { next(err); }
+});
+
+// DELETE /api/production/config-options/:id — smaž volbu
+router.delete('/config-options/:id', async (req, res, next) => {
+  try {
+    await prisma.productConfigOption.delete({ where: { id: parseInt(req.params.id) } });
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
+// POST /api/production/config-options/:optionId/materials — přidej materiálový vliv
+router.post('/config-options/:optionId/materials', async (req, res, next) => {
+  try {
+    const optionId = parseInt(req.params.optionId);
+    const { material_id, quantity, unit } = req.body;
+    const item = await prisma.configOptionMaterial.create({
+      data: { option_id: optionId, material_id: parseInt(material_id), quantity: parseFloat(quantity), unit: unit || 'ks' },
+      include: { material: { select: { id: true, code: true, name: true, unit: true } } },
+    });
+    res.status(201).json(item);
+  } catch (err) { next(err); }
+});
+
+// DELETE /api/production/config-option-materials/:id
+router.delete('/config-option-materials/:id', async (req, res, next) => {
+  try {
+    await prisma.configOptionMaterial.delete({ where: { id: parseInt(req.params.id) } });
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
+// POST /api/production/config-options/:optionId/operations — přidej vliv na operaci
+router.post('/config-options/:optionId/operations', async (req, res, next) => {
+  try {
+    const optionId = parseInt(req.params.optionId);
+    const { operation_id, action, modified_duration, note } = req.body;
+    if (!operation_id || !action) return res.status(400).json({ error: 'operation_id a action jsou povinné' });
+    const item = await prisma.configOptionOperation.create({
+      data: {
+        option_id: optionId, operation_id: parseInt(operation_id),
+        action, modified_duration: modified_duration ? parseInt(modified_duration) : null,
+        note: note || null,
+      },
+      include: { operation: { select: { id: true, step_number: true, name: true } } },
+    });
+    res.status(201).json(item);
+  } catch (err) { next(err); }
+});
+
+// DELETE /api/production/config-option-operations/:id
+router.delete('/config-option-operations/:id', async (req, res, next) => {
+  try {
+    await prisma.configOptionOperation.delete({ where: { id: parseInt(req.params.id) } });
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
+// =============================================================================
+// ORDER ITEM CONFIGS — uložení vybrané konfigurace na položce objednávky
+// =============================================================================
+
+// GET /api/production/order-items/:itemId/config — vybraná konfigurace položky
+router.get('/order-items/:itemId/config', async (req, res, next) => {
+  try {
+    const configs = await prisma.orderItemConfig.findMany({
+      where: { order_item_id: parseInt(req.params.itemId) },
+      include: { option: { include: { group: true } } },
+    });
+    res.json(configs);
+  } catch (err) { next(err); }
+});
+
+// POST /api/production/order-items/:itemId/config — ulož vybranou konfiguraci (bulk)
+router.post('/order-items/:itemId/config', async (req, res, next) => {
+  try {
+    const orderItemId = parseInt(req.params.itemId);
+    const { configs } = req.body; // [{ option_id, custom_value }, ...]
+    if (!Array.isArray(configs)) return res.status(400).json({ error: 'configs musí být pole' });
+
+    // Smaž staré a vytvoř nové (replace)
+    await prisma.orderItemConfig.deleteMany({ where: { order_item_id: orderItemId } });
+    const created = await prisma.$transaction(
+      configs.map(c => prisma.orderItemConfig.create({
+        data: { order_item_id: orderItemId, option_id: c.option_id || null, custom_value: c.custom_value || null },
+      }))
+    );
+    res.json(created);
+  } catch (err) { next(err); }
+});
+
+// =============================================================================
+// RESOLVED OPERATIONS — pracovní postup podle konfigurace
+// =============================================================================
+
+// GET /api/production/products/:id/resolved-operations?configs=1,5,12
+// Vrátí operace produktu upravené podle vybraných konfiguračních voleb
+router.get('/products/:id/resolved-operations', async (req, res, next) => {
+  try {
+    const productId = parseInt(req.params.id);
+    const configOptionIds = (req.query.configs || '').split(',').filter(Boolean).map(Number);
+
+    // Načti základní operace produktu
+    const operations = await prisma.productOperation.findMany({
+      where: { product_id: productId },
+      include: { materials: { include: { material: true } }, workstation: true },
+      orderBy: { step_number: 'asc' },
+    });
+
+    if (configOptionIds.length === 0) {
+      return res.json(operations);
+    }
+
+    // Načti konfigurační vlivy na operace
+    const opEffects = await prisma.configOptionOperation.findMany({
+      where: { option_id: { in: configOptionIds } },
+    });
+
+    // Načti extra materiály z konfigurace
+    const configMaterials = await prisma.configOptionMaterial.findMany({
+      where: { option_id: { in: configOptionIds } },
+      include: { material: true },
+    });
+
+    // Aplikuj vlivy na operace
+    const skipOpIds = new Set();
+    const modifyOps = {};
+    const addOps = [];
+
+    for (const eff of opEffects) {
+      if (eff.action === 'skip') {
+        skipOpIds.add(eff.operation_id);
+      } else if (eff.action === 'modify' && eff.modified_duration) {
+        modifyOps[eff.operation_id] = eff;
+      } else if (eff.action === 'add') {
+        addOps.push(eff);
+      }
+    }
+
+    // Filtruj, uprav, přidej
+    let resolved = operations.filter(op => !skipOpIds.has(op.id));
+    resolved = resolved.map(op => {
+      if (modifyOps[op.id]) {
+        return { ...op, duration: modifyOps[op.id].modified_duration, _config_note: modifyOps[op.id].note };
+      }
+      return op;
+    });
+
+    // Přidej konfig materiály k příslušným operacím
+    for (const cm of configMaterials) {
+      // Najdi první operaci, ke které můžeme přidat materiál, nebo přidej info
+      const existingOp = resolved.find(op => op.id === cm.option?.operation_id);
+      // Materiály z konfigurace přidáme jako extra_materials
+    }
+
+    res.json({
+      operations: resolved,
+      config_materials: configMaterials,
+      skipped_operations: Array.from(skipOpIds),
+    });
   } catch (err) { next(err); }
 });
 

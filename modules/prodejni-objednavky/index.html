@@ -1,0 +1,912 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Prodejní objednávky | HOLYOS</title>
+  <link rel="icon" type="image/svg+xml" href="../../logo-holyos-icon.svg">
+  <base href="../../">
+  <link rel="stylesheet" href="css/dashboard.css">
+  <style>
+    .main-wrapper { margin-left: var(--sidebar-w); flex: 1; min-height: 100vh; display: flex; flex-direction: column; }
+    .module-header { background: linear-gradient(135deg, #eab308 0%, #ca8a04 100%); padding: 28px 32px 20px; display: flex; align-items: center; gap: 16px; }
+    .module-header-icon { font-size: 36px; }
+    .module-header h1 { font-size: 22px; font-weight: 700; }
+    .module-header p { font-size: 13px; color: rgba(255,255,255,0.7); margin-top: 2px; }
+
+    .stats-bar { display: flex; gap: 16px; padding: 20px 24px; flex-wrap: wrap; }
+    .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px 20px; min-width: 150px; flex: 1; }
+    .stat-card .stat-value { font-size: 28px; font-weight: 700; color: #eab308; }
+    .stat-card .stat-label { font-size: 12px; color: var(--text2); margin-top: 4px; }
+
+    .content { padding: 0 24px 24px; flex: 1; }
+
+    .toolbar { display: flex; gap: 12px; margin-bottom: 16px; align-items: center; flex-wrap: wrap; }
+    .toolbar input[type="text"], .toolbar input[type="search"] { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 8px 14px; color: var(--text); font-size: 13px; width: 240px; }
+    .toolbar input::placeholder { color: var(--text2); }
+    .toolbar select { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; color: var(--text); font-size: 13px; }
+
+    .btn { padding: 8px 18px; border-radius: 8px; border: 1px solid var(--border); font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.15s; display: inline-flex; align-items: center; gap: 6px; }
+    .btn-primary { background: #eab308; color: #000; border-color: #eab308; }
+    .btn-primary:hover { background: #ca8a04; }
+    .btn-secondary { background: var(--surface2); color: var(--text); }
+    .btn-secondary:hover { background: var(--border); }
+    .btn-danger { background: rgba(239,68,68,0.15); color: #ef4444; border-color: rgba(239,68,68,0.3); }
+    .btn-danger:hover { background: rgba(239,68,68,0.25); }
+    .btn-sm { padding: 5px 12px; font-size: 12px; }
+
+    .data-table { width: 100%; border-collapse: separate; border-spacing: 0; }
+    .data-table thead { position: sticky; top: 0; z-index: 1; }
+    .data-table th { background: var(--surface2); padding: 10px 14px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text2); border-bottom: 1px solid var(--border); }
+    .data-table td { padding: 10px 14px; font-size: 13px; border-bottom: 1px solid rgba(255,255,255,0.04); vertical-align: middle; }
+    .data-table tr:hover td { background: rgba(234,179,8,0.06); }
+    .data-table tr { cursor: pointer; }
+
+    .badge { display: inline-block; padding: 3px 10px; border-radius: 6px; font-size: 11px; font-weight: 600; }
+    .person-name { font-weight: 600; color: var(--text); }
+
+    .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); z-index: 9999; display: flex; align-items: center; justify-content: center; }
+    .modal { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 24px; width: 600px; max-width: 95vw; max-height: 90vh; overflow-y: auto; }
+    .modal h2 { margin: 0 0 20px; font-size: 18px; }
+    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .form-group { display: flex; flex-direction: column; gap: 4px; }
+    .form-group.full { grid-column: 1 / -1; }
+    .form-group label { font-size: 12px; font-weight: 600; color: var(--text2); }
+    .form-group input, .form-group select, .form-group textarea { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; color: var(--text); font-size: 13px; }
+    .form-group textarea { min-height: 60px; resize: vertical; font-family: inherit; }
+    .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 20px; }
+
+    .empty-state { text-align: center; padding: 60px 20px; color: var(--text2); }
+    .empty-state .empty-icon { font-size: 48px; margin-bottom: 12px; opacity: 0.5; }
+    .empty-state h3 { color: var(--text); margin-bottom: 4px; }
+    .empty-state p { font-size: 13px; }
+  </style>
+</head>
+<body>
+  <div id="sidebar"></div>
+  <div class="main-wrapper">
+    <div class="module-header">
+      <div class="module-header-icon">💰</div>
+      <div>
+        <h1>Prodejní objednávky</h1>
+        <p>Objednávky od odběratelů, fakturace, sledování dodávek</p>
+      </div>
+    </div>
+
+    <div class="stats-bar" id="stats-bar"></div>
+
+    <div class="content">
+      <div class="toolbar">
+        <input type="text" id="order-search" placeholder="Hledat objednávku..." onkeyup="loadOrders()">
+        <select id="order-status-filter" onchange="loadOrders()">
+          <option value="">Všechny stavy</option>
+          <option value="new">Nový</option>
+          <option value="quoted">Poptáno</option>
+          <option value="ordered">Objednáno</option>
+          <option value="confirmed">Potvrzeno</option>
+          <option value="delivered">Doručeno</option>
+          <option value="cancelled">Zrušeno</option>
+        </select>
+        <div style="flex:1"></div>
+        <button class="btn btn-primary" onclick="openOrderModal()">+ Nová prodejní objednávka</button>
+      </div>
+      <div id="orders-table"></div>
+    </div>
+  </div>
+
+  <div id="modal-root"></div>
+
+  <script>
+    var s = document.createElement('script');
+    s.src = '/js/sidebar.js?v=' + Date.now();
+    s.onload = function() { renderSidebar('prodejni-objednavky'); };
+    document.head.appendChild(s);
+  </script>
+
+  <script>
+    // Auth check
+    fetch('/api/auth/me', { credentials: 'include' }).then(function(r) {
+      if (r.status === 401) {
+        var t = sessionStorage.getItem('token');
+        if (!t) window.location.href = '/public/login.html';
+      }
+    });
+  </script>
+
+  <script>
+    const ORDER_STATUSES = {
+      new: { label: 'Nový', color: '#3b82f6' },
+      quoted: { label: 'Poptáno', color: '#3b82f6' },
+      ordered: { label: 'Objednáno', color: '#8b5cf6' },
+      confirmed: { label: 'Potvrzeno', color: '#f59e0b' },
+      delivered: { label: 'Doručeno', color: '#10b981' },
+      cancelled: { label: 'Zrušeno', color: '#ef4444' },
+    };
+
+    function esc(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+
+    let companies = [];
+    let materials = [];
+    let products = [];
+
+    // ============================================================
+    // STATS
+    // ============================================================
+    async function loadStats() {
+      try {
+        const res = await fetch('/api/wh/orders?type=sales');
+        const orders = await res.json();
+        const total = orders.length;
+        const active = orders.filter(o => !['cancelled','delivered'].includes(o.status)).length;
+        const totalValue = orders.reduce((sum, o) => sum + parseFloat(o.total_amount || 0), 0);
+        const delivered = orders.filter(o => o.status === 'delivered').length;
+
+        document.getElementById('stats-bar').innerHTML =
+          '<div class="stat-card"><div class="stat-value">' + total + '</div><div class="stat-label">Objednávek celkem</div></div>' +
+          '<div class="stat-card"><div class="stat-value" style="color:#8b5cf6">' + active + '</div><div class="stat-label">Aktivních</div></div>' +
+          '<div class="stat-card"><div class="stat-value" style="color:#10b981">' + delivered + '</div><div class="stat-label">Doručeno</div></div>' +
+          '<div class="stat-card"><div class="stat-value">' + Math.round(totalValue).toLocaleString('cs-CZ') + ' Kč</div><div class="stat-label">Celková hodnota</div></div>';
+      } catch(e) { console.error(e); }
+    }
+
+    // ============================================================
+    // OBJEDNÁVKY
+    // ============================================================
+    async function loadOrders() {
+      const search = document.getElementById('order-search')?.value || '';
+      const status = document.getElementById('order-status-filter')?.value || '';
+      let url = '/api/wh/orders?type=sales';
+      if (status) url += '&status=' + status;
+      if (search) url += '&search=' + encodeURIComponent(search);
+      try {
+        const res = await fetch(url);
+        const orders = await res.json();
+        renderOrders(orders);
+      } catch(e) { console.error(e); }
+    }
+
+    function renderOrders(list) {
+      const el = document.getElementById('orders-table');
+      if (!list.length) {
+        el.innerHTML = '<div class="empty-state"><div class="empty-icon">💰</div><h3>Žádné prodejní objednávky</h3><p>Vytvořte první prodejní objednávku.</p></div>';
+        return;
+      }
+      let html = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr><th>Číslo</th><th>Odběratel</th><th>Stav</th><th>Položek</th><th>Celkem</th><th>Dodání</th><th>Akce</th></tr></thead><tbody>';
+      for (const o of list) {
+        const st = ORDER_STATUSES[o.status] || { label: o.status, color: '#9ca3af' };
+        html += '<tr onclick="openOrderDetail(' + o.id + ')">';
+        html += '<td class="person-name">' + o.order_number + '</td>';
+        html += '<td>' + (o.company?.name || o.company_name || '—') + '</td>';
+        html += '<td><span class="badge" style="background:' + st.color + '22;color:' + st.color + ';">' + st.label + '</span></td>';
+        html += '<td>' + (o.items_count || (o.items ? o.items.length : 0)) + '</td>';
+        html += '<td style="font-weight:600;">' + parseFloat(o.total_amount || 0).toLocaleString('cs-CZ') + ' ' + (o.currency || 'CZK') + '</td>';
+        html += '<td>' + (o.expected_delivery ? new Date(o.expected_delivery).toLocaleDateString('cs-CZ') : '—') + '</td>';
+        html += '<td><button class="btn btn-danger btn-sm" onclick="event.stopPropagation();deleteOrder(' + o.id + ')">🗑️</button></td>';
+        html += '</tr>';
+      }
+      html += '</tbody></table></div>';
+      el.innerHTML = html;
+    }
+
+    // ============================================================
+    // MODAL: Nová / Editovat objednávku
+    // ============================================================
+    async function reloadCompanies() {
+      try { const r = await fetch('/api/wh/companies'); companies = await r.json(); } catch(e) {}
+    }
+
+    async function openOrderModal(id) {
+      // Načti všechny společnosti (ne jen customers — uživatel může mít firmu s jiným typem)
+      await reloadCompanies();
+
+      let o = {};
+      if (id) { try { const r = await fetch('/api/wh/orders/' + id); o = await r.json(); } catch(e) {} }
+      const compOpts = companies.map(c => '<option value="' + c.id + '"' + (o.company_id === c.id ? ' selected' : '') + '>' + c.name + (c.type ? ' (' + COMPANY_LABELS[c.type] + ')' : '') + '</option>').join('');
+      const statusOpts = Object.entries(ORDER_STATUSES).map(([k,v]) => '<option value="' + k + '"' + (o.status === k ? ' selected' : '') + '>' + v.label + '</option>').join('');
+
+      // Načti výrobky z tabulky Product (ne materiály)
+      if (products.length === 0) {
+        try {
+          let r = await fetch('/api/production/products?type=product&configurator=true');
+          if (!r.ok) r = await fetch('/api/production/products?type=product'); // fallback bez filtru
+          const data = await r.json();
+          products = Array.isArray(data) ? data : [];
+        } catch(e) { products = []; }
+      }
+      const prodOpts = products.map(p =>
+        '<option value="' + p.id + '" data-name="' + p.name + '" data-unit="ks" data-price="0" data-code="' + p.code + '">' +
+        p.code + ' — ' + p.name +
+        '</option>'
+      ).join('');
+
+      // Existující položky (při editaci)
+      let existingItems = [];
+      if (id && o.items) existingItems = o.items;
+      _pendingItems = existingItems.map(it => ({
+        material_id: it.material_id, name: it.name, quantity: parseFloat(it.quantity),
+        unit: it.unit, unit_price: parseFloat(it.unit_price || 0),
+        total_price: parseFloat(it.total_price || 0),
+      }));
+
+      document.getElementById('modal-root').innerHTML = '<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal" style="max-width:700px;"><h2>' + (id ? '✏️ Upravit objednávku' : '➕ Nová prodejní objednávka') + '</h2>' +
+        '<form onsubmit="saveOrder(event,' + (id || 'null') + ')">' +
+          '<input type="hidden" name="type" value="sales">' +
+          '<div class="form-grid">' +
+            '<div class="form-group">' +
+              '<label>Odběratel *</label>' +
+              '<div style="display:flex;gap:6px;">' +
+                '<select name="company_id" id="order-company-select" required style="flex:1"><option value="">— Vyberte odběratele —</option>' + compOpts + '</select>' +
+                '<button type="button" class="btn btn-sm" style="white-space:nowrap;padding:6px 10px;" onclick="toggleNewCompanyForm()">+ Nový</button>' +
+              '</div>' +
+            '</div>' +
+            '<div class="form-group"><label>Stav</label><select name="status">' + statusOpts + '</select></div>' +
+          '</div>' +
+          '<div id="new-company-form" style="display:none;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;margin:8px 0 12px;">' +
+            '<div style="font-size:13px;font-weight:600;margin-bottom:8px;color:#eab308;">🏢 Nový odběratel</div>' +
+            '<div style="display:flex;gap:8px;align-items:end;margin-bottom:10px;">' +
+              '<div class="form-group" style="flex:1;"><label>IČO (dohledání z ARES)</label><input type="text" id="new-comp-ico" placeholder="Zadejte IČO..." maxlength="8"></div>' +
+              '<button type="button" class="btn btn-secondary btn-sm" onclick="lookupARESNewCompany()" style="margin-bottom:2px;">🔍 ARES</button>' +
+            '</div>' +
+            '<div class="form-grid">' +
+              '<div class="form-group full"><label>Název firmy *</label><input type="text" id="new-comp-name" placeholder="Název společnosti"></div>' +
+              '<div class="form-group"><label>DIČ</label><input type="text" id="new-comp-dic" placeholder="CZ12345678"></div>' +
+              '<div class="form-group"><label>Typ</label><select id="new-comp-type"><option value="customer" selected>Odběratel</option><option value="supplier">Dodavatel</option><option value="both">Dodavatel/Odběratel</option><option value="cooperation">Kooperace</option></select></div>' +
+              '<div class="form-group full"><label>Adresa</label><input type="text" id="new-comp-address" placeholder="Ulice a č.p."></div>' +
+              '<div class="form-group"><label>Město</label><input type="text" id="new-comp-city" placeholder="Město"></div>' +
+              '<div class="form-group"><label>PSČ</label><input type="text" id="new-comp-zip" placeholder="12345" maxlength="5"></div>' +
+              '<div class="form-group"><label>Kontaktní osoba</label><input type="text" id="new-comp-contact" placeholder="Jméno Příjmení"></div>' +
+              '<div class="form-group"><label>Email</label><input type="email" id="new-comp-email" placeholder="info@firma.cz"></div>' +
+              '<div class="form-group"><label>Telefon</label><input type="text" id="new-comp-phone" placeholder="+420..."></div>' +
+              '<div class="form-group"><label>Splatnost (dní)</label><input type="number" id="new-comp-payment" value="14" min="0"></div>' +
+            '</div>' +
+            '<div style="display:flex;gap:8px;margin-top:10px;">' +
+              '<button type="button" class="btn btn-primary btn-sm" onclick="createNewCompany()">✅ Vytvořit a vybrat</button>' +
+              '<button type="button" class="btn btn-secondary btn-sm" onclick="toggleNewCompanyForm()">Zrušit</button>' +
+            '</div>' +
+          '</div>' +
+          '<div class="form-grid">' +
+            '<div class="form-group"><label>Očekávané dodání</label><input type="date" name="expected_delivery" value="' + (o.expected_delivery ? o.expected_delivery.split('T')[0] : '') + '"></div>' +
+            '<div class="form-group"><label>Měna</label><select name="currency" onchange="renderPendingItems()"><option value="CZK"' + ((o.currency||'CZK')==='CZK'?' selected':'') + '>CZK (Kč)</option><option value="EUR"' + (o.currency==='EUR'?' selected':'') + '>EUR (€)</option></select></div>' +
+          '</div>' +
+
+          // === POLOŽKY ===
+          '<div style="border-top:1px solid var(--border);margin:16px 0 12px;padding-top:14px;">' +
+            '<h3 style="font-size:14px;margin-bottom:10px;">📦 Položky (výrobky)</h3>' +
+            '<div id="order-items-list"></div>' +
+            '<div style="margin-top:8px;padding:12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;">' +
+              '<div style="display:flex;gap:6px;align-items:end;flex-wrap:wrap;">' +
+                '<div class="form-group" style="flex:2;min-width:180px;"><label>Výrobek</label><select id="add-item-product"><option value="">— Vyberte výrobek —</option>' + prodOpts + '</select></div>' +
+                '<div class="form-group" style="width:70px;"><label>Množství</label><input type="number" id="add-item-qty" value="1" min="0.01" step="0.01"></div>' +
+                '<div class="form-group" style="width:50px;"><label>Jedn.</label><input type="text" id="add-item-unit" value="ks" readonly style="background:var(--surface);"></div>' +
+                '<div class="form-group" style="width:110px;"><label>Cena/ks bez DPH</label><input type="number" id="add-item-price" value="0" step="0.01"></div>' +
+              '</div>' +
+              '<div style="margin-top:8px;text-align:right;">' +
+                '<button type="button" class="btn btn-primary btn-sm" onclick="openProductConfigurator()">+ Přidat položku</button>' +
+              '</div>' +
+            '</div>' +
+          '</div>' +
+
+          '<div class="form-group full" style="margin-top:12px;"><label>Poznámka</label><textarea name="note">' + (o.note || '') + '</textarea></div>' +
+          '<div class="modal-actions"><button type="button" class="btn btn-secondary" onclick="closeModal()">Zrušit</button><button type="submit" class="btn btn-primary">' + (id ? 'Uložit' : 'Vytvořit') + '</button></div>' +
+        '</form></div></div>';
+
+      renderPendingItems();
+    }
+
+    const COMPANY_LABELS = { own: 'Moje firma', supplier: 'Dodavatel', customer: 'Odběratel', cooperation: 'Kooperace', both: 'Dodavatel/Odběratel' };
+
+    function toggleNewCompanyForm() {
+      const form = document.getElementById('new-company-form');
+      if (form) form.style.display = form.style.display === 'none' ? 'block' : 'none';
+    }
+
+    async function lookupARESNewCompany() {
+      const ico = document.getElementById('new-comp-ico')?.value.trim();
+      if (!ico) { alert('Zadejte IČO'); return; }
+      try {
+        const res = await fetch('/api/wh/ares/' + ico);
+        const data = await res.json();
+        if (data.error) { alert(data.error); return; }
+        if (data.name) document.getElementById('new-comp-name').value = data.name;
+        if (data.dic) document.getElementById('new-comp-dic').value = data.dic;
+        if (data.address) document.getElementById('new-comp-address').value = data.address;
+        if (data.city) document.getElementById('new-comp-city').value = data.city;
+        if (data.zip) document.getElementById('new-comp-zip').value = data.zip;
+      } catch(e) { alert('Chyba při vyhledávání v ARES'); }
+    }
+
+    async function createNewCompany() {
+      const name = document.getElementById('new-comp-name')?.value.trim();
+      if (!name) { alert('Zadejte název firmy.'); return; }
+
+      const data = {
+        name: name,
+        ico: document.getElementById('new-comp-ico')?.value.trim() || null,
+        dic: document.getElementById('new-comp-dic')?.value.trim() || null,
+        type: document.getElementById('new-comp-type')?.value || 'customer',
+        address: document.getElementById('new-comp-address')?.value.trim() || null,
+        city: document.getElementById('new-comp-city')?.value.trim() || null,
+        zip: document.getElementById('new-comp-zip')?.value.trim() || null,
+        contact_person: document.getElementById('new-comp-contact')?.value.trim() || null,
+        email: document.getElementById('new-comp-email')?.value.trim() || null,
+        phone: document.getElementById('new-comp-phone')?.value.trim() || null,
+        payment_terms_days: parseInt(document.getElementById('new-comp-payment')?.value) || 14,
+        active: true,
+      };
+
+      try {
+        const res = await fetch('/api/wh/companies', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data),
+        });
+        if (!res.ok) throw new Error('Chyba ' + res.status);
+        const newComp = await res.json();
+
+        // Přidej do seznamu a vyber v selectu
+        companies.push(newComp);
+        const sel = document.getElementById('order-company-select');
+        const opt = document.createElement('option');
+        opt.value = newComp.id;
+        opt.textContent = newComp.name + ' (Odběratel)';
+        opt.selected = true;
+        sel.appendChild(opt);
+
+        // Schovat formulář
+        document.getElementById('new-company-form').style.display = 'none';
+      } catch(e) {
+        alert('Chyba při vytváření firmy: ' + e.message);
+      }
+    }
+
+    // --- Správa položek v modalu ---
+    let _pendingItems = [];
+
+    let _currentConfigGroups = [];
+
+    // =================================================================
+    // MODÁLNÍ KONFIGURÁTOR — přívětivý průvodce konfigurací výrobku
+    // =================================================================
+    async function openProductConfigurator() {
+      const sel = document.getElementById('add-item-product');
+      const opt = sel.selectedOptions[0];
+      if (!opt || !opt.value) { alert('Nejprve vyberte výrobek.'); return; }
+
+      const productId = parseInt(opt.value);
+      const productName = opt.dataset.name || opt.textContent;
+      const productCode = opt.dataset.code || '';
+      const basePrice = parseFloat(document.getElementById('add-item-price').value) || 0;
+      const qty = parseFloat(document.getElementById('add-item-qty').value) || 1;
+      const unit = document.getElementById('add-item-unit').value || 'ks';
+
+      // Načti konfiguraci
+      let groups = [];
+      try {
+        const res = await fetch('/api/production/products/' + productId + '/config');
+        groups = await res.json();
+      } catch(e) { console.error(e); }
+
+      _currentConfigGroups = groups;
+
+      // Pokud výrobek nemá konfigurace, přidej rovnou
+      if (!groups || groups.length === 0) {
+        _pendingItems.push({
+          product_id: productId,
+          name: productName,
+          quantity: qty,
+          unit: unit,
+          unit_price: basePrice,
+          total_price: qty * basePrice,
+          configs: [],
+          config_summary: '',
+        });
+        sel.value = '';
+        document.getElementById('add-item-qty').value = 1;
+        document.getElementById('add-item-price').value = 0;
+        renderPendingItems();
+        return;
+      }
+
+      // Otevři modální konfigurátor
+      const cfgModal = document.createElement('div');
+      cfgModal.id = 'cfg-modal-overlay';
+      cfgModal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:10001;display:flex;align-items:center;justify-content:center;';
+      cfgModal.onclick = function(e) { if (e.target === cfgModal) cfgModal.remove(); };
+
+      const curSym = currencySymbol(getSelectedCurrency());
+
+      let html = '<div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:0;width:650px;max-width:95vw;max-height:90vh;overflow:hidden;display:flex;flex-direction:column;">';
+
+      // Header
+      html += '<div style="padding:20px 24px 16px;border-bottom:1px solid var(--border);background:linear-gradient(135deg,rgba(234,179,8,0.08) 0%,transparent 100%);">';
+      html += '<div style="display:flex;align-items:center;gap:12px;">';
+      html += '<div style="width:44px;height:44px;border-radius:10px;background:rgba(234,179,8,0.15);display:flex;align-items:center;justify-content:center;font-size:22px;">⚙️</div>';
+      html += '<div><h3 style="margin:0;font-size:16px;">Konfigurace výrobku</h3>';
+      html += '<div style="font-size:12px;color:var(--text2);margin-top:2px;"><span style="font-family:monospace;color:#eab308;">' + esc(productCode) + '</span> · ' + esc(productName) + '</div></div></div></div>';
+
+      // Body — scrollable
+      html += '<div style="flex:1;overflow-y:auto;padding:20px 24px;">';
+
+      for (const g of groups) {
+        html += '<div style="margin-bottom:16px;">';
+        html += '<div style="font-size:13px;font-weight:600;margin-bottom:6px;">' + esc(g.name) + (g.required ? ' <span style="color:#ef4444;">*</span>' : '') + '</div>';
+
+        if (g.type === 'single_select') {
+          // Kartičkový výběr — jedna volba
+          html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px;">';
+          for (const o of g.options) {
+            const price = parseFloat(o.price_modifier) || 0;
+            const priceTag = price !== 0 ? '<div style="font-size:11px;font-weight:600;color:' + (price > 0 ? '#ef4444' : '#10b981') + ';margin-top:4px;">' + (price > 0 ? '+' : '') + price.toLocaleString('cs-CZ') + ' ' + curSym + '</div>' : '';
+            const isDefault = o.is_default;
+            html += '<label style="display:block;cursor:pointer;">';
+            html += '<input type="radio" name="cfgm_group_' + g.id + '" value="' + o.id + '" data-price="' + o.price_modifier + '" data-group-name="' + esc(g.name) + '" data-opt-name="' + esc(o.name) + '"' + (isDefault ? ' checked' : '') + ' class="cfgm-radio" style="display:none;">';
+            html += '<div class="cfgm-card" style="border:2px solid ' + (isDefault ? '#eab308' : 'var(--border)') + ';border-radius:10px;padding:10px 14px;transition:all 0.15s;background:' + (isDefault ? 'rgba(234,179,8,0.06)' : 'var(--bg)') + ';">';
+            html += '<div style="font-size:13px;font-weight:600;">' + esc(o.name) + '</div>';
+            if (isDefault) html += '<div style="font-size:10px;color:#eab308;margin-top:2px;">● Standard</div>';
+            html += priceTag;
+            html += '</div></label>';
+          }
+          html += '</div>';
+
+        } else if (g.type === 'multi_select') {
+          html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px;">';
+          for (const o of g.options) {
+            const price = parseFloat(o.price_modifier) || 0;
+            const priceTag = price !== 0 ? '<div style="font-size:11px;font-weight:600;color:' + (price > 0 ? '#ef4444' : '#10b981') + ';margin-top:4px;">' + (price > 0 ? '+' : '') + price.toLocaleString('cs-CZ') + ' ' + curSym + '</div>' : '';
+            html += '<label style="display:block;cursor:pointer;">';
+            html += '<input type="checkbox" value="' + o.id + '" data-price="' + o.price_modifier + '" data-group-name="' + esc(g.name) + '" data-opt-name="' + esc(o.name) + '"' + (o.is_default ? ' checked' : '') + ' class="cfgm-check" data-group-id="' + g.id + '" style="display:none;">';
+            html += '<div class="cfgm-card" style="border:2px solid ' + (o.is_default ? '#eab308' : 'var(--border)') + ';border-radius:10px;padding:10px 14px;transition:all 0.15s;background:' + (o.is_default ? 'rgba(234,179,8,0.06)' : 'var(--bg)') + ';">';
+            html += '<div style="display:flex;align-items:center;gap:6px;"><span class="cfgm-checkmark" style="width:18px;height:18px;border:2px solid ' + (o.is_default ? '#eab308' : 'var(--border)') + ';border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:12px;color:#eab308;">' + (o.is_default ? '✓' : '') + '</span><span style="font-size:13px;font-weight:600;">' + esc(o.name) + '</span></div>';
+            html += priceTag;
+            html += '</div></label>';
+          }
+          html += '</div>';
+
+        } else if (g.type === 'boolean') {
+          const yesOpt = g.options.find(o => o.code.toLowerCase().includes('ano') || o.code.toLowerCase().includes('yes') || o.code.toLowerCase() === 'true');
+          const noOpt = g.options.find(o => o.code.toLowerCase().includes('ne') || o.code.toLowerCase().includes('no') || o.code.toLowerCase() === 'false');
+          html += '<div style="display:flex;gap:10px;">';
+          [yesOpt, noOpt].filter(Boolean).forEach(o => {
+            html += '<label style="display:block;cursor:pointer;flex:1;">';
+            html += '<input type="radio" name="cfgm_group_' + g.id + '" value="' + o.id + '" data-price="' + o.price_modifier + '" data-group-name="' + esc(g.name) + '" data-opt-name="' + esc(o.name) + '"' + (o.is_default ? ' checked' : '') + ' class="cfgm-radio" style="display:none;">';
+            html += '<div class="cfgm-card" style="border:2px solid ' + (o.is_default ? '#eab308' : 'var(--border)') + ';border-radius:10px;padding:12px 16px;text-align:center;transition:all 0.15s;background:' + (o.is_default ? 'rgba(234,179,8,0.06)' : 'var(--bg)') + ';">';
+            html += '<div style="font-size:14px;font-weight:600;">' + esc(o.name) + '</div></div></label>';
+          });
+          html += '</div>';
+
+        } else if (g.type === 'text') {
+          html += '<input type="text" class="cfgm-text" data-group-id="' + g.id + '" data-group-name="' + esc(g.name) + '" placeholder="Zadejte..." style="width:100%;background:var(--bg);border:2px solid var(--border);border-radius:10px;padding:10px 14px;color:var(--text);font-size:13px;transition:border-color 0.15s;">';
+        }
+
+        html += '</div>';
+      }
+
+      html += '</div>'; // end body
+
+      // Footer — cenový souhrn + tlačítka
+      html += '<div style="padding:16px 24px;border-top:1px solid var(--border);background:var(--bg);">';
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;">';
+      html += '<div><div style="font-size:12px;color:var(--text2);">Celková cena položky</div>';
+      const _sym = currencySymbol(getSelectedCurrency());
+      html += '<div id="cfgm-total-price" style="font-size:20px;font-weight:700;color:#eab308;">' + (basePrice * qty).toLocaleString('cs-CZ') + ' ' + _sym + ' bez DPH</div></div>';
+      html += '<div style="display:flex;gap:8px;">';
+      html += '<button class="btn btn-secondary" onclick="document.getElementById(\'cfg-modal-overlay\').remove()">Zrušit</button>';
+      html += '<button class="btn btn-primary" onclick="confirmProductConfig()">✅ Přidat do objednávky</button>';
+      html += '</div></div></div>';
+
+      html += '</div>';
+      cfgModal.innerHTML = html;
+      document.body.appendChild(cfgModal);
+
+      // Event listeners pro interaktivitu kartiček
+      cfgModal.querySelectorAll('.cfgm-radio').forEach(radio => {
+        radio.addEventListener('change', function() {
+          // Odbarvi všechny v skupině
+          const name = this.name;
+          cfgModal.querySelectorAll('input[name="' + name + '"]').forEach(r => {
+            const card = r.nextElementSibling;
+            if (r.checked) { card.style.borderColor = '#eab308'; card.style.background = 'rgba(234,179,8,0.06)'; }
+            else { card.style.borderColor = 'var(--border)'; card.style.background = 'var(--bg)'; }
+          });
+          updateCfgmPrice();
+        });
+      });
+
+      cfgModal.querySelectorAll('.cfgm-check').forEach(chk => {
+        chk.addEventListener('change', function() {
+          const card = this.nextElementSibling;
+          const mark = card.querySelector('.cfgm-checkmark');
+          if (this.checked) { card.style.borderColor = '#eab308'; card.style.background = 'rgba(234,179,8,0.06)'; if (mark) { mark.style.borderColor = '#eab308'; mark.textContent = '✓'; } }
+          else { card.style.borderColor = 'var(--border)'; card.style.background = 'var(--bg)'; if (mark) { mark.style.borderColor = 'var(--border)'; mark.textContent = ''; } }
+          updateCfgmPrice();
+        });
+      });
+
+      cfgModal.querySelectorAll('.cfgm-text').forEach(inp => {
+        inp.addEventListener('focus', function() { this.style.borderColor = '#eab308'; });
+        inp.addEventListener('blur', function() { this.style.borderColor = 'var(--border)'; });
+      });
+
+      // Cenový update funkce
+      window._cfgm_basePrice = basePrice;
+      window._cfgm_qty = qty;
+      window._cfgm_productId = productId;
+      window._cfgm_productName = productName;
+      window._cfgm_unit = unit;
+      updateCfgmPrice();
+    }
+
+    function updateCfgmPrice() {
+      let extra = 0;
+      document.querySelectorAll('#cfg-modal-overlay .cfgm-radio:checked, #cfg-modal-overlay .cfgm-check:checked').forEach(el => {
+        extra += parseFloat(el.dataset.price) || 0;
+      });
+      const total = (window._cfgm_basePrice + extra) * window._cfgm_qty;
+      const el = document.getElementById('cfgm-total-price');
+      if (el) el.textContent = total.toLocaleString('cs-CZ') + ' ' + currencySymbol(getSelectedCurrency()) + ' bez DPH';
+    }
+
+    function confirmProductConfig() {
+      // Sesbírej výběry
+      const configs = [];
+      const configLabels = [];
+      let priceExtra = 0;
+
+      // Radio (single_select + boolean)
+      document.querySelectorAll('#cfg-modal-overlay .cfgm-radio:checked').forEach(r => {
+        configs.push({ option_id: parseInt(r.value) });
+        configLabels.push(r.dataset.groupName + ': ' + r.dataset.optName);
+        priceExtra += parseFloat(r.dataset.price) || 0;
+      });
+
+      // Checkboxy (multi_select)
+      document.querySelectorAll('#cfg-modal-overlay .cfgm-check:checked').forEach(chk => {
+        configs.push({ option_id: parseInt(chk.value) });
+        configLabels.push(chk.dataset.groupName + ': ' + chk.dataset.optName);
+        priceExtra += parseFloat(chk.dataset.price) || 0;
+      });
+
+      // Text
+      document.querySelectorAll('#cfg-modal-overlay .cfgm-text').forEach(inp => {
+        if (inp.value.trim()) {
+          configs.push({ custom_value: inp.value.trim(), _group_id: parseInt(inp.dataset.groupId) });
+          configLabels.push(inp.dataset.groupName + ': ' + inp.value.trim());
+        }
+      });
+
+      // Validace povinných skupin
+      for (const g of _currentConfigGroups) {
+        if (g.required) {
+          const hasSelection = configs.some(c => {
+            if (c.option_id) {
+              return g.options.some(o => o.id === c.option_id);
+            }
+            return false;
+          });
+          if (!hasSelection) { alert('Vyplňte povinnou skupinu: ' + g.name); return; }
+        }
+      }
+
+      const finalPrice = window._cfgm_basePrice + priceExtra;
+
+      _pendingItems.push({
+        product_id: window._cfgm_productId,
+        name: window._cfgm_productName,
+        quantity: window._cfgm_qty,
+        unit: window._cfgm_unit,
+        unit_price: finalPrice,
+        total_price: window._cfgm_qty * finalPrice,
+        configs: configs,
+        config_summary: configLabels.join(' · '),
+      });
+
+      // Reset hlavní formulář
+      document.getElementById('add-item-product').value = '';
+      document.getElementById('add-item-qty').value = 1;
+      document.getElementById('add-item-price').value = 0;
+      document.getElementById('add-item-unit').value = 'ks';
+      _currentConfigGroups = [];
+
+      // Zavři modal
+      document.getElementById('cfg-modal-overlay')?.remove();
+      renderPendingItems();
+    }
+
+    function removePendingItem(idx) {
+      _pendingItems.splice(idx, 1);
+      renderPendingItems();
+    }
+
+    function getSelectedCurrency() {
+      const sel = document.querySelector('select[name="currency"]');
+      return sel ? sel.value : 'CZK';
+    }
+    function currencySymbol(c) { return c === 'EUR' ? '€' : 'Kč'; }
+
+    function renderPendingItems() {
+      const el = document.getElementById('order-items-list');
+      if (!el) return;
+      if (_pendingItems.length === 0) {
+        el.innerHTML = '<div style="color:var(--text2);font-size:12px;padding:8px 0;">Zatím žádné položky — přidejte výrobky níže.</div>';
+        return;
+      }
+      const cur = getSelectedCurrency();
+      const sym = currencySymbol(cur);
+      let total = 0;
+      let html = '<table class="data-table" style="font-size:12px;"><thead><tr><th>Výrobek</th><th style="text-align:right">Množství</th><th>Jedn.</th><th style="text-align:right">Cena/ks bez DPH</th><th style="text-align:right">Celkem bez DPH</th><th></th></tr></thead><tbody>';
+      _pendingItems.forEach((it, i) => {
+        const rowTotal = it.quantity * it.unit_price;
+        total += rowTotal;
+        const configLine = it.config_summary ? '<div style="font-size:11px;color:var(--text2);margin-top:2px;">⚙️ ' + it.config_summary + '</div>' : '';
+        html += '<tr>' +
+          '<td><span class="person-name">' + it.name + '</span>' + configLine + '</td>' +
+          '<td style="text-align:right">' + it.quantity + '</td>' +
+          '<td>' + it.unit + '</td>' +
+          '<td style="text-align:right">' + it.unit_price.toLocaleString('cs-CZ') + ' ' + sym + '</td>' +
+          '<td style="text-align:right;font-weight:600;">' + rowTotal.toLocaleString('cs-CZ') + ' ' + sym + '</td>' +
+          '<td><button type="button" class="btn btn-danger btn-sm" onclick="removePendingItem(' + i + ')" style="padding:2px 8px;">✕</button></td>' +
+        '</tr>';
+      });
+      html += '<tr style="border-top:2px solid var(--border);"><td colspan="4" style="text-align:right;font-weight:600;">Celkem bez DPH:</td><td style="text-align:right;font-weight:700;font-size:14px;color:#eab308;">' + total.toLocaleString('cs-CZ') + ' ' + sym + '</td><td></td></tr>';
+      html += '</tbody></table>';
+      el.innerHTML = html;
+    }
+
+    async function saveOrder(e, id) {
+      e.preventDefault();
+      const form = new FormData(e.target);
+      const raw = Object.fromEntries(form.entries());
+
+      // Validace
+      const companyId = parseInt(raw.company_id);
+      if (!companyId) { alert('Vyberte odběratele.'); return; }
+
+      const data = {
+        type: raw.type || 'sales',
+        company_id: companyId,
+        status: raw.status || 'new',
+        currency: raw.currency || 'CZK',
+        note: raw.note || '',
+        expected_delivery: raw.expected_delivery || null,
+        items_count: _pendingItems.length,
+        total_amount: _pendingItems.reduce((sum, it) => sum + (it.quantity * it.unit_price), 0),
+      };
+
+      try {
+        let orderId = id;
+
+        if (id) {
+          // Editace existující objednávky
+          const res = await fetch('/api/wh/orders/' + id, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+          if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.error || 'Chyba při ukládání (' + res.status + ')'); }
+        } else {
+          // Nová objednávka
+          data.order_number = 'SO-' + Date.now().toString(36).toUpperCase();
+          const res = await fetch('/api/wh/orders', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+          if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.error || 'Chyba při vytváření (' + res.status + ')'); }
+          const newOrder = await res.json();
+          orderId = newOrder.id;
+        }
+
+        // Přidej položky k objednávce
+        if (_pendingItems.length > 0 && orderId) {
+          for (const item of _pendingItems) {
+            if (item.id) continue; // přeskoč existující
+            const itemRes = await fetch('/api/wh/orders/' + orderId + '/items', {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                product_id: item.product_id || null,
+                name: item.name,
+                quantity: item.quantity,
+                unit: item.unit,
+                unit_price: item.unit_price,
+                total_price: item.quantity * item.unit_price,
+              }),
+            });
+            if (!itemRes.ok) { console.error('Chyba přidání položky:', await itemRes.text()); continue; }
+            const savedItem = await itemRes.json();
+
+            // Ulož konfiguraci položky
+            if (item.configs && item.configs.length > 0 && savedItem.id) {
+              await fetch('/api/production/order-items/' + savedItem.id + '/config', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ configs: item.configs }),
+              }).catch(e => console.error('Config save error:', e));
+            }
+          }
+
+          // Aktualizuj celkovou částku
+          await fetch('/api/wh/orders/' + orderId, {
+            method: 'PUT', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ items_count: _pendingItems.length, total_amount: data.total_amount }),
+          });
+        }
+
+        _pendingItems = [];
+        closeModal();
+        loadOrders();
+        loadStats();
+      } catch(e) { alert('Chyba: ' + e.message); console.error('saveOrder error:', e); }
+    }
+
+    // ============================================================
+    // DETAIL objednávky
+    // ============================================================
+    async function openOrderDetail(id) {
+      try {
+        const res = await fetch('/api/wh/orders/' + id);
+        const order = await res.json();
+        if (products.length === 0) { try { const r2 = await fetch('/api/production/products?type=product'); products = await r2.json(); } catch(e) {} }
+        const st = ORDER_STATUSES[order.status] || { label: order.status, color: '#9ca3af' };
+        const statusOpts = Object.entries(ORDER_STATUSES).map(([k,v]) => '<option value="' + k + '"' + (order.status === k ? ' selected' : '') + '>' + v.label + '</option>').join('');
+
+        // Načti konfigurace pro položky
+        const itemConfigs = {};
+        if (order.items) {
+          for (const it of order.items) {
+            try {
+              const cfgRes = await fetch('/api/production/order-items/' + it.id + '/config');
+              const cfgs = await cfgRes.json();
+              if (cfgs.length > 0) itemConfigs[it.id] = cfgs;
+            } catch(e) {}
+          }
+        }
+
+        let itemsHtml = '';
+        if (order.items && order.items.length > 0) {
+          itemsHtml = '<table class="data-table"><thead><tr><th>Položka</th><th>Množství</th><th>Jednotka</th><th>Cena/ks</th><th>Celkem</th><th></th></tr></thead><tbody>';
+          for (const it of order.items) {
+            let configLine = '';
+            if (itemConfigs[it.id]) {
+              const labels = itemConfigs[it.id].map(c => {
+                if (c.option && c.option.group) return c.option.group.name + ': ' + c.option.name;
+                if (c.custom_value) return c.custom_value;
+                return '';
+              }).filter(Boolean);
+              if (labels.length) configLine = '<div style="font-size:11px;color:var(--text2);margin-top:2px;">⚙️ ' + labels.join(' · ') + '</div>';
+            }
+            itemsHtml += '<tr><td><span class="person-name">' + (it.name || '—') + '</span>' + configLine + '</td>';
+            itemsHtml += '<td>' + it.quantity + '</td><td>' + it.unit + '</td>';
+            itemsHtml += '<td>' + parseFloat(it.unit_price || 0).toLocaleString('cs-CZ') + ' ' + currencySymbol(order.currency) + '</td>';
+            itemsHtml += '<td style="font-weight:600;">' + parseFloat(it.total_price || 0).toLocaleString('cs-CZ') + ' ' + currencySymbol(order.currency) + '</td>';
+            itemsHtml += '<td><button class="btn btn-danger btn-sm" onclick="deleteOrderItem(' + it.id + ',' + id + ')">🗑️</button></td></tr>';
+          }
+          itemsHtml += '</tbody></table>';
+        } else {
+          itemsHtml = '<div style="color:var(--text2);font-size:13px;padding:12px;">Zatím žádné položky</div>';
+        }
+
+        const prodDetailOpts = products.map(p => '<option value="' + p.id + '">' + p.code + ' — ' + p.name + '</option>').join('');
+
+        document.getElementById('modal-root').innerHTML = '<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal" style="max-width:750px;">' +
+          '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">' +
+            '<h2 style="margin:0;">' + order.order_number + '</h2>' +
+            '<div style="display:flex;gap:8px;align-items:center;">' +
+              '<select onchange="updateOrderStatus(' + id + ',this.value)" style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:6px 10px;color:var(--text);font-size:12px;">' + statusOpts + '</select>' +
+              '<span class="badge" style="background:' + st.color + '22;color:' + st.color + ';font-size:13px;padding:4px 12px;">' + st.label + '</span>' +
+            '</div>' +
+          '</div>' +
+          '<div style="font-size:13px;color:var(--text2);margin-bottom:16px;">💰 Prodejní · ' + (order.company?.name || '—') + ' · Celkem: <strong style="color:var(--text);">' + parseFloat(order.total_amount || 0).toLocaleString('cs-CZ') + ' ' + (order.currency || 'CZK') + '</strong></div>' +
+          '<div style="border-top:1px solid var(--border);padding-top:16px;margin-bottom:12px;"><h3 style="font-size:14px;margin-bottom:8px;">📦 Položky</h3>' + itemsHtml + '</div>' +
+          '<div style="border-top:1px solid var(--border);padding-top:16px;">' +
+            '<h3 style="font-size:14px;margin-bottom:8px;">➕ Přidat položku</h3>' +
+            '<form onsubmit="addOrderItem(event,' + id + ')" style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;">' +
+              '<div class="form-group" style="flex:2;"><label>Výrobek</label><select name="product_id" onchange="fillItemPrice(this)"><option value="">— Vyberte výrobek —</option>' + prodDetailOpts + '</select></div>' +
+              '<div class="form-group" style="flex:1;"><label>Název</label><input type="text" name="name" placeholder="Nebo ruční název"></div>' +
+              '<div class="form-group" style="width:80px;"><label>Množství</label><input type="number" name="quantity" value="1" min="0.01" step="0.01" required></div>' +
+              '<div class="form-group" style="width:60px;"><label>Jedn.</label><input type="text" name="unit" value="ks"></div>' +
+              '<div class="form-group" style="width:100px;"><label>Cena/ks</label><input type="number" name="unit_price" value="0" step="0.01"></div>' +
+              '<button type="submit" class="btn btn-primary btn-sm" style="margin-bottom:4px;">+ Přidat</button>' +
+            '</form>' +
+          '</div>' +
+          '<div class="modal-actions" style="margin-top:20px;">' +
+            '<button class="btn" style="background:rgba(59,130,246,0.15);color:#3b82f6;border-color:rgba(59,130,246,0.3);" onclick="shareOrder(' + id + ')">🔗 Sdílet zákazníkovi</button>' +
+            '<div style="flex:1;"></div>' +
+            '<button class="btn btn-secondary" onclick="closeModal()">Zavřít</button>' +
+          '</div>' +
+        '</div></div>';
+      } catch(e) { console.error(e); }
+    }
+
+    function fillItemPrice(sel) {
+      const prod = products.find(p => p.id === parseInt(sel.value));
+      if (prod) {
+        const form = sel.closest('form');
+        form.querySelector('[name="name"]').value = prod.name;
+        form.querySelector('[name="unit"]').value = 'ks';
+      }
+    }
+
+    async function addOrderItem(e, orderId) {
+      e.preventDefault();
+      const form = new FormData(e.target);
+      const data = Object.fromEntries(form.entries());
+      data.product_id = parseInt(data.product_id) || null;
+      data.quantity = parseFloat(data.quantity);
+      data.unit_price = parseFloat(data.unit_price || 0);
+      data.total_price = data.quantity * data.unit_price;
+      if (!data.name && !data.product_id) { alert('Vyberte výrobek nebo zadejte název.'); return; }
+      await fetch('/api/wh/orders/' + orderId + '/items', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+      openOrderDetail(orderId);
+      loadStats();
+    }
+
+    async function deleteOrderItem(itemId, orderId) {
+      if (!confirm('Smazat tuto položku?')) return;
+      await fetch('/api/wh/orders/' + orderId + '/items/' + itemId, { method: 'DELETE' });
+      openOrderDetail(orderId);
+      loadStats();
+    }
+
+    async function updateOrderStatus(id, status) {
+      await fetch('/api/wh/orders/' + id, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }) });
+      loadOrders();
+      loadStats();
+    }
+
+    async function deleteOrder(id) {
+      if (!confirm('Opravdu smazat tuto objednávku?')) return;
+      await fetch('/api/wh/orders/' + id, { method: 'DELETE' });
+      loadOrders();
+      loadStats();
+    }
+
+    // ============================================================
+    // HELPERS
+    // ============================================================
+    async function shareOrder(orderId) {
+      try {
+        const res = await fetch('/api/wh/orders/' + orderId + '/share', { method: 'POST' });
+        const data = await res.json();
+        if (!data.share_token) { alert(data.error || 'Chyba při generování odkazu.'); return; }
+
+        const shareUrl = window.location.origin + '/order/' + data.share_token;
+
+        // Zobraz modal s odkazem
+        const m = document.createElement('div');
+        m.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:10002;display:flex;align-items:center;justify-content:center;';
+        m.onclick = function(e) { if (e.target === m) m.remove(); };
+        m.innerHTML = '<div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:24px;width:500px;max-width:95vw;">' +
+          '<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">' +
+            '<div style="width:40px;height:40px;border-radius:10px;background:rgba(59,130,246,0.15);display:flex;align-items:center;justify-content:center;font-size:20px;">🔗</div>' +
+            '<div><h3 style="margin:0;font-size:16px;">Odkaz pro zákazníka</h3>' +
+            '<p style="font-size:12px;color:var(--text2);margin:2px 0 0;">Zákazník uvidí readonly přehled objednávky bez přihlášení</p></div>' +
+          '</div>' +
+          '<div style="display:flex;gap:8px;align-items:center;">' +
+            '<input type="text" readonly value="' + shareUrl + '" id="share-url-input" style="flex:1;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text);font-size:13px;font-family:monospace;" onclick="this.select()">' +
+            '<button class="btn btn-primary" onclick="copyShareUrl()">📋 Kopírovat</button>' +
+          '</div>' +
+          '<div id="share-copy-msg" style="font-size:12px;color:#10b981;margin-top:8px;display:none;">✅ Odkaz zkopírován do schránky</div>' +
+          '<div style="margin-top:16px;text-align:right;">' +
+            '<button class="btn btn-secondary" onclick="this.closest(\'div[style*=position\\:fixed]\').remove()">Zavřít</button>' +
+          '</div>' +
+        '</div>';
+        document.body.appendChild(m);
+
+        // Automaticky vyber text
+        setTimeout(function() { document.getElementById('share-url-input')?.select(); }, 100);
+      } catch(e) { alert('Chyba: ' + e.message); }
+    }
+
+    function copyShareUrl() {
+      const input = document.getElementById('share-url-input');
+      if (input) {
+        input.select();
+        navigator.clipboard.writeText(input.value).then(function() {
+          const msg = document.getElementById('share-copy-msg');
+          if (msg) msg.style.display = 'block';
+          setTimeout(function() { if (msg) msg.style.display = 'none'; }, 3000);
+        });
+      }
+    }
+
+    function closeModal() { document.getElementById('modal-root').innerHTML = ''; }
+
+    // ============================================================
+    // INIT
+    // ============================================================
+    loadStats();
+    loadOrders();
+  </script>
+</body>
+</html>

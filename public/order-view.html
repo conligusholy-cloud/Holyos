@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Objednávka — HolyOS</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .container {
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      max-width: 900px;
+      width: 100%;
+      padding: 40px;
+    }
+
+    .header {
+      text-align: center;
+      margin-bottom: 40px;
+      border-bottom: 2px solid #f0f0f0;
+      padding-bottom: 20px;
+    }
+
+    .header h1 {
+      font-size: 28px;
+      color: #333;
+      margin-bottom: 8px;
+    }
+
+    .header p {
+      color: #666;
+      font-size: 14px;
+    }
+
+    .order-info {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+      margin-bottom: 30px;
+    }
+
+    .info-block {
+      padding: 15px;
+      background: #f9f9f9;
+      border-radius: 8px;
+      border-left: 4px solid #667eea;
+    }
+
+    .info-block label {
+      display: block;
+      font-size: 12px;
+      color: #999;
+      text-transform: uppercase;
+      margin-bottom: 5px;
+      font-weight: 600;
+    }
+
+    .info-block .value {
+      font-size: 18px;
+      color: #333;
+      font-weight: 500;
+    }
+
+    .status {
+      display: inline-block;
+      padding: 6px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+
+    .status.new { background: #e3f2fd; color: #1976d2; }
+    .status.pending { background: #fff3e0; color: #f57c00; }
+    .status.confirmed { background: #f3e5f5; color: #7b1fa2; }
+    .status.delivered { background: #e8f5e9; color: #388e3c; }
+    .status.cancelled { background: #ffebee; color: #c62828; }
+
+    .items-section {
+      margin-top: 40px;
+    }
+
+    .items-section h2 {
+      font-size: 18px;
+      color: #333;
+      margin-bottom: 15px;
+      padding-bottom: 10px;
+      border-bottom: 2px solid #f0f0f0;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    thead {
+      background: #f9f9f9;
+    }
+
+    th {
+      text-align: left;
+      padding: 12px;
+      font-size: 12px;
+      color: #666;
+      font-weight: 600;
+      text-transform: uppercase;
+      border-bottom: 2px solid #e0e0e0;
+    }
+
+    td {
+      padding: 12px;
+      border-bottom: 1px solid #f0f0f0;
+      color: #333;
+    }
+
+    tr:last-child td {
+      border-bottom: none;
+    }
+
+    .item-configs {
+      font-size: 12px;
+      color: #999;
+      margin-top: 5px;
+    }
+
+    .total-row {
+      font-weight: 600;
+      background: #f9f9f9;
+      border-top: 2px solid #e0e0e0;
+    }
+
+    .total-row td:last-child {
+      font-size: 18px;
+      color: #667eea;
+    }
+
+    .note-section {
+      margin-top: 30px;
+      padding: 15px;
+      background: #f0f5ff;
+      border-radius: 8px;
+      border-left: 4px solid #667eea;
+    }
+
+    .note-section h3 {
+      font-size: 12px;
+      color: #667eea;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+      font-weight: 600;
+    }
+
+    .note-section p {
+      color: #333;
+      line-height: 1.6;
+    }
+
+    .error {
+      background: #ffebee;
+      color: #c62828;
+      padding: 20px;
+      border-radius: 8px;
+      text-align: center;
+    }
+
+    .loading {
+      text-align: center;
+      padding: 40px;
+      color: #999;
+    }
+
+    .spinner {
+      border: 4px solid #f0f0f0;
+      border-top: 4px solid #667eea;
+      border-radius: 50%;
+      width: 40px;
+      height: 40px;
+      animation: spin 1s linear infinite;
+      margin: 0 auto 20px;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    .footer {
+      text-align: center;
+      margin-top: 40px;
+      padding-top: 20px;
+      border-top: 2px solid #f0f0f0;
+      color: #999;
+      font-size: 12px;
+    }
+
+    @media (max-width: 768px) {
+      .order-info {
+        grid-template-columns: 1fr;
+      }
+
+      .container {
+        padding: 20px;
+      }
+
+      table {
+        font-size: 13px;
+      }
+
+      th, td {
+        padding: 8px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container" id="app">
+    <div class="loading">
+      <div class="spinner"></div>
+      <p>Načítám objednávku...</p>
+    </div>
+  </div>
+
+  <script>
+    (async function() {
+      const app = document.getElementById('app');
+      const token = window.location.pathname.split('/').pop();
+
+      try {
+        const response = await fetch(`/api/public/order/${token}`);
+        if (!response.ok) {
+          throw new Error('Objednávka nenalezena');
+        }
+
+        const order = await response.json();
+
+        const formatPrice = (price) => {
+          return parseFloat(price).toLocaleString('cs-CZ', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+          });
+        };
+
+        const formatDate = (date) => {
+          if (!date) return '—';
+          return new Date(date).toLocaleDateString('cs-CZ');
+        };
+
+        let itemsHtml = '';
+        if (order.items && order.items.length > 0) {
+          order.items.forEach(item => {
+            let configsHtml = '';
+            if (item.configs && item.configs.length > 0) {
+              configsHtml = item.configs.map(c => {
+                return `<div>${c.group_name}: ${c.option_name}${c.custom_value ? ' (' + c.custom_value + ')' : ''}</div>`;
+              }).join('');
+            }
+
+            itemsHtml += `
+              <tr>
+                <td>
+                  <div>${item.name}</div>
+                  ${configsHtml ? `<div class="item-configs">${configsHtml}</div>` : ''}
+                </td>
+                <td>${formatPrice(item.quantity)} ${item.unit}</td>
+                <td>${order.currency} ${formatPrice(item.unit_price)}</td>
+                <td style="text-align: right; font-weight: 600;">${order.currency} ${formatPrice(item.total_price)}</td>
+              </tr>
+            `;
+          });
+        }
+
+        app.innerHTML = `
+          <div class="header">
+            <h1>Objednávka č. ${order.order_number}</h1>
+            <p>Veřejný náhled — HolyOS Manufacturing OS</p>
+          </div>
+
+          <div class="order-info">
+            <div class="info-block">
+              <label>Objednávající společnost</label>
+              <div class="value">${order.company_name}</div>
+            </div>
+            <div class="info-block">
+              <label>Stav objednávky</label>
+              <div class="value"><span class="status ${order.status}">${order.status}</span></div>
+            </div>
+            <div class="info-block">
+              <label>Očekávané dodání</label>
+              <div class="value">${formatDate(order.expected_delivery)}</div>
+            </div>
+            <div class="info-block">
+              <label>Měna</label>
+              <div class="value">${order.currency}</div>
+            </div>
+          </div>
+
+          ${order.note ? `
+            <div class="note-section">
+              <h3>Poznámka objednávky</h3>
+              <p>${order.note}</p>
+            </div>
+          ` : ''}
+
+          <div class="items-section">
+            <h2>Položky objednávky</h2>
+            <table>
+              <thead>
+                <tr>
+                  <th>Popis položky</th>
+                  <th>Množství</th>
+                  <th>Jednotková cena</th>
+                  <th style="text-align: right;">Cena celkem</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${itemsHtml}
+                <tr class="total-row">
+                  <td colspan="3" style="text-align: right;">Celkem:</td>
+                  <td style="text-align: right;">${order.currency} ${formatPrice(order.total_amount)}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="footer">
+            <p>© 2026 HolyOS — Manufacturing execution system | Best Series s.r.o.</p>
+          </div>
+        `;
+      } catch (error) {
+        app.innerHTML = `
+          <div class="error">
+            <h2>Chyba</h2>
+            <p>${error.message || 'Nepodařilo se načíst objednávku'}</p>
+          </div>
+        `;
+      }
+    })();
+  </script>
+</body>
+</html>

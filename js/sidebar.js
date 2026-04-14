@@ -10,6 +10,7 @@ function renderSidebar(activeModule) {
     { id: 'simulace-vyroby',    name: 'Simulace výroby',     icon: '&#9654;', color: '#22c55e', active: true },
     { id: 'pracovni-postup',    name: 'Pracovní postup',     icon: '&#128295;', color: '#06b6d4', active: true },
     { id: 'nakup-sklad',          name: 'Nákup a sklad',       icon: '&#128230;', color: '#10b981', active: true },
+    { id: 'prodejni-objednavky',  name: 'Prodejní objednávky', icon: '&#128176;', color: '#eab308', active: true },
     { id: 'sklady',                name: 'Sklady',              icon: '&#127981;', color: '#f59e0b', active: true },
     { id: 'pracoviste',           name: 'Pracoviště',          icon: '&#127981;', color: '#14b8a6', active: true },
     { id: 'ai-agenti',            name: 'AI Agenti',           icon: '&#129302;', color: '#8b5cf6', active: true },
@@ -111,28 +112,29 @@ function renderSidebar(activeModule) {
         nav.appendChild(adminLink);
       }
     }
-    // Pokud je super admin, přidat sekci Super Admin
+    // Pokud je super admin, přidat sekci Super Admin (dovnitř hlavní sidebar-nav)
     if (u.isSuperAdmin || u.is_super_admin) {
-      var userSection = document.querySelector('.sidebar-user');
-      if (userSection) {
-        var saSection = document.createElement('div');
-        saSection.className = 'sidebar-sa-section';
-        saSection.innerHTML = '<div class="sidebar-label" style="margin-top:8px; color:#ef4444;">Super Admin</div>' +
-          '<nav class="sidebar-nav">' +
-            '<a class="sidebar-item' + (activeModule === 'mindmap' ? ' active' : '') + '" href="' + basePath + 'modules/holyos-mindmap.html">' +
-              '<div class="sidebar-icon" style="background:rgba(239,68,68,0.15); color:#ef4444;">&#129504;</div>' +
-              '<div class="sidebar-item-info"><div class="sidebar-item-name">Myšlenková mapa</div></div>' +
-            '</a>' +
-            '<a class="sidebar-item' + (activeModule === 'admin-tasks' ? ' active' : '') + '" href="' + basePath + 'modules/admin-tasks/index.html">' +
-              '<div class="sidebar-icon" style="background:rgba(108,92,231,0.15); color:#a78bfa;">&#128203;</div>' +
-              '<div class="sidebar-item-info"><div class="sidebar-item-name">Požadavky</div></div>' +
-            '</a>' +
-            '<a class="sidebar-item' + (activeModule === 'audit-log' ? ' active' : '') + '" href="' + basePath + 'modules/audit-log/index.html">' +
-              '<div class="sidebar-icon" style="background:rgba(245,158,11,0.15); color:#f59e0b;">&#128220;</div>' +
-              '<div class="sidebar-item-info"><div class="sidebar-item-name">Historie změn</div></div>' +
-            '</a>' +
-          '</nav>';
-        userSection.parentNode.insertBefore(saSection, userSection);
+      var nav = nav || document.querySelector('.sidebar-nav');
+      if (nav) {
+        var saLabel = document.createElement('div');
+        saLabel.className = 'sidebar-label';
+        saLabel.style.cssText = 'margin-top:8px; color:#ef4444; padding:12px 10px 6px;';
+        saLabel.textContent = 'Super Admin';
+        nav.appendChild(saLabel);
+
+        var saItems = [
+          { id: 'mindmap', href: basePath + 'modules/holyos-mindmap.html', icon: '&#129504;', color: 'rgba(239,68,68,0.15)', textColor: '#ef4444', name: 'Myšlenková mapa' },
+          { id: 'admin-tasks', href: basePath + 'modules/admin-tasks/index.html', icon: '&#128203;', color: 'rgba(108,92,231,0.15)', textColor: '#a78bfa', name: 'Požadavky' },
+          { id: 'audit-log', href: basePath + 'modules/audit-log/index.html', icon: '&#128220;', color: 'rgba(245,158,11,0.15)', textColor: '#f59e0b', name: 'Historie změn' },
+        ];
+        saItems.forEach(function(m) {
+          var a = document.createElement('a');
+          a.className = 'sidebar-item' + (activeModule === m.id ? ' active' : '');
+          a.href = m.href;
+          a.innerHTML = '<div class="sidebar-icon" style="background:' + m.color + '; color:' + m.textColor + ';">' + m.icon + '</div>' +
+            '<div class="sidebar-item-info"><div class="sidebar-item-name">' + m.name + '</div></div>';
+          nav.appendChild(a);
+        });
       }
     }
   }).catch(function() {});
@@ -144,7 +146,7 @@ function renderSidebar(activeModule) {
   if (!document.getElementById('ai-assistant-script')) {
     var aiScript = document.createElement('script');
     aiScript.id = 'ai-assistant-script';
-    aiScript.src = basePath + 'js/ai-assistant.js';
+    aiScript.src = basePath + 'js/ai-assistant.js?v=' + Date.now();
     document.body.appendChild(aiScript);
   }
 
@@ -152,7 +154,7 @@ function renderSidebar(activeModule) {
   if (!document.getElementById('ai-chat-panel-script')) {
     var chatScript = document.createElement('script');
     chatScript.id = 'ai-chat-panel-script';
-    chatScript.src = basePath + 'js/ai-chat-panel.js';
+    chatScript.src = basePath + 'js/ai-chat-panel.js?v=' + Date.now();
     document.body.appendChild(chatScript);
   }
 }
@@ -525,7 +527,7 @@ function renderAiChat() {
     footer.className = 'ai-chat-footer';
     footer.innerHTML = '<div class="ai-input-row">' +
       '<label class="ai-upload-btn" title="Nahrát screenshot"><input type="file" accept="image/*" style="display:none" onchange="handleAiScreenshot(this)">📷</label>' +
-      '<textarea class="ai-input" id="ai-input" placeholder="Popište svůj požadavek…" rows="1" onkeydown="if(event.key===\'Enter\'&&!event.shiftKey){event.preventDefault();sendAiMessage()}"></textarea>' +
+      '<textarea class="ai-input" id="ai-sidebar-input" placeholder="Popište svůj požadavek…" rows="1" onkeydown="if(event.key===\'Enter\'&&!event.shiftKey){event.preventDefault();sendAiMessage()}"></textarea>' +
       '<button class="ai-send-btn" onclick="sendAiMessage()">→</button>' +
       '</div>';
     chat.appendChild(footer);
@@ -584,7 +586,7 @@ document.addEventListener('paste', function(e) {
 });
 
 function sendAiMessage() {
-  var input = document.getElementById('ai-input');
+  var input = document.getElementById('ai-sidebar-input');
   if (!input) return;
   var text = input.value.trim();
   if (!text && !_aiChatState.screenshot) return;
@@ -650,11 +652,19 @@ function submitAiTask() {
     priority: 'medium',
   };
 
+  var headers = { 'Content-Type': 'application/json' };
+  var t = sessionStorage.getItem('token');
+  if (t) headers['Authorization'] = 'Bearer ' + t;
+
   fetch('/api/admin-tasks', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    headers: headers,
     body: JSON.stringify(task)
-  }).then(function(r) { return r.json(); }).then(function(result) {
+  }).then(function(r) {
+    if (!r.ok) throw new Error('Server vrátil chybu ' + r.status);
+    return r.json();
+  }).then(function(result) {
     _aiChatState.step = 2;
     _aiChatState.messages.push({
       role: 'bot',

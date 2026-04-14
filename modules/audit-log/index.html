@@ -100,9 +100,12 @@
   </div>
   <div id="modal-root"></div>
 
-  <script src="/js/sidebar.js"></script>
   <script>
-    renderSidebar('audit-log');
+    var s = document.createElement('script');
+    s.src = '/js/sidebar.js?v=' + Date.now();
+    s.onload = function() { renderSidebar('audit-log'); };
+    document.head.appendChild(s);
+  </script>
     initDate();
 
     const ENTITY_LABELS = { person: 'Osoba', department: 'Oddělení', role: 'Role', company: 'Společnost', material: 'Materiál', warehouse: 'Sklad', movement: 'Pohyb', attendance: 'Docházka' };

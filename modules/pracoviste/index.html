@@ -299,8 +299,12 @@
 
   <div id="toast" class="toast"></div>
 
-  <script src="../../js/sidebar.js"></script>
-  <script>renderSidebar('pracoviste'); initDate();</script>
+  <script>
+    var s = document.createElement('script');
+    s.src = '../../js/sidebar.js?v=' + Date.now();
+    s.onload = function() { renderSidebar('pracoviste'); initDate(); };
+    document.head.appendChild(s);
+  </script>
 
   <script>
     // =========================================================================

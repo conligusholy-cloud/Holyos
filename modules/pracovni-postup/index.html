@@ -140,13 +140,23 @@
       visible.forEach(p => {
         const opCount = (p.operations || []).length;
         const badge = opCount > 0 ? '<span style="font-size:11px;color:var(--accent);margin-left:8px;">' + opCount + ' op.</span>' : '<span style="font-size:11px;color:var(--text2);margin-left:8px;">bez postupu</span>';
-        html += '<div class="product-card" onclick="openProduct(' + p.id + ')">' +
-          '<div class="product-card-icon">' + (currentType === 'product' ? '&#128295;' : '&#9881;') + '</div>' +
-          '<div class="product-card-info">' +
+        const cfgChecked = p.show_in_configurator ? 'checked' : '';
+        const cfgColor = p.show_in_configurator ? 'color:#eab308;' : 'color:var(--text2);opacity:0.4;';
+        html += '<div class="product-card">' +
+          '<div class="product-card-icon" onclick="openProduct(' + p.id + ')" style="cursor:pointer;">' + (currentType === 'product' ? '&#128295;' : '&#9881;') + '</div>' +
+          '<div class="product-card-info" onclick="openProduct(' + p.id + ')" style="cursor:pointer;flex:1;">' +
             '<div class="product-card-name">' + esc(p.name) + badge + '</div>' +
             '<div class="product-card-meta"><span>' + esc(p.code) + '</span></div>' +
           '</div>' +
-          '<div class="product-card-arrow">&rarr;</div>' +
+          (currentType === 'product' ? '<div class="cfg-toggle" title="Zobrazit v konfigurátoru / prodejních objednávkách" onclick="event.stopPropagation();toggleConfigurator(' + p.id + ',this)" style="display:flex;align-items:center;gap:6px;padding:6px 12px;cursor:pointer;border-radius:8px;transition:background 0.15s;margin-right:4px;" onmouseover="this.style.background=\'rgba(234,179,8,0.08)\'" onmouseout="this.style.background=\'transparent\'">' +
+            '<span style="font-size:18px;' + cfgColor + '">🛒</span>' +
+            '<label class="switch" style="position:relative;width:36px;height:20px;display:inline-block;">' +
+              '<input type="checkbox" ' + cfgChecked + ' style="display:none;" tabindex="-1">' +
+              '<span style="position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;background:' + (p.show_in_configurator ? '#eab308' : 'rgba(255,255,255,0.12)') + ';border-radius:10px;transition:background 0.2s;"></span>' +
+              '<span style="position:absolute;content:\'\';height:16px;width:16px;left:' + (p.show_in_configurator ? '18px' : '2px') + ';top:2px;background:white;border-radius:50%;transition:left 0.2s;box-shadow:0 1px 3px rgba(0,0,0,0.3);"></span>' +
+            '</label>' +
+          '</div>' : '') +
+          '<div class="product-card-arrow" onclick="openProduct(' + p.id + ')" style="cursor:pointer;">&rarr;</div>' +
         '</div>';
       });
       html += '</div>';
@@ -154,6 +164,43 @@
     }
 
     function filterProducts(q) { renderProducts(); }
+
+    async function toggleConfigurator(productId, el) {
+      try {
+        const headers = { 'Accept': 'application/json' };
+        if (token) headers['Authorization'] = 'Bearer ' + token;
+        const res = await fetch('/api/production/products/' + productId + '/configurator', {
+          method: 'PATCH', headers,
+        });
+        const data = await res.json();
+        const isOn = data.show_in_configurator;
+
+        // Aktualizuj lokální stav
+        const product = allProducts.find(p => p.id === productId);
+        if (product) product.show_in_configurator = isOn;
+
+        // Aktualizuj UI bez plného přerenderování
+        const icon = el.querySelector('span');
+        const track = el.querySelector('label > span:first-of-type');
+        const knob = el.querySelector('label > span:last-of-type');
+        const chk = el.querySelector('input');
+
+        if (icon) icon.style.cssText = isOn ? 'font-size:18px;color:#eab308;' : 'font-size:18px;color:var(--text2);opacity:0.4;';
+        if (track) track.style.background = isOn ? '#eab308' : 'rgba(255,255,255,0.12)';
+        if (knob) knob.style.left = isOn ? '18px' : '2px';
+        if (chk) chk.checked = isOn;
+
+        showToast(isOn ? '🛒 ' + (product?.name || '') + ' — zobrazeno v konfigurátoru' : '🛒 ' + (product?.name || '') + ' — skryto z konfigurátoru');
+      } catch(e) { console.error(e); showToast('Chyba: ' + e.message); }
+    }
+
+    function showToast(msg) {
+      const t = document.getElementById('toast');
+      if (!t) return;
+      t.textContent = msg;
+      t.classList.add('show');
+      setTimeout(function() { t.classList.remove('show'); }, 2500);
+    }
 
     function openProduct(id) {
       window.location.href = 'modules/pracovni-postup/detail.html?id=' + id;
