@@ -68,6 +68,63 @@ if (process.env.NODE_ENV !== 'production') {
   });
 }
 
+// ─── Public Routes (bez autentizace) ───────────────────────────────────────
+
+// Veřejný náhled objednávky pro zákazníka (bez autentizace)
+app.get('/api/public/order/:token', async (req, res) => {
+  try {
+    const order = await prisma.order.findUnique({
+      where: { share_token: req.params.token },
+      include: {
+        company: { select: { name: true } },
+        items: {
+          include: {
+            configs: {
+              include: {
+                option: {
+                  include: { group: true },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+    if (!order) return res.status(404).json({ error: 'Objednávka nenalezena' });
+
+    // Vrať jen bezpečná data (bez interních ID, created_by atd.)
+    res.json({
+      order_number: order.order_number,
+      company_name: order.company?.name || '—',
+      status: order.status,
+      currency: order.currency,
+      total_amount: order.total_amount,
+      expected_delivery: order.expected_delivery,
+      note: order.note,
+      items: order.items.map(it => ({
+        name: it.name,
+        quantity: it.quantity,
+        unit: it.unit,
+        unit_price: it.unit_price,
+        total_price: it.total_price,
+        configs: it.configs.map(c => ({
+          group_name: c.option?.group?.name || '',
+          option_name: c.option?.name || '',
+          custom_value: c.custom_value,
+        })),
+      })),
+    });
+  } catch (err) {
+    console.error('Chyba veřejného náhledu:', err);
+    res.status(500).json({ error: 'Interní chyba serveru' });
+  }
+});
+
+// Veřejná stránka pro prohlížení objednávky
+app.get('/order/:token', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'order-view.html'));
+});
+
 // ─── API Routes ────────────────────────────────────────────────────────────
 
 app.use('/api/auth', authRoutes);
@@ -139,12 +196,14 @@ app.use((req, res, next) => {
   next();
 });
 
-// Servíruj frontend
-app.use(express.static(path.join(__dirname, 'public'), { maxAge: '1h' }));
-app.use('/modules', express.static(path.join(__dirname, 'modules'), { maxAge: '1h' }));
-app.use('/css', express.static(path.join(__dirname, 'css'), { maxAge: '1h' }));
-app.use('/js', express.static(path.join(__dirname, 'js'), { maxAge: '1h' }));
-app.use('/dist', express.static(path.join(__dirname, 'dist'), { maxAge: '1h' }));
+// Servíruj frontend — v development režimu bez cache pro snadnější vývoj
+const isDev = process.env.NODE_ENV !== 'production';
+const staticOpts = isDev ? { maxAge: 0, etag: false, lastModified: false } : { maxAge: '1h' };
+app.use(express.static(path.join(__dirname, 'public'), staticOpts));
+app.use('/modules', express.static(path.join(__dirname, 'modules'), staticOpts));
+app.use('/css', express.static(path.join(__dirname, 'css'), staticOpts));
+app.use('/js', express.static(path.join(__dirname, 'js'), staticOpts));
+app.use('/dist', express.static(path.join(__dirname, 'dist'), staticOpts));
 
 // Redirect /admin/users → modul správy uživatelů
 app.get('/admin/users*', (req, res) => {

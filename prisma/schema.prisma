@@ -415,6 +415,7 @@ model Order {
   approved_by       Int?
   expected_delivery DateTime? @db.Date
   delivered_at      DateTime? @db.Date
+  share_token       String?   @unique @db.VarChar(64)
 
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
@@ -434,6 +435,7 @@ model OrderItem {
   id                 Int       @id @default(autoincrement())
   order_id           Int
   material_id        Int?
+  product_id         Int?      // vazba na Product (výrobek)
   name               String    @db.VarChar(255)
   quantity           Decimal   @db.Decimal(10, 2)
   unit               String    @default("ks") @db.VarChar(20)
@@ -446,8 +448,10 @@ model OrderItem {
 
   order    Order     @relation(fields: [order_id], references: [id], onDelete: Cascade)
   material Material? @relation(fields: [material_id], references: [id])
+  configs  OrderItemConfig[] // vybraná konfigurace pro tento výrobek
 
   @@index([order_id])
+  @@index([product_id])
   @@map("order_items")
 }
 
@@ -621,6 +625,7 @@ model Material {
   stock_rules StockRule[]
   inventory_items InventoryItem[]
   operation_materials OperationMaterial[]
+  config_option_materials ConfigOptionMaterial[] // konfigurace, které tento materiál používají
 
   @@index([code])
   @@index([barcode])
@@ -784,6 +789,7 @@ model Product {
   code          String  @unique @db.VarChar(50) // BS-M-xxxx
   name          String  @db.VarChar(255)
   type          String  @default("product") @db.VarChar(50) // product, semi-product
+  show_in_configurator Boolean @default(false) // zobrazit v konfigurátoru pro zákazníka a v prodejních objednávkách
   takt_time     Int?    // linkový takt v minutách (max čas na operaci)
   factorify_id  Int?    // původní ID z Factorify
   material_id   Int?    // vazba na Material pokud existuje
@@ -791,8 +797,9 @@ model Product {
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
 
-  operations ProductOperation[]
-  bom_usages OperationMaterial[]  // kde se tento produkt používá jako BOM položka
+  operations    ProductOperation[]
+  bom_usages    OperationMaterial[]  // kde se tento produkt používá jako BOM položka
+  config_groups ProductConfigGroup[] // konfigurační skupiny (Rám, Barva, ...)
 
   @@index([factorify_id])
   @@map("products")
@@ -888,6 +895,7 @@ model ProductOperation {
   product    Product      @relation(fields: [product_id], references: [id], onDelete: Cascade)
   workstation Workstation? @relation(fields: [workstation_id], references: [id])
   materials  OperationMaterial[]
+  config_option_ops ConfigOptionOperation[] // volby, které ovlivňují tuto operaci
 
   @@index([product_id])
   @@map("product_operations")
@@ -1058,4 +1066,94 @@ model DevAgent {
   updated_at DateTime @updatedAt
 
   @@map("dev_agents")
+}
+
+// =============================================================================
+// PRODUKTOVÝ KONFIGURÁTOR — variabilní výbava výrobků
+// =============================================================================
+
+// Konfigurační skupina (řádek na objednávkovém listu: Rám, Barva opláštění, Polepy, ...)
+model ProductConfigGroup {
+  id          Int     @id @default(autoincrement())
+  product_id  Int
+  name        String  @db.VarChar(255)  // např. "Rám", "Barva opláštění"
+  code        String  @db.VarChar(100)  // strojový kód: "ram", "barva_oplasteni"
+  type        String  @default("single_select") @db.VarChar(50) // single_select, multi_select, boolean, text
+  required    Boolean @default(false)   // musí zákazník vybrat?
+  sort_order  Int     @default(0)       // pořadí zobrazení
+
+  product Product              @relation(fields: [product_id], references: [id], onDelete: Cascade)
+  options ProductConfigOption[]
+
+  @@unique([product_id, code])
+  @@index([product_id])
+  @@map("product_config_groups")
+}
+
+// Konfigurační volba (možnost v rámci skupiny: Fe natíraný, Nerez, ...)
+model ProductConfigOption {
+  id              Int      @id @default(autoincrement())
+  group_id        Int
+  name            String   @db.VarChar(255) // např. "Fe natíraný", "Nerez"
+  code            String   @db.VarChar(100) // strojový kód: "fe_natirany", "nerez"
+  price_modifier  Decimal  @default(0) @db.Decimal(10, 2) // příplatek/sleva k ceně
+  is_default      Boolean  @default(false) // výchozí volba
+  sort_order      Int      @default(0)
+
+  group              ProductConfigGroup    @relation(fields: [group_id], references: [id], onDelete: Cascade)
+  bom_materials      ConfigOptionMaterial[]    // materiály potřebné pro tuto volbu
+  operation_effects  ConfigOptionOperation[]   // vliv na operace v pracovním postupu
+  order_configs      OrderItemConfig[]         // objednávky s touto volbou
+
+  @@unique([group_id, code])
+  @@index([group_id])
+  @@map("product_config_options")
+}
+
+// Vazba volba → materiál (BOM): jaké materiály se přidají/nahradí při výběru volby
+model ConfigOptionMaterial {
+  id          Int     @id @default(autoincrement())
+  option_id   Int
+  material_id Int
+  quantity    Decimal @db.Decimal(10, 3)
+  unit        String  @default("ks") @db.VarChar(20)
+
+  option   ProductConfigOption @relation(fields: [option_id], references: [id], onDelete: Cascade)
+  material Material            @relation(fields: [material_id], references: [id])
+
+  @@index([option_id])
+  @@index([material_id])
+  @@map("config_option_materials")
+}
+
+// Vazba volba → operace: jak volba ovlivní pracovní postup
+model ConfigOptionOperation {
+  id                Int     @id @default(autoincrement())
+  option_id         Int
+  operation_id      Int
+  action            String  @db.VarChar(20) // "add" = přidej operaci, "skip" = přeskoč, "modify" = uprav
+  modified_duration Int?    // upravená doba trvání (minuty), pokud action = "modify"
+  note              String? @db.VarChar(255) // poznámka pro výrobu
+
+  option    ProductConfigOption @relation(fields: [option_id], references: [id], onDelete: Cascade)
+  operation ProductOperation    @relation(fields: [operation_id], references: [id], onDelete: Cascade)
+
+  @@index([option_id])
+  @@index([operation_id])
+  @@map("config_option_operations")
+}
+
+// Vybraná konfigurace na položce prodejní objednávky
+model OrderItemConfig {
+  id              Int     @id @default(autoincrement())
+  order_item_id   Int
+  option_id       Int?    // vybraná volba (pro single_select, multi_select, boolean)
+  custom_value    String? @db.VarChar(500) // vlastní hodnota (pro type "text" nebo "jiná barva")
+
+  order_item OrderItem           @relation(fields: [order_item_id], references: [id], onDelete: Cascade)
+  option     ProductConfigOption? @relation(fields: [option_id], references: [id])
+
+  @@index([order_item_id])
+  @@index([option_id])
+  @@map("order_item_configs")
 }

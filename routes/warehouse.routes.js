@@ -211,13 +211,27 @@ router.get('/orders', async (req, res, next) => {
 // POST /api/wh/orders
 router.post('/orders', async (req, res, next) => {
   try {
-    const { items, ...orderData } = req.body;
+    const { items, items_count, total_amount, ...rest } = req.body;
+
+    // Zajisti správné typy
+    const orderData = {
+      order_number: rest.order_number,
+      type: rest.type || 'sales',
+      company_id: parseInt(rest.company_id),
+      status: rest.status || 'new',
+      currency: rest.currency || 'CZK',
+      note: rest.note || null,
+      expected_delivery: rest.expected_delivery || null,
+      items_count: parseInt(items_count) || 0,
+      total_amount: parseFloat(total_amount) || 0,
+    };
+
+    if (!orderData.company_id || isNaN(orderData.company_id)) {
+      return res.status(400).json({ error: 'Odběratel je povinný — vyberte firmu.' });
+    }
 
     const order = await prisma.order.create({
-      data: {
-        ...orderData,
-        items: items ? { create: items } : undefined,
-      },
+      data: orderData,
       include: { items: true, company: true },
     });
 
@@ -227,12 +241,77 @@ router.post('/orders', async (req, res, next) => {
   }
 });
 
+// GET /api/wh/orders/:id — detail jedné objednávky
+router.get('/orders/:id', async (req, res, next) => {
+  try {
+    const order = await prisma.order.findUnique({
+      where: { id: parseInt(req.params.id) },
+      include: {
+        company: true,
+        items: {
+          include: {
+            configs: {
+              include: {
+                option: {
+                  include: {
+                    group: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+    if (!order) return res.status(404).json({ error: 'Objednávka nenalezena' });
+    res.json(order);
+  } catch (err) { next(err); }
+});
+
+// POST /api/wh/orders/:id/share — Vygeneruj sdílecí token
+router.post('/orders/:id/share', async (req, res, next) => {
+  try {
+    const order = await prisma.order.findUnique({ where: { id: parseInt(req.params.id) } });
+    if (!order) return res.status(404).json({ error: 'Objednávka nenalezena' });
+
+    // Pokud už má token, vrať ho
+    if (order.share_token) {
+      return res.json({ share_token: order.share_token });
+    }
+
+    // Vygeneruj unikátní token
+    const crypto = require('crypto');
+    const token = crypto.randomBytes(24).toString('hex');
+
+    try {
+      const updated = await prisma.order.update({
+        where: { id: parseInt(req.params.id) },
+        data: { share_token: token },
+      });
+      res.json({ share_token: updated.share_token });
+    } catch (dbErr) {
+      // Sloupec share_token pravděpodobně ještě neexistuje — nasaďte migraci
+      console.error('Share token DB error (spusťte migraci):', dbErr.message);
+      res.status(503).json({ error: 'Sdílení není dostupné — nasaďte databázovou migraci (npx prisma migrate deploy)' });
+    }
+  } catch (err) { next(err); }
+});
+
 // PUT /api/wh/orders/:id
 router.put('/orders/:id', async (req, res, next) => {
   try {
+    const allowed = {};
+    const fields = ['status', 'currency', 'note', 'expected_delivery', 'items_count', 'total_amount', 'company_id'];
+    for (const f of fields) {
+      if (req.body[f] !== undefined) allowed[f] = req.body[f];
+    }
+    if (allowed.company_id) allowed.company_id = parseInt(allowed.company_id);
+    if (allowed.items_count !== undefined) allowed.items_count = parseInt(allowed.items_count) || 0;
+    if (allowed.total_amount !== undefined) allowed.total_amount = parseFloat(allowed.total_amount) || 0;
+
     const order = await prisma.order.update({
       where: { id: parseInt(req.params.id) },
-      data: req.body,
+      data: allowed,
       include: { items: true },
     });
     res.json(order);
@@ -270,8 +349,19 @@ router.get('/orders/:id/items', async (req, res, next) => {
 // POST /api/wh/orders/:id/items
 router.post('/orders/:id/items', async (req, res, next) => {
   try {
+    const { product_id, material_id, name, quantity, unit, unit_price, total_price, note } = req.body;
     const item = await prisma.orderItem.create({
-      data: { order_id: parseInt(req.params.id), ...req.body },
+      data: {
+        order_id: parseInt(req.params.id),
+        product_id: product_id ? parseInt(product_id) : null,
+        material_id: material_id ? parseInt(material_id) : null,
+        name: name || '—',
+        quantity: parseFloat(quantity) || 1,
+        unit: unit || 'ks',
+        unit_price: parseFloat(unit_price) || 0,
+        total_price: parseFloat(total_price) || (parseFloat(quantity) || 1) * (parseFloat(unit_price) || 0),
+        note: note || null,
+      },
     });
     // Aktualizovat celkovou cenu objednávky
     const agg = await prisma.orderItem.aggregate({
@@ -861,6 +951,214 @@ router.get('/stock', async (req, res, next) => {
     stock.sort((a, b) => (a.warehouse_name + (a.location_label || '')).localeCompare(b.warehouse_name + (b.location_label || '')));
 
     res.json(stock);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ─── VÝHLED NÁKUPU (Purchase Forecast) ──────────────────────────────────────
+// Kombinuje: aktuální zásoby, otevřené objednávky (nákup/prodej),
+// BOM materiálové potřeby produktů a lead-time dodavatelů.
+// Vrací seznam materiálů s: aktuální zásobou, plánovanou spotřebou,
+// očekávaným příjmem, doporučeným datem objednání a stavem.
+
+router.get('/forecast', async (req, res, next) => {
+  try {
+    const { horizon_days } = req.query;
+    const horizon = parseInt(horizon_days) || 60; // výchozí horizont 60 dní
+    const today = new Date();
+    const horizonEnd = new Date(today);
+    horizonEnd.setDate(horizonEnd.getDate() + horizon);
+
+    // 1) Načti všechny aktivní materiály s dodavatelem
+    const materials = await prisma.material.findMany({
+      where: { status: 'active' },
+      include: {
+        supplier: { select: { id: true, name: true } },
+      },
+      orderBy: { name: 'asc' },
+    });
+
+    // 2) Načti otevřené prodejní objednávky (= poptávka / spotřeba)
+    const salesOrders = await prisma.order.findMany({
+      where: {
+        type: 'sales',
+        status: { notIn: ['cancelled', 'done', 'delivered'] },
+      },
+      include: {
+        items: {
+          where: { status: { not: 'delivered' } },
+          include: { material: { select: { id: true } } },
+        },
+        company: { select: { name: true } },
+      },
+    });
+
+    // 3) Načti otevřené nákupní objednávky (= příjem / supply)
+    const purchaseOrders = await prisma.order.findMany({
+      where: {
+        type: 'purchase',
+        status: { notIn: ['cancelled', 'done', 'delivered'] },
+      },
+      include: {
+        items: {
+          where: { status: { not: 'delivered' } },
+          include: { material: { select: { id: true } } },
+        },
+        company: { select: { name: true } },
+      },
+    });
+
+    // 4) Načti BOM — materiálové potřeby na produkt
+    const bomItems = await prisma.operationMaterial.findMany({
+      include: {
+        material: { select: { id: true } },
+        operation: {
+          select: {
+            product: { select: { id: true, name: true, code: true } },
+          },
+        },
+      },
+    });
+
+    // Sestav mapu spotřeby a příjmu podle material_id
+    const demandMap = {}; // material_id → [{ qty, date, source }]
+    const supplyMap = {}; // material_id → [{ qty, date, source }]
+
+    // Poptávka z prodejních objednávek
+    for (const order of salesOrders) {
+      const deliveryDate = order.expected_delivery || null;
+      for (const item of order.items) {
+        if (!item.material_id) continue;
+        const remaining = parseFloat(item.quantity) - parseFloat(item.delivered_quantity || 0);
+        if (remaining <= 0) continue;
+        if (!demandMap[item.material_id]) demandMap[item.material_id] = [];
+        demandMap[item.material_id].push({
+          qty: remaining,
+          date: deliveryDate,
+          source: 'Prodej: ' + (order.company?.name || order.order_number),
+          order_number: order.order_number,
+        });
+      }
+    }
+
+    // Příjem z nákupních objednávek
+    for (const order of purchaseOrders) {
+      const deliveryDate = order.expected_delivery || null;
+      for (const item of order.items) {
+        if (!item.material_id) continue;
+        const remaining = parseFloat(item.quantity) - parseFloat(item.delivered_quantity || 0);
+        if (remaining <= 0) continue;
+        if (!supplyMap[item.material_id]) supplyMap[item.material_id] = [];
+        supplyMap[item.material_id].push({
+          qty: remaining,
+          date: item.expected_delivery || deliveryDate,
+          source: 'Nákup: ' + (order.company?.name || order.order_number),
+          order_number: order.order_number,
+        });
+      }
+    }
+
+    // BOM potřeby — připravíme přehled kolik materiálu spotřebuje každý produkt
+    const bomMap = {}; // material_id → [{ product_name, qty_per_unit }]
+    for (const bom of bomItems) {
+      if (!bom.material_id) continue;
+      const productName = bom.operation?.product?.name || 'Neznámý produkt';
+      const productCode = bom.operation?.product?.code || '';
+      if (!bomMap[bom.material_id]) bomMap[bom.material_id] = [];
+      bomMap[bom.material_id].push({
+        product: productName,
+        product_code: productCode,
+        qty_per_unit: parseFloat(bom.quantity),
+      });
+    }
+
+    // 5) Sestav výhled pro každý materiál
+    const forecast = materials.map(mat => {
+      const currentStock = parseFloat(mat.current_stock || 0);
+      const minStock = parseFloat(mat.min_stock || 0);
+      const leadTime = parseInt(mat.lead_time_days || 0);
+      const reorderQty = parseFloat(mat.reorder_quantity || 0);
+
+      const demands = demandMap[mat.id] || [];
+      const supplies = supplyMap[mat.id] || [];
+      const bom = bomMap[mat.id] || [];
+
+      const totalDemand = demands.reduce((sum, d) => sum + d.qty, 0);
+      const totalSupply = supplies.reduce((sum, s) => sum + s.qty, 0);
+      const projectedStock = currentStock + totalSupply - totalDemand;
+
+      // Nejbližší datum poptávky
+      const demandDates = demands.filter(d => d.date).map(d => new Date(d.date));
+      const earliestDemand = demandDates.length > 0
+        ? new Date(Math.min(...demandDates.map(d => d.getTime())))
+        : null;
+
+      // Datum kdy objednat = nejbližší poptávka - lead time
+      let orderByDate = null;
+      if (earliestDemand && leadTime > 0) {
+        orderByDate = new Date(earliestDemand);
+        orderByDate.setDate(orderByDate.getDate() - leadTime);
+      }
+
+      // Stav / priorita
+      let status = 'ok';
+      let statusLabel = 'V pořádku';
+      if (currentStock <= 0 && totalDemand > 0) {
+        status = 'critical';
+        statusLabel = 'Kritické — není skladem';
+      } else if (projectedStock < 0) {
+        status = 'critical';
+        statusLabel = 'Kritické — nedostatek po splnění objednávek';
+      } else if (currentStock <= minStock && minStock > 0) {
+        status = 'warning';
+        statusLabel = 'Pod minimem';
+      } else if (projectedStock <= minStock && minStock > 0) {
+        status = 'warning';
+        statusLabel = 'Bude pod minimem';
+      } else if (orderByDate && orderByDate <= today) {
+        status = 'warning';
+        statusLabel = 'Čas objednat';
+      }
+
+      return {
+        material_id: mat.id,
+        code: mat.code,
+        name: mat.name,
+        unit: mat.unit,
+        supplier: mat.supplier?.name || null,
+        supplier_id: mat.supplier?.id || null,
+        current_stock: currentStock,
+        min_stock: minStock,
+        lead_time_days: leadTime,
+        reorder_quantity: reorderQty,
+        total_demand: totalDemand,
+        total_supply: totalSupply,
+        projected_stock: projectedStock,
+        earliest_demand_date: earliestDemand,
+        order_by_date: orderByDate,
+        status,
+        status_label: statusLabel,
+        demands,
+        supplies,
+        bom_usage: bom,
+      };
+    });
+
+    // Setřídíme: critical → warning → ok
+    const statusOrder = { critical: 0, warning: 1, ok: 2 };
+    forecast.sort((a, b) => (statusOrder[a.status] ?? 9) - (statusOrder[b.status] ?? 9));
+
+    // Souhrnná statistika
+    const stats = {
+      total_materials: forecast.length,
+      critical: forecast.filter(f => f.status === 'critical').length,
+      warning: forecast.filter(f => f.status === 'warning').length,
+      ok: forecast.filter(f => f.status === 'ok').length,
+      needs_ordering: forecast.filter(f => f.order_by_date && f.order_by_date <= today).length,
+    };
+
+    res.json({ forecast, stats, horizon_days: horizon });
   } catch (err) {
     next(err);
   }

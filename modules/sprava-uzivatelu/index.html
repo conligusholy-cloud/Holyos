@@ -128,8 +128,12 @@
 
   <div id="toast" class="toast"></div>
 
-  <script src="../../js/sidebar.js"></script>
-  <script>renderSidebar('sprava-uzivatelu'); initDate();</script>
+  <script>
+    var s = document.createElement('script');
+    s.src = '../../js/sidebar.js?v=' + Date.now();
+    s.onload = function() { renderSidebar('sprava-uzivatelu'); initDate(); };
+    document.head.appendChild(s);
+  </script>
 
   <script>
     const token = sessionStorage.getItem('token');

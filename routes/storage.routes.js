@@ -10,8 +10,6 @@ const crypto = require('crypto');
 const uuidv4 = () => crypto.randomUUID();
 const { requireAuth } = require('../middleware/auth');
 
-router.use(requireAuth);
-
 // Složka pro ukládání souborů
 const STORAGE_DIR = process.env.STORAGE_DIR || path.join(__dirname, '..', 'data', 'storage');
 
@@ -19,6 +17,26 @@ const STORAGE_DIR = process.env.STORAGE_DIR || path.join(__dirname, '..', 'data'
 if (!fs.existsSync(STORAGE_DIR)) {
   fs.mkdirSync(STORAGE_DIR, { recursive: true });
 }
+
+// GET /api/storage/files/:filename — stáhnout/zobrazit soubor (VEŘEJNÉ — pro <img src>)
+router.get('/files/:filename(*)', async (req, res, next) => {
+  try {
+    const filePath = path.join(STORAGE_DIR, req.params.filename);
+    const resolved = path.resolve(filePath);
+    if (!resolved.startsWith(path.resolve(STORAGE_DIR))) {
+      return res.status(403).json({ error: 'Přístup zamítnut' });
+    }
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ error: 'Soubor nenalezen' });
+    }
+    // Cache 1 hodina
+    res.set('Cache-Control', 'public, max-age=3600');
+    res.sendFile(resolved);
+  } catch (err) { next(err); }
+});
+
+// Všechny ostatní operace vyžadují auth
+router.use(requireAuth);
 
 // POST /api/storage/upload — nahrání souboru (base64)
 router.post('/upload', async (req, res, next) => {
@@ -54,27 +72,6 @@ router.post('/upload', async (req, res, next) => {
       path: relativePath,
       url: `/api/storage/files/${relativePath}`,
     });
-  } catch (err) {
-    next(err);
-  }
-});
-
-// GET /api/storage/files/:filename — stáhnout soubor
-router.get('/files/:filename(*)', async (req, res, next) => {
-  try {
-    const filePath = path.join(STORAGE_DIR, req.params.filename);
-
-    // Bezpečnostní kontrola — nesmí opustit STORAGE_DIR
-    const resolved = path.resolve(filePath);
-    if (!resolved.startsWith(path.resolve(STORAGE_DIR))) {
-      return res.status(403).json({ error: 'Přístup zamítnut' });
-    }
-
-    if (!fs.existsSync(filePath)) {
-      return res.status(404).json({ error: 'Soubor nenalezen' });
-    }
-
-    res.sendFile(resolved);
   } catch (err) {
     next(err);
   }

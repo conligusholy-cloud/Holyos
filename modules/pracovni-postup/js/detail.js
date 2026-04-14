@@ -254,6 +254,7 @@ function renderCurrentTab() {
     case 'postup': renderPostup(); break;
     case 'normovane': renderNormovane(); break;
     case 'vizualizace': renderVizualizace(); break;
+    case 'konfigurace': renderKonfigurace(); break;
   }
 }
 
@@ -1778,4 +1779,364 @@ function confirmBulkAssignment() {
   closeAssignModal();
   renderCurrentTab();
   showToast(`Přiřazeno ${count} položkám: ${stageName}`);
+}
+
+// =============================================================================
+// TAB: Konfigurace výrobku (varianty a výbava)
+// =============================================================================
+
+let _localProductId = null;
+let _configGroups = [];
+let _allMaterials = [];
+let _localOperations = [];
+
+async function getLocalProductId() {
+  if (_localProductId) return _localProductId;
+  // Hledej produkt v lokální DB podle kódu nebo factorify_id
+  const code = state.product?.code || '';
+  const factorifyId = state.goodsId;
+  try {
+    const res = await fetch('/api/production/products?search=' + encodeURIComponent(code));
+    const prods = await res.json();
+    // Hledej přesnou shodu kódu nebo factorify_id
+    let found = prods.find(p => p.code === code);
+    if (!found) found = prods.find(p => p.factorify_id === parseInt(factorifyId));
+    if (!found && prods.length === 1) found = prods[0];
+    if (found) _localProductId = found.id;
+    return _localProductId;
+  } catch(e) { console.error('Chyba hledání lokálního produktu:', e); return null; }
+}
+
+async function renderKonfigurace() {
+  const productId = await getLocalProductId();
+  if (!productId) {
+    dom.tabContent.innerHTML = '<div class="empty-state"><p>Produkt nenalezen v lokální databázi.</p><p style="font-size:12px;color:var(--text2);">Konfigurace vyžaduje produkt uložený v HolyOS (tabulka Products).</p></div>';
+    return;
+  }
+
+  // Načti konfigurační skupiny
+  try {
+    const res = await fetch('/api/production/products/' + productId + '/config');
+    _configGroups = await res.json();
+  } catch(e) { _configGroups = []; }
+
+  // Načti lokální operace produktu
+  try {
+    const res = await fetch('/api/production/products/' + productId);
+    const prod = await res.json();
+    _localOperations = prod.operations || [];
+  } catch(e) { _localOperations = []; }
+
+  let html = '<div style="padding:16px;">';
+  html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">';
+  html += '<div><h3 style="margin:0;font-size:16px;">⚙️ Konfigurace výrobku</h3><p style="font-size:12px;color:var(--text2);margin:4px 0 0;">Definice variabilních voleb — co si zákazník může vybrat při objednávce</p></div>';
+  html += '<button class="btn" onclick="openAddGroupModal()" style="background:#eab308;color:#000;border-color:#eab308;">+ Nová konfigurační skupina</button>';
+  html += '</div>';
+
+  if (_configGroups.length === 0) {
+    html += '<div class="empty-state"><div style="font-size:48px;opacity:0.4;">⚙️</div><h3>Žádné konfigurační skupiny</h3><p>Přidejte skupiny jako Rám, Barva opláštění, Polepy atd.</p></div>';
+  } else {
+    for (const g of _configGroups) {
+      const typeLabels = { single_select: 'Výběr jedné', multi_select: 'Výběr více', boolean: 'Ano/Ne', text: 'Text' };
+      html += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:12px;">';
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">';
+      html += '<div><strong style="font-size:14px;">' + escapeHtml(g.name) + '</strong> <span style="font-size:11px;color:var(--text2);background:var(--bg);padding:2px 8px;border-radius:4px;margin-left:6px;">' + (typeLabels[g.type] || g.type) + '</span>' + (g.required ? ' <span style="color:#ef4444;font-size:11px;">povinné</span>' : '') + '</div>';
+      html += '<div style="display:flex;gap:4px;">';
+      html += '<button class="btn" style="padding:4px 10px;font-size:11px;" onclick="openAddOptionModal(' + g.id + ')">+ Volba</button>';
+      html += '<button class="btn" style="padding:4px 10px;font-size:11px;" onclick="editConfigGroup(' + g.id + ')">✏️</button>';
+      html += '<button class="btn" style="padding:4px 10px;font-size:11px;color:#ef4444;" onclick="deleteConfigGroup(' + g.id + ')">🗑️</button>';
+      html += '</div></div>';
+
+      // Volby
+      if (g.options && g.options.length > 0) {
+        html += '<table class="data-table" style="font-size:12px;"><thead><tr><th>Volba</th><th>Kód</th><th>Příplatek</th><th>Výchozí</th><th>BOM</th><th>Operace</th><th></th></tr></thead><tbody>';
+        for (const o of g.options) {
+          const bomCount = o.bom_materials ? o.bom_materials.length : 0;
+          const opCount = o.operation_effects ? o.operation_effects.length : 0;
+          const priceStr = parseFloat(o.price_modifier) !== 0 ? (parseFloat(o.price_modifier) > 0 ? '+' : '') + parseFloat(o.price_modifier).toLocaleString('cs-CZ') + ' Kč' : '—';
+          html += '<tr>';
+          html += '<td><strong>' + escapeHtml(o.name) + '</strong></td>';
+          html += '<td style="color:var(--text2);font-family:monospace;">' + escapeHtml(o.code) + '</td>';
+          html += '<td>' + priceStr + '</td>';
+          html += '<td>' + (o.is_default ? '✅' : '') + '</td>';
+          html += '<td>' + (bomCount > 0 ? '<span style="color:#3b82f6;">' + bomCount + ' mat.</span>' : '—') + '</td>';
+          html += '<td>' + (opCount > 0 ? '<span style="color:#8b5cf6;">' + opCount + ' op.</span>' : '—') + '</td>';
+          html += '<td style="display:flex;gap:4px;">';
+          html += '<button class="btn" style="padding:2px 8px;font-size:10px;" onclick="openOptionBomModal(' + o.id + ',\'' + escapeHtml(o.name) + '\')">📦 BOM</button>';
+          html += '<button class="btn" style="padding:2px 8px;font-size:10px;" onclick="openOptionOpsModal(' + o.id + ',\'' + escapeHtml(o.name) + '\')">🏭 Operace</button>';
+          html += '<button class="btn" style="padding:2px 8px;font-size:10px;color:#ef4444;" onclick="deleteConfigOption(' + o.id + ')">✕</button>';
+          html += '</td></tr>';
+
+          // Detail BOM materiálů
+          if (bomCount > 0) {
+            html += '<tr><td colspan="7" style="padding:4px 14px 8px;background:var(--bg);">';
+            html += '<div style="font-size:11px;color:var(--text2);">📦 Materiály: ';
+            html += o.bom_materials.map(bm => bm.material.code + ' ' + bm.material.name + ' (' + bm.quantity + ' ' + bm.unit + ')').join(', ');
+            html += '</div></td></tr>';
+          }
+          if (opCount > 0) {
+            html += '<tr><td colspan="7" style="padding:4px 14px 8px;background:var(--bg);">';
+            html += '<div style="font-size:11px;color:var(--text2);">🏭 Operace: ';
+            html += o.operation_effects.map(oe => {
+              const actionLabels = { add: '➕ přidat', skip: '⏭️ přeskočit', modify: '✏️ upravit' };
+              return (actionLabels[oe.action] || oe.action) + ' "' + oe.operation.name + '"' + (oe.modified_duration ? ' (' + oe.modified_duration + ' min)' : '') + (oe.note ? ' — ' + oe.note : '');
+            }).join(', ');
+            html += '</div></td></tr>';
+          }
+        }
+        html += '</tbody></table>';
+      } else {
+        html += '<div style="color:var(--text2);font-size:12px;padding:8px;">Žádné volby — přidejte možnosti výběru.</div>';
+      }
+      html += '</div>';
+    }
+  }
+  html += '</div>';
+  dom.tabContent.innerHTML = html;
+}
+
+// --- Modály pro přidávání skupin a voleb ---
+
+function openAddGroupModal() {
+  const productId = _localProductId;
+  const modal = document.createElement('div');
+  modal.className = 'modal-overlay';
+  modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.6);z-index:9999;display:flex;align-items:center;justify-content:center;';
+  modal.onclick = function(e) { if (e.target === modal) modal.remove(); };
+  modal.innerHTML = '<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;width:450px;max-width:95vw;">' +
+    '<h3 style="margin:0 0 16px;">➕ Nová konfigurační skupina</h3>' +
+    '<div style="display:flex;flex-direction:column;gap:10px;">' +
+      '<div><label style="font-size:12px;font-weight:600;color:var(--text2);">Název *</label><input type="text" id="cfg-grp-name" placeholder="Např. Rám, Barva opláštění..." style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);"></div>' +
+      '<div><label style="font-size:12px;font-weight:600;color:var(--text2);">Kód (strojový) *</label><input type="text" id="cfg-grp-code" placeholder="ram, barva_oplasteni..." style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);"></div>' +
+      '<div><label style="font-size:12px;font-weight:600;color:var(--text2);">Typ</label><select id="cfg-grp-type" style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);"><option value="single_select">Výběr jedné možnosti</option><option value="multi_select">Výběr více možností</option><option value="boolean">Ano / Ne</option><option value="text">Volný text</option></select></div>' +
+      '<div><label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;"><input type="checkbox" id="cfg-grp-required"> Povinné (zákazník musí vybrat)</label></div>' +
+    '</div>' +
+    '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;">' +
+      '<button class="btn" onclick="this.closest(\'.modal-overlay\').remove()">Zrušit</button>' +
+      '<button class="btn" style="background:#eab308;color:#000;border-color:#eab308;" onclick="saveConfigGroup()">Vytvořit</button>' +
+    '</div></div>';
+  document.body.appendChild(modal);
+
+  // Auto-generuj kód z názvu
+  document.getElementById('cfg-grp-name').addEventListener('input', function() {
+    document.getElementById('cfg-grp-code').value = this.value.toLowerCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+  });
+}
+
+async function saveConfigGroup() {
+  const name = document.getElementById('cfg-grp-name').value.trim();
+  const code = document.getElementById('cfg-grp-code').value.trim();
+  const type = document.getElementById('cfg-grp-type').value;
+  const required = document.getElementById('cfg-grp-required').checked;
+  if (!name || !code) { alert('Vyplňte název a kód.'); return; }
+
+  try {
+    await fetch('/api/production/products/' + _localProductId + '/config-groups', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, code, type, required, sort_order: _configGroups.length }),
+    });
+    document.querySelector('.modal-overlay')?.remove();
+    renderKonfigurace();
+  } catch(e) { alert('Chyba: ' + e.message); }
+}
+
+async function deleteConfigGroup(id) {
+  if (!confirm('Smazat tuto skupinu a všechny její volby?')) return;
+  await fetch('/api/production/config-groups/' + id, { method: 'DELETE' });
+  renderKonfigurace();
+}
+
+function openAddOptionModal(groupId) {
+  const modal = document.createElement('div');
+  modal.className = 'modal-overlay';
+  modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.6);z-index:9999;display:flex;align-items:center;justify-content:center;';
+  modal.onclick = function(e) { if (e.target === modal) modal.remove(); };
+  modal.innerHTML = '<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;width:450px;max-width:95vw;">' +
+    '<h3 style="margin:0 0 16px;">➕ Nová volba</h3>' +
+    '<div style="display:flex;flex-direction:column;gap:10px;">' +
+      '<div><label style="font-size:12px;font-weight:600;color:var(--text2);">Název *</label><input type="text" id="cfg-opt-name" placeholder="Např. Nerez, RAL 7016..." style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);"></div>' +
+      '<div><label style="font-size:12px;font-weight:600;color:var(--text2);">Kód *</label><input type="text" id="cfg-opt-code" placeholder="nerez, ral_7016..." style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);"></div>' +
+      '<div><label style="font-size:12px;font-weight:600;color:var(--text2);">Cenový příplatek (Kč)</label><input type="number" id="cfg-opt-price" value="0" step="0.01" style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);"></div>' +
+      '<div><label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;"><input type="checkbox" id="cfg-opt-default"> Výchozí volba</label></div>' +
+    '</div>' +
+    '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;">' +
+      '<button class="btn" onclick="this.closest(\'.modal-overlay\').remove()">Zrušit</button>' +
+      '<button class="btn" style="background:#eab308;color:#000;border-color:#eab308;" onclick="saveConfigOption(' + groupId + ')">Přidat</button>' +
+    '</div></div>';
+  document.body.appendChild(modal);
+
+  document.getElementById('cfg-opt-name').addEventListener('input', function() {
+    document.getElementById('cfg-opt-code').value = this.value.toLowerCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+  });
+}
+
+async function saveConfigOption(groupId) {
+  const name = document.getElementById('cfg-opt-name').value.trim();
+  const code = document.getElementById('cfg-opt-code').value.trim();
+  const price_modifier = parseFloat(document.getElementById('cfg-opt-price').value) || 0;
+  const is_default = document.getElementById('cfg-opt-default').checked;
+  if (!name || !code) { alert('Vyplňte název a kód.'); return; }
+
+  try {
+    await fetch('/api/production/config-groups/' + groupId + '/options', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, code, price_modifier, is_default }),
+    });
+    document.querySelector('.modal-overlay')?.remove();
+    renderKonfigurace();
+  } catch(e) { alert('Chyba: ' + e.message); }
+}
+
+async function deleteConfigOption(id) {
+  if (!confirm('Smazat tuto volbu?')) return;
+  await fetch('/api/production/config-options/' + id, { method: 'DELETE' });
+  renderKonfigurace();
+}
+
+// --- Modály pro BOM a operace volby ---
+
+async function openOptionBomModal(optionId, optionName) {
+  // Načti materiály pokud nemáme
+  if (_allMaterials.length === 0) {
+    try { const r = await fetch('/api/wh/materials'); _allMaterials = await r.json(); } catch(e) {}
+  }
+  // Načti aktuální BOM pro volbu
+  let currentBom = [];
+  const group = _configGroups.find(g => g.options.some(o => o.id === optionId));
+  if (group) {
+    const opt = group.options.find(o => o.id === optionId);
+    if (opt) currentBom = opt.bom_materials || [];
+  }
+
+  const matOpts = _allMaterials.map(m => '<option value="' + m.id + '">' + m.code + ' — ' + m.name + ' (' + m.unit + ')</option>').join('');
+
+  const modal = document.createElement('div');
+  modal.className = 'modal-overlay';
+  modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.6);z-index:9999;display:flex;align-items:center;justify-content:center;';
+  modal.onclick = function(e) { if (e.target === modal) modal.remove(); };
+
+  let bomHtml = '';
+  if (currentBom.length > 0) {
+    bomHtml = '<div style="margin-bottom:10px;">';
+    currentBom.forEach(bm => {
+      bomHtml += '<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid var(--border);font-size:12px;">' +
+        '<span>' + bm.material.code + ' ' + bm.material.name + ' — ' + bm.quantity + ' ' + bm.unit + '</span>' +
+        '<button class="btn" style="padding:2px 8px;font-size:10px;color:#ef4444;" onclick="deleteBomMaterial(' + bm.id + ',' + optionId + ',\'' + escapeHtml(optionName) + '\')">✕</button></div>';
+    });
+    bomHtml += '</div>';
+  }
+
+  modal.innerHTML = '<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;width:500px;max-width:95vw;">' +
+    '<h3 style="margin:0 0 12px;">📦 BOM materiály: ' + escapeHtml(optionName) + '</h3>' +
+    bomHtml +
+    '<div style="display:flex;gap:6px;align-items:end;">' +
+      '<div style="flex:2;"><label style="font-size:12px;font-weight:600;color:var(--text2);">Materiál</label><select id="bom-mat-id" style="width:100%;padding:6px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;"><option value="">—</option>' + matOpts + '</select></div>' +
+      '<div style="width:80px;"><label style="font-size:12px;font-weight:600;color:var(--text2);">Množství</label><input type="number" id="bom-mat-qty" value="1" min="0.001" step="0.001" style="width:100%;padding:6px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;"></div>' +
+      '<button class="btn" style="background:#3b82f6;color:white;border-color:#3b82f6;padding:6px 12px;font-size:12px;" onclick="addBomMaterial(' + optionId + ',\'' + escapeHtml(optionName) + '\')">+ Přidat</button>' +
+    '</div>' +
+    '<div style="text-align:right;margin-top:12px;"><button class="btn" onclick="this.closest(\'.modal-overlay\').remove()">Zavřít</button></div>' +
+  '</div>';
+  document.body.appendChild(modal);
+}
+
+async function addBomMaterial(optionId, optionName) {
+  const materialId = document.getElementById('bom-mat-id').value;
+  const quantity = document.getElementById('bom-mat-qty').value;
+  if (!materialId) { alert('Vyberte materiál.'); return; }
+  await fetch('/api/production/config-options/' + optionId + '/materials', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ material_id: materialId, quantity: quantity }),
+  });
+  document.querySelector('.modal-overlay')?.remove();
+  await renderKonfigurace();
+  openOptionBomModal(optionId, optionName);
+}
+
+async function deleteBomMaterial(id, optionId, optionName) {
+  await fetch('/api/production/config-option-materials/' + id, { method: 'DELETE' });
+  document.querySelector('.modal-overlay')?.remove();
+  await renderKonfigurace();
+  openOptionBomModal(optionId, optionName);
+}
+
+async function openOptionOpsModal(optionId, optionName) {
+  // Načti operace produktu
+  let currentEffects = [];
+  const group = _configGroups.find(g => g.options.some(o => o.id === optionId));
+  if (group) {
+    const opt = group.options.find(o => o.id === optionId);
+    if (opt) currentEffects = opt.operation_effects || [];
+  }
+
+  const opOpts = _localOperations.map(op => '<option value="' + op.id + '">' + op.step_number + '. ' + op.name + '</option>').join('');
+
+  const modal = document.createElement('div');
+  modal.className = 'modal-overlay';
+  modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.6);z-index:9999;display:flex;align-items:center;justify-content:center;';
+  modal.onclick = function(e) { if (e.target === modal) modal.remove(); };
+
+  let effectsHtml = '';
+  if (currentEffects.length > 0) {
+    effectsHtml = '<div style="margin-bottom:10px;">';
+    const actionLabels = { add: '➕ přidat', skip: '⏭️ přeskočit', modify: '✏️ upravit' };
+    currentEffects.forEach(eff => {
+      effectsHtml += '<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid var(--border);font-size:12px;">' +
+        '<span>' + (actionLabels[eff.action] || eff.action) + ' "' + eff.operation.name + '"' + (eff.modified_duration ? ' (' + eff.modified_duration + ' min)' : '') + (eff.note ? ' — ' + eff.note : '') + '</span>' +
+        '<button class="btn" style="padding:2px 8px;font-size:10px;color:#ef4444;" onclick="deleteOpEffect(' + eff.id + ',' + optionId + ',\'' + escapeHtml(optionName) + '\')">✕</button></div>';
+    });
+    effectsHtml += '</div>';
+  }
+
+  modal.innerHTML = '<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;width:500px;max-width:95vw;">' +
+    '<h3 style="margin:0 0 12px;">🏭 Vliv na operace: ' + escapeHtml(optionName) + '</h3>' +
+    effectsHtml +
+    '<div style="display:flex;gap:6px;align-items:end;flex-wrap:wrap;">' +
+      '<div style="flex:2;"><label style="font-size:12px;font-weight:600;color:var(--text2);">Operace</label><select id="op-eff-opid" style="width:100%;padding:6px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;"><option value="">—</option>' + opOpts + '</select></div>' +
+      '<div style="width:120px;"><label style="font-size:12px;font-weight:600;color:var(--text2);">Akce</label><select id="op-eff-action" style="width:100%;padding:6px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;"><option value="add">➕ Přidat</option><option value="skip">⏭️ Přeskočit</option><option value="modify">✏️ Upravit dobu</option></select></div>' +
+      '<div style="width:80px;"><label style="font-size:12px;font-weight:600;color:var(--text2);">Doba (min)</label><input type="number" id="op-eff-dur" placeholder="—" style="width:100%;padding:6px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;"></div>' +
+      '<button class="btn" style="background:#8b5cf6;color:white;border-color:#8b5cf6;padding:6px 12px;font-size:12px;" onclick="addOpEffect(' + optionId + ',\'' + escapeHtml(optionName) + '\')">+ Přidat</button>' +
+    '</div>' +
+    '<div style="margin-top:6px;"><label style="font-size:12px;font-weight:600;color:var(--text2);">Poznámka</label><input type="text" id="op-eff-note" placeholder="Volitelná poznámka..." style="width:100%;padding:6px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;"></div>' +
+    '<div style="text-align:right;margin-top:12px;"><button class="btn" onclick="this.closest(\'.modal-overlay\').remove()">Zavřít</button></div>' +
+  '</div>';
+  document.body.appendChild(modal);
+}
+
+async function addOpEffect(optionId, optionName) {
+  const operationId = document.getElementById('op-eff-opid').value;
+  const action = document.getElementById('op-eff-action').value;
+  const duration = document.getElementById('op-eff-dur').value;
+  const note = document.getElementById('op-eff-note').value.trim();
+  if (!operationId) { alert('Vyberte operaci.'); return; }
+  await fetch('/api/production/config-options/' + optionId + '/operations', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ operation_id: operationId, action, modified_duration: duration || null, note: note || null }),
+  });
+  document.querySelector('.modal-overlay')?.remove();
+  await renderKonfigurace();
+  openOptionOpsModal(optionId, optionName);
+}
+
+async function deleteOpEffect(id, optionId, optionName) {
+  await fetch('/api/production/config-option-operations/' + id, { method: 'DELETE' });
+  document.querySelector('.modal-overlay')?.remove();
+  await renderKonfigurace();
+  openOptionOpsModal(optionId, optionName);
+}
+
+function editConfigGroup(id) {
+  // Pro jednoduchost zatím jen alert — přidá se modal později
+  const group = _configGroups.find(g => g.id === id);
+  if (!group) return;
+  const newName = prompt('Nový název skupiny:', group.name);
+  if (newName && newName !== group.name) {
+    fetch('/api/production/config-groups/' + id, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: newName }),
+    }).then(() => renderKonfigurace());
+  }
 }

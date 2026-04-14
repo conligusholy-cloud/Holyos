@@ -370,6 +370,7 @@
     <div class="tabs">
       <button class="tab active" data-tab="postup" onclick="switchTab('postup')">Pracovní postup</button>
       <button class="tab" data-tab="souhrn" onclick="switchTab('souhrn')">Souhrn materiálů</button>
+      <button class="tab" data-tab="konfigurace" onclick="switchTab('konfigurace')">⚙️ Konfigurace</button>
     </div>
 
     <!-- Split: editor + historie -->
@@ -601,6 +602,7 @@
     function renderTab() {
       if (currentTab === 'postup') renderWorkflow();
       else if (currentTab === 'souhrn') renderMaterialSummary();
+      else if (currentTab === 'konfigurace') renderKonfiguraceTab();
     }
 
     // === Render workflow ===
@@ -1509,6 +1511,623 @@
       t.textContent = msg;
       t.className = 'toast show' + (isError ? ' error' : '');
       setTimeout(() => t.className = 'toast', 2500);
+    }
+
+    // =================================================================
+    // TAB: Konfigurace výrobku (varianty a výbava)
+    // =================================================================
+    let _cfgGroups = [];
+
+    async function renderKonfiguraceTab() {
+      const content = document.getElementById('tab-content');
+      if (!product || !product.id) {
+        content.innerHTML = '<div class="empty-ops"><p>Produkt nenačten.</p></div>';
+        return;
+      }
+
+      // Načti skupiny
+      try {
+        const res = await api('/api/production/products/' + product.id + '/config');
+        _cfgGroups = res || [];
+      } catch(e) { _cfgGroups = []; }
+
+      let html = '<div style="padding:16px 0;">';
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">';
+      html += '<div><h3 style="margin:0;font-size:16px;">⚙️ Konfigurace výrobku</h3><p style="font-size:12px;color:var(--text2);margin:4px 0 0;">Variabilní výbava — co si zákazník může vybrat při objednávce</p></div>';
+      html += '<button class="btn btn-primary" onclick="cfgOpenAddGroup()">+ Nová skupina</button>';
+      html += '</div>';
+
+      if (_cfgGroups.length === 0) {
+        html += '<div class="empty-ops" style="padding:40px;"><p style="font-size:36px;opacity:0.4;">⚙️</p><h3>Žádné konfigurační skupiny</h3><p>Přidejte skupiny jako Rám, Barva opláštění, Polepy, Akceptory hotovosti atd.</p></div>';
+      } else {
+        const typeLabels = { single_select: 'Výběr jedné', multi_select: 'Výběr více', boolean: 'Ano/Ne', text: 'Volný text' };
+        const actLbl = { add: '➕ Přidat operaci', skip: '⏭️ Přeskočit operaci', modify: '✏️ Upravit dobu' };
+
+        // =====================================================
+        // SEKCE 1: Standardní varianta (výchozí volby)
+        // =====================================================
+        const hasDefaults = _cfgGroups.some(g => g.options && g.options.some(o => o.is_default));
+        let defaultPriceExtra = 0;
+        let defaultBomItems = [];
+        let defaultOpEffects = [];
+
+        html += '<div style="background:linear-gradient(135deg, rgba(234,179,8,0.1) 0%, rgba(234,179,8,0.03) 100%);border:1px solid rgba(234,179,8,0.3);border-radius:10px;padding:16px;margin-bottom:20px;">';
+        html += '<div style="font-size:14px;font-weight:700;margin-bottom:12px;color:#eab308;">📋 Standardní varianta</div>';
+
+        if (!hasDefaults) {
+          html += '<div style="color:var(--text2);font-size:12px;">Zatím žádné výchozí volby. Označte volby jako "výchozí" pro definici standardu.</div>';
+        } else {
+          html += '<table style="width:100%;border-collapse:collapse;font-size:13px;">';
+          html += '<thead><tr style="border-bottom:1px solid rgba(234,179,8,0.3);"><th style="text-align:left;padding:6px 10px;font-size:11px;text-transform:uppercase;color:var(--text2);font-weight:600;">Skupina</th><th style="text-align:left;padding:6px 10px;font-size:11px;text-transform:uppercase;color:var(--text2);font-weight:600;">Výchozí volba</th></tr></thead><tbody>';
+          for (const g of _cfgGroups) {
+            const def = g.options ? g.options.find(o => o.is_default) : null;
+            html += '<tr style="border-bottom:1px solid rgba(255,255,255,0.04);">';
+            html += '<td style="padding:6px 10px;color:var(--text2);">' + esc(g.name) + '</td>';
+            if (def) {
+              html += '<td style="padding:6px 10px;font-weight:600;">' + esc(def.name) + '</td>';
+              defaultPriceExtra += parseFloat(def.price_modifier) || 0;
+              if (def.bom_materials) defaultBomItems = defaultBomItems.concat(def.bom_materials);
+              if (def.operation_effects) defaultOpEffects = defaultOpEffects.concat(def.operation_effects);
+            } else {
+              html += '<td style="padding:6px 10px;color:var(--text2);font-style:italic;">— nevybráno —</td>';
+            }
+            html += '</tr>';
+          }
+          html += '</tbody></table>';
+
+          // Souhrn standardu
+          let summaryParts = [];
+          if (defaultPriceExtra !== 0) summaryParts.push('Cenový vliv: ' + (defaultPriceExtra > 0 ? '+' : '') + defaultPriceExtra.toLocaleString('cs-CZ') + ' Kč');
+          if (defaultBomItems.length > 0) summaryParts.push('📦 ' + defaultBomItems.length + ' extra materiálů');
+          if (defaultOpEffects.length > 0) summaryParts.push('🏭 ' + defaultOpEffects.length + ' změn v operacích');
+          if (summaryParts.length > 0) {
+            html += '<div style="margin-top:8px;font-size:12px;color:var(--text2);padding:0 10px;">' + summaryParts.join(' · ') + '</div>';
+          }
+        }
+        html += '</div>';
+
+        // =====================================================
+        // SEKCE 2: Tabulka změn — co se liší u každé volby
+        // =====================================================
+        html += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:20px;">';
+        html += '<div style="font-size:14px;font-weight:700;margin-bottom:12px;">📊 Přehled variant — změny oproti standardu</div>';
+        html += '<table class="data-table" style="font-size:12px;"><thead><tr>';
+        html += '<th style="width:140px;">Skupina</th>';
+        html += '<th>Volba</th>';
+        html += '<th style="width:90px;">Cena</th>';
+        html += '<th>Změny v materiálech</th>';
+        html += '<th>Změny v operacích</th>';
+        html += '</tr></thead><tbody>';
+
+        for (const g of _cfgGroups) {
+          if (!g.options || g.options.length === 0) continue;
+          const defOpt = g.options.find(o => o.is_default);
+
+          for (let oi = 0; oi < g.options.length; oi++) {
+            const o = g.options[oi];
+            const isDefault = o.is_default;
+            const bomN = o.bom_materials ? o.bom_materials.length : 0;
+            const opN = o.operation_effects ? o.operation_effects.length : 0;
+            const priceMod = parseFloat(o.price_modifier) || 0;
+            const rowBg = isDefault ? 'background:rgba(234,179,8,0.06);' : '';
+
+            html += '<tr style="' + rowBg + '">';
+
+            // Název skupiny jen na prvním řádku
+            if (oi === 0) {
+              html += '<td rowspan="' + g.options.length + '" style="font-weight:600;vertical-align:top;border-right:1px solid var(--border);">' + esc(g.name);
+              html += '<div style="font-size:10px;color:var(--text2);font-weight:400;">' + (typeLabels[g.type] || '') + (g.required ? ' · povinné' : '') + '</div></td>';
+            }
+
+            // Volba
+            html += '<td><strong>' + esc(o.name) + '</strong>';
+            if (isDefault) html += ' <span style="font-size:10px;background:#eab308;color:#000;padding:1px 6px;border-radius:3px;margin-left:4px;">STANDARD</span>';
+            html += '</td>';
+
+            // Cena
+            if (priceMod !== 0) {
+              const clr = priceMod > 0 ? '#ef4444' : '#10b981';
+              html += '<td style="color:' + clr + ';font-weight:600;">' + (priceMod > 0 ? '+' : '') + priceMod.toLocaleString('cs-CZ') + ' Kč</td>';
+            } else {
+              html += '<td style="color:var(--text2);">—</td>';
+            }
+
+            // Změny v materiálech
+            if (bomN > 0) {
+              html += '<td style="font-size:11px;">';
+              o.bom_materials.forEach(bm => {
+                html += '<div style="display:flex;align-items:center;gap:4px;"><span style="color:#3b82f6;">+</span> ' + esc(bm.material.code) + ' ' + esc(bm.material.name) + ' <span style="color:var(--text2);">(' + bm.quantity + ' ' + bm.unit + ')</span></div>';
+              });
+              html += '</td>';
+            } else if (isDefault) {
+              html += '<td style="color:var(--text2);font-size:11px;">Základní BOM</td>';
+            } else {
+              html += '<td style="color:var(--text2);font-size:11px;">Beze změn</td>';
+            }
+
+            // Změny v operacích
+            if (opN > 0) {
+              html += '<td style="font-size:11px;">';
+              o.operation_effects.forEach(oe => {
+                let icon = '⚙️', color = 'var(--text)';
+                if (oe.action === 'add') { icon = '➕'; color = '#10b981'; }
+                else if (oe.action === 'skip') { icon = '⏭️'; color = '#ef4444'; }
+                else if (oe.action === 'modify') { icon = '✏️'; color = '#f59e0b'; }
+                html += '<div style="color:' + color + ';">' + icon + ' ' + esc(oe.operation.name);
+                if (oe.modified_duration) html += ' <span style="color:var(--text2);">(' + oe.modified_duration + ' min)</span>';
+                if (oe.note) html += ' <span style="color:var(--text2);">— ' + esc(oe.note) + '</span>';
+                html += '</div>';
+              });
+              html += '</td>';
+            } else if (isDefault) {
+              html += '<td style="color:var(--text2);font-size:11px;">Základní postup</td>';
+            } else {
+              html += '<td style="color:var(--text2);font-size:11px;">Beze změn</td>';
+            }
+
+            html += '</tr>';
+          }
+        }
+        html += '</tbody></table></div>';
+
+        // =====================================================
+        // SEKCE 3: Správa skupin a voleb (editace)
+        // =====================================================
+        html += '<div style="font-size:14px;font-weight:700;margin-bottom:12px;">🔧 Správa konfiguračních skupin</div>';
+
+        for (const g of _cfgGroups) {
+          html += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:12px;">';
+          html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">';
+          html += '<div><strong style="font-size:14px;">' + esc(g.name) + '</strong>';
+          html += ' <span style="font-size:11px;color:var(--text2);background:var(--bg);padding:2px 8px;border-radius:4px;margin-left:6px;">' + (typeLabels[g.type] || g.type) + '</span>';
+          if (g.required) html += ' <span style="color:#ef4444;font-size:11px;">povinné</span>';
+          html += '</div><div style="display:flex;gap:4px;">';
+          html += '<button class="btn" style="padding:4px 10px;font-size:11px;" onclick="cfgOpenAddOption(' + g.id + ')">+ Volba</button>';
+          html += '<button class="btn" style="padding:4px 10px;font-size:11px;" onclick="cfgEditGroup(' + g.id + ')">✏️</button>';
+          html += '<button class="btn" style="padding:4px 10px;font-size:11px;color:#ef4444;" onclick="cfgDeleteGroup(' + g.id + ')">🗑️</button>';
+          html += '</div></div>';
+
+          if (g.options && g.options.length > 0) {
+            for (const o of g.options) {
+              const bomN = o.bom_materials ? o.bom_materials.length : 0;
+              const opN = o.operation_effects ? o.operation_effects.length : 0;
+              const priceStr = parseFloat(o.price_modifier) !== 0 ? (parseFloat(o.price_modifier) > 0 ? '+' : '') + parseFloat(o.price_modifier).toLocaleString('cs-CZ') + ' Kč' : '—';
+              const isDefault = o.is_default;
+              const borderColor = isDefault ? 'rgba(234,179,8,0.4)' : 'var(--border)';
+              const bgColor = isDefault ? 'rgba(234,179,8,0.04)' : 'var(--bg)';
+
+              html += '<div style="background:' + bgColor + ';border:1px solid ' + borderColor + ';border-radius:8px;padding:12px 14px;margin-bottom:6px;">';
+
+              // Header volby
+              html += '<div style="display:flex;justify-content:space-between;align-items:center;">';
+              html += '<div style="display:flex;align-items:center;gap:10px;">';
+              html += '<strong style="font-size:13px;">' + esc(o.name) + '</strong>';
+              html += '<span style="font-size:10px;color:var(--text2);font-family:monospace;">' + esc(o.code) + '</span>';
+              if (isDefault) html += '<span style="font-size:10px;background:#eab308;color:#000;padding:1px 6px;border-radius:3px;">STANDARD</span>';
+              if (priceStr !== '—') html += '<span style="font-size:12px;font-weight:600;color:' + (parseFloat(o.price_modifier) > 0 ? '#ef4444' : '#10b981') + ';">' + priceStr + '</span>';
+              html += '</div>';
+              html += '<div style="display:flex;gap:4px;">';
+              html += '<button class="btn" style="padding:3px 10px;font-size:11px;background:rgba(139,92,246,0.15);color:#a78bfa;border-color:rgba(139,92,246,0.3);" onclick="cfgOpenWizard(' + o.id + ',\'' + esc(o.name).replace(/'/g, "\\'") + '\')">⚙️ Definovat změny</button>';
+              html += '<button class="btn" style="padding:3px 8px;font-size:11px;color:#ef4444;" onclick="cfgDeleteOption(' + o.id + ')">✕</button>';
+              html += '</div></div>';
+
+              // Detaily změn — materiály a operace
+              if (bomN > 0 || opN > 0) {
+                html += '<div style="margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,0.06);">';
+
+                if (bomN > 0) {
+                  html += '<div style="margin-bottom:' + (opN > 0 ? '6px' : '0') + ';">';
+                  o.bom_materials.forEach(bm => {
+                    const qty = parseFloat(bm.quantity);
+                    let icon = '➕', color = '#3b82f6', label = '';
+                    if (qty === 0) { icon = '🗑️'; color = '#ef4444'; label = 'Odebrat'; }
+                    else { label = bm.quantity + ' ' + bm.unit; }
+                    html += '<div style="display:flex;align-items:center;gap:6px;font-size:11px;padding:2px 0;">';
+                    html += '<span>' + icon + '</span>';
+                    html += '<span style="color:' + color + ';font-family:monospace;">' + esc(bm.material.code) + '</span>';
+                    html += '<span>' + esc(bm.material.name) + '</span>';
+                    html += '<span style="color:var(--text2);">(' + label + ')</span>';
+                    html += '</div>';
+                  });
+                  html += '</div>';
+                }
+
+                if (opN > 0) {
+                  o.operation_effects.forEach(oe => {
+                    let icon = '⚙️', color = 'var(--text)', label = '';
+                    if (oe.action === 'add') { icon = '➕'; color = '#10b981'; label = 'Přidat operaci'; }
+                    else if (oe.action === 'skip') { icon = '⏭️'; color = '#ef4444'; label = 'Přeskočit'; }
+                    else if (oe.action === 'modify') { icon = '✏️'; color = '#f59e0b'; label = 'Upravit'; }
+                    html += '<div style="display:flex;align-items:center;gap:6px;font-size:11px;padding:2px 0;">';
+                    html += '<span>' + icon + '</span>';
+                    html += '<span style="color:' + color + ';font-weight:600;">' + label + '</span>';
+                    html += '<span>"' + esc(oe.operation.name) + '"</span>';
+                    if (oe.modified_duration) html += '<span style="color:var(--text2);">(' + oe.modified_duration + ' min)</span>';
+                    if (oe.note) html += '<span style="color:var(--text2);">— ' + esc(oe.note) + '</span>';
+                    html += '</div>';
+                  });
+                }
+
+                html += '</div>';
+              } else if (!isDefault) {
+                html += '<div style="margin-top:6px;font-size:11px;color:var(--text2);font-style:italic;">Žádné změny — klikněte "Definovat změny"</div>';
+              }
+
+              html += '</div>';
+            }
+          } else {
+            html += '<div style="color:var(--text2);font-size:12px;padding:8px;">Žádné volby — přidejte možnosti výběru.</div>';
+          }
+          html += '</div>';
+        }
+      }
+      html += '</div>';
+      content.innerHTML = html;
+    }
+
+    // --- Přidat skupinu ---
+    function cfgOpenAddGroup() {
+      const m = document.createElement('div');
+      m.id = 'cfg-modal';
+      m.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.6);z-index:9999;display:flex;align-items:center;justify-content:center;';
+      m.onclick = function(e) { if (e.target === m) m.remove(); };
+      m.innerHTML = '<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;width:450px;max-width:95vw;">' +
+        '<h3 style="margin:0 0 16px;">➕ Nová konfigurační skupina</h3>' +
+        '<div style="display:flex;flex-direction:column;gap:10px;">' +
+          '<div><label style="font-size:12px;font-weight:600;color:var(--text2);">Název *</label><input type="text" id="cfg-g-name" placeholder="Např. Rám, Barva opláštění..." style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);"></div>' +
+          '<div><label style="font-size:12px;font-weight:600;color:var(--text2);">Kód *</label><input type="text" id="cfg-g-code" placeholder="ram, barva_oplasteni..." style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);"></div>' +
+          '<div><label style="font-size:12px;font-weight:600;color:var(--text2);">Typ</label><select id="cfg-g-type" style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);"><option value="single_select">Výběr jedné možnosti</option><option value="multi_select">Výběr více možností</option><option value="boolean">Ano / Ne</option><option value="text">Volný text</option></select></div>' +
+          '<div><label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;"><input type="checkbox" id="cfg-g-req"> Povinné</label></div>' +
+        '</div>' +
+        '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;">' +
+          '<button class="btn" onclick="document.getElementById(\'cfg-modal\').remove()">Zrušit</button>' +
+          '<button class="btn btn-primary" onclick="cfgSaveGroup()">Vytvořit</button>' +
+        '</div></div>';
+      document.body.appendChild(m);
+      document.getElementById('cfg-g-name').addEventListener('input', function() {
+        document.getElementById('cfg-g-code').value = this.value.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'');
+      });
+    }
+
+    async function cfgSaveGroup() {
+      const name = document.getElementById('cfg-g-name').value.trim();
+      const code = document.getElementById('cfg-g-code').value.trim();
+      const type = document.getElementById('cfg-g-type').value;
+      const required = document.getElementById('cfg-g-req').checked;
+      if (!name || !code) { alert('Vyplňte název a kód.'); return; }
+      await api('/api/production/products/' + product.id + '/config-groups', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, code, type, required, sort_order: _cfgGroups.length }),
+      });
+      document.getElementById('cfg-modal')?.remove();
+      renderKonfiguraceTab();
+      toast('Skupina "' + name + '" vytvořena');
+    }
+
+    async function cfgDeleteGroup(id) {
+      if (!confirm('Smazat skupinu a všechny volby?')) return;
+      await api('/api/production/config-groups/' + id, { method: 'DELETE' });
+      renderKonfiguraceTab();
+      toast('Skupina smazána');
+    }
+
+    function cfgEditGroup(id) {
+      const g = _cfgGroups.find(x => x.id === id);
+      if (!g) return;
+      const newName = prompt('Nový název:', g.name);
+      if (newName && newName !== g.name) {
+        api('/api/production/config-groups/' + id, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: newName }) })
+          .then(() => { renderKonfiguraceTab(); toast('Přejmenováno'); });
+      }
+    }
+
+    // --- Přidat volbu ---
+    function cfgOpenAddOption(groupId) {
+      const m = document.createElement('div');
+      m.id = 'cfg-modal';
+      m.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.6);z-index:9999;display:flex;align-items:center;justify-content:center;';
+      m.onclick = function(e) { if (e.target === m) m.remove(); };
+      m.innerHTML = '<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;width:450px;max-width:95vw;">' +
+        '<h3 style="margin:0 0 16px;">➕ Nová volba</h3>' +
+        '<div style="display:flex;flex-direction:column;gap:10px;">' +
+          '<div><label style="font-size:12px;font-weight:600;color:var(--text2);">Název *</label><input type="text" id="cfg-o-name" placeholder="Např. Nerez, RAL 7016..." style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);"></div>' +
+          '<div><label style="font-size:12px;font-weight:600;color:var(--text2);">Kód *</label><input type="text" id="cfg-o-code" placeholder="nerez, ral_7016..." style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);"></div>' +
+          '<div><label style="font-size:12px;font-weight:600;color:var(--text2);">Cenový příplatek (Kč)</label><input type="number" id="cfg-o-price" value="0" step="0.01" style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);"></div>' +
+          '<div><label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;"><input type="checkbox" id="cfg-o-def"> Výchozí</label></div>' +
+        '</div>' +
+        '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;">' +
+          '<button class="btn" onclick="document.getElementById(\'cfg-modal\').remove()">Zrušit</button>' +
+          '<button class="btn btn-primary" onclick="cfgSaveOption(' + groupId + ')">Přidat</button>' +
+        '</div></div>';
+      document.body.appendChild(m);
+      document.getElementById('cfg-o-name').addEventListener('input', function() {
+        document.getElementById('cfg-o-code').value = this.value.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'');
+      });
+    }
+
+    async function cfgSaveOption(groupId) {
+      const name = document.getElementById('cfg-o-name').value.trim();
+      const code = document.getElementById('cfg-o-code').value.trim();
+      const price_modifier = parseFloat(document.getElementById('cfg-o-price').value) || 0;
+      const is_default = document.getElementById('cfg-o-def').checked;
+      if (!name || !code) { alert('Vyplňte název a kód.'); return; }
+      await api('/api/production/config-groups/' + groupId + '/options', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, code, price_modifier, is_default }),
+      });
+      document.getElementById('cfg-modal')?.remove();
+      renderKonfiguraceTab();
+      toast('Volba "' + name + '" přidána');
+    }
+
+    async function cfgDeleteOption(id) {
+      if (!confirm('Smazat volbu?')) return;
+      await api('/api/production/config-options/' + id, { method: 'DELETE' });
+      renderKonfiguraceTab();
+    }
+
+    // =================================================================
+    // DVOUKROKOVÝ PRŮVODCE: Definovat změny pro konfigurační volbu
+    // =================================================================
+    let _wizardSelected = []; // { type: 'op'|'mat', opId, opName, matId?, matCode?, matName?, matQty?, matUnit? }
+
+    function cfgOpenWizard(optionId, optionName) {
+      _wizardSelected = [];
+      const ops = product.operations || [];
+      const oName = optionName.replace(/'/g, "\\'");
+
+      // Krok 1: Zobraz celý pracovní postup s materiály — zaškrtni dotčené
+      const m = document.createElement('div');
+      m.id = 'cfg-modal';
+      m.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.6);z-index:9999;display:flex;align-items:center;justify-content:center;';
+      m.onclick = function(e) { if (e.target === m) m.remove(); };
+
+      let html = '<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;width:800px;max-width:95vw;max-height:85vh;overflow-y:auto;">';
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">';
+      html += '<h3 style="margin:0;">⚙️ Změny pro: <span style="color:#eab308;">' + esc(optionName) + '</span></h3>';
+      html += '<span style="font-size:11px;background:rgba(139,92,246,0.15);color:#a78bfa;padding:3px 10px;border-radius:6px;">Krok 1 / 2</span>';
+      html += '</div>';
+      html += '<p style="font-size:12px;color:var(--text2);margin:4px 0 16px;">Zaškrtněte operace a materiály, které tato volba ovlivňuje. Pak klikněte "Pokračovat" pro definici změn.</p>';
+
+      if (ops.length === 0) {
+        html += '<div style="color:var(--text2);padding:20px;text-align:center;">Žádné operace v pracovním postupu.</div>';
+      } else {
+        for (const op of ops) {
+          const mats = op.materials || [];
+          const dur = op.duration || 0;
+          const durUnit = op.duration_unit || 'MINUTE';
+          const durStr = dur + ' ' + (durUnit === 'MINUTE' ? 'min' : durUnit === 'SECOND' ? 's' : 'h');
+          const wsName = op.workstation ? op.workstation.name : '—';
+
+          html += '<div style="border:1px solid var(--border);border-radius:8px;margin-bottom:8px;overflow:hidden;">';
+
+          // Operace header — zaškrtávací
+          html += '<label style="display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;background:var(--bg);" onmouseover="this.style.background=\'rgba(139,92,246,0.06)\'" onmouseout="this.style.background=\'var(--bg)\'">';
+          html += '<input type="checkbox" class="wiz-check" data-type="op" data-op-id="' + op.id + '" data-op-name="' + esc(op.name) + '" style="width:16px;height:16px;">';
+          html += '<div style="flex:1;">';
+          html += '<div style="font-weight:600;font-size:13px;">' + op.step_number + '. ' + esc(op.name) + '</div>';
+          html += '<div style="font-size:11px;color:var(--text2);">🏭 ' + esc(wsName) + ' · ⏱ ' + durStr + ' · 👷 ' + op.workers_count + ' prac.</div>';
+          html += '</div></label>';
+
+          // Materiály pod operací
+          if (mats.length > 0) {
+            html += '<div style="padding:0 14px 8px;background:var(--surface);">';
+            for (const om of mats) {
+              const mat = om.material || {};
+              html += '<label style="display:flex;align-items:center;gap:10px;padding:5px 0 5px 26px;cursor:pointer;font-size:12px;border-top:1px solid rgba(255,255,255,0.03);">';
+              html += '<input type="checkbox" class="wiz-check" data-type="mat" data-op-id="' + op.id + '" data-op-name="' + esc(op.name) + '" data-mat-id="' + mat.id + '" data-mat-code="' + esc(mat.code || '') + '" data-mat-name="' + esc(mat.name || '') + '" data-mat-qty="' + om.quantity + '" data-mat-unit="' + esc(om.unit || 'ks') + '" style="width:14px;height:14px;">';
+              html += '<span style="color:#3b82f6;font-family:monospace;">' + esc(mat.code || '') + '</span> ';
+              html += '<span style="flex:1;">' + esc(mat.name || '') + '</span>';
+              html += '<span style="color:var(--text2);">' + om.quantity + ' ' + esc(om.unit || 'ks') + '</span>';
+              html += '</label>';
+            }
+            html += '</div>';
+          }
+          html += '</div>';
+        }
+      }
+
+      html += '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;border-top:1px solid var(--border);padding-top:12px;">';
+      html += '<button class="btn" onclick="document.getElementById(\'cfg-modal\').remove()">Zrušit</button>';
+      html += '<button class="btn btn-primary" onclick="cfgWizardStep2(' + optionId + ',\'' + oName + '\')">Pokračovat →</button>';
+      html += '</div></div>';
+
+      m.innerHTML = html;
+      document.body.appendChild(m);
+    }
+
+    function cfgWizardStep2(optionId, optionName) {
+      // Sesbírej zaškrtnuté položky
+      _wizardSelected = [];
+      document.querySelectorAll('.wiz-check:checked').forEach(chk => {
+        _wizardSelected.push({
+          type: chk.dataset.type,
+          opId: parseInt(chk.dataset.opId),
+          opName: chk.dataset.opName,
+          matId: chk.dataset.matId ? parseInt(chk.dataset.matId) : null,
+          matCode: chk.dataset.matCode || '',
+          matName: chk.dataset.matName || '',
+          matQty: chk.dataset.matQty || '',
+          matUnit: chk.dataset.matUnit || 'ks',
+        });
+      });
+
+      if (_wizardSelected.length === 0) {
+        alert('Zaškrtněte alespoň jednu operaci nebo materiál.');
+        return;
+      }
+
+      // Načti existující efekty pro tuto volbu
+      let existingBom = [], existingOps = [];
+      for (const g of _cfgGroups) {
+        const o = g.options.find(x => x.id === optionId);
+        if (o) { existingBom = o.bom_materials || []; existingOps = o.operation_effects || []; break; }
+      }
+
+      const modal = document.getElementById('cfg-modal');
+      const matOpts = allMaterials.map(m => '<option value="' + m.id + '">' + m.code + ' — ' + m.name + '</option>').join('');
+      const oName = optionName.replace(/'/g, "\\'");
+
+      let html = '<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;width:850px;max-width:95vw;max-height:85vh;overflow-y:auto;">';
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">';
+      html += '<h3 style="margin:0;">⚙️ Definice změn: <span style="color:#eab308;">' + esc(optionName) + '</span></h3>';
+      html += '<span style="font-size:11px;background:rgba(139,92,246,0.15);color:#a78bfa;padding:3px 10px;border-radius:6px;">Krok 2 / 2</span>';
+      html += '</div>';
+      html += '<p style="font-size:12px;color:var(--text2);margin:4px 0 16px;">Pro každou vybranou položku definujte, co se s ní stane při výběru volby "' + esc(optionName) + '".</p>';
+
+      // Existující definované změny
+      if (existingBom.length > 0 || existingOps.length > 0) {
+        html += '<div style="background:rgba(234,179,8,0.06);border:1px solid rgba(234,179,8,0.2);border-radius:8px;padding:10px 14px;margin-bottom:12px;">';
+        html += '<div style="font-size:12px;font-weight:600;margin-bottom:6px;color:#eab308;">📌 Již definované změny</div>';
+        existingOps.forEach(oe => {
+          const actLbl = { add: '➕ Přidat', skip: '⏭️ Přeskočit', modify: '✏️ Upravit' };
+          html += '<div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;padding:2px 0;">';
+          html += '<span>🏭 ' + (actLbl[oe.action] || oe.action) + ' operaci "' + esc(oe.operation.name) + '"' + (oe.modified_duration ? ' (' + oe.modified_duration + ' min)' : '') + '</span>';
+          html += '<button class="btn" style="padding:2px 8px;font-size:10px;color:#ef4444;" onclick="cfgWizDelOp(' + oe.id + ',' + optionId + ',\'' + oName + '\')">✕</button></div>';
+        });
+        existingBom.forEach(bm => {
+          html += '<div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;padding:2px 0;">';
+          html += '<span>📦 Materiál ' + esc(bm.material.code) + ' ' + esc(bm.material.name) + ' (' + bm.quantity + ' ' + bm.unit + ')</span>';
+          html += '<button class="btn" style="padding:2px 8px;font-size:10px;color:#ef4444;" onclick="cfgWizDelBom(' + bm.id + ',' + optionId + ',\'' + oName + '\')">✕</button></div>';
+        });
+        html += '</div>';
+      }
+
+      // Tabulka nových změn
+      html += '<table class="data-table" style="font-size:12px;"><thead><tr>';
+      html += '<th>Položka</th><th style="width:140px;">Akce</th><th style="width:200px;">Detail</th>';
+      html += '</tr></thead><tbody>';
+
+      _wizardSelected.forEach((item, idx) => {
+        if (item.type === 'op') {
+          html += '<tr style="background:rgba(139,92,246,0.04);">';
+          html += '<td><span style="color:#8b5cf6;">🏭</span> <strong>' + esc(item.opName) + '</strong></td>';
+          html += '<td><select id="wiz-act-' + idx + '" style="width:100%;padding:4px 8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;" onchange="wizToggleDetail(' + idx + ')">';
+          html += '<option value="skip">⏭️ Přeskočit operaci</option>';
+          html += '<option value="modify">✏️ Upravit dobu</option>';
+          html += '<option value="add">➕ Přidat operaci</option>';
+          html += '</select></td>';
+          html += '<td><div id="wiz-det-' + idx + '"><span style="color:var(--text2);font-size:11px;">Operace bude přeskočena</span></div></td>';
+          html += '</tr>';
+        } else {
+          html += '<tr>';
+          html += '<td><span style="color:#3b82f6;">📦</span> <span style="font-family:monospace;font-size:11px;">' + esc(item.matCode) + '</span> ' + esc(item.matName) + ' <span style="color:var(--text2);">(' + item.matQty + ' ' + esc(item.matUnit) + ')</span></td>';
+          html += '<td><select id="wiz-act-' + idx + '" style="width:100%;padding:4px 8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;" onchange="wizToggleDetail(' + idx + ')">';
+          html += '<option value="mat_swap">🔄 Záměna materiálu</option>';
+          html += '<option value="mat_add">➕ Přidat materiál</option>';
+          html += '<option value="mat_remove">🗑️ Odebrat materiál</option>';
+          html += '<option value="mat_qty">📐 Změnit množství</option>';
+          html += '</select></td>';
+          html += '<td><div id="wiz-det-' + idx + '">';
+          html += '<select id="wiz-swap-' + idx + '" style="width:100%;padding:4px 8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:11px;">' + matOpts + '</select>';
+          html += '</div></td>';
+          html += '</tr>';
+        }
+      });
+
+      html += '</tbody></table>';
+
+      html += '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;border-top:1px solid var(--border);padding-top:12px;">';
+      html += '<button class="btn" onclick="cfgOpenWizard(' + optionId + ',\'' + oName + '\')">← Zpět</button>';
+      html += '<button class="btn" onclick="document.getElementById(\'cfg-modal\').remove()">Zrušit</button>';
+      html += '<button class="btn" style="background:#10b981;color:white;border-color:#10b981;" onclick="cfgWizardSave(' + optionId + ',\'' + oName + '\')">✅ Uložit změny</button>';
+      html += '</div></div>';
+
+      modal.innerHTML = html;
+    }
+
+    function wizToggleDetail(idx) {
+      const act = document.getElementById('wiz-act-' + idx).value;
+      const det = document.getElementById('wiz-det-' + idx);
+      const item = _wizardSelected[idx];
+      const matOpts = allMaterials.map(m => '<option value="' + m.id + '">' + m.code + ' — ' + m.name + '</option>').join('');
+
+      if (act === 'skip') {
+        det.innerHTML = '<span style="color:var(--text2);font-size:11px;">Operace bude přeskočena</span>';
+      } else if (act === 'modify') {
+        det.innerHTML = '<div style="display:flex;gap:4px;align-items:center;"><input type="number" id="wiz-dur-' + idx + '" placeholder="min" style="width:70px;padding:4px 8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;"> min</div>';
+      } else if (act === 'add') {
+        det.innerHTML = '<span style="color:var(--text2);font-size:11px;">Operace bude přidána do postupu</span>';
+      } else if (act === 'mat_swap') {
+        det.innerHTML = '<select id="wiz-swap-' + idx + '" style="width:100%;padding:4px 8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:11px;">' + matOpts + '</select>';
+      } else if (act === 'mat_add') {
+        det.innerHTML = '<div style="display:flex;gap:4px;"><select id="wiz-swap-' + idx + '" style="flex:1;padding:4px 8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:11px;">' + matOpts + '</select><input type="number" id="wiz-qty-' + idx + '" value="1" min="0.001" step="0.001" style="width:60px;padding:4px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:11px;"></div>';
+      } else if (act === 'mat_remove') {
+        det.innerHTML = '<span style="color:#ef4444;font-size:11px;">Materiál bude odebrán</span>';
+      } else if (act === 'mat_qty') {
+        det.innerHTML = '<div style="display:flex;gap:4px;align-items:center;"><input type="number" id="wiz-qty-' + idx + '" value="' + (item ? item.matQty : 1) + '" min="0.001" step="0.001" style="width:80px;padding:4px 8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;"> ' + (item ? esc(item.matUnit) : 'ks') + '</div>';
+      }
+    }
+
+    async function cfgWizardSave(optionId, optionName) {
+      let saved = 0;
+      for (let idx = 0; idx < _wizardSelected.length; idx++) {
+        const item = _wizardSelected[idx];
+        const act = document.getElementById('wiz-act-' + idx)?.value;
+        if (!act) continue;
+
+        try {
+          if (item.type === 'op') {
+            // Operace: skip, modify, add
+            const dur = document.getElementById('wiz-dur-' + idx)?.value || null;
+            await api('/api/production/config-options/' + optionId + '/operations', {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ operation_id: item.opId, action: act, modified_duration: dur }),
+            });
+            saved++;
+          } else {
+            // Materiál: mat_swap, mat_add, mat_remove, mat_qty
+            if (act === 'mat_swap') {
+              const newMatId = document.getElementById('wiz-swap-' + idx)?.value;
+              if (newMatId) {
+                // Přidej nový materiál jako náhradu
+                await api('/api/production/config-options/' + optionId + '/materials', {
+                  method: 'POST', headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ material_id: parseInt(newMatId), quantity: parseFloat(item.matQty) || 1 }),
+                });
+                saved++;
+              }
+            } else if (act === 'mat_add') {
+              const newMatId = document.getElementById('wiz-swap-' + idx)?.value;
+              const qty = document.getElementById('wiz-qty-' + idx)?.value || 1;
+              if (newMatId) {
+                await api('/api/production/config-options/' + optionId + '/materials', {
+                  method: 'POST', headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ material_id: parseInt(newMatId), quantity: parseFloat(qty) }),
+                });
+                saved++;
+              }
+            } else if (act === 'mat_remove' || act === 'mat_qty') {
+              // mat_remove: uložíme jako materiál s množstvím 0 (značka odebrání)
+              // mat_qty: uložíme s novým množstvím
+              const qty = act === 'mat_remove' ? 0 : (document.getElementById('wiz-qty-' + idx)?.value || 1);
+              await api('/api/production/config-options/' + optionId + '/materials', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ material_id: item.matId, quantity: parseFloat(qty) }),
+              });
+              saved++;
+            }
+          }
+        } catch(e) { console.error('Chyba ukládání:', e); }
+      }
+
+      document.getElementById('cfg-modal')?.remove();
+      await renderKonfiguraceTab();
+      toast('Uloženo ' + saved + ' změn pro "' + optionName + '"');
+    }
+
+    async function cfgWizDelOp(id, optionId, optionName) {
+      await api('/api/production/config-option-operations/' + id, { method: 'DELETE' });
+      document.getElementById('cfg-modal')?.remove();
+      await renderKonfiguraceTab();
+      cfgOpenWizard(optionId, optionName);
+    }
+
+    async function cfgWizDelBom(id, optionId, optionName) {
+      await api('/api/production/config-option-materials/' + id, { method: 'DELETE' });
+      document.getElementById('cfg-modal')?.remove();
+      await renderKonfiguraceTab();
+      cfgOpenWizard(optionId, optionName);
     }
   </script>
 </body>

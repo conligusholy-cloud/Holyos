@@ -653,7 +653,7 @@
   <script>
     // Load sidebar (non-module for compatibility)
     var s = document.createElement('script');
-    s.src = '/js/sidebar.js';
+    s.src = '/js/sidebar.js?v=' + Date.now();
     s.onload = function() { renderSidebar('lide-hr'); };
     document.head.appendChild(s);
   </script>

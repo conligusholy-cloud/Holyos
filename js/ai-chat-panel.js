@@ -449,7 +449,7 @@
   // --- Odeslání zprávy ---
   async function sendMessage() {
     const input = document.getElementById('ai-chat-input');
-    const text = (input.value || '').trim();
+    const text = (input ? input.value : '').trim();
     if (!text || isLoading) return;
 
     input.value = '';
@@ -466,13 +466,20 @@
     // Typing indicator
     isLoading = true;
     updateSendButton();
-    const typingEl = addTyping();
+    let typingEl = null;
+    try {
+      typingEl = addTyping();
+    } catch (e) { /* ignore */ }
 
     try {
+      const headers = { 'Content-Type': 'application/json' };
+      const t = sessionStorage.getItem('token');
+      if (t) headers['Authorization'] = 'Bearer ' + t;
+
       const resp = await fetch('/api/ai/chat', {
         method: 'POST',
         credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
+        headers: headers,
         body: JSON.stringify({
           message: text,
           module: currentModule,
@@ -482,8 +489,9 @@
         }),
       });
 
+      if (typingEl) typingEl.remove();
+
       const data = await resp.json();
-      typingEl.remove();
 
       if (data.ok && data.response) {
         const assistantInfo = data.assistant || {};
@@ -509,12 +517,13 @@
         addMessage('assistant', 'Chyba: ' + (data.error || 'Neznámá chyba'));
       }
     } catch (e) {
-      typingEl.remove();
+      if (typingEl) try { typingEl.remove(); } catch(_) {}
       addMessage('assistant', '⚠️ AI momentálně nedostupné. Můžete svůj požadavek uložit kliknutím na 📋 vedle textového pole.');
+      console.error('[AI Chat] sendMessage error:', e);
+    } finally {
+      isLoading = false;
+      updateSendButton();
     }
-
-    isLoading = false;
-    updateSendButton();
   }
 
   // --- Přidání zprávy do chatu ---

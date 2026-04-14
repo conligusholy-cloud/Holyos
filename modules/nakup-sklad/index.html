@@ -87,11 +87,12 @@
     <div class="tabs">
       <div class="tab active" data-tab="dashboard" onclick="switchTab('dashboard')">📊 Přehled</div>
       <div class="tab" data-tab="companies" onclick="switchTab('companies')">🏢 Společnosti</div>
-      <div class="tab" data-tab="orders" onclick="switchTab('orders')">📋 Objednávky</div>
+      <div class="tab" data-tab="orders" onclick="switchTab('orders')">📋 Nákupní objednávky</div>
       <div class="tab" data-tab="materials" onclick="switchTab('materials')">📦 Zboží</div>
       <div class="tab" data-tab="stock" onclick="switchTab('stock')">📦 Skladové zásoby</div>
       <div class="tab" data-tab="movements" onclick="switchTab('movements')">🔄 Pohyby</div>
       <div class="tab" data-tab="inventories" onclick="switchTab('inventories')">📋 Inventury</div>
+      <div class="tab" data-tab="forecast" onclick="switchTab('forecast')">📈 Výhled nákupu</div>
     </div>
 
     <div class="stats-bar" id="stats-bar"></div>
@@ -124,7 +125,6 @@
         <div class="sub-tabs">
           <div class="sub-tab active" data-ordertab="all" onclick="switchOrderTab('all')">Všechny</div>
           <div class="sub-tab" data-ordertab="purchase" onclick="switchOrderTab('purchase')">🛒 Nákupní</div>
-          <div class="sub-tab" data-ordertab="sales" onclick="switchOrderTab('sales')">💰 Prodejní</div>
           <div class="sub-tab" data-ordertab="cooperation" onclick="switchOrderTab('cooperation')">🤝 Kooperační</div>
         </div>
         <div class="toolbar">
@@ -216,6 +216,32 @@
         </div>
         <div id="inventories-table"></div>
       </div>
+
+      <!-- TAB: Výhled nákupu -->
+      <div class="tab-content" id="tab-forecast">
+        <div class="toolbar">
+          <select id="forecast-status-filter" onchange="renderForecast()">
+            <option value="">Všechny stavy</option>
+            <option value="critical">🔴 Kritické</option>
+            <option value="warning">🟡 Varování</option>
+            <option value="ok">🟢 V pořádku</option>
+          </select>
+          <select id="forecast-horizon" onchange="loadForecast()">
+            <option value="30">30 dní</option>
+            <option value="60" selected>60 dní</option>
+            <option value="90">90 dní</option>
+            <option value="180">180 dní</option>
+          </select>
+          <input type="search" id="forecast-search" placeholder="Hledat materiál..." oninput="renderForecast()">
+          <div style="flex:1"></div>
+          <button class="btn btn-secondary" onclick="loadForecast()">🔄 Obnovit</button>
+        </div>
+        <div id="forecast-stats" style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap;"></div>
+        <div id="forecast-chart-container" style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:16px;max-height:320px;">
+          <canvas id="forecast-chart" height="280"></canvas>
+        </div>
+        <div id="forecast-table"></div>
+      </div>
     </div>
   </div>
 
@@ -223,7 +249,7 @@
 
   <script>
     var s = document.createElement('script');
-    s.src = '/js/sidebar.js';
+    s.src = '/js/sidebar.js?v=' + Date.now();
     s.onload = function() { renderSidebar('nakup-sklad'); };
     document.head.appendChild(s);
   </script>
@@ -275,6 +301,7 @@
       if (tab === 'stock') { loadStock(); populateStockWhFilter(); }
       if (tab === 'movements') { loadMovements(); populateMovementFilters(); }
       if (tab === 'inventories') { loadInventories(); initInvWhFilter(); }
+      if (tab === 'forecast') loadForecast();
     }
 
     function switchOrderTab(type) {
@@ -282,6 +309,7 @@
       currentOrderType = type === 'all' ? '' : type;
       loadOrders();
     }
+
 
     // ============================================================
     // STATS & DASHBOARD
@@ -473,7 +501,9 @@
       if (search) url += 'search=' + encodeURIComponent(search);
       try {
         const res = await fetch(url);
-        const orders = await res.json();
+        let orders = await res.json();
+        // V této sekci nezobrazujeme prodejní objednávky
+        if (!currentOrderType) orders = orders.filter(o => o.type !== 'sales');
         renderOrders(orders);
       } catch(e) { console.error(e); }
     }
@@ -725,7 +755,14 @@
             '<div class="form-group"><label>Hmotnost (kg)</label><input type="number" name="weight" value="' + v('weight',0) + '" step="0.001"></div>' +
             '<div class="form-group"><label>Účetní jednotka</label><input type="text" name="accounting_unit" value="' + v('accounting_unit') + '"></div>' +
             '<div class="form-group"><label>Šablona zboží</label><input type="text" name="goods_template" value="' + v('goods_template') + '"></div>' +
-            '<div class="form-group full"><label>Fotografie (URL)</label><input type="text" name="photo_url" value="' + v('photo_url') + '" placeholder="URL obrázku"></div>' +
+            '<div class="form-group full"><label>Fotografie</label>' +
+              '<div id="photo-upload-area" style="border:2px dashed var(--border);border-radius:10px;padding:16px;text-align:center;cursor:pointer;transition:border-color 0.2s,background 0.2s;position:relative;" onclick="document.getElementById(\'photo-file-input\').click()" ondragover="event.preventDefault();this.style.borderColor=\'#eab308\';this.style.background=\'rgba(234,179,8,0.06)\'" ondragleave="this.style.borderColor=\'var(--border)\';this.style.background=\'transparent\'" ondrop="event.preventDefault();this.style.borderColor=\'var(--border)\';this.style.background=\'transparent\';handlePhotoDrop(event)">' +
+                (v('photo_url') ? '<div id="photo-preview" style="margin-bottom:8px;"><img src="' + v('photo_url') + '" style="max-width:200px;max-height:140px;border-radius:8px;object-fit:cover;"></div>' : '<div id="photo-preview"></div>') +
+                '<div id="photo-upload-label">' + (v('photo_url') ? '<div style="font-size:12px;color:var(--text2);">Klikněte nebo přetáhněte nový obrázek pro nahrazení</div>' : '<div style="font-size:24px;opacity:0.4;margin-bottom:4px;">📷</div><div style="font-size:13px;color:var(--text2);">Klikněte nebo přetáhněte obrázek</div><div style="font-size:11px;color:var(--text2);opacity:0.6;margin-top:2px;">JPG, PNG, WEBP · max 5 MB</div>') + '</div>' +
+                '<input type="file" id="photo-file-input" accept="image/*" style="display:none;" onchange="handlePhotoSelect(this)">' +
+              '</div>' +
+              '<input type="hidden" name="photo_url" id="photo-url-hidden" value="' + v('photo_url') + '">' +
+            '</div>' +
             '<div class="form-group"><label>Čárový kód</label><input type="text" name="barcode" value="' + v('barcode') + '"></div>' +
             '<div class="form-group"><label>Nákupní cena</label><input type="number" name="unit_price" value="' + v('unit_price',0) + '" step="0.01"></div>' +
           '</div>' +
@@ -795,6 +832,74 @@
           '</div>' +
         '<div class="modal-actions" style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border)"><button type="button" class="btn btn-secondary" onclick="closeModal()">Zrušit</button><button type="submit" class="btn btn-primary">' + (id?'Uložit':'Vytvořit') + '</button></div></form></div></div>';
     }
+
+    // === UPLOAD FOTOGRAFIE ===
+    function handlePhotoDrop(e) {
+      const files = e.dataTransfer.files;
+      if (files.length > 0) uploadPhotoFile(files[0]);
+    }
+
+    function handlePhotoSelect(input) {
+      if (input.files.length > 0) uploadPhotoFile(input.files[0]);
+    }
+
+    async function uploadPhotoFile(file) {
+      // Validace
+      if (!file.type.startsWith('image/')) { alert('Vyberte obrázek (JPG, PNG, WEBP).'); return; }
+      if (file.size > 5 * 1024 * 1024) { alert('Soubor je příliš velký (max 5 MB).'); return; }
+
+      const area = document.getElementById('photo-upload-area');
+      const preview = document.getElementById('photo-preview');
+      const label = document.getElementById('photo-upload-label');
+
+      // Ukaž loading stav
+      if (label) label.innerHTML = '<div style="font-size:13px;color:#eab308;">⏳ Nahrávám...</div>';
+
+      try {
+        // Převeď na base64
+        const base64 = await fileToBase64(file);
+        const base64Data = base64.split(',')[1]; // odstraň data:image/...;base64,
+
+        const res = await fetch('/api/storage/upload', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            file_data: base64Data,
+            file_name: file.name,
+            file_type: file.type,
+            folder: 'photos',
+          }),
+        });
+
+        if (!res.ok) throw new Error('Upload selhal (' + res.status + ')');
+        const data = await res.json();
+        const photoUrl = data.url; // /api/storage/files/photos/xxx.jpg
+
+        // Aktualizuj hidden input
+        document.getElementById('photo-url-hidden').value = photoUrl;
+
+        // Ukaž náhled
+        if (preview) preview.innerHTML = '<img src="' + photoUrl + '" style="max-width:200px;max-height:140px;border-radius:8px;object-fit:cover;">';
+        if (label) label.innerHTML = '<div style="font-size:12px;color:#10b981;margin-top:4px;">✅ Nahráno: ' + esc(file.name) + '</div><div style="font-size:11px;color:var(--text2);margin-top:2px;">Klikněte pro nahrazení</div>';
+        if (area) area.style.borderColor = '#10b981';
+        setTimeout(function() { if (area) area.style.borderColor = 'var(--border)'; }, 2000);
+
+      } catch(e) {
+        console.error('Upload error:', e);
+        if (label) label.innerHTML = '<div style="font-size:13px;color:#ef4444;">❌ Chyba uploadu: ' + e.message + '</div><div style="font-size:11px;color:var(--text2);margin-top:4px;">Zkuste znovu</div>';
+      }
+    }
+
+    function fileToBase64(file) {
+      return new Promise(function(resolve, reject) {
+        var reader = new FileReader();
+        reader.onload = function() { resolve(reader.result); };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+    }
+
+    function esc(s) { if (!s) return ''; var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 
     async function saveMaterial(e, id) {
       e.preventDefault();
@@ -1188,6 +1293,222 @@
       const apply = confirm('Dokončit inventuru a aplikovat rozdíly do skladu?\n\nStiskněte OK pro aplikování korekčních pohybů,\nnebo Zrušit pro dokončení bez změn.');
       await fetch('/api/wh/inventories/' + id + '/complete', { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ apply_differences: apply }) });
       closeModal(); loadInventories(); loadStats();
+    }
+
+    // ============================================================
+    // VÝHLED NÁKUPU (Forecast)
+    // ============================================================
+    let _forecastData = null;
+    let _forecastChart = null;
+
+    async function loadForecast() {
+      const horizon = document.getElementById('forecast-horizon')?.value || 60;
+      try {
+        const resp = await fetch('/api/wh/forecast?horizon_days=' + horizon, { credentials: 'include' });
+        if (!resp.ok) throw new Error('Chyba ' + resp.status);
+        _forecastData = await resp.json();
+        renderForecastStats();
+        renderForecastChart();
+        renderForecast();
+      } catch (e) {
+        console.error('Forecast error:', e);
+        document.getElementById('forecast-table').innerHTML = '<p style="color:#ef4444;padding:20px;">Chyba při načítání výhledu: ' + e.message + '</p>';
+      }
+    }
+
+    function renderForecastStats() {
+      if (!_forecastData) return;
+      const s = _forecastData.stats;
+      document.getElementById('forecast-stats').innerHTML =
+        '<div class="stat-card"><div class="stat-value">' + s.total_materials + '</div><div class="stat-label">Materiálů celkem</div></div>' +
+        '<div class="stat-card"><div class="stat-value" style="color:#ef4444">' + s.critical + '</div><div class="stat-label">🔴 Kritické</div></div>' +
+        '<div class="stat-card"><div class="stat-value" style="color:#f59e0b">' + s.warning + '</div><div class="stat-label">🟡 Varování</div></div>' +
+        '<div class="stat-card"><div class="stat-value" style="color:#22c55e">' + s.ok + '</div><div class="stat-label">🟢 V pořádku</div></div>' +
+        '<div class="stat-card"><div class="stat-value" style="color:#8b5cf6">' + s.needs_ordering + '</div><div class="stat-label">📦 K objednání teď</div></div>';
+    }
+
+    function renderForecastChart() {
+      if (!_forecastData) return;
+      // Načti Chart.js pokud ještě není
+      if (typeof Chart === 'undefined') {
+        var script = document.createElement('script');
+        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js';
+        script.onload = function() { _drawForecastChart(); };
+        document.head.appendChild(script);
+      } else {
+        _drawForecastChart();
+      }
+    }
+
+    function _drawForecastChart() {
+      if (!_forecastData) return;
+      const items = _forecastData.forecast.filter(f => f.status !== 'ok' || f.total_demand > 0).slice(0, 20);
+      if (items.length === 0) {
+        document.getElementById('forecast-chart-container').innerHTML = '<p style="color:var(--text2);text-align:center;padding:40px;">Žádné materiály s poptávkou v horizontu.</p>';
+        return;
+      }
+
+      const labels = items.map(i => i.code || i.name.substring(0, 15));
+      const stockData = items.map(i => i.current_stock);
+      const demandData = items.map(i => i.total_demand);
+      const supplyData = items.map(i => i.total_supply);
+      const minStockData = items.map(i => i.min_stock);
+
+      if (_forecastChart) _forecastChart.destroy();
+      const ctx = document.getElementById('forecast-chart');
+      if (!ctx) return;
+
+      _forecastChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [
+            { label: 'Aktuální zásoba', data: stockData, backgroundColor: 'rgba(34,197,94,0.7)', borderRadius: 4 },
+            { label: 'Plánovaná spotřeba', data: demandData, backgroundColor: 'rgba(239,68,68,0.7)', borderRadius: 4 },
+            { label: 'Očekávaný příjem', data: supplyData, backgroundColor: 'rgba(59,130,246,0.7)', borderRadius: 4 },
+            { label: 'Minimum', data: minStockData, type: 'line', borderColor: '#f59e0b', borderDash: [5,3], pointRadius: 3, borderWidth: 2, fill: false },
+          ],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { position: 'top', labels: { color: '#9ca3af', font: { size: 11 } } },
+            tooltip: { mode: 'index', intersect: false },
+          },
+          scales: {
+            x: { ticks: { color: '#9ca3af', font: { size: 10 } }, grid: { color: 'rgba(255,255,255,0.05)' } },
+            y: { ticks: { color: '#9ca3af' }, grid: { color: 'rgba(255,255,255,0.05)' }, beginAtZero: true },
+          },
+        },
+      });
+    }
+
+    function renderForecast() {
+      if (!_forecastData) return;
+      let items = _forecastData.forecast;
+
+      // Filtr stavu
+      const statusFilter = document.getElementById('forecast-status-filter')?.value;
+      if (statusFilter) items = items.filter(i => i.status === statusFilter);
+
+      // Filtr hledání
+      const search = (document.getElementById('forecast-search')?.value || '').toLowerCase();
+      if (search) items = items.filter(i => (i.name + ' ' + i.code + ' ' + (i.supplier || '')).toLowerCase().includes(search));
+
+      const statusColors = { critical: '#ef4444', warning: '#f59e0b', ok: '#22c55e' };
+      const statusIcons = { critical: '🔴', warning: '🟡', ok: '🟢' };
+
+      let html = '<table class="data-table"><thead><tr>' +
+        '<th>Stav</th><th>Kód</th><th>Materiál</th><th>Dodavatel</th>' +
+        '<th style="text-align:right">Zásoba</th><th style="text-align:right">Minimum</th>' +
+        '<th style="text-align:right">Poptávka</th><th style="text-align:right">Příjem</th>' +
+        '<th style="text-align:right">Projekce</th><th>Lead time</th>' +
+        '<th>Objednat do</th><th>Poznámka</th>' +
+        '</tr></thead><tbody>';
+
+      if (items.length === 0) {
+        html += '<tr><td colspan="12" style="text-align:center;color:var(--text2);padding:32px;">Žádné materiály v tomto filtru</td></tr>';
+      }
+
+      items.forEach(item => {
+        const projColor = item.projected_stock < 0 ? '#ef4444' : item.projected_stock <= item.min_stock ? '#f59e0b' : '#22c55e';
+        const orderDate = item.order_by_date ? new Date(item.order_by_date).toLocaleDateString('cs-CZ') : '—';
+        const isOverdue = item.order_by_date && new Date(item.order_by_date) <= new Date();
+        const demandDate = item.earliest_demand_date ? new Date(item.earliest_demand_date).toLocaleDateString('cs-CZ') : '';
+
+        // BOM info
+        const bomInfo = item.bom_usage.length > 0
+          ? item.bom_usage.map(b => b.product + ' (' + b.qty_per_unit + '/' + item.unit + ')').join(', ')
+          : '';
+
+        html += '<tr onclick="showForecastDetail(' + item.material_id + ')" style="cursor:pointer">' +
+          '<td><span title="' + item.status_label + '">' + statusIcons[item.status] + '</span></td>' +
+          '<td style="font-family:monospace;font-size:12px;color:var(--text2)">' + (item.code || '') + '</td>' +
+          '<td><strong>' + item.name + '</strong></td>' +
+          '<td style="font-size:12px">' + (item.supplier || '<span style="color:var(--text2)">—</span>') + '</td>' +
+          '<td style="text-align:right;font-weight:600">' + item.current_stock + ' ' + item.unit + '</td>' +
+          '<td style="text-align:right;color:var(--text2)">' + item.min_stock + '</td>' +
+          '<td style="text-align:right;color:#ef4444;font-weight:500">' + (item.total_demand > 0 ? '-' + item.total_demand : '0') + '</td>' +
+          '<td style="text-align:right;color:#3b82f6">' + (item.total_supply > 0 ? '+' + item.total_supply : '0') + '</td>' +
+          '<td style="text-align:right;font-weight:700;color:' + projColor + '">' + item.projected_stock.toFixed(1) + '</td>' +
+          '<td style="text-align:center">' + (item.lead_time_days > 0 ? item.lead_time_days + ' d' : '—') + '</td>' +
+          '<td style="font-weight:600;' + (isOverdue ? 'color:#ef4444' : '') + '">' + orderDate + (isOverdue ? ' ⚠️' : '') + '</td>' +
+          '<td style="font-size:11px;color:var(--text2);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + bomInfo + '">' +
+            (bomInfo || (demandDate ? 'Potřeba: ' + demandDate : '')) +
+          '</td>' +
+        '</tr>';
+      });
+
+      html += '</tbody></table>';
+      document.getElementById('forecast-table').innerHTML = html;
+    }
+
+    function showForecastDetail(materialId) {
+      if (!_forecastData) return;
+      const item = _forecastData.forecast.find(f => f.material_id === materialId);
+      if (!item) return;
+
+      const statusIcons = { critical: '🔴', warning: '🟡', ok: '🟢' };
+      let html = '<div class="modal-overlay" style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.6);z-index:9999;display:flex;align-items:center;justify-content:center;" id="forecast-detail-overlay">' +
+        '<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;width:560px;max-width:95vw;max-height:85vh;overflow-y:auto;">' +
+        '<div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;">' +
+          '<span style="font-size:20px">' + statusIcons[item.status] + '</span>' +
+          '<div style="flex:1"><strong style="font-size:15px">' + item.name + '</strong><br><span style="font-size:12px;color:var(--text2)">' + (item.code || '') + ' · ' + item.status_label + '</span></div>' +
+          '<button class="btn btn-sm" onclick="document.getElementById(\'forecast-detail-overlay\').remove()">✕</button>' +
+        '</div>' +
+        '<div style="padding:16px 20px;">';
+
+      // Přehled čísel
+      html += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px;">' +
+        '<div style="text-align:center;padding:10px;background:var(--bg);border-radius:8px;"><div style="font-size:20px;font-weight:700;color:#22c55e">' + item.current_stock + '</div><div style="font-size:11px;color:var(--text2)">Zásoba (' + item.unit + ')</div></div>' +
+        '<div style="text-align:center;padding:10px;background:var(--bg);border-radius:8px;"><div style="font-size:20px;font-weight:700;color:#ef4444">' + item.total_demand + '</div><div style="font-size:11px;color:var(--text2)">Poptávka</div></div>' +
+        '<div style="text-align:center;padding:10px;background:var(--bg);border-radius:8px;"><div style="font-size:20px;font-weight:700;color:#3b82f6">' + item.total_supply + '</div><div style="font-size:11px;color:var(--text2)">Příjem</div></div>' +
+      '</div>';
+
+      // Info
+      html += '<div style="font-size:13px;margin-bottom:12px;">' +
+        '<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border)"><span style="color:var(--text2)">Dodavatel</span><span>' + (item.supplier || '—') + '</span></div>' +
+        '<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border)"><span style="color:var(--text2)">Min. zásoba</span><span>' + item.min_stock + ' ' + item.unit + '</span></div>' +
+        '<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border)"><span style="color:var(--text2)">Lead time</span><span>' + (item.lead_time_days > 0 ? item.lead_time_days + ' dní' : '—') + '</span></div>' +
+        '<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border)"><span style="color:var(--text2)">Projekce zásoby</span><span style="font-weight:700;color:' + (item.projected_stock < 0 ? '#ef4444' : '#22c55e') + '">' + item.projected_stock.toFixed(1) + ' ' + item.unit + '</span></div>' +
+        '<div style="display:flex;justify-content:space-between;padding:4px 0;"><span style="color:var(--text2)">Objednat do</span><span style="font-weight:600">' + (item.order_by_date ? new Date(item.order_by_date).toLocaleDateString('cs-CZ') : '—') + '</span></div>' +
+      '</div>';
+
+      // Poptávka (demands)
+      if (item.demands.length > 0) {
+        html += '<h4 style="font-size:13px;color:#ef4444;margin:12px 0 6px;">📤 Poptávka</h4><table class="data-table" style="font-size:12px"><thead><tr><th>Zdroj</th><th style="text-align:right">Množství</th><th>Termín</th></tr></thead><tbody>';
+        item.demands.forEach(d => {
+          html += '<tr><td>' + d.source + '</td><td style="text-align:right">-' + d.qty + '</td><td>' + (d.date ? new Date(d.date).toLocaleDateString('cs-CZ') : '—') + '</td></tr>';
+        });
+        html += '</tbody></table>';
+      }
+
+      // Příjem (supplies)
+      if (item.supplies.length > 0) {
+        html += '<h4 style="font-size:13px;color:#3b82f6;margin:12px 0 6px;">📥 Očekávaný příjem</h4><table class="data-table" style="font-size:12px"><thead><tr><th>Zdroj</th><th style="text-align:right">Množství</th><th>Termín</th></tr></thead><tbody>';
+        item.supplies.forEach(s => {
+          html += '<tr><td>' + s.source + '</td><td style="text-align:right">+' + s.qty + '</td><td>' + (s.date ? new Date(s.date).toLocaleDateString('cs-CZ') : '—') + '</td></tr>';
+        });
+        html += '</tbody></table>';
+      }
+
+      // BOM vazby
+      if (item.bom_usage.length > 0) {
+        html += '<h4 style="font-size:13px;color:#8b5cf6;margin:12px 0 6px;">🔧 Používá se ve výrobě</h4><table class="data-table" style="font-size:12px"><thead><tr><th>Produkt</th><th>Kód</th><th style="text-align:right">Spotřeba/ks</th></tr></thead><tbody>';
+        item.bom_usage.forEach(b => {
+          html += '<tr><td>' + b.product + '</td><td style="font-family:monospace">' + b.product_code + '</td><td style="text-align:right">' + b.qty_per_unit + ' ' + item.unit + '</td></tr>';
+        });
+        html += '</tbody></table>';
+      }
+
+      html += '</div></div></div>';
+      document.getElementById('modal-root').innerHTML = html;
+
+      // Zavřít klikem na overlay
+      document.getElementById('forecast-detail-overlay').addEventListener('mousedown', function(e) {
+        if (e.target === this) this.remove();
+      });
     }
 
     // ============================================================
