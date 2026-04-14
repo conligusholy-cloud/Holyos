@@ -258,6 +258,7 @@
       </div>
       <div class="chat-suggestions" id="ai-chat-suggestions"></div>
       <div id="ai-chat-input-area">
+        <button id="ai-chat-save-task" title="Uložit jako požadavek" style="width:32px;height:32px;border-radius:50%;border:none;cursor:pointer;background:rgba(167,139,250,0.15);color:#a78bfa;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:16px;transition:background 0.2s;">📋</button>
         <textarea id="ai-chat-input" placeholder="Napiš zprávu... (Enter = odeslat)" rows="1"></textarea>
         <button id="ai-chat-send" title="Odeslat">
           <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
@@ -283,6 +284,8 @@
     document.getElementById('ai-btn-history').addEventListener('click', toggleHistory);
     document.getElementById('ai-btn-history-close').addEventListener('click', toggleHistory);
     document.getElementById('ai-btn-export').addEventListener('click', exportConversation);
+    const saveTaskBtn = document.getElementById('ai-chat-save-task');
+    if (saveTaskBtn) saveTaskBtn.addEventListener('click', saveAsTask);
 
     // Klávesové zkratky
     document.addEventListener('keydown', function(e) {
@@ -507,7 +510,7 @@
       }
     } catch (e) {
       typingEl.remove();
-      addMessage('assistant', 'Chyba připojení: ' + e.message);
+      addMessage('assistant', '⚠️ AI momentálně nedostupné. Můžete svůj požadavek uložit kliknutím na 📋 vedle textového pole.');
     }
 
     isLoading = false;
@@ -669,6 +672,60 @@
     a.download = `holyos-chat-${new Date().toISOString().split('T')[0]}.md`;
     a.click();
     URL.revokeObjectURL(url);
+  }
+
+  // --- Uložit konverzaci jako požadavek ---
+  async function saveAsTask() {
+    // Sebrat text z inputu (pokud není v historii) + celou historii
+    const input = document.getElementById('ai-chat-input');
+    const inputText = (input ? input.value.trim() : '');
+
+    const userMessages = history.filter(m => m.role === 'user').map(m => m.content);
+    // Přidat text z inputu pokud ještě nebyl odeslán
+    if (inputText && (userMessages.length === 0 || userMessages[userMessages.length - 1] !== inputText)) {
+      userMessages.push(inputText);
+    }
+
+    if (userMessages.length === 0) {
+      alert('Nejdřív napište svůj požadavek do textového pole.');
+      return;
+    }
+
+    const conversationLog = history.length > 0
+      ? history.map(m => (m.role === 'user' ? 'Uživatel: ' : 'AI: ') + m.content.replace(/<[^>]*>/g, '')).join('\n')
+      : 'Uživatel: ' + inputText;
+
+    const task = {
+      page: window.location.pathname,
+      page_title: document.title || currentModule,
+      description: userMessages.join('\n---\n'),
+      ai_questions: [],
+      ai_answers: { conversation: conversationLog },
+      priority: 'medium',
+    };
+
+    try {
+      const headers = { 'Content-Type': 'application/json' };
+      const t = sessionStorage.getItem('token');
+      if (t) headers['Authorization'] = 'Bearer ' + t;
+
+      const res = await fetch('/api/admin-tasks', {
+        method: 'POST',
+        credentials: 'include',
+        headers,
+        body: JSON.stringify(task),
+      });
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.error || 'Chyba serveru');
+
+      // Vyčistit input
+      if (input) { input.value = ''; input.style.height = 'auto'; }
+
+      addMessage('assistant', '✅ <strong>Požadavek #' + result.id + ' byl uložen!</strong><br>Najdete ho v sekci Super Admin → Požadavky.');
+      history.push({ role: 'assistant', content: 'Požadavek #' + result.id + ' uložen.' });
+    } catch (e) {
+      alert('Chyba při ukládání požadavku: ' + e.message);
+    }
   }
 
   // --- Veřejné API ---

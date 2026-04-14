@@ -6,6 +6,7 @@ const express = require('express');
 const router = express.Router();
 const { prisma } = require('../config/database');
 const { requireAuth } = require('../middleware/auth');
+const { logAudit, diffObjects, makeSnapshot } = require('../services/audit');
 
 router.use(requireAuth);
 
@@ -39,6 +40,7 @@ router.get('/companies', async (req, res, next) => {
 router.post('/companies', async (req, res, next) => {
   try {
     const company = await prisma.company.create({ data: req.body });
+    await logAudit({ action: 'create', entity: 'company', entity_id: company.id, description: `Vytvořena společnost: ${company.name}`, snapshot: makeSnapshot(company), user: req.user });
     res.status(201).json(company);
   } catch (err) {
     next(err);
@@ -48,10 +50,10 @@ router.post('/companies', async (req, res, next) => {
 // PUT /api/wh/companies/:id
 router.put('/companies/:id', async (req, res, next) => {
   try {
-    const company = await prisma.company.update({
-      where: { id: parseInt(req.params.id) },
-      data: req.body,
-    });
+    const before = await prisma.company.findUnique({ where: { id: parseInt(req.params.id) } });
+    const company = await prisma.company.update({ where: { id: parseInt(req.params.id) }, data: req.body });
+    const changes = diffObjects(before, company);
+    if (changes) await logAudit({ action: 'update', entity: 'company', entity_id: company.id, description: `Upravena společnost: ${company.name}`, changes, snapshot: makeSnapshot(before), user: req.user });
     res.json(company);
   } catch (err) {
     next(err);
@@ -61,10 +63,9 @@ router.put('/companies/:id', async (req, res, next) => {
 // DELETE /api/wh/companies/:id
 router.delete('/companies/:id', async (req, res, next) => {
   try {
-    await prisma.company.update({
-      where: { id: parseInt(req.params.id) },
-      data: { active: false },
-    });
+    const before = await prisma.company.findUnique({ where: { id: parseInt(req.params.id) } });
+    await prisma.company.update({ where: { id: parseInt(req.params.id) }, data: { active: false } });
+    await logAudit({ action: 'delete', entity: 'company', entity_id: parseInt(req.params.id), description: `Smazána společnost: ${before ? before.name : req.params.id}`, snapshot: makeSnapshot(before), user: req.user });
     res.json({ ok: true });
   } catch (err) {
     next(err);
@@ -131,6 +132,7 @@ router.get('/materials/:id', async (req, res, next) => {
 router.post('/materials', async (req, res, next) => {
   try {
     const material = await prisma.material.create({ data: req.body });
+    await logAudit({ action: 'create', entity: 'material', entity_id: material.id, description: `Vytvořen materiál: ${material.name}`, snapshot: makeSnapshot(material), user: req.user });
     res.status(201).json(material);
   } catch (err) {
     next(err);
@@ -140,10 +142,10 @@ router.post('/materials', async (req, res, next) => {
 // PUT /api/wh/materials/:id
 router.put('/materials/:id', async (req, res, next) => {
   try {
-    const material = await prisma.material.update({
-      where: { id: parseInt(req.params.id) },
-      data: req.body,
-    });
+    const before = await prisma.material.findUnique({ where: { id: parseInt(req.params.id) } });
+    const material = await prisma.material.update({ where: { id: parseInt(req.params.id) }, data: req.body });
+    const changes = diffObjects(before, material);
+    if (changes) await logAudit({ action: 'update', entity: 'material', entity_id: material.id, description: `Upraven materiál: ${material.name}`, changes, snapshot: makeSnapshot(before), user: req.user });
     res.json(material);
   } catch (err) {
     next(err);
@@ -153,10 +155,9 @@ router.put('/materials/:id', async (req, res, next) => {
 // DELETE /api/wh/materials/:id (soft delete)
 router.delete('/materials/:id', async (req, res, next) => {
   try {
-    await prisma.material.update({
-      where: { id: parseInt(req.params.id) },
-      data: { status: 'inactive' },
-    });
+    const before = await prisma.material.findUnique({ where: { id: parseInt(req.params.id) } });
+    await prisma.material.update({ where: { id: parseInt(req.params.id) }, data: { status: 'inactive' } });
+    await logAudit({ action: 'delete', entity: 'material', entity_id: parseInt(req.params.id), description: `Smazán materiál: ${before ? before.name : req.params.id}`, snapshot: makeSnapshot(before), user: req.user });
     res.json({ ok: true });
   } catch (err) {
     next(err);
@@ -343,10 +344,29 @@ router.get('/warehouses', async (req, res, next) => {
   }
 });
 
+// GET /api/wh/warehouses/:id — detail skladu s pozicemi a pracovišti
+router.get('/warehouses/:id', async (req, res, next) => {
+  try {
+    const wh = await prisma.warehouse.findUnique({
+      where: { id: parseInt(req.params.id) },
+      include: {
+        manager: { select: { id: true, first_name: true, last_name: true } },
+        locations: { orderBy: [{ section: 'asc' }, { rack: 'asc' }, { position: 'asc' }] },
+        workstations_input: { select: { id: true, name: true, code: true } },
+        workstations_output: { select: { id: true, name: true, code: true } },
+        _count: { select: { locations: true, movements: true } },
+      },
+    });
+    if (!wh) return res.status(404).json({ error: 'Sklad nenalezen' });
+    res.json(wh);
+  } catch (err) { next(err); }
+});
+
 // POST /api/wh/warehouses
 router.post('/warehouses', async (req, res, next) => {
   try {
     const wh = await prisma.warehouse.create({ data: req.body });
+    await logAudit({ action: 'create', entity: 'warehouse', entity_id: wh.id, description: `Vytvořen sklad: ${wh.name}`, snapshot: makeSnapshot(wh), user: req.user });
     res.status(201).json(wh);
   } catch (err) {
     next(err);
@@ -356,24 +376,60 @@ router.post('/warehouses', async (req, res, next) => {
 // PUT /api/wh/warehouses/:id
 router.put('/warehouses/:id', async (req, res, next) => {
   try {
-    const wh = await prisma.warehouse.update({
-      where: { id: parseInt(req.params.id) },
-      data: req.body,
-    });
+    const before = await prisma.warehouse.findUnique({ where: { id: parseInt(req.params.id) } });
+    const wh = await prisma.warehouse.update({ where: { id: parseInt(req.params.id) }, data: req.body });
+    const changes = diffObjects(before, wh);
+    if (changes) await logAudit({ action: 'update', entity: 'warehouse', entity_id: wh.id, description: `Upraven sklad: ${wh.name}`, changes, snapshot: makeSnapshot(before), user: req.user });
     res.json(wh);
   } catch (err) {
     next(err);
   }
 });
 
-// DELETE /api/wh/warehouses/:id (soft)
+// DELETE /api/wh/warehouses/:id — smaže sklad jen pokud nemá naskladněné zboží
 router.delete('/warehouses/:id', async (req, res, next) => {
   try {
-    await prisma.warehouse.update({
-      where: { id: parseInt(req.params.id) },
-      data: { active: false },
-    });
+    const id = parseInt(req.params.id);
+    const before = await prisma.warehouse.findUnique({ where: { id } });
+
+    // Zkontroluj, jestli sklad má pohyby (= naskladněné zboží)
+    const movementCount = await prisma.inventoryMovement.count({ where: { warehouse_id: id } });
+    if (movementCount > 0) {
+      return res.status(409).json({ error: 'Sklad nelze smazat — obsahuje naskladněné zboží (' + movementCount + ' pohybů)' });
+    }
+
+    // Smaž pozice a pak sklad
+    await prisma.warehouseLocation.deleteMany({ where: { warehouse_id: id } });
+    await prisma.warehouse.delete({ where: { id } });
+    await logAudit({ action: 'delete', entity: 'warehouse', entity_id: id, description: `Smazán sklad: ${before ? before.name : id}`, snapshot: makeSnapshot(before), user: req.user });
     res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// DELETE /api/wh/warehouses/bulk — hromadné smazání skladů
+router.delete('/warehouses-bulk', async (req, res, next) => {
+  try {
+    const { ids } = req.body;
+    if (!ids || !ids.length) return res.status(400).json({ error: 'Žádné sklady k smazání' });
+
+    const blocked = [];
+    const deleted = [];
+
+    for (const id of ids) {
+      const movementCount = await prisma.inventoryMovement.count({ where: { warehouse_id: id } });
+      if (movementCount > 0) {
+        const wh = await prisma.warehouse.findUnique({ where: { id }, select: { name: true } });
+        blocked.push({ id, name: wh?.name || id, movements: movementCount });
+      } else {
+        await prisma.warehouseLocation.deleteMany({ where: { warehouse_id: id } });
+        await prisma.warehouse.delete({ where: { id } });
+        deleted.push(id);
+      }
+    }
+
+    res.json({ deleted: deleted.length, blocked });
   } catch (err) {
     next(err);
   }
@@ -394,9 +450,45 @@ router.get('/warehouses/:id/locations', async (req, res, next) => {
   }
 });
 
+// POST /api/wh/warehouses/:id/locations/bulk — hromadné vytvoření pozic
+router.post('/warehouses/:id/locations/bulk', async (req, res, next) => {
+  try {
+    const warehouseId = parseInt(req.params.id);
+    const { section, racks, shelves } = req.body;
+    if (!section || !racks || !shelves) return res.status(400).json({ error: 'Chybí parametry (section, racks, shelves)' });
+
+    const data = [];
+    for (let r = 1; r <= racks; r++) {
+      for (let s = 1; s <= shelves; s++) {
+        const rackStr = String(r).padStart(2, '0');
+        const shelfStr = String(s).padStart(2, '0');
+        data.push({
+          warehouse_id: warehouseId,
+          section: section.toUpperCase(),
+          rack: 'R' + rackStr,
+          position: 'P' + shelfStr,
+          label: section.toUpperCase() + '-R' + rackStr + '-P' + shelfStr,
+        });
+      }
+    }
+
+    // Přeskoč duplicitní labely (unique constraint na label)
+    const result = await prisma.warehouseLocation.createMany({ data, skipDuplicates: true });
+    const skipped = data.length - result.count;
+    res.status(201).json({ created: result.count, total: data.length, skipped });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // POST /api/wh/warehouses/:id/locations
 router.post('/warehouses/:id/locations', async (req, res, next) => {
   try {
+    // Kontrola duplicitního labelu napříč všemi sklady
+    if (req.body.label) {
+      const existing = await prisma.warehouseLocation.findUnique({ where: { label: req.body.label } });
+      if (existing) return res.status(409).json({ error: 'Pozice s označením "' + req.body.label + '" již existuje' });
+    }
     const loc = await prisma.warehouseLocation.create({
       data: { warehouse_id: parseInt(req.params.id), ...req.body },
     });
@@ -419,10 +511,15 @@ router.put('/locations/:id', async (req, res, next) => {
   }
 });
 
-// DELETE /api/wh/locations/:id
+// DELETE /api/wh/locations/:id — smaže pozici jen pokud nemá naskladněné zboží
 router.delete('/locations/:id', async (req, res, next) => {
   try {
-    await prisma.warehouseLocation.delete({ where: { id: parseInt(req.params.id) } });
+    const id = parseInt(req.params.id);
+    const movementCount = await prisma.inventoryMovement.count({ where: { location_id: id } });
+    if (movementCount > 0) {
+      return res.status(409).json({ error: 'Pozici nelze smazat — obsahuje naskladněné zboží (' + movementCount + ' pohybů)' });
+    }
+    await prisma.warehouseLocation.delete({ where: { id } });
     res.json({ ok: true });
   } catch (err) {
     next(err);
@@ -633,6 +730,9 @@ router.post('/movements', async (req, res, next) => {
       data: { current_stock: { increment: delta } },
     });
 
+    const typeLabels = { receipt: 'Příjem', issue: 'Výdej', transfer: 'Transfer', adjustment: 'Korekce' };
+    await logAudit({ action: 'create', entity: 'movement', entity_id: movement.id, description: `${typeLabels[movement.type] || movement.type}: ${movement.quantity} ks (materiál #${movement.material_id}, sklad #${movement.warehouse_id})`, snapshot: makeSnapshot(movement), user: req.user });
+
     res.status(201).json(movement);
   } catch (err) {
     next(err);
@@ -669,7 +769,7 @@ router.get('/movements', async (req, res, next) => {
 // GET /api/wh/stats
 router.get('/stats', async (req, res, next) => {
   try {
-    const [totalMaterials, lowStock, totalCompanies, openOrders, totalValue] = await Promise.all([
+    const [totalMaterials, lowStock, totalCompanies, openOrders, totalValue, warehouseCount] = await Promise.all([
       prisma.material.count({ where: { status: 'active' } }),
       prisma.$queryRaw`
         SELECT COUNT(*)::int as count FROM materials
@@ -681,22 +781,86 @@ router.get('/stats', async (req, res, next) => {
         SELECT COALESCE(SUM(current_stock * COALESCE(unit_price, 0)), 0)::float as value
         FROM materials WHERE status = 'active'
       `,
+      prisma.warehouse.count({ where: { active: true } }),
     ]);
 
     res.json({
-      // camelCase pro frontend
       companyCount: totalCompanies,
       activeOrders: openOrders,
       totalMaterials: totalMaterials,
-      warehouseCount: 1, // Zatím 1 sklad — rozšířit po přidání modelu Warehouse
+      warehouseCount: warehouseCount,
       lowStock: Number(lowStock[0]?.count || 0),
       totalValue: Number(totalValue[0]?.value || 0),
-      // snake_case pro zpětnou kompatibilitu
       total_materials: totalMaterials,
       low_stock_count: Number(lowStock[0]?.count || 0),
       total_companies: totalCompanies,
       open_orders: openOrders,
     });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ─── SKLADOVÉ ZÁSOBY ──────────────────────────────────────────────────────
+
+// GET /api/wh/stock — zásoby zboží podle skladu a pozice
+router.get('/stock', async (req, res, next) => {
+  try {
+    const { warehouse_id, search } = req.query;
+
+    // Načti pohyby s relacemi
+    const where = {};
+    if (warehouse_id) where.warehouse_id = parseInt(warehouse_id);
+    if (search) {
+      where.material = {
+        OR: [
+          { name: { contains: search, mode: 'insensitive' } },
+          { code: { contains: search, mode: 'insensitive' } },
+        ],
+      };
+    }
+
+    const movements = await prisma.inventoryMovement.findMany({
+      where,
+      include: {
+        material: { select: { id: true, name: true, code: true, unit: true, unit_price: true } },
+        warehouse: { select: { id: true, name: true } },
+        location: { select: { id: true, label: true, section: true, rack: true, position: true } },
+      },
+    });
+
+    // Agreguj zásoby podle materiál + sklad + pozice
+    const stockMap = {};
+    for (const mv of movements) {
+      const key = mv.material_id + '-' + mv.warehouse_id + '-' + (mv.location_id || 0);
+      if (!stockMap[key]) {
+        stockMap[key] = {
+          material_id: mv.material.id,
+          material_name: mv.material.name,
+          material_code: mv.material.code,
+          unit: mv.material.unit,
+          unit_price: mv.material.unit_price ? parseFloat(mv.material.unit_price) : 0,
+          warehouse_id: mv.warehouse.id,
+          warehouse_name: mv.warehouse.name,
+          location_id: mv.location?.id || null,
+          location_label: mv.location?.label || null,
+          section: mv.location?.section || null,
+          rack: mv.location?.rack || null,
+          position: mv.location?.position || null,
+          qty: 0,
+        };
+      }
+      const delta = ['receipt', 'adjustment'].includes(mv.type)
+        ? parseFloat(mv.quantity)
+        : -parseFloat(mv.quantity);
+      stockMap[key].qty += delta;
+    }
+
+    // Vrať jen položky s kladnou zásobou
+    const stock = Object.values(stockMap).filter(s => s.qty > 0);
+    stock.sort((a, b) => (a.warehouse_name + (a.location_label || '')).localeCompare(b.warehouse_name + (b.location_label || '')));
+
+    res.json(stock);
   } catch (err) {
     next(err);
   }

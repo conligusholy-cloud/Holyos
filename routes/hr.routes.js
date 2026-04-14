@@ -6,6 +6,7 @@ const express = require('express');
 const router = express.Router();
 const { prisma } = require('../config/database');
 const { requireAuth } = require('../middleware/auth');
+const { logAudit, diffObjects, makeSnapshot } = require('../services/audit');
 
 // Všechny HR routy vyžadují autentizaci
 router.use(requireAuth);
@@ -20,7 +21,7 @@ router.get('/people', async (req, res, next) => {
     const where = {};
     if (type) where.type = type;
     if (department_id) where.department_id = parseInt(department_id);
-    if (active !== undefined) where.active = active === 'true';
+    if (active !== undefined) where.active = active === 'true' || active === '1';
     if (search) {
       where.OR = [
         { first_name: { contains: search, mode: 'insensitive' } },
@@ -36,6 +37,7 @@ router.get('/people', async (req, res, next) => {
         department: true,
         role: true,
         shift: true,
+        company: true,
         supervisor: { select: { id: true, first_name: true, last_name: true } },
       },
       orderBy: { last_name: 'asc' },
@@ -56,6 +58,7 @@ router.get('/people/:id', async (req, res, next) => {
         department: true,
         role: true,
         shift: true,
+        company: true,
         supervisor: { select: { id: true, first_name: true, last_name: true } },
         subordinates: { select: { id: true, first_name: true, last_name: true } },
         documents: { orderBy: { created_at: 'desc' } },
@@ -69,12 +72,70 @@ router.get('/people/:id', async (req, res, next) => {
   }
 });
 
+// Sanitizace dat pro Person model — jen povolená pole se správnými typy
+// currentUser = req.user (volitelný) — pro kontrolu oprávnění
+function sanitizePersonData(body, currentUser) {
+  const data = {};
+  // String pole
+  const strFields = ['type', 'first_name', 'last_name', 'email', 'phone', 'notes',
+    'employee_number', 'contract_type', 'birth_number', 'id_card_number', 'gender',
+    'address', 'city', 'zip', 'bank_account', 'emergency_name', 'emergency_phone',
+    'emergency_relation', 'photo_url', 'chip_number', 'chip_card_id', 'username'];
+  for (const f of strFields) {
+    if (f in body) data[f] = body[f] || null;
+  }
+  // Datum pole
+  const dateFields = ['hire_date', 'end_date', 'birth_date'];
+  for (const f of dateFields) {
+    if (f in body) data[f] = body[f] ? new Date(body[f]) : null;
+  }
+  // Integer FK pole
+  const intFields = ['department_id', 'role_id', 'supervisor_id', 'shift_id', 'user_id', 'company_id', 'leave_entitlement_days', 'leave_carryover'];
+  for (const f of intFields) {
+    if (f in body) data[f] = body[f] ? parseInt(body[f]) : null;
+  }
+  // Decimal pole
+  const decFields = ['hourly_rate', 'monthly_salary'];
+  for (const f of decFields) {
+    if (f in body) data[f] = body[f] ? parseFloat(body[f]) : null;
+  }
+  // Boolean pole
+  if ('active' in body) data.active = !!body.active && body.active !== 'false' && body.active !== '0';
+  // is_super_admin může měnit jen admin nebo super admin
+  const isAdmin = currentUser && (currentUser.role === 'admin' || currentUser.isSuperAdmin);
+  if ('is_super_admin' in body && isAdmin) {
+    data.is_super_admin = !!body.is_super_admin && body.is_super_admin !== 'false' && body.is_super_admin !== '0';
+  }
+  return data;
+}
+
+// Sanitizace dat pro Role (whitelist povolených polí)
+function sanitizeRoleData(body) {
+  const data = {};
+  // String pole
+  const strFields = ['name', 'description'];
+  for (const f of strFields) {
+    if (f in body) data[f] = body[f] || null;
+  }
+  // Integer FK pole
+  const intFields = ['department_id', 'company_id', 'parent_role_id'];
+  for (const f of intFields) {
+    if (f in body) data[f] = body[f] ? parseInt(body[f]) : null;
+  }
+  return data;
+}
+
 // POST /api/hr/people
 router.post('/people', async (req, res, next) => {
   try {
     const person = await prisma.person.create({
-      data: req.body,
-      include: { department: true, role: true },
+      data: sanitizePersonData(req.body, req.user),
+      include: { department: true, role: true, company: true },
+    });
+    await logAudit({
+      action: 'create', entity: 'person', entity_id: person.id,
+      description: `Vytvořena osoba: ${person.first_name} ${person.last_name}`,
+      snapshot: makeSnapshot(person), user: req.user,
     });
     res.status(201).json(person);
   } catch (err) {
@@ -85,11 +146,20 @@ router.post('/people', async (req, res, next) => {
 // PUT /api/hr/people/:id
 router.put('/people/:id', async (req, res, next) => {
   try {
+    const before = await prisma.person.findUnique({ where: { id: parseInt(req.params.id) } });
     const person = await prisma.person.update({
       where: { id: parseInt(req.params.id) },
-      data: req.body,
-      include: { department: true, role: true },
+      data: sanitizePersonData(req.body, req.user),
+      include: { department: true, role: true, company: true },
     });
+    const changes = diffObjects(before, person);
+    if (changes) {
+      await logAudit({
+        action: 'update', entity: 'person', entity_id: person.id,
+        description: `Upravena osoba: ${person.first_name} ${person.last_name}`,
+        changes, snapshot: makeSnapshot(before), user: req.user,
+      });
+    }
     res.json(person);
   } catch (err) {
     next(err);
@@ -99,9 +169,15 @@ router.put('/people/:id', async (req, res, next) => {
 // DELETE /api/hr/people/:id (soft delete)
 router.delete('/people/:id', async (req, res, next) => {
   try {
+    const before = await prisma.person.findUnique({ where: { id: parseInt(req.params.id) } });
     await prisma.person.update({
       where: { id: parseInt(req.params.id) },
       data: { active: false },
+    });
+    await logAudit({
+      action: 'delete', entity: 'person', entity_id: parseInt(req.params.id),
+      description: `Smazána osoba: ${before ? before.first_name + ' ' + before.last_name : req.params.id}`,
+      snapshot: makeSnapshot(before), user: req.user,
     });
     res.json({ ok: true });
   } catch (err) {
@@ -131,6 +207,11 @@ router.get('/departments', async (req, res, next) => {
 router.post('/departments', async (req, res, next) => {
   try {
     const dept = await prisma.department.create({ data: req.body });
+    await logAudit({
+      action: 'create', entity: 'department', entity_id: dept.id,
+      description: `Vytvořeno oddělení: ${dept.name}`,
+      snapshot: makeSnapshot(dept), user: req.user,
+    });
     res.status(201).json(dept);
   } catch (err) {
     next(err);
@@ -140,10 +221,19 @@ router.post('/departments', async (req, res, next) => {
 // PUT /api/hr/departments/:id
 router.put('/departments/:id', async (req, res, next) => {
   try {
+    const before = await prisma.department.findUnique({ where: { id: parseInt(req.params.id) } });
     const dept = await prisma.department.update({
       where: { id: parseInt(req.params.id) },
       data: req.body,
     });
+    const changes = diffObjects(before, dept);
+    if (changes) {
+      await logAudit({
+        action: 'update', entity: 'department', entity_id: dept.id,
+        description: `Upraveno oddělení: ${dept.name}`,
+        changes, snapshot: makeSnapshot(before), user: req.user,
+      });
+    }
     res.json(dept);
   } catch (err) {
     next(err);
@@ -153,7 +243,13 @@ router.put('/departments/:id', async (req, res, next) => {
 // DELETE /api/hr/departments/:id
 router.delete('/departments/:id', async (req, res, next) => {
   try {
+    const before = await prisma.department.findUnique({ where: { id: parseInt(req.params.id) } });
     await prisma.department.delete({ where: { id: parseInt(req.params.id) } });
+    await logAudit({
+      action: 'delete', entity: 'department', entity_id: parseInt(req.params.id),
+      description: `Smazáno oddělení: ${before ? before.name : req.params.id}`,
+      snapshot: makeSnapshot(before), user: req.user,
+    });
     res.json({ ok: true });
   } catch (err) {
     next(err);
@@ -168,6 +264,7 @@ router.get('/roles', async (req, res, next) => {
     const roles = await prisma.role.findMany({
       include: {
         department: { select: { id: true, name: true } },
+        company: { select: { id: true, name: true } },
         _count: { select: { people: true } },
       },
       orderBy: { name: 'asc' },
@@ -181,7 +278,13 @@ router.get('/roles', async (req, res, next) => {
 // POST /api/hr/roles
 router.post('/roles', async (req, res, next) => {
   try {
-    const role = await prisma.role.create({ data: req.body });
+    const data = sanitizeRoleData(req.body);
+    const role = await prisma.role.create({ data });
+    await logAudit({
+      action: 'create', entity: 'role', entity_id: role.id,
+      description: `Vytvořena role: ${role.name}`,
+      snapshot: makeSnapshot(role), user: req.user,
+    });
     res.status(201).json(role);
   } catch (err) {
     next(err);
@@ -191,10 +294,20 @@ router.post('/roles', async (req, res, next) => {
 // PUT /api/hr/roles/:id
 router.put('/roles/:id', async (req, res, next) => {
   try {
+    const before = await prisma.role.findUnique({ where: { id: parseInt(req.params.id) } });
+    const data = sanitizeRoleData(req.body);
     const role = await prisma.role.update({
       where: { id: parseInt(req.params.id) },
-      data: req.body,
+      data,
     });
+    const changes = diffObjects(before, role);
+    if (changes) {
+      await logAudit({
+        action: 'update', entity: 'role', entity_id: role.id,
+        description: `Upravena role: ${role.name}`,
+        changes, snapshot: makeSnapshot(before), user: req.user,
+      });
+    }
     res.json(role);
   } catch (err) {
     next(err);
@@ -204,7 +317,13 @@ router.put('/roles/:id', async (req, res, next) => {
 // DELETE /api/hr/roles/:id
 router.delete('/roles/:id', async (req, res, next) => {
   try {
+    const before = await prisma.role.findUnique({ where: { id: parseInt(req.params.id) } });
     await prisma.role.delete({ where: { id: parseInt(req.params.id) } });
+    await logAudit({
+      action: 'delete', entity: 'role', entity_id: parseInt(req.params.id),
+      description: `Smazána role: ${before ? before.name : req.params.id}`,
+      snapshot: makeSnapshot(before), user: req.user,
+    });
     res.json({ ok: true });
   } catch (err) {
     next(err);

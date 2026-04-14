@@ -107,6 +107,7 @@ router.post('/:id/rollback', requireAdmin, async (req, res, next) => {
       leave_request: 'leaveRequest',
       company: 'company',
       material: 'material',
+      warehouse: 'warehouse',
       order: 'order',
       document: 'document',
     };

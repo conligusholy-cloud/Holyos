@@ -665,6 +665,18 @@
     let people = [];
     let departments = [];
     let roles = [];
+    let currentUser = null; // přihlášený uživatel (pro kontrolu admin práv)
+
+    // Načti info o přihlášeném uživateli
+    (async function() {
+      try {
+        const headers = {};
+        const t = sessionStorage.getItem('token');
+        if (t) headers['Authorization'] = 'Bearer ' + t;
+        const res = await fetch('/api/auth/me', { credentials: 'include', headers });
+        if (res.ok) currentUser = (await res.json()).user || await res.json();
+      } catch(e) {}
+    })();
 
     // ============================================================
     // TAB SWITCHING
@@ -773,9 +785,17 @@
         for (const s of shifts) shiftOptions += `<option value="${s.id}" ${p.shift_id == s.id ? 'selected' : ''}>${s.name}</option>`;
       } catch (e) {}
 
+      // Load companies for company_id dropdown
+      let companyOptions = '<option value="">— Bez společnosti —</option>';
+      try {
+        const res = await fetch('/api/wh/companies');
+        const companies = await res.json();
+        for (const c of companies) companyOptions += `<option value="${c.id}" ${p.company_id == c.id ? 'selected' : ''}>${c.name}</option>`;
+      } catch (e) {}
+
 
       const showEmp = (p.type || 'employee') === 'employee';
-      const html = `<div class="modal-overlay" onclick="if(event.target===this)closeModal()">
+      const html = `<div class="modal-overlay">
         <div class="modal">
           <h2>${isEdit ? '✏️ Upravit osobu' : '➕ Nová osoba'}</h2>
           <form id="person-form" onsubmit="savePerson(event, ${id || 'null'})">
@@ -846,6 +866,10 @@
                 </div>
                 <div class="form-group">
                   <label>Společnost</label>
+                  <select name="company_id">${companyOptions}</select>
+                </div>
+                <div class="form-group">
+                  <label>Oddělení</label>
                   <select name="department_id">${deptOptions}</select>
                 </div>
                 <div class="form-group">
@@ -950,14 +974,14 @@
               </div>
             </div>
 
-            <div id="admin-fields" style="${showEmp ? '' : 'display:none'}">
+            ${(currentUser && (currentUser.role === 'admin' || currentUser.isSuperAdmin)) ? `<div id="admin-fields" style="${showEmp ? '' : 'display:none'}">
               <div class="form-grid" style="margin-top:12px;">
                 <div class="form-group" style="display:flex;align-items:center;gap:10px;padding-top:8px;">
                   <input type="checkbox" name="is_super_admin" id="chk-super-admin" value="1" ${p.is_super_admin ? 'checked' : ''} style="width:18px;height:18px;accent-color:var(--primary);cursor:pointer;">
                   <label for="chk-super-admin" style="cursor:pointer;margin:0;">Super Admin</label>
                 </div>
               </div>
-            </div>
+            </div>` : ''}
 
             <div id="account-section" style="${showEmp ? '' : 'display:none'}">
               <div style="font-size:12px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px;margin:20px 0 10px;padding-top:16px;border-top:1px solid var(--border);">Přihlašovací údaje</div>
@@ -1232,7 +1256,7 @@
       }
       const today = new Date().toISOString().split('T')[0];
 
-      document.getElementById('modal-root').innerHTML = `<div class="modal-overlay" onclick="if(event.target===this)closeModal()">
+      document.getElementById('modal-root').innerHTML = `<div class="modal-overlay">
         <div class="modal">
           <h2>➕ Záznam docházky</h2>
           <form onsubmit="saveAttendance(event)">
@@ -1401,7 +1425,7 @@
           shift = shifts.find(s => s.id === editId) || shift;
         } catch (e) {}
       }
-      document.getElementById('modal-root').innerHTML = `<div class="modal-overlay" onclick="if(event.target===this)closeModal()">
+      document.getElementById('modal-root').innerHTML = `<div class="modal-overlay">
         <div class="modal">
           <h2>${editId ? '✏️ Upravit směnu' : '➕ Nová směna'}</h2>
           <form onsubmit="saveShift(event, ${editId || 0})">
@@ -1515,7 +1539,7 @@
           at = types.find(t => t.id === editId) || at;
         } catch (e) {}
       }
-      document.getElementById('modal-root').innerHTML = `<div class="modal-overlay" onclick="if(event.target===this)closeModal()">
+      document.getElementById('modal-root').innerHTML = `<div class="modal-overlay">
         <div class="modal">
           <h2>${editId ? '✏️ Upravit typ' : '➕ Nový typ nepřítomnosti'}</h2>
           <form onsubmit="saveAbsenceType(event, ${editId || 0})">
@@ -1630,7 +1654,7 @@
       } catch (e) {}
 
       const today = new Date().toISOString().split('T')[0];
-      document.getElementById('modal-root').innerHTML = `<div class="modal-overlay" onclick="if(event.target===this)closeModal()">
+      document.getElementById('modal-root').innerHTML = `<div class="modal-overlay">
         <div class="modal">
           <h2>➕ Nová žádost o volno</h2>
           <form onsubmit="saveLeaveRequest(event)">
@@ -1937,12 +1961,24 @@
 
       function renderCard(role) {
         const dept = role.department_id ? departments.find(d => d.id === role.department_id) : null;
+        const company = role.company || null;
         const bgColor = dept ? dept.color : '#6c5ce7';
         const totalSubs = countSubs(role);
 
+        let subLine = '';
+        if (company || dept) {
+          const parts = [];
+          if (company) parts.push(company.name);
+          if (dept) parts.push(dept.name);
+          subLine = `<div style="font-size:10px;color:var(--text2);font-weight:400;margin-top:1px;">${parts.join(' · ')}</div>`;
+        }
+
         let html = `<div class="org-card">
           <div class="org-card-header" style="background:${bgColor}33;">
-            <span>${role.name}</span>
+            <div style="display:flex;flex-direction:column;">
+              <span>${role.name}</span>
+              ${subLine}
+            </div>
             <div style="display:flex;align-items:center;gap:6px;">
               <span class="org-card-badge">👥 ${totalSubs}</span>
               <div class="org-card-header-actions">
@@ -2046,7 +2082,7 @@
         parentOptions += `<option value="${d.id}" ${dept.parent_id == d.id ? 'selected' : ''}>${d.name}</option>`;
       }
 
-      document.getElementById('modal-root').innerHTML = `<div class="modal-overlay" onclick="if(event.target===this)closeModal()">
+      document.getElementById('modal-root').innerHTML = `<div class="modal-overlay">
         <div class="modal">
           <h2>${id ? '✏️ Upravit společnost' : '➕ Nová společnost'}</h2>
           <form onsubmit="saveDept(event, ${id || 'null'})">
@@ -2127,8 +2163,15 @@
       const role = id ? roles.find(r => r.id === id) : {};
       const rolePerms = id ? (allPermissions[String(id)] || {}) : {};
 
-      let deptOptions = '<option value="">— Bez společnosti —</option>';
+      let deptOptions = '<option value="">— Bez oddělení —</option>';
       for (const d of departments) deptOptions += `<option value="${d.id}" ${role.department_id == d.id ? 'selected' : ''}>${d.name}</option>`;
+
+      let companyOptions = '<option value="">— Bez společnosti —</option>';
+      try {
+        const res = await fetch('/api/wh/companies');
+        const companies = await res.json();
+        for (const c of companies) companyOptions += `<option value="${c.id}" ${role.company_id == c.id ? 'selected' : ''}>${c.name}</option>`;
+      } catch (e) {}
 
       let parentRoleOptions = '<option value="">— Bez nadřazené role —</option>';
       for (const r of roles.filter(r => r.id !== id)) {
@@ -2150,13 +2193,14 @@
         </tr>`;
       }
 
-      document.getElementById('modal-root').innerHTML = `<div class="modal-overlay" onclick="if(event.target===this)closeModal()">
+      document.getElementById('modal-root').innerHTML = `<div class="modal-overlay">
         <div class="modal" style="max-width:520px;">
           <h2>${id ? '✏️ Upravit roli' : '➕ Nová role'}</h2>
           <form onsubmit="saveRole(event, ${id || 'null'})">
             <div class="form-grid">
               <div class="form-group"><label>Název role *</label><input type="text" name="name" value="${role.name || ''}" required></div>
-              <div class="form-group"><label>Společnost</label><select name="department_id">${deptOptions}</select></div>
+              <div class="form-group"><label>Oddělení</label><select name="department_id">${deptOptions}</select></div>
+              <div class="form-group"><label>Společnost</label><select name="company_id">${companyOptions}</select></div>
               <div class="form-group"><label>Nadřazená role</label><select name="parent_role_id">${parentRoleOptions}</select></div>
               <div class="form-group full"><label>Popis</label><textarea name="description">${role.description || ''}</textarea></div>
             </div>
@@ -2182,6 +2226,7 @@
       const data = {
         name: form.get('name'),
         department_id: form.get('department_id') || null,
+        company_id: form.get('company_id') || null,
         parent_role_id: form.get('parent_role_id') ? parseInt(form.get('parent_role_id')) : null,
         description: form.get('description')
       };
@@ -2470,7 +2515,7 @@
         '<input type="checkbox" name="exclude_' + p.id + '" value="' + p.id + '"> ' + p.first_name + ' ' + p.last_name + '</label>'
       ).join('');
 
-      document.getElementById('modal-root').innerHTML = `<div class="modal-overlay" onclick="if(event.target===this)closeModal()">
+      document.getElementById('modal-root').innerHTML = `<div class="modal-overlay">
         <div class="modal" style="max-width:520px;">
           <h2>➕ Nová celozávodní dovolená</h2>
           <form onsubmit="saveCompanyLeave(event)">
@@ -2677,7 +2722,7 @@
         '<option value="' + k + '"' + (doc.category === k ? ' selected' : '') + '>' + v + '</option>'
       ).join('');
 
-      document.getElementById('modal-root').innerHTML = '<div class="modal-overlay" onclick="if(event.target===this)closeModal()">' +
+      document.getElementById('modal-root').innerHTML = '<div class="modal-overlay">' +
         '<div class="modal" style="max-width:600px;">' +
           '<h2>' + (id ? '✏️ Upravit dokument' : '➕ Nový dokument') + '</h2>' +
           '<form onsubmit="saveDocument(event, ' + (id || 'null') + ')">' +
@@ -2794,7 +2839,7 @@
 
       const availableVars = 'jmeno, prijmeni, cele_jmeno, email, telefon, osobni_cislo, datum_nastupu, typ_smlouvy, pozice, oddeleni, hodinova_sazba, mesicni_mzda, datum, rok';
 
-      document.getElementById('modal-root').innerHTML = '<div class="modal-overlay" onclick="if(event.target===this)closeModal()">' +
+      document.getElementById('modal-root').innerHTML = '<div class="modal-overlay">' +
         '<div class="modal" style="max-width:700px;">' +
           '<h2>' + (id ? '✏️ Upravit šablonu' : '➕ Nová šablona') + '</h2>' +
           '<form onsubmit="saveTemplate(event, ' + (id || 'null') + ')">' +
@@ -2986,6 +3031,20 @@
     function closeModal() {
       document.getElementById('modal-root').innerHTML = '';
     }
+
+    // Bezpečné zavírání modalu — vyžaduje mousedown I mouseup na overlay
+    // (řeší problém kdy select dropdown propaguje click na overlay)
+    let _overlayMouseDownTarget = null;
+    document.getElementById('modal-root').addEventListener('mousedown', function(e) {
+      _overlayMouseDownTarget = e.target;
+    });
+    document.getElementById('modal-root').addEventListener('mouseup', function(e) {
+      if (_overlayMouseDownTarget && _overlayMouseDownTarget === e.target &&
+          _overlayMouseDownTarget.classList.contains('modal-overlay')) {
+        closeModal();
+      }
+      _overlayMouseDownTarget = null;
+    });
 
     // Populate attendance person filter
     async function populateAttendanceFilter() {

@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sklady | HOLYOS</title>
+  <link rel="icon" type="image/svg+xml" href="../../logo-holyos-icon.svg">
+  <base href="../../">
+  <link rel="stylesheet" href="css/dashboard.css">
+  <style>
+    .main-wrapper { margin-left: var(--sidebar-w); flex: 1; min-height: 100vh; display: flex; flex-direction: column; }
+    .page-header {
+      display:flex; align-items:center; gap:12px; padding:20px 24px;
+      border-bottom:1px solid var(--border); flex-wrap:wrap;
+    }
+    .page-header h1 { font-size:18px; font-weight:700; margin:0; }
+    .page-header .count { font-size:13px; color:var(--text2); margin-left:4px; }
+    .search-box {
+      margin-left:auto; padding:8px 14px; background:var(--surface2); color:var(--text);
+      border:1px solid var(--border); border-radius:8px; font-size:13px; width:240px;
+    }
+    .search-box:focus { border-color:var(--accent); outline:none; }
+
+    .content { padding:0 24px 24px; }
+    .toolbar { display:flex; gap:12px; margin:16px 0; align-items:center; flex-wrap:wrap; }
+
+    .btn { padding:8px 18px; border-radius:8px; border:1px solid var(--border); font-size:13px; font-weight:500; cursor:pointer; transition:all 0.15s; display:inline-flex; align-items:center; gap:6px; }
+    .btn-primary { background:#f59e0b; color:#000; border-color:#f59e0b; }
+    .btn-primary:hover { background:#d97706; }
+    .btn-secondary { background:var(--surface2); color:var(--text); }
+    .btn-secondary:hover { background:var(--border); }
+    .btn-danger { background:rgba(239,68,68,0.15); color:#ef4444; border-color:rgba(239,68,68,0.3); }
+    .btn-danger:hover { background:rgba(239,68,68,0.25); }
+    .btn-sm { padding:5px 12px; font-size:12px; }
+
+    .data-table { width:100%; border-collapse:separate; border-spacing:0; }
+    .data-table thead { position:sticky; top:0; z-index:1; }
+    .data-table th { background:var(--surface2); padding:10px 14px; text-align:left; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; color:var(--text2); border-bottom:1px solid var(--border); }
+    .data-table td { padding:10px 14px; font-size:13px; border-bottom:1px solid rgba(255,255,255,0.04); vertical-align:middle; }
+    .data-table tr:hover td { background:rgba(245,158,11,0.06); }
+    .badge { display:inline-block; padding:2px 8px; border-radius:10px; font-size:11px; font-weight:500; }
+
+    .modal-overlay { position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.6); z-index:200; display:flex; align-items:center; justify-content:center; }
+    .modal { background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:28px; width:640px; max-width:95vw; max-height:90vh; overflow-y:auto; }
+    .modal h2 { font-size:18px; margin-bottom:20px; }
+    .modal-actions { display:flex; gap:10px; justify-content:flex-end; margin-top:24px; }
+
+    .form-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+    .form-group { display:flex; flex-direction:column; gap:4px; }
+    .form-group.full { grid-column:1 / -1; }
+    .form-group label { font-size:12px; font-weight:500; color:var(--text2); }
+    .form-group input, .form-group select, .form-group textarea { background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:8px 12px; color:var(--text); font-size:13px; font-family:inherit; }
+
+    .empty-state { text-align:center; padding:60px 20px; color:var(--text2); }
+    .empty-state .empty-icon { font-size:48px; margin-bottom:12px; }
+    .empty-state h3 { font-size:16px; color:var(--text); margin-bottom:6px; }
+  </style>
+</head>
+<body>
+  <div id="sidebar"></div>
+  <div class="main-wrapper">
+    <div class="page-header">
+      <span style="font-size:28px;">🏭</span>
+      <div>
+        <h1>Sklady <span class="count" id="wh-count"></span></h1>
+      </div>
+      <input type="text" class="search-box" id="wh-search" placeholder="Hledat sklad..." oninput="filterWarehouses()">
+      <button class="btn btn-primary" onclick="openWarehouseModal()">+ Nový sklad</button>
+    </div>
+
+    <div class="content">
+      <div class="toolbar">
+        <button class="btn btn-sm btn-danger" id="bulk-delete-btn" onclick="bulkDeleteWarehouses()" style="display:none;">🗑️ Smazat vybrané</button>
+        <span id="wh-selection-info" style="font-size:12px;color:var(--text2);display:none;"></span>
+      </div>
+      <div id="warehouses-table"></div>
+    </div>
+  </div>
+  <div id="modal-root"></div>
+
+  <script src="js/sidebar.js"></script>
+  <script>
+    renderSidebar('sklady');
+
+    const WH_TYPES = { main: 'Hlavní', raw: 'Suroviny', finished: 'Hotové výrobky', wip: 'Rozpracovaná výroba', tools: 'Nářadí', consumables: 'Spotřební', external: 'Externí' };
+    let warehouses = [];
+
+    // ─── NAČTENÍ DAT ────────────────────────────────────────────────────────
+    async function loadWarehouses() {
+      try {
+        const r = await fetch('/api/wh/warehouses');
+        warehouses = await r.json();
+        renderWarehouses(warehouses);
+      } catch(e) { console.error(e); }
+    }
+
+    function filterWarehouses() {
+      const q = document.getElementById('wh-search').value.toLowerCase();
+      const filtered = warehouses.filter(w => w.name.toLowerCase().includes(q) || (w.code||'').toLowerCase().includes(q));
+      renderWarehouses(filtered);
+    }
+
+    function renderWarehouses(list) {
+      document.getElementById('wh-count').textContent = '(' + list.length + ')';
+      const el = document.getElementById('warehouses-table');
+      if (!list.length) { el.innerHTML = '<div class="empty-state"><div class="empty-icon">🏭</div><h3>Žádné sklady</h3><p>Vytvořte první sklad.</p></div>'; return; }
+
+      let html = '<table class="data-table"><thead><tr>' +
+        '<th style="width:40px;"><input type="checkbox" id="wh-select-all" onchange="toggleAllWarehouses(this.checked)"></th>' +
+        '<th>Název</th><th>Kód</th><th>Typ</th><th>Adresa</th><th>Pozic</th><th style="width:100px;">Akce</th>' +
+      '</tr></thead><tbody>';
+      for (const w of list) {
+        const typeLabel = WH_TYPES[w.type] || w.type;
+        html += '<tr style="cursor:pointer;" onclick="openWarehouseModal(' + w.id + ')">';
+        html += '<td onclick="event.stopPropagation()"><input type="checkbox" class="wh-checkbox" value="' + w.id + '" onchange="updateWhSelection()"></td>';
+        html += '<td style="font-weight:600;">' + w.name + '</td>';
+        html += '<td style="font-family:monospace;font-size:12px;color:var(--text2);">' + (w.code || '—') + '</td>';
+        html += '<td><span class="badge" style="background:#f59e0b22;color:#f59e0b;">' + typeLabel + '</span></td>';
+        html += '<td style="font-size:12px;color:var(--text2);">' + (w.address || '—') + '</td>';
+        html += '<td>' + (w.locations_count || 0) + '</td>';
+        html += '<td onclick="event.stopPropagation()">' +
+          '<button class="btn btn-sm btn-secondary" onclick="openWarehouseModal(' + w.id + ')" style="margin-right:4px;">✏️</button>' +
+          '<button class="btn btn-sm btn-danger" onclick="deleteWarehouse(' + w.id + ')">🗑️</button>' +
+        '</td>';
+        html += '</tr>';
+      }
+      html += '</tbody></table>';
+      el.innerHTML = html;
+    }
+
+    // ─── VÝBĚR & HROMADNÉ MAZÁNÍ ────────────────────────────────────────────
+    function toggleAllWarehouses(checked) {
+      document.querySelectorAll('.wh-checkbox').forEach(cb => cb.checked = checked);
+      updateWhSelection();
+    }
+
+    function updateWhSelection() {
+      const checked = document.querySelectorAll('.wh-checkbox:checked');
+      const btn = document.getElementById('bulk-delete-btn');
+      const info = document.getElementById('wh-selection-info');
+      if (checked.length > 0) {
+        btn.style.display = '';
+        info.style.display = '';
+        info.textContent = 'Vybráno: ' + checked.length;
+      } else {
+        btn.style.display = 'none';
+        info.style.display = 'none';
+      }
+      const all = document.querySelectorAll('.wh-checkbox');
+      document.getElementById('wh-select-all').checked = all.length > 0 && checked.length === all.length;
+    }
+
+    async function bulkDeleteWarehouses() {
+      const ids = Array.from(document.querySelectorAll('.wh-checkbox:checked')).map(cb => parseInt(cb.value));
+      if (!ids.length) return;
+      if (!confirm('Smazat ' + ids.length + ' vybraných skladů?\n\nSklady s naskladněným zbožím budou přeskočeny.')) return;
+      try {
+        const resp = await fetch('/api/wh/warehouses-bulk', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids }) });
+        const result = await resp.json();
+        let msg = 'Smazáno: ' + result.deleted + ' skladů';
+        if (result.blocked && result.blocked.length > 0) {
+          msg += '\n\nNelze smazat (obsahují zboží):\n' + result.blocked.map(b => '• ' + b.name + ' (' + b.movements + ' pohybů)').join('\n');
+        }
+        alert(msg);
+        loadWarehouses();
+      } catch (e) { console.error(e); alert('Chyba při mazání'); }
+    }
+
+    async function deleteWarehouse(id) {
+      if (!confirm('Smazat sklad a všechny jeho pozice?')) return;
+      const resp = await fetch('/api/wh/warehouses/' + id, { method: 'DELETE' });
+      if (resp.status === 409) {
+        const err = await resp.json();
+        alert(err.error || 'Sklad nelze smazat — obsahuje naskladněné zboží');
+        return;
+      }
+      loadWarehouses();
+    }
+
+    // ─── MODAL — EDITACE SKLADU ─────────────────────────────────────────────
+    async function openWarehouseModal(id) {
+      let w = {};
+      let allWs = [];
+      if (id) {
+        try {
+          const [wRes, wsRes] = await Promise.all([
+            fetch('/api/wh/warehouses/' + id),
+            fetch('/api/production/workstations'),
+          ]);
+          w = await wRes.json();
+          allWs = await wsRes.json();
+        } catch(e) {}
+      }
+      const typeOpts = Object.entries(WH_TYPES).map(([k,v]) => '<option value="' + k + '"' + (w.type===k?' selected':'') + '>' + v + '</option>').join('');
+
+      // Napojená pracoviště
+      let wsHtml = '';
+      if (id) {
+        const wsInput = w.workstations_input || [];
+        const wsOutput = w.workstations_output || [];
+
+        const wsInputBadges = wsInput.length > 0 ? wsInput.map(ws =>
+          '<span style="display:inline-flex;align-items:center;gap:6px;background:rgba(59,130,246,0.12);color:#3b82f6;padding:4px 10px;border-radius:6px;font-size:12px;margin:2px 4px 2px 0;">' +
+            ws.name + (ws.code ? ' (' + ws.code + ')' : '') +
+            ' <span onclick="removeWsFromWarehouse(' + ws.id + ',\'input\',' + id + ')" style="cursor:pointer;opacity:0.7;font-size:14px;" title="Odebrat">&times;</span>' +
+          '</span>'
+        ).join('') : '<div style="color:var(--text2);font-size:12px;">Žádná</div>';
+
+        const wsOutputBadges = wsOutput.length > 0 ? wsOutput.map(ws =>
+          '<span style="display:inline-flex;align-items:center;gap:6px;background:rgba(249,115,22,0.12);color:#f97316;padding:4px 10px;border-radius:6px;font-size:12px;margin:2px 4px 2px 0;">' +
+            ws.name + (ws.code ? ' (' + ws.code + ')' : '') +
+            ' <span onclick="removeWsFromWarehouse(' + ws.id + ',\'output\',' + id + ')" style="cursor:pointer;opacity:0.7;font-size:14px;" title="Odebrat">&times;</span>' +
+          '</span>'
+        ).join('') : '<div style="color:var(--text2);font-size:12px;">Žádná</div>';
+
+        const usedInputIds = new Set(wsInput.map(ws => ws.id));
+        const usedOutputIds = new Set(wsOutput.map(ws => ws.id));
+        const inputOpts = '<option value="">— přidat pracoviště —</option>' + allWs.filter(ws => !usedInputIds.has(ws.id)).map(ws => '<option value="' + ws.id + '">' + ws.name + '</option>').join('');
+        const outputOpts = '<option value="">— přidat pracoviště —</option>' + allWs.filter(ws => !usedOutputIds.has(ws.id)).map(ws => '<option value="' + ws.id + '">' + ws.name + '</option>').join('');
+
+        wsHtml = '<div style="border-top:1px solid var(--border);padding-top:14px;margin-top:14px;">' +
+          '<div style="font-size:13px;font-weight:600;margin-bottom:10px;">🏗️ Napojená pracoviště</div>' +
+          '<div style="display:flex;gap:24px;flex-wrap:wrap;">' +
+            '<div style="flex:1;min-width:180px;">' +
+              '<div style="font-size:11px;color:var(--text2);margin-bottom:6px;font-weight:600;">VSTUPNÍ SKLAD PRO:</div>' +
+              '<div style="margin-bottom:8px;">' + wsInputBadges + '</div>' +
+              '<select style="width:100%;padding:6px 8px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:12px;" onchange="addWsToWarehouse(this.value,\'input\',' + id + ');this.value=\'\';">' + inputOpts + '</select>' +
+            '</div>' +
+            '<div style="flex:1;min-width:180px;">' +
+              '<div style="font-size:11px;color:var(--text2);margin-bottom:6px;font-weight:600;">VÝSTUPNÍ SKLAD PRO:</div>' +
+              '<div style="margin-bottom:8px;">' + wsOutputBadges + '</div>' +
+              '<select style="width:100%;padding:6px 8px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:12px;" onchange="addWsToWarehouse(this.value,\'output\',' + id + ');this.value=\'\';">' + outputOpts + '</select>' +
+            '</div>' +
+          '</div>' +
+        '</div>';
+      }
+
+      // Skladové pozice
+      const locations = (w.locations || []);
+      let locsTableHtml = '';
+      if (locations.length > 0) {
+        locsTableHtml = '<table style="width:100%;font-size:12px;border-collapse:collapse;margin-bottom:10px;">' +
+          '<thead><tr style="color:var(--text2);border-bottom:1px solid var(--border);">' +
+            '<th style="text-align:left;padding:6px 8px;">Označení</th>' +
+            '<th style="text-align:left;padding:6px 8px;">Sklad</th>' +
+            '<th style="text-align:left;padding:6px 8px;">Regál</th>' +
+            '<th style="text-align:left;padding:6px 8px;">Police</th><th style="width:30px;"></th>' +
+          '</tr></thead><tbody>';
+        locations.forEach(loc => {
+          locsTableHtml += '<tr style="border-bottom:1px solid var(--border);">' +
+            '<td style="padding:5px 8px;font-weight:600;">' + (loc.label||'—') + '</td>' +
+            '<td style="padding:5px 8px;">' + (loc.section||'—') + '</td>' +
+            '<td style="padding:5px 8px;">' + (loc.rack||'—') + '</td>' +
+            '<td style="padding:5px 8px;">' + (loc.position||'—') + '</td>' +
+            '<td style="padding:5px 8px;"><span onclick="deleteLocAndRefresh(' + loc.id + ',' + id + ')" style="cursor:pointer;color:var(--text2);font-size:14px;" title="Smazat">&times;</span></td>' +
+          '</tr>';
+        });
+        locsTableHtml += '</tbody></table>';
+      } else if (id) {
+        locsTableHtml = '<div style="color:var(--text2);font-size:12px;padding:8px 0;">Zatím žádné pozice</div>';
+      }
+
+      // Generátor pozic
+      let nextSection = 'A', nextRack = 1, nextShelf = 1;
+      if (locations.length > 0) {
+        const last = locations[locations.length - 1];
+        nextSection = (last.section || 'A').toUpperCase();
+        const rNum = parseInt((last.rack || 'R01').replace(/\D/g, '')) || 1;
+        const sNum = parseInt((last.position || 'P01').replace(/\D/g, '')) || 1;
+        nextRack = rNum;
+        nextShelf = sNum + 1;
+      }
+
+      const generatorHtml = id ? (
+        '<div style="border-top:1px solid var(--border);padding-top:14px;margin-top:14px;">' +
+          '<div style="font-size:13px;font-weight:600;margin-bottom:10px;">📍 Skladové pozice (' + locations.length + ')</div>' +
+          locsTableHtml +
+          '<div style="font-size:12px;font-weight:600;margin-bottom:8px;color:var(--text2);">Přidat pozici:</div>' +
+          '<div style="display:flex;gap:8px;align-items:end;flex-wrap:wrap;">' +
+            '<div class="form-group" style="margin:0;width:70px;"><label style="font-size:11px;">Sklad</label><input type="text" id="gen-section" value="' + nextSection + '" style="font-size:12px;padding:6px 8px;"></div>' +
+            '<div class="form-group" style="margin:0;width:70px;"><label style="font-size:11px;">Regál</label><input type="number" id="gen-rack" value="' + nextRack + '" min="1" max="99" style="font-size:12px;padding:6px 8px;"></div>' +
+            '<div class="form-group" style="margin:0;width:70px;"><label style="font-size:11px;">Police</label><input type="number" id="gen-shelf" value="' + nextShelf + '" min="1" max="99" style="font-size:12px;padding:6px 8px;"></div>' +
+            '<button type="button" class="btn btn-primary btn-sm" onclick="addOneLocation(' + id + ')" style="margin-bottom:0;">+ Přidat</button>' +
+          '</div>' +
+          '<div style="border-top:1px dashed var(--border);margin-top:14px;padding-top:14px;">' +
+            '<div style="font-size:12px;font-weight:600;margin-bottom:8px;color:var(--text2);">Hromadné generování:</div>' +
+            '<div style="display:flex;gap:8px;align-items:end;flex-wrap:wrap;">' +
+              '<div class="form-group" style="margin:0;width:70px;"><label style="font-size:11px;">Sklad</label><input type="text" id="bulk-section" value="' + nextSection + '" style="font-size:12px;padding:6px 8px;"></div>' +
+              '<div class="form-group" style="margin:0;width:80px;"><label style="font-size:11px;">Regálů</label><input type="number" id="bulk-racks" value="10" min="1" max="99" style="font-size:12px;padding:6px 8px;"></div>' +
+              '<div class="form-group" style="margin:0;width:80px;"><label style="font-size:11px;">Polic/regál</label><input type="number" id="bulk-shelves" value="5" min="1" max="99" style="font-size:12px;padding:6px 8px;"></div>' +
+              '<button type="button" class="btn btn-primary btn-sm" onclick="bulkGenerateLocations(' + id + ')" style="margin-bottom:0;">⚡ Vygenerovat</button>' +
+            '</div>' +
+            '<div id="bulk-preview" style="font-size:11px;color:var(--text2);margin-top:6px;"></div>' +
+          '</div>' +
+        '</div>'
+      ) : '<div style="color:var(--text2);font-size:12px;margin-top:12px;padding:10px;background:var(--bg);border-radius:8px;">💡 Nejdřív vytvořte sklad, poté můžete přidat pozice.</div>';
+
+      document.getElementById('modal-root').innerHTML = '<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal" style="max-width:640px;"><h2>' + (id?'✏️ Upravit sklad':'➕ Nový sklad') + '</h2>' +
+        '<form onsubmit="saveWarehouse(event,' + (id||'null') + ')"><div class="form-grid">' +
+          '<div class="form-group"><label>Název *</label><input type="text" name="name" value="' + (w.name||'') + '" required></div>' +
+          '<div class="form-group"><label>Kód</label><input type="text" name="code" value="' + (w.code||'') + '"></div>' +
+          '<div class="form-group"><label>Typ</label><select name="type">' + typeOpts + '</select></div>' +
+          '<div class="form-group"><label>Adresa</label><input type="text" name="address" value="' + (w.address||'') + '"></div>' +
+        '</div>' +
+        wsHtml +
+        generatorHtml +
+        '<div class="modal-actions"><button type="button" class="btn btn-secondary" onclick="closeModal()">Zrušit</button><button type="submit" class="btn btn-primary">' + (id?'Uložit':'Vytvořit') + '</button></div></form></div></div>';
+    }
+
+    // ─── AKCE SKLADU ────────────────────────────────────────────────────────
+    async function saveWarehouse(e, id) {
+      e.preventDefault();
+      const f = new FormData(e.target);
+      const data = {};
+      for (const [k,v] of f.entries()) data[k] = v;
+      await fetch(id ? '/api/wh/warehouses/' + id : '/api/wh/warehouses', { method: id ? 'PUT' : 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(data) });
+      closeModal(); loadWarehouses();
+    }
+
+    function closeModal() { document.getElementById('modal-root').innerHTML = ''; }
+
+    // ─── POZICE ─────────────────────────────────────────────────────────────
+    async function addOneLocation(whId) {
+      const section = (document.getElementById('gen-section').value || 'A').trim().toUpperCase();
+      const rack = parseInt(document.getElementById('gen-rack').value) || 1;
+      const shelf = parseInt(document.getElementById('gen-shelf').value) || 1;
+      const rackStr = String(rack).padStart(2, '0');
+      const shelfStr = String(shelf).padStart(2, '0');
+      const label = section + '-R' + rackStr + '-P' + shelfStr;
+      try {
+        const resp = await fetch('/api/wh/warehouses/' + whId + '/locations', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ section, rack: 'R' + rackStr, position: 'P' + shelfStr, label }),
+        });
+        if (resp.status === 409) { const err = await resp.json(); alert(err.error); return; }
+        openWarehouseModal(whId);
+      } catch (e) { console.error(e); }
+    }
+
+    async function bulkGenerateLocations(whId) {
+      const section = (document.getElementById('bulk-section').value || 'A').trim().toUpperCase();
+      const racks = parseInt(document.getElementById('bulk-racks').value) || 1;
+      const shelves = parseInt(document.getElementById('bulk-shelves').value) || 1;
+      const total = racks * shelves;
+      if (!confirm('Vygenerovat ' + total + ' pozic?\n(' + racks + ' regálů × ' + shelves + ' polic)\n\n' + section + '-R01-P01 až ' + section + '-R' + String(racks).padStart(2,'0') + '-P' + String(shelves).padStart(2,'0'))) return;
+      const preview = document.getElementById('bulk-preview');
+      preview.textContent = '⏳ Generuji ' + total + ' pozic...';
+      try {
+        const resp = await fetch('/api/wh/warehouses/' + whId + '/locations/bulk', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ section, racks, shelves }),
+        });
+        const result = await resp.json();
+        if (result.created !== undefined) {
+          let msg = '✅ Vytvořeno ' + result.created + ' z ' + result.total + ' pozic';
+          if (result.skipped > 0) msg += ' (' + result.skipped + ' přeskočeno — již existují)';
+          preview.textContent = msg;
+        }
+        setTimeout(function() { openWarehouseModal(whId); }, 800);
+      } catch (e) { console.error(e); preview.textContent = '❌ Chyba při generování'; }
+    }
+
+    async function deleteLocAndRefresh(locId, whId) {
+      if (!confirm('Smazat tuto pozici?')) return;
+      const resp = await fetch('/api/wh/locations/' + locId, { method: 'DELETE' });
+      if (resp.status === 409) { const err = await resp.json(); alert(err.error); return; }
+      openWarehouseModal(whId);
+    }
+
+    // ─── PRACOVIŠTĚ ← → SKLAD ──────────────────────────────────────────────
+    async function addWsToWarehouse(wsId, type, whId) {
+      if (!wsId) return;
+      const field = type === 'input' ? 'input_warehouse_id' : 'output_warehouse_id';
+      try {
+        await fetch('/api/production/workstations/' + wsId, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ [field]: whId }) });
+        openWarehouseModal(whId);
+      } catch(e) { console.error(e); }
+    }
+
+    async function removeWsFromWarehouse(wsId, type, whId) {
+      const field = type === 'input' ? 'input_warehouse_id' : 'output_warehouse_id';
+      try {
+        await fetch('/api/production/workstations/' + wsId, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ [field]: null }) });
+        openWarehouseModal(whId);
+      } catch(e) { console.error(e); }
+    }
+
+    // ─── INIT ───────────────────────────────────────────────────────────────
+    loadWarehouses();
+  </script>
+</body>
+</html>

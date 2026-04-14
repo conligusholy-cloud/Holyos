@@ -74,7 +74,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/hr', hrRoutes);
 app.use('/api/wh', warehouseRoutes);
 app.use('/api/mindmap', mindmapRoutes);
-app.use('/api/tasks', adminTasksRoutes);
+app.use('/api/admin-tasks', adminTasksRoutes);
 app.use('/api/audit', auditRoutes);
 app.use('/api/ai', voiceRoutes);  // stt-check, transcribe, voice (bez auth)
 app.use('/api/ai', chatRoutes);   // chat endpoint (bez auth — pro panel)

@@ -63,7 +63,7 @@ async function requireAuth(req, res, next) {
       username: user.username,
       displayName: user.display_name,
       role: user.role,
-      isSuperAdmin: user.is_super_admin,
+      isSuperAdmin: user.is_super_admin || (user.person && user.person.is_super_admin),
       person: user.person,
     };
 
@@ -104,14 +104,14 @@ async function optionalAuth(req, res, next) {
 
     if (token) {
       const decoded = jwt.verify(token, JWT_SECRET);
-      const user = await prisma.user.findUnique({ where: { id: decoded.id } });
+      const user = await prisma.user.findUnique({ where: { id: decoded.id }, include: { person: true } });
       if (user) {
         req.user = {
           id: user.id,
           username: user.username,
           displayName: user.display_name,
           role: user.role,
-          isSuperAdmin: user.is_super_admin,
+          isSuperAdmin: user.is_super_admin || (user.person && user.person.is_super_admin),
         };
       }
     }

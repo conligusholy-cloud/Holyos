@@ -204,6 +204,63 @@ router.delete('/products/:id', async (req, res, next) => {
 });
 
 // =============================================================================
+// HALY (halls) — seskupení pracovišť
+// =============================================================================
+
+// GET /api/production/halls — seznam hal
+router.get('/halls', async (req, res, next) => {
+  try {
+    const halls = await prisma.hall.findMany({
+      orderBy: [{ sort_order: 'asc' }, { name: 'asc' }],
+      include: {
+        _count: { select: { workstations: true } },
+      },
+    });
+    res.json(halls);
+  } catch (err) { next(err); }
+});
+
+// POST /api/production/halls — vytvořit halu
+router.post('/halls', async (req, res, next) => {
+  try {
+    const { name, color, sort_order } = req.body;
+    if (!name || !name.trim()) return res.status(400).json({ error: 'Název haly je povinný' });
+    const hall = await prisma.hall.create({
+      data: {
+        name: name.trim(),
+        color: color || '#14b8a6',
+        sort_order: sort_order || 0,
+      },
+    });
+    res.status(201).json(hall);
+  } catch (err) { next(err); }
+});
+
+// PUT /api/production/halls/:id — upravit halu
+router.put('/halls/:id', async (req, res, next) => {
+  try {
+    const { name, color, sort_order } = req.body;
+    const hall = await prisma.hall.update({
+      where: { id: parseInt(req.params.id) },
+      data: {
+        ...(name !== undefined && { name: name.trim() }),
+        ...(color !== undefined && { color }),
+        ...(sort_order !== undefined && { sort_order }),
+      },
+    });
+    res.json(hall);
+  } catch (err) { next(err); }
+});
+
+// DELETE /api/production/halls/:id — smazat halu (pracoviště zůstanou bez haly)
+router.delete('/halls/:id', async (req, res, next) => {
+  try {
+    await prisma.hall.delete({ where: { id: parseInt(req.params.id) } });
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
+// =============================================================================
 // PRACOVIŠTĚ (workstations)
 // =============================================================================
 
@@ -225,11 +282,14 @@ router.get('/workstations', async (req, res, next) => {
           include: { person: { select: { id: true, first_name: true, last_name: true, email: true, phone: true, photo_url: true, active: true, department: { select: { id: true, name: true } } } } },
           orderBy: [{ is_primary: 'desc' }, { created_at: 'asc' }],
         },
-        input_warehouse: { select: { id: true, name: true, code: true } },
-        output_warehouse: { select: { id: true, name: true, code: true } },
+        hall: { select: { id: true, name: true, color: true } },
+        input_warehouse: { select: { id: true, name: true, code: true, locations: { select: { id: true, label: true, section: true, rack: true, position: true }, orderBy: [{ section: 'asc' }, { rack: 'asc' }, { position: 'asc' }] } } },
+        input_location: { select: { id: true, label: true, section: true, rack: true, position: true } },
+        output_warehouse: { select: { id: true, name: true, code: true, locations: { select: { id: true, label: true, section: true, rack: true, position: true }, orderBy: [{ section: 'asc' }, { rack: 'asc' }, { position: 'asc' }] } } },
+        output_location: { select: { id: true, label: true, section: true, rack: true, position: true } },
         _count: { select: { operations: true } },
       },
-      orderBy: { name: 'asc' },
+      orderBy: [{ hall: { sort_order: 'asc' } }, { name: 'asc' }],
     });
     res.json(workstations);
   } catch (err) { next(err); }
@@ -353,14 +413,18 @@ router.get('/workstations/:id', async (req, res, next) => {
 // POST /api/production/workstations
 router.post('/workstations', async (req, res, next) => {
   try {
-    const { name, code, width_m, length_m, input_warehouse_id, output_warehouse_id } = req.body;
+    const { name, code, hall_id, is_external, width_m, length_m, input_warehouse_id, input_location_id, output_warehouse_id, output_location_id } = req.body;
     const ws = await prisma.workstation.create({
       data: {
         name, code,
+        hall_id: hall_id ? parseInt(hall_id) : null,
+        is_external: is_external === true,
         width_m: width_m ? parseFloat(width_m) : null,
         length_m: length_m ? parseFloat(length_m) : null,
         input_warehouse_id: input_warehouse_id ? parseInt(input_warehouse_id) : null,
+        input_location_id: input_location_id ? parseInt(input_location_id) : null,
         output_warehouse_id: output_warehouse_id ? parseInt(output_warehouse_id) : null,
+        output_location_id: output_location_id ? parseInt(output_location_id) : null,
       },
     });
     res.status(201).json(ws);
@@ -370,12 +434,16 @@ router.post('/workstations', async (req, res, next) => {
 // PUT /api/production/workstations/:id
 router.put('/workstations/:id', async (req, res, next) => {
   try {
-    const { name, code, width_m, length_m, input_warehouse_id, output_warehouse_id } = req.body;
+    const { name, code, hall_id, is_external, width_m, length_m, input_warehouse_id, input_location_id, output_warehouse_id, output_location_id } = req.body;
     const data = { name, code };
+    if (hall_id !== undefined) data.hall_id = hall_id ? parseInt(hall_id) : null;
+    if (is_external !== undefined) data.is_external = is_external === true;
     if (width_m !== undefined) data.width_m = width_m ? parseFloat(width_m) : null;
     if (length_m !== undefined) data.length_m = length_m ? parseFloat(length_m) : null;
     if (input_warehouse_id !== undefined) data.input_warehouse_id = input_warehouse_id ? parseInt(input_warehouse_id) : null;
+    if (input_location_id !== undefined) data.input_location_id = input_location_id ? parseInt(input_location_id) : null;
     if (output_warehouse_id !== undefined) data.output_warehouse_id = output_warehouse_id ? parseInt(output_warehouse_id) : null;
+    if (output_location_id !== undefined) data.output_location_id = output_location_id ? parseInt(output_location_id) : null;
     const ws = await prisma.workstation.update({
       where: { id: parseInt(req.params.id) },
       data,
