@@ -413,7 +413,7 @@
       <div class="form-row">
         <div class="form-group">
           <label>Pracoviště</label>
-          <select id="op-ws"><option value="">— bez pracoviště —</option></select>
+          <select id="op-ws" onchange="handleWsExternalChange()"><option value="">— bez pracoviště —</option></select>
         </div>
         <div class="form-group">
           <label>Fáze</label>
@@ -1051,8 +1051,40 @@
       const sel = document.getElementById('op-ws');
       sel.innerHTML = '<option value="">— bez pracoviště —</option>';
       workstations.forEach(ws => {
-        sel.innerHTML += '<option value="' + ws.id + '"' + (ws.id == selectedId ? ' selected' : '') + '>' + esc(ws.name) + (ws.code ? ' (' + esc(ws.code) + ')' : '') + '</option>';
+        const label = esc(ws.name) + (ws.code ? ' (' + esc(ws.code) + ')' : '') + (ws.is_external ? ' [kooperace]' : '');
+        sel.innerHTML += '<option value="' + ws.id + '" data-external="' + (ws.is_external ? '1' : '0') + '"' + (ws.id == selectedId ? ' selected' : '') + '>' + label + '</option>';
       });
+      // Nastav stav polí podle vybraného pracoviště
+      handleWsExternalChange();
+    }
+
+    // Při změně pracoviště — kooperace = čas 0, nelze měnit
+    function handleWsExternalChange() {
+      const sel = document.getElementById('op-ws');
+      const opt = sel.options[sel.selectedIndex];
+      const isExt = opt && opt.dataset.external === '1';
+
+      const durInput = document.getElementById('op-duration');
+      const unitInput = document.getElementById('op-duration-unit');
+      const prepInput = document.getElementById('op-prep');
+
+      if (isExt) {
+        durInput.value = 0;
+        durInput.disabled = true;
+        durInput.style.opacity = '0.5';
+        unitInput.disabled = true;
+        unitInput.style.opacity = '0.5';
+        prepInput.value = 0;
+        prepInput.disabled = true;
+        prepInput.style.opacity = '0.5';
+      } else {
+        durInput.disabled = false;
+        durInput.style.opacity = '';
+        unitInput.disabled = false;
+        unitInput.style.opacity = '';
+        prepInput.disabled = false;
+        prepInput.style.opacity = '';
+      }
     }
 
     // === Material rows ===

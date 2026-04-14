@@ -159,6 +159,11 @@ router.post('/users', requireAuth, requireAdmin, async (req, res, next) => {
       return res.status(400).json({ error: 'Chybí username nebo password' });
     }
 
+    // Roli admin a super admin může přidělit jen super admin
+    if ((role === 'admin' || isSuperAdmin) && !req.user.isSuperAdmin) {
+      return res.status(403).json({ error: 'Roli administrátora a super admina může přidělit pouze super admin' });
+    }
+
     const hash = await bcrypt.hash(password, 12);
 
     const user = await prisma.user.create({
@@ -189,6 +194,11 @@ router.post('/users', requireAuth, requireAdmin, async (req, res, next) => {
 router.put('/users/:id', requireAuth, requireAdmin, async (req, res, next) => {
   try {
     const { displayName, role, isSuperAdmin, password } = req.body;
+
+    // Roli admin a super admin může přidělit jen super admin
+    if ((role === 'admin' || isSuperAdmin) && !req.user.isSuperAdmin) {
+      return res.status(403).json({ error: 'Roli administrátora a super admina může přidělit pouze super admin' });
+    }
 
     const data = {};
     if (displayName !== undefined) data.display_name = displayName;

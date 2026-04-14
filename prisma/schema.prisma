@@ -104,6 +104,7 @@ model Person {
   supervisor_id   Int?
   shift_id        Int?
   user_id         Int?      @unique
+  company_id      Int?
 
   created_at      DateTime  @default(now())
   updated_at      DateTime  @updatedAt
@@ -111,6 +112,7 @@ model Person {
   // Vztahy
   department      Department?   @relation(fields: [department_id], references: [id])
   role            Role?         @relation(fields: [role_id], references: [id])
+  company         Company?      @relation("PersonCompany", fields: [company_id], references: [id])
   supervisor      Person?       @relation("PersonSupervisor", fields: [supervisor_id], references: [id])
   subordinates    Person[]      @relation("PersonSupervisor")
   shift           Shift?        @relation(fields: [shift_id], references: [id])
@@ -131,6 +133,7 @@ model Person {
 
   @@index([department_id])
   @@index([role_id])
+  @@index([company_id])
   @@index([active])
   @@index([chip_number])
   @@index([chip_card_id])
@@ -160,6 +163,7 @@ model Role {
   description    String? @db.Text
   department_id  Int?
   parent_role_id Int?
+  company_id     Int?
 
   created_at DateTime @default(now())
 
@@ -167,9 +171,11 @@ model Role {
   department  Department? @relation(fields: [department_id], references: [id])
   parent_role Role?       @relation("RoleHierarchy", fields: [parent_role_id], references: [id])
   child_roles Role[]      @relation("RoleHierarchy")
+  company     Company?    @relation("RoleCompany", fields: [company_id], references: [id])
   people      Person[]
   permissions Permission[]
 
+  @@index([company_id])
   @@map("roles")
 }
 
@@ -387,6 +393,8 @@ model Company {
   orders              Order[]
   supplied_materials  Material[]   @relation("MaterialSupplier")
   preferred_for_rules StockRule[]  @relation("StockRuleSupplier")
+  people              Person[]     @relation("PersonCompany")
+  roles               Role[]       @relation("RoleCompany")
 
   @@index([ico])
   @@index([type])
@@ -475,14 +483,16 @@ model WarehouseLocation {
   section      String? @db.VarChar(50)
   rack         String? @db.VarChar(50)
   position     String? @db.VarChar(50)
-  label        String? @db.VarChar(255)
+  label        String  @unique @db.VarChar(255)
   barcode      String? @db.VarChar(100)
   capacity     Decimal? @db.Decimal(10, 2)
   notes        String? @db.Text
 
-  warehouse       Warehouse         @relation(fields: [warehouse_id], references: [id])
-  movements       InventoryMovement[]
-  inventory_items InventoryItem[]
+  warehouse              Warehouse         @relation(fields: [warehouse_id], references: [id])
+  movements              InventoryMovement[]
+  inventory_items        InventoryItem[]
+  workstations_input     Workstation[]     @relation("WorkstationInputLocation")
+  workstations_output    Workstation[]     @relation("WorkstationOutputLocation")
 
   @@index([warehouse_id])
   @@index([barcode])
@@ -788,30 +798,58 @@ model Product {
   @@map("products")
 }
 
+// Hala (seskupení pracovišť)
+model Hall {
+  id         Int     @id @default(autoincrement())
+  name       String  @db.VarChar(255)
+  color      String  @default("#14b8a6") @db.VarChar(20) // barva pro rozlišení
+  sort_order Int     @default(0) // pořadí zobrazení
+
+  created_at DateTime @default(now())
+
+  workstations Workstation[]
+
+  @@map("halls")
+}
+
 model Workstation {
   id           Int     @id @default(autoincrement())
   name         String  @db.VarChar(255)
   code         String? @db.VarChar(50)
   factorify_id Int?    // původní Stage ID z Factorify
 
+  // Zařazení do haly
+  hall_id      Int?
+
+  // Externí pracoviště (kooperace)
+  is_external  Boolean @default(false)
+
   // Rozměry pracoviště v metrech
   width_m      Decimal? @db.Decimal(8, 2) // šířka v m
   length_m     Decimal? @db.Decimal(8, 2) // délka v m
 
-  // Vstupní a výstupní sklad
-  input_warehouse_id  Int?
-  output_warehouse_id Int?
+  // Vstupní a výstupní sklad + pozice
+  input_warehouse_id   Int?
+  input_location_id    Int?
+  output_warehouse_id  Int?
+  output_location_id   Int?
 
   created_at DateTime @default(now())
 
-  input_warehouse  Warehouse? @relation("WorkstationInputWarehouse", fields: [input_warehouse_id], references: [id])
-  output_warehouse Warehouse? @relation("WorkstationOutputWarehouse", fields: [output_warehouse_id], references: [id])
-  operations       ProductOperation[]
-  workers          WorkstationWorker[]
+  hall              Hall?               @relation(fields: [hall_id], references: [id], onDelete: SetNull)
+  input_warehouse   Warehouse?          @relation("WorkstationInputWarehouse", fields: [input_warehouse_id], references: [id])
+  input_location    WarehouseLocation?  @relation("WorkstationInputLocation", fields: [input_location_id], references: [id])
+  output_warehouse  Warehouse?          @relation("WorkstationOutputWarehouse", fields: [output_warehouse_id], references: [id])
+  output_location   WarehouseLocation?  @relation("WorkstationOutputLocation", fields: [output_location_id], references: [id])
+  operations        ProductOperation[]
+  workers           WorkstationWorker[]
 
+  @@index([hall_id])
   @@index([factorify_id])
   @@index([input_warehouse_id])
+  @@index([input_location_id])
   @@index([output_warehouse_id])
+  @@index([output_location_id])
   @@map("workstations")
 }
 

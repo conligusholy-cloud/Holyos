@@ -10,8 +10,9 @@ function renderSidebar(activeModule) {
     { id: 'simulace-vyroby',    name: 'Simulace výroby',     icon: '&#9654;', color: '#22c55e', active: true },
     { id: 'pracovni-postup',    name: 'Pracovní postup',     icon: '&#128295;', color: '#06b6d4', active: true },
     { id: 'nakup-sklad',          name: 'Nákup a sklad',       icon: '&#128230;', color: '#10b981', active: true },
-    { id: 'ai-agenti',            name: 'AI Agenti',           icon: '&#129302;', color: '#8b5cf6', active: true },
+    { id: 'sklady',                name: 'Sklady',              icon: '&#127981;', color: '#f59e0b', active: true },
     { id: 'pracoviste',           name: 'Pracoviště',          icon: '&#127981;', color: '#14b8a6', active: true },
+    { id: 'ai-agenti',            name: 'AI Agenti',           icon: '&#129302;', color: '#8b5cf6', active: true },
     { id: 'dev-hub',              name: 'Dev Hub',             icon: '&#128736;', color: '#f97316', active: true },
     { id: 'planovani',           name: 'Plánování výroby',    icon: '&#128197;', color: '#3b82f6', active: false },
     { id: 'material',            name: 'Materiálový tok',     icon: '&#128666;', color: '#10b981', active: false },
@@ -80,7 +81,12 @@ function renderSidebar(activeModule) {
   }
 
   // Načíst info o přihlášeném uživateli
-  fetch('/api/auth/me', { credentials: 'include' }).then(function(r) {
+  var _authHeaders = { credentials: 'include' };
+  var _storedToken = sessionStorage.getItem('token');
+  if (_storedToken) {
+    _authHeaders.headers = { 'Authorization': 'Bearer ' + _storedToken };
+  }
+  fetch('/api/auth/me', _authHeaders).then(function(r) {
     if (r.status === 401) {
       // Nepřihlášen — přesměruj na login
       var currentPath = window.location.pathname + window.location.search;
@@ -106,7 +112,7 @@ function renderSidebar(activeModule) {
       }
     }
     // Pokud je super admin, přidat sekci Super Admin
-    if (u.is_super_admin) {
+    if (u.isSuperAdmin || u.is_super_admin) {
       var userSection = document.querySelector('.sidebar-user');
       if (userSection) {
         var saSection = document.createElement('div');

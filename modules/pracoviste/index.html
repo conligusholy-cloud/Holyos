@@ -26,57 +26,67 @@
     .btn-danger { background:#ef4444; color:#fff; border-color:#ef4444; }
     .btn-sm { font-size:11px; padding:5px 10px; }
 
-    .ws-grid {
-      display:grid; grid-template-columns:repeat(auto-fill, minmax(340px, 1fr));
-      gap:16px; padding:20px 24px;
+    /* Tabulka */
+    .ws-table-wrap { padding:0 24px 20px; overflow-x:auto; }
+    table.ws-table { width:100%; border-collapse:collapse; font-size:13px; }
+    .ws-table th {
+      text-align:left; padding:10px 12px; color:var(--text2); font-weight:600;
+      font-size:11px; text-transform:uppercase; letter-spacing:0.5px;
+      border-bottom:2px solid var(--border); position:sticky; top:0; background:var(--bg); z-index:1;
     }
-    .ws-card {
-      background:var(--surface); border:1px solid var(--border); border-radius:12px;
-      padding:20px; transition: border-color 0.15s, box-shadow 0.15s;
+    .ws-table td { padding:10px 12px; border-bottom:1px solid var(--border); vertical-align:middle; }
+    .ws-table tr.ws-row:hover td { background:var(--surface2); }
+    .ws-table tr.ws-row { cursor:pointer; }
+
+    /* Řádek haly — rozklikávací hlavička skupiny */
+    .hall-row { cursor:pointer; user-select:none; }
+    .hall-row td {
+      padding:12px 12px; font-weight:700; font-size:13px;
+      border-bottom:2px solid var(--border); background:var(--surface2);
     }
-    .ws-card:hover { border-color:var(--accent); box-shadow:0 2px 12px rgba(99,102,241,0.08); }
-    .ws-card-header { display:flex; align-items:center; gap:12px; margin-bottom:10px; }
-    .ws-icon {
-      width:42px; height:42px; border-radius:10px; background:rgba(20,184,166,0.15);
+    .hall-row:hover td { filter:brightness(1.1); }
+    .hall-header { display:flex; align-items:center; gap:10px; }
+    .hall-color-dot {
+      width:14px; height:14px; border-radius:4px; flex-shrink:0;
+    }
+    .hall-toggle { font-size:12px; color:var(--text2); transition:transform 0.2s; display:inline-block; }
+    .hall-toggle.collapsed { transform:rotate(-90deg); }
+    .hall-count { font-size:11px; color:var(--text2); font-weight:400; margin-left:4px; }
+    .hall-actions { display:flex; gap:4px; }
+
+    /* Barevný levý border na řádku pracoviště podle haly */
+    .ws-row td:first-child { border-left:3px solid transparent; }
+
+    .ws-name-cell { display:flex; align-items:center; gap:10px; }
+    .ws-icon-sm {
+      width:32px; height:32px; border-radius:8px; background:rgba(20,184,166,0.15);
       display:flex; align-items:center; justify-content:center;
-      font-size:20px; color:#14b8a6; flex-shrink:0;
+      font-size:15px; color:#14b8a6; flex-shrink:0;
     }
-    .ws-name { font-size:15px; font-weight:600; flex:1; }
-    .ws-code { font-size:12px; color:var(--text2); }
-
-    .ws-meta { display:flex; gap:12px; font-size:12px; color:var(--text2); margin-bottom:10px; flex-wrap:wrap; }
-    .ws-meta span { display:flex; align-items:center; gap:4px; }
-    .ws-meta .dim-badge {
-      background:rgba(20,184,166,0.1); color:#14b8a6; padding:2px 8px; border-radius:6px; font-weight:600;
+    .ws-name { font-weight:600; }
+    .ws-code { font-size:11px; color:var(--text2); }
+    .ws-ext-badge {
+      font-size:9px; font-weight:700; padding:2px 6px; border-radius:4px;
+      background:rgba(249,115,22,0.15); color:#f97316; text-transform:uppercase;
+      letter-spacing:0.5px; margin-left:6px; vertical-align:middle;
     }
-
-    /* Sklady */
-    .ws-warehouses { display:flex; gap:10px; margin-bottom:10px; flex-wrap:wrap; }
+    .dim-badge {
+      background:rgba(20,184,166,0.1); color:#14b8a6; padding:2px 8px; border-radius:6px;
+      font-weight:600; font-size:11px; white-space:nowrap;
+    }
     .ws-wh-badge {
-      font-size:11px; padding:4px 10px; border-radius:6px; display:flex; align-items:center; gap:4px;
+      font-size:11px; padding:3px 8px; border-radius:6px; display:inline-flex; align-items:center; gap:3px; white-space:nowrap;
     }
     .ws-wh-in { background:rgba(59,130,246,0.12); color:#3b82f6; }
     .ws-wh-out { background:rgba(249,115,22,0.12); color:#f97316; }
-
-    /* Pracovníci */
-    .ws-workers { border-top:1px solid var(--border); padding-top:10px; margin-top:4px; }
-    .ws-workers-title { font-size:11px; color:var(--text2); margin-bottom:6px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; }
-    .ws-worker-item {
-      display:flex; align-items:center; gap:8px; padding:4px 0;
-      border-bottom:1px solid rgba(255,255,255,0.03); font-size:13px;
+    .ws-workers-cell { display:flex; align-items:center; }
+    .ws-worker-mini {
+      width:26px; height:26px; border-radius:50%; background:var(--surface2);
+      display:flex; align-items:center; justify-content:center; font-size:10px;
+      color:var(--text2); border:2px solid var(--bg); margin-left:-6px; overflow:hidden;
     }
-    .ws-worker-item:last-child { border-bottom:none; }
-    .ws-worker-avatar {
-      width:28px; height:28px; border-radius:50%; background:var(--surface2);
-      display:flex; align-items:center; justify-content:center; font-size:12px;
-      color:var(--text2); flex-shrink:0; overflow:hidden;
-    }
-    .ws-worker-avatar img { width:100%; height:100%; object-fit:cover; }
-    .ws-worker-name { flex:1; }
-    .ws-worker-role { font-size:11px; color:var(--text2); }
-    .ws-worker-primary { font-size:10px; background:rgba(20,184,166,0.15); color:#14b8a6; padding:1px 6px; border-radius:4px; }
-
-    .ws-actions { display:flex; gap:6px; margin-top:12px; }
+    .ws-worker-mini:first-child { margin-left:0; }
+    .ws-worker-count { font-size:11px; color:var(--text2); margin-left:6px; }
 
     .empty-state { text-align:center; padding:80px 20px; color:var(--text2); }
     .empty-state .icon { font-size:48px; margin-bottom:12px; }
@@ -121,6 +131,30 @@
     .primary-star { color:#14b8a6; cursor:pointer; font-size:16px; }
     .primary-star.inactive { color:var(--text2); opacity:0.4; }
 
+    /* Color picker v modal haly */
+    .color-options { display:flex; gap:8px; flex-wrap:wrap; padding:4px 0; }
+    .color-opt {
+      width:28px; height:28px; border-radius:6px; cursor:pointer; border:2px solid transparent;
+      transition:border-color 0.15s, transform 0.1s;
+    }
+    .color-opt:hover { transform:scale(1.15); }
+    .color-opt.active { border-color:#fff; box-shadow:0 0 0 2px var(--accent); }
+
+    /* Drag & drop */
+    .ws-row[draggable="true"] { cursor:grab; }
+    .ws-row.dragging { opacity:0.4; }
+    .hall-row.drag-over td {
+      background:var(--accent) !important; color:#fff;
+      box-shadow:inset 0 0 0 2px var(--accent);
+    }
+    .hall-row.drag-over .hall-count,
+    .hall-row.drag-over .hall-toggle { color:#fff !important; }
+    .drag-handle {
+      cursor:grab; color:var(--text2); font-size:14px; padding:0 4px;
+      user-select:none; opacity:0.4; transition:opacity 0.15s;
+    }
+    .ws-row:hover .drag-handle { opacity:1; }
+
     .toast { position:fixed; bottom:20px; right:20px; padding:10px 20px; border-radius:8px; background:#22c55e; color:#fff; font-size:13px; opacity:0; transition:opacity 0.3s; z-index:9999; pointer-events:none; }
     .toast.show { opacity:1; }
     .toast.error { background:#ef4444; }
@@ -132,30 +166,62 @@
   <div class="main-wrapper" style="display:flex;flex-direction:column;height:100vh;">
     <div class="page-header">
       <h1>&#127981; Pracoviště <span class="count" id="ws-count"></span></h1>
+      <button class="btn" onclick="openHallModal()">+ Nová hala</button>
       <button class="btn btn-primary" onclick="openAddModal()">+ Nové pracoviště</button>
       <input type="text" class="search-box" id="search" placeholder="Hledat pracoviště..." oninput="renderList()">
     </div>
 
     <div style="flex:1;overflow-y:auto;">
-      <div class="ws-grid" id="ws-grid">
-        <div class="empty-state"><div class="icon">&#9203;</div><p>Načítám...</p></div>
+      <div class="ws-table-wrap">
+        <table class="ws-table">
+          <thead>
+            <tr>
+              <th style="width:50px;">ID</th>
+              <th>Pracoviště</th>
+              <th>Rozměry</th>
+              <th>Vstupní sklad</th>
+              <th>Výstupní sklad</th>
+              <th>Operací</th>
+              <th>Pracovníci</th>
+              <th style="width:100px;"></th>
+            </tr>
+          </thead>
+          <tbody id="ws-tbody">
+            <tr><td colspan="8" class="empty-state">&#9203; Načítám...</td></tr>
+          </tbody>
+        </table>
       </div>
     </div>
   </div>
 
-  <!-- Modal -->
+  <!-- Modal pracoviště -->
   <div id="ws-modal" class="modal-overlay" style="display:none;" onclick="if(event.target===this)closeModal()">
     <div class="modal-box">
       <h3 id="modal-title">Nové pracoviště</h3>
       <input type="hidden" id="ws-id">
 
-      <div class="form-group">
-        <label>Název pracoviště *</label>
-        <input type="text" id="ws-name" placeholder="Např. Frézka CNC, Montáž, Svařovna...">
+      <div class="form-row">
+        <div class="form-group" style="flex:2;">
+          <label>Název pracoviště *</label>
+          <input type="text" id="ws-name" placeholder="Např. Frézka CNC, Montáž, Svařovna...">
+        </div>
+        <div class="form-group" style="flex:1;">
+          <label>Kód</label>
+          <input type="text" id="ws-code" placeholder="FR-01">
+        </div>
       </div>
-      <div class="form-group">
-        <label>Kód (volitelný)</label>
-        <input type="text" id="ws-code" placeholder="Např. FR-01, CNC-02, MON-01...">
+
+      <div class="form-row">
+        <div class="form-group" style="flex:2;">
+          <label>Hala</label>
+          <select id="ws-hall"><option value="">— bez haly —</option></select>
+        </div>
+        <div class="form-group" style="flex:1;display:flex;align-items:flex-end;padding-bottom:8px;">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:var(--text);margin:0;">
+            <input type="checkbox" id="ws-external" style="width:auto;accent-color:var(--accent);cursor:pointer;">
+            Kooperace (externí)
+          </label>
+        </div>
       </div>
 
       <!-- Rozměry -->
@@ -176,11 +242,21 @@
       <div class="form-row">
         <div class="form-group">
           <label>Vstupní sklad</label>
-          <select id="ws-input-wh"><option value="">— bez skladu —</option></select>
+          <select id="ws-input-wh" onchange="onWarehouseChange('input')"><option value="">— bez skladu —</option></select>
         </div>
         <div class="form-group">
+          <label>Pozice</label>
+          <select id="ws-input-loc"><option value="">— bez pozice —</option></select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
           <label>Výstupní sklad</label>
-          <select id="ws-output-wh"><option value="">— bez skladu —</option></select>
+          <select id="ws-output-wh" onchange="onWarehouseChange('output')"><option value="">— bez skladu —</option></select>
+        </div>
+        <div class="form-group">
+          <label>Pozice</label>
+          <select id="ws-output-loc"><option value="">— bez pozice —</option></select>
         </div>
       </div>
 
@@ -200,6 +276,27 @@
     </div>
   </div>
 
+  <!-- Modal haly -->
+  <div id="hall-modal" class="modal-overlay" style="display:none;" onclick="if(event.target===this)closeHallModal()">
+    <div class="modal-box" style="min-width:380px;max-width:420px;">
+      <h3 id="hall-modal-title">Nová hala</h3>
+      <input type="hidden" id="hall-id">
+      <div class="form-group">
+        <label>Název haly *</label>
+        <input type="text" id="hall-name" placeholder="Např. Hala 1, Montážní hala...">
+      </div>
+      <div class="form-group">
+        <label>Barva</label>
+        <div class="color-options" id="hall-colors"></div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-danger" id="hall-delete-btn" onclick="deleteHall()" style="margin-right:auto;display:none;">Smazat halu</button>
+        <button class="btn" onclick="closeHallModal()">Zrušit</button>
+        <button class="btn btn-primary" onclick="saveHall()">Uložit</button>
+      </div>
+    </div>
+  </div>
+
   <div id="toast" class="toast"></div>
 
   <script src="../../js/sidebar.js"></script>
@@ -207,14 +304,24 @@
 
   <script>
     // =========================================================================
-    // HolyOS — Pracoviště (správa pracovišť, rozměry, sklady, pracovníci)
+    // HolyOS — Pracoviště (správa pracovišť, haly, rozměry, sklady, pracovníci)
     // =========================================================================
 
     const token = sessionStorage.getItem('token');
     let allWorkstations = [];
+    let allHalls = [];
     let allPeople = [];
     let allWarehouses = [];
     let modalWorkers = [];
+    let collapsedHalls = new Set(); // sbalené haly
+
+    // Předdefinované barvy pro haly
+    const HALL_COLORS = [
+      '#14b8a6', '#3b82f6', '#8b5cf6', '#ec4899', '#f97316',
+      '#eab308', '#22c55e', '#06b6d4', '#ef4444', '#6366f1',
+      '#84cc16', '#f43f5e', '#0ea5e9', '#a855f7', '#64748b',
+    ];
+    let selectedHallColor = HALL_COLORS[0];
 
     async function api(path, opts = {}) {
       const headers = { 'Accept': 'application/json', 'Content-Type': 'application/json' };
@@ -230,8 +337,9 @@
     // === Inicializace ===
     document.addEventListener('DOMContentLoaded', async () => {
       try {
-        const [wsList, people, warehouses] = await Promise.all([
+        const [wsList, halls, people, warehouses] = await Promise.all([
           api('/api/production/workstations'),
+          api('/api/production/halls'),
           api('/api/hr/people?active=true'),
           api('/api/wh/warehouses'),
         ]);
@@ -242,17 +350,18 @@
         allWarehouses = (Array.isArray(warehouses) ? warehouses : warehouses.data || [])
           .sort((a, b) => (a.name || '').localeCompare(b.name || '', 'cs'));
 
+        allHalls = halls;
         allWorkstations = wsList;
         renderList();
       } catch (err) {
-        document.getElementById('ws-grid').innerHTML =
-          '<div class="empty-state"><p style="color:#ef4444;">' + esc(err.message) + '</p></div>';
+        document.getElementById('ws-tbody').innerHTML =
+          '<tr><td colspan="8" style="color:#ef4444;text-align:center;padding:40px;">' + esc(err.message) + '</td></tr>';
       }
     });
 
-    // === Render ===
+    // === Render s halami ===
     function renderList() {
-      const grid = document.getElementById('ws-grid');
+      const tbody = document.getElementById('ws-tbody');
       const q = (document.getElementById('search').value || '').toLowerCase().trim();
 
       const filtered = allWorkstations.filter(ws => {
@@ -263,89 +372,370 @@
       document.getElementById('ws-count').textContent = '(' + filtered.length + ')';
 
       if (filtered.length === 0) {
-        grid.innerHTML = '<div class="empty-state"><div class="icon">&#127981;</div>' +
+        tbody.innerHTML = '<tr><td colspan="8" class="empty-state">' +
+          '<div class="icon">&#127981;</div>' +
           '<p>' + (q ? 'Žádné pracoviště nenalezeno' : 'Zatím žádná pracoviště') + '</p>' +
-          (!q ? '<p style="font-size:12px;">Klikněte na "+ Nové pracoviště"</p>' : '') + '</div>';
+          (!q ? '<p style="font-size:12px;">Klikněte na "+ Nové pracoviště"</p>' : '') +
+          '</td></tr>';
         return;
       }
 
-      grid.innerHTML = filtered.map(ws => {
-        const workers = ws.workers || [];
-        const opsCount = ws._count ? ws._count.operations : 0;
-
-        // Rozměry
-        let dimHtml = '';
-        if (ws.width_m || ws.length_m) {
-          const w = ws.width_m ? parseFloat(ws.width_m) : 0;
-          const l = ws.length_m ? parseFloat(ws.length_m) : 0;
-          dimHtml = '<span class="dim-badge">' + w + ' × ' + l + ' m</span>';
-          if (w > 0 && l > 0) dimHtml += '<span>' + (w * l).toFixed(1) + ' m²</span>';
+      // Seskupení: haly + nezařazené
+      const byHall = {};
+      const noHall = [];
+      filtered.forEach(ws => {
+        const hid = ws.hall_id || (ws.hall ? ws.hall.id : null);
+        if (hid) {
+          if (!byHall[hid]) byHall[hid] = [];
+          byHall[hid].push(ws);
+        } else {
+          noHall.push(ws);
         }
+      });
 
-        // Sklady
-        let whHtml = '';
-        if (ws.input_warehouse || ws.output_warehouse) {
-          whHtml = '<div class="ws-warehouses">';
-          if (ws.input_warehouse) whHtml += '<span class="ws-wh-badge ws-wh-in">&#8594; ' + esc(ws.input_warehouse.name) + '</span>';
-          if (ws.output_warehouse) whHtml += '<span class="ws-wh-badge ws-wh-out">&#8592; ' + esc(ws.output_warehouse.name) + '</span>';
-          whHtml += '</div>';
+      let html = '';
+
+      // Haly v pořadí
+      allHalls.forEach(hall => {
+        const wsInHall = byHall[hall.id];
+        if (!wsInHall || wsInHall.length === 0) {
+          // Zobrazit i prázdné haly (pokud nehledáme)
+          if (!q) {
+            html += renderHallRow(hall, 0);
+          }
+          return;
         }
-
-        // Pracovníci
-        let workersHtml = '';
-        if (workers.length > 0) {
-          workersHtml = '<div class="ws-workers"><div class="ws-workers-title">Pracovníci (' + workers.length + ')</div>';
-          workers.slice(0, 5).forEach(ww => {
-            const p = ww.person;
-            const avatar = p.photo_url
-              ? '<img src="' + esc(p.photo_url) + '" alt="">'
-              : (p.first_name || '?').charAt(0) + (p.last_name || '?').charAt(0);
-            workersHtml += '<div class="ws-worker-item">' +
-              '<div class="ws-worker-avatar">' + avatar + '</div>' +
-              '<span class="ws-worker-name">' + esc(p.first_name + ' ' + p.last_name) + '</span>' +
-              (ww.role ? '<span class="ws-worker-role">' + esc(ww.role) + '</span>' : '') +
-              (ww.is_primary ? '<span class="ws-worker-primary">hlavní</span>' : '') +
-            '</div>';
-          });
-          if (workers.length > 5) workersHtml += '<div style="font-size:11px;color:var(--text2);padding:4px 0;">... a dalších ' + (workers.length - 5) + '</div>';
-          workersHtml += '</div>';
+        const isCollapsed = collapsedHalls.has(hall.id);
+        html += renderHallRow(hall, wsInHall.length);
+        if (!isCollapsed) {
+          wsInHall.forEach(ws => { html += renderWsRow(ws, hall.color); });
         }
+      });
 
-        return '<div class="ws-card">' +
-          '<div class="ws-card-header">' +
-            '<div class="ws-icon">&#127981;</div>' +
-            '<div>' +
-              '<div class="ws-name">' + esc(ws.name) + '</div>' +
-              (ws.code ? '<div class="ws-code">' + esc(ws.code) + '</div>' : '') +
+      // Nezařazené
+      if (noHall.length > 0) {
+        const isCollapsed = collapsedHalls.has(0);
+        html += '<tr class="hall-row" data-hall-id="0" onclick="toggleHall(0)">' +
+          '<td colspan="8">' +
+            '<div class="hall-header">' +
+              '<span class="hall-toggle ' + (isCollapsed ? 'collapsed' : '') + '">&#9660;</span>' +
+              '<span class="hall-color-dot" style="background:#64748b;"></span>' +
+              '<span>Nezařazené</span>' +
+              '<span class="hall-count">(' + noHall.length + ')</span>' +
             '</div>' +
+          '</td></tr>';
+        if (!isCollapsed) {
+          noHall.forEach(ws => { html += renderWsRow(ws, '#64748b'); });
+        }
+      }
+
+      tbody.innerHTML = html;
+      initDragAndDrop();
+    }
+
+    function renderHallRow(hall, count) {
+      const isCollapsed = collapsedHalls.has(hall.id);
+      return '<tr class="hall-row" data-hall-id="' + hall.id + '" onclick="toggleHall(' + hall.id + ')">' +
+        '<td colspan="8">' +
+          '<div class="hall-header">' +
+            '<span class="hall-toggle ' + (isCollapsed ? 'collapsed' : '') + '">&#9660;</span>' +
+            '<span class="hall-color-dot" style="background:' + esc(hall.color) + ';"></span>' +
+            '<span>' + esc(hall.name) + '</span>' +
+            '<span class="hall-count">(' + count + ')</span>' +
+            '<span style="flex:1;"></span>' +
+            '<span class="hall-actions" onclick="event.stopPropagation();">' +
+              '<button class="btn btn-sm" onclick="openHallModal(' + hall.id + ')" title="Upravit halu">&#9998;</button>' +
+            '</span>' +
           '</div>' +
-          '<div class="ws-meta">' +
-            dimHtml +
-            '<span>&#9881; ' + opsCount + ' operací</span>' +
-            '<span>&#128101; ' + workers.length + ' pracovníků</span>' +
-          '</div>' +
-          whHtml +
-          workersHtml +
-          '<div class="ws-actions">' +
-            '<button class="btn btn-sm" onclick="openEditModal(' + ws.id + ')">&#9998; Upravit</button>' +
-            '<button class="btn btn-sm btn-danger" onclick="deleteWs(' + ws.id + ')">&#128465; Smazat</button>' +
-          '</div>' +
-        '</div>';
-      }).join('');
+        '</td></tr>';
+    }
+
+    function renderWsRow(ws, hallColor) {
+      const workers = ws.workers || [];
+      const opsCount = ws._count ? ws._count.operations : 0;
+
+      // Rozměry
+      let dimHtml = '<span style="color:var(--text2);">—</span>';
+      if (ws.width_m || ws.length_m) {
+        const w = ws.width_m ? parseFloat(ws.width_m) : 0;
+        const l = ws.length_m ? parseFloat(ws.length_m) : 0;
+        dimHtml = '<span class="dim-badge">' + w + ' × ' + l + ' m</span>';
+        if (w > 0 && l > 0) dimHtml += '<br><span style="font-size:11px;color:var(--text2);">' + (w * l).toFixed(1) + ' m²</span>';
+      }
+
+      // Vstupní sklad
+      let inWhHtml = '<span style="color:var(--text2);">—</span>';
+      if (ws.input_warehouse) {
+        const inLocLabel = ws.input_location ? (ws.input_location.label || [ws.input_location.section, ws.input_location.rack, ws.input_location.position].filter(Boolean).join('-')) : '';
+        inWhHtml = '<span class="ws-wh-badge ws-wh-in">' + esc(ws.input_warehouse.name) + '</span>' +
+          (inLocLabel ? '<div style="font-size:10px;color:var(--text2);margin-top:2px;">&#128205; ' + esc(inLocLabel) + '</div>' : '');
+      }
+
+      // Výstupní sklad
+      let outWhHtml = '<span style="color:var(--text2);">—</span>';
+      if (ws.output_warehouse) {
+        const outLocLabel = ws.output_location ? (ws.output_location.label || [ws.output_location.section, ws.output_location.rack, ws.output_location.position].filter(Boolean).join('-')) : '';
+        outWhHtml = '<span class="ws-wh-badge ws-wh-out">' + esc(ws.output_warehouse.name) + '</span>' +
+          (outLocLabel ? '<div style="font-size:10px;color:var(--text2);margin-top:2px;">&#128205; ' + esc(outLocLabel) + '</div>' : '');
+      }
+
+      // Pracovníci
+      let workersHtml = '<span style="color:var(--text2);">—</span>';
+      if (workers.length > 0) {
+        workersHtml = '<div class="ws-workers-cell">';
+        workers.slice(0, 4).forEach(ww => {
+          const p = ww.person || {};
+          const initials = (p.first_name || '?').charAt(0) + (p.last_name || '?').charAt(0);
+          workersHtml += '<div class="ws-worker-mini" title="' + esc((p.first_name || '') + ' ' + (p.last_name || '')) + '">' + esc(initials) + '</div>';
+        });
+        if (workers.length > 4) workersHtml += '<span class="ws-worker-count">+' + (workers.length - 4) + '</span>';
+        workersHtml += '</div>';
+      }
+
+      return '<tr class="ws-row" draggable="true" data-ws-id="' + ws.id + '" onclick="openEditModal(' + ws.id + ')">' +
+        '<td style="color:var(--text2);font-size:12px;border-left:3px solid ' + (hallColor || 'transparent') + ';"><span class="drag-handle" title="Přetáhněte do haly">&#9776;</span> ' + ws.id + '</td>' +
+        '<td><div class="ws-name-cell"><div class="ws-icon-sm">&#127981;</div><div><span class="ws-name">' + esc(ws.name) + '</span>' +
+          (ws.is_external ? '<span class="ws-ext-badge">kooperace</span>' : '') +
+          (ws.code ? '<div class="ws-code">' + esc(ws.code) + '</div>' : '') +
+        '</div></div></td>' +
+        '<td>' + dimHtml + '</td>' +
+        '<td>' + inWhHtml + '</td>' +
+        '<td>' + outWhHtml + '</td>' +
+        '<td style="text-align:center;">' + opsCount + '</td>' +
+        '<td>' + workersHtml + '</td>' +
+        '<td>' +
+          '<button class="btn btn-sm" onclick="event.stopPropagation();openEditModal(' + ws.id + ')">&#9998;</button> ' +
+          '<button class="btn btn-sm btn-danger" onclick="event.stopPropagation();deleteWs(' + ws.id + ')">&#128465;</button>' +
+        '</td>' +
+      '</tr>';
+    }
+
+    function toggleHall(hallId) {
+      if (collapsedHalls.has(hallId)) {
+        collapsedHalls.delete(hallId);
+      } else {
+        collapsedHalls.add(hallId);
+      }
+      renderList();
+    }
+
+    // === Drag & Drop pracoviště mezi halami ===
+    let dragWsId = null;
+
+    function initDragAndDrop() {
+      const tbody = document.getElementById('ws-tbody');
+
+      // Drag start na pracovišti
+      tbody.querySelectorAll('.ws-row[draggable]').forEach(row => {
+        row.addEventListener('dragstart', e => {
+          dragWsId = parseInt(row.dataset.wsId);
+          row.classList.add('dragging');
+          e.dataTransfer.effectAllowed = 'move';
+          e.dataTransfer.setData('text/plain', dragWsId);
+        });
+        row.addEventListener('dragend', () => {
+          row.classList.remove('dragging');
+          dragWsId = null;
+          // Vyčisti všechny drag-over stavy
+          tbody.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+        });
+      });
+
+      // Drop target na halách
+      tbody.querySelectorAll('.hall-row[data-hall-id]').forEach(hallRow => {
+        hallRow.addEventListener('dragover', e => {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'move';
+          hallRow.classList.add('drag-over');
+        });
+        hallRow.addEventListener('dragleave', e => {
+          // Ošetření — dragleave se volá i při přejezdu na child element
+          if (!hallRow.contains(e.relatedTarget)) {
+            hallRow.classList.remove('drag-over');
+          }
+        });
+        hallRow.addEventListener('drop', async e => {
+          e.preventDefault();
+          e.stopPropagation();
+          hallRow.classList.remove('drag-over');
+
+          const wsId = parseInt(e.dataTransfer.getData('text/plain'));
+          const targetHallId = parseInt(hallRow.dataset.hallId);
+          if (!wsId) return;
+
+          // Najdi pracoviště a zjisti aktuální halu
+          const ws = allWorkstations.find(w => w.id === wsId);
+          if (!ws) return;
+          const currentHallId = ws.hall ? ws.hall.id : (ws.hall_id || 0);
+          if (currentHallId === targetHallId) return; // Už je v této hale
+
+          const newHallId = targetHallId === 0 ? null : targetHallId;
+
+          try {
+            await api('/api/production/workstations/' + wsId, {
+              method: 'PUT',
+              body: JSON.stringify({ hall_id: newHallId }),
+            });
+
+            // Aktualizuj lokální data okamžitě (bez čekání na reload)
+            ws.hall_id = newHallId;
+            ws.hall = newHallId ? allHalls.find(h => h.id === newHallId) || null : null;
+
+            const targetHall = newHallId ? allHalls.find(h => h.id === newHallId) : null;
+            showToast('Přesunuto do ' + (targetHall ? targetHall.name : 'Nezařazené'));
+
+            // Rozbal cílovou halu pokud je sbalená
+            if (collapsedHalls.has(targetHallId)) {
+              collapsedHalls.delete(targetHallId);
+            }
+
+            renderList();
+          } catch (err) {
+            showToast('Chyba: ' + err.message, true);
+          }
+        });
+      });
+    }
+
+    // === Hala modal ===
+    function renderHallColorPicker(selected) {
+      const wrap = document.getElementById('hall-colors');
+      wrap.innerHTML = HALL_COLORS.map(c =>
+        '<div class="color-opt ' + (c === selected ? 'active' : '') + '" ' +
+        'style="background:' + c + ';" onclick="pickHallColor(\'' + c + '\')"></div>'
+      ).join('');
+      selectedHallColor = selected;
+    }
+
+    function pickHallColor(c) {
+      selectedHallColor = c;
+      document.querySelectorAll('.color-opt').forEach(el => {
+        el.classList.toggle('active', el.style.background === c || el.style.backgroundColor === c);
+      });
+    }
+
+    function openHallModal(id) {
+      if (id) {
+        const hall = allHalls.find(h => h.id === id);
+        if (!hall) return;
+        document.getElementById('hall-modal-title').textContent = 'Upravit halu';
+        document.getElementById('hall-id').value = hall.id;
+        document.getElementById('hall-name').value = hall.name;
+        document.getElementById('hall-delete-btn').style.display = '';
+        renderHallColorPicker(hall.color);
+      } else {
+        document.getElementById('hall-modal-title').textContent = 'Nová hala';
+        document.getElementById('hall-id').value = '';
+        document.getElementById('hall-name').value = '';
+        document.getElementById('hall-delete-btn').style.display = 'none';
+        renderHallColorPicker(HALL_COLORS[allHalls.length % HALL_COLORS.length]);
+      }
+      document.getElementById('hall-modal').style.display = 'flex';
+      document.getElementById('hall-name').focus();
+    }
+
+    function closeHallModal() { document.getElementById('hall-modal').style.display = 'none'; }
+
+    async function saveHall() {
+      const id = document.getElementById('hall-id').value;
+      const name = document.getElementById('hall-name').value.trim();
+      if (!name) return showToast('Vyplňte název haly', true);
+      try {
+        const body = { name, color: selectedHallColor };
+        if (id) {
+          await api('/api/production/halls/' + id, { method: 'PUT', body: JSON.stringify(body) });
+        } else {
+          await api('/api/production/halls', { method: 'POST', body: JSON.stringify(body) });
+        }
+        showToast(id ? 'Hala aktualizována' : 'Hala vytvořena');
+        closeHallModal();
+        await reloadData();
+      } catch (err) { showToast('Chyba: ' + err.message, true); }
+    }
+
+    async function deleteHall() {
+      const id = document.getElementById('hall-id').value;
+      if (!id) return;
+      const hall = allHalls.find(h => h.id === parseInt(id));
+      if (!confirm('Smazat halu "' + (hall ? hall.name : '') + '"?\nPracoviště zůstanou, jen budou nezařazená.')) return;
+      try {
+        await api('/api/production/halls/' + id, { method: 'DELETE' });
+        showToast('Hala smazána');
+        closeHallModal();
+        await reloadData();
+      } catch (err) { showToast('Chyba: ' + err.message, true); }
+    }
+
+    // === Hall select v pracovišti ===
+    function populateHallSelect(selectedId) {
+      const sel = document.getElementById('ws-hall');
+      sel.innerHTML = '<option value="">— bez haly —</option>';
+      allHalls.forEach(h => {
+        const selected = h.id === selectedId;
+        sel.innerHTML += '<option value="' + h.id + '"' + (selected ? ' selected' : '') + '>' +
+          esc(h.name) + '</option>';
+      });
     }
 
     // === Warehouse selects ===
-    function populateWarehouseSelects(inputId, outputId) {
+    function populateWarehouseSelects(inputWhId, outputWhId, inputLocId, outputLocId) {
       ['ws-input-wh', 'ws-output-wh'].forEach(selId => {
         const sel = document.getElementById(selId);
         sel.innerHTML = '<option value="">— bez skladu —</option>';
         allWarehouses.forEach(wh => {
-          const selected = (selId === 'ws-input-wh' && wh.id === inputId) ||
-                           (selId === 'ws-output-wh' && wh.id === outputId);
+          const selected = (selId === 'ws-input-wh' && wh.id === inputWhId) ||
+                           (selId === 'ws-output-wh' && wh.id === outputWhId);
           sel.innerHTML += '<option value="' + wh.id + '"' + (selected ? ' selected' : '') + '>' +
             esc(wh.name) + (wh.code ? ' (' + esc(wh.code) + ')' : '') + '</option>';
         });
       });
+      // Naplnit pozice pro vybraný sklad
+      populateLocationSelect('input', inputWhId, inputLocId);
+      populateLocationSelect('output', outputWhId, outputLocId);
+    }
+
+    // Naplní select pozic pro daný typ (input/output) podle zvoleného skladu
+    function populateLocationSelect(type, whId, selectedLocId) {
+      const sel = document.getElementById('ws-' + type + '-loc');
+      sel.innerHTML = '<option value="">— bez pozice —</option>';
+      if (!whId) { sel.disabled = true; sel.style.opacity = '0.5'; return; }
+      sel.disabled = false;
+      sel.style.opacity = '';
+
+      // Najdi pracoviště s tímto skladem, které má locations v API odpovědi
+      const ws = allWorkstations.find(w => {
+        const wh = type === 'input' ? w.input_warehouse : w.output_warehouse;
+        return wh && wh.id === whId && wh.locations;
+      });
+      const locations = ws ? (type === 'input' ? ws.input_warehouse : ws.output_warehouse).locations : [];
+
+      // Pokud nemáme locations z pracovišť, zkusíme načíst z API
+      if (locations.length === 0 && whId) {
+        fetchLocations(whId).then(locs => {
+          locs.forEach(loc => {
+            const label = loc.label || [loc.section, loc.rack, loc.position].filter(Boolean).join('-') || 'Pozice #' + loc.id;
+            sel.innerHTML += '<option value="' + loc.id + '"' + (loc.id === selectedLocId ? ' selected' : '') + '>' + esc(label) + '</option>';
+          });
+        });
+        return;
+      }
+
+      locations.forEach(loc => {
+        const label = loc.label || [loc.section, loc.rack, loc.position].filter(Boolean).join('-') || 'Pozice #' + loc.id;
+        sel.innerHTML += '<option value="' + loc.id + '"' + (loc.id === selectedLocId ? ' selected' : '') + '>' + esc(label) + '</option>';
+      });
+    }
+
+    async function fetchLocations(whId) {
+      try {
+        return await api('/api/wh/warehouses/' + whId + '/locations');
+      } catch (e) { return []; }
+    }
+
+    function onWarehouseChange(type) {
+      const whId = parseInt(document.getElementById('ws-' + type + '-wh').value) || null;
+      // Resetovat pozici při změně skladu
+      populateLocationSelect(type, whId, null);
     }
 
     // === Worker modal ===
@@ -402,8 +792,10 @@
       document.getElementById('ws-code').value = '';
       document.getElementById('ws-width').value = '';
       document.getElementById('ws-length').value = '';
+      document.getElementById('ws-external').checked = false;
       modalWorkers = [];
-      populateWarehouseSelects(null, null);
+      populateHallSelect(null);
+      populateWarehouseSelects(null, null, null, null);
       populateWorkerSelect();
       renderModalWorkers();
       document.getElementById('ws-modal').style.display = 'flex';
@@ -419,10 +811,16 @@
       document.getElementById('ws-code').value = ws.code || '';
       document.getElementById('ws-width').value = ws.width_m ? parseFloat(ws.width_m) : '';
       document.getElementById('ws-length').value = ws.length_m ? parseFloat(ws.length_m) : '';
+      document.getElementById('ws-external').checked = ws.is_external || false;
+
+      const hallId = ws.hall ? ws.hall.id : ws.hall_id || null;
+      populateHallSelect(hallId);
 
       populateWarehouseSelects(
         ws.input_warehouse ? ws.input_warehouse.id : ws.input_warehouse_id || null,
-        ws.output_warehouse ? ws.output_warehouse.id : ws.output_warehouse_id || null
+        ws.output_warehouse ? ws.output_warehouse.id : ws.output_warehouse_id || null,
+        ws.input_location ? ws.input_location.id : ws.input_location_id || null,
+        ws.output_location ? ws.output_location.id : ws.output_location_id || null
       );
 
       modalWorkers = (ws.workers || []).map(ww => ({
@@ -440,20 +838,24 @@
 
     function closeModal() { document.getElementById('ws-modal').style.display = 'none'; }
 
-    // === Save ===
+    // === Save pracoviště ===
     async function saveWs() {
       const id = document.getElementById('ws-id').value;
       const name = document.getElementById('ws-name').value.trim();
       const code = document.getElementById('ws-code').value.trim() || null;
+      const hall_id = document.getElementById('ws-hall').value || null;
+      const is_external = document.getElementById('ws-external').checked;
       const width_m = document.getElementById('ws-width').value || null;
       const length_m = document.getElementById('ws-length').value || null;
       const input_warehouse_id = document.getElementById('ws-input-wh').value || null;
+      const input_location_id = document.getElementById('ws-input-loc').value || null;
       const output_warehouse_id = document.getElementById('ws-output-wh').value || null;
+      const output_location_id = document.getElementById('ws-output-loc').value || null;
       if (!name) return showToast('Vyplňte název pracoviště', true);
 
       try {
         let wsId;
-        const body = { name, code, width_m, length_m, input_warehouse_id, output_warehouse_id };
+        const body = { name, code, hall_id, is_external, width_m, length_m, input_warehouse_id, input_location_id, output_warehouse_id, output_location_id };
         if (id) {
           await api('/api/production/workstations/' + id, { method: 'PUT', body: JSON.stringify(body) });
           wsId = parseInt(id);
@@ -514,7 +916,12 @@
     }
 
     async function reloadData() {
-      allWorkstations = await api('/api/production/workstations');
+      const [wsList, halls] = await Promise.all([
+        api('/api/production/workstations'),
+        api('/api/production/halls'),
+      ]);
+      allHalls = halls;
+      allWorkstations = wsList;
       renderList();
     }
 

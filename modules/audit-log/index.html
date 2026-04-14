@@ -78,8 +78,11 @@
           <option value="person">Osoby</option>
           <option value="department">Oddělení</option>
           <option value="role">Role</option>
+          <option value="company">Společnosti</option>
+          <option value="material">Materiály</option>
+          <option value="warehouse">Sklady</option>
+          <option value="movement">Pohyby</option>
           <option value="attendance">Docházka</option>
-          <option value="system">Systém</option>
         </select>
         <select id="filter-action" onchange="filterLocally()">
           <option value="">Všechny akce</option>
@@ -102,7 +105,7 @@
     renderSidebar('audit-log');
     initDate();
 
-    const ENTITY_LABELS = { person: 'Osoba', department: 'Oddělení', role: 'Role', attendance: 'Docházka', system: 'Systém' };
+    const ENTITY_LABELS = { person: 'Osoba', department: 'Oddělení', role: 'Role', company: 'Společnost', material: 'Materiál', warehouse: 'Sklad', movement: 'Pohyb', attendance: 'Docházka' };
     const ACTION_LABELS = { create: 'Vytvořeno', update: 'Upraveno', delete: 'Smazáno', rollback: 'Rollback' };
     const FIELD_LABELS = {
       first_name: 'Jméno', last_name: 'Příjmení', email: 'E-mail', phone: 'Telefon',
@@ -112,7 +115,11 @@
       address: 'Adresa', chip_number: 'Číslo čipu', is_super_admin: 'Super Admin',
       name: 'Název', color: 'Barva', description: 'Popis',
       clock_in: 'Příchod', clock_out: 'Odchod', break_minutes: 'Přestávka', note: 'Poznámka',
-      date: 'Datum',
+      date: 'Datum', status: 'Status', code: 'Kód', unit: 'Jednotka', price: 'Cena',
+      current_stock: 'Stav skladu', min_stock: 'Minimální stav', warehouse_id: 'Sklad',
+      location_id: 'Pozice', material_id: 'Materiál', quantity: 'Množství',
+      company_id: 'Společnost', parent_role_id: 'Nadřazená role', label: 'Označení',
+      location: 'Umístění', capacity: 'Kapacita', zone: 'Zóna',
     };
 
     let allEntries = [];
@@ -124,11 +131,14 @@
 
       let url = '/api/audit?';
       if (entity) url += 'entity=' + entity + '&';
-      if (from) url += 'from=' + from + 'T00:00:00.000Z&';
-      if (to) url += 'to=' + to + 'T23:59:59.999Z&';
+      if (from) url += 'date_from=' + from + 'T00:00:00.000Z&';
+      if (to) url += 'date_to=' + to + 'T23:59:59.999Z&';
 
       try {
-        const res = await fetch(url);
+        const headers = {};
+        const t = sessionStorage.getItem('token');
+        if (t) headers['Authorization'] = 'Bearer ' + t;
+        const res = await fetch(url, { credentials: 'include', headers });
         if (res.status === 403) {
           document.getElementById('timeline').innerHTML = '<div class="empty-audit"><div class="empty-audit-icon">🔒</div><h3>Přístup odepřen</h3><p>Tato sekce vyžaduje práva Super Admin.</p></div>';
           return;
@@ -184,7 +194,7 @@
             <div class="timeline-meta">
               <span class="action-badge ${e.action}">${ACTION_LABELS[e.action] || e.action}</span>
               <span class="entity-badge">${ENTITY_LABELS[e.entity] || e.entity}</span>
-              <span>👤 ${escHtml(e.user.displayName || e.user.username)}</span>
+              <span>👤 ${escHtml(e.user_display || e.user_name || '—')}</span>
               <span>🕐 ${dateStr}</span>
               <span style="color:var(--text2);">#${e.id}</span>
             </div>`;
@@ -234,7 +244,10 @@
 
     async function executeRollback(id) {
       try {
-        const res = await fetch('/api/audit/' + id + '/rollback', { method: 'POST' });
+        const headers = { 'Content-Type': 'application/json' };
+        const t = sessionStorage.getItem('token');
+        if (t) headers['Authorization'] = 'Bearer ' + t;
+        const res = await fetch('/api/audit/' + id + '/rollback', { method: 'POST', credentials: 'include', headers });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error);
         closeModal();
