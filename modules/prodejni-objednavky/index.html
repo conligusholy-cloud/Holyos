@@ -1305,8 +1305,14 @@
               : '<span style="color:var(--text2);font-size:11px;">—</span>';
 
             if (isEditable) {
+              // Dvouradkovy nazev: prvni radek bold (typicky EN), druhy maly gray (typicky CS)
+              const nameParts = (it.name || '—').split('\n');
+              const nameTop = esc(nameParts[0] || '—');
+              const nameBottom = nameParts.length > 1 ? esc(nameParts.slice(1).join(' ')) : '';
+              const nameCell = '<span class="person-name">' + nameTop + '</span>' +
+                (nameBottom ? '<div style="font-size:11px;color:var(--text2);margin-top:2px;font-style:italic;">' + nameBottom + '</div>' : '');
               itemsHtml += '<tr>';
-              itemsHtml += '<td><span class="person-name">' + (it.name || '—') + '</span>' + configLine + '</td>';
+              itemsHtml += '<td>' + nameCell + configLine + '</td>';
               itemsHtml += '<td style="font-weight:600;">1</td>'; // Vždy 1 ks — multiplikace řešena duplikací řádku
               itemsHtml += '<td>' + it.unit + '</td>';
               itemsHtml += '<td><input type="number" value="' + parseFloat(it.unit_price || 0) + '" step="0.01" style="width:90px;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:4px 8px;color:var(--text);font-size:13px;" onchange="updateOrderItem(' + it.id + ',' + id + ',\'unit_price\',this.value,1)"></td>';
@@ -1319,8 +1325,13 @@
                 '</td>';
               itemsHtml += '</tr>';
             } else {
+              const nameParts2 = (it.name || '—').split('\n');
+              const nameTop2 = esc(nameParts2[0] || '—');
+              const nameBottom2 = nameParts2.length > 1 ? esc(nameParts2.slice(1).join(' ')) : '';
+              const nameCell2 = '<span class="person-name">' + nameTop2 + '</span>' +
+                (nameBottom2 ? '<div style="font-size:11px;color:var(--text2);margin-top:2px;font-style:italic;">' + nameBottom2 + '</div>' : '');
               itemsHtml += '<tr>';
-              itemsHtml += '<td><span class="person-name">' + (it.name || '—') + '</span>' + configLine + '</td>';
+              itemsHtml += '<td>' + nameCell2 + configLine + '</td>';
               itemsHtml += '<td>' + it.quantity + '</td><td>' + it.unit + '</td>';
               itemsHtml += '<td>' + parseFloat(it.unit_price || 0).toLocaleString('cs-CZ') + ' ' + currencySymbol(order.currency) + '</td>';
               itemsHtml += '<td style="font-weight:600;">' + parseFloat(it.total_price || 0).toLocaleString('cs-CZ') + ' ' + currencySymbol(order.currency) + '</td>';
@@ -1385,7 +1396,7 @@
             plPicker +
             '<form onsubmit="addOrderItem(event,' + id + ')" style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;">' +
               '<div class="form-group" style="flex:2;"><label>Výrobek</label><select name="product_id" onchange="fillItemPrice(this)"><option value="">— Vyberte výrobek —</option>' + prodDetailOpts + '</select></div>' +
-              '<div class="form-group" style="flex:1;"><label>Název</label><input type="text" name="name" placeholder="Nebo ruční název"></div>' +
+              '<div class="form-group" style="flex:1;"><label>Název (lze 2 řádky — EN nahoře, CS dole)</label><textarea name="name" rows="2" placeholder="Nebo ruční název" style="resize:vertical;min-height:62px;font-family:inherit;"></textarea></div>' +
               '<input type="hidden" name="quantity" value="1">' +
               '<div class="form-group" style="width:60px;"><label>Jedn.</label><input type="text" name="unit" value="ks"></div>' +
               '<div class="form-group" style="width:100px;"><label>Cena/ks</label><input type="number" name="unit_price" value="0" step="0.01"></div>' +
@@ -1511,7 +1522,15 @@
       if (prodSel) prodSel.value = productId || '';
       // Propis nazev (EN preferovan pri EUR mene, pokud existuje)
       const nameInp = form.querySelector('[name="name"]');
-      if (nameInp) nameInp.value = (currency === 'EUR' && nameEn) ? nameEn : nameCs;
+      if (nameInp) {
+        // Dvouradkovy nazev: EN nahore, CS dole. Pokud EN chybi, jen CS.
+        // Pro EUR menu preferujeme EN; oba pak stejne, jen poradi je konzistentni.
+        if (nameEn && nameCs && nameEn !== nameCs) {
+          nameInp.value = nameEn + '\n' + nameCs;
+        } else {
+          nameInp.value = nameCs || nameEn || '';
+        }
+      }
       // Propis cenu podle meny a podle useTruck
       const priceInp = form.querySelector('[name="unit_price"]');
       if (priceInp) {
