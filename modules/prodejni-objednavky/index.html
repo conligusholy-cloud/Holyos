@@ -1388,21 +1388,22 @@
                     '<button type="button" class="btn btn-sm" style="background:rgba(14,165,233,0.12);color:#0ea5e9;border-color:rgba(14,165,233,0.3);" onclick="fillFromPricelist(document.getElementById(\'add-item-pricelist\'), \'' + order.currency + '\', true)" title="Použít kamionovou (velkoobchodní) cenu">🚛 Kamion</button>' +
                   '</div>' +
                 '</div>' +
-                '<div style="font-size:11px;color:var(--text2);margin-top:6px;">Vyberte položku — automaticky se doplní výrobek, název a cena v měně objednávky. 🚛 Kamion přepíše cenu na velkoobchodní.</div>' +
+                '<div style="font-size:11px;color:var(--text2);margin-top:6px;">Vyberte položku z ceníku — doplní se název a cena v měně objednávky. Výrobek se napojí na pozadí. 🚛 Kamion přepíše cenu na velkoobchodní.</div>' +
               '</div>'
             : '';
           addItemSection = '<div style="border-top:1px solid var(--border);padding-top:16px;">' +
             '<h3 style="font-size:14px;margin-bottom:8px;">➕ Přidat položku</h3>' +
             plPicker +
             '<form onsubmit="addOrderItem(event,' + id + ')" style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;">' +
-              '<div class="form-group" style="flex:2;"><label>Výrobek</label><select name="product_id" onchange="fillItemPrice(this)"><option value="">— Vyberte výrobek —</option>' + prodDetailOpts + '</select></div>' +
-              '<div class="form-group" style="flex:1;"><label>Název (lze 2 řádky — EN nahoře, CS dole)</label><textarea name="name" rows="2" placeholder="Nebo ruční název" style="resize:vertical;min-height:62px;font-family:inherit;"></textarea></div>' +
+              // Vyrobek (product_id) se plni automaticky z ceniku pres fillFromPricelist. Uzivatel ho nevidi.
+              '<input type="hidden" name="product_id" id="add-item-product-hidden" value="">' +
+              '<div class="form-group" style="flex:3;min-width:240px;"><label>Název (EN nahoře, CS dole — lze upravit)</label><textarea name="name" rows="2" placeholder="Vyberte položku z ceníku výše, nebo napište ručně" style="resize:vertical;min-height:62px;font-family:inherit;"></textarea></div>' +
               '<input type="hidden" name="quantity" value="1">' +
               '<div class="form-group" style="width:60px;"><label>Jedn.</label><input type="text" name="unit" value="ks"></div>' +
-              '<div class="form-group" style="width:100px;"><label>Cena/ks</label><input type="number" name="unit_price" value="0" step="0.01"></div>' +
+              '<div class="form-group" style="width:110px;"><label>Cena/ks</label><input type="number" name="unit_price" value="0" step="0.01"></div>' +
               '<button type="submit" class="btn btn-primary btn-sm" style="margin-bottom:4px;">+ Přidat (1 ks)</button>' +
             '</form>' +
-            '<div style="font-size:11px;color:var(--text2);margin-top:6px;">💡 Každý výrobek je samostatný řádek s vlastní konfigurací. Pro další kus stejného typu použijte <strong>🔁 Duplikovat</strong> u existující položky.</div>' +
+            '<div style="font-size:11px;color:var(--text2);margin-top:6px;">💡 Položka se přidá z ceníku — výrobek a konfigurace se přiřadí automaticky. Pro další kus stejného typu použijte <strong>🔁 Duplikovat</strong> u existující položky.</div>' +
           '</div>';
         }
 
