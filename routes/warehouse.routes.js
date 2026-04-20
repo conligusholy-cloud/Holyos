@@ -1440,20 +1440,20 @@ router.get('/pricelist/:id', async (req, res, next) => {
 // POST /api/wh/pricelist
 router.post('/pricelist', async (req, res, next) => {
   try {
-    const { name_cs, name_en, price_czk, price_eur, product_id, note, active } = req.body || {};
+    const { name_cs, name_en, price_czk, price_eur, truck_price_czk, truck_price_eur, product_id, note, active } = req.body || {};
     if (!name_cs || !String(name_cs).trim()) {
       return res.status(400).json({ error: 'Povinny je cesky nazev (name_cs).' });
     }
-    if (!product_id) {
-      return res.status(400).json({ error: 'Povinny je vyrobek (product_id) — kazda polozka ceniku musi byt napojena na Product.' });
-    }
+    // product_id je volitelny — frontend vizualne upozorni pokud chybi
     const created = await prisma.salesPricelistItem.create({
       data: {
         name_cs: String(name_cs).trim(),
         name_en: name_en ? String(name_en).trim() : null,
         price_czk: parsePrice(price_czk),
         price_eur: parsePrice(price_eur),
-        product_id: parseInt(product_id, 10),
+        truck_price_czk: parsePrice(truck_price_czk),
+        truck_price_eur: parsePrice(truck_price_eur),
+        product_id: product_id ? parseInt(product_id, 10) : null,
         note: note || null,
         active: active === undefined ? true : !!active,
       },
@@ -1469,18 +1469,15 @@ router.post('/pricelist', async (req, res, next) => {
 router.put('/pricelist/:id', async (req, res, next) => {
   try {
     const id = parseInt(req.params.id, 10);
-    const { name_cs, name_en, price_czk, price_eur, product_id, note, active } = req.body || {};
+    const { name_cs, name_en, price_czk, price_eur, truck_price_czk, truck_price_eur, product_id, note, active } = req.body || {};
     const data = {};
     if (name_cs !== undefined) data.name_cs = String(name_cs).trim();
     if (name_en !== undefined) data.name_en = name_en ? String(name_en).trim() : null;
     if (price_czk !== undefined) data.price_czk = parsePrice(price_czk);
     if (price_eur !== undefined) data.price_eur = parsePrice(price_eur);
-    if (product_id !== undefined) {
-      if (!product_id) {
-        return res.status(400).json({ error: 'Vyrobek (product_id) je povinny — nelze ho odebrat.' });
-      }
-      data.product_id = parseInt(product_id, 10);
-    }
+    if (truck_price_czk !== undefined) data.truck_price_czk = parsePrice(truck_price_czk);
+    if (truck_price_eur !== undefined) data.truck_price_eur = parsePrice(truck_price_eur);
+    if (product_id !== undefined) data.product_id = product_id ? parseInt(product_id, 10) : null;
     if (note !== undefined) data.note = note || null;
     if (active !== undefined) data.active = !!active;
     const updated = await prisma.salesPricelistItem.update({
