@@ -1442,7 +1442,10 @@ router.post('/pricelist', async (req, res, next) => {
   try {
     const { name_cs, name_en, price_czk, price_eur, product_id, note, active } = req.body || {};
     if (!name_cs || !String(name_cs).trim()) {
-      return res.status(400).json({ error: 'Povinny je alespon cesky nazev (name_cs).' });
+      return res.status(400).json({ error: 'Povinny je cesky nazev (name_cs).' });
+    }
+    if (!product_id) {
+      return res.status(400).json({ error: 'Povinny je vyrobek (product_id) — kazda polozka ceniku musi byt napojena na Product.' });
     }
     const created = await prisma.salesPricelistItem.create({
       data: {
@@ -1450,7 +1453,7 @@ router.post('/pricelist', async (req, res, next) => {
         name_en: name_en ? String(name_en).trim() : null,
         price_czk: parsePrice(price_czk),
         price_eur: parsePrice(price_eur),
-        product_id: product_id ? parseInt(product_id, 10) : null,
+        product_id: parseInt(product_id, 10),
         note: note || null,
         active: active === undefined ? true : !!active,
       },
@@ -1472,7 +1475,12 @@ router.put('/pricelist/:id', async (req, res, next) => {
     if (name_en !== undefined) data.name_en = name_en ? String(name_en).trim() : null;
     if (price_czk !== undefined) data.price_czk = parsePrice(price_czk);
     if (price_eur !== undefined) data.price_eur = parsePrice(price_eur);
-    if (product_id !== undefined) data.product_id = product_id ? parseInt(product_id, 10) : null;
+    if (product_id !== undefined) {
+      if (!product_id) {
+        return res.status(400).json({ error: 'Vyrobek (product_id) je povinny — nelze ho odebrat.' });
+      }
+      data.product_id = parseInt(product_id, 10);
+    }
     if (note !== undefined) data.note = note || null;
     if (active !== undefined) data.active = !!active;
     const updated = await prisma.salesPricelistItem.update({

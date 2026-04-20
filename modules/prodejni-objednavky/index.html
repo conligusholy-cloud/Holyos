@@ -19,6 +19,8 @@
     .tab-btn { background: transparent; border: none; color: var(--text2); padding: 14px 22px; font-size: 14px; font-weight: 600; cursor: pointer; border-bottom: 3px solid transparent; transition: all 0.15s; letter-spacing: 0.3px; }
     .tab-btn:hover { color: var(--text); }
     .tab-btn.active { color: #eab308; border-bottom-color: #eab308; }
+    /* Tab Cenik nema stats-bar jako Objednavky, obsah by sedel prilis blizko tab-baru. */
+    #tab-pricelist > .content { padding-top: 20px; }
     .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px 20px; min-width: 150px; flex: 1; }
     .stat-card .stat-value { font-size: 28px; font-weight: 700; color: #eab308; }
     .stat-card .stat-label { font-size: 12px; color: var(--text2); margin-top: 4px; }
@@ -1754,7 +1756,7 @@
                 '<div class="form-group full"><label>Název (anglicky)</label><input type="text" name="name_en" value="' + esc(item.name_en || '') + '" placeholder="e.g. Oak table 120cm"></div>' +
                 '<div class="form-group"><label>Cena v Kč (bez DPH)</label><input type="number" step="0.01" min="0" name="price_czk" value="' + (item.price_czk != null ? item.price_czk : '') + '" placeholder="0.00"></div>' +
                 '<div class="form-group"><label>Cena v EUR (bez DPH)</label><input type="number" step="0.01" min="0" name="price_eur" value="' + (item.price_eur != null ? item.price_eur : '') + '" placeholder="0.00"></div>' +
-                '<div class="form-group full"><label>Výrobek (volitelné — propojí cenu s existujícím kusem ve výrobě)</label><select name="product_id"><option value="">— Bez napojení —</option>' + prodOpts + '</select></div>' +
+                '<div class="form-group full"><label>Výrobek *</label><select name="product_id" required><option value="">— Vyberte výrobek —</option>' + prodOpts + '</select></div>' +
                 '<div class="form-group full"><label>Poznámka</label><textarea name="note" rows="2" placeholder="Interní poznámka...">' + esc(item.note || '') + '</textarea></div>' +
                 '<div class="form-group full"><label style="display:flex;align-items:center;gap:8px;cursor:pointer;"><input type="checkbox" name="active"' + (item.active === false ? '' : ' checked') + '> <span>Aktivní položka (zobrazí se v nabídce při tvorbě objednávky)</span></label></div>' +
               '</div>' +
@@ -1770,12 +1772,14 @@
     async function savePricelistItem(e, id) {
       e.preventDefault();
       var form = new FormData(e.target);
+      var productIdRaw = form.get('product_id');
+      if (!productIdRaw) { alert('Prosim vyberte vyrobek — kazda polozka ceniku musi byt napojena na Product.'); return; }
       var data = {
         name_cs: form.get('name_cs'),
         name_en: form.get('name_en') || null,
         price_czk: form.get('price_czk') ? parseFloat(form.get('price_czk')) : null,
         price_eur: form.get('price_eur') ? parseFloat(form.get('price_eur')) : null,
-        product_id: form.get('product_id') ? parseInt(form.get('product_id'), 10) : null,
+        product_id: parseInt(productIdRaw, 10),
         note: form.get('note') || null,
         active: form.has('active'),
       };
