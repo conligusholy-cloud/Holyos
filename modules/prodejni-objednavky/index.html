@@ -229,7 +229,7 @@
       // ─── NOVÁ OBJEDNÁVKA — minimalistický krok ───
       // Položky, výrobní sloty, termíny dodání a odkaz pro zákazníka se řeší
       // až v detail dialogu (openOrderDetail). Sjednocuje UX zadávání a úpravy.
-      if (\!id) {
+      if (!id) {
         _pendingItems = [];
         document.getElementById('modal-root').innerHTML =
           '<div class="modal-overlay" onclick="if(event.target===this)closeModal()">' +
@@ -889,7 +889,7 @@
         // Po vytvoření NOVÉ objednávky rovnou otevři detail dialog — tam
         // uživatel přidá položky, nastaví výrobní sloty a vygeneruje odkaz
         // pro zákazníka. Sjednocuje UX zadávání a úpravy.
-        if (\!id && orderId) {
+        if (!id && orderId) {
           setTimeout(() => openOrderDetail(orderId), 50);
         }
       } catch(e) { alert('Chyba: ' + e.message); console.error('saveOrder error:', e); }
