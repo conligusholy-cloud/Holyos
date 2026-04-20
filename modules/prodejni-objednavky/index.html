@@ -225,6 +225,64 @@
       let o = {};
       if (id) { try { const r = await fetch('/api/wh/orders/' + id); o = await r.json(); } catch(e) {} }
       const compOpts = companies.map(c => '<option value="' + c.id + '"' + (o.company_id === c.id ? ' selected' : '') + '>' + c.name + (c.type ? ' (' + COMPANY_LABELS[c.type] + ')' : '') + '</option>').join('');
+
+      // ─── NOVÁ OBJEDNÁVKA — minimalistický krok ───
+      // Položky, výrobní sloty, termíny dodání a odkaz pro zákazníka se řeší
+      // až v detail dialogu (openOrderDetail). Sjednocuje UX zadávání a úpravy.
+      if (\!id) {
+        _pendingItems = [];
+        document.getElementById('modal-root').innerHTML =
+          '<div class="modal-overlay" onclick="if(event.target===this)closeModal()">' +
+            '<div class="modal" style="width:640px;max-width:95vw;">' +
+              '<h2>Nová prodejní objednávka</h2>' +
+              '<p style="font-size:12px;color:var(--text2);margin-bottom:16px;">Stačí vybrat odběratele a měnu. Položky, termíny dodání a odkaz pro zákazníka nastavíte v dalším kroku.</p>' +
+              '<form onsubmit="saveOrder(event, null)">' +
+                '<input type="hidden" name="type" value="sales">' +
+                '<input type="hidden" name="status" value="new">' +
+                '<div class="form-group">' +
+                  '<label>Odběratel *</label>' +
+                  '<div style="display:flex;gap:6px;">' +
+                    '<select name="company_id" id="order-company-select" required style="flex:1"><option value="">— Vyberte odběratele —</option>' + compOpts + '</select>' +
+                    '<button type="button" class="btn btn-sm" style="white-space:nowrap;padding:6px 10px;" onclick="toggleNewCompanyForm()">+ Nový</button>' +
+                  '</div>' +
+                '</div>' +
+                '<div id="new-company-form" style="display:none;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;margin:8px 0 12px;">' +
+                  '<div style="font-size:13px;font-weight:600;margin-bottom:8px;color:#eab308;">Nový odběratel</div>' +
+                  '<div style="display:flex;gap:8px;align-items:end;margin-bottom:10px;">' +
+                    '<div class="form-group" style="flex:1;"><label>IČO (dohledání z ARES)</label><input type="text" id="new-comp-ico" placeholder="Zadejte IČO..." maxlength="8"></div>' +
+                    '<button type="button" class="btn btn-secondary btn-sm" onclick="lookupARESNewCompany()" style="margin-bottom:2px;">ARES</button>' +
+                  '</div>' +
+                  '<div class="form-grid">' +
+                    '<div class="form-group full"><label>Název firmy *</label><input type="text" id="new-comp-name" placeholder="Název společnosti"></div>' +
+                    '<div class="form-group"><label>DIČ</label><input type="text" id="new-comp-dic" placeholder="CZ12345678"></div>' +
+                    '<div class="form-group"><label>Typ</label><select id="new-comp-type"><option value="customer" selected>Odběratel</option><option value="supplier">Dodavatel</option><option value="both">Dodavatel/Odběratel</option><option value="cooperation">Kooperace</option></select></div>' +
+                    '<div class="form-group full"><label>Adresa</label><input type="text" id="new-comp-address" placeholder="Ulice a č.p."></div>' +
+                    '<div class="form-group"><label>Město</label><input type="text" id="new-comp-city" placeholder="Město"></div>' +
+                    '<div class="form-group"><label>PSČ</label><input type="text" id="new-comp-zip" placeholder="12345" maxlength="5"></div>' +
+                    '<div class="form-group"><label>Kontaktní osoba</label><input type="text" id="new-comp-contact" placeholder="Jméno Příjmení"></div>' +
+                    '<div class="form-group"><label>Email</label><input type="email" id="new-comp-email" placeholder="info@firma.cz"></div>' +
+                    '<div class="form-group"><label>Telefon</label><input type="text" id="new-comp-phone" placeholder="+420..."></div>' +
+                    '<div class="form-group"><label>Splatnost (dní)</label><input type="number" id="new-comp-payment" value="14" min="0"></div>' +
+                  '</div>' +
+                  '<div style="display:flex;gap:8px;margin-top:10px;">' +
+                    '<button type="button" class="btn btn-primary btn-sm" onclick="createNewCompany()">Vytvořit a vybrat</button>' +
+                    '<button type="button" class="btn btn-secondary btn-sm" onclick="toggleNewCompanyForm()">Zrušit</button>' +
+                  '</div>' +
+                '</div>' +
+                '<div class="form-grid">' +
+                  '<div class="form-group"><label>Měna</label><select name="currency"><option value="CZK" selected>CZK (Kč)</option><option value="EUR">EUR (€)</option></select></div>' +
+                  '<div class="form-group"><label>Poznámka</label><input type="text" name="note" placeholder="Nepovinné..."></div>' +
+                '</div>' +
+                '<div class="modal-actions">' +
+                  '<button type="button" class="btn btn-secondary" onclick="closeModal()">Zrušit</button>' +
+                  '<button type="submit" class="btn btn-primary">Vytvořit a pokračovat</button>' +
+                '</div>' +
+              '</form>' +
+            '</div>' +
+          '</div>';
+        return;
+      }
+
       const statusOpts = Object.entries(ORDER_STATUSES).map(([k,v]) => '<option value="' + k + '"' + (o.status === k ? ' selected' : '') + '>' + v.label + '</option>').join('');
 
       // Načti výrobky z tabulky Product (ne materiály)
@@ -828,6 +886,12 @@
         closeModal();
         loadOrders();
         loadStats();
+        // Po vytvoření NOVÉ objednávky rovnou otevři detail dialog — tam
+        // uživatel přidá položky, nastaví výrobní sloty a vygeneruje odkaz
+        // pro zákazníka. Sjednocuje UX zadávání a úpravy.
+        if (\!id && orderId) {
+          setTimeout(() => openOrderDetail(orderId), 50);
+        }
       } catch(e) { alert('Chyba: ' + e.message); console.error('saveOrder error:', e); }
     }
 
