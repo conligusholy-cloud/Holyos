@@ -1,50 +1,212 @@
 /* ============================================
-   factorify-api.js — Programování výroby
-   Přepojeno na vlastní HolyOS API (Fáze 3)
+   factorify-api.ts — Napojení na Factorify API
+   Konfigurace se čte z .env souboru
    ============================================ */
 import { showToast } from './renderer.js';
+// Cesty kde hledat .env soubor (zkouší postupně)
+const ENV_PATHS = [
+    '../../.env', // kořen Výroba (vedle modules/)
+    '../../../.env', // nadřazená složka (mimo Výroba)
+    './.env', // aktuální složka
+];
 export const FactorifyAPI = {
     connected: false,
     workstations: [],
+    entities: [],
     loading: false,
     error: null,
-    configLoaded: true,
+    configLoaded: false,
     config: {
+        baseUrl: 'https://bs.factorify.cloud',
+        proxyUrl: window.location.origin,
         useProxy: true,
-        securityToken: 'local',
+        securityToken: '',
+        workstationEntity: 'Stage',
+        endpoints: {
+            entities: '/api/metadata/entities',
+            entityMeta: '/api/metadata/entity/',
+            query: '/api/query/',
+        },
+        headers: {
+            'Accept': 'application/json',
+            'X-FySerialization': 'ui2',
+        },
+    },
+    parseEnv(text) {
+        const result = {};
+        text.split('\n').forEach(line => {
+            line = line.trim();
+            if (!line || line.startsWith('#'))
+                return;
+            const eq = line.indexOf('=');
+            if (eq < 0)
+                return;
+            const key = line.substring(0, eq).trim();
+            let val = line.substring(eq + 1).trim();
+            if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+                val = val.slice(1, -1);
+            }
+            result[key] = val;
+        });
+        return result;
     },
     async loadEnv() {
-        this.configLoaded = true;
-        return true;
+        for (const path of ENV_PATHS) {
+            try {
+                const resp = await fetch(path, { cache: 'no-store' });
+                if (resp.ok) {
+                    const text = await resp.text();
+                    const env = this.parseEnv(text);
+                    if (env.FACTORIFY_BASE_URL)
+                        this.config.baseUrl = env.FACTORIFY_BASE_URL;
+                    if (env.FACTORIFY_TOKEN)
+                        this.config.securityToken = env.FACTORIFY_TOKEN;
+                    if (env.FACTORIFY_ENTITY)
+                        this.config.workstationEntity = env.FACTORIFY_ENTITY;
+                    this.configLoaded = true;
+                    console.log('Factorify .env načten z:', path);
+                    return true;
+                }
+            }
+            catch (e) {
+                // Zkusit další cestu
+            }
+        }
+        // Fallback
+        if (typeof window.FACTORIFY_CONFIG !== 'undefined') {
+            const cfg = window.FACTORIFY_CONFIG;
+            this.config.baseUrl = cfg.baseUrl || this.config.baseUrl;
+            this.config.securityToken = cfg.securityToken || '';
+            this.config.workstationEntity = cfg.workstationEntity || 'Stage';
+            this.configLoaded = true;
+            console.log('Factorify config z api-config.js');
+            return true;
+        }
+        console.warn('Factorify .env nenalezen. Zkontrolujte cestu.');
+        return false;
     },
-    getConfig() { return this.config; },
-    async fetchAPI(path) {
-        const resp = await fetch(path, { headers: { 'Accept': 'application/json' } });
+    getConfig() {
+        return this.config;
+    },
+    getHeaders() {
+        const cfg = this.config;
+        const headers = { ...cfg.headers };
+        if (cfg.securityToken) {
+            headers['Cookie'] = 'securityToken=' + cfg.securityToken;
+        }
+        return headers;
+    },
+    async fetchAPI(path, options = {}) {
+        const cfg = this.config;
+        if (!cfg.baseUrl) {
+            throw new Error('Factorify API není nakonfigurováno');
+        }
+        const method = options.method || 'GET';
+        const body = options.body || null;
+        if (cfg.useProxy) {
+            const url = cfg.proxyUrl + path;
+            const fetchOpts = {
+                method: method,
+                headers: { 'Accept': 'application/json', 'X-FySerialization': 'ui2' },
+            };
+            if (body) {
+                fetchOpts.headers = { ...fetchOpts.headers, 'Content-Type': 'application/json' };
+                fetchOpts.body = typeof body === 'string' ? body : JSON.stringify(body);
+            }
+            const resp = await fetch(url, fetchOpts);
+            if (!resp.ok) {
+                const errText = await resp.text().catch(() => '');
+                throw new Error(`API chyba: ${resp.status} ${resp.statusText} — ${errText.substring(0, 200)}`);
+            }
+            return await resp.json();
+        }
+        if (!cfg.securityToken) {
+            throw new Error('Chybí FACTORIFY_TOKEN v .env souboru');
+        }
+        const url = cfg.baseUrl + path;
+        const fetchOpts = {
+            method: method,
+            headers: this.getHeaders(),
+            credentials: 'include',
+        };
+        if (body) {
+            fetchOpts.headers = { ...fetchOpts.headers, 'Content-Type': 'application/json' };
+            fetchOpts.body = typeof body === 'string' ? body : JSON.stringify(body);
+        }
+        const resp = await fetch(url, fetchOpts);
         if (!resp.ok) {
             const errText = await resp.text().catch(() => '');
-            throw new Error(`API ${resp.status}: ${errText.substring(0, 200)}`);
+            throw new Error(`API chyba: ${resp.status} ${resp.statusText} — ${errText.substring(0, 200)}`);
         }
         return await resp.json();
+    },
+    async loadEntities() {
+        const data = await this.fetchAPI(this.config.endpoints.entities);
+        this.entities = Array.isArray(data) ? data : [];
+        return this.entities;
+    },
+    async loadEntityMeta(entityName) {
+        return await this.fetchAPI(this.config.endpoints.entityMeta + entityName);
+    },
+    async queryEntity(entityName, filter) {
+        const path = this.config.endpoints.query + entityName;
+        const body = filter || {};
+        return await this.fetchAPI(path, { method: 'POST', body: body });
     },
     async loadWorkstations() {
         this.loading = true;
         this.error = null;
         updateFactorifyUI();
         try {
-            console.log('GET /api/production/workstations ...');
-            const data = await this.fetchAPI('/api/production/workstations');
-            this.workstations = data.map(ws => ({
-                id: ws.id,
-                name: ws.name || ('Pracoviště ' + ws.id),
-                code: ws.code || '',
-                type: '',
-                active: true,
-                raw: ws,
+            if (!this.configLoaded) {
+                await this.loadEnv();
+            }
+            const entityName = this.config.workstationEntity || 'Stage';
+            let data = null;
+            console.log(`POST /api/query/${entityName} ...`);
+            data = await this.queryEntity(entityName);
+            console.log('API odpověď (ukázka):', JSON.stringify(data).substring(0, 500));
+            let items = [];
+            if (Array.isArray(data)) {
+                items = data;
+            }
+            else if (data && data.items) {
+                items = data.items;
+            }
+            else if (data && data.records) {
+                items = data.records;
+            }
+            else if (data && data.data) {
+                items = data.data;
+            }
+            else if (data && data.rows) {
+                items = data.rows;
+            }
+            else if (data && typeof data === 'object') {
+                for (const key of Object.keys(data)) {
+                    if (Array.isArray(data[key])) {
+                        items = data[key];
+                        console.log(`Data nalezena v klíči: "${key}"`);
+                        break;
+                    }
+                }
+            }
+            if (items.length === 0 && data) {
+                console.warn('Neznámá struktura odpovědi:', JSON.stringify(data).substring(0, 300));
+            }
+            this.workstations = items.map(item => ({
+                id: item.id || item.ID || item.Id || item.name,
+                name: item.label || item.name || item.Name || item.title || item.Title || ('Pracoviště ' + (item.id || item.ID || '')),
+                code: item.code || item.Code || item.referenceName || item.ReferenceName || '',
+                type: item.type || item.Type || '',
+                active: item.active !== false && item.Active !== false && item.archived !== true,
+                raw: item,
             }));
+            this.workstations = this.workstations.filter(w => w.active);
             this.connected = true;
             this.loading = false;
             updateFactorifyUI();
-            showToast(`Načteno ${this.workstations.length} pracovišť`);
+            showToast(`Načteno ${this.workstations.length} pracovišť z Factorify`);
             return this.workstations;
         }
         catch (err) {
@@ -54,6 +216,21 @@ export const FactorifyAPI = {
             updateFactorifyUI();
             showToast('Chyba: ' + this.error);
             throw err;
+        }
+    },
+    async findWorkstationEntity() {
+        try {
+            const entities = await this.loadEntities();
+            return entities.filter(e => {
+                const name = (e.name || '').toLowerCase();
+                const label = (e.label || '').toLowerCase();
+                return name.includes('stage') || name.includes('work') || name.includes('machine')
+                    || label.includes('pracov') || label.includes('stroj') || label.includes('stage');
+            });
+        }
+        catch (err) {
+            console.error('findWorkstationEntity error:', err);
+            return [];
         }
     },
 };

@@ -10,13 +10,14 @@ export declare function updateColor(color: string): void;
 export declare function movePolygon(obj: DrawingObject, dx: number, dy: number): void;
 export declare function moveVertex(obj: DrawingObject, index: number, newX: number, newY: number): void;
 export declare function rotatePolygon(objId: number, angleDeg: number, centerIndex: number | null): void;
-export declare function addEntrance(objId: number, edgeIndex: number, t1: number, t2: number, type: EntranceType): void;
+export declare function addEntrance(objId: number, edgeIndex: number, t1: number, t2: number, type: EntranceType, wallId?: number): void;
 export declare function removeEntrance(objId: number, entranceId: number): void;
 export declare function updateEntranceProp(objId: number, entranceId: number, key: string, value: unknown): void;
 export declare function updateEntranceWidth(objId: number, entranceId: number, newWidthMeters: number): void;
 interface NearestEdgeResult {
     objId: number;
     edgeIndex: number;
+    wallId?: number;
     t: number;
     dist: number;
     px: number;
@@ -25,6 +26,13 @@ interface NearestEdgeResult {
 export declare function findNearestArealEdge(wx: number, wy: number): NearestEdgeResult | null;
 export declare function addWall(objId: number, x1: number, y1: number, x2: number, y2: number): void;
 export declare function removeWall(objId: number, wallId: number): void;
+export declare function updateWallName(objId: number, wallId: number, name: string): void;
+export declare function updateWallPoint(objId: number, wallId: number, which: 'start' | 'end', axis: 'x' | 'y', value: number): void;
+export declare function updateWallLength(objId: number, wallId: number, newLength: number): void;
+export declare function updateWallAngle(objId: number, wallId: number, angleDeg: number): void;
+export declare function snapWallPerpendicular(objId: number, wallId: number): void;
+export declare function updateWallDistFromCorner(objId: number, wallId: number, distFromStart: number): void;
+export declare function toggleRoomLocked(objId: number, wallId: number): void;
 export declare function addGate(objId: number, wallId: number, t: number, width: number): void;
 export declare function removeGate(objId: number, wallId: number, gateId: number): void;
 interface NearestWallResult {

@@ -11,10 +11,15 @@ function renderSidebar(activeModule) {
     { id: 'pracovni-postup',    name: 'Pracovní postup',     icon: '&#128295;', color: '#06b6d4', active: true },
     { id: 'nakup-sklad',          name: 'Nákup a sklad',       icon: '&#128230;', color: '#10b981', active: true },
     { id: 'prodejni-objednavky',  name: 'Prodejní objednávky', icon: '&#128176;', color: '#eab308', active: true },
+    { id: 'vyrobni-sloty',        name: 'Výrobní sloty',       icon: '&#128197;', color: '#f97316', active: true },
     { id: 'sklady',                name: 'Sklady',              icon: '&#127981;', color: '#f59e0b', active: true },
     { id: 'pracoviste',           name: 'Pracoviště',          icon: '&#127981;', color: '#14b8a6', active: true },
+    { id: 'vozovy-park',          name: 'Vozový park',         icon: '&#128663;', color: '#0ea5e9', active: true },
+    { id: 'cad-vykresy',          name: 'CAD výkresy',         icon: '&#128196;', color: '#0284c7', active: true },
+    { id: 'chat',                 name: 'Zprávy',              icon: '&#128172;', color: '#a78bfa', active: true },
     { id: 'ai-agenti',            name: 'AI Agenti',           icon: '&#129302;', color: '#8b5cf6', active: true },
     { id: 'dev-hub',              name: 'Dev Hub',             icon: '&#128736;', color: '#f97316', active: true },
+    { id: 'kiosky',               name: 'Kiosky',              icon: '&#128433;', color: '#06b6d4', active: true },
     { id: 'planovani',           name: 'Plánování výroby',    icon: '&#128197;', color: '#3b82f6', active: false },
     { id: 'material',            name: 'Materiálový tok',     icon: '&#128666;', color: '#10b981', active: false },
     { id: 'reporty',             name: 'Reporty a analýzy',   icon: '&#128202;', color: '#ef4444', active: false },
@@ -142,13 +147,13 @@ function renderSidebar(activeModule) {
   // Create hamburger button for mobile
   initHamburger();
 
-  // Load AI Voice Assistant
-  if (!document.getElementById('ai-assistant-script')) {
-    var aiScript = document.createElement('script');
-    aiScript.id = 'ai-assistant-script';
-    aiScript.src = basePath + 'js/ai-assistant.js?v=' + Date.now();
-    document.body.appendChild(aiScript);
-  }
+  // AI Voice Assistant — deaktivováno
+  // if (!document.getElementById('ai-assistant-script')) {
+  //   var aiScript = document.createElement('script');
+  //   aiScript.id = 'ai-assistant-script';
+  //   aiScript.src = basePath + 'js/ai-assistant.js?v=' + Date.now();
+  //   document.body.appendChild(aiScript);
+  // }
 
   // Load AI Chat Panel (Claude-powered)
   if (!document.getElementById('ai-chat-panel-script')) {
@@ -157,6 +162,21 @@ function renderSidebar(activeModule) {
     chatScript.src = basePath + 'js/ai-chat-panel.js?v=' + Date.now();
     document.body.appendChild(chatScript);
   }
+
+  // Load messaging & notifications stack
+  var msgScripts = [
+    { id: 'holyos-events-script',    src: 'js/holyos-events.js' },
+    { id: 'notifications-bell-script', src: 'js/notifications-bell.js' },
+    { id: 'user-chat-widget-script', src: 'js/user-chat-widget.js' },
+  ];
+  msgScripts.forEach(function(s) {
+    if (!document.getElementById(s.id)) {
+      var tag = document.createElement('script');
+      tag.id = s.id;
+      tag.src = basePath + s.src + '?v=' + Date.now();
+      document.body.appendChild(tag);
+    }
+  });
 }
 
 function initHamburger() {

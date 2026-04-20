@@ -21,6 +21,26 @@
 
     .content { padding: 0 24px 24px; flex: 1; }
 
+    /* ─── Slot timeline (inline v detailu objednávky) ─── */
+    .stl-wrap { margin-top: 12px; }
+    .stl-scroll { overflow-x: auto; cursor: grab; border: 1px solid var(--border); border-radius: 10px; background: var(--bg); }
+    .stl-scroll:active { cursor: grabbing; }
+    .stl-header { display: flex; border-bottom: 1px solid var(--border); }
+    .stl-month { text-align: center; font-size: 10px; font-weight: 700; color: #6366f1; text-transform: uppercase; padding: 5px 0; border-right: 1px solid var(--border); }
+    .stl-dates { display: flex; border-bottom: 1px solid rgba(255,255,255,0.04); }
+    .stl-date { width: 100px; min-width: 100px; text-align: center; font-size: 9px; color: var(--text2); padding: 3px 0; border-right: 1px solid rgba(255,255,255,0.04); }
+    .stl-date.today { color: #ef4444; font-weight: 700; }
+    .stl-row { display: flex; position: relative; min-height: 44px; }
+    .stl-cell { width: 100px; min-width: 100px; padding: 4px 3px; border-right: 1px solid rgba(255,255,255,0.04); display: flex; align-items: center; justify-content: center; }
+    .stl-slot { width: 100%; padding: 8px 4px; border-radius: 6px; text-align: center; font-size: 10px; font-weight: 600; transition: all 0.15s; }
+    .stl-slot.free { background: rgba(16,185,129,0.12); color: #10b981; border: 1px dashed rgba(16,185,129,0.3); cursor: pointer; }
+    .stl-slot.free:hover { background: rgba(16,185,129,0.25); border-color: #10b981; transform: scale(1.04); }
+    .stl-slot.occupied { background: rgba(249,115,22,0.12); color: #f97316; border: 1px solid rgba(249,115,22,0.2); opacity: 0.6; }
+    .stl-slot.blocked { background: rgba(239,68,68,0.1); color: #ef4444; border: 1px solid rgba(239,68,68,0.15); opacity: 0.5; }
+    .stl-slot.mine { background: rgba(139,92,246,0.2); color: #a78bfa; border: 2px solid #8b5cf6; }
+    .stl-today { position: absolute; top: 0; bottom: 0; width: 2px; background: #ef4444; z-index: 2; pointer-events: none; }
+    .stl-today-label { position: absolute; top: -13px; font-size: 8px; color: #ef4444; font-weight: 700; transform: translateX(-50%); }
+
     .toolbar { display: flex; gap: 12px; margin-bottom: 16px; align-items: center; flex-wrap: wrap; }
     .toolbar input[type="text"], .toolbar input[type="search"] { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 8px 14px; color: var(--text); font-size: 13px; width: 240px; }
     .toolbar input::placeholder { color: var(--text2); }
@@ -108,7 +128,7 @@
     fetch('/api/auth/me', { credentials: 'include' }).then(function(r) {
       if (r.status === 401) {
         var t = sessionStorage.getItem('token');
-        if (!t) window.location.href = '/public/login.html';
+        if (!t) { window.location.href = '/login.html?redirect=' + encodeURIComponent(window.location.pathname); return; }
       }
     });
   </script>
@@ -223,12 +243,13 @@
       let existingItems = [];
       if (id && o.items) existingItems = o.items;
       _pendingItems = existingItems.map(it => ({
+        id: it.id || null, product_id: it.product_id || it.material_id,
         material_id: it.material_id, name: it.name, quantity: parseFloat(it.quantity),
         unit: it.unit, unit_price: parseFloat(it.unit_price || 0),
         total_price: parseFloat(it.total_price || 0),
       }));
 
-      document.getElementById('modal-root').innerHTML = '<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal" style="max-width:700px;"><h2>' + (id ? '✏️ Upravit objednávku' : '➕ Nová prodejní objednávka') + '</h2>' +
+      document.getElementById('modal-root').innerHTML = '<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal" style="width:900px;max-width:95vw;"><h2>' + (id ? '✏️ Upravit objednávku' : '➕ Nová prodejní objednávka') + '</h2>' +
         '<form onsubmit="saveOrder(event,' + (id || 'null') + ')">' +
           '<input type="hidden" name="type" value="sales">' +
           '<div class="form-grid">' +
@@ -287,6 +308,22 @@
           '</div>' +
 
           '<div class="form-group full" style="margin-top:12px;"><label>Poznámka</label><textarea name="note">' + (o.note || '') + '</textarea></div>' +
+
+          // === ODKAZ PRO ZÁKAZNÍKA ===
+          (id ? '<div style="border-top:1px solid var(--border);margin:16px 0 12px;padding-top:14px;">' +
+            '<h3 style="font-size:14px;margin-bottom:8px;">🔗 Odkaz pro zákazníka</h3>' +
+            '<p style="font-size:11px;color:var(--text2);margin-bottom:8px;">Zákazník uvidí přehled objednávky, může konfigurovat produkty a vybírat termíny dodání.</p>' +
+            '<div id="customer-link-area">' +
+              (o.share_token
+                ? '<div style="display:flex;gap:8px;align-items:center;">' +
+                    '<input type="text" readonly value="' + window.location.origin + '/order/' + o.share_token + '" id="modal-share-url" style="flex:1;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:12px;font-family:monospace;" onclick="this.select()">' +
+                    '<button type="button" class="btn btn-sm btn-primary" onclick="copyModalShareUrl()">📋</button>' +
+                  '</div>'
+                : '<button type="button" class="btn btn-sm" style="background:rgba(59,130,246,0.12);color:#3b82f6;border-color:rgba(59,130,246,0.25);" onclick="generateShareLink(' + id + ')">🔗 Vygenerovat odkaz</button>'
+              ) +
+            '</div>' +
+          '</div>' : '') +
+
           '<div class="modal-actions"><button type="button" class="btn btn-secondary" onclick="closeModal()">Zrušit</button><button type="submit" class="btn btn-primary">' + (id ? 'Uložit' : 'Vytvořit') + '</button></div>' +
         '</form></div></div>';
 
@@ -688,10 +725,21 @@
           orderId = newOrder.id;
         }
 
-        // Přidej položky k objednávce
+        // Přidej/aktualizuj položky k objednávce
         if (_pendingItems.length > 0 && orderId) {
           for (const item of _pendingItems) {
-            if (item.id) continue; // přeskoč existující
+            if (item.id) {
+              // Aktualizuj existující položku
+              await fetch('/api/wh/orders/' + orderId + '/items/' + item.id, {
+                method: 'PUT', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  quantity: item.quantity,
+                  unit_price: item.unit_price,
+                  total_price: item.quantity * item.unit_price,
+                }),
+              }).catch(e => console.error('Update item error:', e));
+              continue;
+            }
             const itemRes = await fetch('/api/wh/orders/' + orderId + '/items', {
               method: 'POST', headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -732,13 +780,312 @@
     // ============================================================
     // DETAIL objednávky
     // ============================================================
+    // ─── Výrobní sloty — cache ────────────────────────────────────────────
+    let _availableSlots = [];    // surové DB sloty
+    let _slotWindows = [];       // generovaná okna s matchnutými DB sloty
+    let _slotConfig = { startDay: 1, endDay: 5 }; // Po–Pá
+
+    function _getSlotDays() {
+      var d = _slotConfig.endDay - _slotConfig.startDay + 1;
+      return d <= 0 ? d + 7 : d;
+    }
+
+    function _getSlotStartDate() {
+      var d = new Date();
+      d.setDate(d.getDate() - 56);
+      var diff = (d.getDay() - _slotConfig.startDay + 7) % 7;
+      d.setDate(d.getDate() - diff);
+      d.setHours(0,0,0,0);
+      return d;
+    }
+
+    function _generateSlotWindows() {
+      var windows = [];
+      var start = _getSlotStartDate();
+      var end = new Date(start);
+      end.setFullYear(end.getFullYear() + 2);
+      var d = new Date(start);
+      var days = _getSlotDays();
+      while (d < end) {
+        var slotStart = new Date(d);
+        var slotEnd = new Date(d);
+        slotEnd.setDate(slotEnd.getDate() + days - 1);
+        windows.push({ start: new Date(slotStart), end: new Date(slotEnd) });
+        d.setDate(d.getDate() + 7);
+      }
+      return windows;
+    }
+
+    function _findDbSlotForWindow(win) {
+      for (var i = 0; i < _availableSlots.length; i++) {
+        var s = _availableSlots[i];
+        var sStart = new Date(s.start_date); sStart.setHours(0,0,0,0);
+        var sEnd = new Date(s.end_date); sEnd.setHours(0,0,0,0);
+        if (sStart <= win.end && sEnd >= win.start) return s;
+      }
+      return null;
+    }
+
+    function _buildSlotWindows() {
+      var windows = _generateSlotWindows();
+      var today = new Date(); today.setHours(0,0,0,0);
+      _slotWindows = windows.map(function(win) {
+        var matched = _findDbSlotForWindow(win);
+        var isPast = win.end < today; // Neobsazený slot v minulosti → blokován
+        if (matched) {
+          var hasAssign = matched.assignments && matched.assignments.length > 0;
+          var isBlocked = matched.status === 'blocked';
+          var pastEmpty = isPast && !hasAssign && !isBlocked;
+          return {
+            id: matched.id,
+            start: win.start,
+            end: win.end,
+            start_date: matched.start_date,
+            end_date: matched.end_date,
+            status: pastEmpty ? 'blocked' : matched.status,
+            assignments: matched.assignments || [],
+            from_db: true,
+          };
+        } else {
+          return {
+            id: null,
+            start: win.start,
+            end: win.end,
+            start_date: win.start.toISOString(),
+            end_date: win.end.toISOString(),
+            status: isPast ? 'blocked' : 'open',
+            assignments: [],
+            from_db: false,
+          };
+        }
+      });
+    }
+
+    async function loadAvailableSlots() {
+      try {
+        // Načti slot config z localStorage (stejně jako výrobní sloty modul)
+        try {
+          var cfg = JSON.parse(localStorage.getItem('holyos_slot_config'));
+          if (cfg && cfg.startDay != null) _slotConfig = cfg;
+        } catch(e) {}
+        // Načti DB sloty
+        const now = _getSlotStartDate();
+        const future = new Date(now); future.setFullYear(future.getFullYear() + 2);
+        const from = now.toISOString().split('T')[0];
+        const to = future.toISOString().split('T')[0];
+        const res = await fetch('/api/slots?from=' + from + '&to=' + to, { credentials: 'include' });
+        const all = await res.json();
+        if (!Array.isArray(all)) { _availableSlots = []; } else { _availableSlots = all; }
+        _buildSlotWindows();
+      } catch(e) { _availableSlots = []; _slotWindows = []; }
+    }
+
+    function getSlotForItem(itemId) {
+      for (const slot of _availableSlots) {
+        if (slot.assignments) {
+          for (const a of slot.assignments) {
+            if (a.order_item_id === itemId) return slot;
+          }
+        }
+      }
+      return null;
+    }
+
+    function getFreeSlots() {
+      return _availableSlots.filter(function(s) {
+        return s.status === 'open' && (!s.assignments || s.assignments.length === 0);
+      });
+    }
+
+    function formatSlotLabel(slot) {
+      const start = new Date(slot.start_date);
+      const end = new Date(slot.end_date);
+      return start.getDate() + '.' + (start.getMonth()+1) + '. – ' + end.getDate() + '.' + (end.getMonth()+1) + '.' + end.getFullYear();
+    }
+
+    async function assignSlotToItem(itemId, slotId, orderId, productName, customerName, quantity, startDate, endDate) {
+      try {
+        var actualSlotId = slotId;
+
+        // Pokud slot neexistuje v DB (generované okno), vytvoř ho
+        if (!slotId && startDate && endDate) {
+          var sd = new Date(startDate), ed = new Date(endDate);
+          var slotName = 'Slot ' + sd.getDate() + '.' + (sd.getMonth()+1) + '.–' + ed.getDate() + '.' + (ed.getMonth()+1) + '.';
+          var createRes = await fetch('/api/slots', {
+            method: 'POST', credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              name: slotName,
+              start_date: sd.toISOString(),
+              end_date: ed.toISOString(),
+              capacity_hours: 8,
+              status: 'open',
+              color: '#3b82f6'
+            })
+          });
+          if (createRes.ok) {
+            var newSlot = await createRes.json();
+            actualSlotId = newSlot.id;
+          } else {
+            console.error('Chyba při vytváření slotu'); return;
+          }
+        }
+
+        if (!actualSlotId) return;
+
+        // Vytvoř SlotAssignment
+        await fetch('/api/slots/' + actualSlotId + '/assignments', {
+          method: 'POST', credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            order_item_id: itemId,
+            order_id: orderId,
+            product_name: productName || 'Položka',
+            customer_name: customerName || '',
+            quantity: parseFloat(quantity) || 1,
+            estimated_hours: 0,
+            priority: 0,
+            status: 'planned'
+          })
+        });
+        // Aktualizuj slot na full
+        await fetch('/api/slots/' + actualSlotId, {
+          method: 'PUT', credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: 'full' })
+        });
+        await loadAvailableSlots();
+        await recalcOrder(orderId);
+        openOrderDetail(orderId);
+        loadOrders();
+      } catch(e) { console.error(e); }
+    }
+
+    async function removeSlotFromItem(assignmentId, slotId, orderId) {
+      try {
+        await fetch('/api/slots/assignments/' + assignmentId, { method: 'DELETE', credentials: 'include' });
+        // Vrať slot na open
+        await fetch('/api/slots/' + slotId, {
+          method: 'PUT', credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: 'open' })
+        });
+        await loadAvailableSlots();
+        await recalcOrder(orderId);
+        openOrderDetail(orderId);
+        loadOrders();
+      } catch(e) { console.error(e); }
+    }
+
+    // ─── Inline slot timeline v detailu objednávky ─────────────────────
+    function buildOrderSlotTimeline(orderId, items, order) {
+      if (!_slotWindows || _slotWindows.length === 0) return '<div style="color:var(--text2);font-size:12px;padding:8px;">Žádné výrobní sloty.</div>';
+      const CZ_MONTHS = ['Leden','Únor','Březen','Duben','Květen','Červen','Červenec','Srpen','Září','Říjen','Listopad','Prosinec'];
+      const W = 100;
+      const today = new Date(); today.setHours(0,0,0,0);
+
+      // Měsíce
+      const monthSpans = {};
+      _slotWindows.forEach(function(s) {
+        const d = s.start;
+        const key = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
+        if (!monthSpans[key]) monthSpans[key] = { label: CZ_MONTHS[d.getMonth()] + ' ' + d.getFullYear(), count: 0 };
+        monthSpans[key].count++;
+      });
+
+      let html = '<div class="stl-wrap"><div class="stl-scroll" id="stl-scroll-' + orderId + '">';
+
+      // Month header
+      html += '<div class="stl-header">';
+      Object.keys(monthSpans).sort().forEach(function(k) {
+        const m = monthSpans[k];
+        html += '<div class="stl-month" style="width:' + (m.count*W) + 'px;min-width:' + (m.count*W) + 'px;">' + m.label + '</div>';
+      });
+      html += '</div>';
+
+      // Date header
+      html += '<div class="stl-dates">';
+      _slotWindows.forEach(function(s) {
+        const sd = s.start, ed = s.end;
+        const label = sd.getDate() + '.' + (sd.getMonth()+1) + '. – ' + ed.getDate() + '.' + (ed.getMonth()+1) + '.';
+        const isToday = today >= sd && today <= ed;
+        html += '<div class="stl-date' + (isToday ? ' today' : '') + '">' + label + '</div>';
+      });
+      html += '</div>';
+
+      // Slot row — generovaná okna s matchnutými DB sloty
+      html += '<div class="stl-row">';
+      _slotWindows.forEach(function(slot) {
+        const isFree = (!slot.assignments || slot.assignments.length === 0) && slot.status !== 'blocked' && slot.status !== 'full';
+        const isBlocked = slot.status === 'blocked';
+        const myAssign = slot.assignments ? slot.assignments.find(function(a) { return a.order_id === orderId; }) : null;
+        const cls = myAssign ? 'mine' : (isFree ? 'free' : (isBlocked ? 'blocked' : 'occupied'));
+        const label = myAssign ? '✓' : (isFree ? 'Volný' : '');
+
+        var click = '';
+        if (isFree) {
+          if (slot.id) {
+            click = ' onclick="pickSlotForActiveItem(' + slot.id + ',' + orderId + ',null,null)"';
+          } else {
+            click = ' onclick="pickSlotForActiveItem(null,' + orderId + ',\'' + slot.start.toISOString() + '\',\'' + slot.end.toISOString() + '\')"';
+          }
+        }
+        html += '<div class="stl-cell"><div class="stl-slot ' + cls + '"' + click + '>' + label + '</div></div>';
+      });
+
+      // Today line
+      var slotIdx = 0;
+      for (var i = 0; i < _slotWindows.length; i++) {
+        var sd = _slotWindows[i].start, ed = _slotWindows[i].end;
+        if (today >= sd && today <= ed) { slotIdx = i; break; }
+        if (today < sd) { slotIdx = Math.max(0, i - 0.5); break; }
+        slotIdx = i;
+      }
+      html += '<div class="stl-today" style="left:' + (slotIdx*W + W/2) + 'px;"><div class="stl-today-label">DNES</div></div>';
+      html += '</div></div></div>';
+      return html;
+    }
+
+    let _activePickItemId = null;
+    let _activePickOrderId = null;
+    let _activePickProductName = '';
+    let _activePickCustomerName = '';
+    let _activePickQuantity = 1;
+
+    function activateSlotPickForItem(itemId, orderId, productName, customerName, quantity) {
+      _activePickItemId = itemId;
+      _activePickOrderId = orderId;
+      _activePickProductName = productName;
+      _activePickCustomerName = customerName;
+      _activePickQuantity = quantity;
+      // Zvýrazni řádek
+      document.querySelectorAll('.modal tr').forEach(function(r) { r.style.background = ''; });
+      // Scroll timeline into view
+      var el = document.getElementById('stl-scroll-' + orderId);
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    async function pickSlotForActiveItem(slotId, orderId, startDate, endDate) {
+      if (!_activePickItemId) {
+        alert('Nejdřív klikněte na "Vybrat termín" u položky.');
+        return;
+      }
+      await assignSlotToItem(_activePickItemId, slotId, _activePickOrderId, _activePickProductName, _activePickCustomerName, _activePickQuantity, startDate, endDate);
+      _activePickItemId = null;
+    }
+
     async function openOrderDetail(id) {
       try {
         const res = await fetch('/api/wh/orders/' + id);
         const order = await res.json();
         if (products.length === 0) { try { const r2 = await fetch('/api/production/products?type=product'); products = await r2.json(); } catch(e) {} }
+        if (companies.length === 0) await reloadCompanies();
+        if (_availableSlots.length === 0) await loadAvailableSlots();
         const st = ORDER_STATUSES[order.status] || { label: order.status, color: '#9ca3af' };
         const statusOpts = Object.entries(ORDER_STATUSES).map(([k,v]) => '<option value="' + k + '"' + (order.status === k ? ' selected' : '') + '>' + v.label + '</option>').join('');
+
+        const isEditable = order.status === 'new' || order.status === 'quoted';
+        const isLocked = order.status === 'ordered' || order.status === 'confirmed' || order.status === 'delivered' || order.status === 'in_production';
 
         // Načti konfigurace pro položky
         const itemConfigs = {};
@@ -752,9 +1099,19 @@
           }
         }
 
+        // Banner: zákazník potvrdil konfiguraci
+        let bannerHtml = '';
+        if (order.status === 'ordered') {
+          bannerHtml = '<div style="background:rgba(139,92,246,0.12);border:1px solid rgba(139,92,246,0.3);border-radius:10px;padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;gap:10px;">' +
+            '<div style="font-size:24px;">✅</div>' +
+            '<div><strong style="color:#8b5cf6;">Zákazník potvrdil konfiguraci</strong>' +
+            '<div style="font-size:12px;color:var(--text2);margin-top:2px;">Objednávka je zamčena. Položky a konfigurace nelze měnit.</div></div>' +
+          '</div>';
+        }
+
         let itemsHtml = '';
         if (order.items && order.items.length > 0) {
-          itemsHtml = '<table class="data-table"><thead><tr><th>Položka</th><th>Množství</th><th>Jednotka</th><th>Cena/ks</th><th>Celkem</th><th></th></tr></thead><tbody>';
+          itemsHtml = '<table class="data-table"><thead><tr><th>Položka</th><th>Množství</th><th>Jednotka</th><th>Cena/ks</th><th>Celkem</th><th>Termín dodání</th>' + (isEditable ? '<th></th>' : '') + '</tr></thead><tbody>';
           for (const it of order.items) {
             let configLine = '';
             if (itemConfigs[it.id]) {
@@ -765,11 +1122,45 @@
               }).filter(Boolean);
               if (labels.length) configLine = '<div style="font-size:11px;color:var(--text2);margin-top:2px;">⚙️ ' + labels.join(' · ') + '</div>';
             }
-            itemsHtml += '<tr><td><span class="person-name">' + (it.name || '—') + '</span>' + configLine + '</td>';
-            itemsHtml += '<td>' + it.quantity + '</td><td>' + it.unit + '</td>';
-            itemsHtml += '<td>' + parseFloat(it.unit_price || 0).toLocaleString('cs-CZ') + ' ' + currencySymbol(order.currency) + '</td>';
-            itemsHtml += '<td style="font-weight:600;">' + parseFloat(it.total_price || 0).toLocaleString('cs-CZ') + ' ' + currencySymbol(order.currency) + '</td>';
-            itemsHtml += '<td><button class="btn btn-danger btn-sm" onclick="deleteOrderItem(' + it.id + ',' + id + ')">🗑️</button></td></tr>';
+
+            // Najdi přiřazený slot pro tuto položku
+            const assignedSlot = getSlotForItem(it.id);
+            let slotHtml = '';
+            if (assignedSlot) {
+              const deliveryDate = new Date(assignedSlot.end_date).toLocaleDateString('cs-CZ');
+              const assignment = assignedSlot.assignments.find(a => a.order_item_id === it.id);
+              slotHtml = '<div style="display:flex;align-items:center;gap:4px;">' +
+                '<span style="background:rgba(249,115,22,0.15);color:#f97316;padding:3px 8px;border-radius:6px;font-size:11px;font-weight:600;">' + deliveryDate + '</span>';
+              if (isEditable && assignment) {
+                slotHtml += '<button style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:14px;padding:2px;" onclick="removeSlotFromItem(' + assignment.id + ',' + assignedSlot.id + ',' + id + ')" title="Zrušit termín">✕</button>';
+              }
+              slotHtml += '</div>';
+            } else if (isEditable) {
+              // Tlačítko pro aktivaci výběru na timeline
+              slotHtml = '<button class="btn btn-sm" style="background:rgba(16,185,129,0.12);color:#10b981;border-color:rgba(16,185,129,0.25);font-size:11px;padding:4px 10px;" onclick="activateSlotPickForItem(' + it.id + ',' + id + ',\'' + (it.name||'').replace(/'/g,"\\'") + '\',\'' + (order.company?.name||'').replace(/'/g,"\\'") + '\',' + (it.quantity||1) + ')">📅 Vybrat termín</button>';
+            } else {
+              slotHtml = '<span style="color:var(--text2);font-size:11px;">—</span>';
+            }
+
+            if (isEditable) {
+              itemsHtml += '<tr>';
+              itemsHtml += '<td><span class="person-name">' + (it.name || '—') + '</span>' + configLine + '</td>';
+              itemsHtml += '<td><input type="number" value="' + it.quantity + '" min="0.01" step="0.01" style="width:70px;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:4px 8px;color:var(--text);font-size:13px;" onchange="updateOrderItem(' + it.id + ',' + id + ',\'quantity\',this.value,' + parseFloat(it.unit_price||0) + ')"></td>';
+              itemsHtml += '<td>' + it.unit + '</td>';
+              itemsHtml += '<td><input type="number" value="' + parseFloat(it.unit_price || 0) + '" step="0.01" style="width:90px;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:4px 8px;color:var(--text);font-size:13px;" onchange="updateOrderItem(' + it.id + ',' + id + ',\'unit_price\',this.value,' + parseFloat(it.quantity||0) + ')"></td>';
+              itemsHtml += '<td style="font-weight:600;">' + parseFloat(it.total_price || 0).toLocaleString('cs-CZ') + ' ' + currencySymbol(order.currency) + '</td>';
+              itemsHtml += '<td>' + slotHtml + '</td>';
+              itemsHtml += '<td><button class="btn btn-danger btn-sm" onclick="deleteOrderItem(' + it.id + ',' + id + ')">🗑️</button></td>';
+              itemsHtml += '</tr>';
+            } else {
+              itemsHtml += '<tr>';
+              itemsHtml += '<td><span class="person-name">' + (it.name || '—') + '</span>' + configLine + '</td>';
+              itemsHtml += '<td>' + it.quantity + '</td><td>' + it.unit + '</td>';
+              itemsHtml += '<td>' + parseFloat(it.unit_price || 0).toLocaleString('cs-CZ') + ' ' + currencySymbol(order.currency) + '</td>';
+              itemsHtml += '<td style="font-weight:600;">' + parseFloat(it.total_price || 0).toLocaleString('cs-CZ') + ' ' + currencySymbol(order.currency) + '</td>';
+              itemsHtml += '<td>' + slotHtml + '</td>';
+              itemsHtml += '</tr>';
+            }
           }
           itemsHtml += '</tbody></table>';
         } else {
@@ -778,17 +1169,10 @@
 
         const prodDetailOpts = products.map(p => '<option value="' + p.id + '">' + p.code + ' — ' + p.name + '</option>').join('');
 
-        document.getElementById('modal-root').innerHTML = '<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal" style="max-width:750px;">' +
-          '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">' +
-            '<h2 style="margin:0;">' + order.order_number + '</h2>' +
-            '<div style="display:flex;gap:8px;align-items:center;">' +
-              '<select onchange="updateOrderStatus(' + id + ',this.value)" style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:6px 10px;color:var(--text);font-size:12px;">' + statusOpts + '</select>' +
-              '<span class="badge" style="background:' + st.color + '22;color:' + st.color + ';font-size:13px;padding:4px 12px;">' + st.label + '</span>' +
-            '</div>' +
-          '</div>' +
-          '<div style="font-size:13px;color:var(--text2);margin-bottom:16px;">💰 Prodejní · ' + (order.company?.name || '—') + ' · Celkem: <strong style="color:var(--text);">' + parseFloat(order.total_amount || 0).toLocaleString('cs-CZ') + ' ' + (order.currency || 'CZK') + '</strong></div>' +
-          '<div style="border-top:1px solid var(--border);padding-top:16px;margin-bottom:12px;"><h3 style="font-size:14px;margin-bottom:8px;">📦 Položky</h3>' + itemsHtml + '</div>' +
-          '<div style="border-top:1px solid var(--border);padding-top:16px;">' +
+        // Sekce přidávání položek (jen pokud je editovatelné)
+        let addItemSection = '';
+        if (isEditable) {
+          addItemSection = '<div style="border-top:1px solid var(--border);padding-top:16px;">' +
             '<h3 style="font-size:14px;margin-bottom:8px;">➕ Přidat položku</h3>' +
             '<form onsubmit="addOrderItem(event,' + id + ')" style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;">' +
               '<div class="form-group" style="flex:2;"><label>Výrobek</label><select name="product_id" onchange="fillItemPrice(this)"><option value="">— Vyberte výrobek —</option>' + prodDetailOpts + '</select></div>' +
@@ -798,13 +1182,70 @@
               '<div class="form-group" style="width:100px;"><label>Cena/ks</label><input type="number" name="unit_price" value="0" step="0.01"></div>' +
               '<button type="submit" class="btn btn-primary btn-sm" style="margin-bottom:4px;">+ Přidat</button>' +
             '</form>' +
+          '</div>';
+        }
+
+        document.getElementById('modal-root').innerHTML = '<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal" style="width:900px;max-width:95vw;">' +
+          '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">' +
+            '<h2 style="margin:0;">' + order.order_number + '</h2>' +
+            '<div style="display:flex;gap:8px;align-items:center;">' +
+              '<select onchange="updateOrderStatus(' + id + ',this.value)" style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:6px 10px;color:var(--text);font-size:12px;">' + statusOpts + '</select>' +
+              '<span class="badge" style="background:' + st.color + '22;color:' + st.color + ';font-size:13px;padding:4px 12px;">' + st.label + '</span>' +
+            '</div>' +
           '</div>' +
+          bannerHtml +
+
+          // ─── Editovatelné hlavní údaje objednávky ───
+          (isEditable ? (function() {
+            var compEditOpts = companies.map(function(c) {
+              return '<option value="' + c.id + '"' + (order.company_id === c.id ? ' selected' : '') + '>' + c.name + '</option>';
+            }).join('');
+            return '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;padding:16px;background:var(--bg);border:1px solid var(--border);border-radius:10px;">' +
+              '<div class="form-group"><label style="font-size:11px;color:var(--text2);">Odběratel</label><select id="detail-company" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:6px 10px;color:var(--text);font-size:13px;" onchange="updateOrderField(' + id + ',\'company_id\',this.value)">' + compEditOpts + '</select></div>' +
+              '<div class="form-group"><label style="font-size:11px;color:var(--text2);">Měna</label><select id="detail-currency" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:6px 10px;color:var(--text);font-size:13px;" onchange="updateOrderField(' + id + ',\'currency\',this.value)">' +
+                '<option value="CZK"' + ((order.currency||'CZK')==='CZK'?' selected':'') + '>CZK (Kč)</option>' +
+                '<option value="EUR"' + (order.currency==='EUR'?' selected':'') + '>EUR (€)</option>' +
+              '</select></div>' +
+              '<div class="form-group"><label style="font-size:11px;color:var(--text2);">Očekávané dodání</label><input type="date" id="detail-delivery" value="' + (order.expected_delivery ? new Date(order.expected_delivery).toISOString().split('T')[0] : '') + '" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:6px 10px;color:var(--text);font-size:13px;" onchange="updateOrderField(' + id + ',\'expected_delivery\',this.value)"></div>' +
+              '<div class="form-group"><label style="font-size:11px;color:var(--text2);">Poznámka</label><input type="text" id="detail-note" value="' + (order.note || '').replace(/"/g, '&quot;') + '" placeholder="Poznámka..." style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:6px 10px;color:var(--text);font-size:13px;" onchange="updateOrderField(' + id + ',\'note\',this.value)"></div>' +
+            '</div>';
+          })() :
+          '<div style="font-size:13px;color:var(--text2);margin-bottom:16px;">💰 Prodejní · ' + (order.company?.name || '—') + ' · Celkem: <strong style="color:var(--text);">' + parseFloat(order.total_amount || 0).toLocaleString('cs-CZ') + ' ' + (order.currency || 'CZK') + '</strong></div>') +
+
+          (isLocked ? '<div style="font-size:11px;color:var(--text2);background:var(--bg);border-radius:8px;padding:8px 12px;margin-bottom:12px;">🔒 Objednávka je zamčená — pro editaci změňte stav zpět na Nový.</div>' : '') +
+          '<div style="border-top:1px solid var(--border);padding-top:16px;margin-bottom:12px;"><h3 style="font-size:14px;margin-bottom:8px;">📦 Položky</h3>' + itemsHtml + '</div>' +
+          addItemSection +
+          (isEditable ? '<div style="border-top:1px solid var(--border);padding-top:14px;margin-top:12px;"><h3 style="font-size:14px;margin-bottom:4px;">📅 Výrobní sloty — termín dodání</h3><div style="font-size:11px;color:var(--text2);margin-bottom:6px;">Klikněte na &quot;Vybrat termín&quot; u položky, pak klikněte na volný slot v časové ose.</div>' + buildOrderSlotTimeline(id, order.items || [], order) + '</div>' : '') +
+
+          // ─── Odkaz pro zákazníka ───
+          '<div style="border-top:1px solid var(--border);padding-top:14px;margin-top:12px;">' +
+            '<h3 style="font-size:14px;margin-bottom:8px;">🔗 Odkaz pro zákazníka</h3>' +
+            '<div id="customer-link-area">' +
+              (order.share_token
+                ? '<div style="display:flex;gap:8px;align-items:center;">' +
+                    '<input type="text" readonly value="' + window.location.origin + '/order/' + order.share_token + '" id="modal-share-url" style="flex:1;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:12px;font-family:monospace;" onclick="this.select()">' +
+                    '<button type="button" class="btn btn-sm btn-primary" onclick="copyModalShareUrl()">📋</button>' +
+                  '</div>'
+                : '<button type="button" class="btn btn-sm" style="background:rgba(59,130,246,0.12);color:#3b82f6;border-color:rgba(59,130,246,0.25);" onclick="generateShareLink(' + id + ')">🔗 Vygenerovat odkaz</button>'
+              ) +
+            '</div>' +
+          '</div>' +
+
           '<div class="modal-actions" style="margin-top:20px;">' +
-            '<button class="btn" style="background:rgba(59,130,246,0.15);color:#3b82f6;border-color:rgba(59,130,246,0.3);" onclick="shareOrder(' + id + ')">🔗 Sdílet zákazníkovi</button>' +
             '<div style="flex:1;"></div>' +
+            '<button class="btn btn-primary" onclick="saveAndCloseDetail(' + id + ')">✅ Uložit</button>' +
             '<button class="btn btn-secondary" onclick="closeModal()">Zavřít</button>' +
           '</div>' +
         '</div></div>';
+
+        // Drag-to-scroll na timeline
+        var stlEl = document.getElementById('stl-scroll-' + id);
+        if (stlEl) {
+          var drag = false, sx = 0, sl = 0;
+          stlEl.addEventListener('mousedown', function(e) { drag = true; sx = e.pageX; sl = stlEl.scrollLeft; stlEl.style.cursor = 'grabbing'; });
+          document.addEventListener('mouseup', function() { drag = false; if (stlEl) stlEl.style.cursor = 'grab'; });
+          document.addEventListener('mousemove', function(e) { if (!drag) return; e.preventDefault(); stlEl.scrollLeft = sl - (e.pageX - sx); });
+        }
       } catch(e) { console.error(e); }
     }
 
@@ -827,15 +1268,121 @@
       data.total_price = data.quantity * data.unit_price;
       if (!data.name && !data.product_id) { alert('Vyberte výrobek nebo zadejte název.'); return; }
       await fetch('/api/wh/orders/' + orderId + '/items', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+      await recalcOrder(orderId);
       openOrderDetail(orderId);
+      loadOrders();
       loadStats();
+    }
+
+    // Uloží rozepsanou položku z formuláře (pokud je vyplněná) a zavře modal
+    async function saveAndCloseDetail(orderId) {
+      // Najdi formulář pro přidání položky v detailu
+      const form = document.querySelector('.modal form[onsubmit*="addOrderItem"]');
+      if (form) {
+        const fd = new FormData(form);
+        const raw = Object.fromEntries(fd.entries());
+        const hasProduct = parseInt(raw.product_id) > 0;
+        const hasName = (raw.name || '').trim().length > 0;
+        const hasPrice = parseFloat(raw.unit_price || 0) > 0;
+        // Pokud je vyplněný výrobek nebo název — ulož položku
+        if (hasProduct || hasName) {
+          const data = {
+            product_id: parseInt(raw.product_id) || null,
+            name: raw.name || '',
+            quantity: parseFloat(raw.quantity) || 1,
+            unit: raw.unit || 'ks',
+            unit_price: parseFloat(raw.unit_price || 0),
+            total_price: (parseFloat(raw.quantity) || 1) * parseFloat(raw.unit_price || 0),
+          };
+          await fetch('/api/wh/orders/' + orderId + '/items', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+          });
+        }
+      }
+      await recalcOrder(orderId);
+      closeModal();
+      loadOrders();
+      loadStats();
+    }
+
+    // ─── Přepočítej celkovou částku + datum dodání na objednávce ─────────
+    async function recalcOrder(orderId) {
+      try {
+        // Načti aktuální objednávku s položkami
+        const res = await fetch('/api/wh/orders/' + orderId);
+        const order = await res.json();
+        const items = order.items || [];
+        const totalAmount = items.reduce(function(sum, it) { return sum + parseFloat(it.total_price || 0); }, 0);
+        const itemsCount = items.length;
+
+        // Najdi nejpozdější slot přiřazený k položkám této objednávky
+        let latestEndDate = null;
+        for (const slot of _availableSlots) {
+          if (slot.assignments) {
+            for (const a of slot.assignments) {
+              if (a.order_id === orderId || items.some(function(it) { return it.id === a.order_item_id; })) {
+                const endDate = new Date(slot.end_date);
+                if (!latestEndDate || endDate > latestEndDate) latestEndDate = endDate;
+              }
+            }
+          }
+        }
+
+        const updateData = { items_count: itemsCount, total_amount: totalAmount };
+        if (latestEndDate) {
+          updateData.expected_delivery = latestEndDate.toISOString().split('T')[0];
+        }
+
+        await fetch('/api/wh/orders/' + orderId, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updateData),
+        });
+      } catch(e) { console.error('recalcOrder error:', e); }
+    }
+
+    async function updateOrderItem(itemId, orderId, field, value, otherValue) {
+      const data = {};
+      if (field === 'quantity') {
+        data.quantity = parseFloat(value);
+        data.unit_price = parseFloat(otherValue);
+      } else if (field === 'unit_price') {
+        data.unit_price = parseFloat(value);
+        data.quantity = parseFloat(otherValue);
+      }
+      data.total_price = (data.quantity || 0) * (data.unit_price || 0);
+      try {
+        await fetch('/api/wh/orders/' + orderId + '/items/' + itemId, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data),
+        });
+        await recalcOrder(orderId);
+        openOrderDetail(orderId);
+        loadOrders();
+        loadStats();
+      } catch(e) { console.error(e); }
     }
 
     async function deleteOrderItem(itemId, orderId) {
       if (!confirm('Smazat tuto položku?')) return;
       await fetch('/api/wh/orders/' + orderId + '/items/' + itemId, { method: 'DELETE' });
+      await recalcOrder(orderId);
       openOrderDetail(orderId);
+      loadOrders();
       loadStats();
+    }
+
+    async function updateOrderField(id, field, value) {
+      try {
+        var body = {};
+        body[field] = value;
+        if (field === 'company_id') body[field] = parseInt(value);
+        await fetch('/api/wh/orders/' + id, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        loadOrders();
+        loadStats();
+      } catch(e) { console.error(e); }
     }
 
     async function updateOrderStatus(id, status) {
@@ -854,6 +1401,32 @@
     // ============================================================
     // HELPERS
     // ============================================================
+    async function generateShareLink(orderId) {
+      try {
+        const res = await fetch('/api/wh/orders/' + orderId + '/share', { method: 'POST' });
+        const data = await res.json();
+        if (!data.share_token) { alert(data.error || 'Chyba při generování odkazu.'); return; }
+        const shareUrl = window.location.origin + '/order/' + data.share_token;
+        var area = document.getElementById('customer-link-area');
+        if (area) {
+          area.innerHTML = '<div style="display:flex;gap:8px;align-items:center;">' +
+            '<input type="text" readonly value="' + shareUrl + '" id="modal-share-url" style="flex:1;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:12px;font-family:monospace;" onclick="this.select()">' +
+            '<button type="button" class="btn btn-sm btn-primary" onclick="copyModalShareUrl()">📋</button>' +
+          '</div>';
+        }
+      } catch(e) { alert('Chyba: ' + e.message); }
+    }
+
+    function copyModalShareUrl() {
+      var inp = document.getElementById('modal-share-url');
+      if (!inp) return;
+      inp.select();
+      navigator.clipboard.writeText(inp.value).then(function() {
+        var btn = inp.nextElementSibling;
+        if (btn) { btn.textContent = '✅'; setTimeout(function() { btn.textContent = '📋'; }, 2000); }
+      });
+    }
+
     async function shareOrder(orderId) {
       try {
         const res = await fetch('/api/wh/orders/' + orderId + '/share', { method: 'POST' });
@@ -864,6 +1437,7 @@
 
         // Zobraz modal s odkazem
         const m = document.createElement('div');
+        m.id = 'share-modal-overlay';
         m.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:10002;display:flex;align-items:center;justify-content:center;';
         m.onclick = function(e) { if (e.target === m) m.remove(); };
         m.innerHTML = '<div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:24px;width:500px;max-width:95vw;">' +
@@ -878,7 +1452,7 @@
           '</div>' +
           '<div id="share-copy-msg" style="font-size:12px;color:#10b981;margin-top:8px;display:none;">✅ Odkaz zkopírován do schránky</div>' +
           '<div style="margin-top:16px;text-align:right;">' +
-            '<button class="btn btn-secondary" onclick="this.closest(\'div[style*=position\\:fixed]\').remove()">Zavřít</button>' +
+            '<button class="btn btn-secondary" onclick="closeShareModal()">Zavřít</button>' +
           '</div>' +
         '</div>';
         document.body.appendChild(m);
@@ -886,6 +1460,11 @@
         // Automaticky vyber text
         setTimeout(function() { document.getElementById('share-url-input')?.select(); }, 100);
       } catch(e) { alert('Chyba: ' + e.message); }
+    }
+
+    function closeShareModal() {
+      const el = document.getElementById('share-modal-overlay');
+      if (el) el.remove();
     }
 
     function copyShareUrl() {
@@ -900,7 +1479,7 @@
       }
     }
 
-    function closeModal() { document.getElementById('modal-root').innerHTML = ''; }
+    function closeModal() { document.getElementById('modal-root').innerHTML = ''; _pendingItems = []; }
 
     // ============================================================
     // INIT

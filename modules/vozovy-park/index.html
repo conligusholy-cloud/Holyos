@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Vozový park | HOLYOS</title>
+  <link rel="icon" type="image/svg+xml" href="../../logo-holyos-icon.svg">
+  <base href="../../">
+  <link rel="stylesheet" href="css/dashboard.css">
+  <style>
+    .main-wrapper { margin-left: var(--sidebar-w); flex: 1; min-height: 100vh; display: flex; flex-direction: column; }
+    .page-header {
+      display:flex; align-items:center; gap:12px; padding:20px 24px;
+      border-bottom:1px solid var(--border); flex-wrap:wrap;
+    }
+    .page-header h1 { font-size:18px; font-weight:700; margin:0; }
+    .page-header .count { font-size:13px; color:var(--text2); margin-left:4px; }
+    .search-box {
+      margin-left:auto; padding:8px 14px; background:var(--surface2); color:var(--text);
+      border:1px solid var(--border); border-radius:8px; font-size:13px; width:240px;
+    }
+    .search-box:focus { border-color:var(--accent); outline:none; }
+
+    .content { padding:0 24px 24px; }
+    .toolbar { display:flex; gap:12px; margin:16px 0; align-items:center; flex-wrap:wrap; }
+
+    .btn { padding:8px 18px; border-radius:8px; border:1px solid var(--border); font-size:13px; font-weight:500; cursor:pointer; transition:all 0.15s; display:inline-flex; align-items:center; gap:6px; background:transparent; color:var(--text); }
+    .btn-primary { background:#0ea5e9; color:#fff; border-color:#0ea5e9; }
+    .btn-primary:hover { background:#0284c7; }
+    .btn-secondary { background:var(--surface2); color:var(--text); }
+    .btn-secondary:hover { background:var(--border); }
+    .btn-danger { background:rgba(239,68,68,0.15); color:#ef4444; border-color:rgba(239,68,68,0.3); }
+    .btn-danger:hover { background:rgba(239,68,68,0.25); }
+    .btn-sm { padding:5px 12px; font-size:12px; }
+
+    .stats-row { display:grid; grid-template-columns:repeat(auto-fit, minmax(160px, 1fr)); gap:12px; margin-bottom:16px; }
+    .stat-card { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:14px 16px; }
+    .stat-card .stat-label { font-size:11px; color:var(--text2); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:4px; }
+    .stat-card .stat-value { font-size:22px; font-weight:700; }
+    .stat-card.warn { border-color:rgba(245,158,11,0.3); background:rgba(245,158,11,0.06); }
+    .stat-card.warn .stat-value { color:#f59e0b; }
+    .stat-card.danger { border-color:rgba(239,68,68,0.3); background:rgba(239,68,68,0.06); }
+    .stat-card.danger .stat-value { color:#ef4444; }
+
+    .filters { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+    .filter-select { padding:6px 10px; background:var(--surface2); color:var(--text); border:1px solid var(--border); border-radius:7px; font-size:12px; }
+
+    .data-table { width:100%; border-collapse:separate; border-spacing:0; }
+    .data-table thead { position:sticky; top:0; z-index:1; }
+    .data-table th { background:var(--surface2); padding:10px 12px; text-align:left; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; color:var(--text2); border-bottom:1px solid var(--border); }
+    .data-table td { padding:10px 12px; font-size:13px; border-bottom:1px solid rgba(255,255,255,0.04); vertical-align:middle; }
+    .data-table tr:hover td { background:rgba(14,165,233,0.06); }
+
+    .badge { display:inline-block; padding:2px 8px; border-radius:10px; font-size:11px; font-weight:500; }
+    .badge-ok      { background:rgba(34,197,94,0.15); color:#22c55e; }
+    .badge-warning { background:rgba(245,158,11,0.18); color:#f59e0b; }
+    .badge-expired { background:rgba(239,68,68,0.18); color:#ef4444; }
+    .badge-none    { background:rgba(148,163,184,0.15); color:#94a3b8; }
+    .badge-cat     { background:rgba(14,165,233,0.15); color:#0ea5e9; }
+
+    .spz { font-family:monospace; font-weight:700; letter-spacing:0.5px; }
+
+    .modal-overlay { position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.6); z-index:200; display:flex; align-items:center; justify-content:center; }
+    .modal { background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:28px; width:760px; max-width:95vw; max-height:90vh; overflow-y:auto; }
+    .modal h2 { font-size:18px; margin-bottom:20px; }
+    .modal-actions { display:flex; gap:10px; justify-content:flex-end; margin-top:24px; }
+
+    .form-section-title { font-size:13px; font-weight:600; color:var(--text); margin:18px 0 8px; padding-bottom:4px; border-bottom:1px solid var(--border); }
+    .form-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+    .form-group { display:flex; flex-direction:column; gap:4px; }
+    .form-group.full { grid-column:1 / -1; }
+    .form-group label { font-size:12px; font-weight:500; color:var(--text2); }
+    .form-group input, .form-group select, .form-group textarea { background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:8px 12px; color:var(--text); font-size:13px; font-family:inherit; }
+    .form-group textarea { min-height:60px; resize:vertical; }
+
+    .empty-state { text-align:center; padding:60px 20px; color:var(--text2); }
+    .empty-state .empty-icon { font-size:48px; margin-bottom:12px; }
+    .empty-state h3 { font-size:16px; color:var(--text); margin-bottom:6px; }
+  </style>
+</head>
+<body>
+  <div id="sidebar"></div>
+  <div class="main-wrapper">
+    <div class="page-header">
+      <span style="font-size:28px;">🚐</span>
+      <div>
+        <h1>Vozový park <span class="count" id="veh-count"></span></h1>
+      </div>
+      <input type="text" class="search-box" id="veh-search" placeholder="Hledat SPZ, model, VIN..." oninput="applyFilters()">
+      <button class="btn btn-secondary" onclick="checkExpirations()" title="Vytvořit notifikace na blížící se termíny">🔔 Zkontrolovat termíny</button>
+      <button class="btn btn-primary" onclick="openVehicleModal()">+ Nové vozidlo</button>
+    </div>
+
+    <div class="content">
+      <!-- Statistiky -->
+      <div class="stats-row" id="stats-row"></div>
+
+      <!-- Filtry -->
+      <div class="toolbar">
+        <div class="filters">
+          <select class="filter-select" id="filter-category" onchange="applyFilters()">
+            <option value="">Všechny kategorie</option>
+            <option>Osobní vůz</option>
+            <option>Dodávka</option>
+            <option>Nákladní</option>
+            <option>Motocykl</option>
+            <option>Přívěsný vozík</option>
+            <option>Pracovní stroj</option>
+            <option>Jiné</option>
+          </select>
+          <select class="filter-select" id="filter-status" onchange="applyFilters()">
+            <option value="">Všechny stavy</option>
+            <option value="expired">⚠️ Po termínu</option>
+            <option value="warning">🕒 Blíží se termín (≤30 dnů)</option>
+            <option value="ok">✅ V pořádku</option>
+          </select>
+          <select class="filter-select" id="filter-active" onchange="applyFilters()">
+            <option value="true">Aktivní</option>
+            <option value="false">Vyřazená</option>
+            <option value="">Vše</option>
+          </select>
+        </div>
+      </div>
+
+      <div id="vehicles-table"></div>
+    </div>
+  </div>
+  <div id="modal-root"></div>
+
+  <script>
+    var s = document.createElement('script');
+    s.src = 'js/sidebar.js?v=' + Date.now();
+    s.onload = function() { renderSidebar('vozovy-park'); };
+    document.head.appendChild(s);
+  </script>
+
+  <script>
+    // ─── Stav ───────────────────────────────────────────────────────────────
+    const FINANCING_TYPES = {
+      'operativni_leasing': 'Operativní leasing',
+      'vlastnictvi_firmy':  'Ve vlastnictví firmy',
+      'financni_leasing':   'Finanční leasing',
+      'uver':               'Na úvěr',
+      'jine':               'Jiné',
+    };
+
+    let vehicles = [];
+    let drivers = [];
+
+    // ─── Helpery ────────────────────────────────────────────────────────────
+    function authHeaders() {
+      const h = { 'Content-Type': 'application/json' };
+      const t = sessionStorage.getItem('token');
+      if (t) h['Authorization'] = 'Bearer ' + t;
+      return h;
+    }
+
+    function fmtDate(d) {
+      if (!d) return '—';
+      const dt = new Date(d);
+      if (isNaN(dt.getTime())) return '—';
+      return dt.toLocaleDateString('cs-CZ');
+    }
+
+    function statusBadge(status, days, date) {
+      if (!date) return '<span class="badge badge-none">—</span>';
+      if (status === 'expired') return '<span class="badge badge-expired">Po termínu (' + Math.abs(days) + ' dnů)</span>';
+      if (status === 'warning') return '<span class="badge badge-warning">' + days + ' dnů</span>';
+      if (status === 'ok') return '<span class="badge badge-ok">OK (' + days + ' dnů)</span>';
+      return '<span class="badge badge-none">—</span>';
+    }
+
+    function escHtml(s) {
+      if (s === null || s === undefined) return '';
+      return String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+    }
+
+    // ─── Načtení dat ────────────────────────────────────────────────────────
+    async function loadVehicles() {
+      try {
+        const params = new URLSearchParams();
+        const active = document.getElementById('filter-active').value;
+        if (active) params.set('active', active);
+        const r = await fetch('/api/fleet/vehicles?' + params.toString(), { headers: authHeaders() });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        vehicles = await r.json();
+        renderTable();
+      } catch (e) {
+        console.error(e);
+        document.getElementById('vehicles-table').innerHTML = '<div class="empty-state"><div class="empty-icon">⚠️</div><h3>Nepodařilo se načíst vozidla</h3><p>' + escHtml(e.message) + '</p></div>';
+      }
+    }
+
+    async function loadDrivers() {
+      try {
+        const r = await fetch('/api/fleet/drivers', { headers: authHeaders() });
+        if (r.ok) drivers = await r.json();
+      } catch (e) { console.error(e); }
+    }
+
+    async function loadStats() {
+      try {
+        const r = await fetch('/api/fleet/stats', { headers: authHeaders() });
+        if (!r.ok) return;
+        const stats = await r.json();
+        const expiredSum = stats.insurance.expired + stats.stk.expired + stats.toll.expired;
+        const warnSum = stats.insurance.warning + stats.stk.warning + stats.toll.warning;
+        const row = document.getElementById('stats-row');
+        row.innerHTML =
+          '<div class="stat-card"><div class="stat-label">Celkem aktivních</div><div class="stat-value">' + stats.total + '</div></div>' +
+          '<div class="stat-card ' + (expiredSum > 0 ? 'danger' : '') + '"><div class="stat-label">Po termínu</div><div class="stat-value">' + expiredSum + '</div></div>' +
+          '<div class="stat-card ' + (warnSum > 0 ? 'warn' : '') + '"><div class="stat-label">Blíží se termín (≤30 dní)</div><div class="stat-value">' + warnSum + '</div></div>' +
+          '<div class="stat-card"><div class="stat-label">Osobních vozů</div><div class="stat-value">' + (stats.by_category['Osobní vůz'] || 0) + '</div></div>' +
+          '<div class="stat-card"><div class="stat-label">Dodávek</div><div class="stat-value">' + (stats.by_category['Dodávka'] || 0) + '</div></div>';
+      } catch (e) { console.error(e); }
+    }
+
+    // ─── Filtrace a render ──────────────────────────────────────────────────
+    function applyFilters() {
+      const q = document.getElementById('veh-search').value.toLowerCase();
+      const cat = document.getElementById('filter-category').value;
+      const st  = document.getElementById('filter-status').value;
+      const active = document.getElementById('filter-active').value;
+
+      let filtered = vehicles.slice();
+      if (cat) filtered = filtered.filter(v => v.category === cat);
+      if (active !== '') filtered = filtered.filter(v => v.active === (active === 'true'));
+      if (st) filtered = filtered.filter(v => v.insurance_status === st || v.stk_status === st || v.toll_status === st);
+      if (q) {
+        filtered = filtered.filter(v =>
+          (v.license_plate || '').toLowerCase().includes(q) ||
+          (v.model || '').toLowerCase().includes(q) ||
+          (v.vin || '').toLowerCase().includes(q));
+      }
+      renderTable(filtered);
+    }
+
+    function renderTable(list) {
+      const data = list || vehicles;
+      document.getElementById('veh-count').textContent = '(' + data.length + ')';
+      const el = document.getElementById('vehicles-table');
+      if (!data.length) {
+        el.innerHTML = '<div class="empty-state"><div class="empty-icon">🚐</div><h3>Žádná vozidla</h3><p>Přidejte první vozidlo tlačítkem vpravo nahoře.</p></div>';
+        return;
+      }
+
+      let html = '<table class="data-table"><thead><tr>' +
+        '<th>SPZ</th>' +
+        '<th>Vozidlo</th>' +
+        '<th>Řidič</th>' +
+        '<th>Kategorie</th>' +
+        '<th>POV do</th>' +
+        '<th>Stav POV</th>' +
+        '<th>STK do</th>' +
+        '<th>Stav STK</th>' +
+        '<th>Známka do</th>' +
+        '<th>Stav známky</th>' +
+        '<th>Financování</th>' +
+        '<th style="width:100px;">Akce</th>' +
+      '</tr></thead><tbody>';
+
+      for (const v of data) {
+        const driverCell = v.driver
+          ? escHtml(v.driver.first_name + ' ' + v.driver.last_name)
+          : '<span style="color:var(--text2);font-size:12px;font-style:italic;">+ přiřadit</span>';
+        const financing = v.financing_type ? FINANCING_TYPES[v.financing_type] || v.financing_type : (v.financing_owner || '—');
+        html += '<tr style="cursor:pointer;" onclick="openVehicleModal(' + v.id + ')">';
+        html += '<td><span class="spz">' + escHtml(v.license_plate || '—') + '</span></td>';
+        html += '<td style="font-weight:600;">' + escHtml(v.model) + (v.vin ? '<div style="font-size:11px;color:var(--text2);font-family:monospace;">' + escHtml(v.vin) + '</div>' : '') + '</td>';
+        html += '<td>' + driverCell + '</td>';
+        html += '<td><span class="badge badge-cat">' + escHtml(v.category) + '</span></td>';
+        html += '<td>' + fmtDate(v.insurance_to) + '</td>';
+        html += '<td>' + statusBadge(v.insurance_status, v.insurance_days, v.insurance_to) + '</td>';
+        html += '<td>' + fmtDate(v.stk_valid_to) + '</td>';
+        html += '<td>' + statusBadge(v.stk_status, v.stk_days, v.stk_valid_to) + '</td>';
+        html += '<td>' + fmtDate(v.toll_sticker_to) + '</td>';
+        html += '<td>' + statusBadge(v.toll_status, v.toll_days, v.toll_sticker_to) + '</td>';
+        html += '<td style="font-size:12px;color:var(--text2);">' + escHtml(financing) + '</td>';
+        html += '<td onclick="event.stopPropagation()">' +
+          '<button class="btn btn-sm btn-secondary" onclick="openVehicleModal(' + v.id + ')" title="Upravit">✏️</button> ' +
+          '<button class="btn btn-sm btn-danger" onclick="deleteVehicle(' + v.id + ')" title="Smazat">🗑️</button>' +
+        '</td>';
+        html += '</tr>';
+      }
+      html += '</tbody></table>';
+      el.innerHTML = html;
+    }
+
+    // ─── Modal — editace / vytvoření ───────────────────────────────────────
+    function closeModal() { document.getElementById('modal-root').innerHTML = ''; }
+
+    async function openVehicleModal(id) {
+      let v = {
+        license_plate:'', model:'', vin:'', category:'Osobní vůz', color:'', year:'',
+        insurance_from:'', insurance_to:'', insurance_company:'',
+        stk_valid_to:'', toll_sticker_to:'',
+        financing_type:'', financing_to:'', financing_owner:'',
+        disk_size:'', tire_size:'',
+        driver_id:'', current_km:'', note:'', active:true,
+      };
+      if (id) {
+        try {
+          const r = await fetch('/api/fleet/vehicles/' + id, { headers: authHeaders() });
+          if (r.ok) v = await r.json();
+        } catch(e) { console.error(e); }
+      }
+
+      const catList = ['Osobní vůz','Dodávka','Nákladní','Motocykl','Přívěsný vozík','Pracovní stroj','Jiné'];
+      // Když editujeme a kategorie není v seznamu (např. "přívěsný vozík" s malým p), zachovej ji jako volbu.
+      if (v.category && !catList.includes(v.category)) catList.push(v.category);
+      const catOpts = catList
+        .map(c => '<option value="' + c + '"' + (v.category === c ? ' selected' : '') + '>' + c + '</option>').join('');
+
+      const finOpts = '<option value="">— nevybráno —</option>' + Object.entries(FINANCING_TYPES)
+        .map(([k,label]) => '<option value="' + k + '"' + (v.financing_type === k ? ' selected' : '') + '>' + label + '</option>').join('');
+
+      const driverOpts = '<option value="">— bez přiřazení —</option>' + drivers.map(d =>
+        '<option value="' + d.id + '"' + (v.driver_id === d.id ? ' selected' : '') + '>' +
+        escHtml(d.last_name + ' ' + d.first_name) + (d.department ? ' (' + escHtml(d.department.name) + ')' : '') +
+        '</option>').join('');
+
+      function fmtDateInput(d) {
+        if (!d) return '';
+        const dt = new Date(d);
+        if (isNaN(dt.getTime())) return '';
+        return dt.toISOString().split('T')[0];
+      }
+
+      document.getElementById('modal-root').innerHTML = '<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal">' +
+        '<h2>' + (id ? '✏️ Upravit vozidlo' : '➕ Nové vozidlo') + '</h2>' +
+        '<form onsubmit="saveVehicle(event,' + (id || 'null') + ')">' +
+          '<div class="form-section-title">Identifikace</div>' +
+          '<div class="form-grid">' +
+            '<div class="form-group"><label>SPZ</label><input type="text" name="license_plate" value="' + escHtml(v.license_plate || '') + '" placeholder="7H6 5380"></div>' +
+            '<div class="form-group"><label>Model / vozidlo *</label><input type="text" name="model" value="' + escHtml(v.model || '') + '" required placeholder="Hyundai i30"></div>' +
+            '<div class="form-group"><label>VIN</label><input type="text" name="vin" value="' + escHtml(v.vin || '') + '" maxlength="30"></div>' +
+            '<div class="form-group"><label>Kategorie *</label><select name="category" required>' + catOpts + '</select></div>' +
+            '<div class="form-group"><label>Barva</label><input type="text" name="color" value="' + escHtml(v.color || '') + '"></div>' +
+            '<div class="form-group"><label>Rok výroby</label><input type="number" name="year" value="' + (v.year || '') + '" min="1950" max="2100"></div>' +
+            '<div class="form-group"><label>Aktuální km</label><input type="number" name="current_km" value="' + (v.current_km || '') + '" min="0"></div>' +
+            '<div class="form-group"><label>Řidič / odpovědná osoba</label><select name="driver_id">' + driverOpts + '</select></div>' +
+          '</div>' +
+
+          '<div class="form-section-title">🛡️ Povinné ručení</div>' +
+          '<div class="form-grid">' +
+            '<div class="form-group"><label>Platnost od</label><input type="date" name="insurance_from" value="' + fmtDateInput(v.insurance_from) + '"></div>' +
+            '<div class="form-group"><label>Platnost do</label><input type="date" name="insurance_to" value="' + fmtDateInput(v.insurance_to) + '"></div>' +
+            '<div class="form-group full"><label>Pojišťovna</label><input type="text" name="insurance_company" value="' + escHtml(v.insurance_company || '') + '"></div>' +
+          '</div>' +
+
+          '<div class="form-section-title">🔧 STK a dálniční známka</div>' +
+          '<div class="form-grid">' +
+            '<div class="form-group"><label>STK platná do</label><input type="date" name="stk_valid_to" value="' + fmtDateInput(v.stk_valid_to) + '"></div>' +
+            '<div class="form-group"><label>Dálniční známka do</label><input type="date" name="toll_sticker_to" value="' + fmtDateInput(v.toll_sticker_to) + '"></div>' +
+          '</div>' +
+
+          '<div class="form-section-title">💰 Financování</div>' +
+          '<div class="form-grid">' +
+            '<div class="form-group"><label>Typ financování</label><select name="financing_type">' + finOpts + '</select></div>' +
+            '<div class="form-group"><label>Financování do</label><input type="date" name="financing_to" value="' + fmtDateInput(v.financing_to) + '"></div>' +
+            '<div class="form-group full"><label>Vlastník / financující subjekt</label><input type="text" name="financing_owner" value="' + escHtml(v.financing_owner || '') + '" placeholder="Best Series s.r.o."></div>' +
+          '</div>' +
+
+          '<div class="form-section-title">🛞 Disky a pneu</div>' +
+          '<div class="form-grid">' +
+            '<div class="form-group full"><label>Disk rozměr</label><input type="text" name="disk_size" value="' + escHtml(v.disk_size || '') + '" placeholder="6,5JX16/ET50"></div>' +
+            '<div class="form-group full"><label>Pneu rozměr</label><input type="text" name="tire_size" value="' + escHtml(v.tire_size || '') + '" placeholder="205/55 R16 91H"></div>' +
+          '</div>' +
+
+          '<div class="form-section-title">Ostatní</div>' +
+          '<div class="form-grid">' +
+            '<div class="form-group full"><label>Poznámka</label><textarea name="note">' + escHtml(v.note || '') + '</textarea></div>' +
+            '<div class="form-group"><label><input type="checkbox" name="active" ' + (v.active !== false ? 'checked' : '') + '> Aktivní vozidlo</label></div>' +
+          '</div>' +
+
+          '<div class="modal-actions">' +
+            '<button type="button" class="btn btn-secondary" onclick="closeModal()">Zrušit</button>' +
+            '<button type="submit" class="btn btn-primary">' + (id ? 'Uložit' : 'Vytvořit') + '</button>' +
+          '</div>' +
+        '</form>' +
+      '</div></div>';
+    }
+
+    async function saveVehicle(e, id) {
+      e.preventDefault();
+      const f = new FormData(e.target);
+      const data = {};
+      for (const [k, v] of f.entries()) {
+        if (v === '') continue;
+        if (k === 'year' || k === 'current_km') data[k] = parseInt(v);
+        else if (k === 'driver_id') data[k] = parseInt(v);
+        else data[k] = v;
+      }
+      data.active = e.target.active.checked;
+
+      try {
+        const resp = await fetch(id ? '/api/fleet/vehicles/' + id : '/api/fleet/vehicles', {
+          method: id ? 'PUT' : 'POST',
+          headers: authHeaders(),
+          body: JSON.stringify(data),
+        });
+        if (!resp.ok) {
+          const err = await resp.json().catch(() => ({}));
+          alert('Chyba: ' + (err.error || resp.status) + (err.details ? '\n' + JSON.stringify(err.details.fieldErrors || {}, null, 2) : ''));
+          return;
+        }
+        closeModal();
+        await loadVehicles();
+        await loadStats();
+      } catch (e) {
+        console.error(e);
+        alert('Chyba při ukládání: ' + e.message);
+      }
+    }
+
+    async function deleteVehicle(id) {
+      if (!confirm('Opravdu smazat toto vozidlo?')) return;
+      try {
+        const resp = await fetch('/api/fleet/vehicles/' + id, { method: 'DELETE', headers: authHeaders() });
+        if (!resp.ok) { const err = await resp.json().catch(() => ({})); alert(err.error || 'Nepodařilo se smazat'); return; }
+        await loadVehicles();
+        await loadStats();
+      } catch (e) { console.error(e); alert('Chyba: ' + e.message); }
+    }
+
+    // ─── Notifikace — ruční spuštění kontroly ──────────────────────────────
+    async function checkExpirations() {
+      try {
+        const resp = await fetch('/api/fleet/check-expirations', { method: 'POST', headers: authHeaders(), body: JSON.stringify({ days: 30 }) });
+        const result = await resp.json();
+        if (resp.ok) {
+          alert('✅ Vytvořeno ' + result.notifications_created + ' notifikací.');
+        } else {
+          alert('Chyba: ' + (result.error || resp.status));
+        }
+      } catch (e) { alert('Chyba: ' + e.message); }
+    }
+
+    // ─── Init ──────────────────────────────────────────────────────────────
+    (async function() {
+      // Otevřít modal vozidla pokud je ?id=X v URL (kliknutí z notifikace)
+      await Promise.all([loadDrivers(), loadVehicles(), loadStats()]);
+      const params = new URLSearchParams(window.location.search);
+      const openId = params.get('id');
+      if (openId) openVehicleModal(parseInt(openId));
+    })();
+  </script>
+</body>
+</html>

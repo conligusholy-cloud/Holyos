@@ -8,6 +8,7 @@ export const COLORS = {
     sklad: { fill: 'rgba(16,185,129,0.15)', stroke: '#10b981', label: 'Sklad' },
     cesta: { fill: 'rgba(16,185,129,0.1)', stroke: '#10b981', label: 'Cesta' },
     vstup: { fill: 'rgba(108,140,255,0.2)', stroke: '#6c8cff', label: 'Vstup/Výstup' },
+    stena: { fill: 'rgba(160,160,192,0.2)', stroke: '#a0a0c0', label: 'Stěna' },
 };
 export const DEFAULT_SIZES = {
     areal: { w: 100, h: 80 },

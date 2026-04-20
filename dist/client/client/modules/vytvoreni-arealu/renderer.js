@@ -170,8 +170,15 @@ function renderPolygonObject(g, obj, strokeColor, fillColor) {
     poly.setAttribute('points', pointsStr);
     poly.setAttribute('fill', fillColor);
     poly.setAttribute('stroke', strokeColor);
-    poly.setAttribute('stroke-width', '0.08');
-    poly.setAttribute('stroke-opacity', '0.6');
+    // Hala má silnější a sytější obvod (aby měla vizuální přednost před vnitřními stěnami)
+    if (obj.type === 'hala') {
+        poly.setAttribute('stroke-width', '0.35');
+        poly.setAttribute('stroke-opacity', '1');
+    }
+    else {
+        poly.setAttribute('stroke-width', '0.08');
+        poly.setAttribute('stroke-opacity', '0.6');
+    }
     poly.setAttribute('stroke-linejoin', 'round');
     if (obj.type === 'areal')
         poly.setAttribute('stroke-dasharray', '0.8 0.4');
@@ -347,12 +354,24 @@ function renderRoomLabel(g, obj, room) {
     g.appendChild(underline);
 }
 function renderEntranceMarker(g, obj, entrance) {
-    const pts = obj.points;
-    const i = entrance.edgeIndex;
-    if (i < 0 || i >= pts.length)
-        return;
-    const j = (i + 1) % pts.length;
-    const p1 = pts[i], p2 = pts[j];
+    // Zjisti dva krajní body hrany (buď hrana polygonu, nebo vnitřní stěna)
+    let p1, p2;
+    if (entrance.wallId != null && obj.walls) {
+        const wall = obj.walls.find(w => w.id === entrance.wallId);
+        if (!wall)
+            return;
+        p1 = { x: wall.x1, y: wall.y1 };
+        p2 = { x: wall.x2, y: wall.y2 };
+    }
+    else {
+        const pts = obj.points;
+        const i = entrance.edgeIndex;
+        if (i < 0 || !pts || i >= pts.length)
+            return;
+        const j = (i + 1) % pts.length;
+        p1 = pts[i];
+        p2 = pts[j];
+    }
     // Dva body (t1, t2) definující šířku vjezdu
     const t1 = entrance.t1 != null ? entrance.t1 : 0.4;
     const t2 = entrance.t2 != null ? entrance.t2 : 0.6;
@@ -363,29 +382,30 @@ function renderEntranceMarker(g, obj, entrance) {
     // Střed vjezdu
     const cx = (x1 + x2) / 2;
     const cy = (y1 + y2) / 2;
-    // Směr hrany a normála (VŽDY ven z polygonu)
+    // Směr hrany a normála
     const edx = p2.x - p1.x;
     const edy = p2.y - p1.y;
     const elen = Math.sqrt(edx * edx + edy * edy) || 1;
     const ex = edx / elen;
     const ey = edy / elen;
-    // Kandidátní normála
     let nx = -ey;
     let ny = ex;
-    // Zjistit těžiště polygonu
-    let centX = 0, centY = 0;
-    for (let k = 0; k < pts.length; k++) {
-        centX += pts[k].x;
-        centY += pts[k].y;
-    }
-    centX /= pts.length;
-    centY /= pts.length;
-    // Pokud normála ukazuje DOVNITŘ (směrem k těžišti), otočit ji
-    const midX = (p1.x + p2.x) / 2, midY = (p1.y + p2.y) / 2;
-    const toCentX = centX - midX, toCentY = centY - midY;
-    if (nx * toCentX + ny * toCentY > 0) {
-        nx = -nx;
-        ny = -ny;
+    // Určit "vnějšek": u polygonu ven od těžiště; u vnitřní stěny nemá smysl orientace, tak vezmeme výchozí
+    if (entrance.wallId == null && obj.points && obj.points.length >= 3) {
+        const pts = obj.points;
+        let centX = 0, centY = 0;
+        for (let k = 0; k < pts.length; k++) {
+            centX += pts[k].x;
+            centY += pts[k].y;
+        }
+        centX /= pts.length;
+        centY /= pts.length;
+        const midX = (p1.x + p2.x) / 2, midY = (p1.y + p2.y) / 2;
+        const toCentX = centX - midX, toCentY = centY - midY;
+        if (nx * toCentX + ny * toCentY > 0) {
+            nx = -nx;
+            ny = -ny;
+        }
     }
     const eType = ENTRANCE_TYPES[entrance.type] || ENTRANCE_TYPES.vjezd;
     const color = eType.color;
@@ -484,15 +504,16 @@ function renderWall(g, obj, wall) {
     if (lastT < 1) {
         segments.push({ t1: lastT, t2: 1 });
     }
-    // Segmenty stěny
+    // Segmenty stěny (vnitřní příčky/místnosti — slabší než obvod haly)
     segments.forEach(seg => {
         const line = svgEl('line');
         line.setAttribute('x1', (wx1 + seg.t1 * dx).toString());
         line.setAttribute('y1', (wy1 + seg.t1 * dy).toString());
         line.setAttribute('x2', (wx1 + seg.t2 * dx).toString());
         line.setAttribute('y2', (wy1 + seg.t2 * dy).toString());
-        line.setAttribute('stroke', '#a0a0c0');
-        line.setAttribute('stroke-width', '0.2');
+        line.setAttribute('stroke', '#8a8aa0');
+        line.setAttribute('stroke-opacity', '0.75');
+        line.setAttribute('stroke-width', '0.15');
         line.setAttribute('stroke-linecap', 'round');
         line.setAttribute('opacity', '0.8');
         g.appendChild(line);

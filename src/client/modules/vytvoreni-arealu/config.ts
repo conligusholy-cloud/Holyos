@@ -16,13 +16,14 @@ export interface EntranceTypeConfig {
   icon: string;
 }
 
-export const COLORS: Record<ObjectType, ColorConfig> = {
+export const COLORS: Record<string, ColorConfig> = {
   areal:      { fill: 'rgba(139,92,246,0.1)',  stroke: '#8b5cf6', label: 'Areál' },
   hala:       { fill: 'rgba(59,130,246,0.15)', stroke: '#3b82f6', label: 'Hala' },
   pracoviste: { fill: 'rgba(245,158,11,0.2)',  stroke: '#f59e0b', label: 'Pracoviště' },
   sklad:      { fill: 'rgba(16,185,129,0.15)', stroke: '#10b981', label: 'Sklad' },
   cesta:      { fill: 'rgba(16,185,129,0.1)',  stroke: '#10b981', label: 'Cesta' },
   vstup:      { fill: 'rgba(108,140,255,0.2)', stroke: '#6c8cff', label: 'Vstup/Výstup' },
+  stena:      { fill: 'rgba(160,160,192,0.2)', stroke: '#a0a0c0', label: 'Stěna' },
 };
 
 export const DEFAULT_SIZES: Record<ObjectType, Dimensions> = {

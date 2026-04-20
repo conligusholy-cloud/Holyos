@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Objednávka — HolyOS</title>
+  <title>Konfigurátor objednávky — HolyOS</title>
   <style>
     * {
       margin: 0;
@@ -15,173 +15,472 @@
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
       background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
       min-height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
+      min-height: -webkit-fill-available;
       padding: 20px;
+      -webkit-text-size-adjust: 100%;
     }
 
     .container {
       background: white;
-      border-radius: 12px;
+      border-radius: 16px;
       box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-      max-width: 900px;
+      max-width: 960px;
       width: 100%;
+      margin: 0 auto;
       padding: 40px;
     }
 
     .header {
       text-align: center;
-      margin-bottom: 40px;
+      margin-bottom: 32px;
       border-bottom: 2px solid #f0f0f0;
       padding-bottom: 20px;
     }
 
     .header h1 {
-      font-size: 28px;
+      font-size: 26px;
       color: #333;
-      margin-bottom: 8px;
+      margin-bottom: 6px;
     }
 
     .header p {
-      color: #666;
-      font-size: 14px;
+      color: #888;
+      font-size: 13px;
     }
 
     .order-info {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 20px;
-      margin-bottom: 30px;
+      gap: 16px;
+      margin-bottom: 32px;
     }
 
     .info-block {
-      padding: 15px;
-      background: #f9f9f9;
-      border-radius: 8px;
+      padding: 14px 16px;
+      background: #f9f9fb;
+      border-radius: 10px;
       border-left: 4px solid #667eea;
     }
 
     .info-block label {
       display: block;
-      font-size: 12px;
+      font-size: 11px;
       color: #999;
       text-transform: uppercase;
-      margin-bottom: 5px;
+      margin-bottom: 4px;
       font-weight: 600;
+      letter-spacing: 0.5px;
     }
 
     .info-block .value {
-      font-size: 18px;
+      font-size: 17px;
       color: #333;
       font-weight: 500;
     }
 
     .status {
       display: inline-block;
-      padding: 6px 12px;
+      padding: 5px 12px;
       border-radius: 20px;
-      font-size: 12px;
+      font-size: 11px;
       font-weight: 600;
       text-transform: uppercase;
+      letter-spacing: 0.5px;
     }
 
     .status.new { background: #e3f2fd; color: #1976d2; }
     .status.pending { background: #fff3e0; color: #f57c00; }
-    .status.confirmed { background: #f3e5f5; color: #7b1fa2; }
+    .status.confirmed { background: #ede7f6; color: #7b1fa2; }
     .status.delivered { background: #e8f5e9; color: #388e3c; }
     .status.cancelled { background: #ffebee; color: #c62828; }
 
+    /* ─── Položky objednávky ─── */
     .items-section {
-      margin-top: 40px;
+      margin-top: 32px;
     }
 
     .items-section h2 {
       font-size: 18px;
       color: #333;
-      margin-bottom: 15px;
+      margin-bottom: 16px;
       padding-bottom: 10px;
       border-bottom: 2px solid #f0f0f0;
     }
 
-    table {
-      width: 100%;
-      border-collapse: collapse;
+    .order-item {
+      background: #fafbfc;
+      border: 1px solid #eee;
+      border-radius: 12px;
+      margin-bottom: 16px;
+      overflow: hidden;
     }
 
-    thead {
-      background: #f9f9f9;
+    .item-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 16px 20px;
+      background: #f5f6f8;
+      border-bottom: 1px solid #eee;
     }
 
-    th {
-      text-align: left;
-      padding: 12px;
-      font-size: 12px;
-      color: #666;
+    .item-header .item-name {
+      font-size: 16px;
       font-weight: 600;
-      text-transform: uppercase;
-      border-bottom: 2px solid #e0e0e0;
-    }
-
-    td {
-      padding: 12px;
-      border-bottom: 1px solid #f0f0f0;
       color: #333;
     }
 
-    tr:last-child td {
-      border-bottom: none;
+    .item-header .item-qty {
+      font-size: 13px;
+      color: #666;
+      background: white;
+      padding: 4px 12px;
+      border-radius: 20px;
+      border: 1px solid #e0e0e0;
     }
 
-    .item-configs {
-      font-size: 12px;
-      color: #999;
-      margin-top: 5px;
-    }
-
-    .total-row {
+    .item-header .item-price {
+      font-size: 15px;
       font-weight: 600;
-      background: #f9f9f9;
-      border-top: 2px solid #e0e0e0;
-    }
-
-    .total-row td:last-child {
-      font-size: 18px;
       color: #667eea;
     }
 
+    /* ─── Konfigurační skupiny ─── */
+    .config-section {
+      padding: 20px;
+    }
+
+    .config-section .config-title {
+      font-size: 11px;
+      color: #667eea;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      font-weight: 700;
+      margin-bottom: 12px;
+    }
+
+    .config-group {
+      margin-bottom: 20px;
+    }
+
+    .config-group:last-child {
+      margin-bottom: 0;
+    }
+
+    .config-group-label {
+      font-size: 14px;
+      font-weight: 600;
+      color: #333;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .config-group-label .required-badge {
+      font-size: 10px;
+      background: #ffebee;
+      color: #e53935;
+      padding: 2px 7px;
+      border-radius: 10px;
+      font-weight: 600;
+    }
+
+    .config-options {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .config-option-card {
+      position: relative;
+      cursor: pointer;
+      background: white;
+      border: 2px solid #e8e8ec;
+      border-radius: 10px;
+      padding: 12px 18px;
+      min-width: 120px;
+      transition: all 0.2s;
+      user-select: none;
+    }
+
+    .config-option-card:hover {
+      border-color: #b8bfff;
+      background: #f8f8ff;
+    }
+
+    .config-option-card.selected {
+      border-color: #667eea;
+      background: #eef0ff;
+      box-shadow: 0 0 0 1px #667eea;
+    }
+
+    .config-option-card .option-name {
+      font-size: 14px;
+      font-weight: 500;
+      color: #333;
+    }
+
+    .config-option-card .option-price {
+      font-size: 12px;
+      color: #888;
+      margin-top: 3px;
+    }
+
+    .config-option-card .option-price.positive {
+      color: #e65100;
+    }
+
+    .config-option-card .option-price.negative {
+      color: #2e7d32;
+    }
+
+    .config-option-card .check-mark {
+      position: absolute;
+      top: 8px;
+      right: 10px;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: #667eea;
+      color: white;
+      font-size: 12px;
+      display: none;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .config-option-card.selected .check-mark {
+      display: flex;
+    }
+
+    /* Text input pro typ "text" */
+    .config-text-input {
+      width: 100%;
+      max-width: 400px;
+      padding: 10px 14px;
+      border: 2px solid #e8e8ec;
+      border-radius: 10px;
+      font-size: 14px;
+      color: #333;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .config-text-input:focus {
+      border-color: #667eea;
+    }
+
+    /* ─── Existující konfigurace (readonly) ─── */
+    .existing-config {
+      padding: 12px 20px;
+      background: #f0fff4;
+      border-top: 1px solid #c8e6c9;
+    }
+
+    .existing-config .label {
+      font-size: 11px;
+      color: #2e7d32;
+      text-transform: uppercase;
+      font-weight: 600;
+      margin-bottom: 6px;
+    }
+
+    .existing-config .chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .existing-config .chip {
+      display: inline-block;
+      background: #e8f5e9;
+      color: #2e7d32;
+      padding: 4px 10px;
+      border-radius: 15px;
+      font-size: 12px;
+      font-weight: 500;
+    }
+
+    /* ─── Cenový přehled ─── */
+    .price-summary {
+      margin-top: 24px;
+      padding: 20px;
+      background: #f9f9fb;
+      border-radius: 12px;
+      border: 1px solid #eee;
+    }
+
+    .price-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 6px 0;
+      font-size: 14px;
+      color: #555;
+    }
+
+    .price-row.total {
+      padding-top: 12px;
+      margin-top: 8px;
+      border-top: 2px solid #e0e0e0;
+      font-size: 18px;
+      font-weight: 700;
+      color: #333;
+    }
+
+    .price-row.total .amount {
+      color: #667eea;
+    }
+
+    /* ─── Poznámka zákazníka ─── */
+    .customer-note-section {
+      margin-top: 24px;
+    }
+
+    .customer-note-section label {
+      display: block;
+      font-size: 14px;
+      font-weight: 600;
+      color: #333;
+      margin-bottom: 8px;
+    }
+
+    .customer-note-section textarea {
+      width: 100%;
+      min-height: 80px;
+      padding: 12px 14px;
+      border: 2px solid #e8e8ec;
+      border-radius: 10px;
+      font-size: 14px;
+      font-family: inherit;
+      color: #333;
+      resize: vertical;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .customer-note-section textarea:focus {
+      border-color: #667eea;
+    }
+
+    /* ─── Potvrzovací tlačítko ─── */
+    .confirm-section {
+      margin-top: 32px;
+      text-align: center;
+    }
+
+    .btn-confirm {
+      display: inline-block;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      padding: 16px 48px;
+      font-size: 16px;
+      font-weight: 600;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: all 0.3s;
+      box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+    }
+
+    .btn-confirm:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(102, 126, 234, 0.5);
+    }
+
+    .btn-confirm:active {
+      transform: translateY(0);
+    }
+
+    .btn-confirm:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+
+    .btn-confirm .spinner-inline {
+      display: inline-block;
+      width: 16px;
+      height: 16px;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-top-color: white;
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+      margin-right: 8px;
+      vertical-align: middle;
+    }
+
+    /* ─── Success stav ─── */
+    .success-message {
+      text-align: center;
+      padding: 40px 20px;
+    }
+
+    .success-message .icon {
+      font-size: 64px;
+      margin-bottom: 16px;
+    }
+
+    .success-message h2 {
+      font-size: 24px;
+      color: #2e7d32;
+      margin-bottom: 10px;
+    }
+
+    .success-message p {
+      font-size: 15px;
+      color: #666;
+      line-height: 1.6;
+    }
+
+    /* ─── Stav "již potvrzeno" ─── */
+    .confirmed-banner {
+      background: #ede7f6;
+      border: 1px solid #ce93d8;
+      border-radius: 10px;
+      padding: 16px 20px;
+      margin-bottom: 24px;
+      text-align: center;
+    }
+
+    .confirmed-banner .icon { font-size: 24px; margin-bottom: 6px; }
+    .confirmed-banner p { font-size: 14px; color: #6a1b9a; font-weight: 500; }
+
+    /* ─── Shared ─── */
     .note-section {
-      margin-top: 30px;
-      padding: 15px;
+      margin-top: 20px;
+      padding: 14px 16px;
       background: #f0f5ff;
-      border-radius: 8px;
+      border-radius: 10px;
       border-left: 4px solid #667eea;
     }
 
     .note-section h3 {
-      font-size: 12px;
+      font-size: 11px;
       color: #667eea;
       text-transform: uppercase;
-      margin-bottom: 10px;
+      margin-bottom: 6px;
       font-weight: 600;
     }
 
     .note-section p {
       color: #333;
       line-height: 1.6;
+      font-size: 14px;
     }
 
     .error {
       background: #ffebee;
       color: #c62828;
       padding: 20px;
-      border-radius: 8px;
+      border-radius: 10px;
       text-align: center;
     }
 
     .loading {
       text-align: center;
-      padding: 40px;
+      padding: 60px 20px;
       color: #999;
     }
 
@@ -202,30 +501,418 @@
 
     .footer {
       text-align: center;
-      margin-top: 40px;
-      padding-top: 20px;
+      margin-top: 32px;
+      padding-top: 16px;
       border-top: 2px solid #f0f0f0;
-      color: #999;
-      font-size: 12px;
+      color: #bbb;
+      font-size: 11px;
     }
 
+    /* ─── Přepínač jazyků (vlaječky) ─── */
+    .lang-switcher {
+      display: flex;
+      justify-content: center;
+      gap: 6px;
+      margin-bottom: 20px;
+    }
+
+    .lang-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 40px;
+      height: 30px;
+      border: 2px solid #e0e0e0;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 20px;
+      background: white;
+      transition: all 0.2s;
+      user-select: none;
+      padding: 0;
+      line-height: 1;
+    }
+
+    .lang-btn:hover {
+      border-color: #b8bfff;
+      transform: scale(1.08);
+    }
+
+    .lang-btn.active {
+      border-color: #667eea;
+      box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.3);
+      transform: scale(1.08);
+    }
+
+    /* ─── Responsive: Tablet ─── */
     @media (max-width: 768px) {
-      .order-info {
-        grid-template-columns: 1fr;
+      body {
+        padding: 12px;
       }
 
       .container {
-        padding: 20px;
+        padding: 24px;
+        border-radius: 12px;
       }
 
-      table {
+      .header h1 {
+        font-size: 22px;
+      }
+
+      .order-info {
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+      }
+
+      .info-block .value {
+        font-size: 15px;
+      }
+
+      .item-header {
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .config-option-card {
+        min-width: unset;
+      }
+
+      .price-row.total {
+        font-size: 16px;
+      }
+
+      .btn-confirm {
+        width: 100%;
+        padding: 16px;
+      }
+    }
+
+    /* ─── Responsive: Mobil ─── */
+    @media (max-width: 480px) {
+      body {
+        padding: 0;
+        background: #f5f5f7;
+      }
+
+      .container {
+        border-radius: 0;
+        box-shadow: none;
+        padding: 16px;
+        min-height: 100vh;
+      }
+
+      .header {
+        margin-bottom: 20px;
+        padding-bottom: 14px;
+      }
+
+      .header h1 {
+        font-size: 19px;
+        line-height: 1.3;
+      }
+
+      .header p {
+        font-size: 12px;
+      }
+
+      .order-info {
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+        margin-bottom: 20px;
+      }
+
+      .info-block {
+        padding: 10px 12px;
+        border-radius: 8px;
+        border-left-width: 3px;
+      }
+
+      .info-block label {
+        font-size: 9px;
+        margin-bottom: 2px;
+      }
+
+      .info-block .value {
+        font-size: 14px;
+      }
+
+      .items-section {
+        margin-top: 20px;
+      }
+
+      .items-section h2 {
+        font-size: 16px;
+        margin-bottom: 12px;
+      }
+
+      .order-item {
+        border-radius: 10px;
+        margin-bottom: 12px;
+      }
+
+      .item-header {
+        padding: 12px 14px;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 6px;
+      }
+
+      .item-header .item-name {
+        font-size: 15px;
+        width: 100%;
+      }
+
+      .item-header .item-qty {
+        font-size: 12px;
+        padding: 3px 10px;
+      }
+
+      .item-header .item-price {
+        font-size: 14px;
+      }
+
+      .config-section {
+        padding: 14px;
+      }
+
+      .config-section .config-title {
+        font-size: 10px;
+        margin-bottom: 10px;
+      }
+
+      .config-group {
+        margin-bottom: 16px;
+      }
+
+      .config-group-label {
+        font-size: 13px;
+        margin-bottom: 8px;
+      }
+
+      .config-options {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+      }
+
+      .config-option-card {
+        min-width: unset;
+        padding: 10px 12px;
+        border-radius: 8px;
+        text-align: center;
+      }
+
+      .config-option-card .check-mark {
+        top: 5px;
+        right: 6px;
+        width: 18px;
+        height: 18px;
+        font-size: 10px;
+      }
+
+      .config-option-card .option-name {
+        font-size: 13px;
+        padding-right: 16px;
+      }
+
+      .config-option-card .option-price {
+        font-size: 11px;
+        margin-top: 2px;
+      }
+
+      .config-text-input {
+        max-width: 100%;
+        font-size: 16px; /* zabrání zoomování na iOS */
+        padding: 10px 12px;
+      }
+
+      .price-summary {
+        margin-top: 16px;
+        padding: 14px;
+        border-radius: 10px;
+      }
+
+      .price-row {
+        font-size: 13px;
+        padding: 4px 0;
+      }
+
+      .price-row.total {
+        font-size: 16px;
+        padding-top: 10px;
+        margin-top: 6px;
+      }
+
+      .customer-note-section {
+        margin-top: 16px;
+      }
+
+      .customer-note-section label {
         font-size: 13px;
       }
 
-      th, td {
-        padding: 8px;
+      .customer-note-section textarea {
+        font-size: 16px; /* zabrání zoomování na iOS */
+        min-height: 70px;
+        padding: 10px 12px;
+      }
+
+      .confirm-section {
+        margin-top: 20px;
+        /* Sticky tlačítko na mobilu */
+        position: sticky;
+        bottom: 0;
+        background: white;
+        padding: 12px 0 4px;
+        z-index: 10;
+      }
+
+      .btn-confirm {
+        width: 100%;
+        padding: 16px;
+        font-size: 15px;
+        border-radius: 10px;
+        /* Větší tap target na mobilu */
+        min-height: 52px;
+      }
+
+      .note-section {
+        margin-top: 14px;
+        padding: 12px;
+        border-radius: 8px;
+      }
+
+      .note-section p {
+        font-size: 13px;
+      }
+
+      .existing-config {
+        padding: 10px 14px;
+      }
+
+      .existing-config .chip {
+        font-size: 11px;
+        padding: 3px 8px;
+      }
+
+      .confirmed-banner {
+        padding: 12px 14px;
+        margin-bottom: 16px;
+      }
+
+      .confirmed-banner p {
+        font-size: 13px;
+      }
+
+      .success-message .icon {
+        font-size: 48px;
+      }
+
+      .success-message h2 {
+        font-size: 20px;
+      }
+
+      .success-message p {
+        font-size: 14px;
+      }
+
+      .footer {
+        margin-top: 20px;
+        padding-top: 12px;
+        font-size: 10px;
       }
     }
+
+    /* ─── Responsive: Malé mobily (SE, apod.) ─── */
+    @media (max-width: 360px) {
+      .container {
+        padding: 12px;
+      }
+
+      .header h1 {
+        font-size: 17px;
+      }
+
+      .order-info {
+        grid-template-columns: 1fr;
+        gap: 6px;
+      }
+
+      .config-options {
+        grid-template-columns: 1fr;
+      }
+
+      .config-option-card {
+        text-align: left;
+      }
+
+      .item-header .item-name {
+        font-size: 14px;
+      }
+
+      .price-row.total {
+        font-size: 15px;
+      }
+    }
+
+    /* ─── iOS safe area (notch, home indicator) ─── */
+    @supports (padding-bottom: env(safe-area-inset-bottom)) {
+      .confirm-section {
+        padding-bottom: calc(env(safe-area-inset-bottom) + 4px);
+      }
+    }
+
+    /* ─── Touch optimalizace ─── */
+    @media (hover: none) and (pointer: coarse) {
+      .config-option-card {
+        -webkit-tap-highlight-color: rgba(102, 126, 234, 0.15);
+      }
+
+      .config-option-card:hover {
+        border-color: #e8e8ec;
+        background: white;
+      }
+
+      .config-option-card.selected:hover {
+        border-color: #667eea;
+        background: #eef0ff;
+      }
+
+      .btn-confirm:hover {
+        transform: none;
+        box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+      }
+    }
+
+    /* ─── Slot timeline (zákaznický výběr termínu) ─── */
+    .slot-section { margin-top: 24px; padding: 20px; background: #f4f0ff; border-radius: 12px; border: 1px solid #e0d4f5; }
+    .slot-section h3 { font-size: 15px; color: #5b21b6; margin-bottom: 4px; }
+    .slot-section-sub { font-size: 12px; color: #888; margin-bottom: 12px; }
+    .slot-item-row { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid #e8e0f0; }
+    .slot-item-row:last-child { border-bottom: none; }
+    .slot-item-name { font-weight: 600; color: #333; font-size: 14px; white-space: nowrap; }
+    .slot-item-badge { display: inline-flex; align-items: center; gap: 6px; background: #ede7f6; color: #7c3aed; padding: 5px 12px; border-radius: 8px; font-size: 12px; font-weight: 600; }
+    .slot-item-badge .remove-slot { background: none; border: none; color: #ef4444; cursor: pointer; font-size: 14px; padding: 0 2px; }
+
+    /* Timeline horizontální */
+    .slot-tl-wrap { position: relative; margin-top: 12px; }
+    .slot-tl-scroll { overflow-x: auto; cursor: grab; -webkit-overflow-scrolling: touch; border: 1px solid #e0d4f5; border-radius: 10px; background: #faf8ff; }
+    .slot-tl-scroll:active { cursor: grabbing; }
+    .slot-tl-header { display: flex; border-bottom: 1px solid #e0d4f5; }
+    .slot-tl-month { text-align: center; font-size: 11px; font-weight: 700; color: #5b21b6; text-transform: uppercase; padding: 6px 0; border-right: 1px solid #e0d4f5; }
+    .slot-tl-dates { display: flex; border-bottom: 1px solid #e8e0f0; }
+    .slot-tl-date { width: 110px; min-width: 110px; text-align: center; font-size: 10px; color: #999; padding: 4px 0; border-right: 1px solid #f0ecf5; }
+    .slot-tl-date.today { color: #dc2626; font-weight: 700; }
+    .slot-tl-row { display: flex; position: relative; min-height: 54px; }
+    .slot-tl-cell { width: 110px; min-width: 110px; padding: 6px 4px; border-right: 1px solid #f0ecf5; display: flex; align-items: center; justify-content: center; }
+    .slot-tl-slot { width: 100%; padding: 10px 6px; border-radius: 8px; text-align: center; font-size: 11px; font-weight: 600; transition: all 0.15s; }
+    .slot-tl-slot.free { background: #ecfdf5; color: #059669; border: 1px dashed #a7f3d0; cursor: pointer; }
+    .slot-tl-slot.free:hover { background: #d1fae5; border-color: #34d399; transform: scale(1.03); box-shadow: 0 2px 8px rgba(5,150,105,0.15); }
+    .slot-tl-slot.taken { background: #fff7ed; color: #ea580c; border: 1px solid #fed7aa; opacity: 0.6; }
+    .slot-tl-slot.blocked { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; opacity: 0.5; }
+    .slot-tl-slot.mine { background: #ede7f6; color: #7c3aed; border: 2px solid #a78bfa; }
+    .slot-tl-today-line { position: absolute; top: 0; bottom: 0; width: 2px; background: #dc2626; z-index: 2; pointer-events: none; }
+    .slot-tl-today-label { position: absolute; top: -14px; font-size: 9px; color: #dc2626; font-weight: 700; white-space: nowrap; transform: translateX(-50%); }
   </style>
 </head>
 <body>
@@ -237,120 +924,832 @@
   </div>
 
   <script>
+    // ═════════════════════════════════════════════════════════════════════════
+    // i18n — PŘEKLADOVÝ SYSTÉM
+    // ═════════════════════════════════════════════════════════════════════════
+
+    const LANGS = {
+      cs: { flag: '\u{1F1E8}\u{1F1FF}', label: 'CZ' },
+      en: { flag: '\u{1F1EC}\u{1F1E7}', label: 'EN' },
+      de: { flag: '\u{1F1E9}\u{1F1EA}', label: 'DE' },
+      es: { flag: '\u{1F1EA}\u{1F1F8}', label: 'ES' },
+      hr: { flag: '\u{1F1ED}\u{1F1F7}', label: 'HR' },
+    };
+
+    const TRANSLATIONS = {
+      // ─── Hlavička ───
+      order_title:        { cs: 'Objedn\u00e1vka \u010d.',   en: 'Order No.',        de: 'Bestellung Nr.',    es: 'Pedido N\u00ba',          hr: 'Narud\u017eba br.' },
+      subtitle_config:    { cs: 'Vyberte si konfiguraci va\u0161ich produkt\u016f a potvr\u010fte objedn\u00e1vku', en: 'Select your product configuration and confirm the order', de: 'W\u00e4hlen Sie Ihre Produktkonfiguration und best\u00e4tigen Sie die Bestellung', es: 'Seleccione la configuraci\u00f3n de sus productos y confirme el pedido', hr: 'Odaberite konfiguraciju proizvoda i potvrdite narud\u017ebu' },
+      subtitle_preview:   { cs: 'N\u00e1hled objedn\u00e1vky \u2014 HolyOS', en: 'Order preview \u2014 HolyOS', de: 'Bestell\u00fcbersicht \u2014 HolyOS', es: 'Vista previa del pedido \u2014 HolyOS', hr: 'Pregled narud\u017ebe \u2014 HolyOS' },
+
+      // ─── Info bloky ───
+      company:            { cs: 'Spole\u010dnost',       en: 'Company',            de: 'Unternehmen',        es: 'Empresa',              hr: 'Tvrtka' },
+      status:             { cs: 'Stav',              en: 'Status',             de: 'Status',             es: 'Estado',               hr: 'Status' },
+      expected_delivery:  { cs: 'O\u010dek\u00e1van\u00e9 dod\u00e1n\u00ed', en: 'Expected delivery',  de: 'Voraussichtliche Lieferung', es: 'Entrega prevista',     hr: 'O\u010dekivana isporuka' },
+      currency:           { cs: 'M\u011bna',             en: 'Currency',           de: 'W\u00e4hrung',          es: 'Moneda',               hr: 'Valuta' },
+
+      // ─── Stavy ───
+      status_new:         { cs: 'Nov\u00e1',             en: 'New',                de: 'Neu',                es: 'Nueva',                hr: 'Nova' },
+      status_pending:     { cs: '\u010cek\u00e1 na vy\u0159\u00edzen\u00ed', en: 'Pending',            de: 'Ausstehend',         es: 'Pendiente',            hr: 'Na \u010dekanju' },
+      status_ordered:     { cs: 'Objedn\u00e1no',          en: 'Ordered',            de: 'Bestellt',           es: 'Pedido',               hr: 'Naru\u010deno' },
+      status_confirmed:   { cs: 'Potvrzena',         en: 'Confirmed',          de: 'Best\u00e4tigt',        es: 'Confirmada',           hr: 'Potvr\u0111ena' },
+      status_in_production:{ cs: 'Ve v\u00fdrob\u011b',      en: 'In production',      de: 'In Produktion',      es: 'En producci\u00f3n',       hr: 'U proizvodnji' },
+      status_delivered:   { cs: 'Dod\u00e1no',            en: 'Delivered',          de: 'Geliefert',          es: 'Entregado',            hr: 'Isporu\u010deno' },
+      status_cancelled:   { cs: 'Zru\u0161ena',           en: 'Cancelled',          de: 'Storniert',          es: 'Cancelada',            hr: 'Otkazana' },
+
+      // ─── Konfigurace ───
+      confirmed_banner:   { cs: 'Tato objedn\u00e1vka je ji\u017e potvrzena. Konfigurace je uzam\u010dena.', en: 'This order is already confirmed. Configuration is locked.', de: 'Diese Bestellung ist bereits best\u00e4tigt. Konfiguration gesperrt.', es: 'Este pedido ya est\u00e1 confirmado. La configuraci\u00f3n est\u00e1 bloqueada.', hr: 'Ova narud\u017eba je ve\u0107 potvr\u0111ena. Konfiguracija je zaklju\u010dana.' },
+      note_label:         { cs: 'Pozn\u00e1mka',          en: 'Note',               de: 'Anmerkung',          es: 'Nota',                 hr: 'Napomena' },
+      items_title:        { cs: 'Polo\u017eky objedn\u00e1vky', en: 'Order items',       de: 'Bestellpositionen',  es: 'Art\u00edculos del pedido', hr: 'Stavke narud\u017ebe' },
+      config_title:       { cs: 'Konfigurace produktu', en: 'Product configuration', de: 'Produktkonfiguration', es: 'Configuraci\u00f3n del producto', hr: 'Konfiguracija proizvoda' },
+      config_label:       { cs: 'Konfigurace',        en: 'Configuration',      de: 'Konfiguration',      es: 'Configuraci\u00f3n',       hr: 'Konfiguracija' },
+      required:           { cs: 'povinn\u00e9',           en: 'required',           de: 'erforderlich',       es: 'obligatorio',          hr: 'obavezno' },
+      no_surcharge:       { cs: 'bez p\u0159\u00edplatku',     en: 'no surcharge',       de: 'ohne Aufpreis',      es: 'sin recargo',          hr: 'bez doplate' },
+      enter_value:        { cs: 'Zadejte hodnotu...', en: 'Enter value...',     de: 'Wert eingeben...',   es: 'Introduzca valor...', hr: 'Unesite vrijednost...' },
+      excl_vat:           { cs: 'bez DPH',            en: 'excl. VAT',          de: 'zzgl. MwSt.',        es: 'sin IVA',              hr: 'bez PDV-a' },
+
+      // ─── Cena ───
+      base_price:         { cs: 'Z\u00e1kladn\u00ed cena polo\u017eek:', en: 'Base item price:',  de: 'Grundpreis der Positionen:', es: 'Precio base:',       hr: 'Osnovna cijena stavki:' },
+      config_surcharges:  { cs: 'P\u0159\u00edplatky konfigurace:', en: 'Configuration surcharges:', de: 'Konfigurationszuschl\u00e4ge:', es: 'Recargos de configuraci\u00f3n:', hr: 'Dodaci za konfiguraciju:' },
+      total:              { cs: 'Celkem:',            en: 'Total:',             de: 'Gesamt:',            es: 'Total:',               hr: 'Ukupno:' },
+
+      // ─── Pozn\u00e1mka z\u00e1kazn\u00edka ───
+      your_note:          { cs: 'Va\u0161e pozn\u00e1mka k objedn\u00e1vce (voliteln\u00e9)', en: 'Your order note (optional)', de: 'Ihre Anmerkung zur Bestellung (optional)', es: 'Su nota al pedido (opcional)', hr: 'Va\u0161a napomena uz narud\u017ebu (neobavezno)' },
+      note_placeholder:   { cs: 'P\u0159idejte pozn\u00e1mku, po\u017eadavky, dotazy...', en: 'Add a note, requirements, questions...', de: 'F\u00fcgen Sie eine Anmerkung, Anforderungen, Fragen hinzu...', es: 'A\u00f1ada una nota, requisitos, preguntas...', hr: 'Dodajte napomenu, zahtjeve, pitanja...' },
+
+      // ─── Tla\u010d\u00edtko ───
+      confirm_btn:        { cs: 'Potvrdit konfiguraci', en: 'Confirm configuration', de: 'Konfiguration best\u00e4tigen', es: 'Confirmar configuraci\u00f3n', hr: 'Potvrdite konfiguraciju' },
+      submitting:         { cs: 'Odes\u00edl\u00e1m...',        en: 'Submitting...',      de: 'Wird gesendet...',   es: 'Enviando...',          hr: '\u0160aljem...' },
+
+      // ─── Validace & chyby ───
+      fill_required:      { cs: 'Pros\u00edm dopl\u0148te povinn\u00e9 volby:', en: 'Please fill in required options:', de: 'Bitte f\u00fcllen Sie die Pflichtfelder aus:', es: 'Por favor complete las opciones obligatorias:', hr: 'Molimo ispunite obavezna polja:' },
+      val_fill:           { cs: 'vypl\u0148te',          en: 'fill in',            de: 'ausf\u00fcllen',         es: 'rellene',              hr: 'ispunite' },
+      val_select:         { cs: 'vyberte',           en: 'select',             de: 'w\u00e4hlen',            es: 'seleccione',           hr: 'odaberite' },
+      error_save:         { cs: 'Chyba p\u0159i ukl\u00e1d\u00e1n\u00ed', en: 'Error saving',       de: 'Fehler beim Speichern', es: 'Error al guardar',    hr: 'Gre\u0161ka pri spremanju' },
+
+      // ─── Success ───
+      success_title:      { cs: 'Konfigurace potvrzena!', en: 'Configuration confirmed!', de: 'Konfiguration best\u00e4tigt!', es: '\u00a1Configuraci\u00f3n confirmada!', hr: 'Konfiguracija potvr\u0111ena!' },
+      success_msg:        { cs: 'Va\u0161e volby byly ulo\u017eeny. O dal\u0161\u00edm postupu v\u00e1s budeme informovat.', en: 'Your selections have been saved. We will inform you about the next steps.', de: 'Ihre Auswahl wurde gespeichert. Wir informieren Sie \u00fcber die n\u00e4chsten Schritte.', es: 'Sus selecciones han sido guardadas. Le informaremos sobre los pr\u00f3ximos pasos.', hr: 'Va\u0161 odabir je spremljen. Obavijestit \u0107emo vas o sljede\u0107im koracima.' },
+
+      // ─── Slot picker ───
+      slot_title:         { cs: 'Výběr termínu dodání', en: 'Choose delivery date', de: 'Liefertermin wählen', es: 'Elegir fecha de entrega', hr: 'Odaberite datum isporuke' },
+      slot_subtitle:      { cs: 'Klikněte na tlačítko pro výběr volného termínu dodání.', en: 'Click the button to select an available delivery slot.', de: 'Klicken Sie auf die Schaltfläche, um einen verfügbaren Liefertermin auszuwählen.', es: 'Haga clic en el botón para seleccionar una fecha de entrega disponible.', hr: 'Kliknite gumb za odabir dostupnog termina isporuke.' },
+      slot_locked:        { cs: 'Termíny dodání jsou uzamčeny.', en: 'Delivery dates are locked.', de: 'Liefertermine sind gesperrt.', es: 'Las fechas de entrega están bloqueadas.', hr: 'Datumi isporuke su zaključani.' },
+      slot_pick:          { cs: '📅 Vybrat termín', en: '📅 Pick date', de: '📅 Termin wählen', es: '📅 Elegir fecha', hr: '📅 Odaberi datum' },
+      slot_remove:        { cs: 'Zrušit termín', en: 'Remove date', de: 'Termin entfernen', es: 'Eliminar fecha', hr: 'Ukloni datum' },
+      slot_free:          { cs: 'Volný', en: 'Available', de: 'Verfügbar', es: 'Disponible', hr: 'Dostupno' },
+      slot_taken:         { cs: 'Obsazeno', en: 'Taken', de: 'Belegt', es: 'Ocupado', hr: 'Zauzeto' },
+      slot_blocked:       { cs: 'Blokováno', en: 'Blocked', de: 'Blockiert', es: 'Bloqueado', hr: 'Blokirano' },
+      slot_none:          { cs: 'Žádné termíny k dispozici.', en: 'No delivery slots available.', de: 'Keine Liefertermine verfügbar.', es: 'No hay fechas de entrega disponibles.', hr: 'Nema dostupnih termina isporuke.' },
+      slot_popup_title:   { cs: 'Vyberte termín dodání', en: 'Select delivery date', de: 'Liefertermin auswählen', es: 'Seleccionar fecha de entrega', hr: 'Odaberite datum isporuke' },
+      slot_popup_sub:     { cs: 'Klikněte na zelený (volný) termín.', en: 'Click on a green (available) slot.', de: 'Klicken Sie auf einen grünen (verfügbaren) Termin.', es: 'Haga clic en una fecha verde (disponible).', hr: 'Kliknite na zeleni (dostupni) termin.' },
+
+      // ─── Loading & Error ───
+      loading:            { cs: 'Načítám objednávku...', en: 'Loading order...',    de: 'Bestellung wird geladen...', es: 'Cargando pedido...',   hr: 'Učitavanje narudžbe...' },
+      error_title:        { cs: 'Chyba',              en: 'Error',              de: 'Fehler',             es: 'Error',                hr: 'Gre\u0161ka' },
+      error_not_found:    { cs: 'Objedn\u00e1vka nenalezena', en: 'Order not found',    de: 'Bestellung nicht gefunden', es: 'Pedido no encontrado', hr: 'Narud\u017eba nije prona\u0111ena' },
+      error_load:         { cs: 'Nepoda\u0159ilo se na\u010d\u00edst objedn\u00e1vku', en: 'Failed to load order', de: 'Bestellung konnte nicht geladen werden', es: 'No se pudo cargar el pedido', hr: 'Nije mogu\u0107e u\u010ditati narud\u017ebu' },
+    };
+
+    let currentLang = 'cs';
+
+    function t(key) {
+      const entry = TRANSLATIONS[key];
+      if (!entry) return key;
+      return entry[currentLang] || entry['cs'] || key;
+    }
+
+    function setLang(lang) {
+      if (!LANGS[lang]) return;
+      currentLang = lang;
+      try { localStorage.setItem('holyos_lang', lang); } catch(e) {}
+      renderApp();
+    }
+
+    // Detekce jazyka z prohlížeče nebo localStorage
+    function detectLang() {
+      try {
+        const saved = localStorage.getItem('holyos_lang');
+        if (saved && LANGS[saved]) return saved;
+      } catch(e) {}
+      const nav = (navigator.language || '').toLowerCase().slice(0, 2);
+      if (LANGS[nav]) return nav;
+      return 'cs';
+    }
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // GLOBÁLNÍ STAV
+    // ═════════════════════════════════════════════════════════════════════════
+
+    let orderData = null;
+    let selections = {};
+    let _submitted = false; // po potvrzení konfigurace
+
+    const esc = (s) => {
+      const d = document.createElement('div');
+      d.textContent = s || '';
+      return d.innerHTML;
+    };
+
+    function formatPrice(price) {
+      const locales = { cs: 'cs-CZ', en: 'en-GB', de: 'de-DE', es: 'es-ES', hr: 'hr-HR' };
+      return parseFloat(price || 0).toLocaleString(locales[currentLang] || 'cs-CZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function formatDate(date) {
+      if (!date) return '\u2014';
+      const locales = { cs: 'cs-CZ', en: 'en-GB', de: 'de-DE', es: 'es-ES', hr: 'hr-HR' };
+      return new Date(date).toLocaleDateString(locales[currentLang] || 'cs-CZ');
+    }
+
+    const currSymbol = (cur) => cur === 'EUR' ? '\u20ac' : 'K\u010d';
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // INICIALIZACE
+    // ═════════════════════════════════════════════════════════════════════════
+
+    let slotsData = [];   // pole generovaných oken s matchnutými DB sloty
+    let slotConfig = { startDay: 1, endDay: 5 }; // Po–Pá default
+    let dbSlots = [];     // surové DB sloty z API
+    let slotOrderId = null;
+    let pageToken = '';
+
+    // ─── Generování slotových oken (jako výrobní sloty modul) ──────────
+    function getSlotDays() {
+      var d = slotConfig.endDay - slotConfig.startDay + 1;
+      return d <= 0 ? d + 7 : d;
+    }
+
+    function getSlotStartDate() {
+      var d = new Date();
+      d.setDate(d.getDate() - 56); // 8 týdnů zpátky
+      var diff = (d.getDay() - slotConfig.startDay + 7) % 7;
+      d.setDate(d.getDate() - diff);
+      d.setHours(0,0,0,0);
+      return d;
+    }
+
+    function generateSlotWindows() {
+      var windows = [];
+      var start = getSlotStartDate();
+      var end = new Date(start);
+      end.setFullYear(end.getFullYear() + 2);
+      var d = new Date(start);
+      var days = getSlotDays();
+      while (d < end) {
+        var slotStart = new Date(d);
+        var slotEnd = new Date(d);
+        slotEnd.setDate(slotEnd.getDate() + days - 1);
+        windows.push({ start: new Date(slotStart), end: new Date(slotEnd) });
+        d.setDate(d.getDate() + 7);
+      }
+      return windows;
+    }
+
+    function findDbSlotForWindow(win) {
+      for (var i = 0; i < dbSlots.length; i++) {
+        var s = dbSlots[i];
+        var sStart = new Date(s.start_date); sStart.setHours(0,0,0,0);
+        var sEnd = new Date(s.end_date); sEnd.setHours(0,0,0,0);
+        if (sStart <= win.end && sEnd >= win.start) return s;
+      }
+      return null;
+    }
+
+    function buildSlotsData() {
+      var windows = generateSlotWindows();
+      var today = new Date(); today.setHours(0,0,0,0);
+      slotsData = windows.map(function(win) {
+        var matched = findDbSlotForWindow(win);
+        var isPast = win.end < today; // Neobsazený slot v minulosti → blokován
+        if (matched) {
+          var hasAssign = matched.has_assignments;
+          var blocked = matched.is_blocked;
+          // Minulý + prázdný = blokovaný
+          var pastEmpty = isPast && !hasAssign && !blocked;
+          return {
+            id: matched.id,
+            start_date: win.start.toISOString(),
+            end_date: win.end.toISOString(),
+            status: pastEmpty ? 'blocked' : matched.status,
+            has_assignments: hasAssign,
+            is_blocked: blocked || pastEmpty,
+            is_free: !hasAssign && !blocked && !pastEmpty && matched.status !== 'full',
+            my_assignment: matched.my_assignment,
+            from_db: true,
+          };
+        } else {
+          return {
+            id: null,
+            start_date: win.start.toISOString(),
+            end_date: win.end.toISOString(),
+            status: isPast ? 'blocked' : 'open',
+            has_assignments: false,
+            is_blocked: isPast,
+            is_free: !isPast,
+            my_assignment: null,
+            from_db: false,
+          };
+        }
+      });
+    }
+
     (async function() {
+      currentLang = detectLang();
       const app = document.getElementById('app');
-      const token = window.location.pathname.split('/').pop();
+      pageToken = window.location.pathname.split('/').pop();
 
       try {
-        const response = await fetch(`/api/public/order/${token}`);
-        if (!response.ok) {
-          throw new Error('Objednávka nenalezena');
-        }
-
-        const order = await response.json();
-
-        const formatPrice = (price) => {
-          return parseFloat(price).toLocaleString('cs-CZ', {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2,
-          });
-        };
-
-        const formatDate = (date) => {
-          if (!date) return '—';
-          return new Date(date).toLocaleDateString('cs-CZ');
-        };
-
-        let itemsHtml = '';
-        if (order.items && order.items.length > 0) {
-          order.items.forEach(item => {
-            let configsHtml = '';
-            if (item.configs && item.configs.length > 0) {
-              configsHtml = item.configs.map(c => {
-                return `<div>${c.group_name}: ${c.option_name}${c.custom_value ? ' (' + c.custom_value + ')' : ''}</div>`;
-              }).join('');
+        const resp = await fetch('/api/public/order/' + pageToken);
+        if (!resp.ok) throw new Error(t('error_not_found'));
+        orderData = await resp.json();
+        initSelectionsFromExisting();
+        // Načti sloty (nový formát: { config, db_slots, order_id })
+        try {
+          const sResp = await fetch('/api/public/order/' + pageToken + '/slots');
+          if (sResp.ok) {
+            var sData = await sResp.json();
+            if (sData && sData.config) {
+              slotConfig = sData.config;
+              dbSlots = sData.db_slots || [];
+              slotOrderId = sData.order_id;
+            } else {
+              dbSlots = [];
             }
-
-            itemsHtml += `
-              <tr>
-                <td>
-                  <div>${item.name}</div>
-                  ${configsHtml ? `<div class="item-configs">${configsHtml}</div>` : ''}
-                </td>
-                <td>${formatPrice(item.quantity)} ${item.unit}</td>
-                <td>${order.currency} ${formatPrice(item.unit_price)}</td>
-                <td style="text-align: right; font-weight: 600;">${order.currency} ${formatPrice(item.total_price)}</td>
-              </tr>
-            `;
-          });
-        }
-
-        app.innerHTML = `
-          <div class="header">
-            <h1>Objednávka č. ${order.order_number}</h1>
-            <p>Veřejný náhled — HolyOS Manufacturing OS</p>
-          </div>
-
-          <div class="order-info">
-            <div class="info-block">
-              <label>Objednávající společnost</label>
-              <div class="value">${order.company_name}</div>
-            </div>
-            <div class="info-block">
-              <label>Stav objednávky</label>
-              <div class="value"><span class="status ${order.status}">${order.status}</span></div>
-            </div>
-            <div class="info-block">
-              <label>Očekávané dodání</label>
-              <div class="value">${formatDate(order.expected_delivery)}</div>
-            </div>
-            <div class="info-block">
-              <label>Měna</label>
-              <div class="value">${order.currency}</div>
-            </div>
-          </div>
-
-          ${order.note ? `
-            <div class="note-section">
-              <h3>Poznámka objednávky</h3>
-              <p>${order.note}</p>
-            </div>
-          ` : ''}
-
-          <div class="items-section">
-            <h2>Položky objednávky</h2>
-            <table>
-              <thead>
-                <tr>
-                  <th>Popis položky</th>
-                  <th>Množství</th>
-                  <th>Jednotková cena</th>
-                  <th style="text-align: right;">Cena celkem</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${itemsHtml}
-                <tr class="total-row">
-                  <td colspan="3" style="text-align: right;">Celkem:</td>
-                  <td style="text-align: right;">${order.currency} ${formatPrice(order.total_amount)}</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-
-          <div class="footer">
-            <p>© 2026 HolyOS — Manufacturing execution system | Best Series s.r.o.</p>
-          </div>
-        `;
+            buildSlotsData();
+          } else {
+            console.warn('Slots API returned', sResp.status);
+            slotsData = [];
+          }
+        } catch(e) { console.warn('Slots fetch error:', e); slotsData = []; }
+        renderApp();
       } catch (error) {
-        app.innerHTML = `
-          <div class="error">
-            <h2>Chyba</h2>
-            <p>${error.message || 'Nepodařilo se načíst objednávku'}</p>
-          </div>
-        `;
+        app.innerHTML = '<div class="error"><h2>' + t('error_title') + '</h2><p>' + esc(error.message || t('error_load')) + '</p></div>';
       }
     })();
+
+    function initSelectionsFromExisting() {
+      if (!orderData) return;
+      orderData.items.forEach(item => {
+        if (!item.config_groups || item.config_groups.length === 0) return;
+        selections[item.id] = {};
+        item.config_groups.forEach(group => {
+          selections[item.id][group.id] = { option_ids: [], custom_value: '' };
+        });
+        if (item.configs && item.configs.length > 0) {
+          item.configs.forEach(cfg => {
+            if (!cfg.option_id) return;
+            const cfgOptId = Number(cfg.option_id);
+            for (const group of item.config_groups) {
+              const opt = group.options.find(o => Number(o.id) === cfgOptId);
+              if (opt) {
+                const s = selections[item.id][group.id];
+                if (group.type === 'multi_select') {
+                  if (!s.option_ids.includes(cfgOptId)) s.option_ids.push(cfgOptId);
+                } else {
+                  s.option_ids = [cfgOptId];
+                }
+                if (cfg.custom_value) s.custom_value = cfg.custom_value;
+                break;
+              }
+            }
+          });
+        }
+      });
+    }
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // SLOT PICKER (výběr termínu dodání zákazníkem)
+    // ═════════════════════════════════════════════════════════════════════════
+
+    function getSlotForItem(itemId) {
+      return slotsData.find(s => s.my_assignment && s.my_assignment.order_item_id === itemId) || null;
+    }
+
+    // ─── Slot timeline render ────────────────────────────────────────────
+    let _activeSlotItemId = null; // pro kterou položku zákazník vybírá
+
+    function renderSlotSection(isConfirmed) {
+      const o = orderData;
+      let html = '<div class="slot-section">';
+      html += '<h3>📅 ' + t('slot_title') + '</h3>';
+      html += '<div class="slot-section-sub">' + (isConfirmed ? t('slot_locked') : t('slot_subtitle')) + '</div>';
+
+      // Přiřazené sloty per item
+      o.items.forEach(function(item) {
+        const assigned = getSlotForItem(item.id);
+        html += '<div class="slot-item-row">';
+        html += '<span class="slot-item-name">' + esc(item.name) + '</span>';
+        if (assigned) {
+          const ed = new Date(assigned.end_date).toLocaleDateString(currentLang === 'cs' ? 'cs-CZ' : 'en-GB');
+          html += '<span class="slot-item-badge">' + ed;
+          if (!isConfirmed) html += ' <button class="remove-slot" onclick="removeItemSlot(' + item.id + ')" title="' + t('slot_remove') + '">✕</button>';
+          html += '</span>';
+        } else if (!isConfirmed) {
+          html += '<button class="btn-pick-slot" style="display:inline-block;background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;border:none;padding:6px 16px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;" onclick="activateSlotPick(' + item.id + ')">' + t('slot_pick') + '</button>';
+        } else {
+          html += '<span style="color:#999;font-size:12px;">—</span>';
+        }
+        html += '</div>';
+      });
+
+      // Horizontální timeline
+      html += '<div class="slot-tl-wrap"><div class="slot-tl-scroll" id="slot-tl-scroll">';
+      html += buildTimeline(isConfirmed);
+      html += '</div></div>';
+
+      html += '</div>';
+      return html;
+    }
+
+    function buildTimeline(isConfirmed) {
+      const CZ_MONTHS = ['Leden','Únor','Březen','Duben','Květen','Červen','Červenec','Srpen','Září','Říjen','Listopad','Prosinec'];
+      const EN_MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+      const months = currentLang === 'cs' ? CZ_MONTHS : EN_MONTHS;
+      const W = 110;
+
+      if (!slotsData || slotsData.length === 0) return '<p style="color:#999;font-size:13px;">' + t('slot_none') + '</p>';
+
+      // Měsíce header
+      const monthSpans = {};
+      slotsData.forEach(function(s) {
+        var d = new Date(s.start_date);
+        var key = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
+        if (!monthSpans[key]) monthSpans[key] = { label: months[d.getMonth()] + ' ' + d.getFullYear(), count: 0 };
+        monthSpans[key].count++;
+      });
+
+      let html = '<div class="slot-tl-header">';
+      Object.keys(monthSpans).sort().forEach(function(k) {
+        var m = monthSpans[k];
+        html += '<div class="slot-tl-month" style="width:' + (m.count * W) + 'px;min-width:' + (m.count * W) + 'px;">' + m.label + '</div>';
+      });
+      html += '</div>';
+
+      // Dates header
+      html += '<div class="slot-tl-dates">';
+      var today = new Date(); today.setHours(0,0,0,0);
+      slotsData.forEach(function(s) {
+        var sd = new Date(s.start_date), ed = new Date(s.end_date);
+        var label = sd.getDate() + '.' + (sd.getMonth()+1) + '. – ' + ed.getDate() + '.' + (ed.getMonth()+1) + '.';
+        var isToday = today >= sd && today <= ed;
+        html += '<div class="slot-tl-date' + (isToday ? ' today' : '') + '">' + label + '</div>';
+      });
+      html += '</div>';
+
+      // Slots row — generované okna s matchnutými DB sloty
+      html += '<div class="slot-tl-row">';
+      slotsData.forEach(function(s, idx) {
+        var isMine = s.my_assignment != null;
+        var isFree = s.is_free;
+        var isBlocked = s.is_blocked;
+        var cls = isMine ? 'mine' : (isFree ? 'free' : (isBlocked ? 'blocked' : 'taken'));
+        var label = isMine ? '✓' : (isFree ? t('slot_free') : '');
+
+        // Click handler — pro free sloty: buď slot_id (pokud existuje v DB) nebo start/end date
+        var click = '';
+        if (isFree && !isConfirmed) {
+          if (s.id) {
+            click = ' onclick="pickSlotFromTimeline(' + s.id + ',null,null)"';
+          } else {
+            click = ' onclick="pickSlotFromTimeline(null,\'' + s.start_date + '\',\'' + s.end_date + '\')"';
+          }
+        }
+        html += '<div class="slot-tl-cell"><div class="slot-tl-slot ' + cls + '"' + click + '>' + label + '</div></div>';
+      });
+
+      // Today line
+      var slotIdx = 0;
+      for (var i = 0; i < slotsData.length; i++) {
+        var sd = new Date(slotsData[i].start_date), ed = new Date(slotsData[i].end_date);
+        if (today >= sd && today <= ed) { slotIdx = i; break; }
+        if (today < sd) { slotIdx = Math.max(0, i - 0.5); break; }
+        slotIdx = i;
+      }
+      html += '<div class="slot-tl-today-line" style="left:' + (slotIdx * W + W/2) + 'px;"><div class="slot-tl-today-label">' + (currentLang === 'cs' ? 'DNES' : 'TODAY') + '</div></div>';
+
+      html += '</div>';
+      return html;
+    }
+
+    function activateSlotPick(itemId) {
+      _activeSlotItemId = itemId;
+      // Zvýrazni řádek
+      document.querySelectorAll('.slot-item-row').forEach(function(r) { r.style.background = ''; });
+      var rows = document.querySelectorAll('.slot-item-row');
+      var items = orderData.items;
+      for (var i = 0; i < items.length; i++) {
+        if (items[i].id === itemId && rows[i]) {
+          rows[i].style.background = 'rgba(102,126,234,0.1)';
+          rows[i].style.borderRadius = '8px';
+        }
+      }
+      // Scroll timeline do view
+      var el = document.getElementById('slot-tl-scroll');
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    async function pickSlotFromTimeline(slotId, startDate, endDate) {
+      // Pokud žádná položka není aktivní, najdi první bez slotu
+      if (!_activeSlotItemId) {
+        for (var i = 0; i < orderData.items.length; i++) {
+          if (!getSlotForItem(orderData.items[i].id)) {
+            _activeSlotItemId = orderData.items[i].id;
+            break;
+          }
+        }
+      }
+      if (!_activeSlotItemId) return;
+      await pickSlot(_activeSlotItemId, slotId, startDate, endDate);
+      _activeSlotItemId = null;
+    }
+
+    async function pickSlot(itemId, slotId, startDate, endDate) {
+      try {
+        var body = { item_id: itemId };
+        if (slotId) {
+          body.slot_id = slotId;
+        } else if (startDate && endDate) {
+          body.start_date = startDate;
+          body.end_date = endDate;
+        }
+        const resp = await fetch('/api/public/order/' + pageToken + '/select-slot', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        if (!resp.ok) { const e = await resp.json(); alert(e.error || 'Chyba'); return; }
+        // Reload sloty (nový formát)
+        await reloadSlots();
+        const oResp = await fetch('/api/public/order/' + pageToken);
+        if (oResp.ok) orderData = await oResp.json();
+        initSelectionsFromExisting();
+        renderApp();
+      } catch(e) { alert('Chyba: ' + e.message); }
+    }
+
+    async function reloadSlots() {
+      try {
+        const sResp = await fetch('/api/public/order/' + pageToken + '/slots');
+        if (sResp.ok) {
+          var sData = await sResp.json();
+          if (sData && sData.config) {
+            slotConfig = sData.config;
+            dbSlots = sData.db_slots || [];
+            slotOrderId = sData.order_id;
+          } else {
+            dbSlots = [];
+          }
+          buildSlotsData();
+        }
+      } catch(e) { console.warn('Reload slots error:', e); }
+    }
+
+    async function removeItemSlot(itemId) {
+      try {
+        const resp = await fetch('/api/public/order/' + pageToken + '/remove-slot', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ item_id: itemId }),
+        });
+        if (!resp.ok) return;
+        await reloadSlots();
+        const oResp = await fetch('/api/public/order/' + pageToken);
+        if (oResp.ok) orderData = await oResp.json();
+        initSelectionsFromExisting();
+        renderApp();
+      } catch(e) { console.error(e); }
+    }
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // RENDER
+    // ═════════════════════════════════════════════════════════════════════════
+
+    function renderLangSwitcher() {
+      let html = '<div class="lang-switcher">';
+      Object.keys(LANGS).forEach(code => {
+        const lang = LANGS[code];
+        html += '<button class="lang-btn' + (code === currentLang ? ' active' : '') + '" onclick="setLang(\'' + code + '\')" title="' + lang.label + '">' + lang.flag + '</button>';
+      });
+      html += '</div>';
+      return html;
+    }
+
+    function renderApp() {
+      const app = document.getElementById('app');
+      if (!orderData) return;
+
+      // Po potvrzení konfigurace zobraz success zprávu (i při změně jazyka)
+      if (_submitted) {
+        app.innerHTML = renderLangSwitcher() +
+          '<div class="success-message">' +
+          '<div class="icon">&#9989;</div>' +
+          '<h2>' + t('success_title') + '</h2>' +
+          '<p>' + t('success_msg') + '</p>' +
+          '<p style="margin-top:16px;color:#999;font-size:13px;">' + t('order_title') + ' ' + esc(orderData.order_number) + '</p>' +
+          '</div>' +
+          '<div class="footer"><p>&copy; 2026 HolyOS — Manufacturing execution system | Best Series s.r.o.</p></div>';
+        return;
+      }
+
+      const o = orderData;
+      const cur = currSymbol(o.currency);
+      const isConfirmed = o.status === 'ordered' || o.status === 'confirmed' || o.status === 'delivered' || o.status === 'in_production';
+      const hasConfigurableItems = o.items.some(it => it.config_groups && it.config_groups.length > 0);
+
+      let html = '';
+
+      // Vlajkový přepínač
+      html += renderLangSwitcher();
+
+      // Header
+      html += '<div class="header">';
+      html += '<h1>' + t('order_title') + ' ' + esc(o.order_number) + '</h1>';
+      html += '<p>' + (hasConfigurableItems && !isConfirmed ? t('subtitle_config') : t('subtitle_preview')) + '</p>';
+      html += '</div>';
+
+      // Order info
+      html += '<div class="order-info">';
+      html += '<div class="info-block"><label>' + t('company') + '</label><div class="value">' + esc(o.company_name) + '</div></div>';
+      html += '<div class="info-block"><label>' + t('status') + '</label><div class="value"><span class="status ' + esc(o.status) + '">' + statusLabel(o.status) + '</span></div></div>';
+      html += '<div class="info-block"><label>' + t('expected_delivery') + '</label><div class="value">' + formatDate(o.expected_delivery) + '</div></div>';
+      html += '<div class="info-block"><label>' + t('currency') + '</label><div class="value">' + esc(o.currency) + '</div></div>';
+      html += '</div>';
+
+      // Banner
+      if (isConfirmed) {
+        html += '<div class="confirmed-banner"><div class="icon">&#10003;</div><p>' + t('confirmed_banner') + '</p></div>';
+      }
+
+      // Poznámka
+      if (o.note) {
+        html += '<div class="note-section"><h3>' + t('note_label') + '</h3><p>' + esc(o.note) + '</p></div>';
+      }
+
+      // Položky
+      html += '<div class="items-section"><h2>' + t('items_title') + '</h2>';
+      o.items.forEach(item => {
+        html += '<div class="order-item">';
+        html += '<div class="item-header">';
+        html += '<span class="item-name">' + esc(item.name) + '</span>';
+        html += '<span class="item-qty">' + formatPrice(item.quantity) + ' ' + esc(item.unit) + '</span>';
+        html += '<span class="item-price">' + formatPrice(item.unit_price) + ' ' + cur + ' ' + t('excl_vat') + '</span>';
+        html += '</div>';
+
+        if (item.config_groups && item.config_groups.length > 0) {
+          html += '<div class="config-section">';
+          html += '<div class="config-title">' + t('config_title') + '</div>';
+          item.config_groups.forEach(group => {
+            html += renderConfigGroup(item, group, isConfirmed);
+          });
+          html += '</div>';
+        } else if (item.configs && item.configs.length > 0) {
+          html += '<div class="existing-config">';
+          html += '<div class="label">' + t('config_label') + '</div>';
+          html += '<div class="chips">';
+          item.configs.forEach(c => {
+            html += '<span class="chip">' + esc(c.group_name) + ': ' + esc(c.option_name);
+            if (c.custom_value) html += ' (' + esc(c.custom_value) + ')';
+            html += '</span>';
+          });
+          html += '</div></div>';
+        }
+        html += '</div>';
+      });
+      html += '</div>';
+
+      // Výběr termínu dodání (sloty) — vždy zobrazit
+      if (!isConfirmed) {
+        html += renderSlotSection(isConfirmed);
+      }
+
+      // Cena
+      html += renderPriceSummary();
+
+      // Poznámka zákazníka + tlačítko
+      if (hasConfigurableItems && !isConfirmed) {
+        html += '<div class="customer-note-section">';
+        html += '<label>' + t('your_note') + '</label>';
+        html += '<textarea id="customer-note" placeholder="' + t('note_placeholder') + '"></textarea>';
+        html += '</div>';
+        html += '<div class="confirm-section">';
+        html += '<button class="btn-confirm" id="btn-confirm" onclick="submitConfiguration()">' + t('confirm_btn') + '</button>';
+        html += '</div>';
+      }
+
+      // Footer
+      html += '<div class="footer"><p>&copy; 2026 HolyOS \u2014 Manufacturing execution system | Best Series s.r.o.</p></div>';
+
+      app.innerHTML = html;
+
+      // Drag-to-scroll na timeline
+      var scrollEl = document.getElementById('slot-tl-scroll');
+      if (scrollEl) {
+        var isDrag = false, startX = 0, scrollL = 0;
+        scrollEl.addEventListener('mousedown', function(e) { isDrag = true; startX = e.pageX - scrollEl.offsetLeft; scrollL = scrollEl.scrollLeft; scrollEl.style.cursor = 'grabbing'; });
+        document.addEventListener('mouseup', function() { isDrag = false; if (scrollEl) scrollEl.style.cursor = 'grab'; });
+        document.addEventListener('mousemove', function(e) { if (!isDrag) return; e.preventDefault(); scrollEl.scrollLeft = scrollL - (e.pageX - scrollEl.offsetLeft - startX); });
+      }
+    }
+
+    // ─── Render konfigurační skupiny ─────────────────────────────────────────
+    function renderConfigGroup(item, group, readonly) {
+      let html = '<div class="config-group">';
+      html += '<div class="config-group-label">' + esc(group.name);
+      if (group.required) html += ' <span class="required-badge">' + t('required') + '</span>';
+      html += '</div>';
+
+      const sel = selections[item.id] && selections[item.id][group.id];
+      let selectedIds = sel ? sel.option_ids.map(Number) : [];
+      if (group.type !== 'multi_select' && selectedIds.length > 1) {
+        selectedIds = [selectedIds[selectedIds.length - 1]];
+        if (sel) sel.option_ids = selectedIds;
+      }
+
+      if (group.type === 'text') {
+        const val = sel ? sel.custom_value : '';
+        html += '<input type="text" class="config-text-input" placeholder="' + t('enter_value') + '" value="' + esc(val) + '" ';
+        if (readonly) html += 'disabled ';
+        html += 'oninput="onTextInput(' + item.id + ',' + group.id + ',this.value)" />';
+      } else {
+        const isSingle = group.type !== 'multi_select';
+        html += '<div class="config-options">';
+        group.options.forEach(opt => {
+          const optId = Number(opt.id);
+          const isSelected = selectedIds.includes(optId);
+          const modifier = parseFloat(opt.price_modifier || 0);
+          let priceClass = '';
+          let priceText = '';
+          if (modifier > 0) { priceClass = 'positive'; priceText = '+' + formatPrice(modifier) + ' ' + currSymbol(orderData.currency); }
+          else if (modifier < 0) { priceClass = 'negative'; priceText = formatPrice(modifier) + ' ' + currSymbol(orderData.currency); }
+          else { priceText = t('no_surcharge'); }
+
+          html += '<div class="config-option-card' + (isSelected ? ' selected' : '') + '" ';
+          if (!readonly) {
+            html += 'onclick="toggleOption(' + item.id + ',' + group.id + ',' + optId + ',' + (isSingle ? 1 : 0) + ')"';
+          }
+          html += '>';
+          html += '<div class="check-mark">&#10003;</div>';
+          html += '<div class="option-name">' + esc(opt.name) + '</div>';
+          html += '<div class="option-price ' + priceClass + '">' + priceText + '</div>';
+          html += '</div>';
+        });
+        html += '</div>';
+      }
+
+      html += '</div>';
+      return html;
+    }
+
+    // ─── Cenový přehled ──────────────────────────────────────────────────────
+    function renderPriceSummary() {
+      const o = orderData;
+      const cur = currSymbol(o.currency);
+      let baseTotal = 0;
+      let configTotal = 0;
+
+      o.items.forEach(item => {
+        baseTotal += parseFloat(item.total_price || 0);
+        if (selections[item.id]) {
+          Object.keys(selections[item.id]).forEach(gId => {
+            const sel = selections[item.id][gId];
+            if (!sel.option_ids) return;
+            sel.option_ids.forEach(optId => {
+              const numOptId = Number(optId);
+              for (const g of item.config_groups) {
+                const opt = g.options.find(o => Number(o.id) === numOptId);
+                if (opt) {
+                  configTotal += parseFloat(opt.price_modifier || 0) * parseFloat(item.quantity || 1);
+                  break;
+                }
+              }
+            });
+          });
+        }
+      });
+
+      const grandTotal = baseTotal + configTotal;
+      let html = '<div class="price-summary">';
+      html += '<div class="price-row"><span>' + t('base_price') + '</span><span>' + formatPrice(baseTotal) + ' ' + cur + ' ' + t('excl_vat') + '</span></div>';
+      if (configTotal !== 0) {
+        html += '<div class="price-row"><span>' + t('config_surcharges') + '</span><span>' + (configTotal >= 0 ? '+' : '') + formatPrice(configTotal) + ' ' + cur + '</span></div>';
+      }
+      html += '<div class="price-row total"><span>' + t('total') + '</span><span class="amount">' + formatPrice(grandTotal) + ' ' + cur + ' ' + t('excl_vat') + '</span></div>';
+      html += '</div>';
+      return html;
+    }
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // INTERAKCE
+    // ═════════════════════════════════════════════════════════════════════════
+
+    function toggleOption(itemId, groupId, optionId, isSingle) {
+      if (!selections[itemId]) selections[itemId] = {};
+      if (!selections[itemId][groupId]) selections[itemId][groupId] = { option_ids: [], custom_value: '' };
+      const sel = selections[itemId][groupId];
+      optionId = Number(optionId);
+
+      if (isSingle) {
+        if (sel.option_ids.length === 1 && sel.option_ids[0] === optionId) {
+          sel.option_ids = [];
+        } else {
+          sel.option_ids = [optionId];
+        }
+      } else {
+        const idx = sel.option_ids.indexOf(optionId);
+        if (idx >= 0) { sel.option_ids.splice(idx, 1); }
+        else { sel.option_ids.push(optionId); }
+      }
+      renderApp();
+    }
+
+    function onTextInput(itemId, groupId, value) {
+      if (!selections[itemId]) selections[itemId] = {};
+      if (!selections[itemId][groupId]) selections[itemId][groupId] = { option_ids: [], custom_value: '' };
+      selections[itemId][groupId].custom_value = value;
+    }
+
+    // ─── Validace ────────────────────────────────────────────────────────────
+    function validateConfiguration() {
+      const errors = [];
+      orderData.items.forEach(item => {
+        if (!item.config_groups || item.config_groups.length === 0) return;
+        item.config_groups.forEach(group => {
+          if (!group.required) return;
+          const sel = selections[item.id] && selections[item.id][group.id];
+          if (group.type === 'text') {
+            if (!sel || !sel.custom_value || !sel.custom_value.trim()) {
+              errors.push(item.name + ': ' + t('val_fill') + ' "' + group.name + '"');
+            }
+          } else {
+            if (!sel || sel.option_ids.length === 0) {
+              errors.push(item.name + ': ' + t('val_select') + ' "' + group.name + '"');
+            }
+          }
+        });
+      });
+      return errors;
+    }
+
+    // ─── Odeslání konfigurace ────────────────────────────────────────────────
+    async function submitConfiguration() {
+      const errors = validateConfiguration();
+      if (errors.length > 0) {
+        alert(t('fill_required') + '\n\n' + errors.join('\n'));
+        return;
+      }
+
+      const btn = document.getElementById('btn-confirm');
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner-inline"></span> ' + t('submitting');
+
+      try {
+        const token = window.location.pathname.split('/').pop();
+        const customerNote = document.getElementById('customer-note')?.value || '';
+
+        const itemConfigs = [];
+        orderData.items.forEach(item => {
+          if (!item.config_groups || item.config_groups.length === 0) return;
+          const itemSelections = [];
+          item.config_groups.forEach(group => {
+            const sel = selections[item.id] && selections[item.id][group.id];
+            if (!sel) return;
+            if (group.type === 'text') {
+              if (sel.custom_value && sel.custom_value.trim()) {
+                itemSelections.push({ group_id: group.id, option_id: null, custom_value: sel.custom_value.trim() });
+              }
+            } else {
+              sel.option_ids.forEach(optId => {
+                itemSelections.push({ group_id: group.id, option_id: optId, custom_value: null });
+              });
+            }
+          });
+          if (itemSelections.length > 0) {
+            itemConfigs.push({ item_id: item.id, selections: itemSelections });
+          }
+        });
+
+        const resp = await fetch('/api/public/order/' + token + '/configure', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ items: itemConfigs, customer_note: customerNote }),
+        });
+
+        const result = await resp.json();
+        if (!resp.ok) throw new Error(result.error || t('error_save'));
+
+        _submitted = true;
+        renderApp();
+
+      } catch (error) {
+        alert(t('error_title') + ': ' + error.message);
+        btn.disabled = false;
+        btn.innerHTML = t('confirm_btn');
+      }
+    }
+
+    // ─── Pomocné ─────────────────────────────────────────────────────────────
+    function statusLabel(s) {
+      return t('status_' + s) || s;
+    }
   </script>
 </body>
 </html>

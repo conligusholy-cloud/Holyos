@@ -12,6 +12,8 @@ const { getWarehouseTools, executeWarehouseTool } = require('../../mcp-servers/w
 const { getHrTools, executeHrTool } = require('../../mcp-servers/hr-server');
 const { getProductionTools, executeProductionTool } = require('../../mcp-servers/production-server');
 const { getTasksTools, executeTasksTool } = require('../../mcp-servers/tasks-server');
+const { getFleetTools, executeFleetTool } = require('../../mcp-servers/fleet-server');
+const { getCadTools, executeCadTool } = require('../../mcp-servers/cad-server');
 
 // ─── Mapování: agent slug → MCP servery (tools + executory) ────────────────
 const AGENT_MCP_MAP = {
@@ -50,6 +52,24 @@ const AGENT_MCP_MAP = {
     getTools: () => getProductionTools(),
     execute: (tool, params) => executeProductionTool(tool, params, prisma),
   },
+  spravce_vozidel: {
+    servers: ['fleet', 'hr'],
+    getTools: () => [...getFleetTools(), ...getHrTools()],
+    execute: (tool, params) => {
+      const fleetTools = getFleetTools().map(t => t.name);
+      if (fleetTools.includes(tool)) return executeFleetTool(tool, params, prisma);
+      return executeHrTool(tool, params, prisma);
+    },
+  },
+  konstrukter: {
+    servers: ['cad', 'warehouse'],
+    getTools: () => [...getCadTools(), ...getWarehouseTools()],
+    execute: (tool, params) => {
+      const cadTools = getCadTools().map(t => t.name);
+      if (cadTools.includes(tool)) return executeCadTool(tool, params, prisma);
+      return executeWarehouseTool(tool, params, prisma);
+    },
+  },
 };
 
 // ─── Intent Detection (rychlý routing přes Haiku) ──────────────────────────
@@ -60,6 +80,8 @@ const KEYWORD_MAP = {
   skladnik:     /materiál|sklad|zásob|objednáv|dodavat|odběrat|minimum|pod minim|zboží|firma|společnost/i,
   koordinator:  /plán|simulac|kapacit|termín|priorit|optimaliz|rozvrh|úkol|task|přiřad|delegov/i,
   technik:      /údržb|seříz|poruch|oprav|servis|preventiv|kalibrac/i,
+  spravce_vozidel: /vozidl|vozov|auto\b|spz|vin|stk|povinn[eé] ručen|dálniční známk|řidič|leasing|pneu|disk/i,
+  konstrukter:     /výkres|solidwork|sldprt|sldasm|slddrw|cad|sestav|kusovník|konfigurac|součástk|díl(ů|y|u)?\b/i,
 };
 
 const MODULE_ASSISTANT_MAP = {
@@ -68,6 +90,8 @@ const MODULE_ASSISTANT_MAP = {
   'simulace výroby':      'koordinator',
   'lidé a hr':            'personalista',
   'nákup a sklad':        'skladnik',
+  'vozový park':          'spravce_vozidel',
+  'cad výkresy':          'konstrukter',
 };
 
 /**

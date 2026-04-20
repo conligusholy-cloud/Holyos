@@ -1,0 +1,664 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Zprávy | HOLYOS</title>
+  <link rel="icon" type="image/svg+xml" href="../../logo-holyos-icon.svg">
+  <base href="../../">
+  <link rel="stylesheet" href="css/dashboard.css">
+  <style>
+    .main-wrapper { margin-left: var(--sidebar-w); flex: 1; min-height: 100vh; display: flex; flex-direction: column; }
+
+    .chat-grid {
+      display: grid;
+      grid-template-columns: 320px 1fr;
+      gap: 0;
+      flex: 1;
+      min-height: 0;
+    }
+
+    .chat-sidebar {
+      border-right: 1px solid var(--border);
+      background: var(--surface);
+      display: flex; flex-direction: column;
+      min-width: 0;
+    }
+    .chat-sidebar-header {
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--border);
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .chat-sidebar-header h2 { font-size: 15px; margin: 0; color: var(--text); }
+    .chat-new-btn {
+      background: rgba(108,92,231,0.2); color: #a78bfa;
+      border: 1px solid rgba(108,92,231,0.4);
+      padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 600;
+      cursor: pointer;
+    }
+    .chat-new-btn:hover { background: rgba(108,92,231,0.35); }
+
+    .chat-search {
+      padding: 10px 16px;
+      border-bottom: 1px solid var(--border);
+    }
+    .chat-search input {
+      width: 100%; padding: 7px 10px; background: var(--bg); border: 1px solid var(--border);
+      border-radius: 6px; color: var(--text); font-size: 12px;
+    }
+
+    /* Avatar kolečko */
+    .chat-avatar { width: 36px; height: 36px; border-radius: 50%; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; color: #fff; background-size: cover; background-position: center; overflow: hidden; }
+    .chat-avatar.sm { width: 28px; height: 28px; font-size: 10px; }
+    .chat-avatar.lg { width: 44px; height: 44px; font-size: 14px; }
+
+    .chat-channels { overflow-y: auto; flex: 1; }
+    .chat-channel {
+      padding: 12px 16px; cursor: pointer;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+      transition: background 0.15s;
+      display: flex; gap: 12px; align-items: center;
+    }
+    .chat-channel .body { flex: 1; min-width: 0; }
+    .chat-channel:hover { background: rgba(108,92,231,0.08); }
+    .chat-channel.active { background: rgba(108,92,231,0.15); border-left: 3px solid #a78bfa; padding-left: 13px; }
+    .chat-channel .row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+    .chat-channel .name { font-size: 13px; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .chat-channel .time { font-size: 10px; color: var(--text2); flex-shrink: 0; }
+    .chat-channel .preview { font-size: 11px; color: var(--text2); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .chat-channel .unread-badge { background: #ef4444; color: #fff; font-size: 10px; padding: 1px 7px; border-radius: 9px; font-weight: 700; margin-left: 6px; }
+
+    .chat-main { display: flex; flex-direction: column; min-width: 0; background: var(--bg); }
+    .chat-main-header {
+      padding: 14px 20px; border-bottom: 1px solid var(--border);
+      display: flex; justify-content: space-between; align-items: center; gap: 12px;
+    }
+    .chat-main-title h2 { font-size: 15px; margin: 0; color: var(--text); }
+    .chat-main-title .topic { font-size: 11px; color: var(--text2); margin-top: 2px; }
+    .chat-ai-btn {
+      background: rgba(168,139,250,0.15); color: #a78bfa;
+      border: 1px solid rgba(168,139,250,0.4);
+      padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 600;
+      cursor: pointer;
+    }
+    .chat-ai-btn:hover { background: rgba(168,139,250,0.3); }
+
+    .chat-messages {
+      flex: 1; overflow-y: auto; padding: 20px;
+      display: flex; flex-direction: column; gap: 10px;
+    }
+    .chat-msg { max-width: 70%; padding: 10px 14px; border-radius: 14px; font-size: 14px; line-height: 1.45; word-wrap: break-word; }
+    .chat-msg.mine { align-self: flex-end; background: linear-gradient(135deg, #6c5ce7, #3b82f6); color: #fff; border-bottom-right-radius: 4px; }
+    .chat-msg.other { align-self: flex-start; background: var(--surface); color: var(--text); border-bottom-left-radius: 4px; border: 1px solid var(--border); }
+    .chat-msg.ai { align-self: flex-start; background: rgba(168,139,250,0.1); color: var(--text); border: 1px solid rgba(168,139,250,0.35); }
+    .chat-msg.system { align-self: center; background: rgba(255,255,255,0.05); color: var(--text2); font-size: 12px; font-style: italic; padding: 6px 14px; max-width: 80%; text-align: center; }
+    .chat-msg .author { font-size: 11px; font-weight: 600; margin-bottom: 3px; opacity: 0.8; }
+    .chat-msg .time { font-size: 10px; opacity: 0.6; margin-top: 4px; }
+
+    .chat-compose {
+      padding: 14px 20px; border-top: 1px solid var(--border);
+      display: flex; gap: 10px; align-items: flex-end;
+    }
+    .chat-compose textarea {
+      flex: 1; padding: 10px 14px;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 10px; color: var(--text); font-size: 14px;
+      min-height: 40px; max-height: 160px; resize: none; font-family: inherit;
+    }
+    .chat-compose textarea:focus { outline: 1px solid #6c5ce7; }
+    .chat-compose .send-btn {
+      background: linear-gradient(135deg, #6c5ce7, #3b82f6); color: #fff;
+      border: none; padding: 10px 20px; border-radius: 10px; font-size: 14px; font-weight: 600;
+      cursor: pointer;
+    }
+
+    .chat-empty {
+      flex: 1; display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      text-align: center; padding: 40px; color: var(--text2);
+    }
+    .chat-empty .icon { font-size: 64px; margin-bottom: 14px; }
+    .chat-empty h3 { color: var(--text); margin: 0 0 8px; }
+    .chat-empty p { font-size: 13px; max-width: 320px; line-height: 1.5; }
+
+    /* Modal */
+    .chat-modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 999; display: flex; align-items: center; justify-content: center; }
+    .chat-modal { background: var(--bg); border: 1px solid var(--border); border-radius: 12px; padding: 22px; width: 90%; max-width: 480px; }
+    .chat-modal h3 { margin: 0 0 14px; color: var(--text); }
+    .chat-modal .tabs { display: flex; gap: 6px; margin-bottom: 12px; }
+    .chat-modal .tabs button { flex: 1; padding: 8px; background: var(--surface); color: var(--text2); border: 1px solid var(--border); border-radius: 6px; cursor: pointer; font-size: 12px; }
+    .chat-modal .tabs button.active { background: rgba(108,92,231,0.2); color: #a78bfa; border-color: #6c5ce7; }
+    .chat-modal input { width: 100%; padding: 9px 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: 13px; margin-bottom: 10px; }
+    .chat-modal .user-list { max-height: 220px; overflow-y: auto; border: 1px solid var(--border); border-radius: 6px; }
+    .chat-modal .user-list .user { padding: 9px 12px; cursor: pointer; border-bottom: 1px solid rgba(255,255,255,0.05); font-size: 13px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+    .chat-modal .user-list .user:hover { background: rgba(108,92,231,0.08); }
+    .chat-modal .user-list .user.selected { background: rgba(108,92,231,0.2); color: #a78bfa; }
+    .chat-modal .actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 14px; }
+    .chat-modal .actions button { padding: 8px 16px; border-radius: 6px; font-size: 13px; cursor: pointer; border: 1px solid var(--border); }
+    .chat-modal .actions .primary { background: #6c5ce7; color: #fff; border-color: #6c5ce7; }
+    .chat-modal .actions .secondary { background: var(--surface); color: var(--text); }
+
+    @media (max-width: 768px) {
+      .main-wrapper { margin-left: 0 !important; }
+      .module-header { padding: 14px 16px 12px 56px !important; }
+      .chat-grid { grid-template-columns: 1fr; }
+      .chat-sidebar { display: none; }
+      .chat-sidebar.visible { display: flex; }
+      .chat-main.visible { display: flex; }
+      .chat-main:not(.visible) { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <aside id="sidebar" class="sidebar"></aside>
+  <div class="main-wrapper">
+    <div class="module-header">
+      <div class="module-icon" style="background: linear-gradient(135deg, #6c5ce7, #3b82f6);">💬</div>
+      <div>
+        <h1>Zprávy</h1>
+        <p>Chat s kolegy, skupiny, AI asistenti a systémová oznámení</p>
+      </div>
+    </div>
+
+    <div class="chat-grid" style="flex:1;min-height:0;">
+      <aside class="chat-sidebar">
+        <div class="chat-sidebar-header">
+          <h2>Konverzace</h2>
+          <button class="chat-new-btn" id="btn-new">+ Nová</button>
+        </div>
+        <div class="chat-search">
+          <input type="text" placeholder="Hledat konverzaci..." id="search">
+        </div>
+        <div class="chat-channels" id="channels"></div>
+      </aside>
+
+      <section class="chat-main" id="main">
+        <div class="chat-empty">
+          <div class="icon">💬</div>
+          <h3>Vyber konverzaci</h3>
+          <p>Ze seznamu vlevo nebo klikni na <strong>+ Nová</strong> a začni novou konverzaci. Můžeš psát s kolegy 1:1, v skupinách nebo se zapojit AI asistent.</p>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <div id="modal-root"></div>
+
+  <script>
+    var s = document.createElement('script');
+    s.src = '/js/sidebar.js?v=' + Date.now();
+    s.onload = function() { renderSidebar('chat'); };
+    document.head.appendChild(s);
+  </script>
+
+  <script>
+    const state = {
+      channels: [],
+      activeId: null,
+      active: null,
+      messages: [],
+      users: [],
+    };
+
+    function getToken() { return sessionStorage.getItem('token') || localStorage.getItem('token') || ''; }
+    function auth() {
+      const t = getToken();
+      return t ? { 'Authorization': 'Bearer ' + t } : {};
+    }
+
+    // Moje user ID — funguje i s HttpOnly cookie (fetch /api/auth/me)
+    let _myId = null;
+
+    function meIdFromJwt() {
+      try {
+        const t = getToken();
+        if (!t) return null;
+        const parts = t.split('.');
+        if (parts.length < 2) return null;
+        let b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+        while (b64.length % 4) b64 += '=';
+        const json = decodeURIComponent(Array.prototype.map.call(atob(b64),
+          c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)
+        ).join(''));
+        return JSON.parse(json).id || null;
+      } catch (_) { return null; }
+    }
+
+    const MY_ID_KEY = 'holyos_my_id_v1';
+
+    function primeMyIdFromCache() {
+      if (_myId) return _myId;
+      if (window.__holyosMyId) { _myId = window.__holyosMyId; return _myId; }
+      const jwtId = meIdFromJwt();
+      if (jwtId) { _myId = jwtId; window.__holyosMyId = jwtId; return _myId; }
+      try {
+        const stored = parseInt(localStorage.getItem(MY_ID_KEY));
+        if (stored && !isNaN(stored)) { _myId = stored; window.__holyosMyId = stored; return _myId; }
+      } catch (_) {}
+      return null;
+    }
+
+    async function ensureMyId() {
+      if (_myId) return _myId;
+      primeMyIdFromCache();
+      if (_myId) return _myId;
+      if (!window.__holyosMyIdPromise) {
+        window.__holyosMyIdPromise = fetch('/api/auth/me', { credentials: 'include' })
+          .then(r => r.ok ? r.json() : null)
+          .then(data => { const u = data?.user || data; return u?.id || null; })
+          .catch(() => null);
+      }
+      _myId = await window.__holyosMyIdPromise;
+      if (_myId) {
+        window.__holyosMyId = _myId;
+        try { localStorage.setItem(MY_ID_KEY, String(_myId)); } catch (_) {}
+      }
+      return _myId;
+    }
+
+    function meId() { return _myId; }
+
+    function esc(s) {
+      return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    function fmtTime(iso) {
+      const d = new Date(iso);
+      const now = new Date();
+      if (d.toDateString() === now.toDateString()) return d.toLocaleTimeString('cs-CZ', { hour: '2-digit', minute: '2-digit' });
+      return d.toLocaleDateString('cs-CZ', { day: '2-digit', month: '2-digit' });
+    }
+
+    function channelName(c) {
+      if (c.type === 'direct') {
+        const other = (c.members || []).find(m => m.user_id !== meId());
+        return other?.user?.display_name || other?.user?.username || 'Konverzace';
+      }
+      return c.name || '(bez názvu)';
+    }
+
+    function channelIcon(c) {
+      if (c.type === 'direct') return '💬';
+      if (c.type === 'group') return '👥';
+      if (c.type === 'task') return '📋';
+      if (c.type === 'system') return '⚙️';
+      return '💬';
+    }
+
+    function avatarColor(seed) {
+      const colors = ['#6c5ce7', '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#ec4899', '#14b8a6', '#8b5cf6'];
+      let h = 0;
+      for (let i = 0; i < String(seed || '').length; i++) h = (h * 31 + String(seed).charCodeAt(i)) & 0xffff;
+      return colors[h % colors.length];
+    }
+
+    function initials(user) {
+      if (!user) return '?';
+      const p = user.person;
+      if (p && (p.first_name || p.last_name)) {
+        return ((p.first_name?.[0] || '') + (p.last_name?.[0] || '')).toUpperCase() || '?';
+      }
+      const name = user.display_name || user.username || '?';
+      const parts = name.trim().split(/\s+/);
+      if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+      return name.slice(0, 2).toUpperCase();
+    }
+
+    function avatarHtml(user, size) {
+      if (!user) return `<span class="chat-avatar ${size || ''}" style="background:#444">?</span>`;
+      const cls = `chat-avatar ${size || ''}`;
+      const photo = user.person?.photo_url;
+      const seed = user.username || user.display_name || 'x';
+      const color = avatarColor(seed);
+      if (photo) {
+        return `<span class="${cls}" style="background-image:url('${String(photo).replace(/'/g, "\\'")}');background-color:${color};"></span>`;
+      }
+      return `<span class="${cls}" style="background:${color};">${esc(initials(user))}</span>`;
+    }
+
+    function channelOtherUser(c) {
+      if (!c || c.type !== 'direct') return null;
+      const other = (c.members || []).find(m => m.user_id !== meId());
+      return other?.user || null;
+    }
+
+    async function api(url, opts = {}) {
+      const res = await fetch(url, {
+        credentials: 'include',
+        ...opts,
+        headers: { ...auth(), ...(opts.headers || {}) },
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || ('HTTP ' + res.status));
+      }
+      return res.json();
+    }
+
+    async function loadChannels() {
+      await ensureMyId();
+      state.channels = await api('/api/messages/channels');
+      renderChannels();
+    }
+
+    async function loadMessages(id) {
+      state.messages = await api('/api/messages/channels/' + id + '/messages?limit=100');
+      state.active = state.channels.find(c => c.id === id);
+      renderMessages();
+      api('/api/messages/channels/' + id + '/read', { method: 'POST' }).catch(() => {});
+      const ch = state.channels.find(c => c.id === id);
+      if (ch) ch.unread = 0;
+      renderChannels();
+    }
+
+    function renderChannels() {
+      const el = document.getElementById('channels');
+      const search = document.getElementById('search').value.toLowerCase().trim();
+      const list = state.channels.filter(c => !search || channelName(c).toLowerCase().includes(search));
+
+      if (list.length === 0) {
+        el.innerHTML = '<div style="padding:40px 16px;text-align:center;color:var(--text2);font-size:12px;">Žádné konverzace.<br><br>Klikni na <strong>+ Nová</strong>.</div>';
+        return;
+      }
+
+      el.innerHTML = list.map(c => {
+        const name = channelName(c);
+        const preview = c.last_message ? (c.last_message.content.length > 50 ? c.last_message.content.slice(0, 50) + '…' : c.last_message.content) : '—';
+        const time = c.last_message_at ? fmtTime(c.last_message_at) : '';
+        const other = channelOtherUser(c);
+        const avatar = other
+          ? avatarHtml(other)
+          : `<span class="chat-avatar" style="background:#3b82f6">${channelIcon(c)}</span>`;
+        return `
+          <div class="chat-channel ${c.id === state.activeId ? 'active' : ''}" data-id="${esc(c.id)}">
+            ${avatar}
+            <div class="body">
+              <div class="row">
+                <span class="name">${esc(name)}</span>
+                <span class="time">${esc(time)}</span>
+              </div>
+              <div class="row" style="margin-top:2px;">
+                <span class="preview">${esc(preview)}</span>
+                ${c.unread > 0 ? `<span class="unread-badge">${c.unread}</span>` : ''}
+              </div>
+            </div>
+          </div>`;
+      }).join('');
+
+      el.querySelectorAll('.chat-channel').forEach(node => {
+        node.addEventListener('click', () => {
+          state.activeId = node.dataset.id;
+          loadMessages(state.activeId);
+        });
+      });
+    }
+
+    function renderMessages() {
+      const main = document.getElementById('main');
+      if (!state.activeId) {
+        main.innerHTML = `
+          <div class="chat-empty">
+            <div class="icon">💬</div>
+            <h3>Vyber konverzaci</h3>
+            <p>Ze seznamu vlevo nebo klikni na <strong>+ Nová</strong>.</p>
+          </div>`;
+        return;
+      }
+
+      const title = state.active ? channelName(state.active) : '…';
+      const topic = state.active?.topic || '';
+      const myId = meId();
+      const other = channelOtherUser(state.active);
+      const headerAvatar = other
+        ? avatarHtml(other)
+        : `<span class="chat-avatar" style="background:#3b82f6">${channelIcon(state.active || {})}</span>`;
+
+      main.innerHTML = `
+        <div class="chat-main-header">
+          <div class="chat-main-title" style="display:flex;align-items:center;gap:12px;">
+            ${headerAvatar}
+            <div>
+              <h2>${esc(title)}</h2>
+              ${topic ? `<div class="topic">${esc(topic)}</div>` : ''}
+            </div>
+          </div>
+          <button class="chat-ai-btn" id="btn-ai">✨ Zeptat se AI</button>
+        </div>
+        <div class="chat-messages" id="msg-list"></div>
+        <div class="chat-compose">
+          <textarea id="composer" placeholder="Napiš zprávu… (Enter = odeslat, Shift+Enter = nový řádek)" rows="1"></textarea>
+          <button class="send-btn" id="btn-send">Odeslat</button>
+        </div>`;
+
+      const ml = document.getElementById('msg-list');
+      ml.innerHTML = state.messages.map(m => {
+        const mine = m.sender_type === 'user' && m.sender_id === myId;
+        const cls = m.sender_type === 'system' ? 'system' : m.sender_type === 'ai' ? 'ai' : (mine ? 'mine' : 'other');
+        const author = m.sender_type === 'user'
+          ? (m.sender?.display_name || m.sender?.username || 'Neznámý')
+          : (m.sender_label || (m.sender_type === 'ai' ? 'Claude' : 'HolyOS'));
+        return `
+          <div class="chat-msg ${cls}">
+            ${!mine && cls !== 'system' ? `<div class="author">${esc(author)}</div>` : ''}
+            <div>${esc(m.content).replace(/\n/g, '<br>')}</div>
+            <div class="time">${fmtTime(m.created_at)}</div>
+          </div>`;
+      }).join('');
+      ml.scrollTop = ml.scrollHeight;
+
+      const ta = document.getElementById('composer');
+      const sendBtn = document.getElementById('btn-send');
+      const aiBtn = document.getElementById('btn-ai');
+
+      const send = (useAi = false) => {
+        const txt = ta.value.trim();
+        if (!txt) return;
+        ta.value = '';
+        // Optimistic UI
+        const tempId = 'temp_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+        const myIdVal = meId();
+        const optimistic = {
+          id: tempId,
+          channel_id: state.activeId,
+          sender_id: myIdVal,
+          sender_type: 'user',
+          content: txt,
+          created_at: new Date().toISOString(),
+          sender: { id: myIdVal, display_name: 'Vy', username: 'me' },
+          _pending: true,
+        };
+        state.messages.push(optimistic);
+        renderMessages();
+
+        api('/api/messages/channels/' + state.activeId + '/messages', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content: txt, ai: useAi }),
+        }).then(real => {
+          const idx = state.messages.findIndex(m => m.id === tempId);
+          if (idx >= 0) {
+            const exists = state.messages.some(m => m.id === real.id);
+            if (exists) state.messages.splice(idx, 1);
+            else state.messages[idx] = real;
+            renderMessages();
+          }
+        }).catch(e => {
+          const idx = state.messages.findIndex(m => m.id === tempId);
+          if (idx >= 0) { state.messages[idx]._failed = true; renderMessages(); }
+          alert('Chyba: ' + e.message);
+        });
+      };
+
+      sendBtn.addEventListener('click', () => send(false));
+      aiBtn.addEventListener('click', () => send(true));
+      ta.addEventListener('keydown', e => {
+        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(false); }
+      });
+      ta.focus();
+    }
+
+    // Modal pro novou konverzaci
+    function openNewModal() {
+      let tab = 'direct';
+      const selectedUsers = new Set();
+      let groupName = '';
+
+      document.getElementById('modal-root').innerHTML = `
+        <div class="chat-modal-overlay">
+          <div class="chat-modal">
+            <h3>Nová konverzace</h3>
+            <div class="tabs">
+              <button data-tab="direct" class="active">1:1 chat</button>
+              <button data-tab="group">Skupina</button>
+            </div>
+            <div id="modal-body"></div>
+            <div class="actions">
+              <button class="secondary" id="btn-cancel">Zrušit</button>
+              <button class="primary" id="btn-create">Vytvořit</button>
+            </div>
+          </div>
+        </div>`;
+
+      const overlay = document.querySelector('.chat-modal-overlay');
+      overlay.addEventListener('click', e => { if (e.target === overlay) closeModal(); });
+
+      document.querySelectorAll('.chat-modal .tabs button').forEach(b => {
+        b.addEventListener('click', () => {
+          document.querySelectorAll('.chat-modal .tabs button').forEach(x => x.classList.remove('active'));
+          b.classList.add('active');
+          tab = b.dataset.tab;
+          renderModalBody();
+        });
+      });
+      document.getElementById('btn-cancel').addEventListener('click', closeModal);
+      document.getElementById('btn-create').addEventListener('click', createChannel);
+
+      async function renderModalBody() {
+        const body = document.getElementById('modal-body');
+        if (tab === 'direct') {
+          body.innerHTML = `
+            <input type="text" id="u-search" placeholder="Hledat uživatele...">
+            <div class="user-list" id="u-list"></div>`;
+          document.getElementById('u-search').addEventListener('input', refreshUsers);
+          refreshUsers();
+        } else {
+          body.innerHTML = `
+            <input type="text" id="g-name" placeholder="Název skupiny" value="${esc(groupName)}">
+            <input type="text" id="u-search" placeholder="Hledat uživatele...">
+            <div class="user-list" id="u-list"></div>
+            <div style="font-size:11px;color:var(--text2);margin-top:8px;">Vybraných: <span id="u-count">${selectedUsers.size}</span></div>`;
+          document.getElementById('g-name').addEventListener('input', e => { groupName = e.target.value; });
+          document.getElementById('u-search').addEventListener('input', refreshUsers);
+          refreshUsers();
+        }
+      }
+
+      async function refreshUsers() {
+        const q = document.getElementById('u-search').value;
+        const list = await api('/api/messages/users/searchable?q=' + encodeURIComponent(q));
+        const ul = document.getElementById('u-list');
+        ul.innerHTML = list.map(u => `
+          <div class="user ${selectedUsers.has(u.id) ? 'selected' : ''}" data-id="${u.id}" style="display:flex;align-items:center;gap:10px;">
+            ${avatarHtml(u, 'sm')}
+            <span style="flex:1;">${esc(u.display_name || u.username)}</span>
+            <span style="color:var(--text2);font-size:11px;">@${esc(u.username)}</span>
+          </div>`).join('') || '<div style="padding:14px;text-align:center;color:var(--text2);font-size:12px;">Nic nenalezeno</div>';
+
+        ul.querySelectorAll('.user').forEach(el => {
+          el.addEventListener('click', async () => {
+            const id = parseInt(el.dataset.id);
+            if (tab === 'direct') {
+              try {
+                const ch = await api('/api/messages/channels/direct', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ user_id: id }),
+                });
+                closeModal();
+                await loadChannels();
+                state.activeId = ch.id;
+                loadMessages(ch.id);
+              } catch (e) { alert('Chyba: ' + e.message); }
+            } else {
+              if (selectedUsers.has(id)) selectedUsers.delete(id); else selectedUsers.add(id);
+              const cnt = document.getElementById('u-count');
+              if (cnt) cnt.textContent = selectedUsers.size;
+              el.classList.toggle('selected');
+            }
+          });
+        });
+      }
+
+      async function createChannel() {
+        if (tab === 'direct') {
+          alert('Klikni na uživatele v seznamu pro vytvoření 1:1.');
+          return;
+        }
+        if (!groupName.trim()) { alert('Zadej název skupiny'); return; }
+        if (selectedUsers.size === 0) { alert('Přidej alespoň jednoho člena'); return; }
+        try {
+          const ch = await api('/api/messages/channels/group', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: groupName.trim(), user_ids: [...selectedUsers] }),
+          });
+          closeModal();
+          await loadChannels();
+          state.activeId = ch.id;
+          loadMessages(ch.id);
+        } catch (e) { alert('Chyba: ' + e.message); }
+      }
+
+      renderModalBody();
+    }
+
+    function closeModal() {
+      document.getElementById('modal-root').innerHTML = '';
+    }
+
+    // Init
+    document.getElementById('btn-new').addEventListener('click', openNewModal);
+    document.getElementById('search').addEventListener('input', renderChannels);
+
+    loadChannels().then(() => {
+      // URL param ?channel=... otevře konkrétní konverzaci
+      const params = new URLSearchParams(window.location.search);
+      const cid = params.get('channel');
+      if (cid && state.channels.some(c => c.id === cid)) {
+        state.activeId = cid;
+        loadMessages(cid);
+      }
+    });
+
+    // SSE live updaty
+    (function setupSse() {
+      function tryWire() {
+        if (!window.HolyOSEvents) return setTimeout(tryWire, 200);
+        window.HolyOSEvents.on('message', payload => {
+          if (!payload) return;
+          const { channel_id, message } = payload;
+          if (channel_id === state.activeId) {
+            state.messages.push(message);
+            renderMessages();
+            api('/api/messages/channels/' + channel_id + '/read', { method: 'POST' }).catch(() => {});
+          } else {
+            const ch = state.channels.find(c => c.id === channel_id);
+            if (ch) {
+              if (message.sender_id !== meId()) ch.unread = (ch.unread || 0) + 1;
+              ch.last_message = message;
+              ch.last_message_at = message.created_at;
+              renderChannels();
+            } else {
+              loadChannels();
+            }
+          }
+        });
+        window.HolyOSEvents.on('channel_update', () => loadChannels());
+      }
+      tryWire();
+    })();
+  </script>
+
+  <!-- SSE client, bell a chat widget se načtou ze sidebar.js (globálně) -->
+</body>
+</html>

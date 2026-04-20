@@ -6,3 +6,9 @@ dist/server/
 *.xlsx
 ~$*
 *.docx
+
+# DB backupy
+backup-cad-*.sql
+
+backup-cad.sql
+

@@ -2,8 +2,8 @@
    editor-api.ts — Global API pro funkce volané z HTML
    ============================================ */
 
-import { startDrawMode, cancelDrawMode, startEntrancePlacement, startWallDrawMode, startGatePlacement, startRoomLabelPlacement, showDistanceInput, zoomIn, zoomOut, zoomFit, toggleGrid, toggleSnap, toggleConnectMode, confirmDistanceAndPlace, startEntrancePlacementGlobal } from './interactions.js';
-import { createObject, deleteObject, duplicateObject, findObjectAt, selectObject, updateProp, updateColor, rotatePolygon, removeEntrance, updateEntranceProp, updateEntranceWidth, removeWall, removeGate, removeRoomLabel, updateRoomLabelProp } from './objects.js';
+import { startDrawMode, cancelDrawMode, startEntrancePlacement, startWallDrawModeGlobal, startGatePlacement, startRoomLabelPlacement, showDistanceInput, zoomIn, zoomOut, zoomFit, toggleGrid, toggleSnap, toggleConnectMode, confirmDistanceAndPlace, startEntrancePlacementGlobal } from './interactions.js';
+import { createObject, deleteObject, duplicateObject, findObjectAt, selectObject, updateProp, updateColor, rotatePolygon, removeEntrance, updateEntranceProp, updateEntranceWidth, removeWall, removeGate, removeRoomLabel, updateRoomLabelProp, updateWallName, updateWallPoint, updateWallLength, updateWallAngle, snapWallPerpendicular, updateWallDistFromCorner, toggleRoomLocked } from './objects.js';
 import { showProperties, getRotateCenter, updateVertex, updateEdgeDistance, removeVertex, updateGateProp, toggleLock, deselectAll } from './properties.js';
 import { saveProject, saveProjectAs, loadProject, exportJSON, exportPNG, confirmSave, closeSaveDialog } from './storage.js';
 import { undo, redo } from './history.js';
@@ -15,7 +15,7 @@ export function initEditorAPI(): void {
     startDrawMode,
     cancelDrawMode,
     startEntrancePlacement,
-    startWallDrawMode,
+    startWallDrawModeGlobal,
     startGatePlacement,
     startRoomLabelPlacement,
     showDistanceInput,
@@ -42,6 +42,14 @@ export function initEditorAPI(): void {
     removeGate,
     removeRoomLabel,
     updateRoomLabelProp,
+    // wall editing
+    updateWallName,
+    updateWallPoint,
+    updateWallLength,
+    updateWallAngle,
+    snapWallPerpendicular,
+    updateWallDistFromCorner,
+    toggleRoomLocked,
 
     // properties
     showProperties,
@@ -66,7 +74,6 @@ export function initEditorAPI(): void {
     redo,
     // extra
     confirmDistanceAndPlace,
-    confirmWallPoint: confirmDistanceAndPlace,
     startEntrancePlacementGlobal,
     selectExistingSave: (id: string, name: string) => {
       // selectExistingSave only exists in programovani-vyroby module, not here
@@ -92,4 +99,5 @@ export function initEditorAPI(): void {
   w.closeSaveDialog = closeSaveDialog;
   w.confirmDistanceAndPlace = confirmDistanceAndPlace;
   w.startEntrancePlacementGlobal = startEntrancePlacementGlobal;
+  w.startWallDrawModeGlobal = startWallDrawModeGlobal;
 }

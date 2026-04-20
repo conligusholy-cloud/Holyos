@@ -116,8 +116,48 @@
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 40px;
       animation: slideUp 0.3s ease-out;
+      width: 100%;
+    }
+
+    .identified-layout {
+      display: grid;
+      grid-template-columns: 280px 1fr;
+      gap: 48px;
+      align-items: start;
+      width: 100%;
+      max-width: 900px;
+    }
+
+    .identified-left {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 20px;
+    }
+
+    .identified-right {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      width: 100%;
+    }
+
+    .identified-bottom {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+      width: 100%;
+      max-width: 900px;
+      margin-top: 20px;
+    }
+
+    .identified-bottom > .btn-clock-in {
+      width: 100%;
+      max-width: 400px;
+      padding: 24px 40px;
+      font-size: 24px;
     }
 
     .person-card {
@@ -125,12 +165,12 @@
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 24px;
+      gap: 16px;
     }
 
     .person-photo {
-      width: 200px;
-      height: 200px;
+      width: 140px;
+      height: 140px;
       border-radius: 12px;
       background: var(--surface2);
       display: flex;
@@ -148,7 +188,7 @@
     }
 
     .person-photo-placeholder {
-      font-size: 80px;
+      font-size: 60px;
       color: var(--text2);
     }
 
@@ -157,46 +197,44 @@
     }
 
     .person-name {
-      font-size: 36px;
+      font-size: 26px;
       font-weight: 700;
       color: var(--text);
-      margin-bottom: 8px;
+      margin-bottom: 4px;
     }
 
     .person-role {
-      font-size: 18px;
+      font-size: 15px;
       color: var(--text2);
-      margin-bottom: 20px;
+      margin-bottom: 12px;
     }
 
     .person-status {
-      padding: 12px 24px;
+      padding: 10px 20px;
       background: rgba(108, 140, 255, 0.15);
       border-radius: 8px;
       border-left: 4px solid var(--accent);
-      font-size: 14px;
+      font-size: 13px;
       color: var(--accent);
-      margin-top: 12px;
+      margin-top: 8px;
     }
 
     /* Action buttons */
     .action-buttons {
-      display: flex;
-      gap: 24px;
-      flex-wrap: wrap;
-      justify-content: center;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
       width: 100%;
     }
 
     .btn-action {
-      padding: 24px 40px;
+      padding: 18px 16px;
       border-radius: 12px;
       border: none;
-      font-size: 22px;
+      font-size: 17px;
       font-weight: 600;
       cursor: pointer;
       transition: all 0.2s ease;
-      min-width: 200px;
       text-align: center;
       box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
       text-transform: uppercase;
@@ -210,6 +248,12 @@
     .btn-action:disabled {
       opacity: 0.5;
       cursor: not-allowed;
+    }
+
+    /* Tlačítka přes celou šířku v gridu */
+    .btn-return,
+    .btn-leave {
+      grid-column: 1 / -1;
     }
 
     .btn-clock-in {
@@ -420,53 +464,534 @@
       }
     }
 
-    /* Responsive for smaller screens */
+    /* Rychlé akce — přestávky */
+    .quick-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      width: 100%;
+    }
+
+    .break-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .break-row .btn-quick {
+      flex: 1;
+    }
+
+    .break-duration {
+      min-width: 60px;
+      font-size: 13px;
+      font-weight: 600;
+      text-align: center;
+    }
+
+    .break-duration.ok { color: #22c55e; }
+    .break-duration.warning { color: #eab308; }
+    .break-duration.over { color: #ef4444; }
+    .break-duration.active { color: #06b6d4; animation: pulse 1.5s infinite; }
+
+    .break-summary {
+      padding: 8px 16px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      text-align: center;
+    }
+
+    .break-summary.ok {
+      background: rgba(34, 197, 94, 0.1);
+      color: #22c55e;
+      border: 1px solid rgba(34, 197, 94, 0.2);
+    }
+
+    .break-summary.over {
+      background: rgba(239, 68, 68, 0.1);
+      color: #ef4444;
+      border: 1px solid rgba(239, 68, 68, 0.3);
+    }
+
+    .btn-quick {
+      padding: 16px 20px;
+      border-radius: 10px;
+      border: none;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      text-align: center;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    }
+
+    .btn-quick:active {
+      transform: scale(0.97);
+    }
+
+    .btn-quick-out {
+      background: rgba(234, 179, 8, 0.15);
+      color: #eab308;
+      border: 1px solid rgba(234, 179, 8, 0.3);
+    }
+
+    .btn-quick-out:hover {
+      background: rgba(234, 179, 8, 0.25);
+    }
+
+    .btn-quick-in {
+      background: rgba(34, 197, 94, 0.15);
+      color: #22c55e;
+      border: 1px solid rgba(34, 197, 94, 0.3);
+    }
+
+    .btn-quick-in:hover {
+      background: rgba(34, 197, 94, 0.25);
+    }
+
+    /* Back/logout button */
+    .btn-back {
+      background: transparent !important;
+      border: 1px solid var(--border) !important;
+      color: var(--text2) !important;
+      box-shadow: none !important;
+      font-size: 14px !important;
+      padding: 10px 24px !important;
+      min-width: auto !important;
+      text-transform: none !important;
+      margin-top: auto;
+    }
+
+    .btn-back:hover {
+      background: var(--surface2) !important;
+      color: var(--text) !important;
+    }
+
+    /* Leave request panel */
+    .btn-leave {
+      background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%);
+      color: #fff;
+    }
+
+    .btn-leave:hover:not(:disabled) {
+      background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+      box-shadow: 0 8px 20px rgba(124, 58, 237, 0.3);
+    }
+
+    .state-leave-request {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 32px;
+      animation: slideUp 0.3s ease-out;
+      width: 100%;
+      max-width: 500px;
+    }
+
+    .leave-form {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .leave-form h2 {
+      font-size: 28px;
+      font-weight: 600;
+      text-align: center;
+      color: var(--text);
+      margin: 0;
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .form-group label {
+      font-size: 16px;
+      font-weight: 500;
+      color: var(--text2);
+    }
+
+    .form-group input,
+    .form-group select,
+    .form-group textarea {
+      padding: 16px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: var(--surface2);
+      color: var(--text);
+      font-size: 18px;
+      font-family: inherit;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .form-group input:focus,
+    .form-group select:focus,
+    .form-group textarea:focus {
+      border-color: var(--accent);
+    }
+
+    .form-group textarea {
+      resize: vertical;
+      min-height: 80px;
+    }
+
+    .form-buttons {
+      display: flex;
+      gap: 16px;
+      justify-content: center;
+      margin-top: 12px;
+    }
+
+    .btn-submit {
+      padding: 18px 40px;
+      border-radius: 10px;
+      border: none;
+      font-size: 18px;
+      font-weight: 600;
+      cursor: pointer;
+      background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%);
+      color: #fff;
+      transition: all 0.2s;
+    }
+
+    .btn-submit:hover {
+      background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+      box-shadow: 0 6px 16px rgba(124, 58, 237, 0.3);
+    }
+
+    .btn-cancel {
+      padding: 18px 40px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      font-size: 18px;
+      font-weight: 600;
+      cursor: pointer;
+      background: var(--surface2);
+      color: var(--text2);
+      transition: all 0.2s;
+    }
+
+    .btn-cancel:hover {
+      background: var(--surface);
+      color: var(--text);
+    }
+
+    /* My requests list */
+    .my-requests {
+      width: 100%;
+      max-width: 500px;
+    }
+
+    .my-requests h3 {
+      font-size: 18px;
+      font-weight: 500;
+      color: var(--text2);
+      margin: 0 0 12px;
+    }
+
+    .request-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 16px;
+      background: var(--surface2);
+      border-radius: 8px;
+      margin-bottom: 8px;
+      font-size: 14px;
+    }
+
+    .request-status {
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+
+    .request-status.pending {
+      background: rgba(234, 179, 8, 0.2);
+      color: #eab308;
+    }
+
+    .request-status.approved {
+      background: rgba(34, 197, 94, 0.2);
+      color: #22c55e;
+    }
+
+    .request-status.rejected {
+      background: rgba(239, 68, 68, 0.2);
+      color: #ef4444;
+    }
+
+    /* Responsive — tablet a menší */
     @media (max-width: 768px) {
       .kiosk-header {
-        top: 20px;
-        left: 20px;
-        right: 20px;
+        top: 16px;
+        left: 16px;
+        right: 16px;
       }
 
       .kiosk-logo svg {
-        width: 36px;
-        height: 36px;
+        width: 32px;
+        height: 32px;
       }
 
       .kiosk-logo-text {
-        font-size: 16px;
-      }
-
-      .kiosk-time-date {
         font-size: 14px;
       }
 
+      .kiosk-time-date {
+        font-size: 13px;
+      }
+
+      .kiosk-content {
+        padding: 20px 16px;
+      }
+
       .waiting-message {
-        font-size: 36px;
-      }
-
-      .waiting-subtitle {
-        font-size: 18px;
-      }
-
-      .person-photo {
-        width: 140px;
-        height: 140px;
-      }
-
-      .person-name {
         font-size: 28px;
       }
 
+      .waiting-subtitle {
+        font-size: 16px;
+      }
+
+      .waiting-icon {
+        font-size: 80px;
+      }
+
+      .state-waiting {
+        gap: 32px;
+      }
+
+      /* Na malém displeji — jeden sloupec */
+      .identified-layout {
+        grid-template-columns: 1fr;
+        gap: 20px;
+      }
+
+      .identified-left {
+        flex-direction: row;
+        gap: 16px;
+        width: 100%;
+      }
+
+      .person-card {
+        flex-direction: row;
+        text-align: left;
+        gap: 16px;
+      }
+
+      .person-info {
+        text-align: left;
+      }
+
+      .person-photo {
+        width: 80px;
+        height: 80px;
+        flex-shrink: 0;
+      }
+
+      .person-photo-placeholder {
+        font-size: 36px;
+      }
+
+      .person-name {
+        font-size: 20px;
+      }
+
+      .person-role {
+        font-size: 13px;
+        margin-bottom: 4px;
+      }
+
+      .person-status {
+        font-size: 12px;
+        padding: 6px 12px;
+      }
+
       .btn-action {
-        padding: 18px 30px;
-        font-size: 18px;
-        min-width: 140px;
+        padding: 14px 12px;
+        font-size: 14px;
       }
 
       .action-buttons {
-        gap: 12px;
+        gap: 8px;
       }
+
+      .quick-actions {
+        grid-template-columns: 1fr;
+      }
+
+      .btn-quick {
+        padding: 12px 14px;
+        font-size: 13px;
+      }
+
+      .overtime-widget {
+        flex-wrap: wrap;
+        padding: 10px 14px;
+        gap: 8px;
+      }
+
+      .overtime-value {
+        font-size: 18px;
+      }
+
+      .btn-back {
+        font-size: 14px !important;
+        padding: 10px 20px !important;
+      }
+
+      .confirmation-icon { font-size: 80px; }
+      .confirmation-message { font-size: 24px; }
+      .error-icon { font-size: 80px; }
+      .error-message { font-size: 24px; }
+    }
+
+    /* Responsive — malý telefon */
+    @media (max-width: 480px) {
+      .identified-left {
+        flex-direction: column;
+        align-items: center;
+      }
+
+      .person-card {
+        flex-direction: column;
+        text-align: center;
+      }
+
+      .person-info {
+        text-align: center;
+      }
+
+      .action-buttons {
+        grid-template-columns: 1fr;
+      }
+
+      .btn-clock-in,
+      .btn-return,
+      .btn-leave {
+        grid-column: auto;
+      }
+    }
+
+    /* Přesčasy widget */
+    .overtime-widget {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      padding: 14px 28px;
+      background: var(--surface2);
+      border-radius: 10px;
+      width: 100%;
+      max-width: 900px;
+      box-sizing: border-box;
+    }
+
+    .overtime-value {
+      font-size: 22px;
+      font-weight: 700;
+    }
+
+    .overtime-value.positive { color: #22c55e; }
+    .overtime-value.negative { color: #ef4444; }
+    .overtime-value.zero { color: var(--text2); }
+
+    .overtime-label {
+      font-size: 14px;
+      color: var(--text2);
+    }
+
+    .overtime-details {
+      font-size: 12px;
+      color: var(--text2);
+      opacity: 0.7;
+    }
+
+    .overtime-transfer-btn {
+      margin-left: auto;
+      padding: 8px 16px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--accent);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .overtime-transfer-btn:hover {
+      background: rgba(108, 140, 255, 0.1);
+    }
+
+    /* Overtime transfer form */
+    .state-overtime {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 24px;
+      animation: slideUp 0.3s ease-out;
+      width: 100%;
+      max-width: 450px;
+    }
+
+    .overtime-form h2 {
+      font-size: 24px;
+      font-weight: 600;
+      text-align: center;
+      color: var(--text);
+      margin: 0 0 16px;
+    }
+
+    .overtime-summary {
+      display: flex;
+      justify-content: center;
+      gap: 32px;
+      margin-bottom: 12px;
+    }
+
+    .overtime-summary-item {
+      text-align: center;
+    }
+
+    .overtime-summary-value {
+      font-size: 22px;
+      font-weight: 700;
+    }
+
+    .overtime-summary-label {
+      font-size: 12px;
+      color: var(--text2);
+    }
+
+    .pending-list {
+      width: 100%;
+      margin-top: 8px;
+    }
+
+    .pending-list h4 {
+      font-size: 14px;
+      color: var(--text2);
+      margin: 0 0 8px;
+      font-weight: 500;
+    }
+
+    .pending-item {
+      display: flex;
+      justify-content: space-between;
+      padding: 8px 12px;
+      background: var(--surface2);
+      border-radius: 6px;
+      margin-bottom: 6px;
+      font-size: 13px;
     }
   </style>
 </head>
@@ -501,32 +1026,71 @@
 
       <!-- Identified State (after chip scan) -->
       <div id="stateIdentified" class="state-identified" style="display: none;">
-        <div class="person-card">
-          <div class="person-photo">
-            <div id="personPhotoContainer">
-              <div class="person-photo-placeholder">👤</div>
+        <div class="identified-layout">
+          <!-- Levý sloupec — osoba -->
+          <div class="identified-left">
+            <div class="person-card">
+              <div class="person-photo">
+                <div id="personPhotoContainer">
+                  <div class="person-photo-placeholder">👤</div>
+                </div>
+              </div>
+              <div class="person-info">
+                <div class="person-name" id="personName">Načítání...</div>
+                <div class="person-role" id="personRole">-</div>
+                <div class="person-status" id="personStatus" style="display: none;"></div>
+              </div>
             </div>
           </div>
-          <div class="person-info">
-            <div class="person-name" id="personName">Načítání...</div>
-            <div class="person-role" id="personRole">-</div>
-            <div class="person-status" id="personStatus" style="display: none;"></div>
+
+          <!-- Pravý sloupec — akce -->
+          <div class="identified-right">
+            <div class="action-buttons" id="actionButtons">
+              <button class="btn-action btn-clock-out" id="btnClockOut">
+                ✗ Odchod z práce
+              </button>
+              <button class="btn-action btn-absence" id="btnAbsence">
+                ⊕ Nepřítomnost
+              </button>
+              <button class="btn-action btn-return" id="btnReturnAbsence" style="display: none;">
+                ↺ Návrat
+              </button>
+              <button class="btn-action btn-leave" id="btnLeaveRequest">
+                ✎ Žádost o volno
+              </button>
+            </div>
+
+            <!-- Přestávky -->
+            <div class="quick-actions">
+              <div class="break-row">
+                <button class="btn-quick btn-quick-out" id="btnBreakSnackOut" onclick="recordBreak('break_snack_out')">🥪 Svačina</button>
+                <span class="break-duration" id="breakSnackInfo"></span>
+              </div>
+              <div class="break-row">
+                <button class="btn-quick btn-quick-out" id="btnBreakLunchOut" onclick="recordBreak('break_lunch_out')">🍽 Oběd</button>
+                <span class="break-duration" id="breakLunchInfo"></span>
+              </div>
+            </div>
+
+            <!-- Souhrnný řádek přestávek -->
+            <div class="break-summary" id="breakSummary" style="display: none;"></div>
           </div>
         </div>
 
-        <div class="action-buttons" id="actionButtons">
-          <button class="btn-action btn-clock-in" id="btnClockIn">
-            ✓ Příchod
+        <!-- Spodní sekce — přes celou šířku -->
+        <div class="identified-bottom">
+          <button class="btn-action btn-clock-in" id="btnClockIn" style="display: none;">
+            ✓ Příchod do práce
           </button>
-          <button class="btn-action btn-clock-out" id="btnClockOut">
-            ✗ Odchod
-          </button>
-          <button class="btn-action btn-absence" id="btnAbsence">
-            ⊕ Nepřítomnost
-          </button>
-          <button class="btn-action btn-return" id="btnReturnAbsence" style="display: none;">
-            ↺ Návrat
-          </button>
+          <div class="overtime-widget" id="overtimeWidget" style="display: none;">
+            <div>
+              <div class="overtime-value" id="overtimeValue">0h</div>
+              <div class="overtime-label">Přesčasy tento měsíc</div>
+            </div>
+            <div id="overtimeDetails" class="overtime-details"></div>
+            <button class="overtime-transfer-btn" id="btnOvertimeTransfer">Převod přesčasů →</button>
+          </div>
+          <button class="btn-action btn-back" id="btnBack">← Odejít</button>
         </div>
       </div>
 
@@ -543,6 +1107,89 @@
         <div>
           <div class="error-message" id="errorMessage">Chyba</div>
           <div class="error-details" id="errorDetails">Čip nebyl rozpoznán</div>
+        </div>
+      </div>
+
+      <!-- Leave Request State -->
+      <div id="stateLeaveRequest" class="state-leave-request" style="display: none;">
+        <div class="leave-form">
+          <h2>Žádost o volno</h2>
+          <div class="form-group">
+            <label>Typ</label>
+            <select id="leaveType">
+              <option value="vacation">Dovolená</option>
+              <option value="sick">Nemocenská</option>
+              <option value="personal">Osobní volno</option>
+              <option value="unpaid">Neplacené volno</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Od</label>
+            <input type="date" id="leaveFrom">
+          </div>
+          <div class="form-group">
+            <label>Do</label>
+            <input type="date" id="leaveTo">
+          </div>
+          <div class="form-group">
+            <label>Poznámka (volitelné)</label>
+            <textarea id="leaveNote" placeholder="Důvod, poznámka..."></textarea>
+          </div>
+          <div class="form-buttons">
+            <button class="btn-cancel" id="btnLeaveCancel">Zpět</button>
+            <button class="btn-submit" id="btnLeaveSubmit">Odeslat žádost</button>
+          </div>
+        </div>
+
+        <div class="my-requests" id="myRequestsContainer" style="display: none;">
+          <h3>Mé žádosti</h3>
+          <div id="myRequestsList"></div>
+        </div>
+      </div>
+
+      <!-- Overtime Transfer State -->
+      <div id="stateOvertime" class="state-overtime" style="display: none;">
+        <div class="overtime-form" style="width: 100%;">
+          <h2>Převod přesčasů</h2>
+          <div class="overtime-summary">
+            <div class="overtime-summary-item">
+              <div class="overtime-summary-value" id="otFormValue">0h</div>
+              <div class="overtime-summary-label">Aktuální přesčasy</div>
+            </div>
+            <div class="overtime-summary-item">
+              <div class="overtime-summary-value" id="otFormWorked">0h</div>
+              <div class="overtime-summary-label">Odpracováno</div>
+            </div>
+            <div class="overtime-summary-item">
+              <div class="overtime-summary-value" id="otFormExpected">0h</div>
+              <div class="overtime-summary-label">Fond</div>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Typ převodu</label>
+            <select id="otType">
+              <option value="transfer_to_leave">Přesčas → Náhradní volno</option>
+              <option value="transfer_to_pay">Přesčas → Proplacení</option>
+              <option value="debt_work">Odpracování záporných hodin</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Počet hodin</label>
+            <input type="number" id="otHours" step="0.5" min="0.5" placeholder="např. 4">
+          </div>
+          <div class="form-group">
+            <label>Poznámka (volitelné)</label>
+            <textarea id="otNote" placeholder="Důvod převodu..."></textarea>
+          </div>
+          <div class="form-buttons">
+            <button class="btn-cancel" id="btnOtCancel">Zpět</button>
+            <button class="btn-submit" id="btnOtSubmit">Odeslat žádost</button>
+          </div>
+
+          <div class="pending-list" id="otPendingList" style="display: none;">
+            <h4>Čekající žádosti</h4>
+            <div id="otPendingItems"></div>
+          </div>
         </div>
       </div>
 
@@ -570,6 +1217,7 @@
     const stateConfirmation = document.getElementById('stateConfirmation');
     const stateError = document.getElementById('stateError');
     const stateLoading = document.getElementById('stateLoading');
+    const stateLeaveRequest = document.getElementById('stateLeaveRequest');
 
     const personPhotoContainer = document.getElementById('personPhotoContainer');
     const personName = document.getElementById('personName');
@@ -607,14 +1255,29 @@
     // ============ Chip Input Handler ============
     chipInput.focus();
 
+    // Mapování CZ klávesnice → číslice (RFID čtečka posílá čísla jako klávesy)
+    const czToDigit = {
+      'é': '0', '+': '1', 'ě': '2', 'š': '3', 'č': '4',
+      'ř': '5', 'ž': '6', 'ý': '7', 'á': '8', 'í': '9',
+    };
+
+    function fixCzKeyboard(raw) {
+      return raw.split('').map(ch => czToDigit[ch] || ch).join('');
+    }
+
     chipInput.addEventListener('blur', () => {
+      // Nepřefocusovat pokud je otevřen formulář (potřebujeme focus na inputy)
+      if (currentState === 'leave_request') return;
       setTimeout(() => chipInput.focus(), 0);
     });
 
     chipInput.addEventListener('keypress', async (e) => {
       if (e.key === 'Enter') {
-        const chipId = chipInput.value.trim();
+        const raw = chipInput.value.trim();
         chipInput.value = '';
+
+        // Přeložit CZ znaky na číslice
+        const chipId = fixCzKeyboard(raw);
 
         if (chipId && !isProcessing) {
           await handleChipScan(chipId);
@@ -622,22 +1285,118 @@
       }
     });
 
+    // ============ Zvukové efekty (Web Audio API) ============
+    let audioCtx = null;
+
+    function getAudioCtx() {
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      // Prohlížeč může AudioContext suspendovat — resumovat při každém volání
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      return audioCtx;
+    }
+
+    // Odemknout audio při jakémkoliv stisku klávesy (čtečka = klávesnice)
+    let audioUnlocked = false;
+    document.addEventListener('keydown', () => {
+      if (!audioUnlocked) {
+        getAudioCtx();
+        audioUnlocked = true;
+      }
+    }, { once: false });
+
+    // Přihlašovací znělka — veselá stoupající melodie
+    function playWelcomeChime() {
+      const ctx = getAudioCtx();
+      const now = ctx.currentTime;
+      const notes = [523, 659, 784, 1047]; // C5, E5, G5, C6 — vzestupný akord
+      const durations = [0.12, 0.12, 0.12, 0.25];
+
+      let offset = 0;
+      notes.forEach((freq, i) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+
+        osc.type = 'sine';
+        osc.frequency.value = freq;
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+
+        gain.gain.setValueAtTime(0, now + offset);
+        gain.gain.linearRampToValueAtTime(0.3, now + offset + 0.02);
+        gain.gain.linearRampToValueAtTime(0, now + offset + durations[i]);
+
+        osc.start(now + offset);
+        osc.stop(now + offset + durations[i] + 0.05);
+        offset += durations[i];
+      });
+    }
+
+    // Potvrzení akce — krátké pípnutí
+    function playConfirmSound() {
+      const ctx = getAudioCtx();
+      const now = ctx.currentTime;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      osc.type = 'sine';
+      osc.frequency.value = 880; // A5
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      gain.gain.setValueAtTime(0, now);
+      gain.gain.linearRampToValueAtTime(0.25, now + 0.02);
+      gain.gain.linearRampToValueAtTime(0, now + 0.15);
+
+      osc.start(now);
+      osc.stop(now + 0.2);
+    }
+
+    // Chyba — sestupný tón
+    function playErrorSound() {
+      const ctx = getAudioCtx();
+      const now = ctx.currentTime;
+      const notes = [440, 330]; // A4, E4
+
+      let offset = 0;
+      notes.forEach(freq => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+
+        osc.type = 'square';
+        osc.frequency.value = freq;
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+
+        gain.gain.setValueAtTime(0, now + offset);
+        gain.gain.linearRampToValueAtTime(0.15, now + offset + 0.02);
+        gain.gain.linearRampToValueAtTime(0, now + offset + 0.15);
+
+        osc.start(now + offset);
+        osc.stop(now + offset + 0.2);
+        offset += 0.15;
+      });
+    }
+
     // ============ API Calls ============
-    async function handleChipScan(chipId) {
-      if (currentState !== 'waiting') return;
+    async function handleChipScan(chipId, personId = null) {
+      // Povolit volání z 'waiting' stavu (nový scan) i z 'confirmation' (návrat po absence_in)
+      if (currentState !== 'waiting' && currentState !== 'confirmation') return;
 
       isProcessing = true;
       setState('loading');
 
       try {
+        // Pokud máme personId, použít přímo; jinak identifikovat čipem
+        const body = personId ? { person_id: personId } : { chip_id: chipId };
         const response = await fetch('/api/hr/kiosk/identify', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
-          body: JSON.stringify({ chip_id: chipId })
+          body: JSON.stringify(body)
         });
 
         if (!response.ok) {
+          playErrorSound();
           showError('Čip nebyl rozpoznán', 'Zkuste prosím znovu');
           isProcessing = false;
           return;
@@ -649,7 +1408,8 @@
         // Fetch absence types for this person
         await fetchAbsenceTypes();
 
-        // Show identified state
+        // Znělka + zobrazení profilu
+        playWelcomeChime();
         displayPerson(data);
         setState('identified');
       } catch (error) {
@@ -662,10 +1422,7 @@
 
     async function fetchAbsenceTypes() {
       try {
-        const response = await fetch('/api/hr/absence-types', {
-          credentials: 'include'
-        });
-
+        const response = await fetch('/api/hr/kiosk/absence-types');
         if (response.ok) {
           absenceTypes = await response.json();
         }
@@ -723,13 +1480,22 @@
           details = `Vítejte zpět, ${currentPerson.name}!`;
         }
 
+        playConfirmSound();
         showConfirmation(message, details);
 
-        // Reset after 3 seconds
-        setTimeout(() => {
-          reset();
-          isProcessing = false;
-        }, 3000);
+        // Po příchodu / návratu z nepřítomnosti → zpět na profil (zobrazit tlačítka)
+        if (action === 'clock_in' || action === 'absence_in') {
+          setTimeout(async () => {
+            await handleChipScan(null, currentPerson.id);
+            isProcessing = false;
+          }, 2000);
+        } else {
+          // Odchod / nepřítomnost → reset na čekací obrazovku
+          setTimeout(() => {
+            reset();
+            isProcessing = false;
+          }, 3000);
+        }
       } catch (error) {
         console.error('Action error:', error);
         showError('Chyba komunikace', 'Zkuste prosím znovu');
@@ -747,15 +1513,19 @@
       stateConfirmation.style.display = 'none';
       stateError.style.display = 'none';
       stateLoading.style.display = 'none';
+      stateLeaveRequest.style.display = 'none';
+      document.getElementById('stateOvertime').style.display = 'none';
       absenceMenu.style.display = 'none';
 
       // Show requested state
       switch (state) {
         case 'waiting':
           stateWaiting.style.display = 'flex';
+          clearTimeout(inactivityTimer); // na čekací obrazovce žádný timer
           break;
         case 'identified':
           stateIdentified.style.display = 'flex';
+          resetInactivityTimer(); // spustit 15s odpočet
           break;
         case 'confirmation':
           stateConfirmation.style.display = 'flex';
@@ -765,6 +1535,14 @@
           break;
         case 'loading':
           stateLoading.style.display = 'flex';
+          break;
+        case 'leave_request':
+          stateLeaveRequest.style.display = 'flex';
+          resetInactivityTimer();
+          break;
+        case 'overtime':
+          document.getElementById('stateOvertime').style.display = 'flex';
+          resetInactivityTimer();
           break;
       }
     }
@@ -788,15 +1566,153 @@
         personStatus.style.display = 'none';
       }
 
-      // Show/hide return button based on status
-      if (person.is_absent) {
-        btnReturnAbsence.style.display = 'block';
+      // === Stav: v práci / mimo práci / na přestávce/nepřítomnosti ===
+      const isAtWork = !!person.is_clocked_in;
+      let activeBreakType = null;
+      if (person.breaks) {
+        const activeBreak = person.breaks.find(b => b.is_open);
+        if (activeBreak) activeBreakType = activeBreak.type;
+      }
+      const hasActiveAbsence = person.is_absent;
+      const hasAnyActive = !!activeBreakType || hasActiveAbsence;
+
+      const identifiedLayout = document.querySelector('.identified-layout');
+      const identifiedRight = document.querySelector('.identified-right');
+      const identifiedBottom = document.querySelector('.identified-bottom');
+      const quickActions = document.querySelector('.quick-actions');
+      const breakSummary = document.getElementById('breakSummary');
+      const otWidget = document.getElementById('overtimeWidget');
+      const btnLeave = document.getElementById('btnLeaveRequest');
+      const btnBreakSnackOut = document.getElementById('btnBreakSnackOut');
+      const btnBreakLunchOut = document.getElementById('btnBreakLunchOut');
+      const snackInfo = document.getElementById('breakSnackInfo');
+      const lunchInfo = document.getElementById('breakLunchInfo');
+
+      if (!isAtWork) {
+        // === NENÍ V PRÁCI — centrovaný layout, jen příchod ===
+        identifiedLayout.style.gridTemplateColumns = '1fr';
+        identifiedLayout.style.justifyItems = 'center';
+        identifiedRight.style.display = 'none';
+        identifiedBottom.querySelector('.overtime-widget').style.display = 'none';
+        btnClockIn.style.display = 'block';
+        btnClockOut.style.display = 'none';
+        btnAbsence.style.display = 'none';
+        btnReturnAbsence.style.display = 'none';
+        btnLeave.style.display = 'none';
+        quickActions.style.display = 'none';
+        breakSummary.style.display = 'none';
+      } else if (hasAnyActive) {
+        // === V PRÁCI + aktivní nepřítomnost/přestávka — zobrazit NÁVRAT ===
+        identifiedLayout.style.gridTemplateColumns = '280px 1fr';
+        identifiedLayout.style.justifyItems = '';
+        identifiedRight.style.display = 'flex';
         btnClockIn.style.display = 'none';
         btnClockOut.style.display = 'none';
+        btnAbsence.style.display = 'block';
+        btnAbsence.disabled = true;
+        btnAbsence.style.opacity = '0.4';
+        btnLeave.style.display = 'none';
+        quickActions.style.display = 'flex';
+
+        // Dynamický text NÁVRAT tlačítka
+        const returnLabels = { snack: '↺ Návrat ze svačiny', lunch: '↺ Návrat z obědu' };
+        if (activeBreakType) {
+          btnReturnAbsence.textContent = returnLabels[activeBreakType] || '↺ Návrat';
+          btnReturnAbsence.dataset.returnType = 'break';
+          btnReturnAbsence.dataset.breakType = activeBreakType === 'snack' ? 'break_snack_in' : 'break_lunch_in';
+        } else {
+          btnReturnAbsence.textContent = '↺ Návrat z nepřítomnosti';
+          btnReturnAbsence.dataset.returnType = 'absence';
+          btnReturnAbsence.dataset.breakType = '';
+        }
+        btnReturnAbsence.style.display = 'block';
+
+        // Zablokovat odchody na přestávku
+        btnBreakSnackOut.disabled = true;
+        btnBreakLunchOut.disabled = true;
+        btnBreakSnackOut.style.opacity = '0.4';
+        btnBreakSnackOut.style.cursor = 'not-allowed';
+        btnBreakLunchOut.style.opacity = '0.4';
+        btnBreakLunchOut.style.cursor = 'not-allowed';
       } else {
-        btnReturnAbsence.style.display = 'none';
-        btnClockIn.style.display = 'block';
+        // === V PRÁCI, nic aktivního — zobrazit vše kromě příchodu ===
+        identifiedLayout.style.gridTemplateColumns = '280px 1fr';
+        identifiedLayout.style.justifyItems = '';
+        identifiedRight.style.display = 'flex';
+        btnClockIn.style.display = 'none';
         btnClockOut.style.display = 'block';
+        btnAbsence.style.display = 'block';
+        btnAbsence.disabled = false;
+        btnAbsence.style.opacity = '1';
+        btnReturnAbsence.style.display = 'none';
+        btnReturnAbsence.dataset.returnType = '';
+        btnReturnAbsence.dataset.breakType = '';
+        btnLeave.style.display = 'block';
+        quickActions.style.display = 'flex';
+
+        // Povolit odchody na přestávku
+        btnBreakSnackOut.disabled = false;
+        btnBreakLunchOut.disabled = false;
+        btnBreakSnackOut.style.opacity = '1';
+        btnBreakSnackOut.style.cursor = 'pointer';
+        btnBreakLunchOut.style.opacity = '1';
+        btnBreakLunchOut.style.cursor = 'pointer';
+      }
+
+      // === Přestávky — info o době (zobrazit vždy pokud jsou data) ===
+      snackInfo.textContent = '';
+      snackInfo.className = 'break-duration';
+      lunchInfo.textContent = '';
+      lunchInfo.className = 'break-duration';
+
+      if (person.breaks && person.breaks.length > 0) {
+        const snack = person.breaks.find(b => b.type === 'snack');
+        const lunch = person.breaks.find(b => b.type === 'lunch');
+
+        if (snack) {
+          const mins = snack.duration || 0;
+          snackInfo.textContent = snack.is_open ? `⏱ ${mins} min...` : `${mins} min`;
+          snackInfo.className = 'break-duration ' + (snack.is_open ? 'active' : (mins > 20 ? 'over' : 'ok'));
+        }
+
+        if (lunch) {
+          const mins = lunch.duration || 0;
+          lunchInfo.textContent = lunch.is_open ? `⏱ ${mins} min...` : `${mins} min`;
+          lunchInfo.className = 'break-duration ' + (lunch.is_open ? 'active' : (mins > 30 ? 'over' : 'ok'));
+        }
+      }
+
+      // Souhrnný řádek přestávek
+      if (isAtWork && person.total_break_minutes > 0) {
+        const allowed = person.allowed_break_minutes || 30;
+        const total = person.total_break_minutes;
+        const isOver = person.break_over_limit;
+        breakSummary.style.display = 'block';
+        breakSummary.className = 'break-summary ' + (isOver ? 'over' : 'ok');
+        breakSummary.textContent = isOver
+          ? `⚠ Celkem ${total} min přestávek (povoleno ${allowed} min) — překročeno o ${total - allowed} min!`
+          : `Celkem ${total} min přestávek z ${allowed} min povolených`;
+      } else {
+        breakSummary.style.display = 'none';
+      }
+
+      // === Přesčasy (zobrazit jen když je v práci) ===
+      const otValue = document.getElementById('overtimeValue');
+      const otDetails = document.getElementById('overtimeDetails');
+
+      if (isAtWork && person.overtime) {
+        const ot = person.overtime;
+        const hours = ot.overtime_hours;
+        const absHours = Math.abs(hours);
+        const h = Math.floor(absHours);
+        const m = Math.round((absHours - h) * 60);
+
+        otValue.textContent = (hours >= 0 ? '+' : '-') + h + 'h' + (m > 0 ? ' ' + m + 'm' : '');
+        otValue.className = 'overtime-value ' + (hours > 0 ? 'positive' : hours < 0 ? 'negative' : 'zero');
+        otDetails.textContent = `Odpracováno ${ot.worked_hours}h / fond ${ot.expected_hours}h`;
+        otWidget.style.display = 'flex';
+      } else {
+        otWidget.style.display = 'none';
       }
     }
 
@@ -838,8 +1754,82 @@
     });
 
     btnReturnAbsence.addEventListener('click', () => {
-      recordAction('absence_in');
+      const returnType = btnReturnAbsence.dataset.returnType;
+      if (returnType === 'break') {
+        // Návrat z přestávky — použít break endpoint
+        const breakType = btnReturnAbsence.dataset.breakType;
+        if (breakType) recordBreak(breakType);
+      } else {
+        // Návrat z nepřítomnosti — klasický absence_in
+        recordAction('absence_in');
+      }
     });
+
+    document.getElementById('btnBack').addEventListener('click', () => {
+      reset();
+    });
+
+    // ============ Rychlé akce — přestávky ============
+    async function recordBreak(breakType) {
+      if (!currentPerson || isProcessing) return;
+      // Kontrola — pokud je tlačítko disabled, ignoruj (jen odchody mají tlačítka)
+      const btnMap = {
+        break_snack_out: 'btnBreakSnackOut',
+        break_lunch_out: 'btnBreakLunchOut',
+      };
+      if (btnMap[breakType]) {
+        const btn = document.getElementById(btnMap[breakType]);
+        if (btn && btn.disabled) return;
+      }
+
+      isProcessing = true;
+      setState('loading');
+
+      try {
+        const response = await fetch('/api/hr/kiosk/break', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            person_id: currentPerson.id,
+            break_type: breakType,
+          }),
+        });
+
+        if (!response.ok) {
+          const err = await response.json().catch(() => ({}));
+          playErrorSound();
+          showError('Nepodařilo se zaznamenat', err.error || 'Zkuste prosím znovu');
+          isProcessing = false;
+          return;
+        }
+
+        const labels = {
+          break_snack_out: 'Odchod na svačinu',
+          break_snack_in: 'Návrat ze svačiny',
+          break_lunch_out: 'Odchod na oběd',
+          break_lunch_in: 'Návrat z obědu',
+        };
+
+        playConfirmSound();
+        showConfirmation(labels[breakType] || breakType, currentPerson.name);
+
+        const isReturn = breakType.endsWith('_in');
+        setTimeout(() => {
+          if (isReturn && currentPerson) {
+            // Po návratu z přestávky — zpět na profil (obnovit data)
+            handleChipScan(null, currentPerson.id);
+          } else {
+            reset();
+          }
+          isProcessing = false;
+        }, 2000);
+      } catch (error) {
+        console.error('Break error:', error);
+        playErrorSound();
+        showError('Chyba komunikace', 'Zkuste prosím znovu');
+        isProcessing = false;
+      }
+    }
 
     // ============ Absence Menu ============
     function showAbsenceMenu(button) {
@@ -877,22 +1867,263 @@
       }
     });
 
-    // ============ Keep focus on input ============
-    window.addEventListener('focus', () => {
-      if (currentState === 'waiting') {
-        chipInput.focus();
+    // ============ Leave Request ============
+    const btnLeaveRequest = document.getElementById('btnLeaveRequest');
+    const btnLeaveCancel = document.getElementById('btnLeaveCancel');
+    const btnLeaveSubmit = document.getElementById('btnLeaveSubmit');
+
+    btnLeaveRequest.addEventListener('click', async () => {
+      // Nastavit dnešní datum jako výchozí
+      const today = new Date().toISOString().split('T')[0];
+      document.getElementById('leaveFrom').value = today;
+      document.getElementById('leaveTo').value = today;
+      document.getElementById('leaveNote').value = '';
+      document.getElementById('leaveType').value = 'vacation';
+
+      // Načíst existující žádosti
+      await loadMyRequests();
+
+      setState('leave_request');
+    });
+
+    btnLeaveCancel.addEventListener('click', () => {
+      setState('identified');
+    });
+
+    btnLeaveSubmit.addEventListener('click', async () => {
+      const type = document.getElementById('leaveType').value;
+      const dateFrom = document.getElementById('leaveFrom').value;
+      const dateTo = document.getElementById('leaveTo').value;
+      const note = document.getElementById('leaveNote').value;
+
+      if (!dateFrom || !dateTo) {
+        showError('Vyplňte datum', 'Je potřeba zadat od a do');
+        return;
+      }
+
+      if (new Date(dateTo) < new Date(dateFrom)) {
+        showError('Chybné datum', 'Datum "do" nemůže být před datem "od"');
+        return;
+      }
+
+      isProcessing = true;
+      setState('loading');
+
+      try {
+        const response = await fetch('/api/hr/kiosk/leave-request', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            person_id: currentPerson.id,
+            type,
+            date_from: dateFrom,
+            date_to: dateTo,
+            note: note || null,
+          }),
+        });
+
+        if (!response.ok) {
+          const err = await response.json().catch(() => ({}));
+          showError('Nepodařilo se odeslat', err.error || 'Zkuste prosím znovu');
+          isProcessing = false;
+          return;
+        }
+
+        const typeLabels = {
+          vacation: 'Dovolená',
+          sick: 'Nemocenská',
+          personal: 'Osobní volno',
+          unpaid: 'Neplacené volno',
+        };
+
+        showConfirmation(
+          'Žádost odeslána',
+          `${typeLabels[type] || type}: ${dateFrom} — ${dateTo}`
+        );
+
+        setTimeout(() => {
+          reset();
+          isProcessing = false;
+        }, 3000);
+      } catch (error) {
+        console.error('Leave request error:', error);
+        showError('Chyba komunikace', 'Zkuste prosím znovu');
+        isProcessing = false;
       }
     });
 
-    // Auto-reset on inactivity (10 minutes)
+    async function loadMyRequests() {
+      if (!currentPerson) return;
+
+      const container = document.getElementById('myRequestsContainer');
+      const list = document.getElementById('myRequestsList');
+
+      try {
+        const response = await fetch(`/api/hr/kiosk/my-leave-requests?person_id=${currentPerson.id}`);
+        if (!response.ok) return;
+
+        const requests = await response.json();
+        if (requests.length === 0) {
+          container.style.display = 'none';
+          return;
+        }
+
+        const statusLabels = {
+          pending: 'Čeká',
+          approved: 'Schváleno',
+          rejected: 'Zamítnuto',
+        };
+
+        const typeLabels = {
+          vacation: 'Dovolená',
+          sick: 'Nemocenská',
+          personal: 'Osobní volno',
+          unpaid: 'Neplacené volno',
+        };
+
+        list.innerHTML = requests.map(r => {
+          const from = new Date(r.date_from).toLocaleDateString('cs-CZ');
+          const to = new Date(r.date_to).toLocaleDateString('cs-CZ');
+          const statusClass = r.status;
+          const statusLabel = statusLabels[r.status] || r.status;
+          const typeLabel = typeLabels[r.type] || r.type;
+          return `
+            <div class="request-item">
+              <span>${typeLabel}: ${from} — ${to}</span>
+              <span class="request-status ${statusClass}">${statusLabel}</span>
+            </div>
+          `;
+        }).join('');
+
+        container.style.display = 'block';
+      } catch (error) {
+        console.error('Load requests error:', error);
+      }
+    }
+
+    // ============ Převod přesčasů ============
+    document.getElementById('btnOvertimeTransfer').addEventListener('click', () => {
+      if (!currentPerson) return;
+      const ot = currentPerson.overtime;
+      if (ot) {
+        document.getElementById('otFormValue').textContent = (ot.overtime_hours >= 0 ? '+' : '') + ot.overtime_hours + 'h';
+        document.getElementById('otFormValue').style.color = ot.overtime_hours >= 0 ? '#22c55e' : '#ef4444';
+        document.getElementById('otFormWorked').textContent = ot.worked_hours + 'h';
+        document.getElementById('otFormExpected').textContent = ot.expected_hours + 'h';
+      }
+      document.getElementById('otHours').value = '';
+      document.getElementById('otNote').value = '';
+      document.getElementById('otType').value = 'transfer_to_leave';
+
+      // Načíst čekající žádosti
+      loadPendingOvertimeRequests();
+      setState('overtime');
+    });
+
+    document.getElementById('btnOtCancel').addEventListener('click', () => {
+      setState('identified');
+    });
+
+    document.getElementById('btnOtSubmit').addEventListener('click', async () => {
+      const type = document.getElementById('otType').value;
+      const hours = parseFloat(document.getElementById('otHours').value);
+      const note = document.getElementById('otNote').value;
+
+      if (!hours || hours <= 0) {
+        showError('Vyplňte hodiny', 'Zadejte počet hodin k převodu');
+        return;
+      }
+
+      isProcessing = true;
+      setState('loading');
+
+      try {
+        const response = await fetch('/api/hr/kiosk/overtime-request', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            person_id: currentPerson.id,
+            hours,
+            type,
+            note: note || null,
+          }),
+        });
+
+        if (!response.ok) {
+          const err = await response.json().catch(() => ({}));
+          playErrorSound();
+          showError('Nepodařilo se odeslat', err.error || 'Zkuste prosím znovu');
+          isProcessing = false;
+          return;
+        }
+
+        const typeLabels = {
+          transfer_to_leave: 'Převod na volno',
+          transfer_to_pay: 'Proplacení',
+          debt_work: 'Odpracování dluhu',
+        };
+
+        playConfirmSound();
+        showConfirmation('Žádost odeslána', `${typeLabels[type]}: ${hours}h`);
+
+        setTimeout(() => {
+          reset();
+          isProcessing = false;
+        }, 3000);
+      } catch (error) {
+        console.error('Overtime request error:', error);
+        playErrorSound();
+        showError('Chyba komunikace', 'Zkuste prosím znovu');
+        isProcessing = false;
+      }
+    });
+
+    async function loadPendingOvertimeRequests() {
+      if (!currentPerson) return;
+      try {
+        const response = await fetch(`/api/hr/kiosk/overtime?person_id=${currentPerson.id}`);
+        if (!response.ok) return;
+        const data = await response.json();
+
+        const list = document.getElementById('otPendingList');
+        const items = document.getElementById('otPendingItems');
+
+        if (data.pending_requests && data.pending_requests.length > 0) {
+          const typeLabels = {
+            transfer_to_leave: 'Na volno',
+            transfer_to_pay: 'Proplacení',
+            debt_work: 'Odpracování',
+          };
+          items.innerHTML = data.pending_requests.map(r => `
+            <div class="pending-item">
+              <span>${typeLabels[r.type] || r.type}: ${r.hours}h</span>
+              <span class="request-status pending">Čeká</span>
+            </div>
+          `).join('');
+          list.style.display = 'block';
+        } else {
+          list.style.display = 'none';
+        }
+      } catch (e) {
+        console.error('Load overtime requests error:', e);
+      }
+    }
+
+    // ============ Keep focus on input ============
+    window.addEventListener('focus', () => {
+      if (currentState === 'waiting') chipInput.focus();
+    });
+
+    // Auto-reset — po 15s neaktivity na profilu/formuláři se vrátí na čekací obrazovku
     let inactivityTimer;
     function resetInactivityTimer() {
       clearTimeout(inactivityTimer);
+      if (currentState === 'waiting') return; // na čekací obrazovce timer nepotřebujeme
       inactivityTimer = setTimeout(() => {
         if (currentState !== 'waiting') {
           reset();
         }
-      }, 10 * 60 * 1000);
+      }, 15 * 1000);
     }
 
     chipInput.addEventListener('input', resetInactivityTimer);
@@ -900,6 +2131,9 @@
     btnClockOut.addEventListener('click', resetInactivityTimer);
     btnAbsence.addEventListener('click', resetInactivityTimer);
     btnReturnAbsence.addEventListener('click', resetInactivityTimer);
+    btnLeaveRequest.addEventListener('click', resetInactivityTimer);
+    btnLeaveSubmit.addEventListener('click', resetInactivityTimer);
+    btnLeaveCancel.addEventListener('click', resetInactivityTimer);
 
     // Initialize
     resetInactivityTimer();

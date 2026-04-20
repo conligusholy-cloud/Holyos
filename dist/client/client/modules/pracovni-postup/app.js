@@ -1,6 +1,6 @@
 /* ============================================
-   app.js — Pracovní postup: Hlavní logika
-   Záložky Výrobky / Polotovary + vyhledávání
+   app.ts — Pracovní postup: Hlavní logika
+   Seznam výrobků + vyhledávání
    ============================================ */
 import { FactorifyAPI } from './factorify-api.js';
 const dom = {
@@ -10,9 +10,6 @@ const dom = {
     statusText: null,
     countBadge: null,
 };
-let allProducts = [];
-let allSemiProducts = [];
-let activeTab = 'product';
 // ---- Inicializace ----
 document.addEventListener('DOMContentLoaded', () => {
     dom.productList = document.getElementById('product-list');
@@ -20,74 +17,40 @@ document.addEventListener('DOMContentLoaded', () => {
     dom.statusDot = document.getElementById('status-dot');
     dom.statusText = document.getElementById('status-text');
     dom.countBadge = document.getElementById('count-badge');
+    // Vyhledávání
     if (dom.searchInput) {
         dom.searchInput.addEventListener('input', () => {
             filterProducts(dom.searchInput.value);
         });
     }
+    // Automaticky načíst výrobky
     loadProducts();
 });
-// ---- Načíst vše ----
+// ---- Načíst výrobky ----
 export async function loadProducts() {
     showLoading();
-    updateStatus('loading', 'Načítám data...');
+    updateStatus('loading', 'Připojuji se k Factorify...');
     try {
-        // Načíst obě kategorie paralelně
-        const [products, semiProducts] = await Promise.all([
-            fetchItems('product'),
-            fetchItems('semi-product'),
-        ]);
-        allProducts = products;
-        allSemiProducts = semiProducts;
-        // Aktualizovat počty v záložkách
-        const countProducts = document.getElementById('count-products');
-        const countSemi = document.getElementById('count-semi');
-        if (countProducts) countProducts.textContent = String(allProducts.length);
-        if (countSemi) countSemi.textContent = String(allSemiProducts.length);
-        const total = allProducts.length + allSemiProducts.length;
-        updateStatus('connected', `Připojeno — ${total} položek`);
-        // Zobrazit aktivní záložku
-        renderActiveTab();
+        const products = await FactorifyAPI.loadProducts();
+        updateStatus('connected', `Připojeno — ${products.length} výrobků`);
+        if (dom.countBadge)
+            dom.countBadge.textContent = String(products.length);
+        renderProducts(products);
     }
     catch (err) {
         updateStatus('disconnected', 'Chyba připojení');
         showError(err.message);
     }
 }
-async function fetchItems(type) {
-    const resp = await fetch(`/api/production/products?type=${type}`, { headers: { 'Accept': 'application/json' } });
-    if (!resp.ok) throw new Error(`API ${resp.status}`);
-    return await resp.json();
-}
-// ---- Přepínání záložek ----
-export function switchTab(tab) {
-    activeTab = tab;
-    // UI záložek
-    document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
-    if (tab === 'product') {
-        document.getElementById('tab-products')?.classList.add('active');
-    } else {
-        document.getElementById('tab-semi')?.classList.add('active');
-    }
-    // Reset vyhledávání
-    if (dom.searchInput) dom.searchInput.value = '';
-    renderActiveTab();
-}
-function renderActiveTab() {
-    const items = activeTab === 'product' ? allProducts : allSemiProducts;
-    const label = activeTab === 'product' ? 'výrobek' : 'polotovar';
-    if (dom.countBadge) dom.countBadge.textContent = String(items.length);
-    renderProducts(items, label);
-}
-// ---- Render seznamu ----
-function renderProducts(products, typeLabel) {
-    if (!dom.productList) return;
+// ---- Render seznamu výrobků ----
+function renderProducts(products) {
+    if (!dom.productList)
+        return;
     if (!products || products.length === 0) {
-        const label = typeLabel || 'položky';
         dom.productList.innerHTML = `
       <div class="empty-state">
         <div class="empty-icon">📦</div>
-        <p>Žádné ${label} nenalezeny</p>
+        <p>Žádné výrobky nenalezeny</p>
         <button class="btn" onclick="loadProducts()">Zkusit znovu</button>
       </div>`;
         return;
@@ -96,11 +59,10 @@ function renderProducts(products, typeLabel) {
     products.forEach(p => {
         const code = p.code ? escapeHtml(p.code) : '—';
         const name = escapeHtml(p.name);
-        const type = escapeHtml(p.type || '');
-        const icon = activeTab === 'product' ? '🔧' : '⚙️';
+        const type = escapeHtml(p.type || 'Výrobek');
         html += `
       <div class="product-card" onclick="openProduct('${p.id}')" data-name="${name.toLowerCase()}" data-code="${code.toLowerCase()}">
-        <div class="product-card-icon">${icon}</div>
+        <div class="product-card-icon">🔧</div>
         <div class="product-card-info">
           <div class="product-card-name">${name}</div>
           <div class="product-card-meta">
@@ -125,54 +87,61 @@ export function filterProducts(query) {
         const code = card.dataset.code || '';
         const match = !q || name.includes(q) || code.includes(q);
         card.style.display = match ? '' : 'none';
-        if (match) visible++;
+        if (match)
+            visible++;
     });
-    const total = activeTab === 'product' ? allProducts.length : allSemiProducts.length;
     if (dom.countBadge) {
-        dom.countBadge.textContent = q ? `${visible}/${total}` : String(total);
+        dom.countBadge.textContent = q ? `${visible}/${FactorifyAPI.products.length}` : String(FactorifyAPI.products.length);
     }
 }
-// ---- Otevřít detail ----
+// ---- Otevřít detail výrobku ----
 export function openProduct(productId) {
     window.location.href = 'modules/pracovni-postup/detail.html?id=' + productId;
 }
-// ---- UI stavy ----
+// ---- Stavy UI ----
 function showLoading() {
-    if (!dom.productList) return;
+    if (!dom.productList)
+        return;
     dom.productList.innerHTML = `
     <div class="loading-state">
       <div class="loading-spinner"></div>
-      <p>Načítám data...</p>
+      <p>Načítám výrobky z Factorify...</p>
     </div>`;
 }
 function showError(message) {
-    if (!dom.productList) return;
+    if (!dom.productList)
+        return;
     dom.productList.innerHTML = `
     <div class="error-state">
       <div class="error-icon">⚠️</div>
       <div class="error-msg">${escapeHtml(message)}</div>
-      <button class="btn" onclick="loadProducts()" style="margin-top:12px;">Zkusit znovu</button>
+      <p style="font-size:12px; margin-bottom:16px;">Zkontrolujte, že běží proxy server (node proxy-server.js)</p>
+      <button class="btn" onclick="loadProducts()">Zkusit znovu</button>
     </div>`;
 }
 function updateStatus(state, text) {
-    if (dom.statusDot) dom.statusDot.className = 'status-dot ' + state;
-    if (dom.statusText) dom.statusText.textContent = text;
+    if (dom.statusDot)
+        dom.statusDot.className = 'status-dot ' + state;
+    if (dom.statusText)
+        dom.statusText.textContent = text;
 }
 // ---- Helpers ----
 export function escapeHtml(str) {
-    if (!str) return '';
+    if (!str)
+        return '';
     const div = document.createElement('div');
     div.textContent = str;
     return div.innerHTML;
 }
 export function showToast(message) {
     const toast = document.getElementById('toast');
-    if (!toast) return;
+    if (!toast)
+        return;
     toast.textContent = message;
     toast.classList.add('show');
     setTimeout(() => toast.classList.remove('show'), 2500);
 }
-// Expose global functions for onclick handlers
+// Expose global functions for onclick handlers in HTML
 window.openProduct = openProduct;
 window.loadProducts = loadProducts;
-window.switchTab = switchTab;
+//# sourceMappingURL=app.js.map
