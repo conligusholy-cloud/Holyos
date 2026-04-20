@@ -1388,4 +1388,111 @@ router.get('/forecast', async (req, res, next) => {
   }
 });
 
+// --- PRODEJNI CENIK ---
+// Samostatne prodejni polozky (service, zbozi i vyrobky) s cenami v Kc a EUR
+// bez DPH. Volitelne propojeni na Product pres product_id.
+
+function parsePrice(v) {
+  if (v === undefined || v === null || v === '') return null;
+  const n = Number(v);
+  return isNaN(n) ? null : n;
+}
+
+// GET /api/wh/pricelist?active=true&search=...&product_id=X
+router.get('/pricelist', async (req, res, next) => {
+  try {
+    const { search, active, product_id } = req.query;
+    const where = {};
+    if (active !== undefined) where.active = active === 'true';
+    if (product_id) where.product_id = parseInt(product_id, 10);
+    if (search) {
+      where.OR = [
+        { name_cs: { contains: search, mode: 'insensitive' } },
+        { name_en: { contains: search, mode: 'insensitive' } },
+      ];
+    }
+    const items = await prisma.salesPricelistItem.findMany({
+      where,
+      include: {
+        product: { select: { id: true, code: true, name: true, type: true } },
+      },
+      orderBy: [{ active: 'desc' }, { name_cs: 'asc' }],
+    });
+    res.json(items);
+  } catch (err) { next(err); }
+});
+
+// GET /api/wh/pricelist/:id
+router.get('/pricelist/:id', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const item = await prisma.salesPricelistItem.findUnique({
+      where: { id },
+      include: {
+        product: { select: { id: true, code: true, name: true, type: true } },
+      },
+    });
+    if (!item) return res.status(404).json({ error: 'Polozka ceniku nenalezena' });
+    res.json(item);
+  } catch (err) { next(err); }
+});
+
+// POST /api/wh/pricelist
+router.post('/pricelist', async (req, res, next) => {
+  try {
+    const { name_cs, name_en, price_czk, price_eur, product_id, note, active } = req.body || {};
+    if (!name_cs || !String(name_cs).trim()) {
+      return res.status(400).json({ error: 'Povinny je alespon cesky nazev (name_cs).' });
+    }
+    const created = await prisma.salesPricelistItem.create({
+      data: {
+        name_cs: String(name_cs).trim(),
+        name_en: name_en ? String(name_en).trim() : null,
+        price_czk: parsePrice(price_czk),
+        price_eur: parsePrice(price_eur),
+        product_id: product_id ? parseInt(product_id, 10) : null,
+        note: note || null,
+        active: active === undefined ? true : !!active,
+      },
+      include: {
+        product: { select: { id: true, code: true, name: true, type: true } },
+      },
+    });
+    res.status(201).json(created);
+  } catch (err) { next(err); }
+});
+
+// PUT /api/wh/pricelist/:id
+router.put('/pricelist/:id', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const { name_cs, name_en, price_czk, price_eur, product_id, note, active } = req.body || {};
+    const data = {};
+    if (name_cs !== undefined) data.name_cs = String(name_cs).trim();
+    if (name_en !== undefined) data.name_en = name_en ? String(name_en).trim() : null;
+    if (price_czk !== undefined) data.price_czk = parsePrice(price_czk);
+    if (price_eur !== undefined) data.price_eur = parsePrice(price_eur);
+    if (product_id !== undefined) data.product_id = product_id ? parseInt(product_id, 10) : null;
+    if (note !== undefined) data.note = note || null;
+    if (active !== undefined) data.active = !!active;
+    const updated = await prisma.salesPricelistItem.update({
+      where: { id },
+      data,
+      include: {
+        product: { select: { id: true, code: true, name: true, type: true } },
+      },
+    });
+    res.json(updated);
+  } catch (err) { next(err); }
+});
+
+// DELETE /api/wh/pricelist/:id
+router.delete('/pricelist/:id', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    await prisma.salesPricelistItem.delete({ where: { id } });
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
 module.exports = router;

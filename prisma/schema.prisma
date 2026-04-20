@@ -842,9 +842,32 @@ model Product {
   operations    ProductOperation[]
   bom_usages    OperationMaterial[]  // kde se tento produkt používá jako BOM položka
   config_groups ProductConfigGroup[] // konfigurační skupiny (Rám, Barva, ...)
+  pricelist_items SalesPricelistItem[] // položky v prodejním ceníku navázané na výrobek
 
   @@index([factorify_id])
   @@map("products")
+}
+
+// Prodejní ceník — samostatné prodejní položky s cenami v Kč a EUR bez DPH.
+// Volitelně lze položku propojit s Product (výrobkem). Vhodné pro výrobky,
+// služby, příslušenství nebo zboží, které zatím nemá výrobní kus.
+model SalesPricelistItem {
+  id         Int       @id @default(autoincrement())
+  name_cs    String    @db.VarChar(255)               // název česky (povinný)
+  name_en    String?   @db.VarChar(255)               // název anglicky
+  price_czk  Decimal?  @db.Decimal(12,2)              // Kč bez DPH
+  price_eur  Decimal?  @db.Decimal(12,2)              // EUR bez DPH
+  product_id Int?                                     // volitelné propojení na Product
+  product    Product?  @relation(fields: [product_id], references: [id], onDelete: SetNull)
+  active     Boolean   @default(true)                 // aktivní / zrušená položka
+  note       String?   @db.Text                       // interní poznámka
+
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+
+  @@index([product_id])
+  @@index([active])
+  @@map("sales_pricelist_items")
 }
 
 // Hala (seskupení pracovišť)
