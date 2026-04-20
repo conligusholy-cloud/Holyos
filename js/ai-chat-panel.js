@@ -7,6 +7,10 @@
 (function() {
   'use strict';
 
+  // Zamezení dvojitému načtení
+  if (window.__aiChatPanelLoaded) return;
+  window.__aiChatPanelLoaded = true;
+
   // --- Stav ---
   let isOpen = false;
   let history = [];

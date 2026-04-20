@@ -8,6 +8,7 @@ export function renderSidebar(activeModule) {
         { id: 'programovani-vyroby', name: 'Programování výroby', icon: '&#9881;', color: '#f59e0b', active: true },
         { id: 'simulace-vyroby', name: 'Simulace výroby', icon: '&#9654;', color: '#22c55e', active: true },
         { id: 'pracovni-postup', name: 'Pracovní postup', icon: '&#128295;', color: '#06b6d4', active: true },
+        { id: 'pracoviste', name: 'Pracoviště', icon: '&#127981;', color: '#14b8a6', active: true },
         { id: 'nakup-sklad', name: 'Nákup a sklad', icon: '&#128176;', color: '#f59e0b', active: true },
         { id: 'ai-agenti', name: 'AI Agenti', icon: '&#129302;', color: '#8b5cf6', active: true },
         { id: 'planovani', name: 'Plánování výroby', icon: '&#128197;', color: '#3b82f6', active: false },
@@ -93,13 +94,6 @@ export function renderSidebar(activeModule) {
         }
     })
         .catch(() => { });
-    // --- AI Chat Panel: dynamicky načíst, pokud ještě není ---
-    if (!document.getElementById('ai-chat-script')) {
-        const chatScript = document.createElement('script');
-        chatScript.id = 'ai-chat-script';
-        chatScript.src = '/js/ai-chat-panel.js';
-        document.body.appendChild(chatScript);
-    }
 }
 /**
  * Compute base path from current location to project root

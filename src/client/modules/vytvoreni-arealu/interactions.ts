@@ -3,7 +3,7 @@
    ============================================ */
 
 import { state } from './state.js';
-import { dom, screenToWorld, updateTransform, renderAll, snapToGrid, getPolygonBBox, svgEl, renderDrawPreview, renderEntrancePlacePreview, renderWallDrawPreview, renderWallSnapHover, renderGatePlacePreview, isPointInPolygon } from './renderer.js';
+import { dom, screenToWorld, updateTransform, renderAll, snapToGrid, getPolygonBBox, svgEl, renderDrawPreview, renderEntrancePlacePreview, renderWallDrawPreview, renderGatePlacePreview, isPointInPolygon } from './renderer.js';
 import { COLORS, DEFAULT_SIZES, ENTRANCE_TYPES } from './config.js';
 import { createObject, createPolygonObject, findObjectAt, selectObject, deleteObject, duplicateObject, moveVertex, movePolygon, findNearestArealEdge, addWall, findNearestWall, projectOntoWall, addGate, addRoomLabel, rotatePolygon, addEntrance } from './objects.js';
 import type { ObjectType } from '../../../shared/types.js';
@@ -55,8 +55,14 @@ export function cancelDrawMode(): void {
 }
 
 export function finishPolygon(): void {
-  if (state.drawPoints.length >= 3) {
-    createPolygonObject(state.drawType, state.drawPoints);
+  if (state.drawType === 'stena') {
+    // Enter/dvojklik v režimu stěny → otevřená polyline (stěny bez uzavření)
+    if (state.drawPoints.length >= 2) finalizeWallsFromDrawPoints(false);
+    else cancelDrawMode();
+    return;
+  }
+  if (state.drawPoints.length >= 3 && state.drawType) {
+    createPolygonObject(state.drawType as any, state.drawPoints);
   }
   cancelDrawMode();
 }
@@ -171,7 +177,7 @@ export function cancelEntrancePlacement(): void {
 export function handleEntranceClick(world: any): void {
   const nearest = findNearestArealEdge(world.x, world.y);
   if (!nearest) {
-    showToast('Klikni blíž k hraně areálu nebo haly');
+    showToast('Klikni blíž k hraně areálu, haly nebo stěny');
     return;
   }
 
@@ -186,24 +192,29 @@ export function handleEntranceClick(world: any): void {
     state.entrancePlaceFirstPoint = {
       objId: nearest.objId,
       edgeIndex: nearest.edgeIndex,
+      wallId: nearest.wallId,
       t: nearest.t,
       px: nearest.px,
       py: nearest.py,
-    };
+    } as any;
     updateDrawStatus();
   } else {
-    // Druhý bod — musí být na stejné hraně
-    const fp = state.entrancePlaceFirstPoint;
+    // Druhý bod — musí být na stejné hraně nebo stejné stěně
+    const fp = state.entrancePlaceFirstPoint as any;
     if (!fp) {
       showToast('Chyba: první bod vjezdu nenalezen');
       return;
     }
-    if (nearest.objId !== fp.objId || nearest.edgeIndex !== fp.edgeIndex) {
-      showToast('Druhý bod musí být na stejné hraně');
+    const sameEdge = nearest.objId === fp.objId &&
+      (fp.wallId != null
+        ? nearest.wallId === fp.wallId
+        : nearest.edgeIndex === fp.edgeIndex && nearest.wallId == null);
+    if (!sameEdge) {
+      showToast('Druhý bod musí být na stejné hraně/stěně');
       return;
     }
 
-    addEntrance(fp.objId, fp.edgeIndex, fp.t, nearest.t, state.entrancePlaceType);
+    addEntrance(fp.objId, fp.edgeIndex, fp.t, nearest.t, state.entrancePlaceType, fp.wallId);
     selectObject(fp.objId);
     cancelEntrancePlacement();
   }
@@ -213,208 +224,162 @@ export function handleEntranceClick(world: any): void {
 // WALL DRAW MODE (stěny v hale)
 // ============================
 
-export function startWallDrawMode(objId: number): void {
-  cancelAllModes();
-  state.wallDrawMode = true;
-  state.wallDrawObjId = objId;
-  state.wallDrawStart = null;
-  state.wallDrawSnap = null;
-  if (dom.container) dom.container.style.cursor = 'crosshair';
-  if (dom.container) dom.container.classList.add('drawing');
-  updateDrawStatus();
-  showWallDistInput();
+// Kreslení stěny — zapne klasický drawMode s typem 'stena'.
+// Stejné UX jako hala: bod-po-bodu klikáním, H/V zámek, input na délku hrany.
+// Po druhém bodu se stěna automaticky dokončí (spec. větev v handleDrawClick).
+export function startWallDrawModeGlobal(): void {
+  startDrawMode('stena');
 }
 
+// Kompatibilita — staré volání, přesměrováno na cancelDrawMode
 export function cancelWallDrawMode(): void {
-  state.wallDrawMode = false;
-  state.wallDrawObjId = null;
-  state.wallDrawStart = null;
-  if (dom.snapLayer) dom.snapLayer.innerHTML = '';
-  if (dom.container) dom.container.style.cursor = '';
-  if (dom.container) dom.container.classList.remove('drawing');
-  hideWallDistInput();
-  updateDrawStatus();
+  if (state.drawMode && state.drawType === 'stena') cancelDrawMode();
 }
 
-interface EdgeSnap {
-  edgeType: string;
-  edgeIndex?: number;
-  wallId?: number;
-  x: number;
-  y: number;
-  t: number;
-  edgeStart: any;
-  edgeEnd: any;
-  edgeLen: number;
-  distFromStart: number;
+// Point-in-polygon test (ray casting) — lokální kopie
+function wallPointInPoly(x: number, y: number, points: Array<{ x: number; y: number }>): boolean {
+  let inside = false;
+  for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
+    const xi = points[i].x, yi = points[i].y;
+    const xj = points[j].x, yj = points[j].y;
+    const intersect = ((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+    if (intersect) inside = !inside;
+  }
+  return inside;
 }
 
-function findNearestEdgeInHall(obj: any, wx: number, wy: number): EdgeSnap | null {
-  let best: EdgeSnap | null = null;
+// Vzdálenost bodu k nejbližšímu bodu polygonu (0 pokud je bod uvnitř)
+function distanceToPolygon(x: number, y: number, points: Array<{ x: number; y: number }>): number {
+  if (wallPointInPoly(x, y, points)) return 0;
+  let minD = Infinity;
+  for (let i = 0; i < points.length; i++) {
+    const p1 = points[i];
+    const p2 = points[(i + 1) % points.length];
+    const dx = p2.x - p1.x, dy = p2.y - p1.y;
+    const lenSq = dx * dx + dy * dy;
+    let t = lenSq > 0.0001 ? ((x - p1.x) * dx + (y - p1.y) * dy) / lenSq : 0;
+    t = Math.max(0, Math.min(1, t));
+    const px = p1.x + t * dx, py = p1.y + t * dy;
+    const d = Math.sqrt((x - px) ** 2 + (y - py) ** 2);
+    if (d < minD) minD = d;
+  }
+  return minD;
+}
+
+// Najdi halu pro stěnu: primárně tu, uvnitř které bod leží;
+// pokud žádná neobsahuje bod, vrať nejbližší halu.
+// Pokud žádná hala neexistuje, vrátí null.
+function findHallAt(x: number, y: number): any | null {
+  const halls = state.objects.filter((o: any) =>
+    o.type === 'hala' && o.points && o.points.length >= 3,
+  );
+  if (halls.length === 0) return null;
+
+  // 1) Haly, které bod obsahují — vezmi tu s nejmenší plochou
+  const inside = halls.filter((o: any) => wallPointInPoly(x, y, o.points!));
+  if (inside.length > 0) {
+    let best = inside[0];
+    let bestArea = Infinity;
+    for (const c of inside) {
+      let area = 0;
+      const pts = c.points!;
+      for (let i = 0; i < pts.length; i++) {
+        const j = (i + 1) % pts.length;
+        area += pts[i].x * pts[j].y - pts[j].x * pts[i].y;
+      }
+      area = Math.abs(area / 2);
+      if (area < bestArea) { bestArea = area; best = c; }
+    }
+    return best;
+  }
+
+  // 2) Žádná neobsahuje — vezmi nejbližší
+  let best = halls[0];
   let bestDist = Infinity;
+  for (const h of halls) {
+    const d = distanceToPolygon(x, y, h.points!);
+    if (d < bestDist) { bestDist = d; best = h; }
+  }
+  return best;
+}
 
-  // 1. Hrany obvodu polygonu
-  if (obj.points && obj.points.length >= 3) {
+// Nasnapuj bod na nejbližší hranu haly (obvod nebo existující stěnu),
+// pokud je v threshold vzdálenosti. Jinak vrátí původní bod.
+function snapToHallEdge(x: number, y: number): { x: number; y: number; onEdge: boolean } {
+  const threshold = 2 / state.zoom; // ve world jednotkách — závisí na zoomu
+  let bestPx = x, bestPy = y, bestDist = Infinity;
+
+  for (const obj of state.objects as any[]) {
+    if (obj.type !== 'hala' || !obj.points || obj.points.length < 3) continue;
+    // Obvodové hrany haly
     for (let i = 0; i < obj.points.length; i++) {
-      const j = (i + 1) % obj.points.length;
-      const p1 = obj.points[i], p2 = obj.points[j];
-      const snap = projectPointOnEdge(wx, wy, p1.x, p1.y, p2.x, p2.y);
-      if (snap.dist < bestDist) {
-        bestDist = snap.dist;
-        best = { edgeType: 'perimeter', edgeIndex: i,
-          x: snap.px, y: snap.py, t: snap.t,
-          edgeStart: { x: p1.x, y: p1.y }, edgeEnd: { x: p2.x, y: p2.y },
-          edgeLen: snap.edgeLen, distFromStart: snap.t * snap.edgeLen };
+      const p1 = obj.points[i];
+      const p2 = obj.points[(i + 1) % obj.points.length];
+      const dx = p2.x - p1.x, dy = p2.y - p1.y;
+      const lenSq = dx * dx + dy * dy;
+      if (lenSq < 0.0001) continue;
+      let t = ((x - p1.x) * dx + (y - p1.y) * dy) / lenSq;
+      t = Math.max(0, Math.min(1, t));
+      const px = p1.x + t * dx, py = p1.y + t * dy;
+      const d = Math.sqrt((x - px) ** 2 + (y - py) ** 2);
+      if (d < bestDist) { bestDist = d; bestPx = px; bestPy = py; }
+    }
+    // Existující stěny uvnitř haly
+    if (obj.walls) {
+      for (const wall of obj.walls) {
+        const dx = wall.x2 - wall.x1, dy = wall.y2 - wall.y1;
+        const lenSq = dx * dx + dy * dy;
+        if (lenSq < 0.0001) continue;
+        let t = ((x - wall.x1) * dx + (y - wall.y1) * dy) / lenSq;
+        t = Math.max(0, Math.min(1, t));
+        const px = wall.x1 + t * dx, py = wall.y1 + t * dy;
+        const d = Math.sqrt((x - px) ** 2 + (y - py) ** 2);
+        if (d < bestDist) { bestDist = d; bestPx = px; bestPy = py; }
       }
     }
   }
 
-  // 2. Existující stěny
-  if (obj.walls) {
-    for (const wall of obj.walls) {
-      const snap = projectPointOnEdge(wx, wy, wall.x1, wall.y1, wall.x2, wall.y2);
-      if (snap.dist < bestDist) {
-        bestDist = snap.dist;
-        best = { edgeType: 'wall', wallId: wall.id,
-          x: snap.px, y: snap.py, t: snap.t,
-          edgeStart: { x: wall.x1, y: wall.y1 }, edgeEnd: { x: wall.x2, y: wall.y2 },
-          edgeLen: snap.edgeLen, distFromStart: snap.t * snap.edgeLen };
-      }
-    }
-  }
-
-  return bestDist < 3 / state.zoom ? best : null;
+  if (bestDist < threshold) return { x: bestPx, y: bestPy, onEdge: true };
+  return { x, y, onEdge: false };
 }
 
-function projectPointOnEdge(wx: number, wy: number, x1: number, y1: number, x2: number, y2: number): any {
-  const dx = x2 - x1, dy = y2 - y1;
-  const lenSq = dx * dx + dy * dy;
-  const edgeLen = Math.sqrt(lenSq);
-  if (lenSq < 0.001) return { px: x1, py: y1, t: 0, dist: Math.sqrt((wx - x1) ** 2 + (wy - y1) ** 2), edgeLen: 0 };
+// Finalizace po nakreslení polyline/polygonu stěn.
+// closed=true → vytvoří se i uzavírací stěna (z posledního bodu do prvního)
+//   a doprostřed bounding boxu se umístí RoomLabel.
+// closed=false → otevřená polyline jen ze segmentů mezi body.
+function finalizeWallsFromDrawPoints(closed: boolean): void {
+  const pts = state.drawPoints;
+  if (pts.length < 2) { cancelDrawMode(); return; }
 
-  let t = ((wx - x1) * dx + (wy - y1) * dy) / lenSq;
-  t = Math.max(0, Math.min(1, t));
-
-  const px = x1 + t * dx;
-  const py = y1 + t * dy;
-  const dist = Math.sqrt((wx - px) ** 2 + (wy - py) ** 2);
-
-  return { px, py, t, dist, edgeLen };
-}
-
-function getPointOnEdgeByDist(edgeStart: any, edgeEnd: any, distance: number): any {
-  const dx = edgeEnd.x - edgeStart.x;
-  const dy = edgeEnd.y - edgeStart.y;
-  const len = Math.sqrt(dx * dx + dy * dy);
-  if (len < 0.001) return { x: edgeStart.x, y: edgeStart.y };
-  const t = Math.max(0, Math.min(1, distance / len));
-  return { x: edgeStart.x + t * dx, y: edgeStart.y + t * dy };
-}
-
-export function handleWallClick(world: any): void {
-  const obj = state.objects.find(o => o.id === state.wallDrawObjId);
-  if (!obj) return;
-
-  const snap = findNearestEdgeInHall(obj, world.x, world.y);
-
-  if (!state.wallDrawStart) {
-    if (snap) {
-      state.wallDrawSnap = snap;
-      updateWallDistInput(snap.distFromStart, snap.edgeLen, 'start');
-      state.wallDrawStart = null;
-      updateDrawStatus();
-      renderWallSnapHover(snap);
-    } else {
-      const snapped = { x: snapToGrid(world.x), y: snapToGrid(world.y) };
-      state.wallDrawStart = snapped;
-      state.wallDrawSnap = null;
-      updateDrawStatus();
-      hideWallDistInput();
-    }
-  } else {
-    if (snap) {
-      state.wallDrawSnap = snap;
-      updateWallDistInput(snap.distFromStart, snap.edgeLen, 'end');
-      updateDrawStatus();
-      renderWallSnapHover(snap);
-    } else {
-      const snapped = { x: snapToGrid(world.x), y: snapToGrid(world.y) };
-      finishWall(snapped);
-    }
-  }
-}
-
-export function confirmWallPoint(): void {
-  const input = document.getElementById('wall-dist-field') as HTMLInputElement;
-  if (!input) return;
-  const dist = parseFloat(input.value);
-  if (isNaN(dist) || dist < 0) return;
-
-  const snap = state.wallDrawSnap;
-  if (!snap) return;
-
-  const pt = getPointOnEdgeByDist(snap.edgeStart, snap.edgeEnd, dist);
-
-  if (!state.wallDrawStart) {
-    state.wallDrawStart = pt;
-    state.wallDrawSnap = null;
-    hideWallDistInput();
-    updateDrawStatus();
-  } else {
-    finishWall(pt);
-  }
-}
-
-export function finishWall(endPoint: any): void {
-  const s = state.wallDrawStart;
-  if (!s) return;
-  const dist = Math.sqrt((endPoint.x - s.x) ** 2 + (endPoint.y - s.y) ** 2);
-  if (dist < 0.3) {
-    showToast('Stěna je příliš krátká');
+  const hall = findHallAt(pts[0].x, pts[0].y);
+  if (!hall) {
+    showToast('Nejprve vytvoř alespoň jednu halu');
+    cancelDrawMode();
     return;
   }
-  addWall(state.wallDrawObjId!, s.x, s.y, endPoint.x, endPoint.y);
-  state.wallDrawStart = null;
-  state.wallDrawSnap = null;
-  hideWallDistInput();
-  updateDrawStatus();
-}
 
-// === Wall distance input UI ===
-function showWallDistInput(): void {
-  let box = document.getElementById('wall-dist-input');
-  if (box) { box.style.display = 'none'; return; }
-  box = document.createElement('div');
-  box.id = 'wall-dist-input';
-  box.style.cssText = 'display:none;position:fixed;bottom:50px;left:50%;transform:translateX(-50%);background:var(--surface);border:1px solid var(--accent);border-radius:8px;padding:8px 12px;z-index:999;gap:8px;align-items:center;font-size:13px;color:var(--text);box-shadow:0 4px 16px rgba(0,0,0,0.4);';
-  box.innerHTML = `
-    <span id="wall-dist-label" style="white-space:nowrap;color:var(--text2);font-size:12px;">Vzdálenost:</span>
-    <input type="number" id="wall-dist-field" step="0.5" min="0" style="width:70px;padding:4px 8px;font-size:13px;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:5px;outline:none;"
-      onkeydown="if(event.key==='Enter'){window.editorAPI.confirmWallPoint();event.preventDefault();}">
-    <span id="wall-dist-max" style="font-size:11px;color:var(--text2);"></span>
-    <button class="btn" onclick="window.editorAPI.confirmWallPoint()" style="padding:4px 10px;font-size:12px;">OK</button>
-  `;
-  document.body.appendChild(box);
-}
+  // Kolik segmentů — pokud uzavřené, přidáme i closing segment
+  const segCount = closed ? pts.length : pts.length - 1;
+  let created = 0;
+  for (let i = 0; i < segCount; i++) {
+    const a = pts[i];
+    const b = pts[(i + 1) % pts.length];
+    const d = Math.sqrt((b.x - a.x) ** 2 + (b.y - a.y) ** 2);
+    if (d < 0.3) continue;
+    addWall(hall.id, a.x, a.y, b.x, b.y);
+    created++;
+  }
 
-function updateWallDistInput(distValue: number, maxLen: number, step: string): void {
-  let box = document.getElementById('wall-dist-input');
-  if (!box) { showWallDistInput(); box = document.getElementById('wall-dist-input'); }
-  (box as HTMLElement).style.display = 'flex';
-  const label = document.getElementById('wall-dist-label');
-  const field = document.getElementById('wall-dist-field') as HTMLInputElement;
-  const maxSpan = document.getElementById('wall-dist-max');
-  if (label) label.textContent = step === 'start' ? 'Počátek — vzdálenost od rohu:' : 'Konec — vzdálenost od rohu:';
-  field.value = distValue.toFixed(1);
-  field.max = maxLen.toString();
-  if (maxSpan) maxSpan.textContent = `/ ${maxLen.toFixed(1)} m`;
-  field.focus();
-  field.select();
-}
+  // Pokud uzavřená místnost — umísti RoomLabel do těžiště
+  if (closed && created >= 3) {
+    let cx = 0, cy = 0;
+    for (const p of pts) { cx += p.x; cy += p.y; }
+    cx /= pts.length; cy /= pts.length;
+    try { addRoomLabel(hall.id, cx, cy); } catch {}
+  }
 
-function hideWallDistInput(): void {
-  const box = document.getElementById('wall-dist-input');
-  if (box) box.style.display = 'none';
+  cancelDrawMode();
+  selectObject(hall.id);
 }
 
 // ============================
@@ -520,13 +485,6 @@ export function updateDrawStatus(): void {
     dom.drawStatus.textContent = 'Umísťuji vrata — klikni na stěnu  |  Escape pro zrušení';
     dom.drawStatus.style.display = 'flex';
     dom.drawStatus.style.borderColor = '#f59e0b';
-  } else if (state.wallDrawMode) {
-    let msg;
-    if (state.wallDrawStart) msg = 'Stěna — klikni na obvod/stěnu pro koncový bod  |  Escape';
-    else msg = 'Stěna — klikni na obvod nebo stěnu pro počáteční bod  |  Escape';
-    dom.drawStatus.textContent = msg;
-    dom.drawStatus.style.display = 'flex';
-    dom.drawStatus.style.borderColor = '#a0a0c0';
   } else if (state.entrancePlaceMode) {
     const eType = ENTRANCE_TYPES[state.entrancePlaceType] || ENTRANCE_TYPES.vjezd;
     const step = state.entrancePlaceStep === 1
@@ -543,9 +501,15 @@ export function updateDrawStatus(): void {
     const color = COLORS[state.drawType!] || COLORS.hala;
     const count = state.drawPoints.length;
     let msg = `Kreslím: ${color.label} — `;
-    if (count === 0) msg += 'klikni pro první bod';
-    else if (count < 3) msg += `${count} bodů — pokračuj klikáním`;
-    else msg += `${count} bodů — dvojklik/Enter pro uzavření`;
+    if (state.drawType === 'stena') {
+      if (count === 0) msg += 'klikni pro první bod';
+      else if (count === 1) msg += '1 bod — klikni pro další bod, Enter/dvojklik ukončí';
+      else msg += `${count} bodů — klikni pro další, na 1. bod pro uzavření místnosti, Enter/dvojklik ukončí`;
+    } else {
+      if (count === 0) msg += 'klikni pro první bod';
+      else if (count < 3) msg += `${count} bodů — pokračuj klikáním`;
+      else msg += `${count} bodů — dvojklik/Enter pro uzavření`;
+    }
 
     if (state.drawConstraint === 'h') msg += '  |  ⟷ Vodorovně (H)';
     else if (state.drawConstraint === 'v') msg += '  |  ⟰ Svisle (V)';
@@ -640,11 +604,6 @@ export function initCanvasMouse(): void {
       return;
     }
 
-    if (state.wallDrawMode) {
-      handleWallClick(world);
-      return;
-    }
-
     if (state.entrancePlaceMode) {
       handleEntranceClick(world);
       return;
@@ -733,7 +692,22 @@ export function initCanvasMouse(): void {
       return;
     }
 
+    // Pokud klik spadl do haly, která je už vybraná, a je blízko některé její vnitřní stěny,
+    // pouze tu stěnu zvýrazni v seznamu (neruš selekci haly a neaktivuj drag).
+    if (clicked && clicked.id === state.selected && clicked.type === 'hala' && clicked.walls && clicked.walls.length > 0) {
+      const nw = findNearestWall(clicked, world.x, world.y);
+      if (nw && nw.dist < 1.2 / state.zoom) {
+        (state as any).highlightedWallId = nw.wallId;
+        showProperties(clicked.id);
+        return;
+      }
+    }
+
     if (clicked) {
+      // Klik na jiný objekt → resetni zvýraznění stěny
+      if ((state as any).highlightedWallId != null && clicked.id !== state.selected) {
+        (state as any).highlightedWallId = null;
+      }
       selectObject(clicked.id);
       if (!clicked.locked) {
         pushUndo();
@@ -746,12 +720,16 @@ export function initCanvasMouse(): void {
         }
       }
     } else {
+      (state as any).highlightedWallId = null;
       deselectAll();
     }
   });
 
   dom.container.addEventListener('dblclick', (e: any) => {
-    if (state.drawMode && state.drawPoints.length >= 3) {
+    if (!state.drawMode) return;
+    // Pro stěnu stačí 2 body (rovná stěna), pro ostatní typy 3 body (polygon)
+    const minPts = state.drawType === 'stena' ? 2 : 3;
+    if (state.drawPoints.length >= minPts) {
       finishPolygon();
     }
   });
@@ -770,7 +748,7 @@ export function initCanvasMouse(): void {
       }
     }
 
-    if (state.selected && !isDragging && !isMovingVertex && !isRotatingAroundVertex && !isResizing && !state.drawMode && !state.gatePlaceMode && !state.wallDrawMode && !state.entrancePlaceMode) {
+    if (state.selected && !isDragging && !isMovingVertex && !isRotatingAroundVertex && !isResizing && !state.drawMode && !state.gatePlaceMode && !state.entrancePlaceMode) {
       const hoverObj = state.objects.find(o => o.id === state.selected);
       if (hoverObj && hoverObj.points && !hoverObj.locked) {
         let nearVertex = false;
@@ -791,30 +769,33 @@ export function initCanvasMouse(): void {
       }
     }
 
-    if (state.wallDrawMode && state.wallDrawStart === null) {
-      const obj = state.objects.find(o => o.id === state.wallDrawObjId);
-      if (obj) {
-        const hoverSnap = findNearestEdgeInHall(obj, world.x, world.y);
-        if (hoverSnap) {
-          renderWallSnapHover(hoverSnap);
-        } else {
-          if (dom.snapLayer) dom.snapLayer.innerHTML = '';
-          if (state.wallDrawStart) renderWallDrawPreview(world);
-        }
-        if (state.wallDrawStart && hoverSnap) {
-          renderWallSnapHover(hoverSnap);
-        }
-      }
-    }
-
     if (state.entrancePlaceMode) {
       renderEntrancePlacePreview(world);
     }
 
     if (state.drawMode) {
-      let preview = { x: snapToGrid(world.x), y: snapToGrid(world.y) };
+      let preview: { x: number; y: number };
+      let onEdge = false;
+      if (state.drawType === 'stena') {
+        const snap = snapToHallEdge(world.x, world.y);
+        onEdge = snap.onEdge;
+        preview = onEdge ? { x: snap.x, y: snap.y } : { x: snapToGrid(world.x), y: snapToGrid(world.y) };
+      } else {
+        preview = { x: snapToGrid(world.x), y: snapToGrid(world.y) };
+      }
       preview = applyDrawConstraint(preview);
       renderDrawPreview(preview);
+
+      // Vizuální feedback při snapu na hranu haly
+      if (dom.snapLayer) {
+        if (onEdge) {
+          dom.snapLayer.innerHTML = `<circle cx="${preview.x}" cy="${preview.y}" r="0.6" fill="#f59e0b" stroke="#fff" stroke-width="0.12" opacity="0.9"></circle>`;
+        } else {
+          dom.snapLayer.innerHTML = '';
+        }
+      }
+    } else if (dom.snapLayer && dom.snapLayer.innerHTML) {
+      dom.snapLayer.innerHTML = '';
     }
 
     if (isPanning) {
@@ -975,6 +956,31 @@ export function initCanvasMouse(): void {
 function handleDrawClick(world: any): void {
   let snapped = { x: snapToGrid(world.x), y: snapToGrid(world.y) };
   snapped = applyDrawConstraint(snapped);
+
+  // Kreslení stěny/místnosti: polyline jako hala — klik na první bod uzavře do místnosti.
+  if (state.drawType === 'stena') {
+    // Snap na obvod haly / existující stěnu (má přednost před gridem)
+    const edgeSnap = snapToHallEdge(world.x, world.y);
+    if (edgeSnap.onEdge) {
+      // Aplikuj H/V zámek na snapnutý bod (pro pokračování od předchozího)
+      snapped = applyDrawConstraint({ x: edgeSnap.x, y: edgeSnap.y });
+    }
+
+    if (state.drawPoints.length >= 3) {
+      const first = state.drawPoints[0];
+      const d = Math.sqrt((snapped.x - first.x) ** 2 + (snapped.y - first.y) ** 2);
+      if (d < 2) {
+        finalizeWallsFromDrawPoints(true);
+        return;
+      }
+    }
+    state.drawPoints.push(snapped);
+    state.drawDistance = null;
+    hideDistanceInput();
+    updateDrawStatus();
+    renderDrawPreview(snapped);
+    return;
+  }
 
   if (state.drawPoints.length >= 3) {
     const first = state.drawPoints[0];
@@ -1156,8 +1162,9 @@ export function initKeyboard(): void {
         if (selObj && !selObj.locked) deleteObject(state.selected);
       }
     }
-    if (e.key === 'Enter' && state.drawMode && state.drawPoints.length >= 3) {
-      finishPolygon();
+    if (e.key === 'Enter' && state.drawMode) {
+      const minPts = state.drawType === 'stena' ? 2 : 3;
+      if (state.drawPoints.length >= minPts) finishPolygon();
     }
     if (state.drawMode && state.drawPoints.length > 0) {
       if (e.key === 'h' || e.key === 'H') {

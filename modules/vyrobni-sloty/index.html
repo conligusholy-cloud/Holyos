@@ -1,0 +1,766 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Výrobní sloty | HOLYOS</title>
+  <link rel="icon" type="image/svg+xml" href="../../logo-holyos-icon.svg">
+  <base href="../../">
+  <link rel="stylesheet" href="css/dashboard.css">
+  <style>
+    .main-wrapper { margin-left: var(--sidebar-w); flex: 1; min-height: 100vh; display: flex; flex-direction: column; }
+    .module-header { background: linear-gradient(135deg, #f97316 0%, #ea580c 100%); padding: 28px 32px 20px; display: flex; align-items: center; gap: 16px; }
+    .module-header-icon { font-size: 36px; }
+    .module-header h1 { font-size: 22px; font-weight: 700; }
+    .module-header p { font-size: 13px; color: rgba(255,255,255,0.7); margin-top: 2px; }
+
+    .content { padding: 20px 24px 24px; flex: 1; display: flex; flex-direction: column; }
+
+    .btn { padding: 8px 18px; border-radius: 8px; border: 1px solid var(--border); font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.15s; display: inline-flex; align-items: center; gap: 6px; background: var(--surface); color: var(--text); }
+    .btn-primary { background: #f97316; color: #fff; border-color: #f97316; }
+    .btn-primary:hover { background: #ea580c; }
+    .btn-secondary { background: var(--surface2); color: var(--text); }
+    .btn-secondary:hover { background: var(--border); }
+    .btn-danger { background: rgba(239,68,68,0.15); color: #ef4444; border-color: rgba(239,68,68,0.3); }
+    .btn-sm { padding: 5px 12px; font-size: 12px; }
+
+    /* ─── Toolbar ─── */
+    .toolbar { display: flex; gap: 12px; margin-bottom: 16px; align-items: center; flex-wrap: wrap; }
+    .toolbar select { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; color: var(--text); font-size: 13px; }
+    .settings-badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+      padding: 6px 14px; font-size: 12px; color: var(--text2);
+    }
+    .settings-badge strong { color: var(--text); }
+
+    /* ─── Časová osa – wrapper ─── */
+    .timeline-wrapper {
+      flex: 1;
+      overflow-x: auto;
+      overflow-y: auto;
+      position: relative;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: var(--surface);
+      cursor: grab;
+      user-select: none;
+    }
+    .timeline-wrapper.dragging {
+      cursor: grabbing;
+    }
+    .timeline-inner {
+      position: relative;
+      min-height: 100%;
+    }
+
+    /* ─── Header (dny/týdny) ─── */
+    .tl-months {
+      display: flex;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      background: var(--bg);
+      border-bottom: 1px solid var(--border);
+    }
+    .tl-month-cell {
+      text-align: center;
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--text);
+      padding: 6px 0;
+      border-right: 1px solid var(--border);
+      text-transform: uppercase;
+    }
+    .tl-weeks {
+      display: flex;
+      position: sticky;
+      top: 27px;
+      z-index: 10;
+      background: var(--surface);
+      border-bottom: 2px solid var(--border);
+    }
+    .tl-week-cell {
+      text-align: center;
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--text2);
+      padding: 4px 0;
+      border-right: 1px solid rgba(255,255,255,0.04);
+      box-sizing: border-box;
+    }
+    .tl-week-cell.has-today { color: #f97316; }
+
+    /* ─── Workstation řádky ─── */
+    .tl-row-group { border-bottom: 1px solid var(--border); }
+    .tl-row-label {
+      font-size: 13px; font-weight: 600; color: var(--text);
+      padding: 8px 12px; background: rgba(255,255,255,0.02);
+      display: flex; align-items: center; gap: 8px;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+      position: sticky; left: 0; z-index: 5;
+    }
+    .tl-row-label-dot { width: 8px; height: 8px; border-radius: 50%; }
+
+    .tl-slots-row {
+      display: flex;
+      position: relative;
+      min-height: 110px;
+    }
+
+    /* ─── Slotové buňky ─── */
+    .tl-slot {
+      box-sizing: border-box;
+      border-right: 1px solid rgba(255,255,255,0.04);
+      min-height: 110px;
+      padding: 4px 3px;
+      position: relative;
+      cursor: pointer;
+      transition: background 0.1s;
+    }
+    .tl-slot:hover { background: rgba(255,255,255,0.03); }
+
+    .tl-slot-inner {
+      height: 100%;
+      min-height: 100px;
+      border-radius: 8px;
+      padding: 6px 10px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 2px;
+      transition: all 0.15s;
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* Volný slot */
+    .tl-slot-inner.free {
+      background: rgba(16,185,129,0.08);
+      border: 2px dashed rgba(16,185,129,0.25);
+    }
+    .tl-slot-inner.free:hover {
+      background: rgba(16,185,129,0.15);
+      border-color: rgba(16,185,129,0.5);
+    }
+    .tl-slot-inner.free .slot-title { color: #10b981; font-size: 12px; font-weight: 600; }
+    .tl-slot-inner.free .slot-sub { color: rgba(16,185,129,0.6); font-size: 10px; }
+
+    /* Obsazený slot */
+    .tl-slot-inner.occupied {
+      background: linear-gradient(135deg, rgba(249,115,22,0.2), rgba(234,88,12,0.25));
+      border: 1px solid rgba(249,115,22,0.4);
+    }
+    .tl-slot-inner.occupied:hover {
+      background: linear-gradient(135deg, rgba(249,115,22,0.3), rgba(234,88,12,0.35));
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    }
+    .tl-slot-inner.occupied .slot-title { color: #fb923c; font-size: 12px; font-weight: 700; }
+    .tl-slot-inner.occupied .slot-customer { color: var(--text); font-size: 11px; font-weight: 600; }
+    .tl-slot-inner.occupied .slot-sub { color: var(--text2); font-size: 10px; }
+
+    /* Blokovaný slot */
+    .tl-slot-inner.blocked {
+      background: rgba(239,68,68,0.1);
+      border: 2px dashed rgba(239,68,68,0.3);
+    }
+    .tl-slot-inner.blocked:hover {
+      background: rgba(239,68,68,0.18);
+    }
+    .tl-slot-inner.blocked .slot-title { color: #ef4444; font-size: 12px; font-weight: 600; }
+    .tl-slot-inner.blocked .slot-sub { color: rgba(239,68,68,0.6); font-size: 10px; }
+
+    /* ─── Červená čára DNES ─── */
+    .today-line {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      width: 2px;
+      background: #ef4444;
+      z-index: 8;
+      pointer-events: none;
+    }
+    .today-line::after {
+      content: 'DNES';
+      position: absolute;
+      top: -20px;
+      left: -16px;
+      font-size: 9px;
+      font-weight: 700;
+      color: #ef4444;
+      background: var(--surface);
+      padding: 1px 4px;
+      border-radius: 4px;
+    }
+
+    /* ─── Modály ─── */
+    .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); z-index: 9999; display: flex; align-items: center; justify-content: center; }
+    .modal { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 24px; width: 480px; max-width: 95vw; max-height: 90vh; overflow-y: auto; }
+    .modal h2 { margin: 0 0 20px; font-size: 18px; }
+    .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 20px; }
+
+    .form-group { margin-bottom: 14px; }
+    .form-group label { display: block; font-size: 12px; color: var(--text2); margin-bottom: 4px; font-weight: 600; }
+    .form-group input, .form-group select, .form-group textarea {
+      width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+      padding: 8px 12px; color: var(--text); font-size: 13px; font-family: inherit;
+    }
+    .form-group textarea { min-height: 110px; resize: vertical; }
+    .form-row { display: flex; gap: 12px; }
+    .form-row > .form-group { flex: 1; }
+
+    .day-picker { display: flex; gap: 6px; flex-wrap: wrap; }
+    .day-chip {
+      padding: 6px 14px; border-radius: 8px; font-size: 12px; font-weight: 600;
+      border: 1px solid var(--border); background: var(--bg); color: var(--text2); cursor: pointer;
+      transition: all 0.15s;
+    }
+    .day-chip.active { background: #f97316; color: #fff; border-color: #f97316; }
+    .day-chip:hover:not(.active) { border-color: rgba(249,115,22,0.5); }
+
+    @media (max-width: 768px) {
+      .main-wrapper { margin-left: 0; }
+      .module-header { padding: 16px; }
+      .content { padding: 0 12px 12px; }
+      .form-row { flex-direction: column; gap: 0; }
+    }
+  </style>
+</head>
+<body>
+  <aside id="sidebar" class="sidebar"></aside>
+  <script src="js/sidebar.js"></script>
+  <script>renderSidebar('vyrobni-sloty');</script>
+
+  <div class="main-wrapper">
+    <div class="module-header">
+      <div class="module-header-icon">&#128197;</div>
+      <div>
+        <h1>Výrobní sloty</h1>
+        <p>Plánování výrobních termínů — obchod vidí volné termíny, zákazník si vybírá termín dodání</p>
+      </div>
+    </div>
+
+    <div class="content">
+      <div class="toolbar">
+        <div id="settings-info"></div>
+        <div style="flex:1;"></div>
+        <button class="btn" onclick="openSettingsModal()">&#9881; Nastavení slotů</button>
+      </div>
+
+      <div class="timeline-wrapper" id="timeline-wrapper">
+        <div class="timeline-inner" id="timeline-inner"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="modal-root"></div>
+
+  <script>
+    // ─── Auth ────────────────────────────────────────────────────────────────
+    var token = sessionStorage.getItem('token');
+    var headers = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = 'Bearer ' + token;
+
+    // ─── State ───────────────────────────────────────────────────────────────
+    var slots = [];
+    var workstations = [];
+    var DAYS_CS = ['Ne','Po','Út','St','Čt','Pá','So'];
+    var DAYS_FULL = ['Neděle','Pondělí','Úterý','Středa','Čtvrtek','Pátek','Sobota'];
+    var MONTHS_CS = ['Leden','Únor','Březen','Duben','Květen','Červen','Červenec','Srpen','Září','Říjen','Listopad','Prosinec'];
+    var SLOT_W = 160; // šířka jednoho slotu v px
+
+    // ─── Konfigurace ─────────────────────────────────────────────────────────
+    var slotConfig = loadConfig();
+
+    function defaultConfig() {
+      return { startDay: 1, endDay: 5 }; // Po–Pá
+    }
+    function loadConfig() {
+      try {
+        var c = JSON.parse(localStorage.getItem('holyos_slot_config'));
+        return c && typeof c.startDay === 'number' ? c : defaultConfig();
+      } catch(e) { return defaultConfig(); }
+    }
+    function saveConfigData(cfg) {
+      slotConfig = cfg;
+      localStorage.setItem('holyos_slot_config', JSON.stringify(cfg));
+    }
+
+    function getSlotDays() {
+      // Počet dní ve slotu (startDay → endDay)
+      var diff = (slotConfig.endDay - slotConfig.startDay + 7) % 7;
+      return diff === 0 ? 7 : diff + 1;
+    }
+
+    // ─── Inicializace ────────────────────────────────────────────────────────
+    (async function init() {
+      renderSettingsInfo();
+      await loadAllSlots();
+      render();
+      scrollToToday();
+    })();
+
+    async function loadWorkstations() {
+      try {
+        var res = await fetch('/api/production/workstations', { headers: headers, credentials: 'include' });
+        workstations = await res.json();
+        if (!Array.isArray(workstations)) workstations = [];
+        var sel = document.getElementById('filter-workstation');
+        workstations.forEach(function(ws) {
+          var opt = document.createElement('option');
+          opt.value = ws.id;
+          opt.textContent = ws.name;
+          sel.appendChild(opt);
+        });
+      } catch(e) { console.error(e); }
+    }
+
+    async function loadAllSlots() {
+      // Načti sloty pro celý rozsah (2 roky)
+      var from = getStartDate();
+      var to = new Date(from);
+      to.setFullYear(to.getFullYear() + 2);
+      var params = '?from=' + toISO(from) + '&to=' + toISO(to);
+
+      try {
+        var res = await fetch('/api/slots' + params, { headers: headers, credentials: 'include' });
+        slots = await res.json();
+        if (!Array.isArray(slots)) slots = [];
+      } catch(e) { console.error(e); slots = []; }
+    }
+
+    function renderSettingsInfo() {
+      var el = document.getElementById('settings-info');
+      el.innerHTML = '<div class="settings-badge">' +
+        'Slot: <strong>' + DAYS_CS[slotConfig.startDay] + ' – ' + DAYS_CS[slotConfig.endDay] + '</strong> (' + getSlotDays() + ' dní)' +
+        '</div>';
+    }
+
+    // ─── Generování slotových oken (2 roky) ──────────────────────────────────
+    function getStartDate() {
+      var d = new Date();
+      // 8 týdnů zpátky
+      d.setDate(d.getDate() - 56);
+      // Najdi nejbližší startDay
+      var diff = (d.getDay() - slotConfig.startDay + 7) % 7;
+      d.setDate(d.getDate() - diff);
+      d.setHours(0,0,0,0);
+      return d;
+    }
+
+    function generateSlotWindows() {
+      var windows = [];
+      var start = getStartDate();
+      var end = new Date(start);
+      end.setFullYear(end.getFullYear() + 2);
+      var d = new Date(start);
+      var slotDays = getSlotDays();
+
+      while (d < end) {
+        var slotStart = new Date(d);
+        var slotEnd = new Date(d);
+        slotEnd.setDate(slotEnd.getDate() + slotDays - 1);
+        windows.push({ start: new Date(slotStart), end: new Date(slotEnd) });
+        d.setDate(d.getDate() + 7); // vždy po týdnu
+      }
+      return windows;
+    }
+
+    // ─── Render ──────────────────────────────────────────────────────────────
+    function render() {
+      var el = document.getElementById('timeline-inner');
+      var windows = generateSlotWindows();
+      var totalW = windows.length * SLOT_W;
+      el.style.width = totalW + 'px';
+
+      var today = new Date();
+      today.setHours(0,0,0,0);
+      // Jeden řádek pro celou firmu
+      var wsList = [{ id: null, name: 'Best Series', color: '#f97316' }];
+
+      // ─── Months header ───
+      var html = '<div class="tl-months" style="width:' + totalW + 'px;">';
+      var monthRanges = [];
+      var curMonth = -1;
+      windows.forEach(function(win, i) {
+        var m = win.start.getMonth();
+        var y = win.start.getFullYear();
+        var key = y * 12 + m;
+        if (key !== curMonth) {
+          if (monthRanges.length > 0) monthRanges[monthRanges.length - 1].count = i - monthRanges[monthRanges.length - 1].startIdx;
+          monthRanges.push({ month: m, year: y, startIdx: i, count: 1 });
+          curMonth = key;
+        }
+      });
+      if (monthRanges.length > 0) monthRanges[monthRanges.length - 1].count = windows.length - monthRanges[monthRanges.length - 1].startIdx;
+      monthRanges.forEach(function(mr) {
+        html += '<div class="tl-month-cell" style="width:' + (mr.count * SLOT_W) + 'px;">' +
+          MONTHS_CS[mr.month] + ' ' + mr.year + '</div>';
+      });
+      html += '</div>';
+
+      // ─── Weeks header ───
+      html += '<div class="tl-weeks" style="width:' + totalW + 'px;">';
+      windows.forEach(function(win) {
+        var hasToday = today >= win.start && today <= win.end;
+        html += '<div class="tl-week-cell' + (hasToday ? ' has-today' : '') + '" style="width:' + SLOT_W + 'px;">' +
+          formatDS(win.start) + ' – ' + formatDS(win.end) + '</div>';
+      });
+      html += '</div>';
+
+      // ─── Rows per workstation ───
+      wsList.forEach(function(ws) {
+        var wsColor = ws.color || '#f97316';
+        html += '<div class="tl-row-group">';
+        html += '<div class="tl-row-label"><span class="tl-row-label-dot" style="background:' + wsColor + ';"></span>' + esc(ws.name) + '</div>';
+        html += '<div class="tl-slots-row" style="width:' + totalW + 'px;">';
+
+        windows.forEach(function(win, i) {
+          // Najdi slot pro toto okno
+          var matched = findSlotForWindow(win);
+          var left = i * SLOT_W;
+
+          html += '<div class="tl-slot" style="width:' + SLOT_W + 'px;" onclick="onSlotClick(' +
+            (matched ? matched.id : 'null') + ',null,\'' + toISO(win.start) + '\',\'' + toISO(win.end) + '\')">';
+
+          // Neobsazený slot v minulosti → automaticky blokován
+          var isPast = win.end < today;
+
+          if (matched) {
+            var hasAsgn = matched.assignments && matched.assignments.length > 0;
+            var isBlocked = matched.status === 'blocked';
+
+            if (isBlocked) {
+              html += '<div class="tl-slot-inner blocked">';
+              html += '<div class="slot-title">&#128683; Blokováno</div>';
+              html += '<div class="slot-sub">' + esc(matched.name || 'Blokace') + '</div>';
+              html += '</div>';
+            } else if (hasAsgn) {
+              var a = matched.assignments[0];
+              var deliveryDate = new Date(matched.end_date).toLocaleDateString('cs-CZ');
+              html += '<div class="tl-slot-inner occupied">';
+              html += '<div class="slot-customer">' + esc(a.customer_name || '—') + '</div>';
+              html += '<div class="slot-title">' + esc(a.product_name) + '</div>';
+              html += '<div class="slot-sub">Dodání: ' + deliveryDate + '</div>';
+              html += '</div>';
+            } else if (isPast) {
+              html += '<div class="tl-slot-inner blocked">';
+              html += '<div class="slot-title">&#128683; Prošlé</div>';
+              html += '<div class="slot-sub">' + formatDS(win.start) + ' – ' + formatDS(win.end) + '</div>';
+              html += '</div>';
+            } else {
+              html += '<div class="tl-slot-inner free">';
+              html += '<div class="slot-title">Volné</div>';
+              html += '<div class="slot-sub">' + formatDS(win.start) + ' – ' + formatDS(win.end) + '</div>';
+              html += '</div>';
+            }
+          } else if (isPast) {
+            html += '<div class="tl-slot-inner blocked">';
+            html += '<div class="slot-title">&#128683; Prošlé</div>';
+            html += '<div class="slot-sub">' + formatDS(win.start) + ' – ' + formatDS(win.end) + '</div>';
+            html += '</div>';
+          } else {
+            html += '<div class="tl-slot-inner free">';
+            html += '<div class="slot-title">Volné</div>';
+            html += '<div class="slot-sub">' + formatDS(win.start) + ' – ' + formatDS(win.end) + '</div>';
+            html += '</div>';
+          }
+
+          html += '</div>'; // tl-slot
+        });
+
+        // ─── Červená čára DNES ───
+        var startDate = getStartDate();
+        var daysSinceStart = Math.round((today - startDate) / 86400000);
+        var weeksSinceStart = daysSinceStart / 7;
+        var todayX = weeksSinceStart * SLOT_W;
+        if (todayX > 0 && todayX < totalW) {
+          html += '<div class="today-line" style="left:' + todayX.toFixed(1) + 'px;"></div>';
+        }
+
+        html += '</div>'; // tl-slots-row
+        html += '</div>'; // tl-row-group
+      });
+
+      el.innerHTML = html;
+    }
+
+    function findSlotForWindow(win) {
+      var found = null;
+      slots.forEach(function(s) {
+        var sStart = new Date(s.start_date); sStart.setHours(0,0,0,0);
+        var sEnd = new Date(s.end_date); sEnd.setHours(0,0,0,0);
+        if (sStart <= win.end && sEnd >= win.start) {
+          found = s;
+        }
+      });
+      return found;
+    }
+
+    function scrollToToday() {
+      var wrapper = document.getElementById('timeline-wrapper');
+      var startDate = getStartDate();
+      var today = new Date(); today.setHours(0,0,0,0);
+      var daysSinceStart = Math.round((today - startDate) / 86400000);
+      var weeksSinceStart = daysSinceStart / 7;
+      var todayX = weeksSinceStart * SLOT_W;
+      // Scrollni tak aby dnešek byl zhruba v první třetině
+      wrapper.scrollLeft = Math.max(0, todayX - wrapper.clientWidth / 3);
+    }
+
+    // ─── Klik na slot ────────────────────────────────────────────────────────
+    function onSlotClick(slotId, wsId, startStr, endStr) {
+      if (slotId) {
+        // Existující slot — zobraz detail
+        openSlotDetail(slotId);
+      } else {
+        // Volný — nabídni blokaci
+        openBlockModal(wsId, startStr, endStr);
+      }
+    }
+
+    // ─── Detail obsazeného slotu ─────────────────────────────────────────────
+    function openSlotDetail(id) {
+      var slot = slots.find(function(s) { return s.id === id; });
+      if (!slot) return;
+
+      var startDate = new Date(slot.start_date).toLocaleDateString('cs-CZ');
+      var endDate = new Date(slot.end_date).toLocaleDateString('cs-CZ');
+      var wsName = slot.workstation ? slot.workstation.name : '—';
+
+      var html = '<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal">';
+      html += '<h2>' + esc(slot.name || 'Výrobní slot') + '</h2>';
+
+      html += '<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px;">';
+      html += '<div style="display:flex;justify-content:space-between;font-size:13px;"><span style="color:var(--text2);">Pracoviště</span><strong>' + esc(wsName) + '</strong></div>';
+      html += '<div style="display:flex;justify-content:space-between;font-size:13px;"><span style="color:var(--text2);">Výroba začíná</span><strong>' + startDate + '</strong></div>';
+      html += '<div style="display:flex;justify-content:space-between;font-size:13px;"><span style="color:var(--text2);">Termín dodání zákazníkovi</span><strong>' + endDate + '</strong></div>';
+      html += '<div style="display:flex;justify-content:space-between;font-size:13px;"><span style="color:var(--text2);">Stav</span><strong>' + statusLabel(slot.status) + '</strong></div>';
+      html += '</div>';
+
+      if (slot.assignments && slot.assignments.length > 0) {
+        html += '<div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:8px;">Zakázky v tomto slotu:</div>';
+        slot.assignments.forEach(function(a) {
+          html += '<div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:6px;">';
+          html += '<div style="font-weight:700;font-size:13px;color:#fb923c;">' + esc(a.product_name) + '</div>';
+          if (a.customer_name) html += '<div style="font-size:12px;color:var(--text);">' + esc(a.customer_name) + '</div>';
+          html += '<div style="font-size:11px;color:var(--text2);margin-top:2px;">' + a.quantity + ' ks</div>';
+          html += '</div>';
+        });
+      }
+
+      if (slot.note) {
+        html += '<div style="font-size:12px;color:var(--text2);margin-top:8px;"><em>' + esc(slot.note) + '</em></div>';
+      }
+
+      html += '<div class="modal-actions">';
+      html += '<button class="btn btn-danger" onclick="deleteSlot(' + slot.id + ')">&#128465; Smazat slot</button>';
+      html += '<button class="btn btn-secondary" onclick="closeModal()">Zavřít</button>';
+      html += '</div>';
+      html += '</div></div>';
+
+      document.getElementById('modal-root').innerHTML = html;
+    }
+
+    // ─── Blokace volného slotu ───────────────────────────────────────────────
+    function openBlockModal(wsId, startStr, endStr) {
+      var endDate = new Date(endStr);
+      var deliveryStr = endDate.toLocaleDateString('cs-CZ');
+
+      document.getElementById('modal-root').innerHTML =
+        '<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal">' +
+        '<h2>&#128197; Obsadit slot</h2>' +
+        '<p style="font-size:13px;color:var(--text2);margin:0 0 16px;">Období: <strong>' + startStr + '</strong> → <strong>' + endStr + '</strong><br>Termín dodání zákazníkovi: <strong>' + deliveryStr + '</strong></p>' +
+        '<form onsubmit="saveBlockSlot(event,\'' + startStr + '\',\'' + endStr + '\',' + (wsId || 'null') + ')">' +
+          '<div class="form-group"><label>Typ obsazení</label>' +
+          '<select id="block-type" name="block_type" onchange="toggleBlockFields(this.value)">' +
+            '<option value="block">&#128683; Blokace (dovolená, údržba, skluz)</option>' +
+            '<option value="order">&#128230; Přiřadit zakázku</option>' +
+          '</select></div>' +
+
+          '<div id="block-fields">' +
+            '<div class="form-group"><label>Důvod</label><input type="text" name="reason" placeholder="např. Dovolená, Údržba, Dohnání skluzu"></div>' +
+          '</div>' +
+
+          '<div id="order-fields" style="display:none;">' +
+            '<div class="form-group"><label>Produkt / Zakázka</label><input type="text" name="product_name" placeholder="Název produktu"></div>' +
+            '<div class="form-group"><label>Zákazník</label><input type="text" name="customer_name" placeholder="Jméno zákazníka"></div>' +
+            '<div class="form-group"><label>Množství (ks)</label><input type="number" name="quantity" value="1" min="1" step="1"></div>' +
+          '</div>' +
+
+          '<div class="form-group"><label>Poznámka</label><textarea name="note" placeholder="Volitelná poznámka..."></textarea></div>' +
+
+          '<div class="modal-actions">' +
+            '<button type="button" class="btn btn-secondary" onclick="closeModal()">Zrušit</button>' +
+            '<button type="submit" class="btn btn-primary">Obsadit slot</button>' +
+          '</div>' +
+        '</form>' +
+        '</div></div>';
+    }
+
+    function toggleBlockFields(val) {
+      document.getElementById('block-fields').style.display = val === 'block' ? '' : 'none';
+      document.getElementById('order-fields').style.display = val === 'order' ? '' : 'none';
+    }
+
+    async function saveBlockSlot(e, startStr, endStr, wsId) {
+      e.preventDefault();
+      var fd = new FormData(e.target);
+      var data = Object.fromEntries(fd.entries());
+
+      var isBlock = data.block_type === 'block';
+      var slotData = {
+        name: isBlock ? (data.reason || 'Blokace') : (data.product_name + ' — ' + (data.customer_name || '')),
+        workstation_id: wsId,
+        start_date: startStr,
+        end_date: endStr,
+        capacity_hours: 8,
+        status: isBlock ? 'blocked' : 'full',
+        note: data.note || '',
+        color: isBlock ? '#ef4444' : '#f97316'
+      };
+
+      try {
+        var res = await fetch('/api/slots', { method: 'POST', headers: headers, credentials: 'include', body: JSON.stringify(slotData) });
+        var newSlot = await res.json();
+
+        // Pokud je zakázka, přidej assignment
+        if (!isBlock && data.product_name) {
+          await fetch('/api/slots/' + newSlot.id + '/assignments', {
+            method: 'POST', headers: headers, credentials: 'include',
+            body: JSON.stringify({
+              product_name: data.product_name,
+              customer_name: data.customer_name || '',
+              quantity: parseFloat(data.quantity) || 1,
+              estimated_hours: 0,
+              priority: 0,
+              status: 'planned'
+            })
+          });
+        }
+      } catch(e) { console.error(e); }
+
+      closeModal();
+      await loadAllSlots();
+      render();
+    }
+
+    async function deleteSlot(id) {
+      if (!confirm('Opravdu smazat tento slot?')) return;
+      await fetch('/api/slots/' + id, { method: 'DELETE', headers: headers, credentials: 'include' });
+      closeModal();
+      await loadAllSlots();
+      render();
+    }
+
+    // ─── Nastavení ───────────────────────────────────────────────────────────
+    function openSettingsModal() {
+      var cfg = slotConfig;
+      var startHtml = '';
+      var endHtml = '';
+      for (var i = 0; i < 7; i++) {
+        startHtml += '<div class="day-chip' + (cfg.startDay === i ? ' active' : '') + '" data-day="' + i + '" onclick="pickDay(this,\'start\')">' + DAYS_FULL[i] + '</div>';
+        endHtml += '<div class="day-chip' + (cfg.endDay === i ? ' active' : '') + '" data-day="' + i + '" onclick="pickDay(this,\'end\')">' + DAYS_FULL[i] + '</div>';
+      }
+
+      document.getElementById('modal-root').innerHTML =
+        '<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal">' +
+        '<h2>&#9881; Nastavení výrobních slotů</h2>' +
+        '<p style="font-size:13px;color:var(--text2);margin:0 0 16px;">Nastavte v jaké dny v týdnu výrobní slot začíná a končí. Slot představuje jedno výrobní okno — obchod podle něj slibuje termíny dodání zákazníkům.</p>' +
+        '<form onsubmit="saveSettings(event)">' +
+          '<div class="form-group"><label>Slot začíná v den</label>' +
+          '<div class="day-picker" id="picker-start">' + startHtml + '</div>' +
+          '<input type="hidden" id="cfg-start-day" value="' + cfg.startDay + '">' +
+          '</div>' +
+          '<div class="form-group"><label>Slot končí v den (= termín dodání zákazníkovi)</label>' +
+          '<div class="day-picker" id="picker-end">' + endHtml + '</div>' +
+          '<input type="hidden" id="cfg-end-day" value="' + cfg.endDay + '">' +
+          '</div>' +
+          '<div class="modal-actions">' +
+            '<button type="button" class="btn btn-secondary" onclick="closeModal()">Zrušit</button>' +
+            '<button type="submit" class="btn btn-primary">Uložit nastavení</button>' +
+          '</div>' +
+        '</form>' +
+        '</div></div>';
+    }
+
+    function pickDay(el, type) {
+      el.parentElement.querySelectorAll('.day-chip').forEach(function(c) { c.classList.remove('active'); });
+      el.classList.add('active');
+      document.getElementById('cfg-' + type + '-day').value = el.getAttribute('data-day');
+    }
+
+    function saveSettings(e) {
+      e.preventDefault();
+      saveConfigData({
+        startDay: parseInt(document.getElementById('cfg-start-day').value),
+        endDay: parseInt(document.getElementById('cfg-end-day').value)
+      });
+      closeModal();
+      renderSettingsInfo();
+      render();
+      scrollToToday();
+    }
+
+    // ─── Helpers ──────────────────────────────────────────────────────────────
+    function closeModal() { document.getElementById('modal-root').innerHTML = ''; }
+    function esc(s) { var d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+    function formatDS(d) { return d.getDate() + '.' + (d.getMonth()+1) + '.'; }
+    function toISO(d) { return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); }
+
+    function statusLabel(s) {
+      var labels = { open: 'Otevřený', full: 'Obsazený', blocked: 'Blokovaný', closed: 'Uzavřený' };
+      return labels[s] || s;
+    }
+
+    // ─── Drag-to-scroll (přetahování myší) ───────────────────────────────────
+    (function() {
+      var wrap = document.getElementById('timeline-wrapper');
+      var isDragging = false;
+      var startX, startY, scrollLeft, scrollTop, dragMoved;
+
+      wrap.addEventListener('mousedown', function(e) {
+        // Ignoruj klik na tlačítka a selecty
+        if (e.target.closest('button, select, a, input')) return;
+        isDragging = true;
+        dragMoved = false;
+        wrap.classList.add('dragging');
+        startX = e.pageX - wrap.offsetLeft;
+        startY = e.pageY - wrap.offsetTop;
+        scrollLeft = wrap.scrollLeft;
+        scrollTop = wrap.scrollTop;
+        e.preventDefault();
+      });
+
+      document.addEventListener('mousemove', function(e) {
+        if (!isDragging) return;
+        var x = e.pageX - wrap.offsetLeft;
+        var y = e.pageY - wrap.offsetTop;
+        var dx = x - startX;
+        var dy = y - startY;
+        if (Math.abs(dx) > 3 || Math.abs(dy) > 3) dragMoved = true;
+        wrap.scrollLeft = scrollLeft - dx;
+        wrap.scrollTop = scrollTop - dy;
+      });
+
+      document.addEventListener('mouseup', function() {
+        if (!isDragging) return;
+        isDragging = false;
+        wrap.classList.remove('dragging');
+      });
+
+      // Potlač klik po drag (aby se neotevřel modal po přetažení)
+      wrap.addEventListener('click', function(e) {
+        if (dragMoved) {
+          e.stopPropagation();
+          e.preventDefault();
+          dragMoved = false;
+        }
+      }, true);
+    })();
+  </script>
+
+  <script src="js/ai-chat-panel.js"></script>
+</body>
+</html>

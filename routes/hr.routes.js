@@ -8,7 +8,577 @@ const { prisma } = require('../config/database');
 const { requireAuth } = require('../middleware/auth');
 const { logAudit, diffObjects, makeSnapshot } = require('../services/audit');
 
-// Všechny HR routy vyžadují autentizaci
+// ─── KIOSEK (příchod/odchod přes čip — BEZ autentizace) ─────────────────
+// Kiosk endpointy jsou PŘED requireAuth, protože čip je autentizace
+
+// POST /api/hr/kiosk/identify — identifikace osoby čipem
+router.post('/kiosk/identify', async (req, res, next) => {
+  try {
+    const { chip_id, person_id } = req.body;
+    if (!chip_id && !person_id) return res.status(400).json({ error: 'Chybí chip_id nebo person_id' });
+
+    let person;
+    if (person_id) {
+      // Přímé hledání podle ID (návrat z nepřítomnosti)
+      person = await prisma.person.findFirst({
+        where: { id: parseInt(person_id), active: true },
+        select: {
+          id: true, first_name: true, last_name: true, photo_url: true,
+          employee_number: true,
+          department: { select: { id: true, name: true } },
+          shift: true,
+        },
+      });
+    } else {
+      // Hledáme podle chip_number NEBO chip_card_id
+      person = await prisma.person.findFirst({
+        where: {
+          active: true,
+          OR: [
+            { chip_number: chip_id },
+            { chip_card_id: chip_id },
+          ],
+        },
+        select: {
+          id: true, first_name: true, last_name: true, photo_url: true,
+          employee_number: true,
+          department: { select: { id: true, name: true } },
+          shift: true,
+        },
+      });
+    }
+
+    if (!person) return res.status(404).json({ error: 'Osoba nenalezena' });
+
+    // Zjistit dnešní stav docházky
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const todayAttendance = await prisma.attendance.findFirst({
+      where: { person_id: person.id, date: today },
+      orderBy: { created_at: 'desc' },
+    });
+
+    // Zjistit aktivní nepřítomnost
+    const activeAbsence = await prisma.attendance.findFirst({
+      where: {
+        person_id: person.id,
+        date: today,
+        type: { not: 'work' },
+        clock_out: null,
+      },
+    });
+
+    // Zjistit otevřený příchod do práce (type=work, clock_out=null)
+    const openWork = await prisma.attendance.findFirst({
+      where: { person_id: person.id, date: today, type: 'work', clock_out: null },
+    });
+
+    const name = `${person.first_name} ${person.last_name}`;
+    const role = person.department?.name || 'Zaměstnanec';
+    const is_absent = !!activeAbsence;
+    const is_clocked_in = !!openWork;
+
+    let status = null;
+    if (todayAttendance) {
+      if (todayAttendance.clock_out && todayAttendance.type === 'work') {
+        status = `Odchod zaznamenán v ${todayAttendance.clock_out}`;
+      } else if (todayAttendance.type === 'work' && !todayAttendance.clock_out) {
+        status = `Příchod v ${todayAttendance.clock_in}`;
+      } else if (todayAttendance.type !== 'work') {
+        status = `Nepřítomnost: ${todayAttendance.type} od ${todayAttendance.clock_in}`;
+      }
+    }
+
+    // Dnešní přestávky (svačina, oběd)
+    const todayBreaks = await prisma.attendance.findMany({
+      where: {
+        person_id: person.id,
+        date: today,
+        type: { in: ['break_snack_out', 'break_lunch_out'] },
+      },
+      orderBy: { clock_in: 'asc' },
+    });
+
+    const breakMinutes = person.shift ? person.shift.break_minutes : 30;
+    const nowTime = new Date();
+    const breaks = todayBreaks.map(b => {
+      let duration = null;
+      let isOpen = !b.clock_out;
+      if (b.clock_out) {
+        const [ih, im] = b.clock_in.split(':').map(Number);
+        const [oh, om] = b.clock_out.split(':').map(Number);
+        duration = (oh * 60 + om) - (ih * 60 + im);
+      } else {
+        // Stále na přestávce — počítat od clock_in do teď
+        const [ih, im] = b.clock_in.split(':').map(Number);
+        duration = (nowTime.getHours() * 60 + nowTime.getMinutes()) - (ih * 60 + im);
+      }
+      const breakType = b.type === 'break_snack_out' ? 'snack' : 'lunch';
+      return { type: breakType, clock_in: b.clock_in, clock_out: b.clock_out, duration, is_open: isOpen };
+    });
+
+    // Celková doba přestávek
+    const totalBreakMinutes = breaks.reduce((sum, b) => sum + (b.duration || 0), 0);
+    const breakOverLimit = totalBreakMinutes > breakMinutes;
+
+    // Přesčasy — jednoduchý výpočet pro aktuální měsíc
+    const dailyFund = person.shift ? parseFloat(person.shift.hours_fund) : 8.0;
+    const monthStart = new Date(nowTime.getFullYear(), nowTime.getMonth(), 1);
+    const monthEnd = new Date(nowTime.getFullYear(), nowTime.getMonth() + 1, 0);
+
+    let pastWorkingDays = 0;
+    const yesterday = new Date(nowTime);
+    yesterday.setDate(yesterday.getDate() - 1);
+    for (let d = new Date(monthStart); d <= yesterday; d.setDate(d.getDate() + 1)) {
+      const dow = d.getDay();
+      if (dow >= 1 && dow <= 5) pastWorkingDays++;
+    }
+
+    const workRecords = await prisma.attendance.findMany({
+      where: { person_id: person.id, date: { gte: monthStart, lte: monthEnd }, type: 'work' },
+    });
+
+    let workedMinutes = 0;
+    for (const r of workRecords) {
+      if (r.clock_in && r.clock_out) {
+        const [ih, im] = r.clock_in.split(':').map(Number);
+        const [oh, om] = r.clock_out.split(':').map(Number);
+        const mins = (oh * 60 + om) - (ih * 60 + im) - (r.break_minutes || breakMinutes);
+        if (mins > 0) workedMinutes += mins;
+      }
+    }
+
+    const workedHours = Math.round((workedMinutes / 60) * 100) / 100;
+    const expectedHours = Math.round(pastWorkingDays * dailyFund * 100) / 100;
+    const overtimeHours = Math.round((workedHours - expectedHours) * 100) / 100;
+
+    res.json({
+      id: person.id,
+      name,
+      role,
+      photo: person.photo_url,
+      status,
+      is_absent,
+      is_clocked_in,
+      today_attendance: todayAttendance,
+      breaks,
+      total_break_minutes: totalBreakMinutes,
+      allowed_break_minutes: breakMinutes,
+      break_over_limit: breakOverLimit,
+      overtime: {
+        worked_hours: workedHours,
+        expected_hours: expectedHours,
+        overtime_hours: overtimeHours,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/hr/kiosk/clock — příchod/odchod/nepřítomnost
+router.post('/kiosk/clock', async (req, res, next) => {
+  try {
+    const { person_id, action, absence_type } = req.body;
+    // action: 'clock_in' | 'clock_out' | 'absence_out' | 'absence_in'
+
+    if (!person_id || !action) {
+      return res.status(400).json({ error: 'Chybí person_id nebo action' });
+    }
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const now = new Date();
+    const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+    let record;
+
+    switch (action) {
+      case 'clock_in': {
+        // Kontrola duplicity — existuje otevřený příchod?
+        const openRecord = await prisma.attendance.findFirst({
+          where: { person_id: parseInt(person_id), date: today, clock_out: null, type: 'work' },
+        });
+        if (openRecord) {
+          return res.status(400).json({ error: 'Příchod již zaznamenán, nejdříve odejděte' });
+        }
+
+        record = await prisma.attendance.create({
+          data: {
+            person_id: parseInt(person_id),
+            date: today,
+            clock_in: timeStr,
+            type: 'work',
+          },
+        });
+        res.status(201).json(record);
+        break;
+      }
+
+      case 'clock_out': {
+        const existing = await prisma.attendance.findFirst({
+          where: { person_id: parseInt(person_id), date: today, clock_out: null, type: 'work' },
+          orderBy: { clock_in: 'desc' },
+        });
+        if (!existing) {
+          return res.status(404).json({ error: 'Žádný otevřený příchod k uzavření' });
+        }
+
+        record = await prisma.attendance.update({
+          where: { id: existing.id },
+          data: { clock_out: timeStr },
+        });
+        res.json(record);
+        break;
+      }
+
+      case 'absence_out': {
+        if (!absence_type) {
+          return res.status(400).json({ error: 'Chybí typ nepřítomnosti (absence_type)' });
+        }
+
+        // Kontrola — nesmí být jiná otevřená nepřítomnost/přestávka
+        const activeAbsence = await prisma.attendance.findFirst({
+          where: {
+            person_id: parseInt(person_id),
+            date: today,
+            clock_out: null,
+            type: { not: 'work' },
+          },
+        });
+        if (activeAbsence) {
+          return res.status(400).json({ error: `Již máte otevřenou nepřítomnost (${activeAbsence.type}). Nejdříve se vraťte.` });
+        }
+
+        record = await prisma.attendance.create({
+          data: {
+            person_id: parseInt(person_id),
+            date: today,
+            clock_in: timeStr,
+            type: absence_type,
+            note: `Kiosek: ${absence_type}`,
+          },
+        });
+        res.status(201).json(record);
+        break;
+      }
+
+      case 'absence_in': {
+        // Najít otevřenou nepřítomnost a uzavřít ji
+        const openAbsence = await prisma.attendance.findFirst({
+          where: {
+            person_id: parseInt(person_id),
+            date: today,
+            clock_out: null,
+            type: { not: 'work' },
+          },
+          orderBy: { clock_in: 'desc' },
+        });
+        if (!openAbsence) {
+          return res.status(404).json({ error: 'Žádná otevřená nepřítomnost' });
+        }
+
+        record = await prisma.attendance.update({
+          where: { id: openAbsence.id },
+          data: { clock_out: timeStr },
+        });
+        res.json(record);
+        break;
+      }
+
+      default:
+        return res.status(400).json({ error: `Neplatná akce: ${action}. Povoleno: clock_in, clock_out, absence_out, absence_in` });
+    }
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/hr/kiosk/absence-types — typy nepřítomností (pro kiosk menu)
+router.get('/kiosk/absence-types', async (req, res, next) => {
+  try {
+    const types = await prisma.absenceType.findMany({
+      orderBy: { name: 'asc' },
+    });
+    res.json(types);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/hr/kiosk/leave-request — žádost o dovolenou z kiosku
+router.post('/kiosk/leave-request', async (req, res, next) => {
+  try {
+    const { person_id, type, date_from, date_to, note } = req.body;
+
+    if (!person_id || !type || !date_from || !date_to) {
+      return res.status(400).json({ error: 'Chybí povinné údaje (person_id, type, date_from, date_to)' });
+    }
+
+    const request = await prisma.leaveRequest.create({
+      data: {
+        person_id: parseInt(person_id),
+        type,
+        date_from: new Date(date_from),
+        date_to: new Date(date_to),
+        note: note || null,
+        status: 'pending',
+      },
+    });
+
+    res.status(201).json(request);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/hr/kiosk/my-leave-requests — žádosti o dovolenou pro osobu
+router.get('/kiosk/my-leave-requests', async (req, res, next) => {
+  try {
+    const { person_id } = req.query;
+    if (!person_id) return res.status(400).json({ error: 'Chybí person_id' });
+
+    const requests = await prisma.leaveRequest.findMany({
+      where: { person_id: parseInt(person_id) },
+      orderBy: { created_at: 'desc' },
+      take: 10,
+    });
+
+    res.json(requests);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/hr/kiosk/break — zaznamenání přestávky (svačina, oběd)
+router.post('/kiosk/break', async (req, res, next) => {
+  try {
+    const { person_id, break_type } = req.body;
+    // break_type: break_snack_out, break_snack_in, break_lunch_out, break_lunch_in
+
+    if (!person_id || !break_type) {
+      return res.status(400).json({ error: 'Chybí person_id nebo break_type' });
+    }
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const now = new Date();
+    const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+    const breakLabels = {
+      break_snack_out: 'Svačina',
+      break_snack_in: 'Svačina',
+      break_lunch_out: 'Oběd',
+      break_lunch_in: 'Oběd',
+    };
+
+    const breakName = breakLabels[break_type] || 'Přestávka';
+    const isOut = break_type.endsWith('_out');
+
+    if (isOut) {
+      // Kontrola — nesmí být jiná otevřená nepřítomnost/přestávka
+      const activeAbsence = await prisma.attendance.findFirst({
+        where: {
+          person_id: parseInt(person_id),
+          date: today,
+          clock_out: null,
+          type: { not: 'work' },
+        },
+      });
+      if (activeAbsence) {
+        return res.status(400).json({ error: `Již máte otevřenou nepřítomnost (${activeAbsence.type}). Nejdříve se vraťte.` });
+      }
+
+      // Odchod na přestávku — vytvořit nový záznam
+      const record = await prisma.attendance.create({
+        data: {
+          person_id: parseInt(person_id),
+          date: today,
+          clock_in: timeStr,
+          type: break_type,
+          note: `${breakName} — odchod`,
+        },
+      });
+      res.status(201).json(record);
+    } else {
+      // Návrat z přestávky — uzavřít otevřený záznam
+      const outType = break_type.replace('_in', '_out');
+      const openBreak = await prisma.attendance.findFirst({
+        where: {
+          person_id: parseInt(person_id),
+          date: today,
+          type: outType,
+          clock_out: null,
+        },
+        orderBy: { clock_in: 'desc' },
+      });
+
+      if (!openBreak) {
+        return res.status(404).json({ error: `Žádný otevřený odchod na ${breakName.toLowerCase()}` });
+      }
+
+      const record = await prisma.attendance.update({
+        where: { id: openBreak.id },
+        data: {
+          clock_out: timeStr,
+          note: `${breakName} — ${timeStr}`,
+        },
+      });
+      res.json(record);
+    }
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/hr/kiosk/overtime?person_id= — výpočet přesčasů aktuálního měsíce
+router.get('/kiosk/overtime', async (req, res, next) => {
+  try {
+    const { person_id } = req.query;
+    if (!person_id) return res.status(400).json({ error: 'Chybí person_id' });
+
+    const personId = parseInt(person_id);
+
+    // Načíst osobu se směnou
+    const person = await prisma.person.findUnique({
+      where: { id: personId },
+      include: { shift: true },
+    });
+
+    if (!person) return res.status(404).json({ error: 'Osoba nenalezena' });
+
+    const dailyFund = person.shift ? parseFloat(person.shift.hours_fund) : 8.0;
+    const breakMins = person.shift ? person.shift.break_minutes : 30;
+
+    // Aktuální měsíc
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    const monthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
+    // Počet pracovních dnů v měsíci (Po-Pá)
+    let workingDays = 0;
+    const daysCounted = new Date(monthEnd);
+    for (let d = new Date(monthStart); d <= daysCounted; d.setDate(d.getDate() + 1)) {
+      const dow = d.getDay();
+      if (dow >= 1 && dow <= 5) workingDays++;
+    }
+
+    const expectedHours = workingDays * dailyFund;
+
+    // Načíst záznamy docházky (pouze typ 'work')
+    const records = await prisma.attendance.findMany({
+      where: {
+        person_id: personId,
+        date: { gte: monthStart, lte: monthEnd },
+        type: 'work',
+      },
+    });
+
+    // Spočítat odpracované hodiny
+    let workedMinutes = 0;
+    let daysWorked = 0;
+
+    for (const r of records) {
+      if (r.clock_in && r.clock_out) {
+        const [ih, im] = r.clock_in.split(':').map(Number);
+        const [oh, om] = r.clock_out.split(':').map(Number);
+        const mins = (oh * 60 + om) - (ih * 60 + im) - (r.break_minutes || breakMins);
+        if (mins > 0) workedMinutes += mins;
+        daysWorked++;
+      }
+    }
+
+    const workedHours = workedMinutes / 60;
+    // Přesčasy = odpracováno - očekáváno (pouze za dny, které už proběhly)
+    // Počítáme fond jen za uplynulé pracovní dny
+    let pastWorkingDays = 0;
+    const yesterday = new Date(now);
+    yesterday.setDate(yesterday.getDate() - 1);
+    for (let d = new Date(monthStart); d <= yesterday; d.setDate(d.getDate() + 1)) {
+      const dow = d.getDay();
+      if (dow >= 1 && dow <= 5) pastWorkingDays++;
+    }
+
+    const expectedSoFar = pastWorkingDays * dailyFund;
+    const overtimeHours = workedHours - expectedSoFar;
+
+    // Načíst schválené převody přesčasů pro tento měsíc
+    let transferredHours = 0;
+    try {
+      const transfers = await prisma.overtimeRequest.findMany({
+        where: { person_id: personId, month: monthStr, status: 'approved' },
+      });
+      transferredHours = transfers.reduce((sum, t) => sum + parseFloat(t.hours), 0);
+    } catch (e) {
+      // Tabulka možná ještě neexistuje
+    }
+
+    // Načíst čekající žádosti
+    let pendingRequests = [];
+    try {
+      pendingRequests = await prisma.overtimeRequest.findMany({
+        where: { person_id: personId, status: 'pending' },
+        orderBy: { created_at: 'desc' },
+        take: 5,
+      });
+    } catch (e) {
+      // Tabulka možná ještě neexistuje
+    }
+
+    res.json({
+      month: monthStr,
+      daily_fund: dailyFund,
+      working_days: workingDays,
+      past_working_days: pastWorkingDays,
+      expected_hours: Math.round(expectedSoFar * 100) / 100,
+      expected_hours_total: Math.round(expectedHours * 100) / 100,
+      worked_hours: Math.round(workedHours * 100) / 100,
+      overtime_hours: Math.round(overtimeHours * 100) / 100,
+      transferred_hours: Math.round(transferredHours * 100) / 100,
+      net_overtime: Math.round((overtimeHours - transferredHours) * 100) / 100,
+      days_worked: daysWorked,
+      pending_requests: pendingRequests,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/hr/kiosk/overtime-request — žádost o převod přesčasů
+router.post('/kiosk/overtime-request', async (req, res, next) => {
+  try {
+    const { person_id, hours, type, note } = req.body;
+    // type: 'transfer_to_leave' (přesčas→volno), 'transfer_to_pay' (přesčas→peníze), 'debt_work' (odpracování dluhu)
+
+    if (!person_id || hours === undefined || !type) {
+      return res.status(400).json({ error: 'Chybí person_id, hours nebo type' });
+    }
+
+    const now = new Date();
+    const monthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
+    const request = await prisma.overtimeRequest.create({
+      data: {
+        person_id: parseInt(person_id),
+        hours: parseFloat(hours),
+        type,
+        note: note || null,
+        status: 'pending',
+        month: monthStr,
+      },
+    });
+
+    res.status(201).json(request);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ─── KONEC KIOSKU ───────────────────────────────────────────────────────
+
+// Všechny následující HR routy vyžadují autentizaci
 router.use(requireAuth);
 
 // ─── LIDÉ ──────────────────────────────────────────────────────────────────
@@ -425,14 +995,21 @@ router.delete('/absence-types/:id', async (req, res, next) => {
 
 // ─── DOCHÁZKA ──────────────────────────────────────────────────────────────
 
-// GET /api/hr/attendance?person_id=&date_from=&date_to=
+// GET /api/hr/attendance?person_id=&date_from=&date_to=&month=YYYY-MM
 router.get('/attendance', async (req, res, next) => {
   try {
-    const { person_id, date_from, date_to } = req.query;
+    const { person_id, date_from, date_to, month } = req.query;
 
     const where = {};
     if (person_id) where.person_id = parseInt(person_id);
-    if (date_from || date_to) {
+
+    // Filtr podle měsíce (month=2026-04)
+    if (month) {
+      const [year, mon] = month.split('-').map(Number);
+      const start = new Date(year, mon - 1, 1);
+      const end = new Date(year, mon, 0); // poslední den měsíce
+      where.date = { gte: start, lte: end };
+    } else if (date_from || date_to) {
       where.date = {};
       if (date_from) where.date.gte = new Date(date_from);
       if (date_to) where.date.lte = new Date(date_to);
@@ -446,7 +1023,14 @@ router.get('/attendance', async (req, res, next) => {
       orderBy: [{ date: 'desc' }, { clock_in: 'desc' }],
     });
 
-    res.json(records);
+    // Zploštit person data pro frontend (r.first_name, r.last_name)
+    const flat = records.map(r => ({
+      ...r,
+      first_name: r.person?.first_name || '',
+      last_name: r.person?.last_name || '',
+    }));
+
+    res.json(flat);
   } catch (err) {
     next(err);
   }
@@ -1090,77 +1674,7 @@ router.put('/document-notifications/:id', async (req, res, next) => {
   }
 });
 
-// ─── KIOSEK (příchod/odchod přes čip) ───────────────────────────────────
-
-// POST /api/hr/kiosk/identify
-router.post('/kiosk/identify', async (req, res, next) => {
-  try {
-    const { chip_number, chip_card_id } = req.body;
-    const where = {};
-    if (chip_number) where.chip_number = chip_number;
-    else if (chip_card_id) where.chip_card_id = chip_card_id;
-    else return res.status(400).json({ error: 'Chybí chip_number nebo chip_card_id' });
-
-    const person = await prisma.person.findFirst({
-      where: { ...where, active: true },
-      select: {
-        id: true, first_name: true, last_name: true, photo_url: true,
-        department: { select: { id: true, name: true } },
-        shift: true,
-      },
-    });
-
-    if (!person) return res.status(404).json({ error: 'Osoba nenalezena' });
-    res.json(person);
-  } catch (err) {
-    next(err);
-  }
-});
-
-// POST /api/hr/kiosk/clock
-router.post('/kiosk/clock', async (req, res, next) => {
-  try {
-    const { person_id, action } = req.body; // action: 'in' | 'out'
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const now = new Date();
-    const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-
-    if (action === 'in') {
-      const record = await prisma.attendance.create({
-        data: {
-          person_id: parseInt(person_id),
-          date: today,
-          clock_in: timeStr,
-          type: 'work',
-        },
-      });
-      res.status(201).json(record);
-    } else if (action === 'out') {
-      // Najít dnešní otevřený záznam
-      const existing = await prisma.attendance.findFirst({
-        where: {
-          person_id: parseInt(person_id),
-          date: today,
-          clock_out: null,
-        },
-        orderBy: { clock_in: 'desc' },
-      });
-
-      if (!existing) return res.status(404).json({ error: 'Žádný otevřený příchod' });
-
-      const record = await prisma.attendance.update({
-        where: { id: existing.id },
-        data: { clock_out: timeStr },
-      });
-      res.json(record);
-    } else {
-      res.status(400).json({ error: 'Neplatná akce (povoleno: in, out)' });
-    }
-  } catch (err) {
-    next(err);
-  }
-});
+// (Kiosk endpointy přesunuty PŘED requireAuth — viz začátek souboru)
 
 // ─── SPRÁVA ÚČTŮ ZAMĚSTNANCŮ ─────────────────────────────────────────────
 

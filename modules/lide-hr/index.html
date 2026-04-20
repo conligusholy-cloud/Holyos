@@ -1244,7 +1244,9 @@
 
     function formatDate(d) {
       if (!d) return '—';
-      const [y, m, day] = d.split('-');
+      // Prisma vrací ISO string (2026-04-14T00:00:00.000Z) nebo YYYY-MM-DD
+      const dateStr = d.includes('T') ? d.split('T')[0] : d;
+      const [y, m, day] = dateStr.split('-');
       return `${day}.${m}.${y}`;
     }
 

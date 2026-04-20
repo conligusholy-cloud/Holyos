@@ -300,6 +300,7 @@ router.post('/orders/:id/share', async (req, res, next) => {
 // PUT /api/wh/orders/:id
 router.put('/orders/:id', async (req, res, next) => {
   try {
+    const orderId = parseInt(req.params.id);
     const allowed = {};
     const fields = ['status', 'currency', 'note', 'expected_delivery', 'items_count', 'total_amount', 'company_id'];
     for (const f of fields) {
@@ -309,8 +310,22 @@ router.put('/orders/:id', async (req, res, next) => {
     if (allowed.items_count !== undefined) allowed.items_count = parseInt(allowed.items_count) || 0;
     if (allowed.total_amount !== undefined) allowed.total_amount = parseFloat(allowed.total_amount) || 0;
 
+    // Při zrušení objednávky uvolni sloty
+    if (allowed.status === 'cancelled') {
+      const assignments = await prisma.slotAssignment.findMany({ where: { order_id: orderId } });
+      const slotIds = [...new Set(assignments.map(a => a.slot_id))];
+      await prisma.slotAssignment.deleteMany({ where: { order_id: orderId } });
+      // Uvolni sloty, které nemají další přiřazení
+      for (const sid of slotIds) {
+        const remaining = await prisma.slotAssignment.count({ where: { slot_id: sid } });
+        if (remaining === 0) {
+          await prisma.productionSlot.update({ where: { id: sid }, data: { status: 'open' } });
+        }
+      }
+    }
+
     const order = await prisma.order.update({
-      where: { id: parseInt(req.params.id) },
+      where: { id: orderId },
       data: allowed,
       include: { items: true },
     });
@@ -323,7 +338,21 @@ router.put('/orders/:id', async (req, res, next) => {
 // DELETE /api/wh/orders/:id
 router.delete('/orders/:id', async (req, res, next) => {
   try {
-    await prisma.order.delete({ where: { id: parseInt(req.params.id) } });
+    const orderId = parseInt(req.params.id);
+
+    // Uvolni sloty přiřazené k této objednávce
+    const assignments = await prisma.slotAssignment.findMany({ where: { order_id: orderId } });
+    const slotIds = [...new Set(assignments.map(a => a.slot_id))];
+    await prisma.slotAssignment.deleteMany({ where: { order_id: orderId } });
+    // Uvolni sloty, které nemají další přiřazení
+    for (const sid of slotIds) {
+      const remaining = await prisma.slotAssignment.count({ where: { slot_id: sid } });
+      if (remaining === 0) {
+        await prisma.productionSlot.update({ where: { id: sid }, data: { status: 'open' } });
+      }
+    }
+
+    await prisma.order.delete({ where: { id: orderId } });
     res.json({ ok: true });
   } catch (err) {
     next(err);
@@ -395,10 +424,58 @@ router.put('/orders/:orderId/items/:itemId', async (req, res, next) => {
   }
 });
 
+// PUT /api/wh/orders/:orderId/items/:itemId — editace položky objednávky
+router.put('/orders/:orderId/items/:itemId', async (req, res, next) => {
+  try {
+    const { name, quantity, unit, unit_price } = req.body;
+    const updateData = {};
+    if (name !== undefined) updateData.name = name;
+    if (quantity !== undefined) {
+      updateData.quantity = parseFloat(quantity);
+      updateData.total_price = parseFloat(quantity) * parseFloat(unit_price || req.body.unit_price || 0);
+    }
+    if (unit !== undefined) updateData.unit = unit;
+    if (unit_price !== undefined) {
+      updateData.unit_price = parseFloat(unit_price);
+      updateData.total_price = parseFloat(quantity || req.body.quantity || 0) * parseFloat(unit_price);
+    }
+
+    const item = await prisma.orderItem.update({
+      where: { id: parseInt(req.params.itemId) },
+      data: updateData,
+    });
+
+    // Přepočítej celkovou částku objednávky
+    const allItems = await prisma.orderItem.findMany({
+      where: { order_id: parseInt(req.params.orderId) },
+    });
+    const newTotal = allItems.reduce((sum, i) => sum + parseFloat(i.total_price || 0), 0);
+    await prisma.order.update({
+      where: { id: parseInt(req.params.orderId) },
+      data: { total_amount: newTotal, items_count: allItems.length },
+    });
+
+    res.json(item);
+  } catch (err) {
+    next(err);
+  }
+});
+
 // DELETE /api/wh/orders/:orderId/items/:itemId
 router.delete('/orders/:orderId/items/:itemId', async (req, res, next) => {
   try {
-    await prisma.orderItem.delete({ where: { id: parseInt(req.params.itemId) } });
+    const itemId = parseInt(req.params.itemId);
+    // Uvolni sloty přiřazené k této položce
+    const assignments = await prisma.slotAssignment.findMany({ where: { order_item_id: itemId } });
+    const slotIds = [...new Set(assignments.map(a => a.slot_id))];
+    await prisma.slotAssignment.deleteMany({ where: { order_item_id: itemId } });
+    for (const sid of slotIds) {
+      const remaining = await prisma.slotAssignment.count({ where: { slot_id: sid } });
+      if (remaining === 0) {
+        await prisma.productionSlot.update({ where: { id: sid }, data: { status: 'open' } });
+      }
+    }
+    await prisma.orderItem.delete({ where: { id: itemId } });
     res.json({ ok: true });
   } catch (err) {
     next(err);
@@ -408,7 +485,18 @@ router.delete('/orders/:orderId/items/:itemId', async (req, res, next) => {
 // DELETE /api/wh/order-items/:id — kompatibilní alias (frontend volá tuto cestu)
 router.delete('/order-items/:id', async (req, res, next) => {
   try {
-    await prisma.orderItem.delete({ where: { id: parseInt(req.params.id) } });
+    const itemId = parseInt(req.params.id);
+    // Uvolni sloty přiřazené k této položce
+    const assignments = await prisma.slotAssignment.findMany({ where: { order_item_id: itemId } });
+    const slotIds = [...new Set(assignments.map(a => a.slot_id))];
+    await prisma.slotAssignment.deleteMany({ where: { order_item_id: itemId } });
+    for (const sid of slotIds) {
+      const remaining = await prisma.slotAssignment.count({ where: { slot_id: sid } });
+      if (remaining === 0) {
+        await prisma.productionSlot.update({ where: { id: sid }, data: { status: 'open' } });
+      }
+    }
+    await prisma.orderItem.delete({ where: { id: itemId } });
     res.json({ ok: true });
   } catch (err) {
     next(err);

@@ -332,7 +332,7 @@
       const el = document.getElementById('dashboard-content');
       try {
         const [ordersRes, matsRes, movsRes] = await Promise.all([
-          fetch('/api/wh/orders?status=new'), fetch('/api/wh/materials?low_stock=true'), fetch('/api/wh/movements')
+          fetch('/api/wh/orders?status=new&type=purchase'), fetch('/api/wh/materials?low_stock=true'), fetch('/api/wh/movements')
         ]);
         const newOrders = await ordersRes.json();
         const lowStock = await matsRes.json();
@@ -342,7 +342,7 @@
 
         // New orders
         html += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px;">';
-        html += '<h3 style="font-size:15px;margin-bottom:12px;">📋 Nové objednávky (' + newOrders.length + ')</h3>';
+        html += '<h3 style="font-size:15px;margin-bottom:12px;">📋 Nové nákupní objednávky (' + newOrders.length + ')</h3>';
         if (newOrders.length === 0) {
           html += '<div style="color:var(--text2);font-size:13px;">Žádné nové objednávky</div>';
         } else {

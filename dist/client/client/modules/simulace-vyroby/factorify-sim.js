@@ -1,51 +1,219 @@
 /* ============================================
-   factorify-sim.js — Simulace výroby
-   Přepojeno na vlastní HolyOS API (Fáze 3)
+   factorify-sim.ts — Factorify API pro simulaci
+   Načtení zboží (Item), pracovních postupů a operací
    ============================================ */
 import { PersistentStorage } from '../../js/persistent-storage.js';
 import { state } from './state.js';
 import { showToast } from './app.js';
 export { showToast };
+const ENV_PATHS = [
+    '../../.env',
+    '../../../.env',
+    './.env',
+];
 export const FactorifyAPI = {
     connected: false,
     loading: false,
     error: null,
-    configLoaded: true,
+    configLoaded: false,
     config: {
+        baseUrl: 'https://bs.factorify.cloud',
+        proxyUrl: window.location.origin,
         useProxy: true,
-        securityToken: 'local',
+        securityToken: '',
+        headers: {
+            'Accept': 'application/json',
+            'X-FySerialization': 'ui2',
+        },
     },
     // Cache
     products: [],
     stages: [],
     routes: {},
     entities: [],
+    parseEnv(text) {
+        const result = {};
+        text.split('\n').forEach(line => {
+            line = line.trim();
+            if (!line || line.startsWith('#'))
+                return;
+            const eq = line.indexOf('=');
+            if (eq < 0)
+                return;
+            let key = line.substring(0, eq).trim();
+            let val = line.substring(eq + 1).trim();
+            if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+                val = val.slice(1, -1);
+            }
+            result[key] = val;
+        });
+        return result;
+    },
     async loadEnv() {
-        this.configLoaded = true;
-        return true;
-    },
-    async fetchAPI(path) {
-        const resp = await fetch(path, { headers: { 'Accept': 'application/json' } });
-        if (!resp.ok) {
-            const errText = await resp.text().catch(() => '');
-            throw new Error(`API ${resp.status}: ${errText.substring(0, 200)}`);
+        for (const path of ENV_PATHS) {
+            try {
+                const resp = await fetch(path, { cache: 'no-store' });
+                if (resp.ok) {
+                    const text = await resp.text();
+                    const env = this.parseEnv(text);
+                    if (env.FACTORIFY_BASE_URL)
+                        this.config.baseUrl = env.FACTORIFY_BASE_URL;
+                    if (env.FACTORIFY_TOKEN)
+                        this.config.securityToken = env.FACTORIFY_TOKEN;
+                    this.configLoaded = true;
+                    console.log('Factorify .env načten z:', path);
+                    return true;
+                }
+            }
+            catch (e) {
+                // Pokračovat na další cestu
+            }
         }
-        return await resp.json();
+        return false;
     },
-    // ---- Načíst produkty ----
+    async fetchAPI(path, options = {}) {
+        const cfg = this.config;
+        const method = options.method || 'GET';
+        const body = options.body || null;
+        if (cfg.useProxy) {
+            const url = cfg.proxyUrl + path;
+            const fetchOpts = {
+                method,
+                headers: { 'Accept': 'application/json', 'X-FySerialization': 'ui2' },
+            };
+            if (body) {
+                fetchOpts.headers = { ...fetchOpts.headers, 'Content-Type': 'application/json' };
+                fetchOpts.body = typeof body === 'string' ? body : JSON.stringify(body);
+            }
+            const resp = await fetch(url, fetchOpts);
+            if (!resp.ok) {
+                const errText = await resp.text().catch(() => '');
+                throw new Error(`API ${resp.status}: ${errText.substring(0, 200)}`);
+            }
+            return await resp.json();
+        }
+        throw new Error('Přímé volání API není podporováno — spusťte proxy server');
+    },
+    async queryEntity(entityName, filter) {
+        const path = '/api/query/' + entityName;
+        const body = filter || {};
+        return await this.fetchAPI(path, { method: 'POST', body });
+    },
+    // Extrahovat pole z API odpovědi (různé formáty)
+    extractArray(data) {
+        if (Array.isArray(data))
+            return data;
+        if (data && typeof data === 'object') {
+            const obj = data;
+            if (Array.isArray(obj.rows))
+                return obj.rows;
+            if (Array.isArray(obj.items))
+                return obj.items;
+            if (Array.isArray(obj.records))
+                return obj.records;
+            if (Array.isArray(obj.data))
+                return obj.data;
+            for (const key of Object.keys(obj)) {
+                if (Array.isArray(obj[key]))
+                    return obj[key];
+            }
+        }
+        return [];
+    },
+    // ---- Načíst seznam entit ----
+    async loadEntities() {
+        try {
+            const data = await this.fetchAPI('/api/metadata/entities');
+            this.entities = Array.isArray(data) ? data : [];
+            return this.entities;
+        }
+        catch (e) {
+            console.error('loadEntities error:', e);
+            return [];
+        }
+    },
+    // ---- Načíst zboží (Item / Product) ----
     async loadProducts() {
         this.loading = true;
         this.error = null;
         try {
-            console.log('GET /api/production/products ...');
-            const products = await this.fetchAPI('/api/production/products');
-            console.log(`Načteno ${products.length} produktů`);
-            this.products = products.map(p => ({
-                id: p.id,
-                name: p.name || ('Produkt ' + p.id),
-                code: p.code || '',
-                type: p.type || 'product',
-            }));
+            if (!this.configLoaded)
+                await this.loadEnv();
+            // Zkusit entity: Item, Product, Goods, ...
+            const entityNames = ['Item', 'Product', 'Goods', 'Article', 'Material'];
+            let data = null;
+            let usedEntity = null;
+            for (const eName of entityNames) {
+                try {
+                    console.log(`Zkouším POST /api/query/${eName} ...`);
+                    data = await this.queryEntity(eName);
+                    usedEntity = eName;
+                    console.log(`Entity ${eName} nalezena!`);
+                    break;
+                }
+                catch (e) {
+                    console.log(`Entity ${eName}: ${e.message}`);
+                }
+            }
+            if (!data) {
+                // Zkusit najít entity obsahující "item" nebo "product"
+                const entities = await this.loadEntities();
+                const candidates = entities.filter(e => {
+                    const n = (e.name || '').toLowerCase();
+                    const l = (e.label || '').toLowerCase();
+                    return n.includes('item') || n.includes('product') || n.includes('goods')
+                        || n.includes('zboz') || n.includes('artik') || n.includes('mater')
+                        || l.includes('zboží') || l.includes('výrobek') || l.includes('artikl');
+                });
+                if (candidates.length > 0) {
+                    for (const c of candidates) {
+                        try {
+                            console.log(`Zkouším kandidáta: ${c.name} (${c.label || ''})`);
+                            data = await this.queryEntity(c.name);
+                            usedEntity = c.name || null;
+                            break;
+                        }
+                        catch (e) {
+                            console.log(`Kandidát ${c.name} selhal:`, e.message);
+                        }
+                    }
+                }
+            }
+            if (!data) {
+                throw new Error('Nepodařilo se najít entitu pro zboží v Factorify');
+            }
+            const items = this.extractArray(data);
+            console.log(`Načteno ${items.length} položek z entity ${usedEntity}`);
+            const allProducts = items.map((item) => {
+                // Typ může být string nebo objekt { id, label }
+                const rawType = item.type || item.Type || item.itemType || item.ItemType || '';
+                let typeName = '';
+                if (typeof rawType === 'object' && rawType !== null) {
+                    typeName = rawType.label || rawType.name || rawType.Name || String(rawType.id || '');
+                }
+                else {
+                    typeName = String(rawType);
+                }
+                return {
+                    id: item.id || item.ID || item.Id,
+                    name: item.label || item.name || item.Name || item.title || ('Položka ' + (item.id || '')),
+                    code: item.code || item.Code || item.referenceName || item.ReferenceName || '',
+                    type: typeName,
+                    raw: item,
+                };
+            });
+            // Filtrovat pouze výrobky
+            this.products = allProducts.filter(p => {
+                const t = (p.type || '').toLowerCase();
+                return t.includes('výrobek') || t.includes('vyrobek') || t.includes('product')
+                    || t.includes('manufactured') || t.includes('produced');
+            });
+            console.log(`Filtrováno: ${this.products.length} výrobků z ${allProducts.length} celkem`);
+            // Pokud filtr nenašel nic, ukázat vše (fallback)
+            if (this.products.length === 0) {
+                console.warn('Žádné zboží s typem "výrobek" — zobrazuji vše');
+                this.products = allProducts;
+            }
             this.connected = true;
             this.loading = false;
             return this.products;
@@ -59,11 +227,13 @@ export const FactorifyAPI = {
     // ---- Načíst pracoviště ----
     async loadStages() {
         try {
-            const workstations = await this.fetchAPI('/api/production/workstations');
-            this.stages = workstations.map(ws => ({
-                id: ws.id,
-                name: ws.name || ('Pracoviště ' + ws.id),
-                code: ws.code || '',
+            const data = await this.queryEntity('Stage');
+            const items = this.extractArray(data);
+            this.stages = items.map(item => ({
+                id: item.id || item.ID,
+                name: item.label || item.name || item.Name || ('Pracoviště ' + (item.id || '')),
+                code: item.code || item.Code || item.referenceName || '',
+                raw: item,
             }));
             return this.stages;
         }
@@ -72,24 +242,84 @@ export const FactorifyAPI = {
             return [];
         }
     },
-    // ---- Načíst operace pro produkt ----
-    async loadRoute(productId) {
-        if (this.routes[productId])
-            return this.routes[productId];
+    // ---- Načíst pracovní postup pro zboží ----
+    async loadRoute(itemId) {
+        if (this.routes[itemId])
+            return this.routes[itemId];
         try {
-            console.log(`GET /api/production/operations?product_id=${productId} ...`);
-            const ops = await this.fetchAPI(`/api/production/operations?product_id=${productId}`);
-            const operations = ops.map((op, idx) => ({
-                id: op.id,
-                name: op.name || ('Operace ' + (idx + 1)),
-                stageId: op.workstation_id || null,
-                stageName: op.workstation ? op.workstation.name : '',
-                duration: op.duration || 60,
-                order: op.step_number || idx + 1,
-            }));
-            operations.sort((a, b) => a.order - b.order);
-            this.routes[productId] = operations;
-            console.log(`Postup pro produkt ${productId}: ${operations.length} operací`);
+            // Zkusit entity: WorkOperation, Operation, Route, TechnologicalRoute, ...
+            const routeEntities = [
+                'WorkOperation', 'Operation', 'ProductionOperation',
+                'TechnologicalRoute', 'Route', 'BOM', 'BillOfMaterial',
+                'ManufacturingRoute', 'ProductionRoute', 'RoutingOperation',
+            ];
+            let data = null;
+            let usedEntity = null;
+            for (const eName of routeEntities) {
+                try {
+                    // Zkusit s filtrem na item
+                    data = await this.queryEntity(eName, { itemId: itemId });
+                    if (this.extractArray(data).length > 0) {
+                        usedEntity = eName;
+                        break;
+                    }
+                    // Zkusit bez filtru a filtrovat lokálně
+                    data = await this.queryEntity(eName);
+                    const all = this.extractArray(data);
+                    if (all.length > 0) {
+                        usedEntity = eName;
+                        break;
+                    }
+                }
+                catch (e) {
+                    // Pokračovat
+                }
+            }
+            if (!data && !usedEntity) {
+                // Hledat dynamicky
+                if (this.entities.length === 0)
+                    await this.loadEntities();
+                const candidates = this.entities.filter(e => {
+                    const n = (e.name || '').toLowerCase();
+                    const l = (e.label || '').toLowerCase();
+                    return n.includes('oper') || n.includes('route') || n.includes('routing')
+                        || n.includes('postup') || l.includes('operac') || l.includes('postup');
+                });
+                for (const c of candidates) {
+                    try {
+                        data = await this.queryEntity(c.name);
+                        if (this.extractArray(data).length > 0) {
+                            usedEntity = c.name || null;
+                            break;
+                        }
+                    }
+                    catch (e) {
+                        // Pokračovat
+                    }
+                }
+            }
+            let operations = [];
+            if (data) {
+                const rawOps = this.extractArray(data);
+                // Pokusit se filtrovat na itemId
+                let filtered = rawOps.filter(op => op.itemId === itemId || op.item === itemId ||
+                    op.productId === itemId || op.product === itemId ||
+                    (op.item && op.item.id === itemId));
+                if (filtered.length === 0)
+                    filtered = rawOps; // ukázat vše pokud nelze filtrovat
+                operations = filtered.map((op, idx) => ({
+                    id: op.id || op.ID || idx,
+                    name: op.label || op.name || op.Name || op.operationName || ('Operace ' + (idx + 1)),
+                    stageId: op.stageId || op.stage || (op.stage && op.stage.id) || null,
+                    stageName: op.stageName || (op.stage && (op.stage.label || op.stage.name)) || '',
+                    duration: op.duration || op.time || op.operationTime || op.cycleTime || 60, // sekundy
+                    order: op.order || op.sequence || op.operationOrder || op.sort || idx + 1,
+                }));
+                // Seřadit podle pořadí
+                operations.sort((a, b) => a.order - b.order);
+            }
+            this.routes[itemId] = operations;
+            console.log(`Postup pro item ${itemId}: ${operations.length} operací (z entity ${usedEntity || '?'})`);
             return operations;
         }
         catch (err) {

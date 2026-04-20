@@ -29,11 +29,12 @@ export interface Dimensions {
 export type ObjectType = 'areal' | 'hala' | 'pracoviste' | 'sklad' | 'cesta' | 'vstup';
 export type EntranceType = 'vjezd' | 'vyjezd' | 'oboji';
 export type DrawConstraint = 'h' | 'v' | null;
-export type DrawType = ObjectType | null;
+export type DrawType = ObjectType | 'stena' | null;
 
 export interface Entrance {
   id: number;
-  edgeIndex: number;
+  edgeIndex: number;        // -1 pokud je entrance na vnitřní stěně (použij wallId)
+  wallId?: number;          // id Wall uvnitř haly — pokud nastaveno, entrance je na této stěně
   t1: number;
   t2: number;
   type: EntranceType;
@@ -56,11 +57,13 @@ export interface Wall {
   y2: number;
   name: string;
   gates: Gate[];
+  locked?: boolean;
 }
 
 export interface EntrancePlacePoint {
   objId: number;
   edgeIndex: number;
+  wallId?: number;
   t: number;
   px: number;
   py: number;
@@ -118,6 +121,7 @@ export interface EditorState {
   connections: Connection[];
   nextId: number;
   selected: number | null;
+  highlightedWallId?: number | null;
   zoom: number;
   panX: number;
   panY: number;

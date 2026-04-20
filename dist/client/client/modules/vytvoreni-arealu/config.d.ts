@@ -9,7 +9,7 @@ export interface EntranceTypeConfig {
     label: string;
     icon: string;
 }
-export declare const COLORS: Record<ObjectType, ColorConfig>;
+export declare const COLORS: Record<string, ColorConfig>;
 export declare const DEFAULT_SIZES: Record<ObjectType, Dimensions>;
 export declare const POLYGON_TYPES: ObjectType[];
 export declare const RECT_TYPES: ObjectType[];

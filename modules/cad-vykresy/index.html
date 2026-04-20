@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CAD výkresy | HOLYOS</title>
+  <link rel="icon" type="image/svg+xml" href="../../logo-holyos-icon.svg">
+  <base href="../../">
+  <link rel="stylesheet" href="css/dashboard.css">
+  <style>
+    .main-wrapper { margin-left: var(--sidebar-w); flex: 1; min-height: 100vh; display: flex; flex-direction: column; }
+
+    .page-header {
+      display:flex; align-items:center; gap:12px; padding:20px 24px;
+      border-bottom:1px solid var(--border); flex-wrap:wrap;
+    }
+    .page-header h1 { font-size:18px; font-weight:700; margin:0; }
+    .page-header .count { font-size:13px; color:var(--text2); margin-left:4px; }
+    .search-box {
+      margin-left:auto; padding:8px 14px; background:var(--surface2); color:var(--text);
+      border:1px solid var(--border); border-radius:8px; font-size:13px; width:260px;
+    }
+    .search-box:focus { border-color:var(--accent); outline:none; }
+
+    .btn { padding:8px 16px; border-radius:8px; border:1px solid var(--border); font-size:13px; font-weight:500; cursor:pointer; transition:all 0.15s; display:inline-flex; align-items:center; gap:6px; background:transparent; color:var(--text); }
+    .btn-primary { background:#0284c7; color:#fff; border-color:#0284c7; }
+    .btn-primary:hover { background:#0369a1; }
+    .btn-secondary { background:var(--surface2); color:var(--text); }
+    .btn-sm { padding:5px 12px; font-size:12px; }
+
+    .content { display:grid; grid-template-columns: 320px 1fr; gap:0; flex:1; min-height:0; }
+
+    .tree-panel {
+      border-right:1px solid var(--border);
+      padding:16px 12px; overflow-y:auto;
+      background:var(--surface);
+    }
+    .tree-panel h3 { font-size:11px; text-transform:uppercase; letter-spacing:0.5px; color:var(--text2); margin:0 0 10px 4px; }
+    .tree-node {
+      padding:6px 10px; margin:2px 0; border-radius:6px; cursor:pointer; font-size:13px;
+      display:flex; align-items:center; gap:6px; color:var(--text);
+    }
+    .tree-node:hover { background:var(--surface2); }
+    .tree-node.active { background:rgba(2,132,199,0.15); color:#0284c7; font-weight:500; }
+    .tree-node.block { padding-left:26px; font-size:12px; color:var(--text2); }
+    .tree-node.block.active { color:#0284c7; }
+    .tree-expand { width:12px; display:inline-block; text-align:center; color:var(--text2); }
+    .tree-count { margin-left:auto; font-size:11px; color:var(--text2); background:var(--surface2); padding:1px 7px; border-radius:10px; }
+    .tree-node.active .tree-count { background:rgba(2,132,199,0.25); color:#0284c7; }
+
+    .right-panel { display:flex; flex-direction:column; min-width:0; overflow:hidden; }
+
+    .drawings-list {
+      flex:1; overflow-y:auto; padding:16px 20px;
+    }
+    .drawings-list h2 { font-size:15px; font-weight:600; margin:0 0 12px; }
+
+    .data-table { width:100%; border-collapse:separate; border-spacing:0; }
+    .data-table th { background:var(--surface2); padding:10px 12px; text-align:left; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; color:var(--text2); border-bottom:1px solid var(--border); }
+    .data-table td { padding:10px 12px; font-size:13px; border-bottom:1px solid rgba(255,255,255,0.04); vertical-align:middle; }
+    .data-table tr { cursor:pointer; }
+    .data-table tr:hover td { background:rgba(2,132,199,0.07); }
+    .data-table tr.selected td { background:rgba(2,132,199,0.15); }
+
+    .badge { display:inline-block; padding:2px 8px; border-radius:10px; font-size:11px; font-weight:500; }
+    .badge-ext-sldprt  { background:rgba(14,165,233,0.15); color:#0ea5e9; }
+    .badge-ext-sldasm  { background:rgba(139,92,246,0.15); color:#a78bfa; }
+    .badge-ext-slddrw  { background:rgba(245,158,11,0.15); color:#f59e0b; }
+    .badge-ext-stl     { background:rgba(34,197,94,0.15); color:#22c55e; }
+    .badge-unknown     { background:rgba(239,68,68,0.15); color:#ef4444; }
+    .badge-count       { background:var(--surface2); color:var(--text2); }
+
+    .detail-pane {
+      border-top:1px solid var(--border);
+      height: 45vh;
+      overflow-y:auto;
+      padding:16px 20px;
+      background:var(--surface);
+    }
+    .detail-pane h2 { font-size:15px; font-weight:600; margin:0 0 8px; }
+    .detail-meta { display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:8px 20px; font-size:13px; margin-bottom:16px; }
+    .detail-meta div span { color:var(--text2); font-size:11px; text-transform:uppercase; letter-spacing:0.5px; display:block; }
+    .config-row {
+      border:1px solid var(--border); border-radius:8px; padding:12px; margin-bottom:10px;
+      background:var(--surface2);
+    }
+    .config-row header { display:flex; align-items:center; gap:12px; margin-bottom:8px; }
+    .config-row h4 { margin:0; font-size:14px; font-weight:600; }
+    .config-actions { margin-left:auto; display:flex; gap:6px; }
+    .preview-thumb { width:120px; height:auto; border-radius:6px; border:1px solid var(--border); }
+    .config-body { display:grid; grid-template-columns:130px 1fr; gap:14px; }
+    .prop-list { font-size:12px; line-height:1.6; }
+    .prop-list b { color:var(--text2); font-weight:500; margin-right:4px; }
+
+    .bom-table { width:100%; margin-top:10px; font-size:12px; border-collapse:collapse; }
+    .bom-table th { text-align:left; color:var(--text2); font-size:10px; text-transform:uppercase; letter-spacing:0.5px; padding:4px 6px; border-bottom:1px solid var(--border); }
+    .bom-table td { padding:5px 6px; border-bottom:1px solid rgba(255,255,255,0.04); }
+
+    .empty {
+      color:var(--text2); font-style:italic; padding:40px; text-align:center;
+    }
+    .loader {
+      color:var(--text2); padding:40px; text-align:center;
+    }
+  </style>
+</head>
+<body>
+  <div id="sidebar"></div>
+  <div class="main-wrapper">
+    <div class="page-header">
+      <span style="font-size:26px;">&#128196;</span>
+      <div>
+        <h1>CAD výkresy <span class="count" id="cad-count"></span></h1>
+      </div>
+      <input type="text" class="search-box" id="cad-search" placeholder="Hledat podle názvu souboru, titulku…">
+      <button class="btn btn-secondary" id="btn-reload" title="Obnovit seznam">&#8635; Obnovit</button>
+      <button class="btn btn-primary" id="btn-new-project">+ Nový projekt</button>
+    </div>
+
+    <div class="content">
+      <!-- Strom projektů -->
+      <aside class="tree-panel">
+        <h3>Projekty</h3>
+        <div id="project-tree" class="loader">Načítám…</div>
+      </aside>
+
+      <!-- Pravá strana: seznam + detail -->
+      <section class="right-panel">
+        <div class="drawings-list">
+          <h2 id="drawings-title">Vyber projekt vlevo</h2>
+          <div id="drawings-table"></div>
+        </div>
+        <div class="detail-pane" id="detail-pane">
+          <div class="empty">Vyber výkres ze seznamu pro zobrazení detailu.</div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <script>
+    var s = document.createElement('script');
+    s.src = 'js/sidebar.js?v=' + Date.now();
+    s.onload = function() { renderSidebar('cad-vykresy'); };
+    document.head.appendChild(s);
+  </script>
+
+  <script>
+    // ─── Autentizace ──────────────────────────────────────────────────────────
+    const token = sessionStorage.getItem('token');
+    if (!token) window.location = '/public/login.html';
+
+    const auth = () => ({ 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' });
+
+    // ─── Stav ────────────────────────────────────────────────────────────────
+    const state = {
+      projects: [],
+      activeProjectId: null,
+      activeBlockId: null,
+      drawings: [],
+      activeDrawingId: null,
+      query: '',
+    };
+
+    // ─── Utils ───────────────────────────────────────────────────────────────
+    const escapeHtml = s => (s ?? '').toString().replace(/[&<>"]/g,
+      c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+    const fmt = d => d ? new Date(d).toLocaleDateString('cs-CZ') : '—';
+
+    // ─── Načítání ────────────────────────────────────────────────────────────
+    async function loadProjects() {
+      const res = await fetch('/api/cad/project-blocks', { headers: auth() });
+      if (!res.ok) throw new Error('Načtení projektů selhalo (' + res.status + ')');
+      const data = await res.json();
+      state.projects = data.Projects || [];
+      renderTree();
+    }
+
+    async function loadDrawings() {
+      const params = new URLSearchParams();
+      if (state.activeProjectId) params.set('projectId', state.activeProjectId);
+      if (state.activeBlockId) params.set('blockId', state.activeBlockId);
+      if (state.query) params.set('q', state.query);
+      params.set('limit', '200');
+
+      const res = await fetch('/api/cad/drawings?' + params, { headers: auth() });
+      if (!res.ok) throw new Error('Načtení výkresů selhalo');
+      state.drawings = await res.json();
+      document.getElementById('cad-count').textContent =
+        '· ' + state.drawings.length + ' výkresů';
+      renderDrawings();
+    }
+
+    async function loadDetail(id) {
+      state.activeDrawingId = id;
+      const pane = document.getElementById('detail-pane');
+      pane.innerHTML = '<div class="loader">Načítám detail…</div>';
+      const res = await fetch('/api/cad/drawings/' + id, { headers: auth() });
+      if (!res.ok) { pane.innerHTML = '<div class="empty">Chyba při načítání detailu.</div>'; return; }
+      const d = await res.json();
+      renderDetail(d);
+    }
+
+    // ─── Render: strom projektů ──────────────────────────────────────────────
+    function renderTree() {
+      const el = document.getElementById('project-tree');
+      if (!state.projects.length) {
+        el.innerHTML = '<div class="empty">Žádné projekty. Založte první projekt přes <b>+ Nový projekt</b>.</div>';
+        return;
+      }
+      const parts = [];
+      // "Vše" - bez filtru
+      parts.push(nodeHtml(null, 'Všechny výkresy', '&#128196;', !state.activeProjectId && !state.activeBlockId));
+
+      for (const p of state.projects) {
+        const active = state.activeProjectId === p.Id && !state.activeBlockId;
+        parts.push('<div class="tree-node' + (active ? ' active' : '') + '" data-project="' + p.Id + '">' +
+                   '<span class="tree-expand">&#9662;</span>' +
+                   '<span>' + escapeHtml(p.Code) + ' · ' + escapeHtml(p.Name) + '</span>' +
+                   '</div>');
+        // rekurze bloků
+        (function walk(blocks, depth) {
+          for (const b of blocks || []) {
+            const activeB = state.activeBlockId === b.id;
+            parts.push('<div class="tree-node block' + (activeB ? ' active' : '') + '" ' +
+                       'style="padding-left:' + (26 + depth*14) + 'px" ' +
+                       'data-project="' + p.Id + '" data-block="' + b.id + '">' +
+                       '&#8226; ' + escapeHtml(b.name) + '</div>');
+            if (b.children && b.children.length) walk(b.children, depth + 1);
+          }
+        })(p.Blocks, 0);
+      }
+      el.innerHTML = parts.join('');
+
+      el.querySelectorAll('.tree-node').forEach(n => {
+        n.addEventListener('click', () => {
+          const pid = n.dataset.project ? parseInt(n.dataset.project) : null;
+          const bid = n.dataset.block ? parseInt(n.dataset.block) : null;
+          state.activeProjectId = pid;
+          state.activeBlockId = bid;
+          renderTree();
+          updateDrawingsTitle();
+          loadDrawings();
+        });
+      });
+    }
+
+    function nodeHtml(projectId, name, icon, active) {
+      return '<div class="tree-node' + (active ? ' active' : '') + '" ' +
+             (projectId ? 'data-project="' + projectId + '"' : '') + '>' +
+             '<span class="tree-expand">' + icon + '</span>' +
+             '<span>' + escapeHtml(name) + '</span>' +
+             '</div>';
+    }
+
+    function updateDrawingsTitle() {
+      const t = document.getElementById('drawings-title');
+      if (state.activeBlockId) {
+        const p = state.projects.find(p => p.Id === state.activeProjectId);
+        let block = null;
+        (function find(bs) {
+          for (const b of bs || []) {
+            if (b.id === state.activeBlockId) { block = b; return; }
+            find(b.children);
+          }
+        })(p ? p.Blocks : []);
+        t.textContent = p && block ? (p.Code + ' — ' + block.name) : 'Výkresy';
+      } else if (state.activeProjectId) {
+        const p = state.projects.find(p => p.Id === state.activeProjectId);
+        t.textContent = p ? (p.Code + ' · ' + p.Name) : 'Výkresy';
+      } else {
+        t.textContent = 'Všechny výkresy';
+      }
+    }
+
+    // ─── Render: seznam výkresů ──────────────────────────────────────────────
+    function renderDrawings() {
+      const el = document.getElementById('drawings-table');
+      if (!state.drawings.length) {
+        el.innerHTML = '<div class="empty">Žádné výkresy. Pošli je přes desktop klienta (kontextové menu "Odevzdat do výroby").</div>';
+        return;
+      }
+      const rows = state.drawings.map(d => `
+        <tr data-id="${d.id}" class="${d.id === state.activeDrawingId ? 'selected' : ''}">
+          <td><span class="badge badge-ext-${escapeHtml(d.extension)}">${escapeHtml(d.extension)}</span></td>
+          <td><b>${escapeHtml(d.file_name)}</b>${d.title ? '<br><span style="color:var(--text2);font-size:12px;">'+escapeHtml(d.title)+'</span>' : ''}</td>
+          <td>${d.project ? escapeHtml(d.project.code) : '—'}</td>
+          <td>${d.block ? escapeHtml(d.block.name) : '—'}</td>
+          <td>v${d.version}</td>
+          <td><span class="badge badge-count">${(d.configurations || []).length} konfig.</span></td>
+          <td>${fmt(d.last_import_at)}</td>
+        </tr>`).join('');
+      el.innerHTML = `
+        <table class="data-table">
+          <thead><tr>
+            <th>Typ</th><th>Soubor</th><th>Projekt</th><th>Blok</th><th>Verze</th>
+            <th>Konfig.</th><th>Poslední import</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>`;
+      el.querySelectorAll('tr[data-id]').forEach(tr => {
+        tr.addEventListener('click', () => {
+          const id = parseInt(tr.dataset.id);
+          loadDetail(id);
+          el.querySelectorAll('tr').forEach(r => r.classList.remove('selected'));
+          tr.classList.add('selected');
+        });
+      });
+    }
+
+    // ─── Render: detail výkresu ──────────────────────────────────────────────
+    function renderDetail(d) {
+      const configs = (d.configurations || []).map(c => {
+        const png = c.png_path ? `/api/cad/assets/${c.png_path}` : null;
+        const pdf = c.pdf_path ? `/api/cad/assets/${c.pdf_path}` : null;
+        const props = Object.entries(c.custom_properties || {}).slice(0, 12).map(([k,v]) =>
+          `<div><b>${escapeHtml(k)}:</b> ${escapeHtml(v)}</div>`).join('');
+        const bom = (c.components || []);
+        const bomRows = bom.map(b => `
+          <tr>
+            <td>${b.is_unknown ? '<span class="badge badge-unknown">nerozpoznáno</span>' : ''} ${escapeHtml(b.name)}</td>
+            <td>${b.quantity}</td>
+            <td>${escapeHtml(b.configuration || '')}</td>
+            <td>${b.material ? escapeHtml(b.material.code + ' · ' + b.material.name) : '—'}</td>
+          </tr>`).join('');
+        return `
+          <div class="config-row">
+            <header>
+              <h4>${escapeHtml(c.config_name)}</h4>
+              <span class="badge badge-count">${c.quantity}×</span>
+              ${c.mass_grams ? `<span class="badge badge-count">${(c.mass_grams/1000).toFixed(2)} kg</span>` : ''}
+              <div class="config-actions">
+                ${pdf ? `<a class="btn btn-sm btn-secondary" href="${pdf}" target="_blank">&#128196; PDF</a>` : ''}
+                ${png ? `<a class="btn btn-sm btn-secondary" href="${png}" target="_blank">Náhled</a>` : ''}
+              </div>
+            </header>
+            <div class="config-body">
+              ${png ? `<img src="${png}" class="preview-thumb" alt="náhled">` : '<div></div>'}
+              <div>
+                <div class="prop-list">${props || '<i style="color:var(--text2)">bez custom properties</i>'}</div>
+                ${bom.length ? `
+                  <table class="bom-table">
+                    <thead><tr><th>Díl</th><th>ks</th><th>Konfig.</th><th>Materiál (katalog)</th></tr></thead>
+                    <tbody>${bomRows}</tbody>
+                  </table>` : ''}
+              </div>
+            </div>
+          </div>`;
+      }).join('');
+
+      const pane = document.getElementById('detail-pane');
+      pane.innerHTML = `
+        <h2>${escapeHtml(d.file_name)} <span class="badge badge-ext-${escapeHtml(d.extension)}">${escapeHtml(d.extension)}</span></h2>
+        <div class="detail-meta">
+          <div><span>Projekt</span>${d.project ? escapeHtml(d.project.code + ' · ' + d.project.name) : '—'}</div>
+          <div><span>Blok</span>${d.block ? escapeHtml(d.block.name) : '—'}</div>
+          <div><span>Verze</span>v${d.version}</div>
+          <div><span>Autor</span>${d.creator ? escapeHtml(d.creator.first_name + ' ' + d.creator.last_name) : '—'}</div>
+          <div><span>Import</span>${fmt(d.last_import_at)}</div>
+          <div><span>Původní cesta</span>${escapeHtml(d.source_path || '—')}</div>
+        </div>
+        ${configs || '<div class="empty">Bez konfigurací.</div>'}`;
+    }
+
+    // ─── Nový projekt ─────────────────────────────────────────────────────────
+    async function createProject() {
+      const code = prompt('Kód projektu (krátký, např. "2026-04"):');
+      if (!code) return;
+      const name = prompt('Název projektu:');
+      if (!name) return;
+      const customer = prompt('Zákazník (volitelné):') || null;
+      const res = await fetch('/api/cad/projects', {
+        method: 'POST', headers: auth(),
+        body: JSON.stringify({ code, name, customer }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        alert('Chyba: ' + (err.error || res.status));
+        return;
+      }
+      await loadProjects();
+    }
+
+    // ─── Init ─────────────────────────────────────────────────────────────────
+    document.getElementById('btn-new-project').addEventListener('click', createProject);
+    document.getElementById('btn-reload').addEventListener('click', () => {
+      loadProjects(); loadDrawings();
+    });
+    let searchTimer = null;
+    document.getElementById('cad-search').addEventListener('input', (e) => {
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(() => {
+        state.query = e.target.value.trim();
+        loadDrawings();
+      }, 220);
+    });
+
+    (async () => {
+      try {
+        await loadProjects();
+        await loadDrawings();
+      } catch (e) {
+        console.error(e);
+        document.getElementById('project-tree').innerHTML =
+          '<div class="empty">Chyba: ' + escapeHtml(e.message) + '</div>';
+      }
+    })();
+  </script>
+</body>
+</html>

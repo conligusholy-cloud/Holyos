@@ -30,8 +30,15 @@ model User {
   updated_at    DateTime  @updatedAt
 
   // Vztahy
-  person        Person?   @relation("UserPerson")
+  person        Person?     @relation("UserPerson")
   sessions      Session[]
+  admin_tasks   AdminTask[] @relation("AdminTaskCreator")
+
+  // Messaging (user-to-user chat, oddělený od AI Conversation)
+  chat_memberships  ChatChannelMember[]
+  chat_messages     ChatMessage[]       @relation("ChatMessageSender")
+  created_channels  ChatChannel[]       @relation("ChatChannelCreator")
+  notifications     Notification[]
 
   @@map("users")
 }
@@ -121,6 +128,8 @@ model Person {
   attendance         Attendance[]
   leave_requests     LeaveRequest[]      @relation("LeaveRequestPerson")
   approved_leaves    LeaveRequest[]      @relation("LeaveRequestApprover")
+  overtime_requests        OvertimeRequest[] @relation("OvertimeRequestPerson")
+  approved_overtime        OvertimeRequest[] @relation("OvertimeRequestApprover")
   documents          Document[]
   doc_notifications  DocumentNotification[]
   orders_created     Order[]             @relation("OrderCreatedBy")
@@ -130,6 +139,8 @@ model Person {
   inventories_created Inventory[]        @relation("InventoryCreatedBy")
   inventory_counted  InventoryItem[]     @relation("InventoryCountedBy")
   workstation_assignments WorkstationWorker[]
+  assigned_vehicles  Vehicle[]           @relation("VehicleDriver")
+  cad_drawings_created CadDrawing[]      @relation("CadDrawingCreator")
 
   @@index([department_id])
   @@index([role_id])
@@ -299,6 +310,26 @@ model OvertimeSettings {
   allow_monthly_transfer  Boolean @default(true)
 
   @@map("overtime_settings")
+}
+
+model OvertimeRequest {
+  id          Int      @id @default(autoincrement())
+  person_id   Int
+  hours       Decimal  @db.Decimal(5, 2) // kladné = převod přesčasů na volno, záporné = odpracování dluhu
+  type        String   @db.VarChar(50) // transfer_to_leave (přesčas→volno), transfer_to_pay (přesčas→peníze), debt_work (odpracování záporných)
+  note        String?  @db.Text
+  status      String   @default("pending") @db.VarChar(20) // pending, approved, rejected
+  approved_by Int?
+  month       String   @db.VarChar(7) // YYYY-MM — měsíc ke kterému se přesčas vztahuje
+
+  created_at DateTime @default(now())
+
+  person   Person  @relation("OvertimeRequestPerson", fields: [person_id], references: [id])
+  approver Person? @relation("OvertimeRequestApprover", fields: [approved_by], references: [id])
+
+  @@index([person_id])
+  @@index([status])
+  @@map("overtime_requests")
 }
 
 // =============================================================================
@@ -626,6 +657,7 @@ model Material {
   inventory_items InventoryItem[]
   operation_materials OperationMaterial[]
   config_option_materials ConfigOptionMaterial[] // konfigurace, které tento materiál používají
+  cad_components      CadComponent[]              // komponenty v CAD kusovníkách namapované na tento materiál
 
   @@index([code])
   @@index([barcode])
@@ -744,6 +776,10 @@ model AdminTask {
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
 
+  // Vztahy
+  creator User? @relation("AdminTaskCreator", fields: [created_by], references: [id], onDelete: SetNull)
+
+  @@index([created_by])
   @@map("admin_tasks")
 }
 
@@ -850,6 +886,7 @@ model Workstation {
   output_location   WarehouseLocation?  @relation("WorkstationOutputLocation", fields: [output_location_id], references: [id])
   operations        ProductOperation[]
   workers           WorkstationWorker[]
+  production_slots  ProductionSlot[]
 
   @@index([hall_id])
   @@index([factorify_id])
@@ -1156,4 +1193,366 @@ model OrderItemConfig {
   @@index([order_item_id])
   @@index([option_id])
   @@map("order_item_configs")
+}
+
+// =============================================================================
+// VÝROBNÍ SLOTY — časová okna výroby
+// =============================================================================
+
+// Výrobní slot = časové okno, do kterého se řadí zakázky
+model ProductionSlot {
+  id               Int       @id @default(autoincrement())
+  name             String    @db.VarChar(255) // např. "Týden 16 — Linka A"
+  workstation_id   Int?      // volitelná vazba na pracoviště
+  start_date       DateTime  @db.Date         // začátek slotu
+  end_date         DateTime  @db.Date         // konec slotu
+  capacity_hours   Decimal   @default(8) @db.Decimal(8, 2) // kapacita v hodinách za den
+  status           String    @default("open") @db.VarChar(20) // open, full, blocked, closed
+  color            String    @default("#3b82f6") @db.VarChar(20)
+  note             String?   @db.Text
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  workstation Workstation?        @relation(fields: [workstation_id], references: [id], onDelete: SetNull)
+  assignments SlotAssignment[]
+  blocks      SlotBlock[]
+
+  @@index([workstation_id])
+  @@index([start_date])
+  @@index([end_date])
+  @@index([status])
+  @@map("production_slots")
+}
+
+// Přiřazení objednávky/produktu do slotu
+model SlotAssignment {
+  id              Int     @id @default(autoincrement())
+  slot_id         Int
+  order_id        Int?    // vazba na objednávku
+  order_item_id   Int?    // vazba na konkrétní položku objednávky
+  product_name    String  @db.VarChar(255)  // název produktu (denormalizováno pro rychlý přehled)
+  customer_name   String? @db.VarChar(255)  // zákazník
+  quantity        Decimal @default(1) @db.Decimal(10, 2)
+  estimated_hours Decimal @default(0) @db.Decimal(8, 2) // odhadovaný čas výroby
+  priority        Int     @default(0)       // vyšší = důležitější
+  status          String  @default("planned") @db.VarChar(20) // planned, in_progress, done
+  note            String? @db.Text
+
+  created_at DateTime @default(now())
+
+  slot ProductionSlot @relation(fields: [slot_id], references: [id], onDelete: Cascade)
+
+  @@index([slot_id])
+  @@index([order_id])
+  @@index([status])
+  @@map("slot_assignments")
+}
+
+// Blokace slotu — dovolená, údržba, nepracovní dny apod.
+model SlotBlock {
+  id         Int      @id @default(autoincrement())
+  slot_id    Int
+  start_date DateTime @db.Date
+  end_date   DateTime @db.Date
+  reason     String   @db.VarChar(255) // "Dovolená", "Údržba stroje", "Státní svátek"
+  block_type String   @default("holiday") @db.VarChar(30) // holiday, maintenance, other
+
+  created_at DateTime @default(now())
+
+  slot ProductionSlot @relation(fields: [slot_id], references: [id], onDelete: Cascade)
+
+  @@index([slot_id])
+  @@index([start_date])
+  @@map("slot_blocks")
+}
+
+// =============================================================================
+// MESSAGING — user-to-user chat, skupinové kanály, thready u požadavků, AI účastník
+// Oddělené od Conversation/Message (ty slouží pro AI asistenty se skill_calls)
+// =============================================================================
+
+model ChatChannel {
+  id             String   @id @default(uuid())
+  type           String   @db.VarChar(20) // direct | group | task | system
+  name           String?  @db.VarChar(255) // null pro direct - renderuje se z protistrany
+  topic          String?  @db.VarChar(500)
+  admin_task_id  Int?     // vazba na požadavek (pro type = 'task')
+  created_by     Int?
+  last_message_at DateTime @default(now())
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  creator  User?                @relation("ChatChannelCreator", fields: [created_by], references: [id], onDelete: SetNull)
+  members  ChatChannelMember[]
+  messages ChatMessage[]
+
+  @@unique([type, admin_task_id]) // jeden task kanál = jeden požadavek
+  @@index([type])
+  @@index([last_message_at])
+  @@index([admin_task_id])
+  @@map("chat_channels")
+}
+
+model ChatChannelMember {
+  id           Int       @id @default(autoincrement())
+  channel_id   String
+  user_id      Int
+  role         String    @default("member") @db.VarChar(20) // member | admin
+  joined_at    DateTime  @default(now())
+  last_read_at DateTime? // null = nic nepřečteno
+  muted        Boolean   @default(false)
+
+  channel ChatChannel @relation(fields: [channel_id], references: [id], onDelete: Cascade)
+  user    User        @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([channel_id, user_id])
+  @@index([user_id])
+  @@map("chat_channel_members")
+}
+
+model ChatMessage {
+  id           String   @id @default(uuid())
+  channel_id   String
+  sender_id    Int?     // null pro 'system' a 'ai' (odesílatel z back-endu)
+  sender_type  String   @default("user") @db.VarChar(20) // user | system | ai
+  sender_label String?  @db.VarChar(255) // přezdívka pro system/ai ("HolyOS", "Claude")
+  content      String   @db.Text
+  attachments  Json?    // [{ kind, url, name }]
+  edited_at    DateTime?
+  deleted_at   DateTime?
+
+  created_at DateTime @default(now())
+
+  channel ChatChannel @relation(fields: [channel_id], references: [id], onDelete: Cascade)
+  sender  User?       @relation("ChatMessageSender", fields: [sender_id], references: [id], onDelete: SetNull)
+
+  @@index([channel_id, created_at])
+  @@index([sender_id])
+  @@map("chat_messages")
+}
+
+model Notification {
+  id         String   @id @default(uuid())
+  user_id    Int
+  type       String   @db.VarChar(50) // chat_message | task_status | task_deployed | mention | system
+  title      String   @db.VarChar(255)
+  body       String?  @db.Text
+  link       String?  @db.VarChar(500) // URL nebo route
+  meta       Json?    // { channel_id, message_id, task_id, ... }
+  read_at    DateTime?
+
+  created_at DateTime @default(now())
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id, read_at])
+  @@index([created_at])
+  @@map("notifications")
+}
+
+// =============================================================================
+// VOZOVÝ PARK — VEHICLE FLEET
+// =============================================================================
+
+model Vehicle {
+  id                Int       @id @default(autoincrement())
+
+  // Identifikace vozidla
+  license_plate     String?   @db.VarChar(20)   // SPZ
+  model             String    @db.VarChar(255)  // Vozidlo / model (např. "Hyundai i30")
+  vin               String?   @db.VarChar(30)   // VIN kód
+  category          String    @db.VarChar(50)   // "Osobní vůz" | "Dodávka" | "Nákladní" | "Motocykl" | "Jiné"
+  color             String?   @db.VarChar(50)
+  year              Int?                        // Rok výroby
+
+  // Povinné ručení (POV)
+  insurance_from    DateTime? @db.Date
+  insurance_to      DateTime? @db.Date
+  insurance_company String?   @db.VarChar(255)
+
+  // STK — Státní technická kontrola
+  stk_valid_to      DateTime? @db.Date
+
+  // Dálniční známka
+  toll_sticker_to   DateTime? @db.Date
+
+  // Financování / vlastnictví
+  // "operativni_leasing" | "vlastnictvi_firmy" | "financni_leasing" | "uver" | "jine"
+  financing_type    String?   @db.VarChar(50)
+  financing_to      DateTime? @db.Date
+  financing_owner   String?   @db.VarChar(255)  // Např. "Best Series s.r.o.", "ESSOX s.r.o."
+
+  // Disky a pneu
+  disk_size         String?   @db.VarChar(255)
+  tire_size         String?   @db.VarChar(255)
+
+  // Řidič / odpovědná osoba
+  driver_id         Int?
+  driver            Person?   @relation("VehicleDriver", fields: [driver_id], references: [id], onDelete: SetNull)
+
+  // Stav vozidla
+  active            Boolean   @default(true)    // Aktivní/vyřazeno
+  current_km        Int?                        // Aktuální kilometry
+  note              String?   @db.Text
+
+  // Systémové
+  created_at        DateTime  @default(now())
+  updated_at        DateTime  @updatedAt
+
+  @@index([license_plate])
+  @@index([vin])
+  @@index([category])
+  @@index([driver_id])
+  @@index([active])
+  @@index([insurance_to])
+  @@index([stk_valid_to])
+  @@index([toll_sticker_to])
+  @@map("vehicles")
+}
+
+// =============================================================================
+// CAD — SolidWorks výkresy, sestavy, kusovníky
+// Import ze SolidWorksu přes desktop klienta (kontextové menu "Odevzdat do výroby").
+// Původně tok CadExporter → Factorify, migrováno do HolyOS (/api/cad/*).
+// =============================================================================
+
+// Projekt = nejvyšší úroveň (zakázka / produktová řada)
+model CadProject {
+  id           Int      @id @default(autoincrement())
+  code         String   @unique @db.VarChar(50)    // krátký kód projektu, unikátní
+  name         String   @db.VarChar(255)
+  customer     String?  @db.VarChar(255)
+  description  String?  @db.Text
+  active       Boolean  @default(true)
+
+  created_at   DateTime @default(now())
+  updated_at   DateTime @updatedAt
+
+  blocks   CadBlock[]
+  drawings CadDrawing[]
+
+  @@index([code])
+  @@index([active])
+  @@map("cad_projects")
+}
+
+// Blok = uzel ve stromu projektu (odpovídá Factorify "goodsBlock")
+model CadBlock {
+  id         Int      @id @default(autoincrement())
+  project_id Int
+  parent_id  Int?
+  name       String   @db.VarChar(255)
+  label      String?  @db.VarChar(255)    // TokenizedLabel z původního API (volitelné)
+  sort_order Int      @default(0)
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  project  CadProject @relation(fields: [project_id], references: [id], onDelete: Cascade)
+  parent   CadBlock?  @relation("CadBlockTree", fields: [parent_id], references: [id], onDelete: SetNull)
+  children CadBlock[] @relation("CadBlockTree")
+  drawings CadDrawing[]
+
+  @@index([project_id])
+  @@index([parent_id])
+  @@map("cad_blocks")
+}
+
+// Výkres / díl / sestava — jeden soubor ze SolidWorksu
+model CadDrawing {
+  id            Int      @id @default(autoincrement())
+  project_id    Int
+  block_id      Int?
+
+  // Identifikace
+  file_name     String   @db.VarChar(255)           // např. "12345-01.SLDDRW"
+  relative_path String?  @db.VarChar(500)
+  extension     String   @db.VarChar(10)            // "sldprt" | "sldasm" | "slddrw" | "stl"
+  version       Int      @default(1)
+  checksum      String?  @db.VarChar(64)            // SHA256 pro detekci změn
+  source_path   String?  @db.VarChar(1000)          // původní cesta na disku autora
+
+  // Metadata
+  title         String?  @db.VarChar(255)           // pěkný název (z custom property)
+  description   String?  @db.Text
+
+  // Autor / vlastnictví
+  created_by_id Int?
+  imported_at   DateTime @default(now())
+  last_import_at DateTime @default(now())
+
+  // Systémové
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+
+  project        CadProject         @relation(fields: [project_id], references: [id], onDelete: Cascade)
+  block          CadBlock?          @relation(fields: [block_id], references: [id], onDelete: SetNull)
+  creator        Person?            @relation("CadDrawingCreator", fields: [created_by_id], references: [id], onDelete: SetNull)
+  configurations CadDrawingConfig[]
+
+  @@unique([project_id, file_name, version])
+  @@index([project_id])
+  @@index([block_id])
+  @@index([extension])
+  @@index([file_name])
+  @@map("cad_drawings")
+}
+
+// Konfigurace výkresu — SolidWorks umí mít více konfigurací v jednom souboru
+// (varianty rozměrů, provedení). Pro každou se generuje vlastní PDF/PNG.
+model CadDrawingConfig {
+  id               Int      @id @default(autoincrement())
+  drawing_id       Int
+
+  config_name      String   @db.VarChar(255)         // např. "Default", "Levá varianta"
+  config_code      String?  @db.VarChar(100)         // ConfigurationID z SW
+  quantity         Int      @default(1)              // počet ks při odevzdání
+  selected         Boolean  @default(true)
+
+  custom_properties Json    @default("{}")            // všechny custom props karty
+  mass_grams       Decimal? @db.Decimal(12, 3)       // hmotnost z GetMassProperties
+
+  png_path         String?  @db.VarChar(500)         // cesta uloženého PNG náhledu
+  pdf_path         String?  @db.VarChar(500)         // cesta uloženého PDF výkresu
+
+  // Externí reference (odkazy na další SW soubory)
+  external_references Json  @default("[]")
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  drawing    CadDrawing     @relation(fields: [drawing_id], references: [id], onDelete: Cascade)
+  components CadComponent[]
+
+  @@unique([drawing_id, config_name])
+  @@index([drawing_id])
+  @@map("cad_drawing_configs")
+}
+
+// Komponenta = položka v kusovníku sestavy (.sldasm)
+// "UnknownComponents" = ty, které index nerozpoznal a čekají na dořešení
+model CadComponent {
+  id                Int      @id @default(autoincrement())
+  parent_config_id  Int
+
+  name              String   @db.VarChar(255)
+  path              String?  @db.VarChar(1000)
+  quantity          Int      @default(1)
+  configuration     String?  @db.VarChar(255)
+  custom_properties Json?
+  is_unknown        Boolean  @default(false)         // true = index nenašel odpovídající díl
+  material_id       Int?                              // napojení na HolyOS katalog materiálů
+  resolved          Boolean  @default(false)
+
+  created_at DateTime @default(now())
+
+  parent_config CadDrawingConfig @relation(fields: [parent_config_id], references: [id], onDelete: Cascade)
+  material      Material?        @relation(fields: [material_id], references: [id], onDelete: SetNull)
+
+  @@index([parent_config_id])
+  @@index([material_id])
+  @@index([is_unknown])
+  @@map("cad_components")
 }
