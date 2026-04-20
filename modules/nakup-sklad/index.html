@@ -72,6 +72,7 @@
     .sub-tab:hover { color: var(--text); }
     .sub-tab.active { color: #f59e0b; border-bottom-color: #f59e0b; }
   </style>
+  <script src="/js/countries.js"></script>
 </head>
 <body>
   <div id="sidebar"></div>
@@ -446,6 +447,7 @@
             '<div class="form-group full"><label>Adresa</label><input type="text" name="address" value="' + (c.address||'') + '"></div>' +
             '<div class="form-group"><label>Město</label><input type="text" name="city" value="' + (c.city||'') + '"></div>' +
             '<div class="form-group"><label>PSČ</label><input type="text" name="zip" value="' + (c.zip||'') + '"></div>' +
+            '<div class="form-group"><label>Země</label><select name="country">' + HolyCountries.renderOptions(c.country || 'CZ') + '</select></div>' +
             '<div class="form-group"><label>Kontaktní osoba</label><input type="text" name="contact_person" value="' + (c.contact_person||'') + '"></div>' +
             '<div class="form-group"><label>Email</label><input type="text" name="email" value="' + (c.email||'') + '"></div>' +
             '<div class="form-group"><label>Telefon</label><input type="text" name="phone" value="' + (c.phone||'') + '"></div>' +

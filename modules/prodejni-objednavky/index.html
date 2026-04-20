@@ -88,6 +88,7 @@
     .empty-state h3 { color: var(--text); margin-bottom: 4px; }
     .empty-state p { font-size: 13px; }
   </style>
+  <script src="/js/countries.js"></script>
 </head>
 <body>
   <div id="sidebar"></div>
@@ -321,6 +322,7 @@
                     '<div class="form-group full"><label>Adresa</label><input type="text" id="new-comp-address" placeholder="Ulice a č.p."></div>' +
                     '<div class="form-group"><label>Město</label><input type="text" id="new-comp-city" placeholder="Město"></div>' +
                     '<div class="form-group"><label>PSČ</label><input type="text" id="new-comp-zip" placeholder="12345" maxlength="5"></div>' +
+                    '<div class="form-group"><label>Země</label><select id="new-comp-country">' + HolyCountries.renderOptions('CZ') + '</select></div>' +
                     '<div class="form-group"><label>Kontaktní osoba</label><input type="text" id="new-comp-contact" placeholder="Jméno Příjmení"></div>' +
                     '<div class="form-group"><label>Email</label><input type="email" id="new-comp-email" placeholder="info@firma.cz"></div>' +
                     '<div class="form-group"><label>Telefon</label><input type="text" id="new-comp-phone" placeholder="+420..."></div>' +
@@ -398,6 +400,7 @@
               '<div class="form-group full"><label>Adresa</label><input type="text" id="new-comp-address" placeholder="Ulice a č.p."></div>' +
               '<div class="form-group"><label>Město</label><input type="text" id="new-comp-city" placeholder="Město"></div>' +
               '<div class="form-group"><label>PSČ</label><input type="text" id="new-comp-zip" placeholder="12345" maxlength="5"></div>' +
+                    '<div class="form-group"><label>Země</label><select id="new-comp-country">' + HolyCountries.renderOptions('CZ') + '</select></div>' +
               '<div class="form-group"><label>Kontaktní osoba</label><input type="text" id="new-comp-contact" placeholder="Jméno Příjmení"></div>' +
               '<div class="form-group"><label>Email</label><input type="email" id="new-comp-email" placeholder="info@firma.cz"></div>' +
               '<div class="form-group"><label>Telefon</label><input type="text" id="new-comp-phone" placeholder="+420..."></div>' +
@@ -499,6 +502,7 @@
         address: document.getElementById('new-comp-address')?.value.trim() || null,
         city: document.getElementById('new-comp-city')?.value.trim() || null,
         zip: document.getElementById('new-comp-zip')?.value.trim() || null,
+        country: document.getElementById('new-comp-country')?.value || 'CZ',
         contact_person: document.getElementById('new-comp-contact')?.value.trim() || null,
         email: document.getElementById('new-comp-email')?.value.trim() || null,
         phone: document.getElementById('new-comp-phone')?.value.trim() || null,
