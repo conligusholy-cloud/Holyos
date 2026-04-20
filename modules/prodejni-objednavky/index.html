@@ -1374,38 +1374,40 @@
         // Sekce přidávání položek (jen pokud je editovatelné)
         let addItemSection = '';
         if (isEditable) {
-          // Cenik dropdown s info notice (kdyz je v ceniku alespon jedna polozka)
-          const plPicker = pricelistItems.length > 0
-            ? '<div style="background:rgba(234,179,8,0.08);border:1px solid rgba(234,179,8,0.25);border-radius:8px;padding:10px 14px;margin-bottom:10px;">' +
-                '<div style="display:flex;gap:14px;align-items:end;flex-wrap:wrap;">' +
-                  '<div class="form-group" style="flex:1;min-width:260px;margin-bottom:0;">' +
-                    '<label style="font-weight:600;color:#eab308;">💰 Výběr z ceníku (měna objednávky: ' + order.currency + ')</label>' +
-                    '<select id="add-item-pricelist" onchange="fillFromPricelist(this, \'' + order.currency + '\', document.getElementById(\'add-item-truck\').checked)">' +
-                      '<option value="">— Ručně (bez ceníku) —</option>' + plOpts +
-                    '</select>' +
-                  '</div>' +
-                  '<label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:6px;font-size:13px;" title="Pouzit kamionovou (velkoobchodni) cenu misto maloobchodni">' +
-                    '<input type="checkbox" id="add-item-truck" onchange="fillFromPricelist(document.getElementById(\'add-item-pricelist\'), \'' + order.currency + '\', this.checked)" style="width:16px;height:16px;cursor:pointer;">' +
-                    '<span style="color:#0ea5e9;font-weight:600;">🚛 Kamionová cena</span>' +
-                  '</label>' +
+          // Vse do jednoho flex radku: cenik, kamion, cena, tlacitko.
+          // Nazev je hidden — plni se z vybrane polozky ceniku.
+          if (pricelistItems.length === 0) {
+            addItemSection = '<div style="border-top:1px solid var(--border);padding-top:16px;">' +
+              '<h3 style="font-size:14px;margin-bottom:8px;">➕ Přidat položku</h3>' +
+              '<div style="padding:14px;background:rgba(234,179,8,0.08);border:1px solid rgba(234,179,8,0.3);border-radius:8px;font-size:13px;color:var(--text2);">' +
+                '⚠️ V ceníku zatím nejsou žádné aktivní položky. Přidejte je v záložce <strong style="color:#eab308;">💰 Ceník</strong>, pak se sem budou dát vkládat.' +
+              '</div>' +
+            '</div>';
+          } else {
+            addItemSection = '<div style="border-top:1px solid var(--border);padding-top:16px;">' +
+              '<h3 style="font-size:14px;margin-bottom:8px;">➕ Přidat položku</h3>' +
+              '<form onsubmit="addOrderItem(event,' + id + ')" style="display:flex;gap:10px;flex-wrap:wrap;align-items:end;background:rgba(234,179,8,0.06);border:1px solid rgba(234,179,8,0.2);border-radius:8px;padding:10px 12px;">' +
+                // Vsechny nazev/produkt/mnozstvi/jednotka se plni automaticky — uzivatel vidi jen cenik + cenu.
+                '<input type="hidden" name="product_id" id="add-item-product-hidden" value="">' +
+                '<input type="hidden" name="name" id="add-item-name-hidden" value="">' +
+                '<input type="hidden" name="quantity" value="1">' +
+                '<input type="hidden" name="unit" value="ks">' +
+                '<div class="form-group" style="flex:3;min-width:260px;margin-bottom:0;">' +
+                  '<label style="color:#eab308;font-weight:600;">💰 Položka z ceníku (měna: ' + order.currency + ')</label>' +
+                  '<select id="add-item-pricelist" required onchange="fillFromPricelist(this, \'' + order.currency + '\', document.getElementById(\'add-item-truck\').checked)">' +
+                    '<option value="">— Vyberte položku —</option>' + plOpts +
+                  '</select>' +
                 '</div>' +
-                '<div style="font-size:11px;color:var(--text2);margin-top:6px;">Vyberte položku z ceníku — doplní se název a cena v měně objednávky. Zaškrtněte 🚛 Kamionová cena pro přepnutí na velkoobchodní.</div>' +
-              '</div>'
-            : '';
-          addItemSection = '<div style="border-top:1px solid var(--border);padding-top:16px;">' +
-            '<h3 style="font-size:14px;margin-bottom:8px;">➕ Přidat položku</h3>' +
-            plPicker +
-            '<form onsubmit="addOrderItem(event,' + id + ')" style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;">' +
-              // Vyrobek, mnozstvi a jednotka se plni automaticky — uzivatel je nevidi.
-              '<input type="hidden" name="product_id" id="add-item-product-hidden" value="">' +
-              '<input type="hidden" name="quantity" value="1">' +
-              '<input type="hidden" name="unit" value="ks">' +
-              '<div class="form-group" style="flex:3;min-width:260px;"><label>Název (EN nahoře, CS dole — lze upravit)</label><textarea name="name" rows="2" placeholder="Vyberte položku z ceníku výše, nebo napište ručně" style="resize:vertical;min-height:62px;font-family:inherit;"></textarea></div>' +
-              '<div class="form-group" style="width:140px;"><label>Cena/ks (lze přepsat)</label><input type="number" name="unit_price" value="0" step="0.01"></div>' +
-              '<button type="submit" class="btn btn-primary btn-sm" style="margin-bottom:4px;">+ Přidat</button>' +
-            '</form>' +
-            '<div style="font-size:11px;color:var(--text2);margin-top:6px;">💡 Každá položka = 1 kus = 1 řádek. Výrobek se přiřadí automaticky z ceníku. Pro další stejný kus použijte <strong>🔁 Duplikovat</strong> u existující položky.</div>' +
-          '</div>';
+                '<label style="display:flex;align-items:center;gap:6px;cursor:pointer;margin-bottom:6px;font-size:13px;white-space:nowrap;" title="Pouzit kamionovou (velkoobchodni) cenu">' +
+                  '<input type="checkbox" id="add-item-truck" onchange="fillFromPricelist(document.getElementById(\'add-item-pricelist\'), \'' + order.currency + '\', this.checked)" style="width:16px;height:16px;cursor:pointer;">' +
+                  '<span style="color:#0ea5e9;font-weight:600;">🚛 Kamion</span>' +
+                '</label>' +
+                '<div class="form-group" style="width:130px;margin-bottom:0;"><label>Cena/ks</label><input type="number" name="unit_price" value="0" step="0.01" title="Auto-doplneno z ceniku; lze prepsat"></div>' +
+                '<button type="submit" class="btn btn-primary btn-sm" style="margin-bottom:2px;">+ Přidat</button>' +
+              '</form>' +
+              '<div style="font-size:11px;color:var(--text2);margin-top:6px;">💡 Každá položka = 1 kus = 1 řádek. Pro další stejný kus použijte <strong>🔁 Duplikovat</strong> u existující položky.</div>' +
+            '</div>';
+          }
         }
 
         document.getElementById('modal-root').innerHTML = '<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal" style="width:900px;max-width:95vw;">' +
@@ -1563,7 +1565,7 @@
       data.quantity = parseFloat(data.quantity);
       data.unit_price = parseFloat(data.unit_price || 0);
       data.total_price = data.quantity * data.unit_price;
-      if (!data.name && !data.product_id) { alert('Vyberte výrobek nebo zadejte název.'); return; }
+      if (!data.name && !data.product_id) { alert('Vyberte položku z ceníku.'); return; }
       await fetch('/api/wh/orders/' + orderId + '/items', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
       await recalcOrder(orderId);
       openOrderDetail(orderId);
