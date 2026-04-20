@@ -788,11 +788,11 @@
           headers: { 'Content-Type': 'application/json' },
         });
         if (!r.ok) { const err = await r.json().catch(() => ({})); alert('Chyba: ' + (err.error || r.status)); return; }
-        // Znovu nahraj detail objednávky
+        // Obnov seznam objednavek na pozadi a znovu otevri detail dialog stejne objednavky.
+        // openOrderDetail si data natahne sam z API — nepotrebuje zadnou globalni promennou.
         await loadOrders();
-        // Otevři modal znovu na stejné objednávce
-        const order = orders.find(o => o.id === orderId);
-        if (order) openOrderModal(order.id);
+        await loadStats();
+        openOrderDetail(orderId);
       } catch (e) { alert('Chyba: ' + e.message); }
     }
 
