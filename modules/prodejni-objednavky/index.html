@@ -191,14 +191,43 @@
         const orders = await res.json();
         const total = orders.length;
         const active = orders.filter(o => !['cancelled','delivered'].includes(o.status)).length;
-        const totalValue = orders.reduce((sum, o) => sum + parseFloat(o.total_amount || 0), 0);
         const delivered = orders.filter(o => o.status === 'delivered').length;
+
+        // Secteme celkovou hodnotu zvlast pro kazdou menu — michat CZK a EUR
+        // do jednoho cisla by bylo zavadejici.
+        const byCurrency = {};
+        for (const o of orders) {
+          const cur = o.currency || 'CZK';
+          byCurrency[cur] = (byCurrency[cur] || 0) + parseFloat(o.total_amount || 0);
+        }
+        const curSymbol = { CZK: 'Kč', EUR: '€' };
+        // Razeni: CZK prvni, pak EUR, pak ostatni abecedne
+        const curOrder = Object.keys(byCurrency).sort((a, b) => {
+          if (a === 'CZK') return -1;
+          if (b === 'CZK') return 1;
+          if (a === 'EUR') return -1;
+          if (b === 'EUR') return 1;
+          return a.localeCompare(b);
+        });
+        let valueHtml;
+        if (curOrder.length === 0) {
+          valueHtml = '<div class="stat-value">0 Kč</div>';
+        } else if (curOrder.length === 1) {
+          const c = curOrder[0];
+          valueHtml = '<div class="stat-value">' + Math.round(byCurrency[c]).toLocaleString('cs-CZ') + ' ' + (curSymbol[c] || c) + '</div>';
+        } else {
+          valueHtml = curOrder.map(c =>
+            '<div class="stat-value" style="font-size:18px;line-height:1.2;">' +
+              Math.round(byCurrency[c]).toLocaleString('cs-CZ') + ' ' + (curSymbol[c] || c) +
+            '</div>'
+          ).join('');
+        }
 
         document.getElementById('stats-bar').innerHTML =
           '<div class="stat-card"><div class="stat-value">' + total + '</div><div class="stat-label">Objednávek celkem</div></div>' +
           '<div class="stat-card"><div class="stat-value" style="color:#8b5cf6">' + active + '</div><div class="stat-label">Aktivních</div></div>' +
           '<div class="stat-card"><div class="stat-value" style="color:#10b981">' + delivered + '</div><div class="stat-label">Doručeno</div></div>' +
-          '<div class="stat-card"><div class="stat-value">' + Math.round(totalValue).toLocaleString('cs-CZ') + ' Kč</div><div class="stat-label">Celková hodnota</div></div>';
+          '<div class="stat-card">' + valueHtml + '<div class="stat-label">Celková hodnota</div></div>';
       } catch(e) { console.error(e); }
     }
 
