@@ -1535,8 +1535,10 @@
       // Cena
       html += renderPriceSummary();
 
-      // Poznámka zákazníka + tlačítko
-      if (hasConfigurableItems && !isConfirmed) {
+      // Poznamka zakaznika + tlacitko — zobrazuje se vzdy, dokud neni objednavka potvrzena.
+      // Drive bylo podmineno hasConfigurableItems, ale to zakaznikovi branilo potvrdit
+      // objednavku s jednoduchymi ceninkovymi polozkami bez konfiguraci.
+      if (!isConfirmed) {
         html += '<div class="customer-note-section">';
         html += '<label>' + t('your_note') + '</label>';
         html += '<textarea id="customer-note" placeholder="' + t('note_placeholder') + '"></textarea>';
