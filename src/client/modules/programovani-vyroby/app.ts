@@ -118,16 +118,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   }
 
-  // Inicializace Factorify
+  // Inicializace — pracoviště načteme přímo z lokálního HolyOS endpointu.
+  // Dřívější FactorifyAPI.loadEnv() se snažila fetchnout /.env co hází 403
+  // a vyžadovala externí token — to už nepotřebujeme (data jsou v naší DB).
   if (typeof FactorifyAPI !== 'undefined') {
     if (typeof (window as any).loadWsConfig === 'function') {
       (window as any).loadWsConfig();
     }
-    FactorifyAPI.loadEnv().then(() => {
-      updateFactorifyUI();
-      if (FactorifyAPI.config.securityToken || FactorifyAPI.config.useProxy) {
-        FactorifyAPI.loadWorkstations().catch(() => {});
-      }
+    updateFactorifyUI();
+    FactorifyAPI.loadWorkstations().catch((e: any) => {
+      console.warn('[Programování výroby] loadWorkstations selhalo:', e);
     });
   }
 

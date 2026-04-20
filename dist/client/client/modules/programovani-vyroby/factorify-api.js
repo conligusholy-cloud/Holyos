@@ -158,55 +158,33 @@ export const FactorifyAPI = {
         this.error = null;
         updateFactorifyUI();
         try {
-            if (!this.configLoaded) {
-                await this.loadEnv();
+            // Přepojeno z externí Factorify API na lokální HolyOS endpoint.
+            // Data jdou z prisma.workstation (viz routes/production.routes.js).
+            const token = (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('token')) || '';
+            const headers = { 'Accept': 'application/json' };
+            if (token) headers['Authorization'] = 'Bearer ' + token;
+            console.log('GET /api/production/workstations ...');
+            const resp = await fetch('/api/production/workstations', {
+                credentials: 'include',
+                headers,
+            });
+            if (!resp.ok) {
+                const txt = await resp.text().catch(() => '');
+                throw new Error(`API ${resp.status}: ${txt.substring(0, 200)}`);
             }
-            const entityName = this.config.workstationEntity || 'Stage';
-            let data = null;
-            console.log(`POST /api/query/${entityName} ...`);
-            data = await this.queryEntity(entityName);
-            console.log('API odpověď (ukázka):', JSON.stringify(data).substring(0, 500));
-            let items = [];
-            if (Array.isArray(data)) {
-                items = data;
-            }
-            else if (data && data.items) {
-                items = data.items;
-            }
-            else if (data && data.records) {
-                items = data.records;
-            }
-            else if (data && data.data) {
-                items = data.data;
-            }
-            else if (data && data.rows) {
-                items = data.rows;
-            }
-            else if (data && typeof data === 'object') {
-                for (const key of Object.keys(data)) {
-                    if (Array.isArray(data[key])) {
-                        items = data[key];
-                        console.log(`Data nalezena v klíči: "${key}"`);
-                        break;
-                    }
-                }
-            }
-            if (items.length === 0 && data) {
-                console.warn('Neznámá struktura odpovědi:', JSON.stringify(data).substring(0, 300));
-            }
-            this.workstations = items.map(item => ({
-                id: item.id || item.ID || item.Id || item.name,
-                name: item.label || item.name || item.Name || item.title || item.Title || ('Pracoviště ' + (item.id || item.ID || '')),
-                code: item.code || item.Code || item.referenceName || item.ReferenceName || '',
-                type: item.type || item.Type || '',
-                active: item.active !== false && item.Active !== false && item.archived !== true,
+            const data = await resp.json();
+            this.workstations = (Array.isArray(data) ? data : []).map((item) => ({
+                id: item.id,
+                name: item.name || ('Pracoviště ' + item.id),
+                code: item.code || '',
+                type: '',
+                active: true,
                 raw: item,
             }));
-            this.workstations = this.workstations.filter(w => w.active);
             this.connected = true;
             this.loading = false;
             updateFactorifyUI();
-            showToast(`Načteno ${this.workstations.length} pracovišť z Factorify`);
+            showToast(`Načteno ${this.workstations.length} pracovišť`);
             return this.workstations;
         }
         catch (err) {
@@ -486,19 +464,4 @@ export function saveWsConfig() {
 }
 export function wsConfigApplyDefaults() {
     const defaultWInput = document.getElementById('ws-cfg-default-w');
-    const defaultHInput = document.getElementById('ws-cfg-default-h');
-    if (!defaultWInput || !defaultHInput)
-        return;
-    const w = parseFloat(defaultWInput.value);
-    const h = parseFloat(defaultHInput.value);
-    if (!isNaN(w) && !isNaN(h) && w > 0 && h > 0) {
-        applyDefaultSize(w, h);
-    }
-}
-export function wsConfigToggleAll(checked) {
-    const checkboxes = document.querySelectorAll('.ws-cfg-checkbox:not(:disabled)');
-    checkboxes.forEach(cb => {
-        cb.checked = checked;
-    });
-}
-//# sourceMappingURL=factorify-api.js.map
+    const defaultHInput = document.getElementById('ws-cfg-default-h')
