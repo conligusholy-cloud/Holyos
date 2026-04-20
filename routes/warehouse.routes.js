@@ -207,7 +207,7 @@ router.get('/orders', async (req, res, next) => {
       where,
       include: {
         company: { select: { id: true, name: true } },
-        items: true,
+        items: { include: { product: { select: { id: true, code: true, name: true } } } },
       },
       orderBy: { created_at: 'desc' },
     });
@@ -323,6 +323,7 @@ router.get('/orders/:id', async (req, res, next) => {
         company: true,
         items: {
           include: {
+            product: { select: { id: true, code: true, name: true } },
             configs: {
               include: {
                 option: {

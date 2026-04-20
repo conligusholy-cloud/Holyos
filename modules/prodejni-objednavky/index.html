@@ -1268,7 +1268,7 @@
 
         let itemsHtml = '';
         if (order.items && order.items.length > 0) {
-          itemsHtml = '<table class="data-table"><thead><tr><th>Položka</th><th>Množství</th><th>Jednotka</th><th>Cena/ks</th><th>Celkem</th><th title="První den výrobního slotu — pro plánování výroby">🏭 Výroba od</th><th>Termín dodání</th>' + (isEditable ? '<th></th>' : '') + '</tr></thead><tbody>';
+          itemsHtml = '<table class="data-table"><thead><tr><th>Položka</th><th>Množství</th><th>Jednotka</th><th>Cena/ks</th><th>Celkem</th><th title="První den výrobního slotu — pro plánování výroby">🏭 Výroba od</th><th>Termín dodání</th><th title="Interní — pro výrobu a definici výbavy. Zákazník toto nevidí.">🔗 Výrobek</th>' + (isEditable ? '<th></th>' : '') + '</tr></thead><tbody>';
           for (const it of order.items) {
             let configLine = '';
             if (itemConfigs[it.id]) {
@@ -1319,6 +1319,11 @@
               itemsHtml += '<td style="font-weight:600;">' + parseFloat(it.total_price || 0).toLocaleString('cs-CZ') + ' ' + currencySymbol(order.currency) + '</td>';
               itemsHtml += '<td>' + prodStartCell + '</td>';
               itemsHtml += '<td>' + slotHtml + '</td>';
+              // Pripojeny vyrobek — interne pouze, pro vyrobu/vybavu. Cerveny warning kdyz chybi.
+              const productCell = it.product
+                ? '<div style="font-size:12px;"><span style="color:#8b5cf6;font-weight:600;">' + esc(it.product.code) + '</span><div style="color:var(--text2);font-size:11px;margin-top:1px;">' + esc(it.product.name) + '</div></div>'
+                : '<span style="display:inline-flex;align-items:center;gap:4px;background:rgba(239,68,68,0.15);color:#ef4444;border:1px solid rgba(239,68,68,0.35);padding:2px 8px;border-radius:6px;font-size:11px;font-weight:700;">⚠ Nenapojeno</span>';
+              itemsHtml += '<td>' + productCell + '</td>';
               itemsHtml += '<td style="white-space:nowrap;">' +
                 '<button class="btn btn-sm" style="background:rgba(59,130,246,0.12);color:#3b82f6;border-color:rgba(59,130,246,0.25);font-size:11px;padding:4px 8px;margin-right:4px;" onclick="duplicateOrderItem(' + it.id + ',' + id + ')" title="Duplikovat se stejnou konfigurací">🔁</button>' +
                 '<button class="btn btn-danger btn-sm" onclick="deleteOrderItem(' + it.id + ',' + id + ')">🗑️</button>' +
@@ -1337,6 +1342,10 @@
               itemsHtml += '<td style="font-weight:600;">' + parseFloat(it.total_price || 0).toLocaleString('cs-CZ') + ' ' + currencySymbol(order.currency) + '</td>';
               itemsHtml += '<td>' + prodStartCell + '</td>';
               itemsHtml += '<td>' + slotHtml + '</td>';
+              const productCell2 = it.product
+                ? '<div style="font-size:12px;"><span style="color:#8b5cf6;font-weight:600;">' + esc(it.product.code) + '</span><div style="color:var(--text2);font-size:11px;margin-top:1px;">' + esc(it.product.name) + '</div></div>'
+                : '<span style="display:inline-flex;align-items:center;gap:4px;background:rgba(239,68,68,0.15);color:#ef4444;border:1px solid rgba(239,68,68,0.35);padding:2px 8px;border-radius:6px;font-size:11px;font-weight:700;">⚠ Nenapojeno</span>';
+              itemsHtml += '<td>' + productCell2 + '</td>';
               itemsHtml += '</tr>';
             }
           }
