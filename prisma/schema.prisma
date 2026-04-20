@@ -479,6 +479,7 @@ model OrderItem {
 
   order    Order     @relation(fields: [order_id], references: [id], onDelete: Cascade)
   material Material? @relation(fields: [material_id], references: [id])
+  product  Product?  @relation(fields: [product_id], references: [id], onDelete: SetNull)
   configs  OrderItemConfig[] // vybraná konfigurace pro tento výrobek
 
   @@index([order_id])
@@ -843,6 +844,7 @@ model Product {
   bom_usages    OperationMaterial[]  // kde se tento produkt používá jako BOM položka
   config_groups ProductConfigGroup[] // konfigurační skupiny (Rám, Barva, ...)
   pricelist_items SalesPricelistItem[] // položky v prodejním ceníku navázané na výrobek
+  order_items   OrderItem[]          // položky objednávek, které na tento výrobek odkazují (pro výrobu a výbavu)
 
   @@index([factorify_id])
   @@map("products")
