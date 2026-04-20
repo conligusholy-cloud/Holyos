@@ -1229,6 +1229,12 @@
       try {
         const res = await fetch('/api/wh/orders/' + id);
         const order = await res.json();
+        // Aktivni polozky ceniku pro dropdown 'Z ceniku' pri pridavani polozky
+        let pricelistItems = [];
+        try {
+          const plRes = await fetch('/api/wh/pricelist?active=true');
+          if (plRes.ok) pricelistItems = await plRes.json();
+        } catch(e) { console.warn('pricelist fetch fail', e); }
         if (products.length === 0) { try { const r2 = await fetch('/api/production/products?type=product'); products = await r2.json(); } catch(e) {} }
         if (companies.length === 0) await reloadCompanies();
         if (_availableSlots.length === 0) await loadAvailableSlots();
@@ -1330,11 +1336,53 @@
 
         const prodDetailOpts = products.map(p => '<option value="' + p.id + '">' + p.code + ' — ' + p.name + '</option>').join('');
 
+        // Moznosti z ceniku — priklada data-* atributy pro auto-fill do form fields
+        const plOpts = pricelistItems.map(function(pl) {
+          const priceCzk = pl.price_czk != null ? parseFloat(pl.price_czk) : null;
+          const priceEur = pl.price_eur != null ? parseFloat(pl.price_eur) : null;
+          const truckCzk = pl.truck_price_czk != null ? parseFloat(pl.truck_price_czk) : null;
+          const truckEur = pl.truck_price_eur != null ? parseFloat(pl.truck_price_eur) : null;
+          // Popisek: nazev + aktualni cena podle meny + produkt code
+          const priceForCurrency = order.currency === 'EUR' ? priceEur : priceCzk;
+          const currencySym = order.currency === 'EUR' ? '€' : 'Kč';
+          const pricePart = priceForCurrency != null
+            ? ' — ' + priceForCurrency.toLocaleString('cs-CZ') + ' ' + currencySym
+            : ' — bez ceny ' + currencySym;
+          const prodPart = pl.product ? ' [' + pl.product.code + ']' : ' ⚠ nenapojeno';
+          return '<option value="' + pl.id + '"' +
+            ' data-name-cs="' + esc(pl.name_cs) + '"' +
+            ' data-name-en="' + esc(pl.name_en || '') + '"' +
+            ' data-product-id="' + (pl.product_id || '') + '"' +
+            ' data-price-czk="' + (priceCzk != null ? priceCzk : '') + '"' +
+            ' data-price-eur="' + (priceEur != null ? priceEur : '') + '"' +
+            ' data-truck-czk="' + (truckCzk != null ? truckCzk : '') + '"' +
+            ' data-truck-eur="' + (truckEur != null ? truckEur : '') + '"' +
+            '>' + esc(pl.name_cs) + pricePart + prodPart + '</option>';
+        }).join('');
+
         // Sekce přidávání položek (jen pokud je editovatelné)
         let addItemSection = '';
         if (isEditable) {
+          // Cenik dropdown s info notice (kdyz je v ceniku alespon jedna polozka)
+          const plPicker = pricelistItems.length > 0
+            ? '<div style="background:rgba(234,179,8,0.08);border:1px solid rgba(234,179,8,0.25);border-radius:8px;padding:10px 14px;margin-bottom:10px;">' +
+                '<div style="display:flex;gap:8px;align-items:end;flex-wrap:wrap;">' +
+                  '<div class="form-group" style="flex:1;min-width:260px;margin-bottom:0;">' +
+                    '<label style="font-weight:600;color:#eab308;">💰 Rychlý výběr z ceníku (měna objednávky: ' + order.currency + ')</label>' +
+                    '<select id="add-item-pricelist" onchange="fillFromPricelist(this, \'' + order.currency + '\', false)">' +
+                      '<option value="">— Ručně (bez ceníku) —</option>' + plOpts +
+                    '</select>' +
+                  '</div>' +
+                  '<div style="display:flex;gap:6px;margin-bottom:2px;">' +
+                    '<button type="button" class="btn btn-sm" style="background:rgba(14,165,233,0.12);color:#0ea5e9;border-color:rgba(14,165,233,0.3);" onclick="fillFromPricelist(document.getElementById(\'add-item-pricelist\'), \'' + order.currency + '\', true)" title="Použít kamionovou (velkoobchodní) cenu">🚛 Kamion</button>' +
+                  '</div>' +
+                '</div>' +
+                '<div style="font-size:11px;color:var(--text2);margin-top:6px;">Vyberte položku — automaticky se doplní výrobek, název a cena v měně objednávky. 🚛 Kamion přepíše cenu na velkoobchodní.</div>' +
+              '</div>'
+            : '';
           addItemSection = '<div style="border-top:1px solid var(--border);padding-top:16px;">' +
             '<h3 style="font-size:14px;margin-bottom:8px;">➕ Přidat položku</h3>' +
+            plPicker +
             '<form onsubmit="addOrderItem(event,' + id + ')" style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;">' +
               '<div class="form-group" style="flex:2;"><label>Výrobek</label><select name="product_id" onchange="fillItemPrice(this)"><option value="">— Vyberte výrobek —</option>' + prodDetailOpts + '</select></div>' +
               '<div class="form-group" style="flex:1;"><label>Název</label><input type="text" name="name" placeholder="Nebo ruční název"></div>' +
@@ -1439,6 +1487,42 @@
           document.addEventListener('mousemove', function(e) { if (!drag) return; e.preventDefault(); stlEl.scrollLeft = sl - (e.pageX - sx); });
         }
       } catch(e) { console.error(e); }
+    }
+
+    // Doplni formu pro pridani polozky z vybrane polozky ceniku.
+    // currency = 'CZK' | 'EUR'; useTruck = true pouzije kamionovou cenu.
+    function fillFromPricelist(sel, currency, useTruck) {
+      if (!sel || !sel.value) return;
+      const opt = sel.options[sel.selectedIndex];
+      if (!opt) return;
+      // Najdi sourozenec form (Pridat polozku) ve stejnem containeru
+      const container = sel.closest('div').parentElement.parentElement;
+      const form = container ? container.querySelector('form[onsubmit*="addOrderItem"]') : null;
+      if (!form) return;
+      const nameCs = opt.dataset.nameCs || '';
+      const nameEn = opt.dataset.nameEn || '';
+      const productId = opt.dataset.productId || '';
+      const priceCzk = opt.dataset.priceCzk;
+      const priceEur = opt.dataset.priceEur;
+      const truckCzk = opt.dataset.truckCzk;
+      const truckEur = opt.dataset.truckEur;
+      // Propis produkt
+      const prodSel = form.querySelector('[name="product_id"]');
+      if (prodSel) prodSel.value = productId || '';
+      // Propis nazev (EN preferovan pri EUR mene, pokud existuje)
+      const nameInp = form.querySelector('[name="name"]');
+      if (nameInp) nameInp.value = (currency === 'EUR' && nameEn) ? nameEn : nameCs;
+      // Propis cenu podle meny a podle useTruck
+      const priceInp = form.querySelector('[name="unit_price"]');
+      if (priceInp) {
+        let price;
+        if (useTruck) {
+          price = currency === 'EUR' ? truckEur : truckCzk;
+        } else {
+          price = currency === 'EUR' ? priceEur : priceCzk;
+        }
+        priceInp.value = price || '0';
+      }
     }
 
     function fillItemPrice(sel) {
