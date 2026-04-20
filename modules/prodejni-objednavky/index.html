@@ -191,7 +191,7 @@
         el.innerHTML = '<div class="empty-state"><div class="empty-icon">💰</div><h3>Žádné prodejní objednávky</h3><p>Vytvořte první prodejní objednávku.</p></div>';
         return;
       }
-      let html = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr><th>Číslo</th><th>Odběratel</th><th>Stav</th><th>Položek</th><th>Celkem</th><th>Dodání</th><th>Akce</th></tr></thead><tbody>';
+      let html = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr><th>Číslo</th><th>Odběratel</th><th>Stav</th><th>Položek</th><th>Celkem</th><th title="Datum slíbené zákazníkovi">📅 Zákazník</th><th title="Konec posledního výrobního slotu">🏭 Výroba do</th><th>Akce</th></tr></thead><tbody>';
       for (const o of list) {
         const st = ORDER_STATUSES[o.status] || { label: o.status, color: '#9ca3af' };
         html += '<tr onclick="openOrderDetail(' + o.id + ')">';
@@ -201,6 +201,9 @@
         html += '<td>' + (o.items_count || (o.items ? o.items.length : 0)) + '</td>';
         html += '<td style="font-weight:600;">' + parseFloat(o.total_amount || 0).toLocaleString('cs-CZ') + ' ' + (o.currency || 'CZK') + '</td>';
         html += '<td>' + (o.expected_delivery ? new Date(o.expected_delivery).toLocaleDateString('cs-CZ') : '—') + '</td>';
+        html += '<td>' + (o.production_finish_last
+          ? '<span style="color:#10b981;font-weight:600;">' + new Date(o.production_finish_last).toLocaleDateString('cs-CZ') + '</span>'
+          : '<span style="color:var(--text2);">—</span>') + '</td>';
         html += '<td><button class="btn btn-danger btn-sm" onclick="event.stopPropagation();deleteOrder(' + o.id + ')">🗑️</button></td>';
         html += '</tr>';
       }
@@ -286,7 +289,7 @@
             '</div>' +
           '</div>' +
           '<div class="form-grid">' +
-            '<div class="form-group"><label>Očekávané dodání</label><input type="date" name="expected_delivery" value="' + (o.expected_delivery ? o.expected_delivery.split('T')[0] : '') + '"></div>' +
+            '<div class="form-group"><label>Očekávané datum zákazník</label><input type="date" name="expected_delivery" value="' + (o.expected_delivery ? o.expected_delivery.split('T')[0] : '') + '" title="Kdy jsme zákazníkovi slíbili dodání. Datum pro výrobu se dopočítá ze slotů."></div>' +
             '<div class="form-group"><label>Měna</label><select name="currency" onchange="renderPendingItems()"><option value="CZK"' + ((o.currency||'CZK')==='CZK'?' selected':'') + '>CZK (Kč)</option><option value="EUR"' + (o.currency==='EUR'?' selected':'') + '>EUR (€)</option></select></div>' +
           '</div>' +
 
@@ -297,10 +300,11 @@
             '<div style="margin-top:8px;padding:12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;">' +
               '<div style="display:flex;gap:6px;align-items:end;flex-wrap:wrap;">' +
                 '<div class="form-group" style="flex:2;min-width:180px;"><label>Výrobek</label><select id="add-item-product"><option value="">— Vyberte výrobek —</option>' + prodOpts + '</select></div>' +
-                '<div class="form-group" style="width:70px;"><label>Množství</label><input type="number" id="add-item-qty" value="1" min="0.01" step="0.01"></div>' +
+                '<input type="hidden" id="add-item-qty" value="1">' +
                 '<div class="form-group" style="width:50px;"><label>Jedn.</label><input type="text" id="add-item-unit" value="ks" readonly style="background:var(--surface);"></div>' +
                 '<div class="form-group" style="width:110px;"><label>Cena/ks bez DPH</label><input type="number" id="add-item-price" value="0" step="0.01"></div>' +
               '</div>' +
+              '<div style="font-size:11px;color:var(--text2);margin-top:6px;">💡 Každý výrobek = 1 řádek. Pro více kusů stejné konfigurace použijte tlačítko <strong>🔁 Duplikovat</strong> u přidané položky.</div>' +
               '<div style="margin-top:8px;text-align:right;">' +
                 '<button type="button" class="btn btn-primary btn-sm" onclick="openProductConfigurator()">+ Přidat položku</button>' +
               '</div>' +
@@ -311,15 +315,26 @@
 
           // === ODKAZ PRO ZÁKAZNÍKA ===
           (id ? '<div style="border-top:1px solid var(--border);margin:16px 0 12px;padding-top:14px;">' +
-            '<h3 style="font-size:14px;margin-bottom:8px;">🔗 Odkaz pro zákazníka</h3>' +
-            '<p style="font-size:11px;color:var(--text2);margin-bottom:8px;">Zákazník uvidí přehled objednávky, může konfigurovat produkty a vybírat termíny dodání.</p>' +
+            '<h3 style="font-size:14px;margin-bottom:8px;">🔗 Odkaz pro zákazníka' +
+              (o.status && o.status !== 'new'
+                ? ' <span style="font-size:11px;color:#f59e0b;background:rgba(245,158,11,0.12);padding:2px 8px;border-radius:10px;margin-left:6px;">🔒 Deaktivován</span>'
+                : ''
+              ) +
+            '</h3>' +
+            '<p style="font-size:11px;color:var(--text2);margin-bottom:8px;">Zákazník uvidí přehled objednávky, může konfigurovat produkty a vybírat termíny dodání. Odkaz je aktivní jen ve stavu <strong>Nový</strong>.</p>' +
             '<div id="customer-link-area">' +
               (o.share_token
-                ? '<div style="display:flex;gap:8px;align-items:center;">' +
-                    '<input type="text" readonly value="' + window.location.origin + '/order/' + o.share_token + '" id="modal-share-url" style="flex:1;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:12px;font-family:monospace;" onclick="this.select()">' +
-                    '<button type="button" class="btn btn-sm btn-primary" onclick="copyModalShareUrl()">📋</button>' +
-                  '</div>'
-                : '<button type="button" class="btn btn-sm" style="background:rgba(59,130,246,0.12);color:#3b82f6;border-color:rgba(59,130,246,0.25);" onclick="generateShareLink(' + id + ')">🔗 Vygenerovat odkaz</button>'
+                ? (o.status && o.status !== 'new'
+                    ? '<div style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.25);border-radius:8px;padding:10px 14px;font-family:monospace;font-size:11px;color:var(--text2);word-break:break-all;opacity:0.5;text-decoration:line-through;">' + window.location.origin + '/order/' + o.share_token + '</div>'
+                    : '<div style="display:flex;gap:8px;align-items:center;">' +
+                        '<input type="text" readonly value="' + window.location.origin + '/order/' + o.share_token + '" id="modal-share-url" style="flex:1;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:12px;font-family:monospace;" onclick="this.select()">' +
+                        '<button type="button" class="btn btn-sm btn-primary" onclick="copyModalShareUrl()">📋</button>' +
+                      '</div>'
+                  )
+                : (o.status && o.status !== 'new'
+                    ? '<div style="font-size:12px;color:var(--text2);font-style:italic;">Vytvoření odkazu není možné — objednávka není ve stavu Nový.</div>'
+                    : '<button type="button" class="btn btn-sm" style="background:rgba(59,130,246,0.12);color:#3b82f6;border-color:rgba(59,130,246,0.25);" onclick="generateShareLink(' + id + ')">🔗 Vygenerovat odkaz</button>'
+                  )
               ) +
             '</div>' +
           '</div>' : '') +
@@ -426,14 +441,15 @@
       _currentConfigGroups = groups;
 
       // Pokud výrobek nemá konfigurace, přidej rovnou
+      // (vždy 1 ks; pro víc kusů uživatel duplikuje řádek)
       if (!groups || groups.length === 0) {
         _pendingItems.push({
           product_id: productId,
           name: productName,
-          quantity: qty,
+          quantity: 1,
           unit: unit,
           unit_price: basePrice,
-          total_price: qty * basePrice,
+          total_price: basePrice,
           configs: [],
           config_summary: '',
         });
@@ -629,10 +645,10 @@
       _pendingItems.push({
         product_id: window._cfgm_productId,
         name: window._cfgm_productName,
-        quantity: window._cfgm_qty,
+        quantity: 1, // Vždy 1 kus — duplikace řeší řádky, ne quantity
         unit: window._cfgm_unit,
         unit_price: finalPrice,
-        total_price: window._cfgm_qty * finalPrice,
+        total_price: finalPrice,
         configs: configs,
         config_summary: configLabels.join(' · '),
       });
@@ -654,6 +670,41 @@
       renderPendingItems();
     }
 
+    // Duplikuje položku v pending listu (deep clone včetně configs pole)
+    function duplicatePendingItem(idx) {
+      const src = _pendingItems[idx];
+      if (!src) return;
+      const clone = {
+        product_id: src.product_id,
+        material_id: src.material_id,
+        name: src.name,
+        quantity: 1,
+        unit: src.unit,
+        unit_price: src.unit_price,
+        total_price: src.unit_price,
+        configs: Array.isArray(src.configs) ? src.configs.map(c => ({ ...c })) : [],
+        config_summary: src.config_summary,
+      };
+      _pendingItems.splice(idx + 1, 0, clone); // vlož hned za originál
+      renderPendingItems();
+    }
+
+    // Duplikace existující položky (uložené v DB) — přes backend
+    async function duplicateOrderItem(itemId, orderId) {
+      try {
+        const r = await fetch('/api/wh/orders/' + orderId + '/items/' + itemId + '/duplicate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+        });
+        if (!r.ok) { const err = await r.json().catch(() => ({})); alert('Chyba: ' + (err.error || r.status)); return; }
+        // Znovu nahraj detail objednávky
+        await loadOrders();
+        // Otevři modal znovu na stejné objednávce
+        const order = orders.find(o => o.id === orderId);
+        if (order) openOrderModal(order.id);
+      } catch (e) { alert('Chyba: ' + e.message); }
+    }
+
     function getSelectedCurrency() {
       const sel = document.querySelector('select[name="currency"]');
       return sel ? sel.value : 'CZK';
@@ -670,21 +721,24 @@
       const cur = getSelectedCurrency();
       const sym = currencySymbol(cur);
       let total = 0;
-      let html = '<table class="data-table" style="font-size:12px;"><thead><tr><th>Výrobek</th><th style="text-align:right">Množství</th><th>Jedn.</th><th style="text-align:right">Cena/ks bez DPH</th><th style="text-align:right">Celkem bez DPH</th><th></th></tr></thead><tbody>';
+      let html = '<table class="data-table" style="font-size:12px;"><thead><tr><th>#</th><th>Výrobek</th><th>Jedn.</th><th style="text-align:right">Cena/ks bez DPH</th><th style="text-align:right">Celkem bez DPH</th><th></th></tr></thead><tbody>';
       _pendingItems.forEach((it, i) => {
-        const rowTotal = it.quantity * it.unit_price;
+        const rowTotal = 1 * it.unit_price;
         total += rowTotal;
         const configLine = it.config_summary ? '<div style="font-size:11px;color:var(--text2);margin-top:2px;">⚙️ ' + it.config_summary + '</div>' : '';
         html += '<tr>' +
+          '<td style="color:var(--text2);font-size:11px;">' + (i + 1) + '</td>' +
           '<td><span class="person-name">' + it.name + '</span>' + configLine + '</td>' +
-          '<td style="text-align:right">' + it.quantity + '</td>' +
           '<td>' + it.unit + '</td>' +
           '<td style="text-align:right">' + it.unit_price.toLocaleString('cs-CZ') + ' ' + sym + '</td>' +
           '<td style="text-align:right;font-weight:600;">' + rowTotal.toLocaleString('cs-CZ') + ' ' + sym + '</td>' +
-          '<td><button type="button" class="btn btn-danger btn-sm" onclick="removePendingItem(' + i + ')" style="padding:2px 8px;">✕</button></td>' +
+          '<td style="white-space:nowrap;">' +
+            '<button type="button" class="btn btn-sm" style="background:rgba(59,130,246,0.12);color:#3b82f6;border-color:rgba(59,130,246,0.25);padding:2px 8px;margin-right:4px;" onclick="duplicatePendingItem(' + i + ')" title="Duplikovat se stejnou konfigurací">🔁</button>' +
+            '<button type="button" class="btn btn-danger btn-sm" onclick="removePendingItem(' + i + ')" style="padding:2px 8px;">✕</button>' +
+          '</td>' +
         '</tr>';
       });
-      html += '<tr style="border-top:2px solid var(--border);"><td colspan="4" style="text-align:right;font-weight:600;">Celkem bez DPH:</td><td style="text-align:right;font-weight:700;font-size:14px;color:#eab308;">' + total.toLocaleString('cs-CZ') + ' ' + sym + '</td><td></td></tr>';
+      html += '<tr style="border-top:2px solid var(--border);"><td colspan="4" style="text-align:right;font-weight:600;">Celkem bez DPH (' + _pendingItems.length + ' ks):</td><td style="text-align:right;font-weight:700;font-size:14px;color:#eab308;">' + total.toLocaleString('cs-CZ') + ' ' + sym + '</td><td></td></tr>';
       html += '</tbody></table>';
       el.innerHTML = html;
     }
@@ -1111,7 +1165,7 @@
 
         let itemsHtml = '';
         if (order.items && order.items.length > 0) {
-          itemsHtml = '<table class="data-table"><thead><tr><th>Položka</th><th>Množství</th><th>Jednotka</th><th>Cena/ks</th><th>Celkem</th><th>Termín dodání</th>' + (isEditable ? '<th></th>' : '') + '</tr></thead><tbody>';
+          itemsHtml = '<table class="data-table"><thead><tr><th>Položka</th><th>Množství</th><th>Jednotka</th><th>Cena/ks</th><th>Celkem</th><th title="První den výrobního slotu — pro plánování výroby">🏭 Výroba od</th><th>Termín dodání</th>' + (isEditable ? '<th></th>' : '') + '</tr></thead><tbody>';
           for (const it of order.items) {
             let configLine = '';
             if (itemConfigs[it.id]) {
@@ -1142,15 +1196,24 @@
               slotHtml = '<span style="color:var(--text2);font-size:11px;">—</span>';
             }
 
+            // Výroba od = první den přiřazeného slotu (z backendu — it.production_start)
+            const prodStartCell = it.production_start
+              ? '<span style="background:rgba(16,185,129,0.12);color:#10b981;padding:3px 8px;border-radius:6px;font-size:11px;font-weight:600;">' + new Date(it.production_start).toLocaleDateString('cs-CZ') + '</span>'
+              : '<span style="color:var(--text2);font-size:11px;">—</span>';
+
             if (isEditable) {
               itemsHtml += '<tr>';
               itemsHtml += '<td><span class="person-name">' + (it.name || '—') + '</span>' + configLine + '</td>';
-              itemsHtml += '<td><input type="number" value="' + it.quantity + '" min="0.01" step="0.01" style="width:70px;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:4px 8px;color:var(--text);font-size:13px;" onchange="updateOrderItem(' + it.id + ',' + id + ',\'quantity\',this.value,' + parseFloat(it.unit_price||0) + ')"></td>';
+              itemsHtml += '<td style="font-weight:600;">1</td>'; // Vždy 1 ks — multiplikace řešena duplikací řádku
               itemsHtml += '<td>' + it.unit + '</td>';
-              itemsHtml += '<td><input type="number" value="' + parseFloat(it.unit_price || 0) + '" step="0.01" style="width:90px;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:4px 8px;color:var(--text);font-size:13px;" onchange="updateOrderItem(' + it.id + ',' + id + ',\'unit_price\',this.value,' + parseFloat(it.quantity||0) + ')"></td>';
+              itemsHtml += '<td><input type="number" value="' + parseFloat(it.unit_price || 0) + '" step="0.01" style="width:90px;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:4px 8px;color:var(--text);font-size:13px;" onchange="updateOrderItem(' + it.id + ',' + id + ',\'unit_price\',this.value,1)"></td>';
               itemsHtml += '<td style="font-weight:600;">' + parseFloat(it.total_price || 0).toLocaleString('cs-CZ') + ' ' + currencySymbol(order.currency) + '</td>';
+              itemsHtml += '<td>' + prodStartCell + '</td>';
               itemsHtml += '<td>' + slotHtml + '</td>';
-              itemsHtml += '<td><button class="btn btn-danger btn-sm" onclick="deleteOrderItem(' + it.id + ',' + id + ')">🗑️</button></td>';
+              itemsHtml += '<td style="white-space:nowrap;">' +
+                '<button class="btn btn-sm" style="background:rgba(59,130,246,0.12);color:#3b82f6;border-color:rgba(59,130,246,0.25);font-size:11px;padding:4px 8px;margin-right:4px;" onclick="duplicateOrderItem(' + it.id + ',' + id + ')" title="Duplikovat se stejnou konfigurací">🔁</button>' +
+                '<button class="btn btn-danger btn-sm" onclick="deleteOrderItem(' + it.id + ',' + id + ')">🗑️</button>' +
+                '</td>';
               itemsHtml += '</tr>';
             } else {
               itemsHtml += '<tr>';
@@ -1158,6 +1221,7 @@
               itemsHtml += '<td>' + it.quantity + '</td><td>' + it.unit + '</td>';
               itemsHtml += '<td>' + parseFloat(it.unit_price || 0).toLocaleString('cs-CZ') + ' ' + currencySymbol(order.currency) + '</td>';
               itemsHtml += '<td style="font-weight:600;">' + parseFloat(it.total_price || 0).toLocaleString('cs-CZ') + ' ' + currencySymbol(order.currency) + '</td>';
+              itemsHtml += '<td>' + prodStartCell + '</td>';
               itemsHtml += '<td>' + slotHtml + '</td>';
               itemsHtml += '</tr>';
             }
@@ -1177,11 +1241,12 @@
             '<form onsubmit="addOrderItem(event,' + id + ')" style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;">' +
               '<div class="form-group" style="flex:2;"><label>Výrobek</label><select name="product_id" onchange="fillItemPrice(this)"><option value="">— Vyberte výrobek —</option>' + prodDetailOpts + '</select></div>' +
               '<div class="form-group" style="flex:1;"><label>Název</label><input type="text" name="name" placeholder="Nebo ruční název"></div>' +
-              '<div class="form-group" style="width:80px;"><label>Množství</label><input type="number" name="quantity" value="1" min="0.01" step="0.01" required></div>' +
+              '<input type="hidden" name="quantity" value="1">' +
               '<div class="form-group" style="width:60px;"><label>Jedn.</label><input type="text" name="unit" value="ks"></div>' +
               '<div class="form-group" style="width:100px;"><label>Cena/ks</label><input type="number" name="unit_price" value="0" step="0.01"></div>' +
-              '<button type="submit" class="btn btn-primary btn-sm" style="margin-bottom:4px;">+ Přidat</button>' +
+              '<button type="submit" class="btn btn-primary btn-sm" style="margin-bottom:4px;">+ Přidat (1 ks)</button>' +
             '</form>' +
+            '<div style="font-size:11px;color:var(--text2);margin-top:6px;">💡 Každý výrobek je samostatný řádek s vlastní konfigurací. Pro další kus stejného typu použijte <strong>🔁 Duplikovat</strong> u existující položky.</div>' +
           '</div>';
         }
 
@@ -1200,14 +1265,28 @@
             var compEditOpts = companies.map(function(c) {
               return '<option value="' + c.id + '"' + (order.company_id === c.id ? ' selected' : '') + '>' + c.name + '</option>';
             }).join('');
+            // Computed production dates (read-only) — přicházejí z backendu
+            const prodStart = order.production_start_last
+              ? new Date(order.production_start_last).toLocaleDateString('cs-CZ')
+              : '—';
+            const prodFinish = order.production_finish_last
+              ? new Date(order.production_finish_last).toLocaleDateString('cs-CZ')
+              : '—';
             return '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;padding:16px;background:var(--bg);border:1px solid var(--border);border-radius:10px;">' +
               '<div class="form-group"><label style="font-size:11px;color:var(--text2);">Odběratel</label><select id="detail-company" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:6px 10px;color:var(--text);font-size:13px;" onchange="updateOrderField(' + id + ',\'company_id\',this.value)">' + compEditOpts + '</select></div>' +
               '<div class="form-group"><label style="font-size:11px;color:var(--text2);">Měna</label><select id="detail-currency" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:6px 10px;color:var(--text);font-size:13px;" onchange="updateOrderField(' + id + ',\'currency\',this.value)">' +
                 '<option value="CZK"' + ((order.currency||'CZK')==='CZK'?' selected':'') + '>CZK (Kč)</option>' +
                 '<option value="EUR"' + (order.currency==='EUR'?' selected':'') + '>EUR (€)</option>' +
               '</select></div>' +
-              '<div class="form-group"><label style="font-size:11px;color:var(--text2);">Očekávané dodání</label><input type="date" id="detail-delivery" value="' + (order.expected_delivery ? new Date(order.expected_delivery).toISOString().split('T')[0] : '') + '" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:6px 10px;color:var(--text);font-size:13px;" onchange="updateOrderField(' + id + ',\'expected_delivery\',this.value)"></div>' +
-              '<div class="form-group"><label style="font-size:11px;color:var(--text2);">Poznámka</label><input type="text" id="detail-note" value="' + (order.note || '').replace(/"/g, '&quot;') + '" placeholder="Poznámka..." style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:6px 10px;color:var(--text);font-size:13px;" onchange="updateOrderField(' + id + ',\'note\',this.value)"></div>' +
+              '<div class="form-group"><label style="font-size:11px;color:var(--text2);">📅 Očekávané datum — zákazník</label><input type="date" id="detail-delivery" value="' + (order.expected_delivery ? new Date(order.expected_delivery).toISOString().split('T')[0] : '') + '" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:6px 10px;color:var(--text);font-size:13px;" onchange="updateOrderField(' + id + ',\'expected_delivery\',this.value)" title="Datum slíbené zákazníkovi"></div>' +
+              '<div class="form-group"><label style="font-size:11px;color:var(--text2);">🏭 Očekávané datum — výroba <span style="color:var(--text2);font-weight:400;">(z posledního slotu)</span></label>' +
+                '<div style="background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.2);border-radius:8px;padding:6px 10px;font-size:13px;color:#10b981;display:flex;justify-content:space-between;gap:8px;">' +
+                  '<span title="Start posledního slotu">▶ ' + prodStart + '</span>' +
+                  '<span style="color:var(--text2);">→</span>' +
+                  '<span title="Konec posledního slotu">■ ' + prodFinish + '</span>' +
+                '</div>' +
+              '</div>' +
+              '<div class="form-group" style="grid-column:1 / -1;"><label style="font-size:11px;color:var(--text2);">Poznámka</label><input type="text" id="detail-note" value="' + (order.note || '').replace(/"/g, '&quot;') + '" placeholder="Poznámka..." style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:6px 10px;color:var(--text);font-size:13px;" onchange="updateOrderField(' + id + ',\'note\',this.value)"></div>' +
             '</div>';
           })() :
           '<div style="font-size:13px;color:var(--text2);margin-bottom:16px;">💰 Prodejní · ' + (order.company?.name || '—') + ' · Celkem: <strong style="color:var(--text);">' + parseFloat(order.total_amount || 0).toLocaleString('cs-CZ') + ' ' + (order.currency || 'CZK') + '</strong></div>') +
@@ -1219,14 +1298,30 @@
 
           // ─── Odkaz pro zákazníka ───
           '<div style="border-top:1px solid var(--border);padding-top:14px;margin-top:12px;">' +
-            '<h3 style="font-size:14px;margin-bottom:8px;">🔗 Odkaz pro zákazníka</h3>' +
+            '<h3 style="font-size:14px;margin-bottom:8px;">🔗 Odkaz pro zákazníka' +
+              (order.status !== 'new'
+                ? ' <span style="font-size:11px;color:#f59e0b;background:rgba(245,158,11,0.12);padding:2px 8px;border-radius:10px;margin-left:6px;">🔒 Deaktivován</span>'
+                : ''
+              ) +
+            '</h3>' +
             '<div id="customer-link-area">' +
               (order.share_token
-                ? '<div style="display:flex;gap:8px;align-items:center;">' +
-                    '<input type="text" readonly value="' + window.location.origin + '/order/' + order.share_token + '" id="modal-share-url" style="flex:1;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:12px;font-family:monospace;" onclick="this.select()">' +
-                    '<button type="button" class="btn btn-sm btn-primary" onclick="copyModalShareUrl()">📋</button>' +
-                  '</div>'
-                : '<button type="button" class="btn btn-sm" style="background:rgba(59,130,246,0.12);color:#3b82f6;border-color:rgba(59,130,246,0.25);" onclick="generateShareLink(' + id + ')">🔗 Vygenerovat odkaz</button>'
+                ? (order.status !== 'new'
+                    // Neaktivní stav — odkaz zamčený, nelze kopírovat ani otevírat
+                    ? '<div style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.25);border-radius:8px;padding:10px 14px;">' +
+                        '<div style="font-size:12px;color:var(--text2);margin-bottom:6px;">Odkaz je aktivní jen když je objednávka ve stavu <strong style="color:#3b82f6;">Nový</strong>. Zákazník se teď po kliknutí dozví, že už je objednávka zpracovaná.</div>' +
+                        '<div style="font-family:monospace;font-size:11px;color:var(--text2);word-break:break-all;opacity:0.5;text-decoration:line-through;">' + window.location.origin + '/order/' + order.share_token + '</div>' +
+                      '</div>'
+                    // Aktivní stav
+                    : '<div style="display:flex;gap:8px;align-items:center;">' +
+                        '<input type="text" readonly value="' + window.location.origin + '/order/' + order.share_token + '" id="modal-share-url" style="flex:1;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:12px;font-family:monospace;" onclick="this.select()">' +
+                        '<button type="button" class="btn btn-sm btn-primary" onclick="copyModalShareUrl()">📋</button>' +
+                      '</div>'
+                  )
+                : (order.status !== 'new'
+                    ? '<div style="font-size:12px;color:var(--text2);font-style:italic;">Vytvoření odkazu není možné — objednávka není ve stavu Nový.</div>'
+                    : '<button type="button" class="btn btn-sm" style="background:rgba(59,130,246,0.12);color:#3b82f6;border-color:rgba(59,130,246,0.25);" onclick="generateShareLink(' + id + ')">🔗 Vygenerovat odkaz</button>'
+                  )
               ) +
             '</div>' +
           '</div>' +

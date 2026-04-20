@@ -54,16 +54,15 @@ document.addEventListener('DOMContentLoaded', () => {
     wsSearch.addEventListener('input', (e) => filterWorkstationList(e.target.value));
   }
 
-  // Inicializace Production API — načíst .env a automaticky načíst pracoviště
+  // Inicializace Production API — pracoviště načteme vždycky (lokální HolyOS DB,
+  // žádný externí token nepotřebujeme; dřív zde byl pozůstatek z Factorify proxy)
   if (typeof ProductionAPI !== 'undefined') {
-    // Načíst uloženou konfiguraci pracovišť
     if (typeof loadWsConfig === 'function') loadWsConfig();
     ProductionAPI.loadEnv().then(() => {
       updateProductionUI();
-      // Automaticky načíst pracoviště pokud je token
-      if (ProductionAPI.config.securityToken || ProductionAPI.config.useProxy) {
-        ProductionAPI.loadWorkstations().catch(() => {});
-      }
+      ProductionAPI.loadWorkstations().catch((e) => {
+        console.warn('[Programování výroby] loadWorkstations selhalo:', e);
+      });
     });
   }
 

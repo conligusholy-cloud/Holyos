@@ -55,8 +55,14 @@ router.get('/', requireAuth, async (req, res, next) => {
     const limit = Math.min(parseInt(req.query.limit) || 30, 100);
     const onlyUnread = req.query.unread === 'true';
 
+    // Typy k vynechání (CSV). Např. ?exclude_types=chat_message — když v UI
+    // už chat řešíme jinde a nechceme ho ve zvonku.
+    const excludeTypes = String(req.query.exclude_types || '')
+      .split(',').map(s => s.trim()).filter(Boolean);
+
     const where = { user_id: req.user.id };
     if (onlyUnread) where.read_at = null;
+    if (excludeTypes.length) where.type = { notIn: excludeTypes };
 
     const items = await prisma.notification.findMany({
       where,
@@ -69,9 +75,12 @@ router.get('/', requireAuth, async (req, res, next) => {
 
 router.get('/unread-count', requireAuth, async (req, res, next) => {
   try {
-    const count = await prisma.notification.count({
-      where: { user_id: req.user.id, read_at: null },
-    });
+    const excludeTypes = String(req.query.exclude_types || '')
+      .split(',').map(s => s.trim()).filter(Boolean);
+    const where = { user_id: req.user.id, read_at: null };
+    if (excludeTypes.length) where.type = { notIn: excludeTypes };
+
+    const count = await prisma.notification.count({ where });
     res.json({ count });
   } catch (err) { next(err); }
 });
@@ -116,7 +125,16 @@ router.get('/stream', authFromQueryOrHeader, (req, res) => {
   // Uvítací event (klient zjistí že je spojen)
   res.write(`event: connected\ndata: ${JSON.stringify({ userId })}\n\n`);
 
+  // Presence: pokud tohle je první spojení usera (tj. nebyl online), oznam všem ostatním
+  const wasOnline = bus.isOnline(userId);
   bus.addClient(userId, res);
+  if (!wasOnline) {
+    // Publikuj všem ostatním připojeným, že tenhle user je teď online
+    for (const other of bus.onlineUserIds()) {
+      if (other === userId) continue;
+      bus.publishToUser(other, 'presence', { user_id: userId, online: true });
+    }
+  }
 
   // Heartbeat aby spojení nezmizelo kvůli idle timeoutu na proxy
   const heartbeat = setInterval(() => {
@@ -128,7 +146,18 @@ router.get('/stream', authFromQueryOrHeader, (req, res) => {
   req.on('close', () => {
     clearInterval(heartbeat);
     bus.removeClient(userId, res);
+    // Presence: pokud to bylo poslední spojení usera, oznam všem ostatním
+    if (!bus.isOnline(userId)) {
+      for (const other of bus.onlineUserIds()) {
+        bus.publishToUser(other, 'presence', { user_id: userId, online: false });
+      }
+    }
   });
+});
+
+// Seznam právě online user IDs (používá se při prvním načtení klienta)
+router.get('/presence', requireAuth, (req, res) => {
+  res.json({ online: bus.onlineUserIds() });
 });
 
 // ─── Publikační helper (pro ostatní moduly) ────────────────────────────────

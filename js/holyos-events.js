@@ -53,7 +53,7 @@
       try { emit('connected', JSON.parse(ev.data)); } catch (_) { emit('connected', null); }
     });
 
-    ['notification', 'message', 'channel_update', 'ping'].forEach(name => {
+    ['notification', 'message', 'channel_update', 'ping', 'presence', 'read'].forEach(name => {
       es.addEventListener(name, (ev) => {
         let data = null;
         try { data = JSON.parse(ev.data); } catch (_) {}

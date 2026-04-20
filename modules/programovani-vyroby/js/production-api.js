@@ -26,7 +26,14 @@ const ProductionAPI = {
   getConfig() { return this.config; },
 
   async fetchAPI(path) {
-    const resp = await fetch(path, { headers: { 'Accept': 'application/json' } });
+    // credentials: 'include' → prohlížeč pošle HttpOnly JWT cookie. Bez toho
+    // API vrátí 401 a loadWorkstations skončí s prázdným polem (typický
+    // příznak: "Programování výroby nevidí žádná pracoviště"). Pro jistotu
+    // přidáváme taky Authorization header ze sessionStorage, pokud tam je.
+    const token = (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('token')) || '';
+    const headers = { 'Accept': 'application/json' };
+    if (token) headers['Authorization'] = 'Bearer ' + token;
+    const resp = await fetch(path, { credentials: 'include', headers });
     if (!resp.ok) {
       const errText = await resp.text().catch(() => '');
       throw new Error(`API ${resp.status}: ${errText.substring(0, 200)}`);

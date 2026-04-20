@@ -36,6 +36,8 @@ function statusFromDays(days) {
 
 /**
  * Obohatí vozidlo o počítaná pole (dny a stavy POV/STK/dálniční známky).
+ * next_service / next_tire_change se doplňují samostatně v /vehicles endpointu
+ * protože vyžadují extra DB dotazy a nechceme je načítat u každého detailu.
  */
 function enrichVehicle(v) {
   if (!v) return v;
@@ -57,10 +59,29 @@ function enrichVehicle(v) {
   };
 }
 
+/**
+ * Pro hlavní tabulku: nejbližší plánovaný servis a výměna pneu ke každému
+ * vozidlu. Jeden agregační dotaz, mapa vehicle_id → ISO datum.
+ */
+async function nextScheduledByVehicle(table) {
+  // table = 'vehicleService' | 'vehicleTireChange'
+  const rows = await prisma[table].findMany({
+    where: { status: 'planned', scheduled_at: { not: null, gte: new Date() } },
+    select: { vehicle_id: true, scheduled_at: true },
+    orderBy: { scheduled_at: 'asc' },
+  });
+  const byVehicle = {};
+  for (const r of rows) {
+    if (!byVehicle[r.vehicle_id]) byVehicle[r.vehicle_id] = r.scheduled_at;
+  }
+  return byVehicle;
+}
+
 // ─── Validace ──────────────────────────────────────────────────────────────
 
 const vehicleSchema = z.object({
   license_plate: z.string().max(20).optional().nullable(),
+  company: z.string().max(100).optional().nullable(), // "Best Series" | "Špagetka" | "JTP services"
   model: z.string().min(1).max(255),
   vin: z.string().max(30).optional().nullable(),
   category: z.string().min(1).max(50),
@@ -110,11 +131,12 @@ router.use(requireAuth);
 // ─── GET /api/fleet/vehicles — seznam vozidel ─────────────────────────────
 router.get('/vehicles', async (req, res, next) => {
   try {
-    const { search, category, active, status, driver_id } = req.query;
+    const { search, category, active, status, driver_id, company } = req.query;
 
     const where = {};
     if (active !== undefined) where.active = active === 'true';
     if (category) where.category = category;
+    if (company) where.company = company;
     if (driver_id) where.driver_id = parseInt(driver_id);
     if (search) {
       where.OR = [
@@ -135,6 +157,17 @@ router.get('/vehicles', async (req, res, next) => {
     });
 
     let enriched = vehicles.map(enrichVehicle);
+
+    // Doplň nejbližší plánovaný servis a výměnu pneu — používá se ve sloupcích tabulky
+    const [nextServiceMap, nextTireMap] = await Promise.all([
+      nextScheduledByVehicle('vehicleService'),
+      nextScheduledByVehicle('vehicleTireChange'),
+    ]);
+    enriched = enriched.map(v => ({
+      ...v,
+      next_service: nextServiceMap[v.id] || null,
+      next_tire_change: nextTireMap[v.id] || null,
+    }));
 
     // Filtr podle stavu (expired/warning/ok) — aplikuje na cokoliv (POV, STK, známka)
     if (status) {
@@ -345,6 +378,95 @@ router.post('/check-expirations', async (req, res, next) => {
       }
     }
 
+    // ─── Pneu alerty — napojíme existující hlídač dezénu + sezóny
+    try {
+      const currentSeason = currentTireSeason();
+      // Namontované pneu s nedostatečným dezénem
+      const mounted = await prisma.tireStockItem.findMany({
+        where: { mounted: true, tread_depth_mm: { not: null } },
+        include: { vehicle: { include: { driver: { include: { user: true } } } } },
+      });
+      for (const t of mounted) {
+        if (!t.vehicle) continue;
+        const th = TIRE_DEPTH_WARN[t.season];
+        if (!th) continue;
+        const depth = Number(t.tread_depth_mm);
+        if (depth > th.max) continue; // v pořádku
+
+        const critical = depth < th.min;
+        const title = critical
+          ? `⚠️ Dezén pod minimem — ${t.vehicle.license_plate || t.vehicle.model}`
+          : `🕒 Blíží se výměna pneu — ${t.vehicle.license_plate || t.vehicle.model}`;
+        const body = `${t.season === 'zimni' ? 'Zimní' : 'Letní'} pneu, dezén ${depth} mm (limit ${th.min}-${th.max} mm)`;
+
+        const ids = new Set(recipientIds);
+        if (t.vehicle.driver?.user?.id) ids.add(t.vehicle.driver.user.id);
+        for (const userId of ids) {
+          const since = new Date(); since.setHours(since.getHours() - 24);
+          const existing = await prisma.notification.findFirst({
+            where: {
+              user_id: userId,
+              type: 'fleet_tire_depth',
+              created_at: { gte: since },
+              meta: { path: ['tire_id'], equals: t.id },
+            },
+          });
+          if (existing) continue;
+          await prisma.notification.create({
+            data: {
+              user_id: userId,
+              type: 'fleet_tire_depth',
+              title, body,
+              link: `/modules/vozovy-park/index.html?id=${t.vehicle.id}`,
+              meta: { vehicle_id: t.vehicle.id, tire_id: t.id, season: t.season, depth, critical },
+            },
+          });
+          created++;
+        }
+      }
+
+      // Vozidla bez sezónně vhodných pneu
+      const allActive = await prisma.vehicle.findMany({
+        where: { active: true },
+        include: {
+          tire_stock: { where: { mounted: true }, select: { season: true } },
+          driver: { include: { user: true } },
+        },
+      });
+      for (const v of allActive) {
+        const hasSeason = (v.tire_stock || []).some(t => t.season === currentSeason);
+        if (hasSeason) continue;
+        const title = `🕒 Vozidlo bez ${currentSeason === 'zimni' ? 'zimních' : 'letních'} pneu — ${v.license_plate || v.model}`;
+        const body = `Aktuálně je ${currentSeason === 'zimni' ? 'zimní období (1.11.-31.3.)' : 'letní období (1.4.-31.10.)'} a vozidlo nemá nasazenou sadu`;
+        const ids = new Set(recipientIds);
+        if (v.driver?.user?.id) ids.add(v.driver.user.id);
+        for (const userId of ids) {
+          const since = new Date(); since.setHours(since.getHours() - 24);
+          const existing = await prisma.notification.findFirst({
+            where: {
+              user_id: userId,
+              type: 'fleet_tire_season',
+              created_at: { gte: since },
+              meta: { path: ['vehicle_id'], equals: v.id },
+            },
+          });
+          if (existing) continue;
+          await prisma.notification.create({
+            data: {
+              user_id: userId,
+              type: 'fleet_tire_season',
+              title, body,
+              link: `/modules/vozovy-park/index.html?id=${v.id}`,
+              meta: { vehicle_id: v.id, season: currentSeason },
+            },
+          });
+          created++;
+        }
+      }
+    } catch (e) {
+      console.warn('[fleet check-expirations] tire alerts error:', e.message);
+    }
+
     res.json({ ok: true, notifications_created: created });
   } catch (err) {
     next(err);
@@ -369,6 +491,860 @@ router.get('/drivers', async (req, res, next) => {
   } catch (err) {
     next(err);
   }
+});
+
+// =============================================================================
+// DOKUMENTY VOZU — Technický průkaz, leasing, STK protokoly, obecné přílohy
+// =============================================================================
+
+const fs = require('fs');
+const path = require('path');
+const crypto = require('crypto');
+const STORAGE_DIR = process.env.STORAGE_DIR || path.join(__dirname, '..', 'data', 'storage');
+
+// Ulož base64 soubor do storage/vehicles/<id>/ a vrať { url, file_name, size, mime }
+function saveBase64File(vehicleId, base64, originalName, mime) {
+  const folder = path.join(STORAGE_DIR, 'vehicles', String(vehicleId));
+  if (!fs.existsSync(folder)) fs.mkdirSync(folder, { recursive: true });
+  const ext = path.extname(originalName || '') || '.bin';
+  const uniqueName = `${crypto.randomUUID()}${ext}`;
+  const filePath = path.join(folder, uniqueName);
+  const buffer = Buffer.from(base64, 'base64');
+  fs.writeFileSync(filePath, buffer);
+  return {
+    url: `/api/storage/files/vehicles/${vehicleId}/${uniqueName}`,
+    file_name: uniqueName,
+    size: buffer.length,
+    mime: mime || null,
+    original_name: originalName || uniqueName,
+  };
+}
+
+// GET /api/fleet/vehicles/:id/documents
+router.get('/vehicles/:id/documents', async (req, res, next) => {
+  try {
+    const vehicleId = parseInt(req.params.id);
+    if (isNaN(vehicleId)) return res.status(400).json({ error: 'Neplatné ID' });
+    const docs = await prisma.vehicleDocument.findMany({
+      where: { vehicle_id: vehicleId },
+      orderBy: { uploaded_at: 'desc' },
+    });
+    res.json(docs);
+  } catch (err) { next(err); }
+});
+
+// POST /api/fleet/vehicles/:id/documents — upload dokumentu (base64 v těle)
+// Body: { doc_type, title, file_data (base64), file_name, mime_type, note? }
+router.post('/vehicles/:id/documents', async (req, res, next) => {
+  try {
+    const vehicleId = parseInt(req.params.id);
+    if (isNaN(vehicleId)) return res.status(400).json({ error: 'Neplatné ID' });
+    const { doc_type, title, file_data, file_name, mime_type, note } = req.body;
+    if (!doc_type || !file_data) {
+      return res.status(400).json({ error: 'Chybí doc_type nebo file_data' });
+    }
+    const saved = saveBase64File(vehicleId, file_data, file_name, mime_type);
+    const doc = await prisma.vehicleDocument.create({
+      data: {
+        vehicle_id: vehicleId,
+        doc_type: String(doc_type).slice(0, 50),
+        title: String(title || file_name || saved.original_name).slice(0, 255),
+        file_url: saved.url,
+        file_name: saved.original_name,
+        file_size: saved.size,
+        mime_type: saved.mime,
+        note: note || null,
+        uploaded_by: req.user?.id || null,
+      },
+    });
+    res.status(201).json(doc);
+  } catch (err) { next(err); }
+});
+
+// DELETE /api/fleet/documents/:docId
+router.delete('/documents/:docId', async (req, res, next) => {
+  try {
+    const docId = parseInt(req.params.docId);
+    if (isNaN(docId)) return res.status(400).json({ error: 'Neplatné ID' });
+    const doc = await prisma.vehicleDocument.findUnique({ where: { id: docId } });
+    if (!doc) return res.status(404).json({ error: 'Dokument nenalezen' });
+
+    // Smaž fyzický soubor (best-effort)
+    try {
+      const urlPath = doc.file_url.replace('/api/storage/files/', '');
+      const abs = path.join(STORAGE_DIR, urlPath);
+      const resolved = path.resolve(abs);
+      if (resolved.startsWith(path.resolve(STORAGE_DIR)) && fs.existsSync(resolved)) {
+        fs.unlinkSync(resolved);
+      }
+    } catch (_) { /* soubor možná chybí, ignore */ }
+
+    await prisma.vehicleDocument.delete({ where: { id: docId } });
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
+// =============================================================================
+// POJISTKY — POV, havarijní
+// =============================================================================
+
+const policySchema = z.object({
+  policy_type: z.enum(['pov', 'havarijni', 'jine']),
+  company_name: z.string().max(255).optional().nullable(),
+  policy_number: z.string().max(100).optional().nullable(),
+  valid_from: z.string().optional().nullable(),
+  valid_to: z.string().optional().nullable(),
+  premium_amount: z.number().optional().nullable(),
+  note: z.string().optional().nullable(),
+  // Upload (volitelný — pokud přichází base64, uložíme)
+  file_data: z.string().optional().nullable(),
+  file_name: z.string().optional().nullable(),
+  mime_type: z.string().optional().nullable(),
+});
+
+function toPolicyData(data, vehicleId) {
+  const out = {
+    vehicle_id: vehicleId,
+    policy_type: data.policy_type,
+    company_name: data.company_name || null,
+    policy_number: data.policy_number || null,
+    valid_from: parseDate(data.valid_from),
+    valid_to: parseDate(data.valid_to),
+    premium_amount: data.premium_amount ?? null,
+    note: data.note || null,
+  };
+  if (data.file_data) {
+    const saved = saveBase64File(vehicleId, data.file_data, data.file_name, data.mime_type);
+    out.file_url = saved.url;
+    out.file_name = saved.original_name;
+  }
+  return out;
+}
+
+// GET /api/fleet/vehicles/:id/policies
+router.get('/vehicles/:id/policies', async (req, res, next) => {
+  try {
+    const vehicleId = parseInt(req.params.id);
+    if (isNaN(vehicleId)) return res.status(400).json({ error: 'Neplatné ID' });
+    const policies = await prisma.vehicleInsurancePolicy.findMany({
+      where: { vehicle_id: vehicleId },
+      orderBy: [{ policy_type: 'asc' }, { valid_to: 'desc' }],
+    });
+    res.json(policies);
+  } catch (err) { next(err); }
+});
+
+// POST /api/fleet/vehicles/:id/policies
+router.post('/vehicles/:id/policies', async (req, res, next) => {
+  try {
+    const vehicleId = parseInt(req.params.id);
+    if (isNaN(vehicleId)) return res.status(400).json({ error: 'Neplatné ID' });
+    const parsed = policySchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: 'Neplatná data', details: parsed.error.flatten() });
+    }
+    const policy = await prisma.vehicleInsurancePolicy.create({
+      data: toPolicyData(parsed.data, vehicleId),
+    });
+    res.status(201).json(policy);
+  } catch (err) { next(err); }
+});
+
+// PUT /api/fleet/policies/:policyId
+router.put('/policies/:policyId', async (req, res, next) => {
+  try {
+    const policyId = parseInt(req.params.policyId);
+    if (isNaN(policyId)) return res.status(400).json({ error: 'Neplatné ID' });
+    const existing = await prisma.vehicleInsurancePolicy.findUnique({ where: { id: policyId } });
+    if (!existing) return res.status(404).json({ error: 'Pojistka nenalezena' });
+    const parsed = policySchema.partial().safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: 'Neplatná data', details: parsed.error.flatten() });
+    }
+    const data = toPolicyData(parsed.data, existing.vehicle_id);
+    // Ponech původní file, když se neuploaduje nový
+    if (!parsed.data.file_data) {
+      delete data.file_url;
+      delete data.file_name;
+    }
+    delete data.vehicle_id; // není v update změnitelné
+    const policy = await prisma.vehicleInsurancePolicy.update({
+      where: { id: policyId },
+      data,
+    });
+    res.json(policy);
+  } catch (err) { next(err); }
+});
+
+// DELETE /api/fleet/policies/:policyId
+router.delete('/policies/:policyId', async (req, res, next) => {
+  try {
+    const policyId = parseInt(req.params.policyId);
+    if (isNaN(policyId)) return res.status(400).json({ error: 'Neplatné ID' });
+    const policy = await prisma.vehicleInsurancePolicy.findUnique({ where: { id: policyId } });
+    if (!policy) return res.status(404).json({ error: 'Pojistka nenalezena' });
+
+    // Smaž přiložený soubor, pokud je
+    if (policy.file_url) {
+      try {
+        const urlPath = policy.file_url.replace('/api/storage/files/', '');
+        const abs = path.join(STORAGE_DIR, urlPath);
+        const resolved = path.resolve(abs);
+        if (resolved.startsWith(path.resolve(STORAGE_DIR)) && fs.existsSync(resolved)) {
+          fs.unlinkSync(resolved);
+        }
+      } catch (_) {}
+    }
+
+    await prisma.vehicleInsurancePolicy.delete({ where: { id: policyId } });
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
+// =============================================================================
+// SERVISY VOZU
+// =============================================================================
+
+const serviceSchema = z.object({
+  service_type: z.string().min(1).max(255),
+  scheduled_at: z.string().optional().nullable(),
+  done_at: z.string().optional().nullable(),
+  service_company: z.string().max(255).optional().nullable(),
+  location: z.string().max(500).optional().nullable(),
+  km_at_service: z.number().int().optional().nullable(),
+  cost_labor: z.number().optional().nullable(),
+  cost_parts: z.number().optional().nullable(),
+  invoice_number: z.string().max(100).optional().nullable(),
+  note: z.string().optional().nullable(),
+  status: z.enum(['planned', 'done', 'cancelled']).optional(),
+  // Upload faktury (volitelně)
+  invoice_file_data: z.string().optional().nullable(),
+  invoice_file_name: z.string().optional().nullable(),
+  invoice_mime: z.string().optional().nullable(),
+});
+
+function parseDateTime(v) {
+  if (!v) return null;
+  const d = new Date(v);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+function toServiceData(data, vehicleId, userId) {
+  const out = {
+    vehicle_id: vehicleId,
+    service_type: data.service_type,
+    scheduled_at: parseDateTime(data.scheduled_at),
+    done_at: parseDateTime(data.done_at),
+    service_company: data.service_company || null,
+    location: data.location || null,
+    km_at_service: data.km_at_service ?? null,
+    cost_labor: data.cost_labor ?? null,
+    cost_parts: data.cost_parts ?? null,
+    invoice_number: data.invoice_number || null,
+    note: data.note || null,
+    status: data.status || 'planned',
+  };
+  if (userId != null) out.created_by = userId;
+  if (data.invoice_file_data) {
+    const saved = saveBase64File(vehicleId, data.invoice_file_data, data.invoice_file_name, data.invoice_mime);
+    out.invoice_url = saved.url;
+  }
+  return out;
+}
+
+// GET /api/fleet/vehicles/:id/services — všechny servisy vozu (vč. done)
+router.get('/vehicles/:id/services', async (req, res, next) => {
+  try {
+    const vehicleId = parseInt(req.params.id);
+    if (isNaN(vehicleId)) return res.status(400).json({ error: 'Neplatné ID' });
+    const services = await prisma.vehicleService.findMany({
+      where: { vehicle_id: vehicleId },
+      orderBy: [
+        { status: 'asc' },          // planned first (abecedně)
+        { scheduled_at: 'asc' },
+        { done_at: 'desc' },
+      ],
+    });
+    res.json(services);
+  } catch (err) { next(err); }
+});
+
+// POST /api/fleet/vehicles/:id/services — nový servis
+router.post('/vehicles/:id/services', async (req, res, next) => {
+  try {
+    const vehicleId = parseInt(req.params.id);
+    if (isNaN(vehicleId)) return res.status(400).json({ error: 'Neplatné ID' });
+    const parsed = serviceSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: 'Neplatná data', details: parsed.error.flatten() });
+    }
+    const service = await prisma.vehicleService.create({
+      data: toServiceData(parsed.data, vehicleId, req.user?.id),
+    });
+    // TODO (Fáze 7): pošli email + ICS řidiči a správci vozového parku
+    res.status(201).json(service);
+  } catch (err) { next(err); }
+});
+
+// PUT /api/fleet/services/:serviceId — úprava
+router.put('/services/:serviceId', async (req, res, next) => {
+  try {
+    const serviceId = parseInt(req.params.serviceId);
+    if (isNaN(serviceId)) return res.status(400).json({ error: 'Neplatné ID' });
+    const existing = await prisma.vehicleService.findUnique({ where: { id: serviceId } });
+    if (!existing) return res.status(404).json({ error: 'Servis nenalezen' });
+    const parsed = serviceSchema.partial().safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: 'Neplatná data', details: parsed.error.flatten() });
+    }
+    const data = toServiceData(parsed.data, existing.vehicle_id, undefined);
+    delete data.vehicle_id;
+    delete data.created_by;
+    if (!parsed.data.invoice_file_data) delete data.invoice_url;
+    const service = await prisma.vehicleService.update({
+      where: { id: serviceId },
+      data,
+    });
+    res.json(service);
+  } catch (err) { next(err); }
+});
+
+// POST /api/fleet/services/:serviceId/confirm — správce potvrdí provedení
+// (nastavi status=done, done_at=now jestli není, confirmed_by=user)
+router.post('/services/:serviceId/confirm', async (req, res, next) => {
+  try {
+    const serviceId = parseInt(req.params.serviceId);
+    if (isNaN(serviceId)) return res.status(400).json({ error: 'Neplatné ID' });
+    const existing = await prisma.vehicleService.findUnique({ where: { id: serviceId } });
+    if (!existing) return res.status(404).json({ error: 'Servis nenalezen' });
+    const now = new Date();
+    const service = await prisma.vehicleService.update({
+      where: { id: serviceId },
+      data: {
+        status: 'done',
+        done_at: existing.done_at || now,
+        confirmed_by: req.user?.id || null,
+        confirmed_at: now,
+      },
+    });
+    res.json(service);
+  } catch (err) { next(err); }
+});
+
+// DELETE /api/fleet/services/:serviceId
+router.delete('/services/:serviceId', async (req, res, next) => {
+  try {
+    const serviceId = parseInt(req.params.serviceId);
+    if (isNaN(serviceId)) return res.status(400).json({ error: 'Neplatné ID' });
+    const existing = await prisma.vehicleService.findUnique({ where: { id: serviceId } });
+    if (!existing) return res.status(404).json({ error: 'Servis nenalezen' });
+    // Smaž i fakturu, pokud byla přiložená
+    if (existing.invoice_url) {
+      try {
+        const urlPath = existing.invoice_url.replace('/api/storage/files/', '');
+        const abs = path.join(STORAGE_DIR, urlPath);
+        const resolved = path.resolve(abs);
+        if (resolved.startsWith(path.resolve(STORAGE_DIR)) && fs.existsSync(resolved)) {
+          fs.unlinkSync(resolved);
+        }
+      } catch (_) {}
+    }
+    await prisma.vehicleService.delete({ where: { id: serviceId } });
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
+// =============================================================================
+// ŠKODNÍ UDÁLOSTI
+// =============================================================================
+
+const damageEventSchema = z.object({
+  event_date: z.string().min(1),
+  location: z.string().max(500).optional().nullable(),
+  description: z.string().optional().nullable(),
+  claim_number: z.string().max(100).optional().nullable(),
+  estimated_damage: z.number().optional().nullable(),
+});
+
+function toDamageData(data, vehicleId, userId) {
+  const out = {
+    vehicle_id: vehicleId,
+    event_date: parseDateTime(data.event_date),
+    location: data.location || null,
+    description: data.description || null,
+    claim_number: data.claim_number || null,
+    estimated_damage: data.estimated_damage ?? null,
+  };
+  if (userId != null) out.created_by = userId;
+  return out;
+}
+
+// GET /api/fleet/vehicles/:id/damage-events — všechny škodní události vozidla
+router.get('/vehicles/:id/damage-events', async (req, res, next) => {
+  try {
+    const vehicleId = parseInt(req.params.id);
+    if (isNaN(vehicleId)) return res.status(400).json({ error: 'Neplatné ID' });
+    const events = await prisma.vehicleDamageEvent.findMany({
+      where: { vehicle_id: vehicleId },
+      include: { documents: { orderBy: { uploaded_at: 'desc' } } },
+      orderBy: { event_date: 'desc' },
+    });
+    res.json(events);
+  } catch (err) { next(err); }
+});
+
+// POST /api/fleet/vehicles/:id/damage-events — nová škodní událost
+router.post('/vehicles/:id/damage-events', async (req, res, next) => {
+  try {
+    const vehicleId = parseInt(req.params.id);
+    if (isNaN(vehicleId)) return res.status(400).json({ error: 'Neplatné ID' });
+    const parsed = damageEventSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: 'Neplatná data', details: parsed.error.flatten() });
+    }
+    if (!parsed.data.event_date) {
+      return res.status(400).json({ error: 'Datum události je povinné' });
+    }
+    const event = await prisma.vehicleDamageEvent.create({
+      data: toDamageData(parsed.data, vehicleId, req.user?.id),
+      include: { documents: true },
+    });
+    res.status(201).json(event);
+  } catch (err) { next(err); }
+});
+
+// PUT /api/fleet/damage-events/:eventId — úprava
+router.put('/damage-events/:eventId', async (req, res, next) => {
+  try {
+    const eventId = parseInt(req.params.eventId);
+    if (isNaN(eventId)) return res.status(400).json({ error: 'Neplatné ID' });
+    const existing = await prisma.vehicleDamageEvent.findUnique({ where: { id: eventId } });
+    if (!existing) return res.status(404).json({ error: 'Událost nenalezena' });
+    const parsed = damageEventSchema.partial().safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: 'Neplatná data', details: parsed.error.flatten() });
+    }
+    const data = toDamageData(parsed.data, existing.vehicle_id, undefined);
+    delete data.vehicle_id;
+    delete data.created_by;
+    const event = await prisma.vehicleDamageEvent.update({
+      where: { id: eventId },
+      data,
+      include: { documents: true },
+    });
+    res.json(event);
+  } catch (err) { next(err); }
+});
+
+// DELETE /api/fleet/damage-events/:eventId — smaže událost i všechny přiložené dokumenty
+router.delete('/damage-events/:eventId', async (req, res, next) => {
+  try {
+    const eventId = parseInt(req.params.eventId);
+    if (isNaN(eventId)) return res.status(400).json({ error: 'Neplatné ID' });
+    const existing = await prisma.vehicleDamageEvent.findUnique({
+      where: { id: eventId },
+      include: { documents: true },
+    });
+    if (!existing) return res.status(404).json({ error: 'Událost nenalezena' });
+    // Smaž fyzické soubory přiložených dokumentů
+    for (const doc of existing.documents) {
+      try {
+        const urlPath = doc.file_url.replace('/api/storage/files/', '');
+        const abs = path.join(STORAGE_DIR, urlPath);
+        const resolved = path.resolve(abs);
+        if (resolved.startsWith(path.resolve(STORAGE_DIR)) && fs.existsSync(resolved)) {
+          fs.unlinkSync(resolved);
+        }
+      } catch (_) {}
+    }
+    await prisma.vehicleDamageEvent.delete({ where: { id: eventId } });
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
+// POST /api/fleet/damage-events/:eventId/documents — přidá dokument k události
+router.post('/damage-events/:eventId/documents', async (req, res, next) => {
+  try {
+    const eventId = parseInt(req.params.eventId);
+    if (isNaN(eventId)) return res.status(400).json({ error: 'Neplatné ID' });
+    const event = await prisma.vehicleDamageEvent.findUnique({
+      where: { id: eventId },
+      select: { id: true, vehicle_id: true },
+    });
+    if (!event) return res.status(404).json({ error: 'Událost nenalezena' });
+    const { file_data, file_name, mime_type, title } = req.body;
+    if (!file_data) return res.status(400).json({ error: 'Chybí file_data' });
+    const saved = saveBase64File(event.vehicle_id, file_data, file_name, mime_type);
+    const doc = await prisma.vehicleDamageDocument.create({
+      data: {
+        damage_event_id: eventId,
+        title: title || saved.original_name,
+        file_url: saved.url,
+        file_name: saved.original_name,
+        file_size: saved.size,
+        mime_type: saved.mime,
+        uploaded_by: req.user?.id || null,
+      },
+    });
+    res.status(201).json(doc);
+  } catch (err) { next(err); }
+});
+
+// DELETE /api/fleet/damage-documents/:docId
+router.delete('/damage-documents/:docId', async (req, res, next) => {
+  try {
+    const docId = parseInt(req.params.docId);
+    if (isNaN(docId)) return res.status(400).json({ error: 'Neplatné ID' });
+    const doc = await prisma.vehicleDamageDocument.findUnique({ where: { id: docId } });
+    if (!doc) return res.status(404).json({ error: 'Dokument nenalezen' });
+    try {
+      const urlPath = doc.file_url.replace('/api/storage/files/', '');
+      const abs = path.join(STORAGE_DIR, urlPath);
+      const resolved = path.resolve(abs);
+      if (resolved.startsWith(path.resolve(STORAGE_DIR)) && fs.existsSync(resolved)) {
+        fs.unlinkSync(resolved);
+      }
+    } catch (_) {}
+    await prisma.vehicleDamageDocument.delete({ where: { id: docId } });
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
+// =============================================================================
+// PNEU — VÝMĚNY + SKLAD + HLÍDÁNÍ
+// =============================================================================
+
+// Prahové hodnoty pro hloubku dezénu (mm) — pod těmito hodnotami hlásíme varování.
+const TIRE_DEPTH_WARN = {
+  letni: { min: 2.0, max: 3.0 },   // 2–3 mm = upozornění (pod 2 mm = po termínu)
+  zimni: { min: 4.0, max: 5.0 },   // 4–5 mm = upozornění (pod 4 mm = po termínu)
+};
+
+// Sezóna podle aktuálního data
+function currentTireSeason(date) {
+  const d = date || new Date();
+  const m = d.getMonth() + 1; // 1-12
+  // Zimní: 1.11. – 31.3. (listopad, prosinec, leden, únor, březen)
+  if (m >= 11 || m <= 3) return 'zimni';
+  // Letní: 1.4. – 31.10.
+  return 'letni';
+}
+
+const tireChangeSchema = z.object({
+  season: z.enum(['letni', 'zimni']),
+  scheduled_at: z.string().optional().nullable(),
+  done_at: z.string().optional().nullable(),
+  location: z.string().max(500).optional().nullable(),
+  service_company: z.string().max(255).optional().nullable(),
+  cost_service: z.number().optional().nullable(),
+  cost_tires: z.number().optional().nullable(),
+  invoice_number: z.string().max(100).optional().nullable(),
+  note: z.string().optional().nullable(),
+  status: z.enum(['planned', 'done', 'cancelled']).optional(),
+  invoice_file_data: z.string().optional().nullable(),
+  invoice_file_name: z.string().optional().nullable(),
+  invoice_mime: z.string().optional().nullable(),
+});
+
+function toTireChangeData(data, vehicleId, userId) {
+  const out = {
+    vehicle_id: vehicleId,
+    season: data.season,
+    scheduled_at: parseDateTime(data.scheduled_at),
+    done_at: parseDateTime(data.done_at),
+    location: data.location || null,
+    service_company: data.service_company || null,
+    cost_service: data.cost_service ?? null,
+    cost_tires: data.cost_tires ?? null,
+    invoice_number: data.invoice_number || null,
+    note: data.note || null,
+    status: data.status || 'planned',
+  };
+  if (userId != null) out.created_by = userId;
+  if (data.invoice_file_data) {
+    const saved = saveBase64File(vehicleId, data.invoice_file_data, data.invoice_file_name, data.invoice_mime);
+    out.invoice_url = saved.url;
+  }
+  return out;
+}
+
+// GET /api/fleet/vehicles/:id/tire-changes
+router.get('/vehicles/:id/tire-changes', async (req, res, next) => {
+  try {
+    const vehicleId = parseInt(req.params.id);
+    if (isNaN(vehicleId)) return res.status(400).json({ error: 'Neplatné ID' });
+    const rows = await prisma.vehicleTireChange.findMany({
+      where: { vehicle_id: vehicleId },
+      orderBy: [{ status: 'asc' }, { scheduled_at: 'asc' }, { done_at: 'desc' }],
+    });
+    res.json(rows);
+  } catch (err) { next(err); }
+});
+
+router.post('/vehicles/:id/tire-changes', async (req, res, next) => {
+  try {
+    const vehicleId = parseInt(req.params.id);
+    if (isNaN(vehicleId)) return res.status(400).json({ error: 'Neplatné ID' });
+    const parsed = tireChangeSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: 'Neplatná data', details: parsed.error.flatten() });
+    }
+    const tc = await prisma.vehicleTireChange.create({
+      data: toTireChangeData(parsed.data, vehicleId, req.user?.id),
+    });
+    res.status(201).json(tc);
+  } catch (err) { next(err); }
+});
+
+router.put('/tire-changes/:id', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ error: 'Neplatné ID' });
+    const existing = await prisma.vehicleTireChange.findUnique({ where: { id } });
+    if (!existing) return res.status(404).json({ error: 'Záznam nenalezen' });
+    const parsed = tireChangeSchema.partial().safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: 'Neplatná data', details: parsed.error.flatten() });
+    }
+    const data = toTireChangeData(parsed.data, existing.vehicle_id, undefined);
+    delete data.vehicle_id;
+    delete data.created_by;
+    if (!parsed.data.invoice_file_data) delete data.invoice_url;
+    const tc = await prisma.vehicleTireChange.update({ where: { id }, data });
+    res.json(tc);
+  } catch (err) { next(err); }
+});
+
+router.post('/tire-changes/:id/confirm', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ error: 'Neplatné ID' });
+    const existing = await prisma.vehicleTireChange.findUnique({ where: { id } });
+    if (!existing) return res.status(404).json({ error: 'Záznam nenalezen' });
+    const now = new Date();
+    const tc = await prisma.vehicleTireChange.update({
+      where: { id },
+      data: {
+        status: 'done',
+        done_at: existing.done_at || now,
+        confirmed_by: req.user?.id || null,
+        confirmed_at: now,
+      },
+    });
+    res.json(tc);
+  } catch (err) { next(err); }
+});
+
+router.delete('/tire-changes/:id', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ error: 'Neplatné ID' });
+    const existing = await prisma.vehicleTireChange.findUnique({ where: { id } });
+    if (!existing) return res.status(404).json({ error: 'Záznam nenalezen' });
+    if (existing.invoice_url) {
+      try {
+        const urlPath = existing.invoice_url.replace('/api/storage/files/', '');
+        const abs = path.join(STORAGE_DIR, urlPath);
+        const resolved = path.resolve(abs);
+        if (resolved.startsWith(path.resolve(STORAGE_DIR)) && fs.existsSync(resolved)) {
+          fs.unlinkSync(resolved);
+        }
+      } catch (_) {}
+    }
+    await prisma.vehicleTireChange.delete({ where: { id } });
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
+// =============================================================================
+// SKLAD PNEU
+// =============================================================================
+
+const tireStockSchema = z.object({
+  vehicle_id: z.number().int().optional().nullable(),
+  season: z.enum(['letni', 'zimni']),
+  tire_size: z.string().max(100).optional().nullable(),
+  manufacturer: z.string().max(100).optional().nullable(),
+  model_name: z.string().max(255).optional().nullable(),
+  dot_code: z.string().max(20).optional().nullable(),
+  tread_depth_mm: z.number().optional().nullable(),
+  storage_location: z.string().max(255).optional().nullable(),
+  mounted: z.boolean().optional(),
+  mounted_at: z.string().optional().nullable(),
+  dismounted_at: z.string().optional().nullable(),
+  purchase_price: z.number().optional().nullable(),
+  invoice_number: z.string().max(100).optional().nullable(),
+  note: z.string().optional().nullable(),
+});
+
+function toTireStockData(data) {
+  return {
+    vehicle_id: data.vehicle_id ?? null,
+    season: data.season,
+    tire_size: data.tire_size || null,
+    manufacturer: data.manufacturer || null,
+    model_name: data.model_name || null,
+    dot_code: data.dot_code || null,
+    tread_depth_mm: data.tread_depth_mm ?? null,
+    storage_location: data.storage_location || null,
+    mounted: !!data.mounted,
+    mounted_at: parseDateTime(data.mounted_at),
+    dismounted_at: parseDateTime(data.dismounted_at),
+    purchase_price: data.purchase_price ?? null,
+    invoice_number: data.invoice_number || null,
+    note: data.note || null,
+  };
+}
+
+// GET /api/fleet/vehicles/:id/tire-stock — pneu přiřazené konkrétnímu vozidlu
+router.get('/vehicles/:id/tire-stock', async (req, res, next) => {
+  try {
+    const vehicleId = parseInt(req.params.id);
+    if (isNaN(vehicleId)) return res.status(400).json({ error: 'Neplatné ID' });
+    const items = await prisma.tireStockItem.findMany({
+      where: { vehicle_id: vehicleId },
+      orderBy: [{ season: 'asc' }, { mounted: 'desc' }, { created_at: 'desc' }],
+    });
+    res.json(items);
+  } catch (err) { next(err); }
+});
+
+// GET /api/fleet/tire-stock — celý sklad (nepřiřazené + přiřazené)
+router.get('/tire-stock', async (req, res, next) => {
+  try {
+    const { season, vehicle_id, mounted } = req.query;
+    const where = {};
+    if (season) where.season = season;
+    if (vehicle_id) where.vehicle_id = parseInt(vehicle_id);
+    if (mounted !== undefined) where.mounted = mounted === 'true';
+    const items = await prisma.tireStockItem.findMany({
+      where,
+      include: { vehicle: { select: { id: true, license_plate: true, model: true } } },
+      orderBy: [{ season: 'asc' }, { created_at: 'desc' }],
+    });
+    res.json(items);
+  } catch (err) { next(err); }
+});
+
+router.post('/tire-stock', async (req, res, next) => {
+  try {
+    const parsed = tireStockSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: 'Neplatná data', details: parsed.error.flatten() });
+    }
+    const item = await prisma.tireStockItem.create({ data: toTireStockData(parsed.data) });
+    res.status(201).json(item);
+  } catch (err) { next(err); }
+});
+
+router.put('/tire-stock/:id', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ error: 'Neplatné ID' });
+    const parsed = tireStockSchema.partial().safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: 'Neplatná data', details: parsed.error.flatten() });
+    }
+    const data = toTireStockData(parsed.data);
+    // Nepřepisuj vehicle_id pokud nebylo přímo zmíněno (partial)
+    if (!('vehicle_id' in parsed.data)) delete data.vehicle_id;
+    const item = await prisma.tireStockItem.update({ where: { id }, data });
+    res.json(item);
+  } catch (err) {
+    if (err.code === 'P2025') return res.status(404).json({ error: 'Záznam nenalezen' });
+    next(err);
+  }
+});
+
+router.delete('/tire-stock/:id', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ error: 'Neplatné ID' });
+    await prisma.tireStockItem.delete({ where: { id } });
+    res.json({ ok: true });
+  } catch (err) {
+    if (err.code === 'P2025') return res.status(404).json({ error: 'Záznam nenalezen' });
+    next(err);
+  }
+});
+
+// GET /api/fleet/tire-alerts — pneu hlídání (dezén pod hranicí + nesedící sezóna)
+router.get('/tire-alerts', async (req, res, next) => {
+  try {
+    const season = currentTireSeason();
+    const thresholds = TIRE_DEPTH_WARN[season];
+    const alerts = [];
+
+    // 1) Namontované pneu s dezénem v pásmu upozornění (nebo pod minimem)
+    const mounted = await prisma.tireStockItem.findMany({
+      where: { mounted: true, tread_depth_mm: { not: null } },
+      include: { vehicle: { select: { id: true, license_plate: true, model: true, company: true } } },
+    });
+    for (const t of mounted) {
+      if (!t.vehicle) continue;
+      const depth = Number(t.tread_depth_mm);
+      const tireThresholds = TIRE_DEPTH_WARN[t.season];
+      if (!tireThresholds) continue;
+      if (depth < tireThresholds.min) {
+        alerts.push({
+          kind: 'tire_depth_critical',
+          severity: 'critical',
+          label: `Dezén pod minimem (${depth} mm < ${tireThresholds.min} mm)`,
+          tire_id: t.id,
+          season: t.season,
+          depth,
+          vehicle_id: t.vehicle.id,
+          license_plate: t.vehicle.license_plate,
+          model: t.vehicle.model,
+        });
+      } else if (depth <= tireThresholds.max) {
+        alerts.push({
+          kind: 'tire_depth_warning',
+          severity: 'warning',
+          label: `Blíží se výměna (${depth} mm v pásmu ${tireThresholds.min}-${tireThresholds.max} mm)`,
+          tire_id: t.id,
+          season: t.season,
+          depth,
+          vehicle_id: t.vehicle.id,
+          license_plate: t.vehicle.license_plate,
+          model: t.vehicle.model,
+        });
+      }
+    }
+
+    // 2) Vozidla, která nemají namontovanou sezónně vhodnou sadu
+    //    (aktuální sezóna je X, ale vozidlo nemá mounted tire se season=X)
+    const vehicles = await prisma.vehicle.findMany({
+      where: { active: true },
+      include: {
+        tire_stock: {
+          where: { mounted: true },
+          select: { season: true },
+        },
+      },
+    });
+    for (const v of vehicles) {
+      const mountedSeasons = new Set((v.tire_stock || []).map(t => t.season));
+      if (!mountedSeasons.has(season)) {
+        alerts.push({
+          kind: 'wrong_season',
+          severity: 'warning',
+          label: `Aktuálně je ${season === 'zimni' ? 'zimní' : 'letní'} období — vozidlo nemá odpovídající pneu`,
+          current_season: season,
+          vehicle_id: v.id,
+          license_plate: v.license_plate,
+          model: v.model,
+          has_seasons: [...mountedSeasons],
+        });
+      }
+    }
+
+    res.json({
+      current_season: season,
+      count: alerts.length,
+      alerts,
+    });
+  } catch (err) { next(err); }
 });
 
 // ─── GET /api/fleet/stats — souhrnná statistika vozového parku ────────────

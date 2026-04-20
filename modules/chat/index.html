@@ -54,6 +54,28 @@
     .chat-avatar { width: 36px; height: 36px; border-radius: 50%; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; color: #fff; background-size: cover; background-position: center; overflow: hidden; }
     .chat-avatar.sm { width: 28px; height: 28px; font-size: 10px; }
     .chat-avatar.lg { width: 44px; height: 44px; font-size: 14px; }
+    /* Wrapper s online tečkou */
+    .chat-avatar-wrap { position: relative; flex-shrink: 0; line-height: 0; display: inline-block; }
+    .chat-avatar-wrap .online-dot {
+      position: absolute; right: -1px; bottom: -1px;
+      width: 11px; height: 11px; border-radius: 50%;
+      background: #10b981; border: 2px solid var(--bg);
+      display: none;
+    }
+    .chat-avatar-wrap.sm .online-dot { width: 9px; height: 9px; border-width: 1.5px; }
+    .chat-avatar-wrap.lg .online-dot { width: 13px; height: 13px; }
+    .chat-avatar-wrap.online .online-dot { display: block; }
+
+    /* Read receipts — fajfky */
+    .chat-msg .ticks { display: inline-block; margin-left: 5px; font-size: 11px; letter-spacing: -2px; opacity: 0.95; }
+    .chat-msg .ticks.read { color: #5eead4; }
+    .chat-msg .ticks.sent { color: rgba(255,255,255,0.8); }
+    .chat-msg.other .ticks, .chat-msg.ai .ticks, .chat-msg.system .ticks { display: none; }
+
+    /* Header presence */
+    .chat-main-title .presence { font-size: 11px; margin-top: 1px; }
+    .chat-main-title .presence.online { color: #10b981; }
+    .chat-main-title .presence.offline { color: var(--text2); }
 
     .chat-channels { overflow-y: auto; flex: 1; }
     .chat-channel {
@@ -78,14 +100,6 @@
     }
     .chat-main-title h2 { font-size: 15px; margin: 0; color: var(--text); }
     .chat-main-title .topic { font-size: 11px; color: var(--text2); margin-top: 2px; }
-    .chat-ai-btn {
-      background: rgba(168,139,250,0.15); color: #a78bfa;
-      border: 1px solid rgba(168,139,250,0.4);
-      padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 600;
-      cursor: pointer;
-    }
-    .chat-ai-btn:hover { background: rgba(168,139,250,0.3); }
-
     .chat-messages {
       flex: 1; overflow-y: auto; padding: 20px;
       display: flex; flex-direction: column; gap: 10px;
@@ -97,6 +111,29 @@
     .chat-msg.system { align-self: center; background: rgba(255,255,255,0.05); color: var(--text2); font-size: 12px; font-style: italic; padding: 6px 14px; max-width: 80%; text-align: center; }
     .chat-msg .author { font-size: 11px; font-weight: 600; margin-bottom: 3px; opacity: 0.8; }
     .chat-msg .time { font-size: 10px; opacity: 0.6; margin-top: 4px; }
+
+    /* Emoji picker popover */
+    .chat-emoji-btn {
+      background: transparent; color: var(--text2); border: 1px solid var(--border);
+      padding: 0 12px; border-radius: 8px; cursor: pointer; font-size: 18px;
+      transition: background 0.15s, color 0.15s;
+    }
+    .chat-emoji-btn:hover { background: rgba(108,92,231,0.1); color: #a78bfa; border-color: #6c5ce7; }
+    .chat-emoji-btn.active { background: rgba(108,92,231,0.15); color: #a78bfa; border-color: #6c5ce7; }
+    .chat-emoji-popover {
+      position: absolute; bottom: 74px; left: 60px;
+      width: 360px; max-width: calc(100% - 40px); max-height: 340px;
+      background: var(--bg); border: 1px solid var(--border);
+      border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+      z-index: 20; display: flex; flex-direction: column; overflow: hidden;
+    }
+    .chat-emoji-tabs { display: flex; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+    .chat-emoji-tab { flex: 1; padding: 10px 4px; background: transparent; border: none; cursor: pointer; font-size: 18px; color: var(--text2); border-bottom: 2px solid transparent; }
+    .chat-emoji-tab:hover { color: var(--text); background: rgba(108,92,231,0.05); }
+    .chat-emoji-tab.active { color: #a78bfa; border-bottom-color: #a78bfa; }
+    .chat-emoji-grid { flex: 1; overflow-y: auto; padding: 8px; display: grid; grid-template-columns: repeat(8, 1fr); gap: 2px; }
+    .chat-emoji-btn-item { background: transparent; border: none; cursor: pointer; font-size: 22px; padding: 4px; border-radius: 4px; line-height: 1; }
+    .chat-emoji-btn-item:hover { background: rgba(108,92,231,0.15); }
 
     .chat-compose {
       padding: 14px 20px; border-top: 1px solid var(--border);
@@ -265,6 +302,96 @@
       return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     }
 
+    // ─── Emoji picker — sdíleno mezi instancemi composeru ──────────────────
+    const CHAT_EMOJI_CATEGORIES = [
+      { key: 'smileys', icon: '😀', title: 'Smajlíci', items: [
+        '😀','😃','😄','😁','😆','😅','🤣','😂','🙂','🙃','😉','😊','😇','🥰','😍','🤩',
+        '😘','😋','😛','😜','🤪','😝','🤑','🤗','🤭','🤫','🤔','🤐','🤨','😐','😑','😶',
+        '😏','😒','🙄','😬','🤥','😌','😔','😪','🤤','😴','😷','🤒','🤕','🤢','🤮','🤧',
+        '🥵','🥶','🥴','😵','🤯','🤠','🥳','😎','🤓','🧐','😕','😟','🙁','☹️','😮','😯',
+        '😲','😳','🥺','😦','😧','😨','😰','😥','😢','😭','😱','😖','😣','😞','😓','😩',
+        '😫','🥱','😤','😡','😠','🤬','💀','👻','👽','🤖','🎃',
+      ]},
+      { key: 'gestures', icon: '👋', title: 'Gesta', items: [
+        '👍','👎','👌','🤌','🤏','✌️','🤞','🤟','🤘','🤙','👈','👉','👆','👇','☝️','✋',
+        '🤚','🖐️','🖖','👋','🤝','🙏','✍️','💪','🦾','👀','👁️','👄','🙋','💁','🙅','🙆',
+        '🤷','🙎','🙍','🚶','🏃','💃','🕺','👏','🙌','🤲',
+      ]},
+      { key: 'hearts', icon: '❤️', title: 'Srdce', items: [
+        '❤️','🧡','💛','💚','💙','💜','🖤','🤍','🤎','💔','❣️','💕','💞','💓','💗','💖',
+        '💘','💝','💟','💌','💋','🎀','🌹','🌷','🌸','🌺','🌻',
+      ]},
+      { key: 'objects', icon: '💼', title: 'Objekty', items: [
+        '📁','📂','📃','📄','📋','📊','📈','📉','📝','✏️','📌','📍','📎','🖇️','📏','📐',
+        '🖊️','🖋️','✒️','📑','🔖','🏷️','💼','💻','⌨️','🖥️','📱','☎️','📞','📺','⏰','⏳',
+        '🔋','🔌','💡','🧯','💸','💵','💰','💳','🧾','💎','⚖️','🧰','🔧','🔨','🛠️','⛏️',
+        '🪚','🔩','⚙️','🧱','⛓️','🔫','💣','🧨','🔪','🔗','📦','📫','📬','📭','📮',
+      ]},
+      { key: 'food', icon: '🍕', title: 'Jídlo', items: [
+        '🍎','🍐','🍊','🍋','🍌','🍉','🍇','🍓','🫐','🍈','🍒','🍑','🥭','🍍','🥥','🥝',
+        '🍅','🍆','🥑','🥦','🥬','🥒','🌶️','🫑','🌽','🥕','🧄','🧅','🥔','🫘','🥐','🍞',
+        '🥖','🥨','🧀','🥚','🍳','🥞','🧇','🥓','🥩','🍗','🍖','🌭','🍔','🍟','🍕','🥪',
+        '🥙','🧆','🌮','🌯','🥗','🍝','🍜','🍲','🍛','🍣','🍱','🍤','🍙','🍚','🧁','🍰',
+        '🎂','🍮','🍭','🍬','🍫','🍩','🍪','☕','🍵','🥤','🧋','🍶','🍺','🍻','🥂','🍷',
+      ]},
+      { key: 'symbols', icon: '✨', title: 'Symboly', items: [
+        '✅','❌','❓','❗','‼️','⭐','🌟','⚠️','🚫','💯','🔥','✨','⚡','💥','🎉','🎊',
+        '📢','🔔','🔕','⏰','⏳','⌛','✔️','✖️','➕','➖','➗','💠','〰️','💭','💬','🗯️',
+        '🏆','🥇','🥈','🥉','🏅','🎖️','🎯','🎲','🧩','🎵','🎶','♻️','⚛️','🚸','⛔','📵',
+        '🚭','❇️','✳️','❎','🔴','🟠','🟡','🟢','🔵','🟣','⚫','⚪',
+      ]},
+    ];
+    const CHAT_EMOJI_LAST_KEY = 'holyos_chat_emoji_category';
+
+    function buildChatEmojiPopover(onPick) {
+      const pop = document.createElement('div');
+      pop.className = 'chat-emoji-popover';
+      let activeKey = 'smileys';
+      try { const k = localStorage.getItem(CHAT_EMOJI_LAST_KEY); if (k && CHAT_EMOJI_CATEGORIES.some(c => c.key === k)) activeKey = k; } catch (_) {}
+
+      const tabs = document.createElement('div');
+      tabs.className = 'chat-emoji-tabs';
+      CHAT_EMOJI_CATEGORIES.forEach(cat => {
+        const b = document.createElement('button');
+        b.type = 'button'; b.className = 'chat-emoji-tab' + (cat.key === activeKey ? ' active' : '');
+        b.dataset.category = cat.key; b.title = cat.title; b.textContent = cat.icon;
+        b.addEventListener('click', () => {
+          try { localStorage.setItem(CHAT_EMOJI_LAST_KEY, cat.key); } catch (_) {}
+          pop.querySelectorAll('.chat-emoji-tab').forEach(x => x.classList.toggle('active', x.dataset.category === cat.key));
+          renderGrid(cat.key);
+        });
+        tabs.appendChild(b);
+      });
+      pop.appendChild(tabs);
+
+      const grid = document.createElement('div');
+      grid.className = 'chat-emoji-grid';
+      pop.appendChild(grid);
+
+      function renderGrid(key) {
+        const cat = CHAT_EMOJI_CATEGORIES.find(c => c.key === key) || CHAT_EMOJI_CATEGORIES[0];
+        grid.innerHTML = cat.items.map(e =>
+          `<button type="button" class="chat-emoji-btn-item" data-emoji="${e}" title="${e}">${e}</button>`
+        ).join('');
+        grid.querySelectorAll('.chat-emoji-btn-item').forEach(b => {
+          b.addEventListener('click', () => onPick(b.dataset.emoji));
+        });
+      }
+      renderGrid(activeKey);
+      pop.addEventListener('click', e => e.stopPropagation());
+      return pop;
+    }
+
+    function insertEmojiAtCursor(ta, text) {
+      if (!ta) return;
+      const s = ta.selectionStart || 0;
+      const e = ta.selectionEnd || 0;
+      ta.value = ta.value.slice(0, s) + text + ta.value.slice(e);
+      const np = s + text.length;
+      ta.selectionStart = ta.selectionEnd = np;
+      ta.focus();
+    }
+
     function fmtTime(iso) {
       const d = new Date(iso);
       const now = new Date();
@@ -313,10 +440,44 @@
       const photo = user.person?.photo_url;
       const seed = user.username || user.display_name || 'x';
       const color = avatarColor(seed);
-      if (photo) {
-        return `<span class="${cls}" style="background-image:url('${String(photo).replace(/'/g, "\\'")}');background-color:${color};"></span>`;
+      const online = user.id && isUserOnline(user.id);
+      const wrapCls = `chat-avatar-wrap ${size || ''}${online ? ' online' : ''}`;
+      const inner = photo
+        ? `<span class="${cls}" style="background-image:url('${String(photo).replace(/'/g, "\\'")}');background-color:${color};"></span>`
+        : `<span class="${cls}" style="background:${color};">${esc(initials(user))}</span>`;
+      return `<span class="${wrapCls}" data-user-id="${user.id || ''}">${inner}<span class="online-dot"></span></span>`;
+    }
+
+    // ─── Presence ──────────────────────────────────────────────────────────
+    const onlineUsers = new Set();
+    function isUserOnline(uid) { return !!uid && onlineUsers.has(Number(uid)); }
+    async function loadPresence() {
+      try {
+        const d = await fetch('/api/notifications/presence', { credentials: 'include', headers: auth() }).then(r => r.ok ? r.json() : null);
+        if (!d) return;
+        onlineUsers.clear();
+        (d.online || []).forEach(id => onlineUsers.add(Number(id)));
+        refreshPresenceInDom();
+      } catch (_) {}
+    }
+    function refreshPresenceInDom() {
+      document.querySelectorAll('.chat-avatar-wrap[data-user-id]').forEach(el => {
+        const uid = Number(el.getAttribute('data-user-id'));
+        if (!uid) return;
+        el.classList.toggle('online', onlineUsers.has(uid));
+      });
+      updateHeaderPresence();
+    }
+    function updateHeaderPresence() {
+      const el = document.querySelector('.chat-main-title .presence');
+      if (!el) return;
+      const other = channelOtherUser(state.active);
+      if (!other || !state.active || state.active.type !== 'direct') {
+        el.textContent = ''; el.className = 'presence'; return;
       }
-      return `<span class="${cls}" style="background:${color};">${esc(initials(user))}</span>`;
+      const on = isUserOnline(other.id);
+      el.textContent = on ? 'online' : 'offline';
+      el.className = 'presence ' + (on ? 'online' : 'offline');
     }
 
     function channelOtherUser(c) {
@@ -422,16 +583,25 @@
             ${headerAvatar}
             <div>
               <h2>${esc(title)}</h2>
+              <div class="presence"></div>
               ${topic ? `<div class="topic">${esc(topic)}</div>` : ''}
             </div>
           </div>
-          <button class="chat-ai-btn" id="btn-ai">✨ Zeptat se AI</button>
         </div>
         <div class="chat-messages" id="msg-list"></div>
-        <div class="chat-compose">
+        <div class="chat-compose" style="position:relative;">
+          <button class="chat-emoji-btn" id="btn-emoji" title="Vložit smajlíka">😊</button>
           <textarea id="composer" placeholder="Napiš zprávu… (Enter = odeslat, Shift+Enter = nový řádek)" rows="1"></textarea>
           <button class="send-btn" id="btn-send">Odeslat</button>
         </div>`;
+
+      // Nejvyšší last_read_at protistran (pro ✓✓)
+      const othersReadAt = (() => {
+        const t = (state.active?.members || [])
+          .filter(m => m.user_id !== myId && m.last_read_at)
+          .map(m => new Date(m.last_read_at).getTime());
+        return t.length ? Math.max(...t) : 0;
+      })();
 
       const ml = document.getElementById('msg-list');
       ml.innerHTML = state.messages.map(m => {
@@ -440,18 +610,27 @@
         const author = m.sender_type === 'user'
           ? (m.sender?.display_name || m.sender?.username || 'Neznámý')
           : (m.sender_label || (m.sender_type === 'ai' ? 'Claude' : 'HolyOS'));
+        let ticks = '';
+        if (mine && !m._pending && !m._failed) {
+          const sentAt = new Date(m.created_at).getTime();
+          const isRead = othersReadAt >= sentAt;
+          ticks = isRead
+            ? '<span class="ticks read" title="Přečteno">✓✓</span>'
+            : '<span class="ticks sent" title="Odesláno">✓</span>';
+        }
         return `
           <div class="chat-msg ${cls}">
             ${!mine && cls !== 'system' ? `<div class="author">${esc(author)}</div>` : ''}
             <div>${esc(m.content).replace(/\n/g, '<br>')}</div>
-            <div class="time">${fmtTime(m.created_at)}</div>
+            <div class="time">${fmtTime(m.created_at)}${ticks}</div>
           </div>`;
       }).join('');
       ml.scrollTop = ml.scrollHeight;
 
+      updateHeaderPresence();
+
       const ta = document.getElementById('composer');
       const sendBtn = document.getElementById('btn-send');
-      const aiBtn = document.getElementById('btn-ai');
 
       const send = (useAi = false) => {
         const txt = ta.value.trim();
@@ -493,10 +672,29 @@
       };
 
       sendBtn.addEventListener('click', () => send(false));
-      aiBtn.addEventListener('click', () => send(true));
       ta.addEventListener('keydown', e => {
         if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(false); }
       });
+
+      // Emoji picker
+      const emojiBtn = document.getElementById('btn-emoji');
+      const composeRow = emojiBtn.parentElement;
+      let emojiPop = null;
+      const closeEmojiPop = () => {
+        if (emojiPop) { emojiPop.remove(); emojiPop = null; emojiBtn.classList.remove('active'); document.removeEventListener('click', onOutside); }
+      };
+      const onOutside = (e) => {
+        if (emojiPop && !emojiPop.contains(e.target) && e.target !== emojiBtn) closeEmojiPop();
+      };
+      emojiBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (emojiPop) { closeEmojiPop(); return; }
+        emojiPop = buildChatEmojiPopover(emoji => insertEmojiAtCursor(ta, emoji));
+        composeRow.appendChild(emojiPop);
+        emojiBtn.classList.add('active');
+        setTimeout(() => document.addEventListener('click', onOutside), 0);
+      });
+
       ta.focus();
     }
 
@@ -641,7 +839,20 @@
           if (!payload) return;
           const { channel_id, message } = payload;
           if (channel_id === state.activeId) {
-            state.messages.push(message);
+            // Dedup: backend publikuje SSE i odesílateli a POST response už zprávu
+            // vložila. Pokud tam je stejné ID, ignoruj. Pokud čeká optimistická
+            // se stejným obsahem, nahraď ji.
+            if (state.messages.some(m => m.id === message.id)) {
+              return;
+            }
+            const pendingIdx = state.messages.findIndex(m =>
+              m._pending && m.sender_id === message.sender_id && m.content === message.content
+            );
+            if (pendingIdx >= 0) {
+              state.messages[pendingIdx] = message;
+            } else {
+              state.messages.push(message);
+            }
             renderMessages();
             api('/api/messages/channels/' + channel_id + '/read', { method: 'POST' }).catch(() => {});
           } else {
@@ -657,9 +868,31 @@
           }
         });
         window.HolyOSEvents.on('channel_update', () => loadChannels());
+
+        window.HolyOSEvents.on('presence', payload => {
+          if (!payload || !payload.user_id) return;
+          const uid = Number(payload.user_id);
+          if (payload.online) onlineUsers.add(uid); else onlineUsers.delete(uid);
+          refreshPresenceInDom();
+        });
+
+        window.HolyOSEvents.on('read', payload => {
+          if (!payload || !payload.channel_id) return;
+          const ch = state.channels.find(c => c.id === payload.channel_id);
+          if (ch && Array.isArray(ch.members)) {
+            const mm = ch.members.find(m => m.user_id === payload.reader_id);
+            if (mm) mm.last_read_at = payload.last_read_at;
+          }
+          if (payload.channel_id === state.activeId) {
+            renderMessages();
+          }
+        });
       }
       tryWire();
     })();
+
+    // Prvotní načtení online uživatelů
+    loadPresence();
   </script>
 
   <!-- SSE client, bell a chat widget se načtou ze sidebar.js (globálně) -->

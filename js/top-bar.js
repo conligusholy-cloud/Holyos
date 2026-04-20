@@ -45,6 +45,139 @@
     return /\/login(\.html)?$/i.test(location.pathname);
   }
 
+  // ─── Moje user ID (lazy) ──────────────────────────────────────────────────
+  // Potřebujeme pro filtr "nehraj zvuk u vlastních zpráv". user-chat-widget.js
+  // ukládá id do window.__holyosMyId; kdyby ještě nedojel, fallback na JWT.
+  function myIdFromJwt() {
+    try {
+      var t = getToken();
+      if (!t) return null;
+      var parts = t.split('.');
+      if (parts.length < 2) return null;
+      var b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+      while (b64.length % 4) b64 += '=';
+      var json = decodeURIComponent(Array.prototype.map.call(atob(b64),
+        function (c) { return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2); }
+      ).join(''));
+      return JSON.parse(json).id || null;
+    } catch (_) { return null; }
+  }
+  function getMyIdLazy() {
+    return window.__holyosMyId || myIdFromJwt() || null;
+  }
+
+  // ─── Zvuková notifikace (Web Audio — žádný audio soubor) ─────────────────
+  var _audioCtx = null;
+  function getAudioCtx() {
+    if (_audioCtx) return _audioCtx;
+    var Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return null;
+    try { _audioCtx = new Ctx(); } catch (_) { return null; }
+    return _audioCtx;
+  }
+
+  var SOUND_MUTED_KEY = 'holyos_chat_sound_muted';
+  function isSoundMuted() {
+    try { return localStorage.getItem(SOUND_MUTED_KEY) === '1'; } catch (_) { return false; }
+  }
+  function setSoundMuted(v) {
+    try { localStorage.setItem(SOUND_MUTED_KEY, v ? '1' : '0'); } catch (_) {}
+    updateSoundButton();
+  }
+
+  function playTone(ctx, freq, startAt, vol, dur, type) {
+    var osc = ctx.createOscillator();
+    var gain = ctx.createGain();
+    osc.type = type || 'sine';
+    osc.frequency.value = freq;
+    gain.gain.setValueAtTime(0, startAt);
+    // Rychlý nástup, exponenciální doznění jako zvon
+    gain.gain.linearRampToValueAtTime(vol, startAt + 0.008);
+    gain.gain.exponentialRampToValueAtTime(0.0001, startAt + dur);
+    osc.connect(gain).connect(ctx.destination);
+    osc.start(startAt);
+    osc.stop(startAt + dur + 0.02);
+  }
+
+  var _lastPingAt = 0;
+  function playChatPing() {
+    if (isSoundMuted()) return;
+    var now = Date.now();
+    if (now - _lastPingAt < 700) return;  // throttle — melodie je ~0,8 s dlouhá
+    _lastPingAt = now;
+    var ctx = getAudioCtx();
+    if (!ctx) return;
+    if (ctx.state === 'suspended') {
+      try { ctx.resume(); } catch (_) {}
+    }
+    var t = ctx.currentTime;
+    // „HolyOS chime" — 4-notové vzestupné arpeggio C-dur (C5-E5-G5-C6)
+    // + bell overtón (2. harmonická, sine) pro zvonivý charakter.
+    // Finální nota má delší dozvuk, aby zvuk zněl „uzavřeně".
+    var notes = [
+      { f: 523.25, at: 0.00, dur: 0.18, vol: 0.13 }, // C5
+      { f: 659.25, at: 0.09, dur: 0.20, vol: 0.13 }, // E5
+      { f: 783.99, at: 0.18, dur: 0.24, vol: 0.14 }, // G5
+      { f: 1046.5, at: 0.27, dur: 0.55, vol: 0.16 }, // C6 — finále, delší dozvuk
+    ];
+    notes.forEach(function (n) {
+      // Základní nota — trojúhelník zní tepleji a „zvonivěji" než sine
+      playTone(ctx, n.f, t + n.at, n.vol, n.dur, 'triangle');
+      // Oktávový overtón — jemný třpyt, dělá z toho bell / chime
+      playTone(ctx, n.f * 2, t + n.at, n.vol * 0.22, n.dur * 0.75, 'sine');
+    });
+  }
+
+  function updateSoundButton() {
+    var btn = document.getElementById('tb-btn-sound');
+    if (!btn) return;
+    var muted = isSoundMuted();
+    btn.textContent = muted ? '🔇' : '🔊';
+    btn.title = muted ? 'Zvuk zpráv je vypnutý — klikni pro zapnutí' : 'Zvuk zpráv je zapnutý — klikni pro vypnutí';
+    btn.classList.toggle('muted', muted);
+  }
+
+  // ─── Desktopové notifikace (Browser Notification API) ────────────────────
+  function notifPermission() {
+    if (!('Notification' in window)) return 'unsupported';
+    return Notification.permission; // 'default' | 'granted' | 'denied'
+  }
+
+  function ensureNotifPermission() {
+    if (!('Notification' in window)) return Promise.resolve('unsupported');
+    if (Notification.permission === 'granted' || Notification.permission === 'denied') {
+      return Promise.resolve(Notification.permission);
+    }
+    try {
+      return Notification.requestPermission().then(function (p) { updateSoundButton(); return p; });
+    } catch (_) { return Promise.resolve('denied'); }
+  }
+
+  // Desktopovou notifikaci nezobrazuj, pokud se user dívá přímo na tuhle kartu
+  // (už to vidí). Safari Mac nepodporuje `silent`/`renotify` — držíme se
+  // portable sady: title, body, icon, tag (ty fungují i na Safari).
+  function showDesktopNotification(title, body, link) {
+    if (!('Notification' in window)) return;
+    if (Notification.permission !== 'granted') return;
+    if (document.visibilityState === 'visible' && document.hasFocus()) return;
+    try {
+      var n = new Notification(title || 'HolyOS', {
+        body: body || '',
+        icon: '/logo-holyos-icon.svg',
+        tag: 'holyos-chat-' + (link || ''), // stejný tag = nové nahradí staré (Safari i Chrome)
+      });
+      n.onclick = function () {
+        try { window.focus(); } catch (_) {}
+        if (link) window.location.href = link;
+        n.close();
+      };
+      // Auto-close po 8 s (Safari je často zavře dřív sám, Chrome/Firefox respektují)
+      setTimeout(function () { try { n.close(); } catch (_) {} }, 8000);
+    } catch (e) {
+      console.warn('[TopBar] desktop notification failed:', e);
+    }
+  }
+
   // ─── CSS ──────────────────────────────────────────────────────────────────
   var CSS = [
     '.holyos-topbar {',
@@ -62,6 +195,7 @@
     '}',
     '.holyos-topbar .tb-btn:hover { background: var(--surface2, #313150); border-color: var(--border, #3a3a5c); }',
     '.holyos-topbar .tb-btn.active { background: var(--surface2, #313150); border-color: var(--accent, #6c8cff); }',
+    '.holyos-topbar .tb-btn.muted { opacity: 0.55; }',
     /* Modrý "ufon" (AI chat pro zadání úprav) — malá verze starého .ai-fab */
     '.holyos-topbar .tb-btn.tb-btn-ai {',
     '  background: linear-gradient(135deg, #6c5ce7, #0984e3, #00b894);',
@@ -115,6 +249,9 @@
     /* Starý floatující FAB ("modrý ufon") skryjeme — stejnou funkci teď plní ikona v liště,
        ale iniciujeme ho kvůli CSS a DOM strukturám, které používá openAiChat(). */
     '.ai-fab { display: none !important; }',
+    /* Vlastní bublina plovoucího messengeru (user-chat-widget.js) se skrývá —
+       vstupním bodem je 💬 ikona v téhle liště. Samotný .uchat-panel zůstává viditelný. */
+    '.uchat-bubble { display: none !important; }',
     '',
     /* Mobile */
     '@media (max-width: 768px) {',
@@ -145,7 +282,8 @@
       + '<circle cx="9" cy="14" r="1.5" fill="#fff"/><circle cx="15" cy="14" r="1.5" fill="#fff"/>'
       + '<path d="M9 18h6"/></svg>';
     bar.innerHTML = [
-      '<a class="tb-btn" id="tb-btn-chat" href="/modules/chat/index.html" title="Zprávy">💬<span class="tb-badge" id="tb-badge-chat">0</span></a>',
+      '<button class="tb-btn" id="tb-btn-sound" title="Zvuk zpráv">🔊</button>',
+      '<button class="tb-btn" id="tb-btn-chat" title="Zprávy">💬<span class="tb-badge" id="tb-badge-chat">0</span></button>',
       '<button class="tb-btn" id="tb-btn-bell" title="Notifikace">🔔<span class="tb-badge" id="tb-badge-bell">0</span></button>',
       '<button class="tb-btn tb-btn-ai" id="tb-btn-ai" title="Zadat požadavek na úpravu systému (AI asistent)">' + aiSvg + '</button>',
     ].join('');
@@ -169,6 +307,39 @@
     document.body.appendChild(panel);
 
     // Bind listeners
+    document.getElementById('tb-btn-sound').addEventListener('click', function (e) {
+      e.stopPropagation();
+      var muted = !isSoundMuted();
+      setSoundMuted(muted);
+      // Při zapnutí zvuku rovnou přehraj krátký sample (zároveň unlockne AudioContext)
+      if (!muted) {
+        _lastPingAt = 0;
+        playChatPing();
+        // A rovnou zkus poprosit o povolení desktopových notifikací — uživatel
+        // právě provedl gesto (klik), což je ideální moment.
+        ensureNotifPermission();
+      }
+    });
+    updateSoundButton();
+
+    // Jednorázový unlock AudioContextu při prvním user gesture — autoplay policy
+    // (Chrome i Safari/iOS). Pokrýváme click i touchstart (Safari na iPadu/trackpadu).
+    function _resumeAudioOnce() {
+      var ctx = getAudioCtx();
+      if (ctx && ctx.state === 'suspended') { try { ctx.resume(); } catch (_) {} }
+      document.removeEventListener('click', _resumeAudioOnce);
+      document.removeEventListener('touchstart', _resumeAudioOnce);
+      document.removeEventListener('keydown', _resumeAudioOnce);
+    }
+    document.addEventListener('click', _resumeAudioOnce, { once: true });
+    document.addEventListener('touchstart', _resumeAudioOnce, { once: true, passive: true });
+    document.addEventListener('keydown', _resumeAudioOnce, { once: true });
+
+    document.getElementById('tb-btn-chat').addEventListener('click', function (e) {
+      e.stopPropagation();
+      closeBellPanel();
+      openChatPanel();
+    });
     document.getElementById('tb-btn-bell').addEventListener('click', function (e) {
       e.stopPropagation(); toggleBellPanel();
     });
@@ -223,10 +394,14 @@
     });
   }
 
+  // Typy notifikací, které do zvonku nepatří (chat má vlastní ikonu + zvuk + desktop popup)
+  var BELL_EXCLUDE_TYPES = 'chat_message';
+
   function loadNotifications() {
+    var qs = '?exclude_types=' + encodeURIComponent(BELL_EXCLUDE_TYPES);
     Promise.all([
-      fetch('/api/notifications?limit=30', fetchOpts()).then(function (r) { return r.ok ? r.json() : []; }),
-      fetch('/api/notifications/unread-count', fetchOpts()).then(function (r) { return r.ok ? r.json() : { count: 0 }; }),
+      fetch('/api/notifications?limit=30&' + qs.slice(1), fetchOpts()).then(function (r) { return r.ok ? r.json() : []; }),
+      fetch('/api/notifications/unread-count' + qs, fetchOpts()).then(function (r) { return r.ok ? r.json() : { count: 0 }; }),
     ]).then(function (results) {
       notifItems = results[0] || [];
       notifUnread = (results[1] && results[1].count) || 0;
@@ -308,11 +483,54 @@
     }
   }
 
+  // ─── Plovoucí messenger (user-chat-widget.js) ────────────────────────────
+  // 💬 ikona v liště otevírá stejný panel, co dřív vytahovala vlastní bublina.
+  // Na plnohodnotné stránce /modules/chat/ widget nemountuje — tam odkaz
+  // necháme navigovat přímo na stránku.
+  function openChatPanel(retries) {
+    if (retries == null) retries = 30;  // 30 × 200 ms = 6 s, hodně tolerantní na pomalá připojení a Safari
+    // Na plnohodnotné chat stránce widget nemountuje — uživatel je už „uvnitř"
+    if (/\/modules\/chat(\/|$|\/index)/i.test(window.location.pathname)) return;
+
+    if (window.HolyOSChat && typeof window.HolyOSChat.toggle === 'function') {
+      window.HolyOSChat.toggle();
+      return;
+    }
+
+    // Pokud skript user-chat-widget.js už je v DOMu ale ještě nedoběhl nebo
+    // byl přerušen, zkus ho explicitně doloadovat (Safari občas selže při
+    // první injekci ze sidebar.js kvůli race condition s body parsingem).
+    if (retries === 30 && !document.getElementById('holyos-chat-widget-script')) {
+      var s = document.createElement('script');
+      s.id = 'holyos-chat-widget-script';
+      s.src = '/js/user-chat-widget.js?v=' + Date.now();
+      document.body.appendChild(s);
+    }
+
+    if (retries <= 0) {
+      // NEPŘESMĚROVÁVEJ — uživatel by ztratil kontext (otevřený editor, rozdělanou
+      // práci, atd.). Místo toho popiš chybu a nabídni řešení.
+      console.error('[TopBar] window.HolyOSChat se nepodařilo naloadovat ani po 6 sekundách. '
+        + 'Zkontroluj, že /js/user-chat-widget.js je dostupný (Network tab v DevTools).');
+      alert('Chat widget se nepodařilo načíst. Zkus prosím:\n'
+        + '1) Aktualizovat stránku (Ctrl/Cmd + Shift + R)\n'
+        + '2) Otevřít DevTools (F12) a kouknout do Console / Network na chybu\n'
+        + '3) Pokud problém přetrvává, dej vědět — je to na naší straně.');
+      return;
+    }
+    setTimeout(function () { openChatPanel(retries - 1); }, 200);
+  }
+
   // ─── Live updates (SSE via HolyOSEvents, pokud existuje) ─────────────────
   function hookLiveEvents() {
-    if (!window.HolyOSEvents || typeof window.HolyOSEvents.on !== 'function') return;
+    // HolyOSEvents se načítá async skriptem — počkáme, dokud se neobjeví
+    if (!window.HolyOSEvents || typeof window.HolyOSEvents.on !== 'function') {
+      return setTimeout(hookLiveEvents, 200);
+    }
     window.HolyOSEvents.on('notification', function (n) {
       if (!n) return;
+      // Chat zprávy do zvonku nepatří — má je ikona 💬 + zvuk + desktop popup.
+      if (n.type === 'chat_message') return;
       if (!notifItems.some(function (x) { return x.id === n.id; })) {
         notifItems.unshift(n);
         if (notifItems.length > 50) notifItems.length = 50;
@@ -320,7 +538,31 @@
       if (!n.read_at) notifUnread++;
       renderBell();
     });
-    window.HolyOSEvents.on('message', function () { loadChatUnread(); });
+    window.HolyOSEvents.on('message', function (payload) {
+      loadChatUnread();
+      if (!payload || !payload.message) return;
+      var myId = getMyIdLazy();
+      var m = payload.message;
+      if (myId && m.sender_id === myId) return; // ne u vlastních zpráv
+
+      // 1) Zvukový cink (pokud není mute)
+      playChatPing();
+
+      // 2) Desktopová notifikace — jen pokud není tab focus (jinak je to spam)
+      if (!isSoundMuted()) {
+        var senderName = (m.sender && (m.sender.display_name || m.sender.username))
+          || m.sender_label || 'HolyOS';
+        var preview = m.content
+          ? (m.content.length > 140 ? m.content.slice(0, 140) + '…' : m.content)
+          : (Array.isArray(m.attachments) && m.attachments.length
+              ? (m.attachments.some(function (a) { return a.kind === 'image'; })
+                  ? '📷 Obrázek'
+                  : '📎 Soubor')
+              : '');
+        var link = '/modules/chat/?channel=' + encodeURIComponent(payload.channel_id || '');
+        showDesktopNotification('💬 ' + senderName, preview, link);
+      }
+    });
   }
 
   // ─── Init ────────────────────────────────────────────────────────────────

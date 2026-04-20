@@ -13,17 +13,56 @@
     .tasks-toolbar { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; align-items: center; }
     .tasks-toolbar select { padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 12px; }
 
-    .task-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px 20px; margin-bottom: 12px; transition: all 0.2s; }
-    .task-card:hover { border-color: rgba(108,92,231,0.3); }
+    /* Záložky: Aktivní / Archiv / Koš */
+    .tasks-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 16px; }
+    .tasks-tab {
+      padding: 10px 18px; background: transparent; border: none; color: var(--text2);
+      font-size: 13px; font-weight: 600; cursor: pointer; border-bottom: 2px solid transparent;
+      margin-bottom: -1px; transition: color 0.15s, border-color 0.15s;
+      display: inline-flex; align-items: center; gap: 8px;
+    }
+    .tasks-tab:hover { color: var(--text); }
+    .tasks-tab.active { color: #a78bfa; border-bottom-color: #a78bfa; }
+    .tasks-tab .tab-count {
+      display: inline-block; min-width: 20px; padding: 1px 7px; border-radius: 10px;
+      background: var(--surface2); color: var(--text); font-size: 11px; font-weight: 700;
+    }
+    .tasks-tab.active .tab-count { background: rgba(168,139,250,0.2); color: #a78bfa; }
+
+    /* Task karty — levý akcentovaný pruh podle stavu, barva karty jemně podle stavu */
+    .task-card {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+      padding: 16px 20px 16px 20px; margin-bottom: 12px; transition: all 0.2s;
+      border-left: 4px solid var(--border); position: relative;
+    }
+    .task-card:hover { border-color: rgba(108,92,231,0.3); transform: translateX(2px); }
+    .task-card.status-new         { border-left-color: #a78bfa; background: linear-gradient(90deg, rgba(168,139,250,0.06), var(--surface) 80px); }
+    .task-card.status-in_progress { border-left-color: #3b82f6; background: linear-gradient(90deg, rgba(59,130,246,0.06), var(--surface) 80px); }
+    .task-card.status-done        { border-left-color: #22c55e; background: linear-gradient(90deg, rgba(34,197,94,0.05), var(--surface) 80px); opacity: 0.85; }
+    .task-card.status-cancelled   { border-left-color: #9ca3af; background: linear-gradient(90deg, rgba(156,163,175,0.05), var(--surface) 80px); opacity: 0.7; }
+    .task-card.trashed            { opacity: 0.6; }
+
     .task-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
     .task-title { font-size: 14px; font-weight: 600; color: var(--text); line-height: 1.4; flex: 1; }
     .task-meta { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; }
 
-    .task-badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 10px; font-weight: 600; }
-    .task-badge.new { background: rgba(108,92,231,0.15); color: #a78bfa; }
-    .task-badge.in_progress { background: rgba(59,130,246,0.15); color: #3b82f6; }
-    .task-badge.done { background: rgba(34,197,94,0.15); color: #22c55e; }
-    .task-badge.cancelled { background: rgba(156,163,175,0.15); color: #9ca3af; }
+    /* Výraznější status badge — větší, s glow efektem */
+    .task-badge {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 4px 12px; border-radius: 12px; font-size: 11px; font-weight: 700;
+      letter-spacing: 0.3px; text-transform: uppercase;
+      border: 1px solid currentColor; box-shadow: 0 0 0 2px transparent;
+    }
+    .task-badge.new         { background: rgba(168,139,250,0.18); color: #a78bfa; box-shadow: 0 0 12px rgba(168,139,250,0.25); }
+    .task-badge.in_progress { background: rgba(59,130,246,0.18); color: #3b82f6; box-shadow: 0 0 12px rgba(59,130,246,0.3); animation: pulse-blue 2s infinite; }
+    .task-badge.done        { background: rgba(34,197,94,0.18); color: #22c55e; }
+    .task-badge.cancelled   { background: rgba(156,163,175,0.18); color: #9ca3af; }
+    .task-badge.deleted     { background: rgba(239,68,68,0.15); color: #ef4444; border-color: rgba(239,68,68,0.4); }
+
+    @keyframes pulse-blue {
+      0%, 100% { box-shadow: 0 0 12px rgba(59,130,246,0.3); }
+      50%      { box-shadow: 0 0 20px rgba(59,130,246,0.55); }
+    }
 
     .task-page-badge { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 10px; background: rgba(108,92,231,0.1); color: #a78bfa; }
     .task-time { font-size: 11px; color: var(--text2); }
@@ -45,6 +84,10 @@
     .task-btn-thread:hover { background: rgba(168,139,250,0.25); }
     .task-btn-chat { background: rgba(34,197,94,0.1); color: #22c55e; border-color: rgba(34,197,94,0.3); }
     .task-btn-chat:hover { background: rgba(34,197,94,0.25); }
+    .task-btn-restore { background: rgba(168,139,250,0.12); color: #a78bfa; border-color: rgba(168,139,250,0.3); }
+    .task-btn-restore:hover { background: rgba(168,139,250,0.25); }
+    .task-btn-hard-delete { background: rgba(239,68,68,0.2); color: #ef4444; border-color: rgba(239,68,68,0.5); font-weight: 700; }
+    .task-btn-hard-delete:hover { background: rgba(239,68,68,0.35); }
 
     .stats-bar { display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
     .stat-mini { padding: 8px 14px; border-radius: 8px; background: var(--surface); border: 1px solid var(--border); font-size: 12px; }
@@ -93,13 +136,23 @@
     <div class="module-body" style="padding: 20px 32px;">
       <div class="stats-bar" id="stats-bar"></div>
 
-      <div class="tasks-toolbar">
+      <div class="tasks-tabs" id="tasks-tabs">
+        <button class="tasks-tab active" data-view="active" onclick="switchView('active')">
+          🟢 Aktivní <span class="tab-count" id="count-active">0</span>
+        </button>
+        <button class="tasks-tab" data-view="archive" onclick="switchView('archive')">
+          ✅ Archiv <span class="tab-count" id="count-archive">0</span>
+        </button>
+        <button class="tasks-tab" data-view="trash" onclick="switchView('trash')">
+          🗑️ Koš <span class="tab-count" id="count-trash">0</span>
+        </button>
+      </div>
+
+      <div class="tasks-toolbar" id="tasks-toolbar" style="display:none;">
         <select id="filter-status" onchange="loadTasks()">
           <option value="">Všechny stavy</option>
           <option value="new">Nové</option>
           <option value="in_progress">Rozpracované</option>
-          <option value="done">Hotové</option>
-          <option value="cancelled">Zrušené</option>
         </select>
       </div>
 
@@ -118,25 +171,50 @@
 
   <script>
     let tasks = [];
+    let currentView = 'active'; // active | archive | trash
+
+    function switchView(view) {
+      currentView = view;
+      document.querySelectorAll('.tasks-tab').forEach(t => t.classList.toggle('active', t.dataset.view === view));
+      // Filtr "status" má smysl jen v active view
+      document.getElementById('tasks-toolbar').style.display = view === 'active' ? 'flex' : 'none';
+      loadTasks();
+    }
 
     async function loadTasks() {
-      const status = document.getElementById('filter-status').value;
-      const params = status ? '?status=' + status : '';
-      const res = await fetch('/api/admin-tasks' + params);
-      tasks = await res.json();
-      renderStats();
+      const params = new URLSearchParams({ view: currentView });
+      if (currentView === 'active') {
+        const status = document.getElementById('filter-status').value;
+        if (status) params.set('status', status);
+      }
+      // List + stats PARALELNĚ — neblokují se navzájem
+      const [tasksResp, statsResp] = await Promise.all([
+        fetch('/api/admin-tasks?' + params.toString()),
+        fetch('/api/admin-tasks/stats/summary'),
+      ]);
+      tasks = await tasksResp.json();
+      if (statsResp.ok) {
+        const s = await statsResp.json();
+        applyStats(s);
+      }
       renderTasks();
     }
 
-    function renderStats() {
-      const newCount = tasks.filter(t => t.status === 'new').length;
-      const inProgress = tasks.filter(t => t.status === 'in_progress').length;
-      const done = tasks.filter(t => t.status === 'done').length;
+    function applyStats(s) {
+      s = s || {};
+      document.getElementById('count-active').textContent = s.active || 0;
+      document.getElementById('count-archive').textContent = s.archived || 0;
+      document.getElementById('count-trash').textContent = s.trashed || 0;
+      renderStats(s);
+    }
+
+    function renderStats(s) {
+      s = s || {};
       document.getElementById('stats-bar').innerHTML = `
-        <div class="stat-mini"><strong style="color:#a78bfa">${tasks.length}</strong> celkem</div>
-        <div class="stat-mini"><strong style="color:#a78bfa">${newCount}</strong> nových</div>
-        <div class="stat-mini"><strong style="color:#3b82f6">${inProgress}</strong> rozpracovaných</div>
-        <div class="stat-mini"><strong style="color:#22c55e">${done}</strong> hotových</div>
+        <div class="stat-mini"><strong style="color:#a78bfa">${s.new || 0}</strong> nových</div>
+        <div class="stat-mini"><strong style="color:#3b82f6">${s.in_progress || 0}</strong> rozpracovaných</div>
+        <div class="stat-mini"><strong style="color:#22c55e">${s.archived || 0}</strong> v archivu</div>
+        <div class="stat-mini"><strong style="color:#9ca3af">${s.trashed || 0}</strong> v koši</div>
       `;
     }
 
@@ -155,33 +233,77 @@
         const user = creator ? (creator.display_name || creator.username) : '—';
         const userTitle = creator ? `${creator.display_name || ''} (${creator.username})`.trim() : 'Autor neznámý';
 
-        html += `<div class="task-card">
+        const isTrashed = !!t.deleted_at;
+        const cardClass = 'task-card status-' + t.status + (isTrashed ? ' trashed' : '');
+        html += `<div class="${cardClass}">
           <div class="task-header">
             <div class="task-title">#${t.id} — ${escapeHtml(desc.split('\n')[0])}</div>
+            <span class="task-badge ${t.status}">${statusLabel(t.status)}</span>
           </div>
           <div class="task-meta">
-            <span class="task-badge ${t.status}">${statusLabel(t.status)}</span>
+            ${isTrashed ? '<span class="task-badge deleted">🗑️ V koši</span>' : ''}
             <span class="task-page-badge">📍 ${t.page_title || t.page}</span>
             <span class="task-time">🕐 ${time}</span>
             <span class="task-user" title="${escapeHtml(userTitle)}">👤 ${escapeHtml(user)}</span>
           </div>
           <div class="task-desc">${escapeHtml(desc)}</div>`;
 
-        if (t.screenshot) {
-          html += `<div class="task-screenshot" onclick="showScreenshot(${t.id})"><img src="${t.screenshot}" loading="lazy"></div>`;
+        if (t.has_screenshot) {
+          // Thumbnail = stejný endpoint, ale lazy-loadovaný až po kliknutí.
+          // Karta zobrazuje placeholder ikonku místo plného obrázku → rychlý render.
+          html += `<div class="task-screenshot" onclick="showScreenshot(${t.id})" style="background:rgba(168,139,250,0.08);border:1px solid rgba(168,139,250,0.25);padding:14px;display:flex;align-items:center;gap:10px;max-width:280px;">
+            <span style="font-size:28px;">📸</span>
+            <div>
+              <div style="font-size:13px;font-weight:600;color:var(--text);">Screenshot</div>
+              <div style="font-size:11px;color:var(--text2);">Klikni pro zobrazení v plné velikosti</div>
+            </div>
+          </div>`;
+        }
+
+        // Další přílohy (PDF, Word, Excel, …) — uloženy v ai_answers.attachments
+        const attachments = (t.ai_answers && Array.isArray(t.ai_answers.attachments)) ? t.ai_answers.attachments : [];
+        if (attachments.length) {
+          html += `<div style="margin:8px 0;display:flex;flex-direction:column;gap:4px;">`;
+          attachments.forEach(a => {
+            const icon = attachmentIcon(a);
+            const sz = fmtBytes(a.size);
+            html += `<a href="${escapeHtml(a.url || '#')}" target="_blank" rel="noopener" download="${escapeHtml(a.name || '')}"
+              style="display:inline-flex;align-items:center;gap:8px;padding:6px 10px;background:rgba(168,139,250,0.08);border:1px solid rgba(168,139,250,0.25);border-radius:6px;font-size:12px;color:#e8e8f0;text-decoration:none;max-width:500px;">
+              <span style="font-size:16px;flex-shrink:0;">${icon}</span>
+              <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(a.name || 'soubor')}</span>
+              ${sz ? `<span style="color:var(--text2);font-size:10px;flex-shrink:0;">${sz}</span>` : ''}
+            </a>`;
+          });
+          html += `</div>`;
         }
 
         const authorBtn = (creator && creator.id !== currentUserId())
           ? `<button class="task-btn task-btn-chat" onclick="msgAuthor(${creator.id})">✉️ Napsat autorovi</button>`
           : '';
-        html += `<div class="task-actions">
+        // Akce podle view — v Koši/Archivu jiná sada tlačítek
+        let actionButtons = '';
+        if (currentView === 'trash') {
+          actionButtons = `
+            <button class="task-btn task-btn-restore" onclick="restoreTask(${t.id})">↩️ Obnovit</button>
+            <button class="task-btn task-btn-thread" onclick="openTaskThread(${t.id})">💬 Diskuze</button>
+            ${authorBtn}
+            <button class="task-btn task-btn-hard-delete" onclick="hardDeleteTask(${t.id})">🔥 Smazat trvale</button>`;
+        } else if (currentView === 'archive') {
+          actionButtons = `
+            <button class="task-btn task-btn-deploy" onclick="deployTask(${t.id})">🚀 Nasadit s Claude</button>
+            <button class="task-btn task-btn-restore" onclick="restoreTask(${t.id})">↩️ Vrátit do aktivních</button>
+            <button class="task-btn task-btn-thread" onclick="openTaskThread(${t.id})">💬 Diskuze</button>
+            ${authorBtn}
+            <button class="task-btn task-btn-delete" onclick="deleteTask(${t.id})">🗑️ Do koše</button>`;
+        } else {
+          actionButtons = `
             <button class="task-btn task-btn-deploy" onclick="deployTask(${t.id})">🚀 Nasadit s Claude</button>
             <button class="task-btn task-btn-status" onclick="cycleStatus(${t.id})">📌 Změnit stav</button>
             <button class="task-btn task-btn-thread" onclick="openTaskThread(${t.id})">💬 Diskuze</button>
             ${authorBtn}
-            <button class="task-btn task-btn-delete" onclick="deleteTask(${t.id})">✕ Smazat</button>
-          </div>
-        </div>`;
+            <button class="task-btn task-btn-delete" onclick="deleteTask(${t.id})">🗑️ Do koše</button>`;
+        }
+        html += `<div class="task-actions">${actionButtons}</div></div>`;
       }
       el.innerHTML = html;
     }
@@ -194,15 +316,44 @@
       return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     }
 
-    function showScreenshot(id) {
+    function attachmentIcon(a) {
+      const mime = (a.mime || '').toLowerCase();
+      const name = (a.name || '').toLowerCase();
+      if (mime.startsWith('image/')) return '🖼️';
+      if (mime.includes('pdf') || name.endsWith('.pdf')) return '📕';
+      if (mime.includes('word') || mime.includes('msword') || name.endsWith('.docx') || name.endsWith('.doc')) return '📄';
+      if (mime.includes('sheet') || mime.includes('excel') || name.endsWith('.xlsx') || name.endsWith('.xls') || name.endsWith('.csv')) return '📊';
+      if (mime.includes('zip') || name.endsWith('.zip') || name.endsWith('.rar')) return '🗜️';
+      return '📎';
+    }
+
+    function fmtBytes(bytes) {
+      if (!bytes) return '';
+      if (bytes < 1024) return bytes + ' B';
+      if (bytes < 1024 * 1024) return Math.round(bytes / 1024) + ' kB';
+      return (bytes / 1024 / 1024).toFixed(1) + ' MB';
+    }
+
+    async function showScreenshot(id) {
       const t = tasks.find(x => x.id === id);
-      if (!t || !t.screenshot) return;
+      if (!t || !t.has_screenshot) return;
+      // Screenshot lazy-load — v listu ho nemáme (optimalizace), stáhneme ho teď
       document.getElementById('modal-root').innerHTML = `
         <div class="modal-overlay" onclick="closeModal()">
           <div class="screenshot-modal" onclick="event.stopPropagation()">
-            <img src="${t.screenshot}">
+            <div style="color:#a78bfa;padding:40px;font-size:14px;">Načítám screenshot…</div>
           </div>
         </div>`;
+      try {
+        const r = await fetch('/api/admin-tasks/' + id + '/screenshot');
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const data = await r.json();
+        const modal = document.querySelector('.screenshot-modal');
+        if (modal) modal.innerHTML = '<img src="' + data.screenshot + '">';
+      } catch (e) {
+        const modal = document.querySelector('.screenshot-modal');
+        if (modal) modal.innerHTML = '<div style="color:#ef4444;padding:40px;">Chyba při načítání: ' + escapeHtml(e.message) + '</div>';
+      }
     }
 
     function generateTaskSpec(task) {
@@ -216,13 +367,25 @@
       spec += '📝 POPIS POŽADAVKU:\n';
       spec += task.description + '\n\n';
 
-      if (task.screenshot) {
+      if (task.has_screenshot || task.screenshot) {
         spec += '📸 SCREENSHOT: Přiložen (uživatel nahrál vizuální referenci)\n\n';
+      }
+
+      // Další přílohy (PDF, Word, Excel, atd.)
+      const atts = (task.ai_answers && Array.isArray(task.ai_answers.attachments)) ? task.ai_answers.attachments : [];
+      if (atts.length) {
+        spec += '📎 PŘÍLOHY (' + atts.length + '):\n';
+        atts.forEach(a => {
+          spec += '   • ' + (a.name || 'soubor') + ' — ' + (a.url || '') + '\n';
+        });
+        spec += '\n';
       }
 
       if (task.ai_answers && Object.keys(task.ai_answers).length > 0) {
         spec += '💬 UPŘESNĚNÍ OD UŽIVATELE:\n';
         for (const [key, val] of Object.entries(task.ai_answers)) {
+          // attachments vyřešeny výše, přeskoč je v upřesnění
+          if (key === 'attachments') continue;
           spec += '   • ' + val + '\n';
         }
         spec += '\n';
@@ -231,31 +394,51 @@
       // Add page-specific context
       spec += '🔗 KONTEXT STRÁNKY:\n';
       var pageContextMap = {
-        'Lidé a HR': 'Modul Lidé a HR — evidence zaměstnanců, docházka, org. struktura, role a oprávnění. Soubory: modules/lide-hr/index.html, api/hr.js, db.js',
-        'Dashboard': 'Hlavní dashboard — index.html, zobrazuje přehled celého systému',
-        'Vytvoření areálu': 'Modul pro tvorbu 2D/3D areálu — modules/vytvoreni-arealu/',
-        'Programování výroby': 'Modul programování výroby — modules/programovani-vyroby/',
-        'Simulace výroby': 'Modul simulace — modules/simulace-vyroby/',
-        'Pracovní postup': 'Modul pracovní postupy — modules/pracovni-postup/',
-        'Historie změn': 'Audit log — modules/audit-log/index.html',
-        'Myšlenková mapa': 'Mindmap přehled celého systému — modules/holyos-mindmap.html',
+        'Lidé a HR':            'modules/lide-hr/ (FE) + routes/hr.routes.js (BE). Entity: Person, Department, Attendance, Leave.',
+        'Dashboard':            'index.html — úvodní přehled modulů + widgety.',
+        'Vytvoření areálu':     'modules/vytvoreni-arealu/ — editor 2D půdorysu (haly, cesty, vjezdy).',
+        'Programování výroby':  'modules/programovani-vyroby/ — rozmístění pracovišť a logistických tras.',
+        'Simulace výroby':      'modules/simulace-vyroby/ — vizualizace běhu výroby.',
+        'Pracovní postup':      'modules/pracovni-postup/ + routes/production.routes.js.',
+        'Nákup a sklad':        'modules/nakup-sklad/ + routes/warehouse.routes.js. Entity: Company, Material, PurchaseOrder, Warehouse, Stock, Movement.',
+        'Prodejní objednávky':  'modules/prodejni-objednavky/ + routes/sales.routes.js.',
+        'Výrobní sloty':        'modules/vyrobni-sloty/ + routes/slots.routes.js. Entity: ProductionSlot (blokování, přiřazení zakázek).',
+        'Sklady':               'modules/sklady/ — správa skladů a pozic.',
+        'Pracoviště':           'modules/pracoviste/ — konfigurace pracovišť a přiřazení operací.',
+        'Vozový park':          'modules/vozovy-park/ + routes/fleet.routes.js. Entity: Vehicle, POV/STK/známky, MCP fleet-server.',
+        'CAD výkresy':          'modules/cad-vykresy/ + routes/cad.routes.js. Import ze SolidWorks přes client CAD bridge.',
+        'Zprávy':               'modules/chat/ + js/user-chat-widget.js (floating) + routes/messages.routes.js. SSE přes services/notification-bus.js.',
+        'AI Agenti':            'modules/ai-agenti/ + routes/ai.routes.js + services/ai/ orchestrator. MCP tools v mcp-servers/.',
+        'Dev Hub':              'modules/dev-hub/ — interní vývojářské nástroje.',
+        'Kiosky':               'modules/kiosky/ — kioskové obrazovky pro docházku / panely.',
+        'Požadavky | HOLYOS':   'modules/admin-tasks/ + routes/admin-tasks.routes.js — tenhle modul.',
+        'Historie změn':        'modules/audit-log/ + AuditLog v prisma/schema.prisma — automatický log změn.',
+        'Myšlenková mapa':      'modules/holyos-mindmap.html — mindmap celého systému.',
       };
       var ctx = pageContextMap[task.page_title] || ('Stránka: ' + task.page);
       spec += '   ' + ctx + '\n\n';
 
       spec += '⚙️ TECHNICKÝ KONTEXT:\n';
-      spec += '   • Server: Node.js (http.createServer), bez frameworku\n';
-      spec += '   • DB: JSON soubor přes db.js, auto-increment ID\n';
-      spec += '   • Frontend: Vanilla JS, inline HTML, tmavý motiv\n';
-      spec += '   • Auth: Session-based, cookie, is_super_admin flag\n';
-      spec += '   • Audit: Automatický log všech změn v db.js\n';
-      spec += '   • Hosting: Railway, persistent volume /app/data\n\n';
+      spec += '   • Backend: Node.js 18+ + Express 4 (app.js), routy v routes/*.routes.js\n';
+      spec += '   • DB: PostgreSQL 14+ přes Prisma 6 (prisma/schema.prisma, client v config/database.js)\n';
+      spec += '   • Frontend: Vanilla JS (ES6+), HTML + inline/shared CSS (css/dashboard.css, CSS variables)\n';
+      spec += '   • Auth: JWT v HttpOnly cookie, middleware/auth.js (requireAuth), /api/auth/me pro ID\n';
+      spec += '   • AI: Anthropic SDK (claude-sonnet-4-6), MCP tools v mcp-servers/\n';
+      spec += '   • Realtime: SSE přes /api/notifications/stream, bus v services/notification-bus.js\n';
+      spec += '   • Audit: model AuditLog (Prisma), middleware loguje změny\n';
+      spec += '   • Hosting: Railway, persistent volume /app/data, deploy přes `railway up`\n\n';
 
-      spec += '💡 POŽADAVKY:\n';
-      spec += '   • Zachovat konzistentní UI s existujícími moduly\n';
-      spec += '   • Všechny CRUD operace musí procházet přes db.js (audit log)\n';
-      spec += '   • Udržet provázanost s ostatními sekcemi systému\n';
-      spec += '   • Po dokončení aktualizovat deploy status v myšlenkové mapě\n';
+      spec += '💡 PRAVIDLA (viz Výroba/.claude/CLAUDE.md):\n';
+      spec += '   • Vždy Prisma, NIKDY raw SQL (kromě specifických raw dotazů s důvodem)\n';
+      spec += '   • Include relationships namísto N+1 queries\n';
+      spec += '   • Po změně schema.prisma vždy `npx prisma migrate dev --name "popis"`\n';
+      spec += '   • Všechny routy (mimo /auth) mají `router.use(requireAuth)`\n';
+      spec += '   • Chyby passovat do `next(err)`, ne `res.status(500).send()`\n';
+      spec += '   • Validace přes zod (schema.safeParse)\n';
+      spec += '   • Frontend — vanilla JS, žádný React/Vue/Angular\n';
+      spec += '   • Komentáře, chybové hlášky a commity ČESKY\n';
+      spec += '   • Zachovat konzistentní UI (CSS proměnné --primary, --bg, atd.)\n';
+      spec += '   • Po dokončení změnit stav úkolu na "Hotový" v tomhle modulu\n';
 
       return spec;
     }
@@ -312,9 +495,28 @@
       loadTasks();
     }
 
+    // Soft delete — přesune do Koše
     async function deleteTask(id) {
-      if (!confirm('Smazat požadavek #' + id + '?')) return;
-      await fetch('/api/admin-tasks/' + id, { method: 'DELETE' });
+      if (!confirm('Přesunout požadavek #' + id + ' do Koše?')) return;
+      const r = await fetch('/api/admin-tasks/' + id, { method: 'DELETE' });
+      if (!r.ok) { alert('Chyba při mazání'); return; }
+      loadTasks();
+    }
+
+    // Trvalé smazání — jen z Koše
+    async function hardDeleteTask(id) {
+      if (!confirm('TRVALE smazat požadavek #' + id + '?\n\nTohle je nevratné — záznam zmizí z databáze včetně všech diskuzí.')) return;
+      const r = await fetch('/api/admin-tasks/' + id + '?hard=true', { method: 'DELETE' });
+      if (!r.ok) { const err = await r.json().catch(() => ({})); alert('Chyba: ' + (err.error || r.status)); return; }
+      loadTasks();
+    }
+
+    // Obnovení z Koše nebo z Archivu
+    async function restoreTask(id) {
+      const verb = currentView === 'trash' ? 'obnovit z koše' : 'vrátit do aktivních';
+      if (!confirm('Opravdu ' + verb + ' požadavek #' + id + '?')) return;
+      const r = await fetch('/api/admin-tasks/' + id + '/restore', { method: 'POST' });
+      if (!r.ok) { const err = await r.json().catch(() => ({})); alert('Chyba: ' + (err.error || r.status)); return; }
       loadTasks();
     }
 

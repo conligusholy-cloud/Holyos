@@ -1009,6 +1009,8 @@
       error_title:        { cs: 'Chyba',              en: 'Error',              de: 'Fehler',             es: 'Error',                hr: 'Gre\u0161ka' },
       error_not_found:    { cs: 'Objedn\u00e1vka nenalezena', en: 'Order not found',    de: 'Bestellung nicht gefunden', es: 'Pedido no encontrado', hr: 'Narud\u017eba nije prona\u0111ena' },
       error_load:         { cs: 'Nepoda\u0159ilo se na\u010d\u00edst objedn\u00e1vku', en: 'Failed to load order', de: 'Bestellung konnte nicht geladen werden', es: 'No se pudo cargar el pedido', hr: 'Nije mogu\u0107e u\u010ditati narud\u017ebu' },
+      locked_title:       { cs: 'Odkaz již není aktivní', en: 'Link is no longer active', de: 'Link ist nicht mehr aktiv', es: 'El enlace ya no está activo', hr: 'Poveznica više nije aktivna' },
+      locked_body:        { cs: 'Tato objednávka už byla potvrzena nebo zpracována a konfiguraci už nelze měnit. V případě dotazů nás prosím kontaktujte.', en: 'This order has already been confirmed or processed and the configuration can no longer be changed. Please contact us with any questions.', de: 'Diese Bestellung wurde bereits bestätigt oder bearbeitet und die Konfiguration kann nicht mehr geändert werden. Bei Fragen kontaktieren Sie uns bitte.', es: 'Este pedido ya ha sido confirmado o procesado y la configuración ya no se puede cambiar. Contáctenos si tiene preguntas.', hr: 'Ova narudžba je već potvrđena ili obrađena i konfiguracija se više ne može mijenjati. Za pitanja nas kontaktirajte.' },
     };
 
     let currentLang = 'cs';
@@ -1161,6 +1163,15 @@
 
       try {
         const resp = await fetch('/api/public/order/' + pageToken);
+        // 410 Gone = odkaz deaktivován kvůli stavu objednávky — zobraz hezkou zprávu místo „nenalezena"
+        if (resp.status === 410) {
+          app.innerHTML = '<div class="error" style="max-width:520px;margin:60px auto;padding:30px;text-align:center;">' +
+            '<div style="font-size:48px;margin-bottom:16px;">🔒</div>' +
+            '<h2 style="margin-bottom:12px;">' + esc(t('locked_title')) + '</h2>' +
+            '<p style="color:var(--text2);line-height:1.55;">' + esc(t('locked_body')) + '</p>' +
+          '</div>';
+          return;
+        }
         if (!resp.ok) throw new Error(t('error_not_found'));
         orderData = await resp.json();
         initSelectionsFromExisting();

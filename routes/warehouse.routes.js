@@ -10,6 +10,15 @@ const { logAudit, diffObjects, makeSnapshot } = require('../services/audit');
 
 router.use(requireAuth);
 
+// Helper — bezpečně převede datum string (YYYY-MM-DD nebo ISO) na Date objekt.
+// Prisma DateTime fieldy odmítají string, vyžadují Date instanci.
+function parseDate(v) {
+  if (v === undefined) return undefined; // neměnit pole
+  if (v === null || v === '') return null;
+  const d = new Date(v);
+  return isNaN(d.getTime()) ? null : d;
+}
+
 // ─── FIRMY ─────────────────────────────────────────────────────────────────
 
 // GET /api/wh/companies
@@ -202,11 +211,74 @@ router.get('/orders', async (req, res, next) => {
       },
       orderBy: { created_at: 'desc' },
     });
-    res.json(orders);
+
+    // Dopočítej výrobní datumy ze slotů (bez N+1 queries)
+    const enriched = await enrichOrdersWithProductionDates(orders);
+    res.json(enriched);
   } catch (err) {
     next(err);
   }
 });
+
+// ─── Helper: dopočítej výrobní datumy ze slot-assignmentů ──────────────────
+// Pro každou položku (OrderItem) najdeme její přiřazený slot a vrátíme:
+//   - production_start  = start_date slotu (kdy výroba začíná)
+//   - production_finish = end_date slotu (kdy výroba končí)
+// Pro celou objednávku:
+//   - production_start_last  = start_date NEJPOZDĚJŠÍHO slotu ze všech položek
+//   - production_finish_last = end_date  NEJPOZDĚJŠÍHO slotu (= kdy je vše hotovo)
+// Pro plánování výroby se hodí position_start per položka + finish_last per order.
+async function enrichOrdersWithProductionDates(orders) {
+  if (!orders || !orders.length) return orders;
+
+  // Sesbírej všechna order_item_ids, jedním dotazem natáhni jejich sloty
+  const itemIds = [];
+  for (const o of orders) {
+    if (Array.isArray(o.items)) for (const it of o.items) itemIds.push(it.id);
+  }
+  if (!itemIds.length) return orders;
+
+  const assignments = await prisma.slotAssignment.findMany({
+    where: { order_item_id: { in: itemIds } },
+    include: { slot: { select: { start_date: true, end_date: true } } },
+  });
+
+  // Mapa: order_item_id → { start_date, end_date } — bereme NEJDŘÍVĚJŠÍ start
+  // a NEJPOZDĚJŠÍ end, kdyby jedna položka byla přiřazena do více slotů.
+  const byItem = {};
+  for (const a of assignments) {
+    if (!a.slot || !a.order_item_id) continue;
+    const cur = byItem[a.order_item_id] || { start: null, end: null };
+    const s = a.slot.start_date;
+    const e = a.slot.end_date;
+    if (s && (!cur.start || s < cur.start)) cur.start = s;
+    if (e && (!cur.end || e > cur.end)) cur.end = e;
+    byItem[a.order_item_id] = cur;
+  }
+
+  // Aplikuj na položky + agreguj na úroveň objednávky
+  return orders.map(o => {
+    let orderLatestStart = null;
+    let orderLatestEnd = null;
+    const items = Array.isArray(o.items) ? o.items.map(it => {
+      const m = byItem[it.id];
+      const ps = m?.start || null;
+      const pe = m?.end || null;
+      // Na úrovni objednávky: nejpozdější slot (nejpozdější end_date)
+      if (pe && (!orderLatestEnd || pe > orderLatestEnd)) {
+        orderLatestEnd = pe;
+        orderLatestStart = ps;
+      }
+      return { ...it, production_start: ps, production_finish: pe };
+    }) : [];
+    return {
+      ...o,
+      items,
+      production_start_last: orderLatestStart,   // start NEJPOZDĚJŠÍHO slotu
+      production_finish_last: orderLatestEnd,    // end NEJPOZDĚJŠÍHO slotu (= kdy je objednávka hotová)
+    };
+  });
+}
 
 // POST /api/wh/orders
 router.post('/orders', async (req, res, next) => {
@@ -221,7 +293,8 @@ router.post('/orders', async (req, res, next) => {
       status: rest.status || 'new',
       currency: rest.currency || 'CZK',
       note: rest.note || null,
-      expected_delivery: rest.expected_delivery || null,
+      // Prisma DateTime vyžaduje Date objekt, ne string
+      expected_delivery: parseDate(rest.expected_delivery),
       items_count: parseInt(items_count) || 0,
       total_amount: parseFloat(total_amount) || 0,
     };
@@ -264,7 +337,8 @@ router.get('/orders/:id', async (req, res, next) => {
       },
     });
     if (!order) return res.status(404).json({ error: 'Objednávka nenalezena' });
-    res.json(order);
+    const [enriched] = await enrichOrdersWithProductionDates([order]);
+    res.json(enriched);
   } catch (err) { next(err); }
 });
 
@@ -309,6 +383,7 @@ router.put('/orders/:id', async (req, res, next) => {
     if (allowed.company_id) allowed.company_id = parseInt(allowed.company_id);
     if (allowed.items_count !== undefined) allowed.items_count = parseInt(allowed.items_count) || 0;
     if (allowed.total_amount !== undefined) allowed.total_amount = parseFloat(allowed.total_amount) || 0;
+    if (allowed.expected_delivery !== undefined) allowed.expected_delivery = parseDate(allowed.expected_delivery);
 
     // Při zrušení objednávky uvolni sloty
     if (allowed.status === 'cancelled') {
@@ -378,7 +453,7 @@ router.get('/orders/:id/items', async (req, res, next) => {
 // POST /api/wh/orders/:id/items
 router.post('/orders/:id/items', async (req, res, next) => {
   try {
-    const { product_id, material_id, name, quantity, unit, unit_price, total_price, note } = req.body;
+    const { product_id, material_id, name, quantity, unit, unit_price, total_price, note, expected_delivery } = req.body;
     const item = await prisma.orderItem.create({
       data: {
         order_id: parseInt(req.params.id),
@@ -390,6 +465,7 @@ router.post('/orders/:id/items', async (req, res, next) => {
         unit_price: parseFloat(unit_price) || 0,
         total_price: parseFloat(total_price) || (parseFloat(quantity) || 1) * (parseFloat(unit_price) || 0),
         note: note || null,
+        expected_delivery: parseDate(expected_delivery),
       },
     });
     // Aktualizovat celkovou cenu objednávky
@@ -414,9 +490,21 @@ router.post('/orders/:id/items', async (req, res, next) => {
 // PUT /api/wh/orders/:orderId/items/:itemId
 router.put('/orders/:orderId/items/:itemId', async (req, res, next) => {
   try {
+    // Whitelist polí + konverze typů (nikdy nespreaduj req.body napřímo do data)
+    const allowed = {};
+    const stringFields = ['name', 'unit', 'note'];
+    const intFields = ['product_id', 'material_id'];
+    const floatFields = ['quantity', 'unit_price', 'total_price', 'delivered_quantity'];
+    const dateFields = ['expected_delivery'];
+
+    for (const f of stringFields) if (req.body[f] !== undefined) allowed[f] = req.body[f] || null;
+    for (const f of intFields) if (req.body[f] !== undefined) allowed[f] = req.body[f] ? parseInt(req.body[f]) : null;
+    for (const f of floatFields) if (req.body[f] !== undefined) allowed[f] = req.body[f] !== null && req.body[f] !== '' ? parseFloat(req.body[f]) : null;
+    for (const f of dateFields) if (req.body[f] !== undefined) allowed[f] = parseDate(req.body[f]);
+
     const item = await prisma.orderItem.update({
       where: { id: parseInt(req.params.itemId) },
-      data: req.body,
+      data: allowed,
     });
     res.json(item);
   } catch (err) {
@@ -480,6 +568,54 @@ router.delete('/orders/:orderId/items/:itemId', async (req, res, next) => {
   } catch (err) {
     next(err);
   }
+});
+
+// POST /api/wh/orders/:orderId/items/:itemId/duplicate — naklonuje položku
+// jako nový samostatný řádek včetně konfigurací (OrderItemConfig). Používá se
+// když chce uživatel další kus stejného výrobku se stejnou konfigurací —
+// místo zvýšení quantity (které by konfiguraci neodlišilo).
+router.post('/orders/:orderId/items/:itemId/duplicate', async (req, res, next) => {
+  try {
+    const orderId = parseInt(req.params.orderId);
+    const itemId = parseInt(req.params.itemId);
+    const source = await prisma.orderItem.findUnique({
+      where: { id: itemId },
+      include: { configs: true },
+    });
+    if (!source) return res.status(404).json({ error: 'Položka nenalezena' });
+    if (source.order_id !== orderId) return res.status(400).json({ error: 'Položka nepatří k této objednávce' });
+
+    const clone = await prisma.orderItem.create({
+      data: {
+        order_id: orderId,
+        product_id: source.product_id,
+        material_id: source.material_id,
+        name: source.name,
+        quantity: 1,
+        unit: source.unit,
+        unit_price: source.unit_price,
+        total_price: source.unit_price, // 1 × unit_price
+        note: source.note,
+        expected_delivery: source.expected_delivery,
+        configs: source.configs.length
+          ? { create: source.configs.map(c => ({ option_id: c.option_id, custom_value: c.custom_value })) }
+          : undefined,
+      },
+      include: { configs: { include: { option: { include: { group: true } } } } },
+    });
+
+    // Přepočítej celkovou cenu a počet položek
+    const agg = await prisma.orderItem.aggregate({
+      where: { order_id: orderId },
+      _sum: { total_price: true },
+      _count: true,
+    });
+    await prisma.order.update({
+      where: { id: orderId },
+      data: { total_amount: agg._sum.total_price || 0, items_count: agg._count },
+    });
+    res.status(201).json(clone);
+  } catch (err) { next(err); }
 });
 
 // DELETE /api/wh/order-items/:id — kompatibilní alias (frontend volá tuto cestu)

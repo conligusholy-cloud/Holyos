@@ -229,8 +229,17 @@
 </head>
 <body>
   <aside id="sidebar" class="sidebar"></aside>
-  <script src="js/sidebar.js"></script>
-  <script>renderSidebar('vyrobni-sloty');</script>
+  <script>
+    // Dynamické načtení sidebaru — stejný pattern jako ostatní moduly.
+    // Dříve zde bylo synchronní <script src="js/sidebar.js">, které způsobovalo
+    // na Safari občasný race condition při mountování floatujícího chat widgetu
+    // (user-chat-widget.js se doloadoval dřív než měl window.HolyOSChat chvíli
+    // před prvním kliknutím na chat ikonu).
+    var s = document.createElement('script');
+    s.src = '/js/sidebar.js?v=' + Date.now();
+    s.onload = function() { renderSidebar('vyrobni-sloty'); };
+    document.head.appendChild(s);
+  </script>
 
   <div class="main-wrapper">
     <div class="module-header">
