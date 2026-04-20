@@ -155,21 +155,14 @@ function renderSidebar(activeModule) {
   //   document.body.appendChild(aiScript);
   // }
 
-  // Load AI Chat Panel (Claude-powered)
-  if (!document.getElementById('ai-chat-panel-script')) {
-    var chatScript = document.createElement('script');
-    chatScript.id = 'ai-chat-panel-script';
-    chatScript.src = basePath + 'js/ai-chat-panel.js?v=' + Date.now();
-    document.body.appendChild(chatScript);
-  }
-
-  // Load messaging & notifications stack
-  var msgScripts = [
-    { id: 'holyos-events-script',    src: 'js/holyos-events.js' },
-    { id: 'notifications-bell-script', src: 'js/notifications-bell.js' },
-    { id: 'user-chat-widget-script', src: 'js/user-chat-widget.js' },
+  // Load HolyOS top bar (úkoly / zprávy / zvonek / AI)
+  // Nahrazuje staré floatující widgety (notifications-bell.js, user-chat-widget.js,
+  // ai-chat-panel.js) jednotným pruhem na horním kraji stránky.
+  var tbScripts = [
+    { id: 'holyos-events-script', src: 'js/holyos-events.js' },
+    { id: 'holyos-topbar-script', src: 'js/top-bar.js' },
   ];
-  msgScripts.forEach(function(s) {
+  tbScripts.forEach(function(s) {
     if (!document.getElementById(s.id)) {
       var tag = document.createElement('script');
       tag.id = s.id;
@@ -706,13 +699,6 @@ function logoutUser() {
   });
 }
 
-// Auto-init AI button when sidebar loads
-// Runs immediately if DOM is ready, or waits for it
-if (typeof document !== 'undefined') {
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', function() { initAiButton(); });
-  } else {
-    // DOM already loaded (script loaded dynamically after page load)
-    initAiButton();
-  }
-}
+// Starý floatující AI FAB ("AI Asistent — navrhnout úpravu") byl nahrazen
+// horní lištou v js/top-bar.js. Funkce initAiButton() zůstává jen proto, aby
+// si ji případně mohl volat starší kód — auto-init je vypnutý.

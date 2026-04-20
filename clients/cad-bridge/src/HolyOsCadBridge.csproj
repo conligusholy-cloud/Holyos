@@ -9,7 +9,6 @@
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <ApplicationIcon>cad-bridge.ico</ApplicationIcon>
 
     <!-- Single-file publish do jednoho .exe -->
     <PublishSingleFile>true</PublishSingleFile>
@@ -19,21 +18,17 @@
     <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
   </PropertyGroup>
 
-  <!-- Verze produktu - používá se i ve WiX installeru -->
   <PropertyGroup>
-    <Version>1.0.0</Version>
-    <AssemblyVersion>1.0.0.0</AssemblyVersion>
-    <FileVersion>1.0.0.0</FileVersion>
+    <Version>1.0.1</Version>
+    <AssemblyVersion>1.0.1.0</AssemblyVersion>
+    <FileVersion>1.0.1.0</FileVersion>
     <Product>HolyOS CAD Bridge</Product>
     <Company>Best Series s.r.o.</Company>
-    <Copyright>© 2026 Best Series s.r.o.</Copyright>
+    <Copyright>(c) 2026 Best Series s.r.o.</Copyright>
   </PropertyGroup>
 
-  <!-- Balíky -->
   <ItemGroup>
-    <!-- System.Text.Json a System.Net.Http.Json jsou built-in v .NET 8 -->
-    <!-- Pokud přejdeš na silně typové SolidWorks Interop, odkomentuj: -->
-    <!-- <PackageReference Include="SolidWorks.Interop" Version="31.1.0" /> -->
+    <!-- System.Text.Json a System.Net.Http.Json jsou built-in v .NET 8, nepotrebujeme nic dalsiho. -->
   </ItemGroup>
 
 </Project>
