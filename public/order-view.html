@@ -1549,6 +1549,13 @@
       // Footer
       html += '<div class="footer"><p>&copy; 2026 HolyOS \u2014 Manufacturing execution system | Best Series s.r.o.</p></div>';
 
+      // Zapamatuj si aktualni horizontalni scroll timeline (pokud uz existuje),
+      // aby se po re-renderu obnovil - jinak by po kazdem vyberu slotu kalendar
+      // sletel zpatky doleva.
+      var __prevSlotScrollLeft = null;
+      var __prevSlotEl = document.getElementById('slot-tl-scroll');
+      if (__prevSlotEl) __prevSlotScrollLeft = __prevSlotEl.scrollLeft;
+
       app.innerHTML = html;
 
       // Drag-to-scroll na timeline
@@ -1558,6 +1565,30 @@
         scrollEl.addEventListener('mousedown', function(e) { isDrag = true; startX = e.pageX - scrollEl.offsetLeft; scrollL = scrollEl.scrollLeft; scrollEl.style.cursor = 'grabbing'; });
         document.addEventListener('mouseup', function() { isDrag = false; if (scrollEl) scrollEl.style.cursor = 'grab'; });
         document.addEventListener('mousemove', function(e) { if (!isDrag) return; e.preventDefault(); scrollEl.scrollLeft = scrollL - (e.pageX - scrollEl.offsetLeft - startX); });
+
+        // Scroll pozice timeline:
+        //  - pri re-renderu (po vyberu slotu) obnov predchozi pozici,
+        //  - pri prvnim nacteni autoscroll na prvni relevantni slot
+        //    (vlastni prirazeni > prvni volny), at uzivatel nevidi jen
+        //    blokovanou minulost a hned ma aktivni sloty v zaberu.
+        if (__prevSlotScrollLeft !== null) {
+          scrollEl.scrollLeft = __prevSlotScrollLeft;
+        } else if (typeof slotsData !== 'undefined' && slotsData && slotsData.length) {
+          var __W = 110;
+          var __targetIdx = -1;
+          for (var __i = 0; __i < slotsData.length; __i++) {
+            if (slotsData[__i].my_assignment) { __targetIdx = __i; break; }
+          }
+          if (__targetIdx < 0) {
+            for (var __j = 0; __j < slotsData.length; __j++) {
+              if (slotsData[__j].is_free) { __targetIdx = __j; break; }
+            }
+          }
+          if (__targetIdx > 0) {
+            // Pul bunky paddingu zleva pro kontext.
+            scrollEl.scrollLeft = Math.max(0, Math.floor((__targetIdx - 0.5) * __W));
+          }
+        }
       }
     }
 
