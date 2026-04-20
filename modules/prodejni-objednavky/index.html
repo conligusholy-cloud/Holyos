@@ -21,6 +21,7 @@
     .tab-btn.active { color: #eab308; border-bottom-color: #eab308; }
     /* Tab Cenik nema stats-bar jako Objednavky, obsah by sedel prilis blizko tab-baru. */
     #tab-pricelist > .content { padding-top: 20px; }
+    @keyframes pulse-warn { 0%, 100% { opacity: 1; } 50% { opacity: 0.65; } }
     .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px 20px; min-width: 150px; flex: 1; }
     .stat-card .stat-value { font-size: 28px; font-weight: 700; color: #eab308; }
     .stat-card .stat-label { font-size: 12px; color: var(--text2); margin-top: 4px; }
@@ -1675,6 +1676,13 @@
     // ============================================================
     // CENIK (sales pricelist)
     // ============================================================
+    function updatePlProductWarning() {
+      var sel = document.getElementById('pl-product-select');
+      var warn = document.getElementById('pl-product-warning');
+      if (!sel || !warn) return;
+      warn.style.display = sel.value ? 'none' : 'flex';
+    }
+
     function switchTab(name) {
       ['orders', 'pricelist'].forEach(function(t) {
         var el = document.getElementById('tab-' + t);
@@ -1709,19 +1717,26 @@
       }
       var html = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr>' +
         '<th>Název (CZ)</th><th>Název (EN)</th>' +
-        '<th style="text-align:right">Cena CZK</th>' +
-        '<th style="text-align:right">Cena EUR</th>' +
+        '<th style="text-align:right" title="Maloobchodni">Cena CZK</th>' +
+        '<th style="text-align:right" title="Maloobchodni">Cena EUR</th>' +
+        '<th style="text-align:right" title="Kamionova / velkoobchodni">🚛 CZK</th>' +
+        '<th style="text-align:right" title="Kamionova / velkoobchodni">🚛 EUR</th>' +
         '<th>Výrobek</th><th>Stav</th><th>Akce</th></tr></thead><tbody>';
       for (var i = 0; i < list.length; i++) {
         var it = list[i];
         var statusCss = it.active ? 'background:rgba(16,185,129,0.12);color:#10b981' : 'background:rgba(156,163,175,0.12);color:#9ca3af';
         var statusLbl = it.active ? 'Aktivní' : 'Zrušeno';
-        html += '<tr onclick="openPricelistModal(' + it.id + ')">';
+        var rowStyle = it.product ? '' : 'background:rgba(239,68,68,0.08);';
+        html += '<tr style="' + rowStyle + '" onclick="openPricelistModal(' + it.id + ')">';
         html += '<td class="person-name">' + esc(it.name_cs) + '</td>';
         html += '<td>' + (it.name_en ? esc(it.name_en) : '<span style="color:var(--text2)">—</span>') + '</td>';
         html += '<td style="text-align:right;font-weight:600;">' + (it.price_czk != null ? parseFloat(it.price_czk).toLocaleString('cs-CZ') + ' Kč' : '<span style="color:var(--text2)">—</span>') + '</td>';
         html += '<td style="text-align:right;font-weight:600;">' + (it.price_eur != null ? parseFloat(it.price_eur).toLocaleString('cs-CZ') + ' €' : '<span style="color:var(--text2)">—</span>') + '</td>';
-        html += '<td>' + (it.product ? '<span style="color:#8b5cf6;font-weight:600">' + esc(it.product.code) + '</span> — ' + esc(it.product.name) : '<span style="color:var(--text2)">— bez napojení —</span>') + '</td>';
+        html += '<td style="text-align:right;font-weight:600;color:#0ea5e9;">' + (it.truck_price_czk != null ? parseFloat(it.truck_price_czk).toLocaleString('cs-CZ') + ' Kč' : '<span style="color:var(--text2)">—</span>') + '</td>';
+        html += '<td style="text-align:right;font-weight:600;color:#0ea5e9;">' + (it.truck_price_eur != null ? parseFloat(it.truck_price_eur).toLocaleString('cs-CZ') + ' €' : '<span style="color:var(--text2)">—</span>') + '</td>';
+        html += '<td>' + (it.product
+          ? '<span style="color:#8b5cf6;font-weight:600">' + esc(it.product.code) + '</span> — ' + esc(it.product.name)
+          : '<span style="display:inline-flex;align-items:center;gap:6px;background:rgba(239,68,68,0.15);color:#ef4444;border:1px solid rgba(239,68,68,0.4);padding:3px 10px;border-radius:8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;animation:pulse-warn 1.8s ease-in-out infinite;">⚠ Nenapojeno</span>') + '</td>';
         html += '<td><span class="badge" style="' + statusCss + '">' + statusLbl + '</span></td>';
         html += '<td><button class="btn btn-danger btn-sm" onclick="event.stopPropagation();deletePricelistItem(' + it.id + ')">🗑️</button></td>';
         html += '</tr>';
@@ -1754,9 +1769,15 @@
               '<div class="form-grid">' +
                 '<div class="form-group full"><label>Název (česky) *</label><input type="text" name="name_cs" required value="' + esc(item.name_cs || '') + '" placeholder="Např. Stůl dubový 120cm"></div>' +
                 '<div class="form-group full"><label>Název (anglicky)</label><input type="text" name="name_en" value="' + esc(item.name_en || '') + '" placeholder="e.g. Oak table 120cm"></div>' +
-                '<div class="form-group"><label>Cena v Kč (bez DPH)</label><input type="number" step="0.01" min="0" name="price_czk" value="' + (item.price_czk != null ? item.price_czk : '') + '" placeholder="0.00"></div>' +
-                '<div class="form-group"><label>Cena v EUR (bez DPH)</label><input type="number" step="0.01" min="0" name="price_eur" value="' + (item.price_eur != null ? item.price_eur : '') + '" placeholder="0.00"></div>' +
-                '<div class="form-group full"><label>Výrobek *</label><select name="product_id" required><option value="">— Vyberte výrobek —</option>' + prodOpts + '</select></div>' +
+                '<div class="form-group full" style="grid-column:1/-1;margin-top:4px;"><label style="display:block;font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px;">Maloobchodní cena (bez DPH)</label></div>' +
+                '<div class="form-group"><label>Cena v Kč</label><input type="number" step="0.01" min="0" name="price_czk" value="' + (item.price_czk != null ? item.price_czk : '') + '" placeholder="0.00"></div>' +
+                '<div class="form-group"><label>Cena v EUR</label><input type="number" step="0.01" min="0" name="price_eur" value="' + (item.price_eur != null ? item.price_eur : '') + '" placeholder="0.00"></div>' +
+                '<div class="form-group full" style="grid-column:1/-1;margin-top:4px;"><label style="display:block;font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px;">🚛 Kamionová (velkoobchodní) cena (bez DPH)</label></div>' +
+                '<div class="form-group"><label>Cena v Kč</label><input type="number" step="0.01" min="0" name="truck_price_czk" value="' + (item.truck_price_czk != null ? item.truck_price_czk : '') + '" placeholder="0.00"></div>' +
+                '<div class="form-group"><label>Cena v EUR</label><input type="number" step="0.01" min="0" name="truck_price_eur" value="' + (item.truck_price_eur != null ? item.truck_price_eur : '') + '" placeholder="0.00"></div>' +
+                '<div class="form-group full"><label>Výrobek (volitelné — propojí cenu s existujícím kusem ve výrobě)</label><select name="product_id" id="pl-product-select" onchange="updatePlProductWarning()"><option value="">— Bez napojení —</option>' + prodOpts + '</select>' +
+                  '<div id="pl-product-warning" style="display:' + (item.product_id ? 'none' : 'flex') + ';margin-top:8px;padding:10px 14px;background:rgba(239,68,68,0.12);border:1.5px solid #ef4444;border-radius:8px;color:#ef4444;font-size:13px;font-weight:600;align-items:center;gap:10px;animation:pulse-warn 1.8s ease-in-out infinite;">⚠️ <span>Položka není napojena na výrobek! Zvažte výběr výrobku pro propojení s výrobou.</span></div>' +
+                '</div>' +
                 '<div class="form-group full"><label>Poznámka</label><textarea name="note" rows="2" placeholder="Interní poznámka...">' + esc(item.note || '') + '</textarea></div>' +
                 '<div class="form-group full"><label style="display:flex;align-items:center;gap:8px;cursor:pointer;"><input type="checkbox" name="active"' + (item.active === false ? '' : ' checked') + '> <span>Aktivní položka (zobrazí se v nabídce při tvorbě objednávky)</span></label></div>' +
               '</div>' +
@@ -1772,14 +1793,14 @@
     async function savePricelistItem(e, id) {
       e.preventDefault();
       var form = new FormData(e.target);
-      var productIdRaw = form.get('product_id');
-      if (!productIdRaw) { alert('Prosim vyberte vyrobek — kazda polozka ceniku musi byt napojena na Product.'); return; }
       var data = {
         name_cs: form.get('name_cs'),
         name_en: form.get('name_en') || null,
         price_czk: form.get('price_czk') ? parseFloat(form.get('price_czk')) : null,
         price_eur: form.get('price_eur') ? parseFloat(form.get('price_eur')) : null,
-        product_id: parseInt(productIdRaw, 10),
+        truck_price_czk: form.get('truck_price_czk') ? parseFloat(form.get('truck_price_czk')) : null,
+        truck_price_eur: form.get('truck_price_eur') ? parseFloat(form.get('truck_price_eur')) : null,
+        product_id: form.get('product_id') ? parseInt(form.get('product_id'), 10) : null,
         note: form.get('note') || null,
         active: form.has('active'),
       };

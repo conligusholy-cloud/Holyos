@@ -855,9 +855,11 @@ model SalesPricelistItem {
   id         Int       @id @default(autoincrement())
   name_cs    String    @db.VarChar(255)               // název česky (povinný)
   name_en    String?   @db.VarChar(255)               // název anglicky
-  price_czk  Decimal?  @db.Decimal(12,2)              // Kč bez DPH
-  price_eur  Decimal?  @db.Decimal(12,2)              // EUR bez DPH
-  product_id Int?                                     // volitelné propojení na Product
+  price_czk        Decimal?  @db.Decimal(12,2)        // maloobchodní cena Kč bez DPH
+  price_eur        Decimal?  @db.Decimal(12,2)        // maloobchodní cena EUR bez DPH
+  truck_price_czk  Decimal?  @db.Decimal(12,2)        // kamionová (velkoobchodní) cena Kč bez DPH
+  truck_price_eur  Decimal?  @db.Decimal(12,2)        // kamionová cena EUR bez DPH
+  product_id Int?                                     // volitelné propojení na Product (když prázdné, UI upozorní červeně)
   product    Product?  @relation(fields: [product_id], references: [id], onDelete: SetNull)
   active     Boolean   @default(true)                 // aktivní / zrušená položka
   note       String?   @db.Text                       // interní poznámka
