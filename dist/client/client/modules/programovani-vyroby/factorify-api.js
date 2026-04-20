@@ -465,11 +465,11 @@ export function saveWsConfig() {
 export function wsConfigApplyDefaults() {
     const defaultWInput = document.getElementById('ws-cfg-default-w');
     const defaultHInput = document.getElementById('ws-cfg-default-h');
-    if (\!defaultWInput || \!defaultHInput)
+    if (!defaultWInput || !defaultHInput)
         return;
     const w = parseFloat(defaultWInput.value);
     const h = parseFloat(defaultHInput.value);
-    if (\!isNaN(w) && \!isNaN(h) && w > 0 && h > 0) {
+    if (!isNaN(w) && !isNaN(h) && w > 0 && h > 0) {
         applyDefaultSize(w, h);
     }
 }
