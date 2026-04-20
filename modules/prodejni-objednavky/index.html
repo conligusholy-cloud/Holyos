@@ -15,6 +15,10 @@
     .module-header p { font-size: 13px; color: rgba(255,255,255,0.7); margin-top: 2px; }
 
     .stats-bar { display: flex; gap: 16px; padding: 20px 24px; flex-wrap: wrap; }
+    .tab-bar { display: flex; gap: 0; padding: 0 24px; border-bottom: 1px solid var(--border); background: var(--surface); }
+    .tab-btn { background: transparent; border: none; color: var(--text2); padding: 14px 22px; font-size: 14px; font-weight: 600; cursor: pointer; border-bottom: 3px solid transparent; transition: all 0.15s; letter-spacing: 0.3px; }
+    .tab-btn:hover { color: var(--text); }
+    .tab-btn.active { color: #eab308; border-bottom-color: #eab308; }
     .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px 20px; min-width: 150px; flex: 1; }
     .stat-card .stat-value { font-size: 28px; font-weight: 700; color: #eab308; }
     .stat-card .stat-label { font-size: 12px; color: var(--text2); margin-top: 4px; }
@@ -93,24 +97,50 @@
       </div>
     </div>
 
-    <div class="stats-bar" id="stats-bar"></div>
+    <!-- Tabs: Objednavky | Cenik -->
+    <div class="tab-bar">
+      <button type="button" class="tab-btn active" data-tab="orders" onclick="switchTab('orders')">📋 Objednávky</button>
+      <button type="button" class="tab-btn" data-tab="pricelist" onclick="switchTab('pricelist')">💰 Ceník</button>
+    </div>
 
-    <div class="content">
-      <div class="toolbar">
-        <input type="text" id="order-search" placeholder="Hledat objednávku..." onkeyup="loadOrders()">
-        <select id="order-status-filter" onchange="loadOrders()">
-          <option value="">Všechny stavy</option>
-          <option value="new">Nový</option>
-          <option value="quoted">Poptáno</option>
-          <option value="ordered">Objednáno</option>
-          <option value="confirmed">Potvrzeno</option>
-          <option value="delivered">Doručeno</option>
-          <option value="cancelled">Zrušeno</option>
-        </select>
-        <div style="flex:1"></div>
-        <button class="btn btn-primary" onclick="openOrderModal()">+ Nová prodejní objednávka</button>
+    <!-- TAB: Objednavky -->
+    <div id="tab-orders">
+      <div class="stats-bar" id="stats-bar"></div>
+
+      <div class="content">
+        <div class="toolbar">
+          <input type="text" id="order-search" placeholder="Hledat objednávku..." onkeyup="loadOrders()">
+          <select id="order-status-filter" onchange="loadOrders()">
+            <option value="">Všechny stavy</option>
+            <option value="new">Nový</option>
+            <option value="quoted">Poptáno</option>
+            <option value="ordered">Objednáno</option>
+            <option value="confirmed">Potvrzeno</option>
+            <option value="delivered">Doručeno</option>
+            <option value="cancelled">Zrušeno</option>
+          </select>
+          <div style="flex:1"></div>
+          <button class="btn btn-primary" onclick="openOrderModal()">+ Nová prodejní objednávka</button>
+        </div>
+        <div id="orders-table"></div>
       </div>
-      <div id="orders-table"></div>
+    </div>
+
+    <!-- TAB: Cenik -->
+    <div id="tab-pricelist" style="display:none;">
+      <div class="content">
+        <div class="toolbar">
+          <input type="text" id="pricelist-search" placeholder="Hledat položku (CZ / EN)..." onkeyup="loadPricelist()">
+          <select id="pricelist-filter" onchange="loadPricelist()">
+            <option value="">Všechny</option>
+            <option value="active" selected>Aktivní</option>
+            <option value="inactive">Zrušené</option>
+          </select>
+          <div style="flex:1"></div>
+          <button class="btn btn-primary" onclick="openPricelistModal()">+ Nová položka</button>
+        </div>
+        <div id="pricelist-table"></div>
+      </div>
     </div>
   </div>
 
@@ -1639,6 +1669,137 @@
     }
 
     function closeModal() { document.getElementById('modal-root').innerHTML = ''; _pendingItems = []; }
+
+    // ============================================================
+    // CENIK (sales pricelist)
+    // ============================================================
+    function switchTab(name) {
+      ['orders', 'pricelist'].forEach(function(t) {
+        var el = document.getElementById('tab-' + t);
+        if (el) el.style.display = (t === name) ? '' : 'none';
+        var btn = document.querySelector('.tab-btn[data-tab="' + t + '"]');
+        if (btn) btn.classList.toggle('active', t === name);
+      });
+      if (name === 'pricelist') loadPricelist();
+    }
+
+    async function loadPricelist() {
+      var search = document.getElementById('pricelist-search') ? document.getElementById('pricelist-search').value : '';
+      var filter = document.getElementById('pricelist-filter') ? document.getElementById('pricelist-filter').value : '';
+      var url = '/api/wh/pricelist';
+      var params = [];
+      if (search) params.push('search=' + encodeURIComponent(search));
+      if (filter === 'active') params.push('active=true');
+      if (filter === 'inactive') params.push('active=false');
+      if (params.length) url += '?' + params.join('&');
+      try {
+        var res = await fetch(url);
+        var items = await res.json();
+        renderPricelist(items);
+      } catch(e) { console.error(e); }
+    }
+
+    function renderPricelist(list) {
+      var el = document.getElementById('pricelist-table');
+      if (!list.length) {
+        el.innerHTML = '<div class="empty-state"><div class="empty-icon">💰</div><h3>Prázdný ceník</h3><p>Vytvořte první položku prodejního ceníku.</p></div>';
+        return;
+      }
+      var html = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr>' +
+        '<th>Název (CZ)</th><th>Název (EN)</th>' +
+        '<th style="text-align:right">Cena CZK</th>' +
+        '<th style="text-align:right">Cena EUR</th>' +
+        '<th>Výrobek</th><th>Stav</th><th>Akce</th></tr></thead><tbody>';
+      for (var i = 0; i < list.length; i++) {
+        var it = list[i];
+        var statusCss = it.active ? 'background:rgba(16,185,129,0.12);color:#10b981' : 'background:rgba(156,163,175,0.12);color:#9ca3af';
+        var statusLbl = it.active ? 'Aktivní' : 'Zrušeno';
+        html += '<tr onclick="openPricelistModal(' + it.id + ')">';
+        html += '<td class="person-name">' + esc(it.name_cs) + '</td>';
+        html += '<td>' + (it.name_en ? esc(it.name_en) : '<span style="color:var(--text2)">—</span>') + '</td>';
+        html += '<td style="text-align:right;font-weight:600;">' + (it.price_czk != null ? parseFloat(it.price_czk).toLocaleString('cs-CZ') + ' Kč' : '<span style="color:var(--text2)">—</span>') + '</td>';
+        html += '<td style="text-align:right;font-weight:600;">' + (it.price_eur != null ? parseFloat(it.price_eur).toLocaleString('cs-CZ') + ' €' : '<span style="color:var(--text2)">—</span>') + '</td>';
+        html += '<td>' + (it.product ? '<span style="color:#8b5cf6;font-weight:600">' + esc(it.product.code) + '</span> — ' + esc(it.product.name) : '<span style="color:var(--text2)">— bez napojení —</span>') + '</td>';
+        html += '<td><span class="badge" style="' + statusCss + '">' + statusLbl + '</span></td>';
+        html += '<td><button class="btn btn-danger btn-sm" onclick="event.stopPropagation();deletePricelistItem(' + it.id + ')">🗑️</button></td>';
+        html += '</tr>';
+      }
+      html += '</tbody></table></div>';
+      el.innerHTML = html;
+    }
+
+    async function openPricelistModal(id) {
+      var item = {};
+      if (id) {
+        try { var r = await fetch('/api/wh/pricelist/' + id); item = await r.json(); } catch(e) {}
+      }
+      if (products.length === 0) {
+        try {
+          var pr = await fetch('/api/production/products?type=product');
+          var pd = await pr.json();
+          products = Array.isArray(pd) ? pd : [];
+        } catch(e) {}
+      }
+      var prodOpts = products.map(function(p) {
+        return '<option value="' + p.id + '"' + (item.product_id === p.id ? ' selected' : '') + '>' + esc(p.code) + ' — ' + esc(p.name) + '</option>';
+      }).join('');
+
+      document.getElementById('modal-root').innerHTML =
+        '<div class="modal-overlay" onclick="if(event.target===this)closeModal()">' +
+          '<div class="modal" style="width:640px;max-width:95vw;">' +
+            '<h2>' + (id ? '✏️ Upravit položku ceníku' : '➕ Nová položka ceníku') + '</h2>' +
+            '<form onsubmit="savePricelistItem(event, ' + (id || 'null') + ')">' +
+              '<div class="form-grid">' +
+                '<div class="form-group full"><label>Název (česky) *</label><input type="text" name="name_cs" required value="' + esc(item.name_cs || '') + '" placeholder="Např. Stůl dubový 120cm"></div>' +
+                '<div class="form-group full"><label>Název (anglicky)</label><input type="text" name="name_en" value="' + esc(item.name_en || '') + '" placeholder="e.g. Oak table 120cm"></div>' +
+                '<div class="form-group"><label>Cena v Kč (bez DPH)</label><input type="number" step="0.01" min="0" name="price_czk" value="' + (item.price_czk != null ? item.price_czk : '') + '" placeholder="0.00"></div>' +
+                '<div class="form-group"><label>Cena v EUR (bez DPH)</label><input type="number" step="0.01" min="0" name="price_eur" value="' + (item.price_eur != null ? item.price_eur : '') + '" placeholder="0.00"></div>' +
+                '<div class="form-group full"><label>Výrobek (volitelné — propojí cenu s existujícím kusem ve výrobě)</label><select name="product_id"><option value="">— Bez napojení —</option>' + prodOpts + '</select></div>' +
+                '<div class="form-group full"><label>Poznámka</label><textarea name="note" rows="2" placeholder="Interní poznámka...">' + esc(item.note || '') + '</textarea></div>' +
+                '<div class="form-group full"><label style="display:flex;align-items:center;gap:8px;cursor:pointer;"><input type="checkbox" name="active"' + (item.active === false ? '' : ' checked') + '> <span>Aktivní položka (zobrazí se v nabídce při tvorbě objednávky)</span></label></div>' +
+              '</div>' +
+              '<div class="modal-actions">' +
+                '<button type="button" class="btn btn-secondary" onclick="closeModal()">Zrušit</button>' +
+                '<button type="submit" class="btn btn-primary">' + (id ? 'Uložit' : 'Vytvořit') + '</button>' +
+              '</div>' +
+            '</form>' +
+          '</div>' +
+        '</div>';
+    }
+
+    async function savePricelistItem(e, id) {
+      e.preventDefault();
+      var form = new FormData(e.target);
+      var data = {
+        name_cs: form.get('name_cs'),
+        name_en: form.get('name_en') || null,
+        price_czk: form.get('price_czk') ? parseFloat(form.get('price_czk')) : null,
+        price_eur: form.get('price_eur') ? parseFloat(form.get('price_eur')) : null,
+        product_id: form.get('product_id') ? parseInt(form.get('product_id'), 10) : null,
+        note: form.get('note') || null,
+        active: form.has('active'),
+      };
+      try {
+        var url = id ? ('/api/wh/pricelist/' + id) : '/api/wh/pricelist';
+        var method = id ? 'PUT' : 'POST';
+        var res = await fetch(url, { method: method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+        if (!res.ok) {
+          var err = await res.json().catch(function() { return {}; });
+          throw new Error(err.error || ('Chyba při ukládání (' + res.status + ')'));
+        }
+        closeModal();
+        loadPricelist();
+      } catch(e) { alert('Chyba: ' + e.message); }
+    }
+
+    async function deletePricelistItem(id) {
+      if (!confirm('Opravdu smazat tuto položku ceníku?')) return;
+      try {
+        var res = await fetch('/api/wh/pricelist/' + id, { method: 'DELETE' });
+        if (!res.ok) { alert('Chyba při mazání'); return; }
+        loadPricelist();
+      } catch(e) { alert('Chyba: ' + e.message); }
+    }
 
     // ============================================================
     // INIT
