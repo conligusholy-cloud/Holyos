@@ -36,6 +36,15 @@
       display: none; overflow: hidden;
     }
     .uchat-panel.open { display: grid; grid-template-columns: 240px 1fr; }
+    /* Drag & drop stav — fialový obrys přes celý panel */
+    .uchat-panel.dragging { border-color: #a78bfa; box-shadow: 0 0 0 3px rgba(168,139,250,0.35), 0 12px 40px rgba(0,0,0,0.45); }
+    .uchat-drop-hint {
+      position: absolute; inset: 0; pointer-events: none; z-index: 10;
+      display: none; align-items: center; justify-content: center;
+      background: rgba(108,92,231,0.2); border: 2px dashed #a78bfa; border-radius: 14px;
+      color: #a78bfa; font-weight: 600; font-size: 15px;
+    }
+    .uchat-panel.dragging .uchat-drop-hint { display: flex; }
 
     .uchat-sidebar { border-right: 1px solid var(--border, rgba(255,255,255,0.08)); display: flex; flex-direction: column; min-width: 0; }
     .uchat-sidebar header { padding: 10px 12px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border, rgba(255,255,255,0.08)); }
@@ -48,6 +57,29 @@
     .uchat-avatar { width: 32px; height: 32px; border-radius: 50%; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: #fff; background-size: cover; background-position: center; overflow: hidden; }
     .uchat-avatar.sm { width: 24px; height: 24px; font-size: 9px; }
     .uchat-avatar.lg { width: 40px; height: 40px; font-size: 13px; }
+    /* Wrapper s online tečkou */
+    .uchat-avatar-wrap { position: relative; flex-shrink: 0; line-height: 0; }
+    .uchat-avatar-wrap .online-dot {
+      position: absolute; right: -1px; bottom: -1px;
+      width: 10px; height: 10px; border-radius: 50%;
+      background: #10b981; border: 2px solid var(--bg, #12121c);
+      display: none;
+    }
+    .uchat-avatar-wrap.sm .online-dot { width: 8px; height: 8px; border-width: 1.5px; }
+    .uchat-avatar-wrap.lg .online-dot { width: 12px; height: 12px; }
+    .uchat-avatar-wrap.online .online-dot { display: block; }
+
+    /* Read receipts — fajfky */
+    .uchat-msg .ticks { display: inline-block; margin-left: 4px; font-size: 11px; letter-spacing: -2px; opacity: 0.9; }
+    .uchat-msg .ticks.read { color: #5eead4; }     /* ✓✓ tyrkysová */
+    .uchat-msg .ticks.sent { color: rgba(255,255,255,0.75); }
+    .uchat-msg.other .ticks { display: none; }
+    .uchat-msg.ai .ticks, .uchat-msg.system .ticks { display: none; }
+
+    /* Header presence text */
+    .uchat-main .presence { font-size: 10px; font-weight: 500; margin-left: 2px; }
+    .uchat-main .presence.online { color: #10b981; }
+    .uchat-main .presence.offline { color: var(--text2, #a3a3b2); }
 
     .uchat-channel { padding: 10px 12px; cursor: pointer; border-bottom: 1px solid rgba(255,255,255,0.04); transition: background 0.15s; display: flex; gap: 10px; align-items: center; }
     .uchat-channel:hover { background: rgba(108,92,231,0.06); }
@@ -61,13 +93,11 @@
     .uchat-loader::before { content: ''; display: inline-block; width: 20px; height: 20px; border: 2px solid rgba(108,92,231,0.3); border-top-color: #a78bfa; border-radius: 50%; animation: uchat-spin 0.8s linear infinite; margin-right: 8px; vertical-align: middle; }
     @keyframes uchat-spin { to { transform: rotate(360deg); } }
 
-    .uchat-main { display: flex; flex-direction: column; min-width: 0; }
+    .uchat-main { display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; }
     .uchat-main header { padding: 10px 14px; border-bottom: 1px solid var(--border, rgba(255,255,255,0.08)); display: flex; justify-content: space-between; align-items: center; gap: 10px; }
     .uchat-main h3 { margin: 0; font-size: 13px; font-weight: 600; color: var(--text, #fff); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .uchat-main .close-btn { background: none; border: none; color: var(--text2, #a3a3b2); cursor: pointer; font-size: 18px; padding: 2px 6px; border-radius: 4px; }
     .uchat-main .close-btn:hover { background: rgba(255,255,255,0.08); color: var(--text, #fff); }
-    .uchat-main .ai-btn { background: rgba(168,139,250,0.15); color: #a78bfa; border: 1px solid rgba(168,139,250,0.3); padding: 4px 10px; border-radius: 6px; font-size: 11px; cursor: pointer; }
-    .uchat-main .ai-btn:hover { background: rgba(168,139,250,0.3); }
 
     .uchat-messages { flex: 1; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 8px; }
     .uchat-msg { max-width: 75%; padding: 8px 12px; border-radius: 12px; font-size: 13px; line-height: 1.4; word-wrap: break-word; }
@@ -80,11 +110,48 @@
     .uchat-msg .author { font-size: 10px; font-weight: 600; margin-bottom: 2px; opacity: 0.85; }
     .uchat-msg .ts { font-size: 9px; margin-top: 3px; opacity: 0.55; }
 
-    .uchat-compose { padding: 10px 12px; border-top: 1px solid var(--border, rgba(255,255,255,0.08)); display: flex; gap: 8px; }
+    .uchat-compose { padding: 10px 12px; border-top: 1px solid var(--border, rgba(255,255,255,0.08)); display: flex; gap: 8px; align-items: flex-end; flex-shrink: 0; }
     .uchat-compose textarea { flex: 1; min-height: 36px; max-height: 120px; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border, rgba(255,255,255,0.1)); background: var(--surface, #1e1e2f); color: var(--text, #fff); font-size: 13px; resize: none; font-family: inherit; }
     .uchat-compose textarea:focus { outline: 1px solid #6c5ce7; }
-    .uchat-compose button { background: linear-gradient(135deg, #6c5ce7, #3b82f6); color: #fff; border: none; padding: 0 14px; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 600; }
-    .uchat-compose button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .uchat-compose .send-btn { background: linear-gradient(135deg, #6c5ce7, #3b82f6); color: #fff; border: none; padding: 0 14px; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 600; height: 38px; }
+    .uchat-compose .send-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .uchat-compose .attach-btn, .uchat-compose .emoji-btn { background: transparent; color: var(--text2, #a3a3b2); border: 1px solid var(--border, rgba(255,255,255,0.1)); padding: 0 10px; border-radius: 8px; cursor: pointer; font-size: 15px; height: 38px; transition: background 0.15s, color 0.15s; }
+    .uchat-compose .attach-btn:hover, .uchat-compose .emoji-btn:hover { background: rgba(108,92,231,0.1); color: #a78bfa; border-color: #6c5ce7; }
+    .uchat-compose .emoji-btn.active { background: rgba(108,92,231,0.15); color: #a78bfa; border-color: #6c5ce7; }
+
+    /* Emoji picker popover — vystřelí nad composer */
+    .uchat-emoji-popover {
+      position: absolute; bottom: 60px; left: 50%; transform: translateX(-50%);
+      width: 340px; max-width: calc(100% - 20px); max-height: 320px;
+      background: var(--bg, #12121c); border: 1px solid var(--border, rgba(255,255,255,0.12));
+      border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+      z-index: 20; display: flex; flex-direction: column; overflow: hidden;
+    }
+    .uchat-emoji-tabs { display: flex; border-bottom: 1px solid var(--border, rgba(255,255,255,0.08)); flex-shrink: 0; }
+    .uchat-emoji-tab { flex: 1; padding: 8px 4px; background: transparent; border: none; cursor: pointer; font-size: 16px; color: var(--text2, #a3a3b2); border-bottom: 2px solid transparent; }
+    .uchat-emoji-tab:hover { color: var(--text, #fff); background: rgba(108,92,231,0.05); }
+    .uchat-emoji-tab.active { color: #a78bfa; border-bottom-color: #a78bfa; }
+    .uchat-emoji-grid { flex: 1; overflow-y: auto; padding: 8px; display: grid; grid-template-columns: repeat(8, 1fr); gap: 2px; }
+    .uchat-emoji-btn { background: transparent; border: none; cursor: pointer; font-size: 20px; padding: 4px; border-radius: 4px; line-height: 1; transition: background 0.1s; }
+    .uchat-emoji-btn:hover { background: rgba(108,92,231,0.15); }
+
+    /* Pending přílohy (preview před odesláním) */
+    .uchat-pending { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 12px 0; flex-shrink: 0; }
+    .uchat-pending:empty { display: none; }
+    .uchat-pending .p-item { position: relative; background: var(--surface, #1e1e2f); border: 1px solid var(--border, rgba(255,255,255,0.1)); border-radius: 6px; padding: 4px 26px 4px 8px; font-size: 11px; color: var(--text, #fff); display: flex; align-items: center; gap: 6px; max-width: 180px; }
+    .uchat-pending .p-item.image { padding: 0 20px 0 0; border: 1px solid rgba(108,92,231,0.35); }
+    .uchat-pending .p-item.image img { width: 56px; height: 56px; object-fit: cover; border-radius: 5px 0 0 5px; display: block; }
+    .uchat-pending .p-item .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .uchat-pending .p-item .x { position: absolute; top: 2px; right: 2px; width: 18px; height: 18px; border-radius: 50%; background: rgba(0,0,0,0.5); color: #fff; border: none; font-size: 11px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+    .uchat-pending .p-item .x:hover { background: #ef4444; }
+    .uchat-pending .p-item.uploading { opacity: 0.6; }
+    .uchat-pending .p-item.uploading::after { content: '⏳'; margin-left: 4px; }
+
+    /* Přílohy ve zprávách */
+    .uchat-msg .atts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+    .uchat-msg .atts .att-img { display: block; max-width: 220px; max-height: 220px; border-radius: 8px; cursor: zoom-in; background: rgba(0,0,0,0.2); }
+    .uchat-msg .atts .att-file { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; background: rgba(255,255,255,0.08); border-radius: 8px; color: inherit; text-decoration: none; font-size: 12px; border: 1px solid rgba(255,255,255,0.12); }
+    .uchat-msg .atts .att-file:hover { background: rgba(255,255,255,0.15); }
 
     .uchat-empty-state { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 30px; color: var(--text2, #a3a3b2); }
     .uchat-empty-state .icon { font-size: 48px; margin-bottom: 10px; }
@@ -272,10 +339,12 @@
     const photo = user.person?.photo_url;
     const seed = user.username || user.display_name || 'x';
     const color = avatarColor(seed);
-    if (photo) {
-      return `<span class="${cls}" style="background-image:url('${String(photo).replace(/'/g, "\\'")}');background-color:${color};"></span>`;
-    }
-    return `<span class="${cls}" style="background:${color};">${escapeHtml(initials(user))}</span>`;
+    const online = user.id && isUserOnline(user.id);
+    const wrapCls = `uchat-avatar-wrap ${size || ''}${online ? ' online' : ''}`;
+    const inner = photo
+      ? `<span class="${cls}" style="background-image:url('${String(photo).replace(/'/g, "\\'")}');background-color:${color};"></span>`
+      : `<span class="${cls}" style="background:${color};">${escapeHtml(initials(user))}</span>`;
+    return `<span class="${wrapCls}" data-user-id="${user.id || ''}">${inner}<span class="online-dot"></span></span>`;
   }
 
   // Pro direct kanál vrátí "toho druhého" user objektu
@@ -301,6 +370,155 @@
       throw new Error(err.error || ('HTTP ' + res.status));
     }
     return res.json();
+  }
+
+  // ─── Přílohy ─────────────────────────────────────────────────────────────
+  // Pending = ještě neodeslané soubory přichystané v composeru. Každý má
+  // lokální ID pro UI, status (uploading/ready/failed) a po uploadu metadata.
+  let pendingAttachments = [];   // [{ localId, name, size, mime, kind, previewUrl, url, status }]
+  const MAX_ATTACHMENT_SIZE = 15 * 1024 * 1024; // 15 MB
+
+  function fileToBase64(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const dataUrl = String(reader.result || '');
+        const comma = dataUrl.indexOf(',');
+        resolve(comma >= 0 ? dataUrl.slice(comma + 1) : dataUrl);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function uploadPendingFile(item, file) {
+    try {
+      const b64 = await fileToBase64(file);
+      const res = await api('/api/storage/upload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          file_data: b64,
+          file_name: file.name || ('paste-' + Date.now()),
+          file_type: file.type || null,
+          folder: 'chat',
+        }),
+      });
+      item.url = res.url;
+      item.status = 'ready';
+    } catch (e) {
+      console.warn('[UChat] upload failed', e);
+      item.status = 'failed';
+      item._error = e.message;
+    }
+    renderPendingAttachments();
+  }
+
+  function addFilesToCompose(fileList) {
+    const files = Array.from(fileList || []);
+    if (!files.length) return;
+    files.forEach(f => {
+      if (f.size > MAX_ATTACHMENT_SIZE) {
+        alert('Soubor "' + f.name + '" je příliš velký (max 15 MB).');
+        return;
+      }
+      const isImg = (f.type || '').startsWith('image/');
+      const item = {
+        localId: 'att_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8),
+        name: f.name || (isImg ? 'obrázek.png' : 'soubor'),
+        size: f.size,
+        mime: f.type || '',
+        kind: isImg ? 'image' : 'file',
+        previewUrl: isImg ? URL.createObjectURL(f) : null,
+        status: 'uploading',
+      };
+      pendingAttachments.push(item);
+      uploadPendingFile(item, f);
+    });
+    renderPendingAttachments();
+  }
+
+  function removePendingAttachment(localId) {
+    const idx = pendingAttachments.findIndex(x => x.localId === localId);
+    if (idx < 0) return;
+    const it = pendingAttachments[idx];
+    if (it.previewUrl) URL.revokeObjectURL(it.previewUrl);
+    pendingAttachments.splice(idx, 1);
+    renderPendingAttachments();
+  }
+
+  function renderPendingAttachments() {
+    const box = document.querySelector('.uchat-pending');
+    if (!box) return;
+    if (!pendingAttachments.length) { box.innerHTML = ''; return; }
+    box.innerHTML = pendingAttachments.map(a => {
+      const cls = 'p-item ' + a.kind + (a.status === 'uploading' ? ' uploading' : '') + (a.status === 'failed' ? ' failed' : '');
+      if (a.kind === 'image') {
+        return `
+          <div class="${cls}" data-id="${escapeHtml(a.localId)}">
+            <img src="${escapeHtml(a.previewUrl || a.url || '')}" alt="">
+            <button class="x" title="Odebrat">✕</button>
+          </div>`;
+      }
+      return `
+        <div class="${cls}" data-id="${escapeHtml(a.localId)}" title="${escapeHtml(a.name)}">
+          📎 <span class="name">${escapeHtml(a.name)}</span>
+          <button class="x" title="Odebrat">✕</button>
+        </div>`;
+    }).join('');
+    box.querySelectorAll('.p-item').forEach(el => {
+      const id = el.dataset.id;
+      el.querySelector('.x')?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        removePendingAttachment(id);
+      });
+    });
+  }
+
+  // ─── Presence (kdo je online) ─────────────────────────────────────────────
+  const onlineUsers = new Set();   // Set<userId>
+  let presenceLoaded = false;
+
+  function isUserOnline(userId) {
+    if (!userId) return false;
+    return onlineUsers.has(Number(userId));
+  }
+
+  async function loadPresence() {
+    try {
+      const data = await api('/api/notifications/presence');
+      onlineUsers.clear();
+      (data?.online || []).forEach(id => onlineUsers.add(Number(id)));
+      presenceLoaded = true;
+      refreshPresenceInDom();
+    } catch (e) {
+      console.warn('[UChat] presence load', e);
+    }
+  }
+
+  // Tiché update: nemusíme všechno re-renderovat, stačí toggle třídy
+  // .uchat-avatar-wrap.online podle atributu data-user-id
+  function refreshPresenceInDom() {
+    document.querySelectorAll('.uchat-avatar-wrap[data-user-id]').forEach(el => {
+      const uid = Number(el.getAttribute('data-user-id'));
+      if (!uid) return;
+      el.classList.toggle('online', onlineUsers.has(uid));
+    });
+    updateHeaderPresence();
+  }
+
+  function updateHeaderPresence() {
+    const header = document.querySelector('.uchat-main header .presence');
+    if (!header) return;
+    const other = channelOtherUser(activeChannel);
+    if (!other || !activeChannel || activeChannel.type !== 'direct') {
+      header.textContent = '';
+      header.className = 'presence';
+      return;
+    }
+    const isOn = isUserOnline(other.id);
+    header.textContent = isOn ? 'online' : 'offline';
+    header.className = 'presence ' + (isOn ? 'online' : 'offline');
   }
 
   async function loadChannelsSafe() {
@@ -350,8 +568,9 @@
     }
   }
 
-  async function sendMessage(text, useAi = false) {
-    if (!activeChannelId || !text.trim()) return;
+  async function sendMessage(text, useAi = false, atts = []) {
+    if (!activeChannelId) return;
+    if (!text.trim() && (!atts || atts.length === 0)) return;
     // Optimistic UI — uka\u017e zpr\u00e1vu hned, bez \u010dek\u00e1n\u00ed na server
     const tempId = 'temp_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
     const myIdVal = meId();
@@ -361,6 +580,7 @@
       sender_id: myIdVal,
       sender_type: 'user',
       content: text,
+      attachments: atts.length ? atts.map(a => ({ kind: a.kind, url: a.url, name: a.name, size: a.size, mime: a.mime })) : null,
       created_at: new Date().toISOString(),
       sender: { id: myIdVal, display_name: 'Vy', username: 'me' },
       _pending: true,
@@ -372,7 +592,11 @@
       const real = await api('/api/messages/channels/' + activeChannelId + '/messages', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: text, ai: useAi }),
+        body: JSON.stringify({
+          content: text,
+          ai: useAi,
+          attachments: atts.length ? atts.map(a => ({ kind: a.kind, url: a.url, name: a.name, size: a.size, mime: a.mime })) : undefined,
+        }),
       });
       // Nahra\u010f optimistickou zpr\u00e1vu skute\u010dnou (nebo ji odstran\u00ed, pokud SSE u\u017e dorazil)
       const idx = messages.findIndex(m => m.id === tempId);
@@ -389,6 +613,148 @@
       if (idx >= 0) { messages[idx]._failed = true; messages[idx]._pending = false; renderMessages(); }
       alert('Chyba: ' + e.message);
     }
+  }
+
+  // ─── Emoji picker ─────────────────────────────────────────────────────────
+  // Malá kurátorská sada běžných emoji rozdělená do 6 kategorií. Žádná externí
+  // knihovna — jen unicode znaky. Vybírá se podle poslední použité kategorie
+  // (stored v localStorage) + posledně použité emoji (quick access — TODO).
+  const EMOJI_CATEGORIES = [
+    {
+      key: 'smileys', icon: '😀', title: 'Smajlíci',
+      items: [
+        '😀','😃','😄','😁','😆','😅','🤣','😂','🙂','🙃','😉','😊','😇','🥰','😍','🤩',
+        '😘','😋','😛','😜','🤪','😝','🤑','🤗','🤭','🤫','🤔','🤐','🤨','😐','😑','😶',
+        '😏','😒','🙄','😬','🤥','😌','😔','😪','🤤','😴','😷','🤒','🤕','🤢','🤮','🤧',
+        '🥵','🥶','🥴','😵','🤯','🤠','🥳','😎','🤓','🧐','😕','😟','🙁','☹️','😮','😯',
+        '😲','😳','🥺','😦','😧','😨','😰','😥','😢','😭','😱','😖','😣','😞','😓','😩',
+        '😫','🥱','😤','😡','😠','🤬','💀','👻','👽','🤖','🎃',
+      ],
+    },
+    {
+      key: 'gestures', icon: '👋', title: 'Gesta',
+      items: [
+        '👍','👎','👌','🤌','🤏','✌️','🤞','🤟','🤘','🤙','👈','👉','👆','👇','☝️','✋',
+        '🤚','🖐️','🖖','👋','🤝','🙏','✍️','💪','🦾','🦵','🦶','👂','👃','🧠','👀','👁️',
+        '👄','👶','🧒','👦','👧','🧑','👨','👩','🧓','👴','👵','🙋','💁','🙅','🙆','🤷',
+        '🙎','🙍','💇','💆','🧏','🚶','🏃','💃','🕺','🧎','🧍','👏','🙌','🤲',
+      ],
+    },
+    {
+      key: 'hearts', icon: '❤️', title: 'Srdce',
+      items: [
+        '❤️','🧡','💛','💚','💙','💜','🖤','🤍','🤎','💔','❣️','💕','💞','💓','💗','💖',
+        '💘','💝','💟','♥️','💌','💋','💑','💏','👪','🥂','🎀','🌹','🌷','🌸','🌺','🌻',
+      ],
+    },
+    {
+      key: 'objects', icon: '💼', title: 'Objekty',
+      items: [
+        '📁','📂','📃','📄','📋','📊','📈','📉','📝','✏️','📌','📍','📎','🖇️','📏','📐',
+        '🖊️','🖋️','✒️','📑','🔖','🏷️','💼','💻','⌨️','🖥️','🖨️','🖱️','💾','📀','💿','📱',
+        '☎️','📞','📠','📺','📻','🎙️','🎚️','🎛️','⏱️','⏲️','⏰','🕰️','⌛','⏳','📡','🔋',
+        '🔌','💡','🔦','🕯️','🪔','🧯','🛢️','💸','💵','💴','💶','💷','💰','💳','🧾','💎',
+        '⚖️','🪜','🧰','🔧','🔨','⚒️','🛠️','⛏️','🪓','🪚','🔩','⚙️','🧱','⛓️','🧲','🔫',
+        '💣','🧨','🪃','🏹','🛡️','🪝','🔪','🗡️','⚔️','🪛','🔗','📦','📫','📬','📭','📮',
+      ],
+    },
+    {
+      key: 'food', icon: '🍕', title: 'Jídlo',
+      items: [
+        '🍎','🍐','🍊','🍋','🍌','🍉','🍇','🍓','🫐','🍈','🍒','🍑','🥭','🍍','🥥','🥝',
+        '🍅','🍆','🥑','🥦','🥬','🥒','🌶️','🫑','🌽','🥕','🫒','🧄','🧅','🥔','🍠','🫘',
+        '🥐','🥯','🍞','🥖','🥨','🧀','🥚','🍳','🧈','🥞','🧇','🥓','🥩','🍗','🍖','🦴',
+        '🌭','🍔','🍟','🍕','🥪','🥙','🧆','🌮','🌯','🥗','🥘','🫕','🥫','🍝','🍜','🍲',
+        '🍛','🍣','🍱','🥟','🍤','🍙','🍚','🍘','🍥','🥠','🥮','🍢','🍡','🍧','🍨','🍦',
+        '🥧','🧁','🍰','🎂','🍮','🍭','🍬','🍫','🍿','🍩','🍪','☕','🍵','🧃','🥤','🧋',
+        '🍶','🍺','🍻','🥂','🍷','🥃','🍸','🍹','🍾','🧊',
+      ],
+    },
+    {
+      key: 'symbols', icon: '✨', title: 'Symboly',
+      items: [
+        '✅','❌','❓','❗','‼️','⭐','🌟','⚠️','🚫','💯','🔥','✨','⚡','💥','🎉','🎊',
+        '📢','🔔','🔕','⏰','⏳','⌛','🕐','✔️','✖️','➕','➖','➗','💠','🔱','⚜️','〰️',
+        '💭','💬','🗯️','💡','📖','🏆','🥇','🥈','🥉','🏅','🎖️','🎯','🎲','🧩','🎵','🎶',
+        '♻️','⚛️','🅱️','🆎','🆑','🆒','🆓','🆕','🆖','🆗','🆙','🆚','🔰','⚠️','🚸','⛔',
+        '🚷','🚯','🚳','🚱','🔞','📵','🚭','❇️','✳️','❎','🌀','Ⓜ️','🔸','🔹','🔶','🔷',
+        '🔺','🔻','💠','🔘','🔳','🔲','▪️','▫️','◾','◽','◼️','◻️','⬛','⬜','🟥','🟧',
+        '🟨','🟩','🟦','🟪','🟫','⚫','⚪','🔴','🟠','🟡','🟢','🔵','🟣','🟤',
+      ],
+    },
+  ];
+
+  const EMOJI_LAST_CATEGORY_KEY = 'holyos_chat_emoji_category';
+
+  function getLastEmojiCategory() {
+    try {
+      const k = localStorage.getItem(EMOJI_LAST_CATEGORY_KEY);
+      if (k && EMOJI_CATEGORIES.some(c => c.key === k)) return k;
+    } catch (_) {}
+    return 'smileys';
+  }
+
+  function setLastEmojiCategory(k) {
+    try { localStorage.setItem(EMOJI_LAST_CATEGORY_KEY, k); } catch (_) {}
+  }
+
+  function buildEmojiPopover(onPick) {
+    const pop = document.createElement('div');
+    pop.className = 'uchat-emoji-popover';
+    const activeKey = getLastEmojiCategory();
+
+    // Tabs
+    const tabs = document.createElement('div');
+    tabs.className = 'uchat-emoji-tabs';
+    EMOJI_CATEGORIES.forEach(cat => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'uchat-emoji-tab' + (cat.key === activeKey ? ' active' : '');
+      btn.dataset.category = cat.key;
+      btn.title = cat.title;
+      btn.textContent = cat.icon;
+      btn.addEventListener('click', () => {
+        setLastEmojiCategory(cat.key);
+        pop.querySelectorAll('.uchat-emoji-tab').forEach(b => b.classList.toggle('active', b.dataset.category === cat.key));
+        renderGrid(cat.key);
+      });
+      tabs.appendChild(btn);
+    });
+    pop.appendChild(tabs);
+
+    // Grid
+    const grid = document.createElement('div');
+    grid.className = 'uchat-emoji-grid';
+    pop.appendChild(grid);
+
+    function renderGrid(key) {
+      const cat = EMOJI_CATEGORIES.find(c => c.key === key) || EMOJI_CATEGORIES[0];
+      grid.innerHTML = cat.items.map(e =>
+        `<button type="button" class="uchat-emoji-btn" data-emoji="${e}" title="${e}">${e}</button>`
+      ).join('');
+      grid.querySelectorAll('.uchat-emoji-btn').forEach(b => {
+        b.addEventListener('click', () => onPick(b.dataset.emoji));
+      });
+    }
+    renderGrid(activeKey);
+
+    // Klik dovnitř popoveru nesmí zavřít (stopPropagation)
+    pop.addEventListener('click', e => e.stopPropagation());
+
+    return pop;
+  }
+
+  // Vloží emoji na pozici kurzoru v textarei (nebo na konec)
+  function insertAtCursor(textarea, text) {
+    if (!textarea) return;
+    const start = textarea.selectionStart || 0;
+    const end = textarea.selectionEnd || 0;
+    const before = textarea.value.slice(0, start);
+    const after = textarea.value.slice(end);
+    textarea.value = before + text + after;
+    const newPos = start + text.length;
+    textarea.selectionStart = textarea.selectionEnd = newPos;
+    textarea.focus();
   }
 
   // ─── Rendering ─────────────────────────────────────────────────────────────
@@ -462,15 +828,24 @@
 
     main.innerHTML = `
       <header>
-        <h3 style="display:flex;align-items:center;gap:8px;">${headerAvatar}<span>${escapeHtml(title)}</span></h3>
+        <h3 style="display:flex;align-items:center;gap:8px;">
+          ${headerAvatar}
+          <span style="display:flex;flex-direction:column;line-height:1.15;">
+            <span>${escapeHtml(title)}</span>
+            <span class="presence"></span>
+          </span>
+        </h3>
         <div style="display:flex;gap:6px;">
-          <button class="ai-btn" title="Zapoj AI asistenta do této konverzace">✨ Zeptat se AI</button>
           <button class="close-btn" title="Zavřít">✕</button>
         </div>
       </header>
       <div class="uchat-messages"></div>
-      <div class="uchat-compose">
-        <textarea placeholder="Napiš zprávu… (Enter = odeslat, Shift+Enter = nový řádek)" rows="1"></textarea>
+      <div class="uchat-pending"></div>
+      <div class="uchat-compose" style="position:relative;">
+        <button class="attach-btn" title="Přiložit soubor (nebo vlož obrázek přes Ctrl+V)">📎</button>
+        <input type="file" class="file-input" multiple hidden>
+        <button class="emoji-btn" title="Vložit smajlíka">😊</button>
+        <textarea placeholder="Napiš zprávu… (Enter = odeslat, Shift+Enter = nový řádek, Ctrl+V = vložit screenshot)" rows="1"></textarea>
         <button class="send-btn">Odeslat</button>
       </div>`;
 
@@ -478,6 +853,15 @@
     if (messagesLoading && messages.length === 0) {
       msgBox.innerHTML = '<div class="uchat-loader" style="padding:20px;">Načítám zprávy…</div>';
     } else {
+    // Pro read receipts potřebujeme nejvyšší `last_read_at` někoho jiného
+    // než my sami (typicky protistrany v 1:1 chatu).
+    const othersReadAt = (() => {
+      const times = (activeChannel?.members || [])
+        .filter(m => m.user_id !== myId && m.last_read_at)
+        .map(m => new Date(m.last_read_at).getTime());
+      return times.length ? Math.max(...times) : 0;
+    })();
+
     msgBox.innerHTML = messages.map(m => {
       const mine = m.sender_type === 'user' && m.sender_id === myId;
       const cls = m.sender_type === 'system' ? 'system' : m.sender_type === 'ai' ? 'ai' : (mine ? 'mine' : 'other');
@@ -485,36 +869,128 @@
         ? (m.sender?.display_name || m.sender?.username || 'Neznámý')
         : (m.sender_label || (m.sender_type === 'ai' ? 'Claude' : 'HolyOS'));
       const extraCls = m._pending ? ' pending' : (m._failed ? ' failed' : '');
+      const atts = Array.isArray(m.attachments) ? m.attachments : [];
+      const attsHtml = atts.length ? `<div class="atts">${atts.map(a => {
+        if (a.kind === 'image' && a.url) {
+          return `<a href="${escapeHtml(a.url)}" target="_blank" rel="noopener"><img class="att-img" src="${escapeHtml(a.url)}" alt="${escapeHtml(a.name || '')}"></a>`;
+        }
+        return `<a class="att-file" href="${escapeHtml(a.url || '#')}" target="_blank" rel="noopener" download="${escapeHtml(a.name || '')}">📎 ${escapeHtml(a.name || 'soubor')}</a>`;
+      }).join('')}</div>` : '';
+      const bodyHtml = m.content ? `<div>${escapeHtml(m.content).replace(/\n/g, '<br>')}</div>` : '';
+
+      // Fajfky (jen u mých zpráv, které už jsou na serveru)
+      let ticksHtml = '';
+      if (mine && !m._pending && !m._failed) {
+        const sentAt = new Date(m.created_at).getTime();
+        const isRead = othersReadAt >= sentAt;
+        ticksHtml = isRead
+          ? '<span class="ticks read" title="Přečteno">✓✓</span>'
+          : '<span class="ticks sent" title="Odesláno">✓</span>';
+      }
+
       return `
         <div class="uchat-msg ${cls}${extraCls}">
           ${!mine && cls !== 'system' ? `<div class="author">${escapeHtml(author)}</div>` : ''}
-          <div>${escapeHtml(m.content).replace(/\n/g, '<br>')}</div>
-          <div class="ts">${formatTime(m.created_at)}${m._pending ? ' ⏳' : ''}${m._failed ? ' ⚠️' : ''}</div>
+          ${bodyHtml}
+          ${attsHtml}
+          <div class="ts">${formatTime(m.created_at)}${m._pending ? ' ⏳' : ''}${m._failed ? ' ⚠️' : ''}${ticksHtml}</div>
         </div>`;
     }).join('');
     msgBox.scrollTop = msgBox.scrollHeight;
     }
 
+    // Doplň text "online/offline" do headeru podle aktuální presence
+    updateHeaderPresence();
+
+    // Znovu vykresli pending přílohy (při přepnutí konverzace je vyčistíme)
+    renderPendingAttachments();
+
     const ta = main.querySelector('textarea');
     const sendBtn = main.querySelector('.send-btn');
-    const aiBtn = main.querySelector('.ai-btn');
+    const attachBtn = main.querySelector('.attach-btn');
+    const fileInput = main.querySelector('.file-input');
 
     const doSend = (useAi = false) => {
       const txt = ta.value.trim();
-      if (!txt) return;
+      // Necháme poslat i jen samotné přílohy (bez textu), ale pouze pokud jsou ready
+      const ready = pendingAttachments.filter(a => a.status === 'ready');
+      const stillUploading = pendingAttachments.some(a => a.status === 'uploading');
+      if (stillUploading) { alert('Počkej, soubor se ještě nahrává…'); return; }
+      if (!txt && ready.length === 0) return;
       ta.value = '';
-      sendMessage(txt, useAi);
+      // Vyčistit pending před odesláním — optimistická zpráva už je drží
+      pendingAttachments.forEach(a => a.previewUrl && URL.revokeObjectURL(a.previewUrl));
+      pendingAttachments = [];
+      renderPendingAttachments();
+      sendMessage(txt, useAi, ready);
     };
 
     sendBtn.addEventListener('click', () => doSend(false));
-    aiBtn.addEventListener('click', () => {
-      const txt = ta.value.trim();
-      if (!txt) { ta.placeholder = 'Napiš dotaz pro AI…'; ta.focus(); return; }
-      doSend(true);
-    });
     ta.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); doSend(false); }
     });
+
+    // Přiložit soubor přes 📎 tlačítko
+    attachBtn.addEventListener('click', (e) => { e.preventDefault(); fileInput.click(); });
+    fileInput.addEventListener('change', () => {
+      addFilesToCompose(fileInput.files);
+      fileInput.value = ''; // umožní znovu vybrat stejný soubor
+    });
+
+    // Emoji picker 😊
+    const emojiBtn = main.querySelector('.emoji-btn');
+    const composeRow = main.querySelector('.uchat-compose');
+    let emojiPopover = null;
+    const closeEmojiPopover = () => {
+      if (emojiPopover) {
+        emojiPopover.remove();
+        emojiPopover = null;
+        emojiBtn.classList.remove('active');
+        document.removeEventListener('click', onOutsideClick);
+      }
+    };
+    const onOutsideClick = (e) => {
+      if (emojiPopover && !emojiPopover.contains(e.target) && e.target !== emojiBtn) closeEmojiPopover();
+    };
+    emojiBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (emojiPopover) { closeEmojiPopover(); return; }
+      emojiPopover = buildEmojiPopover((emoji) => {
+        insertAtCursor(ta, emoji);
+      });
+      composeRow.appendChild(emojiPopover);
+      emojiBtn.classList.add('active');
+      // Listener na outside click — registruj asynchronně, ať current click neprojde
+      setTimeout(() => document.addEventListener('click', onOutsideClick), 0);
+    });
+
+    // Ctrl+V paste — obrázek ze schránky (screenshot)
+    ta.addEventListener('paste', (e) => {
+      const items = e.clipboardData && e.clipboardData.items;
+      if (!items) return;
+      const files = [];
+      for (let i = 0; i < items.length; i++) {
+        const it = items[i];
+        if (it.kind === 'file') {
+          const f = it.getAsFile();
+          if (f) files.push(f);
+        }
+      }
+      if (files.length) {
+        e.preventDefault(); // ať se do textarea nevloží název souboru
+        addFilesToCompose(files);
+      }
+    });
+
+    // Drag & drop souborů na textareu
+    ta.addEventListener('dragover', (e) => { e.preventDefault(); });
+    ta.addEventListener('drop', (e) => {
+      if (!e.dataTransfer || !e.dataTransfer.files.length) return;
+      e.preventDefault();
+      addFilesToCompose(e.dataTransfer.files);
+    });
+
     main.querySelector('.close-btn').addEventListener('click', closePanel);
   }
 
@@ -525,6 +1001,9 @@
     activeChannel = channels.find(c => c.id === channelId) || null;
     messages = [];
     messagesLoading = true;
+    // Rozpracované přílohy patří k té staré konverzaci, zahoď je
+    pendingAttachments.forEach(a => a.previewUrl && URL.revokeObjectURL(a.previewUrl));
+    pendingAttachments = [];
     renderSidebar();
     renderMessages();  // hned uk\u00e1\u017ee hlavi\u010dku s avatarem + loader
     loadMessages(channelId).catch(() => {});
@@ -737,9 +1216,70 @@
         </header>
         <div class="uchat-channels"></div>
       </aside>
-      <section class="uchat-main"></section>`;
+      <section class="uchat-main"></section>
+      <div class="uchat-drop-hint">📥 Pusť soubor pro vložení do zprávy</div>`;
     panel.querySelector('.new-btn').addEventListener('click', openNewChannelModal);
     document.body.appendChild(panel);
+
+    // ─── Drag & drop souborů kamkoli do chat panelu ──────────────────────
+    // Safari (Mac) občas nereportuje 'Files' v dataTransfer.types během dragover
+    // tak spolehlivě jako Chrome. Řešení: v dragover VŽDY preventDefault (aby
+    // Safari povolil drop), vizuální feedback drž na detekci souborů, a samotný
+    // drop handler tolerantně přečti files i items jako fallback.
+    let _uchatDragCounter = 0;
+    function _dragHasFilesUchat(e) {
+      if (!e.dataTransfer) return false;
+      const types = e.dataTransfer.types || [];
+      // 'types' může být DOMStringList (Safari) nebo Array — iterace přes for
+      for (let i = 0; i < types.length; i++) {
+        const t = types[i];
+        if (t === 'Files' || t === 'application/x-moz-file') return true;
+      }
+      // DOMStringList.contains() varianta (starší Safari)
+      if (typeof types.contains === 'function' && types.contains('Files')) return true;
+      return false;
+    }
+    panel.addEventListener('dragenter', (e) => {
+      if (!e.dataTransfer) return;
+      e.preventDefault();
+      if (_dragHasFilesUchat(e)) {
+        _uchatDragCounter++;
+        panel.classList.add('dragging');
+      }
+    });
+    panel.addEventListener('dragover', (e) => {
+      if (!e.dataTransfer) return;
+      // VŽDY preventDefault — i když types neobsahuje 'Files' (Safari quirk),
+      // potřebujeme přijmout drop. Skutečné soubory ověří až drop handler.
+      e.preventDefault();
+      try { e.dataTransfer.dropEffect = 'copy'; } catch (_) {}
+    });
+    panel.addEventListener('dragleave', (e) => {
+      _uchatDragCounter = Math.max(0, _uchatDragCounter - 1);
+      if (_uchatDragCounter === 0) panel.classList.remove('dragging');
+    });
+    panel.addEventListener('drop', (e) => {
+      e.preventDefault();
+      _uchatDragCounter = 0;
+      panel.classList.remove('dragging');
+      // Primárně files; fallback na DataTransferItemList (pokud files prázdné)
+      const dt = e.dataTransfer;
+      let files = (dt && dt.files && dt.files.length) ? Array.from(dt.files) : [];
+      if (!files.length && dt && dt.items) {
+        for (let i = 0; i < dt.items.length; i++) {
+          if (dt.items[i].kind === 'file') {
+            const f = dt.items[i].getAsFile();
+            if (f) files.push(f);
+          }
+        }
+      }
+      if (!files.length) return;
+      if (!activeChannelId) {
+        alert('Nejdřív vyber konverzaci v levém panelu, pak můžeš přetáhnout soubor.');
+        return;
+      }
+      addFilesToCompose(files);
+    });
 
     renderMessages();
 
@@ -751,7 +1291,21 @@
 
         // Pokud je otevřený tenhle kanál — přidej do view
         if (channel_id === activeChannelId) {
-          messages.push(message);
+          // Dedup: backend publikuje SSE i odesílateli, a my už máme zprávu
+          // v messages z POST response. Pokud stejné ID je tam, ignoruj.
+          // Zároveň pokud čeká optimistická zpráva se stejným obsahem od stejného
+          // odesílatele (ještě nepřišla POST odpověď), nahraď ji reálnou.
+          if (messages.some(m => m.id === message.id)) {
+            return;
+          }
+          const pendingIdx = messages.findIndex(m =>
+            m._pending && m.sender_id === message.sender_id && m.content === message.content
+          );
+          if (pendingIdx >= 0) {
+            messages[pendingIdx] = message;
+          } else {
+            messages.push(message);
+          }
           renderMessages();
           // A zároveň označ jako přečtené
           api('/api/messages/channels/' + channel_id + '/read', { method: 'POST' }).catch(() => {});
@@ -773,6 +1327,29 @@
       });
 
       window.HolyOSEvents.on('channel_update', () => loadChannels());
+
+      // Presence — někdo se připojil / odpojil
+      window.HolyOSEvents.on('presence', (payload) => {
+        if (!payload || !payload.user_id) return;
+        const uid = Number(payload.user_id);
+        if (payload.online) onlineUsers.add(uid);
+        else onlineUsers.delete(uid);
+        refreshPresenceInDom();
+      });
+
+      // Read receipts — protistrana právě něco přečetla
+      window.HolyOSEvents.on('read', (payload) => {
+        if (!payload || !payload.channel_id) return;
+        const ch = channels.find(c => c.id === payload.channel_id);
+        if (ch && Array.isArray(ch.members)) {
+          const mm = ch.members.find(m => m.user_id === payload.reader_id);
+          if (mm) mm.last_read_at = payload.last_read_at;
+        }
+        if (payload.channel_id === activeChannelId) {
+          // Přepočti a překresli fajfky
+          renderMessages();
+        }
+      });
     }
 
     // Externí API
@@ -794,6 +1371,7 @@
       renderSidebar();
     }
     loadChannels();
+    loadPresence(); // kdo je online PRÁVĚ TEĎ (pak už jen SSE eventy)
   }
 
   if (document.readyState === 'loading') {

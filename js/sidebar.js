@@ -156,10 +156,11 @@ function renderSidebar(activeModule) {
   // }
 
   // Load HolyOS top bar (úkoly / zprávy / zvonek / AI)
-  // Nahrazuje staré floatující widgety (notifications-bell.js, user-chat-widget.js,
-  // ai-chat-panel.js) jednotným pruhem na horním kraji stránky.
+  // user-chat-widget.js se načítá zpět — 💬 ikonu v top-baru používáme jako
+  // trigger pro jeho plovoucí panel (vlastní bublina widgetu je skrytá přes CSS).
   var tbScripts = [
     { id: 'holyos-events-script', src: 'js/holyos-events.js' },
+    { id: 'holyos-chat-widget-script', src: 'js/user-chat-widget.js' },
     { id: 'holyos-topbar-script', src: 'js/top-bar.js' },
   ];
   tbScripts.forEach(function(s) {
@@ -273,6 +274,11 @@ function initAiButton() {
     .ai-chat-close:hover { color: #e8e8f0; }
     .ai-chat-body { padding: 16px 20px; overflow-y: auto; flex: 1; }
     .ai-chat-footer { padding: 12px 20px; border-top: 1px solid #222240; }
+    /* Drag & drop stav — pulzující fialový obrys přes celý chat */
+    .ai-chat.dragging { border-color: #a78bfa; box-shadow: 0 0 0 3px rgba(168,139,250,0.3), 0 20px 60px rgba(0,0,0,0.5); }
+    .ai-chat-drop-hint { position: absolute; inset: 0; pointer-events: none; display: none; align-items: center; justify-content: center;
+      background: rgba(108,92,231,0.15); border: 2px dashed #a78bfa; border-radius: 16px; color: #a78bfa; font-weight: 600; font-size: 15px; z-index: 10; }
+    .ai-chat.dragging .ai-chat-drop-hint { display: flex; }
 
     .ai-msg { margin-bottom: 14px; }
     .ai-msg-bot { background: #222240; border-radius: 12px 12px 12px 4px; padding: 10px 14px; font-size: 13px; color: #e8e8f0; line-height: 1.5; }
@@ -298,6 +304,16 @@ function initAiButton() {
     .ai-screenshot-preview img { width: 100%; height: auto; display: block; }
     .ai-screenshot-remove { font-size: 11px; color: #ef4444; cursor: pointer; margin-top: 4px; }
     .ai-screenshot-remove:hover { text-decoration: underline; }
+
+    /* Seznam přiložených souborů (PDF / Word / Excel / …) */
+    .ai-attachments { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+    .ai-attachment { display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: #0f0f1a; border: 1px solid #222240; border-radius: 8px; font-size: 12px; }
+    .ai-attachment .ico { font-size: 18px; }
+    .ai-attachment .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #e8e8f0; }
+    .ai-attachment .sz { color: #8888aa; font-size: 10px; flex-shrink: 0; }
+    .ai-attachment .rm { background: none; border: none; color: #ef4444; cursor: pointer; font-size: 12px; padding: 0 4px; }
+    .ai-attachment.uploading { opacity: 0.6; }
+    .ai-attachment.uploading::after { content: '⏳'; margin-left: 4px; }
 
     .ai-q-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
     .ai-q-chip { padding: 5px 10px; border-radius: 14px; font-size: 11px; cursor: pointer; border: 1px solid #333;
@@ -463,7 +479,8 @@ function openAiChat() {
     messages: [],
     step: 0,
     description: '',
-    screenshot: null,
+    screenshot: null,     // hlavní obrázek (pro preview + zachování zpětné kompat.)
+    attachments: [],      // další soubory — PDF, Word, Excel, obrázky navíc atd.
     pagePath: page.path,
     pageTitle: page.title,
     answers: {}
@@ -479,9 +496,14 @@ function openAiChat() {
 }
 
 function renderAiChat() {
-  // Remove existing
+  // Remove existing (i s cleanup document-level listenerů, ať nenabalujeme duplicitní)
   var existing = document.getElementById('ai-chat-root');
-  if (existing) existing.remove();
+  if (existing) {
+    if (typeof existing._aiChatDndCleanup === 'function') {
+      try { existing._aiChatDndCleanup(); } catch (_) {}
+    }
+    existing.remove();
+  }
 
   var root = document.createElement('div');
   root.id = 'ai-chat-root';
@@ -532,6 +554,23 @@ function renderAiChat() {
     body.appendChild(ssDiv);
   }
 
+  // Seznam dalších příloh (PDF / Word / Excel / obrázek navíc atd.)
+  if (_aiChatState.attachments && _aiChatState.attachments.length) {
+    var attWrap = document.createElement('div');
+    attWrap.className = 'ai-attachments';
+    _aiChatState.attachments.forEach(function (a) {
+      var row = document.createElement('div');
+      row.className = 'ai-attachment' + (a.status === 'uploading' ? ' uploading' : '');
+      if (a.status === 'failed') row.style.borderColor = '#ef4444';
+      row.innerHTML = '<span class="ico">' + _fileIconForAttachment(a) + '</span>' +
+        '<span class="nm" title="' + (a.name || '').replace(/"/g, '&quot;') + '">' + (a.name || 'soubor') + '</span>' +
+        '<span class="sz">' + _fmtAttachSize(a.size) + '</span>' +
+        '<button class="rm" onclick="removeAiAttachment(\'' + a.localId + '\')" title="Odebrat">✕</button>';
+      attWrap.appendChild(row);
+    });
+    body.appendChild(attWrap);
+  }
+
   chat.appendChild(body);
 
   // Footer with input
@@ -539,35 +578,242 @@ function renderAiChat() {
     var footer = document.createElement('div');
     footer.className = 'ai-chat-footer';
     footer.innerHTML = '<div class="ai-input-row">' +
-      '<label class="ai-upload-btn" title="Nahrát screenshot"><input type="file" accept="image/*" style="display:none" onchange="handleAiScreenshot(this)">📷</label>' +
+      '<label class="ai-upload-btn" title="Připojit soubor (obrázek, PDF, Word, Excel…)"><input type="file" multiple accept="*/*" style="display:none" onchange="handleAiFilePick(this)">📎</label>' +
       '<textarea class="ai-input" id="ai-sidebar-input" placeholder="Popište svůj požadavek…" rows="1" onkeydown="if(event.key===\'Enter\'&&!event.shiftKey){event.preventDefault();sendAiMessage()}"></textarea>' +
       '<button class="ai-send-btn" onclick="sendAiMessage()">→</button>' +
       '</div>';
     chat.appendChild(footer);
   }
 
+  // Drop hint overlay — zobrazí se jen když někdo táhne soubor nad chat
+  var dropHint = document.createElement('div');
+  dropHint.className = 'ai-chat-drop-hint';
+  dropHint.innerHTML = '📥 Pusť obrázek pro rychlé vložení';
+  chat.appendChild(dropHint);
+
   root.appendChild(chat);
   document.body.appendChild(root);
+
+  // ─── Drag & drop souborů kamkoli do AI chatu ─────────────────────────
+  // Safari na Macu má potvrzené problémy s tím, že drop events neprobublávají
+  // spolehlivě skrz vrstvy overlay + chat. Proto registrujeme listenery na
+  // DVOU úrovních:
+  //   1) `root` (chat kontejner) — standardní cesta, funguje na Chrome/Firefox
+  //   2) `document` — globální záchranná síť pro Safari. Aktivní jen dokud
+  //      je chat otevřený; při closeAiChat se odregistruje (viz closeAiChat).
+  var dragCounter = 0;
+
+  function aiChatOnDragEnter(e) {
+    if (!e.dataTransfer) return;
+    if (_dragHasFiles(e)) {
+      e.preventDefault();
+      dragCounter++;
+      chat.classList.add('dragging');
+    }
+  }
+  function aiChatOnDragOver(e) {
+    if (!e.dataTransfer) return;
+    // VŽDY preventDefault — bez toho Safari odmítne následný drop.
+    // Nestačí jen když _dragHasFiles; Safari reportuje types nestabilně.
+    e.preventDefault();
+    try { e.dataTransfer.dropEffect = 'copy'; } catch (_) {}
+    if (_dragHasFiles(e)) chat.classList.add('dragging');
+  }
+  function aiChatOnDragLeave(e) {
+    // Jen když uživatel opustí celé okno (relatedTarget === null) nebo
+    // po zmenšení counteru na 0
+    dragCounter = Math.max(0, dragCounter - 1);
+    if (dragCounter === 0) chat.classList.remove('dragging');
+  }
+  function aiChatOnDrop(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter = 0;
+    chat.classList.remove('dragging');
+    var dt = e.dataTransfer;
+    var files = (dt && dt.files && dt.files.length) ? Array.prototype.slice.call(dt.files) : [];
+    if (!files.length && dt && dt.items) {
+      for (var i = 0; i < dt.items.length; i++) {
+        if (dt.items[i].kind === 'file') {
+          var f = dt.items[i].getAsFile();
+          if (f) files.push(f);
+        }
+      }
+    }
+    console.log('[AI chat] drop:', files.length, 'soubor(ů)',
+      files.map(function (f) { return f.name + ' (' + (f.type || '?') + ', ' + f.size + ' B)'; }));
+    if (files.length) _addAiAttachmentsFromFiles(files);
+    else console.warn('[AI chat] drop proběhl, ale dataTransfer neobsahoval žádné soubory ani items.');
+  }
+
+  // 1) Standardní cesta přes chat container
+  root.addEventListener('dragenter', aiChatOnDragEnter);
+  root.addEventListener('dragover', aiChatOnDragOver);
+  root.addEventListener('dragleave', aiChatOnDragLeave);
+  root.addEventListener('drop', aiChatOnDrop);
+
+  // 2) Globální záchrana pro Safari Mac (drop events tam občas nedoprobublávají).
+  //    Listenery zrušíme v closeAiChat() — uložíme je na root jako custom property.
+  document.addEventListener('dragenter', aiChatOnDragEnter);
+  document.addEventListener('dragover', aiChatOnDragOver);
+  document.addEventListener('dragleave', aiChatOnDragLeave);
+  document.addEventListener('drop', aiChatOnDrop);
+  root._aiChatDndCleanup = function () {
+    document.removeEventListener('dragenter', aiChatOnDragEnter);
+    document.removeEventListener('dragover', aiChatOnDragOver);
+    document.removeEventListener('dragleave', aiChatOnDragLeave);
+    document.removeEventListener('drop', aiChatOnDrop);
+  };
 
   // Scroll to bottom
   setTimeout(function() { body.scrollTop = body.scrollHeight; }, 50);
 }
 
+// Helper — jestli aktuální drag obsahuje soubory (ne text/html atd.)
+// `dataTransfer.types` je DOMStringList (Safari) nebo Array (Chrome) —
+// podpora obou variant přes for-loop + .contains() fallback.
+function _dragHasFiles(e) {
+  if (!e.dataTransfer) return false;
+  var types = e.dataTransfer.types || [];
+  for (var i = 0; i < types.length; i++) {
+    var t = types[i];
+    if (t === 'Files' || t === 'application/x-moz-file') return true;
+  }
+  if (typeof types.contains === 'function' && types.contains('Files')) return true;
+  return false;
+}
+
+// Helper — vezme File objekt, načte ho jako data URL a uloží do stavu.
+// Použije se pro obrázky, které zobrazujeme jako screenshot preview.
+function _setAiScreenshotFromFile(file) {
+  if (!file) return;
+  if (file.size > 20 * 1024 * 1024) { alert('Obrázek je větší než 20 MB.'); return; }
+  if (file.type && file.type.indexOf('image') !== 0) { alert('Soubor není obrázek.'); return; }
+  var reader = new FileReader();
+  reader.onload = function (ev) {
+    _aiChatState.screenshot = ev.target.result;
+    renderAiChat();
+  };
+  reader.readAsDataURL(file);
+}
+
+// Helper — vezme soubor (jakýkoliv typ), nahraje ho do /api/storage/upload
+// a přidá referenci do _aiChatState.attachments. Obrázky jdou do attachments
+// jen když už je přítomný hlavní screenshot — jinak se nastaví jako preview.
+function _addAiAttachmentsFromFiles(fileList) {
+  var files = Array.prototype.slice.call(fileList || []);
+  if (!files.length) return;
+
+  files.forEach(function (file) {
+    if (file.size > 20 * 1024 * 1024) {
+      alert('Soubor "' + file.name + '" je větší než 20 MB, přeskakuji.');
+      return;
+    }
+    var isImage = file.type && file.type.indexOf('image') === 0;
+    // První obrázek bez screenshotu → uložíme jako screenshot preview
+    if (isImage && !_aiChatState.screenshot) {
+      _setAiScreenshotFromFile(file);
+      return;
+    }
+
+    // Ostatní: upload do storage a reference v attachments
+    var item = {
+      localId: 'att_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8),
+      name: file.name,
+      size: file.size,
+      mime: file.type || '',
+      kind: isImage ? 'image' : 'file',
+      status: 'uploading',
+      url: null,
+    };
+    _aiChatState.attachments.push(item);
+    renderAiChat();
+
+    _uploadFileToStorage(file).then(function (saved) {
+      item.url = saved.url;
+      item.status = 'ready';
+      renderAiChat();
+    }).catch(function (e) {
+      console.warn('[AI chat] upload failed', e);
+      item.status = 'failed';
+      renderAiChat();
+    });
+  });
+}
+
+function _uploadFileToStorage(file) {
+  return new Promise(function (resolve, reject) {
+    var reader = new FileReader();
+    reader.onload = function () {
+      var s = String(reader.result || '');
+      var comma = s.indexOf(',');
+      var b64 = comma >= 0 ? s.slice(comma + 1) : s;
+      var headers = { 'Content-Type': 'application/json' };
+      var t = sessionStorage.getItem('token');
+      if (t) headers['Authorization'] = 'Bearer ' + t;
+      fetch('/api/storage/upload', {
+        method: 'POST',
+        credentials: 'include',
+        headers: headers,
+        body: JSON.stringify({
+          file_data: b64,
+          file_name: file.name,
+          file_type: file.type || null,
+          folder: 'admin-tasks',
+        }),
+      }).then(function (r) { return r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)); })
+        .then(resolve).catch(reject);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+function removeAiAttachment(localId) {
+  _aiChatState.attachments = _aiChatState.attachments.filter(function (a) { return a.localId !== localId; });
+  renderAiChat();
+}
+
+function _fileIconForAttachment(att) {
+  var mime = (att.mime || '').toLowerCase();
+  var name = (att.name || '').toLowerCase();
+  if (mime.indexOf('image') === 0) return '🖼️';
+  if (mime.indexOf('pdf') >= 0 || name.endsWith('.pdf')) return '📕';
+  if (mime.indexOf('word') >= 0 || mime.indexOf('msword') >= 0 || name.endsWith('.docx') || name.endsWith('.doc')) return '📄';
+  if (mime.indexOf('sheet') >= 0 || mime.indexOf('excel') >= 0 || name.endsWith('.xlsx') || name.endsWith('.xls') || name.endsWith('.csv')) return '📊';
+  if (mime.indexOf('zip') >= 0 || name.endsWith('.zip') || name.endsWith('.rar')) return '🗜️';
+  if (mime.indexOf('text') === 0) return '📝';
+  return '📎';
+}
+
+function _fmtAttachSize(bytes) {
+  if (!bytes) return '';
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return Math.round(bytes / 1024) + ' kB';
+  return (bytes / 1024 / 1024).toFixed(1) + ' MB';
+}
+
 function closeAiChat() {
   var el = document.getElementById('ai-chat-root');
-  if (el) el.remove();
+  if (el) {
+    // Odregistruj globální document-level drop listenery (Safari backup)
+    if (typeof el._aiChatDndCleanup === 'function') {
+      try { el._aiChatDndCleanup(); } catch (_) {}
+    }
+    el.remove();
+  }
 }
 
 function handleAiScreenshot(input) {
   if (!input.files || !input.files[0]) return;
-  var file = input.files[0];
-  if (file.size > 20 * 1024 * 1024) { alert('Max 20 MB'); return; }
-  var reader = new FileReader();
-  reader.onload = function(e) {
-    _aiChatState.screenshot = e.target.result;
-    renderAiChat();
-  };
-  reader.readAsDataURL(file);
+  _setAiScreenshotFromFile(input.files[0]);
+}
+
+// Nový handler — přijímá jakýkoliv typ souboru (více najednou)
+function handleAiFilePick(input) {
+  if (!input.files || !input.files.length) return;
+  _addAiAttachmentsFromFiles(input.files);
+  input.value = ''; // reset, ať jde stejný soubor vybrat znovu
 }
 
 function removeAiScreenshot() {
@@ -575,26 +821,22 @@ function removeAiScreenshot() {
   renderAiChat();
 }
 
-// Ctrl+V paste support for AI chat screenshots
+// Ctrl+V paste — obrázek nebo soubor ze schránky do AI chatu
 document.addEventListener('paste', function(e) {
-  // Only handle if AI chat is open (root wrapper has id='ai-chat-root')
+  // Funkční jen když je AI chat otevřený
   var chatEl = document.getElementById('ai-chat-root');
   if (!chatEl) return;
   var items = (e.clipboardData || e.originalEvent.clipboardData).items;
+  var files = [];
   for (var i = 0; i < items.length; i++) {
-    if (items[i].type.indexOf('image') !== -1) {
-      e.preventDefault();
-      var file = items[i].getAsFile();
-      if (!file) return;
-      if (file.size > 20 * 1024 * 1024) { alert('Max 20 MB'); return; }
-      var reader = new FileReader();
-      reader.onload = function(ev) {
-        _aiChatState.screenshot = ev.target.result;
-        renderAiChat();
-      };
-      reader.readAsDataURL(file);
-      return;
+    if (items[i].kind === 'file') {
+      var f = items[i].getAsFile();
+      if (f) files.push(f);
     }
+  }
+  if (files.length) {
+    e.preventDefault();
+    _addAiAttachmentsFromFiles(files);
   }
 });
 
@@ -655,15 +897,38 @@ function submitAiTask() {
     return (m.role === 'bot' ? 'AI: ' : 'Uživatel: ') + m.text.replace(/<[^>]*>/g, '');
   }).join('\n');
 
+  // Zkontroluj, že všechny přílohy jsou uploadované (ne uprostřed uploadu / failed)
+  var pending = (_aiChatState.attachments || []).filter(function (a) { return a.status !== 'ready'; });
+  if (pending.length) {
+    var uploading = pending.filter(function (a) { return a.status === 'uploading'; });
+    if (uploading.length) { alert('Počkej, ' + uploading.length + ' příloha se ještě nahrává…'); return; }
+    var failed = pending.filter(function (a) { return a.status === 'failed'; });
+    if (failed.length) {
+      if (!confirm(failed.length + ' příloha se nepodařila nahrát. Odeslat požadavek bez ní?')) return;
+    }
+  }
+  var readyAttachments = (_aiChatState.attachments || [])
+    .filter(function (a) { return a.status === 'ready' && a.url; })
+    .map(function (a) { return { url: a.url, name: a.name, size: a.size, mime: a.mime, kind: a.kind }; });
+
   var task = {
     page: _aiChatState.pagePath,
     page_title: _aiChatState.pageTitle,
     description: userMessages.join('\n---\n'),
     ai_questions: [],
-    ai_answers: { conversation: conversationLog },
+    ai_answers: {
+      conversation: conversationLog,
+      attachments: readyAttachments, // PDF/Word/Excel atd., pole { url, name, size, mime, kind }
+    },
     screenshot: _aiChatState.screenshot,
     priority: 'medium',
   };
+
+  // Diagnostika — vidíš v DevTools console, jestli screenshot vůbec posíláme
+  console.log('[AI chat] submitAiTask',
+    'screenshot:', _aiChatState.screenshot ? (_aiChatState.screenshot.length + ' znaků') : 'NULL',
+    'attachments:', readyAttachments.length,
+    'page:', _aiChatState.pagePath);
 
   var headers = { 'Content-Type': 'application/json' };
   var t = sessionStorage.getItem('token');

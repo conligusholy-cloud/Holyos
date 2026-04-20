@@ -72,6 +72,17 @@ class NotificationBus extends EventEmitter {
     for (const set of this.clients.values()) connections += set.size;
     return { users: this.clients.size, connections };
   }
+
+  // ─── Presence ─────────────────────────────────────────────────────────────
+  // Přítomný = má alespoň jedno otevřené SSE spojení.
+  isOnline(userId) {
+    const set = this.clients.get(userId);
+    return !!(set && set.size > 0);
+  }
+
+  onlineUserIds() {
+    return Array.from(this.clients.keys());
+  }
 }
 
 // Singleton

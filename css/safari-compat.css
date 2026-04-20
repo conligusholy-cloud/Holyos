@@ -1,0 +1,157 @@
+/* ============================================================================
+   safari-compat.css — Optimalizace pro Mac + Safari (WebKit)
+   ============================================================================
+   Vendor prefixy, scrollbar styling, font rendering, autofill, appearance.
+   Bezpečné pro Chrome/Firefox/Edge — jen přidávají WebKit varianty.
+   ============================================================================ */
+
+/* ─── Font rendering na retina displejích ─────────────────────────────────── */
+html, body {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* ─── Hladký scroll na iOS / macOS trackpadu ─────────────────────────────── */
+.main-wrapper, .sidebar, .chat-channels, .chat-messages, .chat-sidebar,
+.uchat-channels, .uchat-messages, .veh-tab-panel,
+.holyos-tb-list, .ai-chat-body, .modal, .task-card,
+.data-table, [class*="scroll"], [class*="overflow-y"] {
+  -webkit-overflow-scrolling: touch;
+}
+
+/* ─── Stylované scrollbary (WebKit — Safari, Chrome, Edge) ────────────────
+   Safari na Macu má defaultně tenké, šedé scrollbary které se zjevují při
+   scrollování — překryjeme je tmavými, aby sedly s dark theme. */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.02);
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(168, 139, 250, 0.25);
+  border-radius: 5px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(168, 139, 250, 0.45);
+  background-clip: padding-box;
+  border: 2px solid transparent;
+}
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Kompaktnější scrollbar uvnitř chat oken (nechceme ukrást moc místa) */
+.uchat-messages::-webkit-scrollbar,
+.uchat-channels::-webkit-scrollbar,
+.chat-messages::-webkit-scrollbar,
+.ai-chat-body::-webkit-scrollbar {
+  width: 6px;
+}
+
+/* ─── backdrop-filter potřebuje -webkit- prefix na Safari ─────────────────── */
+.ai-chat-overlay,
+.uchat-modal,
+.chat-modal-overlay,
+.modal-overlay {
+  -webkit-backdrop-filter: inherit;
+}
+/* Explicitně pro prvky, které backdrop-filter používají: */
+.ai-chat-overlay { -webkit-backdrop-filter: blur(3px); }
+.uchat-modal { -webkit-backdrop-filter: blur(2px); }
+
+/* ─── position: sticky potřebuje -webkit- na starších Safari ─────────────── */
+.data-table thead,
+[style*="position: sticky"],
+[style*="position:sticky"] {
+  position: -webkit-sticky;
+}
+
+/* ─── Input / textarea — Safari přidává rounded corners a inner shadow ──── */
+input[type="text"], input[type="number"], input[type="email"],
+input[type="password"], input[type="search"], input[type="tel"],
+input[type="url"], input[type="date"], input[type="datetime-local"],
+input[type="time"], input[type="month"], input[type="week"],
+textarea, select {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+}
+
+/* Pro select zachováme šipku vpravo (jinak ji WebKit schová) */
+select {
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M0 0l5 6 5-6z' fill='%23a3a3b2'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  padding-right: 26px !important;
+}
+
+/* ─── Autofill na Safari ukazuje žluté pozadí → přepiš na dark ──────────── */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active,
+textarea:-webkit-autofill {
+  -webkit-box-shadow: 0 0 0 1000px var(--surface, #1e1e2f) inset !important;
+  -webkit-text-fill-color: var(--text, #fff) !important;
+  caret-color: var(--text, #fff);
+  transition: background-color 9999s ease-out;
+}
+
+/* ─── Placeholder na Safari ukazuje světlejší odstín než Chrome ──────────── */
+::-webkit-input-placeholder { color: var(--text2, #8888aa); opacity: 1; }
+::-moz-placeholder { color: var(--text2, #8888aa); opacity: 1; }
+::placeholder { color: var(--text2, #8888aa); opacity: 1; }
+
+/* ─── Safari schovává focus ring u button a input — vrátíme ho ───────────── */
+button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible {
+  outline: 2px solid rgba(108, 92, 231, 0.4);
+  outline-offset: 1px;
+}
+
+/* ─── Mac Safari renderuje emoji menší než Chrome — trochu zvětšíme ──────── */
+.uchat-emoji-btn,
+.chat-emoji-btn-item {
+  font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji",
+               "EmojiOne Color", "Android Emoji", sans-serif;
+}
+
+/* ─── iOS Safari: preventuj auto-zoom na input focus (font-size >= 16px) ──
+   Na desktop Mac Safari to nevadí, ale iOS to potřebuje. */
+@media (max-width: 768px) {
+  input, textarea, select {
+    font-size: 16px !important;
+  }
+}
+
+/* ─── Drag & drop: když uživatel přetahuje soubor, zakaž text-selection
+   ať se při rychlých pohybech nic nepodtrhává. */
+.ai-chat.dragging,
+.uchat-panel.dragging {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* ─── Mobile Safari — fix 100vh bug (URL bar roll vs. fixed elements) ──── */
+@supports (-webkit-touch-callout: none) {
+  .main-wrapper {
+    min-height: -webkit-fill-available;
+  }
+  .ai-chat, .uchat-panel {
+    max-height: -webkit-fill-available;
+  }
+}
+
+/* ─── Button a link hover — Safari nemá :hover na touch, takže jen pointer */
+@media (hover: hover) and (pointer: fine) {
+  /* hover styly jen pro zařízení s opravdovou myší/trackpadem */
+}
+
+/* ─── Mac Cmd+V paste — prohlížeč to reportuje jako "paste" event
+   stejně jako Ctrl+V, žádný extra handler není potřeba.
+   Jen pro jistotu: Mac `option/alt` + `cmd` kombinace by neměly přebíjet
+   naše Enter/Shift+Enter shortcuts. */

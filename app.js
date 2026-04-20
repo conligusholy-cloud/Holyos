@@ -75,6 +75,25 @@ if (process.env.NODE_ENV !== 'production') {
 
 // ─── Public Routes (bez autentizace) ───────────────────────────────────────
 
+// Helper — public odkaz je aktivní jen když je objednávka v "new".
+// Ve všech ostatních stavech vracíme 410 Gone se srozumitelným textem
+// pro konfigurátor (order-view.html zobrazí hezkou chybovou stránku).
+function orderLinkLocked(order) {
+  // Nový = aktivní odkaz. Cokoliv jiného = zamčeno.
+  return !order || order.status !== 'new';
+}
+function sendOrderLocked(res, order) {
+  const statusLabel = {
+    new: 'Nový', quoted: 'Poptáno', ordered: 'Objednáno',
+    confirmed: 'Potvrzeno', delivered: 'Doručeno', cancelled: 'Zrušeno',
+  }[order?.status] || order?.status || 'neznámý';
+  return res.status(410).json({
+    error: `Tento odkaz už není aktivní. Objednávka je ve stavu "${statusLabel}" — konfiguraci už nelze měnit.`,
+    locked: true,
+    status: order?.status || null,
+  });
+}
+
 // Veřejný náhled objednávky pro zákazníka (bez autentizace)
 app.get('/api/public/order/:token', async (req, res) => {
   try {
@@ -96,6 +115,8 @@ app.get('/api/public/order/:token', async (req, res) => {
       },
     });
     if (!order) return res.status(404).json({ error: 'Objednávka nenalezena' });
+    if (orderLinkLocked(order)) return sendOrderLocked(res, order);
+    if (orderLinkLocked(order)) return sendOrderLocked(res, order);
 
     // Pro každou položku s product_id načti konfigurační skupiny a volby
     const itemsWithConfig = await Promise.all(order.items.map(async (it) => {
@@ -179,6 +200,7 @@ app.post('/api/public/order/:token/configure', async (req, res) => {
       include: { items: true },
     });
     if (!order) return res.status(404).json({ error: 'Objednávka nenalezena' });
+    if (orderLinkLocked(order)) return sendOrderLocked(res, order);
 
     // Přijímáme: { items: [ { item_id: 1, selections: [ { group_id: 5, option_id: 12, custom_value: null }, ... ] }, ... ], customer_note: "..." }
     const { items: itemConfigs, customer_note } = req.body;
@@ -240,6 +262,7 @@ app.get('/api/public/order/:token/slots', async (req, res) => {
   try {
     const order = await prisma.order.findUnique({ where: { share_token: req.params.token } });
     if (!order) return res.status(404).json({ error: 'Objednávka nenalezena' });
+    if (orderLinkLocked(order)) return sendOrderLocked(res, order);
 
     // Načti všechny existující sloty
     const slots = await prisma.productionSlot.findMany({
@@ -275,6 +298,7 @@ app.post('/api/public/order/:token/select-slot', async (req, res) => {
       include: { items: true, company: { select: { name: true } } },
     });
     if (!order) return res.status(404).json({ error: 'Objednávka nenalezena' });
+    if (orderLinkLocked(order)) return sendOrderLocked(res, order);
 
     const { item_id, slot_id, start_date, end_date } = req.body;
     if (!item_id) return res.status(400).json({ error: 'Chybí item_id' });
@@ -361,6 +385,7 @@ app.post('/api/public/order/:token/remove-slot', async (req, res) => {
       include: { items: true },
     });
     if (!order) return res.status(404).json({ error: 'Objednávka nenalezena' });
+    if (orderLinkLocked(order)) return sendOrderLocked(res, order);
 
     const { item_id } = req.body;
     if (!item_id) return res.status(400).json({ error: 'Chybí item_id' });

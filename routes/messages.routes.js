@@ -430,7 +430,19 @@ router.post('/channels/:id/messages', async (req, res, next) => {
   try {
     await ensureMember(req.params.id, req.user.id);
     const content = String(req.body.content || '').trim();
-    if (!content) return res.status(400).json({ error: 'Prázdná zpráva' });
+    // Přílohy: [{ kind: 'image'|'file', url, name, size, mime }]
+    const rawAttachments = Array.isArray(req.body.attachments) ? req.body.attachments : [];
+    const attachments = rawAttachments.slice(0, 20).map(a => ({
+      kind: (a && a.kind === 'image') ? 'image' : 'file',
+      url: String(a?.url || '').slice(0, 1000),
+      name: a?.name ? String(a.name).slice(0, 255) : undefined,
+      size: typeof a?.size === 'number' ? a.size : undefined,
+      mime: a?.mime ? String(a.mime).slice(0, 100) : undefined,
+    })).filter(a => a.url);
+
+    if (!content && attachments.length === 0) {
+      return res.status(400).json({ error: 'Prázdná zpráva' });
+    }
     if (content.length > 10000) return res.status(400).json({ error: 'Zpráva je příliš dlouhá' });
 
     const channelId = req.params.id;
@@ -440,6 +452,7 @@ router.post('/channels/:id/messages', async (req, res, next) => {
         sender_id: req.user.id,
         sender_type: 'user',
         content,
+        attachments: attachments.length ? attachments : undefined,
       },
       include: { sender: { select: { id: true, username: true, display_name: true, person: { select: { photo_url: true } } } } },
     });
@@ -469,7 +482,11 @@ router.post('/channels/:id/messages', async (req, res, next) => {
         // Notifikace ostatním (kromě odesílatele, nemutovaným) — PARALELNĚ
         const senderLabel = req.user.displayName || req.user.username;
         const channelMeta = membersWithChannel[0]?.channel || {};
-        const preview = content.length > 80 ? content.slice(0, 80) + '…' : content;
+        let preview = content.length > 80 ? content.slice(0, 80) + '…' : content;
+        if (!preview && attachments.length) {
+          const hasImg = attachments.some(a => a.kind === 'image');
+          preview = hasImg ? `📷 Obrázek (${attachments.length})` : `📎 Soubor (${attachments.length})`;
+        }
         const link = channelMeta.type === 'task' && channelMeta.admin_task_id
           ? `/modules/admin-tasks/?task=${channelMeta.admin_task_id}`
           : `/modules/chat/?channel=${channelId}`;
@@ -508,11 +525,33 @@ router.post('/channels/:id/messages', async (req, res, next) => {
 router.post('/channels/:id/read', async (req, res, next) => {
   try {
     await ensureMember(req.params.id, req.user.id);
+    const now = new Date();
     await prisma.chatChannelMember.update({
       where: { channel_id_user_id: { channel_id: req.params.id, user_id: req.user.id } },
-      data: { last_read_at: new Date() },
+      data: { last_read_at: now },
     });
-    res.json({ ok: true });
+    res.json({ ok: true, last_read_at: now });
+
+    // Broadcast read receipt ostatním členům (doubletick) — asynchronně,
+    // klient má odpověď rychle
+    (async () => {
+      try {
+        const members = await prisma.chatChannelMember.findMany({
+          where: { channel_id: req.params.id },
+          select: { user_id: true },
+        });
+        const others = members.map(m => m.user_id).filter(id => id !== req.user.id);
+        if (others.length) {
+          bus.publishToUsers(others, 'read', {
+            channel_id: req.params.id,
+            reader_id: req.user.id,
+            last_read_at: now,
+          });
+        }
+      } catch (e) {
+        console.warn('[messages] read broadcast failed:', e.message);
+      }
+    })();
   } catch (err) {
     if (err.status) return res.status(err.status).json({ error: err.message });
     next(err);
@@ -632,5 +671,65 @@ async function postSystemMessage(channelId, content, label = 'HolyOS') {
 }
 
 router.postSystemMessage = postSystemMessage;
+
+// Vytvoří task-kanál (type='task', admin_task_id=taskId), pokud ještě
+// neexistuje. Jako členy přidá autora požadavku a (volitelně) aktéra změny.
+// Používá se z admin-tasks.routes.js při změně stavu, abychom mohli do chatu
+// doručit systémovou zprávu i v případě, kdy autor zatím kanál neotevřel.
+async function ensureTaskChannel(taskId, actorUserId) {
+  const task = await prisma.adminTask.findUnique({
+    where: { id: taskId },
+    select: { id: true, created_by: true, page_title: true },
+  });
+  if (!task) return null;
+
+  let channel = await prisma.chatChannel.findFirst({
+    where: { type: 'task', admin_task_id: taskId },
+    select: { id: true },
+  });
+
+  if (!channel) {
+    const memberIds = new Set();
+    if (task.created_by) memberIds.add(task.created_by);
+    if (actorUserId && actorUserId !== task.created_by) memberIds.add(actorUserId);
+    if (memberIds.size === 0) return null; // nikoho komu poslat
+
+    channel = await prisma.chatChannel.create({
+      data: {
+        type: 'task',
+        name: `Požadavek #${task.id}${task.page_title ? ` — ${task.page_title}` : ''}`.slice(0, 255),
+        admin_task_id: taskId,
+        created_by: actorUserId || task.created_by,
+        members: {
+          create: [...memberIds].map(uid => ({
+            user_id: uid,
+            role: uid === (actorUserId || task.created_by) ? 'admin' : 'member',
+          })),
+        },
+      },
+      select: { id: true },
+    });
+
+    // Notifikace autorovi o tom, že byl přidán do nového task-kanálu
+    // (channel_update ho donutí refreshnout seznam)
+    bus.publishToUsers([...memberIds], 'channel_update', { channel_id: channel.id });
+  } else {
+    // Kanál je, ale autor v něm nemusí být — doplň ho
+    if (task.created_by) {
+      const isMember = await prisma.chatChannelMember.findUnique({
+        where: { channel_id_user_id: { channel_id: channel.id, user_id: task.created_by } },
+      }).catch(() => null);
+      if (!isMember) {
+        await prisma.chatChannelMember.create({
+          data: { channel_id: channel.id, user_id: task.created_by, role: 'member' },
+        });
+        bus.publishToUser(task.created_by, 'channel_update', { channel_id: channel.id });
+      }
+    }
+  }
+  return channel;
+}
+
+router.ensureTaskChannel = ensureTaskChannel;
 
 module.exports = router;

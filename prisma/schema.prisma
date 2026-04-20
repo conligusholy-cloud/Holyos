@@ -773,6 +773,10 @@ model AdminTask {
   screenshot  String? @db.Text // base64
   created_by  Int?
 
+  // Soft delete — požadavek se přesune do "Koše" místo fyzického smazání.
+  // Autor / admin ho může obnovit nebo trvale smazat.
+  deleted_at  DateTime?
+
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
 
@@ -780,6 +784,8 @@ model AdminTask {
   creator User? @relation("AdminTaskCreator", fields: [created_by], references: [id], onDelete: SetNull)
 
   @@index([created_by])
+  @@index([status])
+  @@index([deleted_at])
   @@map("admin_tasks")
 }
 
@@ -1361,6 +1367,7 @@ model Vehicle {
 
   // Identifikace vozidla
   license_plate     String?   @db.VarChar(20)   // SPZ
+  company           String?   @db.VarChar(100)  // Vlastník/provozovatel: "Best Series" | "Špagetka" | "JTP services"
   model             String    @db.VarChar(255)  // Vozidlo / model (např. "Hyundai i30")
   vin               String?   @db.VarChar(30)   // VIN kód
   category          String    @db.VarChar(50)   // "Osobní vůz" | "Dodávka" | "Nákladní" | "Motocykl" | "Jiné"
@@ -1397,11 +1404,20 @@ model Vehicle {
   current_km        Int?                        // Aktuální kilometry
   note              String?   @db.Text
 
+  // Vztahy k rozšíření fleet managementu (dokumenty, servisy, pneu, škody)
+  documents         VehicleDocument[]
+  insurance_policies VehicleInsurancePolicy[]
+  services          VehicleService[]
+  tire_changes      VehicleTireChange[]
+  damage_events     VehicleDamageEvent[]
+  tire_stock        TireStockItem[]
+
   // Systémové
   created_at        DateTime  @default(now())
   updated_at        DateTime  @updatedAt
 
   @@index([license_plate])
+  @@index([company])
   @@index([vin])
   @@index([category])
   @@index([driver_id])
@@ -1410,6 +1426,216 @@ model Vehicle {
   @@index([stk_valid_to])
   @@index([toll_sticker_to])
   @@map("vehicles")
+}
+
+// Dokumentace vozu — technický průkaz, leasingová smlouva, STK protokoly atd.
+model VehicleDocument {
+  id          Int      @id @default(autoincrement())
+  vehicle_id  Int
+  vehicle     Vehicle  @relation(fields: [vehicle_id], references: [id], onDelete: Cascade)
+
+  // Typ dokumentu: "technicky_prukaz" | "leasing" | "stk_protokol" | "smlouva" | "jine"
+  doc_type    String   @db.VarChar(50)
+  title       String   @db.VarChar(255)      // Popisek (např. "Technický průkaz - list A")
+  file_url    String   @db.VarChar(500)      // /api/storage/files/vehicles/...
+  file_name   String?  @db.VarChar(255)      // Původní název souboru
+  file_size   Int?                            // v bytech
+  mime_type   String?  @db.VarChar(100)
+  note        String?  @db.Text
+
+  uploaded_at DateTime @default(now())
+  uploaded_by Int?                             // User.id (kdo nahrál)
+
+  @@index([vehicle_id])
+  @@index([doc_type])
+  @@map("vehicle_documents")
+}
+
+// Pojistky — povinné ručení a havarijní, s platností a přiloženým dokumentem
+model VehicleInsurancePolicy {
+  id              Int      @id @default(autoincrement())
+  vehicle_id      Int
+  vehicle         Vehicle  @relation(fields: [vehicle_id], references: [id], onDelete: Cascade)
+
+  // Typ: "pov" (povinné ručení) | "havarijni" | "jine"
+  policy_type     String   @db.VarChar(30)
+  company_name    String?  @db.VarChar(255)   // Pojišťovna
+  policy_number   String?  @db.VarChar(100)   // Číslo pojistky
+  valid_from      DateTime? @db.Date
+  valid_to        DateTime? @db.Date
+  premium_amount  Decimal? @db.Decimal(12, 2) // Pojistné (Kč)
+  file_url        String?  @db.VarChar(500)   // Scan/PDF
+  file_name       String?  @db.VarChar(255)
+  note            String?  @db.Text
+
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+
+  @@index([vehicle_id])
+  @@index([policy_type])
+  @@index([valid_to])
+  @@map("vehicle_insurance_policies")
+}
+
+// Servisy — pravidelné + ad-hoc. Plán, provedení, cena, faktura.
+model VehicleService {
+  id               Int      @id @default(autoincrement())
+  vehicle_id       Int
+  vehicle          Vehicle  @relation(fields: [vehicle_id], references: [id], onDelete: Cascade)
+
+  // Stav: "planned" (naplánováno, čeká na provedení)
+  //     | "done" (provedeno a potvrzeno správcem)
+  //     | "cancelled"
+  status           String   @db.VarChar(20) @default("planned")
+
+  service_type     String   @db.VarChar(255)  // Např. "Pravidelný servis", "Výměna oleje", volný text
+  scheduled_at     DateTime?                   // Plánovaný termín (datum + čas)
+  done_at          DateTime?                   // Kdy skutečně proběhlo
+  service_company  String?  @db.VarChar(255)  // Firma provádějící servis
+  location         String?  @db.VarChar(500)  // Místo provedení (adresa)
+  km_at_service    Int?                        // Stav kilometrů při servisu
+
+  cost_labor       Decimal? @db.Decimal(12, 2) // Cena za práci (Kč)
+  cost_parts       Decimal? @db.Decimal(12, 2) // Cena za díly (Kč)
+  invoice_url      String?  @db.VarChar(500)  // Napojená faktura (storage URL)
+  invoice_number   String?  @db.VarChar(100)
+
+  note             String?  @db.Text
+  confirmed_by     Int?                         // User.id správce, který potvrdil provedení
+  confirmed_at     DateTime?
+
+  created_at       DateTime @default(now())
+  created_by       Int?
+  updated_at       DateTime @updatedAt
+
+  @@index([vehicle_id])
+  @@index([status])
+  @@index([scheduled_at])
+  @@map("vehicle_services")
+}
+
+// Výměny pneu — plán, provedení, cena (zvlášť úkon + samotné pneu)
+model VehicleTireChange {
+  id               Int      @id @default(autoincrement())
+  vehicle_id       Int
+  vehicle          Vehicle  @relation(fields: [vehicle_id], references: [id], onDelete: Cascade)
+
+  // Stav: "planned" | "done" | "cancelled"
+  status           String   @db.VarChar(20) @default("planned")
+
+  // Sezóna: "letni" | "zimni"
+  season           String   @db.VarChar(10)
+
+  scheduled_at     DateTime?                   // Plánovaný termín
+  done_at          DateTime?
+  location         String?  @db.VarChar(500)
+  service_company  String?  @db.VarChar(255)
+
+  // Oddělená cena: úkon (výměna/vyvážení) vs. nové pneu
+  cost_service     Decimal? @db.Decimal(12, 2) // Cena za úkon — výměna, vyvážení atd.
+  cost_tires       Decimal? @db.Decimal(12, 2) // Cena za pneu (když byly kupovány nové)
+
+  invoice_url      String?  @db.VarChar(500)
+  invoice_number   String?  @db.VarChar(100)
+
+  note             String?  @db.Text
+  confirmed_by     Int?
+  confirmed_at     DateTime?
+
+  created_at       DateTime @default(now())
+  created_by       Int?
+  updated_at       DateTime @updatedAt
+
+  @@index([vehicle_id])
+  @@index([status])
+  @@index([scheduled_at])
+  @@index([season])
+  @@map("vehicle_tire_changes")
+}
+
+// Škodní události — datum, místo, popis, přílohy
+model VehicleDamageEvent {
+  id           Int      @id @default(autoincrement())
+  vehicle_id   Int
+  vehicle      Vehicle  @relation(fields: [vehicle_id], references: [id], onDelete: Cascade)
+
+  event_date   DateTime                        // Datum události
+  location     String?  @db.VarChar(500)       // Místo události
+  description  String?  @db.Text
+  claim_number String?  @db.VarChar(100)       // Číslo škodní události u pojišťovny
+  estimated_damage Decimal? @db.Decimal(12, 2) // Odhadovaná škoda (Kč)
+
+  documents    VehicleDamageDocument[]
+
+  created_at   DateTime @default(now())
+  created_by   Int?
+  updated_at   DateTime @updatedAt
+
+  @@index([vehicle_id])
+  @@index([event_date])
+  @@map("vehicle_damage_events")
+}
+
+model VehicleDamageDocument {
+  id              Int      @id @default(autoincrement())
+  damage_event_id Int
+  damage_event    VehicleDamageEvent @relation(fields: [damage_event_id], references: [id], onDelete: Cascade)
+
+  title           String?  @db.VarChar(255)
+  file_url        String   @db.VarChar(500)
+  file_name       String?  @db.VarChar(255)
+  mime_type       String?  @db.VarChar(100)
+  file_size       Int?
+  uploaded_at     DateTime @default(now())
+  uploaded_by     Int?
+
+  @@index([damage_event_id])
+  @@map("vehicle_damage_documents")
+}
+
+// Sklad pneu — fyzické pneumatiky na skladě, přiřazené vozidlu (či volné)
+// Sledujeme hloubku dezénu a pozici ve skladu.
+model TireStockItem {
+  id              Int      @id @default(autoincrement())
+
+  // Přiřazení vozidlu (volitelné — může být i univerzální zásoba)
+  vehicle_id      Int?
+  vehicle         Vehicle? @relation(fields: [vehicle_id], references: [id], onDelete: SetNull)
+
+  // Sezóna: "letni" | "zimni"
+  season          String   @db.VarChar(10)
+
+  // Rozměr a výrobce
+  tire_size       String?  @db.VarChar(100)     // např. "205/55 R16 91H"
+  manufacturer    String?  @db.VarChar(100)
+  model_name      String?  @db.VarChar(255)
+  dot_code        String?  @db.VarChar(20)      // DOT kód (týden/rok výroby)
+
+  // Stav dezénu — v mm, pro hlídání hranic (letní 2-3 mm, zimní 4-5 mm = upozornění)
+  tread_depth_mm  Decimal? @db.Decimal(4, 1)
+
+  // Lokace ve skladu (volný text: "Regál A3", "Sklad B — pozice 14")
+  storage_location String? @db.VarChar(255)
+
+  // Namontováno = aktuálně na voze; false = na skladě
+  mounted         Boolean  @default(false)
+  mounted_at      DateTime?
+  dismounted_at   DateTime?
+
+  // Odkaz na nákupní fakturu (nepovinné)
+  purchase_price  Decimal? @db.Decimal(12, 2)
+  invoice_url     String?  @db.VarChar(500)
+  invoice_number  String?  @db.VarChar(100)
+
+  note            String?  @db.Text
+
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+
+  @@index([vehicle_id])
+  @@index([season])
+  @@index([mounted])
+  @@map("tire_stock_items")
 }
 
 // =============================================================================
