@@ -8,7 +8,7 @@
   <base href="../../">
   <link rel="stylesheet" href="css/dashboard.css">
   <style>
-    .main-wrapper { margin-left: var(--sidebar-w); flex: 1; min-height: 100vh; display: flex; flex-direction: column; }
+    .main-wrapper { margin-left: var(--sidebar-w); height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
 
     .chat-grid {
       display: grid;
@@ -16,6 +16,7 @@
       gap: 0;
       flex: 1;
       min-height: 0;
+      overflow: hidden;
     }
 
     .chat-sidebar {
@@ -23,6 +24,8 @@
       background: var(--surface);
       display: flex; flex-direction: column;
       min-width: 0;
+      min-height: 0;
+      overflow: hidden;
     }
     .chat-sidebar-header {
       padding: 14px 16px;
@@ -68,7 +71,7 @@
     .chat-channel .preview { font-size: 11px; color: var(--text2); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .chat-channel .unread-badge { background: #ef4444; color: #fff; font-size: 10px; padding: 1px 7px; border-radius: 9px; font-weight: 700; margin-left: 6px; }
 
-    .chat-main { display: flex; flex-direction: column; min-width: 0; background: var(--bg); }
+    .chat-main { display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; background: var(--bg); }
     .chat-main-header {
       padding: 14px 20px; border-bottom: 1px solid var(--border);
       display: flex; justify-content: space-between; align-items: center; gap: 12px;

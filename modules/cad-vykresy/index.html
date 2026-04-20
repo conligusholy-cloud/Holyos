@@ -146,10 +146,15 @@
 
   <script>
     // ─── Autentizace ──────────────────────────────────────────────────────────
-    const token = sessionStorage.getItem('token');
-    if (!token) window.location = '/public/login.html';
-
-    const auth = () => ({ 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' });
+    // Backend používá httpOnly cookie (nastavena při loginu), sessionStorage.token je jen doplněk.
+    // Redirect na login řeší sidebar.js (fetch /api/auth/me → 401).
+    const auth = () => {
+      const h = { 'Content-Type': 'application/json' };
+      const t = sessionStorage.getItem('token');
+      if (t) h['Authorization'] = 'Bearer ' + t;
+      return h;
+    };
+    const fetchOpts = (extra) => Object.assign({ credentials: 'include', headers: auth() }, extra || {});
 
     // ─── Stav ────────────────────────────────────────────────────────────────
     const state = {
@@ -168,7 +173,7 @@
 
     // ─── Načítání ────────────────────────────────────────────────────────────
     async function loadProjects() {
-      const res = await fetch('/api/cad/project-blocks', { headers: auth() });
+      const res = await fetch('/api/cad/project-blocks', fetchOpts());
       if (!res.ok) throw new Error('Načtení projektů selhalo (' + res.status + ')');
       const data = await res.json();
       state.projects = data.Projects || [];
@@ -182,7 +187,7 @@
       if (state.query) params.set('q', state.query);
       params.set('limit', '200');
 
-      const res = await fetch('/api/cad/drawings?' + params, { headers: auth() });
+      const res = await fetch('/api/cad/drawings?' + params, fetchOpts());
       if (!res.ok) throw new Error('Načtení výkresů selhalo');
       state.drawings = await res.json();
       document.getElementById('cad-count').textContent =
@@ -194,7 +199,7 @@
       state.activeDrawingId = id;
       const pane = document.getElementById('detail-pane');
       pane.innerHTML = '<div class="loader">Načítám detail…</div>';
-      const res = await fetch('/api/cad/drawings/' + id, { headers: auth() });
+      const res = await fetch('/api/cad/drawings/' + id, fetchOpts());
       if (!res.ok) { pane.innerHTML = '<div class="empty">Chyba při načítání detailu.</div>'; return; }
       const d = await res.json();
       renderDetail(d);
@@ -368,10 +373,10 @@
       const name = prompt('Název projektu:');
       if (!name) return;
       const customer = prompt('Zákazník (volitelné):') || null;
-      const res = await fetch('/api/cad/projects', {
-        method: 'POST', headers: auth(),
+      const res = await fetch('/api/cad/projects', fetchOpts({
+        method: 'POST',
         body: JSON.stringify({ code, name, customer }),
-      });
+      }));
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         alert('Chyba: ' + (err.error || res.status));

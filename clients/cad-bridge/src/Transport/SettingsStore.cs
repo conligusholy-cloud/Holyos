@@ -1,8 +1,4 @@
-// =============================================================================
-// HolyOS CAD Bridge — Perzistentní nastavení klienta (URL serveru atd.)
-// Uložené v %LOCALAPPDATA%\HolyOsCadBridge\settings.json.
-// =============================================================================
-
+// HolyOS CAD Bridge — Perzistentni nastaveni klienta
 using System;
 using System.IO;
 using System.Text.Json;
@@ -11,7 +7,7 @@ namespace HolyOs.CadBridge.Transport;
 
 public sealed class BridgeSettings
 {
-    public string ServerUrl { get; set; } = "https://holyos.local";
+    public string ServerUrl { get; set; } = "https://app.holyos.cz";
     public bool GeneratePdfs { get; set; } = true;
     public bool AutoResolveComponents { get; set; } = true;
 

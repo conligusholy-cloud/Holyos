@@ -4,4 +4,7 @@ obj/
 *.suo
 .vs/
 *.msi
-publish/
+pub
+_dist/
+Navod_instalace_HolyOS_CAD_Bridge.pdf
+Navod_instalace_HolyOS_CAD_Bridge.docx

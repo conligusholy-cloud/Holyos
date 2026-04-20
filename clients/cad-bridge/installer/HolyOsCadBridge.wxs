@@ -1,57 +1,37 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!--
-  HolyOS CAD Bridge — WiX installer (WiX 4+)
-
-  Výstup: HolyOsCadBridge.msi
-  Instaluje se do "Program Files\HolyOS\CadBridge".
-  Zaregistruje kontextové menu "Odevzdat do HolyOSu" pro:
-    - SldPart.Document   (.sldprt)
-    - SldAssem.Document  (.sldasm)
-    - SldDraw.Document   (.slddrw)
-    - SystemFileAssociations\.stl
-    - Directory\shell (pro celé složky)
-
-  Build:
-    wix build HolyOsCadBridge.wxs -out HolyOsCadBridge.msi
--->
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
   <Package
       Name="HolyOS CAD Bridge"
       Manufacturer="Best Series s.r.o."
-      Version="1.0.0.0"
+      Version="1.0.1.0"
       UpgradeCode="B0A5F4E0-4D68-4E8A-8A7E-1C9F6B3E3E21"
       Scope="perMachine">
 
-    <MajorUpgrade AllowDowngrades="no" DowngradeErrorMessage="Novější verze HolyOS CAD Bridge je již nainstalována." />
+    <MajorUpgrade AllowDowngrades="no" DowngradeErrorMessage="Novejsi verze HolyOS CAD Bridge je jiz nainstalovana." />
     <MediaTemplate EmbedCab="yes" />
 
-    <!-- Instalační strom -->
     <StandardDirectory Id="ProgramFiles64Folder">
       <Directory Id="HolyOsFolder" Name="HolyOS">
         <Directory Id="INSTALLFOLDER" Name="CadBridge" />
       </Directory>
     </StandardDirectory>
 
-    <!-- Hlavní feature -->
     <Feature Id="Main" Title="HolyOS CAD Bridge" Level="1">
       <ComponentGroupRef Id="AppFiles" />
       <ComponentGroupRef Id="ShellExtensions" />
+      <ComponentRef Id="Shortcut" />
     </Feature>
 
-    <!-- ─── Soubory aplikace ─────────────────────────────────────────────── -->
     <ComponentGroup Id="AppFiles" Directory="INSTALLFOLDER">
       <Component Id="MainExe" Guid="B1B2C3D4-1111-4BEF-A111-AAAA11110001">
-        <!-- Předpoklad: publikovaná single-file binárka -->
         <File Id="HolyOsCadBridgeExe"
-              Source="..\src\bin\Release\net8.0-windows\win-x64\publish\HolyOsCadBridge.exe"
+              Source="HolyOsCadBridge.exe"
               KeyPath="yes" />
       </Component>
     </ComponentGroup>
 
-    <!-- ─── Shell extension: kontextové menu "Odevzdat do HolyOSu" ──────── -->
     <ComponentGroup Id="ShellExtensions" Directory="INSTALLFOLDER">
 
-      <!-- .sldprt (součásti) -->
       <Component Id="CtxSldPart" Guid="B1B2C3D4-1111-4BEF-A111-AAAA11110010">
         <RegistryKey Root="HKCR" Key="SldPart.Document\shell\HolyOsSubmit" ForceCreateOnInstall="yes" ForceDeleteOnUninstall="yes">
           <RegistryValue Type="string" Value="Odevzdat do HolyOSu" />
@@ -62,7 +42,6 @@
         </RegistryKey>
       </Component>
 
-      <!-- .sldasm (sestavy) — podle popisu uživatele klíčové! -->
       <Component Id="CtxSldAsm" Guid="B1B2C3D4-1111-4BEF-A111-AAAA11110011">
         <RegistryKey Root="HKCR" Key="SldAssem.Document\shell\HolyOsSubmit" ForceCreateOnInstall="yes" ForceDeleteOnUninstall="yes">
           <RegistryValue Type="string" Value="Odevzdat do HolyOSu" />
@@ -73,7 +52,6 @@
         </RegistryKey>
       </Component>
 
-      <!-- .slddrw (výkresy) -->
       <Component Id="CtxSldDrw" Guid="B1B2C3D4-1111-4BEF-A111-AAAA11110012">
         <RegistryKey Root="HKCR" Key="SldDraw.Document\shell\HolyOsSubmit" ForceCreateOnInstall="yes" ForceDeleteOnUninstall="yes">
           <RegistryValue Type="string" Value="Odevzdat do HolyOSu" />
@@ -84,7 +62,6 @@
         </RegistryKey>
       </Component>
 
-      <!-- .stl (export ke 3D tisku) -->
       <Component Id="CtxStl" Guid="B1B2C3D4-1111-4BEF-A111-AAAA11110013">
         <RegistryKey Root="HKCR" Key="SystemFileAssociations\.stl\shell\HolyOsSubmit" ForceCreateOnInstall="yes" ForceDeleteOnUninstall="yes">
           <RegistryValue Type="string" Value="Odevzdat do HolyOSu" />
@@ -95,7 +72,6 @@
         </RegistryKey>
       </Component>
 
-      <!-- Celá složka → pošle všechny CAD soubory uvnitř -->
       <Component Id="CtxDirectory" Guid="B1B2C3D4-1111-4BEF-A111-AAAA11110014">
         <RegistryKey Root="HKCR" Key="Directory\shell\HolyOsSubmit" ForceCreateOnInstall="yes" ForceDeleteOnUninstall="yes">
           <RegistryValue Type="string" Value="Odevzdat do HolyOSu" />
@@ -108,13 +84,12 @@
 
     </ComponentGroup>
 
-    <!-- Start menu zkratka -->
     <StandardDirectory Id="ProgramMenuFolder">
       <Directory Id="HolyOsMenuFolder" Name="HolyOS">
         <Component Id="Shortcut" Guid="B1B2C3D4-1111-4BEF-A111-AAAA11110020">
           <Shortcut Id="AppShortcut"
                     Name="HolyOS CAD Bridge"
-                    Description="Odevzdávání CAD výkresů do HolyOSu"
+                    Description="Odevzdavani CAD vykresu do HolyOSu"
                     Target="[INSTALLFOLDER]HolyOsCadBridge.exe"
                     WorkingDirectory="INSTALLFOLDER" />
           <RemoveFolder Id="RemoveHolyOsMenuFolder" On="uninstall" />
@@ -123,9 +98,5 @@
       </Directory>
     </StandardDirectory>
 
-    <!-- Start menu shortcut přidat do hlavní feature -->
-    <Feature Id="Shortcuts" Title="Zástupce v nabídce Start" Level="1">
-      <ComponentRef Id="Shortcut" />
-    </Feature>
   </Package>
 </Wix>
