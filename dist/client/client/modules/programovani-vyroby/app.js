@@ -5,7 +5,7 @@ import { state } from './state.js';
 import { initDom, renderAll, updateTransform, resizeSVG } from './renderer.js';
 import { initPaletteDrag, initCanvasMouse, initZoom, initKeyboard, initSplitHandle, zoomIn, zoomOut, zoomFit, toggleGrid, toggleSnap, toggleConnectMode, confirmDistanceAndPlace } from './interactions.js';
 import { initFileLoader, initPersistentStorage, checkUrlParams, updateTitleBar, saveProject, saveProjectAs, loadProject, exportJSON, exportPNG, confirmSave, closeSaveDialog } from './storage.js';
-import { FactorifyAPI, markUsedWorkstations, updateFactorifyUI, openWsConfigDialog, closeWsConfigDialog, saveWsConfig, wsConfigApplyDefaults, wsConfigToggleAll } from './factorify-api.js';
+import { FactorifyAPI, markUsedWorkstations, updateFactorifyUI, openWsConfigDialog, closeWsConfigDialog, saveWsConfig, wsConfigApplyDefaults, wsConfigToggleAll, dragWorkstation, setWsDimension } from './factorify-api.js';
 import * as objects from './objects.js';
 import * as properties from './properties.js';
 import * as history from './history.js';
@@ -47,6 +47,8 @@ window.__module__ = {
     FactorifyAPI,
     markUsedWorkstations,
     updateFactorifyUI,
+    dragWorkstation,
+    setWsDimension,
     // Import alle nezbytné funkce z ostatních modulů
     ...objects,
     ...properties,
