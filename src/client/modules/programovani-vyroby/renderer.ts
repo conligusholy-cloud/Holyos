@@ -634,10 +634,10 @@ function renderWall(g: SVGGElement, obj: DrawingObject, wall: any): void {
     line.setAttribute('y1', String(wy1 + seg.t1 * dy));
     line.setAttribute('x2', String(wx1 + seg.t2 * dx));
     line.setAttribute('y2', String(wy1 + seg.t2 * dy));
-    line.setAttribute('stroke', '#a0a0c0');
-    line.setAttribute('stroke-width', '0.2');
+    line.setAttribute('stroke', '#6ca5ff');
+    line.setAttribute('stroke-width', '0.4');
     line.setAttribute('stroke-linecap', 'round');
-    line.setAttribute('opacity', '0.8');
+    line.setAttribute('opacity', '0.95');
     g.appendChild(line);
   });
 
@@ -671,9 +671,9 @@ function renderWall(g: SVGGElement, obj: DrawingObject, wall: any): void {
     arcPath.setAttribute('d', `M ${gx1} ${gy1} A ${arcR} ${arcR} 0 0 1 ${gx2} ${gy2}`);
     arcPath.setAttribute('fill', 'none');
     arcPath.setAttribute('stroke', '#f59e0b');
-    arcPath.setAttribute('stroke-width', '0.08');
-    arcPath.setAttribute('stroke-dasharray', '0.3 0.2');
-    arcPath.setAttribute('opacity', '0.6');
+    arcPath.setAttribute('stroke-width', '0.2');
+    arcPath.setAttribute('stroke-dasharray', '0.4 0.25');
+    arcPath.setAttribute('opacity', '0.9');
     g.appendChild(arcPath);
   });
 }
