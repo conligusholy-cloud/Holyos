@@ -997,6 +997,50 @@ router.put('/inventories/:invId/items/:itemId', async (req, res, next) => {
   }
 });
 
+// --- EXCHANGE RATES (CNB denni kurzy, cache 1h) ---
+// Vraci { rates: { EUR: 25.12, USD: 22.4, ... }, source: 'CNB', valid_for: '2026-04-21' }.
+// Kazda sazba je normalizovana na 1 jednotku zahranicni meny -> X CZK.
+let _fxRatesCache = null;
+let _fxRatesCacheUntil = 0;
+router.get('/exchange-rates', async (req, res, next) => {
+  try {
+    const now = Date.now();
+    if (_fxRatesCache && now < _fxRatesCacheUntil) {
+      return res.json(_fxRatesCache);
+    }
+    const response = await fetch('https://api.cnb.cz/cnbapi/exrates/daily?lang=CZ');
+    if (!response.ok) throw new Error('CNB API nedostupne');
+    const data = await response.json();
+    const rates = { CZK: 1 };
+    for (const r of (data.rates || [])) {
+      const code = r.currencyCode;
+      const amount = parseFloat(r.amount) || 1;
+      const rate = parseFloat(r.rate);
+      if (code && !isNaN(rate) && rate > 0) {
+        rates[code] = rate / amount; // 1 jednotka -> X CZK
+      }
+    }
+    const out = {
+      rates,
+      source: 'CNB',
+      valid_for: (data.rates && data.rates[0] && data.rates[0].validFor) || null,
+      fetched_at: new Date().toISOString(),
+    };
+    _fxRatesCache = out;
+    _fxRatesCacheUntil = now + 60 * 60 * 1000; // 1h cache
+    res.json(out);
+  } catch (err) {
+    // Fallback — priblizne sazby, at UI neprestane fungovat kdyz CNB spadne.
+    res.json({
+      rates: { CZK: 1, EUR: 25, USD: 22, GBP: 29, PLN: 6, HUF: 0.065 },
+      source: 'fallback',
+      valid_for: null,
+      fetched_at: new Date().toISOString(),
+      error: err.message,
+    });
+  }
+});
+
 // ─── ARES (vyhledání firmy podle IČO) ─────────────────────────────────────
 
 // GET /api/wh/ares/:ico
