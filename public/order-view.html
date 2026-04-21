@@ -890,7 +890,7 @@
     .slot-section-sub { font-size: 12px; color: #888; margin-bottom: 12px; }
     .slot-item-row { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid #e8e0f0; }
     .slot-item-row:last-child { border-bottom: none; }
-    .slot-item-name { font-weight: 600; color: #333; font-size: 14px; white-space: nowrap; }
+    .slot-item-name { color: #333; font-size: 14px; }
     .slot-item-badge { display: inline-flex; align-items: center; gap: 6px; background: #ede7f6; color: #7c3aed; padding: 5px 12px; border-radius: 8px; font-size: 12px; font-weight: 600; }
     .slot-item-badge .remove-slot { background: none; border: none; color: #ef4444; cursor: pointer; font-size: 14px; padding: 0 2px; }
 
@@ -1250,7 +1250,13 @@
       o.items.forEach(function(item) {
         const assigned = getSlotForItem(item.id);
         html += '<div class="slot-item-row">';
-        html += '<span class="slot-item-name">' + esc(item.name) + '</span>';
+        var __nameParts = (item.name || '').split('\n');
+        var __nameTop = esc(__nameParts[0] || '');
+        var __nameSub = __nameParts.length > 1 ? esc(__nameParts.slice(1).join(' ')) : '';
+        html += '<span class="slot-item-name" style="display:inline-flex;flex-direction:column;align-items:flex-start;line-height:1.2;">' +
+          '<span style="font-weight:700;">' + __nameTop + '</span>' +
+          (__nameSub ? '<span style="font-size:11px;color:#888;font-weight:400;font-style:italic;">' + __nameSub + '</span>' : '') +
+        '</span>';
         if (assigned) {
           const ed = new Date(assigned.end_date).toLocaleDateString(currentLang === 'cs' ? 'cs-CZ' : 'en-GB');
           html += '<span class="slot-item-badge">' + ed;
@@ -1500,7 +1506,13 @@
       o.items.forEach(item => {
         html += '<div class="order-item">';
         html += '<div class="item-header">';
-        html += '<span class="item-name">' + esc(item.name) + '</span>';
+        var __nameParts2 = (item.name || '').split('\n');
+        var __nameTop2 = esc(__nameParts2[0] || '');
+        var __nameSub2 = __nameParts2.length > 1 ? esc(__nameParts2.slice(1).join(' ')) : '';
+        html += '<span class="item-name" style="display:inline-flex;flex-direction:column;line-height:1.2;">' +
+          '<span>' + __nameTop2 + '</span>' +
+          (__nameSub2 ? '<span style="font-size:11px;color:#888;font-weight:400;font-style:italic;margin-top:2px;">' + __nameSub2 + '</span>' : '') +
+        '</span>';
         html += '<span class="item-qty">' + formatPrice(item.quantity) + ' ' + esc(item.unit) + '</span>';
         html += '<span class="item-price">' + formatPrice(item.unit_price) + ' ' + cur + ' ' + t('excl_vat') + '</span>';
         html += '</div>';
