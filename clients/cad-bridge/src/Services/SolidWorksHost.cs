@@ -122,7 +122,12 @@ public sealed class SolidWorksHost : IDisposable
                 result[n] = getVal;
             }
         }
-        catch { /* ignorujeme — custom props jsou best-effort */ }
+        catch (Exception ex)
+        {
+            // Custom props jsou best-effort — při chybě si jen zalogujeme
+            // a vrátíme částečný výsledek, aby to nesestřelilo celý run.
+            Diagnostics.LogException("GetCustomProperties (best-effort)", ex);
+        }
         return result;
     }
 
@@ -137,25 +142,40 @@ public sealed class SolidWorksHost : IDisposable
     /// <summary>
     /// Vrátí seznam komponent v sestavě. Používá assembly.GetComponents.
     /// </summary>
-    internal List<AssemblyComponent> GetComponents(object model)
+    internal List<AssemblyComponent> GetComponents(object model, string filePath)
     {
         var list = new List<AssemblyComponent>();
+
+        // Typ dokumentu odvodíme z přípony — volání "GetType" přes InvokeMember
+        // kolidovalo se System.Object.GetType() a vracelo .NET Type objekt,
+        // na kterém Convert.ToInt32 hodil FormatException.
+        var ext = Path.GetExtension(filePath).ToLowerInvariant();
+        if (ext != ".sldasm") return list; // jen pro sestavy
+
         try
         {
-            var docTypeObj = Invoke(model, "GetType");
-            var docType = docTypeObj is int i ? i : Convert.ToInt32(docTypeObj ?? 0);
-            if (docType != 2) return list; // jen pro sestavy
-
             var configMgr = GetProp(model, "ConfigurationManager");
-            var activeCfg = Invoke(configMgr!, "get_ActiveConfiguration");
-            if (activeCfg == null) return list;
+            if (configMgr == null) throw new InvalidOperationException(
+                "ModelDoc2.ConfigurationManager vrátil null.");
+
+            // ActiveConfiguration je property — pryč s "get_" prefixem.
+            var activeCfg = GetProp(configMgr, "ActiveConfiguration");
+            if (activeCfg == null) throw new InvalidOperationException(
+                "ConfigurationManager.ActiveConfiguration vrátil null.");
 
             var rootComp = Invoke(activeCfg, "GetRootComponent3", true);
-            if (rootComp == null) return list;
+            if (rootComp == null) throw new InvalidOperationException(
+                "Configuration.GetRootComponent3 vrátil null (sestava není plně načtená?).");
 
             Walk(rootComp, list, 0);
         }
-        catch { /* best-effort */ }
+        catch (Exception ex)
+        {
+            // Výjimka se nesmí tiše spolknout — ProcessRow ji musí vidět.
+            Diagnostics.LogException($"GetComponents — {filePath}", ex);
+            throw new InvalidOperationException(
+                "Nepodařilo se vyčíst komponenty sestavy: " + Diagnostics.ShortMessage(ex), ex);
+        }
         return list;
     }
 
@@ -210,7 +230,7 @@ public sealed class OpenDocument : IDisposable
     public Dictionary<string, object?> GetCustomProperties(string? configName = null)
         => _host.GetCustomProperties(Model, configName);
 
-    public List<AssemblyComponent> GetComponents() => _host.GetComponents(Model);
+    public List<AssemblyComponent> GetComponents() => _host.GetComponents(Model, Path);
 
     public void Dispose() => _host.CloseDocument(Path);
 }

@@ -101,11 +101,13 @@ public sealed class ConfigurationDto
 
     public decimal? MassGrams { get; set; }
 
-    // Dvě varianty pro PDF/PNG: buď cesta k již nahranému assetu, nebo Base64
+    // Dvě varianty pro PDF/PNG/STL: buď cesta k již nahranému assetu, nebo Base64
     public string? PngPath { get; set; }
     public string? PdfPath { get; set; }
+    public string? StlPath { get; set; }
     public string? PngBase64 { get; set; }
     public string? PdfBase64 { get; set; }
+    public string? StlBase64 { get; set; }
 
     public List<object> ExternalReferences { get; set; } = new();
     public List<ComponentDto> Components { get; set; } = new();

@@ -41,6 +41,62 @@ public static class Exporters
     }
 
     /// <summary>
+    /// Exportuje dokument (.sldprt/.sldasm) do STL meshe pro webový 3D viewer
+    /// (Three.js + STLLoader). Kvalita = Fine (relativně malý soubor, cca
+    /// 2–10 MB), binární formát, jednotky z preferencí SW.
+    /// </summary>
+    public static byte[]? ExportStl(OpenDocument doc)
+    {
+        var tmp = Path.Combine(Path.GetTempPath(), $"holyos-{Guid.NewGuid():N}.stl");
+        try
+        {
+            // Nastavíme user preferences přes Extension.SetUserPreferenceInteger:
+            //   swUserPreferenceIntegerValue_e.swSTLQuality          = 98
+            //     hodnoty:  0 = Coarse, 1 = Fine
+            //   swUserPreferenceIntegerValue_e.swSTLBinaryFormat     = 26
+            //     hodnoty:  0 = ASCII,  1 = Binary (chceme Binary)
+            // swUserPreferenceOption_e.swDetailingNoOptionSpecified   = 0
+            var ext = doc.Model.GetType().InvokeMember("Extension",
+                BindingFlags.GetProperty, null, doc.Model, null);
+            if (ext != null)
+            {
+                try
+                {
+                    ext.GetType().InvokeMember("SetUserPreferenceInteger",
+                        BindingFlags.InvokeMethod, null, ext,
+                        new object?[] { 98, 0, 1 });  // swSTLQuality = Fine
+                }
+                catch { /* best-effort */ }
+                try
+                {
+                    ext.GetType().InvokeMember("SetUserPreferenceToggle",
+                        BindingFlags.InvokeMethod, null, ext,
+                        new object?[] { 26, 0, true });  // swSTLBinaryFormat = Binary
+                }
+                catch { /* best-effort */ }
+            }
+
+            int errors = 0, warnings = 0;
+            // SaveAs3(FileName, Version, Options, SaveAsOptions, Errors, Warnings)
+            doc.Model.GetType().InvokeMember("SaveAs3",
+                BindingFlags.InvokeMethod, null, doc.Model,
+                new object?[] { tmp, 0, 0, errors, warnings });
+
+            if (!File.Exists(tmp) || new FileInfo(tmp).Length == 0) return null;
+            var bytes = File.ReadAllBytes(tmp);
+            return bytes;
+        }
+        catch
+        {
+            return null;
+        }
+        finally
+        {
+            try { if (File.Exists(tmp)) File.Delete(tmp); } catch { }
+        }
+    }
+
+    /// <summary>
     /// Vytáhne PNG náhled dokumentu přímo z uloženého .sldprt/.sldasm
     /// (bez otevírání SW) — používá embeddovaný thumbnail OLE bloku.
     /// </summary>

@@ -212,7 +212,7 @@ router.get('/assets/*', (req, res) => {
 // ───────────────────────────────────────────────────────────────────────────
 const uploadAssetSchema = z.object({
   filename: z.string().optional(),
-  kind: z.enum(['pdf', 'png']),
+  kind: z.enum(['pdf', 'png', 'stl']),
   contentBase64: z.string().min(1),
 });
 router.post('/upload-asset', async (req, res, next) => {
