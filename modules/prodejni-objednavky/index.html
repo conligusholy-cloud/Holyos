@@ -298,7 +298,15 @@
         html += '<td class="person-name">' + o.order_number + '</td>';
         html += '<td>' + (o.company?.name || o.company_name || '—') + '</td>';
         html += '<td><span class="badge" style="background:' + st.color + '22;color:' + st.color + ';">' + st.label + '</span></td>';
-        html += '<td>' + (o.items_count || (o.items ? o.items.length : 0)) + '</td>';
+        // Interni warning: pokud alespon 1 polozka nema napojeny Product, zakaznik
+        // ji neodesle do vyroby (nema co vyrobit). Red ⚠ badge vedle poctu polozek.
+        const itemsArr = Array.isArray(o.items) ? o.items : [];
+        const unlinkedCount = itemsArr.filter(it => !it.product_id && !it.product).length;
+        const itemsNum = o.items_count || itemsArr.length || 0;
+        const linkWarning = unlinkedCount > 0
+          ? ' <span title="' + unlinkedCount + ' z ' + itemsNum + ' polo\u017eek nem\u00e1 napojen\u00fd V\u00fdrobek \u2014 nespadne do v\u00fdroby" style="display:inline-flex;align-items:center;gap:3px;background:rgba(239,68,68,0.15);color:#ef4444;border:1px solid rgba(239,68,68,0.35);padding:1px 6px;border-radius:6px;font-size:10px;font-weight:700;margin-left:6px;vertical-align:middle;">\u26a0 ' + unlinkedCount + '</span>'
+          : '';
+        html += '<td>' + itemsNum + linkWarning + '</td>';
         html += '<td style="font-weight:600;">' + parseFloat(o.total_amount || 0).toLocaleString('cs-CZ') + ' ' + (o.currency || 'CZK') + '</td>';
         html += '<td>' + (o.expected_delivery ? new Date(o.expected_delivery).toLocaleDateString('cs-CZ') : '—') + '</td>';
         html += '<td>' + (o.production_finish_last
