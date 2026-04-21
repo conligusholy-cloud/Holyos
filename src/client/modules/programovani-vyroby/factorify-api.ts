@@ -474,9 +474,10 @@ export function openWsConfigDialog(): void {
   FactorifyAPI.workstations.forEach(ws => {
     const dims = getWsDimensions(String(ws.id));
     const isUsed = usedIds.has(String(ws.id));
+    const isEnabled = wsEnabledSet.size === 0 || wsEnabledSet.has(String(ws.id));
     const row = document.createElement('tr');
     row.innerHTML = `
-      <td><input type="checkbox" class="ws-cfg-checkbox" data-ws-id="${ws.id}" ${isUsed ? 'checked disabled' : ''}></td>
+      <td><input type="checkbox" class="ws-cfg-checkbox" data-ws-id="${ws.id}" ${isUsed ? 'checked disabled' : (isEnabled ? 'checked' : '')}></td>
       <td>${ws.name}</td>
       <td style="color:var(--text2);font-size:11px;">${ws.code || '-'}</td>
       <td style="color:var(--text2);font-size:12px;">${(ws as any).width_m != null ? (ws as any).width_m : '—'} m</td>
@@ -495,37 +496,31 @@ export function closeWsConfigDialog(): void {
 }
 
 export function saveWsConfig(): void {
-  const wInputs = document.querySelectorAll('.ws-cfg-w');
-  const hInputs = document.querySelectorAll('.ws-cfg-h');
-
-  wInputs.forEach(input => {
-    const wsId = (input as HTMLInputElement).dataset.wsId;
-    const value = (input as HTMLInputElement).value;
-    if (wsId && value) {
-      setWsDimension(wsId, 'w', value);
+  // Precti zaskrtnute checkboxy a nastav wsEnabledSet — tim se paleta omezi.
+  // Pokud jsou VSECHNY (vcetne disabled umistenych) zaskrtnute, vymazeme set
+  // (prazdny = zobraz vse — jednodussi stav a neutralni default).
+  const checkboxes = document.querySelectorAll('.ws-cfg-checkbox');
+  const totalCount = checkboxes.length;
+  let checkedCount = 0;
+  const newEnabledIds: string[] = [];
+  checkboxes.forEach(cb => {
+    const input = cb as HTMLInputElement;
+    const wsId = input.dataset.wsId || '';
+    if (input.checked) {
+      checkedCount++;
+      if (wsId) newEnabledIds.push(wsId);
     }
   });
 
-  hInputs.forEach(input => {
-    const wsId = (input as HTMLInputElement).dataset.wsId;
-    const value = (input as HTMLInputElement).value;
-    if (wsId && value) {
-      setWsDimension(wsId, 'h', value);
-    }
-  });
-
-  const defaultWInput = document.getElementById('ws-cfg-default-w') as HTMLInputElement | null;
-  const defaultHInput = document.getElementById('ws-cfg-default-h') as HTMLInputElement | null;
-
-  if (defaultWInput && defaultHInput) {
-    const w = parseFloat(defaultWInput.value);
-    const h = parseFloat(defaultHInput.value);
-    if (!isNaN(w) && !isNaN(h)) {
-      applyDefaultSize(w, h);
-    }
+  wsEnabledSet.clear();
+  if (checkedCount > 0 && checkedCount < totalCount) {
+    // Castecny vyber — ulozime jen zaskrtnute
+    for (const id of newEnabledIds) wsEnabledSet.add(id);
   }
+  // Jinak (vsechny nebo zadne) nechame set prazdny -> zobraz vse.
 
   closeWsConfigDialog();
+  updateFactorifyUI();
   showToast('Konfigurace pracovišť uložena');
 }
 
