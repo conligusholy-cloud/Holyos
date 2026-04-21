@@ -284,7 +284,9 @@
         el.innerHTML = '<div class="empty">Žádné výkresy. Pošli je přes desktop klienta (kontextové menu "Odevzdat do výroby").</div>';
         return;
       }
-      const rows = state.drawings.map(d => `
+      const rows = state.drawings.map(d => {
+        const creatorName = d.creator ? escapeHtml(d.creator.first_name + ' ' + d.creator.last_name) : '<span style="color:var(--text2)">—</span>';
+        return `
         <tr data-id="${d.id}" class="${d.id === state.activeDrawingId ? 'selected' : ''}">
           <td><span class="badge badge-ext-${escapeHtml(d.extension)}">${escapeHtml(d.extension)}</span></td>
           <td><b>${escapeHtml(d.file_name)}</b>${d.title ? '<br><span style="color:var(--text2);font-size:12px;">'+escapeHtml(d.title)+'</span>' : ''}</td>
@@ -292,13 +294,19 @@
           <td>${d.block ? escapeHtml(d.block.name) : '—'}</td>
           <td>v${d.version}</td>
           <td><span class="badge badge-count">${(d.configurations || []).length} konfig.</span></td>
+          <td style="font-size:12px;">${creatorName}</td>
           <td>${fmt(d.last_import_at)}</td>
-        </tr>`).join('');
+          <td style="white-space:nowrap;" onclick="event.stopPropagation();">
+            <button class="btn btn-sm" style="background:rgba(59,130,246,0.12);color:#3b82f6;border-color:rgba(59,130,246,0.3);padding:3px 8px;font-size:11px;" onclick="openEditDrawing(${d.id})" title="Upravit">\u270f\ufe0f</button>
+            <button class="btn btn-sm btn-danger" style="padding:3px 8px;font-size:11px;margin-left:4px;" onclick="deleteDrawing(${d.id})" title="Smazat">\ud83d\uddd1\ufe0f</button>
+          </td>
+        </tr>`;
+      }).join('');
       el.innerHTML = `
         <table class="data-table">
           <thead><tr>
             <th>Typ</th><th>Soubor</th><th>Projekt</th><th>Blok</th><th>Verze</th>
-            <th>Konfig.</th><th>Poslední import</th>
+            <th>Konfig.</th><th>Importoval</th><th>Poslední import</th><th>Akce</th>
           </tr></thead>
           <tbody>${rows}</tbody>
         </table>`;
@@ -310,6 +318,78 @@
           tr.classList.add('selected');
         });
       });
+    }
+
+    // ─── Edit / Delete vykresu ───────────────────────────────────────────────
+    async function deleteDrawing(id) {
+      if (!confirm('Opravdu smazat tento v\u00fdkres i se v\u0161emi konfiguracemi?')) return;
+      try {
+        const res = await fetch('/api/cad/drawings/' + id, { method: 'DELETE' });
+        if (!res.ok) { alert('Chyba p\u0159i maz\u00e1n\u00ed'); return; }
+        // Uklid state
+        state.drawings = state.drawings.filter(d => d.id !== id);
+        if (state.activeDrawingId === id) {
+          state.activeDrawingId = null;
+          document.getElementById('detail-pane').innerHTML = '<div class="empty">Vyber v\u00fdkres ze seznamu pro zobrazen\u00ed detailu.</div>';
+        }
+        renderDrawings();
+      } catch (e) { alert('Chyba: ' + e.message); }
+    }
+
+    async function openEditDrawing(id) {
+      const d = state.drawings.find(x => x.id === id);
+      if (!d) return;
+      // Nactem bloky pro dropdown
+      let blocks = [];
+      try {
+        const projectId = d.project ? d.project.id : null;
+        if (projectId) {
+          const br = await fetch('/api/cad/project-blocks?projectId=' + projectId);
+          if (br.ok) blocks = await br.json();
+        }
+      } catch(e) {}
+      const blockOpts = ['<option value="">\u2014 Bez bloku \u2014</option>']
+        .concat(blocks.map(b => '<option value="' + b.id + '"' + (d.block && d.block.id === b.id ? ' selected' : '') + '>' + escapeHtml(b.name) + '</option>'))
+        .join('');
+      const modalRoot = document.getElementById('modal-root') || (() => { const m = document.createElement('div'); m.id='modal-root'; document.body.appendChild(m); return m; })();
+      modalRoot.innerHTML =
+        '<div class="modal-overlay" onclick="if(event.target===this)closeDrawingEditModal()" style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:10000;display:flex;align-items:center;justify-content:center;">' +
+          '<div class="modal" style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;width:560px;max-width:95vw;">' +
+            '<h2 style="margin-bottom:16px;">\u270f\ufe0f Upravit v\u00fdkres</h2>' +
+            '<form onsubmit="saveDrawingEdit(event,' + id + ')">' +
+              '<div class="form-group"><label style="font-size:12px;color:var(--text2);">Soubor</label><div style="padding:6px 0;"><b>' + escapeHtml(d.file_name) + '</b> <span style="color:var(--text2);font-size:11px;">(neupravitelne)</span></div></div>' +
+              '<div class="form-group"><label>N\u00e1zev / titulek</label><input type="text" name="title" value="' + escapeHtml(d.title || '') + '" placeholder="Nap\u0159. Hlavn\u00ed r\u00e1m"></div>' +
+              '<div class="form-group"><label>Popis</label><textarea name="description" rows="3" placeholder="Intern\u00ed pozn\u00e1mky...">' + escapeHtml(d.description || '') + '</textarea></div>' +
+              '<div class="form-group"><label>Blok (skupina)</label><select name="block_id">' + blockOpts + '</select></div>' +
+              '<div class="modal-actions" style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;">' +
+                '<button type="button" class="btn btn-secondary" onclick="closeDrawingEditModal()">Zru\u0161it</button>' +
+                '<button type="submit" class="btn btn-primary">Ulo\u017eit</button>' +
+              '</div>' +
+            '</form>' +
+          '</div>' +
+        '</div>';
+    }
+
+    function closeDrawingEditModal() {
+      const m = document.getElementById('modal-root');
+      if (m) m.innerHTML = '';
+    }
+
+    async function saveDrawingEdit(e, id) {
+      e.preventDefault();
+      const f = new FormData(e.target);
+      const data = {
+        title: f.get('title') || null,
+        description: f.get('description') || null,
+        block_id: f.get('block_id') ? parseInt(f.get('block_id')) : null,
+      };
+      try {
+        const res = await fetch('/api/cad/drawings/' + id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+        if (!res.ok) { alert('Chyba p\u0159i ulo\u017een\u00ed'); return; }
+        closeDrawingEditModal();
+        await loadDrawings();
+        if (state.activeDrawingId === id) loadDetail(id);
+      } catch (e) { alert('Chyba: ' + e.message); }
     }
 
     // ─── Render: detail výkresu ──────────────────────────────────────────────
@@ -359,9 +439,14 @@
           <div><span>Projekt</span>${d.project ? escapeHtml(d.project.code + ' · ' + d.project.name) : '—'}</div>
           <div><span>Blok</span>${d.block ? escapeHtml(d.block.name) : '—'}</div>
           <div><span>Verze</span>v${d.version}</div>
-          <div><span>Autor</span>${d.creator ? escapeHtml(d.creator.first_name + ' ' + d.creator.last_name) : '—'}</div>
-          <div><span>Import</span>${fmt(d.last_import_at)}</div>
-          <div><span>Původní cesta</span>${escapeHtml(d.source_path || '—')}</div>
+          <div><span>Typ</span>${escapeHtml(d.extension)}</div>
+          <div><span>Importoval</span>${d.creator ? escapeHtml(d.creator.first_name + ' ' + d.creator.last_name) + (d.creator.email ? ' <small style="color:var(--text2);">(' + escapeHtml(d.creator.email) + ')</small>' : '') : '—'}</div>
+          <div><span>Vytvořeno</span>${fmt(d.created_at)}</div>
+          <div><span>Poslední import</span>${fmt(d.last_import_at)}</div>
+          <div><span>Relativní cesta</span>${escapeHtml(d.relative_path || '—')}</div>
+          <div><span>Původní cesta</span><code style="font-size:11px;word-break:break-all;">${escapeHtml(d.source_path || '—')}</code></div>
+          <div><span>Checksum (SHA256)</span><code style="font-size:10px;color:var(--text2);word-break:break-all;">${escapeHtml(d.checksum || '—')}</code></div>
+          ${d.description ? '<div style="grid-column:1/-1;"><span>Popis</span>' + escapeHtml(d.description) + '</div>' : ''}
         </div>
         ${configs || '<div class="empty">Bez konfigurací.</div>'}`;
     }
@@ -410,5 +495,6 @@
       }
     })();
   </script>
+  <div id="modal-root"></div>
 </body>
 </html>

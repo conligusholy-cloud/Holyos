@@ -141,6 +141,7 @@ router.get('/drawings', async (req, res, next) => {
       include: {
         project: { select: { id: true, code: true, name: true } },
         block:   { select: { id: true, name: true } },
+        creator: { select: { id: true, first_name: true, last_name: true, email: true } },
         configurations: {
           select: { id: true, config_name: true, quantity: true, png_path: true, pdf_path: true },
         },
@@ -527,6 +528,43 @@ router.post('/components/:id/resolve', async (req, res, next) => {
       data: { material_id, is_unknown: false, resolved: true },
     });
     res.json(comp);
+  } catch (err) { next(err); }
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// PATCH /api/cad/drawings/:id — update title/description/block_id
+// ───────────────────────────────────────────────────────────────────────────
+router.patch('/drawings/:id', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ error: 'Neplatne ID' });
+    const { title, description, block_id } = req.body || {};
+    const data = {};
+    if (title !== undefined) data.title = title ? String(title).trim() : null;
+    if (description !== undefined) data.description = description ? String(description).trim() : null;
+    if (block_id !== undefined) data.block_id = block_id ? parseInt(block_id) : null;
+    const updated = await prisma.cadDrawing.update({
+      where: { id },
+      data,
+      include: {
+        project: { select: { id: true, code: true, name: true } },
+        block:   { select: { id: true, name: true } },
+        creator: { select: { id: true, first_name: true, last_name: true, email: true } },
+      },
+    });
+    res.json(updated);
+  } catch (err) { next(err); }
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// DELETE /api/cad/drawings/:id — smaze vykres (cascade smaze konfigurace)
+// ───────────────────────────────────────────────────────────────────────────
+router.delete('/drawings/:id', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ error: 'Neplatne ID' });
+    await prisma.cadDrawing.delete({ where: { id } });
+    res.json({ ok: true });
   } catch (err) { next(err); }
 });
 
