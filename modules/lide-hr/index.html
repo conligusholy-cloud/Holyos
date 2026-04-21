@@ -749,7 +749,7 @@
 
       for (const p of people) {
         html += `<tr onclick="openPersonModal(${p.id})">
-          <td class="person-name"><div style="display:flex;align-items:center;gap:8px;"><span style="width:28px;height:28px;border-radius:50%;background:var(--surface2);display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden;font-size:11px;color:var(--text2);">${p.photo_url ? '<img src="' + p.photo_url + '" style="width:100%;height:100%;object-fit:cover;">' : p.first_name.charAt(0).toUpperCase()}</span>${p.first_name} ${p.last_name}${!p.active ? ' <span style="color:var(--text2)">(neaktivní)</span>' : ''}${p.is_super_admin ? ' <span style="font-size:9px;background:rgba(239,68,68,0.15);color:#ef4444;padding:1px 5px;border-radius:4px;">SA</span>' : ''}</div></td>
+          <td class="person-name"><div style="display:flex;align-items:center;gap:8px;"><span style="width:28px;height:28px;border-radius:50%;background:var(--surface2);display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden;font-size:11px;color:var(--text2);">${p.photo_url ? '<img src="' + p.photo_url + '" style="width:100%;height:100%;object-fit:cover;">' : p.first_name.charAt(0).toUpperCase()}</span>${p.last_name} ${p.first_name}${!p.active ? ' <span style="color:var(--text2)">(neaktivní)</span>' : ''}${p.is_super_admin ? ' <span style="font-size:9px;background:rgba(239,68,68,0.15);color:#ef4444;padding:1px 5px;border-radius:4px;">SA</span>' : ''}</div></td>
           <td><span class="badge badge-${p.type}">${TYPE_LABELS[p.type] || p.type}</span></td>
           <td>${p.email || '—'}</td>
           <td>${p.phone || '—'}</td>
@@ -757,7 +757,7 @@
           <td>${p.role_name || '—'}</td>
           <td>${p.contract_type ? '<span class="badge badge-' + p.contract_type + '">' + (CONTRACT_LABELS[p.contract_type] || p.contract_type) + '</span>' : '—'}</td>
           <td>${p.username ? '<span class="badge badge-active">' + p.username + '</span>' : '<span style="color:var(--text2);font-size:11px">—</span>'}</td>
-          <td><button class="btn btn-sm btn-secondary" onclick="event.stopPropagation();deletePerson(${p.id},'${p.first_name} ${p.last_name}')">✕</button></td>
+          <td><button class="btn btn-sm btn-secondary" onclick="event.stopPropagation();deletePerson(${p.id},'${p.last_name} ${p.first_name}')">✕</button></td>
         </tr>`;
       }
       html += '</tbody></table>';
@@ -1236,7 +1236,7 @@
         const typeLabels = { work: 'Práce', vacation: 'Dovolená', sick: 'Nemoc', holiday: 'Svátek', other: 'Jiné' };
         html += `<tr>
           <td>${formatDate(r.date)}</td>
-          <td class="person-name">${r.first_name} ${r.last_name}</td>
+          <td class="person-name">${r.last_name} ${r.first_name}</td>
           <td>${r.clock_in || '—'}</td><td>${r.clock_out || '—'}</td>
           <td>${r.break_minutes || 0} min</td><td><strong>${worked}</strong></td>
           <td>${typeLabels[r.type] || r.type}</td>
@@ -1260,7 +1260,7 @@
       await loadPeopleData();
       let options = '';
       for (const p of people.filter(x => x.type === 'employee')) {
-        options += `<option value="${p.id}">${p.first_name} ${p.last_name}</option>`;
+        options += `<option value="${p.id}">${p.last_name} ${p.first_name}</option>`;
       }
       const today = new Date().toISOString().split('T')[0];
 
@@ -1378,7 +1378,7 @@
         return `<div class="presence-card">
           <div class="presence-avatar">${avatar}</div>
           <div class="presence-info">
-            <div class="presence-name">${p.first_name} ${p.last_name}</div>
+            <div class="presence-name">${p.last_name} ${p.first_name}</div>
             <div class="presence-role">${p.role_name || '—'}</div>
             <div class="presence-time">${timeInfo}</div>
           </div>
@@ -1628,7 +1628,7 @@
       let html = '<table class="data-table"><thead><tr><th>Zaměstnanec</th><th>Typ</th><th>Od</th><th>Do</th><th>Poznámka</th><th>Stav</th><th></th></tr></thead><tbody>';
       for (const r of reqs) {
         const person = people.find(p => p.id === r.person_id);
-        const personName = person ? `${person.first_name} ${person.last_name}` : `#${r.person_id}`;
+        const personName = person ? `${person.last_name} ${person.first_name}` : `#${r.person_id}`;
         const actions = r.status === 'pending' ? `
           <button class="btn btn-sm" style="background:#10b981;color:#fff;border-color:#10b981" onclick="approveLeave(${r.id})">✓ Schválit</button>
           <button class="btn btn-sm btn-danger" onclick="rejectLeave(${r.id})">✕ Zamítnout</button>
@@ -1651,7 +1651,7 @@
       await loadPeopleData();
       let options = '';
       for (const p of people.filter(x => x.type === 'employee')) {
-        options += `<option value="${p.id}">${p.first_name} ${p.last_name}</option>`;
+        options += `<option value="${p.id}">${p.last_name} ${p.first_name}</option>`;
       }
       // Fetch absence types for type select
       let typeOptions = '<option value="vacation">Dovolená</option><option value="sick">Nemocenská</option>';
@@ -1756,7 +1756,7 @@
       // Group by person
       const byPerson = {};
       for (const r of records) {
-        if (!byPerson[r.person_id]) byPerson[r.person_id] = { name: r.first_name + ' ' + r.last_name, records: [] };
+        if (!byPerson[r.person_id]) byPerson[r.person_id] = { name: r.last_name + ' ' + r.first_name, records: [] };
         byPerson[r.person_id].records.push(r);
       }
 
@@ -1774,7 +1774,7 @@
 
         html += `<tr${changed ? ' style="background:rgba(16,185,129,0.05)"' : ''}>
           <td>${formatDate(r.date)}</td>
-          <td class="person-name">${r.first_name} ${r.last_name}</td>
+          <td class="person-name">${r.last_name} ${r.first_name}</td>
           <td>${r.clock_in || '—'}</td><td>${r.clock_out || '—'}</td>
           <td><input type="time" value="${adjIn || ''}" onchange="updateAdjusted(${r.id},'adjusted_clock_in',this.value)" style="background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:3px 6px;color:var(--text);font-size:12px;width:90px"></td>
           <td><input type="time" value="${adjOut || ''}" onchange="updateAdjusted(${r.id},'adjusted_clock_out',this.value)" style="background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:3px 6px;color:var(--text);font-size:12px;width:90px"></td>
@@ -1910,7 +1910,7 @@
       const sel = document.getElementById('export-person');
       if (sel && sel.options.length <= 1 && people.length > 0) {
         for (const p of people.filter(x => x.type === 'employee')) {
-          sel.add(new Option(p.first_name + ' ' + p.last_name, p.id));
+          sel.add(new Option(p.last_name + ' ' + p.first_name, p.id));
         }
       }
       // Default to current month
@@ -2563,7 +2563,7 @@
       const employees = people.filter(p => p.type === 'employee');
       let checkboxes = employees.map(p =>
         '<label style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:13px;cursor:pointer;">' +
-        '<input type="checkbox" name="exclude_' + p.id + '" value="' + p.id + '"> ' + p.first_name + ' ' + p.last_name + '</label>'
+        '<input type="checkbox" name="exclude_' + p.id + '" value="' + p.id + '"> ' + p.last_name + ' ' + p.first_name + '</label>'
       ).join('');
 
       document.getElementById('modal-root').innerHTML = `<div class="modal-overlay">
@@ -2755,7 +2755,7 @@
       for (const p of people.filter(x => x.type === 'employee')) {
         const opt = document.createElement('option');
         opt.value = p.id;
-        opt.textContent = p.first_name + ' ' + p.last_name;
+        opt.textContent = p.last_name + ' ' + p.first_name;
         sel.appendChild(opt);
       }
     }
@@ -2767,7 +2767,7 @@
         try { const r = await fetch('/api/hr/documents/' + id); doc = await r.json(); } catch(e) {}
       }
       const personOptions = people.filter(p => p.type === 'employee').map(p =>
-        '<option value="' + p.id + '"' + (doc.person_id === p.id ? ' selected' : '') + '>' + p.first_name + ' ' + p.last_name + '</option>'
+        '<option value="' + p.id + '"' + (doc.person_id === p.id ? ' selected' : '') + '>' + p.last_name + ' ' + p.first_name + '</option>'
       ).join('');
       const catOptions = Object.entries(DOC_CATEGORIES).map(([k,v]) =>
         '<option value="' + k + '"' + (doc.category === k ? ' selected' : '') + '>' + v + '</option>'
@@ -2950,7 +2950,7 @@
       // Load people
       const pSel = document.getElementById('gen-person');
       pSel.innerHTML = '<option value="">— Vyberte zaměstnance —</option>' +
-        people.filter(p => p.type === 'employee').map(p => '<option value="' + p.id + '">' + p.first_name + ' ' + p.last_name + '</option>').join('');
+        people.filter(p => p.type === 'employee').map(p => '<option value="' + p.id + '">' + p.last_name + ' ' + p.first_name + '</option>').join('');
     }
 
     async function updateGenVariables() {
@@ -3104,7 +3104,7 @@
       for (const p of people.filter(x => x.type === 'employee')) {
         const opt = document.createElement('option');
         opt.value = p.id;
-        opt.textContent = p.first_name + ' ' + p.last_name;
+        opt.textContent = p.last_name + ' ' + p.first_name;
         sel.appendChild(opt);
       }
     }
