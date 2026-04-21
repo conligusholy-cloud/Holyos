@@ -100,7 +100,7 @@ export function renderAll() {
     // Nejprve vykreslit areál jako read-only pozadí (ztlumené)
     if (state.arealObjects && state.arealObjects.length > 0) {
         const arealGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-        arealGroup.setAttribute('opacity', '0.45');
+        arealGroup.setAttribute('opacity', '0.75');
         arealGroup.style.pointerEvents = 'none';
         state.arealObjects.forEach(obj => {
             renderArealBackgroundObject(arealGroup, obj);
@@ -191,8 +191,8 @@ function renderDiamondObject(g, obj, strokeColor, fillColor) {
     poly.setAttribute('points', `${cx},0 ${obj.w},${cy} ${cx},${obj.h} 0,${cy}`);
     poly.setAttribute('fill', fillColor);
     poly.setAttribute('stroke', strokeColor);
-    poly.setAttribute('stroke-width', '0.08');
-    poly.setAttribute('stroke-opacity', '0.5');
+    poly.setAttribute('stroke-width', '0.3');
+    poly.setAttribute('stroke-opacity', '0.9');
     g.appendChild(poly);
     addCornerLabels(g, obj);
     const rotV = obj.rotation || 0;
