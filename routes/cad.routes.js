@@ -22,7 +22,7 @@ const fs = require('fs');
 const path = require('path');
 const { z } = require('zod');
 const { prisma } = require('../config/database');
-const { requireAuth } = require('../middleware/auth');
+const { requireAuth, requireSuperAdmin } = require('../middleware/auth');
 
 // ─── Úložiště pro PDF/PNG ────────────────────────────────────────────────────
 // Na Railway persistent volume /app/data/cad-assets, lokálně ./data/cad-assets.
@@ -64,7 +64,9 @@ function absAssetPath(rel) {
 }
 
 // ─── Autentizace pro všechny CAD endpointy ──────────────────────────────────
+// CAD výkresy jsou interní/super-admin modul — běžní uživatelé 403.
 router.use(requireAuth);
+router.use(requireSuperAdmin);
 
 // ───────────────────────────────────────────────────────────────────────────
 // GET /api/cad/project-blocks — strom projektů + bloků

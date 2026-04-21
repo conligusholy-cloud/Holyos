@@ -15,10 +15,7 @@ function renderSidebar(activeModule) {
     { id: 'sklady',                name: 'Sklady',              icon: '&#127981;', color: '#f59e0b', active: true },
     { id: 'pracoviste',           name: 'Pracoviště',          icon: '&#127981;', color: '#14b8a6', active: true },
     { id: 'vozovy-park',          name: 'Vozový park',         icon: '&#128663;', color: '#0ea5e9', active: true },
-    { id: 'cad-vykresy',          name: 'CAD výkresy',         icon: '&#128196;', color: '#0284c7', active: true },
     { id: 'chat',                 name: 'Zprávy',              icon: '&#128172;', color: '#a78bfa', active: true },
-    { id: 'ai-agenti',            name: 'AI Agenti',           icon: '&#129302;', color: '#8b5cf6', active: true },
-    { id: 'dev-hub',              name: 'Dev Hub',             icon: '&#128736;', color: '#f97316', active: true },
     { id: 'kiosky',               name: 'Kiosky',              icon: '&#128433;', color: '#06b6d4', active: true },
     { id: 'planovani',           name: 'Plánování výroby',    icon: '&#128197;', color: '#3b82f6', active: false },
     { id: 'material',            name: 'Materiálový tok',     icon: '&#128666;', color: '#10b981', active: false },
@@ -128,6 +125,9 @@ function renderSidebar(activeModule) {
         nav.appendChild(saLabel);
 
         var saItems = [
+          { id: 'cad-vykresy', href: basePath + 'modules/cad-vykresy/index.html', icon: '&#128196;', color: 'rgba(2,132,199,0.15)', textColor: '#0284c7', name: 'CAD výkresy' },
+          { id: 'ai-agenti', href: basePath + 'modules/ai-agenti/index.html', icon: '&#129302;', color: 'rgba(139,92,246,0.15)', textColor: '#8b5cf6', name: 'AI Agenti' },
+          { id: 'dev-hub', href: basePath + 'modules/dev-hub/index.html', icon: '&#128736;', color: 'rgba(249,115,22,0.15)', textColor: '#f97316', name: 'Dev Hub' },
           { id: 'mindmap', href: basePath + 'modules/holyos-mindmap.html', icon: '&#129504;', color: 'rgba(239,68,68,0.15)', textColor: '#ef4444', name: 'Myšlenková mapa' },
           { id: 'admin-tasks', href: basePath + 'modules/admin-tasks/index.html', icon: '&#128203;', color: 'rgba(108,92,231,0.15)', textColor: '#a78bfa', name: 'Požadavky' },
           { id: 'audit-log', href: basePath + 'modules/audit-log/index.html', icon: '&#128220;', color: 'rgba(245,158,11,0.15)', textColor: '#f59e0b', name: 'Historie změn' },

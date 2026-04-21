@@ -5,14 +5,14 @@
 const express = require('express');
 const router = express.Router();
 const { prisma } = require('../config/database');
-const { requireAuth, requireAdmin } = require('../middleware/auth');
+const { requireAuth, requireSuperAdmin } = require('../middleware/auth');
 const Anthropic = require('@anthropic-ai/sdk');
 const { getDevTools, executeDevTool } = require('../mcp-servers/dev-server');
 const fs = require('fs');
 const path = require('path');
 
 router.use(requireAuth);
-router.use(requireAdmin);
+router.use(requireSuperAdmin);
 
 // ─── Výchozí agenti — seedují se do DB, pokud je prázdná ─────────────────
 
