@@ -296,6 +296,16 @@
           <td>${d.block ? escapeHtml(d.block.name) : '—'}</td>
           <td>v${d.version}</td>
           <td><span class="badge badge-count">${(d.configurations || []).length} konfig.</span></td>
+          <td style="white-space:nowrap;" onclick="event.stopPropagation();">${(() => {
+            const pdfConfigs = (d.configurations || []).filter(c => c.pdf_path);
+            if (pdfConfigs.length === 0) return '<span style="color:var(--text2);">\u2014</span>';
+            if (pdfConfigs.length === 1) {
+              return '<a href="/api/cad/assets/' + encodeURI(pdfConfigs[0].pdf_path) + '" target="_blank" class="btn btn-sm" style="background:rgba(239,68,68,0.12);color:#ef4444;border-color:rgba(239,68,68,0.3);padding:3px 10px;font-size:11px;text-decoration:none;" title="Otev\u0159\u00edt PDF">\ud83d\udcc4 PDF</a>';
+            }
+            // Vic konfiguraci — zobraz prvni + badge s poctem dalsich
+            return '<a href="/api/cad/assets/' + encodeURI(pdfConfigs[0].pdf_path) + '" target="_blank" class="btn btn-sm" style="background:rgba(239,68,68,0.12);color:#ef4444;border-color:rgba(239,68,68,0.3);padding:3px 10px;font-size:11px;text-decoration:none;" title="Otev\u0159\u00edt PDF konfigurace: ' + escapeHtml(pdfConfigs[0].config_name || '') + '">\ud83d\udcc4 PDF</a>' +
+              ' <span class="badge badge-count" title="Dal\u0161\u00ed ' + (pdfConfigs.length - 1) + ' PDF — v detailu">+' + (pdfConfigs.length - 1) + '</span>';
+          })()}</td>
           <td style="font-size:12px;">${creatorName}</td>
           <td>${fmt(d.last_import_at)}</td>
           <td style="white-space:nowrap;" onclick="event.stopPropagation();">
@@ -308,7 +318,7 @@
         <table class="data-table">
           <thead><tr>
             <th>Typ</th><th>Soubor</th><th>Projekt</th><th>Blok</th><th>Verze</th>
-            <th>Konfig.</th><th>Importoval</th><th>Poslední import</th><th>Akce</th>
+            <th>Konfig.</th><th>PDF</th><th>Importoval</th><th>Poslední import</th><th>Akce</th>
           </tr></thead>
           <tbody>${rows}</tbody>
         </table>`;
