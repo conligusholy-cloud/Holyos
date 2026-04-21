@@ -218,9 +218,11 @@
 
       for (const p of state.projects) {
         const active = state.activeProjectId === p.Id && !state.activeBlockId;
-        parts.push('<div class="tree-node' + (active ? ' active' : '') + '" data-project="' + p.Id + '">' +
+        parts.push('<div class="tree-node' + (active ? ' active' : '') + '" data-project="' + p.Id + '" style="display:flex;align-items:center;gap:6px;">' +
                    '<span class="tree-expand">&#9662;</span>' +
-                   '<span>' + escapeHtml(p.Code) + ' · ' + escapeHtml(p.Name) + '</span>' +
+                   '<span style="flex:1;">' + escapeHtml(p.Code) + ' \u00b7 ' + escapeHtml(p.Name) + '</span>' +
+                   '<button class="btn-icon-mini" title="Upravit" onclick="event.stopPropagation();openEditProject(' + p.Id + ')" style="background:none;border:none;color:#3b82f6;cursor:pointer;font-size:12px;padding:2px 4px;">\u270f\ufe0f</button>' +
+                   '<button class="btn-icon-mini" title="Smazat" onclick="event.stopPropagation();deleteProject(' + p.Id + ')" style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:12px;padding:2px 4px;">\ud83d\uddd1\ufe0f</button>' +
                    '</div>');
         // rekurze bloků
         (function walk(blocks, depth) {
@@ -343,11 +345,23 @@
       let blocks = [];
       try {
         const projectId = d.project ? d.project.id : null;
-        if (projectId) {
-          const br = await fetch('/api/cad/project-blocks?projectId=' + projectId);
-          if (br.ok) blocks = await br.json();
+        const br = await fetch('/api/cad/project-blocks', fetchOpts());
+        if (br.ok) {
+          const bd = await br.json();
+          const projects = (bd && bd.Projects) || [];
+          const targetProject = projects.find(pp => pp.Id === projectId);
+          // Flatten stromove struktury Blocks -> plochy seznam
+          const flatten = (arr, depth) => {
+            const out = [];
+            for (const b of (arr || [])) {
+              out.push({ id: b.id, name: '\u00a0\u00a0'.repeat(depth) + b.name });
+              if (b.children && b.children.length) out.push(...flatten(b.children, depth + 1));
+            }
+            return out;
+          };
+          blocks = targetProject ? flatten(targetProject.Blocks, 0) : [];
         }
-      } catch(e) {}
+      } catch(e) { console.warn('load blocks fail', e); }
       const blockOpts = ['<option value="">\u2014 Bez bloku \u2014</option>']
         .concat(blocks.map(b => '<option value="' + b.id + '"' + (d.block && d.block.id === b.id ? ' selected' : '') + '>' + escapeHtml(b.name) + '</option>'))
         .join('');
@@ -389,6 +403,66 @@
         closeDrawingEditModal();
         await loadDrawings();
         if (state.activeDrawingId === id) loadDetail(id);
+      } catch (e) { alert('Chyba: ' + e.message); }
+    }
+
+    // ─── Edit / Delete projektu ──────────────────────────────────────────────
+    async function deleteProject(id) {
+      const p = state.projects.find(x => x.Id === id);
+      if (!p) return;
+      const msg = 'Opravdu smazat projekt "' + (p.Code || '?') + ' \u00b7 ' + (p.Name || '') + '"?\n\n\u26a0\ufe0f Smaze se v\u010detne vsech bloku a v\u00fdkresu v projektu.';
+      if (!confirm(msg)) return;
+      try {
+        const res = await fetch('/api/cad/projects/' + id, { method: 'DELETE' });
+        if (!res.ok) { alert('Chyba p\u0159i maz\u00e1n\u00ed'); return; }
+        if (state.activeProjectId === id) {
+          state.activeProjectId = null;
+          state.activeBlockId = null;
+        }
+        await loadProjects();
+        await loadDrawings();
+      } catch (e) { alert('Chyba: ' + e.message); }
+    }
+
+    function openEditProject(id) {
+      const p = state.projects.find(x => x.Id === id);
+      if (!p) return;
+      const modalRoot = document.getElementById('modal-root') || (() => { const m = document.createElement('div'); m.id='modal-root'; document.body.appendChild(m); return m; })();
+      modalRoot.innerHTML =
+        '<div class="modal-overlay" onclick="if(event.target===this)closeProjectEditModal()" style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:10000;display:flex;align-items:center;justify-content:center;">' +
+          '<div class="modal" style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;width:520px;max-width:95vw;">' +
+            '<h2 style="margin-bottom:16px;">\u270f\ufe0f Upravit projekt</h2>' +
+            '<form onsubmit="saveProjectEdit(event,' + id + ')">' +
+              '<div class="form-group"><label>K\u00f3d *</label><input type="text" name="code" value="' + escapeHtml(p.Code || '') + '" required placeholder="TEST-01"></div>' +
+              '<div class="form-group"><label>N\u00e1zev *</label><input type="text" name="name" value="' + escapeHtml(p.Name || '') + '" required placeholder="Testovac\u00ed projekt"></div>' +
+              '<div class="form-group"><label>Z\u00e1kazn\u00edk</label><input type="text" name="customer" value="' + escapeHtml(p.Customer || '') + '" placeholder="Nepovinn\u00e9"></div>' +
+              '<div class="modal-actions" style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;">' +
+                '<button type="button" class="btn btn-secondary" onclick="closeProjectEditModal()">Zru\u0161it</button>' +
+                '<button type="submit" class="btn btn-primary">Ulo\u017eit</button>' +
+              '</div>' +
+            '</form>' +
+          '</div>' +
+        '</div>';
+    }
+
+    function closeProjectEditModal() {
+      const m = document.getElementById('modal-root');
+      if (m) m.innerHTML = '';
+    }
+
+    async function saveProjectEdit(e, id) {
+      e.preventDefault();
+      const f = new FormData(e.target);
+      const data = {
+        code: f.get('code'),
+        name: f.get('name'),
+        customer: f.get('customer') || null,
+      };
+      try {
+        const res = await fetch('/api/cad/projects/' + id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+        if (!res.ok) { alert('Chyba p\u0159i ulo\u017een\u00ed'); return; }
+        closeProjectEditModal();
+        await loadProjects();
       } catch (e) { alert('Chyba: ' + e.message); }
     }
 

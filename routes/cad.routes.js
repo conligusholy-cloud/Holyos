@@ -557,6 +557,36 @@ router.patch('/drawings/:id', async (req, res, next) => {
 });
 
 // ───────────────────────────────────────────────────────────────────────────
+// PATCH /api/cad/projects/:id — update code/name/customer/active
+// ───────────────────────────────────────────────────────────────────────────
+router.patch('/projects/:id', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ error: 'Neplatne ID' });
+    const { code, name, customer, active } = req.body || {};
+    const data = {};
+    if (code !== undefined) data.code = String(code).trim();
+    if (name !== undefined) data.name = String(name).trim();
+    if (customer !== undefined) data.customer = customer ? String(customer).trim() : null;
+    if (active !== undefined) data.active = !!active;
+    const updated = await prisma.cadProject.update({ where: { id }, data });
+    res.json(updated);
+  } catch (err) { next(err); }
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// DELETE /api/cad/projects/:id — smaze projekt (cascade smaze bloky + vykresy)
+// ───────────────────────────────────────────────────────────────────────────
+router.delete('/projects/:id', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ error: 'Neplatne ID' });
+    await prisma.cadProject.delete({ where: { id } });
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
+// ───────────────────────────────────────────────────────────────────────────
 // DELETE /api/cad/drawings/:id — smaze vykres (cascade smaze konfigurace)
 // ───────────────────────────────────────────────────────────────────────────
 router.delete('/drawings/:id', async (req, res, next) => {
