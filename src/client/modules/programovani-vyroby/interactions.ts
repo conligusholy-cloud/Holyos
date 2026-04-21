@@ -102,7 +102,26 @@ export function initPaletteDrag(): void {
     if (!type) return;
 
     const world = screenToWorld(e.clientX, e.clientY);
-    createObject(type as any, world.x, world.y);
+    const obj: any = createObject(type as any, world.x, world.y);
+
+    // Pokud karta nese metadata pracoviste (WS z palety), preneseme je na novy objekt.
+    const wsJson = e.dataTransfer?.getData('application/x-factorify-ws');
+    if (wsJson && obj) {
+      try {
+        const ws: any = JSON.parse(wsJson);
+        if (ws.name) obj.name = ws.name;
+        if (ws.w != null) obj.w = ws.w;
+        if (ws.h != null) obj.h = ws.h;
+        if (ws.id != null) obj.factorifyId = ws.id;
+        if (ws.code) obj.wsCode = ws.code;
+        // Rerender (primo) + sediva karta v palete (drag-and-drop jedenkrat).
+        renderAll();
+        const mod = (window as any).__module__;
+        if (mod && typeof mod.markUsedWorkstations === 'function') mod.markUsedWorkstations();
+      } catch (err) {
+        console.warn('drop WS metadata parse fail', err);
+      }
+    }
   });
 }
 

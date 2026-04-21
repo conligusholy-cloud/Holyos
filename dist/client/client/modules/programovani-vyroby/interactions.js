@@ -88,7 +88,24 @@ export function initPaletteDrag() {
         if (!type)
             return;
         const world = screenToWorld(e.clientX, e.clientY);
-        createObject(type, world.x, world.y);
+        const obj = createObject(type, world.x, world.y);
+        // Pokud karta nese metadata pracoviste (WS z palety), preneseme je na novy objekt.
+        const wsJson = e.dataTransfer?.getData('application/x-factorify-ws');
+        if (wsJson && obj) {
+            try {
+                const ws = JSON.parse(wsJson);
+                if (ws.name) obj.name = ws.name;
+                if (ws.w != null) obj.w = ws.w;
+                if (ws.h != null) obj.h = ws.h;
+                if (ws.id != null) obj.factorifyId = ws.id;
+                if (ws.code) obj.wsCode = ws.code;
+                renderAll();
+                const mod = window.__module__;
+                if (mod && typeof mod.markUsedWorkstations === 'function') mod.markUsedWorkstations();
+            } catch (err) {
+                console.warn('drop WS metadata parse fail', err);
+            }
+        }
     });
 }
 // ============================
