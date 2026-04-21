@@ -296,8 +296,12 @@ export function applyDefaultSize(w?: number, h?: number): void {
 
 export function getUsedWsIds(): Set<string> {
   const used = new Set<string>();
-  if (typeof (window as any).state !== 'undefined' && (window as any).state.objects) {
-    (window as any).state.objects.forEach((obj: any) => {
+  // State je vystaveny pres window.__module__.state (app.ts). Drive jsme pouzivali
+  // window.state coz je undefined -> Set byl prazdny a markUsedWorkstations nic nedelala.
+  const mod: any = (window as any).__module__;
+  const objects = mod && mod.state && mod.state.objects;
+  if (objects && objects.forEach) {
+    objects.forEach((obj: any) => {
       if (obj.factorifyId) used.add(String(obj.factorifyId));
     });
   }

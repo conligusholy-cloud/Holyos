@@ -255,8 +255,11 @@ export function applyDefaultSize(w, h) {
 }
 export function getUsedWsIds() {
     const used = new Set();
-    if (typeof window.state !== 'undefined' && window.state.objects) {
-        window.state.objects.forEach((obj) => {
+    // State je vystaveny pres window.__module__.state (app.js).
+    const mod = window.__module__;
+    const objects = mod && mod.state && mod.state.objects;
+    if (objects && objects.forEach) {
+        objects.forEach((obj) => {
             if (obj.factorifyId)
                 used.add(String(obj.factorifyId));
         });
