@@ -499,7 +499,8 @@
               ${c.mass_grams ? `<span class="badge badge-count">${(c.mass_grams/1000).toFixed(2)} kg</span>` : ''}
               <div class="config-actions">
                 ${pdf ? `<a class="btn btn-sm btn-secondary" href="${pdf}" target="_blank">&#128196; PDF</a>` : ''}
-                ${png ? `<a class="btn btn-sm btn-secondary" href="${png}" target="_blank">Náhled</a>` : ''}
+                ${png ? `<a class="btn btn-sm btn-secondary" href="${png}" target="_blank">&#128444;&#65039; Náhled</a>` : ''}
+                ${c.stl_path ? `<button type="button" class="btn btn-sm" style="background:rgba(34,197,94,0.15);color:#22c55e;border:1px solid rgba(34,197,94,0.35);" onclick="open3DViewer('${escapeHtml(c.stl_path)}', '${escapeHtml(d.file_name)} — ${escapeHtml(c.config_name)}', ${c.png_path ? "'/api/cad/assets/" + c.png_path + "'" : 'null'})">&#128302; 3D Viewer</button>` : ''}
               </div>
             </header>
             <div class="config-body">
@@ -614,7 +615,182 @@
     // ─── Init ─────────────────────────────────────────────────────────────────
     document.getElementById('btn-new-project').addEventListener('click', createProject);
     document.getElementById('btn-reload').addEventListener('click', () => {
-      loadProjects(); loadDrawings();
+  
+
+    // ============================================================
+    // 3D WEB VIEWER (Three.js + STLLoader)
+    // Lazy-load: Three.js a STL se fetchne teprve pri prvnim otevreni.
+    // Server + Holyos = 0 CPU pri rendru. Vse bezi na GPU klienta.
+    // Browser cacheuje STL 30 dni (viz Cache-Control na backendu).
+    // ============================================================
+    let _threeLoaded = false;
+    let _three = null;
+    let _stlLoader = null;
+    let _orbitControls = null;
+
+    async function _ensureThreeLoaded() {
+      if (_threeLoaded) return;
+      // Tri knihovny z CDN (vsechny ~600 KB gzipped celkem, browser je cacheuje).
+      await _loadScript('https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js');
+      // STLLoader a OrbitControls v r128 nejsou soucasti three.min.js, stahneme je zvlast
+      await _loadScript('https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/STLLoader.js');
+      await _loadScript('https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js');
+      _three = window.THREE;
+      _stlLoader = new _three.STLLoader();
+      _threeLoaded = true;
+    }
+
+    function _loadScript(url) {
+      return new Promise((resolve, reject) => {
+        if (document.querySelector('script[src="' + url + '"]')) { resolve(); return; }
+        const s = document.createElement('script');
+        s.src = url;
+        s.onload = resolve;
+        s.onerror = () => reject(new Error('Load fail: ' + url));
+        document.head.appendChild(s);
+      });
+    }
+
+    let _viewerAnimId = null;
+    let _viewerRenderer = null;
+
+    async function open3DViewer(stlPath, title, thumbnailUrl) {
+      const modalRoot = document.getElementById('modal-root') || (() => { const m = document.createElement('div'); m.id='modal-root'; document.body.appendChild(m); return m; })();
+      // Nejdrive ukazeme modal s PNG thumbnailem + progress, potom teprve nacteme STL
+      const thumbHtml = thumbnailUrl && thumbnailUrl !== 'null'
+        ? '<img src="' + thumbnailUrl + '" style="max-width:60%;max-height:60%;object-fit:contain;opacity:0.3;" alt="n\u00e1hled">'
+        : '<div style="color:#666;">N\u00e1hled nen\u00ed k dispozici</div>';
+      modalRoot.innerHTML =
+        '<div id="viewer3d-overlay" style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.92);z-index:10000;display:flex;flex-direction:column;">' +
+          '<div style="padding:12px 20px;display:flex;justify-content:space-between;align-items:center;background:rgba(0,0,0,0.5);border-bottom:1px solid #333;">' +
+            '<div style="color:#fff;font-size:14px;font-weight:600;">\ud83d\udd0d ' + title + '</div>' +
+            '<div style="color:#888;font-size:11px;margin-left:auto;margin-right:16px;">My\u0161 = rotace | Scroll = zoom | Prav\u00fd + drag = posun</div>' +
+            '<button onclick="close3DViewer()" style="background:rgba(239,68,68,0.15);color:#ef4444;border:1px solid rgba(239,68,68,0.4);padding:6px 14px;border-radius:6px;cursor:pointer;font-size:12px;">\u2715 Zav\u0159\u00edt</button>' +
+          '</div>' +
+          '<div id="viewer3d-canvas-wrap" style="flex:1;position:relative;display:flex;align-items:center;justify-content:center;background:radial-gradient(circle at center, #1a1a2e 0%, #0a0a1a 100%);">' +
+            '<div id="viewer3d-loading" style="position:absolute;z-index:2;text-align:center;color:#fff;">' +
+              thumbHtml +
+              '<div style="margin-top:16px;font-size:13px;">Na\u010d\u00edt\u00e1m 3D model\u2026</div>' +
+              '<div id="viewer3d-progress" style="margin-top:8px;font-size:11px;color:#888;">Stahuji STL</div>' +
+            '</div>' +
+          '</div>' +
+        '</div>';
+
+      try {
+        await _ensureThreeLoaded();
+        document.getElementById('viewer3d-progress').textContent = 'Stahuji STL\u2026';
+
+        const url = '/api/cad/assets/' + stlPath;
+        const resp = await fetch(url);
+        if (!resp.ok) throw new Error('STL nenalezen: ' + resp.status);
+        const buffer = await resp.arrayBuffer();
+        document.getElementById('viewer3d-progress').textContent = 'Parsuji mesh\u2026';
+
+        const geometry = _stlLoader.parse(buffer);
+        geometry.computeBoundingBox();
+        geometry.computeVertexNormals();
+
+        const wrap = document.getElementById('viewer3d-canvas-wrap');
+        const width = wrap.clientWidth, height = wrap.clientHeight;
+
+        const scene = new _three.Scene();
+        scene.background = new _three.Color(0x0a0a1a);
+
+        // Zjisti bounding box pro lazy nastaveni kamery + centrum
+        const bbox = geometry.boundingBox;
+        const center = bbox.getCenter(new _three.Vector3());
+        const size = bbox.getSize(new _three.Vector3());
+        const maxDim = Math.max(size.x, size.y, size.z);
+
+        const camera = new _three.PerspectiveCamera(50, width / height, maxDim * 0.01, maxDim * 100);
+        camera.position.set(center.x + maxDim * 1.8, center.y - maxDim * 1.8, center.z + maxDim * 1.2);
+        camera.up.set(0, 0, 1);
+        camera.lookAt(center);
+
+        _viewerRenderer = new _three.WebGLRenderer({ antialias: true });
+        _viewerRenderer.setSize(width, height);
+        _viewerRenderer.setPixelRatio(window.devicePixelRatio || 1);
+        wrap.appendChild(_viewerRenderer.domElement);
+
+        // Material — stribrny kov s PBR-like appearance
+        const material = new _three.MeshPhongMaterial({
+          color: 0xb0b8c5,
+          specular: 0xffffff,
+          shininess: 100,
+          flatShading: false,
+        });
+        const mesh = new _three.Mesh(geometry, material);
+        scene.add(mesh);
+
+        // Osvetleni
+        scene.add(new _three.AmbientLight(0x404050, 1.0));
+        const key = new _three.DirectionalLight(0xffffff, 0.8);
+        key.position.set(maxDim * 2, -maxDim * 2, maxDim * 2);
+        scene.add(key);
+        const fill = new _three.DirectionalLight(0xaabbff, 0.4);
+        fill.position.set(-maxDim, maxDim, maxDim);
+        scene.add(fill);
+
+        // Grid na Z=0 pro prostorovou orientaci
+        const gridHelper = new _three.GridHelper(maxDim * 3, 20, 0x555555, 0x333333);
+        gridHelper.rotation.x = Math.PI / 2;
+        gridHelper.position.z = bbox.min.z;
+        scene.add(gridHelper);
+
+        // Osa X/Y/Z pro referenci
+        const axesHelper = new _three.AxesHelper(maxDim * 0.3);
+        scene.add(axesHelper);
+
+        _orbitControls = new _three.OrbitControls(camera, _viewerRenderer.domElement);
+        _orbitControls.target.copy(center);
+        _orbitControls.enableDamping = true;
+        _orbitControls.dampingFactor = 0.1;
+        _orbitControls.update();
+
+        // Skry loading overlay, spust animacni smycku
+        const loading = document.getElementById('viewer3d-loading');
+        if (loading) loading.style.display = 'none';
+
+        function animate() {
+          _viewerAnimId = requestAnimationFrame(animate);
+          _orbitControls.update();
+          _viewerRenderer.render(scene, camera);
+        }
+        animate();
+
+        // Resize handler
+        window.addEventListener('resize', _onViewerResize);
+
+      } catch (e) {
+        const loadingEl = document.getElementById('viewer3d-loading');
+        if (loadingEl) {
+          loadingEl.innerHTML = '<div style="color:#ef4444;padding:40px;">\u26a0\ufe0f Chyba p\u0159i na\u010d\u00edt\u00e1n\u00ed 3D modelu: ' + e.message + '</div>';
+        }
+        console.error('3D viewer error', e);
+      }
+    }
+
+    function _onViewerResize() {
+      const wrap = document.getElementById('viewer3d-canvas-wrap');
+      if (!wrap || !_viewerRenderer) return;
+      _viewerRenderer.setSize(wrap.clientWidth, wrap.clientHeight);
+    }
+
+    function close3DViewer() {
+      if (_viewerAnimId) { cancelAnimationFrame(_viewerAnimId); _viewerAnimId = null; }
+      if (_viewerRenderer) { _viewerRenderer.dispose(); _viewerRenderer = null; }
+      if (_orbitControls) { _orbitControls.dispose(); _orbitControls = null; }
+      window.removeEventListener('resize', _onViewerResize);
+      const modalRoot = document.getElementById('modal-root');
+      if (modalRoot) modalRoot.innerHTML = '';
+    }
+
+    // ESC zavre viewer
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && document.getElementById('viewer3d-overlay')) close3DViewer();
+    });
+
+    loadProjects(); loadDrawings();
     });
     let searchTimer = null;
     document.getElementById('cad-search').addEventListener('input', (e) => {

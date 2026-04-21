@@ -143,7 +143,7 @@ router.get('/drawings', async (req, res, next) => {
         block:   { select: { id: true, name: true } },
         creator: { select: { id: true, first_name: true, last_name: true, email: true } },
         configurations: {
-          select: { id: true, config_name: true, quantity: true, png_path: true, pdf_path: true },
+          select: { id: true, config_name: true, quantity: true, png_path: true, pdf_path: true, stl_path: true },
         },
       },
     });
@@ -194,8 +194,12 @@ router.get('/assets/*', (req, res) => {
   const ext = path.extname(full).toLowerCase();
   const mime = ext === '.pdf' ? 'application/pdf'
              : ext === '.png' ? 'image/png'
+             : ext === '.stl' ? 'model/stl'
              : 'application/octet-stream';
   res.type(mime);
+  // Assety jsou adresovane hashem (immutable) — drz je v browser cache 30 dni.
+  // Druhe otevreni stejneho STL/PDF = 0 bajtu z Holyosu.
+  res.setHeader('Cache-Control', 'public, max-age=2592000, immutable');
   fs.createReadStream(full).pipe(res);
 });
 
@@ -278,8 +282,10 @@ const importSchema = z.object({
       MassGrams: z.number().optional().nullable(),
       PngBase64: z.string().optional().nullable(),
       PdfBase64: z.string().optional().nullable(),
+      StlBase64: z.string().optional().nullable(),
       PngPath: z.string().optional().nullable(),
       PdfPath: z.string().optional().nullable(),
+      StlPath: z.string().optional().nullable(),
       ExternalReferences: z.array(z.any()).default([]),
       Components: z.array(z.object({
         Name: z.string(),
@@ -324,8 +330,10 @@ router.post('/drawings-import', async (req, res, next) => {
         for (const cfg of f.Configurations) {
           let pngPath = cfg.PngPath || null;
           let pdfPath = cfg.PdfPath || null;
+          let stlPath = cfg.StlPath || null;
           if (!pngPath && cfg.PngBase64) pngPath = saveBase64Asset(cfg.PngBase64, 'png');
           if (!pdfPath && cfg.PdfBase64) pdfPath = saveBase64Asset(cfg.PdfBase64, 'pdf');
+          if (!stlPath && cfg.StlBase64) stlPath = saveBase64Asset(cfg.StlBase64, 'stl');
 
           configPayloads.push({
             config_name: cfg.ConfigurationName,
@@ -336,6 +344,7 @@ router.post('/drawings-import', async (req, res, next) => {
             mass_grams: cfg.MassGrams ?? null,
             png_path: pngPath,
             pdf_path: pdfPath,
+            stl_path: stlPath,
             external_references: cfg.ExternalReferences,
             components: cfg.Components,
             unknown: cfg.UnknownComponents,
@@ -408,6 +417,7 @@ router.post('/drawings-import', async (req, res, next) => {
               mass_grams: c.mass_grams,
               png_path: c.png_path,
               pdf_path: c.pdf_path,
+              stl_path: c.stl_path,
               external_references: c.external_references,
             },
           });

@@ -1769,6 +1769,7 @@ model CadDrawingConfig {
 
   png_path         String?  @db.VarChar(500)         // cesta uloženého PNG náhledu
   pdf_path         String?  @db.VarChar(500)         // cesta uloženého PDF výkresu
+  stl_path         String?  @db.VarChar(500)         // cesta uloženého STL pro 3D web viewer (Three.js)
 
   // Externí reference (odkazy na další SW soubory)
   external_references Json  @default("[]")
