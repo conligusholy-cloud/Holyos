@@ -346,7 +346,7 @@ export function renderWsPreview(container: HTMLElement, wMeters: number, hMeters
 // === UI UPDATE ===
 
 export function updateFactorifyUI(): void {
-  const panel = document.getElementById('factorify-panel');
+  const panel = document.getElementById('workstation-grid');
   if (!panel) return;
 
   const countEl = document.getElementById('ws-count');

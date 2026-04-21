@@ -303,7 +303,7 @@ export function renderWsPreview(container, wMeters, hMeters) {
 }
 // === UI UPDATE ===
 export function updateFactorifyUI() {
-    const panel = document.getElementById('factorify-panel');
+    const panel = document.getElementById('workstation-grid');
     if (!panel)
         return;
     const countEl = document.getElementById('ws-count');
