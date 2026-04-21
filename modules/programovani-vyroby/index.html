@@ -146,17 +146,8 @@
 <!-- Workstation Config Dialog -->
 <div id="ws-config-dialog" class="modal-overlay" style="display:none;">
   <div class="modal-box modal-box-wide">
-    <h3>Pracoviště a základní rozměry</h3>
-    <div class="ws-config-defaults">
-      <label>Výchozí rozměry pro nová pracoviště:</label>
-      <div style="display:flex;align-items:center;gap:6px;margin-top:4px;">
-        <input type="number" id="ws-cfg-default-w" value="2" min="0.5" max="50" step="0.5" style="width:65px;" title="Šířka (m)">
-        <span>×</span>
-        <input type="number" id="ws-cfg-default-h" value="2" min="0.5" max="50" step="0.5" style="width:65px;" title="Výška (m)">
-        <span style="font-size:12px;color:var(--text2);">m</span>
-        <button class="btn btn-small" onclick="wsConfigApplyDefaults()" title="Nastavit na všechna nepoužitá" style="margin-left:8px;">Aplikovat na vše</button>
-      </div>
-    </div>
+    <h3>Pracoviště v paletě</h3>
+    <p style="font-size:12px;color:var(--text2);margin:0 0 12px 0;">Zaškrtněte pracoviště, která chcete mít v paletě pro umíťování na mapu. Rozměry se berou automaticky z modulu Pracoviště — zde jsou jen pro informaci.</p>
     <div class="ws-config-table-wrap">
       <table class="ws-config-table" id="ws-config-table">
         <thead>
