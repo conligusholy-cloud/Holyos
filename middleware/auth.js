@@ -90,6 +90,18 @@ function requireAdmin(req, res, next) {
 }
 
 /**
+ * Middleware — vyžaduje super admin oprávnění.
+ * Používá se pro interní/ladicí moduly (CAD výkresy, AI Agenti, Dev Hub, atd.),
+ * které nemají být viditelné ani použitelné běžnými uživateli.
+ */
+function requireSuperAdmin(req, res, next) {
+  if (!req.user || !req.user.isSuperAdmin) {
+    return res.status(403).json({ error: 'Přístup odmítnut — vyžadováno oprávnění super admin' });
+  }
+  next();
+}
+
+/**
  * Middleware — volitelná autentizace (nepřeruší pokud chybí token)
  */
 async function optionalAuth(req, res, next) {
@@ -125,6 +137,7 @@ module.exports = {
   generateToken,
   requireAuth,
   requireAdmin,
+  requireSuperAdmin,
   optionalAuth,
   JWT_SECRET,
 };

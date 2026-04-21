@@ -7,9 +7,15 @@ const router = express.Router();
 const path = require('path');
 const fs = require('fs');
 const { prisma } = require('../config/database');
-const { requireAuth, requireAdmin } = require('../middleware/auth');
+const { requireAuth, requireAdmin, requireSuperAdmin } = require('../middleware/auth');
 
 router.use(requireAuth);
+// AI Agenti modul je interní/super-admin — management endpointy (moduly,
+// asistenti, skilly, konverzace) vyžadují super admin oprávnění.
+// Pozor: endpointy /chat, /voice, /stt-check a /transcribe NEJSOU zde
+// namountované — ty jsou samostatně v app.js bez auth, aby je mohl využívat
+// globální AI panel dostupný všem uživatelům.
+router.use(requireSuperAdmin);
 
 // ─── MODULY (auto-detekce) ───────────────────────────────────────────────
 // GET /api/ai/modules — vrátí seznam všech modulů z adresáře modules/
