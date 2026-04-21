@@ -194,14 +194,28 @@
         const active = orders.filter(o => !['cancelled','delivered'].includes(o.status)).length;
         const delivered = orders.filter(o => o.status === 'delivered').length;
 
-        // Secteme celkovou hodnotu zvlast pro kazdou menu — michat CZK a EUR
-        // do jednoho cisla by bylo zavadejici.
+        // Sectene hodnoty zvlast pro kazdou menu — michat CZK a EUR do jednoho cisla by bylo zavadejici.
         const byCurrency = {};
         for (const o of orders) {
           const cur = o.currency || 'CZK';
           byCurrency[cur] = (byCurrency[cur] || 0) + parseFloat(o.total_amount || 0);
         }
-        const curSymbol = { CZK: 'Kč', EUR: '€' };
+
+        // Kurzy z CNB (cache 1h na backendu). Fallback na priblizne sazby kdyby spadlo.
+        let fxRates = { CZK: 1, EUR: 25, USD: 22 };
+        let fxSource = 'fallback';
+        let fxValidFor = '';
+        try {
+          const fxRes = await fetch('/api/wh/exchange-rates');
+          if (fxRes.ok) {
+            const fxData = await fxRes.json();
+            if (fxData && fxData.rates) fxRates = fxData.rates;
+            fxSource = fxData.source || 'CNB';
+            fxValidFor = fxData.valid_for || '';
+          }
+        } catch(e) { console.warn('fx rates fetch fail', e); }
+
+        const curSymbol = { CZK: 'Kč', EUR: '€', USD: '$', GBP: '£', PLN: 'zł', HUF: 'Ft' };
         // Razeni: CZK prvni, pak EUR, pak ostatni abecedne
         const curOrder = Object.keys(byCurrency).sort((a, b) => {
           if (a === 'CZK') return -1;
@@ -210,25 +224,48 @@
           if (b === 'EUR') return 1;
           return a.localeCompare(b);
         });
+
+        // Souhrnna hodnota prepoctena na CZK (vsechny meny secteny v Kc)
+        let totalCzk = 0;
+        for (const c of curOrder) {
+          const rate = fxRates[c] || 1;
+          totalCzk += byCurrency[c] * rate;
+        }
+
+        function fmt(v, cur) {
+          return Math.round(v).toLocaleString('cs-CZ') + ' ' + (curSymbol[cur] || cur);
+        }
+
         let valueHtml;
         if (curOrder.length === 0) {
           valueHtml = '<div class="stat-value">0 Kč</div>';
+        } else if (curOrder.length === 1 && curOrder[0] === 'CZK') {
+          // Jen CZK — zadny prepocet nepotreba
+          valueHtml = '<div class="stat-value">' + fmt(byCurrency.CZK, 'CZK') + '</div>';
         } else if (curOrder.length === 1) {
+          // Jen jedna cizi mena — ukaz nahore hodnotu, pod tim ≈ Kc
           const c = curOrder[0];
-          valueHtml = '<div class="stat-value">' + Math.round(byCurrency[c]).toLocaleString('cs-CZ') + ' ' + (curSymbol[c] || c) + '</div>';
+          const czkEquiv = byCurrency[c] * (fxRates[c] || 0);
+          valueHtml = '<div class="stat-value">' + fmt(byCurrency[c], c) + '</div>' +
+            '<div style="font-size:12px;color:var(--text2);margin-top:2px;font-weight:500;">≈ ' + fmt(czkEquiv, 'CZK') + '</div>';
         } else {
+          // Vic men — kazdou samostatne na radek, pod tim celkovy prepocet na Kc
           valueHtml = curOrder.map(c =>
-            '<div class="stat-value" style="font-size:18px;line-height:1.2;">' +
-              Math.round(byCurrency[c]).toLocaleString('cs-CZ') + ' ' + (curSymbol[c] || c) +
-            '</div>'
-          ).join('');
+            '<div class="stat-value" style="font-size:16px;line-height:1.25;">' + fmt(byCurrency[c], c) + '</div>'
+          ).join('') +
+          '<div style="font-size:12px;color:var(--text2);margin-top:3px;font-weight:500;border-top:1px dashed var(--border);padding-top:3px;">≈ ' + fmt(totalCzk, 'CZK') + ' celkem</div>';
         }
+
+        // Tooltip s informaci o zdroji kurzu
+        const fxTooltip = fxSource === 'CNB'
+          ? 'Kurz ČNB' + (fxValidFor ? ' ze dne ' + fxValidFor : '')
+          : 'Kurz — fallback (CNB API nedostupne)';
 
         document.getElementById('stats-bar').innerHTML =
           '<div class="stat-card"><div class="stat-value">' + total + '</div><div class="stat-label">Objednávek celkem</div></div>' +
           '<div class="stat-card"><div class="stat-value" style="color:#8b5cf6">' + active + '</div><div class="stat-label">Aktivních</div></div>' +
           '<div class="stat-card"><div class="stat-value" style="color:#10b981">' + delivered + '</div><div class="stat-label">Doručeno</div></div>' +
-          '<div class="stat-card">' + valueHtml + '<div class="stat-label">Celková hodnota</div></div>';
+          '<div class="stat-card" title="' + fxTooltip + '">' + valueHtml + '<div class="stat-label">Celková hodnota</div></div>';
       } catch(e) { console.error(e); }
     }
 
