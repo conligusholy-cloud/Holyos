@@ -137,7 +137,7 @@ export function renderAll(): void {
   // Nejprve vykreslit areál jako read-only pozadí (ztlumené)
   if (state.arealObjects && state.arealObjects.length > 0) {
     const arealGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-    arealGroup.setAttribute('opacity', '0.45');
+    arealGroup.setAttribute('opacity', '0.75');
     arealGroup.style.pointerEvents = 'none';
     state.arealObjects.forEach(obj => {
       renderArealBackgroundObject(arealGroup, obj);
@@ -164,8 +164,8 @@ function renderArealBackgroundObject(parent: SVGGElement, obj: DrawingObject): v
     poly.setAttribute('points', pts.map(p => `${p.x},${p.y}`).join(' '));
     poly.setAttribute('fill', fillColor);
     poly.setAttribute('stroke', strokeColor);
-    poly.setAttribute('stroke-width', '0.08');
-    poly.setAttribute('stroke-opacity', '0.5');
+    poly.setAttribute('stroke-width', '0.3');
+    poly.setAttribute('stroke-opacity', '0.9');
     poly.setAttribute('stroke-linejoin', 'round');
     if (obj.type === 'areal') poly.setAttribute('stroke-dasharray', '0.8 0.4');
     g.appendChild(poly);
@@ -195,8 +195,8 @@ function renderArealBackgroundObject(parent: SVGGElement, obj: DrawingObject): v
     rect.setAttribute('rx', obj.type === 'cesta' ? '0.2' : '0.3');
     rect.setAttribute('fill', fillColor);
     rect.setAttribute('stroke', strokeColor);
-    rect.setAttribute('stroke-width', '0.08');
-    rect.setAttribute('stroke-opacity', '0.4');
+    rect.setAttribute('stroke-width', '0.3');
+    rect.setAttribute('stroke-opacity', '0.9');
     g.appendChild(rect);
     g.setAttribute('transform', `translate(${obj.x},${obj.y})`);
   }
