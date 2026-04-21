@@ -532,6 +532,63 @@
           <div><span>Checksum (SHA256)</span><code style="font-size:10px;color:var(--text2);word-break:break-all;">${escapeHtml(d.checksum || '—')}</code></div>
           ${d.description ? '<div style="grid-column:1/-1;"><span>Popis</span>' + escapeHtml(d.description) + '</div>' : ''}
         </div>
+        ${(() => {
+          // Kusovnik sekce — prominentni pro sestavy (.sldasm).
+          // Scita komponenty napric vsemi konfiguracemi, oddeluje unknown (cervene).
+          const isAssembly = (d.extension || '').toLowerCase() === 'sldasm';
+          if (!isAssembly) return '';
+          const allComps = [];
+          for (const c of (d.configurations || [])) {
+            for (const comp of (c.components || [])) {
+              allComps.push(Object.assign({}, comp, { __configName: c.config_name }));
+            }
+          }
+          if (allComps.length === 0) {
+            return '<div style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.3);border-left:3px solid #f59e0b;border-radius:8px;padding:14px 18px;margin:16px 0;">' +
+              '<strong style="color:#f59e0b;">\u26a0\ufe0f Kusovn\u00edk chyb\u00ed</strong><br>' +
+              '<span style="color:var(--text2);font-size:13px;line-height:1.55;">Tento v\u00fdkres je sestava (.sldasm), ale p\u0159i importu z CAD klienta nebyly odesl\u00e1ny ko\u0161enty kusovn\u00edku. ' +
+                'P\u0159epo\u0161lete soubor z SolidWorks p\u0159es \u201eOdevzdat do v\u00fdroby\u201c, klient tentokr\u00e1t rozparsuje vnit\u0159n\u00ed referenace.</span>' +
+            '</div>';
+          }
+          const known = allComps.filter(c => !c.is_unknown);
+          const unknown = allComps.filter(c => c.is_unknown);
+          let rowsHtml = '';
+          for (const b of known) {
+            rowsHtml += '<tr>' +
+              '<td>' + escapeHtml(b.name) + '</td>' +
+              '<td style="text-align:right;font-weight:600;">' + (b.quantity || 1) + '\u00d7</td>' +
+              '<td style="color:var(--text2);font-size:12px;">' + escapeHtml(b.configuration || '—') + '</td>' +
+              '<td>' + (b.material ? '<span style="color:#10b981;font-weight:600">' + escapeHtml(b.material.code) + '</span> \u00b7 ' + escapeHtml(b.material.name) : '<span style="color:var(--text2)">—</span>') + '</td>' +
+              '<td style="color:var(--text2);font-size:11px;">' + escapeHtml(b.__configName || '') + '</td>' +
+            '</tr>';
+          }
+          for (const b of unknown) {
+            rowsHtml += '<tr style="background:rgba(239,68,68,0.06);">' +
+              '<td><span style="background:rgba(239,68,68,0.15);color:#ef4444;border:1px solid rgba(239,68,68,0.35);padding:1px 6px;border-radius:4px;font-size:10px;font-weight:700;margin-right:6px;">\u26a0 NEROZPOZN\u00c1NO</span>' + escapeHtml(b.name) + '</td>' +
+              '<td style="text-align:right;font-weight:600;">' + (b.quantity || 1) + '\u00d7</td>' +
+              '<td style="color:var(--text2);font-size:12px;">' + escapeHtml(b.configuration || '—') + '</td>' +
+              '<td><span style="color:#ef4444">— Chyb\u00ed v katalogu materi\u00e1l\u016f —</span></td>' +
+              '<td style="color:var(--text2);font-size:11px;">' + escapeHtml(b.__configName || '') + '</td>' +
+            '</tr>';
+          }
+          return '<div style="margin:20px 0;padding:18px;background:var(--surface);border:1px solid var(--border);border-radius:12px;">' +
+            '<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">' +
+              '<h3 style="margin:0;font-size:16px;">\ud83d\uddc2\ufe0f Kusovn\u00edk sestavy</h3>' +
+              '<span class="badge badge-count">' + known.length + ' polo\u017eek</span>' +
+              (unknown.length ? '<span style="background:rgba(239,68,68,0.15);color:#ef4444;padding:3px 10px;border-radius:10px;font-size:11px;font-weight:700;">\u26a0 ' + unknown.length + ' nerozpozn\u00e1no</span>' : '') +
+            '</div>' +
+            '<table class="bom-table" style="width:100%;font-size:13px;">' +
+              '<thead><tr>' +
+                '<th style="text-align:left;">D\u00edl</th>' +
+                '<th style="text-align:right;width:60px;">Ks</th>' +
+                '<th style="text-align:left;width:120px;">Konfig.</th>' +
+                '<th style="text-align:left;">Materi\u00e1l (katalog)</th>' +
+                '<th style="text-align:left;width:100px;">Z konfig.</th>' +
+              '</tr></thead>' +
+              '<tbody>' + rowsHtml + '</tbody>' +
+            '</table>' +
+          '</div>';
+        })()}
         ${configs || '<div class="empty">Bez konfigurací.</div>'}`;
     }
 
