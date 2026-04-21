@@ -288,10 +288,18 @@
       }
       const rows = state.drawings.map(d => {
         const creatorName = d.creator ? escapeHtml(d.creator.first_name + ' ' + d.creator.last_name) : '<span style="color:var(--text2)">—</span>';
+        // 3D viewer tlacitko — otevre prvni konfiguraci s STL rovnou ze seznamu.
+        // Kdyz STL neni (stare importy nebo .slddrw), tlacitko se nezobrazi.
+        const stlConfig = (d.configurations || []).find(c => c.stl_path);
+        const stlTitle = d.file_name + (stlConfig ? (' \u00b7 ' + (stlConfig.config_name || '')) : '');
+        const stlThumb = stlConfig && stlConfig.png_path ? ("'/api/cad/assets/" + stlConfig.png_path + "'") : 'null';
+        const stlBtn = stlConfig
+          ? `<button type="button" class="btn btn-sm" onclick="event.stopPropagation();open3DViewer('${escapeHtml(stlConfig.stl_path)}', '${escapeHtml(stlTitle)}', ${stlThumb})" style="background:rgba(16,185,129,0.12);color:#10b981;border:1px solid rgba(16,185,129,0.35);padding:2px 8px;font-size:10px;margin-left:8px;vertical-align:middle;border-radius:6px;cursor:pointer;" title="Otev\u0159\u00edt 3D n\u00e1hled">&#128302; 3D</button>`
+          : '';
         return `
         <tr data-id="${d.id}" class="${d.id === state.activeDrawingId ? 'selected' : ''}">
           <td><span class="badge badge-ext-${escapeHtml(d.extension)}">${escapeHtml(d.extension)}</span></td>
-          <td><b>${escapeHtml(d.file_name)}</b>${d.title ? '<br><span style="color:var(--text2);font-size:12px;">'+escapeHtml(d.title)+'</span>' : ''}</td>
+          <td><b>${escapeHtml(d.file_name)}</b>${stlBtn}${d.title ? '<br><span style="color:var(--text2);font-size:12px;">'+escapeHtml(d.title)+'</span>' : ''}</td>
           <td>${d.project ? escapeHtml(d.project.code) : '—'}</td>
           <td>${d.block ? escapeHtml(d.block.name) : '—'}</td>
           <td>v${d.version}</td>

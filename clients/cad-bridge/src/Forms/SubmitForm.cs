@@ -267,7 +267,8 @@ public sealed class SubmitForm : Form
         catch (Exception ex)
         {
             _status.ForeColor = Color.FromArgb(220, 38, 38);
-            _status.Text = "Chyba: " + ex.Message;
+            _status.Text = "Chyba: " + Diagnostics.ShortMessage(ex);
+            Diagnostics.LogException("OnSearchAsync", ex);
         }
         finally
         {
@@ -289,7 +290,11 @@ public sealed class SubmitForm : Form
         }
         catch (Exception ex)
         {
-            row.Status = "Chyba: " + ex.Message;
+            // Rozbalíme TargetInvocationException (COM late binding), aby se
+            // zobrazila skutečná chyba a ne jen "Exception has been thrown
+            // by the target of an invocation."
+            row.Status = "Chyba: " + Diagnostics.ShortMessage(ex);
+            Diagnostics.LogException($"ProcessRow — {row.FileName}", ex);
         }
     }
 
@@ -313,7 +318,7 @@ public sealed class SubmitForm : Form
         _status.Text = "Odevzdávám…";
         try
         {
-            // Pre-upload PDF (volitelně)
+            // Pre-upload PDF (volitelně) — jen pro výkresy (.slddrw)
             foreach (var row in _rows)
             {
                 if (!_settings.GeneratePdfs) break;
@@ -332,6 +337,27 @@ public sealed class SubmitForm : Form
                     }
                 }
                 catch { /* PDF je best-effort */ }
+            }
+
+            // Pre-upload STL — pro díly a sestavy (pro webový 3D viewer)
+            foreach (var row in _rows)
+            {
+                if (row.Extension != "sldprt" && row.Extension != "sldasm") continue;
+                if (row.StlPath != null) continue;
+
+                try
+                {
+                    _status.Text = $"Exportuji STL: {row.FileName}…";
+                    using var doc = _sw.OpenDocument(row.Path);
+                    var stl = Exporters.ExportStl(doc);
+                    if (stl != null)
+                    {
+                        var uploaded = await _client.UploadAssetAsync("stl",
+                            Path.GetFileNameWithoutExtension(row.FileName) + ".stl", stl);
+                        row.StlPath = uploaded.Path;
+                    }
+                }
+                catch { /* STL je best-effort — viewer je nice-to-have */ }
             }
 
             var payload = new DrawingsImportRequest
@@ -357,6 +383,7 @@ public sealed class SubmitForm : Form
                             CustomProperties = r.CustomProperties ?? new(),
                             PdfPath = r.PdfPath,
                             PngPath = r.PngPath,
+                            StlPath = r.StlPath,
                             Components = r.Components.Select(c => new ComponentDto
                             {
                                 Name = c.Name,
@@ -414,6 +441,7 @@ public sealed class SubmitForm : Form
         public int ComponentCount { get; set; }
         public string? PdfPath { get; set; }
         public string? PngPath { get; set; }
+        public string? StlPath { get; set; }
         public string Status { get; set; } = "Čeká";
     }
 }
