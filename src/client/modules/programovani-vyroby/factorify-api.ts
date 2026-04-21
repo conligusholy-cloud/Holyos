@@ -212,6 +212,8 @@ export const FactorifyAPI = {
         id: item.id,
         name: item.name || ('Pracoviště ' + item.id),
         code: item.code || '',
+        width_m: item.width_m != null ? parseFloat(item.width_m) : null,
+        length_m: item.length_m != null ? parseFloat(item.length_m) : null,
         type: '',
         active: true,
         raw: item,
@@ -257,6 +259,11 @@ let defaultWsSize: WorkstationConfig = { w: 2, h: 2 };
 const wsEnabledSet = new Set<string>();
 
 export function getWsDimensions(wsId: string): WorkstationConfig {
+  // Master data z Workstation (backend) maji prednost pred lokalnim stavem.
+  const ws: any = FactorifyAPI.workstations.find((w: any) => String(w.id) === wsId);
+  if (ws && ws.width_m != null && ws.length_m != null) {
+    return { w: parseFloat(ws.width_m), h: parseFloat(ws.length_m) };
+  }
   if (!wsDimensions[wsId]) {
     wsDimensions[wsId] = { w: defaultWsSize.w, h: defaultWsSize.h };
   }
@@ -472,8 +479,8 @@ export function openWsConfigDialog(): void {
       <td><input type="checkbox" class="ws-cfg-checkbox" data-ws-id="${ws.id}" ${isUsed ? 'checked disabled' : ''}></td>
       <td>${ws.name}</td>
       <td style="color:var(--text2);font-size:11px;">${ws.code || '-'}</td>
-      <td><input type="number" class="ws-cfg-w" data-ws-id="${ws.id}" value="${dims.w}" min="0.5" max="50" step="0.5" style="width:60px;"></td>
-      <td><input type="number" class="ws-cfg-h" data-ws-id="${ws.id}" value="${dims.h}" min="0.5" max="50" step="0.5" style="width:60px;"></td>
+      <td style="color:var(--text2);font-size:12px;">${(ws as any).width_m != null ? (ws as any).width_m : '—'} m</td>
+      <td style="color:var(--text2);font-size:12px;">${(ws as any).length_m != null ? (ws as any).length_m : '—'} m</td>
       <td style="color:${isUsed ? 'var(--accent2)' : 'var(--text2)'}; font-size:11px;">${isUsed ? '✓ Umístěno' : '-'}</td>
     `;
     tbody.appendChild(row);
