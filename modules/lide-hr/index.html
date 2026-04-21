@@ -138,6 +138,12 @@
     /* Org chart */
     /* Org chart — Tree layout with SVG connectors */
     .org-tree-wrapper { overflow-x: auto; overflow-y: visible; padding: 24px 0; -webkit-overflow-scrolling: touch; }
+    .org-company-tabs { display: flex; gap: 6px; flex-wrap: wrap; padding: 10px 0 16px; border-bottom: 1px solid var(--border); margin-bottom: 12px; }
+    .org-company-tab { background: var(--surface); border: 1px solid var(--border); color: var(--text2); padding: 8px 14px; border-radius: 8px; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; transition: all 0.15s; }
+    .org-company-tab:hover { color: var(--text); border-color: rgba(108,92,231,0.4); }
+    .org-company-tab.active { background: rgba(108,92,231,0.15); border-color: #6c5ce7; color: #ffffff; font-weight: 600; }
+    .org-company-tab .count { background: rgba(108,92,231,0.25); color: #a193f5; padding: 1px 7px; border-radius: 10px; font-size: 11px; font-weight: 700; }
+    .org-company-tab.active .count { background: rgba(255,255,255,0.2); color: #ffffff; }
     .org-tree-inner { display: inline-block; min-width: 100%; }
 
     .org-tree-node { display: flex; flex-direction: column; align-items: center; }
@@ -1928,6 +1934,23 @@
       renderDepartments();
     }
 
+    function escHtml(s) {
+      if (s == null) return '';
+      return String(s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    window._activeOrgCompany = window._activeOrgCompany === undefined ? 'all' : window._activeOrgCompany;
+
+    function setActiveOrgCompany(id) {
+      window._activeOrgCompany = id;
+      renderDepartments();
+    }
+
     function renderDepartments() {
       const el = document.getElementById('org-tree');
       if (departments.length === 0 && roles.length === 0) {
@@ -1935,25 +1958,51 @@
         return;
       }
 
-      // Build role hierarchy
-      const roleMap = {};
-      for (const r of roles) roleMap[r.id] = { ...r, children: [], people: [] };
-
       const activePeople = people.filter(p => p.active == 1);
+
+      const companiesMap = {};
+      for (const r of roles) {
+        if (r.company && r.company.id) companiesMap[r.company.id] = r.company;
+      }
       for (const p of activePeople) {
+        if (p.company && p.company.id) companiesMap[p.company.id] = p.company;
+      }
+      const orgCompanies = Object.values(companiesMap).sort((a, b) => (a.name || '').localeCompare(b.name || '', 'cs'));
+
+      const activeCid = window._activeOrgCompany;
+      const activeExists = activeCid === 'all' || orgCompanies.some(c => c.id === activeCid);
+      const effectiveCid = activeExists ? activeCid : 'all';
+
+      let tabsHtml = `<div class="org-company-tabs">`;
+      const allCls = effectiveCid === 'all' ? ' active' : '';
+      tabsHtml += `<button type="button" class="org-company-tab${allCls}" onclick="setActiveOrgCompany('all')">🌐 Všechny firmy <span class="count">${activePeople.length}</span></button>`;
+      for (const c of orgCompanies) {
+        const cnt = activePeople.filter(p => p.company && p.company.id === c.id).length;
+        const cls = effectiveCid === c.id ? ' active' : '';
+        tabsHtml += `<button type="button" class="org-company-tab${cls}" onclick="setActiveOrgCompany(${c.id})">🏢 ${escHtml(c.name)} <span class="count">${cnt}</span></button>`;
+      }
+      tabsHtml += '</div>';
+
+      const rolesFiltered = effectiveCid === 'all' ? roles : roles.filter(r => r.company && r.company.id === effectiveCid);
+      const peopleFiltered = effectiveCid === 'all' ? activePeople : activePeople.filter(p => p.company && p.company.id === effectiveCid);
+
+      const roleMap = {};
+      for (const r of rolesFiltered) roleMap[r.id] = Object.assign({}, r, { children: [], people: [] });
+
+      for (const p of peopleFiltered) {
         if (p.role_id && roleMap[p.role_id]) roleMap[p.role_id].people.push(p);
       }
 
       const rootRoles = [];
-      for (const r of roles) {
+      for (const r of rolesFiltered) {
         if (r.parent_role_id && roleMap[r.parent_role_id]) {
           roleMap[r.parent_role_id].children.push(roleMap[r.id]);
-        } else {
+        } else if (roleMap[r.id]) {
           rootRoles.push(roleMap[r.id]);
         }
       }
 
-      const unassigned = activePeople.filter(p => !p.role_id || !roleMap[p.role_id]);
+      const unassigned = peopleFiltered.filter(p => !p.role_id || !roleMap[p.role_id]);
 
       function countSubs(role) {
         let count = role.people.length;
@@ -2074,7 +2123,7 @@
       }
       html += '</div></div>';
 
-      el.innerHTML = html;
+      el.innerHTML = tabsHtml + html;
     }
 
     async function openDeptModal(id) {
