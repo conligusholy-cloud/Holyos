@@ -170,6 +170,13 @@ router.get('/drawings', async (req, res, next) => {
         configurations: {
           select: { id: true, config_name: true, quantity: true, png_path: true, pdf_path: true, stl_path: true },
         },
+        // Nejnovější záznam ze změnového logu — pro seznam stačí 1 (ukazujeme
+        // váhu a poznámku poslední změny vedle blesku).
+        change_logs: {
+          orderBy: { created_at: 'desc' },
+          take: 1,
+          select: { id: true, action: true, weight: true, note: true, created_at: true },
+        },
       },
     });
     res.json(drawings);
