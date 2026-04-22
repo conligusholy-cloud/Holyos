@@ -34,6 +34,13 @@ public sealed class LoginForm : Form
         Size = new Size(420, 270);
         Font = new Font("Segoe UI", 9.5f);
 
+        try
+        {
+            using var s = typeof(LoginForm).Assembly.GetManifestResourceStream("app-icon.ico");
+            if (s != null) Icon = new Icon(s);
+        }
+        catch { /* default ikonka */ }
+
         var lblServer = new Label { Text = "Adresa serveru:", Location = new Point(20, 22), Width = 120 };
         _txtServer = new TextBox { Location = new Point(140, 20), Width = 250, Text = settings.ServerUrl };
 

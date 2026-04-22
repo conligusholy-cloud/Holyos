@@ -9,6 +9,9 @@ using System.Text.Json.Serialization;
 
 namespace HolyOs.CadBridge.Transport;
 
+// ── Helper pro detekci změn — dvojice hashů z /api/cad/drawings ──────────────
+public sealed record ServerHashes(string? Checksum, string? FeatureHash);
+
 // ── /api/auth/login ──────────────────────────────────────────────────────────
 public sealed class LoginRequest
 {
@@ -86,6 +89,10 @@ public sealed class DrawingFileDto
     public string Extension { get; set; } = "";
     public int? Version { get; set; }
     public string? SourcePath { get; set; }
+    /// <summary>SHA-256 hex primárního souboru (fallback, přepisuje se i při pouhém Save v SW).</summary>
+    public string? Checksum { get; set; }
+    /// <summary>Hash featurek modelu ze SolidWorks — reálný indikátor změny geometrie.</summary>
+    public string? FeatureHash { get; set; }
     public List<ConfigurationDto> Configurations { get; set; } = new();
 }
 
@@ -109,9 +116,24 @@ public sealed class ConfigurationDto
     public string? PdfBase64 { get; set; }
     public string? StlBase64 { get; set; }
 
+    // Další přílohy (STEP, DXF, EASM, EPRT, IGES …). Server si je uloží
+    // a zobrazí jako tlačítka ke stažení vedle PDF/Náhledu.
+    public List<AttachmentDto> Attachments { get; set; } = new();
+
     public List<object> ExternalReferences { get; set; } = new();
     public List<ComponentDto> Components { get; set; } = new();
     public List<ComponentDto> UnknownComponents { get; set; } = new();
+}
+
+public sealed class AttachmentDto
+{
+    /// <summary>"step" | "dxf" | "easm" | "eprt" | "iges" | …</summary>
+    public string Kind { get; set; } = "";
+    public string Filename { get; set; } = "";
+    /// <summary>Cesta k již nahranému assetu (přes /api/cad/upload-asset).</summary>
+    public string? Path { get; set; }
+    /// <summary>Raw obsah souboru base64 (alternativa k Path).</summary>
+    public string? Base64 { get; set; }
 }
 
 public sealed class ComponentDto

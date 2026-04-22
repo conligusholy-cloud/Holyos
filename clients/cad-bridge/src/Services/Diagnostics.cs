@@ -41,9 +41,26 @@ public static class Diagnostics
     {
         var real = Unwrap(ex);
         var msg = real.Message?.Trim();
-        if (string.IsNullOrEmpty(msg)) msg = real.GetType().Name;
+        var typeName = real.GetType().Name;
+
+        // Když je `real` jen holé TargetInvocationException / RuntimeBinderException
+        // bez inner exception, message je generická ("Exception has been thrown by
+        // the target of an invocation.") a uživatel z ní nic nevyčte. Připojíme
+        // aspoň typ + HResult, ať se u kolegy dá problém rychleji identifikovat.
+        bool genericWrapperMsg =
+            real is TargetInvocationException ||
+            string.IsNullOrEmpty(msg) ||
+            msg == "Exception has been thrown by the target of an invocation.";
+
+        if (genericWrapperMsg)
+        {
+            var hresult = real.HResult;
+            msg = string.IsNullOrEmpty(msg) ? typeName : msg;
+            msg += $" [{typeName}, HRESULT=0x{hresult:X8}]";
+        }
+
         // Některé COM hlášky mají newline uvnitř — UI je zobrazí na jeden řádek
-        return msg.Replace("\r", " ").Replace("\n", " ");
+        return (msg ?? typeName).Replace("\r", " ").Replace("\n", " ");
     }
 
     /// <summary>

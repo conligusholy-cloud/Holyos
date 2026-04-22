@@ -28,12 +28,31 @@ public sealed class SubmitForm : Form
 
     private readonly TreeView _projectTree = new();
     private readonly DataGridView _filesGrid = new();
+    private readonly DataGridView _componentsGrid = new();
+    private readonly Label _componentsHeader = new()
+    {
+        Text = "Komponenty vybrané sestavy",
+        Dock = DockStyle.Top,
+        Height = 26,
+        TextAlign = ContentAlignment.MiddleLeft,
+        Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
+        Padding = new Padding(10, 0, 0, 0),
+    };
+    private readonly Button _btnScanFolder = new() { Text = "🗂 Naskenovat složku", Height = 32 };
     private readonly Button _btnAddFile = new() { Text = "+ Přidat soubor…", Height = 32 };
     private readonly Button _btnSearch = new() { Text = "🔍 Vyhledat komponenty", Height = 32 };
+    private readonly Button _btnSettings = new() { Text = "⚙ Nastavení", Height = 32 };
     private readonly Button _btnSubmit = new() { Text = "✓ Odevzdat do HolyOSu", Height = 32 };
     private readonly CheckBox _chkOverwrite = new() { Text = "Přepsat stejné verze", AutoSize = true };
     private readonly Label _status = new() { AutoSize = false, Dock = DockStyle.Bottom, Height = 22,
         TextAlign = ContentAlignment.MiddleLeft, ForeColor = Color.FromArgb(100, 116, 139) };
+    private readonly ProgressBar _progress = new()
+    {
+        Dock = DockStyle.Bottom,
+        Height = 6,
+        Style = ProgressBarStyle.Continuous,
+        Visible = false,
+    };
 
     private readonly List<FileRow> _rows = new();
     private int? _selectedProjectId;
@@ -46,9 +65,10 @@ public sealed class SubmitForm : Form
 
         Text = "HolyOS CAD Bridge";
         StartPosition = FormStartPosition.CenterScreen;
-        Size = new Size(1100, 680);
+        Size = new Size(1400, 820);
         Font = new Font("Segoe UI", 9.5f);
-        MinimumSize = new Size(900, 500);
+        MinimumSize = new Size(1100, 600);
+        TryLoadAppIcon();
 
         BuildUi();
 
@@ -63,10 +83,21 @@ public sealed class SubmitForm : Form
         FormClosing += (_, __) => _sw.Dispose();
 
         _btnAddFile.Click += (_, __) => OnAddFile();
+        _btnScanFolder.Click += (_, __) => OnScanFolder();
         _btnSearch.Click += async (_, __) => await OnSearchAsync();
         _btnSubmit.Click += async (_, __) => await OnSubmitAsync();
+        _btnSettings.Click += (_, __) =>
+        {
+            using var dlg = new SettingsForm(_settings);
+            if (dlg.ShowDialog(this) == DialogResult.OK)
+            {
+                // Propagace změn — checkbox "přepsat" v bottombar i URL klienta.
+                _chkOverwrite.Checked = _settings.OverwriteSameVersion;
+                _client.SetBaseUrl(_settings.ServerUrl);
+            }
+        };
 
-        _projectTree.AfterSelect += (_, __) =>
+        _projectTree.AfterSelect += async (_, __) =>
         {
             if (_projectTree.SelectedNode?.Tag is Project p)
             { _selectedProjectId = p.Id; _selectedBlockId = null; }
@@ -77,22 +108,41 @@ public sealed class SubmitForm : Form
             _status.Text = _selectedProjectId.HasValue
                 ? $"Cíl: projekt #{_selectedProjectId}" + (_selectedBlockId.HasValue ? $", blok #{_selectedBlockId}" : "")
                 : "Vyber projekt vlevo";
+
+            // Po výběru projektu přepočítat změny proti serveru (pokud už jsou načtené soubory).
+            if (_selectedProjectId.HasValue && _rows.Count > 0) await DetectChangesAsync();
         };
+    }
+
+    /// <summary>Nastaví ikonku okna z embedded resource app-icon.ico (pokud je).</summary>
+    private void TryLoadAppIcon()
+    {
+        try
+        {
+            using var s = typeof(SubmitForm).Assembly.GetManifestResourceStream("app-icon.ico");
+            if (s != null) Icon = new Icon(s);
+        }
+        catch { /* není ikona — Windows použije default */ }
     }
 
     private void BuildUi()
     {
-        var split = new SplitContainer
+        // Hlavní rozložení — TableLayoutPanel místo SplitContainer.
+        // Důvod: SplitContainer je notoricky problematický s timing/Width během
+        // inicializace (házel ArgumentException při Panel2MinSize). TableLayoutPanel
+        // s fixní Absolute šířkou levého sloupce vypadá identicky a nemá timing bugy.
+        var main = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
-            SplitterDistance = 300,
+            RowCount = 1,
+            ColumnCount = 2,
         };
+        main.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 260));
+        main.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        main.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
-        // Levý panel — strom projektů
-        _projectTree.Dock = DockStyle.Fill;
-        _projectTree.HideSelection = false;
-        split.Panel1.Controls.Add(_projectTree);
-
+        // Levý sloupec — panel s hlavičkou + stromem projektů.
+        var leftPanel = new Panel { Dock = DockStyle.Fill };
         var leftHeader = new Label
         {
             Text = "Projekty a bloky",
@@ -102,8 +152,14 @@ public sealed class SubmitForm : Form
             Font = new Font(Font, FontStyle.Bold),
             Padding = new Padding(10, 0, 0, 0),
         };
-        split.Panel1.Controls.Add(leftHeader);
-        leftHeader.BringToFront();
+        _projectTree.Dock = DockStyle.Fill;
+        _projectTree.HideSelection = false;
+        _projectTree.BorderStyle = BorderStyle.FixedSingle;
+        // Pořadí přidání: TreeView první (Fill), potom Header (Top) —
+        // Header "ukrojí" svou výšku z Fill a TreeView automaticky upraví.
+        leftPanel.Controls.Add(_projectTree);
+        leftPanel.Controls.Add(leftHeader);
+        main.Controls.Add(leftPanel, 0, 0);
 
         // Pravý panel — toolbar nahoře, grid uprostřed, status dole
         var rightLayout = new TableLayoutPanel
@@ -118,13 +174,16 @@ public sealed class SubmitForm : Form
 
         var toolbar = new FlowLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(10, 8, 10, 8) };
         _btnAddFile.Width = 140;
+        _btnScanFolder.Width = 180;
         _btnSearch.Width = 200;
-        toolbar.Controls.AddRange(new Control[] { _btnAddFile, _btnSearch });
+        _btnSettings.Width = 130;
+        toolbar.Controls.AddRange(new Control[] { _btnScanFolder, _btnAddFile, _btnSearch, _btnSettings });
         rightLayout.Controls.Add(toolbar, 0, 0);
 
         _filesGrid.Dock = DockStyle.Fill;
         _filesGrid.AllowUserToAddRows = false;
         _filesGrid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
+        _filesGrid.MultiSelect = false;
         _filesGrid.RowHeadersVisible = false;
         _filesGrid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
         _filesGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "File",     HeaderText = "Soubor", Width = 240 });
@@ -133,7 +192,43 @@ public sealed class SubmitForm : Form
         _filesGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Qty",      HeaderText = "Ks", Width = 60 });
         _filesGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "CompCount",HeaderText = "Komponent", Width = 100 });
         _filesGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Status",   HeaderText = "Stav", Width = 120 });
-        rightLayout.Controls.Add(_filesGrid, 0, 1);
+
+        // Druhý grid — detail komponent vybraného souboru.
+        _componentsGrid.Dock = DockStyle.Fill;
+        _componentsGrid.AllowUserToAddRows = false;
+        _componentsGrid.ReadOnly = true;
+        _componentsGrid.RowHeadersVisible = false;
+        _componentsGrid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
+        _componentsGrid.BackgroundColor = Color.FromArgb(248, 250, 252);
+        _componentsGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "CompType",    HeaderText = "Typ",         FillWeight = 10 });
+        _componentsGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "CompName",    HeaderText = "Díl",         FillWeight = 30 });
+        _componentsGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "CompPath",    HeaderText = "Cesta",       FillWeight = 35 });
+        _componentsGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "CompCfg",     HeaderText = "Konfigurace", FillWeight = 15 });
+        _componentsGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "CompQty",     HeaderText = "Ks",          FillWeight = 10 });
+
+        // Kontejner pro spodní grid (komponenty) — header nahoře, grid vyplní zbytek.
+        var componentsPanel = new Panel { Dock = DockStyle.Fill };
+        componentsPanel.Controls.Add(_componentsGrid);
+        componentsPanel.Controls.Add(_componentsHeader);
+        _componentsHeader.BringToFront();
+
+        // Vertikální rozložení souborů/komponent — zase TableLayoutPanel,
+        // aby byl stejně spolehlivý jako hlavní.
+        var gridsLayout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            RowCount = 2,
+            ColumnCount = 1,
+        };
+        gridsLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 55));
+        gridsLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 45));
+        gridsLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        gridsLayout.Controls.Add(_filesGrid, 0, 0);
+        gridsLayout.Controls.Add(componentsPanel, 0, 1);
+        rightLayout.Controls.Add(gridsLayout, 0, 1);
+
+        // Propojení: při změně výběru v horním gridu se dolní grid naplní komponentami.
+        _filesGrid.SelectionChanged += (_, __) => RenderSelectedComponents();
 
         var bottomBar = new FlowLayoutPanel
         {
@@ -150,10 +245,11 @@ public sealed class SubmitForm : Form
         bottomBar.Controls.Add(_chkOverwrite);
         rightLayout.Controls.Add(bottomBar, 0, 2);
 
-        split.Panel2.Controls.Add(rightLayout);
+        main.Controls.Add(rightLayout, 1, 0);
 
-        Controls.Add(split);
+        Controls.Add(main);
         Controls.Add(_status);
+        Controls.Add(_progress);
         _status.Text = "Připraveno";
     }
 
@@ -164,6 +260,12 @@ public sealed class SubmitForm : Form
         try
         {
             var resp = await _client.GetProjectBlocksAsync();
+            Diagnostics.LogException("LoadProjects — OK",
+                new InvalidOperationException(
+                    $"Server URL={_settings.ServerUrl}, Success={resp.Success}, " +
+                    $"Projects={resp.Projects?.Count ?? -1}, " +
+                    $"Codes={string.Join(", ", (resp.Projects ?? new List<Project>()).Select(p => p.Code))}"));
+
             _projectTree.BeginUpdate();
             _projectTree.Nodes.Clear();
             foreach (var p in resp.Projects)
@@ -174,14 +276,24 @@ public sealed class SubmitForm : Form
             }
             _projectTree.ExpandAll();
             _projectTree.EndUpdate();
-            _status.Text = resp.Projects.Count == 0
-                ? "Server nemá žádné projekty — nejdřív je založ v modulu CAD výkresy."
-                : $"Načteno {resp.Projects.Count} projektů";
+
+            if (resp.Projects.Count == 0)
+            {
+                _status.ForeColor = Color.FromArgb(220, 38, 38);
+                _status.Text = "Server vrátil 0 projektů — zkontroluj na webu app.holyos.cz, že jsou aktivní (projekty s active=true)";
+            }
+            else
+            {
+                _status.ForeColor = Color.FromArgb(22, 163, 74);
+                _status.Text = $"Načteno {resp.Projects.Count} projektů ({string.Join(", ", resp.Projects.Take(3).Select(p => p.Code))}{(resp.Projects.Count > 3 ? "…" : "")})";
+            }
         }
         catch (Exception ex)
         {
+            Diagnostics.LogException("LoadProjects — EXCEPTION", ex);
             _status.ForeColor = Color.FromArgb(220, 38, 38);
-            _status.Text = "Chyba: " + ex.Message;
+            _status.Text = "Chyba načtení projektů: " + Diagnostics.ShortMessage(ex) +
+                           " (viz log %LOCALAPPDATA%\\HolyOsCadBridge\\logs)";
         }
     }
 
@@ -198,10 +310,13 @@ public sealed class SubmitForm : Form
     // ── Přidání souborů do gridu ────────────────────────────────────────────
     private void OnAddFile()
     {
+        var exts = _settings.ImportExtensions ?? new List<string> { "sldprt", "sldasm", "slddrw" };
+        var pattern = string.Join(";", exts.Select(e => "*." + e.TrimStart('.').ToLowerInvariant()));
         using var dlg = new OpenFileDialog
         {
             Multiselect = true,
-            Filter = "SolidWorks|*.sldprt;*.sldasm;*.slddrw|Všechny|*.*",
+            Filter = $"CAD soubory|{pattern}|Všechny|*.*",
+            InitialDirectory = _settings.DefaultCadFolder ?? "",
         };
         if (dlg.ShowDialog(this) != DialogResult.OK) return;
         foreach (var f in dlg.FileNames) AddFilePath(f);
@@ -214,8 +329,15 @@ public sealed class SubmitForm : Form
         AddFilePath(path);
     }
 
-    private void AddFilePath(string path)
+    private void AddFilePath(string path) => AddFilePathIfNew(path);
+
+    /// <summary>Přidá soubor do gridu, pokud stejná cesta ještě není v seznamu.</summary>
+    private bool AddFilePathIfNew(string path)
     {
+        var norm = Path.GetFullPath(path);
+        if (_rows.Any(r => string.Equals(Path.GetFullPath(r.Path), norm, StringComparison.OrdinalIgnoreCase)))
+            return false;
+
         var ext = Path.GetExtension(path).ToLowerInvariant().TrimStart('.');
         var row = new FileRow
         {
@@ -228,6 +350,160 @@ public sealed class SubmitForm : Form
         _rows.Add(row);
         _filesGrid.Rows.Add(row.FileName, row.Extension, row.ConfigurationName ?? "—",
             row.Quantity, row.ComponentCount, row.Status);
+        return true;
+    }
+
+    /// <summary>
+    /// Porovná lokální stav každého primárního souboru se stavem na serveru.
+    /// Preferuje feature_hash (SHA-256 feature-tree SW) před SHA-256 binárky, protože
+    /// SolidWorks mění obsah souboru i při pouhém Save (časové razítko), takže
+    /// checksum není spolehlivý indikátor reálné změny geometrie/konstrukce.
+    /// Řádky označí stavem: ⚡ Nový / ⚡ Změněný / ✓ Beze změn.
+    /// </summary>
+    private async Task DetectChangesAsync()
+    {
+        if (_selectedProjectId == null || _rows.Count == 0) return;
+        try
+        {
+            _status.Text = "Porovnávám se serverem…";
+            var serverHashes = await _client.GetExistingHashesAsync(_selectedProjectId.Value);
+
+            for (int i = 0; i < _rows.Count; i++)
+            {
+                var row = _rows[i];
+                // Spočítat lokální checksum (cache-náchylná operace — dělá to až teď,
+                // takže velké soubory trvají vteřinu, menší ms).
+                row.LocalChecksum ??= await Task.Run(() => ComputeSha256(row.Path));
+
+                string state;
+                string statusText;
+
+                if (!serverHashes.TryGetValue(row.FileName, out var sh))
+                {
+                    state = "new";
+                    statusText = "⚡ Nový";
+                }
+                else
+                {
+                    // Primárně porovnej feature-hash (hash feature-tree). Pokud některý
+                    // chybí (starší server, jiný SW soubor), padáme zpět na SHA-256.
+                    bool? featureEqual = (row.FeatureHash != null && sh.FeatureHash != null)
+                        ? string.Equals(row.FeatureHash, sh.FeatureHash, StringComparison.OrdinalIgnoreCase)
+                        : (bool?)null;
+                    bool? checksumEqual = (row.LocalChecksum != null && sh.Checksum != null)
+                        ? string.Equals(row.LocalChecksum, sh.Checksum, StringComparison.OrdinalIgnoreCase)
+                        : (bool?)null;
+
+                    if (featureEqual == true)
+                    {
+                        state = "same"; statusText = "✓ Beze změn";
+                    }
+                    else if (featureEqual == false)
+                    {
+                        state = "changed"; statusText = "⚡ Změněný";
+                    }
+                    else if (checksumEqual == true)
+                    {
+                        state = "same"; statusText = "✓ Beze změn";
+                    }
+                    else if (checksumEqual == false)
+                    {
+                        state = "changed"; statusText = "⚡ Změněný";
+                    }
+                    else
+                    {
+                        // Server nemá ani jeden hash → bereme jako změnu (první upload s hashem).
+                        state = "changed"; statusText = "⚡ Změněný";
+                    }
+                }
+                row.ChangeState = state;
+
+                // Do "Stav" sloupce dáme prefix dle diff proti serveru + dřívější info.
+                var baseStatus = row.IsVirtualAssembly ? "Virtuální (vynechá se)"
+                    : !SwNativeExts.Contains(row.Extension) ? "Připraveno (raw)"
+                    : "Připraveno";
+                _filesGrid.Rows[i].Cells["Status"].Value = $"{statusText}  ·  {baseStatus}";
+
+                // Zvýraznění celého řádku
+                var gridRow = _filesGrid.Rows[i];
+                if (state == "new")
+                {
+                    gridRow.DefaultCellStyle.ForeColor = Color.FromArgb(34, 197, 94);   // zelená
+                    gridRow.DefaultCellStyle.Font = new Font(_filesGrid.Font, FontStyle.Bold);
+                }
+                else if (state == "changed")
+                {
+                    gridRow.DefaultCellStyle.ForeColor = Color.FromArgb(234, 179, 8);   // žlutá
+                    gridRow.DefaultCellStyle.Font = new Font(_filesGrid.Font, FontStyle.Bold);
+                }
+                else if (state == "same")
+                {
+                    gridRow.DefaultCellStyle.ForeColor = Color.FromArgb(107, 114, 128); // šedá
+                }
+            }
+
+            var news    = _rows.Count(r => r.ChangeState == "new");
+            var changed = _rows.Count(r => r.ChangeState == "changed");
+            var same    = _rows.Count(r => r.ChangeState == "same");
+            _status.ForeColor = Color.FromArgb(22, 163, 74);
+            _status.Text = $"Porovnáno se serverem: ⚡ {news} nových, ⚡ {changed} změněných, ✓ {same} beze změn";
+        }
+        catch (Exception ex)
+        {
+            Diagnostics.LogException("DetectChangesAsync", ex);
+        }
+    }
+
+    /// <summary>
+    /// Spočítá SHA-256 hex souboru. Server ho použije k detekci změn mezi uploady.
+    /// </summary>
+    private static string? ComputeSha256(string path)
+    {
+        try
+        {
+            if (!File.Exists(path)) return null;
+            using var sha = System.Security.Cryptography.SHA256.Create();
+            using var fs = File.OpenRead(path);
+            var hash = sha.ComputeHash(fs);
+            var sb = new System.Text.StringBuilder(hash.Length * 2);
+            foreach (var b in hash) sb.Append(b.ToString("x2"));
+            return sb.ToString();
+        }
+        catch { return null; }
+    }
+
+    /// <summary>
+    /// Pozná virtuální sestavu podle custom property Typ = "virtualni".
+    /// Hledá case-insensitive přes klíče "Typ" / "typ" / "TYP" a porovnává hodnotu.
+    /// </summary>
+    private static bool IsVirtualAssemblyByProps(Dictionary<string, object?>? props)
+    {
+        if (props == null) return false;
+        foreach (var kv in props)
+        {
+            if (!string.Equals(kv.Key, "Typ", StringComparison.OrdinalIgnoreCase)) continue;
+            var v = (kv.Value ?? "").ToString()?.Trim();
+            if (string.Equals(v, "virtualni", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(v, "virtuální", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(v, "virtual",   StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /// <summary>Detekuje, zda je CAD soubor součástí SolidWorks Toolboxu
+    /// nebo běžné knihovny normalizovaných dílů (ISO šrouby, matky…).</summary>
+    private static bool IsToolboxPart(string path)
+    {
+        var p = path.ToLowerInvariant();
+        return p.Contains("toolbox")
+            || p.Contains("normalizované")
+            || p.Contains("normalizovane")
+            || p.Contains("\\iso ")
+            || p.Contains("\\din ")
+            || p.Contains("\\ansi ");
     }
 
     private void ProcessPendingQueue()
@@ -247,22 +523,68 @@ public sealed class SubmitForm : Form
         }
 
         _btnSearch.Enabled = false;
+        _status.ForeColor = Color.FromArgb(100, 116, 139);
         _status.Text = "Spouštím SolidWorks…";
         try
         {
             await Task.Run(() => _sw.Connect());
 
-            for (int i = 0; i < _rows.Count; i++)
+            int processed = 0, addedComponents = 0, virtualCount = 0;
+            int idx = 0;
+            while (idx < _rows.Count)
             {
-                var row = _rows[i];
-                _status.Text = $"Zpracovávám {row.FileName}…";
-                await Task.Run(() => ProcessRow(row));
+                var row = _rows[idx];
+                if (SwNativeExts.Contains(row.Extension))
+                {
+                    _status.Text = $"Čtu komponenty: {row.FileName} ({idx + 1}/{_rows.Count})…";
+                    await Task.Run(() => ProcessRow(row));
 
-                _filesGrid.Rows[i].Cells["Cfg"].Value       = row.ConfigurationName ?? "—";
-                _filesGrid.Rows[i].Cells["CompCount"].Value = row.ComponentCount;
-                _filesGrid.Rows[i].Cells["Status"].Value    = row.Status;
+                    _filesGrid.Rows[idx].Cells["Cfg"].Value       = row.ConfigurationName ?? "—";
+                    _filesGrid.Rows[idx].Cells["CompCount"].Value = row.ComponentCount;
+                    _filesGrid.Rows[idx].Cells["Status"].Value    = row.Status;
+                    if (row.IsVirtualAssembly)
+                    {
+                        _filesGrid.Rows[idx].DefaultCellStyle.ForeColor = Color.FromArgb(107, 114, 128);
+                        _filesGrid.Rows[idx].DefaultCellStyle.Font = new Font(_filesGrid.Font, FontStyle.Italic);
+                    }
+                    processed++;
+
+                    // Auto-expand — pro každou komponentu, pokud je její fyzický soubor
+                    // na disku a není z Toolboxu, přidej ji jako další řádek (rekurzivně
+                    // — další iterace cyklu ji pak zase zpracuje a rozbalí subsestavu).
+                    // Komponenty bez fyzického souboru (Path prázdná nebo File neexistuje)
+                    // jsou "fiktivní" (virtual components v SW) — pouze se napočítají pro
+                    // informaci a zachovají se v kusovníku, ale nestahují se samostatně.
+                    if (_settings.SubmitComponents)
+                    {
+                        foreach (var c in row.Components)
+                        {
+                            // Do HolyOSu nerozbalujeme potlačené ani vyloučené z BOM —
+                            // to jsou komponenty, které konstruktér schválně vyřadil z výroby.
+                            // V Bridge jsou barevně zvýrazněné jako info, ale na server nejdou.
+                            if (c.IsSuppressed)   continue;
+                            if (c.ExcludeFromBom) continue;
+                            if (string.IsNullOrWhiteSpace(c.Path) || !File.Exists(c.Path))
+                            {
+                                virtualCount++;
+                                continue;
+                            }
+                            if (_settings.IgnoreToolboxParts && IsToolboxPart(c.Path)) continue;
+                            if (AddFilePathIfNew(c.Path)) addedComponents++;
+                        }
+                    }
+                }
+                idx++;
             }
-            _status.Text = "Hotovo — komponenty načteny";
+
+            _status.ForeColor = Color.FromArgb(22, 163, 74);
+            _status.Text = $"Hotovo — {processed} zdrojových souborů, " +
+                           $"{addedComponents} přidaných komponent, " +
+                           $"{virtualCount} fiktivních (bez souboru, zůstávají v kusovníku)";
+            RenderSelectedComponents();
+
+            // Porovnat se serverem a označit změněné soubory ⚡.
+            await DetectChangesAsync();
         }
         catch (Exception ex)
         {
@@ -276,8 +598,156 @@ public sealed class SubmitForm : Form
         }
     }
 
+    /// <summary>
+    /// Projde kořenový adresář (z Nastavení), najde primární CAD soubory
+    /// (.sldprt/.sldasm/.slddrw/.step…) a ke každému připojí sesterské soubory
+    /// se stejným základním názvem jako přílohy (PDF, DXF, DWG, STL, …).
+    /// Nespouští SolidWorks — celý sken běží čistě nad filesystémem.
+    /// </summary>
+    private void OnScanFolder()
+    {
+        var root = _settings.DefaultCadFolder;
+        if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root))
+        {
+            using var dlg = new FolderBrowserDialog
+            {
+                Description = "Vyber kořenovou složku s CAD soubory",
+                InitialDirectory = root ?? "",
+            };
+            if (dlg.ShowDialog(this) != DialogResult.OK) return;
+            root = dlg.SelectedPath;
+            _settings.DefaultCadFolder = root;
+            try { SettingsStore.Save(_settings); } catch { }
+        }
+
+        var primary = new HashSet<string>(
+            (_settings.PrimaryExtensions ?? new List<string>()).Select(e => e.TrimStart('.').ToLowerInvariant()),
+            StringComparer.OrdinalIgnoreCase);
+        var attachExts = new HashSet<string>(
+            (_settings.AttachmentExtensions ?? new List<string>()).Select(e => e.TrimStart('.').ToLowerInvariant()),
+            StringComparer.OrdinalIgnoreCase);
+
+        var searchOpt = _settings.ScanSubdirectories
+            ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
+
+        _status.Text = $"Skenuji {root}…";
+        _rows.Clear();
+        _filesGrid.Rows.Clear();
+
+        try
+        {
+            // Index všech souborů podle základního jména (bez přípony).
+            var byBase = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+            foreach (var path in Directory.EnumerateFiles(root, "*.*", searchOpt))
+            {
+                var baseName = Path.GetFileNameWithoutExtension(path);
+                if (!byBase.TryGetValue(baseName, out var list))
+                {
+                    list = new List<string>();
+                    byBase[baseName] = list;
+                }
+                list.Add(path);
+            }
+
+            // Pro každou skupinu souborů se stejným základním jménem najdi primární
+            // a zbytek připoj jako přílohy.
+            int primaryCount = 0, attachCount = 0;
+            foreach (var (baseName, files) in byBase)
+            {
+                var primaryFiles = files
+                    .Where(p => primary.Contains(Path.GetExtension(p).TrimStart('.').ToLowerInvariant()))
+                    .ToList();
+                if (primaryFiles.Count == 0) continue;
+
+                // Přílohy = všechny soubory skupiny kromě primárního, co je v attachExts.
+                var attachments = files
+                    .Where(p => !primaryFiles.Contains(p, StringComparer.OrdinalIgnoreCase))
+                    .Where(p => attachExts.Contains(Path.GetExtension(p).TrimStart('.').ToLowerInvariant()))
+                    .ToList();
+
+                // Preferujeme sestavu (.sldasm), pak díl (.sldprt) — to je primární zdroj.
+                var main = primaryFiles.FirstOrDefault(p =>
+                    string.Equals(Path.GetExtension(p), ".sldasm", StringComparison.OrdinalIgnoreCase))
+                    ?? primaryFiles.First();
+
+                // Ostatní primární soubory (pokud by jich bylo víc) se stanou také přílohami.
+                attachments.AddRange(primaryFiles.Where(p => p != main));
+
+                var row = new FileRow
+                {
+                    Path = main,
+                    FileName = Path.GetFileName(main),
+                    Extension = Path.GetExtension(main).TrimStart('.').ToLowerInvariant(),
+                    ConfigurationName = "Výchozí",
+                    Quantity = 1,
+                    Components = new List<AssemblyComponent>(),
+                    ComponentCount = 0,
+                    SiblingAttachments = attachments,
+                    Status = attachments.Count > 0
+                        ? $"Připraveno · {attachments.Count} příloh"
+                        : "Připraveno",
+                };
+                _rows.Add(row);
+                _filesGrid.Rows.Add(row.FileName, row.Extension, row.ConfigurationName,
+                    row.Quantity, row.ComponentCount, row.Status);
+
+                primaryCount++;
+                attachCount += attachments.Count;
+            }
+
+            _status.ForeColor = Color.FromArgb(22, 163, 74);
+            _status.Text = $"Naskenováno: {primaryCount} hlavních souborů + {attachCount} příloh";
+            RenderSelectedComponents();
+
+            // Po skenu porovnat lokální checksum se serverem a označit změny ⚡.
+            _ = DetectChangesAsync();
+
+            // Rozpočet příloh podle přípon pro výpis uživateli.
+            var breakdown = _rows
+                .SelectMany(r => r.SiblingAttachments)
+                .GroupBy(p => Path.GetExtension(p).TrimStart('.').ToUpperInvariant())
+                .OrderByDescending(g => g.Count())
+                .Select(g => $"{g.Key}: {g.Count()}")
+                .ToList();
+
+            MessageBox.Show(this,
+                $"Složka: {root}\n\n" +
+                $"Hlavních souborů (.sldprt / .sldasm): {primaryCount}\n" +
+                $"Vedlejších souborů připojených jako přílohy: {attachCount}\n" +
+                (breakdown.Count > 0 ? "  " + string.Join(", ", breakdown) : "") + "\n\n" +
+                (primaryCount == 0
+                    ? "Ve složce nebyl nalezen žádný .sldprt ani .sldasm. Zkontroluj cestu v Nastavení."
+                    : "Klikni Odevzdat do HolyOSu pro nahrání."),
+                "Výsledek skenování",
+                MessageBoxButtons.OK,
+                primaryCount > 0 ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+        }
+        catch (Exception ex)
+        {
+            Diagnostics.LogException("OnScanFolder", ex);
+            _status.ForeColor = Color.FromArgb(220, 38, 38);
+            _status.Text = "Chyba skenu: " + Diagnostics.ShortMessage(ex);
+        }
+    }
+
+    private static readonly HashSet<string> SwNativeExts = new(StringComparer.OrdinalIgnoreCase)
+        { "sldprt", "sldasm", "slddrw" };
+
     private void ProcessRow(FileRow row)
     {
+        // Ne-SolidWorks soubor (step, dxf, easm, eprt, iges, …) — RAW mód.
+        // Nezkoušíme otvírat přes SW, protože komponenty ani custom props
+        // z těchto formátů nedostaneme. Jen zaregistrujeme v gridu s defaultem.
+        if (!SwNativeExts.Contains(row.Extension))
+        {
+            row.ConfigurationName = "Výchozí";
+            row.CustomProperties  = new Dictionary<string, object?>();
+            row.Components        = new List<AssemblyComponent>();
+            row.ComponentCount    = 0;
+            row.Status            = "Připraveno (raw)";
+            return;
+        }
+
         try
         {
             using var doc = _sw.OpenDocument(row.Path);
@@ -286,16 +756,60 @@ public sealed class SubmitForm : Form
             row.CustomProperties = doc.GetCustomProperties(row.ConfigurationName);
             row.Components = doc.GetComponents();
             row.ComponentCount = row.Components.Count;
-            row.Status = "Připraveno";
+
+            // Feature fingerprint — reálný indikátor změny geometrie.
+            // Nezmění se při Save bez úprav (SW přepíše jen metadata), mění se jen
+            // když konstruktér skutečně upravil strom featurek nebo přidal komponenty.
+            row.FeatureHash = doc.FeatureFingerprint;
+
+            // Virtuální sestava — custom property "Typ" (případně "typ") = "virtualni".
+            // Takovou sestavu do HolyOSu neposíláme, ale expandujeme její komponenty.
+            row.IsVirtualAssembly = IsVirtualAssemblyByProps(row.CustomProperties);
+
+            // Auto-discovery sesterských příloh (.step, .dxf, …) vedle SW souboru.
+            row.SiblingAttachments = FindSiblingAttachments(row.Path);
+
+            row.Status = row.IsVirtualAssembly ? "Virtuální (vynechá se)" : "Připraveno";
         }
         catch (Exception ex)
         {
-            // Rozbalíme TargetInvocationException (COM late binding), aby se
-            // zobrazila skutečná chyba a ne jen "Exception has been thrown
-            // by the target of an invocation."
             row.Status = "Chyba: " + Diagnostics.ShortMessage(ex);
             Diagnostics.LogException($"ProcessRow — {row.FileName}", ex);
         }
+    }
+
+    /// <summary>
+    /// Najde sesterské soubory vedle SW modelu — pro každou podporovanou
+    /// přípontu (z nastavení + typické CAD exporty) vrátí existující cestu.
+    /// </summary>
+    private List<string> FindSiblingAttachments(string srcPath)
+    {
+        var result = new List<string>();
+        try
+        {
+            var dir = Path.GetDirectoryName(srcPath);
+            if (string.IsNullOrEmpty(dir) || !Directory.Exists(dir)) return result;
+            var nameNoExt = Path.GetFileNameWithoutExtension(srcPath);
+
+            // Přípony — ze settings plus standardní CAD exporty, mimo SW native.
+            var attachExts = (_settings.ImportExtensions ?? new List<string>())
+                .Select(e => e.TrimStart('.').ToLowerInvariant())
+                .Concat(new[] { "step", "stp", "dxf", "dwg", "iges", "igs", "easm", "eprt", "x_t", "x_b" })
+                .Where(e => !SwNativeExts.Contains(e))
+                .Distinct();
+
+            foreach (var ext in attachExts)
+            {
+                foreach (var variant in new[] { ext, ext.ToUpperInvariant() })
+                {
+                    var p = Path.Combine(dir, nameNoExt + "." + variant);
+                    if (File.Exists(p) && !result.Any(x => string.Equals(x, p, StringComparison.OrdinalIgnoreCase)))
+                        result.Add(p);
+                }
+            }
+        }
+        catch { /* best-effort */ }
+        return result;
     }
 
     // ── Odevzdat do HolyOSu ─────────────────────────────────────────────────
@@ -315,57 +829,176 @@ public sealed class SubmitForm : Form
         }
 
         _btnSubmit.Enabled = false;
-        _status.Text = "Odevzdávám…";
+
+        // PHASE 0: uložit všechny otevřené "dirty" dokumenty v SolidWorksu.
+        // Pokrývá scenario: uživatel upravuje díl ale ještě neklikl Save —
+        // Bridge by jinak viděl starý obsah na disku a vyhodnotil jako "beze změn".
+        // Bridge se připojuje k existující instanci SW (pokud neběží, spustí ji tichou),
+        // takže se nezmění viditelnost uživatelského okna.
+        if (_settings.RefreshAssembliesBeforeExport)
+        {
+            try
+            {
+                _status.ForeColor = Color.FromArgb(100, 116, 139);
+                _status.Text = "Hledám neuložené změny v SolidWorksu…";
+                _status.Refresh();
+                await Task.Run(() => _sw.Connect());
+                var savedDirty = await Task.Run(() => _sw.SaveDirtyOpenDocuments());
+                if (savedDirty > 0)
+                {
+                    _status.Text = $"Uloženo {savedDirty} neuložených dokumentů v SW.";
+                    _status.Refresh();
+                }
+            }
+            catch (Exception ex)
+            {
+                Diagnostics.LogException("SaveDirtyBeforeExport", ex);
+                // SW nemusí být dostupný — pokračujeme bez tohoto kroku.
+            }
+        }
+
+        // PHASE 1: Obnova sestav — pro každou .sldasm otevřeme v SW a zavoláme Save.
+        // Tím se promítnou změny v podsestavách/dílech do souboru vrcholové sestavy
+        // (SW aktualizuje reference při uložení). Soubor na disku dostane aktuální
+        // obsah a nový SHA-256 checksum, server správně zdetekuje change.
+        if (_settings.RefreshAssembliesBeforeExport)
+        {
+            var assemblies = _rows.Where(r =>
+                r.Extension.Equals("sldasm", StringComparison.OrdinalIgnoreCase) &&
+                !r.IsVirtualAssembly &&
+                File.Exists(r.Path)).ToList();
+            if (assemblies.Count > 0)
+            {
+                _status.ForeColor = Color.FromArgb(100, 116, 139);
+                _status.Text = $"Obnovuji {assemblies.Count} sestav v SolidWorks…";
+                _status.Refresh();
+                try
+                {
+                    await Task.Run(() => _sw.Connect());
+                    for (int i = 0; i < assemblies.Count; i++)
+                    {
+                        var a = assemblies[i];
+                        _status.Text = $"Aktualizuji sestavu v SW: {a.FileName} ({i + 1}/{assemblies.Count})";
+                        _status.Refresh();
+                        try
+                        {
+                            await Task.Run(() =>
+                            {
+                                using var doc = _sw.OpenDocument(a.Path);
+                                doc.Save();
+                            });
+                        }
+                        catch (Exception exRefresh)
+                        {
+                            Diagnostics.LogException($"RefreshAssembly {a.FileName}", exRefresh);
+                        }
+                    }
+                }
+                catch (Exception exConn)
+                {
+                    Diagnostics.LogException("RefreshAssembliesBeforeExport (SW Connect)", exConn);
+                    // Pokud SW nedostupný, export pokračuje — jen bez refresh.
+                }
+            }
+        }
+
+        // Spočti celkový počet kroků pro progress bar:
+        //   1 krok za každý ne-SW soubor (raw upload)
+        //   + 1 krok za každou sesterskou přílohu
+        //   + 1 krok za finální /drawings-import
+        var rowsToUpload = _rows.Where(r => !r.IsVirtualAssembly).ToList();
+        int totalSteps = 1 + rowsToUpload.Sum(r =>
+            (SwNativeExts.Contains(r.Extension) ? 0 : 1) + r.SiblingAttachments.Count);
+        int completed = 0;
+
+        _progress.Visible = true;
+        _progress.Minimum = 0;
+        _progress.Maximum = Math.Max(1, totalSteps);
+        _progress.Value = 0;
+        _status.ForeColor = Color.FromArgb(100, 116, 139);
+        _status.Text = $"Odevzdávám… 0 / {totalSteps}";
+
+        void Step(string msg)
+        {
+            completed++;
+            if (completed > _progress.Maximum) completed = _progress.Maximum;
+            _progress.Value = completed;
+            _status.Text = $"{msg}  ·  {completed} / {totalSteps}";
+            _progress.Refresh();
+            _status.Refresh();
+        }
+
         try
         {
-            // Pre-upload PDF (volitelně) — jen pro výkresy (.slddrw)
-            foreach (var row in _rows)
-            {
-                if (!_settings.GeneratePdfs) break;
-                if (row.Extension != "slddrw") continue;
-                if (row.PdfPath != null) continue;
+            // Bridge 2.x: žádné spouštění SolidWorksu při odevzdávání. Pracujeme
+            // čistě se soubory, jak je najdeme ve složce. PDF / DXF / STEP atd.
+            // jsou prostě přílohy.
 
-                try
+            // Upload všech nalezených příloh (sesterské soubory stejného jména).
+            var rowAttachments = new Dictionary<FileRow, List<AttachmentDto>>();
+            foreach (var row in rowsToUpload)
+            {
+                var list = new List<AttachmentDto>();
+
+                // Ne-SW soubor (raw mód) — přibalíme ho samotného jako přílohu (raw bytes).
+                if (!SwNativeExts.Contains(row.Extension))
                 {
-                    using var doc = _sw.OpenDocument(row.Path);
-                    var pdf = Exporters.ExportPdf(doc);
-                    if (pdf != null)
+                    try
                     {
-                        var uploaded = await _client.UploadAssetAsync("pdf",
-                            Path.GetFileNameWithoutExtension(row.FileName) + ".pdf", pdf);
-                        row.PdfPath = uploaded.Path;
+                        var bytes = await Task.Run(() => File.ReadAllBytes(row.Path));
+                        var uploaded = await _client.UploadAssetAsync(row.Extension,
+                            row.FileName, bytes);
+                        list.Add(new AttachmentDto
+                        {
+                            Kind = row.Extension,
+                            Filename = row.FileName,
+                            Path = uploaded.Path,
+                        });
                     }
+                    catch (Exception ex)
+                    {
+                        Diagnostics.LogException($"UploadRaw {row.FileName}", ex);
+                    }
+                    Step($"Nahráno: {row.FileName}");
                 }
-                catch { /* PDF je best-effort */ }
+
+                // Sesterské soubory vedle SW modelu — nahrajeme jako přílohy.
+                foreach (var sib in row.SiblingAttachments)
+                {
+                    try
+                    {
+                        var kind = Path.GetExtension(sib).TrimStart('.').ToLowerInvariant();
+                        var bytes = await Task.Run(() => File.ReadAllBytes(sib));
+                        var uploaded = await _client.UploadAssetAsync(kind,
+                            Path.GetFileName(sib), bytes);
+                        list.Add(new AttachmentDto
+                        {
+                            Kind = kind,
+                            Filename = Path.GetFileName(sib),
+                            Path = uploaded.Path,
+                        });
+                    }
+                    catch (Exception ex)
+                    {
+                        Diagnostics.LogException($"UploadSibling {Path.GetFileName(sib)}", ex);
+                    }
+                    Step($"Nahráno: {Path.GetFileName(sib)}");
+                }
+
+                rowAttachments[row] = list;
             }
 
-            // Pre-upload STL — pro díly a sestavy (pro webový 3D viewer)
-            foreach (var row in _rows)
-            {
-                if (row.Extension != "sldprt" && row.Extension != "sldasm") continue;
-                if (row.StlPath != null) continue;
-
-                try
-                {
-                    _status.Text = $"Exportuji STL: {row.FileName}…";
-                    using var doc = _sw.OpenDocument(row.Path);
-                    var stl = Exporters.ExportStl(doc);
-                    if (stl != null)
-                    {
-                        var uploaded = await _client.UploadAssetAsync("stl",
-                            Path.GetFileNameWithoutExtension(row.FileName) + ".stl", stl);
-                        row.StlPath = uploaded.Path;
-                    }
-                }
-                catch { /* STL je best-effort — viewer je nice-to-have */ }
-            }
+            _status.Text = $"Zapisuji metadata na server…  ·  {completed} / {totalSteps}";
+            _status.Refresh();
 
             var payload = new DrawingsImportRequest
             {
                 Project = new ProjectRef { Id = _selectedProjectId },
                 GoodsBlockId = _selectedBlockId,
                 Overwrite = _chkOverwrite.Checked,
-                DrawingFiles = _rows.Select(r => new DrawingFileDto
+                // Virtuální sestavy (custom property Typ=virtualni) vynecháváme z uploadu —
+                // jejich komponenty se ale odevzdaly samostatně díky auto-expanzi.
+                DrawingFiles = _rows.Where(r => !r.IsVirtualAssembly).Select(r => new DrawingFileDto
                 {
                     Name = Path.GetFileNameWithoutExtension(r.FileName),
                     DrawingFileName = r.FileName,
@@ -373,6 +1006,8 @@ public sealed class SubmitForm : Form
                     Extension = r.Extension,
                     Version = 1,
                     SourcePath = r.Path,
+                    Checksum = r.LocalChecksum ?? ComputeSha256(r.Path),
+                    FeatureHash = r.FeatureHash,
                     Configurations = new()
                     {
                         new ConfigurationDto
@@ -384,30 +1019,52 @@ public sealed class SubmitForm : Form
                             PdfPath = r.PdfPath,
                             PngPath = r.PngPath,
                             StlPath = r.StlPath,
-                            Components = r.Components.Select(c => new ComponentDto
-                            {
-                                Name = c.Name,
-                                Path = c.Path,
-                                Quantity = c.Quantity,
-                                ConfigurationName = c.Configuration,
-                            }).ToList(),
+                            Attachments = rowAttachments.TryGetValue(r, out var al) ? al : new List<AttachmentDto>(),
+                            // Do HolyOSu posíláme jen výrobně relevantní komponenty.
+                            // Potlačené (Suppressed) a vyloučené z BOM (ExcludeFromBOM)
+                            // se zcela vynechávají — v Bridge se jen zobrazí barevně
+                            // pro vizuální kontrolu, ale na server jdou pouze "normální" díly.
+                            Components = r.Components
+                                .Where(c => !c.IsSuppressed && !c.ExcludeFromBom)
+                                .Select(c => new ComponentDto
+                                {
+                                    Name = c.Name,
+                                    Path = c.Path,
+                                    Quantity = c.Quantity,
+                                    ConfigurationName = c.Configuration,
+                                }).ToList(),
                         }
                     }
                 }).ToList()
             };
 
             var resp = await _client.ImportDrawingsAsync(payload);
-            var lines = new List<string>();
+
+            // Souhrn — co bylo vytvořeno / aktualizováno + rozpočet příloh.
+            var totalAttachments = rowAttachments.Values.Sum(l => l.Count);
+            var attachmentBreakdown = rowAttachments.Values
+                .SelectMany(l => l)
+                .GroupBy(a => (a.Kind ?? "").ToUpperInvariant())
+                .OrderByDescending(g => g.Count())
+                .Select(g => $"{g.Key}: {g.Count()}")
+                .ToList();
+
+            var lines = new List<string>
+            {
+                $"Hlavních souborů: {resp.Created.Count + resp.Updated.Count + resp.NotChanged.Count}",
+                $"  • Nových: {resp.Created.Count}",
+                $"  • Aktualizovaných: {resp.Updated.Count}",
+                $"  • Beze změn: {resp.NotChanged.Count}",
+                $"Příloh celkem: {totalAttachments}" + (attachmentBreakdown.Count > 0 ? "  (" + string.Join(", ", attachmentBreakdown) + ")" : ""),
+            };
             if (resp.Created.Count > 0)
-                lines.Add($"Vytvořeno: {string.Join(", ", resp.Created.ConvertAll(x => x.DrawingFileName))}");
+                lines.Add($"\nVytvořeno: {string.Join(", ", resp.Created.ConvertAll(x => x.DrawingFileName))}");
             if (resp.Updated.Count > 0)
                 lines.Add($"Aktualizováno: {string.Join(", ", resp.Updated.ConvertAll(x => x.DrawingFileName))}");
             if (resp.NotChanged.Count > 0)
                 lines.Add($"Beze změn: {string.Join(", ", resp.NotChanged.ConvertAll(x => x.DrawingFileName))}");
-            if (resp.UnknownComponents.Count > 0)
-                lines.Add($"Nerozpoznané komponenty: {resp.UnknownComponents.Count}");
             if (resp.Errors.Count > 0)
-                lines.Add("Chyby: " + string.Join("; ", resp.Errors.ConvertAll(e => $"{e.File} – {e.Message}")));
+                lines.Add("\nChyby: " + string.Join("; ", resp.Errors.ConvertAll(e => $"{e.File} – {e.Message}")));
 
             MessageBox.Show(this, string.Join("\n", lines),
                 resp.Success ? "Odevzdání proběhlo úspěšně" : "Odevzdání částečně selhalo",
@@ -426,7 +1083,121 @@ public sealed class SubmitForm : Form
         finally
         {
             _btnSubmit.Enabled = true;
+            _progress.Value = _progress.Maximum;
+            // Po malé pauze progress bar schováme — aby uživatel viděl "dokončeno".
+            var t = new System.Windows.Forms.Timer { Interval = 1500 };
+            t.Tick += (_, __) => { _progress.Visible = false; t.Stop(); t.Dispose(); };
+            t.Start();
         }
+    }
+
+    // Vrátí cestu k sesterskému .slddrw (výkres k modelu) nebo null, pokud neexistuje.
+    // Zkouší se v těch stejné složce jako .sldprt/.sldasm a akceptuje obě velikosti
+    // přípony (Windows souborový systém je case-insensitive, ale SolidWorks občas
+    // vytváří soubory s velkou příponou SLDDRW).
+    private static string? FindSiblingDrawing(string srcPath)
+    {
+        try
+        {
+            var dir = Path.GetDirectoryName(srcPath);
+            if (string.IsNullOrEmpty(dir) || !Directory.Exists(dir)) return null;
+            var nameNoExt = Path.GetFileNameWithoutExtension(srcPath);
+            foreach (var ext in new[] { ".SLDDRW", ".slddrw" })
+            {
+                var p = Path.Combine(dir, nameNoExt + ext);
+                if (File.Exists(p)) return p;
+            }
+            // Fallback: scan složky pro případ nesouladu v diakritice/case
+            foreach (var p in Directory.EnumerateFiles(dir, nameNoExt + ".*"))
+            {
+                if (Path.GetExtension(p).Equals(".slddrw", StringComparison.OrdinalIgnoreCase))
+                    return p;
+            }
+        }
+        catch { /* best-effort */ }
+        return null;
+    }
+
+    // Naplní spodní grid komponent podle aktuálně vybraného řádku v horním gridu.
+    private void RenderSelectedComponents()
+    {
+        _componentsGrid.Rows.Clear();
+        if (_filesGrid.SelectedRows.Count == 0 || _rows.Count == 0)
+        {
+            _componentsHeader.Text = "Komponenty vybrané sestavy";
+            return;
+        }
+        var idx = _filesGrid.SelectedRows[0].Index;
+        if (idx < 0 || idx >= _rows.Count) return;
+
+        var row = _rows[idx];
+        int virtualCount = 0, suppressedCount = 0, excludedCount = 0, virtualAsmCount = 0;
+
+        // Index souborů v _rows podle cesty — pro rychlé vyhledání, zda je komponenta
+        // zároveň v gridu (a zda je označená jako virtuální sestava).
+        var byPath = _rows.Where(r => !string.IsNullOrEmpty(r.Path))
+            .GroupBy(r => Path.GetFullPath(r.Path), StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+
+        foreach (var c in row.Components)
+        {
+            var isFictional = string.IsNullOrWhiteSpace(c.Path) || !File.Exists(c.Path);
+            if (isFictional) virtualCount++;
+            if (c.IsSuppressed) suppressedCount++;
+            if (c.ExcludeFromBom) excludedCount++;
+
+            // Zjisti, zda je komponenta virtuální sestava (custom property Typ=virtualni).
+            bool isVirtualAsm = false;
+            if (!isFictional && c.Path != null &&
+                byPath.TryGetValue(Path.GetFullPath(c.Path), out var matchedRow))
+            {
+                isVirtualAsm = matchedRow.IsVirtualAssembly;
+            }
+            if (isVirtualAsm) virtualAsmCount++;
+
+            // Typ — kombinace stavů. Přednost mají stavy z SolidWorksu.
+            string type;
+            if (c.IsSuppressed)           type = "⛔ potlačený";
+            else if (c.ExcludeFromBom)    type = "⊘ mimo BOM";
+            else if (isFictional)         type = "🧩 fiktivní";
+            else if (isVirtualAsm)        type = "⊙ virtuální";
+            else if (c.Path?.EndsWith(".sldasm", StringComparison.OrdinalIgnoreCase) == true) type = "sestava";
+            else                          type = "díl";
+
+            var newRowIdx = _componentsGrid.Rows.Add(type, c.Name, c.Path ?? "—", c.Configuration ?? "—", c.Quantity);
+            var r = _componentsGrid.Rows[newRowIdx];
+
+            if (c.IsSuppressed)
+            {
+                r.DefaultCellStyle.ForeColor = Color.FromArgb(239, 68, 68); // červená
+                r.DefaultCellStyle.Font = new Font(_componentsGrid.Font, FontStyle.Strikeout);
+            }
+            else if (c.ExcludeFromBom)
+            {
+                r.DefaultCellStyle.ForeColor = Color.FromArgb(245, 158, 11); // oranžová
+            }
+            else if (isVirtualAsm)
+            {
+                r.DefaultCellStyle.ForeColor = Color.FromArgb(168, 85, 247); // fialová
+                r.DefaultCellStyle.Font = new Font(_componentsGrid.Font, FontStyle.Italic);
+            }
+            else if (isFictional)
+            {
+                r.DefaultCellStyle.ForeColor = Color.FromArgb(107, 114, 128);
+                r.DefaultCellStyle.Font = new Font(_componentsGrid.Font, FontStyle.Italic);
+            }
+        }
+
+        var tags = new List<string>();
+        if (virtualCount > 0)    tags.Add($"{virtualCount} fiktivních");
+        if (virtualAsmCount > 0) tags.Add($"{virtualAsmCount} virtuálních sestav");
+        if (suppressedCount > 0) tags.Add($"{suppressedCount} potlačených");
+        if (excludedCount > 0)   tags.Add($"{excludedCount} mimo BOM");
+
+        _componentsHeader.Text = row.Components.Count == 0
+            ? $"Komponenty: {row.FileName} — bez komponent (klikni Vyhledat komponenty)"
+            : $"Komponenty: {row.FileName}  ·  {row.Components.Count} ks"
+              + (tags.Count > 0 ? "  ·  " + string.Join(", ", tags) : "");
     }
 
     private sealed class FileRow
@@ -442,6 +1213,23 @@ public sealed class SubmitForm : Form
         public string? PdfPath { get; set; }
         public string? PngPath { get; set; }
         public string? StlPath { get; set; }
+        /// <summary>Cesty k sesterským souborům (.step/.dxf/…) pro upload jako přílohy.</summary>
+        public List<string> SiblingAttachments { get; set; } = new();
+        /// <summary>Sestava má custom property "Typ" = "virtualni" → do HolyOSu se neexportuje,
+        /// ale její komponenty ano.</summary>
+        public bool IsVirtualAssembly { get; set; }
+
+        /// <summary>Lokálně spočítaný SHA-256 primárního souboru.</summary>
+        public string? LocalChecksum { get; set; }
+
+        /// <summary>Hash featurek z SolidWorks modelu. Mění se jen při reálné úpravě
+        /// geometrie, ne při pouhém Save. Preferován před LocalChecksum pro detekci změn.</summary>
+        public string? FeatureHash { get; set; }
+
+        /// <summary>Stav proti serveru: "new" (neexistuje), "changed" (checksum se liší),
+        /// "same" (beze změn), "" (nezjišťováno).</summary>
+        public string ChangeState { get; set; } = "";
+
         public string Status { get; set; } = "Čeká";
     }
 }
