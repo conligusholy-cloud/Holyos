@@ -685,10 +685,40 @@
           }
           const known = allComps.filter(c => !c.is_unknown);
           const unknown = allComps.filter(c => c.is_unknown);
+
+          // Helper pro vyhledání custom property napříč možnými variantami jména
+          // (Norma/norma/Standard, Popis/popis/Description, Materiál/Material/material, …).
+          function cp(comp, ...keys) {
+            const p = comp && comp.custom_properties;
+            if (!p) return '';
+            const norm = (s) => String(s).toLowerCase()
+              .replace(/[áä]/g,'a').replace(/[čć]/g,'c').replace(/[ďđ]/g,'d')
+              .replace(/[éě]/g,'e').replace(/[í]/g,'i').replace(/[ňń]/g,'n')
+              .replace(/[óö]/g,'o').replace(/[řŕ]/g,'r').replace(/[šś]/g,'s')
+              .replace(/[ťţ]/g,'t').replace(/[úůü]/g,'u').replace(/[ýÿ]/g,'y').replace(/[žź]/g,'z');
+            const lookup = {};
+            for (const [k, v] of Object.entries(p)) lookup[norm(k)] = v;
+            for (const k of keys) {
+              const nk = norm(k);
+              if (lookup[nk] !== undefined && lookup[nk] !== null && String(lookup[nk]).trim() !== '') {
+                return String(lookup[nk]).trim();
+              }
+            }
+            return '';
+          }
+
           let rowsHtml = '';
           for (const b of known) {
+            const norma    = cp(b, 'Norma', 'Standard');
+            const popis    = cp(b, 'Popis', 'Description', 'Název', 'Nazev', 'Name');
+            const mat      = cp(b, 'Materiál', 'Material');
+            const hmot     = cp(b, 'Hmotnost', 'Mass', 'Weight');
             rowsHtml += '<tr>' +
               '<td>' + escapeHtml(b.name) + '</td>' +
+              '<td style="color:var(--text2);">' + (norma ? escapeHtml(norma) : '<span style="color:var(--text2)">—</span>') + '</td>' +
+              '<td style="color:var(--text2);font-size:12px;">' + (popis ? escapeHtml(popis) : '<span style="color:var(--text2)">—</span>') + '</td>' +
+              '<td style="color:var(--text2);">' + (mat ? escapeHtml(mat) : '<span style="color:var(--text2)">—</span>') + '</td>' +
+              '<td style="text-align:right;color:var(--text2);font-size:12px;">' + (hmot ? escapeHtml(hmot) : '<span style="color:var(--text2)">—</span>') + '</td>' +
               '<td style="text-align:right;font-weight:600;">' + (b.quantity || 1) + '\u00d7</td>' +
               '<td style="color:var(--text2);font-size:12px;">' + escapeHtml(b.configuration || '—') + '</td>' +
               '<td>' + (b.material ? '<span style="color:#10b981;font-weight:600">' + escapeHtml(b.material.code) + '</span> \u00b7 ' + escapeHtml(b.material.name) : '<span style="color:var(--text2)">—</span>') + '</td>' +
@@ -696,8 +726,16 @@
             '</tr>';
           }
           for (const b of unknown) {
+            const norma    = cp(b, 'Norma', 'Standard');
+            const popis    = cp(b, 'Popis', 'Description', 'Název', 'Nazev', 'Name');
+            const mat      = cp(b, 'Materiál', 'Material');
+            const hmot     = cp(b, 'Hmotnost', 'Mass', 'Weight');
             rowsHtml += '<tr style="background:rgba(239,68,68,0.06);">' +
               '<td><span style="background:rgba(239,68,68,0.15);color:#ef4444;border:1px solid rgba(239,68,68,0.35);padding:1px 6px;border-radius:4px;font-size:10px;font-weight:700;margin-right:6px;">\u26a0 NEROZPOZN\u00c1NO</span>' + escapeHtml(b.name) + '</td>' +
+              '<td style="color:var(--text2);">' + (norma ? escapeHtml(norma) : '<span style="color:var(--text2)">—</span>') + '</td>' +
+              '<td style="color:var(--text2);font-size:12px;">' + (popis ? escapeHtml(popis) : '<span style="color:var(--text2)">—</span>') + '</td>' +
+              '<td style="color:var(--text2);">' + (mat ? escapeHtml(mat) : '<span style="color:var(--text2)">—</span>') + '</td>' +
+              '<td style="text-align:right;color:var(--text2);font-size:12px;">' + (hmot ? escapeHtml(hmot) : '<span style="color:var(--text2)">—</span>') + '</td>' +
               '<td style="text-align:right;font-weight:600;">' + (b.quantity || 1) + '\u00d7</td>' +
               '<td style="color:var(--text2);font-size:12px;">' + escapeHtml(b.configuration || '—') + '</td>' +
               '<td><span style="color:#ef4444">— Chyb\u00ed v katalogu materi\u00e1l\u016f —</span></td>' +
@@ -713,10 +751,14 @@
             '<table class="bom-table" style="width:100%;font-size:13px;">' +
               '<thead><tr>' +
                 '<th style="text-align:left;">D\u00edl</th>' +
-                '<th style="text-align:right;width:60px;">Ks</th>' +
+                '<th style="text-align:left;width:110px;">Norma</th>' +
+                '<th style="text-align:left;">Popis (SW)</th>' +
+                '<th style="text-align:left;width:110px;">Materi\u00e1l (SW)</th>' +
+                '<th style="text-align:right;width:85px;">Hmotnost</th>' +
+                '<th style="text-align:right;width:55px;">Ks</th>' +
                 '<th style="text-align:left;width:120px;">Konfig.</th>' +
                 '<th style="text-align:left;">Materi\u00e1l (katalog)</th>' +
-                '<th style="text-align:left;width:100px;">Z konfig.</th>' +
+                '<th style="text-align:left;width:90px;">Z konfig.</th>' +
               '</tr></thead>' +
               '<tbody>' + rowsHtml + '</tbody>' +
             '</table>' +
