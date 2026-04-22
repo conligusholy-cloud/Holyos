@@ -299,6 +299,7 @@ const importSchema = z.object({
     Version: z.number().int().optional(),
     SourcePath: z.string().optional().nullable(),
     Checksum: z.string().optional().nullable(),
+    FeatureHash: z.string().optional().nullable(),
     Configurations: z.array(z.object({
       ConfigurationName: z.string(),
       ConfigurationID: z.string().optional().nullable(),
@@ -415,14 +416,29 @@ router.post('/drawings-import', requireCadWrite, async (req, res, next) => {
         let drawing;
         let action; // 'created' | 'updated' | 'not_changed'
 
-        // Detekce změny přes SHA-256 checksum.
+        // Detekce změny — preferujeme feature_hash (hash feature-tree ze SolidWorks).
+        // Feature hash se nemění jen při pouhém Save v SW, mění se až když
+        // konstruktér reálně přidá/upraví/odstraní feature nebo změní geometrii.
+        // SHA-256 binárního souboru je fallback, protože SW ukládá timestampy
+        // do souboru a tak se checksum mění při každém Save.
+        //
         // - Nový záznam → vždy create.
-        // - Existuje a checksum se shoduje → not_changed (přeskočit, rychlé).
-        // - Existuje a checksum se liší → update (automatický, i bez overwrite flagu).
-        // - Existuje, Bridge checksum neposlal, overwrite=true → update (fallback).
-        // - Existuje, bez checksumu, overwrite=false → not_changed (původní chování).
+        // - Existuje a feature_hash se shoduje → not_changed (skip).
+        // - Existuje, feature_hash chybí, ale checksum sedí → not_changed.
+        // - Existuje a feature_hash se liší → update.
+        // - Existuje, checksum se liší a feature_hash nepřišel → update.
+        // - Existuje, Bridge neposlal ani jedno a overwrite=false → not_changed.
+        const featureHashMatches = existing && f.FeatureHash && existing.feature_hash
+          && existing.feature_hash.toLowerCase() === f.FeatureHash.toLowerCase();
+        const featureHashDiffers = existing && f.FeatureHash && existing.feature_hash
+          && existing.feature_hash.toLowerCase() !== f.FeatureHash.toLowerCase();
         const checksumMatches = existing && f.Checksum && existing.checksum
           && existing.checksum.toLowerCase() === f.Checksum.toLowerCase();
+
+        // „Beze změny" = feature_hash je k dispozici a sedí,
+        //                 nebo feature_hash nepřišel/nebyl uložen a checksum sedí.
+        const unchanged = featureHashMatches
+          || (!f.FeatureHash && !existing?.feature_hash && checksumMatches);
 
         if (!existing) {
           drawing = await prisma.cadDrawing.create({
@@ -435,12 +451,13 @@ router.post('/drawings-import', requireCadWrite, async (req, res, next) => {
               version: f.Version ?? 1,
               source_path: f.SourcePath ?? null,
               checksum: f.Checksum ?? null,
+              feature_hash: f.FeatureHash ?? null,
               title: f.Name ?? null,
               created_by_id: authorPersonId,
             },
           });
           action = 'created';
-        } else if (checksumMatches && !overwrite) {
+        } else if (unchanged && !overwrite) {
           // Stejný soubor — neděláme nic, jen reportujeme jako "beze změn".
           notChanged.push({
             Id: existing.id,
@@ -448,9 +465,8 @@ router.post('/drawings-import', requireCadWrite, async (req, res, next) => {
             Version: existing.version,
           });
           continue;
-        } else if (overwrite || (f.Checksum && !checksumMatches)) {
-          // Přepisujeme — buď ruční overwrite, nebo Bridge zjistil změnu.
-          // Inkrementujeme verzi, aby bylo vidět, kolikrát byl výkres aktualizován.
+        } else if (overwrite || featureHashDiffers || (f.Checksum && !checksumMatches)) {
+          // Přepisujeme — buď ruční overwrite, feature_hash se liší, nebo checksum.
           drawing = await prisma.cadDrawing.update({
             where: { id: existing.id },
             data: {
@@ -458,6 +474,7 @@ router.post('/drawings-import', requireCadWrite, async (req, res, next) => {
               relative_path: f.RelativePath ?? existing.relative_path,
               source_path: f.SourcePath ?? existing.source_path,
               checksum: f.Checksum ?? existing.checksum,
+              feature_hash: f.FeatureHash ?? existing.feature_hash,
               title: f.Name ?? existing.title,
               version: (existing.version ?? 1) + 1,
               last_import_at: new Date(),
@@ -467,7 +484,7 @@ router.post('/drawings-import', requireCadWrite, async (req, res, next) => {
           await prisma.cadDrawingConfig.deleteMany({ where: { drawing_id: drawing.id } });
           action = 'updated';
         } else {
-          // Existuje, Bridge neposlal checksum (starší verze), overwrite=false → noop.
+          // Existuje, Bridge neposlal potřebné údaje, overwrite=false → noop.
           notChanged.push({
             Id: existing.id,
             DrawingFileName: existing.file_name,
