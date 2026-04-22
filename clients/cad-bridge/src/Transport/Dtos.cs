@@ -93,6 +93,10 @@ public sealed class DrawingFileDto
     public string? Checksum { get; set; }
     /// <summary>Hash featurek modelu ze SolidWorks — reálný indikátor změny geometrie.</summary>
     public string? FeatureHash { get; set; }
+    /// <summary>Váha změny vyplněná konstruktérem u bleskem označených položek: "minor" | "medium" | "major".</summary>
+    public string? ChangeWeight { get; set; }
+    /// <summary>Volitelná poznámka konstruktéra k provedené změně (např. "zvětšen průměr díry z 8 na 10").</summary>
+    public string? ChangeNote { get; set; }
     public List<ConfigurationDto> Configurations { get; set; } = new();
 }
 

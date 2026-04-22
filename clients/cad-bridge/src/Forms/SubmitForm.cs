@@ -828,6 +828,36 @@ public sealed class SubmitForm : Form
             return;
         }
 
+        // PHASE –1: Dialog pro váhu + poznámku u řádků s bleskem.
+        // Zobrazí se jen pokud se předem detekovalo (_rows mají ChangeState)
+        // aspoň u jednoho řádku "new" nebo "changed". Beze změny = nic neukázat.
+        // Když uživatel klikne Zrušit, submit se přeruší.
+        var changedRows = _rows.Where(r =>
+            !r.IsVirtualAssembly &&
+            (r.ChangeState == "new" || r.ChangeState == "changed"))
+            .ToList();
+
+        if (changedRows.Count > 0)
+        {
+            var entries = changedRows.Select(r => new ChangeDetailsForm.Entry(
+                r.FileName, r.ChangeState, r.ChangeWeight, r.ChangeNote)).ToList();
+
+            using var dlg = new ChangeDetailsForm(entries);
+            if (dlg.ShowDialog(this) != DialogResult.OK)
+            {
+                _status.ForeColor = Color.FromArgb(100, 116, 139);
+                _status.Text = "Odeslání zrušeno uživatelem.";
+                return;
+            }
+
+            // Propiš hodnoty zpět do FileRow.
+            for (int i = 0; i < changedRows.Count; i++)
+            {
+                changedRows[i].ChangeWeight = dlg.Result[i].Weight;
+                changedRows[i].ChangeNote = dlg.Result[i].Note;
+            }
+        }
+
         _btnSubmit.Enabled = false;
 
         // PHASE 0: uložit všechny otevřené "dirty" dokumenty v SolidWorksu.
@@ -1008,6 +1038,8 @@ public sealed class SubmitForm : Form
                     SourcePath = r.Path,
                     Checksum = r.LocalChecksum ?? ComputeSha256(r.Path),
                     FeatureHash = r.FeatureHash,
+                    ChangeWeight = r.ChangeWeight,
+                    ChangeNote = r.ChangeNote,
                     Configurations = new()
                     {
                         new ConfigurationDto
@@ -1229,6 +1261,13 @@ public sealed class SubmitForm : Form
         /// <summary>Stav proti serveru: "new" (neexistuje), "changed" (checksum se liší),
         /// "same" (beze změn), "" (nezjišťováno).</summary>
         public string ChangeState { get; set; } = "";
+
+        /// <summary>Váha změny, kterou konstruktér vybral v dialogu před odesláním.
+        /// Povolené hodnoty: "minor" | "medium" | "major" | null (nevyplněno).</summary>
+        public string? ChangeWeight { get; set; }
+
+        /// <summary>Volitelná poznámka ke změně.</summary>
+        public string? ChangeNote { get; set; }
 
         public string Status { get; set; } = "Čeká";
     }
