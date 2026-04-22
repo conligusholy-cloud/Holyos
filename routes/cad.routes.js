@@ -298,6 +298,7 @@ const importSchema = z.object({
     Extension: z.string(),
     Version: z.number().int().optional(),
     SourcePath: z.string().optional().nullable(),
+    Checksum: z.string().optional().nullable(),
     Configurations: z.array(z.object({
       ConfigurationName: z.string(),
       ConfigurationID: z.string().optional().nullable(),
@@ -414,6 +415,15 @@ router.post('/drawings-import', requireCadWrite, async (req, res, next) => {
         let drawing;
         let action; // 'created' | 'updated' | 'not_changed'
 
+        // Detekce změny přes SHA-256 checksum.
+        // - Nový záznam → vždy create.
+        // - Existuje a checksum se shoduje → not_changed (přeskočit, rychlé).
+        // - Existuje a checksum se liší → update (automatický, i bez overwrite flagu).
+        // - Existuje, Bridge checksum neposlal, overwrite=true → update (fallback).
+        // - Existuje, bez checksumu, overwrite=false → not_changed (původní chování).
+        const checksumMatches = existing && f.Checksum && existing.checksum
+          && existing.checksum.toLowerCase() === f.Checksum.toLowerCase();
+
         if (!existing) {
           drawing = await prisma.cadDrawing.create({
             data: {
@@ -424,18 +434,29 @@ router.post('/drawings-import', requireCadWrite, async (req, res, next) => {
               extension: f.Extension.toLowerCase().replace(/^\./, ''),
               version: f.Version ?? 1,
               source_path: f.SourcePath ?? null,
+              checksum: f.Checksum ?? null,
               title: f.Name ?? null,
               created_by_id: authorPersonId,
             },
           });
           action = 'created';
-        } else if (overwrite) {
+        } else if (checksumMatches && !overwrite) {
+          // Stejný soubor — neděláme nic, jen reportujeme jako "beze změn".
+          notChanged.push({
+            Id: existing.id,
+            DrawingFileName: existing.file_name,
+            Version: existing.version,
+          });
+          continue;
+        } else if (overwrite || (f.Checksum && !checksumMatches)) {
+          // Přepisujeme — buď ruční overwrite, nebo Bridge zjistil změnu.
           drawing = await prisma.cadDrawing.update({
             where: { id: existing.id },
             data: {
               block_id: goodsBlockId ?? existing.block_id,
               relative_path: f.RelativePath ?? existing.relative_path,
               source_path: f.SourcePath ?? existing.source_path,
+              checksum: f.Checksum ?? existing.checksum,
               title: f.Name ?? existing.title,
               last_import_at: new Date(),
             },
@@ -444,8 +465,7 @@ router.post('/drawings-import', requireCadWrite, async (req, res, next) => {
           await prisma.cadDrawingConfig.deleteMany({ where: { drawing_id: drawing.id } });
           action = 'updated';
         } else {
-          // Existuje a overwrite=false → neměníme, jen reportujeme
-          updated.length; // noop
+          // Existuje, Bridge neposlal checksum (starší verze), overwrite=false → noop.
           notChanged.push({
             Id: existing.id,
             DrawingFileName: existing.file_name,
