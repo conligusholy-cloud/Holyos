@@ -986,6 +986,10 @@
                   <input type="checkbox" name="is_super_admin" id="chk-super-admin" value="1" ${p.is_super_admin ? 'checked' : ''} style="width:18px;height:18px;accent-color:var(--primary);cursor:pointer;">
                   <label for="chk-super-admin" style="cursor:pointer;margin:0;">Super Admin</label>
                 </div>
+                <div class="form-group" style="display:flex;align-items:center;gap:10px;padding-top:8px;">
+                  <input type="checkbox" name="can_upload_cad" id="chk-can-upload-cad" value="1" ${p.can_upload_cad ? 'checked' : ''} style="width:18px;height:18px;accent-color:var(--primary);cursor:pointer;">
+                  <label for="chk-can-upload-cad" style="cursor:pointer;margin:0;" title="Povolit odevzdávání SolidWorks výkresů přes HolyOS CAD Bridge">Může vkládat CAD</label>
+                </div>
               </div>
             </div>` : ''}
 
@@ -1117,8 +1121,9 @@
       for (const [k, v] of form.entries()) {
         data[k] = v === '' ? null : v;
       }
-      // Handle checkbox (unchecked = not in FormData)
+      // Handle checkboxy (unchecked = není v FormData, tak musíme číst z DOMu)
       data.is_super_admin = document.getElementById('chk-super-admin') && document.getElementById('chk-super-admin').checked ? 1 : 0;
+      data.can_upload_cad = document.getElementById('chk-can-upload-cad') && document.getElementById('chk-can-upload-cad').checked ? 1 : 0;
       // Convert numeric fields
       if (data.hourly_rate) data.hourly_rate = parseFloat(data.hourly_rate);
       if (data.monthly_salary) data.monthly_salary = parseFloat(data.monthly_salary);
