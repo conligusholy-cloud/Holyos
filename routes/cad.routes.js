@@ -450,6 +450,7 @@ router.post('/drawings-import', requireCadWrite, async (req, res, next) => {
           continue;
         } else if (overwrite || (f.Checksum && !checksumMatches)) {
           // Přepisujeme — buď ruční overwrite, nebo Bridge zjistil změnu.
+          // Inkrementujeme verzi, aby bylo vidět, kolikrát byl výkres aktualizován.
           drawing = await prisma.cadDrawing.update({
             where: { id: existing.id },
             data: {
@@ -458,6 +459,7 @@ router.post('/drawings-import', requireCadWrite, async (req, res, next) => {
               source_path: f.SourcePath ?? existing.source_path,
               checksum: f.Checksum ?? existing.checksum,
               title: f.Name ?? existing.title,
+              version: (existing.version ?? 1) + 1,
               last_import_at: new Date(),
             },
           });
