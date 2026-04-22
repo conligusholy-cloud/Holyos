@@ -2,9 +2,16 @@
 const express = require('express');
 const router = express.Router();
 const { prisma } = require('../config/database');
-const { requireAuth } = require('../middleware/auth');
+const { requireAuth, requireAuthOrApiKey } = require('../middleware/auth');
 
-router.use(requireAuth);
+// Per-path autentizace:
+//   /calendar*   → cookie NEBO X-API-Key (pro externí integrace)
+//   vše ostatní  → pouze cookie (interní moduly HolyOS)
+router.use((req, res, next) => {
+  const isCalendar = req.path === '/calendar' || req.path.startsWith('/calendar/');
+  if (isCalendar) return requireAuthOrApiKey(req, res, next);
+  return requireAuth(req, res, next);
+});
 
 // ─── SLOTY ────────────────────────────────────────────────────────────────
 
@@ -22,15 +29,208 @@ router.get('/', async (req, res, next) => {
       where,
       include: {
         workstation: { select: { id: true, name: true, code: true } },
-        assignments: {
-          orderBy: { priority: 'desc' },
-        },
+        assignments: { orderBy: { priority: 'desc' } },
         blocks: true,
         _count: { select: { assignments: true } },
       },
       orderBy: { start_date: 'asc' },
     });
     res.json(slots);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ─── VEŘEJNÝ KALENDÁŘ (sanitizovaný pro externí stránky) ─────────────────
+// GET /api/slots/calendar — naplněnost slotů BEZ detailů zakázek
+router.get('/calendar', async (req, res, next) => {
+  try {
+    const { from, to, workstation_id } = req.query;
+    const where = {};
+    if (from) where.start_date = { gte: new Date(from) };
+    if (to) where.end_date = { ...(where.end_date || {}), lte: new Date(to) };
+    if (workstation_id) where.workstation_id = parseInt(workstation_id);
+
+    const slots = await prisma.productionSlot.findMany({
+      where,
+      include: {
+        workstation: { select: { id: true, name: true, code: true } },
+        assignments: { select: { estimated_hours: true, quantity: true, status: true } },
+        blocks: { select: { id: true, start_date: true, end_date: true, reason: true, block_type: true } },
+      },
+      orderBy: { start_date: 'asc' },
+    });
+
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+
+    const calendar = slots.map(s => {
+      const start = new Date(s.start_date);
+      const end = new Date(s.end_date);
+      let workDays = 0;
+      for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+        const dow = d.getDay();
+        if (dow !== 0 && dow !== 6) workDays++;
+      }
+      const capacityTotal = Number(s.capacity_hours) * Math.max(workDays, 1);
+      const usedHours = s.assignments.reduce((sum, a) => sum + Number(a.estimated_hours || 0), 0);
+      const occupancyPct = capacityTotal > 0
+        ? Math.min(100, Math.round((usedHours / capacityTotal) * 100))
+        : 0;
+
+      let derivedStatus = 'free';
+      let label = 'Volno';
+      const isBlocked = s.status === 'blocked' || (s.blocks && s.blocks.length > 0);
+      if (isBlocked) {
+        derivedStatus = 'blocked';
+        label = 'Blokováno';
+      } else if (end < now) {
+        derivedStatus = 'expired';
+        label = 'Prošlé';
+      } else if (occupancyPct >= 100) {
+        derivedStatus = 'full';
+        label = 'Plno';
+      } else if (s.assignments.length > 0) {
+        derivedStatus = 'occupied';
+        label = `Obsazeno ${occupancyPct} %`;
+      }
+
+      return {
+        id: s.id,
+        name: s.name,
+        start_date: s.start_date,
+        end_date: s.end_date,
+        workstation: s.workstation,
+        status: derivedStatus,
+        label,
+        occupancy_pct: occupancyPct,
+        assignment_count: s.assignments.length,
+        used_hours: Math.round(usedHours * 10) / 10,
+        capacity_hours_per_day: Number(s.capacity_hours),
+        capacity_total_hours: Math.round(capacityTotal * 10) / 10,
+        color: s.color,
+        is_blocked: isBlocked,
+        blocks: s.blocks.map(b => ({
+          id: b.id,
+          start_date: b.start_date,
+          end_date: b.end_date,
+          reason: b.reason,
+          block_type: b.block_type,
+        })),
+      };
+    });
+
+    res.json({
+      range: { from: from || null, to: to || null },
+      count: calendar.length,
+      slots: calendar,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/slots/calendar/block — zablokovat období
+router.post('/calendar/block', async (req, res, next) => {
+  try {
+    const { start_date, end_date, reason, block_type, capacity_hours } = req.body;
+    if (!start_date || !end_date || !reason) {
+      return res.status(400).json({ error: 'Začátek, konec a důvod jsou povinné' });
+    }
+
+    const slot = await prisma.productionSlot.create({
+      data: {
+        name: `Blokace: ${reason}`,
+        start_date: new Date(start_date),
+        end_date: new Date(end_date),
+        capacity_hours: capacity_hours ? parseFloat(capacity_hours) : 8,
+        status: 'blocked',
+        color: '#dc2626',
+        note: reason,
+        blocks: {
+          create: {
+            start_date: new Date(start_date),
+            end_date: new Date(end_date),
+            reason,
+            block_type: block_type || 'holiday',
+          },
+        },
+      },
+      include: { blocks: true },
+    });
+
+    res.status(201).json({
+      id: slot.id,
+      block_id: slot.blocks[0]?.id,
+      start_date: slot.start_date,
+      end_date: slot.end_date,
+      reason,
+      status: 'blocked',
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// DELETE /api/slots/calendar/block/:slotId — zrušit blokaci
+router.delete('/calendar/block/:slotId', async (req, res, next) => {
+  try {
+    const slotId = parseInt(req.params.slotId);
+    const slot = await prisma.productionSlot.findUnique({ where: { id: slotId } });
+    if (!slot) return res.status(404).json({ error: 'Slot nenalezen' });
+    if (slot.status !== 'blocked') {
+      return res.status(400).json({ error: 'Tento slot není blokace, smazání přes tento endpoint nelze' });
+    }
+    await prisma.productionSlot.delete({ where: { id: slotId } });
+    res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/slots/calendar/next-free?hours=X — nejbližší volný slot
+router.get('/calendar/next-free', async (req, res, next) => {
+  try {
+    const neededHours = parseFloat(req.query.hours) || 0;
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+
+    const slots = await prisma.productionSlot.findMany({
+      where: {
+        end_date: { gte: now },
+        status: { notIn: ['blocked', 'closed'] },
+      },
+      include: {
+        assignments: { select: { estimated_hours: true } },
+        blocks: { select: { id: true } },
+      },
+      orderBy: { start_date: 'asc' },
+    });
+
+    for (const s of slots) {
+      if (s.blocks.length > 0) continue;
+      const start = new Date(s.start_date);
+      const end = new Date(s.end_date);
+      let workDays = 0;
+      for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+        const dow = d.getDay();
+        if (dow !== 0 && dow !== 6) workDays++;
+      }
+      const capacity = Number(s.capacity_hours) * Math.max(workDays, 1);
+      const used = s.assignments.reduce((sum, a) => sum + Number(a.estimated_hours || 0), 0);
+      const free = capacity - used;
+      if (free >= neededHours) {
+        return res.json({
+          id: s.id,
+          name: s.name,
+          start_date: s.start_date,
+          end_date: s.end_date,
+          free_hours: Math.round(free * 10) / 10,
+          needed_hours: neededHours,
+        });
+      }
+    }
+    res.status(404).json({ error: 'Žádný volný slot s dostatečnou kapacitou' });
   } catch (err) {
     next(err);
   }
@@ -103,7 +303,7 @@ router.put('/:id', async (req, res, next) => {
   }
 });
 
-// DELETE /api/slots/:id — smazání slotu
+// DELETE /api/slots/:id
 router.delete('/:id', async (req, res, next) => {
   try {
     await prisma.productionSlot.delete({ where: { id: parseInt(req.params.id) } });
@@ -113,9 +313,8 @@ router.delete('/:id', async (req, res, next) => {
   }
 });
 
-// ─── PŘIŘAZENÍ ZAKÁZEK DO SLOTŮ ──────────────────────────────────────────
+// ─── PŘIŘAZENÍ ZAKÁZEK ──────────────────────────────────────────────────
 
-// POST /api/slots/:id/assignments — přiřadit zakázku do slotu
 router.post('/:id/assignments', async (req, res, next) => {
   try {
     const { order_id, order_item_id, product_name, customer_name, quantity, estimated_hours, priority, note } = req.body;
@@ -140,7 +339,6 @@ router.post('/:id/assignments', async (req, res, next) => {
   }
 });
 
-// PUT /api/slots/assignments/:id — úprava přiřazení
 router.put('/assignments/:id', async (req, res, next) => {
   try {
     const { product_name, customer_name, quantity, estimated_hours, priority, status, note, slot_id } = req.body;
@@ -164,7 +362,6 @@ router.put('/assignments/:id', async (req, res, next) => {
   }
 });
 
-// DELETE /api/slots/assignments/:id — odebrání zakázky ze slotu
 router.delete('/assignments/:id', async (req, res, next) => {
   try {
     await prisma.slotAssignment.delete({ where: { id: parseInt(req.params.id) } });
@@ -174,9 +371,8 @@ router.delete('/assignments/:id', async (req, res, next) => {
   }
 });
 
-// ─── BLOKACE ──────────────────────────────────────────────────────────────
+// ─── BLOKACE ────────────────────────────────────────────────────────────
 
-// POST /api/slots/:id/blocks — blokovat slot (dovolená, údržba, ...)
 router.post('/:id/blocks', async (req, res, next) => {
   try {
     const { start_date, end_date, reason, block_type } = req.body;
@@ -198,7 +394,6 @@ router.post('/:id/blocks', async (req, res, next) => {
   }
 });
 
-// DELETE /api/slots/blocks/:id — odebrat blokaci
 router.delete('/blocks/:id', async (req, res, next) => {
   try {
     await prisma.slotBlock.delete({ where: { id: parseInt(req.params.id) } });
@@ -208,12 +403,10 @@ router.delete('/blocks/:id', async (req, res, next) => {
   }
 });
 
-// ─── STATISTIKY ───────────────────────────────────────────────────────────
+// ─── STATISTIKY ────────────────────────────────────────────────────────
 
-// GET /api/slots/stats/overview — přehled pro dashboard
 router.get('/stats/overview', async (req, res, next) => {
   try {
-    const now = new Date();
     const [total, open, blocked, assignments] = await Promise.all([
       prisma.productionSlot.count(),
       prisma.productionSlot.count({ where: { status: 'open' } }),
