@@ -79,6 +79,13 @@ public sealed class SubmitForm : Form
             AppState.PendingPath = null;
             AppState.PathEnqueued += () => BeginInvoke((Action)ProcessPendingQueue);
             AppState.FocusRequested += () => BeginInvoke((Action)BringToFront);
+
+            // Pokud Bridge spustili s cestou (z kontextového menu) a přibyl
+            // aspoň jeden SW soubor, auto-spustit Vyhledat komponenty.
+            if (_rows.Any(r => SwNativeExts.Contains(r.Extension)))
+            {
+                _ = OnSearchAsync();
+            }
         };
         FormClosing += (_, __) => _sw.Dispose();
 
@@ -517,8 +524,17 @@ public sealed class SubmitForm : Form
 
     private void ProcessPendingQueue()
     {
+        int before = _rows.Count;
         while (AppState.TryDequeuePath(out var p)) HandleIncomingPath(p);
         BringToFront();
+
+        // Nové SW soubory → auto Vyhledat komponenty (pokud zrovna neběží).
+        if (_rows.Count > before
+            && _btnSearch.Enabled
+            && _rows.Any(r => SwNativeExts.Contains(r.Extension)))
+        {
+            _ = OnSearchAsync();
+        }
     }
 
     // ── Vyhledat komponenty přes SW (klíčová funkce z popisu uživatele) ─────
