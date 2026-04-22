@@ -311,7 +311,16 @@
           <td><b>${escapeHtml(d.file_name)}</b>${stlBtn}${d.title ? '<br><span style="color:var(--text2);font-size:12px;">'+escapeHtml(d.title)+'</span>' : ''}</td>
           <td>${d.project ? escapeHtml(d.project.code) : '—'}</td>
           <td>${d.block ? escapeHtml(d.block.name) : '—'}</td>
-          <td>v${d.version}</td>
+          <td style="white-space:nowrap;">${(() => {
+            // Blesk vedle verze — stejná terminologie jako CAD Bridge:
+            //   v1   = první import → ⚡ Nový (zelený)
+            //   v>=2 = aspoň jeden update → ⚡ Změněný (žlutý)
+            const ver = 'v' + d.version;
+            if (d.version === 1) {
+              return ver + ' <span title="Nov\u00fd v\u00fdkres — importov\u00e1n poprv\u00e9" style="display:inline-block;margin-left:6px;padding:1px 7px;border-radius:10px;background:rgba(34,197,94,0.15);color:#22c55e;border:1px solid rgba(34,197,94,0.35);font-size:10px;font-weight:600;">\u26a1 Nov\u00fd</span>';
+            }
+            return ver + ' <span title="V\u00fdkres byl ' + (d.version - 1) + '\u00d7 aktualizov\u00e1n" style="display:inline-block;margin-left:6px;padding:1px 7px;border-radius:10px;background:rgba(234,179,8,0.15);color:#eab308;border:1px solid rgba(234,179,8,0.35);font-size:10px;font-weight:600;">\u26a1 Zm\u011bn\u011bn\u00fd</span>';
+          })()}</td>
           <td><span class="badge badge-count">${(d.configurations || []).length} konfig.</span></td>
           <td style="white-space:nowrap;" onclick="event.stopPropagation();">${(() => {
             const pdfConfigs = (d.configurations || []).filter(c => c.pdf_path);
