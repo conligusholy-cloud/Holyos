@@ -319,7 +319,16 @@ public sealed class SubmitForm : Form
             InitialDirectory = _settings.DefaultCadFolder ?? "",
         };
         if (dlg.ShowDialog(this) != DialogResult.OK) return;
-        foreach (var f in dlg.FileNames) AddFilePath(f);
+        int added = 0;
+        foreach (var f in dlg.FileNames) { if (AddFilePathIfNew(f)) added++; }
+
+        // Auto — pokud přibyl aspoň jeden SW soubor, rovnou spustit Vyhledat
+        // komponenty. Předchází situaci, kdy uživatel přidá .sldprt, hned klikne
+        // Odevzdat a Bridge nestihne načíst přílohy / feature-hash.
+        if (added > 0 && _rows.Any(r => SwNativeExts.Contains(r.Extension)))
+        {
+            _ = OnSearchAsync();
+        }
     }
 
     private void HandleIncomingPath(string? path)
@@ -741,9 +750,6 @@ public sealed class SubmitForm : Form
             _status.Text = $"Naskenováno: {primaryCount} hlavních, {attachCount} příloh, {rawCount} samostatných";
             RenderSelectedComponents();
 
-            // Po skenu porovnat lokální checksum se serverem a označit změny ⚡.
-            _ = DetectChangesAsync();
-
             // Rozpočet příloh + samostatných podle přípon pro výpis uživateli.
             var breakdown = _rows
                 .SelectMany(r => r.SiblingAttachments.Concat(new[] { r.Path }))
@@ -761,10 +767,24 @@ public sealed class SubmitForm : Form
                 (breakdown.Count > 0 ? "  " + string.Join(", ", breakdown) : "") + "\n\n" +
                 (totalRows == 0
                     ? "Ve složce nebyl nalezen žádný relevantní soubor. Zkontroluj přípony v Nastavení a cestu."
-                    : "Klikni Odevzdat do HolyOSu pro nahrání."),
+                    : "Teď se automaticky spustí Vyhledat komponenty — rozbalím sestavy přes SolidWorks a označím změny."),
                 "Výsledek skenování",
                 MessageBoxButtons.OK,
                 totalRows > 0 ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+
+            // Po skenu automaticky spustit Vyhledat komponenty — bez toho Bridge
+            // neotevře sestavy v SW, nezíská feature-hash ani komponenty, a
+            // často Petr zapomíná tento krok udělat. OnSearchAsync má uvnitř
+            // taky DetectChangesAsync, takže změny proti serveru se označí.
+            if (totalRows > 0)
+            {
+                _ = OnSearchAsync();
+            }
+            else
+            {
+                // Jen sken neprodukoval řádky — spustíme aspoň porovnání.
+                _ = DetectChangesAsync();
+            }
         }
         catch (Exception ex)
         {
