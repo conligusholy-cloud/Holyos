@@ -1728,7 +1728,8 @@ model CadDrawing {
   relative_path String?  @db.VarChar(500)
   extension     String   @db.VarChar(10)            // "sldprt" | "sldasm" | "slddrw" | "stl"
   version       Int      @default(1)
-  checksum      String?  @db.VarChar(64)            // SHA256 pro detekci změn
+  checksum      String?  @db.VarChar(64)            // SHA256 binárního souboru
+  feature_hash  String?  @db.VarChar(64)            // SHA256 feature-tree ze SW — reálný indikátor změny geometrie
   source_path   String?  @db.VarChar(1000)          // původní cesta na disku autora
 
   // Metadata
