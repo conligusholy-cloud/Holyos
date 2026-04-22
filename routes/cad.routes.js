@@ -64,9 +64,32 @@ function absAssetPath(rel) {
 }
 
 // ─── Autentizace pro všechny CAD endpointy ──────────────────────────────────
-// CAD výkresy jsou interní/super-admin modul — běžní uživatelé 403.
+// Čtení je otevřené všem přihlášeným (web CAD modul, seznam projektů ve Bridge).
+// Zápis (upload nových výkresů, založení projektu) vyžaduje buď super admin,
+// nebo flag Person.can_upload_cad na připojeném Person záznamu.
 router.use(requireAuth);
-router.use(requireSuperAdmin);
+
+async function requireCadWrite(req, res, next) {
+  try {
+    // Super admin má vždy plný přístup
+    if (req.user && req.user.isSuperAdmin) return next();
+
+    // Jinak si najdeme navázaný Person a zkontrolujeme flag can_upload_cad.
+    // (req.user.person už může být načten z requireAuth middleware.)
+    let person = req.user && req.user.person;
+    if (!person && req.user && req.user.id) {
+      person = await prisma.person.findFirst({ where: { user_id: req.user.id } });
+    }
+
+    if (person && person.can_upload_cad === true) return next();
+
+    return res.status(403).json({
+      error: 'Pro nahrávání CAD výkresů je potřeba oprávnění. Požádej admina, ať ti v Lidé a HR zaškrtne „Může vkládat CAD".',
+    });
+  } catch (err) {
+    next(err);
+  }
+}
 
 // ───────────────────────────────────────────────────────────────────────────
 // GET /api/cad/project-blocks — strom projektů + bloků
@@ -217,7 +240,7 @@ const uploadAssetSchema = z.object({
   kind: z.enum(['pdf', 'png', 'stl']),
   contentBase64: z.string().min(1),
 });
-router.post('/upload-asset', async (req, res, next) => {
+router.post('/upload-asset', requireCadWrite, async (req, res, next) => {
   try {
     const parsed = uploadAssetSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -301,7 +324,7 @@ const importSchema = z.object({
   })),
 });
 
-router.post('/drawings-import', async (req, res, next) => {
+router.post('/drawings-import', requireCadWrite, async (req, res, next) => {
   try {
     const parsed = importSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -487,7 +510,7 @@ const projectSchema = z.object({
   customer: z.string().max(255).optional().nullable(),
   description: z.string().optional().nullable(),
 });
-router.post('/projects', async (req, res, next) => {
+router.post('/projects', requireCadWrite, async (req, res, next) => {
   try {
     const parsed = projectSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -510,7 +533,7 @@ const blockSchema = z.object({
   parent_id: z.number().int().optional().nullable(),
   sort_order: z.number().int().optional(),
 });
-router.post('/projects/:id/blocks', async (req, res, next) => {
+router.post('/projects/:id/blocks', requireCadWrite, async (req, res, next) => {
   try {
     const project_id = parseInt(req.params.id);
     if (isNaN(project_id)) return res.status(400).json({ error: 'Neplatné ID projektu' });
@@ -589,7 +612,7 @@ router.patch('/projects/:id', async (req, res, next) => {
 // ───────────────────────────────────────────────────────────────────────────
 // DELETE /api/cad/projects/:id — smaze projekt (cascade smaze bloky + vykresy)
 // ───────────────────────────────────────────────────────────────────────────
-router.delete('/projects/:id', async (req, res, next) => {
+router.delete('/projects/:id', requireCadWrite, async (req, res, next) => {
   try {
     const id = parseInt(req.params.id);
     if (isNaN(id)) return res.status(400).json({ error: 'Neplatne ID' });
@@ -601,7 +624,7 @@ router.delete('/projects/:id', async (req, res, next) => {
 // ───────────────────────────────────────────────────────────────────────────
 // DELETE /api/cad/drawings/:id — smaze vykres (cascade smaze konfigurace)
 // ───────────────────────────────────────────────────────────────────────────
-router.delete('/drawings/:id', async (req, res, next) => {
+router.delete('/drawings/:id', requireCadWrite, async (req, res, next) => {
   try {
     const id = parseInt(req.params.id);
     if (isNaN(id)) return res.status(400).json({ error: 'Neplatne ID' });

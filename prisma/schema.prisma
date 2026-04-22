@@ -101,6 +101,10 @@ model Person {
   is_super_admin  Boolean   @default(false)
   username        String?   @db.VarChar(100)
 
+  // Oprávnění pro specifické funkce. Zatím jediný flag — může odevzdávat CAD
+  // výkresy ze SolidWorksu přes desktop klient HolyOS CAD Bridge.
+  can_upload_cad  Boolean   @default(false)
+
   // Dovolená
   leave_entitlement_days Int?
   leave_carryover        Int?

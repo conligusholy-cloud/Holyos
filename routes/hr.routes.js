@@ -670,11 +670,13 @@ function sanitizePersonData(body, currentUser) {
     if (f in body) data[f] = body[f] ? parseFloat(body[f]) : null;
   }
   // Boolean pole
-  if ('active' in body) data.active = !!body.active && body.active !== 'false' && body.active !== '0';
+  const toBool = v => !!v && v !== 'false' && v !== '0';
+  if ('active' in body) data.active = toBool(body.active);
+  if ('can_upload_cad' in body) data.can_upload_cad = toBool(body.can_upload_cad);
   // is_super_admin může měnit jen admin nebo super admin
   const isAdmin = currentUser && (currentUser.role === 'admin' || currentUser.isSuperAdmin);
   if ('is_super_admin' in body && isAdmin) {
-    data.is_super_admin = !!body.is_super_admin && body.is_super_admin !== 'false' && body.is_super_admin !== '0';
+    data.is_super_admin = toBool(body.is_super_admin);
   }
   return data;
 }
