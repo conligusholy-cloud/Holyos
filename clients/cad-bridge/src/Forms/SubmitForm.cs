@@ -620,12 +620,22 @@ public sealed class SubmitForm : Form
             try { SettingsStore.Save(_settings); } catch { }
         }
 
-        var primary = new HashSet<string>(
-            (_settings.PrimaryExtensions ?? new List<string>()).Select(e => e.TrimStart('.').ToLowerInvariant()),
-            StringComparer.OrdinalIgnoreCase);
-        var attachExts = new HashSet<string>(
-            (_settings.AttachmentExtensions ?? new List<string>()).Select(e => e.TrimStart('.').ToLowerInvariant()),
-            StringComparer.OrdinalIgnoreCase);
+        // PRIMARY je VŽDY jen SW model (SLDPRT/SLDASM), nezávisle na Settings.
+        // Dříve brala logika primary ze _settings.PrimaryExtensions, takže pokud
+        // tam uživatel přidal dxf/pdf/step, Bridge tyto přípony považoval za
+        // primární výkres a SLDPRT se stával přílohou DXF souboru — kolize
+        // s DB schématem, attachments se nezapisovaly.
+        var primary = new HashSet<string>(new[] { "sldprt", "sldasm" }, StringComparer.OrdinalIgnoreCase);
+        // Attachment přípony: unie AttachmentExtensions + všechny ne-primární
+        // přípony z Settings (ať se neztratí, když si uživatel přidá vlastní typ).
+        var attachExts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var e in (_settings.AttachmentExtensions ?? new List<string>()))
+            attachExts.Add(e.TrimStart('.').ToLowerInvariant());
+        foreach (var e in (_settings.PrimaryExtensions ?? new List<string>()))
+        {
+            var norm = e.TrimStart('.').ToLowerInvariant();
+            if (!primary.Contains(norm)) attachExts.Add(norm);
+        }
 
         var searchOpt = _settings.ScanSubdirectories
             ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
@@ -825,21 +835,34 @@ public sealed class SubmitForm : Form
             if (string.IsNullOrEmpty(dir) || !Directory.Exists(dir)) return result;
             var nameNoExt = Path.GetFileNameWithoutExtension(srcPath);
 
-            // Přípony — ze settings plus standardní CAD exporty, mimo SW native.
-            var attachExts = (_settings.ImportExtensions ?? new List<string>())
-                .Select(e => e.TrimStart('.').ToLowerInvariant())
-                .Concat(new[] { "step", "stp", "dxf", "dwg", "iges", "igs", "easm", "eprt", "x_t", "x_b" })
-                .Where(e => !SwNativeExts.Contains(e))
-                .Distinct();
-
-            foreach (var ext in attachExts)
+            // Přípony — z AttachmentExtensions + všechno ne-SW-native z
+            // PrimaryExtensions (pro případ, že si uživatel přidal vlastní typ
+            // jako „primární", ale my ho bereme jako přílohu). Nakonec doplníme
+            // pevný seznam standardních CAD exportů jako safety net.
+            var attachExts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var e in (_settings.AttachmentExtensions ?? new List<string>()))
+                attachExts.Add(e.TrimStart('.').ToLowerInvariant());
+            foreach (var e in (_settings.PrimaryExtensions ?? new List<string>()))
             {
-                foreach (var variant in new[] { ext, ext.ToUpperInvariant() })
-                {
-                    var p = Path.Combine(dir, nameNoExt + "." + variant);
-                    if (File.Exists(p) && !result.Any(x => string.Equals(x, p, StringComparison.OrdinalIgnoreCase)))
-                        result.Add(p);
-                }
+                var norm = e.TrimStart('.').ToLowerInvariant();
+                if (!SwNativeExts.Contains(norm)) attachExts.Add(norm);
+            }
+            foreach (var e in new[] { "step", "stp", "dxf", "dwg", "iges", "igs", "easm", "eprt", "x_t", "x_b", "pdf", "stl" })
+                attachExts.Add(e);
+
+            // Najdi skutečně existující siblings přes Get-Files (case-insensitive
+            // filesystem). Tohle je spolehlivější, než zkoušet všechny kombinace
+            // lower/UPPER ručně — ošetří i mixed-case příponu typu "File.Dxf".
+            foreach (var file in Directory.EnumerateFiles(dir, nameNoExt + ".*"))
+            {
+                if (!string.Equals(Path.GetFileNameWithoutExtension(file), nameNoExt,
+                        StringComparison.OrdinalIgnoreCase))
+                    continue;   // "NA0733kopie.SLDPRT" nesmí trefit "NA0733"
+                var ext = Path.GetExtension(file).TrimStart('.').ToLowerInvariant();
+                if (!attachExts.Contains(ext)) continue;
+                if (string.Equals(file, srcPath, StringComparison.OrdinalIgnoreCase)) continue;
+                if (!result.Any(x => string.Equals(x, file, StringComparison.OrdinalIgnoreCase)))
+                    result.Add(file);
             }
         }
         catch { /* best-effort */ }
