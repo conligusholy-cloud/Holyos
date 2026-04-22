@@ -170,7 +170,15 @@
     // ─── Utils ───────────────────────────────────────────────────────────────
     const escapeHtml = s => (s ?? '').toString().replace(/[&<>"]/g,
       c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-    const fmt = d => d ? new Date(d).toLocaleDateString('cs-CZ') : '—';
+    const fmt = d => {
+      if (!d) return '—';
+      const dt = new Date(d);
+      // Datum + čas do minuty — "22. 4. 2026, 10:34"
+      return dt.toLocaleString('cs-CZ', {
+        day: 'numeric', month: 'numeric', year: 'numeric',
+        hour: '2-digit', minute: '2-digit',
+      });
+    };
 
     // ─── Načítání ────────────────────────────────────────────────────────────
     async function loadProjects() {
@@ -510,6 +518,7 @@
                 ${pdf ? `<a class="btn btn-sm btn-secondary" href="${pdf}" target="_blank">&#128196; PDF</a>` : ''}
                 ${png ? `<a class="btn btn-sm btn-secondary" href="${png}" target="_blank">&#128444;&#65039; Náhled</a>` : ''}
                 ${c.stl_path ? `<button type="button" class="btn btn-sm" style="background:rgba(34,197,94,0.15);color:#22c55e;border:1px solid rgba(34,197,94,0.35);" onclick="open3DViewer('${escapeHtml(c.stl_path)}', '${escapeHtml(d.file_name)} — ${escapeHtml(c.config_name)}', ${c.png_path ? "'/api/cad/assets/" + c.png_path + "'" : 'null'})">&#128302; 3D Viewer</button>` : ''}
+                ${(c.attachments || []).map(a => `<a class="btn btn-sm btn-secondary" href="/api/cad/assets/${encodeURI(a.path)}" target="_blank" title="${escapeHtml(a.filename)}" style="text-transform:uppercase;font-size:11px;">&#128230; ${escapeHtml(a.kind)}</a>`).join('')}
               </div>
             </header>
             <div class="config-body">

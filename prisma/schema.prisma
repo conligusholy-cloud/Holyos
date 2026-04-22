@@ -1775,6 +1775,10 @@ model CadDrawingConfig {
   pdf_path         String?  @db.VarChar(500)         // cesta uloženého PDF výkresu
   stl_path         String?  @db.VarChar(500)         // cesta uloženého STL pro 3D web viewer (Three.js)
 
+  // Další přílohy — .step, .dxf, .easm, .eprt, .iges atd. Formát:
+  // [{ kind: "step", filename: "BS-S-0325.step", path: "2026/04/ab12…step", size: 123456 }]
+  attachments      Json     @default("[]")
+
   // Externí reference (odkazy na další SW soubory)
   external_references Json  @default("[]")
 
