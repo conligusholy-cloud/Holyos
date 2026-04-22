@@ -253,9 +253,12 @@ router.get('/assets/*', (req, res) => {
 // Doporučeno pro desktop klienta: neposílat velké Base64 v drawings-import,
 // nejdřív nahrát přes tento endpoint a v drawings-import referencovat jen path.
 // ───────────────────────────────────────────────────────────────────────────
+// Kind je libovolná krátká přípona (pdf/png/stl/dxf/step/easm/dwg/iges/…).
+// Sanitizace do saveBase64Asset odstraní nealfanumerické znaky, takže žádná
+// injection cesta. Dříve byl enum s pdf/png/stl — tím se DXF/STEP/… odmítaly.
 const uploadAssetSchema = z.object({
   filename: z.string().optional(),
-  kind: z.enum(['pdf', 'png', 'stl']),
+  kind: z.string().min(1).max(20),
   contentBase64: z.string().min(1),
 });
 router.post('/upload-asset', requireCadWrite, async (req, res, next) => {
@@ -460,10 +463,38 @@ router.post('/drawings-import', requireCadWrite, async (req, res, next) => {
         const checksumMatches = existing && f.Checksum && existing.checksum
           && existing.checksum.toLowerCase() === f.Checksum.toLowerCase();
 
+        // Detekce změny počtu/typu příloh — i když feature-hash je stejný, nová
+        // verze Bridge může poslat víc sourozeneckých souborů (DXF, STEP, …),
+        // které předchozí verze ještě neuploadovala. V takovém případě bereme
+        // import jako update, abychom přílohy v DB doplnili.
+        let attachmentsChanged = false;
+        if (existing) {
+          const oldAtts = new Set();
+          for (const c of (existing.configurations || [])) {
+            for (const a of (c.attachments || [])) {
+              oldAtts.add(`${(a.kind || '').toLowerCase()}|${(a.filename || '').toLowerCase()}`);
+            }
+          }
+          const newAtts = new Set();
+          for (const cfg of (f.Configurations || [])) {
+            for (const a of (cfg.Attachments || [])) {
+              newAtts.add(`${(a.Kind || '').toLowerCase()}|${(a.Filename || '').toLowerCase()}`);
+            }
+          }
+          // Liší se, pokud staré a nové sady neobsahují identické položky.
+          if (oldAtts.size !== newAtts.size) {
+            attachmentsChanged = true;
+          } else {
+            for (const k of newAtts) { if (!oldAtts.has(k)) { attachmentsChanged = true; break; } }
+          }
+        }
+
         // „Beze změny" = feature_hash je k dispozici a sedí,
-        //                 nebo feature_hash nepřišel/nebyl uložen a checksum sedí.
-        const unchanged = featureHashMatches
-          || (!f.FeatureHash && !existing?.feature_hash && checksumMatches);
+        //                 nebo feature_hash nepřišel/nebyl uložen a checksum sedí,
+        //                 A současně se nezměnil seznam příloh (kind+filename).
+        const unchanged = (featureHashMatches
+          || (!f.FeatureHash && !existing?.feature_hash && checksumMatches))
+          && !attachmentsChanged;
 
         if (!existing) {
           drawing = await prisma.cadDrawing.create({
@@ -491,7 +522,7 @@ router.post('/drawings-import', requireCadWrite, async (req, res, next) => {
             Version: existing.version,
           });
           continue;
-        } else if (overwrite || featureHashDiffers || (f.Checksum && !checksumMatches)) {
+        } else if (overwrite || featureHashDiffers || (f.Checksum && !checksumMatches) || attachmentsChanged) {
           // Přepisujeme — buď ruční overwrite, feature_hash se liší, nebo checksum.
           drawing = await prisma.cadDrawing.update({
             where: { id: existing.id },
