@@ -354,6 +354,33 @@
             return '<a href="/api/cad/assets/' + encodeURI(pdfConfigs[0].pdf_path) + '" target="_blank" class="btn btn-sm" style="background:rgba(239,68,68,0.12);color:#ef4444;border-color:rgba(239,68,68,0.3);padding:3px 10px;font-size:11px;text-decoration:none;" title="Otev\u0159\u00edt PDF konfigurace: ' + escapeHtml(pdfConfigs[0].config_name || '') + '">\ud83d\udcc4 PDF</a>' +
               ' <span class="badge badge-count" title="Dal\u0161\u00ed ' + (pdfConfigs.length - 1) + ' PDF — v detailu">+' + (pdfConfigs.length - 1) + '</span>';
           })()}</td>
+          <td style="white-space:nowrap;" onclick="event.stopPropagation();">${(() => {
+            // Přílohy (DXF, STEP, EASM, DWG, IGES…) — sečíst napříč konfiguracemi
+            // a vykreslit jako malé pilulky s přímým odkazem na stažení.
+            const allAtt = [];
+            for (const c of (d.configurations || [])) {
+              for (const a of (c.attachments || [])) allAtt.push(a);
+            }
+            if (allAtt.length === 0) return '<span style="color:var(--text2);">\u2014</span>';
+            // Deduplikace podle path — stejná příloha u více konfigurací se neopakuje.
+            const seen = new Set();
+            const uniq = allAtt.filter(a => {
+              const k = a.path || (a.kind + '|' + a.filename);
+              if (seen.has(k)) return false;
+              seen.add(k); return true;
+            });
+            // Limit na 3 viditelné pilulky, zbytek jako "+N".
+            const visible = uniq.slice(0, 3);
+            const rest = uniq.length - visible.length;
+            const pills = visible.map(a => {
+              const kind = (a.kind || '').toUpperCase() || '\u2014';
+              return '<a href="/api/cad/assets/' + encodeURI(a.path) + '" target="_blank" title="' + escapeHtml(a.filename || '') + '" style="display:inline-block;margin-right:4px;padding:2px 8px;border-radius:10px;background:rgba(99,102,241,0.15);color:#818cf8;border:1px solid rgba(99,102,241,0.35);font-size:10px;font-weight:600;text-decoration:none;">\ud83d\udce6 ' + escapeHtml(kind) + '</a>';
+            }).join('');
+            const more = rest > 0
+              ? '<span class="badge badge-count" title="Dal\u0161\u00ed ' + rest + ' — v detailu">+' + rest + '</span>'
+              : '';
+            return pills + more;
+          })()}</td>
           <td style="font-size:12px;">${creatorName}</td>
           <td>${fmt(d.last_import_at)}</td>
           <td style="white-space:nowrap;" onclick="event.stopPropagation();">
@@ -366,7 +393,7 @@
         <table class="data-table">
           <thead><tr>
             <th>Typ</th><th>Soubor</th><th>Projekt</th><th>Blok</th><th>Verze</th>
-            <th>Konfig.</th><th>PDF</th><th>Importoval</th><th>Poslední import</th><th>Akce</th>
+            <th>Konfig.</th><th>PDF</th><th>Přílohy</th><th>Importoval</th><th>Poslední import</th><th>Akce</th>
           </tr></thead>
           <tbody>${rows}</tbody>
         </table>`;

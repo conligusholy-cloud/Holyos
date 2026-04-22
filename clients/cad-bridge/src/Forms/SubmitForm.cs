@@ -650,14 +650,46 @@ public sealed class SubmitForm : Form
             }
 
             // Pro každou skupinu souborů se stejným základním jménem najdi primární
-            // a zbytek připoj jako přílohy.
-            int primaryCount = 0, attachCount = 0;
+            // a zbytek připoj jako přílohy. U skupin bez primárního souboru (orphan)
+            // každý povolený soubor zařadíme jako samostatný raw řádek — typicky
+            // samostatné DXF / STEP / DWG / PDF v kořenové složce, které nemají
+            // odpovídající SW model.
+            int primaryCount = 0, attachCount = 0, rawCount = 0;
             foreach (var (baseName, files) in byBase)
             {
                 var primaryFiles = files
                     .Where(p => primary.Contains(Path.GetExtension(p).TrimStart('.').ToLowerInvariant()))
                     .ToList();
-                if (primaryFiles.Count == 0) continue;
+
+                if (primaryFiles.Count == 0)
+                {
+                    // Orphan — v této skupině není SW primární soubor.
+                    // Každý povolený příloha-soubor zařaď samostatně jako raw řádek.
+                    var orphans = files
+                        .Where(p => attachExts.Contains(Path.GetExtension(p).TrimStart('.').ToLowerInvariant()))
+                        .ToList();
+
+                    foreach (var orphan in orphans)
+                    {
+                        var rawRow = new FileRow
+                        {
+                            Path = orphan,
+                            FileName = Path.GetFileName(orphan),
+                            Extension = Path.GetExtension(orphan).TrimStart('.').ToLowerInvariant(),
+                            ConfigurationName = "Výchozí",
+                            Quantity = 1,
+                            Components = new List<AssemblyComponent>(),
+                            ComponentCount = 0,
+                            SiblingAttachments = new List<string>(),
+                            Status = "Připraveno (samostatný)",
+                        };
+                        _rows.Add(rawRow);
+                        _filesGrid.Rows.Add(rawRow.FileName, rawRow.Extension, rawRow.ConfigurationName,
+                            rawRow.Quantity, rawRow.ComponentCount, rawRow.Status);
+                        rawCount++;
+                    }
+                    continue;
+                }
 
                 // Přílohy = všechny soubory skupiny kromě primárního, co je v attachExts.
                 var attachments = files
@@ -696,31 +728,33 @@ public sealed class SubmitForm : Form
             }
 
             _status.ForeColor = Color.FromArgb(22, 163, 74);
-            _status.Text = $"Naskenováno: {primaryCount} hlavních souborů + {attachCount} příloh";
+            _status.Text = $"Naskenováno: {primaryCount} hlavních, {attachCount} příloh, {rawCount} samostatných";
             RenderSelectedComponents();
 
             // Po skenu porovnat lokální checksum se serverem a označit změny ⚡.
             _ = DetectChangesAsync();
 
-            // Rozpočet příloh podle přípon pro výpis uživateli.
+            // Rozpočet příloh + samostatných podle přípon pro výpis uživateli.
             var breakdown = _rows
-                .SelectMany(r => r.SiblingAttachments)
+                .SelectMany(r => r.SiblingAttachments.Concat(new[] { r.Path }))
                 .GroupBy(p => Path.GetExtension(p).TrimStart('.').ToUpperInvariant())
                 .OrderByDescending(g => g.Count())
                 .Select(g => $"{g.Key}: {g.Count()}")
                 .ToList();
 
+            var totalRows = primaryCount + rawCount;
             MessageBox.Show(this,
                 $"Složka: {root}\n\n" +
                 $"Hlavních souborů (.sldprt / .sldasm): {primaryCount}\n" +
-                $"Vedlejších souborů připojených jako přílohy: {attachCount}\n" +
+                $"Samostatných souborů (DXF, STEP, DWG, PDF…): {rawCount}\n" +
+                $"Příloh vedle hlavních souborů: {attachCount}\n" +
                 (breakdown.Count > 0 ? "  " + string.Join(", ", breakdown) : "") + "\n\n" +
-                (primaryCount == 0
-                    ? "Ve složce nebyl nalezen žádný .sldprt ani .sldasm. Zkontroluj cestu v Nastavení."
+                (totalRows == 0
+                    ? "Ve složce nebyl nalezen žádný relevantní soubor. Zkontroluj přípony v Nastavení a cestu."
                     : "Klikni Odevzdat do HolyOSu pro nahrání."),
                 "Výsledek skenování",
                 MessageBoxButtons.OK,
-                primaryCount > 0 ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+                totalRows > 0 ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
         }
         catch (Exception ex)
         {
