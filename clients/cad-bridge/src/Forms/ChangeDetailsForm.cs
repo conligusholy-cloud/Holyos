@@ -179,49 +179,49 @@ public sealed class ChangeDetailsForm : Form
         root.Controls.Add(_grid, 0, 1);
 
         // ── Patička s tlačítky ──────────────────────────────────────────────
-        var footer = new TableLayoutPanel
+        // FlowLayoutPanel zprava doleva, bez Dock.Fill na tlačítkách —
+        // Dock.Fill + Height + FlatStyle.Flat kombinace způsobila, že text
+        // nešel vidět. Standardní Button s pevnou velikostí je spolehlivější.
+        var footer = new FlowLayoutPanel
         {
             Dock = DockStyle.Fill,
-            ColumnCount = 3,
-            RowCount = 1,
+            FlowDirection = FlowDirection.RightToLeft,
             BackColor = Color.FromArgb(243, 244, 246),
-            Padding = new Padding(18, 12, 18, 12),
+            Padding = new Padding(18, 14, 18, 14),
+            WrapContents = false,
         };
-        footer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f)); // spacer
-        footer.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 200f)); // OK
-        footer.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 120f)); // Cancel
+
+        _btnCancel = new Button
+        {
+            Text = "Zrušit",
+            Size = new Size(110, 36),
+            UseVisualStyleBackColor = true,
+            DialogResult = DialogResult.Cancel,
+            TextAlign = ContentAlignment.MiddleCenter,
+            Font = new Font("Segoe UI", 9.5f),
+            Margin = new Padding(0, 0, 0, 0),
+        };
 
         _btnOk = new Button
         {
             Text = "Odeslat do HolyOSu",
-            Dock = DockStyle.Fill,
+            Size = new Size(200, 36),
             FlatStyle = FlatStyle.Flat,
             DialogResult = DialogResult.OK,
             BackColor = Color.FromArgb(59, 130, 246),
             ForeColor = Color.White,
             Font = new Font("Segoe UI Semibold", 9.5f),
+            TextAlign = ContentAlignment.MiddleCenter,
             Margin = new Padding(0, 0, 8, 0),
-            Height = 38,
+            UseCompatibleTextRendering = false,
         };
         _btnOk.FlatAppearance.BorderSize = 0;
         _btnOk.FlatAppearance.MouseOverBackColor = Color.FromArgb(37, 99, 235);
+        _btnOk.FlatAppearance.MouseDownBackColor = Color.FromArgb(29, 78, 216);
 
-        _btnCancel = new Button
-        {
-            Text = "Zrušit",
-            Dock = DockStyle.Fill,
-            FlatStyle = FlatStyle.Flat,
-            DialogResult = DialogResult.Cancel,
-            BackColor = Color.White,
-            ForeColor = Color.FromArgb(55, 65, 81),
-            Height = 38,
-        };
-        _btnCancel.FlatAppearance.BorderColor = Color.FromArgb(209, 213, 219);
-        _btnCancel.FlatAppearance.BorderSize = 1;
-
-        footer.Controls.Add(new Panel { Dock = DockStyle.Fill, BackColor = Color.Transparent }, 0, 0);
-        footer.Controls.Add(_btnOk, 1, 0);
-        footer.Controls.Add(_btnCancel, 2, 0);
+        // Pořadí (zprava doleva): Zrušit vpravo, Odeslat vlevo.
+        footer.Controls.Add(_btnCancel);
+        footer.Controls.Add(_btnOk);
 
         root.Controls.Add(footer, 0, 2);
 
