@@ -233,11 +233,30 @@ public sealed class SolidWorksHost : IDisposable
     {
         try
         {
-            var sb = new System.Text.StringBuilder();
+            // Rozlišit typ dokumentu — sestavy hashujeme JINAK než díly:
+            //   DÍL (.sldprt)     → plný fingerprint (tree + dimensions + mass).
+            //                       Reaguje i na úpravu rozměrů / přidání díry.
+            //   SESTAVA (.sldasm) → jen topologie (tree + suppressed).
+            //                       Úprava dílu uvnitř sestavy nemá propagovat
+            //                       "Změněný" stav do nadsestavy; sestava je
+            //                       změněná jen když se změní její struktura
+            //                       (přidaná/odebraná/přejmenovaná komponenta,
+            //                       nová Mate, …).
+            int docType = 0;
+            try
+            {
+                var t = Invoke(model, "GetType");
+                if (t is int i) docType = i;
+                else if (t is short sh) docType = sh;
+            }
+            catch { }
+            // swDocumentTypes_e: 1 = Part, 2 = Assembly, 3 = Drawing
+            bool isAssembly = (docType == 2);
 
-            // U dokumentů typu ASSEMBLY: skládáme z komponent + jejich konfigurací.
-            // Pro DÍLY a OSTATNÍ: skládáme z features stromu.
-            // Základ přes FirstFeature/GetNextFeature (iteruje celý strom).
+            var sb = new System.Text.StringBuilder();
+            sb.Append(isAssembly ? "ASM" : "PRT").Append('\n');
+
+            // Iterace feature-tree přes FirstFeature/GetNextFeature.
             var first = Invoke(model, "FirstFeature");
             int depth = 0;
             while (first != null && depth < 10000)
@@ -261,47 +280,47 @@ public sealed class SolidWorksHost : IDisposable
                     sb.Append(name).Append('|').Append(type)
                       .Append('|').Append(suppressed ? 'S' : 'U');
 
-                    // Projdi DisplayDimensions této featury — hodnoty zachytí změnu
-                    // jakéhokoli rozměru uvnitř (hloubka extrude, průměr díry,
-                    // rozměr ve sketchi, úhel…). Bez toho by "stejný strom, jiný
-                    // rozměr" padal na beze změn.
-                    try
+                    // Rozměry — pouze u DÍLŮ. U sestav by hodnoty Mate/dimensions
+                    // mohly drift-ovat po přepočtu kvůli změně v komponentě.
+                    if (!isAssembly)
                     {
-                        var dispDim = Invoke(first, "GetFirstDisplayDimension");
-                        int dimDepth = 0;
-                        while (dispDim != null && dimDepth < 500)
+                        try
                         {
-                            try
+                            var dispDim = Invoke(first, "GetFirstDisplayDimension");
+                            int dimDepth = 0;
+                            while (dispDim != null && dimDepth < 500)
                             {
-                                var dim = Invoke(dispDim, "GetDimension2", 0);
-                                if (dim != null)
+                                try
                                 {
-                                    double val = 0.0;
-                                    try
+                                    var dim = Invoke(dispDim, "GetDimension2", 0);
+                                    if (dim != null)
                                     {
-                                        // GetSystemValue3(which=1 = current config) vrací hodnotu v m/rad.
-                                        var raw = Invoke(dim, "GetSystemValue3", 1, "");
-                                        if (raw is double d) val = d;
-                                        else if (raw is float f) val = f;
-                                        else if (raw is Array arr && arr.Length > 0 && arr.GetValue(0) is double d2) val = d2;
+                                        double val = 0.0;
+                                        try
+                                        {
+                                            var raw = Invoke(dim, "GetSystemValue3", 1, "");
+                                            if (raw is double d) val = d;
+                                            else if (raw is float f) val = f;
+                                            else if (raw is Array arr && arr.Length > 0 && arr.GetValue(0) is double d2) val = d2;
+                                        }
+                                        catch
+                                        {
+                                            try { var v = GetProp(dim, "Value"); if (v is double d3) val = d3; } catch { }
+                                        }
+                                        // Kvantizace na 0.1 μm / 1e-6 rad — odstraní floating-point šum.
+                                        long quant = (long)System.Math.Round(val * 1e7);
+                                        sb.Append('|').Append(quant);
                                     }
-                                    catch
-                                    {
-                                        try { var v = GetProp(dim, "Value"); if (v is double d3) val = d3; } catch { }
-                                    }
-                                    // Kvantizace na 0.1 μm / 1e-6 rad — eliminuje floating-point šum mezi Save.
-                                    long quant = (long)System.Math.Round(val * 1e7);
-                                    sb.Append('|').Append(quant);
                                 }
+                                catch { }
+                                object? nextDim = null;
+                                try { nextDim = Invoke(first, "GetNextDisplayDimension", dispDim); } catch { }
+                                dispDim = nextDim;
+                                dimDepth++;
                             }
-                            catch { }
-                            object? nextDim = null;
-                            try { nextDim = Invoke(first, "GetNextDisplayDimension", dispDim); } catch { }
-                            dispDim = nextDim;
-                            dimDepth++;
                         }
+                        catch { }
                     }
-                    catch { /* feature bez dimensions — normální */ }
 
                     sb.Append('\n');
                 }
@@ -313,33 +332,34 @@ public sealed class SolidWorksHost : IDisposable
                 depth++;
             }
 
-            // Mass properties — finální otisk geometrie. Zachytí i změny, které by
-            // ze stromu featur byly špatně vidět (boolean operace, vnořené těla,
-            // změna materiálu s jinou hustotou).
-            try
+            // Mass properties — také POUZE u dílů.
+            // U sestavy se hmotnost spočítá z komponent, takže vyvrtání díry
+            // v komponentě by změnilo hmotnost nadsestavy. To nechceme.
+            if (!isAssembly)
             {
-                var ext = GetProp(model, "Extension");
-                if (ext != null)
+                try
                 {
-                    // CreateMassProperty2 je rychlejší varianta, fallback na CreateMassProperty.
-                    object? mp = null;
-                    try { mp = Invoke(ext, "CreateMassProperty2"); } catch { }
-                    if (mp == null) { try { mp = Invoke(ext, "CreateMassProperty"); } catch { } }
-                    if (mp != null)
+                    var ext = GetProp(model, "Extension");
+                    if (ext != null)
                     {
-                        double mass = 0, volume = 0, surface = 0;
-                        try { if (GetProp(mp, "Mass") is double m) mass = m; } catch { }
-                        try { if (GetProp(mp, "Volume") is double v) volume = v; } catch { }
-                        try { if (GetProp(mp, "SurfaceArea") is double s) surface = s; } catch { }
-                        // Kvantizace: mg (1e6), mm³ (1e9), mm² (1e6) — ořízne šum.
-                        sb.Append("M|")
-                          .Append((long)System.Math.Round(mass * 1e6)).Append('|')
-                          .Append((long)System.Math.Round(volume * 1e9)).Append('|')
-                          .Append((long)System.Math.Round(surface * 1e6)).Append('\n');
+                        object? mp = null;
+                        try { mp = Invoke(ext, "CreateMassProperty2"); } catch { }
+                        if (mp == null) { try { mp = Invoke(ext, "CreateMassProperty"); } catch { } }
+                        if (mp != null)
+                        {
+                            double mass = 0, volume = 0, surface = 0;
+                            try { if (GetProp(mp, "Mass") is double m) mass = m; } catch { }
+                            try { if (GetProp(mp, "Volume") is double v) volume = v; } catch { }
+                            try { if (GetProp(mp, "SurfaceArea") is double s) surface = s; } catch { }
+                            sb.Append("M|")
+                              .Append((long)System.Math.Round(mass * 1e6)).Append('|')
+                              .Append((long)System.Math.Round(volume * 1e9)).Append('|')
+                              .Append((long)System.Math.Round(surface * 1e6)).Append('\n');
+                        }
                     }
                 }
+                catch { }
             }
-            catch { /* mass properties nejsou dostupné u všech typů dokumentů */ }
 
             if (sb.Length == 0) return null;
 
