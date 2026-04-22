@@ -31,6 +31,18 @@ internal static class Program
     [STAThread]
     private static int Main(string[] args)
     {
+        // Jako úplně první věc — chytač všech neošetřených výjimek, aby crash
+        // hned při startu aplikace ukázal MessageBox + zapsal do logu, místo
+        // aby okno tiše zmizelo a uživatel neměl šanci zjistit proč.
+        Application.ThreadException += (_, e) => ShowFatal("Application.ThreadException", e.Exception);
+        AppDomain.CurrentDomain.UnhandledException += (_, e) =>
+            ShowFatal("AppDomain.UnhandledException", e.ExceptionObject as Exception ?? new Exception("Unknown"));
+        TaskScheduler.UnobservedTaskException += (_, e) =>
+        {
+            ShowFatal("TaskScheduler.UnobservedTaskException", e.Exception);
+            e.SetObserved();
+        };
+
         ApplicationConfiguration.Initialize();
         Application.SetHighDpiMode(HighDpiMode.SystemAware);
 
@@ -86,6 +98,21 @@ internal static class Program
 
         cts.Cancel();
         return 0;
+    }
+
+    private static void ShowFatal(string context, Exception ex)
+    {
+        try { Services.Diagnostics.LogException($"FATAL: {context}", ex); } catch { }
+        try
+        {
+            var real = ex;
+            while (real is System.Reflection.TargetInvocationException tie && tie.InnerException != null)
+                real = tie.InnerException;
+            var msg = $"{real.GetType().Name}: {real.Message}\n\n{real.StackTrace}";
+            MessageBox.Show(msg, "HolyOS CAD Bridge — chyba při startu",
+                MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+        catch { /* posledni zachrana */ }
     }
 
     // ── Klient: pošle cestu běžící instanci ──────────────────────────────────

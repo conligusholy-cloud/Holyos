@@ -10,6 +10,10 @@
     <LangVersion>latest</LangVersion>
     <ApplicationManifest>app.manifest</ApplicationManifest>
 
+    <!-- Ikonka aplikace — stačí dát `app-icon.ico` do clients/cad-bridge/.
+         Pokud neexistuje, build projde s default Windows ikonkou. -->
+    <ApplicationIcon Condition="Exists('..\app-icon.ico')">..\app-icon.ico</ApplicationIcon>
+
     <!-- Single-file publish do jednoho .exe -->
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
@@ -19,16 +23,16 @@
   </PropertyGroup>
 
   <PropertyGroup>
-    <Version>1.0.2</Version>
-    <AssemblyVersion>1.0.2.0</AssemblyVersion>
-    <FileVersion>1.0.2.0</FileVersion>
+    <Version>2.9.0</Version>
+    <AssemblyVersion>2.9.0.0</AssemblyVersion>
+    <FileVersion>2.9.0.0</FileVersion>
     <Product>HolyOS CAD Bridge</Product>
     <Company>Best Series s.r.o.</Company>
     <Copyright>(c) 2026 Best Series s.r.o.</Copyright>
   </PropertyGroup>
 
-  <ItemGroup>
-    <!-- System.Text.Json a System.Net.Http.Json jsou built-in v .NET 8, nepotrebujeme nic dalsiho. -->
+  <ItemGroup Condition="Exists('..\app-icon.ico')">
+    <EmbeddedResource Include="..\app-icon.ico" LogicalName="app-icon.ico" />
   </ItemGroup>
 
 </Project>

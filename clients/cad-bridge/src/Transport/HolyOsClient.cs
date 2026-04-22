@@ -1,5 +1,6 @@
 // HolyOS CAD Bridge — HTTP klient proti HolyOS backendu.
 using System;
+using System.Collections.Generic;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -82,6 +83,45 @@ public sealed class HolyOsClient : IDisposable
         resp.EnsureSuccessStatusCode();
         return await resp.Content.ReadFromJsonAsync<ProjectBlocksResponse>(cancellationToken: ct)
             ?? throw new InvalidOperationException("Prazdna odpoved serveru.");
+    }
+
+    // /api/cad/drawings?projectId=X — vrací existující výkresy v projektu včetně
+    // checksumu a feature_hash (hash feature-tree ze SolidWorks).
+    // Bridge to používá k detekci změn před odevzdáním.
+    public async Task<Dictionary<string, ServerHashes>> GetExistingHashesAsync(
+        int projectId, CancellationToken ct = default)
+    {
+        var result = new Dictionary<string, ServerHashes>(System.StringComparer.OrdinalIgnoreCase);
+        try
+        {
+            var resp = await _http.GetAsync(
+                $"api/cad/drawings?projectId={projectId}&limit=500", ct);
+            if (!resp.IsSuccessStatusCode) return result;
+            using var doc = await System.Text.Json.JsonDocument.ParseAsync(
+                await resp.Content.ReadAsStreamAsync(ct), cancellationToken: ct);
+            foreach (var el in doc.RootElement.EnumerateArray())
+            {
+                var fileName = el.TryGetProperty("file_name", out var fn) ? fn.GetString() : null;
+                var checksum = el.TryGetProperty("checksum", out var cs) && cs.ValueKind == System.Text.Json.JsonValueKind.String
+                    ? cs.GetString() : null;
+                var featureHash = el.TryGetProperty("feature_hash", out var fh) && fh.ValueKind == System.Text.Json.JsonValueKind.String
+                    ? fh.GetString() : null;
+                if (!string.IsNullOrEmpty(fileName))
+                    result[fileName!] = new ServerHashes(checksum, featureHash);
+            }
+        }
+        catch { /* bezproblémový fallback — jednou nefungoval detekční endpoint, Bridge jede bez označení */ }
+        return result;
+    }
+
+    /// <summary>Backward-compat wrapper — vrací jen checksum, pokud někde ještě volá.</summary>
+    public async Task<Dictionary<string, string?>> GetExistingChecksumsAsync(
+        int projectId, CancellationToken ct = default)
+    {
+        var src = await GetExistingHashesAsync(projectId, ct);
+        var dict = new Dictionary<string, string?>(System.StringComparer.OrdinalIgnoreCase);
+        foreach (var kv in src) dict[kv.Key] = kv.Value.Checksum;
+        return dict;
     }
 
     // /api/cad/upload-asset
