@@ -810,8 +810,6 @@
       if (e.key === 'Escape' && document.getElementById('viewer3d-overlay')) close3DViewer();
     });
 
-    loadProjects(); loadDrawings();
-    });
     let searchTimer = null;
     document.getElementById('cad-search').addEventListener('input', (e) => {
       clearTimeout(searchTimer);
