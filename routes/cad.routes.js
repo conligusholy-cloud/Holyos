@@ -168,7 +168,11 @@ router.get('/drawings', async (req, res, next) => {
         block:   { select: { id: true, name: true } },
         creator: { select: { id: true, first_name: true, last_name: true, email: true } },
         configurations: {
-          select: { id: true, config_name: true, quantity: true, png_path: true, pdf_path: true, stl_path: true },
+          select: {
+            id: true, config_name: true, quantity: true,
+            png_path: true, pdf_path: true, stl_path: true,
+            attachments: true,
+          },
         },
         // Nejnovější záznam ze změnového logu — pro seznam stačí 1 (ukazujeme
         // váhu a poznámku poslední změny vedle blesku).

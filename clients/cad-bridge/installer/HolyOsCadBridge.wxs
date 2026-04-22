@@ -3,7 +3,7 @@
   <Package
       Name="HolyOS CAD Bridge"
       Manufacturer="Best Series s.r.o."
-      Version="2.9.4.0"
+      Version="2.9.5.0"
       UpgradeCode="B0A5F4E0-4D68-4E8A-8A7E-1C9F6B3E3E21"
       Scope="perMachine">
 
