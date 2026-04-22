@@ -633,7 +633,9 @@
     // ─── Init ─────────────────────────────────────────────────────────────────
     document.getElementById('btn-new-project').addEventListener('click', createProject);
     document.getElementById('btn-reload').addEventListener('click', () => {
-  
+      loadProjects();
+      loadDrawings();
+    });
 
     // ============================================================
     // 3D WEB VIEWER (Three.js + STLLoader)
