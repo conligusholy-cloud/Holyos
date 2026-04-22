@@ -560,6 +560,45 @@
           <div><span>Checksum (SHA256)</span><code style="font-size:10px;color:var(--text2);word-break:break-all;">${escapeHtml(d.checksum || '—')}</code></div>
           ${d.description ? '<div style="grid-column:1/-1;"><span>Popis</span>' + escapeHtml(d.description) + '</div>' : ''}
         </div>
+
+        ${(() => {
+          // Historie změn (change log) — časová osa s váhou + poznámkou.
+          const logs = d.change_logs || [];
+          if (!logs.length) return '';
+          const weightLabel = { minor: 'Drobná', medium: 'Střední', major: 'Zásadní' };
+          const weightColor = {
+            minor:  { bg: 'rgba(59,130,246,0.12)',  fg: '#3b82f6' },
+            medium: { bg: 'rgba(234,179,8,0.15)',    fg: '#eab308' },
+            major:  { bg: 'rgba(239,68,68,0.15)',    fg: '#ef4444' },
+          };
+          const items = logs.map(l => {
+            const authorName = l.author ? escapeHtml(l.author.first_name + ' ' + l.author.last_name) : '—';
+            const verBadge = l.action === 'created'
+              ? '<span style="background:rgba(34,197,94,0.15);color:#22c55e;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;">v1 · nový</span>'
+              : '<span style="background:rgba(234,179,8,0.15);color:#eab308;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;">v' + (l.old_version || '?') + ' \u2192 v' + l.new_version + '</span>';
+            const wBadge = l.weight ? (() => {
+              const col = weightColor[l.weight] || weightColor.minor;
+              return '<span style="background:' + col.bg + ';color:' + col.fg + ';padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;margin-left:6px;">\u26a1 ' + (weightLabel[l.weight] || l.weight) + '</span>';
+            })() : '';
+            const note = l.note
+              ? '<div style="margin-top:6px;color:var(--text);font-size:13px;white-space:pre-wrap;">' + escapeHtml(l.note) + '</div>'
+              : '<div style="margin-top:4px;color:var(--text2);font-size:12px;font-style:italic;">bez poznámky</div>';
+            return `
+              <div style="padding:12px 14px;border-left:3px solid rgba(148,163,184,0.35);margin-bottom:10px;background:rgba(255,255,255,0.03);border-radius:0 8px 8px 0;">
+                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                  ${verBadge}${wBadge}
+                  <span style="color:var(--text2);font-size:12px;margin-left:auto;">${fmt(l.created_at)} \u00b7 ${authorName}</span>
+                </div>
+                ${note}
+              </div>`;
+          }).join('');
+          return `
+            <div style="margin-top:20px;">
+              <h3 style="margin:0 0 12px 0;font-size:14px;color:var(--text2);letter-spacing:0.03em;text-transform:uppercase;">Historie změn (\u26a1)</h3>
+              ${items}
+            </div>`;
+        })()}
+
         ${(() => {
           // Kusovnik sekce — prominentni pro sestavy (.sldasm).
           // Scita komponenty napric vsemi konfiguracemi, oddeluje unknown (cervene).

@@ -199,6 +199,13 @@ router.get('/drawings/:id', async (req, res, next) => {
             },
           },
         },
+        change_logs: {
+          orderBy: { created_at: 'desc' },
+          take: 50,
+          include: {
+            author: { select: { id: true, first_name: true, last_name: true } },
+          },
+        },
       },
     });
     if (!drawing) return res.status(404).json({ error: 'Výkres nenalezen' });
@@ -300,6 +307,11 @@ const importSchema = z.object({
     SourcePath: z.string().optional().nullable(),
     Checksum: z.string().optional().nullable(),
     FeatureHash: z.string().optional().nullable(),
+    // Volitelná váha + poznámka ke změně — konstruktér vyplní v Bridge před uploadem
+    // u každého výkresu, který má blesk (Nový / Změněný). Server z toho skládá
+    // záznam do cad_drawing_change_logs pro historii změn.
+    ChangeWeight: z.enum(['minor', 'medium', 'major']).optional().nullable(),
+    ChangeNote: z.string().optional().nullable(),
     Configurations: z.array(z.object({
       ConfigurationName: z.string(),
       ConfigurationID: z.string().optional().nullable(),
@@ -415,6 +427,8 @@ router.post('/drawings-import', requireCadWrite, async (req, res, next) => {
 
         let drawing;
         let action; // 'created' | 'updated' | 'not_changed'
+        let oldVersion = null;    // pro změnový log (předchozí verze před update)
+        let newVersion = null;    // pro změnový log (verze po uložení)
 
         // Detekce změny — preferujeme feature_hash (hash feature-tree ze SolidWorks).
         // Feature hash se nemění jen při pouhém Save v SW, mění se až když
@@ -457,6 +471,7 @@ router.post('/drawings-import', requireCadWrite, async (req, res, next) => {
             },
           });
           action = 'created';
+          newVersion = drawing.version;
         } else if (unchanged && !overwrite) {
           // Stejný soubor — neděláme nic, jen reportujeme jako "beze změn".
           notChanged.push({
@@ -483,6 +498,8 @@ router.post('/drawings-import', requireCadWrite, async (req, res, next) => {
           // Smazat staré konfigurace (včetně komponent díky cascade)
           await prisma.cadDrawingConfig.deleteMany({ where: { drawing_id: drawing.id } });
           action = 'updated';
+          oldVersion = existing.version ?? null;
+          newVersion = drawing.version;
         } else {
           // Existuje, Bridge neposlal potřebné údaje, overwrite=false → noop.
           notChanged.push({
@@ -538,6 +555,25 @@ router.post('/drawings-import', requireCadWrite, async (req, res, next) => {
             }
             if (c.unknown.length) unknownOut.push(...c.unknown);
           }
+        }
+
+        // Změnový log — váha + poznámka od konstruktéra (pokud něco vyplnil).
+        // Zapisuje se i bez těchto údajů — aspoň máme záznam kdo + kdy + z jaké verze.
+        try {
+          await prisma.cadDrawingChangeLog.create({
+            data: {
+              drawing_id: drawing.id,
+              author_id: authorPersonId,
+              action,
+              weight: f.ChangeWeight ?? null,
+              note: (f.ChangeNote && f.ChangeNote.trim()) ? f.ChangeNote.trim() : null,
+              old_version: oldVersion,
+              new_version: newVersion ?? drawing.version,
+            },
+          });
+        } catch (logErr) {
+          // Log selhání nesmí shodit import — jen vytiskneme do stdoutu.
+          console.error('[cad-import] Nepodařilo se zapsat change-log:', logErr?.message || logErr);
         }
 
         const payload = {

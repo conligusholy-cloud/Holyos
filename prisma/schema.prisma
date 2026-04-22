@@ -145,6 +145,7 @@ model Person {
   workstation_assignments WorkstationWorker[]
   assigned_vehicles  Vehicle[]           @relation("VehicleDriver")
   cad_drawings_created CadDrawing[]      @relation("CadDrawingCreator")
+  cad_change_logs      CadDrawingChangeLog[] @relation("CadDrawingChangeLogAuthor")
 
   @@index([department_id])
   @@index([role_id])
@@ -1745,10 +1746,11 @@ model CadDrawing {
   created_at    DateTime @default(now())
   updated_at    DateTime @updatedAt
 
-  project        CadProject         @relation(fields: [project_id], references: [id], onDelete: Cascade)
-  block          CadBlock?          @relation(fields: [block_id], references: [id], onDelete: SetNull)
-  creator        Person?            @relation("CadDrawingCreator", fields: [created_by_id], references: [id], onDelete: SetNull)
+  project        CadProject              @relation(fields: [project_id], references: [id], onDelete: Cascade)
+  block          CadBlock?               @relation(fields: [block_id], references: [id], onDelete: SetNull)
+  creator        Person?                 @relation("CadDrawingCreator", fields: [created_by_id], references: [id], onDelete: SetNull)
   configurations CadDrawingConfig[]
+  change_logs    CadDrawingChangeLog[]
 
   @@unique([project_id, file_name, version])
   @@index([project_id])
@@ -1756,6 +1758,28 @@ model CadDrawing {
   @@index([extension])
   @@index([file_name])
   @@map("cad_drawings")
+}
+
+// Historie změn výkresu — každý úspěšný import (create / update) zaznamená
+// autora, verze, váhu změny a volitelnou poznámku od konstruktéra.
+// Zobrazuje se v detailu výkresu jako časová osa.
+model CadDrawingChangeLog {
+  id           Int       @id @default(autoincrement())
+  drawing_id   Int
+  author_id    Int?
+  action       String    @db.VarChar(20)            // "created" | "updated"
+  weight       String?   @db.VarChar(20)            // "minor" | "medium" | "major" | null
+  note         String?   @db.Text
+  old_version  Int?
+  new_version  Int
+  created_at   DateTime  @default(now())
+
+  drawing      CadDrawing @relation(fields: [drawing_id], references: [id], onDelete: Cascade)
+  author       Person?    @relation("CadDrawingChangeLogAuthor", fields: [author_id], references: [id], onDelete: SetNull)
+
+  @@index([drawing_id])
+  @@index([created_at])
+  @@map("cad_drawing_change_logs")
 }
 
 // Konfigurace výkresu — SolidWorks umí mít více konfigurací v jednom souboru
