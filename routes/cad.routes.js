@@ -311,6 +311,14 @@ const importSchema = z.object({
       PngPath: z.string().optional().nullable(),
       PdfPath: z.string().optional().nullable(),
       StlPath: z.string().optional().nullable(),
+      // Další přílohy (STEP, DXF, EASM, EPRT, IGES …). Každá má buď Path
+      // (už uploadnuté přes upload-asset) nebo Base64 (server uloží).
+      Attachments: z.array(z.object({
+        Kind: z.string(),              // "step" | "dxf" | "easm" | …
+        Filename: z.string(),
+        Path: z.string().optional().nullable(),
+        Base64: z.string().optional().nullable(),
+      })).default([]),
       ExternalReferences: z.array(z.any()).default([]),
       Components: z.array(z.object({
         Name: z.string(),
@@ -360,6 +368,22 @@ router.post('/drawings-import', requireCadWrite, async (req, res, next) => {
           if (!pdfPath && cfg.PdfBase64) pdfPath = saveBase64Asset(cfg.PdfBase64, 'pdf');
           if (!stlPath && cfg.StlBase64) stlPath = saveBase64Asset(cfg.StlBase64, 'stl');
 
+          // Přílohy — pokud má Base64, uložíme; pokud má Path, použijeme ji.
+          const attachments = [];
+          for (const a of (cfg.Attachments || [])) {
+            let p = a.Path || null;
+            if (!p && a.Base64) {
+              p = saveBase64Asset(a.Base64, (a.Kind || 'bin').toLowerCase().replace(/[^a-z0-9]/g, ''));
+            }
+            if (p) {
+              attachments.push({
+                kind: (a.Kind || '').toLowerCase(),
+                filename: a.Filename,
+                path: p,
+              });
+            }
+          }
+
           configPayloads.push({
             config_name: cfg.ConfigurationName,
             config_code: cfg.ConfigurationID ?? null,
@@ -370,6 +394,7 @@ router.post('/drawings-import', requireCadWrite, async (req, res, next) => {
             png_path: pngPath,
             pdf_path: pdfPath,
             stl_path: stlPath,
+            attachments,
             external_references: cfg.ExternalReferences,
             components: cfg.Components,
             unknown: cfg.UnknownComponents,
@@ -443,6 +468,7 @@ router.post('/drawings-import', requireCadWrite, async (req, res, next) => {
               png_path: c.png_path,
               pdf_path: c.pdf_path,
               stl_path: c.stl_path,
+              attachments: c.attachments,
               external_references: c.external_references,
             },
           });
