@@ -91,14 +91,38 @@ function requireAdmin(req, res, next) {
 
 /**
  * Middleware — vyžaduje super admin oprávnění.
- * Používá se pro interní/ladicí moduly (CAD výkresy, AI Agenti, Dev Hub, atd.),
- * které nemají být viditelné ani použitelné běžnými uživateli.
  */
 function requireSuperAdmin(req, res, next) {
   if (!req.user || !req.user.isSuperAdmin) {
     return res.status(403).json({ error: 'Přístup odmítnut — vyžadováno oprávnění super admin' });
   }
   next();
+}
+
+/**
+ * Middleware — přístup pro externí integrace přes statický API klíč
+ * NEBO standardní JWT (cookie / Bearer).
+ *
+ * Klíč se nastavuje v env proměnné SLOT_CALENDAR_API_KEY. Kolega ho posílá
+ * v hlavičce X-API-Key. Pokud klíč sedí, nastaví se req.user s isApiKey: true.
+ */
+async function requireAuthOrApiKey(req, res, next) {
+  const validApiKey = process.env.SLOT_CALENDAR_API_KEY;
+  const providedKey = req.headers['x-api-key'];
+
+  if (validApiKey && providedKey && providedKey === validApiKey) {
+    req.user = {
+      id: null,
+      username: 'api-key',
+      displayName: 'External API consumer',
+      role: 'api',
+      isApiKey: true,
+    };
+    return next();
+  }
+
+  // Fallback na standardní JWT auth
+  return requireAuth(req, res, next);
 }
 
 /**
@@ -136,6 +160,7 @@ async function optionalAuth(req, res, next) {
 module.exports = {
   generateToken,
   requireAuth,
+  requireAuthOrApiKey,
   requireAdmin,
   requireSuperAdmin,
   optionalAuth,
