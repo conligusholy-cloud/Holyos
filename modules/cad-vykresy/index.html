@@ -298,12 +298,20 @@
       const rows = state.drawings.map(d => {
         const creatorName = d.creator ? escapeHtml(d.creator.first_name + ' ' + d.creator.last_name) : '<span style="color:var(--text2)">—</span>';
         // 3D viewer tlacitko — otevre prvni konfiguraci s STL rovnou ze seznamu.
-        // Kdyz STL neni (stare importy nebo .slddrw), tlacitko se nezobrazi.
-        const stlConfig = (d.configurations || []).find(c => c.stl_path);
+        // STL hledame v dvou mistech: dedikovane c.stl_path (stare importy) NEBO
+        // v c.attachments s kind='stl' (nova verze Bridge 2.9.6+ STL uklada jako
+        // sibling prilohu, ne do dedikovaneho sloupce).
+        let stlPath = null;
+        let stlConfig = null;
+        for (const c of (d.configurations || [])) {
+          if (c.stl_path) { stlPath = c.stl_path; stlConfig = c; break; }
+          const stlAtt = (c.attachments || []).find(a => (a.kind || '').toLowerCase() === 'stl');
+          if (stlAtt && stlAtt.path) { stlPath = stlAtt.path; stlConfig = c; break; }
+        }
         const stlTitle = d.file_name + (stlConfig ? (' \u00b7 ' + (stlConfig.config_name || '')) : '');
         const stlThumb = stlConfig && stlConfig.png_path ? ("'/api/cad/assets/" + stlConfig.png_path + "'") : 'null';
-        const stlBtn = stlConfig
-          ? `<button type="button" class="btn btn-sm" onclick="event.stopPropagation();open3DViewer('${escapeHtml(stlConfig.stl_path)}', '${escapeHtml(stlTitle)}', ${stlThumb})" style="background:rgba(16,185,129,0.12);color:#10b981;border:1px solid rgba(16,185,129,0.35);padding:2px 8px;font-size:10px;margin-left:8px;vertical-align:middle;border-radius:6px;cursor:pointer;" title="Otev\u0159\u00edt 3D n\u00e1hled">&#128302; 3D</button>`
+        const stlBtn = stlPath
+          ? `<button type="button" class="btn btn-sm" onclick="event.stopPropagation();open3DViewer('${escapeHtml(stlPath)}', '${escapeHtml(stlTitle)}', ${stlThumb})" style="background:rgba(16,185,129,0.12);color:#10b981;border:1px solid rgba(16,185,129,0.35);padding:2px 8px;font-size:10px;margin-left:8px;vertical-align:middle;border-radius:6px;cursor:pointer;" title="Otev\u0159\u00edt 3D n\u00e1hled">&#128302; 3D</button>`
           : '';
         // Poslední záznam z change_logs — váha + poznámka z nejnovějšího importu.
         const lastLog = (d.change_logs && d.change_logs.length) ? d.change_logs[0] : null;
@@ -575,7 +583,16 @@
               <div class="config-actions">
                 ${pdf ? `<a class="btn btn-sm btn-secondary" href="${pdf}" target="_blank">&#128196; PDF</a>` : ''}
                 ${png ? `<a class="btn btn-sm btn-secondary" href="${png}" target="_blank">&#128444;&#65039; Náhled</a>` : ''}
-                ${c.stl_path ? `<button type="button" class="btn btn-sm" style="background:rgba(34,197,94,0.15);color:#22c55e;border:1px solid rgba(34,197,94,0.35);" onclick="open3DViewer('${escapeHtml(c.stl_path)}', '${escapeHtml(d.file_name)} — ${escapeHtml(c.config_name)}', ${c.png_path ? "'/api/cad/assets/" + c.png_path + "'" : 'null'})">&#128302; 3D Viewer</button>` : ''}
+                ${(() => {
+                  // STL z dedikovaného stl_path NEBO z attachments[].kind='stl'
+                  let stl = c.stl_path;
+                  if (!stl) {
+                    const a = (c.attachments || []).find(x => (x.kind || '').toLowerCase() === 'stl');
+                    if (a) stl = a.path;
+                  }
+                  if (!stl) return '';
+                  return `<button type="button" class="btn btn-sm" style="background:rgba(34,197,94,0.15);color:#22c55e;border:1px solid rgba(34,197,94,0.35);" onclick="open3DViewer('${escapeHtml(stl)}', '${escapeHtml(d.file_name)} — ${escapeHtml(c.config_name)}', ${c.png_path ? "'/api/cad/assets/" + c.png_path + "'" : 'null'})">&#128302; 3D Viewer</button>`;
+                })()}
                 ${(c.attachments || []).map(a => `<a class="btn btn-sm btn-secondary" href="/api/cad/assets/${encodeURI(a.path)}" target="_blank" title="${escapeHtml(a.filename)}" style="text-transform:uppercase;font-size:11px;">&#128230; ${escapeHtml(a.kind)}</a>`).join('')}
               </div>
             </header>
