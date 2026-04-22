@@ -1,0 +1,498 @@
+openapi: 3.1.0
+info:
+  title: HolyOS — Kalendář výrobních slotů (Public API)
+  description: |
+    Sanitizované REST API pro zobrazení a blokaci termínů výrobních slotů HolyOS.
+
+    ## Anonymizace dat
+    Všechny odpovědi jsou **anonymizované** — neobsahují žádné obchodně citlivé informace:
+
+    - **Žádný název firmy** / zákazníka
+    - **Žádný název výrobku** ani kódy produktů
+    - **Žádná čísla objednávek** ani odkazy na položky
+    - **Žádné priority, poznámky, interní stavy**
+
+    Klient vidí **jen obsazenost termínu**: zda je slot volný, obsazený (na kolik procent), plný, blokovaný nebo už prošlý. Nic víc.
+
+    ## Autentizace
+    Všechny endpointy vyžadují statický API klíč v hlavičce `X-API-Key`. Klíč
+    získáš od správce HolyOS a musíš ho chránit jako heslo (neukládej do Gitu,
+    nelogguj).
+
+    ## Stabilita
+    Shape odpovědí je stabilní. Noví atributy mohou být přidáni, existující
+    nejsou odstraněny bez major verze.
+  version: 1.0.0
+  contact:
+    name: Tomáš Holý
+    email: tomas.holy@bestseries.cz
+  license:
+    name: Proprietary
+    identifier: LicenseRef-BestSeries-Proprietary
+
+servers:
+  - url: https://holyos.cz
+    description: Produkční server
+
+tags:
+  - name: Calendar
+    description: Čtení kalendáře a plánovacích slotů.
+  - name: Blocks
+    description: Blokace termínů (dovolená, údržba, ad-hoc).
+
+security:
+  - ApiKeyAuth: []
+
+paths:
+  /api/slots/calendar:
+    get:
+      summary: Získat anonymizovaný kalendář slotů
+      description: |
+        Vrátí pole slotů v zadaném rozsahu s vypočtenou naplněností a stavem.
+        **Bez** názvů firem, produktů, čísel objednávek.
+      operationId: getCalendar
+      tags: [Calendar]
+      parameters:
+        - name: from
+          in: query
+          description: Dolní mez filtru. `slot.start_date >= from`.
+          required: false
+          schema:
+            type: string
+            format: date
+          example: "2026-04-01"
+        - name: to
+          in: query
+          description: Horní mez filtru. `slot.end_date <= to`.
+          required: false
+          schema:
+            type: string
+            format: date
+          example: "2026-06-30"
+        - name: workstation_id
+          in: query
+          description: Filtr na konkrétní pracoviště (jen ID, bez názvu firmy).
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        "200":
+          description: Úspěšná odpověď.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CalendarResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /api/slots/calendar/next-free:
+    get:
+      summary: Najít první slot s dostatečnou volnou kapacitou
+      description: |
+        Projde sloty od dneška a vrátí první, do kterého se vejde ≥ `hours`
+        volných hodin. Pro obchodníky potvrzující dodací termín.
+      operationId: getNextFreeSlot
+      tags: [Calendar]
+      parameters:
+        - name: hours
+          in: query
+          description: Kolik volných hodin musí slot mít, aby vyhovoval.
+          required: true
+          schema:
+            type: number
+            format: float
+            minimum: 0
+          example: 16
+      responses:
+        "200":
+          description: Nalezen volný slot.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NextFreeSlot"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Žádný slot s takovou volnou kapacitou.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error: "Žádný volný slot s dostatečnou kapacitou"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /api/slots/calendar/block:
+    post:
+      summary: Zablokovat termín
+      description: |
+        Vytvoří nový slot se stavem `blocked` a k němu blokaci. Slouží pro
+        vyznačení období, které nelze plánovat (dovolená, údržba, ad-hoc).
+      operationId: blockTerm
+      tags: [Blocks]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BlockRequest"
+            example:
+              start_date: "2026-07-01"
+              end_date: "2026-07-15"
+              reason: "Celozávodní dovolená"
+              block_type: "holiday"
+      responses:
+        "201":
+          description: Blokace vytvořena.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BlockResponse"
+        "400":
+          description: Chybí povinné pole.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error: "Začátek, konec a důvod jsou povinné"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /api/slots/calendar/block/{slotId}:
+    delete:
+      summary: Zrušit blokaci termínu
+      description: |
+        Smaže slot vytvořený jako blokace. Povoleno **pouze** pro sloty se
+        statusem `blocked` — nelze smazat slot, který drží zakázky.
+      operationId: unblockTerm
+      tags: [Blocks]
+      parameters:
+        - name: slotId
+          in: path
+          description: ID slotu vráceného z POST `/block`.
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+          example: 57
+      responses:
+        "200":
+          description: Blokace zrušena.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Ok"
+        "400":
+          description: Slot není blokace.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error: "Tento slot není blokace, smazání přes tento endpoint nelze"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Slot neexistuje.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error: "Slot nenalezen"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: |
+        Statický API klíč. Získej ho od správce HolyOS.
+        Nikdy neukládej do repozitáře, neposílej nešifrovaně.
+
+  responses:
+    Unauthorized:
+      description: Chybí nebo neplatný API klíč.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error: "Nepřihlášen — chybí token"
+    ServerError:
+      description: Interní chyba serveru.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+  schemas:
+    CalendarResponse:
+      type: object
+      required: [range, count, slots]
+      properties:
+        range:
+          type: object
+          description: Použité filtry `from` / `to`. Null pokud nebyly zadány.
+          required: [from, to]
+          properties:
+            from:
+              type: [string, "null"]
+              format: date
+            to:
+              type: [string, "null"]
+              format: date
+        count:
+          type: integer
+          description: Počet slotů v odpovědi.
+          minimum: 0
+        slots:
+          type: array
+          items:
+            $ref: "#/components/schemas/CalendarSlot"
+
+    CalendarSlot:
+      type: object
+      description: |
+        Anonymizovaný slot. **Neobsahuje** názvy firem, produktů ani čísla objednávek.
+      required:
+        - id
+        - name
+        - start_date
+        - end_date
+        - status
+        - label
+        - occupancy_pct
+        - assignment_count
+        - used_hours
+        - capacity_hours_per_day
+        - capacity_total_hours
+        - color
+        - is_blocked
+        - blocks
+      properties:
+        id:
+          type: integer
+          description: Interní ID slotu. Stabilní napříč voláními.
+          example: 42
+        name:
+          type: string
+          description: |
+            Neutrální název slotu zvolený plánovačem (typicky týden + linka).
+            **Nikdy** neobsahuje název firmy ani produktu.
+          example: "Týden 17 — Linka A"
+        start_date:
+          type: string
+          format: date-time
+          example: "2026-04-20T00:00:00.000Z"
+        end_date:
+          type: string
+          format: date-time
+          example: "2026-04-24T00:00:00.000Z"
+        workstation:
+          description: Informace o pracovišti (bez firemních dat).
+          oneOf:
+            - $ref: "#/components/schemas/Workstation"
+            - type: "null"
+        status:
+          type: string
+          enum: [free, occupied, full, blocked, expired]
+          description: |
+            Odvozený stav slotu:
+            * `free` — bez přiřazení, termín v budoucnu
+            * `occupied` — aspoň 1 přiřazení, kapacita < 100 %
+            * `full` — naplněnost ≥ 100 %
+            * `blocked` — ruční blokace (dovolená, údržba)
+            * `expired` — termín už proběhl
+        label:
+          type: string
+          description: Lidsky čitelný popis stavu (např. "Obsazeno 75 %"). Bez obchodních údajů.
+          example: "Obsazeno 75 %"
+        occupancy_pct:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: Procento naplnění kapacity slotu (0–100).
+          example: 75
+        assignment_count:
+          type: integer
+          minimum: 0
+          description: Počet přiřazených zakázek. **Samotné zakázky nejsou vidět.**
+          example: 2
+        used_hours:
+          type: number
+          format: float
+          minimum: 0
+          description: Součet odhadovaných hodin všech přiřazení.
+          example: 30
+        capacity_hours_per_day:
+          type: number
+          format: float
+          minimum: 0
+          description: Kapacita slotu v hodinách na jeden pracovní den.
+          example: 8
+        capacity_total_hours:
+          type: number
+          format: float
+          minimum: 0
+          description: Celková kapacita slotu (hodin/den × pracovní dny).
+          example: 40
+        color:
+          type: string
+          pattern: "^#[0-9a-fA-F]{6}$"
+          description: Doporučená barva pro vizualizaci (HEX).
+          example: "#f97316"
+        is_blocked:
+          type: boolean
+          description: True pokud je slot ručně zablokovaný.
+        blocks:
+          type: array
+          description: Aktivní blokace ve slotu.
+          items:
+            $ref: "#/components/schemas/Block"
+
+    Workstation:
+      type: object
+      description: |
+        Pracoviště. Obsahuje **jen neutrální identifikátory** — žádné citlivé údaje.
+      required: [id, name, code]
+      properties:
+        id:
+          type: integer
+          example: 1
+        name:
+          type: string
+          description: Název pracoviště (např. "Montáž", "Svařovna"). Interní, ne obchodní.
+          example: "Montáž"
+        code:
+          type: string
+          description: Zkrácený kód pracoviště.
+          example: "MON-01"
+
+    Block:
+      type: object
+      description: Záznam o blokaci (dovolená, údržba). **Bez jména autora.**
+      required: [id, start_date, end_date, reason, block_type]
+      properties:
+        id:
+          type: integer
+          example: 23
+        start_date:
+          type: string
+          format: date-time
+        end_date:
+          type: string
+          format: date-time
+        reason:
+          type: string
+          description: Krátký důvod. Neobsahuje jméno zadavatele.
+          example: "Celozávodní dovolená"
+        block_type:
+          type: string
+          enum: [holiday, maintenance, other]
+
+    NextFreeSlot:
+      type: object
+      required: [id, name, start_date, end_date, free_hours, needed_hours]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+          description: Neutrální název slotu.
+          example: "Týden 19 — Linka A"
+        start_date:
+          type: string
+          format: date-time
+        end_date:
+          type: string
+          format: date-time
+        free_hours:
+          type: number
+          format: float
+          description: Kolik hodin je ještě volných.
+          example: 24
+        needed_hours:
+          type: number
+          format: float
+          description: Hodnota parametru `hours` z requestu.
+          example: 16
+
+    BlockRequest:
+      type: object
+      required: [start_date, end_date, reason]
+      properties:
+        start_date:
+          type: string
+          format: date
+          description: Začátek blokace (YYYY-MM-DD).
+          example: "2026-07-01"
+        end_date:
+          type: string
+          format: date
+          description: Konec blokace (YYYY-MM-DD).
+          example: "2026-07-15"
+        reason:
+          type: string
+          description: Krátký text. Neukládej sem citlivá obchodní data.
+          example: "Celozávodní dovolená"
+        block_type:
+          type: string
+          enum: [holiday, maintenance, other]
+          default: holiday
+        capacity_hours:
+          type: number
+          format: float
+          description: Hodin/den kapacity slotu. Nepovinné.
+          default: 8
+
+    BlockResponse:
+      type: object
+      required: [id, start_date, end_date, reason, status]
+      properties:
+        id:
+          type: integer
+          description: ID nově vytvořeného slotu. Použij pro DELETE.
+          example: 57
+        block_id:
+          type: integer
+          description: ID záznamu blokace uvnitř slotu.
+          example: 23
+        start_date:
+          type: string
+          format: date-time
+        end_date:
+          type: string
+          format: date-time
+        reason:
+          type: string
+          example: "Celozávodní dovolená"
+        status:
+          type: string
+          enum: [blocked]
+
+    Ok:
+      type: object
+      required: [ok]
+      properties:
+        ok:
+          type: boolean
+          example: true
+
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+          description: Krátký popis chyby v češtině.
