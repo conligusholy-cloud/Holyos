@@ -419,6 +419,68 @@ public sealed class SolidWorksHost : IDisposable
     }
 
     /// <summary>
+    /// Exportuje model jako STL do dočasného souboru v TEMP a vrátí jeho obsah
+    /// jako byte[]. Temp soubor se po přečtení smaže. Používá se pro 3D viewer
+    /// v HolyOS — sestavy i díly bez ruční STL exportu tak dostanou 3D náhled
+    /// bez nutnosti špinit uživatelovu kořenovou složku novými soubory.
+    ///
+    /// SolidWorks SaveAs přes IModelDocExtension — stejný pattern jako SaveDocument,
+    /// jen jiná cílová přípona.
+    /// </summary>
+    internal byte[]? ExportStlBytes(object model)
+    {
+        string? tempPath = null;
+        try
+        {
+            tempPath = System.IO.Path.Combine(
+                System.IO.Path.GetTempPath(),
+                "holyos_cad_" + System.Guid.NewGuid().ToString("N") + ".stl");
+
+            var ext = GetProp(model, "Extension");
+            if (ext == null) return null;
+
+            // IModelDocExtension.SaveAs(string Name, int Version, int Options,
+            //   object ExportData, object AdvancedSaveAsOptions,
+            //   ref int Errors, ref int Warnings) : bool
+            object?[] args = new object?[] { tempPath, 0, 1 /* Silent */, null, null, 0, 0 };
+            var mods = new ParameterModifier(args.Length);
+            mods[5] = true; // Errors  (ref)
+            mods[6] = true; // Warnings (ref)
+
+            object? result = null;
+            try
+            {
+                result = ext.GetType().InvokeMember(
+                    "SaveAs",
+                    BindingFlags.InvokeMethod,
+                    binder: null, target: ext, args: args,
+                    modifiers: new[] { mods },
+                    culture: null, namedParameters: null);
+            }
+            catch (Exception exSave)
+            {
+                Diagnostics.LogException("ExportStlBytes SaveAs", exSave);
+                return null;
+            }
+
+            if (result is bool ok && !ok) return null;
+            if (!System.IO.File.Exists(tempPath)) return null;
+
+            var bytes = System.IO.File.ReadAllBytes(tempPath);
+            return bytes.Length > 0 ? bytes : null;
+        }
+        catch (Exception ex)
+        {
+            Diagnostics.LogException("ExportStlBytes (best-effort)", ex);
+            return null;
+        }
+        finally
+        {
+            try { if (tempPath != null && System.IO.File.Exists(tempPath)) System.IO.File.Delete(tempPath); } catch { }
+        }
+    }
+
+    /// <summary>
     /// Uloží aktuální model. Použito k "aktualizaci" sestavy před exportem —
     /// SolidWorks při uložení obnoví reference na všechny podsestavy a díly,
     /// takže na disku vznikne soubor s aktuálními daty a novým checksumem.
@@ -572,6 +634,21 @@ public sealed class SolidWorksHost : IDisposable
                     catch { }
                 }
 
+                // Custom properties komponenty — otevřeme její ModelDoc a
+                // přečteme CustomPropertyManager pro danou konfiguraci.
+                // Merge General + Config-specific (stejně jako GetCustomProperties
+                // volá pro top-level model).
+                Dictionary<string, object?>? compProps = null;
+                try
+                {
+                    var compModel = Invoke(ch, "GetModelDoc2");
+                    if (compModel != null)
+                    {
+                        compProps = GetCustomProperties(compModel, cfg);
+                    }
+                }
+                catch { /* potlačená / virtuální komponenta — props nejsou */ }
+
                 acc.Add(new AssemblyComponent
                 {
                     Name = name,
@@ -580,6 +657,7 @@ public sealed class SolidWorksHost : IDisposable
                     Quantity = 1,
                     IsSuppressed = isSuppressed,
                     ExcludeFromBom = excludeFromBom,
+                    CustomProperties = compProps,
                 });
                 // Nepotlačené komponenty rozbalíme rekurzivně (potlačené nemají podstromy).
                 if (!isSuppressed) Walk(ch, acc, depth + 1);
@@ -606,6 +684,10 @@ public sealed class AssemblyComponent
 
     /// <summary>Komponenta je označena "Vyloučit z kusovníku" (ExcludeFromBOM).</summary>
     public bool ExcludeFromBom { get; set; }
+
+    /// <summary>Custom properties komponenty ze SolidWorks (Norma, Popis, Materiál,
+    /// Hmotnost, Název, Author, Datum, …). Merge General + Config-specific.</summary>
+    public Dictionary<string, object?>? CustomProperties { get; set; }
 }
 
 public sealed class OpenDocument : IDisposable
@@ -633,6 +715,10 @@ public sealed class OpenDocument : IDisposable
     /// <summary>Feature fingerprint modelu — změní se jen při reálné úpravě geometrie,
     /// ne při pouhém Save (na rozdíl od SHA-256 souboru).</summary>
     public string? FeatureFingerprint => _host.GetFeatureFingerprint(Model);
+
+    /// <summary>Vygeneruje STL v TEMP a vrátí bytes; TEMP se pak smaže.
+    /// Pro 3D viewer v HolyOS (sestavy/díly bez ručně exportovaného STL).</summary>
+    public byte[]? ExportStlBytes() => _host.ExportStlBytes(Model);
 
     public void Dispose() => _host.CloseDocument(Path);
 }

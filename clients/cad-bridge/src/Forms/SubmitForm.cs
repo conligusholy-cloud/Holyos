@@ -1157,6 +1157,7 @@ public sealed class SubmitForm : Form
                                     Path = c.Path,
                                     Quantity = c.Quantity,
                                     ConfigurationName = c.Configuration,
+                                    CustomProperties = c.CustomProperties,
                                 }).ToList(),
                         }
                     }
