@@ -11,13 +11,18 @@ dist/server/
 backup-cad-*.sql
 backup-cad.sql
 
-# Bridge build output (generováno dotnet publish + wix build)
+# Bridge build output (generovĂˇno dotnet publish + wix build)
 clients/cad-bridge/publish/
 clients/cad-bridge/*.wixpdb
 clients/cad-bridge/*.msi
 clients/cad-bridge/*.tmp
 clients/cad-bridge/.~lock.*#
 
-# Root rozpracované dokumenty (odstraň ze seznamu, když je chceš v gitu)
+# Root rozpracovanĂ© dokumenty (odstraĹ ze seznamu, kdyĹľ je chceĹˇ v gitu)
 balicek-sloty-api.zip
 sprava-pro-kolegu.md
+clients/cad-bridge/*.pdf
+docs/
+
+clients/cad-bridge/*.pdf
+docs/
