@@ -259,7 +259,51 @@ public sealed class SolidWorksHost : IDisposable
                     }
                     catch { }
                     sb.Append(name).Append('|').Append(type)
-                      .Append('|').Append(suppressed ? 'S' : 'U').Append('\n');
+                      .Append('|').Append(suppressed ? 'S' : 'U');
+
+                    // Projdi DisplayDimensions této featury — hodnoty zachytí změnu
+                    // jakéhokoli rozměru uvnitř (hloubka extrude, průměr díry,
+                    // rozměr ve sketchi, úhel…). Bez toho by "stejný strom, jiný
+                    // rozměr" padal na beze změn.
+                    try
+                    {
+                        var dispDim = Invoke(first, "GetFirstDisplayDimension");
+                        int dimDepth = 0;
+                        while (dispDim != null && dimDepth < 500)
+                        {
+                            try
+                            {
+                                var dim = Invoke(dispDim, "GetDimension2", 0);
+                                if (dim != null)
+                                {
+                                    double val = 0.0;
+                                    try
+                                    {
+                                        // GetSystemValue3(which=1 = current config) vrací hodnotu v m/rad.
+                                        var raw = Invoke(dim, "GetSystemValue3", 1, "");
+                                        if (raw is double d) val = d;
+                                        else if (raw is float f) val = f;
+                                        else if (raw is Array arr && arr.Length > 0 && arr.GetValue(0) is double d2) val = d2;
+                                    }
+                                    catch
+                                    {
+                                        try { var v = GetProp(dim, "Value"); if (v is double d3) val = d3; } catch { }
+                                    }
+                                    // Kvantizace na 0.1 μm / 1e-6 rad — eliminuje floating-point šum mezi Save.
+                                    long quant = (long)System.Math.Round(val * 1e7);
+                                    sb.Append('|').Append(quant);
+                                }
+                            }
+                            catch { }
+                            object? nextDim = null;
+                            try { nextDim = Invoke(first, "GetNextDisplayDimension", dispDim); } catch { }
+                            dispDim = nextDim;
+                            dimDepth++;
+                        }
+                    }
+                    catch { /* feature bez dimensions — normální */ }
+
+                    sb.Append('\n');
                 }
                 catch { /* ojedinělá chyba na feature — jedeme dál */ }
 
@@ -268,6 +312,34 @@ public sealed class SolidWorksHost : IDisposable
                 first = next;
                 depth++;
             }
+
+            // Mass properties — finální otisk geometrie. Zachytí i změny, které by
+            // ze stromu featur byly špatně vidět (boolean operace, vnořené těla,
+            // změna materiálu s jinou hustotou).
+            try
+            {
+                var ext = GetProp(model, "Extension");
+                if (ext != null)
+                {
+                    // CreateMassProperty2 je rychlejší varianta, fallback na CreateMassProperty.
+                    object? mp = null;
+                    try { mp = Invoke(ext, "CreateMassProperty2"); } catch { }
+                    if (mp == null) { try { mp = Invoke(ext, "CreateMassProperty"); } catch { } }
+                    if (mp != null)
+                    {
+                        double mass = 0, volume = 0, surface = 0;
+                        try { if (GetProp(mp, "Mass") is double m) mass = m; } catch { }
+                        try { if (GetProp(mp, "Volume") is double v) volume = v; } catch { }
+                        try { if (GetProp(mp, "SurfaceArea") is double s) surface = s; } catch { }
+                        // Kvantizace: mg (1e6), mm³ (1e9), mm² (1e6) — ořízne šum.
+                        sb.Append("M|")
+                          .Append((long)System.Math.Round(mass * 1e6)).Append('|')
+                          .Append((long)System.Math.Round(volume * 1e9)).Append('|')
+                          .Append((long)System.Math.Round(surface * 1e6)).Append('\n');
+                    }
+                }
+            }
+            catch { /* mass properties nejsou dostupné u všech typů dokumentů */ }
 
             if (sb.Length == 0) return null;
 
