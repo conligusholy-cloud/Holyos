@@ -1108,6 +1108,36 @@ public sealed class SubmitForm : Form
                     Step($"Nahráno: {Path.GetFileName(sib)}");
                 }
 
+                // Samotný SW soubor (SLDPRT/SLDASM/SLDDRW) — uploadneme ho také
+                // jako přílohu, aby šel v HolyOSu stáhnout a otevřít v eDrawings
+                // nebo SolidWorks. Velké sestavy jsou desítky MB, ale při scan
+                // Petrovy celé složky by to zahltilo úložiště — proto jen pokud
+                // to uživatel v Nastavení zapnul (UploadSwFileItself, default ON
+                // pro začátek, uživatel pak může vypnout).
+                if (_settings.UploadSwFileItself
+                    && SwNativeExts.Contains(row.Extension)
+                    && File.Exists(row.Path))
+                {
+                    try
+                    {
+                        _status.Text = $"Nahrávám SW soubor: {row.FileName}…";
+                        _status.Refresh();
+                        var kind = row.Extension.ToLowerInvariant();
+                        var bytes = await Task.Run(() => File.ReadAllBytes(row.Path));
+                        var uploaded = await _client.UploadAssetAsync(kind, row.FileName, bytes);
+                        list.Add(new AttachmentDto
+                        {
+                            Kind = kind,
+                            Filename = row.FileName,
+                            Path = uploaded.Path,
+                        });
+                    }
+                    catch (Exception exSw)
+                    {
+                        Diagnostics.LogException($"UploadSwFile {row.FileName}", exSw);
+                    }
+                }
+
                 rowAttachments[row] = list;
             }
 
