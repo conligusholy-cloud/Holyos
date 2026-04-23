@@ -1199,16 +1199,72 @@ public sealed class SubmitForm : Form
         //   + 1 krok za finální /drawings-import
         var rowsToUpload = _rows.Where(r => !r.IsVirtualAssembly).ToList();
 
-        // Předpřipravíme čerstvý seznam siblings pro každý row, ať totalSteps
-        // odpovídá skutečnému počtu uploadů (safety-net rescan v submit-loop
-        // přidá siblings, takže tady je počítáme už se znalostí DefaultCadFolder).
+        // REKURZIVNÍ INDEX sourozenců napříč celým DefaultCadFolder — jednorázově
+        // projde všechny podsložky a grupuje soubory podle base-name. Fixuje
+        // problém, kdy primární SLDPRT je v podsložce (ref. ze sestavy), ale
+        // jeho DXF/PDF sibling je v root (nebo v jiné sourozenecké složce).
+        // Bez tohohto by FindSiblingAttachments (= vedle souboru + v root)
+        // sourozence v mezisložkách neviděl.
+        UpdateStatus("Indexuji sourozence v CAD složce…", _settings.DefaultCadFolder ?? "");
+        var siblingIndex = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+        try
+        {
+            if (!string.IsNullOrEmpty(_settings.DefaultCadFolder) && Directory.Exists(_settings.DefaultCadFolder))
+            {
+                var option = _settings.ScanSubdirectories
+                    ? SearchOption.AllDirectories
+                    : SearchOption.TopDirectoryOnly;
+                await Task.Run(() =>
+                {
+                    foreach (var f in Directory.EnumerateFiles(_settings.DefaultCadFolder, "*.*", option))
+                    {
+                        var bn = Path.GetFileNameWithoutExtension(f);
+                        if (string.IsNullOrEmpty(bn)) continue;
+                        if (!siblingIndex.TryGetValue(bn, out var lst))
+                            siblingIndex[bn] = lst = new List<string>();
+                        lst.Add(f);
+                    }
+                });
+            }
+        }
+        catch (Exception exIdx)
+        {
+            Diagnostics.LogException("BuildSiblingIndex", exIdx);
+        }
+
+        // Povolené přípony pro přílohy (stejně jako FindSiblingAttachments).
+        var attachExts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var e in (_settings.AttachmentExtensions ?? new List<string>()))
+            attachExts.Add(e.TrimStart('.').ToLowerInvariant());
+        foreach (var e in (_settings.PrimaryExtensions ?? new List<string>()))
+        {
+            var norm = e.TrimStart('.').ToLowerInvariant();
+            if (!SwNativeExts.Contains(norm)) attachExts.Add(norm);
+        }
+        foreach (var e in new[] { "step", "stp", "dxf", "dwg", "iges", "igs", "easm", "eprt", "x_t", "x_b", "pdf", "stl" })
+            attachExts.Add(e);
+
+        // Doplníme siblings pro každý row — jednak klasicky (FindSiblingAttachments
+        // = vedle souboru + root), jednak z rekurzivního indexu (celá tree).
         foreach (var r in rowsToUpload)
         {
             if (!SwNativeExts.Contains(r.Extension)) continue;
-            var fresh = FindSiblingAttachments(r.Path);
             var existing = new HashSet<string>(r.SiblingAttachments, StringComparer.OrdinalIgnoreCase);
-            foreach (var fs in fresh)
-                if (!existing.Contains(fs)) { r.SiblingAttachments.Add(fs); existing.Add(fs); }
+            void AddIfValid(string path)
+            {
+                if (existing.Contains(path)) return;
+                if (string.Equals(path, r.Path, StringComparison.OrdinalIgnoreCase)) return;
+                var ext = Path.GetExtension(path).TrimStart('.').ToLowerInvariant();
+                if (!attachExts.Contains(ext)) return;
+                r.SiblingAttachments.Add(path);
+                existing.Add(path);
+            }
+            foreach (var fs in FindSiblingAttachments(r.Path)) AddIfValid(fs);
+            var bn = Path.GetFileNameWithoutExtension(r.Path);
+            if (!string.IsNullOrEmpty(bn) && siblingIndex.TryGetValue(bn, out var candidates))
+            {
+                foreach (var cand in candidates) AddIfValid(cand);
+            }
         }
 
         int totalSteps = 1 + rowsToUpload.Sum(r =>
