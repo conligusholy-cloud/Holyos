@@ -144,6 +144,17 @@ function getWarehouseTools() {
         required: ['template', 'data'],
       },
     },
+    {
+      name: 'lookup_serial_number',
+      description: 'Dohledá konkrétní kus podle sériového čísla (S/N). Vrátí aktuální status (in_stock / issued / scrapped / returned), materiál, lokaci, kdo/kdy přijal a vydal. Použij pro servis: „kde je kus s S/N XYZ, komu byl vydán".',
+      input_schema: {
+        type: 'object',
+        properties: {
+          serial_number: { type: 'string', description: 'Hledaný S/N, např. SN-001234' },
+        },
+        required: ['serial_number'],
+      },
+    },
   ];
 }
 
@@ -396,6 +407,45 @@ async function executeWarehouseTool(toolName, params, prisma) {
         status: job.status,
         copies: job.copies,
         finished_at: job.finished_at,
+      };
+    }
+
+    case 'lookup_serial_number': {
+      const sn = String(params.serial_number || '').trim();
+      if (!sn) return { found: false, message: 'Prázdný S/N' };
+      const matches = await prisma.serialNumber.findMany({
+        where: { serial_number: sn },
+        include: {
+          material: { select: { id: true, code: true, name: true, unit: true } },
+          location: { select: { id: true, label: true, warehouse_id: true } },
+          received_person: { select: { id: true, first_name: true, last_name: true } },
+          issued_person: { select: { id: true, first_name: true, last_name: true } },
+        },
+        orderBy: { updated_at: 'desc' },
+        take: 10,
+      });
+      if (matches.length === 0) return { found: false, serial_number: sn };
+      return {
+        found: true,
+        count: matches.length,
+        serials: matches.map((s) => ({
+          id: s.id,
+          serial_number: s.serial_number,
+          status: s.status,
+          material: s.material,
+          location: s.location,
+          received_at: s.received_at,
+          received_by: s.received_person
+            ? `${s.received_person.first_name} ${s.received_person.last_name}`
+            : null,
+          issued_at: s.issued_at,
+          issued_by: s.issued_person
+            ? `${s.issued_person.first_name} ${s.issued_person.last_name}`
+            : null,
+          reference_type: s.reference_type,
+          reference_id: s.reference_id,
+          note: s.note,
+        })),
       };
     }
 

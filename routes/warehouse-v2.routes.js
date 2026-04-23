@@ -23,6 +23,8 @@ const { createMove, resolvePersonIdForUser, MOVE_TYPES } = require('../services/
 const { createDocument, completeDocument, cancelDocument, DOC_TYPES } = require('../services/warehouse/documents.service');
 const { createBatch, pickBatchItem, completeBatch, BATCH_STATUS } = require('../services/warehouse/batches.service');
 const { lockLocations, unlockLocations, finishInventoryWithAdjust } = require('../services/warehouse/inventory-v2.service');
+const serialNumbersService = require('../services/warehouse/serial-numbers.service');
+const lotsService = require('../services/warehouse/lots.service');
 
 const router = express.Router();
 router.use(requireAuth);
@@ -463,6 +465,320 @@ router.post('/inventories/:id/finish-v2', async (req, res, next) => {
   } catch (err) {
     if (err.message?.includes('neexistuje')) return res.status(404).json({ error: err.message });
     if (err.message?.includes('uzavřená')) return res.status(409).json({ error: err.message });
+    next(err);
+  }
+});
+
+// ===========================================================================
+// SERIAL NUMBERS — tracking konkrétních kusů (servis + save_sn_first_scan)
+// ===========================================================================
+
+// GET /api/wh/serials?sn=XYZ    — fulltext lookup napříč materiály
+router.get('/serials', async (req, res, next) => {
+  try {
+    const sn = req.query.sn ? String(req.query.sn) : null;
+    if (!sn) return res.status(400).json({ error: 'Chybí query parametr ?sn=' });
+    const matches = await serialNumbersService.lookupBySerialNumber(sn);
+    res.json(matches);
+  } catch (err) { next(err); }
+});
+
+// GET /api/wh/serials/:id       — detail jednoho kusu
+router.get('/serials/:id', async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    const sn = await serialNumbersService.getSerialById(id);
+    if (!sn) return res.status(404).json({ error: 'Sériové číslo neexistuje' });
+    res.json(sn);
+  } catch (err) { next(err); }
+});
+
+// GET /api/wh/materials/:id/serials — seznam S/N pro materiál
+router.get('/materials/:id/serials', async (req, res, next) => {
+  try {
+    const material_id = Number(req.params.id);
+    const status = req.query.status ? String(req.query.status) : undefined;
+    const limit = req.query.limit ? Number(req.query.limit) : undefined;
+    const list = await serialNumbersService.listByMaterial(material_id, { status, limit });
+    res.json(list);
+  } catch (err) { next(err); }
+});
+
+// POST /api/wh/materials/:id/serials/bulk-receipt
+//   body: { warehouse_id, location_id, serials: string[], unit_price?, document_id?, note?, client_uuid? }
+//   vytvoří 1× receipt move + N× SerialNumber v transakci
+const bulkReceiptSchema = z.object({
+  warehouse_id: z.number().int().positive(),
+  location_id: z.number().int().positive(),
+  serials: z.array(z.string().min(1)).min(1),
+  unit_price: z.number().nullable().optional(),
+  document_id: z.number().int().positive().nullable().optional(),
+  note: z.string().nullable().optional(),
+  client_uuid: z.string().uuid().nullable().optional(),
+});
+
+router.post('/materials/:id/serials/bulk-receipt', async (req, res, next) => {
+  try {
+    const material_id = Number(req.params.id);
+    const input = bulkReceiptSchema.parse(req.body);
+    const person_id = await resolvePersonIdForUser(req.user);
+    const result = await serialNumbersService.createBulkReceiptWithSerials({
+      material_id,
+      warehouse_id: input.warehouse_id,
+      location_id: input.location_id,
+      serials: input.serials,
+      unit_price: input.unit_price ?? undefined,
+      document_id: input.document_id ?? undefined,
+      note: input.note ?? undefined,
+      client_uuid: input.client_uuid ?? undefined,
+      device_id: req.get('X-Device-Id') || null,
+      created_by: person_id,
+    });
+    res.status(201).json(result);
+  } catch (err) {
+    if (err.name === 'ZodError') return res.status(400).json({ error: err.errors });
+    if (err.message?.includes('neexistuje')) return res.status(404).json({ error: err.message });
+    if (
+      err.message?.includes('duplicity') ||
+      err.message?.includes('už existují') ||
+      err.message?.includes('neodpovídá masce') ||
+      err.message?.includes('save_sn_first_scan')
+    ) {
+      return res.status(409).json({ error: err.message });
+    }
+    next(err);
+  }
+});
+
+// PATCH /api/wh/serials/:id/issue
+//   body: { warehouse_id, reference_type?, reference_id?, note?, client_uuid? }
+const issueSchema = z.object({
+  warehouse_id: z.number().int().positive(),
+  reference_type: z.string().nullable().optional(),
+  reference_id: z.number().int().positive().nullable().optional(),
+  note: z.string().nullable().optional(),
+  client_uuid: z.string().uuid().nullable().optional(),
+});
+
+router.patch('/serials/:id/issue', async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    const input = issueSchema.parse(req.body);
+    const person_id = await resolvePersonIdForUser(req.user);
+    const result = await serialNumbersService.issueSerial({
+      id,
+      warehouse_id: input.warehouse_id,
+      reference_type: input.reference_type ?? undefined,
+      reference_id: input.reference_id ?? undefined,
+      note: input.note ?? undefined,
+      client_uuid: input.client_uuid ?? undefined,
+      device_id: req.get('X-Device-Id') || null,
+      issued_by: person_id,
+    });
+    res.json(result);
+  } catch (err) {
+    if (err.name === 'ZodError') return res.status(400).json({ error: err.errors });
+    if (err.message?.includes('neexistuje')) return res.status(404).json({ error: err.message });
+    if (err.message?.includes('není ve stavu')) return res.status(409).json({ error: err.message });
+    if (err.message?.includes('nemá aktuální lokaci')) return res.status(400).json({ error: err.message });
+    next(err);
+  }
+});
+
+// PATCH /api/wh/serials/:id/scrap
+router.patch('/serials/:id/scrap', async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    const note = req.body?.note ? String(req.body.note) : null;
+    const person_id = await resolvePersonIdForUser(req.user);
+    const result = await serialNumbersService.scrapSerial({
+      id, note, scrapped_by: person_id,
+    });
+    res.json(result);
+  } catch (err) {
+    if (err.message?.includes('neexistuje')) return res.status(404).json({ error: err.message });
+    next(err);
+  }
+});
+
+// PATCH /api/wh/serials/:id/return — vrátit issued kus zpět
+const returnSchema = z.object({
+  location_id: z.number().int().positive(),
+  note: z.string().nullable().optional(),
+});
+
+router.patch('/serials/:id/return', async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    const input = returnSchema.parse(req.body);
+    const person_id = await resolvePersonIdForUser(req.user);
+    const result = await serialNumbersService.returnSerial({
+      id,
+      location_id: input.location_id,
+      note: input.note ?? undefined,
+      returned_by: person_id,
+    });
+    res.json(result);
+  } catch (err) {
+    if (err.name === 'ZodError') return res.status(400).json({ error: err.errors });
+    if (err.message?.includes('neexistuje')) return res.status(404).json({ error: err.message });
+    if (err.message?.includes('není ve stavu')) return res.status(409).json({ error: err.message });
+    next(err);
+  }
+});
+
+// ===========================================================================
+// MATERIAL LOTS — šarže s expirací (prádelna, potraviny, chemie)
+// ===========================================================================
+
+// GET /api/wh/materials/:id/lots?status=&expiringWithinDays=
+router.get('/materials/:id/lots', async (req, res, next) => {
+  try {
+    const material_id = Number(req.params.id);
+    const status = req.query.status ? String(req.query.status) : undefined;
+    const expiringWithinDays = req.query.expiringWithinDays ? Number(req.query.expiringWithinDays) : undefined;
+    const limit = req.query.limit ? Number(req.query.limit) : undefined;
+    const list = await lotsService.listByMaterial(material_id, { status, expiringWithinDays, limit });
+    res.json(list);
+  } catch (err) { next(err); }
+});
+
+// GET /api/wh/lots/:id
+router.get('/lots/:id', async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    const lot = await lotsService.getLotById(id);
+    if (!lot) return res.status(404).json({ error: 'Šarže neexistuje' });
+    res.json(lot);
+  } catch (err) { next(err); }
+});
+
+// GET /api/wh/lots/expiring?days=30
+router.get('/lots/expiring', async (req, res, next) => {
+  try {
+    const days = req.query.days ? Number(req.query.days) : 30;
+    const limit = req.query.limit ? Number(req.query.limit) : 200;
+    const list = await lotsService.getExpiring({ days, limit });
+    res.json(list);
+  } catch (err) { next(err); }
+});
+
+// GET /api/wh/materials/:materialId/lots/by-code/:code
+router.get('/materials/:materialId/lots/by-code/:code', async (req, res, next) => {
+  try {
+    const material_id = Number(req.params.materialId);
+    const code = String(req.params.code);
+    const lot = await lotsService.lookupByLotCode(material_id, code);
+    if (!lot) return res.status(404).json({ error: 'Šarže neexistuje' });
+    res.json(lot);
+  } catch (err) { next(err); }
+});
+
+// POST /api/wh/materials/:id/lots — vytvoření šarže bez pohybu (evidovat dopředu)
+const lotCreateSchema = z.object({
+  lot_code: z.string().min(1),
+  manufactured_at: z.string().nullable().optional(),
+  expires_at: z.string().nullable().optional(),
+  supplier_id: z.number().int().positive().nullable().optional(),
+  supplier_lot_ref: z.string().nullable().optional(),
+  note: z.string().nullable().optional(),
+});
+
+router.post('/materials/:id/lots', async (req, res, next) => {
+  try {
+    const material_id = Number(req.params.id);
+    const input = lotCreateSchema.parse(req.body);
+    const person_id = await resolvePersonIdForUser(req.user);
+    const lot = await lotsService.createLot({
+      material_id,
+      lot_code: input.lot_code,
+      manufactured_at: input.manufactured_at ?? null,
+      expires_at: input.expires_at ?? null,
+      supplier_id: input.supplier_id ?? null,
+      supplier_lot_ref: input.supplier_lot_ref ?? null,
+      note: input.note ?? null,
+      received_by: person_id,
+    });
+    res.status(201).json(lot);
+  } catch (err) {
+    if (err.name === 'ZodError') return res.status(400).json({ error: err.errors });
+    if (err.message?.includes('neexistuje')) return res.status(404).json({ error: err.message });
+    if (err.message?.includes('unique') || err.message?.includes('duplicate')) {
+      return res.status(409).json({ error: 'Šarže s tímto lot_code už existuje' });
+    }
+    next(err);
+  }
+});
+
+// POST /api/wh/materials/:id/lots/receive — příjem šarže + move + Stock
+const lotReceiveSchema = z.object({
+  warehouse_id: z.number().int().positive(),
+  location_id: z.number().int().positive(),
+  quantity: z.number().positive(),
+  lot_code: z.string().min(1),
+  manufactured_at: z.string().nullable().optional(),
+  expires_at: z.string().nullable().optional(),
+  supplier_id: z.number().int().positive().nullable().optional(),
+  supplier_lot_ref: z.string().nullable().optional(),
+  unit_price: z.number().nullable().optional(),
+  document_id: z.number().int().positive().nullable().optional(),
+  note: z.string().nullable().optional(),
+  client_uuid: z.string().uuid().nullable().optional(),
+});
+
+router.post('/materials/:id/lots/receive', async (req, res, next) => {
+  try {
+    const material_id = Number(req.params.id);
+    const input = lotReceiveSchema.parse(req.body);
+    const person_id = await resolvePersonIdForUser(req.user);
+    const result = await lotsService.receiveLotWithMove({
+      material_id,
+      warehouse_id: input.warehouse_id,
+      location_id: input.location_id,
+      quantity: input.quantity,
+      lot_code: input.lot_code,
+      manufactured_at: input.manufactured_at ?? null,
+      expires_at: input.expires_at ?? null,
+      supplier_id: input.supplier_id ?? null,
+      supplier_lot_ref: input.supplier_lot_ref ?? null,
+      unit_price: input.unit_price ?? null,
+      document_id: input.document_id ?? null,
+      note: input.note ?? null,
+      client_uuid: input.client_uuid ?? null,
+      device_id: req.get('X-Device-Id') || null,
+      created_by: person_id,
+    });
+    res.status(201).json(result);
+  } catch (err) {
+    if (err.name === 'ZodError') return res.status(400).json({ error: err.errors });
+    if (err.message?.includes('neexistuje')) return res.status(404).json({ error: err.message });
+    if (
+      err.message?.includes('už existuje') ||
+      err.message?.includes('není označen') ||
+      err.message?.includes('musí být')
+    ) {
+      return res.status(409).json({ error: err.message });
+    }
+    next(err);
+  }
+});
+
+// PATCH /api/wh/lots/:id/status  body: { status, note? }
+const lotStatusSchema = z.object({
+  status: z.enum(['in_stock', 'consumed', 'expired', 'scrapped']),
+  note: z.string().nullable().optional(),
+});
+
+router.patch('/lots/:id/status', async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    const input = lotStatusSchema.parse(req.body);
+    const lot = await lotsService.changeLotStatus(id, input.status, input.note ?? undefined);
+    res.json(lot);
+  } catch (err) {
+    if (err.name === 'ZodError') return res.status(400).json({ error: err.errors });
+    if (err.message?.includes('neexistuje')) return res.status(404).json({ error: err.message });
+    if (err.message?.includes('Neplatný status')) return res.status(400).json({ error: err.message });
     next(err);
   }
 });
