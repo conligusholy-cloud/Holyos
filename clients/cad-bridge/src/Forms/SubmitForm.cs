@@ -409,6 +409,23 @@ public sealed class SubmitForm : Form
     }
 
     /// <summary>
+    /// Naformátuje odhad zbývajícího času na základě uplynulého času a podílu hotových.
+    /// Používá se v banneru během dlouhých operací (scan / search / submit).
+    /// </summary>
+    private static string FormatEta(DateTime startUtc, int doneCount, int totalCount)
+    {
+        if (doneCount <= 0 || totalCount <= 0 || doneCount >= totalCount) return "";
+        var elapsed = DateTime.UtcNow - startUtc;
+        if (elapsed.TotalSeconds < 0.5) return "";
+        var avg = elapsed.TotalSeconds / doneCount;
+        var remaining = (totalCount - doneCount) * avg;
+        if (remaining < 1)     return "";
+        if (remaining < 60)    return $" · zbývá ~{Math.Ceiling(remaining):0} s";
+        if (remaining < 3600)  return $" · zbývá ~{Math.Ceiling(remaining / 60):0} min";
+        return $" · zbývá ~{remaining / 3600:F1} h";
+    }
+
+    /// <summary>
     /// Aktualizuje status bar dole + velký banner nahoře (pokud běží busy).
     /// Volat namísto přímého _status.Text = ...
     /// </summary>
@@ -661,17 +678,35 @@ public sealed class SubmitForm : Form
         {
             await Task.Run(() => _sw.Connect());
 
-            int processed = 0, addedComponents = 0, virtualCount = 0;
+            int processed = 0, addedComponents = 0, virtualCount = 0, failed = 0;
             int idx = 0;
+            var swStartUtc = DateTime.UtcNow;
             while (idx < _rows.Count)
             {
                 var row = _rows[idx];
                 if (SwNativeExts.Contains(row.Extension))
                 {
+                    // Počet SW řádků pro ETA — používám aktuální celkový počet,
+                    // i když auto-expanze přidává během chodu. Odhad se průběžně
+                    // upravuje podle reálné rychlosti.
+                    var swTotal = _rows.Count(r => SwNativeExts.Contains(r.Extension));
+                    var eta = FormatEta(swStartUtc, processed, swTotal);
                     UpdateStatus(
-                        $"Vyhledávám komponenty — {idx + 1}/{_rows.Count}",
+                        $"Vyhledávám komponenty — {idx + 1}/{_rows.Count}{eta}",
                         $"Čtu: {row.FileName}");
-                    await Task.Run(() => ProcessRow(row));
+                    // ProcessRow má vlastní try/catch — exception z něj nepropadne
+                    // a loop pokračuje dál. Ale pro jistotu obalujeme ještě my,
+                    // kdyby ProcessRow vyhodil něco mimo svůj catch.
+                    try
+                    {
+                        await Task.Run(() => ProcessRow(row));
+                    }
+                    catch (Exception rowEx)
+                    {
+                        failed++;
+                        row.Status = "Chyba: " + Diagnostics.ShortMessage(rowEx);
+                        Diagnostics.LogException($"OnSearchAsync row {row.FileName}", rowEx);
+                    }
 
                     _filesGrid.Rows[idx].Cells["Cfg"].Value       = row.ConfigurationName ?? "—";
                     _filesGrid.Rows[idx].Cells["CompCount"].Value = row.ComponentCount;
@@ -711,10 +746,10 @@ public sealed class SubmitForm : Form
                 idx++;
             }
 
-            _status.ForeColor = Color.FromArgb(22, 163, 74);
-            _status.Text = $"Hotovo — {processed} zdrojových souborů, " +
-                           $"{addedComponents} přidaných komponent, " +
-                           $"{virtualCount} fiktivních (bez souboru, zůstávají v kusovníku)";
+            _status.ForeColor = failed > 0 ? Color.FromArgb(234, 88, 12) : Color.FromArgb(22, 163, 74);
+            _status.Text = $"Hotovo — {processed} zpracováno, {addedComponents} přidaných komponent, "
+                         + $"{virtualCount} fiktivních"
+                         + (failed > 0 ? $", {failed} chyb (koukni na Stav sloupec)" : "");
             RenderSelectedComponents();
 
             // Porovnat se serverem a označit změněné soubory ⚡.
@@ -1191,13 +1226,13 @@ public sealed class SubmitForm : Form
         _status.ForeColor = Color.FromArgb(100, 116, 139);
         UpdateStatus($"Odevzdávám… 0 / {totalSteps}", "Nahrávám soubory a přílohy na server");
 
+        var submitStartUtc = DateTime.UtcNow;
+
         void Step(string msg)
         {
             completed++;
             if (completed > _progress.Maximum) completed = _progress.Maximum;
             _progress.Value = completed;
-            // Přepni banner progress z Marquee na Continuous, jakmile máme reálný
-            // počet — uživatel pak vidí skutečný podíl, ne jen „něco se děje".
             if (_busyProgress.Style != ProgressBarStyle.Continuous)
             {
                 _busyProgress.Style   = ProgressBarStyle.Continuous;
@@ -1205,7 +1240,8 @@ public sealed class SubmitForm : Form
                 _busyProgress.Maximum = Math.Max(1, totalSteps);
             }
             _busyProgress.Value = Math.Min(completed, _busyProgress.Maximum);
-            UpdateStatus($"Odevzdávám… {completed} / {totalSteps}", msg);
+            var eta = FormatEta(submitStartUtc, completed, totalSteps);
+            UpdateStatus($"Odevzdávám… {completed} / {totalSteps}{eta}", msg);
             _progress.Refresh();
             _busyProgress.Refresh();
         }
