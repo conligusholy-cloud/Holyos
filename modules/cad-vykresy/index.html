@@ -165,6 +165,7 @@
       drawings: [],
       activeDrawingId: null,
       query: '',
+      expandedDrawingIds: new Set(),    // ID výkresů rozbalených v seznamu (inline detail)
     };
 
     // ─── Utils ───────────────────────────────────────────────────────────────
@@ -288,6 +289,114 @@
       }
     }
 
+    // Helper pro custom properties — case/diacritics-insensitive lookup.
+    function cpLookup(obj, ...keys) {
+      if (!obj) return '';
+      const norm = (s) => String(s).toLowerCase()
+        .replace(/[áä]/g,'a').replace(/[čć]/g,'c').replace(/[ďđ]/g,'d')
+        .replace(/[éě]/g,'e').replace(/[í]/g,'i').replace(/[ňń]/g,'n')
+        .replace(/[óö]/g,'o').replace(/[řŕ]/g,'r').replace(/[šś]/g,'s')
+        .replace(/[ťţ]/g,'t').replace(/[úůü]/g,'u').replace(/[ýÿ]/g,'y').replace(/[žź]/g,'z');
+      const lookup = {};
+      for (const [k, v] of Object.entries(obj)) lookup[norm(k)] = v;
+      for (const k of keys) {
+        const nk = norm(k);
+        if (lookup[nk] !== undefined && lookup[nk] !== null && String(lookup[nk]).trim() !== '') {
+          return String(lookup[nk]).trim();
+        }
+      }
+      return '';
+    }
+
+    // Render inline expanded detail — vnořený řádek (TR) pod hlavním řádkem v tabulce.
+    // Obsahuje info o dílu/sestavě (z custom properties první konfigurace) a,
+    // pokud je to sestava, tabulku komponent (kusovník) se sloupci Norma/Popis/…
+    function renderExpandedDetail(d) {
+      const cfg = (d.configurations || [])[0];
+      const cp  = cfg && cfg.custom_properties || {};
+
+      const norma  = cpLookup(cp, 'Norma', 'Standard');
+      const popis  = cpLookup(cp, 'Popis', 'Description', 'Název', 'Nazev', 'Name');
+      const mat    = cpLookup(cp, 'Materiál', 'Material');
+      const hmot   = cpLookup(cp, 'Hmotnost', 'Mass', 'Weight');
+      const rozmer = cpLookup(cp, 'Rozmer', 'Rozměr', 'Dimension', 'Size');
+      const polo   = cpLookup(cp, 'Polotovar', 'Semifinished', 'Semi-finished');
+      const tdp    = cpLookup(cp, 'TDP');
+
+      const infoChips = [
+        ['Norma',      norma],
+        ['Popis (SW)', popis],
+        ['Materiál',   mat],
+        ['Hmotnost',   hmot],
+        ['Rozměr',     rozmer],
+        ['Polotovar',  polo],
+        ['TDP',        tdp],
+      ].filter(([_, v]) => v).map(([label, value]) =>
+        '<div style="padding:6px 12px;background:rgba(148,163,184,0.08);border-radius:6px;font-size:12px;">' +
+          '<span style="color:var(--text2);text-transform:uppercase;letter-spacing:0.05em;font-size:10px;display:block;">' + escapeHtml(label) + '</span>' +
+          '<span style="color:var(--text);font-weight:600;">' + escapeHtml(value) + '</span>' +
+        '</div>'
+      ).join('');
+
+      const allComps = [];
+      for (const c of (d.configurations || [])) {
+        for (const comp of (c.components || [])) {
+          allComps.push(Object.assign({}, comp, { __configName: c.config_name }));
+        }
+      }
+      let bomHtml = '';
+      if (allComps.length > 0) {
+        const bomRows = allComps.map(b => {
+          const bn  = cpLookup(b.custom_properties, 'Norma', 'Standard');
+          const bp  = cpLookup(b.custom_properties, 'Popis', 'Description', 'Název', 'Nazev', 'Name');
+          const bm  = cpLookup(b.custom_properties, 'Materiál', 'Material');
+          const bh  = cpLookup(b.custom_properties, 'Hmotnost', 'Mass', 'Weight');
+          const unknownBadge = b.is_unknown
+            ? '<span style="background:rgba(239,68,68,0.15);color:#ef4444;border:1px solid rgba(239,68,68,0.35);padding:1px 6px;border-radius:4px;font-size:10px;font-weight:700;margin-right:6px;">\u26a0 NEROZPOZN\u00c1NO</span>'
+            : '';
+          const matCatalog = b.material
+            ? '<span style="color:#10b981;font-weight:600">' + escapeHtml(b.material.code) + '</span> \u00b7 ' + escapeHtml(b.material.name)
+            : (b.is_unknown ? '<span style="color:#ef4444">— Chybí v katalogu —</span>' : '<span style="color:var(--text2)">—</span>');
+          return '<tr' + (b.is_unknown ? ' style="background:rgba(239,68,68,0.05);"' : '') + '>' +
+            '<td style="padding:6px 8px;">' + unknownBadge + escapeHtml(b.name || '') + '</td>' +
+            '<td style="padding:6px 8px;color:var(--text2);">' + (bn ? escapeHtml(bn) : '—') + '</td>' +
+            '<td style="padding:6px 8px;color:var(--text2);font-size:12px;">' + (bp ? escapeHtml(bp) : '—') + '</td>' +
+            '<td style="padding:6px 8px;color:var(--text2);">' + (bm ? escapeHtml(bm) : '—') + '</td>' +
+            '<td style="padding:6px 8px;text-align:right;color:var(--text2);font-size:12px;">' + (bh ? escapeHtml(bh) : '—') + '</td>' +
+            '<td style="padding:6px 8px;text-align:right;font-weight:600;">' + (b.quantity || 1) + '\u00d7</td>' +
+            '<td style="padding:6px 8px;color:var(--text2);font-size:12px;">' + escapeHtml(b.configuration || '—') + '</td>' +
+            '<td style="padding:6px 8px;">' + matCatalog + '</td>' +
+          '</tr>';
+        }).join('');
+        bomHtml =
+          '<div style="margin-top:14px;">' +
+            '<h4 style="margin:0 0 8px 0;font-size:12px;color:var(--text2);letter-spacing:0.05em;text-transform:uppercase;">\ud83d\uddc2\ufe0f Kusovník · ' + allComps.length + ' položek</h4>' +
+            '<table style="width:100%;font-size:12px;border-collapse:collapse;">' +
+              '<thead><tr style="background:rgba(148,163,184,0.1);">' +
+                '<th style="text-align:left;padding:6px 8px;">Díl</th>' +
+                '<th style="text-align:left;padding:6px 8px;width:100px;">Norma</th>' +
+                '<th style="text-align:left;padding:6px 8px;">Popis (SW)</th>' +
+                '<th style="text-align:left;padding:6px 8px;width:100px;">Materiál (SW)</th>' +
+                '<th style="text-align:right;padding:6px 8px;width:80px;">Hmotnost</th>' +
+                '<th style="text-align:right;padding:6px 8px;width:45px;">Ks</th>' +
+                '<th style="text-align:left;padding:6px 8px;width:110px;">Konfig.</th>' +
+                '<th style="text-align:left;padding:6px 8px;">Materiál (katalog)</th>' +
+              '</tr></thead>' +
+              '<tbody>' + bomRows + '</tbody>' +
+            '</table>' +
+          '</div>';
+      }
+
+      return '<tr class="expanded-detail" data-parent-id="' + d.id + '">' +
+        '<td colspan="11" style="padding:14px 22px 18px 50px;background:rgba(148,163,184,0.04);border-left:3px solid rgba(99,102,241,0.5);">' +
+          (infoChips
+            ? '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:6px;">' + infoChips + '</div>'
+            : '<div style="color:var(--text2);font-style:italic;font-size:12px;">Bez custom properties (zkuste znovu odeslat z Bridge 2.9.12+)</div>') +
+          bomHtml +
+        '</td>' +
+      '</tr>';
+    }
+
     // ─── Render: seznam výkresů ──────────────────────────────────────────────
     function renderDrawings() {
       const el = document.getElementById('drawings-table');
@@ -345,9 +454,15 @@
                          : extLower === 'slddrw' ? { bg: 'rgba(16,185,129,0.15)',  fg: '#10b981', brd: 'rgba(16,185,129,0.35)' }
                          :                         { bg: 'rgba(148,163,184,0.15)', fg: '#94a3b8', brd: 'rgba(148,163,184,0.35)' };
 
+        const isExpanded = state.expandedDrawingIds.has(d.id);
+        const caret = isExpanded ? '\u25bc' : '\u25b6';   // ▼ / ▶
+
         return `
-        <tr data-id="${d.id}" class="${d.id === state.activeDrawingId ? 'selected' : ''}">
-          <td><span style="display:inline-block;padding:3px 10px;border-radius:6px;background:${typeColor.bg};color:${typeColor.fg};border:1px solid ${typeColor.brd};font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;">${escapeHtml(typeLabel)}</span></td>
+        <tr data-id="${d.id}" class="${d.id === state.activeDrawingId ? 'selected' : ''}" style="cursor:pointer;" title="Dvojklik = rozbalit / sbalit">
+          <td style="white-space:nowrap;">
+            <span class="expand-caret" data-expand-id="${d.id}" style="display:inline-block;width:14px;text-align:center;color:var(--text2);font-size:10px;margin-right:4px;cursor:pointer;user-select:none;">${caret}</span>
+            <span style="display:inline-block;padding:3px 10px;border-radius:6px;background:${typeColor.bg};color:${typeColor.fg};border:1px solid ${typeColor.brd};font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;">${escapeHtml(typeLabel)}</span>
+          </td>
           <td><b style="font-size:14px;letter-spacing:0.01em;">${escapeHtml(code)}</b>${stlBtn}${d.title ? '<br><span style="color:var(--text2);font-size:12px;">'+escapeHtml(d.title)+'</span>' : ''}${noteLine}</td>
           <td>${d.project ? escapeHtml(d.project.code) : '—'}</td>
           <td>${d.block ? escapeHtml(d.block.name) : '—'}</td>
@@ -421,7 +536,7 @@
             <button class="btn btn-sm" style="background:rgba(59,130,246,0.12);color:#3b82f6;border-color:rgba(59,130,246,0.3);padding:3px 8px;font-size:11px;" onclick="openEditDrawing(${d.id})" title="Upravit">\u270f\ufe0f</button>
             <button class="btn btn-sm btn-danger" style="padding:3px 8px;font-size:11px;margin-left:4px;" onclick="deleteDrawing(${d.id})" title="Smazat">\ud83d\uddd1\ufe0f</button>
           </td>
-        </tr>`;
+        </tr>` + (isExpanded ? renderExpandedDetail(d) : '');
       }).join('');
       el.innerHTML = `
         <table class="data-table">
@@ -437,6 +552,26 @@
           loadDetail(id);
           el.querySelectorAll('tr').forEach(r => r.classList.remove('selected'));
           tr.classList.add('selected');
+        });
+        // Dvojklik na řádek → rozbalit/sbalit inline detail (kusovník, custom props).
+        tr.addEventListener('dblclick', (e) => {
+          e.preventDefault();
+          // Zrušit text-selection způsobenou rychlým dblclick
+          if (window.getSelection) window.getSelection().removeAllRanges();
+          const id = parseInt(tr.dataset.id);
+          if (state.expandedDrawingIds.has(id)) state.expandedDrawingIds.delete(id);
+          else state.expandedDrawingIds.add(id);
+          renderDrawings();
+        });
+      });
+      // Šipka v buňce Typ — samostatný click-target, aby šlo rozbalit i bez dblclick.
+      el.querySelectorAll('.expand-caret').forEach(s => {
+        s.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const id = parseInt(s.dataset.expandId);
+          if (state.expandedDrawingIds.has(id)) state.expandedDrawingIds.delete(id);
+          else state.expandedDrawingIds.add(id);
+          renderDrawings();
         });
       });
     }

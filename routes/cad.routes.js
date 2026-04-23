@@ -172,6 +172,16 @@ router.get('/drawings', async (req, res, next) => {
             id: true, config_name: true, quantity: true,
             png_path: true, pdf_path: true, stl_path: true,
             attachments: true,
+            custom_properties: true,
+            mass_grams: true,
+            // Komponenty pro inline kusovník v expanded řádku seznamu.
+            components: {
+              select: {
+                id: true, name: true, path: true, quantity: true,
+                configuration: true, custom_properties: true, is_unknown: true,
+                material: { select: { id: true, code: true, name: true } },
+              },
+            },
           },
         },
         // Nejnovější záznam ze změnového logu — pro seznam stačí 1 (ukazujeme
