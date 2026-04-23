@@ -12,9 +12,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import Numpad, { parseNumpad } from '../components/Numpad';
 import {
   getBatch,
-  generateClientUuid,
   numberOrZero,
-  pickBatchItem,
   type BatchItem,
 } from '../api/batches';
 import { ApiError } from '../api/client';
@@ -25,6 +23,8 @@ import {
   NotFoundError,
 } from '../sync/lookup';
 import type { CachedLocation } from '../db/schema';
+import { enqueuePick } from '../db/pickQueueRepo';
+import { useSync } from '../sync/SyncContext';
 
 interface ResolvedLocation {
   id: number;
@@ -37,7 +37,7 @@ export default function PickingPickPage() {
   const batchId = Number(id);
   const batchItemId = Number(itemId);
 
-  const [clientUuid] = useState(() => generateClientUuid());
+  const { stats, flushQueue, refreshStats } = useSync();
 
   const [item, setItem] = useState<BatchItem | null>(null);
   const [loading, setLoading] = useState(true);
@@ -126,17 +126,20 @@ export default function PickingPickPage() {
     setSaving(true);
     setError(null);
     try {
-      const result = await pickBatchItem(batchId, {
+      // Offline-safe: enqueue + (pokud online) okamžitý flush. auto_completed
+      // bychom v offline neznali; proto prostě naviguj zpět na detail dávky,
+      // kde se progressbar přepočítá z čerstvých dat.
+      await enqueuePick({
+        batch_id: batchId,
         batch_item_id: batchItemId,
         picked_quantity: quantity,
         from_location_id: loc,
-        client_uuid: clientUuid,
       });
-      if (result.auto_completed) {
-        navigate(`/picking/${batchId}?done=1`);
-      } else {
-        navigate(`/picking/${batchId}`);
+      await refreshStats();
+      if (stats.online) {
+        await flushQueue();
       }
+      navigate(`/picking/${batchId}`);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Uložení selhalo');
     } finally {

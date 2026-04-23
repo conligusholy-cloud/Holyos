@@ -12,7 +12,7 @@ import type { DBSchema, IDBPDatabase } from 'idb';
 import { openDB } from 'idb';
 
 export const DB_NAME = 'holyos-pwa-sklad';
-export const DB_VERSION = 1;
+export const DB_VERSION = 2;
 
 // ---------- typy záznamů ---------------------------------------------------
 
@@ -69,6 +69,42 @@ export interface QueuedMove {
   deduped?: boolean;
 }
 
+// Queued inventura — PUT /api/wh/inventories/:invId/items/:itemId { actual_qty }
+// Idempotentní: stejný PUT dá stejný výsledek, takže není třeba client_uuid na
+// backendu. Klient si drží uuid jako primary key jen pro identifikaci záznamu.
+export interface QueuedInventoryCount {
+  client_uuid: string;
+  inventory_id: number;
+  item_id: number;
+  actual_qty: number;
+
+  status: QueueStatus;
+  created_at: string;
+  attempts: number;
+  last_error?: string | null;
+  last_attempt_at?: string | null;
+  synced_at?: string | null;
+}
+
+// Queued pick — POST /api/wh/batches/:id/pick s {batch_item_id, picked_quantity,
+// from_location_id, client_uuid}. Backend používá client_uuid pro idempotenci
+// sekundárního inventory_movement (issue), takže resend je bezpečný.
+export interface QueuedPick {
+  client_uuid: string;
+  batch_id: number;
+  batch_item_id: number;
+  picked_quantity: number;
+  from_location_id?: number | null;
+  note?: string | null;
+
+  status: QueueStatus;
+  created_at: string;
+  attempts: number;
+  last_error?: string | null;
+  last_attempt_at?: string | null;
+  synced_at?: string | null;
+}
+
 export type MetaKey =
   | 'last_materials_sync'
   | 'last_locations_sync'
@@ -101,6 +137,22 @@ export interface HolyDb extends DBSchema {
       'by-created-at': string;
     };
   };
+  inventory_queue: {
+    key: string;
+    value: QueuedInventoryCount;
+    indexes: {
+      'by-status': QueueStatus;
+      'by-created-at': string;
+    };
+  };
+  pick_queue: {
+    key: string;
+    value: QueuedPick;
+    indexes: {
+      'by-status': QueueStatus;
+      'by-created-at': string;
+    };
+  };
   meta: {
     key: MetaKey;
     value: MetaRecord;
@@ -127,6 +179,15 @@ export function getDb(): Promise<IDBPDatabase<HolyDb>> {
           queue.createIndex('by-created-at', 'created_at', { unique: false });
 
           db.createObjectStore('meta', { keyPath: 'key' });
+        }
+        if (oldVersion < 2) {
+          const invQ = db.createObjectStore('inventory_queue', { keyPath: 'client_uuid' });
+          invQ.createIndex('by-status', 'status', { unique: false });
+          invQ.createIndex('by-created-at', 'created_at', { unique: false });
+
+          const pickQ = db.createObjectStore('pick_queue', { keyPath: 'client_uuid' });
+          pickQ.createIndex('by-status', 'status', { unique: false });
+          pickQ.createIndex('by-created-at', 'created_at', { unique: false });
         }
       },
       blocked() {
