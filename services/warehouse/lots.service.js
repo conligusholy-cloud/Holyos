@@ -164,16 +164,9 @@ async function receiveLotWithMove({
     });
 
     // Rebalance Stock: vezmi z NULL lot řádku q, přidej do nového lot řádku q.
-    // Pokud NULL řádek má méně než q (nestane se hned po createMove, ale safety),
-    // limit to what's available.
-    const nullStock = await tx.stock.findUnique({
-      where: {
-        material_id_location_id_lot_id: {
-          material_id,
-          location_id,
-          lot_id: null,
-        },
-      },
+    // Prisma neakceptuje NULL v compound findUnique key, proto findFirst.
+    const nullStock = await tx.stock.findFirst({
+      where: { material_id, location_id, lot_id: null },
     });
     const takeFromNull = nullStock ? Math.min(Number(nullStock.quantity), q) : 0;
 

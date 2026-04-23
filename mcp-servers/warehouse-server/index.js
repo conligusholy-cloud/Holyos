@@ -155,6 +155,17 @@ function getWarehouseTools() {
         required: ['serial_number'],
       },
     },
+    {
+      name: 'list_expiring_lots',
+      description: 'Vrátí šarže materiálů (prádelna, potraviny, chemie) blížící se expiraci. Vrací lot_code, materiál, expires_at, days_left, aktuální celkové množství a lokace. Použij pro dashboard: „co expiruje v příštích 30 dnech" nebo pro alert před týdnem, kdy je potřeba objednat novou zásobu.',
+      input_schema: {
+        type: 'object',
+        properties: {
+          days: { type: 'number', description: 'Horizon ve dnech od dneška (default 30)', default: 30 },
+          limit: { type: 'number', description: 'Max počet šarží', default: 100 },
+        },
+      },
+    },
   ];
 }
 
@@ -407,6 +418,50 @@ async function executeWarehouseTool(toolName, params, prisma) {
         status: job.status,
         copies: job.copies,
         finished_at: job.finished_at,
+      };
+    }
+
+    case 'list_expiring_lots': {
+      const days = Math.max(1, Number(params.days) || 30);
+      const limit = Math.min(500, Number(params.limit) || 100);
+      const cutoff = new Date();
+      cutoff.setDate(cutoff.getDate() + days);
+      const lots = await prisma.materialLot.findMany({
+        where: {
+          status: 'in_stock',
+          expires_at: { not: null, lte: cutoff },
+        },
+        orderBy: { expires_at: 'asc' },
+        take: limit,
+        include: {
+          material: { select: { id: true, code: true, name: true, unit: true } },
+          stock_rows: {
+            where: { quantity: { gt: 0 } },
+            include: { location: { select: { id: true, label: true } } },
+          },
+        },
+      });
+      const now = Date.now();
+      return {
+        horizon_days: days,
+        count: lots.length,
+        lots: lots.map((l) => {
+          const totalQty = l.stock_rows.reduce((s, r) => s + Number(r.quantity || 0), 0);
+          const expMs = l.expires_at ? new Date(l.expires_at).getTime() : null;
+          const daysLeft = expMs != null ? Math.floor((expMs - now) / 86400000) : null;
+          return {
+            id: l.id,
+            lot_code: l.lot_code,
+            material: l.material,
+            expires_at: l.expires_at,
+            days_left: daysLeft,
+            total_quantity: totalQty,
+            locations: l.stock_rows.map((r) => ({
+              label: r.location?.label,
+              quantity: r.quantity,
+            })),
+          };
+        }),
       };
     }
 

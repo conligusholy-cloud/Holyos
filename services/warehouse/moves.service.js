@@ -60,12 +60,34 @@ function deriveStockDeltas(input) {
 /**
  * Upsert Stock řádku s atomickým delta zvýšením/snížením.
  * V Prisma 6 lze použít `quantity: { increment: delta }` (umí i záporné).
+ *
+ * Po zavedení MaterialLot (SKLAD 2.0) je Stock unikátní podle triplet
+ * [material_id, location_id, lot_id]. Protože Prisma findUnique/upsert
+ * neakceptuje NULL v compound key, pro nešaržované pohyby (lot_id=null)
+ * obcházíme přes findFirst + update/create.
  */
-async function applyStockDelta(tx, { material_id, location_id, delta }) {
-  // upsert: pokud řádek existuje → increment; jinak vytvoř s quantity = delta
+async function applyStockDelta(tx, { material_id, location_id, lot_id = null, delta }) {
+  if (lot_id == null) {
+    const existing = await tx.stock.findFirst({
+      where: { material_id, location_id, lot_id: null },
+    });
+    if (existing) {
+      await tx.stock.update({
+        where: { id: existing.id },
+        data: { quantity: { increment: delta } },
+      });
+    } else {
+      await tx.stock.create({
+        data: { material_id, location_id, lot_id: null, quantity: delta },
+      });
+    }
+    return;
+  }
   await tx.stock.upsert({
-    where: { material_id_location_id: { material_id, location_id } },
-    create: { material_id, location_id, quantity: delta },
+    where: {
+      material_id_location_id_lot_id: { material_id, location_id, lot_id },
+    },
+    create: { material_id, location_id, lot_id, quantity: delta },
     update: { quantity: { increment: delta } },
   });
 }
@@ -133,11 +155,12 @@ async function createMove(input) {
       },
     });
 
-    // 3. Stock: aplikuj delty
+    // 3. Stock: aplikuj delty (lot_id propaguje se z input — pro šaržované pohyby)
     for (const d of deltas) {
       await applyStockDelta(tx, {
         material_id: input.material_id,
         location_id: d.location_id,
+        lot_id: input.lot_id ?? null,
         delta: d.delta,
       });
     }
