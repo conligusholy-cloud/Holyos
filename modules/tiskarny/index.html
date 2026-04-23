@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <title>Tiskárny | HOLYOS</title>
+  <link rel="icon" href="../../logo-holyos-icon.svg">
+  <base href="../../">
+  <link rel="stylesheet" href="css/dashboard.css">
+  <style>
+    /* ===== Tabs ===== */
+    .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 20px; }
+    .tab { padding: 12px 20px; color: var(--text2); cursor: pointer; border-bottom: 2px solid transparent; font-weight: 500; }
+    .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    /* ===== Printer card ===== */
+    .printer-list { display: flex; flex-direction: column; gap: 10px; }
+    .printer-card {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+      padding: 16px 20px; display: flex; align-items: center; gap: 16px;
+    }
+    .ping-dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
+    .ping-dot.ok { background: #22c55e; box-shadow: 0 0 10px rgba(34,197,94,0.4); }
+    .ping-dot.unknown { background: #64748b; }
+    .ping-dot.fail { background: #ef4444; }
+    .ping-dot.inactive { background: #475569; opacity: 0.5; }
+    .printer-name { font-weight: 600; font-size: 1.05em; }
+    .printer-meta { color: var(--text2); font-size: 0.88em; margin-top: 2px; }
+    .printer-actions { margin-left: auto; display: flex; gap: 8px; }
+
+    /* ===== Templates editor ===== */
+    .template-editor-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    .template-editor-grid textarea { min-height: 320px; font-family: 'Consolas', 'Courier New', monospace; font-size: 12px; }
+    .template-preview-box { background: #fff; border: 1px solid var(--border); border-radius: 8px; padding: 12px; min-height: 150px; display: flex; align-items: center; justify-content: center; }
+    .template-preview-box img { max-width: 100%; max-height: 400px; }
+    .template-preview-box .placeholder-hint { color: #666; font-size: 0.9em; text-align: center; }
+
+    /* ===== Jobs ===== */
+    .status-badge { padding: 3px 10px; border-radius: 12px; font-size: 0.82em; font-weight: 600; }
+    .status-badge.done { background: #22c55e22; color: #22c55e; }
+    .status-badge.failed { background: #ef444422; color: #ef4444; }
+    .status-badge.queued { background: #6c8cff22; color: #6c8cff; }
+    .status-badge.printing { background: #f59e0b22; color: #f59e0b; }
+
+    /* ===== Modal ===== */
+    .modal-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: flex;
+      align-items: center; justify-content: center; z-index: 1000;
+    }
+    .modal {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+      padding: 24px 28px; max-width: 640px; width: 90%; max-height: 90vh; overflow-y: auto;
+    }
+    .modal.wide { max-width: 920px; }
+    .modal h2 { margin-top: 0; }
+    .modal-row { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+    .modal-row label { color: var(--text2); font-size: 0.88em; }
+    .modal-row input, .modal-row select, .modal-row textarea {
+      background: var(--surface2); color: var(--text); border: 1px solid var(--border);
+      border-radius: 6px; padding: 8px 10px; font-size: 0.95em;
+    }
+    .modal-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
+    .test-result {
+      padding: 12px; border-radius: 8px; margin-top: 12px; font-size: 0.92em;
+    }
+    .test-result.ok { background: #22c55e18; color: #22c55e; border: 1px solid #22c55e44; }
+    .test-result.fail { background: #ef444418; color: #ef4444; border: 1px solid #ef444444; }
+
+    /* ===== Utility ===== */
+    .empty-hint { text-align: center; padding: 40px; color: var(--text2); }
+    .btn-sm { padding: 6px 12px; font-size: 0.85em; }
+    .inline-code { font-family: 'Consolas', monospace; background: var(--surface2); padding: 2px 6px; border-radius: 4px; font-size: 0.88em; }
+  </style>
+</head>
+<body>
+  <aside id="sidebar"></aside>
+
+  <div class="main-wrapper">
+    <div class="main-header">
+      <h1>🖨 Tiskárny</h1>
+      <p>Správa ZPL tiskáren, šablony etiket a historie tisků</p>
+    </div>
+
+    <div class="main-content">
+      <div class="tabs">
+        <div class="tab active" data-tab="printers" onclick="switchTab('printers')">🖨 Tiskárny</div>
+        <div class="tab" data-tab="templates" onclick="switchTab('templates')">🏷 Šablony etiket</div>
+        <div class="tab" data-tab="quick" onclick="switchTab('quick')">⚡ Rychlý tisk</div>
+        <div class="tab" data-tab="jobs" onclick="switchTab('jobs')">📜 Historie tisků</div>
+      </div>
+
+      <!-- TAB: TISKÁRNY -->
+      <div class="tab-content active" id="tab-printers">
+        <div style="display: flex; justify-content: flex-end; margin-bottom: 16px;">
+          <button class="btn btn-primary" onclick="openPrinterModal()">+ Přidat tiskárnu</button>
+        </div>
+        <div class="printer-list" id="printer-list">
+          <div class="empty-hint">Načítání…</div>
+        </div>
+      </div>
+
+      <!-- TAB: ŠABLONY -->
+      <div class="tab-content" id="tab-templates">
+        <div style="display: flex; justify-content: flex-end; margin-bottom: 16px;">
+          <button class="btn btn-primary" onclick="openTemplateModal()">+ Nová šablona</button>
+        </div>
+        <table class="data-table" id="templates-table">
+          <thead>
+            <tr>
+              <th>Kód</th><th>Název</th><th>Jazyk</th><th>Rozměr</th><th>Placeholdery</th><th>Aktivní</th><th></th>
+            </tr>
+          </thead>
+          <tbody><tr><td colspan="7" class="empty-hint">Načítání…</td></tr></tbody>
+        </table>
+      </div>
+
+      <!-- TAB: RYCHLÝ TISK -->
+      <div class="tab-content" id="tab-quick">
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
+          <!-- Levý panel: hledání + výběr materiálu -->
+          <div>
+            <h3 style="margin-top:0;">1. Vyhledej materiál</h3>
+            <input type="text" id="q-search" placeholder="SKU, jméno nebo naskenuj QR" autofocus
+                   oninput="qSearchDebounced()"
+                   style="width: 100%; background: var(--surface2); color: var(--text); border: 1px solid var(--border); padding: 10px 12px; border-radius: 8px; font-size: 1em; margin-bottom: 12px;">
+            <div id="q-results" style="max-height: 360px; overflow-y: auto;"></div>
+          </div>
+
+          <!-- Pravý panel: parametry tisku + preview -->
+          <div>
+            <h3 style="margin-top:0;">2. Vytiskni</h3>
+            <div id="q-selected" style="background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin-bottom: 14px; min-height: 60px; color: var(--text2);">
+              Vyber materiál vlevo…
+            </div>
+            <div class="modal-grid2">
+              <div class="modal-row"><label>Šablona</label><select id="q-template" onchange="qUpdatePreview()"></select></div>
+              <div class="modal-row"><label>Tiskárna</label><select id="q-printer"></select></div>
+              <div class="modal-row"><label>Počet kopií</label><input type="number" id="q-copies" value="1" min="1" max="99"></div>
+            </div>
+            <div class="template-preview-box" id="q-preview" style="margin-bottom: 14px;">
+              <div class="placeholder-hint">Náhled se zobrazí po výběru materiálu</div>
+            </div>
+            <button class="btn btn-primary" id="q-print-btn" onclick="qPrintNow()" disabled style="width: 100%; padding: 12px;">Tisknout</button>
+            <div id="q-result" style="margin-top: 10px;"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB: HISTORIE -->
+      <div class="tab-content" id="tab-jobs">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+          <div>
+            <label style="color: var(--text2); margin-right: 8px;">Stav:</label>
+            <select id="jobs-status-filter" onchange="loadJobs()" style="background: var(--surface2); color: var(--text); border: 1px solid var(--border); padding: 6px 10px; border-radius: 6px;">
+              <option value="">Všechny</option>
+              <option value="done">Hotové</option>
+              <option value="failed">Selhaly</option>
+              <option value="queued">Ve frontě</option>
+            </select>
+          </div>
+          <button class="btn btn-secondary btn-sm" onclick="loadJobs()">🔄 Obnovit</button>
+        </div>
+        <table class="data-table" id="jobs-table">
+          <thead>
+            <tr><th>Čas</th><th>Šablona</th><th>Tiskárna</th><th>Kopie</th><th>Stav</th><th>Chyba</th></tr>
+          </thead>
+          <tbody><tr><td colspan="6" class="empty-hint">Načítání…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div id="modal-root"></div>
+
+  <!-- Sidebar -->
+  <script>
+    var s = document.createElement('script');
+    s.src = '/js/sidebar.js?v=' + Date.now();
+    s.onload = function() { renderSidebar('tiskarny'); };
+    document.head.appendChild(s);
+
+    var tb = document.createElement('script');
+    tb.src = '/js/top-bar.js?v=' + Date.now();
+    document.head.appendChild(tb);
+  </script>
+
+  <!-- Modul logic -->
+  <script>
+  (function() {
+    const token = sessionStorage.getItem('token') || '';
+    function authHeaders(extra) {
+      const h = { 'Content-Type': 'application/json' };
+      if (token) h['Authorization'] = 'Bearer ' + token;
+      return Object.assign(h, extra || {});
+    }
+    async function api(method, path, body) {
+      const opts = { method, credentials: 'include', headers: authHeaders() };
+      if (body !== undefined) opts.body = JSON.stringify(body);
+      const res = await fetch(path, opts);
+      const ct = res.headers.get('content-type') || '';
+      const data = ct.includes('json') ? await res.json().catch(() => null) : null;
+      return { status: res.status, data };
+    }
+    window.switchTab = function(tab) {
+      document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+      document.querySelectorAll('.tab-content').forEach(t => t.classList.toggle('active', t.id === 'tab-' + tab));
+      if (tab === 'templates') loadTemplates();
+      if (tab === 'jobs') loadJobs();
+      if (tab === 'quick') loadQuickPrint();
+    };
+
+    // =========================================================================
+    // PRINTERS
+    // =========================================================================
+    async function loadPrinters() {
+      const { status, data } = await api('GET', '/api/print/printers');
+      const list = document.getElementById('printer-list');
+      if (status !== 200 || !Array.isArray(data)) {
+        list.innerHTML = '<div class="empty-hint">Chyba: nelze načíst tiskárny (status ' + status + ')</div>';
+        return;
+      }
+      if (data.length === 0) {
+        list.innerHTML = '<div class="empty-hint">Žádné tiskárny. Klikni na <b>+ Přidat tiskárnu</b>.</div>';
+        return;
+      }
+      list.innerHTML = data.map(renderPrinterCard).join('');
+    }
+    function pingClass(p) {
+      if (!p.is_active) return 'inactive';
+      if (!p.last_ping_ok) return 'unknown';
+      const ageMs = Date.now() - new Date(p.last_ping_ok).getTime();
+      return ageMs < 5 * 60 * 1000 ? 'ok' : 'fail';
+    }
+    function pingLabel(p) {
+      if (!p.is_active) return 'Neaktivní';
+      if (!p.last_ping_ok) return 'Nezjištěno';
+      const min = Math.round((Date.now() - new Date(p.last_ping_ok).getTime()) / 60000);
+      return 'Ping: ' + (min < 1 ? 'teď' : min + ' min')+ ' zpět';
+    }
+    function renderPrinterCard(p) {
+      const loc = p.location ? ('· ' + p.location.label) : '';
+      return (
+        '<div class="printer-card">' +
+          '<div class="ping-dot ' + pingClass(p) + '" title="' + pingLabel(p) + '"></div>' +
+          '<div>' +
+            '<div class="printer-name">' + escapeHtml(p.name) + '</div>' +
+            '<div class="printer-meta">' + escapeHtml(p.model) + ' · ' + escapeHtml(p.ip_address || '—') + ':' + (p.port || '—') + ' · ' + p.label_width_mm + '×' + p.label_height_mm + ' mm ' + loc + '</div>' +
+          '</div>' +
+          '<div class="printer-actions">' +
+            '<button class="btn btn-secondary btn-sm" onclick="testPrinter(' + p.id + ', true)">Test</button>' +
+            '<button class="btn btn-secondary btn-sm" onclick="openPrinterModal(' + p.id + ')">⚙ Upravit</button>' +
+            '<button class="btn btn-danger btn-sm" onclick="deletePrinter(' + p.id + ')">×</button>' +
+          '</div>' +
+        '</div>'
+      );
+    }
+    window.testPrinter = async function(id, withLabel) {
+      const conf = withLabel ? confirm('Pošle se zkušební etiketa na tiskárnu. Pokračovat?') : true;
+      if (!conf) return;
+      const r = await api('POST', '/api/print/printers/' + id + '/test', { withTestLabel: !!withLabel });
+      if (r.status !== 200) return alert('Chyba: ' + (r.data?.error || r.status));
+      const d = r.data;
+      alert(
+        (d.ping_ok ? '✓' : '✗') + ' Ping: ' + (d.ping_ok ? 'OK (' + d.latency_ms + ' ms)' : 'FAIL — ' + d.error) +
+        (withLabel ? '\n' + (d.print_ok ? '✓' : '✗') + ' Tisk: ' + (d.print_ok ? 'OK' : 'FAIL — ' + (d.error || '')) : '')
+      );
+      loadPrinters();
+    };
+    window.deletePrinter = async function(id) {
+      if (!confirm('Smazat tiskárnu?')) return;
+      const r = await api('DELETE', '/api/print/printers/' + id);
+      if (r.status === 200 && r.data?.deactivated) {
+        alert('Tiskárna má historii tisků — místo smazání byla deaktivována.');
+      } else if (r.status !== 204) {
+        alert('Chyba: ' + (r.data?.error || r.status));
+      }
+      loadPrinters();
+    };
+    window.openPrinterModal = async function(id) {
+      let printer = { name: '', model: 'TSC_TC200', connection_type: 'lan', ip_address: '', port: 9100,
+                      language: 'ZPL', label_width_mm: 60, label_height_mm: 20, dpi: 203, priority: 0, is_active: true };
+      if (id) {
+        const r = await api('GET', '/api/print/printers/' + id);
+        if (r.status !== 200) return alert('Nelze načíst tiskárnu');
+        printer = r.data;
+      }
+      // Locations dropdown
+      const locRes = await api('GET', '/api/wh/sync/locations');
+      const locations = (locRes.data?.items) || [];
+      const locOptions = '<option value="">(žádná)</option>' + locations.map(l =>
+        '<option value="' + l.id + '"' + (printer.location_id === l.id ? ' selected' : '') + '>' + escapeHtml(l.label) + '</option>'
+      ).join('');
+
+      document.getElementById('modal-root').innerHTML = (
+        '<div class="modal-overlay" onclick="if(event.target===this)closeModal()">' +
+          '<div class="modal wide">' +
+            '<h2>' + (id ? 'Upravit tiskárnu' : 'Přidat tiskárnu') + '</h2>' +
+            '<div class="modal-grid2">' +
+              fieldText('Název', 'p-name', printer.name) +
+              fieldSelect('Model', 'p-model', printer.model, [['TSC_TC200','TSC TC200'], ['ZEBRA_GK420','Zebra GK420'], ['CUSTOM','Vlastní']]) +
+              fieldSelect('Umístění', 'p-location', printer.location_id || '', null, locOptions) +
+              fieldSelect('Připojení', 'p-conn', printer.connection_type, [['lan','LAN'], ['usb','USB']]) +
+              fieldText('IP adresa', 'p-ip', printer.ip_address || '') +
+              fieldNumber('Port', 'p-port', printer.port || 9100) +
+              fieldSelect('Jazyk', 'p-lang', printer.language, [['ZPL','ZPL'], ['TSPL','TSPL'], ['EPL','EPL']]) +
+              fieldNumber('DPI', 'p-dpi', printer.dpi) +
+              fieldNumber('Šířka etikety (mm)', 'p-w', printer.label_width_mm) +
+              fieldNumber('Výška etikety (mm)', 'p-h', printer.label_height_mm) +
+              fieldNumber('Priorita', 'p-prio', printer.priority) +
+              fieldCheckbox('Aktivní', 'p-active', printer.is_active) +
+            '</div>' +
+            '<div class="modal-actions">' +
+              '<button class="btn btn-secondary" onclick="closeModal()">Zrušit</button>' +
+              '<button class="btn btn-primary" onclick="savePrinter(' + (id || 'null') + ')">' + (id ? 'Uložit' : 'Přidat a testovat') + '</button>' +
+            '</div>' +
+            '<div id="p-test-result"></div>' +
+          '</div>' +
+        '</div>'
+      );
+    };
+    window.savePrinter = async function(id) {
+      const body = {
+        name: val('p-name'),
+        model: val('p-model'),
+        location_id: val('p-location') ? Number(val('p-location')) : null,
+        connection_type: val('p-conn'),
+        ip_address: val('p-ip') || null,
+        port: Number(val('p-port')) || null,
+        language: val('p-lang'),
+        dpi: Number(val('p-dpi')),
+        label_width_mm: Number(val('p-w')),
+        label_height_mm: Number(val('p-h')),
+        priority: Number(val('p-prio')),
+        is_active: document.getElementById('p-active').checked,
+      };
+      const r = id ? await api('PATCH', '/api/print/printers/' + id, body)
+                   : await api('POST', '/api/print/printers', body);
+      if (r.status !== 200 && r.status !== 201) {
+        return alert('Chyba: ' + JSON.stringify(r.data?.error || r.status));
+      }
+      const pid = r.data.id;
+      // Rovnou test (bez fyzické etikety — jen ping)
+      const t = await api('POST', '/api/print/printers/' + pid + '/test', { withTestLabel: false });
+      const box = document.getElementById('p-test-result');
+      if (t.status === 200 && t.data.ping_ok) {
+        box.innerHTML = '<div class="test-result ok">✓ Tiskárna odpovídá (ping ' + t.data.latency_ms + ' ms)</div>';
+        setTimeout(() => { closeModal(); loadPrinters(); }, 1200);
+      } else {
+        box.innerHTML = '<div class="test-result fail">✗ Ping selhal: ' + (t.data?.error || 'neznámá chyba') + '</div>';
+      }
+    };
+
+    // =========================================================================
+    // LABEL TEMPLATES
+    // =========================================================================
+    async function loadTemplates() {
+      const r = await api('GET', '/api/print/templates');
+      const tbody = document.querySelector('#templates-table tbody');
+      if (r.status !== 200) {
+        tbody.innerHTML = '<tr><td colspan="7" class="empty-hint">Chyba načítání.</td></tr>';
+        return;
+      }
+      if (r.data.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" class="empty-hint">Žádné šablony.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = r.data.map(t => (
+        '<tr>' +
+          '<td><span class="inline-code">' + escapeHtml(t.code) + '</span></td>' +
+          '<td>' + escapeHtml(t.name) + '</td>' +
+          '<td>' + t.language + '</td>' +
+          '<td>' + t.width_mm + '×' + t.height_mm + ' mm</td>' +
+          '<td>' + (t.placeholders || []).map(p => '<span class="inline-code" style="margin-right:4px;">{{' + p + '}}</span>').join('') + '</td>' +
+          '<td>' + (t.is_active ? '✓' : '—') + '</td>' +
+          '<td><button class="btn btn-secondary btn-sm" onclick="openTemplateModal(' + t.id + ')">Upravit</button></td>' +
+        '</tr>'
+      )).join('');
+    }
+    window.openTemplateModal = async function(id) {
+      let tpl = { code: '', name: '', language: 'ZPL', width_mm: 60, height_mm: 20, body: '^XA\n\n^XZ', description: '', is_active: true };
+      if (id) {
+        const r = await api('GET', '/api/print/templates/' + id);
+        if (r.status !== 200) return alert('Nelze načíst šablonu');
+        tpl = r.data;
+      }
+      document.getElementById('modal-root').innerHTML = (
+        '<div class="modal-overlay" onclick="if(event.target===this)closeModal()">' +
+          '<div class="modal wide">' +
+            '<h2>' + (id ? 'Upravit šablonu' : 'Nová šablona') + '</h2>' +
+            '<div class="modal-grid2">' +
+              fieldText('Kód (unikátní)', 't-code', tpl.code) +
+              fieldText('Název', 't-name', tpl.name) +
+              fieldNumber('Šířka (mm)', 't-w', tpl.width_mm) +
+              fieldNumber('Výška (mm)', 't-h', tpl.height_mm) +
+            '</div>' +
+            '<div class="template-editor-grid" style="margin-top:14px;">' +
+              '<div>' +
+                '<label style="color:var(--text2);font-size:0.88em;">ZPL tělo šablony (použij {{placeholder}}):</label>' +
+                '<textarea id="t-body" oninput="renderPreview()">' + escapeHtml(tpl.body) + '</textarea>' +
+              '</div>' +
+              '<div>' +
+                '<label style="color:var(--text2);font-size:0.88em;">Náhled (Labelary):</label>' +
+                '<div class="template-preview-box" id="t-preview">' +
+                  '<div class="placeholder-hint">Napiš ZPL vlevo → náhled se obnoví</div>' +
+                '</div>' +
+              '</div>' +
+            '</div>' +
+            '<div class="modal-row" style="margin-top:14px;">' +
+              '<label>Popis</label>' +
+              '<textarea id="t-desc" rows="2">' + escapeHtml(tpl.description || '') + '</textarea>' +
+            '</div>' +
+            '<div class="modal-actions">' +
+              '<button class="btn btn-secondary" onclick="closeModal()">Zrušit</button>' +
+              '<button class="btn btn-primary" onclick="saveTemplate(' + (id || 'null') + ')">Uložit</button>' +
+            '</div>' +
+          '</div>' +
+        '</div>'
+      );
+      renderPreview();
+    };
+    let previewTimer = null;
+    window.renderPreview = function() {
+      clearTimeout(previewTimer);
+      previewTimer = setTimeout(doRenderPreview, 400);
+    };
+    async function doRenderPreview() {
+      const body = document.getElementById('t-body').value;
+      const w = Number(document.getElementById('t-w').value) || 60;
+      const h = Number(document.getElementById('t-h').value) || 20;
+      // Substituce placeholderů — názornou hodnotou
+      const demo = body.replace(/\{\{\s*([\w.-]+)\s*\}\}/g, (_, k) => k.toUpperCase());
+      // Labelary: 8dpmm = 203 DPI, rozměry v inch
+      const wIn = (w / 25.4).toFixed(2), hIn = (h / 25.4).toFixed(2);
+      const box = document.getElementById('t-preview');
+      box.innerHTML = '<div class="placeholder-hint">Načítám náhled…</div>';
+      try {
+        const res = await fetch('https://api.labelary.com/v1/printers/8dpmm/labels/' + wIn + 'x' + hIn + '/0/', {
+          method: 'POST', headers: { 'Accept': 'image/png', 'Content-Type': 'application/x-www-form-urlencoded' }, body: demo,
+        });
+        if (!res.ok) throw new Error('Labelary ' + res.status);
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        box.innerHTML = '<img src="' + url + '" alt="preview">';
+      } catch (e) {
+        box.innerHTML = '<div class="placeholder-hint">Náhled nedostupný: ' + escapeHtml(e.message) + '</div>';
+      }
+    }
+    window.saveTemplate = async function(id) {
+      const body = {
+        code: val('t-code'),
+        name: val('t-name'),
+        language: 'ZPL',
+        width_mm: Number(val('t-w')),
+        height_mm: Number(val('t-h')),
+        body: val('t-body'),
+        description: val('t-desc') || null,
+        is_active: true,
+      };
+      const r = id ? await api('PATCH', '/api/print/templates/' + id, body)
+                   : await api('POST', '/api/print/templates', body);
+      if (r.status !== 200 && r.status !== 201) return alert('Chyba: ' + JSON.stringify(r.data?.error || r.status));
+      closeModal(); loadTemplates();
+    };
+
+    // =========================================================================
+    // PRINT JOBS
+    // =========================================================================
+    window.loadJobs = async function() {
+      const status = document.getElementById('jobs-status-filter')?.value || '';
+      const q = status ? ('?status=' + status) : '';
+      const r = await api('GET', '/api/print/jobs' + q);
+      const tbody = document.querySelector('#jobs-table tbody');
+      if (r.status !== 200) {
+        tbody.innerHTML = '<tr><td colspan="6" class="empty-hint">Chyba načítání.</td></tr>';
+        return;
+      }
+      if (r.data.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="empty-hint">Žádné záznamy.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = r.data.map(j => (
+        '<tr>' +
+          '<td>' + formatDate(j.created_at) + '</td>' +
+          '<td>' + escapeHtml(j.template?.code || '—') + '</td>' +
+          '<td>' + escapeHtml(j.printer?.name || '—') + '</td>' +
+          '<td>' + j.copies + '</td>' +
+          '<td><span class="status-badge ' + j.status + '">' + j.status + '</span></td>' +
+          '<td style="color:#ef4444;font-size:0.85em;">' + escapeHtml(j.error || '') + '</td>' +
+        '</tr>'
+      )).join('');
+    };
+
+    // =========================================================================
+    // QUICK PRINT (tab 4)
+    // =========================================================================
+    let qSelectedMaterial = null;
+    let qTemplates = [];
+    let qPrinters = [];
+    let qSearchTimer = null;
+
+    async function loadQuickPrint() {
+      // Načti šablony + tiskárny (jen aktivní) do dropdownů
+      if (qTemplates.length === 0) {
+        const tr = await api('GET', '/api/print/templates');
+        qTemplates = (tr.data || []).filter(t => t.is_active);
+      }
+      if (qPrinters.length === 0) {
+        const pr = await api('GET', '/api/print/printers');
+        qPrinters = (pr.data || []).filter(p => p.is_active);
+      }
+      const tplSel = document.getElementById('q-template');
+      tplSel.innerHTML = qTemplates.map(t =>
+        '<option value="' + t.code + '">' + escapeHtml(t.code) + ' — ' + escapeHtml(t.name) + '</option>'
+      ).join('');
+      // Default = item_label pokud existuje
+      if (qTemplates.some(t => t.code === 'item_label')) tplSel.value = 'item_label';
+
+      const prnSel = document.getElementById('q-printer');
+      prnSel.innerHTML = '<option value="">— automaticky (nejvyšší priorita) —</option>' +
+        qPrinters.map(p => '<option value="' + p.id + '">' + escapeHtml(p.name) + '</option>').join('');
+    }
+
+    window.qSearchDebounced = function() {
+      clearTimeout(qSearchTimer);
+      qSearchTimer = setTimeout(qSearch, 300);
+    };
+    async function qSearch() {
+      const q = document.getElementById('q-search').value.trim();
+      const box = document.getElementById('q-results');
+      if (!q) { box.innerHTML = ''; return; }
+
+      // 1. Pokud vypadá jako unikátní barcode (hodnota z QR), zkus přímo lookup by-qr
+      const qrRes = await api('GET', '/api/wh/items/by-qr/' + encodeURIComponent(q));
+      if (qrRes.status === 200) {
+        box.innerHTML = renderQResultRow(qrRes.data, true);
+        qSelectMaterial(qrRes.data);  // auto-select při přímém QR
+        return;
+      }
+      // 2. Jinak fulltext search přes materiály
+      const sr = await fetch('/api/wh/materials?search=' + encodeURIComponent(q) + '&limit=20', {
+        credentials: 'include', headers: authHeaders(),
+      });
+      const materials = sr.ok ? await sr.json() : [];
+      if (materials.length === 0) {
+        box.innerHTML = '<div class="empty-hint">Žádné výsledky.</div>';
+        return;
+      }
+      box.innerHTML = materials.map(m => renderQResultRow(m, false)).join('');
+    }
+
+    function renderQResultRow(m, isExact) {
+      const bc = m.barcode ? '<span class="inline-code">' + escapeHtml(m.barcode) + '</span>' : '';
+      const icon = isExact ? '✓ ' : '';
+      return (
+        '<div class="printer-card" style="cursor:pointer;padding:12px;" onclick="qSelectMaterialById(' + m.id + ')">' +
+          '<div>' +
+            '<div class="printer-name">' + icon + escapeHtml(m.name) + '</div>' +
+            '<div class="printer-meta">SKU: ' + escapeHtml(m.code) + '  ' + bc + (m.unit ? ' · ' + m.unit : '') +
+              '  · skladem: ' + Number(m.current_stock || 0) + '</div>' +
+          '</div>' +
+        '</div>'
+      );
+    }
+
+    window.qSelectMaterialById = async function(id) {
+      const r = await fetch('/api/wh/materials/' + id, { credentials: 'include', headers: authHeaders() });
+      if (!r.ok) return;
+      const m = await r.json();
+      qSelectMaterial(m);
+    };
+
+    function qSelectMaterial(m) {
+      qSelectedMaterial = m;
+      document.getElementById('q-selected').innerHTML =
+        '<div style="color: var(--text);"><b>' + escapeHtml(m.name) + '</b></div>' +
+        '<div class="printer-meta" style="margin-top: 4px;">SKU: ' + escapeHtml(m.code) +
+        (m.barcode ? '  QR: <span class="inline-code">' + escapeHtml(m.barcode) + '</span>' : '') + '</div>';
+      document.getElementById('q-print-btn').disabled = false;
+      qUpdatePreview();
+    }
+
+    window.qUpdatePreview = async function() {
+      if (!qSelectedMaterial) return;
+      const code = document.getElementById('q-template').value;
+      const tpl = qTemplates.find(t => t.code === code);
+      if (!tpl) return;
+
+      // Data pro substituci: složené z vlastností materiálu + nejčastějších polí
+      const data = {
+        barcode: qSelectedMaterial.barcode || '',
+        code: qSelectedMaterial.code || '',
+        name: qSelectedMaterial.name || '',
+        unit: qSelectedMaterial.unit || '',
+      };
+      // Náhrada placeholderů
+      let body = tpl.body;
+      Object.keys(data).forEach(k => {
+        body = body.replace(new RegExp('\\{\\{\\s*' + k + '\\s*\\}\\}', 'g'), data[k] || '');
+      });
+      // Zbývající nevyplněné placeholdery
+      body = body.replace(/\{\{\s*([\w.-]+)\s*\}\}/g, '');
+
+      const wIn = (tpl.width_mm / 25.4).toFixed(2);
+      const hIn = (tpl.height_mm / 25.4).toFixed(2);
+      const box = document.getElementById('q-preview');
+      box.innerHTML = '<div class="placeholder-hint">Načítám náhled…</div>';
+      try {
+        const res = await fetch('https://api.labelary.com/v1/printers/8dpmm/labels/' + wIn + 'x' + hIn + '/0/', {
+          method: 'POST', headers: { 'Accept': 'image/png' }, body,
+        });
+        if (!res.ok) throw new Error('Labelary ' + res.status);
+        const blob = await res.blob();
+        box.innerHTML = '<img src="' + URL.createObjectURL(blob) + '">';
+      } catch (e) {
+        box.innerHTML = '<div class="placeholder-hint">Náhled nedostupný: ' + escapeHtml(e.message) + '</div>';
+      }
+    };
+
+    window.qPrintNow = async function() {
+      if (!qSelectedMaterial) return;
+      const btn = document.getElementById('q-print-btn');
+      btn.disabled = true;
+      btn.textContent = 'Odesílám…';
+      const body = {
+        template: document.getElementById('q-template').value,
+        data: {
+          barcode: qSelectedMaterial.barcode || '',
+          code: qSelectedMaterial.code || '',
+          name: qSelectedMaterial.name || '',
+          unit: qSelectedMaterial.unit || '',
+        },
+        copies: Number(document.getElementById('q-copies').value) || 1,
+      };
+      const pid = document.getElementById('q-printer').value;
+      if (pid) body.printer_id = Number(pid);
+
+      const r = await api('POST', '/api/print', body);
+      const box = document.getElementById('q-result');
+      if (r.status === 200) {
+        box.innerHTML = '<div class="test-result ok">✓ Odesláno. Job #' + r.data.id + ' na tiskárnu id=' + r.data.printer_id + '</div>';
+      } else {
+        box.innerHTML = '<div class="test-result fail">✗ ' + escapeHtml(r.data?.error || String(r.status)) + '</div>';
+      }
+      btn.disabled = false;
+      btn.textContent = 'Tisknout';
+    };
+
+    // =========================================================================
+    // Helpers
+    // =========================================================================
+    function val(id) { return document.getElementById(id).value; }
+    function closeModal() { document.getElementById('modal-root').innerHTML = ''; }
+    window.closeModal = closeModal;
+    function escapeHtml(s) {
+      return String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+    }
+    function formatDate(iso) {
+      if (!iso) return '';
+      return new Date(iso).toLocaleString('cs-CZ');
+    }
+    function fieldText(label, id, value) {
+      return '<div class="modal-row"><label>' + label + '</label><input type="text" id="' + id + '" value="' + escapeHtml(value) + '"></div>';
+    }
+    function fieldNumber(label, id, value) {
+      return '<div class="modal-row"><label>' + label + '</label><input type="number" id="' + id + '" value="' + (value ?? '') + '"></div>';
+    }
+    function fieldCheckbox(label, id, value) {
+      return '<div class="modal-row"><label style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="' + id + '"' + (value ? ' checked' : '') + '> ' + label + '</label></div>';
+    }
+    function fieldSelect(label, id, value, options, rawOptions) {
+      const opts = rawOptions || (options || []).map(([v, t]) => '<option value="' + v + '"' + (v === value ? ' selected' : '') + '>' + escapeHtml(t) + '</option>').join('');
+      return '<div class="modal-row"><label>' + label + '</label><select id="' + id + '">' + opts + '</select></div>';
+    }
+
+    // Init
+    loadPrinters();
+  })();
+  </script>
+</body>
+</html>

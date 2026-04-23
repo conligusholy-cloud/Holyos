@@ -1,0 +1,129 @@
+Sklad 2.0 — PWA čtečka, centralizovaný tisk, skladové doklady a dávky
+
+Kompletní implementace fází 1–3 briefu sklad-2-pwa-tisk (duben 2026).
+Nahrazuje Factorify, HolyOS se stává jediným zdrojem pravdy pro sklady,
+pohyby, tisk ZPL etiket a picking.
+
+DATOVÝ MODEL
+
+Schema (prisma/schema.prisma) je rozšířeno v předchozím commitu — tento
+commit přidává pouze migrační soubor a navazující kód.
+
+Souhrn změn schématu (už v HEAD):
+- Material: sector (vyroba/stavba/servis/eshop/pradelna), unique barcode,
+  back-refs na stock a batch_items.
+- WarehouseLocation: type, locked_for_inventory, unique barcode,
+  back-refs.
+- InventoryMovement: from/to_location_id, document_id, client_uuid UUID
+  @unique pro offline dedup z PWA, device_id, rozšířený enum type.
+
+Nové tabulky (už v HEAD):
+- stock, warehouse_documents, batches + batch_items,
+  printers, label_templates, print_jobs.
+
+Migrace 20260423143720_sklad_2_pwa_tisk je v tomto commitu — na Railway
+DB byla aplikována přes prisma migrate diff + db execute + migrate
+resolve (migrate dev selhává kvůli shadow DB a rozbité migrační historii).
+
+BACKEND
+
+services/print/
+- zpl-renderer.js — substituce {{placeholder}} s escapem ^ a ~
+- tsc-driver.js — čistý TCP socket (ping, sendZpl), bez ACK, timeout
+- print.service.js — orchestrátor: autoselekce tiskárny
+  (printer_id → location_id → priority), render, zápis print_job, send,
+  update statusu a last_ping_ok
+
+services/warehouse/
+- moves.service.js — createMove s idempotentním client_uuid dedup,
+  transakční update stock tabulky, backward-compat Material.current_stock,
+  validace typ vs. lokace (receipt/issue/transfer/pick/adjustment)
+- documents.service.js — generátor číselných řad PR/VY/PS/PI/IN-YYYY-NNNNN,
+  complete/cancel dokumentů
+- batches.service.js — createBatch s items, pickBatchItem s auto-done
+  po posledním picku (picked/short/skipped statusy)
+- inventory-v2.service.js — lockLocations, unlockLocations,
+  finishInventoryWithAdjust (vygeneruje inventory_adjust pohyby pro
+  rozdíly, čímž srovná Stock i current_stock)
+
+routes/print.routes.js — namespace /api/print
+- CRUD tiskáren + test, CRUD šablon, POST /api/print (hlavní endpoint),
+  historie print_jobs, Zod validace, audit log přes services/audit
+
+routes/warehouse-v2.routes.js — namespace /api/wh (za legacy router)
+- POST/GET /moves s client_uuid idempotence a X-Device-Id hlavičkou
+- GET /items/by-qr/:code, /locations/by-qr/:code
+- GET /sync/materials (delta), /sync/locations (full)
+- CRUD /documents + /complete /cancel
+- CRUD /batches + /:id/pick + /:id/complete
+- /inventories/:id/lock-locations, unlock-locations, finish-v2
+- resolvePersonIdForUser helper (User → Person mapping)
+
+Mount v app.js: /api/print → printRoutes, /api/wh → warehouseV2Routes.
+
+MCP warehouse-server rozšířen z 3 na 10 tools:
+- search_materials, lookup_material_by_qr, lookup_location_by_qr,
+  create_move, list_batches, list_documents, print_label (nové)
+- stock_check, list_orders, list_companies (legacy, ponecháno)
+
+WEB UI (vanilla JS, HolyOS styl)
+
+modules/tiskarny/ — 4 taby:
+- Tiskárny: seznam s ping indikátorem (zelená/červená tečka podle
+  last_ping_ok < 5 min), wizard přidání (preset TSC_TC200), test (ping
+  + volitelně etiketa), CRUD
+- Šablony etiket: editor ZPL + živý PNG preview přes Labelary API
+  (api.labelary.com, CORS povoleno, 400ms debounce)
+- Rychlý tisk: QR search (auto-select při přímém hit přes /items/by-qr/),
+  fulltext fallback, tiskárna autoselect, live preview s vyplněnými daty
+- Historie tisků: seznam s filtrem stavu
+
+modules/doklady/
+- Seznam s filtry (typ, stav), barevné badge pro typy PR/VY/PS/PI/IN,
+  detail s tabulkou pohybů (z lokace → na lokaci), tvorba draftu
+  s partner dropdown (companies), complete/cancel akce
+
+modules/davky/
+- Seznam s filtry (stav, sektor), progress bar v detailu,
+  tvorba s dynamickými řádky (+ Přidat řádek, odebrat), detail
+  s Pick/Skip akcí per položka, auto-done po posledním picku
+
+Registrace v js/sidebar.js: 4 nové položky (Tiskárny, Skladové doklady,
+Pickovací dávky).
+
+TESTOVACÍ SKRIPTY
+
+scripts/check-sklad2-preflight.js — pre-flight kontrola před migrací
+(duplikátní barcode, prázdné stringy)
+scripts/backup-sklad2.js — JSON záloha skladových tabulek
+scripts/migrate-sklad2.ps1 — generuje prisma migrate diff bez shadow DB,
+  zapisuje bez BOM přes .NET UTF8Encoding(false)
+scripts/apply-sklad2-migration.js — prisma db execute + migrate resolve
+  + generate, s detekcí a odstraněním BOM z migration.sql
+scripts/seed-sklad2.js — 3 ZPL šablony + 2 Factorify tiskárny, smoke test
+scripts/test-print.js — ZPL render, TCP ping, fyzický tisk
+scripts/test-moves.js — 10 asertů (transakce, dedup)
+scripts/test-docs-batches.js — 21 asertů (řady, statusy, auto-done)
+scripts/test-inventory-v2.js — 15 asertů (lock, finish, adjust)
+scripts/test-api-e2e.js — 35 asertů přes HTTP s JWT
+scripts/test-mcp-warehouse.js — 27 asertů přes in-process MCP exekutor
+
+Celkem 108 passing testů, fyzický tisk ověřen na Tiskárna Rychnov
+(90.183.16.242:55985) a Tiskárna RK CNC (:55986).
+
+DOKUMENTACE
+
+docs/warehouse-openapi.yaml — OpenAPI 3.1 s 21 cestami a 15 schématy
+(Sync, Lookup, Moves, Documents, Batches, Inventory, Print)
+docs/warehouse-migration-runbook.md — 5-krokový plán s pre-flight SQL,
+  zálohou, migrací, seedem, smoke testem a rollbackem
+docs/COMMIT_MSG.txt — tento soubor
+
+ODLOŽENÉ (po MVP)
+
+- Sériová čísla pro servis (save_sn_first_scan už v Material)
+- Šarže s expirací (MaterialLot tabulka)
+- FIFO ocenění (stock layers)
+- E-shop integrace pro automatický generování pick listů
+- Inline tlačítko Tisknout v modules/nakup-sklad/
+- PWA skeleton (Fáze 4)
