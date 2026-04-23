@@ -3,16 +3,20 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import Numpad, { parseNumpad } from '../components/Numpad';
-import { getInventory, updateInventoryItem, numberOrZero, type InventoryItem } from '../api/inventory';
+import { getInventory, numberOrZero, type InventoryItem } from '../api/inventory';
 import { ApiError } from '../api/client';
 import { useBarcodeScanner } from '../hooks/useBarcodeScanner';
 import { lookupMaterialByQr, NotFoundError } from '../sync/lookup';
+import { enqueueInventoryCount } from '../db/inventoryQueueRepo';
+import { useSync } from '../sync/SyncContext';
 
 export default function InventoryCountPage() {
   const navigate = useNavigate();
   const { id, itemId } = useParams<{ id: string; itemId: string }>();
   const invId = Number(id);
   const invItemId = Number(itemId);
+
+  const { stats, flushQueue, refreshStats } = useSync();
 
   const [item, setItem] = useState<InventoryItem | null>(null);
   const [raw, setRaw] = useState('');
@@ -80,7 +84,17 @@ export default function InventoryCountPage() {
     setSaving(true);
     setError(null);
     try {
-      await updateInventoryItem(invId, invItemId, { actual_qty: value });
+      // Zapiš do offline queue. Pokud jsme online, flushQueue je okamžitě pošle
+      // na backend; pokud offline, zůstanou ve frontě a odejdou při návratu.
+      await enqueueInventoryCount({
+        inventory_id: invId,
+        item_id: invItemId,
+        actual_qty: value,
+      });
+      await refreshStats();
+      if (stats.online) {
+        await flushQueue();
+      }
       navigate(`/inventory/${invId}`);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Uložení selhalo');

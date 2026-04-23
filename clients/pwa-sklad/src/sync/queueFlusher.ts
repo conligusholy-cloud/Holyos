@@ -1,13 +1,18 @@
-// HolyOS PWA — flusher pending pohybů na /api/wh/moves.
+// HolyOS PWA — flusher pending operací v offline queues.
 //
-// Kontrakty:
-//   - 201 Created  :: nový pohyb, backend vrátil svůj id
-//   - 200 OK       :: dedup hit (stejný client_uuid už dřív prošel), body má
-//                     `_deduped: true`; ze strany PWA to je OK stejně jako 201.
-//   - 400          :: validační / business chyba → markFailed (neposílat znovu,
-//                     dokud uživatel v debug UI nezopakuje ručně)
-//   - 401          :: apiFetch auto-loguje uživatele; record zůstane pending
-//   - 0 (síť) / 5xx:: revertToPending, další flush to zkusí znovu
+// Tři queues:
+//   - write_queue (moves)       → POST /api/wh/moves
+//   - inventory_queue (counts)  → PUT /api/wh/inventories/:invId/items/:itemId
+//   - pick_queue (picks)        → POST /api/wh/batches/:id/pick
+//
+// Kontrakty flushe:
+//   - 2xx          :: markSynced
+//   - 400          :: markFailed (neposílat znovu, dokud user neretrue ručně)
+//   - 401          :: apiFetch auto-logout; zůstane pending (pokračuje po loginu)
+//   - 0 (síť)/5xx  :: revertToPending, další flush to zkusí
+//
+// Pořadí flush je moves → inventory → pick — pohyby nejdřív aby stock byl
+// konzistentní pro následné inventury/picky.
 
 import { ApiError, apiFetch } from '../api/client';
 import {
@@ -17,7 +22,21 @@ import {
   markSyncing,
   revertToPending,
 } from '../db/queueRepo';
-import type { QueuedMove } from '../db/schema';
+import {
+  listInventoryPending,
+  markInventoryFailed,
+  markInventorySynced,
+  markInventorySyncing,
+  revertInventoryToPending,
+} from '../db/inventoryQueueRepo';
+import {
+  listPickPending,
+  markPickFailed,
+  markPickSynced,
+  markPickSyncing,
+  revertPickToPending,
+} from '../db/pickQueueRepo';
+import type { QueuedInventoryCount, QueuedMove, QueuedPick } from '../db/schema';
 
 interface MoveResponse {
   id: number;
@@ -88,6 +107,81 @@ async function flushOne(move: QueuedMove): Promise<'synced' | 'deduped' | 'faile
   }
 }
 
+// ---------- Inventury --------------------------------------------------------
+
+async function flushInventory(record: QueuedInventoryCount): Promise<'synced' | 'failed' | 'retrying'> {
+  await markInventorySyncing(record.client_uuid);
+  try {
+    await apiFetch(
+      `/api/wh/inventories/${record.inventory_id}/items/${record.item_id}`,
+      {
+        method: 'PUT',
+        body: { actual_qty: record.actual_qty },
+      }
+    );
+    await markInventorySynced(record.client_uuid);
+    return 'synced';
+  } catch (err) {
+    if (err instanceof ApiError) {
+      if (err.status === 0 || err.status >= 500) {
+        await revertInventoryToPending(record.client_uuid, err.message);
+        return 'retrying';
+      }
+      if (err.status === 401) {
+        await revertInventoryToPending(record.client_uuid, 'Nepřihlášen');
+        return 'retrying';
+      }
+      await markInventoryFailed(record.client_uuid, err.message);
+      return 'failed';
+    }
+    await revertInventoryToPending(
+      record.client_uuid,
+      err instanceof Error ? err.message : 'Neznámá chyba'
+    );
+    return 'retrying';
+  }
+}
+
+// ---------- Picks ------------------------------------------------------------
+
+async function flushPick(record: QueuedPick): Promise<'synced' | 'failed' | 'retrying'> {
+  await markPickSyncing(record.client_uuid);
+  try {
+    await apiFetch(`/api/wh/batches/${record.batch_id}/pick`, {
+      method: 'POST',
+      body: {
+        batch_item_id: record.batch_item_id,
+        picked_quantity: record.picked_quantity,
+        from_location_id: record.from_location_id ?? undefined,
+        client_uuid: record.client_uuid,
+        note: record.note ?? undefined,
+      },
+    });
+    await markPickSynced(record.client_uuid);
+    return 'synced';
+  } catch (err) {
+    if (err instanceof ApiError) {
+      if (err.status === 0 || err.status >= 500) {
+        await revertPickToPending(record.client_uuid, err.message);
+        return 'retrying';
+      }
+      if (err.status === 401) {
+        await revertPickToPending(record.client_uuid, 'Nepřihlášen');
+        return 'retrying';
+      }
+      await markPickFailed(record.client_uuid, err.message);
+      return 'failed';
+    }
+    await revertPickToPending(
+      record.client_uuid,
+      err instanceof Error ? err.message : 'Neznámá chyba'
+    );
+    return 'retrying';
+  }
+}
+
+// ---------- Orchestrátor -----------------------------------------------------
+
 let running = false;
 
 export async function flushPending(): Promise<FlushResult> {
@@ -98,18 +192,32 @@ export async function flushPending(): Promise<FlushResult> {
   }
   running = true;
   try {
-    const pending = await listPending();
-    const result: FlushResult = {
-      attempted: pending.length,
-      synced: 0,
-      deduped: 0,
-      failed: 0,
-      retrying: 0,
-    };
-    for (const move of pending) {
+    const result: FlushResult = { attempted: 0, synced: 0, deduped: 0, failed: 0, retrying: 0 };
+
+    // 1) Moves — stock musí být čerstvý před inventurou/pickingem
+    const moves = await listPending();
+    result.attempted += moves.length;
+    for (const move of moves) {
       const outcome = await flushOne(move);
       result[outcome]++;
     }
+
+    // 2) Inventura
+    const counts = await listInventoryPending();
+    result.attempted += counts.length;
+    for (const count of counts) {
+      const outcome = await flushInventory(count);
+      result[outcome]++;
+    }
+
+    // 3) Picking
+    const picks = await listPickPending();
+    result.attempted += picks.length;
+    for (const pick of picks) {
+      const outcome = await flushPick(pick);
+      result[outcome]++;
+    }
+
     return result;
   } finally {
     running = false;

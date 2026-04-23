@@ -19,6 +19,8 @@ import { useAuth } from '../auth/AuthContext';
 import { useOnlineStatus } from '../hooks/useOnlineStatus';
 import { countLocations, countMaterials } from '../db/catalogRepo';
 import { countByStatus } from '../db/queueRepo';
+import { countInventoryByStatus } from '../db/inventoryQueueRepo';
+import { countPickByStatus } from '../db/pickQueueRepo';
 import { getAllMeta } from '../db/metaRepo';
 import { pullCatalog, type CatalogSyncResult } from './catalogSync';
 import { flushPending, type FlushResult } from './queueFlusher';
@@ -69,20 +71,30 @@ export function SyncProvider({ children }: { children: ReactNode }) {
 
   const refreshStats = useCallback(async () => {
     try {
-      const [pendingCount, failedCount, syncingCount, materialsCount, locationsCount, meta] =
-        await Promise.all([
-          countByStatus('pending'),
-          countByStatus('failed'),
-          countByStatus('syncing'),
-          countMaterials(),
-          countLocations(),
-          getAllMeta(),
-        ]);
+      const [
+        movePending, moveFailed, moveSyncing,
+        invPending, invFailed, invSyncing,
+        pickPending, pickFailed, pickSyncing,
+        materialsCount, locationsCount, meta,
+      ] = await Promise.all([
+        countByStatus('pending'),
+        countByStatus('failed'),
+        countByStatus('syncing'),
+        countInventoryByStatus('pending'),
+        countInventoryByStatus('failed'),
+        countInventoryByStatus('syncing'),
+        countPickByStatus('pending'),
+        countPickByStatus('failed'),
+        countPickByStatus('syncing'),
+        countMaterials(),
+        countLocations(),
+        getAllMeta(),
+      ]);
       setStats({
         online,
-        pendingCount,
-        failedCount,
-        syncingCount,
+        pendingCount: movePending + invPending + pickPending,
+        failedCount: moveFailed + invFailed + pickFailed,
+        syncingCount: moveSyncing + invSyncing + pickSyncing,
         materialsCount,
         locationsCount,
         lastMaterialsSync: meta.last_materials_sync ?? null,
