@@ -21,7 +21,7 @@ const { prisma } = require('../config/database');
 const { requireAuth } = require('../middleware/auth');
 const { createMove, resolvePersonIdForUser, MOVE_TYPES } = require('../services/warehouse/moves.service');
 const { createDocument, completeDocument, cancelDocument, DOC_TYPES } = require('../services/warehouse/documents.service');
-const { createBatch, pickBatchItem, completeBatch, BATCH_STATUS } = require('../services/warehouse/batches.service');
+const { createBatch, pickBatchItem, pickBatchItemMultiLot, completeBatch, BATCH_STATUS } = require('../services/warehouse/batches.service');
 const { lockLocations, unlockLocations, finishInventoryWithAdjust } = require('../services/warehouse/inventory-v2.service');
 const serialNumbersService = require('../services/warehouse/serial-numbers.service');
 const lotsService = require('../services/warehouse/lots.service');
@@ -416,6 +416,52 @@ router.post('/batches/:id/pick', async (req, res, next) => {
     if (err.message?.includes('neexistuje')) return res.status(404).json({ error: err.message });
     if (err.message?.includes('Dávka je ve stavu')) return res.status(409).json({ error: err.message });
     if (err.message?.includes('Chybí from_location_id') || err.message?.includes('nepatří')) {
+      return res.status(400).json({ error: err.message });
+    }
+    next(err);
+  }
+});
+
+// POST /api/wh/batches/:id/pick-split — rozdělený pick přes víc šarží
+const pickSplitInputSchema = z.object({
+  batch_item_id: z.number().int().positive(),
+  client_uuid_prefix: z.string().uuid(),
+  note: z.string().nullable().optional(),
+  splits: z.array(
+    z.object({
+      lot_id: z.number().int().positive(),
+      quantity: z.number().positive(),
+      from_location_id: z.number().int().positive().nullable().optional(),
+    })
+  ).min(1),
+});
+
+router.post('/batches/:id/pick-split', async (req, res, next) => {
+  try {
+    const batch_id = Number(req.params.id);
+    const input = pickSplitInputSchema.parse(req.body);
+    const person_id = await resolvePersonIdForUser(req.user);
+    const result = await pickBatchItemMultiLot({
+      batch_id,
+      batch_item_id: input.batch_item_id,
+      splits: input.splits,
+      client_uuid_prefix: input.client_uuid_prefix,
+      device_id: req.get('X-Device-Id') || null,
+      user_person_id: person_id,
+      note: input.note,
+    });
+    res.json(result);
+  } catch (err) {
+    if (err.name === 'ZodError') return res.status(400).json({ error: err.errors });
+    if (err.message?.includes('neexistuje')) return res.status(404).json({ error: err.message });
+    if (err.message?.includes('Dávka je ve stavu')) return res.status(409).json({ error: err.message });
+    if (
+      err.message?.includes('splits') ||
+      err.message?.includes('musí být') ||
+      err.message?.includes('Chybí') ||
+      err.message?.includes('UUID') ||
+      err.message?.includes('lot_id')
+    ) {
       return res.status(400).json({ error: err.message });
     }
     next(err);

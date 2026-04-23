@@ -1,10 +1,12 @@
 // HolyOS PWA — scan step (materiál nebo lokace).
 
-import { useState, type FormEvent } from 'react';
-import CameraScanner from '../CameraScanner';
+import { lazy, Suspense, useState, type FormEvent } from 'react';
 import { useBarcodeScanner } from '../../hooks/useBarcodeScanner';
 import { lookupLocationByQr, lookupMaterialByQr, NotFoundError } from '../../sync/lookup';
 import type { CachedLocation, CachedMaterial } from '../../db/schema';
+
+// Lazy — zxing bundle (~200 KB) se stáhne až uživatel klikne 📷 Kamera.
+const CameraScanner = lazy(() => import('../CameraScanner'));
 
 interface BaseProps {
   title: string;
@@ -135,11 +137,13 @@ export default function ScanStep(props: Props) {
       </div>
 
       {cameraOpen && (
-        <CameraScanner
-          title={target === 'material' ? 'Naskenujte materiál' : 'Naskenujte lokaci'}
-          onScan={handleCameraScan}
-          onClose={() => setCameraOpen(false)}
-        />
+        <Suspense fallback={<div className="camera-overlay"><div className="camera-hint">Načítám kameru…</div></div>}>
+          <CameraScanner
+            title={target === 'material' ? 'Naskenujte materiál' : 'Naskenujte lokaci'}
+            onScan={handleCameraScan}
+            onClose={() => setCameraOpen(false)}
+          />
+        </Suspense>
       )}
     </>
   );
