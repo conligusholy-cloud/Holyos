@@ -123,6 +123,23 @@ async function createMove(input) {
     throw new Error(`${input.type} vyžaduje kladné quantity`);
   }
 
+  // Lot status guard — pokud pohyb cílí na konkrétní šarži, ta musí být aktivní
+  // (in_stock / consumed). Expired nebo scrapped šarže nelze pohybovat;
+  // takové kusy musí být vyřazeny dedikovaným adjustment pohybem bez lot_id.
+  if (input.lot_id != null) {
+    const lot = await prisma.materialLot.findUnique({
+      where: { id: input.lot_id },
+      select: { id: true, status: true, lot_code: true, material_id: true },
+    });
+    if (!lot) throw new Error(`Šarže #${input.lot_id} neexistuje`);
+    if (lot.material_id !== input.material_id) {
+      throw new Error(`Šarže ${lot.lot_code} nepatří k materiálu #${input.material_id}`);
+    }
+    if (['expired', 'scrapped'].includes(lot.status)) {
+      throw new Error(`Šarže ${lot.lot_code} je ve stavu '${lot.status}', pohyb není povolen`);
+    }
+  }
+
   const deltas = deriveStockDeltas(input);
 
   return prisma.$transaction(async (tx) => {
