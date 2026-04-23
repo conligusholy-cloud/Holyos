@@ -4,6 +4,9 @@
   "version": "0.1.0",
   "type": "module",
   "description": "HolyOS — PWA klient pro SUNMI L2H/L3 čtečky (sklad 2.0)",
+  "engines": {
+    "node": ">=22.0.0"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",

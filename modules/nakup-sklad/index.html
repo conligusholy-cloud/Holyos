@@ -693,7 +693,10 @@
         html += '<td style="font-weight:600;color:' + (isLow ? '#ef4444' : '#10b981') + '">' + stock + (isLow ? ' ⚠️' : '') + '</td>';
         html += '<td>' + minStock + '</td>';
         html += '<td style="font-size:12px;color:var(--text2)">' + supplierName + '</td>';
-        html += '<td style="text-align:right"><button class="btn btn-danger btn-sm" onclick="event.stopPropagation();deleteMaterial(' + m.id + ')">✕</button></td>';
+        html += '<td style="text-align:right;white-space:nowrap">' +
+          '<button class="btn btn-secondary btn-sm" title="Vytisknout etiketu" onclick="event.stopPropagation();printMaterialLabel(' + m.id + ')" style="padding:4px 8px;margin-right:4px">🖨</button>' +
+          '<button class="btn btn-danger btn-sm" onclick="event.stopPropagation();deleteMaterial(' + m.id + ')">✕</button>' +
+          '</td>';
         html += '</tr>';
       }
       html += '</tbody></table></div>';
@@ -880,7 +883,12 @@
             '<div class="form-group full"><label>Poznámka</label><textarea name="description" rows="4">' + v('description') + '</textarea></div>' +
             '<div class="form-group full"><label>Poznámka pro výrobu</label><textarea name="production_note" rows="4">' + v('production_note') + '</textarea></div>' +
           '</div>' +
-        '<div class="modal-actions" style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border)"><button type="button" class="btn btn-secondary" onclick="closeModal()">Zrušit</button><button type="submit" class="btn btn-primary">' + (id?'Uložit':'Vytvořit') + '</button></div></form></div></div>';
+        '<div class="modal-actions" style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border);gap:8px">' +
+          (id ? '<button type="button" class="btn btn-secondary" onclick="printMaterialLabel(' + id + ')">🖨 Tisknout etiketu</button>' : '') +
+          '<div style="flex:1"></div>' +
+          '<button type="button" class="btn btn-secondary" onclick="closeModal()">Zrušit</button>' +
+          '<button type="submit" class="btn btn-primary">' + (id ? 'Uložit' : 'Vytvořit') + '</button>' +
+        '</div></form></div></div>';
     }
 
     // === UPLOAD FOTOGRAFIE ===
@@ -990,6 +998,57 @@
       if (!confirm('Smazat zboží?')) return;
       await fetch('/api/wh/materials/' + id, { method: 'DELETE' });
       loadMaterials(); loadStats();
+    }
+
+    // ============================================================
+    // TISK ETIKETY MATERIÁLU (inline)
+    // Volá POST /api/print s template=item_label; tiskárnu vybírá backend
+    // autoselektem (aktivní default, nebo podle location_id pokud dáme).
+    // ============================================================
+    async function printMaterialLabel(materialId, copies) {
+      let mat = null;
+      try {
+        const r = await fetch('/api/wh/materials/' + materialId);
+        if (!r.ok) throw new Error('Materiál nenalezen (' + r.status + ')');
+        mat = await r.json();
+      } catch (err) {
+        alert('Tisk selhal: ' + (err.message || err));
+        return;
+      }
+      if (copies == null) {
+        const answer = prompt('Počet kopií etikety?', '1');
+        if (answer == null) return;
+        copies = Math.max(1, Math.min(99, parseInt(answer) || 1));
+      }
+
+      try {
+        const r = await fetch('/api/print', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            template: 'item_label',
+            data: {
+              code: mat.code || '',
+              name: mat.name || '',
+              barcode: mat.barcode || mat.code || '',
+              unit: mat.unit || 'ks',
+              supplier: (mat.supplier && mat.supplier.name) || mat.supplier_name || '',
+            },
+            copies: copies,
+          }),
+        });
+        const data = await r.json().catch(function() { return {}; });
+        if (!r.ok) {
+          const msg = typeof data.error === 'string' ? data.error : ('HTTP ' + r.status);
+          alert('Tisk selhal: ' + msg);
+          return;
+        }
+        // Úspěch — minimalistický toast přes alert (aby bylo jasné, že job odešel)
+        const printerTxt = data.printer_id ? (' tiskárna #' + data.printer_id) : '';
+        alert('✓ Etiketa odeslána na tiskárnu' + printerTxt + ' (kopií: ' + copies + ')');
+      } catch (err) {
+        alert('Tisk selhal: ' + (err.message || err));
+      }
     }
 
     // ============================================================
