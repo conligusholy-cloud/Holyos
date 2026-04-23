@@ -145,6 +145,39 @@ async function main() {
   });
   ok(Number(lotBStockAfter.quantity) === 2, `lot-B stock po issue = 2 (je ${lotBStockAfter.quantity})`);
 
+  // [7b] Auto-FIFO: issue 2 ks bez lot_id — backend má vybrat lot-B (bližší expirace)
+  console.log('\n[7b] Auto-FIFO issue 2 ks bez lot_id (očekává lot-B)');
+  await createMove({
+    type: 'issue',
+    material_id: material.id,
+    warehouse_id: warehouse.id,
+    location_id: location.id,
+    quantity: 2,
+    note: 'Auto-FIFO smoke',
+  });
+  const lotBStockFinal = await prisma.stock.findFirst({
+    where: { material_id: material.id, location_id: location.id, lot_id: lotB.lot.id },
+  });
+  ok(Number(lotBStockFinal?.quantity ?? -1) === 0, `lot-B stock po auto-FIFO = 0 (je ${lotBStockFinal?.quantity ?? 'missing'})`);
+  const lotAStockStill = await prisma.stock.findFirst({
+    where: { material_id: material.id, location_id: location.id, lot_id: lotA.lot.id },
+  });
+  ok(Number(lotAStockStill?.quantity ?? -1) === 10, `lot-A stock netčen = 10 (je ${lotAStockStill?.quantity})`);
+
+  // [7c] Auto-FIFO — žádná single šarže nemá 15 ks
+  console.log('\n[7c] Auto-FIFO — žádná single šarže nemá 15 ks');
+  let fifoOverErr = null;
+  try {
+    await createMove({
+      type: 'issue',
+      material_id: material.id,
+      warehouse_id: warehouse.id,
+      location_id: location.id,
+      quantity: 15,
+    });
+  } catch (e) { fifoOverErr = e; }
+  ok(fifoOverErr && fifoOverErr.message.includes('šaržovaný'), `auto-FIFO odmítl overflow (${fifoOverErr?.message?.slice(0, 100)})`);
+
   // [8] Guard expired — markni lot-B jako expired, zkus pohyb → fail
   console.log('\n[8] Guard expired lot');
   await lotsService.changeLotStatus(lotB.lot.id, 'expired', 'test expired');
