@@ -97,6 +97,19 @@ export default defineConfig(({ mode }) => {
       outDir: 'dist',
       sourcemap: true,
       target: 'es2020',
+      // Split chunky pro rychlejší initial load + lepší cache reuse mezi deploy.
+      // react a scanner jsou stabilní, mění se zřídka — dostanou long-term cache.
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            react: ['react', 'react-dom', 'react-router-dom'],
+            scanner: ['@zxing/browser', '@zxing/library'],
+            idb: ['idb'],
+          },
+        },
+      },
+      // Zvýšení warning limitu, aby vite nepumpoval na rozumné chunky.
+      chunkSizeWarningLimit: 400,
     },
   };
 });

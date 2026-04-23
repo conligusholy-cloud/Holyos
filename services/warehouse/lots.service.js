@@ -310,6 +310,28 @@ async function changeLotStatus(id, newStatus, note) {
 }
 
 /**
+ * Hromadné markování prošlých šarží. Spustitelné z cronu / startupu / admin
+ * endpointu. Vrací počet šarží, které přešly z in_stock na expired.
+ *
+ * Záměr: držet dashboard čistý a automaticky markovat, že materiál už nesmí
+ * být vyskladněn (UI může takové lots skrýt, backend by měl blokovat pick
+ * z expired lotu — to zatím nemáme, ale listFifoCandidates je respektuje).
+ */
+async function sweepExpiredLots({ cutoff } = {}) {
+  const atMoment = cutoff ? new Date(cutoff) : new Date();
+  const result = await prisma.materialLot.updateMany({
+    where: {
+      status: 'in_stock',
+      expires_at: { not: null, lt: atMoment },
+    },
+    data: {
+      status: 'expired',
+    },
+  });
+  return { marked: result.count, at: atMoment.toISOString() };
+}
+
+/**
  * FIFO výběr šarží pro picking — vrátí seřazený seznam in_stock šarží na
  * konkrétní lokaci, oldest expires_at first (šarže bez expirace jako poslední).
  * Caller pak odebírá postupně podle potřeby.
@@ -347,4 +369,5 @@ module.exports = {
   getExpiring,
   changeLotStatus,
   listFifoCandidates,
+  sweepExpiredLots,
 };

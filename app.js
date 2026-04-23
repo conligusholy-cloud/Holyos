@@ -592,8 +592,28 @@ async function ensureAdminUser() {
   }
 }
 
+// ─── Auto-expire šarží — denní sweep -------------------------------------
+// Při startu backendu + každých 24 h zkoukne MaterialLot s expires_at<now
+// a statusem in_stock a markne je jako expired. Žádná externí dependency,
+// setInterval stačí. Lze ručně spustit přes POST /api/wh/lots/sweep-expired.
+const SWEEP_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 h
+async function runExpiredLotsSweep() {
+  try {
+    const { sweepExpiredLots } = require('./services/warehouse/lots.service');
+    const res = await sweepExpiredLots();
+    if (res.marked > 0) {
+      console.log(`  🧹 Sweep expired lots: ${res.marked} šarží -> status 'expired' (${res.at})`);
+    }
+  } catch (err) {
+    console.error('  ⚠ Auto-expire lots sweep failed:', err.message);
+  }
+}
+
 app.listen(PORT, async () => {
   await ensureAdminUser();
+  // První sweep při startu (po migrace se nestane hned, ale po každém restartu ok)
+  runExpiredLotsSweep();
+  setInterval(runExpiredLotsSweep, SWEEP_INTERVAL_MS);
   console.log(`
   ╔══════════════════════════════════════════╗
   ║          HolyOS v0.5.0                   ║
