@@ -1249,7 +1249,15 @@
         const isBlocked = slot.status === 'blocked';
         const myAssign = slot.assignments ? slot.assignments.find(function(a) { return a.order_id === orderId; }) : null;
         const cls = myAssign ? 'mine' : (isFree ? 'free' : (isBlocked ? 'blocked' : 'occupied'));
-        const label = myAssign ? '✓' : (isFree ? 'Volný' : '');
+        // V obsazeném slotu, který patří této objednávce, zobrazíme výrobní číslo kiosku
+        // — je to hlavní identifikátor pro výrobu. Když není, fallback na ✓.
+        var serial = '';
+        if (myAssign) {
+          serial = (myAssign.order_item && myAssign.order_item.serial_number) || '';
+        }
+        const label = myAssign
+          ? (serial ? '<span style="font-family:monospace;font-size:11px;font-weight:700;">' + esc(serial) + '</span>' : '✓')
+          : (isFree ? 'Volný' : '');
 
         var click = '';
         if (isFree) {
@@ -1259,7 +1267,8 @@
             click = ' onclick="pickSlotForActiveItem(null,' + orderId + ',\'' + slot.start.toISOString() + '\',\'' + slot.end.toISOString() + '\')"';
           }
         }
-        html += '<div class="stl-cell"><div class="stl-slot ' + cls + '"' + click + '>' + label + '</div></div>';
+        const titleAttr = myAssign && serial ? ' title="Výrobní č. ' + esc(serial) + '"' : '';
+        html += '<div class="stl-cell"><div class="stl-slot ' + cls + '"' + click + titleAttr + '>' + label + '</div></div>';
       });
 
       // Today line
@@ -1346,7 +1355,7 @@
 
         let itemsHtml = '';
         if (order.items && order.items.length > 0) {
-          itemsHtml = '<table class="data-table"><thead><tr><th>Položka</th><th>Množství</th><th>Jednotka</th><th>Cena/ks</th><th>Celkem</th><th title="První den výrobního slotu — pro plánování výroby">🏭 Výroba od</th><th>Termín dodání</th><th title="Interní — pro výrobu a definici výbavy. Zákazník toto nevidí.">🔗 Výrobek</th>' + (isEditable ? '<th></th>' : '') + '</tr></thead><tbody>';
+          itemsHtml = '<table class="data-table"><thead><tr><th>Položka</th><th title="Výrobní číslo kiosku — viditelné i ve výrobních slotech">🔢 Výrobní č.</th><th>Množství</th><th>Jednotka</th><th>Cena/ks</th><th>Celkem</th><th title="První den výrobního slotu — pro plánování výroby">🏭 Výroba od</th><th>Termín dodání</th><th title="Interní — pro výrobu a definici výbavy. Zákazník toto nevidí.">🔗 Výrobek</th>' + (isEditable ? '<th></th>' : '') + '</tr></thead><tbody>';
           for (const it of order.items) {
             let configLine = '';
             if (itemConfigs[it.id]) {
@@ -1389,8 +1398,11 @@
               const nameBottom = nameParts.length > 1 ? esc(nameParts.slice(1).join(' ')) : '';
               const nameCell = '<span class="person-name">' + nameTop + '</span>' +
                 (nameBottom ? '<div style="font-size:11px;color:var(--text2);margin-top:2px;font-style:italic;">' + nameBottom + '</div>' : '');
+              // Výrobní číslo kiosku — editovatelné inline, bez přenačtení modalu
+              const serialCellEditable = '<input type="text" value="' + esc(it.serial_number || '') + '" placeholder="—" maxlength="100" style="width:120px;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:4px 8px;color:var(--text);font-size:12px;font-family:monospace;" onchange="updateOrderItemSerial(' + it.id + ',' + id + ',this.value,this)" title="Výrobní číslo kiosku (např. SN-2026-001)">';
               itemsHtml += '<tr>';
               itemsHtml += '<td>' + nameCell + configLine + '</td>';
+              itemsHtml += '<td>' + serialCellEditable + '</td>';
               itemsHtml += '<td style="font-weight:600;">1</td>'; // Vždy 1 ks — multiplikace řešena duplikací řádku
               itemsHtml += '<td>' + it.unit + '</td>';
               itemsHtml += '<td><input type="number" value="' + parseFloat(it.unit_price || 0) + '" step="0.01" style="width:90px;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:4px 8px;color:var(--text);font-size:13px;" onchange="updateOrderItem(' + it.id + ',' + id + ',\'unit_price\',this.value,1)"></td>';
@@ -1413,8 +1425,13 @@
               const nameBottom2 = nameParts2.length > 1 ? esc(nameParts2.slice(1).join(' ')) : '';
               const nameCell2 = '<span class="person-name">' + nameTop2 + '</span>' +
                 (nameBottom2 ? '<div style="font-size:11px;color:var(--text2);margin-top:2px;font-style:italic;">' + nameBottom2 + '</div>' : '');
+              // Výrobní číslo — jen zobrazit, zamčený stav
+              const serialCellLocked = it.serial_number
+                ? '<span style="font-family:monospace;font-size:12px;background:rgba(139,92,246,0.12);color:#8b5cf6;padding:3px 8px;border-radius:6px;font-weight:600;">' + esc(it.serial_number) + '</span>'
+                : '<span style="color:var(--text2);font-size:11px;">—</span>';
               itemsHtml += '<tr>';
               itemsHtml += '<td>' + nameCell2 + configLine + '</td>';
+              itemsHtml += '<td>' + serialCellLocked + '</td>';
               itemsHtml += '<td>' + it.quantity + '</td><td>' + it.unit + '</td>';
               itemsHtml += '<td>' + parseFloat(it.unit_price || 0).toLocaleString('cs-CZ') + ' ' + currencySymbol(order.currency) + '</td>';
               itemsHtml += '<td style="font-weight:600;">' + parseFloat(it.total_price || 0).toLocaleString('cs-CZ') + ' ' + currencySymbol(order.currency) + '</td>';
@@ -1726,6 +1743,32 @@
           body: JSON.stringify(updateData),
         });
       } catch(e) { console.error('recalcOrder error:', e); }
+    }
+
+    // Výrobní číslo kiosku — uloží bez přenačtení modalu (aby input nezrušil fokus).
+    // Po uložení jen krátce blikne input, aby bylo vidět že se uložilo.
+    async function updateOrderItemSerial(itemId, orderId, value, inputEl) {
+      const serial = (value || '').trim();
+      try {
+        const res = await fetch('/api/wh/orders/' + orderId + '/items/' + itemId, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ serial_number: serial }),
+        });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        if (inputEl) {
+          const orig = inputEl.style.borderColor;
+          inputEl.style.borderColor = '#10b981';
+          setTimeout(function() { inputEl.style.borderColor = orig || ''; }, 600);
+        }
+        // Neprovádíme openOrderDetail — ztratil by se fokus + zákazník neví kam koukat.
+        // Tabulku objednávek ale aktualizujeme (třeba pro filtr/hledání později).
+        loadOrders();
+      } catch (e) {
+        console.error('Uložení výrobního čísla selhalo', e);
+        if (inputEl) inputEl.style.borderColor = '#ef4444';
+        alert('Nepodařilo se uložit výrobní číslo.');
+      }
     }
 
     async function updateOrderItem(itemId, orderId, field, value, otherValue) {

@@ -454,7 +454,7 @@ router.get('/orders/:id/items', async (req, res, next) => {
 // POST /api/wh/orders/:id/items
 router.post('/orders/:id/items', async (req, res, next) => {
   try {
-    const { product_id, material_id, name, quantity, unit, unit_price, total_price, note, expected_delivery } = req.body;
+    const { product_id, material_id, name, quantity, unit, unit_price, total_price, note, expected_delivery, serial_number } = req.body;
     const item = await prisma.orderItem.create({
       data: {
         order_id: parseInt(req.params.id),
@@ -467,6 +467,7 @@ router.post('/orders/:id/items', async (req, res, next) => {
         total_price: parseFloat(total_price) || (parseFloat(quantity) || 1) * (parseFloat(unit_price) || 0),
         note: note || null,
         expected_delivery: parseDate(expected_delivery),
+        serial_number: serial_number ? String(serial_number).trim() || null : null,
       },
     });
     // Aktualizovat celkovou cenu objednávky
@@ -493,12 +494,18 @@ router.put('/orders/:orderId/items/:itemId', async (req, res, next) => {
   try {
     // Whitelist polí + konverze typů (nikdy nespreaduj req.body napřímo do data)
     const allowed = {};
-    const stringFields = ['name', 'unit', 'note'];
+    const stringFields = ['name', 'unit', 'note', 'serial_number'];
     const intFields = ['product_id', 'material_id'];
     const floatFields = ['quantity', 'unit_price', 'total_price', 'delivered_quantity'];
     const dateFields = ['expected_delivery'];
 
-    for (const f of stringFields) if (req.body[f] !== undefined) allowed[f] = req.body[f] || null;
+    for (const f of stringFields) {
+      if (req.body[f] !== undefined) {
+        // Prázdný string → null (aby se v DB neukládal prázdný serial "")
+        const v = req.body[f];
+        allowed[f] = v != null && String(v).trim() !== '' ? String(v).trim() : null;
+      }
+    }
     for (const f of intFields) if (req.body[f] !== undefined) allowed[f] = req.body[f] ? parseInt(req.body[f]) : null;
     for (const f of floatFields) if (req.body[f] !== undefined) allowed[f] = req.body[f] !== null && req.body[f] !== '' ? parseFloat(req.body[f]) : null;
     for (const f of dateFields) if (req.body[f] !== undefined) allowed[f] = parseDate(req.body[f]);
