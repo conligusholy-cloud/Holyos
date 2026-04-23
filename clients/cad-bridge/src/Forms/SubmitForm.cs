@@ -46,10 +46,13 @@ public sealed class SubmitForm : Form
     private readonly CheckBox _chkOverwrite = new() { Text = "Přepsat stejné verze", AutoSize = true };
     private readonly Label _status = new() { AutoSize = false, Dock = DockStyle.Bottom, Height = 22,
         TextAlign = ContentAlignment.MiddleLeft, ForeColor = Color.FromArgb(100, 116, 139) };
+    // Malý progress vpravo dole — teď vypnuto, protože velký banner nahoře
+    // ukazuje stejnou informaci čitelněji. Ponechán jen jako data-source pro
+    // Step() (_progress.Value / Maximum) bez vizuální indikace.
     private readonly ProgressBar _progress = new()
     {
         Dock = DockStyle.Bottom,
-        Height = 6,
+        Height = 1,
         Style = ProgressBarStyle.Continuous,
         Visible = false,
     };
@@ -398,6 +401,10 @@ public sealed class SubmitForm : Form
         {
             _busyTitle.Text  = "";
             _busyDetail.Text = "";
+            // Reset banner progress na Marquee pro další operaci (Step()
+            // si přepne na Continuous jakmile zná reálný počet kroků).
+            _busyProgress.Style = ProgressBarStyle.Marquee;
+            _busyProgress.MarqueeAnimationSpeed = 30;
         }
     }
 
@@ -1152,11 +1159,29 @@ public sealed class SubmitForm : Form
 
         // Spočti celkový počet kroků pro progress bar:
         //   1 krok za každý ne-SW soubor (raw upload)
-        //   + 1 krok za každou sesterskou přílohu
+        //   + 1 krok za každou sesterskou přílohu (reálný počet po FindSiblingAttachments)
+        //   + 1 krok za samotný SW soubor (pokud UploadSwFileItself=true)
         //   + 1 krok za finální /drawings-import
         var rowsToUpload = _rows.Where(r => !r.IsVirtualAssembly).ToList();
+
+        // Předpřipravíme čerstvý seznam siblings pro každý row, ať totalSteps
+        // odpovídá skutečnému počtu uploadů (safety-net rescan v submit-loop
+        // přidá siblings, takže tady je počítáme už se znalostí DefaultCadFolder).
+        foreach (var r in rowsToUpload)
+        {
+            if (!SwNativeExts.Contains(r.Extension)) continue;
+            var fresh = FindSiblingAttachments(r.Path);
+            var existing = new HashSet<string>(r.SiblingAttachments, StringComparer.OrdinalIgnoreCase);
+            foreach (var fs in fresh)
+                if (!existing.Contains(fs)) { r.SiblingAttachments.Add(fs); existing.Add(fs); }
+        }
+
         int totalSteps = 1 + rowsToUpload.Sum(r =>
-            (SwNativeExts.Contains(r.Extension) ? 0 : 1) + r.SiblingAttachments.Count);
+        {
+            int rawStep = SwNativeExts.Contains(r.Extension) ? 0 : 1;
+            int swSelfStep = (_settings.UploadSwFileItself && SwNativeExts.Contains(r.Extension) && File.Exists(r.Path)) ? 1 : 0;
+            return rawStep + r.SiblingAttachments.Count + swSelfStep;
+        });
         int completed = 0;
 
         _progress.Visible = true;
@@ -1171,8 +1196,18 @@ public sealed class SubmitForm : Form
             completed++;
             if (completed > _progress.Maximum) completed = _progress.Maximum;
             _progress.Value = completed;
+            // Přepni banner progress z Marquee na Continuous, jakmile máme reálný
+            // počet — uživatel pak vidí skutečný podíl, ne jen „něco se děje".
+            if (_busyProgress.Style != ProgressBarStyle.Continuous)
+            {
+                _busyProgress.Style   = ProgressBarStyle.Continuous;
+                _busyProgress.Minimum = 0;
+                _busyProgress.Maximum = Math.Max(1, totalSteps);
+            }
+            _busyProgress.Value = Math.Min(completed, _busyProgress.Maximum);
             UpdateStatus($"Odevzdávám… {completed} / {totalSteps}", msg);
             _progress.Refresh();
+            _busyProgress.Refresh();
         }
 
         try
@@ -1275,10 +1310,6 @@ public sealed class SubmitForm : Form
                     {
                         try
                         {
-                            _status.Text = attempt == 1
-                                ? $"Nahrávám SW soubor: {row.FileName}…"
-                                : $"Nahrávám SW soubor: {row.FileName} (pokus {attempt}/3)…";
-                            _status.Refresh();
                             var bytes = await Task.Run(() => File.ReadAllBytes(row.Path));
                             var up = await _client.UploadAssetAsync(kind, row.FileName, bytes);
                             list.Add(new AttachmentDto { Kind = kind, Filename = row.FileName, Path = up.Path });
@@ -1292,6 +1323,9 @@ public sealed class SubmitForm : Form
                     }
                     if (!uploaded && lastEx != null)
                         Diagnostics.LogException($"UploadSwFile FAILED {row.FileName} (3 pokusy)", lastEx);
+                    Step(uploaded
+                        ? $"Nahrán SW soubor: {row.FileName}"
+                        : $"SELHALO (SW): {row.FileName}");
                 }
 
                 rowAttachments[row] = list;
