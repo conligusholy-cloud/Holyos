@@ -332,16 +332,20 @@
     async function loadDashboard() {
       const el = document.getElementById('dashboard-content');
       try {
-        const [ordersRes, matsRes, movsRes, expiringRes] = await Promise.all([
+        const [ordersRes, matsRes, movsRes, expiringRes, snStatsRes, snRecentRes] = await Promise.all([
           fetch('/api/wh/orders?status=new&type=purchase'),
           fetch('/api/wh/materials?low_stock=true'),
           fetch('/api/wh/movements'),
           fetch('/api/wh/lots/expiring?days=30&limit=10'),
+          fetch('/api/wh/serials/stats'),
+          fetch('/api/wh/serials/recent?days=30&limit=10'),
         ]);
         const newOrders = await ordersRes.json();
         const lowStock = await matsRes.json();
         const recentMoves = (await movsRes.json()).slice(0, 10);
         const expiringLots = expiringRes.ok ? await expiringRes.json() : [];
+        const snStats = snStatsRes.ok ? await snStatsRes.json() : { in_stock: 0, issued: 0, scrapped: 0, returned: 0 };
+        const snRecent = snRecentRes.ok ? await snRecentRes.json() : [];
 
         let html = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">';
 
@@ -408,6 +412,38 @@
         }
         html += '</div>';
 
+        // Sériová čísla
+        const snTotal = (snStats.in_stock || 0) + (snStats.issued || 0) + (snStats.scrapped || 0) + (snStats.returned || 0);
+        if (snTotal > 0 || snRecent.length > 0) {
+          html += '<div style="grid-column:1/-1;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px;">';
+          html += '<h3 style="font-size:15px;margin-bottom:12px;">🔖 Sériová čísla — přehled</h3>';
+          html += '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px">' +
+            '<div style="text-align:center;padding:12px;background:rgba(16,185,129,0.1);border-radius:8px"><div style="font-size:22px;font-weight:700;color:#10b981">' + (snStats.in_stock || 0) + '</div><div style="font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px">Skladem</div></div>' +
+            '<div style="text-align:center;padding:12px;background:rgba(245,158,11,0.1);border-radius:8px"><div style="font-size:22px;font-weight:700;color:#f59e0b">' + (snStats.issued || 0) + '</div><div style="font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px">Vydané</div></div>' +
+            '<div style="text-align:center;padding:12px;background:rgba(108,140,255,0.1);border-radius:8px"><div style="font-size:22px;font-weight:700;color:#6c8cff">' + (snStats.returned || 0) + '</div><div style="font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px">Vrácené</div></div>' +
+            '<div style="text-align:center;padding:12px;background:rgba(239,68,68,0.1);border-radius:8px"><div style="font-size:22px;font-weight:700;color:#ef4444">' + (snStats.scrapped || 0) + '</div><div style="font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px">Vyřazené</div></div>' +
+            '</div>';
+          if (snRecent.length > 0) {
+            html += '<div style="font-size:12px;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">Nedávno vydané (posledních 30 dní)</div>';
+            html += '<table class="data-table"><thead><tr><th>S/N</th><th>Materiál</th><th>Vydal</th><th>Kdy</th><th>Vazba</th></tr></thead><tbody>';
+            for (const s of snRecent) {
+              const mat = s.material;
+              const person = s.issued_person ? esc(s.issued_person.first_name + ' ' + s.issued_person.last_name) : '—';
+              const ref = s.reference_type ? (esc(s.reference_type) + ' #' + s.reference_id) : '—';
+              const when = s.issued_at ? new Date(s.issued_at).toLocaleString('cs-CZ', { dateStyle: 'short', timeStyle: 'short' }) : '—';
+              html += '<tr' + (mat ? ' onclick="openMaterialSerialsTab(' + mat.id + ')" style="cursor:pointer"' : '') + '>';
+              html += '<td style="font-family:ui-monospace,monospace;font-weight:600">' + esc(s.serial_number) + '</td>';
+              html += '<td class="person-name">' + esc(mat ? (mat.name + ' · ' + mat.code) : '—') + '</td>';
+              html += '<td style="font-size:12px">' + person + '</td>';
+              html += '<td style="font-size:12px;color:var(--text2)">' + when + '</td>';
+              html += '<td style="font-size:12px;color:var(--text2)">' + ref + '</td>';
+              html += '</tr>';
+            }
+            html += '</tbody></table>';
+          }
+          html += '</div>';
+        }
+
         // Recent movements
         html += '<div style="grid-column:1/-1;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px;">';
         html += '<h3 style="font-size:15px;margin-bottom:12px;">🔄 Poslední pohyby</h3>';
@@ -434,6 +470,12 @@
     async function openMaterialLotsTab(materialId) {
       await openMaterialModal(materialId);
       setTimeout(function() { switchMatTab('lots'); loadLotPanel(materialId); }, 60);
+    }
+
+    // Otevře detail materiálu a přepne rovnou na tab Sériová čísla
+    async function openMaterialSerialsTab(materialId) {
+      await openMaterialModal(materialId);
+      setTimeout(function() { switchMatTab('serials'); loadSerialPanel(materialId); }, 60);
     }
 
     // ============================================================
