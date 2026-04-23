@@ -54,6 +54,43 @@ public sealed class SubmitForm : Form
         Visible = false,
     };
 
+    // Velký viditelný banner během asynchronních operací (scan / search / submit)
+    // — aby uživatel neměl pocit, že je Bridge zaseknutý. Zobrazuje aktuální činnost
+    // + indeterminate progress. Visible se přepíná v SetBusy().
+    private readonly Panel       _busyBanner = new()
+    {
+        Dock = DockStyle.Top,
+        Height = 70,
+        BackColor = Color.FromArgb(219, 234, 254),   // světle modrá
+        Padding = new Padding(18, 10, 18, 10),
+        Visible = false,
+    };
+    private readonly Label       _busyTitle = new()
+    {
+        AutoSize = false,
+        Dock = DockStyle.Top,
+        Height = 22,
+        Font = new Font("Segoe UI Semibold", 11f),
+        ForeColor = Color.FromArgb(29, 78, 216),
+        Text = "⏳ Pracuji…",
+    };
+    private readonly Label       _busyDetail = new()
+    {
+        AutoSize = false,
+        Dock = DockStyle.Top,
+        Height = 18,
+        Font = new Font("Segoe UI", 9.5f),
+        ForeColor = Color.FromArgb(55, 65, 81),
+        Text = "",
+    };
+    private readonly ProgressBar _busyProgress = new()
+    {
+        Dock = DockStyle.Bottom,
+        Height = 14,
+        Style = ProgressBarStyle.Marquee,
+        MarqueeAnimationSpeed = 30,
+    };
+
     private readonly List<FileRow> _rows = new();
     private int? _selectedProjectId;
     private int? _selectedBlockId;
@@ -232,7 +269,19 @@ public sealed class SubmitForm : Form
         gridsLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         gridsLayout.Controls.Add(_filesGrid, 0, 0);
         gridsLayout.Controls.Add(componentsPanel, 0, 1);
-        rightLayout.Controls.Add(gridsLayout, 0, 1);
+
+        // Sestavení busyBanneru — title (velký), detail (menší) a progress dole.
+        // Přidávání pořadí pro Dock=Top: poslední přidaný je nejvýš → přidávám
+        // v opačném pořadí (detail → title → progress).
+        _busyBanner.Controls.Add(_busyProgress); // Dock=Bottom
+        _busyBanner.Controls.Add(_busyDetail);   // Dock=Top (spodní)
+        _busyBanner.Controls.Add(_busyTitle);    // Dock=Top (horní) — přidán poslední
+
+        // Wrapper panel: banner nahoře + grids pod ním.
+        var gridsWithBanner = new Panel { Dock = DockStyle.Fill };
+        gridsWithBanner.Controls.Add(gridsLayout); // Dock=Fill
+        gridsWithBanner.Controls.Add(_busyBanner); // Dock=Top — přes grid když viditelný
+        rightLayout.Controls.Add(gridsWithBanner, 0, 1);
 
         // Propojení: při změně výběru v horním gridu se dolní grid naplní komponentami.
         _filesGrid.SelectionChanged += (_, __) => RenderSelectedComponents();
@@ -256,6 +305,18 @@ public sealed class SubmitForm : Form
 
         Controls.Add(main);
         Controls.Add(_status);
+        // Nouzový reset — dvojklik na status lištu vynutí odemčení UI.
+        // Použít, pokud se Bridge zasekne v "busy" stavu po dokončené operaci.
+        _status.DoubleClick += (_, __) =>
+        {
+            if (_busyDepth > 0)
+            {
+                _busyDepth = 0;
+                SetBusy(false);
+                _status.ForeColor = Color.FromArgb(100, 116, 139);
+                _status.Text = "UI odemčeno (nouzový reset).";
+            }
+        };
         Controls.Add(_progress);
         _status.Text = "Připraveno";
     }
@@ -329,10 +390,29 @@ public sealed class SubmitForm : Form
         _btnAddFile.Enabled    = !isBusy;
         _btnSearch.Enabled     = !isBusy;
         _btnSettings.Enabled   = !isBusy;
-        // Vizuálně odlišit — submit je primární akce, ať uživatel vidí, že čeká.
         _btnSubmit.Text = isBusy
             ? "⏳ Čekám na načtení komponent…"
             : "✓ Odevzdat do HolyOSu";
+        _busyBanner.Visible = isBusy;
+        if (!isBusy)
+        {
+            _busyTitle.Text  = "";
+            _busyDetail.Text = "";
+        }
+    }
+
+    /// <summary>
+    /// Aktualizuje status bar dole + velký banner nahoře (pokud běží busy).
+    /// Volat namísto přímého _status.Text = ...
+    /// </summary>
+    private void UpdateStatus(string text, string? detail = null)
+    {
+        _status.Text = text;
+        _busyTitle.Text = "⏳ " + text;
+        if (detail != null) _busyDetail.Text = detail;
+        _status.Refresh();
+        _busyTitle.Refresh();
+        _busyDetail.Refresh();
     }
 
     private void OnAddFile()
@@ -401,7 +481,7 @@ public sealed class SubmitForm : Form
         if (_selectedProjectId == null || _rows.Count == 0) return;
         try
         {
-            _status.Text = "Porovnávám se serverem…";
+            UpdateStatus("Porovnávám se serverem…", "Kontroluji hash existujících výkresů v HolyOSu");
             var serverHashes = await _client.GetExistingHashesAsync(_selectedProjectId.Value);
 
             for (int i = 0; i < _rows.Count; i++)
@@ -569,7 +649,7 @@ public sealed class SubmitForm : Form
 
         SetBusy(true);
         _status.ForeColor = Color.FromArgb(100, 116, 139);
-        _status.Text = "Spouštím SolidWorks…";
+        UpdateStatus("Spouštím SolidWorks…", "Chvilku to trvá, pokud SW běží poprvé.");
         try
         {
             await Task.Run(() => _sw.Connect());
@@ -581,7 +661,9 @@ public sealed class SubmitForm : Form
                 var row = _rows[idx];
                 if (SwNativeExts.Contains(row.Extension))
                 {
-                    _status.Text = $"Čtu komponenty: {row.FileName} ({idx + 1}/{_rows.Count})…";
+                    UpdateStatus(
+                        $"Vyhledávám komponenty — {idx + 1}/{_rows.Count}",
+                        $"Čtu: {row.FileName}");
                     await Task.Run(() => ProcessRow(row));
 
                     _filesGrid.Rows[idx].Cells["Cfg"].Value       = row.ConfigurationName ?? "—";
@@ -689,7 +771,7 @@ public sealed class SubmitForm : Form
         var searchOpt = _settings.ScanSubdirectories
             ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
 
-        _status.Text = $"Skenuji {root}…";
+        UpdateStatus("Skenuji složku…", root);
         _rows.Clear();
         _filesGrid.Rows.Clear();
 
@@ -1082,16 +1164,15 @@ public sealed class SubmitForm : Form
         _progress.Maximum = Math.Max(1, totalSteps);
         _progress.Value = 0;
         _status.ForeColor = Color.FromArgb(100, 116, 139);
-        _status.Text = $"Odevzdávám… 0 / {totalSteps}";
+        UpdateStatus($"Odevzdávám… 0 / {totalSteps}", "Nahrávám soubory a přílohy na server");
 
         void Step(string msg)
         {
             completed++;
             if (completed > _progress.Maximum) completed = _progress.Maximum;
             _progress.Value = completed;
-            _status.Text = $"{msg}  ·  {completed} / {totalSteps}";
+            UpdateStatus($"Odevzdávám… {completed} / {totalSteps}", msg);
             _progress.Refresh();
-            _status.Refresh();
         }
 
         try
