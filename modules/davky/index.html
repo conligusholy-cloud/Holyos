@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <title>Pickovací dávky | HOLYOS</title>
+  <link rel="icon" href="../../logo-holyos-icon.svg">
+  <base href="../../">
+  <link rel="stylesheet" href="css/dashboard.css">
+  <style>
+    .filters { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; align-items: center; }
+    .filters label { color: var(--text2); font-size: 0.88em; }
+    .filters select {
+      background: var(--surface2); color: var(--text); border: 1px solid var(--border);
+      padding: 7px 10px; border-radius: 6px; font-size: 0.9em;
+    }
+    .status-badge { padding: 3px 10px; border-radius: 12px; font-size: 0.8em; font-weight: 600; }
+    .status-badge.open { background: #64748b22; color: #94a3b8; }
+    .status-badge.picking { background: #f59e0b22; color: #f59e0b; }
+    .status-badge.done { background: #22c55e22; color: #22c55e; }
+    .status-badge.cancelled { background: #ef444422; color: #ef4444; }
+    .item-status { padding: 2px 8px; border-radius: 8px; font-size: 0.78em; font-weight: 600; }
+    .item-status.pending { background: #475569; color: #cbd5e1; }
+    .item-status.picked { background: #22c55e33; color: #4ade80; }
+    .item-status.short { background: #f59e0b33; color: #fbbf24; }
+    .item-status.skipped { background: #64748b33; color: #94a3b8; }
+
+    .progress-bar { height: 6px; background: var(--surface2); border-radius: 3px; overflow: hidden; min-width: 80px; }
+    .progress-bar-fill { height: 100%; background: var(--accent); transition: width 0.3s; }
+    .progress-bar-fill.done { background: #22c55e; }
+
+    .batch-number { font-family: 'Consolas', monospace; font-weight: 600; }
+
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+    .modal { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 24px 28px; max-width: 640px; width: 90%; max-height: 90vh; overflow-y: auto; }
+    .modal.wide { max-width: 1080px; }
+    .modal h2 { margin-top: 0; }
+    .modal-row { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+    .modal-row label { color: var(--text2); font-size: 0.88em; }
+    .modal-row input, .modal-row select, .modal-row textarea {
+      background: var(--surface2); color: var(--text); border: 1px solid var(--border);
+      border-radius: 6px; padding: 8px 10px; font-size: 0.95em;
+    }
+    .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
+
+    /* Create batch — item rows */
+    .item-row {
+      display: grid; grid-template-columns: 3fr 1fr 2fr 40px;
+      gap: 10px; align-items: center; margin-bottom: 8px;
+    }
+    .item-row input, .item-row select {
+      background: var(--surface2); color: var(--text); border: 1px solid var(--border);
+      padding: 7px 10px; border-radius: 6px; font-size: 0.9em;
+    }
+    .item-row .remove-btn {
+      background: var(--surface2); border: 1px solid var(--border); color: #ef4444;
+      border-radius: 6px; cursor: pointer; padding: 7px; font-weight: 700;
+    }
+
+    /* Detail — pick rows */
+    .pick-row {
+      display: grid; grid-template-columns: 2fr 2fr 1fr 1fr 1fr 160px;
+      gap: 10px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border);
+    }
+    .pick-row:last-child { border-bottom: none; }
+    .pick-row .pick-controls { display: flex; gap: 6px; }
+    .pick-row .pick-qty {
+      width: 70px; background: var(--surface2); color: var(--text); border: 1px solid var(--border);
+      padding: 5px 8px; border-radius: 5px; font-size: 0.9em;
+    }
+
+    .empty-hint { text-align: center; padding: 40px; color: var(--text2); }
+    .btn-sm { padding: 6px 12px; font-size: 0.85em; }
+    .btn-xs { padding: 4px 8px; font-size: 0.8em; }
+    .inline-code { font-family: 'Consolas', monospace; background: var(--surface2); padding: 2px 6px; border-radius: 4px; font-size: 0.85em; }
+  </style>
+</head>
+<body>
+  <aside id="sidebar"></aside>
+
+  <div class="main-wrapper">
+    <div class="main-header">
+      <h1>📦 Pickovací dávky</h1>
+      <p>Seskupení materiálů k vychystávání — e-shop, výroba, expedice</p>
+    </div>
+
+    <div class="main-content">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+        <div class="filters">
+          <label>Stav:</label>
+          <select id="f-status" onchange="loadBatches()">
+            <option value="">Všechny</option>
+            <option value="open" selected>Otevřené</option>
+            <option value="picking">V pickingu</option>
+            <option value="done">Hotové</option>
+            <option value="cancelled">Zrušené</option>
+          </select>
+          <label>Sektor:</label>
+          <select id="f-sector" onchange="loadBatches()">
+            <option value="">Všechny</option>
+            <option value="vyroba">Výroba</option>
+            <option value="stavba">Stavba</option>
+            <option value="servis">Servis</option>
+            <option value="eshop">E-shop</option>
+            <option value="pradelna">Prádelna</option>
+          </select>
+          <button class="btn btn-secondary btn-sm" onclick="loadBatches()">🔄 Obnovit</button>
+        </div>
+        <button class="btn btn-primary" onclick="openCreateModal()">+ Nová dávka</button>
+      </div>
+
+      <table class="data-table" id="batches-table">
+        <thead>
+          <tr>
+            <th>Číslo</th>
+            <th>Sektor</th>
+            <th>Stav</th>
+            <th>Operátor</th>
+            <th>Progress</th>
+            <th>Položek</th>
+            <th>Vytvořeno</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody><tr><td colspan="8" class="empty-hint">Načítání…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div id="modal-root"></div>
+
+  <script>
+    var s = document.createElement('script');
+    s.src = '/js/sidebar.js?v=' + Date.now();
+    s.onload = function() { renderSidebar('davky'); };
+    document.head.appendChild(s);
+    var tb = document.createElement('script');
+    tb.src = '/js/top-bar.js?v=' + Date.now();
+    document.head.appendChild(tb);
+  </script>
+
+  <script>
+  (function() {
+    const token = sessionStorage.getItem('token') || '';
+    function authHeaders() {
+      const h = { 'Content-Type': 'application/json' };
+      if (token) h['Authorization'] = 'Bearer ' + token;
+      return h;
+    }
+    async function api(method, path, body) {
+      const opts = { method, credentials: 'include', headers: authHeaders() };
+      if (body !== undefined) opts.body = JSON.stringify(body);
+      const res = await fetch(path, opts);
+      const ct = res.headers.get('content-type') || '';
+      const data = ct.includes('json') ? await res.json().catch(() => null) : null;
+      return { status: res.status, data };
+    }
+
+    const STATUS_LABEL = { open: 'Otevřená', picking: 'V pickingu', done: 'Hotová', cancelled: 'Zrušená' };
+    const ITEM_STATUS_LABEL = { pending: 'Čeká', picked: 'Vypícknuto', short: 'Málo', skipped: 'Přeskočeno' };
+    const SECTOR_LABEL = { vyroba: 'Výroba', stavba: 'Stavba', servis: 'Servis', eshop: 'E-shop', pradelna: 'Prádelna' };
+
+    // Cache pro dropdowny v tvorbě / picking
+    let materialsCache = null;
+    let locationsCache = null;
+
+    async function preloadDropdowns() {
+      if (!locationsCache) {
+        const r = await api('GET', '/api/wh/sync/locations');
+        locationsCache = r.data?.items || [];
+      }
+      if (!materialsCache) {
+        const r = await api('GET', '/api/wh/sync/materials');
+        materialsCache = r.data?.items || [];
+      }
+    }
+
+    async function loadBatches() {
+      const status = document.getElementById('f-status').value;
+      const sector = document.getElementById('f-sector').value;
+      const qs = new URLSearchParams();
+      if (status) qs.set('status', status);
+      if (sector) qs.set('sector', sector);
+      const r = await api('GET', '/api/wh/batches' + (qs.toString() ? '?' + qs : ''));
+      const tbody = document.querySelector('#batches-table tbody');
+      if (r.status !== 200) {
+        tbody.innerHTML = '<tr><td colspan="8" class="empty-hint">Chyba: ' + r.status + '</td></tr>';
+        return;
+      }
+      if (r.data.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8" class="empty-hint">Žádné dávky.</td></tr>';
+        return;
+      }
+      // Pro každou dávku spočítej progress z items (zkrácená verze: víme jen _count — detail až na klik)
+      tbody.innerHTML = r.data.map(b => {
+        return (
+          '<tr>' +
+            '<td><span class="batch-number">' + escapeHtml(b.number) + '</span></td>' +
+            '<td>' + (SECTOR_LABEL[b.sector] || b.sector || '—') + '</td>' +
+            '<td><span class="status-badge ' + b.status + '">' + (STATUS_LABEL[b.status] || b.status) + '</span></td>' +
+            '<td>' + (b.assignee ? escapeHtml(b.assignee.first_name + ' ' + b.assignee.last_name) : '—') + '</td>' +
+            '<td>' + (b.status === 'done' ? '<span style="color:#22c55e;">✓ 100 %</span>' : '<em style="color:var(--text2);font-size:0.88em;">otevři detail</em>') + '</td>' +
+            '<td style="text-align:center;">' + (b._count?.items || 0) + '</td>' +
+            '<td>' + formatDate(b.created_at) + '</td>' +
+            '<td><button class="btn btn-secondary btn-sm" onclick="openBatchDetail(' + b.id + ')">Detail</button></td>' +
+          '</tr>'
+        );
+      }).join('');
+    }
+    window.loadBatches = loadBatches;
+
+    // =========================================================================
+    // DETAIL DÁVKY
+    // =========================================================================
+    window.openBatchDetail = async function(id) {
+      await preloadDropdowns();
+      const r = await api('GET', '/api/wh/batches/' + id);
+      if (r.status !== 200) return alert('Nelze načíst dávku');
+      const b = r.data;
+
+      const picked = b.items.filter(i => i.status !== 'pending').length;
+      const progressPct = b.items.length === 0 ? 0 : Math.round(100 * picked / b.items.length);
+      const isActive = b.status === 'open' || b.status === 'picking';
+
+      document.getElementById('modal-root').innerHTML = (
+        '<div class="modal-overlay" onclick="if(event.target===this)closeModal()">' +
+          '<div class="modal wide">' +
+            '<h2>Dávka <span class="batch-number">' + escapeHtml(b.number) + '</span>' +
+              ' <span class="status-badge ' + b.status + '" style="margin-left:10px;font-size:0.7em;">' + (STATUS_LABEL[b.status] || b.status) + '</span>' +
+            '</h2>' +
+            '<div style="display:flex;gap:24px;color:var(--text2);font-size:0.9em;margin-bottom:14px;">' +
+              '<div>Sektor: <b style="color:var(--text)">' + (SECTOR_LABEL[b.sector] || b.sector || '—') + '</b></div>' +
+              '<div>Operátor: <b style="color:var(--text)">' + (b.assignee ? escapeHtml(b.assignee.first_name + ' ' + b.assignee.last_name) : '—') + '</b></div>' +
+              '<div>Vytvořeno: <b style="color:var(--text)">' + formatDate(b.created_at) + '</b></div>' +
+              (b.completed_at ? '<div>Dokončeno: <b style="color:var(--text)">' + formatDate(b.completed_at) + '</b></div>' : '') +
+            '</div>' +
+            '<div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;">' +
+              '<div class="progress-bar" style="flex:1;"><div class="progress-bar-fill ' + (progressPct === 100 ? 'done' : '') + '" style="width:' + progressPct + '%;"></div></div>' +
+              '<div style="font-weight:600;">' + picked + ' / ' + b.items.length + ' položek (' + progressPct + ' %)</div>' +
+            '</div>' +
+            (b.note ? '<div style="margin-bottom:14px;"><label style="color:var(--text2);font-size:0.82em;">Poznámka</label><div>' + escapeHtml(b.note) + '</div></div>' : '') +
+
+            '<h3 style="margin-top:20px;">Položky dávky</h3>' +
+            '<div>' + b.items.map(i => renderPickRow(i, b.id, isActive)).join('') + '</div>' +
+
+            '<div class="modal-actions">' +
+              '<button class="btn btn-secondary" onclick="closeModal()">Zavřít</button>' +
+              (isActive ? '<button class="btn btn-primary" onclick="completeBatch(' + b.id + ')">Dokončit dávku</button>' : '') +
+            '</div>' +
+          '</div>' +
+        '</div>'
+      );
+    };
+
+    function renderPickRow(i, batchId, canPick) {
+      const locSel = '<select id="pick-loc-' + i.id + '" ' + (canPick ? '' : 'disabled') + '>' +
+        locationsCache.map(l => '<option value="' + l.id + '"' + (i.from_location_id === l.id ? ' selected' : '') + '>' + escapeHtml(l.label) + '</option>').join('') +
+        '</select>';
+
+      return (
+        '<div class="pick-row">' +
+          '<div>' +
+            '<div style="font-weight:500;">' + escapeHtml(i.material?.name || '—') + '</div>' +
+            '<div style="color:var(--text2);font-size:0.82em;">SKU: ' + escapeHtml(i.material?.code || '') +
+              (i.material?.barcode ? '  <span class="inline-code">' + escapeHtml(i.material.barcode) + '</span>' : '') + '</div>' +
+          '</div>' +
+          '<div>' + locSel + '</div>' +
+          '<div style="text-align:right;"><b>' + Number(i.quantity) + '</b> ' + (i.material?.unit || '') + '</div>' +
+          '<div style="text-align:right;">' + (i.picked_quantity != null ? '<b style="color:var(--accent);">' + Number(i.picked_quantity) + '</b>' : '—') + '</div>' +
+          '<div><span class="item-status ' + i.status + '">' + (ITEM_STATUS_LABEL[i.status] || i.status) + '</span></div>' +
+          '<div class="pick-controls">' +
+            (canPick && i.status === 'pending'
+              ? '<input type="number" id="pick-qty-' + i.id + '" class="pick-qty" value="' + Number(i.quantity) + '" min="0" max="99999">' +
+                '<button class="btn btn-primary btn-xs" onclick="pickItem(' + batchId + ',' + i.id + ',' + i.material_id + ')">Pick</button>' +
+                '<button class="btn btn-secondary btn-xs" onclick="pickItem(' + batchId + ',' + i.id + ',' + i.material_id + ',0)">Skip</button>'
+              : '<span style="color:var(--text2);font-size:0.85em;">—</span>') +
+          '</div>' +
+        '</div>'
+      );
+    }
+
+    window.pickItem = async function(batchId, itemId, materialId, forceQty) {
+      const qty = forceQty !== undefined ? forceQty : Number(document.getElementById('pick-qty-' + itemId).value);
+      if (qty == null || Number.isNaN(qty)) return alert('Zadej platné množství');
+      const from_location_id = Number(document.getElementById('pick-loc-' + itemId).value);
+      const client_uuid = crypto.randomUUID();
+      const r = await api('POST', '/api/wh/batches/' + batchId + '/pick', {
+        batch_item_id: itemId,
+        picked_quantity: qty,
+        from_location_id,
+        client_uuid,
+      });
+      if (r.status !== 200) return alert('Chyba: ' + (r.data?.error || r.status));
+      openBatchDetail(batchId); // refresh detailu
+    };
+
+    window.completeBatch = async function(id) {
+      if (!confirm('Dokončit dávku ručně? Pending položky zůstanou pending.')) return;
+      const r = await api('PATCH', '/api/wh/batches/' + id + '/complete');
+      if (r.status !== 200) return alert('Chyba: ' + (r.data?.error || r.status));
+      closeModal(); loadBatches();
+    };
+
+    // =========================================================================
+    // TVORBA DÁVKY
+    // =========================================================================
+    let newItemIndex = 0;
+    window.openCreateModal = async function() {
+      await preloadDropdowns();
+      newItemIndex = 0;
+
+      const matOpts = materialsCache.map(m => '<option value="' + m.id + '">' + escapeHtml(m.code + ' — ' + m.name) + '</option>').join('');
+      const locOpts = '<option value="">(bez doporučené)</option>' + locationsCache.map(l => '<option value="' + l.id + '">' + escapeHtml(l.label) + '</option>').join('');
+
+      document.getElementById('modal-root').innerHTML = (
+        '<div class="modal-overlay" onclick="if(event.target===this)closeModal()">' +
+          '<div class="modal wide">' +
+            '<h2>Nová dávka</h2>' +
+            '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px;">' +
+              '<div class="modal-row"><label>Sektor</label><select id="c-sector">' +
+                '<option value="">(nespecifikováno)</option>' +
+                Object.entries(SECTOR_LABEL).map(([k,v]) => '<option value="' + k + '">' + v + '</option>').join('') +
+                '</select></div>' +
+              '<div class="modal-row"><label>Poznámka</label><input type="text" id="c-note"></div>' +
+            '</div>' +
+            '<h3 style="margin-top:0;">Položky dávky</h3>' +
+            '<div class="item-row" style="color:var(--text2);font-size:0.85em;margin-bottom:4px;">' +
+              '<div>Materiál</div><div>Množství</div><div>Doporučená lokace</div><div></div>' +
+            '</div>' +
+            '<div id="c-items" data-mat-opts="1" data-loc-opts="1">' +
+              renderNewItemRow(matOpts, locOpts) +
+            '</div>' +
+            '<button class="btn btn-secondary btn-sm" onclick="addNewItemRow()" style="margin-top:8px;">+ Přidat řádek</button>' +
+            '<div class="modal-actions">' +
+              '<button class="btn btn-secondary" onclick="closeModal()">Zrušit</button>' +
+              '<button class="btn btn-primary" onclick="createBatch()">Vytvořit dávku</button>' +
+            '</div>' +
+          '</div>' +
+        '</div>'
+      );
+      // Uložím si options do dat atributů pro addNewItemRow
+      window.__matOpts = matOpts;
+      window.__locOpts = locOpts;
+    };
+
+    function renderNewItemRow(matOpts, locOpts) {
+      newItemIndex++;
+      const idx = newItemIndex;
+      return (
+        '<div class="item-row" data-idx="' + idx + '">' +
+          '<select class="c-mat">' + matOpts + '</select>' +
+          '<input type="number" class="c-qty" value="1" min="0.001" step="any">' +
+          '<select class="c-loc">' + locOpts + '</select>' +
+          '<button class="remove-btn" onclick="this.parentElement.remove()" title="Odebrat">×</button>' +
+        '</div>'
+      );
+    }
+    window.addNewItemRow = function() {
+      document.getElementById('c-items').insertAdjacentHTML('beforeend',
+        renderNewItemRow(window.__matOpts, window.__locOpts));
+    };
+
+    window.createBatch = async function() {
+      const sector = document.getElementById('c-sector').value || null;
+      const note = document.getElementById('c-note').value || null;
+      const rows = document.querySelectorAll('#c-items .item-row');
+      const items = [];
+      rows.forEach((row, i) => {
+        const material_id = Number(row.querySelector('.c-mat').value);
+        const quantity = Number(row.querySelector('.c-qty').value);
+        const from_location_id = row.querySelector('.c-loc').value ? Number(row.querySelector('.c-loc').value) : null;
+        if (material_id && quantity > 0) {
+          items.push({ material_id, quantity, from_location_id, sort_order: i });
+        }
+      });
+      if (items.length === 0) return alert('Přidej aspoň jednu položku.');
+
+      const r = await api('POST', '/api/wh/batches', { sector, note, items });
+      if (r.status !== 201) return alert('Chyba: ' + JSON.stringify(r.data?.error || r.status));
+      closeModal();
+      await loadBatches();
+      openBatchDetail(r.data.id);
+    };
+
+    // =========================================================================
+    // Helpers
+    // =========================================================================
+    function escapeHtml(s) {
+      return String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+    }
+    function formatDate(iso) {
+      if (!iso) return '';
+      return new Date(iso).toLocaleString('cs-CZ', { hour12: false });
+    }
+    function closeModal() { document.getElementById('modal-root').innerHTML = ''; }
+    window.closeModal = closeModal;
+
+    loadBatches();
+  })();
+  </script>
+</body>
+</html>
