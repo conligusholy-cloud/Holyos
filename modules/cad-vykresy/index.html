@@ -166,6 +166,7 @@
       activeDrawingId: null,
       query: '',
       expandedDrawingIds: new Set(),    // ID výkresů rozbalených v seznamu (inline detail)
+      expandedAttachmentsIds: new Set(), // ID výkresů s rozbaleným seznamem příloh (+N → všechny)
     };
 
     // ─── Utils ───────────────────────────────────────────────────────────────
@@ -514,20 +515,32 @@
               if (seen.has(k)) return false;
               seen.add(k); return true;
             });
-            // Limit na 4 viditelné pilulky, zbytek jako "+N".
-            const visible = uniq.slice(0, 4);
-            const rest = uniq.length - visible.length;
+            // Limit na 4 viditelné pilulky, zbytek přes klikatelný "+N" badge.
+            // Pokud je ID výkresu v expandedAttachmentsIds, zobrazit všechny.
+            const isAttExpanded = state.expandedAttachmentsIds.has(d.id);
+            const visible = isAttExpanded ? uniq : uniq.slice(0, 4);
+            const rest = isAttExpanded ? 0 : (uniq.length - visible.length);
             const pills = visible.map(a => {
               const kind = (a.kind || '').toUpperCase() || '\u2014';
               // Lokální SW pilulka (bez serverového souboru) — šedá, bez linku.
               if (a.__local) {
-                return '<span title="SW soubor na stran\u011b konstrukt\u00e9ra — nen\u00ed v HolyOSu" style="display:inline-block;margin-right:4px;padding:2px 8px;border-radius:10px;background:rgba(148,163,184,0.15);color:#94a3b8;border:1px solid rgba(148,163,184,0.35);font-size:10px;font-weight:600;cursor:help;">\u2699\ufe0f ' + escapeHtml(kind) + '</span>';
+                return '<span title="SW soubor na stran\u011b konstrukt\u00e9ra — nen\u00ed v HolyOSu" style="display:inline-block;margin:2px 4px 2px 0;padding:2px 8px;border-radius:10px;background:rgba(148,163,184,0.15);color:#94a3b8;border:1px solid rgba(148,163,184,0.35);font-size:10px;font-weight:600;cursor:help;">\u2699\ufe0f ' + escapeHtml(kind) + '</span>';
               }
-              return '<a href="/api/cad/assets/' + encodeURI(a.path) + '" target="_blank" title="' + escapeHtml(a.filename || '') + '" style="display:inline-block;margin-right:4px;padding:2px 8px;border-radius:10px;background:rgba(99,102,241,0.15);color:#818cf8;border:1px solid rgba(99,102,241,0.35);font-size:10px;font-weight:600;text-decoration:none;">\ud83d\udce6 ' + escapeHtml(kind) + '</a>';
+              // Přípona určí, zda otevřít inline v prohlížeči (PDF/PNG/obrázky)
+              // nebo stáhnout (vše ostatní). `download` atribut nutí browser stahovat
+              // u ne-inline typů; PDF/PNG browser otevře v novém tabu sám.
+              const k = (a.kind || '').toLowerCase();
+              const inlineTypes = ['pdf', 'png', 'jpg', 'jpeg', 'svg', 'webp', 'gif'];
+              const downloadAttr = inlineTypes.includes(k) ? '' : ' download="' + escapeHtml(a.filename || '') + '"';
+              return '<a href="/api/cad/assets/' + encodeURI(a.path) + '" target="_blank"' + downloadAttr + ' title="' + escapeHtml(a.filename || '') + '" style="display:inline-block;margin:2px 4px 2px 0;padding:2px 8px;border-radius:10px;background:rgba(99,102,241,0.15);color:#818cf8;border:1px solid rgba(99,102,241,0.35);font-size:10px;font-weight:600;text-decoration:none;">\ud83d\udce6 ' + escapeHtml(kind) + '</a>';
             }).join('');
-            const more = rest > 0
-              ? '<span class="badge badge-count" title="Dal\u0161\u00ed ' + rest + ' — v detailu">+' + rest + '</span>'
-              : '';
+            let more = '';
+            if (rest > 0) {
+              more = '<span class="attachment-expand" data-expand-att-id="' + d.id + '" title="Zobrazit dal\u0161\u00ed ' + rest + ' p\u0159\u00edloh" style="display:inline-block;margin:2px 0 2px 2px;padding:2px 8px;border-radius:10px;background:rgba(59,130,246,0.15);color:#3b82f6;border:1px solid rgba(59,130,246,0.35);font-size:10px;font-weight:600;cursor:pointer;">+' + rest + '</span>';
+            } else if (isAttExpanded && uniq.length > 4) {
+              // Zobraz tlačítko pro sbalení zpět
+              more = '<span class="attachment-collapse" data-collapse-att-id="' + d.id + '" title="Sbalit" style="display:inline-block;margin:2px 0 2px 2px;padding:2px 8px;border-radius:10px;background:rgba(148,163,184,0.15);color:#94a3b8;border:1px solid rgba(148,163,184,0.35);font-size:10px;font-weight:600;cursor:pointer;">\u2212</span>';
+            }
             return pills + more;
           })()}</td>
           <td style="font-size:12px;">${creatorName}</td>
@@ -571,6 +584,24 @@
           const id = parseInt(s.dataset.expandId);
           if (state.expandedDrawingIds.has(id)) state.expandedDrawingIds.delete(id);
           else state.expandedDrawingIds.add(id);
+          renderDrawings();
+        });
+      });
+      // Klik na +N badge → zobrazit všechny přílohy tohoto výkresu.
+      el.querySelectorAll('.attachment-expand').forEach(s => {
+        s.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const id = parseInt(s.dataset.expandAttId);
+          state.expandedAttachmentsIds.add(id);
+          renderDrawings();
+        });
+      });
+      // Klik na − badge → sbalit zpět na 4 pilulky.
+      el.querySelectorAll('.attachment-collapse').forEach(s => {
+        s.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const id = parseInt(s.dataset.collapseAttId);
+          state.expandedAttachmentsIds.delete(id);
           renderDrawings();
         });
       });
