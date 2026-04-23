@@ -109,8 +109,8 @@ async function main() {
   ok(finishRes.inventory.completed_at != null, `completed_at nastaveno`);
 
   // Stock stav
-  const stockA = await prisma.stock.findUnique({ where: { material_id_location_id: { material_id: material.id, location_id: locA.id } } });
-  const stockB = await prisma.stock.findUnique({ where: { material_id_location_id: { material_id: material.id, location_id: locB.id } } });
+  const stockA = await prisma.stock.findFirst({ where: { material_id: material.id, location_id: locA.id, lot_id: null } });
+  const stockB = await prisma.stock.findFirst({ where: { material_id: material.id, location_id: locB.id, lot_id: null } });
   ok(Number(stockA.quantity) === 95, `Stock A = 95 (je ${stockA.quantity})`);
   ok(Number(stockB.quantity) === 52, `Stock B = 52 (je ${stockB.quantity})`);
 

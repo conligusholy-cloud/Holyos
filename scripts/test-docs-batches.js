@@ -165,8 +165,8 @@ async function main() {
   ok(batchFinal.status === 'done' && batchFinal.completed_at, `batch status = done + completed_at`);
 
   // Stock A: 200 - 50 - 30 - 0 = 120
-  const stockA = await prisma.stock.findUnique({
-    where: { material_id_location_id: { material_id: material.id, location_id: locA.id } },
+  const stockA = await prisma.stock.findFirst({
+    where: { material_id: material.id, location_id: locA.id, lot_id: null },
   });
   ok(Number(stockA.quantity) === 120, `Stock A = 120 (je ${stockA.quantity})`);
 

@@ -978,7 +978,6 @@
       // Checkboxes (unchecked = not in FormData)
       const cbs = ['non_stock','uses_service_eshop','distinguish_batches','interchangeable_batches','no_availability_check','check_availability_stage','check_availability_expedition','plan_orders','mandatory_scan','save_sn_first_scan','temp_barcode','auto_complete_after_bom_scan','exact_consumption','ignore','ignore_forecast_eval','split_receipt_by_sales_items','expirable','allow_rotation'];
       for (const cb of cbs) d[cb] = f.has(cb);
-      console.log('[saveMaterial] PUT payload — save_sn_first_scan =', d.save_sn_first_scan, '| všechny cbs:', cbs.reduce((o,c)=>{o[c]=d[c];return o;},{}));
       const res = await fetch(id ? '/api/wh/materials/' + id : '/api/wh/materials', {
         method: id ? 'PUT' : 'POST',
         headers: {'Content-Type':'application/json'},
@@ -989,8 +988,6 @@
         alert('Uložení selhalo (' + res.status + '): ' + err);
         return;
       }
-      const saved = await res.json();
-      console.log('[saveMaterial] response — save_sn_first_scan =', saved.save_sn_first_scan);
       closeModal(); loadMaterials(); loadStats();
     }
 

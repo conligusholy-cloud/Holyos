@@ -93,8 +93,8 @@ async function main() {
     to_location_id: locA.id,
     quantity: 50,
   });
-  const stockAfter2 = await prisma.stock.findUnique({
-    where: { material_id_location_id: { material_id: material.id, location_id: locA.id } },
+  const stockAfter2 = await prisma.stock.findFirst({
+    where: { material_id: material.id, location_id: locA.id, lot_id: null },
   });
   ok(Number(stockAfter2.quantity) === 150, `Stock A = 150 (je ${stockAfter2.quantity})`);
 
@@ -109,11 +109,11 @@ async function main() {
     to_location_id: locB.id,
     quantity: 30,
   });
-  const stockAAfter3 = await prisma.stock.findUnique({
-    where: { material_id_location_id: { material_id: material.id, location_id: locA.id } },
+  const stockAAfter3 = await prisma.stock.findFirst({
+    where: { material_id: material.id, location_id: locA.id, lot_id: null },
   });
-  const stockBAfter3 = await prisma.stock.findUnique({
-    where: { material_id_location_id: { material_id: material.id, location_id: locB.id } },
+  const stockBAfter3 = await prisma.stock.findFirst({
+    where: { material_id: material.id, location_id: locB.id, lot_id: null },
   });
   ok(Number(stockAAfter3.quantity) === 120, `Stock A = 120 (je ${stockAAfter3.quantity})`);
   ok(Number(stockBAfter3.quantity) === 30, `Stock B = 30 (je ${stockBAfter3.quantity})`);
@@ -133,11 +133,11 @@ async function main() {
   ok(r4.move.id === (await prisma.inventoryMovement.findUnique({ where: { client_uuid: UUID.t1 } })).id,
      'vrácen byl původní move');
 
-  const stockAFinal = await prisma.stock.findUnique({
-    where: { material_id_location_id: { material_id: material.id, location_id: locA.id } },
+  const stockAFinal = await prisma.stock.findFirst({
+    where: { material_id: material.id, location_id: locA.id, lot_id: null },
   });
-  const stockBFinal = await prisma.stock.findUnique({
-    where: { material_id_location_id: { material_id: material.id, location_id: locB.id } },
+  const stockBFinal = await prisma.stock.findFirst({
+    where: { material_id: material.id, location_id: locB.id, lot_id: null },
   });
   ok(Number(stockAFinal.quantity) === 120, `Stock A po dedup = 120 (je ${stockAFinal.quantity})`);
   ok(Number(stockBFinal.quantity) === 30, `Stock B po dedup = 30 (je ${stockBFinal.quantity})`);

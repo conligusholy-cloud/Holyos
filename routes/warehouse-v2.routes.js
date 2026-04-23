@@ -763,6 +763,15 @@ router.post('/materials/:id/lots/receive', async (req, res, next) => {
   }
 });
 
+// POST /api/wh/lots/sweep-expired — admin hromadně marknout prošlé šarže
+router.post('/lots/sweep-expired', async (req, res, next) => {
+  try {
+    const cutoff = req.body?.cutoff ? String(req.body.cutoff) : undefined;
+    const result = await lotsService.sweepExpiredLots({ cutoff });
+    res.json(result);
+  } catch (err) { next(err); }
+});
+
 // PATCH /api/wh/lots/:id/status  body: { status, note? }
 const lotStatusSchema = z.object({
   status: z.enum(['in_stock', 'consumed', 'expired', 'scrapped']),
