@@ -867,14 +867,11 @@ public sealed class SubmitForm : Form
         var result = new List<string>();
         try
         {
-            var dir = Path.GetDirectoryName(srcPath);
-            if (string.IsNullOrEmpty(dir) || !Directory.Exists(dir)) return result;
             var nameNoExt = Path.GetFileNameWithoutExtension(srcPath);
+            if (string.IsNullOrEmpty(nameNoExt)) return result;
 
-            // Přípony — z AttachmentExtensions + všechno ne-SW-native z
-            // PrimaryExtensions (pro případ, že si uživatel přidal vlastní typ
-            // jako „primární", ale my ho bereme jako přílohu). Nakonec doplníme
-            // pevný seznam standardních CAD exportů jako safety net.
+            // Seznam povolených příloh — AttachmentExtensions + non-SW z PrimaryExtensions
+            // + hardcoded safety net standardních CAD exportů.
             var attachExts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var e in (_settings.AttachmentExtensions ?? new List<string>()))
                 attachExts.Add(e.TrimStart('.').ToLowerInvariant());
@@ -886,19 +883,34 @@ public sealed class SubmitForm : Form
             foreach (var e in new[] { "step", "stp", "dxf", "dwg", "iges", "igs", "easm", "eprt", "x_t", "x_b", "pdf", "stl" })
                 attachExts.Add(e);
 
-            // Najdi skutečně existující siblings přes Get-Files (case-insensitive
-            // filesystem). Tohle je spolehlivější, než zkoušet všechny kombinace
-            // lower/UPPER ručně — ošetří i mixed-case příponu typu "File.Dxf".
-            foreach (var file in Directory.EnumerateFiles(dir, nameNoExt + ".*"))
+            // Kandidátní adresáře, kde siblings hledáme:
+            //   1) vedle samotného souboru (standardní případ)
+            //   2) v DefaultCadFolder (kořenová CAD složka) — konstruktéři často
+            //      dávají DXF/PDF do jedné „společné" root složky, zatímco SLDPRT
+            //      subsestav jsou ve vlastních podsložkách. Bez této cesty by
+            //      Bridge nenašel siblings pro komponenty v podsložkách.
+            var dirs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var ownDir = Path.GetDirectoryName(srcPath);
+            if (!string.IsNullOrEmpty(ownDir) && Directory.Exists(ownDir)) dirs.Add(ownDir);
+            var root = _settings.DefaultCadFolder;
+            if (!string.IsNullOrEmpty(root) && Directory.Exists(root)) dirs.Add(root);
+
+            foreach (var dir in dirs)
             {
-                if (!string.Equals(Path.GetFileNameWithoutExtension(file), nameNoExt,
-                        StringComparison.OrdinalIgnoreCase))
-                    continue;   // "NA0733kopie.SLDPRT" nesmí trefit "NA0733"
-                var ext = Path.GetExtension(file).TrimStart('.').ToLowerInvariant();
-                if (!attachExts.Contains(ext)) continue;
-                if (string.Equals(file, srcPath, StringComparison.OrdinalIgnoreCase)) continue;
-                if (!result.Any(x => string.Equals(x, file, StringComparison.OrdinalIgnoreCase)))
-                    result.Add(file);
+                IEnumerable<string> files;
+                try { files = Directory.EnumerateFiles(dir, nameNoExt + ".*"); }
+                catch { continue; }
+                foreach (var file in files)
+                {
+                    if (!string.Equals(Path.GetFileNameWithoutExtension(file), nameNoExt,
+                            StringComparison.OrdinalIgnoreCase))
+                        continue;   // "NA0733kopie.SLDPRT" nesmí trefit "NA0733"
+                    var ext = Path.GetExtension(file).TrimStart('.').ToLowerInvariant();
+                    if (!attachExts.Contains(ext)) continue;
+                    if (string.Equals(file, srcPath, StringComparison.OrdinalIgnoreCase)) continue;
+                    if (!result.Any(x => string.Equals(x, file, StringComparison.OrdinalIgnoreCase)))
+                        result.Add(file);
+                }
             }
         }
         catch { /* best-effort */ }
@@ -1085,27 +1097,53 @@ public sealed class SubmitForm : Form
                     Step($"Nahráno: {row.FileName}");
                 }
 
+                // SAFETY NET: před upload vždycky re-scan siblings. Pokud byl row
+                // přidán přes auto-expanzi (Vyhledat komponenty → AddFilePathIfNew),
+                // SiblingAttachments nemusí být kompletní. Zde doplníme všechno,
+                // co FindSiblingAttachments vidí (vedle souboru + v DefaultCadFolder).
+                if (SwNativeExts.Contains(row.Extension))
+                {
+                    var freshSiblings = FindSiblingAttachments(row.Path);
+                    var existingSet = new HashSet<string>(row.SiblingAttachments, StringComparer.OrdinalIgnoreCase);
+                    foreach (var fs in freshSiblings)
+                    {
+                        if (!existingSet.Contains(fs))
+                        {
+                            row.SiblingAttachments.Add(fs);
+                            existingSet.Add(fs);
+                        }
+                    }
+                }
+
                 // Sesterské soubory vedle SW modelu — nahrajeme jako přílohy.
+                // Retry 3× při přechodných síťových chybách, ať nic nezapadne tiše.
                 foreach (var sib in row.SiblingAttachments)
                 {
-                    try
+                    if (!File.Exists(sib)) { Step($"Přeskakuji (neexistuje): {Path.GetFileName(sib)}"); continue; }
+                    var kind = Path.GetExtension(sib).TrimStart('.').ToLowerInvariant();
+                    var sibFileName = Path.GetFileName(sib);
+                    Exception? lastEx = null;
+                    bool uploaded = false;
+                    for (int attempt = 1; attempt <= 3 && !uploaded; attempt++)
                     {
-                        var kind = Path.GetExtension(sib).TrimStart('.').ToLowerInvariant();
-                        var bytes = await Task.Run(() => File.ReadAllBytes(sib));
-                        var uploaded = await _client.UploadAssetAsync(kind,
-                            Path.GetFileName(sib), bytes);
-                        list.Add(new AttachmentDto
+                        try
                         {
-                            Kind = kind,
-                            Filename = Path.GetFileName(sib),
-                            Path = uploaded.Path,
-                        });
+                            var bytes = await Task.Run(() => File.ReadAllBytes(sib));
+                            var up = await _client.UploadAssetAsync(kind, sibFileName, bytes);
+                            list.Add(new AttachmentDto { Kind = kind, Filename = sibFileName, Path = up.Path });
+                            uploaded = true;
+                        }
+                        catch (Exception ex)
+                        {
+                            lastEx = ex;
+                            if (attempt < 3) await Task.Delay(500 * attempt); // 500ms, 1000ms backoff
+                        }
                     }
-                    catch (Exception ex)
-                    {
-                        Diagnostics.LogException($"UploadSibling {Path.GetFileName(sib)}", ex);
-                    }
-                    Step($"Nahráno: {Path.GetFileName(sib)}");
+                    if (!uploaded && lastEx != null)
+                        Diagnostics.LogException($"UploadSibling FAILED {sibFileName} (3 pokusy)", lastEx);
+                    Step(uploaded
+                        ? $"Nahráno: {sibFileName}"
+                        : $"SELHALO: {sibFileName}");
                 }
 
                 // Samotný SW soubor (SLDPRT/SLDASM/SLDDRW) — uploadneme ho také
@@ -1118,24 +1156,30 @@ public sealed class SubmitForm : Form
                     && SwNativeExts.Contains(row.Extension)
                     && File.Exists(row.Path))
                 {
-                    try
+                    var kind = row.Extension.ToLowerInvariant();
+                    Exception? lastEx = null;
+                    bool uploaded = false;
+                    for (int attempt = 1; attempt <= 3 && !uploaded; attempt++)
                     {
-                        _status.Text = $"Nahrávám SW soubor: {row.FileName}…";
-                        _status.Refresh();
-                        var kind = row.Extension.ToLowerInvariant();
-                        var bytes = await Task.Run(() => File.ReadAllBytes(row.Path));
-                        var uploaded = await _client.UploadAssetAsync(kind, row.FileName, bytes);
-                        list.Add(new AttachmentDto
+                        try
                         {
-                            Kind = kind,
-                            Filename = row.FileName,
-                            Path = uploaded.Path,
-                        });
+                            _status.Text = attempt == 1
+                                ? $"Nahrávám SW soubor: {row.FileName}…"
+                                : $"Nahrávám SW soubor: {row.FileName} (pokus {attempt}/3)…";
+                            _status.Refresh();
+                            var bytes = await Task.Run(() => File.ReadAllBytes(row.Path));
+                            var up = await _client.UploadAssetAsync(kind, row.FileName, bytes);
+                            list.Add(new AttachmentDto { Kind = kind, Filename = row.FileName, Path = up.Path });
+                            uploaded = true;
+                        }
+                        catch (Exception ex)
+                        {
+                            lastEx = ex;
+                            if (attempt < 3) await Task.Delay(500 * attempt);
+                        }
                     }
-                    catch (Exception exSw)
-                    {
-                        Diagnostics.LogException($"UploadSwFile {row.FileName}", exSw);
-                    }
+                    if (!uploaded && lastEx != null)
+                        Diagnostics.LogException($"UploadSwFile FAILED {row.FileName} (3 pokusy)", lastEx);
                 }
 
                 rowAttachments[row] = list;
