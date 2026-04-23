@@ -85,6 +85,39 @@ export async function completeBatch(id: number): Promise<BatchSummary> {
   });
 }
 
+// Multi-lot split pick — rozdělený výdej přes víc šarží na jedné lokaci.
+// Backend používá deterministický client_uuid_prefix (prefix s nahrazením
+// posledních 4 hex znaků za index splitu) pro idempotenci každého splitu zvlášť.
+export interface PickSplit {
+  lot_id: number;
+  quantity: number;
+  from_location_id?: number | null;
+}
+
+export interface PickSplitInput {
+  batch_item_id: number;
+  client_uuid_prefix: string;
+  splits: PickSplit[];
+  note?: string | null;
+}
+
+export interface PickSplitResult {
+  item: BatchItem;
+  moves: Array<{ move_id: number; lot_id: number; quantity: number; deduped: boolean }>;
+  total_picked: number;
+  auto_completed: boolean;
+}
+
+export async function pickBatchItemSplit(
+  batchId: number,
+  input: PickSplitInput
+): Promise<PickSplitResult> {
+  return apiFetch<PickSplitResult>(`/api/wh/batches/${batchId}/pick-split`, {
+    method: 'POST',
+    body: input,
+  });
+}
+
 export function numberOrZero(value: string | number | null | undefined): number {
   if (value == null) return 0;
   const n = typeof value === 'number' ? value : Number(value);

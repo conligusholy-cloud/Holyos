@@ -259,6 +259,15 @@ export default function PickingPickPage() {
           </button>
           <button
             type="button"
+            className="btn"
+            onClick={() => navigate(`/picking/${batchId}/items/${batchItemId}/split`)}
+            disabled={saving || requiresLocationScan}
+            title="Rozdělit pick mezi víc šarží (online only)"
+          >
+            ⇵ Rozdělit přes šarže
+          </button>
+          <button
+            type="button"
             className="btn btn-ghost"
             onClick={() => navigate(`/picking/${batchId}`)}
             disabled={saving}

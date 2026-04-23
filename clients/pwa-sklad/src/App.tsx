@@ -14,6 +14,7 @@ import InventoryCountPage from './pages/InventoryCountPage';
 import PickingListPage from './pages/PickingListPage';
 import PickingDetailPage from './pages/PickingDetailPage';
 import PickingPickPage from './pages/PickingPickPage';
+import PickingSplitPage from './pages/PickingSplitPage';
 
 export default function App() {
   return (
@@ -97,6 +98,14 @@ export default function App() {
         element={
           <ProtectedRoute>
             <PickingPickPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/picking/:id/items/:itemId/split"
+        element={
+          <ProtectedRoute>
+            <PickingSplitPage />
           </ProtectedRoute>
         }
       />
