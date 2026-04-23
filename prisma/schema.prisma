@@ -151,6 +151,9 @@ model Person {
   batches_assigned        Batch[]               @relation("BatchAssignee")
   batch_items_picked      BatchItem[]           @relation("BatchItemPickedBy")
   print_jobs              PrintJob[]            @relation("PrintJobRequestedBy")
+  serials_received        SerialNumber[]        @relation("SerialReceivedBy")
+  serials_issued          SerialNumber[]        @relation("SerialIssuedBy")
+  lots_received           MaterialLot[]         @relation("MaterialLotReceivedBy")
 
   @@index([department_id])
   @@index([role_id])
@@ -446,6 +449,7 @@ model Company {
   vehicle_tire_changes   VehicleTireChange[]   @relation("VehicleTireCompany")
   // SKLAD 2.0 — dodavatel/odběratel na skladovém dokumentu (DL, výdejka)
   warehouse_documents    WarehouseDocument[]   @relation("WarehouseDocumentPartner")
+  supplied_lots          MaterialLot[]         @relation("MaterialLotSupplier")
 
   @@index([ico])
   @@index([type])
@@ -559,6 +563,7 @@ model WarehouseLocation {
   incoming_transfers     InventoryMovement[] @relation("MovementToLocation")   // přesuny "do této lokace"
   printers               Printer[]         // tiskárny přiřazené k této lokaci
   batch_items_from       BatchItem[]       // pickovací položky zdrojové lokace
+  serial_numbers         SerialNumber[]    // sériová čísla aktuálně umístěná na lokaci
 
   @@index([warehouse_id])
   @@index([type])
@@ -692,6 +697,8 @@ model Material {
   cad_components      CadComponent[]              // komponenty v CAD kusovníkách namapované na tento materiál
   stock              Stock[]                     // SKLAD 2.0 — zásoby po lokacích (rychlý lookup)
   batch_items        BatchItem[]                 // SKLAD 2.0 — položky v pickovacích dávkách
+  serial_numbers     SerialNumber[]              // SKLAD 2.0 — sériová čísla per kus (pokud save_sn_first_scan)
+  lots               MaterialLot[]               // SKLAD 2.0 — šarže (pokud expirable / distinguish_batches)
 
   @@index([code])
   @@index([supplier_id])
@@ -727,6 +734,9 @@ model InventoryMovement {
   to_location    WarehouseLocation? @relation("MovementToLocation", fields: [to_location_id], references: [id])
   document       WarehouseDocument? @relation(fields: [document_id], references: [id])
   creator        Person?            @relation("MovementCreatedBy", fields: [created_by], references: [id])
+  serials_received SerialNumber[]   @relation("SerialReceivedMove") // S/N přijatá tímto pohybem
+  serials_issued   SerialNumber[]   @relation("SerialIssuedMove")   // S/N vydaná tímto pohybem
+  lots_received    MaterialLot[]    @relation("MaterialLotReceivedMove") // šarže přijaté tímto pohybem
 
   @@index([material_id])
   @@index([warehouse_id])
@@ -1913,6 +1923,7 @@ model Stock {
   id                 Int      @id @default(autoincrement())
   material_id        Int
   location_id        Int
+  lot_id             Int?     // SKLAD 2.0 — šarže (jen pokud Material.expirable nebo distinguish_batches)
   quantity           Decimal  @default(0) @db.Decimal(12, 3)
   reserved_quantity  Decimal  @default(0) @db.Decimal(12, 3) // rezervováno pro otevřené dávky/výdejky
 
@@ -1920,11 +1931,54 @@ model Stock {
 
   material Material          @relation(fields: [material_id], references: [id])
   location WarehouseLocation @relation(fields: [location_id], references: [id])
+  lot      MaterialLot?      @relation(fields: [lot_id], references: [id])
 
-  @@unique([material_id, location_id])
+  // Triplet unique — pro nešaržované materiály (lot_id = NULL) PostgreSQL NULL != NULL,
+  // takže potenciálně dva záznamy [material, location, NULL]. Business logika v
+  // moves.service.js musí takové duplicity hlídat (zatím: upsert po kompozitním klíči).
+  @@unique([material_id, location_id, lot_id])
   @@index([location_id])
   @@index([material_id])
+  @@index([lot_id])
   @@map("stock")
+}
+
+// SKLAD 2.0 — Šarže (lot) pro materiály s expirací nebo rozlišováním dávek.
+// Typický use case: prádelna (detergenty s expirací, sledujeme od které šarže
+// byl odebrán kus do konkrétního cyklu), potraviny, chemikálie.
+// FIFO podle expires_at se řeší v services/warehouse/lots.service.js pickFIFO.
+model MaterialLot {
+  id              Int       @id @default(autoincrement())
+  material_id     Int
+  lot_code        String    @db.VarChar(100)
+  status          String    @default("in_stock") @db.VarChar(20) // in_stock, consumed, expired, scrapped
+
+  manufactured_at DateTime? @db.Date
+  expires_at      DateTime? @db.Date
+
+  supplier_id         Int?
+  supplier_lot_ref    String? @db.VarChar(100) // externí lot reference od dodavatele
+
+  received_at         DateTime?
+  received_move_id    Int?
+  received_by         Int?
+
+  note       String? @db.Text
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  material        Material           @relation(fields: [material_id], references: [id], onDelete: Cascade)
+  supplier        Company?           @relation("MaterialLotSupplier", fields: [supplier_id], references: [id])
+  received_move   InventoryMovement? @relation("MaterialLotReceivedMove", fields: [received_move_id], references: [id])
+  received_person Person?            @relation("MaterialLotReceivedBy", fields: [received_by], references: [id])
+  stock_rows      Stock[]            // Stock záznamy v různých lokacích pro tuto šarži
+
+  @@unique([material_id, lot_code])
+  @@index([material_id])
+  @@index([status])
+  @@index([expires_at])
+  @@index([supplier_id])
+  @@map("material_lots")
 }
 
 // Skladový dokument — zastřešuje skupinu pohybů (dodací list, výdejka, přesunka,
@@ -2084,4 +2138,51 @@ model PrintJob {
   @@index([status])
   @@index([created_at])
   @@map("print_jobs")
+}
+
+// SKLAD 2.0 — Sériová čísla (servis + trackované kusy)
+// Jedno vydané číslo per konkrétní fyzický kus materiálu. Řízení: při příjmu
+// materiálu s Material.save_sn_first_scan=true UI vyžádá sken N S/N; při
+// výdeji/servisu se S/N mění status + naváže se na zakázku. `sn_mask` na
+// Material může obsahovat regex pro validaci formátu S/N.
+model SerialNumber {
+  id             Int       @id @default(autoincrement())
+  material_id    Int
+  serial_number  String    @db.VarChar(100)
+  status         String    @default("in_stock") @db.VarChar(20) // in_stock, issued, scrapped, returned
+  location_id    Int?
+
+  // Audit: kdy se číslo objevilo / vydalo / vyřadilo + vazba na pohyby.
+  received_at        DateTime?
+  received_move_id   Int?
+  issued_at          DateTime?
+  issued_move_id     Int?
+  scrapped_at        DateTime?
+  returned_at        DateTime?
+
+  // Vazba na zakázku / servisní případ / dávku.
+  reference_type String? @db.VarChar(50) // order, service_case, batch, manual, project
+  reference_id   Int?
+
+  received_by Int? // Person — kdo přijal
+  issued_by   Int? // Person — kdo vydal
+  note        String? @db.Text
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  material        Material           @relation(fields: [material_id], references: [id], onDelete: Cascade)
+  location        WarehouseLocation? @relation(fields: [location_id], references: [id])
+  received_move   InventoryMovement? @relation("SerialReceivedMove", fields: [received_move_id], references: [id])
+  issued_move     InventoryMovement? @relation("SerialIssuedMove", fields: [issued_move_id], references: [id])
+  received_person Person?            @relation("SerialReceivedBy", fields: [received_by], references: [id])
+  issued_person   Person?            @relation("SerialIssuedBy", fields: [issued_by], references: [id])
+
+  @@unique([material_id, serial_number]) // stejný S/N může teoreticky existovat u různých materiálů
+  @@index([material_id])
+  @@index([serial_number])
+  @@index([status])
+  @@index([location_id])
+  @@index([reference_type, reference_id])
+  @@map("serial_numbers")
 }

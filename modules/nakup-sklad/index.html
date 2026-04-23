@@ -723,6 +723,7 @@
       const v = (f, def) => m[f] !== undefined && m[f] !== null ? m[f] : (def !== undefined ? def : '');
 
       const showSnTab = !!(id && m.save_sn_first_scan);
+      const showLotTab = !!(id && (m.expirable || m.distinguish_batches));
       document.getElementById('modal-root').innerHTML = '<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal" style="max-width:820px"><h2>' + (id?'✏️ Upravit zboží':'➕ Nové zboží') + '</h2>' +
         '<div class="sub-tabs" style="margin-bottom:12px">' +
           '<div class="sub-tab mat-tab active" data-tab="general" onclick="switchMatTab(\'general\')">Obecné</div>' +
@@ -730,6 +731,7 @@
           '<div class="sub-tab mat-tab" data-tab="planning" onclick="switchMatTab(\'planning\')">Plánování</div>' +
           '<div class="sub-tab mat-tab" data-tab="properties" onclick="switchMatTab(\'properties\')">Vlastnosti</div>' +
           (showSnTab ? '<div class="sub-tab mat-tab" data-tab="serials" onclick="switchMatTab(\'serials\');loadSerialPanel(' + id + ')">🔖 Sériová čísla</div>' : '') +
+          (showLotTab ? '<div class="sub-tab mat-tab" data-tab="lots" onclick="switchMatTab(\'lots\');loadLotPanel(' + id + ')">📦 Šarže</div>' : '') +
           '<div class="sub-tab mat-tab" data-tab="notes" onclick="switchMatTab(\'notes\')">Poznámky</div>' +
         '</div>' +
         '<form onsubmit="saveMaterial(event,' + (id||'null') + ')" style="max-height:55vh;overflow-y:auto;padding-right:8px">' +
@@ -854,6 +856,25 @@
                 '<div id="sn-panel-content" style="max-height:46vh;overflow-y:auto">Načítám…</div>' +
               '</div>'
             : '') +
+          // === TAB: Šarže (jen pokud expirable / distinguish_batches) ===
+          (showLotTab
+            ? '<div class="mat-tab-content" data-tab="lots" style="display:none">' +
+                '<div style="display:flex;gap:10px;align-items:center;justify-content:space-between;margin-bottom:10px">' +
+                  '<div style="display:flex;gap:8px;align-items:center">' +
+                    '<label style="font-size:12px;color:var(--text2)">Stav:</label>' +
+                    '<select id="lot-filter-status" onchange="loadLotPanel(' + id + ')" style="padding:6px 10px;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:12px">' +
+                      '<option value="in_stock" selected>Na skladě</option>' +
+                      '<option value="">Vše</option>' +
+                      '<option value="consumed">Spotřebováno</option>' +
+                      '<option value="expired">Po expiraci</option>' +
+                      '<option value="scrapped">Vyřazeno</option>' +
+                    '</select>' +
+                  '</div>' +
+                  '<button type="button" class="btn btn-primary" onclick="openLotReceiveDialog(' + id + ')">+ Přijmout šarži</button>' +
+                '</div>' +
+                '<div id="lot-panel-content" style="max-height:46vh;overflow-y:auto">Načítám…</div>' +
+              '</div>'
+            : '') +
           // === TAB: Poznámky ===
           '<div class="form-grid mat-tab-content" data-tab="notes" style="display:none">' +
             '<div class="form-group full"><label>Poznámka</label><textarea name="description" rows="4">' + v('description') + '</textarea></div>' +
@@ -938,12 +959,14 @@
       // Parse numbers
       const nums = ['unit_price','min_stock','max_stock','weight','alt_unit_coeff','batch_size_min','batch_size_max','batch_size_default','lead_time_days','wait_after_stock_hours','expedition_reserve_days','delivery_tolerance_pct','processed_in_multiples','priority','release_before_dispatch_days','forecast_pct','sort_weight','daily_target','max_acceptable_shelf_life_pct'];
       for (const n of nums) if (d[n] !== undefined) d[n] = parseFloat(d[n]) || 0;
-      // Optional Int FK: prázdný string → null, jinak parseInt
-      if (d.supplier_id === '' || d.supplier_id == null) d.supplier_id = null;
-      else d.supplier_id = parseInt(d.supplier_id);
-      // Optional Date: prázdný string → null (Prisma neakceptuje "")
-      const dates = ['valid_from', 'valid_to'];
-      for (const f of dates) if (d[f] === '') d[f] = null;
+      // Všechny optional FK (pole končící na _id) a datumová pole: "" → null.
+      // Prisma neakceptuje prázdný string tam, kde čeká number/null nebo Date/null.
+      for (const key of Object.keys(d)) {
+        if (d[key] === '' && (key.endsWith('_id') || key.startsWith('valid_'))) {
+          d[key] = null;
+        }
+      }
+      if (typeof d.supplier_id === 'string' && d.supplier_id) d.supplier_id = parseInt(d.supplier_id);
       // Checkboxes (unchecked = not in FormData)
       const cbs = ['non_stock','uses_service_eshop','distinguish_batches','interchangeable_batches','no_availability_check','check_availability_stage','check_availability_expedition','plan_orders','mandatory_scan','save_sn_first_scan','temp_barcode','auto_complete_after_bom_scan','exact_consumption','ignore','ignore_forecast_eval','split_receipt_by_sales_items','expirable','allow_rotation'];
       for (const cb of cbs) d[cb] = f.has(cb);
@@ -1179,6 +1202,210 @@
           return;
         }
         loadSerialPanel(materialId);
+      } catch (err) {
+        alert('Chyba: ' + (err.message || String(err)));
+      }
+    }
+
+    // ============================================================
+    // ŠARŽE (panel v detailu materiálu, jen expirable / distinguish_batches)
+    // ============================================================
+
+    const LOT_STATUS_LABEL = {
+      in_stock: 'Skladem',
+      consumed: 'Spotřebováno',
+      expired:  'Po expiraci',
+      scrapped: 'Vyřazeno',
+    };
+    const LOT_STATUS_COLOR = {
+      in_stock: '#10b981',
+      consumed: '#6c8cff',
+      expired:  '#ef4444',
+      scrapped: '#6c6c6c',
+    };
+
+    function fmtDate(iso) {
+      if (!iso) return '—';
+      try { return new Date(iso).toLocaleDateString('cs-CZ'); } catch(_) { return iso; }
+    }
+    function daysUntil(iso) {
+      if (!iso) return null;
+      const now = new Date();
+      const target = new Date(iso);
+      const diff = Math.floor((target - now) / (1000 * 60 * 60 * 24));
+      return diff;
+    }
+    function fmtExpires(iso) {
+      if (!iso) return '—';
+      const d = daysUntil(iso);
+      const date = fmtDate(iso);
+      if (d == null) return date;
+      if (d < 0) return date + ' (prošlá ' + Math.abs(d) + ' d.)';
+      if (d <= 30) return date + ' (za ' + d + ' d.)';
+      return date;
+    }
+
+    async function loadLotPanel(materialId) {
+      const container = document.getElementById('lot-panel-content');
+      if (!container) return;
+      const statusSel = document.getElementById('lot-filter-status');
+      const status = statusSel ? statusSel.value : '';
+      container.innerHTML = '<div style="color:var(--text2);font-size:13px;padding:20px;text-align:center">Načítám…</div>';
+      try {
+        const qs = status ? ('?status=' + encodeURIComponent(status)) : '';
+        const r = await fetch('/api/wh/materials/' + materialId + '/lots' + qs);
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const lots = await r.json();
+        if (!Array.isArray(lots) || lots.length === 0) {
+          container.innerHTML = '<div style="color:var(--text2);font-size:13px;padding:20px;text-align:center;font-style:italic">Žádné šarže pro tento filtr.</div>';
+          return;
+        }
+        const rows = lots.map(function(l) {
+          const c = LOT_STATUS_COLOR[l.status] || '#999';
+          const lbl = LOT_STATUS_LABEL[l.status] || l.status;
+          const totalStock = (l.stock_rows || []).reduce(function(s, row) { return s + Number(row.quantity || 0); }, 0);
+          const locList = (l.stock_rows || [])
+            .filter(function(row) { return Number(row.quantity) > 0; })
+            .map(function(row) { return esc(row.location ? row.location.label : '?') + ' (' + row.quantity + ')'; })
+            .join(', ');
+          const daysLeft = daysUntil(l.expires_at);
+          const expiresCls = daysLeft != null && daysLeft <= 30 ? ' style="color:#f59e0b;font-weight:600"' : (daysLeft != null && daysLeft < 0 ? ' style="color:#ef4444;font-weight:700"' : '');
+          const actions = [];
+          if (l.status === 'in_stock') {
+            actions.push('<button type="button" class="btn btn-secondary" style="padding:4px 10px;font-size:11px" onclick="changeLotStatusDialog(' + l.id + ',' + materialId + ',\'expired\')">Expirovat</button>');
+            actions.push('<button type="button" class="btn btn-secondary" style="padding:4px 10px;font-size:11px" onclick="changeLotStatusDialog(' + l.id + ',' + materialId + ',\'scrapped\')">Vyřadit</button>');
+          }
+          return '<tr>' +
+            '<td style="font-family:ui-monospace,monospace;font-weight:600">' + esc(l.lot_code) + '</td>' +
+            '<td><span style="display:inline-block;padding:2px 8px;border-radius:999px;background:' + c + '22;color:' + c + ';font-size:11px;font-weight:600">' + lbl + '</span></td>' +
+            '<td>' + fmtDate(l.manufactured_at) + '</td>' +
+            '<td' + expiresCls + '>' + fmtExpires(l.expires_at) + '</td>' +
+            '<td style="text-align:right;font-variant-numeric:tabular-nums">' + totalStock + '</td>' +
+            '<td style="font-size:11px;color:var(--text2)">' + (locList || '—') + '</td>' +
+            '<td style="text-align:right;white-space:nowrap">' + actions.join(' ') + '</td>' +
+            '</tr>';
+        }).join('');
+        container.innerHTML = '<table class="data-table" style="width:100%"><thead><tr>' +
+          '<th>Lot kód</th><th>Stav</th><th>Vyrobeno</th><th>Expiruje</th><th style="text-align:right">Množství</th><th>Lokace</th><th></th>' +
+          '</tr></thead><tbody>' + rows + '</tbody></table>' +
+          '<div style="font-size:11px;color:var(--text2);margin-top:8px">Zobrazeno ' + lots.length + ' šarží.</div>';
+      } catch (err) {
+        container.innerHTML = '<div style="color:#ef4444;font-size:13px;padding:20px">Chyba: ' + esc(err.message || String(err)) + '</div>';
+      }
+    }
+
+    async function openLotReceiveDialog(materialId) {
+      let material = null;
+      try { const r = await fetch('/api/wh/materials/' + materialId); material = await r.json(); } catch(_) {}
+      let warehouses = [];
+      try { const r = await fetch('/api/wh/warehouses'); warehouses = await r.json(); } catch(_) {}
+      let locations = [];
+      try { const r = await fetch('/api/wh/locations'); locations = await r.json(); } catch(_) {}
+      let suppliers = companies.filter(function(c) { return c.type === 'supplier' || c.type === 'both'; });
+      if (suppliers.length === 0) {
+        try { const r = await fetch('/api/wh/companies?type=supplier'); const list = await r.json(); suppliers = list; } catch(_) {}
+      }
+
+      const whOpts = (warehouses || []).map(function(w) { return '<option value="' + w.id + '">' + esc(w.name || ('Sklad #' + w.id)) + '</option>'; }).join('');
+      const locOpts = (locations || []).map(function(l) { return '<option value="' + l.id + '">' + esc(l.label) + '</option>'; }).join('');
+      const supOpts = '<option value="">—</option>' + (suppliers || []).map(function(c) { return '<option value="' + c.id + '">' + esc(c.name) + '</option>'; }).join('');
+
+      const shelfHint = material && material.shelf_life ? (' · shelf_life ' + material.shelf_life + ' ' + (material.shelf_life_unit || 'month')) : '';
+
+      document.getElementById('modal-root').innerHTML =
+        '<div class="modal-overlay" onclick="if(event.target===this)closeLotDialog()">' +
+          '<div class="modal" style="max-width:640px">' +
+            '<h2>Přijmout šarži — ' + esc(material && material.name ? material.name : 'Materiál') + '</h2>' +
+            '<div style="font-size:12px;color:var(--text2);margin-bottom:10px">expires_at se dopočítá z vyrobeno + shelf_life pokud vynecháš' + shelfHint + '</div>' +
+            '<div class="form-grid">' +
+              '<div class="form-group"><label>Kód šarže *</label><input type="text" id="lot-code" placeholder="např. LOT-2026-04-A" style="font-family:ui-monospace,monospace"></div>' +
+              '<div class="form-group"><label>Množství *</label><input type="number" id="lot-qty" step="0.001" placeholder="0"></div>' +
+              '<div class="form-group"><label>Sklad *</label><select id="lot-wh">' + whOpts + '</select></div>' +
+              '<div class="form-group"><label>Lokace *</label><select id="lot-loc">' + locOpts + '</select></div>' +
+              '<div class="form-group"><label>Vyrobeno</label><input type="date" id="lot-manufactured"></div>' +
+              '<div class="form-group"><label>Expiruje</label><input type="date" id="lot-expires"></div>' +
+              '<div class="form-group"><label>Dodavatel</label><select id="lot-supplier">' + supOpts + '</select></div>' +
+              '<div class="form-group"><label>Ref. dodavatele</label><input type="text" id="lot-supplier-ref" placeholder="externí lot"></div>' +
+              '<div class="form-group"><label>Cena / jednotku</label><input type="number" id="lot-price" step="0.01" placeholder="0"></div>' +
+              '<div class="form-group full"><label>Poznámka</label><input type="text" id="lot-note"></div>' +
+            '</div>' +
+            '<div id="lot-error" style="color:#ef4444;font-size:13px;margin-top:8px"></div>' +
+            '<div class="modal-actions">' +
+              '<button type="button" class="btn btn-secondary" onclick="closeLotDialog()">Zrušit</button>' +
+              '<button type="button" class="btn btn-primary" onclick="submitLotReceive(' + materialId + ')">Přijmout</button>' +
+            '</div>' +
+          '</div>' +
+        '</div>';
+    }
+
+    function closeLotDialog() {
+      document.getElementById('modal-root').innerHTML = '';
+    }
+
+    async function submitLotReceive(materialId) {
+      const errEl = document.getElementById('lot-error');
+      errEl.textContent = '';
+      const code = (document.getElementById('lot-code').value || '').trim();
+      const qty = parseFloat(document.getElementById('lot-qty').value);
+      const wh = parseInt(document.getElementById('lot-wh').value);
+      const loc = parseInt(document.getElementById('lot-loc').value);
+      const manuf = document.getElementById('lot-manufactured').value || null;
+      const exp = document.getElementById('lot-expires').value || null;
+      const supId = parseInt(document.getElementById('lot-supplier').value) || null;
+      const supRef = document.getElementById('lot-supplier-ref').value || null;
+      const price = parseFloat(document.getElementById('lot-price').value) || null;
+      const note = document.getElementById('lot-note').value || null;
+
+      if (!code) { errEl.textContent = 'Zadejte lot kód.'; return; }
+      if (!qty || qty <= 0) { errEl.textContent = 'Zadejte kladné množství.'; return; }
+      if (!wh || !loc) { errEl.textContent = 'Vyplňte sklad a lokaci.'; return; }
+
+      try {
+        const r = await fetch('/api/wh/materials/' + materialId + '/lots/receive', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            warehouse_id: wh,
+            location_id: loc,
+            quantity: qty,
+            lot_code: code,
+            manufactured_at: manuf,
+            expires_at: exp,
+            supplier_id: supId,
+            supplier_lot_ref: supRef,
+            unit_price: price,
+            note: note,
+          }),
+        });
+        const data = await r.json();
+        if (!r.ok) {
+          errEl.textContent = typeof data.error === 'string' ? data.error : 'Chyba ' + r.status;
+          return;
+        }
+        document.getElementById('modal-root').innerHTML = '';
+        await openMaterialModal(materialId);
+        setTimeout(function() { switchMatTab('lots'); loadLotPanel(materialId); }, 50);
+      } catch (err) {
+        errEl.textContent = err.message || String(err);
+      }
+    }
+
+    async function changeLotStatusDialog(lotId, materialId, newStatus) {
+      const label = LOT_STATUS_LABEL[newStatus] || newStatus;
+      if (!confirm('Opravdu označit šarži jako „' + label + '"? (Sklad se tím nesníží — případné vyskladnění udělej zvlášť přes pohyb.)')) return;
+      const note = prompt('Poznámka (volitelné):');
+      try {
+        const r = await fetch('/api/wh/lots/' + lotId + '/status', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: newStatus, note: note || null }),
+        });
+        if (!r.ok) {
+          const data = await r.json().catch(function() { return {}; });
+          alert('Chyba: ' + (data.error || r.status));
+          return;
+        }
+        loadLotPanel(materialId);
       } catch (err) {
         alert('Chyba: ' + (err.message || String(err)));
       }
