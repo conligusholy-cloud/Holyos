@@ -23,9 +23,9 @@
   </PropertyGroup>
 
   <PropertyGroup>
-    <Version>2.9.14</Version>
-    <AssemblyVersion>2.9.14.0</AssemblyVersion>
-    <FileVersion>2.9.14.0</FileVersion>
+    <Version>2.9.15</Version>
+    <AssemblyVersion>2.9.15.0</AssemblyVersion>
+    <FileVersion>2.9.15.0</FileVersion>
     <Product>HolyOS CAD Bridge</Product>
     <Company>Best Series s.r.o.</Company>
     <Copyright>(c) 2026 Best Series s.r.o.</Copyright>

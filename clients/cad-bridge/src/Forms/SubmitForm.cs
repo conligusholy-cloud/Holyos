@@ -315,6 +315,26 @@ public sealed class SubmitForm : Form
     }
 
     // ── Přidání souborů do gridu ────────────────────────────────────────────
+    // Počet běžících async operací (OnScanFolder, OnSearchAsync, OnSubmitAsync).
+    // Dokud je > 0, tlačítko Odevzdat je disabled — uživatel nemůže spustit submit
+    // dřív, než se kompletně načtou komponenty a přílohy.
+    private int _busyDepth;
+
+    private void SetBusy(bool busy)
+    {
+        _busyDepth = Math.Max(0, _busyDepth + (busy ? 1 : -1));
+        var isBusy = _busyDepth > 0;
+        _btnSubmit.Enabled     = !isBusy;
+        _btnScanFolder.Enabled = !isBusy;
+        _btnAddFile.Enabled    = !isBusy;
+        _btnSearch.Enabled     = !isBusy;
+        _btnSettings.Enabled   = !isBusy;
+        // Vizuálně odlišit — submit je primární akce, ať uživatel vidí, že čeká.
+        _btnSubmit.Text = isBusy
+            ? "⏳ Čekám na načtení komponent…"
+            : "✓ Odevzdat do HolyOSu";
+    }
+
     private void OnAddFile()
     {
         var exts = _settings.ImportExtensions ?? new List<string> { "sldprt", "sldasm", "slddrw" };
@@ -547,7 +567,7 @@ public sealed class SubmitForm : Form
             return;
         }
 
-        _btnSearch.Enabled = false;
+        SetBusy(true);
         _status.ForeColor = Color.FromArgb(100, 116, 139);
         _status.Text = "Spouštím SolidWorks…";
         try
@@ -619,7 +639,7 @@ public sealed class SubmitForm : Form
         }
         finally
         {
-            _btnSearch.Enabled = true;
+            SetBusy(false);
         }
     }
 
@@ -644,6 +664,10 @@ public sealed class SubmitForm : Form
             _settings.DefaultCadFolder = root;
             try { SettingsStore.Save(_settings); } catch { }
         }
+
+        // Zablokovat UI během skenu + následně spuštěného Vyhledat komponenty,
+        // aby uživatel nemohl klepnout Odevzdat dřív, než je všechno načteno.
+        SetBusy(true);
 
         // PRIMARY je VŽDY jen SW model (SLDPRT/SLDASM), nezávisle na Settings.
         // Dříve brala logika primary ze _settings.PrimaryExtensions, takže pokud
@@ -792,6 +816,7 @@ public sealed class SubmitForm : Form
             // neotevře sestavy v SW, nezíská feature-hash ani komponenty, a
             // často Petr zapomíná tento krok udělat. OnSearchAsync má uvnitř
             // taky DetectChangesAsync, takže změny proti serveru se označí.
+            // Busy je přenesen — OnSearchAsync si sám SetBusy(true/false).
             if (totalRows > 0)
             {
                 _ = OnSearchAsync();
@@ -807,6 +832,12 @@ public sealed class SubmitForm : Form
             Diagnostics.LogException("OnScanFolder", ex);
             _status.ForeColor = Color.FromArgb(220, 38, 38);
             _status.Text = "Chyba skenu: " + Diagnostics.ShortMessage(ex);
+        }
+        finally
+        {
+            // Synchronní část skenu skončila — odemknout UI. Pokud jsme spustili
+            // OnSearchAsync, ten si busy depth rovnou zase zvedne.
+            SetBusy(false);
         }
     }
 
@@ -963,7 +994,7 @@ public sealed class SubmitForm : Form
             }
         }
 
-        _btnSubmit.Enabled = false;
+        SetBusy(true);
 
         // PHASE 0: uložit všechny otevřené "dirty" dokumenty v SolidWorksu.
         // Pokrývá scenario: uživatel upravuje díl ale ještě neklikl Save —
@@ -1282,7 +1313,7 @@ public sealed class SubmitForm : Form
         }
         finally
         {
-            _btnSubmit.Enabled = true;
+            SetBusy(false);
             _progress.Value = _progress.Maximum;
             // Po malé pauze progress bar schováme — aby uživatel viděl "dokončeno".
             var t = new System.Windows.Forms.Timer { Interval = 1500 };
