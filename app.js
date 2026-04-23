@@ -505,9 +505,35 @@ app.use('/css', express.static(path.join(__dirname, 'css'), staticOpts));
 app.use('/js', express.static(path.join(__dirname, 'js'), staticOpts));
 app.use('/dist', express.static(path.join(__dirname, 'dist'), staticOpts));
 
+// PWA Sklad — vite build výstup, base '/pwa/'
+const PWA_DIST = path.join(__dirname, 'clients', 'pwa-sklad', 'dist');
+app.use('/pwa', express.static(PWA_DIST, {
+  ...staticOpts,
+  // sw.js a manifest nesmí cachovat klient, jinak se neaktualizuje
+  setHeaders(res, filePath) {
+    if (filePath.endsWith('sw.js') || filePath.endsWith('manifest.webmanifest')) {
+      res.setHeader('Cache-Control', 'no-cache');
+    }
+  },
+}));
+
 // Redirect /admin/users → modul správy uživatelů
 app.get('/admin/users*', (req, res) => {
   res.redirect('/modules/sprava-uzivatelu/index.html');
+});
+
+// SPA fallback pro PWA (react-router) — musí být PŘED generickým /* fallbackem
+app.get('/pwa/*', (req, res, next) => {
+  if (req.path.startsWith('/api/')) return next();
+  const indexPath = path.join(PWA_DIST, 'index.html');
+  res.sendFile(indexPath, (err) => {
+    if (err) {
+      // Build PWA není přítomen (dev / první deploy) — pošli návod místo 500
+      res.status(503).type('text').send(
+        'PWA dist není přítomný. Spusť `npm run build` v clients/pwa-sklad/ (nebo nech Railway build).'
+      );
+    }
+  });
 });
 
 // SPA fallback — pro stávající frontend (jen root a modules)
