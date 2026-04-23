@@ -499,13 +499,27 @@
             // pilulka na první pozici — soubor fyzicky v HolyOS není, ale uživatel
             // vidí, že výkres má tento typ modelu na straně Petra v CAD složce.
             const allAtt = [];
-            // Nejprve SW soubor sám — přidat jako pilulku BEZ linku.
-            const swKind = (d.extension || '').toLowerCase();
-            if (['sldprt', 'sldasm', 'slddrw'].includes(swKind)) {
-              allAtt.push({ kind: swKind, filename: d.file_name, path: null, __local: true });
-            }
+            // Nejprve posbírat serverové attachments napříč konfiguracemi.
             for (const c of (d.configurations || [])) {
               for (const a of (c.attachments || [])) allAtt.push(a);
+            }
+            // SW soubor (SLDPRT/SLDASM/SLDDRW): pokud už je v serverových
+            // attachments (Bridge 2.9.13+ uploaduje binárku na server → klikatelný
+            // link), nic nedělat. Pokud NENÍ (starší import), přidat šedou __local
+            // info pilulku jako indikaci, že soubor existuje jen u konstruktéra.
+            const swKind = (d.extension || '').toLowerCase();
+            if (['sldprt', 'sldasm', 'slddrw'].includes(swKind)) {
+              const hasServerSw = allAtt.some(a => (a.kind || '').toLowerCase() === swKind);
+              if (!hasServerSw) {
+                allAtt.unshift({ kind: swKind, filename: d.file_name, path: null, __local: true });
+              } else {
+                // Posunout SW příloh na první pozici pro konzistentní UX.
+                const swIdx = allAtt.findIndex(a => (a.kind || '').toLowerCase() === swKind);
+                if (swIdx > 0) {
+                  const [sw] = allAtt.splice(swIdx, 1);
+                  allAtt.unshift(sw);
+                }
+              }
             }
             if (allAtt.length === 0) return '<span style="color:var(--text2);">\u2014</span>';
             // Deduplikace podle kind|filename — stejná příloha u více konfigurací se neopakuje.

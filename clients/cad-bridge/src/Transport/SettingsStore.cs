@@ -47,6 +47,12 @@ public sealed class BridgeSettings
     /// dostane aktuální obsah a nový checksum, server správně rozpozná change.</summary>
     public bool RefreshAssembliesBeforeExport { get; set; } = true;
 
+    /// <summary>Uploadovat i samotný SW soubor (SLDPRT/SLDASM/SLDDRW) na server,
+    /// aby šel v HolyOSu stáhnout a otevřít v eDrawings / SolidWorksu.
+    /// POZOR: velké sestavy zabírají hodně místa, pro stovky souborů se může
+    /// úložiště Railway plnit rychle. Default true (pro testing), lze vypnout.</summary>
+    public bool UploadSwFileItself { get; set; } = true;
+
     /// <summary>Zpětná kompatibilita — starý název pole přípon.</summary>
     public System.Collections.Generic.List<string>? ImportExtensions
     {
