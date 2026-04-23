@@ -166,6 +166,17 @@ function getWarehouseTools() {
         },
       },
     },
+    {
+      name: 'recent_warehouse_activity',
+      description: 'Souhrn skladové aktivity za posledních N dní (default 1) — počty pohybů per type, top materiály podle obratu, nové šarže, vydaná sériová čísla. Použij pro denní reporty: „co se ve skladu stalo dnes / tento týden".',
+      input_schema: {
+        type: 'object',
+        properties: {
+          days: { type: 'number', description: 'Kolik dní zpět (default 1 = dnes)', default: 1 },
+          top: { type: 'number', description: 'Počet top materiálů (default 5)', default: 5 },
+        },
+      },
+    },
   ];
 }
 
@@ -418,6 +429,66 @@ async function executeWarehouseTool(toolName, params, prisma) {
         status: job.status,
         copies: job.copies,
         finished_at: job.finished_at,
+      };
+    }
+
+    case 'recent_warehouse_activity': {
+      const days = Math.max(1, Number(params.days) || 1);
+      const top = Math.min(20, Number(params.top) || 5);
+      const since = new Date();
+      since.setDate(since.getDate() - days);
+
+      // Pohyby per type
+      const movesByType = await prisma.inventoryMovement.groupBy({
+        by: ['type'],
+        where: { created_at: { gte: since } },
+        _count: { _all: true },
+        _sum: { quantity: true },
+      });
+
+      // Top materiály podle počtu pohybů
+      const topMoves = await prisma.inventoryMovement.groupBy({
+        by: ['material_id'],
+        where: { created_at: { gte: since } },
+        _count: { _all: true },
+        _sum: { quantity: true },
+        orderBy: { _count: { material_id: 'desc' } },
+        take: top,
+      });
+      const topMaterialIds = topMoves.map((m) => m.material_id);
+      const topMaterials = topMaterialIds.length > 0
+        ? await prisma.material.findMany({
+            where: { id: { in: topMaterialIds } },
+            select: { id: true, code: true, name: true, unit: true },
+          })
+        : [];
+      const matMap = Object.fromEntries(topMaterials.map((m) => [m.id, m]));
+
+      // Nové šarže
+      const newLots = await prisma.materialLot.count({
+        where: { created_at: { gte: since } },
+      });
+
+      // Vydaná S/N
+      const issuedSerials = await prisma.serialNumber.count({
+        where: { issued_at: { gte: since } },
+      });
+
+      return {
+        horizon_days: days,
+        since: since.toISOString(),
+        moves_by_type: movesByType.map((m) => ({
+          type: m.type,
+          count: m._count._all,
+          total_quantity: m._sum.quantity,
+        })),
+        top_materials: topMoves.map((m) => ({
+          material: matMap[m.material_id] ?? { id: m.material_id },
+          move_count: m._count._all,
+          total_quantity: m._sum.quantity,
+        })),
+        new_lots: newLots,
+        issued_serials: issuedSerials,
       };
     }
 

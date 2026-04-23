@@ -288,6 +288,43 @@ async function getSerialById(id) {
   });
 }
 
+/**
+ * Souhrn počtů napříč všemi S/N podle statusu.
+ */
+async function getStatusCounts() {
+  const grouped = await prisma.serialNumber.groupBy({
+    by: ['status'],
+    _count: { _all: true },
+  });
+  const counts = { in_stock: 0, issued: 0, scrapped: 0, returned: 0 };
+  for (const row of grouped) {
+    if (row.status in counts) {
+      counts[row.status] = row._count._all;
+    }
+  }
+  return counts;
+}
+
+/**
+ * Nedávno vydaná S/N — pro dashboard widget.
+ */
+async function listRecentlyIssued({ days = 30, limit = 10 } = {}) {
+  const since = new Date();
+  since.setDate(since.getDate() - Number(days));
+  return prisma.serialNumber.findMany({
+    where: {
+      status: { in: ['issued', 'returned'] },
+      issued_at: { gte: since },
+    },
+    orderBy: { issued_at: 'desc' },
+    take: Math.min(Number(limit) || 10, 100),
+    include: {
+      material: { select: { id: true, code: true, name: true, unit: true } },
+      issued_person: { select: { id: true, first_name: true, last_name: true } },
+    },
+  });
+}
+
 module.exports = {
   SN_STATUS,
   validateSnMask,
@@ -298,4 +335,6 @@ module.exports = {
   lookupBySerialNumber,
   listByMaterial,
   getSerialById,
+  getStatusCounts,
+  listRecentlyIssued,
 };

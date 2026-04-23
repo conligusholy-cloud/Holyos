@@ -529,6 +529,24 @@ router.get('/serials', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// GET /api/wh/serials/stats — souhrn per status (pro dashboard)
+router.get('/serials/stats', async (req, res, next) => {
+  try {
+    const counts = await serialNumbersService.getStatusCounts();
+    res.json(counts);
+  } catch (err) { next(err); }
+});
+
+// GET /api/wh/serials/recent?days=30&limit=10 — nedávno vydaná S/N
+router.get('/serials/recent', async (req, res, next) => {
+  try {
+    const days = req.query.days ? Number(req.query.days) : 30;
+    const limit = req.query.limit ? Number(req.query.limit) : 10;
+    const list = await serialNumbersService.listRecentlyIssued({ days, limit });
+    res.json(list);
+  } catch (err) { next(err); }
+});
+
 // GET /api/wh/serials/:id       — detail jednoho kusu
 router.get('/serials/:id', async (req, res, next) => {
   try {
