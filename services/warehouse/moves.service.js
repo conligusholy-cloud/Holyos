@@ -123,6 +123,54 @@ async function createMove(input) {
     throw new Error(`${input.type} vyžaduje kladné quantity`);
   }
 
+  // Auto-FIFO: pokud materiál je šaržovaný a volající nepředal explicitní
+  // lot_id, zvolíme lot s nejbližší expirací, který má dost stocku na zdrojové
+  // lokaci. Platí pro výdejové typy (issue/transfer/pick) a inventurní úpravy
+  // se zápornou quantity. Receipt bez lot_id necháváme padnout do NULL-lot
+  // bucketu — u receiptu je smysl explicitně zadat lot přes lots.service.
+  if (input.lot_id == null && ['issue', 'transfer', 'pick', 'adjustment', 'inventory_adjust'].includes(input.type)) {
+    const sourceLoc = input.from_location_id ?? input.location_id ?? null;
+    if (sourceLoc) {
+      const mat = await prisma.material.findUnique({
+        where: { id: input.material_id },
+        select: { expirable: true, distinguish_batches: true },
+      });
+      if (mat && (mat.expirable || mat.distinguish_batches)) {
+        const needed = Math.abs(Number(input.quantity));
+        const rows = await prisma.stock.findMany({
+          where: {
+            material_id: input.material_id,
+            location_id: sourceLoc,
+            quantity: { gt: 0 },
+            lot_id: { not: null },
+          },
+          include: { lot: true },
+        });
+        const valid = rows
+          .filter((s) => s.lot && s.lot.status === 'in_stock')
+          .sort((a, b) => {
+            const ax = a.lot.expires_at ? new Date(a.lot.expires_at).getTime() : Infinity;
+            const bx = b.lot.expires_at ? new Date(b.lot.expires_at).getTime() : Infinity;
+            return ax - bx;
+          });
+        const enough = valid.find((s) => Number(s.quantity) >= needed);
+        if (enough) {
+          input.lot_id = enough.lot_id;
+        } else if (valid.length > 0) {
+          const available = valid
+            .map((s) => `${s.lot.lot_code} (${s.quantity})`)
+            .join(', ');
+          throw new Error(
+            `Materiál je šaržovaný — žádná jednotlivá šarže na lokaci nemá ${needed} ks. K dispozici: ${available}. Rozděl pohyb přes víc šarží (pick-split) nebo vyřeš ručně.`
+          );
+        }
+        // Pokud valid.length === 0, šarže tam nejsou — necháváme padnout do
+        // NULL-lot bucketu (pravděpodobně nešaržované zbytky). Explicitní volání
+        // s lot_id zůstává dostupné pro plně šaržovaný provoz.
+      }
+    }
+  }
+
   // Lot status guard — pokud pohyb cílí na konkrétní šarži, ta musí být aktivní
   // (in_stock / consumed). Expired nebo scrapped šarže nelze pohybovat;
   // takové kusy musí být vyřazeny dedikovaným adjustment pohybem bez lot_id.
