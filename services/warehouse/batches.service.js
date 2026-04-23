@@ -5,6 +5,7 @@
 
 const { prisma } = require('../../config/database');
 const { createMove } = require('./moves.service');
+const lotsService = require('./lots.service');
 
 const BATCH_STATUS = ['open', 'picking', 'done', 'cancelled'];
 const ITEM_STATUS = ['pending', 'picked', 'short', 'skipped'];
@@ -96,14 +97,39 @@ async function pickBatchItem({ batch_id, batch_item_id, picked_quantity, from_lo
   const sourceLocation = from_location_id || item.from_location_id;
 
   let moveId = null;
+  let lotIdUsed = null;
   if (Number(picked_quantity) > 0) {
     if (!sourceLocation) {
       throw new Error('Chybí from_location_id (ani v requestu, ani na položce dávky)');
     }
-    // Pick = výdej ze zdrojové lokace (žádná cílová — materiál opouští sklad do pracoviště).
-    // Pro jednoduchost: type='pick', location_id = from (sníží Stock).
-    // Pokud potřebuješ převézt do výstupního skladu jako separátní transfer, uděláš ho
-    // jako samostatný move po pickingu.
+
+    // FIFO šarží: pokud materiál má expirable/distinguish_batches, vybereme
+    // lot s nejbližší expirací, který má dost stocku pro celé `picked_quantity`.
+    // Rozdělení přes víc šarží v jedné pick operaci nepodporujeme — operátor by
+    // ho musel udělat jako několik separátních picků.
+    const material = await prisma.material.findUnique({
+      where: { id: item.material_id },
+      select: { id: true, code: true, expirable: true, distinguish_batches: true },
+    });
+    if (material && (material.expirable || material.distinguish_batches)) {
+      const candidates = await lotsService.listFifoCandidates({
+        material_id: item.material_id,
+        location_id: sourceLocation,
+      });
+      const enough = candidates.find(
+        (s) => Number(s.quantity) >= Number(picked_quantity)
+      );
+      if (!enough) {
+        const available = candidates
+          .map((s) => `${s.lot.lot_code} (${s.quantity})`)
+          .join(', ');
+        throw new Error(
+          `Žádná jednotlivá šarže na lokaci nemá ${picked_quantity} ks. K dispozici: ${available || 'žádné šarže'}. Rozděl pick ručně.`
+        );
+      }
+      lotIdUsed = enough.lot_id;
+    }
+
     const moveResult = await createMove({
       type: 'issue', // picking fakticky znamená výdej na zakázku
       client_uuid,
@@ -111,11 +137,14 @@ async function pickBatchItem({ batch_id, batch_item_id, picked_quantity, from_lo
       material_id: item.material_id,
       warehouse_id: (await prisma.warehouseLocation.findUnique({ where: { id: sourceLocation }, select: { warehouse_id: true } })).warehouse_id,
       location_id: sourceLocation,
+      lot_id: lotIdUsed, // null pro nešaržované, lot.id pro FIFO pick
       quantity: picked_quantity,
       reference_type: 'batch',
       reference_id: batch.id,
       created_by: user_person_id ?? null,
-      note,
+      note: lotIdUsed
+        ? (note ? `${note} (lot ${lotIdUsed})` : `FIFO lot ${lotIdUsed}`)
+        : note,
     });
     moveId = moveResult.move.id;
   }
@@ -157,7 +186,7 @@ async function pickBatchItem({ batch_id, batch_item_id, picked_quantity, from_lo
     });
   }
 
-  return { item: updated, move_id: moveId, auto_completed: pendingLeft === 0 };
+  return { item: updated, move_id: moveId, lot_id: lotIdUsed, auto_completed: pendingLeft === 0 };
 }
 
 /**
