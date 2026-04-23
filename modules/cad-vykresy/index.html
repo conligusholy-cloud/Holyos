@@ -124,14 +124,11 @@
         <div id="project-tree" class="loader">Načítám…</div>
       </aside>
 
-      <!-- Pravá strana: seznam + detail -->
+      <!-- Pravá strana: seznam s inline expandable řádky -->
       <section class="right-panel">
         <div class="drawings-list">
           <h2 id="drawings-title">Vyber projekt vlevo</h2>
           <div id="drawings-table"></div>
-        </div>
-        <div class="detail-pane" id="detail-pane">
-          <div class="empty">Vyber výkres ze seznamu pro zobrazení detailu.</div>
         </div>
       </section>
     </div>
@@ -167,6 +164,7 @@
       query: '',
       expandedDrawingIds: new Set(),    // ID výkresů rozbalených v seznamu (inline detail)
       expandedAttachmentsIds: new Set(), // ID výkresů s rozbaleným seznamem příloh (+N → všechny)
+      detailsCache: new Map(),          // cache pro plný detail (history) — lazy-fetch při expand
     };
 
     // ─── Utils ───────────────────────────────────────────────────────────────
@@ -206,14 +204,29 @@
       renderDrawings();
     }
 
-    async function loadDetail(id) {
-      state.activeDrawingId = id;
-      const pane = document.getElementById('detail-pane');
-      pane.innerHTML = '<div class="loader">Načítám detail…</div>';
-      const res = await fetch('/api/cad/drawings/' + id, fetchOpts());
-      if (!res.ok) { pane.innerHTML = '<div class="empty">Chyba při načítání detailu.</div>'; return; }
-      const d = await res.json();
-      renderDetail(d);
+    // Toggle expand/collapse jednoho výkresu v seznamu.
+    // Při rozbalení (poprvé) async načte plný detail (plná historie změn),
+    // uloží do cache a re-renderuje. Zatímco fetch běží, expand už ukazuje
+    // data ze seznamu — uživatel nečeká na render, ale po dokončení fetche
+    // se doplní timeline historie.
+    async function toggleExpandedDrawing(id) {
+      if (state.expandedDrawingIds.has(id)) {
+        state.expandedDrawingIds.delete(id);
+        renderDrawings();
+        return;
+      }
+      state.expandedDrawingIds.add(id);
+      renderDrawings();
+      if (!state.detailsCache.has(id)) {
+        try {
+          const res = await fetch('/api/cad/drawings/' + id, fetchOpts());
+          if (res.ok) {
+            const full = await res.json();
+            state.detailsCache.set(id, full);
+            if (state.expandedDrawingIds.has(id)) renderDrawings();
+          }
+        } catch (_) { /* no-op; expanded zůstane s daty ze seznamu */ }
+      }
     }
 
     // ─── Render: strom projektů ──────────────────────────────────────────────
@@ -309,91 +322,16 @@
       return '';
     }
 
-    // Render inline expanded detail — vnořený řádek (TR) pod hlavním řádkem v tabulce.
-    // Obsahuje info o dílu/sestavě (z custom properties první konfigurace) a,
-    // pokud je to sestava, tabulku komponent (kusovník) se sloupci Norma/Popis/…
+    // Render inline expanded detail — vnořený řádek (TR) pod hlavním řádkem.
+    // Zavolá sdílený builder buildFullDetailHtml, aby se neduplikoval kód se
+    // samostatným detail pane. Obsahuje meta, historii změn, kusovník a konfigurace.
     function renderExpandedDetail(d) {
-      const cfg = (d.configurations || [])[0];
-      const cp  = cfg && cfg.custom_properties || {};
-
-      const norma  = cpLookup(cp, 'Norma', 'Standard');
-      const popis  = cpLookup(cp, 'Popis', 'Description', 'Název', 'Nazev', 'Name');
-      const mat    = cpLookup(cp, 'Materiál', 'Material');
-      const hmot   = cpLookup(cp, 'Hmotnost', 'Mass', 'Weight');
-      const rozmer = cpLookup(cp, 'Rozmer', 'Rozměr', 'Dimension', 'Size');
-      const polo   = cpLookup(cp, 'Polotovar', 'Semifinished', 'Semi-finished');
-      const tdp    = cpLookup(cp, 'TDP');
-
-      const infoChips = [
-        ['Norma',      norma],
-        ['Popis (SW)', popis],
-        ['Materiál',   mat],
-        ['Hmotnost',   hmot],
-        ['Rozměr',     rozmer],
-        ['Polotovar',  polo],
-        ['TDP',        tdp],
-      ].filter(([_, v]) => v).map(([label, value]) =>
-        '<div style="padding:6px 12px;background:rgba(148,163,184,0.08);border-radius:6px;font-size:12px;">' +
-          '<span style="color:var(--text2);text-transform:uppercase;letter-spacing:0.05em;font-size:10px;display:block;">' + escapeHtml(label) + '</span>' +
-          '<span style="color:var(--text);font-weight:600;">' + escapeHtml(value) + '</span>' +
-        '</div>'
-      ).join('');
-
-      const allComps = [];
-      for (const c of (d.configurations || [])) {
-        for (const comp of (c.components || [])) {
-          allComps.push(Object.assign({}, comp, { __configName: c.config_name }));
-        }
-      }
-      let bomHtml = '';
-      if (allComps.length > 0) {
-        const bomRows = allComps.map(b => {
-          const bn  = cpLookup(b.custom_properties, 'Norma', 'Standard');
-          const bp  = cpLookup(b.custom_properties, 'Popis', 'Description', 'Název', 'Nazev', 'Name');
-          const bm  = cpLookup(b.custom_properties, 'Materiál', 'Material');
-          const bh  = cpLookup(b.custom_properties, 'Hmotnost', 'Mass', 'Weight');
-          const unknownBadge = b.is_unknown
-            ? '<span style="background:rgba(239,68,68,0.15);color:#ef4444;border:1px solid rgba(239,68,68,0.35);padding:1px 6px;border-radius:4px;font-size:10px;font-weight:700;margin-right:6px;">\u26a0 NEROZPOZN\u00c1NO</span>'
-            : '';
-          const matCatalog = b.material
-            ? '<span style="color:#10b981;font-weight:600">' + escapeHtml(b.material.code) + '</span> \u00b7 ' + escapeHtml(b.material.name)
-            : (b.is_unknown ? '<span style="color:#ef4444">— Chybí v katalogu —</span>' : '<span style="color:var(--text2)">—</span>');
-          return '<tr' + (b.is_unknown ? ' style="background:rgba(239,68,68,0.05);"' : '') + '>' +
-            '<td style="padding:6px 8px;">' + unknownBadge + escapeHtml(b.name || '') + '</td>' +
-            '<td style="padding:6px 8px;color:var(--text2);">' + (bn ? escapeHtml(bn) : '—') + '</td>' +
-            '<td style="padding:6px 8px;color:var(--text2);font-size:12px;">' + (bp ? escapeHtml(bp) : '—') + '</td>' +
-            '<td style="padding:6px 8px;color:var(--text2);">' + (bm ? escapeHtml(bm) : '—') + '</td>' +
-            '<td style="padding:6px 8px;text-align:right;color:var(--text2);font-size:12px;">' + (bh ? escapeHtml(bh) : '—') + '</td>' +
-            '<td style="padding:6px 8px;text-align:right;font-weight:600;">' + (b.quantity || 1) + '\u00d7</td>' +
-            '<td style="padding:6px 8px;color:var(--text2);font-size:12px;">' + escapeHtml(b.configuration || '—') + '</td>' +
-            '<td style="padding:6px 8px;">' + matCatalog + '</td>' +
-          '</tr>';
-        }).join('');
-        bomHtml =
-          '<div style="margin-top:14px;">' +
-            '<h4 style="margin:0 0 8px 0;font-size:12px;color:var(--text2);letter-spacing:0.05em;text-transform:uppercase;">\ud83d\uddc2\ufe0f Kusovník · ' + allComps.length + ' položek</h4>' +
-            '<table style="width:100%;font-size:12px;border-collapse:collapse;">' +
-              '<thead><tr style="background:rgba(148,163,184,0.1);">' +
-                '<th style="text-align:left;padding:6px 8px;">Díl</th>' +
-                '<th style="text-align:left;padding:6px 8px;width:100px;">Norma</th>' +
-                '<th style="text-align:left;padding:6px 8px;">Popis (SW)</th>' +
-                '<th style="text-align:left;padding:6px 8px;width:100px;">Materiál (SW)</th>' +
-                '<th style="text-align:right;padding:6px 8px;width:80px;">Hmotnost</th>' +
-                '<th style="text-align:right;padding:6px 8px;width:45px;">Ks</th>' +
-                '<th style="text-align:left;padding:6px 8px;width:110px;">Konfig.</th>' +
-                '<th style="text-align:left;padding:6px 8px;">Materiál (katalog)</th>' +
-              '</tr></thead>' +
-              '<tbody>' + bomRows + '</tbody>' +
-            '</table>' +
-          '</div>';
-      }
-
+      // Cache obsahuje plnou historii (všechny change_logs). Pokud ještě neběží
+      // fetch nebo selhal, použijeme data ze seznamu (max 1 log, bez detailu).
+      const full = state.detailsCache.get(d.id) || d;
       return '<tr class="expanded-detail" data-parent-id="' + d.id + '">' +
-        '<td colspan="11" style="padding:14px 22px 18px 50px;background:rgba(148,163,184,0.04);border-left:3px solid rgba(99,102,241,0.5);">' +
-          (infoChips
-            ? '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:6px;">' + infoChips + '</div>'
-            : '<div style="color:var(--text2);font-style:italic;font-size:12px;">Bez custom properties (zkuste znovu odeslat z Bridge 2.9.12+)</div>') +
-          bomHtml +
+        '<td colspan="12" style="padding:18px 24px 22px 50px;background:rgba(148,163,184,0.04);border-left:3px solid rgba(99,102,241,0.5);">' +
+          buildFullDetailHtml(full) +
         '</td>' +
       '</tr>';
     }
@@ -437,9 +375,10 @@
               return ' <span title="V\u00e1ha zm\u011bny: ' + escapeHtml(weightLabels[lastLog.weight] || lastLog.weight) + '" style="display:inline-block;margin-left:4px;padding:1px 7px;border-radius:10px;background:' + c.bg + ';color:' + c.fg + ';border:1px solid ' + c.brd + ';font-size:10px;font-weight:600;">' + escapeHtml(weightLabels[lastLog.weight] || lastLog.weight) + '</span>';
             })()
           : '';
-        const noteLine = (lastLog && lastLog.note)
-          ? '<div style="color:#94a3b8;font-size:11px;margin-top:2px;font-style:italic;max-width:360px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + escapeHtml(lastLog.note) + '">\ud83d\udcac ' + escapeHtml(lastLog.note) + '</div>'
-          : '';
+        // Poznámka ke změně — samostatný sloupec, ne pod názvem kódu.
+        const noteCell = (lastLog && lastLog.note)
+          ? '<div style="color:var(--text);font-size:12px;font-style:italic;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + escapeHtml(lastLog.note) + '">\ud83d\udcac ' + escapeHtml(lastLog.note) + '</div>'
+          : '<span style="color:var(--text2);">\u2014</span>';
 
         // KÓD = název souboru bez přípony — primární identifikátor výkresu.
         // Používá se pro synchronizaci se zbožím v HolyOSu (Material.code).
@@ -459,12 +398,12 @@
         const caret = isExpanded ? '\u25bc' : '\u25b6';   // ▼ / ▶
 
         return `
-        <tr data-id="${d.id}" class="${d.id === state.activeDrawingId ? 'selected' : ''}" style="cursor:pointer;" title="Dvojklik = rozbalit / sbalit">
+        <tr data-id="${d.id}" class="${isExpanded ? 'selected' : ''}" style="cursor:pointer;" title="Klik = rozbalit / sbalit">
           <td style="white-space:nowrap;">
             <span class="expand-caret" data-expand-id="${d.id}" style="display:inline-block;width:14px;text-align:center;color:var(--text2);font-size:10px;margin-right:4px;cursor:pointer;user-select:none;">${caret}</span>
             <span style="display:inline-block;padding:3px 10px;border-radius:6px;background:${typeColor.bg};color:${typeColor.fg};border:1px solid ${typeColor.brd};font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;">${escapeHtml(typeLabel)}</span>
           </td>
-          <td><b style="font-size:14px;letter-spacing:0.01em;">${escapeHtml(code)}</b>${stlBtn}${d.title ? '<br><span style="color:var(--text2);font-size:12px;">'+escapeHtml(d.title)+'</span>' : ''}${noteLine}</td>
+          <td><b style="font-size:14px;letter-spacing:0.01em;">${escapeHtml(code)}</b>${stlBtn}${d.title ? '<br><span style="color:var(--text2);font-size:12px;">'+escapeHtml(d.title)+'</span>' : ''}</td>
           <td>${d.project ? escapeHtml(d.project.code) : '—'}</td>
           <td>${d.block ? escapeHtml(d.block.name) : '—'}</td>
           <td style="white-space:nowrap;">${(() => {
@@ -481,6 +420,7 @@
             }
             return base + weightBadge;
           })()}</td>
+          <td>${noteCell}</td>
           <td><span class="badge badge-count">${(d.configurations || []).length} konfig.</span></td>
           <td style="white-space:nowrap;" onclick="event.stopPropagation();">${(() => {
             const pdfConfigs = (d.configurations || []).filter(c => c.pdf_path);
@@ -568,37 +508,26 @@
       el.innerHTML = `
         <table class="data-table">
           <thead><tr>
-            <th>Typ</th><th>Kód</th><th>Projekt</th><th>Blok</th><th>Verze</th>
+            <th>Typ</th><th>Kód</th><th>Projekt</th><th>Blok</th><th>Verze</th><th>Poznámka</th>
             <th>Konfig.</th><th>PDF</th><th>Přílohy</th><th>Importoval</th><th>Poslední import</th><th>Akce</th>
           </tr></thead>
           <tbody>${rows}</tbody>
         </table>`;
       el.querySelectorAll('tr[data-id]').forEach(tr => {
+        // Jeden klik na řádek = rozbalit/sbalit inline detail. (Dříve fungoval
+        // single-click pro otevření spodního detail pane — ten byl odstraněn.)
         tr.addEventListener('click', () => {
           const id = parseInt(tr.dataset.id);
-          loadDetail(id);
-          el.querySelectorAll('tr').forEach(r => r.classList.remove('selected'));
-          tr.classList.add('selected');
-        });
-        // Dvojklik na řádek → rozbalit/sbalit inline detail (kusovník, custom props).
-        tr.addEventListener('dblclick', (e) => {
-          e.preventDefault();
-          // Zrušit text-selection způsobenou rychlým dblclick
-          if (window.getSelection) window.getSelection().removeAllRanges();
-          const id = parseInt(tr.dataset.id);
-          if (state.expandedDrawingIds.has(id)) state.expandedDrawingIds.delete(id);
-          else state.expandedDrawingIds.add(id);
-          renderDrawings();
+          toggleExpandedDrawing(id);
         });
       });
-      // Šipka v buňce Typ — samostatný click-target, aby šlo rozbalit i bez dblclick.
+      // Šipka v buňce Typ — samostatný click-target, aby šlo rozbalit i bez clicku
+      // na řádek (kdyby click hit jiný prvek).
       el.querySelectorAll('.expand-caret').forEach(s => {
         s.addEventListener('click', (e) => {
           e.stopPropagation();
           const id = parseInt(s.dataset.expandId);
-          if (state.expandedDrawingIds.has(id)) state.expandedDrawingIds.delete(id);
-          else state.expandedDrawingIds.add(id);
-          renderDrawings();
+          toggleExpandedDrawing(id);
         });
       });
       // Klik na +N badge → zobrazit všechny přílohy tohoto výkresu.
@@ -629,10 +558,9 @@
         if (!res.ok) { alert('Chyba p\u0159i maz\u00e1n\u00ed'); return; }
         // Uklid state
         state.drawings = state.drawings.filter(d => d.id !== id);
-        if (state.activeDrawingId === id) {
-          state.activeDrawingId = null;
-          document.getElementById('detail-pane').innerHTML = '<div class="empty">Vyber v\u00fdkres ze seznamu pro zobrazen\u00ed detailu.</div>';
-        }
+        state.expandedDrawingIds.delete(id);
+        state.expandedAttachmentsIds.delete(id);
+        state.detailsCache.delete(id);
         renderDrawings();
       } catch (e) { alert('Chyba: ' + e.message); }
     }
@@ -700,8 +628,9 @@
         const res = await fetch('/api/cad/drawings/' + id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
         if (!res.ok) { alert('Chyba p\u0159i ulo\u017een\u00ed'); return; }
         closeDrawingEditModal();
+        // Vyprázdnit cache pro upravený záznam — expanded se pak lazy-fetchne znovu.
+        state.detailsCache.delete(id);
         await loadDrawings();
-        if (state.activeDrawingId === id) loadDetail(id);
       } catch (e) { alert('Chyba: ' + e.message); }
     }
 
@@ -765,8 +694,9 @@
       } catch (e) { alert('Chyba: ' + e.message); }
     }
 
-    // ─── Render: detail výkresu ──────────────────────────────────────────────
-    function renderDetail(d) {
+    // ─── Render: plný detail výkresu (HTML string) ───────────────────────────
+    // Tohle je obsah, který se vloží do expanded (rozbaleného) řádku v seznamu.
+    function buildFullDetailHtml(d) {
       const configs = (d.configurations || []).map(c => {
         const png = c.png_path ? `/api/cad/assets/${c.png_path}` : null;
         const pdf = c.pdf_path ? `/api/cad/assets/${c.pdf_path}` : null;
@@ -816,8 +746,7 @@
           </div>`;
       }).join('');
 
-      const pane = document.getElementById('detail-pane');
-      pane.innerHTML = `
+      return `
         <h2>${escapeHtml(d.file_name)} <span class="badge badge-ext-${escapeHtml(d.extension)}">${escapeHtml(d.extension)}</span></h2>
         <div class="detail-meta">
           <div><span>Projekt</span>${d.project ? escapeHtml(d.project.code + ' · ' + d.project.name) : '—'}</div>
