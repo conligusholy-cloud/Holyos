@@ -190,6 +190,134 @@ async function pickBatchItem({ batch_id, batch_item_id, picked_quantity, from_lo
 }
 
 /**
+ * Rozdělený pick přes víc šarží — vyřeší případ, kdy žádná jednotlivá šarže
+ * na lokaci nemá dost stocku pro celé `item.quantity`. Vytvoří po jednom
+ * `issue` pohybu pro každý split v transakčním pořadí.
+ *
+ * `client_uuid_prefix` je UUID v4; z něj se deterministicky odvodí per-split
+ * client_uuid (prefix s patched posledními 4 hex nibbles = index). Umožňuje
+ * retry při síťové chybě — druhý send projde jako 200 deduped pro každý
+ * split zvlášť.
+ */
+async function pickBatchItemMultiLot({
+  batch_id,
+  batch_item_id,
+  splits, // [{ lot_id, quantity, from_location_id? }]
+  client_uuid_prefix,
+  device_id,
+  user_person_id,
+  note,
+}) {
+  if (!Array.isArray(splits) || splits.length === 0) {
+    throw new Error('splits musí obsahovat aspoň jednu položku');
+  }
+  if (!client_uuid_prefix) throw new Error('client_uuid_prefix je povinný (idempotence)');
+  if (!/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$/.test(client_uuid_prefix)) {
+    throw new Error('client_uuid_prefix musí být platné UUID v4');
+  }
+
+  const batch = await prisma.batch.findUnique({ where: { id: batch_id } });
+  if (!batch) throw new Error('Dávka neexistuje');
+  if (batch.status === 'done' || batch.status === 'cancelled') {
+    throw new Error(`Dávka je ve stavu '${batch.status}', pick není povolen`);
+  }
+
+  const item = await prisma.batchItem.findUnique({ where: { id: batch_item_id } });
+  if (!item) throw new Error('Položka dávky neexistuje');
+  if (item.batch_id !== batch_id) throw new Error('Položka nepatří do této dávky');
+
+  // Sanity: součet split quantities > 0
+  const totalPicked = splits.reduce((s, x) => s + Number(x.quantity || 0), 0);
+  if (!Number.isFinite(totalPicked) || totalPicked <= 0) {
+    throw new Error('Celkové picked_quantity musí být kladné');
+  }
+
+  // Získáme warehouse_id podle první lokace (všechny by měly být ze stejného warehouse)
+  const firstLocationId = splits[0].from_location_id || item.from_location_id;
+  if (!firstLocationId) {
+    throw new Error('Chybí from_location_id (ani v requestu, ani na položce dávky)');
+  }
+  const firstLoc = await prisma.warehouseLocation.findUnique({
+    where: { id: firstLocationId },
+    select: { warehouse_id: true },
+  });
+  if (!firstLoc) throw new Error('Zdrojová lokace neexistuje');
+
+  const moves = [];
+  for (let i = 0; i < splits.length; i++) {
+    const split = splits[i];
+    const locId = split.from_location_id || item.from_location_id;
+    if (!locId) throw new Error(`Split #${i + 1}: chybí from_location_id`);
+    const q = Number(split.quantity);
+    if (!Number.isFinite(q) || q <= 0) {
+      throw new Error(`Split #${i + 1}: quantity musí být kladné`);
+    }
+    if (!split.lot_id) {
+      throw new Error(`Split #${i + 1}: lot_id je povinný`);
+    }
+
+    // Derivace client_uuid: prefix s náhradou posledních 4 hex na hex zapis indexu.
+    // Pro index < 65536 (splits je <=10 prakticky) se index vejde do 4 hex znaků.
+    const idxHex = String(i).padStart(4, '0').slice(-4);
+    const clientUuid = client_uuid_prefix.slice(0, -4) + idxHex;
+
+    const mr = await createMove({
+      type: 'issue',
+      client_uuid: clientUuid,
+      device_id,
+      material_id: item.material_id,
+      warehouse_id: firstLoc.warehouse_id,
+      location_id: locId,
+      lot_id: split.lot_id,
+      quantity: q,
+      reference_type: 'batch',
+      reference_id: batch.id,
+      created_by: user_person_id ?? null,
+      note: note ? `${note} (split ${i + 1}/${splits.length}, lot ${split.lot_id})` : `split ${i + 1}/${splits.length}, lot ${split.lot_id}`,
+    });
+    moves.push({ move_id: mr.move.id, lot_id: split.lot_id, quantity: q, deduped: mr.deduped });
+  }
+
+  // Update batch_item
+  let newStatus;
+  if (totalPicked >= Number(item.quantity)) newStatus = 'picked';
+  else if (totalPicked > 0) newStatus = 'short';
+  else newStatus = 'skipped';
+
+  const updated = await prisma.batchItem.update({
+    where: { id: batch_item_id },
+    data: {
+      picked_quantity: totalPicked,
+      status: newStatus,
+      picked_by: user_person_id ?? null,
+      picked_at: new Date(),
+      from_location_id: firstLocationId,
+    },
+  });
+
+  // Open → picking
+  if (batch.status === 'open') {
+    await prisma.batch.update({
+      where: { id: batch.id },
+      data: { status: 'picking', started_at: new Date() },
+    });
+  }
+
+  // Auto-done
+  const pendingLeft = await prisma.batchItem.count({
+    where: { batch_id: batch.id, status: 'pending' },
+  });
+  if (pendingLeft === 0) {
+    await prisma.batch.update({
+      where: { id: batch.id },
+      data: { status: 'done', completed_at: new Date() },
+    });
+  }
+
+  return { item: updated, moves, total_picked: totalPicked, auto_completed: pendingLeft === 0 };
+}
+
+/**
  * Ruční uzavření dávky (i pokud nejsou všechny items picked).
  */
 async function completeBatch(id) {
@@ -203,6 +331,6 @@ async function completeBatch(id) {
 }
 
 module.exports = {
-  createBatch, pickBatchItem, completeBatch, generateBatchNumber,
+  createBatch, pickBatchItem, pickBatchItemMultiLot, completeBatch, generateBatchNumber,
   BATCH_STATUS, ITEM_STATUS,
 };
