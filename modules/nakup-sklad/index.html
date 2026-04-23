@@ -710,18 +710,26 @@
     async function openMaterialModal(id) {
       if (companies.length === 0) { try { const r = await fetch('/api/wh/companies?type=supplier'); companies = await r.json(); } catch(e) {} }
       let m = {};
-      if (id) { try { const r = await fetch('/api/wh/materials/' + id); m = await r.json(); } catch(e) {} }
+      if (id) {
+        try {
+          // cache-busting timestamp — čerstvá data po každém Uložit
+          const r = await fetch('/api/wh/materials/' + id + '?_=' + Date.now(), { cache: 'no-store' });
+          m = await r.json();
+        } catch(e) {}
+      }
       const supOpts = companies.filter(c => c.type==='supplier'||c.type==='both').map(c => '<option value="' + c.id + '"' + (m.supplier_id===c.id?' selected':'') + '>' + c.name + '</option>').join('');
       const s = (f, v) => m[f] === v ? ' selected' : '';
       const c = (f) => m[f] ? ' checked' : '';
       const v = (f, def) => m[f] !== undefined && m[f] !== null ? m[f] : (def !== undefined ? def : '');
 
+      const showSnTab = !!(id && m.save_sn_first_scan);
       document.getElementById('modal-root').innerHTML = '<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal" style="max-width:820px"><h2>' + (id?'✏️ Upravit zboží':'➕ Nové zboží') + '</h2>' +
         '<div class="sub-tabs" style="margin-bottom:12px">' +
           '<div class="sub-tab mat-tab active" data-tab="general" onclick="switchMatTab(\'general\')">Obecné</div>' +
           '<div class="sub-tab mat-tab" data-tab="technical" onclick="switchMatTab(\'technical\')">Výkres / Tech</div>' +
           '<div class="sub-tab mat-tab" data-tab="planning" onclick="switchMatTab(\'planning\')">Plánování</div>' +
           '<div class="sub-tab mat-tab" data-tab="properties" onclick="switchMatTab(\'properties\')">Vlastnosti</div>' +
+          (showSnTab ? '<div class="sub-tab mat-tab" data-tab="serials" onclick="switchMatTab(\'serials\');loadSerialPanel(' + id + ')">🔖 Sériová čísla</div>' : '') +
           '<div class="sub-tab mat-tab" data-tab="notes" onclick="switchMatTab(\'notes\')">Poznámky</div>' +
         '</div>' +
         '<form onsubmit="saveMaterial(event,' + (id||'null') + ')" style="max-height:55vh;overflow-y:auto;padding-right:8px">' +
@@ -752,7 +760,7 @@
             '<div class="form-group"><label>Cílový sklad</label><input type="text" name="target_warehouse" value="' + v('target_warehouse') + '"></div>' +
             '<div class="form-group"><label>Čeká po naskladnění [h]</label><input type="number" name="wait_after_stock_hours" value="' + v('wait_after_stock_hours',0) + '" step="0.1"></div>' +
             '<div class="form-group"><label>Dodavatel</label><select name="supplier_id"><option value="">—</option>' + supOpts + '</select></div>' +
-            '<div class="form-group"><label>Skupina</label><input type="text" name="group" value="' + v('group') + '"></div>' +
+            '<div class="form-group"><label>Skupina</label><input type="text" name="material_group" value="' + v('material_group') + '"></div>' +
             '<div class="form-group"><label>Norma</label><input type="text" name="norm" value="' + v('norm') + '"></div>' +
             '<div class="form-group"><label>Hmotnost (kg)</label><input type="number" name="weight" value="' + v('weight',0) + '" step="0.001"></div>' +
             '<div class="form-group"><label>Účetní jednotka</label><input type="text" name="accounting_unit" value="' + v('accounting_unit') + '"></div>' +
@@ -827,6 +835,25 @@
             '<div class="form-group"><label>Jednotka trvanlivosti</label><select name="shelf_life_unit"><option value="month"' + s('shelf_life_unit','month') + '>Měsíc</option><option value="day"' + s('shelf_life_unit','day') + '>Den</option><option value="year"' + s('shelf_life_unit','year') + '>Rok</option></select></div>' +
             '<div class="form-group"><label style="display:flex;align-items:center;gap:6px"><input type="checkbox" name="allow_rotation"' + c('allow_rotation') + '> Povolit otočení</label></div>' +
           '</div>' +
+          // === TAB: Sériová čísla (jen pokud save_sn_first_scan) ===
+          (showSnTab
+            ? '<div class="mat-tab-content" data-tab="serials" style="display:none">' +
+                '<div style="display:flex;gap:10px;align-items:center;justify-content:space-between;margin-bottom:10px">' +
+                  '<div style="display:flex;gap:8px;align-items:center">' +
+                    '<label style="font-size:12px;color:var(--text2)">Stav:</label>' +
+                    '<select id="sn-filter-status" onchange="loadSerialPanel(' + id + ')" style="padding:6px 10px;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:12px">' +
+                      '<option value="">Vše</option>' +
+                      '<option value="in_stock" selected>Skladem</option>' +
+                      '<option value="issued">Vydané</option>' +
+                      '<option value="scrapped">Vyřazené</option>' +
+                      '<option value="returned">Vrácené</option>' +
+                    '</select>' +
+                  '</div>' +
+                  '<button type="button" class="btn btn-primary" onclick="openSerialBulkReceipt(' + id + ')">+ Přijmout kusy</button>' +
+                '</div>' +
+                '<div id="sn-panel-content" style="max-height:46vh;overflow-y:auto">Načítám…</div>' +
+              '</div>'
+            : '') +
           // === TAB: Poznámky ===
           '<div class="form-grid mat-tab-content" data-tab="notes" style="display:none">' +
             '<div class="form-group full"><label>Poznámka</label><textarea name="description" rows="4">' + v('description') + '</textarea></div>' +
@@ -915,7 +942,19 @@
       // Checkboxes (unchecked = not in FormData)
       const cbs = ['non_stock','uses_service_eshop','distinguish_batches','interchangeable_batches','no_availability_check','check_availability_stage','check_availability_expedition','plan_orders','mandatory_scan','save_sn_first_scan','temp_barcode','auto_complete_after_bom_scan','exact_consumption','ignore','ignore_forecast_eval','split_receipt_by_sales_items','expirable','allow_rotation'];
       for (const cb of cbs) d[cb] = f.has(cb);
-      await fetch(id ? '/api/wh/materials/' + id : '/api/wh/materials', { method: id ? 'PUT' : 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(d) });
+      console.log('[saveMaterial] PUT payload — save_sn_first_scan =', d.save_sn_first_scan, '| všechny cbs:', cbs.reduce((o,c)=>{o[c]=d[c];return o;},{}));
+      const res = await fetch(id ? '/api/wh/materials/' + id : '/api/wh/materials', {
+        method: id ? 'PUT' : 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify(d),
+      });
+      if (!res.ok) {
+        const err = await res.text();
+        alert('Uložení selhalo (' + res.status + '): ' + err);
+        return;
+      }
+      const saved = await res.json();
+      console.log('[saveMaterial] response — save_sn_first_scan =', saved.save_sn_first_scan);
       closeModal(); loadMaterials(); loadStats();
     }
 
@@ -923,6 +962,221 @@
       if (!confirm('Smazat zboží?')) return;
       await fetch('/api/wh/materials/' + id, { method: 'DELETE' });
       loadMaterials(); loadStats();
+    }
+
+    // ============================================================
+    // SÉRIOVÁ ČÍSLA (panel v detailu materiálu)
+    // ============================================================
+
+    const SN_STATUS_LABEL = {
+      in_stock: 'Skladem',
+      issued:   'Vydané',
+      scrapped: 'Vyřazené',
+      returned: 'Vrácené',
+    };
+    const SN_STATUS_COLOR = {
+      in_stock: '#10b981',
+      issued:   '#f59e0b',
+      scrapped: '#ef4444',
+      returned: '#6c8cff',
+    };
+
+    async function loadSerialPanel(materialId) {
+      const container = document.getElementById('sn-panel-content');
+      if (!container) return;
+      const statusSel = document.getElementById('sn-filter-status');
+      const status = statusSel ? statusSel.value : '';
+      container.innerHTML = '<div style="color:var(--text2);font-size:13px;padding:20px;text-align:center">Načítám…</div>';
+      try {
+        const qs = status ? ('?status=' + encodeURIComponent(status)) : '';
+        const r = await fetch('/api/wh/materials/' + materialId + '/serials' + qs);
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const serials = await r.json();
+        if (!Array.isArray(serials) || serials.length === 0) {
+          container.innerHTML = '<div style="color:var(--text2);font-size:13px;padding:20px;text-align:center;font-style:italic">Žádná sériová čísla pro tento filtr.</div>';
+          return;
+        }
+        const rows = serials.map(function(s) {
+          const c = SN_STATUS_COLOR[s.status] || '#999';
+          const lbl = SN_STATUS_LABEL[s.status] || s.status;
+          const loc = s.location ? esc(s.location.label) : '—';
+          const ref = s.reference_type ? (esc(s.reference_type) + ' #' + s.reference_id) : '';
+          const actions = [];
+          if (s.status === 'in_stock') {
+            actions.push('<button type="button" class="btn btn-secondary" style="padding:4px 10px;font-size:11px" onclick="issueSerialDialog(' + s.id + ',' + materialId + ')">Vydat</button>');
+            actions.push('<button type="button" class="btn btn-secondary" style="padding:4px 10px;font-size:11px" onclick="scrapSerialConfirm(' + s.id + ',' + materialId + ')">Vyřadit</button>');
+          } else if (s.status === 'issued') {
+            actions.push('<button type="button" class="btn btn-secondary" style="padding:4px 10px;font-size:11px" onclick="returnSerialDialog(' + s.id + ',' + materialId + ')">Vrátit</button>');
+          }
+          return '<tr>' +
+            '<td style="font-family:ui-monospace,monospace">' + esc(s.serial_number) + '</td>' +
+            '<td><span style="display:inline-block;padding:2px 8px;border-radius:999px;background:' + c + '22;color:' + c + ';font-size:11px;font-weight:600">' + lbl + '</span></td>' +
+            '<td>' + loc + '</td>' +
+            '<td style="font-size:11px;color:var(--text2)">' + ref + '</td>' +
+            '<td style="text-align:right;white-space:nowrap">' + actions.join(' ') + '</td>' +
+            '</tr>';
+        }).join('');
+        container.innerHTML = '<table class="data-table" style="width:100%"><thead><tr>' +
+          '<th>Sériové číslo</th><th>Stav</th><th>Lokace</th><th>Vazba</th><th></th>' +
+          '</tr></thead><tbody>' + rows + '</tbody></table>' +
+          '<div style="font-size:11px;color:var(--text2);margin-top:8px">Zobrazeno ' + serials.length + ' kusů.</div>';
+      } catch (err) {
+        container.innerHTML = '<div style="color:#ef4444;font-size:13px;padding:20px">Chyba: ' + esc(err.message || String(err)) + '</div>';
+      }
+    }
+
+    async function openSerialBulkReceipt(materialId) {
+      // Načti materiál kvůli sn_mask + dostupné lokace pro target_warehouse
+      let material = null;
+      try { const r = await fetch('/api/wh/materials/' + materialId); material = await r.json(); } catch(_) {}
+      let warehouses = [];
+      try { const r = await fetch('/api/wh/warehouses'); warehouses = await r.json(); } catch(_) {}
+      let locations = [];
+      try { const r = await fetch('/api/wh/locations'); locations = await r.json(); } catch(_) {}
+      const whOpts = (warehouses || []).map(function(w) {
+        return '<option value="' + w.id + '">' + esc(w.name || ('Sklad #' + w.id)) + '</option>';
+      }).join('');
+      const locOpts = (locations || []).map(function(l) {
+        return '<option value="' + l.id + '" data-wh="' + l.warehouse_id + '">' + esc(l.label) + '</option>';
+      }).join('');
+
+      document.getElementById('modal-root').innerHTML =
+        '<div class="modal-overlay" onclick="if(event.target===this)closeSerialDialog()">' +
+          '<div class="modal" style="max-width:640px">' +
+            '<h2>Přijmout kusy — ' + esc(material && material.name ? material.name : 'Materiál') + '</h2>' +
+            (material && material.sn_mask ? '<div style="font-size:12px;color:var(--text2);margin-bottom:10px">Maska S/N: <code>' + esc(material.sn_mask) + '</code></div>' : '') +
+            '<div class="form-grid">' +
+              '<div class="form-group"><label>Sklad *</label><select id="sn-wh">' + whOpts + '</select></div>' +
+              '<div class="form-group"><label>Lokace *</label><select id="sn-loc">' + locOpts + '</select></div>' +
+              '<div class="form-group"><label>Nákupní cena</label><input type="number" id="sn-price" step="0.01" placeholder="0"></div>' +
+              '<div class="form-group full">' +
+                '<label>Sériová čísla (1 per řádek)</label>' +
+                '<textarea id="sn-list" rows="8" style="font-family:ui-monospace,monospace;width:100%" placeholder="SN-000001&#10;SN-000002&#10;…"></textarea>' +
+                '<div style="font-size:11px;color:var(--text2);margin-top:4px">Počet kusů = počet řádků. Duplicity a prázdné řádky se odfiltrují.</div>' +
+              '</div>' +
+              '<div class="form-group full"><label>Poznámka</label><input type="text" id="sn-note" placeholder="volitelné"></div>' +
+            '</div>' +
+            '<div id="sn-error" style="color:#ef4444;font-size:13px;margin-top:8px"></div>' +
+            '<div class="modal-actions">' +
+              '<button type="button" class="btn btn-secondary" onclick="closeSerialDialog()">Zrušit</button>' +
+              '<button type="button" class="btn btn-primary" onclick="submitSerialBulkReceipt(' + materialId + ')">Přijmout</button>' +
+            '</div>' +
+          '</div>' +
+        '</div>';
+    }
+
+    function closeSerialDialog() {
+      // Vrátit se zpět na detail materiálu — znovu otevřít modal
+      const prevMatchId = (document.querySelector('[data-sn-prev-material]') || {}).dataset;
+      document.getElementById('modal-root').innerHTML = '';
+    }
+
+    async function submitSerialBulkReceipt(materialId) {
+      const errEl = document.getElementById('sn-error');
+      errEl.textContent = '';
+      const wh = parseInt(document.getElementById('sn-wh').value);
+      const loc = parseInt(document.getElementById('sn-loc').value);
+      const price = parseFloat(document.getElementById('sn-price').value) || null;
+      const note = document.getElementById('sn-note').value || null;
+      const raw = document.getElementById('sn-list').value || '';
+
+      const serials = raw.split(/\r?\n/).map(function(s) { return s.trim(); }).filter(Boolean);
+      if (serials.length === 0) { errEl.textContent = 'Zadejte aspoň jedno S/N.'; return; }
+      if (!wh || !loc) { errEl.textContent = 'Vyplňte sklad a lokaci.'; return; }
+
+      try {
+        const r = await fetch('/api/wh/materials/' + materialId + '/serials/bulk-receipt', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            warehouse_id: wh,
+            location_id: loc,
+            serials: serials,
+            unit_price: price,
+            note: note,
+          }),
+        });
+        const data = await r.json();
+        if (!r.ok) {
+          errEl.textContent = typeof data.error === 'string' ? data.error : 'Chyba ' + r.status;
+          return;
+        }
+        // Úspěch — zavřít a obnovit panel
+        document.getElementById('modal-root').innerHTML = '';
+        await openMaterialModal(materialId);
+        setTimeout(function() { switchMatTab('serials'); loadSerialPanel(materialId); }, 50);
+      } catch (err) {
+        errEl.textContent = err.message || String(err);
+      }
+    }
+
+    async function issueSerialDialog(serialId, materialId) {
+      const wh = prompt('Sklad (ID), odkud se vydává:');
+      if (!wh) return;
+      const refType = prompt('Vazba (order / service_case / project / batch / manual) — volitelné:');
+      const refId = refType ? prompt('ID vazby:') : null;
+      const note = prompt('Poznámka (volitelné):');
+      try {
+        const r = await fetch('/api/wh/serials/' + serialId + '/issue', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            warehouse_id: parseInt(wh),
+            reference_type: refType || null,
+            reference_id: refId ? parseInt(refId) : null,
+            note: note || null,
+          }),
+        });
+        if (!r.ok) {
+          const data = await r.json().catch(function() { return {}; });
+          alert('Chyba: ' + (data.error || r.status));
+          return;
+        }
+        loadSerialPanel(materialId);
+      } catch (err) {
+        alert('Chyba: ' + (err.message || String(err)));
+      }
+    }
+
+    async function scrapSerialConfirm(serialId, materialId) {
+      if (!confirm('Opravdu vyřadit tento kus?')) return;
+      const note = prompt('Důvod vyřazení (volitelné):');
+      try {
+        const r = await fetch('/api/wh/serials/' + serialId + '/scrap', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ note: note || null }),
+        });
+        if (!r.ok) {
+          const data = await r.json().catch(function() { return {}; });
+          alert('Chyba: ' + (data.error || r.status));
+          return;
+        }
+        loadSerialPanel(materialId);
+      } catch (err) {
+        alert('Chyba: ' + (err.message || String(err)));
+      }
+    }
+
+    async function returnSerialDialog(serialId, materialId) {
+      const loc = prompt('Do jaké lokace (ID) se kus vrací?');
+      if (!loc) return;
+      const note = prompt('Poznámka (volitelné):');
+      try {
+        const r = await fetch('/api/wh/serials/' + serialId + '/return', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ location_id: parseInt(loc), note: note || null }),
+        });
+        if (!r.ok) {
+          const data = await r.json().catch(function() { return {}; });
+          alert('Chyba: ' + (data.error || r.status));
+          return;
+        }
+        loadSerialPanel(materialId);
+      } catch (err) {
+        alert('Chyba: ' + (err.message || String(err)));
+      }
     }
 
     // ============================================================
