@@ -95,6 +95,9 @@ public sealed class SubmitForm : Form
     };
 
     private readonly List<FileRow> _rows = new();
+    // Seznam komponent, které Bridge při Vyhledat komponenty vyloučil z exportu —
+    // slouží pro transparentní report uživateli, proč se něco neposlalo.
+    private readonly List<(string Name, string Reason, string ParentAssembly)> _excludedComponents = new();
     private int? _selectedProjectId;
     private int? _selectedBlockId;
 
@@ -451,7 +454,7 @@ public sealed class SubmitForm : Form
         };
         if (dlg.ShowDialog(this) != DialogResult.OK) return;
         int added = 0;
-        foreach (var f in dlg.FileNames) { if (AddFilePathIfNew(f)) added++; }
+        foreach (var f in dlg.FileNames) { if (AddFilePathIfNew(f) != null) added++; }
 
         // Auto — pokud přibyl aspoň jeden SW soubor, rovnou spustit Vyhledat
         // komponenty. Předchází situaci, kdy uživatel přidá .sldprt, hned klikne
@@ -471,12 +474,13 @@ public sealed class SubmitForm : Form
 
     private void AddFilePath(string path) => AddFilePathIfNew(path);
 
-    /// <summary>Přidá soubor do gridu, pokud stejná cesta ještě není v seznamu.</summary>
-    private bool AddFilePathIfNew(string path)
+    /// <summary>Přidá soubor do gridu, pokud stejná cesta ještě není v seznamu.
+    /// Vrací nově přidaný FileRow, nebo null pokud už existoval.</summary>
+    private FileRow? AddFilePathIfNew(string path)
     {
         var norm = Path.GetFullPath(path);
         if (_rows.Any(r => string.Equals(Path.GetFullPath(r.Path), norm, StringComparison.OrdinalIgnoreCase)))
-            return false;
+            return null;
 
         var ext = Path.GetExtension(path).ToLowerInvariant().TrimStart('.');
         var row = new FileRow
@@ -490,7 +494,7 @@ public sealed class SubmitForm : Form
         _rows.Add(row);
         _filesGrid.Rows.Add(row.FileName, row.Extension, row.ConfigurationName ?? "—",
             row.Quantity, row.ComponentCount, row.Status);
-        return true;
+        return row;
     }
 
     /// <summary>
@@ -674,6 +678,7 @@ public sealed class SubmitForm : Form
         SetBusy(true);
         _status.ForeColor = Color.FromArgb(100, 116, 139);
         UpdateStatus("Spouštím SolidWorks…", "Chvilku to trvá, pokud SW běží poprvé.");
+        _excludedComponents.Clear();
         try
         {
             await Task.Run(() => _sw.Connect());
@@ -728,18 +733,51 @@ public sealed class SubmitForm : Form
                     {
                         foreach (var c in row.Components)
                         {
-                            // Do HolyOSu nerozbalujeme potlačené ani vyloučené z BOM —
-                            // to jsou komponenty, které konstruktér schválně vyřadil z výroby.
-                            // V Bridge jsou barevně zvýrazněné jako info, ale na server nejdou.
-                            if (c.IsSuppressed)   continue;
-                            if (c.ExcludeFromBom) continue;
+                            // Potlačené komponenty (Suppressed) chceme VIDĚT v gridu modře,
+                            // ale nikdy neposlat do HolyOSu. Přidáme řádek, označíme ho
+                            // vizuálně a filtrujeme při submit.
+                            if (c.IsSuppressed)
+                            {
+                                _excludedComponents.Add((c.Name, "Potlačená (Suppressed)", row.FileName));
+                                if (!string.IsNullOrWhiteSpace(c.Path) && File.Exists(c.Path))
+                                {
+                                    var supRow = AddFilePathIfNew(c.Path);
+                                    if (supRow != null)
+                                    {
+                                        supRow.IsSuppressed = true;
+                                        supRow.Status = "Potlačená (vynechá se)";
+                                        // Najdi právě přidaný řádek a obarvi modře
+                                        for (int gi = _filesGrid.Rows.Count - 1; gi >= 0; gi--)
+                                        {
+                                            if ((string?)_filesGrid.Rows[gi].Cells["File"].Value == supRow.FileName)
+                                            {
+                                                _filesGrid.Rows[gi].DefaultCellStyle.ForeColor = Color.FromArgb(37, 99, 235);
+                                                _filesGrid.Rows[gi].DefaultCellStyle.Font = new Font(_filesGrid.Font, FontStyle.Italic);
+                                                _filesGrid.Rows[gi].Cells["Status"].Value = supRow.Status;
+                                                break;
+                                            }
+                                        }
+                                    }
+                                }
+                                continue;
+                            }
+                            if (c.ExcludeFromBom)
+                            {
+                                _excludedComponents.Add((c.Name, "Vyloučená z kusovníku (ExcludeFromBOM)", row.FileName));
+                                continue;
+                            }
                             if (string.IsNullOrWhiteSpace(c.Path) || !File.Exists(c.Path))
                             {
                                 virtualCount++;
+                                _excludedComponents.Add((c.Name, "Bez fyzického souboru (virtuální)", row.FileName));
                                 continue;
                             }
-                            if (_settings.IgnoreToolboxParts && IsToolboxPart(c.Path)) continue;
-                            if (AddFilePathIfNew(c.Path)) addedComponents++;
+                            if (_settings.IgnoreToolboxParts && IsToolboxPart(c.Path))
+                            {
+                                _excludedComponents.Add((c.Name, "Standardní díl (Toolbox/ISO/normalizované)", row.FileName));
+                                continue;
+                            }
+                            if (AddFilePathIfNew(c.Path) != null) addedComponents++;
                         }
                     }
                 }
@@ -749,11 +787,15 @@ public sealed class SubmitForm : Form
             _status.ForeColor = failed > 0 ? Color.FromArgb(234, 88, 12) : Color.FromArgb(22, 163, 74);
             _status.Text = $"Hotovo — {processed} zpracováno, {addedComponents} přidaných komponent, "
                          + $"{virtualCount} fiktivních"
+                         + (_excludedComponents.Count > 0 ? $", {_excludedComponents.Count} vyloučených" : "")
                          + (failed > 0 ? $", {failed} chyb (koukni na Stav sloupec)" : "");
             RenderSelectedComponents();
 
             // Porovnat se serverem a označit změněné soubory ⚡.
             await DetectChangesAsync();
+
+            // Přehled vyloučených komponent — co a proč Bridge neposlal do HolyOSu.
+            ShowExcludedSummary();
         }
         catch (Exception ex)
         {
@@ -765,6 +807,113 @@ public sealed class SubmitForm : Form
         {
             SetBusy(false);
         }
+    }
+
+    /// <summary>
+    /// Zobrazí přehled komponent, které Bridge vyloučil z exportu, seskupené
+    /// podle pravidla vyloučení. Uživatel tak vidí, proč některé díly v HolyOSu
+    /// nebudou (potlačená, ExcludeFromBOM, Toolbox, bez souboru). Zobrazuje se
+    /// v neblokujícím modelu — Form, ne MessageBox, kvůli velkému obsahu.
+    /// </summary>
+    private void ShowExcludedSummary()
+    {
+        if (_excludedComponents.Count == 0) return;
+
+        // Seskupení podle důvodu, řazené od nejčastějšího.
+        var groups = _excludedComponents
+            .GroupBy(x => x.Reason)
+            .OrderByDescending(g => g.Count())
+            .ToList();
+
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine($"Celkem vyloučeno: {_excludedComponents.Count} komponent");
+        sb.AppendLine("Pravidla vyloučení z exportu do HolyOSu:");
+        sb.AppendLine();
+        foreach (var g in groups)
+        {
+            sb.AppendLine($"• {g.Key} — {g.Count()}×");
+        }
+        sb.AppendLine();
+        sb.AppendLine("DETAILY:");
+        foreach (var g in groups)
+        {
+            sb.AppendLine();
+            sb.AppendLine($"══ {g.Key} ({g.Count()}×) ══");
+            foreach (var (name, _, parent) in g.Take(200))
+            {
+                sb.AppendLine($"   {name}  (v sestavě: {parent})");
+            }
+            if (g.Count() > 200) sb.AppendLine($"   … a dalších {g.Count() - 200}");
+        }
+
+        // Modální Form s TextBox (ReadOnly, monospace, scrollbar) — lepší než
+        // MessageBox, který text hyzdí a nejde z něj kopírovat.
+        using var dlg = new Form
+        {
+            Text = "Vyloučené komponenty — pravidla exportu",
+            StartPosition = FormStartPosition.CenterParent,
+            Size = new Size(760, 580),
+            MinimumSize = new Size(520, 360),
+            Font = new Font("Segoe UI", 9.5f),
+            ShowIcon = false,
+            MaximizeBox = true,
+            MinimizeBox = false,
+        };
+        var layout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2,
+            Padding = new Padding(12),
+        };
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
+
+        var txt = new TextBox
+        {
+            Multiline = true,
+            ReadOnly = true,
+            ScrollBars = ScrollBars.Both,
+            Dock = DockStyle.Fill,
+            Font = new Font("Consolas", 9.5f),
+            WordWrap = false,
+            Text = sb.ToString(),
+            BackColor = Color.FromArgb(248, 250, 252),
+        };
+        layout.Controls.Add(txt, 0, 0);
+
+        var btnRow = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            FlowDirection = FlowDirection.RightToLeft,
+        };
+        var btnOk = new Button
+        {
+            Text = "Zavřít", Width = 110, Height = 32,
+            DialogResult = DialogResult.OK,
+            BackColor = Color.FromArgb(2, 132, 199),
+            ForeColor = Color.White,
+            FlatStyle = FlatStyle.Flat,
+        };
+        btnOk.FlatAppearance.BorderSize = 0;
+        var btnCopy = new Button
+        {
+            Text = "Kopírovat", Width = 110, Height = 32,
+            FlatStyle = FlatStyle.Flat,
+            BackColor = Color.White,
+            Margin = new Padding(0, 0, 8, 0),
+        };
+        btnCopy.FlatAppearance.BorderColor = Color.FromArgb(209, 213, 219);
+        btnCopy.Click += (_, __) =>
+        {
+            try { Clipboard.SetText(txt.Text); } catch { }
+        };
+        btnRow.Controls.Add(btnOk);
+        btnRow.Controls.Add(btnCopy);
+        layout.Controls.Add(btnRow, 0, 1);
+        dlg.Controls.Add(layout);
+        dlg.AcceptButton = btnOk;
+
+        dlg.ShowDialog(this);
     }
 
     /// <summary>
@@ -1197,7 +1346,9 @@ public sealed class SubmitForm : Form
         //   + 1 krok za každou sesterskou přílohu (reálný počet po FindSiblingAttachments)
         //   + 1 krok za samotný SW soubor (pokud UploadSwFileItself=true)
         //   + 1 krok za finální /drawings-import
-        var rowsToUpload = _rows.Where(r => !r.IsVirtualAssembly).ToList();
+        // Vylučujeme virtuální sestavy (Typ=virtualni) a potlačené komponenty
+        // (IsSuppressed=true). Obojí je v gridu vidět, ale do HolyOSu nejde.
+        var rowsToUpload = _rows.Where(r => !r.IsVirtualAssembly && !r.IsSuppressed).ToList();
 
         // REKURZIVNÍ INDEX sourozenců napříč celým DefaultCadFolder — jednorázově
         // projde všechny podsložky a grupuje soubory podle base-name. Fixuje
@@ -1653,6 +1804,10 @@ public sealed class SubmitForm : Form
         public string? StlPath { get; set; }
         /// <summary>Cesty k sesterským souborům (.step/.dxf/…) pro upload jako přílohy.</summary>
         public List<string> SiblingAttachments { get; set; } = new();
+        /// <summary>Komponenta v nadřazené sestavě je potlačená (Suppressed). Do HolyOSu
+        /// se neexportuje, v Bridge gridu je označena modrou barvou pro orientaci.</summary>
+        public bool IsSuppressed { get; set; }
+
         /// <summary>Sestava má custom property "Typ" = "virtualni" → do HolyOSu se neexportuje,
         /// ale její komponenty ano.</summary>
         public bool IsVirtualAssembly { get; set; }
