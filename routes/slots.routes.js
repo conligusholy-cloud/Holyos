@@ -29,7 +29,14 @@ router.get('/', async (req, res, next) => {
       where,
       include: {
         workstation: { select: { id: true, name: true, code: true } },
-        assignments: { orderBy: { priority: 'desc' } },
+        // Natáhni zároveň položku objednávky kvůli výrobnímu číslu — přes FK order_item_id.
+        // include místo zvlášť dotazovat → žádné N+1.
+        assignments: {
+          orderBy: { priority: 'desc' },
+          include: {
+            order_item: { select: { id: true, serial_number: true, name: true } },
+          },
+        },
         blocks: true,
         _count: { select: { assignments: true } },
       },
