@@ -26,3 +26,11 @@ docs/
 
 clients/cad-bridge/*.pdf
 docs/
+
+# Sklad 2.0 — whitelist konkretnich souboru v docs/ (docs/ je jinak ignored vyse)
+!docs/warehouse-openapi.yaml
+!docs/warehouse-migration-runbook.md
+!docs/COMMIT_MSG.txt
+
+# Lokalni zalohy DB (z backup-sklad2.js apod.)
+backups/
