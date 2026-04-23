@@ -7,7 +7,7 @@
     "dev": "node --watch app.js",
     "start": "npx prisma migrate deploy && node app.js",
     "start:legacy": "node server.js",
-    "build": "npx prisma generate",
+    "build": "npx prisma generate && npm --prefix clients/pwa-sklad ci && npm --prefix clients/pwa-sklad run build",
     "db:migrate": "npx prisma migrate dev",
     "db:push": "npx prisma db push",
     "db:seed": "node scripts/migrate-json-to-postgres.js",
