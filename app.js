@@ -18,6 +18,7 @@ const { prisma } = require('./config/database');
 const authRoutes = require('./routes/auth.routes');
 const hrRoutes = require('./routes/hr.routes');
 const warehouseRoutes = require('./routes/warehouse.routes');
+const warehouseV2Routes = require('./routes/warehouse-v2.routes');
 const mindmapRoutes = require('./routes/mindmap.routes');
 const adminTasksRoutes = require('./routes/admin-tasks.routes');
 const auditRoutes = require('./routes/audit.routes');
@@ -32,6 +33,7 @@ const notificationsRoutes = require('./routes/notifications.routes');
 const messagesRoutes = require('./routes/messages.routes');
 const fleetRoutes = require('./routes/fleet.routes');
 const cadRoutes = require('./routes/cad.routes');
+const printRoutes = require('./routes/print.routes');
 
 // ─── Inicializace aplikace ────────────────────────────────────────────────
 
@@ -421,6 +423,7 @@ app.get('/order/:token', (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/hr', hrRoutes);
 app.use('/api/wh', warehouseRoutes);
+app.use('/api/wh', warehouseV2Routes); // Sklad 2.0 — moves, lookup, sync (mountnuté za legacy)
 app.use('/api/mindmap', mindmapRoutes);
 app.use('/api/admin-tasks', adminTasksRoutes);
 app.use('/api/audit', auditRoutes);
@@ -435,6 +438,7 @@ app.use('/api/notifications', notificationsRoutes);
 app.use('/api/messages', messagesRoutes);
 app.use('/api/fleet', fleetRoutes);
 app.use('/api/cad', cadRoutes);
+app.use('/api/print', printRoutes);
 
 // ─── Legacy storage proxy (kompatibilita s persistent-storage.js) ──────────
 

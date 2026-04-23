@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <title>Skladové doklady | HOLYOS</title>
+  <link rel="icon" href="../../logo-holyos-icon.svg">
+  <base href="../../">
+  <link rel="stylesheet" href="css/dashboard.css">
+  <style>
+    /* Filtry */
+    .filters { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; align-items: center; }
+    .filters label { color: var(--text2); font-size: 0.88em; }
+    .filters select, .filters input {
+      background: var(--surface2); color: var(--text); border: 1px solid var(--border);
+      padding: 7px 10px; border-radius: 6px; font-size: 0.9em;
+    }
+
+    /* Badges */
+    .type-badge, .status-badge { padding: 3px 10px; border-radius: 12px; font-size: 0.8em; font-weight: 600; white-space: nowrap; }
+    .type-badge.receipt_doc { background: #22c55e22; color: #22c55e; }
+    .type-badge.issue_doc { background: #ef444422; color: #ef4444; }
+    .type-badge.transfer_doc { background: #6c8cff22; color: #6c8cff; }
+    .type-badge.pick_list { background: #f59e0b22; color: #f59e0b; }
+    .type-badge.inventory_doc { background: #a78bfa22; color: #a78bfa; }
+    .status-badge.draft { background: #64748b22; color: #94a3b8; }
+    .status-badge.in_progress { background: #f59e0b22; color: #f59e0b; }
+    .status-badge.completed { background: #22c55e22; color: #22c55e; }
+    .status-badge.cancelled { background: #ef444422; color: #ef4444; }
+
+    .doc-number { font-family: 'Consolas', monospace; font-weight: 600; }
+
+    /* Modal */
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+    .modal { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 24px 28px; max-width: 640px; width: 90%; max-height: 90vh; overflow-y: auto; }
+    .modal.wide { max-width: 980px; }
+    .modal h2 { margin-top: 0; }
+    .modal-row { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+    .modal-row label { color: var(--text2); font-size: 0.88em; }
+    .modal-row input, .modal-row select, .modal-row textarea {
+      background: var(--surface2); color: var(--text); border: 1px solid var(--border);
+      border-radius: 6px; padding: 8px 10px; font-size: 0.95em;
+    }
+    .modal-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
+
+    /* Detail */
+    .detail-header { display: flex; gap: 24px; margin-bottom: 20px; padding-bottom: 14px; border-bottom: 1px solid var(--border); }
+    .detail-col { flex: 1; }
+    .detail-col label { color: var(--text2); font-size: 0.82em; text-transform: uppercase; letter-spacing: 0.5px; }
+    .detail-col div { font-size: 1em; margin-top: 2px; }
+    .movement-row { padding: 10px 0; border-bottom: 1px solid var(--border); }
+    .movement-row:last-child { border-bottom: none; }
+
+    .empty-hint { text-align: center; padding: 40px; color: var(--text2); }
+    .btn-sm { padding: 6px 12px; font-size: 0.85em; }
+    .inline-code { font-family: 'Consolas', monospace; background: var(--surface2); padding: 2px 6px; border-radius: 4px; font-size: 0.88em; }
+  </style>
+</head>
+<body>
+  <aside id="sidebar"></aside>
+
+  <div class="main-wrapper">
+    <div class="main-header">
+      <h1>📑 Skladové doklady</h1>
+      <p>Dodací listy, výdejky, přesunky, pickovací listy a inventurní protokoly</p>
+    </div>
+
+    <div class="main-content">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+        <div class="filters">
+          <label>Typ:</label>
+          <select id="f-type" onchange="loadDocs()">
+            <option value="">Všechny</option>
+            <option value="receipt_doc">Příjemka (PR)</option>
+            <option value="issue_doc">Výdejka (VY)</option>
+            <option value="transfer_doc">Přesunka (PS)</option>
+            <option value="pick_list">Pickovací list (PI)</option>
+            <option value="inventory_doc">Inventurní protokol (IN)</option>
+          </select>
+          <label>Stav:</label>
+          <select id="f-status" onchange="loadDocs()">
+            <option value="">Všechny</option>
+            <option value="draft">Rozpracované</option>
+            <option value="in_progress">V běhu</option>
+            <option value="completed">Uzavřené</option>
+            <option value="cancelled">Zrušené</option>
+          </select>
+          <button class="btn btn-secondary btn-sm" onclick="loadDocs()">🔄 Obnovit</button>
+        </div>
+        <button class="btn btn-primary" onclick="openCreateModal()">+ Nový doklad</button>
+      </div>
+
+      <table class="data-table" id="docs-table">
+        <thead>
+          <tr>
+            <th>Číslo</th>
+            <th>Typ</th>
+            <th>Stav</th>
+            <th>Partner</th>
+            <th>Reference</th>
+            <th>Pohybů</th>
+            <th>Vytvořeno</th>
+            <th>Uzavřeno</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody><tr><td colspan="9" class="empty-hint">Načítání…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div id="modal-root"></div>
+
+  <!-- Sidebar -->
+  <script>
+    var s = document.createElement('script');
+    s.src = '/js/sidebar.js?v=' + Date.now();
+    s.onload = function() { renderSidebar('doklady'); };
+    document.head.appendChild(s);
+
+    var tb = document.createElement('script');
+    tb.src = '/js/top-bar.js?v=' + Date.now();
+    document.head.appendChild(tb);
+  </script>
+
+  <script>
+  (function() {
+    const token = sessionStorage.getItem('token') || '';
+    function authHeaders() {
+      const h = { 'Content-Type': 'application/json' };
+      if (token) h['Authorization'] = 'Bearer ' + token;
+      return h;
+    }
+    async function api(method, path, body) {
+      const opts = { method, credentials: 'include', headers: authHeaders() };
+      if (body !== undefined) opts.body = JSON.stringify(body);
+      const res = await fetch(path, opts);
+      const ct = res.headers.get('content-type') || '';
+      const data = ct.includes('json') ? await res.json().catch(() => null) : null;
+      return { status: res.status, data };
+    }
+
+    const TYPE_LABEL = {
+      receipt_doc: 'Příjemka',
+      issue_doc: 'Výdejka',
+      transfer_doc: 'Přesunka',
+      pick_list: 'Picking',
+      inventory_doc: 'Inventura',
+    };
+    const STATUS_LABEL = {
+      draft: 'Rozpracovaný',
+      in_progress: 'V běhu',
+      completed: 'Uzavřený',
+      cancelled: 'Zrušený',
+    };
+
+    async function loadDocs() {
+      const type = document.getElementById('f-type').value;
+      const status = document.getElementById('f-status').value;
+      const qs = new URLSearchParams();
+      if (type) qs.set('type', type);
+      if (status) qs.set('status', status);
+      const r = await api('GET', '/api/wh/documents' + (qs.toString() ? '?' + qs : ''));
+      const tbody = document.querySelector('#docs-table tbody');
+      if (r.status !== 200) {
+        tbody.innerHTML = '<tr><td colspan="9" class="empty-hint">Chyba: ' + r.status + '</td></tr>';
+        return;
+      }
+      if (r.data.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="9" class="empty-hint">Žádné doklady.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = r.data.map(d => (
+        '<tr>' +
+          '<td><span class="doc-number">' + escapeHtml(d.number) + '</span></td>' +
+          '<td><span class="type-badge ' + d.type + '">' + (TYPE_LABEL[d.type] || d.type) + '</span></td>' +
+          '<td><span class="status-badge ' + d.status + '">' + (STATUS_LABEL[d.status] || d.status) + '</span></td>' +
+          '<td>' + escapeHtml(d.partner?.name || '—') + '</td>' +
+          '<td>' + escapeHtml(d.reference || '—') + '</td>' +
+          '<td style="text-align:center;">' + (d._count?.movements || 0) + '</td>' +
+          '<td>' + formatDate(d.created_at) + '</td>' +
+          '<td>' + (d.completed_at ? formatDate(d.completed_at) : '—') + '</td>' +
+          '<td><button class="btn btn-secondary btn-sm" onclick="openDetail(' + d.id + ')">Detail</button></td>' +
+        '</tr>'
+      )).join('');
+    }
+    window.loadDocs = loadDocs;
+
+    window.openDetail = async function(id) {
+      const r = await api('GET', '/api/wh/documents/' + id);
+      if (r.status !== 200) return alert('Nelze načíst doklad');
+      const d = r.data;
+
+      const canComplete = d.status === 'draft' || d.status === 'in_progress';
+      const canCancel = d.status !== 'completed' && d.status !== 'cancelled';
+
+      document.getElementById('modal-root').innerHTML = (
+        '<div class="modal-overlay" onclick="if(event.target===this)closeModal()">' +
+          '<div class="modal wide">' +
+            '<h2>' + (TYPE_LABEL[d.type] || d.type) + ' <span class="doc-number">' + escapeHtml(d.number) + '</span></h2>' +
+            '<div class="detail-header">' +
+              '<div class="detail-col"><label>Stav</label><div><span class="status-badge ' + d.status + '">' + (STATUS_LABEL[d.status] || d.status) + '</span></div></div>' +
+              '<div class="detail-col"><label>Partner</label><div>' + escapeHtml(d.partner?.name || '—') + '</div></div>' +
+              '<div class="detail-col"><label>Reference</label><div>' + escapeHtml(d.reference || '—') + '</div></div>' +
+              '<div class="detail-col"><label>Vytvořeno</label><div>' + formatDate(d.created_at) + '</div></div>' +
+              (d.completed_at ? '<div class="detail-col"><label>Uzavřeno</label><div>' + formatDate(d.completed_at) + '</div></div>' : '') +
+            '</div>' +
+            (d.note ? '<div style="margin-bottom:14px;"><label style="color:var(--text2);font-size:0.82em;">Poznámka</label><div>' + escapeHtml(d.note) + '</div></div>' : '') +
+            '<h3 style="margin-top:20px;">Pohyby (' + d.movements.length + ')</h3>' +
+            (d.movements.length === 0
+              ? '<div class="empty-hint">K tomuto dokladu zatím nejsou připnuté žádné pohyby.</div>'
+              : '<table class="data-table"><thead><tr><th>Čas</th><th>Typ</th><th>Materiál</th><th>Množství</th><th>Z lokace</th><th>Na lokaci</th></tr></thead><tbody>' +
+                d.movements.map(m => (
+                  '<tr>' +
+                    '<td>' + formatDate(m.created_at) + '</td>' +
+                    '<td>' + escapeHtml(m.type) + '</td>' +
+                    '<td>' + escapeHtml(m.material?.name || '—') + ' <span class="inline-code">' + escapeHtml(m.material?.code || '') + '</span></td>' +
+                    '<td style="text-align:right;font-weight:600;">' + Number(m.quantity) + ' ' + (m.material?.unit || '') + '</td>' +
+                    '<td>' + escapeHtml(m.from_location?.label || m.location?.label || '—') + '</td>' +
+                    '<td>' + escapeHtml(m.to_location?.label || '—') + '</td>' +
+                  '</tr>'
+                )).join('') +
+                '</tbody></table>'
+            ) +
+            '<div class="modal-actions">' +
+              '<button class="btn btn-secondary" onclick="closeModal()">Zavřít</button>' +
+              (canCancel ? '<button class="btn btn-danger" onclick="cancelDoc(' + d.id + ')">Zrušit doklad</button>' : '') +
+              (canComplete ? '<button class="btn btn-primary" onclick="completeDoc(' + d.id + ')">Uzavřít</button>' : '') +
+            '</div>' +
+          '</div>' +
+        '</div>'
+      );
+    };
+
+    window.completeDoc = async function(id) {
+      if (!confirm('Uzavřít doklad? Po uzavření ho nelze editovat.')) return;
+      const r = await api('PATCH', '/api/wh/documents/' + id + '/complete');
+      if (r.status !== 200) return alert('Chyba: ' + (r.data?.error || r.status));
+      closeModal(); loadDocs();
+    };
+    window.cancelDoc = async function(id) {
+      if (!confirm('Zrušit doklad? Pohyby zůstanou v DB, jen doklad se označí jako cancelled.')) return;
+      const r = await api('PATCH', '/api/wh/documents/' + id + '/cancel');
+      if (r.status !== 200) return alert('Chyba: ' + (r.data?.error || r.status));
+      closeModal(); loadDocs();
+    };
+
+    window.openCreateModal = async function() {
+      // Předem načti seznam firem pro dropdown partnera
+      const cr = await fetch('/api/wh/companies?limit=500', { credentials: 'include', headers: authHeaders() });
+      const companies = cr.ok ? await cr.json() : [];
+      const companyOpts = '<option value="">(bez partnera)</option>' +
+        companies.map(c => '<option value="' + c.id + '">' + escapeHtml(c.name) + '</option>').join('');
+
+      document.getElementById('modal-root').innerHTML = (
+        '<div class="modal-overlay" onclick="if(event.target===this)closeModal()">' +
+          '<div class="modal">' +
+            '<h2>Nový doklad</h2>' +
+            '<div class="modal-row"><label>Typ</label><select id="d-type">' +
+              Object.entries(TYPE_LABEL).map(([k,v]) => '<option value="' + k + '">' + v + '</option>').join('') +
+              '</select></div>' +
+            '<div class="modal-row"><label>Partner</label><select id="d-partner">' + companyOpts + '</select></div>' +
+            '<div class="modal-row"><label>Reference (externí číslo, např. DL dodavatele)</label><input type="text" id="d-ref"></div>' +
+            '<div class="modal-row"><label>Poznámka</label><textarea id="d-note" rows="3"></textarea></div>' +
+            '<div class="modal-actions">' +
+              '<button class="btn btn-secondary" onclick="closeModal()">Zrušit</button>' +
+              '<button class="btn btn-primary" onclick="createDoc()">Vytvořit draft</button>' +
+            '</div>' +
+          '</div>' +
+        '</div>'
+      );
+    };
+    window.createDoc = async function() {
+      const body = {
+        type: document.getElementById('d-type').value,
+        partner_id: document.getElementById('d-partner').value ? Number(document.getElementById('d-partner').value) : null,
+        reference: document.getElementById('d-ref').value || null,
+        note: document.getElementById('d-note').value || null,
+      };
+      const r = await api('POST', '/api/wh/documents', body);
+      if (r.status !== 201) return alert('Chyba: ' + JSON.stringify(r.data?.error || r.status));
+      closeModal();
+      await loadDocs();
+      openDetail(r.data.id); // rovnou otevři detail nově vytvořeného
+    };
+
+    // Helpers
+    function escapeHtml(s) {
+      return String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+    }
+    function formatDate(iso) {
+      if (!iso) return '';
+      return new Date(iso).toLocaleString('cs-CZ', { hour12: false });
+    }
+    function closeModal() { document.getElementById('modal-root').innerHTML = ''; }
+    window.closeModal = closeModal;
+
+    loadDocs();
+  })();
+  </script>
+</body>
+</html>
