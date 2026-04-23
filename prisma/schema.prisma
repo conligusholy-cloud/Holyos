@@ -146,6 +146,11 @@ model Person {
   assigned_vehicles  Vehicle[]           @relation("VehicleDriver")
   cad_drawings_created CadDrawing[]      @relation("CadDrawingCreator")
   cad_change_logs      CadDrawingChangeLog[] @relation("CadDrawingChangeLogAuthor")
+  // SKLAD 2.0
+  warehouse_documents_created WarehouseDocument[] @relation("WarehouseDocumentCreator")
+  batches_assigned        Batch[]               @relation("BatchAssignee")
+  batch_items_picked      BatchItem[]           @relation("BatchItemPickedBy")
+  print_jobs              PrintJob[]            @relation("PrintJobRequestedBy")
 
   @@index([department_id])
   @@index([role_id])
@@ -409,11 +414,16 @@ model Company {
   name               String  @db.VarChar(255)
   ico                String? @db.VarChar(20)
   dic                String? @db.VarChar(20)
+  // Adresa sídla (fakturační)
   address            String? @db.VarChar(255)
   city               String? @db.VarChar(100)
   zip                String? @db.VarChar(10)
   country            String  @default("CZ") @db.VarChar(2)
-  type               String  @db.VarChar(50) // supplier, customer, cooperation, both
+  // Adresa provozovny (kam se fyzicky jezdí na servis / odkud probíhá dodání)
+  branch_address     String? @db.VarChar(255)
+  branch_city        String? @db.VarChar(100)
+  branch_zip         String? @db.VarChar(10)
+  type               String  @db.VarChar(50) // supplier, customer, cooperation, both, service_provider
   contact_person     String? @db.VarChar(255)
   email              String? @db.VarChar(255)
   phone              String? @db.VarChar(20)
@@ -426,11 +436,16 @@ model Company {
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
 
-  orders              Order[]
-  supplied_materials  Material[]   @relation("MaterialSupplier")
-  preferred_for_rules StockRule[]  @relation("StockRuleSupplier")
-  people              Person[]     @relation("PersonCompany")
-  roles               Role[]       @relation("RoleCompany")
+  orders                 Order[]
+  supplied_materials     Material[]            @relation("MaterialSupplier")
+  preferred_for_rules    StockRule[]           @relation("StockRuleSupplier")
+  people                 Person[]              @relation("PersonCompany")
+  roles                  Role[]                @relation("RoleCompany")
+  // Fleet — servisní firmy a pneuservisy
+  vehicle_services       VehicleService[]      @relation("VehicleServiceCompany")
+  vehicle_tire_changes   VehicleTireChange[]   @relation("VehicleTireCompany")
+  // SKLAD 2.0 — dodavatel/odběratel na skladovém dokumentu (DL, výdejka)
+  warehouse_documents    WarehouseDocument[]   @relation("WarehouseDocumentPartner")
 
   @@index([ico])
   @@index([type])
@@ -481,14 +496,17 @@ model OrderItem {
   delivered_quantity Decimal   @default(0) @db.Decimal(10, 2)
   status             String    @default("pending") @db.VarChar(20)
   note               String?   @db.Text
+  serial_number      String?   @db.VarChar(100) // Výrobní číslo kiosku (přidělené ručně na úrovni položky)
 
   order    Order     @relation(fields: [order_id], references: [id], onDelete: Cascade)
   material Material? @relation(fields: [material_id], references: [id])
   product  Product?  @relation(fields: [product_id], references: [id], onDelete: SetNull)
   configs  OrderItemConfig[] // vybraná konfigurace pro tento výrobek
+  slot_assignments SlotAssignment[] // přiřazení do výrobních slotů (pro zobrazení výrobního čísla v náhledu)
 
   @@index([order_id])
   @@index([product_id])
+  @@index([serial_number])
   @@map("order_items")
 }
 
@@ -525,8 +543,10 @@ model WarehouseLocation {
   rack         String? @db.VarChar(50)
   position     String? @db.VarChar(50)
   label        String  @unique @db.VarChar(255)
-  barcode      String? @db.VarChar(100)
+  barcode      String? @unique @db.VarChar(100) // QR kód na etiketě lokace
+  type         String  @default("position") @db.VarChar(30) // warehouse, aisle, rack, position, workstation_in, workstation_out
   capacity     Decimal? @db.Decimal(10, 2)
+  locked_for_inventory Boolean @default(false) // SKLAD 2.0 — zámek po dobu probíhající inventury
   notes        String? @db.Text
 
   warehouse              Warehouse         @relation(fields: [warehouse_id], references: [id])
@@ -534,9 +554,14 @@ model WarehouseLocation {
   inventory_items        InventoryItem[]
   workstations_input     Workstation[]     @relation("WorkstationInputLocation")
   workstations_output    Workstation[]     @relation("WorkstationOutputLocation")
+  stock                  Stock[]           // SKLAD 2.0 — zásoby na lokaci
+  outgoing_transfers     InventoryMovement[] @relation("MovementFromLocation") // přesuny "z této lokace"
+  incoming_transfers     InventoryMovement[] @relation("MovementToLocation")   // přesuny "do této lokace"
+  printers               Printer[]         // tiskárny přiřazené k této lokaci
+  batch_items_from       BatchItem[]       // pickovací položky zdrojové lokace
 
   @@index([warehouse_id])
-  @@index([barcode])
+  @@index([type])
   @@map("warehouse_locations")
 }
 
@@ -548,7 +573,8 @@ model Material {
   status      String  @default("active") @db.VarChar(20)
   type        String  @default("material") @db.VarChar(50)
   unit        String  @default("ks") @db.VarChar(20)
-  barcode     String? @db.VarChar(100)
+  barcode     String? @unique @db.VarChar(100) // QR kód na etiketě — unikátní pro lookup ze čtečky
+  sector      String? @db.VarChar(20) // vyroba, stavba, servis, eshop, pradelna
 
   // Ceny & zásoby
   unit_price         Decimal? @db.Decimal(10, 2)
@@ -664,11 +690,13 @@ model Material {
   operation_materials OperationMaterial[]
   config_option_materials ConfigOptionMaterial[] // konfigurace, které tento materiál používají
   cad_components      CadComponent[]              // komponenty v CAD kusovníkách namapované na tento materiál
+  stock              Stock[]                     // SKLAD 2.0 — zásoby po lokacích (rychlý lookup)
+  batch_items        BatchItem[]                 // SKLAD 2.0 — položky v pickovacích dávkách
 
   @@index([code])
-  @@index([barcode])
   @@index([supplier_id])
   @@index([factorify_id])
+  @@index([sector])
   @@map("materials")
 }
 
@@ -676,25 +704,36 @@ model InventoryMovement {
   id             Int     @id @default(autoincrement())
   material_id    Int
   warehouse_id   Int
-  location_id    Int?
-  type           String  @db.VarChar(20) // receipt, issue, transfer, adjustment
+  location_id    Int?    // pro jednoduchý příjem/výdej (backward-compat)
+  from_location_id Int?  // SKLAD 2.0 — zdrojová lokace pro transfer/pick
+  to_location_id   Int?  // SKLAD 2.0 — cílová lokace pro transfer/příjem
+  type           String  @db.VarChar(20) // receipt, issue, transfer, adjustment, pick, inventory_adjust
   quantity       Decimal @db.Decimal(10, 2)
   unit_price     Decimal? @db.Decimal(10, 2)
-  reference_type String? @db.VarChar(50) // order, project, inventory, manual
+  reference_type String? @db.VarChar(50) // order, project, inventory, manual, document, batch
   reference_id   Int?
+  document_id    Int?    // SKLAD 2.0 — zastřešující dokument (DL, výdejka, přesunka, inventurní protokol)
+  client_uuid    String? @unique @db.Uuid // SKLAD 2.0 — offline dedup z PWA čtečky
+  device_id      String? @db.VarChar(100) // SKLAD 2.0 — audit: z jaké čtečky pohyb přišel
   note           String? @db.Text
   created_by     Int?
 
   created_at DateTime @default(now())
 
-  material  Material           @relation(fields: [material_id], references: [id])
-  warehouse Warehouse          @relation(fields: [warehouse_id], references: [id])
-  location  WarehouseLocation? @relation(fields: [location_id], references: [id])
-  creator   Person?            @relation("MovementCreatedBy", fields: [created_by], references: [id])
+  material       Material           @relation(fields: [material_id], references: [id])
+  warehouse      Warehouse          @relation(fields: [warehouse_id], references: [id])
+  location       WarehouseLocation? @relation(fields: [location_id], references: [id])
+  from_location  WarehouseLocation? @relation("MovementFromLocation", fields: [from_location_id], references: [id])
+  to_location    WarehouseLocation? @relation("MovementToLocation", fields: [to_location_id], references: [id])
+  document       WarehouseDocument? @relation(fields: [document_id], references: [id])
+  creator        Person?            @relation("MovementCreatedBy", fields: [created_by], references: [id])
 
   @@index([material_id])
   @@index([warehouse_id])
   @@index([created_at])
+  @@index([document_id])
+  @@index([from_location_id])
+  @@index([to_location_id])
   @@map("inventory_movements")
 }
 
@@ -1279,10 +1318,12 @@ model SlotAssignment {
 
   created_at DateTime @default(now())
 
-  slot ProductionSlot @relation(fields: [slot_id], references: [id], onDelete: Cascade)
+  slot       ProductionSlot @relation(fields: [slot_id], references: [id], onDelete: Cascade)
+  order_item OrderItem?     @relation(fields: [order_item_id], references: [id], onDelete: SetNull)
 
   @@index([slot_id])
   @@index([order_id])
+  @@index([order_item_id])
   @@index([status])
   @@map("slot_assignments")
 }
@@ -1466,7 +1507,8 @@ model VehicleDocument {
   vehicle_id  Int
   vehicle     Vehicle  @relation(fields: [vehicle_id], references: [id], onDelete: Cascade)
 
-  // Typ dokumentu: "technicky_prukaz" | "leasing" | "stk_protokol" | "smlouva" | "jine"
+  // Typ dokumentu: "technicky_prukaz" | "stk_protokol" | "smlouva" | "protokol" | "jine"
+  // (Hodnota "leasing" zůstává podporována pro zpětnou kompatibilitu starších záznamů.)
   doc_type    String   @db.VarChar(50)
   title       String   @db.VarChar(255)      // Popisek (např. "Technický průkaz - list A")
   file_url    String   @db.VarChar(500)      // /api/storage/files/vehicles/...
@@ -1523,7 +1565,11 @@ model VehicleService {
   service_type     String   @db.VarChar(255)  // Např. "Pravidelný servis", "Výměna oleje", volný text
   scheduled_at     DateTime?                   // Plánovaný termín (datum + čas)
   done_at          DateTime?                   // Kdy skutečně proběhlo
-  service_company  String?  @db.VarChar(255)  // Firma provádějící servis
+  // Napojení na firmu v adresáři (preferovaný zdroj pravdy). Textové pole service_company
+  // zůstává pro zpětnou kompatibilitu starších záznamů a při mazání firmy z adresáře.
+  service_company_id Int?
+  service_company_ref Company? @relation("VehicleServiceCompany", fields: [service_company_id], references: [id], onDelete: SetNull)
+  service_company  String?  @db.VarChar(255)  // Denormalizovaný název firmy (kvůli historii / mazání)
   location         String?  @db.VarChar(500)  // Místo provedení (adresa)
   km_at_service    Int?                        // Stav kilometrů při servisu
 
@@ -1543,6 +1589,7 @@ model VehicleService {
   @@index([vehicle_id])
   @@index([status])
   @@index([scheduled_at])
+  @@index([service_company_id])
   @@map("vehicle_services")
 }
 
@@ -1561,7 +1608,11 @@ model VehicleTireChange {
   scheduled_at     DateTime?                   // Plánovaný termín
   done_at          DateTime?
   location         String?  @db.VarChar(500)
-  service_company  String?  @db.VarChar(255)
+  // Napojení na firmu v adresáři (preferovaný zdroj pravdy). Textové pole service_company
+  // zůstává pro zpětnou kompatibilitu starších záznamů a při mazání firmy z adresáře.
+  service_company_id Int?
+  service_company_ref Company? @relation("VehicleTireCompany", fields: [service_company_id], references: [id], onDelete: SetNull)
+  service_company  String?  @db.VarChar(255)  // Denormalizovaný název firmy (kvůli historii / mazání)
 
   // Oddělená cena: úkon (výměna/vyvážení) vs. nové pneu
   cost_service     Decimal? @db.Decimal(12, 2) // Cena za úkon — výměna, vyvážení atd.
@@ -1582,6 +1633,7 @@ model VehicleTireChange {
   @@index([status])
   @@index([scheduled_at])
   @@index([season])
+  @@index([service_company_id])
   @@map("vehicle_tire_changes")
 }
 
@@ -1842,4 +1894,194 @@ model CadComponent {
   @@index([material_id])
   @@index([is_unknown])
   @@map("cad_components")
+}
+
+// =============================================================================
+// SKLAD 2.0 — PWA ČTEČKA + CENTRÁLNÍ TISK (2026-04)
+//
+// Nové entity pro skladový modul s podporou PWA na SUNMI L2H/L3 čtečce,
+// offline-first provoz (dedup přes client_uuid), pickovací dávky a
+// centrální tisk etiket přes TSC TC200 v ZPL.
+//
+// Doplňuje stávající Warehouse / WarehouseLocation / Material /
+// InventoryMovement / Inventory — nenahrazuje je.
+// =============================================================================
+
+// Aktuální zásoba dané položky na konkrétní lokaci.
+// Transakčně udržovaná z InventoryMovement — rychlý lookup pro čtečku.
+model Stock {
+  id                 Int      @id @default(autoincrement())
+  material_id        Int
+  location_id        Int
+  quantity           Decimal  @default(0) @db.Decimal(12, 3)
+  reserved_quantity  Decimal  @default(0) @db.Decimal(12, 3) // rezervováno pro otevřené dávky/výdejky
+
+  updated_at DateTime @updatedAt
+
+  material Material          @relation(fields: [material_id], references: [id])
+  location WarehouseLocation @relation(fields: [location_id], references: [id])
+
+  @@unique([material_id, location_id])
+  @@index([location_id])
+  @@index([material_id])
+  @@map("stock")
+}
+
+// Skladový dokument — zastřešuje skupinu pohybů (dodací list, výdejka, přesunka,
+// pickovací list, inventurní protokol). Append-only princip: dokument se
+// uzavře (completed) a dál se needituje — oprava je novým opačným dokumentem.
+model WarehouseDocument {
+  id           Int      @id @default(autoincrement())
+  type         String   @db.VarChar(30) // receipt_doc, issue_doc, transfer_doc, pick_list, inventory_doc
+  number       String   @unique @db.VarChar(50) // řada per typ, např. PR-2026-00123
+  status       String   @default("draft") @db.VarChar(20) // draft, in_progress, completed, cancelled
+  partner_id   Int?     // dodavatel / odběratel / projekt (Company)
+  reference    String?  @db.VarChar(255) // volný text — číslo DL od dodavatele apod.
+  note         String?  @db.Text
+  created_by   Int?
+  completed_at DateTime?
+  completed_by Int?
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  partner   Company?            @relation("WarehouseDocumentPartner", fields: [partner_id], references: [id])
+  creator   Person?             @relation("WarehouseDocumentCreator", fields: [created_by], references: [id])
+  movements InventoryMovement[] // pohyby patřící tomuto dokumentu
+
+  @@index([type])
+  @@index([status])
+  @@index([partner_id])
+  @@index([created_at])
+  @@map("warehouse_documents")
+}
+
+// Pickovací dávka — skupina položek vychystávaných najednou.
+// Typicky e-shop: 20 objednávek za hodinu se zpracuje jako jedna dávka
+// a operátor prochází sklad podle optimální trasy.
+model Batch {
+  id           Int      @id @default(autoincrement())
+  number       String   @unique @db.VarChar(50) // např. BAT-2026-0042
+  sector       String?  @db.VarChar(20) // vyroba, stavba, servis, eshop, pradelna
+  status       String   @default("open") @db.VarChar(20) // open, picking, done, cancelled
+  assigned_to  Int?     // operátor (Person), který dávku pickuje
+  note         String?  @db.Text
+
+  created_at   DateTime  @default(now())
+  started_at   DateTime?
+  completed_at DateTime?
+
+  assignee Person?     @relation("BatchAssignee", fields: [assigned_to], references: [id])
+  items    BatchItem[]
+
+  @@index([status])
+  @@index([assigned_to])
+  @@index([sector])
+  @@map("batches")
+}
+
+// Jedna položka pickovací dávky — co, kolik, odkud.
+// Seřazeno podle optimální trasy skladem (via sort_order).
+model BatchItem {
+  id               Int       @id @default(autoincrement())
+  batch_id         Int
+  material_id      Int
+  from_location_id Int?      // odkud se má vzít (navrhovaná zdrojová lokace)
+  quantity         Decimal   @db.Decimal(12, 3)
+  picked_quantity  Decimal?  @db.Decimal(12, 3) // kolik se reálně napickovalo
+  status           String    @default("pending") @db.VarChar(20) // pending, picked, short, skipped
+  sort_order       Int       @default(0) // pořadí v trase skladem
+  picked_by        Int?      // Person, kdo položku napickoval
+  picked_at        DateTime?
+  note             String?   @db.Text
+
+  batch         Batch              @relation(fields: [batch_id], references: [id], onDelete: Cascade)
+  material      Material           @relation(fields: [material_id], references: [id])
+  from_location WarehouseLocation? @relation(fields: [from_location_id], references: [id])
+  picker        Person?            @relation("BatchItemPickedBy", fields: [picked_by], references: [id])
+
+  @@index([batch_id])
+  @@index([material_id])
+  @@index([status])
+  @@map("batch_items")
+}
+
+// Tiskárna etiket — centrálně spravovaná, HolyOS backend drží TCP spojení
+// a vystavuje tiskové API. Web i PWA volají stejný endpoint.
+model Printer {
+  id               Int      @id @default(autoincrement())
+  name             String   @db.VarChar(100) // např. "Tiskárna Rychnov"
+  model            String   @default("TSC_TC200") @db.VarChar(50) // preset: TSC_TC200, ZEBRA_GK420, CUSTOM
+  location_id      Int?     // kam patří (autoselekce tiskárny podle místa operace)
+  connection_type  String   @default("lan") @db.VarChar(10) // lan, usb
+  ip_address       String?  @db.Inet
+  port             Int?
+  language         String   @default("ZPL") @db.VarChar(10) // ZPL, TSPL, EPL
+  label_width_mm   Decimal  @default(60) @db.Decimal(6, 2)
+  label_height_mm  Decimal  @default(20) @db.Decimal(6, 2)
+  dpi              Int      @default(203)
+  priority         Int      @default(0) // autoselekce při více tiskárnách
+  is_active        Boolean  @default(true)
+  last_ping_ok     DateTime?
+  encoding         String   @default("UTF-8") @db.VarChar(20)
+  // Pokročilá nastavení (většinou default, skrytá v UI)
+  pre_command      String?  @db.Text
+  post_command     String?  @db.Text
+  gap_mm           Decimal? @db.Decimal(4, 2)
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  location   WarehouseLocation? @relation(fields: [location_id], references: [id])
+  print_jobs PrintJob[]
+
+  @@index([location_id])
+  @@index([is_active])
+  @@map("printers")
+}
+
+// Šablona etikety — ZPL/TSPL text s placeholdery {{qr_code}}, {{item_name}}, …
+// Backend při tisku dosadí data a pošle na tiskárnu.
+model LabelTemplate {
+  id          Int      @id @default(autoincrement())
+  code        String   @unique @db.VarChar(50) // např. item_label, location_label, document_summary
+  name        String   @db.VarChar(255)
+  language    String   @default("ZPL") @db.VarChar(10) // ZPL, TSPL, EPL
+  width_mm    Decimal  @default(60) @db.Decimal(6, 2)
+  height_mm   Decimal  @default(20) @db.Decimal(6, 2)
+  body        String   @db.Text // šablona s placeholdery
+  description String?  @db.Text
+  is_active   Boolean  @default(true)
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  print_jobs PrintJob[]
+
+  @@map("label_templates")
+}
+
+// Záznam o tisku — auditní stopa. Kdo, kdy, co, kam, úspěch/chyba.
+model PrintJob {
+  id           Int      @id @default(autoincrement())
+  template_id  Int?
+  printer_id   Int
+  data         Json     // hodnoty pro placeholdery šablony
+  copies       Int      @default(1)
+  status       String   @default("queued") @db.VarChar(20) // queued, printing, done, failed
+  error        String?  @db.Text
+  requested_by Int?     // Person
+  device_id    String?  @db.VarChar(100) // z jaké čtečky/PC byl tisk spuštěn
+
+  created_at  DateTime  @default(now())
+  finished_at DateTime?
+
+  template  LabelTemplate? @relation(fields: [template_id], references: [id])
+  printer   Printer        @relation(fields: [printer_id], references: [id])
+  requester Person?        @relation("PrintJobRequestedBy", fields: [requested_by], references: [id])
+
+  @@index([printer_id])
+  @@index([status])
+  @@index([created_at])
+  @@map("print_jobs")
 }

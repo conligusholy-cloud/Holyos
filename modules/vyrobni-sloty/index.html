@@ -448,9 +448,14 @@
             } else if (hasAsgn) {
               var a = matched.assignments[0];
               var deliveryDate = new Date(matched.end_date).toLocaleDateString('cs-CZ');
+              // Výrobní číslo kiosku — přichází z relace order_item (doplněno v /api/slots)
+              var serial = a.order_item && a.order_item.serial_number ? a.order_item.serial_number : '';
               html += '<div class="tl-slot-inner occupied">';
               html += '<div class="slot-customer">' + esc(a.customer_name || '—') + '</div>';
               html += '<div class="slot-title">' + esc(a.product_name) + '</div>';
+              if (serial) {
+                html += '<div class="slot-sub" style="font-family:monospace;color:#fbbf24;font-weight:700;">🔢 ' + esc(serial) + '</div>';
+              }
               html += '<div class="slot-sub">Dodání: ' + deliveryDate + '</div>';
               html += '</div>';
             } else if (isPast) {
@@ -551,9 +556,13 @@
       if (slot.assignments && slot.assignments.length > 0) {
         html += '<div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:8px;">Zakázky v tomto slotu:</div>';
         slot.assignments.forEach(function(a) {
+          var serial = a.order_item && a.order_item.serial_number ? a.order_item.serial_number : '';
           html += '<div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:6px;">';
           html += '<div style="font-weight:700;font-size:13px;color:#fb923c;">' + esc(a.product_name) + '</div>';
           if (a.customer_name) html += '<div style="font-size:12px;color:var(--text);">' + esc(a.customer_name) + '</div>';
+          if (serial) {
+            html += '<div style="font-size:12px;margin-top:4px;"><span style="font-family:monospace;font-weight:700;background:rgba(251,191,36,0.15);color:#fbbf24;padding:3px 8px;border-radius:6px;">🔢 ' + esc(serial) + '</span></div>';
+          }
           html += '<div style="font-size:11px;color:var(--text2);margin-top:2px;">' + a.quantity + ' ks</div>';
           html += '</div>';
         });

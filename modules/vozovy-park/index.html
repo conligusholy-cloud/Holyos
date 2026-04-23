@@ -104,7 +104,7 @@
     .form-group.full { grid-column:1 / -1; }
     .form-group label { font-size:12px; font-weight:500; color:var(--text2); }
     .form-group input, .form-group select, .form-group textarea { background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:10px 12px; color:var(--text); font-size:14px; font-family:inherit; line-height:1.4; }
-    .form-group textarea { min-height:140px; resize:vertical; }
+    .form-group textarea { min-height:180px; resize:vertical; padding:14px 16px; font-size:15px; line-height:1.5; }
 
     .empty-state { text-align:center; padding:60px 20px; color:var(--text2); }
     .empty-state .empty-icon { font-size:48px; margin-bottom:12px; }
@@ -165,6 +165,8 @@
     </div>
   </div>
   <div id="modal-root"></div>
+  <!-- Oddělený root pro modály adresáře firem, aby se mohly stackovat nad detailem vozidla. -->
+  <div id="provider-modal-root"></div>
 
   <script>
     var s = document.createElement('script');
@@ -227,7 +229,10 @@
         const r = await fetch('/api/fleet/vehicles?' + params.toString(), { headers: authHeaders() });
         if (!r.ok) throw new Error('HTTP ' + r.status);
         vehicles = await r.json();
-        renderTable();
+        // Po načtení dat aplikujeme aktuálně vybrané filtry (kategorie, firma,
+        // hledání…), aby se po uložení karty vozu nezobrazila neúplná kategorie
+        // „Všechny" a uživatel zůstal v původně vybrané kategorii.
+        applyFilters();
       } catch (e) {
         console.error(e);
         document.getElementById('vehicles-table').innerHTML = '<div class="empty-state"><div class="empty-icon">⚠️</div><h3>Nepodařilo se načíst vozidla</h3><p>' + escHtml(e.message) + '</p></div>';
@@ -568,13 +573,19 @@
     }
 
     // ─── Záložky: Dokumentace ───────────────────────────────────────────────
+    // Aktivní výčet typů dokumentů — zobrazuje se v dropdownu při zakládání nového dokumentu.
     const DOC_TYPES = {
       'technicky_prukaz': '📘 Technický průkaz',
-      'leasing': '📜 Leasingová smlouva',
       'stk_protokol': '🔧 STK protokol',
       'smlouva': '📝 Smlouva',
+      'protokol': '📋 Protokol',
       'jine': '📎 Jiné',
     };
+    // Zpětná kompatibilita pro starší záznamy (dropdown už je nenabízí, ale při zobrazení je potřeba popisek).
+    const DOC_TYPES_LEGACY = {
+      'leasing': '📜 Leasingová smlouva',
+    };
+    function docTypeLabel(k) { return DOC_TYPES[k] || DOC_TYPES_LEGACY[k] || k; }
 
     function fileIconForMime(mime) {
       if (!mime) return '📎';
@@ -613,26 +624,17 @@
         if (!r.ok) throw new Error('HTTP ' + r.status);
         const docs = await r.json();
 
-        const docTypeOpts = Object.entries(DOC_TYPES)
-          .map(([k, label]) => '<option value="' + k + '">' + label + '</option>').join('');
+        // Form wrap (prázdný, naplní se až po kliknutí na "+ Nový dokument")
+        let html = '<div id="doc-form-wrap"></div>';
+        html += '<button type="button" class="btn btn-primary btn-sm" onclick="showDocumentForm(' + vehicleId + ')">+ Nový dokument</button>';
 
-        let html = '<div class="form-section-title">Nahrát nový dokument</div>';
-        html += '<div class="form-grid">' +
-          '<div class="form-group"><label>Typ</label><select id="doc-type">' + docTypeOpts + '</select></div>' +
-          '<div class="form-group"><label>Název (volitelně)</label><input type="text" id="doc-title" placeholder="např. TP - list A"></div>' +
-          '</div>';
-        html += '<label class="veh-upload" id="doc-upload-zone">' +
-          '<input type="file" id="doc-file" accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx">' +
-          '📥 <strong>Klikni</strong> nebo přetáhni soubor sem (nebo Ctrl+V screenshot)' +
-          '</label>';
-
-        html += '<div class="form-section-title">Uložené dokumenty (' + docs.length + ')</div>';
+        html += '<div class="form-section-title" style="margin-top:20px;">Uložené dokumenty (' + docs.length + ')</div>';
         if (docs.length === 0) {
           html += '<div class="veh-empty">Zatím žádné dokumenty.</div>';
         } else {
           html += '<div class="veh-list">';
           docs.forEach(d => {
-            const typeLabel = DOC_TYPES[d.doc_type] || d.doc_type;
+            const typeLabel = docTypeLabel(d.doc_type);
             const uploaded = d.uploaded_at ? new Date(d.uploaded_at).toLocaleDateString('cs-CZ') : '';
             html += '<div class="veh-item">' +
               '<div class="icon">' + fileIconForMime(d.mime_type) + '</div>' +
@@ -641,7 +643,7 @@
                 '<div class="meta">' + typeLabel + ' · ' + escHtml(d.file_name || '') + ' · ' + fmtSize(d.file_size) + (uploaded ? ' · ' + uploaded : '') + '</div>' +
               '</div>' +
               '<div class="actions">' +
-                '<a class="dl" href="' + escHtml(d.file_url) + '" target="_blank" rel="noopener" download="' + escHtml(d.file_name || '') + '">Stáhnout</a>' +
+                '<a class="dl" href="' + escHtml(d.file_url) + '" target="_blank" rel="noopener">📎 Zobrazit</a>' +
                 '<button type="button" class="btn btn-sm btn-danger" onclick="deleteDocument(' + d.id + ',' + vehicleId + ')">🗑️</button>' +
               '</div>' +
             '</div>';
@@ -649,31 +651,48 @@
           html += '</div>';
         }
         panel.innerHTML = html;
-
-        // Wire upload zone (click + drag&drop + paste)
-        const zone = panel.querySelector('#doc-upload-zone');
-        const fileInput = panel.querySelector('#doc-file');
-        fileInput.addEventListener('change', function () {
-          if (fileInput.files && fileInput.files[0]) uploadDocument(vehicleId, fileInput.files[0], panel);
-        });
-        zone.addEventListener('dragover', function (e) { e.preventDefault(); zone.classList.add('dragging'); });
-        zone.addEventListener('dragleave', function () { zone.classList.remove('dragging'); });
-        zone.addEventListener('drop', function (e) {
-          e.preventDefault();
-          zone.classList.remove('dragging');
-          if (e.dataTransfer.files && e.dataTransfer.files[0]) uploadDocument(vehicleId, e.dataTransfer.files[0], panel);
-        });
       } catch (e) {
         panel.innerHTML = '<div class="veh-empty">Chyba: ' + escHtml(e.message) + '</div>';
       }
     }
 
-    async function uploadDocument(vehicleId, file, panel) {
+    // Inline formulář pro založení nového dokumentu (analogicky k showServiceForm)
+    function showDocumentForm(vehicleId) {
+      const wrap = document.getElementById('doc-form-wrap');
+      if (!wrap) return;
+      const typeOpts = Object.entries(DOC_TYPES)
+        .map(([k, label]) => '<option value="' + k + '">' + label + '</option>').join('');
+
+      wrap.innerHTML = '<div class="policy-card">' +
+        '<div class="form-grid">' +
+          '<div class="form-group"><label>Typ dokumentu *</label><select id="doc-type">' + typeOpts + '</select></div>' +
+          '<div class="form-group"><label>Název (volitelně)</label><input type="text" id="doc-title" placeholder="např. TP - list A"></div>' +
+          '<div class="form-group full"><label>Soubor (PDF / obrázek / Word / Excel) *</label><input type="file" id="doc-file" accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx"></div>' +
+        '</div>' +
+        '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;">' +
+          '<button type="button" class="btn btn-sm btn-secondary" onclick="cancelDocumentForm()">Zrušit</button>' +
+          '<button type="button" class="btn btn-sm btn-primary" onclick="saveDocument(' + vehicleId + ')">Vytvořit dokument</button>' +
+        '</div>' +
+      '</div>';
+    }
+
+    function cancelDocumentForm() {
+      const wrap = document.getElementById('doc-form-wrap');
+      if (wrap) wrap.innerHTML = '';
+    }
+
+    async function saveDocument(vehicleId) {
+      const typeEl = document.getElementById('doc-type');
+      const titleEl = document.getElementById('doc-title');
+      const fileEl = document.getElementById('doc-file');
+      if (!typeEl || !fileEl) return;
+      const file = fileEl.files && fileEl.files[0];
+      if (!file) { alert('Vyber soubor k nahrání.'); return; }
       if (file.size > 20 * 1024 * 1024) { alert('Soubor je větší než 20 MB.'); return; }
       try {
         const b64 = await fileToBase64(file);
-        const docType = panel.querySelector('#doc-type').value;
-        const title = panel.querySelector('#doc-title').value.trim() || file.name;
+        const docType = typeEl.value;
+        const title = (titleEl.value || '').trim() || file.name;
         const r = await fetch('/api/fleet/vehicles/' + vehicleId + '/documents', {
           method: 'POST',
           headers: authHeaders(),
@@ -686,7 +705,8 @@
           }),
         });
         if (!r.ok) { const err = await r.json().catch(() => ({})); alert('Chyba: ' + (err.error || r.status)); return; }
-        await loadDocumentsTab(vehicleId, panel);
+        const panel = document.querySelector('.veh-tab-panel[data-panel="documents"]');
+        if (panel) await loadDocumentsTab(vehicleId, panel);
       } catch (e) { alert('Chyba: ' + e.message); }
     }
 
@@ -707,12 +727,17 @@
       'jine': 'Jiné',
     };
 
+    // Cache naposledy načtených pojistek pro daný detail — využívá showPolicyForm
+    // při editaci, aby nemusel znovu dotazovat server.
+    let currentPolicies = [];
+
     async function loadInsuranceTab(vehicleId, panel) {
       panel.innerHTML = '<div class="veh-empty">Načítám pojistky…</div>';
       try {
         const r = await fetch('/api/fleet/vehicles/' + vehicleId + '/policies', { headers: authHeaders() });
         if (!r.ok) throw new Error('HTTP ' + r.status);
         const policies = await r.json();
+        currentPolicies = policies;
 
         let html = '<div class="form-section-title">Přidat pojistku</div>';
         html += '<div id="policy-form-wrap"></div>';
@@ -731,6 +756,7 @@
                 '<span class="type-badge ' + escHtml(p.policy_type) + '">' + (POLICY_TYPES[p.policy_type] || p.policy_type) + '</span>' +
                 '<div style="display:flex;gap:6px;">' +
                   (p.file_url ? '<a class="dl" href="' + escHtml(p.file_url) + '" target="_blank" rel="noopener">📎 Stáhnout</a>' : '') +
+                  '<button type="button" class="btn btn-sm btn-secondary" onclick="showPolicyForm(' + vehicleId + ',' + p.id + ')" title="Upravit pojistku">✏️ Upravit</button>' +
                   '<button type="button" class="btn btn-sm btn-danger" onclick="deletePolicy(' + p.id + ',' + vehicleId + ')">🗑️</button>' +
                 '</div>' +
               '</header>' +
@@ -753,22 +779,48 @@
     function showPolicyForm(vehicleId, policyId) {
       const wrap = document.getElementById('policy-form-wrap');
       if (!wrap) return;
+
+      // Pokud editujeme, najdeme existující pojistku v cache z posledního loadu
+      const editing = policyId != null;
+      const p = editing ? (currentPolicies.find(x => x.id === policyId) || null) : null;
+
       const policyTypeOpts = Object.entries(POLICY_TYPES)
-        .map(([k, label]) => '<option value="' + k + '">' + label + '</option>').join('');
+        .map(([k, label]) => '<option value="' + k + '"' + (p && p.policy_type === k ? ' selected' : '') + '>' + label + '</option>').join('');
+
+      function toDateInput(d) {
+        if (!d) return '';
+        const dt = new Date(d);
+        if (isNaN(dt.getTime())) return '';
+        return dt.toISOString().split('T')[0];
+      }
+      const valFrom = p && p.valid_from ? toDateInput(p.valid_from) : '';
+      const valTo = p && p.valid_to ? toDateInput(p.valid_to) : '';
+      const premium = p && p.premium_amount != null ? Number(p.premium_amount) : '';
+
+      const fileInfoHtml = editing && p && p.file_url
+        ? '<div class="form-group full" style="font-size:12px;color:var(--text2);">Aktuálně přiložený soubor: <a class="dl" href="' + escHtml(p.file_url) + '" target="_blank" rel="noopener">📎 ' + escHtml(p.file_name || 'stáhnout') + '</a>. Nahrání nového souboru ho nahradí.</div>'
+        : '';
+
+      const title = editing ? 'Upravit pojistku' : 'Nová pojistka';
+      const submitLabel = editing ? 'Uložit změny' : 'Uložit pojistku';
+      const saveArg = editing ? (vehicleId + ',' + policyId) : (vehicleId + ',null');
+
       wrap.innerHTML = '<div class="policy-card" id="new-policy-card">' +
+        '<div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:10px;">' + title + '</div>' +
         '<div class="form-grid">' +
           '<div class="form-group"><label>Typ *</label><select id="p-type">' + policyTypeOpts + '</select></div>' +
-          '<div class="form-group"><label>Pojišťovna</label><input type="text" id="p-company" placeholder="Např. Kooperativa"></div>' +
-          '<div class="form-group"><label>Číslo pojistky</label><input type="text" id="p-number"></div>' +
-          '<div class="form-group"><label>Pojistné (Kč)</label><input type="number" id="p-premium" step="0.01" min="0"></div>' +
-          '<div class="form-group"><label>Platnost od</label><input type="date" id="p-from"></div>' +
-          '<div class="form-group"><label>Platnost do</label><input type="date" id="p-to"></div>' +
-          '<div class="form-group full"><label>Poznámka</label><textarea id="p-note"></textarea></div>' +
-          '<div class="form-group full"><label>Přiložit scan/PDF (volitelné)</label><input type="file" id="p-file" accept="image/*,application/pdf"></div>' +
+          '<div class="form-group"><label>Pojišťovna</label><input type="text" id="p-company" placeholder="Např. Kooperativa" value="' + escHtml(p && p.company_name || '') + '"></div>' +
+          '<div class="form-group"><label>Číslo pojistky</label><input type="text" id="p-number" value="' + escHtml(p && p.policy_number || '') + '"></div>' +
+          '<div class="form-group"><label>Pojistné (Kč)</label><input type="number" id="p-premium" step="0.01" min="0" value="' + premium + '"></div>' +
+          '<div class="form-group"><label>Platnost od</label><input type="date" id="p-from" value="' + valFrom + '"></div>' +
+          '<div class="form-group"><label>Platnost do</label><input type="date" id="p-to" value="' + valTo + '"></div>' +
+          '<div class="form-group full"><label>Poznámka</label><textarea id="p-note">' + escHtml(p && p.note || '') + '</textarea></div>' +
+          fileInfoHtml +
+          '<div class="form-group full"><label>' + (editing ? 'Nahradit scan/PDF (volitelné)' : 'Přiložit scan/PDF (volitelné)') + '</label><input type="file" id="p-file" accept="image/*,application/pdf"></div>' +
         '</div>' +
         '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;">' +
           '<button type="button" class="btn btn-sm btn-secondary" onclick="cancelPolicyForm()">Zrušit</button>' +
-          '<button type="button" class="btn btn-sm btn-primary" onclick="savePolicy(' + vehicleId + ')">Uložit pojistku</button>' +
+          '<button type="button" class="btn btn-sm btn-primary" onclick="savePolicy(' + saveArg + ')">' + submitLabel + '</button>' +
         '</div>' +
       '</div>';
     }
@@ -778,7 +830,7 @@
       if (wrap) wrap.innerHTML = '';
     }
 
-    async function savePolicy(vehicleId) {
+    async function savePolicy(vehicleId, policyId) {
       const data = {
         policy_type: document.getElementById('p-type').value,
         company_name: document.getElementById('p-company').value.trim() || null,
@@ -800,8 +852,13 @@
         data.mime_type = file.type || null;
       }
       try {
-        const r = await fetch('/api/fleet/vehicles/' + vehicleId + '/policies', {
-          method: 'POST',
+        const editing = policyId != null;
+        const url = editing
+          ? '/api/fleet/policies/' + policyId
+          : '/api/fleet/vehicles/' + vehicleId + '/policies';
+        const method = editing ? 'PUT' : 'POST';
+        const r = await fetch(url, {
+          method,
           headers: authHeaders(),
           body: JSON.stringify(data),
         });
@@ -875,6 +932,239 @@
       } catch (e) { alert('Chyba: ' + e.message); }
     }
 
+    // ─── Adresář servisních firem (sdíleno se Service i Tire tabem) ────────
+    // Cache firem (dodavatelé / servisy) — naplní se z /api/fleet/service-providers.
+    // Používá se pro rychlé vyplnění dropdownu "Firma" ve formuláři servisu / pneu.
+    window._serviceProvidersCache = null;
+
+    async function ensureServiceProviders(force) {
+      if (!force && window._serviceProvidersCache) return window._serviceProvidersCache;
+      try {
+        const r = await fetch('/api/fleet/service-providers', { headers: authHeaders() });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        window._serviceProvidersCache = await r.json();
+      } catch (e) {
+        window._serviceProvidersCache = [];
+        console.error('Nelze načíst adresář firem:', e);
+      }
+      return window._serviceProvidersCache;
+    }
+
+    function serviceProviderOptionsHtml(selectedId) {
+      const providers = window._serviceProvidersCache || [];
+      const sel = selectedId != null ? String(selectedId) : '';
+      let html = '<option value=""' + (sel === '' ? ' selected' : '') + '>— neuvedeno —</option>';
+      providers.forEach(p => {
+        html += '<option value="' + p.id + '"' + (String(p.id) === sel ? ' selected' : '') + '>' +
+          escHtml(p.name) + (p.ico ? ' (IČ ' + escHtml(p.ico) + ')' : '') +
+        '</option>';
+      });
+      return html;
+    }
+
+    // HTML dropdownu + tlačítka "+ Nová firma" pro formulář servisu/pneu.
+    // `selectId` je ID selectu (unikátní v rámci stránky), `selectedId` je aktuálně vybrané id nebo null.
+    function serviceProviderSelectHtml(selectId, selectedId) {
+      return '<div style="display:flex;gap:6px;align-items:stretch;">' +
+        '<select id="' + selectId + '" style="flex:1;">' + serviceProviderOptionsHtml(selectedId) + '</select>' +
+        '<button type="button" class="btn btn-sm btn-secondary" title="Přidat novou firmu do adresáře" ' +
+          'onclick="openProviderQuickCreate(\'' + selectId + '\')">+ Nová</button>' +
+      '</div>';
+    }
+
+    // Otevře modal s rychlým formulářem pro založení firmy — po uložení ji vybere v dropdownu `selectId`.
+    function openProviderQuickCreate(selectId) {
+      openProviderFormModal(null, async function (created) {
+        if (!created) return;
+        await ensureServiceProviders(true); // refresh cache
+        const sel = document.getElementById(selectId);
+        if (sel) {
+          sel.innerHTML = serviceProviderOptionsHtml(created.id);
+        }
+      });
+    }
+
+    // Zavře všechny modály adresáře (nezávislé na hlavním modal-root).
+    function closeProviderModal() {
+      document.getElementById('provider-modal-root').innerHTML = '';
+    }
+
+    // Otevře modal s formulářem pro založení/úpravu firmy.
+    // `onSaved(company)` se zavolá po úspěšném uložení; může být null.
+    function openProviderFormModal(providerId, onSaved) {
+      const existing = providerId
+        ? (window._serviceProvidersCache || []).find(p => p.id === providerId)
+        : null;
+      const p = existing || {};
+      const title = providerId ? '✏️ Upravit firmu' : '+ Nová firma';
+      document.getElementById('provider-modal-root').innerHTML =
+        '<div class="modal-overlay" onclick="if(event.target===this)closeProviderModal()">' +
+        '<div class="modal" style="width:860px;">' +
+          '<h2>' + title + '</h2>' +
+          '<div class="form-section-title">Identifikace</div>' +
+          '<div class="form-grid">' +
+            '<div class="form-group full"><label>Název firmy *</label><input type="text" id="pr-name" value="' + escHtml(p.name || '') + '" placeholder="např. Autoservis Novák s.r.o."></div>' +
+            '<div class="form-group"><label>IČ</label><input type="text" id="pr-ico" value="' + escHtml(p.ico || '') + '" placeholder="12345678"></div>' +
+            '<div class="form-group"><label>DIČ</label><input type="text" id="pr-dic" value="' + escHtml(p.dic || '') + '" placeholder="CZ12345678"></div>' +
+          '</div>' +
+          '<div class="form-section-title">Adresa sídla (fakturační)</div>' +
+          '<div class="form-grid">' +
+            '<div class="form-group full"><label>Ulice a č.p.</label><input type="text" id="pr-address" value="' + escHtml(p.address || '') + '"></div>' +
+            '<div class="form-group"><label>Město</label><input type="text" id="pr-city" value="' + escHtml(p.city || '') + '"></div>' +
+            '<div class="form-group"><label>PSČ</label><input type="text" id="pr-zip" value="' + escHtml(p.zip || '') + '"></div>' +
+          '</div>' +
+          '<div class="form-section-title">Adresa provozovny (kam jezdíme)</div>' +
+          '<div class="form-grid">' +
+            '<div class="form-group full"><label>Ulice a č.p.</label><input type="text" id="pr-branch-address" value="' + escHtml(p.branch_address || '') + '"></div>' +
+            '<div class="form-group"><label>Město</label><input type="text" id="pr-branch-city" value="' + escHtml(p.branch_city || '') + '"></div>' +
+            '<div class="form-group"><label>PSČ</label><input type="text" id="pr-branch-zip" value="' + escHtml(p.branch_zip || '') + '"></div>' +
+          '</div>' +
+          '<div class="form-section-title">Kontakt a fakturace</div>' +
+          '<div class="form-grid">' +
+            '<div class="form-group"><label>Kontaktní osoba</label><input type="text" id="pr-contact" value="' + escHtml(p.contact_person || '') + '"></div>' +
+            '<div class="form-group"><label>E-mail</label><input type="email" id="pr-email" value="' + escHtml(p.email || '') + '"></div>' +
+            '<div class="form-group"><label>Telefon</label><input type="text" id="pr-phone" value="' + escHtml(p.phone || '') + '"></div>' +
+            '<div class="form-group"><label>Web</label><input type="text" id="pr-web" value="' + escHtml(p.web || '') + '" placeholder="https://"></div>' +
+            '<div class="form-group"><label>Bankovní účet</label><input type="text" id="pr-bank" value="' + escHtml(p.bank_account || '') + '" placeholder="1234567890/0100"></div>' +
+            '<div class="form-group"><label>Splatnost (dní)</label><input type="number" id="pr-payment" value="' + (p.payment_terms_days != null ? p.payment_terms_days : 14) + '" min="0" max="365"></div>' +
+            '<div class="form-group full"><label>Poznámky</label><textarea id="pr-notes" rows="2">' + escHtml(p.notes || '') + '</textarea></div>' +
+          '</div>' +
+          '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;">' +
+            '<button type="button" class="btn btn-secondary" onclick="closeProviderModal()">Zrušit</button>' +
+            '<button type="button" class="btn btn-primary" id="pr-save-btn">Uložit firmu</button>' +
+          '</div>' +
+        '</div></div>';
+
+      document.getElementById('pr-save-btn').addEventListener('click', async () => {
+        const name = document.getElementById('pr-name').value.trim();
+        if (!name) { alert('Zadej název firmy.'); return; }
+        const payment = document.getElementById('pr-payment').value;
+        const body = {
+          name,
+          ico: document.getElementById('pr-ico').value.trim() || null,
+          dic: document.getElementById('pr-dic').value.trim() || null,
+          address: document.getElementById('pr-address').value.trim() || null,
+          city: document.getElementById('pr-city').value.trim() || null,
+          zip: document.getElementById('pr-zip').value.trim() || null,
+          branch_address: document.getElementById('pr-branch-address').value.trim() || null,
+          branch_city: document.getElementById('pr-branch-city').value.trim() || null,
+          branch_zip: document.getElementById('pr-branch-zip').value.trim() || null,
+          contact_person: document.getElementById('pr-contact').value.trim() || null,
+          email: document.getElementById('pr-email').value.trim() || null,
+          phone: document.getElementById('pr-phone').value.trim() || null,
+          web: document.getElementById('pr-web').value.trim() || null,
+          bank_account: document.getElementById('pr-bank').value.trim() || null,
+          payment_terms_days: payment ? parseInt(payment) : null,
+          notes: document.getElementById('pr-notes').value.trim() || null,
+        };
+        try {
+          const url = providerId
+            ? '/api/fleet/service-providers/' + providerId
+            : '/api/fleet/service-providers';
+          const r = await fetch(url, {
+            method: providerId ? 'PUT' : 'POST',
+            headers: authHeaders(),
+            body: JSON.stringify(body),
+          });
+          if (!r.ok) { const err = await r.json().catch(() => ({})); alert('Chyba: ' + (err.error || r.status)); return; }
+          const saved = await r.json();
+          await ensureServiceProviders(true);
+          closeProviderModal();
+          if (typeof onSaved === 'function') onSaved(saved);
+        } catch (e) { alert('Chyba: ' + e.message); }
+      });
+    }
+
+    // Modal se seznamem všech firem (CRUD) — otevírá se z toolbaru Servis/Pneu.
+    async function openProviderDirectoryModal() {
+      await ensureServiceProviders(true);
+      renderProviderDirectoryModal();
+    }
+
+    function renderProviderDirectoryModal() {
+      const providers = window._serviceProvidersCache || [];
+      let rows = '';
+      if (providers.length === 0) {
+        rows = '<div class="veh-empty">Adresář je prázdný. Přidej první firmu kliknutím na "+ Nová firma".</div>';
+      } else {
+        rows = '<div class="veh-list">' + providers.map(p => {
+          const addr = [p.branch_address || p.address, p.branch_city || p.city].filter(Boolean).join(', ');
+          return '<div class="veh-item">' +
+            '<div class="icon">🏢</div>' +
+            '<div class="body">' +
+              '<div class="title">' + escHtml(p.name) + (p.ico ? ' <span style="font-size:11px;color:var(--text2);font-weight:400;">· IČ ' + escHtml(p.ico) + '</span>' : '') + '</div>' +
+              '<div class="meta">' +
+                (addr ? '📍 ' + escHtml(addr) : '') +
+                (p.contact_person ? ' · 👤 ' + escHtml(p.contact_person) : '') +
+                (p.email ? ' · ✉️ ' + escHtml(p.email) : '') +
+                (p.phone ? ' · ☎️ ' + escHtml(p.phone) : '') +
+              '</div>' +
+            '</div>' +
+            '<div class="actions">' +
+              '<button type="button" class="btn btn-sm btn-secondary" onclick="editProviderFromDirectory(' + p.id + ')">✏️</button>' +
+              '<button type="button" class="btn btn-sm btn-danger" onclick="deleteProviderFromDirectory(' + p.id + ')">🗑️</button>' +
+            '</div>' +
+          '</div>';
+        }).join('') + '</div>';
+      }
+      document.getElementById('provider-modal-root').innerHTML =
+        '<div class="modal-overlay" onclick="if(event.target===this)closeProviderModal()">' +
+        '<div class="modal" style="width:860px;">' +
+          '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">' +
+            '<h2 style="margin:0;">📇 Adresář firem</h2>' +
+            '<button type="button" class="btn btn-primary btn-sm" onclick="addProviderFromDirectory()">+ Nová firma</button>' +
+          '</div>' +
+          rows +
+          '<div style="display:flex;justify-content:flex-end;margin-top:16px;">' +
+            '<button type="button" class="btn btn-secondary" onclick="closeProviderModal()">Zavřít</button>' +
+          '</div>' +
+        '</div></div>';
+    }
+
+    function addProviderFromDirectory() {
+      openProviderFormModal(null, async function () {
+        await openProviderDirectoryModal(); // znovu otevře seznam s obnovenými daty
+      });
+    }
+
+    function editProviderFromDirectory(id) {
+      openProviderFormModal(id, async function () {
+        await openProviderDirectoryModal();
+        // Refresh otevřených panelů (pokud uživatel stojí na servisu/pneu)
+        refreshCurrentTabAfterProviderChange();
+      });
+    }
+
+    async function deleteProviderFromDirectory(id) {
+      const p = (window._serviceProvidersCache || []).find(x => x.id === id);
+      if (!p) return;
+      if (!confirm('Smazat firmu "' + p.name + '" z adresáře?')) return;
+      try {
+        const r = await fetch('/api/fleet/service-providers/' + id, {
+          method: 'DELETE',
+          headers: authHeaders(),
+        });
+        if (!r.ok) {
+          const err = await r.json().catch(() => ({}));
+          alert('Nelze smazat: ' + (err.error || r.status));
+          return;
+        }
+        await ensureServiceProviders(true);
+        renderProviderDirectoryModal();
+        refreshCurrentTabAfterProviderChange();
+      } catch (e) { alert('Chyba: ' + e.message); }
+    }
+
+    // Přenačte aktuálně aktivní vehicle tab (service/tires), aby se projevily změny adresáře.
+    function refreshCurrentTabAfterProviderChange() {
+      const vid = window._currentVehicleId;
+      if (!vid) return;
+      const activeServicePanel = document.querySelector('.veh-tab-panel.active[data-panel="service"]');
+      const activeTiresPanel = document.querySelector('.veh-tab-panel.active[data-panel="tires"]');
+      if (activeServicePanel) loadServiceTab(vid, activeServicePanel);
+      if (activeTiresPanel) loadTiresTab(vid, activeTiresPanel);
+    }
+
     // ─── Záložky: Servis ────────────────────────────────────────────────────
     const SERVICE_STATUS = {
       planned: { label: '🕒 Naplánováno', color: '#0ea5e9' },
@@ -905,9 +1195,12 @@
     async function loadServiceTab(vehicleId, panel) {
       panel.innerHTML = '<div class="veh-empty">Načítám servisy…</div>';
       try {
-        const r = await fetch('/api/fleet/vehicles/' + vehicleId + '/services', { headers: authHeaders() });
-        if (!r.ok) throw new Error('HTTP ' + r.status);
-        const services = await r.json();
+        // Paralelně nahrajeme servisy i adresář firem (dropdown ve formuláři)
+        const [services] = await Promise.all([
+          fetch('/api/fleet/vehicles/' + vehicleId + '/services', { headers: authHeaders() })
+            .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }),
+          ensureServiceProviders(),
+        ]);
 
         // Spočítej celkové náklady a počty stavů
         const planned = services.filter(s => s.status === 'planned');
@@ -922,7 +1215,10 @@
         '</div>';
 
         html += '<div id="service-form-wrap"></div>';
-        html += '<button type="button" class="btn btn-primary btn-sm" onclick="showServiceForm(' + vehicleId + ', null)">+ Nový servis</button>';
+        html += '<div style="display:flex;gap:8px;flex-wrap:wrap;">' +
+          '<button type="button" class="btn btn-primary btn-sm" onclick="showServiceForm(' + vehicleId + ', null)">+ Nový servis</button>' +
+          '<button type="button" class="btn btn-secondary btn-sm" onclick="openProviderDirectoryModal()" title="Spravovat adresář firem">📇 Adresář firem</button>' +
+        '</div>';
 
         html += '<div class="form-section-title" style="margin-top:20px;">Historie (' + services.length + ')</div>';
         if (services.length === 0) {
@@ -933,12 +1229,14 @@
             const st = SERVICE_STATUS[s.status] || { label: s.status, color: 'var(--text2)' };
             const when = s.status === 'planned' ? fmtDateTime(s.scheduled_at) : fmtDateTime(s.done_at || s.scheduled_at);
             const totalSvc = (Number(s.cost_labor || 0) + Number(s.cost_parts || 0));
+            // Preferuj aktuální název firmy z FK (přes relation), fallback na denormalizovaný text
+            const companyName = (s.service_company_ref && s.service_company_ref.name) || s.service_company;
             html += '<div class="veh-item" style="flex-wrap:wrap;">' +
               '<div class="icon">🔧</div>' +
               '<div class="body">' +
                 '<div class="title">' + escHtml(s.service_type) + ' <span style="color:' + st.color + ';font-weight:500;font-size:11px;margin-left:6px;">' + st.label + '</span></div>' +
                 '<div class="meta">' +
-                  when + (s.service_company ? ' · ' + escHtml(s.service_company) : '') +
+                  when + (companyName ? ' · 🏢 ' + escHtml(companyName) : '') +
                   (s.location ? ' · 📍 ' + escHtml(s.location) : '') +
                   (s.km_at_service ? ' · ' + s.km_at_service.toLocaleString('cs-CZ') + ' km' : '') +
                   (totalSvc ? ' · ' + fmtMoney(totalSvc) : '') +
@@ -974,12 +1272,16 @@
       const statusOpts = Object.entries(SERVICE_STATUS)
         .map(([k, o]) => '<option value="' + k + '"' + (s.status === k ? ' selected' : '') + '>' + o.label + '</option>').join('');
 
+      // Pro firmu: pokud existuje FK, použij id; jinak si ponecháme volný text jako fallback (nic nevybereme).
+      const selectedCompanyId = s.service_company_id != null ? s.service_company_id : null;
+      const companySelect = serviceProviderSelectHtml('s-company-id', selectedCompanyId);
+
       wrap.innerHTML = '<div class="policy-card">' +
         '<div class="form-grid">' +
           '<div class="form-group full"><label>Druh servisu *</label><input type="text" id="s-type" value="' + escHtml(s.service_type || '') + '" placeholder="např. Pravidelný servis, Výměna oleje"></div>' +
           '<div class="form-group"><label>Plánovaný termín</label><input type="datetime-local" id="s-scheduled" value="' + fmtDateTimeInput(s.scheduled_at) + '"></div>' +
           '<div class="form-group"><label>Provedeno (datum + čas)</label><input type="datetime-local" id="s-done" value="' + fmtDateTimeInput(s.done_at) + '"></div>' +
-          '<div class="form-group"><label>Firma provádějící servis</label><input type="text" id="s-company" value="' + escHtml(s.service_company || '') + '"></div>' +
+          '<div class="form-group full"><label>Firma provádějící servis (z adresáře)</label>' + companySelect + '</div>' +
           '<div class="form-group"><label>Stav kilometrů</label><input type="number" id="s-km" value="' + (s.km_at_service || '') + '" min="0"></div>' +
           '<div class="form-group full"><label>Místo provedení</label><input type="text" id="s-location" value="' + escHtml(s.location || '') + '" placeholder="např. Autoservis Novák, Brno"></div>' +
           '<div class="form-group"><label>Cena za práci (Kč)</label><input type="number" id="s-labor" value="' + (s.cost_labor || '') + '" step="0.01" min="0"></div>' +
@@ -1004,11 +1306,13 @@
     async function saveService(vehicleId, serviceId) {
       const serviceType = document.getElementById('s-type').value.trim();
       if (!serviceType) { alert('Zadej druh servisu.'); return; }
+      const companyIdVal = document.getElementById('s-company-id').value;
       const data = {
         service_type: serviceType,
         scheduled_at: document.getElementById('s-scheduled').value || null,
         done_at: document.getElementById('s-done').value || null,
-        service_company: document.getElementById('s-company').value.trim() || null,
+        service_company_id: companyIdVal ? parseInt(companyIdVal) : null,
+        service_company: null, // text se doplní na serveru podle FK; pro prázdný výběr zůstává null
         location: document.getElementById('s-location').value.trim() || null,
         km_at_service: (function () { const v = document.getElementById('s-km').value; return v ? parseInt(v) : null; })(),
         cost_labor: (function () { const v = document.getElementById('s-labor').value; return v ? parseFloat(v) : null; })(),
@@ -1118,16 +1422,16 @@
                           '<div class="meta">' + fmtSize(d.file_size) + '</div>' +
                         '</div>' +
                         '<div class="actions">' +
-                          '<a class="dl" href="' + escHtml(d.file_url) + '" target="_blank" rel="noopener" download="' + escHtml(d.file_name || '') + '">Stáhnout</a>' +
+                          '<a class="dl" href="' + escHtml(d.file_url) + '" target="_blank" rel="noopener" onclick="return openDamageDocument(event, this.href, ' + escHtml(JSON.stringify(d.title || d.file_name || '')) + ')">👁️ Zobrazit</a>' +
                           '<button type="button" class="btn btn-sm btn-danger" onclick="deleteDamageDocument(' + d.id + ',' + vehicleId + ')">🗑️</button>' +
                         '</div>' +
                       '</div>'
                     ).join('') + '</div>'
                   : '<div style="font-size:11px;color:var(--text2);font-style:italic;">Žádné dokumenty.</div>'
                 ) +
-                '<label class="veh-upload" style="margin-top:8px;padding:14px;font-size:12px;" ondragover="event.preventDefault();this.classList.add(\'dragging\')" ondragleave="this.classList.remove(\'dragging\')" ondrop="event.preventDefault();this.classList.remove(\'dragging\');addDamageDocuments(' + ev.id + ',event.dataTransfer.files,' + vehicleId + ')">' +
-                  '<input type="file" multiple onchange="addDamageDocuments(' + ev.id + ',this.files,' + vehicleId + ')">' +
-                  '📎 Přidat dokument (foto, protokol, faktura…)' +
+                '<label class="btn btn-secondary btn-sm" style="margin-top:10px;cursor:pointer;">' +
+                  '<input type="file" multiple style="display:none;" onchange="addDamageDocuments(' + ev.id + ',this.files,' + vehicleId + ');this.value=null;">' +
+                  '📎 Přidat dokument' +
                 '</label>' +
               '</div>' +
             '</div>';
@@ -1236,6 +1540,27 @@
       } catch (e) { alert('Chyba: ' + e.message); }
     }
 
+    // Otevře dokument škodní události v samostatném vyskakovacím okně.
+    // Vrací false, aby se zabránilo defaultnímu prokliku linku (když popup projde).
+    // Při blokování popupů vrací true a link se otevře v nové záložce (stejně jako faktury v servisu).
+    function openDamageDocument(evt, fileUrl, title) {
+      if (!fileUrl) return false;
+      const w = Math.min(1100, Math.round((window.screen.availWidth || 1200) * 0.85));
+      const h = Math.min(800, Math.round((window.screen.availHeight || 900) * 0.85));
+      const left = Math.max(0, Math.round(((window.screen.availWidth || 1200) - w) / 2));
+      const top = Math.max(0, Math.round(((window.screen.availHeight || 900) - h) / 2));
+      const features = 'popup=yes,noopener,noreferrer,width=' + w + ',height=' + h + ',left=' + left + ',top=' + top + ',resizable=yes,scrollbars=yes';
+      let win = null;
+      try { win = window.open(fileUrl, '_blank', features); } catch (_) { win = null; }
+      if (!win) {
+        // Popup blokovaný – necháme browser otevřít link v nové záložce (default chování <a target="_blank">)
+        return true;
+      }
+      try { win.document.title = title || 'Dokument škodní události'; } catch (_) { /* cross-origin – ignoruj */ }
+      if (evt && evt.preventDefault) evt.preventDefault();
+      return false;
+    }
+
     // Quick-create škodní události z top-baru
     function openQuickDamageModal() {
       if (!vehicles || !vehicles.length) {
@@ -1329,6 +1654,7 @@
         const [changesResp, stockResp] = await Promise.all([
           fetch('/api/fleet/vehicles/' + vehicleId + '/tire-changes', { headers: authHeaders() }),
           fetch('/api/fleet/vehicles/' + vehicleId + '/tire-stock', { headers: authHeaders() }),
+          ensureServiceProviders(), // Adresář firem pro dropdown při zakládání výměny
         ]);
         if (!changesResp.ok) throw new Error('HTTP ' + changesResp.status);
         const changes = await changesResp.json();
@@ -1377,7 +1703,10 @@
         // ─── VÝMĚNY PNEU (plánování + historie)
         html += '<div class="form-section-title">🛞 Výměny pneu</div>';
         html += '<div id="tire-change-form-wrap"></div>';
-        html += '<button type="button" class="btn btn-primary btn-sm" onclick="showTireChangeForm(' + vehicleId + ', null)">+ Nová výměna</button>';
+        html += '<div style="display:flex;gap:8px;flex-wrap:wrap;">' +
+          '<button type="button" class="btn btn-primary btn-sm" onclick="showTireChangeForm(' + vehicleId + ', null)">+ Nová výměna</button>' +
+          '<button type="button" class="btn btn-secondary btn-sm" onclick="openProviderDirectoryModal()" title="Spravovat adresář firem">📇 Adresář firem</button>' +
+        '</div>';
 
         if (changes.length === 0) {
           html += '<div class="veh-empty">Zatím žádné výměny pneu.</div>';
@@ -1387,12 +1716,13 @@
             const st = SERVICE_STATUS[c.status] || { label: c.status, color: 'var(--text2)' };
             const when = c.status === 'planned' ? fmtDateTime(c.scheduled_at) : fmtDateTime(c.done_at || c.scheduled_at);
             const total = Number(c.cost_service || 0) + Number(c.cost_tires || 0);
+            const companyName = (c.service_company_ref && c.service_company_ref.name) || c.service_company;
             html += '<div class="veh-item" style="flex-wrap:wrap;">' +
               '<div class="icon">' + (c.season === 'zimni' ? '❄️' : '☀️') + '</div>' +
               '<div class="body">' +
                 '<div class="title">' + SEASON_LABEL[c.season] + ' výměna <span style="color:' + st.color + ';font-weight:500;font-size:11px;margin-left:6px;">' + st.label + '</span></div>' +
                 '<div class="meta">' +
-                  when + (c.service_company ? ' · ' + escHtml(c.service_company) : '') +
+                  when + (companyName ? ' · 🏢 ' + escHtml(companyName) : '') +
                   (c.location ? ' · 📍 ' + escHtml(c.location) : '') +
                   (c.cost_service ? ' · úkon ' + fmtMoney(c.cost_service) : '') +
                   (c.cost_tires ? ' · pneu ' + fmtMoney(c.cost_tires) : '') +
@@ -1468,14 +1798,17 @@
       const statusOpts = Object.entries(SERVICE_STATUS)
         .map(([k, o]) => '<option value="' + k + '"' + (c.status === k ? ' selected' : '') + '>' + o.label + '</option>').join('');
 
+      const selectedCompanyId = c.service_company_id != null ? c.service_company_id : null;
+      const companySelect = serviceProviderSelectHtml('tc-company-id', selectedCompanyId);
+
       wrap.innerHTML = '<div class="policy-card">' +
         '<div class="form-grid">' +
           '<div class="form-group"><label>Sezóna *</label><select id="tc-season">' + seasonOpts + '</select></div>' +
           '<div class="form-group"><label>Stav</label><select id="tc-status">' + statusOpts + '</select></div>' +
           '<div class="form-group"><label>Plánovaný termín</label><input type="datetime-local" id="tc-scheduled" value="' + fmtDateTimeInput(c.scheduled_at) + '"></div>' +
           '<div class="form-group"><label>Provedeno (datum + čas)</label><input type="datetime-local" id="tc-done" value="' + fmtDateTimeInput(c.done_at) + '"></div>' +
-          '<div class="form-group"><label>Firma / pneuservis</label><input type="text" id="tc-company" value="' + escHtml(c.service_company || '') + '"></div>' +
-          '<div class="form-group"><label>Místo výměny</label><input type="text" id="tc-location" value="' + escHtml(c.location || '') + '"></div>' +
+          '<div class="form-group full"><label>Firma / pneuservis (z adresáře)</label>' + companySelect + '</div>' +
+          '<div class="form-group full"><label>Místo výměny</label><input type="text" id="tc-location" value="' + escHtml(c.location || '') + '"></div>' +
           '<div class="form-group"><label>Cena za úkon (výměna/vyvážení, Kč)</label><input type="number" id="tc-labor" value="' + (c.cost_service || '') + '" step="0.01" min="0"></div>' +
           '<div class="form-group"><label>Cena za pneu (Kč)</label><input type="number" id="tc-tires" value="' + (c.cost_tires || '') + '" step="0.01" min="0"></div>' +
           '<div class="form-group"><label>Číslo faktury</label><input type="text" id="tc-invoice-num" value="' + escHtml(c.invoice_number || '') + '"></div>' +
@@ -1495,11 +1828,13 @@
     }
 
     async function saveTireChange(vehicleId, changeId) {
+      const companyIdVal = document.getElementById('tc-company-id').value;
       const data = {
         season: document.getElementById('tc-season').value,
         scheduled_at: document.getElementById('tc-scheduled').value || null,
         done_at: document.getElementById('tc-done').value || null,
-        service_company: document.getElementById('tc-company').value.trim() || null,
+        service_company_id: companyIdVal ? parseInt(companyIdVal) : null,
+        service_company: null, // text se vygeneruje na serveru z FK
         location: document.getElementById('tc-location').value.trim() || null,
         cost_service: (function () { const v = document.getElementById('tc-labor').value; return v ? parseFloat(v) : null; })(),
         cost_tires: (function () { const v = document.getElementById('tc-tires').value; return v ? parseFloat(v) : null; })(),

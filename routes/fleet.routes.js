@@ -709,6 +709,9 @@ const serviceSchema = z.object({
   service_type: z.string().min(1).max(255),
   scheduled_at: z.string().optional().nullable(),
   done_at: z.string().optional().nullable(),
+  // FK na Company z adresáře servisních firem. Pokud je vyplněno, service_company
+  // text se doplní automaticky (denormalizovaný název pro historii).
+  service_company_id: z.number().int().optional().nullable(),
   service_company: z.string().max(255).optional().nullable(),
   location: z.string().max(500).optional().nullable(),
   km_at_service: z.number().int().optional().nullable(),
@@ -729,12 +732,21 @@ function parseDateTime(v) {
   return isNaN(d.getTime()) ? null : d;
 }
 
-function toServiceData(data, vehicleId, userId) {
+// Pokud je vyplněné service_company_id, dohledá název firmy a vrátí ho.
+// Při neplatném ID vrací null (FK se vynuluje, ale zůstane volitelný text).
+async function resolveCompanyName(companyId) {
+  if (companyId == null) return null;
+  const co = await prisma.company.findUnique({ where: { id: companyId }, select: { name: true } });
+  return co ? co.name : null;
+}
+
+async function toServiceData(data, vehicleId, userId) {
   const out = {
     vehicle_id: vehicleId,
     service_type: data.service_type,
     scheduled_at: parseDateTime(data.scheduled_at),
     done_at: parseDateTime(data.done_at),
+    service_company_id: data.service_company_id ?? null,
     service_company: data.service_company || null,
     location: data.location || null,
     km_at_service: data.km_at_service ?? null,
@@ -744,6 +756,12 @@ function toServiceData(data, vehicleId, userId) {
     note: data.note || null,
     status: data.status || 'planned',
   };
+  // Je-li uvedena firma z adresáře, přepíšeme denormalizovaný název jejím aktuálním názvem.
+  if (out.service_company_id != null) {
+    const name = await resolveCompanyName(out.service_company_id);
+    if (name) out.service_company = name;
+    else out.service_company_id = null; // FK neexistuje, spadni na volný text
+  }
   if (userId != null) out.created_by = userId;
   if (data.invoice_file_data) {
     const saved = saveBase64File(vehicleId, data.invoice_file_data, data.invoice_file_name, data.invoice_mime);
@@ -752,6 +770,14 @@ function toServiceData(data, vehicleId, userId) {
   return out;
 }
 
+// Výběr polí firmy, která potřebujeme posílat do FE (pro zobrazení v kartě / tooltipu)
+const SERVICE_COMPANY_SELECT = {
+  id: true, name: true, ico: true, dic: true,
+  address: true, city: true, zip: true,
+  branch_address: true, branch_city: true, branch_zip: true,
+  contact_person: true, email: true, phone: true, active: true,
+};
+
 // GET /api/fleet/vehicles/:id/services — všechny servisy vozu (vč. done)
 router.get('/vehicles/:id/services', async (req, res, next) => {
   try {
@@ -759,6 +785,7 @@ router.get('/vehicles/:id/services', async (req, res, next) => {
     if (isNaN(vehicleId)) return res.status(400).json({ error: 'Neplatné ID' });
     const services = await prisma.vehicleService.findMany({
       where: { vehicle_id: vehicleId },
+      include: { service_company_ref: { select: SERVICE_COMPANY_SELECT } },
       orderBy: [
         { status: 'asc' },          // planned first (abecedně)
         { scheduled_at: 'asc' },
@@ -779,7 +806,8 @@ router.post('/vehicles/:id/services', async (req, res, next) => {
       return res.status(400).json({ error: 'Neplatná data', details: parsed.error.flatten() });
     }
     const service = await prisma.vehicleService.create({
-      data: toServiceData(parsed.data, vehicleId, req.user?.id),
+      data: await toServiceData(parsed.data, vehicleId, req.user?.id),
+      include: { service_company_ref: { select: SERVICE_COMPANY_SELECT } },
     });
     // TODO (Fáze 7): pošli email + ICS řidiči a správci vozového parku
     res.status(201).json(service);
@@ -797,13 +825,14 @@ router.put('/services/:serviceId', async (req, res, next) => {
     if (!parsed.success) {
       return res.status(400).json({ error: 'Neplatná data', details: parsed.error.flatten() });
     }
-    const data = toServiceData(parsed.data, existing.vehicle_id, undefined);
+    const data = await toServiceData(parsed.data, existing.vehicle_id, undefined);
     delete data.vehicle_id;
     delete data.created_by;
     if (!parsed.data.invoice_file_data) delete data.invoice_url;
     const service = await prisma.vehicleService.update({
       where: { id: serviceId },
       data,
+      include: { service_company_ref: { select: SERVICE_COMPANY_SELECT } },
     });
     res.json(service);
   } catch (err) { next(err); }
@@ -1035,6 +1064,8 @@ const tireChangeSchema = z.object({
   scheduled_at: z.string().optional().nullable(),
   done_at: z.string().optional().nullable(),
   location: z.string().max(500).optional().nullable(),
+  // FK na Company z adresáře. service_company text se doplní automaticky dle názvu firmy.
+  service_company_id: z.number().int().optional().nullable(),
   service_company: z.string().max(255).optional().nullable(),
   cost_service: z.number().optional().nullable(),
   cost_tires: z.number().optional().nullable(),
@@ -1046,13 +1077,14 @@ const tireChangeSchema = z.object({
   invoice_mime: z.string().optional().nullable(),
 });
 
-function toTireChangeData(data, vehicleId, userId) {
+async function toTireChangeData(data, vehicleId, userId) {
   const out = {
     vehicle_id: vehicleId,
     season: data.season,
     scheduled_at: parseDateTime(data.scheduled_at),
     done_at: parseDateTime(data.done_at),
     location: data.location || null,
+    service_company_id: data.service_company_id ?? null,
     service_company: data.service_company || null,
     cost_service: data.cost_service ?? null,
     cost_tires: data.cost_tires ?? null,
@@ -1060,6 +1092,11 @@ function toTireChangeData(data, vehicleId, userId) {
     note: data.note || null,
     status: data.status || 'planned',
   };
+  if (out.service_company_id != null) {
+    const name = await resolveCompanyName(out.service_company_id);
+    if (name) out.service_company = name;
+    else out.service_company_id = null;
+  }
   if (userId != null) out.created_by = userId;
   if (data.invoice_file_data) {
     const saved = saveBase64File(vehicleId, data.invoice_file_data, data.invoice_file_name, data.invoice_mime);
@@ -1075,6 +1112,7 @@ router.get('/vehicles/:id/tire-changes', async (req, res, next) => {
     if (isNaN(vehicleId)) return res.status(400).json({ error: 'Neplatné ID' });
     const rows = await prisma.vehicleTireChange.findMany({
       where: { vehicle_id: vehicleId },
+      include: { service_company_ref: { select: SERVICE_COMPANY_SELECT } },
       orderBy: [{ status: 'asc' }, { scheduled_at: 'asc' }, { done_at: 'desc' }],
     });
     res.json(rows);
@@ -1090,7 +1128,8 @@ router.post('/vehicles/:id/tire-changes', async (req, res, next) => {
       return res.status(400).json({ error: 'Neplatná data', details: parsed.error.flatten() });
     }
     const tc = await prisma.vehicleTireChange.create({
-      data: toTireChangeData(parsed.data, vehicleId, req.user?.id),
+      data: await toTireChangeData(parsed.data, vehicleId, req.user?.id),
+      include: { service_company_ref: { select: SERVICE_COMPANY_SELECT } },
     });
     res.status(201).json(tc);
   } catch (err) { next(err); }
@@ -1106,11 +1145,14 @@ router.put('/tire-changes/:id', async (req, res, next) => {
     if (!parsed.success) {
       return res.status(400).json({ error: 'Neplatná data', details: parsed.error.flatten() });
     }
-    const data = toTireChangeData(parsed.data, existing.vehicle_id, undefined);
+    const data = await toTireChangeData(parsed.data, existing.vehicle_id, undefined);
     delete data.vehicle_id;
     delete data.created_by;
     if (!parsed.data.invoice_file_data) delete data.invoice_url;
-    const tc = await prisma.vehicleTireChange.update({ where: { id }, data });
+    const tc = await prisma.vehicleTireChange.update({
+      where: { id }, data,
+      include: { service_company_ref: { select: SERVICE_COMPANY_SELECT } },
+    });
     res.json(tc);
   } catch (err) { next(err); }
 });
@@ -1381,6 +1423,169 @@ router.get('/stats', async (req, res, next) => {
   } catch (err) {
     next(err);
   }
+});
+
+// =============================================================================
+// ADRESÁŘ SERVISNÍCH FIREM (servisy, pneuservisy, dodavatelé)
+// Sdílí tabulku Company — filtrováno na supplier / cooperation / both / service_provider.
+// Při zápisu VehicleService / VehicleTireChange se service_company_id (FK) doplňuje
+// spolu s denormalizovaným názvem do service_company (String) kvůli historii.
+// =============================================================================
+
+const SERVICE_PROVIDER_TYPES = ['supplier', 'cooperation', 'both', 'service_provider'];
+
+const serviceProviderSchema = z.object({
+  name: z.string().min(1).max(255),
+  ico: z.string().max(20).optional().nullable(),
+  dic: z.string().max(20).optional().nullable(),
+  // Sídlo
+  address: z.string().max(255).optional().nullable(),
+  city: z.string().max(100).optional().nullable(),
+  zip: z.string().max(10).optional().nullable(),
+  country: z.string().max(2).optional().nullable(),
+  // Provozovna
+  branch_address: z.string().max(255).optional().nullable(),
+  branch_city: z.string().max(100).optional().nullable(),
+  branch_zip: z.string().max(10).optional().nullable(),
+  // Ostatní
+  type: z.string().max(50).optional().nullable(),
+  contact_person: z.string().max(255).optional().nullable(),
+  email: z.string().max(255).optional().nullable(),
+  phone: z.string().max(20).optional().nullable(),
+  web: z.string().max(255).optional().nullable(),
+  bank_account: z.string().max(50).optional().nullable(),
+  payment_terms_days: z.number().int().min(0).max(365).optional().nullable(),
+  notes: z.string().optional().nullable(),
+  active: z.boolean().optional(),
+});
+
+function toCompanyData(data) {
+  const out = {
+    name: data.name,
+    ico: data.ico || null,
+    dic: data.dic || null,
+    address: data.address || null,
+    city: data.city || null,
+    zip: data.zip || null,
+    country: data.country || 'CZ',
+    branch_address: data.branch_address || null,
+    branch_city: data.branch_city || null,
+    branch_zip: data.branch_zip || null,
+    type: data.type || 'service_provider',
+    contact_person: data.contact_person || null,
+    email: data.email || null,
+    phone: data.phone || null,
+    web: data.web || null,
+    bank_account: data.bank_account || null,
+    notes: data.notes || null,
+  };
+  if (data.payment_terms_days != null) out.payment_terms_days = data.payment_terms_days;
+  if (data.active != null) out.active = data.active;
+  return out;
+}
+
+// GET /api/fleet/service-providers — seznam firem vhodných pro servis/pneu
+router.get('/service-providers', async (req, res, next) => {
+  try {
+    const includeInactive = req.query.include_inactive === 'true';
+    const search = (req.query.search || '').toString().trim();
+    const where = {
+      type: { in: SERVICE_PROVIDER_TYPES },
+    };
+    if (!includeInactive) where.active = true;
+    if (search) {
+      where.OR = [
+        { name: { contains: search, mode: 'insensitive' } },
+        { ico: { contains: search } },
+        { dic: { contains: search } },
+      ];
+    }
+    const companies = await prisma.company.findMany({
+      where,
+      orderBy: [{ name: 'asc' }],
+    });
+    res.json(companies);
+  } catch (err) { next(err); }
+});
+
+// GET /api/fleet/service-providers/:id — detail firmy
+router.get('/service-providers/:id', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ error: 'Neplatné ID' });
+    const company = await prisma.company.findUnique({ where: { id } });
+    if (!company) return res.status(404).json({ error: 'Firma nenalezena' });
+    res.json(company);
+  } catch (err) { next(err); }
+});
+
+// POST /api/fleet/service-providers — založí novou firmu
+router.post('/service-providers', async (req, res, next) => {
+  try {
+    const parsed = serviceProviderSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: 'Neplatná data', details: parsed.error.flatten() });
+    }
+    const data = toCompanyData(parsed.data);
+    const company = await prisma.company.create({ data });
+    res.status(201).json(company);
+  } catch (err) { next(err); }
+});
+
+// PUT /api/fleet/service-providers/:id — upraví firmu
+router.put('/service-providers/:id', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ error: 'Neplatné ID' });
+    const parsed = serviceProviderSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: 'Neplatná data', details: parsed.error.flatten() });
+    }
+    const existing = await prisma.company.findUnique({ where: { id } });
+    if (!existing) return res.status(404).json({ error: 'Firma nenalezena' });
+    const data = toCompanyData(parsed.data);
+    const company = await prisma.company.update({ where: { id }, data });
+    // Promítni změnu názvu do denormalizovaných polí existujících servisů / pneu výměn
+    if (existing.name !== company.name) {
+      await prisma.vehicleService.updateMany({
+        where: { service_company_id: id },
+        data: { service_company: company.name },
+      });
+      await prisma.vehicleTireChange.updateMany({
+        where: { service_company_id: id },
+        data: { service_company: company.name },
+      });
+    }
+    res.json(company);
+  } catch (err) { next(err); }
+});
+
+// DELETE /api/fleet/service-providers/:id — smaže firmu (pouze pokud ji nikdo nepoužívá)
+// Kontrolujeme odkazy napříč fleetem i zbytkem systému. Pro soft-delete použij PUT { active: false }.
+router.delete('/service-providers/:id', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ error: 'Neplatné ID' });
+    const existing = await prisma.company.findUnique({ where: { id } });
+    if (!existing) return res.status(404).json({ error: 'Firma nenalezena' });
+
+    // Kontrola na reference — dokud existují, tvrdý delete nepovolíme.
+    const [svcCount, tireCount, orderCount, materialCount] = await Promise.all([
+      prisma.vehicleService.count({ where: { service_company_id: id } }),
+      prisma.vehicleTireChange.count({ where: { service_company_id: id } }),
+      prisma.order.count({ where: { company_id: id } }).catch(() => 0),
+      prisma.material.count({ where: { supplier_id: id } }).catch(() => 0),
+    ]);
+    const refs = svcCount + tireCount + orderCount + materialCount;
+    if (refs > 0) {
+      return res.status(409).json({
+        error: 'Firma je použita jinde v systému, nelze smazat. Můžeš ji deaktivovat.',
+        references: { services: svcCount, tire_changes: tireCount, orders: orderCount, materials: materialCount },
+      });
+    }
+    await prisma.company.delete({ where: { id } });
+    res.json({ ok: true });
+  } catch (err) { next(err); }
 });
 
 module.exports = router;
