@@ -271,7 +271,8 @@
             (canPick && i.status === 'pending'
               ? '<input type="number" id="pick-qty-' + i.id + '" class="pick-qty" value="' + Number(i.quantity) + '" min="0" max="99999">' +
                 '<button class="btn btn-primary btn-xs" onclick="pickItem(' + batchId + ',' + i.id + ',' + i.material_id + ')">Pick</button>' +
-                '<button class="btn btn-secondary btn-xs" onclick="pickItem(' + batchId + ',' + i.id + ',' + i.material_id + ',0)">Skip</button>'
+                '<button class="btn btn-secondary btn-xs" onclick="pickItem(' + batchId + ',' + i.id + ',' + i.material_id + ',0)">Skip</button>' +
+                '<button class="btn btn-secondary btn-xs" title="Rozdělit přes víc šarží" onclick="openSplitPickModal(' + batchId + ',' + i.id + ',' + i.material_id + ',' + Number(i.quantity) + ')">⇵ Rozdělit</button>'
               : '<span style="color:var(--text2);font-size:0.85em;">—</span>') +
           '</div>' +
         '</div>'
@@ -391,6 +392,124 @@
       if (!iso) return '';
       return new Date(iso).toLocaleString('cs-CZ', { hour12: false });
     }
+    // =========================================================================
+    // SPLIT PICK přes víc šarží (pro expirable / distinguish_batches materiály)
+    // =========================================================================
+    window.openSplitPickModal = async function(batchId, itemId, materialId, requestedQty) {
+      // Načteme in_stock šarže materiálu + filtrujeme podle vybrané zdrojové
+      // lokace (ta je v pick-loc-{itemId} selectu vyšší v detailu).
+      const locSelect = document.getElementById('pick-loc-' + itemId);
+      const sourceLocId = locSelect ? Number(locSelect.value) : null;
+
+      const r = await api('GET', '/api/wh/materials/' + materialId + '/lots?status=in_stock');
+      if (r.status !== 200) return alert('Nelze načíst šarže: ' + (r.data?.error || r.status));
+      const lots = Array.isArray(r.data) ? r.data : [];
+
+      // Filter lots, které mají stock na sourceLocId
+      const candidates = lots
+        .map(function(l) {
+          const row = (l.stock_rows || []).find(function(s) {
+            return Number(s.location_id) === sourceLocId && Number(s.quantity) > 0;
+          });
+          return row ? { lot: l, available: Number(row.quantity) } : null;
+        })
+        .filter(Boolean)
+        .sort(function(a, b) {
+          const ax = a.lot.expires_at ? new Date(a.lot.expires_at).getTime() : Infinity;
+          const bx = b.lot.expires_at ? new Date(b.lot.expires_at).getTime() : Infinity;
+          return ax - bx;
+        });
+
+      if (candidates.length === 0) {
+        alert('Na této lokaci nejsou žádné šarže se skladem. Buď přijmi novou šarži, nebo použij běžný Pick (pro nešaržovaný stock).');
+        return;
+      }
+
+      function fmtDate(iso) { if (!iso) return '—'; try { return new Date(iso).toLocaleDateString('cs-CZ'); } catch(_) { return iso; } }
+      function daysLeft(iso) { if (!iso) return null; return Math.floor((new Date(iso) - new Date()) / 86400000); }
+
+      const rows = candidates.map(function(c, i) {
+        const dl = daysLeft(c.lot.expires_at);
+        const dlStr = dl == null ? '' : (dl < 0 ? ' (prošlá ' + Math.abs(dl) + ' d.)' : ' (za ' + dl + ' d.)');
+        const dlColor = dl != null && dl <= 30 ? '#f59e0b' : 'var(--text2)';
+        return '<tr>' +
+          '<td style="font-family:ui-monospace,monospace;font-weight:600">' + escapeHtml(c.lot.lot_code) + '</td>' +
+          '<td style="color:' + dlColor + ';font-size:0.85em">' + fmtDate(c.lot.expires_at) + dlStr + '</td>' +
+          '<td style="text-align:right;font-variant-numeric:tabular-nums">' + c.available + '</td>' +
+          '<td style="text-align:right"><input type="number" id="split-q-' + c.lot.id + '" class="pick-qty" value="0" min="0" max="' + c.available + '" step="0.001" oninput="recomputeSplitTotal()"></td>' +
+          '</tr>';
+      }).join('');
+
+      document.getElementById('modal-root').innerHTML =
+        '<div class="modal-overlay" onclick="if(event.target===this)closeModal()">' +
+          '<div class="modal wide">' +
+            '<h2>Rozdělit pick přes šarže</h2>' +
+            '<div style="color:var(--text2);font-size:0.9em;margin-bottom:12px">Požadováno: <b style="color:var(--text)">' + requestedQty + '</b> · lokace: <b style="color:var(--text)">' + (locSelect ? escapeHtml(locSelect.options[locSelect.selectedIndex].text) : '—') + '</b></div>' +
+            '<table class="data-table" style="width:100%;margin-bottom:12px"><thead><tr>' +
+              '<th>Šarže</th><th>Expirace</th><th style="text-align:right">Skladem</th><th style="text-align:right">Vzít</th>' +
+            '</tr></thead><tbody>' + rows + '</tbody></table>' +
+            '<div style="display:flex;justify-content:flex-end;gap:16px;color:var(--text2);font-size:0.9em;margin-bottom:8px">' +
+              '<span>Celkem zvoleno: <b id="split-total" style="color:var(--accent);font-variant-numeric:tabular-nums">0</b> / ' + requestedQty + '</span>' +
+            '</div>' +
+            '<div id="split-error" style="color:#ef4444;font-size:0.88em;margin-bottom:8px"></div>' +
+            '<div class="modal-actions">' +
+              '<button class="btn btn-secondary" onclick="openBatchDetail(' + batchId + ')">Zpět</button>' +
+              '<button class="btn btn-primary" onclick="submitSplitPick(' + batchId + ',' + itemId + ',' + sourceLocId + ')">Odeslat split</button>' +
+            '</div>' +
+          '</div>' +
+        '</div>';
+
+      // Cache kandidátů pro submit fn
+      window.__splitCandidates = candidates;
+      window.__splitRequestedQty = requestedQty;
+      recomputeSplitTotal();
+    };
+
+    window.recomputeSplitTotal = function() {
+      const cs = window.__splitCandidates || [];
+      let total = 0;
+      for (const c of cs) {
+        const v = Number(document.getElementById('split-q-' + c.lot.id)?.value) || 0;
+        total += v;
+      }
+      const el = document.getElementById('split-total');
+      if (el) el.textContent = total.toLocaleString('cs-CZ', { maximumFractionDigits: 3 });
+    };
+
+    window.submitSplitPick = async function(batchId, itemId, sourceLocId) {
+      const cs = window.__splitCandidates || [];
+      const errEl = document.getElementById('split-error');
+      if (errEl) errEl.textContent = '';
+
+      const splits = [];
+      for (const c of cs) {
+        const v = Number(document.getElementById('split-q-' + c.lot.id)?.value) || 0;
+        if (v > 0) {
+          if (v > c.available) {
+            if (errEl) errEl.textContent = 'Šarže ' + c.lot.lot_code + ' má jen ' + c.available + ', nelze vzít ' + v + '.';
+            return;
+          }
+          splits.push({ lot_id: c.lot.id, quantity: v, from_location_id: sourceLocId });
+        }
+      }
+      if (splits.length === 0) {
+        if (errEl) errEl.textContent = 'Zadej aspoň jeden split s kladným množstvím.';
+        return;
+      }
+
+      const client_uuid_prefix = crypto.randomUUID();
+      const r = await api('POST', '/api/wh/batches/' + batchId + '/pick-split', {
+        batch_item_id: itemId,
+        client_uuid_prefix,
+        splits,
+      });
+      if (r.status !== 200 && r.status !== 201) {
+        if (errEl) errEl.textContent = 'Chyba: ' + (r.data?.error || r.status);
+        return;
+      }
+      openBatchDetail(batchId); // refresh detailu
+    };
+
     function closeModal() { document.getElementById('modal-root').innerHTML = ''; }
     window.closeModal = closeModal;
 
