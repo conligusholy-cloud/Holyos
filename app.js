@@ -505,6 +505,15 @@ app.use('/css', express.static(path.join(__dirname, 'css'), staticOpts));
 app.use('/js', express.static(path.join(__dirname, 'js'), staticOpts));
 app.use('/dist', express.static(path.join(__dirname, 'dist'), staticOpts));
 
+// Digital Asset Links — TWA (Trusted Web Activity) verification pro Android.
+// APK vygenerovaný přes PWA Builder má uložený SHA256 fingerprint signing keystore;
+// Android stáhne tenhle JSON z naší domény a ověří, že APK patří k téhle webové
+// aplikaci. Bez tohoto souboru TWA běží s URL lištou (fallback na Custom Tabs).
+app.get('/.well-known/assetlinks.json', (req, res) => {
+  res.type('application/json');
+  res.sendFile(path.join(__dirname, 'public', 'well-known', 'assetlinks.json'));
+});
+
 // PWA Sklad — vite build výstup, base '/pwa/'
 const PWA_DIST = path.join(__dirname, 'clients', 'pwa-sklad', 'dist');
 app.use('/pwa', express.static(PWA_DIST, {
