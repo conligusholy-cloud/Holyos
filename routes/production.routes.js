@@ -1456,13 +1456,18 @@ async function generateBatchNumber(plannedStart) {
 // POST /api/production/batches — vytvoření dávky
 //   body: { product_id (povinné), quantity (povinné), variant_key?, batch_type?,
 //           priority?, planned_start?, planned_end?, parent_batch_id?,
-//           bom_snapshot_id?, created_by_id?, note? }
+//           bom_snapshot_id?, created_by_id?, note?,
+//           auto_generate_operations? (default true) }
+//
+//   Když auto_generate_operations !== false, hned po vytvoření dávky se zavolá
+//   plánovač: pro každou ProductOperation produktu vznikne BatchOperation
+//   se status='ready' (rovnou dostupné v kiosku).
 router.post('/batches', async (req, res, next) => {
   try {
     const {
       product_id, quantity, variant_key, batch_type, priority,
       planned_start, planned_end, parent_batch_id, bom_snapshot_id,
-      created_by_id, note,
+      created_by_id, note, auto_generate_operations,
     } = req.body || {};
 
     const productId = parseInt(product_id, 10);
@@ -1490,7 +1495,21 @@ router.post('/batches', async (req, res, next) => {
       },
       include: { product: { select: { id: true, code: true, name: true } } },
     });
-    res.status(201).json(batch);
+
+    // Plánovač F3.1 — automaticky vygeneruj BatchOperation
+    let opsResult = null;
+    if (auto_generate_operations !== false) {
+      try {
+        const { generateBatchOperationsForBatch } = require('../services/planning/batch-operations');
+        opsResult = await generateBatchOperationsForBatch(batch.id);
+      } catch (e) {
+        // Generátor nemá blokovat create dávky — jen zalogovat upozornění.
+        console.error('[batches/create] auto-generate operations failed:', e.message);
+        opsResult = { error: e.message };
+      }
+    }
+
+    res.status(201).json({ ...batch, operations_generated: opsResult });
   } catch (err) {
     if (err.code === 'P2003') return res.status(400).json({ error: 'Product, parent_batch nebo bom_snapshot neexistuje' });
     if (err.code === 'P2002') return res.status(409).json({ error: 'Konflikt batch_number — zkus znovu' });

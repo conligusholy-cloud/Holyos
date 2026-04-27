@@ -10,6 +10,7 @@
 const express = require('express');
 const router = express.Router();
 const { prisma } = require('../config/database');
+const { generateBatchOperationsForBatch } = require('../services/planning/batch-operations');
 
 // =============================================================================
 // BOM SNAPSHOTS — zamražený kusovník pro plánování dávky
@@ -162,6 +163,33 @@ router.delete('/snapshot-bom/:id', async (req, res, next) => {
     res.status(204).end();
   } catch (err) {
     if (err.code === 'P2025') return res.status(404).json({ error: 'Snapshot nenalezen' });
+    next(err);
+  }
+});
+
+// =============================================================================
+// PLÁNOVAČ — GENERÁTOR BatchOperation Z PRODUKTOVÉHO POSTUPU (F3.1)
+// =============================================================================
+
+// POST /api/planning/batches/:id/generate-operations
+//   Vygeneruje BatchOperation pro každou ProductOperation produktu dávky.
+//   Idempotentní — pokud už BatchOperation existují, vrátí { skipped: true, existing_count: N }.
+//
+//   body (volitelné): { initial_status?: 'ready' | 'pending' }  — default 'ready'.
+router.post('/batches/:id/generate-operations', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ error: 'Neplatné ID dávky' });
+
+    const initialStatus = req.body?.initial_status || 'ready';
+    if (!['ready', 'pending'].includes(initialStatus)) {
+      return res.status(400).json({ error: "initial_status musí být 'ready' nebo 'pending'" });
+    }
+
+    const result = await generateBatchOperationsForBatch(id, { initialStatus });
+    res.status(result.skipped ? 200 : 201).json(result);
+  } catch (err) {
+    if (/nenalezena/.test(err.message)) return res.status(404).json({ error: err.message });
     next(err);
   }
 });

@@ -275,6 +275,8 @@
         : `<td>—</td>`;
       case 'actions': {
         const buttons = [];
+        const opCount = v._count?.batch_operations ?? 0;
+        if (opCount === 0) buttons.push(`<button class="btn btn-sm btn-secondary" data-action="gen-ops" data-id="${v.id}" title="Vygenerovat BatchOperation z postupu produktu">⚙️ Generuj op.</button>`);
         if (v.status === 'planned') buttons.push(`<button class="btn btn-sm btn-success" data-action="release" data-id="${v.id}">▶ Vydat</button>`);
         if (v.status !== 'done' && v.status !== 'cancelled') buttons.push(`<button class="btn btn-sm btn-danger" data-action="delete" data-id="${v.id}" title="Smazat">🗑️</button>`);
         return `<td class="col-actions">${buttons.join(' ')}</td>`;
@@ -409,6 +411,13 @@
         if (!confirm('Smazat tuto dávku včetně operací a logů?')) { btn.disabled = false; return; }
         const r = await fetch(`/api/production/batches/${id}`, { method: 'DELETE', headers: authHeaders() });
         if (!r.ok) throw new Error((await r.json()).error || 'HTTP ' + r.status);
+      } else if (action === 'gen-ops') {
+        const r = await fetch(`/api/planning/batches/${id}/generate-operations`, {
+          method: 'POST', headers: authHeaders(), body: JSON.stringify({ initial_status: 'ready' }),
+        });
+        if (!r.ok) throw new Error((await r.json()).error || 'HTTP ' + r.status);
+        const result = await r.json();
+        if (result.skipped) alert(`Operace už existují (${result.existing_count}).`);
       }
       await loadAll();
     } catch (err) {
@@ -464,6 +473,12 @@
             <label>Poznámka</label>
             <textarea id="m-note"></textarea>
           </div>
+          <div class="form-row" style="flex-direction:row; align-items:center; gap:8px;">
+            <input type="checkbox" id="m-autogen" checked style="width:auto;">
+            <label for="m-autogen" style="margin:0; cursor:pointer; text-transform:none; letter-spacing:normal; font-weight:500;">
+              Automaticky vygenerovat operace z postupu produktu
+            </label>
+          </div>
           <div class="modal-actions">
             <button class="btn btn-secondary" onclick="document.getElementById('modalRoot').innerHTML=''">Zrušit</button>
             <button class="btn btn-primary" id="m-save">Vytvořit dávku</button>
@@ -494,6 +509,7 @@
       planned_end: document.getElementById('m-end').value || null,
       priority: parseInt(document.getElementById('m-prio').value, 10) || 100,
       note: document.getElementById('m-note').value || null,
+      auto_generate_operations: document.getElementById('m-autogen').checked,
     };
 
     const btn = document.getElementById('m-save');
