@@ -222,7 +222,7 @@ model BatchOperationLog {
 - [x] **F5.1** `vyrobni-sloty` rozšíření — health badge v detail modalu (lazy fetch /health-score, color + progress bar). Plný in-grid badge na všech slotech je TODO.
 - [ ] **F5.2** `prodejni-objednavky` — drag-drop OrderItem → SlotAssignment
 - [x] **F5.3** Modul `planovani-vyroby` (nový) — přehled dávek, denní plán, filtr týden/typ (Factorify-style hustá tabulka, MRP modal, generátor operací)
-- [ ] **F5.4** Workstation buffer view (vstupní/výstupní materiál v reálném čase)
+- [x] **F5.4** Workstation buffer view — endpoint `GET /api/production/workstations/:id/buffer` (Stock per input/output location + in_progress operations) + tlačítko "📦 Materiál" v top baru kiosku → modal s tabulkou.
 - [x] **F5.5** Endpoint `GET /api/slots/:id/health-score` — utilization_pct, status (under/optimal/full/overloaded/no_capacity), color hex, working_days × capacity_per_day
 
 ### F6 — Výrobní obrazovka pracoviště ✅ DONE 2026-04-27 (MVP)

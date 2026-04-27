@@ -1590,6 +1590,77 @@ router.delete('/batches/:id', async (req, res, next) => {
 // PLÁNOVAČ — VÝROBNÍ KIOSEK (F6) — endpointy pro obrazovku pracoviště
 // =============================================================================
 
+// GET /api/production/workstations/:id/buffer
+//   F5.4 Workstation buffer view — co je fyzicky na vstupní/výstupní lokaci
+//   pracoviště a kolik z toho drží rozpracované BatchOperation.
+//   Vrací { workstation, input, output, in_progress_operations }.
+router.get('/workstations/:id/buffer', async (req, res, next) => {
+  try {
+    const wsId = parseInt(req.params.id, 10);
+    if (isNaN(wsId)) return res.status(400).json({ error: 'Neplatné ID pracoviště' });
+
+    const ws = await prisma.workstation.findUnique({
+      where: { id: wsId },
+      include: {
+        input_location: { select: { id: true, code: true, name: true, warehouse_id: true } },
+        output_location: { select: { id: true, code: true, name: true, warehouse_id: true } },
+      },
+    });
+    if (!ws) return res.status(404).json({ error: 'Pracoviště nenalezeno' });
+
+    async function loadStock(locationId) {
+      if (!locationId) return [];
+      const rows = await prisma.stock.findMany({
+        where: { location_id: locationId, quantity: { gt: 0 } },
+        include: {
+          material: { select: { id: true, code: true, name: true, unit: true } },
+          lot: { select: { id: true, lot_number: true, expires_at: true } },
+        },
+        orderBy: [{ material: { code: 'asc' } }],
+      });
+      return rows.map(r => ({
+        material: r.material,
+        lot: r.lot,
+        quantity: Number(r.quantity),
+        reserved_quantity: Number(r.reserved_quantity),
+        available: Number(r.quantity) - Number(r.reserved_quantity),
+      }));
+    }
+
+    const [inputStock, outputStock] = await Promise.all([
+      loadStock(ws.input_location_id),
+      loadStock(ws.output_location_id),
+    ]);
+
+    // Rozpracované operace na tomto pracovišti — užitečné kontextu (kdo drží jaký materiál)
+    const inProgress = await prisma.batchOperation.findMany({
+      where: { workstation_id: wsId, status: 'in_progress' },
+      include: {
+        batch: { select: { batch_number: true, quantity: true,
+          product: { select: { code: true, name: true } } } },
+        operation: { select: { name: true, step_number: true } },
+        assigned_person: { select: { first_name: true, last_name: true } },
+      },
+      orderBy: { started_at: 'asc' },
+    });
+
+    res.json({
+      workstation: { id: ws.id, name: ws.name, code: ws.code, flow_type: ws.flow_type },
+      input: { location: ws.input_location, stock: inputStock, total_items: inputStock.length },
+      output: { location: ws.output_location, stock: outputStock, total_items: outputStock.length },
+      in_progress_operations: inProgress.map(op => ({
+        id: op.id,
+        batch_number: op.batch?.batch_number,
+        product: op.batch?.product ? `${op.batch.product.code} ${op.batch.product.name}` : null,
+        operation: op.operation?.name,
+        step: op.operation?.step_number,
+        assigned_to: op.assigned_person ? `${op.assigned_person.first_name} ${op.assigned_person.last_name}` : null,
+        started_at: op.started_at,
+      })),
+    });
+  } catch (err) { next(err); }
+});
+
 // GET /api/production/workstations/:id/available-work?person_id=N
 //   Klíčový endpoint kiosku. Vrátí dvě skupiny úkolů pro daného pracovníka:
 //     - my_in_progress: rozpracované úkoly, které pracovník už začal (status='in_progress')

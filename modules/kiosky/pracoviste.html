@@ -287,6 +287,7 @@
   <div class="ws-topbar">
     <div class="ws-name" id="wsName">Načítám...<small id="wsCode"></small></div>
     <div class="ws-clock" id="wsClock">--:--</div>
+    <button class="ws-logout-btn" id="bufferBtn" style="display:none; background:rgba(108,140,255,0.15); color:#6c8cff; border-color:rgba(108,140,255,0.4); margin-right:8px;">📦 Materiál</button>
     <button class="ws-logout-btn" id="logoutBtn" style="display:none">Odhlásit</button>
   </div>
 
@@ -431,6 +432,7 @@
     loginScreen.style.display = 'none';
     workerScreen.style.display = 'flex';
     logoutBtn.style.display = 'block';
+    document.getElementById('bufferBtn').style.display = 'block';
     // /api/hr/kiosk/identify vrací { id, name, role, photo, ... } — ne first_name/last_name
     workerName.firstChild.textContent = currentPerson.name || `Pracovník #${currentPerson.id}`;
     workerMeta.textContent = currentPerson.role || '';
@@ -444,7 +446,82 @@
     workerScreen.style.display = 'none';
     loginScreen.style.display = 'flex';
     logoutBtn.style.display = 'none';
+    document.getElementById('bufferBtn').style.display = 'none';
     chipInput.focus();
+  }
+
+  // ----- Buffer modal — F5.4 Workstation buffer view -----
+  document.getElementById('bufferBtn').addEventListener('click', openBufferModal);
+  async function openBufferModal() {
+    let body = document.body;
+    let backdrop = document.getElementById('buf-backdrop');
+    if (!backdrop) {
+      backdrop = document.createElement('div');
+      backdrop.id = 'buf-backdrop';
+      backdrop.style.cssText = 'position:fixed; inset:0; background:rgba(0,0,0,0.7); z-index:1000; display:flex; align-items:center; justify-content:center;';
+      backdrop.addEventListener('click', e => { if (e.target === backdrop) backdrop.remove(); });
+      body.appendChild(backdrop);
+    }
+    backdrop.innerHTML = `
+      <div style="background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:24px; min-width:900px; max-width:95vw; max-height:90vh; overflow-y:auto;">
+        <h2 style="margin:0 0 14px;">📦 Materiál na pracovišti</h2>
+        <div id="buf-content" style="font-size:14px;">Načítám…</div>
+        <div style="display:flex; justify-content:flex-end; margin-top:16px;">
+          <button class="ws-logout-btn" onclick="document.getElementById('buf-backdrop').remove()">Zavřít</button>
+        </div>
+      </div>`;
+    try {
+      const r = await fetch(`/api/production/workstations/${wsId}/buffer`, { credentials: 'include' });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const data = await r.json();
+      renderBuffer(data);
+    } catch (e) {
+      document.getElementById('buf-content').innerHTML = `<div style="color:#ef4444">Chyba: ${e.message}</div>`;
+    }
+  }
+
+  function renderBuffer(data) {
+    const fmt = q => Number(q).toLocaleString('cs-CZ');
+    function tableHtml(title, side) {
+      const rows = (side.stock || []).map(s => `
+        <tr>
+          <td><strong>${s.material.code}</strong></td>
+          <td>${s.material.name}</td>
+          <td style="text-align:right;">${fmt(s.available)} ${s.material.unit}</td>
+          <td style="text-align:right; color:var(--text2);">${fmt(s.quantity)} (rezerv. ${fmt(s.reserved_quantity)})</td>
+          <td style="color:var(--text2);">${s.lot ? s.lot.lot_number || '—' : '—'}</td>
+        </tr>`).join('');
+      const loc = side.location ? `${side.location.code || ''} ${side.location.name}` : '—';
+      return `
+        <h3 style="font-size:14px; margin:14px 0 6px; color:var(--text2);">${title} <span style="font-weight:400; font-size:12px; color:var(--text2);">(${loc})</span></h3>
+        ${side.stock.length === 0
+          ? '<div style="color:var(--text2); padding:12px; text-align:center;">Žádný materiál</div>'
+          : `<table style="width:100%; border-collapse:collapse; font-size:13px;">
+              <thead><tr style="background:rgba(160,160,160,0.1); text-transform:uppercase; font-size:11px; color:var(--text2);">
+                <th style="text-align:left; padding:6px 10px;">Kód</th>
+                <th style="text-align:left; padding:6px 10px;">Název</th>
+                <th style="text-align:right; padding:6px 10px;">Dostupné</th>
+                <th style="text-align:right; padding:6px 10px;">Celkem (rezerv.)</th>
+                <th style="text-align:left; padding:6px 10px;">Šarže</th>
+              </tr></thead>
+              <tbody>${rows}</tbody>
+            </table>`
+        }`;
+    }
+
+    let inProgressHtml = '';
+    if (data.in_progress_operations && data.in_progress_operations.length > 0) {
+      inProgressHtml = `
+        <h3 style="font-size:14px; margin:14px 0 6px; color:var(--text2);">Rozpracované úkoly</h3>
+        <ul style="margin:0; padding-left:18px; font-size:13px;">
+        ${data.in_progress_operations.map(op => `<li><strong>${op.batch_number}</strong> ${op.product || ''} — ${op.operation} (krok ${op.step}) · ${op.assigned_to || 'bez přiřazení'}</li>`).join('')}
+        </ul>`;
+    }
+
+    document.getElementById('buf-content').innerHTML = `
+      ${tableHtml('Vstupní buffer', data.input)}
+      ${tableHtml('Výstupní buffer', data.output)}
+      ${inProgressHtml}`;
   }
 
   // Auto logout po 5 minutách nečinnosti
