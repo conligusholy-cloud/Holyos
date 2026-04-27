@@ -188,12 +188,12 @@ model BatchOperationLog {
 
 ## 8. TODO list (zaškrtávat při dokončení)
 
-### F1 — Datový základ
-- [ ] **F1.1** Schema rozšíření v `prisma/schema.prisma` (8 nových + 4 rozšíření)
-- [ ] **F1.2** Migrační SQL `20260427_pridej-davky-kompetence-bom-snapshot` + apply na Railway DB (diff + db execute + migrate resolve)
-- [ ] **F1.3** Routes Competency + WorkerCompetency + OperationRequiredCompetency CRUD
-- [ ] **F1.4** Routes ProductionBatch + BatchOperation CRUD + generátor batch_number
-- [ ] **F1.5** Seed `scripts/seed-competencies.js` (~15 kompetencí pro prádlomat)
+### F1 — Datový základ ✅ DONE 2026-04-27
+- [x] **F1.1** Schema rozšíření v `prisma/schema.prisma` (8 nových + 4 rozšíření)
+- [x] **F1.2** Migrační SQL `20260427160947_pridej-davky-kompetence-bom-snapshot` + apply na Railway DB (diff + db execute + migrate resolve)
+- [x] **F1.3** Routes Competency + WorkerCompetency + OperationRequiredCompetency CRUD (11 endpointů)
+- [x] **F1.4** Routes ProductionBatch + BatchOperation CRUD + generátor batch_number `DV-{rok}-W{week}-{seq}` (9 endpointů)
+- [x] **F1.5** Seed `scripts/seed-competencies.js` — 15 kompetencí (svarovna, montáž, elektro, bondy, lakovna, kontrola, expedice)
 
 ### F2 — Factorify pull
 - [ ] **F2.1** Rozšíření Factorify klienta o BOM endpoint (`POST /api/query/Stage` s parametry)
@@ -277,9 +277,21 @@ model BatchOperationLog {
 - Zjištěno: `Workstation.input_*/output_*` už v schema je → ušetřena 1 migrace
 - Zjištěno: `Material.lead_time_days`, `supplier_id`, `batch_size_*` už v schema je → ušetřena 1 migrace
 
-### Sem zapisuj zpětnou vazbu po každé fázi:
-- *(po F1 doplnit: co fungovalo, co chytlo neočekávaně, co změnit ve F2)*
-- *(...)*
+### F1 retro (2026-04-27 večer)
+
+**Co fungovalo:**
+- 1 model per Edit + průběžný `npx prisma validate` po každém kroku — žádný truncation, schema validní napoprvé.
+- Vzor migračních skriptů ze sklad-2 (`migrate-planovac-f1.ps1` + `apply-planovac-f1-migration.js`) přizpůsobený 1:1, bez problémů.
+- `prisma migrate diff` → `db execute` → `migrate resolve` workflow proti Railway DB hladce.
+
+**Co chytlo neočekávaně:**
+- **Mount sync drift**: po startu session bylo 90+ souborů v `git status` jako modified, schema.prisma uříznutá o 137 řádků, package.json truncated. Obnoveno přes `git show HEAD:path > path` (přes git checkout to nešlo — `.git/index.lock` blokovaný Windows-side procesem). Memory `holyos_truncated_files_pre_railway_up.md` se znovu potvrdila.
+- **Edit/bash mount inkonzistence**: Edit/Read tool vidí Windows realitu okamžitě, ale bash mount má cache delay (až 10 s). `wc -l` po Editu vrací starou hodnotu — pro ověření používat Read tool, ne `wc`/`cat`.
+- **Drift v migration.sql**: `prisma migrate diff` vygeneroval `ALTER TABLE company_branches ALTER COLUMN updated_at DROP DEFAULT` — preexisting drift mezi DB a schemou (default v DB, ne ve schemě). Bezpečné, ponecháno.
+
+**Co změnit ve F2:**
+- Před start session vždy ověřit `git status --short | wc -l` a `wc -l prisma/schema.prisma` proti HEAD. Pokud drift, hned `git show HEAD:` na kritické soubory.
+- Pro Factorify pull asi bude potřeba `BomSnapshot.source = 'factorify_pull'` + `source_ref` ukládat Factorify Stage run-id.
 
 ---
 
