@@ -287,6 +287,7 @@
   <div class="ws-topbar">
     <div class="ws-name" id="wsName">Načítám...<small id="wsCode"></small></div>
     <div class="ws-clock" id="wsClock">--:--</div>
+    <span id="kbHint" style="display:none; font-size:11px; color:var(--text2); margin-right:14px;">F1 Materiál · F5 Obnovit · Esc Odhlásit</span>
     <button class="ws-logout-btn" id="bufferBtn" style="display:none; background:rgba(108,140,255,0.15); color:#6c8cff; border-color:rgba(108,140,255,0.4); margin-right:8px;">📦 Materiál</button>
     <button class="ws-logout-btn" id="logoutBtn" style="display:none">Odhlásit</button>
   </div>
@@ -433,6 +434,7 @@
     workerScreen.style.display = 'flex';
     logoutBtn.style.display = 'block';
     document.getElementById('bufferBtn').style.display = 'block';
+    document.getElementById('kbHint').style.display = 'inline';
     // /api/hr/kiosk/identify vrací { id, name, role, photo, ... } — ne first_name/last_name
     workerName.firstChild.textContent = currentPerson.name || `Pracovník #${currentPerson.id}`;
     workerMeta.textContent = currentPerson.role || '';
@@ -447,6 +449,7 @@
     loginScreen.style.display = 'flex';
     logoutBtn.style.display = 'none';
     document.getElementById('bufferBtn').style.display = 'none';
+    document.getElementById('kbHint').style.display = 'none';
     chipInput.focus();
   }
 
@@ -537,6 +540,24 @@
   }
   document.addEventListener('click', resetInactivity);
   document.addEventListener('keydown', resetInactivity);
+
+  // ----- Klávesové zkratky -----
+  document.addEventListener('keydown', (e) => {
+    // Pokud uživatel právě píše do prompt() / dialogu, ignoruj
+    if (e.target.tagName === 'INPUT' && e.target.id !== 'chipInput') return;
+    if (e.target.tagName === 'TEXTAREA') return;
+
+    if (e.key === 'Escape' && currentPerson) {
+      e.preventDefault();
+      logout();
+    } else if (e.key === 'F5') {
+      e.preventDefault();
+      if (currentPerson) refreshTasks();
+    } else if (e.key === 'F1' && currentPerson) {
+      e.preventDefault();
+      openBufferModal();
+    }
+  });
 
   // ----- Načítání úkolů -----
   async function refreshTasks() {
