@@ -141,6 +141,7 @@
     <span style="font-size:22px;">🗂️</span>
     <h1>Plánování výroby <span class="count" id="batchCount"></span></h1>
     <div style="margin-left:auto; display:flex; gap:8px;">
+      <button class="btn btn-secondary" onclick="openWorkstationQueue()" title="Vytížení pracovišť — kolik práce čeká">🏭 Vytížení</button>
       <button class="btn btn-secondary" onclick="openPurchaseReport()" title="Konsolidovaný nákupní report přes všechny aktivní dávky">📋 Nákupní report</button>
       <button class="btn btn-secondary" onclick="loadAll()">🔄 Obnovit</button>
       <button class="btn btn-primary" onclick="openCreateModal()">+ Nová dávka</button>
@@ -449,6 +450,81 @@
       alert('Chyba: ' + err.message);
       btn.disabled = false;
     }
+  }
+
+  // ─── Vytížení pracovišť (workstation queue) ─────────────────────────────
+  async function openWorkstationQueue() {
+    document.getElementById('modalRoot').innerHTML = `
+      <div class="modal-backdrop" id="mb">
+        <div class="modal" style="min-width:1100px; max-width:95vw;">
+          <h2>🏭 Vytížení pracovišť</h2>
+          <div id="wq-content">Načítám…</div>
+          <div class="modal-actions">
+            <button class="btn btn-secondary" onclick="document.getElementById('modalRoot').innerHTML=''">Zavřít</button>
+          </div>
+        </div>
+      </div>`;
+    document.getElementById('mb').addEventListener('click', e => {
+      if (e.target.id === 'mb') document.getElementById('modalRoot').innerHTML = '';
+    });
+
+    try {
+      const r = await fetch('/api/planning/workstation-queue', { headers: authHeaders() });
+      if (!r.ok) throw new Error((await r.json()).error || 'HTTP ' + r.status);
+      const q = await r.json();
+      renderWorkstationQueue(q);
+    } catch (e) {
+      document.getElementById('wq-content').innerHTML = `<div style="color:#ef4444">Chyba: ${escHtml(e.message)}</div>`;
+    }
+  }
+  window.openWorkstationQueue = openWorkstationQueue;
+
+  function renderWorkstationQueue(q) {
+    if (!q.workstations || q.workstations.length === 0) {
+      document.getElementById('wq-content').innerHTML =
+        `<div class="empty-state"><div class="empty-icon">📭</div><h3>Žádné aktivní úkoly</h3><p>Žádná pracoviště nemají rozpracované ani čekající BatchOperation.</p></div>`;
+      return;
+    }
+
+    const summary = q.summary || {};
+    const rows = q.workstations.map(w => {
+      const wsName = w.workstation
+        ? `<strong>${escHtml(w.workstation.name)}</strong> ${w.workstation.code ? '<span style="color:var(--text2);">('+escHtml(w.workstation.code)+')</span>' : ''}${w.workstation.hall ? ' <span style="color:var(--text2); font-size:11px;">'+escHtml(w.workstation.hall.name)+'</span>' : ''}`
+        : '<em>(bez pracoviště)</em>';
+      const queueColor = w.queue_total === 0 ? 'var(--text2)' :
+                         w.queue_total < 5 ? '#22c55e' :
+                         w.queue_total < 15 ? '#f59e0b' : '#ef4444';
+      const oldestColor = w.oldest_waiting_days == null ? 'var(--text2)' :
+                          w.oldest_waiting_days < 1 ? '#22c55e' :
+                          w.oldest_waiting_days < 3 ? '#f59e0b' : '#ef4444';
+      return `
+        <tr>
+          <td>${wsName}</td>
+          <td class="col-num" style="color:${queueColor}; font-weight:700;">${w.queue_total}</td>
+          <td class="col-num"><span style="color:#6c8cff;">${w.pending}</span> / <span style="color:#22c55e;">${w.ready}</span></td>
+          <td class="col-num"><span style="color:#f59e0b;">${w.in_progress}</span></td>
+          <td class="col-num"><span style="color:#14b8a6;">${w.done_today}</span></td>
+          <td class="col-num"><strong>${w.planned_hours}</strong> h <span style="color:var(--text2); font-size:11px;">(${w.planned_minutes} min)</span></td>
+          <td class="col-num" style="color:${oldestColor};">${w.oldest_waiting_days != null ? w.oldest_waiting_days + ' dní' : '—'}</td>
+        </tr>`;
+    }).join('');
+
+    document.getElementById('wq-content').innerHTML = `
+      <div style="display:flex; gap:24px; font-size:13px; color:var(--text2); margin-bottom:14px; flex-wrap:wrap;">
+        <div><strong style="color:#6c8cff;">Pending:</strong> ${summary.total_pending || 0}</div>
+        <div><strong style="color:#22c55e;">Ready:</strong> ${summary.total_ready || 0}</div>
+        <div><strong style="color:#f59e0b;">In progress:</strong> ${summary.total_in_progress || 0}</div>
+        <div><strong style="color:#14b8a6;">Hotovo dnes:</strong> ${summary.total_done_today || 0}</div>
+        <div><strong style="color:var(--text);">Naplánovaných hodin:</strong> ${summary.total_planned_hours || 0}</div>
+      </div>
+      <div style="overflow-x:auto;">
+        <table class="dense" style="width:100%;">
+          <thead><tr class="head-titles">
+            <th>Pracoviště</th><th>Fronta</th><th>Pending / Ready</th><th>In progress</th><th>Hotovo dnes</th><th>Plán hodin</th><th>Oldest wait</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
   }
 
   // ─── Konsolidovaný nákupní report — F4.5 ────────────────────────────────
