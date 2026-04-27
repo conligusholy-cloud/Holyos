@@ -219,7 +219,7 @@ model BatchOperationLog {
 - [x] **F4.5** UI report v `planovani-vyroby` — tlačítko "📊 MRP" u dávky → modal s dvěma tabulkami (potřeby × stav × shortage, návrhy PO). Sloupec "Materiál k dispozici" se updatne po MRP fetchi (zelená ✓ / červená ✗).
 
 ### F5 — UI dispečer (částečně 2026-04-27)
-- [x] **F5.1** `vyrobni-sloty` rozšíření — health badge v detail modalu (lazy fetch /health-score, color + progress bar). Plný in-grid badge na všech slotech je TODO.
+- [x] **F5.1** `vyrobni-sloty` rozšíření — health badge v detail modalu (lazy fetch /health-score, color + progress bar) + **in-grid mini badge** na každém occupied slotu (3px barevný proužek nahoře + procento vpravo nahoře, počítáno client-side ze slot.assignments)
 - [ ] **F5.2** `prodejni-objednavky` — drag-drop OrderItem → SlotAssignment
 - [x] **F5.3** Modul `planovani-vyroby` (nový) — přehled dávek, denní plán, filtr týden/typ (Factorify-style hustá tabulka, MRP modal, generátor operací)
 - [x] **F5.4** Workstation buffer view — endpoint `GET /api/production/workstations/:id/buffer` (Stock per input/output location + in_progress operations) + tlačítko "📦 Materiál" v top baru kiosku → modal s tabulkou.
