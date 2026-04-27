@@ -195,6 +195,8 @@ async function main() {
           duration: durationNorm,
           duration_unit: durationUnit,
           preparation_time: n(op, 'preparationTime', 'PreparationTime') || 0,
+          // Plánovač F2 — operace stažená z Factorify (lze ručně přepsat čas, audit přes last_calibrated_at).
+          from_factorify: true,
         });
       }
 
