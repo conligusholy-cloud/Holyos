@@ -22,10 +22,10 @@ clients/cad-bridge/.~lock.*#
 balicek-sloty-api.zip
 sprava-pro-kolegu.md
 clients/cad-bridge/*.pdf
-docs/
+docs/*
 
 clients/cad-bridge/*.pdf
-docs/
+docs/*
 
 # Sklad 2.0 — whitelist konkretnich souboru v docs/ (docs/ je jinak ignored vyse)
 !docs/warehouse-openapi.yaml
