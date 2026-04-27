@@ -1646,6 +1646,7 @@ model VehicleService {
   cost_parts     Decimal? @db.Decimal(12, 2) // Cena za díly (Kč)
   invoice_url    String?  @db.VarChar(500) // Napojená faktura (storage URL)
   invoice_number String?  @db.VarChar(100)
+  protocol_url   String?  @db.VarChar(500) // Protokol / dodací list (PDF / obrázek, storage URL)
 
   note         String?   @db.Text
   confirmed_by Int? // User.id správce, který potvrdil provedení
