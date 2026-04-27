@@ -190,6 +190,7 @@
   let allBatches = [];
   let products = [];
   let columnFilters = {}; // key → string (per-column input filter)
+  let mrpCache = new Map(); // batch_id → MRP result (lazy fetched)
 
   // ─── Helpery ──────────────────────────────────────────────────────────────
   function authHeaders() {
@@ -248,7 +249,12 @@
     { key: 'actual_start',  label: 'Skutečný začátek',         type: 'datetime', get: b => b.actual_start },
     { key: 'actual_end',    label: 'Čas dokončení',            type: 'datetime', get: b => b.actual_end },
     { key: 'product',       label: 'Zboží',                    type: 'link',     get: b => b.product ? { id: b.product.id, code: b.product.code, name: b.product.name } : null },
-    { key: 'material_ok',   label: 'Materiál k dispozici',     type: 'bool',     get: b => null /* TODO: F4 MRP — kontrola Stock vs. BOM */ },
+    { key: 'material_ok',   label: 'Materiál k dispozici',     type: 'bool',     get: b => {
+      // F4 MRP — true = vše OK, false = shortage > 0, null = ještě nenačteno
+      const m = mrpCache.get(b.id);
+      if (m === undefined) return null;
+      return m.summary?.all_materials_ok === true;
+    } },
     { key: 'bom_ok',        label: 'BOM snapshot',             type: 'bool',     get: b => b.bom_snapshot_id != null },
     { key: 'released',      label: 'Vydaná',                   type: 'bool',     get: b => ['released','in_progress','paused','done'].includes(b.status) },
     { key: 'done',          label: 'Hotová',                   type: 'bool',     get: b => b.status === 'done' },
@@ -277,6 +283,7 @@
         const buttons = [];
         const opCount = v._count?.batch_operations ?? 0;
         if (opCount === 0) buttons.push(`<button class="btn btn-sm btn-secondary" data-action="gen-ops" data-id="${v.id}" title="Vygenerovat BatchOperation z postupu produktu">⚙️ Generuj op.</button>`);
+        buttons.push(`<button class="btn btn-sm btn-secondary" data-action="mrp" data-id="${v.id}" title="MRP — kontrola materiálu pro tuto dávku">📊 MRP</button>`);
         if (v.status === 'planned') buttons.push(`<button class="btn btn-sm btn-success" data-action="release" data-id="${v.id}">▶ Vydat</button>`);
         if (v.status !== 'done' && v.status !== 'cancelled') buttons.push(`<button class="btn btn-sm btn-danger" data-action="delete" data-id="${v.id}" title="Smazat">🗑️</button>`);
         return `<td class="col-actions">${buttons.join(' ')}</td>`;
@@ -418,12 +425,100 @@
         if (!r.ok) throw new Error((await r.json()).error || 'HTTP ' + r.status);
         const result = await r.json();
         if (result.skipped) alert(`Operace už existují (${result.existing_count}).`);
+      } else if (action === 'mrp') {
+        const r = await fetch(`/api/planning/batches/${id}/mrp`, { headers: authHeaders() });
+        if (!r.ok) throw new Error((await r.json()).error || 'HTTP ' + r.status);
+        const mrp = await r.json();
+        mrpCache.set(id, mrp);
+        renderMrpModal(mrp);
+        applyFilters(); // re-render aby boolean Materiál k dispozici se updatlo
+        btn.disabled = false;
+        return; // bez loadAll() — žádné mutace
       }
       await loadAll();
     } catch (err) {
       alert('Chyba: ' + err.message);
       btn.disabled = false;
     }
+  }
+
+  // ─── MRP modal — výsledek analýzy materiálu ─────────────────────────────
+  function renderMrpModal(mrp) {
+    const items = mrp.items || [];
+    const proposals = mrp.po_proposals || [];
+
+    const itemsRows = items.map(it => {
+      const shortClass = it.shortage > 0 ? 'bool-no' : 'bool-yes';
+      return `
+        <tr>
+          <td><strong>${escHtml(it.material?.code || '')}</strong></td>
+          <td>${escHtml(it.material?.name || '—')}</td>
+          <td class="col-num">${it.qty_per_ks} ${escHtml(it.unit)}</td>
+          <td class="col-num"><strong>${it.needed}</strong></td>
+          <td class="col-num">${it.stock?.available ?? '—'}</td>
+          <td class="col-num bool-cell ${shortClass}">${it.shortage > 0 ? it.shortage : '✓'}</td>
+          <td>${it.expected_delivery || '—'}</td>
+          <td>${escHtml(it.supplier?.name || '—')}</td>
+        </tr>`;
+    }).join('');
+
+    const proposalsRows = proposals.length === 0 ? '<tr><td colspan="6" style="text-align:center; color:var(--text2); padding:24px;">Žádné návrhy nákupních objednávek — všechen materiál je na skladě.</td></tr>' :
+      proposals.map(p => `
+        <tr>
+          <td><strong>${escHtml(p.material?.code || '')}</strong></td>
+          <td>${escHtml(p.material?.name || '')}</td>
+          <td class="col-num"><strong>${p.quantity_to_order}</strong> ${escHtml(p.unit)}</td>
+          <td class="col-num">${p.lead_time_days != null ? p.lead_time_days + ' dní' : '—'}</td>
+          <td>${p.expected_delivery || '—'}</td>
+          <td>${escHtml(p.supplier?.name || '—')}</td>
+        </tr>`).join('');
+
+    const okBadge = mrp.summary?.all_materials_ok
+      ? '<span class="badge badge-released">✓ Vše na skladě</span>'
+      : `<span class="badge badge-cancelled">⚠️ Chybí ${mrp.summary?.shortage_count || 0} materiálů</span>`;
+
+    document.getElementById('modalRoot').innerHTML = `
+      <div class="modal-backdrop" id="mb">
+        <div class="modal" style="min-width:1100px; max-width:95vw;">
+          <h2 style="display:flex; align-items:center; gap:14px;">
+            📊 MRP — ${escHtml(mrp.batch?.batch_number || '')} ${okBadge}
+          </h2>
+          <div style="display:flex; gap:24px; font-size:13px; color:var(--text2); margin-bottom:14px; flex-wrap:wrap;">
+            <div><strong style="color:var(--text);">Produkt:</strong> ${escHtml(mrp.batch?.product?.code || '')} ${escHtml(mrp.batch?.product?.name || '')}</div>
+            <div><strong style="color:var(--text);">Množství:</strong> ${mrp.batch?.quantity || '?'} ks</div>
+            <div><strong style="color:var(--text);">BOM zdroj:</strong> ${escHtml(mrp.bom_source)}</div>
+            <div><strong style="color:var(--text);">Materiálů:</strong> ${mrp.summary?.items_count || 0}</div>
+          </div>
+
+          <h3 style="font-size:14px; margin:18px 0 8px;">Materiálové potřeby</h3>
+          <div style="overflow-x:auto;">
+            <table class="dense" style="width:100%;">
+              <thead><tr class="head-titles">
+                <th>Kód</th><th>Název</th><th>Per ks</th><th>Potřeba</th><th>Skladem</th><th>Chybí</th><th>Dodání</th><th>Dodavatel</th>
+              </tr></thead>
+              <tbody>${itemsRows || '<tr><td colspan="8" style="text-align:center; padding:24px;">Žádné položky BOM</td></tr>'}</tbody>
+            </table>
+          </div>
+
+          <h3 style="font-size:14px; margin:22px 0 8px;">Návrhy nákupu</h3>
+          <div style="overflow-x:auto;">
+            <table class="dense" style="width:100%;">
+              <thead><tr class="head-titles">
+                <th>Kód</th><th>Název</th><th>Objednat</th><th>Lead time</th><th>Očekávané dodání</th><th>Dodavatel</th>
+              </tr></thead>
+              <tbody>${proposalsRows}</tbody>
+            </table>
+          </div>
+
+          <div class="modal-actions">
+            <button class="btn btn-secondary" onclick="document.getElementById('modalRoot').innerHTML=''">Zavřít</button>
+          </div>
+        </div>
+      </div>`;
+
+    document.getElementById('mb').addEventListener('click', e => {
+      if (e.target.id === 'mb') document.getElementById('modalRoot').innerHTML = '';
+    });
   }
 
   // ─── Modal pro novou dávku ────────────────────────────────────────────────

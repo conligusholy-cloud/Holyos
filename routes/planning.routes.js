@@ -11,6 +11,7 @@ const express = require('express');
 const router = express.Router();
 const { prisma } = require('../config/database');
 const { generateBatchOperationsForBatch } = require('../services/planning/batch-operations');
+const { computeMrpForBatch } = require('../services/planning/mrp');
 
 // =============================================================================
 // BOM SNAPSHOTS — zamražený kusovník pro plánování dávky
@@ -188,6 +189,41 @@ router.post('/batches/:id/generate-operations', async (req, res, next) => {
 
     const result = await generateBatchOperationsForBatch(id, { initialStatus });
     res.status(result.skipped ? 200 : 201).json(result);
+  } catch (err) {
+    if (/nenalezena/.test(err.message)) return res.status(404).json({ error: err.message });
+    next(err);
+  }
+});
+
+// =============================================================================
+// PLÁNOVAČ — MRP V1 (Material Requirements Planning) (F4)
+// =============================================================================
+
+// POST /api/planning/mrp-run
+//   body: { batch_id }
+//   Vrátí MRP analýzu pro jednu dávku — co potřebuje, co je na skladě,
+//   čeho je shortage a návrh nákupních objednávek (po_proposals).
+router.post('/mrp-run', async (req, res, next) => {
+  try {
+    const batchId = parseInt(req.body?.batch_id, 10);
+    if (isNaN(batchId)) return res.status(400).json({ error: 'batch_id je povinné' });
+
+    const result = await computeMrpForBatch(batchId);
+    res.json(result);
+  } catch (err) {
+    if (/nenalezena/.test(err.message)) return res.status(404).json({ error: err.message });
+    next(err);
+  }
+});
+
+// GET /api/planning/batches/:id/mrp — kratší zápis pro UI lazy-load.
+router.get('/batches/:id/mrp', async (req, res, next) => {
+  try {
+    const batchId = parseInt(req.params.id, 10);
+    if (isNaN(batchId)) return res.status(400).json({ error: 'Neplatné ID' });
+
+    const result = await computeMrpForBatch(batchId);
+    res.json(result);
   } catch (err) {
     if (/nenalezena/.test(err.message)) return res.status(404).json({ error: err.message });
     next(err);
