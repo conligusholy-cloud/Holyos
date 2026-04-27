@@ -456,6 +456,36 @@ router.get('/audit-log', async (req, res, next) => {
       byPerson.set(key, cur);
     }
 
+    if (req.query.format === 'csv') {
+      const esc = v => {
+        if (v == null) return '';
+        const s = String(v);
+        return /[",;\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+      };
+      const csvLines = [
+        ['Čas', 'Akce', 'Pracovník', 'Dávka', 'Produkt', 'Operace', 'Pracoviště', 'Trvání (min)', 'Poznámka'].join(';'),
+      ];
+      for (const l of logs) {
+        const time = new Date(l.created_at).toLocaleString('cs-CZ', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        csvLines.push([
+          esc(time),
+          esc(l.action),
+          esc(l.person ? l.person.first_name + ' ' + l.person.last_name : ''),
+          esc(l.batch_operation?.batch?.batch_number || ''),
+          esc(l.batch_operation?.batch?.product ? l.batch_operation.batch.product.code + ' ' + l.batch_operation.batch.product.name : ''),
+          esc(l.batch_operation?.operation?.name || ''),
+          esc(l.batch_operation?.workstation?.name || ''),
+          esc(l.batch_operation?.duration_minutes != null ? l.batch_operation.duration_minutes : ''),
+          esc(l.note || ''),
+        ].join(';'));
+      }
+      const csv = '﻿' + csvLines.join('\r\n');
+      const dateLabel = (from && to) ? `${from}_${to}` : (from || to || new Date().toISOString().slice(0, 10));
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="audit-log-${dateLabel}.csv"`);
+      return res.send(csv);
+    }
+
     res.json({
       filter: { from: from || null, to: to || null, person_id: person_id || null, batch_id: batch_id || null, action: action || null },
       summary: {
