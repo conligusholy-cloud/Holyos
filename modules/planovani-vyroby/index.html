@@ -85,6 +85,9 @@
     .col-link a:hover { text-decoration: underline; }
     .col-actions { text-align: right; white-space: nowrap; }
 
+    /* Overdue zvýraznění — červený text + tučný */
+    .overdue-cell { color: #ef4444; font-weight: 700; }
+
     /* Boolean cells — zelené/červené pozadí jako ve Factorify */
     .bool-cell {
       text-align: center; font-weight: 700; font-size: 13px;
@@ -170,6 +173,10 @@
       <select class="filter-select" id="qfYear" onchange="applyFilters()">
         <option value="">Rok: vše</option>
       </select>
+      <label style="font-size:12px; color:var(--text2); display:flex; align-items:center; gap:6px; cursor:pointer; padding:6px 10px; border:1px solid var(--border); border-radius:6px; background:var(--surface);">
+        <input type="checkbox" id="qfOverdue" onchange="applyFilters()" style="margin:0;">
+        <span style="color:#ef4444; font-weight:600;">⚠️ Jen po termínu</span>
+      </label>
       <span style="color:var(--text2); font-size:12px; margin-left:auto;" id="lastUpdate"></span>
     </div>
 
@@ -241,13 +248,19 @@
     return m ? parseInt(m[1], 10) : null;
   }
 
+  function isOverdue(b) {
+    if (!b.planned_end) return false;
+    if (b.status === 'done' || b.status === 'cancelled') return false;
+    return new Date(b.planned_end) < new Date();
+  }
+
   // ─── Sloupce ──────────────────────────────────────────────────────────────
   // Definuju seznam sloupců — z toho generuji header + filter řádek + tělo.
   // type: 'text' | 'date' | 'datetime' | 'num' | 'bool' | 'status' | 'link' | 'actions' | 'badge'
   const COLUMNS = [
     { key: 'id',            label: 'Id',                       type: 'num',      get: b => b.id },
     { key: 'batch_number',  label: 'Číslo dávky',              type: 'text',     get: b => b.batch_number },
-    { key: 'planned_end',   label: 'Požadovaný termín',        type: 'datetime', get: b => b.planned_end },
+    { key: 'planned_end',   label: 'Požadovaný termín',        type: 'datetime', get: b => b.planned_end, className: b => isOverdue(b) ? 'overdue-cell' : '' },
     { key: 'released_at',   label: 'Čas uvolnění',             type: 'datetime', get: b => b.status !== 'planned' ? b.updated_at : null },
     { key: 'actual_start',  label: 'Skutečný začátek',         type: 'datetime', get: b => b.actual_start },
     { key: 'actual_end',    label: 'Čas dokončení',            type: 'datetime', get: b => b.actual_end },
@@ -272,8 +285,9 @@
 
   function renderCell(col, b) {
     const v = col.get(b);
+    const extraCls = col.className ? ' ' + (typeof col.className === 'function' ? col.className(b) : col.className) : '';
     switch (col.type) {
-      case 'num':       return `<td class="col-num">${v != null ? v : '—'}</td>`;
+      case 'num':       return `<td class="col-num${extraCls}">${v != null ? v : '—'}</td>`;
       case 'text': {
         // Speciální zachzení: batch_number se renderuje jako klikatelný link na detail modal
         if (col.key === 'batch_number' && v) {
@@ -281,8 +295,8 @@
         }
         return `<td>${escHtml(v ?? '—')}</td>`;
       }
-      case 'date':      return `<td>${fmtDate(v)}</td>`;
-      case 'datetime':  return `<td>${fmtDateTime(v)}</td>`;
+      case 'date':      return `<td class="${extraCls.trim()}">${fmtDate(v)}</td>`;
+      case 'datetime':  return `<td class="${extraCls.trim()}">${fmtDateTime(v)}</td>`;
       case 'bool':      return `<td style="padding:0;">${bool(v)}</td>`;
       case 'badge':     return `<td>${statusBadge(v)}</td>`;
       case 'link':      return v
@@ -358,11 +372,13 @@
     const status = document.getElementById('qfStatus').value;
     const type = document.getElementById('qfType').value;
     const year = document.getElementById('qfYear').value;
+    const overdueOnly = document.getElementById('qfOverdue')?.checked;
 
     let filtered = allBatches;
     if (status) filtered = filtered.filter(b => b.status === status);
     if (type) filtered = filtered.filter(b => b.batch_type === type);
     if (year) filtered = filtered.filter(b => yearFromBatchNumber(b.batch_number) === parseInt(year, 10));
+    if (overdueOnly) filtered = filtered.filter(b => isOverdue(b));
 
     // Per-column inline filtry
     for (const col of COLUMNS) {
@@ -391,7 +407,8 @@
 
     const rows = batches.map(b => {
       const cells = COLUMNS.map(c => renderCell(c, b)).join('');
-      return `<tr>${cells}</tr>`;
+      const overdueClass = isOverdue(b) ? ' style="border-left:3px solid #ef4444;"' : '';
+      return `<tr${overdueClass}>${cells}</tr>`;
     }).join('');
 
     document.getElementById('tableWrap').innerHTML = `
