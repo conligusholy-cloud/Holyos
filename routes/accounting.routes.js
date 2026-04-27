@@ -1156,17 +1156,87 @@ router.post('/email/ingests/reprocess-all', async (req, res, next) => {
 });
 
 // POST /api/accounting/email/ingests/:id/reprocess — znovu spustit OCR + vytvořit Invoice
+// Rozšíření: pokus o stažení faktury z URL v těle e-mailu (Nayax-style faktury jako odkaz).
 router.post('/email/ingests/:id/reprocess', async (req, res, next) => {
   try {
     const id = parseInt(req.params.id, 10);
     const ingest = await prisma.emailIngest.findUnique({
       where: { id },
-      include: { attachments: { where: { is_invoice_candidate: true } } },
+      include: { attachments: true },
     });
     if (!ingest) return res.status(404).json({ error: 'Email ingest nenalezen' });
-    if (!ingest.attachments.length) return res.status(400).json({ error: 'Žádná invoice-kandidát příloha' });
 
-    // Smaž staré extrakce a uvolni starou vazbu na Invoice (pokud existující Invoice byla z této ingestu, ponecháme — duplicate check ji rozezná)
+    // Pokus o stažení faktury z URL v body (i když máme přílohy — můžou být logo/banner)
+    const fsLink = require('fs');
+    const pathLink = require('path');
+    const cryptoLink = require('crypto');
+    const STORAGE_LINK = process.env.STORAGE_DIR || pathLink.join(__dirname, '..', 'data', 'storage');
+    const now = new Date();
+    const targetDir = pathLink.join(STORAGE_LINK, 'invoices-incoming', String(now.getFullYear()), String(now.getMonth() + 1).padStart(2, '0'));
+    if (!fsLink.existsSync(targetDir)) fsLink.mkdirSync(targetDir, { recursive: true });
+
+    const haystack = (ingest.body_html || '') + '\n' + (ingest.body_text || '');
+    const urlRegex = /https?:\/\/[^\s"'<>)]+/gi;
+    const seen = new Map();
+    for (const m of haystack.matchAll(urlRegex)) {
+      const u = m[0].replace(/[.,;:!?)\]>]+$/, '');
+      let score = 0;
+      if (/\.pdf(\?|$|#)/i.test(u)) score += 10;
+      if (/invoice|faktur|attachment|download|stahnout/i.test(u)) score += 5;
+      if (score > 0 && !seen.has(u)) seen.set(u, { url: u, score });
+    }
+    const links = [...seen.values()].sort((a, b) => b.score - a.score).slice(0, 5);
+    const existingUrls = new Set(ingest.attachments.filter(a => a.source_url).map(a => a.source_url));
+    let newlyDownloaded = 0;
+
+    for (const { url } of links) {
+      if (existingUrls.has(url)) continue;
+      try {
+        const ctrl = new AbortController();
+        const tmo = setTimeout(() => ctrl.abort(), 30000);
+        const r = await fetch(url, { redirect: 'follow', signal: ctrl.signal, headers: { 'Accept': 'application/pdf,image/*,*/*' } }).finally(() => clearTimeout(tmo));
+        if (!r.ok) { console.warn(`[reprocess link] ${url} → HTTP ${r.status}`); continue; }
+        const ct = (r.headers.get('content-type') || '').toLowerCase();
+        if (!ct.includes('pdf') && !ct.startsWith('image/')) {
+          console.warn(`[reprocess link] ${url} → ${ct}, není PDF/obrázek`); continue;
+        }
+        const ab = await r.arrayBuffer();
+        if (ab.byteLength > 20 * 1024 * 1024) { console.warn(`[reprocess link] ${url} → příliš velké`); continue; }
+        const buffer = Buffer.from(ab);
+        const cd = r.headers.get('content-disposition') || '';
+        const cdMatch = cd.match(/filename[^=]*=([^;]+)/i);
+        const urlName = url.split('?')[0].split('/').pop() || 'invoice';
+        let fname = (cdMatch ? cdMatch[1].replace(/['"]/g, '').trim() : urlName) || 'invoice';
+        if (!/\.(pdf|png|jpe?g|webp)$/i.test(fname)) {
+          fname += ct.includes('pdf') ? '.pdf' : '.' + ct.split('/')[1].split(';')[0];
+        }
+        const safeName = `${id}-${Date.now()}-${fname.replace(/[^\w\-\.\s]/g, '_').slice(0, 120)}`;
+        const filePath = pathLink.join(targetDir, safeName);
+        fsLink.writeFileSync(filePath, buffer);
+        const sha256 = cryptoLink.createHash('sha256').update(buffer).digest('hex');
+        await prisma.emailAttachment.create({
+          data: {
+            email_ingest_id: id, filename: fname, content_type: ct || 'application/pdf',
+            size_bytes: buffer.length, file_path: filePath,
+            source: 'link_download', source_url: url.slice(0, 1000), sha256, is_invoice_candidate: true,
+          },
+        });
+        newlyDownloaded++;
+        console.log(`[reprocess link] Stažena faktura z ${url} → ${fname} (${buffer.length} B)`);
+      } catch (e) {
+        console.warn(`[reprocess link] ${url} selhal: ${e.message}`);
+      }
+    }
+
+    // Reload kandidátů (včetně právě stažených)
+    const allCandidates = await prisma.emailAttachment.findMany({
+      where: { email_ingest_id: id, is_invoice_candidate: true },
+    });
+    if (!allCandidates.length) {
+      return res.status(400).json({ error: 'Žádný invoice kandidát ani po pokusu o stažení odkazů z těla e-mailu' });
+    }
+
+    // Smaž staré extrakce a uvolni starou vazbu na Invoice
     await prisma.ocrExtraction.deleteMany({ where: { email_ingest_id: id } });
     await prisma.emailIngest.update({
       where: { id },
@@ -1174,13 +1244,14 @@ router.post('/email/ingests/:id/reprocess', async (req, res, next) => {
     });
 
     // Použijeme společnou pipeline + finalize logiku (vytvoří Invoice s duplicate prevention)
-    const result = await runPipelineAndFinalize(ingest, ingest.attachments, { notifyContext: null });
+    const result = await runPipelineAndFinalize(ingest, allCandidates, { notifyContext: null });
 
     res.json({
       ok: true,
       created_invoices: result.invoices.map(i => ({ id: i.id, invoice_number: i.invoice_number, total: i.total })),
       skipped_duplicates: result.skippedDuplicates,
       pipeline_count: result.results.length,
+      newly_downloaded_links: newlyDownloaded,
     });
   } catch (err) { next(err); }
 });
