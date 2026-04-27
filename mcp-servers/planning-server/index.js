@@ -224,6 +224,11 @@ function getPlanningTools() {
       },
     },
     {
+      name: 'dashboard_summary',
+      description: 'Agregátní přehled výroby: aktivní dávky, po termínu, materiálové shortage, in-progress operace, aktivní pracovníci dnes, top 3 nejvíc vytížená pracoviště. Použij když uživatel chce kompaktní stav výroby.',
+      input_schema: { type: 'object', properties: {} },
+    },
+    {
       name: 'audit_log',
       description: 'Audit log akcí v kioscích — kdo co kdy udělal (start/pause/resume/done/problem). Filtry: from, to (YYYY-MM-DD), person_id, batch_id, action. Default: dnes.',
       input_schema: {
@@ -712,6 +717,88 @@ async function executePlanningTool(toolName, params, prisma) {
         return op;
       });
       return { batch_operation_id: result.id, status_after: targetStatus };
+    }
+
+    // ─── dashboard_summary ───────────────────────────────────────────────
+    case 'dashboard_summary': {
+      const now = new Date();
+      const dayStart = new Date(now); dayStart.setHours(0, 0, 0, 0);
+
+      // Paralelně 6 dotazů
+      const [batchesByStatus, overdueBatches, opsByStatus, activePersons, topWs, purchaseRep] = await Promise.all([
+        prisma.productionBatch.groupBy({ by: ['status'], _count: { _all: true } }),
+        prisma.productionBatch.count({
+          where: {
+            planned_end: { lt: now, not: null },
+            status: { notIn: ['done', 'cancelled'] },
+          },
+        }),
+        prisma.batchOperation.groupBy({
+          by: ['status'],
+          _count: { _all: true },
+          where: { OR: [
+            { status: { in: ['pending', 'ready', 'in_progress', 'blocked'] } },
+            { AND: [{ status: 'done' }, { finished_at: { gte: dayStart } }] },
+          ] },
+        }),
+        prisma.batchOperationLog.findMany({
+          where: { created_at: { gte: dayStart }, action: 'done' },
+          select: { person: { select: { first_name: true, last_name: true } } },
+          distinct: ['person_id'],
+        }),
+        prisma.batchOperation.groupBy({
+          by: ['workstation_id'],
+          where: { status: { in: ['pending', 'ready'] }, workstation_id: { not: null } },
+          _count: { _all: true },
+          orderBy: { _count: { workstation_id: 'desc' } },
+          take: 3,
+        }),
+        computePurchaseReport({ statuses: ['planned', 'released', 'in_progress', 'paused'] }).catch(() => null),
+      ]);
+
+      const statusCounts = {};
+      for (const g of batchesByStatus) statusCounts[g.status] = g._count._all;
+      const opsCounts = {};
+      for (const g of opsByStatus) opsCounts[g.status] = g._count._all;
+
+      // Top WS — doplň názvy
+      const wsIds = topWs.map(w => w.workstation_id).filter(Boolean);
+      const wsAll = wsIds.length > 0 ? await prisma.workstation.findMany({
+        where: { id: { in: wsIds } }, select: { id: true, name: true },
+      }) : [];
+      const wsMap = new Map(wsAll.map(w => [w.id, w.name]));
+
+      return {
+        timestamp: now.toISOString(),
+        batches: {
+          planned: statusCounts.planned || 0,
+          released: statusCounts.released || 0,
+          in_progress: statusCounts.in_progress || 0,
+          paused: statusCounts.paused || 0,
+          done_total: statusCounts.done || 0,
+          cancelled_total: statusCounts.cancelled || 0,
+          overdue: overdueBatches,
+        },
+        operations: {
+          pending: opsCounts.pending || 0,
+          ready: opsCounts.ready || 0,
+          in_progress: opsCounts.in_progress || 0,
+          blocked: opsCounts.blocked || 0,
+          done_today: opsCounts.done || 0,
+        },
+        people: {
+          active_today: activePersons.filter(p => p.person).map(p => `${p.person.first_name} ${p.person.last_name}`),
+        },
+        top_workstations_queue: topWs.map(w => ({
+          workstation: wsMap.get(w.workstation_id) || `#${w.workstation_id}`,
+          queue: w._count._all,
+        })),
+        purchase: purchaseRep ? {
+          materials_to_order: purchaseRep.items_count,
+          suppliers: purchaseRep.by_supplier.length,
+          batches_processed: purchaseRep.batches_processed,
+        } : { error: 'Purchase report nedostupný' },
+      };
     }
 
     // ─── audit_log ───────────────────────────────────────────────────────
