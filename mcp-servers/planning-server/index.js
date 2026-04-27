@@ -146,6 +146,23 @@ function getPlanningTools() {
         },
       },
     },
+    {
+      name: 'workstation_queue',
+      description: 'Vytížení pracovišť — kolik BatchOperation čeká, je ready, in_progress, nebo bylo dnes hotovo. Per pracoviště + sumár.',
+      input_schema: { type: 'object', properties: {} },
+    },
+    {
+      name: 'person_performance',
+      description: 'Výkon pracovníka v daný den — kolik operací dokončil, kolik minut, průměr na operaci. Také rozpracované úkoly.',
+      input_schema: {
+        type: 'object',
+        properties: {
+          person_id: { type: 'number' },
+          date: { type: 'string', description: 'YYYY-MM-DD, default dnes' },
+        },
+        required: ['person_id'],
+      },
+    },
   ];
 }
 
@@ -454,6 +471,98 @@ async function executePlanningTool(toolName, params, prisma) {
           lead_time_days: it.lead_time_days,
           expected_delivery: it.expected_delivery,
           covers_batches: it.contributors.length,
+        })),
+      };
+    }
+
+    // ─── workstation_queue ───────────────────────────────────────────────
+    case 'workstation_queue': {
+      // Inline implementace — sdílíme s GET /workstation-queue endpointem
+      const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
+      const ops = await prisma.batchOperation.findMany({
+        where: {
+          OR: [
+            { status: { in: ['pending', 'ready', 'in_progress'] } },
+            { AND: [{ status: 'done' }, { finished_at: { gte: todayStart } }] },
+          ],
+        },
+        select: { id: true, workstation_id: true, status: true,
+          batch: { select: { quantity: true } },
+          operation: { select: { duration: true, duration_unit: true } } },
+      });
+      const wsIds = Array.from(new Set(ops.map(o => o.workstation_id).filter(Boolean)));
+      const wsAll = await prisma.workstation.findMany({
+        where: wsIds.length > 0 ? { id: { in: wsIds } } : undefined,
+        select: { id: true, name: true, code: true },
+      });
+      const wsMap = new Map(wsAll.map(w => [w.id, w]));
+      const groups = new Map();
+      function opMin(op) {
+        const d = op.operation?.duration || 0;
+        const u = op.operation?.duration_unit || 'MINUTE';
+        const qty = op.batch?.quantity || 1;
+        const perKs = u === 'HOUR' ? d * 60 : u === 'SECOND' ? d / 60 : d;
+        return perKs * qty;
+      }
+      for (const o of ops) {
+        const key = o.workstation_id || 'null';
+        const cur = groups.get(key) || {
+          workstation: o.workstation_id ? wsMap.get(o.workstation_id) : null,
+          pending: 0, ready: 0, in_progress: 0, done_today: 0, planned_minutes: 0,
+        };
+        if (o.status === 'pending') { cur.pending++; cur.planned_minutes += opMin(o); }
+        else if (o.status === 'ready') { cur.ready++; cur.planned_minutes += opMin(o); }
+        else if (o.status === 'in_progress') cur.in_progress++;
+        else if (o.status === 'done') cur.done_today++;
+        groups.set(key, cur);
+      }
+      const result = Array.from(groups.values())
+        .map(g => ({
+          workstation: g.workstation?.name || null,
+          queue_total: g.pending + g.ready,
+          pending: g.pending, ready: g.ready,
+          in_progress: g.in_progress, done_today: g.done_today,
+          planned_hours: +(g.planned_minutes / 60).toFixed(1),
+        }))
+        .sort((a, b) => b.queue_total - a.queue_total);
+      return { workstations_count: result.length, workstations: result };
+    }
+
+    // ─── person_performance ──────────────────────────────────────────────
+    case 'person_performance': {
+      const dateStr = params.date || new Date().toISOString().slice(0, 10);
+      const dayStart = new Date(dateStr + 'T00:00:00');
+      const dayEnd = new Date(dateStr + 'T23:59:59');
+
+      const completed = await prisma.batchOperation.findMany({
+        where: {
+          assigned_person_id: params.person_id,
+          finished_at: { gte: dayStart, lte: dayEnd },
+          status: 'done',
+        },
+        include: {
+          operation: { select: { name: true } },
+          workstation: { select: { name: true } },
+          batch: { select: { batch_number: true,
+            product: { select: { code: true } } } },
+        },
+        orderBy: { finished_at: 'asc' },
+      });
+      const totalMinutes = completed.reduce((s, op) => s + (op.duration_minutes || 0), 0);
+      return {
+        person_id: params.person_id,
+        date: dateStr,
+        completed_count: completed.length,
+        total_minutes: totalMinutes,
+        total_hours: +(totalMinutes / 60).toFixed(2),
+        avg_minutes: completed.length > 0 ? +(totalMinutes / completed.length).toFixed(1) : 0,
+        operations: completed.map(op => ({
+          batch: op.batch?.batch_number,
+          product: op.batch?.product?.code,
+          operation: op.operation?.name,
+          workstation: op.workstation?.name,
+          duration_minutes: op.duration_minutes,
+          finished_at: op.finished_at,
         })),
       };
     }
