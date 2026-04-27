@@ -203,6 +203,15 @@
     '}',
     '.holyos-topbar .tb-btn.tb-btn-ai:hover { transform: scale(1.05); box-shadow: 0 4px 16px rgba(108,92,231,0.55); border-color: transparent; }',
     '.holyos-topbar .tb-btn.tb-btn-ai svg { display: block; }',
+    /* AI asistenti (chat s ucetni/mistr/...) */
+    '.holyos-topbar .tb-btn.tb-btn-assistant {',
+    '  background: linear-gradient(135deg, #6366f1, #8b5cf6);',
+    '  border-color: transparent; box-shadow: 0 2px 10px rgba(99,102,241,0.35);',
+    '}',
+    '.holyos-topbar .tb-btn.tb-btn-assistant:hover { transform: scale(1.05); box-shadow: 0 4px 16px rgba(99,102,241,0.55); border-color: transparent; }',
+    '.holyos-topbar .tb-btn.tb-btn-assistant svg { display: block; }',
+    /* Pokud běží ai-chat-panel.js, schováme jeho původní floating FAB — máme ikonu v top baru */
+    'body.holyos-has-topbar #ai-chat-fab { display: none !important; }',
     '.holyos-topbar .tb-badge {',
     '  position: absolute; top: -3px; right: -3px; min-width: 16px; height: 16px;',
     '  padding: 0 4px; border-radius: 8px; background: #ef4444; color: #fff;',
@@ -281,11 +290,17 @@
       + '<path d="M12 2a2 2 0 012 2c0 .74-.4 1.39-1 1.73V7h1a7 7 0 017 7h1a1 1 0 110 2h-1.07A7 7 0 0113 22h-2a7 7 0 01-6.93-6H3a1 1 0 110-2h1a7 7 0 017-7h1V5.73c-.6-.34-1-.99-1-1.73a2 2 0 012-2z"/>'
       + '<circle cx="9" cy="14" r="1.5" fill="#fff"/><circle cx="15" cy="14" r="1.5" fill="#fff"/>'
       + '<path d="M9 18h6"/></svg>';
+    // AI asistenti chat (Účetní, Mistr, Skladník …) — chat-bubble ikona
+    var assistantSvg = '<svg viewBox="0 0 24 24" width="18" height="18" fill="#fff">'
+      + '<path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H5.17L4 17.17V4h16v12z"/>'
+      + '<circle cx="8" cy="10" r="1.2"/><circle cx="12" cy="10" r="1.2"/><circle cx="16" cy="10" r="1.2"/>'
+      + '</svg>';
     bar.innerHTML = [
       '<button class="tb-btn" id="tb-btn-sound" title="Zvuk zpráv">🔊</button>',
       '<button class="tb-btn" id="tb-btn-chat" title="Zprávy">💬<span class="tb-badge" id="tb-badge-chat">0</span></button>',
       '<button class="tb-btn" id="tb-btn-bell" title="Notifikace">🔔<span class="tb-badge" id="tb-badge-bell">0</span></button>',
-      '<button class="tb-btn tb-btn-ai" id="tb-btn-ai" title="Zadat požadavek na úpravu systému (AI asistent)">' + aiSvg + '</button>',
+      '<button class="tb-btn tb-btn-assistant" id="tb-btn-assistant" title="AI asistenti (Účetní, Mistr, Skladník…) — Ctrl+K">' + assistantSvg + '</button>',
+      '<button class="tb-btn tb-btn-ai" id="tb-btn-ai" title="Zadat požadavek na úpravu systému (AI dev)">' + aiSvg + '</button>',
     ].join('');
     document.body.appendChild(bar);
     document.body.classList.add('holyos-has-topbar');
@@ -347,6 +362,10 @@
     document.getElementById('tb-btn-ai').addEventListener('click', function (e) {
       e.stopPropagation();
       openAiChatFromSidebar();
+    });
+    document.getElementById('tb-btn-assistant').addEventListener('click', function (e) {
+      e.stopPropagation();
+      openAssistantChat();
     });
 
     document.addEventListener('click', function () { closeBellPanel(); });
@@ -481,6 +500,45 @@
     } else {
       console.warn('[TopBar] window.openAiChat() chybí.');
     }
+  }
+
+  // ─── Assistant chat (ucetni, mistr, ...) ──────────────────────────────────
+  // js/ai-chat-panel.js exportuje window.__aiChat = { toggle, open, close, ... }.
+  // Top-bar ho lazy-loaduje při prvním kliku na ikonu (aby každá stránka HolyOS
+  // dostala asistenty bez nutnosti import v každém modulu).
+  function ensureAssistantChatLoaded(cb) {
+    if (window.__aiChat && typeof window.__aiChat.toggle === 'function') {
+      cb && cb();
+      return;
+    }
+    if (window.__aiChatLoading) {
+      // Už se načítá — počkáme
+      var t = setInterval(function () {
+        if (window.__aiChat && typeof window.__aiChat.toggle === 'function') {
+          clearInterval(t); cb && cb();
+        }
+      }, 50);
+      return;
+    }
+    window.__aiChatLoading = true;
+    var s = document.createElement('script');
+    s.src = '/js/ai-chat-panel.js?v=' + Date.now();
+    s.onload = function () {
+      window.__aiChatLoading = false;
+      cb && cb();
+    };
+    s.onerror = function () {
+      window.__aiChatLoading = false;
+      console.error('[TopBar] ai-chat-panel.js se nepodařilo načíst.');
+    };
+    document.head.appendChild(s);
+  }
+  function openAssistantChat() {
+    ensureAssistantChatLoaded(function () {
+      if (window.__aiChat && typeof window.__aiChat.toggle === 'function') {
+        window.__aiChat.toggle();
+      }
+    });
   }
 
   // ─── Plovoucí messenger (user-chat-widget.js) ────────────────────────────

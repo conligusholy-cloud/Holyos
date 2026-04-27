@@ -15,6 +15,8 @@ import PickingListPage from './pages/PickingListPage';
 import PickingDetailPage from './pages/PickingDetailPage';
 import PickingPickPage from './pages/PickingPickPage';
 import PickingSplitPage from './pages/PickingSplitPage';
+import StockCheckPage from './pages/StockCheckPage';
+import ItemInfoPage from './pages/ItemInfoPage';
 
 export default function App() {
   return (
@@ -106,6 +108,22 @@ export default function App() {
         element={
           <ProtectedRoute>
             <PickingSplitPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/stock-check"
+        element={
+          <ProtectedRoute>
+            <StockCheckPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/info"
+        element={
+          <ProtectedRoute>
+            <ItemInfoPage />
           </ProtectedRoute>
         }
       />

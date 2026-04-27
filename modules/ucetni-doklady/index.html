@@ -1,0 +1,2263 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <title>Účetní doklady | HOLYOS</title>
+  <link rel="icon" href="../../logo-holyos-icon.svg">
+  <base href="../../">
+  <link rel="stylesheet" href="css/dashboard.css">
+  <style>
+    /* Tabulka — .data-table není globálně definovaná v dashboard.css,
+       každý modul má vlastní inline styl (konvence HolyOS) */
+    .data-table { width: 100%; border-collapse: separate; border-spacing: 0; }
+    .data-table thead { position: sticky; top: 0; z-index: 1; }
+    .data-table th {
+      background: var(--surface2); padding: 10px 14px; text-align: left;
+      font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;
+      color: var(--text2); border-bottom: 1px solid var(--border);
+    }
+    .data-table td {
+      padding: 10px 14px; font-size: 13px;
+      border-bottom: 1px solid rgba(255,255,255,0.04); vertical-align: middle;
+    }
+    .data-table tr:hover td { background: rgba(8,145,178,0.06); }
+    .data-table tr { cursor: pointer; }
+
+    /* Filtry */
+    .filters { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; align-items: center; }
+    .filters label { color: var(--text2); font-size: 0.88em; }
+    .filters select, .filters input {
+      background: var(--surface2); color: var(--text); border: 1px solid var(--border);
+      padding: 7px 10px; border-radius: 6px; font-size: 0.9em;
+    }
+    .filters input[type=text] { min-width: 180px; }
+
+    /* KPI tiles */
+    .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 20px; }
+    .kpi-tile {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px;
+    }
+    .kpi-tile .kpi-label { color: var(--text2); font-size: 0.82em; text-transform: uppercase; letter-spacing: 0.5px; }
+    .kpi-tile .kpi-value { font-size: 1.5em; font-weight: 700; margin-top: 4px; }
+    .kpi-tile.alert { border-color: #ef4444; }
+    .kpi-tile.warn { border-color: #f59e0b; }
+    .kpi-tile.ok { border-color: #22c55e; }
+
+    /* Badges — směr + stav + typ */
+    .dir-badge, .status-badge, .type-badge { padding: 3px 10px; border-radius: 12px; font-size: 0.78em; font-weight: 600; white-space: nowrap; }
+    .dir-badge.ap { background: #ef444422; color: #ef4444; } /* závazek — AP */
+    .dir-badge.ar { background: #22c55e22; color: #22c55e; } /* pohledávka — AR */
+
+    .status-badge.draft { background: #64748b22; color: #94a3b8; }
+    .status-badge.awaiting_po_match,
+    .status-badge.awaiting_goods_receipt,
+    .status-badge.awaiting_approval { background: #f59e0b22; color: #f59e0b; }
+    .status-badge.po_matched,
+    .status-badge.goods_received { background: #6c8cff22; color: #6c8cff; }
+    .status-badge.approved,
+    .status-badge.ready_to_pay { background: #22c55e22; color: #22c55e; }
+    .status-badge.payment_queued { background: #a78bfa22; color: #a78bfa; }
+    .status-badge.paid,
+    .status-badge.archived { background: #22c55e22; color: #86efac; }
+    .status-badge.overdue,
+    .status-badge.cancelled,
+    .status-badge.written_off { background: #ef444422; color: #ef4444; }
+    .status-badge.issued,
+    .status-badge.sent,
+    .status-badge.reminder_1_sent,
+    .status-badge.reminder_2_sent,
+    .status-badge.reminder_3_sent { background: #0891b222; color: #06b6d4; }
+
+    .type-badge.received { background: #f9731622; color: #f97316; }
+    .type-badge.issued { background: #10b98122; color: #10b981; }
+    .type-badge.credit_note_received, .type-badge.credit_note_issued { background: #a78bfa22; color: #a78bfa; }
+    .type-badge.proforma_received, .type-badge.proforma_issued { background: #eab30822; color: #eab308; }
+
+    .invoice-num { font-family: 'Consolas', monospace; font-weight: 600; }
+    .amount-cell { text-align: right; font-family: 'Consolas', monospace; font-variant-numeric: tabular-nums; }
+
+    /* Modal */
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+    .modal { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 24px 28px; max-width: 720px; width: 94%; max-height: 92vh; overflow-y: auto; }
+    .modal.wide { max-width: 1100px; }
+    .modal h2 { margin-top: 0; }
+    .modal-row { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+    .modal-row label { color: var(--text2); font-size: 0.88em; }
+    .modal-row input, .modal-row select, .modal-row textarea {
+      background: var(--surface2); color: var(--text); border: 1px solid var(--border);
+      border-radius: 6px; padding: 8px 10px; font-size: 0.95em;
+    }
+    .modal-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .modal-grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+    .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
+
+    .detail-header { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 14px; margin-bottom: 18px; padding-bottom: 14px; border-bottom: 1px solid var(--border); }
+    .detail-col label { color: var(--text2); font-size: 0.78em; text-transform: uppercase; letter-spacing: 0.5px; }
+    .detail-col div { font-size: 0.98em; margin-top: 3px; }
+
+    .items-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+    .items-table th, .items-table td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); font-size: 0.9em; }
+    .items-table th { color: var(--text2); font-weight: 600; font-size: 0.82em; }
+    .items-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
+
+    .approval-list { margin-top: 10px; }
+    .approval-step { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border); }
+    .approval-step:last-child { border-bottom: none; }
+
+    .empty-hint { text-align: center; padding: 40px; color: var(--text2); }
+    .btn-sm { padding: 6px 12px; font-size: 0.85em; }
+    .inline-code { font-family: 'Consolas', monospace; background: var(--surface2); padding: 2px 6px; border-radius: 4px; font-size: 0.88em; }
+    .blocker-box { background: #ef444411; border: 1px solid #ef444455; border-radius: 6px; padding: 10px 14px; margin: 10px 0; }
+    .blocker-box ul { margin: 6px 0 0 0; padding-left: 22px; }
+    .workflow-step { color: var(--text2); font-size: 0.85em; margin: 8px 0; }
+
+    /* Tab navigation — Fáze 4 (K platbě) */
+    .tab-nav { display: flex; gap: 4px; margin-bottom: 18px; border-bottom: 1px solid var(--border); }
+    .tab-btn {
+      background: none; border: none; padding: 10px 18px; cursor: pointer;
+      color: var(--text2); font-size: 0.95em; font-weight: 500;
+      border-bottom: 2px solid transparent; margin-bottom: -1px;
+    }
+    .tab-btn:hover { color: var(--text); }
+    .tab-btn.active { color: #0891b2; border-bottom-color: #0891b2; }
+    .tab-pane { display: none; }
+    .tab-pane.active { display: block; }
+
+    /* Payment batch card */
+    .pb-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 18px 20px; margin-bottom: 22px; }
+    .pb-card h3 { margin-top: 0; margin-bottom: 14px; }
+    .pb-row { display: grid; grid-template-columns: 220px 1fr; gap: 14px; align-items: center; margin-bottom: 12px; }
+    .pb-row label { color: var(--text2); font-size: 0.9em; }
+    .pb-row select, .pb-row input {
+      background: var(--surface2); color: var(--text); border: 1px solid var(--border);
+      padding: 8px 10px; border-radius: 6px; font-size: 0.95em; width: 100%;
+    }
+    .pb-summary { background: rgba(8,145,178,0.08); border: 1px solid rgba(8,145,178,0.25); border-radius: 8px; padding: 12px 16px; margin: 12px 0; }
+    .pb-summary strong { color: #0891b2; font-size: 1.2em; }
+
+    /* Batch status badges */
+    .batch-status { padding: 3px 10px; border-radius: 12px; font-size: 0.78em; font-weight: 600; white-space: nowrap; }
+    .batch-status.draft { background: #64748b22; color: #94a3b8; }
+    .batch-status.generated { background: #0891b222; color: #06b6d4; }
+    .batch-status.submitted_to_bank { background: #a78bfa22; color: #a78bfa; }
+    .batch-status.processed { background: #22c55e22; color: #22c55e; }
+    .batch-status.cancelled, .batch-status.rejected { background: #ef444422; color: #ef4444; }
+  </style>
+</head>
+<body>
+  <aside id="sidebar"></aside>
+
+  <div class="main-wrapper">
+    <div class="main-header">
+      <h1>💲 Účetní doklady</h1>
+      <p>Faktury přijaté i vydané, schvalování, 3-way match s objednávkou a příjemkou, platby</p>
+    </div>
+
+    <div class="main-content">
+      <!-- KPI dashboard -->
+      <div class="kpi-grid" id="kpi-grid">
+        <div class="kpi-tile"><div class="kpi-label">Nezaplacené AP</div><div class="kpi-value" id="kpi-ap">—</div></div>
+        <div class="kpi-tile"><div class="kpi-label">Nezaplacené AR</div><div class="kpi-value" id="kpi-ar">—</div></div>
+        <div class="kpi-tile alert"><div class="kpi-label">Po splatnosti AP</div><div class="kpi-value" id="kpi-overdue-ap">—</div></div>
+        <div class="kpi-tile alert"><div class="kpi-label">Po splatnosti AR</div><div class="kpi-value" id="kpi-overdue-ar">—</div></div>
+        <div class="kpi-tile warn"><div class="kpi-label">K ručnímu přepsání (OCR)</div><div class="kpi-value" id="kpi-review">—</div></div>
+        <div class="kpi-tile warn"><div class="kpi-label">Čeká na schválení</div><div class="kpi-value" id="kpi-approval">—</div></div>
+        <div class="kpi-tile ok"><div class="kpi-label">Připraveno k platbě</div><div class="kpi-value" id="kpi-ready">—</div></div>
+      </div>
+
+      <!-- TABS NAVIGATION -->
+      <div class="tab-nav">
+        <button type="button" class="tab-btn active" onclick="switchAccountingTab('invoices')">📄 Faktury</button>
+        <button type="button" class="tab-btn" onclick="switchAccountingTab('payments')">💳 K platbě</button>
+        <button type="button" class="tab-btn" onclick="switchAccountingTab('bank')">🏦 Banka</button>
+        <button type="button" class="tab-btn" onclick="switchAccountingTab('reminders')">📨 Upomínky</button>
+      </div>
+
+      <!-- TAB: FAKTURY -->
+      <div class="tab-pane active" id="tab-invoices">
+
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+        <div class="filters">
+          <label>Směr:</label>
+          <select id="f-direction" onchange="loadInvoices()">
+            <option value="">Oba</option>
+            <option value="ap">Přijaté (AP)</option>
+            <option value="ar">Vydané (AR)</option>
+          </select>
+          <label>Typ:</label>
+          <select id="f-type" onchange="loadInvoices()">
+            <option value="">Všechny</option>
+            <option value="received">Faktura přijatá</option>
+            <option value="issued">Faktura vydaná</option>
+            <option value="credit_note_received">Dobropis přijatý</option>
+            <option value="credit_note_issued">Dobropis vydaný</option>
+            <option value="proforma_received">Záloha přijatá</option>
+            <option value="proforma_issued">Záloha vydaná</option>
+          </select>
+          <label>Stav:</label>
+          <select id="f-status" onchange="loadInvoices()">
+            <option value="">Všechny</option>
+            <option value="draft">Rozpracované</option>
+            <option value="awaiting_approval">Čeká na schválení</option>
+            <option value="approved">Schválené</option>
+            <option value="ready_to_pay">K platbě</option>
+            <option value="paid">Zaplacené</option>
+            <option value="overdue">Po splatnosti</option>
+            <option value="cancelled">Zrušené</option>
+          </select>
+          <label>Hledat:</label>
+          <input type="text" id="f-search" placeholder="číslo, VS, firma…" oninput="debounceLoad()">
+          <label><input type="checkbox" id="f-overdue" onchange="loadInvoices()"> Jen po splatnosti</label>
+          <button class="btn btn-secondary btn-sm" onclick="loadInvoices()">🔄 Obnovit</button>
+        </div>
+        <div style="display:flex; gap:8px;">
+          <button class="btn btn-secondary" id="btn-fetch-mails" onclick="fetchEmailsNow()" title="Stáhne nové faktury z IMAP schránky a spustí OCR">📧 Zkontrolovat maily</button>
+          <button class="btn btn-secondary" onclick="openIngestList()" title="Přehled přijatých e-mailů a jejich OCR stav">📥 Příchozí e-maily</button>
+          <button class="btn btn-primary" onclick="openCreateModal('received')">+ Přijatá</button>
+          <button class="btn btn-primary" onclick="openCreateModal('issued')">+ Vydaná</button>
+        </div>
+      </div>
+
+      <table class="data-table" id="invoices-table">
+        <thead>
+          <tr>
+            <th>Číslo</th>
+            <th>Typ</th>
+            <th>Stav</th>
+            <th>Firma</th>
+            <th>Externí č.</th>
+            <th>VS</th>
+            <th class="num">Částka</th>
+            <th>Účet protistrany</th>
+            <th>Vystaveno</th>
+            <th>Splatnost</th>
+            <th>Objednávka</th>
+            <th>Příjemka</th>
+            <th>Založil</th>
+            <th>Založeno</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody><tr><td colspan="15" class="empty-hint">Načítání…</td></tr></tbody>
+      </table>
+
+      </div><!-- /tab-invoices -->
+
+      <!-- TAB: K PLATBĚ -->
+      <div class="tab-pane" id="tab-payments">
+
+        <div class="pb-card">
+          <h3>💳 Vytvořit platební příkaz (ABO/KPC)</h3>
+
+          <div class="pb-row">
+            <label>Z bankovního účtu:</label>
+            <select id="pb-bank-account">
+              <option value="">— vyberte účet —</option>
+            </select>
+          </div>
+
+          <div class="pb-row">
+            <label>Datum splatnosti:</label>
+            <input type="date" id="pb-due-date">
+          </div>
+
+          <div class="pb-row">
+            <label>Formát:</label>
+            <select id="pb-format">
+              <option value="ABO-KPC" selected>ABO/KPC (univerzální, všechny banky)</option>
+              <option value="ABO-GPC">ABO/GPC</option>
+              <option value="SEPA-XML" disabled>SEPA XML (Fáze 4.5)</option>
+              <option value="FIO-API" disabled>Fio REST API (Fáze 4.5)</option>
+            </select>
+          </div>
+
+          <h4 style="margin-top:18px;">Faktury ve stavu „Připraveno k platbě"</h4>
+          <table class="data-table" id="ready-invoices-table">
+            <thead>
+              <tr>
+                <th style="width:40px;"><input type="checkbox" id="pb-check-all" onchange="togglePbCheckAll(this.checked)"></th>
+                <th>Číslo</th>
+                <th>Dodavatel</th>
+                <th>VS</th>
+                <th>Účet příjemce</th>
+                <th>Splatnost</th>
+                <th class="num">Částka</th>
+              </tr>
+            </thead>
+            <tbody><tr><td colspan="7" class="empty-hint">Načítání…</td></tr></tbody>
+          </table>
+
+          <div class="pb-summary" id="pb-summary" style="display:none;">
+            Vybráno: <strong id="pb-selected-count">0</strong> faktur ·
+            Celkem: <strong id="pb-selected-total">0</strong> Kč
+          </div>
+
+          <div style="display:flex; gap:10px; justify-content:flex-end; margin-top:14px;">
+            <button class="btn btn-primary" onclick="createPaymentBatch()">📤 Vygenerovat platební příkaz</button>
+          </div>
+        </div>
+
+        <h3 style="margin-top:30px;">📚 Historie platebních příkazů</h3>
+        <table class="data-table" id="batches-table">
+          <thead>
+            <tr>
+              <th>Číslo</th>
+              <th>Stav</th>
+              <th>Banka</th>
+              <th class="num">Plateb</th>
+              <th class="num">Celkem</th>
+              <th>Splatnost</th>
+              <th>Vytvořeno</th>
+              <th>Odesláno</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody><tr><td colspan="9" class="empty-hint">Načítání…</td></tr></tbody>
+        </table>
+
+      </div><!-- /tab-payments -->
+
+      <!-- TAB: BANKA (výpisy + transakce) -->
+      <div class="tab-pane" id="tab-bank">
+
+        <div class="pb-card">
+          <h3>🏦 Bankovní výpisy</h3>
+          <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-bottom:14px;">
+            <label>Účet:</label>
+            <select id="bank-filter-account" onchange="loadStatements()">
+              <option value="">Všechny účty</option>
+            </select>
+            <button class="btn btn-primary" onclick="openUploadStatementModal()">📁 Nahrát výpis</button>
+            <button class="btn btn-secondary btn-sm" onclick="loadStatements()">🔄 Obnovit</button>
+          </div>
+
+          <table class="data-table" id="statements-table">
+            <thead>
+              <tr>
+                <th>Číslo</th>
+                <th>Účet</th>
+                <th>Období</th>
+                <th class="num">Otev. zůstatek</th>
+                <th class="num">Záv. zůstatek</th>
+                <th class="num">Transakcí</th>
+                <th>Zdroj</th>
+                <th>Importováno</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody><tr><td colspan="9" class="empty-hint">Vyberte účet a klikněte „Nahrát výpis".</td></tr></tbody>
+          </table>
+        </div>
+
+        <div class="pb-card" id="bank-tx-card" style="display:none;">
+          <h3>💸 Transakce výpisu <span id="bank-tx-stmt-label" style="color:var(--text2); font-weight:normal;"></span></h3>
+          <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-bottom:12px;">
+            <label>Filtr:</label>
+            <select id="tx-filter-status" onchange="loadTransactions()">
+              <option value="">Všechny</option>
+              <option value="unmatched" selected>Nepárované</option>
+              <option value="matched">Spárované</option>
+              <option value="needs_review">K posouzení</option>
+              <option value="ignored">Ignorované</option>
+            </select>
+            <select id="tx-filter-direction" onchange="loadTransactions()">
+              <option value="">Všechny směry</option>
+              <option value="in">Příjem</option>
+              <option value="out">Výdaj</option>
+            </select>
+            <input type="text" id="tx-filter-search" placeholder="VS, název, účet, zpráva…" oninput="debounceTxLoad()" style="flex:1; min-width:220px;">
+            <button class="btn btn-primary btn-sm" onclick="runAutoMatch()" title="Auto-match nepárovaných transakcí podle VS+částka">🔗 Auto-match</button>
+            <button class="btn btn-secondary btn-sm" onclick="closeTxList()">✕ Zavřít</button>
+          </div>
+
+          <table class="data-table" id="transactions-table">
+            <thead>
+              <tr>
+                <th>Datum</th>
+                <th>Směr</th>
+                <th class="num">Částka</th>
+                <th>Protistrana</th>
+                <th>Účet protistrany</th>
+                <th>VS</th>
+                <th>Zpráva</th>
+                <th>Stav</th>
+              </tr>
+            </thead>
+            <tbody><tr><td colspan="8" class="empty-hint">Klikněte na výpis pro zobrazení transakcí.</td></tr></tbody>
+          </table>
+        </div>
+
+      </div><!-- /tab-bank -->
+
+      <!-- TAB: UPOMÍNKY (Fáze 7) -->
+      <div class="tab-pane" id="tab-reminders">
+
+        <div class="pb-card">
+          <h3>📨 Automatické upomínky</h3>
+          <div style="display:flex; gap:18px; align-items:center; flex-wrap:wrap; margin-bottom:14px;">
+            <div id="rem-status-line" style="font-size:14px; color:var(--text2);">Načítám stav workeru…</div>
+            <button class="btn btn-secondary btn-sm" onclick="reloadReminderStatus()">🔄 Obnovit</button>
+            <button class="btn btn-secondary btn-sm" id="rem-pause-btn" onclick="toggleRemindersPause()" style="display:none;">⏸️ Pozastavit</button>
+            <button class="btn btn-primary btn-sm" id="rem-run-btn" onclick="runRemindersNow()" style="display:none;">▶️ Spustit teď</button>
+          </div>
+          <div style="font-size:13px; color:var(--text2); line-height:1.5;">
+            Worker tikne <b>každý den v 8:00 lokálního času</b>. Pošle upomínky AR fakturám po splatnosti:
+            <span style="color:#fbbf24;">7 dní</span> = 1. připomínka,
+            <span style="color:#fb923c;">14 dní</span> = 2. urgence,
+            <span style="color:#ef4444;">21 dní</span> = 3. předsoudní.
+            Jazyk se vybírá podle <b>Company.country</b> (CZ→cs, SK→sk, DE/AT→de, ostatní→en).
+          </div>
+        </div>
+
+        <div class="pb-card" style="margin-top:16px;">
+          <h3>📋 Historie odeslaných upomínek</h3>
+          <table class="data-table" id="reminders-table" style="width:100%;">
+            <thead>
+              <tr>
+                <th>FAKTURA</th>
+                <th>ODBĚRATEL</th>
+                <th style="text-align:center;">ÚROVEŇ</th>
+                <th>JAZYK</th>
+                <th>PŘÍJEMCE</th>
+                <th>STAV</th>
+                <th>ODESLÁNO</th>
+                <th>PŘEDMĚT</th>
+              </tr>
+            </thead>
+            <tbody><tr><td colspan="8" class="empty-hint">Načítám…</td></tr></tbody>
+          </table>
+        </div>
+
+      </div><!-- /tab-reminders -->
+
+    </div>
+  </div>
+
+  <div id="modal-root"></div>
+
+  <!-- Sidebar + topbar -->
+  <script>
+    var s = document.createElement('script');
+    s.src = '/js/sidebar.js?v=' + Date.now();
+    s.onload = function() { renderSidebar('ucetni-doklady'); };
+    document.head.appendChild(s);
+    var tb = document.createElement('script');
+    tb.src = '/js/top-bar.js?v=' + Date.now();
+    document.head.appendChild(tb);
+  </script>
+
+  <script>
+  (function() {
+    const token = sessionStorage.getItem('token') || '';
+    function authHeaders() {
+      const h = { 'Content-Type': 'application/json' };
+      if (token) h['Authorization'] = 'Bearer ' + token;
+      return h;
+    }
+    async function api(method, path, body) {
+      const opts = { method, credentials: 'include', headers: authHeaders() };
+      if (body !== undefined) opts.body = JSON.stringify(body);
+      const res = await fetch(path, opts);
+      const ct = res.headers.get('content-type') || '';
+      const data = ct.includes('json') ? await res.json().catch(() => null) : null;
+      return { status: res.status, data };
+    }
+
+    const TYPE_LABEL = {
+      received: 'Přijatá', issued: 'Vydaná',
+      credit_note_received: 'Dobropis P', credit_note_issued: 'Dobropis V',
+      proforma_received: 'Záloha P', proforma_issued: 'Záloha V',
+    };
+    const STATUS_LABEL = {
+      draft: 'Rozpracovaný',
+      awaiting_po_match: 'Čeká na PO',
+      po_matched: 'Napojeno na PO',
+      awaiting_goods_receipt: 'Čeká na příjem',
+      goods_received: 'Zboží přijato',
+      awaiting_approval: 'Čeká na schválení',
+      approved: 'Schváleno',
+      ready_to_pay: 'K platbě',
+      payment_queued: 'V ABO frontě',
+      paid: 'Zaplaceno',
+      overdue: 'Po splatnosti',
+      cancelled: 'Zrušeno',
+      written_off: 'Odepsáno',
+      archived: 'Archivováno',
+      issued: 'Vystaveno',
+      sent: 'Odesláno',
+      reminder_1_sent: 'Upomínka 1',
+      reminder_2_sent: 'Upomínka 2',
+      reminder_3_sent: 'Upomínka 3',
+    };
+
+    function fmtAmount(n) {
+      if (n === null || n === undefined) return '—';
+      return Number(n).toLocaleString('cs-CZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+    function fmtDate(s) {
+      if (!s) return '—';
+      const d = new Date(s);
+      return d.toLocaleDateString('cs-CZ');
+    }
+    function fmtDateTime(s) {
+      if (!s) return '—';
+      const d = new Date(s);
+      return d.toLocaleDateString('cs-CZ') + ' ' + d.toLocaleTimeString('cs-CZ', { hour: '2-digit', minute: '2-digit' });
+    }
+    function personName(p) {
+      if (!p) return '—';
+      const name = [p.first_name, p.last_name].filter(Boolean).join(' ').trim();
+      return name || '—';
+    }
+    // Jméno autora — preferuj Person, fallback na User (admin bez Person), pak '—'
+    function creatorLabel(inv) {
+      const p = inv.created_by;
+      if (p) {
+        const name = [p.first_name, p.last_name].filter(Boolean).join(' ').trim();
+        if (name) return name;
+      }
+      const u = inv.created_by_user;
+      if (u) return u.display_name || u.username || '—';
+      return '—';
+    }
+    function escapeHtml(s) {
+      if (s === null || s === undefined) return '';
+      return String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    }
+    window.escapeHtml = escapeHtml;
+
+    let debounceTimer;
+    window.debounceLoad = function() {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(loadInvoices, 300);
+    };
+
+    async function loadSummary() {
+      const r = await api('GET', '/api/accounting/summary');
+      if (r.status !== 200) return;
+      const d = r.data;
+      document.getElementById('kpi-ap').textContent =
+        (d.unpaid_ap?.count || 0) + ' / ' + fmtAmount(d.unpaid_ap?.total) + ' Kč';
+      document.getElementById('kpi-ar').textContent =
+        (d.unpaid_ar?.count || 0) + ' / ' + fmtAmount(d.unpaid_ar?.total) + ' Kč';
+      document.getElementById('kpi-overdue-ap').textContent = d.overdue_ap || 0;
+      document.getElementById('kpi-overdue-ar').textContent = d.overdue_ar || 0;
+      document.getElementById('kpi-review').textContent = d.needs_review || 0;
+      document.getElementById('kpi-approval').textContent = d.pending_approval || 0;
+      document.getElementById('kpi-ready').textContent = d.ready_to_pay || 0;
+    }
+    window.loadSummary = loadSummary;
+
+    async function loadInvoices() {
+      const qs = new URLSearchParams();
+      const direction = document.getElementById('f-direction').value;
+      const type = document.getElementById('f-type').value;
+      const status = document.getElementById('f-status').value;
+      const search = document.getElementById('f-search').value.trim();
+      const overdue = document.getElementById('f-overdue').checked;
+      if (direction) qs.set('direction', direction);
+      if (type) qs.set('type', type);
+      if (status) qs.set('status', status);
+      if (search) qs.set('search', search);
+      if (overdue) qs.set('overdue', 'true');
+
+      const r = await api('GET', '/api/accounting/invoices' + (qs.toString() ? '?' + qs : ''));
+      const tbody = document.querySelector('#invoices-table tbody');
+      if (r.status !== 200) {
+        tbody.innerHTML = '<tr><td colspan="15" class="empty-hint">Chyba: ' + r.status + '</td></tr>';
+        return;
+      }
+      if (!r.data.length) {
+        tbody.innerHTML = '<tr><td colspan="15" class="empty-hint">Žádné faktury odpovídající filtrům.</td></tr>';
+        return;
+      }
+      const now = Date.now();
+      tbody.innerHTML = r.data.map(inv => {
+        const isOverdue = inv.date_due && new Date(inv.date_due).getTime() < now
+          && !['paid','cancelled','written_off','archived'].includes(inv.status);
+
+        // Anti-podvod kontrola — badge dle bank_account_verification.status
+        const ver = inv.bank_account_verification || { status: 'no_account' };
+        const accDisplay = inv.partner_bank_account || inv.partner_iban || '';
+        let accCell;
+        if (ver.status === 'no_account') {
+          accCell = '<td style="color:var(--text2);">—</td>';
+        } else {
+          const verStyle = {
+            verified: 'background:#10b98122;color:#10b981;border:1px solid #10b98155;',
+            mismatch: 'background:#ef444422;color:#ef4444;border:1px solid #ef444455;',
+            unknown:  'background:#f59e0b22;color:#f59e0b;border:1px solid #f59e0b55;',
+          }[ver.status] || '';
+          const verIcon = { verified: '✓', mismatch: '🚫', unknown: '?' }[ver.status] || '?';
+          const verLabel = { verified: 'Známý', mismatch: 'POZOR!', unknown: 'Neověř.' }[ver.status] || '?';
+          accCell = '<td style="white-space:nowrap;">' +
+            '<div style="font-family:monospace;font-size:0.85em;">' + escapeHtml(accDisplay) + '</div>' +
+            '<span title="' + escapeHtml(ver.message || '') + '" style="display:inline-block;font-size:0.75em;padding:1px 6px;border-radius:4px;margin-top:2px;' + verStyle + '">' +
+              verIcon + ' ' + verLabel +
+            '</span>' +
+          '</td>';
+        }
+
+        return '<tr style="cursor:pointer" onclick="openDetail(' + inv.id + ')">' +
+          '<td><span class="invoice-num">' + escapeHtml(inv.invoice_number) + '</span>' +
+            ' <span class="dir-badge ' + inv.direction + '">' + (inv.direction === 'ap' ? 'AP' : 'AR') + '</span></td>' +
+          '<td><span class="type-badge ' + inv.type + '">' + (TYPE_LABEL[inv.type] || inv.type) + '</span></td>' +
+          '<td><span class="status-badge ' + inv.status + '">' + (STATUS_LABEL[inv.status] || inv.status) + '</span></td>' +
+          '<td>' + escapeHtml(inv.company?.name || '—') + '</td>' +
+          '<td>' + escapeHtml(inv.external_number || '—') + '</td>' +
+          '<td>' + escapeHtml(inv.variable_symbol || '—') + '</td>' +
+          '<td class="amount-cell" style="white-space:nowrap;">' +
+            '<div><b>' + fmtAmount(inv.total) + '</b> ' + escapeHtml(inv.currency) + '</div>' +
+            '<div style="font-size:0.78em;color:var(--text2);">bez DPH: ' + fmtAmount(inv.subtotal) + '</div>' +
+          '</td>' +
+          accCell +
+          '<td>' + fmtDate(inv.date_issued) + '</td>' +
+          '<td' + (isOverdue ? ' style="color:#ef4444;font-weight:600;"' : '') + '>' + fmtDate(inv.date_due) + '</td>' +
+          '<td>' + (inv.order ? '<span class="inline-code">' + escapeHtml(inv.order.order_number) + '</span>' : '—') + '</td>' +
+          '<td>' + (inv.warehouse_document ? '<span class="inline-code">' + escapeHtml(inv.warehouse_document.number) + '</span>' : '—') + '</td>' +
+          '<td>' + escapeHtml(creatorLabel(inv)) + '</td>' +
+          '<td style="color:var(--text2);font-size:0.88em;white-space:nowrap;">' + fmtDateTime(inv.created_at) + '</td>' +
+          '<td onclick="event.stopPropagation()" style="white-space:nowrap;">' +
+            (inv.has_source_file
+              ? '<a href="/api/accounting/invoices/' + inv.id + '/source-pdf" target="_blank" class="btn btn-secondary btn-sm" title="Stáhnout / zobrazit originální PDF" style="margin-right:4px;text-decoration:none;">📄</a>'
+              : '') +
+            '<button class="btn btn-secondary btn-sm" onclick="openDetail(' + inv.id + ')">Detail</button>' +
+            (window.currentUser?.isSuperAdmin
+              ? ' <button class="btn btn-danger btn-sm" onclick="hardDeleteInvoice(' + inv.id + ', \'' + escapeHtml(inv.invoice_number) + '\')" title="Trvale smazat (super admin)" style="margin-left:4px;">🗑️</button>'
+              : '') +
+          '</td>' +
+        '</tr>';
+      }).join('');
+    }
+    window.loadInvoices = loadInvoices;
+
+    window.closeModal = function() {
+      document.getElementById('modal-root').innerHTML = '';
+      if (window._ingestPollTimer) {
+        clearTimeout(window._ingestPollTimer);
+        window._ingestPollTimer = null;
+      }
+    };
+
+    window.openDetail = async function(id) {
+      const r = await api('GET', '/api/accounting/invoices/' + id);
+      if (r.status !== 200) return alert('Nelze načíst fakturu');
+      const inv = r.data;
+
+      const itemsHtml = (inv.items || []).map(it => (
+        '<tr>' +
+          '<td>' + it.line_order + '</td>' +
+          '<td>' + escapeHtml(it.description) +
+            (it.material ? ' <span class="inline-code">' + escapeHtml(it.material.code) + '</span>' : '') +
+            (it.vehicle ? ' 🚗 ' + escapeHtml(it.vehicle.license_plate || it.vehicle.model) : '') +
+            (it.person ? ' 👤 ' + escapeHtml(it.person.first_name + ' ' + it.person.last_name) : '') +
+          '</td>' +
+          '<td class="num">' + Number(it.quantity) + ' ' + escapeHtml(it.unit) + '</td>' +
+          '<td class="num">' + fmtAmount(it.unit_price) + '</td>' +
+          '<td class="num">' + Number(it.vat_rate) + '%</td>' +
+          '<td class="num">' + fmtAmount(it.subtotal) + '</td>' +
+          '<td class="num">' + fmtAmount(it.vat_amount) + '</td>' +
+          '<td class="num"><b>' + fmtAmount(it.total) + '</b></td>' +
+          '<td>' + escapeHtml(it.cost_center?.name || '—') + '</td>' +
+        '</tr>'
+      )).join('');
+
+      const approvalsHtml = (inv.approval_steps || []).map(st => (
+        '<div class="approval-step">' +
+          '<div>#' + st.step_order + ' — ' + escapeHtml(st.approver.first_name + ' ' + st.approver.last_name) + '</div>' +
+          '<div><span class="status-badge ' + st.status + '">' +
+            (st.status === 'approved' ? '✅ Schváleno' : st.status === 'rejected' ? '❌ Zamítnuto' : '⏳ Čeká') +
+          '</span>' + (st.decided_at ? ' <span style="color:var(--text2);font-size:0.85em;">' + fmtDate(st.decided_at) + '</span>' : '') + '</div>' +
+        '</div>'
+      )).join('');
+
+      const canEdit = !['paid','cancelled','written_off','archived'].includes(inv.status);
+      const canSubmitForApproval = inv.direction === 'ap' && inv.status !== 'cancelled' && inv.status !== 'paid';
+      const canMarkReadyToPay = inv.direction === 'ap' && ['approved', 'goods_received'].includes(inv.status);
+
+      document.getElementById('modal-root').innerHTML = (
+        '<div class="modal-overlay" onclick="if(event.target===this)closeModal()">' +
+          '<div class="modal wide">' +
+            '<h2><span class="invoice-num">' + escapeHtml(inv.invoice_number) + '</span>' +
+              ' <span class="dir-badge ' + inv.direction + '">' + (inv.direction === 'ap' ? 'Přijatá (AP)' : 'Vydaná (AR)') + '</span>' +
+              ' <span class="type-badge ' + inv.type + '">' + (TYPE_LABEL[inv.type] || inv.type) + '</span></h2>' +
+            '<div class="detail-header">' +
+              '<div class="detail-col"><label>Stav</label><div><span class="status-badge ' + inv.status + '">' + (STATUS_LABEL[inv.status] || inv.status) + '</span></div></div>' +
+              '<div class="detail-col"><label>Firma</label><div>' + escapeHtml(inv.company?.name || '—') +
+                (inv.company?.ico ? '<br><small style="color:var(--text2);">IČO: ' + escapeHtml(inv.company.ico) + '</small>' : '') + '</div></div>' +
+              '<div class="detail-col"><label>Externí číslo</label><div>' + escapeHtml(inv.external_number || '—') + '</div></div>' +
+              '<div class="detail-col"><label>Var. symbol</label><div>' + escapeHtml(inv.variable_symbol || '—') + '</div></div>' +
+              '<div class="detail-col"><label>Vystaveno</label><div>' + fmtDate(inv.date_issued) + '</div></div>' +
+              '<div class="detail-col"><label>DUZP</label><div>' + fmtDate(inv.date_taxable) + '</div></div>' +
+              '<div class="detail-col"><label>Splatnost</label><div>' + fmtDate(inv.date_due) + '</div></div>' +
+              '<div class="detail-col"><label>Celkem s DPH</label><div style="font-weight:700;font-size:1.1em;">' + fmtAmount(inv.total) + ' ' + escapeHtml(inv.currency) + '</div></div>' +
+              '<div class="detail-col"><label>Zaplaceno</label><div>' + fmtAmount(inv.paid_amount) + ' ' + escapeHtml(inv.currency) + '</div></div>' +
+              '<div class="detail-col"><label>Bankovní účet protistrany</label><div>' +
+                escapeHtml(inv.partner_bank_account || inv.partner_iban || '—') +
+                (() => {
+                  const ver = inv.bank_account_verification;
+                  if (!ver || ver.status === 'no_account') return '';
+                  const styles = {
+                    verified: 'background:#10b98122;color:#10b981;border:1px solid #10b98155;',
+                    mismatch: 'background:#ef444422;color:#ef4444;border:1px solid #ef444555;',
+                    unknown:  'background:#f59e0b22;color:#f59e0b;border:1px solid #f59e0b55;',
+                  };
+                  const icons = { verified: '✓ Známý účet', mismatch: '🚫 POZOR — neznámý účet!', unknown: '⚠️ Neověřeno' };
+                  return '<div style="margin-top:6px;font-size:0.85em;display:inline-block;padding:3px 8px;border-radius:4px;' + (styles[ver.status] || '') + '">' +
+                    (icons[ver.status] || '?') +
+                    '</div>' +
+                    '<div style="font-size:0.78em;color:var(--text2);margin-top:4px;">' + escapeHtml(ver.message || '') + '</div>' +
+                    (ver.status !== 'verified' && (inv.partner_bank_account || inv.partner_iban) && inv.company_id
+                      ? '<button class="btn btn-secondary btn-sm" onclick="verifyAccount(' + inv.id + ', ' + (ver.status === 'mismatch' ? 'true' : 'false') + ')" style="margin-top:6px;">' +
+                        (ver.status === 'mismatch' ? '⚠️ Přidat i přes nesoulad (override)' : '✓ Potvrdit účet') +
+                        '</button>'
+                      : '');
+                })() +
+              '</div></div>' +
+            '</div>' +
+
+            // 3-way match section
+            '<div style="margin:14px 0; padding:10px 14px; background:var(--surface2); border-radius:6px;">' +
+              '<div class="workflow-step">🔗 <b>3-way match:</b></div>' +
+              '<div>Objednávka: ' + (inv.order ? '<span class="inline-code">' + escapeHtml(inv.order.order_number) + '</span>' : '<span style="color:var(--text2);">— nenapojeno</span>') +
+              ' &nbsp;|&nbsp; ' +
+              'Příjemka: ' + (inv.warehouse_document ? '<span class="inline-code">' + escapeHtml(inv.warehouse_document.number) + '</span>' : '<span style="color:var(--text2);">— nenapojeno</span>') +
+              (inv.direction === 'ap' && canEdit ? ' <button class="btn btn-secondary btn-sm" onclick="openMatchModal(' + inv.id + ')" style="margin-left:10px;">Navázat / změnit</button>' : '') +
+              '</div>' +
+            '</div>' +
+
+            // Items
+            '<h3 style="margin-top:18px;">Položky (' + (inv.items?.length || 0) + ')</h3>' +
+            (inv.items?.length
+              ? '<table class="items-table"><thead><tr>' +
+                '<th>#</th><th>Popis</th><th class="num">Množství</th><th class="num">J. cena</th>' +
+                '<th class="num">DPH</th><th class="num">Základ</th><th class="num">DPH Kč</th><th class="num">Celkem</th>' +
+                '<th>Středisko</th></tr></thead><tbody>' + itemsHtml + '</tbody></table>'
+              : '<div class="empty-hint" style="padding:20px;">Žádné položky</div>') +
+
+            // Schvalování (AP)
+            (inv.direction === 'ap' && (inv.approval_steps?.length || canSubmitForApproval) ?
+              '<h3 style="margin-top:18px;">Schvalování</h3>' +
+              (inv.approval_steps?.length
+                ? '<div class="approval-list">' + approvalsHtml + '</div>'
+                : '<div style="color:var(--text2);">Nejsou přiřazení schvalovatelé</div>')
+              : '') +
+
+            // Upomínky (AR)
+            (inv.direction === 'ar' && inv.reminders?.length ?
+              '<h3 style="margin-top:18px;">Upomínky</h3>' +
+              '<div>' + inv.reminders.map(r =>
+                '#' + r.level + ' — ' + (r.status === 'sent' ? '✅ Odesláno ' + fmtDate(r.sent_at) : '⏳ Naplánováno na ' + fmtDate(r.scheduled_at))
+              ).join('<br>') + '</div>'
+              : '') +
+
+            (inv.note ? '<h3 style="margin-top:18px;">Poznámka</h3><div style="white-space:pre-wrap;">' + escapeHtml(inv.note) + '</div>' : '') +
+
+            '<div class="modal-actions">' +
+              '<button class="btn btn-secondary" onclick="closeModal()">Zavřít</button>' +
+              (window.currentUser?.isSuperAdmin
+                ? '<button class="btn btn-danger" onclick="hardDeleteInvoice(' + inv.id + ', \'' + escapeHtml(inv.invoice_number) + '\')" title="Super admin: trvalé smazání">🗑️ Trvale smazat</button>'
+                : '') +
+              (canEdit && inv.status !== 'cancelled' ? '<button class="btn btn-danger" onclick="cancelInvoice(' + inv.id + ')">Zrušit</button>' : '') +
+              (canSubmitForApproval && inv.status !== 'awaiting_approval' ? '<button class="btn btn-secondary" onclick="submitForApproval(' + inv.id + ')">Poslat ke schválení</button>' : '') +
+              (inv.status === 'awaiting_approval' ? '<button class="btn btn-primary" onclick="approveInvoice(' + inv.id + ')">✅ Schválit</button><button class="btn btn-danger" onclick="rejectInvoice(' + inv.id + ')">❌ Zamítnout</button>' : '') +
+              (canMarkReadyToPay ? '<button class="btn btn-primary" onclick="markReadyToPay(' + inv.id + ')">Označit jako k platbě</button>' : '') +
+              // AR — Fáze 6: PDF + odeslat zákazníkovi
+              (inv.direction === 'ar'
+                ? '<button class="btn btn-secondary" onclick="downloadInvoicePdf(' + inv.id + ')">📄 Stáhnout PDF</button>' +
+                  '<button class="btn btn-primary" onclick="sendInvoiceToCustomer(' + inv.id + ', \'' + escapeHtml(inv.company?.email || '') + '\', \'' + escapeHtml(inv.invoice_number) + '\')">📧 Odeslat zákazníkovi</button>'
+                : '') +
+            '</div>' +
+          '</div>' +
+        '</div>'
+      );
+    };
+
+    // ─── Akce na faktuře ─────────────────────────────────────────────────
+    window.cancelInvoice = async function(id) {
+      if (!confirm('Opravdu zrušit fakturu? Status se změní na cancelled.')) return;
+      const r = await api('DELETE', '/api/accounting/invoices/' + id);
+      if (r.status !== 200) return alert('Chyba: ' + (r.data?.error || r.status));
+      closeModal(); loadInvoices(); loadSummary();
+    };
+
+    // 🗑️ Trvalé smazání — jen super admin
+    window.verifyAccount = async function(invoiceId, isOverride) {
+      const note = prompt(
+        isOverride
+          ? '⚠️ POZOR: Firma má v whitelistu jiné účty.\nTímto kliknutím potvrzuješ, že tenhle účet je legitimní (např. firma změnila banku).\n\nVolitelná poznámka:'
+          : 'Potvrzuješ, že tenhle účet patří firmě a faktura není podvod?\n\nVolitelná poznámka:'
+      );
+      if (note === null) return; // Cancel
+      const body = { note: note || null };
+      if (isOverride) body.override_mismatch = true;
+      const r = await api('POST', '/api/accounting/invoices/' + invoiceId + '/verify-bank-account', body);
+      if (r.status !== 200) {
+        if (r.status === 409) {
+          alert('⚠️ ' + r.data.error + '\n\nPoužij tlačítko "Přidat i přes nesoulad (override)" pokud opravdu víš, co děláš.');
+        } else {
+          alert('Chyba: ' + (r.data?.error || r.status));
+        }
+        return;
+      }
+      alert('✓ ' + r.data.message);
+      openDetail(invoiceId);
+      loadInvoices();
+    };
+
+    window.hardDeleteInvoice = async function(id, invoiceNumber) {
+      if (!window.currentUser?.isSuperAdmin) return alert('Tvoje role nemá oprávnění trvalého smazání.');
+      const confirm1 = prompt('TRVALĚ smazat fakturu ' + invoiceNumber + '? Tohle nelze vrátit.\n\nNapiš "SMAZAT" pro potvrzení:');
+      if (confirm1 !== 'SMAZAT') return;
+      const r = await api('DELETE', '/api/accounting/invoices/' + id + '?hard=true');
+      if (r.status !== 200) return alert('Chyba: ' + (r.data?.error || r.status));
+      alert('Faktura ' + invoiceNumber + ' byla trvale smazána.');
+      closeModal(); loadInvoices(); loadSummary();
+    };
+
+    window.submitForApproval = async function(id) {
+      const input = prompt('ID schvalovatele(ů) — oddělit čárkou (Person.id):');
+      if (!input) return;
+      const approver_ids = input.split(',').map(s => parseInt(s.trim(), 10)).filter(n => n > 0);
+      if (!approver_ids.length) return alert('Žádní platní schvalovatelé');
+      const r = await api('POST', '/api/accounting/invoices/' + id + '/submit-for-approval', { approver_ids });
+      if (r.status !== 200) return alert('Chyba: ' + (r.data?.error || r.status));
+      openDetail(id); loadInvoices(); loadSummary();
+    };
+
+    window.approveInvoice = async function(id) {
+      const note = prompt('Poznámka ke schválení (volitelné):') || '';
+      const r = await api('POST', '/api/accounting/invoices/' + id + '/approve', { note });
+      if (r.status !== 200) return alert('Chyba: ' + (r.data?.error || r.status));
+      openDetail(id); loadInvoices(); loadSummary();
+    };
+
+    window.rejectInvoice = async function(id) {
+      const note = prompt('Důvod zamítnutí:');
+      if (note === null) return;
+      const r = await api('POST', '/api/accounting/invoices/' + id + '/reject', { note });
+      if (r.status !== 200) return alert('Chyba: ' + (r.data?.error || r.status));
+      openDetail(id); loadInvoices(); loadSummary();
+    };
+
+    window.markReadyToPay = async function(id) {
+      const r = await api('POST', '/api/accounting/invoices/' + id + '/mark-ready-to-pay');
+      if (r.status !== 200) {
+        const blockers = r.data?.blockers?.length ? '\n\nBlokátory:\n• ' + r.data.blockers.join('\n• ') : '';
+        return alert('Chyba: ' + (r.data?.error || r.status) + blockers);
+      }
+      openDetail(id); loadInvoices(); loadSummary();
+    };
+
+    // ─── Fáze 6: AR PDF + odeslat zákazníkovi ─────────────────────────────
+    window.downloadInvoicePdf = async function(id) {
+      // Použijeme fetch + blob, abychom zachovali Authorization header
+      try {
+        const headers = {};
+        if (token) headers['Authorization'] = 'Bearer ' + token;
+        const resp = await fetch('/api/accounting/invoices/' + id + '/pdf', {
+          credentials: 'include',
+          headers,
+        });
+        if (!resp.ok) {
+          const txt = await resp.text();
+          let err = 'HTTP ' + resp.status;
+          try { err = JSON.parse(txt).error || err; } catch {}
+          return alert('Chyba: ' + err);
+        }
+        const cd = resp.headers.get('content-disposition') || '';
+        const m = cd.match(/filename="([^"]+)"/);
+        const filename = m ? m[1] : 'faktura.pdf';
+        const blob = await resp.blob();
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = filename;
+        document.body.appendChild(a); a.click();
+        setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 100);
+      } catch (e) {
+        alert('Stažení selhalo: ' + e.message);
+      }
+    };
+
+    window.sendInvoiceToCustomer = async function(id, defaultEmail, invoiceNumber) {
+      const to = prompt('E-mail zákazníka:', defaultEmail || '');
+      if (to === null) return; // Cancel
+      if (!to.trim()) return alert('Zadej e-mail.');
+
+      const subject = prompt('Předmět e-mailu:', `Faktura ${invoiceNumber}`);
+      if (subject === null) return;
+
+      if (!confirm('Odeslat fakturu ' + invoiceNumber + ' na ' + to + '?\n\nE-mail bude obsahovat PDF faktury jako přílohu.')) return;
+
+      const r = await api('POST', '/api/accounting/invoices/' + id + '/send', {
+        to: to.trim(),
+        subject: subject || undefined,
+      });
+      if (r.status !== 200) {
+        return alert('Chyba: ' + (r.data?.error || r.data?.reason || r.status));
+      }
+      alert('✅ Faktura odeslána na ' + r.data.sent_to + '\nMessage ID: ' + (r.data.message_id || 'N/A'));
+      openDetail(id); loadInvoices(); loadSummary();
+    };
+
+    // ─── Match modal ──────────────────────────────────────────────────────
+    window.openMatchModal = async function(id) {
+      const r = await api('GET', '/api/accounting/invoices/' + id + '/suggest-matches');
+      if (r.status !== 200) return alert('Chyba: ' + r.status);
+      const { orders, receipts } = r.data;
+
+      const ordersOpts = '<option value="">— žádná objednávka —</option>' +
+        orders.map(o => '<option value="' + o.id + '">' +
+          escapeHtml(o.order_number) + ' | ' + fmtAmount(o.total_amount) + ' Kč' +
+          (o._score >= 0.98 ? ' ✅ přesná shoda' : '') + '</option>').join('');
+      const receiptsOpts = '<option value="">— žádná příjemka —</option>' +
+        receipts.map(r2 => '<option value="' + r2.id + '">' +
+          escapeHtml(r2.number) + ' | ' + escapeHtml(r2.status) + '</option>').join('');
+
+      document.getElementById('modal-root').insertAdjacentHTML('beforeend',
+        '<div class="modal-overlay" onclick="if(event.target===this)closeModal()">' +
+          '<div class="modal">' +
+            '<h2>Napojení faktury</h2>' +
+            '<div class="modal-row"><label>Objednávka (PO)</label><select id="match-order">' + ordersOpts + '</select></div>' +
+            '<div class="modal-row"><label>Příjemka (DL)</label><select id="match-receipt">' + receiptsOpts + '</select></div>' +
+            '<div class="modal-actions">' +
+              '<button class="btn btn-secondary" onclick="closeModal()">Zrušit</button>' +
+              '<button class="btn btn-primary" onclick="doMatch(' + id + ')">Uložit</button>' +
+            '</div>' +
+          '</div>' +
+        '</div>');
+    };
+    window.doMatch = async function(id) {
+      const order_id = parseInt(document.getElementById('match-order').value, 10) || null;
+      const warehouse_document_id = parseInt(document.getElementById('match-receipt').value, 10) || null;
+      const r = await api('POST', '/api/accounting/invoices/' + id + '/match', { order_id, warehouse_document_id });
+      if (r.status !== 200) return alert('Chyba: ' + (r.data?.error || r.status));
+      closeModal(); openDetail(id); loadInvoices();
+    };
+
+    // ─── Create modal — plný editor s položkami, měnou, toggle s/bez DPH ──
+    // Stav items držíme v window.cState, abychom přežili re-render řádků.
+    window.cState = { items: [], pricesWithVat: false, currency: 'CZK' };
+
+    function makeEmptyItem() {
+      return { description: '', quantity: 1, unit: 'ks', input_price: 0, vat_rate: 21, note: '' };
+    }
+
+    // Přepočet jednoho řádku: vrací { subtotal, vat, total, unit_price_netto, unit_price_brutto }
+    // input_price je to, co uživatel napsal (interpretace záleží na pricesWithVat flagu).
+    function calcRow(it, pricesWithVat) {
+      const q = Number(it.quantity) || 0;
+      const ip = Number(it.input_price) || 0;
+      const vr = Number(it.vat_rate) || 0;
+      let unit_netto, unit_brutto;
+      if (pricesWithVat) {
+        unit_brutto = ip;
+        unit_netto = +(ip / (1 + vr / 100)).toFixed(4);
+      } else {
+        unit_netto = ip;
+        unit_brutto = +(ip * (1 + vr / 100)).toFixed(4);
+      }
+      const subtotal = +(q * unit_netto).toFixed(2);
+      const vat = +(subtotal * vr / 100).toFixed(2);
+      const total = +(subtotal + vat).toFixed(2);
+      return { subtotal, vat, total, unit_netto, unit_brutto };
+    }
+
+    function renderCreateItems() {
+      const withVat = window.cState.pricesWithVat;
+      const items = window.cState.items;
+      let sumSubtotal = 0, sumVat = 0, sumTotal = 0;
+
+      const rowsHtml = items.map((it, idx) => {
+        const c = calcRow(it, withVat);
+        sumSubtotal += c.subtotal; sumVat += c.vat; sumTotal += c.total;
+        return (
+          '<tr>' +
+            '<td style="width:36%;"><input type="text" class="ci-desc" data-idx="' + idx + '" value="' + escapeHtml(it.description) + '" placeholder="Popis položky" style="width:100%;"></td>' +
+            '<td style="width:9%;"><input type="number" step="0.001" class="ci-qty" data-idx="' + idx + '" value="' + it.quantity + '" style="width:100%;"></td>' +
+            '<td style="width:7%;"><input type="text" class="ci-unit" data-idx="' + idx + '" value="' + escapeHtml(it.unit) + '" style="width:100%;"></td>' +
+            '<td style="width:14%;"><input type="number" step="0.01" class="ci-price" data-idx="' + idx + '" value="' + it.input_price + '" style="width:100%;text-align:right;"></td>' +
+            '<td style="width:8%;"><select class="ci-vat" data-idx="' + idx + '">' +
+              [0, 12, 15, 21].map(r =>
+                '<option value="' + r + '"' + (Number(it.vat_rate) === r ? ' selected' : '') + '>' + r + '%</option>'
+              ).join('') +
+            '</select></td>' +
+            '<td class="num">' + fmtAmount(c.subtotal) + '</td>' +
+            '<td class="num">' + fmtAmount(c.vat) + '</td>' +
+            '<td class="num"><b>' + fmtAmount(c.total) + '</b></td>' +
+            '<td><button type="button" class="btn btn-danger btn-sm" onclick="removeCreateItem(' + idx + ')" title="Smazat řádek">×</button></td>' +
+          '</tr>'
+        );
+      }).join('');
+
+      const priceHeaderLabel = withVat ? 'Cena / ks s DPH' : 'Cena / ks bez DPH';
+
+      document.getElementById('c-items-body').innerHTML = rowsHtml || '<tr><td colspan="9" class="empty-hint" style="padding:18px;">Žádné položky — přidej řádek tlačítkem níže.</td></tr>';
+      document.getElementById('c-price-header').textContent = priceHeaderLabel;
+      document.getElementById('c-sum-subtotal').textContent = fmtAmount(sumSubtotal);
+      document.getElementById('c-sum-vat').textContent = fmtAmount(sumVat);
+      document.getElementById('c-sum-total').textContent = fmtAmount(sumTotal);
+
+      // Napojit event handlery na inputy (event delegation by bylo lepší, ale tohle je jednodušší)
+      document.querySelectorAll('#c-items-body input, #c-items-body select').forEach(el => {
+        el.addEventListener('input', handleItemInputChange);
+        el.addEventListener('change', handleItemInputChange);
+      });
+    }
+
+    function handleItemInputChange(e) {
+      const idx = Number(e.target.dataset.idx);
+      const it = window.cState.items[idx];
+      if (!it) return;
+      const cls = e.target.className;
+      if (cls.includes('ci-desc')) it.description = e.target.value;
+      else if (cls.includes('ci-qty')) it.quantity = parseFloat(e.target.value) || 0;
+      else if (cls.includes('ci-unit')) it.unit = e.target.value;
+      else if (cls.includes('ci-price')) it.input_price = parseFloat(e.target.value) || 0;
+      else if (cls.includes('ci-vat')) it.vat_rate = parseFloat(e.target.value) || 0;
+      renderCreateItems(); // re-render kvůli součtům — inputy ztratí focus, ale je to v pořádku pro většinu případů
+      // preserve focus na stejném indexu + třídě
+      setTimeout(() => {
+        const same = document.querySelector('.' + cls.split(' ').find(c => c.startsWith('ci-')) + '[data-idx="' + idx + '"]');
+        if (same) {
+          same.focus();
+          if (same.setSelectionRange && typeof same.value === 'string') {
+            const len = same.value.length;
+            try { same.setSelectionRange(len, len); } catch {}
+          }
+        }
+      }, 0);
+    }
+
+    window.addCreateItem = function() {
+      window.cState.items.push(makeEmptyItem());
+      renderCreateItems();
+    };
+    window.removeCreateItem = function(idx) {
+      window.cState.items.splice(idx, 1);
+      renderCreateItems();
+    };
+    window.toggleCreatePricesWithVat = function(ev) {
+      window.cState.pricesWithVat = ev.target.checked;
+      // Přepočítat input_price tak, aby zobrazené sumy zůstaly stejné
+      window.cState.items.forEach(it => {
+        const vr = Number(it.vat_rate) || 0;
+        if (ev.target.checked) {
+          // Bylo bez DPH, teď s DPH — napočítej cenu s DPH
+          it.input_price = +(Number(it.input_price) * (1 + vr / 100)).toFixed(2);
+        } else {
+          // Bylo s DPH, teď bez DPH
+          it.input_price = +(Number(it.input_price) / (1 + vr / 100)).toFixed(2);
+        }
+      });
+      renderCreateItems();
+    };
+    window.setCreateCurrency = function(ev) {
+      window.cState.currency = ev.target.value;
+      document.getElementById('c-cur-label-1').textContent = ev.target.value;
+      document.getElementById('c-cur-label-2').textContent = ev.target.value;
+      document.getElementById('c-cur-label-3').textContent = ev.target.value;
+    };
+
+    window.openCreateModal = async function(defaultType) {
+      defaultType = defaultType || 'received';
+      window.cState = { items: [makeEmptyItem()], pricesWithVat: false, currency: 'CZK' };
+
+      const r = await api('GET', '/api/wh/companies');
+      const companies = r.status === 200 ? r.data : [];
+      const companyOpts = '<option value="">— vyber firmu —</option>' +
+        companies.map(c => '<option value="' + c.id + '">' +
+          escapeHtml(c.name) + (c.ico ? ' (' + escapeHtml(c.ico) + ')' : '') + '</option>').join('');
+
+      const today = new Date().toISOString().split('T')[0];
+      const due14 = new Date(Date.now() + 14*86400000).toISOString().split('T')[0];
+
+      const currencyOpts = ['CZK', 'EUR', 'USD', 'GBP', 'PLN'].map(c =>
+        '<option value="' + c + '"' + (c === 'CZK' ? ' selected' : '') + '>' + c + '</option>').join('');
+
+      document.getElementById('modal-root').innerHTML = (
+        '<div class="modal-overlay" onclick="if(event.target===this)closeModal()">' +
+          '<div class="modal wide">' +
+            '<h2>Nová faktura</h2>' +
+
+            // Hlavička
+            '<div class="modal-grid3">' +
+              '<div class="modal-row"><label>Typ</label><select id="c-type">' +
+                '<option value="received"' + (defaultType==='received'?' selected':'') + '>Faktura přijatá</option>' +
+                '<option value="issued"' + (defaultType==='issued'?' selected':'') + '>Faktura vydaná</option>' +
+                '<option value="credit_note_received">Dobropis přijatý</option>' +
+                '<option value="credit_note_issued">Dobropis vydaný</option>' +
+                '<option value="proforma_received">Záloha přijatá</option>' +
+                '<option value="proforma_issued">Záloha vydaná</option>' +
+              '</select></div>' +
+              '<div class="modal-row" style="grid-column: span 2;"><label>Firma</label><select id="c-company">' + companyOpts + '</select></div>' +
+            '</div>' +
+            '<div class="modal-grid3">' +
+              '<div class="modal-row"><label>Externí číslo</label><input type="text" id="c-external" placeholder="Číslo od dodavatele"></div>' +
+              '<div class="modal-row"><label>Var. symbol</label><input type="text" id="c-vs"></div>' +
+              '<div class="modal-row"><label>Měna</label><select id="c-currency" onchange="setCreateCurrency(event)">' + currencyOpts + '</select></div>' +
+            '</div>' +
+            '<div class="modal-grid3">' +
+              '<div class="modal-row"><label>Datum vystavení</label><input type="date" id="c-issued" value="' + today + '"></div>' +
+              '<div class="modal-row"><label>DUZP</label><input type="date" id="c-taxable" value="' + today + '"></div>' +
+              '<div class="modal-row"><label>Splatnost</label><input type="date" id="c-due" value="' + due14 + '"></div>' +
+            '</div>' +
+
+            // Toggle s/bez DPH
+            '<div style="margin:14px 0 6px 0; padding:10px 14px; background:var(--surface2); border-radius:6px; display:flex; justify-content:space-between; align-items:center;">' +
+              '<div><b>Položky</b> <span style="color:var(--text2); font-size:0.85em;">— ceny jsou počítané podle přepínače vpravo, součty se aktualizují živě</span></div>' +
+              '<label style="display:flex; align-items:center; gap:8px; cursor:pointer;">' +
+                '<input type="checkbox" id="c-prices-with-vat" onchange="toggleCreatePricesWithVat(event)">' +
+                '<span>Zadávám ceny <b>s DPH</b></span>' +
+              '</label>' +
+            '</div>' +
+
+            // Tabulka položek
+            '<div style="overflow-x:auto;">' +
+              '<table class="items-table" style="min-width:900px;">' +
+                '<thead><tr>' +
+                  '<th>Popis</th>' +
+                  '<th>Množství</th>' +
+                  '<th>Jedn.</th>' +
+                  '<th id="c-price-header" class="num">Cena / ks bez DPH</th>' +
+                  '<th>DPH</th>' +
+                  '<th class="num">Základ</th>' +
+                  '<th class="num">DPH Kč</th>' +
+                  '<th class="num">Celkem</th>' +
+                  '<th></th>' +
+                '</tr></thead>' +
+                '<tbody id="c-items-body"></tbody>' +
+                '<tfoot>' +
+                  '<tr><td colspan="5" style="text-align:right;color:var(--text2);">Základ celkem:</td><td class="num" colspan="3"><b id="c-sum-subtotal">0,00</b> <span id="c-cur-label-1">CZK</span></td><td></td></tr>' +
+                  '<tr><td colspan="5" style="text-align:right;color:var(--text2);">DPH celkem:</td><td class="num" colspan="3"><b id="c-sum-vat">0,00</b> <span id="c-cur-label-2">CZK</span></td><td></td></tr>' +
+                  '<tr><td colspan="5" style="text-align:right;font-size:1.05em;">Celkem k úhradě:</td><td class="num" colspan="3" style="font-size:1.2em;"><b id="c-sum-total">0,00</b> <span id="c-cur-label-3">CZK</span></td><td></td></tr>' +
+                '</tfoot>' +
+              '</table>' +
+            '</div>' +
+            '<div style="margin-top:10px;"><button type="button" class="btn btn-secondary btn-sm" onclick="addCreateItem()">+ Přidat položku</button></div>' +
+
+            // Service flag (přeskočí 3-way match guard)
+            '<div style="margin-top:16px; padding:10px 14px; background:rgba(168,85,247,0.08); border:1px solid rgba(168,85,247,0.25); border-radius:6px;">' +
+              '<label style="display:flex; align-items:center; gap:10px; cursor:pointer;">' +
+                '<input type="checkbox" id="c-is-service">' +
+                '<span><b>Faktura za službu</b> <span style="color:var(--text2); font-size:0.88em;">— energie, telco, pojistky, nájem. Přeskočí 3-way match (objednávka + příjemka).</span></span>' +
+              '</label>' +
+            '</div>' +
+
+            // Poznámka
+            '<div class="modal-row" style="margin-top:16px;"><label>Poznámka</label><textarea id="c-note" rows="2"></textarea></div>' +
+
+            '<div class="modal-actions">' +
+              '<button class="btn btn-secondary" onclick="closeModal()">Zrušit</button>' +
+              '<button class="btn btn-primary" onclick="submitCreate()">Založit</button>' +
+            '</div>' +
+          '</div>' +
+        '</div>'
+      );
+      renderCreateItems();
+    };
+
+    window.submitCreate = async function() {
+      const type = document.getElementById('c-type').value;
+      const company_id = parseInt(document.getElementById('c-company').value, 10);
+      if (!company_id) return alert('Vyber firmu');
+      const items = window.cState.items
+        .filter(it => it.description && Number(it.quantity) > 0)
+        .map(it => {
+          const c = calcRow(it, window.cState.pricesWithVat);
+          return {
+            description: it.description,
+            quantity: Number(it.quantity),
+            unit: it.unit || 'ks',
+            unit_price: c.unit_netto, // backend vždy očekává cenu bez DPH
+            vat_rate: Number(it.vat_rate),
+            note: it.note || null,
+          };
+        });
+
+      if (items.length === 0) return alert('Přidej aspoň jednu položku s popisem a množstvím.');
+
+      const isService = document.getElementById('c-is-service')?.checked === true;
+      const body = {
+        type, company_id,
+        currency: window.cState.currency,
+        external_number: document.getElementById('c-external').value || null,
+        variable_symbol: document.getElementById('c-vs').value || null,
+        date_issued: document.getElementById('c-issued').value,
+        date_taxable: document.getElementById('c-taxable').value || null,
+        date_due: document.getElementById('c-due').value,
+        note: document.getElementById('c-note').value || null,
+        source: 'manual',
+        tags: isService ? ['service'] : [],
+        items,
+      };
+      const r = await api('POST', '/api/accounting/invoices', body);
+      if (r.status !== 201) return alert('Chyba: ' + (r.data?.error || r.status) + '\n' + JSON.stringify(r.data?.details || ''));
+      closeModal(); loadInvoices(); loadSummary();
+      setTimeout(() => openDetail(r.data.id), 100);
+    };
+
+    // ─── E-mail ingest UI ────────────────────────────────────────────────
+    window.fetchEmailsNow = async function() {
+      const btn = event?.target;
+      if (btn) { btn.disabled = true; btn.textContent = '📧 Kontroluji...'; }
+      const r = await api('POST', '/api/accounting/email/fetch-now');
+      if (btn) { btn.disabled = false; btn.textContent = '📧 Zkontrolovat maily'; }
+      if (r.status !== 200) return alert('Chyba: ' + (r.data?.error || r.status));
+      const res = r.data?.last_result;
+      if (!res) return alert('Worker dosud neběžel.');
+      if (!res.ok) return alert('IMAP: ' + (res.reason || res.error || 'neznámá chyba'));
+      alert(
+        'Zpracováno e-mailů:\n' +
+        '• Staženo: ' + (res.fetched || 0) + '\n' +
+        '• Úspěšně parsováno: ' + (res.parsed || 0) + '\n' +
+        '• Chyby: ' + (res.errors?.length || 0)
+      );
+      loadInvoices(); loadSummary();
+    };
+
+    window.ingestTab = 'active'; // 'active' | 'duplicate' | 'archive' | 'logs'
+
+    window.openIngestList = async function(tab) {
+      if (tab) window.ingestTab = tab;
+
+      // Tab "Logy" má jiný flow — tabulka audit logů
+      if (window.ingestTab === 'logs') {
+        return openIngestLogs();
+      }
+
+      const r = await api('GET', '/api/accounting/email/ingests?group=' + window.ingestTab);
+      if (r.status !== 200) return alert('Chyba: ' + r.status);
+
+      // Auto-refresh každou 1 s, pokud je něco ve stavu extracting/parsing
+      const hasInFlight = (r.data || []).some(ing => ['extracting', 'parsing'].includes(ing.status));
+      if (window._ingestPollTimer) { clearTimeout(window._ingestPollTimer); window._ingestPollTimer = null; }
+      if (hasInFlight) {
+        window._ingestPollTimer = setTimeout(() => {
+          // Re-render jen pokud je modal stále otevřený
+          if (document.querySelector('#modal-root .modal')) {
+            openIngestList();
+            loadInvoices(); loadSummary();
+          }
+        }, 1000);
+      }
+      const rows = (r.data || []).map(ing => {
+        const statusCls = { received: 'draft', parsing: 'awaiting_approval', extracting: 'awaiting_approval',
+          awaiting_review: 'awaiting_approval', linked_to_invoice: 'paid',
+          unreadable: 'cancelled', duplicate: 'awaiting_approval', processed: 'paid', spam: 'cancelled' }[ing.status] || 'draft';
+        const inv = ing.invoices?.[0];
+        const invoicesHtml = (ing.invoices || []).length === 0 ? '—'
+          : ing.invoices.map(i => '<span class="invoice-num">' + escapeHtml(i.invoice_number) + '</span>').join(' ');
+        return (
+          '<tr>' +
+            '<td style="white-space:nowrap;">' + fmtDateTime(ing.received_at) + '</td>' +
+            '<td>' + escapeHtml(ing.from_email) + (ing.from_name ? ' <span style="color:var(--text2);">(' + escapeHtml(ing.from_name) + ')</span>' : '') + '</td>' +
+            '<td>' + escapeHtml(ing.subject.slice(0, 80)) + '</td>' +
+            '<td><span class="status-badge ' + statusCls + '">' +
+              escapeHtml(ing.status === 'extracting' && ing.note ? ing.note : ing.status) +
+            '</span></td>' +
+            '<td style="text-align:center;">' + (
+              ing.status === 'linked_to_invoice' ? '<span style="color:#22c55e;">✅ 100 %</span>' :
+              ing.status === 'duplicate' ? '<span style="color:#f59e0b;">🔁 dup</span>' :
+              (ing.confidence !== null ? Math.round(Number(ing.confidence) * 100) + ' %' : '—')
+            ) + '</td>' +
+            '<td style="text-align:center;">' + (ing.attachments?.length || 0) + '</td>' +
+            '<td>' + invoicesHtml + '</td>' +
+            '<td><button class="btn btn-secondary btn-sm" onclick="reprocessIngest(' + ing.id + ')">Reprocess</button></td>' +
+          '</tr>'
+        );
+      }).join('');
+
+      const tabBtn = (key, label) =>
+        '<button class="btn ' + (window.ingestTab === key ? 'btn-primary' : 'btn-secondary') + '" ' +
+        'onclick="openIngestList(\'' + key + '\')" style="margin-right:8px;">' + label + '</button>';
+
+      const tabHints = { active: 'vyžadují akci', duplicate: 'duplikáty existujících faktur', archive: 'zpracované, faktura vytvořená', logs: 'historie akcí a chyb' };
+
+      const eligibleForReprocess = (r.data || []).filter(ing =>
+        (ing.attachments?.filter(a => a.is_invoice_candidate)?.length || 0) > 0
+      ).length;
+
+      document.getElementById('modal-root').innerHTML = (
+        '<div class="modal-overlay" onclick="if(event.target===this)closeModal()">' +
+          '<div class="modal wide">' +
+            '<h2>Příchozí e-maily</h2>' +
+            '<div style="margin-bottom:14px; display:flex; align-items:center; flex-wrap:wrap; gap:8px;">' +
+              tabBtn('active', '📥 Aktivní') +
+              tabBtn('duplicate', '🔁 Duplicita') +
+              tabBtn('archive', '📚 Archiv') +
+              tabBtn('logs', '📋 Logy') +
+              '<span style="color:var(--text2); font-size:0.88em;">' +
+                escapeHtml(tabHints[window.ingestTab] || '') + ' &nbsp;·&nbsp; celkem: ' + (r.data?.length || 0) +
+              '</span>' +
+              '<div style="margin-left:auto;">' +
+                (eligibleForReprocess > 0
+                  ? '<button class="btn btn-primary btn-sm" onclick="reprocessAll()" title="Spustit reprocess pro všechny e-maily v této záložce">⚡ Hromadný reprocess (' + eligibleForReprocess + ')</button>'
+                  : '') +
+              '</div>' +
+            '</div>' +
+            '<div style="max-height:65vh; overflow-y:auto;">' +
+              '<table class="items-table" style="width:100%;">' +
+                '<thead><tr>' +
+                  '<th>Obdrženo</th><th>Od</th><th>Předmět</th><th>Stav</th>' +
+                  '<th>Jistota</th><th>Příl.</th><th>Faktura</th><th></th>' +
+                '</tr></thead>' +
+                '<tbody>' + (rows || '<tr><td colspan="8" class="empty-hint" style="padding:20px;">' +
+                  ({active: 'Žádné aktivní e-maily — vše zpracováno.',
+                    duplicate: 'Žádné duplikáty.',
+                    archive: 'Archiv je prázdný.'}[window.ingestTab] || 'Prázdné.') +
+                  '</td></tr>') + '</tbody>' +
+              '</table>' +
+            '</div>' +
+            '<div class="modal-actions">' +
+              '<button class="btn btn-secondary" onclick="closeModal()">Zavřít</button>' +
+              '<button class="btn btn-primary" onclick="fetchEmailsNow()">📧 Zkontrolovat nové</button>' +
+            '</div>' +
+          '</div>' +
+        '</div>'
+      );
+    };
+
+    window.openIngestLogs = async function() {
+      const r = await api('GET', '/api/accounting/email/logs?limit=300');
+      if (r.status !== 200) return alert('Chyba: ' + r.status);
+      const logs = r.data || [];
+      const tabBtn = (key, label) =>
+        '<button class="btn ' + (window.ingestTab === key ? 'btn-primary' : 'btn-secondary') + '" ' +
+        'onclick="openIngestList(\'' + key + '\')" style="margin-right:8px;">' + label + '</button>';
+      const tabHints = { active: 'vyžadují akci', duplicate: 'duplikáty existujících faktur', archive: 'zpracované, faktura vytvořená', logs: 'historie akcí a chyb' };
+
+      const rows = logs.map(l => {
+        const isError = /error|❌|selhal/i.test(l.description || '');
+        const color = isError ? 'color:#ef4444;' : '';
+        return '<tr>' +
+          '<td style="white-space:nowrap;color:var(--text2);font-size:0.85em;">' + fmtDateTime(l.timestamp) + '</td>' +
+          '<td>' + escapeHtml(l.user_display || l.user_name || '—') + '</td>' +
+          '<td><span class="inline-code">' + escapeHtml(l.entity || '') + '</span></td>' +
+          '<td><span class="status-badge ' + (l.action === 'create' ? 'paid' : l.action === 'delete' ? 'cancelled' : 'awaiting_approval') + '">' + escapeHtml(l.action || '') + '</span></td>' +
+          '<td style="' + color + '">' + escapeHtml(l.description || '') + '</td>' +
+        '</tr>';
+      }).join('');
+
+      document.getElementById('modal-root').innerHTML = (
+        '<div class="modal-overlay" onclick="if(event.target===this)closeModal()">' +
+          '<div class="modal wide">' +
+            '<h2>Příchozí e-maily</h2>' +
+            '<div style="margin-bottom:14px; display:flex; align-items:center; flex-wrap:wrap; gap:8px;">' +
+              tabBtn('active', '📥 Aktivní') +
+              tabBtn('duplicate', '🔁 Duplicita') +
+              tabBtn('archive', '📚 Archiv') +
+              tabBtn('logs', '📋 Logy') +
+              '<span style="color:var(--text2); font-size:0.88em;">' + escapeHtml(tabHints[window.ingestTab] || '') + ' &nbsp;·&nbsp; ' + logs.length + ' záznamů</span>' +
+            '</div>' +
+            '<div style="max-height:65vh; overflow-y:auto;">' +
+              '<table class="items-table" style="width:100%;">' +
+                '<thead><tr><th>Čas</th><th>Kdo</th><th>Entita</th><th>Akce</th><th>Popis</th></tr></thead>' +
+                '<tbody>' + (rows || '<tr><td colspan="5" class="empty-hint" style="padding:20px;">Žádné logy.</td></tr>') + '</tbody>' +
+              '</table>' +
+            '</div>' +
+            '<div class="modal-actions">' +
+              '<button class="btn btn-secondary" onclick="closeModal()">Zavřít</button>' +
+            '</div>' +
+          '</div>' +
+        '</div>'
+      );
+    };
+
+    window.reprocessAll = async function() {
+      const tabLabels = { active: 'aktivních', duplicate: 'duplicitních', archive: 'archivovaných' };
+      if (!confirm('Spustit reprocess pro všechny ' + (tabLabels[window.ingestTab] || '') + ' e-maily?\nProces běží na pozadí — sleduj progress v tabulce.')) return;
+      const r = await api('POST', '/api/accounting/email/ingests/reprocess-all?group=' + window.ingestTab);
+      if (r.status !== 200) return alert('Chyba: ' + (r.data?.error || r.status));
+      alert('Reprocess zahájen pro ' + (r.data?.queued || 0) + ' e-mailů. Status se bude průběžně aktualizovat.');
+      openIngestList();
+    };
+
+    window.reprocessIngest = async function(id) {
+      if (!confirm('Smazat staré OCR extrakce a spustit znovu (s vytvořením faktury, pokud OCR projde)?')) return;
+      const r = await api('POST', '/api/accounting/email/ingests/' + id + '/reprocess');
+      if (r.status !== 200) return alert('Chyba: ' + (r.data?.error || r.status));
+      const created = r.data?.created_invoices || [];
+      const skipped = r.data?.skipped_duplicates || [];
+      const lines = [];
+      lines.push('Reprocess dokončen.');
+      lines.push('• Vytvořeno faktur: ' + created.length);
+      if (created.length) {
+        lines.push('  ' + created.map(i => i.invoice_number + ' (' + Number(i.total).toFixed(2) + ' Kč)').join(', '));
+      }
+      lines.push('• Přeskočeno duplikátů: ' + skipped.length);
+      lines.push('• OCR průchodů: ' + (r.data?.pipeline_count || 0));
+      alert(lines.join('\n'));
+      openIngestList();
+      loadInvoices(); loadSummary();
+    };
+
+    // ─── Worker status countdown ────────────────────────────────────────
+    let workerCountdownTimer = null;
+    async function refreshWorkerStatus() {
+      const r = await api('GET', '/api/accounting/email/status');
+      if (r.status !== 200) return;
+      const nextRun = r.data?.next_run_at ? new Date(r.data.next_run_at) : null;
+      const btn = document.getElementById('btn-fetch-mails');
+      if (!btn) return;
+      if (workerCountdownTimer) clearInterval(workerCountdownTimer);
+      const tick = () => {
+        if (btn.disabled) return; // probíhá fetch, neměnit text
+        if (!nextRun) {
+          btn.textContent = '📧 Zkontrolovat maily';
+          return;
+        }
+        const diff = Math.max(0, nextRun.getTime() - Date.now());
+        const min = Math.floor(diff / 60000);
+        const sec = Math.floor((diff % 60000) / 1000);
+        btn.textContent = '📧 Zkontrolovat maily (auto za ' + min + ':' + String(sec).padStart(2, '0') + ')';
+        if (diff === 0) refreshWorkerStatus(); // worker právě tickl, refresh status
+      };
+      tick();
+      workerCountdownTimer = setInterval(tick, 1000);
+    }
+    refreshWorkerStatus();
+    setInterval(refreshWorkerStatus, 30000); // každých 30s reload status
+
+    // ─── Whoami (pro super admin akce) ───────────────────────────────────
+    window.currentUser = null;
+    api('GET', '/api/accounting/whoami').then(r => {
+      if (r.status === 200) window.currentUser = r.data;
+    });
+
+    // ─── Tab switching (Faktury / K platbě) ─────────────────────────────
+    window.switchAccountingTab = function(name) {
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+      const btnIdxMap = { invoices: 0, payments: 1, bank: 2, reminders: 3 };
+      const btnIdx = btnIdxMap[name] ?? 0;
+      document.querySelectorAll('.tab-btn')[btnIdx].classList.add('active');
+      document.getElementById('tab-' + name).classList.add('active');
+      if (name === 'payments') loadPaymentsTab();
+      if (name === 'reminders') loadRemindersTab();
+    };
+
+    // ─── Tab "Upomínky" — Fáze 7 ────────────────────────────────────────
+
+    async function loadRemindersTab() {
+      await reloadReminderStatus();
+      await loadRemindersList();
+    }
+
+    window.reloadReminderStatus = async function() {
+      const r = await api('GET', '/api/accounting/reminders/status');
+      const line = document.getElementById('rem-status-line');
+      const pauseBtn = document.getElementById('rem-pause-btn');
+      const runBtn = document.getElementById('rem-run-btn');
+      if (r.status !== 200) { line.textContent = 'Chyba: ' + r.status; return; }
+      const d = r.data || {};
+      const next = d.next_run_at ? new Date(d.next_run_at).toLocaleString('cs-CZ') : '—';
+      const last = d.last_run ? new Date(d.last_run).toLocaleString('cs-CZ') : 'nikdy';
+      const lastSent = d.last_result?.sent ?? '—';
+      const lastErrors = d.last_result?.errors?.length ?? 0;
+      const pausedTag = d.paused ? '<span style="color:#ef4444;font-weight:600;"> ⏸ POZASTAVENO</span>' : '';
+      line.innerHTML =
+        `Další běh: <b>${next}</b> · Poslední: ${last} (odesláno ${lastSent}, chyb ${lastErrors})${pausedTag}`;
+
+      // Tlačítka pause/run jen super adminovi
+      const isSuper = !!window.currentUser?.isSuperAdmin;
+      pauseBtn.style.display = isSuper ? '' : 'none';
+      runBtn.style.display = isSuper ? '' : 'none';
+      pauseBtn.textContent = d.paused ? '▶ Spustit' : '⏸ Pozastavit';
+      pauseBtn.dataset.paused = d.paused ? '1' : '0';
+    };
+
+    window.toggleRemindersPause = async function() {
+      const btn = document.getElementById('rem-pause-btn');
+      const willPause = btn.dataset.paused !== '1';
+      const r = await api('POST', '/api/accounting/reminders/pause', { paused: willPause });
+      if (r.status !== 200) return alert('Chyba: ' + (r.data?.error || r.status));
+      reloadReminderStatus();
+    };
+
+    window.runRemindersNow = async function() {
+      if (!confirm('Spustit kontrolu upomínek teď? Worker projde overdue AR faktury a rozešle všechny upomínky podle pravidel (7/14/21 dní).')) return;
+      const btn = document.getElementById('rem-run-btn');
+      btn.disabled = true; btn.textContent = '⏳ Probíhá…';
+      const r = await api('POST', '/api/accounting/reminders/run-now');
+      btn.disabled = false; btn.textContent = '▶️ Spustit teď';
+      if (r.status !== 200) return alert('Chyba: ' + (r.data?.error || r.status));
+      const res = r.data?.last_result || {};
+      alert(
+        `Worker doběhl.\n` +
+        `• Odesláno: ${res.sent || 0}\n` +
+        `• Přeskočeno: ${res.skipped || 0}\n` +
+        `• Chyb: ${res.errors?.length || 0}` +
+        (res.paused ? '\n⚠ Worker je POZASTAVENÝ — nic se neodeslalo.' : '')
+      );
+      reloadReminderStatus();
+      loadRemindersList();
+    };
+
+    async function loadRemindersList() {
+      const r = await api('GET', '/api/accounting/reminders?limit=200');
+      const tbody = document.querySelector('#reminders-table tbody');
+      if (r.status !== 200) {
+        tbody.innerHTML = '<tr><td colspan="8" class="empty-hint">Chyba: ' + r.status + '</td></tr>';
+        return;
+      }
+      if (!r.data?.length) {
+        tbody.innerHTML = '<tr><td colspan="8" class="empty-hint">Zatím žádné upomínky neodešly.</td></tr>';
+        return;
+      }
+      const levelLabel = (l) => ({1: '1️⃣ Připomínka', 2: '2️⃣ Urgence', 3: '3️⃣ Předsoudní'})[l] || l;
+      const statusBadge = (s) => {
+        const colors = { sent: '#22c55e', scheduled: '#fbbf24', bounced: '#ef4444', cancelled: '#888' };
+        const labels = { sent: 'Odesláno', scheduled: 'Naplánované', bounced: 'Selhalo', cancelled: 'Zrušeno' };
+        return `<span style="color:${colors[s] || '#888'};font-weight:600;">${labels[s] || s}</span>`;
+      };
+      const langFlag = (lang) => ({cs: '🇨🇿', sk: '🇸🇰', de: '🇩🇪', en: '🇬🇧'})[lang] || lang || '—';
+      tbody.innerHTML = r.data.map(rem => `
+        <tr>
+          <td><span class="invoice-num">${escapeHtml(rem.invoice?.invoice_number || '—')}</span></td>
+          <td>${escapeHtml(rem.invoice?.company?.name || '—')}</td>
+          <td style="text-align:center;">${levelLabel(rem.level)}</td>
+          <td>${langFlag((rem.invoice?.company?.country || '').toLowerCase())} ${escapeHtml(rem.invoice?.company?.country || '')}</td>
+          <td>${escapeHtml(rem.sent_to_email || '—')}</td>
+          <td>${statusBadge(rem.status)}</td>
+          <td>${rem.sent_at ? fmtDateTime(rem.sent_at) : '—'}</td>
+          <td style="font-size:0.85em; color:var(--text2); max-width:300px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${escapeHtml(rem.subject)}">${escapeHtml(rem.subject)}</td>
+        </tr>
+      `).join('');
+    }
+
+    // ─── Tab "K platbě" — Fáze 4 ────────────────────────────────────────
+    let _paymentsState = {
+      bankAccounts: [],
+      readyInvoices: [],
+      batches: [],
+      selected: new Set(),
+    };
+
+    async function loadPaymentsTab() {
+      // Default splatnost = dnes + 1 den
+      const dueInput = document.getElementById('pb-due-date');
+      if (!dueInput.value) {
+        const d = new Date(); d.setDate(d.getDate() + 1);
+        dueInput.value = d.toISOString().slice(0, 10);
+      }
+
+      // Bank accounts
+      const ba = await api('GET', '/api/banking/accounts?active=true');
+      const sel = document.getElementById('pb-bank-account');
+      if (ba.status === 200) {
+        _paymentsState.bankAccounts = ba.data;
+        sel.innerHTML = '<option value="">— vyberte účet —</option>' +
+          ba.data.map(a => `<option value="${a.id}">${escapeHtml(a.bank_label || a.bank)} — ${escapeHtml(a.name)} (${escapeHtml(a.account_number)}/${escapeHtml(a.bank_code)})</option>`).join('');
+      } else {
+        sel.innerHTML = '<option>Chyba při načítání</option>';
+      }
+
+      // Ready invoices
+      const ri = await api('GET', '/api/accounting/payment-batches/eligible-invoices');
+      const tbody = document.querySelector('#ready-invoices-table tbody');
+      if (ri.status === 200) {
+        _paymentsState.readyInvoices = ri.data;
+        if (!ri.data.length) {
+          tbody.innerHTML = '<tr><td colspan="7" class="empty-hint">Žádné faktury ve stavu „K platbě". Schvalte fakturu ve záložce Faktury.</td></tr>';
+        } else {
+          tbody.innerHTML = ri.data.map(i => `
+            <tr>
+              <td><input type="checkbox" class="pb-row-check" data-id="${i.id}" data-amount="${i.total}" onchange="onPbRowCheck()"></td>
+              <td><span class="invoice-num">${escapeHtml(i.invoice_number)}</span></td>
+              <td>${escapeHtml(i.company?.name || '—')}</td>
+              <td>${escapeHtml(i.variable_symbol || '—')}</td>
+              <td class="acc-num" style="font-family:monospace;font-size:0.85em;">${escapeHtml(i.partner_bank_account || i.partner_iban || '<span style="color:#ef4444">CHYBÍ</span>')}</td>
+              <td>${fmtDate(i.date_due)}</td>
+              <td class="amount-cell">${fmtAmount(i.total)}</td>
+            </tr>
+          `).join('');
+        }
+      } else {
+        tbody.innerHTML = '<tr><td colspan="7" class="empty-hint">Chyba: ' + ri.status + '</td></tr>';
+      }
+      _paymentsState.selected.clear();
+      updatePbSummary();
+
+      // Batches history
+      await loadBatches();
+    }
+
+    async function loadBatches() {
+      const r = await api('GET', '/api/accounting/payment-batches');
+      const tbody = document.querySelector('#batches-table tbody');
+      if (r.status !== 200) {
+        tbody.innerHTML = '<tr><td colspan="9" class="empty-hint">Chyba: ' + r.status + '</td></tr>';
+        return;
+      }
+      _paymentsState.batches = r.data;
+      if (!r.data.length) {
+        tbody.innerHTML = '<tr><td colspan="9" class="empty-hint">Žádné platební příkazy zatím nebyly vytvořeny.</td></tr>';
+        return;
+      }
+      const isSuper = !!window.currentUser?.isSuperAdmin;
+      tbody.innerHTML = r.data.map(b => `
+        <tr>
+          <td><span class="invoice-num">${escapeHtml(b.batch_number)}</span></td>
+          <td><span class="batch-status ${b.status}">${batchStatusLabel(b.status)}</span></td>
+          <td>${escapeHtml(b.bank_account?.name || '—')} <span style="color:var(--text2);font-size:0.85em;">(${escapeHtml(b.bank_account?.bank_code || '')})</span></td>
+          <td class="amount-cell">${b.total_count || b._count?.payments || 0}</td>
+          <td class="amount-cell">${fmtAmount(b.total_amount)}</td>
+          <td>${fmtDate(b.due_date)}</td>
+          <td>${fmtDateTime(b.created_at)}</td>
+          <td>${b.submitted_at ? fmtDateTime(b.submitted_at) : '—'}</td>
+          <td>
+            ${['draft','generated'].includes(b.status)
+              ? `<button class="btn btn-secondary btn-sm" onclick="downloadBatchKpc(${b.id})">⬇ KPC</button>
+                 <button class="btn btn-primary btn-sm" onclick="markBatchSubmitted(${b.id})">✓ Odesláno</button>
+                 <button class="btn btn-secondary btn-sm" onclick="cancelBatch(${b.id})" style="color:#ef4444;">✕</button>`
+              : b.status === 'submitted_to_bank'
+                ? `<button class="btn btn-secondary btn-sm" onclick="downloadBatchKpc(${b.id})">⬇ KPC</button>`
+                : ''}
+            ${isSuper
+              ? `<button class="btn btn-secondary btn-sm" onclick="deleteBatch(${b.id}, '${escapeHtml(b.batch_number).replace(/'/g, "\\'")}', '${b.status}')" style="color:#ef4444;" title="Smazat (super admin)">🗑️</button>`
+              : ''}
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    function batchStatusLabel(s) {
+      return ({
+        draft: 'Rozpracovaný',
+        generated: 'Vygenerovaný',
+        submitted_to_bank: 'V bance',
+        processed: 'Zpracovaný',
+        rejected: 'Zamítnutý',
+        cancelled: 'Zrušený',
+      })[s] || s;
+    }
+
+    window.togglePbCheckAll = function(checked) {
+      document.querySelectorAll('.pb-row-check').forEach(cb => {
+        cb.checked = checked;
+      });
+      onPbRowCheck();
+    };
+
+    window.onPbRowCheck = function() {
+      _paymentsState.selected.clear();
+      let total = 0;
+      document.querySelectorAll('.pb-row-check').forEach(cb => {
+        if (cb.checked) {
+          _paymentsState.selected.add(parseInt(cb.dataset.id, 10));
+          total += parseFloat(cb.dataset.amount) || 0;
+        }
+      });
+      updatePbSummary(total);
+    };
+
+    function updatePbSummary(total) {
+      const el = document.getElementById('pb-summary');
+      const count = _paymentsState.selected.size;
+      if (count === 0) {
+        el.style.display = 'none';
+        return;
+      }
+      if (total === undefined) {
+        total = 0;
+        document.querySelectorAll('.pb-row-check').forEach(cb => {
+          if (cb.checked) total += parseFloat(cb.dataset.amount) || 0;
+        });
+      }
+      document.getElementById('pb-selected-count').textContent = count;
+      document.getElementById('pb-selected-total').textContent = fmtAmount(total);
+      el.style.display = 'block';
+    }
+
+    window.createPaymentBatch = async function() {
+      const bankId = parseInt(document.getElementById('pb-bank-account').value, 10);
+      if (!bankId) { alert('Vyberte bankovní účet.'); return; }
+      if (_paymentsState.selected.size === 0) { alert('Vyberte alespoň jednu fakturu.'); return; }
+
+      const dueDate = document.getElementById('pb-due-date').value;
+      const format = document.getElementById('pb-format').value;
+
+      const r = await api('POST', '/api/accounting/payment-batches', {
+        bank_account_id: bankId,
+        invoice_ids: Array.from(_paymentsState.selected),
+        due_date: dueDate || undefined,
+        format,
+      });
+
+      if (r.status === 201) {
+        const ok = confirm(`✅ Platební příkaz ${r.data.batch_number} vytvořen.\n\nStáhnout KPC soubor teď?`);
+        if (ok) downloadBatchKpc(r.data.id);
+        loadPaymentsTab();
+        loadSummary();
+      } else if (r.status === 403) {
+        alert(r.data?.error || 'Vyžaduje super admin potvrzení.');
+      } else {
+        const detail = r.data?.invalid ? '\n' + JSON.stringify(r.data.invalid, null, 2) : '';
+        alert('Chyba ' + r.status + ': ' + (r.data?.error || '') + detail);
+      }
+    };
+
+    window.downloadBatchKpc = function(batchId) {
+      // Stáhne přes nový tab — server vrátí Content-Disposition: attachment
+      const url = '/api/accounting/payment-batches/' + batchId + '/download.kpc';
+      // Pro authorized download potřebujeme token v URL ne — fetch + blob
+      fetch(url, { credentials: 'include', headers: token ? { 'Authorization': 'Bearer ' + token } : {} })
+        .then(r => {
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          const cd = r.headers.get('content-disposition') || '';
+          const m = cd.match(/filename="([^"]+)"/);
+          const filename = m ? m[1] : 'batch.kpc';
+          return r.blob().then(b => ({ blob: b, filename }));
+        })
+        .then(({ blob, filename }) => {
+          const a = document.createElement('a');
+          a.href = URL.createObjectURL(blob);
+          a.download = filename;
+          document.body.appendChild(a); a.click();
+          setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 100);
+          loadBatches();
+        })
+        .catch(e => alert('Stažení selhalo: ' + e.message));
+    };
+
+    window.markBatchSubmitted = async function(batchId) {
+      if (!confirm('Označit batch jako odeslaný do banky? Po importu KPC souboru do internetbankingu klikněte zde, aby se faktury správně řadily.')) return;
+      const r = await api('POST', '/api/accounting/payment-batches/' + batchId + '/submit');
+      if (r.status === 200) {
+        loadBatches();
+      } else {
+        alert('Chyba: ' + (r.data?.error || r.status));
+      }
+    };
+
+    window.cancelBatch = async function(batchId) {
+      if (!confirm('Zrušit batch? Faktury se vrátí do stavu „K platbě".')) return;
+      const r = await api('POST', '/api/accounting/payment-batches/' + batchId + '/cancel');
+      if (r.status === 200) {
+        loadPaymentsTab();
+        loadSummary();
+      } else {
+        alert('Chyba: ' + (r.data?.error || r.status));
+      }
+    };
+
+    // Super-admin smazání platebního příkazu (cancelled = jen smazat row, jinak ?force=true s odpárováním)
+    window.deleteBatch = async function(batchId, label, status) {
+      if (status === 'cancelled') {
+        if (!confirm(`Smazat zrušený batch ${label}?\nZmizí jen z historie, faktury jsou už dávno vrácené.`)) return;
+        const r = await api('DELETE', '/api/accounting/payment-batches/' + batchId);
+        if (r.status === 200) {
+          loadPaymentsTab(); loadSummary();
+        } else {
+          alert('Chyba: ' + (r.data?.error || r.status));
+        }
+        return;
+      }
+
+      // Aktivní batch — první pokus bez force, abychom dostali počty
+      let r = await api('DELETE', '/api/accounting/payment-batches/' + batchId);
+      if (r.status === 409 && r.data?.can_force) {
+        const matched = r.data.matched_payments || 0;
+        const queued = r.data.queued_payments || 0;
+        const parts = [];
+        if (matched > 0) parts.push(`${matched} plateb už spárovaných s bankou (vrátí paid_amount na fakturách, faktura zpět z paid)`);
+        if (queued > 0) parts.push(`${queued} plateb pouze ve frontě (vrátí faktury do "K platbě")`);
+        const warning =
+          `⚠️ SUPER ADMIN OVERRIDE\n\n` +
+          `Batch ${label} (stav: ${r.data.status}) obsahuje:\n• ${parts.join('\n• ')}\n\n` +
+          `Smazat i přesto? Akce je nevratná.`;
+        if (!confirm(warning)) return;
+        r = await api('DELETE', '/api/accounting/payment-batches/' + batchId + '?force=true');
+      }
+
+      if (r.status === 200) {
+        const d = r.data || {};
+        if (d.forced) {
+          alert(
+            `Batch ${label} smazán (force).\n` +
+            `• Stav před: ${d.previous_status}\n` +
+            `• Odpárováno z banky: ${d.unmatched_tx_count || 0}\n` +
+            `• Vráceno faktur do "K platbě": ${d.restored_invoice_count || 0}`
+          );
+        }
+        loadPaymentsTab(); loadSummary();
+      } else {
+        alert('Chyba: ' + (r.data?.error || r.status));
+      }
+    };
+
+    // ────────────────────────────────────────────────────────────────────
+    // TAB BANKA — výpisy + transakce (Fáze 5a)
+    // ────────────────────────────────────────────────────────────────────
+
+    let bankAccountsCache = [];
+    let currentStatementId = null;
+    let txDebounceHandle = null;
+
+    async function loadBankAccountsForFilter() {
+      const r = await api('GET', '/api/banking/accounts?active=true');
+      if (r.status !== 200) return;
+      bankAccountsCache = r.data || [];
+      const sel = document.getElementById('bank-filter-account');
+      const current = sel.value;
+      sel.innerHTML = '<option value="">Všechny účty</option>' +
+        bankAccountsCache.map(a =>
+          `<option value="${a.id}">${a.name} (${a.account_number}/${a.bank_code})</option>`
+        ).join('');
+      if (current) sel.value = current;
+    }
+
+    window.loadStatements = async function() {
+      const accountId = document.getElementById('bank-filter-account').value;
+      const url = '/api/banking/statements' + (accountId ? '?bank_account_id=' + accountId : '');
+      const r = await api('GET', url);
+      const tbody = document.querySelector('#statements-table tbody');
+
+      if (r.status !== 200 || !Array.isArray(r.data)) {
+        tbody.innerHTML = '<tr><td colspan="9" class="empty-hint">Chyba: ' + (r.data?.error || r.status) + '</td></tr>';
+        return;
+      }
+
+      if (r.data.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="9" class="empty-hint">Žádné výpisy zatím nebyly nahrány.</td></tr>';
+        return;
+      }
+
+      const sourceLabel = {
+        api: 'API', gpc_upload: 'GPC', csv_upload: 'CSV', mt940_upload: 'MT940',
+      };
+
+      tbody.innerHTML = r.data.map(s => `
+        <tr onclick="openStatement(${s.id}, '${(s.statement_number || '').replace(/'/g, '\\\'')}')">
+          <td><strong>${s.statement_number || '—'}</strong></td>
+          <td>${s.bank_account?.name || '—'}<br><small style="color:var(--text2)">${s.bank_account?.account_number || ''}/${s.bank_account?.bank_code || ''}</small></td>
+          <td>${fmtDate(s.period_from)} – ${fmtDate(s.period_to)}</td>
+          <td class="num">${fmtAmount(s.opening_balance)}</td>
+          <td class="num">${fmtAmount(s.closing_balance)}</td>
+          <td class="num">${s._count?.transactions ?? 0}</td>
+          <td>${sourceLabel[s.source] || s.source}</td>
+          <td>${fmtDate(s.imported_at)}</td>
+          <td>
+            <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation(); deleteStatement(${s.id}, '${(s.statement_number || '').replace(/'/g, '\\\'')}')">🗑️</button>
+          </td>
+        </tr>
+      `).join('');
+    };
+
+    window.openStatement = function(id, label) {
+      currentStatementId = id;
+      document.getElementById('bank-tx-stmt-label').textContent = '— ' + (label || '');
+      document.getElementById('bank-tx-card').style.display = 'block';
+      // Reset filtrů
+      document.getElementById('tx-filter-status').value = '';
+      document.getElementById('tx-filter-direction').value = '';
+      document.getElementById('tx-filter-search').value = '';
+      loadTransactions();
+      // Scroll
+      document.getElementById('bank-tx-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    };
+
+    window.closeTxList = function() {
+      currentStatementId = null;
+      document.getElementById('bank-tx-card').style.display = 'none';
+    };
+
+    window.loadTransactions = async function() {
+      if (!currentStatementId) return;
+      const params = new URLSearchParams({ statement_id: String(currentStatementId), limit: '500' });
+      const status = document.getElementById('tx-filter-status').value;
+      const direction = document.getElementById('tx-filter-direction').value;
+      const search = document.getElementById('tx-filter-search').value.trim();
+      if (status) params.set('match_status', status);
+      if (direction) params.set('direction', direction);
+      if (search) params.set('search', search);
+
+      const r = await api('GET', '/api/banking/transactions?' + params.toString());
+      const tbody = document.querySelector('#transactions-table tbody');
+
+      if (r.status !== 200 || !Array.isArray(r.data)) {
+        tbody.innerHTML = '<tr><td colspan="8" class="empty-hint">Chyba: ' + (r.data?.error || r.status) + '</td></tr>';
+        return;
+      }
+
+      if (r.data.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8" class="empty-hint">Žádné transakce odpovídající filtrům.</td></tr>';
+        return;
+      }
+
+      const statusBadge = {
+        unmatched:    '<span class="batch-status draft">Nepárováno</span>',
+        matched:      '<span class="batch-status processed">Spárováno</span>',
+        needs_review: '<span class="batch-status submitted_to_bank">K posouzení</span>',
+        ignored:      '<span class="batch-status cancelled">Ignor.</span>',
+      };
+
+      tbody.innerHTML = r.data.map(t => {
+        const sign = t.direction === 'in' ? '+' : '−';
+        const cls = t.direction === 'in' ? 'style="color:#22c55e"' : 'style="color:#f87171"';
+        const matchedInvoice = t.payment?.allocations?.[0]?.invoice;
+        const cursor = t.match_status === 'matched' ? 'default' : 'pointer';
+        const onclickAttr = t.match_status === 'matched'
+          ? `onclick="confirmUnmatch(${t.id})"`
+          : `onclick="openMatchModal(${t.id})"`;
+        // Stav buňka: u matched zobrazíme číslo faktury; jinak badge
+        const statusCell = t.match_status === 'matched' && matchedInvoice
+          ? `<span class="batch-status processed" title="Klikni pro odpojení">→ ${escapeHtml(matchedInvoice.invoice_number)}</span>`
+          : (statusBadge[t.match_status] || t.match_status);
+        return `
+          <tr style="cursor:${cursor}" ${onclickAttr}>
+            <td>${fmtDate(t.transaction_date)}</td>
+            <td><span ${cls}>${t.direction === 'in' ? '↓ Příjem' : '↑ Výdaj'}</span></td>
+            <td class="num"><span ${cls}>${sign} ${fmtAmount(t.amount)}</span></td>
+            <td>${escapeHtml(t.counterparty_name || '—')}</td>
+            <td><small>${escapeHtml(t.counterparty_account || '—')}</small></td>
+            <td>${escapeHtml(t.variable_symbol || '—')}</td>
+            <td><small>${escapeHtml(t.message || '—')}</small></td>
+            <td>${statusCell}</td>
+          </tr>
+        `;
+      }).join('');
+    };
+
+    window.debounceTxLoad = function() {
+      clearTimeout(txDebounceHandle);
+      txDebounceHandle = setTimeout(loadTransactions, 350);
+    };
+
+    window.deleteStatement = async function(id, label) {
+      if (!confirm(`Smazat výpis ${label}? Smaže i všechny jeho transakce. (Lze jen pokud žádná není spárovaná.)`)) return;
+      let r = await api('DELETE', '/api/banking/statements/' + id);
+
+      // Super admin override — pokud server vrátí 409 a uživatel má práva, nabídneme force-delete.
+      if (r.status === 409 && r.data?.can_force) {
+        const matched = r.data.matched_count || 0;
+        const ignored = r.data.ignored_count || 0;
+        const parts = [];
+        if (matched > 0) parts.push(`${matched} spárovaných (vrátí paid_amount na fakturách, smaže Payment+Allocations)`);
+        if (ignored > 0) parts.push(`${ignored} ignorovaných (resetují se na unmatched)`);
+        const warning =
+          `⚠️ SUPER ADMIN OVERRIDE\n\n` +
+          `Výpis ${label} obsahuje:\n• ${parts.join('\n• ')}\n\n` +
+          `Smazat i přesto? Akce je nevratná, faktury se vrátí do stavu před zaúčtováním platby.`;
+        if (!confirm(warning)) return;
+        r = await api('DELETE', '/api/banking/statements/' + id + '?force=true');
+      }
+
+      if (r.status === 200) {
+        const d = r.data || {};
+        if (d.forced) {
+          alert(
+            `Výpis ${label} smazán (force).\n` +
+            `• Odpárováno spárovaných: ${d.unmatched_count || 0}\n` +
+            `• Resetováno ignorovaných: ${d.ignored_reset_count || 0}`
+          );
+        }
+        if (currentStatementId === id) closeTxList();
+        loadStatements();
+        if (typeof loadSummary === 'function') loadSummary();
+      } else {
+        alert('Chyba: ' + (r.data?.error || r.status));
+      }
+    };
+
+    // ─── Upload modal ────────────────────────────────────────────────────
+
+    function escapeHtml(s) {
+      if (s === null || s === undefined) return '';
+      return String(s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
+    function arrayBufferToBase64(buffer) {
+      const bytes = new Uint8Array(buffer);
+      const chunkSize = 0x8000;
+      let binary = '';
+      for (let i = 0; i < bytes.length; i += chunkSize) {
+        binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunkSize));
+      }
+      return btoa(binary);
+    }
+
+    window.openUploadStatementModal = function() {
+      const root = document.getElementById('modal-root');
+      const accountOptions = bankAccountsCache.map(a =>
+        `<option value="${a.id}">${a.name} (${a.account_number}/${a.bank_code})</option>`
+      ).join('');
+
+      root.innerHTML = `
+        <div class="modal-overlay" onclick="closeUploadModal(event)">
+          <div class="modal" onclick="event.stopPropagation()" style="max-width:560px;">
+            <h3 style="margin-top:0;">📁 Nahrát bankovní výpis</h3>
+            <div style="margin:14px 0;">
+              <label style="display:block; color:var(--text2); margin-bottom:4px;">Bankovní účet</label>
+              <select id="upload-account" style="width:100%; padding:8px 10px;">
+                <option value="">— vyberte účet —</option>
+                ${accountOptions}
+              </select>
+            </div>
+            <div style="margin:14px 0;">
+              <label style="display:block; color:var(--text2); margin-bottom:4px;">Soubor výpisu</label>
+              <input type="file" id="upload-file" accept=".gpc,.csv,.sta,.mt940,.txt" style="width:100%;">
+              <div style="color:var(--text2); font-size:0.85em; margin-top:4px;">Podporované: GPC (.gpc), Fio CSV (.csv), MT940 (.sta/.mt940). Max 10 MB.</div>
+            </div>
+            <div style="margin:14px 0;">
+              <label style="display:block; color:var(--text2); margin-bottom:4px;">Formát</label>
+              <select id="upload-format" style="width:100%; padding:8px 10px;">
+                <option value="auto" selected>Auto-detekce</option>
+                <option value="gpc">GPC (ABO)</option>
+                <option value="fio_csv">Fio CSV</option>
+                <option value="mt940">MT940 (SWIFT)</option>
+              </select>
+            </div>
+            <div id="upload-status" style="margin:10px 0; min-height:20px;"></div>
+            <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:18px;">
+              <button class="btn btn-secondary" onclick="closeUploadModal()">Zrušit</button>
+              <button class="btn btn-primary" id="upload-submit" onclick="submitStatementUpload()">📁 Nahrát a parsovat</button>
+            </div>
+          </div>
+        </div>
+      `;
+    };
+
+    window.closeUploadModal = function(e) {
+      if (e && e.target !== e.currentTarget) return;
+      document.getElementById('modal-root').innerHTML = '';
+    };
+
+    window.submitStatementUpload = async function() {
+      const accountId = document.getElementById('upload-account').value;
+      const fileInput = document.getElementById('upload-file');
+      const format = document.getElementById('upload-format').value;
+      const statusEl = document.getElementById('upload-status');
+      const submitBtn = document.getElementById('upload-submit');
+
+      if (!accountId) {
+        statusEl.innerHTML = '<span style="color:#f87171">Vyberte bankovní účet.</span>';
+        return;
+      }
+      if (!fileInput.files || fileInput.files.length === 0) {
+        statusEl.innerHTML = '<span style="color:#f87171">Vyberte soubor.</span>';
+        return;
+      }
+
+      const file = fileInput.files[0];
+      if (file.size > 10 * 1024 * 1024) {
+        statusEl.innerHTML = '<span style="color:#f87171">Soubor je větší než 10 MB.</span>';
+        return;
+      }
+
+      statusEl.innerHTML = '<span style="color:var(--text2)">Načítám soubor…</span>';
+      submitBtn.disabled = true;
+
+      try {
+        const buffer = await file.arrayBuffer();
+        const content_base64 = arrayBufferToBase64(buffer);
+
+        statusEl.innerHTML = '<span style="color:var(--text2)">Parsuji a ukládám…</span>';
+
+        const r = await api('POST', '/api/banking/statements/upload', {
+          bank_account_id: parseInt(accountId, 10),
+          filename: file.name,
+          content_base64,
+          format,
+        });
+
+        if (r.status === 201) {
+          const w = (r.data.warnings || []).join('\n');
+          statusEl.innerHTML =
+            `<div style="color:#22c55e; font-weight:600;">✓ Výpis uložen</div>` +
+            `<div style="color:var(--text2); font-size:0.9em; margin-top:6px;">` +
+            `Formát: ${r.data.format} · Transakcí: ${r.data.transaction_count}` +
+            (r.data.duplicates_skipped > 0 ? ` (${r.data.duplicates_skipped} duplicit přeskočeno)` : '') +
+            `</div>` +
+            (w ? `<div style="color:#fbbf24; font-size:0.85em; margin-top:6px; white-space:pre-line;">⚠ ${escapeHtml(w)}</div>` : '');
+          loadStatements();
+          setTimeout(() => closeUploadModal(), 2000);
+        } else {
+          statusEl.innerHTML = `<span style="color:#f87171">Chyba: ${escapeHtml(r.data?.error || ('HTTP ' + r.status))}</span>`;
+          submitBtn.disabled = false;
+        }
+      } catch (e) {
+        statusEl.innerHTML = `<span style="color:#f87171">Chyba: ${escapeHtml(e.message)}</span>`;
+        submitBtn.disabled = false;
+      }
+    };
+
+    // ─── Auto-match a párování — Fáze 5b ─────────────────────────────────
+
+    window.runAutoMatch = async function() {
+      if (!currentStatementId) return;
+      if (!confirm('Spustit auto-match nepárovaných transakcí výpisu? Spáruje transakce s fakturami podle VS+částka.')) return;
+
+      const r = await api('POST', `/api/banking/statements/${currentStatementId}/auto-match`, {
+        amount_tolerance: 0.01,
+      });
+      if (r.status === 200) {
+        const s = r.data;
+        alert(
+          `Auto-match dokončen:\n` +
+          `  ✓ Spárováno: ${s.matched}\n` +
+          `  ⚠ K posouzení: ${s.needs_review}\n` +
+          `  — Bez kandidáta: ${s.no_match}\n` +
+          (s.errors?.length ? `\n  ✗ Chyby: ${s.errors.length}` : '')
+        );
+        loadTransactions();
+        loadSummary();
+      } else {
+        alert('Chyba: ' + (r.data?.error || r.status));
+      }
+    };
+
+    window.openMatchModal = async function(txId) {
+      const root = document.getElementById('modal-root');
+      root.innerHTML = `
+        <div class="modal-overlay" onclick="closeMatchModal(event)">
+          <div class="modal" onclick="event.stopPropagation()" style="max-width:720px;">
+            <h3 style="margin-top:0;">🔗 Spárovat transakci</h3>
+            <div id="match-modal-content">Načítám kandidáty…</div>
+          </div>
+        </div>
+      `;
+
+      const r = await api('GET', `/api/banking/transactions/${txId}/match-candidates`);
+      const content = document.getElementById('match-modal-content');
+      if (r.status !== 200) {
+        content.innerHTML = `<div style="color:#f87171">Chyba: ${escapeHtml(r.data?.error || r.status)}</div>`;
+        return;
+      }
+
+      const tx = r.data.transaction;
+      const decision = r.data.decision;
+      const candidates = r.data.candidates || [];
+      const reason = r.data.reason || '';
+
+      const directionLabel = tx.direction === 'in' ? '↓ Příjem' : '↑ Výdaj';
+      const sign = tx.direction === 'in' ? '+' : '−';
+
+      let candidatesHtml = '';
+      if (candidates.length === 0) {
+        candidatesHtml = `<div style="color:var(--text2); padding:12px; background:var(--surface2); border-radius:6px;">${escapeHtml(reason)}</div>`;
+      } else {
+        candidatesHtml = `
+          <div style="color:var(--text2); margin-bottom:8px;">${escapeHtml(reason)}</div>
+          <div style="max-height:340px; overflow-y:auto; border:1px solid var(--border); border-radius:6px;">
+            ${candidates.map(inv => {
+              const remaining = Number(inv.total) - Number(inv.paid_amount);
+              const exact = Math.abs(remaining - Number(tx.amount)) <= 0.01;
+              return `
+                <label style="display:block; padding:10px 14px; border-bottom:1px solid var(--border); cursor:pointer;">
+                  <input type="radio" name="match-invoice" value="${inv.id}" ${exact ? 'checked' : ''}>
+                  <strong>${escapeHtml(inv.invoice_number)}</strong> — ${escapeHtml(inv.company?.name || '?')}
+                  ${inv.external_number ? `<small style="color:var(--text2)"> (ext. ${escapeHtml(inv.external_number)})</small>` : ''}
+                  <br>
+                  <small style="color:var(--text2)">VS ${escapeHtml(inv.variable_symbol || '—')} · splatnost ${fmtDate(inv.date_due)} · stav ${escapeHtml(inv.status)}</small>
+                  <span style="float:right;">
+                    <strong>${fmtAmount(remaining)} Kč</strong> zbývá z ${fmtAmount(inv.total)} ${exact ? ' ✓ přesně sedí' : ''}
+                  </span>
+                </label>
+              `;
+            }).join('')}
+          </div>
+        `;
+      }
+
+      content.innerHTML = `
+        <div style="background:var(--surface2); padding:12px 16px; border-radius:6px; margin-bottom:14px;">
+          <div style="color:var(--text2); font-size:0.88em;">Transakce</div>
+          <div style="margin-top:4px;">
+            <span style="color:${tx.direction === 'in' ? '#22c55e' : '#f87171'}">${directionLabel}</span>
+            &nbsp;<strong>${sign} ${fmtAmount(tx.amount)} Kč</strong>
+            &nbsp;·&nbsp; ${escapeHtml(tx.counterparty_name || tx.counterparty_account || '—')}
+            &nbsp;·&nbsp; VS ${escapeHtml(tx.variable_symbol || '—')}
+          </div>
+        </div>
+
+        <h4 style="margin:14px 0 8px;">Kandidáti faktur</h4>
+        ${candidatesHtml}
+
+        <div style="margin-top:18px; padding-top:14px; border-top:1px solid var(--border); display:flex; gap:8px; justify-content:space-between;">
+          <button class="btn btn-secondary btn-sm" onclick="submitIgnore(${txId})">⊘ Ignorovat (neplatba)</button>
+          <div style="display:flex; gap:8px;">
+            <button class="btn btn-secondary" onclick="closeMatchModal()">Zrušit</button>
+            ${candidates.length > 0
+              ? `<button class="btn btn-primary" onclick="submitMatch(${txId})">🔗 Spárovat</button>`
+              : ''}
+          </div>
+        </div>
+      `;
+    };
+
+    window.closeMatchModal = function(e) {
+      if (e && e.target !== e.currentTarget) return;
+      document.getElementById('modal-root').innerHTML = '';
+    };
+
+    window.submitMatch = async function(txId) {
+      const radio = document.querySelector('input[name="match-invoice"]:checked');
+      if (!radio) {
+        alert('Vyberte fakturu.');
+        return;
+      }
+      const invoiceId = parseInt(radio.value, 10);
+      const r = await api('POST', `/api/banking/transactions/${txId}/match`, {
+        invoice_id: invoiceId,
+      });
+      if (r.status === 200) {
+        closeMatchModal();
+        loadTransactions();
+        loadSummary();
+      } else {
+        alert('Chyba: ' + (r.data?.error || r.status));
+      }
+    };
+
+    window.submitIgnore = async function(txId) {
+      const note = prompt('Důvod ignorování (volitelně):', '');
+      if (note === null) return;
+      const r = await api('POST', `/api/banking/transactions/${txId}/ignore`, { note: note || null });
+      if (r.status === 200) {
+        closeMatchModal();
+        loadTransactions();
+      } else {
+        alert('Chyba: ' + (r.data?.error || r.status));
+      }
+    };
+
+    window.confirmUnmatch = async function(txId) {
+      if (!confirm('Odpojit spárování? Faktura se vrátí do nezaplaceného stavu (paid_amount klesne).')) return;
+      const r = await api('POST', `/api/banking/transactions/${txId}/unmatch`);
+      if (r.status === 200) {
+        loadTransactions();
+        loadSummary();
+      } else {
+        alert('Chyba: ' + (r.data?.error || r.status));
+      }
+    };
+
+    // ─── Hook na switchAccountingTab — načti data při přepnutí na "bank" ──
+    const _origSwitchTab = window.switchAccountingTab;
+    window.switchAccountingTab = function(name) {
+      _origSwitchTab(name);
+      if (name === 'bank') {
+        loadBankAccountsForFilter().then(loadStatements);
+      }
+    };
+
+    // ─── Init ────────────────────────────────────────────────────────────
+    loadSummary();
+    loadInvoices();
+
+    // Hash-link: pokud URL obsahuje #invoice=ID, otevři detail po načtení.
+    // Použité pro deep-link z modulu Prodejní objednávky → "Vystavit fakturu"
+    const hashMatch = window.location.hash.match(/#invoice=(\d+)/);
+    if (hashMatch) {
+      const invoiceId = parseInt(hashMatch[1], 10);
+      // Počkáme chvíli, ať se loadInvoices stihne, pak otevřeme detail
+      setTimeout(() => openDetail(invoiceId), 600);
+    }
+  })();
+  </script>
+</body>
+</html>

@@ -2,7 +2,20 @@
 // HolyOS — Express aplikace (hlavní soubor)
 // =============================================================================
 
-require('dotenv').config();
+// `override: true` zaručuje, že hodnoty z .env přepíší shell-level env variables
+// (typicky Win User-level Environment, kde někdy zbývají placeholder hodnoty).
+// Na Railway/produkci .env soubor neexistuje, takže dotenv neudělá nic — env z
+// platformy zůstane respektované. Viz holyos_env_powershell_shadow memory.
+require('dotenv').config({ override: true });
+
+// Global safety net — nechceme, aby osamocený unhandled error (např. síťový
+// ECONNRESET z IMAP socketu) zabil celý HolyOS server. Logujeme, ale žijeme dál.
+process.on('uncaughtException', (err, origin) => {
+  console.error(`[app] uncaughtException (${origin}):`, err.message || err, err.stack);
+});
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('[app] unhandledRejection:', reason);
+});
 
 const express = require('express');
 const cors = require('cors');
@@ -34,6 +47,8 @@ const messagesRoutes = require('./routes/messages.routes');
 const fleetRoutes = require('./routes/fleet.routes');
 const cadRoutes = require('./routes/cad.routes');
 const printRoutes = require('./routes/print.routes');
+const accountingRoutes = require('./routes/accounting.routes');
+const bankingRoutes = require('./routes/banking.routes');
 
 // ─── Inicializace aplikace ────────────────────────────────────────────────
 
@@ -439,6 +454,8 @@ app.use('/api/messages', messagesRoutes);
 app.use('/api/fleet', fleetRoutes);
 app.use('/api/cad', cadRoutes);
 app.use('/api/print', printRoutes);
+app.use('/api/accounting', accountingRoutes);
+app.use('/api/banking', bankingRoutes);
 
 // ─── Legacy storage proxy (kompatibilita s persistent-storage.js) ──────────
 
@@ -623,6 +640,27 @@ app.listen(PORT, async () => {
   // První sweep při startu (po migrace se nestane hned, ale po každém restartu ok)
   runExpiredLotsSweep();
   setInterval(runExpiredLotsSweep, SWEEP_INTERVAL_MS);
+  // Spustit email ingest worker (IMAP poller pro faktury)
+  try {
+    const emailIngestWorker = require('./services/email-ingest-worker');
+    emailIngestWorker.start();
+  } catch (err) {
+    console.error('[app] email-ingest-worker nelze spustit:', err.message);
+  }
+  // Spustit digest worker (týdenní souhrn nezpracovaných bank transakcí)
+  try {
+    const digestWorker = require('./services/digest-worker');
+    digestWorker.start();
+  } catch (err) {
+    console.error('[app] digest-worker nelze spustit:', err.message);
+  }
+  // Spustit dunning worker (denní upomínky AR po splatnosti — Fáze 7)
+  try {
+    const dunningWorker = require('./services/dunning-worker');
+    dunningWorker.start();
+  } catch (err) {
+    console.error('[app] dunning-worker nelze spustit:', err.message);
+  }
   console.log(`
   ╔══════════════════════════════════════════╗
   ║          HolyOS v0.5.0                   ║

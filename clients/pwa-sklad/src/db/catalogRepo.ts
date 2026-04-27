@@ -51,6 +51,26 @@ export async function getLocation(id: number): Promise<CachedLocation | null> {
   return (await db.get('locations', id)) ?? null;
 }
 
+// Offline fallback pro `sto-{wh}-{code}` — projdeme všechny lokace daného
+// skladu a porovnáme code proti label / position. Počet lokací v praxi
+// v řádu stovek, takže full scan je v pořádku.
+export async function findLocationByCode(
+  warehouseId: number,
+  code: string,
+): Promise<CachedLocation | null> {
+  if (!code) return null;
+  const db = await getDb();
+  const all = await db.getAll('locations');
+  const needle = code.toLowerCase();
+  return (
+    all.find(
+      (loc) =>
+        loc.warehouse_id === warehouseId &&
+        (loc.label?.toLowerCase() === needle || loc.position?.toLowerCase() === needle),
+    ) ?? null
+  );
+}
+
 export async function clearCatalog(): Promise<void> {
   const db = await getDb();
   const tx = db.transaction(['materials', 'locations'], 'readwrite');

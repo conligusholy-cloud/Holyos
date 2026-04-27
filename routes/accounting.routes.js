@@ -152,7 +152,7 @@ router.get('/invoices', async (req, res, next) => {
     const invoices = await prisma.invoice.findMany({
       where,
       include: {
-        company: { select: { id: true, name: true, ico: true } },
+        company: { select: { id: true, name: true, ico: true, verified_bank_accounts: true } },
         order: { select: { id: true, order_number: true } },
         warehouse_document: { select: { id: true, number: true, type: true, status: true } },
         created_by: { select: { id: true, first_name: true, last_name: true } },
@@ -163,11 +163,49 @@ router.get('/invoices', async (req, res, next) => {
       take: Math.min(parseInt(limit, 10) || 200, 1000),
     });
 
-    // Přidat příznak, jestli má originální přílohu (bez vystavení absolutní cesty)
-    const result = invoices.map(inv => ({
-      ...inv,
-      has_source_file: !!(inv.source_file_path || inv.pdf_file_path),
-    }));
+    // Anti-podvod kontrola: pro každou fakturu s vyplněným partner_bank_account
+    // porovnej s Company.verified_bank_accounts (whitelist). UI zobrazí badge.
+    const { normalizeAccount } = require('../services/banking/account-verification');
+    const result = invoices.map(inv => {
+      let verification = null;
+      if (inv.partner_bank_account || inv.partner_iban) {
+        if (!inv.company) {
+          verification = { status: 'unknown', message: 'Faktura nemá napojenou firmu.' };
+        } else {
+          const whitelist = Array.isArray(inv.company.verified_bank_accounts)
+            ? inv.company.verified_bank_accounts
+            : [];
+          const accNorm = normalizeAccount(inv.partner_bank_account);
+          const ibanNorm = (inv.partner_iban || '').replace(/\s+/g, '').toUpperCase();
+          const matched = whitelist.find(e => {
+            const eAcc = normalizeAccount(e.account);
+            const eIban = (e.iban || '').replace(/\s+/g, '').toUpperCase();
+            return (accNorm && eAcc === accNorm) || (ibanNorm && eIban === ibanNorm);
+          });
+          if (matched) {
+            verification = { status: 'verified', source: matched.source || 'manual', message: 'Známý účet ✓' };
+          } else if (whitelist.length > 0) {
+            verification = {
+              status: 'mismatch',
+              message: `Firma má ${whitelist.length} jiných účtů — tenhle není mezi nimi!`,
+            };
+          } else {
+            verification = { status: 'unknown', message: 'Firma zatím nemá ověřené účty.' };
+          }
+        }
+      } else {
+        verification = { status: 'no_account', message: 'Účet protistrany není vyplněn.' };
+      }
+
+      // Strip whitelist z odpovědi (lehčí payload, raw data nepotřebujeme v listingu)
+      const { verified_bank_accounts, ...companyTrimmed } = inv.company || {};
+      return {
+        ...inv,
+        company: inv.company ? companyTrimmed : null,
+        has_source_file: !!(inv.source_file_path || inv.pdf_file_path),
+        bank_account_verification: verification,
+      };
+    });
 
     res.json(result);
   } catch (err) { next(err); }
@@ -210,7 +248,21 @@ router.get('/invoices/:id', async (req, res, next) => {
       },
     });
     if (!invoice) return res.status(404).json({ error: 'Faktura nenalezena' });
-    res.json(invoice);
+
+    // Anti-podvod ověření účtu protistrany
+    let bank_account_verification = null;
+    try {
+      const { verifyAccount } = require('../services/banking/account-verification');
+      bank_account_verification = await verifyAccount({
+        companyId: invoice.company_id,
+        partnerBankAccount: invoice.partner_bank_account,
+        partnerIban: invoice.partner_iban,
+      });
+    } catch (e) {
+      console.error('[verify-account] selhalo:', e.message);
+    }
+
+    res.json({ ...invoice, bank_account_verification });
   } catch (err) { next(err); }
 });
 
@@ -1679,6 +1731,169 @@ router.delete('/payment-batches/:id', async (req, res, next) => {
 });
 
 // ────────────────────────────────────────────────────────────────────────────
+// FÁZE 7 — UPOMÍNKY (AR cron + manual)
+// ────────────────────────────────────────────────────────────────────────────
+
+const dunningWorker = require('../services/dunning-worker');
+const { buildReminder } = require('../services/reminders/templates');
+const { setSetting, getSetting } = require('../services/settings');
+
+// GET /api/accounting/reminders — list odeslaných/scheduled upomínek
+router.get('/reminders', async (req, res, next) => {
+  try {
+    const { status, invoice_id, limit = '100' } = req.query;
+    const where = {};
+    if (status) where.status = String(status);
+    if (invoice_id) where.invoice_id = parseInt(invoice_id, 10);
+    const reminders = await prisma.reminder.findMany({
+      where,
+      include: {
+        invoice: {
+          select: {
+            id: true, invoice_number: true, total: true, currency: true, date_due: true,
+            paid_amount: true, status: true,
+            company: { select: { id: true, name: true, country: true } },
+          },
+        },
+      },
+      orderBy: { created_at: 'desc' },
+      take: Math.min(parseInt(limit, 10) || 100, 500),
+    });
+    res.json(reminders);
+  } catch (err) { next(err); }
+});
+
+// GET /api/accounting/reminders/status — stav workeru + pause flag
+router.get('/reminders/status', async (req, res, next) => {
+  try {
+    const workerStatus = dunningWorker.status();
+    const pausedSetting = await prisma.appSetting.findUnique({
+      where: { key: 'reminders_paused' },
+    });
+    const paused = pausedSetting && (pausedSetting.value === 'true' || pausedSetting.value === '1');
+    res.json({ ...workerStatus, paused: !!paused });
+  } catch (err) { next(err); }
+});
+
+// POST /api/accounting/reminders/pause — body { paused: true|false }
+router.post('/reminders/pause', requireSuperAdmin, async (req, res, next) => {
+  try {
+    const paused = !!req.body?.paused;
+    await setSetting('reminders_paused', paused ? 'true' : 'false', { type: 'boolean' });
+    await logAudit({
+      action: 'update', entity: 'app_setting', entity_id: 0,
+      description: `Upomínky ${paused ? 'POZASTAVENY' : 'spuštěny'}`,
+      user: req.user,
+    }).catch(() => {});
+    res.json({ ok: true, paused });
+  } catch (err) { next(err); }
+});
+
+// POST /api/accounting/reminders/run-now — manuální spuštění workeru
+router.post('/reminders/run-now', requireSuperAdmin, async (req, res, next) => {
+  try {
+    const result = await dunningWorker.triggerNow();
+    res.json(result);
+  } catch (err) { next(err); }
+});
+
+// GET /api/accounting/reminders/preview/:invoiceId/:level — náhled mailu (bez odeslání)
+router.get('/reminders/preview/:invoiceId/:level', async (req, res, next) => {
+  try {
+    const invoiceId = parseInt(req.params.invoiceId, 10);
+    const level = parseInt(req.params.level, 10);
+    if (![1, 2, 3].includes(level)) return res.status(400).json({ error: 'Level musí být 1, 2 nebo 3' });
+
+    const invoice = await prisma.invoice.findUnique({
+      where: { id: invoiceId },
+      include: { company: true },
+    });
+    if (!invoice) return res.status(404).json({ error: 'Faktura nenalezena' });
+    if (invoice.direction !== 'ar') return res.status(400).json({ error: 'Upomínky lze posílat jen pro AR (vydané) faktury' });
+
+    const ourCompany = await getOurCompany().catch(() => null);
+    const us = { name: ourCompany?.name || 'Best Series s.r.o.', iban: ourCompany?.iban || null };
+    const built = buildReminder({ level, invoice, partner: invoice.company, us });
+
+    res.json({
+      invoice_id: invoice.id,
+      invoice_number: invoice.invoice_number,
+      to: invoice.company?.email || null,
+      subject: built.subject,
+      body: built.body,
+      language: built.language,
+      days_overdue: built.days_overdue,
+    });
+  } catch (err) { next(err); }
+});
+
+// POST /api/accounting/reminders/send/:invoiceId/:level — manuální odeslání jedné upomínky
+router.post('/reminders/send/:invoiceId/:level', async (req, res, next) => {
+  try {
+    const invoiceId = parseInt(req.params.invoiceId, 10);
+    const level = parseInt(req.params.level, 10);
+    if (![1, 2, 3].includes(level)) return res.status(400).json({ error: 'Level musí být 1, 2 nebo 3' });
+
+    const invoice = await prisma.invoice.findUnique({
+      where: { id: invoiceId },
+      include: { company: true, reminders: true },
+    });
+    if (!invoice) return res.status(404).json({ error: 'Faktura nenalezena' });
+    if (invoice.direction !== 'ar') return res.status(400).json({ error: 'Upomínky lze posílat jen pro AR (vydané) faktury' });
+
+    const existing = invoice.reminders.find(r => r.level === level && r.status === 'sent');
+    if (existing) return res.status(409).json({ error: `Upomínka úrovně ${level} už byla odeslána ${existing.sent_at}` });
+
+    const toEmail = req.body?.to || invoice.company?.email;
+    if (!toEmail) return res.status(400).json({ error: 'Chybí email — odběratel ho nemá ve své Company.email a v body není override.' });
+
+    const ourCompany = await getOurCompany().catch(() => null);
+    const us = { name: ourCompany?.name || 'Best Series s.r.o.', iban: ourCompany?.iban || null };
+    const built = buildReminder({ level, invoice, partner: invoice.company, us });
+
+    // Vytvoř Reminder záznam s upsert (umí přepsat scheduled, ale ne sent)
+    const reminder = await prisma.reminder.upsert({
+      where: { invoice_id_level: { invoice_id: invoice.id, level } },
+      create: {
+        invoice_id: invoice.id, level,
+        scheduled_at: new Date(),
+        subject: built.subject, body: built.body,
+        sent_to_email: toEmail, status: 'scheduled',
+      },
+      update: {
+        subject: built.subject, body: built.body,
+        sent_to_email: toEmail, status: 'scheduled',
+      },
+    });
+
+    const fromUpn = process.env.INVOICE_IMAP_USER || 'faktury@bestseries.cz';
+    const result = await sendMail({ to: toEmail, subject: built.subject, body: built.body, from: fromUpn });
+    if (!result?.sent) {
+      await prisma.reminder.update({ where: { id: reminder.id }, data: { status: 'bounced' } });
+      return res.status(502).json({ error: result?.skipped || 'Odeslání selhalo' });
+    }
+
+    await prisma.reminder.update({
+      where: { id: reminder.id },
+      data: { status: 'sent', sent_at: new Date() },
+    });
+    const reminderField = `reminder_${level}_sent_at`;
+    const newStatus = level === 1 ? 'reminder_1_sent' : level === 2 ? 'reminder_2_sent' : 'reminder_3_sent';
+    await prisma.invoice.update({
+      where: { id: invoice.id },
+      data: { [reminderField]: new Date(), status: newStatus },
+    });
+    await logAudit({
+      action: 'reminder_sent', entity: 'invoice', entity_id: invoice.id,
+      description: `Manuální upomínka ${level}/3 (${built.language}) odeslána na ${toEmail}, ${built.days_overdue} dní po splatnosti`,
+      user: req.user,
+    }).catch(() => {});
+
+    res.json({ ok: true, reminder_id: reminder.id, language: built.language, days_overdue: built.days_overdue });
+  } catch (err) { next(err); }
+});
+
+// ────────────────────────────────────────────────────────────────────────────
 // FÁZE 6 — FAKTURY VYDANÉ (AR): autofill z Order, PDF export, e-mail
 // ────────────────────────────────────────────────────────────────────────────
 
@@ -1957,6 +2172,81 @@ router.post('/invoices/:id/send', async (req, res, next) => {
       message_id: result.messageId,
       invoice: updated,
     });
+  } catch (err) { next(err); }
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// OVĚŘENÍ BANKOVNÍHO ÚČTU (anti-podvod whitelist)
+// ────────────────────────────────────────────────────────────────────────────
+
+const { addToWhitelist, verifyAccount } = require('../services/banking/account-verification');
+
+// POST /api/accounting/invoices/:id/verify-bank-account — přidá účet z faktury
+// do whitelistu firmy (Company.verified_bank_accounts). Volat z UI tlačítkem
+// "Potvrdit účet" v detailu faktury, kde verification.status je 'unknown' nebo 'mismatch'.
+const verifyAccountSchema = z.object({
+  note: z.string().optional(),
+  override_mismatch: z.boolean().optional(), // pokud je status mismatch, super admin může přepsat
+});
+
+router.post('/invoices/:id/verify-bank-account', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isFinite(id)) return res.status(400).json({ error: 'Neplatné id' });
+
+    const parsed = verifyAccountSchema.safeParse(req.body || {});
+    if (!parsed.success) return res.status(400).json({ error: 'Validace selhala', details: parsed.error.issues });
+
+    const invoice = await prisma.invoice.findUnique({
+      where: { id },
+      include: { company: { select: { id: true, name: true, verified_bank_accounts: true } } },
+    });
+    if (!invoice) return res.status(404).json({ error: 'Faktura nenalezena' });
+    if (!invoice.company_id) return res.status(400).json({ error: 'Faktura nemá napojenou firmu — nelze přidat do whitelistu.' });
+    if (!invoice.partner_bank_account && !invoice.partner_iban) {
+      return res.status(400).json({ error: 'Faktura nemá vyplněný účet protistrany.' });
+    }
+
+    // Sanity check: pokud má firma jiné účty a tenhle nesedí, vyžaduj override flag
+    const whitelist = Array.isArray(invoice.company.verified_bank_accounts)
+      ? invoice.company.verified_bank_accounts : [];
+    if (whitelist.length > 0 && !parsed.data.override_mismatch) {
+      // Zkus rychlou shodu
+      const verification = await verifyAccount({
+        companyId: invoice.company_id,
+        partnerBankAccount: invoice.partner_bank_account,
+        partnerIban: invoice.partner_iban,
+      });
+      if (verification.status === 'mismatch') {
+        return res.status(409).json({
+          error: 'Firma má v whitelistu jiné účty. Pokud opravdu chceš přidat tento účet, pošli `override_mismatch: true` (vyžaduje vědomé rozhodnutí).',
+          verification,
+          existing_whitelist_count: whitelist.length,
+        });
+      }
+    }
+
+    const result = await addToWhitelist({
+      companyId: invoice.company_id,
+      account: invoice.partner_bank_account,
+      iban: invoice.partner_iban,
+      verifiedByUserId: req.user?.id,
+      source: 'manual',
+      note: parsed.data.note || `Potvrzeno z faktury ${invoice.invoice_number}`,
+    });
+
+    if (!result.added) {
+      return res.json({ ok: true, message: 'Účet už ve whitelistu byl.', entry: result.entry });
+    }
+
+    await logAudit({
+      action: 'update', entity: 'company', entity_id: invoice.company_id,
+      description: `🔐 Účet ${invoice.partner_bank_account || invoice.partner_iban} přidán do whitelistu (${invoice.company.name}) z faktury ${invoice.invoice_number}${parsed.data.override_mismatch ? ' [OVERRIDE]' : ''}`,
+      snapshot: { entry: result.entry },
+      user: req.user,
+    }).catch(() => {});
+
+    res.json({ ok: true, message: 'Účet přidán do whitelistu firmy.', entry: result.entry, total: result.total });
   } catch (err) { next(err); }
 });
 

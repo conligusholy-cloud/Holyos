@@ -20,25 +20,31 @@ datasource db {
 // =============================================================================
 
 model User {
-  id            Int       @id @default(autoincrement())
-  username      String    @unique @db.VarChar(100)
-  display_name  String    @db.VarChar(255)
-  password_hash String    @db.VarChar(255) // bcrypt hash (nahrazuje PBKDF2)
-  role          String    @default("user") @db.VarChar(20)
+  id             Int      @id @default(autoincrement())
+  username       String   @unique @db.VarChar(100)
+  display_name   String   @db.VarChar(255)
+  password_hash  String   @db.VarChar(255) // bcrypt hash (nahrazuje PBKDF2)
+  role           String   @default("user") @db.VarChar(20)
   is_super_admin Boolean  @default(false)
-  created_at    DateTime  @default(now())
-  updated_at    DateTime  @updatedAt
+  created_at     DateTime @default(now())
+  updated_at     DateTime @updatedAt
 
   // Vztahy
-  person        Person?     @relation("UserPerson")
-  sessions      Session[]
-  admin_tasks   AdminTask[] @relation("AdminTaskCreator")
+  person      Person?     @relation("UserPerson")
+  sessions    Session[]
+  admin_tasks AdminTask[] @relation("AdminTaskCreator")
 
   // Messaging (user-to-user chat, oddělený od AI Conversation)
-  chat_memberships  ChatChannelMember[]
-  chat_messages     ChatMessage[]       @relation("ChatMessageSender")
-  created_channels  ChatChannel[]       @relation("ChatChannelCreator")
-  notifications     Notification[]
+  chat_memberships ChatChannelMember[]
+  chat_messages    ChatMessage[]       @relation("ChatMessageSender")
+  created_channels ChatChannel[]       @relation("ChatChannelCreator")
+  notifications    Notification[]
+
+  // Účetní doklady — vždy vyplněný User, který fakturu vytvořil
+  invoices_created Invoice[] @relation("InvoiceCreatorUser")
+
+  // App settings — kdo poslední změnil
+  app_settings_updated AppSetting[] @relation("AppSettingUpdater")
 
   @@map("users")
 }
@@ -62,14 +68,14 @@ model Session {
 // =============================================================================
 
 model Person {
-  id              Int       @id @default(autoincrement())
-  type            String    @default("employee") @db.VarChar(50)
-  first_name      String    @db.VarChar(255)
-  last_name       String    @db.VarChar(255)
-  email           String?   @db.VarChar(255)
-  phone           String?   @db.VarChar(20)
-  notes           String?   @db.Text
-  active          Boolean   @default(true)
+  id         Int     @id @default(autoincrement())
+  type       String  @default("employee") @db.VarChar(50)
+  first_name String  @db.VarChar(255)
+  last_name  String  @db.VarChar(255)
+  email      String? @db.VarChar(255)
+  phone      String? @db.VarChar(20)
+  notes      String? @db.Text
+  active     Boolean @default(true)
 
   // Zaměstnanecké údaje
   employee_number String?   @db.VarChar(50)
@@ -81,13 +87,13 @@ model Person {
   bank_account    String?   @db.VarChar(50)
 
   // Osobní údaje
-  birth_date      DateTime? @db.Date
-  birth_number    String?   @db.VarChar(20)
-  id_card_number  String?   @db.VarChar(20)
-  gender          String?   @db.VarChar(10)
-  address         String?   @db.VarChar(255)
-  city            String?   @db.VarChar(100)
-  zip             String?   @db.VarChar(10)
+  birth_date     DateTime? @db.Date
+  birth_number   String?   @db.VarChar(20)
+  id_card_number String?   @db.VarChar(20)
+  gender         String?   @db.VarChar(10)
+  address        String?   @db.VarChar(255)
+  city           String?   @db.VarChar(100)
+  zip            String?   @db.VarChar(10)
 
   // Kontakt pro případ nouze
   emergency_name     String? @db.VarChar(255)
@@ -95,65 +101,75 @@ model Person {
   emergency_relation String? @db.VarChar(100)
 
   // Systémové
-  photo_url       String?   @db.Text
-  chip_number     String?   @db.VarChar(50)
-  chip_card_id    String?   @db.VarChar(50)
-  is_super_admin  Boolean   @default(false)
-  username        String?   @db.VarChar(100)
+  photo_url      String? @db.Text
+  chip_number    String? @db.VarChar(50)
+  chip_card_id   String? @db.VarChar(50)
+  is_super_admin Boolean @default(false)
+  username       String? @db.VarChar(100)
 
   // Oprávnění pro specifické funkce. Zatím jediný flag — může odevzdávat CAD
   // výkresy ze SolidWorksu přes desktop klient HolyOS CAD Bridge.
-  can_upload_cad  Boolean   @default(false)
+  can_upload_cad Boolean @default(false)
 
   // Dovolená
   leave_entitlement_days Int?
   leave_carryover        Int?
 
   // FK
-  department_id   Int?
-  role_id         Int?
-  supervisor_id   Int?
-  shift_id        Int?
-  user_id         Int?      @unique
-  company_id      Int?
+  department_id Int?
+  role_id       Int?
+  supervisor_id Int?
+  shift_id      Int?
+  user_id       Int? @unique
+  company_id    Int?
 
-  created_at      DateTime  @default(now())
-  updated_at      DateTime  @updatedAt
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
 
   // Vztahy
-  department      Department?   @relation(fields: [department_id], references: [id])
-  role            Role?         @relation(fields: [role_id], references: [id])
-  company         Company?      @relation("PersonCompany", fields: [company_id], references: [id])
-  supervisor      Person?       @relation("PersonSupervisor", fields: [supervisor_id], references: [id])
-  subordinates    Person[]      @relation("PersonSupervisor")
-  shift           Shift?        @relation(fields: [shift_id], references: [id])
-  user            User?         @relation("UserPerson", fields: [user_id], references: [id])
+  department   Department? @relation(fields: [department_id], references: [id])
+  role         Role?       @relation(fields: [role_id], references: [id])
+  company      Company?    @relation("PersonCompany", fields: [company_id], references: [id])
+  supervisor   Person?     @relation("PersonSupervisor", fields: [supervisor_id], references: [id])
+  subordinates Person[]    @relation("PersonSupervisor")
+  shift        Shift?      @relation(fields: [shift_id], references: [id])
+  user         User?       @relation("UserPerson", fields: [user_id], references: [id])
 
-  attendance         Attendance[]
-  leave_requests     LeaveRequest[]      @relation("LeaveRequestPerson")
-  approved_leaves    LeaveRequest[]      @relation("LeaveRequestApprover")
-  overtime_requests        OvertimeRequest[] @relation("OvertimeRequestPerson")
-  approved_overtime        OvertimeRequest[] @relation("OvertimeRequestApprover")
-  documents          Document[]
-  doc_notifications  DocumentNotification[]
-  orders_created     Order[]             @relation("OrderCreatedBy")
-  orders_approved    Order[]             @relation("OrderApprovedBy")
-  inventory_movements InventoryMovement[] @relation("MovementCreatedBy")
-  managed_warehouses Warehouse[]         @relation("WarehouseManager")
-  inventories_created Inventory[]        @relation("InventoryCreatedBy")
-  inventory_counted  InventoryItem[]     @relation("InventoryCountedBy")
-  workstation_assignments WorkstationWorker[]
-  assigned_vehicles  Vehicle[]           @relation("VehicleDriver")
-  cad_drawings_created CadDrawing[]      @relation("CadDrawingCreator")
-  cad_change_logs      CadDrawingChangeLog[] @relation("CadDrawingChangeLogAuthor")
+  attendance                  Attendance[]
+  leave_requests              LeaveRequest[]         @relation("LeaveRequestPerson")
+  approved_leaves             LeaveRequest[]         @relation("LeaveRequestApprover")
+  overtime_requests           OvertimeRequest[]      @relation("OvertimeRequestPerson")
+  approved_overtime           OvertimeRequest[]      @relation("OvertimeRequestApprover")
+  documents                   Document[]
+  doc_notifications           DocumentNotification[]
+  orders_created              Order[]                @relation("OrderCreatedBy")
+  orders_approved             Order[]                @relation("OrderApprovedBy")
+  inventory_movements         InventoryMovement[]    @relation("MovementCreatedBy")
+  managed_warehouses          Warehouse[]            @relation("WarehouseManager")
+  inventories_created         Inventory[]            @relation("InventoryCreatedBy")
+  inventory_counted           InventoryItem[]        @relation("InventoryCountedBy")
+  workstation_assignments     WorkstationWorker[]
+  assigned_vehicles           Vehicle[]              @relation("VehicleDriver")
+  cad_drawings_created        CadDrawing[]           @relation("CadDrawingCreator")
+  cad_change_logs             CadDrawingChangeLog[]  @relation("CadDrawingChangeLogAuthor")
   // SKLAD 2.0
-  warehouse_documents_created WarehouseDocument[] @relation("WarehouseDocumentCreator")
-  batches_assigned        Batch[]               @relation("BatchAssignee")
-  batch_items_picked      BatchItem[]           @relation("BatchItemPickedBy")
-  print_jobs              PrintJob[]            @relation("PrintJobRequestedBy")
-  serials_received        SerialNumber[]        @relation("SerialReceivedBy")
-  serials_issued          SerialNumber[]        @relation("SerialIssuedBy")
-  lots_received           MaterialLot[]         @relation("MaterialLotReceivedBy")
+  warehouse_documents_created WarehouseDocument[]    @relation("WarehouseDocumentCreator")
+  batches_assigned            Batch[]                @relation("BatchAssignee")
+  batch_items_picked          BatchItem[]            @relation("BatchItemPickedBy")
+  print_jobs                  PrintJob[]             @relation("PrintJobRequestedBy")
+  serials_received            SerialNumber[]         @relation("SerialReceivedBy")
+  serials_issued              SerialNumber[]         @relation("SerialIssuedBy")
+  lots_received               MaterialLot[]          @relation("MaterialLotReceivedBy")
+
+  // Účetní doklady — faktury, schvalování, platby, pokladna, cost-centers
+  invoices_created           Invoice[]             @relation("InvoiceCreator")
+  invoices_approved          Invoice[]             @relation("InvoiceApprover")
+  invoice_approval_steps     InvoiceApprovalStep[] @relation("InvoiceApprovalStepApprover")
+  invoice_items_as_person    InvoiceItem[]         @relation("InvoiceItemPerson")
+  cost_centers_as_target     CostCenter[]          @relation("CostCenterPerson")
+  cash_registers_responsible CashRegister[]        @relation("CashRegisterResponsible")
+  cash_movements_created     CashMovement[]        @relation("CashMovementCreator")
+  payment_batches_created    PaymentBatch[]        @relation("PaymentBatchCreator")
 
   @@index([department_id])
   @@index([role_id])
@@ -165,18 +181,19 @@ model Person {
 }
 
 model Department {
-  id        Int       @id @default(autoincrement())
-  name      String    @db.VarChar(255)
-  color     String?   @db.VarChar(7)
+  id        Int     @id @default(autoincrement())
+  name      String  @db.VarChar(255)
+  color     String? @db.VarChar(7)
   parent_id Int?
 
   created_at DateTime @default(now())
 
   // Vztahy
-  parent    Department?  @relation("DepartmentHierarchy", fields: [parent_id], references: [id])
-  children  Department[] @relation("DepartmentHierarchy")
-  people    Person[]
-  roles     Role[]
+  parent       Department?  @relation("DepartmentHierarchy", fields: [parent_id], references: [id])
+  children     Department[] @relation("DepartmentHierarchy")
+  people       Person[]
+  roles        Role[]
+  cost_centers CostCenter[] @relation("CostCenterDepartment")
 
   @@map("departments")
 }
@@ -192,10 +209,10 @@ model Role {
   created_at DateTime @default(now())
 
   // Vztahy
-  department  Department? @relation(fields: [department_id], references: [id])
-  parent_role Role?       @relation("RoleHierarchy", fields: [parent_role_id], references: [id])
-  child_roles Role[]      @relation("RoleHierarchy")
-  company     Company?    @relation("RoleCompany", fields: [company_id], references: [id])
+  department  Department?  @relation(fields: [department_id], references: [id])
+  parent_role Role?        @relation("RoleHierarchy", fields: [parent_role_id], references: [id])
+  child_roles Role[]       @relation("RoleHierarchy")
+  company     Company?     @relation("RoleCompany", fields: [company_id], references: [id])
   people      Person[]
   permissions Permission[]
 
@@ -280,7 +297,7 @@ model CompanyLeave {
   name                String   @db.VarChar(255)
   date_from           DateTime @db.Date
   date_to             DateTime @db.Date
-  excluded_person_ids Json?    // int[]
+  excluded_person_ids Json? // int[]
 
   created_at DateTime @default(now())
 
@@ -304,11 +321,11 @@ model Permission {
 // =============================================================================
 
 model LeaveSettings {
-  id                      Int     @id @default(1)
-  default_entitlement_days Int    @default(20)
-  year                    Int     @default(2026)
-  carryover_allowed       Boolean @default(true)
-  carryover_max_days      Int     @default(5)
+  id                       Int     @id @default(1)
+  default_entitlement_days Int     @default(20)
+  year                     Int     @default(2026)
+  carryover_allowed        Boolean @default(true)
+  carryover_max_days       Int     @default(5)
 
   @@map("leave_settings")
 }
@@ -326,14 +343,14 @@ model OvertimeSettings {
 }
 
 model OvertimeRequest {
-  id          Int      @id @default(autoincrement())
+  id          Int     @id @default(autoincrement())
   person_id   Int
-  hours       Decimal  @db.Decimal(5, 2) // kladné = převod přesčasů na volno, záporné = odpracování dluhu
-  type        String   @db.VarChar(50) // transfer_to_leave (přesčas→volno), transfer_to_pay (přesčas→peníze), debt_work (odpracování záporných)
-  note        String?  @db.Text
-  status      String   @default("pending") @db.VarChar(20) // pending, approved, rejected
+  hours       Decimal @db.Decimal(5, 2) // kladné = převod přesčasů na volno, záporné = odpracování dluhu
+  type        String  @db.VarChar(50) // transfer_to_leave (přesčas→volno), transfer_to_pay (přesčas→peníze), debt_work (odpracování záporných)
+  note        String? @db.Text
+  status      String  @default("pending") @db.VarChar(20) // pending, approved, rejected
   approved_by Int?
-  month       String   @db.VarChar(7) // YYYY-MM — měsíc ke kterému se přesčas vztahuje
+  month       String  @db.VarChar(7) // YYYY-MM — měsíc ke kterému se přesčas vztahuje
 
   created_at DateTime @default(now())
 
@@ -362,7 +379,7 @@ model Document {
   valid_from DateTime? @db.Date
   valid_to   DateTime? @db.Date
   status     String    @default("active") @db.VarChar(20)
-  tags       Json?     // string[]
+  tags       Json? // string[]
   note       String?   @db.Text
 
   created_at DateTime @default(now())
@@ -381,7 +398,7 @@ model DocumentTemplate {
   name        String  @db.VarChar(255)
   category    String? @db.VarChar(50)
   content     String  @db.Text // HTML s {{placeholder}}
-  variables   Json?   // string[]
+  variables   Json? // string[]
   description String? @db.Text
 
   created_at DateTime @default(now())
@@ -391,14 +408,14 @@ model DocumentTemplate {
 }
 
 model DocumentNotification {
-  id                    Int       @id @default(autoincrement())
-  document_id           Int
-  person_id             Int
-  type                  String    @db.VarChar(20) // expiring, expired, custom
-  trigger_days_before   Int?
-  message               String?   @db.VarChar(255)
-  sent_at               DateTime?
-  dismissed             Boolean   @default(false)
+  id                  Int       @id @default(autoincrement())
+  document_id         Int
+  person_id           Int
+  type                String    @db.VarChar(20) // expiring, expired, custom
+  trigger_days_before Int?
+  message             String?   @db.VarChar(255)
+  sent_at             DateTime?
+  dismissed           Boolean   @default(false)
 
   created_at DateTime @default(now())
 
@@ -432,6 +449,11 @@ model Company {
   phone              String? @db.VarChar(20)
   web                String? @db.VarChar(255)
   bank_account       String? @db.VarChar(50)
+  // Whitelist potvrzených bankovních účtů (anti-podvod). JSON pole záznamů
+  // { account, iban?, verified_by_user_id, verified_at, source, note? }.
+  // Při schválení faktury / klik "Potvrdit účet" se sem účet přidá.
+  // Faktura s neznámým účtem od známé firmy dostane v UI red flag.
+  verified_bank_accounts Json @default("[]")
   payment_terms_days Int     @default(14)
   notes              String? @db.Text
   active             Boolean @default(true)
@@ -439,17 +461,21 @@ model Company {
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
 
-  orders                 Order[]
-  supplied_materials     Material[]            @relation("MaterialSupplier")
-  preferred_for_rules    StockRule[]           @relation("StockRuleSupplier")
-  people                 Person[]              @relation("PersonCompany")
-  roles                  Role[]                @relation("RoleCompany")
+  orders               Order[]
+  supplied_materials   Material[]          @relation("MaterialSupplier")
+  preferred_for_rules  StockRule[]         @relation("StockRuleSupplier")
+  people               Person[]            @relation("PersonCompany")
+  roles                Role[]              @relation("RoleCompany")
   // Fleet — servisní firmy a pneuservisy
-  vehicle_services       VehicleService[]      @relation("VehicleServiceCompany")
-  vehicle_tire_changes   VehicleTireChange[]   @relation("VehicleTireCompany")
+  vehicle_services     VehicleService[]    @relation("VehicleServiceCompany")
+  vehicle_tire_changes VehicleTireChange[] @relation("VehicleTireCompany")
+  // Provozovny (více poboček pod jednou firmou v adresáři)
+  branches             CompanyBranch[]     @relation("CompanyBranches")
   // SKLAD 2.0 — dodavatel/odběratel na skladovém dokumentu (DL, výdejka)
-  warehouse_documents    WarehouseDocument[]   @relation("WarehouseDocumentPartner")
-  supplied_lots          MaterialLot[]         @relation("MaterialLotSupplier")
+  warehouse_documents  WarehouseDocument[] @relation("WarehouseDocumentPartner")
+  supplied_lots        MaterialLot[]       @relation("MaterialLotSupplier")
+  // Účetní doklady — faktury přijaté (AP) i vydané (AR)
+  invoices             Invoice[]           @relation("InvoiceCompany")
 
   @@index([ico])
   @@index([type])
@@ -479,6 +505,7 @@ model Order {
   creator  Person?     @relation("OrderCreatedBy", fields: [created_by], references: [id])
   approver Person?     @relation("OrderApprovedBy", fields: [approved_by], references: [id])
   items    OrderItem[]
+  invoices Invoice[]   @relation("InvoiceOrder")
 
   @@index([type])
   @@index([status])
@@ -490,7 +517,7 @@ model OrderItem {
   id                 Int       @id @default(autoincrement())
   order_id           Int
   material_id        Int?
-  product_id         Int?      // vazba na Product (výrobek)
+  product_id         Int? // vazba na Product (výrobek)
   name               String    @db.VarChar(255)
   quantity           Decimal   @db.Decimal(10, 2)
   unit               String    @default("ks") @db.VarChar(20)
@@ -502,11 +529,12 @@ model OrderItem {
   note               String?   @db.Text
   serial_number      String?   @db.VarChar(100) // Výrobní číslo kiosku (přidělené ručně na úrovni položky)
 
-  order    Order     @relation(fields: [order_id], references: [id], onDelete: Cascade)
-  material Material? @relation(fields: [material_id], references: [id])
-  product  Product?  @relation(fields: [product_id], references: [id], onDelete: SetNull)
-  configs  OrderItemConfig[] // vybraná konfigurace pro tento výrobek
+  order            Order             @relation(fields: [order_id], references: [id], onDelete: Cascade)
+  material         Material?         @relation(fields: [material_id], references: [id])
+  product          Product?          @relation(fields: [product_id], references: [id], onDelete: SetNull)
+  configs          OrderItemConfig[] // vybraná konfigurace pro tento výrobek
   slot_assignments SlotAssignment[] // přiřazení do výrobních slotů (pro zobrazení výrobního čísla v náhledu)
+  invoice_items    InvoiceItem[]     @relation("InvoiceItemOrderItem")
 
   @@index([order_id])
   @@index([product_id])
@@ -529,41 +557,41 @@ model Warehouse {
 
   created_at DateTime @default(now())
 
-  manager    Person?             @relation("WarehouseManager", fields: [manager_id], references: [id])
-  locations  WarehouseLocation[]
-  movements  InventoryMovement[]
-  stock_rules StockRule[]
-  inventories Inventory[]
-  workstations_input  Workstation[] @relation("WorkstationInputWarehouse")
-  workstations_output Workstation[] @relation("WorkstationOutputWarehouse")
+  manager             Person?             @relation("WarehouseManager", fields: [manager_id], references: [id])
+  locations           WarehouseLocation[]
+  movements           InventoryMovement[]
+  stock_rules         StockRule[]
+  inventories         Inventory[]
+  workstations_input  Workstation[]       @relation("WorkstationInputWarehouse")
+  workstations_output Workstation[]       @relation("WorkstationOutputWarehouse")
 
   @@map("warehouses")
 }
 
 model WarehouseLocation {
-  id           Int     @id @default(autoincrement())
-  warehouse_id Int
-  section      String? @db.VarChar(50)
-  rack         String? @db.VarChar(50)
-  position     String? @db.VarChar(50)
-  label        String  @unique @db.VarChar(255)
-  barcode      String? @unique @db.VarChar(100) // QR kód na etiketě lokace
-  type         String  @default("position") @db.VarChar(30) // warehouse, aisle, rack, position, workstation_in, workstation_out
-  capacity     Decimal? @db.Decimal(10, 2)
-  locked_for_inventory Boolean @default(false) // SKLAD 2.0 — zámek po dobu probíhající inventury
-  notes        String? @db.Text
+  id                   Int      @id @default(autoincrement())
+  warehouse_id         Int
+  section              String?  @db.VarChar(50)
+  rack                 String?  @db.VarChar(50)
+  position             String?  @db.VarChar(50)
+  label                String   @unique @db.VarChar(255)
+  barcode              String?  @unique @db.VarChar(100) // QR kód na etiketě lokace
+  type                 String   @default("position") @db.VarChar(30) // warehouse, aisle, rack, position, workstation_in, workstation_out
+  capacity             Decimal? @db.Decimal(10, 2)
+  locked_for_inventory Boolean  @default(false) // SKLAD 2.0 — zámek po dobu probíhající inventury
+  notes                String?  @db.Text
 
-  warehouse              Warehouse         @relation(fields: [warehouse_id], references: [id])
-  movements              InventoryMovement[]
-  inventory_items        InventoryItem[]
-  workstations_input     Workstation[]     @relation("WorkstationInputLocation")
-  workstations_output    Workstation[]     @relation("WorkstationOutputLocation")
-  stock                  Stock[]           // SKLAD 2.0 — zásoby na lokaci
-  outgoing_transfers     InventoryMovement[] @relation("MovementFromLocation") // přesuny "z této lokace"
-  incoming_transfers     InventoryMovement[] @relation("MovementToLocation")   // přesuny "do této lokace"
-  printers               Printer[]         // tiskárny přiřazené k této lokaci
-  batch_items_from       BatchItem[]       // pickovací položky zdrojové lokace
-  serial_numbers         SerialNumber[]    // sériová čísla aktuálně umístěná na lokaci
+  warehouse           Warehouse           @relation(fields: [warehouse_id], references: [id])
+  movements           InventoryMovement[]
+  inventory_items     InventoryItem[]
+  workstations_input  Workstation[]       @relation("WorkstationInputLocation")
+  workstations_output Workstation[]       @relation("WorkstationOutputLocation")
+  stock               Stock[] // SKLAD 2.0 — zásoby na lokaci
+  outgoing_transfers  InventoryMovement[] @relation("MovementFromLocation") // přesuny "z této lokace"
+  incoming_transfers  InventoryMovement[] @relation("MovementToLocation") // přesuny "do této lokace"
+  printers            Printer[] // tiskárny přiřazené k této lokaci
+  batch_items_from    BatchItem[] // pickovací položky zdrojové lokace
+  serial_numbers      SerialNumber[] // sériová čísla aktuálně umístěná na lokaci
 
   @@index([warehouse_id])
   @@index([type])
@@ -595,14 +623,14 @@ model Material {
   lead_time_days Decimal? @db.Decimal(5, 2)
 
   // Dávky & objednávky
-  batch_size_min         Decimal? @db.Decimal(10, 2)
-  batch_size_max         Decimal? @db.Decimal(10, 2)
-  batch_size_default     Decimal? @db.Decimal(10, 2)
-  processed_in_multiples Decimal? @db.Decimal(10, 2)
-  reorder_quantity       Decimal? @db.Decimal(10, 2)
+  batch_size_min          Decimal? @db.Decimal(10, 2)
+  batch_size_max          Decimal? @db.Decimal(10, 2)
+  batch_size_default      Decimal? @db.Decimal(10, 2)
+  processed_in_multiples  Decimal? @db.Decimal(10, 2)
+  reorder_quantity        Decimal? @db.Decimal(10, 2)
   expedition_reserve_days Decimal? @db.Decimal(5, 2)
-  delivery_tolerance_pct Decimal? @db.Decimal(5, 2)
-  plan_orders            Boolean  @default(false)
+  delivery_tolerance_pct  Decimal? @db.Decimal(5, 2)
+  plan_orders             Boolean  @default(false)
 
   // Klasifikace
   classification String? @db.VarChar(50)
@@ -628,20 +656,20 @@ model Material {
   solid_name       String? @db.VarChar(100)
 
   // Skladové příznaky
-  non_stock                      Boolean @default(false)
-  distinguish_batches            Boolean @default(false)
-  interchangeable_batches        Boolean @default(false)
-  no_availability_check          Boolean @default(false)
-  check_availability_stage       Boolean @default(false)
-  check_availability_expedition  Boolean @default(false)
-  mandatory_scan                 Boolean @default(false)
-  save_sn_first_scan             Boolean @default(false)
-  temp_barcode                   Boolean @default(false)
-  auto_complete_after_bom_scan   Boolean @default(false)
-  exact_consumption              Boolean @default(false)
-  ignore                         Boolean @default(false)
-  ignore_forecast_eval           Boolean @default(false)
-  split_receipt_by_sales_items   Boolean @default(false)
+  non_stock                     Boolean @default(false)
+  distinguish_batches           Boolean @default(false)
+  interchangeable_batches       Boolean @default(false)
+  no_availability_check         Boolean @default(false)
+  check_availability_stage      Boolean @default(false)
+  check_availability_expedition Boolean @default(false)
+  mandatory_scan                Boolean @default(false)
+  save_sn_first_scan            Boolean @default(false)
+  temp_barcode                  Boolean @default(false)
+  auto_complete_after_bom_scan  Boolean @default(false)
+  exact_consumption             Boolean @default(false)
+  ignore                        Boolean @default(false)
+  ignore_forecast_eval          Boolean @default(false)
+  split_receipt_by_sales_items  Boolean @default(false)
 
   // Expirace
   expirable                     Boolean  @default(false)
@@ -651,54 +679,55 @@ model Material {
   allow_rotation                Boolean  @default(false)
 
   // Plánování
-  priority                       Int?
-  release_before_dispatch_days   Decimal? @db.Decimal(5, 2)
-  forecast_pct                   Decimal? @db.Decimal(5, 2)
-  sort_weight                    Decimal? @db.Decimal(10, 2)
-  daily_target                   Decimal? @db.Decimal(10, 2)
+  priority                     Int?
+  release_before_dispatch_days Decimal? @db.Decimal(5, 2)
+  forecast_pct                 Decimal? @db.Decimal(5, 2)
+  sort_weight                  Decimal? @db.Decimal(10, 2)
+  daily_target                 Decimal? @db.Decimal(10, 2)
 
   // Ostatní
-  stock_substitution  String?  @db.VarChar(50)
-  internal_status     String?  @db.VarChar(50)
-  valid_from          DateTime? @db.Date
-  valid_to            DateTime? @db.Date
-  customers           String?  @db.Text
-  internal_value      String?  @db.VarChar(100)
-  active_flag         String?  @db.VarChar(20)
-  export_state        String?  @db.VarChar(50)
-  accounting_unit     String?  @db.VarChar(50)
-  goods_template      String?  @db.VarChar(100)
-  sn_mask             String?  @db.VarChar(50)
-  uses_service_eshop  Boolean  @default(false)
-  alt_unit            String?  @db.VarChar(20)
-  alt_unit_coeff      Decimal? @db.Decimal(10, 2)
-  similar_goods       String?  @db.VarChar(255)
-  alt_goods           String?  @db.VarChar(255)
-  alt_goods_forecast  String?  @db.VarChar(255)
-  target_warehouse    String?  @db.VarChar(50)
-  wait_after_stock_hours Decimal? @db.Decimal(5, 2)
-  keywords            String?  @db.Text
-  photo_url           String?  @db.Text
-  description         String?  @db.Text
-  production_note     String?  @db.Text
-  factorify_id        String?  @db.VarChar(100)
+  stock_substitution     String?   @db.VarChar(50)
+  internal_status        String?   @db.VarChar(50)
+  valid_from             DateTime? @db.Date
+  valid_to               DateTime? @db.Date
+  customers              String?   @db.Text
+  internal_value         String?   @db.VarChar(100)
+  active_flag            String?   @db.VarChar(20)
+  export_state           String?   @db.VarChar(50)
+  accounting_unit        String?   @db.VarChar(50)
+  goods_template         String?   @db.VarChar(100)
+  sn_mask                String?   @db.VarChar(50)
+  uses_service_eshop     Boolean   @default(false)
+  alt_unit               String?   @db.VarChar(20)
+  alt_unit_coeff         Decimal?  @db.Decimal(10, 2)
+  similar_goods          String?   @db.VarChar(255)
+  alt_goods              String?   @db.VarChar(255)
+  alt_goods_forecast     String?   @db.VarChar(255)
+  target_warehouse       String?   @db.VarChar(50)
+  wait_after_stock_hours Decimal?  @db.Decimal(5, 2)
+  keywords               String?   @db.Text
+  photo_url              String?   @db.Text
+  description            String?   @db.Text
+  production_note        String?   @db.Text
+  factorify_id           String?   @db.VarChar(100)
 
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
 
   // Vztahy
-  supplier    Company?            @relation("MaterialSupplier", fields: [supplier_id], references: [id])
-  movements   InventoryMovement[]
-  order_items OrderItem[]
-  stock_rules StockRule[]
-  inventory_items InventoryItem[]
-  operation_materials OperationMaterial[]
+  supplier                Company?               @relation("MaterialSupplier", fields: [supplier_id], references: [id])
+  movements               InventoryMovement[]
+  order_items             OrderItem[]
+  stock_rules             StockRule[]
+  inventory_items         InventoryItem[]
+  operation_materials     OperationMaterial[]
   config_option_materials ConfigOptionMaterial[] // konfigurace, které tento materiál používají
-  cad_components      CadComponent[]              // komponenty v CAD kusovníkách namapované na tento materiál
-  stock              Stock[]                     // SKLAD 2.0 — zásoby po lokacích (rychlý lookup)
-  batch_items        BatchItem[]                 // SKLAD 2.0 — položky v pickovacích dávkách
-  serial_numbers     SerialNumber[]              // SKLAD 2.0 — sériová čísla per kus (pokud save_sn_first_scan)
-  lots               MaterialLot[]               // SKLAD 2.0 — šarže (pokud expirable / distinguish_batches)
+  cad_components          CadComponent[] // komponenty v CAD kusovníkách namapované na tento materiál
+  stock                   Stock[] // SKLAD 2.0 — zásoby po lokacích (rychlý lookup)
+  batch_items             BatchItem[] // SKLAD 2.0 — položky v pickovacích dávkách
+  serial_numbers          SerialNumber[] // SKLAD 2.0 — sériová čísla per kus (pokud save_sn_first_scan)
+  lots                    MaterialLot[] // SKLAD 2.0 — šarže (pokud expirable / distinguish_batches)
+  invoice_items           InvoiceItem[]          @relation("InvoiceItemMaterial") // řádky faktur odkazující na tento materiál
 
   @@index([code])
   @@index([supplier_id])
@@ -708,35 +737,35 @@ model Material {
 }
 
 model InventoryMovement {
-  id             Int     @id @default(autoincrement())
-  material_id    Int
-  warehouse_id   Int
-  location_id    Int?    // pro jednoduchý příjem/výdej (backward-compat)
-  from_location_id Int?  // SKLAD 2.0 — zdrojová lokace pro transfer/pick
-  to_location_id   Int?  // SKLAD 2.0 — cílová lokace pro transfer/příjem
-  type           String  @db.VarChar(20) // receipt, issue, transfer, adjustment, pick, inventory_adjust
-  quantity       Decimal @db.Decimal(10, 2)
-  unit_price     Decimal? @db.Decimal(10, 2)
-  reference_type String? @db.VarChar(50) // order, project, inventory, manual, document, batch
-  reference_id   Int?
-  document_id    Int?    // SKLAD 2.0 — zastřešující dokument (DL, výdejka, přesunka, inventurní protokol)
-  client_uuid    String? @unique @db.Uuid // SKLAD 2.0 — offline dedup z PWA čtečky
-  device_id      String? @db.VarChar(100) // SKLAD 2.0 — audit: z jaké čtečky pohyb přišel
-  note           String? @db.Text
-  created_by     Int?
+  id               Int      @id @default(autoincrement())
+  material_id      Int
+  warehouse_id     Int
+  location_id      Int? // pro jednoduchý příjem/výdej (backward-compat)
+  from_location_id Int? // SKLAD 2.0 — zdrojová lokace pro transfer/pick
+  to_location_id   Int? // SKLAD 2.0 — cílová lokace pro transfer/příjem
+  type             String   @db.VarChar(20) // receipt, issue, transfer, adjustment, pick, inventory_adjust
+  quantity         Decimal  @db.Decimal(10, 2)
+  unit_price       Decimal? @db.Decimal(10, 2)
+  reference_type   String?  @db.VarChar(50) // order, project, inventory, manual, document, batch
+  reference_id     Int?
+  document_id      Int? // SKLAD 2.0 — zastřešující dokument (DL, výdejka, přesunka, inventurní protokol)
+  client_uuid      String?  @unique @db.Uuid // SKLAD 2.0 — offline dedup z PWA čtečky
+  device_id        String?  @db.VarChar(100) // SKLAD 2.0 — audit: z jaké čtečky pohyb přišel
+  note             String?  @db.Text
+  created_by       Int?
 
   created_at DateTime @default(now())
 
-  material       Material           @relation(fields: [material_id], references: [id])
-  warehouse      Warehouse          @relation(fields: [warehouse_id], references: [id])
-  location       WarehouseLocation? @relation(fields: [location_id], references: [id])
-  from_location  WarehouseLocation? @relation("MovementFromLocation", fields: [from_location_id], references: [id])
-  to_location    WarehouseLocation? @relation("MovementToLocation", fields: [to_location_id], references: [id])
-  document       WarehouseDocument? @relation(fields: [document_id], references: [id])
-  creator        Person?            @relation("MovementCreatedBy", fields: [created_by], references: [id])
-  serials_received SerialNumber[]   @relation("SerialReceivedMove") // S/N přijatá tímto pohybem
-  serials_issued   SerialNumber[]   @relation("SerialIssuedMove")   // S/N vydaná tímto pohybem
-  lots_received    MaterialLot[]    @relation("MaterialLotReceivedMove") // šarže přijaté tímto pohybem
+  material         Material           @relation(fields: [material_id], references: [id])
+  warehouse        Warehouse          @relation(fields: [warehouse_id], references: [id])
+  location         WarehouseLocation? @relation(fields: [location_id], references: [id])
+  from_location    WarehouseLocation? @relation("MovementFromLocation", fields: [from_location_id], references: [id])
+  to_location      WarehouseLocation? @relation("MovementToLocation", fields: [to_location_id], references: [id])
+  document         WarehouseDocument? @relation(fields: [document_id], references: [id])
+  creator          Person?            @relation("MovementCreatedBy", fields: [created_by], references: [id])
+  serials_received SerialNumber[]     @relation("SerialReceivedMove") // S/N přijatá tímto pohybem
+  serials_issued   SerialNumber[]     @relation("SerialIssuedMove") // S/N vydaná tímto pohybem
+  lots_received    MaterialLot[]      @relation("MaterialLotReceivedMove") // šarže přijaté tímto pohybem
 
   @@index([material_id])
   @@index([warehouse_id])
@@ -789,18 +818,18 @@ model Inventory {
 }
 
 model InventoryItem {
-  id             Int      @id @default(autoincrement())
-  inventory_id   Int
-  material_id    Int
-  location_id    Int?
-  expected_qty   Decimal  @db.Decimal(10, 2)
-  actual_qty     Decimal? @db.Decimal(10, 2)
-  difference     Decimal? @db.Decimal(10, 2)
-  unit_price     Decimal? @db.Decimal(10, 2)
-  value_difference Decimal? @db.Decimal(12, 2)
-  counted_by     Int?
-  counted_at     DateTime?
-  note           String?  @db.Text
+  id               Int       @id @default(autoincrement())
+  inventory_id     Int
+  material_id      Int
+  location_id      Int?
+  expected_qty     Decimal   @db.Decimal(10, 2)
+  actual_qty       Decimal?  @db.Decimal(10, 2)
+  difference       Decimal?  @db.Decimal(10, 2)
+  unit_price       Decimal?  @db.Decimal(10, 2)
+  value_difference Decimal?  @db.Decimal(12, 2)
+  counted_by       Int?
+  counted_at       DateTime?
+  note             String?   @db.Text
 
   inventory Inventory          @relation(fields: [inventory_id], references: [id], onDelete: Cascade)
   material  Material           @relation(fields: [material_id], references: [id])
@@ -816,21 +845,21 @@ model InventoryItem {
 // =============================================================================
 
 model AdminTask {
-  id          Int     @id @default(autoincrement())
-  status      String  @default("new") @db.VarChar(20)
-  priority    String  @default("medium") @db.VarChar(20)
-  page        String? @db.VarChar(255)
-  page_title  String? @db.VarChar(255)
-  description String? @db.Text
-  spec        String? @db.Text
+  id           Int     @id @default(autoincrement())
+  status       String  @default("new") @db.VarChar(20)
+  priority     String  @default("medium") @db.VarChar(20)
+  page         String? @db.VarChar(255)
+  page_title   String? @db.VarChar(255)
+  description  String? @db.Text
+  spec         String? @db.Text
   ai_questions Json?
   ai_answers   Json?
-  screenshot  String? @db.Text // base64
-  created_by  Int?
+  screenshot   String? @db.Text // base64
+  created_by   Int?
 
   // Soft delete — požadavek se přesune do "Koše" místo fyzického smazání.
   // Autor / admin ho může obnovit nebo trvale smazat.
-  deleted_at  DateTime?
+  deleted_at DateTime?
 
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
@@ -845,16 +874,16 @@ model AdminTask {
 }
 
 model AuditLog {
-  id          Int      @id @default(autoincrement())
-  timestamp   DateTime @default(now())
-  user_name   String?  @db.VarChar(100)
-  user_display String? @db.VarChar(255)
-  action      String   @db.VarChar(20) // create, update, delete, rollback
-  entity      String   @db.VarChar(50)
-  entity_id   Int?
-  description String?  @db.Text
-  changes     Json?    // { field: { from, to } }
-  snapshot    Json?    // Kompletní snapshot entity
+  id           Int      @id @default(autoincrement())
+  timestamp    DateTime @default(now())
+  user_name    String?  @db.VarChar(100)
+  user_display String?  @db.VarChar(255)
+  action       String   @db.VarChar(20) // create, update, delete, rollback
+  entity       String   @db.VarChar(50)
+  entity_id    Int?
+  description  String?  @db.Text
+  changes      Json? // { field: { from, to } }
+  snapshot     Json? // Kompletní snapshot entity
 
   @@index([entity, entity_id])
   @@index([timestamp])
@@ -866,10 +895,10 @@ model AuditLog {
 // =============================================================================
 
 model MindmapNote {
-  id       Int    @id @default(autoincrement())
-  key      String @unique @db.VarChar(255) // identifikátor uzlu
-  content  Json   // obsah uzlu
-  version  Int    @default(1)
+  id      Int    @id @default(autoincrement())
+  key     String @unique @db.VarChar(255) // identifikátor uzlu
+  content Json // obsah uzlu
+  version Int    @default(1)
 
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
@@ -882,23 +911,24 @@ model MindmapNote {
 // =============================================================================
 
 model Product {
-  id            Int     @id @default(autoincrement())
-  code          String  @unique @db.VarChar(50) // BS-M-xxxx
-  name          String  @db.VarChar(255)
-  type          String  @default("product") @db.VarChar(50) // product, semi-product
+  id                   Int     @id @default(autoincrement())
+  code                 String  @unique @db.VarChar(50) // BS-M-xxxx
+  name                 String  @db.VarChar(255)
+  type                 String  @default("product") @db.VarChar(50) // product, semi-product
   show_in_configurator Boolean @default(false) // zobrazit v konfigurátoru pro zákazníka a v prodejních objednávkách
-  takt_time     Int?    // linkový takt v minutách (max čas na operaci)
-  factorify_id  Int?    // původní ID z Factorify
-  material_id   Int?    // vazba na Material pokud existuje
+  takt_time            Int? // linkový takt v minutách (max čas na operaci)
+  factorify_id         Int? // původní ID z Factorify
+  material_id          Int? // vazba na Material pokud existuje
 
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
 
-  operations    ProductOperation[]
-  bom_usages    OperationMaterial[]  // kde se tento produkt používá jako BOM položka
-  config_groups ProductConfigGroup[] // konfigurační skupiny (Rám, Barva, ...)
+  operations      ProductOperation[]
+  bom_usages      OperationMaterial[] // kde se tento produkt používá jako BOM položka
+  config_groups   ProductConfigGroup[] // konfigurační skupiny (Rám, Barva, ...)
   pricelist_items SalesPricelistItem[] // položky v prodejním ceníku navázané na výrobek
-  order_items   OrderItem[]          // položky objednávek, které na tento výrobek odkazují (pro výrobu a výbavu)
+  order_items     OrderItem[] // položky objednávek, které na tento výrobek odkazují (pro výrobu a výbavu)
+  invoice_items   InvoiceItem[]        @relation("InvoiceItemProduct")
 
   @@index([factorify_id])
   @@map("products")
@@ -908,20 +938,20 @@ model Product {
 // Volitelně lze položku propojit s Product (výrobkem). Vhodné pro výrobky,
 // služby, příslušenství nebo zboží, které zatím nemá výrobní kus.
 model SalesPricelistItem {
-  id         Int       @id @default(autoincrement())
-  name_cs    String    @db.VarChar(255)               // název česky (povinný)
-  name_en    String?   @db.VarChar(255)               // název anglicky
-  price_czk        Decimal?  @db.Decimal(12,2)        // maloobchodní cena Kč bez DPH
-  price_eur        Decimal?  @db.Decimal(12,2)        // maloobchodní cena EUR bez DPH
-  truck_price_czk  Decimal?  @db.Decimal(12,2)        // kamionová (velkoobchodní) cena Kč bez DPH
-  truck_price_eur  Decimal?  @db.Decimal(12,2)        // kamionová cena EUR bez DPH
-  product_id Int?                                     // volitelné propojení na Product (když prázdné, UI upozorní červeně)
-  product    Product?  @relation(fields: [product_id], references: [id], onDelete: SetNull)
-  active     Boolean   @default(true)                 // aktivní / zrušená položka
-  note       String?   @db.Text                       // interní poznámka
+  id              Int      @id @default(autoincrement())
+  name_cs         String   @db.VarChar(255) // název česky (povinný)
+  name_en         String?  @db.VarChar(255) // název anglicky
+  price_czk       Decimal? @db.Decimal(12, 2) // maloobchodní cena Kč bez DPH
+  price_eur       Decimal? @db.Decimal(12, 2) // maloobchodní cena EUR bez DPH
+  truck_price_czk Decimal? @db.Decimal(12, 2) // kamionová (velkoobchodní) cena Kč bez DPH
+  truck_price_eur Decimal? @db.Decimal(12, 2) // kamionová cena EUR bez DPH
+  product_id      Int? // volitelné propojení na Product (když prázdné, UI upozorní červeně)
+  product         Product? @relation(fields: [product_id], references: [id], onDelete: SetNull)
+  active          Boolean  @default(true) // aktivní / zrušená položka
+  note            String?  @db.Text // interní poznámka
 
-  created_at DateTime  @default(now())
-  updated_at DateTime  @updatedAt
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
 
   @@index([product_id])
   @@index([active])
@@ -930,10 +960,10 @@ model SalesPricelistItem {
 
 // Hala (seskupení pracovišť)
 model Hall {
-  id         Int     @id @default(autoincrement())
-  name       String  @db.VarChar(255)
-  color      String  @default("#14b8a6") @db.VarChar(20) // barva pro rozlišení
-  sort_order Int     @default(0) // pořadí zobrazení
+  id         Int    @id @default(autoincrement())
+  name       String @db.VarChar(255)
+  color      String @default("#14b8a6") @db.VarChar(20) // barva pro rozlišení
+  sort_order Int    @default(0) // pořadí zobrazení
 
   created_at DateTime @default(now())
 
@@ -946,34 +976,34 @@ model Workstation {
   id           Int     @id @default(autoincrement())
   name         String  @db.VarChar(255)
   code         String? @db.VarChar(50)
-  factorify_id Int?    // původní Stage ID z Factorify
+  factorify_id Int? // původní Stage ID z Factorify
 
   // Zařazení do haly
-  hall_id      Int?
+  hall_id Int?
 
   // Externí pracoviště (kooperace)
-  is_external  Boolean @default(false)
+  is_external Boolean @default(false)
 
   // Rozměry pracoviště v metrech
-  width_m      Decimal? @db.Decimal(8, 2) // šířka v m
-  length_m     Decimal? @db.Decimal(8, 2) // délka v m
+  width_m  Decimal? @db.Decimal(8, 2) // šířka v m
+  length_m Decimal? @db.Decimal(8, 2) // délka v m
 
   // Vstupní a výstupní sklad + pozice
-  input_warehouse_id   Int?
-  input_location_id    Int?
-  output_warehouse_id  Int?
-  output_location_id   Int?
+  input_warehouse_id  Int?
+  input_location_id   Int?
+  output_warehouse_id Int?
+  output_location_id  Int?
 
   created_at DateTime @default(now())
 
-  hall              Hall?               @relation(fields: [hall_id], references: [id], onDelete: SetNull)
-  input_warehouse   Warehouse?          @relation("WorkstationInputWarehouse", fields: [input_warehouse_id], references: [id])
-  input_location    WarehouseLocation?  @relation("WorkstationInputLocation", fields: [input_location_id], references: [id])
-  output_warehouse  Warehouse?          @relation("WorkstationOutputWarehouse", fields: [output_warehouse_id], references: [id])
-  output_location   WarehouseLocation?  @relation("WorkstationOutputLocation", fields: [output_location_id], references: [id])
-  operations        ProductOperation[]
-  workers           WorkstationWorker[]
-  production_slots  ProductionSlot[]
+  hall             Hall?               @relation(fields: [hall_id], references: [id], onDelete: SetNull)
+  input_warehouse  Warehouse?          @relation("WorkstationInputWarehouse", fields: [input_warehouse_id], references: [id])
+  input_location   WarehouseLocation?  @relation("WorkstationInputLocation", fields: [input_location_id], references: [id])
+  output_warehouse Warehouse?          @relation("WorkstationOutputWarehouse", fields: [output_warehouse_id], references: [id])
+  output_location  WarehouseLocation?  @relation("WorkstationOutputLocation", fields: [output_location_id], references: [id])
+  operations       ProductOperation[]
+  workers          WorkstationWorker[]
+  production_slots ProductionSlot[]
 
   @@index([hall_id])
   @@index([factorify_id])
@@ -990,7 +1020,7 @@ model WorkstationWorker {
   workstation_id Int
   person_id      Int
   role           String? @db.VarChar(100) // role na pracovišti (operátor, seřizovač, kontrolor...)
-  is_primary     Boolean @default(false)  // hlavní pracovník pracoviště
+  is_primary     Boolean @default(false) // hlavní pracovník pracoviště
 
   created_at DateTime @default(now())
 
@@ -1003,22 +1033,22 @@ model WorkstationWorker {
 }
 
 model ProductOperation {
-  id              Int     @id @default(autoincrement())
-  product_id      Int
-  workstation_id  Int?
-  step_number     Int     // pořadí operace
-  name            String  @db.VarChar(255)
-  phase           String? @db.VarChar(255)
-  duration        Int?    // trvání v minutách
-  duration_unit   String  @default("MINUTE") @db.VarChar(20) // MINUTE, SECOND, HOUR
-  preparation_time Int    @default(0)
-  workers_count   Int     @default(1) // počet pracovníků na operaci
-  description     String? @db.Text    // popis operace
-  bom_count       Int?    // počet BOM položek
+  id               Int     @id @default(autoincrement())
+  product_id       Int
+  workstation_id   Int?
+  step_number      Int // pořadí operace
+  name             String  @db.VarChar(255)
+  phase            String? @db.VarChar(255)
+  duration         Int? // trvání v minutách
+  duration_unit    String  @default("MINUTE") @db.VarChar(20) // MINUTE, SECOND, HOUR
+  preparation_time Int     @default(0)
+  workers_count    Int     @default(1) // počet pracovníků na operaci
+  description      String? @db.Text // popis operace
+  bom_count        Int? // počet BOM položek
 
-  product    Product      @relation(fields: [product_id], references: [id], onDelete: Cascade)
-  workstation Workstation? @relation(fields: [workstation_id], references: [id])
-  materials  OperationMaterial[]
+  product           Product                 @relation(fields: [product_id], references: [id], onDelete: Cascade)
+  workstation       Workstation?            @relation(fields: [workstation_id], references: [id])
+  materials         OperationMaterial[]
   config_option_ops ConfigOptionOperation[] // volby, které ovlivňují tuto operaci
 
   @@index([product_id])
@@ -1030,7 +1060,7 @@ model OperationMaterial {
   id           Int     @id @default(autoincrement())
   operation_id Int
   material_id  Int
-  product_id   Int?    // přímá vazba na Product (pokud je to výrobek/polotovar)
+  product_id   Int? // přímá vazba na Product (pokud je to výrobek/polotovar)
   quantity     Decimal @db.Decimal(10, 3) // spotřeba materiálu
   unit         String  @default("ks") @db.VarChar(20)
 
@@ -1049,12 +1079,12 @@ model OperationMaterial {
 // =============================================================================
 
 model Simulation {
-  id       String @id @default(uuid())
-  name     String @db.VarChar(255)
-  version  Int    @default(1)
-  objects  Json   // pole objektů (areály, stroje, atd.)
+  id          String @id @default(uuid())
+  name        String @db.VarChar(255)
+  version     Int    @default(1)
+  objects     Json // pole objektů (areály, stroje, atd.)
   connections Json? // pole propojení
-  viewport Json?  // { zoom, panX, panY }
+  viewport    Json? // { zoom, panX, panY }
 
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
@@ -1094,24 +1124,24 @@ model Skill {
   category       String  @db.VarChar(50) // system, hr, warehouse, production, tasks
   handler_type   String  @db.VarChar(50) // mcp_tool, api_call, db_query, external
   handler_config Json?
-  input_schema   Json?   // JSON Schema
-  output_schema  Json?   // JSON Schema
+  input_schema   Json? // JSON Schema
+  output_schema  Json? // JSON Schema
   requires_auth  Boolean @default(true)
   is_active      Boolean @default(true)
 
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
 
-  assistants  AssistantSkill[]
-  executions  SkillExecution[]
+  assistants AssistantSkill[]
+  executions SkillExecution[]
 
   @@map("skills")
 }
 
 model AssistantSkill {
-  assistant_id  String
-  skill_id      String
-  priority      Int    @default(0)
+  assistant_id    String
+  skill_id        String
+  priority        Int    @default(0)
   config_override Json?
 
   assistant Assistant @relation(fields: [assistant_id], references: [id], onDelete: Cascade)
@@ -1126,7 +1156,7 @@ model Conversation {
   user_id      Int
   assistant_id String
   title        String? @db.VarChar(255)
-  context      Json?   // { module, page, extra_data }
+  context      Json? // { module, page, extra_data }
 
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
@@ -1144,11 +1174,11 @@ model Message {
   conversation_id String
   role            String @db.VarChar(20) // user, assistant, system
   content         String @db.Text
-  skill_calls     Json?  // [{ skill_id, input, output }]
+  skill_calls     Json? // [{ skill_id, input, output }]
 
   created_at DateTime @default(now())
 
-  conversation Conversation   @relation(fields: [conversation_id], references: [id], onDelete: Cascade)
+  conversation Conversation     @relation(fields: [conversation_id], references: [id], onDelete: Cascade)
   executions   SkillExecution[]
 
   @@index([conversation_id])
@@ -1179,9 +1209,9 @@ model DevAgent {
   slug          String  @unique @db.VarChar(100)
   name          String  @db.VarChar(255)
   icon          String  @default("🤖") @db.VarChar(10)
-  module        String? @db.VarChar(100)   // mapování na modul (lide-hr, nakup-sklad, ...)
-  context_file  String? @db.VarChar(255)   // cesta ke kontextovému souboru (.claude/agents/*.md)
-  system_prompt String  @db.Text           // system prompt pro Claude
+  module        String? @db.VarChar(100) // mapování na modul (lide-hr, nakup-sklad, ...)
+  context_file  String? @db.VarChar(255) // cesta ke kontextovému souboru (.claude/agents/*.md)
+  system_prompt String  @db.Text // system prompt pro Claude
   model         String  @default("claude-sonnet-4-6") @db.VarChar(100)
   is_active     Boolean @default(true)
   color         String  @default("#8b5cf6") @db.VarChar(20)
@@ -1198,15 +1228,15 @@ model DevAgent {
 
 // Konfigurační skupina (řádek na objednávkovém listu: Rám, Barva opláštění, Polepy, ...)
 model ProductConfigGroup {
-  id          Int     @id @default(autoincrement())
-  product_id  Int
-  name        String  @db.VarChar(255)  // např. "Rám", "Barva opláštění"
-  code        String  @db.VarChar(100)  // strojový kód: "ram", "barva_oplasteni"
-  type        String  @default("single_select") @db.VarChar(50) // single_select, multi_select, boolean, text
-  required    Boolean @default(false)   // musí zákazník vybrat?
-  sort_order  Int     @default(0)       // pořadí zobrazení
+  id         Int     @id @default(autoincrement())
+  product_id Int
+  name       String  @db.VarChar(255) // např. "Rám", "Barva opláštění"
+  code       String  @db.VarChar(100) // strojový kód: "ram", "barva_oplasteni"
+  type       String  @default("single_select") @db.VarChar(50) // single_select, multi_select, boolean, text
+  required   Boolean @default(false) // musí zákazník vybrat?
+  sort_order Int     @default(0) // pořadí zobrazení
 
-  product Product              @relation(fields: [product_id], references: [id], onDelete: Cascade)
+  product Product               @relation(fields: [product_id], references: [id], onDelete: Cascade)
   options ProductConfigOption[]
 
   @@unique([product_id, code])
@@ -1216,18 +1246,18 @@ model ProductConfigGroup {
 
 // Konfigurační volba (možnost v rámci skupiny: Fe natíraný, Nerez, ...)
 model ProductConfigOption {
-  id              Int      @id @default(autoincrement())
-  group_id        Int
-  name            String   @db.VarChar(255) // např. "Fe natíraný", "Nerez"
-  code            String   @db.VarChar(100) // strojový kód: "fe_natirany", "nerez"
-  price_modifier  Decimal  @default(0) @db.Decimal(10, 2) // příplatek/sleva k ceně
-  is_default      Boolean  @default(false) // výchozí volba
-  sort_order      Int      @default(0)
+  id             Int     @id @default(autoincrement())
+  group_id       Int
+  name           String  @db.VarChar(255) // např. "Fe natíraný", "Nerez"
+  code           String  @db.VarChar(100) // strojový kód: "fe_natirany", "nerez"
+  price_modifier Decimal @default(0) @db.Decimal(10, 2) // příplatek/sleva k ceně
+  is_default     Boolean @default(false) // výchozí volba
+  sort_order     Int     @default(0)
 
-  group              ProductConfigGroup    @relation(fields: [group_id], references: [id], onDelete: Cascade)
-  bom_materials      ConfigOptionMaterial[]    // materiály potřebné pro tuto volbu
-  operation_effects  ConfigOptionOperation[]   // vliv na operace v pracovním postupu
-  order_configs      OrderItemConfig[]         // objednávky s touto volbou
+  group             ProductConfigGroup      @relation(fields: [group_id], references: [id], onDelete: Cascade)
+  bom_materials     ConfigOptionMaterial[] // materiály potřebné pro tuto volbu
+  operation_effects ConfigOptionOperation[] // vliv na operace v pracovním postupu
+  order_configs     OrderItemConfig[] // objednávky s touto volbou
 
   @@unique([group_id, code])
   @@index([group_id])
@@ -1256,7 +1286,7 @@ model ConfigOptionOperation {
   option_id         Int
   operation_id      Int
   action            String  @db.VarChar(20) // "add" = přidej operaci, "skip" = přeskoč, "modify" = uprav
-  modified_duration Int?    // upravená doba trvání (minuty), pokud action = "modify"
+  modified_duration Int? // upravená doba trvání (minuty), pokud action = "modify"
   note              String? @db.VarChar(255) // poznámka pro výrobu
 
   option    ProductConfigOption @relation(fields: [option_id], references: [id], onDelete: Cascade)
@@ -1269,12 +1299,12 @@ model ConfigOptionOperation {
 
 // Vybraná konfigurace na položce prodejní objednávky
 model OrderItemConfig {
-  id              Int     @id @default(autoincrement())
-  order_item_id   Int
-  option_id       Int?    // vybraná volba (pro single_select, multi_select, boolean)
-  custom_value    String? @db.VarChar(500) // vlastní hodnota (pro type "text" nebo "jiná barva")
+  id            Int     @id @default(autoincrement())
+  order_item_id Int
+  option_id     Int? // vybraná volba (pro single_select, multi_select, boolean)
+  custom_value  String? @db.VarChar(500) // vlastní hodnota (pro type "text" nebo "jiná barva")
 
-  order_item OrderItem           @relation(fields: [order_item_id], references: [id], onDelete: Cascade)
+  order_item OrderItem            @relation(fields: [order_item_id], references: [id], onDelete: Cascade)
   option     ProductConfigOption? @relation(fields: [option_id], references: [id])
 
   @@index([order_item_id])
@@ -1288,20 +1318,20 @@ model OrderItemConfig {
 
 // Výrobní slot = časové okno, do kterého se řadí zakázky
 model ProductionSlot {
-  id               Int       @id @default(autoincrement())
-  name             String    @db.VarChar(255) // např. "Týden 16 — Linka A"
-  workstation_id   Int?      // volitelná vazba na pracoviště
-  start_date       DateTime  @db.Date         // začátek slotu
-  end_date         DateTime  @db.Date         // konec slotu
-  capacity_hours   Decimal   @default(8) @db.Decimal(8, 2) // kapacita v hodinách za den
-  status           String    @default("open") @db.VarChar(20) // open, full, blocked, closed
-  color            String    @default("#3b82f6") @db.VarChar(20)
-  note             String?   @db.Text
+  id             Int      @id @default(autoincrement())
+  name           String   @db.VarChar(255) // např. "Týden 16 — Linka A"
+  workstation_id Int? // volitelná vazba na pracoviště
+  start_date     DateTime @db.Date // začátek slotu
+  end_date       DateTime @db.Date // konec slotu
+  capacity_hours Decimal  @default(8) @db.Decimal(8, 2) // kapacita v hodinách za den
+  status         String   @default("open") @db.VarChar(20) // open, full, blocked, closed
+  color          String   @default("#3b82f6") @db.VarChar(20)
+  note           String?  @db.Text
 
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
 
-  workstation Workstation?        @relation(fields: [workstation_id], references: [id], onDelete: SetNull)
+  workstation Workstation?     @relation(fields: [workstation_id], references: [id], onDelete: SetNull)
   assignments SlotAssignment[]
   blocks      SlotBlock[]
 
@@ -1316,13 +1346,13 @@ model ProductionSlot {
 model SlotAssignment {
   id              Int     @id @default(autoincrement())
   slot_id         Int
-  order_id        Int?    // vazba na objednávku
-  order_item_id   Int?    // vazba na konkrétní položku objednávky
-  product_name    String  @db.VarChar(255)  // název produktu (denormalizováno pro rychlý přehled)
-  customer_name   String? @db.VarChar(255)  // zákazník
+  order_id        Int? // vazba na objednávku
+  order_item_id   Int? // vazba na konkrétní položku objednávky
+  product_name    String  @db.VarChar(255) // název produktu (denormalizováno pro rychlý přehled)
+  customer_name   String? @db.VarChar(255) // zákazník
   quantity        Decimal @default(1) @db.Decimal(10, 2)
   estimated_hours Decimal @default(0) @db.Decimal(8, 2) // odhadovaný čas výroby
-  priority        Int     @default(0)       // vyšší = důležitější
+  priority        Int     @default(0) // vyšší = důležitější
   status          String  @default("planned") @db.VarChar(20) // planned, in_progress, done
   note            String? @db.Text
 
@@ -1362,18 +1392,18 @@ model SlotBlock {
 // =============================================================================
 
 model ChatChannel {
-  id             String   @id @default(uuid())
-  type           String   @db.VarChar(20) // direct | group | task | system
-  name           String?  @db.VarChar(255) // null pro direct - renderuje se z protistrany
-  topic          String?  @db.VarChar(500)
-  admin_task_id  Int?     // vazba na požadavek (pro type = 'task')
-  created_by     Int?
+  id              String   @id @default(uuid())
+  type            String   @db.VarChar(20) // direct | group | task | system
+  name            String?  @db.VarChar(255) // null pro direct - renderuje se z protistrany
+  topic           String?  @db.VarChar(500)
+  admin_task_id   Int? // vazba na požadavek (pro type = 'task')
+  created_by      Int?
   last_message_at DateTime @default(now())
 
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
 
-  creator  User?                @relation("ChatChannelCreator", fields: [created_by], references: [id], onDelete: SetNull)
+  creator  User?               @relation("ChatChannelCreator", fields: [created_by], references: [id], onDelete: SetNull)
   members  ChatChannelMember[]
   messages ChatMessage[]
 
@@ -1402,13 +1432,13 @@ model ChatChannelMember {
 }
 
 model ChatMessage {
-  id           String   @id @default(uuid())
+  id           String    @id @default(uuid())
   channel_id   String
-  sender_id    Int?     // null pro 'system' a 'ai' (odesílatel z back-endu)
-  sender_type  String   @default("user") @db.VarChar(20) // user | system | ai
-  sender_label String?  @db.VarChar(255) // přezdívka pro system/ai ("HolyOS", "Claude")
-  content      String   @db.Text
-  attachments  Json?    // [{ kind, url, name }]
+  sender_id    Int? // null pro 'system' a 'ai' (odesílatel z back-endu)
+  sender_type  String    @default("user") @db.VarChar(20) // user | system | ai
+  sender_label String?   @db.VarChar(255) // přezdívka pro system/ai ("HolyOS", "Claude")
+  content      String    @db.Text
+  attachments  Json? // [{ kind, url, name }]
   edited_at    DateTime?
   deleted_at   DateTime?
 
@@ -1423,14 +1453,14 @@ model ChatMessage {
 }
 
 model Notification {
-  id         String   @id @default(uuid())
-  user_id    Int
-  type       String   @db.VarChar(50) // chat_message | task_status | task_deployed | mention | system
-  title      String   @db.VarChar(255)
-  body       String?  @db.Text
-  link       String?  @db.VarChar(500) // URL nebo route
-  meta       Json?    // { channel_id, message_id, task_id, ... }
-  read_at    DateTime?
+  id      String    @id @default(uuid())
+  user_id Int
+  type    String    @db.VarChar(50) // chat_message | task_status | task_deployed | mention | system
+  title   String    @db.VarChar(255)
+  body    String?   @db.Text
+  link    String?   @db.VarChar(500) // URL nebo route
+  meta    Json? // { channel_id, message_id, task_id, ... }
+  read_at DateTime?
 
   created_at DateTime @default(now())
 
@@ -1446,16 +1476,16 @@ model Notification {
 // =============================================================================
 
 model Vehicle {
-  id                Int       @id @default(autoincrement())
+  id Int @id @default(autoincrement())
 
   // Identifikace vozidla
-  license_plate     String?   @db.VarChar(20)   // SPZ
-  company           String?   @db.VarChar(100)  // Vlastník/provozovatel: "Best Series" | "Špagetka" | "JTP services"
-  model             String    @db.VarChar(255)  // Vozidlo / model (např. "Hyundai i30")
-  vin               String?   @db.VarChar(30)   // VIN kód
-  category          String    @db.VarChar(50)   // "Osobní vůz" | "Dodávka" | "Nákladní" | "Motocykl" | "Jiné"
-  color             String?   @db.VarChar(50)
-  year              Int?                        // Rok výroby
+  license_plate String? @db.VarChar(20) // SPZ
+  company       String? @db.VarChar(100) // Vlastník/provozovatel: "Best Series" | "Špagetka" | "JTP services"
+  model         String  @db.VarChar(255) // Vozidlo / model (např. "Hyundai i30")
+  vin           String? @db.VarChar(30) // VIN kód
+  category      String  @db.VarChar(50) // "Osobní vůz" | "Dodávka" | "Nákladní" | "Motocykl" | "Jiné"
+  color         String? @db.VarChar(50)
+  year          Int? // Rok výroby
 
   // Povinné ručení (POV)
   insurance_from    DateTime? @db.Date
@@ -1463,41 +1493,45 @@ model Vehicle {
   insurance_company String?   @db.VarChar(255)
 
   // STK — Státní technická kontrola
-  stk_valid_to      DateTime? @db.Date
+  stk_valid_to DateTime? @db.Date
 
   // Dálniční známka
-  toll_sticker_to   DateTime? @db.Date
+  toll_sticker_to DateTime? @db.Date
 
   // Financování / vlastnictví
   // "operativni_leasing" | "vlastnictvi_firmy" | "financni_leasing" | "uver" | "jine"
-  financing_type    String?   @db.VarChar(50)
-  financing_to      DateTime? @db.Date
-  financing_owner   String?   @db.VarChar(255)  // Např. "Best Series s.r.o.", "ESSOX s.r.o."
+  financing_type  String?   @db.VarChar(50)
+  financing_to    DateTime? @db.Date
+  financing_owner String?   @db.VarChar(255) // Např. "Best Series s.r.o.", "ESSOX s.r.o."
 
   // Disky a pneu
-  disk_size         String?   @db.VarChar(255)
-  tire_size         String?   @db.VarChar(255)
+  disk_size String? @db.VarChar(255)
+  tire_size String? @db.VarChar(255)
 
   // Řidič / odpovědná osoba
-  driver_id         Int?
-  driver            Person?   @relation("VehicleDriver", fields: [driver_id], references: [id], onDelete: SetNull)
+  driver_id Int?
+  driver    Person? @relation("VehicleDriver", fields: [driver_id], references: [id], onDelete: SetNull)
 
   // Stav vozidla
-  active            Boolean   @default(true)    // Aktivní/vyřazeno
-  current_km        Int?                        // Aktuální kilometry
-  note              String?   @db.Text
+  active     Boolean @default(true) // Aktivní/vyřazeno
+  current_km Int? // Aktuální kilometry
+  note       String? @db.Text
 
   // Vztahy k rozšíření fleet managementu (dokumenty, servisy, pneu, škody)
-  documents         VehicleDocument[]
+  documents          VehicleDocument[]
   insurance_policies VehicleInsurancePolicy[]
-  services          VehicleService[]
-  tire_changes      VehicleTireChange[]
-  damage_events     VehicleDamageEvent[]
-  tire_stock        TireStockItem[]
+  services           VehicleService[]
+  tire_changes       VehicleTireChange[]
+  damage_events      VehicleDamageEvent[]
+  tire_stock         TireStockItem[]
+
+  // Účetní doklady — náklady na konkrétní auto (palivo, servis, pojistka)
+  invoice_items InvoiceItem[] @relation("InvoiceItemVehicle")
+  cost_centers  CostCenter[]  @relation("CostCenterVehicle")
 
   // Systémové
-  created_at        DateTime  @default(now())
-  updated_at        DateTime  @updatedAt
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
 
   @@index([license_plate])
   @@index([company])
@@ -1513,22 +1547,22 @@ model Vehicle {
 
 // Dokumentace vozu — technický průkaz, leasingová smlouva, STK protokoly atd.
 model VehicleDocument {
-  id          Int      @id @default(autoincrement())
-  vehicle_id  Int
-  vehicle     Vehicle  @relation(fields: [vehicle_id], references: [id], onDelete: Cascade)
+  id         Int     @id @default(autoincrement())
+  vehicle_id Int
+  vehicle    Vehicle @relation(fields: [vehicle_id], references: [id], onDelete: Cascade)
 
   // Typ dokumentu: "technicky_prukaz" | "stk_protokol" | "smlouva" | "protokol" | "jine"
   // (Hodnota "leasing" zůstává podporována pro zpětnou kompatibilitu starších záznamů.)
-  doc_type    String   @db.VarChar(50)
-  title       String   @db.VarChar(255)      // Popisek (např. "Technický průkaz - list A")
-  file_url    String   @db.VarChar(500)      // /api/storage/files/vehicles/...
-  file_name   String?  @db.VarChar(255)      // Původní název souboru
-  file_size   Int?                            // v bytech
-  mime_type   String?  @db.VarChar(100)
-  note        String?  @db.Text
+  doc_type  String  @db.VarChar(50)
+  title     String  @db.VarChar(255) // Popisek (např. "Technický průkaz - list A")
+  file_url  String  @db.VarChar(500) // /api/storage/files/vehicles/...
+  file_name String? @db.VarChar(255) // Původní název souboru
+  file_size Int? // v bytech
+  mime_type String? @db.VarChar(100)
+  note      String? @db.Text
 
   uploaded_at DateTime @default(now())
-  uploaded_by Int?                             // User.id (kdo nahrál)
+  uploaded_by Int? // User.id (kdo nahrál)
 
   @@index([vehicle_id])
   @@index([doc_type])
@@ -1537,23 +1571,23 @@ model VehicleDocument {
 
 // Pojistky — povinné ručení a havarijní, s platností a přiloženým dokumentem
 model VehicleInsurancePolicy {
-  id              Int      @id @default(autoincrement())
-  vehicle_id      Int
-  vehicle         Vehicle  @relation(fields: [vehicle_id], references: [id], onDelete: Cascade)
+  id         Int     @id @default(autoincrement())
+  vehicle_id Int
+  vehicle    Vehicle @relation(fields: [vehicle_id], references: [id], onDelete: Cascade)
 
   // Typ: "pov" (povinné ručení) | "havarijni" | "jine"
-  policy_type     String   @db.VarChar(30)
-  company_name    String?  @db.VarChar(255)   // Pojišťovna
-  policy_number   String?  @db.VarChar(100)   // Číslo pojistky
-  valid_from      DateTime? @db.Date
-  valid_to        DateTime? @db.Date
-  premium_amount  Decimal? @db.Decimal(12, 2) // Pojistné (Kč)
-  file_url        String?  @db.VarChar(500)   // Scan/PDF
-  file_name       String?  @db.VarChar(255)
-  note            String?  @db.Text
+  policy_type    String    @db.VarChar(30)
+  company_name   String?   @db.VarChar(255) // Pojišťovna
+  policy_number  String?   @db.VarChar(100) // Číslo pojistky
+  valid_from     DateTime? @db.Date
+  valid_to       DateTime? @db.Date
+  premium_amount Decimal?  @db.Decimal(12, 2) // Pojistné (Kč)
+  file_url       String?   @db.VarChar(500) // Scan/PDF
+  file_name      String?   @db.VarChar(255)
+  note           String?   @db.Text
 
-  created_at      DateTime @default(now())
-  updated_at      DateTime @updatedAt
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
 
   @@index([vehicle_id])
   @@index([policy_type])
@@ -1563,38 +1597,45 @@ model VehicleInsurancePolicy {
 
 // Servisy — pravidelné + ad-hoc. Plán, provedení, cena, faktura.
 model VehicleService {
-  id               Int      @id @default(autoincrement())
-  vehicle_id       Int
-  vehicle          Vehicle  @relation(fields: [vehicle_id], references: [id], onDelete: Cascade)
+  id         Int     @id @default(autoincrement())
+  vehicle_id Int
+  vehicle    Vehicle @relation(fields: [vehicle_id], references: [id], onDelete: Cascade)
 
   // Stav: "planned" (naplánováno, čeká na provedení)
   //     | "done" (provedeno a potvrzeno správcem)
   //     | "cancelled"
-  status           String   @db.VarChar(20) @default("planned")
+  status String @default("planned") @db.VarChar(20)
 
-  service_type     String   @db.VarChar(255)  // Např. "Pravidelný servis", "Výměna oleje", volný text
-  scheduled_at     DateTime?                   // Plánovaný termín (datum + čas)
-  done_at          DateTime?                   // Kdy skutečně proběhlo
+  service_type        String    @db.VarChar(255) // Např. "Pravidelný servis", "Výměna oleje", volný text
+  scheduled_at        DateTime? // Plánovaný termín (datum + čas)
+  done_at             DateTime? // Kdy skutečně proběhlo
   // Napojení na firmu v adresáři (preferovaný zdroj pravdy). Textové pole service_company
   // zůstává pro zpětnou kompatibilitu starších záznamů a při mazání firmy z adresáře.
-  service_company_id Int?
-  service_company_ref Company? @relation("VehicleServiceCompany", fields: [service_company_id], references: [id], onDelete: SetNull)
-  service_company  String?  @db.VarChar(255)  // Denormalizovaný název firmy (kvůli historii / mazání)
-  location         String?  @db.VarChar(500)  // Místo provedení (adresa)
-  km_at_service    Int?                        // Stav kilometrů při servisu
+  service_company_id  Int?
+  service_company_ref Company?  @relation("VehicleServiceCompany", fields: [service_company_id], references: [id], onDelete: SetNull)
+  service_company     String?   @db.VarChar(255) // Denormalizovaný název firmy (kvůli historii / mazání)
+  // Místo provedení (volný text) — zachováno jako fallback pro starší záznamy
+  // a pro případ, kdy uživatel zadal lokaci ručně mimo adresář provozoven.
+  // Preferovaný zdroj pravdy je M2N relace `branches` (VehicleServiceLocation).
+  location            String?   @db.VarChar(500)
+  km_at_service       Int? // Stav kilometrů při servisu
+  order_number        String?   @db.VarChar(100) // Číslo zakázky
 
-  cost_labor       Decimal? @db.Decimal(12, 2) // Cena za práci (Kč)
-  cost_parts       Decimal? @db.Decimal(12, 2) // Cena za díly (Kč)
-  invoice_url      String?  @db.VarChar(500)  // Napojená faktura (storage URL)
-  invoice_number   String?  @db.VarChar(100)
+  cost_labor     Decimal? @db.Decimal(12, 2) // Cena za práci (Kč)
+  cost_parts     Decimal? @db.Decimal(12, 2) // Cena za díly (Kč)
+  invoice_url    String?  @db.VarChar(500) // Napojená faktura (storage URL)
+  invoice_number String?  @db.VarChar(100)
 
-  note             String?  @db.Text
-  confirmed_by     Int?                         // User.id správce, který potvrdil provedení
-  confirmed_at     DateTime?
+  note         String?   @db.Text
+  confirmed_by Int? // User.id správce, který potvrdil provedení
+  confirmed_at DateTime?
 
-  created_at       DateTime @default(now())
-  created_by       Int?
-  updated_at       DateTime @updatedAt
+  created_at DateTime @default(now())
+  created_by Int?
+  updated_at DateTime @updatedAt
+
+  // Místa provedení (M2N) — vybraná z provozoven firmy provádějící servis.
+  branches VehicleServiceLocation[]
 
   @@index([vehicle_id])
   @@index([status])
@@ -1605,39 +1646,46 @@ model VehicleService {
 
 // Výměny pneu — plán, provedení, cena (zvlášť úkon + samotné pneu)
 model VehicleTireChange {
-  id               Int      @id @default(autoincrement())
-  vehicle_id       Int
-  vehicle          Vehicle  @relation(fields: [vehicle_id], references: [id], onDelete: Cascade)
+  id         Int     @id @default(autoincrement())
+  vehicle_id Int
+  vehicle    Vehicle @relation(fields: [vehicle_id], references: [id], onDelete: Cascade)
 
   // Stav: "planned" | "done" | "cancelled"
-  status           String   @db.VarChar(20) @default("planned")
+  status String @default("planned") @db.VarChar(20)
 
   // Sezóna: "letni" | "zimni"
-  season           String   @db.VarChar(10)
+  season String @db.VarChar(10)
 
-  scheduled_at     DateTime?                   // Plánovaný termín
-  done_at          DateTime?
-  location         String?  @db.VarChar(500)
+  scheduled_at        DateTime? // Plánovaný termín
+  done_at             DateTime?
+  // Místo výměny (volný text) — zachováno jako fallback. Preferovaný zdroj pravdy
+  // je M2N relace `branches` (VehicleTireChangeLocation).
+  location            String?   @db.VarChar(500)
+  km_at_service       Int? // Stav kilometrů při výměně
+  order_number        String?   @db.VarChar(100) // Číslo zakázky
   // Napojení na firmu v adresáři (preferovaný zdroj pravdy). Textové pole service_company
   // zůstává pro zpětnou kompatibilitu starších záznamů a při mazání firmy z adresáře.
-  service_company_id Int?
-  service_company_ref Company? @relation("VehicleTireCompany", fields: [service_company_id], references: [id], onDelete: SetNull)
-  service_company  String?  @db.VarChar(255)  // Denormalizovaný název firmy (kvůli historii / mazání)
+  service_company_id  Int?
+  service_company_ref Company?  @relation("VehicleTireCompany", fields: [service_company_id], references: [id], onDelete: SetNull)
+  service_company     String?   @db.VarChar(255) // Denormalizovaný název firmy (kvůli historii / mazání)
 
   // Oddělená cena: úkon (výměna/vyvážení) vs. nové pneu
-  cost_service     Decimal? @db.Decimal(12, 2) // Cena za úkon — výměna, vyvážení atd.
-  cost_tires       Decimal? @db.Decimal(12, 2) // Cena za pneu (když byly kupovány nové)
+  cost_service Decimal? @db.Decimal(12, 2) // Cena za úkon — výměna, vyvážení atd.
+  cost_tires   Decimal? @db.Decimal(12, 2) // Cena za pneu (když byly kupovány nové)
 
-  invoice_url      String?  @db.VarChar(500)
-  invoice_number   String?  @db.VarChar(100)
+  invoice_url    String? @db.VarChar(500)
+  invoice_number String? @db.VarChar(100)
 
-  note             String?  @db.Text
-  confirmed_by     Int?
-  confirmed_at     DateTime?
+  note         String?   @db.Text
+  confirmed_by Int?
+  confirmed_at DateTime?
 
-  created_at       DateTime @default(now())
-  created_by       Int?
-  updated_at       DateTime @updatedAt
+  created_at DateTime @default(now())
+  created_by Int?
+  updated_at DateTime @updatedAt
+
+  // Místa provedení (M2N) — vybraná z provozoven pneuservisu.
+  branches VehicleTireChangeLocation[]
 
   @@index([vehicle_id])
   @@index([status])
@@ -1647,23 +1695,83 @@ model VehicleTireChange {
   @@map("vehicle_tire_changes")
 }
 
+// Provozovny firem (adresář) — každá Company může mít více provozoven.
+// Vznikají v Adresáři firem tlačítkem +Přidat. V Servisu / Pneu management
+// se vybírají jako Místo provedení (může jich být více najednou).
+model CompanyBranch {
+  id         Int     @id @default(autoincrement())
+  company_id Int
+  company    Company @relation("CompanyBranches", fields: [company_id], references: [id], onDelete: Cascade)
+
+  name           String? @db.VarChar(255) // Název pobočky (např. "Brno - Olomoucká")
+  address        String? @db.VarChar(255)
+  city           String? @db.VarChar(100)
+  zip            String? @db.VarChar(10)
+  contact_person String? @db.VarChar(255)
+  phone          String? @db.VarChar(50)
+  email          String? @db.VarChar(255)
+  note           String? @db.Text
+  active         Boolean @default(true)
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  service_locations VehicleServiceLocation[]
+  tire_locations    VehicleTireChangeLocation[]
+
+  @@index([company_id])
+  @@map("company_branches")
+}
+
+// M2N: VehicleService ↔ CompanyBranch (více míst provedení pro jeden servis)
+model VehicleServiceLocation {
+  service_id Int
+  branch_id  Int
+
+  service VehicleService @relation(fields: [service_id], references: [id], onDelete: Cascade)
+  branch  CompanyBranch  @relation(fields: [branch_id], references: [id], onDelete: Cascade)
+
+  created_at DateTime @default(now())
+
+  @@id([service_id, branch_id])
+  @@index([service_id])
+  @@index([branch_id])
+  @@map("vehicle_service_locations")
+}
+
+// M2N: VehicleTireChange ↔ CompanyBranch (více míst provedení pro jednu výměnu)
+model VehicleTireChangeLocation {
+  tire_change_id Int
+  branch_id      Int
+
+  tire_change VehicleTireChange @relation(fields: [tire_change_id], references: [id], onDelete: Cascade)
+  branch      CompanyBranch     @relation(fields: [branch_id], references: [id], onDelete: Cascade)
+
+  created_at DateTime @default(now())
+
+  @@id([tire_change_id, branch_id])
+  @@index([tire_change_id])
+  @@index([branch_id])
+  @@map("vehicle_tire_change_locations")
+}
+
 // Škodní události — datum, místo, popis, přílohy
 model VehicleDamageEvent {
-  id           Int      @id @default(autoincrement())
-  vehicle_id   Int
-  vehicle      Vehicle  @relation(fields: [vehicle_id], references: [id], onDelete: Cascade)
+  id         Int     @id @default(autoincrement())
+  vehicle_id Int
+  vehicle    Vehicle @relation(fields: [vehicle_id], references: [id], onDelete: Cascade)
 
-  event_date   DateTime                        // Datum události
-  location     String?  @db.VarChar(500)       // Místo události
-  description  String?  @db.Text
-  claim_number String?  @db.VarChar(100)       // Číslo škodní události u pojišťovny
+  event_date       DateTime // Datum události
+  location         String?  @db.VarChar(500) // Místo události
+  description      String?  @db.Text
+  claim_number     String?  @db.VarChar(100) // Číslo škodní události u pojišťovny
   estimated_damage Decimal? @db.Decimal(12, 2) // Odhadovaná škoda (Kč)
 
-  documents    VehicleDamageDocument[]
+  documents VehicleDamageDocument[]
 
-  created_at   DateTime @default(now())
-  created_by   Int?
-  updated_at   DateTime @updatedAt
+  created_at DateTime @default(now())
+  created_by Int?
+  updated_at DateTime @updatedAt
 
   @@index([vehicle_id])
   @@index([event_date])
@@ -1671,17 +1779,17 @@ model VehicleDamageEvent {
 }
 
 model VehicleDamageDocument {
-  id              Int      @id @default(autoincrement())
+  id              Int                @id @default(autoincrement())
   damage_event_id Int
   damage_event    VehicleDamageEvent @relation(fields: [damage_event_id], references: [id], onDelete: Cascade)
 
-  title           String?  @db.VarChar(255)
-  file_url        String   @db.VarChar(500)
-  file_name       String?  @db.VarChar(255)
-  mime_type       String?  @db.VarChar(100)
-  file_size       Int?
-  uploaded_at     DateTime @default(now())
-  uploaded_by     Int?
+  title       String?  @db.VarChar(255)
+  file_url    String   @db.VarChar(500)
+  file_name   String?  @db.VarChar(255)
+  mime_type   String?  @db.VarChar(100)
+  file_size   Int?
+  uploaded_at DateTime @default(now())
+  uploaded_by Int?
 
   @@index([damage_event_id])
   @@map("vehicle_damage_documents")
@@ -1690,41 +1798,41 @@ model VehicleDamageDocument {
 // Sklad pneu — fyzické pneumatiky na skladě, přiřazené vozidlu (či volné)
 // Sledujeme hloubku dezénu a pozici ve skladu.
 model TireStockItem {
-  id              Int      @id @default(autoincrement())
+  id Int @id @default(autoincrement())
 
   // Přiřazení vozidlu (volitelné — může být i univerzální zásoba)
-  vehicle_id      Int?
-  vehicle         Vehicle? @relation(fields: [vehicle_id], references: [id], onDelete: SetNull)
+  vehicle_id Int?
+  vehicle    Vehicle? @relation(fields: [vehicle_id], references: [id], onDelete: SetNull)
 
   // Sezóna: "letni" | "zimni"
-  season          String   @db.VarChar(10)
+  season String @db.VarChar(10)
 
   // Rozměr a výrobce
-  tire_size       String?  @db.VarChar(100)     // např. "205/55 R16 91H"
-  manufacturer    String?  @db.VarChar(100)
-  model_name      String?  @db.VarChar(255)
-  dot_code        String?  @db.VarChar(20)      // DOT kód (týden/rok výroby)
+  tire_size    String? @db.VarChar(100) // např. "205/55 R16 91H"
+  manufacturer String? @db.VarChar(100)
+  model_name   String? @db.VarChar(255)
+  dot_code     String? @db.VarChar(20) // DOT kód (týden/rok výroby)
 
   // Stav dezénu — v mm, pro hlídání hranic (letní 2-3 mm, zimní 4-5 mm = upozornění)
-  tread_depth_mm  Decimal? @db.Decimal(4, 1)
+  tread_depth_mm Decimal? @db.Decimal(4, 1)
 
   // Lokace ve skladu (volný text: "Regál A3", "Sklad B — pozice 14")
   storage_location String? @db.VarChar(255)
 
   // Namontováno = aktuálně na voze; false = na skladě
-  mounted         Boolean  @default(false)
-  mounted_at      DateTime?
-  dismounted_at   DateTime?
+  mounted       Boolean   @default(false)
+  mounted_at    DateTime?
+  dismounted_at DateTime?
 
   // Odkaz na nákupní fakturu (nepovinné)
-  purchase_price  Decimal? @db.Decimal(12, 2)
-  invoice_url     String?  @db.VarChar(500)
-  invoice_number  String?  @db.VarChar(100)
+  purchase_price Decimal? @db.Decimal(12, 2)
+  invoice_url    String?  @db.VarChar(500)
+  invoice_number String?  @db.VarChar(100)
 
-  note            String?  @db.Text
+  note String? @db.Text
 
-  created_at      DateTime @default(now())
-  updated_at      DateTime @updatedAt
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
 
   @@index([vehicle_id])
   @@index([season])
@@ -1740,15 +1848,15 @@ model TireStockItem {
 
 // Projekt = nejvyšší úroveň (zakázka / produktová řada)
 model CadProject {
-  id           Int      @id @default(autoincrement())
-  code         String   @unique @db.VarChar(50)    // krátký kód projektu, unikátní
-  name         String   @db.VarChar(255)
-  customer     String?  @db.VarChar(255)
-  description  String?  @db.Text
-  active       Boolean  @default(true)
+  id          Int     @id @default(autoincrement())
+  code        String  @unique @db.VarChar(50) // krátký kód projektu, unikátní
+  name        String  @db.VarChar(255)
+  customer    String? @db.VarChar(255)
+  description String? @db.Text
+  active      Boolean @default(true)
 
-  created_at   DateTime @default(now())
-  updated_at   DateTime @updatedAt
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
 
   blocks   CadBlock[]
   drawings CadDrawing[]
@@ -1760,19 +1868,19 @@ model CadProject {
 
 // Blok = uzel ve stromu projektu (odpovídá Factorify "goodsBlock")
 model CadBlock {
-  id         Int      @id @default(autoincrement())
+  id         Int     @id @default(autoincrement())
   project_id Int
   parent_id  Int?
-  name       String   @db.VarChar(255)
-  label      String?  @db.VarChar(255)    // TokenizedLabel z původního API (volitelné)
-  sort_order Int      @default(0)
+  name       String  @db.VarChar(255)
+  label      String? @db.VarChar(255) // TokenizedLabel z původního API (volitelné)
+  sort_order Int     @default(0)
 
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
 
-  project  CadProject @relation(fields: [project_id], references: [id], onDelete: Cascade)
-  parent   CadBlock?  @relation("CadBlockTree", fields: [parent_id], references: [id], onDelete: SetNull)
-  children CadBlock[] @relation("CadBlockTree")
+  project  CadProject   @relation(fields: [project_id], references: [id], onDelete: Cascade)
+  parent   CadBlock?    @relation("CadBlockTree", fields: [parent_id], references: [id], onDelete: SetNull)
+  children CadBlock[]   @relation("CadBlockTree")
   drawings CadDrawing[]
 
   @@index([project_id])
@@ -1782,35 +1890,35 @@ model CadBlock {
 
 // Výkres / díl / sestava — jeden soubor ze SolidWorksu
 model CadDrawing {
-  id            Int      @id @default(autoincrement())
-  project_id    Int
-  block_id      Int?
+  id         Int  @id @default(autoincrement())
+  project_id Int
+  block_id   Int?
 
   // Identifikace
-  file_name     String   @db.VarChar(255)           // např. "12345-01.SLDDRW"
-  relative_path String?  @db.VarChar(500)
-  extension     String   @db.VarChar(10)            // "sldprt" | "sldasm" | "slddrw" | "stl"
-  version       Int      @default(1)
-  checksum      String?  @db.VarChar(64)            // SHA256 binárního souboru
-  feature_hash  String?  @db.VarChar(64)            // SHA256 feature-tree ze SW — reálný indikátor změny geometrie
-  source_path   String?  @db.VarChar(1000)          // původní cesta na disku autora
+  file_name     String  @db.VarChar(255) // např. "12345-01.SLDDRW"
+  relative_path String? @db.VarChar(500)
+  extension     String  @db.VarChar(10) // "sldprt" | "sldasm" | "slddrw" | "stl"
+  version       Int     @default(1)
+  checksum      String? @db.VarChar(64) // SHA256 binárního souboru
+  feature_hash  String? @db.VarChar(64) // SHA256 feature-tree ze SW — reálný indikátor změny geometrie
+  source_path   String? @db.VarChar(1000) // původní cesta na disku autora
 
   // Metadata
-  title         String?  @db.VarChar(255)           // pěkný název (z custom property)
-  description   String?  @db.Text
+  title       String? @db.VarChar(255) // pěkný název (z custom property)
+  description String? @db.Text
 
   // Autor / vlastnictví
-  created_by_id Int?
-  imported_at   DateTime @default(now())
+  created_by_id  Int?
+  imported_at    DateTime @default(now())
   last_import_at DateTime @default(now())
 
   // Systémové
-  created_at    DateTime @default(now())
-  updated_at    DateTime @updatedAt
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
 
-  project        CadProject              @relation(fields: [project_id], references: [id], onDelete: Cascade)
-  block          CadBlock?               @relation(fields: [block_id], references: [id], onDelete: SetNull)
-  creator        Person?                 @relation("CadDrawingCreator", fields: [created_by_id], references: [id], onDelete: SetNull)
+  project        CadProject            @relation(fields: [project_id], references: [id], onDelete: Cascade)
+  block          CadBlock?             @relation(fields: [block_id], references: [id], onDelete: SetNull)
+  creator        Person?               @relation("CadDrawingCreator", fields: [created_by_id], references: [id], onDelete: SetNull)
   configurations CadDrawingConfig[]
   change_logs    CadDrawingChangeLog[]
 
@@ -1826,18 +1934,18 @@ model CadDrawing {
 // autora, verze, váhu změny a volitelnou poznámku od konstruktéra.
 // Zobrazuje se v detailu výkresu jako časová osa.
 model CadDrawingChangeLog {
-  id           Int       @id @default(autoincrement())
-  drawing_id   Int
-  author_id    Int?
-  action       String    @db.VarChar(20)            // "created" | "updated"
-  weight       String?   @db.VarChar(20)            // "minor" | "medium" | "major" | null
-  note         String?   @db.Text
-  old_version  Int?
-  new_version  Int
-  created_at   DateTime  @default(now())
+  id          Int      @id @default(autoincrement())
+  drawing_id  Int
+  author_id   Int?
+  action      String   @db.VarChar(20) // "created" | "updated"
+  weight      String?  @db.VarChar(20) // "minor" | "medium" | "major" | null
+  note        String?  @db.Text
+  old_version Int?
+  new_version Int
+  created_at  DateTime @default(now())
 
-  drawing      CadDrawing @relation(fields: [drawing_id], references: [id], onDelete: Cascade)
-  author       Person?    @relation("CadDrawingChangeLogAuthor", fields: [author_id], references: [id], onDelete: SetNull)
+  drawing CadDrawing @relation(fields: [drawing_id], references: [id], onDelete: Cascade)
+  author  Person?    @relation("CadDrawingChangeLogAuthor", fields: [author_id], references: [id], onDelete: SetNull)
 
   @@index([drawing_id])
   @@index([created_at])
@@ -1847,27 +1955,27 @@ model CadDrawingChangeLog {
 // Konfigurace výkresu — SolidWorks umí mít více konfigurací v jednom souboru
 // (varianty rozměrů, provedení). Pro každou se generuje vlastní PDF/PNG.
 model CadDrawingConfig {
-  id               Int      @id @default(autoincrement())
-  drawing_id       Int
+  id         Int @id @default(autoincrement())
+  drawing_id Int
 
-  config_name      String   @db.VarChar(255)         // např. "Default", "Levá varianta"
-  config_code      String?  @db.VarChar(100)         // ConfigurationID z SW
-  quantity         Int      @default(1)              // počet ks při odevzdání
-  selected         Boolean  @default(true)
+  config_name String  @db.VarChar(255) // např. "Default", "Levá varianta"
+  config_code String? @db.VarChar(100) // ConfigurationID z SW
+  quantity    Int     @default(1) // počet ks při odevzdání
+  selected    Boolean @default(true)
 
-  custom_properties Json    @default("{}")            // všechny custom props karty
-  mass_grams       Decimal? @db.Decimal(12, 3)       // hmotnost z GetMassProperties
+  custom_properties Json     @default("{}") // všechny custom props karty
+  mass_grams        Decimal? @db.Decimal(12, 3) // hmotnost z GetMassProperties
 
-  png_path         String?  @db.VarChar(500)         // cesta uloženého PNG náhledu
-  pdf_path         String?  @db.VarChar(500)         // cesta uloženého PDF výkresu
-  stl_path         String?  @db.VarChar(500)         // cesta uloženého STL pro 3D web viewer (Three.js)
+  png_path String? @db.VarChar(500) // cesta uloženého PNG náhledu
+  pdf_path String? @db.VarChar(500) // cesta uloženého PDF výkresu
+  stl_path String? @db.VarChar(500) // cesta uloženého STL pro 3D web viewer (Three.js)
 
   // Další přílohy — .step, .dxf, .easm, .eprt, .iges atd. Formát:
   // [{ kind: "step", filename: "BS-S-0325.step", path: "2026/04/ab12…step", size: 123456 }]
-  attachments      Json     @default("[]")
+  attachments Json @default("[]")
 
   // Externí reference (odkazy na další SW soubory)
-  external_references Json  @default("[]")
+  external_references Json @default("[]")
 
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
@@ -1883,17 +1991,17 @@ model CadDrawingConfig {
 // Komponenta = položka v kusovníku sestavy (.sldasm)
 // "UnknownComponents" = ty, které index nerozpoznal a čekají na dořešení
 model CadComponent {
-  id                Int      @id @default(autoincrement())
-  parent_config_id  Int
+  id               Int @id @default(autoincrement())
+  parent_config_id Int
 
-  name              String   @db.VarChar(255)
-  path              String?  @db.VarChar(1000)
-  quantity          Int      @default(1)
-  configuration     String?  @db.VarChar(255)
+  name              String  @db.VarChar(255)
+  path              String? @db.VarChar(1000)
+  quantity          Int     @default(1)
+  configuration     String? @db.VarChar(255)
   custom_properties Json?
-  is_unknown        Boolean  @default(false)         // true = index nenašel odpovídající díl
-  material_id       Int?                              // napojení na HolyOS katalog materiálů
-  resolved          Boolean  @default(false)
+  is_unknown        Boolean @default(false) // true = index nenašel odpovídající díl
+  material_id       Int? // napojení na HolyOS katalog materiálů
+  resolved          Boolean @default(false)
 
   created_at DateTime @default(now())
 
@@ -1920,12 +2028,12 @@ model CadComponent {
 // Aktuální zásoba dané položky na konkrétní lokaci.
 // Transakčně udržovaná z InventoryMovement — rychlý lookup pro čtečku.
 model Stock {
-  id                 Int      @id @default(autoincrement())
-  material_id        Int
-  location_id        Int
-  lot_id             Int?     // SKLAD 2.0 — šarže (jen pokud Material.expirable nebo distinguish_batches)
-  quantity           Decimal  @default(0) @db.Decimal(12, 3)
-  reserved_quantity  Decimal  @default(0) @db.Decimal(12, 3) // rezervováno pro otevřené dávky/výdejky
+  id                Int     @id @default(autoincrement())
+  material_id       Int
+  location_id       Int
+  lot_id            Int? // SKLAD 2.0 — šarže (jen pokud Material.expirable nebo distinguish_batches)
+  quantity          Decimal @default(0) @db.Decimal(12, 3)
+  reserved_quantity Decimal @default(0) @db.Decimal(12, 3) // rezervováno pro otevřené dávky/výdejky
 
   updated_at DateTime @updatedAt
 
@@ -1948,22 +2056,22 @@ model Stock {
 // byl odebrán kus do konkrétního cyklu), potraviny, chemikálie.
 // FIFO podle expires_at se řeší v services/warehouse/lots.service.js pickFIFO.
 model MaterialLot {
-  id              Int       @id @default(autoincrement())
-  material_id     Int
-  lot_code        String    @db.VarChar(100)
-  status          String    @default("in_stock") @db.VarChar(20) // in_stock, consumed, expired, scrapped
+  id          Int    @id @default(autoincrement())
+  material_id Int
+  lot_code    String @db.VarChar(100)
+  status      String @default("in_stock") @db.VarChar(20) // in_stock, consumed, expired, scrapped
 
   manufactured_at DateTime? @db.Date
   expires_at      DateTime? @db.Date
 
-  supplier_id         Int?
-  supplier_lot_ref    String? @db.VarChar(100) // externí lot reference od dodavatele
+  supplier_id      Int?
+  supplier_lot_ref String? @db.VarChar(100) // externí lot reference od dodavatele
 
-  received_at         DateTime?
-  received_move_id    Int?
-  received_by         Int?
+  received_at      DateTime?
+  received_move_id Int?
+  received_by      Int?
 
-  note       String? @db.Text
+  note       String?  @db.Text
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
 
@@ -1971,7 +2079,7 @@ model MaterialLot {
   supplier        Company?           @relation("MaterialLotSupplier", fields: [supplier_id], references: [id])
   received_move   InventoryMovement? @relation("MaterialLotReceivedMove", fields: [received_move_id], references: [id])
   received_person Person?            @relation("MaterialLotReceivedBy", fields: [received_by], references: [id])
-  stock_rows      Stock[]            // Stock záznamy v různých lokacích pro tuto šarži
+  stock_rows      Stock[] // Stock záznamy v různých lokacích pro tuto šarži
 
   @@unique([material_id, lot_code])
   @@index([material_id])
@@ -1985,13 +2093,13 @@ model MaterialLot {
 // pickovací list, inventurní protokol). Append-only princip: dokument se
 // uzavře (completed) a dál se needituje — oprava je novým opačným dokumentem.
 model WarehouseDocument {
-  id           Int      @id @default(autoincrement())
-  type         String   @db.VarChar(30) // receipt_doc, issue_doc, transfer_doc, pick_list, inventory_doc
-  number       String   @unique @db.VarChar(50) // řada per typ, např. PR-2026-00123
-  status       String   @default("draft") @db.VarChar(20) // draft, in_progress, completed, cancelled
-  partner_id   Int?     // dodavatel / odběratel / projekt (Company)
-  reference    String?  @db.VarChar(255) // volný text — číslo DL od dodavatele apod.
-  note         String?  @db.Text
+  id           Int       @id @default(autoincrement())
+  type         String    @db.VarChar(30) // receipt_doc, issue_doc, transfer_doc, pick_list, inventory_doc
+  number       String    @unique @db.VarChar(50) // řada per typ, např. PR-2026-00123
+  status       String    @default("draft") @db.VarChar(20) // draft, in_progress, completed, cancelled
+  partner_id   Int? // dodavatel / odběratel / projekt (Company)
+  reference    String?   @db.VarChar(255) // volný text — číslo DL od dodavatele apod.
+  note         String?   @db.Text
   created_by   Int?
   completed_at DateTime?
   completed_by Int?
@@ -2002,6 +2110,7 @@ model WarehouseDocument {
   partner   Company?            @relation("WarehouseDocumentPartner", fields: [partner_id], references: [id])
   creator   Person?             @relation("WarehouseDocumentCreator", fields: [created_by], references: [id])
   movements InventoryMovement[] // pohyby patřící tomuto dokumentu
+  invoices  Invoice[]           @relation("InvoiceWarehouseDoc") // faktury vázané na tento doklad (AP příjemka, AR dodací list)
 
   @@index([type])
   @@index([status])
@@ -2014,12 +2123,12 @@ model WarehouseDocument {
 // Typicky e-shop: 20 objednávek za hodinu se zpracuje jako jedna dávka
 // a operátor prochází sklad podle optimální trasy.
 model Batch {
-  id           Int      @id @default(autoincrement())
-  number       String   @unique @db.VarChar(50) // např. BAT-2026-0042
-  sector       String?  @db.VarChar(20) // vyroba, stavba, servis, eshop, pradelna
-  status       String   @default("open") @db.VarChar(20) // open, picking, done, cancelled
-  assigned_to  Int?     // operátor (Person), který dávku pickuje
-  note         String?  @db.Text
+  id          Int     @id @default(autoincrement())
+  number      String  @unique @db.VarChar(50) // např. BAT-2026-0042
+  sector      String? @db.VarChar(20) // vyroba, stavba, servis, eshop, pradelna
+  status      String  @default("open") @db.VarChar(20) // open, picking, done, cancelled
+  assigned_to Int? // operátor (Person), který dávku pickuje
+  note        String? @db.Text
 
   created_at   DateTime  @default(now())
   started_at   DateTime?
@@ -2040,12 +2149,12 @@ model BatchItem {
   id               Int       @id @default(autoincrement())
   batch_id         Int
   material_id      Int
-  from_location_id Int?      // odkud se má vzít (navrhovaná zdrojová lokace)
+  from_location_id Int? // odkud se má vzít (navrhovaná zdrojová lokace)
   quantity         Decimal   @db.Decimal(12, 3)
   picked_quantity  Decimal?  @db.Decimal(12, 3) // kolik se reálně napickovalo
   status           String    @default("pending") @db.VarChar(20) // pending, picked, short, skipped
   sort_order       Int       @default(0) // pořadí v trase skladem
-  picked_by        Int?      // Person, kdo položku napickoval
+  picked_by        Int? // Person, kdo položku napickoval
   picked_at        DateTime?
   note             String?   @db.Text
 
@@ -2063,25 +2172,25 @@ model BatchItem {
 // Tiskárna etiket — centrálně spravovaná, HolyOS backend drží TCP spojení
 // a vystavuje tiskové API. Web i PWA volají stejný endpoint.
 model Printer {
-  id               Int      @id @default(autoincrement())
-  name             String   @db.VarChar(100) // např. "Tiskárna Rychnov"
-  model            String   @default("TSC_TC200") @db.VarChar(50) // preset: TSC_TC200, ZEBRA_GK420, CUSTOM
-  location_id      Int?     // kam patří (autoselekce tiskárny podle místa operace)
-  connection_type  String   @default("lan") @db.VarChar(10) // lan, usb
-  ip_address       String?  @db.Inet
-  port             Int?
-  language         String   @default("ZPL") @db.VarChar(10) // ZPL, TSPL, EPL
-  label_width_mm   Decimal  @default(60) @db.Decimal(6, 2)
-  label_height_mm  Decimal  @default(20) @db.Decimal(6, 2)
-  dpi              Int      @default(203)
-  priority         Int      @default(0) // autoselekce při více tiskárnách
-  is_active        Boolean  @default(true)
-  last_ping_ok     DateTime?
-  encoding         String   @default("UTF-8") @db.VarChar(20)
+  id              Int       @id @default(autoincrement())
+  name            String    @db.VarChar(100) // např. "Tiskárna Rychnov"
+  model           String    @default("TSC_TC200") @db.VarChar(50) // preset: TSC_TC200, ZEBRA_GK420, CUSTOM
+  location_id     Int? // kam patří (autoselekce tiskárny podle místa operace)
+  connection_type String    @default("lan") @db.VarChar(10) // lan, usb
+  ip_address      String?   @db.Inet
+  port            Int?
+  language        String    @default("ZPL") @db.VarChar(10) // ZPL, TSPL, EPL
+  label_width_mm  Decimal   @default(60) @db.Decimal(6, 2)
+  label_height_mm Decimal   @default(20) @db.Decimal(6, 2)
+  dpi             Int       @default(203)
+  priority        Int       @default(0) // autoselekce při více tiskárnách
+  is_active       Boolean   @default(true)
+  last_ping_ok    DateTime?
+  encoding        String    @default("UTF-8") @db.VarChar(20)
   // Pokročilá nastavení (většinou default, skrytá v UI)
-  pre_command      String?  @db.Text
-  post_command     String?  @db.Text
-  gap_mm           Decimal? @db.Decimal(4, 2)
+  pre_command     String?   @db.Text
+  post_command    String?   @db.Text
+  gap_mm          Decimal?  @db.Decimal(4, 2)
 
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
@@ -2097,15 +2206,15 @@ model Printer {
 // Šablona etikety — ZPL/TSPL text s placeholdery {{qr_code}}, {{item_name}}, …
 // Backend při tisku dosadí data a pošle na tiskárnu.
 model LabelTemplate {
-  id          Int      @id @default(autoincrement())
-  code        String   @unique @db.VarChar(50) // např. item_label, location_label, document_summary
-  name        String   @db.VarChar(255)
-  language    String   @default("ZPL") @db.VarChar(10) // ZPL, TSPL, EPL
-  width_mm    Decimal  @default(60) @db.Decimal(6, 2)
-  height_mm   Decimal  @default(20) @db.Decimal(6, 2)
-  body        String   @db.Text // šablona s placeholdery
-  description String?  @db.Text
-  is_active   Boolean  @default(true)
+  id          Int     @id @default(autoincrement())
+  code        String  @unique @db.VarChar(50) // např. item_label, location_label, document_summary
+  name        String  @db.VarChar(255)
+  language    String  @default("ZPL") @db.VarChar(10) // ZPL, TSPL, EPL
+  width_mm    Decimal @default(60) @db.Decimal(6, 2)
+  height_mm   Decimal @default(20) @db.Decimal(6, 2)
+  body        String  @db.Text // šablona s placeholdery
+  description String? @db.Text
+  is_active   Boolean @default(true)
 
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
@@ -2117,15 +2226,15 @@ model LabelTemplate {
 
 // Záznam o tisku — auditní stopa. Kdo, kdy, co, kam, úspěch/chyba.
 model PrintJob {
-  id           Int      @id @default(autoincrement())
+  id           Int     @id @default(autoincrement())
   template_id  Int?
   printer_id   Int
-  data         Json     // hodnoty pro placeholdery šablony
-  copies       Int      @default(1)
-  status       String   @default("queued") @db.VarChar(20) // queued, printing, done, failed
-  error        String?  @db.Text
-  requested_by Int?     // Person
-  device_id    String?  @db.VarChar(100) // z jaké čtečky/PC byl tisk spuštěn
+  data         Json // hodnoty pro placeholdery šablony
+  copies       Int     @default(1)
+  status       String  @default("queued") @db.VarChar(20) // queued, printing, done, failed
+  error        String? @db.Text
+  requested_by Int? // Person
+  device_id    String? @db.VarChar(100) // z jaké čtečky/PC byl tisk spuštěn
 
   created_at  DateTime  @default(now())
   finished_at DateTime?
@@ -2146,19 +2255,19 @@ model PrintJob {
 // výdeji/servisu se S/N mění status + naváže se na zakázku. `sn_mask` na
 // Material může obsahovat regex pro validaci formátu S/N.
 model SerialNumber {
-  id             Int       @id @default(autoincrement())
-  material_id    Int
-  serial_number  String    @db.VarChar(100)
-  status         String    @default("in_stock") @db.VarChar(20) // in_stock, issued, scrapped, returned
-  location_id    Int?
+  id            Int    @id @default(autoincrement())
+  material_id   Int
+  serial_number String @db.VarChar(100)
+  status        String @default("in_stock") @db.VarChar(20) // in_stock, issued, scrapped, returned
+  location_id   Int?
 
   // Audit: kdy se číslo objevilo / vydalo / vyřadilo + vazba na pohyby.
-  received_at        DateTime?
-  received_move_id   Int?
-  issued_at          DateTime?
-  issued_move_id     Int?
-  scrapped_at        DateTime?
-  returned_at        DateTime?
+  received_at      DateTime?
+  received_move_id Int?
+  issued_at        DateTime?
+  issued_move_id   Int?
+  scrapped_at      DateTime?
+  returned_at      DateTime?
 
   // Vazba na zakázku / servisní případ / dávku.
   reference_type String? @db.VarChar(50) // order, service_case, batch, manual, project
@@ -2185,4 +2294,736 @@ model SerialNumber {
   @@index([location_id])
   @@index([reference_type, reference_id])
   @@map("serial_numbers")
+}
+
+// =============================================================================
+// ÚČETNÍ DOKLADY — FAKTURY, PLATBY, BANKA, POKLADNA, OCR-EMAIL
+// Modul "Účetní doklady" (ucetni-doklady). Faktury přijaté i vydané,
+// 3-way match (objednávka + příjemka + faktura), workflow schvalování,
+// hromadný ABO platební příkaz, výpisy z banky + párování, pokladna,
+// upomínky, odevzdání účetní firmě, OCR e-mail ingest.
+// =============================================================================
+
+// Faktura (přijatá i vydaná). Pro přijatou: direction=ap, type=received.
+// Pro vydanou: direction=ar, type=issued. Dobropisy: type=credit_note_*.
+model Invoice {
+  id              Int     @id @default(autoincrement())
+  invoice_number  String  @unique @db.VarChar(50) // naše interní číslo; sekvenční řada per typ
+  external_number String? @db.VarChar(100) // číslo dokladu od dodavatele (AP) nebo ref od zákazníka (AR)
+  type            String  @db.VarChar(30) // received, issued, credit_note_received, credit_note_issued, proforma_received, proforma_issued
+  direction       String  @db.VarChar(2) // ap (payable), ar (receivable)
+
+  // Partner (dodavatel pro AP, odběratel pro AR)
+  company_id Int
+  company    Company @relation("InvoiceCompany", fields: [company_id], references: [id])
+
+  // Vazba na objednávku (pro 3-way match)
+  order_id Int?
+  order    Order? @relation("InvoiceOrder", fields: [order_id], references: [id])
+
+  // Vazba na skladový doklad (příjemka pro AP / dodací list pro AR)
+  warehouse_document_id Int?
+  warehouse_document    WarehouseDocument? @relation("InvoiceWarehouseDoc", fields: [warehouse_document_id], references: [id])
+
+  // Finanční sumy
+  currency      String  @default("CZK") @db.VarChar(3)
+  exchange_rate Decimal @default(1) @db.Decimal(12, 6)
+  subtotal      Decimal @default(0) @db.Decimal(14, 2) // bez DPH
+  vat_amount    Decimal @default(0) @db.Decimal(14, 2)
+  total         Decimal @default(0) @db.Decimal(14, 2) // s DPH
+  rounding      Decimal @default(0) @db.Decimal(6, 2)
+  paid_amount   Decimal @default(0) @db.Decimal(14, 2)
+
+  // DPH režim
+  vat_regime String @default("standard") @db.VarChar(30) // standard, reverse_charge, eu_goods, non_vat_payer
+
+  // Data
+  date_issued   DateTime  @db.Date
+  date_taxable  DateTime? @db.Date // DUZP
+  date_received DateTime? // datum doručení (AP)
+  date_due      DateTime  @db.Date
+
+  // Platba
+  payment_method       String  @default("bank_transfer") @db.VarChar(20) // bank_transfer, cash, card, barter
+  variable_symbol      String? @db.VarChar(20)
+  constant_symbol      String? @db.VarChar(10)
+  specific_symbol      String? @db.VarChar(20)
+  partner_bank_account String? @db.VarChar(50) // kam platit (AP) / náš účet (AR)
+  partner_iban         String? @db.VarChar(34)
+  partner_bic          String? @db.VarChar(11)
+
+  // Stav (workflow):
+  //  AP: draft → awaiting_po_match → po_matched → awaiting_goods_receipt → goods_received
+  //      → awaiting_approval → approved → ready_to_pay → payment_queued → paid → archived
+  //  AR: draft → issued → sent → reminder_1_sent → reminder_2_sent → reminder_3_sent
+  //      → paid → overdue → written_off | cancelled
+  status String @default("draft") @db.VarChar(30)
+
+  // Schvalování (AP)
+  approved_by_id Int?
+  approved_by    Person?   @relation("InvoiceApprover", fields: [approved_by_id], references: [id])
+  approved_at    DateTime?
+
+  // Upomínky (AR)
+  reminder_1_sent_at DateTime?
+  reminder_2_sent_at DateTime?
+  reminder_3_sent_at DateTime?
+
+  // Zdroj dokumentu
+  source          String?      @db.VarChar(30) // manual, email, api, import_xml, factorify
+  email_ingest_id Int?
+  email_ingest    EmailIngest? @relation("InvoiceEmailIngest", fields: [email_ingest_id], references: [id])
+
+  // OCR
+  ocr_confidence     Decimal? @db.Decimal(4, 3) // 0.000–1.000
+  ocr_passes_done    Int      @default(0)
+  needs_human_review Boolean  @default(false)
+
+  // Skenovaný originál (PDF/obrázek)
+  source_file_path String? @db.VarChar(500)
+
+  // Zdrojový PDF (vygenerovaný pro AR, nebo scan pro AP)
+  pdf_file_path String? @db.VarChar(500)
+
+  // Meta
+  note          String?  @db.Text
+  internal_note String?  @db.Text
+  tags          String[] @default([])
+
+  created_by_id      Int?
+  created_by         Person? @relation("InvoiceCreator", fields: [created_by_id], references: [id])
+  // Vždy vyplněné — User, který fakturu založil (i když nemá propojený Person)
+  created_by_user_id Int?
+  created_by_user    User?   @relation("InvoiceCreatorUser", fields: [created_by_user_id], references: [id])
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  items           InvoiceItem[]
+  allocations     PaymentAllocation[]
+  ocr_extractions OcrExtraction[]          @relation("OcrForInvoice")
+  approval_steps  InvoiceApprovalStep[]
+  reminders       Reminder[]
+  cash_movements  CashMovement[]           @relation("CashMovementInvoice")
+  handover_items  AccountantHandoverItem[] @relation("HandoverItemInvoice")
+
+  @@index([type, status])
+  @@index([direction, status])
+  @@index([company_id])
+  @@index([order_id])
+  @@index([date_issued])
+  @@index([date_due])
+  @@index([external_number])
+  @@index([variable_symbol])
+  @@map("invoices")
+}
+
+// Řádek faktury. Cost-center umožňuje kategorizaci (auto/osoba/stroj/projekt).
+model InvoiceItem {
+  id         Int     @id @default(autoincrement())
+  invoice_id Int
+  invoice    Invoice @relation(fields: [invoice_id], references: [id], onDelete: Cascade)
+
+  line_order  Int     @default(0)
+  description String  @db.VarChar(500)
+  quantity    Decimal @db.Decimal(12, 4)
+  unit        String  @default("ks") @db.VarChar(20)
+  unit_price  Decimal @db.Decimal(14, 4) // bez DPH
+
+  vat_rate   Decimal @default(21) @db.Decimal(5, 2) // 0, 12, 15, 21 %
+  subtotal   Decimal @db.Decimal(14, 2) // bez DPH
+  vat_amount Decimal @db.Decimal(14, 2)
+  total      Decimal @db.Decimal(14, 2) // s DPH
+
+  // Cost-center kategorizace (auto, osoba, stroj, projekt, oddělení, obecné)
+  cost_center_id Int?
+  cost_center    CostCenter? @relation("InvoiceItemCostCenter", fields: [cost_center_id], references: [id])
+
+  // Vazba na master data
+  material_id Int?
+  material    Material? @relation("InvoiceItemMaterial", fields: [material_id], references: [id])
+  product_id  Int?
+  product     Product?  @relation("InvoiceItemProduct", fields: [product_id], references: [id])
+
+  // Přímé assety (pro rychlou statistiku bez cost-centeru)
+  vehicle_id Int?
+  vehicle    Vehicle? @relation("InvoiceItemVehicle", fields: [vehicle_id], references: [id])
+  person_id  Int?
+  person     Person?  @relation("InvoiceItemPerson", fields: [person_id], references: [id])
+
+  // Vazba na položku objednávky (3-way match)
+  order_item_id Int?
+  order_item    OrderItem? @relation("InvoiceItemOrderItem", fields: [order_item_id], references: [id])
+
+  note String? @db.VarChar(500)
+
+  @@index([invoice_id])
+  @@index([cost_center_id])
+  @@index([vehicle_id])
+  @@index([person_id])
+  @@index([material_id])
+  @@map("invoice_items")
+}
+
+// Schvalovací krok u faktury (multi-step approval).
+model InvoiceApprovalStep {
+  id          Int       @id @default(autoincrement())
+  invoice_id  Int
+  invoice     Invoice   @relation(fields: [invoice_id], references: [id], onDelete: Cascade)
+  step_order  Int
+  approver_id Int
+  approver    Person    @relation("InvoiceApprovalStepApprover", fields: [approver_id], references: [id])
+  status      String    @default("pending") @db.VarChar(20) // pending, approved, rejected, skipped
+  required    Boolean   @default(true)
+  decided_at  DateTime?
+  note        String?   @db.Text
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@index([invoice_id])
+  @@index([approver_id, status])
+  @@map("invoice_approval_steps")
+}
+
+// =============================================================================
+// COST CENTERS (nákladová střediska)
+// =============================================================================
+
+model CostCenter {
+  id   Int    @id @default(autoincrement())
+  code String @unique @db.VarChar(50)
+  name String @db.VarChar(255)
+  // vehicle, person, machine, project, department, general
+  type String @db.VarChar(30)
+
+  parent_id Int?
+  parent    CostCenter?  @relation("CostCenterHierarchy", fields: [parent_id], references: [id])
+  children  CostCenter[] @relation("CostCenterHierarchy")
+
+  // Volitelné navázání na konkrétní entitu (auto, osobu, oddělení)
+  vehicle_id    Int?
+  vehicle       Vehicle?    @relation("CostCenterVehicle", fields: [vehicle_id], references: [id])
+  person_id     Int?
+  person        Person?     @relation("CostCenterPerson", fields: [person_id], references: [id])
+  department_id Int?
+  department    Department? @relation("CostCenterDepartment", fields: [department_id], references: [id])
+
+  active Boolean @default(true)
+  note   String? @db.Text
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  invoice_items  InvoiceItem[]  @relation("InvoiceItemCostCenter")
+  cash_movements CashMovement[] @relation("CashMovementCostCenter")
+
+  @@index([type, active])
+  @@index([vehicle_id])
+  @@index([person_id])
+  @@map("cost_centers")
+}
+
+// =============================================================================
+// PLATBY — DÁVKA (ABO BATCH) & JEDNOTLIVÁ PLATBA & ALOKACE
+// =============================================================================
+
+// Hromadný platební příkaz do banky (ABO/SEPA/API).
+model PaymentBatch {
+  id              Int         @id @default(autoincrement())
+  batch_number    String      @unique @db.VarChar(50) // PB-2026-0001
+  bank_account_id Int
+  bank_account    BankAccount @relation(fields: [bank_account_id], references: [id])
+  // ABO-KPC, ABO-GPC (pro příkaz), SEPA-XML, MULTICASH, FIO-API, CSOB-API
+  format          String      @db.VarChar(30)
+  // draft, generated, submitted_to_bank, processed, rejected, cancelled
+  status          String      @default("draft") @db.VarChar(30)
+  total_count     Int         @default(0)
+  total_amount    Decimal     @default(0) @db.Decimal(16, 2)
+  file_path       String?     @db.VarChar(500)
+  generated_at    DateTime?
+  submitted_at    DateTime?
+  processed_at    DateTime?
+  due_date        DateTime    @db.Date
+  note            String?     @db.Text
+
+  created_by_id Int?
+  created_by    Person? @relation("PaymentBatchCreator", fields: [created_by_id], references: [id])
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  payments Payment[]
+
+  @@index([status, due_date])
+  @@index([bank_account_id])
+  @@map("payment_batches")
+}
+
+// Jednotlivá platba (outgoing z batche / incoming z výpisu / hotovost).
+model Payment {
+  id        Int    @id @default(autoincrement())
+  direction String @db.VarChar(3) // out (AP), in (AR)
+  method    String @default("bank_transfer") @db.VarChar(20) // bank_transfer, cash, card, barter
+
+  batch_id         Int?
+  batch            PaymentBatch? @relation(fields: [batch_id], references: [id])
+  cash_register_id Int?
+  cash_register    CashRegister? @relation("PaymentCashRegister", fields: [cash_register_id], references: [id])
+
+  bank_transaction_id Int?             @unique
+  bank_transaction    BankTransaction? @relation(fields: [bank_transaction_id], references: [id])
+
+  amount     Decimal @db.Decimal(14, 2)
+  currency   String  @default("CZK") @db.VarChar(3)
+  amount_czk Decimal @db.Decimal(14, 2)
+
+  partner_name    String  @db.VarChar(255)
+  partner_account String? @db.VarChar(50)
+  variable_symbol String? @db.VarChar(20)
+  constant_symbol String? @db.VarChar(10)
+  specific_symbol String? @db.VarChar(20)
+  message         String? @db.VarChar(140) // zpráva pro příjemce
+
+  scheduled_date DateTime? @db.Date
+  executed_date  DateTime? @db.Date
+
+  // draft, queued, submitted, executed, failed, cancelled
+  status String @default("draft") @db.VarChar(20)
+
+  allocations PaymentAllocation[]
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@index([status, scheduled_date])
+  @@index([batch_id])
+  @@index([variable_symbol])
+  @@map("payments")
+}
+
+// Alokace platby na fakturu (m:n — jedna platba může pokrýt více faktur, částečné platby).
+model PaymentAllocation {
+  id         Int     @id @default(autoincrement())
+  payment_id Int
+  payment    Payment @relation(fields: [payment_id], references: [id], onDelete: Cascade)
+  invoice_id Int
+  invoice    Invoice @relation(fields: [invoice_id], references: [id])
+  amount     Decimal @db.Decimal(14, 2)
+  note       String? @db.VarChar(255)
+
+  created_at DateTime @default(now())
+
+  @@index([payment_id])
+  @@index([invoice_id])
+  @@map("payment_allocations")
+}
+
+// =============================================================================
+// BANKA — ÚČTY, VÝPISY, TRANSAKCE, PRAVIDLA PRO PÁROVÁNÍ
+// =============================================================================
+
+model BankAccount {
+  id                  Int       @id @default(autoincrement())
+  name                String    @db.VarChar(100) // "Fio firma", "ČSOB provoz"
+  // FIO, CSOB, MONETA, UNICREDIT, KB, RB, OTHER
+  bank                String    @db.VarChar(20)
+  account_number      String    @db.VarChar(30) // 2501234567
+  bank_code           String    @db.VarChar(4) // 2010, 0300, 0600, 2700
+  iban                String?   @db.VarChar(34)
+  bic                 String?   @db.VarChar(11)
+  currency            String    @default("CZK") @db.VarChar(3)
+  api_enabled         Boolean   @default(false)
+  api_credentials_ref String?   @db.VarChar(255) // klíč do secret store (ENV), ne samotný token
+  active              Boolean   @default(true)
+  opening_balance     Decimal   @default(0) @db.Decimal(16, 2)
+  current_balance     Decimal   @default(0) @db.Decimal(16, 2)
+  last_statement_date DateTime? @db.Date
+  note                String?   @db.Text
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  statements      BankStatement[]
+  transactions    BankTransaction[]
+  payment_batches PaymentBatch[]
+
+  @@unique([account_number, bank_code])
+  @@index([bank, active])
+  @@map("bank_accounts")
+}
+
+model BankStatement {
+  id               Int         @id @default(autoincrement())
+  bank_account_id  Int
+  bank_account     BankAccount @relation(fields: [bank_account_id], references: [id])
+  statement_number String      @db.VarChar(50)
+  period_from      DateTime    @db.Date
+  period_to        DateTime    @db.Date
+  opening_balance  Decimal     @db.Decimal(16, 2)
+  closing_balance  Decimal     @db.Decimal(16, 2)
+  // api, gpc_upload, csv_upload, mt940_upload
+  source           String      @db.VarChar(30)
+  file_path        String?     @db.VarChar(500)
+  imported_at      DateTime    @default(now())
+  imported_by_id   Int?
+
+  transactions BankTransaction[]
+
+  @@unique([bank_account_id, statement_number])
+  @@index([period_from, period_to])
+  @@map("bank_statements")
+}
+
+model BankTransaction {
+  id              Int            @id @default(autoincrement())
+  bank_account_id Int
+  bank_account    BankAccount    @relation(fields: [bank_account_id], references: [id])
+  statement_id    Int?
+  statement       BankStatement? @relation(fields: [statement_id], references: [id])
+
+  transaction_date DateTime  @db.Date
+  value_date       DateTime? @db.Date
+  direction        String    @db.VarChar(3) // in, out
+  amount           Decimal   @db.Decimal(14, 2)
+  currency         String    @default("CZK") @db.VarChar(3)
+
+  counterparty_name    String? @db.VarChar(255)
+  counterparty_account String? @db.VarChar(50)
+  variable_symbol      String? @db.VarChar(20)
+  constant_symbol      String? @db.VarChar(10)
+  specific_symbol      String? @db.VarChar(20)
+  message              String? @db.VarChar(255)
+  reference            String? @db.VarChar(100) // reference banky (unikátní ID transakce)
+
+  // unmatched, matched, ignored, needs_review
+  match_status  String        @default("unmatched") @db.VarChar(20)
+  // vs, amount_partner, manual, rule
+  match_method  String?       @db.VarChar(20)
+  match_rule_id Int?
+  match_rule    MatchingRule? @relation(fields: [match_rule_id], references: [id])
+
+  // Jedna transakce = 0 nebo 1 Payment (1:1)
+  payment Payment?
+
+  note           String?   @db.Text
+  resolved_by_id Int?
+  resolved_at    DateTime?
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@unique([bank_account_id, reference])
+  @@index([transaction_date])
+  @@index([match_status])
+  @@index([variable_symbol])
+  @@index([counterparty_account])
+  @@map("bank_transactions")
+}
+
+// Pravidlo pro automatické párování opakovaných plateb (nájem, pojistky, trvalé příkazy).
+model MatchingRule {
+  id       Int     @id @default(autoincrement())
+  name     String  @db.VarChar(255)
+  priority Int     @default(100)
+  active   Boolean @default(true)
+
+  // Kritéria
+  direction                  String?  @db.VarChar(3) // in, out
+  counterparty_account       String?  @db.VarChar(50)
+  counterparty_name_contains String?  @db.VarChar(255)
+  variable_symbol            String?  @db.VarChar(20)
+  amount_min                 Decimal? @db.Decimal(14, 2)
+  amount_max                 Decimal? @db.Decimal(14, 2)
+
+  // Akce
+  // ignore, auto_match_invoice, auto_match_cost_center, notify
+  action         String @db.VarChar(30)
+  cost_center_id Int?
+  assignee_id    Int?
+
+  transactions BankTransaction[]
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@index([active, priority])
+  @@map("matching_rules")
+}
+
+// =============================================================================
+// POKLADNA
+// =============================================================================
+
+model CashRegister {
+  id                 Int       @id @default(autoincrement())
+  name               String    @db.VarChar(100)
+  currency           String    @default("CZK") @db.VarChar(3)
+  location           String?   @db.VarChar(255)
+  responsible_id     Int?
+  responsible        Person?   @relation("CashRegisterResponsible", fields: [responsible_id], references: [id])
+  opening_balance    Decimal   @default(0) @db.Decimal(12, 2)
+  current_balance    Decimal   @default(0) @db.Decimal(12, 2)
+  last_reconciled_at DateTime?
+  active             Boolean   @default(true)
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  movements CashMovement[]
+  payments  Payment[]      @relation("PaymentCashRegister")
+
+  @@index([active])
+  @@map("cash_registers")
+}
+
+model CashMovement {
+  id               Int          @id @default(autoincrement())
+  cash_register_id Int
+  cash_register    CashRegister @relation(fields: [cash_register_id], references: [id])
+  date             DateTime     @db.Date
+  document_number  String       @unique @db.VarChar(30) // P2026000123 / V2026000123
+  direction        String       @db.VarChar(3) // in, out
+  amount           Decimal      @db.Decimal(12, 2)
+  // invoice_payment, fuel, salary_advance, petty_cash_top_up, sale, refund, other
+  purpose          String       @db.VarChar(50)
+  description      String       @db.VarChar(500)
+
+  // Volitelné vazby
+  invoice_id     Int?
+  invoice        Invoice?    @relation("CashMovementInvoice", fields: [invoice_id], references: [id])
+  cost_center_id Int?
+  cost_center    CostCenter? @relation("CashMovementCostCenter", fields: [cost_center_id], references: [id])
+
+  receipt_file_path String? @db.VarChar(500) // naskenovaný paragon
+
+  created_by_id Int?
+  created_by    Person? @relation("CashMovementCreator", fields: [created_by_id], references: [id])
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@index([cash_register_id, date])
+  @@index([invoice_id])
+  @@map("cash_movements")
+}
+
+// =============================================================================
+// E-MAIL INGEST + OCR
+// =============================================================================
+
+// Přijatý e-mail s potenciální fakturou (mailbox faktury@bestseries.cz).
+model EmailIngest {
+  id          Int      @id @default(autoincrement())
+  mailbox     String   @db.VarChar(255)
+  message_id  String   @unique @db.VarChar(255) // RFC 5322 Message-ID
+  thread_id   String?  @db.VarChar(255)
+  from_email  String   @db.VarChar(255)
+  from_name   String?  @db.VarChar(255)
+  to_email    String   @db.VarChar(255)
+  subject     String   @db.VarChar(500)
+  body_text   String?  @db.Text
+  body_html   String?  @db.Text
+  received_at DateTime
+  fetched_at  DateTime @default(now())
+
+  // received → parsing → extracting → awaiting_review
+  //         → linked_to_invoice | unreadable | spam | duplicate | processed
+  status String @default("received") @db.VarChar(30)
+
+  confidence Decimal? @db.Decimal(4, 3)
+  attempts   Int      @default(0)
+
+  // Upozornění odesílateli (nečitelný doklad)
+  sender_notified_at   DateTime?
+  sender_notify_reason String?   @db.VarChar(255)
+
+  note String? @db.Text
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  attachments EmailAttachment[]
+  invoices    Invoice[]         @relation("InvoiceEmailIngest")
+  extractions OcrExtraction[]   @relation("OcrForEmailIngest")
+
+  @@index([status, received_at])
+  @@index([mailbox])
+  @@map("email_ingests")
+}
+
+model EmailAttachment {
+  id                   Int         @id @default(autoincrement())
+  email_ingest_id      Int
+  email_ingest         EmailIngest @relation(fields: [email_ingest_id], references: [id], onDelete: Cascade)
+  filename             String      @db.VarChar(500)
+  content_type         String      @db.VarChar(100)
+  size_bytes           Int
+  file_path            String      @db.VarChar(500)
+  source               String      @default("attachment") @db.VarChar(20) // attachment, link_download
+  source_url           String?     @db.VarChar(1000)
+  sha256               String?     @db.VarChar(64)
+  is_invoice_candidate Boolean     @default(false)
+
+  created_at DateTime @default(now())
+
+  extractions OcrExtraction[] @relation("OcrForAttachment")
+
+  @@index([email_ingest_id])
+  @@index([sha256])
+  @@map("email_attachments")
+}
+
+// Jeden pass extrakce (multi-pass pipeline pro vysokou jistotu).
+model OcrExtraction {
+  id              Int              @id @default(autoincrement())
+  email_ingest_id Int?
+  email_ingest    EmailIngest?     @relation("OcrForEmailIngest", fields: [email_ingest_id], references: [id])
+  attachment_id   Int?
+  attachment      EmailAttachment? @relation("OcrForAttachment", fields: [attachment_id], references: [id])
+  invoice_id      Int?
+  invoice         Invoice?         @relation("OcrForInvoice", fields: [invoice_id], references: [id])
+
+  pass_number Int
+  // claude_vision_header, claude_vision_lines, ares_lookup, vies_lookup,
+  // vat_math_check, duplicate_check, link_follow
+  pass_type   String  @db.VarChar(50)
+  model_used  String? @db.VarChar(50) // claude-sonnet-4-6, ares, vies
+
+  extracted_data Json
+  confidence     Decimal @db.Decimal(4, 3)
+  warnings       Json?
+  errors         Json?
+
+  input_tokens  Int?
+  output_tokens Int?
+  cost_czk      Decimal? @db.Decimal(8, 4)
+
+  executed_at DateTime @default(now())
+  duration_ms Int?
+
+  @@index([email_ingest_id])
+  @@index([invoice_id])
+  @@index([pass_type])
+  @@map("ocr_extractions")
+}
+
+// =============================================================================
+// UPOMÍNKY (pro vydané faktury po splatnosti)
+// =============================================================================
+
+model Reminder {
+  id            Int       @id @default(autoincrement())
+  invoice_id    Int
+  invoice       Invoice   @relation(fields: [invoice_id], references: [id], onDelete: Cascade)
+  level         Int // 1, 2, 3
+  scheduled_at  DateTime
+  sent_at       DateTime?
+  sent_to_email String?   @db.VarChar(255)
+  subject       String    @db.VarChar(255)
+  body          String    @db.Text
+  // scheduled, sent, bounced, cancelled
+  status        String    @default("scheduled") @db.VarChar(20)
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@unique([invoice_id, level])
+  @@index([status, scheduled_at])
+  @@map("reminders")
+}
+
+// =============================================================================
+// ODEVZDÁNÍ ÚČETNÍ FIRMĚ (měsíční balíček)
+// =============================================================================
+
+model AccountantHandover {
+  id           Int    @id @default(autoincrement())
+  period_month Int // 1–12
+  period_year  Int
+  // preparing → ready → sent → confirmed_by_accountant → closed
+  status       String @default("preparing") @db.VarChar(30)
+
+  document_count Int     @default(0)
+  total_received Decimal @default(0) @db.Decimal(14, 2)
+  total_issued   Decimal @default(0) @db.Decimal(14, 2)
+  total_cash     Decimal @default(0) @db.Decimal(14, 2)
+
+  zip_file_path String? @db.VarChar(500)
+  checklist     Json // [{ item: "přijaté faktury", done: bool, note: "" }, ...]
+
+  sent_at       DateTime?
+  sent_to_email String?   @db.VarChar(255)
+  confirmed_at  DateTime?
+
+  note String? @db.Text
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  items AccountantHandoverItem[]
+
+  @@unique([period_year, period_month])
+  @@index([status])
+  @@map("accountant_handovers")
+}
+
+model AccountantHandoverItem {
+  id            Int                @id @default(autoincrement())
+  handover_id   Int
+  handover      AccountantHandover @relation(fields: [handover_id], references: [id], onDelete: Cascade)
+  // invoice_received, invoice_issued, cash_movement, bank_statement, other
+  document_type String             @db.VarChar(30)
+  document_id   Int
+  file_path     String?            @db.VarChar(500)
+  included      Boolean            @default(true)
+  note          String?            @db.VarChar(500)
+
+  // Volitelná tvrdá vazba pro typ invoice (pro integritu)
+  invoice_id Int?
+  invoice    Invoice? @relation("HandoverItemInvoice", fields: [invoice_id], references: [id])
+
+  created_at DateTime @default(now())
+
+  @@index([handover_id])
+  @@index([document_type, document_id])
+  @@map("accountant_handover_items")
+}
+
+// =============================================================================
+// APLIKAČNÍ NASTAVENÍ (key/value)
+// =============================================================================
+// Universální key/value úložiště pro user-configurable parametry, které:
+//  - nejsou per-uživatel (pro to máme User.preferences),
+//  - nejsou tajné/secret (pro to máme .env / secret store),
+//  - mohou se měnit za běhu bez nasazení (např. limity, prahy, default volby).
+//
+// Klíče používáme dot-notation per modul (např. "accounting.payment_batch.approval_limit_czk").
+// Hodnota je string — typování v aplikaci přes services/settings.js helper.
+
+// =============================================================================
+// APLIKAČNÍ NASTAVENÍ (key/value)
+// =============================================================================
+// Universální key/value úložiště pro user-configurable parametry.
+// Klíče dot-notation: "accounting.payment_batch.approval_limit_czk".
+
+// =============================================================================
+// APLIKACNI NASTAVENI (key/value)
+// =============================================================================
+model AppSetting {
+  id          Int     @id @default(autoincrement())
+  key         String  @unique @db.VarChar(120)
+  value       String  @db.Text
+  value_type  String  @default("string") @db.VarChar(20)
+  description String? @db.Text
+  scope       String? @db.VarChar(50)
+
+  updated_by_user_id Int?
+  updated_by         User? @relation("AppSettingUpdater", fields: [updated_by_user_id], references: [id])
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@index([scope])
+  @@map("app_settings")
 }

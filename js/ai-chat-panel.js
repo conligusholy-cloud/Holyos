@@ -25,11 +25,16 @@
   // --- Detekce aktuálního modulu ---
   function detectModule() {
     const path = window.location.pathname.toLowerCase();
+    if (path.includes('ucetni-doklady')) return 'Účetní doklady';
+    if (path.includes('banka-pravidla')) return 'Pravidla párování';
+    if (path.includes('banky') || path.includes('/banky/')) return 'Banky';
     if (path.includes('hr') || path.includes('lid')) return 'Lidé a HR';
     if (path.includes('sklad') || path.includes('warehouse')) return 'Nákup a sklad';
     if (path.includes('pracovni-postup')) return 'Pracovní postup';
     if (path.includes('programovani')) return 'Programování výroby';
     if (path.includes('simulace')) return 'Simulace výroby';
+    if (path.includes('vozovy-park') || path.includes('fleet')) return 'Vozový park';
+    if (path.includes('cad')) return 'CAD výkresy';
     if (path.includes('datovy-model')) return 'Datový model';
     if (path.includes('vytvoreni-arealu')) return 'Vytvoření areálu';
     if (path.includes('mindmap')) return 'Mindmapa';
