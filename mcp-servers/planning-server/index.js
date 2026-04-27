@@ -184,6 +184,21 @@ function getPlanningTools() {
       description: 'Auto-close: pokud všechny BatchOperation dávky jsou done/cancelled, přepne batch na done (nebo cancelled) a nastaví actual_end. Idempotentní.',
       input_schema: { type: 'object', properties: { batch_id: { type: 'number' } }, required: ['batch_id'] },
     },
+    {
+      name: 'audit_log',
+      description: 'Audit log akcí v kioscích — kdo co kdy udělal (start/pause/resume/done/problem). Filtry: from, to (YYYY-MM-DD), person_id, batch_id, action. Default: dnes.',
+      input_schema: {
+        type: 'object',
+        properties: {
+          from: { type: 'string', description: 'YYYY-MM-DD' },
+          to: { type: 'string', description: 'YYYY-MM-DD' },
+          person_id: { type: 'number' },
+          batch_id: { type: 'number' },
+          action: { type: 'string', enum: ['start', 'pause', 'resume', 'done', 'problem', 'comment'] },
+          limit: { type: 'number', default: 100 },
+        },
+      },
+    },
   ];
 }
 
@@ -592,6 +607,51 @@ async function executePlanningTool(toolName, params, prisma) {
     case 'check_batch_completion': {
       const result = await checkAndCloseBatch(params.batch_id);
       return result;
+    }
+
+    // ─── audit_log ───────────────────────────────────────────────────────
+    case 'audit_log': {
+      const where = {};
+      if (params.action) where.action = params.action;
+      if (params.person_id) where.person_id = params.person_id;
+      if (params.batch_id) where.batch_operation = { batch_id: params.batch_id };
+      if (params.from || params.to) {
+        where.created_at = {};
+        if (params.from) where.created_at.gte = new Date(params.from + 'T00:00:00');
+        if (params.to) where.created_at.lte = new Date(params.to + 'T23:59:59');
+      } else {
+        const dayStart = new Date(); dayStart.setHours(0, 0, 0, 0);
+        where.created_at = { gte: dayStart };
+      }
+
+      const logs = await prisma.batchOperationLog.findMany({
+        where,
+        take: Math.min(params.limit || 100, 500),
+        include: {
+          person: { select: { first_name: true, last_name: true } },
+          batch_operation: {
+            select: {
+              duration_minutes: true,
+              operation: { select: { name: true } },
+              batch: { select: { batch_number: true } },
+            },
+          },
+        },
+        orderBy: { created_at: 'desc' },
+      });
+
+      return {
+        count: logs.length,
+        logs: logs.map(l => ({
+          time: l.created_at,
+          action: l.action,
+          person: l.person ? `${l.person.first_name} ${l.person.last_name}` : null,
+          batch: l.batch_operation?.batch?.batch_number,
+          operation: l.batch_operation?.operation?.name,
+          duration_minutes: l.batch_operation?.duration_minutes,
+          note: l.note,
+        })),
+      };
     }
 
     // ─── pause_batch / resume_batch / cancel_batch ───────────────────────
