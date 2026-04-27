@@ -949,4 +949,178 @@ router.patch('/lots/:id/status', async (req, res, next) => {
   }
 });
 
+// ────────────────────────────────────────────────────────────────────────────
+// FÁZE 12 — PWA "Čekání na příjem"
+// AP faktury, které mají vazbu na objednávku, ale příjemka ještě nebyla.
+// Po potvrzení v PWA se vyrobí WarehouseDocument (příjemka) a faktura
+// se posune ze stavu awaiting_goods_receipt → goods_received.
+// ────────────────────────────────────────────────────────────────────────────
+
+const PWA_AWAIT_STATUSES = ['awaiting_goods_receipt', 'po_matched'];
+
+// GET /api/wh/pwa/awaiting-receipt — list AP faktur čekajících na příjem
+router.get('/pwa/awaiting-receipt', async (req, res, next) => {
+  try {
+    const invoices = await prisma.invoice.findMany({
+      where: {
+        direction: 'ap',
+        status: { in: PWA_AWAIT_STATUSES },
+        order_id: { not: null },
+        warehouse_document_id: null,
+      },
+      include: {
+        company: { select: { id: true, name: true, ico: true } },
+        order: {
+          select: {
+            id: true, order_number: true, status: true,
+            items: {
+              select: {
+                id: true, line_order: true, quantity: true, unit: true,
+                material: { select: { id: true, name: true, code: true, qr_code: true } },
+                product: { select: { id: true, name: true, code: true } },
+              },
+            },
+          },
+        },
+      },
+      orderBy: { date_received: 'asc' },
+      take: 100,
+    });
+    res.json(invoices.map(inv => ({
+      id: inv.id,
+      invoice_number: inv.invoice_number,
+      external_number: inv.external_number,
+      company: inv.company?.name,
+      ico: inv.company?.ico,
+      order_number: inv.order?.order_number,
+      order_id: inv.order?.id,
+      date_issued: inv.date_issued,
+      date_received: inv.date_received,
+      total: Number(inv.total),
+      currency: inv.currency,
+      items: (inv.order?.items || []).map(it => ({
+        id: it.id,
+        material_name: it.material?.name || it.product?.name,
+        material_code: it.material?.code || it.product?.code,
+        material_qr: it.material?.qr_code,
+        quantity: Number(it.quantity),
+        unit: it.unit,
+      })),
+      status: inv.status,
+    })));
+  } catch (err) { next(err); }
+});
+
+// GET /api/wh/pwa/awaiting-receipt/by-qr/:qr_code — najdi fakturu podle QR materiálu
+router.get('/pwa/awaiting-receipt/by-qr/:qr_code', async (req, res, next) => {
+  try {
+    const qr = req.params.qr_code;
+    if (!qr) return res.status(400).json({ error: 'Chybí qr_code' });
+    const material = await prisma.material.findFirst({
+      where: { qr_code: qr },
+      select: { id: true, name: true, code: true },
+    });
+    if (!material) return res.status(404).json({ error: 'Materiál s tímto QR neexistuje' });
+
+    const invoices = await prisma.invoice.findMany({
+      where: {
+        direction: 'ap',
+        status: { in: PWA_AWAIT_STATUSES },
+        warehouse_document_id: null,
+        order: { items: { some: { material_id: material.id } } },
+      },
+      include: {
+        company: { select: { name: true } },
+        order: { select: { id: true, order_number: true } },
+      },
+      take: 20,
+    });
+    res.json({
+      material,
+      candidate_invoices: invoices.map(inv => ({
+        id: inv.id,
+        invoice_number: inv.invoice_number,
+        company: inv.company?.name,
+        order_number: inv.order?.order_number,
+        total: Number(inv.total),
+      })),
+    });
+  } catch (err) { next(err); }
+});
+
+// POST /api/wh/pwa/awaiting-receipt/:invoiceId/confirm
+//   body: { warehouse_id, qr_codes?: string[], note? }
+router.post('/pwa/awaiting-receipt/:invoiceId/confirm', async (req, res, next) => {
+  try {
+    const invoiceId = parseInt(req.params.invoiceId, 10);
+    const { warehouse_id, qr_codes, note } = req.body || {};
+    if (!warehouse_id) return res.status(400).json({ error: 'Chybí warehouse_id' });
+
+    const inv = await prisma.invoice.findUnique({
+      where: { id: invoiceId },
+      include: { order: { include: { items: true } } },
+    });
+    if (!inv) return res.status(404).json({ error: 'Faktura nenalezena' });
+    if (inv.direction !== 'ap') return res.status(400).json({ error: 'Jen AP faktury podporují tento workflow' });
+    if (!inv.order_id) return res.status(400).json({ error: 'Faktura nemá vazbu na objednávku' });
+    if (inv.warehouse_document_id) return res.status(409).json({ error: 'Faktura už má přiřazenou příjemku' });
+
+    // Číslo příjemky PR-{rok}-XXXX
+    const year = new Date().getFullYear();
+    const prefix = `PR-${year}-`;
+    const lastDoc = await prisma.warehouseDocument.findFirst({
+      where: { document_number: { startsWith: prefix } },
+      orderBy: { document_number: 'desc' },
+      select: { document_number: true },
+    });
+    let nextSeq = 1;
+    if (lastDoc) {
+      const seq = parseInt(lastDoc.document_number.slice(prefix.length), 10);
+      if (Number.isFinite(seq)) nextSeq = seq + 1;
+    }
+    const docNumber = prefix + String(nextSeq).padStart(4, '0');
+
+    const result = await prisma.$transaction(async (tx) => {
+      const doc = await tx.warehouseDocument.create({
+        data: {
+          document_number: docNumber,
+          type: 'receive',
+          warehouse_id: parseInt(warehouse_id, 10),
+          order_id: inv.order_id,
+          partner_company_id: inv.company_id,
+          status: 'completed',
+          note: (note || `PWA příjem na fakturu ${inv.invoice_number}`)
+            + (qr_codes?.length ? ` | QR: ${qr_codes.join(', ')}` : ''),
+          created_by_id: req.user?.person?.id || null,
+        },
+      });
+      const updated = await tx.invoice.update({
+        where: { id: invoiceId },
+        data: {
+          warehouse_document_id: doc.id,
+          status: 'goods_received',
+        },
+      });
+      return { doc, updated };
+    });
+
+    try {
+      const { logAudit } = require('../services/audit');
+      await logAudit({
+        action: 'create', entity: 'warehouse_document', entity_id: result.doc.id,
+        description: `PWA příjemka ${docNumber} pro fakturu ${inv.invoice_number} (objednávka ${inv.order_id})`,
+        user: req.user,
+      });
+    } catch {}
+
+    res.json({
+      ok: true,
+      warehouse_document_id: result.doc.id,
+      document_number: docNumber,
+      invoice_number: inv.invoice_number,
+      new_invoice_status: result.updated.status,
+    });
+  } catch (err) { next(err); }
+});
+
 module.exports = router;
