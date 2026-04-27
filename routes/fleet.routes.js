@@ -8,6 +8,66 @@ const router = express.Router();
 const { z } = require('zod');
 const { prisma } = require('../config/database');
 const { requireAuth } = require('../middleware/auth');
+// Helper z notifications.routes.js — udělá DB záznam i SSE push v jednom
+// volání (čímž získáme i live "zvonek" v UI).
+const { createNotification } = require('./notifications.routes');
+
+// ─── Pomocné funkce pro fleet notifikace ───────────────────────────────────
+// Krátký popis vozidla — "SPZ 1AB 2345 (Hyundai i30)" / fallback na model
+function vehicleLabel(v) {
+  if (!v) return 'vozidlo';
+  if (v.license_plate && v.model) return `${v.license_plate} (${v.model})`;
+  return v.license_plate || v.model || `vozidlo #${v.id}`;
+}
+
+// Zformátuje datum + čas v cs-CZ pro tělo notifikace.
+// Pokud je čas 00:00:00, zobrazí jen datum (uživatel zjevně čas nezadal).
+function formatServiceDateTime(d) {
+  if (!d) return null;
+  const date = new Date(d);
+  if (isNaN(date.getTime())) return null;
+  const dateStr = date.toLocaleDateString('cs-CZ');
+  const hasTime = date.getHours() !== 0 || date.getMinutes() !== 0 || date.getSeconds() !== 0;
+  if (!hasTime) return dateStr;
+  const timeStr = date.toLocaleTimeString('cs-CZ', { hour: '2-digit', minute: '2-digit' });
+  return `${dateStr} v ${timeStr}`;
+}
+
+// Sestaví textový popis místa servisu podle priorit:
+// 1) provozovny v M2N relaci (branches) — adresa první vybrané (pro většinu případů jediná),
+// 2) fallback na fakturační/sídelní adresu firmy z adresáře,
+// 3) volný text `location`,
+// 4) jen název servisní firmy.
+function describeServicePlace(service) {
+  // Provozovny vybrané jako Místo provedení (M2N)
+  const fromBranches = (service.branches || [])
+    .map(b => b.branch)
+    .filter(Boolean)
+    .map(b => {
+      const parts = [b.name, b.address, [b.zip, b.city].filter(Boolean).join(' ')]
+        .filter(Boolean);
+      return parts.join(', ');
+    })
+    .filter(Boolean);
+  if (fromBranches.length) return fromBranches.join(' • ');
+
+  // Z adresáře — branch_* fields nebo sídlo firmy
+  const co = service.service_company_ref;
+  if (co) {
+    const branchLine = [co.branch_address, [co.branch_zip, co.branch_city].filter(Boolean).join(' ')]
+      .filter(Boolean).join(', ');
+    if (branchLine) return co.name ? `${co.name}, ${branchLine}` : branchLine;
+    const seatLine = [co.address, [co.zip, co.city].filter(Boolean).join(' ')]
+      .filter(Boolean).join(', ');
+    if (seatLine) return co.name ? `${co.name}, ${seatLine}` : seatLine;
+    if (co.name) return co.name;
+  }
+
+  // Volný text fallback (starší záznamy)
+  if (service.location) return service.location;
+  if (service.service_company) return service.service_company;
+  return null;
+}
 
 // ─── Pomocné funkce ────────────────────────────────────────────────────────
 
@@ -247,11 +307,74 @@ router.put('/vehicles/:id', async (req, res, next) => {
       },
     });
 
+    // ─── Notifikace o změně řidiče ──────────────────────────────────────────
+    // Posíláme nezávisle na úspěchu/neúspěchu (push selže tiše do logu, abychom
+    // neshodili response samotné úpravy vozidla).
+    try {
+      const driverChanged = ('driver_id' in parsed.data) && (exists.driver_id !== vehicle.driver_id);
+      if (driverChanged) {
+        await notifyDriverChange({
+          vehicle,
+          oldDriverId: exists.driver_id,
+          newDriverId: vehicle.driver_id,
+          actorUserId: req.user?.id,
+        });
+      }
+    } catch (e) {
+      console.error('[fleet] Notifikace o změně řidiče selhala:', e.message);
+    }
+
     res.json(enrichVehicle(vehicle));
   } catch (err) {
     next(err);
   }
 });
+
+/**
+ * Pošle notifikaci původnímu i novému řidiči vozu při změně.
+ *  - oldDriverId / newDriverId = Person.id (nebo null)
+ *  - actorUserId = User.id toho, kdo změnu provedl (nenotifikujeme ho samého)
+ */
+async function notifyDriverChange({ vehicle, oldDriverId, newDriverId, actorUserId }) {
+  const label = vehicleLabel(vehicle);
+  const link = `/modules/vozovy-park/index.html?id=${vehicle.id}`;
+
+  // Nový řidič — "Bylo Vám přiděleno vozidlo …"
+  if (newDriverId) {
+    const np = await prisma.person.findUnique({
+      where: { id: newDriverId },
+      select: { user_id: true, first_name: true, last_name: true },
+    });
+    if (np?.user_id && np.user_id !== actorUserId) {
+      await createNotification({
+        userId: np.user_id,
+        type: 'fleet_driver_assigned',
+        title: `🚗 Bylo Vám přiděleno vozidlo ${label}`,
+        body: `Od této chvíle jste evidován/a jako řidič vozidla ${label}.`,
+        link,
+        meta: { vehicle_id: vehicle.id, license_plate: vehicle.license_plate || null, kind: 'assigned' },
+      });
+    }
+  }
+
+  // Starý řidič — "Vozidlo … Vám bylo odebráno"
+  if (oldDriverId && oldDriverId !== newDriverId) {
+    const op = await prisma.person.findUnique({
+      where: { id: oldDriverId },
+      select: { user_id: true, first_name: true, last_name: true },
+    });
+    if (op?.user_id && op.user_id !== actorUserId) {
+      await createNotification({
+        userId: op.user_id,
+        type: 'fleet_driver_unassigned',
+        title: `🚗 Vozidlo ${label} Vám bylo odebráno`,
+        body: `Již nejste evidován/a jako řidič vozidla ${label}.`,
+        link,
+        meta: { vehicle_id: vehicle.id, license_plate: vehicle.license_plate || null, kind: 'unassigned' },
+      });
+    }
+  }
+}
 
 // ─── DELETE /api/fleet/vehicles/:id — smazat vozidlo ──────────────────────
 router.delete('/vehicles/:id', async (req, res, next) => {
@@ -874,10 +997,70 @@ router.post('/vehicles/:id/services', async (req, res, next) => {
         },
       });
     });
-    // TODO (Fáze 7): pošli email + ICS řidiči a správci vozového parku
+
+    // ─── Notifikace řidiči o naplánovaném servisu ───────────────────────────
+    // Tichý fallback — chyba zápisu/pushe nesmí shodit založení servisu.
+    try {
+      await notifyDriverAboutService({ serviceId: service.id, actorUserId: req.user?.id });
+    } catch (e) {
+      console.error('[fleet] Notifikace řidiče o servisu selhala:', e.message);
+    }
+
     res.status(201).json(service);
   } catch (err) { next(err); }
 });
+
+/**
+ * Pošle řidiči vozu notifikaci o nově naplánovaném servisu (datum/čas + místo).
+ * Když vozidlo nemá řidiče, řidič nemá user_id, nebo zakládá servis sám sobě,
+ * neposílá nic. Místo skládáme přes describeServicePlace (preferuje vybrané
+ * provozovny, fallback na adresu firmy / volný text).
+ */
+async function notifyDriverAboutService({ serviceId, actorUserId }) {
+  const service = await prisma.vehicleService.findUnique({
+    where: { id: serviceId },
+    include: {
+      vehicle: {
+        select: {
+          id: true, license_plate: true, model: true,
+          driver: { select: { id: true, user_id: true, first_name: true, last_name: true } },
+        },
+      },
+      service_company_ref: { select: SERVICE_COMPANY_SELECT },
+      ...SERVICE_LOCATION_INCLUDE,
+    },
+  });
+  if (!service || !service.vehicle) return;
+
+  const driver = service.vehicle.driver;
+  if (!driver || !driver.user_id) return;        // nemá kam doručit
+  if (driver.user_id === actorUserId) return;    // nenotifikujeme aktéra samotného
+
+  const label = vehicleLabel(service.vehicle);
+  const when = formatServiceDateTime(service.scheduled_at) || 'termín bude upřesněn';
+  const place = describeServicePlace(service) || 'místo bude upřesněno';
+
+  const title = `🔧 Naplánován servis: ${label}`;
+  const bodyLines = [];
+  if (service.service_type) bodyLines.push(`Úkon: ${service.service_type}`);
+  bodyLines.push(`Termín: ${when}`);
+  bodyLines.push(`Místo: ${place}`);
+  if (service.note) bodyLines.push(`Pozn.: ${service.note}`);
+
+  await createNotification({
+    userId: driver.user_id,
+    type: 'fleet_service_planned',
+    title,
+    body: bodyLines.join('\n'),
+    link: `/modules/vozovy-park/index.html?id=${service.vehicle.id}`,
+    meta: {
+      vehicle_id: service.vehicle.id,
+      service_id: service.id,
+      license_plate: service.vehicle.license_plate || null,
+      scheduled_at: service.scheduled_at,
+    },
+  });
+}
 
 // PUT /api/fleet/services/:serviceId — úprava
 router.put('/services/:serviceId', async (req, res, next) => {

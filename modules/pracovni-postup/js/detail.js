@@ -2044,20 +2044,61 @@ async function openOptionBomModal(optionId, optionName) {
 }
 
 async function addBomMaterial(optionId, optionName) {
-  const materialId = document.getElementById('bom-mat-id').value;
-  const quantity = document.getElementById('bom-mat-qty').value;
-  if (!materialId) { alert('Vyberte materiál.'); return; }
-  await fetch('/api/production/config-options/' + optionId + '/materials', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ material_id: materialId, quantity: quantity }),
-  });
+  // Vyber materiálu a množství z modálního formuláře
+  const materialIdRaw = document.getElementById('bom-mat-id').value;
+  const quantityRaw   = document.getElementById('bom-mat-qty').value;
+
+  // Validace na klientu — bez ní se chyba schovala do tichého fetch.
+  const materialId = parseInt(materialIdRaw, 10);
+  const quantity   = parseFloat(quantityRaw);
+  if (!materialIdRaw || Number.isNaN(materialId)) { alert('Vyberte materiál ze seznamu.'); return; }
+  if (Number.isNaN(quantity) || quantity <= 0)    { alert('Zadejte platné množství (> 0).'); return; }
+
+  // Jednotku převezmeme z katalogu materiálu, ať se v BOM neobjevuje fixní 'ks'.
+  const mat = _allMaterials.find(m => Number(m.id) === materialId);
+  const unit = (mat && mat.unit) ? mat.unit : 'ks';
+
+  // Zápis na server — pokud selže, ukážeme uživateli důvod místo tichého ignorování.
+  try {
+    const res = await fetch('/api/production/config-options/' + optionId + '/materials', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ material_id: materialId, quantity, unit }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      alert('Materiál se nepodařilo uložit: ' + (err.error || (res.status + ' ' + res.statusText)));
+      return; // modal necháme otevřený, ať uživatel může opravit hodnotu
+    }
+  } catch (e) {
+    alert('Chyba sítě při ukládání materiálu: ' + e.message);
+    return;
+  }
+
   document.querySelector('.modal-overlay')?.remove();
   await renderKonfigurace();
   openOptionBomModal(optionId, optionName);
 }
 
 async function deleteBomMaterial(id, optionId, optionName) {
-  await fetch('/api/production/config-option-materials/' + id, { method: 'DELETE' });
+  // Stejná logika jako u uložení — bez kontroly response.ok jsme tiše svolávali smazání,
+  // i když Prisma vrátila chybu (např. neexistující ID).
+  try {
+    const res = await fetch('/api/production/config-option-materials/' + id, {
+      method: 'DELETE',
+      credentials: 'include',
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      alert('Materiál se nepodařilo odebrat: ' + (err.error || (res.status + ' ' + res.statusText)));
+      return;
+    }
+  } catch (e) {
+    alert('Chyba sítě při odebírání materiálu: ' + e.message);
+    return;
+  }
+
   document.querySelector('.modal-overlay')?.remove();
   await renderKonfigurace();
   openOptionBomModal(optionId, optionName);

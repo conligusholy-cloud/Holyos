@@ -755,8 +755,11 @@
               '<header>' +
                 '<span class="type-badge ' + escHtml(p.policy_type) + '">' + (POLICY_TYPES[p.policy_type] || p.policy_type) + '</span>' +
                 '<div style="display:flex;gap:6px;">' +
-                  (p.file_url ? '<a class="dl" href="' + escHtml(p.file_url) + '" target="_blank" rel="noopener">📎 Stáhnout</a>' : '') +
-                  '<button type="button" class="btn btn-sm btn-secondary" onclick="showPolicyForm(' + vehicleId + ',' + p.id + ')" title="Upravit pojistku">✏️ Upravit</button>' +
+                  // 'Zobrazit' otevře dokument v novém tabu (PDF/obrázek se zobrazí inline);
+                  // dříve nadepsáno '📎 Stáhnout' a vypadalo jako force-download.
+                  (p.file_url ? '<a class="btn btn-sm btn-secondary" href="' + escHtml(p.file_url) + '" target="_blank" rel="noopener" title="Zobrazit přiložený dokument">👁️ Zobrazit</a>' : '') +
+                  // Přejmenováno z '✏️ Upravit' — jasně sdělujeme, že jde i o úpravu uloženého dokumentu (souboru).
+                  '<button type="button" class="btn btn-sm btn-secondary" onclick="showPolicyForm(' + vehicleId + ',' + p.id + ')" title="Upravit pojistku včetně uloženého dokumentu">📝 Upravit dokument</button>' +
                   '<button type="button" class="btn btn-sm btn-danger" onclick="deletePolicy(' + p.id + ',' + vehicleId + ')">🗑️</button>' +
                 '</div>' +
               '</header>' +

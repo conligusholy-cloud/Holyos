@@ -18,6 +18,8 @@ function renderSidebar(activeModule) {
     { id: 'ucetni-doklady',       name: 'Účetní doklady',      icon: '&#128178;', color: '#0891b2', active: true },
     { id: 'banky',                name: 'Banky',               icon: '&#127974;', color: '#0ea5e9', active: true },
     { id: 'banka-pravidla',       name: 'Pravidla párování',   icon: '&#9878;',   color: '#a855f7', active: true },
+    { id: 'pokladna',             name: 'Pokladna',            icon: '&#128181;', color: '#10b981', active: true },
+    { id: 'naklady',              name: 'Náklady',             icon: '&#128202;', color: '#ef4444', active: true },
     { id: 'davky',                 name: 'Pickovací dávky',     icon: '&#128230;', color: '#f59e0b', active: true },
     { id: 'pracoviste',           name: 'Pracoviště',          icon: '&#127981;', color: '#14b8a6', active: true },
     { id: 'vozovy-park',          name: 'Vozový park',         icon: '&#128663;', color: '#0ea5e9', active: true },

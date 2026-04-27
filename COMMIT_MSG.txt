@@ -1,0 +1,40 @@
+Účetní doklady Fáze 1-8 + force-delete + Sklad 2.0 fixes
+
+Účetní doklady (iniciativa 12 fází, dnes do Fáze 8):
+- Schema: Invoice, PaymentBatch, BankStatement, BankTransaction, MatchingRule,
+  AppSetting, Reminder, CashRegister, CashMovement (+ 3 migrace)
+- AP/AR: import OCR, schvalování, payment batches (ABO/KPC), platby
+- Banka: parsery Fio/ČSOB/Moneta/UniCredit (GPC/ABO-KPC), auto-matching,
+  pravidla párování, force-delete pro super admina (cascade unmatch)
+- Faktury vydané (AR): autofill z Order, PDF s brand záhlavím + QR SPAYD,
+  email send via Microsoft Graph send-as
+- Upomínky (Fáze 7): denní cron 8:00, multi-jazyk (cs/sk/de/en) podle
+  Company.country, 3 úrovně (7/14/21 dní), pause flag, manual run
+- Pokladna (Fáze 8): CashRegister + CashMovement, číselné řady P/V{rok}{seq6},
+  paragon upload, inventura s korekčním pohybem, 7 účelů (číselník)
+
+Force-delete pro super admina:
+- Bankovní výpis: 409 + can_force, ?force=true unmatchne všechny matched/ignored
+  transakce a smaže výpis (cascade přes unmatchTransaction)
+- Platební příkaz: stejný vzor, vrátí faktury na ready_to_pay nebo unmatch
+  z bank tx, pokud už byl matched
+
+Sklad 2.0 — průběžné fixy:
+- Sériová čísla (SerialNumber + UI nakup-sklad)
+- Šarže/lots s expirací (MaterialLot + Stock.lot_id triplet)
+- TWA Sklad APK pro SUNMI (Digital Asset Links)
+
+Infrastruktura:
+- email-ingest přes Microsoft Graph (nahradili IMAP kvůli MAPI logon issues)
+- Microsoft Graph send-as přes EXO ApplicationAccessPolicy + holyos-senders@
+- Worker pattern: email-ingest, digest, dunning (vše startuje z app.js)
+
+Routes:
+- /api/accounting (faktury, platby, upomínky)
+- /api/banking (účty, výpisy, transakce, pravidla, force-delete)
+- /api/cash (Fáze 8)
+
+Moduly:
+- ucetni-doklady (Faktury / K platbě / Banka / Upomínky)
+- banky, banka-pravidla
+- pokladna (nový sidebar item)
