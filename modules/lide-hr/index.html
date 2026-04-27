@@ -801,6 +801,9 @@
 
 
       const showEmp = (p.type || 'employee') === 'employee';
+      // Prisma vrací DateTime jako ISO 8601 ("2020-01-15T00:00:00.000Z"),
+      // ale <input type="date"> očekává jen "YYYY-MM-DD" — jinak zůstane prázdné.
+      const dateOnly = (v) => (v ? String(v).slice(0, 10) : '');
       const html = `<div class="modal-overlay">
         <div class="modal">
           <h2>${isEdit ? '✏️ Upravit osobu' : '➕ Nová osoba'}</h2>
@@ -884,7 +887,7 @@
                 </div>
                 <div class="form-group">
                   <label>Datum nástupu</label>
-                  <input type="date" name="hire_date" value="${p.hire_date || ''}">
+                  <input type="date" name="hire_date" value="${dateOnly(p.hire_date)}">
                 </div>
                 <div class="form-group">
                   <label>Hodinová sazba (Kč)</label>
@@ -896,7 +899,7 @@
                 </div>
                 <div class="form-group">
                   <label>Datum konce prac. poměru</label>
-                  <input type="date" name="end_date" value="${p.end_date || ''}">
+                  <input type="date" name="end_date" value="${dateOnly(p.end_date)}">
                 </div>
                 <div class="form-group">
                   <label>Číslo čipu</label>
@@ -918,7 +921,7 @@
               <div class="form-grid">
                 <div class="form-group">
                   <label>Datum narození</label>
-                  <input type="date" name="birth_date" value="${p.birth_date || ''}">
+                  <input type="date" name="birth_date" value="${dateOnly(p.birth_date)}">
                 </div>
                 <div class="form-group">
                   <label>Rodné číslo</label>
@@ -2786,8 +2789,8 @@
               '<div class="form-group full"><label>Název dokumentu *</label><input type="text" name="title" value="' + (doc.title || '') + '" required></div>' +
               '<div class="form-group"><label>Kategorie</label><select name="category">' + catOptions + '</select></div>' +
               '<div class="form-group"><label>Zaměstnanec</label><select name="person_id"><option value="">— Bez přiřazení —</option>' + personOptions + '</select></div>' +
-              '<div class="form-group"><label>Platnost od</label><input type="date" name="valid_from" value="' + (doc.valid_from || '') + '"></div>' +
-              '<div class="form-group"><label>Platnost do</label><input type="date" name="valid_to" value="' + (doc.valid_to || '') + '"></div>' +
+              '<div class="form-group"><label>Platnost od</label><input type="date" name="valid_from" value="' + (doc.valid_from ? String(doc.valid_from).slice(0, 10) : '') + '"></div>' +
+              '<div class="form-group"><label>Platnost do</label><input type="date" name="valid_to" value="' + (doc.valid_to ? String(doc.valid_to).slice(0, 10) : '') + '"></div>' +
               '<div class="form-group"><label>Stav</label><select name="status"><option value="active"' + (doc.status === 'active' ? ' selected' : '') + '>Aktivní</option><option value="archived"' + (doc.status === 'archived' ? ' selected' : '') + '>Archivovaný</option></select></div>' +
               '<div class="form-group"><label>Tagy (oddělte čárkou)</label><input type="text" name="tags" value="' + (doc.tags ? doc.tags.join(', ') : '') + '"></div>' +
               '<div class="form-group full"><label>Poznámka</label><textarea name="note">' + (doc.note || '') + '</textarea></div>' +
