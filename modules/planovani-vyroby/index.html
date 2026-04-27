@@ -287,7 +287,10 @@
         if (opCount === 0) buttons.push(`<button class="btn btn-sm btn-secondary" data-action="gen-ops" data-id="${v.id}" title="Vygenerovat BatchOperation z postupu produktu">⚙️ Generuj op.</button>`);
         buttons.push(`<button class="btn btn-sm btn-secondary" data-action="mrp" data-id="${v.id}" title="MRP — kontrola materiálu pro tuto dávku">📊 MRP</button>`);
         buttons.push(`<button class="btn btn-sm btn-secondary" data-action="pre-pick" data-id="${v.id}" title="Pre-pick — návrh transferů materiálu na pracoviště">🚚 Pre-pick</button>`);
-        if (v.status === 'planned') buttons.push(`<button class="btn btn-sm btn-success" data-action="release" data-id="${v.id}">▶ Vydat</button>`);
+        if (v.status === 'planned') buttons.push(`<button class="btn btn-sm btn-success" data-action="release" data-id="${v.id}" title="Vydat do výroby">▶ Vydat</button>`);
+        if (v.status === 'released' || v.status === 'in_progress') buttons.push(`<button class="btn btn-sm btn-secondary" data-action="pause" data-id="${v.id}" title="Pozastavit">⏸️</button>`);
+        if (v.status === 'paused') buttons.push(`<button class="btn btn-sm btn-success" data-action="resume" data-id="${v.id}" title="Obnovit">▶ Obnovit</button>`);
+        if (['planned', 'released', 'paused'].includes(v.status)) buttons.push(`<button class="btn btn-sm btn-secondary" data-action="cancel" data-id="${v.id}" title="Zrušit (cancelled)">✗ Zrušit</button>`);
         if (v.status !== 'done' && v.status !== 'cancelled') buttons.push(`<button class="btn btn-sm btn-danger" data-action="delete" data-id="${v.id}" title="Smazat">🗑️</button>`);
         return `<td class="col-actions">${buttons.join(' ')}</td>`;
       }
@@ -416,6 +419,12 @@
     try {
       if (action === 'release') {
         const r = await fetch(`/api/production/batches/${id}/release`, { method: 'POST', headers: authHeaders() });
+        if (!r.ok) throw new Error((await r.json()).error || 'HTTP ' + r.status);
+      } else if (action === 'pause' || action === 'resume' || action === 'cancel') {
+        if (action === 'cancel' && !confirm('Opravdu zrušit tuto dávku? (status → cancelled, neumaže — pro úplné smazání použij 🗑️)')) {
+          btn.disabled = false; return;
+        }
+        const r = await fetch(`/api/planning/batches/${id}/${action}`, { method: 'POST', headers: authHeaders() });
         if (!r.ok) throw new Error((await r.json()).error || 'HTTP ' + r.status);
       } else if (action === 'delete') {
         if (!confirm('Smazat tuto dávku včetně operací a logů?')) { btn.disabled = false; return; }

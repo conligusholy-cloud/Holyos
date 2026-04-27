@@ -163,6 +163,21 @@ function getPlanningTools() {
         required: ['person_id'],
       },
     },
+    {
+      name: 'pause_batch',
+      description: 'Pozastaví dávku ve výrobě (released/in_progress → paused). Operace přestanou být v kioscích vidět.',
+      input_schema: { type: 'object', properties: { batch_id: { type: 'number' } }, required: ['batch_id'] },
+    },
+    {
+      name: 'resume_batch',
+      description: 'Obnoví pozastavenou dávku (paused → in_progress).',
+      input_schema: { type: 'object', properties: { batch_id: { type: 'number' } }, required: ['batch_id'] },
+    },
+    {
+      name: 'cancel_batch',
+      description: 'Zruší dávku (planned/released/paused → cancelled). In-progress dávku nutno nejdřív pause.',
+      input_schema: { type: 'object', properties: { batch_id: { type: 'number' } }, required: ['batch_id'] },
+    },
   ];
 }
 
@@ -565,6 +580,30 @@ async function executePlanningTool(toolName, params, prisma) {
           finished_at: op.finished_at,
         })),
       };
+    }
+
+    // ─── pause_batch / resume_batch / cancel_batch ───────────────────────
+    case 'pause_batch':
+    case 'resume_batch':
+    case 'cancel_batch': {
+      const transitions = {
+        pause_batch: { from: ['released', 'in_progress'], to: 'paused' },
+        resume_batch: { from: ['paused'], to: 'in_progress' },
+        cancel_batch: { from: ['planned', 'released', 'paused'], to: 'cancelled' },
+      };
+      const t = transitions[toolName];
+      const existing = await prisma.productionBatch.findUnique({
+        where: { id: params.batch_id }, select: { status: true, batch_number: true },
+      });
+      if (!existing) throw new Error(`Dávka id=${params.batch_id} nenalezena`);
+      if (!t.from.includes(existing.status)) {
+        throw new Error(`Nelze ${toolName} ze stavu '${existing.status}' (povoleno: ${t.from.join(', ')})`);
+      }
+      const updated = await prisma.productionBatch.update({
+        where: { id: params.batch_id }, data: { status: t.to },
+        select: { id: true, batch_number: true, status: true },
+      });
+      return updated;
     }
 
     default:

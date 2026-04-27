@@ -219,6 +219,68 @@ router.post('/mrp-run', async (req, res, next) => {
 });
 
 // =============================================================================
+// PLÁNOVAČ — WORKFLOW AKCE (pause / resume / cancel batch)
+// =============================================================================
+
+// Helper — bezpečně přepne status dávky podle whitelist of allowed transitions.
+async function transitionBatchStatus(id, fromStatuses, toStatus, extraData = {}) {
+  const existing = await prisma.productionBatch.findUnique({
+    where: { id }, select: { status: true, batch_number: true },
+  });
+  if (!existing) {
+    const err = new Error('Dávka nenalezena');
+    err.code = 'NOT_FOUND';
+    throw err;
+  }
+  if (!fromStatuses.includes(existing.status)) {
+    const err = new Error(`Nelze přejít ze stavu '${existing.status}' do '${toStatus}'`);
+    err.code = 'BAD_TRANSITION';
+    throw err;
+  }
+  return prisma.productionBatch.update({
+    where: { id }, data: { status: toStatus, ...extraData },
+    include: { product: { select: { code: true, name: true } } },
+  });
+}
+
+function handleTransitionError(err, res, next) {
+  if (err.code === 'NOT_FOUND') return res.status(404).json({ error: err.message });
+  if (err.code === 'BAD_TRANSITION') return res.status(409).json({ error: err.message });
+  next(err);
+}
+
+// POST /api/planning/batches/:id/pause — released | in_progress → paused
+router.post('/batches/:id/pause', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ error: 'Neplatné ID' });
+    const updated = await transitionBatchStatus(id, ['released', 'in_progress'], 'paused');
+    res.json(updated);
+  } catch (err) { handleTransitionError(err, res, next); }
+});
+
+// POST /api/planning/batches/:id/resume — paused → in_progress
+router.post('/batches/:id/resume', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ error: 'Neplatné ID' });
+    const updated = await transitionBatchStatus(id, ['paused'], 'in_progress');
+    res.json(updated);
+  } catch (err) { handleTransitionError(err, res, next); }
+});
+
+// POST /api/planning/batches/:id/cancel — planned | released | paused → cancelled
+//   in_progress nelze rovnou cancel (musí se nejdřív paused, vědomé rozhodnutí).
+router.post('/batches/:id/cancel', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ error: 'Neplatné ID' });
+    const updated = await transitionBatchStatus(id, ['planned', 'released', 'paused'], 'cancelled');
+    res.json(updated);
+  } catch (err) { handleTransitionError(err, res, next); }
+});
+
+// =============================================================================
 // PLÁNOVAČ — VÝKON PRACOVNÍKA (today / per date)
 // =============================================================================
 
