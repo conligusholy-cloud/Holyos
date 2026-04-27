@@ -298,6 +298,95 @@ router.post('/batches/:id/cancel', async (req, res, next) => {
 });
 
 // =============================================================================
+// PLÁNOVAČ — AUDIT LOG (BatchOperationLog query)
+// =============================================================================
+
+// GET /api/planning/audit-log
+//   ?from=YYYY-MM-DD&to=YYYY-MM-DD       (default: dnes)
+//   ?person_id=N&batch_id=N&action=start|pause|resume|done|problem|comment
+//   ?limit=200 (default 200, max 1000)
+//   Vrátí seznam akcí v kioscích — pro mzdy / audit / debug.
+router.get('/audit-log', async (req, res, next) => {
+  try {
+    const { from, to, person_id, batch_id, action } = req.query;
+    const limit = Math.min(parseInt(req.query.limit, 10) || 200, 1000);
+
+    const where = {};
+    if (action) where.action = action;
+    if (person_id) where.person_id = parseInt(person_id, 10);
+    if (batch_id) where.batch_operation = { batch_id: parseInt(batch_id, 10) };
+
+    if (from || to) {
+      where.created_at = {};
+      if (from) where.created_at.gte = new Date(from + 'T00:00:00');
+      if (to) where.created_at.lte = new Date(to + 'T23:59:59');
+    } else {
+      // default: dnes
+      const dayStart = new Date(); dayStart.setHours(0, 0, 0, 0);
+      const dayEnd = new Date(); dayEnd.setHours(23, 59, 59, 999);
+      where.created_at = { gte: dayStart, lte: dayEnd };
+    }
+
+    const logs = await prisma.batchOperationLog.findMany({
+      where,
+      take: limit,
+      include: {
+        person: { select: { first_name: true, last_name: true } },
+        batch_operation: {
+          select: {
+            id: true, sequence: true, duration_minutes: true,
+            operation: { select: { name: true } },
+            workstation: { select: { name: true } },
+            batch: { select: { id: true, batch_number: true,
+              product: { select: { code: true, name: true } } } },
+          },
+        },
+      },
+      orderBy: { created_at: 'desc' },
+    });
+
+    // Agregát per person + per action — užitečný pro mzdy
+    const byPerson = new Map();
+    const byAction = {};
+    for (const l of logs) {
+      byAction[l.action] = (byAction[l.action] || 0) + 1;
+      if (!l.person) continue;
+      const key = l.person.first_name + ' ' + l.person.last_name;
+      const cur = byPerson.get(key) || { name: key, actions: 0, done_count: 0, total_minutes: 0 };
+      cur.actions++;
+      if (l.action === 'done') {
+        cur.done_count++;
+        cur.total_minutes += (l.batch_operation?.duration_minutes || 0);
+      }
+      byPerson.set(key, cur);
+    }
+
+    res.json({
+      filter: { from: from || null, to: to || null, person_id: person_id || null, batch_id: batch_id || null, action: action || null },
+      summary: {
+        total: logs.length,
+        by_action: byAction,
+        by_person: Array.from(byPerson.values()).sort((a, b) => b.done_count - a.done_count),
+      },
+      logs: logs.map(l => ({
+        id: l.id,
+        created_at: l.created_at,
+        action: l.action,
+        person: l.person ? `${l.person.first_name} ${l.person.last_name}` : null,
+        batch_number: l.batch_operation?.batch?.batch_number || null,
+        product: l.batch_operation?.batch?.product
+          ? `${l.batch_operation.batch.product.code} ${l.batch_operation.batch.product.name}`
+          : null,
+        operation: l.batch_operation?.operation?.name || null,
+        workstation: l.batch_operation?.workstation?.name || null,
+        duration_minutes: l.batch_operation?.duration_minutes || null,
+        note: l.note,
+      })),
+    });
+  } catch (err) { next(err); }
+});
+
+// =============================================================================
 // PLÁNOVAČ — VÝKON PRACOVNÍKA (today / per date)
 // =============================================================================
 

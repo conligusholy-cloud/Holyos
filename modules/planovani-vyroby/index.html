@@ -142,6 +142,7 @@
     <h1>Plánování výroby <span class="count" id="batchCount"></span></h1>
     <div style="margin-left:auto; display:flex; gap:8px;">
       <button class="btn btn-secondary" onclick="openWorkstationQueue()" title="Vytížení pracovišť — kolik práce čeká">🏭 Vytížení</button>
+      <button class="btn btn-secondary" onclick="openAuditLog()" title="Audit log akcí v kioscích za dnešek">📜 Audit</button>
       <button class="btn btn-secondary" onclick="openPurchaseReport()" title="Konsolidovaný nákupní report přes všechny aktivní dávky">📋 Nákupní report</button>
       <button class="btn btn-secondary" onclick="loadAll()">🔄 Obnovit</button>
       <button class="btn btn-primary" onclick="openCreateModal()">+ Nová dávka</button>
@@ -459,6 +460,112 @@
       alert('Chyba: ' + err.message);
       btn.disabled = false;
     }
+  }
+
+  // ─── Audit log akcí v kioscích ──────────────────────────────────────────
+  async function openAuditLog() {
+    const today = new Date().toISOString().slice(0, 10);
+    document.getElementById('modalRoot').innerHTML = `
+      <div class="modal-backdrop" id="mb">
+        <div class="modal" style="min-width:1100px; max-width:95vw;">
+          <h2>📜 Audit log</h2>
+          <div style="display:flex; gap:10px; margin-bottom:14px; flex-wrap:wrap; align-items:center;">
+            <label style="font-size:12px; color:var(--text2);">Od: <input type="date" id="al-from" value="${today}" style="margin-left:6px; padding:5px 8px; background:var(--surface2); color:var(--text); border:1px solid var(--border); border-radius:6px;"></label>
+            <label style="font-size:12px; color:var(--text2);">Do: <input type="date" id="al-to" value="${today}" style="margin-left:6px; padding:5px 8px; background:var(--surface2); color:var(--text); border:1px solid var(--border); border-radius:6px;"></label>
+            <select id="al-action" style="padding:5px 8px; background:var(--surface2); color:var(--text); border:1px solid var(--border); border-radius:6px; font-size:12px;">
+              <option value="">Všechny akce</option>
+              <option value="start">▶ Začátky</option>
+              <option value="done">✓ Dokončení</option>
+              <option value="pause">⏸ Pauzy</option>
+              <option value="resume">▶ Obnovení</option>
+              <option value="problem">⚠️ Problémy</option>
+            </select>
+            <button class="btn btn-secondary btn-sm" onclick="reloadAuditLog()">🔄 Hledat</button>
+          </div>
+          <div id="al-content">Načítám…</div>
+          <div class="modal-actions">
+            <button class="btn btn-secondary" onclick="document.getElementById('modalRoot').innerHTML=''">Zavřít</button>
+          </div>
+        </div>
+      </div>`;
+    document.getElementById('mb').addEventListener('click', e => {
+      if (e.target.id === 'mb') document.getElementById('modalRoot').innerHTML = '';
+    });
+    reloadAuditLog();
+  }
+  window.openAuditLog = openAuditLog;
+
+  async function reloadAuditLog() {
+    const from = document.getElementById('al-from').value;
+    const to = document.getElementById('al-to').value;
+    const action = document.getElementById('al-action').value;
+    const params = new URLSearchParams();
+    if (from) params.set('from', from);
+    if (to) params.set('to', to);
+    if (action) params.set('action', action);
+    document.getElementById('al-content').innerHTML = 'Načítám…';
+    try {
+      const r = await fetch('/api/planning/audit-log?' + params.toString(), { headers: authHeaders() });
+      if (!r.ok) throw new Error((await r.json()).error || 'HTTP ' + r.status);
+      const log = await r.json();
+      renderAuditLog(log);
+    } catch (e) {
+      document.getElementById('al-content').innerHTML = `<div style="color:#ef4444">Chyba: ${escHtml(e.message)}</div>`;
+    }
+  }
+  window.reloadAuditLog = reloadAuditLog;
+
+  function renderAuditLog(log) {
+    const summary = log.summary || {};
+    const byAction = summary.by_action || {};
+    const byPerson = summary.by_person || [];
+    const fmt = d => new Date(d).toLocaleString('cs-CZ', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+    const actionIcon = {
+      start: '▶', pause: '⏸', resume: '▶', done: '✓', problem: '⚠️', comment: '💬',
+    };
+    const actionColor = {
+      start: '#6c8cff', pause: '#a0a0a0', resume: '#22c55e',
+      done: '#14b8a6', problem: '#ef4444', comment: '#f59e0b',
+    };
+
+    const personHtml = byPerson.length === 0 ? '' :
+      `<h3 style="font-size:13px; margin:14px 0 6px; color:var(--text2);">Pracovníci</h3>
+       <div style="display:flex; flex-wrap:wrap; gap:10px; margin-bottom:18px;">
+       ${byPerson.map(p => `
+         <div style="background:var(--surface2); border-radius:8px; padding:10px 14px; min-width:200px;">
+           <div style="font-weight:700; font-size:13px;">${escHtml(p.name)}</div>
+           <div style="font-size:11px; color:var(--text2);">${p.actions} akcí · <strong style="color:#14b8a6;">${p.done_count}</strong> dokončení · ${p.total_minutes} min</div>
+         </div>`).join('')}
+       </div>`;
+
+    const rowsHtml = log.logs.length === 0
+      ? '<div class="empty-state"><div class="empty-icon">📭</div><div>Žádné záznamy</div></div>'
+      : `<table class="dense" style="width:100%;">
+          <thead><tr class="head-titles">
+            <th>Čas</th><th>Akce</th><th>Pracovník</th><th>Dávka</th><th>Operace</th><th>Trvání</th><th>Poznámka</th>
+          </tr></thead>
+          <tbody>${log.logs.map(l => `
+            <tr>
+              <td style="white-space:nowrap;">${fmt(l.created_at)}</td>
+              <td><span style="color:${actionColor[l.action] || 'var(--text)'}; font-weight:700;">${actionIcon[l.action] || ''} ${escHtml(l.action)}</span></td>
+              <td>${escHtml(l.person || '—')}</td>
+              <td>${escHtml(l.batch_number || '—')}</td>
+              <td>${escHtml(l.operation || '—')}</td>
+              <td style="text-align:right;">${l.duration_minutes != null ? l.duration_minutes + ' min' : '—'}</td>
+              <td style="color:var(--text2);">${escHtml(l.note || '')}</td>
+            </tr>`).join('')}
+          </tbody>
+         </table>`;
+
+    document.getElementById('al-content').innerHTML = `
+      <div style="display:flex; gap:18px; font-size:13px; color:var(--text2); margin-bottom:14px; flex-wrap:wrap;">
+        <div><strong style="color:var(--text);">Celkem akcí:</strong> ${summary.total || 0}</div>
+        ${Object.entries(byAction).map(([a, c]) => `<div><strong style="color:${actionColor[a] || 'var(--text)'};">${actionIcon[a] || ''} ${a}:</strong> ${c}</div>`).join('')}
+      </div>
+      ${personHtml}
+      <h3 style="font-size:13px; margin:14px 0 6px; color:var(--text2);">Záznamy (${log.logs.length})</h3>
+      <div style="max-height:55vh; overflow-y:auto; overflow-x:auto;">${rowsHtml}</div>`;
   }
 
   // ─── Vytížení pracovišť (workstation queue) ─────────────────────────────
