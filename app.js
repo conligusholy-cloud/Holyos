@@ -40,6 +40,7 @@ const storageRoutes = require('./routes/storage.routes');
 const voiceRoutes = require('./routes/voice.routes');
 const chatRoutes = require('./routes/chat.routes');
 const productionRoutes = require('./routes/production.routes');
+const planningRoutes = require('./routes/planning.routes');
 const slotsRoutes = require('./routes/slots.routes');
 const devRoutes = require('./routes/dev.routes');
 const notificationsRoutes = require('./routes/notifications.routes');
@@ -449,6 +450,7 @@ app.use('/api/ai', chatRoutes);   // chat endpoint (bez auth — pro panel)
 app.use('/api/ai', aiRoutes);     // asistenti, konverzace (s auth)
 app.use('/api/storage', storageRoutes);
 app.use('/api/production', productionRoutes);
+app.use('/api/planning', planningRoutes);
 app.use('/api/slots', slotsRoutes);
 app.use('/api/dev', devRoutes);
 app.use('/api/notifications', notificationsRoutes);

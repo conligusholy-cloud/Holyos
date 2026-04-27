@@ -195,12 +195,12 @@ model BatchOperationLog {
 - [x] **F1.4** Routes ProductionBatch + BatchOperation CRUD + generátor batch_number `{rok}-{seq3}` (9 endpointů)
 - [x] **F1.5** Seed `scripts/seed-competencies.js` — 15 kompetencí (svarovna, montáž, elektro, bondy, lakovna, kontrola, expedice)
 
-### F2 — Factorify pull
-- [ ] **F2.1** Rozšíření Factorify klienta o BOM endpoint (`POST /api/query/Stage` s parametry)
-- [ ] **F2.2** Sync ProductOperation z Factorify s `from_factorify=true`
-- [ ] **F2.3** Sync Material lead-time + supplier z Factorify
-- [ ] **F2.4** UI pro kalibraci časů ProductOperation (override `last_calibrated_at`)
-- [ ] **F2.5** Snapshot endpoint `POST /api/planning/snapshot-bom`
+### F2 — Factorify pull (částečně 2026-04-27)
+- [x] **F2.1** Factorify klient (`scripts/dump-factorify-fast.js`) už existuje — Goods/Stage/WorkOperation přes `POST /api/query/{Entity}` s X-AccountingUnit hlavičkou
+- [x] **F2.2** Sync ProductOperation z Factorify s `from_factorify=true` (přidáno do dump skriptu)
+- [ ] **F2.3** Sync Material lead-time + supplier z Factorify (TODO)
+- [ ] **F2.4** UI pro kalibraci časů ProductOperation (override `last_calibrated_at`) (TODO)
+- [x] **F2.5** Snapshot endpoint `POST /api/planning/snapshot-bom` v `routes/planning.routes.js` — flat BOM (depth=0) z OperationMaterial. + GET list/detail + DELETE
 
 ### F3 — Plánovač v1
 - [ ] **F3.1** `services/planning/scheduler.js` — týdenní kapacitní plán
