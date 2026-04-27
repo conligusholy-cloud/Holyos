@@ -14,6 +14,7 @@ const { generateBatchOperationsForBatch } = require('../services/planning/batch-
 const { computeMrpForBatch } = require('../services/planning/mrp');
 const { computePrePickForBatch } = require('../services/planning/pre-pick');
 const { computePurchaseReport } = require('../services/planning/purchase-report');
+const { checkAndCloseBatch } = require('../services/planning/batch-state');
 
 // =============================================================================
 // BOM SNAPSHOTS — zamražený kusovník pro plánování dávky
@@ -267,6 +268,22 @@ router.post('/batches/:id/resume', async (req, res, next) => {
     const updated = await transitionBatchStatus(id, ['paused'], 'in_progress');
     res.json(updated);
   } catch (err) { handleTransitionError(err, res, next); }
+});
+
+// POST /api/planning/batches/:id/check-completion
+//   Auto-close: pokud všechny BatchOperation jsou done/cancelled, přepne batch
+//   na 'done' (nebo 'cancelled' pokud žádná není done) a nastaví actual_end.
+//   Idempotentní — vrací action: noop_* / auto_closed / auto_cancelled.
+router.post('/batches/:id/check-completion', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ error: 'Neplatné ID' });
+    const result = await checkAndCloseBatch(id);
+    res.json(result);
+  } catch (err) {
+    if (/nenalezena/.test(err.message)) return res.status(404).json({ error: err.message });
+    next(err);
+  }
 });
 
 // POST /api/planning/batches/:id/cancel — planned | released | paused → cancelled

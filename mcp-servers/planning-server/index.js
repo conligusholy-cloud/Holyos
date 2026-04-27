@@ -16,6 +16,7 @@ const { generateBatchOperationsForBatch } = require('../../services/planning/bat
 const { computeMrpForBatch } = require('../../services/planning/mrp');
 const { computePrePickForBatch } = require('../../services/planning/pre-pick');
 const { computePurchaseReport } = require('../../services/planning/purchase-report');
+const { checkAndCloseBatch } = require('../../services/planning/batch-state');
 
 function getPlanningTools() {
   return [
@@ -176,6 +177,11 @@ function getPlanningTools() {
     {
       name: 'cancel_batch',
       description: 'Zruší dávku (planned/released/paused → cancelled). In-progress dávku nutno nejdřív pause.',
+      input_schema: { type: 'object', properties: { batch_id: { type: 'number' } }, required: ['batch_id'] },
+    },
+    {
+      name: 'check_batch_completion',
+      description: 'Auto-close: pokud všechny BatchOperation dávky jsou done/cancelled, přepne batch na done (nebo cancelled) a nastaví actual_end. Idempotentní.',
       input_schema: { type: 'object', properties: { batch_id: { type: 'number' } }, required: ['batch_id'] },
     },
   ];
@@ -580,6 +586,12 @@ async function executePlanningTool(toolName, params, prisma) {
           finished_at: op.finished_at,
         })),
       };
+    }
+
+    // ─── check_batch_completion ──────────────────────────────────────────
+    case 'check_batch_completion': {
+      const result = await checkAndCloseBatch(params.batch_id);
+      return result;
     }
 
     // ─── pause_batch / resume_batch / cancel_batch ───────────────────────
