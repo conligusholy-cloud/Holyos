@@ -51,6 +51,96 @@ function isInvoiceCandidate(filename, contentType) {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
+// Detekce a stažení faktury z odkazu v těle (Fáze 3 — rozšíření 2026-04-27)
+// Některé portály posílají fakturu jen jako URL (např. Nayax, Aircall, atd.)
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Najde URL kandidáty na fakturu v HTML/textovém těle e-mailu.
+ * Score: PDF link = 10, "invoice|faktura|download|stahnout|attachment" v URL = 5.
+ * @returns {Array<{url, score}>} unikátní top 5 podle score
+ */
+function extractInvoiceLinksFromBody(html, text) {
+  const haystack = (html || '') + '\n' + (text || '');
+  if (!haystack.trim()) return [];
+  const urlRegex = /https?:\/\/[^\s"'<>)]+/gi;
+  const urls = [...haystack.matchAll(urlRegex)].map(m => m[0].replace(/[.,;:!?)\]>]+$/, ''));
+  const seen = new Map();
+  for (const u of urls) {
+    let score = 0;
+    if (/\.pdf(\?|$|#)/i.test(u)) score += 10;
+    if (/invoice|faktur|attachment|download|stahnout|st%c3%a1hnout/i.test(u)) score += 5;
+    if (score > 0 && !seen.has(u)) seen.set(u, { url: u, score });
+  }
+  return [...seen.values()].sort((a, b) => b.score - a.score).slice(0, 5);
+}
+
+/**
+ * Stáhne PDF/obrázek z URL (max 20 MB, timeout 30 s, follow redirects).
+ * Uloží jako EmailAttachment (source='link_download', source_url=URL).
+ * @returns {Promise<EmailAttachment|null>} null pokud neúspěšné nebo není kandidát
+ */
+async function downloadInvoiceFromLink(url, ingestId, targetDir) {
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30000);
+    const res = await fetch(url, {
+      redirect: 'follow',
+      signal: controller.signal,
+      headers: { 'Accept': 'application/pdf,image/*,*/*' },
+    }).finally(() => clearTimeout(timeout));
+
+    if (!res.ok) {
+      console.warn(`[email-ingest] Link download ${url} → HTTP ${res.status}`);
+      return null;
+    }
+    const contentType = (res.headers.get('content-type') || '').toLowerCase();
+    const ab = await res.arrayBuffer();
+    if (ab.byteLength > 20 * 1024 * 1024) {
+      console.warn(`[email-ingest] Link download ${url} → příliš velké (${ab.byteLength} B)`);
+      return null;
+    }
+    const buffer = Buffer.from(ab);
+
+    const cd = res.headers.get('content-disposition') || '';
+    const cdMatch = cd.match(/filename[^=]*=([^;]+)/i);
+    const urlPath = url.split('?')[0].split('#')[0];
+    const urlName = urlPath.split('/').pop() || 'invoice';
+    let filename = (cdMatch ? cdMatch[1].replace(/['"]/g, '').trim() : urlName) || 'invoice';
+    if (!/\.(pdf|png|jpe?g|webp)$/i.test(filename)) {
+      if (contentType.includes('application/pdf')) filename += '.pdf';
+      else if (contentType.startsWith('image/')) filename += '.' + contentType.split('/')[1].split(';')[0];
+    }
+    if (!isInvoiceCandidate(filename, contentType)) {
+      console.warn(`[email-ingest] Link ${url} → ${contentType}, není faktura-kandidát, přeskakuji`);
+      return null;
+    }
+
+    const safeName = `${ingestId}-${Date.now()}-${sanitizeFilename(filename)}`;
+    const filePath = path.join(targetDir, safeName);
+    fs.writeFileSync(filePath, buffer);
+    const sha256 = crypto.createHash('sha256').update(buffer).digest('hex');
+
+    return prisma.emailAttachment.create({
+      data: {
+        email_ingest_id: ingestId,
+        filename,
+        content_type: contentType || 'application/pdf',
+        size_bytes: buffer.length,
+        file_path: filePath,
+        source: 'link_download',
+        source_url: url.slice(0, 1000),
+        sha256,
+        is_invoice_candidate: true,
+      },
+    });
+  } catch (err) {
+    console.error(`[email-ingest] Link download ${url} selhal:`, err.message);
+    return null;
+  }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
 // Hlavní fetch loop
 // ────────────────────────────────────────────────────────────────────────────
 
@@ -164,15 +254,32 @@ async function processMessage(userPrincipalName, msg) {
     }
   }
 
-  const candidates = savedAttachments.filter(a => a.is_invoice_candidate);
+  let candidates = savedAttachments.filter(a => a.is_invoice_candidate);
+
+  // Fáze 3 rozšíření: pokud žádná čitelná příloha, zkus odkazy v těle e-mailu.
+  if (candidates.length === 0) {
+    const links = extractInvoiceLinksFromBody(msg.body?.content, msg.bodyPreview);
+    if (links.length > 0) {
+      console.log(`[email-ingest] Mail "${msg.subject}" nemá přílohy, zkouším ${links.length} odkazů.`);
+      for (const { url } of links) {
+        const downloaded = await downloadInvoiceFromLink(url, ingest.id, targetDir);
+        if (downloaded) {
+          savedAttachments.push(downloaded);
+          candidates.push(downloaded);
+          console.log(`[email-ingest] Stažena faktura z odkazu: ${downloaded.filename} (${downloaded.size_bytes} B)`);
+        }
+      }
+    }
+  }
+
   if (candidates.length === 0) {
     await prisma.emailIngest.update({
       where: { id: ingest.id },
-      data: { status: 'unreadable', confidence: 0, sender_notify_reason: 'Žádná čitelná příloha' },
+      data: { status: 'unreadable', confidence: 0, sender_notify_reason: 'Žádná čitelná příloha ani odkaz na fakturu' },
     });
     await notifySenderUnreadable(
       userPrincipalName, fromAddr, msg,
-      'V e-mailu nebyla nalezena čitelná příloha s fakturou (PDF / obrázek).'
+      'V e-mailu nebyla nalezena čitelná příloha ani odkaz na fakturu (PDF / obrázek).'
     );
     return ingest;
   }
