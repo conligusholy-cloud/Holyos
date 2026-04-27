@@ -35,17 +35,22 @@ async function resolveRecipients() {
     .filter(Boolean);
   if (envList.length > 0) return envList;
 
-  // Fallback: aktivní Person s rolí účetní/finance (pokud Person model má roli;
-  // jinak vrátíme prázdný seznam a worker odešle nic).
+  // Fallback: aktivní Person s rolí účetní/finance. Person.role je relace
+  // na model Role (nikoli scalar string), takže filtr musí jít přes role.name.
+  // Robustně používáme case-insensitive contains, ať pokryjeme „Účetní",
+  // „Účetní oddělení", „Finance & controlling" apod.
   try {
     const persons = await prisma.person.findMany({
       where: {
         active: true,
         email: { not: null },
-        OR: [
-          { role: { in: ['accountant', 'finance'] } },
-          // Můžeme zde přidat jiné role v budoucnu
-        ],
+        role: {
+          OR: [
+            { name: { contains: 'účetn', mode: 'insensitive' } },
+            { name: { contains: 'accountant', mode: 'insensitive' } },
+            { name: { contains: 'finance', mode: 'insensitive' } },
+          ],
+        },
       },
       select: { email: true },
     });
