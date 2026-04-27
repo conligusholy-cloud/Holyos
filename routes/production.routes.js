@@ -1578,7 +1578,110 @@ router.delete('/batches/:id', async (req, res, next) => {
 });
 
 // =============================================================================
-// PLÁNOVAČ — INSTANCE OPERACÍ (BatchOperation) — vstup pro F6 kiosek
+// PLÁNOVAČ — VÝROBNÍ KIOSEK (F6) — endpointy pro obrazovku pracoviště
+// =============================================================================
+
+// GET /api/production/workstations/:id/available-work?person_id=N
+//   Klíčový endpoint kiosku. Vrátí dvě skupiny úkolů pro daného pracovníka:
+//     - my_in_progress: rozpracované úkoly, které pracovník už začal (status='in_progress')
+//     - available: úkoly připravené k odebrání (status pending/ready, bez assigned_person)
+//   Filtrace přes kompetence: pracovník vidí úkol jen pokud má všechny
+//   required_competencies operace na úrovni >= min_level.
+router.get('/workstations/:id/available-work', async (req, res, next) => {
+  try {
+    const wsId = parseInt(req.params.id, 10);
+    if (isNaN(wsId)) return res.status(400).json({ error: 'Neplatné ID pracoviště' });
+
+    const personId = parseInt(req.query.person_id, 10);
+    if (isNaN(personId)) return res.status(400).json({ error: 'person_id je povinné' });
+
+    // 1. Získat kompetence pracovníka jako mapu { competency_id: level }
+    const myCompetencies = await prisma.workerCompetency.findMany({
+      where: { person_id: personId },
+      select: { competency_id: true, level: true, valid_until: true },
+    });
+    const today = new Date();
+    const compMap = new Map();
+    for (const wc of myCompetencies) {
+      if (wc.valid_until && wc.valid_until < today) continue; // expired
+      compMap.set(wc.competency_id, wc.level);
+    }
+
+    // 2. Načíst rozpracované úkoly tohoto pracovníka na tomto pracovišti
+    const myInProgress = await prisma.batchOperation.findMany({
+      where: {
+        workstation_id: wsId,
+        assigned_person_id: personId,
+        status: 'in_progress',
+      },
+      include: {
+        batch: { select: { id: true, batch_number: true, quantity: true, priority: true,
+          product: { select: { id: true, code: true, name: true } } } },
+        operation: { select: { id: true, name: true, step_number: true, duration: true, description: true } },
+      },
+      orderBy: [{ started_at: 'asc' }],
+    });
+
+    // 3. Načíst dostupné úkoly (bez přiřazení) — kandidáty pro filtrování
+    const candidates = await prisma.batchOperation.findMany({
+      where: {
+        workstation_id: wsId,
+        assigned_person_id: null,
+        status: { in: ['pending', 'ready'] },
+      },
+      include: {
+        batch: { select: { id: true, batch_number: true, quantity: true, priority: true, status: true,
+          product: { select: { id: true, code: true, name: true } } } },
+        operation: {
+          select: {
+            id: true, name: true, step_number: true, duration: true, description: true,
+            required_competencies: {
+              include: { competency: { select: { id: true, code: true, name: true } } },
+            },
+          },
+        },
+      },
+      orderBy: [{ batch: { priority: 'asc' } }, { sequence: 'asc' }, { planned_start: 'asc' }],
+    });
+
+    // 4. Filtr přes kompetence — vyhodit úkoly, kde pracovník nemá všechny required.
+    //    blocked_by_competency = pole jmen kompetencí, které pracovníkovi chybí (k debug zobrazení).
+    const available = [];
+    for (const op of candidates) {
+      const required = op.operation.required_competencies;
+      let allowed = true;
+      const missing = [];
+      for (const req of required) {
+        const myLvl = compMap.get(req.competency_id);
+        if (!myLvl || myLvl < req.min_level) {
+          allowed = false;
+          missing.push({
+            code: req.competency.code,
+            name: req.competency.name,
+            min_level: req.min_level,
+            my_level: myLvl || 0,
+          });
+        }
+      }
+      if (allowed) {
+        // Pro UI nepotřebujeme vracet required_competencies — usnadníme payload.
+        const { required_competencies, ...opSlim } = op.operation;
+        available.push({ ...op, operation: opSlim });
+      }
+      // Else: úkol pro tohoto pracovníka skrytý (tvrdá kompetenční politika).
+    }
+
+    res.json({
+      workstation_id: wsId,
+      person_id: personId,
+      my_in_progress: myInProgress,
+      available,
+    });
+  } catch (err) { next(err); }
+});
+
+// =============================================================================
+// PLÁNOVAČ — INSTANCE OPERACÍ (BatchOperation)
 // =============================================================================
 
 // GET /api/production/batch-operations — seznam instancí operací

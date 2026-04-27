@@ -254,23 +254,26 @@
       </div>
     </div>
 
-    <!-- Operátorský panel -->
-    <div class="kiosk-card planned">
+    <!-- Operátorský panel — kiosek pracoviště (F6 Plánovače) -->
+    <a href="modules/kiosky/pracoviste.html?ws=85" target="_blank" class="kiosk-card">
       <div class="kiosk-card-header">
         <div class="kiosk-card-icon" style="background: rgba(59, 130, 246, 0.15); color: #3b82f6;">🖥</div>
         <div>
           <div class="kiosk-card-title">Operátorský panel</div>
-          <div class="kiosk-card-subtitle">Pracoviště na hale</div>
+          <div class="kiosk-card-subtitle">Pracoviště na hale (čipový login)</div>
         </div>
       </div>
       <div class="kiosk-card-desc">
-        Panel pro operátora u stroje — zobrazení aktuální operace, pracovního postupu, hlášení závad a potvrzení dokončení.
+        Panel pro operátora u stroje — zobrazení rozpracovaných a dostupných úkolů, start/done přes čipovou kartu. URL <code>?ws=N</code> = ID pracoviště.
       </div>
       <div class="kiosk-card-footer">
-        <div class="kiosk-card-status planned">Připravuje se</div>
-        <div class="kiosk-card-action"></div>
+        <div class="kiosk-card-status active">Aktivní</div>
+        <div class="kiosk-card-actions">
+          <button class="btn-copy-link" onclick="event.preventDefault(); event.stopPropagation(); copyKioskLink(this, 'modules/kiosky/pracoviste.html?ws=85');">📋 Kopírovat odkaz (ws=85)</button>
+          <div class="kiosk-card-action">Otevřít →</div>
+        </div>
       </div>
-    </div>
+    </a>
 
   </div>
 </div>

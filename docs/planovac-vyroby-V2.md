@@ -225,14 +225,16 @@ model BatchOperationLog {
 - [ ] **F5.4** Workstation buffer view (vstupní/výstupní materiál v reálném čase)
 - [ ] **F5.5** Endpoint `GET /api/slots/:id/health-score`
 
-### F6 — Výrobní obrazovka pracoviště
-- [ ] **F6.1** Rozšíření `modules/kiosky/` o typ `workstation` (URL `?type=workstation&ws=N`)
-- [ ] **F6.2** Login čipem (Attendance pattern, sdílí logiku se HR kioskem)
-- [ ] **F6.3** Endpoint `GET /api/workstation/:id/available-work` — filtrované přes kompetence + ready BatchOperation
-- [ ] **F6.4** Endpoint `POST /api/batch-operations/:id/start` (assigned_person_id + started_at)
-- [ ] **F6.5** Endpoint `POST /api/batch-operations/:id/done` + auto-trigger transferu materiálu na další pracoviště
-- [ ] **F6.6** Touch-friendly fullscreen UI (velká tlačítka, čitelné z 1 m)
-- [ ] **F6.7** Live refresh seznamu úkolů (polling 30 s)
+### F6 — Výrobní obrazovka pracoviště ✅ DONE 2026-04-27 (MVP)
+- [x] **F6.1** `modules/kiosky/pracoviste.html` (URL `?ws=N`) + aktivace karty na rozcestníku
+- [x] **F6.2** Login čipem přes existující `/api/hr/kiosk/identify` (sdíleno s HR kioskem)
+- [x] **F6.3** `GET /api/production/workstations/:id/available-work?person_id=N` — tvrdé filtrování přes WorkerCompetency × OperationRequiredCompetency, vrací `my_in_progress` + `available`
+- [x] **F6.4** `POST /api/production/batch-operations/:id/start` (z F1.4)
+- [x] **F6.5** `POST /api/production/batch-operations/:id/done` (z F1.4) — auto-transfer materiálu na další pracoviště je TODO pro F3 plánovač
+- [x] **F6.6** Touch-friendly fullscreen UI — velká tlačítka, dark theme, animovaný chip pulse, toast notifikace
+- [x] **F6.7** Polling 30s + auto-logout po 5 min nečinnosti
+
+**Smoke test data**: `node scripts/seed-test-batch.js --ws=N` vyrobí 1 testovací dávku se statusem `released` + BatchOperation pro každou ProductOperation pracoviště, status `ready` (hned vidět v kiosku).
 
 ### F7 — Workflow engine (paralelně po F3)
 - [ ] **F7.1** Schema migrace `Workflow`, `WorkflowNode`, `WorkflowEdge`, `WorkflowRun`, `NodeExecution`, `Feedback`

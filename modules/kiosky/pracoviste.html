@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Výrobní kiosek | HOLYOS</title>
+  <link rel="icon" type="image/svg+xml" href="../../logo-holyos-icon.svg">
+  <base href="../../">
+  <link rel="stylesheet" href="css/dashboard.css">
+  <style>
+    /* =========================================================================
+       Výrobní kiosek pracoviště — fullscreen, touch-friendly, čitelné z 1 m
+       ========================================================================= */
+
+    body {
+      margin: 0;
+      padding: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      overflow: hidden;
+    }
+
+    .ws-kiosk {
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      background: linear-gradient(135deg, #1e1e2e 0%, #28324a 100%);
+    }
+
+    /* ----- Top bar — info o pracovišti + odhlásit ----- */
+    .ws-topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 16px 32px;
+      background: rgba(0, 0, 0, 0.25);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .ws-name {
+      font-size: 28px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+    }
+
+    .ws-name small {
+      display: block;
+      font-size: 13px;
+      font-weight: 400;
+      color: var(--text2);
+      letter-spacing: normal;
+    }
+
+    .ws-clock {
+      font-size: 24px;
+      font-weight: 600;
+      color: var(--text2);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .ws-logout-btn {
+      background: rgba(239, 68, 68, 0.15);
+      color: #ef4444;
+      border: 1px solid rgba(239, 68, 68, 0.4);
+      border-radius: 12px;
+      padding: 10px 20px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .ws-logout-btn:hover { background: rgba(239, 68, 68, 0.25); }
+
+    /* ----- Stavy obrazovky ----- */
+    .ws-content {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 32px;
+      overflow-y: auto;
+    }
+
+    /* Login stav — čekání na čip */
+    .ws-login {
+      text-align: center;
+      max-width: 600px;
+    }
+
+    .ws-login h1 {
+      font-size: 64px;
+      font-weight: 800;
+      margin: 0 0 24px;
+      letter-spacing: -0.02em;
+    }
+
+    .ws-login p {
+      font-size: 22px;
+      color: var(--text2);
+      margin: 0;
+    }
+
+    .ws-chip-icon {
+      width: 160px;
+      height: 160px;
+      margin: 32px auto;
+      border-radius: 50%;
+      background: rgba(108, 140, 255, 0.15);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 80px;
+      animation: pulse-chip 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse-chip {
+      0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(108, 140, 255, 0.4); }
+      50%      { transform: scale(1.05); box-shadow: 0 0 0 24px rgba(108, 140, 255, 0); }
+    }
+
+    /* Hidden chip input — keyboard wedge / RFID čtečka tam píše */
+    #chipInput {
+      position: absolute;
+      left: -9999px;
+      width: 1px;
+      height: 1px;
+      opacity: 0;
+    }
+
+    /* ----- Identifikovaný pracovník + seznam úkolů ----- */
+    .ws-worker-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 20px 32px;
+      background: rgba(108, 140, 255, 0.12);
+      border-bottom: 1px solid rgba(108, 140, 255, 0.25);
+    }
+
+    .ws-worker-name {
+      font-size: 24px;
+      font-weight: 700;
+    }
+
+    .ws-worker-name small {
+      display: block;
+      font-size: 13px;
+      color: var(--text2);
+      font-weight: 400;
+      margin-top: 2px;
+    }
+
+    .ws-tasks {
+      width: 100%;
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 24px 0;
+    }
+
+    .ws-section-title {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--text2);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin: 16px 0 12px;
+      padding: 0 8px;
+    }
+
+    .ws-task-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 20px 24px;
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      transition: border-color 0.15s, transform 0.15s;
+    }
+
+    .ws-task-card.in-progress {
+      border-color: #22c55e;
+      background: rgba(34, 197, 94, 0.06);
+    }
+
+    .ws-task-info { flex: 1; min-width: 0; }
+
+    .ws-task-batch {
+      font-size: 13px;
+      color: var(--text2);
+      letter-spacing: 0.4px;
+      text-transform: uppercase;
+      font-weight: 600;
+    }
+
+    .ws-task-name {
+      font-size: 22px;
+      font-weight: 700;
+      margin: 4px 0;
+    }
+
+    .ws-task-meta {
+      font-size: 14px;
+      color: var(--text2);
+      display: flex;
+      gap: 18px;
+      flex-wrap: wrap;
+    }
+
+    .ws-task-actions {
+      display: flex;
+      gap: 12px;
+    }
+
+    .ws-btn {
+      font-size: 18px;
+      font-weight: 700;
+      padding: 16px 28px;
+      border-radius: 12px;
+      border: none;
+      cursor: pointer;
+      min-width: 140px;
+      transition: transform 0.1s, opacity 0.15s;
+    }
+
+    .ws-btn:active { transform: scale(0.97); }
+
+    .ws-btn-start {
+      background: var(--accent);
+      color: white;
+    }
+
+    .ws-btn-done {
+      background: #22c55e;
+      color: white;
+    }
+
+    .ws-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .ws-empty {
+      text-align: center;
+      padding: 64px 24px;
+      color: var(--text2);
+    }
+
+    .ws-empty-icon {
+      font-size: 64px;
+      margin-bottom: 16px;
+      opacity: 0.5;
+    }
+
+    /* Toast notifikace */
+    .ws-toast {
+      position: fixed;
+      bottom: 32px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px 28px;
+      font-size: 17px;
+      font-weight: 600;
+      box-shadow: 0 12px 40px rgba(0,0,0,0.4);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.25s;
+      z-index: 100;
+    }
+
+    .ws-toast.show { opacity: 1; }
+    .ws-toast.success { border-color: #22c55e; color: #22c55e; }
+    .ws-toast.error { border-color: #ef4444; color: #ef4444; }
+  </style>
+</head>
+<body>
+
+<input type="text" id="chipInput" autocomplete="off" autofocus>
+
+<div class="ws-kiosk">
+
+  <div class="ws-topbar">
+    <div class="ws-name" id="wsName">Načítám...<small id="wsCode"></small></div>
+    <div class="ws-clock" id="wsClock">--:--</div>
+    <button class="ws-logout-btn" id="logoutBtn" style="display:none">Odhlásit</button>
+  </div>
+
+  <!-- Login screen -->
+  <div class="ws-content" id="loginScreen">
+    <div class="ws-login">
+      <div class="ws-chip-icon">🪪</div>
+      <h1>Přiložte čip</h1>
+      <p>Pro zobrazení vašich úkolů přiložte čipovou kartu ke čtečce.</p>
+    </div>
+  </div>
+
+  <!-- Worker / tasks screen -->
+  <div id="workerScreen" style="display:none; flex:1; display:flex; flex-direction:column;">
+    <div class="ws-worker-bar">
+      <div class="ws-worker-name" id="workerName">—<small id="workerMeta"></small></div>
+      <div style="font-size:14px; color:var(--text2);" id="lastUpdate">—</div>
+    </div>
+    <div class="ws-tasks" id="tasksContainer">
+      <div class="ws-empty">
+        <div class="ws-empty-icon">⏳</div>
+        <div>Načítám úkoly...</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="ws-toast" id="toast"></div>
+
+<script>
+(function() {
+  // ----- Načtení parametrů URL -----
+  const params = new URLSearchParams(window.location.search);
+  const wsId = parseInt(params.get('ws'), 10);
+
+  if (isNaN(wsId)) {
+    document.getElementById('wsName').innerHTML = 'Chyba<small>Chybí ?ws=&lt;ID&gt;</small>';
+    return;
+  }
+
+  // ----- Stav -----
+  let currentWorkstation = null;
+  let currentPerson = null;
+  let pollTimer = null;
+  let isProcessing = false;
+
+  // ----- DOM refs -----
+  const chipInput = document.getElementById('chipInput');
+  const loginScreen = document.getElementById('loginScreen');
+  const workerScreen = document.getElementById('workerScreen');
+  const wsName = document.getElementById('wsName');
+  const wsCode = document.getElementById('wsCode');
+  const wsClock = document.getElementById('wsClock');
+  const workerName = document.getElementById('workerName');
+  const workerMeta = document.getElementById('workerMeta');
+  const tasksContainer = document.getElementById('tasksContainer');
+  const lastUpdate = document.getElementById('lastUpdate');
+  const logoutBtn = document.getElementById('logoutBtn');
+  const toast = document.getElementById('toast');
+
+  // ----- Pomocné -----
+  function showToast(msg, type) {
+    toast.textContent = msg;
+    toast.className = 'ws-toast show ' + (type || '');
+    setTimeout(() => { toast.className = 'ws-toast'; }, 2500);
+  }
+
+  function tickClock() {
+    const d = new Date();
+    wsClock.textContent = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+  }
+  setInterval(tickClock, 5000);
+  tickClock();
+
+  // CZ keyboard fix — některé čtečky posílají skrz CZ layout
+  function fixCzKeyboard(s) {
+    const map = { '+':'1','ě':'2','š':'3','č':'4','ř':'5','ž':'6','ý':'7','á':'8','í':'9','é':'0' };
+    return s.split('').map(c => map[c] || c).join('');
+  }
+
+  // Drží focus na chip input (jediné aktivní pole pro RFID)
+  function refocusChip() {
+    if (!currentPerson) chipInput.focus();
+  }
+  chipInput.addEventListener('blur', () => setTimeout(refocusChip, 0));
+  document.addEventListener('click', refocusChip);
+
+  // ----- Načtení info o pracovišti -----
+  async function loadWorkstation() {
+    try {
+      const r = await fetch(`/api/production/workstations`, { credentials: 'include' });
+      // Tento endpoint nemusí existovat — fallback na obecný workstation lookup později
+      if (!r.ok) throw new Error('workstation list nedostupný');
+      const list = await r.json();
+      const ws = (list || []).find(w => w.id === wsId);
+      if (ws) {
+        currentWorkstation = ws;
+        wsName.firstChild.textContent = ws.name;
+        wsCode.textContent = ws.code ? `kód ${ws.code}` : '';
+      } else {
+        wsName.firstChild.textContent = `Pracoviště #${wsId}`;
+      }
+    } catch (e) {
+      wsName.firstChild.textContent = `Pracoviště #${wsId}`;
+    }
+  }
+
+  // ----- Chip scan handler -----
+  chipInput.addEventListener('keypress', async (e) => {
+    if (e.key !== 'Enter') return;
+    const raw = chipInput.value.trim();
+    chipInput.value = '';
+    if (!raw || isProcessing) return;
+
+    const chipId = fixCzKeyboard(raw);
+    isProcessing = true;
+    try {
+      const r = await fetch('/api/hr/kiosk/identify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ chip_id: chipId }),
+      });
+      if (!r.ok) {
+        showToast('Čip nebyl rozpoznán', 'error');
+        return;
+      }
+      const person = await r.json();
+      currentPerson = person;
+      showWorkerScreen();
+      await refreshTasks();
+      startPolling();
+    } catch (err) {
+      showToast('Chyba spojení', 'error');
+    } finally {
+      isProcessing = false;
+    }
+  });
+
+  function showWorkerScreen() {
+    loginScreen.style.display = 'none';
+    workerScreen.style.display = 'flex';
+    logoutBtn.style.display = 'block';
+    // /api/hr/kiosk/identify vrací { id, name, role, photo, ... } — ne first_name/last_name
+    workerName.firstChild.textContent = currentPerson.name || `Pracovník #${currentPerson.id}`;
+    workerMeta.textContent = currentPerson.role || '';
+  }
+
+  // ----- Logout -----
+  logoutBtn.addEventListener('click', logout);
+  function logout() {
+    currentPerson = null;
+    stopPolling();
+    workerScreen.style.display = 'none';
+    loginScreen.style.display = 'flex';
+    logoutBtn.style.display = 'none';
+    chipInput.focus();
+  }
+
+  // Auto logout po 5 minutách nečinnosti
+  let inactivityTimer = null;
+  function resetInactivity() {
+    if (inactivityTimer) clearTimeout(inactivityTimer);
+    if (currentPerson) {
+      inactivityTimer = setTimeout(() => {
+        showToast('Odhlášen kvůli nečinnosti', 'error');
+        logout();
+      }, 5 * 60 * 1000);
+    }
+  }
+  document.addEventListener('click', resetInactivity);
+  document.addEventListener('keydown', resetInactivity);
+
+  // ----- Načítání úkolů -----
+  async function refreshTasks() {
+    if (!currentPerson) return;
+    try {
+      const r = await fetch(`/api/production/workstations/${wsId}/available-work?person_id=${currentPerson.id}`, {
+        credentials: 'include',
+      });
+      if (!r.ok) {
+        tasksContainer.innerHTML = `<div class="ws-empty"><div class="ws-empty-icon">⚠️</div><div>Chyba načítání (HTTP ${r.status})</div></div>`;
+        return;
+      }
+      const data = await r.json();
+      renderTasks(data);
+      lastUpdate.textContent = 'Aktualizováno ' + new Date().toLocaleTimeString('cs-CZ', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    } catch (e) {
+      tasksContainer.innerHTML = `<div class="ws-empty"><div class="ws-empty-icon">⚠️</div><div>Chyba spojení</div></div>`;
+    }
+  }
+
+  function renderTasks(data) {
+    const myInProgress = data.my_in_progress || [];
+    const available = data.available || [];
+
+    if (myInProgress.length === 0 && available.length === 0) {
+      tasksContainer.innerHTML = `
+        <div class="ws-empty">
+          <div class="ws-empty-icon">✅</div>
+          <div>Žádné úkoly. Užijte si přestávku.</div>
+        </div>`;
+      return;
+    }
+
+    let html = '';
+    if (myInProgress.length > 0) {
+      html += '<div class="ws-section-title">Můj rozpracovaný úkol</div>';
+      html += myInProgress.map(t => taskCardHtml(t, 'in-progress')).join('');
+    }
+    if (available.length > 0) {
+      html += '<div class="ws-section-title">Dostupné úkoly</div>';
+      html += available.map(t => taskCardHtml(t, 'available')).join('');
+    }
+    tasksContainer.innerHTML = html;
+
+    // Naheaderuj posluchače
+    tasksContainer.querySelectorAll('[data-action]').forEach(btn => {
+      btn.addEventListener('click', handleTaskAction);
+    });
+  }
+
+  function escapeHtml(s) {
+    if (s == null) return '';
+    return String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+  }
+
+  function taskCardHtml(t, kind) {
+    const product = t.batch?.product;
+    const op = t.operation;
+    const isInProgress = kind === 'in-progress';
+    const action = isInProgress ? 'done' : 'start';
+    const btnLabel = isInProgress ? '✓ Hotovo' : '▶ Začít';
+    const btnClass = isInProgress ? 'ws-btn-done' : 'ws-btn-start';
+
+    return `
+      <div class="ws-task-card ${isInProgress ? 'in-progress' : ''}">
+        <div class="ws-task-info">
+          <div class="ws-task-batch">${escapeHtml(t.batch?.batch_number || '')} · ${escapeHtml(product?.code || '')} ${escapeHtml(product?.name || '')}</div>
+          <div class="ws-task-name">${escapeHtml(op?.step_number || '')}. ${escapeHtml(op?.name || 'Operace')}</div>
+          <div class="ws-task-meta">
+            <span>📦 ${t.batch?.quantity || '?'} ks</span>
+            ${op?.duration ? `<span>⏱ ${op.duration} min/ks</span>` : ''}
+            ${t.batch?.priority ? `<span>⚡ priorita ${t.batch.priority}</span>` : ''}
+          </div>
+        </div>
+        <div class="ws-task-actions">
+          <button class="ws-btn ${btnClass}" data-action="${action}" data-id="${t.id}">${btnLabel}</button>
+        </div>
+      </div>`;
+  }
+
+  async function handleTaskAction(e) {
+    const btn = e.currentTarget;
+    const action = btn.dataset.action;
+    const id = parseInt(btn.dataset.id, 10);
+    if (!id || isProcessing) return;
+
+    btn.disabled = true;
+    isProcessing = true;
+    try {
+      const r = await fetch(`/api/production/batch-operations/${id}/${action}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ person_id: currentPerson.id }),
+      });
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({}));
+        showToast(err.error || `Chyba (HTTP ${r.status})`, 'error');
+      } else {
+        showToast(action === 'start' ? 'Úkol zahájen' : 'Úkol dokončen', 'success');
+      }
+      await refreshTasks();
+    } catch (err) {
+      showToast('Chyba spojení', 'error');
+    } finally {
+      isProcessing = false;
+      btn.disabled = false;
+    }
+  }
+
+  // ----- Polling -----
+  function startPolling() {
+    stopPolling();
+    pollTimer = setInterval(refreshTasks, 30000);
+    resetInactivity();
+  }
+  function stopPolling() {
+    if (pollTimer) clearInterval(pollTimer);
+    pollTimer = null;
+    if (inactivityTimer) clearTimeout(inactivityTimer);
+  }
+
+  // ----- Init -----
+  loadWorkstation();
+  chipInput.focus();
+})();
+</script>
+
+</body>
+</html>
