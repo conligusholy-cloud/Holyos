@@ -256,12 +256,18 @@ async function processMessage(userPrincipalName, msg) {
 
   let candidates = savedAttachments.filter(a => a.is_invoice_candidate);
 
-  // Fáze 3 rozšíření: pokud žádná čitelná příloha, zkus odkazy v těle e-mailu.
-  if (candidates.length === 0) {
-    const links = extractInvoiceLinksFromBody(msg.body?.content, msg.bodyPreview);
-    if (links.length > 0) {
-      console.log(`[email-ingest] Mail "${msg.subject}" nemá přílohy, zkouším ${links.length} odkazů.`);
-      for (const { url } of links) {
+  // Fáze 3 rozšíření: VŽDYCKY zkus odkazy v těle (i když máme přílohy — ty mohou
+  // být jen logo/banner, skutečná faktura je v URL).
+  // Skip jen pokud už máme stahnutý link z předchozího běhu (sha256 nebo source_url match).
+  const links = extractInvoiceLinksFromBody(msg.body?.content, msg.bodyPreview);
+  if (links.length > 0) {
+    const existingLinks = new Set(
+      savedAttachments.filter(a => a.source === 'link_download' && a.source_url).map(a => a.source_url)
+    );
+    const newLinks = links.filter(l => !existingLinks.has(l.url));
+    if (newLinks.length > 0) {
+      console.log(`[email-ingest] Mail "${msg.subject}" — zkouším ${newLinks.length} odkazů (z ${links.length} celkem, ${candidates.length} stávajících příloh-kandidátů).`);
+      for (const { url } of newLinks) {
         const downloaded = await downloadInvoiceFromLink(url, ingest.id, targetDir);
         if (downloaded) {
           savedAttachments.push(downloaded);
