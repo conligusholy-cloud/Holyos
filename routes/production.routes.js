@@ -1434,22 +1434,12 @@ router.get('/batches/:id', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// Helper: ISO week number (Po-Ne, čtvrtek určuje rok)
-function getIsoWeek(date) {
-  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
-  const dayNum = d.getUTCDay() || 7;
-  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
-  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
-  const week = Math.ceil(((d - yearStart) / 86400000 + 1) / 7);
-  return { year: d.getUTCFullYear(), week };
-}
-
-// Generátor batch_number: DV-{rok}-W{week}-{seq}
-// Bere týden z planned_start (pokud je) jinak z dnes.
+// Generátor batch_number: {rok}-{seq3}, např. "2026-001", "2026-042".
+// Sekvence běží od 1 v rámci kalendářního roku planned_start (nebo dnes).
 async function generateBatchNumber(plannedStart) {
   const ref = plannedStart ? new Date(plannedStart) : new Date();
-  const { year, week } = getIsoWeek(ref);
-  const prefix = `DV-${year}-W${String(week).padStart(2, '0')}-`;
+  const year = ref.getFullYear();
+  const prefix = `${year}-`;
   const last = await prisma.productionBatch.findFirst({
     where: { batch_number: { startsWith: prefix } },
     orderBy: { batch_number: 'desc' },

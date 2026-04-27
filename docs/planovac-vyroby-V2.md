@@ -117,7 +117,7 @@ model OperationRequiredCompetency {
 
 // Výrobní dávka
 model ProductionBatch {
-  id, batch_number (DV-{rok}-W{week}-{seq}),
+  id, batch_number ({rok}-{seq3}),
   product_id, variant_key, quantity,
   batch_type (main/feeder/subassembly), status (planned/released/in_progress/paused/done/cancelled),
   priority, planned_start, planned_end, actual_start, actual_end,
@@ -192,7 +192,7 @@ model BatchOperationLog {
 - [x] **F1.1** Schema rozšíření v `prisma/schema.prisma` (8 nových + 4 rozšíření)
 - [x] **F1.2** Migrační SQL `20260427160947_pridej-davky-kompetence-bom-snapshot` + apply na Railway DB (diff + db execute + migrate resolve)
 - [x] **F1.3** Routes Competency + WorkerCompetency + OperationRequiredCompetency CRUD (11 endpointů)
-- [x] **F1.4** Routes ProductionBatch + BatchOperation CRUD + generátor batch_number `DV-{rok}-W{week}-{seq}` (9 endpointů)
+- [x] **F1.4** Routes ProductionBatch + BatchOperation CRUD + generátor batch_number `{rok}-{seq3}` (9 endpointů)
 - [x] **F1.5** Seed `scripts/seed-competencies.js` — 15 kompetencí (svarovna, montáž, elektro, bondy, lakovna, kontrola, expedice)
 
 ### F2 — Factorify pull
