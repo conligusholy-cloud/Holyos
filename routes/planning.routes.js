@@ -219,6 +219,92 @@ router.post('/mrp-run', async (req, res, next) => {
 });
 
 // =============================================================================
+// PLÁNOVAČ — VÝKON PRACOVNÍKA (today / per date)
+// =============================================================================
+
+// GET /api/planning/persons/:id/performance?date=YYYY-MM-DD
+//   Co pracovník daný den udělal — kolik BatchOperation dokončil, kolik minut.
+//   Default date = dnes.
+router.get('/persons/:id/performance', async (req, res, next) => {
+  try {
+    const personId = parseInt(req.params.id, 10);
+    if (isNaN(personId)) return res.status(400).json({ error: 'Neplatné ID' });
+
+    const dateStr = req.query.date || new Date().toISOString().slice(0, 10);
+    const dayStart = new Date(dateStr + 'T00:00:00');
+    const dayEnd = new Date(dateStr + 'T23:59:59');
+    if (isNaN(dayStart.getTime())) return res.status(400).json({ error: 'Neplatné datum' });
+
+    const person = await prisma.person.findUnique({
+      where: { id: personId },
+      select: { id: true, first_name: true, last_name: true, employee_number: true },
+    });
+    if (!person) return res.status(404).json({ error: 'Pracovník nenalezen' });
+
+    // Dokončené BatchOperation, kde pracovník byl assigned (nezáleží na logu —
+    // BatchOperation.assigned_person_id + finished_at je zdroj pravdy).
+    const completed = await prisma.batchOperation.findMany({
+      where: {
+        assigned_person_id: personId,
+        finished_at: { gte: dayStart, lte: dayEnd },
+        status: 'done',
+      },
+      include: {
+        operation: { select: { name: true, step_number: true } },
+        workstation: { select: { name: true } },
+        batch: { select: { batch_number: true,
+          product: { select: { code: true, name: true } } } },
+      },
+      orderBy: { finished_at: 'asc' },
+    });
+
+    // Rozpracované, které pracovník začal a stále jede
+    const inProgress = await prisma.batchOperation.findMany({
+      where: { assigned_person_id: personId, status: 'in_progress' },
+      include: {
+        operation: { select: { name: true } },
+        workstation: { select: { name: true } },
+        batch: { select: { batch_number: true,
+          product: { select: { code: true, name: true } } } },
+      },
+    });
+
+    const totalMinutes = completed.reduce((s, op) => s + (op.duration_minutes || 0), 0);
+
+    res.json({
+      person,
+      date: dateStr,
+      summary: {
+        completed_count: completed.length,
+        in_progress_count: inProgress.length,
+        total_minutes: totalMinutes,
+        total_hours: +(totalMinutes / 60).toFixed(2),
+        avg_minutes_per_operation: completed.length > 0 ? +(totalMinutes / completed.length).toFixed(1) : 0,
+      },
+      completed: completed.map(op => ({
+        id: op.id,
+        batch_number: op.batch?.batch_number,
+        product: op.batch?.product ? `${op.batch.product.code} ${op.batch.product.name}` : null,
+        operation: op.operation?.name,
+        step: op.operation?.step_number,
+        workstation: op.workstation?.name,
+        started_at: op.started_at,
+        finished_at: op.finished_at,
+        duration_minutes: op.duration_minutes,
+      })),
+      in_progress: inProgress.map(op => ({
+        id: op.id,
+        batch_number: op.batch?.batch_number,
+        product: op.batch?.product ? `${op.batch.product.code} ${op.batch.product.name}` : null,
+        operation: op.operation?.name,
+        workstation: op.workstation?.name,
+        started_at: op.started_at,
+      })),
+    });
+  } catch (err) { next(err); }
+});
+
+// =============================================================================
 // PLÁNOVAČ — VYTÍŽENÍ PRACOVIŠŤ (queue summary)
 // =============================================================================
 
