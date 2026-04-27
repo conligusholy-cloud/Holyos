@@ -298,6 +298,85 @@ router.post('/batches/:id/cancel', async (req, res, next) => {
 });
 
 // =============================================================================
+// PLÁNOVAČ — PROBLEM REPORTING (z kiosku)
+// =============================================================================
+
+// POST /api/planning/batch-operations/:id/problem
+//   body: { person_id, note }
+//   Pracovník hlásí problém s úkolem (chybí materiál, špatný výkres, ...).
+//   Akce: BatchOperation.status → 'blocked', BatchOperationLog action='problem' + note.
+//   Foreman pak v audit logu uvidí.
+router.post('/batch-operations/:id/problem', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ error: 'Neplatné ID' });
+
+    const personId = req.body?.person_id ? parseInt(req.body.person_id, 10) : null;
+    const note = (req.body?.note || '').trim();
+    if (!note) return res.status(400).json({ error: 'note je povinná — popiš problém' });
+
+    const existing = await prisma.batchOperation.findUnique({
+      where: { id }, select: { status: true },
+    });
+    if (!existing) return res.status(404).json({ error: 'Operace nenalezena' });
+
+    const result = await prisma.$transaction(async (tx) => {
+      const op = await tx.batchOperation.update({
+        where: { id },
+        data: { status: 'blocked' },
+      });
+      await tx.batchOperationLog.create({
+        data: { batch_operation_id: id, person_id: personId, action: 'problem', note },
+      });
+      return op;
+    });
+
+    res.json({ batch_operation: result, status_before: existing.status, action_logged: 'problem' });
+  } catch (err) {
+    if (err.code === 'P2003') return res.status(400).json({ error: 'Person neexistuje' });
+    next(err);
+  }
+});
+
+// POST /api/planning/batch-operations/:id/unblock
+//   Foreman/admin uvolní zablokovanou operaci po vyřešení problému.
+//   blocked → ready (defaultně) nebo zachová původní status, pokud je v body.
+router.post('/batch-operations/:id/unblock', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ error: 'Neplatné ID' });
+
+    const targetStatus = req.body?.target_status || 'ready';
+    if (!['ready', 'pending', 'in_progress'].includes(targetStatus)) {
+      return res.status(400).json({ error: "target_status musí být 'ready', 'pending' nebo 'in_progress'" });
+    }
+    const note = (req.body?.note || '').trim() || null;
+    const personId = req.body?.person_id ? parseInt(req.body.person_id, 10) : null;
+
+    const existing = await prisma.batchOperation.findUnique({
+      where: { id }, select: { status: true },
+    });
+    if (!existing) return res.status(404).json({ error: 'Operace nenalezena' });
+    if (existing.status !== 'blocked') {
+      return res.status(409).json({ error: `Nelze unblockovat ze stavu '${existing.status}', musí být 'blocked'` });
+    }
+
+    const result = await prisma.$transaction(async (tx) => {
+      const op = await tx.batchOperation.update({
+        where: { id }, data: { status: targetStatus },
+      });
+      await tx.batchOperationLog.create({
+        data: { batch_operation_id: id, person_id: personId, action: 'comment',
+          note: `Unblock → ${targetStatus}` + (note ? ': ' + note : '') },
+      });
+      return op;
+    });
+
+    res.json({ batch_operation: result, status_before: 'blocked', status_after: targetStatus });
+  } catch (err) { next(err); }
+});
+
+// =============================================================================
 // PLÁNOVAČ — AUDIT LOG (BatchOperationLog query)
 // =============================================================================
 

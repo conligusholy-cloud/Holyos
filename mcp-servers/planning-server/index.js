@@ -185,6 +185,20 @@ function getPlanningTools() {
       input_schema: { type: 'object', properties: { batch_id: { type: 'number' } }, required: ['batch_id'] },
     },
     {
+      name: 'unblock_operation',
+      description: 'Odblokuje BatchOperation která byla zablokovaná po hlášení problému. Foreman zadá target_status (default ready) a poznámku.',
+      input_schema: {
+        type: 'object',
+        properties: {
+          batch_operation_id: { type: 'number' },
+          target_status: { type: 'string', enum: ['ready', 'pending', 'in_progress'], default: 'ready' },
+          note: { type: 'string' },
+          person_id: { type: 'number', description: 'Foreman ID pro audit' },
+        },
+        required: ['batch_operation_id'],
+      },
+    },
+    {
       name: 'audit_log',
       description: 'Audit log akcí v kioscích — kdo co kdy udělal (start/pause/resume/done/problem). Filtry: from, to (YYYY-MM-DD), person_id, batch_id, action. Default: dnes.',
       input_schema: {
@@ -607,6 +621,33 @@ async function executePlanningTool(toolName, params, prisma) {
     case 'check_batch_completion': {
       const result = await checkAndCloseBatch(params.batch_id);
       return result;
+    }
+
+    // ─── unblock_operation ───────────────────────────────────────────────
+    case 'unblock_operation': {
+      const targetStatus = params.target_status || 'ready';
+      const existing = await prisma.batchOperation.findUnique({
+        where: { id: params.batch_operation_id }, select: { status: true },
+      });
+      if (!existing) throw new Error(`Operace id=${params.batch_operation_id} nenalezena`);
+      if (existing.status !== 'blocked') {
+        throw new Error(`Nelze unblockovat ze stavu '${existing.status}'`);
+      }
+      const result = await prisma.$transaction(async (tx) => {
+        const op = await tx.batchOperation.update({
+          where: { id: params.batch_operation_id }, data: { status: targetStatus },
+        });
+        await tx.batchOperationLog.create({
+          data: {
+            batch_operation_id: params.batch_operation_id,
+            person_id: params.person_id || null,
+            action: 'comment',
+            note: `Unblock → ${targetStatus}` + (params.note ? ': ' + params.note : ''),
+          },
+        });
+        return op;
+      });
+      return { batch_operation_id: result.id, status_after: targetStatus };
     }
 
     // ─── audit_log ───────────────────────────────────────────────────────
