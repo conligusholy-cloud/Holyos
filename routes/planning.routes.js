@@ -675,11 +675,42 @@ router.get('/workstation-queue', async (req, res, next) => {
 
 // GET /api/planning/purchase-report
 //   ?statuses=planned,released,in_progress  (CSV — default je všech aktivních)
+//   ?format=csv  → vrátí text/csv (jinak JSON).
 //   Vrátí materiály, které je třeba objednat napříč všemi dávkami.
 router.get('/purchase-report', async (req, res, next) => {
   try {
     const statuses = req.query.statuses ? String(req.query.statuses).split(',').map(s => s.trim()).filter(Boolean) : null;
     const result = await computePurchaseReport({ statuses });
+
+    if (req.query.format === 'csv') {
+      // CSV s BOM (Excel je očekává pro UTF-8 v české diakritice)
+      const esc = v => {
+        if (v == null) return '';
+        const s = String(v);
+        return /[",;\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+      };
+      const lines = [
+        ['Kód', 'Název', 'Objednat', 'Jednotka', 'Dodavatel', 'Lead time (dní)', 'Očekávané dodání', 'Pokrývá dávek'].join(';'),
+      ];
+      for (const it of result.items) {
+        lines.push([
+          esc(it.material?.code),
+          esc(it.material?.name),
+          esc(it.total_shortage),
+          esc(it.unit),
+          esc(it.supplier?.name || ''),
+          esc(it.lead_time_days != null ? it.lead_time_days : ''),
+          esc(it.expected_delivery || ''),
+          esc(it.contributors.length),
+        ].join(';'));
+      }
+      const csv = '﻿' + lines.join('\r\n');
+      const filename = `nakupni-report-${new Date().toISOString().slice(0, 10)}.csv`;
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      return res.send(csv);
+    }
+
     res.json(result);
   } catch (err) { next(err); }
 });
