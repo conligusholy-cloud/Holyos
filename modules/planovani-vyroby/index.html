@@ -141,6 +141,7 @@
     <span style="font-size:22px;">🗂️</span>
     <h1>Plánování výroby <span class="count" id="batchCount"></span></h1>
     <div style="margin-left:auto; display:flex; gap:8px;">
+      <button class="btn btn-secondary" onclick="openPurchaseReport()" title="Konsolidovaný nákupní report přes všechny aktivní dávky">📋 Nákupní report</button>
       <button class="btn btn-secondary" onclick="loadAll()">🔄 Obnovit</button>
       <button class="btn btn-primary" onclick="openCreateModal()">+ Nová dávka</button>
     </div>
@@ -448,6 +449,91 @@
       alert('Chyba: ' + err.message);
       btn.disabled = false;
     }
+  }
+
+  // ─── Konsolidovaný nákupní report — F4.5 ────────────────────────────────
+  async function openPurchaseReport() {
+    document.getElementById('modalRoot').innerHTML = `
+      <div class="modal-backdrop" id="mb">
+        <div class="modal" style="min-width:1100px; max-width:95vw;">
+          <h2>📋 Konsolidovaný nákupní report</h2>
+          <div id="pr-content">Načítám…</div>
+          <div class="modal-actions">
+            <button class="btn btn-secondary" onclick="document.getElementById('modalRoot').innerHTML=''">Zavřít</button>
+          </div>
+        </div>
+      </div>`;
+    document.getElementById('mb').addEventListener('click', e => {
+      if (e.target.id === 'mb') document.getElementById('modalRoot').innerHTML = '';
+    });
+
+    try {
+      const r = await fetch('/api/planning/purchase-report', { headers: authHeaders() });
+      if (!r.ok) throw new Error((await r.json()).error || 'HTTP ' + r.status);
+      const rep = await r.json();
+      renderPurchaseReport(rep);
+    } catch (e) {
+      document.getElementById('pr-content').innerHTML = `<div style="color:#ef4444">Chyba: ${escHtml(e.message)}</div>`;
+    }
+  }
+  window.openPurchaseReport = openPurchaseReport;
+
+  function renderPurchaseReport(rep) {
+    if (rep.items_count === 0) {
+      document.getElementById('pr-content').innerHTML = `
+        <div class="empty-state"><div class="empty-icon">✅</div><h3>Vše na skladě!</h3>
+          <p>Napříč ${rep.batches_processed} aktivními dávkami nechybí žádný materiál.</p>
+        </div>`;
+      return;
+    }
+
+    // Sekce 1: Per-supplier summary
+    const suppliersHtml = (rep.by_supplier || []).map(s => {
+      const name = s.supplier ? escHtml(s.supplier.name) : '<em style="color:#f59e0b;">— bez dodavatele —</em>';
+      return `
+        <div style="background:var(--surface2); border-radius:8px; padding:10px 14px; min-width:240px;">
+          <div style="font-weight:700; font-size:13px; margin-bottom:4px;">${name}</div>
+          <div style="font-size:12px; color:var(--text2);">${s.items_count} položek${s.sample_lead_time_days != null ? ' · lead time cca '+s.sample_lead_time_days+' dní' : ''}</div>
+        </div>`;
+    }).join('');
+
+    // Sekce 2: Detail tabulka
+    const itemsRows = rep.items.map(it => {
+      const supplier = it.supplier ? escHtml(it.supplier.name) : '<em style="color:#f59e0b;">— bez —</em>';
+      const contributors = it.contributors.map(c =>
+        `${escHtml(c.batch_number)} (${c.shortage} ${escHtml(it.unit)})`
+      ).join(', ');
+      return `
+        <tr>
+          <td><strong>${escHtml(it.material?.code || '')}</strong></td>
+          <td>${escHtml(it.material?.name || '—')}</td>
+          <td class="col-num"><strong>${it.total_shortage}</strong> ${escHtml(it.unit)}</td>
+          <td>${supplier}</td>
+          <td>${it.lead_time_days != null ? it.lead_time_days + ' dní' : '—'}</td>
+          <td>${it.expected_delivery || '—'}</td>
+          <td style="font-size:11px; color:var(--text2);" title="${escHtml(contributors)}">${it.contributors.length} dávek</td>
+        </tr>`;
+    }).join('');
+
+    document.getElementById('pr-content').innerHTML = `
+      <div style="display:flex; gap:24px; font-size:13px; color:var(--text2); margin-bottom:14px; flex-wrap:wrap;">
+        <div><strong style="color:var(--text);">Aktivních dávek:</strong> ${rep.batches_processed}</div>
+        <div><strong style="color:var(--text);">Materiálů k objednání:</strong> ${rep.items_count}</div>
+        <div><strong style="color:var(--text);">Dodavatelů:</strong> ${rep.by_supplier.length}</div>
+      </div>
+
+      <h3 style="font-size:13px; margin:14px 0 8px; color:var(--text2);">Souhrn podle dodavatele</h3>
+      <div style="display:flex; flex-wrap:wrap; gap:10px; margin-bottom:18px;">${suppliersHtml}</div>
+
+      <h3 style="font-size:13px; margin:14px 0 8px; color:var(--text2);">Materiály k objednání</h3>
+      <div style="overflow-x:auto;">
+        <table class="dense" style="width:100%;">
+          <thead><tr class="head-titles">
+            <th>Kód</th><th>Název</th><th>Objednat</th><th>Dodavatel</th><th>Lead time</th><th>Dodání</th><th>Pokrývá</th>
+          </tr></thead>
+          <tbody>${itemsRows}</tbody>
+        </table>
+      </div>`;
   }
 
   // ─── Pre-pick modal — F3.4 návrh transferů ──────────────────────────────
