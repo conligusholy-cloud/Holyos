@@ -143,6 +143,51 @@ router.get('/items/by-qr/:qr_code', async (req, res, next) => {
 });
 
 // ---------------------------------------------------------------------------
+// GET /api/wh/items/by-id/:id — lookup materiálu podle numerického ID
+// Používá PWA když naskenuje QR ve tvaru `mat-{id}`. Vrací identický shape
+// jako /items/by-qr (material + stock_by_location + last_movements), aby PWA
+// nemusela větvit render.
+// ---------------------------------------------------------------------------
+router.get('/items/by-id/:id', async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) {
+      return res.status(400).json({ error: 'Neplatné ID materiálu' });
+    }
+    const material = await prisma.material.findUnique({
+      where: { id },
+      include: {
+        supplier: { select: { id: true, name: true } },
+      },
+    });
+    if (!material) return res.status(404).json({ error: `Materiál s ID ${id} neexistuje` });
+
+    // Top 10 lokací, kde materiál fyzicky leží
+    const stockByLocation = await prisma.stock.findMany({
+      where: { material_id: material.id, quantity: { gt: 0 } },
+      orderBy: { quantity: 'desc' },
+      take: 10,
+      include: {
+        location: { select: { id: true, label: true, warehouse_id: true, type: true } },
+      },
+    });
+
+    // Posledních 10 pohybů
+    const lastMovements = await prisma.inventoryMovement.findMany({
+      where: { material_id: material.id },
+      orderBy: { created_at: 'desc' },
+      take: 10,
+      select: {
+        id: true, type: true, quantity: true, location_id: true,
+        from_location_id: true, to_location_id: true, created_at: true,
+      },
+    });
+
+    res.json({ ...material, stock_by_location: stockByLocation, last_movements: lastMovements });
+  } catch (err) { next(err); }
+});
+
+// ---------------------------------------------------------------------------
 // GET /api/wh/locations/by-qr/:qr_code — lookup lokace podle barcode
 // ---------------------------------------------------------------------------
 router.get('/locations/by-qr/:qr_code', async (req, res, next) => {
@@ -155,6 +200,54 @@ router.get('/locations/by-qr/:qr_code', async (req, res, next) => {
       },
     });
     if (!location) return res.status(404).json({ error: 'Lokace s tímto QR kódem neexistuje' });
+
+    const stock = await prisma.stock.findMany({
+      where: { location_id: location.id, quantity: { gt: 0 } },
+      orderBy: { quantity: 'desc' },
+      include: {
+        material: { select: { id: true, code: true, name: true, unit: true } },
+      },
+    });
+
+    res.json({ ...location, stock });
+  } catch (err) { next(err); }
+});
+
+// ---------------------------------------------------------------------------
+// GET /api/wh/locations/by-code — lookup lokace podle (warehouse_id, code)
+// Používá PWA když naskenuje QR ve tvaru `sto-{wh_id}-{code}`. Vrací identický
+// shape jako /locations/by-qr.
+// Query: ?warehouse_id=1&code=A04A
+// ---------------------------------------------------------------------------
+router.get('/locations/by-code', async (req, res, next) => {
+  try {
+    const warehouseId = Number(req.query.warehouse_id);
+    const code = req.query.code ? String(req.query.code).trim() : '';
+    if (!Number.isInteger(warehouseId) || warehouseId <= 0) {
+      return res.status(400).json({ error: 'Neplatné warehouse_id' });
+    }
+    if (!code) {
+      return res.status(400).json({ error: 'Chybí code' });
+    }
+
+    // Lokace se identifikuje uvnitř skladu primárně přes `label` (unikátní) nebo
+    // kombinaci section/rack/position. Tady bereme prvního kandidáta, který sedí
+    // buď na label nebo na position (pozice v regálu) v daném skladu.
+    const location = await prisma.warehouseLocation.findFirst({
+      where: {
+        warehouse_id: warehouseId,
+        OR: [
+          { label: code },
+          { position: code },
+        ],
+      },
+      include: {
+        warehouse: { select: { id: true, name: true, code: true } },
+      },
+    });
+    if (!location) {
+      return res.status(404).json({ error: `Lokace "${code}" ve skladu ${warehouseId} neexistuje` });
+    }
 
     const stock = await prisma.stock.findMany({
       where: { location_id: location.id, quantity: { gt: 0 } },

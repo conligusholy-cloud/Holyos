@@ -1592,6 +1592,10 @@
 
           '<div class="modal-actions" style="margin-top:20px;">' +
             '<div style="flex:1;"></div>' +
+            // Fáze 6 — Vystavit fakturu (jen pro objednávky, které mají položky a nejsou cancelled)
+            ((order.items && order.items.length > 0 && order.status !== 'cancelled')
+              ? '<button class="btn btn-secondary" onclick="createInvoiceFromOrder(' + id + ')" title="Vystaví fakturu (AR) z této objednávky">💼 Vystavit fakturu</button>'
+              : '') +
             '<button class="btn btn-primary" onclick="saveAndCloseDetail(' + id + ')">✅ Uložit</button>' +
             '<button class="btn btn-secondary" onclick="closeModal()">Zavřít</button>' +
           '</div>' +
@@ -1678,6 +1682,35 @@
     }
 
     // Uloží rozepsanou položku z formuláře (pokud je vyplněná) a zavře modal
+    // Fáze 6 — Vystavit fakturu z objednávky
+    async function createInvoiceFromOrder(orderId) {
+      if (!confirm('Vystavit fakturu z této objednávky?\n\nFaktura se vytvoří jako draft a otevře se v novém okně modulu Účetní doklady.')) return;
+
+      try {
+        const token = sessionStorage.getItem('token') || '';
+        const res = await fetch('/api/accounting/invoices/from-order', {
+          method: 'POST',
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { 'Authorization': 'Bearer ' + token } : {}),
+          },
+          body: JSON.stringify({ order_id: orderId }),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          alert('Chyba: ' + (err.error || res.status));
+          return;
+        }
+        const invoice = await res.json();
+        alert('✅ Faktura ' + invoice.invoice_number + ' vytvořena.\n\nOtevírám detail v Účetních dokladech…');
+        // Otevři detail faktury v novém tabu
+        window.open('/modules/ucetni-doklady/index.html#invoice=' + invoice.id, '_blank');
+      } catch (e) {
+        alert('Chyba: ' + e.message);
+      }
+    }
+
     async function saveAndCloseDetail(orderId) {
       // Najdi formulář pro přidání položky v detailu
       const form = document.querySelector('.modal form[onsubmit*="addOrderItem"]');

@@ -8,6 +8,32 @@ const { prisma } = require('../config/database');
 const { requireAuth } = require('../middleware/auth');
 const { logAudit, diffObjects, makeSnapshot } = require('../services/audit');
 
+// ─── Časové zóny ────────────────────────────────────────────────────────
+// Node proces na Railway běží v UTC, ale docházka musí být v Europe/Prague.
+// Helper vrací Prague-lokální kalendářní den (UTC půlnoc pro Prisma @db.Date)
+// a aktuální HH:MM v pražském čase — používej místo new Date().getHours() apod.
+const PRAGUE_TZ = 'Europe/Prague';
+function nowInPrague() {
+  const d = new Date();
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: PRAGUE_TZ,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hour12: false,
+  }).formatToParts(d).reduce((a, p) => {
+    if (p.type !== 'literal') a[p.type] = p.value;
+    return a;
+  }, {});
+  const year = parseInt(parts.year, 10);
+  const month = parseInt(parts.month, 10); // 1-12
+  const day = parseInt(parts.day, 10);
+  const hour = parseInt(parts.hour, 10);
+  const minute = parseInt(parts.minute, 10);
+  // UTC půlnoc pražského kalendářního dne — vhodné pro Prisma @db.Date
+  const today = new Date(Date.UTC(year, month - 1, day));
+  const timeStr = `${parts.hour}:${parts.minute}`;
+  return { today, timeStr, year, month, day, hour, minute };
+}
+
 // ─── KIOSEK (příchod/odchod přes čip — BEZ autentizace) ─────────────────
 // Kiosk endpointy jsou PŘED requireAuth, protože čip je autentizace
 
@@ -50,9 +76,8 @@ router.post('/kiosk/identify', async (req, res, next) => {
 
     if (!person) return res.status(404).json({ error: 'Osoba nenalezena' });
 
-    // Zjistit dnešní stav docházky
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    // Zjistit dnešní stav docházky (pražský kalendářní den)
+    const { today, hour: pragueNowHour, minute: pragueNowMinute } = nowInPrague();
 
     const todayAttendance = await prisma.attendance.findFirst({
       where: { person_id: person.id, date: today },
@@ -110,9 +135,9 @@ router.post('/kiosk/identify', async (req, res, next) => {
         const [oh, om] = b.clock_out.split(':').map(Number);
         duration = (oh * 60 + om) - (ih * 60 + im);
       } else {
-        // Stále na přestávce — počítat od clock_in do teď
+        // Stále na přestávce — počítat od clock_in do teď (pražský čas)
         const [ih, im] = b.clock_in.split(':').map(Number);
-        duration = (nowTime.getHours() * 60 + nowTime.getMinutes()) - (ih * 60 + im);
+        duration = (pragueNowHour * 60 + pragueNowMinute) - (ih * 60 + im);
       }
       const breakType = b.type === 'break_snack_out' ? 'snack' : 'lunch';
       return { type: breakType, clock_in: b.clock_in, clock_out: b.clock_out, duration, is_open: isOpen };
@@ -187,10 +212,8 @@ router.post('/kiosk/clock', async (req, res, next) => {
       return res.status(400).json({ error: 'Chybí person_id nebo action' });
     }
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const now = new Date();
-    const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    // Pražský kalendářní den + lokální HH:MM (Node na Railway je UTC)
+    const { today, timeStr } = nowInPrague();
 
     let record;
 
@@ -361,10 +384,8 @@ router.post('/kiosk/break', async (req, res, next) => {
       return res.status(400).json({ error: 'Chybí person_id nebo break_type' });
     }
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const now = new Date();
-    const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    // Pražský kalendářní den + lokální HH:MM (Node na Railway je UTC)
+    const { today, timeStr } = nowInPrague();
 
     const breakLabels = {
       break_snack_out: 'Svačina',

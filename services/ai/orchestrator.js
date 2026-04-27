@@ -14,6 +14,7 @@ const { getProductionTools, executeProductionTool } = require('../../mcp-servers
 const { getTasksTools, executeTasksTool } = require('../../mcp-servers/tasks-server');
 const { getFleetTools, executeFleetTool } = require('../../mcp-servers/fleet-server');
 const { getCadTools, executeCadTool } = require('../../mcp-servers/cad-server');
+const { getAccountingTools, executeAccountingTool } = require('../../mcp-servers/accounting-server');
 
 // ─── Mapování: agent slug → MCP servery (tools + executory) ────────────────
 const AGENT_MCP_MAP = {
@@ -70,6 +71,11 @@ const AGENT_MCP_MAP = {
       return executeWarehouseTool(tool, params, prisma);
     },
   },
+  ucetni: {
+    servers: ['accounting'],
+    getTools: () => getAccountingTools(),
+    execute: (tool, params) => executeAccountingTool(tool, params, prisma),
+  },
 };
 
 // ─── Intent Detection (rychlý routing přes Haiku) ──────────────────────────
@@ -82,6 +88,7 @@ const KEYWORD_MAP = {
   technik:      /údržb|seříz|poruch|oprav|servis|preventiv|kalibrac/i,
   spravce_vozidel: /vozidl|vozov|auto\b|spz|vin|stk|povinn[eé] ručen|dálniční známk|řidič|leasing|pneu|disk/i,
   konstrukter:     /výkres|solidwork|sldprt|sldasm|slddrw|cad|sestav|kusovník|konfigurac|součástk|díl(ů|y|u)?\b/i,
+  ucetni:          /faktur|účet|úhrad|platb|banka|výpis|párov|nezaplacen|po splatnosti|kpc|abo|VS\b|variabiln|DPH|dlužník|pohledáv/i,
 };
 
 const MODULE_ASSISTANT_MAP = {
@@ -92,6 +99,9 @@ const MODULE_ASSISTANT_MAP = {
   'nákup a sklad':        'skladnik',
   'vozový park':          'spravce_vozidel',
   'cad výkresy':          'konstrukter',
+  'účetní doklady':       'ucetni',
+  'banky':                'ucetni',
+  'pravidla párování':    'ucetni',
 };
 
 /**

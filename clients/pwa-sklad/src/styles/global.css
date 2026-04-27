@@ -358,7 +358,9 @@ button {
   gap: var(--gap-md);
 }
 
-.tile-grid .tile:nth-child(5) {
+/* Osamocený poslední tile (lichý celkový počet) roztáhneme přes obě kolony,
+   ať v portrait módu nezbývá prázdné půl řádky. */
+.tile-grid .tile:last-child:nth-child(odd) {
   grid-column: 1 / -1;
 }
 
@@ -404,6 +406,8 @@ button {
 .tile-transfer .tile-icon { color: var(--accent); }
 .tile-inventory .tile-icon { color: var(--ok); }
 .tile-picking .tile-icon { color: #c68cff; }
+.tile-stock-check .tile-icon { color: #38bdf8; }
+.tile-info .tile-icon { color: #e6e6e6; }
 
 /* ----- Tlačítka ----- */
 
@@ -1086,7 +1090,7 @@ button {
   .tile-grid {
     grid-template-columns: repeat(3, 1fr);
   }
-  .tile-grid .tile:nth-child(5) {
+  .tile-grid .tile:last-child:nth-child(odd) {
     grid-column: auto;
   }
 }

@@ -93,26 +93,71 @@ function renderEmailHtml({ title, body, link, linkLabel = 'Otevřít v HolyOS', 
 /**
  * Pošle email. Vrací { sent: bool, skipped: string? }.
  * Nikdy nevyhodí chybu — chyba se jen zaloguje.
+ *
+ * Pořadí cest:
+ *   1) Pokud je předán `from` a Microsoft Graph je nakonfigurovaný (Azure App z Fáze 3
+ *      s permission Mail.Send), použij Graph send-as jménem `from`. Tj. e-mail
+ *      odejde z mailboxu té osoby (s Sent Items v jejím Outlooku).
+ *   2) Jinak SMTP (nodemailer s SMTP_HOST/USER/PASS z .env).
+ *
+ * @param {Object} args
+ * @param {string} args.to
+ * @param {string} args.subject
+ * @param {string} args.body            Plain text body (HTML se vyrenderuje šablonou)
+ * @param {string} [args.from]          UPN odesílatele (pro Graph send-as). Když chybí,
+ *                                      použije se SMTP_FROM/SMTP_USER.
+ * @param {string} [args.link]          Volitelný odkaz na akci v UI
+ * @param {string} [args.linkLabel]
+ * @param {string} [args.preheader]
+ * @param {Array}  [args.attachments]   Pole attachments [{ filename, content, contentType }]
+ *                                      Použito mj. pro PDF fakturu (Fáze 6).
  */
-async function sendMail({ to, subject, body, link, linkLabel, preheader }) {
+async function sendMail({ to, subject, body, from, link, linkLabel, preheader, attachments }) {
   if (!to) return { sent: false, skipped: 'no-recipient' };
 
+  // 1) Microsoft Graph send-as (preferovaná cesta pokud je `from` zadán a Graph
+  //    je nakonfigurovaný — tedy Azure App z Fáze 3 s Mail.Send permission)
+  if (from) {
+    try {
+      const msGraph = require('./ms-graph-client');
+      if (msGraph.isConfigured && msGraph.isConfigured()) {
+        const html = renderEmailHtml({ title: subject, body, link, linkLabel, preheader });
+        await msGraph.sendMailAs(from, {
+          to,
+          subject: subject || 'HolyOS — notifikace',
+          textBody: body ? body + (link ? `\n\n${link}` : '') : '',
+          htmlBody: html,
+          attachments: Array.isArray(attachments) ? attachments : undefined,
+        });
+        return { sent: true, via: 'graph', from };
+      }
+    } catch (e) {
+      console.error('[Email] Graph sendMailAs selhal, fallback na SMTP:', e.message);
+      // Spadnout dolů na SMTP
+    }
+  }
+
+  // 2) SMTP fallback
   const tx = getTransporter();
   if (!tx) return { sent: false, skipped: 'no-transporter' };
 
-  const from = process.env.SMTP_FROM || process.env.SMTP_USER || 'holyos@localhost';
+  const fromHeader = from || process.env.SMTP_FROM || process.env.SMTP_USER || 'holyos@localhost';
 
   try {
-    const info = await tx.sendMail({
-      from,
+    const mailOpts = {
+      from: fromHeader,
       to,
       subject: subject || 'HolyOS — notifikace',
       text: body ? body + (link ? `\n\n${link}` : '') : '',
       html: renderEmailHtml({ title: subject, body, link, linkLabel, preheader }),
-    });
-    return { sent: true, messageId: info.messageId };
+    };
+    if (Array.isArray(attachments) && attachments.length > 0) {
+      mailOpts.attachments = attachments;
+    }
+    const info = await tx.sendMail(mailOpts);
+    return { sent: true, via: 'smtp', messageId: info.messageId };
   } catch (e) {
-    console.error('[Email] Chyba odeslání na', to, '-', e.message);
+    console.error('[Email] SMTP odeslání na', to, 'selhalo:', e.message);
     return { sent: false, skipped: 'send-failed', error: e.message };
   }
 }

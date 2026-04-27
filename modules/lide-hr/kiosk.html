@@ -1063,10 +1063,6 @@
             <!-- Přestávky -->
             <div class="quick-actions">
               <div class="break-row">
-                <button class="btn-quick btn-quick-out" id="btnBreakSnackOut" onclick="recordBreak('break_snack_out')">🥪 Svačina</button>
-                <span class="break-duration" id="breakSnackInfo"></span>
-              </div>
-              <div class="break-row">
                 <button class="btn-quick btn-quick-out" id="btnBreakLunchOut" onclick="recordBreak('break_lunch_out')">🍽 Oběd</button>
                 <span class="break-duration" id="breakLunchInfo"></span>
               </div>
@@ -1583,9 +1579,7 @@
       const breakSummary = document.getElementById('breakSummary');
       const otWidget = document.getElementById('overtimeWidget');
       const btnLeave = document.getElementById('btnLeaveRequest');
-      const btnBreakSnackOut = document.getElementById('btnBreakSnackOut');
       const btnBreakLunchOut = document.getElementById('btnBreakLunchOut');
-      const snackInfo = document.getElementById('breakSnackInfo');
       const lunchInfo = document.getElementById('breakLunchInfo');
 
       if (!isAtWork) {
@@ -1615,11 +1609,11 @@
         quickActions.style.display = 'flex';
 
         // Dynamický text NÁVRAT tlačítka
-        const returnLabels = { snack: '↺ Návrat ze svačiny', lunch: '↺ Návrat z obědu' };
+        const returnLabels = { lunch: '↺ Návrat z obědu' };
         if (activeBreakType) {
           btnReturnAbsence.textContent = returnLabels[activeBreakType] || '↺ Návrat';
           btnReturnAbsence.dataset.returnType = 'break';
-          btnReturnAbsence.dataset.breakType = activeBreakType === 'snack' ? 'break_snack_in' : 'break_lunch_in';
+          btnReturnAbsence.dataset.breakType = 'break_lunch_in';
         } else {
           btnReturnAbsence.textContent = '↺ Návrat z nepřítomnosti';
           btnReturnAbsence.dataset.returnType = 'absence';
@@ -1628,10 +1622,7 @@
         btnReturnAbsence.style.display = 'block';
 
         // Zablokovat odchody na přestávku
-        btnBreakSnackOut.disabled = true;
         btnBreakLunchOut.disabled = true;
-        btnBreakSnackOut.style.opacity = '0.4';
-        btnBreakSnackOut.style.cursor = 'not-allowed';
         btnBreakLunchOut.style.opacity = '0.4';
         btnBreakLunchOut.style.cursor = 'not-allowed';
       } else {
@@ -1651,29 +1642,17 @@
         quickActions.style.display = 'flex';
 
         // Povolit odchody na přestávku
-        btnBreakSnackOut.disabled = false;
         btnBreakLunchOut.disabled = false;
-        btnBreakSnackOut.style.opacity = '1';
-        btnBreakSnackOut.style.cursor = 'pointer';
         btnBreakLunchOut.style.opacity = '1';
         btnBreakLunchOut.style.cursor = 'pointer';
       }
 
       // === Přestávky — info o době (zobrazit vždy pokud jsou data) ===
-      snackInfo.textContent = '';
-      snackInfo.className = 'break-duration';
       lunchInfo.textContent = '';
       lunchInfo.className = 'break-duration';
 
       if (person.breaks && person.breaks.length > 0) {
-        const snack = person.breaks.find(b => b.type === 'snack');
         const lunch = person.breaks.find(b => b.type === 'lunch');
-
-        if (snack) {
-          const mins = snack.duration || 0;
-          snackInfo.textContent = snack.is_open ? `⏱ ${mins} min...` : `${mins} min`;
-          snackInfo.className = 'break-duration ' + (snack.is_open ? 'active' : (mins > 20 ? 'over' : 'ok'));
-        }
 
         if (lunch) {
           const mins = lunch.duration || 0;
@@ -1774,7 +1753,6 @@
       if (!currentPerson || isProcessing) return;
       // Kontrola — pokud je tlačítko disabled, ignoruj (jen odchody mají tlačítka)
       const btnMap = {
-        break_snack_out: 'btnBreakSnackOut',
         break_lunch_out: 'btnBreakLunchOut',
       };
       if (btnMap[breakType]) {
@@ -1804,8 +1782,6 @@
         }
 
         const labels = {
-          break_snack_out: 'Odchod na svačinu',
-          break_snack_in: 'Návrat ze svačiny',
           break_lunch_out: 'Odchod na oběd',
           break_lunch_in: 'Návrat z obědu',
         };

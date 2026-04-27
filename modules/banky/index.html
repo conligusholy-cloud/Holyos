@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <title>Banky | HOLYOS</title>
+  <link rel="icon" href="../../logo-holyos-icon.svg">
+  <base href="../../">
+  <link rel="stylesheet" href="css/dashboard.css">
+  <style>
+    /* .data-table konvence — každý modul má vlastní inline styl */
+    .data-table { width: 100%; border-collapse: separate; border-spacing: 0; }
+    .data-table thead { position: sticky; top: 0; z-index: 1; }
+    .data-table th {
+      background: var(--surface2); padding: 10px 14px; text-align: left;
+      font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;
+      color: var(--text2); border-bottom: 1px solid var(--border);
+    }
+    .data-table td {
+      padding: 10px 14px; font-size: 13px;
+      border-bottom: 1px solid rgba(255,255,255,0.04); vertical-align: middle;
+    }
+    .data-table tr:hover td { background: rgba(14,165,233,0.06); }
+    .data-table tr { cursor: pointer; }
+
+    .bank-badge { padding: 3px 10px; border-radius: 12px; font-size: 0.78em; font-weight: 600; white-space: nowrap;
+      background: rgba(14,165,233,0.15); color: #0ea5e9; }
+    .bank-badge.inactive { background: rgba(100,116,139,0.18); color: #94a3b8; }
+
+    .acc-num { font-family: 'Consolas', monospace; font-weight: 600; }
+    .balance-cell { text-align: right; font-family: 'Consolas', monospace; font-variant-numeric: tabular-nums; }
+
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+    .modal { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 24px 28px; max-width: 640px; width: 94%; max-height: 92vh; overflow-y: auto; }
+    .modal h2 { margin-top: 0; }
+    .modal-row { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+    .modal-row label { color: var(--text2); font-size: 0.88em; }
+    .modal-row input, .modal-row select, .modal-row textarea {
+      background: var(--surface2); color: var(--text); border: 1px solid var(--border);
+      border-radius: 6px; padding: 8px 10px; font-size: 0.95em;
+    }
+    .modal-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .modal-grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+    .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
+
+    .empty-hint { text-align: center; padding: 40px; color: var(--text2); }
+    .info-box { background: rgba(14,165,233,0.08); border: 1px solid rgba(14,165,233,0.25); border-radius: 8px; padding: 12px 16px; margin-bottom: 18px; color: var(--text2); }
+    .checkbox-row { display: flex; align-items: center; gap: 8px; }
+  </style>
+</head>
+<body>
+  <aside id="sidebar"></aside>
+
+  <div class="main-wrapper">
+    <div class="main-header">
+      <h1>🏦 Banky</h1>
+      <p>Bankovní účty a parametry pro hromadné platební příkazy (ABO/KPC, Fio API)</p>
+    </div>
+
+    <div class="main-content">
+      <div class="info-box">
+        🛈 Bankovní účty se používají v modulu Účetní doklady → tab K platbě.
+        Každý účet musí mít správné číslo + kód banky, aby se vygeneroval platný KPC soubor.
+      </div>
+
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+        <div></div>
+        <button class="btn btn-primary" onclick="openCreateModal()">+ Nový účet</button>
+      </div>
+
+      <table class="data-table" id="accounts-table">
+        <thead>
+          <tr>
+            <th>Banka</th>
+            <th>Název</th>
+            <th>Číslo účtu</th>
+            <th>IBAN</th>
+            <th>Měna</th>
+            <th class="balance-cell">Aktuální zůstatek</th>
+            <th>API</th>
+            <th>Stav</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody><tr><td colspan="9" class="empty-hint">Načítání…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div id="modal-root"></div>
+
+  <script>
+    var s = document.createElement('script');
+    s.src = '/js/sidebar.js?v=' + Date.now();
+    s.onload = function() { renderSidebar('banky'); };
+    document.head.appendChild(s);
+    var tb = document.createElement('script');
+    tb.src = '/js/top-bar.js?v=' + Date.now();
+    document.head.appendChild(tb);
+  </script>
+
+  <script>
+  (function() {
+    const token = sessionStorage.getItem('token') || '';
+    function authHeaders() {
+      const h = { 'Content-Type': 'application/json' };
+      if (token) h['Authorization'] = 'Bearer ' + token;
+      return h;
+    }
+    async function api(method, path, body) {
+      const opts = { method, credentials: 'include', headers: authHeaders() };
+      if (body !== undefined) opts.body = JSON.stringify(body);
+      const res = await fetch(path, opts);
+      const ct = res.headers.get('content-type') || '';
+      const data = ct.includes('json') ? await res.json().catch(() => null) : null;
+      return { status: res.status, data };
+    }
+
+    const BANK_LABEL = {
+      FIO: 'Fio banka',
+      CSOB: 'ČSOB',
+      MONETA: 'Moneta',
+      UNICREDIT: 'UniCredit',
+      KB: 'Komerční banka',
+      RB: 'Raiffeisenbank',
+      OTHER: 'Jiná',
+    };
+
+    function fmtAmount(n) {
+      if (n === null || n === undefined) return '—';
+      return Number(n).toLocaleString('cs-CZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+    function escapeHtml(s) {
+      if (s === null || s === undefined) return '';
+      return String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    }
+
+    async function loadAccounts() {
+      const r = await api('GET', '/api/banking/accounts');
+      const tbody = document.querySelector('#accounts-table tbody');
+      if (r.status !== 200) {
+        tbody.innerHTML = '<tr><td colspan="9" class="empty-hint">Chyba: ' + r.status + '</td></tr>';
+        return;
+      }
+      if (!r.data.length) {
+        tbody.innerHTML = '<tr><td colspan="9" class="empty-hint">Žádné bankovní účty. Klikněte na <strong>+ Nový účet</strong>.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = r.data.map(a => `
+        <tr onclick="openEditModal(${a.id})">
+          <td><span class="bank-badge ${a.active ? '' : 'inactive'}">${escapeHtml(a.bank_label || a.bank)}</span></td>
+          <td>${escapeHtml(a.name)}</td>
+          <td class="acc-num">${escapeHtml(a.account_number)}/${escapeHtml(a.bank_code)}</td>
+          <td class="acc-num">${escapeHtml(a.iban || '')}</td>
+          <td>${escapeHtml(a.currency)}</td>
+          <td class="balance-cell">${fmtAmount(a.current_balance)}</td>
+          <td>${a.api_enabled ? '✅' : '—'}</td>
+          <td>${a.active ? 'Aktivní' : 'Neaktivní'}</td>
+          <td><button class="btn btn-secondary btn-sm" onclick="event.stopPropagation(); openEditModal(${a.id})">Upravit</button></td>
+        </tr>
+      `).join('');
+    }
+    window.loadAccounts = loadAccounts;
+
+    function blankAccount() {
+      return {
+        id: null, name: '', bank: 'FIO', account_number: '', bank_code: '2010',
+        iban: '', bic: '', currency: 'CZK', api_enabled: false, api_credentials_ref: '',
+        active: true, opening_balance: 0, note: '',
+      };
+    }
+
+    function modalHtml(a, isEdit) {
+      const banks = ['FIO', 'CSOB', 'MONETA', 'UNICREDIT', 'KB', 'RB', 'OTHER'];
+      const bankOpts = banks.map(b => `<option value="${b}" ${a.bank === b ? 'selected' : ''}>${BANK_LABEL[b]}</option>`).join('');
+      return `
+        <div class="modal-overlay" onclick="if(event.target===this)closeModal()">
+          <div class="modal">
+            <h2>${isEdit ? '✏️ Upravit bankovní účet' : '+ Nový bankovní účet'}</h2>
+
+            <div class="modal-row">
+              <label>Název účtu (interní)</label>
+              <input id="m-name" type="text" value="${escapeHtml(a.name)}" placeholder="např. Fio firma — provoz">
+            </div>
+
+            <div class="modal-grid2">
+              <div class="modal-row">
+                <label>Banka</label>
+                <select id="m-bank" onchange="onBankChange()">${bankOpts}</select>
+              </div>
+              <div class="modal-row">
+                <label>Měna</label>
+                <select id="m-currency">
+                  <option ${a.currency === 'CZK' ? 'selected' : ''}>CZK</option>
+                  <option ${a.currency === 'EUR' ? 'selected' : ''}>EUR</option>
+                  <option ${a.currency === 'USD' ? 'selected' : ''}>USD</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="modal-grid2">
+              <div class="modal-row">
+                <label>Číslo účtu (s případným prefixem, např. 123-456789)</label>
+                <input id="m-account_number" type="text" value="${escapeHtml(a.account_number)}" placeholder="2501234567">
+              </div>
+              <div class="modal-row">
+                <label>Kód banky (4 číslice)</label>
+                <input id="m-bank_code" type="text" maxlength="4" value="${escapeHtml(a.bank_code)}" placeholder="2010">
+              </div>
+            </div>
+
+            <div class="modal-grid2">
+              <div class="modal-row">
+                <label>IBAN</label>
+                <input id="m-iban" type="text" value="${escapeHtml(a.iban || '')}" placeholder="CZ65 0800 0000 0019 2000 1450">
+              </div>
+              <div class="modal-row">
+                <label>BIC / SWIFT</label>
+                <input id="m-bic" type="text" value="${escapeHtml(a.bic || '')}" placeholder="GIBACZPX">
+              </div>
+            </div>
+
+            <div class="modal-grid2">
+              <div class="modal-row">
+                <label>Otevírací zůstatek (Kč)</label>
+                <input id="m-opening_balance" type="number" step="0.01" value="${a.opening_balance || 0}">
+              </div>
+              <div class="modal-row" style="justify-content: flex-end;">
+                <div class="checkbox-row">
+                  <input id="m-active" type="checkbox" ${a.active ? 'checked' : ''}>
+                  <label for="m-active">Účet aktivní</label>
+                </div>
+                <div class="checkbox-row" style="margin-top:6px;">
+                  <input id="m-api_enabled" type="checkbox" ${a.api_enabled ? 'checked' : ''}>
+                  <label for="m-api_enabled">API integrace povolena (Fio REST)</label>
+                </div>
+              </div>
+            </div>
+
+            <div class="modal-row">
+              <label>Reference na API token (název ENV proměnné, ne samotný token!)</label>
+              <input id="m-api_credentials_ref" type="text" value="${escapeHtml(a.api_credentials_ref || '')}" placeholder="FIO_API_TOKEN">
+            </div>
+
+            <div class="modal-row">
+              <label>Poznámka</label>
+              <textarea id="m-note" rows="2">${escapeHtml(a.note || '')}</textarea>
+            </div>
+
+            <div class="modal-actions">
+              ${isEdit ? `<button class="btn btn-secondary" onclick="deleteAccount(${a.id})" style="margin-right:auto; color:#ef4444;">🗑️ Smazat</button>` : ''}
+              <button class="btn btn-secondary" onclick="closeModal()">Zrušit</button>
+              <button class="btn btn-primary" onclick="saveAccount(${a.id || 'null'})">💾 Uložit</button>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    window.openCreateModal = function() {
+      document.getElementById('modal-root').innerHTML = modalHtml(blankAccount(), false);
+    };
+
+    window.openEditModal = async function(id) {
+      const r = await api('GET', '/api/banking/accounts/' + id);
+      if (r.status !== 200) { alert('Chyba: nelze načíst účet'); return; }
+      document.getElementById('modal-root').innerHTML = modalHtml(r.data, true);
+    };
+
+    window.closeModal = function() {
+      document.getElementById('modal-root').innerHTML = '';
+    };
+
+    // Auto-doplnění bank_code podle vybrané banky
+    const BANK_CODE_DEFAULT = { FIO: '2010', CSOB: '0300', MONETA: '0600', UNICREDIT: '2700', KB: '0100', RB: '5500', OTHER: '' };
+    window.onBankChange = function() {
+      const bank = document.getElementById('m-bank').value;
+      const codeInput = document.getElementById('m-bank_code');
+      if (BANK_CODE_DEFAULT[bank] && (!codeInput.value || Object.values(BANK_CODE_DEFAULT).includes(codeInput.value))) {
+        codeInput.value = BANK_CODE_DEFAULT[bank];
+      }
+    };
+
+    window.saveAccount = async function(id) {
+      const data = {
+        name: document.getElementById('m-name').value.trim(),
+        bank: document.getElementById('m-bank').value,
+        account_number: document.getElementById('m-account_number').value.trim(),
+        bank_code: document.getElementById('m-bank_code').value.trim(),
+        iban: document.getElementById('m-iban').value.trim() || null,
+        bic: document.getElementById('m-bic').value.trim() || null,
+        currency: document.getElementById('m-currency').value,
+        api_enabled: document.getElementById('m-api_enabled').checked,
+        api_credentials_ref: document.getElementById('m-api_credentials_ref').value.trim() || null,
+        active: document.getElementById('m-active').checked,
+        opening_balance: parseFloat(document.getElementById('m-opening_balance').value) || 0,
+        note: document.getElementById('m-note').value.trim() || null,
+      };
+
+      if (!data.name) { alert('Název účtu je povinný'); return; }
+      if (!data.account_number) { alert('Číslo účtu je povinné'); return; }
+      if (!/^\d{4}$/.test(data.bank_code)) { alert('Kód banky musí být 4 číslice'); return; }
+
+      const r = id
+        ? await api('PUT', '/api/banking/accounts/' + id, data)
+        : await api('POST', '/api/banking/accounts', data);
+
+      if (r.status >= 200 && r.status < 300) {
+        closeModal();
+        loadAccounts();
+      } else {
+        alert('Chyba: ' + (r.data?.error || r.status));
+      }
+    };
+
+    window.deleteAccount = async function(id) {
+      if (!confirm('Smazat bankovní účet?\n\nÚčet s historií transakcí bude pouze deaktivován.')) return;
+      const r = await api('DELETE', '/api/banking/accounts/' + id);
+      if (r.status === 200) {
+        if (r.data?.soft_deleted) alert('Účet byl deaktivován (má historii transakcí, nelze hard delete).');
+        closeModal();
+        loadAccounts();
+      } else {
+        alert('Chyba: ' + (r.data?.error || r.status));
+      }
+    };
+
+    // Init
+    loadAccounts();
+  })();
+  </script>
+</body>
+</html>

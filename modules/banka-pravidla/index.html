@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <title>Pravidla párování | HOLYOS</title>
+  <link rel="icon" href="../../logo-holyos-icon.svg">
+  <base href="../../">
+  <link rel="stylesheet" href="css/dashboard.css">
+  <style>
+    .data-table { width: 100%; border-collapse: separate; border-spacing: 0; }
+    .data-table thead { position: sticky; top: 0; z-index: 1; }
+    .data-table th {
+      background: var(--surface2); padding: 10px 14px; text-align: left;
+      font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;
+      color: var(--text2); border-bottom: 1px solid var(--border);
+    }
+    .data-table td {
+      padding: 10px 14px; font-size: 13px;
+      border-bottom: 1px solid rgba(255,255,255,0.04); vertical-align: middle;
+    }
+    .data-table tr:hover td { background: rgba(168,85,247,0.06); }
+    .data-table tr { cursor: pointer; }
+
+    .rule-action { padding: 3px 10px; border-radius: 12px; font-size: 0.78em; font-weight: 600; white-space: nowrap; }
+    .rule-action.ignore { background: rgba(100,116,139,0.2); color: #94a3b8; }
+    .rule-action.auto_match_invoice { background: rgba(34,197,94,0.18); color: #22c55e; }
+    .rule-action.auto_match_cost_center { background: rgba(168,85,247,0.18); color: #a855f7; }
+    .rule-action.notify { background: rgba(251,191,36,0.18); color: #fbbf24; }
+    .rule-active { color: #22c55e; }
+    .rule-inactive { color: #64748b; }
+
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+    .modal { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 24px 28px; max-width: 720px; width: 94%; max-height: 92vh; overflow-y: auto; }
+    .modal h2 { margin-top: 0; }
+    .modal-row { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+    .modal-row label { color: var(--text2); font-size: 0.88em; }
+    .modal-row input, .modal-row select, .modal-row textarea {
+      background: var(--surface2); color: var(--text); border: 1px solid var(--border);
+      border-radius: 6px; padding: 8px 10px; font-size: 0.95em;
+    }
+    .modal-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .modal-actions { display: flex; gap: 10px; justify-content: space-between; margin-top: 20px; }
+    .modal-section { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
+    .modal-section h4 { margin: 0 0 8px; color: var(--text2); font-size: 0.92em; font-weight: 600; }
+
+    .empty-hint { text-align: center; padding: 40px; color: var(--text2); }
+    .info-box { background: rgba(168,85,247,0.08); border: 1px solid rgba(168,85,247,0.25); border-radius: 8px; padding: 12px 16px; margin-bottom: 18px; color: var(--text2); }
+    .criteria-summary { color: var(--text2); font-size: 0.88em; }
+    .criteria-summary code { background: var(--surface2); padding: 1px 6px; border-radius: 3px; font-family: 'Consolas', monospace; }
+    .checkbox-row { display: flex; align-items: center; gap: 8px; }
+  </style>
+</head>
+<body>
+  <aside id="sidebar"></aside>
+
+  <div class="main-wrapper">
+    <div class="main-header">
+      <h1>⚖️ Pravidla párování</h1>
+      <p>Automatické zpracování bankovních transakcí — auto-ignor opakovaných operací (kartové platby, poplatky), auto-match podle protistrany</p>
+    </div>
+
+    <div class="main-content">
+      <div class="info-box">
+        🛈 Pravidla se vyhodnocují <strong>před klasickým VS+částka match</strong> v pořadí podle priority (vyšší dřív).
+        První pravidlo, které odpovídá kritériím, se aplikuje a další se přeskočí.
+        Použij je například k auto-ignoraci kartových plateb (VS=6042) nebo k auto-matchi opakovaných nájmů přes counterparty_account.
+      </div>
+
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+        <div></div>
+        <button class="btn btn-primary" onclick="openCreateModal()">+ Nové pravidlo</button>
+      </div>
+
+      <table class="data-table" id="rules-table">
+        <thead>
+          <tr>
+            <th style="width: 60px;">Priorita</th>
+            <th>Název</th>
+            <th>Kritéria</th>
+            <th>Akce</th>
+            <th style="width: 90px;">Stav</th>
+            <th style="width: 50px;"></th>
+          </tr>
+        </thead>
+        <tbody><tr><td colspan="6" class="empty-hint">Načítání…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div id="modal-root"></div>
+
+  <script>
+    var s = document.createElement('script');
+    s.src = '/js/sidebar.js?v=' + Date.now();
+    s.onload = function() { renderSidebar('banka-pravidla'); };
+    document.head.appendChild(s);
+    var tb = document.createElement('script');
+    tb.src = '/js/top-bar.js?v=' + Date.now();
+    document.head.appendChild(tb);
+  </script>
+
+  <script>
+  (function() {
+    const token = sessionStorage.getItem('token') || '';
+    function authHeaders() {
+      const h = { 'Content-Type': 'application/json' };
+      if (token) h['Authorization'] = 'Bearer ' + token;
+      return h;
+    }
+    async function api(method, path, body) {
+      const opts = { method, credentials: 'include', headers: authHeaders() };
+      if (body !== undefined) opts.body = JSON.stringify(body);
+      const res = await fetch(path, opts);
+      const ct = res.headers.get('content-type') || '';
+      const data = ct.includes('json') ? await res.json().catch(() => null) : null;
+      return { status: res.status, data };
+    }
+
+    function escapeHtml(s) {
+      if (s === null || s === undefined) return '';
+      return String(s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
+    const ACTION_LABEL = {
+      ignore: 'Ignorovat',
+      auto_match_invoice: 'Auto-match faktura',
+      auto_match_cost_center: 'Cost-center',
+      notify: 'Posoudit',
+    };
+
+    function renderCriteria(rule) {
+      const parts = [];
+      if (rule.direction) parts.push(`směr=<code>${rule.direction}</code>`);
+      if (rule.counterparty_account) parts.push(`účet=<code>${escapeHtml(rule.counterparty_account)}</code>`);
+      if (rule.counterparty_name_contains) parts.push(`název obsahuje "<code>${escapeHtml(rule.counterparty_name_contains)}</code>"`);
+      if (rule.variable_symbol) parts.push(`VS=<code>${escapeHtml(rule.variable_symbol)}</code>`);
+      if (rule.amount_min !== null && rule.amount_min !== undefined) parts.push(`min=<code>${rule.amount_min}</code>`);
+      if (rule.amount_max !== null && rule.amount_max !== undefined) parts.push(`max=<code>${rule.amount_max}</code>`);
+      return parts.length ? parts.join(' AND ') : '<em style="color:var(--text2)">— bez kritérií (vždy)</em>';
+    }
+
+    async function loadRules() {
+      const r = await api('GET', '/api/banking/matching-rules');
+      const tbody = document.querySelector('#rules-table tbody');
+
+      if (r.status !== 200 || !Array.isArray(r.data)) {
+        tbody.innerHTML = `<tr><td colspan="6" class="empty-hint">Chyba: ${escapeHtml(r.data?.error || r.status)}</td></tr>`;
+        return;
+      }
+
+      if (r.data.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="empty-hint">Zatím nejsou žádná pravidla. Klikni <strong>+ Nové pravidlo</strong>.</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = r.data.map(rule => `
+        <tr onclick="openEditModal(${rule.id})">
+          <td><strong>${rule.priority}</strong></td>
+          <td>
+            <strong>${escapeHtml(rule.name)}</strong>
+          </td>
+          <td><div class="criteria-summary">${renderCriteria(rule)}</div></td>
+          <td><span class="rule-action ${rule.action}">${ACTION_LABEL[rule.action] || rule.action}</span></td>
+          <td>${rule.active
+            ? '<span class="rule-active">● Aktivní</span>'
+            : '<span class="rule-inactive">○ Neaktivní</span>'}</td>
+          <td>
+            <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation(); deleteRule(${rule.id}, '${escapeHtml(rule.name).replace(/'/g, "\\'")}')">🗑️</button>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    function renderModal(rule) {
+      const isEdit = !!rule;
+      const r = rule || {};
+      const root = document.getElementById('modal-root');
+
+      root.innerHTML = `
+        <div class="modal-overlay" onclick="closeModal(event)">
+          <div class="modal" onclick="event.stopPropagation()">
+            <h2>${isEdit ? '✏️ Upravit pravidlo' : '+ Nové pravidlo'}</h2>
+
+            <div class="modal-grid2">
+              <div class="modal-row">
+                <label>Název pravidla</label>
+                <input id="rule-name" type="text" value="${escapeHtml(r.name || '')}" placeholder="např. Auto-ignor kartových plateb">
+              </div>
+              <div class="modal-row">
+                <label>Priorita (vyšší dřív)</label>
+                <input id="rule-priority" type="number" value="${r.priority ?? 100}">
+              </div>
+            </div>
+
+            <div class="modal-row checkbox-row">
+              <input id="rule-active" type="checkbox" ${r.active === false ? '' : 'checked'}>
+              <label for="rule-active">Pravidlo aktivní</label>
+            </div>
+
+            <div class="modal-section">
+              <h4>Kritéria (všechna jsou volitelná, kombinují se logickým AND)</h4>
+              <div class="modal-grid2">
+                <div class="modal-row">
+                  <label>Směr transakce</label>
+                  <select id="rule-direction">
+                    <option value="">— libovolný —</option>
+                    <option value="in" ${r.direction === 'in' ? 'selected' : ''}>Příjem (in)</option>
+                    <option value="out" ${r.direction === 'out' ? 'selected' : ''}>Výdaj (out)</option>
+                  </select>
+                </div>
+                <div class="modal-row">
+                  <label>Účet protistrany</label>
+                  <input id="rule-counterparty-account" type="text" value="${escapeHtml(r.counterparty_account || '')}" placeholder="např. 1234567890">
+                </div>
+              </div>
+              <div class="modal-row">
+                <label>Název protistrany obsahuje</label>
+                <input id="rule-counterparty-name" type="text" value="${escapeHtml(r.counterparty_name_contains || '')}" placeholder="např. RYANAIR (case-insensitive)">
+              </div>
+              <div class="modal-grid2">
+                <div class="modal-row">
+                  <label>Variabilní symbol</label>
+                  <input id="rule-vs" type="text" value="${escapeHtml(r.variable_symbol || '')}" placeholder="např. 6042 (Fio karty)">
+                </div>
+                <div class="modal-row"></div>
+              </div>
+              <div class="modal-grid2">
+                <div class="modal-row">
+                  <label>Min. částka (Kč)</label>
+                  <input id="rule-amount-min" type="number" step="0.01" value="${r.amount_min ?? ''}">
+                </div>
+                <div class="modal-row">
+                  <label>Max. částka (Kč)</label>
+                  <input id="rule-amount-max" type="number" step="0.01" value="${r.amount_max ?? ''}">
+                </div>
+              </div>
+            </div>
+
+            <div class="modal-section">
+              <h4>Akce při shodě</h4>
+              <div class="modal-row">
+                <select id="rule-action">
+                  <option value="ignore" ${r.action === 'ignore' ? 'selected' : ''}>Ignorovat (auto-ignored)</option>
+                  <option value="auto_match_invoice" ${r.action === 'auto_match_invoice' ? 'selected' : ''}>Auto-match faktura (rozšířený o counterparty_account)</option>
+                  <option value="auto_match_cost_center" ${r.action === 'auto_match_cost_center' ? 'selected' : ''}>Cost-center (zatím jen flag, plná logika ve Fázi 9)</option>
+                  <option value="notify" ${r.action === 'notify' ? 'selected' : ''}>Označit k posouzení (needs_review) + assignee</option>
+                </select>
+              </div>
+              <div class="modal-grid2">
+                <div class="modal-row">
+                  <label>Cost-center ID (pro cost-center akci)</label>
+                  <input id="rule-cost-center-id" type="number" value="${r.cost_center_id ?? ''}">
+                </div>
+                <div class="modal-row">
+                  <label>Assignee Person ID (pro notify)</label>
+                  <input id="rule-assignee-id" type="number" value="${r.assignee_id ?? ''}">
+                </div>
+              </div>
+            </div>
+
+            <div class="modal-actions">
+              <div></div>
+              <div style="display:flex; gap:8px;">
+                <button class="btn btn-secondary" onclick="closeModal()">Zrušit</button>
+                <button class="btn btn-primary" onclick="saveRule(${rule?.id || 'null'})">💾 Uložit</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    window.openCreateModal = function() { renderModal(null); };
+
+    window.openEditModal = async function(id) {
+      const r = await api('GET', `/api/banking/matching-rules/${id}`);
+      if (r.status !== 200) {
+        alert('Chyba: ' + (r.data?.error || r.status));
+        return;
+      }
+      renderModal(r.data);
+    };
+
+    window.closeModal = function(e) {
+      if (e && e.target !== e.currentTarget) return;
+      document.getElementById('modal-root').innerHTML = '';
+    };
+
+    function readField(id, type) {
+      const el = document.getElementById(id);
+      if (!el) return null;
+      const v = el.value.trim();
+      if (v === '') return null;
+      if (type === 'number') return Number(v);
+      return v;
+    }
+
+    window.saveRule = async function(ruleId) {
+      const data = {
+        name: readField('rule-name'),
+        priority: readField('rule-priority', 'number') ?? 100,
+        active: document.getElementById('rule-active').checked,
+        direction: readField('rule-direction'),
+        counterparty_account: readField('rule-counterparty-account'),
+        counterparty_name_contains: readField('rule-counterparty-name'),
+        variable_symbol: readField('rule-vs'),
+        amount_min: readField('rule-amount-min', 'number'),
+        amount_max: readField('rule-amount-max', 'number'),
+        action: readField('rule-action'),
+        cost_center_id: readField('rule-cost-center-id', 'number'),
+        assignee_id: readField('rule-assignee-id', 'number'),
+      };
+      // Pro CREATE odstraníme null (zod použije default).
+      // Pro UPDATE necháváme null — explicitně to backendu řekne "vymazat pole".
+      if (!ruleId) {
+        Object.keys(data).forEach(k => {
+          if (data[k] === null && k !== 'amount_min' && k !== 'amount_max') delete data[k];
+        });
+      }
+      if (!data.name) { alert('Zadej název pravidla.'); return; }
+      if (!data.action) { alert('Zvol akci.'); return; }
+
+      const r = ruleId
+        ? await api('PUT', `/api/banking/matching-rules/${ruleId}`, data)
+        : await api('POST', '/api/banking/matching-rules', data);
+
+      if (r.status === 200 || r.status === 201) {
+        closeModal();
+        loadRules();
+      } else {
+        alert('Chyba: ' + (r.data?.error || r.status) + (r.data?.details ? '\n' + JSON.stringify(r.data.details, null, 2) : ''));
+      }
+    };
+
+    window.deleteRule = async function(id, name) {
+      if (!confirm(`Smazat pravidlo "${name}"? (Pokud bylo aplikováno na transakce, jen se deaktivuje.)`)) return;
+      const r = await api('DELETE', `/api/banking/matching-rules/${id}`);
+      if (r.status === 200) {
+        if (r.data?.soft_deleted) alert(r.data.reason);
+        loadRules();
+      } else {
+        alert('Chyba: ' + (r.data?.error || r.status));
+      }
+    };
+
+    loadRules();
+  })();
+  </script>
+</body>
+</html>
