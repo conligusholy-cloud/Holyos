@@ -202,14 +202,14 @@ model BatchOperationLog {
 - [ ] **F2.4** UI pro kalibraci časů ProductOperation (override `last_calibrated_at`) (TODO)
 - [x] **F2.5** Snapshot endpoint `POST /api/planning/snapshot-bom` v `routes/planning.routes.js` — flat BOM (depth=0) z OperationMaterial. + GET list/detail + DELETE
 
-### F3 — Plánovač v1
-- [ ] **F3.1** `services/planning/scheduler.js` — týdenní kapacitní plán
-- [ ] **F3.2** `services/planning/batch-builder.js` — EOQ s kapacitním omezením
-- [ ] **F3.3** `services/planning/capacity-planner.js` — RCCP (týdenní) + CRP (denní)
-- [ ] **F3.4** Pre-pick logika: po vygenerování BatchOperation vystavit transfer order na `input_location_id` pracoviště
-- [ ] **F3.5** Routes `POST /api/planning/weekly-plan`, `POST /api/planning/daily-plan`
-- [ ] **F3.6** MCP `planning-server/` + tool `generate_weekly_plan` v1
-- [ ] **F3.7** Agent `planovac` + zaregistrování v orchestrátoru (AGENT_MCP_MAP, KEYWORD_MAP, MODULE_ASSISTANT_MAP)
+### F3 — Plánovač v1 (částečně 2026-04-27)
+- [x] **F3.1** Generátor BatchOperation z dávky: `services/planning/batch-operations.js` + `POST /api/planning/batches/:id/generate-operations` + auto-generate při `POST /api/production/batches` (default true). UI: checkbox v modalu + tlačítko "⚙️ Generuj op." v tabulce u dávek s 0 op.
+- [ ] **F3.2** `services/planning/batch-builder.js` — EOQ s kapacitním omezením (TODO)
+- [ ] **F3.3** `services/planning/capacity-planner.js` — RCCP (týdenní) + CRP (denní) (TODO)
+- [ ] **F3.4** Pre-pick logika: po vygenerování BatchOperation vystavit transfer order na `input_location_id` pracoviště (TODO)
+- [ ] **F3.5** Routes `POST /api/planning/weekly-plan`, `POST /api/planning/daily-plan` (TODO)
+- [ ] **F3.6** MCP `planning-server/` + tool `generate_weekly_plan` v1 (TODO)
+- [ ] **F3.7** Agent `planovac` + zaregistrování v orchestrátoru (TODO)
 
 ### F4 — MRP
 - [ ] **F4.1** `services/planning/mrp.js` — BOM explosion + netting
