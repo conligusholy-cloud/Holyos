@@ -13,6 +13,7 @@ const { prisma } = require('../config/database');
 const { generateBatchOperationsForBatch } = require('../services/planning/batch-operations');
 const { computeMrpForBatch } = require('../services/planning/mrp');
 const { computePrePickForBatch } = require('../services/planning/pre-pick');
+const { computePurchaseReport } = require('../services/planning/purchase-report');
 
 // =============================================================================
 // BOM SNAPSHOTS — zamražený kusovník pro plánování dávky
@@ -215,6 +216,21 @@ router.post('/mrp-run', async (req, res, next) => {
     if (/nenalezena/.test(err.message)) return res.status(404).json({ error: err.message });
     next(err);
   }
+});
+
+// =============================================================================
+// PLÁNOVAČ — KONSOLIDOVANÝ NÁKUPNÍ REPORT (F4.5)
+// =============================================================================
+
+// GET /api/planning/purchase-report
+//   ?statuses=planned,released,in_progress  (CSV — default je všech aktivních)
+//   Vrátí materiály, které je třeba objednat napříč všemi dávkami.
+router.get('/purchase-report', async (req, res, next) => {
+  try {
+    const statuses = req.query.statuses ? String(req.query.statuses).split(',').map(s => s.trim()).filter(Boolean) : null;
+    const result = await computePurchaseReport({ statuses });
+    res.json(result);
+  } catch (err) { next(err); }
 });
 
 // =============================================================================
