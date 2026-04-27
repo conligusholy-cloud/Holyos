@@ -486,7 +486,7 @@
       }
       const TYPE_LABELS = { vehicle: 'Auto', person: 'Osoba', machine: 'Stroj', project: 'Projekt', department: 'Oddělení', general: 'Obecné' };
       tbody.innerHTML = r.data.map(cc => {
-        const linked = cc.vehicle ? `${cc.vehicle.license_plate} ${cc.vehicle.brand || ''} ${cc.vehicle.model || ''}`.trim()
+        const linked = cc.vehicle ? `${cc.vehicle.license_plate} ${cc.vehicle.category || ''} ${cc.vehicle.year || ''}`.trim()
                      : cc.person ? `${cc.person.first_name || ''} ${cc.person.last_name || ''}`.trim()
                      : cc.department ? cc.department.name
                      : '—';

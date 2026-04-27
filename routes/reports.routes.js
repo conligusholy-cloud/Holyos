@@ -85,7 +85,7 @@ router.get('/cost-centers', async (req, res, next) => {
     const ccs = await prisma.costCenter.findMany({
       where,
       include: {
-        vehicle: { select: { id: true, license_plate: true, brand: true, model: true } },
+        vehicle: { select: { id: true, license_plate: true, category: true, year: true } },
         person: { select: { id: true, first_name: true, last_name: true } },
         department: { select: { id: true, name: true } },
         parent: { select: { id: true, code: true, name: true } },
@@ -192,7 +192,7 @@ router.get('/cost-centers/summary', async (req, res, next) => {
     const ccs = await prisma.costCenter.findMany({
       where: ccWhere,
       include: {
-        vehicle: { select: { id: true, license_plate: true, brand: true, model: true } },
+        vehicle: { select: { id: true, license_plate: true, category: true, year: true } },
         person: { select: { id: true, first_name: true, last_name: true } },
         department: { select: { id: true, name: true } },
       },
@@ -242,7 +242,7 @@ router.get('/cost-centers/summary', async (req, res, next) => {
         name: cc.name,
         type: cc.type,
         type_label: TYPE_LABELS[cc.type] || cc.type,
-        linked: cc.vehicle ? `${cc.vehicle.license_plate} ${cc.vehicle.brand || ''} ${cc.vehicle.model || ''}`.trim()
+        linked: cc.vehicle ? `${cc.vehicle.license_plate} ${cc.vehicle.category || ''} ${cc.vehicle.year || ''}`.trim()
               : cc.person ? `${cc.person.first_name || ''} ${cc.person.last_name || ''}`.trim()
               : cc.department ? cc.department.name
               : null,
