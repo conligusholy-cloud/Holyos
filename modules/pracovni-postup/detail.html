@@ -445,6 +445,55 @@
     .gantt-c5 { background: #eab308; color: #1a1a1a; }
     .gantt-c6 { background: #06b6d4; }
     .gantt-c7 { background: #a78bfa; }
+    .gantt-row.sub-row { margin-bottom: 4px; }
+    .gantt-row.sub-row .gantt-label {
+      font-size: 12px;
+      color: var(--text2);
+      padding-left: 14px;
+      position: relative;
+    }
+    .gantt-row.sub-row .gantt-label::before {
+      content: "↳";
+      position: absolute;
+      left: 0;
+      color: var(--text2);
+      font-size: 13px;
+    }
+    .gantt-row.sub-row .gantt-label .sub-prefix {
+      display: inline-block;
+      padding: 1px 6px;
+      margin-right: 4px;
+      background: var(--surface2);
+      border-radius: 3px;
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--text2);
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
+    .gantt-row.sub-row .gantt-bar {
+      opacity: 0.78;
+      font-size: 10px;
+      font-weight: 500;
+    }
+    .gantt-main-divider {
+      grid-column: 1 / -1;
+      height: 1px;
+      background: var(--border);
+      margin: 6px 0 4px;
+      opacity: 0.5;
+    }
+    .gantt-toggle {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 14px;
+      font-size: 13px;
+      color: var(--text2);
+      cursor: pointer;
+      user-select: none;
+    }
+    .gantt-toggle input { cursor: pointer; }
     .gantt-summary {
       display: flex;
       flex-wrap: wrap;
@@ -1638,6 +1687,30 @@
     // Sekvenční layout: každá operace začíná tam, kde předchozí skončila.
     // Šířka baru = realMinutes (čas s pracovníky), reálné minuty počítá realMinutes().
     // =================================================================
+    // Stav: zobrazovat sub-produkty (předmontáže/polotovary)?
+    let _ganttShowSubs = true;
+    window.toggleGanttSubs = function(checked) {
+      _ganttShowSubs = !!checked;
+      renderGanttTab();
+    };
+
+    // Pomocná: vrátí pole sub-produktů (z materiálů s linked_product mající operace)
+    // ve formátu [{ subProduct, ops: [...sorted by step] }]
+    function collectSubProducts(op) {
+      const out = [];
+      for (const m of (op.materials || [])) {
+        const lp = m.linked_product;
+        if (lp && Array.isArray(lp.operations) && lp.operations.length > 0) {
+          out.push({
+            subProduct: lp,
+            material: m,
+            ops: lp.operations.slice().sort((a, b) => (a.step_number || 0) - (b.step_number || 0)),
+          });
+        }
+      }
+      return out;
+    }
+
     function renderGanttTab() {
       const content = document.getElementById('tab-content');
       const ops = (product.operations || []).slice().sort((a, b) => (a.step_number || 0) - (b.step_number || 0));
@@ -1649,32 +1722,93 @@
         return;
       }
 
+      // ── 1) Naplánuj rows: nejdřív hlavní ops, pak sub-produkty zarovnané na konec ──
+      // mainCum = kumulativní čas hlavních operací (začíná na 0)
+      // sub-produkt feeder končí přesně v okamžiku startu hlavní operace (musí být hotový)
+      // Sub-produkty jednoho main opu běží "paralelně" — každý vlastní řádek, všechny končí
+      // ve stejném okamžiku = main op start.
+      const mainColorOf = (idx) => 'gantt-c' + (idx % 8);
+      const subColorOf = (mainIdx, subIdx) => 'gantt-c' + ((mainIdx * 3 + subIdx + 5) % 8);
+
+      const groups = [];  // [{ main: {op, idx, start, end}, subs: [{subProduct, op, start, end, mainIdx, subIdx}] }]
+      let mainCum = 0;
+      ops.forEach((op, mainIdx) => {
+        const dur = realMinutes(op);
+        const mainStart = mainCum;
+        const mainEnd = mainCum + dur;
+        const subs = [];
+        if (_ganttShowSubs) {
+          const subProds = collectSubProducts(op);
+          subProds.forEach((sp, subIdx) => {
+            const subTotal = sp.ops.reduce((s, o) => s + realMinutes(o), 0);
+            // Tento sub-produkt končí v mainStart, jeho operace běží v sérii zpětně
+            let subCum = mainStart - subTotal;
+            sp.ops.forEach(subOp => {
+              const sd = realMinutes(subOp);
+              subs.push({
+                subProduct: sp.subProduct,
+                op: subOp,
+                start: subCum,
+                end: subCum + sd,
+                mainIdx,
+                subIdx,
+              });
+              subCum += sd;
+            });
+          });
+        }
+        groups.push({ main: { op, idx: mainIdx, start: mainStart, end: mainEnd }, subs });
+        mainCum = mainEnd;
+      });
+
+      // Posun timeline tak, aby všechny starts >= 0
+      const allStarts = groups.flatMap(g => [g.main.start, ...g.subs.map(s => s.start)]);
+      const minStart = Math.min(0, ...allStarts);
+      if (minStart < 0) {
+        const shift = -minStart;
+        groups.forEach(g => {
+          g.main.start += shift; g.main.end += shift;
+          g.subs.forEach(s => { s.start += shift; s.end += shift; });
+        });
+      }
+      const totalEnd = Math.max(...groups.map(g => g.main.end), 0);
+
+      // ── 2) Souhrnný panel ──
       const totalReal = ops.reduce((s, o) => s + realMinutes(o), 0);
       const totalNorm = ops.reduce((s, o) => s + normMinutes(o), 0);
       const totalPrep = ops.reduce((s, o) => s + (o.preparation_time || 0), 0);
       const takt = product.takt_time;
+      const subOpCount = groups.reduce((s, g) => s + g.subs.length, 0);
+      const subProdCount = new Set(groups.flatMap(g => g.subs.map(s => s.subProduct.id))).size;
 
       let html = '<div class="gantt-wrapper">';
 
-      // Souhrnný panel
+      html += '<label class="gantt-toggle">' +
+        '<input type="checkbox" ' + (_ganttShowSubs ? 'checked' : '') + ' onchange="toggleGanttSubs(this.checked)">' +
+        '<span>Zobrazit i předmontáže / polotovary (jejich výroba musí skončit, než se spustí daná operace)</span>' +
+        '</label>';
+
       html += '<div class="gantt-summary">' +
-        '<div class="gantt-summary-item"><div class="label">Operací</div><div class="value">' + ops.length + '</div></div>' +
-        '<div class="gantt-summary-item"><div class="label">Celkem (reálně)</div><div class="value">' + formatDuration(totalReal) + '</div></div>' +
+        '<div class="gantt-summary-item"><div class="label">Operací</div><div class="value">' + ops.length + (subOpCount ? ' + ' + subOpCount + ' sub' : '') + '</div></div>' +
+        '<div class="gantt-summary-item"><div class="label">Celkem (s polotovary)</div><div class="value">' + formatDuration(totalEnd) + '</div></div>' +
+        '<div class="gantt-summary-item"><div class="label">Hl. operace (reálně)</div><div class="value">' + formatDuration(totalReal) + '</div></div>' +
         '<div class="gantt-summary-item"><div class="label">Norma (1 os.)</div><div class="value">' + formatDuration(totalNorm) + '</div></div>' +
         (totalPrep > 0 ? '<div class="gantt-summary-item"><div class="label">Příprava</div><div class="value">' + totalPrep + ' min</div></div>' : '') +
+        (subProdCount > 0 ? '<div class="gantt-summary-item"><div class="label">Polotovarů</div><div class="value">' + subProdCount + '</div></div>' : '') +
         (takt ? '<div class="gantt-summary-item"><div class="label">Linkový takt</div><div class="value">' + takt + ' min</div></div>' : '') +
         '</div>';
 
-      // Časová osa nahoře
-      const tickStep = totalReal > 600 ? 60 : (totalReal > 120 ? 30 : (totalReal > 30 ? 10 : 5));
-      const tickCount = Math.floor(totalReal / tickStep) + 1;
+      // ── 3) Časová osa ──
+      const safeTotal = totalEnd > 0 ? totalEnd : 1;
+      const tickStep = safeTotal > 600 ? 60 : (safeTotal > 120 ? 30 : (safeTotal > 30 ? 10 : 5));
+      const tickCount = Math.floor(safeTotal / tickStep) + 1;
       html += '<div class="gantt-row header">' +
         '<div></div>' +
         '<div class="gantt-axis-track">';
       for (let i = 0; i <= tickCount; i++) {
         const minAt = i * tickStep;
-        if (minAt > totalReal) break;
-        const pct = totalReal > 0 ? (minAt / totalReal * 100) : 0;
+        if (minAt > safeTotal) break;
+        const pct = (minAt / safeTotal) * 100;
         const label = minAt >= 60
           ? (Math.floor(minAt / 60) + 'h' + (minAt % 60 ? ' ' + (minAt % 60) + 'm' : ''))
           : (minAt + 'm');
@@ -1684,35 +1818,60 @@
       }
       html += '</div></div>';
 
-      // Řádky operací
-      let cum = 0;
-      ops.forEach((op, idx) => {
-        const dur = realMinutes(op);
-        const startPct = totalReal > 0 ? (cum / totalReal * 100) : 0;
-        const widthPct = totalReal > 0 ? (dur / totalReal * 100) : 0;
-        const wsName = op.workstation ? op.workstation.name : '';
-        const colorIdx = idx % 8;
+      // ── 4) Řádky: pro každou skupinu nejprve sub-produkty, pak hlavní op ──
+      groups.forEach((g, gIdx) => {
+        if (gIdx > 0 && (g.subs.length > 0 || groups[gIdx - 1].subs.length > 0)) {
+          html += '<div class="gantt-main-divider"></div>';
+        }
+
+        // Sub rows nejdřív (běží před main)
+        g.subs.forEach((s) => {
+          const startPct = (s.start / safeTotal) * 100;
+          const widthPct = ((s.end - s.start) / safeTotal) * 100;
+          const sd = s.end - s.start;
+          const tooltip = s.subProduct.code + ' / ' + s.op.name + ' — ' + formatDuration(sd) +
+            ' • běží ' + formatDuration(s.start) + ' → ' + formatDuration(s.end) +
+            ' (musí skončit než začne hl. op ' + g.main.op.step_number + ')';
+          html += '<div class="gantt-row sub-row">' +
+            '<div class="gantt-label">' +
+              '<span class="sub-prefix">' + esc(s.subProduct.code) + '</span>' +
+              esc(s.op.name) +
+            '</div>' +
+            '<div class="gantt-track">' +
+              '<div class="gantt-bar ' + subColorOf(s.mainIdx, s.subIdx) + '" ' +
+                   'style="left:' + startPct + '%;width:' + widthPct + '%;" ' +
+                   'title="' + esc(tooltip) + '">' +
+                (widthPct > 4 ? formatDuration(sd) : '') +
+              '</div>' +
+            '</div>' +
+            '</div>';
+        });
+
+        // Main op
+        const m = g.main;
+        const dur = m.end - m.start;
+        const startPct = (m.start / safeTotal) * 100;
+        const widthPct = (dur / safeTotal) * 100;
+        const wsName = m.op.workstation ? m.op.workstation.name : '';
         const overTakt = takt && dur > takt;
-        const tooltip = op.name + ' — ' + formatDuration(dur) +
+        const tooltip = m.op.name + ' — ' + formatDuration(dur) +
           (wsName ? ' • ' + wsName : '') +
-          ' • začátek ' + formatDuration(cum) + ', konec ' + formatDuration(cum + dur);
+          ' • ' + formatDuration(m.start) + ' → ' + formatDuration(m.end);
 
         html += '<div class="gantt-row">' +
           '<div class="gantt-label">' +
-            '<span class="step">' + (op.step_number || (idx + 1)) + '</span>' +
-            esc(op.name) +
+            '<span class="step">' + (m.op.step_number || (m.idx + 1)) + '</span>' +
+            esc(m.op.name) +
             (wsName ? ' <span class="ws">(' + esc(wsName) + ')</span>' : '') +
           '</div>' +
           '<div class="gantt-track">' +
-            '<div class="gantt-bar gantt-c' + colorIdx + (overTakt ? ' over-takt' : '') + '" ' +
+            '<div class="gantt-bar ' + mainColorOf(m.idx) + (overTakt ? ' over-takt' : '') + '" ' +
                  'style="left:' + startPct + '%;width:' + widthPct + '%;" ' +
                  'title="' + esc(tooltip) + '">' +
               (widthPct > 4 ? formatDuration(dur) : '') +
             '</div>' +
           '</div>' +
           '</div>';
-
-        cum += dur;
       });
 
       html += '</div>'; // .gantt-wrapper
