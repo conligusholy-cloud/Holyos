@@ -284,6 +284,7 @@
         const opCount = v._count?.batch_operations ?? 0;
         if (opCount === 0) buttons.push(`<button class="btn btn-sm btn-secondary" data-action="gen-ops" data-id="${v.id}" title="Vygenerovat BatchOperation z postupu produktu">⚙️ Generuj op.</button>`);
         buttons.push(`<button class="btn btn-sm btn-secondary" data-action="mrp" data-id="${v.id}" title="MRP — kontrola materiálu pro tuto dávku">📊 MRP</button>`);
+        buttons.push(`<button class="btn btn-sm btn-secondary" data-action="pre-pick" data-id="${v.id}" title="Pre-pick — návrh transferů materiálu na pracoviště">🚚 Pre-pick</button>`);
         if (v.status === 'planned') buttons.push(`<button class="btn btn-sm btn-success" data-action="release" data-id="${v.id}">▶ Vydat</button>`);
         if (v.status !== 'done' && v.status !== 'cancelled') buttons.push(`<button class="btn btn-sm btn-danger" data-action="delete" data-id="${v.id}" title="Smazat">🗑️</button>`);
         return `<td class="col-actions">${buttons.join(' ')}</td>`;
@@ -434,12 +435,95 @@
         applyFilters(); // re-render aby boolean Materiál k dispozici se updatlo
         btn.disabled = false;
         return; // bez loadAll() — žádné mutace
+      } else if (action === 'pre-pick') {
+        const r = await fetch(`/api/planning/batches/${id}/pre-pick`, { headers: authHeaders() });
+        if (!r.ok) throw new Error((await r.json()).error || 'HTTP ' + r.status);
+        const pp = await r.json();
+        renderPrePickModal(pp);
+        btn.disabled = false;
+        return;
       }
       await loadAll();
     } catch (err) {
       alert('Chyba: ' + err.message);
       btn.disabled = false;
     }
+  }
+
+  // ─── Pre-pick modal — F3.4 návrh transferů ──────────────────────────────
+  function renderPrePickModal(pp) {
+    const groups = pp.by_workstation || [];
+    const summary = pp.summary || {};
+
+    const actionLabel = {
+      transfer_ok: '<span style="color:#22c55e;">✓ K přesunu</span>',
+      on_location: '<span style="color:#14b8a6;">✓ Už na místě</span>',
+      shortage: '<span style="color:#ef4444;">⚠️ Chybí</span>',
+      no_source: '<span style="color:#f59e0b;">? Není kde brát</span>',
+      no_target: '<span style="color:#a0a0a0;">? Pracoviště bez input lokace</span>',
+    };
+
+    const groupsHtml = groups.length === 0
+      ? '<div style="text-align:center; color:var(--text2); padding:32px;">Dávka nemá BatchOperation nebo OperationMaterial. <br/>Vygeneruj operace tlačítkem „⚙️ Generuj op."</div>'
+      : groups.map(g => {
+          const ws = g.workstation;
+          const target = g.input_location;
+          const wsTitle = ws ? `${escHtml(ws.name)} ${ws.code ? '<span style="color:var(--text2);">('+escHtml(ws.code)+')</span>' : ''}` : '<em>(bez pracoviště)</em>';
+          const targetLabel = target ? `${escHtml(target.code || '')} ${escHtml(target.name)}` : '<em style="color:#f59e0b;">⚠️ Pracoviště nemá input_location</em>';
+          const rows = g.transfers.map(t => `
+            <tr>
+              <td><strong>${escHtml(t.material?.code || '')}</strong></td>
+              <td>${escHtml(t.material?.name || '—')}</td>
+              <td class="col-num"><strong>${t.needed}</strong> ${escHtml(t.unit)}</td>
+              <td>${t.source_location ? escHtml(t.source_location.code || '') + ' ' + escHtml(t.source_location.name || '') : '<em>—</em>'}</td>
+              <td class="col-num">${t.available_at_source}</td>
+              <td>${actionLabel[t.action] || t.action}</td>
+            </tr>`).join('');
+          return `
+            <div style="margin-bottom:18px; border:1px solid var(--border); border-radius:10px; overflow:hidden;">
+              <div style="padding:10px 14px; background:var(--surface2); display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+                <div><strong style="font-size:14px;">🏭 ${wsTitle}</strong> → <span style="color:var(--text2);">${targetLabel}</span></div>
+                <div style="font-size:12px; color:var(--text2);">${g.transfers.length} položek</div>
+              </div>
+              <table style="width:100%; border-collapse:collapse; font-size:12px;">
+                <thead><tr style="background:rgba(160,160,160,0.05); text-transform:uppercase; font-size:10px; color:var(--text2);">
+                  <th style="text-align:left; padding:6px 10px;">Kód</th>
+                  <th style="text-align:left; padding:6px 10px;">Název</th>
+                  <th style="text-align:right; padding:6px 10px;">Potřeba</th>
+                  <th style="text-align:left; padding:6px 10px;">Zdroj</th>
+                  <th style="text-align:right; padding:6px 10px;">Dostupné</th>
+                  <th style="text-align:left; padding:6px 10px;">Akce</th>
+                </tr></thead>
+                <tbody>${rows}</tbody>
+              </table>
+            </div>`;
+        }).join('');
+
+    document.getElementById('modalRoot').innerHTML = `
+      <div class="modal-backdrop" id="mb">
+        <div class="modal" style="min-width:1100px; max-width:95vw;">
+          <h2>🚚 Pre-pick — ${escHtml(pp.batch?.batch_number || '')}</h2>
+          <div style="display:flex; gap:24px; font-size:13px; color:var(--text2); margin-bottom:14px; flex-wrap:wrap;">
+            <div><strong style="color:var(--text);">Produkt:</strong> ${escHtml(pp.batch?.product?.code || '')} ${escHtml(pp.batch?.product?.name || '')}</div>
+            <div><strong style="color:var(--text);">Pracovišť:</strong> ${summary.workstations_count || 0}</div>
+            <div><strong style="color:var(--text);">Transferů:</strong> ${summary.transfers_total || 0}</div>
+            <div><strong style="color:#22c55e;">OK:</strong> ${summary.transfers_ok || 0}</div>
+            ${summary.on_location ? `<div><strong style="color:#14b8a6;">Už na místě:</strong> ${summary.on_location}</div>` : ''}
+            ${summary.shortages ? `<div><strong style="color:#ef4444;">Chybí:</strong> ${summary.shortages}</div>` : ''}
+            ${summary.no_target ? `<div><strong style="color:#a0a0a0;">Bez cílové lokace:</strong> ${summary.no_target}</div>` : ''}
+          </div>
+          ${groupsHtml}
+          <p style="font-size:12px; color:var(--text2); margin-top:14px;">
+            <em>V1: pouze návrh. Reálné transfery se vystavují ručně v modulu „Skladové doklady".</em>
+          </p>
+          <div class="modal-actions">
+            <button class="btn btn-secondary" onclick="document.getElementById('modalRoot').innerHTML=''">Zavřít</button>
+          </div>
+        </div>
+      </div>`;
+    document.getElementById('mb').addEventListener('click', e => {
+      if (e.target.id === 'mb') document.getElementById('modalRoot').innerHTML = '';
+    });
   }
 
   // ─── MRP modal — výsledek analýzy materiálu ─────────────────────────────

@@ -12,6 +12,7 @@ const router = express.Router();
 const { prisma } = require('../config/database');
 const { generateBatchOperationsForBatch } = require('../services/planning/batch-operations');
 const { computeMrpForBatch } = require('../services/planning/mrp');
+const { computePrePickForBatch } = require('../services/planning/pre-pick');
 
 // =============================================================================
 // BOM SNAPSHOTS — zamražený kusovník pro plánování dávky
@@ -209,6 +210,36 @@ router.post('/mrp-run', async (req, res, next) => {
     if (isNaN(batchId)) return res.status(400).json({ error: 'batch_id je povinné' });
 
     const result = await computeMrpForBatch(batchId);
+    res.json(result);
+  } catch (err) {
+    if (/nenalezena/.test(err.message)) return res.status(404).json({ error: err.message });
+    next(err);
+  }
+});
+
+// =============================================================================
+// PLÁNOVAČ — PRE-PICK V1 (F3.4) — návrh transferů na pracoviště
+// =============================================================================
+
+// POST /api/planning/batches/:id/pre-pick — spočítá návrh transferů.
+// Volitelně GET pro lazy-load v UI.
+router.post('/batches/:id/pre-pick', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ error: 'Neplatné ID' });
+    const result = await computePrePickForBatch(id);
+    res.json(result);
+  } catch (err) {
+    if (/nenalezena/.test(err.message)) return res.status(404).json({ error: err.message });
+    next(err);
+  }
+});
+
+router.get('/batches/:id/pre-pick', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ error: 'Neplatné ID' });
+    const result = await computePrePickForBatch(id);
     res.json(result);
   } catch (err) {
     if (/nenalezena/.test(err.message)) return res.status(404).json({ error: err.message });
