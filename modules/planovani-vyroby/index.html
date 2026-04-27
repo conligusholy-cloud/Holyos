@@ -274,7 +274,13 @@
     const v = col.get(b);
     switch (col.type) {
       case 'num':       return `<td class="col-num">${v != null ? v : '—'}</td>`;
-      case 'text':      return `<td>${escHtml(v ?? '—')}</td>`;
+      case 'text': {
+        // Speciální zachzení: batch_number se renderuje jako klikatelný link na detail modal
+        if (col.key === 'batch_number' && v) {
+          return `<td class="col-link"><a href="#" data-detail-id="${b.id}" onclick="event.preventDefault(); window.openBatchDetail(${b.id});" style="font-weight:700;">${escHtml(v)}</a></td>`;
+        }
+        return `<td>${escHtml(v ?? '—')}</td>`;
+      }
       case 'date':      return `<td>${fmtDate(v)}</td>`;
       case 'datetime':  return `<td>${fmtDateTime(v)}</td>`;
       case 'bool':      return `<td style="padding:0;">${bool(v)}</td>`;
@@ -460,6 +466,144 @@
       alert('Chyba: ' + err.message);
       btn.disabled = false;
     }
+  }
+
+  // ─── Detail dávky (full info v jednom modalu) ────────────────────────────
+  async function openBatchDetail(batchId) {
+    document.getElementById('modalRoot').innerHTML = `
+      <div class="modal-backdrop" id="mb">
+        <div class="modal" style="min-width:1200px; max-width:97vw;">
+          <h2 id="bd-title">Detail dávky</h2>
+          <div id="bd-content">Načítám…</div>
+          <div class="modal-actions">
+            <button class="btn btn-secondary" onclick="document.getElementById('modalRoot').innerHTML=''">Zavřít</button>
+          </div>
+        </div>
+      </div>`;
+    document.getElementById('mb').addEventListener('click', e => {
+      if (e.target.id === 'mb') document.getElementById('modalRoot').innerHTML = '';
+    });
+
+    try {
+      // Paralelně 3 fetche: detail batch, MRP summary, audit log
+      const [batchRes, mrpRes, auditRes] = await Promise.all([
+        fetch(`/api/production/batches/${batchId}`, { headers: authHeaders() }),
+        fetch(`/api/planning/batches/${batchId}/mrp`, { headers: authHeaders() }),
+        fetch(`/api/planning/audit-log?batch_id=${batchId}&limit=50`, { headers: authHeaders() }),
+      ]);
+      if (!batchRes.ok) throw new Error('HTTP ' + batchRes.status);
+      const batch = await batchRes.json();
+      const mrp = mrpRes.ok ? await mrpRes.json() : null;
+      const audit = auditRes.ok ? await auditRes.json() : null;
+      renderBatchDetail(batch, mrp, audit);
+    } catch (e) {
+      document.getElementById('bd-content').innerHTML = `<div style="color:#ef4444">Chyba: ${escHtml(e.message)}</div>`;
+    }
+  }
+  window.openBatchDetail = openBatchDetail;
+
+  function renderBatchDetail(b, mrp, audit) {
+    document.getElementById('bd-title').innerHTML =
+      `${escHtml(b.batch_number)} ${statusBadge(b.status)} <span style="color:var(--text2); font-weight:400; font-size:14px; margin-left:8px;">${escHtml(b.product?.code || '')} ${escHtml(b.product?.name || '')}</span>`;
+
+    // Header info
+    const headerHtml = `
+      <div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:12px; margin-bottom:16px; font-size:13px;">
+        <div><div style="color:var(--text2); font-size:11px; text-transform:uppercase;">Množství</div><div style="font-weight:700; font-size:16px;">${b.quantity} ks</div></div>
+        <div><div style="color:var(--text2); font-size:11px; text-transform:uppercase;">Typ</div><div style="font-weight:700; font-size:14px;">${escHtml(b.batch_type)}</div></div>
+        <div><div style="color:var(--text2); font-size:11px; text-transform:uppercase;">Priorita</div><div style="font-weight:700; font-size:14px;">${b.priority}</div></div>
+        <div><div style="color:var(--text2); font-size:11px; text-transform:uppercase;">Vytvořil</div><div style="font-weight:700; font-size:14px;">${b.created_by ? escHtml(b.created_by.first_name + ' ' + b.created_by.last_name) : '—'}</div></div>
+        <div><div style="color:var(--text2); font-size:11px; text-transform:uppercase;">Plán začátek</div><div>${fmtDateTime(b.planned_start)}</div></div>
+        <div><div style="color:var(--text2); font-size:11px; text-transform:uppercase;">Plán konec</div><div>${fmtDateTime(b.planned_end)}</div></div>
+        <div><div style="color:var(--text2); font-size:11px; text-transform:uppercase;">Skutečnost zač.</div><div>${fmtDateTime(b.actual_start)}</div></div>
+        <div><div style="color:var(--text2); font-size:11px; text-transform:uppercase;">Skutečnost konec</div><div>${fmtDateTime(b.actual_end)}</div></div>
+      </div>`;
+
+    // Operace
+    const ops = (b.batch_operations || []).sort((a, c) => a.sequence - c.sequence);
+    const opsRows = ops.map(op => `
+      <tr>
+        <td class="col-num">${op.sequence}</td>
+        <td><strong>${escHtml(op.operation?.name || '')}</strong></td>
+        <td>${escHtml(op.workstation?.name || '—')}</td>
+        <td>${statusBadge(op.status)}</td>
+        <td>${op.assigned_person ? escHtml(op.assigned_person.first_name + ' ' + op.assigned_person.last_name) : '—'}</td>
+        <td>${fmtDateTime(op.started_at)}</td>
+        <td>${fmtDateTime(op.finished_at)}</td>
+        <td class="col-num">${op.duration_minutes != null ? op.duration_minutes + ' min' : '—'}</td>
+      </tr>`).join('');
+    const opsHtml = ops.length === 0
+      ? '<div style="color:var(--text2); padding:14px; text-align:center;">Žádné BatchOperation. Použij „⚙️ Generuj op." v hlavní tabulce.</div>'
+      : `<table class="dense" style="width:100%; margin-bottom:18px;">
+          <thead><tr class="head-titles">
+            <th>#</th><th>Operace</th><th>Pracoviště</th><th>Stav</th><th>Pracovník</th><th>Začátek</th><th>Konec</th><th>Trvání</th>
+          </tr></thead>
+          <tbody>${opsRows}</tbody>
+        </table>`;
+
+    // MRP summary (zkráceně)
+    const mrpHtml = !mrp ? '<div style="color:var(--text2);">MRP nedostupné</div>' :
+      mrp.summary?.all_materials_ok
+        ? `<div style="color:#22c55e;">✓ Všech ${mrp.summary.items_count} materiálů na skladě</div>`
+        : `<div>
+            <strong style="color:#ef4444;">⚠️ Chybí ${mrp.summary.shortage_count} z ${mrp.summary.items_count} materiálů</strong>
+            <ul style="margin:6px 0 0; padding-left:20px; font-size:12px;">
+              ${mrp.items.filter(it => it.shortage > 0).slice(0, 5).map(it =>
+                `<li>${escHtml(it.material?.code || '')} ${escHtml(it.material?.name?.slice(0, 40) || '')} — chybí <strong>${it.shortage} ${escHtml(it.unit)}</strong>${it.expected_delivery ? ' (dodání '+it.expected_delivery+')' : ''}</li>`
+              ).join('')}
+              ${mrp.items.filter(it => it.shortage > 0).length > 5 ? `<li>+${mrp.items.filter(it => it.shortage > 0).length - 5} dalších…</li>` : ''}
+            </ul>
+            <div style="margin-top:6px; font-size:11px; color:var(--text2);">Detailní rozpis v "📊 MRP" v hlavní tabulce.</div>
+          </div>`;
+
+    // Audit (poslední akce)
+    const actionIcon = { start: '▶', pause: '⏸', resume: '▶', done: '✓', problem: '⚠️', comment: '💬' };
+    const actionColor = { start: '#6c8cff', pause: '#a0a0a0', resume: '#22c55e', done: '#14b8a6', problem: '#ef4444', comment: '#f59e0b' };
+    const fmtTime = d => new Date(d).toLocaleString('cs-CZ', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
+    const auditHtml = !audit || audit.logs.length === 0
+      ? '<div style="color:var(--text2); font-size:12px; padding:8px;">Žádná aktivita v kioscích zatím.</div>'
+      : `<table style="width:100%; font-size:12px; border-collapse:collapse;">
+          <thead><tr style="text-transform:uppercase; font-size:10px; color:var(--text2);">
+            <th style="text-align:left; padding:4px 8px;">Čas</th>
+            <th style="text-align:left; padding:4px 8px;">Akce</th>
+            <th style="text-align:left; padding:4px 8px;">Pracovník</th>
+            <th style="text-align:left; padding:4px 8px;">Operace</th>
+            <th style="text-align:left; padding:4px 8px;">Trvání</th>
+          </tr></thead>
+          <tbody>${audit.logs.slice(0, 30).map(l => `
+            <tr style="border-top:1px solid var(--border);">
+              <td style="padding:4px 8px;">${fmtTime(l.created_at)}</td>
+              <td style="padding:4px 8px; color:${actionColor[l.action] || 'var(--text)'}; font-weight:700;">${actionIcon[l.action] || ''} ${escHtml(l.action)}</td>
+              <td style="padding:4px 8px;">${escHtml(l.person || '—')}</td>
+              <td style="padding:4px 8px;">${escHtml(l.operation || '—')}</td>
+              <td style="padding:4px 8px;">${l.duration_minutes != null ? l.duration_minutes + ' min' : '—'}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>`;
+
+    // BOM snapshot info
+    const bomHtml = b.bom_snapshot
+      ? `<div style="font-size:12px;"><strong>BOM snapshot #${b.bom_snapshot.id}</strong> — source: ${escHtml(b.bom_snapshot.source)}, ${b.bom_snapshot.snapshot_at ? new Date(b.bom_snapshot.snapshot_at).toLocaleDateString('cs-CZ') : ''}</div>`
+      : '<div style="font-size:12px; color:var(--text2);">BOM snapshot nezamražen — MRP používá fallback z OperationMaterial</div>';
+
+    const noteHtml = b.note ? `<div style="margin-top:14px; padding:10px 14px; background:rgba(245,158,11,0.06); border:1px solid rgba(245,158,11,0.3); border-radius:8px; font-size:13px;"><strong>Poznámka:</strong> ${escHtml(b.note)}</div>` : '';
+
+    document.getElementById('bd-content').innerHTML = `
+      ${headerHtml}
+      <h3 style="font-size:13px; margin:14px 0 8px; color:var(--text2);">Operace</h3>
+      ${opsHtml}
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:18px;">
+        <div>
+          <h3 style="font-size:13px; margin:0 0 8px; color:var(--text2);">Materiál (MRP)</h3>
+          ${mrpHtml}
+          <div style="margin-top:10px;">${bomHtml}</div>
+        </div>
+        <div>
+          <h3 style="font-size:13px; margin:0 0 8px; color:var(--text2);">Aktivita v kioscích</h3>
+          ${auditHtml}
+        </div>
+      </div>
+      ${noteHtml}`;
   }
 
   // ─── Audit log akcí v kioscích ──────────────────────────────────────────
