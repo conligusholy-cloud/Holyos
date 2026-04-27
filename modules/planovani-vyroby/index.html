@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Plánování výroby | HOLYOS</title>
+  <link rel="icon" type="image/svg+xml" href="../../logo-holyos-icon.svg">
+  <base href="../../">
+  <link rel="stylesheet" href="css/dashboard.css">
+  <style>
+    /* ============================================================
+       Plánování výroby — hustá tabulka ve Factorify stylu
+       ============================================================ */
+    .main-wrapper { margin-left: var(--sidebar-w); flex: 1; min-height: 100vh; display: flex; flex-direction: column; }
+    .page-header {
+      display: flex; align-items: center; gap: 12px; padding: 14px 20px;
+      border-bottom: 1px solid var(--border); flex-wrap: wrap;
+    }
+    .page-header h1 { font-size: 17px; font-weight: 700; margin: 0; }
+    .page-header .count { font-size: 12px; color: var(--text2); margin-left: 4px; }
+
+    .content { padding: 0; flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+    .quick-filters {
+      display: flex; gap: 8px; padding: 10px 20px; border-bottom: 1px solid var(--border);
+      align-items: center; flex-wrap: wrap; background: var(--surface2);
+    }
+
+    .btn {
+      padding: 7px 14px; border-radius: 6px; border: 1px solid var(--border);
+      font-size: 12px; font-weight: 500; cursor: pointer; transition: all 0.15s;
+      display: inline-flex; align-items: center; gap: 5px;
+      background: transparent; color: var(--text);
+    }
+    .btn-primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .btn-primary:hover { opacity: 0.9; }
+    .btn-secondary { background: var(--surface2); }
+    .btn-success { background: #16a34a; color: #fff; border-color: #16a34a; }
+    .btn-danger { background: #dc2626; color: #fff; border-color: #dc2626; }
+    .btn-sm { padding: 3px 8px; font-size: 11px; }
+
+    .filter-select {
+      padding: 6px 10px; background: var(--surface); color: var(--text);
+      border: 1px solid var(--border); border-radius: 6px; font-size: 12px;
+    }
+
+    /* === Hustá tabulka ===================================================== */
+    .table-wrap {
+      flex: 1; overflow: auto; background: var(--surface);
+    }
+    table.dense {
+      width: max-content; min-width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+    table.dense thead { position: sticky; top: 0; z-index: 5; }
+    table.dense thead tr.head-titles th {
+      background: var(--surface2); color: var(--text2);
+      font-weight: 600; text-align: left; padding: 8px 10px;
+      border-bottom: 1px solid var(--border);
+      border-right: 1px solid var(--border);
+      white-space: nowrap; vertical-align: bottom;
+    }
+    table.dense thead tr.head-filters th {
+      background: var(--surface2); padding: 4px 6px;
+      border-bottom: 1px solid var(--border);
+      border-right: 1px solid var(--border);
+    }
+    table.dense thead tr.head-filters input,
+    table.dense thead tr.head-filters select {
+      width: 100%; padding: 4px 6px; font-size: 11px;
+      background: var(--surface); color: var(--text);
+      border: 1px solid var(--border); border-radius: 4px;
+      box-sizing: border-box;
+    }
+    table.dense tbody td {
+      padding: 6px 10px; border-bottom: 1px solid var(--border);
+      border-right: 1px solid var(--border);
+      white-space: nowrap; vertical-align: middle;
+    }
+    table.dense tbody tr:hover td {
+      background: rgba(108, 140, 255, 0.05);
+    }
+    .col-num { text-align: right; font-variant-numeric: tabular-nums; }
+    .col-link a { color: #6c8cff; text-decoration: none; }
+    .col-link a:hover { text-decoration: underline; }
+    .col-actions { text-align: right; white-space: nowrap; }
+
+    /* Boolean cells — zelené/červené pozadí jako ve Factorify */
+    .bool-cell {
+      text-align: center; font-weight: 700; font-size: 13px;
+      padding: 6px 10px;
+    }
+    .bool-yes { background: rgba(34, 197, 94, 0.18); color: #16a34a; }
+    .bool-no  { background: rgba(239, 68, 68, 0.18); color: #dc2626; }
+    .bool-na  { color: var(--text2); }
+
+    /* Status badge */
+    .badge {
+      display: inline-block; padding: 2px 8px; border-radius: 999px;
+      font-size: 10px; font-weight: 600; text-transform: uppercase;
+      letter-spacing: 0.4px;
+    }
+    .badge-planned { background: rgba(108, 140, 255, 0.15); color: #6c8cff; }
+    .badge-released { background: rgba(34, 197, 94, 0.15); color: #16a34a; }
+    .badge-in_progress { background: rgba(245, 158, 11, 0.15); color: #f59e0b; }
+    .badge-paused { background: rgba(160, 160, 160, 0.15); color: #a0a0a0; }
+    .badge-done { background: rgba(20, 184, 166, 0.15); color: #14b8a6; }
+    .badge-cancelled { background: rgba(239, 68, 68, 0.15); color: #ef4444; }
+
+    /* Empty state */
+    .empty-state {
+      padding: 64px 24px; text-align: center; color: var(--text2);
+    }
+    .empty-icon { font-size: 48px; margin-bottom: 12px; opacity: 0.5; }
+
+    /* Modal */
+    .modal-backdrop {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+      display: flex; align-items: center; justify-content: center; z-index: 1000;
+    }
+    .modal {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+      padding: 22px; min-width: 420px; max-width: 600px; max-height: 90vh; overflow-y: auto;
+    }
+    .modal h2 { margin: 0 0 14px; font-size: 18px; }
+    .modal .form-row { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
+    .modal label { font-size: 11px; color: var(--text2); font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; }
+    .modal input, .modal select, .modal textarea {
+      padding: 9px 11px; background: var(--surface2); color: var(--text);
+      border: 1px solid var(--border); border-radius: 7px; font-size: 13px; font-family: inherit;
+    }
+    .modal textarea { min-height: 60px; resize: vertical; }
+    .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+  </style>
+</head>
+<body>
+
+<div id="sidebar"></div>
+<div class="main-wrapper">
+  <div class="page-header">
+    <span style="font-size:22px;">🗂️</span>
+    <h1>Plánování výroby <span class="count" id="batchCount"></span></h1>
+    <div style="margin-left:auto; display:flex; gap:8px;">
+      <button class="btn btn-secondary" onclick="loadAll()">🔄 Obnovit</button>
+      <button class="btn btn-primary" onclick="openCreateModal()">+ Nová dávka</button>
+    </div>
+  </div>
+
+  <div class="content">
+    <!-- Rychlé filtry -->
+    <div class="quick-filters">
+      <select class="filter-select" id="qfStatus" onchange="applyFilters()">
+        <option value="">Stav: vše</option>
+        <option value="planned">📋 Plánovaná</option>
+        <option value="released">✅ Vydaná</option>
+        <option value="in_progress">⚙️ Probíhá</option>
+        <option value="paused">⏸️ Pauza</option>
+        <option value="done">🏁 Hotová</option>
+        <option value="cancelled">❌ Zrušená</option>
+      </select>
+      <select class="filter-select" id="qfType" onchange="applyFilters()">
+        <option value="">Typ: vše</option>
+        <option value="main">Hlavní</option>
+        <option value="feeder">Feeder</option>
+        <option value="subassembly">Podsestava</option>
+      </select>
+      <select class="filter-select" id="qfYear" onchange="applyFilters()">
+        <option value="">Rok: vše</option>
+      </select>
+      <span style="color:var(--text2); font-size:12px; margin-left:auto;" id="lastUpdate"></span>
+    </div>
+
+    <!-- Hustá tabulka -->
+    <div class="table-wrap" id="tableWrap"></div>
+  </div>
+</div>
+
+<div id="modalRoot"></div>
+
+<script>
+  var s = document.createElement('script');
+  s.src = 'js/sidebar.js?v=' + Date.now();
+  s.onload = function() { renderSidebar('planovani-vyroby'); };
+  document.head.appendChild(s);
+</script>
+
+<script>
+(function() {
+  // ─── Stav ─────────────────────────────────────────────────────────────────
+  let allBatches = [];
+  let products = [];
+  let columnFilters = {}; // key → string (per-column input filter)
+
+  // ─── Helpery ──────────────────────────────────────────────────────────────
+  function authHeaders() {
+    const h = { 'Content-Type': 'application/json' };
+    const t = sessionStorage.getItem('token');
+    if (t) h['Authorization'] = 'Bearer ' + t;
+    return h;
+  }
+
+  function escHtml(s) {
+    if (s == null) return '';
+    return String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+  }
+
+  function fmtDate(d) {
+    if (!d) return '—';
+    const dt = new Date(d);
+    if (isNaN(dt.getTime())) return '—';
+    return dt.toLocaleDateString('cs-CZ');
+  }
+
+  function fmtDateTime(d) {
+    if (!d) return '—';
+    const dt = new Date(d);
+    if (isNaN(dt.getTime())) return '—';
+    return dt.toLocaleString('cs-CZ', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  }
+
+  function statusBadge(status) {
+    const labels = {
+      planned: 'Plánovaná', released: 'Vydaná', in_progress: 'Probíhá',
+      paused: 'Pauza', done: 'Hotová', cancelled: 'Zrušená',
+    };
+    return `<span class="badge badge-${status}">${labels[status] || status}</span>`;
+  }
+
+  function bool(v) {
+    if (v === true) return '<div class="bool-cell bool-yes">✓</div>';
+    if (v === false) return '<div class="bool-cell bool-no">✗</div>';
+    return '<div class="bool-cell bool-na">—</div>';
+  }
+
+  function yearFromBatchNumber(bn) {
+    const m = (bn || '').match(/^(\d{4})-/);
+    return m ? parseInt(m[1], 10) : null;
+  }
+
+  // ─── Sloupce ──────────────────────────────────────────────────────────────
+  // Definuju seznam sloupců — z toho generuji header + filter řádek + tělo.
+  // type: 'text' | 'date' | 'datetime' | 'num' | 'bool' | 'status' | 'link' | 'actions' | 'badge'
+  const COLUMNS = [
+    { key: 'id',            label: 'Id',                       type: 'num',      get: b => b.id },
+    { key: 'batch_number',  label: 'Číslo dávky',              type: 'text',     get: b => b.batch_number },
+    { key: 'planned_end',   label: 'Požadovaný termín',        type: 'datetime', get: b => b.planned_end },
+    { key: 'released_at',   label: 'Čas uvolnění',             type: 'datetime', get: b => b.status !== 'planned' ? b.updated_at : null },
+    { key: 'actual_start',  label: 'Skutečný začátek',         type: 'datetime', get: b => b.actual_start },
+    { key: 'actual_end',    label: 'Čas dokončení',            type: 'datetime', get: b => b.actual_end },
+    { key: 'product',       label: 'Zboží',                    type: 'link',     get: b => b.product ? { id: b.product.id, code: b.product.code, name: b.product.name } : null },
+    { key: 'material_ok',   label: 'Materiál k dispozici',     type: 'bool',     get: b => null /* TODO: F4 MRP — kontrola Stock vs. BOM */ },
+    { key: 'bom_ok',        label: 'BOM snapshot',             type: 'bool',     get: b => b.bom_snapshot_id != null },
+    { key: 'released',      label: 'Vydaná',                   type: 'bool',     get: b => ['released','in_progress','paused','done'].includes(b.status) },
+    { key: 'done',          label: 'Hotová',                   type: 'bool',     get: b => b.status === 'done' },
+    { key: 'cancelled',     label: 'Stažena z výroby',         type: 'bool',     get: b => b.status === 'cancelled' },
+    { key: 'quantity',      label: 'Množství',                 type: 'num',      get: b => b.quantity },
+    { key: 'op_count',      label: 'Operací',                  type: 'num',      get: b => b._count?.batch_operations ?? 0 },
+    { key: 'status',        label: 'Stav',                     type: 'badge',    get: b => b.status },
+    { key: 'batch_type',    label: 'Typ',                      type: 'text',     get: b => b.batch_type },
+    { key: 'priority',      label: 'Priorita',                 type: 'num',      get: b => b.priority },
+    { key: 'actions',       label: '',                         type: 'actions',  get: b => b },
+  ];
+
+  function renderCell(col, b) {
+    const v = col.get(b);
+    switch (col.type) {
+      case 'num':       return `<td class="col-num">${v != null ? v : '—'}</td>`;
+      case 'text':      return `<td>${escHtml(v ?? '—')}</td>`;
+      case 'date':      return `<td>${fmtDate(v)}</td>`;
+      case 'datetime':  return `<td>${fmtDateTime(v)}</td>`;
+      case 'bool':      return `<td style="padding:0;">${bool(v)}</td>`;
+      case 'badge':     return `<td>${statusBadge(v)}</td>`;
+      case 'link':      return v
+        ? `<td class="col-link"><a href="modules/pracovni-postup/detail.html?id=${v.id}" title="${escHtml(v.name)}">${escHtml(v.code)} <span style="color:var(--text2)">${escHtml((v.name || '').slice(0,40))}</span></a></td>`
+        : `<td>—</td>`;
+      case 'actions': {
+        const buttons = [];
+        if (v.status === 'planned') buttons.push(`<button class="btn btn-sm btn-success" data-action="release" data-id="${v.id}">▶ Vydat</button>`);
+        if (v.status !== 'done' && v.status !== 'cancelled') buttons.push(`<button class="btn btn-sm btn-danger" data-action="delete" data-id="${v.id}" title="Smazat">🗑️</button>`);
+        return `<td class="col-actions">${buttons.join(' ')}</td>`;
+      }
+      default: return `<td>${escHtml(v ?? '')}</td>`;
+    }
+  }
+
+  function cellFilterMatches(col, b, filterValue) {
+    if (!filterValue) return true;
+    const fv = String(filterValue).toLowerCase().trim();
+    const v = col.get(b);
+    if (col.type === 'bool') {
+      // ✓ / ano / yes / true → true; ✗ / ne / no / false → false; — / na → null
+      if (['✓','y','ano','yes','true','1'].includes(fv)) return v === true;
+      if (['✗','n','ne','no','false','0'].includes(fv)) return v === false;
+      return true;
+    }
+    if (col.type === 'link') return v && (`${v.code} ${v.name}`.toLowerCase().includes(fv));
+    if (col.type === 'num') return String(v).includes(fv);
+    if (col.type === 'date' || col.type === 'datetime') {
+      return v && fmtDateTime(v).toLowerCase().includes(fv);
+    }
+    if (col.type === 'badge') return String(v ?? '').toLowerCase().includes(fv);
+    return String(v ?? '').toLowerCase().includes(fv);
+  }
+
+  // ─── Načtení dat ──────────────────────────────────────────────────────────
+  async function loadAll() {
+    try {
+      const r = await fetch('/api/production/batches', { headers: authHeaders() });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      allBatches = await r.json();
+      populateYearFilter();
+      applyFilters();
+      document.getElementById('lastUpdate').textContent = 'Aktualizováno ' + new Date().toLocaleTimeString('cs-CZ', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    } catch (e) {
+      document.getElementById('tableWrap').innerHTML =
+        `<div class="empty-state"><div class="empty-icon">⚠️</div><h3>Nepodařilo se načíst dávky</h3><p>${escHtml(e.message)}</p></div>`;
+    }
+  }
+
+  function populateYearFilter() {
+    const sel = document.getElementById('qfYear');
+    const cur = sel.value;
+    const years = new Set();
+    allBatches.forEach(b => {
+      const y = yearFromBatchNumber(b.batch_number);
+      if (y) years.add(y);
+    });
+    const sorted = Array.from(years).sort().reverse();
+    sel.innerHTML = '<option value="">Rok: vše</option>' + sorted.map(y => `<option value="${y}">${y}</option>`).join('');
+    sel.value = cur;
+  }
+
+  // ─── Filtrace + render ────────────────────────────────────────────────────
+  function applyFilters() {
+    const status = document.getElementById('qfStatus').value;
+    const type = document.getElementById('qfType').value;
+    const year = document.getElementById('qfYear').value;
+
+    let filtered = allBatches;
+    if (status) filtered = filtered.filter(b => b.status === status);
+    if (type) filtered = filtered.filter(b => b.batch_type === type);
+    if (year) filtered = filtered.filter(b => yearFromBatchNumber(b.batch_number) === parseInt(year, 10));
+
+    // Per-column inline filtry
+    for (const col of COLUMNS) {
+      const fv = columnFilters[col.key];
+      if (fv) filtered = filtered.filter(b => cellFilterMatches(col, b, fv));
+    }
+
+    document.getElementById('batchCount').textContent = filtered.length === allBatches.length
+      ? `(${allBatches.length})` : `(${filtered.length}/${allBatches.length})`;
+    renderTable(filtered);
+  }
+
+  function renderTable(batches) {
+    if (allBatches.length === 0) {
+      document.getElementById('tableWrap').innerHTML =
+        `<div class="empty-state"><div class="empty-icon">📭</div><h3>Žádné dávky</h3><p>Vytvoř první dávku tlačítkem „+ Nová dávka".</p></div>`;
+      return;
+    }
+
+    const titles = COLUMNS.map(c => `<th>${escHtml(c.label)}</th>`).join('');
+    const filters = COLUMNS.map(c => {
+      if (c.type === 'actions') return '<th></th>';
+      const cur = escHtml(columnFilters[c.key] || '');
+      return `<th><input type="text" data-fkey="${c.key}" value="${cur}" placeholder=""></th>`;
+    }).join('');
+
+    const rows = batches.map(b => {
+      const cells = COLUMNS.map(c => renderCell(c, b)).join('');
+      return `<tr>${cells}</tr>`;
+    }).join('');
+
+    document.getElementById('tableWrap').innerHTML = `
+      <table class="dense">
+        <thead>
+          <tr class="head-titles">${titles}</tr>
+          <tr class="head-filters">${filters}</tr>
+        </thead>
+        <tbody>${rows || `<tr><td colspan="${COLUMNS.length}" class="empty-state">Žádné dávky neodpovídají filtru.</td></tr>`}</tbody>
+      </table>`;
+
+    // Per-column input listeners
+    document.querySelectorAll('input[data-fkey]').forEach(inp => {
+      inp.addEventListener('input', e => {
+        columnFilters[e.target.dataset.fkey] = e.target.value;
+        applyFilters();
+      });
+    });
+
+    // Action button listeners
+    document.querySelectorAll('[data-action]').forEach(btn => {
+      btn.addEventListener('click', handleAction);
+    });
+  }
+
+  // ─── Akce ─────────────────────────────────────────────────────────────────
+  async function handleAction(e) {
+    e.stopPropagation();
+    const btn = e.currentTarget;
+    const action = btn.dataset.action;
+    const id = parseInt(btn.dataset.id, 10);
+    btn.disabled = true;
+    try {
+      if (action === 'release') {
+        const r = await fetch(`/api/production/batches/${id}/release`, { method: 'POST', headers: authHeaders() });
+        if (!r.ok) throw new Error((await r.json()).error || 'HTTP ' + r.status);
+      } else if (action === 'delete') {
+        if (!confirm('Smazat tuto dávku včetně operací a logů?')) { btn.disabled = false; return; }
+        const r = await fetch(`/api/production/batches/${id}`, { method: 'DELETE', headers: authHeaders() });
+        if (!r.ok) throw new Error((await r.json()).error || 'HTTP ' + r.status);
+      }
+      await loadAll();
+    } catch (err) {
+      alert('Chyba: ' + err.message);
+      btn.disabled = false;
+    }
+  }
+
+  // ─── Modal pro novou dávku ────────────────────────────────────────────────
+  async function openCreateModal() {
+    if (products.length === 0) {
+      try {
+        const r = await fetch('/api/production/products', { headers: authHeaders() });
+        if (r.ok) products = await r.json();
+      } catch (e) { /* ignore */ }
+    }
+    const productOpts = products.map(p => `<option value="${p.id}">${escHtml(p.code)} — ${escHtml(p.name)}</option>`).join('');
+    const today = new Date().toISOString().slice(0, 10);
+
+    document.getElementById('modalRoot').innerHTML = `
+      <div class="modal-backdrop" id="mb">
+        <div class="modal">
+          <h2>Nová výrobní dávka</h2>
+          <div class="form-row">
+            <label>Produkt *</label>
+            <select id="m-product">${productOpts || '<option value="">(nelze načíst seznam produktů)</option>'}</select>
+          </div>
+          <div class="form-row">
+            <label>Množství (ks) *</label>
+            <input type="number" id="m-qty" min="1" value="5">
+          </div>
+          <div class="form-row">
+            <label>Typ dávky</label>
+            <select id="m-type">
+              <option value="main">Hlavní (montáž)</option>
+              <option value="feeder">Feeder (předmontáž)</option>
+              <option value="subassembly">Podsestava</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <label>Variant key (volitelně)</label>
+            <input type="text" id="m-variant" placeholder='např. "ram:nerez|barva:bila"'>
+          </div>
+          <div class="form-row" style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+            <div><label>Plán začátek</label><input type="date" id="m-start" value="${today}"></div>
+            <div><label>Plán konec</label><input type="date" id="m-end"></div>
+          </div>
+          <div class="form-row">
+            <label>Priorita (nižší = přednost)</label>
+            <input type="number" id="m-prio" value="100">
+          </div>
+          <div class="form-row">
+            <label>Poznámka</label>
+            <textarea id="m-note"></textarea>
+          </div>
+          <div class="modal-actions">
+            <button class="btn btn-secondary" onclick="document.getElementById('modalRoot').innerHTML=''">Zrušit</button>
+            <button class="btn btn-primary" id="m-save">Vytvořit dávku</button>
+          </div>
+        </div>
+      </div>`;
+
+    document.getElementById('m-save').addEventListener('click', submitCreate);
+    document.getElementById('mb').addEventListener('click', e => {
+      if (e.target.id === 'mb') document.getElementById('modalRoot').innerHTML = '';
+    });
+  }
+  window.openCreateModal = openCreateModal;
+  window.applyFilters = applyFilters;
+  window.loadAll = loadAll;
+
+  async function submitCreate() {
+    const productId = parseInt(document.getElementById('m-product').value, 10);
+    const qty = parseInt(document.getElementById('m-qty').value, 10);
+    if (!productId || !qty) { alert('Vyber produkt a zadej množství.'); return; }
+
+    const body = {
+      product_id: productId,
+      quantity: qty,
+      batch_type: document.getElementById('m-type').value,
+      variant_key: document.getElementById('m-variant').value || null,
+      planned_start: document.getElementById('m-start').value || null,
+      planned_end: document.getElementById('m-end').value || null,
+      priority: parseInt(document.getElementById('m-prio').value, 10) || 100,
+      note: document.getElementById('m-note').value || null,
+    };
+
+    const btn = document.getElementById('m-save');
+    btn.disabled = true; btn.textContent = 'Vytvářím…';
+    try {
+      const r = await fetch('/api/production/batches', {
+        method: 'POST', headers: authHeaders(), body: JSON.stringify(body),
+      });
+      if (!r.ok) throw new Error((await r.json()).error || 'HTTP ' + r.status);
+      document.getElementById('modalRoot').innerHTML = '';
+      await loadAll();
+    } catch (err) {
+      alert('Chyba: ' + err.message);
+      btn.disabled = false; btn.textContent = 'Vytvořit dávku';
+    }
+  }
+
+  // ─── Init ─────────────────────────────────────────────────────────────────
+  loadAll();
+})();
+</script>
+
+</body>
+</html>

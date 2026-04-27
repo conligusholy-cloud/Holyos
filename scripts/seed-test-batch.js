@@ -24,18 +24,11 @@ const wsId = parseInt(arg('ws', 1), 10);
 const productIdArg = arg('product', null);
 const quantity = parseInt(arg('qty', 5), 10);
 
-function getIsoWeek(date) {
-  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
-  const dayNum = d.getUTCDay() || 7;
-  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
-  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
-  const week = Math.ceil(((d - yearStart) / 86400000 + 1) / 7);
-  return { year: d.getUTCFullYear(), week };
-}
-
+// Generátor batch_number — musí odpovídat routes/production.routes.js generateBatchNumber.
+// Formát: {rok}-{seq3} (např. "2026-001").
 async function generateBatchNumber() {
-  const { year, week } = getIsoWeek(new Date());
-  const prefix = `DV-${year}-W${String(week).padStart(2, '0')}-`;
+  const year = new Date().getFullYear();
+  const prefix = `${year}-`;
   const last = await prisma.productionBatch.findFirst({
     where: { batch_number: { startsWith: prefix } },
     orderBy: { batch_number: 'desc' },
