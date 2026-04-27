@@ -215,7 +215,7 @@ model BatchOperationLog {
 - [x] **F4.1** `services/planning/mrp.js` — BOM explosion (flat, depth=0) + netting Stock vs. potřeba. BOM zdroj: BomSnapshot pokud má, jinak fallback OperationMaterial. Sumuje Stock přes všechny lokace (quantity - reserved_quantity).
 - [x] **F4.2** Lead-time offset (Material.lead_time_days → expected_delivery), zaokrouhlení qty_to_order na batch_size_default/min. Kategorizace long-lead/kanban TODO.
 - [x] **F4.3** Endpoint `POST /api/planning/mrp-run` (s body { batch_id }) + GET `/api/planning/batches/:id/mrp` pro UI lazy-load.
-- [ ] **F4.4** MCP tool `calculate_mrp` (TODO)
+- [x] **F4.4** MCP `planning-server/` se 8 tools: `list_batches`, `get_batch_detail`, `create_batch`, `generate_operations`, `release_batch`, `calculate_mrp`, `create_bom_snapshot`, `list_competencies`. Agent `planovac` registrovaný v orchestrátoru (servers: planning + production + warehouse). KEYWORD_MAP + MODULE_ASSISTANT_MAP rozšířené.
 - [x] **F4.5** UI report v `planovani-vyroby` — tlačítko "📊 MRP" u dávky → modal s dvěma tabulkami (potřeby × stav × shortage, návrhy PO). Sloupec "Materiál k dispozici" se updatne po MRP fetchi (zelená ✓ / červená ✗).
 
 ### F5 — UI dispečer (částečně 2026-04-27)

@@ -15,6 +15,7 @@ const { getTasksTools, executeTasksTool } = require('../../mcp-servers/tasks-ser
 const { getFleetTools, executeFleetTool } = require('../../mcp-servers/fleet-server');
 const { getCadTools, executeCadTool } = require('../../mcp-servers/cad-server');
 const { getAccountingTools, executeAccountingTool } = require('../../mcp-servers/accounting-server');
+const { getPlanningTools, executePlanningTool } = require('../../mcp-servers/planning-server');
 
 // ─── Mapování: agent slug → MCP servery (tools + executory) ────────────────
 const AGENT_MCP_MAP = {
@@ -76,6 +77,17 @@ const AGENT_MCP_MAP = {
     getTools: () => getAccountingTools(),
     execute: (tool, params) => executeAccountingTool(tool, params, prisma),
   },
+  planovac: {
+    servers: ['planning', 'production', 'warehouse'],
+    getTools: () => [...getPlanningTools(), ...getProductionTools(), ...getWarehouseTools()],
+    execute: (tool, params) => {
+      const planningTools = getPlanningTools().map(t => t.name);
+      const prodTools = getProductionTools().map(t => t.name);
+      if (planningTools.includes(tool)) return executePlanningTool(tool, params, prisma);
+      if (prodTools.includes(tool)) return executeProductionTool(tool, params, prisma);
+      return executeWarehouseTool(tool, params, prisma);
+    },
+  },
 };
 
 // ─── Intent Detection (rychlý routing přes Haiku) ──────────────────────────
@@ -89,6 +101,7 @@ const KEYWORD_MAP = {
   spravce_vozidel: /vozidl|vozov|auto\b|spz|vin|stk|povinn[eé] ručen|dálniční známk|řidič|leasing|pneu|disk/i,
   konstrukter:     /výkres|solidwork|sldprt|sldasm|slddrw|cad|sestav|kusovník|konfigurac|součástk|díl(ů|y|u)?\b/i,
   ucetni:          /faktur|účet|úhrad|platb|banka|výpis|párov|nezaplacen|po splatnosti|kpc|abo|VS\b|variabiln|DPH|dlužník|pohledáv/i,
+  planovac:        /plánov|dávk(a|y|u)|batch|MRP|BOM|snapshot|kapacit|nákupní návrh|disponibil|short(age|ka)|kompetenc|PALETA|prádlomat/i,
 };
 
 const MODULE_ASSISTANT_MAP = {
@@ -102,6 +115,8 @@ const MODULE_ASSISTANT_MAP = {
   'účetní doklady':       'ucetni',
   'banky':                'ucetni',
   'pravidla párování':    'ucetni',
+  'plánování výroby':     'planovac',
+  'výrobní sloty':        'planovac',
 };
 
 /**
