@@ -635,6 +635,7 @@
           </div>
           <div id="al-content">Načítám…</div>
           <div class="modal-actions">
+            <button class="btn btn-secondary" onclick="exportAuditCsv()" title="Stáhnout filtrované záznamy jako CSV">📥 CSV</button>
             <button class="btn btn-secondary" onclick="document.getElementById('modalRoot').innerHTML=''">Zavřít</button>
           </div>
         </div>
@@ -665,6 +666,20 @@
     }
   }
   window.reloadAuditLog = reloadAuditLog;
+
+  function exportAuditCsv() {
+    const from = document.getElementById('al-from').value;
+    const to = document.getElementById('al-to').value;
+    const action = document.getElementById('al-action').value;
+    const params = new URLSearchParams();
+    if (from) params.set('from', from);
+    if (to) params.set('to', to);
+    if (action) params.set('action', action);
+    params.set('format', 'csv');
+    params.set('limit', '5000'); // pro export bereme víc záznamů
+    window.open('/api/planning/audit-log?' + params.toString(), '_blank');
+  }
+  window.exportAuditCsv = exportAuditCsv;
 
   function renderAuditLog(log) {
     const summary = log.summary || {};
