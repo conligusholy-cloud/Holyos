@@ -32,6 +32,11 @@ docs/
 !docs/warehouse-migration-runbook.md
 !docs/COMMIT_MSG.txt
 
+# Planovac vyroby — whitelist
+!docs/planovac-vyroby.md
+!docs/planovac-vyroby-V2.md
+!docs/HANDOFF-PLANOVAC-2026-04-27.md
+
 # Lokalni zalohy DB (z backup-sklad2.js apod.)
 backups/
 
