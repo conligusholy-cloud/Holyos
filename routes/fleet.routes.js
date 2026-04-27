@@ -851,6 +851,10 @@ const serviceSchema = z.object({
   invoice_file_data: z.string().optional().nullable(),
   invoice_file_name: z.string().optional().nullable(),
   invoice_mime: z.string().optional().nullable(),
+  // Upload protokolu / dodacího listu (volitelně)
+  protocol_file_data: z.string().optional().nullable(),
+  protocol_file_name: z.string().optional().nullable(),
+  protocol_mime: z.string().optional().nullable(),
 });
 
 function parseDateTime(v) {
@@ -894,6 +898,10 @@ async function toServiceData(data, vehicleId, userId) {
   if (data.invoice_file_data) {
     const saved = saveBase64File(vehicleId, data.invoice_file_data, data.invoice_file_name, data.invoice_mime);
     out.invoice_url = saved.url;
+  }
+  if (data.protocol_file_data) {
+    const saved = saveBase64File(vehicleId, data.protocol_file_data, data.protocol_file_name, data.protocol_mime);
+    out.protocol_url = saved.url;
   }
   return out;
 }
@@ -1077,6 +1085,7 @@ router.put('/services/:serviceId', async (req, res, next) => {
     delete data.vehicle_id;
     delete data.created_by;
     if (!parsed.data.invoice_file_data) delete data.invoice_url;
+    if (!parsed.data.protocol_file_data) delete data.protocol_url;
     const service = await prisma.$transaction(async (tx) => {
       await tx.vehicleService.update({ where: { id: serviceId }, data });
       // branch_ids === undefined ⇒ klient pole vůbec neposlal, M2N necháváme být.
@@ -1125,10 +1134,11 @@ router.delete('/services/:serviceId', async (req, res, next) => {
     if (isNaN(serviceId)) return res.status(400).json({ error: 'Neplatné ID' });
     const existing = await prisma.vehicleService.findUnique({ where: { id: serviceId } });
     if (!existing) return res.status(404).json({ error: 'Servis nenalezen' });
-    // Smaž i fakturu, pokud byla přiložená
-    if (existing.invoice_url) {
+    // Smaž přiložené soubory (faktura + protokol/dodací list), pokud byly nahrané.
+    for (const url of [existing.invoice_url, existing.protocol_url]) {
+      if (!url) continue;
       try {
-        const urlPath = existing.invoice_url.replace('/api/storage/files/', '');
+        const urlPath = url.replace('/api/storage/files/', '');
         const abs = path.join(STORAGE_DIR, urlPath);
         const resolved = path.resolve(abs);
         if (resolved.startsWith(path.resolve(STORAGE_DIR)) && fs.existsSync(resolved)) {

@@ -968,15 +968,39 @@
     // HTML dropdownu + tlačítka "+ Nová firma" pro formulář servisu/pneu.
     // `selectId` je ID selectu (unikátní v rámci stránky), `selectedId` je aktuálně vybrané id nebo null.
     // `branchPickerPrefix` (volitelně) — pokud je předán, při změně firmy se reset/překresli i branch picker s tímto prefixem.
+    // Dvojklik na select otevře detail (kompletní list) vybrané firmy.
     function serviceProviderSelectHtml(selectId, selectedId, branchPickerPrefix) {
       const onChange = branchPickerPrefix
         ? ' onchange="onCompanyChange(\'' + branchPickerPrefix + '\')"'
         : '';
+      const onDblClick = ' ondblclick="openProviderDetailFromSelect(\'' + selectId + '\')"';
+      const titleHint = ' title="Dvojklikem otevřeš detail firmy"';
       return '<div style="display:flex;gap:6px;align-items:stretch;">' +
-        '<select id="' + selectId + '" style="flex:1;"' + onChange + '>' + serviceProviderOptionsHtml(selectedId) + '</select>' +
+        '<select id="' + selectId + '" style="flex:1;"' + onChange + onDblClick + titleHint + '>' + serviceProviderOptionsHtml(selectedId) + '</select>' +
         '<button type="button" class="btn btn-sm btn-secondary" title="Přidat novou firmu do adresáře" ' +
           'onclick="openProviderQuickCreate(\'' + selectId + '\')">+ Nová</button>' +
       '</div>';
+    }
+
+    // Otevře detail firmy v modálu — volá se na dvojklik na select s firmou.
+    // Zachová callback, který po uložení obnoví branch picker, pokud existuje (servis/pneu).
+    function openProviderDetailFromSelect(selectId) {
+      const sel = document.getElementById(selectId);
+      if (!sel) return;
+      const id = sel.value ? parseInt(sel.value) : null;
+      if (!id) {
+        alert('Nejdřív vyber firmu z rozbalovacího menu.');
+        return;
+      }
+      openProviderFormModal(id, async function () {
+        await ensureServiceProviders(true);
+        // Refresh selectu (název firmy se mohl změnit) i případného branch pickeru.
+        const fresh = (window._serviceProvidersCache || []).find(p => p.id === id);
+        if (fresh) sel.innerHTML = serviceProviderOptionsHtml(id);
+        const prefix = selectId.startsWith('s-') ? 's' : (selectId.startsWith('tc-') ? 'tc' : null);
+        if (prefix) onCompanyChange(prefix);
+        refreshCurrentTabAfterProviderChange();
+      });
     }
 
     // ─── Branch picker (multi-select provozoven) ────────────────────────────
@@ -1400,6 +1424,27 @@
       return Number(v).toLocaleString('cs-CZ', { maximumFractionDigits: 2 }) + ' Kč';
     }
 
+    // Sorter pro historii servisů a výměn pneu:
+    //   1) naplánované záznamy (status === 'planned') jdou nahoru, chronologicky vzestupně
+    //      (nejbližší termín je první) — uživatel je takhle vidí jako „budoucí to-do"
+    //   2) ostatní (done / cancelled) jdou pod ně, sestupně podle data provedení
+    //      (done_at), aby nejnovější historie byla nahoře
+    function serviceHistoryComparator(a, b) {
+      const aPlanned = a.status === 'planned';
+      const bPlanned = b.status === 'planned';
+      if (aPlanned && !bPlanned) return -1;
+      if (!aPlanned && bPlanned) return 1;
+      if (aPlanned && bPlanned) {
+        const at = new Date(a.scheduled_at || 0).getTime();
+        const bt = new Date(b.scheduled_at || 0).getTime();
+        return at - bt; // nejbližší první
+      }
+      // Hotové / zrušené — sestupně podle data provedení (fallback scheduled_at)
+      const at = new Date(a.done_at || a.scheduled_at || 0).getTime();
+      const bt = new Date(b.done_at || b.scheduled_at || 0).getTime();
+      return bt - at; // nejnovější první
+    }
+
     async function loadServiceTab(vehicleId, panel) {
       panel.innerHTML = '<div class="veh-empty">Načítám servisy…</div>';
       try {
@@ -1409,6 +1454,10 @@
             .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }),
           ensureServiceProviders(),
         ]);
+
+        // Řazení: naplánované nahoru chronologicky (nejbližší termín první),
+        // historie (done/cancelled) dolů sestupně podle data provedení (nejnovější první).
+        services.sort(serviceHistoryComparator);
 
         // Spočítej celkové náklady a počty stavů
         const planned = services.filter(s => s.status === 'planned');
@@ -1461,6 +1510,7 @@
               '</div>' +
               '<div class="actions">' +
                 (s.invoice_url ? '<a class="dl" href="' + escHtml(s.invoice_url) + '" target="_blank" rel="noopener">📎 Faktura</a>' : '') +
+                (s.protocol_url ? '<a class="dl" href="' + escHtml(s.protocol_url) + '" target="_blank" rel="noopener" title="Protokol / dodací list">📋 Protokol</a>' : '') +
                 (s.status === 'planned' ? '<button type="button" class="btn btn-sm btn-primary" onclick="confirmService(' + s.id + ',' + vehicleId + ')" title="Potvrdit provedení">✓ Hotovo</button>' : '') +
                 '<button type="button" class="btn btn-sm btn-secondary" onclick="showServiceForm(' + vehicleId + ',' + s.id + ')">✏️</button>' +
                 '<button type="button" class="btn btn-sm btn-danger" onclick="deleteService(' + s.id + ',' + vehicleId + ')">🗑️</button>' +
@@ -1510,6 +1560,7 @@
           '<div class="form-group"><label>Číslo faktury</label><input type="text" id="s-invoice-num" value="' + escHtml(s.invoice_number || '') + '"></div>' +
           '<div class="form-group"><label>Stav</label><select id="s-status">' + statusOpts + '</select></div>' +
           '<div class="form-group full"><label>Faktura (PDF/obrázek)' + (s.invoice_url ? ' <a href="' + escHtml(s.invoice_url) + '" target="_blank" style="color:#0ea5e9;font-size:11px;">(aktuální ↗)</a>' : '') + '</label><input type="file" id="s-invoice-file" accept="image/*,application/pdf"></div>' +
+          '<div class="form-group full"><label>Protokol / dodací list (PDF/obrázek)' + (s.protocol_url ? ' <a href="' + escHtml(s.protocol_url) + '" target="_blank" style="color:#0ea5e9;font-size:11px;">(aktuální ↗)</a>' : '') + '</label><input type="file" id="s-protocol-file" accept="image/*,application/pdf"></div>' +
           '<div class="form-group full"><label>Poznámka</label><textarea id="s-note">' + escHtml(s.note || '') + '</textarea></div>' +
         '</div>' +
         '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;">' +
@@ -1551,6 +1602,14 @@
         data.invoice_file_data = await fileToBase64(file);
         data.invoice_file_name = file.name;
         data.invoice_mime = file.type || null;
+      }
+      const protocolEl = document.getElementById('s-protocol-file');
+      if (protocolEl && protocolEl.files && protocolEl.files[0]) {
+        const file = protocolEl.files[0];
+        if (file.size > 20 * 1024 * 1024) { alert('Protokol je větší než 20 MB.'); return; }
+        data.protocol_file_data = await fileToBase64(file);
+        data.protocol_file_name = file.name;
+        data.protocol_mime = file.type || null;
       }
       try {
         const url = serviceId
@@ -1882,6 +1941,9 @@
         if (!changesResp.ok) throw new Error('HTTP ' + changesResp.status);
         const changes = await changesResp.json();
         const stock = stockResp.ok ? await stockResp.json() : [];
+
+        // Řazení výměn pneu — stejné business pravidlo jako u servisů.
+        changes.sort(serviceHistoryComparator);
 
         const season = currentSeasonCZ();
         const mountedThisSeason = stock.find(t => t.mounted && t.season === season);
