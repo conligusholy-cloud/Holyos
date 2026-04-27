@@ -206,7 +206,7 @@ model BatchOperationLog {
 - [x] **F3.1** Generátor BatchOperation z dávky: `services/planning/batch-operations.js` + `POST /api/planning/batches/:id/generate-operations` + auto-generate při `POST /api/production/batches` (default true). UI: checkbox v modalu + tlačítko "⚙️ Generuj op." v tabulce u dávek s 0 op.
 - [ ] **F3.2** `services/planning/batch-builder.js` — EOQ s kapacitním omezením (TODO)
 - [ ] **F3.3** `services/planning/capacity-planner.js` — RCCP (týdenní) + CRP (denní) (TODO)
-- [ ] **F3.4** Pre-pick logika: po vygenerování BatchOperation vystavit transfer order na `input_location_id` pracoviště (TODO)
+- [x] **F3.4** Pre-pick V1 — `services/planning/pre-pick.js`. Pro každou BatchOperation: konsoliduje OperationMaterial × batch.quantity, najde Stock zdroj s největší dostupností, navrhne transfer na `workstation.input_location`. Endpoint `POST/GET /api/planning/batches/:id/pre-pick`. UI: tlačítko "🚚 Pre-pick" v `planovani-vyroby` → modal po pracovištích s tabulkou (kód, název, potřeba, zdroj, dostupné, akce). Akce: transfer_ok / on_location / shortage / no_source / no_target. **V1: pouze návrh — reálné InventoryMovement se vystavuje ručně v "Skladové doklady".**
 - [ ] **F3.5** Routes `POST /api/planning/weekly-plan`, `POST /api/planning/daily-plan` (TODO)
 - [ ] **F3.6** MCP `planning-server/` + tool `generate_weekly_plan` v1 (TODO)
 - [ ] **F3.7** Agent `planovac` + zaregistrování v orchestrátoru (TODO)
