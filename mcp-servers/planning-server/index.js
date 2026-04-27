@@ -14,6 +14,8 @@
 
 const { generateBatchOperationsForBatch } = require('../../services/planning/batch-operations');
 const { computeMrpForBatch } = require('../../services/planning/mrp');
+const { computePrePickForBatch } = require('../../services/planning/pre-pick');
+const { computePurchaseReport } = require('../../services/planning/purchase-report');
 
 function getPlanningTools() {
   return [
@@ -116,6 +118,31 @@ function getPlanningTools() {
         properties: {
           category: { type: 'string', description: 'svarovna, montaz, elektro, kontrola, ...' },
           active: { type: 'boolean', default: true },
+        },
+      },
+    },
+    {
+      name: 'compute_pre_pick',
+      description: 'Pre-pick V1 — návrh transferů materiálu na vstupní lokace pracovišť pro konkrétní dávku. Vrátí seznam transferů per pracoviště se stavem (transfer_ok / on_location / shortage / no_source / no_target).',
+      input_schema: {
+        type: 'object',
+        properties: {
+          batch_id: { type: 'number' },
+        },
+        required: ['batch_id'],
+      },
+    },
+    {
+      name: 'purchase_report',
+      description: 'Konsolidovaný nákupní report — materiály k objednání napříč všemi aktivními dávkami (planned/released/in_progress/paused). Group by supplier.',
+      input_schema: {
+        type: 'object',
+        properties: {
+          statuses: {
+            type: 'array',
+            items: { type: 'string', enum: ['planned', 'released', 'in_progress', 'paused', 'done', 'cancelled'] },
+            description: 'Filtr na statusy dávek (default: aktivní).',
+          },
         },
       },
     },
@@ -381,6 +408,52 @@ async function executePlanningTool(toolName, params, prisma) {
         competencies: items.map(c => ({
           id: c.id, code: c.code, name: c.name,
           category: c.category, level_max: c.level_max,
+        })),
+      };
+    }
+
+    // ─── compute_pre_pick ────────────────────────────────────────────────
+    case 'compute_pre_pick': {
+      const result = await computePrePickForBatch(params.batch_id);
+      // Zkrácený výstup pro AI
+      return {
+        batch_number: result.batch?.batch_number,
+        product: result.batch?.product ? `${result.batch.product.code} ${result.batch.product.name}` : null,
+        summary: result.summary,
+        by_workstation: (result.by_workstation || []).map(g => ({
+          workstation: g.workstation?.name || null,
+          input_location: g.input_location ? `${g.input_location.code || ''} ${g.input_location.name}`.trim() : null,
+          transfers: g.transfers.map(t => ({
+            material: t.material ? `${t.material.code} ${t.material.name}` : null,
+            needed: t.needed,
+            unit: t.unit,
+            source: t.source_location ? `${t.source_location.code || ''} ${t.source_location.name}`.trim() : null,
+            available_at_source: t.available_at_source,
+            action: t.action,
+          })),
+        })),
+      };
+    }
+
+    // ─── purchase_report ─────────────────────────────────────────────────
+    case 'purchase_report': {
+      const result = await computePurchaseReport({ statuses: params.statuses });
+      return {
+        batches_processed: result.batches_processed,
+        items_count: result.items_count,
+        by_supplier: result.by_supplier.map(s => ({
+          supplier: s.supplier?.name || '— bez dodavatele —',
+          items_count: s.items_count,
+          sample_lead_time_days: s.sample_lead_time_days,
+        })),
+        items: result.items.map(it => ({
+          material: it.material ? `${it.material.code} ${it.material.name}` : null,
+          total_shortage: it.total_shortage,
+          unit: it.unit,
+          supplier: it.supplier?.name || null,
+          lead_time_days: it.lead_time_days,
+          expected_delivery: it.expected_delivery,
+          covers_batches: it.contributors.length,
         })),
       };
     }
