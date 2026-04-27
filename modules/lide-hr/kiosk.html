@@ -1393,7 +1393,15 @@
 
         if (!response.ok) {
           playErrorSound();
-          showError('Čip nebyl rozpoznán', 'Zkuste prosím znovu');
+          // Pokus o detail z těla odpovědi — rozlišujeme neznámý čip vs. ukončený poměr
+          let errCode = null, errBody = {};
+          try { errBody = await response.json(); errCode = errBody.code || null; } catch (e) {}
+          if (errCode === 'employment_ended') {
+            const who = errBody.person_name ? ` (${errBody.person_name})` : '';
+            showError('Pracovní poměr ukončen' + who, 'Tento čip patří bývalému zaměstnanci. Obraťte se na HR.');
+          } else {
+            showError('Čip nebyl rozpoznán', 'Zkuste prosím znovu');
+          }
           isProcessing = false;
           return;
         }
