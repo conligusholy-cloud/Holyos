@@ -56,10 +56,10 @@ router.post('/kiosk/identify', async (req, res, next) => {
         },
       });
     } else {
-      // Hledáme podle chip_number NEBO chip_card_id
+      // Hledáme podle chip_number NEBO chip_card_id (BEZ filtru na active —
+      // pokud čip patří bývalému zaměstnanci, chceme to rozlišit od neznámého čipu)
       person = await prisma.person.findFirst({
         where: {
-          active: true,
           OR: [
             { chip_number: chip_id },
             { chip_card_id: chip_id },
@@ -67,14 +67,28 @@ router.post('/kiosk/identify', async (req, res, next) => {
         },
         select: {
           id: true, first_name: true, last_name: true, photo_url: true,
-          employee_number: true,
+          employee_number: true, active: true, end_date: true,
           department: { select: { id: true, name: true } },
           shift: true,
         },
       });
     }
 
-    if (!person) return res.status(404).json({ error: 'Osoba nenalezena' });
+    if (!person) return res.status(404).json({ error: 'Osoba nenalezena', code: 'chip_unknown' });
+
+    // Čip patří bývalému zaměstnanci — neaktivní nebo už skončil pracovní poměr
+    if (chip_id) {
+      const todayDate = nowInPrague().today;
+      const employmentEnded = person.active === false
+        || (person.end_date && new Date(person.end_date) < todayDate);
+      if (employmentEnded) {
+        return res.status(403).json({
+          error: 'Pracovní poměr ukončen',
+          code: 'employment_ended',
+          person_name: `${person.first_name} ${person.last_name}`,
+        });
+      }
+    }
 
     // Zjistit dnešní stav docházky (pražský kalendářní den)
     const { today, hour: pragueNowHour, minute: pragueNowMinute } = nowInPrague();
