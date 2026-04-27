@@ -46,6 +46,9 @@ model User {
   // App settings — kdo poslední změnil
   app_settings_updated AppSetting[] @relation("AppSettingUpdater")
 
+  // Schvalování objednávek — kdo schválil (User FK pro audit, Tomáš nemá vždy Person)
+  orders_approved_user Order[] @relation("OrderApproverUser")
+
   @@map("users")
 }
 
@@ -493,23 +496,41 @@ model Order {
   currency          String    @default("CZK") @db.VarChar(3)
   note              String?   @db.Text
   created_by        Int?
-  approved_by       Int?
+  approved_by       Int? // legacy Person FK — zachováno; nově preferujeme approved_by_user_id
   expected_delivery DateTime? @db.Date
   delivered_at      DateTime? @db.Date
   share_token       String?   @unique @db.VarChar(64)
 
+  // Schvalovací workflow (manuální vs MRP autogen) — Fáze "Schvalování objednávek"
+  // approval_status: pending | submitted | approved | rejected | auto_approved
+  //   pending       = draft, ještě neodesláno řediteli
+  //   submitted     = posláno ke schválení (čeká na ředitele)
+  //   approved      = ředitel schválil (přechod přes /api/wh/orders/:id/approve)
+  //   rejected      = ředitel zamítl s poznámkou — vrácení do pending pro úpravu
+  //   auto_approved = MRP/stockrule autogenerovaná Order, neprojde lidským schválením
+  approval_status            String    @default("pending") @db.VarChar(20)
+  approved_by_user_id        Int? // User FK pro audit (Tomášův User nemá vždy Person)
+  approved_at                DateTime?
+  approval_note              String?   @db.Text // důvod zamítnutí, případně poznámka schvalovatele
+  submitted_for_approval_at  DateTime?
+  // source: kdo Order vytvořil — 'manual' (z UI), 'mrp_autogen' (auto z stockrule),
+  //   'import' (Factorify migrace). manual → vyžaduje schválení; ostatní → auto_approved.
+  source                     String    @default("manual") @db.VarChar(20)
+
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
 
-  company  Company     @relation(fields: [company_id], references: [id])
-  creator  Person?     @relation("OrderCreatedBy", fields: [created_by], references: [id])
-  approver Person?     @relation("OrderApprovedBy", fields: [approved_by], references: [id])
-  items    OrderItem[]
-  invoices Invoice[]   @relation("InvoiceOrder")
+  company       Company     @relation(fields: [company_id], references: [id])
+  creator       Person?     @relation("OrderCreatedBy", fields: [created_by], references: [id])
+  approver      Person?     @relation("OrderApprovedBy", fields: [approved_by], references: [id])
+  approver_user User?       @relation("OrderApproverUser", fields: [approved_by_user_id], references: [id])
+  items         OrderItem[]
+  invoices      Invoice[]   @relation("InvoiceOrder")
 
   @@index([type])
   @@index([status])
   @@index([company_id])
+  @@index([approval_status])
   @@map("orders")
 }
 
@@ -3010,13 +3031,17 @@ model AccountantHandoverItem {
 // =============================================================================
 // APLIKACNI NASTAVENI (key/value)
 // =============================================================================
+
+// =============================================================================
+// APLIKACNI NASTAVENI (key/value)
+// =============================================================================
 model AppSetting {
-  id          Int     @id @default(autoincrement())
-  key         String  @unique @db.VarChar(120)
-  value       String  @db.Text
-  value_type  String  @default("string") @db.VarChar(20)
-  description String? @db.Text
-  scope       String? @db.VarChar(50)
+  id          Int      @id @default(autoincrement())
+  key         String   @unique @db.VarChar(120)
+  value       String   @db.Text
+  value_type  String   @default("string") @db.VarChar(20)
+  description String?  @db.Text
+  scope       String?  @db.VarChar(50)
 
   updated_by_user_id Int?
   updated_by         User? @relation("AppSettingUpdater", fields: [updated_by_user_id], references: [id])
