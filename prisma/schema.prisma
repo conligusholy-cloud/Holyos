@@ -2909,12 +2909,11 @@ model OcrExtraction {
   // claude_vision_header, claude_vision_lines, ares_lookup, vies_lookup,
   // vat_math_check, duplicate_check, link_follow
   pass_type   String  @db.VarChar(50)
-  model_used  String? @db.VarChar(50) // claude-sonnet-4-6, ares, vies
-
+  model_used  String? @db.VarChar(50) // claude-sonnet-4-6, claude-opus-4-6
   extracted_data Json
-  confidence     Decimal @db.Decimal(4, 3)
-  warnings       Json?
-  errors         Json?
+  confidence  Decimal @db.Decimal(4, 3)
+  warnings    Json?
+  errors      Json?
 
   input_tokens  Int?
   output_tokens Int?
@@ -2930,7 +2929,7 @@ model OcrExtraction {
 }
 
 // =============================================================================
-// UPOMÍNKY (pro vydané faktury po splatnosti)
+// UPOMÍNKY (Fáze 7)
 // =============================================================================
 
 model Reminder {
@@ -2955,15 +2954,15 @@ model Reminder {
 }
 
 // =============================================================================
-// ODEVZDÁNÍ ÚČETNÍ FIRMĚ (měsíční balíček)
+// ODEVZDÁNÍ ÚČETNÍ FIRMĚ (Fáze 10) — měsíční ZIP balíček
 // =============================================================================
 
 model AccountantHandover {
-  id           Int    @id @default(autoincrement())
-  period_month Int // 1–12
-  period_year  Int
+  id             Int    @id @default(autoincrement())
+  period_month   Int // 1–12
+  period_year    Int
   // preparing → ready → sent → confirmed_by_accountant → closed
-  status       String @default("preparing") @db.VarChar(30)
+  status         String @default("preparing") @db.VarChar(30)
 
   document_count Int     @default(0)
   total_received Decimal @default(0) @db.Decimal(14, 2)
@@ -2971,13 +2970,12 @@ model AccountantHandover {
   total_cash     Decimal @default(0) @db.Decimal(14, 2)
 
   zip_file_path String? @db.VarChar(500)
-  checklist     Json // [{ item: "přijaté faktury", done: bool, note: "" }, ...]
+  checklist     Json // [{ item, done: bool, note }]
 
   sent_at       DateTime?
   sent_to_email String?   @db.VarChar(255)
   confirmed_at  DateTime?
-
-  note String? @db.Text
+  note          String?   @db.Text
 
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
@@ -2990,19 +2988,20 @@ model AccountantHandover {
 }
 
 model AccountantHandoverItem {
-  id            Int                @id @default(autoincrement())
-  handover_id   Int
-  handover      AccountantHandover @relation(fields: [handover_id], references: [id], onDelete: Cascade)
-  // invoice_received, invoice_issued, cash_movement, bank_statement, other
-  document_type String             @db.VarChar(30)
+  id          Int                @id @default(autoincrement())
+  handover_id Int
+  handover    AccountantHandover @relation(fields: [handover_id], references: [id], onDelete: Cascade)
+  // invoice_received | invoice_issued | cash_movement_summary | bank_statement | other
+  document_type String           @db.VarChar(30)
   document_id   Int
-  file_path     String?            @db.VarChar(500)
-  included      Boolean            @default(true)
-  note          String?            @db.VarChar(500)
 
-  // Volitelná tvrdá vazba pro typ invoice (pro integritu)
+  // Volitelná silná vazba na Invoice (pro AP/AR)
   invoice_id Int?
   invoice    Invoice? @relation("HandoverItemInvoice", fields: [invoice_id], references: [id])
+
+  file_path String? @db.VarChar(500)
+  included  Boolean @default(true)
+  note      String? @db.VarChar(500)
 
   created_at DateTime @default(now())
 
@@ -3022,24 +3021,11 @@ model AccountantHandoverItem {
 // Klíče používáme dot-notation per modul (např. "accounting.payment_batch.approval_limit_czk").
 // Hodnota je string — typování v aplikaci přes services/settings.js helper.
 
-// =============================================================================
-// APLIKAČNÍ NASTAVENÍ (key/value)
-// =============================================================================
-// Universální key/value úložiště pro user-configurable parametry.
-// Klíče dot-notation: "accounting.payment_batch.approval_limit_czk".
-
-// =============================================================================
-// APLIKACNI NASTAVENI (key/value)
-// =============================================================================
-
-// =============================================================================
-// APLIKACNI NASTAVENI (key/value)
-// =============================================================================
 model AppSetting {
   id          Int      @id @default(autoincrement())
   key         String   @unique @db.VarChar(120)
   value       String   @db.Text
-  value_type  String   @default("string") @db.VarChar(20)
+  value_type  String   @default("string") @db.VarChar(20) // string, number, boolean, json
   description String?  @db.Text
   scope       String?  @db.VarChar(50)
 

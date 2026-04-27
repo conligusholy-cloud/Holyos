@@ -8,7 +8,7 @@ interface Action {
   label: string;
   hint: string;
   to: string;
-  accent: 'receive' | 'issue' | 'transfer' | 'inventory' | 'picking' | 'stock-check' | 'info';
+  accent: 'receive' | 'issue' | 'transfer' | 'inventory' | 'picking' | 'stock-check' | 'info' | 'awaiting';
   icon: string;
 }
 
@@ -20,6 +20,7 @@ const ACTIONS: Action[] = [
   { key: 'picking', label: 'Picking', hint: 'Dávky na expedici', to: '/picking', accent: 'picking', icon: '☰' },
   { key: 'stock-check', label: 'Kontrola stavu', hint: 'Sken → stav po lokacích', to: '/stock-check', accent: 'stock-check', icon: '⚗' },
   { key: 'info', label: 'Info o zboží', hint: 'Sken → plný detail', to: '/info', accent: 'info', icon: '👁' },
+  { key: 'awaiting', label: 'Čekání na příjem', hint: 'Faktury bez příjemky', to: '/awaiting-receipt', accent: 'awaiting', icon: '📋' },
 ];
 
 export default function DashboardPage() {

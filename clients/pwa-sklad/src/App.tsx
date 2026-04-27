@@ -17,6 +17,7 @@ import PickingPickPage from './pages/PickingPickPage';
 import PickingSplitPage from './pages/PickingSplitPage';
 import StockCheckPage from './pages/StockCheckPage';
 import ItemInfoPage from './pages/ItemInfoPage';
+import AwaitingReceiptPage from './pages/AwaitingReceiptPage';
 
 export default function App() {
   return (
@@ -124,6 +125,14 @@ export default function App() {
         element={
           <ProtectedRoute>
             <ItemInfoPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/awaiting-receipt"
+        element={
+          <ProtectedRoute>
+            <AwaitingReceiptPage />
           </ProtectedRoute>
         }
       />

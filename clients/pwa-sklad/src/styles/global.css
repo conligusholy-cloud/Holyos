@@ -408,6 +408,7 @@ button {
 .tile-picking .tile-icon { color: #c68cff; }
 .tile-stock-check .tile-icon { color: #38bdf8; }
 .tile-info .tile-icon { color: #e6e6e6; }
+.tile-awaiting .tile-icon { color: #fbbf24; }
 
 /* ----- Tlačítka ----- */
 

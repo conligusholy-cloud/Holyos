@@ -171,6 +171,7 @@
         <button type="button" class="tab-btn" onclick="switchAccountingTab('payments')">💳 K platbě</button>
         <button type="button" class="tab-btn" onclick="switchAccountingTab('bank')">🏦 Banka</button>
         <button type="button" class="tab-btn" onclick="switchAccountingTab('reminders')">📨 Upomínky</button>
+        <button type="button" class="tab-btn" onclick="switchAccountingTab('handovers')">📦 Účetní firma</button>
       </div>
 
       <!-- TAB: FAKTURY -->
@@ -429,6 +430,42 @@
         </div>
 
       </div><!-- /tab-reminders -->
+
+      <!-- TAB: ODEVZDÁNÍ ÚČETNÍ FIRMĚ (Fáze 10) -->
+      <div class="tab-pane" id="tab-handovers">
+        <div class="pb-card">
+          <h3>📦 Měsíční balíčky pro účetní firmu</h3>
+          <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-bottom:14px;">
+            <button class="btn btn-primary btn-sm" onclick="openCreateHandoverModal()">+ Nový balíček</button>
+            <button class="btn btn-secondary btn-sm" onclick="loadHandovers()">🔄 Obnovit</button>
+          </div>
+          <div style="font-size:13px; color:var(--text2); line-height:1.5;">
+            ZIP obsahuje: PDF přijatých + vydaných faktur, <code>invoices.csv</code>,
+            <code>cash.csv</code>, <code>bank.csv</code>, <code>bank-statements.csv</code>,
+            <code>manifest.json</code> a <code>README.txt</code>. Po vygenerování ho můžeš stáhnout
+            nebo přímo odeslat účetní firmě.
+          </div>
+        </div>
+
+        <div class="pb-card" style="margin-top:16px;">
+          <h3>📋 Historie</h3>
+          <table class="data-table" id="handovers-table" style="width:100%;">
+            <thead>
+              <tr>
+                <th>Období</th>
+                <th>Stav</th>
+                <th>Dokumenty</th>
+                <th>Přijaté (Kč)</th>
+                <th>Vydané (Kč)</th>
+                <th>Odesláno</th>
+                <th>Příjemce</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody><tr><td colspan="8" class="empty-hint">Načítám…</td></tr></tbody>
+          </table>
+        </div>
+      </div><!-- /tab-handovers -->
 
     </div>
   </div>
@@ -1429,12 +1466,125 @@
     window.switchAccountingTab = function(name) {
       document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
       document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
-      const btnIdxMap = { invoices: 0, payments: 1, bank: 2, reminders: 3 };
+      const btnIdxMap = { invoices: 0, payments: 1, bank: 2, reminders: 3, handovers: 4 };
       const btnIdx = btnIdxMap[name] ?? 0;
       document.querySelectorAll('.tab-btn')[btnIdx].classList.add('active');
       document.getElementById('tab-' + name).classList.add('active');
       if (name === 'payments') loadPaymentsTab();
       if (name === 'reminders') loadRemindersTab();
+      if (name === 'handovers') loadHandovers();
+    };
+
+    // ─── Tab "Odevzdání účetní firmě" — Fáze 10 ────────────────────────
+    window.loadHandovers = async function() {
+      const r = await api('GET', '/api/accounting/handovers');
+      const tbody = document.querySelector('#handovers-table tbody');
+      if (r.status !== 200) { tbody.innerHTML = '<tr><td colspan="8" class="empty-hint">Chyba: ' + r.status + '</td></tr>'; return; }
+      if (!r.data?.length) {
+        tbody.innerHTML = '<tr><td colspan="8" class="empty-hint">Zatím žádné balíčky. Vytvoř první přes „+ Nový balíček".</td></tr>';
+        return;
+      }
+      const isSuper = !!window.currentUser?.isSuperAdmin;
+      const statusBadge = (s) => {
+        const colors = { preparing: '#fbbf24', ready: '#22c55e', sent: '#0ea5e9', confirmed_by_accountant: '#a855f7', closed: '#888' };
+        const labels = { preparing: 'Připravuje se', ready: 'Připraven', sent: 'Odesláno', confirmed_by_accountant: 'Potvrzeno', closed: 'Uzavřeno' };
+        return `<span style="color:${colors[s] || '#888'};font-weight:600;">${labels[s] || s}</span>`;
+      };
+      tbody.innerHTML = r.data.map(h => {
+        const period = `${h.period_year}/${String(h.period_month).padStart(2, '0')}`;
+        const buildBtn = isSuper && h.status === 'preparing'
+          ? `<button class="btn btn-primary btn-sm" onclick="buildHandover(${h.id})">⚙️ Vyrobit ZIP</button>` : '';
+        const downloadBtn = h.zip_file_path
+          ? `<button class="btn btn-secondary btn-sm" onclick="downloadHandover(${h.id})">⬇ Stáhnout</button>` : '';
+        const sendBtn = isSuper && (h.status === 'ready' || h.status === 'sent')
+          ? `<button class="btn btn-secondary btn-sm" onclick="sendHandover(${h.id})">📧 Odeslat</button>` : '';
+        const deleteBtn = isSuper
+          ? `<button class="btn btn-secondary btn-sm" onclick="deleteHandover(${h.id}, '${period}', '${h.status}')" style="color:#ef4444;">🗑️</button>` : '';
+        return `
+          <tr>
+            <td><b>${period}</b></td>
+            <td>${statusBadge(h.status)}</td>
+            <td style="text-align:right;">${h.document_count || 0}</td>
+            <td style="text-align:right;">${fmtAmount(h.total_received)}</td>
+            <td style="text-align:right;">${fmtAmount(h.total_issued)}</td>
+            <td>${h.sent_at ? fmtDateTime(h.sent_at) : '—'}</td>
+            <td>${escapeHtml(h.sent_to_email || '—')}</td>
+            <td>${buildBtn} ${downloadBtn} ${sendBtn} ${deleteBtn}</td>
+          </tr>
+        `;
+      }).join('');
+    };
+
+    window.openCreateHandoverModal = function() {
+      const today = new Date();
+      // Default: minulý měsíc
+      let defaultMonth = today.getMonth(); // 0-11, takže o jeden méně
+      let defaultYear = today.getFullYear();
+      if (defaultMonth === 0) { defaultMonth = 12; defaultYear--; }
+      document.getElementById('modal-root').innerHTML = `
+        <div class="modal-backdrop" onclick="if(event.target===this)closeModal()" style="position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:1000; display:flex; align-items:center; justify-content:center;">
+          <div style="background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 24px; min-width: 480px;">
+            <h3 style="margin-top:0;">+ Nový balíček účetní firmě</h3>
+            <div style="display:grid; grid-template-columns: 140px 1fr; gap:12px; margin-bottom:12px;">
+              <label>Rok</label><input type="number" id="hov-year" value="${defaultYear}" style="background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:8px 10px;">
+              <label>Měsíc</label><input type="number" id="hov-month" min="1" max="12" value="${defaultMonth}" style="background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:8px 10px;">
+              <label>Email účetní</label><input type="email" id="hov-email" placeholder="ucetni@firma.cz" style="background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:8px 10px;">
+            </div>
+            <div style="display:flex; gap:10px; justify-content:flex-end; margin-top:18px;">
+              <button class="btn btn-secondary" onclick="closeModal()">Zrušit</button>
+              <button class="btn btn-primary" onclick="submitCreateHandover()">Vytvořit</button>
+            </div>
+          </div>
+        </div>
+      `;
+    };
+
+    window.submitCreateHandover = async function() {
+      const year = parseInt(document.getElementById('hov-year').value, 10);
+      const month = parseInt(document.getElementById('hov-month').value, 10);
+      const email = document.getElementById('hov-email').value.trim() || null;
+      const r = await api('POST', '/api/accounting/handovers', { period_year: year, period_month: month, sent_to_email: email });
+      if (r.status !== 201) return alert('Chyba: ' + (r.data?.error || r.status));
+      closeModal();
+      loadHandovers();
+    };
+
+    window.buildHandover = async function(id) {
+      if (!confirm('Vyrobit ZIP balíček? Trvá to chvilku — sbalíme všechny PDF a CSV za měsíc.')) return;
+      const r = await api('POST', '/api/accounting/handovers/' + id + '/build');
+      if (r.status !== 200) return alert('Chyba: ' + (r.data?.error || r.status));
+      const sizeMb = (r.data.size_bytes / 1024 / 1024).toFixed(2);
+      alert(`ZIP vygenerován (${sizeMb} MB).\n\nFaktury AP: ${r.data.manifest.counts.invoices_ap}\nFaktury AR: ${r.data.manifest.counts.invoices_ar}\nPokladna: ${r.data.manifest.counts.cash_movements}\nBank tx: ${r.data.manifest.counts.bank_transactions}`);
+      loadHandovers();
+    };
+
+    window.downloadHandover = function(id) {
+      const url = '/api/accounting/handovers/' + id + '/download';
+      const a = document.createElement('a');
+      a.href = url; a.download = '';
+      document.body.appendChild(a); a.click(); a.remove();
+    };
+
+    window.sendHandover = async function(id) {
+      const to = prompt('Email účetní firmy (Enter = použít uložený):', '');
+      const body = to ? { to } : {};
+      const r = await api('POST', '/api/accounting/handovers/' + id + '/send', body);
+      if (r.status !== 200) return alert('Chyba: ' + (r.data?.error || r.status));
+      alert(`Odesláno na ${r.data.sent_to}`);
+      loadHandovers();
+    };
+
+    window.deleteHandover = async function(id, period, status) {
+      const sentStates = ['sent', 'confirmed_by_accountant', 'closed'];
+      const force = sentStates.includes(status);
+      const msg = force
+        ? `⚠️ Balíček ${period} je ve stavu ${status} (už odeslán). Smazat I PŘESTO?`
+        : `Smazat balíček ${period}?`;
+      if (!confirm(msg)) return;
+      const url = '/api/accounting/handovers/' + id + (force ? '?force=true' : '');
+      const r = await api('DELETE', url);
+      if (r.status !== 200) return alert('Chyba: ' + (r.data?.error || r.status));
+      loadHandovers();
     };
 
     // ─── Tab "Upomínky" — Fáze 7 ────────────────────────────────────────
