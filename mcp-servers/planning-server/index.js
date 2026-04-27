@@ -143,6 +143,19 @@ function getPlanningTools() {
       },
     },
     {
+      name: 'list_persons_with_competency',
+      description: 'Najde pracovníky s konkrétní kompetencí — filtr na code/category + min_level. Vrací jméno, level, kdy certifikováno, do kdy platí, plus zda je dnes v práci (Attendance).',
+      input_schema: {
+        type: 'object',
+        properties: {
+          competency_code: { type: 'string', description: 'Kód kompetence (např. SVAR_MIG)' },
+          category: { type: 'string', description: 'Alternativně: kategorie (např. svarovna)' },
+          min_level: { type: 'number', description: 'Minimální požadovaná úroveň 1-3', default: 1 },
+          only_present_today: { type: 'boolean', description: 'Jen přítomní dnes', default: false },
+        },
+      },
+    },
+    {
       name: 'compute_pre_pick',
       description: 'Pre-pick V1 — návrh transferů materiálu na vstupní lokace pracovišť pro konkrétní dávku. Vrátí seznam transferů per pracoviště se stavem (transfer_ok / on_location / shortage / no_source / no_target).',
       input_schema: {
@@ -520,6 +533,74 @@ async function executePlanningTool(toolName, params, prisma) {
         snapshot_at: snap.snapshot_at,
         items_count: items.length,
         operations_processed: operations.length,
+      };
+    }
+
+    // ─── list_persons_with_competency ────────────────────────────────────
+    case 'list_persons_with_competency': {
+      const minLevel = params.min_level || 1;
+      const compWhere = {};
+      if (params.competency_code) compWhere.code = params.competency_code;
+      if (params.category) compWhere.category = params.category;
+
+      // Najdi competency_id(s) podle filteru
+      const matchingComps = await prisma.competency.findMany({
+        where: compWhere, select: { id: true, code: true, name: true },
+      });
+      if (matchingComps.length === 0) return { count: 0, persons: [], message: 'Žádná kompetence neodpovídá filtru' };
+
+      const compIds = matchingComps.map(c => c.id);
+
+      // Worker competencies × Person
+      const today = new Date();
+      const wcs = await prisma.workerCompetency.findMany({
+        where: {
+          competency_id: { in: compIds },
+          level: { gte: minLevel },
+          OR: [{ valid_until: null }, { valid_until: { gte: today } }],
+        },
+        include: {
+          person: {
+            select: { id: true, first_name: true, last_name: true, employee_number: true, active: true,
+              department: { select: { name: true } } },
+          },
+          competency: { select: { id: true, code: true, name: true, category: true } },
+        },
+      });
+
+      // Filter active persons only
+      let filtered = wcs.filter(wc => wc.person?.active);
+
+      // Pokud only_present_today: ověř Attendance
+      if (params.only_present_today) {
+        const dayStart = new Date(today); dayStart.setHours(0, 0, 0, 0);
+        const dayEnd = new Date(today); dayEnd.setHours(23, 59, 59, 999);
+        const presentPersons = await prisma.attendance.findMany({
+          where: {
+            type: 'work',
+            date: { gte: dayStart, lte: dayEnd },
+            clock_out: null,  // jen otevřené příchody = přítomní
+          },
+          select: { person_id: true },
+        });
+        const presentIds = new Set(presentPersons.map(a => a.person_id));
+        filtered = filtered.filter(wc => presentIds.has(wc.person.id));
+      }
+
+      return {
+        count: filtered.length,
+        filter: { competency_code: params.competency_code, category: params.category, min_level: minLevel, only_present_today: params.only_present_today || false },
+        matching_competencies: matchingComps.map(c => `${c.code} (${c.name})`),
+        persons: filtered.map(wc => ({
+          person_id: wc.person.id,
+          name: `${wc.person.first_name} ${wc.person.last_name}`,
+          employee_number: wc.person.employee_number,
+          department: wc.person.department?.name || null,
+          competency: `${wc.competency.code} ${wc.competency.name}`,
+          level: wc.level,
+          certified_at: wc.certified_at,
+          valid_until: wc.valid_until,
+        })),
       };
     }
 
