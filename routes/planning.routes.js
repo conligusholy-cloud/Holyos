@@ -219,6 +219,108 @@ router.post('/mrp-run', async (req, res, next) => {
 });
 
 // =============================================================================
+// PLÁNOVAČ — VYTÍŽENÍ PRACOVIŠŤ (queue summary)
+// =============================================================================
+
+// GET /api/planning/workstation-queue
+//   Per pracoviště: počty pending/ready/in_progress/done_today + total planned minutes
+//   pro nezpracované (operation.duration × batch.quantity), oldest waiting (kolik
+//   dní BatchOperation visí ve frontě).
+router.get('/workstation-queue', async (req, res, next) => {
+  try {
+    // Načti všechny aktivní BatchOperation (kromě done starší než dnes a cancelled)
+    const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
+
+    const ops = await prisma.batchOperation.findMany({
+      where: {
+        OR: [
+          { status: { in: ['pending', 'ready', 'in_progress'] } },
+          { AND: [{ status: 'done' }, { finished_at: { gte: todayStart } }] },
+        ],
+      },
+      select: {
+        id: true, workstation_id: true, status: true, created_at: true, finished_at: true,
+        batch: { select: { quantity: true } },
+        operation: { select: { duration: true, duration_unit: true } },
+      },
+    });
+
+    // Načti pracoviště pro lookup (jen ty s nějakou operací — buď v ops nebo i ostatní)
+    const wsIds = Array.from(new Set(ops.map(o => o.workstation_id).filter(Boolean)));
+    const wsAll = await prisma.workstation.findMany({
+      where: wsIds.length > 0 ? { id: { in: wsIds } } : undefined,
+      select: { id: true, name: true, code: true, flow_type: true,
+        hall: { select: { name: true } } },
+    });
+
+    const wsMap = new Map(wsAll.map(w => [w.id, w]));
+
+    // Helpér — operation.duration v minutách
+    function opMinutes(op) {
+      const d = op.operation?.duration || 0;
+      const u = op.operation?.duration_unit || 'MINUTE';
+      const qty = op.batch?.quantity || 1;
+      const perKs = u === 'HOUR' ? d * 60 : u === 'SECOND' ? d / 60 : d;
+      return perKs * qty;
+    }
+
+    // Group by workstation
+    const groups = new Map(); // ws_id || 'null' → counters
+    for (const o of ops) {
+      const key = o.workstation_id || 'null';
+      const cur = groups.get(key) || {
+        workstation: o.workstation_id ? wsMap.get(o.workstation_id) : null,
+        pending: 0, ready: 0, in_progress: 0, done_today: 0,
+        planned_minutes: 0, oldest_waiting_at: null,
+      };
+      if (o.status === 'pending') {
+        cur.pending++;
+        cur.planned_minutes += opMinutes(o);
+        if (!cur.oldest_waiting_at || o.created_at < cur.oldest_waiting_at) cur.oldest_waiting_at = o.created_at;
+      } else if (o.status === 'ready') {
+        cur.ready++;
+        cur.planned_minutes += opMinutes(o);
+        if (!cur.oldest_waiting_at || o.created_at < cur.oldest_waiting_at) cur.oldest_waiting_at = o.created_at;
+      } else if (o.status === 'in_progress') {
+        cur.in_progress++;
+      } else if (o.status === 'done') {
+        cur.done_today++;
+      }
+      groups.set(key, cur);
+    }
+
+    const now = Date.now();
+    const result = Array.from(groups.values()).map(g => ({
+      workstation: g.workstation || null,
+      pending: g.pending,
+      ready: g.ready,
+      in_progress: g.in_progress,
+      done_today: g.done_today,
+      queue_total: g.pending + g.ready,
+      planned_minutes: Math.round(g.planned_minutes),
+      planned_hours: +(g.planned_minutes / 60).toFixed(1),
+      oldest_waiting_days: g.oldest_waiting_at ? +((now - new Date(g.oldest_waiting_at).getTime()) / 86400000).toFixed(1) : null,
+    }));
+
+    // Sort: nejvyšší fronta první
+    result.sort((a, b) => b.queue_total - a.queue_total || b.planned_minutes - a.planned_minutes);
+
+    res.json({
+      generated_at: new Date().toISOString(),
+      workstations_count: result.length,
+      summary: {
+        total_pending: result.reduce((s, r) => s + r.pending, 0),
+        total_ready: result.reduce((s, r) => s + r.ready, 0),
+        total_in_progress: result.reduce((s, r) => s + r.in_progress, 0),
+        total_done_today: result.reduce((s, r) => s + r.done_today, 0),
+        total_planned_hours: +result.reduce((s, r) => s + r.planned_hours, 0).toFixed(1),
+      },
+      workstations: result,
+    });
+  } catch (err) { next(err); }
+});
+
+// =============================================================================
 // PLÁNOVAČ — KONSOLIDOVANÝ NÁKUPNÍ REPORT (F4.5)
 // =============================================================================
 
