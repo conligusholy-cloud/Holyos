@@ -1133,4 +1133,579 @@ router.get('/products/:id/resolved-operations', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// =============================================================================
+// PLÁNOVAČ — KOMPETENCE
+// =============================================================================
+
+// GET /api/production/competencies — seznam kompetencí
+//   ?category=svarovna     — filtr na kategorii
+//   ?active=true|false     — jen aktivní / všechny
+//   ?include=workers       — zahrnout pole worker_competencies
+router.get('/competencies', async (req, res, next) => {
+  try {
+    const { category, active, include } = req.query;
+    const where = {};
+    if (category) where.category = category;
+    if (active === 'true') where.active = true;
+    if (active === 'false') where.active = false;
+
+    const competencies = await prisma.competency.findMany({
+      where,
+      orderBy: [{ category: 'asc' }, { name: 'asc' }],
+      include: include === 'workers' ? {
+        worker_competencies: {
+          include: { person: { select: { id: true, first_name: true, last_name: true } } },
+        },
+      } : undefined,
+    });
+    res.json(competencies);
+  } catch (err) { next(err); }
+});
+
+// GET /api/production/competencies/:id — detail kompetence
+router.get('/competencies/:id', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ error: 'Neplatné ID' });
+
+    const competency = await prisma.competency.findUnique({
+      where: { id },
+      include: {
+        worker_competencies: {
+          include: { person: { select: { id: true, first_name: true, last_name: true, employee_number: true } } },
+          orderBy: [{ level: 'desc' }, { person: { last_name: 'asc' } }],
+        },
+        required_for_operations: {
+          include: {
+            operation: {
+              select: { id: true, name: true, step_number: true, product: { select: { id: true, code: true, name: true } } },
+            },
+          },
+        },
+      },
+    });
+    if (!competency) return res.status(404).json({ error: 'Kompetence nenalezena' });
+    res.json(competency);
+  } catch (err) { next(err); }
+});
+
+// POST /api/production/competencies — vytvoření kompetence
+router.post('/competencies', async (req, res, next) => {
+  try {
+    const { code, name, category, description, level_max, active } = req.body || {};
+    if (!code || !name) return res.status(400).json({ error: 'code a name jsou povinné' });
+
+    const competency = await prisma.competency.create({
+      data: {
+        code: String(code).trim(),
+        name: String(name).trim(),
+        category: category || null,
+        description: description || null,
+        level_max: level_max != null ? parseInt(level_max, 10) : 3,
+        active: active === false ? false : true,
+      },
+    });
+    res.status(201).json(competency);
+  } catch (err) {
+    if (err.code === 'P2002') return res.status(409).json({ error: 'Kompetence s tímto kódem už existuje' });
+    next(err);
+  }
+});
+
+// PUT /api/production/competencies/:id — úprava kompetence
+router.put('/competencies/:id', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ error: 'Neplatné ID' });
+
+    const { code, name, category, description, level_max, active } = req.body || {};
+    const data = {};
+    if (code !== undefined) data.code = String(code).trim();
+    if (name !== undefined) data.name = String(name).trim();
+    if (category !== undefined) data.category = category || null;
+    if (description !== undefined) data.description = description || null;
+    if (level_max !== undefined) data.level_max = parseInt(level_max, 10);
+    if (active !== undefined) data.active = !!active;
+
+    const competency = await prisma.competency.update({ where: { id }, data });
+    res.json(competency);
+  } catch (err) {
+    if (err.code === 'P2025') return res.status(404).json({ error: 'Kompetence nenalezena' });
+    if (err.code === 'P2002') return res.status(409).json({ error: 'Kompetence s tímto kódem už existuje' });
+    next(err);
+  }
+});
+
+// DELETE /api/production/competencies/:id — smazání kompetence (cascade na worker_competencies a required)
+router.delete('/competencies/:id', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ error: 'Neplatné ID' });
+
+    await prisma.competency.delete({ where: { id } });
+    res.status(204).end();
+  } catch (err) {
+    if (err.code === 'P2025') return res.status(404).json({ error: 'Kompetence nenalezena' });
+    next(err);
+  }
+});
+
+// GET /api/production/persons/:personId/competencies — kompetence pracovníka
+router.get('/persons/:personId/competencies', async (req, res, next) => {
+  try {
+    const personId = parseInt(req.params.personId, 10);
+    if (isNaN(personId)) return res.status(400).json({ error: 'Neplatné personId' });
+
+    const items = await prisma.workerCompetency.findMany({
+      where: { person_id: personId },
+      include: { competency: true },
+      orderBy: [{ competency: { category: 'asc' } }, { competency: { name: 'asc' } }],
+    });
+    res.json(items);
+  } catch (err) { next(err); }
+});
+
+// POST /api/production/persons/:personId/competencies — přidat / upsertovat kompetenci pracovníka
+//   body: { competency_id, level, certified_at?, valid_until?, note? }
+//   Pokud už dvojice existuje, provede update (UNIQUE person+competency).
+router.post('/persons/:personId/competencies', async (req, res, next) => {
+  try {
+    const personId = parseInt(req.params.personId, 10);
+    if (isNaN(personId)) return res.status(400).json({ error: 'Neplatné personId' });
+
+    const { competency_id, level, certified_at, valid_until, note } = req.body || {};
+    const competencyId = parseInt(competency_id, 10);
+    if (isNaN(competencyId)) return res.status(400).json({ error: 'competency_id je povinné' });
+
+    const lvl = level != null ? parseInt(level, 10) : 1;
+    const data = {
+      level: lvl,
+      certified_at: certified_at ? new Date(certified_at) : null,
+      valid_until: valid_until ? new Date(valid_until) : null,
+      note: note || null,
+    };
+
+    const wc = await prisma.workerCompetency.upsert({
+      where: { person_id_competency_id: { person_id: personId, competency_id: competencyId } },
+      create: { person_id: personId, competency_id: competencyId, ...data },
+      update: data,
+      include: { competency: true },
+    });
+    res.status(201).json(wc);
+  } catch (err) {
+    if (err.code === 'P2003') return res.status(400).json({ error: 'Person nebo Competency neexistuje' });
+    next(err);
+  }
+});
+
+// DELETE /api/production/worker-competencies/:id — odebrání kompetence pracovníkovi
+router.delete('/worker-competencies/:id', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ error: 'Neplatné ID' });
+
+    await prisma.workerCompetency.delete({ where: { id } });
+    res.status(204).end();
+  } catch (err) {
+    if (err.code === 'P2025') return res.status(404).json({ error: 'Záznam nenalezen' });
+    next(err);
+  }
+});
+
+// GET /api/production/operations/:opId/required-competencies — co operace vyžaduje
+router.get('/operations/:opId/required-competencies', async (req, res, next) => {
+  try {
+    const opId = parseInt(req.params.opId, 10);
+    if (isNaN(opId)) return res.status(400).json({ error: 'Neplatné opId' });
+
+    const items = await prisma.operationRequiredCompetency.findMany({
+      where: { operation_id: opId },
+      include: { competency: true },
+      orderBy: [{ competency: { name: 'asc' } }],
+    });
+    res.json(items);
+  } catch (err) { next(err); }
+});
+
+// POST /api/production/operations/:opId/required-competencies — přidat / upsertovat požadavek
+//   body: { competency_id, min_level }
+router.post('/operations/:opId/required-competencies', async (req, res, next) => {
+  try {
+    const opId = parseInt(req.params.opId, 10);
+    if (isNaN(opId)) return res.status(400).json({ error: 'Neplatné opId' });
+
+    const { competency_id, min_level } = req.body || {};
+    const competencyId = parseInt(competency_id, 10);
+    if (isNaN(competencyId)) return res.status(400).json({ error: 'competency_id je povinné' });
+    const lvl = min_level != null ? parseInt(min_level, 10) : 1;
+
+    const item = await prisma.operationRequiredCompetency.upsert({
+      where: { operation_id_competency_id: { operation_id: opId, competency_id: competencyId } },
+      create: { operation_id: opId, competency_id: competencyId, min_level: lvl },
+      update: { min_level: lvl },
+      include: { competency: true },
+    });
+    res.status(201).json(item);
+  } catch (err) {
+    if (err.code === 'P2003') return res.status(400).json({ error: 'Operace nebo Competency neexistuje' });
+    next(err);
+  }
+});
+
+// DELETE /api/production/operation-required-competencies/:id — odebrat požadavek operace
+router.delete('/operation-required-competencies/:id', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ error: 'Neplatné ID' });
+
+    await prisma.operationRequiredCompetency.delete({ where: { id } });
+    res.status(204).end();
+  } catch (err) {
+    if (err.code === 'P2025') return res.status(404).json({ error: 'Záznam nenalezen' });
+    next(err);
+  }
+});
+
+// =============================================================================
+// PLÁNOVAČ — VÝROBNÍ DÁVKY (ProductionBatch)
+// =============================================================================
+
+// GET /api/production/batches — seznam dávek
+//   ?status=planned|released|in_progress|paused|done|cancelled
+//   ?batch_type=main|feeder|subassembly
+//   ?product_id=N
+//   ?from=YYYY-MM-DD&to=YYYY-MM-DD — filtr na planned_start
+router.get('/batches', async (req, res, next) => {
+  try {
+    const { status, batch_type, product_id, from, to } = req.query;
+    const where = {};
+    if (status) where.status = status;
+    if (batch_type) where.batch_type = batch_type;
+    if (product_id) where.product_id = parseInt(product_id, 10);
+    if (from || to) {
+      where.planned_start = {};
+      if (from) where.planned_start.gte = new Date(from);
+      if (to) where.planned_start.lte = new Date(to);
+    }
+
+    const batches = await prisma.productionBatch.findMany({
+      where,
+      include: {
+        product: { select: { id: true, code: true, name: true } },
+        parent_batch: { select: { id: true, batch_number: true } },
+        created_by: { select: { id: true, first_name: true, last_name: true } },
+        _count: { select: { batch_operations: true, feeder_batches: true } },
+      },
+      orderBy: [{ planned_start: 'asc' }, { priority: 'asc' }],
+    });
+    res.json(batches);
+  } catch (err) { next(err); }
+});
+
+// GET /api/production/batches/:id — detail dávky včetně operací a feeder dávek
+router.get('/batches/:id', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ error: 'Neplatné ID' });
+
+    const batch = await prisma.productionBatch.findUnique({
+      where: { id },
+      include: {
+        product: true,
+        parent_batch: { select: { id: true, batch_number: true, status: true } },
+        feeder_batches: { select: { id: true, batch_number: true, status: true, batch_type: true, quantity: true } },
+        bom_snapshot: true,
+        created_by: { select: { id: true, first_name: true, last_name: true } },
+        batch_operations: {
+          include: {
+            operation: { select: { id: true, name: true, step_number: true, duration: true } },
+            workstation: { select: { id: true, name: true } },
+            assigned_person: { select: { id: true, first_name: true, last_name: true } },
+          },
+          orderBy: { sequence: 'asc' },
+        },
+        slot_assignments: {
+          include: { slot: { select: { id: true, start_date: true, end_date: true } } },
+        },
+      },
+    });
+    if (!batch) return res.status(404).json({ error: 'Dávka nenalezena' });
+    res.json(batch);
+  } catch (err) { next(err); }
+});
+
+// Helper: ISO week number (Po-Ne, čtvrtek určuje rok)
+function getIsoWeek(date) {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const dayNum = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  const week = Math.ceil(((d - yearStart) / 86400000 + 1) / 7);
+  return { year: d.getUTCFullYear(), week };
+}
+
+// Generátor batch_number: DV-{rok}-W{week}-{seq}
+// Bere týden z planned_start (pokud je) jinak z dnes.
+async function generateBatchNumber(plannedStart) {
+  const ref = plannedStart ? new Date(plannedStart) : new Date();
+  const { year, week } = getIsoWeek(ref);
+  const prefix = `DV-${year}-W${String(week).padStart(2, '0')}-`;
+  const last = await prisma.productionBatch.findFirst({
+    where: { batch_number: { startsWith: prefix } },
+    orderBy: { batch_number: 'desc' },
+    select: { batch_number: true },
+  });
+  let seq = 1;
+  if (last) {
+    const m = last.batch_number.match(/-(\d+)$/);
+    if (m) seq = parseInt(m[1], 10) + 1;
+  }
+  return prefix + String(seq).padStart(3, '0');
+}
+
+// POST /api/production/batches — vytvoření dávky
+//   body: { product_id (povinné), quantity (povinné), variant_key?, batch_type?,
+//           priority?, planned_start?, planned_end?, parent_batch_id?,
+//           bom_snapshot_id?, created_by_id?, note? }
+router.post('/batches', async (req, res, next) => {
+  try {
+    const {
+      product_id, quantity, variant_key, batch_type, priority,
+      planned_start, planned_end, parent_batch_id, bom_snapshot_id,
+      created_by_id, note,
+    } = req.body || {};
+
+    const productId = parseInt(product_id, 10);
+    const qty = parseInt(quantity, 10);
+    if (isNaN(productId) || isNaN(qty) || qty <= 0) {
+      return res.status(400).json({ error: 'product_id a quantity (>0) jsou povinné' });
+    }
+
+    const batch_number = await generateBatchNumber(planned_start);
+
+    const batch = await prisma.productionBatch.create({
+      data: {
+        batch_number,
+        product_id: productId,
+        quantity: qty,
+        variant_key: variant_key || null,
+        batch_type: batch_type || 'main',
+        priority: priority != null ? parseInt(priority, 10) : 100,
+        planned_start: planned_start ? new Date(planned_start) : null,
+        planned_end: planned_end ? new Date(planned_end) : null,
+        parent_batch_id: parent_batch_id ? parseInt(parent_batch_id, 10) : null,
+        bom_snapshot_id: bom_snapshot_id ? parseInt(bom_snapshot_id, 10) : null,
+        created_by_id: created_by_id ? parseInt(created_by_id, 10) : null,
+        note: note || null,
+      },
+      include: { product: { select: { id: true, code: true, name: true } } },
+    });
+    res.status(201).json(batch);
+  } catch (err) {
+    if (err.code === 'P2003') return res.status(400).json({ error: 'Product, parent_batch nebo bom_snapshot neexistuje' });
+    if (err.code === 'P2002') return res.status(409).json({ error: 'Konflikt batch_number — zkus znovu' });
+    next(err);
+  }
+});
+
+// PUT /api/production/batches/:id — úprava dávky
+router.put('/batches/:id', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ error: 'Neplatné ID' });
+
+    const allowed = ['quantity', 'variant_key', 'batch_type', 'status', 'priority',
+      'planned_start', 'planned_end', 'actual_start', 'actual_end',
+      'parent_batch_id', 'bom_snapshot_id', 'note'];
+    const data = {};
+    for (const k of allowed) {
+      if (req.body[k] === undefined) continue;
+      const v = req.body[k];
+      if (k === 'quantity' || k === 'priority' || k === 'parent_batch_id' || k === 'bom_snapshot_id') {
+        data[k] = v == null ? null : parseInt(v, 10);
+      } else if (k.endsWith('_start') || k.endsWith('_end')) {
+        data[k] = v ? new Date(v) : null;
+      } else {
+        data[k] = v;
+      }
+    }
+
+    const batch = await prisma.productionBatch.update({
+      where: { id }, data,
+      include: { product: { select: { id: true, code: true, name: true } } },
+    });
+    res.json(batch);
+  } catch (err) {
+    if (err.code === 'P2025') return res.status(404).json({ error: 'Dávka nenalezena' });
+    next(err);
+  }
+});
+
+// POST /api/production/batches/:id/release — přechod planned → released.
+// Při release se dávka přiřadí k pracovním pozicím (BatchOperation se zatím
+// vytváří externě plánovačem; tento endpoint jen přepíná stav).
+router.post('/batches/:id/release', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ error: 'Neplatné ID' });
+
+    const batch = await prisma.productionBatch.findUnique({ where: { id }, select: { status: true } });
+    if (!batch) return res.status(404).json({ error: 'Dávka nenalezena' });
+    if (batch.status !== 'planned') {
+      return res.status(409).json({ error: `Dávku lze release-ovat jen ze stavu 'planned' (aktuálně '${batch.status}')` });
+    }
+
+    const updated = await prisma.productionBatch.update({
+      where: { id },
+      data: { status: 'released' },
+    });
+    res.json(updated);
+  } catch (err) { next(err); }
+});
+
+// DELETE /api/production/batches/:id — smazání dávky (cascade na batch_operations + logs)
+router.delete('/batches/:id', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ error: 'Neplatné ID' });
+
+    await prisma.productionBatch.delete({ where: { id } });
+    res.status(204).end();
+  } catch (err) {
+    if (err.code === 'P2025') return res.status(404).json({ error: 'Dávka nenalezena' });
+    next(err);
+  }
+});
+
+// =============================================================================
+// PLÁNOVAČ — INSTANCE OPERACÍ (BatchOperation) — vstup pro F6 kiosek
+// =============================================================================
+
+// GET /api/production/batch-operations — seznam instancí operací
+//   Klíčový endpoint pro výrobní obrazovku pracoviště.
+//   ?workstation_id=N — pro kiosek konkrétního pracoviště
+//   ?status=pending|ready|in_progress|done|blocked
+//   ?assigned_person_id=N — můj seznam
+//   ?batch_id=N — operace dané dávky
+router.get('/batch-operations', async (req, res, next) => {
+  try {
+    const { workstation_id, status, assigned_person_id, batch_id } = req.query;
+    const where = {};
+    if (workstation_id) where.workstation_id = parseInt(workstation_id, 10);
+    if (status) where.status = status;
+    if (assigned_person_id) where.assigned_person_id = parseInt(assigned_person_id, 10);
+    if (batch_id) where.batch_id = parseInt(batch_id, 10);
+
+    const ops = await prisma.batchOperation.findMany({
+      where,
+      include: {
+        batch: {
+          select: {
+            id: true, batch_number: true, status: true, priority: true, quantity: true,
+            product: { select: { id: true, code: true, name: true } },
+          },
+        },
+        operation: {
+          select: {
+            id: true, name: true, step_number: true, duration: true,
+            required_competencies: { include: { competency: true } },
+          },
+        },
+        workstation: { select: { id: true, name: true } },
+        assigned_person: { select: { id: true, first_name: true, last_name: true } },
+      },
+      orderBy: [{ planned_start: 'asc' }, { sequence: 'asc' }],
+    });
+    res.json(ops);
+  } catch (err) { next(err); }
+});
+
+// POST /api/production/batch-operations/:id/start — pracovník zahajuje úkol
+//   body: { person_id }
+//   Nastaví assigned_person_id, started_at = now, status = 'in_progress'
+//   a zaloguje akci 'start' do BatchOperationLog.
+router.post('/batch-operations/:id/start', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ error: 'Neplatné ID' });
+
+    const personId = parseInt(req.body?.person_id, 10);
+    if (isNaN(personId)) return res.status(400).json({ error: 'person_id je povinné' });
+
+    const existing = await prisma.batchOperation.findUnique({ where: { id }, select: { status: true } });
+    if (!existing) return res.status(404).json({ error: 'Operace nenalezena' });
+    if (existing.status !== 'ready' && existing.status !== 'pending') {
+      return res.status(409).json({ error: `Nelze startovat ze stavu '${existing.status}'` });
+    }
+
+    const result = await prisma.$transaction(async (tx) => {
+      const op = await tx.batchOperation.update({
+        where: { id },
+        data: {
+          status: 'in_progress',
+          assigned_person_id: personId,
+          started_at: new Date(),
+        },
+      });
+      await tx.batchOperationLog.create({
+        data: { batch_operation_id: id, person_id: personId, action: 'start' },
+      });
+      return op;
+    });
+    res.json(result);
+  } catch (err) {
+    if (err.code === 'P2003') return res.status(400).json({ error: 'Person neexistuje' });
+    next(err);
+  }
+});
+
+// POST /api/production/batch-operations/:id/done — pracovník dokončil úkol
+//   body: { person_id?, note? }
+//   Nastaví finished_at = now, dopočítá duration_minutes, status = 'done',
+//   zaloguje 'done'.
+router.post('/batch-operations/:id/done', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ error: 'Neplatné ID' });
+
+    const personId = req.body?.person_id ? parseInt(req.body.person_id, 10) : null;
+    const note = req.body?.note || null;
+
+    const existing = await prisma.batchOperation.findUnique({
+      where: { id },
+      select: { status: true, started_at: true, assigned_person_id: true },
+    });
+    if (!existing) return res.status(404).json({ error: 'Operace nenalezena' });
+    if (existing.status !== 'in_progress') {
+      return res.status(409).json({ error: `Nelze dokončit ze stavu '${existing.status}'` });
+    }
+
+    const finished = new Date();
+    const duration = existing.started_at
+      ? Math.max(1, Math.round((finished - existing.started_at) / 60000))
+      : null;
+
+    const result = await prisma.$transaction(async (tx) => {
+      const op = await tx.batchOperation.update({
+        where: { id },
+        data: {
+          status: 'done',
+          finished_at: finished,
+          duration_minutes: duration,
+        },
+      });
+      await tx.batchOperationLog.create({
+        data: {
+          batch_operation_id: id,
+          person_id: personId || existing.assigned_person_id,
+          action: 'done',
+          note,
+        },
+      });
+      return op;
+    });
+    res.json(result);
+  } catch (err) { next(err); }
+});
+
 module.exports = router;
