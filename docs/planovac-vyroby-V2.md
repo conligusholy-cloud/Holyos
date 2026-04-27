@@ -218,12 +218,12 @@ model BatchOperationLog {
 - [ ] **F4.4** MCP tool `calculate_mrp` (TODO)
 - [x] **F4.5** UI report v `planovani-vyroby` — tlačítko "📊 MRP" u dávky → modal s dvěma tabulkami (potřeby × stav × shortage, návrhy PO). Sloupec "Materiál k dispozici" se updatne po MRP fetchi (zelená ✓ / červená ✗).
 
-### F5 — UI dispečer
-- [ ] **F5.1** `vyrobni-sloty` rozšíření o slot health score + barevné varování
+### F5 — UI dispečer (částečně 2026-04-27)
+- [x] **F5.1** `vyrobni-sloty` rozšíření — health badge v detail modalu (lazy fetch /health-score, color + progress bar). Plný in-grid badge na všech slotech je TODO.
 - [ ] **F5.2** `prodejni-objednavky` — drag-drop OrderItem → SlotAssignment
-- [ ] **F5.3** Modul `planovani-vyroby` (nový) — přehled dávek, denní plán, filtr týden/typ
+- [x] **F5.3** Modul `planovani-vyroby` (nový) — přehled dávek, denní plán, filtr týden/typ (Factorify-style hustá tabulka, MRP modal, generátor operací)
 - [ ] **F5.4** Workstation buffer view (vstupní/výstupní materiál v reálném čase)
-- [ ] **F5.5** Endpoint `GET /api/slots/:id/health-score`
+- [x] **F5.5** Endpoint `GET /api/slots/:id/health-score` — utilization_pct, status (under/optimal/full/overloaded/no_capacity), color hex, working_days × capacity_per_day
 
 ### F6 — Výrobní obrazovka pracoviště ✅ DONE 2026-04-27 (MVP)
 - [x] **F6.1** `modules/kiosky/pracoviste.html` (URL `?ws=N`) + aktivace karty na rozcestníku

@@ -546,6 +546,11 @@
       var html = '<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal">';
       html += '<h2>' + esc(slot.name || 'Výrobní slot') + '</h2>';
 
+      // Health score badge (lazy load — naplní se po otevření)
+      html += '<div id="slot-health" style="margin:0 0 14px; padding:10px 14px; border-radius:10px; background:rgba(160,160,160,0.08); border:1px solid var(--border); font-size:13px;">';
+      html += '<span style="color:var(--text2);">Vytížení slotu:</span> <em style="color:var(--text2);">načítám…</em>';
+      html += '</div>';
+
       html += '<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px;">';
       html += '<div style="display:flex;justify-content:space-between;font-size:13px;"><span style="color:var(--text2);">Pracoviště</span><strong>' + esc(wsName) + '</strong></div>';
       html += '<div style="display:flex;justify-content:space-between;font-size:13px;"><span style="color:var(--text2);">Výroba začíná</span><strong>' + startDate + '</strong></div>';
@@ -579,6 +584,40 @@
       html += '</div></div>';
 
       document.getElementById('modal-root').innerHTML = html;
+
+      // Lazy load health-score
+      fetch('/api/slots/' + slot.id + '/health-score', { credentials: 'include' })
+        .then(function(r) { return r.ok ? r.json() : null; })
+        .then(function(h) {
+          var el = document.getElementById('slot-health');
+          if (!el) return; // modal už byl zavřený
+          if (!h) {
+            el.innerHTML = '<span style="color:var(--text2);">Vytížení slotu — nedostupné</span>';
+            return;
+          }
+          var pct = h.utilization_pct;
+          var bar = '<div style="height:8px; background:rgba(160,160,160,0.15); border-radius:4px; overflow:hidden; margin-top:8px;">' +
+                    '<div style="height:100%; width:' + Math.min(100, pct) + '%; background:' + h.color + '; transition:width 0.3s;"></div>' +
+                    '</div>';
+          el.style.borderColor = h.color;
+          el.style.background = 'rgba(' + hexToRgb(h.color) + ',0.08)';
+          el.innerHTML =
+            '<div style="display:flex; justify-content:space-between; align-items:center;">' +
+              '<span><strong style="color:' + h.color + ';">' + h.label + '</strong> ' +
+              '<span style="color:var(--text2); margin-left:8px;">(' + pct + ' %)</span></span>' +
+              '<span style="font-size:11px; color:var(--text2);">' +
+                h.total_estimated_hours + ' / ' + h.capacity_total_hours + ' h ' +
+                '· ' + h.working_days + ' dní × ' + h.capacity_per_day + ' h' +
+              '</span>' +
+            '</div>' + bar;
+        })
+        .catch(function() { /* tichá chyba — health score je nice-to-have */ });
+    }
+
+    // Hex → "r,g,b" pro rgba()
+    function hexToRgb(hex) {
+      var m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex || '');
+      return m ? parseInt(m[1],16) + ',' + parseInt(m[2],16) + ',' + parseInt(m[3],16) : '160,160,160';
     }
 
     // ─── Blokace volného slotu ───────────────────────────────────────────────
