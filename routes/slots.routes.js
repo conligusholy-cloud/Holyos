@@ -244,6 +244,67 @@ router.get('/calendar/next-free', async (req, res, next) => {
 });
 
 // GET /api/slots/:id — detail slotu
+// GET /api/slots/:id/health-score — vytížení slotu
+//   Vrátí poměr SUM(estimated_hours z assignments) / (capacity_hours × pracovní_dny).
+//   Pracovní_dny = počet dnů Po-Pá mezi start_date a end_date (včetně).
+//   POZN: Per memory holyos_express_route_order — pevný podcestu nad dynamickou route.
+router.get('/:id/health-score', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ error: 'Neplatné ID' });
+
+    const slot = await prisma.productionSlot.findUnique({
+      where: { id },
+      include: { assignments: { select: { estimated_hours: true, status: true } } },
+    });
+    if (!slot) return res.status(404).json({ error: 'Slot nenalezen' });
+
+    // Spočítej pracovní dny (Po-Pá) v intervalu start_date..end_date
+    let workingDays = 0;
+    const start = new Date(slot.start_date);
+    const end = new Date(slot.end_date);
+    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+      const dow = d.getDay();
+      if (dow >= 1 && dow <= 5) workingDays++;
+    }
+    if (workingDays === 0) workingDays = 1; // ochrana proti dělení nulou
+
+    const capacityPerDay = Number(slot.capacity_hours) || 0;
+    const capacityTotal = +(capacityPerDay * workingDays).toFixed(2);
+
+    const totalEstimated = slot.assignments.reduce(
+      (sum, a) => sum + (a.status === 'cancelled' ? 0 : Number(a.estimated_hours || 0)),
+      0,
+    );
+    const utilizationPct = capacityTotal > 0 ? +(totalEstimated / capacityTotal * 100).toFixed(1) : 0;
+
+    let status, color, label;
+    if (capacityTotal === 0) {
+      status = 'no_capacity'; color = 'gray'; label = 'Bez kapacity';
+    } else if (utilizationPct < 70) {
+      status = 'under'; color = '#22c55e'; label = 'Volná kapacita';
+    } else if (utilizationPct < 90) {
+      status = 'optimal'; color = '#14b8a6'; label = 'Optimální';
+    } else if (utilizationPct <= 100) {
+      status = 'full'; color = '#f59e0b'; label = 'Plně vytížený';
+    } else {
+      status = 'overloaded'; color = '#ef4444'; label = 'Přetížený';
+    }
+
+    res.json({
+      slot_id: id,
+      slot_name: slot.name,
+      utilization_pct: utilizationPct,
+      total_estimated_hours: +totalEstimated.toFixed(2),
+      capacity_total_hours: capacityTotal,
+      capacity_per_day: capacityPerDay,
+      working_days: workingDays,
+      assignments_count: slot.assignments.length,
+      status, color, label,
+    });
+  } catch (err) { next(err); }
+});
+
 router.get('/:id', async (req, res, next) => {
   try {
     const slot = await prisma.productionSlot.findUnique({
