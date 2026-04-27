@@ -1395,9 +1395,33 @@ router.get('/batches', async (req, res, next) => {
         parent_batch: { select: { id: true, batch_number: true } },
         created_by: { select: { id: true, first_name: true, last_name: true } },
         _count: { select: { batch_operations: true, feeder_batches: true } },
+        // Vazba na prodejní objednávku jde přes SlotAssignment.order_id (Int? bez Prisma relace),
+        // takže si vytáhnu jen IDčka a doplním order_number jedním navazujícím lookupem.
+        slot_assignments: { select: { order_id: true } },
       },
       orderBy: [{ planned_start: 'asc' }, { priority: 'asc' }],
     });
+
+    // Doplnění related_orders — sběr unikátních order_id přes všechny dávky → jeden batch lookup
+    const orderIds = [...new Set(
+      batches.flatMap(b => (b.slot_assignments || []).map(s => s.order_id).filter(Boolean))
+    )];
+    const orderMap = new Map();
+    if (orderIds.length) {
+      const orders = await prisma.order.findMany({
+        where: { id: { in: orderIds } },
+        select: { id: true, order_number: true },
+      });
+      orders.forEach(o => orderMap.set(o.id, o.order_number));
+    }
+    batches.forEach(b => {
+      const ids = [...new Set((b.slot_assignments || []).map(s => s.order_id).filter(Boolean))];
+      b.related_orders = ids
+        .map(id => ({ id, order_number: orderMap.get(id) || null }))
+        .filter(o => o.order_number);
+      delete b.slot_assignments;
+    });
+
     res.json(batches);
   } catch (err) { next(err); }
 });
