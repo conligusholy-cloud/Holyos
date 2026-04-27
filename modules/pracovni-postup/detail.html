@@ -349,6 +349,124 @@
     .toast { position:fixed; bottom:20px; right:20px; padding:10px 20px; border-radius:8px; background:#22c55e; color:#fff; font-size:13px; opacity:0; transition:opacity 0.3s; z-index:9999; pointer-events:none; }
     .toast.show { opacity:1; }
     .toast.error { background:#ef4444; }
+
+    /* === Tab: Časový graf (Gantt) === */
+    .gantt-wrapper { padding: 12px 4px 24px; }
+    .gantt-row {
+      display: grid;
+      grid-template-columns: 220px 1fr;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 6px;
+    }
+    .gantt-row.header {
+      margin-bottom: 10px;
+      font-size: 11px;
+      color: var(--text2);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .gantt-label {
+      font-size: 13px;
+      color: var(--text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .gantt-label .step {
+      display: inline-block;
+      width: 22px;
+      height: 22px;
+      line-height: 22px;
+      text-align: center;
+      background: var(--surface2);
+      border-radius: 4px;
+      margin-right: 6px;
+      font-weight: 700;
+      font-size: 12px;
+      color: var(--text2);
+    }
+    .gantt-label .ws {
+      font-size: 11px;
+      color: var(--text2);
+      margin-left: 4px;
+    }
+    .gantt-track {
+      position: relative;
+      height: 28px;
+      background: rgba(255, 255, 255, 0.03);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    .gantt-axis-track {
+      position: relative;
+      height: 24px;
+      border-bottom: 1px solid var(--border);
+    }
+    .gantt-tick {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      width: 1px;
+      background: var(--border);
+    }
+    .gantt-tick-label {
+      position: absolute;
+      top: 0;
+      left: 4px;
+      font-size: 10px;
+      color: var(--text2);
+      white-space: nowrap;
+    }
+    .gantt-bar {
+      position: absolute;
+      top: 3px;
+      bottom: 3px;
+      border-radius: 4px;
+      padding: 0 8px;
+      display: flex;
+      align-items: center;
+      font-size: 11px;
+      color: white;
+      font-weight: 600;
+      min-width: 4px;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+      cursor: default;
+    }
+    .gantt-bar.over-takt { outline: 2px solid #ef4444; outline-offset: -2px; }
+    .gantt-c0 { background: #0891b2; }
+    .gantt-c1 { background: #8b5cf6; }
+    .gantt-c2 { background: #10b981; }
+    .gantt-c3 { background: #f97316; }
+    .gantt-c4 { background: #ef4444; }
+    .gantt-c5 { background: #eab308; color: #1a1a1a; }
+    .gantt-c6 { background: #06b6d4; }
+    .gantt-c7 { background: #a78bfa; }
+    .gantt-summary {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      margin-bottom: 18px;
+      padding: 12px 16px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+    .gantt-summary-item .label {
+      font-size: 11px;
+      color: var(--text2);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .gantt-summary-item .value {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--text);
+    }
+
   </style>
 </head>
 <body>
@@ -370,6 +488,7 @@
     <div class="tabs">
       <button class="tab active" data-tab="postup" onclick="switchTab('postup')">Pracovní postup</button>
       <button class="tab" data-tab="souhrn" onclick="switchTab('souhrn')">Souhrn materiálů</button>
+      <button class="tab" data-tab="graf" onclick="switchTab('graf')">📊 Graf</button>
       <button class="tab" data-tab="konfigurace" onclick="switchTab('konfigurace')">⚙️ Konfigurace</button>
     </div>
 
@@ -602,6 +721,7 @@
     function renderTab() {
       if (currentTab === 'postup') renderWorkflow();
       else if (currentTab === 'souhrn') renderMaterialSummary();
+      else if (currentTab === 'graf') renderGanttTab();
       else if (currentTab === 'konfigurace') renderKonfiguraceTab();
     }
 
@@ -1511,6 +1631,92 @@
       t.textContent = msg;
       t.className = 'toast show' + (isError ? ' error' : '');
       setTimeout(() => t.className = 'toast', 2500);
+    }
+
+    // =================================================================
+    // TAB: Časový graf (Gantt) — operace seřazené v čase
+    // Sekvenční layout: každá operace začíná tam, kde předchozí skončila.
+    // Šířka baru = realMinutes (čas s pracovníky), reálné minuty počítá realMinutes().
+    // =================================================================
+    function renderGanttTab() {
+      const content = document.getElementById('tab-content');
+      const ops = (product.operations || []).slice().sort((a, b) => (a.step_number || 0) - (b.step_number || 0));
+
+      if (ops.length === 0) {
+        content.innerHTML = '<div class="empty-ops"><div class="icon">📊</div>' +
+          '<p>Žádné operace k zobrazení</p>' +
+          '<p style="font-size:12px;">Přidej operace v záložce „Pracovní postup"</p></div>';
+        return;
+      }
+
+      const totalReal = ops.reduce((s, o) => s + realMinutes(o), 0);
+      const totalNorm = ops.reduce((s, o) => s + normMinutes(o), 0);
+      const totalPrep = ops.reduce((s, o) => s + (o.preparation_time || 0), 0);
+      const takt = product.takt_time;
+
+      let html = '<div class="gantt-wrapper">';
+
+      // Souhrnný panel
+      html += '<div class="gantt-summary">' +
+        '<div class="gantt-summary-item"><div class="label">Operací</div><div class="value">' + ops.length + '</div></div>' +
+        '<div class="gantt-summary-item"><div class="label">Celkem (reálně)</div><div class="value">' + formatDuration(totalReal) + '</div></div>' +
+        '<div class="gantt-summary-item"><div class="label">Norma (1 os.)</div><div class="value">' + formatDuration(totalNorm) + '</div></div>' +
+        (totalPrep > 0 ? '<div class="gantt-summary-item"><div class="label">Příprava</div><div class="value">' + totalPrep + ' min</div></div>' : '') +
+        (takt ? '<div class="gantt-summary-item"><div class="label">Linkový takt</div><div class="value">' + takt + ' min</div></div>' : '') +
+        '</div>';
+
+      // Časová osa nahoře
+      const tickStep = totalReal > 600 ? 60 : (totalReal > 120 ? 30 : (totalReal > 30 ? 10 : 5));
+      const tickCount = Math.floor(totalReal / tickStep) + 1;
+      html += '<div class="gantt-row header">' +
+        '<div></div>' +
+        '<div class="gantt-axis-track">';
+      for (let i = 0; i <= tickCount; i++) {
+        const minAt = i * tickStep;
+        if (minAt > totalReal) break;
+        const pct = totalReal > 0 ? (minAt / totalReal * 100) : 0;
+        const label = minAt >= 60
+          ? (Math.floor(minAt / 60) + 'h' + (minAt % 60 ? ' ' + (minAt % 60) + 'm' : ''))
+          : (minAt + 'm');
+        html += '<div class="gantt-tick" style="left:' + pct + '%;">' +
+          '<span class="gantt-tick-label">' + label + '</span>' +
+          '</div>';
+      }
+      html += '</div></div>';
+
+      // Řádky operací
+      let cum = 0;
+      ops.forEach((op, idx) => {
+        const dur = realMinutes(op);
+        const startPct = totalReal > 0 ? (cum / totalReal * 100) : 0;
+        const widthPct = totalReal > 0 ? (dur / totalReal * 100) : 0;
+        const wsName = op.workstation ? op.workstation.name : '';
+        const colorIdx = idx % 8;
+        const overTakt = takt && dur > takt;
+        const tooltip = op.name + ' — ' + formatDuration(dur) +
+          (wsName ? ' • ' + wsName : '') +
+          ' • začátek ' + formatDuration(cum) + ', konec ' + formatDuration(cum + dur);
+
+        html += '<div class="gantt-row">' +
+          '<div class="gantt-label">' +
+            '<span class="step">' + (op.step_number || (idx + 1)) + '</span>' +
+            esc(op.name) +
+            (wsName ? ' <span class="ws">(' + esc(wsName) + ')</span>' : '') +
+          '</div>' +
+          '<div class="gantt-track">' +
+            '<div class="gantt-bar gantt-c' + colorIdx + (overTakt ? ' over-takt' : '') + '" ' +
+                 'style="left:' + startPct + '%;width:' + widthPct + '%;" ' +
+                 'title="' + esc(tooltip) + '">' +
+              (widthPct > 4 ? formatDuration(dur) : '') +
+            '</div>' +
+          '</div>' +
+          '</div>';
+
+        cum += dur;
+      });
+
+      html += '</div>'; // .gantt-wrapper
+      content.innerHTML = html;
     }
 
     // =================================================================
