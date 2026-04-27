@@ -1,40 +1,84 @@
-Účetní doklady Fáze 1-8 + force-delete + Sklad 2.0 fixes
+Účetní doklady Fáze 1-12 + force-delete + Sklad 2.0 fixes + Pokladna + Náklady + PWA awaiting
 
-Účetní doklady (iniciativa 12 fází, dnes do Fáze 8):
-- Schema: Invoice, PaymentBatch, BankStatement, BankTransaction, MatchingRule,
-  AppSetting, Reminder, CashRegister, CashMovement (+ 3 migrace)
-- AP/AR: import OCR, schvalování, payment batches (ABO/KPC), platby
-- Banka: parsery Fio/ČSOB/Moneta/UniCredit (GPC/ABO-KPC), auto-matching,
-  pravidla párování, force-delete pro super admina (cascade unmatch)
-- Faktury vydané (AR): autofill z Order, PDF s brand záhlavím + QR SPAYD,
-  email send via Microsoft Graph send-as
-- Upomínky (Fáze 7): denní cron 8:00, multi-jazyk (cs/sk/de/en) podle
-  Company.country, 3 úrovně (7/14/21 dní), pause flag, manual run
-- Pokladna (Fáze 8): CashRegister + CashMovement, číselné řady P/V{rok}{seq6},
-  paragon upload, inventura s korekčním pohybem, 7 účelů (číselník)
+12-fázová iniciativa Účetní doklady KOMPLETNÍ:
 
-Force-delete pro super admina:
-- Bankovní výpis: 409 + can_force, ?force=true unmatchne všechny matched/ignored
-  transakce a smaže výpis (cascade přes unmatchTransaction)
-- Platební příkaz: stejný vzor, vrátí faktury na ready_to_pay nebo unmatch
-  z bank tx, pokud už byl matched
+F1-F5 — AP/AR + 3-way match + email ingest (Graph) + ABO/KPC + bank výpisy
+- Schema 19 modelů, migrace 20260424120000_ucetni_doklady
+- routes/accounting.routes.js, routes/banking.routes.js
+- services/banking/{abo-kpc, parsers/, auto-matcher, matching-rules}
+- services/email-ingest.js (Graph REST), services/ocr/pipeline.js (6 passes)
+- modules/ucetni-doklady, modules/banky, modules/banka-pravidla
 
-Sklad 2.0 — průběžné fixy:
-- Sériová čísla (SerialNumber + UI nakup-sklad)
-- Šarže/lots s expirací (MaterialLot + Stock.lot_id triplet)
-- TWA Sklad APK pro SUNMI (Digital Asset Links)
+F6 — Faktury vydané (AR) + PDF + email send-as
+- services/pdf/{invoice-pdf.js, invoice-template.html} (Puppeteer + QR SPAYD + IBAN mod-97)
+- services/ms-graph-client.sendMailAs(fromUpn, ...)
+- services/email.js Graph-first s SMTP fallbackem
+- POST /invoices/from-order, GET /invoices/:id/pdf, POST /invoices/:id/send
 
-Infrastruktura:
-- email-ingest přes Microsoft Graph (nahradili IMAP kvůli MAPI logon issues)
-- Microsoft Graph send-as přes EXO ApplicationAccessPolicy + holyos-senders@
+F7 — Upomínky AR (cron 8:00 + multi-jazyk)
+- services/reminders/templates.js — cs/sk/de/en × 3 levely (7/14/21 dní)
+- services/dunning-worker.js — denní cron, AppSetting.reminders_paused
+- routes /api/accounting/reminders/{status,pause,run-now,preview,send}
+- Subtab 📨 Upomínky v Účetních dokladech (history, pause/run super admin)
+
+F8 — Pokladna
+- routes/cash-register.routes.js — CRUD pokladen, pohyby, paragon upload, inventura
+- Číselné řady P/V{rok}{seq6}, korekční pohyb při inventuře
+- Modul modules/pokladna/ (sidebar 💵), 4 KPI karty, modal příjem/výdaj/inventura
+- Storage data/storage/cash/{movementId}/
+
+F9 — Statistiky cost-center
+- routes/reports.routes.js — CostCenter CRUD + summary/by-type/detail/timeseries
+- Modul modules/naklady/ (sidebar 📊), 3 taby + Chart.js (doughnut + stacked bar)
+- Drill-down per cost center s 12měsíčním trendem
+- Logika: AP náklady + pokladní výdaje (mimo invoice_payment, žádný double-count)
+
+F10 — Odevzdání účetní firmě
+- services/accountant/handover-builder.js (archiver) — ZIP s PDF + 4 CSV + manifest + README
+- routes /api/accounting/handovers/{,id,id/build,id/download,id/send,id/confirm,id/checklist}
+- Subtab 📦 Účetní firma v Účetních dokladech
+- Doplnění oseknutého schema.prisma o Reminder, AppSetting, AccountantHandover, AccountantHandoverItem
+- package.json: archiver ^7.0.1
+
+F11 — MCP rozšíření accounting-server (write actions)
+- mcp-servers/accounting-server/ — 9 nových tools k původním 7
+  Read: list_reminders, get_cash_balance, get_cost_center_summary, list_handovers
+  Write: mark_invoice_ready_to_pay, send_reminder_now, create_cash_movement,
+         create_handover, build_handover_zip
+- prisma/seed-assistants.js — system_prompt agenta `ucetni` aktualizovaný (write rules)
+- services/ai/orchestrator.js — KEYWORD_MAP/MODULE_ASSISTANT_MAP rozšířen o pokladnu+náklady
+
+F12 — PWA "Čekání na příjem"
+- Backend: GET /api/wh/pwa/awaiting-receipt + by-qr/:qr + POST :id/confirm
+- PWA: clients/pwa-sklad/src/{api/awaiting-receipt.ts, pages/AwaitingReceiptPage.tsx}
+- Workflow: skladník vidí AP faktury bez příjemky → potvrdí → vyrobí WarehouseDocument PR-{rok}-{seq4} → faktura na goods_received
+- Dashboard tile 📋 (8. v pořadí), CSS .tile-awaiting
+
+Force-delete pro super admina (mimo iniciativu):
+- DELETE /api/banking/statements/:id?force=true — unmatch transakcí přes
+  matcher.unmatchTransaction() + cascade delete
+- DELETE /api/accounting/payment-batches/:id?force=true — restore faktur
+  na ready_to_pay nebo unmatch z bank tx, smaže batch
+- UI: 🗑️ tlačítko visible jen super-adminovi v tabu Banka i K platbě
+
+Sklad 2.0 — průběžné práce z minulých dní:
+- SerialNumber + UI v nakup-sklad
+- MaterialLot s expirací (Stock.lot_id triplet, tab Šarže)
+- TWA Sklad APK pro SUNMI L2H + Digital Asset Links
+
+Infra:
+- email-ingest přes Microsoft Graph (nahradili IMAP — MAPI logon nešlo)
+- Graph send-as přes EXO ApplicationAccessPolicy + holyos-senders@
 - Worker pattern: email-ingest, digest, dunning (vše startuje z app.js)
 
-Routes:
-- /api/accounting (faktury, platby, upomínky)
-- /api/banking (účty, výpisy, transakce, pravidla, force-delete)
-- /api/cash (Fáze 8)
+Nové sidebar items:
+- 💵 Pokladna
+- 📊 Náklady
 
-Moduly:
-- ucetni-doklady (Faktury / K platbě / Banka / Upomínky)
-- banky, banka-pravidla
-- pokladna (nový sidebar item)
+Nové API namespaces:
+- /api/cash (CashRegister)
+- /api/reports (CostCenter + reports)
+
+Memory updates:
+- holyos_railway_env_sync.md (env musí jít do .env *i* Railway)
+- holyos_railway_deploy_source.md (variables --set redeployuje z origin/main)
