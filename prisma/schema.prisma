@@ -1696,6 +1696,10 @@ model VehicleTireChange {
 
   invoice_url    String? @db.VarChar(500)
   invoice_number String? @db.VarChar(100)
+  // Protokol / dodací list (PDF nebo obrázek) — uložený ve storage stejně
+  // jako faktura. Slouží k záznamu předávacího protokolu, dodacího listu od
+  // pneuservisu nebo jiné technické dokumentace ke konkrétní výměně.
+  protocol_url   String? @db.VarChar(500)
 
   note         String?   @db.Text
   confirmed_by Int?

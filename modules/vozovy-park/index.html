@@ -1960,7 +1960,8 @@
                 (c.note ? '<div style="font-size:11px;color:var(--text2);margin-top:3px;font-style:italic;">' + escHtml(c.note) + '</div>' : '') +
               '</div>' +
               '<div class="actions">' +
-                (c.invoice_url ? '<a class="dl" href="' + escHtml(c.invoice_url) + '" target="_blank" rel="noopener">📎 Faktura</a>' : '') +
+                (c.invoice_url ? '<a class="dl" href="' + escHtml(c.invoice_url) + '" target="_blank" rel="noopener" title="Otevřít fakturu">📎 Faktura</a>' : '') +
+                (c.protocol_url ? '<a class="dl" href="' + escHtml(c.protocol_url) + '" target="_blank" rel="noopener" title="Otevřít protokol / dodací list">📋 Protokol</a>' : '') +
                 (c.status === 'planned' ? '<button type="button" class="btn btn-sm btn-primary" onclick="confirmTireChange(' + c.id + ',' + vehicleId + ')" title="Potvrdit provedení">✓ Hotovo</button>' : '') +
                 '<button type="button" class="btn btn-sm btn-secondary" onclick="showTireChangeForm(' + vehicleId + ',' + c.id + ')">✏️</button>' +
                 '<button type="button" class="btn btn-sm btn-danger" onclick="deleteTireChange(' + c.id + ',' + vehicleId + ')">🗑️</button>' +
@@ -2047,6 +2048,8 @@
           '<div class="form-group"><label>Cena za pneu (Kč)</label><input type="number" id="tc-tires" value="' + (c.cost_tires || '') + '" step="0.01" min="0"></div>' +
           '<div class="form-group"><label>Číslo faktury</label><input type="text" id="tc-invoice-num" value="' + escHtml(c.invoice_number || '') + '"></div>' +
           '<div class="form-group"><label>Faktura (PDF/obrázek)' + (c.invoice_url ? ' <a href="' + escHtml(c.invoice_url) + '" target="_blank" style="color:#0ea5e9;font-size:11px;">(aktuální ↗)</a>' : '') + '</label><input type="file" id="tc-invoice-file" accept="image/*,application/pdf"></div>' +
+          // Protokol / dodací list — analogicky jako faktura. Pokud už existuje, ukážeme odkaz na aktuální.
+          '<div class="form-group"><label>Protokol / dodací list (PDF/obrázek)' + (c.protocol_url ? ' <a href="' + escHtml(c.protocol_url) + '" target="_blank" style="color:#0ea5e9;font-size:11px;">(aktuální ↗)</a>' : '') + '</label><input type="file" id="tc-protocol-file" accept="image/*,application/pdf"></div>' +
           '<div class="form-group full"><label>Poznámka</label><textarea id="tc-note">' + escHtml(c.note || '') + '</textarea></div>' +
         '</div>' +
         '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;">' +
@@ -2086,6 +2089,15 @@
         data.invoice_file_data = await fileToBase64(file);
         data.invoice_file_name = file.name;
         data.invoice_mime = file.type || null;
+      }
+      // Protokol / dodací list — totéž jako faktura, jen do jiných polí.
+      const protocolEl = document.getElementById('tc-protocol-file');
+      if (protocolEl && protocolEl.files && protocolEl.files[0]) {
+        const file = protocolEl.files[0];
+        if (file.size > 20 * 1024 * 1024) { alert('Protokol je větší než 20 MB.'); return; }
+        data.protocol_file_data = await fileToBase64(file);
+        data.protocol_file_name = file.name;
+        data.protocol_mime = file.type || null;
       }
       try {
         const url = changeId ? '/api/fleet/tire-changes/' + changeId : '/api/fleet/vehicles/' + vehicleId + '/tire-changes';
