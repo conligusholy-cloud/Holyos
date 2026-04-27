@@ -65,6 +65,25 @@ function getPlanningTools() {
       },
     },
     {
+      name: 'update_batch',
+      description: 'Upraví dávku — priorita, planned_start/end, poznámka, variant_key, batch_type, parent_batch_id. Status NELZE měnit (na to jsou release/pause/resume/cancel).',
+      input_schema: {
+        type: 'object',
+        properties: {
+          batch_id: { type: 'number' },
+          priority: { type: 'number', description: 'Nižší = přednost' },
+          planned_start: { type: 'string', description: 'YYYY-MM-DD' },
+          planned_end: { type: 'string', description: 'YYYY-MM-DD' },
+          note: { type: 'string' },
+          variant_key: { type: 'string' },
+          batch_type: { type: 'string', enum: ['main', 'feeder', 'subassembly'] },
+          parent_batch_id: { type: 'number' },
+          bom_snapshot_id: { type: 'number' },
+        },
+        required: ['batch_id'],
+      },
+    },
+    {
       name: 'generate_operations',
       description: 'Vygeneruje BatchOperation pro existující dávku z ProductOperation produktu. Idempotentní.',
       input_schema: {
@@ -355,6 +374,39 @@ async function executePlanningTool(toolName, params, prisma) {
           skipped: opsResult.skipped,
           warning: opsResult.warning,
         } : null,
+      };
+    }
+
+    // ─── update_batch ────────────────────────────────────────────────────
+    case 'update_batch': {
+      const data = {};
+      if (params.priority != null) data.priority = parseInt(params.priority, 10);
+      if (params.planned_start !== undefined) data.planned_start = params.planned_start ? new Date(params.planned_start) : null;
+      if (params.planned_end !== undefined) data.planned_end = params.planned_end ? new Date(params.planned_end) : null;
+      if (params.note !== undefined) data.note = params.note || null;
+      if (params.variant_key !== undefined) data.variant_key = params.variant_key || null;
+      if (params.batch_type !== undefined) data.batch_type = params.batch_type;
+      if (params.parent_batch_id !== undefined) data.parent_batch_id = params.parent_batch_id || null;
+      if (params.bom_snapshot_id !== undefined) data.bom_snapshot_id = params.bom_snapshot_id || null;
+
+      if (Object.keys(data).length === 0) {
+        throw new Error('Nezadali jste žádné pole k aktualizaci');
+      }
+
+      const batch = await prisma.productionBatch.update({
+        where: { id: params.batch_id },
+        data,
+        include: { product: { select: { code: true, name: true } } },
+      });
+      return {
+        id: batch.id,
+        batch_number: batch.batch_number,
+        status: batch.status,
+        priority: batch.priority,
+        planned_start: batch.planned_start,
+        planned_end: batch.planned_end,
+        product: batch.product ? `${batch.product.code} ${batch.product.name}` : null,
+        updated_fields: Object.keys(data),
       };
     }
 
