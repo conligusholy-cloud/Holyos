@@ -294,6 +294,7 @@
         if (opCount === 0) buttons.push(`<button class="btn btn-sm btn-secondary" data-action="gen-ops" data-id="${v.id}" title="Vygenerovat BatchOperation z postupu produktu">⚙️ Generuj op.</button>`);
         buttons.push(`<button class="btn btn-sm btn-secondary" data-action="mrp" data-id="${v.id}" title="MRP — kontrola materiálu pro tuto dávku">📊 MRP</button>`);
         buttons.push(`<button class="btn btn-sm btn-secondary" data-action="pre-pick" data-id="${v.id}" title="Pre-pick — návrh transferů materiálu na pracoviště">🚚 Pre-pick</button>`);
+        if (opCount > 0 && v.status !== 'done' && v.status !== 'cancelled') buttons.push(`<button class="btn btn-sm btn-secondary" data-action="schedule" data-id="${v.id}" title="Naplánovat časy operací (planned_start/end)">📅 Naplánuj</button>`);
         if (v.status === 'planned') buttons.push(`<button class="btn btn-sm btn-success" data-action="release" data-id="${v.id}" title="Vydat do výroby">▶ Vydat</button>`);
         if (v.status === 'released' || v.status === 'in_progress') buttons.push(`<button class="btn btn-sm btn-secondary" data-action="pause" data-id="${v.id}" title="Pozastavit">⏸️</button>`);
         if (v.status === 'paused') buttons.push(`<button class="btn btn-sm btn-success" data-action="resume" data-id="${v.id}" title="Obnovit">▶ Obnovit</button>`);
@@ -460,6 +461,12 @@
         renderPrePickModal(pp);
         btn.disabled = false;
         return;
+      } else if (action === 'schedule') {
+        const r = await fetch(`/api/planning/batches/${id}/schedule`, { method: 'POST', headers: authHeaders() });
+        if (!r.ok) throw new Error((await r.json()).error || 'HTTP ' + r.status);
+        const result = await r.json();
+        if (result.warning) alert('⚠️ ' + result.warning);
+        else alert(`📅 Naplánováno ${result.operations_scheduled} operací\nZačátek: ${new Date(result.plan_start).toLocaleString('cs-CZ')}\nKonec: ${new Date(result.plan_end).toLocaleString('cs-CZ')}\nCelkem ${result.total_minutes} minut`);
       }
       await loadAll();
     } catch (err) {

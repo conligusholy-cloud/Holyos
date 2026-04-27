@@ -17,6 +17,7 @@ const { computeMrpForBatch } = require('../../services/planning/mrp');
 const { computePrePickForBatch } = require('../../services/planning/pre-pick');
 const { computePurchaseReport } = require('../../services/planning/purchase-report');
 const { checkAndCloseBatch } = require('../../services/planning/batch-state');
+const { scheduleBatch } = require('../../services/planning/scheduler');
 
 function getPlanningTools() {
   return [
@@ -182,6 +183,11 @@ function getPlanningTools() {
     {
       name: 'check_batch_completion',
       description: 'Auto-close: pokud všechny BatchOperation dávky jsou done/cancelled, přepne batch na done (nebo cancelled) a nastaví actual_end. Idempotentní.',
+      input_schema: { type: 'object', properties: { batch_id: { type: 'number' } }, required: ['batch_id'] },
+    },
+    {
+      name: 'schedule_batch',
+      description: 'Naive sekvenční scheduling — nastaví planned_start/planned_end pro každou BatchOperation. V1 ignoruje shift hours a queue na pracovišti (jen sériově od batch.planned_start nebo NOW).',
       input_schema: { type: 'object', properties: { batch_id: { type: 'number' } }, required: ['batch_id'] },
     },
     {
@@ -620,6 +626,12 @@ async function executePlanningTool(toolName, params, prisma) {
     // ─── check_batch_completion ──────────────────────────────────────────
     case 'check_batch_completion': {
       const result = await checkAndCloseBatch(params.batch_id);
+      return result;
+    }
+
+    // ─── schedule_batch ──────────────────────────────────────────────────
+    case 'schedule_batch': {
+      const result = await scheduleBatch(params.batch_id);
       return result;
     }
 
