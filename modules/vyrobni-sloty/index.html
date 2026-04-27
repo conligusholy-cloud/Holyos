@@ -450,7 +450,13 @@
               var deliveryDate = new Date(matched.end_date).toLocaleDateString('cs-CZ');
               // Výrobní číslo kiosku — přichází z relace order_item (doplněno v /api/slots)
               var serial = a.order_item && a.order_item.serial_number ? a.order_item.serial_number : '';
-              html += '<div class="tl-slot-inner occupied">';
+              // F5.1+ health badge — vytížení slotu
+              var hc = slotHealthClient(matched);
+              html += '<div class="tl-slot-inner occupied" style="position:relative;">';
+              if (hc) {
+                html += '<div class="slot-health-bar" title="Vytížení ' + hc.label + '" style="position:absolute; top:0; left:0; right:0; height:3px; background:' + hc.color + '; border-radius:6px 6px 0 0;"></div>';
+                html += '<div class="slot-health-pct" style="position:absolute; top:4px; right:6px; font-size:10px; font-weight:700; color:' + hc.color + ';">' + hc.label + '</div>';
+              }
               html += '<div class="slot-customer">' + esc(a.customer_name || '—') + '</div>';
               html += '<div class="slot-title">' + esc(a.product_name) + '</div>';
               if (serial) {
@@ -510,6 +516,34 @@
         }
       });
       return found;
+    }
+
+    // F5.1+ — client-side health score (zrcadlí backend logiku z routes/slots.routes.js)
+    function slotHealthClient(slot) {
+      if (!slot || !slot.assignments) return null;
+      var startD = new Date(slot.start_date);
+      var endD = new Date(slot.end_date);
+      var workingDays = 0;
+      for (var d = new Date(startD); d <= endD; d.setDate(d.getDate() + 1)) {
+        var dow = d.getDay();
+        if (dow >= 1 && dow <= 5) workingDays++;
+      }
+      if (workingDays === 0) workingDays = 1;
+      var capacityPerDay = Number(slot.capacity_hours) || 0;
+      var capacityTotal = capacityPerDay * workingDays;
+      var totalEst = 0;
+      slot.assignments.forEach(function(a) {
+        if (a.status === 'cancelled') return;
+        totalEst += Number(a.estimated_hours || 0);
+      });
+      var pct = capacityTotal > 0 ? (totalEst / capacityTotal * 100) : 0;
+      var color, label;
+      if (capacityTotal === 0) { color = '#666'; label = '?'; }
+      else if (pct < 70)   { color = '#22c55e'; label = pct.toFixed(0) + '%'; }
+      else if (pct < 90)   { color = '#14b8a6'; label = pct.toFixed(0) + '%'; }
+      else if (pct <= 100) { color = '#f59e0b'; label = pct.toFixed(0) + '%'; }
+      else                 { color = '#ef4444'; label = pct.toFixed(0) + '%'; }
+      return { pct: pct, color: color, label: label };
     }
 
     function scrollToToday() {
