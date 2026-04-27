@@ -600,6 +600,11 @@
     const btnLabel = isInProgress ? '✓ Hotovo' : '▶ Začít';
     const btnClass = isInProgress ? 'ws-btn-done' : 'ws-btn-start';
 
+    // Tlačítko "Problém" jen pro rozpracovaný úkol (operace, kterou pracovník drží)
+    const problemBtn = isInProgress
+      ? `<button class="ws-btn" data-action="problem" data-id="${t.id}" style="background:rgba(239,68,68,0.15); color:#ef4444; border:1px solid rgba(239,68,68,0.4);">📝 Problém</button>`
+      : '';
+
     return `
       <div class="ws-task-card ${isInProgress ? 'in-progress' : ''}">
         <div class="ws-task-info">
@@ -612,6 +617,7 @@
           </div>
         </div>
         <div class="ws-task-actions">
+          ${problemBtn}
           <button class="ws-btn ${btnClass}" data-action="${action}" data-id="${t.id}">${btnLabel}</button>
         </div>
       </div>`;
@@ -622,6 +628,35 @@
     const action = btn.dataset.action;
     const id = parseInt(btn.dataset.id, 10);
     if (!id || isProcessing) return;
+
+    // "Problém" — vyžaduje text poznámky a posílá se na samostatný endpoint
+    if (action === 'problem') {
+      const note = window.prompt('Popiš problém s úkolem (např. „chybí materiál NA0218", „špatný výkres"):', '');
+      if (!note || !note.trim()) return;
+      btn.disabled = true;
+      isProcessing = true;
+      try {
+        const r = await fetch(`/api/planning/batch-operations/${id}/problem`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ person_id: currentPerson.id, note: note.trim() }),
+        });
+        if (!r.ok) {
+          const err = await r.json().catch(() => ({}));
+          showToast(err.error || `Chyba (HTTP ${r.status})`, 'error');
+        } else {
+          showToast('Problém nahlášen — úkol odblokuje foreman', 'success');
+        }
+        await refreshTasks();
+      } catch (err) {
+        showToast('Chyba spojení', 'error');
+      } finally {
+        isProcessing = false;
+        btn.disabled = false;
+      }
+      return;
+    }
 
     btn.disabled = true;
     isProcessing = true;
