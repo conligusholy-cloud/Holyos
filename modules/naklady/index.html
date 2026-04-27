@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <title>Náklady | HOLYOS</title>
+  <link rel="icon" href="../../logo-holyos-icon.svg">
+  <base href="../../">
+  <link rel="stylesheet" href="css/dashboard.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    .data-table { width: 100%; border-collapse: separate; border-spacing: 0; }
+    .data-table thead { position: sticky; top: 0; z-index: 1; }
+    .data-table th {
+      background: var(--surface2); padding: 10px 14px; text-align: left;
+      font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;
+      color: var(--text2); border-bottom: 1px solid var(--border);
+    }
+    .data-table td {
+      padding: 10px 14px; font-size: 13px;
+      border-bottom: 1px solid rgba(255,255,255,0.04); vertical-align: middle;
+    }
+    .data-table tr.cc-row { cursor: pointer; }
+    .data-table tr.cc-row:hover td { background: rgba(239,68,68,0.06); }
+
+    .amount-cell { text-align: right; font-family: 'Consolas', monospace; font-variant-numeric: tabular-nums; }
+    .cost-positive { color: #ef4444; font-weight: 600; }
+
+    .type-pill {
+      display: inline-block; padding: 2px 10px; border-radius: 10px; font-size: 0.78em;
+      background: rgba(100,116,139,0.18); color: #94a3b8; white-space: nowrap;
+    }
+    .type-pill.vehicle { background: rgba(14,165,233,0.15); color: #0ea5e9; }
+    .type-pill.person { background: rgba(168,85,247,0.15); color: #a855f7; }
+    .type-pill.machine { background: rgba(249,115,22,0.15); color: #f97316; }
+    .type-pill.project { background: rgba(34,197,94,0.15); color: #22c55e; }
+    .type-pill.department { background: rgba(99,102,241,0.15); color: #6366f1; }
+    .type-pill.general { background: rgba(100,116,139,0.18); color: #94a3b8; }
+
+    .tab-nav { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 18px; }
+    .tab-btn {
+      background: transparent; border: none; color: var(--text2); padding: 10px 18px;
+      font-size: 14px; cursor: pointer; border-bottom: 2px solid transparent;
+    }
+    .tab-btn:hover { color: var(--text); }
+    .tab-btn.active { color: #ef4444; border-bottom-color: #ef4444; }
+    .tab-pane { display: none; }
+    .tab-pane.active { display: block; }
+
+    .filters {
+      display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
+      margin-bottom: 16px;
+    }
+    .filters label { font-size: 12px; color: var(--text2); }
+    .filters input[type="date"], .filters select {
+      background: var(--surface2); color: var(--text); border: 1px solid var(--border);
+      border-radius: 6px; padding: 6px 10px; font-size: 13px;
+    }
+
+    .kpi-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-bottom: 24px; }
+    .kpi-tile {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px;
+    }
+    .kpi-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text2); }
+    .kpi-value { font-size: 24px; font-weight: 700; margin-top: 4px; font-variant-numeric: tabular-nums; }
+    .kpi-sub { font-size: 12px; color: var(--text2); margin-top: 2px; }
+
+    .empty-hint { text-align: center; padding: 40px; color: var(--text2); }
+
+    .modal-backdrop {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .modal {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+      padding: 24px; min-width: 720px; max-width: 1000px; width: 90%; max-height: 90vh; overflow: auto;
+    }
+    .modal h3 { margin-top: 0; }
+    .form-row { display: grid; grid-template-columns: 140px 1fr; gap: 12px; margin-bottom: 12px; align-items: center; }
+    .form-row label { color: var(--text2); font-size: 13px; }
+    .form-row input, .form-row select, .form-row textarea {
+      background: var(--surface2); color: var(--text); border: 1px solid var(--border);
+      border-radius: 6px; padding: 8px 10px; font-size: 13px; width: 100%; box-sizing: border-box;
+    }
+    .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 18px; }
+
+    .chart-wrapper { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
+    .chart-flex { display: grid; grid-template-columns: minmax(0, 2fr) 1fr; gap: 24px; align-items: start; }
+    @media (max-width: 1100px) { .chart-flex { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <aside id="sidebar"></aside>
+
+  <div class="main-wrapper">
+    <div class="main-header">
+      <h1>📊 Náklady</h1>
+      <p>Reporty podle CostCenter — auto, osoba, stroj, projekt, oddělení</p>
+    </div>
+
+    <div class="main-content">
+
+      <div class="tab-nav">
+        <button type="button" class="tab-btn active" onclick="switchTab('overview')">📋 Přehled</button>
+        <button type="button" class="tab-btn" onclick="switchTab('by-type')">🥧 Podle typu</button>
+        <button type="button" class="tab-btn" onclick="switchTab('cost-centers')">⚙️ Cost Centers</button>
+      </div>
+
+      <!-- TAB: PŘEHLED -->
+      <div class="tab-pane active" id="tab-overview">
+        <div class="filters">
+          <label>Od:</label>
+          <input type="date" id="o-from">
+          <label>Do:</label>
+          <input type="date" id="o-to">
+          <label>Typ:</label>
+          <select id="o-type">
+            <option value="">Vše</option>
+            <option value="vehicle">Auto</option>
+            <option value="person">Osoba</option>
+            <option value="machine">Stroj</option>
+            <option value="project">Projekt</option>
+            <option value="department">Oddělení</option>
+            <option value="general">Obecné</option>
+          </select>
+          <button class="btn btn-primary btn-sm" onclick="loadOverview()">🔄 Aktualizovat</button>
+        </div>
+
+        <div class="kpi-row">
+          <div class="kpi-tile">
+            <div class="kpi-label">Celkové náklady</div>
+            <div class="kpi-value cost-positive" id="kpi-total">—</div>
+            <div class="kpi-sub" id="kpi-total-sub">—</div>
+          </div>
+          <div class="kpi-tile">
+            <div class="kpi-label">Z faktur (AP)</div>
+            <div class="kpi-value" id="kpi-invoices">—</div>
+            <div class="kpi-sub">subtotal řádků InvoiceItem</div>
+          </div>
+          <div class="kpi-tile">
+            <div class="kpi-label">Z pokladny (výdaje)</div>
+            <div class="kpi-value" id="kpi-cash">—</div>
+            <div class="kpi-sub">CashMovement out (mimo úhrad faktur)</div>
+          </div>
+        </div>
+
+        <table class="data-table" id="overview-table">
+          <thead>
+            <tr>
+              <th>Cost center</th>
+              <th>Typ</th>
+              <th>Vazba</th>
+              <th class="amount-cell">Faktury</th>
+              <th class="amount-cell">Pokladna</th>
+              <th class="amount-cell">Celkem</th>
+            </tr>
+          </thead>
+          <tbody><tr><td colspan="6" class="empty-hint">Načítání…</td></tr></tbody>
+        </table>
+      </div>
+
+      <!-- TAB: PODLE TYPU -->
+      <div class="tab-pane" id="tab-by-type">
+        <div class="filters">
+          <label>Od:</label>
+          <input type="date" id="t-from">
+          <label>Do:</label>
+          <input type="date" id="t-to">
+          <button class="btn btn-primary btn-sm" onclick="loadByType()">🔄 Aktualizovat</button>
+        </div>
+        <div class="chart-wrapper chart-flex">
+          <div style="position: relative; min-height: 360px;">
+            <canvas id="byTypeChart"></canvas>
+          </div>
+          <table class="data-table" id="by-type-table">
+            <thead><tr><th>Typ</th><th class="amount-cell">Náklady</th><th class="amount-cell">%</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- TAB: COST CENTERS CRUD -->
+      <div class="tab-pane" id="tab-cost-centers">
+        <div style="display: flex; justify-content: space-between; margin-bottom: 16px;">
+          <div></div>
+          <button class="btn btn-primary" onclick="openCcModal()">+ Nový cost center</button>
+        </div>
+        <table class="data-table" id="cc-table">
+          <thead>
+            <tr>
+              <th>Code</th>
+              <th>Název</th>
+              <th>Typ</th>
+              <th>Vazba</th>
+              <th>Aktivní</th>
+              <th>Použito</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody><tr><td colspan="7" class="empty-hint">Načítání…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div id="modal-root"></div>
+
+  <script>
+    var s = document.createElement('script');
+    s.src = '/js/sidebar.js?v=' + Date.now();
+    s.onload = function() { renderSidebar('naklady'); };
+    document.head.appendChild(s);
+    var tb = document.createElement('script');
+    tb.src = '/js/top-bar.js?v=' + Date.now();
+    document.head.appendChild(tb);
+  </script>
+
+  <script>
+  (function() {
+    const token = sessionStorage.getItem('token') || '';
+    function authHeaders() {
+      const h = { 'Content-Type': 'application/json' };
+      if (token) h['Authorization'] = 'Bearer ' + token;
+      return h;
+    }
+    async function api(method, path, body) {
+      const opts = { method, credentials: 'include', headers: authHeaders() };
+      if (body !== undefined) opts.body = JSON.stringify(body);
+      const res = await fetch(path, opts);
+      const ct = res.headers.get('content-type') || '';
+      const data = ct.includes('json') ? await res.json().catch(() => null) : null;
+      return { status: res.status, data };
+    }
+
+    function fmtAmount(n) {
+      if (n === null || n === undefined) return '—';
+      return Number(n).toLocaleString('cs-CZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+    function fmtDate(d) {
+      if (!d) return '—';
+      const x = new Date(d);
+      return x.getDate() + '. ' + (x.getMonth() + 1) + '. ' + x.getFullYear();
+    }
+    function escapeHtml(s) {
+      if (s === null || s === undefined) return '';
+      return String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    }
+
+    let isSuper = false;
+    api('GET', '/api/accounting/whoami').then(r => {
+      if (r.status === 200) isSuper = !!r.data?.isSuperAdmin;
+    });
+
+    // Default date range: od 1. 1. letošního roku do dneška
+    function setDefaultDates() {
+      const today = new Date();
+      const yearStart = new Date(today.getFullYear(), 0, 1);
+      const fmt = (d) => d.toISOString().slice(0, 10);
+      ['o-from', 't-from'].forEach(id => { const el = document.getElementById(id); if (el && !el.value) el.value = fmt(yearStart); });
+      ['o-to', 't-to'].forEach(id => { const el = document.getElementById(id); if (el && !el.value) el.value = fmt(today); });
+    }
+
+    window.switchTab = function(name) {
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+      const map = { 'overview': 0, 'by-type': 1, 'cost-centers': 2 };
+      document.querySelectorAll('.tab-btn')[map[name]].classList.add('active');
+      document.getElementById('tab-' + name).classList.add('active');
+      if (name === 'overview') loadOverview();
+      if (name === 'by-type') loadByType();
+      if (name === 'cost-centers') loadCostCenters();
+    };
+
+    // ─── TAB PŘEHLED ───────────────────────────────────────────────────
+    window.loadOverview = async function() {
+      const params = new URLSearchParams();
+      const f = document.getElementById('o-from').value;
+      const t = document.getElementById('o-to').value;
+      const ty = document.getElementById('o-type').value;
+      if (f) params.set('from', f);
+      if (t) params.set('to', t);
+      if (ty) params.set('type', ty);
+      const r = await api('GET', '/api/reports/cost-centers/summary?' + params.toString());
+      const tbody = document.querySelector('#overview-table tbody');
+      if (r.status !== 200) { tbody.innerHTML = '<tr><td colspan="6" class="empty-hint">Chyba: ' + r.status + '</td></tr>'; return; }
+      const d = r.data;
+      document.getElementById('kpi-total').textContent = fmtAmount(d.totals.total) + ' Kč';
+      document.getElementById('kpi-total-sub').textContent = d.rows.length + ' cost centers';
+      document.getElementById('kpi-invoices').textContent = fmtAmount(d.totals.invoices) + ' Kč';
+      document.getElementById('kpi-cash').textContent = fmtAmount(d.totals.cash) + ' Kč';
+      if (!d.rows.length) {
+        tbody.innerHTML = '<tr><td colspan="6" class="empty-hint">Žádné náklady ve zvoleném období.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = d.rows.map(row => `
+        <tr class="cc-row" onclick="openDrillDown(${row.id}, '${escapeHtml(row.code)}', '${escapeHtml(row.name)}')">
+          <td><b>${escapeHtml(row.code)}</b><br><small style="color:var(--text2);">${escapeHtml(row.name)}</small></td>
+          <td><span class="type-pill ${row.type}">${escapeHtml(row.type_label)}</span></td>
+          <td>${escapeHtml(row.linked || '—')}</td>
+          <td class="amount-cell">${fmtAmount(row.invoices_total)}<br><small style="color:var(--text2);">${row.invoices_count} pol.</small></td>
+          <td class="amount-cell">${fmtAmount(row.cash_total)}<br><small style="color:var(--text2);">${row.cash_count} poh.</small></td>
+          <td class="amount-cell cost-positive">${fmtAmount(row.total)} Kč</td>
+        </tr>
+      `).join('');
+    };
+
+    // ─── DRILL-DOWN modal s časovou řadou + detailem ────────────────────
+    let drillChart = null;
+    window.openDrillDown = async function(id, code, name) {
+      const params = new URLSearchParams();
+      const f = document.getElementById('o-from').value;
+      const t = document.getElementById('o-to').value;
+      if (f) params.set('from', f);
+      if (t) params.set('to', t);
+      const [d, ts] = await Promise.all([
+        api('GET', `/api/reports/cost-centers/${id}/detail?` + params.toString()),
+        api('GET', `/api/reports/cost-centers/${id}/timeseries?months=12`),
+      ]);
+      if (d.status !== 200) return alert('Chyba: ' + d.status);
+
+      const detail = d.data;
+      const items = detail.invoice_items || [];
+      const moves = detail.cash_movements || [];
+      const tsRows = ts.data?.months || [];
+
+      const itemsHtml = items.length
+        ? items.map(it => `
+          <tr>
+            <td>${fmtDate(it.invoice?.date_issued)}</td>
+            <td><b>${escapeHtml(it.invoice?.invoice_number || '—')}</b></td>
+            <td>${escapeHtml(it.invoice?.company?.name || '—')}</td>
+            <td>${escapeHtml(it.description)}</td>
+            <td class="amount-cell">${fmtAmount(it.total)} ${escapeHtml(it.invoice?.currency || '')}</td>
+          </tr>
+        `).join('')
+        : '<tr><td colspan="5" class="empty-hint">Žádné položky faktur.</td></tr>';
+
+      const movesHtml = moves.length
+        ? moves.map(m => `
+          <tr>
+            <td>${fmtDate(m.date)}</td>
+            <td><b>${escapeHtml(m.document_number)}</b></td>
+            <td>${escapeHtml(m.cash_register?.name || '—')}</td>
+            <td>${escapeHtml(m.description)}</td>
+            <td class="amount-cell">${fmtAmount(m.amount)} ${escapeHtml(m.cash_register?.currency || '')}</td>
+          </tr>
+        `).join('')
+        : '<tr><td colspan="5" class="empty-hint">Žádné pokladní pohyby.</td></tr>';
+
+      document.getElementById('modal-root').innerHTML = `
+        <div class="modal-backdrop" onclick="if(event.target===this)closeModal()">
+          <div class="modal" style="min-width:880px;">
+            <h3>📌 ${escapeHtml(code)} — ${escapeHtml(name)}</h3>
+
+            <div class="kpi-row" style="margin-bottom:16px;">
+              <div class="kpi-tile">
+                <div class="kpi-label">Faktury (AP)</div>
+                <div class="kpi-value">${fmtAmount(detail.summary.invoices_total)} Kč</div>
+              </div>
+              <div class="kpi-tile">
+                <div class="kpi-label">Pokladna</div>
+                <div class="kpi-value">${fmtAmount(detail.summary.cash_total)} Kč</div>
+              </div>
+              <div class="kpi-tile">
+                <div class="kpi-label">Celkem</div>
+                <div class="kpi-value cost-positive">${fmtAmount(detail.summary.invoices_total + detail.summary.cash_total)} Kč</div>
+              </div>
+            </div>
+
+            <h4>📈 Měsíční trend (12 měsíců)</h4>
+            <div style="position:relative; height:240px; margin-bottom:24px;">
+              <canvas id="drillChart"></canvas>
+            </div>
+
+            <h4>📄 Položky faktur (AP)</h4>
+            <div style="max-height:240px; overflow:auto; border:1px solid var(--border); border-radius:8px; margin-bottom:18px;">
+              <table class="data-table">
+                <thead><tr><th>Datum</th><th>Faktura</th><th>Dodavatel</th><th>Popis</th><th class="amount-cell">Částka</th></tr></thead>
+                <tbody>${itemsHtml}</tbody>
+              </table>
+            </div>
+
+            <h4>💵 Pokladní výdaje</h4>
+            <div style="max-height:240px; overflow:auto; border:1px solid var(--border); border-radius:8px;">
+              <table class="data-table">
+                <thead><tr><th>Datum</th><th>Doklad</th><th>Pokladna</th><th>Popis</th><th class="amount-cell">Částka</th></tr></thead>
+                <tbody>${movesHtml}</tbody>
+              </table>
+            </div>
+
+            <div class="modal-actions">
+              <button class="btn btn-primary" onclick="closeModal()">Zavřít</button>
+            </div>
+          </div>
+        </div>
+      `;
+
+      // Vykreslit graf
+      const ctx = document.getElementById('drillChart').getContext('2d');
+      if (drillChart) drillChart.destroy();
+      drillChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: tsRows.map(m => m.label),
+          datasets: [
+            { label: 'Faktury', data: tsRows.map(m => m.invoices), backgroundColor: '#0ea5e9' },
+            { label: 'Pokladna', data: tsRows.map(m => m.cash), backgroundColor: '#10b981' },
+          ],
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } },
+          plugins: { legend: { position: 'bottom' } },
+        },
+      });
+    };
+
+    window.closeModal = function() {
+      document.getElementById('modal-root').innerHTML = '';
+      if (drillChart) { drillChart.destroy(); drillChart = null; }
+      if (byTypeChart) { /* keep, je v jiném panelu */ }
+    };
+
+    // ─── TAB PODLE TYPU ────────────────────────────────────────────────
+    let byTypeChart = null;
+    window.loadByType = async function() {
+      const params = new URLSearchParams();
+      const f = document.getElementById('t-from').value;
+      const t = document.getElementById('t-to').value;
+      if (f) params.set('from', f);
+      if (t) params.set('to', t);
+      const r = await api('GET', '/api/reports/cost-centers/by-type?' + params.toString());
+      const tbody = document.querySelector('#by-type-table tbody');
+      if (r.status !== 200) { tbody.innerHTML = '<tr><td colspan="3" class="empty-hint">Chyba: ' + r.status + '</td></tr>'; return; }
+      const d = r.data;
+      if (!d.rows.length) {
+        tbody.innerHTML = '<tr><td colspan="3" class="empty-hint">Žádné náklady ve zvoleném období.</td></tr>';
+        return;
+      }
+      const totalSum = d.totals.total || 1;
+      tbody.innerHTML = d.rows.map(row => `
+        <tr>
+          <td><span class="type-pill ${row.type}">${escapeHtml(row.type_label)}</span></td>
+          <td class="amount-cell">${fmtAmount(row.total)} Kč</td>
+          <td class="amount-cell">${((row.total / totalSum) * 100).toFixed(1)} %</td>
+        </tr>
+      `).join('');
+
+      const colors = {
+        vehicle: '#0ea5e9', person: '#a855f7', machine: '#f97316',
+        project: '#22c55e', department: '#6366f1', general: '#94a3b8',
+      };
+      const ctx = document.getElementById('byTypeChart').getContext('2d');
+      if (byTypeChart) byTypeChart.destroy();
+      byTypeChart = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+          labels: d.rows.map(r => r.type_label),
+          datasets: [{
+            data: d.rows.map(r => r.total),
+            backgroundColor: d.rows.map(r => colors[r.type] || '#94a3b8'),
+            borderColor: 'transparent',
+          }],
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: {
+            legend: { position: 'bottom' },
+            tooltip: {
+              callbacks: {
+                label: (ctx) => `${ctx.label}: ${fmtAmount(ctx.parsed)} Kč (${((ctx.parsed/totalSum)*100).toFixed(1)} %)`,
+              },
+            },
+          },
+        },
+      });
+    };
+
+    // ─── TAB COST CENTERS CRUD ──────────────────────────────────────────
+    window.loadCostCenters = async function() {
+      const r = await api('GET', '/api/reports/cost-centers');
+      const tbody = document.querySelector('#cc-table tbody');
+      if (r.status !== 200) { tbody.innerHTML = '<tr><td colspan="7" class="empty-hint">Chyba: ' + r.status + '</td></tr>'; return; }
+      if (!r.data.length) {
+        tbody.innerHTML = '<tr><td colspan="7" class="empty-hint">Zatím žádné cost centers.</td></tr>';
+        return;
+      }
+      const TYPE_LABELS = { vehicle: 'Auto', person: 'Osoba', machine: 'Stroj', project: 'Projekt', department: 'Oddělení', general: 'Obecné' };
+      tbody.innerHTML = r.data.map(cc => {
+        const linked = cc.vehicle ? `${cc.vehicle.license_plate} ${cc.vehicle.brand || ''} ${cc.vehicle.model || ''}`.trim()
+                     : cc.person ? `${cc.person.first_name || ''} ${cc.person.last_name || ''}`.trim()
+                     : cc.department ? cc.department.name
+                     : '—';
+        const usage = cc._count.invoice_items + cc._count.cash_movements;
+        const actions = isSuper ? `
+          <button class="btn btn-secondary btn-sm" onclick="editCc(${cc.id})">✏️</button>
+          <button class="btn btn-secondary btn-sm" onclick="deleteCc(${cc.id}, '${escapeHtml(cc.code)}')" style="color:#ef4444;">🗑️</button>
+        ` : '';
+        return `
+          <tr>
+            <td><b>${escapeHtml(cc.code)}</b></td>
+            <td>${escapeHtml(cc.name)}</td>
+            <td><span class="type-pill ${cc.type}">${TYPE_LABELS[cc.type] || cc.type}</span></td>
+            <td>${escapeHtml(linked)}</td>
+            <td>${cc.active ? '✓' : '✗'}</td>
+            <td>${usage}</td>
+            <td>${actions}</td>
+          </tr>
+        `;
+      }).join('');
+    };
+
+    window.openCcModal = function(existing) {
+      const cc = existing || { code: '', name: '', type: 'general', note: '', active: true };
+      const isEdit = !!existing;
+      document.getElementById('modal-root').innerHTML = `
+        <div class="modal-backdrop" onclick="if(event.target===this)closeModal()">
+          <div class="modal" style="min-width:520px;">
+            <h3>${isEdit ? '✏️ Upravit cost center' : '+ Nový cost center'}</h3>
+            <div class="form-row">
+              <label>Code</label>
+              <input type="text" id="cc-code" value="${escapeHtml(cc.code)}" ${isEdit ? 'disabled' : ''} placeholder="AUTO-001">
+            </div>
+            <div class="form-row">
+              <label>Název</label>
+              <input type="text" id="cc-name" value="${escapeHtml(cc.name)}" placeholder="např. Felicia 1Z2 3456">
+            </div>
+            <div class="form-row">
+              <label>Typ</label>
+              <select id="cc-type">
+                <option value="vehicle" ${cc.type==='vehicle'?'selected':''}>Auto</option>
+                <option value="person" ${cc.type==='person'?'selected':''}>Osoba</option>
+                <option value="machine" ${cc.type==='machine'?'selected':''}>Stroj</option>
+                <option value="project" ${cc.type==='project'?'selected':''}>Projekt</option>
+                <option value="department" ${cc.type==='department'?'selected':''}>Oddělení</option>
+                <option value="general" ${cc.type==='general'?'selected':''}>Obecné</option>
+              </select>
+            </div>
+            <div class="form-row">
+              <label>Vehicle ID (volit.)</label>
+              <input type="number" id="cc-vehicle" value="${cc.vehicle_id || ''}" placeholder="jen pro typ Auto">
+            </div>
+            <div class="form-row">
+              <label>Person ID (volit.)</label>
+              <input type="number" id="cc-person" value="${cc.person_id || ''}" placeholder="jen pro typ Osoba">
+            </div>
+            <div class="form-row">
+              <label>Department ID (volit.)</label>
+              <input type="number" id="cc-department" value="${cc.department_id || ''}" placeholder="jen pro typ Oddělení">
+            </div>
+            <div class="form-row">
+              <label>Aktivní</label>
+              <input type="checkbox" id="cc-active" ${cc.active ? 'checked' : ''}>
+            </div>
+            <div class="form-row">
+              <label>Poznámka</label>
+              <textarea id="cc-note" rows="2">${escapeHtml(cc.note || '')}</textarea>
+            </div>
+            <div class="modal-actions">
+              <button class="btn btn-secondary" onclick="closeModal()">Zrušit</button>
+              <button class="btn btn-primary" onclick="submitCc(${isEdit ? cc.id : 'null'})">${isEdit ? 'Uložit' : 'Vytvořit'}</button>
+            </div>
+          </div>
+        </div>
+      `;
+    };
+
+    window.editCc = async function(id) {
+      const r = await api('GET', '/api/reports/cost-centers');
+      if (r.status !== 200) return alert('Chyba: ' + r.status);
+      const cc = r.data.find(x => x.id === id);
+      if (cc) openCcModal(cc);
+    };
+
+    window.submitCc = async function(id) {
+      const data = {
+        code: document.getElementById('cc-code').value.trim(),
+        name: document.getElementById('cc-name').value.trim(),
+        type: document.getElementById('cc-type').value,
+        vehicle_id: parseInt(document.getElementById('cc-vehicle').value) || null,
+        person_id: parseInt(document.getElementById('cc-person').value) || null,
+        department_id: parseInt(document.getElementById('cc-department').value) || null,
+        active: document.getElementById('cc-active').checked,
+        note: document.getElementById('cc-note').value.trim() || null,
+      };
+      if (!data.name) return alert('Vyplň název.');
+      const r = id
+        ? await api('PUT', '/api/reports/cost-centers/' + id, data)
+        : await api('POST', '/api/reports/cost-centers', { ...data, code: data.code });
+      if (r.status >= 400) return alert('Chyba: ' + (r.data?.error || r.status));
+      closeModal();
+      loadCostCenters();
+    };
+
+    window.deleteCc = async function(id, code) {
+      if (!confirm(`Smazat cost center ${code}?`)) return;
+      const r = await api('DELETE', '/api/reports/cost-centers/' + id);
+      if (r.status !== 200) return alert('Chyba: ' + (r.data?.error || r.status));
+      loadCostCenters();
+    };
+
+    setDefaultDates();
+    loadOverview();
+  })();
+  </script>
+</body>
+</html>

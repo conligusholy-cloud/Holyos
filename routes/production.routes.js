@@ -956,10 +956,30 @@ router.delete('/config-options/:id', async (req, res, next) => {
 // POST /api/production/config-options/:optionId/materials — přidej materiálový vliv
 router.post('/config-options/:optionId/materials', async (req, res, next) => {
   try {
-    const optionId = parseInt(req.params.optionId);
-    const { material_id, quantity, unit } = req.body;
+    const optionId   = parseInt(req.params.optionId, 10);
+    const materialId = parseInt(req.body && req.body.material_id, 10);
+    const quantity   = parseFloat(req.body && req.body.quantity);
+    const unit       = (req.body && req.body.unit) ? String(req.body.unit).trim() : 'ks';
+
+    // Validace — bez toho letěly NaN hodnoty rovnou do Prisma a request padal
+    // s neuchopitelnou interní chybou (UI to schovalo a uživatel viděl jen,
+    // že se v sestavě nic neuloží).
+    if (Number.isNaN(optionId))   return res.status(400).json({ error: 'Neplatné ID volby konfigurace.' });
+    if (Number.isNaN(materialId)) return res.status(400).json({ error: 'Vyberte platný materiál ze seznamu.' });
+    if (Number.isNaN(quantity) || quantity <= 0) {
+      return res.status(400).json({ error: 'Množství musí být kladné číslo.' });
+    }
+
+    // Existuje volba i materiál? Přátelská 404 místo Prisma P2003.
+    const [option, material] = await Promise.all([
+      prisma.productConfigOption.findUnique({ where: { id: optionId }, select: { id: true } }),
+      prisma.material.findUnique({ where: { id: materialId }, select: { id: true } }),
+    ]);
+    if (!option)   return res.status(404).json({ error: 'Volba konfigurace nenalezena.' });
+    if (!material) return res.status(404).json({ error: 'Materiál nenalezen v katalogu.' });
+
     const item = await prisma.configOptionMaterial.create({
-      data: { option_id: optionId, material_id: parseInt(material_id), quantity: parseFloat(quantity), unit: unit || 'ks' },
+      data: { option_id: optionId, material_id: materialId, quantity, unit },
       include: { material: { select: { id: true, code: true, name: true, unit: true } } },
     });
     res.status(201).json(item);
@@ -969,9 +989,17 @@ router.post('/config-options/:optionId/materials', async (req, res, next) => {
 // DELETE /api/production/config-option-materials/:id
 router.delete('/config-option-materials/:id', async (req, res, next) => {
   try {
-    await prisma.configOptionMaterial.delete({ where: { id: parseInt(req.params.id) } });
+    const id = parseInt(req.params.id, 10);
+    if (Number.isNaN(id)) return res.status(400).json({ error: 'Neplatné ID položky BOM.' });
+    await prisma.configOptionMaterial.delete({ where: { id } });
     res.json({ ok: true });
-  } catch (err) { next(err); }
+  } catch (err) {
+    // Prisma P2025 = záznam k smazání neexistuje. Vracíme přátelskou 404.
+    if (err && err.code === 'P2025') {
+      return res.status(404).json({ error: 'Položka BOM už byla smazána nebo neexistuje.' });
+    }
+    next(err);
+  }
 });
 
 // POST /api/production/config-options/:optionId/operations — přidej vliv na operaci

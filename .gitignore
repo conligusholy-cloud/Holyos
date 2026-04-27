@@ -34,3 +34,16 @@ docs/
 
 # Lokalni zalohy DB (z backup-sklad2.js apod.)
 backups/
+
+# APK build output (Sklad PWA / TWA)
+*.apk
+*.idsig
+uber-apk-signer.jar
+
+# Bankovni KPC vystupy generovane do rootu (test soubory)
+PB-*.kpc
+
+# Rozpracovane docasne soubory
+tmp/
+*.log
+
