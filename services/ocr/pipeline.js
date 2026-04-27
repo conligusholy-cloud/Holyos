@@ -21,7 +21,17 @@ const CONFIDENCE_THRESHOLDS = {
 
 // Rozpoznat direction (ap / ar) podle toho, jestli naše firma je supplier nebo customer.
 // Placeholder — do budoucna vytáhnout z env nebo settings:
-const OUR_COMPANY_ICOS = (process.env.OUR_COMPANY_ICOS || '').split(',').map(s => s.trim()).filter(Boolean);
+// Past z 2026-04-27 (BestDrive): OCR někdy vrací IČO bez vodící nuly ("5643724"),
+// kdežto v env je standardní 8místný tvar ("05643724"). Porovnáváme proto
+// normalizovaně — jen číslice + zero-pad na 8 znaků.
+function normalizeIco(s) {
+  const digits = String(s || '').replace(/\D/g, '');
+  if (!digits) return '';
+  return digits.padStart(8, '0');
+}
+const OUR_COMPANY_ICOS = (process.env.OUR_COMPANY_ICOS || '')
+  .split(',').map(s => s.trim()).filter(Boolean);
+const OUR_COMPANY_ICOS_NORM = OUR_COMPANY_ICOS.map(normalizeIco);
 
 /**
  * Vrátí objekt { direction, suspicious, reason } popisující výsledek detekce.
@@ -37,8 +47,10 @@ const OUR_COMPANY_ICOS = (process.env.OUR_COMPANY_ICOS || '').split(',').map(s =
 function detectDirection(headerData) {
   const supplierIco = headerData?.supplier?.ico || null;
   const customerIco = headerData?.customer?.ico || null;
-  const ourIsSupplier = supplierIco && OUR_COMPANY_ICOS.includes(supplierIco);
-  const ourIsCustomer = customerIco && OUR_COMPANY_ICOS.includes(customerIco);
+  const supplierIcoNorm = normalizeIco(supplierIco);
+  const customerIcoNorm = normalizeIco(customerIco);
+  const ourIsSupplier = supplierIcoNorm && OUR_COMPANY_ICOS_NORM.includes(supplierIcoNorm);
+  const ourIsCustomer = customerIcoNorm && OUR_COMPANY_ICOS_NORM.includes(customerIcoNorm);
 
   // 1) Naše IČO je v dodavateli I odběrateli současně — nemožné v praxi, OCR omyl
   if (ourIsSupplier && ourIsCustomer) {
