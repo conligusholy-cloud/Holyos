@@ -1337,6 +1337,10 @@ const tireChangeSchema = z.object({
   invoice_file_data: z.string().optional().nullable(),
   invoice_file_name: z.string().optional().nullable(),
   invoice_mime: z.string().optional().nullable(),
+  // Protokol / dodací list — stejný base64 mechanismus jako faktura výše.
+  protocol_file_data: z.string().optional().nullable(),
+  protocol_file_name: z.string().optional().nullable(),
+  protocol_mime: z.string().optional().nullable(),
 });
 
 async function toTireChangeData(data, vehicleId, userId) {
@@ -1365,6 +1369,10 @@ async function toTireChangeData(data, vehicleId, userId) {
   if (data.invoice_file_data) {
     const saved = saveBase64File(vehicleId, data.invoice_file_data, data.invoice_file_name, data.invoice_mime);
     out.invoice_url = saved.url;
+  }
+  if (data.protocol_file_data) {
+    const saved = saveBase64File(vehicleId, data.protocol_file_data, data.protocol_file_name, data.protocol_mime);
+    out.protocol_url = saved.url;
   }
   return out;
 }
@@ -1424,6 +1432,9 @@ router.put('/tire-changes/:id', async (req, res, next) => {
     delete data.vehicle_id;
     delete data.created_by;
     if (!parsed.data.invoice_file_data) delete data.invoice_url;
+    // Stejné pravidlo jako u faktury: pokud klient v této editaci nepřiložil
+    // nový protokol, nepřepisujeme existující URL na null.
+    if (!parsed.data.protocol_file_data) delete data.protocol_url;
     const tc = await prisma.$transaction(async (tx) => {
       await tx.vehicleTireChange.update({ where: { id }, data });
       if (parsed.data.branch_ids !== undefined) {
@@ -1467,9 +1478,12 @@ router.delete('/tire-changes/:id', async (req, res, next) => {
     if (isNaN(id)) return res.status(400).json({ error: 'Neplatné ID' });
     const existing = await prisma.vehicleTireChange.findUnique({ where: { id } });
     if (!existing) return res.status(404).json({ error: 'Záznam nenalezen' });
-    if (existing.invoice_url) {
+    // Uklidí přiložené soubory (faktura i protokol) ze storage volume.
+    // Tichý try/catch — neexistující/cizí soubor nesmí shodit smazání záznamu.
+    for (const url of [existing.invoice_url, existing.protocol_url]) {
+      if (!url) continue;
       try {
-        const urlPath = existing.invoice_url.replace('/api/storage/files/', '');
+        const urlPath = url.replace('/api/storage/files/', '');
         const abs = path.join(STORAGE_DIR, urlPath);
         const resolved = path.resolve(abs);
         if (resolved.startsWith(path.resolve(STORAGE_DIR)) && fs.existsSync(resolved)) {
