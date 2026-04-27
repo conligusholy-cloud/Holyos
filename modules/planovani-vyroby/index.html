@@ -260,6 +260,7 @@
   const COLUMNS = [
     { key: 'id',            label: 'Id',                       type: 'num',      get: b => b.id },
     { key: 'batch_number',  label: 'Číslo dávky',              type: 'text',     get: b => b.batch_number },
+    { key: 'orders',        label: 'Číslo objednávky',         type: 'orders',   get: b => b.related_orders || [] },
     { key: 'planned_end',   label: 'Požadovaný termín',        type: 'datetime', get: b => b.planned_end, className: b => isOverdue(b) ? 'overdue-cell' : '' },
     { key: 'released_at',   label: 'Čas uvolnění',             type: 'datetime', get: b => b.status !== 'planned' ? b.updated_at : null },
     { key: 'actual_start',  label: 'Skutečný začátek',         type: 'datetime', get: b => b.actual_start },
@@ -299,6 +300,13 @@
       case 'datetime':  return `<td class="${extraCls.trim()}">${fmtDateTime(v)}</td>`;
       case 'bool':      return `<td style="padding:0;">${bool(v)}</td>`;
       case 'badge':     return `<td>${statusBadge(v)}</td>`;
+      case 'orders': {
+        if (!v || !v.length) return `<td>—</td>`;
+        const links = v.map(o =>
+          `<a href="modules/prodejni-objednavky/index.html#order-${o.id}" title="${escHtml(o.order_number)}">${escHtml(o.order_number)}</a>`
+        ).join(', ');
+        return `<td class="col-link">${links}</td>`;
+      }
       case 'link':      return v
         ? `<td class="col-link"><a href="modules/pracovni-postup/detail.html?id=${v.id}" title="${escHtml(v.name)}">${escHtml(v.code)} <span style="color:var(--text2)">${escHtml((v.name || '').slice(0,40))}</span></a></td>`
         : `<td>—</td>`;
@@ -330,6 +338,7 @@
       if (['✗','n','ne','no','false','0'].includes(fv)) return v === false;
       return true;
     }
+    if (col.type === 'orders') return v && v.some(o => (o.order_number || '').toLowerCase().includes(fv));
     if (col.type === 'link') return v && (`${v.code} ${v.name}`.toLowerCase().includes(fv));
     if (col.type === 'num') return String(v).includes(fv);
     if (col.type === 'date' || col.type === 'datetime') {
