@@ -1180,12 +1180,15 @@ router.post('/email/ingests/:id/reprocess', async (req, res, next) => {
     const seen = new Map();
     for (const m of haystack.matchAll(urlRegex)) {
       const u = m[0].replace(/[.,;:!?)\]>]+$/, '');
+      // Vyloučit běžné non-invoice URL (analytics, social, unsubscribe)
+      if (/google-analytics|googletagmanager|facebook\.com|twitter\.com|linkedin\.com|youtube\.com|unsubscribe|preferences|privacy-policy/i.test(u)) continue;
       let score = 0;
       if (/\.pdf(\?|$|#)/i.test(u)) score += 10;
-      if (/invoice|faktur|attachment|download|stahnout/i.test(u)) score += 5;
-      if (score > 0 && !seen.has(u)) seen.set(u, { url: u, score });
+      if (/invoice|faktur|attachment|download|stahnout|view.{0,5}doc|getfile|nayax|portal/i.test(u)) score += 5;
+      // I score=0 přijmeme — content-type rozhodne při fetchi
+      if (!seen.has(u)) seen.set(u, { url: u, score });
     }
-    const links = [...seen.values()].sort((a, b) => b.score - a.score).slice(0, 5);
+    const links = [...seen.values()].sort((a, b) => b.score - a.score).slice(0, 10);
     const existingUrls = new Set(ingest.attachments.filter(a => a.source_url).map(a => a.source_url));
     let newlyDownloaded = 0;
 
