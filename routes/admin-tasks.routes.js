@@ -295,4 +295,55 @@ router.post('/:id/restore', async (req, res, next) => {
   }
 });
 
+// POST /api/admin-tasks/run-import-product-images
+// Jednorázový trigger — spustí scripts/import-factorify-product-images.js jako child process
+// v běžícím Railway containeru (aby fotky padaly do /app/data/product-images/, ne lokálně).
+// Vrací 202 hned, skript běží na pozadí. Progress je v Railway logs (`railway logs`).
+//
+// Sekvenční ochrana: pokud už běží jiný import, nový request vrátí 409.
+let _imageImportRunning = false;
+router.post('/run-import-product-images', async (req, res, next) => {
+  try {
+    if (_imageImportRunning) {
+      return res.status(409).json({ error: 'Import už běží', running: true });
+    }
+    _imageImportRunning = true;
+
+    const { spawn } = require('child_process');
+    const path = require('path');
+    const scriptPath = path.join(__dirname, '..', 'scripts', 'import-factorify-product-images.js');
+    const args = [];
+    if (req.body && req.body.only) args.push('--only=' + parseInt(req.body.only));
+    if (req.body && req.body.dry_run) args.push('--dry-run');
+
+    const child = spawn(process.execPath, [scriptPath, ...args], {
+      env: process.env,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      detached: false,
+    });
+    console.log(`[admin-tasks] spuštěn import-factorify-product-images (pid=${child.pid}, args=${JSON.stringify(args)}, by user=${req.user?.id})`);
+
+    child.stdout.on('data', d => process.stdout.write(`[import-images] ${d}`));
+    child.stderr.on('data', d => process.stderr.write(`[import-images] ${d}`));
+    child.on('exit', (code, sig) => {
+      _imageImportRunning = false;
+      console.log(`[admin-tasks] import-factorify-product-images skončil: code=${code} sig=${sig}`);
+    });
+    child.on('error', (e) => {
+      _imageImportRunning = false;
+      console.error('[admin-tasks] import-factorify-product-images error:', e);
+    });
+
+    res.status(202).json({
+      ok: true,
+      pid: child.pid,
+      args,
+      message: 'Import běží na pozadí — sleduj `railway logs` (výstup označený [import-images])',
+    });
+  } catch (err) {
+    _imageImportRunning = false;
+    next(err);
+  }
+});
+
 module.exports = router;
