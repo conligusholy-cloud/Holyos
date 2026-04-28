@@ -263,6 +263,31 @@
     .takt-setting .takt-unit { font-size:12px; color:var(--text2); }
 
     .op-card.over-takt { border-color:#ef4444; border-width:2px; }
+    /* === FY import placeholder operace === */
+    .op-card.fy-import {
+      border-left: 4px solid #eab308;
+      background: linear-gradient(90deg, rgba(234,179,8,0.08) 0%, rgba(234,179,8,0.02) 30%, transparent 60%);
+    }
+    .op-card.fy-import .op-step { background: rgba(234,179,8,0.2); color: #eab308; }
+    .op-card.fy-import::before {
+      content: '⚠️ FY import — k roztřídění';
+      position: absolute; top: 4px; right: 12px;
+      font-size: 10px; font-weight: 700; color: #eab308;
+      background: rgba(234,179,8,0.1); padding: 2px 8px; border-radius: 4px;
+      letter-spacing: 0.5px;
+    }
+    .op-card { position: relative; }
+    /* === Drag&drop materiálu mezi operacemi === */
+    .mat-table tr.mat-row { cursor: grab; }
+    .mat-table tr.mat-row:active { cursor: grabbing; }
+    .mat-table tr.mat-row.dragging-mat { opacity: 0.4; background: rgba(99,102,241,0.1); }
+    .op-card.mat-drop-target { border-color: #10b981; border-style: dashed; box-shadow: 0 0 0 3px rgba(16,185,129,0.15); }
+    .op-card.mat-drop-target::after {
+      content: '⬇️ Přetáhni sem materiál';
+      position: absolute; bottom: 8px; right: 12px;
+      font-size: 11px; font-weight: 600; color: #10b981;
+      background: rgba(16,185,129,0.15); padding: 2px 8px; border-radius: 4px;
+    }
     .op-card.over-takt .op-step { color:#ef4444; }
     .op-card.under-takt { border-color:#ef4444; border-width:2px; border-style:dashed; }
     .op-card.under-takt .op-step { color:#ef4444; }
@@ -592,7 +617,7 @@
       list-style: none;
       cursor: pointer;
       display: grid;
-      grid-template-columns: 18px 70px 70px 110px 1fr 80px 50px 90px 60px 1fr;
+      grid-template-columns: 18px 70px 70px 110px 1fr 80px 50px 90px 60px 1fr 130px;
       align-items: center;
       gap: 8px;
       padding: 5px 8px;
@@ -625,7 +650,7 @@
     .fy-tree-container .fy-row-mismatch { background: rgba(234,179,8,0.08); box-shadow: inset 3px 0 0 #eab308; }
     .fy-tree-header {
       display: grid;
-      grid-template-columns: 18px 70px 70px 110px 1fr 80px 50px 90px 60px 1fr;
+      grid-template-columns: 18px 70px 70px 110px 1fr 80px 50px 90px 60px 1fr 130px;
       gap: 8px;
       padding: 8px;
       background: var(--surface2);
@@ -951,6 +976,22 @@
         '</div>' +
         '</div>';
 
+      // Banner: FY import operace v celém podstromu (i v polotovarech)
+      const fyImports = wfFindFyImportInSubtree(product, new Set([product.id]));
+      if (fyImports.length > 0) {
+        html += '<div style="margin-bottom:16px;padding:12px 16px;background:rgba(234,179,8,0.08);border:1px solid rgba(234,179,8,0.4);border-radius:8px;font-size:13px;">';
+        html += '<div style="font-weight:600;color:#eab308;margin-bottom:6px;">⚠️ V podstromu pracovního postupu jsou ' + fyImports.length + ' FY import operace k roztřídění</div>';
+        html += '<div style="font-size:12px;color:var(--text2);margin-bottom:8px;">Tyto placeholder operace vznikly automatickým importem z Factorify. Otevři detail polotovaru a roztřiď jejich materiály do správných operací (drag&drop).</div>';
+        html += '<div style="display:flex;gap:8px;flex-wrap:wrap;">';
+        for (const fy of fyImports) {
+          const matCount = (fy.operation.materials || []).length;
+          html += '<a href="modules/pracovni-postup/detail.html?id=' + fy.product.id + '" style="display:inline-flex;align-items:center;gap:6px;padding:5px 10px;background:rgba(234,179,8,0.15);border:1px solid rgba(234,179,8,0.4);border-radius:6px;color:#eab308;font-size:12px;text-decoration:none;font-weight:600;" title="Otevřít detail postupu ' + esc(fy.product.code || '?') + '">';
+          html += '📥 ' + esc(fy.product.code || '?') + ' <span style="color:var(--text2);font-weight:400;">(' + matCount + ' spotřeb)</span> →';
+          html += '</a>';
+        }
+        html += '</div></div>';
+      }
+
       if (ops.length === 0) {
         html += '<div class="empty-ops"><div class="icon">&#128736;</div>' +
           '<p>Žádné operace v pracovním postupu</p>' +
@@ -984,7 +1025,8 @@
       const underTakt = takt && realMin > 0 && (realMin / takt) < 0.8;
       const mats = op.materials || [];
 
-      let html = '<div class="op-card' + (overTakt ? ' over-takt' : '') + (underTakt ? ' under-takt' : '') + '" draggable="true" data-op-id="' + op.id + '">' +
+      const isFyImport = /^FY import/i.test(op.name || '');
+      let html = '<div class="op-card' + (overTakt ? ' over-takt' : '') + (underTakt ? ' under-takt' : '') + (isFyImport ? ' fy-import' : '') + '" draggable="true" data-op-id="' + op.id + '" ondragover="omDragOver(event,' + op.id + ')" ondragleave="omDragLeave(event,' + op.id + ')" ondrop="omDrop(event,' + op.id + ')">' +
         '<div class="op-handle" title="Přetáhni pro změnu pořadí">&#8942;&#8942;</div>' +
         '<div class="op-step">' + op.step_number + '</div>' +
         '<div class="op-body">' +
@@ -1066,7 +1108,7 @@
             workersCell = '<span style="color:#ef4444;font-size:11px;">—</span>';
           }
 
-          html += '<tr>' +
+          html += '<tr class="mat-row" draggable="true" data-om-id="' + m.id + '" data-source-op-id="' + op.id + '" ondragstart="omDragStart(event,' + m.id + ',' + op.id + ')" ondragend="omDragEnd(event)" title="Přetáhni řádek na jinou operaci pro přesun materiálu">' +
             '<td style="font-family:monospace;color:var(--text2);font-size:11px;" title="Material.id">' + (mat.id || '') + '</td>' +
             '<td>' + nameCell + '</td>' +
             '<td style="color:var(--text2);">' + esc(mat.code || '') + '</td>' +
@@ -2765,6 +2807,35 @@
     }
 
     // Set kodu vsech materialu v pracovnim postupu (rekurzivne pres polotovary).
+    // Najde vsechny FY import operace v podstromu Productu (rekurzivne pres polotovary).
+    // Vraci array { product: lp, operation: subOp } pro kazdou nalezenou operaci.
+    function wfFindFyImportInSubtree(rootProduct, visited) {
+      if (!rootProduct) return [];
+      visited = visited || new Set();
+      const result = [];
+      function walk(p, depth) {
+        if (!p || depth > 30) return;
+        for (const op of (p.operations || [])) {
+          for (const om of (op.materials || [])) {
+            const lp = om.linked_product;
+            if (!lp) continue;
+            if (lp.id != null && visited.has(lp.id)) continue;
+            if (lp.id != null) visited.add(lp.id);
+            // Najdi FY import operace v tomto polotovaru
+            for (const subOp of (lp.operations || [])) {
+              if (/^FY import/i.test(subOp.name || '')) {
+                result.push({ product: lp, operation: subOp });
+              }
+            }
+            // Rekurze do hloubky
+            walk(lp, depth + 1);
+          }
+        }
+      }
+      walk(rootProduct, 0);
+      return result;
+    }
+
     function fyBuildWorkflowCodeSet(rootProduct) {
       const codes = new Set();
       const visitedProducts = new Set();
@@ -3324,6 +3395,16 @@
       else if (codeMatch) statCell = '<span class="fy-stat" style="color:#10b981;" title="Kód v postupu' + (wfEntry ? ', množství: ' + Number(wfQty).toLocaleString('cs-CZ', { maximumFractionDigits: 4 }) + ' ' + (wfEntry.unit || '') : '') + '">✅</span>';
       else statCell = '<span class="fy-stat" style="color:#ef4444;" title="Kód není v postupu">❌</span>';
 
+      // Akce: u polotovaru/výrobku s dětmi tlačítko 📥 Import kusovníku
+      const isComposite = (typeLabel === 'Polotovar' || typeLabel === 'Výrobek');
+      const hasChildren = node.children && node.children.length > 0;
+      let actionCell = '<span></span>';
+      if (isComposite && hasChildren && !isLevel1) {
+        const lvlEsc = String(it.level || '').replace(/'/g, '&#39;');
+        const nameEsc = esc(it.name).replace(/'/g, '&#39;');
+        actionCell = '<button class="btn fy-import-btn" onclick="event.stopPropagation();fyImportChildrenToWorkflow(\'' + lvlEsc + '\',\'' + nameEsc + '\',' + node.children.length + ')" title="Vytvoří v Pracovním postupu novou operaci FY import a doplní do ní ' + node.children.length + ' chybějících materiálů z FY kusovníku (s množstvím). Polotovar BS-X-XXXX dostane svůj postup, pokud ještě neexistuje." style="font-size:10px;padding:3px 8px;background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.4);color:#10b981;border-radius:4px;cursor:pointer;">📥 Doplnit do postupu</button>';
+      }
+
       function makeCells() {
         return '<span class="fy-level">' + esc(it.level || '') + '</span>'
           + '<span class="fy-fid">' + (it.factorify_item_id || '') + '</span>'
@@ -3333,7 +3414,8 @@
           + '<span class="fy-unit">' + esc(it.unit || '') + '</span>'
           + '<span class="fy-type" data-t="' + esc(typeLabel) + '">' + esc(typeLabel) + '</span>'
           + statCell
-          + '<span class="fy-op" title="' + esc(it.used_in_operations || '') + '">' + esc(it.used_in_operations || '') + '</span>';
+          + '<span class="fy-op" title="' + esc(it.used_in_operations || '') + '">' + esc(it.used_in_operations || '') + '</span>'
+          + actionCell;
       }
 
       if (node.children && node.children.length > 0) {
@@ -3346,7 +3428,7 @@
 
     function fyRenderTreeView(items, qtyMap, onlyMissing) {
       const roots = fyBuildTree(items);
-      const headerHtml = '<div class="fy-tree-header"><span></span><span>Úroveň</span><span>FY ID</span><span>Kód</span><span>Název</span><span>Množství</span><span>Jed.</span><span>Typ</span><span>V postupu</span><span>Použito v op.</span></div>';
+      const headerHtml = '<div class="fy-tree-header"><span></span><span>Úroveň</span><span>FY ID</span><span>Kód</span><span>Název</span><span>Množství</span><span>Jed.</span><span>Typ</span><span>V postupu</span><span>Použito v op.</span><span>Akce</span></div>';
       const body = roots.map(r => fyRenderTreeNode(r, qtyMap, onlyMissing)).join('');
       return '<div class="fy-tree-container">' + headerHtml + body + '</div>';
     }
@@ -3539,8 +3621,8 @@ for (let r = 1; r < rows.length; r++) {
 
         if (items.length === 0) { toast('Sestava neobsahuje zadne polozky'); return; }
 
-        const topRow = items.find(it => String(it.level || '').replace(/\s+/g,'').trim() === '1') || items[0];
-if (topRow) {
+const topRow = items.find(it => String(it.level || '').replace(/\s+/g,'').trim() === '1') || items[0];
+        if (topRow) {
           if (product.factorify_id != null && topRow.factorify_item_id != null
               && Number(product.factorify_id) !== Number(topRow.factorify_item_id)) {
             alert('Sestava patří jinému výrobku!\nFY ID exportu: ' + topRow.factorify_item_id + '\nFY ID výrobku: ' + product.factorify_id);
@@ -3579,6 +3661,103 @@ if (topRow) {
         await renderFyBomTab();
       } catch (err) {
         toast('Chyba: ' + err.message);
+      }
+    }
+
+    // === FY → HolyOS: doplnění kusovníku do pracovního postupu ===
+    // Pro daný level (např. "1.49") pošle backendu request, který:
+    //  1. Najde / vytvoří target Product odpovídající FY polotovaru/výrobku
+    //  2. Vytvoří v něm operaci "FY import" (workstation = null)
+    //  3. Doplní jen materiály které ještě v postupu chybí (s množstvím z FY)
+    // === Drag&drop materiálu mezi operacemi v rámci postupu ===
+    let _omDragData = null;
+
+    function omDragStart(ev, omId, sourceOpId) {
+      ev.stopPropagation();
+      _omDragData = { omId, sourceOpId };
+      try {
+        ev.dataTransfer.setData('application/x-om', JSON.stringify(_omDragData));
+        ev.dataTransfer.effectAllowed = 'move';
+      } catch (e) { /* ignore */ }
+      const tr = ev.currentTarget;
+      if (tr) tr.classList.add('dragging-mat');
+    }
+
+    function omDragEnd(ev) {
+      _omDragData = null;
+      document.querySelectorAll('.dragging-mat').forEach(el => el.classList.remove('dragging-mat'));
+      document.querySelectorAll('.mat-drop-target').forEach(el => el.classList.remove('mat-drop-target'));
+    }
+
+    function omDragOver(ev, targetOpId) {
+      if (!_omDragData) return;
+      if (_omDragData.sourceOpId === targetOpId) return;
+      ev.preventDefault();
+      ev.dataTransfer.dropEffect = 'move';
+      const card = ev.currentTarget;
+      if (card && !card.classList.contains('mat-drop-target')) card.classList.add('mat-drop-target');
+    }
+
+    function omDragLeave(ev, targetOpId) {
+      const card = ev.currentTarget;
+      const rel = ev.relatedTarget;
+      if (card && (!rel || !card.contains(rel))) card.classList.remove('mat-drop-target');
+    }
+
+    async function omDrop(ev, targetOpId) {
+      if (!_omDragData) return;
+      ev.preventDefault();
+      const { omId, sourceOpId } = _omDragData;
+      _omDragData = null;
+      document.querySelectorAll('.mat-drop-target').forEach(el => el.classList.remove('mat-drop-target'));
+      document.querySelectorAll('.dragging-mat').forEach(el => el.classList.remove('dragging-mat'));
+      if (sourceOpId === targetOpId) return;
+      try {
+        await api('/api/production/operation-materials/' + omId, {
+          method: 'PUT',
+          body: JSON.stringify({ operation_id: targetOpId }),
+        });
+        toast('Materiál přesunut do operace #' + targetOpId);
+        await wfRefreshFromServer(null);
+      } catch (err) {
+        console.error('omDrop error:', err);
+        toast('Chyba přesunu: ' + err.message);
+      }
+    }
+
+    async function fyImportChildrenToWorkflow(level, name, childrenCount) {
+      if (!product || !product.id) return;
+      const ok = confirm('📥 Doplnit kusovník z Factorify do pracovního postupu?\n\nPolotovar: ' + name + '\nÚroveň: ' + level + '\nPoložek k vyhodnocení: ' + childrenCount + '\n\nVytvoří se nová operace "FY import" v odpovídajícím postupu (pokud ještě neexistuje), do které se doplní jen ty materiály, které v postupu chybí. Existující data se nepřepíšou.');
+      if (!ok) return;
+      try {
+        toast('Doplňuji kusovník...');
+        const result = await api('/api/production/products/' + product.id + '/fy-bom/import-children', {
+          method: 'POST',
+          body: JSON.stringify({ parent_level: level }),
+        });
+        let msg = '';
+        if (result.added > 0) msg += '✅ Přidáno ' + result.added + ' spotřeb';
+        if (result.already_existed > 0) msg += (msg ? ' · ' : '') + result.already_existed + ' už existovalo';
+        if (result.skipped && result.skipped.length > 0) msg += (msg ? ' · ' : '') + '⚠️ ' + result.skipped.length + ' skipnuto (chybí Material)';
+        if (!msg) msg = result.message || 'Hotovo';
+        msg += '\n\nCíl: ' + result.target_product_code + (result.operation_name ? ' (operace: ' + result.operation_name + ')' : '');
+        if (result.skipped && result.skipped.length > 0) {
+          msg += '\n\nSkipnuté:\n' + result.skipped.slice(0, 10).map(s => '  • ' + (s.code || '?') + ' — ' + (s.reason || '')).join('\n');
+          if (result.skipped.length > 10) msg += '\n  … a další ' + (result.skipped.length - 10);
+        }
+        if (result.target_product_id && result.target_product_id !== product.id) {
+          msg += '\n\nOtevřít detail postupu ' + result.target_product_code + '?';
+          if (confirm(msg)) {
+            window.location.href = 'modules/pracovni-postup/detail.html?id=' + result.target_product_id;
+            return;
+          }
+        } else {
+          alert(msg);
+          await wfRefreshFromServer(null);
+        }
+      } catch (err) {
+        console.error('fyImportChildrenToWorkflow error:', err);
+        alert('Chyba importu: ' + err.message);
       }
     }
   </script>
