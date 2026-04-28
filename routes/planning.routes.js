@@ -34,37 +34,62 @@ router.post('/snapshot-bom', async (req, res, next) => {
     const { product_id, variant_key, source, source_ref, note } = req.body || {};
     const productId = parseInt(product_id, 10);
     if (isNaN(productId)) return res.status(400).json({ error: 'product_id je povinné' });
+    const effectiveSource = source || 'computed';
 
-    // Ověř produkt
+    // Ověř produkt — pro factorify_pull potřebujeme i factorify_id
     const product = await prisma.product.findUnique({
       where: { id: productId },
-      select: { id: true, code: true, name: true },
+      select: { id: true, code: true, name: true, factorify_id: true },
     });
     if (!product) return res.status(404).json({ error: 'Produkt nenalezen' });
 
-    // Načti operace + materiály
-    const operations = await prisma.productOperation.findMany({
-      where: { product_id: productId },
-      include: { materials: true },
-      orderBy: { step_number: 'asc' },
-    });
+    let items = [];
+    let extraStats = null;
+    let warnings = [];
 
-    if (operations.length === 0) {
-      return res.status(400).json({ error: 'Produkt nemá žádné operace — BOM nelze sestavit' });
-    }
-
-    // Sestav položky snapshotu — flat, depth=0
-    const items = [];
-    for (const op of operations) {
-      for (const om of op.materials) {
-        items.push({
-          material_id: om.material_id,
-          source_operation_id: op.id,
-          quantity: om.quantity,
-          unit: om.unit || 'ks',
-          depth: 0,
+    if (effectiveSource === 'factorify_pull') {
+      // F2.5+ — pull BOM z Factorify (Tomášův buildBomTree)
+      if (!product.factorify_id) {
+        return res.status(400).json({ error: `Produkt ${product.code} nemá factorify_id — nelze pull z Factorify` });
+      }
+      try {
+        const { buildBomItemsFromFactorify } = require('../services/planning/bom-from-factorify');
+        const result = await buildBomItemsFromFactorify(product, prisma);
+        items = result.items;
+        extraStats = result.stats;
+        warnings = result.warnings;
+      } catch (e) {
+        return res.status(502).json({ error: `Factorify BOM selhal: ${e.message}` });
+      }
+      if (items.length === 0) {
+        return res.status(400).json({
+          error: 'Factorify BOM vrátil 0 mapovaných materiálů',
+          warnings,
+          stats: extraStats,
         });
       }
+    } else {
+      // 'computed' / 'manual' — fallback na ProductOperation × OperationMaterial (původní logika)
+      const operations = await prisma.productOperation.findMany({
+        where: { product_id: productId },
+        include: { materials: true },
+        orderBy: { step_number: 'asc' },
+      });
+      if (operations.length === 0) {
+        return res.status(400).json({ error: 'Produkt nemá žádné operace — BOM nelze sestavit' });
+      }
+      for (const op of operations) {
+        for (const om of op.materials) {
+          items.push({
+            material_id: om.material_id,
+            source_operation_id: op.id,
+            quantity: om.quantity,
+            unit: om.unit || 'ks',
+            depth: 0,
+          });
+        }
+      }
+      extraStats = { operations_processed: operations.length, items_count: items.length };
     }
 
     // Vytvoř snapshot + items v jedné transakci
@@ -73,7 +98,7 @@ router.post('/snapshot-bom', async (req, res, next) => {
         data: {
           product_id: productId,
           variant_key: variant_key || null,
-          source: source || 'computed',
+          source: effectiveSource,
           source_ref: source_ref || null,
           note: note || null,
         },
@@ -102,10 +127,8 @@ router.post('/snapshot-bom', async (req, res, next) => {
 
     res.status(201).json({
       ...full,
-      stats: {
-        operations_processed: operations.length,
-        items_count: items.length,
-      },
+      stats: extraStats || { items_count: items.length },
+      warnings: warnings && warnings.length > 0 ? warnings : undefined,
     });
   } catch (err) { next(err); }
 });

@@ -118,35 +118,6 @@ router.get('/materials', async (req, res, next) => {
   }
 });
 
-// GET /api/wh/materials/:id/image — vrátí fotografii materiálu z persistent volume.
-// (Pevný podcest před dynamickou /:id route — viz holyos_express_route_order memory.)
-// Soubor je hledán v data/product-images/ pod jménem mat-<id>.<libovolná přípona>.
-router.get('/materials/:id/image', async (req, res, next) => {
-  try {
-    const id = parseInt(req.params.id);
-    if (!Number.isFinite(id)) return res.status(400).json({ error: 'Neplatné ID' });
-    const fs = require('fs');
-    const path = require('path');
-    const IMAGES_DIR = path.join(__dirname, '..', 'data', 'product-images');
-    if (!fs.existsSync(IMAGES_DIR)) {
-      return res.status(404).json({ error: 'Adresář s obrázky neexistuje' });
-    }
-    const prefix = `mat-${id}.`;
-    const match = fs.readdirSync(IMAGES_DIR).find(f => f.startsWith(prefix));
-    if (!match) return res.status(404).json({ error: 'Materiál nemá fotografii' });
-    const filePath = path.join(IMAGES_DIR, match);
-    const ext = (path.extname(match) || '').toLowerCase();
-    const mime = ext === '.png' ? 'image/png'
-      : ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg'
-      : ext === '.gif' ? 'image/gif'
-      : ext === '.webp' ? 'image/webp'
-      : 'application/octet-stream';
-    res.set('Content-Type', mime);
-    res.set('Cache-Control', 'public, max-age=3600');
-    fs.createReadStream(filePath).pipe(res);
-  } catch (err) { next(err); }
-});
-
 // GET /api/wh/materials/:id
 router.get('/materials/:id', async (req, res, next) => {
   try {

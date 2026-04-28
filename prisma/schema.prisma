@@ -955,6 +955,10 @@ model Product {
   factorify_id         Int? // původní ID z Factorify
   material_id          Int? // vazba na Material pokud existuje
 
+  // Fotografie produktu — ukládáme do persistent volume na Railway (/app/data/product-images/<id>.<ext>).
+  // image_path je název souboru relativně k adresáři product-images/.
+  image_path           String? @db.VarChar(255)
+
   // Plánovač — dávkové parametry
   min_batch_size      Int? // minimální velikost výrobní dávky (kvůli setupům, ekonomice)
   economic_batch_size Int? // EOQ — preferovaná velikost dávky
@@ -973,6 +977,9 @@ model Product {
   // Plánovač
   bom_snapshots     BomSnapshot[]
   production_batches ProductionBatch[] @relation("BatchProduct")
+
+  // Factorify referenční sestava zboží (poslední import) — read-only snapshot
+  fy_bom ProductFyBom?
 
   @@index([factorify_id])
   @@map("products")
@@ -3318,4 +3325,58 @@ model BatchOperationLog {
   @@index([action])
   @@index([created_at])
   @@map("batch_operation_logs")
+}
+
+// =============================================================================
+// FACTORIFY SESTAVA ZBOŽÍ (FY BOM) — referenční snímek importovaný z exportu
+// Factorify > Sestava zboží. Read-only přehled, ne zdroj pravdy pro plánování.
+// 1:1 s Product (last-import wins, žádné verzování).
+// =============================================================================
+
+model ProductFyBom {
+  id              Int      @id @default(autoincrement())
+  product_id      Int      @unique
+  imported_at     DateTime @default(now())
+  imported_by_id  Int? // User.id, kdo import provedl
+  imported_by     String?  @db.VarChar(120) // display name pro snadný výpis
+  source_filename String?  @db.VarChar(255)
+  row_count       Int      @default(0)
+  note            String?  @db.Text
+
+  product Product             @relation(fields: [product_id], references: [id], onDelete: Cascade)
+  items   ProductFyBomItem[]
+
+  @@map("product_fy_boms")
+}
+
+// Položka FY sestavy — surová data z Factorify exportu, žádný join na HolyOS
+// materiály. Identifikujeme podle factorify_item_id + level (Úroveň ve stromu).
+model ProductFyBomItem {
+  id                 Int      @id @default(autoincrement())
+  fy_bom_id          Int
+  level              String?  @db.VarChar(20) // Úroveň, např. "1", "1. 1", "1.10"
+  factorify_item_id  Int? // ID zboží z Factorify
+  name               String   @db.VarChar(500) // sloupec Zboží
+  quantity           Decimal? @db.Decimal(14, 4)
+  unit               String?  @db.VarChar(20)
+  item_type          String?  @db.VarChar(50) // Typ (Výrobek, Materiál, ...)
+  keywords           String?  @db.Text
+  status             String?  @db.VarChar(50) // Stav (Aktivní, ...)
+  photo              String?  @db.VarChar(500)
+  ignore_stock       Boolean  @default(false) // Nehlídat dostupnost
+  used_in_operations String?  @db.Text // Použito v operacích
+  used_at_workstations String? @db.Text // Použito na pracovištích
+  is_purchasable     Boolean  @default(false)
+  has_workflow       Boolean  @default(false)
+  drawing            String?  @db.VarChar(500)
+  drawing_is_draft   Boolean  @default(false)
+  defined_in         String?  @db.VarChar(120) // Workflow / Drawing
+  position           String?  @db.VarChar(120)
+  row_index          Int // pořadí řádku v exportu (zachovat původní pořadí)
+
+  fy_bom ProductFyBom @relation(fields: [fy_bom_id], references: [id], onDelete: Cascade)
+
+  @@index([fy_bom_id, row_index])
+  @@index([factorify_item_id])
+  @@map("product_fy_bom_items")
 }

@@ -265,7 +265,7 @@
     { key: 'released_at',   label: 'Čas uvolnění',             type: 'datetime', get: b => b.status !== 'planned' ? b.updated_at : null },
     { key: 'actual_start',  label: 'Skutečný začátek',         type: 'datetime', get: b => b.actual_start },
     { key: 'actual_end',    label: 'Čas dokončení',            type: 'datetime', get: b => b.actual_end },
-    { key: 'product',       label: 'Zboží',                    type: 'link',     get: b => b.product ? { id: b.product.id, code: b.product.code, name: b.product.name } : null },
+    { key: 'product',       label: 'Zboží',                    type: 'link',     get: b => b.product ? { id: b.product.id, code: b.product.code, name: b.product.name, image_path: b.product.image_path } : null },
     { key: 'material_ok',   label: 'Materiál k dispozici',     type: 'bool',     get: b => {
       // F4 MRP — true = vše OK, false = shortage > 0, null = ještě nenačteno
       const m = mrpCache.get(b.id);
@@ -307,9 +307,14 @@
         ).join(', ');
         return `<td class="col-link">${links}</td>`;
       }
-      case 'link':      return v
-        ? `<td class="col-link"><a href="modules/pracovni-postup/detail.html?id=${v.id}" title="${escHtml(v.name)}">${escHtml(v.code)} <span style="color:var(--text2)">${escHtml((v.name || '').slice(0,40))}</span></a></td>`
-        : `<td>—</td>`;
+      case 'link': {
+        if (!v) return `<td>—</td>`;
+        // Pokud má produkt obrázek, ukáže se thumbnail před kódem.
+        const thumb = v.image_path
+          ? `<img src="/api/production/products/${v.id}/image" alt="" loading="lazy" onerror="this.remove()" style="width:24px;height:24px;border-radius:4px;object-fit:cover;vertical-align:middle;margin-right:6px;border:1px solid var(--border);">`
+          : '';
+        return `<td class="col-link"><a href="modules/pracovni-postup/detail.html?id=${v.id}" title="${escHtml(v.name)}" style="display:inline-flex;align-items:center;">${thumb}<span>${escHtml(v.code)} <span style="color:var(--text2)">${escHtml((v.name || '').slice(0,40))}</span></span></a></td>`;
+      }
       case 'actions': {
         const buttons = [];
         const opCount = v._count?.batch_operations ?? 0;

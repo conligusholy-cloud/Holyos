@@ -142,10 +142,18 @@
         const badge = opCount > 0 ? '<span style="font-size:11px;color:var(--accent);margin-left:8px;">' + opCount + ' op.</span>' : '<span style="font-size:11px;color:var(--text2);margin-left:8px;">bez postupu</span>';
         const cfgChecked = p.show_in_configurator ? 'checked' : '';
         const cfgColor = p.show_in_configurator ? 'color:#eab308;' : 'color:var(--text2);opacity:0.4;';
+        // Strip Factorify externí ID prefix typu '390000123 - ' nebo '821 ' z začátku názvu
+        // + Factorify technický suffix typu '- 3VZADA_1', '3VBEDNA_DETERGENTY' z konce
+        const cleanName = String(p.name || '')
+          .replace(/^\d{3,12}\s*-\s*/, '')
+          .replace(/^\d{3,12}\s+/, '')
+          .replace(/[\s-]+3V[A-Z0-9_]{2,}\s*$/, '')
+          .replace(/[\s-]+[A-Z][A-Z0-9]*_[A-Z0-9_]+\s*$/, '')
+          .trim();
         html += '<div class="product-card">' +
           '<div class="product-card-icon" onclick="openProduct(' + p.id + ')" style="cursor:pointer;">' + (currentType === 'product' ? '&#128295;' : '&#9881;') + '</div>' +
           '<div class="product-card-info" onclick="openProduct(' + p.id + ')" style="cursor:pointer;flex:1;">' +
-            '<div class="product-card-name">' + esc(p.name) + badge + '</div>' +
+            '<div class="product-card-name">' + esc(cleanName) + badge + '</div>' +
             '<div class="product-card-meta"><span>' + esc(p.code) + '</span></div>' +
           '</div>' +
           (currentType === 'product' ? '<div class="cfg-toggle" title="Zobrazit v konfigurátoru / prodejních objednávkách" onclick="event.stopPropagation();toggleConfigurator(' + p.id + ',this)" style="display:flex;align-items:center;gap:6px;padding:6px 12px;cursor:pointer;border-radius:8px;transition:background 0.15s;margin-right:4px;" onmouseover="this.style.background=\'rgba(234,179,8,0.08)\'" onmouseout="this.style.background=\'transparent\'">' +
@@ -187,7 +195,6 @@
 
         if (icon) icon.style.cssText = isOn ? 'font-size:18px;color:#eab308;' : 'font-size:18px;color:var(--text2);opacity:0.4;';
         if (track) track.style.background = isOn ? '#eab308' : 'rgba(255,255,255,0.12)';
-        if (knob) knob.style.left = isOn ? '18px' : '2px';
         if (chk) chk.checked = isOn;
 
         showToast(isOn ? '🛒 ' + (product?.name || '') + ' — zobrazeno v konfigurátoru' : '🛒 ' + (product?.name || '') + ' — skryto z konfigurátoru');
