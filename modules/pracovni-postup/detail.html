@@ -7,6 +7,8 @@
   <link rel="icon" type="image/svg+xml" href="../../logo-holyos-icon.svg">
   <base href="../../">
   <link rel="stylesheet" href="css/dashboard.css">
+  <!-- SheetJS pro parsovani .xlsx v zalozce Sestava zbozi FY -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <style>
     /* === Layout === */
     .detail-header {
@@ -24,6 +26,11 @@
     .detail-code { font-size:12px; color:var(--text2); }
     .detail-meta { display:flex; gap:16px; font-size:12px; color:var(--text2); }
     .detail-meta span { display:flex; align-items:center; gap:4px; }
+    .detail-photo {
+      width:48px; height:48px; border-radius:8px; object-fit:cover;
+      background:var(--surface2); border:1px solid var(--border); flex-shrink:0;
+    }
+    .detail-photo[hidden] { display:none; }
 
     /* === Tabs === */
     .tabs {
@@ -516,6 +523,123 @@
       color: var(--text);
     }
 
+
+    /* === Workflow tree (rozklikavaci strom postupu) === */
+    .wf-tree-container { font-size: 13px; }
+    .wf-tree-container details { border: none; }
+    .wf-tree-container details > summary {
+      list-style: none;
+      cursor: pointer;
+      display: grid;
+      grid-template-columns: 18px 70px 110px 1fr 90px 90px 1fr 1fr;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 8px;
+      border-bottom: 1px solid var(--border);
+      transition: background 0.1s;
+    }
+    .wf-tree-container details > summary:hover { background: var(--surface2); }
+    .wf-tree-container details > summary::-webkit-details-marker { display: none; }
+    .wf-tree-container details > summary::before {
+      content: '▶';
+      font-size: 10px;
+      color: var(--text2);
+      transition: transform 0.15s;
+      transform-origin: center;
+    }
+    .wf-tree-container details[open] > summary::before { transform: rotate(90deg); }
+    .wf-tree-container .wf-leaf {
+      display: grid;
+      grid-template-columns: 18px 70px 110px 1fr 90px 90px 1fr 1fr;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 8px;
+      border-bottom: 1px solid var(--border);
+    }
+    .wf-tree-container .wf-leaf:hover { background: var(--surface2); }
+    .wf-tree-container .wf-children { padding-left: 22px; border-left: 1px dashed rgba(255,255,255,0.08); margin-left: 8px; }
+    .wf-tree-container .wf-code { font-family: monospace; color: var(--text2); font-size: 11px; }
+    .wf-tree-container .wf-name { color: var(--text); }
+    .wf-tree-container .wf-qty { text-align: right; font-variant-numeric: tabular-nums; }
+    .wf-tree-container .wf-type { font-weight: 600; font-size: 11px; }
+    .wf-tree-container .wf-type[data-t="Výrobek"] { color: #3b82f6; }
+    .wf-tree-container .wf-type[data-t="Polotovar"] { color: #a855f7; }
+    .wf-tree-container .wf-type[data-t="Materiál"] { color: #10b981; }
+    .wf-tree-container .wf-op, .wf-tree-container .wf-ws { color: var(--text2); font-size: 11px; }
+    .wf-tree-header {
+      display: grid;
+      grid-template-columns: 18px 70px 110px 1fr 90px 90px 1fr 1fr;
+      gap: 8px;
+      padding: 8px 8px;
+      background: var(--surface2);
+      border-bottom: 2px solid var(--border);
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text2);
+      text-transform: uppercase;
+      position: sticky;
+      top: 0;
+      z-index: 1;
+    }
+    .wf-tree-header > span:nth-child(5) { text-align: right; }
+    .wf-tree-container .wf-matid { font-family: monospace; color: var(--text2); font-size: 11px; }
+
+    /* === FY tree (hierarchický strom Factorify exportu podle úrovní) === */
+    .fy-tree-container { font-size: 12px; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+    .fy-tree-container details { border: none; }
+    .fy-tree-container details > summary,
+    .fy-tree-container .fy-tree-leaf {
+      list-style: none;
+      cursor: pointer;
+      display: grid;
+      grid-template-columns: 18px 70px 70px 110px 1fr 80px 50px 90px 60px 1fr;
+      align-items: center;
+      gap: 8px;
+      padding: 5px 8px;
+      border-bottom: 1px solid var(--border);
+    }
+    .fy-tree-container details > summary:hover,
+    .fy-tree-container .fy-tree-leaf:hover { background: var(--surface2); }
+    .fy-tree-container details > summary::-webkit-details-marker { display: none; }
+    .fy-tree-container details > summary::before {
+      content: '▶';
+      font-size: 10px;
+      color: var(--text2);
+      transition: transform 0.15s;
+    }
+    .fy-tree-container details[open] > summary::before { transform: rotate(90deg); }
+    .fy-tree-container .fy-tree-children { padding-left: 22px; border-left: 1px dashed rgba(255,255,255,0.08); margin-left: 8px; }
+    .fy-tree-container .fy-level { font-family: monospace; color: var(--text2); font-size: 10px; }
+    .fy-tree-container .fy-fid { font-family: monospace; color: var(--text2); font-size: 10px; }
+    .fy-tree-container .fy-code { font-family: monospace; font-size: 11px; color: var(--text); font-weight: 600; }
+    .fy-tree-container .fy-name { color: var(--text); }
+    .fy-tree-container .fy-qty { text-align: right; font-variant-numeric: tabular-nums; }
+    .fy-tree-container .fy-unit { color: var(--text2); }
+    .fy-tree-container .fy-type { font-weight: 600; font-size: 11px; }
+    .fy-tree-container .fy-type[data-t="Výrobek"] { color: #3b82f6; }
+    .fy-tree-container .fy-type[data-t="Polotovar"] { color: #a855f7; }
+    .fy-tree-container .fy-type[data-t="Materiál"] { color: #10b981; }
+    .fy-tree-container .fy-stat { text-align: center; font-weight: 700; }
+    .fy-tree-container .fy-op { color: var(--text2); font-size: 10px; }
+    .fy-tree-container .fy-row-missing { background: rgba(239,68,68,0.08); box-shadow: inset 3px 0 0 #ef4444; }
+    .fy-tree-container .fy-row-mismatch { background: rgba(234,179,8,0.08); box-shadow: inset 3px 0 0 #eab308; }
+    .fy-tree-header {
+      display: grid;
+      grid-template-columns: 18px 70px 70px 110px 1fr 80px 50px 90px 60px 1fr;
+      gap: 8px;
+      padding: 8px;
+      background: var(--surface2);
+      border-bottom: 2px solid var(--border);
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text2);
+      text-transform: uppercase;
+      position: sticky;
+      top: 0;
+      z-index: 1;
+    }
+    .fy-tree-header > span:nth-child(6) { text-align: right; }
+    .fy-tree-header > span:nth-child(8) { text-align: center; }
   </style>
 </head>
 <body>
@@ -526,9 +650,11 @@
     <!-- Header -->
     <div class="detail-header">
       <a href="modules/pracovni-postup/index.html" class="back-btn" title="Zpět na seznam">&larr;</a>
+      <img id="product-photo" class="detail-photo" alt="" hidden>
       <div class="detail-header-info">
         <h1 id="product-name">Načítám...</h1>
         <span class="detail-code" id="product-code"></span>
+        <span class="detail-id" id="product-id" title="ID pracovního postupu (Product.id v DB) — používej pro reference v dokumentech, externí systémy a debug" style="display:none;margin-left:8px;font-family:monospace;font-size:11px;color:var(--text2);background:var(--surface2);padding:2px 8px;border-radius:4px;border:1px solid var(--border);"></span>
       </div>
       <div class="detail-meta" id="detail-meta"></div>
     </div>
@@ -539,6 +665,7 @@
       <button class="tab" data-tab="souhrn" onclick="switchTab('souhrn')">Souhrn materiálů</button>
       <button class="tab" data-tab="graf" onclick="switchTab('graf')">📊 Graf</button>
       <button class="tab" data-tab="konfigurace" onclick="switchTab('konfigurace')">⚙️ Konfigurace</button>
+      <button class="tab" data-tab="fy-bom" onclick="switchTab('fy-bom')">📥 Sestava zboží FY</button>
     </div>
 
     <!-- Split: editor + historie -->
@@ -704,6 +831,20 @@
 
         document.getElementById('product-name').textContent = product.name;
         document.getElementById('product-code').textContent = product.code;
+        const idBadge = document.getElementById('product-id');
+        if (idBadge && product.id != null) {
+          idBadge.textContent = '📋 Postup #' + product.id;
+          idBadge.style.display = 'inline-block';
+        }
+        // Fotka produktu — pokud existuje, ukaž ji v hlavičce.
+        // Pokud produkt fotku nemá, /image vrátí 404 a img zůstane skrytý přes onerror.
+        const photoEl = document.getElementById('product-photo');
+        if (photoEl && product.image_path) {
+          photoEl.src = '/api/production/products/' + product.id + '/image';
+          photoEl.alt = product.name;
+          photoEl.hidden = false;
+          photoEl.onerror = () => { photoEl.hidden = true; };
+        }
         updateMeta();
         renderTab();
       } catch (err) {
@@ -772,6 +913,7 @@
       else if (currentTab === 'souhrn') renderMaterialSummary();
       else if (currentTab === 'graf') renderGanttTab();
       else if (currentTab === 'konfigurace') renderKonfiguraceTab();
+      else if (currentTab === 'fy-bom') renderFyBomTab();
     }
 
     // === Render workflow ===
@@ -848,6 +990,7 @@
         '<div class="op-body">' +
           '<div class="op-row">' +
             '<span class="op-name">' + esc(op.name) + '</span>' +
+            '<span class="op-id-badge" title="ID pracovní operace (ProductOperation.id)" style="font-family:monospace;font-size:10px;color:var(--text2);background:var(--surface2);padding:1px 6px;border-radius:3px;border:1px solid var(--border);margin-left:6px;">#' + op.id + '</span>' +
             (op.workstation ? '<span class="op-ws">' + esc(wsName) + '</span>' : '') +
           '</div>' +
           '<div class="op-meta">' +
@@ -870,7 +1013,7 @@
           '</div>' +
           '<div id="' + matId + '" style="display:none;">' +
             '<table class="mat-table">' +
-              '<thead><tr><th>Materiál</th><th>Kód</th><th>Typ</th><th>Norma</th><th>Reálně</th><th>Pracovníků</th><th style="text-align:right;">Množství</th><th>Jedn.</th></tr></thead>' +
+              '<thead><tr><th style="width:60px;" title="ID materiálu (Material.id) — shoduje se se sloupcem ID v Nákup a sklad → Zboží">ID</th><th>Materiál</th><th>Kód</th><th>Typ</th><th>Norma</th><th>Reálně</th><th>Pracovníků</th><th style="text-align:right;">Množství</th><th>Jedn.</th></tr></thead>' +
               '<tbody>';
         mats.forEach(m => {
           const mat = m.material || {};
@@ -924,6 +1067,7 @@
           }
 
           html += '<tr>' +
+            '<td style="font-family:monospace;color:var(--text2);font-size:11px;" title="Material.id">' + (mat.id || '') + '</td>' +
             '<td>' + nameCell + '</td>' +
             '<td style="color:var(--text2);">' + esc(mat.code || '') + '</td>' +
             '<td>' + typeBadge + '</td>' +
@@ -936,7 +1080,7 @@
 
           // Inline sub-workflow — rekurzivní (polotovar v polotovaru atd.)
           if (hasOps) {
-            html += '<tr id="' + subWfId + '" style="display:none;"><td colspan="8" style="padding:0;">' +
+            html += '<tr id="' + subWfId + '" style="display:none;"><td colspan="9" style="padding:0;">' +
               renderSubWorkflow(lp, 0) +
             '</td></tr>';
           }
@@ -1023,7 +1167,7 @@
             '</div>' +
             '<div id="' + subMatId + '" style="display:none;">' +
               '<table class="mat-table" style="margin-left:0;">' +
-                '<thead><tr><th>Materiál</th><th>Kód</th><th>Typ</th><th>Norma</th><th>Reálně</th><th>Pracovníků</th><th style="text-align:right;">Množství</th><th>Jedn.</th></tr></thead>' +
+                '<thead><tr><th style="width:60px;" title="ID materiálu (Material.id)">ID</th><th>Materiál</th><th>Kód</th><th>Typ</th><th>Norma</th><th>Reálně</th><th>Pracovníků</th><th style="text-align:right;">Množství</th><th>Jedn.</th></tr></thead>' +
                 '<tbody>';
           soMats.forEach(sm => {
             const smat = sm.material || {};
@@ -1074,6 +1218,7 @@
             }
 
             html += '<tr>' +
+              '<td style="font-family:monospace;color:var(--text2);font-size:11px;" title="Material.id">' + (smat.id || '') + '</td>' +
               '<td>' + sNameCell + '</td>' +
               '<td style="color:var(--text2);">' + esc(smat.code || '') + '</td>' +
               '<td>' + sTypeBadge + '</td>' +
@@ -1086,7 +1231,7 @@
 
             // Rekurzivní sub-workflow pro další úroveň
             if (sHasOps) {
-              html += '<tr id="' + sSubWfId + '" style="display:none;"><td colspan="8" style="padding:0;">' +
+              html += '<tr id="' + sSubWfId + '" style="display:none;"><td colspan="9" style="padding:0;">' +
                 renderSubWorkflow(slp, depth + 1) +
               '</td></tr>';
             }
@@ -1482,39 +1627,108 @@
     }
 
     // === Material summary tab ===
+    let _summaryMode = sessionStorage.getItem('summary_mode') || 'tree';
+
+    function setSummaryMode(mode) {
+      _summaryMode = mode;
+      sessionStorage.setItem('summary_mode', mode);
+      renderMaterialSummary();
+    }
+
     function renderMaterialSummary() {
       const content = document.getElementById('tab-content');
       const ops = product.operations || [];
 
-      // Agreguj materiály ze všech operací
-      const matMap = {};
-      ops.forEach(op => {
-        (op.materials || []).forEach(m => {
-          const key = m.material_id + '_' + m.unit;
-          if (!matMap[key]) {
-            matMap[key] = {
-              material: m.material,
-              unit: m.unit,
-              totalQty: 0,
-              operations: [],
-            };
-          }
-          matMap[key].totalQty += parseFloat(m.quantity);
-          matMap[key].operations.push(op.name);
-        });
-      });
+      // Toggle Souhrn / Strom
+      const hasAnyMaterial = ops.some(o => (o.materials || []).length > 0);
+      let toolbar = '<div style="display:flex;gap:6px;margin-bottom:12px;">';
+      const treeBtn = _summaryMode === 'tree' ? 'btn-primary' : 'btn';
+      const flatBtn = _summaryMode === 'flat' ? 'btn-primary' : 'btn';
+      toolbar += '<button class="btn ' + treeBtn + '" onclick="setSummaryMode(\'tree\')" title="Hierarchický strom postupu s rozklikáváním polotovarů">🌳 Strom postupu</button>';
+      toolbar += '<button class="btn ' + flatBtn + '" onclick="setSummaryMode(\'flat\')" title="Plochý souhrn — sečtené množství napříč operacemi">📋 Souhrn (plochý)</button>';
+      toolbar += '</div>';
 
-      const matList = Object.values(matMap);
-
-      if (matList.length === 0) {
-        content.innerHTML = '<div class="empty-ops"><div class="icon">&#128230;</div><p>Žádné materiály v operacích</p><p style="font-size:12px;">Přidejte materiály k operacím v záložce "Pracovní postup"</p></div>';
+      if (!hasAnyMaterial) {
+        content.innerHTML = toolbar + '<div class="empty-ops"><div class="icon">&#128230;</div><p>Žádné materiály v operacích</p><p style="font-size:12px;">Přidejte materiály k operacím v záložce "Pracovní postup"</p></div>';
         return;
       }
 
-      let html = '<h3 style="margin-bottom:16px;">Celková spotřeba materiálu na 1 výrobek</h3>';
+      // STROM POSTUPU
+      if (_summaryMode === 'tree') {
+        content.innerHTML = toolbar + '<h3 style="margin:8px 0 8px;">Pracovní postup — rozpad přes polotovary</h3>' + wfRenderTree(product);
+        return;
+      }
+
+      // PLOCHY SOUHRN — rekurzivni agregace pres cely strom postupu.
+      // PLNY BOM: kazdy material/polotovar (vc. tech s postupem) je v seznamu.
+      // Polotovary s postupem se navic rekurzivne rozpadnou na podpolozky.
+      // Quantity se nasobi cestou stromem (parent qty * child qty).
+      const matMap = {};
+      const visitedProducts = new Set();
+      function flattenWalk(productNode, multiplier, depth) {
+        if (!productNode || depth > 30) return;
+        if (productNode.id != null) {
+          if (visitedProducts.has(productNode.id)) return;
+          visitedProducts.add(productNode.id);
+        }
+        for (const op of (productNode.operations || [])) {
+          for (const om of (op.materials || [])) {
+            const mat = om.material;
+            if (!mat) continue;
+            const qty = parseFloat(om.quantity || 0) * multiplier;
+            const lp = om.linked_product;
+            const lpHasOps = lp && Array.isArray(lp.operations) && lp.operations.length > 0;
+
+            // Pridej tento item (i polotovar s postupem) — plny BOM
+            const unit = om.unit || mat.unit || 'ks';
+            const key = mat.id + '_' + unit;
+            if (!matMap[key]) {
+              matMap[key] = {
+                material: mat,
+                unit: unit,
+                totalQty: 0,
+                operations: [],
+                isMissingProcess: !!(wfIsCompositeType(mat.type) && !lpHasOps),
+                hasProcess: !!lpHasOps,
+              };
+            }
+            matMap[key].totalQty += qty;
+            if (!matMap[key].operations.includes(op.name)) {
+              matMap[key].operations.push(op.name);
+            }
+
+            // Pokud ma polotovar postup, rekurzivne rozbal (qty se vynasobi)
+            if (lpHasOps) flattenWalk(lp, qty, depth + 1);
+          }
+        }
+      }
+      flattenWalk(product, 1, 0);
+
+      const matList = Object.values(matMap).sort((a, b) => {
+        // 1) Polotovary bez postupu nahoru (chyba dat — Tomas to musi resit)
+        if (a.isMissingProcess !== b.isMissingProcess) return a.isMissingProcess ? -1 : 1;
+        // 2) Pak polotovary s postupem (vyrobky/polotovary)
+        if (a.hasProcess !== b.hasProcess) return a.hasProcess ? -1 : 1;
+        // 3) Nakonec abecedne
+        return (a.material.name || '').localeCompare(b.material.name || '', 'cs');
+      });
+
+      if (matList.length === 0) {
+        content.innerHTML = toolbar + '<div class="empty-ops"><div class="icon">&#128230;</div><p>Žádné materiály v operacích</p></div>';
+        return;
+      }
+
+      // Statistika
+      const missingCount = matList.filter(m => m.isMissingProcess).length;
+      const missingNote = missingCount > 0
+        ? '<div style="padding:10px 14px;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.35);border-radius:8px;margin-bottom:12px;font-size:12px;">⚠️ <b style="color:#ef4444;">' + missingCount + ' polotovarů</b> v souhrnu chybí pracovní postup, proto je nelze rozpadnout na nakupované díly. Zobrazují se jako jedna položka.</div>'
+        : '';
+      let html = toolbar + '<h3 style="margin-bottom:8px;">Celková spotřeba materiálu na 1 výrobek <span style="font-size:12px;font-weight:400;color:var(--text2);">(rekurzivní rozpad včetně polotovarů)</span></h3>' + missingNote;
       html += '<table style="width:100%;border-collapse:collapse;font-size:13px;">' +
         '<thead><tr style="border-bottom:2px solid var(--border);text-align:left;">' +
+        '<th style="padding:8px;width:60px;" title="ID materiálu (Material.id) — shoduje se se sloupcem ID v Nákup a sklad → Zboží">ID</th>' +
         '<th style="padding:8px;">Materiál</th><th style="padding:8px;">Kód</th>' +
+        '<th style="padding:8px;">Typ</th>' +
         '<th style="padding:8px;text-align:right;">Množství</th><th style="padding:8px;">Jednotka</th>' +
         '<th style="padding:8px;">Sklad</th><th style="padding:8px;">Operace</th>' +
         '</tr></thead><tbody>';
@@ -1523,9 +1737,13 @@
         const mat = m.material || {};
         const stock = mat.current_stock != null ? parseFloat(mat.current_stock) : '—';
         const stockColor = (typeof stock === 'number' && stock < m.totalQty) ? 'color:#ef4444;font-weight:600;' : '';
-        html += '<tr style="border-bottom:1px solid var(--border);">' +
-          '<td style="padding:8px;">' + esc(mat.name || '?') + '</td>' +
+        const missingBadge = m.isMissingProcess ? ' <span title="Tento polotovar nemá v HolyOSu zadaný pracovní postup, proto se v plochém souhrnu objeví jako jedna položka místo rozpadu na nakupované díly." style="display:inline-block;background:rgba(239,68,68,0.15);color:#ef4444;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:700;cursor:help;">⚠ chybí postup</span>' : '';
+        const typeLabel = wfTypeLabel(mat.type);
+        html += '<tr style="border-bottom:1px solid var(--border);' + (m.isMissingProcess ? 'background:rgba(239,68,68,0.05);' : '') + '">' +
+          '<td style="padding:8px;font-family:monospace;color:var(--text2);font-size:11px;" title="Material.id">' + (mat.id || '') + '</td>' +
+          '<td style="padding:8px;">' + esc(mat.name || '?') + missingBadge + '</td>' +
           '<td style="padding:8px;color:var(--text2);">' + esc(mat.code || '') + '</td>' +
+          '<td style="padding:8px;color:var(--text2);font-size:11px;">' + esc(typeLabel) + '</td>' +
           '<td style="padding:8px;text-align:right;font-weight:600;">' + m.totalQty.toFixed(3) + '</td>' +
           '<td style="padding:8px;">' + esc(m.unit) + '</td>' +
           '<td style="padding:8px;' + stockColor + '">' + stock + '</td>' +
@@ -2493,6 +2711,875 @@
       document.getElementById('cfg-modal')?.remove();
       await renderKonfiguraceTab();
       cfgOpenWizard(optionId, optionName);
+    }
+
+    // =================================================================
+    // TAB: Sestava zbozi FY (Factorify export - referencni snimek)
+    // =================================================================
+    let _fyBom = null;
+    let _fyOnlyMissing = false;
+    let _fyViewMode = sessionStorage.getItem('fy_view_mode') || 'tree'; // 'tree' | 'table'
+
+    function setFyViewMode(mode) {
+      _fyViewMode = mode;
+      sessionStorage.setItem('fy_view_mode', mode);
+      renderFyBomTab();
+    }
+
+    const FY_HEADER_MAP = {
+      'uroven': 'level',
+      'urove': 'level',
+      'id zbozi': 'factorify_item_id',
+      'zbozi': 'name',
+      'mnozstvi': 'quantity',
+      'jednotka': 'unit',
+      'typ': 'item_type',
+      'klicova slova': 'keywords',
+      'stav': 'status',
+      'fotografie': 'photo',
+      'nehlidat dostupnost': 'ignore_stock',
+      'pouzito v operacich': 'used_in_operations',
+      'pouzito na pracovistich': 'used_at_workstations',
+      'nakupovatelne': 'is_purchasable',
+      'ma pracovni postup': 'has_workflow',
+      'vykres': 'drawing',
+      'vykres je navrh': 'drawing_is_draft',
+      'definovano v': 'defined_in',
+      'pozice': 'position',
+    };
+
+    function fyStripDiacritics(s) {
+      return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '');
+    }
+    function fyNormHeader(h) {
+      return fyStripDiacritics(h).trim().toLowerCase().replace(/\s+/g, ' ');
+    }
+    function fyToBool(v) {
+      if (typeof v === 'boolean') return v;
+      const s = String(v || '').trim().toLowerCase();
+      return s === 'true' || s === 'ano' || s === '1' || s === 'yes';
+    }
+    function fyExtractCode(name) {
+      const m = String(name || '').trim().match(/^(\S+)/);
+      return m ? m[1].toUpperCase() : null;
+    }
+
+    // Set kodu vsech materialu v pracovnim postupu (rekurzivne pres polotovary).
+    function fyBuildWorkflowCodeSet(rootProduct) {
+      const codes = new Set();
+      const visitedProducts = new Set();
+      function walk(p, depth) {
+        if (!p || depth > 30) return;
+        const pid = p.id;
+        if (pid != null) {
+          if (visitedProducts.has(pid)) return;
+          visitedProducts.add(pid);
+        }
+        if (depth > 0 && p.code) codes.add(String(p.code).toUpperCase());
+        const ops = p.operations || [];
+        for (const op of ops) {
+          const mats = op.materials || [];
+          for (const om of mats) {
+            const mat = om.material;
+            if (mat && mat.code) codes.add(String(mat.code).toUpperCase());
+            if (om && om.linked_product) walk(om.linked_product, depth + 1);
+          }
+        }
+      }
+      walk(rootProduct, 0);
+      return codes;
+    }
+
+    // Map<code(uppercase), { qty, unit }> — agregovany rekurzivni rozpad pres polotovary.
+    // Pro porovnani s FY exportem (kontrola mnozstvi).
+    function fyBuildWorkflowQtyMap(rootProduct) {
+      const map = new Map();
+      const visited = new Set();
+      function walk(p, multiplier, depth) {
+        if (!p || depth > 30) return;
+        if (p.id != null) {
+          if (visited.has(p.id)) return;
+          visited.add(p.id);
+        }
+        // Pridej i sam polotovar (kdyby ho FY mel jako uroven 1.x)
+        if (depth > 0 && p.code) {
+          const k = String(p.code).toUpperCase();
+          const cur = map.get(k);
+          map.set(k, { qty: (cur ? cur.qty : 0) + multiplier, unit: cur ? cur.unit : 'ks' });
+        }
+        for (const op of (p.operations || [])) {
+          for (const om of (op.materials || [])) {
+            const mat = om.material;
+            if (!mat || !mat.code) continue;
+            const qty = parseFloat(om.quantity || 0) * multiplier;
+            const unit = om.unit || mat.unit || 'ks';
+            const lp = om.linked_product;
+            const lpHasOps = lp && Array.isArray(lp.operations) && lp.operations.length > 0;
+
+            const k = String(mat.code).toUpperCase();
+            const cur = map.get(k);
+            map.set(k, { qty: (cur ? cur.qty : 0) + qty, unit: cur ? cur.unit : unit });
+
+            if (lpHasOps) walk(lp, qty, depth + 1);
+          }
+        }
+      }
+      walk(rootProduct, 1, 0);
+      return map;
+    }
+
+    // === Workflow tree helpers (sdilene mezi Souhrn materialu a FY tabem) ===
+
+    function wfIsCompositeType(type) {
+      const t = String(type || '').toLowerCase();
+      return t.includes('semi') || t.includes('polotovar') || t.includes('product') || t.includes('výrobek') || t.includes('vyrobek');
+    }
+
+    // Mapuje raw type z DB (semi_product, product, material, ...) na cesky text
+    function wfTypeLabel(rawType) {
+      const t = String(rawType || '').toLowerCase();
+      if (t.includes('semi') || t.includes('polotovar')) return 'Polotovar';
+      if (t.includes('product') || t.includes('výrobek') || t.includes('vyrobek')) return 'Výrobek';
+      if (t.includes('material') || t.includes('materi')) return 'Materiál';
+      return rawType || '';
+    }
+
+    function wfMakeRow(o, hasChildren, flags) {
+      flags = flags || {};
+      const qtyStr = o.qty != null && o.qty !== '' ? Number(o.qty).toLocaleString('cs-CZ', { maximumFractionDigits: 4 }) : '';
+      const unit = o.unit || '';
+      const qtyCell = qtyStr ? (qtyStr + (unit ? ' ' + esc(unit) : '')) : '';
+      let html = '';
+      html += '<span class="wf-matid" title="Material.id (shoduje se se sloupcem ID v Nákup a sklad → Zboží)">' + (o.matId != null ? o.matId : '') + '</span>';
+      html += '<span class="wf-code" title="' + esc(o.code || '') + '">' + esc(o.code || '') + '</span>';
+      html += '<span class="wf-name">' + esc(o.name || '') + '</span>';
+      html += '<span class="wf-qty">' + qtyCell + '</span>';
+      // typ + pripadne broken indikator (s diagnostikou)
+      const typeLabel = wfTypeLabel(o.type);
+      let typeCell = '<span class="wf-type" data-t="' + esc(typeLabel) + '">' + esc(typeLabel) + '</span>';
+      if (flags.broken) {
+        const diag = (flags.matId != null ? 'mat.id=' + flags.matId : '')
+          + (flags.lpId != null ? ' lp_id=' + flags.lpId : ' lp_id=null')
+          + (flags.lpHasOps != null ? ' ops=' + flags.lpHasOps : '');
+        typeCell = '<span style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;">'
+          + '<span class="wf-type" data-t="' + esc(typeLabel) + '">' + esc(typeLabel) + '</span>'
+          + '<span title="Tento polotovar nemá v HolyOSu zadaný pracovní postup (žádné operace), nelze ho proto dál rozpadnout. Diagnostika: ' + esc(diag.trim()) + '" style="display:inline-block;background:rgba(239,68,68,0.15);color:#ef4444;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:700;cursor:help;">⚠ chybí postup</span>'
+          + '</span>';
+      } else if (flags.cycle) {
+        typeCell += ' <span style="color:#eab308;font-size:10px;" title="Polotovar by se zacyklil — odkazuje na sám sebe. Strom dál nepokračuje.">↻ cyklus</span>';
+      }
+      html += typeCell;
+      html += '<span class="wf-op" title="' + esc(o.op || '') + '">' + esc(o.op || '') + '</span>';
+      html += '<span class="wf-ws" title="' + esc(o.ws || '') + '">' + esc(o.ws || '') + '</span>';
+      return html;
+    }
+
+    // Vraci { html, broken, total }
+    function wfRenderNode(material, omat, op, depth, visited) {
+      if (!material) return { html: '', broken: 0, total: 0 };
+      // POZOR: backend ukládá linked_product na OperationMaterial wrapper (omat), ne na Material.
+      // Fallback na material.linked_product pro případ, že by někdo volal funkci jinak.
+      const lp = (omat && omat.linked_product) || material.linked_product;
+      const linkedId = lp ? lp.id : null;
+      const lpHasOps = lp && Array.isArray(lp.operations) ? lp.operations.length : 0;
+      const isCycle = linkedId != null && visited.has(linkedId);
+      const hasChildren = !!lp && lpHasOps > 0 && !isCycle && depth < 30;
+      const isComposite = wfIsCompositeType(material.type);
+      // broken = polotovar typ ALE bud nema linked_product, nebo ma s prazdnym operations[]
+      const isBroken = isComposite && (!lp || lpHasOps === 0) && !isCycle;
+
+      const rowData = {
+        matId: material.id,
+        code: material.code,
+        name: material.name,
+        qty: omat ? omat.quantity : null,
+        unit: (omat && omat.unit) || material.unit,
+        type: material.type,
+        op: op ? op.name : '',
+        ws: op && op.workstation ? op.workstation.name : '',
+      };
+
+      let broken = isBroken ? 1 : 0;
+      let total = isComposite ? 1 : 0;
+
+      const diagFlags = {
+        broken: isBroken,
+        cycle: isCycle,
+        matId: material.id,
+        lpId: linkedId,
+        lpHasOps: lpHasOps,
+      };
+
+      if (hasChildren) {
+        const newVisited = new Set(visited);
+        newVisited.add(linkedId);
+        let childrenHtml = '';
+        for (const sop of (lp.operations || [])) {
+          for (const som of (sop.materials || [])) {
+            if (!som.material) continue;
+            const sub = wfRenderNode(som.material, som, sop, depth + 1, newVisited);
+            childrenHtml += sub.html;
+            broken += sub.broken;
+            total += sub.total;
+          }
+        }
+        if (!childrenHtml) {
+          return { html: '<div class="wf-leaf"><span></span>' + wfMakeRow(rowData, false, diagFlags) + '</div>', broken: broken, total: total };
+        }
+        return {
+          html: '<details open><summary>' + wfMakeRow(rowData, true, { broken: false }) + '</summary>'
+              + '<div class="wf-children">' + childrenHtml + '</div></details>',
+          broken: broken, total: total,
+        };
+      } else {
+        return {
+          html: '<div class="wf-leaf"><span></span>' + wfMakeRow(rowData, false, diagFlags) + '</div>',
+          broken: broken, total: total,
+        };
+      }
+    }
+
+    // Najdi v allProductsList vsechny Product kandidaty, kteri by mohli byt
+    // linked_product pro dany material (rozne strategy match)
+    function wfFindProductCandidates(material, products) {
+      if (!material || !Array.isArray(products)) return [];
+      const code = String(material.code || '').toLowerCase();
+      const name = String(material.name || '').toLowerCase();
+      const stripCode = (s) => s.replace(/-[a-z0-9]{1,3}$/, '');
+      const matStripped = stripCode(code);
+
+      const out = [];
+      for (const p of products) {
+        const pCode = String(p.code || '').toLowerCase();
+        const pName = String(p.name || '').toLowerCase();
+        const pStripped = stripCode(pCode);
+        const reasons = [];
+
+        if (p.material_id === material.id) reasons.push('material_id matches');
+        if (pCode && pCode === code) reasons.push('exact code');
+        if (pName && pName === name) reasons.push('exact name');
+        if (pStripped && pCode && pStripped !== pCode && pStripped === code) reasons.push('Product[' + p.code + '] → strip → matches Material[' + material.code + ']');
+        if (matStripped && code && matStripped !== code && matStripped === pCode) reasons.push('Material[' + material.code + '] → strip → matches Product[' + p.code + ']');
+        if (pCode && code && pCode !== code && pCode.includes(code)) reasons.push('Product code contains Material code');
+        if (code && pCode && pCode !== code && code.includes(pCode)) reasons.push('Material code contains Product code');
+        if (pName && name && pName !== name && (pName.includes(name) || name.includes(pName))) reasons.push('name partial match');
+
+        if (reasons.length > 0) out.push({ product: p, reasons: reasons });
+      }
+      return out;
+    }
+
+    function wfRenderTree(rootProduct, opts) {
+      opts = opts || {};
+      if (!rootProduct) return '<div class="empty-ops"><p>Produkt nenacten.</p></div>';
+
+      // DIAGNOSTIKA - vyhodit do F12 console stav linked_product + kandidaty z allProductsList
+      try {
+        console.groupCollapsed('[wfRenderTree] Diagnostika postupu', rootProduct.code, '-', rootProduct.name);
+        console.log('Celkem Products v allProductsList:', (typeof allProductsList !== 'undefined' && Array.isArray(allProductsList)) ? allProductsList.length : 'N/A');
+        const ops0 = rootProduct.operations || [];
+        for (const op0 of ops0) {
+          for (const om0 of (op0.materials || [])) {
+            const m0 = om0.material;
+            if (!m0) continue;
+            const lp0 = m0.linked_product;
+            const lpOps0 = lp0 && Array.isArray(lp0.operations) ? lp0.operations.length : 0;
+            const isComp0 = wfIsCompositeType(m0.type);
+            console.log(
+              '[' + op0.name + '] ' + (m0.code || '?') + ' "' + (m0.name || '') + '"',
+              '| type=' + (m0.type || '?'),
+              '| composite=' + isComp0,
+              '| linked_product=' + (lp0 ? '{id:' + lp0.id + ', code:' + lp0.code + ', ops:' + lpOps0 + '}' : 'NULL'),
+              '| material.id=' + m0.id
+            );
+            // Pro polotovary bez linked_product zkus najit kandidaty
+            if (isComp0 && !lp0 && typeof allProductsList !== 'undefined' && Array.isArray(allProductsList)) {
+              const candidates = wfFindProductCandidates(m0, allProductsList);
+              if (candidates.length > 0) {
+                for (const cand of candidates) {
+                  console.log('   ↳ kandidát: Product#' + cand.product.id, '"' + cand.product.code + '"', '"' + cand.product.name + '"', '— důvody:', cand.reasons.join(', '));
+                }
+              } else {
+                console.warn('   ↳ ⚠️ ŽÁDNÝ kandidát v allProductsList — Product pro tento polotovar v DB neexistuje (musíš ho vytvořit)');
+              }
+            }
+          }
+        }
+        console.groupEnd();
+      } catch (e) { console.error('[wfRenderTree] Diag error:', e); }
+
+      const visited = new Set();
+      if (rootProduct.id != null) visited.add(rootProduct.id);
+
+      let childrenHtml = '';
+      let totalBroken = 0;
+      let totalPolotovary = 0;
+      const ops = rootProduct.operations || [];
+      for (const op of ops) {
+        for (const om of (op.materials || [])) {
+          if (!om.material) continue;
+          const sub = wfRenderNode(om.material, om, op, 1, visited);
+          childrenHtml += sub.html;
+          totalBroken += sub.broken;
+          totalPolotovary += sub.total;
+        }
+      }
+
+      const rootRow = wfMakeRow({
+        matId: rootProduct.material_id || null,
+        code: rootProduct.code,
+        name: rootProduct.name,
+        qty: 1,
+        unit: 'ks',
+        type: 'Výrobek',
+        op: '',
+        ws: '',
+      }, !!childrenHtml);
+
+      const wfCodes = fyBuildWorkflowCodeSet(rootProduct);
+
+      let html = '<div class="wf-tree-container">';
+      // Toolbar
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;flex-wrap:wrap;">';
+      html += '<div style="font-size:12px;color:var(--text2);">🌳 Strom postupu — celkem <b style="color:var(--text);">' + wfCodes.size + '</b> unikátních kódů (vč. polotovarů)</div>';
+      html += '<div style="display:flex;gap:6px;flex-wrap:wrap;">';
+      html += '<button class="btn" onclick="wfRefreshFromServer(this)" title="Re-fetch produktu z /api/production/products/:id (cache-bust). Po změně dat na backendu (např. po --apply) obnoví strom" style="font-size:11px;padding:4px 10px;background:rgba(34,197,94,0.1);border-color:rgba(34,197,94,0.4);color:#22c55e;">🔄 Obnovit ze serveru</button>';
+      html += '<button class="btn" onclick="wfTreeExpandAll(this)" title="Rozbalí všechny větve" style="font-size:11px;padding:4px 10px;">▼ Rozbalit vše</button>';
+      html += '<button class="btn" onclick="wfTreeCollapseAll(this)" title="Sbalí všechny větve" style="font-size:11px;padding:4px 10px;">▶ Sbalit vše</button>';
+      html += '</div>';
+      html += '</div>';
+
+      // Varovani o broken polotovarech
+      if (totalBroken > 0) {
+        html += '<div style="display:flex;gap:12px;align-items:flex-start;padding:10px 14px;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.35);border-radius:8px;margin:4px 0 10px;font-size:12px;">';
+        html += '<span style="font-size:16px;line-height:1;">⚠️</span>';
+        html += '<div>U <b style="color:#ef4444;">' + totalBroken + ' z ' + totalPolotovary + ' polotovarů</b> chybí pracovní postup. ';
+        html += 'Tyto polotovary nemají v HolyOSu zadané operace, nelze je tedy dál rozpadnout. ';
+        html += 'Polotovary označené <span style="color:#ef4444;font-weight:600;">⚠ chybí postup</span> ve stromě potřebují doplnit operace v záložce Pracovní postup, nebo vytvořit chybějící Product záznam.';
+        html += '</div></div>';
+      }
+
+      // Sticky header
+      html += '<div class="wf-tree-header"><span></span><span>ID</span><span>Kód</span><span>Název</span><span>Množství</span><span>Typ</span><span>Operace</span><span>Pracoviště</span></div>';
+      // Root + children
+      if (childrenHtml) {
+        html += '<details open><summary>' + rootRow + '</summary><div class="wf-children">' + childrenHtml + '</div></details>';
+      } else {
+        html += '<div class="wf-leaf"><span></span>' + rootRow + '</div>';
+      }
+      html += '</div>';
+      return html;
+    }
+
+    function wfTreeExpandAll(btn) {
+      const root = btn.closest('.wf-tree-container') || document;
+      root.querySelectorAll('details').forEach(d => d.open = true);
+    }
+    function wfTreeCollapseAll(btn) {
+      const root = btn.closest('.wf-tree-container') || document;
+      root.querySelectorAll('details').forEach((d, i) => { if (i > 0) d.open = false; });
+    }
+
+    // Re-fetch produktu ze serveru s cache-bust query, prepise globalni `product` a re-rendruje strom.
+    // Pouziti: po `--apply` v scriptu, kdy chceme videt aktualni linked_product bez nutnosti hard refresh
+    async function wfRefreshFromServer(btn) {
+      if (!product || !product.id) return;
+      const origText = btn ? btn.textContent : '';
+      if (btn) { btn.textContent = '⏳ Načítám...'; btn.disabled = true; }
+      try {
+        const fresh = await api('/api/production/products/' + product.id + '?_t=' + Date.now());
+        // Zachovaj odkaz, prepis fields (aby ostatni reference jako allMaterials zustaly funkcni)
+        for (const k of Object.keys(product)) delete product[k];
+        Object.assign(product, fresh);
+        toast('Data obnovena ze serveru');
+        // Re-render aktualne otevreneho tabu
+        if (typeof renderTab === 'function') renderTab();
+        else if (typeof renderMaterialSummary === 'function') renderMaterialSummary();
+      } catch (err) {
+        console.error('[wfRefreshFromServer] Chyba:', err);
+        toast('Chyba při refresh: ' + err.message);
+      } finally {
+        if (btn) { btn.disabled = false; }
+      }
+    }
+
+    async function renderFyBomTab() {
+      const content = document.getElementById('tab-content');
+      if (!product || !product.id) {
+        content.innerHTML = '<div class="empty-ops"><p>Produkt nenacten.</p></div>';
+        return;
+      }
+      content.innerHTML = '<div class="empty-ops"><div class="loading-spinner"></div><p>Nacitam sestavu...</p></div>';
+
+      try {
+        _fyBom = await api('/api/production/products/' + product.id + '/fy-bom');
+      } catch(e) {
+        _fyBom = null;
+      }
+
+      let html = '<div style="padding:16px 0;">';
+
+      // Header + akcni tlacitka
+      html += '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:16px;flex-wrap:wrap;">';
+      html += '<div><h3 style="margin:0;font-size:16px;">📥 Sestava zboží — export z Factorify</h3>';
+      html += '<p style="font-size:12px;color:var(--text2);margin:4px 0 0;max-width:560px;">Referenční snímek. Naimportuj soubor <code>.xlsx</code> z Factorify (Sestava zboží). Nový import přepíše předchozí.</p></div>';
+      html += '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">';
+      html += '<input type="file" id="fy-file-input" accept=".xlsx,.xls" style="display:none;" onchange="fyHandleFile(this.files[0])">';
+      const importLabel = _fyBom ? 'Nahrát novou sestavu z Factorify' : 'Nahrát sestavu z Factorify (.xlsx)';
+      const importTitle = _fyBom
+        ? 'Vyber .xlsx soubor exportovaný z Factorify (Sestava zboží). Stávající naimportovaná sestava bude přepsána.'
+        : 'Vyber .xlsx soubor exportovaný z Factorify (Sestava zboží). Uloží se jako referenční snímek pro tento výrobek.';
+      html += '<button class="btn btn-primary" onclick="document.getElementById(\'fy-file-input\').click()" title="' + esc(importTitle) + '">📤 ' + esc(importLabel) + '</button>';
+      if (_fyBom) {
+        html += '<button class="btn" onclick="fyDelete()" title="Odstraní naimportovanou Factorify sestavu z tohoto výrobku. Pracovní postup se tím nezmění." style="color:#ef4444;border-color:rgba(239,68,68,0.4);">🗑️ Smazat naimportovanou sestavu</button>';
+      }
+      html += '</div>';
+      html += '</div>';
+
+      // Drop zona
+      html += '<div id="fy-drop-zone" ondragover="fyDragOver(event)" ondragleave="fyDragLeave(event)" ondrop="fyDrop(event)" ';
+      html += 'style="border:2px dashed var(--border);border-radius:10px;padding:20px;text-align:center;color:var(--text2);font-size:13px;margin-bottom:16px;transition:all 0.2s;cursor:pointer;" ';
+      html += 'onclick="document.getElementById(\'fy-file-input\').click()" title="Klikni nebo přetáhni .xlsx soubor">';
+      html += '⬇️ Přetáhni sem <code>.xlsx</code> z Factorify nebo klikni pro výběr souboru';
+      html += '</div>';
+
+      // Strom HolyOS postupu - kolapsibilni sekce nad importem (vzdy viditelna, i bez FY snapshotu)
+      html += '<details style="margin-bottom:16px;background:var(--surface);border:1px solid var(--border);border-radius:8px;">';
+      html += '<summary style="cursor:pointer;padding:12px 16px;font-size:13px;font-weight:600;list-style:none;display:flex;align-items:center;gap:8px;" title="Pracovní postup HolyOS — rozpad přes polotovary, pro porovnání s Factorify exportem">🌳 Pracovní postup HolyOS <span style="color:var(--text2);font-weight:400;font-size:12px;">(klikni pro rozbalení stromu)</span></summary>';
+      html += '<div style="padding:0 16px 16px;">' + wfRenderTree(product) + '</div>';
+      html += '</details>';
+
+      if (!_fyBom) {
+        html += '<div class="empty-ops" style="padding:40px;"><p style="font-size:36px;opacity:0.4;">📦</p><h3>Žádná sestava zatím není naimportována</h3><p>V Factorify otevři <em>Sestava zboží</em> pro tento výrobek a stáhni <code>.xlsx</code>.</p></div>';
+      } else {
+        const items = _fyBom.items || [];
+        const importedAt = new Date(_fyBom.imported_at).toLocaleString('cs-CZ');
+        const author = _fyBom.imported_by ? esc(_fyBom.imported_by) : '—';
+        const fname = _fyBom.source_filename ? esc(_fyBom.source_filename) : '—';
+
+        // Diff vuci pracovnimu postupu — kontrola kodu i mnozstvi
+        const wfQtyMap = fyBuildWorkflowQtyMap(product);
+        let missingCount = 0;
+        let mismatchCount = 0;
+        for (const it of items) {
+          const lvl = String(it.level || '').replace(/\s+/g,'').trim();
+          if (lvl === '1') continue;
+          const code = fyExtractCode(it.name);
+          if (!code) continue;
+          const wfEntry = wfQtyMap.get(code);
+          if (!wfEntry) {
+            missingCount++;
+          } else if (it.quantity != null && wfEntry.qty != null && !fyQtyMatch(it.quantity, wfEntry.qty)) {
+            mismatchCount++;
+          }
+        }
+        const totalNonRoot = items.length - (items.some(it => String(it.level || '').replace(/\s+/g,'').trim() === '1') ? 1 : 0);
+        const presentCount = totalNonRoot - missingCount - mismatchCount;
+
+        // Meta info
+        html += '<div style="display:flex;gap:24px;padding:12px 16px;background:var(--surface);border:1px solid var(--border);border-radius:8px;margin-bottom:12px;font-size:12px;color:var(--text2);flex-wrap:wrap;">';
+        html += '<div><b style="color:var(--text);">' + items.length + '</b> položek</div>';
+        html += '<div>📅 Naimportováno: <b style="color:var(--text);">' + importedAt + '</b></div>';
+        html += '<div>👤 Autor: <b style="color:var(--text);">' + author + '</b></div>';
+        html += '<div>📄 Zdroj: <b style="color:var(--text);">' + fname + '</b></div>';
+        html += '</div>';
+
+        // Diff banner
+        if (missingCount > 0 || mismatchCount > 0) {
+          const bg = missingCount > 0 ? 'rgba(239,68,68,0.1)' : 'rgba(234,179,8,0.1)';
+          const border = missingCount > 0 ? 'rgba(239,68,68,0.4)' : 'rgba(234,179,8,0.4)';
+          html += '<div style="display:flex;justify-content:space-between;align-items:center;gap:16px;padding:12px 16px;background:' + bg + ';border:1px solid ' + border + ';border-radius:8px;margin-bottom:12px;font-size:13px;flex-wrap:wrap;">';
+          html += '<div>';
+          if (missingCount > 0) html += '❌ <b style="color:#ef4444;">' + missingCount + '</b> chybí v postupu';
+          if (missingCount > 0 && mismatchCount > 0) html += ' &nbsp;·&nbsp; ';
+          if (mismatchCount > 0) html += '⚠️ <b style="color:#eab308;">' + mismatchCount + '</b> jiné množství';
+          html += ' &nbsp;·&nbsp; <span style="color:var(--text2);">✅ ' + presentCount + ' sedí</span>';
+          html += '</div>';
+          html += '<button class="btn" onclick="fyToggleOnlyMissing()" id="fy-toggle-missing" title="Filtruje tabulku jen na problémové položky (chybí nebo jiné množství)" style="font-size:12px;padding:5px 12px;">' + (_fyOnlyMissing ? '👁️ Zobrazit vše' : '🔎 Jen problémové') + '</button>';
+          html += '</div>';
+        } else {
+          html += '<div style="padding:12px 16px;background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.4);border-radius:8px;margin-bottom:12px;font-size:13px;">';
+          html += '✅ Všech ' + items.length + ' položek z exportu sedí s pracovním postupem (kód i množství).';
+          html += '</div>';
+        }
+
+        // Toggle Strom / Tabulka
+        const treeBtnCls = _fyViewMode === 'tree' ? 'btn-primary' : 'btn';
+        const tableBtnCls = _fyViewMode === 'table' ? 'btn-primary' : 'btn';
+        html += '<div style="display:flex;gap:6px;margin-bottom:8px;align-items:center;flex-wrap:wrap;">';
+        html += '<button class="btn ' + treeBtnCls + '" onclick="setFyViewMode(\'tree\')" title="Hierarchický strom podle úrovní z Factorify (1, 1.1, 1.1.1, ...)" style="font-size:12px;padding:5px 12px;">🌳 Strom (jako Factorify)</button>';
+        html += '<button class="btn ' + tableBtnCls + '" onclick="setFyViewMode(\'table\')" title="Plochá tabulka — všechny položky pod sebou bez hierarchie" style="font-size:12px;padding:5px 12px;">📋 Plochá tabulka</button>';
+        html += '<input type="text" id="fy-filter" placeholder="🔍 Hledat v sestavě (název, ID, operace)..." oninput="fyApplyFilter()" style="flex:1;min-width:200px;max-width:400px;padding:8px 12px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;">';
+        html += '</div>';
+
+        if (_fyViewMode === 'tree') {
+          // Hierarchicky strom podle FY urovni
+          html += '<div id="fy-view-container">' + fyRenderTreeView(items, wfQtyMap, _fyOnlyMissing) + '</div>';
+        } else {
+          // Plocha tabulka
+          html += '<div id="fy-view-container" style="overflow-x:auto;border:1px solid var(--border);border-radius:8px;background:var(--surface);">';
+          html += '<table class="data-table fy-table" style="width:100%;font-size:12px;border-collapse:collapse;">';
+          html += '<thead><tr style="background:var(--surface2);">';
+          html += '<th style="padding:8px 10px;text-align:left;width:60px;">Úroveň</th>';
+          html += '<th style="padding:8px 10px;text-align:left;width:80px;">ID</th>';
+          html += '<th style="padding:8px 10px;text-align:left;">Zboží</th>';
+          html += '<th style="padding:8px 10px;text-align:right;width:80px;">Množství</th>';
+          html += '<th style="padding:8px 10px;text-align:left;width:60px;">Jed.</th>';
+          html += '<th style="padding:8px 10px;text-align:left;width:90px;">Typ</th>';
+          html += '<th style="padding:8px 10px;text-align:center;width:80px;" title="Je tato položka v pracovním postupu (přímo nebo přes polotovar)?">V postupu</th>';
+          html += '<th style="padding:8px 10px;text-align:left;">Použito v operacích</th>';
+          html += '<th style="padding:8px 10px;text-align:left;width:90px;">Definováno</th>';
+          html += '</tr></thead><tbody id="fy-tbody">';
+          html += fyRenderRows(items, wfQtyMap, _fyOnlyMissing);
+          html += '</tbody></table>';
+          html += '</div>';
+        }
+      }
+
+      html += '</div>';
+      content.innerHTML = html;
+    }
+
+    // Parse FY level string (napr. "1. 1", "1.10", "1.76.70.20.1.1") na pole cisel
+    function fyParseLevel(s) {
+      if (!s) return [];
+      const parts = String(s).split(/[\s.]+/).filter(p => p.length > 0);
+      return parts.map(p => parseInt(p, 10)).filter(n => !Number.isNaN(n));
+    }
+
+    // Postavi tree z FY items podle level path
+    function fyBuildTree(items) {
+      const enriched = items.map(it => ({
+        item: it,
+        path: fyParseLevel(it.level),
+        children: [],
+      }));
+      const byPath = new Map();
+      for (const node of enriched) {
+        byPath.set(JSON.stringify(node.path), node);
+      }
+      const roots = [];
+      for (const node of enriched) {
+        if (node.path.length === 0) {
+          roots.push(node);
+        } else if (node.path.length === 1) {
+          roots.push(node);
+        } else {
+          const parentKey = JSON.stringify(node.path.slice(0, -1));
+          const parent = byPath.get(parentKey);
+          if (parent) parent.children.push(node);
+          else roots.push(node); // orphan → root
+        }
+      }
+      return roots;
+    }
+
+    // Render single FY tree node (rekurzivne s details)
+    function fyRenderTreeNode(node, qtyMap, onlyMissing) {
+      const it = node.item;
+      const code = fyExtractCode(it.name);
+      const isLevel1 = node.path.length <= 1;
+      const wfEntry = code ? qtyMap.get(code) : null;
+      const codeMatch = isLevel1 ? true : !!wfEntry;
+      const fyQty = it.quantity != null ? Number(it.quantity) : null;
+      const wfQty = wfEntry ? wfEntry.qty : null;
+      let qtyMatch = true;
+      let qtyDiffNote = '';
+      if (codeMatch && !isLevel1 && wfEntry && fyQty != null) {
+        qtyMatch = fyQtyMatch(fyQty, wfQty);
+        if (!qtyMatch) {
+          qtyDiffNote = 'FY: ' + Number(fyQty).toLocaleString('cs-CZ', { maximumFractionDigits: 4 })
+            + ' ' + (it.unit || '')
+            + ' / Postup: ' + Number(wfQty).toLocaleString('cs-CZ', { maximumFractionDigits: 4 })
+            + ' ' + (wfEntry.unit || '');
+        }
+      }
+      const missing = !codeMatch;
+      const mismatch = codeMatch && !qtyMatch && !isLevel1;
+
+      // Skryj kdyz onlyMissing zapnute a tento node ani jeho potomci nejsou problemove
+      if (onlyMissing) {
+        // rekurzivne zjisti jestli ma node nebo nejaky potomek problem
+        function hasIssue(n) {
+          if (n === node ? (missing || mismatch) : false) return true;
+          const c = n.item;
+          const cCode = fyExtractCode(c.name);
+          const cIsRoot = n.path.length <= 1;
+          const cEntry = cCode ? qtyMap.get(cCode) : null;
+          const cMatch = cIsRoot ? true : !!cEntry;
+          if (!cMatch) return true;
+          if (cMatch && !cIsRoot && cEntry && c.quantity != null && !fyQtyMatch(c.quantity, cEntry.qty)) return true;
+          for (const ch of n.children) if (hasIssue(ch)) return true;
+          return false;
+        }
+        if (!hasIssue(node)) return '';
+      }
+
+      const typeLabel = wfTypeLabel(it.item_type);
+      const qtyDisplay = it.quantity != null ? Number(it.quantity).toLocaleString('cs-CZ', { maximumFractionDigits: 4 }) : '';
+      const rowClass = missing ? 'fy-row-missing' : (mismatch ? 'fy-row-mismatch' : '');
+      let statCell = '';
+      if (isLevel1) statCell = '<span class="fy-stat" style="color:var(--text2);font-size:10px;" title="Sám výrobek">—</span>';
+      else if (mismatch) statCell = '<span class="fy-stat" style="color:#eab308;cursor:help;" title="Jiné množství. ' + esc(qtyDiffNote) + '">⚠️</span>';
+      else if (codeMatch) statCell = '<span class="fy-stat" style="color:#10b981;" title="Kód v postupu' + (wfEntry ? ', množství: ' + Number(wfQty).toLocaleString('cs-CZ', { maximumFractionDigits: 4 }) + ' ' + (wfEntry.unit || '') : '') + '">✅</span>';
+      else statCell = '<span class="fy-stat" style="color:#ef4444;" title="Kód není v postupu">❌</span>';
+
+      function makeCells() {
+        return '<span class="fy-level">' + esc(it.level || '') + '</span>'
+          + '<span class="fy-fid">' + (it.factorify_item_id || '') + '</span>'
+          + '<span class="fy-code">' + esc(code || '') + '</span>'
+          + '<span class="fy-name">' + esc(it.name || '') + '</span>'
+          + '<span class="fy-qty' + (mismatch ? '" style="color:#eab308;font-weight:600;"' : '"') + '>' + qtyDisplay + '</span>'
+          + '<span class="fy-unit">' + esc(it.unit || '') + '</span>'
+          + '<span class="fy-type" data-t="' + esc(typeLabel) + '">' + esc(typeLabel) + '</span>'
+          + statCell
+          + '<span class="fy-op" title="' + esc(it.used_in_operations || '') + '">' + esc(it.used_in_operations || '') + '</span>';
+      }
+
+      if (node.children && node.children.length > 0) {
+        const childrenHtml = node.children.map(c => fyRenderTreeNode(c, qtyMap, onlyMissing)).join('');
+        return '<details open><summary class="' + rowClass + '">' + makeCells() + '</summary>'
+          + '<div class="fy-tree-children">' + childrenHtml + '</div></details>';
+      }
+      return '<div class="fy-tree-leaf ' + rowClass + '"><span></span>' + makeCells() + '</div>';
+    }
+
+    function fyRenderTreeView(items, qtyMap, onlyMissing) {
+      const roots = fyBuildTree(items);
+      const headerHtml = '<div class="fy-tree-header"><span></span><span>Úroveň</span><span>FY ID</span><span>Kód</span><span>Název</span><span>Množství</span><span>Jed.</span><span>Typ</span><span>V postupu</span><span>Použito v op.</span></div>';
+      const body = roots.map(r => fyRenderTreeNode(r, qtyMap, onlyMissing)).join('');
+      return '<div class="fy-tree-container">' + headerHtml + body + '</div>';
+    }
+
+    // Tolerance pri porovnani mnozstvi (FY vs postup) - 1 promile + min 0.001
+    function fyQtyMatch(a, b) {
+      if (a == null && b == null) return true;
+      if (a == null || b == null) return false;
+      const diff = Math.abs(Number(a) - Number(b));
+      const tol = Math.max(0.001, Math.abs(Number(a)) * 0.001);
+      return diff <= tol;
+    }
+
+    function fyRenderRows(items, wfQtyMap, onlyMissing) {
+      if (!items || items.length === 0) {
+        return '<tr><td colspan="9" style="padding:20px;text-align:center;color:var(--text2);">Žádné položky</td></tr>';
+      }
+      const qtyMap = (wfQtyMap instanceof Map) ? wfQtyMap : new Map();
+      let out = '';
+      let visible = 0;
+      for (const it of items) {
+        const code = fyExtractCode(it.name);
+        const isLevel1 = String(it.level || '').replace(/\s+/g,'').trim() === '1';
+        const wfEntry = code ? qtyMap.get(code) : null;
+        const codeMatch = isLevel1 ? true : !!wfEntry;
+        // Mnozstvi: FY hlasi quantity vzhledem k 1 ks rodicovskeho polotovaru.
+        // Pro top-level (uroven 1.X primo pod vyrobkem) se to porovnava s wfEntry.qty.
+        // Pro hlubsi urovne by to bylo komplikovanejsi (parent-relative); zatim porovname
+        // jen kdyz je jednoznacny case (kod sedi a obe maji qty).
+        const fyQty = it.quantity != null ? Number(it.quantity) : null;
+        const wfQty = wfEntry ? wfEntry.qty : null;
+        let qtyMatch = true;
+        let qtyDiffNote = '';
+        if (codeMatch && !isLevel1 && wfEntry && fyQty != null) {
+          qtyMatch = fyQtyMatch(fyQty, wfQty);
+          if (!qtyMatch) {
+            qtyDiffNote = 'FY: ' + Number(fyQty).toLocaleString('cs-CZ', { maximumFractionDigits: 4 })
+              + ' ' + (it.unit || '')
+              + ' / Postup: ' + Number(wfQty).toLocaleString('cs-CZ', { maximumFractionDigits: 4 })
+              + ' ' + (wfEntry.unit || '')
+              + ' (rozdíl ' + (fyQty > wfQty ? '+' : '') + Number(fyQty - wfQty).toLocaleString('cs-CZ', { maximumFractionDigits: 4 }) + ')';
+          }
+        }
+        const missing = !codeMatch;
+        const mismatch = codeMatch && !qtyMatch && !isLevel1;
+
+        if (onlyMissing && !missing && !mismatch) continue;
+        visible++;
+
+        const typeLabel = wfTypeLabel(it.item_type);
+        const typeColor = typeLabel === 'Výrobek' ? '#3b82f6' : (typeLabel === 'Polotovar' ? '#a855f7' : (typeLabel === 'Materiál' ? '#10b981' : 'var(--text2)'));
+        const qtyDisplay = it.quantity != null ? Number(it.quantity).toLocaleString('cs-CZ', { maximumFractionDigits: 4 }) : '';
+        let rowStyle = 'border-top:1px solid var(--border);';
+        if (missing) rowStyle += 'background:rgba(239,68,68,0.08);box-shadow:inset 3px 0 0 #ef4444;';
+        else if (mismatch) rowStyle += 'background:rgba(234,179,8,0.08);box-shadow:inset 3px 0 0 #eab308;';
+        out += '<tr style="' + rowStyle + '">';
+        out += '<td style="padding:6px 10px;color:var(--text2);font-family:monospace;">' + esc(it.level || '') + '</td>';
+        out += '<td style="padding:6px 10px;color:var(--text2);font-family:monospace;">' + (it.factorify_item_id || '') + '</td>';
+        out += '<td style="padding:6px 10px;">' + esc(it.name) + '</td>';
+        out += '<td style="padding:6px 10px;text-align:right;font-variant-numeric:tabular-nums;' + (mismatch ? 'color:#eab308;font-weight:600;' : '') + '">' + qtyDisplay + '</td>';
+        out += '<td style="padding:6px 10px;color:var(--text2);">' + esc(it.unit || '') + '</td>';
+        out += '<td style="padding:6px 10px;color:' + typeColor + ';font-weight:600;">' + esc(typeLabel) + '</td>';
+        if (isLevel1) {
+          out += '<td style="padding:6px 10px;text-align:center;color:var(--text2);font-size:11px;" title="Toto je samotný výrobek">—</td>';
+        } else if (mismatch) {
+          out += '<td style="padding:6px 10px;text-align:center;color:#eab308;font-weight:700;cursor:help;" title="Kód ' + esc(code || '') + ' je v postupu, ale s jiným množstvím. ' + esc(qtyDiffNote) + '">⚠️</td>';
+        } else if (codeMatch) {
+          out += '<td style="padding:6px 10px;text-align:center;color:#10b981;font-weight:700;" title="Kód ' + esc(code || '') + ' je v pracovním postupu' + (wfEntry ? ' (množství: ' + Number(wfQty).toLocaleString('cs-CZ', { maximumFractionDigits: 4 }) + ' ' + (wfEntry.unit || '') + ')' : '') + '">✅</td>';
+        } else {
+          out += '<td style="padding:6px 10px;text-align:center;color:#ef4444;font-weight:700;" title="Kód ' + esc(code || '') + ' není v pracovním postupu">❌</td>';
+        }
+        out += '<td style="padding:6px 10px;color:var(--text2);font-size:11px;">' + esc(it.used_in_operations || '') + '</td>';
+        out += '<td style="padding:6px 10px;color:var(--text2);font-size:11px;">' + esc(it.defined_in || '') + '</td>';
+        out += '</tr>';
+      }
+      if (visible === 0) {
+        return '<tr><td colspan="9" style="padding:20px;text-align:center;color:var(--text2);">Filtru neodpovídá žádná položka</td></tr>';
+      }
+      return out;
+    }
+
+    function fyToggleOnlyMissing() {
+      _fyOnlyMissing = !_fyOnlyMissing;
+      fyApplyFilter();
+      const btn = document.getElementById('fy-toggle-missing');
+      if (btn) btn.textContent = _fyOnlyMissing ? '👁️ Zobrazit vše' : '🔎 Jen problémové';
+    }
+
+    function fyApplyFilter() {
+      if (!_fyBom) return;
+      const filterEl = document.getElementById('fy-filter');
+      const q = filterEl ? (filterEl.value || '').trim().toLowerCase() : '';
+      const items = (_fyBom.items || []).filter(it => {
+        if (!q) return true;
+        const hay = [it.name, it.factorify_item_id, it.used_in_operations, it.item_type, it.level].join(' ').toLowerCase();
+        return hay.includes(q);
+      });
+      const wfQtyMap = fyBuildWorkflowQtyMap(product);
+      const container = document.getElementById('fy-view-container');
+      if (!container) return;
+      if (_fyViewMode === 'tree') {
+        // Re-render strom
+        container.innerHTML = fyRenderTreeView(items, wfQtyMap, _fyOnlyMissing).replace(/^<div class="fy-tree-container">|<\/div>$/g, '');
+        // Vlastne lepsi: nahrad cely
+        container.outerHTML = '<div id="fy-view-container">' + fyRenderTreeView(items, wfQtyMap, _fyOnlyMissing) + '</div>';
+      } else {
+        const tbody = document.getElementById('fy-tbody');
+        if (tbody) tbody.innerHTML = fyRenderRows(items, wfQtyMap, _fyOnlyMissing);
+      }
+    }
+
+    function fyDragOver(ev) {
+      ev.preventDefault();
+      const z = document.getElementById('fy-drop-zone');
+      if (z) { z.style.borderColor = 'var(--accent)'; z.style.background = 'rgba(59,130,246,0.05)'; }
+    }
+    function fyDragLeave(ev) {
+      ev.preventDefault();
+      const z = document.getElementById('fy-drop-zone');
+      if (z) { z.style.borderColor = 'var(--border)'; z.style.background = ''; }
+    }
+    function fyDrop(ev) {
+      ev.preventDefault();
+      fyDragLeave(ev);
+      const f = ev.dataTransfer && ev.dataTransfer.files ? ev.dataTransfer.files[0] : null;
+      if (f) fyHandleFile(f);
+    }
+
+    async function fyHandleFile(file) {
+      if (!file) return;
+      if (!/\.(xlsx|xls)$/i.test(file.name)) {
+        toast('Vyber soubor .xlsx nebo .xls');
+        return;
+      }
+      if (typeof XLSX === 'undefined') {
+        toast('Knihovna SheetJS se nenacetla - zkontroluj internet');
+        return;
+      }
+
+      try {
+        const buf = await file.arrayBuffer();
+        const wb = XLSX.read(buf, { type: 'array' });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        if (!ws) { toast('Soubor neobsahuje zadne listy'); return; }
+
+        const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null, raw: true });
+        if (rows.length < 2) { toast('Soubor je prazdny'); return; }
+
+        const headers = rows[0].map(h => fyNormHeader(h));
+        const colIdx = {};
+        headers.forEach((h, i) => {
+          const key = FY_HEADER_MAP[h];
+          if (key && !(key in colIdx)) colIdx[key] = i;
+        });
+
+        if (!('name' in colIdx)) {
+          toast('Sloupec "Zbozi" nebyl nalezen - zkontroluj export');
+          return;
+        }
+
+        const items = [];
+for (let r = 1; r < rows.length; r++) {
+          const row = rows[r];
+          if (!row || row.every(v => v == null || v === '')) continue;
+          const get = k => colIdx[k] != null ? row[colIdx[k]] : null;
+          const name = get('name');
+          if (!name || String(name).trim() === '') continue;
+
+          items.push({
+            level: get('level') != null ? String(get('level')) : null,
+            factorify_item_id: get('factorify_item_id') != null && get('factorify_item_id') !== '' ? Number(get('factorify_item_id')) : null,
+            name: String(name),
+            quantity: get('quantity') != null && get('quantity') !== '' ? Number(get('quantity')) : null,
+            unit: get('unit') != null ? String(get('unit')) : null,
+            item_type: get('item_type') != null ? String(get('item_type')) : null,
+            keywords: get('keywords') != null ? String(get('keywords')) : null,
+            status: get('status') != null ? String(get('status')) : null,
+            photo: get('photo') != null ? String(get('photo')) : null,
+            ignore_stock: fyToBool(get('ignore_stock')),
+            used_in_operations: get('used_in_operations') != null ? String(get('used_in_operations')) : null,
+            used_at_workstations: get('used_at_workstations') != null ? String(get('used_at_workstations')) : null,
+            is_purchasable: fyToBool(get('is_purchasable')),
+            has_workflow: fyToBool(get('has_workflow')),
+            drawing: get('drawing') != null ? String(get('drawing')) : null,
+            drawing_is_draft: fyToBool(get('drawing_is_draft')),
+            defined_in: get('defined_in') != null ? String(get('defined_in')) : null,
+            position: get('position') != null ? String(get('position')) : null,
+          });
+        }
+
+        if (items.length === 0) { toast('Sestava neobsahuje zadne polozky'); return; }
+
+        const topRow = items.find(it => String(it.level || '').replace(/\s+/g,'').trim() === '1') || items[0];
+if (topRow) {
+          if (product.factorify_id != null && topRow.factorify_item_id != null
+              && Number(product.factorify_id) !== Number(topRow.factorify_item_id)) {
+            alert('Sestava patří jinému výrobku!\nFY ID exportu: ' + topRow.factorify_item_id + '\nFY ID výrobku: ' + product.factorify_id);
+            return;
+          }
+          const m = String(topRow.name || '').trim().match(/^(\S+)/);
+          const importedCode = m ? m[1] : null;
+          if (importedCode && product.code && importedCode.toLowerCase() !== product.code.toLowerCase()) {
+            alert('Sestava patří jinému výrobku!\nKód v exportu: ' + importedCode + '\nKód výrobku: ' + product.code);
+            return;
+          }
+        }
+
+        if (_fyBom && !confirm('Existujici sestava (' + (_fyBom.items ? _fyBom.items.length : 0) + ' polozek) bude prepsana. Pokracovat?')) return;
+
+        toast('Nahravam ' + items.length + ' polozek...');
+        await api('/api/production/products/' + product.id + '/fy-bom/import', {
+          method: 'POST',
+          body: JSON.stringify({ source_filename: file.name, items: items }),
+        });
+        toast('Import dokoncen - ' + items.length + ' polozek');
+        await renderFyBomTab();
+      } catch (err) {
+        console.error('FY import error:', err);
+        toast('Chyba importu: ' + err.message);
+      }
+    }
+
+    async function fyDelete() {
+      if (!_fyBom) return;
+      if (!confirm('Opravdu smazat sestavu (' + (_fyBom.items ? _fyBom.items.length : 0) + ' polozek)?')) return;
+      try {
+        await api('/api/production/products/' + product.id + '/fy-bom', { method: 'DELETE' });
+        _fyBom = null;
+        toast('Sestava smazana');
+        await renderFyBomTab();
+      } catch (err) {
+        toast('Chyba: ' + err.message);
+      }
     }
   </script>
 </body>

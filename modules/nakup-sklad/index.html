@@ -755,7 +755,7 @@
     function renderMaterials(list) {
       const el = document.getElementById('materials-table');
       if (!list.length) { el.innerHTML = '<div class="empty-state"><div class="empty-icon">📦</div><h3>Žádné zboží</h3><p>Přidejte první zboží nebo importujte z CSV.</p></div>'; return; }
-      let html = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr><th>ID</th><th>Typ</th><th>Kód</th><th>Název</th><th>Stav</th><th>Jedn.</th><th>Cena</th><th>Sklad</th><th>Min.</th><th>Dodavatel</th><th></th></tr></thead><tbody>';
+      let html = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr><th></th><th>ID</th><th>Typ</th><th>Kód</th><th>Název</th><th>Stav</th><th>Jedn.</th><th>Cena</th><th>Sklad</th><th>Min.</th><th>Dodavatel</th><th></th></tr></thead><tbody>';
       for (const m of list) {
         const stock = Number(m.current_stock) || 0;
         const minStock = Number(m.min_stock) || 0;
@@ -766,7 +766,13 @@
         const sLabel = MAT_STATUSES[m.status] || m.status || '—';
         const sColor = MAT_STATUS_COLORS[m.status] || '#64748b';
         const supplierName = m.supplier_name || m.supplier?.name || '—';
+        // Thumbnail z photo_url. Pokud chybí, zobrazí se prázdná buňka 36×36
+        // (fallback ikona 📦 přes onerror, kdyby URL byla rozbitá).
+        const thumb = m.photo_url
+          ? '<img src="' + m.photo_url + '" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement(\'div\'),{textContent:\'📦\',style:\'font-size:18px;opacity:.4;text-align:center\'}))" style="width:36px;height:36px;border-radius:6px;object-fit:cover;background:var(--surface2);border:1px solid var(--border);display:block">'
+          : '<div style="width:36px;height:36px;border-radius:6px;background:var(--surface2);border:1px solid var(--border);"></div>';
         html += '<tr onclick="openMaterialModal(' + m.id + ')">';
+        html += '<td style="width:48px;padding:4px 8px">' + thumb + '</td>';
         html += '<td style="font-family:monospace;color:var(--text2);font-size:12px">' + m.id + '</td>';
         html += '<td><span class="badge" style="background:' + tColor + '22;color:' + tColor + '">' + tLabel + '</span></td>';
         html += '<td style="font-family:monospace;color:var(--text2);font-size:12px">' + (m.code||'—') + '</td>';
