@@ -33,29 +33,50 @@ async function loadProductDeep(productId, prisma) {
   });
 }
 
-// Najdi Product odpovídající danému materiálu (přes material_id FK, kód, nebo název)
+function stripCodeSuffix(code) {
+  if (!code) return code;
+  return code.replace(/-[A-Za-z0-9]{1,3}$/, '');
+}
+
 async function findLinkedProduct(material, prisma, productCache) {
   if (!material) return null;
   const code = (material.code || '').toLowerCase();
   const name = (material.name || '').toLowerCase();
-
-  // Zkontroluj cache
+  if (productCache.byMatId[material.id]) return productCache.byMatId[material.id];
   if (code && productCache.byCode[code]) return productCache.byCode[code];
   if (name && productCache.byName[name]) return productCache.byName[name];
-  if (productCache.byMatId[material.id]) return productCache.byMatId[material.id];
-
+  if (code && productCache.byStrippedProductCode[code]) {
+    const candidate = productCache.byStrippedProductCode[code];
+    if (candidate !== '__AMBIGUOUS__') return candidate;
+  }
+  if (code) {
+    const stripped = stripCodeSuffix(code);
+    if (stripped && stripped !== code && productCache.byCode[stripped]) {
+      return productCache.byCode[stripped];
+    }
+  }
   return null;
 }
 
-// Předpočítej cache všech produktů pro rychlé vyhledávání
 async function buildProductCache(prisma) {
   const allProducts = await prisma.product.findMany({
     select: { id: true, material_id: true, code: true, name: true },
   });
-  const cache = { byMatId: {}, byCode: {}, byName: {} };
+  const cache = { byMatId: {}, byCode: {}, byName: {}, byStrippedProductCode: {} };
   allProducts.forEach(p => {
     if (p.material_id) cache.byMatId[p.material_id] = p.id;
-    if (p.code) cache.byCode[p.code.toLowerCase()] = p.id;
+    if (p.code) {
+      const lower = p.code.toLowerCase();
+      cache.byCode[lower] = p.id;
+      const stripped = stripCodeSuffix(lower);
+      if (stripped && stripped !== lower) {
+        if (cache.byStrippedProductCode[stripped] && cache.byStrippedProductCode[stripped] !== p.id) {
+          cache.byStrippedProductCode[stripped] = '__AMBIGUOUS__';
+        } else {
+          cache.byStrippedProductCode[stripped] = p.id;
+        }
+      }
+    }
     if (p.name) cache.byName[p.name.toLowerCase()] = p.id;
   });
   return cache;
@@ -232,6 +253,294 @@ router.delete('/products/:id', async (req, res, next) => {
   try {
     await prisma.product.delete({ where: { id: parseInt(req.params.id) } });
     res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
+// =============================================================================
+// FACTORIFY SESTAVA ZBOŽÍ (FY BOM)
+// =============================================================================
+
+router.get('/products/:id/fy-bom', async (req, res, next) => {
+  try {
+    const productId = parseInt(req.params.id);
+    if (Number.isNaN(productId)) return res.status(400).json({ error: 'Neplatné ID produktu' });
+    const bom = await prisma.productFyBom.findUnique({
+      where: { product_id: productId },
+      include: { items: { orderBy: { row_index: 'asc' } } },
+    });
+    res.json(bom);
+  } catch (err) { next(err); }
+});
+
+router.post('/products/:id/fy-bom/import', async (req, res, next) => {
+  try {
+    const productId = parseInt(req.params.id);
+    if (Number.isNaN(productId)) return res.status(400).json({ error: 'Neplatné ID produktu' });
+    const product = await prisma.product.findUnique({ where: { id: productId } });
+    if (!product) return res.status(404).json({ error: 'Produkt nenalezen' });
+
+    const { source_filename, items, note } = req.body || {};
+    if (!Array.isArray(items)) return res.status(400).json({ error: 'Pole `items` je povinné' });
+    if (items.length === 0) return res.status(400).json({ error: 'Sestava neobsahuje žádné řádky' });
+    if (items.length > 5000) return res.status(400).json({ error: 'Příliš mnoho řádků (max 5000)' });
+
+    const rows = [];
+    items.forEach((it, idx) => {
+      if (!it || typeof it !== 'object') return;
+      const name = String(it.name || '').trim();
+      if (!name) return;
+      const qty = it.quantity === '' || it.quantity == null ? null : Number(it.quantity);
+      rows.push({
+        row_index: idx,
+        level: it.level ? String(it.level).slice(0, 20) : null,
+        factorify_item_id: it.factorify_item_id != null && !Number.isNaN(parseInt(it.factorify_item_id)) ? parseInt(it.factorify_item_id) : null,
+        name: name.slice(0, 500),
+        quantity: qty != null && !Number.isNaN(qty) ? qty : null,
+        unit: it.unit ? String(it.unit).slice(0, 20) : null,
+        item_type: it.item_type ? String(it.item_type).slice(0, 50) : null,
+        keywords: it.keywords ? String(it.keywords) : null,
+        status: it.status ? String(it.status).slice(0, 50) : null,
+        photo: it.photo ? String(it.photo).slice(0, 500) : null,
+        ignore_stock: !!it.ignore_stock,
+        used_in_operations: it.used_in_operations ? String(it.used_in_operations) : null,
+        used_at_workstations: it.used_at_workstations ? String(it.used_at_workstations) : null,
+        is_purchasable: !!it.is_purchasable,
+        has_workflow: !!it.has_workflow,
+        drawing: it.drawing ? String(it.drawing).slice(0, 500) : null,
+        drawing_is_draft: !!it.drawing_is_draft,
+        defined_in: it.defined_in ? String(it.defined_in).slice(0, 120) : null,
+        position: it.position ? String(it.position).slice(0, 120) : null,
+      });
+    });
+
+    if (rows.length === 0) return res.status(400).json({ error: 'Žádný řádek nemá vyplněný název zboží' });
+
+    const topRow = rows.find(r => {
+      const lvl = (r.level || '').replace(/\s+/g, '').trim();
+      return lvl === '1' || lvl === '';
+    }) || rows[0];
+
+    if (topRow) {
+      if (product.factorify_id != null && topRow.factorify_item_id != null
+          && product.factorify_id !== topRow.factorify_item_id) {
+        return res.status(400).json({
+          error: 'Sestava patří jinému výrobku',
+          detail: 'Factorify ID v exportu (' + topRow.factorify_item_id + ') neodpovídá tomuto výrobku (' + product.factorify_id + ').',
+        });
+      }
+      const tokenMatch = String(topRow.name || '').trim().match(/^(\S+)/);
+      const importedCode = tokenMatch ? tokenMatch[1] : null;
+      if (importedCode && product.code && importedCode.toLowerCase() !== product.code.toLowerCase()) {
+        return res.status(400).json({
+          error: 'Sestava patří jinému výrobku',
+          detail: 'Kód v exportu (' + importedCode + ') neodpovídá kódu produktu (' + product.code + ').',
+        });
+      }
+    }
+
+    const userId = req.user && req.user.id || null;
+    const userName = req.user && (req.user.displayName || req.user.username) || null;
+
+    const result = await prisma.$transaction(async (tx) => {
+      await tx.productFyBom.deleteMany({ where: { product_id: productId } });
+      return tx.productFyBom.create({
+        data: {
+          product_id: productId,
+          imported_by_id: userId,
+          imported_by: userName,
+          source_filename: source_filename ? String(source_filename).slice(0, 255) : null,
+          row_count: rows.length,
+          note: note ? String(note) : null,
+          items: { create: rows },
+        },
+        include: { items: { orderBy: { row_index: 'asc' } } },
+      });
+    });
+
+    res.json(result);
+  } catch (err) { next(err); }
+});
+
+router.delete('/products/:id/fy-bom', async (req, res, next) => {
+  try {
+    const productId = parseInt(req.params.id);
+    if (Number.isNaN(productId)) return res.status(400).json({ error: 'Neplatné ID produktu' });
+    await prisma.productFyBom.deleteMany({ where: { product_id: productId } });
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
+// POST /products/:id/fy-bom/import-children
+// Z FY snapshotu přebere přímé děti polotovaru na zadané parent_level a doplní je
+// do pracovního postupu odpovídajícího Productu jako novou operaci "FY import".
+// Existující spotřeby se nepřepisují — doplní se jen rozdílné materiály.
+router.post('/products/:id/fy-bom/import-children', async (req, res, next) => {
+  try {
+    const productId = parseInt(req.params.id);
+    if (Number.isNaN(productId)) return res.status(400).json({ error: 'Neplatné ID produktu' });
+
+    const product = await prisma.product.findUnique({ where: { id: productId } });
+    if (!product) return res.status(404).json({ error: 'Produkt nenalezen' });
+
+    const { parent_level } = req.body || {};
+    if (!parent_level) return res.status(400).json({ error: 'parent_level je povinné' });
+
+    const fyBom = await prisma.productFyBom.findUnique({
+      where: { product_id: productId },
+      include: { items: { orderBy: { row_index: 'asc' } } },
+    });
+    if (!fyBom) return res.status(400).json({ error: 'Pro tento produkt není naimportovaná FY sestava' });
+
+    const parseLevel = (s) => {
+      if (!s) return [];
+      return String(s).split(/[\s.]+/).filter(p => p.length > 0).map(p => parseInt(p, 10)).filter(n => !Number.isNaN(n));
+    };
+    const arrEq = (a, b) => a.length === b.length && a.every((v, i) => v === b[i]);
+    const isChildOf = (parentArr, childArr) => childArr.length === parentArr.length + 1 && parentArr.every((v, i) => v === childArr[i]);
+    const extractCode = (name) => {
+      const m = String(name || '').trim().match(/^(\S+)/);
+      return m ? m[1] : null;
+    };
+
+    const parentArr = parseLevel(parent_level);
+    if (parentArr.length === 0) return res.status(400).json({ error: 'parent_level je neplatný' });
+
+    const parentItem = fyBom.items.find(it => arrEq(parseLevel(it.level), parentArr));
+    if (!parentItem) return res.status(400).json({ error: 'V FY snapshotu není položka s úrovní ' + parent_level });
+
+    const childItems = fyBom.items.filter(it => isChildOf(parentArr, parseLevel(it.level)));
+    if (childItems.length === 0) {
+      return res.status(400).json({ error: 'Pro tento polotovar nejsou v FY snapshotu žádné podpoložky' });
+    }
+
+    let targetProductId;
+    if (arrEq(parentArr, [1])) {
+      targetProductId = productId;
+    } else {
+      const parentCode = extractCode(parentItem.name);
+      const parentFactId = parentItem.factorify_item_id;
+      let target = null;
+      if (parentCode) target = await prisma.product.findFirst({ where: { code: parentCode } });
+      if (!target && parentFactId) target = await prisma.product.findFirst({ where: { factorify_id: parentFactId } });
+      if (!target) {
+        let cleanName = String(parentItem.name || '').trim().replace(/^\d{3,12}\s*-\s*/, '').replace(/^[\w-]+\s+/, '').trim();
+        if (!cleanName) cleanName = parentItem.name || ('Polotovar ' + (parentCode || parentFactId));
+        const isProductType = String(parentItem.item_type || '').toLowerCase().includes('výrobek') || String(parentItem.item_type || '').toLowerCase().includes('vyrobek');
+        let materialId = null;
+        if (parentCode) {
+          const mat = await prisma.material.findFirst({ where: { code: parentCode } });
+          if (mat) materialId = mat.id;
+        }
+        const created = await prisma.product.create({
+          data: {
+            code: parentCode || ('FY-' + parentFactId),
+            name: cleanName,
+            type: isProductType ? 'product' : 'semi-product',
+            material_id: materialId,
+            factorify_id: parentFactId,
+          },
+        });
+        targetProductId = created.id;
+      } else {
+        targetProductId = target.id;
+      }
+    }
+
+    const targetProduct = await prisma.product.findUnique({
+      where: { id: targetProductId },
+      include: { operations: { include: { materials: { include: { material: true } } } } },
+    });
+
+    const existingCodes = new Set();
+    for (const op of (targetProduct.operations || [])) {
+      for (const om of (op.materials || [])) {
+        if (om.material && om.material.code) existingCodes.add(om.material.code.toLowerCase());
+      }
+    }
+
+    const toAdd = [];
+    const skipped = [];
+    const alreadyExisted = [];
+    for (const child of childItems) {
+      const code = extractCode(child.name);
+      const factId = child.factorify_item_id;
+      if (!code) {
+        skipped.push({ code: null, name: child.name, level: child.level, reason: 'Nelze extrahovat kód z názvu' });
+        continue;
+      }
+      if (existingCodes.has(code.toLowerCase())) {
+        alreadyExisted.push({ code, name: child.name, level: child.level });
+        continue;
+      }
+      let material = await prisma.material.findFirst({ where: { code: code } });
+      if (!material && factId) {
+        material = await prisma.material.findFirst({ where: { external_id: String(factId) } });
+      }
+      if (!material) {
+        skipped.push({ code, name: child.name, level: child.level, reason: 'Material s kódem ' + code + ' neexistuje v HolyOS' });
+        continue;
+      }
+      toAdd.push({
+        material_id: material.id,
+        material_code: material.code,
+        quantity: child.quantity != null ? Number(child.quantity) : 1,
+        unit: child.unit || material.unit || 'ks',
+      });
+    }
+
+    if (toAdd.length === 0) {
+      return res.json({
+        added: 0,
+        already_existed: alreadyExisted.length,
+        already_existed_list: alreadyExisted,
+        skipped,
+        target_product_id: targetProductId,
+        target_product_code: targetProduct.code,
+        message: 'Vše je už v postupu nebo žádný materiál nenalezen',
+      });
+    }
+
+    let importOp = (targetProduct.operations || []).find(op => /^FY import/i.test(op.name));
+    if (!importOp) {
+      const maxStep = (targetProduct.operations || []).reduce((mx, o) => Math.max(mx, o.step_number || 0), 0);
+      importOp = await prisma.productOperation.create({
+        data: {
+          product_id: targetProductId,
+          name: 'FY import (' + new Date().toLocaleDateString('cs-CZ') + ')',
+          step_number: maxStep + 1,
+          duration: 0,
+          duration_unit: 'MINUTE',
+          workers_count: 1,
+          description: 'Automatický import kusovníku z Factorify exportu — bez přiřazení k pracovišti, k ručnímu rozdělení do správných operací.',
+        },
+      });
+    }
+
+    let added = 0;
+    for (const item of toAdd) {
+      const linked = await prisma.product.findFirst({ where: { material_id: item.material_id } });
+      await prisma.operationMaterial.create({
+        data: {
+          operation_id: importOp.id,
+          material_id: item.material_id,
+          quantity: item.quantity,
+          unit: item.unit,
+          product_id: linked ? linked.id : null,
+        },
+      });
+      added++;
+    }
+
+    res.json({
+      added,
+      already_existed: alreadyExisted.length,
+      already_existed_list: alreadyExisted,
+      skipped,
+      operation_id: importOp.id,
+      operation_name: importOp.name,
+      target_product_id: targetProductId,
+      target_product_code: targetProduct.code,
+    });
   } catch (err) { next(err); }
 });
 
@@ -683,10 +992,16 @@ router.post('/operations/:id/materials', async (req, res, next) => {
 // PUT /api/production/operation-materials/:id
 router.put('/operation-materials/:id', async (req, res, next) => {
   try {
-    const { material_id, quantity, unit } = req.body;
+    const { material_id, quantity, unit, operation_id } = req.body;
+    const data = {};
+    if (material_id !== undefined) data.material_id = material_id;
+    if (quantity !== undefined) data.quantity = quantity;
+    if (unit !== undefined) data.unit = unit;
+    // Drag&drop: presun materialu mezi operacemi
+    if (operation_id !== undefined) data.operation_id = operation_id;
     const mat = await prisma.operationMaterial.update({
       where: { id: parseInt(req.params.id) },
-      data: { material_id, quantity, unit },
+      data: data,
       include: { material: { select: { id: true, code: true, name: true, unit: true, current_stock: true } } },
     });
     res.json(mat);
