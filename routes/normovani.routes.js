@@ -366,6 +366,24 @@ function csvSafe(v) {
   return s;
 }
 
+// DELETE /api/normovani/sessions/:id — smazat měření (cascade smaže i eventy)
+router.delete('/sessions/:id', async (req, res, next) => {
+  try {
+    const sessionId = parseInt(req.params.id, 10);
+    if (!Number.isFinite(sessionId)) {
+      return res.status(400).json({ error: 'Neplatné session id' });
+    }
+    const exists = await prisma.normovaniSession.findUnique({ where: { id: sessionId } });
+    if (!exists) return res.status(404).json({ error: `Session ${sessionId} neexistuje` });
+
+    // Cascade smaže i NormovaniEvent (FK má onDelete: Cascade ve schema)
+    await prisma.normovaniSession.delete({ where: { id: sessionId } });
+    res.json({ ok: true, deleted_id: sessionId });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // ─── Dynamická /:id MUSÍ být POSLEDNÍ (memory holyos_express_route_order) ──
 
 // GET /api/normovani/sessions/:id — detail session
