@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Přehled normování | HOLYOS</title>
+  <link rel="icon" type="image/svg+xml" href="../../logo-holyos-icon.svg">
+  <base href="../../">
+  <link rel="stylesheet" href="css/dashboard.css">
+  <style>
+    .main-wrapper { margin-left: var(--sidebar-w); flex: 1; min-height: 100vh; display: flex; flex-direction: column; }
+    @media (max-width: 768px) { .main-wrapper { margin-left: 0; } }
+
+    .module-header {
+      background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);
+      padding: 28px 32px 20px;
+      display: flex; align-items: center; gap: 16px;
+    }
+    .module-header-icon { font-size: 36px; }
+    .module-header h1 { font-size: 22px; font-weight: 700; }
+    .module-header p { font-size: 13px; color: rgba(255,255,255,0.7); margin-top: 2px; }
+
+    .filters {
+      display: flex; gap: 12px; flex-wrap: wrap;
+      padding: 16px 24px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+    }
+    .filters .filter {
+      display: flex; flex-direction: column; gap: 4px;
+      min-width: 140px;
+    }
+    .filters label {
+      font-size: 11px; font-weight: 600; color: var(--text2);
+      text-transform: uppercase; letter-spacing: 0.5px;
+    }
+    .filters input, .filters select {
+      padding: 8px 10px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-size: 13px;
+    }
+    .filters .actions { display: flex; gap: 8px; align-self: flex-end; }
+    .filters button {
+      padding: 8px 16px;
+      border: none; border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px; font-weight: 500;
+    }
+    .filters button.primary { background: #6366f1; color: white; }
+    .filters button.ghost { background: transparent; border: 1px solid var(--border); color: var(--text2); }
+
+    .stats-bar {
+      display: flex; gap: 16px; flex-wrap: wrap;
+      padding: 20px 24px;
+    }
+    .stat-card {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+      padding: 14px 18px; min-width: 130px;
+    }
+    .stat-card .v { font-size: 22px; font-weight: 700; color: #8b5cf6; }
+    .stat-card .l { font-size: 11px; color: var(--text2); margin-top: 4px; }
+
+    .data-section { padding: 0 24px 32px; }
+    .table-wrap {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+      overflow: hidden;
+    }
+    .data-table {
+      width: 100%; border-collapse: collapse; font-size: 13px;
+    }
+    .data-table thead th {
+      text-align: left; font-size: 11px; font-weight: 600;
+      color: var(--text2); text-transform: uppercase; letter-spacing: 0.5px;
+      padding: 12px 14px; background: var(--bg);
+      border-bottom: 1px solid var(--border);
+    }
+    .data-table tbody td {
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--border);
+    }
+    .data-table tbody tr:hover { background: rgba(139,92,246,0.05); cursor: pointer; }
+    .data-table tbody tr.expanded { background: rgba(139,92,246,0.08); }
+
+    .status-pill {
+      display: inline-block;
+      padding: 2px 8px; border-radius: 999px;
+      font-size: 11px; font-weight: 600;
+    }
+    .status-active { background: #fef3c7; color: #92400e; }
+    .status-done { background: #d1fae5; color: #065f46; }
+    .status-paused { background: #e0e7ff; color: #3730a3; }
+    .status-abandoned { background: #fee2e2; color: #991b1b; }
+
+    .row-detail {
+      background: var(--bg);
+      padding: 16px 24px;
+      border-bottom: 1px solid var(--border);
+    }
+    .detail-actions { display: flex; gap: 8px; margin-bottom: 12px; }
+    .detail-actions a, .detail-actions button {
+      padding: 6px 12px; border-radius: 6px; font-size: 12px;
+      border: 1px solid var(--border); background: var(--surface); color: var(--text);
+      text-decoration: none; cursor: pointer;
+    }
+    .detail-actions a:hover, .detail-actions button:hover { border-color: #8b5cf6; color: #8b5cf6; }
+
+    .pairs-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .pairs-table th {
+      text-align: left; padding: 6px 10px;
+      color: var(--text2); font-weight: 600; font-size: 10px; text-transform: uppercase;
+      border-bottom: 1px solid var(--border);
+    }
+    .pairs-table td {
+      padding: 6px 10px;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+    }
+    .pairs-table .code { font-family: 'SF Mono', Consolas, monospace; color: #fbbf24; font-weight: 600; }
+    .pairs-table .duration { font-weight: 600; color: var(--text); }
+    .pairs-table .duration.open { color: #f59e0b; }
+    .pairs-table .duration.orphan { color: #dc2626; }
+
+    .empty {
+      text-align: center; padding: 48px 16px; color: var(--text2);
+    }
+    .empty .ico { font-size: 40px; margin-bottom: 12px; }
+
+    .pair-status {
+      display: inline-block; padding: 1px 6px; border-radius: 4px;
+      font-size: 10px; font-weight: 600;
+    }
+    .pair-closed { background: #d1fae5; color: #065f46; }
+    .pair-open { background: #fef3c7; color: #92400e; }
+    .pair-orphan { background: #fee2e2; color: #991b1b; }
+    .pair-abandoned { background: #fed7aa; color: #9a3412; }
+  </style>
+</head>
+<body>
+  <div class="dashboard">
+    <div class="main-wrapper">
+      <div class="module-header">
+        <div class="module-header-icon">📊</div>
+        <div>
+          <h1>Přehled normování</h1>
+          <p>Záznamy měření TAC + Tpz na pracovišti — sessions, eventy, export</p>
+        </div>
+      </div>
+
+      <div class="filters">
+        <div class="filter">
+          <label for="f-person">Pracovník</label>
+          <select id="f-person"><option value="">— všichni —</option></select>
+        </div>
+        <div class="filter">
+          <label for="f-batch">Číslo dávky</label>
+          <input id="f-batch" type="text" placeholder="např. 22965">
+        </div>
+        <div class="filter">
+          <label for="f-status">Stav</label>
+          <select id="f-status">
+            <option value="">— všechny —</option>
+            <option value="active">Aktivní</option>
+            <option value="done">Dokončené</option>
+            <option value="paused">Pauznuté</option>
+          </select>
+        </div>
+        <div class="filter">
+          <label for="f-from">Od</label>
+          <input id="f-from" type="date">
+        </div>
+        <div class="filter">
+          <label for="f-to">Do</label>
+          <input id="f-to" type="date">
+        </div>
+        <div class="actions">
+          <button class="primary" id="apply-filters">Filtrovat</button>
+          <button class="ghost" id="reset-filters">Reset</button>
+        </div>
+      </div>
+
+      <div class="stats-bar" id="stats-bar"></div>
+
+      <div class="data-section">
+        <div class="table-wrap">
+          <table class="data-table" id="sessions-table">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Pracovník</th>
+                <th>Dávka</th>
+                <th>Zboží</th>
+                <th>Operace</th>
+                <th>Začátek</th>
+                <th>Konec</th>
+                <th>Doba</th>
+                <th>Eventů</th>
+                <th>Stav</th>
+              </tr>
+            </thead>
+            <tbody id="sessions-body">
+              <tr><td colspan="10" class="empty"><div class="ico">⏳</div>Načítám…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/sidebar.js"></script>
+  <script src="js/top-bar.js"></script>
+  <script>
+    // Auth: 401 → login
+    fetch('/api/auth/me', { credentials: 'include' }).then(function (r) {
+      if (r.status === 401) {
+        window.location.href = '/login.html?redirect=' + encodeURIComponent(location.pathname);
+      }
+    }).catch(function () {});
+
+    // Globální fetch override — vždy posílat auth cookie
+    const _fetch = window.fetch;
+    window.fetch = function (url, opts) {
+      opts = opts || {};
+      opts.credentials = opts.credentials || 'include';
+      return _fetch.call(this, url, opts);
+    };
+
+    // ─── Util ──────────────────────────────────────────────
+    function fmtDuration(seconds) {
+      if (seconds == null) return '—';
+      const s = Math.round(seconds);
+      const h = Math.floor(s / 3600);
+      const m = Math.floor((s % 3600) / 60);
+      const sec = s % 60;
+      if (h > 0) return h + 'h ' + m + 'm';
+      if (m > 0) return m + 'm ' + sec + 's';
+      return sec + 's';
+    }
+    function fmtDateTime(iso) {
+      if (!iso) return '—';
+      const d = new Date(iso);
+      const pad = function (n) { return n < 10 ? '0' + n : n; };
+      return pad(d.getDate()) + '.' + pad(d.getMonth() + 1) + '.' + d.getFullYear() +
+             ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+    }
+    function fmtDate(iso) {
+      if (!iso) return '';
+      return new Date(iso).toISOString().slice(0, 10);
+    }
+    function escapeHtml(s) {
+      if (s == null) return '';
+      return String(s).replace(/[&<>"']/g, function (c) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+      });
+    }
+    function durationOfSession(s) {
+      if (!s.started_at) return null;
+      const start = new Date(s.started_at).getTime();
+      const end = s.ended_at ? new Date(s.ended_at).getTime() : Date.now();
+      return Math.round((end - start) / 1000);
+    }
+
+    // ─── Načti pracovníky pro filter dropdown (z HR API) ──
+    async function loadPeople() {
+      try {
+        const res = await fetch('/api/hr/people?active=true', { credentials: 'include' });
+        if (!res.ok) return;
+        const people = await res.json();
+        const sel = document.getElementById('f-person');
+        people.sort(function (a, b) {
+          return ((a.last_name || '') + a.first_name).localeCompare((b.last_name || '') + b.first_name);
+        });
+        people.forEach(function (p) {
+          const opt = document.createElement('option');
+          opt.value = p.id;
+          opt.textContent = (p.first_name || '') + ' ' + (p.last_name || '');
+          sel.appendChild(opt);
+        });
+      } catch (_) {}
+    }
+
+    // ─── Načti sessions podle filtrů ──────────────────────
+    async function loadSessions() {
+      const params = new URLSearchParams();
+      const personId = document.getElementById('f-person').value;
+      const status = document.getElementById('f-status').value;
+      const batchId = document.getElementById('f-batch').value.trim();
+      if (personId) params.set('person_id', personId);
+      if (status) params.set('status', status);
+      if (batchId) params.set('batch_id', batchId);
+      params.set('limit', '200');
+
+      const body = document.getElementById('sessions-body');
+      body.innerHTML = '<tr><td colspan="10" class="empty"><div class="ico">⏳</div>Načítám…</td></tr>';
+
+      try {
+        const res = await fetch('/api/normovani/sessions?' + params.toString(), { credentials: 'include' });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        let sessions = await res.json();
+
+        // Klientsky vyfiltruj podle data (API to neumí, šetřím změny v BE)
+        const from = document.getElementById('f-from').value;
+        const to = document.getElementById('f-to').value;
+        if (from) {
+          const fromMs = new Date(from + 'T00:00:00').getTime();
+          sessions = sessions.filter(function (s) { return new Date(s.started_at).getTime() >= fromMs; });
+        }
+        if (to) {
+          const toMs = new Date(to + 'T23:59:59').getTime();
+          sessions = sessions.filter(function (s) { return new Date(s.started_at).getTime() <= toMs; });
+        }
+
+        renderStats(sessions);
+        renderTable(sessions);
+      } catch (e) {
+        body.innerHTML = '<tr><td colspan="10" class="empty"><div class="ico">⚠️</div>Chyba: ' + escapeHtml(e.message) + '</td></tr>';
+      }
+    }
+
+    function renderStats(sessions) {
+      const total = sessions.length;
+      const active = sessions.filter(function (s) { return s.status === 'active'; }).length;
+      const done = sessions.filter(function (s) { return s.status === 'done'; }).length;
+      const totalSec = sessions.reduce(function (a, s) { return a + (durationOfSession(s) || 0); }, 0);
+      const totalEvents = sessions.reduce(function (a, s) { return a + (s._count ? s._count.events : 0); }, 0);
+
+      const bar = document.getElementById('stats-bar');
+      bar.innerHTML =
+        '<div class="stat-card"><div class="v">' + total + '</div><div class="l">Sessions celkem</div></div>' +
+        '<div class="stat-card"><div class="v">' + active + '</div><div class="l">Aktivních</div></div>' +
+        '<div class="stat-card"><div class="v">' + done + '</div><div class="l">Dokončených</div></div>' +
+        '<div class="stat-card"><div class="v">' + fmtDuration(totalSec) + '</div><div class="l">Naměřeno celkem</div></div>' +
+        '<div class="stat-card"><div class="v">' + totalEvents + '</div><div class="l">Eventů (start/end)</div></div>';
+    }
+
+    function renderTable(sessions) {
+      const body = document.getElementById('sessions-body');
+      if (sessions.length === 0) {
+        body.innerHTML = '<tr><td colspan="10" class="empty"><div class="ico">📭</div>Žádné měření neodpovídá filtru.</td></tr>';
+        return;
+      }
+      body.innerHTML = '';
+      sessions.forEach(function (s) {
+        const tr = document.createElement('tr');
+        tr.dataset.id = s.id;
+        const personName = s.person ? ((s.person.first_name || '') + ' ' + (s.person.last_name || '')).trim() : '#' + s.person_id;
+        const statusClass = 'status-' + (s.status || 'unknown');
+        tr.innerHTML =
+          '<td>#' + s.id + '</td>' +
+          '<td>' + escapeHtml(personName) + '</td>' +
+          '<td><strong>' + escapeHtml(s.fy_batch_number) + '</strong></td>' +
+          '<td>' + escapeHtml(s.fy_goods_code || '') + ' ' + escapeHtml((s.fy_goods_name || '').slice(0, 40)) + '</td>' +
+          '<td>' + escapeHtml(s.fy_operation_name || '') + '</td>' +
+          '<td>' + fmtDateTime(s.started_at) + '</td>' +
+          '<td>' + fmtDateTime(s.ended_at) + '</td>' +
+          '<td>' + fmtDuration(durationOfSession(s)) + '</td>' +
+          '<td>' + (s._count ? s._count.events : 0) + '</td>' +
+          '<td><span class="status-pill ' + statusClass + '">' + escapeHtml(s.status) + '</span></td>';
+        tr.addEventListener('click', function () { toggleDetail(tr, s); });
+        body.appendChild(tr);
+      });
+    }
+
+    async function toggleDetail(rowTr, session) {
+      // Pokud už je expanded, zavři
+      if (rowTr.classList.contains('expanded')) {
+        const next = rowTr.nextElementSibling;
+        if (next && next.classList.contains('detail-row')) next.remove();
+        rowTr.classList.remove('expanded');
+        return;
+      }
+      rowTr.classList.add('expanded');
+
+      const detailTr = document.createElement('tr');
+      detailTr.className = 'detail-row';
+      const td = document.createElement('td');
+      td.colSpan = 10;
+      td.innerHTML = '<div class="row-detail"><div class="empty"><div class="ico">⏳</div>Načítám detail…</div></div>';
+      detailTr.appendChild(td);
+      rowTr.parentNode.insertBefore(detailTr, rowTr.nextSibling);
+
+      try {
+        const res = await fetch('/api/normovani/sessions/' + session.id + '/export', { credentials: 'include' });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const data = await res.json();
+        renderDetail(td, data);
+      } catch (e) {
+        td.innerHTML = '<div class="row-detail"><div class="empty"><div class="ico">⚠️</div>Chyba: ' + escapeHtml(e.message) + '</div></div>';
+      }
+    }
+
+    function renderDetail(td, data) {
+      const items = data.items || [];
+      const exportUrl = '/api/normovani/sessions/' + data.session.id + '/export?format=csv';
+      let html = '<div class="row-detail">';
+      html += '<div class="detail-actions">';
+      html += '<a href="' + exportUrl + '" download>📥 Export CSV</a>';
+      html += '<a href="/api/normovani/sessions/' + data.session.id + '/export" target="_blank">📄 JSON detail</a>';
+      html += '</div>';
+
+      if (items.length === 0) {
+        html += '<div class="empty"><div class="ico">📭</div>Tahle session zatím nemá žádné eventy.</div>';
+      } else {
+        html += '<table class="pairs-table"><thead><tr>' +
+                '<th>Kód</th><th>Název</th><th>Mn.</th><th>Start</th><th>Konec</th><th>Trvání</th><th>Stav</th>' +
+                '</tr></thead><tbody>';
+        items.forEach(function (p) {
+          const durClass = p.status === 'open' ? 'open' : (p.status === 'orphan_end' ? 'orphan' : '');
+          const pillClass = 'pair-' + (p.status === 'orphan_end' ? 'orphan' : p.status);
+          html += '<tr>' +
+                  '<td class="code">' + escapeHtml(p.item_code || '?') + '</td>' +
+                  '<td>' + escapeHtml((p.item_name || '').slice(0, 60)) + '</td>' +
+                  '<td>' + (p.quantity != null ? p.quantity : '') + ' ' + escapeHtml(p.item_unit || '') + '</td>' +
+                  '<td>' + fmtDateTime(p.start_at) + '</td>' +
+                  '<td>' + fmtDateTime(p.end_at) + '</td>' +
+                  '<td class="duration ' + durClass + '">' + fmtDuration(p.duration_seconds) + '</td>' +
+                  '<td><span class="pair-status ' + pillClass + '">' + escapeHtml(p.status) + '</span></td>' +
+                  '</tr>';
+        });
+        html += '</tbody></table>';
+
+        // Sumář
+        if (data.summary) {
+          html += '<div style="margin-top: 12px; font-size: 12px; color: var(--text2);">' +
+                  'Celkem párů: <strong>' + data.summary.total_pairs + '</strong> · ' +
+                  'Uzavřených: <strong>' + data.summary.closed + '</strong> · ' +
+                  'Otevřených: <strong>' + data.summary.open + '</strong> · ' +
+                  'Orphan: <strong>' + data.summary.orphan_end + '</strong> · ' +
+                  'Naměřeno: <strong>' + fmtDuration(data.summary.total_duration_seconds) + '</strong>' +
+                  '</div>';
+        }
+      }
+
+      html += '</div>';
+      td.innerHTML = html;
+    }
+
+    // ─── Init ──────────────────────────────────────────────
+    document.getElementById('apply-filters').addEventListener('click', loadSessions);
+    document.getElementById('reset-filters').addEventListener('click', function () {
+      document.getElementById('f-person').value = '';
+      document.getElementById('f-batch').value = '';
+      document.getElementById('f-status').value = '';
+      document.getElementById('f-from').value = '';
+      document.getElementById('f-to').value = '';
+      loadSessions();
+    });
+    // Enter v batch inputu = filtruj
+    document.getElementById('f-batch').addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') loadSessions();
+    });
+
+    loadPeople();
+    loadSessions();
+  </script>
+</body>
+</html>

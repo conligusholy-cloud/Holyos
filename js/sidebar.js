@@ -23,6 +23,7 @@ function renderSidebar(activeModule) {
     { id: 'davky',                 name: 'Pickovací dávky',     icon: '&#128230;', color: '#f59e0b', active: true },
     { id: 'pracoviste',           name: 'Pracoviště',          icon: '&#127981;', color: '#14b8a6', active: true },
     { id: 'normovani-fy',         name: 'Normování',           icon: '&#9201;',   color: '#6366f1', active: true },
+    { id: 'normovani-prehled',    name: 'Normy',               icon: '&#128202;', color: '#8b5cf6', active: true },
     { id: 'vozovy-park',          name: 'Vozový park',         icon: '&#128663;', color: '#0ea5e9', active: true },
     { id: 'chat',                 name: 'Zprávy',              icon: '&#128172;', color: '#a78bfa', active: true },
     { id: 'kiosky',               name: 'Kiosky',              icon: '&#128433;', color: '#06b6d4', active: true },
