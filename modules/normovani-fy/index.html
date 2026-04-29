@@ -64,7 +64,10 @@
          dílu dá doscrollovat i s velkým tlačítkem ve spodní liště. */
       padding-bottom: 16px;
     }
-    .app.has-footer .content { padding-bottom: 96px; }
+    /* Rezerva pod posledním řádkem v měření = výška footer-baru
+       (12px top + cca 54px tlačítko + 12px bottom) + safe-area Android navbar
+       + ~16px vizuální mezera. Pokud byt u stop překrývá, zvyš tady. */
+    .app.has-footer .content { padding-bottom: calc(110px + env(safe-area-inset-bottom)); }
 
     /* ─── Sticky footer bar (jen na obrazovce měření) ──────────── */
     .footer-bar {
@@ -398,6 +401,16 @@
   <!-- QR scanner overlay -->
   <div class="scanner-overlay" id="scanner-overlay">
     <video id="scanner-video" playsinline autoplay></video>
+    <div class="scanner-bar">
+      <span class="info" id="scanner-info">Naskenuj QR kód…</span>
+      <button class="icon-btn" id="scanner-close-btn">✕</button>
+    </div>
+  </div>
+
+  <script src="modules/normovani-fy/app.js"></script>
+</body>
+</html>
+ay></video>
     <div class="scanner-bar">
       <span class="info" id="scanner-info">Naskenuj QR kód…</span>
       <button class="icon-btn" id="scanner-close-btn">✕</button>
