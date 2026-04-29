@@ -73,6 +73,7 @@
     .sub-tab.active { color: #f59e0b; border-bottom-color: #f59e0b; }
   </style>
   <script src="/js/countries.js"></script>
+  <script src="/js/image-lightbox.js"></script>
 </head>
 <body>
   <div id="sidebar"></div>
@@ -766,10 +767,11 @@
         const sLabel = MAT_STATUSES[m.status] || m.status || '—';
         const sColor = MAT_STATUS_COLORS[m.status] || '#64748b';
         const supplierName = m.supplier_name || m.supplier?.name || '—';
-        // Thumbnail z photo_url. Pokud chybí, zobrazí se prázdná buňka 36×36
-        // (fallback ikona 📦 přes onerror, kdyby URL byla rozbitá).
+        // Thumbnail z photo_url. Klik otevírá lightbox (samostatné okno s velkou fotkou).
+        // Pokud chybí, zobrazí se prázdná buňka 36×36 (fallback ikona 📦 přes onerror).
+        const escName = (m.name || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
         const thumb = m.photo_url
-          ? '<img src="' + m.photo_url + '" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement(\'div\'),{textContent:\'📦\',style:\'font-size:18px;opacity:.4;text-align:center\'}))" style="width:36px;height:36px;border-radius:6px;object-fit:cover;background:var(--surface2);border:1px solid var(--border);display:block">'
+          ? '<img src="' + m.photo_url + '" loading="lazy" onclick="event.stopPropagation();openImageLightbox(this.src,\'' + escName + '\')" onerror="this.replaceWith(Object.assign(document.createElement(\'div\'),{textContent:\'📦\',style:\'font-size:18px;opacity:.4;text-align:center\'}))" style="width:36px;height:36px;border-radius:6px;object-fit:cover;background:var(--surface2);border:1px solid var(--border);display:block;cursor:zoom-in" title="Klik = velký náhled">'
           : '<div style="width:36px;height:36px;border-radius:6px;background:var(--surface2);border:1px solid var(--border);"></div>';
         html += '<tr onclick="openMaterialModal(' + m.id + ')">';
         html += '<td style="width:48px;padding:4px 8px">' + thumb + '</td>';
@@ -1700,10 +1702,19 @@
       let html = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr><th>Datum</th><th>Typ</th><th>Zboží</th><th>Sklad</th><th>Množství</th><th>Cena/ks</th><th>Poznámka</th></tr></thead><tbody>';
       for (const mv of list) {
         const t = MV_TYPES[mv.type] || { label: mv.type, color: '#9ca3af' };
-        html += '<tr><td style="color:var(--text2);">' + new Date(mv.created_at).toLocaleString('cs-CZ') + '</td>';
+        // Backend vrací material/warehouse jako nested objekt; jména extrahujeme bezpečně.
+        const materialName = mv.material?.name || mv.material_name || '—';
+        const materialCode = mv.material?.code || '';
+        const warehouseName = mv.warehouse?.name || mv.warehouse_name || '—';
+        const matCol = materialCode
+          ? '<span class="person-name">' + materialName + '</span> <span style="font-family:monospace;font-size:11px;color:var(--text2);">(' + materialCode + ')</span>'
+          : '<span class="person-name">' + materialName + '</span>';
+        // Datum: preferuj factorify_moved_at (skutečné datum pohybu) před created_at (datum importu)
+        const movedAt = mv.factorify_moved_at || mv.created_at;
+        html += '<tr><td style="color:var(--text2);">' + new Date(movedAt).toLocaleString('cs-CZ') + '</td>';
         html += '<td><span class="badge" style="background:' + t.color + '22;color:' + t.color + ';">' + t.label + '</span></td>';
-        html += '<td class="person-name">' + (mv.material_name || '—') + '</td>';
-        html += '<td>' + (mv.warehouse_name || '—') + '</td>';
+        html += '<td>' + matCol + '</td>';
+        html += '<td>' + warehouseName + '</td>';
         html += '<td style="font-weight:600;">' + mv.quantity + '</td>';
         html += '<td>' + (mv.unit_price||0).toLocaleString('cs-CZ') + ' Kč</td>';
         html += '<td style="color:var(--text2);">' + (mv.note||'') + '</td></tr>';
