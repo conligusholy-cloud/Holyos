@@ -1143,6 +1143,13 @@ router.get('/movements', async (req, res, next) => {
     if (warehouse_id) where.warehouse_id = parseInt(warehouse_id);
     if (type) where.type = type;
 
+    // Pagination: limit 1..2000, offset >= 0. Default 200 (3× původních 100).
+    const limit = Math.min(Math.max(parseInt(req.query.limit) || 200, 1), 2000);
+    const offset = Math.max(parseInt(req.query.offset) || 0, 0);
+
+    // Řadit podle skutečného data pohybu (factorify_moved_at) primárně, fallback created_at.
+    // Faktorify import nastavuje factorify_moved_at na původní datum pohybu z Factorify;
+    // u ručně vytvořených pohybů (přes UI/PWA) tohle pole zůstává null a použije se created_at.
     const movements = await prisma.inventoryMovement.findMany({
       where,
       include: {
@@ -1150,8 +1157,12 @@ router.get('/movements', async (req, res, next) => {
         warehouse: { select: { id: true, name: true } },
         creator: { select: { id: true, first_name: true, last_name: true } },
       },
-      orderBy: { created_at: 'desc' },
-      take: 100,
+      orderBy: [
+        { factorify_moved_at: { sort: 'desc', nulls: 'last' } },
+        { created_at: 'desc' },
+      ],
+      take: limit,
+      skip: offset,
     });
     res.json(movements);
   } catch (err) {
