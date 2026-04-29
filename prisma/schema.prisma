@@ -175,15 +175,18 @@ model Person {
   payment_batches_created    PaymentBatch[]        @relation("PaymentBatchCreator")
 
   // Plánovač — kompetence
-  competencies WorkerCompetency[] @relation("WorkerCompetencyPerson")
+  competencies                  WorkerCompetency[]  @relation("WorkerCompetencyPerson")
   // Plánovač — vytvořené dávky
-  batches_created ProductionBatch[] @relation("BatchCreatedBy")
+  batches_created               ProductionBatch[]   @relation("BatchCreatedBy")
   // Plánovač — přiřazené operace v kiosku
-  batch_operations_assigned BatchOperation[]    @relation("BatchOperationAssignee")
+  batch_operations_assigned     BatchOperation[]    @relation("BatchOperationAssignee")
   // Plánovač — log akcí v kiosku
-  batch_operation_logs      BatchOperationLog[] @relation("BatchOperationLogPerson")
+  batch_operation_logs          BatchOperationLog[] @relation("BatchOperationLogPerson")
   // Plánovač — kalibrace časů ProductOperation
-  product_operations_calibrated ProductOperation[] @relation("ProductOperationCalibrator")
+  product_operations_calibrated ProductOperation[]  @relation("ProductOperationCalibrator")
+
+  // Normování — měření časů na pracovišti
+  normovani_sessions NormovaniSession[] @relation("NormovaniSessionPerson")
 
   @@index([department_id])
   @@index([role_id])
@@ -444,33 +447,36 @@ model DocumentNotification {
 // =============================================================================
 
 model Company {
-  id                 Int     @id @default(autoincrement())
-  name               String  @db.VarChar(255)
-  ico                String? @db.VarChar(20)
-  dic                String? @db.VarChar(20)
+  id                     Int     @id @default(autoincrement())
+  name                   String  @db.VarChar(255)
+  ico                    String? @db.VarChar(20)
+  dic                    String? @db.VarChar(20)
   // Adresa sídla (fakturační)
-  address            String? @db.VarChar(255)
-  city               String? @db.VarChar(100)
-  zip                String? @db.VarChar(10)
-  country            String  @default("CZ") @db.VarChar(2)
+  address                String? @db.VarChar(255)
+  city                   String? @db.VarChar(100)
+  zip                    String? @db.VarChar(10)
+  country                String  @default("CZ") @db.VarChar(2)
   // Adresa provozovny (kam se fyzicky jezdí na servis / odkud probíhá dodání)
-  branch_address     String? @db.VarChar(255)
-  branch_city        String? @db.VarChar(100)
-  branch_zip         String? @db.VarChar(10)
-  type               String  @db.VarChar(50) // supplier, customer, cooperation, both, service_provider
-  contact_person     String? @db.VarChar(255)
-  email              String? @db.VarChar(255)
-  phone              String? @db.VarChar(20)
-  web                String? @db.VarChar(255)
-  bank_account       String? @db.VarChar(50)
+  branch_address         String? @db.VarChar(255)
+  branch_city            String? @db.VarChar(100)
+  branch_zip             String? @db.VarChar(10)
+  type                   String  @db.VarChar(50) // supplier, customer, cooperation, both, service_provider
+  contact_person         String? @db.VarChar(255)
+  email                  String? @db.VarChar(255)
+  phone                  String? @db.VarChar(20)
+  web                    String? @db.VarChar(255)
+  bank_account           String? @db.VarChar(50)
   // Whitelist potvrzených bankovních účtů (anti-podvod). JSON pole záznamů
   // { account, iban?, verified_by_user_id, verified_at, source, note? }.
   // Při schválení faktury / klik "Potvrdit účet" se sem účet přidá.
   // Faktura s neznámým účtem od známé firmy dostane v UI red flag.
-  verified_bank_accounts Json @default("[]")
-  payment_terms_days Int     @default(14)
-  notes              String? @db.Text
-  active             Boolean @default(true)
+  verified_bank_accounts Json    @default("[]")
+  payment_terms_days     Int     @default(14)
+  notes                  String? @db.Text
+  active                 Boolean @default(true)
+
+  // Factorify migrace
+  factorify_id String? @db.VarChar(100) // Company.id
 
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
@@ -490,9 +496,12 @@ model Company {
   supplied_lots        MaterialLot[]       @relation("MaterialLotSupplier")
   // Účetní doklady — faktury přijaté (AP) i vydané (AR)
   invoices             Invoice[]           @relation("InvoiceCompany")
+  // Factorify nákupní ceník
+  supplier_price_lists SupplierPriceList[] @relation("SupplierPriceListSupplier")
 
   @@index([ico])
   @@index([type])
+  @@index([factorify_id])
   @@map("companies")
 }
 
@@ -519,14 +528,22 @@ model Order {
   //   approved      = ředitel schválil (přechod přes /api/wh/orders/:id/approve)
   //   rejected      = ředitel zamítl s poznámkou — vrácení do pending pro úpravu
   //   auto_approved = MRP/stockrule autogenerovaná Order, neprojde lidským schválením
-  approval_status            String    @default("pending") @db.VarChar(20)
-  approved_by_user_id        Int? // User FK pro audit (Tomášův User nemá vždy Person)
-  approved_at                DateTime?
-  approval_note              String?   @db.Text // důvod zamítnutí, případně poznámka schvalovatele
-  submitted_for_approval_at  DateTime?
+  approval_status           String    @default("pending") @db.VarChar(20)
+  approved_by_user_id       Int? // User FK pro audit (Tomášův User nemá vždy Person)
+  approved_at               DateTime?
+  approval_note             String?   @db.Text // důvod zamítnutí, případně poznámka schvalovatele
+  submitted_for_approval_at DateTime?
   // source: kdo Order vytvořil — 'manual' (z UI), 'mrp_autogen' (auto z stockrule),
   //   'import' (Factorify migrace). manual → vyžaduje schválení; ostatní → auto_approved.
-  source                     String    @default("manual") @db.VarChar(20)
+  source                    String    @default("manual") @db.VarChar(20)
+
+  // Factorify migrace — jednoznačná identifikace + nepřeložitelná custom pole
+  factorify_id       String? @db.VarChar(100) // PurchaseOrder.id ve Factorify
+  factorify_metadata Json? // STAV/DUVOD/POPT/SCHASTAV/PLAT/" REASON" — Best Series custom pole
+
+  // Vazby na CostCenter / Project (Factorify Order má costCenter + project)
+  cost_center_id Int?
+  project_id     Int?
 
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
@@ -535,6 +552,8 @@ model Order {
   creator       Person?     @relation("OrderCreatedBy", fields: [created_by], references: [id])
   approver      Person?     @relation("OrderApprovedBy", fields: [approved_by], references: [id])
   approver_user User?       @relation("OrderApproverUser", fields: [approved_by_user_id], references: [id])
+  cost_center   CostCenter? @relation("OrderCostCenter", fields: [cost_center_id], references: [id])
+  project       Project?    @relation("OrderProject", fields: [project_id], references: [id])
   items         OrderItem[]
   invoices      Invoice[]   @relation("InvoiceOrder")
 
@@ -542,6 +561,9 @@ model Order {
   @@index([status])
   @@index([company_id])
   @@index([approval_status])
+  @@index([factorify_id])
+  @@index([cost_center_id])
+  @@index([project_id])
   @@map("orders")
 }
 
@@ -561,6 +583,10 @@ model OrderItem {
   note               String?   @db.Text
   serial_number      String?   @db.VarChar(100) // Výrobní číslo kiosku (přidělené ručně na úrovni položky)
 
+  // Factorify migrace
+  factorify_id                 String? @db.VarChar(100) // PurchaseOrderItem.id
+  factorify_price_list_item_id String? @db.VarChar(100) // buyingPriceListItem.id (vazba na cenový tier)
+
   order            Order             @relation(fields: [order_id], references: [id], onDelete: Cascade)
   material         Material?         @relation(fields: [material_id], references: [id])
   product          Product?          @relation(fields: [product_id], references: [id], onDelete: SetNull)
@@ -571,6 +597,7 @@ model OrderItem {
   @@index([order_id])
   @@index([product_id])
   @@index([serial_number])
+  @@index([factorify_id])
   @@map("order_items")
 }
 
@@ -587,6 +614,10 @@ model Warehouse {
   manager_id Int?
   active     Boolean @default(true)
 
+  // Factorify migrace
+  factorify_id String? @db.VarChar(100) // Stock.id
+  hala_code    String? @db.VarChar(20) // HALA1..HALA4 — kategorizace skladů Best Series
+
   created_at DateTime @default(now())
 
   manager             Person?             @relation("WarehouseManager", fields: [manager_id], references: [id])
@@ -597,6 +628,7 @@ model Warehouse {
   workstations_input  Workstation[]       @relation("WorkstationInputWarehouse")
   workstations_output Workstation[]       @relation("WorkstationOutputWarehouse")
 
+  @@index([factorify_id])
   @@map("warehouses")
 }
 
@@ -760,6 +792,7 @@ model Material {
   serial_numbers          SerialNumber[] // SKLAD 2.0 — sériová čísla per kus (pokud save_sn_first_scan)
   lots                    MaterialLot[] // SKLAD 2.0 — šarže (pokud expirable / distinguish_batches)
   invoice_items           InvoiceItem[]          @relation("InvoiceItemMaterial") // řádky faktur odkazující na tento materiál
+  supplier_price_lists    SupplierPriceList[] // Factorify nákupní ceník (více dodavatelů × více období)
 
   // Plánovač
   bom_snapshot_items BomSnapshotItem[]
@@ -789,6 +822,12 @@ model InventoryMovement {
   note             String?  @db.Text
   created_by       Int?
 
+  // Factorify migrace
+  factorify_id          String?   @db.VarChar(100) // StockMove.id
+  factorify_document_id String?   @db.VarChar(100) // StockMove.stockDocument.id (vazba na původní StockDocument; HolyOS má svůj document_id)
+  factorify_state       String?   @db.VarChar(20) // StockMove.state (NEW/EXPORTED/CANCELLED/...)
+  factorify_moved_at    DateTime? // StockMove.movedAt — původní timestamp pohybu
+
   created_at DateTime @default(now())
 
   material         Material           @relation(fields: [material_id], references: [id])
@@ -808,6 +847,8 @@ model InventoryMovement {
   @@index([document_id])
   @@index([from_location_id])
   @@index([to_location_id])
+  @@index([factorify_id])
+  @@index([factorify_document_id])
   @@map("inventory_movements")
 }
 
@@ -843,12 +884,16 @@ model Inventory {
   created_by   Int?
   note         String?   @db.Text
 
+  // Factorify migrace
+  factorify_id String? @db.VarChar(100) // StockPhysicalInventory.id
+
   created_at DateTime @default(now())
 
   warehouse Warehouse       @relation(fields: [warehouse_id], references: [id])
   creator   Person?         @relation("InventoryCreatedBy", fields: [created_by], references: [id])
   items     InventoryItem[]
 
+  @@index([factorify_id])
   @@map("inventories")
 }
 
@@ -866,12 +911,16 @@ model InventoryItem {
   counted_at       DateTime?
   note             String?   @db.Text
 
+  // Factorify migrace
+  factorify_id String? @db.VarChar(100) // StockPhysicalInventoryPosition.id
+
   inventory Inventory          @relation(fields: [inventory_id], references: [id], onDelete: Cascade)
   material  Material           @relation(fields: [material_id], references: [id])
   location  WarehouseLocation? @relation(fields: [location_id], references: [id])
   counter   Person?            @relation("InventoryCountedBy", fields: [counted_by], references: [id])
 
   @@index([inventory_id])
+  @@index([factorify_id])
   @@map("inventory_items")
 }
 
@@ -957,7 +1006,7 @@ model Product {
 
   // Fotografie produktu — ukládáme do persistent volume na Railway (/app/data/product-images/<id>.<ext>).
   // image_path je název souboru relativně k adresáři product-images/.
-  image_path           String? @db.VarChar(255)
+  image_path String? @db.VarChar(255)
 
   // Plánovač — dávkové parametry
   min_batch_size      Int? // minimální velikost výrobní dávky (kvůli setupům, ekonomice)
@@ -975,7 +1024,7 @@ model Product {
   invoice_items   InvoiceItem[]        @relation("InvoiceItemProduct")
 
   // Plánovač
-  bom_snapshots     BomSnapshot[]
+  bom_snapshots      BomSnapshot[]
   production_batches ProductionBatch[] @relation("BatchProduct")
 
   // Factorify referenční sestava zboží (poslední import) — read-only snapshot
@@ -1107,16 +1156,21 @@ model ProductOperation {
   last_calibrated_at    DateTime? // kdy naposledy ručně přepsán čas (override Factorify)
   last_calibrated_by_id Int?
 
-  product           Product                 @relation(fields: [product_id], references: [id], onDelete: Cascade)
-  workstation       Workstation?            @relation(fields: [workstation_id], references: [id])
-  materials         OperationMaterial[]
-  config_option_ops ConfigOptionOperation[] // volby, které ovlivňují tuto operaci
-  last_calibrated_by Person?                @relation("ProductOperationCalibrator", fields: [last_calibrated_by_id], references: [id])
+  // Migrační okno — operace je jen staging area pro materiály z FY importu (ne reálná pracovní operace).
+  // Plánovač, simulace, normy a Gantt by ji měli ignorovat. Tomáš materiály drag&dropem rozdělí
+  // do správných operací a tuto operaci pak smaže.
+  is_staging Boolean @default(false)
+
+  product            Product                 @relation(fields: [product_id], references: [id], onDelete: Cascade)
+  workstation        Workstation?            @relation(fields: [workstation_id], references: [id])
+  materials          OperationMaterial[]
+  config_option_ops  ConfigOptionOperation[] // volby, které ovlivňují tuto operaci
+  last_calibrated_by Person?                 @relation("ProductOperationCalibrator", fields: [last_calibrated_by_id], references: [id])
 
   // Plánovač — požadované kompetence
   required_competencies OperationRequiredCompetency[]
   // Plánovač — BOM snapshot itemy, kde je tato operace zdrojem spotřeby materiálu
-  bom_snapshot_items    BomSnapshotItem[]            @relation("BomSnapshotItemOperation")
+  bom_snapshot_items    BomSnapshotItem[]             @relation("BomSnapshotItemOperation")
   // Plánovač — instance operace pro výrobní dávky
   batch_operations      BatchOperation[]
 
@@ -2174,25 +2228,38 @@ model WarehouseDocument {
   type         String    @db.VarChar(30) // receipt_doc, issue_doc, transfer_doc, pick_list, inventory_doc
   number       String    @unique @db.VarChar(50) // řada per typ, např. PR-2026-00123
   status       String    @default("draft") @db.VarChar(20) // draft, in_progress, completed, cancelled
-  partner_id   Int? // dodavatel / odběratel / projekt (Company)
+  partner_id   Int? // dodavatel / odběratel / projekt (Company) — Factorify counterpartyCompany
   reference    String?   @db.VarChar(255) // volný text — číslo DL od dodavatele apod.
   note         String?   @db.Text
   created_by   Int?
   completed_at DateTime?
   completed_by Int?
 
+  // Vazby (Factorify má i tyto vazby na StockDocument)
+  cost_center_id Int?
+  project_id     Int?
+
+  // Factorify migrace
+  factorify_id   String? @db.VarChar(100) // StockDocument.id
+  factorify_type String? @db.VarChar(50) // původní type ze StockDocument (Factorify enum)
+
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
 
-  partner   Company?            @relation("WarehouseDocumentPartner", fields: [partner_id], references: [id])
-  creator   Person?             @relation("WarehouseDocumentCreator", fields: [created_by], references: [id])
-  movements InventoryMovement[] // pohyby patřící tomuto dokumentu
-  invoices  Invoice[]           @relation("InvoiceWarehouseDoc") // faktury vázané na tento doklad (AP příjemka, AR dodací list)
+  partner     Company?            @relation("WarehouseDocumentPartner", fields: [partner_id], references: [id])
+  creator     Person?             @relation("WarehouseDocumentCreator", fields: [created_by], references: [id])
+  cost_center CostCenter?         @relation("WarehouseDocumentCostCenter", fields: [cost_center_id], references: [id])
+  project     Project?            @relation("WarehouseDocumentProject", fields: [project_id], references: [id])
+  movements   InventoryMovement[] // pohyby patřící tomuto dokumentu
+  invoices    Invoice[]           @relation("InvoiceWarehouseDoc") // faktury vázané na tento doklad (AP příjemka, AR dodací list)
 
   @@index([type])
   @@index([status])
   @@index([partner_id])
   @@index([created_at])
+  @@index([factorify_id])
+  @@index([cost_center_id])
+  @@index([project_id])
   @@map("warehouse_documents")
 }
 
@@ -2589,15 +2656,21 @@ model CostCenter {
   active Boolean @default(true)
   note   String? @db.Text
 
+  // Factorify migrace
+  factorify_id String? @db.VarChar(100) // CostCenter.id
+
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
 
-  invoice_items  InvoiceItem[]  @relation("InvoiceItemCostCenter")
-  cash_movements CashMovement[] @relation("CashMovementCostCenter")
+  invoice_items       InvoiceItem[]       @relation("InvoiceItemCostCenter")
+  cash_movements      CashMovement[]      @relation("CashMovementCostCenter")
+  orders              Order[]             @relation("OrderCostCenter")
+  warehouse_documents WarehouseDocument[] @relation("WarehouseDocumentCostCenter")
 
   @@index([type, active])
   @@index([vehicle_id])
   @@index([person_id])
+  @@index([factorify_id])
   @@map("cost_centers")
 }
 
@@ -2961,15 +3034,15 @@ model OcrExtraction {
   invoice_id      Int?
   invoice         Invoice?         @relation("OcrForInvoice", fields: [invoice_id], references: [id])
 
-  pass_number Int
+  pass_number    Int
   // claude_vision_header, claude_vision_lines, ares_lookup, vies_lookup,
   // vat_math_check, duplicate_check, link_follow
-  pass_type   String  @db.VarChar(50)
-  model_used  String? @db.VarChar(50) // claude-sonnet-4-6, claude-opus-4-6
+  pass_type      String  @db.VarChar(50)
+  model_used     String? @db.VarChar(50) // claude-sonnet-4-6, claude-opus-4-6
   extracted_data Json
-  confidence  Decimal @db.Decimal(4, 3)
-  warnings    Json?
-  errors      Json?
+  confidence     Decimal @db.Decimal(4, 3)
+  warnings       Json?
+  errors         Json?
 
   input_tokens  Int?
   output_tokens Int?
@@ -3014,11 +3087,11 @@ model Reminder {
 // =============================================================================
 
 model AccountantHandover {
-  id             Int    @id @default(autoincrement())
-  period_month   Int // 1–12
-  period_year    Int
+  id           Int    @id @default(autoincrement())
+  period_month Int // 1–12
+  period_year  Int
   // preparing → ready → sent → confirmed_by_accountant → closed
-  status         String @default("preparing") @db.VarChar(30)
+  status       String @default("preparing") @db.VarChar(30)
 
   document_count Int     @default(0)
   total_received Decimal @default(0) @db.Decimal(14, 2)
@@ -3044,11 +3117,11 @@ model AccountantHandover {
 }
 
 model AccountantHandoverItem {
-  id          Int                @id @default(autoincrement())
-  handover_id Int
-  handover    AccountantHandover @relation(fields: [handover_id], references: [id], onDelete: Cascade)
+  id            Int                @id @default(autoincrement())
+  handover_id   Int
+  handover      AccountantHandover @relation(fields: [handover_id], references: [id], onDelete: Cascade)
   // invoice_received | invoice_issued | cash_movement_summary | bank_statement | other
-  document_type String           @db.VarChar(30)
+  document_type String             @db.VarChar(30)
   document_id   Int
 
   // Volitelná silná vazba na Invoice (pro AP/AR)
@@ -3078,12 +3151,12 @@ model AccountantHandoverItem {
 // Hodnota je string — typování v aplikaci přes services/settings.js helper.
 
 model AppSetting {
-  id          Int      @id @default(autoincrement())
-  key         String   @unique @db.VarChar(120)
-  value       String   @db.Text
-  value_type  String   @default("string") @db.VarChar(20) // string, number, boolean, json
-  description String?  @db.Text
-  scope       String?  @db.VarChar(50)
+  id          Int     @id @default(autoincrement())
+  key         String  @unique @db.VarChar(120)
+  value       String  @db.Text
+  value_type  String  @default("string") @db.VarChar(20) // string, number, boolean, json
+  description String? @db.Text
+  scope       String? @db.VarChar(50)
 
   updated_by_user_id Int?
   updated_by         User? @relation("AppSettingUpdater", fields: [updated_by_user_id], references: [id])
@@ -3102,13 +3175,13 @@ model AppSetting {
 // Katalog dovedností (svařování MIG, pájení bondů, montáž rámu, programování PLC, ...).
 // Každá kompetence má levely 1..level_max (1 = junior, 2 = standard, 3 = senior/instruktor).
 model Competency {
-  id          Int      @id @default(autoincrement())
-  code        String   @unique @db.VarChar(50) // SVAR_MIG, PAJ_BOND, MONT_RAM, ...
-  name        String   @db.VarChar(120)
-  category    String?  @db.VarChar(50) // svarovna, montaz, elektro, kontrola, ...
-  description String?  @db.Text
-  level_max   Int      @default(3)
-  active      Boolean  @default(true)
+  id          Int     @id @default(autoincrement())
+  code        String  @unique @db.VarChar(50) // SVAR_MIG, PAJ_BOND, MONT_RAM, ...
+  name        String  @db.VarChar(120)
+  category    String? @db.VarChar(50) // svarovna, montaz, elektro, kontrola, ...
+  description String? @db.Text
+  level_max   Int     @default(3)
+  active      Boolean @default(true)
 
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
@@ -3220,34 +3293,34 @@ model BomSnapshotItem {
 // parent_batch_id: feeder dávka odkazuje na hlavní dávku, kterou živí.
 // bom_snapshot_id: snapshot BOM použitý pro plánování této dávky (frozen view).
 model ProductionBatch {
-  id            Int    @id @default(autoincrement())
-  batch_number  String @unique @db.VarChar(50)
-  product_id    Int
-  variant_key   String? @db.VarChar(255)
-  quantity      Int
-  batch_type    String @default("main") @db.VarChar(20)
-  status        String @default("planned") @db.VarChar(20)
-  priority      Int    @default(100)
+  id           Int     @id @default(autoincrement())
+  batch_number String  @unique @db.VarChar(50)
+  product_id   Int
+  variant_key  String? @db.VarChar(255)
+  quantity     Int
+  batch_type   String  @default("main") @db.VarChar(20)
+  status       String  @default("planned") @db.VarChar(20)
+  priority     Int     @default(100)
 
   planned_start DateTime?
   planned_end   DateTime?
   actual_start  DateTime?
   actual_end    DateTime?
 
-  parent_batch_id  Int?
-  bom_snapshot_id  Int?
-  created_by_id    Int?
+  parent_batch_id Int?
+  bom_snapshot_id Int?
+  created_by_id   Int?
 
   note String? @db.Text
 
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
 
-  product       Product           @relation("BatchProduct", fields: [product_id], references: [id])
-  parent_batch  ProductionBatch?  @relation("BatchFeederHierarchy", fields: [parent_batch_id], references: [id])
+  product        Product           @relation("BatchProduct", fields: [product_id], references: [id])
+  parent_batch   ProductionBatch?  @relation("BatchFeederHierarchy", fields: [parent_batch_id], references: [id])
   feeder_batches ProductionBatch[] @relation("BatchFeederHierarchy")
-  bom_snapshot  BomSnapshot?      @relation("BatchBomSnapshot", fields: [bom_snapshot_id], references: [id])
-  created_by    Person?           @relation("BatchCreatedBy", fields: [created_by_id], references: [id])
+  bom_snapshot   BomSnapshot?      @relation("BatchBomSnapshot", fields: [bom_snapshot_id], references: [id])
+  created_by     Person?           @relation("BatchCreatedBy", fields: [created_by_id], references: [id])
 
   // Reverzní — instance operací této dávky
   batch_operations BatchOperation[]
@@ -3309,10 +3382,10 @@ model BatchOperation {
 // Slouží jako zdroj pravdy pro výpočet fakticky odpracovaných hodin
 // a pro reporting prostojů.
 model BatchOperationLog {
-  id                 Int    @id @default(autoincrement())
+  id                 Int     @id @default(autoincrement())
   batch_operation_id Int
   person_id          Int?
-  action             String @db.VarChar(30) // start, pause, resume, done, problem, comment
+  action             String  @db.VarChar(30) // start, pause, resume, done, problem, comment
   note               String? @db.Text
 
   created_at DateTime @default(now())
@@ -3343,7 +3416,7 @@ model ProductFyBom {
   row_count       Int      @default(0)
   note            String?  @db.Text
 
-  product Product             @relation(fields: [product_id], references: [id], onDelete: Cascade)
+  product Product            @relation(fields: [product_id], references: [id], onDelete: Cascade)
   items   ProductFyBomItem[]
 
   @@map("product_fy_boms")
@@ -3352,31 +3425,195 @@ model ProductFyBom {
 // Položka FY sestavy — surová data z Factorify exportu, žádný join na HolyOS
 // materiály. Identifikujeme podle factorify_item_id + level (Úroveň ve stromu).
 model ProductFyBomItem {
-  id                 Int      @id @default(autoincrement())
-  fy_bom_id          Int
-  level              String?  @db.VarChar(20) // Úroveň, např. "1", "1. 1", "1.10"
-  factorify_item_id  Int? // ID zboží z Factorify
-  name               String   @db.VarChar(500) // sloupec Zboží
-  quantity           Decimal? @db.Decimal(14, 4)
-  unit               String?  @db.VarChar(20)
-  item_type          String?  @db.VarChar(50) // Typ (Výrobek, Materiál, ...)
-  keywords           String?  @db.Text
-  status             String?  @db.VarChar(50) // Stav (Aktivní, ...)
-  photo              String?  @db.VarChar(500)
-  ignore_stock       Boolean  @default(false) // Nehlídat dostupnost
-  used_in_operations String?  @db.Text // Použito v operacích
-  used_at_workstations String? @db.Text // Použito na pracovištích
-  is_purchasable     Boolean  @default(false)
-  has_workflow       Boolean  @default(false)
-  drawing            String?  @db.VarChar(500)
-  drawing_is_draft   Boolean  @default(false)
-  defined_in         String?  @db.VarChar(120) // Workflow / Drawing
-  position           String?  @db.VarChar(120)
-  row_index          Int // pořadí řádku v exportu (zachovat původní pořadí)
+  id                   Int      @id @default(autoincrement())
+  fy_bom_id            Int
+  level                String?  @db.VarChar(20) // Úroveň, např. "1", "1. 1", "1.10"
+  factorify_item_id    Int? // ID zboží z Factorify
+  name                 String   @db.VarChar(500) // sloupec Zboží
+  quantity             Decimal? @db.Decimal(14, 4)
+  unit                 String?  @db.VarChar(20)
+  item_type            String?  @db.VarChar(50) // Typ (Výrobek, Materiál, ...)
+  keywords             String?  @db.Text
+  status               String?  @db.VarChar(50) // Stav (Aktivní, ...)
+  photo                String?  @db.VarChar(500)
+  ignore_stock         Boolean  @default(false) // Nehlídat dostupnost
+  used_in_operations   String?  @db.Text // Použito v operacích
+  used_at_workstations String?  @db.Text // Použito na pracovištích
+  is_purchasable       Boolean  @default(false)
+  has_workflow         Boolean  @default(false)
+  drawing              String?  @db.VarChar(500)
+  drawing_is_draft     Boolean  @default(false)
+  defined_in           String?  @db.VarChar(120) // Workflow / Drawing
+  position             String?  @db.VarChar(120)
+  row_index            Int // pořadí řádku v exportu (zachovat původní pořadí)
 
   fy_bom ProductFyBom @relation(fields: [fy_bom_id], references: [id], onDelete: Cascade)
 
   @@index([fy_bom_id, row_index])
   @@index([factorify_item_id])
   @@map("product_fy_bom_items")
+}
+
+// =============================================================================
+// FACTORIFY MIGRACE — projekty, nákupní ceník
+// Naplněno scriptem scripts/import-from-factorify.js v rámci jednorázové migrace
+// dat ze Factorify do HolyOS (sklad + nákup). Idempotentní upsert přes factorify_id.
+// =============================================================================
+
+// Projekt — Factorify Project (208 záznamů). Vázán na Order a WarehouseDocument.
+model Project {
+  id     Int     @id @default(autoincrement())
+  code   String? @db.VarChar(50)
+  name   String  @db.VarChar(255)
+  active Boolean @default(true)
+  note   String? @db.Text
+
+  factorify_id String? @db.VarChar(100)
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  orders              Order[]             @relation("OrderProject")
+  warehouse_documents WarehouseDocument[] @relation("WarehouseDocumentProject")
+
+  @@index([factorify_id])
+  @@index([code])
+  @@map("projects")
+}
+
+// Nákupní ceník dodavatele — Factorify BuyingPriceList.
+// Jeden záznam = kombinace (supplier × material × validita). Items obsahují
+// množstevní cenové tiery (např. 1+ ks za 100 Kč, 100+ ks za 90 Kč).
+model SupplierPriceList {
+  id                Int       @id @default(autoincrement())
+  supplier_id       Int // Company FK (dodavatel)
+  material_id       Int // Material FK
+  valid_from        DateTime? @db.Date
+  valid_to          DateTime? @db.Date
+  is_primary        Boolean   @default(false) // primární ceník (default supplier pro materiál)
+  is_valid          Boolean   @default(true) // valid flag z Factorify
+  country_of_origin String?   @db.VarChar(2)
+  note              String?   @db.Text
+
+  factorify_id String? @db.VarChar(100)
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  supplier Company                 @relation("SupplierPriceListSupplier", fields: [supplier_id], references: [id])
+  material Material                @relation(fields: [material_id], references: [id])
+  items    SupplierPriceListItem[]
+
+  @@index([factorify_id])
+  @@index([supplier_id])
+  @@index([material_id])
+  @@index([is_primary])
+  @@map("supplier_price_lists")
+}
+
+// Položka nákupního ceníku — množstevní cenový tier.
+// Faktorify BuyingPriceListItem (1329 záznamů). quantity_min může být null = base price.
+model SupplierPriceListItem {
+  id                       Int      @id @default(autoincrement())
+  price_list_id            Int
+  quantity_min             Decimal? @db.Decimal(12, 2) // minimální množství tieru (null = bez podmínky)
+  price                    Decimal  @db.Decimal(12, 4) // cena za jednotku
+  currency                 String   @default("CZK") @db.VarChar(3)
+  additional_cost          Decimal? @db.Decimal(12, 4) // doprava / clo
+  additional_cost_currency String?  @db.VarChar(3)
+  min_order_quantity       Decimal? @db.Decimal(12, 2)
+  delivery_time_days       Int?
+  supplier_part_no         String?  @db.VarChar(100) // orderNo — kódovací číslo dodavatele
+
+  factorify_id String? @db.VarChar(100)
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  price_list SupplierPriceList @relation(fields: [price_list_id], references: [id], onDelete: Cascade)
+
+  @@index([factorify_id])
+  @@index([price_list_id])
+  @@map("supplier_price_list_items")
+}
+
+// =============================================================================
+// NORMOVÁNÍ — měření TAC + Tpz na pracovišti přes mobil
+// =============================================================================
+// Modul `modules/normovani-fy`: normátor přijde na pracoviště, naskenuje/zadá
+// číslo dávky, vybere operaci a měří start/konec u jednotlivých dílů.
+// FY je READ-ONLY — všechny start/end události žijí výhradně tady.
+// FY identifikátory držíme jako stringy bez FK, aby záznamy zůstaly intaktní
+// i když se FY data změní (přejmenování operace, smazání BOM atd.).
+
+model NormovaniSession {
+  id Int @id @default(autoincrement())
+
+  // Kdo měří
+  person_id Int
+
+  // FY reference (jen jako identifikátory, ne FK)
+  fy_batch_id        String  @db.VarChar(50)  // = Batch.id (= Batch.number)
+  fy_batch_number    String  @db.VarChar(50)  // duplicitně pro lidsky čitelný export
+  fy_goods_id        String? @db.VarChar(50)  // Batch.goods.id
+  fy_goods_code      String? @db.VarChar(100) // Batch.goods.code (BS-S-0381)
+  fy_goods_name      String? @db.VarChar(500) // Batch.goods.name
+  fy_workflow_id     String? @db.VarChar(50)  // Batch.workflow.id
+  fy_operation_id    String  @db.VarChar(50)  // WorkflowOperation.id zvolené operace
+  fy_operation_name  String? @db.VarChar(500) // WorkflowOperation.operationName
+
+  // Pracoviště (z WorkflowOperation.stage.referenceName, např. "Lakovací BOX")
+  workplace_label String? @db.VarChar(255)
+
+  // Časová razítka
+  started_at DateTime  @default(now())
+  ended_at   DateTime?
+
+  // active = právě měří, paused = pauznuto, done = ukončeno, abandoned = zrušeno
+  status String @default("active") @db.VarChar(20)
+
+  notes String? @db.Text
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  person Person            @relation("NormovaniSessionPerson", fields: [person_id], references: [id])
+  events NormovaniEvent[]  @relation("NormovaniSessionEvents")
+
+  @@index([person_id])
+  @@index([fy_batch_id])
+  @@index([fy_operation_id])
+  @@index([status])
+  @@index([started_at])
+  @@map("normovani_sessions")
+}
+
+model NormovaniEvent {
+  id         Int    @id @default(autoincrement())
+  session_id Int
+
+  // start = chytl díl do ruky, end = díl namontován/dokončen
+  event_type String @db.VarChar(10)
+
+  // FY OperationBillOfMaterialsItem reference (string, ne FK)
+  fy_item_id   String  @db.VarChar(50)  // BOM item.id z FY (např. 46669)
+  fy_goods_id  String? @db.VarChar(50)  // BOM item.goods.id (např. 973)
+  item_code    String? @db.VarChar(100) // goods.code (např. NA0692)
+  item_name    String? @db.VarChar(500) // goods.name
+  item_unit    String? @db.VarChar(20)  // goods.unit (l, ks, m...)
+  item_qr      String? @db.VarChar(255) // QR kód, pokud byl pro vyhledání naskenován
+  quantity     Decimal? @db.Decimal(12, 4) // očekávané množství z BOM (pro export)
+
+  occurred_at  DateTime @default(now())
+
+  notes String? @db.Text
+
+  created_at DateTime @default(now())
+
+  session NormovaniSession @relation("NormovaniSessionEvents", fields: [session_id], references: [id], onDelete: Cascade)
+
+  @@index([session_id, occurred_at])
+  @@index([fy_item_id])
+  @@index([event_type])
+  @@map("normovani_events")
 }
