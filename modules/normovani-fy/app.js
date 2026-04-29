@@ -72,6 +72,9 @@
     $('#step-badge').textContent = step;
     $('#back-btn').style.display = screenId === 'screen-identify' ? 'none' : '';
     $('#person-name').textContent = (state.person && state.person.name) || '';
+    // Sticky spodní lišta jen na obrazovce měření (ať „Ukončit měření" vidíme i bez scrollu)
+    const app = document.querySelector('.app');
+    if (app) app.classList.toggle('has-footer', screenId === 'screen-measure');
   }
 
   // ─── Screen 1: Auth bootstrap (HolyOS login) ─────────────────────
