@@ -60,7 +60,25 @@
       overflow-y: auto;
       -webkit-overflow-scrolling: touch;
       padding: 16px;
+      /* Když je viditelný footer-bar, dáme dolů místo navíc, ať se k poslednímu
+         dílu dá doscrollovat i s velkým tlačítkem ve spodní liště. */
+      padding-bottom: 16px;
     }
+    .app.has-footer .content { padding-bottom: 96px; }
+
+    /* ─── Sticky footer bar (jen na obrazovce měření) ──────────── */
+    .footer-bar {
+      display: none;
+      position: fixed;
+      left: 0; right: 0; bottom: 0;
+      padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+      background: linear-gradient(to top, #0f172a 70%, rgba(15, 23, 42, 0));
+      z-index: 50;
+      pointer-events: none; /* gradient nesmí blokovat scroll */
+    }
+    .footer-bar > * { pointer-events: auto; }
+    .app.has-footer .footer-bar { display: block; }
+    .footer-bar .btn { margin-top: 0; }
 
     /* ─── Screen base ─────────────────────────────────────────── */
     .screen { display: none; }
@@ -368,9 +386,13 @@
           <button class="icon-btn" id="item-scan-btn" aria-label="Skenovat QR dílu">⤓</button>
         </div>
         <div class="item-list" id="item-list"></div>
-        <button class="btn btn-danger" id="end-session-btn" style="margin-top: 24px;">Ukončit měření</button>
       </section>
     </main>
+
+    <!-- Sticky footer bar — viditelný jen na obrazovce měření -->
+    <footer class="footer-bar" id="footer-bar">
+      <button class="btn btn-danger" id="end-session-btn">Ukončit měření</button>
+    </footer>
   </div>
 
   <!-- QR scanner overlay -->
