@@ -8,8 +8,20 @@
   <base href="../../">
   <link rel="stylesheet" href="css/dashboard.css">
   <style>
-    .main-wrapper { margin-left: var(--sidebar-w); flex: 1; min-height: 100vh; display: flex; flex-direction: column; }
-    @media (max-width: 768px) { .main-wrapper { margin-left: 0; } }
+    /* dashboard.css definuje .main-wrapper { flex: 1 1 0% } — z neznámého důvodu
+       v tomhle modulu flex-basis 0% způsobuje šířku ~666 px místo 2310 px. Override
+       s explicit width zajistí, že obsah sahá až k pravému okraji. */
+    .main-wrapper {
+      flex: 0 0 auto !important;
+      width: calc(100vw - var(--sidebar-w)) !important;
+      margin-left: var(--sidebar-w) !important;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    @media (max-width: 768px) {
+      .main-wrapper { width: 100vw !important; margin-left: 0 !important; }
+    }
 
     .module-header {
       background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);
@@ -517,7 +529,10 @@
   </script>
 </body>
 </html>
--from').value = '';
+').value = '';
+      document.getElementById('f-batch').value = '';
+      document.getElementById('f-status').value = '';
+      document.getElementById('f-from').value = '';
       document.getElementById('f-to').value = '';
       loadSessions();
     });
