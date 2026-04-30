@@ -212,22 +212,23 @@ async function getBatch(batchIdOrNumber) {
       });
     }
   } else if (raw.workflowOperation && raw.workflowOperation.workflowEntity && raw.workflowOperation.workflowEntity.id != null) {
-    out.source = 'index';
-    const wfEntityId = Number(raw.workflowOperation.workflowEntity.id);
-    out.workflow = { id: String(wfEntityId) };
-    const [woIdx, bomIdx] = await Promise.all([
-      ensureWorkflowOperationIndex(),
-      ensureBomIndex(),
-    ]);
-    const ops = woIdx.get(wfEntityId) || [];
-    for (const op of ops) {
-      const bom = bomIdx.get(Number(op.id)) || [];
+    // POZOR: davka 24515 nema vlastni workflow. Drive jsme tu spustili 40s+ stream
+    // pres OperationBillOfMaterialsItem (453 MB), coz blokovalo event loop a delalo
+    // celý HolyOS nepouzitelny. DOCASNE VYPNUTO — vratime current op + flag.
+    // TODO: udelat per-op POST query s server-side filtrem (probe-bom-filter.js)
+    out.source = 'no_workflow_skipped';
+    if (raw.workflowOperation) {
       out.operations.push({
-        id: op.id,
-        position: op.position,
-        name: op.name,
-        workplace: op.workplace,
-        bomItems: bom.map((b) => ({ id: b.id, goods_id: b.goods_id, code: b.code, name: b.name, unit: b.unit, quantity: b.quantity, perQuantity: b.perQuantity, sequence: b.sequence })),
+        id: String(raw.workflowOperation.id),
+        position: raw.workflowOperation.position != null ? raw.workflowOperation.position : 0,
+        name: asString(raw.workflowOperation.operationName) || ('Op ' + raw.workflowOperation.id),
+        workplace: asString(raw.workflowOperation.stage),
+        bomItems: Array.isArray(raw.workflowOperation.billOfMaterialsItems)
+          ? raw.workflowOperation.billOfMaterialsItems.map((it) => {
+              const t = trimBomItem(it);
+              return { id: t.id, goods_id: t.goods_id, code: t.code, name: t.name, unit: t.unit, quantity: t.quantity, perQuantity: t.perQuantity, sequence: t.sequence };
+            })
+          : [],
       });
     }
   }
