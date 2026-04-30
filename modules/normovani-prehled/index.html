@@ -149,9 +149,8 @@
 <body>
   <aside id="sidebar" class="sidebar"></aside>
 
-  <div class="dashboard">
-    <div class="main-wrapper">
-      <div class="module-header">
+  <div class="main-wrapper">
+    <div class="module-header">
         <div class="module-header-icon">📊</div>
         <div>
           <h1>Přehled normování</h1>
@@ -220,7 +219,15 @@
     </div>
   </div>
 
-  <script src="js/sidebar.js"></script>
+  <script>
+    // Sidebar je global renderSidebar() v js/sidebar.js — načti dynamicky a po loadu zavolej.
+    (function () {
+      var s = document.createElement('script');
+      s.src = '/js/sidebar.js?v=' + Date.now();
+      s.onload = function () { try { renderSidebar('normovani-prehled'); } catch (e) { console.error('renderSidebar:', e); } };
+      document.head.appendChild(s);
+    })();
+  </script>
   <script src="js/top-bar.js"></script>
   <script>
     // Auth: 401 → login
@@ -507,6 +514,23 @@
 
     loadPeople();
     loadSessions();
+  </script>
+</body>
+</html>
+-from').value = '';
+      document.getElementById('f-to').value = '';
+      loadSessions();
+    });
+    document.getElementById('f-batch').addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') loadSessions();
+    });
+
+    loadPeople();
+    loadSessions();
+  </script>
+</body>
+</html>
+ssions();
   </script>
 </body>
 </html>
