@@ -29,7 +29,6 @@ function renderSidebar(activeModule) {
     { id: 'chat',                 name: 'Zprávy',              icon: '&#128172;', color: '#a78bfa', active: true },
     { id: 'kiosky',               name: 'Kiosky',              icon: '&#128433;', color: '#06b6d4', active: true },
     { id: 'planovani-vyroby',   name: 'Plánování výroby',    icon: '&#128197;', color: '#3b82f6', active: true },
-    { id: 'ai-vyvojar',         name: 'AI Vývojář',          icon: '&#129302;', color: '#0ea5e9', active: true },
     { id: 'material',            name: 'Materiálový tok',     icon: '&#128666;', color: '#10b981', active: false },
     { id: 'reporty',             name: 'Reporty a analýzy',   icon: '&#128202;', color: '#ef4444', active: false },
     { id: 'nastaveni',           name: 'Nastavení',           icon: '&#9881;', color: '#6c8cff', active: false },
@@ -139,6 +138,7 @@ function renderSidebar(activeModule) {
         var saItems = [
           { id: 'cad-vykresy', href: basePath + 'modules/cad-vykresy/index.html', icon: '&#128196;', color: 'rgba(2,132,199,0.15)', textColor: '#0284c7', name: 'CAD výkresy' },
           { id: 'ai-agenti', href: basePath + 'modules/ai-agenti/index.html', icon: '&#129302;', color: 'rgba(139,92,246,0.15)', textColor: '#8b5cf6', name: 'AI Agenti' },
+          { id: 'ai-vyvojar', href: basePath + 'modules/ai-vyvojar/index.html', icon: '&#128187;', color: 'rgba(14,165,233,0.15)', textColor: '#0ea5e9', name: 'AI Vývojář' },
           { id: 'dev-hub', href: basePath + 'modules/dev-hub/index.html', icon: '&#128736;', color: 'rgba(249,115,22,0.15)', textColor: '#f97316', name: 'Dev Hub' },
           { id: 'mindmap', href: basePath + 'modules/holyos-mindmap.html', icon: '&#129504;', color: 'rgba(239,68,68,0.15)', textColor: '#ef4444', name: 'Myšlenková mapa' },
           { id: 'admin-tasks', href: basePath + 'modules/admin-tasks/index.html', icon: '&#128203;', color: 'rgba(108,92,231,0.15)', textColor: '#a78bfa', name: 'Požadavky' },
