@@ -1513,11 +1513,18 @@ router.delete('/tire-changes/:id', async (req, res, next) => {
 const tireStockSchema = z.object({
   vehicle_id: z.number().int().optional().nullable(),
   season: z.enum(['letni', 'zimni']),
+  // Přední sada (legacy pole — bez prefixu)
   tire_size: z.string().max(100).optional().nullable(),
   manufacturer: z.string().max(100).optional().nullable(),
   model_name: z.string().max(255).optional().nullable(),
   dot_code: z.string().max(20).optional().nullable(),
   tread_depth_mm: z.number().optional().nullable(),
+  // Zadní sada — pokud null, považuje se za stejnou jako přední
+  rear_tire_size: z.string().max(100).optional().nullable(),
+  rear_manufacturer: z.string().max(100).optional().nullable(),
+  rear_model_name: z.string().max(255).optional().nullable(),
+  rear_dot_code: z.string().max(20).optional().nullable(),
+  rear_tread_depth_mm: z.number().optional().nullable(),
   storage_location: z.string().max(255).optional().nullable(),
   mounted: z.boolean().optional(),
   mounted_at: z.string().optional().nullable(),
@@ -1531,11 +1538,18 @@ function toTireStockData(data) {
   return {
     vehicle_id: data.vehicle_id ?? null,
     season: data.season,
+    // Přední sada
     tire_size: data.tire_size || null,
     manufacturer: data.manufacturer || null,
     model_name: data.model_name || null,
     dot_code: data.dot_code || null,
     tread_depth_mm: data.tread_depth_mm ?? null,
+    // Zadní sada (null = stejná jako přední)
+    rear_tire_size: data.rear_tire_size || null,
+    rear_manufacturer: data.rear_manufacturer || null,
+    rear_model_name: data.rear_model_name || null,
+    rear_dot_code: data.rear_dot_code || null,
+    rear_tread_depth_mm: data.rear_tread_depth_mm ?? null,
     storage_location: data.storage_location || null,
     mounted: !!data.mounted,
     mounted_at: parseDateTime(data.mounted_at),
@@ -1626,21 +1640,31 @@ router.get('/tire-alerts', async (req, res, next) => {
     const alerts = [];
 
     // 1) Namontované pneu s dezénem v pásmu upozornění (nebo pod minimem)
+    //    Skenujeme PŘEDNÍ i ZADNÍ sadu zvlášť — každá náprava může mít svůj
+    //    samostatný alert (rozdílná hloubka, rozdílný DOT, …).
     const mounted = await prisma.tireStockItem.findMany({
-      where: { mounted: true, tread_depth_mm: { not: null } },
+      where: {
+        mounted: true,
+        OR: [
+          { tread_depth_mm: { not: null } },
+          { rear_tread_depth_mm: { not: null } },
+        ],
+      },
       include: { vehicle: { select: { id: true, license_plate: true, model: true, company: true } } },
     });
-    for (const t of mounted) {
-      if (!t.vehicle) continue;
-      const depth = Number(t.tread_depth_mm);
+    // Helper — vyrobí alert pro danou nápravu
+    function pushAxleAlert(t, axle, depth) {
+      if (!t.vehicle) return;
       const tireThresholds = TIRE_DEPTH_WARN[t.season];
-      if (!tireThresholds) continue;
+      if (!tireThresholds) return;
+      const axleLabel = axle === 'front' ? 'přední' : 'zadní';
       if (depth < tireThresholds.min) {
         alerts.push({
           kind: 'tire_depth_critical',
           severity: 'critical',
-          label: `Dezén pod minimem (${depth} mm < ${tireThresholds.min} mm)`,
+          label: `Dezén ${axleLabel} sady pod minimem (${depth} mm < ${tireThresholds.min} mm)`,
           tire_id: t.id,
+          axle,
           season: t.season,
           depth,
           vehicle_id: t.vehicle.id,
@@ -1651,14 +1675,27 @@ router.get('/tire-alerts', async (req, res, next) => {
         alerts.push({
           kind: 'tire_depth_warning',
           severity: 'warning',
-          label: `Blíží se výměna (${depth} mm v pásmu ${tireThresholds.min}-${tireThresholds.max} mm)`,
+          label: `Blíží se výměna ${axleLabel} sady (${depth} mm v pásmu ${tireThresholds.min}-${tireThresholds.max} mm)`,
           tire_id: t.id,
+          axle,
           season: t.season,
           depth,
           vehicle_id: t.vehicle.id,
           license_plate: t.vehicle.license_plate,
           model: t.vehicle.model,
         });
+      }
+    }
+    for (const t of mounted) {
+      // Přední sada — primární tread_depth_mm pole
+      if (t.tread_depth_mm != null) {
+        pushAxleAlert(t, 'front', Number(t.tread_depth_mm));
+      }
+      // Zadní sada — když rear_tread_depth_mm je vyplněné, jdeme zvlášť.
+      // Když zadní hloubka chybí, znamená to "stejné jako přední" a používáme
+      // přední hodnotu (alert už ale nezdvojujeme, jinak bychom hlásili dvakrát totéž).
+      if (t.rear_tread_depth_mm != null) {
+        pushAxleAlert(t, 'rear', Number(t.rear_tread_depth_mm));
       }
     }
 
