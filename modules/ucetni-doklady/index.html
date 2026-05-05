@@ -230,6 +230,7 @@
             <th>VS</th>
             <th class="num">Částka</th>
             <th>Účet protistrany</th>
+            <th>Způsob úhrady</th>
             <th>Vystaveno</th>
             <th>Splatnost</th>
             <th>Objednávka</th>
@@ -239,7 +240,7 @@
             <th></th>
           </tr>
         </thead>
-        <tbody><tr><td colspan="15" class="empty-hint">Načítání…</td></tr></tbody>
+        <tbody><tr><td colspan="16" class="empty-hint">Načítání…</td></tr></tbody>
       </table>
 
       </div><!-- /tab-invoices -->
@@ -527,6 +528,23 @@
       reminder_3_sent: 'Upomínka 3',
     };
 
+    // Způsoby úhrady — krátký + dlouhý label, ikona pro tabulku/detail
+    const PAYMENT_METHOD = {
+      bank_transfer: { label: 'Převodem',  full: 'Platba převodem',  icon: '🏦' },
+      card:          { label: 'Kartou',    full: 'Platba kartou',    icon: '💳' },
+      cod:           { label: 'Dobírkou',  full: 'Platba dobírkou',  icon: '📦' },
+      cash:          { label: 'Hotově',    full: 'Platba hotově',    icon: '💵' },
+      barter:        { label: 'Zápočet',   full: 'Zápočet',          icon: '🔄' },
+    };
+    function fmtPayment(method, mode) {
+      // mode: 'short' (default) → ikona + krátký label, 'full' → ikona + plný název
+      if (!method) return '—';
+      const def = PAYMENT_METHOD[method];
+      if (!def) return method;
+      if (mode === 'full') return def.icon + ' ' + def.full;
+      return def.icon + ' ' + def.label;
+    }
+
     function fmtAmount(n) {
       if (n === null || n === undefined) return '—';
       return Number(n).toLocaleString('cs-CZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -601,11 +619,11 @@
       const r = await api('GET', '/api/accounting/invoices' + (qs.toString() ? '?' + qs : ''));
       const tbody = document.querySelector('#invoices-table tbody');
       if (r.status !== 200) {
-        tbody.innerHTML = '<tr><td colspan="15" class="empty-hint">Chyba: ' + r.status + '</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="16" class="empty-hint">Chyba: ' + r.status + '</td></tr>';
         return;
       }
       if (!r.data.length) {
-        tbody.innerHTML = '<tr><td colspan="15" class="empty-hint">Žádné faktury odpovídající filtrům.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="16" class="empty-hint">Žádné faktury odpovídající filtrům.</td></tr>';
         return;
       }
       const now = Date.now();
@@ -648,6 +666,7 @@
             '<div style="font-size:0.78em;color:var(--text2);">bez DPH: ' + fmtAmount(inv.subtotal) + '</div>' +
           '</td>' +
           accCell +
+          '<td style="white-space:nowrap;">' + fmtPayment(inv.payment_method) + '</td>' +
           '<td>' + fmtDate(inv.date_issued) + '</td>' +
           '<td' + (isOverdue ? ' style="color:#ef4444;font-weight:600;"' : '') + '>' + fmtDate(inv.date_due) + '</td>' +
           '<td>' + (inv.order ? '<span class="inline-code">' + escapeHtml(inv.order.order_number) + '</span>' : '—') + '</td>' +
@@ -751,6 +770,16 @@
                       : '');
                 })() +
               '</div></div>' +
+              '<div class="detail-col"><label>Způsob úhrady</label><div>' +
+                (canEdit
+                  ? '<select id="d-payment-method" onchange="updatePaymentMethod(' + inv.id + ', this.value)" style="background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:0.95em;">' +
+                      Object.entries(PAYMENT_METHOD).map(([k, v]) =>
+                        '<option value="' + k + '"' + ((inv.payment_method || 'bank_transfer') === k ? ' selected' : '') + '>' + v.icon + ' ' + v.full + '</option>'
+                      ).join('') +
+                    '</select>'
+                  : fmtPayment(inv.payment_method, 'full')
+                ) +
+              '</div></div>' +
             '</div>' +
 
             // 3-way match section
@@ -839,6 +868,17 @@
       }
       alert('✓ ' + r.data.message);
       openDetail(invoiceId);
+      loadInvoices();
+    };
+
+    // Změna způsobu úhrady přímo z detailu — PUT /invoices/:id
+    window.updatePaymentMethod = async function(invoiceId, method) {
+      const r = await api('PUT', '/api/accounting/invoices/' + invoiceId, { payment_method: method });
+      if (r.status !== 200) {
+        alert('Chyba: ' + (r.data?.error || r.status));
+        return;
+      }
+      // Aktualizuj řádek v tabulce, ať se způsob úhrady projeví bez celého reloadu
       loadInvoices();
     };
 
@@ -1139,6 +1179,13 @@
               '<div class="modal-row"><label>DUZP</label><input type="date" id="c-taxable" value="' + today + '"></div>' +
               '<div class="modal-row"><label>Splatnost</label><input type="date" id="c-due" value="' + due14 + '"></div>' +
             '</div>' +
+            '<div class="modal-grid3">' +
+              '<div class="modal-row"><label>Způsob úhrady</label><select id="c-payment-method">' +
+                Object.entries(PAYMENT_METHOD).filter(([k]) => k !== 'barter').map(([k, v]) =>
+                  '<option value="' + k + '"' + (k === 'bank_transfer' ? ' selected' : '') + '>' + v.icon + ' ' + v.full + '</option>'
+                ).join('') +
+              '</select></div>' +
+            '</div>' +
 
             // Toggle s/bez DPH
             '<div style="margin:14px 0 6px 0; padding:10px 14px; background:var(--surface2); border-radius:6px; display:flex; justify-content:space-between; align-items:center;">' +
@@ -1223,6 +1270,7 @@
         date_issued: document.getElementById('c-issued').value,
         date_taxable: document.getElementById('c-taxable').value || null,
         date_due: document.getElementById('c-due').value,
+        payment_method: document.getElementById('c-payment-method')?.value || 'bank_transfer',
         note: document.getElementById('c-note').value || null,
         source: 'manual',
         tags: isService ? ['service'] : [],
