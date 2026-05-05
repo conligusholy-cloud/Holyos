@@ -193,6 +193,47 @@ router.post('/runs/:id/cancel', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// ─── Diagnostika prostředí workeru (git, node, env) ────────────────────────
+
+router.get('/diag', async (req, res, next) => {
+  try {
+    const { execFile } = require('child_process');
+    const probe = (cmd, args) => new Promise((resolve) => {
+      try {
+        execFile(cmd, args, { timeout: 5000 }, (err, stdout, stderr) => {
+          resolve({
+            ok: !err,
+            stdout: (stdout || '').trim(),
+            stderr: (stderr || '').trim(),
+            err: err ? (err.code || err.message) : null,
+          });
+        });
+      } catch (e) {
+        resolve({ ok: false, err: e.code || e.message });
+      }
+    });
+    const [git, node, which, path] = await Promise.all([
+      probe('git', ['--version']),
+      probe('node', ['--version']),
+      probe('which', ['git']),
+      probe('sh', ['-c', 'echo $PATH']),
+    ]);
+    res.json({
+      git, node, which, path,
+      env: {
+        AGENT_WORKER_ENABLED: process.env.AGENT_WORKER_ENABLED || null,
+        AI_DEV_GITHUB_TOKEN_present: !!process.env.AI_DEV_GITHUB_TOKEN,
+        AI_DEV_GITHUB_TOKEN_len: (process.env.AI_DEV_GITHUB_TOKEN || '').length,
+        ANTHROPIC_API_KEY_present: !!process.env.ANTHROPIC_API_KEY,
+        AI_DEV_TMP_DIR: process.env.AI_DEV_TMP_DIR || '(default os.tmpdir)',
+        NODE_VERSION: process.version,
+      },
+      platform: process.platform,
+      cwd: process.cwd(),
+    });
+  } catch (err) { next(err); }
+});
+
 // ─── Queue ─────────────────────────────────────────────────────────────────
 
 router.get('/queue', async (req, res, next) => {
