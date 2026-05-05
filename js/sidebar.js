@@ -29,6 +29,7 @@ function renderSidebar(activeModule) {
     { id: 'chat',                 name: 'Zprávy',              icon: '&#128172;', color: '#a78bfa', active: true },
     { id: 'kiosky',               name: 'Kiosky',              icon: '&#128433;', color: '#06b6d4', active: true },
     { id: 'planovani-vyroby',   name: 'Plánování výroby',    icon: '&#128197;', color: '#3b82f6', active: true },
+    { id: 'ai-vyvojar',         name: 'AI Vývojář',          icon: '&#129302;', color: '#0ea5e9', active: true },
     { id: 'material',            name: 'Materiálový tok',     icon: '&#128666;', color: '#10b981', active: false },
     { id: 'reporty',             name: 'Reporty a analýzy',   icon: '&#128202;', color: '#ef4444', active: false },
     { id: 'nastaveni',           name: 'Nastavení',           icon: '&#9881;', color: '#6c8cff', active: false },
@@ -977,8 +978,4 @@ function logoutUser() {
 
 // Starý floatující AI FAB ("AI Asistent — navrhnout úpravu") byl nahrazen
 // horní lištou v js/top-bar.js. Funkce initAiButton() zůstává jen proto, aby
-// si ji případně mohl volat starší kód — auto-init je vypnutý.
-
-// Starý floatující AI FAB ("AI Asistent — navrhnout úpravu") byl nahrazen
-// horní lištou v js/top-bar.js. Funkce initAiButton() zůstává jen proto, aby
-// si ji případně mohl volat starší kód — auto-init je vypnutý.
+// si ji případně mohl volat starší kód — auto-init je vypnut
