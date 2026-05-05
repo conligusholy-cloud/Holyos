@@ -1947,6 +1947,15 @@ model TireStockItem {
   // Stav dezénu — v mm, pro hlídání hranic (letní 2-3 mm, zimní 4-5 mm = upozornění)
   tread_depth_mm Decimal? @db.Decimal(4, 1)
 
+  // Zadní sada (axle = rear). Existující pole výše = přední sada (axle = front).
+  // Pokud rear_* zůstane null, znamená to, že přední a zadní sada jsou identické
+  // (stejný rozměr/výrobce/atd.) — UI to interpretuje jako "stejné jako přední".
+  rear_tire_size      String?  @db.VarChar(100)
+  rear_manufacturer   String?  @db.VarChar(100)
+  rear_model_name     String?  @db.VarChar(255)
+  rear_dot_code       String?  @db.VarChar(20)
+  rear_tread_depth_mm Decimal? @db.Decimal(4, 1)
+
   // Lokace ve skladu (volný text: "Regál A3", "Sklad B — pozice 14")
   storage_location String? @db.VarChar(255)
 

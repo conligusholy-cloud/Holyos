@@ -1958,14 +1958,25 @@
         if (!mountedThisSeason) {
           warns.push('Aktuálně je ' + (season === 'zimni' ? 'zimní období (1.11.-31.3.)' : 'letní období (1.4.-31.10.)') + ' a na tomhle voze není nasazena odpovídající sada pneu.');
         }
-        for (const t of stock.filter(x => x.mounted)) {
-          if (t.tread_depth_mm == null) continue;
-          const st = tireDepthStatus(t.season, t.tread_depth_mm);
+        // Pro každou nasazenou sadu projdeme PŘEDNÍ i ZADNÍ nápravu zvlášť
+        // (přední = pole bez prefixu, zadní = rear_*). Pokud rear_ chybí, znamená
+        // to "stejné jako přední" a varování za zadní nápravu nedubujeme.
+        function _axleWarn(t, axle, depth) {
+          if (depth == null) return;
+          const st = tireDepthStatus(t.season, depth);
+          const axleLabel = axle === 'front' ? 'přední sada' : 'zadní sada';
+          const manuf = axle === 'front' ? (t.manufacturer || '') : (t.rear_manufacturer || t.manufacturer || '');
+          const model = axle === 'front' ? (t.model_name || '') : (t.rear_model_name || t.model_name || '');
+          const desc = (manuf + ' ' + model).trim();
           if (st.cls === 'badge-warning') {
-            warns.push(`${SEASON_LABEL[t.season]} pneu (${t.manufacturer || ''} ${t.model_name || ''}) má dezén ${t.tread_depth_mm} mm — blíží se výměna.`);
+            warns.push(`${SEASON_LABEL[t.season]} ${axleLabel}${desc ? ' (' + desc + ')' : ''} má dezén ${depth} mm — blíží se výměna.`);
           } else if (st.cls === 'badge-expired') {
-            warns.push(`❗ ${SEASON_LABEL[t.season]} pneu má dezén ${t.tread_depth_mm} mm, POD MINIMEM ${TIRE_DEPTH_WARN[t.season].min} mm — nutno vyměnit.`);
+            warns.push(`❗ ${SEASON_LABEL[t.season]} ${axleLabel} má dezén ${depth} mm, POD MINIMEM ${TIRE_DEPTH_WARN[t.season].min} mm — nutno vyměnit.`);
           }
+        }
+        for (const t of stock.filter(x => x.mounted)) {
+          _axleWarn(t, 'front', t.tread_depth_mm);
+          if (t.rear_tread_depth_mm != null) _axleWarn(t, 'rear', t.rear_tread_depth_mm);
         }
         if (warns.length) {
           warningsHtml = '<div style="background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.35);border-radius:10px;padding:12px 14px;margin-bottom:14px;">' +
@@ -2043,21 +2054,32 @@
         } else {
           html += '<div class="veh-list" style="margin-top:14px;">';
           stock.forEach(t => {
-            const st = tireDepthStatus(t.season, t.tread_depth_mm);
+            // Přední (vždy přítomné) + zadní (volitelně, null = stejné jako přední)
+            const stFront = tireDepthStatus(t.season, t.tread_depth_mm);
+            const hasRear = t.rear_tread_depth_mm != null || t.rear_tire_size || t.rear_manufacturer || t.rear_model_name || t.rear_dot_code;
+            const stRear = hasRear ? tireDepthStatus(t.season, t.rear_tread_depth_mm ?? t.tread_depth_mm) : null;
             const mountedBadge = t.mounted
               ? '<span class="badge badge-ok" style="margin-left:6px;">NASAZENO</span>'
               : '<span class="badge badge-none" style="margin-left:6px;">ve skladu</span>';
+            // Helper pro řádek jedné nápravy
+            const axleRow = (label, size, manuf, model, dot, st, depth) => (
+              '<div style="font-size:11px;color:var(--text2);margin-top:3px;">' +
+                '<strong style="color:var(--text);">' + label + ':</strong> ' +
+                escHtml(((manuf || '') + ' ' + (model || '')).trim() || '—') +
+                (size ? ' · ' + escHtml(size) : '') +
+                (dot ? ' · DOT ' + escHtml(dot) : '') +
+                (depth != null ? ' · dezén: <span style="color:' + st.txt + ';font-weight:600;">' + st.label + '</span>' + (st.msg ? ' (' + st.msg + ')' : '') : '') +
+              '</div>'
+            );
             html += '<div class="veh-item" style="flex-wrap:wrap;">' +
               '<div class="icon">' + (t.season === 'zimni' ? '❄️' : '☀️') + '</div>' +
               '<div class="body">' +
-                '<div class="title">' + SEASON_LABEL[t.season] + ' — ' + escHtml((t.manufacturer || '') + ' ' + (t.model_name || '')).trim() + mountedBadge + '</div>' +
-                '<div class="meta">' +
-                  (t.tire_size ? escHtml(t.tire_size) : '') +
-                  (t.dot_code ? ' · DOT ' + escHtml(t.dot_code) : '') +
-                  (t.storage_location ? ' · 📦 ' + escHtml(t.storage_location) : '') +
-                  ' · dezén: <span style="color:' + st.txt + ';font-weight:600;">' + st.label + '</span>' +
-                  (st.msg ? ' (' + st.msg + ')' : '') +
-                '</div>' +
+                '<div class="title">' + SEASON_LABEL[t.season] + ' sada' + mountedBadge + '</div>' +
+                axleRow('Přední', t.tire_size, t.manufacturer, t.model_name, t.dot_code, stFront, t.tread_depth_mm) +
+                (hasRear
+                  ? axleRow('Zadní', t.rear_tire_size || t.tire_size, t.rear_manufacturer || t.manufacturer, t.rear_model_name || t.model_name, t.rear_dot_code || t.dot_code, stRear, t.rear_tread_depth_mm ?? t.tread_depth_mm)
+                  : '<div style="font-size:11px;color:var(--text2);margin-top:3px;font-style:italic;"><strong style="color:var(--text);">Zadní:</strong> stejné jako přední</div>') +
+                (t.storage_location ? '<div style="font-size:11px;color:var(--text2);margin-top:3px;">📦 ' + escHtml(t.storage_location) + '</div>' : '') +
               '</div>' +
               '<div class="actions">' +
                 '<button type="button" class="btn btn-sm btn-secondary" onclick="showTireStockForm(' + vehicleId + ',' + t.id + ')">✏️</button>' +
@@ -2198,36 +2220,90 @@
     }
 
     // ─── Sklad pneu — form
+    // Jedna sada pneu = jeden TireStockItem. V rámci sady editujeme zvlášť
+    // PŘEDNÍ a ZADNÍ nápravu (rozměr, výrobce, model, DOT, hloubka dezénu).
+    // Sezóna a obecné údaje (sklad, cena, mountnutí) jsou společné.
+    // Když uživatel zaškrtne "Zadní stejná jako přední", rear_* se odešlou jako
+    // null a UI to interpretuje jako identické osazení.
     function showTireStockForm(vehicleId, tireId) {
       const wrap = document.getElementById('tire-stock-form-wrap');
       if (!wrap) return;
-      let t = { season:'letni', tire_size:'', manufacturer:'', model_name:'', dot_code:'', tread_depth_mm:'', storage_location:'', mounted:false, purchase_price:'', invoice_number:'', note:'' };
+      let t = {
+        season:'letni',
+        tire_size:'', manufacturer:'', model_name:'', dot_code:'', tread_depth_mm:'',
+        rear_tire_size:'', rear_manufacturer:'', rear_model_name:'', rear_dot_code:'', rear_tread_depth_mm:'',
+        storage_location:'', mounted:false, purchase_price:'', invoice_number:'', note:''
+      };
       if (tireId) {
         const found = (window._tireStockCache || []).find(x => x.id === tireId);
         if (found) t = found;
       }
+      // Detekce: má sada vyplněnou zadní nápravu (jakákoli z rear_* polí)?
+      const hasRear = t.rear_tread_depth_mm != null && t.rear_tread_depth_mm !== ''
+                   || t.rear_tire_size || t.rear_manufacturer || t.rear_model_name || t.rear_dot_code;
+
       const seasonOpts = Object.entries(SEASON_LABEL)
         .map(([k, label]) => '<option value="' + k + '"' + (t.season === k ? ' selected' : '') + '>' + label + '</option>').join('');
 
+      // Helper — vyrobí form-grid pro jednu nápravu
+      function axleSection(idPrefix, sizeVal, manufVal, modelVal, dotVal, depthVal) {
+        return '<div class="form-grid">' +
+          '<div class="form-group"><label>Rozměr</label><input type="text" id="' + idPrefix + '-size" value="' + escHtml(sizeVal || '') + '" placeholder="205/55 R16 91H"></div>' +
+          '<div class="form-group"><label>Výrobce</label><input type="text" id="' + idPrefix + '-manuf" value="' + escHtml(manufVal || '') + '" placeholder="Continental"></div>' +
+          '<div class="form-group"><label>Model</label><input type="text" id="' + idPrefix + '-model" value="' + escHtml(modelVal || '') + '" placeholder="WinterContact TS870"></div>' +
+          '<div class="form-group"><label>DOT kód</label><input type="text" id="' + idPrefix + '-dot" value="' + escHtml(dotVal || '') + '" placeholder="4322"></div>' +
+          '<div class="form-group"><label>Hloubka dezénu (mm)</label><input type="number" id="' + idPrefix + '-depth" value="' + (depthVal != null && depthVal !== '' ? depthVal : '') + '" step="0.1" min="0" max="15"></div>' +
+        '</div>';
+      }
+
       wrap.innerHTML = '<div class="policy-card">' +
+        // Společné záhlaví — sezóna
         '<div class="form-grid">' +
           '<div class="form-group"><label>Sezóna *</label><select id="ts-season">' + seasonOpts + '</select></div>' +
-          '<div class="form-group"><label>Rozměr</label><input type="text" id="ts-size" value="' + escHtml(t.tire_size || '') + '" placeholder="205/55 R16 91H"></div>' +
-          '<div class="form-group"><label>Výrobce</label><input type="text" id="ts-manuf" value="' + escHtml(t.manufacturer || '') + '" placeholder="Continental"></div>' +
-          '<div class="form-group"><label>Model</label><input type="text" id="ts-model" value="' + escHtml(t.model_name || '') + '" placeholder="WinterContact TS870"></div>' +
-          '<div class="form-group"><label>DOT kód</label><input type="text" id="ts-dot" value="' + escHtml(t.dot_code || '') + '" placeholder="4322"></div>' +
-          '<div class="form-group"><label>Hloubka dezénu (mm)</label><input type="number" id="ts-depth" value="' + (t.tread_depth_mm || '') + '" step="0.1" min="0" max="15"></div>' +
+        '</div>' +
+
+        // Sekce: PŘEDNÍ SADA
+        '<div style="margin-top:14px;padding:12px 14px;background:rgba(14,165,233,0.06);border:1px solid rgba(14,165,233,0.2);border-radius:8px;">' +
+          '<div style="font-weight:600;font-size:13px;color:#0ea5e9;margin-bottom:10px;">🚗 Přední sada pneu</div>' +
+          axleSection('ts', t.tire_size, t.manufacturer, t.model_name, t.dot_code, t.tread_depth_mm) +
+        '</div>' +
+
+        // Toggle "zadní stejná jako přední"
+        '<div style="margin-top:10px;padding:8px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;">' +
+          '<label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer;">' +
+            '<input type="checkbox" id="ts-rear-same"' + (!hasRear ? ' checked' : '') + ' onchange="toggleTireRearSection()">' +
+            'Zadní sada je <strong>stejná jako přední</strong> (totožný rozměr / výrobce / DOT atd.)' +
+          '</label>' +
+        '</div>' +
+
+        // Sekce: ZADNÍ SADA — viditelná jen když hasRear
+        '<div id="ts-rear-section" style="margin-top:10px;padding:12px 14px;background:rgba(168,85,247,0.06);border:1px solid rgba(168,85,247,0.2);border-radius:8px;' + (hasRear ? '' : 'display:none;') + '">' +
+          '<div style="font-weight:600;font-size:13px;color:#a855f7;margin-bottom:10px;">🚙 Zadní sada pneu</div>' +
+          axleSection('ts-rear', t.rear_tire_size, t.rear_manufacturer, t.rear_model_name, t.rear_dot_code, t.rear_tread_depth_mm) +
+        '</div>' +
+
+        // Společné údaje — sklad, cena, faktura, mountnutí, poznámka
+        '<div style="margin-top:14px;" class="form-grid">' +
           '<div class="form-group full"><label>Pozice ve skladu</label><input type="text" id="ts-location" value="' + escHtml(t.storage_location || '') + '" placeholder="Regál A3, pozice 14"></div>' +
           '<div class="form-group"><label>Cena pořízení (Kč)</label><input type="number" id="ts-price" value="' + (t.purchase_price || '') + '" step="0.01" min="0"></div>' +
           '<div class="form-group"><label>Číslo faktury</label><input type="text" id="ts-invoice" value="' + escHtml(t.invoice_number || '') + '"></div>' +
           '<div class="form-group full"><label><input type="checkbox" id="ts-mounted"' + (t.mounted ? ' checked' : '') + '> Aktuálně namontováno na voze (toto je NASAZENÁ sada)</label></div>' +
           '<div class="form-group full"><label>Poznámka</label><textarea id="ts-note">' + escHtml(t.note || '') + '</textarea></div>' +
         '</div>' +
+
         '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;">' +
           '<button type="button" class="btn btn-sm btn-secondary" onclick="cancelTireStockForm()">Zrušit</button>' +
           '<button type="button" class="btn btn-sm btn-primary" onclick="saveTireStock(' + vehicleId + ',' + (tireId || 'null') + ')">' + (tireId ? 'Uložit změny' : 'Přidat pneu do skladu') + '</button>' +
         '</div>' +
       '</div>';
+    }
+
+    // Toggle viditelnosti sekce "Zadní sada" — zaškrtnutí = stejné jako přední
+    function toggleTireRearSection() {
+      const cb = document.getElementById('ts-rear-same');
+      const sec = document.getElementById('ts-rear-section');
+      if (!cb || !sec) return;
+      sec.style.display = cb.checked ? 'none' : '';
     }
 
     function cancelTireStockForm() {
@@ -2236,14 +2312,36 @@
     }
 
     async function saveTireStock(vehicleId, tireId) {
+      // Zadní sada je "stejná jako přední"? Pak rear_* odešleme jako null.
+      const rearSame = document.getElementById('ts-rear-same');
+      const sendRear = !(rearSame && rearSame.checked);
+      const rearVal = (id) => {
+        if (!sendRear) return null;
+        const el = document.getElementById(id);
+        return el ? (el.value.trim() || null) : null;
+      };
+      const rearDepth = (function () {
+        if (!sendRear) return null;
+        const el = document.getElementById('ts-rear-depth');
+        if (!el) return null;
+        const v = el.value;
+        return v ? parseFloat(v) : null;
+      })();
       const data = {
         vehicle_id: vehicleId,
         season: document.getElementById('ts-season').value,
+        // Přední sada
         tire_size: document.getElementById('ts-size').value.trim() || null,
         manufacturer: document.getElementById('ts-manuf').value.trim() || null,
         model_name: document.getElementById('ts-model').value.trim() || null,
         dot_code: document.getElementById('ts-dot').value.trim() || null,
         tread_depth_mm: (function () { const v = document.getElementById('ts-depth').value; return v ? parseFloat(v) : null; })(),
+        // Zadní sada (null = stejné jako přední)
+        rear_tire_size: rearVal('ts-rear-size'),
+        rear_manufacturer: rearVal('ts-rear-manuf'),
+        rear_model_name: rearVal('ts-rear-model'),
+        rear_dot_code: rearVal('ts-rear-dot'),
+        rear_tread_depth_mm: rearDepth,
         storage_location: document.getElementById('ts-location').value.trim() || null,
         purchase_price: (function () { const v = document.getElementById('ts-price').value; return v ? parseFloat(v) : null; })(),
         invoice_number: document.getElementById('ts-invoice').value.trim() || null,
