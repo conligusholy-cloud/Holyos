@@ -1722,7 +1722,12 @@ model VehicleInsurancePolicy {
   valid_from     DateTime? @db.Date
   valid_to       DateTime? @db.Date
   premium_amount Decimal?  @db.Decimal(12, 2) // Pojistné (Kč)
-  file_url       String?   @db.VarChar(500) // Scan/PDF
+  // Pojistná smlouva (nový slot — "Smlouva scan")
+  contract_url   String?   @db.VarChar(500)
+  contract_name  String?   @db.VarChar(255)
+  // Zelená karta (původní file_url — sémanticky se interpretuje jako Zelená karta;
+  //   název pole zůstává kvůli zpětné kompatibilitě a načítání starých dat)
+  file_url       String?   @db.VarChar(500)
   file_name      String?   @db.VarChar(255)
   note           String?   @db.Text
 
@@ -3671,4 +3676,101 @@ model Directive {
   @@index([status])
   @@index([code])
   @@map("directives")
+}
+
+
+// =============================================================================
+// AI VÝVOJÁŘ — autonomní agent, který přijímá úkoly z AdminTask, kódí v sandboxu
+// a otevírá PR. UI v super admin sekci, komunikace přes ChatChannel typu 'task'.
+// Viz docs/ai-vyvojar/brief-v1.md a docs/ai-vyvojar/plan-faze-1.md.
+// =============================================================================
+
+// Singleton — nastavení agenta (limity, master switch). Vždy id=1.
+model AgentSettings {
+  id                      Int      @id @default(1)
+  enabled                 Boolean  @default(false) // Master kill switch
+  default_autonomy        String   @default("pr_review") @db.VarChar(20) // full_auto | pr_review | plan_review
+  max_concurrent_runs     Int      @default(1)
+  max_runs_per_day        Int      @default(5)
+  daily_token_budget      Int      @default(1000000) // hrubý strop pro tokens_used / den
+  default_timeout_minutes Int      @default(30)
+  max_commits_per_run     Int      @default(10) // pojistka proti zacyklení
+  auto_merge_wait_minutes Int      @default(15)
+
+  updated_by Int?
+  updated_at DateTime @updatedAt
+
+  updater User? @relation("AgentSettingsUpdater", fields: [updated_by], references: [id], onDelete: SetNull)
+
+  @@map("agent_settings")
+}
+
+// Cílová repozitoria, ve kterých agent smí pracovat. CRUD ze super admin UI.
+model AgentRepo {
+  id                 String   @id @default(uuid())
+  name               String   @db.VarChar(100) // "SIS", "holyos-ai-playground"
+  git_url            String   @db.VarChar(500) // SSH nebo HTTPS URL
+  default_branch     String   @default("main") @db.VarChar(100)
+  protected_branches String[] @default([]) // do těchto větví agent přímo nepushne
+  allow_auto_merge   Boolean  @default(false)
+  required_checks    String[] @default([]) // jména GitHub Actions / checks, která musí projít
+  tech_stack         Json? // { runtime, tests, lint, ... } — informativně pro agenta
+  active             Boolean  @default(true)
+
+  created_by Int?
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  creator User?       @relation("AgentRepoCreator", fields: [created_by], references: [id], onDelete: SetNull)
+  runs    AgentRun[]
+  tasks   AdminTask[]
+
+  @@index([active])
+  @@map("agent_repos")
+}
+
+// Jeden řádek = jeden běh agenta nad jedním AdminTaskem.
+model AgentRun {
+  id             String    @id @default(uuid())
+  task_id        Int
+  repo_id        String?
+  status         String    @default("queued") @db.VarChar(30) // queued | triaging | awaiting_clarification | planning | coding | testing | pr_open | merged | completed | failed | cancelled | escalated
+  autonomy_mode  String    @default("pr_review") @db.VarChar(20) // snapshot v okamžiku spuštění
+  started_at     DateTime  @default(now())
+  ended_at       DateTime?
+  container_id   String?   @db.VarChar(100) // pro Fázi 2 (Docker)
+  branch         String?   @db.VarChar(255) // ai/REQ-{id}-{slug}
+  pr_url         String?   @db.VarChar(500)
+  pr_number      Int?
+  tokens_used    Int       @default(0)
+  commits_count  Int       @default(0)
+  failure_reason String?   @db.Text
+  summary        String?   @db.Text // krátký final summary po dokončení
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  task   AdminTask       @relation("AdminTaskAgentRuns", fields: [task_id], references: [id], onDelete: Cascade)
+  repo   AgentRepo?      @relation(fields: [repo_id], references: [id], onDelete: SetNull)
+  events AgentRunEvent[]
+
+  @@index([task_id])
+  @@index([status])
+  @@index([started_at])
+  @@map("agent_runs")
+}
+
+// Detailní audit log běhu — každý významný krok (tool call, commit, error, ...).
+model AgentRunEvent {
+  id      String   @id @default(uuid())
+  run_id  String
+  at      DateTime @default(now())
+  kind    String   @db.VarChar(50) // tool_call | file_change | commit | question_to_user | rule_blocked | error | decision | llm_message
+  payload Json? // strukturovaná data k události
+
+  run AgentRun @relation(fields: [run_id], references: [id], onDelete: Cascade)
+
+  @@index([run_id, at])
+  @@index([kind])
+  @@map("agent_run_events")
 }

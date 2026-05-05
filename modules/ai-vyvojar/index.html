@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Vývojář | HOLYOS</title>
+  <link rel="icon" type="image/svg+xml" href="../../logo-holyos-icon.svg">
+  <base href="../../">
+  <link rel="stylesheet" href="css/dashboard.css">
+  <style>
+    .main-wrapper { margin-left: var(--sidebar-w); flex: 1; min-height: 100vh; display: flex; flex-direction: column; }
+    .aidev-page { padding: 24px 32px; }
+    .aidev-header {
+      display: flex; align-items: flex-start; justify-content: space-between; gap: 24px;
+      margin-bottom: 20px; flex-wrap: wrap;
+    }
+    .aidev-title h1 { font-size: 22px; margin: 0 0 4px; color: var(--text); }
+    .aidev-title .sub { color: var(--text2); font-size: 13px; }
+
+    /* Kill switch — vždy viditelný v hlavičce */
+    .kill-switch {
+      display: inline-flex; align-items: center; gap: 12px; padding: 10px 16px;
+      border-radius: 10px; border: 2px solid; font-weight: 600;
+      transition: all 0.2s; cursor: pointer;
+    }
+    .kill-switch.on { border-color: #22c55e; background: rgba(34,197,94,0.1); color: #22c55e; }
+    .kill-switch.off { border-color: #ef4444; background: rgba(239,68,68,0.1); color: #ef4444; }
+    .kill-switch .ks-dot {
+      width: 10px; height: 10px; border-radius: 50%; background: currentColor;
+      box-shadow: 0 0 8px currentColor;
+    }
+    .kill-switch button {
+      margin-left: 8px; padding: 6px 12px; border-radius: 6px;
+      border: 1px solid currentColor; background: transparent; color: inherit;
+      font-size: 12px; font-weight: 600; cursor: pointer;
+    }
+    .kill-switch button:hover { background: currentColor; color: var(--bg); }
+
+    /* Tabs */
+    .aidev-tabs {
+      display: flex; gap: 4px; border-bottom: 1px solid var(--border);
+      margin-bottom: 20px; flex-wrap: wrap;
+    }
+    .aidev-tab {
+      padding: 10px 18px; background: transparent; border: none; color: var(--text2);
+      font-size: 13px; font-weight: 600; cursor: pointer; border-bottom: 2px solid transparent;
+      margin-bottom: -1px; transition: color 0.15s, border-color 0.15s;
+    }
+    .aidev-tab:hover { color: var(--text); }
+    .aidev-tab.active { color: #0ea5e9; border-bottom-color: #0ea5e9; }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    /* Counters */
+    .counters {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 16px; margin-bottom: 24px;
+    }
+    .counter-card {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+      padding: 16px;
+    }
+    .counter-card .label { font-size: 11px; color: var(--text2); text-transform: uppercase; letter-spacing: 0.5px; }
+    .counter-card .value { font-size: 28px; font-weight: 700; color: var(--text); margin-top: 4px; }
+    .counter-card .hint  { font-size: 11px; color: var(--text2); margin-top: 4px; }
+
+    /* Tables — inline (.data-table není v dashboard.css globálně) */
+    .data-table {
+      width: 100%; border-collapse: collapse; font-size: 13px;
+      background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden;
+    }
+    .data-table thead th {
+      text-align: left; padding: 10px 12px; background: var(--surface2);
+      border-bottom: 1px solid var(--border); color: var(--text2); font-weight: 600; font-size: 12px;
+      text-transform: uppercase; letter-spacing: 0.4px;
+    }
+    .data-table tbody td {
+      padding: 10px 12px; border-bottom: 1px solid var(--border); color: var(--text);
+    }
+    .data-table tbody tr:hover { background: rgba(14,165,233,0.04); }
+    .data-table tbody tr:last-child td { border-bottom: none; }
+
+    /* Status chip */
+    .chip {
+      display: inline-block; padding: 2px 10px; border-radius: 12px;
+      font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px;
+    }
+    .chip.queued, .chip.triaging, .chip.planning, .chip.coding, .chip.testing { background: rgba(59,130,246,0.15); color: #3b82f6; }
+    .chip.pr_open { background: rgba(168,139,250,0.15); color: #a78bfa; }
+    .chip.merged, .chip.completed { background: rgba(34,197,94,0.15); color: #22c55e; }
+    .chip.failed, .chip.escalated { background: rgba(239,68,68,0.15); color: #ef4444; }
+    .chip.cancelled { background: rgba(156,163,175,0.15); color: #9ca3af; }
+    .chip.awaiting_clarification, .chip.awaiting_approval { background: rgba(234,179,8,0.15); color: #eab308; }
+
+    /* Forms */
+    .form-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 14px; margin-bottom: 16px;
+    }
+    .form-grid label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--text2); }
+    .form-grid input, .form-grid select, .form-grid textarea {
+      padding: 7px 10px; border-radius: 6px; border: 1px solid var(--border);
+      background: var(--surface); color: var(--text); font-size: 13px; font-family: inherit;
+    }
+    .form-grid input[type="checkbox"] { width: auto; margin-top: 6px; }
+
+    .btn {
+      padding: 8px 16px; border-radius: 8px; border: 1px solid var(--border);
+      background: var(--surface); color: var(--text); font-size: 13px; font-weight: 600;
+      cursor: pointer; transition: all 0.15s;
+    }
+    .btn:hover { background: var(--surface2); }
+    .btn.primary { background: #0ea5e9; color: white; border-color: #0ea5e9; }
+    .btn.primary:hover { background: #0284c7; }
+    .btn.danger { background: #ef4444; color: white; border-color: #ef4444; }
+    .btn.danger:hover { background: #dc2626; }
+
+    .empty {
+      padding: 24px; text-align: center; color: var(--text2); font-style: italic;
+      border: 1px dashed var(--border); border-radius: 10px;
+    }
+
+    /* Audit log detail */
+    .events-list { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+    .event-row {
+      padding: 8px 14px; border-bottom: 1px solid var(--border); font-size: 12px;
+      display: grid; grid-template-columns: 110px 130px 1fr; gap: 12px; align-items: start;
+    }
+    .event-row:last-child { border-bottom: none; }
+    .event-row .at { color: var(--text2); font-family: ui-monospace, monospace; }
+    .event-row .kind { font-weight: 600; color: #0ea5e9; }
+    .event-row .payload { color: var(--text); white-space: pre-wrap; word-break: break-word; font-family: ui-monospace, monospace; font-size: 11px; }
+
+    @media (max-width: 768px) {
+      .main-wrapper { margin-left: 0; }
+      .aidev-page { padding: 16px; }
+      .aidev-header { flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+
+<aside id="sidebar" class="sidebar"></aside>
+
+<div class="main-wrapper">
+  <div class="aidev-page">
+
+    <div class="aidev-header">
+      <div class="aidev-title">
+        <h1>AI Vývojář <span style="font-size:12px; color:var(--text2); font-weight:400;">— modul #13 (Fáze 1 / MVP)</span></h1>
+        <div class="sub">Autonomní agent. Přijímá úkoly z modulu Požadavky, otevírá PR. Komunikuje jako "Alan, AI Vývojář".</div>
+      </div>
+      <div id="kill-switch-host"></div>
+    </div>
+
+    <div class="aidev-tabs">
+      <button class="aidev-tab active" data-tab="dashboard">Dashboard</button>
+      <button class="aidev-tab" data-tab="repos">Repozitáře</button>
+      <button class="aidev-tab" data-tab="limits">Limity</button>
+      <button class="aidev-tab" data-tab="audit">Audit log</button>
+    </div>
+
+    <!-- DASHBOARD -->
+    <div class="tab-content active" data-tab="dashboard">
+      <div class="counters" id="counters"></div>
+
+      <h3 style="margin: 24px 0 10px; font-size: 14px;">Fronta čekajících úkolů</h3>
+      <div id="queue-host">
+        <div class="empty">Načítání…</div>
+      </div>
+
+      <h3 style="margin: 24px 0 10px; font-size: 14px;">Posledních 20 běhů</h3>
+      <div id="recent-runs-host">
+        <div class="empty">Načítání…</div>
+      </div>
+    </div>
+
+    <!-- REPOZITÁŘE -->
+    <div class="tab-content" data-tab="repos">
+      <div style="margin-bottom:14px;">
+        <button class="btn primary" id="btn-new-repo">+ Přidat repozitář</button>
+      </div>
+      <div id="repos-host"><div class="empty">Načítání…</div></div>
+
+      <div id="repo-form-host" style="display:none; margin-top:20px; padding:16px; background:var(--surface); border:1px solid var(--border); border-radius:10px;">
+        <h3 style="margin:0 0 12px; font-size:14px;" id="repo-form-title">Nový repozitář</h3>
+        <input type="hidden" id="repo-id" value="">
+        <div class="form-grid">
+          <label>Název<input id="repo-name" placeholder="SIS"></label>
+          <label>Git URL<input id="repo-git-url" placeholder="https://github.com/owner/repo.git"></label>
+          <label>Default branch<input id="repo-default-branch" value="main"></label>
+          <label>Auto-merge<input id="repo-allow-auto-merge" type="checkbox"></label>
+          <label>Aktivní<input id="repo-active" type="checkbox" checked></label>
+        </div>
+        <label style="display:block; font-size:12px; color:var(--text2); margin-bottom:4px;">Protected branches (čárkou)</label>
+        <input id="repo-protected-branches" style="width:100%;" placeholder="main, production">
+        <label style="display:block; font-size:12px; color:var(--text2); margin: 12px 0 4px;">Required checks (čárkou)</label>
+        <input id="repo-required-checks" style="width:100%;" placeholder="ci/build, ci/tests">
+        <label style="display:block; font-size:12px; color:var(--text2); margin: 12px 0 4px;">Tech stack (JSON)</label>
+        <textarea id="repo-tech-stack" rows="3" style="width:100%; font-family:ui-monospace,monospace; font-size:12px;" placeholder='{"runtime":"node","tests":"vitest","lint":"eslint"}'></textarea>
+        <div style="margin-top:14px; display:flex; gap:10px;">
+          <button class="btn primary" id="btn-save-repo">Uložit</button>
+          <button class="btn" id="btn-cancel-repo">Zrušit</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- LIMITY -->
+    <div class="tab-content" data-tab="limits">
+      <div id="limits-host" style="background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:20px;">
+        <div class="form-grid">
+          <label>Default autonomy
+            <select id="lim-default-autonomy">
+              <option value="full_auto">full_auto</option>
+              <option value="pr_review" selected>pr_review</option>
+              <option value="plan_review">plan_review</option>
+            </select>
+          </label>
+          <label>Max souběžných běhů<input type="number" id="lim-max-concurrent" min="0" max="20"></label>
+          <label>Max běhů za den<input type="number" id="lim-max-per-day" min="0" max="1000"></label>
+          <label>Denní rozpočet tokenů<input type="number" id="lim-token-budget" min="0"></label>
+          <label>Default timeout (min)<input type="number" id="lim-timeout" min="1" max="360"></label>
+          <label>Max commitů za běh<input type="number" id="lim-max-commits" min="1" max="100"></label>
+          <label>Auto-merge wait (min)<input type="number" id="lim-merge-wait" min="0" max="1440"></label>
+        </div>
+        <button class="btn primary" id="btn-save-limits" style="margin-top:14px;">Uložit nastavení</button>
+      </div>
+    </div>
+
+    <!-- AUDIT LOG -->
+    <div class="tab-content" data-tab="audit">
+      <div style="margin-bottom:14px; display:flex; gap:10px; align-items:center;">
+        <select id="audit-status-filter">
+          <option value="">Všechny stavy</option>
+          <option value="running">Aktivní</option>
+          <option value="terminal">Ukončené</option>
+          <option value="pr_open">PR open</option>
+          <option value="merged">Merged</option>
+          <option value="failed">Failed</option>
+          <option value="escalated">Escalated</option>
+        </select>
+        <button class="btn" id="btn-refresh-audit">Aktualizovat</button>
+      </div>
+      <div id="audit-list-host"><div class="empty">Načítání…</div></div>
+
+      <div id="audit-detail-host" style="margin-top:20px; display:none;">
+        <h3 style="margin:0 0 10px; font-size:14px;">Detail běhu</h3>
+        <div id="audit-detail-summary" style="margin-bottom:14px; padding:14px; background:var(--surface); border:1px solid var(--border); border-radius:10px;"></div>
+        <div id="audit-detail-events"></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script src="js/sidebar.js"></script>
+<script src="modules/ai-vyvojar/app.js"></script>
+</body>
+</html>

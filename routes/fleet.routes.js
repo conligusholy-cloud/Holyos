@@ -719,10 +719,17 @@ const policySchema = z.object({
   valid_to: z.string().optional().nullable(),
   premium_amount: z.number().optional().nullable(),
   note: z.string().optional().nullable(),
-  // Upload (volitelný — pokud přichází base64, uložíme)
+  // Zelená karta (původní file_url) — upload base64
   file_data: z.string().optional().nullable(),
   file_name: z.string().optional().nullable(),
   mime_type: z.string().optional().nullable(),
+  // Pojistná smlouva — upload base64
+  contract_data: z.string().optional().nullable(),
+  contract_file_name: z.string().optional().nullable(),
+  contract_mime_type: z.string().optional().nullable(),
+  // Příznaky pro odebrání — UI tlačítko "Odebrat" pro každou kolonku zvlášť
+  remove_green_card: z.boolean().optional(),
+  remove_contract: z.boolean().optional(),
 });
 
 function toPolicyData(data, vehicleId) {
@@ -736,12 +743,32 @@ function toPolicyData(data, vehicleId) {
     premium_amount: data.premium_amount ?? null,
     note: data.note || null,
   };
+  // Zelená karta — upload nového souboru
   if (data.file_data) {
     const saved = saveBase64File(vehicleId, data.file_data, data.file_name, data.mime_type);
     out.file_url = saved.url;
     out.file_name = saved.original_name;
   }
+  // Smlouva scan — upload nového souboru
+  if (data.contract_data) {
+    const saved = saveBase64File(vehicleId, data.contract_data, data.contract_file_name, data.contract_mime_type);
+    out.contract_url = saved.url;
+    out.contract_name = saved.original_name;
+  }
   return out;
+}
+
+// Smaže fyzický soubor v STORAGE_DIR podle stored URL (best-effort, nehází)
+function removeStoredFile(fileUrl) {
+  if (!fileUrl) return;
+  try {
+    const urlPath = fileUrl.replace('/api/storage/files/', '');
+    const abs = path.join(STORAGE_DIR, urlPath);
+    const resolved = path.resolve(abs);
+    if (resolved.startsWith(path.resolve(STORAGE_DIR)) && fs.existsSync(resolved)) {
+      fs.unlinkSync(resolved);
+    }
+  } catch (_) {}
 }
 
 // GET /api/fleet/vehicles/:id/policies
@@ -785,10 +812,26 @@ router.put('/policies/:policyId', async (req, res, next) => {
       return res.status(400).json({ error: 'Neplatná data', details: parsed.error.flatten() });
     }
     const data = toPolicyData(parsed.data, existing.vehicle_id);
-    // Ponech původní file, když se neuploaduje nový
+    // Zelená karta — pokud se neuploaduje nová, ponech stávající
     if (!parsed.data.file_data) {
       delete data.file_url;
       delete data.file_name;
+    }
+    // Smlouva — analogicky
+    if (!parsed.data.contract_data) {
+      delete data.contract_url;
+      delete data.contract_name;
+    }
+    // Odebrat tlačítko — nullovat URL a smazat fyzický soubor
+    if (parsed.data.remove_green_card) {
+      removeStoredFile(existing.file_url);
+      data.file_url = null;
+      data.file_name = null;
+    }
+    if (parsed.data.remove_contract) {
+      removeStoredFile(existing.contract_url);
+      data.contract_url = null;
+      data.contract_name = null;
     }
     delete data.vehicle_id; // není v update změnitelné
     const policy = await prisma.vehicleInsurancePolicy.update({
@@ -807,17 +850,9 @@ router.delete('/policies/:policyId', async (req, res, next) => {
     const policy = await prisma.vehicleInsurancePolicy.findUnique({ where: { id: policyId } });
     if (!policy) return res.status(404).json({ error: 'Pojistka nenalezena' });
 
-    // Smaž přiložený soubor, pokud je
-    if (policy.file_url) {
-      try {
-        const urlPath = policy.file_url.replace('/api/storage/files/', '');
-        const abs = path.join(STORAGE_DIR, urlPath);
-        const resolved = path.resolve(abs);
-        if (resolved.startsWith(path.resolve(STORAGE_DIR)) && fs.existsSync(resolved)) {
-          fs.unlinkSync(resolved);
-        }
-      } catch (_) {}
-    }
+    // Smaž přiložené soubory (Zelená karta + Smlouva scan), pokud existují
+    removeStoredFile(policy.file_url);
+    removeStoredFile(policy.contract_url);
 
     await prisma.vehicleInsurancePolicy.delete({ where: { id: policyId } });
     res.json({ ok: true });
