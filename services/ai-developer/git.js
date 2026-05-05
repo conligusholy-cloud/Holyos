@@ -1,103 +1,116 @@
 // =============================================================================
-// HolyOS — AI Vývojář / git wrapper (přes child_process git CLI)
+// HolyOS — AI Vývojář / git wrapper (isomorphic-git, čistě JS)
 // =============================================================================
-// Žádný simple-git dep — voláme system git binárku. Postačuje pro Fázi 1.
-// Token pro HTTPS clone se vkládá do URL: https://x-access-token:TOKEN@github.com/...
+// Žádný system git CLI — Railway/mise build image ho nemá v PATH a explicitní
+// instalaci přes nixpacks.toml ignoruje. isomorphic-git je čistě JS knihovna,
+// která pracuje přímo s file systémem a HTTP. Funguje na clone, branch, add,
+// commit, push.
+//
+// Auth pro HTTPS: onAuth callback vrací { username: 'x-access-token', password: PAT }
+// (stejný pattern jako GitHub Apps a fine-grained PATs).
 
-const { spawn } = require('child_process');
+const fs = require('fs');
+const git = require('isomorphic-git');
+const http = require('isomorphic-git/http/node');
 
-function runGit(args, opts = {}) {
-  return new Promise((resolve, reject) => {
-    const child = spawn('git', args, {
-      cwd: opts.cwd,
-      env: { ...process.env, GIT_TERMINAL_PROMPT: '0', ...(opts.env || {}) },
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-    let stdout = '';
-    let stderr = '';
-    child.stdout.on('data', (d) => { stdout += d.toString(); });
-    child.stderr.on('data', (d) => { stderr += d.toString(); });
-    child.on('error', reject);
-    child.on('close', (code) => {
-      if (code === 0) {
-        resolve({ stdout: stdout.trim(), stderr: stderr.trim() });
-      } else {
-        const err = new Error(`git ${args.join(' ')} exited ${code}: ${stderr.trim()}`);
-        err.code = code;
-        err.stdout = stdout;
-        err.stderr = stderr;
-        reject(err);
-      }
-    });
-  });
-}
+const AGENT_AUTHOR = {
+  name: 'Alan, AI Vývojář',
+  email: 'ai-vyvojar@holyos.local',
+};
 
-function authedHttpsUrl(gitUrl, token) {
-  if (!token) return gitUrl;
-  if (!gitUrl.startsWith('https://')) return gitUrl;
-  // https://github.com/foo/bar.git → https://x-access-token:TOKEN@github.com/foo/bar.git
-  return gitUrl.replace('https://', `https://x-access-token:${token}@`);
+function makeOnAuth(token) {
+  return () => ({ username: 'x-access-token', password: token });
 }
 
 async function clone({ gitUrl, branch, dir, token, depth = 1 }) {
-  const url = authedHttpsUrl(gitUrl, token);
-  const args = ['clone', '--depth', String(depth)];
-  if (branch) args.push('--branch', branch);
-  args.push(url, dir);
-  await runGit(args);
-}
-
-async function checkoutNewBranch({ cwd, branch }) {
-  await runGit(['checkout', '-b', branch], { cwd });
-}
-
-async function setIdentity({ cwd, name, email }) {
-  await runGit(['config', 'user.name', name], { cwd });
-  await runGit(['config', 'user.email', email], { cwd });
-}
-
-async function statusPorcelain({ cwd }) {
-  const { stdout } = await runGit(['status', '--porcelain'], { cwd });
-  return stdout.split('\n').filter(Boolean).map((line) => {
-    const status = line.slice(0, 2);
-    const path = line.slice(3);
-    return { status, path };
+  await fs.promises.mkdir(dir, { recursive: true });
+  await git.clone({
+    fs,
+    http,
+    dir,
+    url: gitUrl,
+    ref: branch,
+    singleBranch: true,
+    depth,
+    onAuth: makeOnAuth(token),
   });
 }
 
+async function checkoutNewBranch({ cwd, branch }) {
+  // isomorphic-git: vytvoř novou větev z aktuálního HEAD a checkoutni ji
+  await git.branch({ fs, dir: cwd, ref: branch, checkout: true });
+}
+
+async function setIdentity({ cwd, name, email }) {
+  // identity se předává v commit() přes author. Tady jen zapíšeme do configu
+  // pro konzistenci (audit log si to taky čte).
+  await git.setConfig({ fs, dir: cwd, path: 'user.name', value: name });
+  await git.setConfig({ fs, dir: cwd, path: 'user.email', value: email });
+}
+
+async function statusPorcelain({ cwd }) {
+  // statusMatrix vrátí [filepath, headStatus, workdirStatus, stageStatus]
+  // headStatus:    0 = absent, 1 = present
+  // workdirStatus: 0 = absent, 1 = match HEAD, 2 = different
+  // stageStatus:   0 = absent, 1 = match HEAD, 2 = match workdir, 3 = different
+  const matrix = await git.statusMatrix({ fs, dir: cwd });
+  const out = [];
+  for (const [filepath, head, workdir, stage] of matrix) {
+    if (head === 1 && workdir === 1 && stage === 1) continue; // unchanged
+    let code = '??';
+    if (head === 0 && workdir === 1) code = 'A ';
+    else if (head === 1 && workdir === 0) code = 'D ';
+    else if (head === 1 && workdir === 2) code = ' M';
+    out.push({ status: code, path: filepath });
+  }
+  return out;
+}
+
 async function addAll({ cwd }) {
-  await runGit(['add', '-A'], { cwd });
-}
-
-async function commit({ cwd, message }) {
-  await runGit(['commit', '-m', message], { cwd });
-}
-
-async function push({ cwd, branch, token, gitUrl }) {
-  // Použij authed URL pro push (jinak by HTTPS clone bez tokenu selhal)
-  const url = authedHttpsUrl(gitUrl, token);
-  await runGit(['push', url, branch], { cwd });
-}
-
-async function getHeadSha({ cwd }) {
-  const { stdout } = await runGit(['rev-parse', 'HEAD'], { cwd });
-  return stdout.trim();
-}
-
-async function getChangedFiles({ cwd, fromBranch = 'origin/main' }) {
-  try {
-    const { stdout } = await runGit(['diff', '--name-only', fromBranch, 'HEAD'], { cwd });
-    return stdout.split('\n').filter(Boolean);
-  } catch (_e) {
-    // Fallback: jen aktuální status
-    const status = await statusPorcelain({ cwd });
-    return status.map((s) => s.path);
+  const matrix = await git.statusMatrix({ fs, dir: cwd });
+  for (const [filepath, head, workdir] of matrix) {
+    if (workdir === 0 && head === 1) {
+      await git.remove({ fs, dir: cwd, filepath });
+    } else if (workdir > 0) {
+      await git.add({ fs, dir: cwd, filepath });
+    }
   }
 }
 
+async function commit({ cwd, message }) {
+  const sha = await git.commit({
+    fs,
+    dir: cwd,
+    message,
+    author: AGENT_AUTHOR,
+    committer: AGENT_AUTHOR,
+  });
+  return sha;
+}
+
+async function push({ cwd, branch, token, gitUrl }) {
+  await git.push({
+    fs,
+    http,
+    dir: cwd,
+    url: gitUrl,
+    remote: 'origin',
+    ref: branch,
+    onAuth: makeOnAuth(token),
+  });
+}
+
+async function getHeadSha({ cwd }) {
+  return git.resolveRef({ fs, dir: cwd, ref: 'HEAD' });
+}
+
+async function getChangedFiles({ cwd }) {
+  const status = await statusPorcelain({ cwd });
+  return status.map((s) => s.path);
+}
+
 module.exports = {
-  runGit,
-  authedHttpsUrl,
+  AGENT_AUTHOR,
   clone,
   checkoutNewBranch,
   setIdentity,
