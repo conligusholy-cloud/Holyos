@@ -104,6 +104,17 @@
       background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
       padding: 28px; width: 560px; max-width: 95vw; max-height: 90vh; overflow-y: auto;
     }
+    /* Karta osoby — roztažená na celou šířku obrazovky (max 95vw, výška 95vh).
+       Form-grid uvnitř drží 2 sloupce; na velmi širokých obrazovkách (>1400 px)
+       přepneme na 3 sloupce, aby pole nebyly nesmyslně dlouhá. */
+    .modal.modal-fullwidth {
+      width: 95vw;
+      max-width: 95vw;
+      max-height: 95vh;
+    }
+    @media (min-width: 1400px) {
+      .modal.modal-fullwidth .form-grid { grid-template-columns: 1fr 1fr 1fr; }
+    }
     .modal h2 { font-size: 18px; margin-bottom: 20px; }
     .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 24px; }
 
@@ -805,7 +816,7 @@
       // ale <input type="date"> očekává jen "YYYY-MM-DD" — jinak zůstane prázdné.
       const dateOnly = (v) => (v ? String(v).slice(0, 10) : '');
       const html = `<div class="modal-overlay">
-        <div class="modal">
+        <div class="modal modal-fullwidth">
           <h2>${isEdit ? '✏️ Upravit osobu' : '➕ Nová osoba'}</h2>
           <form id="person-form" onsubmit="savePerson(event, ${id || 'null'})">
             <div style="display:flex;align-items:center;gap:16px;margin-bottom:16px;padding-bottom:16px;border-bottom:1px solid var(--border);">
