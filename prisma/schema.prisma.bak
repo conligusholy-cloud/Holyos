@@ -49,10 +49,6 @@ model User {
   // Schvalování objednávek — kdo schválil (User FK pro audit, Tomáš nemá vždy Person)
   orders_approved_user Order[] @relation("OrderApproverUser")
 
-  // AI Vývojář — kdo upravil settings / vytvořil repo
-  agent_settings_updated AgentSettings[] @relation("AgentSettingsUpdater")
-  agent_repos_created    AgentRepo[]     @relation("AgentRepoCreator")
-
   @@map("users")
 }
 
@@ -949,25 +945,15 @@ model AdminTask {
   // Autor / admin ho může obnovit nebo trvale smazat.
   deleted_at DateTime?
 
-  // AI Vývojář — pole pro modul, který autonomně řeší úkoly
-  assignable_to_ai    Boolean @default(false)
-  acceptance_criteria String? @db.Text
-  affected_module     String? @db.VarChar(100)
-  target_repo_id      String?
-
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
 
   // Vztahy
-  creator     User?      @relation("AdminTaskCreator", fields: [created_by], references: [id], onDelete: SetNull)
-  target_repo AgentRepo? @relation(fields: [target_repo_id], references: [id], onDelete: SetNull)
-  agent_runs  AgentRun[] @relation("AdminTaskAgentRuns")
+  creator User? @relation("AdminTaskCreator", fields: [created_by], references: [id], onDelete: SetNull)
 
   @@index([created_by])
   @@index([status])
   @@index([deleted_at])
-  @@index([assignable_to_ai])
-  @@index([target_repo_id])
   @@map("admin_tasks")
 }
 
