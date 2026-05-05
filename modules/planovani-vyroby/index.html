@@ -187,6 +187,7 @@
 
 <div id="modalRoot"></div>
 
+<script src="/js/image-lightbox.js"></script>
 <script>
   var s = document.createElement('script');
   s.src = 'js/sidebar.js?v=' + Date.now();
@@ -309,9 +310,10 @@
       }
       case 'link': {
         if (!v) return `<td>—</td>`;
-        // Pokud má produkt obrázek, ukáže se thumbnail před kódem.
+        // Pokud má produkt obrázek, ukáže se thumbnail před kódem. Klik na thumbnail = lightbox.
+        const lbTitle = (v.code + ' — ' + (v.name || '')).replace(/'/g, "\\'");
         const thumb = v.image_path
-          ? `<img src="/api/production/products/${v.id}/image" alt="" loading="lazy" onerror="this.remove()" style="width:24px;height:24px;border-radius:4px;object-fit:cover;vertical-align:middle;margin-right:6px;border:1px solid var(--border);">`
+          ? `<img src="/api/production/products/${v.id}/image" alt="" loading="lazy" onclick="event.preventDefault();event.stopPropagation();window.openImageLightbox && window.openImageLightbox(this.src,'${lbTitle}')" onerror="this.remove()" style="width:24px;height:24px;border-radius:4px;object-fit:cover;vertical-align:middle;margin-right:6px;border:1px solid var(--border);cursor:zoom-in" title="Klik = velký náhled">`
           : '';
         return `<td class="col-link"><a href="modules/pracovni-postup/detail.html?id=${v.id}" title="${escHtml(v.name)}" style="display:inline-flex;align-items:center;">${thumb}<span>${escHtml(v.code)} <span style="color:var(--text2)">${escHtml((v.name || '').slice(0,40))}</span></span></a></td>`;
       }
