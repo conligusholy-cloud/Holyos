@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Metodické pokyny a směrnice | HOLYOS</title>
+  <link rel="icon" type="image/svg+xml" href="../../logo-holyos-icon.svg">
+  <base href="../../">
+  <link rel="stylesheet" href="css/dashboard.css">
+  <style>
+    .main-wrapper { margin-left: var(--sidebar-w); flex: 1; min-height: 100vh; display: flex; flex-direction: column; }
+    .page-header {
+      display:flex; align-items:center; gap:12px; padding:20px 24px;
+      border-bottom:1px solid var(--border); flex-wrap:wrap;
+    }
+    .page-header h1 { font-size:18px; font-weight:700; margin:0; }
+    .page-header .count { font-size:13px; color:var(--text2); margin-left:4px; }
+    .search-box {
+      margin-left:auto; padding:8px 14px; background:var(--surface2); color:var(--text);
+      border:1px solid var(--border); border-radius:8px; font-size:13px; width:240px;
+    }
+    .search-box:focus { border-color:var(--accent); outline:none; }
+
+    .content { padding:0 24px 24px; }
+    .toolbar { display:flex; gap:12px; margin:16px 0; align-items:center; flex-wrap:wrap; }
+
+    .btn { padding:8px 18px; border-radius:8px; border:1px solid var(--border); font-size:13px; font-weight:500; cursor:pointer; transition:all 0.15s; display:inline-flex; align-items:center; gap:6px; background:transparent; color:var(--text); }
+    .btn-primary { background:#a78bfa; color:#fff; border-color:#a78bfa; }
+    .btn-primary:hover { background:#8b5cf6; }
+    .btn-secondary { background:var(--surface2); color:var(--text); }
+    .btn-secondary:hover { background:var(--border); }
+    .btn-danger { background:rgba(239,68,68,0.15); color:#ef4444; border-color:rgba(239,68,68,0.3); }
+    .btn-danger:hover { background:rgba(239,68,68,0.25); }
+    .btn-sm { padding:5px 12px; font-size:12px; }
+
+    .filters { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+    .filter-select { padding:6px 10px; background:var(--surface2); color:var(--text); border:1px solid var(--border); border-radius:7px; font-size:12px; }
+
+    .stats-row { display:grid; grid-template-columns:repeat(auto-fit, minmax(160px, 1fr)); gap:12px; margin-bottom:16px; }
+    .stat-card { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:14px 16px; }
+    .stat-card .stat-label { font-size:11px; color:var(--text2); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:4px; }
+    .stat-card .stat-value { font-size:22px; font-weight:700; }
+
+    .data-table { width:100%; border-collapse:separate; border-spacing:0; }
+    .data-table thead { position:sticky; top:0; z-index:1; }
+    .data-table th { background:var(--surface2); padding:10px 12px; text-align:left; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; color:var(--text2); border-bottom:1px solid var(--border); }
+    .data-table td { padding:10px 12px; font-size:13px; border-bottom:1px solid rgba(255,255,255,0.04); vertical-align:middle; }
+    .data-table tr:hover td { background:rgba(167,139,250,0.06); cursor:pointer; }
+    .data-table .code-cell { font-family:monospace; font-weight:700; letter-spacing:0.5px; color:#a78bfa; }
+
+    .badge { display:inline-block; padding:2px 8px; border-radius:10px; font-size:11px; font-weight:500; }
+    .badge-active   { background:rgba(34,197,94,0.18); color:#22c55e; }
+    .badge-draft    { background:rgba(245,158,11,0.18); color:#f59e0b; }
+    .badge-archived { background:rgba(148,163,184,0.18); color:#94a3b8; }
+    .badge-cat      { background:rgba(167,139,250,0.15); color:#a78bfa; }
+
+    .modal-overlay { position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.6); z-index:200; display:flex; align-items:center; justify-content:center; padding:20px; }
+    .modal { background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:28px; width:780px; max-width:100%; max-height:90vh; overflow-y:auto; }
+    .modal h2 { font-size:18px; margin:0 0 20px 0; }
+    .modal-actions { display:flex; gap:10px; justify-content:flex-end; margin-top:24px; padding-top:16px; border-top:1px solid var(--border); }
+
+    .form-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+    .form-grid .full { grid-column: 1 / -1; }
+    .form-row { display:flex; flex-direction:column; gap:6px; }
+    .form-row label { font-size:12px; color:var(--text2); font-weight:500; }
+    .form-row input, .form-row select, .form-row textarea {
+      background:var(--surface2); color:var(--text); border:1px solid var(--border);
+      border-radius:7px; padding:8px 10px; font-size:13px; font-family:inherit;
+    }
+    .form-row textarea { resize:vertical; min-height:120px; }
+    .form-row input:focus, .form-row select:focus, .form-row textarea:focus {
+      border-color:#a78bfa; outline:none;
+    }
+
+    .empty-hint { padding:60px 20px; text-align:center; color:var(--text2); font-size:14px; }
+
+    /* Přílohy */
+    .att-zone { border:2px dashed var(--border); border-radius:10px; padding:18px; text-align:center; color:var(--text2); font-size:12px; cursor:pointer; transition:border-color 0.15s, background 0.15s; }
+    .att-zone:hover, .att-zone.dragging { border-color:#a78bfa; background:rgba(167,139,250,0.06); color:var(--text); }
+    .att-zone input[type=file] { display:none; }
+    .att-list { display:flex; flex-direction:column; gap:6px; margin-top:10px; }
+    .att-item { display:flex; align-items:center; gap:10px; padding:8px 12px; background:var(--bg); border:1px solid var(--border); border-radius:8px; font-size:12px; }
+    .att-item .ico { font-size:18px; flex-shrink:0; }
+    .att-item .nm { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--text); }
+    .att-item .sz { color:var(--text2); font-size:11px; flex-shrink:0; }
+    .att-item a.dl { color:#0ea5e9; text-decoration:none; }
+    .att-item button.rm { background:none; border:none; color:#ef4444; cursor:pointer; font-size:14px; }
+
+    .effective-row { display:flex; gap:10px; align-items:center; font-size:12px; color:var(--text2); }
+    .effective-row span.dot { width:6px; height:6px; border-radius:50%; background:var(--text2); display:inline-block; }
+  </style>
+</head>
+<body>
+  <aside id="sidebar" class="sidebar"></aside>
+
+  <div class="main-wrapper">
+    <div class="page-header">
+      <h1>📘 Metodické pokyny a směrnice</h1>
+      <span class="count" id="totalCount">—</span>
+      <input type="search" class="search-box" id="searchBox" placeholder="Hledat (kód, název)…">
+    </div>
+
+    <div class="content">
+      <div class="stats-row" id="statsRow"></div>
+
+      <div class="toolbar">
+        <div class="filters">
+          <select class="filter-select" id="filterCategory">
+            <option value="all">Všechny kategorie</option>
+            <option value="obecne">Obecné</option>
+            <option value="hr">HR</option>
+            <option value="vyroba">Výroba</option>
+            <option value="sklad">Sklad</option>
+            <option value="kvalita">Kvalita</option>
+            <option value="bozp">BOZP</option>
+            <option value="it">IT</option>
+            <option value="ekonomika">Ekonomika</option>
+          </select>
+          <select class="filter-select" id="filterStatus">
+            <option value="all">Všechny stavy</option>
+            <option value="active">Platná</option>
+            <option value="draft">Pracovní verze</option>
+            <option value="archived">Archivovaná</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" style="margin-left:auto;" onclick="openCreateModal()">+ Nová směrnice</button>
+      </div>
+
+      <div style="background:var(--surface); border:1px solid var(--border); border-radius:10px; overflow:hidden;">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th style="width:130px;">Kód</th>
+              <th>Název</th>
+              <th style="width:120px;">Kategorie</th>
+              <th style="width:80px;">Verze</th>
+              <th style="width:120px;">Platnost od</th>
+              <th style="width:120px;">Stav</th>
+              <th style="width:80px;"></th>
+            </tr>
+          </thead>
+          <tbody id="tbody">
+            <tr><td colspan="7" class="empty-hint">Načítání…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/sidebar.js"></script>
+  <script src="modules/metodicke-pokyny/app.js"></script>
+  <script>renderSidebar('metodicke-pokyny');</script>
+</body>
+</html>

@@ -3617,3 +3617,35 @@ model NormovaniEvent {
   @@index([event_type])
   @@map("normovani_events")
 }
+
+// =============================================================================
+// METODICKÉ POKYNY A SMĚRNICE
+// =============================================================================
+// Centrální evidence interních směrnic, metodických pokynů a postupů.
+// Každý dokument má kód, název, kategorii, verzi a stav. Podporuje
+// libovolný počet příloh (PDF, Word, atd.) přes /api/storage/upload.
+
+model Directive {
+  id           Int     @id @default(autoincrement())
+  code         String  @unique @db.VarChar(50)         // např. "SM-001", "MP-HR-002"
+  title        String  @db.VarChar(500)                // krátký název směrnice
+  category     String  @default("obecne") @db.VarChar(50) // obecne, hr, vyroba, sklad, kvalita, bozp, atd.
+  content      String? @db.Text                        // tělo směrnice (markdown / HTML)
+  version      String  @default("1.0") @db.VarChar(20) // verze dokumentu
+  status       String  @default("draft") @db.VarChar(20) // draft, active, archived
+  effective_from DateTime? @db.Date                    // platnost od
+  effective_to   DateTime? @db.Date                    // platnost do
+  tags         Json?                                   // pole stringů — volné štítky
+  attachments  Json?                                   // [{ url, name, size, mime }, ...]
+
+  // Audit
+  created_by Int?
+  updated_by Int?
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@index([category])
+  @@index([status])
+  @@index([code])
+  @@map("directives")
+}

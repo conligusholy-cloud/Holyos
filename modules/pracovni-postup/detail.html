@@ -9,6 +9,7 @@
   <link rel="stylesheet" href="css/dashboard.css">
   <!-- SheetJS pro parsovani .xlsx v zalozce Sestava zbozi FY -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="/js/image-lightbox.js"></script>
   <style>
     /* === Layout === */
     .detail-header {
@@ -110,7 +111,19 @@
     .op-materials .mat-toggle .arrow.open { transform: rotate(90deg); }
     .mat-table {
       width:100%; border-collapse:collapse; margin-top:6px; font-size:12px;
+      min-width: 720px; /* Aby se nesmrskla pod tuto šířku — wrapper má overflow-x:auto */
     }
+    /* Min-width na klíčové sloupce, ostatní auto. Materiál se natáhne. */
+    .mat-table th:nth-child(1), .mat-table td:nth-child(1) { min-width: 50px; } /* ID */
+    .mat-table th:nth-child(2), .mat-table td:nth-child(2) { min-width: 180px; } /* Materiál */
+    .mat-table th:nth-child(3), .mat-table td:nth-child(3) { min-width: 90px; } /* Kód */
+    .mat-table th:nth-child(4), .mat-table td:nth-child(4) { min-width: 80px; } /* Typ */
+    .mat-table th:nth-child(5), .mat-table td:nth-child(5) { min-width: 60px; white-space: nowrap; } /* Norma */
+    .mat-table th:nth-child(6), .mat-table td:nth-child(6) { min-width: 70px; white-space: nowrap; } /* Reálně */
+    .mat-table th:nth-child(7), .mat-table td:nth-child(7) { min-width: 70px; white-space: nowrap; } /* Pracovníků */
+    .mat-table th:nth-child(8), .mat-table td:nth-child(8) { min-width: 70px; text-align: right; white-space: nowrap; } /* Množství */
+    .mat-table th:nth-child(9), .mat-table td:nth-child(9) { min-width: 40px; white-space: nowrap; } /* Jedn. */
+    .mat-table-wrap { overflow-x: auto; max-width: 100%; }
     .mat-table th {
       text-align:left; padding:6px 10px; color:var(--text2); font-weight:600;
       border-bottom:1px solid var(--border); font-size:11px;
@@ -675,7 +688,7 @@
     <!-- Header -->
     <div class="detail-header">
       <a href="modules/pracovni-postup/index.html" class="back-btn" title="Zpět na seznam">&larr;</a>
-      <img id="product-photo" class="detail-photo" alt="" hidden>
+      <img id="product-photo" class="detail-photo" alt="" hidden style="cursor:zoom-in" title="Klik = velký náhled">
       <div class="detail-header-info">
         <h1 id="product-name">Načítám...</h1>
         <span class="detail-code" id="product-code"></span>
@@ -869,6 +882,7 @@
           photoEl.alt = product.name;
           photoEl.hidden = false;
           photoEl.onerror = () => { photoEl.hidden = true; };
+          photoEl.onclick = () => window.openImageLightbox && window.openImageLightbox(photoEl.src, product.code + ' — ' + product.name);
         }
         updateMeta();
         renderTab();
@@ -944,26 +958,35 @@
     // === Render workflow ===
     function renderWorkflow() {
       const content = document.getElementById('tab-content');
-      const ops = product.operations || [];
+      // Aplikuj pending moves z draft módu (drag&drop neuložené změny)
+      const ops = applyPendingMoves(product.operations || []);
 
-      // Toolbar
+      // Toolbar — Nová operace + případné "Uložit / Zahodit" pokud jsou pending změny
       let html = '<div class="wf-toolbar">' +
-        '<button class="btn btn-primary" onclick="openAddOp()">+ Nová operace</button>' +
-        '</div>';
+        '<button class="btn btn-primary" onclick="openAddOp()">+ Nová operace</button>';
+      if (_pendingMoves.size > 0) {
+        html += '<button class="btn" style="background:#10b981;color:#fff;border-color:#10b981;font-weight:700;" onclick="commitPendingMoves()" title="Uložit všechny neuložené přesuny materiálů do databáze">💾 Uložit pracovní postup (' + _pendingMoves.size + ' změn' + (_pendingMoves.size === 1 ? 'a' : (_pendingMoves.size < 5 ? 'y' : '')) + ')</button>';
+        html += '<button class="btn" style="background:rgba(239,68,68,0.1);color:#ef4444;border-color:rgba(239,68,68,0.4);" onclick="discardPendingMoves()" title="Vrátí všechny neuložené přesuny">↺ Zahodit změny</button>';
+      }
+      html += '</div>';
 
       // Summary cards — včetně rekurzivních sub-produktů
-      const totalDirect = { norm: ops.reduce((s, o) => s + normMinutes(o), 0), real: ops.reduce((s, o) => s + realMinutes(o), 0) };
-      const totalWithSubs = calcTotalTime(ops);
-      const totalPrep = ops.reduce((s, o) => s + (o.preparation_time || 0), 0);
-      const maxWorkers = ops.reduce((s, o) => Math.max(s, o.workers_count || 1), 0);
-      const totalMats = ops.reduce((s, o) => s + (o.materials || []).length, 0);
+      // Staging operace (FY import migrační okno) jsou IGNOROVANÉ v normách, časech, počtech.
+      // Sémanticky to nejsou pracovní operace — slouží jen jako drag&drop staging area.
+      const isStaging = (op) => op.is_staging || /^FY import/i.test(op.name || '');
+      const realOps = ops.filter(o => !isStaging(o));
+      const totalDirect = { norm: realOps.reduce((s, o) => s + normMinutes(o), 0), real: realOps.reduce((s, o) => s + realMinutes(o), 0) };
+      const totalWithSubs = calcTotalTime(realOps);
+      const totalPrep = realOps.reduce((s, o) => s + (o.preparation_time || 0), 0);
+      const maxWorkers = realOps.reduce((s, o) => Math.max(s, o.workers_count || 1), 0);
+      const totalMats = realOps.reduce((s, o) => s + (o.materials || []).length, 0);
       const hasSubs = totalWithSubs.norm > totalDirect.norm;
 
       const taktVal = product.takt_time || '';
       const overTaktCount = taktVal ? ops.filter(o => realMinutes(o) > taktVal).length : 0;
 
       html += '<div class="wf-summary">' +
-        summaryCard('Operací', ops.length, '') +
+        summaryCard('Operací', realOps.length, '') +
         summaryCard('Norma (1 os.)', formatDuration(totalWithSubs.norm), hasSubs ? '(vč. sub)' : '') +
         summaryCard('Reálný čas', formatDuration(totalWithSubs.real), hasSubs ? '(vč. sub)' : '') +
         summaryCard('Příprava', totalPrep, 'min') +
@@ -992,21 +1015,85 @@
         html += '</div></div>';
       }
 
-      if (ops.length === 0) {
+      // Rozdeleni: regularni operace vs FY import (staging) panely
+      const isStagingOp = (op) => /^FY import/i.test(op.name || '');
+      const regularOps = ops.filter(op => !isStagingOp(op));
+      const stagingOps = ops.filter(op => isStagingOp(op));
+
+      if (regularOps.length === 0 && stagingOps.length === 0) {
         html += '<div class="empty-ops"><div class="icon">&#128736;</div>' +
           '<p>Žádné operace v pracovním postupu</p>' +
           '<p style="font-size:12px;">Klikněte na "+ Nová operace" pro přidání prvního kroku</p></div>';
       } else {
-        html += '<div class="op-list" id="op-list">';
-        ops.forEach((op, i) => {
-          if (i > 0) html += '<div class="op-arrow">&#9660;</div>';
-          html += renderOpCard(op, i);
-        });
+        // Wrapper pro op-list s místem pro sticky panel vpravo
+        html += '<div style="display:flex;gap:16px;align-items:flex-start;">';
+        html += '<div class="op-list" id="op-list" style="flex:1;min-width:0;">';
+        if (regularOps.length === 0) {
+          html += '<div class="empty-ops" style="padding:30px;"><p style="font-size:13px;color:var(--text2);">Žádné regulární operace. Vytvoř operace pomocí "+ Nová operace" a přesuň materiály ze žlutého panelu vpravo.</p></div>';
+        } else {
+          regularOps.forEach((op, i) => {
+            if (i > 0) html += '<div class="op-arrow">&#9660;</div>';
+            html += renderOpCard(op, i);
+          });
+        }
+        html += '</div>';
+
+        // Sticky panel vpravo s FY import staging materialy
+        if (stagingOps.length > 0) {
+          html += '<div id="fy-staging-panel" style="position:sticky;top:12px;width:340px;flex-shrink:0;background:var(--surface);border:2px solid #eab308;border-radius:8px;box-shadow:0 4px 16px rgba(234,179,8,0.2);max-height:calc(100vh - 80px);overflow-y:auto;">';
+          for (const sop of stagingOps) {
+            const mats = sop.materials || [];
+            html += '<div style="padding:10px 14px;background:rgba(234,179,8,0.15);border-bottom:1px solid var(--border);position:sticky;top:0;background-color:#3a2f0a;z-index:1;">';
+            html += '<div style="font-weight:700;color:#eab308;font-size:13px;display:flex;align-items:center;justify-content:space-between;gap:8px;">';
+            html += '<span>📦 ' + esc(sop.name) + '</span>';
+            html += '<span style="font-size:11px;color:var(--text2);font-weight:400;">' + mats.length + ' k roztřídění</span>';
+            html += '</div>';
+            html += '<div style="font-size:11px;color:var(--text2);margin-top:4px;">Migrační okno z FY importu — zaškrtni a přetáhni nebo táhni jednotlivě.</div>';
+            html += '<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;">';
+            html += '<label style="font-size:10px;display:flex;align-items:center;gap:4px;cursor:pointer;flex:1;background:rgba(234,179,8,0.15);padding:3px 8px;border-radius:4px;">';
+            html += '<input type="checkbox" class="fy-select-all" data-op-id="' + sop.id + '" onchange="fyToggleSelectAll(' + sop.id + ', this.checked)"> Vybrat vše';
+            html += '<span class="fy-selected-count" id="fy-selected-count-' + sop.id + '" style="margin-left:auto;font-weight:600;color:#eab308;"></span>';
+            html += '</label>';
+            html += '<button class="btn" onclick="openEditOp(' + sop.id + ')" title="Upravit operaci" style="font-size:10px;padding:3px 8px;">✏️</button>';
+            html += '<button class="btn btn-del" onclick="deleteOp(' + sop.id + ')" title="Smazat operaci" style="font-size:10px;padding:3px 8px;color:#ef4444;border-color:rgba(239,68,68,0.4);">🗑️</button>';
+            html += '</div>';
+            html += '</div>';
+
+            if (mats.length === 0) {
+              html += '<div style="padding:20px 14px;text-align:center;color:var(--text2);font-size:12px;">Žádné položky k roztřídění — operaci můžeš smazat.</div>';
+            } else {
+              html += '<div data-op-id="' + sop.id + '" ondragover="omDragOver(event,' + sop.id + ')" ondragleave="omDragLeave(event,' + sop.id + ')" ondrop="omDrop(event,' + sop.id + ')">';
+              for (const m of mats) {
+                const mat = m.material || {};
+                const isSelected = window._selectedOmIds && window._selectedOmIds.has(m.id);
+                const selStyle = isSelected ? 'background:rgba(234,179,8,0.10);box-shadow:inset 3px 0 0 #eab308;' : '';
+                html += '<div class="fy-staging-item mat-row" draggable="true" data-om-id="' + m.id + '" data-source-op-id="' + sop.id + '" ondragstart="omDragStart(event,' + m.id + ',' + sop.id + ')" ondragend="omDragEnd(event)" title="Přetáhni do operace vlevo (zaškrtnuté se přesunou všechny společně)" style="padding:8px 14px;border-bottom:1px solid var(--border);cursor:grab;display:flex;align-items:flex-start;gap:8px;' + selStyle + '">';
+                html += '<input type="checkbox" class="fy-select-row" data-om-id="' + m.id + '" data-op-id="' + sop.id + '"' + (isSelected ? ' checked' : '') + ' onclick="event.stopPropagation()" onchange="fyToggleRowSelect(' + m.id + ', ' + sop.id + ', this.checked)" style="margin-top:2px;cursor:pointer;">';
+                html += '<div style="flex:1;display:flex;flex-direction:column;gap:2px;min-width:0;">';
+                html += '<div style="display:flex;align-items:center;gap:6px;font-size:12px;">';
+                html += '<span style="font-family:monospace;color:var(--text2);font-size:10px;">#' + (mat.id || '') + '</span>';
+                html += '<span style="font-family:monospace;font-size:11px;font-weight:600;">' + esc(mat.code || '') + '</span>';
+                html += '</div>';
+                html += '<div style="font-size:11px;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + esc(mat.name || '') + '">' + esc(mat.name || '') + '</div>';
+                html += '<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text);">';
+                html += '<span>' + Number(m.quantity || 0).toLocaleString('cs-CZ', { maximumFractionDigits: 4 }) + ' ' + esc(m.unit || '') + '</span>';
+                html += '<span style="color:var(--text2);font-size:10px;">⠿ táhni</span>';
+                html += '</div>';
+                html += '</div>';
+                html += '</div>';
+              }
+              html += '</div>';
+            }
+          }
+          html += '</div>';
+        }
         html += '</div>';
       }
 
       content.innerHTML = html;
       initDragDrop();
+      // Obnov rozbalené sekce (mat-*, sub-wf-*) po re-renderu — kvůli drag&drop draftu
+      if (typeof restoreExpandedSections === 'function') restoreExpandedSections();
     }
 
     function summaryCard(label, value, unit) {
@@ -1053,7 +1140,7 @@
           '<div class="mat-toggle" onclick="toggleMats(\'' + matId + '\', this)">' +
             '<span class="arrow">&#9654;</span> Materiál (' + mats.length + ')' +
           '</div>' +
-          '<div id="' + matId + '" style="display:none;">' +
+          '<div id="' + matId + '" style="display:none;" class="mat-table-wrap">' +
             '<table class="mat-table">' +
               '<thead><tr><th style="width:60px;" title="ID materiálu (Material.id) — shoduje se se sloupcem ID v Nákup a sklad → Zboží">ID</th><th>Materiál</th><th>Kód</th><th>Typ</th><th>Norma</th><th>Reálně</th><th>Pracovníků</th><th style="text-align:right;">Množství</th><th>Jedn.</th></tr></thead>' +
               '<tbody>';
@@ -1108,9 +1195,11 @@
             workersCell = '<span style="color:#ef4444;font-size:11px;">—</span>';
           }
 
-          html += '<tr class="mat-row" draggable="true" data-om-id="' + m.id + '" data-source-op-id="' + op.id + '" ondragstart="omDragStart(event,' + m.id + ',' + op.id + ')" ondragend="omDragEnd(event)" title="Přetáhni řádek na jinou operaci pro přesun materiálu">' +
+          const pendingStyle = m._pending ? 'background:rgba(234,179,8,0.12);box-shadow:inset 3px 0 0 #eab308;' : '';
+          const pendingBadge = m._pending ? ' <span style="display:inline-block;background:#eab308;color:#000;padding:1px 6px;border-radius:4px;font-size:9px;font-weight:700;letter-spacing:0.5px;margin-left:6px;" title="Neuložená změna — klikni Uložit pracovní postup">📝 NEULOŽENO</span>' : '';
+          html += '<tr class="mat-row' + (m._pending ? ' mat-row-pending' : '') + '" draggable="true" data-om-id="' + m.id + '" data-source-op-id="' + op.id + '" ondragstart="omDragStart(event,' + m.id + ',' + op.id + ')" ondragend="omDragEnd(event)" title="Přetáhni řádek na jinou operaci pro přesun materiálu" style="' + pendingStyle + '">' +
             '<td style="font-family:monospace;color:var(--text2);font-size:11px;" title="Material.id">' + (mat.id || '') + '</td>' +
-            '<td>' + nameCell + '</td>' +
+            '<td>' + nameCell + pendingBadge + '</td>' +
             '<td style="color:var(--text2);">' + esc(mat.code || '') + '</td>' +
             '<td>' + typeBadge + '</td>' +
             '<td>' + normCell + '</td>' +
@@ -1207,7 +1296,7 @@
             '<div class="mat-toggle" onclick="toggleMats(\'' + subMatId + '\', this)" style="font-size:11px;">' +
               '<span class="arrow">&#9654;</span> Materiál (' + soMats.length + ')' +
             '</div>' +
-            '<div id="' + subMatId + '" style="display:none;">' +
+            '<div id="' + subMatId + '" style="display:none;" class="mat-table-wrap">' +
               '<table class="mat-table" style="margin-left:0;">' +
                 '<thead><tr><th style="width:60px;" title="ID materiálu (Material.id)">ID</th><th>Materiál</th><th>Kód</th><th>Typ</th><th>Norma</th><th>Reálně</th><th>Pracovníků</th><th style="text-align:right;">Množství</th><th>Jedn.</th></tr></thead>' +
                 '<tbody>';
@@ -1892,6 +1981,10 @@
     }
 
     // === Materiály toggle ===
+    // === Stav rozbalených sekcí (mat-*, sub-wf-*) ===
+    // Přežívá renderTab() — aby se po drag&drop zachoval rozbalený strom.
+    if (typeof window._expandedSections === 'undefined') window._expandedSections = new Set();
+
     function toggleMats(id, toggleEl) {
       const el = document.getElementById(id);
       if (!el) return;
@@ -1899,6 +1992,8 @@
       el.style.display = isOpen ? 'none' : '';
       const arrow = toggleEl.querySelector('.arrow');
       if (arrow) arrow.classList.toggle('open', !isOpen);
+      if (isOpen) window._expandedSections.delete(id);
+      else window._expandedSections.add(id);
     }
 
     function toggleSubWf(id, clickEl) {
@@ -1906,6 +2001,33 @@
       if (!el) return;
       const isOpen = el.style.display !== 'none';
       el.style.display = isOpen ? 'none' : 'table-row';
+      if (isOpen) window._expandedSections.delete(id);
+      else window._expandedSections.add(id);
+    }
+
+    // Po každém renderWorkflow() obnoví rozbalené sekce z _expandedSections.
+    function restoreExpandedSections() {
+      if (!window._expandedSections || window._expandedSections.size === 0) return;
+      // Sestav seznam id, které pořád existují v DOM
+      const stillExisting = new Set();
+      window._expandedSections.forEach(id => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        stillExisting.add(id);
+        if (id.startsWith('sub-wf-')) {
+          el.style.display = 'table-row';
+        } else {
+          el.style.display = '';
+          // mat-toggle arrow před tímto elementem
+          const toggle = el.previousElementSibling;
+          if (toggle && toggle.classList.contains('mat-toggle')) {
+            const arrow = toggle.querySelector('.arrow');
+            if (arrow) arrow.classList.add('open');
+          }
+        }
+      });
+      // Zúž na to, co opravdu existuje (zbavíme se id z odstraněných operací)
+      window._expandedSections = stillExisting;
     }
 
     // === Takt ===
@@ -2862,41 +2984,130 @@
     }
 
     // Map<code(uppercase), { qty, unit }> — agregovany rekurzivni rozpad pres polotovary.
-    // Pro porovnani s FY exportem (kontrola mnozstvi).
-    function fyBuildWorkflowQtyMap(rootProduct) {
-      const map = new Map();
+    // PLUS strict per-polotovar map — pro každý polotovar v postupu zachytíme jeho PŘÍMÉ děti.
+    //
+    // Diff se má ptát: "Je tento materiál PŘÍMO pod polotovarem X (podle FY hierarchie)?",
+    // ne jen "Je někde v rekurzivním stromu?". Volné hledání dělá ✅ i pro materiály které
+    // patří jinam (např. NA0134 v BS-SE-VP00 ≠ FY požadavek na BS-M-0004).
+    function fyBuildWorkflowQtyMap(rootProduct, fyItems) {
+      const byCode = new Map();
+      const byMatId = new Map();
+      // Pro strict diff: Map<polotovar_factorify_id, Map<child_factorify_id, { qty, unit }>>
+      const directChildren = new Map();
       const visited = new Set();
+
+      function addEntry(target, key, qty, unit) {
+        if (key == null || key === '') return;
+        const cur = target.get(key);
+        target.set(key, { qty: (cur ? cur.qty : 0) + qty, unit: cur ? cur.unit : unit });
+      }
+
+      function ensureChildrenMap(polotovarFid) {
+        if (polotovarFid == null) return null;
+        if (!directChildren.has(polotovarFid)) directChildren.set(polotovarFid, new Map());
+        return directChildren.get(polotovarFid);
+      }
+
+      // Helper: získá Factorify ID z entity (Product nebo Material).
+      // factorify_id může být String (Material) nebo Int (Product) — vrací Number.
+      function getFactId(entity) {
+        if (!entity) return null;
+        const fid = entity.factorify_id;
+        if (fid == null || fid === '') return null;
+        const n = Number(fid);
+        return Number.isFinite(n) ? n : null;
+      }
+
       function walk(p, multiplier, depth) {
         if (!p || depth > 30) return;
         if (p.id != null) {
           if (visited.has(p.id)) return;
           visited.add(p.id);
         }
-        // Pridej i sam polotovar (kdyby ho FY mel jako uroven 1.x)
-        if (depth > 0 && p.code) {
-          const k = String(p.code).toUpperCase();
-          const cur = map.get(k);
-          map.set(k, { qty: (cur ? cur.qty : 0) + multiplier, unit: cur ? cur.unit : 'ks' });
+        // Identifikace polotovaru — Product.factorify_id (Factorify ID polotovaru/výrobku).
+        // Product.id je HolyOS Prisma PK, nemá nic společného s FY ID.
+        const polotovarFid = getFactId(p);
+        const childMap = ensureChildrenMap(polotovarFid);
+
+        if (depth > 0) {
+          if (p.code) addEntry(byCode, String(p.code).toUpperCase(), multiplier, 'ks');
+          if (polotovarFid != null) addEntry(byMatId, polotovarFid, multiplier, 'ks');
         }
         for (const op of (p.operations || [])) {
           for (const om of (op.materials || [])) {
             const mat = om.material;
-            if (!mat || !mat.code) continue;
+            if (!mat) continue;
             const qty = parseFloat(om.quantity || 0) * multiplier;
+            const directQty = parseFloat(om.quantity || 0);
             const unit = om.unit || mat.unit || 'ks';
             const lp = om.linked_product;
             const lpHasOps = lp && Array.isArray(lp.operations) && lp.operations.length > 0;
 
-            const k = String(mat.code).toUpperCase();
-            const cur = map.get(k);
-            map.set(k, { qty: (cur ? cur.qty : 0) + qty, unit: cur ? cur.unit : unit });
+            if (mat.code) addEntry(byCode, String(mat.code).toUpperCase(), qty, unit);
+            // Material.factorify_id (varchar) — sem patří FY ID, ne mat.id (HolyOS PK)
+            const matFid = getFactId(mat);
+            if (matFid != null) {
+              addEntry(byMatId, matFid, qty, unit);
+              if (childMap) {
+                const cur = childMap.get(matFid);
+                childMap.set(matFid, { qty: (cur ? cur.qty : 0) + directQty, unit });
+              }
+            }
 
             if (lpHasOps) walk(lp, qty, depth + 1);
           }
         }
       }
       walk(rootProduct, 1, 0);
-      return map;
+
+      // Postav level→FY ID mapu z FY items (pro strict lookup parent polotovaru)
+      const levelToFid = new Map();
+      if (Array.isArray(fyItems)) {
+        for (const it of fyItems) {
+          if (it.factorify_item_id == null) continue;
+          const lvl = String(it.level || '').replace(/\s+/g, '').trim();
+          if (!lvl) continue;
+          if (!levelToFid.has(lvl)) levelToFid.set(lvl, Number(it.factorify_item_id));
+        }
+      }
+
+      const result = byCode;
+      result.byMatId = byMatId;
+      result.byCode = byCode;
+      result.directChildren = directChildren;
+      result.levelToFid = levelToFid;
+
+      // STRICT lookup: pro item na úrovni X.Y najdi parent level X → factorify_id polotovaru,
+      // a hledej child factorify_id JEN v jeho directChildren.
+      result.lookup = function(item) {
+        if (!item) return null;
+        const fid = item.factorify_item_id != null ? Number(item.factorify_item_id) : null;
+        const lvl = String(item.level || '').replace(/\s+/g, '').trim();
+
+        // Strict per-level: vyžaduj parent v hierarchii
+        if (fid != null && lvl && lvl.includes('.')) {
+          const parts = lvl.split('.');
+          parts.pop();
+          const parentLvl = parts.join('.');
+          const parentFid = levelToFid.get(parentLvl);
+          if (parentFid != null) {
+            const childMap = directChildren.get(parentFid);
+            if (childMap && childMap.has(fid)) return childMap.get(fid);
+            // Strict miss — explicitně null, ne fallback
+            return null;
+          }
+        }
+
+        // Fallback (root úroveň "1" nebo bez factorify_id) — volný lookup po ID/kódu
+        if (fid && byMatId.has(fid)) return byMatId.get(fid);
+        const code = fyExtractCode(item.name);
+        if (code) {
+          const k = String(code).toUpperCase();
+          if (byCode.has(k)) return byCode.get(k);
+        }
+        return null;
+      };
+      return result;
     }
 
     // === Workflow tree helpers (sdilene mezi Souhrn materialu a FY tabem) ===
@@ -3153,6 +3364,25 @@
 
     // Re-fetch produktu ze serveru s cache-bust query, prepise globalni `product` a re-rendruje strom.
     // Pouziti: po `--apply` v scriptu, kdy chceme videt aktualni linked_product bez nutnosti hard refresh
+    // Re-fetch produkt + re-render FY tab (přepočet ✅/❌/⚠️ proti aktuálnímu pracovnímu postupu)
+    async function fyRefreshComparison(btn) {
+      if (!product || !product.id) return;
+      const origText = btn ? btn.textContent : '';
+      if (btn) { btn.textContent = '⏳ Porovnávám...'; btn.disabled = true; }
+      try {
+        const fresh = await api('/api/production/products/' + product.id + '?_t=' + Date.now());
+        for (const k of Object.keys(product)) delete product[k];
+        Object.assign(product, fresh);
+        await renderFyBomTab();
+        toast('✅ Porovnání obnoveno');
+      } catch (err) {
+        console.error('[fyRefreshComparison] Chyba:', err);
+        toast('Chyba: ' + err.message);
+      } finally {
+        if (btn) { btn.disabled = false; btn.textContent = origText; }
+      }
+    }
+
     async function wfRefreshFromServer(btn) {
       if (!product || !product.id) return;
       const origText = btn ? btn.textContent : '';
@@ -3202,6 +3432,7 @@
         : 'Vyber .xlsx soubor exportovaný z Factorify (Sestava zboží). Uloží se jako referenční snímek pro tento výrobek.';
       html += '<button class="btn btn-primary" onclick="document.getElementById(\'fy-file-input\').click()" title="' + esc(importTitle) + '">📤 ' + esc(importLabel) + '</button>';
       if (_fyBom) {
+        html += '<button class="btn" onclick="fyRefreshComparison(this)" title="Re-fetch celého pracovního postupu (rekurzivně přes polotovary) z databáze a přepočte ✅/❌/⚠️ proti FY exportu. Použij po Doplnit do postupu nebo po ručních změnách v jiných polotovarech." style="background:rgba(34,197,94,0.1);border-color:rgba(34,197,94,0.4);color:#22c55e;font-weight:600;">🔄 Porovnat kusovníky</button>';
         html += '<button class="btn" onclick="fyDelete()" title="Odstraní naimportovanou Factorify sestavu z tohoto výrobku. Pracovní postup se tím nezmění." style="color:#ef4444;border-color:rgba(239,68,68,0.4);">🗑️ Smazat naimportovanou sestavu</button>';
       }
       html += '</div>';
@@ -3228,23 +3459,24 @@
         const author = _fyBom.imported_by ? esc(_fyBom.imported_by) : '—';
         const fname = _fyBom.source_filename ? esc(_fyBom.source_filename) : '—';
 
-        // Diff vuci pracovnimu postupu — kontrola kodu i mnozstvi
-        const wfQtyMap = fyBuildWorkflowQtyMap(product);
+        // Diff vuci pracovnimu postupu — STRICT per-level kontrola.
+        // Materiál musí být PŘÍMO pod správným polotovarem podle FY hierarchie.
+        const wfQtyMap = fyBuildWorkflowQtyMap(product, items);
         let missingCount = 0;
         let mismatchCount = 0;
+        let countedNonRoot = 0;
         for (const it of items) {
           const lvl = String(it.level || '').replace(/\s+/g,'').trim();
           if (lvl === '1') continue;
-          const code = fyExtractCode(it.name);
-          if (!code) continue;
-          const wfEntry = wfQtyMap.get(code);
+          countedNonRoot++;
+          const wfEntry = wfQtyMap.lookup(it);
           if (!wfEntry) {
             missingCount++;
           } else if (it.quantity != null && wfEntry.qty != null && !fyQtyMatch(it.quantity, wfEntry.qty)) {
             mismatchCount++;
           }
         }
-        const totalNonRoot = items.length - (items.some(it => String(it.level || '').replace(/\s+/g,'').trim() === '1') ? 1 : 0);
+        const totalNonRoot = countedNonRoot;
         const presentCount = totalNonRoot - missingCount - mismatchCount;
 
         // Meta info
@@ -3348,9 +3580,9 @@
     // Render single FY tree node (rekurzivne s details)
     function fyRenderTreeNode(node, qtyMap, onlyMissing) {
       const it = node.item;
-      const code = fyExtractCode(it.name);
       const isLevel1 = node.path.length <= 1;
-      const wfEntry = code ? qtyMap.get(code) : null;
+      // Lookup priorita: factorify_item_id == Material.id, pak first-token code
+      const wfEntry = qtyMap && typeof qtyMap.lookup === 'function' ? qtyMap.lookup(it) : null;
       const codeMatch = isLevel1 ? true : !!wfEntry;
       const fyQty = it.quantity != null ? Number(it.quantity) : null;
       const wfQty = wfEntry ? wfEntry.qty : null;
@@ -3374,9 +3606,8 @@
         function hasIssue(n) {
           if (n === node ? (missing || mismatch) : false) return true;
           const c = n.item;
-          const cCode = fyExtractCode(c.name);
           const cIsRoot = n.path.length <= 1;
-          const cEntry = cCode ? qtyMap.get(cCode) : null;
+          const cEntry = qtyMap && typeof qtyMap.lookup === 'function' ? qtyMap.lookup(c) : null;
           const cMatch = cIsRoot ? true : !!cEntry;
           if (!cMatch) return true;
           if (cMatch && !cIsRoot && cEntry && c.quantity != null && !fyQtyMatch(c.quantity, cEntry.qty)) return true;
@@ -3395,17 +3626,34 @@
       else if (codeMatch) statCell = '<span class="fy-stat" style="color:#10b981;" title="Kód v postupu' + (wfEntry ? ', množství: ' + Number(wfQty).toLocaleString('cs-CZ', { maximumFractionDigits: 4 }) + ' ' + (wfEntry.unit || '') : '') + '">✅</span>';
       else statCell = '<span class="fy-stat" style="color:#ef4444;" title="Kód není v postupu">❌</span>';
 
-      // Akce: u polotovaru/výrobku s dětmi tlačítko 📥 Import kusovníku
+      // Akce: u polotovaru/výrobku s dětmi tlačítko 📥 Doplnit do postupu,
+      //       u řádků s ⚠️ (jiné množství) tlačítko 🔄 Sjednotit množství.
       const isComposite = (typeLabel === 'Polotovar' || typeLabel === 'Výrobek');
       const hasChildren = node.children && node.children.length > 0;
       let actionCell = '<span></span>';
-      if (isComposite && hasChildren && !isLevel1) {
+      if (isComposite && hasChildren) {
         const lvlEsc = String(it.level || '').replace(/'/g, '&#39;');
         const nameEsc = esc(it.name).replace(/'/g, '&#39;');
-        actionCell = '<button class="btn fy-import-btn" onclick="event.stopPropagation();fyImportChildrenToWorkflow(\'' + lvlEsc + '\',\'' + nameEsc + '\',' + node.children.length + ')" title="Vytvoří v Pracovním postupu novou operaci FY import a doplní do ní ' + node.children.length + ' chybějících materiálů z FY kusovníku (s množstvím). Polotovar BS-X-XXXX dostane svůj postup, pokud ještě neexistuje." style="font-size:10px;padding:3px 8px;background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.4);color:#10b981;border-radius:4px;cursor:pointer;">📥 Doplnit do postupu</button>';
+        const titleText = isLevel1
+          ? 'Vytvoří v Pracovním postupu vrcholové sestavy novou operaci FY import a doplní do ní ' + node.children.length + ' chybějících materiálů úrovně 1.X (s množstvím).'
+          : 'Vytvoří v Pracovním postupu novou operaci FY import a doplní do ní ' + node.children.length + ' chybějících materiálů z FY kusovníku (s množstvím). Polotovar dostane svůj postup, pokud ještě neexistuje.';
+        actionCell = '<button class="btn fy-import-btn" onclick="event.stopPropagation();fyImportChildrenToWorkflow(\'' + lvlEsc + '\',\'' + nameEsc + '\',' + node.children.length + ')" title="' + esc(titleText) + '" style="font-size:10px;padding:3px 8px;background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.4);color:#10b981;border-radius:4px;cursor:pointer;">📥 Doplnit do postupu</button>';
+      } else if (mismatch && it.factorify_item_id != null) {
+        // Sjednotit množství v postupu s FY exportem
+        const lvlParts = String(it.level || '').replace(/\s+/g, '').trim().split('.');
+        lvlParts.pop();
+        const parentLvl = lvlParts.join('.');
+        const fid = Number(it.factorify_item_id);
+        const fyQty = Number(it.quantity || 0);
+        const fyUnit = String(it.unit || '').replace(/'/g, '&#39;');
+        const titleText = 'Aktualizuje množství v pracovním postupu na hodnotu z FY exportu ('
+          + Number(fyQty).toLocaleString('cs-CZ', { maximumFractionDigits: 4 }) + ' ' + (it.unit || '')
+          + ') místo aktuálního ' + (wfQty != null ? Number(wfQty).toLocaleString('cs-CZ', { maximumFractionDigits: 4 }) + ' ' + (wfEntry.unit || '') : '?') + '.';
+        actionCell = '<button class="btn fy-sync-btn" onclick="event.stopPropagation();fySyncQty(\'' + parentLvl + '\',' + fid + ',' + fyQty + ',\'' + fyUnit + '\')" title="' + esc(titleText) + '" style="font-size:10px;padding:3px 8px;background:rgba(234,179,8,0.10);border:1px solid rgba(234,179,8,0.4);color:#eab308;border-radius:4px;cursor:pointer;">🔄 Sjednotit množství</button>';
       }
 
       function makeCells() {
+        const code = fyExtractCode(it.name);
         return '<span class="fy-level">' + esc(it.level || '') + '</span>'
           + '<span class="fy-fid">' + (it.factorify_item_id || '') + '</span>'
           + '<span class="fy-code">' + esc(code || '') + '</span>'
@@ -3446,13 +3694,13 @@
       if (!items || items.length === 0) {
         return '<tr><td colspan="9" style="padding:20px;text-align:center;color:var(--text2);">Žádné položky</td></tr>';
       }
-      const qtyMap = (wfQtyMap instanceof Map) ? wfQtyMap : new Map();
+      const qtyMap = wfQtyMap || new Map();
       let out = '';
       let visible = 0;
       for (const it of items) {
-        const code = fyExtractCode(it.name);
         const isLevel1 = String(it.level || '').replace(/\s+/g,'').trim() === '1';
-        const wfEntry = code ? qtyMap.get(code) : null;
+        // Lookup: factorify_item_id == Material.id, fallback first-token code
+        const wfEntry = qtyMap && typeof qtyMap.lookup === 'function' ? qtyMap.lookup(it) : null;
         const codeMatch = isLevel1 ? true : !!wfEntry;
         // Mnozstvi: FY hlasi quantity vzhledem k 1 ks rodicovskeho polotovaru.
         // Pro top-level (uroven 1.X primo pod vyrobkem) se to porovnava s wfEntry.qty.
@@ -3526,7 +3774,8 @@
         const hay = [it.name, it.factorify_item_id, it.used_in_operations, it.item_type, it.level].join(' ').toLowerCase();
         return hay.includes(q);
       });
-      const wfQtyMap = fyBuildWorkflowQtyMap(product);
+      // Strict per-level diff potřebuje VŠECHNY FY items (ne jen filtrované) pro level→fid mapu
+      const wfQtyMap = fyBuildWorkflowQtyMap(product, _fyBom.items || []);
       const container = document.getElementById('fy-view-container');
       if (!container) return;
       if (_fyViewMode === 'tree') {
@@ -3664,23 +3913,216 @@ const topRow = items.find(it => String(it.level || '').replace(/\s+/g,'').trim()
       }
     }
 
-    // === FY → HolyOS: doplnění kusovníku do pracovního postupu ===
-    // Pro daný level (např. "1.49") pošle backendu request, který:
-    //  1. Najde / vytvoří target Product odpovídající FY polotovaru/výrobku
-    //  2. Vytvoří v něm operaci "FY import" (workstation = null)
-    //  3. Doplní jen materiály které ještě v postupu chybí (s množstvím z FY)
-    // === Drag&drop materiálu mezi operacemi v rámci postupu ===
+    // === Drag&drop materialu mezi operacemi v ramci postupu ===
     let _omDragData = null;
+    // Draft mode — pending přesuny materiálů. Map<om_id, target_op_id>.
+    // Drag&drop neukládá hned, čeká na "Uložit pracovní postup".
+    const _pendingMoves = new Map();
+
+    // Aplikuj pending moves na ops pole — vrátí transformovanou kopii pro render.
+    // Pending materiály získají flag _pending = true (žluté zvýraznění).
+    function applyPendingMoves(ops) {
+      if (_pendingMoves.size === 0) return ops;
+      const opsByID = {};
+      ops.forEach(op => {
+        opsByID[op.id] = Object.assign({}, op, { materials: (op.materials || []).slice() });
+      });
+      for (const [omId, targetOpId] of _pendingMoves.entries()) {
+        let foundMat = null;
+        let originalOpId = null;
+        for (const op of Object.values(opsByID)) {
+          const idx = op.materials.findIndex(m => m.id === omId);
+          if (idx >= 0) {
+            foundMat = Object.assign({}, op.materials[idx], { _pending: true, _originalOpId: op.id });
+            originalOpId = op.id;
+            op.materials.splice(idx, 1);
+            break;
+          }
+        }
+        if (foundMat && opsByID[targetOpId]) {
+          opsByID[targetOpId].materials.push(foundMat);
+        } else if (foundMat && originalOpId) {
+          // Target neexistuje — vrátit zpátky
+          opsByID[originalOpId].materials.push(Object.assign({}, foundMat, { _pending: false }));
+        }
+      }
+      return Object.values(opsByID).sort((a, b) => (a.step_number || 0) - (b.step_number || 0));
+    }
+
+    // Blokující overlay s progress barem — zobrazí se po dobu ukládání
+    function showSaveOverlay(total) {
+      let el = document.getElementById('save-overlay');
+      if (!el) {
+        el = document.createElement('div');
+        el.id = 'save-overlay';
+        el.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:99999;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px);';
+        el.innerHTML =
+          '<div style="background:var(--surface,#1a1d24);border:1px solid var(--border,#2a2d35);border-radius:12px;padding:32px 40px;min-width:320px;max-width:420px;box-shadow:0 20px 60px rgba(0,0,0,0.5);text-align:center;">' +
+            '<div style="font-size:36px;margin-bottom:12px;">💾</div>' +
+            '<div id="save-overlay-title" style="font-size:16px;font-weight:600;margin-bottom:8px;color:var(--text,#e2e4e9);">Ukládám pracovní postup</div>' +
+            '<div id="save-overlay-status" style="font-size:13px;color:var(--text2,#8b8fa3);margin-bottom:16px;">Příprava...</div>' +
+            '<div style="background:rgba(255,255,255,0.08);border-radius:6px;height:8px;overflow:hidden;">' +
+              '<div id="save-overlay-bar" style="background:linear-gradient(90deg,#10b981,#34d399);height:100%;width:0%;transition:width 0.2s;"></div>' +
+            '</div>' +
+            '<div id="save-overlay-counter" style="font-size:11px;color:var(--text2,#8b8fa3);margin-top:10px;font-family:monospace;">0 / ' + total + '</div>' +
+            '<div style="font-size:10px;color:var(--text2,#8b8fa3);margin-top:14px;opacity:0.7;">Nezavírej okno, dokud se vše neuloží.</div>' +
+          '</div>';
+        document.body.appendChild(el);
+      }
+    }
+    function updateSaveOverlay(done, total, statusText) {
+      const bar = document.getElementById('save-overlay-bar');
+      const counter = document.getElementById('save-overlay-counter');
+      const status = document.getElementById('save-overlay-status');
+      if (bar) bar.style.width = (total > 0 ? Math.round((done / total) * 100) : 0) + '%';
+      if (counter) counter.textContent = done + ' / ' + total;
+      if (status && statusText) status.textContent = statusText;
+    }
+    function hideSaveOverlay() {
+      const el = document.getElementById('save-overlay');
+      if (el) el.remove();
+    }
+
+    async function commitPendingMoves() {
+      if (_pendingMoves.size === 0) return;
+      const count = _pendingMoves.size;
+      if (!confirm('Uložit ' + count + ' změn do pracovního postupu?\n\nVšechny přesuny materiálů se uloží do databáze.')) return;
+
+      // Zachyť snapshot pendingu — pokud user mezitím něco udělá, neztratí se
+      const snapshot = Array.from(_pendingMoves.entries());
+      // Vyčisti pending hned, aby UI ukazovalo "ukládá se", ne falešné "neuloženo"
+      _pendingMoves.clear();
+
+      showSaveOverlay(snapshot.length);
+      const errors = [];
+      let done = 0;
+
+      // Paralelizuj v dávkách po 5 — rychlé, ale neudusí backend
+      const BATCH = 5;
+      for (let i = 0; i < snapshot.length; i += BATCH) {
+        const chunk = snapshot.slice(i, i + BATCH);
+        await Promise.all(chunk.map(async ([omId, targetOpId]) => {
+          try {
+            await api('/api/production/operation-materials/' + omId, {
+              method: 'PUT',
+              body: JSON.stringify({ operation_id: targetOpId }),
+            });
+          } catch (err) {
+            errors.push('Material #' + omId + ': ' + err.message);
+          } finally {
+            done++;
+            updateSaveOverlay(done, snapshot.length, 'Ukládám změny...');
+          }
+        }));
+      }
+
+      updateSaveOverlay(done, snapshot.length, 'Načítám aktuální stav...');
+      try {
+        await wfRefreshFromServer(null);
+      } catch (e) { /* refresh chyby ignoruj — uložení proběhlo */ }
+
+      hideSaveOverlay();
+
+      if (errors.length > 0) {
+        alert('⚠️ Některé změny se neuložily (' + errors.length + ' z ' + snapshot.length + '):\n\n' + errors.slice(0, 10).join('\n') + (errors.length > 10 ? '\n…' : ''));
+      } else {
+        toast('✅ Uloženo ' + snapshot.length + ' změn');
+      }
+    }
+
+    function discardPendingMoves() {
+      if (_pendingMoves.size === 0) return;
+      const count = _pendingMoves.size;
+      if (!confirm('Zahodit ' + count + ' neuložených změn?\n\nVrátí se původní rozložení materiálů.')) return;
+      _pendingMoves.clear();
+      toast('Změny zahozeny');
+      if (typeof renderTab === 'function') renderTab();
+    }
+
+    // === Hromadný výběr v FY staging panelu ===
+    if (typeof window._selectedOmIds === 'undefined') window._selectedOmIds = new Set();
+
+    function fyToggleRowSelect(omId, opId, checked) {
+      if (checked) window._selectedOmIds.add(omId);
+      else window._selectedOmIds.delete(omId);
+      fyUpdateSelectionUI(opId);
+    }
+
+    function fyToggleSelectAll(opId, checked) {
+      const rows = document.querySelectorAll('.fy-select-row[data-op-id="' + opId + '"]');
+      rows.forEach(cb => {
+        const id = parseInt(cb.dataset.omId, 10);
+        if (Number.isNaN(id)) return;
+        cb.checked = checked;
+        if (checked) window._selectedOmIds.add(id);
+        else window._selectedOmIds.delete(id);
+        // Vizuálně zvýrazni řádek
+        const row = cb.closest('.fy-staging-item');
+        if (row) {
+          if (checked) {
+            row.style.background = 'rgba(234,179,8,0.10)';
+            row.style.boxShadow = 'inset 3px 0 0 #eab308';
+          } else {
+            row.style.background = '';
+            row.style.boxShadow = '';
+          }
+        }
+      });
+      fyUpdateSelectionUI(opId);
+    }
+
+    function fyUpdateSelectionUI(opId) {
+      // Spočítej kolik z této staging operace je vybráno
+      const rows = document.querySelectorAll('.fy-select-row[data-op-id="' + opId + '"]');
+      let total = 0, sel = 0;
+      rows.forEach(cb => {
+        total++;
+        if (window._selectedOmIds.has(parseInt(cb.dataset.omId, 10))) sel++;
+      });
+      const counter = document.getElementById('fy-selected-count-' + opId);
+      if (counter) counter.textContent = sel > 0 ? '(' + sel + '/' + total + ')' : '';
+      // Sjednoť stav "select all" checkboxu
+      const selAll = document.querySelector('.fy-select-all[data-op-id="' + opId + '"]');
+      if (selAll) {
+        selAll.checked = sel > 0 && sel === total;
+        selAll.indeterminate = sel > 0 && sel < total;
+      }
+      // Zvýrazni jednotlivé řádky
+      rows.forEach(cb => {
+        const row = cb.closest('.fy-staging-item');
+        if (!row) return;
+        if (window._selectedOmIds.has(parseInt(cb.dataset.omId, 10))) {
+          row.style.background = 'rgba(234,179,8,0.10)';
+          row.style.boxShadow = 'inset 3px 0 0 #eab308';
+        } else {
+          row.style.background = '';
+          row.style.boxShadow = '';
+        }
+      });
+    }
 
     function omDragStart(ev, omId, sourceOpId) {
       ev.stopPropagation();
-      _omDragData = { omId, sourceOpId };
+      // Pokud je tažená položka v selekci, dragneme celou selekci.
+      // Jinak jen tu jednu (a aktuální selekci ignorujeme).
+      let bulk = null;
+      if (window._selectedOmIds && window._selectedOmIds.has(omId) && window._selectedOmIds.size > 1) {
+        bulk = Array.from(window._selectedOmIds);
+      }
+      _omDragData = { omId, sourceOpId, bulk };
       try {
         ev.dataTransfer.setData('application/x-om', JSON.stringify(_omDragData));
         ev.dataTransfer.effectAllowed = 'move';
       } catch (e) { /* ignore */ }
       const tr = ev.currentTarget;
       if (tr) tr.classList.add('dragging-mat');
+      // Vizuální feedback pro hromadný drag
+      if (bulk && bulk.length > 1) {
+        document.querySelectorAll('.fy-staging-item').forEach(el => {
+          const id = parseInt(el.getAttribute('data-om-id'), 10);
+          if (bulk.includes(id)) el.classList.add('dragging-mat');
+        });
+      }
     }
 
     function omDragEnd(ev) {
@@ -3707,27 +4149,70 @@ const topRow = items.find(it => String(it.level || '').replace(/\s+/g,'').trim()
     async function omDrop(ev, targetOpId) {
       if (!_omDragData) return;
       ev.preventDefault();
-      const { omId, sourceOpId } = _omDragData;
+      const { omId, sourceOpId, bulk } = _omDragData;
       _omDragData = null;
       document.querySelectorAll('.mat-drop-target').forEach(el => el.classList.remove('mat-drop-target'));
       document.querySelectorAll('.dragging-mat').forEach(el => el.classList.remove('dragging-mat'));
-      if (sourceOpId === targetOpId) return;
+
+      if (bulk && bulk.length > 1) {
+        let moved = 0;
+        for (const id of bulk) {
+          const row = document.querySelector('.fy-staging-item[data-om-id="' + id + '"]');
+          const src = row ? parseInt(row.getAttribute('data-source-op-id'), 10) : null;
+          if (src === targetOpId) {
+            if (_pendingMoves.has(id)) _pendingMoves.delete(id);
+            continue;
+          }
+          _pendingMoves.set(id, targetOpId);
+          moved++;
+        }
+        window._selectedOmIds = new Set();
+        toast('📝 Hromadně přesunuto ' + moved + ' položek (neuloženo) — klikni "Uložit pracovní postup" pro commit');
+        if (typeof renderTab === 'function') renderTab();
+        return;
+      }
+
+      if (sourceOpId === targetOpId) {
+        if (_pendingMoves.has(omId)) {
+          _pendingMoves.delete(omId);
+          if (typeof renderTab === 'function') renderTab();
+        }
+        return;
+      }
+      _pendingMoves.set(omId, targetOpId);
+      toast('📝 Přesunuto (neuloženo) — klikni "Uložit pracovní postup" pro commit');
+      if (typeof renderTab === 'function') renderTab();
+    }
+
+    async function fySyncQty(parentLevel, factorifyItemId, fyQty, fyUnit) {
+      if (!product || !product.id) return;
+      if (!confirm('🔄 Sjednotit množství s FY exportem?\n\nFY ID: ' + factorifyItemId + '\nNové množství: ' + fyQty + ' ' + (fyUnit || ''))) return;
       try {
-        await api('/api/production/operation-materials/' + omId, {
-          method: 'PUT',
-          body: JSON.stringify({ operation_id: targetOpId }),
+        toast('Upravuji množství...');
+        const result = await api('/api/production/products/' + product.id + '/fy-bom/sync-qty', {
+          method: 'POST',
+          body: JSON.stringify({
+            parent_level: parentLevel,
+            factorify_item_id: factorifyItemId,
+            fy_qty: fyQty,
+            fy_unit: fyUnit || null,
+          }),
         });
-        toast('Materiál přesunut do operace #' + targetOpId);
-        await wfRefreshFromServer(null);
+        let msg = '✅ Upraveno: ' + (result.material_code || '?')
+          + '\nOperace: ' + (result.operation_name || '?')
+          + '\nNové množství: ' + result.new_quantity + ' ' + (result.new_unit || '');
+        if (result.warning) msg += '\n\n⚠️ ' + result.warning;
+        toast(msg);
+        await fyRefreshComparison(null);
       } catch (err) {
-        console.error('omDrop error:', err);
-        toast('Chyba přesunu: ' + err.message);
+        console.error('fySyncQty error:', err);
+        alert('Chyba: ' + err.message);
       }
     }
 
     async function fyImportChildrenToWorkflow(level, name, childrenCount) {
       if (!product || !product.id) return;
-      const ok = confirm('📥 Doplnit kusovník z Factorify do pracovního postupu?\n\nPolotovar: ' + name + '\nÚroveň: ' + level + '\nPoložek k vyhodnocení: ' + childrenCount + '\n\nVytvoří se nová operace "FY import" v odpovídajícím postupu (pokud ještě neexistuje), do které se doplní jen ty materiály, které v postupu chybí. Existující data se nepřepíšou.');
+      const ok = confirm('📥 Doplnit kusovník z Factorify do pracovního postupu?\n\nPolotovar: ' + name + '\nÚroveň: ' + level + '\nPoložek k vyhodnocení: ' + childrenCount + '\n\nVytvoří se nová operace "FY import" v odpovídajícím postupu (pokud ještě neexistuje), do které se doplní jen ty materiály, které v postupu chybí.');
       if (!ok) return;
       try {
         toast('Doplňuji kusovník...');
@@ -3751,6 +4236,7 @@ const topRow = items.find(it => String(it.level || '').replace(/\s+/g,'').trim()
             window.location.href = 'modules/pracovni-postup/detail.html?id=' + result.target_product_id;
             return;
           }
+          await wfRefreshFromServer(null);
         } else {
           alert(msg);
           await wfRefreshFromServer(null);

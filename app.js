@@ -53,6 +53,7 @@ const bankingRoutes = require('./routes/banking.routes');
 const cashRegisterRoutes = require('./routes/cash-register.routes');
 const reportsRoutes = require('./routes/reports.routes');
 const normovaniRoutes = require('./routes/normovani.routes');
+const directivesRoutes = require('./routes/directives.routes');
 
 // ─── Inicializace aplikace ────────────────────────────────────────────────
 
@@ -464,6 +465,7 @@ app.use('/api/banking', bankingRoutes);
 app.use('/api/cash', cashRegisterRoutes);
 app.use('/api/reports', reportsRoutes);
 app.use('/api/normovani', normovaniRoutes);
+app.use('/api/directives', directivesRoutes);
 
 // ─── Legacy storage proxy (kompatibilita s persistent-storage.js) ──────────
 
