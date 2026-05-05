@@ -54,6 +54,7 @@ const cashRegisterRoutes = require('./routes/cash-register.routes');
 const reportsRoutes = require('./routes/reports.routes');
 const normovaniRoutes = require('./routes/normovani.routes');
 const directivesRoutes = require('./routes/directives.routes');
+const agentRoutes = require('./routes/agent.routes');
 
 // ─── Inicializace aplikace ────────────────────────────────────────────────
 
@@ -466,6 +467,7 @@ app.use('/api/cash', cashRegisterRoutes);
 app.use('/api/reports', reportsRoutes);
 app.use('/api/normovani', normovaniRoutes);
 app.use('/api/directives', directivesRoutes);
+app.use('/api/agent', agentRoutes); // AI Vývojář (modul #13) — super-admin only
 
 // ─── Legacy storage proxy (kompatibilita s persistent-storage.js) ──────────
 
@@ -670,6 +672,14 @@ app.listen(PORT, async () => {
     dunningWorker.start();
   } catch (err) {
     console.error('[app] dunning-worker nelze spustit:', err.message);
+  }
+  // Spustit AI Vývojář worker (poller pro úkoly přiřazené ai-vyvojar)
+  // Aktivní pouze pokud AGENT_WORKER_ENABLED=true a agent_settings.enabled=true
+  try {
+    const aiDevWorker = require('./services/ai-developer/worker');
+    aiDevWorker.start();
+  } catch (err) {
+    console.error('[app] ai-developer worker nelze spustit:', err.message);
   }
   console.log(`
   ╔══════════════════════════════════════════╗
