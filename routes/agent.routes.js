@@ -37,7 +37,7 @@ const RepoCreateSchema = z.object({
   protected_branches: z.array(z.string()).optional(),
   allow_auto_merge: z.boolean().optional(),
   required_checks: z.array(z.string()).optional(),
-  tech_stack: z.record(z.any()).optional(),
+  tech_stack: z.record(z.string(), z.any()).optional(),
   active: z.boolean().optional(),
 });
 
