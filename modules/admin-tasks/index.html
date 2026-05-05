@@ -242,6 +242,7 @@
           </div>
           <div class="task-meta">
             ${isTrashed ? '<span class="task-badge deleted">🗑️ V koši</span>' : ''}
+            ${t.assignable_to_ai ? '<span class="task-badge" style="background:rgba(14,165,233,0.15);color:#0ea5e9;">🤖 AI Vývojář</span>' : ''}
             <span class="task-page-badge">📍 ${t.page_title || t.page}</span>
             <span class="task-time">🕐 ${time}</span>
             <span class="task-user" title="${escapeHtml(userTitle)}">👤 ${escapeHtml(user)}</span>
@@ -297,6 +298,7 @@
             <button class="task-btn task-btn-delete" onclick="deleteTask(${t.id})">🗑️ Do koše</button>`;
         } else {
           actionButtons = `
+            <button class="task-btn task-btn-ai" onclick="assignToAi(${t.id})" style="background:rgba(14,165,233,0.15);color:#0ea5e9;">🤖 Předat AI Vývojáři</button>
             <button class="task-btn task-btn-deploy" onclick="deployTask(${t.id})">🚀 Nasadit s Claude</button>
             <button class="task-btn task-btn-status" onclick="cycleStatus(${t.id})">📌 Změnit stav</button>
             <button class="task-btn task-btn-thread" onclick="openTaskThread(${t.id})">💬 Diskuze</button>
@@ -518,6 +520,78 @@
       const r = await fetch('/api/admin-tasks/' + id + '/restore', { method: 'POST' });
       if (!r.ok) { const err = await r.json().catch(() => ({})); alert('Chyba: ' + (err.error || r.status)); return; }
       loadTasks();
+    }
+
+    // ─── AI Vývojář — předání úkolu autonomnímu agentovi ────────────────────
+
+    async function assignToAi(taskId) {
+      const task = tasks.find(x => x.id === taskId);
+      if (!task) return;
+
+      let repos = [];
+      try {
+        const r = await fetch('/api/agent/repos?active=true', { credentials: 'include' });
+        if (r.ok) repos = await r.json();
+      } catch (_) {}
+
+      if (!repos.length) {
+        alert('Žádné aktivní repo pro AI Vývojáře.\n\nPřidej ho v Super Admin → AI Vývojář → Repozitáře.');
+        return;
+      }
+
+      const acExisting = task.acceptance_criteria || '';
+      const repoExisting = task.target_repo_id || repos[0].id;
+      const placeholder = 'Cíl: \nDefinice hotovo:\n- \n- \nModul: \nTyp změny: bug_fix | new_feature | refactor | ui_change | documentation';
+
+      const optionsHtml = repos.map(function(r) {
+        const sel = r.id === repoExisting ? ' selected' : '';
+        return '<option value="' + escapeHtml(r.id) + '"' + sel + '>' + escapeHtml(r.name) + ' — ' + escapeHtml(r.git_url) + '</option>';
+      }).join('');
+
+      document.getElementById('modal-root').innerHTML =
+        '<div class="modal-overlay" onclick="closeModal()">' +
+          '<div class="modal" onclick="event.stopPropagation()">' +
+            '<h3>🤖 Předat AI Vývojáři — požadavek #' + task.id + '</h3>' +
+            '<p style="font-size:13px;color:var(--text2);margin-bottom:14px;">' +
+              'Doplň akceptační kritéria a vyber cílový repozitář. Worker úkol zvedne do 30 s ' +
+              '(pokud je Master switch ON v sekci AI Vývojář).' +
+            '</p>' +
+            '<label style="display:block;font-size:12px;color:var(--text2);margin-bottom:4px;">Cílový repozitář</label>' +
+            '<select id="ai-target-repo" style="width:100%;padding:8px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;margin-bottom:12px;font-size:13px;">' +
+              optionsHtml +
+            '</select>' +
+            '<label style="display:block;font-size:12px;color:var(--text2);margin-bottom:4px;">Akceptační kritéria (povinné, min. 20 znaků)</label>' +
+            '<textarea id="ai-acceptance" rows="8" placeholder="' + placeholder + '" ' +
+              'style="width:100%;padding:8px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;font-family:inherit;font-size:13px;">' + escapeHtml(acExisting) + '</textarea>' +
+            '<div class="modal-actions">' +
+              '<button class="btn btn-secondary" onclick="closeModal()">Zrušit</button>' +
+              '<button class="btn btn-primary" onclick="saveAiAssignment(' + task.id + ')">🚀 Předat AI Vývojáři</button>' +
+            '</div>' +
+          '</div>' +
+        '</div>';
+    }
+
+    async function saveAiAssignment(taskId) {
+      const ac = (document.getElementById('ai-acceptance').value || '').trim();
+      const repoId = document.getElementById('ai-target-repo').value;
+      if (ac.length < 20) { alert('Akceptační kritéria jsou moc krátká. Napiš aspoň 20 znaků.'); return; }
+      if (!repoId) { alert('Vyber cílový repozitář.'); return; }
+      try {
+        const r = await fetch('/api/admin-tasks/' + taskId, {
+          method: 'PUT',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            assignable_to_ai: true,
+            acceptance_criteria: ac,
+            target_repo_id: repoId,
+          }),
+        });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        closeModal();
+        alert('✅ Úkol #' + taskId + ' byl předán AI Vývojáři. Worker ho zvedne do 30 s (pokud je Master switch ON).');
+        loadTasks();
+      } catch (e) { alert('Chyba při ukládání: ' + e.message); }
     }
 
     function closeModal() {
