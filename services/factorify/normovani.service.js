@@ -212,24 +212,48 @@ async function getBatch(batchIdOrNumber) {
       });
     }
   } else if (raw.workflowOperation && raw.workflowOperation.workflowEntity && raw.workflowOperation.workflowEntity.id != null) {
-    // POZOR: davka 24515 nema vlastni workflow. Drive jsme tu spustili 40s+ stream
-    // pres OperationBillOfMaterialsItem (453 MB), coz blokovalo event loop a delalo
-    // celý HolyOS nepouzitelny. DOCASNE VYPNUTO — vratime current op + flag.
-    // TODO: udelat per-op POST query s server-side filtrem (probe-bom-filter.js)
-    out.source = 'no_workflow_skipped';
-    if (raw.workflowOperation) {
-      out.operations.push({
-        id: String(raw.workflowOperation.id),
-        position: raw.workflowOperation.position != null ? raw.workflowOperation.position : 0,
-        name: asString(raw.workflowOperation.operationName) || ('Op ' + raw.workflowOperation.id),
-        workplace: asString(raw.workflowOperation.stage),
-        bomItems: Array.isArray(raw.workflowOperation.billOfMaterialsItems)
-          ? raw.workflowOperation.billOfMaterialsItems.map((it) => {
-              const t = trimBomItem(it);
-              return { id: t.id, goods_id: t.goods_id, code: t.code, name: t.name, unit: t.unit, quantity: t.quantity, perQuantity: t.perQuantity, sequence: t.sequence };
-            })
-          : [],
-      });
+    // Davka bez clonovaneho workflow (jako 24515). Dva pripady:
+    //   B1) Indexy hotove (cache hit) -> full workflow + BOM
+    //   B2) Indexy nehotove -> jen current op + bom_pending flag, indexy nakopneme na pozadi
+    const wfEntityId = Number(raw.workflowOperation.workflowEntity.id);
+    out.workflow = { id: String(wfEntityId) };
+    const _now = Date.now();
+    const woReady = _woIndex && (_now - _woTs < INDEX_TTL_MS);
+    const bomReady = _bomIndex && (_now - _bomTs < INDEX_TTL_MS);
+
+    if (woReady && bomReady) {
+      out.source = 'index';
+      const ops = _woIndex.get(wfEntityId) || [];
+      for (const op of ops) {
+        const bom = _bomIndex.get(Number(op.id)) || [];
+        out.operations.push({
+          id: op.id,
+          position: op.position,
+          name: op.name,
+          workplace: op.workplace,
+          bomItems: bom.map((b) => ({ id: b.id, goods_id: b.goods_id, code: b.code, name: b.name, unit: b.unit, quantity: b.quantity, perQuantity: b.perQuantity, sequence: b.sequence })),
+        });
+      }
+    } else {
+      out.source = 'pending';
+      out.bom_pending = true;
+      if (raw.workflowOperation) {
+        out.operations.push({
+          id: String(raw.workflowOperation.id),
+          position: raw.workflowOperation.position != null ? raw.workflowOperation.position : 0,
+          name: asString(raw.workflowOperation.operationName) || ('Op ' + raw.workflowOperation.id),
+          workplace: asString(raw.workflowOperation.stage),
+          bomItems: Array.isArray(raw.workflowOperation.billOfMaterialsItems)
+            ? raw.workflowOperation.billOfMaterialsItems.map((it) => {
+                const t = trimBomItem(it);
+                return { id: t.id, goods_id: t.goods_id, code: t.code, name: t.name, unit: t.unit, quantity: t.quantity, perQuantity: t.perQuantity, sequence: t.sequence };
+              })
+            : [],
+        });
+      }
+      // Fire-and-forget kickoff (request neblokuje)
+      if (!woReady) ensureWorkflowOperationIndex().catch(function(e){ console.error('[normovani] WO index err:', e.message); });
+      if (!bomReady) ensureBomIndex().catch(function(e){ console.error('[normovani] BOM index err:', e.message); });
     }
   }
 
@@ -254,4 +278,12 @@ function clearCache(idOrNumber) {
   _cache.delete(String(idOrNumber));
 }
 
-module.exports = { getBatch, clearCache };
+
+// ---- Public: warm-up indexu na pozadi (volat z app.js po app.listen()) ----
+function warmIndexes() {
+  console.log('[normovani] warmIndexes() — kicking off background index build');
+  ensureWorkflowOperationIndex().catch(function (e) { console.error('[normovani] warm WO error:', e.message); });
+  ensureBomIndex().catch(function (e) { console.error('[normovani] warm BOM error:', e.message); });
+}
+
+module.exports = { getBatch, clearCache, warmIndexes };

@@ -666,6 +666,14 @@ app.listen(PORT, async () => {
   } catch (err) {
     console.error('[app] digest-worker nelze spustit:', err.message);
   }
+  // Normování — background prefetch FY indexů (WorkflowOperation + OperationBillOfMaterialsItem),
+  // ať první lookup na dávku bez vlastního workflow má cache hotovou. ~60 s, fire-and-forget.
+  try {
+    const fyNormovani = require('./services/factorify/normovani.service');
+    if (typeof fyNormovani.warmIndexes === 'function') fyNormovani.warmIndexes();
+  } catch (err) {
+    console.error('[app] normovani warmIndexes nelze spustit:', err.message);
+  }
   // Spustit dunning worker (denní upomínky AR po splatnosti — Fáze 7)
   try {
     const dunningWorker = require('./services/dunning-worker');
@@ -698,3 +706,12 @@ app.listen(PORT, async () => {
 });
 
 module.exports = app;
+rage, production ║
+  ║          dev (agents & tools)           ║
+  ║          tasks, dev (in-process)        ║
+  ║                                          ║
+  ║  Health:  /api/health                    ║
+  ║  Mode:    ${process.env.NODE_ENV || 'development'}                   ║
+  ╚══════════════════════════════════════════╝
+  `);
+});
