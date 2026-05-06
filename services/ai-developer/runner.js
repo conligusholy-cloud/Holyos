@@ -144,6 +144,13 @@ async function processTask(task, options = {}) {
       file_changes: agentResult.fileChanges,
     });
 
+    // Ulož summary + tokens hned — kdyby commit/push/PR selhalo, summary
+    // zůstane v DB pro Audit log (aby uživatel viděl, co agent navrhoval).
+    await repository.updateRun(run.id, {
+      summary: agentResult.summary,
+      tokens_used: agentResult.tokensUsed,
+    });
+
     // ── 4) Forbidden check ─────────────────────────────────────────────
     const status = await git.statusPorcelain({ cwd: workdir });
     if (status.length === 0) {
