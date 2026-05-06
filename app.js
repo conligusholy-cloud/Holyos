@@ -649,50 +649,36 @@ async function runExpiredLotsSweep() {
 
 app.listen(PORT, async () => {
   await ensureAdminUser();
-  // První sweep při startu (po migrace se nestane hned, ale po každém restartu ok)
   runExpiredLotsSweep();
   setInterval(runExpiredLotsSweep, SWEEP_INTERVAL_MS);
-  // Spustit email ingest worker (IMAP poller pro faktury)
   try {
     const emailIngestWorker = require('./services/email-ingest-worker');
     emailIngestWorker.start();
   } catch (err) {
     console.error('[app] email-ingest-worker nelze spustit:', err.message);
   }
-  // Spustit digest worker (týdenní souhrn nezpracovaných bank transakcí)
   try {
     const digestWorker = require('./services/digest-worker');
     digestWorker.start();
   } catch (err) {
     console.error('[app] digest-worker nelze spustit:', err.message);
   }
-  // Normování — background prefetch FY indexů (WorkflowOperation + OperationBillOfMaterialsItem),
-  // ať první lookup na dávku bez vlastního workflow má cache hotovou. ~60 s, fire-and-forget.
-  try {
-    const fyNormovani = require('./services/factorify/normovani.service');
-    if (typeof fyNormovani.warmIndexes === 'function') fyNormovani.warmIndexes();
-  } catch (err) {
-    console.error('[app] normovani warmIndexes nelze spustit:', err.message);
-  }
-  // Spustit dunning worker (denní upomínky AR po splatnosti — Fáze 7)
   try {
     const dunningWorker = require('./services/dunning-worker');
     dunningWorker.start();
   } catch (err) {
     console.error('[app] dunning-worker nelze spustit:', err.message);
   }
-  // Spustit AI Vývojář worker (poller pro úkoly přiřazené ai-vyvojar)
-  // Aktivní pouze pokud AGENT_WORKER_ENABLED=true a agent_settings.enabled=true
   try {
     const aiDevWorker = require('./services/ai-developer/worker');
     aiDevWorker.start();
   } catch (err) {
     console.error('[app] ai-developer worker nelze spustit:', err.message);
   }
-  console.log('======================================');
+  console.log('=========================================');
   console.log('  HolyOS v0.5.0');
   console.log('  Listening on port ' + PORT);
   console.log('  Mode: ' + (process.env.NODE_ENV || 'development'));
   console.log('  Health: /api/health');
-  console.log('======================================');
+  console.log('=========================================');
 });
