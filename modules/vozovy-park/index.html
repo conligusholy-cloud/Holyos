@@ -734,7 +734,10 @@
     async function loadInsuranceTab(vehicleId, panel) {
       panel.innerHTML = '<div class="veh-empty">Načítám pojistky…</div>';
       try {
-        const r = await fetch('/api/fleet/vehicles/' + vehicleId + '/policies', { headers: authHeaders() });
+        const [r] = await Promise.all([
+          fetch('/api/fleet/vehicles/' + vehicleId + '/policies', { headers: authHeaders() }),
+          ensureAllCompanies(), // pro <select> v showPolicyForm
+        ]);
         if (!r.ok) throw new Error('HTTP ' + r.status);
         const policies = await r.json();
         currentPolicies = policies;
@@ -751,6 +754,19 @@
             const validFrom = p.valid_from ? new Date(p.valid_from).toLocaleDateString('cs-CZ') : '—';
             const validTo = p.valid_to ? new Date(p.valid_to).toLocaleDateString('cs-CZ') : '—';
             const premium = p.premium_amount != null ? Number(p.premium_amount).toLocaleString('cs-CZ') + ' Kč' : '—';
+            // Zobrazit pojišťovnu z FK pokud je, jinak fallback na text.
+            const insurerName = (p.company && p.company.name) || p.company_name || '—';
+            // Krytí — badges pro zaškrtnutá doplňková pojištění
+            const coverages = [];
+            if (p.has_havarijni) coverages.push('Havarijní');
+            if (p.has_glass)     coverages.push('Čelní sklo');
+            if (p.has_animal)    coverages.push('Střet se zvěří');
+            if (p.has_natural)   coverages.push('Živelní');
+            const coveragesHtml = coverages.length
+              ? '<div style="margin-top:4px;"><strong>Krytí:</strong> ' +
+                coverages.map(c => '<span class="badge badge-cat" style="margin-right:4px;">' + c + '</span>').join('') +
+                '</div>'
+              : '';
             html += '<div class="policy-card">' +
               '<header>' +
                 '<span class="type-badge ' + escHtml(p.policy_type) + '">' + (POLICY_TYPES[p.policy_type] || p.policy_type) + '</span>' +
@@ -766,10 +782,11 @@
                 '</div>' +
               '</header>' +
               '<div style="font-size:12px;color:var(--text2);">' +
-                '<div><strong>Pojišťovna:</strong> ' + escHtml(p.company_name || '—') + '</div>' +
+                '<div><strong>Pojišťovna:</strong> ' + escHtml(insurerName) + '</div>' +
                 '<div><strong>Číslo pojistky:</strong> ' + escHtml(p.policy_number || '—') + '</div>' +
                 '<div><strong>Platnost:</strong> ' + validFrom + ' — ' + validTo + '</div>' +
                 '<div><strong>Pojistné:</strong> ' + premium + '</div>' +
+                coveragesHtml +
                 (p.note ? '<div style="margin-top:6px;"><em>' + escHtml(p.note) + '</em></div>' : '') +
               '</div>' +
             '</div>';
@@ -831,11 +848,25 @@
       const submitLabel = editing ? 'Uložit změny' : 'Uložit pojistku';
       const saveArg = editing ? (vehicleId + ',' + policyId) : (vehicleId + ',null');
 
+      const selectedCompanyId = (p && p.company_id) ? p.company_id : null;
+      const companySelect = '<select id="p-company-id">' + companyOptionsHtml(selectedCompanyId) + '</select>';
+      // Doplňková krytí — render 4 checkboxů. Hodnota je z editovaného p (pokud existuje).
+      const cb = (id, label, val) => '<label style="display:inline-flex;align-items:center;gap:6px;font-weight:400;cursor:pointer;">' +
+        '<input type="checkbox" id="' + id + '"' + (val ? ' checked' : '') + '>' + label + '</label>';
+      const coveragesRow = '<div class="form-group full" style="display:flex;flex-wrap:wrap;gap:14px;align-items:center;padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;">' +
+        '<span style="font-size:12px;font-weight:600;color:var(--text2);margin-right:8px;">Doplňková krytí:</span>' +
+        cb('p-cov-havarijni', 'Havarijní pojištění',          p && p.has_havarijni) +
+        cb('p-cov-glass',     'Pojištění čelního skla',       p && p.has_glass) +
+        cb('p-cov-animal',    'Pojištění střetu se zvěří',    p && p.has_animal) +
+        cb('p-cov-natural',   'Živelní pojištění',            p && p.has_natural) +
+      '</div>';
+
       wrap.innerHTML = '<div class="policy-card" id="new-policy-card">' +
         '<div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:10px;">' + title + '</div>' +
         '<div class="form-grid">' +
           '<div class="form-group"><label>Typ *</label><select id="p-type">' + policyTypeOpts + '</select></div>' +
-          '<div class="form-group"><label>Pojišťovna</label><input type="text" id="p-company" placeholder="Např. Kooperativa" value="' + escHtml(p && p.company_name || '') + '"></div>' +
+          '<div class="form-group"><label>Pojišťovna</label>' + companySelect + '</div>' +
+          coveragesRow +
           '<div class="form-group"><label>Číslo pojistky</label><input type="text" id="p-number" value="' + escHtml(p && p.policy_number || '') + '"></div>' +
           '<div class="form-group"><label>Pojistné (Kč)</label><input type="number" id="p-premium" step="0.01" min="0" value="' + premium + '"></div>' +
           '<div class="form-group"><label>Platnost od</label><input type="date" id="p-from" value="' + valFrom + '"></div>' +
@@ -870,10 +901,24 @@
     }
 
     async function savePolicy(vehicleId, policyId) {
+      const companyIdEl = document.getElementById('p-company-id');
+      const companyIdRaw = companyIdEl ? companyIdEl.value : '';
+      const companyId = companyIdRaw ? parseInt(companyIdRaw, 10) : null;
+      // Zachovej i textový snapshot pro starší kód a fallback (z option labelu)
+      let companyText = null;
+      if (companyId && companyIdEl) {
+        const opt = companyIdEl.options[companyIdEl.selectedIndex];
+        if (opt) companyText = (opt.textContent || '').replace(/\s*\(IČ.*$/, '').trim() || null;
+      }
       const data = {
         policy_type: document.getElementById('p-type').value,
-        company_name: document.getElementById('p-company').value.trim() || null,
+        company_id: companyId,
+        company_name: companyText,
         policy_number: document.getElementById('p-number').value.trim() || null,
+        has_havarijni: !!document.getElementById('p-cov-havarijni')?.checked,
+        has_glass:     !!document.getElementById('p-cov-glass')?.checked,
+        has_animal:    !!document.getElementById('p-cov-animal')?.checked,
+        has_natural:   !!document.getElementById('p-cov-natural')?.checked,
         premium_amount: (function () {
           const v = document.getElementById('p-premium').value;
           return v ? parseFloat(v) : null;
@@ -921,7 +966,25 @@
         if (!r.ok) { const err = await r.json().catch(() => ({})); alert('Chyba: ' + (err.error || r.status)); return; }
         const panel = document.querySelector('.veh-tab-panel[data-panel="insurance"]');
         if (panel) await loadInsuranceTab(vehicleId, panel);
+        // Po uložení pojistky aktualizuj i základní záložku — backend syncuje
+        // vehicle.insurance_company, takže load znovu otevře aktuální data.
+        await refreshVehicleBasicTab(vehicleId);
       } catch (e) { alert('Chyba: ' + e.message); }
+    }
+
+    // Společné helper — znovu načte vozidlo z API a updatuje DOM input
+    // 'insurance_company' v právě otevřeném modálu (pokud existuje), aby se
+    // změna pojišťovny okamžitě promítla na záložce Základní údaje.
+    async function refreshVehicleBasicTab(vehicleId) {
+      try {
+        const r = await fetch('/api/fleet/vehicles/' + vehicleId, { headers: authHeaders() });
+        if (!r.ok) return;
+        const veh = await r.json();
+        const inp = document.querySelector('input[name="insurance_company"]');
+        if (inp) inp.value = veh.insurance_company || '';
+        // Sync dat ve seznamu vozidel (přehled)
+        if (typeof loadVehicles === 'function') loadVehicles();
+      } catch (_) { /* tichý fallback — UI se aktualizuje při příštím otevření */ }
     }
 
     async function deletePolicy(policyId, vehicleId) {
@@ -931,6 +994,7 @@
         if (!r.ok) { const err = await r.json().catch(() => ({})); alert('Chyba: ' + (err.error || r.status)); return; }
         const panel = document.querySelector('.veh-tab-panel[data-panel="insurance"]');
         if (panel) await loadInsuranceTab(vehicleId, panel);
+        await refreshVehicleBasicTab(vehicleId);
       } catch (e) { alert('Chyba: ' + e.message); }
     }
 
@@ -1004,6 +1068,33 @@
         console.error('Nelze načíst adresář firem:', e);
       }
       return window._serviceProvidersCache;
+    }
+
+    // Cache adresáře firem pro Pojišťovny — bez filtru type, vrací všechny.
+    // Použité v <select> Pojišťovny v záložce Pojištění (formulář pojistky).
+    window._allCompaniesCache = null;
+    async function ensureAllCompanies(force) {
+      if (!force && window._allCompaniesCache) return window._allCompaniesCache;
+      try {
+        const r = await fetch('/api/wh/companies', { headers: authHeaders() });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        window._allCompaniesCache = await r.json();
+      } catch (e) {
+        window._allCompaniesCache = [];
+        console.error('Nelze načíst adresář firem (wh/companies):', e);
+      }
+      return window._allCompaniesCache;
+    }
+    function companyOptionsHtml(selectedId) {
+      const list = window._allCompaniesCache || [];
+      const sel = selectedId != null ? String(selectedId) : '';
+      let html = '<option value=""' + (sel === '' ? ' selected' : '') + '>— vyberte pojišťovnu —</option>';
+      list.forEach(c => {
+        html += '<option value="' + c.id + '"' + (String(c.id) === sel ? ' selected' : '') + '>' +
+          escHtml(c.name) + (c.ico ? ' (IČ ' + escHtml(c.ico) + ')' : '') +
+        '</option>';
+      });
+      return html;
     }
 
     function serviceProviderOptionsHtml(selectedId) {
