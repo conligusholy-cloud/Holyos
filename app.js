@@ -689,29 +689,10 @@ app.listen(PORT, async () => {
   } catch (err) {
     console.error('[app] ai-developer worker nelze spustit:', err.message);
   }
-  console.log(`
-  ╔══════════════════════════════════════════╗
-  ║          HolyOS v0.5.0                   ║
-  ║          http://localhost:${PORT}           ║
-  ║                                          ║
-  ║  API:     auth, hr, wh, mindmap, tasks   ║
-  ║          audit, ai, storage, production ║
-  ║          dev (agents & tools)           ║
-  ║  MCP:     warehouse, hr, production,    ║
-  ║          tasks, dev (in-process)        ║
-  ║  Health:  /api/health                    ║
-  ║  Mode:    ${process.env.NODE_ENV || 'development'}                   ║
-  ╚══════════════════════════════════════════╝
-  `);
-});
-
-module.exports = app;
-rage, production ║
-  ║          dev (agents & tools)           ║
-  ║          tasks, dev (in-process)        ║
-  ║                                          ║
-  ║  Health:  /api/health                    ║
-  ║  Mode:    ${process.env.NODE_ENV || 'development'}                   ║
-  ╚══════════════════════════════════════════╝
-  `);
+  console.log('======================================');
+  console.log('  HolyOS v0.5.0');
+  console.log('  Listening on port ' + PORT);
+  console.log('  Mode: ' + (process.env.NODE_ENV || 'development'));
+  console.log('  Health: /api/health');
+  console.log('======================================');
 });
