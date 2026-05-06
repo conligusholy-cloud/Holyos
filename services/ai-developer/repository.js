@@ -107,13 +107,16 @@ const RUN_LIST_INCLUDE = {
   repo: { select: { id: true, name: true, git_url: true } },
 };
 
+// pr_open NENÍ running — agent skončil, PR čeká na review/merge u člověka.
+// Pokud bychom ho měli jako running, blokovala by se fronta při max_concurrent_runs=1
+// kvůli běhům, které už dávno dodělaly svou práci.
 const RUNNING_STATUSES = [
   'queued', 'triaging', 'awaiting_clarification',
-  'planning', 'awaiting_approval', 'coding', 'testing', 'pr_open',
+  'planning', 'awaiting_approval', 'coding', 'testing',
 ];
 
 const TERMINAL_STATUSES = [
-  'merged', 'completed', 'failed', 'cancelled', 'escalated',
+  'pr_open', 'merged', 'completed', 'failed', 'cancelled', 'escalated',
 ];
 
 async function listRuns({ status, taskId, limit = 50 } = {}) {
