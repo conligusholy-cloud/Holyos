@@ -539,9 +539,35 @@
         return;
       }
 
-      const acExisting = task.acceptance_criteria || '';
+      // Pre-fill akceptační kritéria — pokud už je vyplněné, ponech;
+      // jinak postav draft z popisu a názvu úkolu.
+      function buildAcDraft(t) {
+        if (t.acceptance_criteria && t.acceptance_criteria.trim().length > 0) {
+          return t.acceptance_criteria;
+        }
+        const desc = (t.description || '').trim();
+        const firstLine = desc.split('\n')[0].trim();
+        const restLines = desc.split('\n').slice(1).join('\n').trim();
+        const goal = firstLine || (t.page_title || '').trim() || '(doplň cíl jednou větou)';
+        const lines = [];
+        lines.push('Cíl: ' + goal);
+        lines.push('');
+        lines.push('Definice hotovo:');
+        lines.push('- ');
+        lines.push('- ');
+        if (restLines) {
+          lines.push('');
+          lines.push('Kontext z požadavku:');
+          lines.push(restLines);
+        }
+        lines.push('');
+        lines.push('Modul: ' + ((t.affected_module || t.page_title || t.page || 'globální')));
+        lines.push('Typ změny: bug_fix | new_feature | refactor | ui_change | documentation');
+        return lines.join('\n');
+      }
+      const acExisting = buildAcDraft(task);
       const repoExisting = task.target_repo_id || repos[0].id;
-      const placeholder = 'Cíl: \nDefinice hotovo:\n- \n- \nModul: \nTyp změny: bug_fix | new_feature | refactor | ui_change | documentation';
+      const placeholder = 'Cíl: ...\nDefinice hotovo:\n- \n- \nModul: ...\nTyp změny: bug_fix | new_feature | refactor | ui_change | documentation';
 
       const optionsHtml = repos.map(function(r) {
         const sel = r.id === repoExisting ? ' selected' : '';
