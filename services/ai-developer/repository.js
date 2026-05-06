@@ -236,6 +236,31 @@ async function listQueue({ limit = 10 } = {}) {
   return candidates.filter((t) => !busyTaskIds.has(t.id));
 }
 
+// ─── Auto-merge kandidáti ──────────────────────────────────────────────────
+//
+// Worker periodicky volá listAutoMergeCandidates(). Vrací pr_open runs, kde:
+//   - repo.allow_auto_merge = true
+//   - uplynulo auto_merge_wait_minutes od pr_open updatu
+//   - run.repo a run.task existují
+// Worker pak pro každý zavolá GitHub API merge a updatuje DB.
+
+async function listAutoMergeCandidates({ waitMinutes }) {
+  const cutoff = new Date(Date.now() - waitMinutes * 60_000);
+  return prisma.agentRun.findMany({
+    where: {
+      status: 'pr_open',
+      pr_url: { not: null },
+      pr_number: { not: null },
+      // updated_at se mění při přechodu na pr_open (commits_count=1, pr_url, ...)
+      updated_at: { lte: cutoff },
+      repo: { allow_auto_merge: true },
+    },
+    include: { repo: true, task: true },
+    orderBy: { updated_at: 'asc' },
+    take: 5,
+  });
+}
+
 // ─── Counters pro limity ───────────────────────────────────────────────────
 
 async function countRunningRuns() {
@@ -308,6 +333,7 @@ module.exports = {
   appendEvent,
   // queue + counters
   listQueue,
+  listAutoMergeCandidates,
   countRunningRuns,
   todayRunsCount,
   todayTokensUsed,
