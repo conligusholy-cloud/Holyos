@@ -297,8 +297,13 @@
             ${authorBtn}
             <button class="task-btn task-btn-delete" onclick="deleteTask(${t.id})">🗑️ Do koše</button>`;
         } else {
+          // Pokud je úkol už předán AI Vývojáři, místo "Předat AI" ukážeme
+          // "🔁 Změnit AI repo" — backend odmítne reassign, pokud běží run.
+          const aiBtn = t.assignable_to_ai
+            ? `<button class="task-btn" onclick="reassignAiRepo(${t.id})" title="Změnit cílový repo (jen pokud neběží žádný run)" style="background:rgba(14,165,233,0.15);color:#0ea5e9;">🔁 Změnit AI repo</button>`
+            : `<button class="task-btn task-btn-ai" onclick="assignToAi(${t.id})" style="background:rgba(14,165,233,0.15);color:#0ea5e9;">🤖 Předat AI Vývojáři</button>`;
           actionButtons = `
-            <button class="task-btn task-btn-ai" onclick="assignToAi(${t.id})" style="background:rgba(14,165,233,0.15);color:#0ea5e9;">🤖 Předat AI Vývojáři</button>
+            ${aiBtn}
             <button class="task-btn task-btn-deploy" onclick="deployTask(${t.id})">🚀 Nasadit s Claude</button>
             <button class="task-btn task-btn-status" onclick="cycleStatus(${t.id})">📌 Změnit stav</button>
             <button class="task-btn task-btn-thread" onclick="openTaskThread(${t.id})">💬 Diskuze</button>
@@ -625,6 +630,73 @@
         alert('✅ Úkol #' + taskId + ' byl předán AI Vývojáři. Worker ho zvedne do 30 s (pokud je Master switch ON).');
         loadTasks();
       } catch (e) { alert('Chyba při ukládání: ' + e.message); }
+    }
+
+    // ─── Reassign target_repa (úkol už je v AI Vývojáři) ─────────────────────
+    //
+    // Backend (PUT /api/admin-tasks/:id) odmítne reassign s 409, pokud existuje
+    // aktivní run (RUNNING_STATUSES + pr_open). UX flow: uživatel pak musí
+    // cancelnout/uzavřít run v modulu AI Vývojář a reassign zkusit znovu.
+    async function reassignAiRepo(taskId) {
+      try {
+        const task = tasks.find((x) => x.id === taskId);
+        if (!task) { alert('Úkol nenalezen.'); return; }
+
+        const reposRes = await fetch('/api/agent/repos', { credentials: 'include' });
+        if (!reposRes.ok) { alert('Nelze načíst repozitáře (HTTP ' + reposRes.status + ').'); return; }
+        const allRepos = await reposRes.json();
+        const repos = (Array.isArray(allRepos) ? allRepos : []).filter(function(r) { return r.active !== false; });
+        if (!repos.length) { alert('Žádné aktivní repozitáře. Přidej nejdřív v modulu AI Vývojář.'); return; }
+
+        const optionsHtml = repos.map(function(r) {
+          const sel = r.id === task.target_repo_id ? ' selected' : '';
+          return '<option value="' + escapeHtml(r.id) + '"' + sel + '>' + escapeHtml(r.name) + ' — ' + escapeHtml(r.git_url) + '</option>';
+        }).join('');
+
+        document.getElementById('modal-root').innerHTML =
+          '<div class="modal-overlay" onclick="closeModal()">' +
+            '<div class="modal" onclick="event.stopPropagation()">' +
+              '<h3>🔁 Změnit cílový repo — požadavek #' + task.id + '</h3>' +
+              '<p style="font-size:13px;color:var(--text2);margin-bottom:14px;">' +
+                'Akceptační kritéria zůstávají. Pokud běží aktivní run, reassign se odmítne se zprávou — nejdřív ho cancelni v modulu AI Vývojář.' +
+              '</p>' +
+              '<label style="display:block;font-size:12px;color:var(--text2);margin-bottom:4px;">Cílový repozitář</label>' +
+              '<select id="ai-reassign-repo" style="width:100%;padding:8px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;margin-bottom:12px;font-size:13px;">' +
+                optionsHtml +
+              '</select>' +
+              '<div class="modal-actions">' +
+                '<button class="btn btn-secondary" onclick="closeModal()">Zrušit</button>' +
+                '<button class="btn btn-primary" onclick="saveAiReassign(' + task.id + ')">🔁 Reassign</button>' +
+              '</div>' +
+            '</div>' +
+          '</div>';
+      } catch (e) {
+        alert('Chyba: ' + e.message);
+      }
+    }
+
+    async function saveAiReassign(taskId) {
+      const repoId = document.getElementById('ai-reassign-repo').value;
+      if (!repoId) { alert('Vyber repozitář.'); return; }
+      try {
+        const r = await fetch('/api/admin-tasks/' + taskId, {
+          method: 'PUT',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ target_repo_id: repoId }),
+        });
+        if (r.status === 409) {
+          let err = {};
+          try { err = await r.json(); } catch (_) {}
+          alert((err && err.message) || 'Aktivní AI run blokuje reassign. Cancelni ho v modulu AI Vývojář.');
+          return;
+        }
+        if (!r.ok) { alert('Reassign selhal (HTTP ' + r.status + ').'); return; }
+        closeModal();
+        await loadTasks();
+      } catch (e) {
+        alert('Chyba: ' + e.message);
+      }
     }
 
     function closeModal() {

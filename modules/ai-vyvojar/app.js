@@ -384,6 +384,7 @@
         '<div><strong>Run:</strong> <span style="font-family:ui-monospace,monospace; font-size:12px;">' + escapeHtml(run.id) + '</span></div>' +
         '<div><strong>Úkol:</strong> #' + run.task_id + ' ' + escapeHtml(run.task && run.task.page_title ? run.task.page_title : '') + '</div>' +
         '<div><strong>Status:</strong> <span class="chip ' + escapeHtml(run.status) + '">' + escapeHtml(run.status) + '</span></div>' +
+        '<div><strong>Repo:</strong> ' + escapeHtml(run.repo && run.repo.name ? run.repo.name : '—') + '</div>' +
         '<div><strong>Branch:</strong> ' + escapeHtml(run.branch || '—') + '</div>' +
         '<div><strong>PR:</strong> ' + (run.pr_url ? '<a href="' + escapeHtml(run.pr_url) + '" target="_blank">' + escapeHtml(run.pr_url) + '</a>' : '—') + '</div>' +
         '<div><strong>Tokeny:</strong> ' + (run.tokens_used || 0).toLocaleString('cs-CZ') + ' &nbsp; <strong>Commitů:</strong> ' + (run.commits_count || 0) + '</div>' +
@@ -393,6 +394,7 @@
         '<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">' +
           (run.status === 'pr_open' ? '<button class="btn" id="btn-merge-pr" style="background:#22c55e;color:white;border-color:#22c55e;">🟢 Mergnout PR</button>' : '') +
           (run.status === 'pr_open' ? '<button class="btn" id="btn-close-pr" style="background:#ef4444;color:white;border-color:#ef4444;">🔴 Zavřít PR</button>' : '') +
+          '<button class="btn" id="btn-reassign-repo" style="background:#0ea5e9;color:white;border-color:#0ea5e9;">🔁 Změnit repo</button>' +
           '<button class="btn danger" id="btn-cancel-run">Zrušit běh</button>' +
         '</div>';
 
@@ -435,6 +437,13 @@
         });
       }
 
+      const reassignBtn = $('#btn-reassign-repo');
+      if (reassignBtn) {
+        reassignBtn.addEventListener('click', () => {
+          openReassignRepoModal(runId, run.task_id, run.repo && run.repo.id);
+        });
+      }
+
       $('#audit-detail-events').innerHTML =
         '<div class="events-list">' +
         (run.events && run.events.length ? run.events.map((e) =>
@@ -450,6 +459,80 @@
       $('#audit-detail-summary').innerHTML = '<div class="empty">Chyba: ' + escapeHtml(err.message) + '</div>';
       $('#audit-detail-events').innerHTML = '';
     }
+  }
+
+  // ─── Reassign target_repa z detailu run ────────────────────────────────
+  //
+  // Inline modal (žádný shared modal-root v tomhle modulu). Volá stejný PUT
+  // endpoint jako admin-tasks UI: /api/admin-tasks/:id { target_repo_id }.
+  // Backend (admin-tasks.routes.js) odmítne s 409, pokud existuje aktivní run
+  // — tj. tlačítko stiskneš na pr_open / coding / queued runu, dostaneš zpět
+  // hlášku „nejdřív cancelni run". Po cancelu reassign smí proběhnout.
+  async function openReassignRepoModal(runId, taskId, currentRepoId) {
+    let allRepos;
+    try {
+      allRepos = await api('/repos');
+    } catch (err) {
+      alert('Nelze načíst repozitáře: ' + err.message);
+      return;
+    }
+    const active = (Array.isArray(allRepos) ? allRepos : []).filter((r) => r.active !== false);
+    if (!active.length) {
+      alert('Žádné aktivní repozitáře. Přidej nejdřív v záložce Repozitáře.');
+      return;
+    }
+
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9999;display:flex;align-items:center;justify-content:center;';
+    const box = document.createElement('div');
+    box.style.cssText = 'background:var(--surface,#1a1b2e);padding:20px;border-radius:8px;min-width:480px;max-width:95vw;color:var(--text,#e8e8f0);border:1px solid var(--border,#333);';
+    const optionsHtml = active.map((r) => {
+      const sel = r.id === currentRepoId ? ' selected' : '';
+      return '<option value="' + escapeHtml(r.id) + '"' + sel + '>' + escapeHtml(r.name) + ' — ' + escapeHtml(r.git_url) + '</option>';
+    }).join('');
+    box.innerHTML =
+      '<h3 style="margin:0 0 10px;">🔁 Změnit cílový repo úkolu #' + taskId + '</h3>' +
+      '<p style="font-size:13px;color:var(--text2,#aaa);margin-bottom:14px;">' +
+        'Pokud běží aktivní run (RUNNING nebo pr_open), reassign se odmítne se zprávou — nejdřív ho cancelni tlačítkem „Zrušit běh".' +
+      '</p>' +
+      '<label style="display:block;font-size:12px;color:var(--text2,#aaa);margin-bottom:4px;">Cílový repozitář</label>' +
+      '<select id="ai-reassign-select" style="width:100%;padding:8px;background:var(--surface,#0f1020);border:1px solid var(--border,#333);color:var(--text,#e8e8f0);border-radius:6px;margin-bottom:12px;font-size:13px;">' +
+        optionsHtml +
+      '</select>' +
+      '<div style="display:flex;justify-content:flex-end;gap:8px;">' +
+        '<button class="btn" id="ai-reassign-cancel">Zrušit</button>' +
+        '<button class="btn" id="ai-reassign-save" style="background:#0ea5e9;color:white;border-color:#0ea5e9;">🔁 Reassign</button>' +
+      '</div>';
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+
+    const close = () => { try { document.body.removeChild(overlay); } catch (_) {} };
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+    box.querySelector('#ai-reassign-cancel').addEventListener('click', close);
+    box.querySelector('#ai-reassign-save').addEventListener('click', async () => {
+      const newRepoId = box.querySelector('#ai-reassign-select').value;
+      if (!newRepoId) { alert('Vyber repozitář.'); return; }
+      if (newRepoId === currentRepoId) { close(); return; }
+      try {
+        const r = await fetch('/api/admin-tasks/' + taskId, {
+          method: 'PUT',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ target_repo_id: newRepoId }),
+        });
+        if (r.status === 409) {
+          let err = {};
+          try { err = await r.json(); } catch (_) {}
+          alert((err && err.message) || 'Aktivní AI run blokuje reassign. Cancelni ho a zkus to znovu.');
+          return;
+        }
+        if (!r.ok) { alert('Reassign selhal (HTTP ' + r.status + ').'); return; }
+        close();
+        openRunDetail(runId);
+      } catch (e) {
+        alert('Chyba: ' + e.message);
+      }
+    });
   }
 
   // ─── Init ──────────────────────────────────────────────────────────────

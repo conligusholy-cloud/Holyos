@@ -193,6 +193,21 @@ async function appendEvent(runId, kind, payload) {
   });
 }
 
+// Vrátí run, který blokuje další "změny zadání" pro daný úkol — tj. je
+// v RUNNING_STATUSES nebo `pr_open` (PR čeká na review/merge u člověka).
+// Používá se v admin-tasks PUT pro odmítnutí reassignu target_repa, dokud
+// aktivní run nedoběhne / není cancelnut. Vrací null, pokud nic neblokuje.
+async function getBlockingRunForTask(taskId) {
+  return prisma.agentRun.findFirst({
+    where: {
+      task_id: taskId,
+      status: { in: [...RUNNING_STATUSES, 'pr_open'] },
+    },
+    orderBy: { started_at: 'desc' },
+    include: { repo: { select: { id: true, name: true } } },
+  });
+}
+
 // ─── Queue (úkoly připravené pro AI Vývojáře) ──────────────────────────────
 //
 // Pravidla pro Fázi 1:
@@ -342,6 +357,7 @@ module.exports = {
   updateRun,
   cancelRun,
   appendEvent,
+  getBlockingRunForTask,
   // queue + counters
   listQueue,
   listAutoMergeCandidates,

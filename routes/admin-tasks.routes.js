@@ -8,6 +8,7 @@ const router = express.Router();
 const { prisma } = require('../config/database');
 const { requireAuth } = require('../middleware/auth');
 const { createNotification } = require('./notifications.routes');
+const { getBlockingRunForTask } = require('../services/ai-developer/repository');
 
 router.use(requireAuth);
 
@@ -197,8 +198,39 @@ router.put('/:id', async (req, res, next) => {
     const id = parseInt(req.params.id);
     const previous = await prisma.adminTask.findUnique({
       where: { id },
-      select: { id: true, status: true, created_by: true, page_title: true, page: true, description: true },
+      select: {
+        id: true, status: true, created_by: true, page_title: true, page: true, description: true,
+        // Pro reassign-blocker check (target_repo_id změna na úkolu, co už je v AI):
+        assignable_to_ai: true, target_repo_id: true,
+      },
     });
+
+    // Reassign target_repa na úkolu, který už byl předán AI Vývojáři — pokud
+    // existuje aktivní run (RUNNING nebo pr_open), reassign odmítneme se 409.
+    // Audit log a invariant `run.repo_id == co bylo na tasku v okamžiku startu`
+    // tak zůstanou konzistentní. Cancel/uzavření runu provede uživatel ručně
+    // v modulu AI Vývojář.
+    if (
+      previous &&
+      previous.assignable_to_ai &&
+      req.body &&
+      Object.prototype.hasOwnProperty.call(req.body, 'target_repo_id') &&
+      req.body.target_repo_id !== previous.target_repo_id
+    ) {
+      const blocking = await getBlockingRunForTask(id);
+      if (blocking) {
+        return res.status(409).json({
+          error: 'AI_RUN_ACTIVE',
+          message: `Aktivní run #${blocking.id} (${blocking.status}) v repu ${blocking.repo?.name || '?'}. Cancelni ho v modulu AI Vývojář a zkus to znovu.`,
+          run: {
+            id: blocking.id,
+            status: blocking.status,
+            repo_id: blocking.repo_id,
+            repo_name: blocking.repo?.name || null,
+          },
+        });
+      }
+    }
 
     const task = await prisma.adminTask.update({
       where: { id },
