@@ -621,3 +621,183 @@ body {
     font-size: 14px;
   }
 }
+
+/* =============================================================================
+   iOS / Mobile optimalizace — globálně pro celý HolyOS
+   ============================================================================= */
+
+/* Disable double-tap zoom & blue tap highlight na všech tlačítkách / odkazech /
+   interaktivních prvcích. Touch-action: manipulation zachová pinch-zoom u textu,
+   ale potlačí nechtěný 300ms double-tap delay. */
+button,
+a,
+.btn,
+.tab,
+.sidebar-item,
+.welcome-card,
+input[type="checkbox"],
+input[type="radio"],
+select,
+[onclick],
+[role="button"] {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+/* iOS Safari na vstupech s font-size <16 px ZOOM-uje stránku po fokusu —
+   to je nepříjemné a po zrušení neumí samo odzoomovat. Globální opt-out. */
+@media (hover: none) and (pointer: coarse) {
+  input[type="text"],
+  input[type="number"],
+  input[type="email"],
+  input[type="tel"],
+  input[type="password"],
+  input[type="search"],
+  input[type="date"],
+  input[type="datetime-local"],
+  input[type="month"],
+  input[type="week"],
+  input[type="time"],
+  input[type="url"],
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
+}
+
+/* Safe-area pro iPhone X+ (notch / home indicator) — sidebar a topbar dotykově
+   nepřekrývejí systémové prvky. Body padding pokrývá fallback. */
+@supports (padding: env(safe-area-inset-top)) {
+  body {
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+  .sidebar {
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  /* Top-bar (js/top-bar.js .holyos-topbar) — posuneme o safe-area-top */
+  .holyos-topbar {
+    padding-top: env(safe-area-inset-top) !important;
+    height: calc(44px + env(safe-area-inset-top)) !important;
+  }
+  /* Hamburger v rohu — taky pod safe-area */
+  .hamburger-btn {
+    top: calc(8px + env(safe-area-inset-top)) !important;
+  }
+  /* Module headers se posunou o totéž — ať se nevpíchnou pod statusbar */
+  .main-header,
+  .module-header,
+  .page-header {
+    padding-top: calc(20px + env(safe-area-inset-top));
+  }
+}
+
+/* Zabraň "rubber-band" scrollu (overscroll bouncing) na hlavním obsahu —
+   jinak iOS po krajním scrollu odhaluje pozadí, což rozbíjí dojem aplikace. */
+html, body {
+  overscroll-behavior-y: contain;
+}
+
+/* Sidebar na mobilu — momentum scrolling + nezachytí systémový gest swipe
+   from edge, který přivolává Control Center / app switcher. */
+.sidebar {
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Modal-overlay na mobilu — drž se nad klávesnicí, neschovávej obsah pod ní.
+   max-height bere v potaz visualViewport (CSS proměnná --vh nastavujeme v JS,
+   pokud je definovaná, jinak fallback 100vh). */
+@media (max-width: 768px) {
+  .modal-overlay {
+    align-items: flex-end !important;
+    padding: 0 !important;
+  }
+  .modal,
+  .modal-box {
+    max-height: 92vh !important;
+    max-height: calc(var(--vh, 1vh) * 92) !important;
+    padding-bottom: calc(28px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  /* Form-row v modálech (Účetní doklady, AI atd.) */
+  .modal-row,
+  .form-row {
+    margin-bottom: 12px;
+  }
+
+  /* form-grid uvnitř modálu — jeden sloupec, lepší pro úzkou obrazovku */
+  .modal .modal-grid2,
+  .modal .modal-grid3,
+  .modal-box .modal-grid2,
+  .modal-box .modal-grid3 {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Detail-header (faktury) — víc jak 6 sloupců nemá smysl na mobilu */
+  .detail-header {
+    grid-template-columns: 1fr 1fr !important;
+    gap: 10px !important;
+  }
+  .detail-col {
+    min-width: 0;
+  }
+
+  /* Tabulky které mají inline data-table style — také scroll horizontálně */
+  table {
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Větší touch terče na ikonové tlačítka — 🗑️ ✏️ 👁️ atp. */
+  .btn-sm {
+    min-width: 36px;
+    min-height: 36px;
+  }
+
+  /* Stat-card hodnoty — drobnější písmo na úzké obrazovce */
+  .stat-card .stat-value {
+    font-size: 18px !important;
+  }
+}
+
+/* iPhone SE / 5 / starší (≤375 px) — ještě úspornější padding */
+@media (max-width: 380px) {
+  .main-content,
+  .content {
+    padding: 8px !important;
+  }
+  .btn {
+    padding: 8px 12px !important;
+    font-size: 13px !important;
+  }
+  .data-table th,
+  .data-table td {
+    padding: 6px 8px !important;
+    font-size: 12px !important;
+  }
+  /* AI floating bubble vlevo dole — mobilní layout */
+  .ai-fab {
+    width: 36px !important;
+    height: 36px !important;
+  }
+}
+
+/* Prevent text-selection bubbles na nedotčitelných UI prvcích (buttony, ikony) */
+.btn,
+.sidebar-item,
+.tab,
+.hamburger-btn,
+.welcome-card-title,
+.sidebar-icon,
+.holyos-topbar {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* Inputs ale výběr POVOLENÉ — chceme aby šlo zkopírovat */
+input,
+textarea,
+[contenteditable="true"] {
+  -webkit-user-select: auto;
+  user-select: auto;
+}
