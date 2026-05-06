@@ -22,6 +22,12 @@ const { runAgent, isForbidden } = require('./agent');
 
 const TMP_ROOT = process.env.AI_DEV_TMP_DIR || path.join(os.tmpdir(), 'holyos-agent');
 
+function shortenForBody(text, maxLen) {
+  if (!text) return '';
+  const t = String(text).replace(/\s+/g, ' ').trim();
+  return t.length <= maxLen ? t : t.slice(0, maxLen - 1) + '…';
+}
+
 function slugify(text) {
   return String(text || '')
     .toLowerCase()
@@ -172,6 +178,15 @@ async function processTask(task, options = {}) {
         template: 'escalated',
         args: [`Agent se pokusil změnit zakázané cesty: ${violations.map((v) => v.path).join(', ')}`],
       });
+      try {
+        await chat.notifySuperAdmins({
+          type: 'task_status',
+          title: `⚠️ AI Vývojář eskaloval úkol #${task.id}`,
+          body: `Agent narazil na forbidden cesty: ${violations.map((v) => v.path).join(', ').slice(0, 200)}`,
+          link: '/modules/ai-vyvojar/index.html',
+          meta: { run_id: run.id, task_id: task.id, kind: 'escalated' },
+        });
+      } catch (e) { console.error('[ai-dev] notifySuperAdmins (escalated) failed:', e.message); }
       return run;
     }
 
@@ -228,6 +243,20 @@ async function processTask(task, options = {}) {
       link: pr.html_url,
       meta: { pr_url: pr.html_url, pr_number: pr.number, run_id: run.id },
     });
+
+    // Notifikace všem super adminům — jen ti reviewují a mergují
+    try {
+      await chat.notifySuperAdmins({
+        excludeUserId: task.created_by,
+        type: 'task_status',
+        title: `🤖 PR #${pr.number} čeká na review (úkol #${task.id})`,
+        body: `${prTitle} — ${shortenForBody(agentResult.summary, 140)}`,
+        link: '/modules/ai-vyvojar/index.html',
+        meta: { run_id: run.id, pr_url: pr.html_url, pr_number: pr.number, task_id: task.id },
+      });
+    } catch (e) {
+      console.error('[ai-dev] notifySuperAdmins (pr_open) failed:', e.message);
+    }
 
     // Fáze 1: žádný auto-merge → běh končí v pr_open. UI Audit log si přebere
     // status z webhooku (Fáze 2) nebo manuálního refreshe.

@@ -99,9 +99,31 @@ async function notifyTaskCreator(adminTaskId, { type, title, body, link, meta } 
   });
 }
 
+/**
+ * Vytvoří Notification pro všechny super adminy (kromě případně vyloučeného userId).
+ * Použití: po otevření PR (review čeká), po failed/escalated (potřebuje pozornost).
+ */
+async function notifySuperAdmins({ excludeUserId = null, type, title, body, link, meta } = {}) {
+  const admins = await prisma.user.findMany({
+    where: { is_super_admin: true, ...(excludeUserId ? { id: { not: excludeUserId } } : {}) },
+    select: { id: true },
+  });
+  if (!admins.length) return [];
+  const data = admins.map((u) => ({
+    user_id: u.id,
+    type: type || 'task_status',
+    title: title || 'AI Vývojář',
+    body: body || null,
+    link: link || '/modules/ai-vyvojar/index.html',
+    meta: meta || {},
+  }));
+  return prisma.notification.createMany({ data });
+}
+
 module.exports = {
   postMessage,
   notifyTaskCreator,
+  notifySuperAdmins,
   getOrCreateTaskChannel,
   TEMPLATES,
 };
