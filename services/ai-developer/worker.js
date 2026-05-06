@@ -13,6 +13,9 @@
 
 const repository = require('./repository');
 const runner = require('./runner');
+const github = require('./github');
+const chat = require('./chat');
+const { prisma } = require('../../config/database');
 
 const POLL_INTERVAL_MS = parseInt(process.env.AI_DEV_POLL_INTERVAL_MS || '30000', 10);
 let _timer = null;
@@ -31,6 +34,13 @@ async function pollOnce() {
   }
 
   if (!settings.enabled) return; // Kill switch OFF
+
+  // Auto-merge nezávisí na queue capacity — pr_open run, který se mergne,
+  // už neblokuje slot (pr_open je v TERMINAL_STATUSES). Spustíme paralelně,
+  // ať se nezpožďuje kvůli capacity checkům dole.
+  pollAutoMerge(settings).catch((e) =>
+    console.error('[ai-dev/worker] pollAutoMerge failed:', e.message)
+  );
 
   // Limit běžících
   let running;
@@ -85,6 +95,70 @@ async function pollOnce() {
       .finally(() => {
         _activeRuns.delete(guardKey);
       });
+  }
+}
+
+// ─── Auto-merge ────────────────────────────────────────────────────────────
+//
+// Pro pr_open runs s repo.allow_auto_merge=true, kterým uplynula čekací doba,
+// zavoláme GitHub API merge a updatneme DB. Volá se ze stejného pollu jako
+// processTask, ale jen pokud je settings.enabled.
+
+async function pollAutoMerge(settings) {
+  const githubToken = process.env.AI_DEV_GITHUB_TOKEN;
+  if (!githubToken) return;
+
+  let candidates;
+  try {
+    candidates = await repository.listAutoMergeCandidates({
+      waitMinutes: settings.auto_merge_wait_minutes || 15,
+    });
+  } catch (err) {
+    console.error('[ai-dev/worker] listAutoMergeCandidates failed:', err.message);
+    return;
+  }
+  if (!candidates.length) return;
+
+  for (const run of candidates) {
+    try {
+      const ghRepo = github.parseRepo(run.repo.git_url);
+      if (!ghRepo) continue;
+
+      const result = await github.mergePullRequest({
+        token: githubToken,
+        owner: ghRepo.owner,
+        repo: ghRepo.repo,
+        number: run.pr_number,
+        mergeMethod: 'squash',
+      });
+
+      await repository.updateRun(run.id, {
+        status: 'merged',
+        ended_at: new Date(),
+      });
+      await repository.appendEvent(run.id, 'decision', {
+        action: 'auto_merged',
+        sha: result.sha,
+        wait_minutes: settings.auto_merge_wait_minutes,
+      });
+
+      if (run.task && run.task.status !== 'done') {
+        await prisma.adminTask.update({ where: { id: run.task_id }, data: { status: 'done' } });
+      }
+
+      try {
+        await chat.postMessage(run.task_id, '✅ Auto-merge proběhl. Úkol je hotový.', {});
+      } catch (_e) {}
+
+      console.log(`[ai-dev/worker] auto-merged run ${run.id} (PR #${run.pr_number}, sha ${result.sha})`);
+    } catch (err) {
+      console.error(`[ai-dev/worker] auto-merge failed for run ${run.id}:`, err.message);
+      await repository.appendEvent(run.id, 'error', {
+        phase: 'auto_merge',
+        message: err.message,
+      });
+      // Nezamykáme run jako failed — člověk může mergnout ručně, jen log a jdeme dál
+    }
   }
 }
 
