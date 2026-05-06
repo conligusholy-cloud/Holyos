@@ -150,6 +150,16 @@ async function pollAutoMerge(settings) {
         await chat.postMessage(run.task_id, '✅ Auto-merge proběhl. Úkol je hotový.', {});
       } catch (_e) {}
 
+      try {
+        await chat.notifySuperAdmins({
+          type: 'task_status',
+          title: `🟢 Auto-merge: PR #${run.pr_number} (úkol #${run.task_id})`,
+          body: 'AI Vývojář autonomně mergnul PR po uplynutí čekací doby.',
+          link: run.pr_url,
+          meta: { run_id: run.id, sha: result.sha, kind: 'auto_merged' },
+        });
+      } catch (_e) {}
+
       console.log(`[ai-dev/worker] auto-merged run ${run.id} (PR #${run.pr_number}, sha ${result.sha})`);
     } catch (err) {
       console.error(`[ai-dev/worker] auto-merge failed for run ${run.id}:`, err.message);
