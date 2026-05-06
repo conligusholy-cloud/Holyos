@@ -603,15 +603,22 @@
       if (ac.length < 20) { alert('Akceptační kritéria jsou moc krátká. Napiš aspoň 20 znaků.'); return; }
       if (!repoId) { alert('Vyber cílový repozitář.'); return; }
       try {
+        // Pokud je úkol ve stavu 'new', posuneme ho na 'in_progress' — AI na něm
+        // teď pracuje, takže "Nový" by bylo zavádějící. Status v hotovo vrátíme
+        // ručně po review PR (nebo to udělá Fáze 2 přes webhook auto-merge).
+        const task = tasks.find((x) => x.id === taskId);
+        const patch = {
+          assignable_to_ai: true,
+          acceptance_criteria: ac,
+          target_repo_id: repoId,
+        };
+        if (task && task.status === 'new') patch.status = 'in_progress';
+
         const r = await fetch('/api/admin-tasks/' + taskId, {
           method: 'PUT',
           credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            assignable_to_ai: true,
-            acceptance_criteria: ac,
-            target_repo_id: repoId,
-          }),
+          body: JSON.stringify(patch),
         });
         if (!r.ok) throw new Error('HTTP ' + r.status);
         closeModal();
