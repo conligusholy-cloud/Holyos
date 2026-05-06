@@ -390,7 +390,36 @@
         '<div><strong>Spuštěno:</strong> ' + fmtDate(run.started_at) + ' &nbsp; <strong>Ukončeno:</strong> ' + fmtDate(run.ended_at) + '</div>' +
         (run.failure_reason ? '<div style="color:#ef4444; margin-top:6px;"><strong>Chyba:</strong> ' + escapeHtml(run.failure_reason) + '</div>' : '') +
         (run.summary ? '<div style="margin-top:8px;"><strong>Shrnutí:</strong> ' + escapeHtml(run.summary) + '</div>' : '') +
-        '<div style="margin-top:10px;"><button class="btn danger" id="btn-cancel-run">Zrušit běh</button></div>';
+        '<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">' +
+          (run.status === 'pr_open' ? '<button class="btn" id="btn-merge-pr" style="background:#22c55e;color:white;border-color:#22c55e;">🟢 Mergnout PR</button>' : '') +
+          (run.status === 'pr_open' ? '<button class="btn" id="btn-close-pr" style="background:#ef4444;color:white;border-color:#ef4444;">🔴 Zavřít PR</button>' : '') +
+          '<button class="btn danger" id="btn-cancel-run">Zrušit běh</button>' +
+        '</div>';
+
+      const mergeBtn = $('#btn-merge-pr');
+      if (mergeBtn) {
+        mergeBtn.addEventListener('click', async () => {
+          if (!confirm('Mergnout PR #' + run.pr_number + ' (squash) a označit úkol jako Hotový?')) return;
+          try {
+            const res = await api('/runs/' + runId + '/merge', { method: 'POST', body: JSON.stringify({}) });
+            alert('✅ PR mergnut. SHA: ' + (res.sha || '?'));
+            openRunDetail(runId);
+          } catch (err) { alert('Merge selhal: ' + err.message); }
+        });
+      }
+
+      const closeBtn = $('#btn-close-pr');
+      if (closeBtn) {
+        closeBtn.addEventListener('click', async () => {
+          if (!confirm('Zavřít PR #' + run.pr_number + ' bez mergeru? Větev zůstane na GitHubu.')) return;
+          const reason = prompt('Důvod (volitelně):') || '';
+          try {
+            await api('/runs/' + runId + '/close', { method: 'POST', body: JSON.stringify({ reason }) });
+            alert('PR zavřen.');
+            openRunDetail(runId);
+          } catch (err) { alert('Zavření selhalo: ' + err.message); }
+        });
+      }
 
       const cancelBtn = $('#btn-cancel-run');
       if (cancelBtn) {

@@ -70,10 +70,32 @@ async function listRequiredCheckRuns({ token, owner, repo, ref }) {
   return ghRequest(`/repos/${owner}/${repo}/commits/${ref}/check-runs`, { token });
 }
 
+async function mergePullRequest({ token, owner, repo, number, mergeMethod = 'squash', commitTitle, commitMessage }) {
+  return ghRequest(`/repos/${owner}/${repo}/pulls/${number}/merge`, {
+    method: 'PUT',
+    token,
+    body: {
+      merge_method: mergeMethod,
+      ...(commitTitle ? { commit_title: commitTitle } : {}),
+      ...(commitMessage ? { commit_message: commitMessage } : {}),
+    },
+  });
+}
+
+async function closePullRequest({ token, owner, repo, number }) {
+  return ghRequest(`/repos/${owner}/${repo}/pulls/${number}`, {
+    method: 'PATCH',
+    token,
+    body: { state: 'closed' },
+  });
+}
+
 module.exports = {
   parseRepo,
   ghRequest,
   openPullRequest,
   getPullRequest,
   listRequiredCheckRuns,
+  mergePullRequest,
+  closePullRequest,
 };
