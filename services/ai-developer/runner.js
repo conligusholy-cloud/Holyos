@@ -98,7 +98,7 @@ async function processTask(task, options = {}) {
 
   // Setup pracovního adresáře
   const workdir = path.join(TMP_ROOT, run.id, 'repo');
-  const branch = `ai/REQ-${task.id}-${slugify(task.page_title || '')}`;
+  const branch = `ai/REQ-${task.id}-${slugify(task.page_title || '')}-${run.id.slice(0, 8)}`;
 
   try {
     await log('decision', { action: 'start', branch, workdir });
