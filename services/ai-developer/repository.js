@@ -129,12 +129,22 @@ async function listRuns({ status, taskId, limit = 50 } = {}) {
     where.status = status;
   }
   if (taskId) where.task_id = taskId;
-  return prisma.agentRun.findMany({
+  const runs = await prisma.agentRun.findMany({
     where,
     orderBy: { started_at: 'desc' },
     take: Math.min(Math.max(parseInt(limit, 10) || 50, 1), 200),
     include: RUN_LIST_INCLUDE,
   });
+
+  // Spočítej file_change events per run (pro přehled v audit logu bez drilldownu)
+  if (runs.length === 0) return runs;
+  const counts = await prisma.agentRunEvent.groupBy({
+    by: ['run_id'],
+    where: { run_id: { in: runs.map((r) => r.id) }, kind: 'file_change' },
+    _count: { _all: true },
+  });
+  const countMap = new Map(counts.map((c) => [c.run_id, c._count._all]));
+  return runs.map((r) => ({ ...r, file_changes_count: countMap.get(r.id) || 0 }));
 }
 
 async function getRunWithEvents(id, { eventsLimit = 500 } = {}) {
