@@ -141,6 +141,13 @@
       '</tbody></table>';
   }
 
+  function shortSummary(text, maxLen) {
+    if (!text) return '';
+    const trimmed = String(text).replace(/\s+/g, ' ').trim();
+    if (trimmed.length <= maxLen) return trimmed;
+    return trimmed.slice(0, maxLen - 1) + '…';
+  }
+
   function renderRecentRuns(runs) {
     const host = $('#recent-runs-host');
     if (!runs || !runs.length) {
@@ -149,7 +156,7 @@
     }
     host.innerHTML =
       '<table class="data-table"><thead><tr>' +
-        '<th>Spuštěno</th><th>Úkol</th><th>Status</th><th>PR</th><th>Tokens</th><th></th>' +
+        '<th>Spuštěno</th><th>Úkol</th><th>Status</th><th>PR</th><th>Soub.</th><th>Tokens</th><th>Shrnutí</th><th></th>' +
       '</tr></thead><tbody>' +
       runs.map((r) =>
         '<tr>' +
@@ -157,7 +164,9 @@
           '<td>#' + r.task_id + ' ' + escapeHtml(r.task && r.task.page_title ? r.task.page_title : '') + '</td>' +
           '<td><span class="chip ' + escapeHtml(r.status) + '">' + escapeHtml(r.status) + '</span></td>' +
           '<td>' + (r.pr_url ? '<a href="' + escapeHtml(r.pr_url) + '" target="_blank">PR #' + r.pr_number + '</a>' : '—') + '</td>' +
+          '<td style="text-align:center;color:var(--text2);">' + (r.file_changes_count != null ? r.file_changes_count : '—') + '</td>' +
           '<td>' + (r.tokens_used || 0).toLocaleString('cs-CZ') + '</td>' +
+          '<td title="' + escapeHtml(r.summary || r.failure_reason || '') + '" style="color:var(--text2);font-size:12px;max-width:340px;">' + escapeHtml(shortSummary(r.summary || r.failure_reason, 80)) + '</td>' +
           '<td><button class="btn" data-run-id="' + escapeHtml(r.id) + '">Detail</button></td>' +
         '</tr>'
       ).join('') +
@@ -337,7 +346,7 @@
     }
     host.innerHTML =
       '<table class="data-table"><thead><tr>' +
-        '<th>Spuštěno</th><th>Úkol</th><th>Repo</th><th>Status</th><th>PR</th><th>Tokens</th><th></th>' +
+        '<th>Spuštěno</th><th>Úkol</th><th>Repo</th><th>Status</th><th>PR</th><th>Soub.</th><th>Tokens</th><th>Shrnutí</th><th></th>' +
       '</tr></thead><tbody>' +
       items.map((r) =>
         '<tr>' +
@@ -346,7 +355,9 @@
           '<td>' + escapeHtml(r.repo ? r.repo.name : '—') + '</td>' +
           '<td><span class="chip ' + escapeHtml(r.status) + '">' + escapeHtml(r.status) + '</span></td>' +
           '<td>' + (r.pr_url ? '<a href="' + escapeHtml(r.pr_url) + '" target="_blank">PR #' + r.pr_number + '</a>' : '—') + '</td>' +
+          '<td style="text-align:center;color:var(--text2);">' + (r.file_changes_count != null ? r.file_changes_count : '—') + '</td>' +
           '<td>' + (r.tokens_used || 0).toLocaleString('cs-CZ') + '</td>' +
+          '<td title="' + escapeHtml(r.summary || r.failure_reason || '') + '" style="color:var(--text2);font-size:12px;max-width:340px;">' + escapeHtml(shortSummary(r.summary || r.failure_reason, 80)) + '</td>' +
           '<td><button class="btn" data-run-id="' + escapeHtml(r.id) + '">Detail</button></td>' +
         '</tr>'
       ).join('') +
