@@ -14,6 +14,7 @@ const path = require('path');
 const os = require('os');
 const fs = require('fs/promises');
 
+const { prisma } = require('../../config/database');
 const repository = require('./repository');
 const chat = require('./chat');
 const git = require('./git');
@@ -160,7 +161,34 @@ async function processTask(task, options = {}) {
     // ── 4) Forbidden check ─────────────────────────────────────────────
     const status = await git.statusPorcelain({ cwd: workdir });
     if (status.length === 0) {
-      return fail('Agent neudělal žádné změny — buď úkol nebyl proveditelný, nebo skončil příliš brzy.', {
+      // Agent rozpoznal, že úkol není v tomto repu proveditelný (typicky:
+      // úkol pro HolyOS modul, target_repo ale playground sandbox).
+      // Pošleme do chat threadu úkolu detailní zprávu od Alana s vysvětlením,
+      // aby Tomáš věděl PROČ a co s tím. Task zůstane assignable_to_ai=true,
+      // ale listQueue ho po dobu backoff_minutes z fronty vyřadí (viz
+      // repository.listQueue) — bez toho by worker úkol bral každých 30 s.
+      const reason = agentResult.summary || 'Agent rozpoznal, že požadovaná změna není v cílovém repu proveditelná.';
+      const helpMsg =
+        `Nemohl jsem dokončit úkol v cílovém repu \`${repo.name}\`.\n\n` +
+        `**Důvod (z mého pohledu):**\n${reason}\n\n` +
+        `**Co s tím můžeš udělat:**\n` +
+        `1. **Změnit target_repo** — pokud je úkol o jiném repu (např. HolyOS samotný, ne sandbox), přidej ten repo v Super Admin → AI Vývojář → Repozitáře a edituj úkol.\n` +
+        `2. **Upřesnit akceptační kritéria** — pokud chceš úkol pojmout jako sandbox-friendly variantu (např. ukázku/prototyp), přepiš AC tak, aby šel udělat v aktuálním repu.\n` +
+        `3. **Odznačit z AI fronty** — v Požadavcích zruš checkbox "Předat AI Vývojáři", úkol vyřeš ručně.\n\n` +
+        `_Zatím úkol nebudu brát dalších 30 minut, ať zbytečně nespálíme tokeny. Až změníš nastavení, vrátím se k němu._`;
+      try {
+        await chat.postMessage(task.id, helpMsg);
+      } catch (e) { console.error('[ai-dev] chat.postMessage no-changes failed:', e.message); }
+      try {
+        await chat.notifySuperAdmins({
+          type: 'task_status',
+          title: `⚠️ Úkol #${task.id} — agent nemohl pokračovat`,
+          body: shortenForBody(reason, 200),
+          link: `/modules/admin-tasks/index.html?task=${task.id}`,
+          meta: { run_id: run.id, task_id: task.id, kind: 'no_changes' },
+        });
+      } catch (_e) {}
+      return fail('Agent neudělal žádné změny — viz zpráva v chat threadu úkolu.', {
         agent_summary: agentResult.summary,
       });
     }

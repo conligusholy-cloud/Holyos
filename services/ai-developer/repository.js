@@ -218,16 +218,27 @@ async function listQueue({ limit = 10 } = {}) {
 
   if (candidates.length === 0) return [];
 
-  // Vyfiltruj ty, co mají běžící run NEBO čekající na merge (pr_open).
-  // pr_open NENÍ v RUNNING_STATUSES (uvolňuje worker slot), ALE listQueue ho
-  // bere v potaz — task s otevřeným PR nezvedáme znovu, dokud člověk
-  // PR nemergne / nezamítne (a task ručně nezmění status). Bez tohoto by
-  // worker úkol opakoval donekonečna a vyrobil hromadu duplicitních PR.
+  // Vyfiltruj ty, co mají běžící run, čekající PR, nebo nedávno failed run.
+  // - RUNNING_STATUSES: agent právě pracuje
+  // - pr_open: čeká na review člověka
+  // - failed/escalated mladší než FAILED_BACKOFF_MINUTES: nedávno spadl,
+  //   nezvedat 30 min, ať Tomáš stihne změnit target_repo / AC. Bez toho
+  //   by se cyklus opakoval každých 30 s a pálil tokeny (viz incident
+  //   2026-05-06: úkol #42 spálil 360 000 tokenů ve 39 retry pokusech).
+  const FAILED_BACKOFF_MINUTES = 30;
+  const backoffCutoff = new Date(Date.now() - FAILED_BACKOFF_MINUTES * 60_000);
+
   const taskIds = candidates.map((t) => t.id);
   const blocking = await prisma.agentRun.findMany({
     where: {
       task_id: { in: taskIds },
-      status: { in: [...RUNNING_STATUSES, 'pr_open'] },
+      OR: [
+        { status: { in: [...RUNNING_STATUSES, 'pr_open'] } },
+        {
+          status: { in: ['failed', 'escalated'] },
+          updated_at: { gte: backoffCutoff },
+        },
+      ],
     },
     select: { task_id: true },
   });
