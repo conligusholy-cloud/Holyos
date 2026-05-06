@@ -713,12 +713,19 @@ router.delete('/documents/:docId', async (req, res, next) => {
 
 const policySchema = z.object({
   policy_type: z.enum(['pov', 'havarijni', 'jine']),
+  // Pojišťovna — preferovaně FK na adresář firem; company_name jako text fallback
+  company_id: z.number().int().optional().nullable(),
   company_name: z.string().max(255).optional().nullable(),
   policy_number: z.string().max(100).optional().nullable(),
   valid_from: z.string().optional().nullable(),
   valid_to: z.string().optional().nullable(),
   premium_amount: z.number().optional().nullable(),
   note: z.string().optional().nullable(),
+  // Doplňková krytí — checkboxy v UI
+  has_havarijni: z.boolean().optional(),
+  has_glass: z.boolean().optional(),
+  has_animal: z.boolean().optional(),
+  has_natural: z.boolean().optional(),
   // Zelená karta (původní file_url) — upload base64
   file_data: z.string().optional().nullable(),
   file_name: z.string().optional().nullable(),
@@ -736,6 +743,7 @@ function toPolicyData(data, vehicleId) {
   const out = {
     vehicle_id: vehicleId,
     policy_type: data.policy_type,
+    company_id: data.company_id ?? null,
     company_name: data.company_name || null,
     policy_number: data.policy_number || null,
     valid_from: parseDate(data.valid_from),
@@ -743,6 +751,11 @@ function toPolicyData(data, vehicleId) {
     premium_amount: data.premium_amount ?? null,
     note: data.note || null,
   };
+  // Doplňková krytí — boolean pole se v Prisma update musí předávat výslovně
+  if (data.has_havarijni !== undefined) out.has_havarijni = !!data.has_havarijni;
+  if (data.has_glass     !== undefined) out.has_glass     = !!data.has_glass;
+  if (data.has_animal    !== undefined) out.has_animal    = !!data.has_animal;
+  if (data.has_natural   !== undefined) out.has_natural   = !!data.has_natural;
   // Zelená karta — upload nového souboru
   if (data.file_data) {
     const saved = saveBase64File(vehicleId, data.file_data, data.file_name, data.mime_type);
@@ -771,6 +784,38 @@ function removeStoredFile(fileUrl) {
   } catch (_) {}
 }
 
+// Po uložení/úpravě pojistky — synchronizuj zobrazenou pojišťovnu
+// na základní záložce vozidla (Vehicle.insurance_company text). Bere se podle:
+//   - POV pojistky s nejpozdějším valid_to (současná POV) → ta diktuje "Pojišťovnu"
+// Když takovou nemá, vezme se nejnovější existující policy. Když nic, smaže se.
+async function syncVehicleInsuranceCompany(vehicleId) {
+  try {
+    // Preferuj POV s nejpozdějším valid_to
+    let chosen = await prisma.vehicleInsurancePolicy.findFirst({
+      where: { vehicle_id: vehicleId, policy_type: 'pov' },
+      orderBy: [{ valid_to: 'desc' }, { created_at: 'desc' }],
+      include: { company: { select: { id: true, name: true } } },
+    });
+    if (!chosen) {
+      // Fallback — jakákoliv pojistka, nejnovější
+      chosen = await prisma.vehicleInsurancePolicy.findFirst({
+        where: { vehicle_id: vehicleId },
+        orderBy: [{ valid_to: 'desc' }, { created_at: 'desc' }],
+        include: { company: { select: { id: true, name: true } } },
+      });
+    }
+    const display = chosen
+      ? (chosen.company?.name || chosen.company_name || null)
+      : null;
+    await prisma.vehicle.update({
+      where: { id: vehicleId },
+      data: { insurance_company: display },
+    });
+  } catch (e) {
+    console.error('[fleet] syncVehicleInsuranceCompany failed:', e.message);
+  }
+}
+
 // GET /api/fleet/vehicles/:id/policies
 router.get('/vehicles/:id/policies', async (req, res, next) => {
   try {
@@ -778,6 +823,7 @@ router.get('/vehicles/:id/policies', async (req, res, next) => {
     if (isNaN(vehicleId)) return res.status(400).json({ error: 'Neplatné ID' });
     const policies = await prisma.vehicleInsurancePolicy.findMany({
       where: { vehicle_id: vehicleId },
+      include: { company: { select: { id: true, name: true, ico: true } } },
       orderBy: [{ policy_type: 'asc' }, { valid_to: 'desc' }],
     });
     res.json(policies);
@@ -796,6 +842,7 @@ router.post('/vehicles/:id/policies', async (req, res, next) => {
     const policy = await prisma.vehicleInsurancePolicy.create({
       data: toPolicyData(parsed.data, vehicleId),
     });
+    await syncVehicleInsuranceCompany(vehicleId);
     res.status(201).json(policy);
   } catch (err) { next(err); }
 });
@@ -838,6 +885,7 @@ router.put('/policies/:policyId', async (req, res, next) => {
       where: { id: policyId },
       data,
     });
+    await syncVehicleInsuranceCompany(existing.vehicle_id);
     res.json(policy);
   } catch (err) { next(err); }
 });
@@ -854,7 +902,10 @@ router.delete('/policies/:policyId', async (req, res, next) => {
     removeStoredFile(policy.file_url);
     removeStoredFile(policy.contract_url);
 
+    const vehicleId = policy.vehicle_id;
     await prisma.vehicleInsurancePolicy.delete({ where: { id: policyId } });
+    // Po smazání aktualizuj zobrazenou pojišťovnu na vozidle (nejlepší zbylá pojistka)
+    await syncVehicleInsuranceCompany(vehicleId);
     res.json({ ok: true });
   } catch (err) { next(err); }
 });

@@ -500,6 +500,8 @@ model Company {
   supplied_lots        MaterialLot[]       @relation("MaterialLotSupplier")
   // Účetní doklady — faktury přijaté (AP) i vydané (AR)
   invoices             Invoice[]           @relation("InvoiceCompany")
+  // Pojišťovny — pokud je firma vedená jako pojišťovna v adresáři, zde jsou navázané pojistky
+  insurance_policies   VehicleInsurancePolicy[] @relation("InsuranceCompany")
   // Factorify nákupní ceník
   supplier_price_lists SupplierPriceList[] @relation("SupplierPriceListSupplier")
 
@@ -1717,7 +1719,18 @@ model VehicleInsurancePolicy {
 
   // Typ: "pov" (povinné ručení) | "havarijni" | "jine"
   policy_type    String    @db.VarChar(30)
-  company_name   String?   @db.VarChar(255) // Pojišťovna
+  // Pojišťovna — preferovaně FK na adresář firem (Company),
+  //   company_name zůstává jako fallback / textový snapshot pro starší data.
+  company_id     Int?
+  company        Company?  @relation("InsuranceCompany", fields: [company_id], references: [id], onDelete: SetNull)
+  company_name   String?   @db.VarChar(255) // Pojišťovna (text fallback)
+
+  // Doplňková krytí — checkboxy v UI. Jedna pojistka může mít víc krytí.
+  has_havarijni Boolean @default(false) // Havarijní pojištění
+  has_glass     Boolean @default(false) // Pojištění čelního skla
+  has_animal    Boolean @default(false) // Pojištění střetu se zvěří
+  has_natural   Boolean @default(false) // Živelní pojištění
+
   policy_number  String?   @db.VarChar(100) // Číslo pojistky
   valid_from     DateTime? @db.Date
   valid_to       DateTime? @db.Date
@@ -1735,6 +1748,7 @@ model VehicleInsurancePolicy {
   updated_at DateTime @updatedAt
 
   @@index([vehicle_id])
+  @@index([company_id])
   @@index([policy_type])
   @@index([valid_to])
   @@map("vehicle_insurance_policies")
