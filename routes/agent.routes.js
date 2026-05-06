@@ -193,6 +193,96 @@ router.post('/runs/:id/cancel', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// ─── PR review (merge / close) ─────────────────────────────────────────────
+//
+// Tlačítka v Detail run modálu vyřeší PR bez chození na GitHub.
+// Worker po otevření PR nastaví status=pr_open. Uživatel zkontroluje diff
+// na GitHubu (link v Detail), vrátí se a klikne Mergnout/Zavřít.
+// Backend volá GitHub API + updatuje agent_run.status + posune AdminTask.
+
+const github = require('../services/ai-developer/github');
+
+async function getRunWithRepo(runId) {
+  const { prisma: db } = require('../config/database');
+  return db.agentRun.findUnique({
+    where: { id: runId },
+    include: { repo: true, task: true },
+  });
+}
+
+router.post('/runs/:id/merge', async (req, res, next) => {
+  try {
+    const run = await getRunWithRepo(req.params.id);
+    if (!run) return res.status(404).json({ error: 'Běh nenalezen' });
+    if (!run.pr_url || !run.pr_number) return res.status(400).json({ error: 'Běh nemá otevřený PR' });
+    if (run.status !== 'pr_open') return res.status(400).json({ error: `PR nelze mergnout v stavu ${run.status}` });
+
+    const ghRepo = github.parseRepo(run.repo.git_url);
+    const token = process.env.AI_DEV_GITHUB_TOKEN;
+    if (!token) return res.status(500).json({ error: 'AI_DEV_GITHUB_TOKEN chybí' });
+
+    let mergeResult;
+    try {
+      mergeResult = await github.mergePullRequest({
+        token, owner: ghRepo.owner, repo: ghRepo.repo, number: run.pr_number,
+        mergeMethod: 'squash',
+      });
+    } catch (e) {
+      return res.status(409).json({ error: 'GitHub merge selhal: ' + e.message });
+    }
+
+    await repo.updateRun(run.id, { status: 'merged', ended_at: new Date() });
+    await repo.appendEvent(run.id, 'decision', { action: 'merged_via_ui', by: req.user.username, sha: mergeResult.sha });
+
+    // Posun AdminTask na done
+    if (run.task && run.task.status !== 'done') {
+      await prisma.adminTask.update({ where: { id: run.task_id }, data: { status: 'done' } });
+    }
+
+    await prisma.auditLog.create({
+      data: {
+        user_name: req.user.username,
+        user_display: req.user.display_name || null,
+        action: 'update',
+        entity: 'agent_run',
+        description: `AI Vývojář — PR #${run.pr_number} mergnut, úkol #${run.task_id} done`,
+        changes: { run_id: run.id, sha: mergeResult.sha },
+      },
+    });
+    res.json({ ok: true, sha: mergeResult.sha, run_status: 'merged' });
+  } catch (err) { next(err); }
+});
+
+router.post('/runs/:id/close', async (req, res, next) => {
+  try {
+    const run = await getRunWithRepo(req.params.id);
+    if (!run) return res.status(404).json({ error: 'Běh nenalezen' });
+    if (!run.pr_url || !run.pr_number) return res.status(400).json({ error: 'Běh nemá otevřený PR' });
+    if (run.status !== 'pr_open') return res.status(400).json({ error: `PR nelze zavřít v stavu ${run.status}` });
+
+    const ghRepo = github.parseRepo(run.repo.git_url);
+    const token = process.env.AI_DEV_GITHUB_TOKEN;
+    if (!token) return res.status(500).json({ error: 'AI_DEV_GITHUB_TOKEN chybí' });
+
+    try {
+      await github.closePullRequest({
+        token, owner: ghRepo.owner, repo: ghRepo.repo, number: run.pr_number,
+      });
+    } catch (e) {
+      return res.status(409).json({ error: 'GitHub close selhal: ' + e.message });
+    }
+
+    await repo.updateRun(run.id, {
+      status: 'cancelled',
+      ended_at: new Date(),
+      failure_reason: req.body && req.body.reason ? req.body.reason : `PR zavřen bez mergeru (${req.user.username})`,
+    });
+    await repo.appendEvent(run.id, 'decision', { action: 'closed_via_ui', by: req.user.username, reason: req.body && req.body.reason });
+
+    res.json({ ok: true, run_status: 'cancelled' });
+  } catch (err) { next(err); }
+});
+
 // ─── Queue ─────────────────────────────────────────────────────────────────
 
 router.get('/queue', async (req, res, next) => {
