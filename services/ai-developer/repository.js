@@ -208,13 +208,20 @@ async function listQueue({ limit = 10 } = {}) {
 
   if (candidates.length === 0) return [];
 
-  // Vyfiltruj ty, co mají běžící run
+  // Vyfiltruj ty, co mají běžící run NEBO čekající na merge (pr_open).
+  // pr_open NENÍ v RUNNING_STATUSES (uvolňuje worker slot), ALE listQueue ho
+  // bere v potaz — task s otevřeným PR nezvedáme znovu, dokud člověk
+  // PR nemergne / nezamítne (a task ručně nezmění status). Bez tohoto by
+  // worker úkol opakoval donekonečna a vyrobil hromadu duplicitních PR.
   const taskIds = candidates.map((t) => t.id);
-  const running = await prisma.agentRun.findMany({
-    where: { task_id: { in: taskIds }, status: { in: RUNNING_STATUSES } },
+  const blocking = await prisma.agentRun.findMany({
+    where: {
+      task_id: { in: taskIds },
+      status: { in: [...RUNNING_STATUSES, 'pr_open'] },
+    },
     select: { task_id: true },
   });
-  const busyTaskIds = new Set(running.map((r) => r.task_id));
+  const busyTaskIds = new Set(blocking.map((r) => r.task_id));
 
   return candidates.filter((t) => !busyTaskIds.has(t.id));
 }
