@@ -112,6 +112,17 @@
     loadMetrics();
   }
 
+  // Připoj seeder tlačítko k recent-runs-host (po prvním loadDashboard)
+  document.addEventListener('click', function(e) {
+    if (e.target && e.target.id === 'btn-open-seeder') {
+      openSeederModal();
+    }
+  });
+
+  // Window-level wrapper pro openSeederModal a closeSeederModal (volaný z onclick)
+  window.openSeederModal = function() { openSeederModal(); };
+  window.closeSeederModal = function() { closeSeederModal(); };
+
   async function loadMetrics() {
     const daysSel = $('#metrics-days');
     const days = daysSel ? (parseInt(daysSel.value, 10) || 30) : 30;
@@ -190,6 +201,117 @@
       '<div class="value">' + value + '</div>' +
       '<div class="hint">' + escapeHtml(sub) + '</div>' +
       '</div>';
+  }
+
+  // ─── AI Seeder (Fáze 4: AI navrhuje úkoly z historie) ───────────────────
+
+  async function openSeederModal() {
+    document.getElementById('modal-root') ||
+      (function() { const d = document.createElement('div'); d.id = 'modal-root'; document.body.appendChild(d); })();
+    const root = document.getElementById('modal-root') || (function() {
+      const d = document.createElement('div'); d.id = 'modal-root'; document.body.appendChild(d); return d;
+    })();
+
+    root.innerHTML =
+      '<div style="position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9999;display:flex;align-items:center;justify-content:center;" onclick="closeSeederModal()">' +
+        '<div style="background:var(--surface);padding:20px;border-radius:8px;min-width:600px;max-width:95vw;max-height:90vh;overflow-y:auto;color:var(--text);border:1px solid var(--border);" onclick="event.stopPropagation()">' +
+          '<h3 style="margin:0 0 10px;">🌱 AI navrhuje úkoly</h3>' +
+          '<p style="font-size:12px;color:var(--text2);margin-bottom:14px;">' +
+            'Alan se podívá na poslední failed/escalated runs + rejected plans a navrhne 1-3 úkoly, které stojí za vytvoření. Bez DB persistence — návrhy zatím nikam neukládám.' +
+          '</p>' +
+          '<div style="display:flex;gap:12px;align-items:center;margin-bottom:14px;">' +
+            '<label style="font-size:13px;">Období: <input id="seeder-lookback" type="number" value="30" min="1" max="365" style="width:70px;padding:4px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:4px;"></label>' +
+            '<span style="font-size:13px;">dní</span>' +
+            '<button class="btn" id="btn-seeder-run" style="background:#22c55e;color:white;border-color:#22c55e;margin-left:auto;">🌱 Spustit návrh</button>' +
+          '</div>' +
+          '<div id="seeder-results"><div class="empty">Klikni „🌱 Spustit návrh" pro vygenerování návrhů.</div></div>' +
+          '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px;">' +
+            '<button class="btn" onclick="closeSeederModal()">Zavřít</button>' +
+            '<button class="btn primary" id="btn-seeder-accept" style="display:none;">✅ Vytvořit vybrané úkoly</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+
+    document.getElementById('btn-seeder-run').addEventListener('click', runSeeder);
+    document.getElementById('btn-seeder-accept').addEventListener('click', acceptSelectedProposals);
+  }
+
+  function closeSeederModal() {
+    const root = document.getElementById('modal-root');
+    if (root) root.innerHTML = '';
+  }
+
+  let _seederProposals = [];
+
+  async function runSeeder() {
+    const days = parseInt(document.getElementById('seeder-lookback').value, 10) || 30;
+    const btn = document.getElementById('btn-seeder-run');
+    btn.disabled = true; btn.textContent = '⏳ Alan přemýšlí...';
+    try {
+      const data = await api('/seeder/propose', {
+        method: 'POST',
+        body: JSON.stringify({ lookback_days: days }),
+      });
+      _seederProposals = data.proposals || [];
+      renderSeederResults(data);
+    } catch (err) {
+      document.getElementById('seeder-results').innerHTML = '<div class="empty">Chyba: ' + escapeHtml(err.message) + '</div>';
+    } finally {
+      btn.disabled = false; btn.textContent = '🌱 Spustit znovu';
+    }
+  }
+
+  function renderSeederResults(data) {
+    const host = document.getElementById('seeder-results');
+    const proposals = data.proposals || [];
+    if (proposals.length === 0) {
+      host.innerHTML = '<div class="empty">Alan nenavrhl žádné úkoly. Reason: ' +
+        escapeHtml(data.reason || 'Nedostatek dat / patternů') +
+        '<br><small>Stats: ' + escapeHtml(JSON.stringify(data.stats)) + '</small></div>';
+      document.getElementById('btn-seeder-accept').style.display = 'none';
+      return;
+    }
+    let html = '<div style="margin-bottom:8px;font-size:12px;color:var(--text2);">' +
+      '🪙 ' + (data.tokensUsed || 0) + ' tokens spotřebováno. Vyber, které chceš vytvořit:' +
+      '</div>';
+    proposals.forEach((p, i) => {
+      const priorityColor = p.priority === 'high' ? '#ef4444' : (p.priority === 'low' ? '#22c55e' : '#f59e0b');
+      html += '<div style="background:var(--surface2,rgba(0,0,0,0.2));border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:10px;">' +
+        '<label style="display:flex;gap:10px;align-items:flex-start;cursor:pointer;">' +
+          '<input type="checkbox" class="seeder-pick" data-idx="' + i + '" checked style="margin-top:4px;">' +
+          '<div style="flex:1;">' +
+            '<div style="display:flex;gap:8px;align-items:center;margin-bottom:4px;">' +
+              '<strong>' + escapeHtml(p.page_title) + '</strong>' +
+              '<span class="chip" style="background:' + priorityColor + '22;color:' + priorityColor + ';">' + escapeHtml(p.priority) + '</span>' +
+              (p.change_type ? '<span class="chip" style="background:rgba(14,165,233,0.15);color:#0ea5e9;">' + escapeHtml(p.change_type) + '</span>' : '') +
+              (p.affected_module ? '<span class="chip" style="background:rgba(168,139,250,0.15);color:#a78bfa;">' + escapeHtml(p.affected_module) + '</span>' : '') +
+            '</div>' +
+            '<div style="font-size:12px;color:var(--text);margin-bottom:4px;white-space:pre-wrap;">' + escapeHtml(p.description) + '</div>' +
+            (p.acceptance_criteria ? '<details style="margin-top:6px;"><summary style="cursor:pointer;font-size:11px;color:var(--text2);">📋 Akceptační kritéria</summary><pre style="font-size:11px;font-family:ui-monospace,monospace;background:rgba(0,0,0,0.2);padding:6px;border-radius:4px;margin-top:4px;white-space:pre-wrap;">' + escapeHtml(p.acceptance_criteria) + '</pre></details>' : '') +
+            (p.seeder_reason ? '<div style="font-size:11px;color:var(--text2);font-style:italic;margin-top:4px;">💡 ' + escapeHtml(p.seeder_reason) + '</div>' : '') +
+          '</div>' +
+        '</label>' +
+      '</div>';
+    });
+    host.innerHTML = html;
+    document.getElementById('btn-seeder-accept').style.display = 'inline-block';
+  }
+
+  async function acceptSelectedProposals() {
+    const checks = Array.from(document.querySelectorAll('.seeder-pick:checked'));
+    if (checks.length === 0) { alert('Vyber alespoň 1 návrh.'); return; }
+    const drafts = checks.map((c) => _seederProposals[parseInt(c.dataset.idx, 10)]).filter(Boolean);
+    if (!confirm('Vytvořit ' + drafts.length + ' nové úkoly?')) return;
+    try {
+      const data = await api('/seeder/accept', {
+        method: 'POST',
+        body: JSON.stringify({ drafts }),
+      });
+      alert('✅ Vytvořeno ' + (data.created || []).length + ' úkolů. Najdi je v Požadavcích.');
+      closeSeederModal();
+    } catch (err) {
+      alert('Chyba: ' + err.message);
+    }
   }
 
 

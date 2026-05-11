@@ -11,6 +11,7 @@ const router = express.Router();
 
 const { requireAuth, requireSuperAdmin } = require('../middleware/auth');
 const repo = require('../services/ai-developer/repository');
+const seeder = require('../services/ai-developer/seeder');
 const { prisma } = require('../config/database');
 
 // Všechny routy jen pro super admina
@@ -496,6 +497,51 @@ router.post('/approvals/:id/decide', async (req, res, next) => {
       },
     });
     res.json(updated);
+  } catch (err) { next(err); }
+});
+
+// ─── Seeder (AI navrhuje úkoly, Fáze 4) ───────────────────────────────────
+router.post('/seeder/propose', async (req, res, next) => {
+  try {
+    const lookbackDays = Math.max(1, Math.min(365, parseInt(req.body && req.body.lookback_days, 10) || 30));
+    const result = await seeder.propose({ lookbackDays });
+    res.json(result);
+  } catch (err) { next(err); }
+});
+
+router.post('/seeder/accept', async (req, res, next) => {
+  try {
+    const drafts = Array.isArray(req.body && req.body.drafts) ? req.body.drafts : [];
+    if (!drafts.length) return res.status(400).json({ error: 'drafts musí být ne-prázdné pole.' });
+    const created = [];
+    for (const d of drafts) {
+      const t = await prisma.adminTask.create({
+        data: {
+          page_title: String(d.page_title || '').slice(0, 200),
+          description: String(d.description || ''),
+          acceptance_criteria: String(d.acceptance_criteria || ''),
+          affected_module: d.affected_module || null,
+          change_type: d.change_type || null,
+          priority: ['low', 'medium', 'high'].includes(d.priority) ? d.priority : 'medium',
+          status: 'new',
+          created_by: req.user.id, // super-admin (seedery jsou vznesené přes UI)
+          ai_answers: { seeder_reason: d.seeder_reason || null, seeder_at: new Date().toISOString() },
+        },
+        select: { id: true, page_title: true },
+      });
+      created.push(t);
+    }
+    await prisma.auditLog.create({
+      data: {
+        user_name: req.user.username,
+        user_display: req.user.display_name || null,
+        action: 'create',
+        entity: 'admin_task',
+        description: `AI Vývojář — seeder vytvořil ${created.length} úkolů`,
+        changes: { task_ids: created.map((t) => t.id), titles: created.map((t) => t.page_title) },
+      },
+    });
+    res.status(201).json({ created });
   } catch (err) { next(err); }
 });
 
