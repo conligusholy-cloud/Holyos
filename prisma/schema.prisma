@@ -50,9 +50,10 @@ model User {
   orders_approved_user Order[] @relation("OrderApproverUser")
 
   // AI Vývojář — kdo upravil settings / vytvořil repo
-  agent_settings_updated AgentSettings[] @relation("AgentSettingsUpdater")
-  agent_repos_created    AgentRepo[]     @relation("AgentRepoCreator")
-  agent_rules_created    AgentRule[]     @relation("AgentRuleCreator")
+  agent_settings_updated  AgentSettings[]  @relation("AgentSettingsUpdater")
+  agent_repos_created     AgentRepo[]      @relation("AgentRepoCreator")
+  agent_rules_created     AgentRule[]      @relation("AgentRuleCreator")
+  agent_approvals_decided AgentApproval[]  @relation("AgentApprovalDecider")
 
   @@map("users")
 }
@@ -3765,9 +3766,10 @@ model AgentRun {
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
 
-  task   AdminTask       @relation("AdminTaskAgentRuns", fields: [task_id], references: [id], onDelete: Cascade)
-  repo   AgentRepo?      @relation(fields: [repo_id], references: [id], onDelete: SetNull)
-  events AgentRunEvent[]
+  task      AdminTask       @relation("AdminTaskAgentRuns", fields: [task_id], references: [id], onDelete: Cascade)
+  repo      AgentRepo?      @relation(fields: [repo_id], references: [id], onDelete: SetNull)
+  events    AgentRunEvent[]
+  approvals AgentApproval[]
 
   @@index([task_id])
   @@index([status])
@@ -3819,4 +3821,30 @@ model AgentRule {
 
   @@index([kind, scope, active])
   @@map("agent_rules")
+}
+
+// Schvalovací fronta — když agent narazí na akci spadající pod kind=requires_approval
+// rule, runner se zastaví na status='awaiting_approval' a vytvoří AgentApproval
+// (decision='pending'). Super-admin v UI klikne Schválit / Zamítnout; worker při
+// dalším poll cyklu run zvedne podle decision (approved → pokračuj, rejected →
+// status='escalated'). MVP této tabulky bez napojení na runner — auto-tvorba a
+// resume workflow přijdou v další session. Zatím lze přes UI ručně testovat
+// list/decide flow.
+model AgentApproval {
+  id           String    @id @default(uuid())
+  run_id       String
+  kind         String    @db.VarChar(30)  // plan_review | pr_review | rule_override
+  requested_at DateTime  @default(now())
+  decided_at   DateTime?
+  decided_by   Int?
+  decision     String    @default("pending") @db.VarChar(20)  // pending | approved | rejected | expired
+  comment      String?   @db.Text
+  payload      Json?     // strukturovaný kontext: plán, diff, rule violation, ...
+
+  run     AgentRun @relation(fields: [run_id], references: [id], onDelete: Cascade)
+  decider User?    @relation("AgentApprovalDecider", fields: [decided_by], references: [id], onDelete: SetNull)
+
+  @@index([run_id])
+  @@index([decision])
+  @@map("agent_approvals")
 }

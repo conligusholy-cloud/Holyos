@@ -267,6 +267,74 @@ function incrementRuleBlockedCount(ruleId) {
     .catch((e) => console.error('[ai-dev] incrementRuleBlockedCount:', e.message));
 }
 
+// ─── AgentApproval CRUD + decision ──────────────────────────────────────────
+
+async function listApprovals({ decision, runId, limit = 50 } = {}) {
+  const where = {};
+  if (decision) where.decision = decision;
+  if (runId) where.run_id = runId;
+  return prisma.agentApproval.findMany({
+    where,
+    orderBy: [{ decision: 'asc' }, { requested_at: 'desc' }],
+    take: Math.min(Math.max(parseInt(limit, 10) || 50, 1), 200),
+    include: {
+      run: {
+        select: {
+          id: true, task_id: true, status: true, branch: true,
+          task: { select: { id: true, page_title: true } },
+          repo: { select: { id: true, name: true } },
+        },
+      },
+      decider: { select: { id: true, username: true, display_name: true } },
+    },
+  });
+}
+
+async function getApproval(id) {
+  return prisma.agentApproval.findUnique({
+    where: { id },
+    include: {
+      run: {
+        select: {
+          id: true, task_id: true, status: true, branch: true, pr_url: true,
+          task: { select: { id: true, page_title: true, acceptance_criteria: true } },
+          repo: { select: { id: true, name: true, git_url: true } },
+        },
+      },
+      decider: { select: { id: true, username: true, display_name: true } },
+    },
+  });
+}
+
+async function createApproval({ runId, kind, payload }) {
+  return prisma.agentApproval.create({
+    data: {
+      run_id: runId,
+      kind,
+      payload: payload || null,
+      // decision default 'pending' z DB
+    },
+  });
+}
+
+// Schválit / zamítnout. decision musí být 'approved' nebo 'rejected'.
+// decidedBy = userId (super-admin), comment je volitelný.
+async function decideApproval(id, { decision, decidedBy, comment }) {
+  if (!['approved', 'rejected'].includes(decision)) {
+    throw new Error(`decideApproval: neplatný decision '${decision}' (smí jen approved|rejected)`);
+  }
+  return prisma.agentApproval.update({
+    where: { id },
+    data: {
+      decision,
+      decided_by: decidedBy,
+      decided_at: new Date(),
+      comment: comment || null,
+    },
+  });
+}
+
+
 
 // ─── Queue (úkoly připravené pro AI Vývojáře) ──────────────────────────────
 //
@@ -426,6 +494,11 @@ module.exports = {
   updateRule,
   deleteRule,
   incrementRuleBlockedCount,
+  // approvals
+  listApprovals,
+  getApproval,
+  createApproval,
+  decideApproval,
   // queue + counters
   listQueue,
   listAutoMergeCandidates,
