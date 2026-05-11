@@ -279,31 +279,106 @@
     var MONTHS_CS = ['Leden','Únor','Březen','Duben','Květen','Červen','Červenec','Srpen','Září','Říjen','Listopad','Prosinec'];
     var SLOT_W = 160; // šířka jednoho slotu v px
 
-    // ─── Konfigurace ─────────────────────────────────────────────────────────
-    var slotConfig = loadConfig();
+    // ─── Konfigurace (multi-scheme s časovou platností) ─────────────────────
+    // slotSchemes je pole z DB seřazené sestupně podle valid_from (nejnovější
+    // první). Pro každý kalendářní týden hledáme scheme, jehož valid_from ≤
+    // pondělí_týdne ≤ (valid_to NULL → ∞). Scheme má 1..N oken.
+    var slotSchemes = [];
 
-    function defaultConfig() {
-      return { startDay: 1, endDay: 5 }; // Po–Pá
-    }
-    function loadConfig() {
-      try {
-        var c = JSON.parse(localStorage.getItem('holyos_slot_config'));
-        return c && typeof c.startDay === 'number' ? c : defaultConfig();
-      } catch(e) { return defaultConfig(); }
-    }
-    function saveConfigData(cfg) {
-      slotConfig = cfg;
-      localStorage.setItem('holyos_slot_config', JSON.stringify(cfg));
+    function defaultWindows() {
+      return [{ start_day: 1, end_day: 5, sort_order: 0, name: null }]; // Po–Pá
     }
 
-    function getSlotDays() {
-      // Počet dní ve slotu (startDay → endDay)
-      var diff = (slotConfig.endDay - slotConfig.startDay + 7) % 7;
+    // ISO date YYYY-MM-DD z Date (lokální čas)
+    function toISODate(d) {
+      var dd = new Date(d);
+      return dd.getFullYear() + '-' + String(dd.getMonth()+1).padStart(2,'0') + '-' + String(dd.getDate()).padStart(2,'0');
+    }
+    function parseISODate(s) {
+      // Pozor: 'YYYY-MM-DD' parsované přes new Date() je UTC, dáme to do lokální půlnoci
+      if (s instanceof Date) return s;
+      var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(s));
+      if (!m) return new Date(s);
+      return new Date(parseInt(m[1]), parseInt(m[2])-1, parseInt(m[3]));
+    }
+
+    // Pondělí týdne, ve kterém leží dané datum (pondělí = den 1, neděle = 0)
+    function mondayOfWeek(date) {
+      var d = new Date(date);
+      d.setHours(0,0,0,0);
+      var diff = (d.getDay() + 6) % 7; // 0=Po, ..., 6=Ne
+      d.setDate(d.getDate() - diff);
+      return d;
+    }
+
+    // Najdi scheme, které platí pro daný den (typicky pondělí týdne)
+    function getSchemeFor(date) {
+      var ref = new Date(date); ref.setHours(0,0,0,0);
+      for (var i = 0; i < slotSchemes.length; i++) {
+        var s = slotSchemes[i];
+        var from = parseISODate(s.valid_from);
+        var to = s.valid_to ? parseISODate(s.valid_to) : null;
+        if (from <= ref && (to === null || ref <= to)) {
+          return s;
+        }
+      }
+      return null;
+    }
+
+    // Počet dní v okně (start_day → end_day, oba inclusive, přes víkend OK)
+    function windowDays(w) {
+      var diff = (w.end_day - w.start_day + 7) % 7;
       return diff === 0 ? 7 : diff + 1;
+    }
+
+    // Načti schémata z DB; při prvním spuštění (žádné v DB) udělej migraci
+    // z localStorage (nebo defaultu) — vytvoř první scheme s validitou "od dnes".
+    async function loadSchemes() {
+      try {
+        var res = await fetch('/api/slot-schemes', { headers: headers, credentials: 'include' });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        slotSchemes = await res.json();
+        if (!Array.isArray(slotSchemes)) slotSchemes = [];
+      } catch(e) { console.error('Load schemes failed:', e); slotSchemes = []; }
+
+      if (slotSchemes.length === 0) {
+        // Migrace ze starého localStorage configu (nebo default Po–Pá)
+        var legacy = null;
+        try {
+          legacy = JSON.parse(localStorage.getItem('holyos_slot_config'));
+        } catch(e) {}
+        var windows = (legacy && typeof legacy.startDay === 'number')
+          ? [{ start_day: legacy.startDay, end_day: legacy.endDay, sort_order: 0, name: null }]
+          : defaultWindows();
+
+        // valid_from = pondělí aktuálního týdne (ať nevznikne mezera v minulosti)
+        var monday = mondayOfWeek(new Date());
+        // …raději ale táhneme zpátky o pár měsíců, aby měla i historie z minulých
+        // týdnů co kreslit. Použijeme 2 roky zpět, ať to pokryje vše co render dělá.
+        var farPast = new Date(monday);
+        farPast.setFullYear(farPast.getFullYear() - 2);
+
+        try {
+          var post = await fetch('/api/slot-schemes', {
+            method: 'POST', headers: headers, credentials: 'include',
+            body: JSON.stringify({
+              valid_from: toISODate(farPast),
+              note: 'Migrace z localStorage',
+              windows: windows,
+            }),
+          });
+          if (post.ok) {
+            var created = await post.json();
+            slotSchemes = [created];
+            try { localStorage.removeItem('holyos_slot_config'); } catch(e) {}
+          }
+        } catch(e) { console.error('Seed scheme failed:', e); }
+      }
     }
 
     // ─── Inicializace ────────────────────────────────────────────────────────
     (async function init() {
+      await loadSchemes();
       renderSettingsInfo();
       await loadAllSlots();
       render();
@@ -341,37 +416,64 @@
 
     function renderSettingsInfo() {
       var el = document.getElementById('settings-info');
-      el.innerHTML = '<div class="settings-badge">' +
-        'Slot: <strong>' + DAYS_CS[slotConfig.startDay] + ' – ' + DAYS_CS[slotConfig.endDay] + '</strong> (' + getSlotDays() + ' dní)' +
-        '</div>';
+      var now = new Date(); now.setHours(0,0,0,0);
+      var current = getSchemeFor(now);
+      if (!current) {
+        el.innerHTML = '<div class="settings-badge" style="background:rgba(239,68,68,0.15);color:#ef4444;">Žádné aktivní schéma — otevři Nastavení slotů</div>';
+        return;
+      }
+      var wins = (current.windows || []).slice().sort(function(a,b){ return (a.sort_order||0) - (b.sort_order||0); });
+      var parts = wins.map(function(w) {
+        return '<strong>' + DAYS_CS[w.start_day] + '–' + DAYS_CS[w.end_day] + '</strong> (' + windowDays(w) + ' dní)';
+      });
+      var label = wins.length === 1 ? 'Slot: ' : ('Sloty (' + wins.length + '/týden): ');
+      var validToTxt = current.valid_to ? (' · platí do ' + new Date(current.valid_to).toLocaleDateString('cs-CZ')) : '';
+      el.innerHTML = '<div class="settings-badge">' + label + parts.join(' &nbsp;|&nbsp; ') + validToTxt + '</div>';
     }
 
     // ─── Generování slotových oken (2 roky) ──────────────────────────────────
+    // Iterujeme po týdnech (pondělí → pondělí). Pro každý týden najdeme aktivní
+    // scheme; pokud žádné neplatí, týden přeskočíme (mezera v kalendáři). Když
+    // má scheme více oken, generujeme JEDEN slot na okno (= víc sloupců/týden).
     function getStartDate() {
-      var d = new Date();
-      // 8 týdnů zpátky
-      d.setDate(d.getDate() - 56);
-      // Najdi nejbližší startDay
-      var diff = (d.getDay() - slotConfig.startDay + 7) % 7;
-      d.setDate(d.getDate() - diff);
-      d.setHours(0,0,0,0);
-      return d;
+      // 8 týdnů zpátky od pondělí aktuálního týdne
+      var monday = mondayOfWeek(new Date());
+      monday.setDate(monday.getDate() - 56);
+      return monday;
     }
 
     function generateSlotWindows() {
       var windows = [];
-      var start = getStartDate();
-      var end = new Date(start);
-      end.setFullYear(end.getFullYear() + 2);
-      var d = new Date(start);
-      var slotDays = getSlotDays();
+      var startMonday = getStartDate();
+      var endLimit = new Date(startMonday);
+      endLimit.setFullYear(endLimit.getFullYear() + 2);
 
-      while (d < end) {
-        var slotStart = new Date(d);
-        var slotEnd = new Date(d);
-        slotEnd.setDate(slotEnd.getDate() + slotDays - 1);
-        windows.push({ start: new Date(slotStart), end: new Date(slotEnd) });
-        d.setDate(d.getDate() + 7); // vždy po týdnu
+      var weekMonday = new Date(startMonday);
+      while (weekMonday < endLimit) {
+        var scheme = getSchemeFor(weekMonday);
+        if (scheme && scheme.windows && scheme.windows.length) {
+          var wins = scheme.windows.slice().sort(function(a,b){ return (a.sort_order||0) - (b.sort_order||0); });
+          for (var k = 0; k < wins.length; k++) {
+            var w = wins[k];
+            // start_day/end_day 0..6 (0=neděle); pondělí týdne je den 1
+            // Den v týdnu vzhledem k pondělí: (day - 1 + 7) % 7 (Po=0, Ne=6)
+            var startOffset = (w.start_day - 1 + 7) % 7;
+            var slotStart = new Date(weekMonday);
+            slotStart.setDate(slotStart.getDate() + startOffset);
+            var slotEnd = new Date(slotStart);
+            slotEnd.setDate(slotEnd.getDate() + windowDays(w) - 1);
+            windows.push({
+              start: slotStart,
+              end: slotEnd,
+              scheme_id: scheme.id,
+              window_name: w.name || null,
+              window_index: k,
+              window_count: wins.length,
+            });
+          }
+        }
+        weekMonday = new Date(weekMonday);
+        weekMonday.setDate(weekMonday.getDate() + 7);
       }
       return windows;
     }
@@ -745,53 +847,212 @@
       render();
     }
 
-    // ─── Nastavení ───────────────────────────────────────────────────────────
+    // ─── Nastavení (multi-scheme) ────────────────────────────────────────────
+    //
+    // UI ukazuje seznam všech schémat (časových řezů); každé schéma má pole
+    // oken. Tlačítkem „+ Nové schéma od …" se vytvoří nový řez (předchozí
+    // se na backendu automaticky uzavře dnem před novým valid_from).
+    // Edit + Smazat funguje per řádek.
+
     function openSettingsModal() {
-      var cfg = slotConfig;
-      var startHtml = '';
-      var endHtml = '';
-      for (var i = 0; i < 7; i++) {
-        startHtml += '<div class="day-chip' + (cfg.startDay === i ? ' active' : '') + '" data-day="' + i + '" onclick="pickDay(this,\'start\')">' + DAYS_FULL[i] + '</div>';
-        endHtml += '<div class="day-chip' + (cfg.endDay === i ? ' active' : '') + '" data-day="' + i + '" onclick="pickDay(this,\'end\')">' + DAYS_FULL[i] + '</div>';
-      }
+      var rows = slotSchemes.slice().sort(function(a,b){
+        return parseISODate(b.valid_from) - parseISODate(a.valid_from);
+      });
+      var rowsHtml = rows.length ? rows.map(renderSchemeRow).join('') :
+        '<div style="color:var(--text2);font-size:13px;padding:12px;text-align:center;">Žádné schéma. Přidej první přes tlačítko níže.</div>';
 
       document.getElementById('modal-root').innerHTML =
-        '<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal">' +
-        '<h2>&#9881; Nastavení výrobních slotů</h2>' +
-        '<p style="font-size:13px;color:var(--text2);margin:0 0 16px;">Nastavte v jaké dny v týdnu výrobní slot začíná a končí. Slot představuje jedno výrobní okno — obchod podle něj slibuje termíny dodání zákazníkům.</p>' +
-        '<form onsubmit="saveSettings(event)">' +
-          '<div class="form-group"><label>Slot začíná v den</label>' +
-          '<div class="day-picker" id="picker-start">' + startHtml + '</div>' +
-          '<input type="hidden" id="cfg-start-day" value="' + cfg.startDay + '">' +
+        '<div class="modal-overlay" onclick="if(event.target===this)closeModal()">' +
+          '<div class="modal" style="max-width:760px;">' +
+            '<h2>&#9881; Nastavení výrobních slotů</h2>' +
+            '<p style="font-size:13px;color:var(--text2);margin:0 0 14px;">' +
+              'Týdenní vzorec slotů s časovou platností. Můžeš mít víc oken v týdnu ' +
+              '(např. <em>Po–St</em> + <em>St–Pá</em> = 2 sloty/týden) a od určitého data ' +
+              'pravidlo změnit, aniž bys ztratil historii. Předchozí schéma se automaticky ' +
+              'uzavře den před začátkem nového.' +
+            '</p>' +
+            '<div id="schemes-list">' + rowsHtml + '</div>' +
+            '<div style="margin-top:14px;display:flex;gap:8px;">' +
+              '<button class="btn btn-primary" onclick="openSchemeEditor(null)">+ Nové schéma od …</button>' +
+              '<div style="flex:1;"></div>' +
+              '<button class="btn btn-secondary" onclick="closeModal()">Zavřít</button>' +
+            '</div>' +
           '</div>' +
-          '<div class="form-group"><label>Slot končí v den (= termín dodání zákazníkovi)</label>' +
-          '<div class="day-picker" id="picker-end">' + endHtml + '</div>' +
-          '<input type="hidden" id="cfg-end-day" value="' + cfg.endDay + '">' +
-          '</div>' +
-          '<div class="modal-actions">' +
-            '<button type="button" class="btn btn-secondary" onclick="closeModal()">Zrušit</button>' +
-            '<button type="submit" class="btn btn-primary">Uložit nastavení</button>' +
-          '</div>' +
-        '</form>' +
-        '</div></div>';
+        '</div>';
     }
 
-    function pickDay(el, type) {
-      el.parentElement.querySelectorAll('.day-chip').forEach(function(c) { c.classList.remove('active'); });
-      el.classList.add('active');
-      document.getElementById('cfg-' + type + '-day').value = el.getAttribute('data-day');
+    function renderSchemeRow(s) {
+      var from = new Date(s.valid_from).toLocaleDateString('cs-CZ');
+      var to = s.valid_to ? new Date(s.valid_to).toLocaleDateString('cs-CZ') : '<em style="color:#22c55e;">platí dosud</em>';
+      var wins = (s.windows || []).slice().sort(function(a,b){ return (a.sort_order||0) - (b.sort_order||0); });
+      var winsHtml = wins.map(function(w) {
+        var nm = w.name ? esc(w.name) + ': ' : '';
+        return '<span class="settings-badge" style="margin-right:6px;">' + nm + DAYS_CS[w.start_day] + '–' + DAYS_CS[w.end_day] + ' (' + windowDays(w) + ' dní)</span>';
+      }).join('');
+      return '<div style="border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:8px;background:var(--bg);">' +
+        '<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">' +
+          '<div style="font-weight:600;">📅 Od ' + from + ' do ' + to + '</div>' +
+          '<div style="flex:1;"></div>' +
+          '<button class="btn btn-secondary" style="padding:4px 10px;font-size:11px;" onclick="openSchemeEditor(' + s.id + ')">✏️ Upravit</button>' +
+          '<button class="btn btn-secondary" style="padding:4px 10px;font-size:11px;background:rgba(239,68,68,0.1);color:#ef4444;border-color:rgba(239,68,68,0.3);" onclick="deleteScheme(' + s.id + ')">🗑️ Smazat</button>' +
+        '</div>' +
+        (s.note ? '<div style="font-size:11px;color:var(--text2);margin-bottom:6px;">' + esc(s.note) + '</div>' : '') +
+        '<div>' + winsHtml + '</div>' +
+      '</div>';
     }
 
-    function saveSettings(e) {
-      e.preventDefault();
-      saveConfigData({
-        startDay: parseInt(document.getElementById('cfg-start-day').value),
-        endDay: parseInt(document.getElementById('cfg-end-day').value)
-      });
-      closeModal();
-      renderSettingsInfo();
-      render();
-      scrollToToday();
+    // ─── Editor jednoho schématu (vytvořit / upravit) ───────────────────────
+    var _editorState = { id: null, valid_from: null, valid_to: null, note: '', windows: [] };
+
+    function openSchemeEditor(id) {
+      var existing = id ? slotSchemes.find(function(s){ return s.id === id; }) : null;
+      if (existing) {
+        _editorState = {
+          id: existing.id,
+          valid_from: toISODate(parseISODate(existing.valid_from)),
+          valid_to: existing.valid_to ? toISODate(parseISODate(existing.valid_to)) : '',
+          note: existing.note || '',
+          windows: (existing.windows || []).slice().sort(function(a,b){ return (a.sort_order||0) - (b.sort_order||0); })
+            .map(function(w){ return { start_day: w.start_day, end_day: w.end_day, name: w.name || '' }; }),
+        };
+      } else {
+        var nextMon = mondayOfWeek(new Date());
+        nextMon.setDate(nextMon.getDate() + 7);
+        _editorState = {
+          id: null,
+          valid_from: toISODate(nextMon),
+          valid_to: '',
+          note: '',
+          windows: [{ start_day: 1, end_day: 5, name: '' }],
+        };
+      }
+      renderSchemeEditor();
+    }
+
+    function renderSchemeEditor() {
+      var st = _editorState;
+      var winsHtml = st.windows.map(function(w, idx){ return renderWindowEditor(w, idx); }).join('');
+      var title = st.id ? '✏️ Upravit schéma' : '✚ Nové schéma';
+      document.getElementById('modal-root').innerHTML =
+        '<div class="modal-overlay" onclick="if(event.target===this)closeModal()">' +
+          '<div class="modal" style="max-width:760px;">' +
+            '<h2>' + title + '</h2>' +
+            '<div class="form-row">' +
+              '<div class="form-group"><label>Platí od</label>' +
+                '<input type="date" id="ed-valid-from" value="' + esc(st.valid_from) + '">' +
+                '<div style="font-size:11px;color:var(--text2);margin-top:4px;">Při uložení nového schématu se předchozí ' +
+                'aktuální schéma automaticky uzavře dnem před tímto datem.</div>' +
+              '</div>' +
+              '<div class="form-group"><label>Platí do (nepovinné)</label>' +
+                '<input type="date" id="ed-valid-to" value="' + esc(st.valid_to) + '">' +
+                '<div style="font-size:11px;color:var(--text2);margin-top:4px;">Nech prázdné = platí dosud.</div>' +
+              '</div>' +
+            '</div>' +
+            '<div class="form-group"><label>Poznámka</label>' +
+              '<input type="text" id="ed-note" value="' + esc(st.note) + '" placeholder="např. „od září 2026 dva sloty/týden"">' +
+            '</div>' +
+            '<div style="margin:14px 0 8px;font-size:13px;font-weight:600;color:var(--text);">Okna v týdnu (' + st.windows.length + ')</div>' +
+            '<div id="windows-list">' + winsHtml + '</div>' +
+            '<button type="button" class="btn btn-secondary" onclick="addWindow()" style="margin-top:8px;">+ Přidat okno</button>' +
+            '<div class="modal-actions">' +
+              '<button type="button" class="btn btn-secondary" onclick="openSettingsModal()">← Zpět</button>' +
+              '<button type="button" class="btn btn-primary" onclick="saveScheme()">Uložit</button>' +
+            '</div>' +
+          '</div>' +
+        '</div>';
+    }
+
+    function renderWindowEditor(w, idx) {
+      var startChips = '', endChips = '';
+      for (var i = 0; i < 7; i++) {
+        startChips += '<div class="day-chip' + (w.start_day === i ? ' active' : '') + '" onclick="setWindowDay(' + idx + ',\'start\',' + i + ')">' + DAYS_CS[i] + '</div>';
+        endChips += '<div class="day-chip' + (w.end_day === i ? ' active' : '') + '" onclick="setWindowDay(' + idx + ',\'end\',' + i + ')">' + DAYS_CS[i] + '</div>';
+      }
+      var canRemove = _editorState.windows.length > 1;
+      return '<div style="border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px;background:var(--bg);">' +
+        '<div style="display:flex;gap:10px;align-items:center;margin-bottom:8px;">' +
+          '<div style="font-size:12px;font-weight:600;color:var(--text);">Slot ' + (idx+1) + '</div>' +
+          '<input type="text" placeholder="Název (nepovinné)" value="' + esc(w.name || '') + '" oninput="setWindowName(' + idx + ', this.value)" style="flex:1;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:12px;color:var(--text);">' +
+          (canRemove ? '<button type="button" onclick="removeWindow(' + idx + ')" style="background:rgba(239,68,68,0.1);color:#ef4444;border:1px solid rgba(239,68,68,0.3);border-radius:6px;padding:4px 10px;cursor:pointer;font-size:11px;">✖ Odebrat</button>' : '') +
+        '</div>' +
+        '<div style="font-size:11px;color:var(--text2);margin-bottom:4px;">Začíná v den</div>' +
+        '<div class="day-picker" style="margin-bottom:8px;">' + startChips + '</div>' +
+        '<div style="font-size:11px;color:var(--text2);margin-bottom:4px;">Končí v den (= termín dodání)</div>' +
+        '<div class="day-picker">' + endChips + '</div>' +
+      '</div>';
+    }
+
+    function setWindowDay(idx, type, day) {
+      var w = _editorState.windows[idx];
+      if (!w) return;
+      if (type === 'start') w.start_day = day; else w.end_day = day;
+      renderSchemeEditor();
+    }
+    function setWindowName(idx, name) {
+      var w = _editorState.windows[idx];
+      if (w) w.name = name;
+    }
+    function addWindow() {
+      _editorState.windows.push({ start_day: 1, end_day: 5, name: '' });
+      renderSchemeEditor();
+    }
+    function removeWindow(idx) {
+      if (_editorState.windows.length <= 1) return;
+      _editorState.windows.splice(idx, 1);
+      renderSchemeEditor();
+    }
+
+    async function saveScheme() {
+      var fromEl = document.getElementById('ed-valid-from');
+      var toEl = document.getElementById('ed-valid-to');
+      var noteEl = document.getElementById('ed-note');
+      var validFrom = fromEl ? fromEl.value : '';
+      var validTo = toEl ? toEl.value : '';
+      var note = noteEl ? noteEl.value : '';
+      if (!validFrom) { alert('Vyplň datum „Platí od".'); return; }
+      if (!_editorState.windows.length) { alert('Musí být aspoň jedno okno.'); return; }
+
+      var payload = {
+        valid_from: validFrom,
+        valid_to: validTo || null,
+        note: note || null,
+        windows: _editorState.windows.map(function(w, i){
+          return { start_day: w.start_day, end_day: w.end_day, sort_order: i, name: (w.name || '').trim() || null };
+        }),
+      };
+
+      try {
+        var url = _editorState.id ? '/api/slot-schemes/' + _editorState.id : '/api/slot-schemes';
+        var method = _editorState.id ? 'PUT' : 'POST';
+        var res = await fetch(url, {
+          method: method, headers: headers, credentials: 'include',
+          body: JSON.stringify(payload),
+        });
+        if (!res.ok) {
+          var err = await res.json().catch(function(){ return {}; });
+          alert('Uložení selhalo: ' + (err.error || ('HTTP ' + res.status)));
+          return;
+        }
+        await loadSchemes();
+        closeModal();
+        renderSettingsInfo();
+        render();
+        scrollToToday();
+      } catch(e) {
+        alert('Chyba: ' + e.message);
+      }
+    }
+
+    async function deleteScheme(id) {
+      if (!confirm('Opravdu smazat toto schéma? Pokud to bylo aktuálně platné schéma, žádné okno se v jeho intervalu nebude renderovat.')) return;
+      try {
+        var res = await fetch('/api/slot-schemes/' + id, { method: 'DELETE', headers: headers, credentials: 'include' });
+        if (!res.ok) { alert('Smazání selhalo (HTTP ' + res.status + ')'); return; }
+        await loadSchemes();
+        openSettingsModal();
+        renderSettingsInfo();
+        render();
+      } catch(e) { alert('Chyba: ' + e.message); }
     }
 
     // ─── Helpers ──────────────────────────────────────────────────────────────

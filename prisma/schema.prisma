@@ -32,7 +32,9 @@ model User {
   // Vztahy
   person      Person?     @relation("UserPerson")
   sessions    Session[]
-  admin_tasks AdminTask[] @relation("AdminTaskCreator")
+  admin_tasks          AdminTask[] @relation("AdminTaskCreator")
+  admin_tasks_assigned AdminTask[] @relation("AdminTaskAssignee")
+  slot_schemes_created SlotScheme[] @relation("SlotSchemeCreator")
 
   // Messaging (user-to-user chat, oddělený od AI Conversation)
   chat_memberships ChatChannelMember[]
@@ -949,6 +951,12 @@ model AdminTask {
   screenshot   String? @db.Text // base64
   created_by   Int?
 
+  // Kdo na úkolu aktuálně pracuje (manuálně přiřazený řešitel nebo auto-claim
+  // při změně status → in_progress). Pro AI úkoly (assignable_to_ai=true) má
+  // přednost AgentRun.status — viz routes/admin-tasks.routes.js (active_run).
+  assigned_to Int?
+  assigned_at DateTime?
+
   // Soft delete — požadavek se přesune do "Koše" místo fyzického smazání.
   // Autor / admin ho může obnovit nebo trvale smazat.
   deleted_at DateTime?
@@ -973,15 +981,66 @@ model AdminTask {
 
   // Vztahy
   creator     User?      @relation("AdminTaskCreator", fields: [created_by], references: [id], onDelete: SetNull)
+  assignee    User?      @relation("AdminTaskAssignee", fields: [assigned_to], references: [id], onDelete: SetNull)
   target_repo AgentRepo? @relation(fields: [target_repo_id], references: [id], onDelete: SetNull)
   agent_runs  AgentRun[] @relation("AdminTaskAgentRuns")
 
   @@index([created_by])
+  @@index([assigned_to])
   @@index([status])
   @@index([deleted_at])
   @@index([assignable_to_ai])
   @@index([target_repo_id])
   @@map("admin_tasks")
+}
+
+// =============================================================================
+// VÝROBNÍ SLOTY — týdenní vzorec (kolik a jakých slotů je v týdnu)
+// =============================================================================
+// Aby šlo říct „od 1.9.2026 chci mít místo jednoho slotu (Po–Pá) dva sloty/týden
+// (Po–St a St–Pá)", konfigurace už není 1 řádek v localStorage, ale databázový
+// časový řez (sada SlotScheme). Pro každý kalendářní týden se najde aktivní
+// SlotScheme (kde valid_from ≤ pondělí_týdne ≤ valid_to nebo valid_to IS NULL)
+// a vykreslí všechna jeho okna (SlotSchemeWindow).
+model SlotScheme {
+  id          Int       @id @default(autoincrement())
+  // Datum, od kterého schéma platí. Backend normalizuje na pondělí daného týdne.
+  valid_from  DateTime  @db.Date
+  // Datum, dokdy schéma platí. NULL = aktuální (open-ended).
+  // Při vytvoření nového schématu se předchozí (které mělo valid_to NULL)
+  // automaticky uzavře na den - 1 před novým valid_from.
+  valid_to    DateTime? @db.Date
+  // Volitelný popisek pro UI ("zimní rozvrh", "od září 2026", …)
+  note        String?   @db.VarChar(255)
+  created_by  Int?
+  created_at  DateTime  @default(now())
+  updated_at  DateTime  @updatedAt
+
+  windows SlotSchemeWindow[]
+  creator User?              @relation("SlotSchemeCreator", fields: [created_by], references: [id], onDelete: SetNull)
+
+  @@index([valid_from])
+  @@index([valid_to])
+  @@map("slot_schemes")
+}
+
+// Jedno výrobní okno v rámci týdenního schématu. SlotScheme může mít 1..N oken.
+// start_day/end_day jsou 0..6 (0=neděle, 1=pondělí, ..., 6=sobota) — stejná
+// konvence jako JavaScript Date.getDay() (a původní frontend ve vyrobni-sloty).
+model SlotSchemeWindow {
+  id         Int     @id @default(autoincrement())
+  scheme_id  Int
+  start_day  Int     // 0..6
+  end_day    Int     // 0..6, pokud < start_day, okno přechází přes víkend
+  // Pořadí pro stabilní vykreslení (1. slot, 2. slot, …) v rámci týdne
+  sort_order Int     @default(0)
+  // Volitelný název ("Slot A", "Expres", …) — pro UI rozlišení v kalendáři
+  name       String? @db.VarChar(50)
+
+  scheme SlotScheme @relation(fields: [scheme_id], references: [id], onDelete: Cascade)
+
+  @@index([scheme_id])
+  @@map("slot_scheme_windows")
 }
 
 model AuditLog {
