@@ -8,15 +8,18 @@ const router = express.Router();
 const { prisma } = require('../config/database');
 const { requireAuth } = require('../middleware/auth');
 const { createNotification } = require('./notifications.routes');
-const { getBlockingRunForTask } = require('../services/ai-developer/repository');
+const { getBlockingRunForTask, RUNNING_STATUSES } = require('../services/ai-developer/repository');
 const acChat = require('../services/ai-developer/ac-chat');
 const suitability = require('../services/ai-developer/suitability');
 
 router.use(requireAuth);
 
-// Společný include pro vracené záznamy (autor požadavku)
+// Společný include pro vracené záznamy (autor požadavku + řešitel)
 const TASK_INCLUDE = {
   creator: {
+    select: { id: true, username: true, display_name: true }
+  },
+  assignee: {
     select: { id: true, username: true, display_name: true }
   }
 };
@@ -124,8 +127,10 @@ router.get('/', async (req, res, next) => {
         change_type: true, autonomy_override: true,
         ai_suitability_score: true, ai_suitability_reasoning: true,
         created_by: true, deleted_at: true,
+        assigned_to: true, assigned_at: true,
         created_at: true, updated_at: true,
         creator: { select: { id: true, username: true, display_name: true } },
+        assignee: { select: { id: true, username: true, display_name: true } },
       },
     });
 
@@ -138,6 +143,33 @@ router.get('/', async (req, res, next) => {
       `;
       const ssSet = new Set(idsWithScreenshot.map(r => r.id));
       tasks.forEach(t => { t.has_screenshot = ssSet.has(t.id); });
+
+      // Active AI runs (RUNNING_STATUSES + pr_open) pro tasky s assignable_to_ai.
+      // Bereme jen nejnovější per task — info ukazujeme jako badge „🤖 coding"
+      // vedle assignee. Reuse logiky z getBlockingRunForTask, ale dávkově pro list.
+      const aiTaskIds = tasks.filter(t => t.assignable_to_ai).map(t => t.id);
+      if (aiTaskIds.length) {
+        const runs = await prisma.agentRun.findMany({
+          where: {
+            task_id: { in: aiTaskIds },
+            status: { in: [...RUNNING_STATUSES, 'pr_open'] },
+          },
+          orderBy: { started_at: 'desc' },
+          select: {
+            id: true, task_id: true, status: true,
+            started_at: true, pr_url: true,
+            repo: { select: { id: true, name: true } },
+          },
+        });
+        // Nejnovější per task_id (sortováno desc, takže first wins)
+        const runByTask = new Map();
+        for (const r of runs) {
+          if (!runByTask.has(r.task_id)) runByTask.set(r.task_id, r);
+        }
+        tasks.forEach(t => {
+          t.active_run = runByTask.get(t.id) || null;
+        });
+      }
     }
 
     res.json(tasks);
@@ -271,6 +303,45 @@ router.post('/:id/evaluate-suitability', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// POST /api/admin-tasks/:id/claim — řešitel přebírá úkol (musí být PŘED PUT /:id)
+// Klidně přepíše stávajícího řešitele — UI by se mělo zeptat, ale backend nevadí.
+// Pokud je task ve stavu 'new', posune ho na 'in_progress' automaticky.
+router.post('/:id/claim', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ error: 'Neplatné ID' });
+    const existing = await prisma.adminTask.findUnique({
+      where: { id }, select: { id: true, status: true },
+    });
+    if (!existing) return res.status(404).json({ error: 'Úkol nenalezen' });
+
+    const data = {
+      assigned_to: req.user.id,
+      assigned_at: new Date(),
+    };
+    if (existing.status === 'new') data.status = 'in_progress';
+
+    const task = await prisma.adminTask.update({
+      where: { id }, data, include: TASK_INCLUDE,
+    });
+    res.json(task);
+  } catch (err) { next(err); }
+});
+
+// POST /api/admin-tasks/:id/unclaim — uvolnit (vynulovat assignee)
+router.post('/:id/unclaim', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ error: 'Neplatné ID' });
+    const task = await prisma.adminTask.update({
+      where: { id },
+      data: { assigned_to: null, assigned_at: null },
+      include: TASK_INCLUDE,
+    });
+    res.json(task);
+  } catch (err) { next(err); }
+});
+
 // PUT /api/tasks/:id
 router.put('/:id', async (req, res, next) => {
   try {
@@ -279,6 +350,7 @@ router.put('/:id', async (req, res, next) => {
       where: { id },
       select: {
         id: true, status: true, created_by: true, page_title: true, page: true, description: true,
+        assigned_to: true,
         // Pro reassign-blocker check (target_repo_id změna na úkolu, co už je v AI):
         assignable_to_ai: true, target_repo_id: true,
       },
@@ -311,9 +383,29 @@ router.put('/:id', async (req, res, next) => {
       }
     }
 
+    // Auto-claim při přechodu na in_progress (pokud nikdo jiný už nepracuje)
+    // a auto-release při done/cancelled. Klient může explicitně poslat
+    // `assigned_to` v body a tím auto-logiku přebít.
+    const patch = { ...req.body };
+    const sendsAssignedTo = Object.prototype.hasOwnProperty.call(req.body, 'assigned_to');
+    if (!sendsAssignedTo && previous && req.body && req.body.status) {
+      const newStatus = req.body.status;
+      if (newStatus === 'in_progress' && previous.status !== 'in_progress' && !previous.assigned_to) {
+        patch.assigned_to = req.user.id;
+        patch.assigned_at = new Date();
+      } else if ((newStatus === 'done' || newStatus === 'cancelled') && previous.assigned_to) {
+        patch.assigned_to = null;
+        patch.assigned_at = null;
+      }
+    }
+    if (sendsAssignedTo) {
+      // Pokud klient explicitně mění assignee, dorovnej i assigned_at
+      patch.assigned_at = req.body.assigned_to ? new Date() : null;
+    }
+
     const task = await prisma.adminTask.update({
       where: { id },
-      data: req.body,
+      data: patch,
       include: TASK_INCLUDE,
     });
 

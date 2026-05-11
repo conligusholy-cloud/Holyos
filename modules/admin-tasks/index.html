@@ -67,6 +67,15 @@
     .task-page-badge { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 10px; background: rgba(108,92,231,0.1); color: #a78bfa; }
     .task-time { font-size: 11px; color: var(--text2); }
     .task-user { font-size: 11px; color: var(--text2); }
+    /* Řešitel — kdo na úkolu právě pracuje */
+    .task-assignee {
+      display: inline-flex; align-items: center; gap: 4px;
+      font-size: 11px; padding: 2px 8px; border-radius: 10px;
+      background: rgba(59,130,246,0.12); color: #60a5fa;
+      border: 1px solid rgba(59,130,246,0.3); font-weight: 600;
+    }
+    .task-assignee.unassigned { background: rgba(156,163,175,0.1); color: var(--text2); border-color: var(--border); font-weight: 500; font-style: italic; }
+    .task-assignee.ai { background: rgba(14,165,233,0.12); color: #38bdf8; border-color: rgba(14,165,233,0.35); }
 
     .task-desc { font-size: 13px; color: var(--text); line-height: 1.5; white-space: pre-line; margin-bottom: 10px; }
     .task-screenshot { border-radius: 8px; overflow: hidden; border: 1px solid var(--border); max-width: 300px; margin-bottom: 10px; cursor: pointer; }
@@ -244,8 +253,9 @@
           </div>
           <div class="task-meta">
             ${isTrashed ? '<span class="task-badge deleted">🗑️ V koši</span>' : ''}
-            ${t.assignable_to_ai ? '<span class="task-badge" style="background:rgba(14,165,233,0.15);color:#0ea5e9;">🤖 AI Vývojář</span>' : ''}
+            ${(t.assignable_to_ai && !t.active_run) ? '<span class="task-badge" style="background:rgba(14,165,233,0.15);color:#0ea5e9;">🤖 AI Vývojář</span>' : ''}
             ${renderSuitabilityBadge(t)}
+            ${renderAssigneeBadge(t)}
             <span class="task-page-badge">📍 ${t.page_title || t.page}</span>
             <span class="task-time">🕐 ${time}</span>
             <span class="task-user" title="${escapeHtml(userTitle)}">👤 ${escapeHtml(user)}</span>
@@ -311,10 +321,20 @@
           const evalBtn = (t.ai_suitability_score === null || t.ai_suitability_score === undefined)
             ? `<button class="task-btn" onclick="evaluateSuitability(${t.id})" title="AI Vývojář vyhodnotí, jak vhodný je úkol pro autonomní zpracování" style="background:rgba(249,115,22,0.12);color:#f97316;">✨ Vyhodnotit pro AI</button>`
             : '';
+          // Vzít si / Uvolnit — viditelnost kdo úkol řeší. Pokud běží AI run,
+          // dáváme přednost zobrazení AI stavu a tlačítko Vzít si schováme,
+          // ať si někdo nezačne shazovat AI běh.
+          const myId = currentUserId();
+          const claimBtn = (!t.active_run && (!t.assigned_to || t.assigned_to === myId))
+            ? (t.assigned_to === myId
+                ? `<button class="task-btn" onclick="unclaimTask(${t.id})" title="Uvolnit — někdo jiný to může převzít" style="background:rgba(156,163,175,0.15);color:#9ca3af;border-color:rgba(156,163,175,0.3);">🙅 Uvolnit</button>`
+                : `<button class="task-btn" onclick="claimTask(${t.id})" title="Převzít úkol — bude vidět že na něm pracuješ" style="background:rgba(59,130,246,0.15);color:#60a5fa;border-color:rgba(59,130,246,0.3);">🙋 Vzít si</button>`)
+            : '';
           actionButtons = `
             ${aiBtn}
             ${acChatBtn}
             ${evalBtn}
+            ${claimBtn}
             <button class="task-btn task-btn-deploy" onclick="deployTask(${t.id})">🚀 Nasadit s Claude</button>
             <button class="task-btn task-btn-status" onclick="cycleStatus(${t.id})">📌 Změnit stav</button>
             <button class="task-btn task-btn-thread" onclick="openTaskThread(${t.id})">💬 Diskuze</button>
@@ -929,6 +949,59 @@
       }
     }
 
+    // ─── Řešitel (assignee) — kdo na úkolu právě pracuje ───────────────────
+    function renderAssigneeBadge(t) {
+      // Mapování stavů AI runu na lidsky čitelný štítek
+      const aiLabelMap = {
+        queued: 'Ve frontě', triaging: 'Triage', awaiting_clarification: 'Čeká na doplnění',
+        planning: 'Plán', awaiting_approval: 'Schválit plán',
+        coding: 'Píše kód', testing: 'Testuje',
+        pr_open: 'PR otevřen', merged: 'Mergnuto', completed: 'Hotovo',
+        failed: 'Chyba', cancelled: 'Zrušeno', escalated: 'Eskalováno',
+      };
+      // Aktivní AI run má přednost před lidským řešitelem
+      if (t.active_run) {
+        const r = t.active_run;
+        const lbl = aiLabelMap[r.status] || r.status;
+        const repo = (r.repo && r.repo.name) ? ' · ' + r.repo.name : '';
+        const title = 'AI Vývojář — run ' + r.id + ' (' + r.status + ')' + repo;
+        return '<span class="task-assignee ai" title="' + escapeHtml(title) + '">🤖 ' + escapeHtml(lbl) + (r.pr_url ? ' · 🔗 PR' : '') + '</span>';
+      }
+      // Lidský řešitel
+      if (t.assignee) {
+        const name = t.assignee.display_name || t.assignee.username;
+        const since = t.assigned_at ? new Date(t.assigned_at).toLocaleString('cs-CZ') : '';
+        const title = 'Pracuje: ' + name + (since ? ' (od ' + since + ')' : '');
+        return '<span class="task-assignee" title="' + escapeHtml(title) + '">👷 ' + escapeHtml(name) + '</span>';
+      }
+      // Nikdo zatím
+      if (t.status === 'in_progress') {
+        return '<span class="task-assignee unassigned" title="Stav je rozpracovaný, ale není přiřazen žádný řešitel">⚠️ Bez řešitele</span>';
+      }
+      return '<span class="task-assignee unassigned" title="Úkol čeká na řešitele">— Nikdo</span>';
+    }
+
+    async function claimTask(taskId) {
+      try {
+        const r = await fetch('/api/admin-tasks/' + taskId + '/claim', {
+          method: 'POST', credentials: 'include',
+        });
+        if (!r.ok) { alert('Převzetí selhalo: HTTP ' + r.status); return; }
+        await loadTasks();
+      } catch (e) { alert('Chyba: ' + e.message); }
+    }
+
+    async function unclaimTask(taskId) {
+      if (!confirm('Uvolnit úkol #' + taskId + '? Někdo jiný si ho bude moct vzít.')) return;
+      try {
+        const r = await fetch('/api/admin-tasks/' + taskId + '/unclaim', {
+          method: 'POST', credentials: 'include',
+        });
+        if (!r.ok) { alert('Uvolnění selhalo: HTTP ' + r.status); return; }
+        await loadTasks();
+      } catch (e) { alert('Chyba: ' + e.message); }
+    }
+
     // ─── AI Suitability scoring (Fáze 4) ───────────────────────────────────
     function renderSuitabilityBadge(t) {
       if (t.ai_suitability_score === null || t.ai_suitability_score === undefined) return '';
@@ -990,12 +1063,25 @@
 
     // ─── Chat integrace ──────────────────────────────────────────────────────
 
+    // JWT je v httpOnly cookie — neumíme ho dekódovat. Místo toho si načteme
+    // /api/auth/me jednou při startu modulu a id cache-neme do __meId.
+    let __meId = null;
     function currentUserId() {
+      if (__meId) return __meId;
+      // Fallback pro starší flow (přechodné období, lokální dev se starým tokenem)
       try {
         const t = sessionStorage.getItem('token') || localStorage.getItem('token');
         if (!t) return null;
         return JSON.parse(atob(t.split('.')[1])).id;
       } catch (_) { return null; }
+    }
+    async function fetchMe() {
+      try {
+        const r = await fetch('/api/auth/me', { credentials: 'include' });
+        if (!r.ok) return;
+        const me = await r.json();
+        __meId = me.id || (me.user && me.user.id) || null;
+      } catch (_) { /* offline / not logged in */ }
     }
 
     async function openTaskThread(taskId) {
@@ -1058,8 +1144,9 @@
       }
     })();
 
-    // Init
-    loadTasks();
+    // Init — paralelně načteme svoje user id (pro claim/unclaim viditelnost)
+    // a seznam úkolů. fetchMe je rychlé, takže do prvního renderu většinou stihne.
+    fetchMe().then(() => loadTasks());
   </script>
 </body>
 </html>
