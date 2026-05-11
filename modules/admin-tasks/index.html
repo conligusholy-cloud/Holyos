@@ -302,8 +302,12 @@
           const aiBtn = t.assignable_to_ai
             ? `<button class="task-btn" onclick="reassignAiRepo(${t.id})" title="Změnit cílový repo (jen pokud neběží žádný run)" style="background:rgba(14,165,233,0.15);color:#0ea5e9;">🔁 Změnit AI repo</button>`
             : `<button class="task-btn task-btn-ai" onclick="assignToAi(${t.id})" style="background:rgba(14,165,233,0.15);color:#0ea5e9;">🤖 Předat AI Vývojáři</button>`;
+          const acChatBtn = !t.assignable_to_ai
+            ? `<button class="task-btn" onclick="openAcChat(${t.id})" title="AI doptá akceptační kritéria v chatu (Fáze 3 z briefu)" style="background:rgba(168,139,250,0.15);color:#a78bfa;">💬 Upřesnit AC s AI</button>`
+            : '';
           actionButtons = `
             ${aiBtn}
+            ${acChatBtn}
             <button class="task-btn task-btn-deploy" onclick="deployTask(${t.id})">🚀 Nasadit s Claude</button>
             <button class="task-btn task-btn-status" onclick="cycleStatus(${t.id})">📌 Změnit stav</button>
             <button class="task-btn task-btn-thread" onclick="openTaskThread(${t.id})">💬 Diskuze</button>
@@ -736,6 +740,185 @@
         await loadTasks();
       } catch (e) {
         alert('Chyba: ' + e.message);
+      }
+    }
+
+    // ─── AC chat (Fáze 3 z briefu kap. 6) ──────────────────────────────────
+    //
+    // AI haiku vede konverzaci a doptává akceptační kritéria. Místo statického
+    // modalu Předat AI Vývojáři se zadavatel může nejdřív rozhovořit s AI,
+    // která průběžně aktualizuje task.acceptance_criteria, change_type, atd.
+    // Po finalize se otevře assign modal s předvyplněnými AC.
+
+    let _acChatState = { taskId: null, history: [], currentAc: null, finalized: false };
+
+    async function openAcChat(taskId) {
+      try {
+        // Načti task pro initial history (ai_questions JSONB)
+        const r = await fetch('/api/admin-tasks/' + taskId, { credentials: 'include' });
+        if (!r.ok) { alert('Načtení úkolu selhalo: HTTP ' + r.status); return; }
+        const task = await r.json();
+        _acChatState = {
+          taskId: task.id,
+          history: Array.isArray(task.ai_questions) ? task.ai_questions : [],
+          currentAc: {
+            acceptance_criteria: task.acceptance_criteria,
+            affected_module: task.affected_module,
+            change_type: task.change_type,
+            autonomy_override: task.autonomy_override,
+          },
+          finalized: false,
+        };
+
+        renderAcChatModal(task);
+      } catch (e) {
+        alert('Chyba: ' + e.message);
+      }
+    }
+
+    function renderAcChatModal(task) {
+      const histHtml = renderAcHistory(_acChatState.history);
+      const acHtml = renderAcPreview(_acChatState.currentAc);
+      const finalizedBanner = _acChatState.finalized
+        ? '<div style="background:rgba(34,197,94,0.15);border:1px solid rgba(34,197,94,0.4);border-radius:6px;padding:10px;margin-bottom:12px;color:#22c55e;font-size:13px;">' +
+          '✅ <strong>AC je hotové.</strong> Klikni „Použít a předat AI Vývojáři" níže.' +
+          '</div>'
+        : '';
+
+      document.getElementById('modal-root').innerHTML =
+        '<div class="modal-overlay" onclick="closeModal()">' +
+          '<div class="modal" style="max-width:900px;width:95%;max-height:90vh;display:flex;flex-direction:column;" onclick="event.stopPropagation()">' +
+            '<h3>💬 Doptat AC s AI — požadavek #' + task.id + '</h3>' +
+            '<p style="font-size:12px;color:var(--text2);margin-bottom:10px;">' +
+              'Alan, AI Vývojář se tě postupně zeptá na povinná pole. Tvoje odpovědi jdou rovnou do akceptačních kritérií.' +
+              ' <button onclick="resetAcChat(' + task.id + ')" style="font-size:11px;padding:2px 8px;margin-left:8px;background:transparent;border:1px solid var(--border);color:var(--text2);border-radius:4px;cursor:pointer;">↺ Vynulovat konverzaci</button>' +
+            '</p>' +
+            finalizedBanner +
+            '<div id="ac-chat-history" style="flex:1;overflow-y:auto;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:12px;min-height:200px;max-height:380px;">' +
+              histHtml +
+            '</div>' +
+            '<div id="ac-chat-current-ac" style="margin-bottom:12px;">' + acHtml + '</div>' +
+            '<div style="display:flex;gap:8px;">' +
+              '<textarea id="ac-chat-input" rows="2" placeholder="Tvoje odpověď nebo upřesnění..." style="flex:1;padding:8px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;font-family:inherit;font-size:13px;" onkeydown="if(event.ctrlKey&&event.key===&quot;Enter&quot;){sendAcChatMessage(' + task.id + ');}"></textarea>' +
+              '<button class="btn btn-primary" onclick="sendAcChatMessage(' + task.id + ')" style="align-self:stretch;">📤 Odeslat<br><span style="font-size:10px;opacity:0.7;">Ctrl+Enter</span></button>' +
+            '</div>' +
+            '<div class="modal-actions">' +
+              '<button class="btn btn-secondary" onclick="closeModal()">Zavřít</button>' +
+              (_acChatState.finalized
+                ? '<button class="btn btn-primary" onclick="closeModal(); setTimeout(()=>assignToAi(' + task.id + '), 50);">🚀 Použít a předat AI Vývojáři</button>'
+                : '') +
+            '</div>' +
+          '</div>' +
+        '</div>';
+
+      // Auto-scroll history dolů
+      const h = document.getElementById('ac-chat-history');
+      if (h) h.scrollTop = h.scrollHeight;
+
+      // Inicialní zpráva, pokud history je prázdná
+      if (_acChatState.history.length === 0) {
+        document.getElementById('ac-chat-history').innerHTML =
+          '<div style="color:var(--text2);font-size:12px;font-style:italic;">' +
+          'Napiš krátký popis úkolu nebo otázku, na co se chceš zeptat. Alan začne se základními poli (cíl, definice hotovo, modul, typ změny).' +
+          '</div>';
+      }
+    }
+
+    function renderAcHistory(history) {
+      if (!history || history.length === 0) return '';
+      const lines = [];
+      for (const msg of history) {
+        const isUser = msg.role === 'user';
+        const txt = typeof msg.content === 'string'
+          ? msg.content
+          : (Array.isArray(msg.content) ? msg.content.filter(b => b.type === 'text').map(b => b.text).join('\n') : JSON.stringify(msg.content).slice(0, 200));
+        if (!txt || !txt.trim()) continue;
+        lines.push(
+          '<div style="margin-bottom:10px;">' +
+            '<div style="font-size:11px;color:' + (isUser ? '#0ea5e9' : '#a78bfa') + ';font-weight:600;margin-bottom:2px;">' +
+              (isUser ? '👤 Ty' : '🤖 Alan') +
+            '</div>' +
+            '<div style="font-size:13px;color:var(--text);white-space:pre-wrap;line-height:1.4;">' +
+              escapeHtml(txt) +
+            '</div>' +
+          '</div>'
+        );
+      }
+      return lines.join('');
+    }
+
+    function renderAcPreview(ac) {
+      if (!ac) return '';
+      const has = ac.acceptance_criteria || ac.affected_module || ac.change_type || ac.autonomy_override;
+      if (!has) return '';
+      let html = '<details style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px;">' +
+        '<summary style="cursor:pointer;font-size:12px;color:var(--text2);font-weight:600;">📋 Aktuální AC (klikni pro detail)</summary>' +
+        '<div style="margin-top:8px;font-size:12px;">';
+      if (ac.acceptance_criteria) {
+        html += '<div style="margin-bottom:6px;"><strong>Akceptační kritéria:</strong><br><div style="white-space:pre-wrap;color:var(--text);font-family:ui-monospace,monospace;font-size:11px;background:rgba(0,0,0,0.2);padding:6px;border-radius:4px;margin-top:2px;">' + escapeHtml(ac.acceptance_criteria) + '</div></div>';
+      }
+      if (ac.affected_module) html += '<div><strong>Modul:</strong> ' + escapeHtml(ac.affected_module) + '</div>';
+      if (ac.change_type) html += '<div><strong>Typ změny:</strong> ' + escapeHtml(ac.change_type) + '</div>';
+      if (ac.autonomy_override) html += '<div><strong>Autonomy override:</strong> ' + escapeHtml(ac.autonomy_override) + '</div>';
+      html += '</div></details>';
+      return html;
+    }
+
+    async function sendAcChatMessage(taskId) {
+      const input = document.getElementById('ac-chat-input');
+      const message = (input && input.value || '').trim();
+      if (!message) { alert('Napiš zprávu.'); return; }
+      const btn = document.querySelector('[onclick*="sendAcChatMessage"]');
+      if (btn) { btn.disabled = true; btn.innerHTML = '⏳ Alan přemýšlí...'; }
+      try {
+        const r = await fetch('/api/admin-tasks/' + taskId + '/ac-chat', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message }),
+        });
+        if (!r.ok) {
+          let err = {};
+          try { err = await r.json(); } catch (_) {}
+          alert((err && err.error) || ('HTTP ' + r.status));
+          return;
+        }
+        const data = await r.json();
+
+        // Update state
+        // Backend uložil novou history do task.ai_questions. Pro UI ji rekonstruujeme.
+        _acChatState.history.push({ role: 'user', content: message });
+        _acChatState.history.push({ role: 'assistant', content: data.ai_message });
+        _acChatState.currentAc = data.current_ac;
+        _acChatState.finalized = !!data.finalized || _acChatState.finalized;
+
+        if (data.escalate) {
+          alert('🛑 Doporučení AI: ' + (data.escalate_reason || 'Úkol není zralý, přiřaď člověku.'));
+        }
+
+        // Re-render — vyrobíme dočasný task obj kvůli signature
+        renderAcChatModal({ id: taskId });
+      } catch (e) {
+        alert('Chyba: ' + e.message);
+      } finally {
+        if (btn) { btn.disabled = false; btn.innerHTML = '📤 Odeslat<br><span style="font-size:10px;opacity:0.7;">Ctrl+Enter</span>'; }
+      }
+    }
+
+    async function resetAcChat(taskId) {
+      if (!confirm('Vynulovat konverzaci s Alanem? AC pole zůstanou, ale historie zmizí.')) return;
+      try {
+        await fetch('/api/admin-tasks/' + taskId + '/ac-chat', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ reset: true, message: '__reset__' }),
+        });
+        _acChatState.history = [];
+        _acChatState.finalized = false;
+        renderAcChatModal({ id: taskId });
+      } catch (e) {
+        alert('Reset selhal: ' + e.message);
       }
     }
 

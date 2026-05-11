@@ -9,6 +9,7 @@ const { prisma } = require('../config/database');
 const { requireAuth } = require('../middleware/auth');
 const { createNotification } = require('./notifications.routes');
 const { getBlockingRunForTask } = require('../services/ai-developer/repository');
+const acChat = require('../services/ai-developer/ac-chat');
 
 router.use(requireAuth);
 
@@ -275,6 +276,78 @@ router.put('/:id', async (req, res, next) => {
   } catch (err) {
     next(err);
   }
+});
+
+// POST /api/admin-tasks/:id/ac-chat — AI doptává akceptační kritéria
+// body: { message: string, reset?: boolean }
+// History persistuje v task.ai_questions (JSONB pole {role, content}).
+// Pokud reset=true, history se vynuluje (nový rozhovor).
+router.post('/:id/ac-chat', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id);
+    const message = String((req.body && req.body.message) || '').trim();
+    const reset = !!(req.body && req.body.reset);
+    if (!message && !reset) {
+      return res.status(400).json({ error: 'Chybí message v body.' });
+    }
+
+    const task = await prisma.adminTask.findUnique({
+      where: { id },
+      select: {
+        id: true, page_title: true, description: true,
+        acceptance_criteria: true, affected_module: true,
+        change_type: true, autonomy_override: true,
+        ai_questions: true,
+      },
+    });
+    if (!task) return res.status(404).json({ error: 'Úkol nenalezen' });
+
+    if (reset) {
+      await prisma.adminTask.update({ where: { id }, data: { ai_questions: [] } });
+      return res.json({ ai_message: '(Nová konverzace — zeptej se mě na úkol.)', updates: null, finalized: false, escalate: false, history_reset: true });
+    }
+
+    const history = Array.isArray(task.ai_questions) ? task.ai_questions : [];
+
+    let result;
+    try {
+      result = await acChat.chat({ task, history, userMessage: message });
+    } catch (e) {
+      console.error('[ac-chat] chat() failed:', e.message);
+      return res.status(500).json({ error: 'AC chat selhal: ' + e.message });
+    }
+
+    // Persist new history (max 100 messages, aby se nepřetekla DB)
+    const trimmedHistory = result.newHistory.slice(-100);
+
+    // Apply suggested updates do task fields (partial, jen non-null/non-empty)
+    const taskPatch = { ai_questions: trimmedHistory };
+    if (result.updates) {
+      const u = result.updates;
+      if (u.acceptance_criteria && u.acceptance_criteria.trim()) taskPatch.acceptance_criteria = u.acceptance_criteria.trim();
+      if (u.affected_module && u.affected_module.trim()) taskPatch.affected_module = u.affected_module.trim();
+      if (u.change_type) taskPatch.change_type = u.change_type;
+      if (u.autonomy_override) taskPatch.autonomy_override = u.autonomy_override;
+    }
+    await prisma.adminTask.update({ where: { id }, data: taskPatch });
+
+    res.json({
+      ai_message: result.aiMessage,
+      updates: result.updates,
+      finalized: result.finalized,
+      summary: result.summary,
+      escalate: result.escalate,
+      escalate_reason: result.escalateReason,
+      tokens_used: result.tokensUsed,
+      // Frontend si znovu pamatuje aktuální AC fields přes updates
+      current_ac: {
+        acceptance_criteria: taskPatch.acceptance_criteria || task.acceptance_criteria || null,
+        affected_module: taskPatch.affected_module || task.affected_module || null,
+        change_type: taskPatch.change_type || task.change_type || null,
+        autonomy_override: taskPatch.autonomy_override || task.autonomy_override || null,
+      },
+    });
+  } catch (err) { next(err); }
 });
 
 // DELETE /api/admin-tasks/:id
