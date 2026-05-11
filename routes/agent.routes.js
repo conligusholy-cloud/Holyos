@@ -413,6 +413,16 @@ router.delete('/rules/:id', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+
+// ─── Metriky úspěšnosti ───────────────────────────────────────────────────
+router.get('/metrics', async (req, res, next) => {
+  try {
+    const days = req.query.days ? Math.max(1, Math.min(365, parseInt(req.query.days, 10) || 30)) : 30;
+    const m = await repo.getMetrics({ days });
+    res.json(m);
+  } catch (err) { next(err); }
+});
+
 // ─── Schvalovací fronta (approvals) ───────────────────────────────────────
 //
 // MVP: tabulka + UI bez napojení na runner (auto-tvorba a resume workflow přijdou

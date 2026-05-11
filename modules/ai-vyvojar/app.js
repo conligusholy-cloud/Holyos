@@ -46,6 +46,10 @@
 
   // ─── Tabs ──────────────────────────────────────────────────────────────
 
+  document.addEventListener('change', (e) => {
+    if (e.target && e.target.id === 'metrics-days') loadMetrics();
+  });
+
   $$('.aidev-tab').forEach((btn) => {
     btn.addEventListener('click', () => {
       $$('.aidev-tab').forEach((b) => b.classList.remove('active'));
@@ -104,7 +108,90 @@
     } catch (err) {
       $('#counters').innerHTML = '<div class="empty">Chyba: ' + escapeHtml(err.message) + '</div>';
     }
+    // Metriky se nahrávají samostatně (jiný endpoint, jiné period filter)
+    loadMetrics();
   }
+
+  async function loadMetrics() {
+    const daysSel = $('#metrics-days');
+    const days = daysSel ? (parseInt(daysSel.value, 10) || 30) : 30;
+    try {
+      const m = await api('/metrics?days=' + days);
+      renderMetrics(m);
+    } catch (err) {
+      $('#metrics-host').innerHTML = '<div class="empty">Chyba: ' + escapeHtml(err.message) + '</div>';
+    }
+  }
+
+  function formatPct(rate) {
+    if (rate === null || rate === undefined) return '—';
+    return Math.round(rate * 100) + ' %';
+  }
+
+  function formatDuration(seconds) {
+    if (!seconds || seconds < 0) return '—';
+    if (seconds < 60) return seconds + ' s';
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return m + ' min ' + (s > 0 ? s + ' s' : '');
+  }
+
+  function renderMetrics(m) {
+    if (!m || m.total_runs === 0) {
+      $('#metrics-host').innerHTML = '<div class="empty">Žádné běhy za posledních ' + (m && m.period_days) + ' dní.</div>';
+      return;
+    }
+    const bs = m.by_status || {};
+    const mergeRateColor = m.merge_rate === null ? '#888' : (m.merge_rate >= 0.7 ? '#22c55e' : (m.merge_rate >= 0.4 ? '#f59e0b' : '#ef4444'));
+    const retryRateColor = m.retry && m.retry.retry_rate !== null
+      ? (m.retry.retry_rate >= 0.4 ? '#ef4444' : (m.retry.retry_rate >= 0.2 ? '#f59e0b' : '#22c55e'))
+      : '#888';
+
+    let html = '<div class="counters" style="margin-top:0;">';
+    html += counterCardWithSub(
+      'Merge rate',
+      '<span style="color:' + mergeRateColor + ';">' + formatPct(m.merge_rate) + '</span>',
+      (bs.merged + (bs.completed || 0)) + ' z ' + ((bs.merged || 0) + (bs.completed || 0) + (bs.failed || 0) + (bs.escalated || 0)) + ' rozhodnuto'
+    );
+    html += counterCardWithSub(
+      'Retry rate',
+      '<span style="color:' + retryRateColor + ';">' + formatPct(m.retry ? m.retry.retry_rate : null) + '</span>',
+      (m.retry ? m.retry.tasks_with_retry : 0) + ' z ' + (m.retry ? m.retry.unique_tasks : 0) + ' úkolů'
+    );
+    html += counterCardWithSub(
+      'Tokenů / run',
+      (m.tokens.avg_per_run || 0).toLocaleString('cs-CZ'),
+      'celkem ' + (m.tokens.total || 0).toLocaleString('cs-CZ') + ' (' + m.tokens.finished_runs + ' runů)'
+    );
+    html += counterCardWithSub(
+      'Doba / run',
+      formatDuration(m.avg_duration_seconds),
+      m.tokens.finished_runs + ' dokončených'
+    );
+    const pa = m.plan_approvals || {};
+    const planTotal = pa.approved + pa.rejected;
+    html += counterCardWithSub(
+      'Plán approval',
+      formatPct(pa.approval_rate),
+      pa.approved + ' z ' + planTotal + ' schváleno' + (pa.pending ? ' (' + pa.pending + ' pending)' : '')
+    );
+    html += counterCardWithSub(
+      'Běhů celkem',
+      m.total_runs.toLocaleString('cs-CZ'),
+      (bs.merged || 0) + ' merged · ' + (bs.failed || 0) + ' failed · ' + (bs.escalated || 0) + ' escalated'
+    );
+    html += '</div>';
+    $('#metrics-host').innerHTML = html;
+  }
+
+  function counterCardWithSub(label, value, sub) {
+    return '<div class="counter-card">' +
+      '<div class="label">' + escapeHtml(label) + '</div>' +
+      '<div class="value">' + value + '</div>' +
+      '<div class="hint">' + escapeHtml(sub) + '</div>' +
+      '</div>';
+  }
+
 
   function renderCounters(c) {
     $('#counters').innerHTML =
