@@ -204,6 +204,37 @@ router.post('/', async (req, res, next) => {
   }
 });
 
+// POST /api/admin-tasks/backfill-suitability — hromadná re-eval pro tasky bez score
+// Defaultně max 20 tasků per call, aby se nezadřela DB / Anthropic API.
+router.post('/backfill-suitability', async (req, res, next) => {
+  try {
+    const limit = Math.min(Math.max(parseInt(req.body && req.body.limit, 10) || 20, 1), 100);
+    const tasks = await prisma.adminTask.findMany({
+      where: { ai_suitability_score: null, deleted_at: null },
+      orderBy: { created_at: 'desc' },
+      take: limit,
+      select: { id: true },
+    });
+    if (tasks.length === 0) {
+      return res.json({ evaluated: 0, message: 'Žádné tasky bez score.' });
+    }
+    // Spusť všechny eval paralelně (fire-and-forget, response vrátíme hned)
+    const ids = tasks.map((t) => t.id);
+    setImmediate(() => {
+      Promise.all(ids.map((id) =>
+        evaluateSuitabilityAsync(id).catch((e) =>
+          console.error('[admin-tasks] backfill eval failed for', id, ':', e.message)
+        )
+      ));
+    });
+    res.json({
+      evaluated: tasks.length,
+      task_ids: ids,
+      message: `Zpracovávám ${tasks.length} úkolů na pozadí — score se objeví do cca 30 s.`,
+    });
+  } catch (err) { next(err); }
+});
+
 // Helper — vyhodnotí task + uloží score/reasoning do DB.
 async function evaluateSuitabilityAsync(taskId) {
   const task = await prisma.adminTask.findUnique({
@@ -290,6 +321,16 @@ router.put('/:id', async (req, res, next) => {
     // Systémové zprávy do task-chatu jsme odstranili, aby notifikace o požadavcích
     // nezamořovaly chat. Task-channel si může autor sám otevřít tlačítkem „Diskuze",
     // pokud chce o požadavku pokecat s řešitelem.
+    // Re-eval suitability pokud se měnily fields, na kterých score závisí
+    // (popis, AC, change_type, affected_module). Async fire-and-forget.
+    const evalRelevant = ['description', 'acceptance_criteria', 'change_type', 'affected_module', 'page_title']
+      .some((k) => req.body && Object.prototype.hasOwnProperty.call(req.body, k));
+    if (evalRelevant) {
+      setImmediate(() => evaluateSuitabilityAsync(id).catch((e) =>
+        console.error('[admin-tasks] re-eval suitability after PUT failed for', id, ':', e.message)
+      ));
+    }
+
     if (previous && previous.status !== task.status && task.created_by && task.created_by !== req.user.id) {
       const statusLabel = STATUS_LABELS[task.status] || task.status;
       const actor = req.user.displayName || req.user.username;

@@ -193,6 +193,8 @@
         fetch('/api/admin-tasks/stats/summary'),
       ]);
       tasks = await tasksResp.json();
+      // Auto-backfill suitability score pro tasky bez score (1× per session)
+      maybeBackfillSuitability(tasks);
       if (statsResp.ok) {
         const s = await statsResp.json();
         applyStats(s);
@@ -950,6 +952,35 @@
         loadTasks();
       } catch (e) {
         alert('Chyba: ' + e.message);
+      }
+    }
+
+    // Hromadný backfill suitability pro tasky bez score — volá se automaticky
+    // při načtení listu (jen 1× per session, aby se nezadřela Anthropic API).
+    let _backfilledInSession = false;
+    async function maybeBackfillSuitability(tasks) {
+      if (_backfilledInSession) return;
+      const withoutScore = (tasks || []).filter((t) =>
+        t.ai_suitability_score === null || t.ai_suitability_score === undefined
+      );
+      if (withoutScore.length === 0) return;
+      _backfilledInSession = true;
+      try {
+        const r = await fetch('/api/admin-tasks/backfill-suitability', {
+          method: 'POST', credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ limit: Math.min(withoutScore.length, 20) }),
+        });
+        if (r.ok) {
+          const data = await r.json();
+          if (data.evaluated > 0) {
+            console.log('[admin-tasks] Backfill suitability spuštěn pro ' + data.evaluated + ' úkolů');
+            // Po 30 s reload (score by mělo být v DB)
+            setTimeout(() => loadTasks(), 30000);
+          }
+        }
+      } catch (e) {
+        console.warn('[admin-tasks] Backfill selhal:', e.message);
       }
     }
 
