@@ -243,6 +243,7 @@
           <div class="task-meta">
             ${isTrashed ? '<span class="task-badge deleted">🗑️ V koši</span>' : ''}
             ${t.assignable_to_ai ? '<span class="task-badge" style="background:rgba(14,165,233,0.15);color:#0ea5e9;">🤖 AI Vývojář</span>' : ''}
+            ${renderSuitabilityBadge(t)}
             <span class="task-page-badge">📍 ${t.page_title || t.page}</span>
             <span class="task-time">🕐 ${time}</span>
             <span class="task-user" title="${escapeHtml(userTitle)}">👤 ${escapeHtml(user)}</span>
@@ -305,9 +306,13 @@
           const acChatBtn = !t.assignable_to_ai
             ? `<button class="task-btn" onclick="openAcChat(${t.id})" title="AI doptá akceptační kritéria v chatu (Fáze 3 z briefu)" style="background:rgba(168,139,250,0.15);color:#a78bfa;">💬 Upřesnit AC s AI</button>`
             : '';
+          const evalBtn = (t.ai_suitability_score === null || t.ai_suitability_score === undefined)
+            ? `<button class="task-btn" onclick="evaluateSuitability(${t.id})" title="AI Vývojář vyhodnotí, jak vhodný je úkol pro autonomní zpracování" style="background:rgba(249,115,22,0.12);color:#f97316;">✨ Vyhodnotit pro AI</button>`
+            : '';
           actionButtons = `
             ${aiBtn}
             ${acChatBtn}
+            ${evalBtn}
             <button class="task-btn task-btn-deploy" onclick="deployTask(${t.id})">🚀 Nasadit s Claude</button>
             <button class="task-btn task-btn-status" onclick="cycleStatus(${t.id})">📌 Změnit stav</button>
             <button class="task-btn task-btn-thread" onclick="openTaskThread(${t.id})">💬 Diskuze</button>
@@ -919,6 +924,32 @@
         renderAcChatModal({ id: taskId });
       } catch (e) {
         alert('Reset selhal: ' + e.message);
+      }
+    }
+
+    // ─── AI Suitability scoring (Fáze 4) ───────────────────────────────────
+    function renderSuitabilityBadge(t) {
+      if (t.ai_suitability_score === null || t.ai_suitability_score === undefined) return '';
+      const s = t.ai_suitability_score;
+      let color, label;
+      if (s >= 70) { color = '#22c55e'; label = '🤖✓ AI: ' + s + '%'; }
+      else if (s >= 40) { color = '#f59e0b'; label = '🤖? AI: ' + s + '%'; }
+      else { color = '#ef4444'; label = '👤 AI: ' + s + '%'; }
+      const reasoning = t.ai_suitability_reasoning ? escapeHtml(t.ai_suitability_reasoning) : '';
+      return '<span class="task-badge" style="background:' + color + '22;color:' + color + ';border-color:' + color + ';" title="' + reasoning + '">' + label + '</span>';
+    }
+
+    async function evaluateSuitability(taskId) {
+      try {
+        const r = await fetch('/api/admin-tasks/' + taskId + '/evaluate-suitability', {
+          method: 'POST', credentials: 'include',
+        });
+        if (!r.ok) { alert('Vyhodnocení selhalo: HTTP ' + r.status); return; }
+        const data = await r.json();
+        alert('🤖 AI suitability: ' + (data.ai_suitability_score !== null ? data.ai_suitability_score + '%' : '?') + '\n\n' + (data.ai_suitability_reasoning || '(bez vysvětlení)'));
+        loadTasks();
+      } catch (e) {
+        alert('Chyba: ' + e.message);
       }
     }
 
