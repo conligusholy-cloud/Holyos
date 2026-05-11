@@ -21,6 +21,7 @@ const git = require('./git');
 const github = require('./github');
 const { runAgent, buildForbiddenChecker } = require('./agent');
 const triageModule = require('./triage');
+const plannerModule = require('./planner');
 
 const TMP_ROOT = process.env.AI_DEV_TMP_DIR || path.join(os.tmpdir(), 'holyos-agent');
 
@@ -121,9 +122,10 @@ async function processTask(task, options = {}) {
   const workdir = path.join(TMP_ROOT, run.id, 'repo');
   const branch = `ai/REQ-${task.id}-${slugify(task.page_title || '')}-${run.id.slice(0, 8)}`;
 
-  // Tokens spotřebované triage callem — sčítáme s coding loop tokeny při
-  // updateRun. Když je triage vypnutý nebo selže, zůstane 0.
+  // Tokens spotřebované triage + planner callem — sčítáme s coding loop tokeny
+  // při updateRun. Když je triage/planner vypnutý nebo selže, zůstanou 0.
   let triageTokens = 0;
+  let plannerTokens = 0;
 
   try {
     await log('decision', { action: 'start', branch, workdir });
@@ -243,13 +245,9 @@ async function processTask(task, options = {}) {
     // ── 2) Větev ────────────────────────────────────────────────────────
     await git.checkoutNewBranch({ cwd: workdir, branch });
 
-    // ── 3) Claude agent ────────────────────────────────────────────────
-    await repository.updateRun(run.id, { status: 'coding' });
-
     // Načti aktivní forbidden+path_pattern pravidla pro tento run (per-run
     // cache — rules se mění zřídka, žádný hot-reload uvnitř běhu). Předáme
-    // je do runAgentu (tool-level forbidden check v read/write/list) a
-    // použijeme i pro post-commit status diff níže v § 4. Při chybě DB
+    // je do plannerů, runAgentu i § 4 post-commit checku. Při chybě DB
     // čtení agent.js fallbackuje na HARDCODED_FORBIDDEN_FALLBACK.
     let forbiddenRules = [];
     try {
@@ -258,6 +256,90 @@ async function processTask(task, options = {}) {
       console.error('[ai-dev] listForbiddenPathRules selhalo → hardcoded fallback:', e.message);
     }
     const forbiddenCheck = buildForbiddenChecker(forbiddenRules);
+
+    // ── 2.5) Planning (preflight Claude Sonnet call PO clone, PŘED coding) ───
+    //
+    // Cíl: agent vrátí strukturovaný plán (které soubory změní, jaké riziko).
+    // Plán prochází AgentApproval(kind='plan_review') pokud:
+    //   - planner sám označil plán jako requires_approval=true (high risk / DB / auth)
+    //   - NEBO settings.default_autonomy === 'plan_review'
+    // Pokud autonomy='full_auto' a planner risk je low/medium, jdeme rovnou na coding.
+    //
+    // Vypínač: env AI_DEV_PLANNER_ENABLED=false. Při chybě fallback na bez-plánu
+    // coding (forbidden check + no-changes safety net stejně chrání).
+    const plannerEnabled = process.env.AI_DEV_PLANNER_ENABLED !== 'false';
+    let plan = null;
+    if (plannerEnabled) {
+      await repository.updateRun(run.id, { status: 'planning' });
+      try {
+        const result = await plannerModule.runPlanner({
+          workdir,
+          task,
+          repo,
+          forbiddenCheck,
+          onEvent: async (kind, payload) => log(kind, payload),
+        });
+        plan = result.plan;
+        plannerTokens = result.tokensUsed || 0;
+        await log('decision', {
+          action: 'planning_done',
+          summary: (plan && plan.summary) || result.reason,
+          risk_level: plan && plan.risk_level,
+          files_to_change_count: plan && plan.files_to_change ? plan.files_to_change.length : 0,
+          requires_approval: plan && plan.requires_approval,
+          tokens_used: plannerTokens,
+        });
+      } catch (e) {
+        await log('error', { phase: 'planning', message: e.message });
+        // fallback — pokračujeme na coding bez plánu (warning logged)
+      }
+
+      // Rozhodnutí: vyžaduje approval?
+      const autonomy = settings.default_autonomy; // 'full_auto' | 'pr_review' | 'plan_review'
+      const needsApproval = plan && (plan.requires_approval === true || autonomy === 'plan_review') && autonomy !== 'full_auto';
+
+      if (needsApproval) {
+        try {
+          await repository.createApproval({
+            runId: run.id,
+            kind: 'plan_review',
+            payload: plan,
+          });
+        } catch (e) {
+          console.error('[ai-dev] createApproval selhalo:', e.message);
+        }
+        await log('decision', {
+          action: 'approval_requested',
+          kind: 'plan_review',
+          reason: plan.requires_approval ? 'planner označil plán jako requires_approval=true' : `autonomy=${autonomy}`,
+        });
+        const planSummary = plan.summary || 'Plán k schválení';
+        const riskBadge = plan.risk_level ? ` (risk: ${plan.risk_level})` : '';
+        try {
+          await chat.postMessage(task.id, `📋 **Plán k schválení**${riskBadge}\n\n${planSummary}\n\nDetaily v modulu AI Vývojář → záložka Schválení.`);
+        } catch (e) { console.error('[ai-dev] chat plan_review:', e.message); }
+        try {
+          await chat.notifySuperAdmins({
+            type: 'task_status',
+            title: `📋 Plán čeká na schválení — úkol #${task.id}`,
+            body: shortenForBody(planSummary + riskBadge, 200),
+            link: '/modules/ai-vyvojar/',
+            meta: { run_id: run.id, task_id: task.id, kind: 'plan_review' },
+          });
+        } catch (_e) {}
+        await repository.updateRun(run.id, {
+          status: 'awaiting_approval',
+          ended_at: new Date(),
+          tokens_used: triageTokens + plannerTokens,
+          summary: planSummary,
+        });
+        return run;
+      }
+      // Plán schválen automaticky (full_auto + low/medium risk) nebo planner failed → coding
+    }
+
+    // ── 3) Claude agent ────────────────────────────────────────────────
+    await repository.updateRun(run.id, { status: 'coding' });
 
     const agentResult = await runAgent({
       workdir,
@@ -278,7 +360,7 @@ async function processTask(task, options = {}) {
     // zůstane v DB pro Audit log (aby uživatel viděl, co agent navrhoval).
     await repository.updateRun(run.id, {
       summary: agentResult.summary,
-      tokens_used: triageTokens + agentResult.tokensUsed,
+      tokens_used: triageTokens + plannerTokens + agentResult.tokensUsed,
     });
 
     // ── 4) Forbidden check ─────────────────────────────────────────────
@@ -339,7 +421,7 @@ async function processTask(task, options = {}) {
         status: 'escalated',
         ended_at: new Date(),
         failure_reason: 'Změna sahala na zakázané cesty',
-        tokens_used: triageTokens + agentResult.tokensUsed,
+        tokens_used: triageTokens + plannerTokens + agentResult.tokensUsed,
       });
       await chat.postMessage(task.id, '', {
         template: 'escalated',
@@ -397,7 +479,7 @@ async function processTask(task, options = {}) {
       status: 'pr_open',
       pr_url: pr.html_url,
       pr_number: pr.number,
-      tokens_used: triageTokens + agentResult.tokensUsed,
+      tokens_used: triageTokens + plannerTokens + agentResult.tokensUsed,
       summary: agentResult.summary,
     });
 
