@@ -496,6 +496,102 @@ async function getDashboard() {
   };
 }
 
+
+// ─── Metriky úspěšnosti (dashboard widget) ────────────────────────────────
+//
+// Agreguje za posledních N dní (default 30). Pomocí dvou Prisma groupBy
+// a malého post-processingu — žádné raw SQL, žádný DB cache.
+async function getMetrics({ days = 30 } = {}) {
+  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+
+  // Status counts
+  const statusGroups = await prisma.agentRun.groupBy({
+    by: ['status'],
+    where: { started_at: { gte: since } },
+    _count: { _all: true },
+  });
+  const statusMap = Object.fromEntries(statusGroups.map((g) => [g.status, g._count._all]));
+
+  const merged = statusMap.merged || 0;
+  const completed = statusMap.completed || 0;
+  const failed = statusMap.failed || 0;
+  const escalated = statusMap.escalated || 0;
+  const cancelled = statusMap.cancelled || 0;
+  const pr_open = statusMap.pr_open || 0;
+  const awaiting = (statusMap.awaiting_approval || 0) + (statusMap.awaiting_clarification || 0);
+
+  const total = statusGroups.reduce((s, g) => s + g._count._all, 0);
+
+  // Decided runs = nepočítáme cancelled (uživatel zrušil ručně) ani in-progress.
+  const decided = merged + completed + failed + escalated;
+  const success = merged + completed;
+  const mergeRate = decided > 0 ? success / decided : null;
+
+  // Retry rate: kolik unique tasků mělo >1 run za období.
+  const taskRunCounts = await prisma.agentRun.groupBy({
+    by: ['task_id'],
+    where: { started_at: { gte: since } },
+    _count: { _all: true },
+  });
+  const uniqueTasks = taskRunCounts.length;
+  const tasksWithRetry = taskRunCounts.filter((t) => t._count._all > 1).length;
+  const retryRate = uniqueTasks > 0 ? tasksWithRetry / uniqueTasks : null;
+
+  // Tokens a duration (jen runs s ended_at, ne in-progress)
+  const finishedRuns = await prisma.agentRun.findMany({
+    where: { started_at: { gte: since }, ended_at: { not: null } },
+    select: { tokens_used: true, started_at: true, ended_at: true },
+  });
+  const totalTokens = finishedRuns.reduce((s, r) => s + (r.tokens_used || 0), 0);
+  const avgTokens = finishedRuns.length > 0 ? Math.round(totalTokens / finishedRuns.length) : 0;
+  const durations = finishedRuns
+    .map((r) => (r.ended_at && r.started_at) ? (r.ended_at.getTime() - r.started_at.getTime()) / 1000 : null)
+    .filter((d) => d !== null && d >= 0);
+  const avgDurationSec = durations.length > 0
+    ? Math.round(durations.reduce((s, d) => s + d, 0) / durations.length)
+    : 0;
+
+  // Plan approvals: kolik plan_review approvalů approved vs rejected
+  const approvalGroups = await prisma.agentApproval.groupBy({
+    by: ['decision'],
+    where: { kind: 'plan_review', requested_at: { gte: since } },
+    _count: { _all: true },
+  });
+  const approvalMap = Object.fromEntries(approvalGroups.map((g) => [g.decision, g._count._all]));
+  const planApproved = approvalMap.approved || 0;
+  const planRejected = approvalMap.rejected || 0;
+  const planPending = approvalMap.pending || 0;
+  const planDecided = planApproved + planRejected;
+  const planApprovalRate = planDecided > 0 ? planApproved / planDecided : null;
+
+  return {
+    period_days: days,
+    since: since.toISOString(),
+    total_runs: total,
+    by_status: {
+      merged, completed, failed, escalated, cancelled, pr_open, awaiting,
+    },
+    merge_rate: mergeRate,
+    retry: {
+      unique_tasks: uniqueTasks,
+      tasks_with_retry: tasksWithRetry,
+      retry_rate: retryRate,
+    },
+    tokens: {
+      total: totalTokens,
+      avg_per_run: avgTokens,
+      finished_runs: finishedRuns.length,
+    },
+    avg_duration_seconds: avgDurationSec,
+    plan_approvals: {
+      approved: planApproved,
+      rejected: planRejected,
+      pending: planPending,
+      approval_rate: planApprovalRate,
+    },
+  };
+}
+
 module.exports = {
   AI_DEV_USERNAME,
   RUNNING_STATUSES,
@@ -538,6 +634,7 @@ module.exports = {
   countRunningRuns,
   todayRunsCount,
   todayTokensUsed,
-  // dashboard
+  // dashboard + metrics
   getDashboard,
+  getMetrics,
 };
