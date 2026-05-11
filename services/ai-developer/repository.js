@@ -208,6 +208,66 @@ async function getBlockingRunForTask(taskId) {
   });
 }
 
+// ─── AgentRule CRUD + helpers ───────────────────────────────────────────────
+
+// Vrátí aktivní forbidden path-pattern pravidla. Načítá runner per-run při
+// startu (rules se mění zřídka, žádný hot-reload uvnitř běhu).
+async function listForbiddenPathRules() {
+  return prisma.agentRule.findMany({
+    where: { kind: 'forbidden', scope: 'path_pattern', active: true },
+    orderBy: { created_at: 'asc' },
+  });
+}
+
+async function listRules({ kind, scope, active } = {}) {
+  const where = {};
+  if (kind) where.kind = kind;
+  if (scope) where.scope = scope;
+  if (active !== undefined) where.active = active;
+  return prisma.agentRule.findMany({
+    where,
+    orderBy: [{ kind: 'asc' }, { scope: 'asc' }, { created_at: 'asc' }],
+    include: { creator: { select: { id: true, username: true, display_name: true } } },
+  });
+}
+
+async function getRule(id) {
+  return prisma.agentRule.findUnique({
+    where: { id },
+    include: { creator: { select: { id: true, username: true, display_name: true } } },
+  });
+}
+
+async function createRule({ kind, scope, value, description, active, createdBy }) {
+  return prisma.agentRule.create({
+    data: {
+      kind,
+      scope,
+      value,
+      description: description || null,
+      active: active !== false,
+      created_by: createdBy || null,
+    },
+  });
+}
+
+async function updateRule(id, patch) {
+  return prisma.agentRule.update({ where: { id }, data: patch });
+}
+
+async function deleteRule(id) {
+  return prisma.agentRule.delete({ where: { id } });
+}
+
+// Fire-and-forget increment blocked_count po rule_blocked eventu. Nečekáme
+// na výsledek — statistika nesmí blokovat critical path agenta.
+function incrementRuleBlockedCount(ruleId) {
+  prisma.agentRule
+    .update({ where: { id: ruleId }, data: { blocked_count: { increment: 1 } } })
+    .catch((e) => console.error('[ai-dev] incrementRuleBlockedCount:', e.message));
+}
+
+
 // ─── Queue (úkoly připravené pro AI Vývojáře) ──────────────────────────────
 //
 // Pravidla pro Fázi 1:
@@ -358,6 +418,14 @@ module.exports = {
   cancelRun,
   appendEvent,
   getBlockingRunForTask,
+  // rules
+  listForbiddenPathRules,
+  listRules,
+  getRule,
+  createRule,
+  updateRule,
+  deleteRule,
+  incrementRuleBlockedCount,
   // queue + counters
   listQueue,
   listAutoMergeCandidates,

@@ -17,16 +17,28 @@ const MAX_TURNS = 25;
 const MAX_TOKENS_PER_TURN = 4096;
 const MAX_READ_BYTES = 200_000;
 
-// Forbidden paths — agent je nesmí číst ani psát. Hardcoded ve Fázi 1
-// (Fáze 2 přesune do agent_rules tabulky).
-const FORBIDDEN_PATTERNS = [
-  /(^|\/)\.env(\.|$)/i,
-  /(^|\/)secrets\//i,
-  /\.(key|pem)$/i,
-  /(^|\/)migrations\//i,
-  /(^|\/)node_modules\//,
-  /\.git\//,
+// Forbidden paths — agent je nesmí číst ani psát.
+//
+// Primární zdroj: AgentRule tabulka (kind='forbidden', scope='path_pattern')
+// načtená runnerem per-run a předaná do runAgent jako `rules` parametr. Tento
+// HARDCODED_FORBIDDEN_FALLBACK se používá *jen* když rules pole je prázdné —
+// typicky při selhání DB load nebo dokud někdo nesmaže všechna pravidla z UI.
+// Bezpečnostní safety net, ať agent nikdy nemůže měnit .env apod. bez ohledu
+// na stav DB.
+const HARDCODED_FORBIDDEN_FALLBACK = [
+  { id: 'hardcoded:env', value: '(^|/)\\.env(\\.|$)' },
+  { id: 'hardcoded:secrets', value: '(^|/)secrets/' },
+  { id: 'hardcoded:keys', value: '\\.(key|pem)$' },
+  { id: 'hardcoded:migrations', value: '(^|/)migrations/' },
+  { id: 'hardcoded:node_modules', value: '(^|/)node_modules/' },
+  { id: 'hardcoded:dotgit', value: '\\.git/' },
 ];
+
+// Backward compatibility export: FORBIDDEN_PATTERNS jako array regexů
+// (některé starší volání může počítat s nimi přímo).
+const FORBIDDEN_PATTERNS = HARDCODED_FORBIDDEN_FALLBACK.map(
+  (r) => new RegExp(r.value, 'i')
+);
 
 // Whitelist příkazů pro run_shell. Cokoli mimo whitelist se odmítne.
 const SHELL_WHITELIST = [
@@ -37,8 +49,38 @@ const SHELL_WHITELIST = [
   /^yarn\s+(test|lint|build)\b/,
 ];
 
+// Factory — vrací checker `(relPath) => null | { rule_id, value }`.
+// Pokud `rules` je prázdné / null, použije HARDCODED_FORBIDDEN_FALLBACK
+// (safety net). Každé pravidlo se zkompiluje jako case-insensitive regex.
+// Volá se 1× při startu runu (runner) — výsledek se předá do runAgent
+// přes closure a používá v každém read/write/list tool callu.
+function buildForbiddenChecker(rules) {
+  const source = (Array.isArray(rules) && rules.length > 0)
+    ? rules
+    : HARDCODED_FORBIDDEN_FALLBACK;
+  const compiled = source.map((r) => {
+    try {
+      return { id: r.id, value: r.value, re: new RegExp(r.value, 'i') };
+    } catch (e) {
+      console.error(`[ai-dev] AgentRule id=${r.id} má nevalidní regex "${r.value}": ${e.message}`);
+      return null;
+    }
+  }).filter(Boolean);
+
+  return function check(relPath) {
+    const norm = String(relPath || '').replace(/\\/g, '/');
+    for (const rule of compiled) {
+      if (rule.re.test(norm)) {
+        return { rule_id: rule.id, value: rule.value };
+      }
+    }
+    return null;
+  };
+}
+
+// Backward-compat boolean varianta (legacy callsites, hardcoded fallback).
 function isForbidden(relPath) {
-  const norm = relPath.replace(/\\/g, '/');
+  const norm = String(relPath || '').replace(/\\/g, '/');
   return FORBIDDEN_PATTERNS.some((re) => re.test(norm));
 }
 
@@ -109,19 +151,25 @@ const TOOLS = [
   },
 ];
 
-async function execTool(name, input, workdir) {
+async function execTool(name, input, workdir, forbiddenCheck) {
+  // forbiddenCheck je vždy z buildForbiddenChecker (z DB pravidel) — runAgent
+  // ho dodá přes closure. Vrací null | { rule_id, value } — pokud non-null,
+  // vracíme error s rule_id, aby tool_call event v audit logu věděl, který
+  // pravidlo to zablokovalo (runner pak inkrementuje rule.blocked_count).
   switch (name) {
     case 'list_files': {
-      if (isForbidden(input.path)) return { error: 'Cesta je zakázaná (forbidden_pattern).' };
+      const hit = forbiddenCheck(input.path);
+      if (hit) return { error: 'Cesta je zakázaná (forbidden_pattern).', rule_id: hit.rule_id, pattern: hit.value };
       const dir = safeJoin(workdir, input.path);
       const entries = await fs.readdir(dir, { withFileTypes: true });
       const list = entries
-        .filter((e) => !isForbidden(path.join(input.path, e.name)))
+        .filter((e) => !forbiddenCheck(path.join(input.path, e.name)))
         .map((e) => ({ name: e.name, type: e.isDirectory() ? 'dir' : 'file' }));
       return { entries: list };
     }
     case 'read_file': {
-      if (isForbidden(input.path)) return { error: 'Cesta je zakázaná (forbidden_pattern).' };
+      const hit = forbiddenCheck(input.path);
+      if (hit) return { error: 'Cesta je zakázaná (forbidden_pattern).', rule_id: hit.rule_id, pattern: hit.value };
       const file = safeJoin(workdir, input.path);
       const stat = await fs.stat(file).catch(() => null);
       if (!stat) return { error: 'Soubor neexistuje.' };
@@ -132,7 +180,8 @@ async function execTool(name, input, workdir) {
       return { content };
     }
     case 'write_file': {
-      if (isForbidden(input.path)) return { error: 'Cesta je zakázaná (forbidden_pattern).' };
+      const hit = forbiddenCheck(input.path);
+      if (hit) return { error: 'Cesta je zakázaná (forbidden_pattern).', rule_id: hit.rule_id, pattern: hit.value };
       const file = safeJoin(workdir, input.path);
       await fs.mkdir(path.dirname(file), { recursive: true });
       await fs.writeFile(file, input.content, 'utf-8');
@@ -200,13 +249,21 @@ ${JSON.stringify(repo.tech_stack || {}, null, 2)}`;
 
 /**
  * Hlavní entry point — spustí Claude tool-use loop a vrátí výsledek.
+ *
+ * @param {object} opts.rules - Pole AgentRule záznamů typu forbidden+path_pattern
+ *   z DB (načtené runnerem). Pokud prázdné/undefined, použije se hardcoded
+ *   fallback. Checker se vyrábí 1× per run a používá se v každém tool callu.
  */
-async function runAgent({ workdir, task, repo, onEvent }) {
+async function runAgent({ workdir, task, repo, rules, onEvent }) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
     throw new Error('ANTHROPIC_API_KEY chybí — agent nelze spustit');
   }
   const client = new Anthropic({ apiKey });
+
+  // Vyrobíme forbidden checker z DB pravidel (nebo hardcoded fallbacku).
+  // Předáme ho do execTool přes closure — žádné per-call DB volání.
+  const forbiddenCheck = buildForbiddenChecker(rules);
 
   const messages = [
     { role: 'user', content: 'Začni — prozkoumej repo a implementuj úkol.' },
@@ -261,9 +318,20 @@ async function runAgent({ workdir, task, repo, onEvent }) {
 
       let result;
       try {
-        result = await execTool(block.name, block.input || {}, workdir);
+        result = await execTool(block.name, block.input || {}, workdir, forbiddenCheck);
       } catch (e) {
         result = { error: e.message || String(e) };
+      }
+
+      // Pokud forbidden checker zachytil hit, zaloguj jako rule_blocked event
+      // — runner pak může incrementnout AgentRule.blocked_count statistiku.
+      if (result && result.rule_id && onEvent) {
+        await onEvent('rule_blocked', {
+          rule_id: result.rule_id,
+          pattern: result.pattern,
+          tool: block.name,
+          path: block.input && block.input.path,
+        });
       }
 
       if (onEvent) {
@@ -318,7 +386,9 @@ async function runAgent({ workdir, task, repo, onEvent }) {
 module.exports = {
   runAgent,
   isForbidden,
+  buildForbiddenChecker,
   FORBIDDEN_PATTERNS,
+  HARDCODED_FORBIDDEN_FALLBACK,
   SHELL_WHITELIST,
   TOOLS,
 };

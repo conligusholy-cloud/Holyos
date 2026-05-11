@@ -60,6 +60,7 @@
   function onTabChange(tab) {
     if (tab === 'dashboard') loadDashboard();
     if (tab === 'repos') loadRepos();
+    if (tab === 'rules') loadRules();
     if (tab === 'limits') loadLimits();
     if (tab === 'audit') loadAudit();
   }
@@ -534,6 +535,124 @@
       }
     });
   }
+
+
+  // ─── Pravidla (kind=forbidden / requires_approval / allowed) ─────────────
+  //
+  // Frontend nad /api/agent/rules. Backend (services/ai-developer/runner.js)
+  // aktuálně aplikuje jen kind='forbidden' + scope='path_pattern' v každém
+  // runu — ostatní kombinace jsou rezerva pro Fázi 3 (approval workflow).
+
+  let _rules = [];
+
+  async function loadRules() {
+    try {
+      const params = [];
+      const kind = $('#rule-filter-kind') && $('#rule-filter-kind').value;
+      const scope = $('#rule-filter-scope') && $('#rule-filter-scope').value;
+      const onlyActive = $('#rule-filter-active-only') && $('#rule-filter-active-only').checked;
+      if (kind) params.push('kind=' + encodeURIComponent(kind));
+      if (scope) params.push('scope=' + encodeURIComponent(scope));
+      if (onlyActive) params.push('active=true');
+      const qs = params.length ? '?' + params.join('&') : '';
+      _rules = await api('/rules' + qs);
+      renderRules();
+    } catch (err) {
+      $('#rules-host').innerHTML = '<div class="empty">Chyba: ' + escapeHtml(err.message) + '</div>';
+    }
+  }
+
+  function renderRules() {
+    if (!_rules || _rules.length === 0) {
+      $('#rules-host').innerHTML = '<div class="empty">Žádná pravidla. Klikni „+ Přidat pravidlo".</div>';
+      return;
+    }
+    let html = '<table class="data-table" style="width:100%; border-collapse:collapse;">' +
+      '<thead><tr>' +
+      '<th>KIND</th><th>SCOPE</th><th>VALUE</th><th>POPIS</th>' +
+      '<th>AKTIVNÍ</th><th>ZABLOK.</th><th></th>' +
+      '</tr></thead><tbody>';
+    for (const r of _rules) {
+      const kindColor = r.kind === 'forbidden' ? '#ef4444' : (r.kind === 'requires_approval' ? '#f59e0b' : '#22c55e');
+      html += '<tr>' +
+        '<td><span class="chip" style="background:' + kindColor + '22; color:' + kindColor + ';">' + escapeHtml(r.kind) + '</span></td>' +
+        '<td>' + escapeHtml(r.scope) + '</td>' +
+        '<td style="font-family:ui-monospace,monospace; font-size:12px; max-width:300px; word-break:break-all;">' + escapeHtml(r.value) + '</td>' +
+        '<td style="font-size:12px; color:var(--text2); max-width:280px;">' + escapeHtml(r.description || '—') + '</td>' +
+        '<td>' + (r.active ? '✓' : '—') + '</td>' +
+        '<td>' + (r.blocked_count || 0) + '</td>' +
+        '<td>' +
+          '<button class="btn" data-edit-rule="' + escapeHtml(r.id) + '">Upravit</button> ' +
+          '<button class="btn danger" data-del-rule="' + escapeHtml(r.id) + '">Smazat</button>' +
+        '</td>' +
+      '</tr>';
+    }
+    html += '</tbody></table>';
+    $('#rules-host').innerHTML = html;
+
+    $$('[data-edit-rule]').forEach((b) => {
+      b.addEventListener('click', () => {
+        const r = _rules.find((x) => x.id === b.dataset.editRule);
+        if (r) openRuleForm(r);
+      });
+    });
+    $$('[data-del-rule]').forEach((b) => {
+      b.addEventListener('click', () => deleteRule(b.dataset.delRule));
+    });
+  }
+
+  function openRuleForm(rule) {
+    $('#rule-form-title').textContent = rule ? 'Upravit pravidlo' : 'Nové pravidlo';
+    $('#rule-id').value = rule ? rule.id : '';
+    $('#rule-kind').value = rule ? rule.kind : 'forbidden';
+    $('#rule-scope').value = rule ? rule.scope : 'path_pattern';
+    $('#rule-value').value = rule ? rule.value : '';
+    $('#rule-description').value = rule ? (rule.description || '') : '';
+    $('#rule-active').checked = rule ? !!rule.active : true;
+    $('#rule-form-host').style.display = 'block';
+    $('#rule-value').focus();
+  }
+
+  async function deleteRule(id) {
+    const r = _rules.find((x) => x.id === id);
+    if (!r) return;
+    if (!confirm('Smazat pravidlo ' + r.kind + '/' + r.scope + ' "' + r.value + '"?')) return;
+    try {
+      await api('/rules/' + id, { method: 'DELETE' });
+      loadRules();
+    } catch (err) {
+      alert('Smazání selhalo: ' + err.message);
+    }
+  }
+
+  $('#btn-new-rule').addEventListener('click', () => openRuleForm(null));
+  $('#btn-cancel-rule').addEventListener('click', () => { $('#rule-form-host').style.display = 'none'; });
+  $('#rule-filter-kind').addEventListener('change', loadRules);
+  $('#rule-filter-scope').addEventListener('change', loadRules);
+  $('#rule-filter-active-only').addEventListener('change', loadRules);
+
+  $('#btn-save-rule').addEventListener('click', async () => {
+    const id = $('#rule-id').value;
+    const body = {
+      kind: $('#rule-kind').value,
+      scope: $('#rule-scope').value,
+      value: $('#rule-value').value.trim(),
+      description: $('#rule-description').value.trim() || null,
+      active: $('#rule-active').checked,
+    };
+    if (!body.value) { alert('Vyplň value.'); return; }
+    try {
+      if (id) {
+        await api('/rules/' + id, { method: 'PUT', body: JSON.stringify(body) });
+      } else {
+        await api('/rules', { method: 'POST', body: JSON.stringify(body) });
+      }
+      $('#rule-form-host').style.display = 'none';
+      loadRules();
+    } catch (err) {
+      alert('Uložení selhalo: ' + err.message);
+    }
+  });
 
   // ─── Init ──────────────────────────────────────────────────────────────
 

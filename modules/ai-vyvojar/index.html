@@ -156,6 +156,7 @@
     <div class="aidev-tabs">
       <button class="aidev-tab active" data-tab="dashboard">Dashboard</button>
       <button class="aidev-tab" data-tab="repos">Repozitáře</button>
+      <button class="aidev-tab" data-tab="rules">Pravidla</button>
       <button class="aidev-tab" data-tab="limits">Limity</button>
       <button class="aidev-tab" data-tab="audit">Audit log</button>
     </div>
@@ -201,6 +202,68 @@
         <div style="margin-top:14px; display:flex; gap:10px;">
           <button class="btn primary" id="btn-save-repo">Uložit</button>
           <button class="btn" id="btn-cancel-repo">Zrušit</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- PRAVIDLA -->
+    <div class="tab-content" data-tab="rules">
+      <div style="margin-bottom:14px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+        <button class="btn primary" id="btn-new-rule">+ Přidat pravidlo</button>
+        <select id="rule-filter-kind" style="padding:6px;">
+          <option value="">— všechny kind —</option>
+          <option value="forbidden">forbidden</option>
+          <option value="requires_approval">requires_approval</option>
+          <option value="allowed">allowed</option>
+        </select>
+        <select id="rule-filter-scope" style="padding:6px;">
+          <option value="">— všechny scope —</option>
+          <option value="path_pattern">path_pattern</option>
+          <option value="module">module</option>
+          <option value="operation_type">operation_type</option>
+          <option value="db_table">db_table</option>
+          <option value="repo">repo</option>
+        </select>
+        <label style="font-size:12px; color:var(--text2); display:flex; gap:4px; align-items:center;">
+          <input type="checkbox" id="rule-filter-active-only"> jen aktivní
+        </label>
+        <span style="font-size:12px; color:var(--text2); margin-left:auto;">
+          Aktuálně backend aplikuje jen <code>forbidden / path_pattern</code> — ostatní jsou rezerva pro Fázi 3.
+        </span>
+      </div>
+      <div id="rules-host"><div class="empty">Načítání…</div></div>
+
+      <div id="rule-form-host" style="display:none; margin-top:20px; padding:16px; background:var(--surface); border:1px solid var(--border); border-radius:10px;">
+        <h3 style="margin:0 0 12px; font-size:14px;" id="rule-form-title">Nové pravidlo</h3>
+        <input type="hidden" id="rule-id" value="">
+        <div class="form-grid">
+          <label>Kind
+            <select id="rule-kind">
+              <option value="forbidden">forbidden</option>
+              <option value="requires_approval">requires_approval</option>
+              <option value="allowed">allowed</option>
+            </select>
+          </label>
+          <label>Scope
+            <select id="rule-scope">
+              <option value="path_pattern">path_pattern</option>
+              <option value="module">module</option>
+              <option value="operation_type">operation_type</option>
+              <option value="db_table">db_table</option>
+              <option value="repo">repo</option>
+            </select>
+          </label>
+          <label>Aktivní<input id="rule-active" type="checkbox" checked></label>
+        </div>
+        <label style="display:block; font-size:12px; color:var(--text2); margin: 12px 0 4px;">
+          Value (pro path_pattern: regex bez /.../ obalu, např. <code>(^|/)\.env(\.|$)</code>)
+        </label>
+        <input id="rule-value" style="width:100%; font-family:ui-monospace,monospace; font-size:12px;" placeholder="(^|/)\.env(\.|$)">
+        <label style="display:block; font-size:12px; color:var(--text2); margin: 12px 0 4px;">Popis (pro člověka, proč pravidlo existuje)</label>
+        <textarea id="rule-description" rows="3" style="width:100%; font-size:13px;" placeholder="Nemodifikovat .env soubory — obsahují secrets."></textarea>
+        <div style="margin-top:14px; display:flex; gap:10px;">
+          <button class="btn primary" id="btn-save-rule">Uložit</button>
+          <button class="btn" id="btn-cancel-rule">Zrušit</button>
         </div>
       </div>
     </div>
