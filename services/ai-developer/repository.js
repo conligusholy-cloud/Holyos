@@ -592,6 +592,62 @@ async function getMetrics({ days = 30 } = {}) {
   };
 }
 
+
+// ─── Learning from history (Fáze 4) ────────────────────────────────────────
+
+// Vrátí past N runs se status failed/escalated/cancelled, ideálně pro stejný
+// affected_module. Plus rejected plan approvals. Triage + planner to dostane
+// jako kontext, aby se učili z minulých chyb.
+async function getPastFailures({ affectedModule, limit = 5 } = {}) {
+  // 1) Failed/escalated runs (preferenčně pro stejný module, jinak global)
+  const where = { status: { in: ['failed', 'escalated', 'cancelled'] } };
+  if (affectedModule) {
+    where.task = { affected_module: affectedModule };
+  }
+  const runs = await prisma.agentRun.findMany({
+    where,
+    orderBy: { ended_at: 'desc' },
+    take: Math.min(Math.max(parseInt(limit, 10) || 5, 1), 20),
+    select: {
+      id: true,
+      status: true,
+      failure_reason: true,
+      summary: true,
+      ended_at: true,
+      task: {
+        select: { id: true, page_title: true, affected_module: true, change_type: true },
+      },
+    },
+  });
+
+  // 2) Rejected plan approvals (klíčové insight — kde Tomáš odmítl plán)
+  const rejectedApprovals = await prisma.agentApproval.findMany({
+    where: {
+      decision: 'rejected',
+      kind: 'plan_review',
+      ...(affectedModule
+        ? { run: { task: { affected_module: affectedModule } } }
+        : {}),
+    },
+    orderBy: { decided_at: 'desc' },
+    take: Math.min(Math.max(parseInt(limit, 10) || 5, 1), 20),
+    select: {
+      id: true,
+      comment: true,
+      decided_at: true,
+      payload: true,
+      run: {
+        select: {
+          id: true,
+          task: { select: { id: true, page_title: true, affected_module: true } },
+        },
+      },
+    },
+  });
+
+  return { failedRuns: runs, rejectedApprovals };
+}
+
 module.exports = {
   AI_DEV_USERNAME,
   RUNNING_STATUSES,
@@ -637,4 +693,6 @@ module.exports = {
   // dashboard + metrics
   getDashboard,
   getMetrics,
+  // learning from history
+  getPastFailures,
 };

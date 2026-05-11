@@ -147,7 +147,21 @@ PRAVIDLA PRO submit_plan:
 - risk_level: "high" pokud plán sahá na DB schema/migrace, auth, payment flow, secrets, deployment configy. "medium" pokud mění sdílené komponenty nebo více modulů. Jinak "low".
 - requires_approval: true vždy když risk_level=high; jinak false (nech runneru rozhodnout podle autonomy mode).
 - Maximum ${PLANNER_MAX_TURNS} kol nástrojů — buď efektivní.
-- NIKDY nevolej write_file (tu nemáš), tvoje role je jen číst a plánovat. Coding loop přijde po schválení plánu.`;
+- NIKDY nevolej write_file (tu nemáš), tvoje role je jen číst a plánovat. Coding loop přijde po schválení plánu.
+
+${pastFailures && (pastFailures.failedRuns?.length || pastFailures.rejectedApprovals?.length) ? `
+HISTORIE PODOBNÝCH PŘEDCHOZÍCH ÚKOLŮ V TOMTO MODULU:
+${(pastFailures.failedRuns || []).slice(0, 3).map((r, i) =>
+  `${i + 1}. [${r.status}] "${r.task?.page_title || '?'}" — ${(r.failure_reason || r.summary || '').slice(0, 200)}`
+).join('\n')}
+${(pastFailures.rejectedApprovals || []).length > 0 ? `
+
+MINULÉ ZAMÍTNUTÉ PLÁNY (Tomáš odmítl, vyhni se podobnému přístupu):
+${pastFailures.rejectedApprovals.slice(0, 3).map((a, i) =>
+  `${i + 1}. "${a.run?.task?.page_title || '?'}" — důvod: ${(a.comment || '(bez komentáře)').slice(0, 200)}`
+).join('\n')}` : ''}
+
+Pouč se z této historie: pokud tvůj plán by se shoduje s některým minulým failure / rejection, přemýšlej jak ho udělat jinak (nebo zvýš risk_level + requires_approval na true).` : ''}`;
 }
 
 /**

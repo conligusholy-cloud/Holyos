@@ -48,7 +48,7 @@ PRIORITIZACE V NEJISTOTĚ:
 - Mezi "needs_clarification" a "ok" → preferuj "ok" (agent si poradí, ať jsou tokeny dobře využité).
 - Mezi "stop" a "needs_clarification" → preferuj "needs_clarification" (dej zadavateli šanci doplnit).`;
 
-function buildUserMessage(task, repo) {
+function buildUserMessage(task, repo, pastFailures) {
   const desc = (task.description || '(bez popisu)').slice(0, 1500);
   const ac = task.acceptance_criteria || '(prázdné)';
   const tech = repo.tech_stack ? JSON.stringify(repo.tech_stack) : '{}';
@@ -65,6 +65,20 @@ CÍLOVÝ REPO:
 - URL: ${repo.git_url}
 - Default branch: ${repo.default_branch || 'main'}
 - Tech stack: ${tech}
+
+${pastFailures && (pastFailures.failedRuns?.length || pastFailures.rejectedApprovals?.length) ? `
+
+HISTORIE PODOBNÝCH ÚKOLŮ (poslední failures pro tento modul):
+${(pastFailures.failedRuns || []).slice(0, 3).map((r, i) =>
+  `${i + 1}. [${r.status}] #${r.task?.id} "${r.task?.page_title || '?'}" — ${(r.failure_reason || r.summary || '').slice(0, 200)}`
+).join('\n')}
+${(pastFailures.rejectedApprovals || []).length > 0 ? `\n\nMINULÉ ZAMÍTNUTÉ PLÁNY:
+${pastFailures.rejectedApprovals.slice(0, 3).map((a, i) =>
+  `${i + 1}. #${a.run?.task?.id} "${a.run?.task?.page_title || '?'}" — Tomáš zamítl: ${(a.comment || '(bez komentáře)').slice(0, 200)}`
+).join('\n')}` : ''}
+
+Z této historie se pouč: pokud aktuální úkol připomíná některý z minulých failures, dej tomu váhu při verdiktu (zvážni needs_clarification s konkrétními otázkami inspirovanými minulými chybami).
+` : ''}
 
 Vrať <triage_result>{...}</triage_result>.`;
 }
@@ -92,7 +106,7 @@ function parseTriageResult(text) {
  * zablokovali kvůli vlastnímu bugu v triage. Stávající "no-changes" safety
  * net v runner.js zachytí případy, kde agent stejně nic neprovede.
  */
-async function runTriage({ task, repo }) {
+async function runTriage({ task, repo, pastFailures = null }) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
     throw new Error('ANTHROPIC_API_KEY chybí — triage nelze spustit');
@@ -104,7 +118,7 @@ async function runTriage({ task, repo }) {
     max_tokens: TRIAGE_MAX_TOKENS,
     system: SYSTEM_PROMPT,
     messages: [
-      { role: 'user', content: buildUserMessage(task, repo) },
+      { role: 'user', content: buildUserMessage(task, repo, pastFailures) },
     ],
   });
 

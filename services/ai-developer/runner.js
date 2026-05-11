@@ -183,9 +183,21 @@ async function processTask(task, options = {}) {
     const triageEnabled = !isResume && process.env.AI_DEV_TRIAGE_ENABLED !== 'false';
     if (triageEnabled) {
       await repository.updateRun(run.id, { status: 'triaging' });
+
+      // Fáze 4 learning: fetch past failures pro tento modul → triage se z nich poučí
+      let pastFailures = null;
+      try {
+        pastFailures = await repository.getPastFailures({
+          affectedModule: task.affected_module,
+          limit: 5,
+        });
+      } catch (e) {
+        console.error('[ai-dev] getPastFailures (triage) failed:', e.message);
+      }
+
       let triage;
       try {
-        triage = await triageModule.runTriage({ task, repo });
+        triage = await triageModule.runTriage({ task, repo, pastFailures });
         triageTokens = triage.tokensUsed || 0;
         await log('decision', {
           action: 'triage_done',
