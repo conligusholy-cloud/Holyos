@@ -55,6 +55,9 @@ async function rmrf(dir) {
  * @param {object} options — { aiUserId }
  */
 async function processTask(task, options = {}) {
+  const { resumeRunId = null, presetPlan = null } = options;
+  const isResume = !!resumeRunId;
+
   const githubToken = process.env.AI_DEV_GITHUB_TOKEN;
   if (!githubToken) {
     throw new Error('AI_DEV_GITHUB_TOKEN env chybí — nelze klonovat ani otevřít PR');
@@ -74,13 +77,21 @@ async function processTask(task, options = {}) {
     throw new Error(`Nelze rozpoznat owner/repo z git_url: ${repo.git_url}`);
   }
 
-  // Vytvoř DB záznam běhu
+  // Vytvoř DB záznam běhu — nebo reuse existující (resume po approval).
   const settings = await repository.getSettings();
-  const run = await repository.createRun({
-    taskId: task.id,
-    repoId: repo.id,
-    autonomyMode: settings.default_autonomy,
-  });
+  let run;
+  if (isResume) {
+    run = await prisma.agentRun.findUnique({ where: { id: resumeRunId } });
+    if (!run) throw new Error(`Resume run ${resumeRunId} neexistuje`);
+    // Re-open run pro coding fázi (status awaiting_approval → queued → coding)
+    await repository.updateRun(run.id, { status: 'queued', ended_at: null });
+  } else {
+    run = await repository.createRun({
+      taskId: task.id,
+      repoId: repo.id,
+      autonomyMode: settings.default_autonomy,
+    });
+  }
 
   // Wrapper kolem appendEvent — pro 'rule_blocked' kind ještě navíc
   // inkrementuje AgentRule.blocked_count statistiku (fire-and-forget,
@@ -128,9 +139,21 @@ async function processTask(task, options = {}) {
   let plannerTokens = 0;
 
   try {
-    await log('decision', { action: 'start', branch, workdir });
+    await log('decision', {
+      action: isResume ? 'resume_start' : 'start',
+      branch,
+      workdir,
+      resume: isResume,
+      has_preset_plan: !!presetPlan,
+    });
 
-    await chat.postMessage(task.id, '', { template: 'accept' });
+    if (!isResume) {
+      await chat.postMessage(task.id, '', { template: 'accept' });
+    } else {
+      try {
+        await chat.postMessage(task.id, '✅ Plán schválen — pokračuji v práci.');
+      } catch (_e) { /* best effort */ }
+    }
 
     // ── 0) Triage (preflight Claude haiku call PŘED clone) ─────────────
     //
@@ -143,7 +166,10 @@ async function processTask(task, options = {}) {
     // Vypínač: env AI_DEV_TRIAGE_ENABLED=false (default true). Při triage chybě
     // (síť, parser, …) triage modul fallbacks na verdict='ok', ať coding loop
     // dostane šanci — stávající "no-changes" safety net to zachytí níže.
-    const triageEnabled = process.env.AI_DEV_TRIAGE_ENABLED !== 'false';
+    //
+    // Při isResume (po approval) triage i planning se přeskakují — předchozí
+    // run je už vyhodnotil a plán byl schválen.
+    const triageEnabled = !isResume && process.env.AI_DEV_TRIAGE_ENABLED !== 'false';
     if (triageEnabled) {
       await repository.updateRun(run.id, { status: 'triaging' });
       let triage;
@@ -267,7 +293,9 @@ async function processTask(task, options = {}) {
     //
     // Vypínač: env AI_DEV_PLANNER_ENABLED=false. Při chybě fallback na bez-plánu
     // coding (forbidden check + no-changes safety net stejně chrání).
-    const plannerEnabled = process.env.AI_DEV_PLANNER_ENABLED !== 'false';
+    // Při isResume planning se přeskakuje — plán už je schválený a předaný
+    // jako presetPlan parametr do runAgent (system prompt).
+    const plannerEnabled = !isResume && process.env.AI_DEV_PLANNER_ENABLED !== 'false';
     let plan = null;
     if (plannerEnabled) {
       await repository.updateRun(run.id, { status: 'planning' });
@@ -346,6 +374,7 @@ async function processTask(task, options = {}) {
       task,
       repo,
       rules: forbiddenRules,
+      presetPlan: isResume ? presetPlan : null,
       onEvent: async (kind, payload) => log(kind, payload),
     });
 

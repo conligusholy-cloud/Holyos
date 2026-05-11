@@ -333,6 +333,38 @@ async function decideApproval(id, { decision, decidedBy, comment }) {
     },
   });
 }
+// Najde runy v awaiting_approval, které mají rozhodnutý approval (approved
+// nebo rejected). Worker pollApprovals to zvedne a buď spustí resume (approved)
+// nebo eskaluje (rejected). Vrátí pole {run, approval} (latest approval per run).
+async function listApprovalsToProcess() {
+  // Najdi všechny awaiting_approval runy s alespoň jedním rozhodnutým approval
+  const runs = await prisma.agentRun.findMany({
+    where: {
+      status: 'awaiting_approval',
+      approvals: {
+        some: {
+          decision: { in: ['approved', 'rejected'] },
+          decided_at: { not: null },
+        },
+      },
+    },
+    include: {
+      task: { select: { id: true, page_title: true, description: true, acceptance_criteria: true, created_by: true } },
+      repo: true,
+      approvals: {
+        where: { decision: { in: ['approved', 'rejected'] } },
+        orderBy: { decided_at: 'desc' },
+        take: 1,
+      },
+    },
+  });
+
+  // Mapuj na {run, approval}
+  return runs
+    .filter((r) => r.approvals && r.approvals.length > 0)
+    .map((r) => ({ run: r, approval: r.approvals[0] }));
+}
+
 
 
 
@@ -499,6 +531,7 @@ module.exports = {
   getApproval,
   createApproval,
   decideApproval,
+  listApprovalsToProcess,
   // queue + counters
   listQueue,
   listAutoMergeCandidates,
