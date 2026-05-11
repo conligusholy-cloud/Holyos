@@ -10,6 +10,7 @@ const { requireAuth } = require('../middleware/auth');
 const { createNotification } = require('./notifications.routes');
 const { getBlockingRunForTask } = require('../services/ai-developer/repository');
 const acChat = require('../services/ai-developer/ac-chat');
+const suitability = require('../services/ai-developer/suitability');
 
 router.use(requireAuth);
 
@@ -119,6 +120,9 @@ router.get('/', async (req, res, next) => {
         page: true, page_title: true,
         description: true, spec: true,
         ai_questions: true, ai_answers: true,
+        assignable_to_ai: true, target_repo_id: true,
+        change_type: true, autonomy_override: true,
+        ai_suitability_score: true, ai_suitability_reasoning: true,
         created_by: true, deleted_at: true,
         created_at: true, updated_at: true,
         creator: { select: { id: true, username: true, display_name: true } },
@@ -187,10 +191,53 @@ router.post('/', async (req, res, next) => {
     });
     console.log(`[admin-tasks] → vytvořen úkol #${task.id}, screenshot v DB: ${task.screenshot ? task.screenshot.length + ' B' : 'NULL'}`);
     res.status(201).json(task);
+
+    // Async fire-and-forget: vyhodnoť suitability score (Claude haiku) pro nový task.
+    // Pokud Alan už task finalizoval (Alan chat), score je informativní; pokud ne,
+    // pomůže Tomášovi rychle vidět, který task je pro AI vhodný.
+    setImmediate(() => evaluateSuitabilityAsync(task.id).catch((e) =>
+      console.error('[admin-tasks] suitability eval failed for', task.id, ':', e.message)
+    ));
   } catch (err) {
     console.error('[admin-tasks] POST chyba:', err.message);
     next(err);
   }
+});
+
+// Helper — vyhodnotí task + uloží score/reasoning do DB.
+async function evaluateSuitabilityAsync(taskId) {
+  const task = await prisma.adminTask.findUnique({
+    where: { id: taskId },
+    select: {
+      id: true, page_title: true, description: true, page: true,
+      acceptance_criteria: true, affected_module: true, change_type: true,
+    },
+  });
+  if (!task) return;
+  const result = await suitability.evaluate(task);
+  const data = {
+    ai_suitability_score: result.score,
+    ai_suitability_reasoning: result.reasoning,
+    ai_suitability_at: new Date(),
+  };
+  // Pokud Alan ještě nemá change_type / autonomy, můžeme nasadit doporučení.
+  // Jen JEMNĚ — nepřepisujeme pokud už něco je (uživatel může mít vlastní volbu).
+  if (result.recommendedChangeType && !task.change_type) data.change_type = result.recommendedChangeType;
+  await prisma.adminTask.update({ where: { id: taskId }, data });
+}
+
+// POST /api/admin-tasks/:id/evaluate-suitability — re-evaluate manuálně z UI
+router.post('/:id/evaluate-suitability', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ error: 'Neplatné ID' });
+    await evaluateSuitabilityAsync(id);
+    const task = await prisma.adminTask.findUnique({
+      where: { id },
+      select: { ai_suitability_score: true, ai_suitability_reasoning: true, ai_suitability_at: true },
+    });
+    res.json(task);
+  } catch (err) { next(err); }
 });
 
 // PUT /api/tasks/:id

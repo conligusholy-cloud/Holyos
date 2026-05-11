@@ -963,6 +963,10 @@ model AdminTask {
   // mapping, null = použij mapping podle change_type, fallback na settings.
   change_type         String? @db.VarChar(30)  // documentation | ui_change | bug_fix | refactor | new_feature | integration | data_migration
   autonomy_override   String? @db.VarChar(20)  // full_auto | pr_review | plan_review
+  // AI suitability scoring (Fáze 4): Claude haiku ohodnotí jak vhodný je úkol pro AI Vývojáře
+  ai_suitability_score      Int?    // 0-100, vyšší = vhodnější pro AI
+  ai_suitability_reasoning  String? @db.Text  // krátké vysvětlení proč (česky)
+  ai_suitability_at         DateTime? @db.Timestamptz  // kdy byl score vyhodnocen
 
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
