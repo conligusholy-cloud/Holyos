@@ -55,7 +55,7 @@ const labelTemplateInputSchema = z.object({
 
 const printJobInputSchema = z.object({
   template: z.string().min(1),        // kód šablony
-  data: z.record(z.any()).default({}),
+  data: z.record(z.string(), z.any()).default({}),
   printer_id: z.number().int().nullable().optional(),
   copies: z.number().int().min(1).max(99).default(1),
   location_id: z.number().int().nullable().optional(),
