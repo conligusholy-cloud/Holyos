@@ -20,6 +20,7 @@ const chat = require('./chat');
 const git = require('./git');
 const github = require('./github');
 const { runAgent, isForbidden } = require('./agent');
+const triageModule = require('./triage');
 
 const TMP_ROOT = process.env.AI_DEV_TMP_DIR || path.join(os.tmpdir(), 'holyos-agent');
 
@@ -107,14 +108,109 @@ async function processTask(task, options = {}) {
   const workdir = path.join(TMP_ROOT, run.id, 'repo');
   const branch = `ai/REQ-${task.id}-${slugify(task.page_title || '')}-${run.id.slice(0, 8)}`;
 
+  // Tokens spotřebované triage callem — sčítáme s coding loop tokeny při
+  // updateRun. Když je triage vypnutý nebo selže, zůstane 0.
+  let triageTokens = 0;
+
   try {
     await log('decision', { action: 'start', branch, workdir });
 
     await chat.postMessage(task.id, '', { template: 'accept' });
 
+    // ── 0) Triage (preflight Claude haiku call PŘED clone) ─────────────
+    //
+    // Cíl: nepálit tokeny na úkolech se špatným target_repo nebo neúplnými AC.
+    // Triage neklonuje repo, jen vyhodnotí task + repo metadata. Možné výsledky:
+    //   - ok                  → pokračuj na clone + coding loop (běžný flow)
+    //   - needs_clarification → otázky do task chatu, status awaiting_clarification, run končí
+    //   - stop                → eskalace, status escalated, run končí
+    //
+    // Vypínač: env AI_DEV_TRIAGE_ENABLED=false (default true). Při triage chybě
+    // (síť, parser, …) triage modul fallbacks na verdict='ok', ať coding loop
+    // dostane šanci — stávající "no-changes" safety net to zachytí níže.
+    const triageEnabled = process.env.AI_DEV_TRIAGE_ENABLED !== 'false';
+    if (triageEnabled) {
+      await repository.updateRun(run.id, { status: 'triaging' });
+      let triage;
+      try {
+        triage = await triageModule.runTriage({ task, repo });
+        triageTokens = triage.tokensUsed || 0;
+        await log('decision', {
+          action: 'triage_done',
+          verdict: triage.verdict,
+          reason: triage.reason,
+          questions_count: triage.questions.length,
+          tokens_used: triageTokens,
+        });
+      } catch (e) {
+        // Hard fail (např. ANTHROPIC_API_KEY chybí). Logujeme a fallback na ok.
+        await log('error', { phase: 'triage', message: e.message });
+        triage = { verdict: 'ok', reason: 'Triage hard fail → fallback ok', questions: [] };
+      }
+
+      if (triage.verdict === 'needs_clarification') {
+        const qs = (triage.questions || []).filter(Boolean);
+        const qsList = qs.length
+          ? qs.map((q, i) => `${i + 1}. ${q}`).join('\n')
+          : '_(triage neuvedl konkrétní otázky)_';
+        const msg =
+          `Než se pustím do úkolu, potřebuju upřesnit:\n\n` +
+          `${qsList}\n\n` +
+          `**Důvod:** ${triage.reason}\n\n` +
+          `_Doplň prosím odpovědi v Požadavcích → akceptační kritéria. Po doplnění úkol znovu zvednu sám (do 30 min, viz failed backoff)._`;
+        try { await chat.postMessage(task.id, msg); }
+        catch (e) { console.error('[ai-dev] triage chat (clarification):', e.message); }
+        try {
+          await chat.notifyTaskCreator(task.id, {
+            type: 'task_status',
+            title: `🤔 AI Vývojář se ptá k úkolu #${task.id}`,
+            body: shortenForBody(qs[0] || triage.reason, 200),
+            link: `/modules/admin-tasks/?task=${task.id}`,
+            meta: { run_id: run.id, kind: 'awaiting_clarification' },
+          });
+        } catch (_e) {}
+        await repository.updateRun(run.id, {
+          status: 'awaiting_clarification',
+          ended_at: new Date(),
+          tokens_used: triageTokens,
+          summary: triage.reason,
+        });
+        return run;
+      }
+
+      if (triage.verdict === 'stop') {
+        const msg =
+          `**Tento úkol nemůžu zpracovat** — eskaluji na člověka.\n\n` +
+          `**Důvod:** ${triage.reason}\n\n` +
+          `_Změň prosím target_repo nebo akceptační kritéria a zkus znovu._`;
+        try { await chat.postMessage(task.id, msg); }
+        catch (e) { console.error('[ai-dev] triage chat (stop):', e.message); }
+        try {
+          await chat.notifySuperAdmins({
+            type: 'task_status',
+            title: `🛑 AI Vývojář eskaloval úkol #${task.id} (triage)`,
+            body: shortenForBody(triage.reason, 200),
+            link: '/modules/ai-vyvojar/',
+            meta: { run_id: run.id, task_id: task.id, kind: 'triage_stop' },
+          });
+        } catch (_e) {}
+        await repository.updateRun(run.id, {
+          status: 'escalated',
+          ended_at: new Date(),
+          tokens_used: triageTokens,
+          failure_reason: triage.reason,
+          summary: triage.reason,
+        });
+        return run;
+      }
+
+      // verdict === 'ok' → pokračuj na clone + coding
+    }
+
     // ── 1) Clone ───────────────────────────────────────────────────────
     await fs.mkdir(path.dirname(workdir), { recursive: true });
-    await repository.updateRun(run.id, { status: 'triaging', branch });
+    // Branch nastavujeme až teď (status už je 'triaging' z triage fáze).
+    await repository.updateRun(run.id, { branch });
 
     await log('decision', { action: 'clone', git_url: repo.git_url, default_branch: repo.default_branch });
     await git.clone({
@@ -155,7 +251,7 @@ async function processTask(task, options = {}) {
     // zůstane v DB pro Audit log (aby uživatel viděl, co agent navrhoval).
     await repository.updateRun(run.id, {
       summary: agentResult.summary,
-      tokens_used: agentResult.tokensUsed,
+      tokens_used: triageTokens + agentResult.tokensUsed,
     });
 
     // ── 4) Forbidden check ─────────────────────────────────────────────
@@ -200,7 +296,7 @@ async function processTask(task, options = {}) {
         status: 'escalated',
         ended_at: new Date(),
         failure_reason: 'Změna sahala na zakázané cesty',
-        tokens_used: agentResult.tokensUsed,
+        tokens_used: triageTokens + agentResult.tokensUsed,
       });
       await chat.postMessage(task.id, '', {
         template: 'escalated',
@@ -258,7 +354,7 @@ async function processTask(task, options = {}) {
       status: 'pr_open',
       pr_url: pr.html_url,
       pr_number: pr.number,
-      tokens_used: agentResult.tokensUsed,
+      tokens_used: triageTokens + agentResult.tokensUsed,
       summary: agentResult.summary,
     });
 
