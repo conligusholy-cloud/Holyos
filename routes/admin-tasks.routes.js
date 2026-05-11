@@ -278,6 +278,41 @@ router.put('/:id', async (req, res, next) => {
   }
 });
 
+// POST /api/admin-tasks/draft-chat — AI doptává úkol BĚHEM vytváření (před DB)
+// body: { message, history, draft, page_context }
+// Žádná DB persistence — vše drží frontend mezi voláními. Po finalized=true
+// frontend pošle POST / s draftem (existující create endpoint).
+router.post('/draft-chat', async (req, res, next) => {
+  try {
+    const message = String((req.body && req.body.message) || '').trim();
+    if (!message) return res.status(400).json({ error: 'Chybí message v body.' });
+
+    const history = Array.isArray(req.body && req.body.history) ? req.body.history : [];
+    const draft = (req.body && req.body.draft && typeof req.body.draft === 'object') ? req.body.draft : {};
+    const pageContext = (req.body && req.body.page_context && typeof req.body.page_context === 'object') ? req.body.page_context : {};
+
+    let result;
+    try {
+      result = await acChat.chatDraft({ draft, history, userMessage: message, pageContext });
+    } catch (e) {
+      console.error('[ac-chat draft] failed:', e.message);
+      return res.status(500).json({ error: 'AC chat (draft) selhal: ' + e.message });
+    }
+
+    res.json({
+      ai_message: result.aiMessage,
+      updates: result.updates,
+      draft: result.updatedDraft,
+      history: result.newHistory.slice(-100),
+      finalized: result.finalized,
+      summary: result.summary,
+      escalate: result.escalate,
+      escalate_reason: result.escalateReason,
+      tokens_used: result.tokensUsed,
+    });
+  } catch (err) { next(err); }
+});
+
 // POST /api/admin-tasks/:id/ac-chat — AI doptává akceptační kritéria
 // body: { message: string, reset?: boolean }
 // History persistuje v task.ai_questions (JSONB pole {role, content}).
