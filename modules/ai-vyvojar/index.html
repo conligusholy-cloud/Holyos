@@ -157,6 +157,7 @@
       <button class="aidev-tab active" data-tab="dashboard">Dashboard</button>
       <button class="aidev-tab" data-tab="repos">Repozitáře</button>
       <button class="aidev-tab" data-tab="rules">Pravidla</button>
+      <button class="aidev-tab" data-tab="approvals">Schválení</button>
       <button class="aidev-tab" data-tab="limits">Limity</button>
       <button class="aidev-tab" data-tab="audit">Audit log</button>
     </div>
@@ -266,6 +267,24 @@
           <button class="btn" id="btn-cancel-rule">Zrušit</button>
         </div>
       </div>
+    </div>
+
+    <!-- SCHVÁLENÍ -->
+    <div class="tab-content" data-tab="approvals">
+      <div style="margin-bottom:14px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+        <select id="approval-filter-decision" style="padding:6px;">
+          <option value="pending" selected>jen pending</option>
+          <option value="">— všechny —</option>
+          <option value="approved">approved</option>
+          <option value="rejected">rejected</option>
+          <option value="expired">expired</option>
+        </select>
+        <span style="font-size:12px; color:var(--text2); margin-left:auto;">
+          MVP — runner zatím netvoří approvaly automaticky (přijde v další session).
+          UI funguje pro list/decide; manuální tvorba přes API <code>POST /api/agent/approvals</code>.
+        </span>
+      </div>
+      <div id="approvals-host"><div class="empty">Načítání…</div></div>
     </div>
 
     <!-- LIMITY -->

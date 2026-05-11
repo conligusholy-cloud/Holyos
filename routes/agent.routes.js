@@ -61,6 +61,20 @@ const RuleCreateSchema = z.object({
 
 const RulePatchSchema = RuleCreateSchema.partial();
 
+const APPROVAL_KINDS = ['plan_review', 'pr_review', 'rule_override'];
+const APPROVAL_DECISIONS = ['approved', 'rejected'];
+
+const ApprovalCreateSchema = z.object({
+  run_id: z.string().uuid(),
+  kind: z.enum(APPROVAL_KINDS),
+  payload: z.record(z.string(), z.any()).optional().nullable(),
+});
+
+const ApprovalDecideSchema = z.object({
+  decision: z.enum(APPROVAL_DECISIONS),
+  comment: z.string().max(2000).optional().nullable(),
+});
+
 // ─── Dashboard ─────────────────────────────────────────────────────────────
 
 router.get('/dashboard', async (req, res, next) => {
@@ -396,6 +410,82 @@ router.delete('/rules/:id', async (req, res, next) => {
       },
     });
     res.status(204).end();
+  } catch (err) { next(err); }
+});
+
+// ─── Schvalovací fronta (approvals) ───────────────────────────────────────
+//
+// MVP: tabulka + UI bez napojení na runner (auto-tvorba a resume workflow přijdou
+// v další session). Endpointy umožňují ručně vytvořit / decide pro testování UI flow.
+
+router.get('/approvals', async (req, res, next) => {
+  try {
+    const items = await repo.listApprovals({
+      decision: req.query.decision || undefined,
+      runId: req.query.run_id || undefined,
+      limit: req.query.limit,
+    });
+    res.json(items);
+  } catch (err) { next(err); }
+});
+
+router.get('/approvals/:id', async (req, res, next) => {
+  try {
+    const item = await repo.getApproval(req.params.id);
+    if (!item) return res.status(404).json({ error: 'Approval nenalezen' });
+    res.json(item);
+  } catch (err) { next(err); }
+});
+
+router.post('/approvals', async (req, res, next) => {
+  try {
+    const data = ApprovalCreateSchema.parse(req.body);
+    const created = await repo.createApproval({
+      runId: data.run_id,
+      kind: data.kind,
+      payload: data.payload,
+    });
+    await prisma.auditLog.create({
+      data: {
+        user_name: req.user.username,
+        user_display: req.user.display_name || null,
+        action: 'create',
+        entity: 'agent_approval',
+        description: `AI Vývojář — vytvořen approval ${data.kind} pro run ${data.run_id.slice(0, 8)}`,
+        changes: data,
+      },
+    });
+    res.status(201).json(created);
+  } catch (err) { next(err); }
+});
+
+router.post('/approvals/:id/decide', async (req, res, next) => {
+  try {
+    const { decision, comment } = ApprovalDecideSchema.parse(req.body);
+    const target = await repo.getApproval(req.params.id);
+    if (!target) return res.status(404).json({ error: 'Approval nenalezen' });
+    if (target.decision !== 'pending') {
+      return res.status(409).json({
+        error: 'ALREADY_DECIDED',
+        message: `Approval už má decision='${target.decision}', nelze změnit.`,
+      });
+    }
+    const updated = await repo.decideApproval(req.params.id, {
+      decision,
+      decidedBy: req.user.id,
+      comment,
+    });
+    await prisma.auditLog.create({
+      data: {
+        user_name: req.user.username,
+        user_display: req.user.display_name || null,
+        action: 'update',
+        entity: 'agent_approval',
+        description: `AI Vývojář — approval ${target.kind} ${decision === 'approved' ? 'SCHVÁLEN' : 'ZAMÍTNUT'} (run ${target.run_id.slice(0, 8)})`,
+        changes: { decision, comment: comment || null },
+      },
+    });
+    res.json(updated);
   } catch (err) { next(err); }
 });
 

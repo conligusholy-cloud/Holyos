@@ -61,6 +61,7 @@
     if (tab === 'dashboard') loadDashboard();
     if (tab === 'repos') loadRepos();
     if (tab === 'rules') loadRules();
+    if (tab === 'approvals') loadApprovals();
     if (tab === 'limits') loadLimits();
     if (tab === 'audit') loadAudit();
   }
@@ -653,6 +654,111 @@
       alert('Uložení selhalo: ' + err.message);
     }
   });
+
+
+  // ─── Schvalovací fronta (approvals) ──────────────────────────────────────
+  //
+  // Frontend nad /api/agent/approvals. MVP bez napojení na runner — runner
+  // zatím netvoří approvaly automaticky. Schvalování (Schválit / Zamítnout)
+  // ale funguje end-to-end přes /approvals/:id/decide.
+
+  let _approvals = [];
+
+  async function loadApprovals() {
+    try {
+      const decision = $('#approval-filter-decision').value;
+      const qs = decision ? '?decision=' + encodeURIComponent(decision) : '';
+      _approvals = await api('/approvals' + qs);
+      renderApprovals();
+    } catch (err) {
+      $('#approvals-host').innerHTML = '<div class="empty">Chyba: ' + escapeHtml(err.message) + '</div>';
+    }
+  }
+
+  function renderApprovals() {
+    if (!_approvals || _approvals.length === 0) {
+      $('#approvals-host').innerHTML = '<div class="empty">Žádné approvaly. Runner zatím netvoří automaticky — vytvoř manuálně přes API pro test.</div>';
+      return;
+    }
+    let html = '<table class="data-table" style="width:100%; border-collapse:collapse;">' +
+      '<thead><tr>' +
+      '<th>KIND</th><th>ÚKOL</th><th>REPO</th><th>RUN STATUS</th>' +
+      '<th>VYŽÁDÁNO</th><th>DECISION</th><th>ROZHODL</th><th></th>' +
+      '</tr></thead><tbody>';
+    for (const a of _approvals) {
+      const decisionColor = a.decision === 'pending' ? '#f59e0b'
+        : (a.decision === 'approved' ? '#22c55e'
+        : (a.decision === 'rejected' ? '#ef4444' : '#888'));
+      const taskTitle = a.run && a.run.task ? a.run.task.page_title : '';
+      const taskId = a.run && a.run.task ? a.run.task.id : '?';
+      const repoName = a.run && a.run.repo ? a.run.repo.name : '—';
+      const runStatus = a.run ? a.run.status : '—';
+      const deciderName = a.decider ? (a.decider.display_name || a.decider.username) : '—';
+      html += '<tr>' +
+        '<td><span class="chip" style="background:rgba(14,165,233,0.15);color:#0ea5e9;">' + escapeHtml(a.kind) + '</span></td>' +
+        '<td>#' + taskId + ' ' + escapeHtml(shortSummary(taskTitle, 50)) + '</td>' +
+        '<td>' + escapeHtml(repoName) + '</td>' +
+        '<td><span class="chip ' + escapeHtml(runStatus) + '">' + escapeHtml(runStatus) + '</span></td>' +
+        '<td style="font-size:12px;">' + fmtDate(a.requested_at) + '</td>' +
+        '<td><span class="chip" style="background:' + decisionColor + '22; color:' + decisionColor + ';">' + escapeHtml(a.decision) + '</span></td>' +
+        '<td style="font-size:12px;">' + escapeHtml(deciderName) + (a.decided_at ? '<br><span style="color:var(--text2);font-size:11px;">' + fmtDate(a.decided_at) + '</span>' : '') + '</td>' +
+        '<td>';
+      if (a.decision === 'pending') {
+        html +=
+          '<button class="btn" data-approve="' + escapeHtml(a.id) + '" style="background:#22c55e;color:white;border-color:#22c55e;">✓ Schválit</button> ' +
+          '<button class="btn" data-reject="' + escapeHtml(a.id) + '" style="background:#ef4444;color:white;border-color:#ef4444;">✕ Zamítnout</button>';
+      } else {
+        html += '<button class="btn" data-detail-approval="' + escapeHtml(a.id) + '">Detail</button>';
+      }
+      html += '</td>' +
+      '</tr>';
+      // Payload preview pod řádkem
+      if (a.payload && Object.keys(a.payload).length > 0) {
+        html += '<tr><td colspan="8" style="font-family:ui-monospace,monospace;font-size:11px;color:var(--text2);background:rgba(0,0,0,0.2);padding:6px 12px;">' +
+          'payload: ' + escapeHtml(JSON.stringify(a.payload).slice(0, 300)) +
+          '</td></tr>';
+      }
+      if (a.comment) {
+        html += '<tr><td colspan="8" style="font-size:12px;color:var(--text2);background:rgba(0,0,0,0.1);padding:6px 12px;">' +
+          '💬 ' + escapeHtml(a.comment) +
+          '</td></tr>';
+      }
+    }
+    html += '</tbody></table>';
+    $('#approvals-host').innerHTML = html;
+
+    $$('[data-approve]').forEach((b) => {
+      b.addEventListener('click', () => decideApproval(b.dataset.approve, 'approved'));
+    });
+    $$('[data-reject]').forEach((b) => {
+      b.addEventListener('click', () => decideApproval(b.dataset.reject, 'rejected'));
+    });
+    $$('[data-detail-approval]').forEach((b) => {
+      b.addEventListener('click', () => {
+        const a = _approvals.find((x) => x.id === b.dataset.detailApproval);
+        if (a) alert(JSON.stringify(a, null, 2));
+      });
+    });
+  }
+
+  async function decideApproval(id, decision) {
+    const a = _approvals.find((x) => x.id === id);
+    if (!a) return;
+    const verbCs = decision === 'approved' ? 'Schválit' : 'Zamítnout';
+    if (!confirm(verbCs + ' approval ' + a.kind + ' pro úkol #' + (a.run && a.run.task ? a.run.task.id : '?') + '?')) return;
+    const comment = prompt('Komentář (volitelně):') || '';
+    try {
+      await api('/approvals/' + id + '/decide', {
+        method: 'POST',
+        body: JSON.stringify({ decision, comment }),
+      });
+      loadApprovals();
+    } catch (err) {
+      alert('Rozhodnutí selhalo: ' + err.message);
+    }
+  }
+
+  $('#approval-filter-decision').addEventListener('change', loadApprovals);
 
   // ─── Init ──────────────────────────────────────────────────────────────
 
