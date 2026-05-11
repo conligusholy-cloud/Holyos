@@ -217,8 +217,8 @@ async function execTool(name, input, workdir, forbiddenCheck) {
   }
 }
 
-function buildSystemPrompt(task, repo) {
-  return `Jsi "Alan, AI Vývojář" — autonomní agent v HolyOS. Pracuješ v naklonovaném repu ${repo.name} (${repo.git_url}).
+function buildSystemPrompt(task, repo, presetPlan = null) {
+  let prompt = `Jsi "Alan, AI Vývojář" — autonomní agent v HolyOS. Pracuješ v naklonovaném repu ${repo.name} (${repo.git_url}).
 
 ÚKOL #${task.id}:
 ${task.page_title || '(bez názvu)'}
@@ -245,6 +245,18 @@ PRAVIDLA:
 
 REPO TECH STACK:
 ${JSON.stringify(repo.tech_stack || {}, null, 2)}`;
+
+  if (presetPlan) {
+    prompt += `\n\n══════════════════════════════════════════════════════\n`;
+    prompt += `SCHVÁLENÝ PLÁN (od planneru, schváleno super-adminem):\n`;
+    prompt += `══════════════════════════════════════════════════════\n`;
+    prompt += JSON.stringify(presetPlan, null, 2);
+    prompt += `\n\nDrž se tohoto plánu. Pokud potřebuješ udělat něco mimo plán, ` +
+              `volej finish() s vysvětlením proč — lidský operátor to dořeší. ` +
+              `Nedělej věci nad rámec plánu bez explicitního důvodu.`;
+  }
+
+  return prompt;
 }
 
 /**
@@ -254,7 +266,7 @@ ${JSON.stringify(repo.tech_stack || {}, null, 2)}`;
  *   z DB (načtené runnerem). Pokud prázdné/undefined, použije se hardcoded
  *   fallback. Checker se vyrábí 1× per run a používá se v každém tool callu.
  */
-async function runAgent({ workdir, task, repo, rules, onEvent }) {
+async function runAgent({ workdir, task, repo, rules, presetPlan, onEvent }) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
     throw new Error('ANTHROPIC_API_KEY chybí — agent nelze spustit');
@@ -278,7 +290,7 @@ async function runAgent({ workdir, task, repo, rules, onEvent }) {
     const response = await client.messages.create({
       model: MODEL,
       max_tokens: MAX_TOKENS_PER_TURN,
-      system: buildSystemPrompt(task, repo),
+      system: buildSystemPrompt(task, repo, presetPlan),
       tools: TOOLS,
       messages,
     });

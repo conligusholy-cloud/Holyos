@@ -42,6 +42,13 @@ async function pollOnce() {
     console.error('[ai-dev/worker] pollAutoMerge failed:', e.message)
   );
 
+  // Approvals — runy v awaiting_approval s rozhodnutým approvalem (approved
+  // nebo rejected). Také paralelně, taky nezávisle na queue capacity (resume
+  // run reuse existující run.id, queue limit nezvyšuje).
+  pollApprovals(settings).catch((e) =>
+    console.error('[ai-dev/worker] pollApprovals failed:', e.message)
+  );
+
   // Limit běžících
   let running;
   try {
@@ -170,6 +177,95 @@ async function pollAutoMerge(settings) {
       // Nezamykáme run jako failed — člověk může mergnout ručně, jen log a jdeme dál
     }
   }
+}
+
+
+
+// ─── Approval resume / rejection ───────────────────────────────────────────
+//
+// Zachycuje runy v 'awaiting_approval' s rozhodnutým approvalem (decided_at
+// set). Pro 'approved' spustí resume přes runner.processTask({ resumeRunId,
+// presetPlan }), pro 'rejected' status → 'escalated' + notify.
+
+async function pollApprovals(settings) {
+  let items;
+  try {
+    items = await repository.listApprovalsToProcess();
+  } catch (err) {
+    console.error('[ai-dev/worker] listApprovalsToProcess failed:', err.message);
+    return;
+  }
+  if (!items.length) return;
+
+  for (const { run, approval } of items) {
+    const guardKey = `approval:${approval.id}`;
+    if (_activeRuns.has(guardKey)) continue;
+    _activeRuns.add(guardKey);
+
+    // Spusť asynchronně — handlers volají network (chat, runner.processTask)
+    // a nechceme blokovat polling.
+    (async () => {
+      try {
+        if (approval.decision === 'rejected') {
+          await handleApprovalRejected(run, approval);
+        } else if (approval.decision === 'approved') {
+          await handleApprovalApproved(run, approval);
+        }
+      } catch (err) {
+        console.error(`[ai-dev/worker] approval handler run=${run.id} failed:`, err.message);
+      } finally {
+        _activeRuns.delete(guardKey);
+      }
+    })();
+  }
+}
+
+async function handleApprovalRejected(run, approval) {
+  const commentText = approval.comment ? approval.comment : '(bez komentáře)';
+  await repository.updateRun(run.id, {
+    status: 'escalated',
+    ended_at: new Date(),
+    failure_reason: 'Plán zamítnut: ' + commentText,
+    summary: 'Plán zamítnut super-adminem.',
+  });
+  await repository.appendEvent(run.id, 'decision', {
+    action: 'approval_rejected',
+    approval_id: approval.id,
+    comment: approval.comment || null,
+  });
+  try {
+    await chat.postMessage(run.task_id,
+      `🛑 **Plán pro úkol #${run.task_id} byl zamítnut.**\n\n` +
+      (approval.comment ? '**Komentář:** ' + approval.comment + '\n\n' : '') +
+      `_Run končí ve stavu \`escalated\`. Pro znovuspuštění uprav úkol (akceptační kritéria, target_repo) a předej AI Vývojáři znovu._`
+    );
+  } catch (e) { console.error('[ai-dev/worker] chat (rejected):', e.message); }
+  try {
+    await chat.notifyTaskCreator(run.task_id, {
+      type: 'task_status',
+      title: `🛑 Plán zamítnut — úkol #${run.task_id}`,
+      body: (approval.comment || 'Bez komentáře').slice(0, 200),
+      link: '/modules/ai-vyvojar/',
+      meta: { run_id: run.id, approval_id: approval.id, kind: 'plan_rejected' },
+    });
+  } catch (_e) {}
+  console.log(`[ai-dev/worker] approval rejected for run ${run.id}`);
+}
+
+async function handleApprovalApproved(run, approval) {
+  console.log(`[ai-dev/worker] resume run ${run.id} (approval ${approval.id} approved)`);
+  await repository.appendEvent(run.id, 'decision', {
+    action: 'approval_approved',
+    approval_id: approval.id,
+    comment: approval.comment || null,
+  });
+  // run.task je už populated (z listApprovalsToProcess include).
+  // approval.payload obsahuje schválený plán — runner ho předá agentu jako
+  // presetPlan (system prompt).
+  await runner.processTask(run.task, {
+    resumeRunId: run.id,
+    presetPlan: approval.payload || null,
+  });
 }
 
 function start() {
