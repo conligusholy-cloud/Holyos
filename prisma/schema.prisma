@@ -958,6 +958,11 @@ model AdminTask {
   acceptance_criteria String? @db.Text
   affected_module     String? @db.VarChar(100)
   target_repo_id      String?
+  // Mix-autonomy: change_type určuje výchozí autonomy podle typu (mapping
+  // v services/ai-developer/autonomy.js). autonomy_override per-task přebije
+  // mapping, null = použij mapping podle change_type, fallback na settings.
+  change_type         String? @db.VarChar(30)  // documentation | ui_change | bug_fix | refactor | new_feature | integration | data_migration
+  autonomy_override   String? @db.VarChar(20)  // full_auto | pr_review | plan_review
 
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt

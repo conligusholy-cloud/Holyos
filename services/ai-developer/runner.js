@@ -22,6 +22,7 @@ const github = require('./github');
 const { runAgent, buildForbiddenChecker } = require('./agent');
 const triageModule = require('./triage');
 const plannerModule = require('./planner');
+const { resolveAutonomy } = require('./autonomy');
 
 const TMP_ROOT = process.env.AI_DEV_TMP_DIR || path.join(os.tmpdir(), 'holyos-agent');
 
@@ -79,6 +80,16 @@ async function processTask(task, options = {}) {
 
   // Vytvoř DB záznam běhu — nebo reuse existující (resume po approval).
   const settings = await repository.getSettings();
+
+  // Mix-autonomy: vyřeš autonomy podle task.change_type + autonomy_override
+  // (services/ai-developer/autonomy.js). Pokud task nemá change_type ani
+  // override, fallback na settings.default_autonomy.
+  const resolvedAutonomy = resolveAutonomy({
+    changeType: task.change_type,
+    override: task.autonomy_override,
+    defaultAutonomy: settings.default_autonomy,
+  });
+
   let run;
   if (isResume) {
     run = await prisma.agentRun.findUnique({ where: { id: resumeRunId } });
@@ -89,7 +100,7 @@ async function processTask(task, options = {}) {
     run = await repository.createRun({
       taskId: task.id,
       repoId: repo.id,
-      autonomyMode: settings.default_autonomy,
+      autonomyMode: resolvedAutonomy,
     });
   }
 
@@ -322,8 +333,9 @@ async function processTask(task, options = {}) {
         // fallback — pokračujeme na coding bez plánu (warning logged)
       }
 
-      // Rozhodnutí: vyžaduje approval?
-      const autonomy = settings.default_autonomy; // 'full_auto' | 'pr_review' | 'plan_review'
+      // Rozhodnutí: vyžaduje approval? Používáme resolvedAutonomy (mix-autonomy
+      // podle task.change_type / autonomy_override) místo settings.default_autonomy.
+      const autonomy = resolvedAutonomy; // 'full_auto' | 'pr_review' | 'plan_review'
       const needsApproval = plan && (plan.requires_approval === true || autonomy === 'plan_review') && autonomy !== 'full_auto';
 
       if (needsApproval) {
