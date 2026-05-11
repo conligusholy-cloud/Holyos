@@ -23,6 +23,28 @@ const AC_CHAT_MAX_TOKENS = 2048;
 
 const TOOLS = [
   {
+    name: 'update_basic_fields',
+    description: 'V draft módu (vytváření nového požadavku) — nastav základní pole úkolu: titulek a popis. Volej včas, jakmile máš informace o tom CO uživatel chce. Pak pokračuj s update_ac_fields pro detailnější pole.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        page_title: {
+          type: 'string',
+          description: 'Krátký titulek úkolu (max 100 znaků), např. "Přidej tlačítko Export v tabulce zaměstnanců".',
+        },
+        description: {
+          type: 'string',
+          description: 'Strukturovaný popis úkolu (1-3 odstavce) — co uživatel chce, na kterou stránku, jaký kontext.',
+        },
+        priority: {
+          type: 'string',
+          enum: ['low', 'medium', 'high'],
+          description: 'Priorita podle naléhavosti (default medium).',
+        },
+      },
+    },
+  },
+  {
     name: 'update_ac_fields',
     description: 'Aktualizuj pole akceptačních kritérií úkolu na základě informací od zadavatele. Volej průběžně, jak se konverzace vyvíjí — aktualizuj jen pole, která už znáš. Volej DŘÍVE než kladeš další otázku.',
     input_schema: {
@@ -217,7 +239,129 @@ async function chat({ task, history = [], userMessage }) {
   };
 }
 
+/**
+ * chatDraft — varianta pro vytváření nového požadavku (před existencí DB taska).
+ *
+ * Liší se od chat() tím, že místo `task` přijímá `draft` (jen powdered fields,
+ * žádné DB ID). Plus extra tool `update_basic_fields` pro page_title/description.
+ * History persistuje frontend (žádné DB updaty — task ještě neexistuje).
+ *
+ * Frontend sbírá draft mezi voláními a na konci POST /api/admin-tasks s draftem.
+ *
+ * @param {object} opts.draft - { page_title?, description?, page?, page_title?,
+ *   acceptance_criteria?, affected_module?, change_type?, autonomy_override?, priority? }
+ * @param {Array} opts.history - předchozí messages [{role, content}]
+ * @param {string} opts.userMessage - aktuální user input
+ * @param {object} opts.pageContext - { path, title } z frontendu (kde uživatel klikl AI)
+ */
+async function chatDraft({ draft = {}, history = [], userMessage, pageContext = {} }) {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) {
+    throw new Error('ANTHROPIC_API_KEY chybí — AC chat (draft) nelze spustit');
+  }
+  const client = new Anthropic({ apiKey });
+
+  const messages = [
+    ...history,
+    { role: 'user', content: userMessage },
+  ];
+
+  const systemPrompt = `Jsi "Alan, AI Vývojář" v HolyOS. Aktuálně pomáháš uživateli vytvořit NOVÝ požadavek (úkol pro AI Vývojáře). Tvoje role: doptat se na povinná pole a postupně vyplnit:
+  - page_title (krátký titulek)
+  - description (1-3 odstavce popisu)
+  - acceptance_criteria (strukturovaný "Cíl / Definice hotovo / Modul / Typ změny")
+  - affected_module (modul HolyOSu, např. HR, Sklad, …)
+  - change_type (bug_fix | new_feature | refactor | ui_change | integration | documentation | data_migration)
+  - autonomy_override (volitelné: full_auto | pr_review | plan_review)
+
+KONTEXT STRÁNKY (odkud uživatel chat vyvolal):
+- path: ${pageContext.path || '(neuvedeno)'}
+- title: ${pageContext.title || '(neuvedeno)'}
+
+SOUČASNÝ STAV DRAFTU:
+${JSON.stringify(draft, null, 2)}
+
+POSTUP:
+1. První zpráva uživatele = HRUBÝ POPIS toho co chce. Zachyť ho přes update_basic_fields (page_title + description).
+2. Doptej se postupně: definice hotovo, modul, typ změny. Jedna otázka per zpráva.
+3. PRŮBĚŽNĚ aktualizuj draft přes update_ac_fields.
+4. Když máš všechna povinná pole + dokážeš shrnout úkol do tvaru "Když uživatel udělá X, systém má udělat Y, a poznáme to podle Z", zavolej finalize_with_ac.
+5. Pokud uživatel opakovaně řekne "nevím" / "rozhodni sám", zavolej request_human.
+
+STYL:
+- Český jazyk, tykání.
+- Konkrétní, ne abstraktní.
+- KRÁTKÉ otázky, jedna per zpráva.
+- Žádné "děkuji", "skvělé" — drž to věcné.
+- Pokud uživatel chat začíná otázkou (ne popisem), nejdřív se zeptej "Co potřebuješ?"`;
+
+  const response = await client.messages.create({
+    model: AC_CHAT_MODEL,
+    max_tokens: AC_CHAT_MAX_TOKENS,
+    system: systemPrompt,
+    tools: TOOLS,
+    messages,
+  });
+
+  const tokensUsed = (response.usage?.input_tokens || 0) + (response.usage?.output_tokens || 0);
+
+  let aiMessage = '';
+  let updates = null;
+  let finalized = false;
+  let summary = null;
+  let escalate = false;
+  let escalateReason = null;
+
+  for (const block of response.content) {
+    if (block.type === 'text') {
+      aiMessage += (aiMessage ? '\n\n' : '') + block.text;
+    } else if (block.type === 'tool_use') {
+      if (block.name === 'update_basic_fields' || block.name === 'update_ac_fields') {
+        updates = { ...(updates || {}), ...block.input };
+      } else if (block.name === 'finalize_with_ac') {
+        finalized = true;
+        summary = (block.input && block.input.summary) || null;
+      } else if (block.name === 'request_human') {
+        escalate = true;
+        escalateReason = (block.input && block.input.reason) || 'AI doporučuje přiřadit člověku.';
+      }
+    }
+  }
+
+  if (!aiMessage) {
+    if (finalized) {
+      aiMessage = '✅ Mám všechny potřebné informace. Souhrn: ' + (summary || '(bez shrnutí)') + '\n\nMůžeš požadavek odeslat — bude rovnou připravený pro AI Vývojáře.';
+    } else if (escalate) {
+      aiMessage = '🛑 Doporučuji přiřadit člověku: ' + escalateReason;
+    } else {
+      aiMessage = '(Alan: bez textu, viz updates)';
+    }
+  }
+
+  const newHistory = [
+    ...history,
+    { role: 'user', content: userMessage },
+    { role: 'assistant', content: response.content },
+  ];
+
+  // Merge updates do draftu (pro frontend pohodlí — vrátíme updated draft)
+  const updatedDraft = updates ? { ...draft, ...updates } : draft;
+
+  return {
+    aiMessage,
+    updates,
+    updatedDraft,
+    finalized,
+    summary,
+    escalate,
+    escalateReason,
+    tokensUsed,
+    newHistory,
+  };
+}
+
 module.exports = {
   chat,
+  chatDraft,
   AC_CHAT_MODEL,
 };

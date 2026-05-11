@@ -491,6 +491,11 @@ function openAiChat() {
     messages: [],
     step: 0,
     description: '',
+    draft: {},
+    history: [],
+    finalized: false,
+    summary: null,
+    escalateReason: null,
     screenshot: null,     // hlavní obrázek (pro preview + zachování zpětné kompat.)
     attachments: [],      // další soubory — PDF, Word, Excel, obrázky navíc atd.
     pagePath: page.path,
@@ -858,29 +863,43 @@ function sendAiMessage() {
   var text = input.value.trim();
   if (!text && !_aiChatState.screenshot) return;
 
-  // Add user message
   _aiChatState.messages.push({ role: 'user', text: text });
+  if (_aiChatState.step === 0) { _aiChatState.description = text; _aiChatState.step = 1; }
 
-  if (_aiChatState.step === 0) {
-    // First message — analyze and respond contextually
-    _aiChatState.description = text;
-    var analysis = analyzeRequest(text, _aiChatState.pageTitle);
-    _aiChatState.messages.push({ role: 'bot', text: analysis.response });
-    _aiChatState.step = 1;
-  } else {
-    // Follow-up messages — acknowledge and ask for more if needed
-    var allText = _aiChatState.messages.filter(function(m) { return m.role === 'user'; }).map(function(m) { return m.text; }).join(' ');
-    var msgCount = _aiChatState.messages.filter(function(m) { return m.role === 'user'; }).length;
-
-    if (msgCount <= 3) {
-      // Still gathering info — respond to the new details
-      var analysis = analyzeFollowup(text, allText, _aiChatState.pageTitle);
-      _aiChatState.messages.push({ role: 'bot', text: analysis });
-    }
-    // After 3+ messages, just let user keep adding context or submit
-  }
-
+  _aiChatState.messages.push({ role: 'bot', text: '\u23F3 Alan p\u0159em\u00FD\u0161l\u00ED...', _pending: true });
+  if (input) input.value = '';
   renderAiChat();
+
+  var headers = { 'Content-Type': 'application/json' };
+  var tk = sessionStorage.getItem('token');
+  if (tk) headers['Authorization'] = 'Bearer ' + tk;
+
+  fetch('/api/admin-tasks/draft-chat', {
+    method: 'POST',
+    credentials: 'include',
+    headers: headers,
+    body: JSON.stringify({
+      message: text,
+      history: _aiChatState.history || [],
+      draft: _aiChatState.draft || {},
+      page_context: { path: _aiChatState.pagePath, title: _aiChatState.pageTitle },
+    }),
+  }).then(function(r) {
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return r.json();
+  }).then(function(data) {
+    _aiChatState.messages = _aiChatState.messages.filter(function(m) { return !m._pending; });
+    _aiChatState.messages.push({ role: 'bot', text: data.ai_message || '(Alan: bez textu)' });
+    if (data.draft) _aiChatState.draft = data.draft;
+    if (data.history) _aiChatState.history = data.history;
+    if (data.finalized) { _aiChatState.finalized = true; _aiChatState.summary = data.summary; }
+    if (data.escalate) { _aiChatState.escalateReason = data.escalate_reason; }
+    renderAiChat();
+  }).catch(function(e) {
+    _aiChatState.messages = _aiChatState.messages.filter(function(m) { return !m._pending; });
+    _aiChatState.messages.push({ role: 'bot', text: '\u26A0\uFE0F Chyba: ' + e.message + ' (zkus znovu)' });
+    renderAiChat();
+  });
 }
 
 function analyzeFollowup(newText, allText, pageTitle) {
@@ -923,17 +942,25 @@ function submitAiTask() {
     .filter(function (a) { return a.status === 'ready' && a.url; })
     .map(function (a) { return { url: a.url, name: a.name, size: a.size, mime: a.mime, kind: a.kind }; });
 
+  // Použij Alanův draft, pokud finalizoval. Jinak fallback na conversation.
+  var draft = _aiChatState.draft || {};
   var task = {
     page: _aiChatState.pagePath,
-    page_title: _aiChatState.pageTitle,
-    description: userMessages.join('\n---\n'),
-    ai_questions: [],
+    page_title: draft.page_title || _aiChatState.pageTitle || (userMessages[0] || '').slice(0, 100),
+    description: draft.description || userMessages.join('\n---\n'),
+    acceptance_criteria: draft.acceptance_criteria || null,
+    affected_module: draft.affected_module || null,
+    change_type: draft.change_type || null,
+    autonomy_override: draft.autonomy_override || null,
+    ai_questions: _aiChatState.history || [],
     ai_answers: {
       conversation: conversationLog,
-      attachments: readyAttachments, // PDF/Word/Excel atd., pole { url, name, size, mime, kind }
+      attachments: readyAttachments,
+      alan_summary: _aiChatState.summary || null,
+      alan_finalized: !!_aiChatState.finalized,
     },
     screenshot: _aiChatState.screenshot,
-    priority: 'medium',
+    priority: draft.priority || 'medium',
   };
 
   // Diagnostika — vidíš v DevTools console, jestli screenshot vůbec posíláme
