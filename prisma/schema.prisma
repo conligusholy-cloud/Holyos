@@ -52,6 +52,7 @@ model User {
   // AI Vývojář — kdo upravil settings / vytvořil repo
   agent_settings_updated AgentSettings[] @relation("AgentSettingsUpdater")
   agent_repos_created    AgentRepo[]     @relation("AgentRepoCreator")
+  agent_rules_created    AgentRule[]     @relation("AgentRuleCreator")
 
   @@map("users")
 }
@@ -3787,4 +3788,35 @@ model AgentRunEvent {
   @@index([run_id, at])
   @@index([kind])
   @@map("agent_run_events")
+}
+
+// Pravidla, co agent smí / nesmí / vyžaduje schválení. Editovatelné z UI
+// (modul AI Vývojář → záložka Pravidla). Načítají se per-run z DB do paměti
+// agenta (žádný hot-reload uvnitř běžícího runu — pravidla se mění zřídka).
+//
+// Fáze 1: jen kind='forbidden' + scope='path_pattern' jsou implementované
+// (nahrazují hardcoded FORBIDDEN_PATTERNS v services/ai-developer/agent.js).
+// kind='requires_approval' a 'allowed' jsou ve schématu pro Fázi 2 (approval
+// workflow), zatím se na ně neaplikuje žádný backend check.
+//
+// scope='module' / 'operation_type' / 'db_table' / 'repo' jsou rezerva pro
+// Fázi 2/3 — backend check zatím neumí. value='*' nebo prefix-match logiku
+// si dopíšeme, až bude potřeba.
+model AgentRule {
+  id            String   @id @default(uuid())
+  kind          String   @db.VarChar(30)  // forbidden | requires_approval | allowed
+  scope         String   @db.VarChar(30)  // path_pattern | module | operation_type | db_table | repo
+  value         String   @db.Text          // regex pattern (bez /.../ obalu) nebo název modulu / operace
+  description   String?  @db.Text          // popis pro člověka (proč pravidlo existuje)
+  active        Boolean  @default(true)
+  blocked_count Int      @default(0)       // kolikrát toto pravidlo zablokovalo agenta — pro statistiku v UI
+
+  created_by Int?
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  creator User? @relation("AgentRuleCreator", fields: [created_by], references: [id], onDelete: SetNull)
+
+  @@index([kind, scope, active])
+  @@map("agent_rules")
 }

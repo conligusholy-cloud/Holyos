@@ -48,6 +48,19 @@ const KillSwitchSchema = z.object({
   reason: z.string().max(500).optional(),
 });
 
+const RULE_KINDS = ['forbidden', 'requires_approval', 'allowed'];
+const RULE_SCOPES = ['path_pattern', 'module', 'operation_type', 'db_table', 'repo'];
+
+const RuleCreateSchema = z.object({
+  kind: z.enum(RULE_KINDS),
+  scope: z.enum(RULE_SCOPES),
+  value: z.string().min(1).max(1000),
+  description: z.string().max(2000).optional().nullable(),
+  active: z.boolean().optional(),
+});
+
+const RulePatchSchema = RuleCreateSchema.partial();
+
 // ─── Dashboard ─────────────────────────────────────────────────────────────
 
 router.get('/dashboard', async (req, res, next) => {
@@ -289,6 +302,100 @@ router.get('/queue', async (req, res, next) => {
   try {
     const items = await repo.listQueue({ limit: req.query.limit });
     res.json(items);
+  } catch (err) { next(err); }
+});
+
+// ─── Rules (forbidden / requires_approval / allowed) ──────────────────────
+//
+// Fáze 2 feature: dynamická pravidla nahrazují hardcoded FORBIDDEN_PATTERNS
+// v services/ai-developer/agent.js. Runner načítá aktivní pravidla per-run
+// přes repository.listForbiddenPathRules() a předává do runAgent. Aktuálně
+// se aplikuje jen kind='forbidden' + scope='path_pattern' (Fáze 1+2). Ostatní
+// kind/scope hodnoty jsou ve schématu pro budoucí approval workflow.
+
+router.get('/rules', async (req, res, next) => {
+  try {
+    const filter = {};
+    if (req.query.kind) filter.kind = req.query.kind;
+    if (req.query.scope) filter.scope = req.query.scope;
+    if (req.query.active === 'true') filter.active = true;
+    else if (req.query.active === 'false') filter.active = false;
+    const items = await repo.listRules(filter);
+    res.json(items);
+  } catch (err) { next(err); }
+});
+
+router.get('/rules/:id', async (req, res, next) => {
+  try {
+    const item = await repo.getRule(req.params.id);
+    if (!item) return res.status(404).json({ error: 'Pravidlo nenalezeno' });
+    res.json(item);
+  } catch (err) { next(err); }
+});
+
+router.post('/rules', async (req, res, next) => {
+  try {
+    const data = RuleCreateSchema.parse(req.body);
+    // Validuj že value je valid regex — pravidlo s špatným regex by jinak
+    // crashlo buildForbiddenChecker (i když ten už chyby logujeme a vynecháme).
+    if (data.scope === 'path_pattern') {
+      try { new RegExp(data.value); }
+      catch (e) { return res.status(400).json({ error: `Hodnota není validní regex: ${e.message}` }); }
+    }
+    const created = await repo.createRule({ ...data, createdBy: req.user.id });
+    await prisma.auditLog.create({
+      data: {
+        user_name: req.user.username,
+        user_display: req.user.display_name || null,
+        action: 'create',
+        entity: 'agent_rule',
+        description: `AI Vývojář — vytvořeno pravidlo ${data.kind}/${data.scope} '${data.value.slice(0, 80)}'`,
+        changes: data,
+      },
+    });
+    res.status(201).json(created);
+  } catch (err) { next(err); }
+});
+
+router.put('/rules/:id', async (req, res, next) => {
+  try {
+    const patch = RulePatchSchema.parse(req.body);
+    if (patch.scope === 'path_pattern' && patch.value) {
+      try { new RegExp(patch.value); }
+      catch (e) { return res.status(400).json({ error: `Hodnota není validní regex: ${e.message}` }); }
+    }
+    const target = await repo.getRule(req.params.id);
+    if (!target) return res.status(404).json({ error: 'Pravidlo nenalezeno' });
+    const updated = await repo.updateRule(req.params.id, patch);
+    await prisma.auditLog.create({
+      data: {
+        user_name: req.user.username,
+        user_display: req.user.display_name || null,
+        action: 'update',
+        entity: 'agent_rule',
+        description: `AI Vývojář — update pravidla ${updated.kind}/${updated.scope}`,
+        changes: patch,
+      },
+    });
+    res.json(updated);
+  } catch (err) { next(err); }
+});
+
+router.delete('/rules/:id', async (req, res, next) => {
+  try {
+    const target = await repo.getRule(req.params.id);
+    if (!target) return res.status(404).json({ error: 'Pravidlo nenalezeno' });
+    await repo.deleteRule(req.params.id);
+    await prisma.auditLog.create({
+      data: {
+        user_name: req.user.username,
+        user_display: req.user.display_name || null,
+        action: 'delete',
+        entity: 'agent_rule',
+        description: `AI Vývojář — smazáno pravidlo ${target.kind}/${target.scope} '${target.value.slice(0, 80)}'`,
+      },
+    });
+    res.status(204).end();
   } catch (err) { next(err); }
 });
 

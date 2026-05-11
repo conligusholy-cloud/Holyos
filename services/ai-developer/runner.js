@@ -19,7 +19,7 @@ const repository = require('./repository');
 const chat = require('./chat');
 const git = require('./git');
 const github = require('./github');
-const { runAgent, isForbidden } = require('./agent');
+const { runAgent, buildForbiddenChecker } = require('./agent');
 const triageModule = require('./triage');
 
 const TMP_ROOT = process.env.AI_DEV_TMP_DIR || path.join(os.tmpdir(), 'holyos-agent');
@@ -81,7 +81,20 @@ async function processTask(task, options = {}) {
     autonomyMode: settings.default_autonomy,
   });
 
-  const log = (kind, payload) => repository.appendEvent(run.id, kind, payload);
+  // Wrapper kolem appendEvent — pro 'rule_blocked' kind ještě navíc
+  // inkrementuje AgentRule.blocked_count statistiku (fire-and-forget,
+  // nečekáme na výsledek). Hardcoded fallback pravidla (id='hardcoded:*')
+  // se neinkrementují — nejsou v DB.
+  const log = (kind, payload) => {
+    if (
+      kind === 'rule_blocked' &&
+      payload && payload.rule_id &&
+      !String(payload.rule_id).startsWith('hardcoded:')
+    ) {
+      repository.incrementRuleBlockedCount(payload.rule_id);
+    }
+    return repository.appendEvent(run.id, kind, payload);
+  };
 
   // Pomocná funkce — uloží failure a commitne run jako failed
   async function fail(reason, extra = {}) {
@@ -233,10 +246,24 @@ async function processTask(task, options = {}) {
     // ── 3) Claude agent ────────────────────────────────────────────────
     await repository.updateRun(run.id, { status: 'coding' });
 
+    // Načti aktivní forbidden+path_pattern pravidla pro tento run (per-run
+    // cache — rules se mění zřídka, žádný hot-reload uvnitř běhu). Předáme
+    // je do runAgentu (tool-level forbidden check v read/write/list) a
+    // použijeme i pro post-commit status diff níže v § 4. Při chybě DB
+    // čtení agent.js fallbackuje na HARDCODED_FORBIDDEN_FALLBACK.
+    let forbiddenRules = [];
+    try {
+      forbiddenRules = await repository.listForbiddenPathRules();
+    } catch (e) {
+      console.error('[ai-dev] listForbiddenPathRules selhalo → hardcoded fallback:', e.message);
+    }
+    const forbiddenCheck = buildForbiddenChecker(forbiddenRules);
+
     const agentResult = await runAgent({
       workdir,
       task,
       repo,
+      rules: forbiddenRules,
       onEvent: async (kind, payload) => log(kind, payload),
     });
 
@@ -289,9 +316,25 @@ async function processTask(task, options = {}) {
       });
     }
 
-    const violations = status.filter((s) => isForbidden(s.path));
+    // Post-commit forbidden check: použij stejný checker jako agent (DB pravidla).
+    // Pokud Claude obešel tool-level forbidden přes nějaký kreativní filename trik
+    // (např. relative path s `..` který by safeJoin propustil), zachytí ho tahle
+    // poslední pojistka před commitem. Každá violation se zaloguje samostatně
+    // s rule_id (inkrementuje blocked_count), pak agreguje do escalation reason.
+    const violations = [];
+    for (const s of status) {
+      const hit = forbiddenCheck(s.path);
+      if (hit) {
+        violations.push({ path: s.path, rule_id: hit.rule_id, pattern: hit.value });
+        await log('rule_blocked', {
+          rule_id: hit.rule_id,
+          pattern: hit.value,
+          path: s.path,
+          source: 'post_commit_check',
+        });
+      }
+    }
     if (violations.length > 0) {
-      await log('rule_blocked', { violations: violations.map((v) => v.path) });
       await repository.updateRun(run.id, {
         status: 'escalated',
         ended_at: new Date(),
