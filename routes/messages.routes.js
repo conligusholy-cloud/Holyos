@@ -506,6 +506,42 @@ router.post('/channels/:id/messages', async (req, res, next) => {
           });
         }));
 
+        // ─── AI Vývojář auto-append AC z task chat reply ──────────────────
+        //
+        // Pokud kanál je type='task' a úkol má aktivní run ve stavu
+        // awaiting_clarification, append user reply do task.acceptance_criteria.
+        // Worker při dalším poll cyklu (30 s) zvedne úkol znovu, triage uvidí
+        // novou AC a vyhodnotí (buď ok → coding, nebo další needs_clarification).
+        // Uživatel tak nemusí editovat AC ručně — stačí odpovědět v chatu jako
+        // kolegovi.
+        try {
+          if (channelMeta.type === 'task' && channelMeta.admin_task_id && content) {
+            const taskId = channelMeta.admin_task_id;
+            const awaitingRun = await prisma.agentRun.findFirst({
+              where: { task_id: taskId, status: 'awaiting_clarification' },
+              orderBy: { started_at: 'desc' },
+              select: { id: true },
+            });
+            if (awaitingRun) {
+              const task = await prisma.adminTask.findUnique({
+                where: { id: taskId },
+                select: { acceptance_criteria: true },
+              });
+              const ts = new Date().toLocaleString('cs-CZ');
+              const userName = req.user.displayName || req.user.username;
+              const reply = `\n\n--- Odpověď od ${userName} (${ts}) ---\n${content}`;
+              const newAc = (task.acceptance_criteria || '') + reply;
+              await prisma.adminTask.update({
+                where: { id: taskId },
+                data: { acceptance_criteria: newAc },
+              });
+              console.log(`[messages] task chat reply append to AC: task #${taskId}, run ${awaitingRun.id}`);
+            }
+          }
+        } catch (e) {
+          console.error('[messages] AC append from task chat failed:', e.message);
+        }
+
         // AI účastník
         if (req.body.ai === true || /@ai\b/i.test(content)) {
           triggerAiReply({ channelId, triggerMessage: message, fromUser: req.user })
