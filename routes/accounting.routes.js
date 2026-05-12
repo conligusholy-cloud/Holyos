@@ -11,6 +11,7 @@ const { unmatchTransaction } = require('../services/banking/auto-matcher');
 const { getPaymentBatchApprovalLimit, getOurCompany, getDefaultInvoiceDueDays } = require('../services/settings');
 const { generateInvoicePdf } = require('../services/pdf/invoice-pdf');
 const { sendMail } = require('../services/email');
+const { generateInvoiceNumber } = require('../services/accountant/invoice-numbering');
 const { z } = require('zod');
 
 router.use(requireAuth);
@@ -40,32 +41,8 @@ router.get('/whoami', (req, res) => {
  *   proforma_received   → ZP-2026-00001   (zálohová přijatá)
  *   proforma_issued     → ZV-2026-00001   (zálohová vydaná)
  */
-async function generateInvoiceNumber(type) {
-  const year = new Date().getFullYear();
-  const prefixMap = {
-    received: 'FP',
-    issued: 'FV',
-    credit_note_received: 'DP',
-    credit_note_issued: 'DV',
-    proforma_received: 'ZP',
-    proforma_issued: 'ZV',
-  };
-  const prefix = prefixMap[type] || 'FP';
-  const yearPart = `${prefix}-${year}-`;
-
-  const last = await prisma.invoice.findFirst({
-    where: { invoice_number: { startsWith: yearPart } },
-    orderBy: { invoice_number: 'desc' },
-    select: { invoice_number: true },
-  });
-
-  let nextSeq = 1;
-  if (last) {
-    const match = last.invoice_number.match(/(\d+)$/);
-    if (match) nextSeq = parseInt(match[1], 10) + 1;
-  }
-  return `${yearPart}${String(nextSeq).padStart(5, '0')}`;
-}
+// generateInvoiceNumber — viz services/accountant/invoice-numbering.js
+// (extrahováno do servisního modulu, aby ho mohl použít i final-invoice worker)
 
 /** Derivovat direction (ap/ar) z typu dokladu */
 function directionFromType(type) {
