@@ -121,7 +121,7 @@ async function execTool(name, input, workdir, forbiddenCheck) {
   }
 }
 
-function buildSystemPrompt(task, repo) {
+function buildSystemPrompt(task, repo, pastFailures) {
   return `Jsi "Alan, AI Vývojář" — autonomní agent v HolyOS, fáze PLÁNOVÁNÍ.
 
 ÚKOL #${task.id}:
@@ -179,7 +179,7 @@ Pouč se z této historie: pokud tvůj plán by se shoduje s některým minulým
  * Při chybě (síť, parser) vrací plan=null + reason — runner pak fallbackne
  * na bez-plánu coding loop (status zůstane v 'planning', logged warning).
  */
-async function runPlanner({ workdir, task, repo, forbiddenCheck, onEvent }) {
+async function runPlanner({ workdir, task, repo, forbiddenCheck, onEvent, pastFailures = null }) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
     throw new Error('ANTHROPIC_API_KEY chybí — planner nelze spustit');
@@ -198,7 +198,7 @@ async function runPlanner({ workdir, task, repo, forbiddenCheck, onEvent }) {
     const response = await messagesCreate(client, {
       model: PLANNER_MODEL,
       max_tokens: PLANNER_MAX_TOKENS_PER_TURN,
-      system: buildSystemPrompt(task, repo),
+      system: buildSystemPrompt(task, repo, pastFailures),
       tools: TOOLS,
       messages,
     }, { label: 'ai-dev/planner' });
