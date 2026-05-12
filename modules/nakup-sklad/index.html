@@ -2148,4 +2148,24 @@
       }
 
       html += '</div></div></div>';
-      document.getElement
+      document.getElementById('modal-root').innerHTML = html;
+
+      // Zavřít klikem na overlay
+      document.getElementById('forecast-detail-overlay').addEventListener('mousedown', function(e) {
+        if (e.target === this) this.remove();
+      });
+    }
+
+    // ============================================================
+    // HELPERS
+    // ============================================================
+    function closeModal() { document.getElementById('modal-root').innerHTML = ''; }
+
+    // ============================================================
+    // INIT
+    // ============================================================
+    loadStats();
+    loadDashboard();
+  </script>
+</body>
+</html>

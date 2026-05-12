@@ -253,6 +253,7 @@
     <div class="content">
       <div class="toolbar">
         <div id="settings-info"></div>
+        <div id="capacity-summary"></div>
         <div style="flex:1;"></div>
         <button class="btn" onclick="openSettingsModal()">&#9881; Nastavení slotů</button>
       </div>
@@ -479,6 +480,51 @@
     }
 
     // ─── Render ──────────────────────────────────────────────────────────────
+    // ─── Přehled kapacit do konce roku ──────────────────────────────────────
+    // Spočítá kolik je volných / obsazených / blokovaných slotů od dneška do
+    // 31.12. aktuálního roku. Volá se z render() po každém přepočtu windows.
+    function computeCapacitySummary() {
+      var today = new Date(); today.setHours(0,0,0,0);
+      var endOfYear = new Date(today.getFullYear(), 11, 31); // 31.12.
+      endOfYear.setHours(23,59,59,999);
+
+      var windows = generateSlotWindows();
+      var free = 0, occupied = 0, blocked = 0, total = 0;
+      windows.forEach(function(win) {
+        // Slot do konce roku počítáme podle data DODÁNÍ (win.end), aby slot
+        // překlenující rok přes silvestra spadl do správného období.
+        if (win.end < today) return;             // minulé okno — nezajímá
+        if (win.end > endOfYear) return;         // okno až v dalším roce
+        total++;
+        var matched = findSlotForWindow(win);
+        if (!matched) { free++; return; }
+        if (matched.status === 'blocked') { blocked++; return; }
+        var hasAsgn = matched.assignments && matched.assignments.length > 0;
+        if (hasAsgn) occupied++;
+        else free++;
+      });
+      return { free: free, occupied: occupied, blocked: blocked, total: total, year: today.getFullYear() };
+    }
+
+    function renderCapacitySummary() {
+      var el = document.getElementById('capacity-summary');
+      if (!el) return;
+      var s = computeCapacitySummary();
+      if (s.total === 0) {
+        el.innerHTML = '<div class="settings-badge" style="color:var(--text2);">Do konce ' + s.year + ' nejsou plánované sloty</div>';
+        return;
+      }
+      // Hlavní badge — volné sloty. Kliknutí scrolluje na první volný (nice to have, ale teď jen vizuál).
+      el.innerHTML =
+        '<div class="settings-badge" title="Slot je volný = bez přiřazené objednávky a není blokovaný" ' +
+            'style="background:rgba(16,185,129,0.12);border-color:rgba(16,185,129,0.35);">' +
+          '🟢 <strong style="color:#10b981;font-size:14px;">' + s.free + '</strong>&nbsp;volných do konce ' + s.year +
+          ' &nbsp;<span style="color:var(--text2);">(' + s.occupied + ' obsazených' +
+          (s.blocked ? ', ' + s.blocked + ' blokovaných' : '') +
+          ' / ' + s.total + ' celkem)</span>' +
+        '</div>';
+    }
+
     function render() {
       var el = document.getElementById('timeline-inner');
       var windows = generateSlotWindows();
@@ -606,6 +652,7 @@
       });
 
       el.innerHTML = html;
+      renderCapacitySummary();
     }
 
     function findSlotForWindow(win) {
