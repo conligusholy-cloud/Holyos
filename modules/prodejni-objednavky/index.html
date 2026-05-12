@@ -161,7 +161,8 @@
     .cf-payment-kind.deposit { background: rgba(139,92,246,0.18); color: #a78bfa; }
     .cf-payment-kind.final { background: rgba(59,130,246,0.18); color: #60a5fa; }
     .cf-payment-kind.full { background: rgba(234,179,8,0.18); color: #eab308; }
-    .cf-payment-amount { font-size: 15px; font-weight: 700; color: var(--text); margin-bottom: 4px; }
+    .cf-payment-amount { font-size: 15px; font-weight: 700; color: var(--text); margin-bottom: 2px; }
+    .cf-payment-approx { font-size: 11px; color: var(--text2); font-weight: 500; margin-bottom: 4px; }
     .cf-payment-ref { font-size: 11px; color: var(--text2); display: flex; justify-content: space-between; gap: 6px; }
     .cf-payment-ref .cf-order-num { color: #eab308; font-weight: 600; }
     .cf-payment-status { display: inline-flex; align-items: center; gap: 4px; font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 4px; margin-top: 6px; }
@@ -2538,6 +2539,12 @@
     var _cashflowView = 'timeline';
     var _cashflowCalAnchor = null; // první den zobrazeného měsíce v kalendáři
 
+    // FX kurzy pro přibližný přepočet cizích měn na CZK — načítáme z /api/wh/exchange-rates při loadCashflow.
+    // Stejný princip jako loadStats v záložce Objednávky: pod EUR/USD apod. ukážeme „≈ X Kč".
+    var _cfFxRates = { CZK: 1, EUR: 25, USD: 22, GBP: 29, PLN: 6, HUF: 0.065 }; // fallback dokud nenačteme z CNB
+    var _cfFxSource = 'fallback';
+    var _cfFxValidFor = '';
+
     // Symbol pro měnu — kalendář i timeline pracují s reálnou měnou objednávky, ne s pevně psaným „Kč".
     function cfCurSymbol(c) {
       if (c === 'EUR') return '€';
@@ -2567,10 +2574,58 @@
       return keys.map(function (k) { return cfFmtMoney(amountsByCur[k], k); }).join(' + ');
     }
 
+    // Spočítá přibližný součet cizích měn přepočtený do CZK (CZK část se nepřičítá zpět — ta už je v Kč).
+    // Vrací číslo (může být 0, pokud žádná cizí měna).
+    function cfCzkApproxFromMixed(amountsByCur) {
+      var sum = 0;
+      Object.keys(amountsByCur).forEach(function (k) {
+        if (k === 'CZK') return;
+        var rate = _cfFxRates[k] || 0;
+        sum += (amountsByCur[k] || 0) * rate;
+      });
+      return sum;
+    }
+    // HTML sub-řádek „≈ X Kč" pro stat karty/měsíční hlavičky. Vrací prázdno, pokud nejsou cizí měny.
+    // opts: { size:px, marginTop:px, label:string ('' = bez popisku, např. „+ CZK celkem") }
+    function cfRenderCzkApprox(amountsByCur, opts) {
+      var amt = cfCzkApproxFromMixed(amountsByCur);
+      if (amt <= 0.5) return '';
+      opts = opts || {};
+      var size = opts.size || 12;
+      var marginTop = opts.marginTop || 2;
+      var label = (opts.label != null) ? opts.label : '';
+      return '<div style="font-size:' + size + 'px;color:var(--text2);margin-top:' + marginTop + 'px;font-weight:500;">≈ ' + cfFmtMoney(amt, 'CZK') + (label ? ' ' + label : '') + '</div>';
+    }
+    // Přibližný přepočet jedné částky v dané měně na CZK.
+    function cfCzkApproxSingle(amount, currency) {
+      var cur = currency || 'CZK';
+      if (cur === 'CZK') return 0;
+      var rate = _cfFxRates[cur] || 0;
+      return (amount || 0) * rate;
+    }
+    // Tooltip s informací o zdroji kurzu (CNB s datem, případně fallback).
+    function cfFxTooltip() {
+      return _cfFxSource === 'CNB'
+        ? 'Kurz ČNB' + (_cfFxValidFor ? ' ze dne ' + _cfFxValidFor : '')
+        : 'Kurz — fallback (CNB API nedostupné)';
+    }
+
     async function loadCashflow() {
       var timelineEl = document.getElementById('cf-timeline');
       if (timelineEl) timelineEl.innerHTML = '<div style="padding:30px;color:var(--text2);font-style:italic;">Načítám platby…</div>';
       try {
+        // Načti FX kurzy (CNB, cache 1h na backendu) pro přibližný přepočet EUR/USD/… na Kč.
+        // Stejný princip jako loadStats v záložce Objednávky. Pokud spadne, držíme fallback hodnoty.
+        try {
+          var fxRes = await fetch('/api/wh/exchange-rates');
+          if (fxRes.ok) {
+            var fxData = await fxRes.json();
+            if (fxData && fxData.rates) _cfFxRates = fxData.rates;
+            _cfFxSource = fxData.source || 'CNB';
+            _cfFxValidFor = fxData.valid_for || '';
+          }
+        } catch (fxe) { console.warn('cashflow fx rates fetch fail', fxe); }
+
         var res = await fetch('/api/wh/orders?type=sales');
         if (!res.ok) throw new Error('HTTP ' + res.status);
         var orders = await res.json();
@@ -2765,25 +2820,34 @@
         }
       });
 
+      // Pod hodnotou v cizí měně ukážeme přibližný součet v Kč (stejný princip jako záložka Objednávky).
+      // Stat karty mají užší layout — držíme menší font (11 px) a CSS proměnnou na barvu.
+      var approxOpts = { size: 11, marginTop: 3 };
+      var fxTooltip = cfFxTooltip();
+
       box.innerHTML =
-        '<div class="cf-stat pending">' +
+        '<div class="cf-stat pending" title="' + esc(fxTooltip) + '">' +
           '<div class="cf-stat-label">Tento měsíc očekáváno</div>' +
           '<div class="cf-stat-value">' + cfFmtMixed(sumThisMonth) + '</div>' +
+          cfRenderCzkApprox(sumThisMonth, approxOpts) +
           '<div class="cf-stat-sub">' + countThisMonth + ' plateb</div>' +
         '</div>' +
-        '<div class="cf-stat pending">' +
+        '<div class="cf-stat pending" title="' + esc(fxTooltip) + '">' +
           '<div class="cf-stat-label">Celkem nezaplaceno</div>' +
           '<div class="cf-stat-value">' + cfFmtMixed(sumPending) + '</div>' +
+          cfRenderCzkApprox(sumPending, approxOpts) +
           '<div class="cf-stat-sub">' + countPending + ' očekávaných plateb</div>' +
         '</div>' +
-        '<div class="cf-stat warn">' +
+        '<div class="cf-stat warn" title="' + esc(fxTooltip) + '">' +
           '<div class="cf-stat-label">Po splatnosti</div>' +
           '<div class="cf-stat-value">' + cfFmtMixed(sumOverdue) + '</div>' +
+          cfRenderCzkApprox(sumOverdue, approxOpts) +
           '<div class="cf-stat-sub">' + countOverdue + ' plateb v prodlení</div>' +
         '</div>' +
-        '<div class="cf-stat ok">' +
+        '<div class="cf-stat ok" title="' + esc(fxTooltip) + '">' +
           '<div class="cf-stat-label">Přijato letos</div>' +
           '<div class="cf-stat-value">' + cfFmtMixed(sumReceivedYTD) + '</div>' +
+          cfRenderCzkApprox(sumReceivedYTD, approxOpts) +
           '<div class="cf-stat-sub">Od 1. ledna ' + today.getFullYear() + '</div>' +
         '</div>';
     }
@@ -2832,14 +2896,22 @@
         });
         var isCurrent = (y === nowYear && mi === nowMonth);
 
+        // Pro „≈ X Kč" sub-řádek pod hlavičkou měsíce — sečteme cizí měny napříč příchozími+očekávanými
+        // a vykreslíme až pod cf-month-sub (kompaktnější než per-řádek u každé spojené měny).
+        var sumAllByCur = {};
+        Object.keys(sumInByCur).forEach(function (k) { sumAllByCur[k] = (sumAllByCur[k] || 0) + sumInByCur[k]; });
+        Object.keys(sumPendByCur).forEach(function (k) { sumAllByCur[k] = (sumAllByCur[k] || 0) + sumPendByCur[k]; });
+        var approxHtml = cfRenderCzkApprox(sumAllByCur, { size: 10, marginTop: 2 });
+
         html += '<div class="cf-month-col">' +
-          '<div class="cf-month-head' + (isCurrent ? ' current' : '') + '">' +
+          '<div class="cf-month-head' + (isCurrent ? ' current' : '') + '"' + (approxHtml ? ' title="' + esc(cfFxTooltip()) + '"' : '') + '>' +
             '<div class="cf-month-title">' + monthNames[mi] + ' ' + y + '</div>' +
             '<div class="cf-month-sub">' +
               (totalIn > 0 ? '<span class="cf-incoming">✓ ' + cfFmtMixed(sumInByCur) + '</span>' : '') +
               (totalPend > 0 ? '<span class="cf-pending">⏳ ' + cfFmtMixed(sumPendByCur) + '</span>' : '') +
               (totalIn === 0 && totalPend === 0 ? '<span style="color:var(--text2);font-style:italic;">bez plateb</span>' : '') +
             '</div>' +
+            approxHtml +
           '</div>' +
           '<div class="cf-month-body">';
         if (!monthPayments.length) {
@@ -2867,7 +2939,16 @@
       var kindLabel = p.kind === 'deposit' ? 'Záloha' : (p.kind === 'final' ? 'Doplatek' : 'Platba');
       var dateStr = p.date.toLocaleDateString('cs-CZ', { day: 'numeric', month: 'numeric' });
       if (p.estimated) dateStr = '~ ' + dateStr;
-      var amountStr = Math.round(p.amount).toLocaleString('cs-CZ') + ' ' + (p.currency || 'CZK');
+      var curCode = p.currency || 'CZK';
+      var amountStr = Math.round(p.amount).toLocaleString('cs-CZ') + ' ' + curCode;
+      // ≈ Kč přibližná hodnota pod hlavní částkou — jen pro cizí měnu, kurz z CNB cache.
+      var approxHtml = '';
+      if (curCode !== 'CZK') {
+        var czkAmt = cfCzkApproxSingle(p.amount, curCode);
+        if (czkAmt > 0.5) {
+          approxHtml = '<div class="cf-payment-approx" title="' + esc(cfFxTooltip()) + '">≈ ' + cfFmtMoney(czkAmt, 'CZK') + '</div>';
+        }
+      }
       var orderNum = p.order.order_number || '—';
       var customer = (p.order.company && p.order.company.name) || '—';
       var orderId = p.order.id;
@@ -2878,6 +2959,7 @@
           '<span class="cf-payment-kind ' + p.kind + '">' + kindLabel + '</span>' +
         '</div>' +
         '<div class="cf-payment-amount">' + amountStr + '</div>' +
+        approxHtml +
         '<div class="cf-payment-ref">' +
           '<span class="cf-order-num">' + esc(orderNum) + '</span>' +
           '<span style="text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:140px;" title="' + esc(customer) + '">' + esc(customer) + '</span>' +
