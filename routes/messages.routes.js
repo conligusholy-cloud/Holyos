@@ -535,7 +535,33 @@ router.post('/channels/:id/messages', async (req, res, next) => {
                 where: { id: taskId },
                 data: { acceptance_criteria: newAc },
               });
-              console.log(`[messages] task chat reply append to AC: task #${taskId}, run ${awaitingRun.id}`);
+
+              // KRITICKÉ: cancelnout awaiting_clarification run, jinak worker
+              // úkol nepřevezme znovu (listQueue filtruje active runy). Po cancel
+              // worker v dalším 30s cyklu vytvoří NOVÝ run s updated AC, triage
+              // ho vyhodnotí a buď řekne ok (→ coding) nebo zase needs_clarification
+              // s navazujícími otázkami.
+              await prisma.agentRun.update({
+                where: { id: awaitingRun.id },
+                data: {
+                  status: 'cancelled',
+                  ended_at: new Date(),
+                  failure_reason: 'AC doplněno přes task chat — re-evaluation v dalším poll cyklu',
+                },
+              });
+              await prisma.agentRunEvent.create({
+                data: {
+                  run_id: awaitingRun.id,
+                  kind: 'decision',
+                  payload: {
+                    action: 'cancel_for_re_eval',
+                    by: userName,
+                    user_reply_preview: content.slice(0, 200),
+                  },
+                },
+              });
+
+              console.log(`[messages] task chat reply → AC append + run ${awaitingRun.id} cancelled (re-eval): task #${taskId}`);
             }
           }
         } catch (e) {
