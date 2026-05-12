@@ -56,6 +56,7 @@ const reportsRoutes = require('./routes/reports.routes');
 const normovaniRoutes = require('./routes/normovani.routes');
 const directivesRoutes = require('./routes/directives.routes');
 const agentRoutes = require('./routes/agent.routes');
+const businessToolsRoutes = require('./routes/business-tools.routes');
 
 // ─── Inicializace aplikace ────────────────────────────────────────────────
 
@@ -440,6 +441,11 @@ app.get('/order/:token', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'order-view.html'));
 });
 
+// Veřejná stránka pro sdílené obchodní pomůcky (token-based, bez auth)
+app.get('/share/tools/:tool/:token', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'tool-share.html'));
+});
+
 // ─── API Routes ────────────────────────────────────────────────────────────
 
 app.use('/api/auth', authRoutes);
@@ -470,6 +476,7 @@ app.use('/api/reports', reportsRoutes);
 app.use('/api/normovani', normovaniRoutes);
 app.use('/api/directives', directivesRoutes);
 app.use('/api/agent', agentRoutes); // AI Vývojář (modul #13) — super-admin only
+app.use('/api/tools', businessToolsRoutes); // Obchodní pomůcky (sales-aid)
 
 // ─── Legacy storage proxy (kompatibilita s persistent-storage.js) ──────────
 
@@ -676,6 +683,12 @@ app.listen(PORT, async () => {
     aiDevWorker.start();
   } catch (err) {
     console.error('[app] ai-developer worker nelze spustit:', err.message);
+  }
+  try {
+    const finalInvoiceWorker = require('./services/orders/final-invoice-worker');
+    finalInvoiceWorker.start();
+  } catch (err) {
+    console.error('[app] final-invoice-worker nelze spustit:', err.message);
   }
   console.log('=========================================');
   console.log('  HolyOS v0.5.0');

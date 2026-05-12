@@ -12,6 +12,11 @@ const {
   releaseOrderToProduction,
   shouldRelease,
 } = require('../services/orders/release-to-production');
+const {
+  issueFinalInvoiceForOrder,
+  markFinalInvoicePaid,
+  unmarkFinalInvoicePaid,
+} = require('../services/orders/final-invoice');
 
 router.use(requireAuth);
 
@@ -242,6 +247,12 @@ router.get('/orders', async (req, res, next) => {
       include: {
         company: { select: { id: true, name: true } },
         items: { include: { product: { select: { id: true, code: true, name: true } } } },
+        final_invoice: {
+          select: {
+            id: true, invoice_number: true, total: true, currency: true,
+            date_issued: true, date_due: true, status: true, paid_amount: true,
+          },
+        },
       },
       orderBy: { created_at: 'desc' },
     });
@@ -294,6 +305,7 @@ async function enrichOrdersWithProductionDates(orders) {
   return orders.map(o => {
     let orderLatestStart = null;
     let orderLatestEnd = null;
+    let orderEarliestStart = null; // nejranější start ze všech slotů (kdy výroba reálně začne)
     const items = Array.isArray(o.items) ? o.items.map(it => {
       const m = byItem[it.id];
       const ps = m?.start || null;
@@ -303,6 +315,10 @@ async function enrichOrdersWithProductionDates(orders) {
         orderLatestEnd = pe;
         orderLatestStart = ps;
       }
+      // Nejranější start — pro trigger doplatkové faktury "N dní před výroba od"
+      if (ps && (!orderEarliestStart || ps < orderEarliestStart)) {
+        orderEarliestStart = ps;
+      }
       return { ...it, production_start: ps, production_finish: pe };
     }) : [];
     return {
@@ -310,6 +326,7 @@ async function enrichOrdersWithProductionDates(orders) {
       items,
       production_start_last: orderLatestStart,   // start NEJPOZDĚJŠÍHO slotu
       production_finish_last: orderLatestEnd,    // end NEJPOZDĚJŠÍHO slotu (= kdy je objednávka hotová)
+      production_start_first: orderEarliestStart, // start NEJRANĚJŠÍHO slotu (= kdy výroba reálně začne)
       // Externí share URL (přes SHARE_BASE_URL — typicky bestseries.cash)
       share_url: o.share_token ? buildOrderShareUrl('/order/' + o.share_token) : null,
     };
@@ -369,6 +386,12 @@ router.get('/orders/:id', async (req, res, next) => {
                 },
               },
             },
+          },
+        },
+        final_invoice: {
+          select: {
+            id: true, invoice_number: true, total: true, currency: true,
+            date_issued: true, date_due: true, status: true, paid_amount: true,
           },
         },
       },
@@ -434,7 +457,7 @@ router.put('/orders/:id/payment-config', async (req, res, next) => {
       return res.status(400).json({ error: 'Platby řešíme jen pro prodejní objednávky' });
     }
 
-    const { payment_split, deposit_amount, deposit_percent, release_on_deposit } = req.body || {};
+    const { payment_split, deposit_amount, deposit_percent, release_on_deposit, final_invoice_lead_days } = req.body || {};
     const data = {};
     if (payment_split !== undefined) data.payment_split = !!payment_split;
     if (deposit_amount !== undefined) {
@@ -444,6 +467,10 @@ router.put('/orders/:id/payment-config', async (req, res, next) => {
       data.deposit_percent = deposit_percent === null || deposit_percent === '' ? null : parseInt(deposit_percent, 10);
     }
     if (release_on_deposit !== undefined) data.release_on_deposit = !!release_on_deposit;
+    if (final_invoice_lead_days !== undefined) {
+      const n = parseInt(final_invoice_lead_days, 10);
+      data.final_invoice_lead_days = isNaN(n) ? 14 : Math.max(0, Math.min(180, n));
+    }
 
     // Když uživatel zruší payment_split, vyčistíme zálohové údaje (ale ne final_paid — to je platná platba).
     if (data.payment_split === false) {
@@ -533,10 +560,26 @@ router.post('/orders/:id/payment', async (req, res, next) => {
       });
     }
 
+    // Propsání platby doplatku na linked Invoice (pokud existuje doplatková faktura).
+    // 'final' nebo 'full' v split-režimu — propis na Invoice.status='paid'/'issued'.
+    let finalInvoiceUpdate = null;
+    if ((kind === 'final' || kind === 'full') && fresh.final_invoice_id) {
+      try {
+        if (isPaid) {
+          finalInvoiceUpdate = await markFinalInvoicePaid(orderId);
+        } else {
+          finalInvoiceUpdate = await unmarkFinalInvoicePaid(orderId);
+        }
+      } catch (e) {
+        console.error('[orders/payment] propsání na Invoice selhalo:', e.message);
+      }
+    }
+
     res.json({
       order: fresh,
       status_changed: statusChanged,
       release: releaseResult,
+      final_invoice_update: finalInvoiceUpdate,
     });
   } catch (err) { next(err); }
 });
@@ -556,6 +599,42 @@ router.post('/orders/:id/release-to-production', async (req, res, next) => {
     }
     if (!result.released && result.reason === 'not_a_sales_order') {
       return res.status(400).json({ error: 'Jen prodejní objednávka se rozpadá do výroby' });
+    }
+    res.json(result);
+  } catch (err) { next(err); }
+});
+
+// POST /api/wh/orders/:id/issue-final-invoice
+//   Ruční vystavení doplatkové faktury (override workeru). Vrací Invoice nebo
+//   reason, proč ji nelze vystavit (např. order_not_found, already_issued).
+//   body: { skipEligibilityChecks?: bool } — true = vystavit i bez zaplacené zálohy
+router.post('/orders/:id/issue-final-invoice', async (req, res, next) => {
+  try {
+    const orderId = parseInt(req.params.id, 10);
+    if (isNaN(orderId)) return res.status(400).json({ error: 'Neplatné ID' });
+
+    const skipChecks = !!req.body?.skipEligibilityChecks;
+    const result = await issueFinalInvoiceForOrder(orderId, {
+      createdByUserId: req.user?.id || null,
+      skipEligibilityChecks: skipChecks,
+    });
+    if (result.reason === 'order_not_found') {
+      return res.status(404).json({ error: 'Objednávka nenalezena' });
+    }
+    if (result.reason === 'not_a_sales_order') {
+      return res.status(400).json({ error: 'Jen prodejní objednávka může mít doplatkovou fakturu' });
+    }
+    if (result.reason === 'already_issued') {
+      return res.status(409).json({ error: 'Faktura na doplatek už byla vystavena', invoice: result.invoice });
+    }
+    if (result.reason === 'payment_not_split') {
+      return res.status(400).json({ error: 'Objednávka nemá rozdělenou platbu' });
+    }
+    if (result.reason === 'deposit_not_paid' && !skipChecks) {
+      return res.status(400).json({ error: 'Záloha ještě nebyla zaplacena. Použij skipEligibilityChecks pro override.' });
+    }
+    if (result.reason === 'final_amount_zero') {
+      return res.status(400).json({ error: 'Částka doplatku je 0 — není co fakturovat' });
     }
     res.json(result);
   } catch (err) { next(err); }

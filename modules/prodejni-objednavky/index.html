@@ -441,7 +441,7 @@
         el.innerHTML = '<div class="empty-state"><div class="empty-icon">💰</div><h3>Žádné prodejní objednávky</h3><p>Vytvořte první prodejní objednávku.</p></div>';
         return;
       }
-      let html = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr><th>Číslo</th><th>Odběratel</th><th>Stav</th><th>Položek</th><th>Celkem</th><th title="Datum slíbené zákazníkovi">📅 Zákazník</th><th title="Konec posledního výrobního slotu">🏭 Výroba do</th><th>Akce</th></tr></thead><tbody>';
+      let html = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr><th>Číslo</th><th>Odběratel</th><th>Stav</th><th>Položek</th><th>Celkem</th><th title="Datum slíbené zákazníkovi">📅 Zákazník</th><th title="Doplatková faktura — datum vystavení / částka / stav platby">💵 Doplatek</th><th title="Konec posledního výrobního slotu">🏭 Výroba do</th><th>Akce</th></tr></thead><tbody>';
       for (const o of list) {
         const st = ORDER_STATUSES[o.status] || { label: o.status, color: '#9ca3af' };
         html += '<tr onclick="openOrderDetail(' + o.id + ')">';
@@ -459,6 +459,7 @@
         html += '<td>' + itemsNum + linkWarning + '</td>';
         html += '<td style="font-weight:600;">' + parseFloat(o.total_amount || 0).toLocaleString('cs-CZ') + ' ' + (o.currency || 'CZK') + '</td>';
         html += '<td>' + (o.expected_delivery ? new Date(o.expected_delivery).toLocaleDateString('cs-CZ') : '—') + '</td>';
+        html += '<td>' + renderFinalInvoiceCell(o) + '</td>';
         html += '<td>' + (o.production_finish_last
           ? '<span style="color:#10b981;font-weight:600;">' + new Date(o.production_finish_last).toLocaleDateString('cs-CZ') + '</span>'
           : '<span style="color:var(--text2);">—</span>') + '</td>';
@@ -1766,6 +1767,113 @@
     }
 
     // ============================================================
+    // DOPLATKOVÁ FAKTURA — buňka v seznamu + sekce v detail panelu
+    // ============================================================
+
+    function renderFinalInvoiceCell(order) {
+      const inv = order.final_invoice;
+      if (!inv) {
+        // Pokud má rozdělenou platbu se zaplacenou zálohou — čekáme na worker
+        if (order.payment_split && order.deposit_paid) {
+          return '<span style="font-size:11px;color:var(--text2);font-style:italic;">⏳ čeká na vystavení</span>';
+        }
+        return '<span style="color:var(--text2);">—</span>';
+      }
+      const today = new Date(); today.setHours(0,0,0,0);
+      const due = inv.date_due ? new Date(inv.date_due) : null;
+      const overdue = due && inv.status !== 'paid' && due < today;
+      let pillColor = '#3b82f6'; // issued
+      let pillLabel = 'Vystaveno';
+      if (inv.status === 'paid') { pillColor = '#10b981'; pillLabel = 'Zaplaceno'; }
+      else if (overdue) { pillColor = '#ef4444'; pillLabel = 'Po splatnosti'; }
+      const dateStr = inv.date_issued ? new Date(inv.date_issued).toLocaleDateString('cs-CZ') : '—';
+      const amountStr = parseFloat(inv.total || 0).toLocaleString('cs-CZ') + ' ' + (inv.currency || 'CZK');
+      return '<div style="display:flex;flex-direction:column;gap:2px;font-size:11px;">' +
+        '<span style="font-weight:600;color:var(--text);" title="' + esc(inv.invoice_number) + '">' + dateStr + '</span>' +
+        '<span style="color:var(--text2);">' + amountStr + '</span>' +
+        '<span style="display:inline-flex;align-items:center;gap:3px;background:' + pillColor + '22;color:' + pillColor + ';padding:1px 6px;border-radius:6px;font-size:10px;font-weight:600;width:fit-content;">' + pillLabel + '</span>' +
+      '</div>';
+    }
+
+    function renderFinalInvoiceSection(order) {
+      const inv = order.final_invoice;
+      const leadDays = order.final_invoice_lead_days != null ? order.final_invoice_lead_days : 14;
+
+      // Když není rozdělená platba — sekce se nezobrazí vůbec
+      if (!order.payment_split) return '';
+
+      let body = '';
+      if (inv) {
+        const today = new Date(); today.setHours(0,0,0,0);
+        const due = inv.date_due ? new Date(inv.date_due) : null;
+        const overdue = due && inv.status !== 'paid' && due < today;
+        let pillColor = '#3b82f6'; let pillLabel = '📤 Vystaveno';
+        if (inv.status === 'paid') { pillColor = '#10b981'; pillLabel = '✓ Zaplaceno'; }
+        else if (overdue) { pillColor = '#ef4444'; pillLabel = '⚠ Po splatnosti'; }
+        const dateIss = inv.date_issued ? new Date(inv.date_issued).toLocaleDateString('cs-CZ') : '—';
+        const dateDue = inv.date_due ? new Date(inv.date_due).toLocaleDateString('cs-CZ') : '—';
+        const amount = parseFloat(inv.total || 0).toLocaleString('cs-CZ') + ' ' + (inv.currency || 'CZK');
+        body = '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;padding:10px;background:var(--surface);border:1px solid var(--border);border-radius:8px;font-size:12px;">' +
+          '<div><div style="color:var(--text2);font-size:11px;">Číslo</div><div style="font-weight:600;font-family:monospace;">' + esc(inv.invoice_number) + '</div></div>' +
+          '<div><div style="color:var(--text2);font-size:11px;">Vystaveno</div><div style="font-weight:600;">' + dateIss + '</div></div>' +
+          '<div><div style="color:var(--text2);font-size:11px;">Splatno</div><div style="font-weight:600;">' + dateDue + '</div></div>' +
+          '<div><div style="color:var(--text2);font-size:11px;">Částka</div><div style="font-weight:600;color:#f59e0b;">' + amount + '</div></div>' +
+          '<div style="grid-column:1 / -1;display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--border);padding-top:8px;margin-top:2px;">' +
+            '<span style="display:inline-flex;align-items:center;gap:4px;background:' + pillColor + '22;color:' + pillColor + ';padding:3px 10px;border-radius:6px;font-weight:600;">' + pillLabel + '</span>' +
+            '<a href="/modules/ucetni-doklady/index.html?invoice=' + inv.id + '" style="color:#3b82f6;text-decoration:none;font-size:11px;">Otevřít v Účetních dokladech →</a>' +
+          '</div>' +
+        '</div>';
+      } else {
+        const eligible = order.deposit_paid;
+        const hint = eligible
+          ? 'Worker vystaví fakturu automaticky <strong>' + leadDays + ' dní před začátkem výroby</strong>. Pokud potřebuješ vystavit hned, klikni níže.'
+          : 'Faktura na doplatek se vystaví automaticky <strong>' + leadDays + ' dní před začátkem výroby</strong>, jakmile zákazník zaplatí zálohu.';
+        body = '<div style="padding:10px;background:var(--surface);border:1px solid var(--border);border-radius:8px;font-size:12px;color:var(--text2);">' +
+          hint +
+          '<div style="display:flex;align-items:center;gap:8px;margin-top:8px;">' +
+            '<label style="font-size:11px;color:var(--text2);">Dní před výroba od:</label>' +
+            '<input type="number" min="0" max="180" id="lead-days-' + order.id + '" value="' + leadDays + '" style="width:70px;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:4px 8px;color:var(--text);font-size:12px;" onchange="updateLeadDays(' + order.id + ',this.value)">' +
+            '<button class="btn btn-sm" style="background:rgba(245,158,11,0.12);color:#f59e0b;border-color:rgba(245,158,11,0.3);margin-left:auto;" onclick="issueFinalInvoiceNow(' + order.id + ')">📄 Vystavit doplatkovou fakturu hned</button>' +
+          '</div>' +
+        '</div>';
+      }
+
+      return '<div style="margin-top:12px;">' +
+        '<div style="font-size:12px;color:var(--text2);margin-bottom:6px;font-weight:600;">💵 Faktura na doplatek</div>' +
+        body +
+      '</div>';
+    }
+
+    async function updateLeadDays(orderId, v) {
+      try {
+        await fetch('/api/wh/orders/' + orderId + '/payment-config', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ final_invoice_lead_days: parseInt(v, 10) || 14 }),
+        });
+      } catch(e) { console.error(e); }
+    }
+
+    async function issueFinalInvoiceNow(orderId) {
+      if (!confirm('Vystavit doplatkovou fakturu hned? Worker by ji vystavil automaticky N dní před začátkem výroby.')) return;
+      try {
+        const res = await fetch('/api/wh/orders/' + orderId + '/issue-final-invoice', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ skipEligibilityChecks: false }),
+        });
+        const j = await res.json();
+        if (!res.ok) {
+          alert('Nelze vystavit: ' + (j.error || 'neznámá chyba'));
+          return;
+        }
+        alert('✓ Vystavena faktura ' + (j.invoice?.invoice_number || ''));
+        openOrderDetail(orderId);
+        loadOrders();
+      } catch(e) { console.error(e); alert('Chyba při vystavení faktury'); }
+    }
+
+    // ============================================================
     // PLATBA — záloha / doplatek / plná platba + uvolnění do výroby
     // ============================================================
 
@@ -1849,6 +1957,8 @@
           '</div>' : '') +
           // Řádek 3: tlačítka platby
           '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">' + paymentButtons + '</div>' +
+          // Sekce s doplatkovou fakturou (vidí se jen u rozdělené platby)
+          renderFinalInvoiceSection(order) +
           // Footer s info o budoucí automatice
           '<div style="font-size:11px;color:var(--text2);margin-top:10px;font-style:italic;">' +
             'ℹ️ Zatím se platba označuje ručně. Připravujeme auto-párování s bankovním výpisem (Účetní iniciativa).' +

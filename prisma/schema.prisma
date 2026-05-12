@@ -557,6 +557,13 @@ model Order {
   release_on_deposit Boolean   @default(true)
   released_at        DateTime?
 
+  // Doplatková faktura — automaticky vystavená workerem N dní před zahájením výroby
+  // (defaultně 14 dní; konfigurovatelné per objednávka).
+  // final_invoice_id se nastaví, jakmile worker fakturu vytvoří (idempotence).
+  // Když final_paid=true a final_invoice_id existuje, propisuje se i na Invoice.status='paid'.
+  final_invoice_id        Int? @unique
+  final_invoice_lead_days Int  @default(14)
+
   // Schvalovací workflow (manuální vs MRP autogen) — Fáze "Schvalování objednávek"
   // approval_status: pending | submitted | approved | rejected | auto_approved
   //   pending       = draft, ještě neodesláno řediteli
@@ -592,6 +599,7 @@ model Order {
   project       Project?    @relation("OrderProject", fields: [project_id], references: [id])
   items         OrderItem[]
   invoices      Invoice[]   @relation("InvoiceOrder")
+  final_invoice Invoice?    @relation("OrderFinalInvoice", fields: [final_invoice_id], references: [id])
 
   @@index([type])
   @@index([status])
@@ -603,6 +611,7 @@ model Order {
   @@index([deposit_paid])
   @@index([final_paid])
   @@index([released_at])
+  @@index([final_invoice_id])
   @@map("orders")
 }
 
@@ -2654,6 +2663,13 @@ model Invoice {
   reminder_2_sent_at DateTime?
   reminder_3_sent_at DateTime?
 
+  // Role faktury v rámci dvoufázové platby:
+  //   'deposit' — záloha (proforma_issued nebo issued se sníženou částkou)
+  //   'final'   — doplatek (zbytek po záloze)
+  //   'full'    — jednorázová platba (default chování, pokud Order.payment_split=false)
+  //   null      — legacy / běžná faktura nesouvisející s platebním schématem
+  invoice_role String? @db.VarChar(20)
+
   // Zdroj dokumentu
   source          String?      @db.VarChar(30) // manual, email, api, import_xml, factorify
   email_ingest_id Int?
@@ -2691,6 +2707,8 @@ model Invoice {
   reminders       Reminder[]
   cash_movements  CashMovement[]           @relation("CashMovementInvoice")
   handover_items  AccountantHandoverItem[] @relation("HandoverItemInvoice")
+  // Reverzní k Order.final_invoice (1:1) — faktura na doplatek
+  order_as_final  Order?                   @relation("OrderFinalInvoice")
 
   @@index([type, status])
   @@index([direction, status])
@@ -2700,6 +2718,7 @@ model Invoice {
   @@index([date_due])
   @@index([external_number])
   @@index([variable_symbol])
+  @@index([invoice_role])
   @@map("invoices")
 }
 
