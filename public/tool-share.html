@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Ekonomika prádlomatu | HolyOS</title>
+  <link rel="icon" type="image/svg+xml" href="/logo-holyos-icon.svg">
+  <style>
+    :root {
+      --bg: #0f0f10;
+      --surface: #18181b;
+      --surface2: #232327;
+      --border: #2a2a2e;
+      --text: #f5f5f7;
+      --text2: #9ca3af;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+      min-height: 100vh;
+    }
+    .share-header {
+      background: linear-gradient(135deg, #6c5ce7 0%, #3b82f6 100%);
+      padding: 28px 24px 22px;
+      color: #fff;
+    }
+    .share-header-inner { max-width: 1100px; margin: 0 auto; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+    .share-icon { font-size: 36px; }
+    .share-title h1 { font-size: 22px; font-weight: 700; }
+    .share-title p { font-size: 13px; opacity: 0.85; margin-top: 4px; }
+    .share-recipient { margin-left: auto; text-align: right; font-size: 12px; opacity: 0.9; }
+    .share-recipient strong { display: block; font-size: 14px; font-weight: 600; }
+
+    .share-toolbar {
+      max-width: 1100px;
+      margin: 18px auto 0;
+      padding: 12px 24px;
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .share-toolbar .left-info { font-size: 12px; color: var(--text2); flex: 1; min-width: 240px; }
+    .share-toolbar .left-info strong { color: #eab308; }
+
+    .btn {
+      padding: 8px 16px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      background: var(--surface);
+      color: var(--text);
+      transition: all 0.15s;
+      font-family: inherit;
+    }
+    .btn:hover { background: var(--surface2); }
+    .btn-primary { background: #6c5ce7; border-color: #6c5ce7; color: #fff; }
+    .btn-primary:hover { background: #5a4bdb; }
+    .btn-sm { padding: 6px 12px; font-size: 12px; }
+
+    .share-content { max-width: 1100px; margin: 0 auto; padding: 14px 24px 60px; }
+
+    .loading, .error-box {
+      max-width: 480px;
+      margin: 60px auto;
+      padding: 24px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      text-align: center;
+    }
+    .loading .spinner {
+      width: 32px; height: 32px; margin: 0 auto 12px;
+      border: 3px solid var(--border);
+      border-top-color: #6c5ce7;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .error-box { border-color: rgba(239,68,68,0.4); background: rgba(239,68,68,0.08); }
+    .error-box h2 { color: #ef4444; margin-bottom: 8px; }
+    .error-box p { color: var(--text2); font-size: 13px; line-height: 1.5; }
+
+    .models-strip {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      padding: 4px 0 10px;
+      margin-bottom: 10px;
+    }
+    .model-chip {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px 12px;
+      cursor: pointer;
+      font-size: 12px;
+      white-space: nowrap;
+      transition: all 0.12s;
+    }
+    .model-chip:hover { border-color: #6c5ce7; }
+    .model-chip strong { display: block; font-size: 13px; margin-bottom: 2px; }
+    .model-chip span { color: var(--text2); font-size: 11px; }
+
+    .save-modal-overlay {
+      position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.6);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 9999;
+    }
+    .save-modal {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 24px;
+      width: 420px;
+      max-width: 95vw;
+    }
+    .save-modal h3 { font-size: 16px; margin-bottom: 14px; }
+    .save-modal input {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 12px;
+      color: var(--text);
+      font-size: 13px;
+      font-family: inherit;
+    }
+    .save-modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 14px; }
+
+    .toast {
+      position: fixed; bottom: 24px; right: 24px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 16px;
+      font-size: 13px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+      z-index: 10000;
+      animation: slidein 0.2s ease-out;
+    }
+    .toast.ok { border-color: #10b981; color: #10b981; }
+    .toast.err { border-color: #ef4444; color: #ef4444; }
+    @keyframes slidein { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+    /* ─── Mobile responsive ─────────────────────────────────────── */
+    @media (max-width: 640px) {
+      .share-header { padding: 20px 16px 16px; }
+      .share-header-inner { flex-direction: column; align-items: flex-start; gap: 8px; }
+      .share-icon { font-size: 30px; }
+      .share-title h1 { font-size: 18px; }
+      .share-title p { font-size: 12px; }
+      .share-recipient { margin-left: 0; text-align: left; }
+      .share-recipient strong { font-size: 13px; }
+
+      .share-toolbar { margin: 12px 12px 0; padding: 10px 12px; flex-direction: column; align-items: stretch; gap: 8px; }
+      .share-toolbar .left-info { font-size: 11px; line-height: 1.4; min-width: 0; }
+      .share-toolbar .btn { width: 100%; justify-content: center; }
+
+      .share-content { padding: 12px 12px 60px; }
+
+      /* Force tool root grid to single column on narrow screens */
+      .pe-toolbar { flex-wrap: wrap; gap: 8px !important; padding: 10px 12px !important; }
+      .pe-toolbar .btn { flex: 1 1 auto; }
+      .pe-results { grid-template-columns: repeat(2, 1fr) !important; gap: 8px !important; padding: 12px !important; }
+      .pe-result-card { padding: 10px !important; }
+      .pe-result-card .pe-rc-value { font-size: 17px !important; }
+      .pe-result-card .pe-rc-label { font-size: 9px !important; }
+      .pe-result-card .pe-rc-sub { font-size: 10px !important; }
+
+      .pe-section-head { padding: 10px 12px !important; }
+      .pe-section-head h3 { font-size: 12px !important; }
+      .pe-section-body { padding: 10px 12px !important; }
+
+      .pe-row { grid-template-columns: 1fr 90px 50px !important; gap: 6px !important; font-size: 12px !important; }
+      .pe-row.lockable { grid-template-columns: 1fr 90px 36px 30px !important; }
+      .pe-input, .pe-readonly { font-size: 12px !important; padding: 5px 8px !important; }
+      .pe-row .pe-unit { font-size: 10px !important; }
+      .pe-lock-btn { width: 26px !important; height: 26px !important; font-size: 12px !important; }
+
+      .pe-bar-wrap { padding: 12px !important; }
+      .pe-bar-row { grid-template-columns: 100px 1fr 90px !important; font-size: 11px !important; }
+
+      .models-strip { gap: 6px; padding-bottom: 8px; }
+      .model-chip { padding: 6px 10px; font-size: 11px; }
+      .model-chip strong { font-size: 12px; }
+    }
+
+    /* ─── Print → PDF ───────────────────────────────────────────── */
+    @media print {
+      @page { size: A4; margin: 12mm; }
+      body { background: #fff !important; color: #111 !important; font-size: 11pt; }
+
+      /* Skrýt UI chrome, který v PDF nepotřebujeme */
+      .share-header { background: none !important; color: #111 !important; padding: 0 0 16px; border-bottom: 2px solid #6c5ce7; margin-bottom: 16px; }
+      .share-icon { display: none; }
+      .share-recipient { color: #111; }
+      .share-toolbar, #models-strip-wrap, #modal-root, #toast-root, .pe-toolbar, .pe-lock-btn { display: none !important; }
+
+      .share-content { padding: 0 !important; max-width: none; }
+      #tool-root, .pe-section, .pe-section-body, .pe-bar-wrap { background: #fff !important; color: #111 !important; border-color: #bbb !important; }
+      .pe-section { break-inside: avoid; box-shadow: none; margin-bottom: 8mm; }
+      /* Forsně rozbal všechny sbalené sekce pro tisk */
+      .pe-section.pe-collapsed .pe-section-body { display: grid !important; }
+      .pe-section-head { background: #f4f4f7 !important; color: #111 !important; cursor: default; }
+      .pe-section-head h3 { color: #111 !important; }
+      .pe-section-head .pe-h-tag { color: #666 !important; }
+
+      /* Inputy/readonly v tisku → jednoduchá border-bottom místo barevných pozadí */
+      .pe-row { color: #111 !important; }
+      .pe-row label { color: #111 !important; }
+      .pe-row .pe-unit { color: #666 !important; }
+      .pe-input { background: #fff8d6 !important; color: #111 !important; border-color: #d97706 !important; box-shadow: none !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .pe-readonly { background: #f4f4f7 !important; color: #111 !important; border-color: #bbb !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .pe-readonly.emp { background: #fff8d6 !important; color: #b45309 !important; border-color: #d97706 !important; }
+      .pe-readonly.pe-locked-display { background: #f4f4f7 !important; color: #111 !important; border-color: #bbb !important; }
+
+      /* Výsledkové karty — vlož jako 4-sloupcový blok hned pod hlavičkou */
+      .pe-results { grid-template-columns: repeat(4, 1fr) !important; gap: 8px !important; padding: 0 !important; background: none !important; border: none !important; margin-bottom: 8mm; break-inside: avoid; }
+      .pe-result-card { background: #fff !important; color: #111 !important; border: 1px solid #6c5ce7 !important; padding: 10px !important; }
+      .pe-result-card .pe-rc-value { color: #6c5ce7 !important; }
+      .pe-result-card.neg .pe-rc-value { color: #b91c1c !important; }
+      .pe-result-card.ok .pe-rc-value { color: #047857 !important; }
+      .pe-result-card .pe-rc-label, .pe-result-card .pe-rc-sub { color: #555 !important; }
+
+      /* Cost-structure bar chart */
+      .pe-bar-wrap { border: 1px solid #bbb !important; }
+      .pe-bar-row .pe-bar { background: #eee !important; border: 1px solid #ddd; }
+      .pe-bar-row .pe-bar > span { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .pe-info { background: #f4f4f7 !important; color: #555 !important; border-color: #bbb !important; }
+
+      /* 10letá projekce — chart + mini cards */
+      .pe-projection-chart-wrap { border: 1px solid #bbb !important; background: #fff !important; }
+      .pe-svg text { fill: #111 !important; }
+      .pe-svg text[fill="#9ca3af"] { fill: #555 !important; }
+      .pe-svg text[fill="#e5e7eb"] { fill: #111 !important; }
+      .pe-svg line[stroke="rgba(255,255,255,0.06)"] { stroke: #eee !important; }
+      .pe-svg line[stroke="rgba(255,255,255,0.22)"] { stroke: #999 !important; }
+      .pe-mini-card { background: #fff !important; color: #111 !important; border-color: #bbb !important; }
+      .pe-mini-card .pe-mc-label { color: #555 !important; }
+      .pe-mini-card .pe-mc-value { color: #6c5ce7 !important; }
+      .pe-mini-card.ok .pe-mc-value { color: #047857 !important; }
+      .pe-mini-card.neg .pe-mc-value { color: #b91c1c !important; }
+      .pe-year-cell .pe-year-label { color: #555 !important; }
+    }
+  </style>
+  <script src="/modules/prodejni-objednavky/pradlomat-economy.js"></script>
+</head>
+<body>
+  <header class="share-header">
+    <div class="share-header-inner">
+      <div class="share-icon">📊</div>
+      <div class="share-title">
+        <h1 id="share-title">Ekonomika prádlomatu</h1>
+        <p id="share-subtitle">Interaktivní model návratnosti</p>
+      </div>
+      <div class="share-recipient" id="share-recipient" style="display:none;">
+        <strong id="share-recipient-name"></strong>
+        <span id="share-recipient-company"></span>
+      </div>
+    </div>
+  </header>
+
+  <div class="share-toolbar" id="share-toolbar" style="display:none;">
+    <div class="left-info">
+      💡 Žlutá pole můžete <strong>libovolně měnit</strong> a zkoušet různé scénáře. Ostatní hodnoty se přepočítají automaticky.
+    </div>
+    <button class="btn btn-sm" onclick="resetToDefaults()">↺ Výchozí</button>
+    <button class="btn btn-sm" onclick="downloadPdf()">📄 Stáhnout PDF</button>
+    <button class="btn btn-primary btn-sm" onclick="openSaveModal()">💾 Uložit můj model</button>
+  </div>
+
+  <main class="share-content">
+    <div id="loading" class="loading">
+      <div class="spinner"></div>
+      <div style="font-size:13px;color:var(--text2);">Načítám pomůcku…</div>
+    </div>
+
+    <div id="error" class="error-box" style="display:none;">
+      <h2 id="error-title">Odkaz nelze otevřít</h2>
+      <p id="error-msg">Zkuste obnovit stránku nebo kontaktujte odesílatele.</p>
+    </div>
+
+    <div id="content" style="display:none;">
+      <div id="models-strip-wrap" style="display:none;">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.6px;color:var(--text2);margin-bottom:6px;">Vaše uložené modely</div>
+        <div class="models-strip" id="models-strip"></div>
+      </div>
+      <div id="tool-root"></div>
+    </div>
+  </main>
+
+  <div id="modal-root"></div>
+  <div id="toast-root"></div>
+
+  <script>
+    (function () {
+      'use strict';
+      var pathParts = window.location.pathname.split('/').filter(Boolean);
+      // expected: ['share', 'tools', '<tool-slug>', '<token>']
+      var TOOL = pathParts[2] || '';
+      var TOKEN = pathParts[3] || '';
+      var SHARE_DATA = null;
+      var EDIT_DEBOUNCE = null;
+
+      function showError(msg) {
+        document.getElementById('loading').style.display = 'none';
+        document.getElementById('content').style.display = 'none';
+        document.getElementById('error').style.display = '';
+        document.getElementById('error-msg').textContent = msg || 'Zkuste obnovit stránku nebo kontaktujte odesílatele.';
+      }
+
+      function toast(msg, cls) {
+        var t = document.createElement('div');
+        t.className = 'toast ' + (cls || '');
+        t.textContent = msg;
+        document.getElementById('toast-root').appendChild(t);
+        setTimeout(function () { t.remove(); }, 3000);
+      }
+
+      function logEvent(type, payload) {
+        // beacon-style: nečeká na response, neblokuje UI
+        fetch('/api/tools/share/' + encodeURIComponent(TOKEN) + '/event', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ event_type: type, payload: payload || null }),
+          keepalive: true,
+        }).catch(function () { /* noop */ });
+      }
+
+      function load() {
+        if (!TOKEN || TOKEN.length < 16) {
+          showError('Odkaz je neplatný. Zkontrolujte, prosím, URL.');
+          return;
+        }
+        fetch('/api/tools/share/' + encodeURIComponent(TOKEN), { headers: { 'Accept': 'application/json' } })
+          .then(function (r) {
+            if (!r.ok) {
+              return r.json().then(function (j) { throw new Error(j.error || 'Chyba ' + r.status); });
+            }
+            return r.json();
+          })
+          .then(function (data) {
+            SHARE_DATA = data;
+            renderHeader(data);
+            renderModelsStrip(data.models);
+            mountTool(data);
+          })
+          .catch(function (e) {
+            showError(e.message || 'Odkaz nelze otevřít.');
+          });
+      }
+
+      function renderHeader(data) {
+        var title = (data.tool && data.tool.title) || 'Obchodní pomůcka';
+        document.getElementById('share-title').textContent = title;
+        document.title = title + ' | HolyOS';
+        if (data.tool && data.tool.description) {
+          document.getElementById('share-subtitle').textContent = data.tool.description;
+        }
+        if (data.recipient) {
+          document.getElementById('share-recipient').style.display = '';
+          document.getElementById('share-recipient-name').textContent = data.recipient.name || '';
+          document.getElementById('share-recipient-company').textContent = data.recipient.company || data.recipient.email || '';
+        }
+      }
+
+      function renderModelsStrip(models) {
+        if (!models || !models.length) return;
+        var wrap = document.getElementById('models-strip-wrap');
+        var strip = document.getElementById('models-strip');
+        wrap.style.display = '';
+        var html = '';
+        for (var i = 0; i < models.length; i++) {
+          var m = models[i];
+          var dt = new Date(m.created_at).toLocaleString('cs-CZ', { dateStyle: 'short', timeStyle: 'short' });
+          html += '<div class="model-chip" data-idx="' + i + '" onclick="window._shareLoadModel(' + i + ')"><strong>' +
+            escapeHtml(m.name) + '</strong><span>' + dt + '</span></div>';
+        }
+        strip.innerHTML = html;
+      }
+
+      function escapeHtml(s) {
+        return String(s == null ? '' : s)
+          .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+      }
+
+      function mountTool(data) {
+        document.getElementById('loading').style.display = 'none';
+        document.getElementById('content').style.display = '';
+
+        if (TOOL !== 'pradlomat-economy' || !window.PradlomatTool) {
+          showError('Tato pomůcka zatím není podporována.');
+          return;
+        }
+
+        // Fallback chain: poslední uložený zákazníkův model → server defaults → JS factory
+        var initialState = null;
+        if (data.models && data.models.length && data.models[0].data_json) {
+          initialState = data.models[0].data_json;
+        } else if (data.defaults_json && typeof data.defaults_json === 'object') {
+          initialState = data.defaults_json;
+        }
+        var locks = (data.locks_json && typeof data.locks_json === 'object') ? data.locks_json : {};
+
+        window.PradlomatTool.mount(document.getElementById('tool-root'), {
+          initialState: initialState,
+          locks: locks,
+          enforceLocks: true,
+          onChange: function (state, computed) {
+            // debounced 'edited' event ať server neřveme každým stiskem klávesy
+            clearTimeout(EDIT_DEBOUNCE);
+            EDIT_DEBOUNCE = setTimeout(function () {
+              logEvent('edited', { sample: { zakazniku_za_den: state.zakazniku_za_den, zisk: computed ? computed.zisk : null } });
+            }, 1500);
+          },
+        });
+      }
+
+      // ─── Public actions ──────────────────────────────────────────────
+      window._shareLoadModel = function (idx) {
+        if (!SHARE_DATA || !SHARE_DATA.models || !SHARE_DATA.models[idx]) return;
+        var m = SHARE_DATA.models[idx];
+        var locks = (SHARE_DATA.locks_json && typeof SHARE_DATA.locks_json === 'object') ? SHARE_DATA.locks_json : {};
+        window.PradlomatTool.mount(document.getElementById('tool-root'), {
+          initialState: m.data_json,
+          locks: locks,
+          enforceLocks: true,
+          onChange: function (state, computed) {
+            clearTimeout(EDIT_DEBOUNCE);
+            EDIT_DEBOUNCE = setTimeout(function () { logEvent('edited'); }, 1500);
+          },
+        });
+        toast('Načten model: ' + m.name, 'ok');
+      };
+
+      window.resetToDefaults = function () {
+        if (window.PradlomatTool) window.PradlomatTool.resetDefaults();
+        toast('Obnovenoo výchozí nastavení', 'ok');
+      };
+
+      window.exportJson = function () {
+        if (window.PradlomatTool) window.PradlomatTool.exportJSON();
+        logEvent('exported', { kind: 'json' });
+      };
+
+      window.downloadPdf = function () {
+        // Před tiskem expanduj všechny sbalené sekce (CSS pro @media print to také forsuje,
+        // ale tady to děláme explicitně aby uživatel viděl preview ve správném stavu).
+        var collapsed = document.querySelectorAll('.pe-section.pe-collapsed');
+        var toReopen = [];
+        for (var i = 0; i < collapsed.length; i++) {
+          collapsed[i].classList.remove('pe-collapsed');
+          toReopen.push(collapsed[i]);
+        }
+        logEvent('exported', { kind: 'pdf' });
+        // Necháme krátkou pauzu na re-render rozbalení, pak tiskneme.
+        setTimeout(function () {
+          window.print();
+          // Po zavření print dialogu (lehce neuchopitelné — print je sync) vrátíme původní stav.
+          setTimeout(function () {
+            for (var j = 0; j < toReopen.length; j++) toReopen[j].classList.add('pe-collapsed');
+          }, 200);
+        }, 80);
+      };
+
+      window.openSaveModal = function () {
+        var defaultName = 'Můj model ' + new Date().toLocaleString('cs-CZ', { dateStyle: 'short', timeStyle: 'short' });
+        var html =
+          '<div class="save-modal-overlay" onclick="if(event.target===this)window.closeSaveModal()">' +
+            '<div class="save-modal">' +
+              '<h3>💾 Uložit můj model</h3>' +
+              '<input id="save-model-name" type="text" placeholder="Název modelu" value="' + escapeHtml(defaultName) + '">' +
+              '<div style="font-size:11px;color:var(--text2);margin-top:8px;line-height:1.5;">Uložená varianta se objeví v záhlaví nahoře a kdykoliv se k ní můžete vrátit. Odesilatele to také uvidí.</div>' +
+              '<div class="save-modal-actions">' +
+                '<button class="btn btn-sm" onclick="window.closeSaveModal()">Zrušit</button>' +
+                '<button class="btn btn-primary btn-sm" onclick="window.doSaveModel()">Uložit</button>' +
+              '</div>' +
+            '</div>' +
+          '</div>';
+        document.getElementById('modal-root').innerHTML = html;
+        setTimeout(function () {
+          var i = document.getElementById('save-model-name');
+          if (i) { i.focus(); i.select(); }
+        }, 50);
+      };
+
+      window.closeSaveModal = function () {
+        document.getElementById('modal-root').innerHTML = '';
+      };
+
+      window.doSaveModel = function () {
+        var nameEl = document.getElementById('save-model-name');
+        var name = nameEl ? nameEl.value.trim() : '';
+        if (!name) name = 'Pracovní model';
+        var state = window.PradlomatTool.getState();
+        var computed = window.PradlomatTool.getComputed();
+        fetch('/api/tools/share/' + encodeURIComponent(TOKEN) + '/model', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: name, data_json: state, computed_json: computed }),
+        })
+          .then(function (r) {
+            if (!r.ok) return r.json().then(function (j) { throw new Error(j.error || 'Chyba ' + r.status); });
+            return r.json();
+          })
+          .then(function (m) {
+            // Připoj na začátek seznamu
+            if (!SHARE_DATA.models) SHARE_DATA.models = [];
+            SHARE_DATA.models.unshift({ id: m.id, name: m.name, created_at: m.created_at, data_json: state });
+            renderModelsStrip(SHARE_DATA.models);
+            window.closeSaveModal();
+            toast('✓ Model uložen', 'ok');
+          })
+          .catch(function (e) {
+            toast('Nepodařilo se uložit: ' + e.message, 'err');
+          });
+      };
+
+      // Zobraz toolbar a načti
+      document.getElementById('share-toolbar').style.display = '';
+      load();
+    })();
+  </script>
+</body>
+</html>

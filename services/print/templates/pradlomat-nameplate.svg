@@ -1,0 +1,82 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="800" height="640" viewBox="0 0 800 640" shape-rendering="crispEdges">
+  <style>
+    text {
+      font-family: Arial, "Liberation Sans", "DejaVu Sans", sans-serif;
+      dominant-baseline: alphabetic;
+    }
+    .frame      { fill: none; stroke: black; stroke-width: 3; }
+    .frame-thin { fill: none; stroke: black; stroke-width: 2; }
+    .cell       { fill: none; stroke: black; stroke-width: 4; }
+    .label      { font-family: "Arial Black", Arial, sans-serif; font-size: 22px; font-weight: 900; fill: black; stroke: black; stroke-width: 0.8; paint-order: stroke; letter-spacing: 0.3px; }
+    .sublabel   { font-family: "Arial Black", Arial, sans-serif; font-size: 16px; font-weight: 900; fill: black; stroke: black; stroke-width: 0.5; paint-order: stroke; }
+    .value      { font-size: 26px; font-weight: 700; fill: black; }
+    .product    { font-size: 58px; font-weight: 700; fill: black; letter-spacing: 2px; }
+    .company    { font-size: 26px; font-weight: 700; fill: black; }
+    .address    { font-size: 18px; font-weight: 700; fill: black; }
+    .ce         { font-size: 38px; font-weight: 700; fill: black; }
+    .colon      { font-size: 28px; font-weight: 700; fill: black; }
+  </style>
+
+  <!-- ============ HEADER ============ -->
+  <!-- Logo (BarTender originál, 255×142 px → škálováno na 270×150, plně včetně S.R.O.) -->
+  <image x="20" y="15" width="280" height="135" preserveAspectRatio="xMidYMid meet" href="data:image/png;base64,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"/>
+
+  <!-- Company text (vpravo od loga — posunuto, ať „s.r.o." v logu zůstane vidět) -->
+  <text x="320" y="52" class="company">BEST SERIES s.r.o.</text>
+  <text x="320" y="80" class="address">Zámostní 1155/27</text>
+  <text x="320" y="105" class="address">710 00 Ostrava</text>
+  <text x="320" y="130" class="address">Czech Republic</text>
+
+  <!-- CE — oficiální Conformité Européenne logo (Wikimedia SVG, EU norma) -->
+  <!-- Originál 280×200, scale 0.32 → 90×64, pozice 640,30 (více od pravého okraje) -->
+  <g transform="translate(640, 30) scale(0.32)" fill="black">
+    <path d="M110,199.498744A100,100 0 0 1 100,200A100,100 0 0 1 100,0A100,100 0 0 1 110,0.501256L110,30.501256A70,70 0 0 0 100,30A70,70 0 0 0 100,170A70,70 0 0 0 110,169.498744Z"/>
+    <path d="M280,199.498744A100,100 0 0 1 270,200A100,100 0 0 1 270,0A100,100 0 0 1 280,0.501256L280,30.501256A70,70 0 0 0 270,30A70,70 0 0 0 201.620283,85L260,85L260,115L201.620283,115A70,70 0 0 0 270,170A70,70 0 0 0 280,169.498744Z"/>
+  </g>
+
+  <!-- ============ PRODUCT NAME ROW ============ -->
+  <rect x="10" y="170" width="780" height="105" rx="14" ry="14" class="cell"/>
+  <text x="25" y="200" class="label">Název</text>
+  <text x="25" y="225" class="sublabel">Product Name</text>
+  <text x="160" y="225" class="colon">:</text>
+  <text x="200" y="232" class="product">{{product_name}}</text>
+
+  <!-- ============ ROW 1 ============ -->
+  <rect x="10" y="285" width="385" height="110" rx="14" ry="14" class="cell"/>
+  <rect x="405" y="285" width="385" height="110" rx="14" ry="14" class="cell"/>
+  <text x="25" y="335" class="label">Typ</text>
+  <text x="25" y="360" class="sublabel">Type</text>
+  <text x="185" y="357" class="colon">:</text>
+  <text x="203" y="363" class="value">{{type}}</text>
+
+  <text x="420" y="335" class="label">Datum výroby</text>
+  <text x="420" y="360" class="sublabel">Production Date</text>
+  <text x="600" y="357" class="colon">:</text>
+  <text x="618" y="363" class="value">{{date}}</text>
+
+  <!-- ============ ROW 2 ============ -->
+  <rect x="10" y="405" width="385" height="110" rx="14" ry="14" class="cell"/>
+  <rect x="405" y="405" width="385" height="110" rx="14" ry="14" class="cell"/>
+  <text x="25" y="455" class="label">Číslo</text>
+  <text x="25" y="480" class="sublabel">S/N</text>
+  <text x="185" y="477" class="colon">:</text>
+  <text x="203" y="483" class="value">{{serial}}</text>
+
+  <text x="420" y="455" class="label">Příkon</text>
+  <text x="420" y="480" class="sublabel">Input Power</text>
+  <text x="600" y="477" class="colon">:</text>
+  <text x="618" y="483" class="value">{{power}}</text>
+
+  <!-- ============ ROW 3 ============ -->
+  <rect x="10" y="525" width="385" height="110" rx="14" ry="14" class="cell"/>
+  <rect x="405" y="525" width="385" height="110" rx="14" ry="14" class="cell"/>
+  <text x="25" y="575" class="label">Jmen. napětí</text>
+  <text x="25" y="600" class="sublabel">Rated Voltage</text>
+  <text x="185" y="597" class="colon">:</text>
+  <text x="203" y="603" class="value">{{voltage}}</text>
+
+  <text x="420" y="575" class="label">Hmotnost</text>
+  <text x="420" y="600" class="sublabel">Weight</text>
+  <text x="600" y="597" class="colon">:</text>
+  <text x="618" y="603" class="value">{{weight}}</text>
+</svg>

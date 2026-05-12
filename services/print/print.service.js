@@ -10,7 +10,8 @@
 
 const { prisma } = require('../../config/database');
 const { render } = require('./zpl-renderer');
-const { sendZpl, ping } = require('./tsc-driver');
+const { sendZpl, sendRaw, ping } = require('./tsc-driver');
+const bitmapRenderer = require('./bitmap-renderer'); // lazy — puppeteer se nahodí až při prvním TSPL_BITMAP jobu
 
 /**
  * Vybere tiskárnu podle pořadí priorit:
@@ -63,10 +64,32 @@ async function printLabel({ template, data, printer_id, location_id, copies = 1,
   // 2. Tiskárna
   const printer = await selectPrinter({ printer_id, location_id });
 
-  // 3. Render
-  const zplSingle = render(tpl.body, data || {});
-  // Pro kopie opakujeme sekvenci ^XA...^XZ; TSC TC200 tiskne každou zvlášť.
-  const zpl = Array.from({ length: Math.max(1, copies) }, () => zplSingle).join('\n');
+  // 3. Render — větvení podle jazyka šablony
+  const language = (tpl.language || 'ZPL').toUpperCase();
+  let payload;     // Buffer nebo string podle větve
+  let sendFn;      // sendZpl | sendRaw
+
+  if (language === 'TSPL_BITMAP') {
+    // SVG šablona → headless render (3× supersample) → 1-bit threshold → TSPL BITMAP payload
+    payload = await bitmapRenderer.renderTemplate({
+      svg:        tpl.body,
+      data:       data || {},
+      widthMm:    Number(tpl.width_mm),
+      heightMm:   Number(tpl.height_mm),
+      dpi:        printer.dpi || 203,
+      density:    13,  // optimalní hodnota pro TE210 (potvrzeno hands-on)
+      speed:      2,   // pomaleji = víc tepla na dot = ostřejší
+      gapMm:      Number(printer.gap_mm) || 2,
+      copies:     Math.max(1, copies),
+    });
+    sendFn = (opts) => sendRaw({ ...opts, payload, drainMs: 800 });
+  } else {
+    // Klasický ZPL renderer (string substituce ^FD{{key}}^FS → hodnoty)
+    const zplSingle = render(tpl.body, data || {});
+    // Pro kopie opakujeme sekvenci ^XA...^XZ; TSC TC200 tiskne každou zvlášť.
+    payload = Array.from({ length: Math.max(1, copies) }, () => zplSingle).join('\n');
+    sendFn = (opts) => sendZpl({ ...opts, zpl: payload });
+  }
 
   // 4. Zápis do print_jobs — status 'queued'
   const job = await prisma.printJob.create({
@@ -90,10 +113,9 @@ async function printLabel({ template, data, printer_id, location_id, copies = 1,
     throw new Error(`Tiskárna "${printer.name}" nemá IP`);
   }
 
-  const result = await sendZpl({
+  const result = await sendFn({
     ip: printer.ip_address,
     port: printer.port || 9100,
-    zpl,
   });
 
   // 6. Update statusu joba + last_ping_ok

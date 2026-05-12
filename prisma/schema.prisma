@@ -200,6 +200,11 @@ model Person {
   // Normování — měření časů na pracovišti
   normovani_sessions NormovaniSession[] @relation("NormovaniSessionPerson")
 
+  // Nábor — uchazeči přiřazení k tomuto náboráři + převod uchazeče na zaměstnance
+  applicants_assigned  JobApplicant[]  @relation("ApplicantAssignedTo")
+  applicant_converted  JobApplicant?   @relation("ApplicantConverted")
+  applicant_notes_written ApplicantNote[] @relation("ApplicantNoteAuthor")
+
   @@index([department_id])
   @@index([role_id])
   @@index([company_id])
@@ -4044,4 +4049,93 @@ model BusinessToolDefaults {
   updater User? @relation("BusinessToolDefaultsUpdater", fields: [updated_by], references: [id], onDelete: SetNull)
 
   @@map("business_tool_defaults")
+}
+
+// =============================================================================
+// NÁBOR — uchazeči o práci
+// =============================================================================
+//
+// Evidence kandidátů, kteří mají zájem pracovat ve firmě. Zdroje:
+//   - manuální zadání
+//   - Meta (Facebook) Lead Ads webhook
+//   - import z CSV
+//
+// Workflow status: new → contacted → interview → offer → hired / rejected
+// Po stavu "hired" volitelně proběhne convert na Person (zachová se historie
+// jako converted_person_id, applicant zůstane v DB jako archiv).
+model JobApplicant {
+  id         Int     @id @default(autoincrement())
+  first_name String  @db.VarChar(255)
+  last_name  String? @db.VarChar(255)
+  email      String? @db.VarChar(255)
+  phone      String? @db.VarChar(50)
+
+  // Pozice o kterou má kandidát zájem (volný text — operátor, šička, řidič…)
+  position      String? @db.VarChar(255)
+  // Životopis — base64 (stejně jako Document.file_data)
+  cv_data       String? @db.Text
+  cv_filename   String? @db.VarChar(255)
+  cv_mime       String? @db.VarChar(100)
+
+  // Zdroj kandidáta: facebook_ads, manual, referral, web, other
+  source        String  @default("manual") @db.VarChar(50)
+  source_detail String? @db.VarChar(255) // např. ID kampaně, jméno doporučitele
+
+  // Status náboru
+  status        String  @default("new") @db.VarChar(30)
+  // new | contacted | interview | offer | hired | rejected
+
+  // Volné poznámky (souhrn — detailní komunikace jde do ApplicantNote)
+  notes         String? @db.Text
+
+  // Komu je uchazeč přiřazen (HR/náborář)
+  assigned_to_id Int?
+  assigned_to    Person? @relation("ApplicantAssignedTo", fields: [assigned_to_id], references: [id], onDelete: SetNull)
+
+  // Po přijetí — odkaz na vytvořeného Person
+  converted_person_id Int?     @unique
+  converted_person    Person?  @relation("ApplicantConverted", fields: [converted_person_id], references: [id], onDelete: SetNull)
+  converted_at        DateTime?
+
+  // Meta Lead Ads — pokud kandidát přišel z FB webhooku
+  meta_lead_id    String? @unique @db.VarChar(255)
+  meta_form_id    String? @db.VarChar(255)
+  meta_page_id    String? @db.VarChar(255)
+  meta_ad_id      String? @db.VarChar(255)
+  meta_raw        Json?
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  applicant_notes ApplicantNote[]
+
+  @@index([status])
+  @@index([source])
+  @@index([assigned_to_id])
+  @@map("job_applicants")
+}
+
+// Časová osa komunikace s uchazečem — hovor, e-mail, schůzka, poznámka.
+model ApplicantNote {
+  id           Int      @id @default(autoincrement())
+  applicant_id Int
+  applicant    JobApplicant @relation(fields: [applicant_id], references: [id], onDelete: Cascade)
+
+  // Kdo poznámku napsal (HR/náborář). Volitelné — webhooky píší bez autora.
+  author_id Int?
+  author    Person? @relation("ApplicantNoteAuthor", fields: [author_id], references: [id], onDelete: SetNull)
+
+  // Typ kontaktu: call, email, meeting, sms, note, status_change, system
+  kind    String  @default("note") @db.VarChar(30)
+  content String  @db.Text
+
+  // Pro status_change — odkud kam
+  old_status String? @db.VarChar(30)
+  new_status String? @db.VarChar(30)
+
+  created_at DateTime @default(now())
+
+  @@index([applicant_id])
+  @@index([author_id])
+  @@map("applicant_notes")
 }

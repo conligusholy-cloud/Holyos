@@ -30,6 +30,7 @@ const { prisma } = require('./config/database');
 
 const authRoutes = require('./routes/auth.routes');
 const hrRoutes = require('./routes/hr.routes');
+const applicantsRoutes = require('./routes/applicants.routes');
 const warehouseRoutes = require('./routes/warehouse.routes');
 const warehouseV2Routes = require('./routes/warehouse-v2.routes');
 const mindmapRoutes = require('./routes/mindmap.routes');
@@ -449,6 +450,7 @@ app.get('/share/tools/:tool/:token', (req, res) => {
 // ─── API Routes ────────────────────────────────────────────────────────────
 
 app.use('/api/auth', authRoutes);
+app.use('/api/hr/applicants', applicantsRoutes); // musí být PŘED /api/hr (pevný podcesta)
 app.use('/api/hr', hrRoutes);
 app.use('/api/wh', warehouseRoutes);
 app.use('/api/wh', warehouseV2Routes); // Sklad 2.0 — moves, lookup, sync (mountnuté za legacy)
