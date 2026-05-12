@@ -2563,6 +2563,46 @@
       } catch (e) { alert('Chyba: ' + e.message); }
     }
 
+    // ─── Smazání souboru (Faktura / Protokol) bez smazání záznamu ────────────
+    // Zavolá PUT s remove_invoice=true nebo remove_protocol=true, uloží hned
+    // (bez jiných dat) a reload tab. Backend smaže fyzický soubor + vynuluje URL.
+
+    async function deleteTireChangeFile(changeId, field, vehicleId) {
+      const label = field === 'invoice' ? 'fakturu' : 'protokol / dodací list';
+      if (!confirm('Opravdu smazat ' + label + '? Záznam výměny zůstane zachován.')) return;
+      try {
+        const body = field === 'invoice'
+          ? { remove_invoice: true }
+          : { remove_protocol: true };
+        const r = await fetch('/api/fleet/tire-changes/' + changeId, {
+          method: 'PUT',
+          headers: authHeaders(),
+          body: JSON.stringify(body),
+        });
+        if (!r.ok) { const err = await r.json().catch(() => ({})); alert('Chyba: ' + (err.error || r.status)); return; }
+        const panel = document.querySelector('.veh-tab-panel[data-panel="tires"]');
+        if (panel) await loadTiresTab(vehicleId, panel);
+      } catch (e) { alert('Chyba: ' + e.message); }
+    }
+
+    async function deleteServiceFile(serviceId, field, vehicleId) {
+      const label = field === 'invoice' ? 'fakturu' : 'protokol / dodací list';
+      if (!confirm('Opravdu smazat ' + label + '? Servisní záznam zůstane zachován.')) return;
+      try {
+        const body = field === 'invoice'
+          ? { remove_invoice: true }
+          : { remove_protocol: true };
+        const r = await fetch('/api/fleet/services/' + serviceId, {
+          method: 'PUT',
+          headers: authHeaders(),
+          body: JSON.stringify(body),
+        });
+        if (!r.ok) { const err = await r.json().catch(() => ({})); alert('Chyba: ' + (err.error || r.status)); return; }
+        const panel = document.querySelector('.veh-tab-panel[data-panel="service"]');
+        if (panel) await loadServiceTab(vehicleId, panel);
+      } catch (e) { alert('Chyba: ' + e.message); }
+    }
+
     // ─── Init ──────────────────────────────────────────────────────────────
     (async function() {
       initCompanyFilter();

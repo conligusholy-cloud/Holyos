@@ -12,7 +12,8 @@
     "db:push": "npx prisma db push",
     "db:seed": "node scripts/migrate-json-to-postgres.js",
     "db:studio": "npx prisma studio",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "node scripts/patch-fleet-frontend.js"
   },
   "engines": {
     "node": ">=22.0.0"
