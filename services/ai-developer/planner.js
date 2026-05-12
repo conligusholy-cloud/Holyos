@@ -23,6 +23,7 @@
 // }
 
 const Anthropic = require('@anthropic-ai/sdk');
+const { messagesCreate } = require('../anthropic-retry');
 const fs = require('fs/promises');
 const path = require('path');
 
@@ -194,13 +195,13 @@ async function runPlanner({ workdir, task, repo, forbiddenCheck, onEvent }) {
   let plan = null;
 
   for (let turn = 0; turn < PLANNER_MAX_TURNS; turn++) {
-    const response = await client.messages.create({
+    const response = await messagesCreate(client, {
       model: PLANNER_MODEL,
       max_tokens: PLANNER_MAX_TOKENS_PER_TURN,
       system: buildSystemPrompt(task, repo),
       tools: TOOLS,
       messages,
-    });
+    }, { label: 'ai-dev/planner' });
 
     totalInputTokens += response.usage?.input_tokens || 0;
     totalOutputTokens += response.usage?.output_tokens || 0;

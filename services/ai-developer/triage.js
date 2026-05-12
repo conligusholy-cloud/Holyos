@@ -15,6 +15,7 @@
 // Triage neklonuje repo — pracuje jen s task metadaty + repo metadaty.
 
 const Anthropic = require('@anthropic-ai/sdk');
+const { messagesCreate } = require('../anthropic-retry');
 
 const TRIAGE_MODEL = process.env.AI_DEV_TRIAGE_MODEL || 'claude-haiku-4-5-20251001';
 const TRIAGE_MAX_TOKENS = 600;
@@ -150,14 +151,14 @@ async function runTriage({ task, repo, pastFailures = null }) {
   }
   const client = new Anthropic({ apiKey });
 
-  const response = await client.messages.create({
+  const response = await messagesCreate(client, {
     model: TRIAGE_MODEL,
     max_tokens: TRIAGE_MAX_TOKENS,
     system: SYSTEM_PROMPT,
     messages: [
       { role: 'user', content: buildUserMessage(task, repo, pastFailures) },
     ],
-  });
+  }, { label: 'ai-dev/triage' });
 
   const tokensUsed = (response.usage?.input_tokens || 0) + (response.usage?.output_tokens || 0);
   const textBlock = response.content.find((b) => b.type === 'text');

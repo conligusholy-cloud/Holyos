@@ -7,6 +7,7 @@
 // _reasoning / _at. UI v admin-tasks ukazuje barevný badge na kartě.
 
 const Anthropic = require('@anthropic-ai/sdk');
+const { messagesCreate } = require('../anthropic-retry');
 
 const SUITABILITY_MODEL = process.env.AI_DEV_SUITABILITY_MODEL || 'claude-haiku-4-5-20251001';
 const SUITABILITY_MAX_TOKENS = 400;
@@ -63,12 +64,12 @@ async function evaluate(task) {
   if (!apiKey) throw new Error('ANTHROPIC_API_KEY chybí — suitability nelze spustit');
   const client = new Anthropic({ apiKey });
 
-  const response = await client.messages.create({
+  const response = await messagesCreate(client, {
     model: SUITABILITY_MODEL,
     max_tokens: SUITABILITY_MAX_TOKENS,
     system: SYSTEM_PROMPT,
     messages: [{ role: 'user', content: buildUserMessage(task) }],
-  });
+  }, { label: 'ai-dev/suitability' });
 
   const tokensUsed = (response.usage?.input_tokens || 0) + (response.usage?.output_tokens || 0);
   const textBlock = response.content.find((b) => b.type === 'text');

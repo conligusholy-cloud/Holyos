@@ -11,6 +11,7 @@ const Anthropic = require('@anthropic-ai/sdk');
 const fs = require('fs/promises');
 const path = require('path');
 const { spawn } = require('child_process');
+const { messagesCreate } = require('../anthropic-retry');
 
 const MODEL = process.env.AI_DEV_MODEL || 'claude-sonnet-4-6';
 const MAX_TURNS = 25;
@@ -287,13 +288,13 @@ async function runAgent({ workdir, task, repo, rules, presetPlan, onEvent }) {
   const fileChanges = new Set();
 
   for (let turn = 0; turn < MAX_TURNS; turn++) {
-    const response = await client.messages.create({
+    const response = await messagesCreate(client, {
       model: MODEL,
       max_tokens: MAX_TOKENS_PER_TURN,
       system: buildSystemPrompt(task, repo, presetPlan),
       tools: TOOLS,
       messages,
-    });
+    }, { label: 'ai-dev/agent' });
 
     totalInputTokens += response.usage?.input_tokens || 0;
     totalOutputTokens += response.usage?.output_tokens || 0;
