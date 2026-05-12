@@ -941,6 +941,9 @@ const serviceSchema = z.object({
   protocol_file_data: z.string().optional().nullable(),
   protocol_file_name: z.string().optional().nullable(),
   protocol_mime: z.string().optional().nullable(),
+  // Příznaky pro smazání souboru bez smazání celého záznamu (tlačítko koš v UI)
+  remove_invoice: z.boolean().optional(),
+  remove_protocol: z.boolean().optional(),
 });
 
 function parseDateTime(v) {
@@ -1172,6 +1175,15 @@ router.put('/services/:serviceId', async (req, res, next) => {
     delete data.created_by;
     if (!parsed.data.invoice_file_data) delete data.invoice_url;
     if (!parsed.data.protocol_file_data) delete data.protocol_url;
+    // Tlačítko koš — smaž soubor + vynuluj URL v záznamu
+    if (parsed.data.remove_invoice) {
+      removeStoredFile(existing.invoice_url);
+      data.invoice_url = null;
+    }
+    if (parsed.data.remove_protocol) {
+      removeStoredFile(existing.protocol_url);
+      data.protocol_url = null;
+    }
     const service = await prisma.$transaction(async (tx) => {
       await tx.vehicleService.update({ where: { id: serviceId }, data });
       // branch_ids === undefined ⇒ klient pole vůbec neposlal, M2N necháváme být.
@@ -1437,6 +1449,9 @@ const tireChangeSchema = z.object({
   protocol_file_data: z.string().optional().nullable(),
   protocol_file_name: z.string().optional().nullable(),
   protocol_mime: z.string().optional().nullable(),
+  // Příznaky pro smazání souboru bez smazání celého záznamu (tlačítko koš v UI)
+  remove_invoice: z.boolean().optional(),
+  remove_protocol: z.boolean().optional(),
 });
 
 async function toTireChangeData(data, vehicleId, userId) {
@@ -1531,6 +1546,15 @@ router.put('/tire-changes/:id', async (req, res, next) => {
     // Stejné pravidlo jako u faktury: pokud klient v této editaci nepřiložil
     // nový protokol, nepřepisujeme existující URL na null.
     if (!parsed.data.protocol_file_data) delete data.protocol_url;
+    // Tlačítko koš — smaž soubor + vynuluj URL v záznamu
+    if (parsed.data.remove_invoice) {
+      removeStoredFile(existing.invoice_url);
+      data.invoice_url = null;
+    }
+    if (parsed.data.remove_protocol) {
+      removeStoredFile(existing.protocol_url);
+      data.protocol_url = null;
+    }
     const tc = await prisma.$transaction(async (tx) => {
       await tx.vehicleTireChange.update({ where: { id }, data });
       if (parsed.data.branch_ids !== undefined) {
