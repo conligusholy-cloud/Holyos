@@ -6,6 +6,7 @@
 
 const Anthropic = require('@anthropic-ai/sdk');
 const { prisma } = require('../../config/database');
+const { messagesCreate } = require('../anthropic-retry');
 
 // ─── MCP Server registry (in-process) ─────────────────────────────────────
 const { getWarehouseTools, executeWarehouseTool } = require('../../mcp-servers/warehouse-server');
@@ -146,7 +147,7 @@ async function detectIntentByAI(client, message, assistants) {
   try {
     const agentList = assistants.map(a => `- ${a.slug}: ${a.role}`).join('\n');
 
-    const response = await client.messages.create({
+    const response = await messagesCreate(client, {
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 150,
       system: `Jsi router v systému HolyOS. Urči, který agent(i) mají zpracovat dotaz.
@@ -159,7 +160,7 @@ Pravidla:
 - Pokud si nejsi jistý, vrať ["mistr"]
 - Vrať POUZE JSON pole, nic jiného`,
       messages: [{ role: 'user', content: message }],
-    });
+    }, { label: 'orchestrator/router' });
 
     const text = response.content[0]?.text?.trim();
     const parsed = JSON.parse(text);
@@ -256,12 +257,12 @@ async function runSingleAgent(client, slug, message, currentModule, history, all
   const sources = { tables: new Set(), recordCount: 0 };
   let maxIterations = 8;
 
-  let result = await client.messages.create({
+  let result = await messagesCreate(client, {
     model, max_tokens: maxTokens, temperature,
     system: assistant.system_prompt,
     tools: tools.length > 0 ? tools : undefined,
     messages,
-  });
+  }, { label: 'orchestrator/agent-initial' });
 
   while (result.stop_reason === 'tool_use' && maxIterations-- > 0) {
     // Může být více tool_use bloků v jedné odpovědi
@@ -299,12 +300,12 @@ async function runSingleAgent(client, slug, message, currentModule, history, all
       })),
     });
 
-    result = await client.messages.create({
+    result = await messagesCreate(client, {
       model, max_tokens: maxTokens, temperature,
       system: assistant.system_prompt,
       tools: tools.length > 0 ? tools : undefined,
       messages,
-    });
+    }, { label: 'orchestrator/agent-tool-loop' });
   }
 
   const textBlock = result.content?.find(c => c.type === 'text');
@@ -340,7 +341,7 @@ async function runMultiAgent(client, slugs, message, currentModule, history, all
     `[${r.assistant.name}]: ${r.response}`
   ).join('\n\n---\n\n');
 
-  const synthesisResponse = await client.messages.create({
+  const synthesisResponse = await messagesCreate(client, {
     model: 'claude-sonnet-4-6',
     max_tokens: 2048,
     temperature: 0.2,
@@ -354,7 +355,7 @@ Tvým úkolem je:
       role: 'user',
       content: `Původní dotaz: "${message}"\n\nOdpovědi agentů:\n\n${agentResponses}`,
     }],
-  });
+  }, { label: 'orchestrator/synthesis' });
 
   const synthesisText = synthesisResponse.content?.find(c => c.type === 'text')?.text;
 

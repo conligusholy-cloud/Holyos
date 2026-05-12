@@ -11,6 +11,7 @@
 
 const Anthropic = require('@anthropic-ai/sdk');
 const { prisma } = require('../../config/database');
+const { messagesCreate } = require('../anthropic-retry');
 
 const SEEDER_MODEL = process.env.AI_DEV_SEEDER_MODEL || 'claude-haiku-4-5-20251001';
 const SEEDER_MAX_TOKENS = 2000;
@@ -117,12 +118,12 @@ ${pendingTasks.map((t, i) =>
 Navrhni 1-3 nové AdminTasky, které by stálo za vytvoření. Vrať <proposals>[...]</proposals>.`;
 
   const client = new Anthropic({ apiKey });
-  const response = await client.messages.create({
+  const response = await messagesCreate(client, {
     model: SEEDER_MODEL,
     max_tokens: SEEDER_MAX_TOKENS,
     system: SYSTEM_PROMPT,
     messages: [{ role: 'user', content: userMessage }],
-  });
+  }, { label: 'ai-dev/seeder' });
 
   const tokensUsed = (response.usage?.input_tokens || 0) + (response.usage?.output_tokens || 0);
   const textBlock = response.content.find((b) => b.type === 'text');

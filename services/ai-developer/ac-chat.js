@@ -17,6 +17,7 @@
 // Frontend si history pamatuje a posílá ji s každým requestem.
 
 const Anthropic = require('@anthropic-ai/sdk');
+const { messagesCreate } = require('../anthropic-retry');
 
 const AC_CHAT_MODEL = process.env.AI_DEV_AC_CHAT_MODEL || 'claude-haiku-4-5-20251001';
 const AC_CHAT_MAX_TOKENS = 2048;
@@ -193,13 +194,13 @@ async function chat({ task, history = [], userMessage }) {
     { role: 'user', content: userMessage },
   ];
 
-  const response = await client.messages.create({
+  const response = await messagesCreate(client, {
     model: AC_CHAT_MODEL,
     max_tokens: AC_CHAT_MAX_TOKENS,
     system: buildSystemPrompt(task),
     tools: TOOLS,
     messages,
-  });
+  }, { label: 'ai-dev/ac-chat' });
 
   const tokensUsed = (response.usage?.input_tokens || 0) + (response.usage?.output_tokens || 0);
 
@@ -317,13 +318,13 @@ STYL:
 
 KOMU PÍŠEŠ: zaměstnancům HolyOSu (skladnice, HR-istka, mistr), kteří neznají IT termíny. Ptej se na CO chtějí a KDE v HolyOSu, ne na technické detaily (které soubory, jaké selectory, atd.) — ty si zjistí coding agent přes list_files / read_file.`;
 
-  const response = await client.messages.create({
+  const response = await messagesCreate(client, {
     model: AC_CHAT_MODEL,
     max_tokens: AC_CHAT_MAX_TOKENS,
     system: systemPrompt,
     tools: TOOLS,
     messages,
-  });
+  }, { label: 'ai-dev/ac-chat-draft' });
 
   const tokensUsed = (response.usage?.input_tokens || 0) + (response.usage?.output_tokens || 0);
 
