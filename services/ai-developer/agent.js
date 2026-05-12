@@ -322,11 +322,29 @@ async function runAgent({ workdir, task, repo, rules, presetPlan, onEvent }) {
     messages.push({ role: 'assistant', content: response.content });
 
     // stop_reason='max_tokens' znamená, že odpověď byla useknutá kvůli limitu —
-    // tool_use blok je neúplný (např. write_file s mid-content cutoff). Nesmí
-    // se to brát jako "vzdal to"; pošli nudge user-message a dej Sonnetu šanci
-    // pokračovat. Tool_use bloky s neúplným input.content do tool_results
-    // neposíláme — Sonnet vidí, že tool nezvládl run a zkusí to znovu menší.
+    // tool_use blok je neúplný (např. write_file s mid-content cutoff).
+    //
+    // KRITICKÉ: Anthropic API vyžaduje, aby user message PO assistant message
+    // s tool_use obsahovala tool_result pro KAŽDÉ tool_use_id. Jinak vrátí
+    // 400 invalid_request_error. Takže nestačí poslat jen text nudge —
+    // musíme nejdřív poslat is_error tool_result pro každý neúplný tool_use
+    // a pak druhý user message s textovým nudge.
     if (response.stop_reason === 'max_tokens') {
+      const toolUseBlocks = response.content.filter((b) => b.type === 'tool_use');
+      if (toolUseBlocks.length > 0) {
+        messages.push({
+          role: 'user',
+          content: toolUseBlocks.map((b) => ({
+            type: 'tool_result',
+            tool_use_id: b.id,
+            content:
+              'Tool nemohl být proveden — tvoje odpověď byla useknutá na max_tokens (' +
+              MAX_TOKENS_PER_TURN +
+              ' output tokenů). Rozděl výstup na menší kusy a zkus znovu.',
+            is_error: true,
+          })),
+        });
+      }
       messages.push({
         role: 'user',
         content:
@@ -341,6 +359,7 @@ async function runAgent({ workdir, task, repo, rules, presetPlan, onEvent }) {
         await onEvent('decision', {
           action: 'max_tokens_recovery',
           turn,
+          truncated_tool_uses: toolUseBlocks.length,
           note: 'Předchozí turn useknut, posílám nudge.',
         });
       }
