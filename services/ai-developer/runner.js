@@ -328,6 +328,7 @@ async function processTask(task, options = {}) {
           task,
           repo,
           forbiddenCheck,
+          pastFailures,
           onEvent: async (kind, payload) => log(kind, payload),
         });
         plan = result.plan;
