@@ -117,6 +117,79 @@
     .pm-placeholder { padding: 28px; text-align: center; color: var(--text2); border: 1px dashed var(--border); border-radius: 10px; background: rgba(234,179,8,0.04); }
     .pm-placeholder .pmp-icon { font-size: 40px; margin-bottom: 10px; opacity: 0.6; }
     .pm-placeholder code { background: var(--surface2); padding: 2px 6px; border-radius: 4px; color: #eab308; font-size: 12px; }
+
+    /* ─── Cash flow timeline (tab #tab-cashflow) ─── */
+    #tab-cashflow { padding: 20px 24px 24px; }
+    .cf-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 18px; }
+    .cf-stat { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
+    .cf-stat-label { font-size: 11px; color: var(--text2); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; margin-bottom: 6px; }
+    .cf-stat-value { font-size: 22px; font-weight: 700; color: var(--text); }
+    .cf-stat-sub { font-size: 11px; color: var(--text2); margin-top: 2px; }
+    .cf-stat.warn .cf-stat-value { color: #ef4444; }
+    .cf-stat.ok .cf-stat-value { color: #10b981; }
+    .cf-stat.pending .cf-stat-value { color: #f59e0b; }
+
+    .cf-toolbar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; }
+    .cf-toolbar select, .cf-toolbar input { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; color: var(--text); font-size: 13px; }
+    .cf-view-switch { display: inline-flex; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+    .cf-view-switch button { background: transparent; border: none; color: var(--text2); padding: 8px 14px; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.15s; }
+    .cf-view-switch button.active { background: rgba(234,179,8,0.2); color: #eab308; }
+
+    /* Timeline (horizontální, sloupce = měsíce) */
+    .cf-timeline-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 0; overflow: hidden; }
+    .cf-timeline-scroll { overflow-x: auto; }
+    .cf-timeline { display: flex; min-width: max-content; }
+    .cf-month-col { min-width: 260px; flex: 1; border-right: 1px solid var(--border); }
+    .cf-month-col:last-child { border-right: none; }
+    .cf-month-head { padding: 12px 14px; background: var(--surface2); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 1; }
+    .cf-month-head.current { background: rgba(234,179,8,0.18); border-bottom-color: #eab308; }
+    .cf-month-title { font-size: 13px; font-weight: 700; color: var(--text); text-transform: uppercase; letter-spacing: 0.5px; }
+    .cf-month-sub { font-size: 11px; color: var(--text2); margin-top: 2px; display: flex; gap: 10px; }
+    .cf-month-sub .cf-incoming { color: #10b981; font-weight: 600; }
+    .cf-month-sub .cf-pending { color: #f59e0b; font-weight: 600; }
+    .cf-month-body { padding: 10px; min-height: 200px; max-height: 580px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+    .cf-month-empty { font-size: 12px; color: var(--text2); text-align: center; padding: 20px 8px; font-style: italic; }
+
+    .cf-payment { background: var(--bg); border: 1px solid var(--border); border-left-width: 4px; border-radius: 8px; padding: 10px 12px; cursor: pointer; transition: all 0.15s; position: relative; }
+    .cf-payment:hover { background: var(--surface2); transform: translateX(2px); }
+    .cf-payment.paid { border-left-color: #10b981; }
+    .cf-payment.pending { border-left-color: #f59e0b; }
+    .cf-payment.overdue { border-left-color: #ef4444; background: rgba(239,68,68,0.06); }
+    .cf-payment-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 4px; }
+    .cf-payment-date { font-size: 11px; font-weight: 700; color: var(--text); }
+    .cf-payment-kind { font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; padding: 2px 6px; border-radius: 4px; font-weight: 700; }
+    .cf-payment-kind.deposit { background: rgba(139,92,246,0.18); color: #a78bfa; }
+    .cf-payment-kind.final { background: rgba(59,130,246,0.18); color: #60a5fa; }
+    .cf-payment-kind.full { background: rgba(234,179,8,0.18); color: #eab308; }
+    .cf-payment-amount { font-size: 15px; font-weight: 700; color: var(--text); margin-bottom: 4px; }
+    .cf-payment-ref { font-size: 11px; color: var(--text2); display: flex; justify-content: space-between; gap: 6px; }
+    .cf-payment-ref .cf-order-num { color: #eab308; font-weight: 600; }
+    .cf-payment-status { display: inline-flex; align-items: center; gap: 4px; font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 4px; margin-top: 6px; }
+    .cf-payment-status.paid { background: rgba(16,185,129,0.18); color: #10b981; }
+    .cf-payment-status.pending { background: rgba(245,158,11,0.18); color: #f59e0b; }
+    .cf-payment-status.overdue { background: rgba(239,68,68,0.18); color: #ef4444; }
+    .cf-payment-estimated { font-size: 9px; font-style: italic; color: var(--text2); margin-top: 3px; }
+
+    /* Kalendář (alternativní view) */
+    .cf-calendar-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+    .cf-cal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+    .cf-cal-nav { display: flex; gap: 6px; align-items: center; }
+    .cf-cal-title { font-size: 16px; font-weight: 700; text-transform: capitalize; }
+    .cf-cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+    .cf-cal-dow { text-align: center; font-size: 10px; font-weight: 700; color: var(--text2); text-transform: uppercase; letter-spacing: 0.5px; padding: 6px 0; }
+    .cf-cal-day { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; min-height: 90px; padding: 6px; display: flex; flex-direction: column; gap: 3px; position: relative; }
+    .cf-cal-day.other-month { opacity: 0.35; }
+    .cf-cal-day.today { border-color: #eab308; box-shadow: inset 0 0 0 1px #eab308; }
+    .cf-cal-day-num { font-size: 11px; font-weight: 700; color: var(--text2); }
+    .cf-cal-day.today .cf-cal-day-num { color: #eab308; }
+    .cf-cal-pill { font-size: 10px; padding: 2px 5px; border-radius: 4px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
+    .cf-cal-pill.paid { background: rgba(16,185,129,0.2); color: #10b981; }
+    .cf-cal-pill.pending { background: rgba(245,158,11,0.22); color: #f59e0b; }
+    .cf-cal-pill.overdue { background: rgba(239,68,68,0.22); color: #ef4444; }
+
+    .cf-legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 11px; color: var(--text2); margin-top: 12px; }
+    .cf-legend-item { display: inline-flex; align-items: center; gap: 5px; }
+    .cf-legend-dot { width: 10px; height: 10px; border-radius: 3px; }
   </style>
   <script src="/js/countries.js"></script>
   <script src="modules/prodejni-objednavky/pradlomat-economy.js"></script>
@@ -132,10 +205,11 @@
       </div>
     </div>
 
-    <!-- Tabs: Objednavky | Cenik | Obchodni pomucky -->
+    <!-- Tabs: Objednavky | Cenik | Cash flow | Obchodni pomucky -->
     <div class="tab-bar">
       <button type="button" class="tab-btn active" data-tab="orders" onclick="switchTab('orders')">📋 Objednávky</button>
       <button type="button" class="tab-btn" data-tab="pricelist" onclick="switchTab('pricelist')">💰 Ceník</button>
+      <button type="button" class="tab-btn" data-tab="cashflow" onclick="switchTab('cashflow')">💸 Cash flow</button>
       <button type="button" class="tab-btn" data-tab="tools" onclick="switchTab('tools')">🧰 Obchodní pomůcky</button>
     </div>
 
@@ -176,6 +250,59 @@
           <button class="btn btn-primary" onclick="openPricelistModal()">+ Nová položka</button>
         </div>
         <div id="pricelist-table"></div>
+      </div>
+    </div>
+
+    <!-- TAB: Cash flow (časová osa očekávaných plateb) -->
+    <div id="tab-cashflow" style="display:none;">
+      <div class="cf-stats" id="cf-stats">
+        <div class="cf-stat"><div class="cf-stat-label">Načítám…</div><div class="cf-stat-value">—</div></div>
+      </div>
+
+      <div class="cf-toolbar">
+        <div class="cf-view-switch">
+          <button type="button" data-cf-view="timeline" class="active" onclick="setCashflowView('timeline')">📈 Časová osa</button>
+          <button type="button" data-cf-view="calendar" onclick="setCashflowView('calendar')">📅 Kalendář</button>
+        </div>
+        <select id="cf-filter-status" onchange="renderCashflow()">
+          <option value="all">Všechny platby</option>
+          <option value="pending" selected>Pouze nezaplacené</option>
+          <option value="paid">Pouze zaplacené</option>
+          <option value="overdue">Pouze po splatnosti</option>
+        </select>
+        <select id="cf-filter-kind" onchange="renderCashflow()">
+          <option value="all">Zálohy i doplatky</option>
+          <option value="deposit">Pouze zálohy</option>
+          <option value="final">Pouze doplatky</option>
+        </select>
+        <div style="flex:1"></div>
+        <button class="btn btn-secondary btn-sm" onclick="loadCashflow()">🔄 Obnovit</button>
+      </div>
+
+      <div id="cf-view-timeline" class="cf-timeline-wrap">
+        <div class="cf-timeline-scroll"><div class="cf-timeline" id="cf-timeline">
+          <div style="padding:30px;color:var(--text2);font-style:italic;">Načítám platby…</div>
+        </div></div>
+      </div>
+
+      <div id="cf-view-calendar" class="cf-calendar-wrap" style="display:none;">
+        <div class="cf-cal-head">
+          <div class="cf-cal-nav">
+            <button class="btn btn-sm btn-secondary" onclick="cfCalShift(-1)">‹</button>
+            <button class="btn btn-sm btn-secondary" onclick="cfCalShift(0)">Dnes</button>
+            <button class="btn btn-sm btn-secondary" onclick="cfCalShift(1)">›</button>
+          </div>
+          <div class="cf-cal-title" id="cf-cal-title">—</div>
+          <div style="width:120px;"></div>
+        </div>
+        <div class="cf-cal-grid" id="cf-cal-grid"></div>
+      </div>
+
+      <div class="cf-legend">
+        <span class="cf-legend-item"><span class="cf-legend-dot" style="background:#10b981;"></span> Zaplaceno</span>
+        <span class="cf-legend-item"><span class="cf-legend-dot" style="background:#f59e0b;"></span> Očekávané</span>
+        <span class="cf-legend-item"><span class="cf-legend-dot" style="background:#ef4444;"></span> Po splatnosti</span>
+        <span class="cf-legend-item" style="margin-left:auto;font-style:italic;">Termíny bez doplatkové faktury jsou odhad (~ ikona u data).</span>
       </div>
     </div>
 
@@ -2393,14 +2520,386 @@
     }
 
     function switchTab(name) {
-      ['orders', 'pricelist', 'tools'].forEach(function(t) {
+      ['orders', 'pricelist', 'cashflow', 'tools'].forEach(function(t) {
         var el = document.getElementById('tab-' + t);
         if (el) el.style.display = (t === name) ? '' : 'none';
         var btn = document.querySelector('.tab-btn[data-tab="' + t + '"]');
         if (btn) btn.classList.toggle('active', t === name);
       });
       if (name === 'pricelist') loadPricelist();
+      if (name === 'cashflow') loadCashflow();
       if (name === 'tools') initToolsTab();
+    }
+
+    // ============================================================
+    // CASH FLOW — časová osa očekávaných záloh a doplatků
+    // ============================================================
+    var _cashflowPayments = [];   // pole { date, amount, kind, paid, overdue, order, estimated }
+    var _cashflowView = 'timeline';
+    var _cashflowCalAnchor = null; // první den zobrazeného měsíce v kalendáři
+
+    async function loadCashflow() {
+      var timelineEl = document.getElementById('cf-timeline');
+      if (timelineEl) timelineEl.innerHTML = '<div style="padding:30px;color:var(--text2);font-style:italic;">Načítám platby…</div>';
+      try {
+        var res = await fetch('/api/wh/orders?type=sales');
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        var orders = await res.json();
+        _cashflowPayments = buildPaymentsFromOrders(orders);
+        renderCashflow();
+      } catch (e) {
+        console.error('loadCashflow:', e);
+        if (timelineEl) timelineEl.innerHTML = '<div style="padding:30px;color:#ef4444;">Chyba při načítání: ' + (e.message || e) + '</div>';
+      }
+    }
+
+    // Z objednávek vyrobí pole jednotlivých plateb (záloha/doplatek/celá).
+    // Logika dat:
+    //   - záloha:  pokud existuje deposit invoice (invoice_role='deposit') → její date_due,
+    //              jinak heuristika: order.created_at + 7 dní (odhad — vyznačíme ~).
+    //   - doplatek: pokud existuje final_invoice → final_invoice.date_due,
+    //              jinak heuristika: expected_delivery + final_invoice_lead_days (odhad).
+    //   - jednorázová platba (payment_split=false):
+    //              pokud final_invoice → date_due, jinak expected_delivery nebo created_at+14d (odhad).
+    function buildPaymentsFromOrders(orders) {
+      var out = [];
+      var today = new Date(); today.setHours(0, 0, 0, 0);
+      orders.forEach(function (o) {
+        // Zrušené objednávky cash flow neovlivňují.
+        if (o.status === 'cancelled') return;
+
+        var total = parseFloat(o.total_amount || 0) || 0;
+        var currency = o.currency || 'CZK';
+
+        if (o.payment_split) {
+          // ── ZÁLOHA ──
+          var depositAmt = 0;
+          if (o.deposit_amount != null) depositAmt = parseFloat(o.deposit_amount) || 0;
+          else if (o.deposit_percent != null) depositAmt = total * (parseFloat(o.deposit_percent) / 100);
+
+          var depositDate, depositEstimated = true;
+          if (o.deposit_paid && o.deposit_paid_at) {
+            depositDate = new Date(o.deposit_paid_at);
+            depositEstimated = false;
+          } else if (o.created_at) {
+            // Heuristika — záloha typicky do týdne od potvrzení objednávky.
+            var base = new Date(o.created_at);
+            base.setDate(base.getDate() + 7);
+            depositDate = base;
+          }
+          if (depositDate && depositAmt > 0) {
+            out.push({
+              date: depositDate,
+              amount: depositAmt,
+              currency: currency,
+              kind: 'deposit',
+              paid: !!o.deposit_paid,
+              overdue: !o.deposit_paid && depositDate < today,
+              order: o,
+              estimated: depositEstimated && !o.deposit_paid,
+            });
+          }
+
+          // ── DOPLATEK ──
+          var finalAmt = total - depositAmt;
+          if (finalAmt > 0.01) {
+            var finalDate, finalEstimated = true;
+            if (o.final_paid && o.final_paid_at) {
+              finalDate = new Date(o.final_paid_at);
+              finalEstimated = false;
+            } else if (o.final_invoice && o.final_invoice.date_due) {
+              finalDate = new Date(o.final_invoice.date_due);
+              finalEstimated = false;
+            } else if (o.expected_delivery) {
+              var ed = new Date(o.expected_delivery);
+              ed.setDate(ed.getDate() + (o.final_invoice_lead_days || 14));
+              finalDate = ed;
+            } else if (o.created_at) {
+              var c = new Date(o.created_at);
+              c.setDate(c.getDate() + 30 + (o.final_invoice_lead_days || 14));
+              finalDate = c;
+            }
+            if (finalDate) {
+              out.push({
+                date: finalDate,
+                amount: finalAmt,
+                currency: currency,
+                kind: 'final',
+                paid: !!o.final_paid,
+                overdue: !o.final_paid && finalDate < today,
+                order: o,
+                estimated: finalEstimated && !o.final_paid,
+              });
+            }
+          }
+        } else {
+          // ── JEDNORÁZOVÁ PLATBA (záloha = celá objednávka) ──
+          if (total > 0) {
+            var fullDate, fullEstimated = true;
+            if (o.final_paid && o.final_paid_at) {
+              fullDate = new Date(o.final_paid_at);
+              fullEstimated = false;
+            } else if (o.final_invoice && o.final_invoice.date_due) {
+              fullDate = new Date(o.final_invoice.date_due);
+              fullEstimated = false;
+            } else if (o.expected_delivery) {
+              fullDate = new Date(o.expected_delivery);
+            } else if (o.created_at) {
+              var cc = new Date(o.created_at);
+              cc.setDate(cc.getDate() + 14);
+              fullDate = cc;
+            }
+            if (fullDate) {
+              out.push({
+                date: fullDate,
+                amount: total,
+                currency: currency,
+                kind: 'full',
+                paid: !!o.final_paid,
+                overdue: !o.final_paid && fullDate < today,
+                order: o,
+                estimated: fullEstimated && !o.final_paid,
+              });
+            }
+          }
+        }
+      });
+      // Vzestupně podle data
+      out.sort(function (a, b) { return a.date - b.date; });
+      return out;
+    }
+
+    function filterPayments() {
+      var statusF = (document.getElementById('cf-filter-status') || {}).value || 'all';
+      var kindF = (document.getElementById('cf-filter-kind') || {}).value || 'all';
+      return _cashflowPayments.filter(function (p) {
+        if (kindF !== 'all' && p.kind !== kindF) {
+          // Při filtru kind='final' chceme vidět i 'full' (de facto jeden doplatek).
+          if (!(kindF === 'final' && p.kind === 'full')) return false;
+        }
+        if (statusF === 'paid' && !p.paid) return false;
+        if (statusF === 'pending' && (p.paid || p.overdue)) return false;
+        if (statusF === 'overdue' && !p.overdue) return false;
+        return true;
+      });
+    }
+
+    function renderCashflow() {
+      renderCashflowStats();
+      if (_cashflowView === 'timeline') renderCashflowTimeline();
+      else renderCashflowCalendar();
+    }
+
+    function renderCashflowStats() {
+      var box = document.getElementById('cf-stats');
+      if (!box) return;
+      var today = new Date(); today.setHours(0, 0, 0, 0);
+      var monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+      var monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 1);
+
+      var sumPending = 0, sumOverdue = 0, sumThisMonth = 0, sumReceivedYTD = 0;
+      var countPending = 0, countOverdue = 0, countThisMonth = 0;
+      var yearStart = new Date(today.getFullYear(), 0, 1);
+
+      _cashflowPayments.forEach(function (p) {
+        if (!p.paid) {
+          if (p.overdue) { sumOverdue += p.amount; countOverdue++; }
+          else { sumPending += p.amount; countPending++; }
+          if (p.date >= monthStart && p.date < monthEnd) { sumThisMonth += p.amount; countThisMonth++; }
+        } else {
+          if (p.date >= yearStart) sumReceivedYTD += p.amount;
+        }
+      });
+
+      function fmt(n) { return Math.round(n).toLocaleString('cs-CZ') + ' Kč'; }
+      box.innerHTML =
+        '<div class="cf-stat pending">' +
+          '<div class="cf-stat-label">Tento měsíc očekáváno</div>' +
+          '<div class="cf-stat-value">' + fmt(sumThisMonth) + '</div>' +
+          '<div class="cf-stat-sub">' + countThisMonth + ' plateb</div>' +
+        '</div>' +
+        '<div class="cf-stat pending">' +
+          '<div class="cf-stat-label">Celkem nezaplaceno</div>' +
+          '<div class="cf-stat-value">' + fmt(sumPending) + '</div>' +
+          '<div class="cf-stat-sub">' + countPending + ' očekávaných plateb</div>' +
+        '</div>' +
+        '<div class="cf-stat warn">' +
+          '<div class="cf-stat-label">Po splatnosti</div>' +
+          '<div class="cf-stat-value">' + fmt(sumOverdue) + '</div>' +
+          '<div class="cf-stat-sub">' + countOverdue + ' plateb v prodlení</div>' +
+        '</div>' +
+        '<div class="cf-stat ok">' +
+          '<div class="cf-stat-label">Přijato letos</div>' +
+          '<div class="cf-stat-value">' + fmt(sumReceivedYTD) + '</div>' +
+          '<div class="cf-stat-sub">Od 1. ledna ' + today.getFullYear() + '</div>' +
+        '</div>';
+    }
+
+    function renderCashflowTimeline() {
+      var el = document.getElementById('cf-timeline');
+      if (!el) return;
+      var payments = filterPayments();
+
+      if (!payments.length) {
+        el.innerHTML = '<div style="padding:40px;color:var(--text2);text-align:center;font-style:italic;width:100%;">Žádné platby pro zvolený filtr.</div>';
+        return;
+      }
+
+      // Měsíční seznam — od (nejdřív měsíc dnešní nebo první platby) po (poslední platba)
+      var today = new Date(); today.setHours(0, 0, 0, 0);
+      var firstDate = payments[0].date < today ? payments[0].date : today;
+      var lastDate = payments[payments.length - 1].date > today ? payments[payments.length - 1].date : today;
+
+      var months = [];
+      var cur = new Date(firstDate.getFullYear(), firstDate.getMonth(), 1);
+      var endM = new Date(lastDate.getFullYear(), lastDate.getMonth(), 1);
+      while (cur <= endM) {
+        months.push(new Date(cur));
+        cur.setMonth(cur.getMonth() + 1);
+      }
+      // Bezpečnostní limit — kdyby šly objednávky daleko do budoucnosti, neukazujeme víc než 24 měsíců.
+      if (months.length > 24) months = months.slice(0, 24);
+
+      var monthNames = ['Leden', 'Únor', 'Březen', 'Duben', 'Květen', 'Červen', 'Červenec', 'Srpen', 'Září', 'Říjen', 'Listopad', 'Prosinec'];
+      var nowMonth = today.getMonth(), nowYear = today.getFullYear();
+
+      var html = '';
+      months.forEach(function (m) {
+        var y = m.getFullYear(), mi = m.getMonth();
+        var monthPayments = payments.filter(function (p) {
+          return p.date.getFullYear() === y && p.date.getMonth() === mi;
+        });
+        var sumIn = 0, sumPend = 0;
+        monthPayments.forEach(function (p) {
+          if (p.paid) sumIn += p.amount; else sumPend += p.amount;
+        });
+        var isCurrent = (y === nowYear && mi === nowMonth);
+
+        html += '<div class="cf-month-col">' +
+          '<div class="cf-month-head' + (isCurrent ? ' current' : '') + '">' +
+            '<div class="cf-month-title">' + monthNames[mi] + ' ' + y + '</div>' +
+            '<div class="cf-month-sub">' +
+              (sumIn > 0 ? '<span class="cf-incoming">✓ ' + Math.round(sumIn).toLocaleString('cs-CZ') + ' Kč</span>' : '') +
+              (sumPend > 0 ? '<span class="cf-pending">⏳ ' + Math.round(sumPend).toLocaleString('cs-CZ') + ' Kč</span>' : '') +
+              (sumIn === 0 && sumPend === 0 ? '<span style="color:var(--text2);font-style:italic;">bez plateb</span>' : '') +
+            '</div>' +
+          '</div>' +
+          '<div class="cf-month-body">';
+        if (!monthPayments.length) {
+          html += '<div class="cf-month-empty">— žádná platba —</div>';
+        } else {
+          monthPayments.forEach(function (p) { html += renderPaymentCard(p); });
+        }
+        html += '</div></div>';
+      });
+      el.innerHTML = html;
+
+      // Auto-scroll na aktuální měsíc (pokud existuje ve view)
+      var scroll = document.querySelector('#cf-view-timeline .cf-timeline-scroll');
+      var currentHead = el.querySelector('.cf-month-head.current');
+      if (scroll && currentHead) {
+        var rect = currentHead.getBoundingClientRect();
+        var parentRect = scroll.getBoundingClientRect();
+        scroll.scrollLeft += rect.left - parentRect.left - 12;
+      }
+    }
+
+    function renderPaymentCard(p) {
+      var statusCls = p.paid ? 'paid' : (p.overdue ? 'overdue' : 'pending');
+      var statusLabel = p.paid ? '✓ Zaplaceno' : (p.overdue ? '⚠ Po splatnosti' : '⏳ Očekává se');
+      var kindLabel = p.kind === 'deposit' ? 'Záloha' : (p.kind === 'final' ? 'Doplatek' : 'Platba');
+      var dateStr = p.date.toLocaleDateString('cs-CZ', { day: 'numeric', month: 'numeric' });
+      if (p.estimated) dateStr = '~ ' + dateStr;
+      var amountStr = Math.round(p.amount).toLocaleString('cs-CZ') + ' ' + (p.currency || 'CZK');
+      var orderNum = p.order.order_number || '—';
+      var customer = (p.order.company && p.order.company.name) || '—';
+      var orderId = p.order.id;
+      var estimatedNote = p.estimated ? '<div class="cf-payment-estimated">~ Odhadovaný termín (faktura ještě nebyla vystavena)</div>' : '';
+      return '<div class="cf-payment ' + statusCls + '" onclick="openOrderDetail(' + orderId + ')">' +
+        '<div class="cf-payment-top">' +
+          '<span class="cf-payment-date">' + dateStr + '</span>' +
+          '<span class="cf-payment-kind ' + p.kind + '">' + kindLabel + '</span>' +
+        '</div>' +
+        '<div class="cf-payment-amount">' + amountStr + '</div>' +
+        '<div class="cf-payment-ref">' +
+          '<span class="cf-order-num">' + esc(orderNum) + '</span>' +
+          '<span style="text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:140px;" title="' + esc(customer) + '">' + esc(customer) + '</span>' +
+        '</div>' +
+        '<span class="cf-payment-status ' + statusCls + '">' + statusLabel + '</span>' +
+        estimatedNote +
+      '</div>';
+    }
+
+    function setCashflowView(view) {
+      _cashflowView = view;
+      var btns = document.querySelectorAll('.cf-view-switch button');
+      btns.forEach(function (b) { b.classList.toggle('active', b.getAttribute('data-cf-view') === view); });
+      document.getElementById('cf-view-timeline').style.display = (view === 'timeline') ? '' : 'none';
+      document.getElementById('cf-view-calendar').style.display = (view === 'calendar') ? '' : 'none';
+      renderCashflow();
+    }
+
+    function cfCalShift(dir) {
+      var today = new Date();
+      if (dir === 0) _cashflowCalAnchor = new Date(today.getFullYear(), today.getMonth(), 1);
+      else {
+        if (!_cashflowCalAnchor) _cashflowCalAnchor = new Date(today.getFullYear(), today.getMonth(), 1);
+        _cashflowCalAnchor.setMonth(_cashflowCalAnchor.getMonth() + dir);
+      }
+      renderCashflowCalendar();
+    }
+
+    function renderCashflowCalendar() {
+      var grid = document.getElementById('cf-cal-grid');
+      var titleEl = document.getElementById('cf-cal-title');
+      if (!grid || !titleEl) return;
+      var today = new Date(); today.setHours(0, 0, 0, 0);
+      if (!_cashflowCalAnchor) _cashflowCalAnchor = new Date(today.getFullYear(), today.getMonth(), 1);
+      var anchor = _cashflowCalAnchor;
+      var monthNames = ['leden', 'únor', 'březen', 'duben', 'květen', 'červen', 'červenec', 'srpen', 'září', 'říjen', 'listopad', 'prosinec'];
+      titleEl.textContent = monthNames[anchor.getMonth()] + ' ' + anchor.getFullYear();
+
+      // Mřížka — začínáme pondělím týdne v němž padne 1. den měsíce.
+      var firstOfMonth = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
+      var firstDow = (firstOfMonth.getDay() + 6) % 7; // 0 = pondělí
+      var gridStart = new Date(firstOfMonth);
+      gridStart.setDate(gridStart.getDate() - firstDow);
+
+      var payments = filterPayments();
+
+      // Group payments by yyyy-mm-dd
+      var byDay = {};
+      payments.forEach(function (p) {
+        var key = p.date.getFullYear() + '-' + (p.date.getMonth() + 1) + '-' + p.date.getDate();
+        if (!byDay[key]) byDay[key] = [];
+        byDay[key].push(p);
+      });
+
+      var html = '';
+      ['Po', 'Út', 'St', 'Čt', 'Pá', 'So', 'Ne'].forEach(function (d) {
+        html += '<div class="cf-cal-dow">' + d + '</div>';
+      });
+      // 6 řádků × 7 dní = 42 buněk
+      for (var i = 0; i < 42; i++) {
+        var d = new Date(gridStart);
+        d.setDate(gridStart.getDate() + i);
+        d.setHours(0, 0, 0, 0);
+        var isOther = d.getMonth() !== anchor.getMonth();
+        var isToday = d.getTime() === today.getTime();
+        var key = d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate();
+        var dayPays = byDay[key] || [];
+        html += '<div class="cf-cal-day' + (isOther ? ' other-month' : '') + (isToday ? ' today' : '') + '">' +
+          '<div class="cf-cal-day-num">' + d.getDate() + '</div>';
+        dayPays.forEach(function (p) {
+          var cls = p.paid ? 'paid' : (p.overdue ? 'overdue' : 'pending');
+          var amt = Math.round(p.amount).toLocaleString('cs-CZ');
+          var kind = p.kind === 'deposit' ? 'Z' : (p.kind === 'final' ? 'D' : 'P');
+          var title = (p.order.order_number || '') + ' — ' + ((p.order.company && p.order.company.name) || '') + ' — ' + amt + ' Kč';
+          html += '<div class="cf-cal-pill ' + cls + '" title="' + esc(title) + '" onclick="event.stopPropagation();openOrderDetail(' + p.order.id + ')">' + kind + ' ' + amt + '</div>';
+        });
+        html += '</div>';
+      }
+      grid.innerHTML = html;
     }
 
     // ============================================================
