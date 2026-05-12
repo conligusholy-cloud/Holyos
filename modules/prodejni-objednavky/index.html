@@ -87,8 +87,39 @@
     .empty-state .empty-icon { font-size: 48px; margin-bottom: 12px; opacity: 0.5; }
     .empty-state h3 { color: var(--text); margin-bottom: 4px; }
     .empty-state p { font-size: 13px; }
+
+    /* ─── Obchodní pomůcky (tools tab) ─── */
+    #tab-tools { padding: 20px 24px 24px; }
+    .tools-shell { display: grid; grid-template-columns: 260px 1fr; gap: 20px; align-items: start; }
+    @media (max-width: 900px) { .tools-shell { grid-template-columns: 1fr; } }
+    .tools-nav { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 12px; position: sticky; top: 60px; }
+    .tools-nav-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; color: var(--text2); padding: 6px 10px 10px; }
+    .tools-nav-item { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 500; color: var(--text); transition: background 0.12s; border: 1px solid transparent; }
+    .tools-nav-item:hover { background: var(--surface2); }
+    .tools-nav-item.active { background: rgba(234,179,8,0.12); border-color: rgba(234,179,8,0.35); color: #eab308; }
+    .tools-nav-item .tn-icon { font-size: 18px; line-height: 1; }
+    .tools-nav-item .tn-soon { margin-left: auto; font-size: 9px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; background: rgba(156,163,175,0.18); color: #9ca3af; padding: 2px 6px; border-radius: 4px; }
+
+    .tool-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 24px; }
+    .tool-head { display: flex; align-items: flex-start; gap: 14px; padding-bottom: 18px; border-bottom: 1px solid var(--border); margin-bottom: 18px; }
+    .tool-head-icon { font-size: 28px; line-height: 1; }
+    .tool-head h2 { font-size: 18px; font-weight: 700; margin: 0; }
+    .tool-head p { font-size: 12px; color: var(--text2); margin-top: 4px; }
+    .tool-section-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; color: var(--text2); margin: 22px 0 10px; }
+
+    .recipient-row { display: grid; grid-template-columns: 1.4fr 1.4fr 0.9fr 0.9fr auto; gap: 10px; align-items: center; padding: 12px 14px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg); margin-bottom: 8px; font-size: 13px; }
+    .recipient-row .r-name { font-weight: 600; color: var(--text); }
+    .recipient-row .r-email { color: var(--text2); }
+    .recipient-row .r-stat { font-size: 11px; color: var(--text2); }
+    .recipient-row .r-stat strong { color: #eab308; font-size: 14px; }
+    .recipient-row .r-actions { display: flex; gap: 6px; }
+    .recipient-empty { text-align: center; padding: 28px 12px; color: var(--text2); font-size: 13px; border: 1px dashed var(--border); border-radius: 10px; background: rgba(255,255,255,0.02); }
+    .pm-placeholder { padding: 28px; text-align: center; color: var(--text2); border: 1px dashed var(--border); border-radius: 10px; background: rgba(234,179,8,0.04); }
+    .pm-placeholder .pmp-icon { font-size: 40px; margin-bottom: 10px; opacity: 0.6; }
+    .pm-placeholder code { background: var(--surface2); padding: 2px 6px; border-radius: 4px; color: #eab308; font-size: 12px; }
   </style>
   <script src="/js/countries.js"></script>
+  <script src="modules/prodejni-objednavky/pradlomat-economy.js"></script>
 </head>
 <body>
   <div id="sidebar"></div>
@@ -101,10 +132,11 @@
       </div>
     </div>
 
-    <!-- Tabs: Objednavky | Cenik -->
+    <!-- Tabs: Objednavky | Cenik | Obchodni pomucky -->
     <div class="tab-bar">
       <button type="button" class="tab-btn active" data-tab="orders" onclick="switchTab('orders')">📋 Objednávky</button>
       <button type="button" class="tab-btn" data-tab="pricelist" onclick="switchTab('pricelist')">💰 Ceník</button>
+      <button type="button" class="tab-btn" data-tab="tools" onclick="switchTab('tools')">🧰 Obchodní pomůcky</button>
     </div>
 
     <!-- TAB: Objednavky -->
@@ -146,6 +178,89 @@
         <div id="pricelist-table"></div>
       </div>
     </div>
+
+    <!-- TAB: Obchodni pomucky -->
+    <div id="tab-tools" style="display:none;">
+      <div class="tools-shell">
+        <!-- Levy panel: seznam pomucek -->
+        <aside class="tools-nav">
+          <div class="tools-nav-title">Pomůcky</div>
+          <div class="tools-nav-item active" data-tool="pradlomat-economy" onclick="switchTool('pradlomat-economy')">
+            <span class="tn-icon">📊</span>
+            <span>Ekonomika prádlomatu</span>
+          </div>
+          <div class="tools-nav-item" data-tool="margin-calc" onclick="switchTool('margin-calc')">
+            <span class="tn-icon">🧮</span>
+            <span>Kalkulačka marže</span>
+            <span class="tn-soon">brzy</span>
+          </div>
+          <div class="tools-nav-item" data-tool="quote-templates" onclick="switchTool('quote-templates')">
+            <span class="tn-icon">✉️</span>
+            <span>Šablony nabídek</span>
+            <span class="tn-soon">brzy</span>
+          </div>
+        </aside>
+
+        <!-- Pravy panel: aktivni pomucka -->
+        <main class="tool-panel" id="tool-panel">
+          <!-- Tool: Ekonomika pradlomatu -->
+          <div class="tool-view" data-tool-view="pradlomat-economy">
+            <div class="tool-head">
+              <div class="tool-head-icon">📊</div>
+              <div style="flex:1">
+                <h2>Ekonomika prádlomatu</h2>
+                <p>Editovatelný model TCO / návratnosti pro jeden prádlomat. Žlutá pole jsou vstupy (jako v Excelu), ostatní hodnoty se počítají automaticky. Model lze sdílet odkazem se zákazníkem a sledovat využití.</p>
+              </div>
+            </div>
+
+            <!-- Živá editovatelná tabulka (montuje pradlomat-economy.js) -->
+            <div id="pradlomat-tool-root"></div>
+
+            <!-- Sekce: Spravce kontaktu -->
+            <div class="tool-section-title" style="display:flex;align-items:center;gap:10px;margin-top:32px;">
+              <span style="flex:1">Příjemci &amp; statistiky využití</span>
+              <button class="btn btn-primary btn-sm" onclick="openRecipientModal()">+ Odeslat nový odkaz</button>
+            </div>
+            <div id="recipients-list">
+              <div class="recipient-empty">
+                Zatím jsi nikomu odkaz neposlal. Klikni na <strong>+ Odeslat nový odkaz</strong> a založ prvního příjemce.<br>
+                <span style="font-size:11px;opacity:0.7;">Backend (token + email přes Microsoft Graph + tracking otevření a uložení modelů) navážu v dalším kroku.</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tool: Margin calculator (placeholder) -->
+          <div class="tool-view" data-tool-view="margin-calc" style="display:none;">
+            <div class="tool-head">
+              <div class="tool-head-icon">🧮</div>
+              <div>
+                <h2>Kalkulačka marže</h2>
+                <p>Rychlý výpočet prodejní ceny z nákladů, marže a DPH.</p>
+              </div>
+            </div>
+            <div class="pm-placeholder">
+              <div class="pmp-icon">🚧</div>
+              <div>Pomůcka v přípravě.</div>
+            </div>
+          </div>
+
+          <!-- Tool: Quote templates (placeholder) -->
+          <div class="tool-view" data-tool-view="quote-templates" style="display:none;">
+            <div class="tool-head">
+              <div class="tool-head-icon">✉️</div>
+              <div>
+                <h2>Šablony nabídek</h2>
+                <p>Předpřipravené texty pro nabídky, follow-upy a urgence.</p>
+              </div>
+            </div>
+            <div class="pm-placeholder">
+              <div class="pmp-icon">🚧</div>
+              <div>Pomůcka v přípravě.</div>
+            </div>
+          </div>
+        </main>
+      </div>
+    </div>
   </div>
 
   <div id="modal-root"></div>
@@ -178,6 +293,41 @@
     };
 
     function esc(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+
+    // Vykreslí badge stavu + případný sub-badge platby (Záloha ✓ / Doplaceno / Čeká…).
+    // Vrací HTML pro vložení do buňky. opts.size = 'sm' (default) | 'lg' (pro detail).
+    function renderStatusBadges(order, opts) {
+      opts = opts || {};
+      const st = ORDER_STATUSES[order.status] || { label: order.status, color: '#9ca3af' };
+      const sizeCss = opts.size === 'lg' ? 'font-size:13px;padding:4px 12px;' : '';
+      const mainBadge = '<span class="badge" style="background:' + st.color + '22;color:' + st.color + ';' + sizeCss + '">' + st.label + '</span>';
+
+      // Sub-badge platby — relevantní jen pro prodejní objednávku, status ordered+ a !cancelled
+      if (order.type && order.type !== 'sales') return mainBadge;
+      if (!['ordered','confirmed','delivered'].includes(order.status)) return mainBadge;
+
+      let subLabel = '';
+      let subColor = '';
+      let subIcon = '';
+      if (order.payment_split) {
+        if (order.final_paid) {
+          subLabel = 'Doplaceno'; subColor = '#10b981'; subIcon = '✓';
+        } else if (order.deposit_paid) {
+          subLabel = 'Záloha'; subColor = '#10b981'; subIcon = '✓';
+        } else {
+          subLabel = 'Čeká na zálohu'; subColor = '#94a3b8'; subIcon = '⏳';
+        }
+      } else {
+        if (order.final_paid) {
+          subLabel = 'Zaplaceno'; subColor = '#10b981'; subIcon = '✓';
+        } else {
+          subLabel = 'Čeká na platbu'; subColor = '#94a3b8'; subIcon = '⏳';
+        }
+      }
+      const subSizeCss = opts.size === 'lg' ? 'font-size:12px;padding:3px 10px;' : 'font-size:10px;padding:2px 6px;';
+      const subBadge = '<span class="badge" style="background:' + subColor + '22;color:' + subColor + ';margin-left:4px;' + subSizeCss + '" title="Stav platby">' + subIcon + ' ' + subLabel + '</span>';
+      return mainBadge + subBadge;
+    }
 
     let companies = [];
     let materials = [];
@@ -297,7 +447,7 @@
         html += '<tr onclick="openOrderDetail(' + o.id + ')">';
         html += '<td class="person-name">' + o.order_number + '</td>';
         html += '<td>' + (o.company?.name || o.company_name || '—') + '</td>';
-        html += '<td><span class="badge" style="background:' + st.color + '22;color:' + st.color + ';">' + st.label + '</span></td>';
+        html += '<td>' + renderStatusBadges({ ...o, type: 'sales' }) + '</td>';
         // Interni warning: pokud alespon 1 polozka nema napojeny Product, zakaznik
         // ji neodesle do vyroby (nema co vyrobit). Red ⚠ badge vedle poctu polozek.
         const itemsArr = Array.isArray(o.items) ? o.items : [];
@@ -493,9 +643,9 @@
             '<div id="customer-link-area">' +
               (o.share_token
                 ? (o.status && o.status !== 'new'
-                    ? '<div style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.25);border-radius:8px;padding:10px 14px;font-family:monospace;font-size:11px;color:var(--text2);word-break:break-all;opacity:0.5;text-decoration:line-through;">' + window.location.origin + '/order/' + o.share_token + '</div>'
+                    ? '<div style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.25);border-radius:8px;padding:10px 14px;font-family:monospace;font-size:11px;color:var(--text2);word-break:break-all;opacity:0.5;text-decoration:line-through;">' + (o.share_url || (window.location.origin + '/order/' + o.share_token)) + '</div>'
                     : '<div style="display:flex;gap:8px;align-items:center;">' +
-                        '<input type="text" readonly value="' + window.location.origin + '/order/' + o.share_token + '" id="modal-share-url" style="flex:1;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:12px;font-family:monospace;" onclick="this.select()">' +
+                        '<input type="text" readonly value="' + (o.share_url || (window.location.origin + '/order/' + o.share_token)) + '" id="modal-share-url" style="flex:1;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:12px;font-family:monospace;" onclick="this.select()">' +
                         '<button type="button" class="btn btn-sm btn-primary" onclick="copyModalShareUrl()">📋</button>' +
                       '</div>'
                   )
@@ -1519,7 +1669,7 @@
             '<h2 style="margin:0;">' + order.order_number + '</h2>' +
             '<div style="display:flex;gap:8px;align-items:center;">' +
               '<select onchange="updateOrderStatus(' + id + ',this.value)" style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:6px 10px;color:var(--text);font-size:12px;">' + statusOpts + '</select>' +
-              '<span class="badge" style="background:' + st.color + '22;color:' + st.color + ';font-size:13px;padding:4px 12px;">' + st.label + '</span>' +
+              renderStatusBadges({ ...order, type: 'sales' }, { size: 'lg' }) +
             '</div>' +
           '</div>' +
           bannerHtml +
@@ -1560,6 +1710,9 @@
           addItemSection +
           (isEditable ? '<div style="border-top:1px solid var(--border);padding-top:14px;margin-top:12px;"><h3 style="font-size:14px;margin-bottom:4px;">📅 Výrobní sloty — termín dodání</h3><div style="font-size:11px;color:var(--text2);margin-bottom:6px;">Klikněte na &quot;Vybrat termín&quot; u položky, pak klikněte na volný slot v časové ose.</div>' + buildOrderSlotTimeline(id, order.items || [], order) + '</div>' : '') +
 
+          // ─── Panel Platba (viditelný od stavu 'ordered' dál) ───
+          (['ordered','confirmed','delivered'].includes(order.status) ? renderPaymentPanel(order) : '') +
+
           // ─── Odkaz pro zákazníka ───
           '<div style="border-top:1px solid var(--border);padding-top:14px;margin-top:12px;">' +
             '<h3 style="font-size:14px;margin-bottom:8px;">🔗 Odkaz pro zákazníka' +
@@ -1574,11 +1727,11 @@
                     // Neaktivní stav — odkaz zamčený, nelze kopírovat ani otevírat
                     ? '<div style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.25);border-radius:8px;padding:10px 14px;">' +
                         '<div style="font-size:12px;color:var(--text2);margin-bottom:6px;">Odkaz je aktivní jen když je objednávka ve stavu <strong style="color:#3b82f6;">Nový</strong>. Zákazník se teď po kliknutí dozví, že už je objednávka zpracovaná.</div>' +
-                        '<div style="font-family:monospace;font-size:11px;color:var(--text2);word-break:break-all;opacity:0.5;text-decoration:line-through;">' + window.location.origin + '/order/' + order.share_token + '</div>' +
+                        '<div style="font-family:monospace;font-size:11px;color:var(--text2);word-break:break-all;opacity:0.5;text-decoration:line-through;">' + (order.share_url || (window.location.origin + '/order/' + order.share_token)) + '</div>' +
                       '</div>'
                     // Aktivní stav
                     : '<div style="display:flex;gap:8px;align-items:center;">' +
-                        '<input type="text" readonly value="' + window.location.origin + '/order/' + order.share_token + '" id="modal-share-url" style="flex:1;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:12px;font-family:monospace;" onclick="this.select()">' +
+                        '<input type="text" readonly value="' + (order.share_url || (window.location.origin + '/order/' + order.share_token)) + '" id="modal-share-url" style="flex:1;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:12px;font-family:monospace;" onclick="this.select()">' +
                         '<button type="button" class="btn btn-sm btn-primary" onclick="copyModalShareUrl()">📋</button>' +
                       '</div>'
                   )
@@ -1610,6 +1763,181 @@
           document.addEventListener('mousemove', function(e) { if (!drag) return; e.preventDefault(); stlEl.scrollLeft = sl - (e.pageX - sx); });
         }
       } catch(e) { console.error(e); }
+    }
+
+    // ============================================================
+    // PLATBA — záloha / doplatek / plná platba + uvolnění do výroby
+    // ============================================================
+
+    // Vypočítá výši zálohy z deposit_amount nebo deposit_percent.
+    function computeDepositValue(order) {
+      const total = parseFloat(order.total_amount || 0);
+      if (order.deposit_amount != null && order.deposit_amount !== '') {
+        return parseFloat(order.deposit_amount);
+      }
+      if (order.deposit_percent != null && order.deposit_percent !== '') {
+        return Math.round((total * parseInt(order.deposit_percent, 10) / 100) * 100) / 100;
+      }
+      return null;
+    }
+
+    function fmtMoney(v, cur) {
+      return parseFloat(v || 0).toLocaleString('cs-CZ', { maximumFractionDigits: 2 }) + ' ' + (cur || 'CZK');
+    }
+
+    // Vrátí HTML panelu Platba pro detail objednávky.
+    function renderPaymentPanel(order) {
+      const cur = order.currency || 'CZK';
+      const total = parseFloat(order.total_amount || 0);
+      const dep = computeDepositValue(order);
+      const rest = dep != null ? Math.max(0, total - dep) : null;
+      const oid = order.id;
+
+      // Stav uvolnění do výroby
+      const releaseInfo = order.released_at
+        ? '<span style="display:inline-flex;align-items:center;gap:4px;background:rgba(16,185,129,0.15);color:#10b981;padding:3px 10px;border-radius:6px;font-size:11px;font-weight:600;">🏭 Uvolněno do výroby ' + new Date(order.released_at).toLocaleDateString('cs-CZ') + '</span>'
+        : '<span style="display:inline-flex;align-items:center;gap:4px;background:rgba(148,163,184,0.15);color:var(--text2);padding:3px 10px;border-radius:6px;font-size:11px;font-weight:500;">⏳ Čeká na uvolnění do výroby</span>';
+
+      // Konfigurace platby
+      const splitOn = !!order.payment_split;
+      const releaseOnDeposit = order.release_on_deposit !== false; // default true
+      const depAmount = order.deposit_amount != null ? order.deposit_amount : '';
+      const depPercent = order.deposit_percent != null ? order.deposit_percent : '';
+
+      // Tlačítka platby
+      let paymentButtons = '';
+      if (splitOn) {
+        const depBtn = order.deposit_paid
+          ? '<span style="display:inline-flex;align-items:center;gap:6px;background:rgba(16,185,129,0.15);color:#10b981;padding:6px 12px;border-radius:8px;font-size:12px;font-weight:600;">✓ Záloha přijata ' + (order.deposit_paid_at ? new Date(order.deposit_paid_at).toLocaleDateString('cs-CZ') : '') + ' <button onclick="markPayment(' + oid + ',\'deposit\',false)" style="background:none;border:none;color:#10b981;cursor:pointer;opacity:0.5;font-size:12px;" title="Zrušit označení">✕</button></span>'
+          : '<button class="btn btn-sm" style="background:rgba(59,130,246,0.12);color:#3b82f6;border-color:rgba(59,130,246,0.3);" onclick="markPayment(' + oid + ',\'deposit\',true)">💰 Záloha přišla' + (dep != null ? ' (' + fmtMoney(dep, cur) + ')' : '') + '</button>';
+        const finBtn = order.final_paid
+          ? '<span style="display:inline-flex;align-items:center;gap:6px;background:rgba(16,185,129,0.15);color:#10b981;padding:6px 12px;border-radius:8px;font-size:12px;font-weight:600;">✓ Doplatek přijat ' + (order.final_paid_at ? new Date(order.final_paid_at).toLocaleDateString('cs-CZ') : '') + ' <button onclick="markPayment(' + oid + ',\'final\',false)" style="background:none;border:none;color:#10b981;cursor:pointer;opacity:0.5;font-size:12px;" title="Zrušit označení">✕</button></span>'
+          : '<button class="btn btn-sm" style="background:rgba(245,158,11,0.12);color:#f59e0b;border-color:rgba(245,158,11,0.3);" onclick="markPayment(' + oid + ',\'final\',true)">💵 Doplatek přišel' + (rest != null ? ' (' + fmtMoney(rest, cur) + ')' : '') + '</button>';
+        paymentButtons = depBtn + ' ' + finBtn;
+      } else {
+        const fullBtn = order.final_paid
+          ? '<span style="display:inline-flex;align-items:center;gap:6px;background:rgba(16,185,129,0.15);color:#10b981;padding:6px 12px;border-radius:8px;font-size:12px;font-weight:600;">✓ Zaplaceno ' + (order.final_paid_at ? new Date(order.final_paid_at).toLocaleDateString('cs-CZ') : '') + ' <button onclick="markPayment(' + oid + ',\'full\',false)" style="background:none;border:none;color:#10b981;cursor:pointer;opacity:0.5;font-size:12px;" title="Zrušit označení">✕</button></span>'
+          : '<button class="btn btn-sm btn-primary" onclick="markPayment(' + oid + ',\'full\',true)">💰 Platba přišla' + (total ? ' (' + fmtMoney(total, cur) + ')' : '') + '</button>';
+        paymentButtons = fullBtn;
+      }
+
+      return '<div style="border-top:1px solid var(--border);padding-top:14px;margin-top:12px;">' +
+        '<h3 style="font-size:14px;margin-bottom:10px;display:flex;align-items:center;gap:8px;">💳 Platba ' + releaseInfo + '</h3>' +
+        '<div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:14px;">' +
+          // Řádek 1: režim platby
+          '<div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:' + (splitOn ? '12px' : '8px') + ';">' +
+            '<label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;">' +
+              '<input type="checkbox"' + (splitOn ? ' checked' : '') + ' onchange="togglePaymentSplit(' + oid + ',this.checked)"> ' +
+              'Rozdělená platba (záloha + doplatek)' +
+            '</label>' +
+            (splitOn ? '<label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;color:var(--text2);">' +
+              '<input type="checkbox"' + (releaseOnDeposit ? ' checked' : '') + ' onchange="toggleReleaseOnDeposit(' + oid + ',this.checked)"> ' +
+              'Uvolnit výrobu už po záloze' +
+            '</label>' : '') +
+          '</div>' +
+          // Řádek 2: nastavení výše zálohy (jen u split)
+          (splitOn ? '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px;">' +
+            '<div><label style="font-size:11px;color:var(--text2);">Záloha — částka</label>' +
+              '<input type="number" step="0.01" id="dep-amount-' + oid + '" value="' + depAmount + '" placeholder="—" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:6px 10px;color:var(--text);font-size:13px;" onchange="updateDepositAmount(' + oid + ',this.value)"></div>' +
+            '<div><label style="font-size:11px;color:var(--text2);">…nebo % z celkem</label>' +
+              '<input type="number" min="0" max="100" id="dep-percent-' + oid + '" value="' + depPercent + '" placeholder="—" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:6px 10px;color:var(--text);font-size:13px;" onchange="updateDepositPercent(' + oid + ',this.value)"></div>' +
+            '<div><label style="font-size:11px;color:var(--text2);">Vypočtené hodnoty</label>' +
+              '<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;line-height:1.4;">' +
+                'Záloha: <strong>' + (dep != null ? fmtMoney(dep, cur) : '—') + '</strong><br>' +
+                'Doplatek: <strong>' + (rest != null ? fmtMoney(rest, cur) : '—') + '</strong>' +
+              '</div></div>' +
+          '</div>' : '') +
+          // Řádek 3: tlačítka platby
+          '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">' + paymentButtons + '</div>' +
+          // Footer s info o budoucí automatice
+          '<div style="font-size:11px;color:var(--text2);margin-top:10px;font-style:italic;">' +
+            'ℹ️ Zatím se platba označuje ručně. Připravujeme auto-párování s bankovním výpisem (Účetní iniciativa).' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+    }
+
+    // Toggle: rozdělená platba ano/ne
+    async function togglePaymentSplit(orderId, on) {
+      try {
+        await fetch('/api/wh/orders/' + orderId + '/payment-config', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ payment_split: !!on }),
+        });
+        openOrderDetail(orderId);
+        loadOrders();
+      } catch(e) { console.error(e); alert('Nepodařilo se uložit nastavení platby.'); }
+    }
+
+    // Toggle: uvolnit výrobu už po záloze
+    async function toggleReleaseOnDeposit(orderId, on) {
+      try {
+        await fetch('/api/wh/orders/' + orderId + '/payment-config', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ release_on_deposit: !!on }),
+        });
+      } catch(e) { console.error(e); }
+    }
+
+    async function updateDepositAmount(orderId, v) {
+      try {
+        await fetch('/api/wh/orders/' + orderId + '/payment-config', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            deposit_amount: v === '' ? null : parseFloat(v),
+            // když uživatel zadá pevnou částku, vyčistíme procenta (jen jedno z dvou)
+            deposit_percent: null,
+          }),
+        });
+        openOrderDetail(orderId);
+      } catch(e) { console.error(e); }
+    }
+
+    async function updateDepositPercent(orderId, v) {
+      try {
+        await fetch('/api/wh/orders/' + orderId + '/payment-config', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            deposit_percent: v === '' ? null : parseInt(v, 10),
+            deposit_amount: null,
+          }),
+        });
+        openOrderDetail(orderId);
+      } catch(e) { console.error(e); }
+    }
+
+    // Manuální označení platby (zatím; auto-párování s bankou bude později).
+    // kind: 'deposit' | 'final' | 'full'
+    async function markPayment(orderId, kind, paid) {
+      try {
+        const res = await fetch('/api/wh/orders/' + orderId + '/payment', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ kind, paid }),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          alert('Chyba: ' + (err.error || 'nelze označit platbu'));
+          return;
+        }
+        const result = await res.json();
+        // Když se rozpadla objednávka do výroby, ukaž souhrn
+        if (result.release && result.release.released && result.release.batches?.length) {
+          const cnt = result.release.batches.length;
+          const numbers = result.release.batches.map(b => b.batch_number).join(', ');
+          alert('✅ Platba označena. Vytvořeno ' + cnt + ' výrobních dávek: ' + numbers);
+        }
+        openOrderDetail(orderId);
+        loadOrders();
+        loadStats();
+      } catch(e) {
+        console.error(e);
+        alert('Síťová chyba při označení platby.');
+      }
     }
 
     // Doplni formu pro pridani polozky z vybrane polozky ceniku.
@@ -1868,7 +2196,8 @@
         const res = await fetch('/api/wh/orders/' + orderId + '/share', { method: 'POST' });
         const data = await res.json();
         if (!data.share_token) { alert(data.error || 'Chyba při generování odkazu.'); return; }
-        const shareUrl = window.location.origin + '/order/' + data.share_token;
+        // share_url buduje backend (SHARE_BASE_URL → bestseries.cash); fallback na window.location
+        const shareUrl = data.share_url || (window.location.origin + '/order/' + data.share_token);
         var area = document.getElementById('customer-link-area');
         if (area) {
           area.innerHTML = '<div style="display:flex;gap:8px;align-items:center;">' +
@@ -1895,7 +2224,7 @@
         const data = await res.json();
         if (!data.share_token) { alert(data.error || 'Chyba při generování odkazu.'); return; }
 
-        const shareUrl = window.location.origin + '/order/' + data.share_token;
+        const shareUrl = data.share_url || (window.location.origin + '/order/' + data.share_token);
 
         // Zobraz modal s odkazem
         const m = document.createElement('div');
@@ -1954,13 +2283,395 @@
     }
 
     function switchTab(name) {
-      ['orders', 'pricelist'].forEach(function(t) {
+      ['orders', 'pricelist', 'tools'].forEach(function(t) {
         var el = document.getElementById('tab-' + t);
         if (el) el.style.display = (t === name) ? '' : 'none';
         var btn = document.querySelector('.tab-btn[data-tab="' + t + '"]');
         if (btn) btn.classList.toggle('active', t === name);
       });
       if (name === 'pricelist') loadPricelist();
+      if (name === 'tools') initToolsTab();
+    }
+
+    // ============================================================
+    // OBCHODNI POMUCKY (tools tab)
+    // ============================================================
+    var _activeTool = 'pradlomat-economy';
+    var _pradlomatMounted = false;
+    var _toolsTabInited = false;
+
+    function initToolsTab() {
+      mountPradlomatIfNeeded();
+      // Vždy refreshni seznam příjemců při přepnutí na tab (rychlé fetch)
+      loadRecipients();
+      _toolsTabInited = true;
+    }
+    async function mountPradlomatIfNeeded() {
+      if (_pradlomatMounted) return;
+      var root = document.getElementById('pradlomat-tool-root');
+      if (!(root && window.PradlomatTool && typeof window.PradlomatTool.mount === 'function')) return;
+
+      // 1) Načti server-side výchozí hodnoty + lock state (pokud admin nějaké uložil).
+      var initialState = null;
+      var initialLocks = {};
+      try {
+        var res = await fetch('/api/tools/defaults/pradlomat-economy');
+        if (res.ok) {
+          var d = await res.json();
+          if (d && d.data_json) initialState = d.data_json;
+          if (d && d.locks_json) initialLocks = d.locks_json;
+        }
+      } catch (e) { /* tichá fallback na JS DEFAULTS */ }
+
+      // 2) Mount v admin režimu: lockable=true (vykreslí lock toggle u žlutých inputů).
+      //    onSaveDefaults dostává { state, locks } a PUT-ne to na backend.
+      window.PradlomatTool.mount(root, {
+        initialState: initialState,
+        locks: initialLocks,
+        lockable: true,
+        onSaveDefaults: async function (state, locks) {
+          var r = await fetch('/api/tools/defaults/pradlomat-economy', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ data_json: state, locks_json: locks }),
+          });
+          if (!r.ok) {
+            var err = {};
+            try { err = await r.json(); } catch (_) {}
+            throw new Error(err.error || 'HTTP ' + r.status);
+          }
+          return await r.json();
+        },
+      });
+      _pradlomatMounted = true;
+    }
+    function switchTool(name) {
+      _activeTool = name;
+      var items = document.querySelectorAll('.tools-nav-item');
+      for (var i = 0; i < items.length; i++) {
+        items[i].classList.toggle('active', items[i].getAttribute('data-tool') === name);
+      }
+      var views = document.querySelectorAll('.tool-view');
+      for (var j = 0; j < views.length; j++) {
+        views[j].style.display = (views[j].getAttribute('data-tool-view') === name) ? '' : 'none';
+      }
+      if (name === 'pradlomat-economy') {
+        mountPradlomatIfNeeded();
+        loadRecipients();
+      }
+    }
+
+    // ── Recipient management ─────────────────────────────────────
+    async function loadRecipients() {
+      var listEl = document.getElementById('recipients-list');
+      if (!listEl) return;
+      try {
+        var res = await fetch('/api/tools/recipients?tool=pradlomat-economy');
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        var items = await res.json();
+        renderRecipients(items);
+      } catch (e) {
+        listEl.innerHTML = '<div class="recipient-empty" style="color:#ef4444;border-color:rgba(239,68,68,0.3);">Nepodařilo se načíst příjemce: ' + esc(e.message) + '</div>';
+      }
+    }
+
+    function renderRecipients(items) {
+      var listEl = document.getElementById('recipients-list');
+      if (!listEl) return;
+      if (!items.length) {
+        listEl.innerHTML = '<div class="recipient-empty">Zatím jsi nikomu odkaz neposlal. Klikni na <strong>+ Odeslat nový odkaz</strong> a založ prvního příjemce.</div>';
+        return;
+      }
+      var html = '';
+      for (var i = 0; i < items.length; i++) {
+        var r = items[i];
+        var lastOpened = r.last_opened
+          ? new Date(r.last_opened).toLocaleString('cs-CZ', { dateStyle: 'short', timeStyle: 'short' })
+          : '<span style="color:var(--text2);">neotevřeno</span>';
+        var sent = new Date(r.created_at).toLocaleDateString('cs-CZ');
+        html +=
+          '<div class="recipient-row" data-id="' + r.id + '">' +
+            '<div><div class="r-name">' + esc(r.name) + '</div>' +
+              (r.company ? '<div class="r-stat">' + esc(r.company) + '</div>' : '') +
+            '</div>' +
+            '<div class="r-email">' + esc(r.email) + '<div class="r-stat">odesláno ' + sent + '</div></div>' +
+            '<div class="r-stat" title="Kolikrát zákazník otevřel odkaz">👁 <strong>' + r.open_count + '</strong>' +
+              '<div style="margin-top:2px;font-size:10px;">poslední: ' + lastOpened + '</div></div>' +
+            '<div class="r-stat" title="Kolik modelů zákazník uložil">💾 <strong>' + r.save_count + '</strong>' +
+              '<div style="margin-top:2px;font-size:10px;">uložené modely</div></div>' +
+            '<div class="r-actions">' +
+              '<button class="btn btn-secondary btn-sm" title="Kopírovat odkaz" onclick="copyShareLink(' + r.id + ', \'' + esc(r.share_link || '') + '\')">🔗</button>' +
+              '<button class="btn btn-secondary btn-sm" title="Detail + log" onclick="openRecipientDetail(' + r.id + ')">📊</button>' +
+              '<button class="btn btn-secondary btn-sm" title="Poslat znovu" onclick="resendShareLink(' + r.id + ')">✉️</button>' +
+              '<button class="btn btn-danger btn-sm" title="Smazat" onclick="deleteRecipient(' + r.id + ')">🗑️</button>' +
+            '</div>' +
+          '</div>';
+      }
+      listEl.innerHTML = html;
+    }
+
+    function openRecipientModal() {
+      var html = '<div class="modal-overlay" onclick="if(event.target===this)closeModal()">' +
+        '<div class="modal" style="width:540px;">' +
+          '<h2>📤 Odeslat odkaz na pomůcku</h2>' +
+          '<div class="form-grid">' +
+            '<div class="form-group"><label>Jméno kontaktu *</label><input id="rcp-name" type="text" placeholder="Jan Novák"></div>' +
+            '<div class="form-group"><label>Firma</label><input id="rcp-company" type="text" placeholder="ACME s.r.o."></div>' +
+            '<div class="form-group full"><label>E-mail *</label><input id="rcp-email" type="email" placeholder="jan@acme.cz"></div>' +
+            '<div class="form-group full"><label>Poznámka pro zákazníka (vložená do e-mailu)</label><textarea id="rcp-note" placeholder="Pane Nováku, posílám slíbený model návratnosti..."></textarea></div>' +
+            '<div class="form-group full" style="flex-direction:row;align-items:center;gap:8px;">' +
+              '<input id="rcp-send" type="checkbox" checked style="width:auto;">' +
+              '<label for="rcp-send" style="margin:0;cursor:pointer;">Odeslat e-mail teď (Microsoft Graph / SMTP)</label>' +
+            '</div>' +
+          '</div>' +
+          '<div class="modal-actions">' +
+            '<button class="btn btn-secondary" onclick="closeModal()">Zrušit</button>' +
+            '<button class="btn btn-primary" onclick="submitRecipient()">Vytvořit a odeslat</button>' +
+          '</div>' +
+        '</div></div>';
+      document.getElementById('modal-root').innerHTML = html;
+      setTimeout(function () { var el = document.getElementById('rcp-name'); if (el) el.focus(); }, 50);
+    }
+
+    async function submitRecipient() {
+      var name = (document.getElementById('rcp-name') || {}).value || '';
+      var email = (document.getElementById('rcp-email') || {}).value || '';
+      var company = (document.getElementById('rcp-company') || {}).value || '';
+      var note = (document.getElementById('rcp-note') || {}).value || '';
+      var send = (document.getElementById('rcp-send') || {}).checked;
+      if (!name.trim()) { alert('Vyplň jméno.'); return; }
+      if (!email.trim()) { alert('Vyplň e-mail.'); return; }
+      try {
+        var res = await fetch('/api/tools/recipients', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            tool: 'pradlomat-economy',
+            name: name.trim(),
+            email: email.trim(),
+            company: company.trim() || null,
+            note: note.trim() || null,
+            send_email: !!send,
+          }),
+        });
+        var data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'HTTP ' + res.status);
+        closeModal();
+        var msg = '✓ Příjemce vytvořen. Odkaz: ' + data.share_link;
+        if (data.email_result && data.email_result.sent) {
+          msg += '\n\n✓ E-mail odeslán (' + (data.email_result.via || 'smtp') + ').';
+        } else if (send) {
+          msg += '\n\n⚠️ E-mail se nepodařilo odeslat: ' + (data.email_result && data.email_result.skipped || 'neznámá chyba') + '. Odkaz můžeš poslat ručně.';
+        }
+        alert(msg);
+        loadRecipients();
+      } catch (e) {
+        alert('Chyba: ' + e.message);
+      }
+    }
+
+    // share_link už buduje backend přes SHARE_BASE_URL → frontend ho jen použije
+    async function copyShareLink(id, shareLink) {
+      var url = shareLink || '';
+      if (!url) { alert('Odkaz není dostupný.'); return; }
+      try {
+        await navigator.clipboard.writeText(url);
+        alert('Odkaz zkopírován do schránky:\n' + url);
+      } catch (e) {
+        prompt('Zkopíruj odkaz ručně:', url);
+      }
+    }
+
+    async function resendShareLink(id) {
+      if (!confirm('Poslat odkaz znovu na stejný e-mail?')) return;
+      try {
+        var res = await fetch('/api/tools/recipients/' + id + '/resend', { method: 'POST' });
+        var data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'HTTP ' + res.status);
+        alert(data.email_result && data.email_result.sent
+          ? '✓ E-mail odeslán znovu.'
+          : '⚠️ E-mail se nepodařilo odeslat: ' + (data.email_result && data.email_result.skipped));
+      } catch (e) {
+        alert('Chyba: ' + e.message);
+      }
+    }
+
+    async function deleteRecipient(id) {
+      if (!confirm('Opravdu smazat příjemce? Smazat všechny jeho uložené modely a event log?')) return;
+      try {
+        var res = await fetch('/api/tools/recipients/' + id, { method: 'DELETE' });
+        if (!res.ok) {
+          var data = await res.json();
+          throw new Error(data.error || 'HTTP ' + res.status);
+        }
+        loadRecipients();
+      } catch (e) {
+        alert('Chyba: ' + e.message);
+      }
+    }
+
+    async function openRecipientDetail(id) {
+      try {
+        var res = await fetch('/api/tools/recipients/' + id);
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        var d = await res.json();
+        renderRecipientDetail(d);
+      } catch (e) {
+        alert('Chyba: ' + e.message);
+      }
+    }
+
+    // ── AI shrnutí ───────────────────────────────────────────────
+    var _aiSummaryBusy = {};
+
+    function buildAiSummaryBlock(d) {
+      var hasSummary = !!d.ai_summary_text;
+      var generatedAt = d.ai_summary_generated_at
+        ? new Date(d.ai_summary_generated_at).toLocaleString('cs-CZ', { dateStyle: 'short', timeStyle: 'short' })
+        : null;
+      var stale = !!d.ai_summary_stale;
+
+      var body;
+      if (!hasSummary) {
+        body =
+          '<div style="padding:18px;text-align:center;color:var(--text2);font-size:13px;">' +
+            'AI shrnutí zatím nebylo vygenerováno.<br>' +
+            '<span style="font-size:11px;opacity:0.7;">Claude (sonnet-4-6) projde event log + uložené modely a sepíše, jak zákazník s pomůckou pracuje.</span>' +
+          '</div>';
+      } else {
+        body =
+          '<div id="ai-summary-text" style="font-size:13px;line-height:1.6;color:var(--text);white-space:pre-wrap;">' +
+            esc(d.ai_summary_text) +
+          '</div>' +
+          '<div style="margin-top:10px;font-size:11px;color:var(--text2);">' +
+            'Vygenerováno ' + generatedAt + ' · ' + esc(d.ai_summary_model || 'claude') +
+            (stale ? ' · <span style="color:#f59e0b;font-weight:600;">⚠ shrnutí je zastaralé (zákazník mezitím něco změnil)</span>' : '') +
+          '</div>';
+      }
+
+      var btnLabel = hasSummary ? (stale ? 'Aktualizovat' : 'Regenerovat') : 'Vygenerovat AI shrnutí';
+      var btnCls = (!hasSummary || stale) ? 'btn-primary' : 'btn-secondary';
+
+      return (
+        '<div id="ai-summary-block" style="background:linear-gradient(135deg,rgba(108,92,231,0.10),rgba(59,130,246,0.04));border:1px solid rgba(108,92,231,0.30);border-radius:10px;padding:14px 16px;margin-bottom:18px;">' +
+          '<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">' +
+            '<span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.6px;color:#a5b4fc;">🤖 AI shrnutí chování</span>' +
+            '<div style="flex:1"></div>' +
+            '<button id="ai-summary-btn" class="btn ' + btnCls + ' btn-sm" onclick="regenerateAiSummary(' + d.id + ')">' + btnLabel + '</button>' +
+          '</div>' +
+          '<div id="ai-summary-body">' + body + '</div>' +
+        '</div>'
+      );
+    }
+
+    async function regenerateAiSummary(id) {
+      if (_aiSummaryBusy[id]) return;
+      _aiSummaryBusy[id] = true;
+      var btn = document.getElementById('ai-summary-btn');
+      var body = document.getElementById('ai-summary-body');
+      if (btn) { btn.disabled = true; btn.textContent = 'Generuji…'; }
+      if (body) {
+        body.innerHTML =
+          '<div style="padding:24px;text-align:center;color:var(--text2);font-size:13px;">' +
+            '<div style="display:inline-block;width:24px;height:24px;border:3px solid var(--border);border-top-color:#6c5ce7;border-radius:50%;animation:spin 0.8s linear infinite;"></div>' +
+            '<div style="margin-top:10px;">Claude čte event log a uložené modely…</div>' +
+          '</div>';
+      }
+      try {
+        var res = await fetch('/api/tools/recipients/' + id + '/ai-summary', { method: 'POST' });
+        var data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'HTTP ' + res.status);
+        if (body) {
+          body.innerHTML =
+            '<div id="ai-summary-text" style="font-size:13px;line-height:1.6;color:var(--text);white-space:pre-wrap;">' +
+              esc(data.text) +
+            '</div>' +
+            '<div style="margin-top:10px;font-size:11px;color:var(--text2);">' +
+              'Vygenerováno ' + new Date(data.generated_at).toLocaleString('cs-CZ', { dateStyle: 'short', timeStyle: 'short' }) +
+              ' · ' + esc(data.model) +
+              (data.tokens_in ? ' · ' + data.tokens_in + ' → ' + data.tokens_out + ' tokenů' : '') +
+            '</div>';
+        }
+        if (btn) { btn.disabled = false; btn.classList.remove('btn-primary'); btn.classList.add('btn-secondary'); btn.textContent = 'Regenerovat'; }
+      } catch (e) {
+        if (body) {
+          body.innerHTML = '<div style="padding:14px;color:#ef4444;font-size:13px;">Chyba: ' + esc(e.message) + '</div>';
+        }
+        if (btn) { btn.disabled = false; btn.textContent = 'Zkusit znovu'; }
+      } finally {
+        _aiSummaryBusy[id] = false;
+      }
+    }
+
+    function renderRecipientDetail(d) {
+      var EVENT_LABELS = {
+        sent: '📤 Odesláno', opened: '👁 Otevřeno', edited: '✏️ Upraveno',
+        saved: '💾 Uloženo', exported: '⬇ Export', resent: '🔁 Posláno znovu', viewed: '👁 Náhled',
+      };
+      var eventsHtml = '';
+      if (d.events && d.events.length) {
+        for (var i = 0; i < d.events.length; i++) {
+          var ev = d.events[i];
+          var dt = new Date(ev.created_at).toLocaleString('cs-CZ', { dateStyle: 'short', timeStyle: 'medium' });
+          eventsHtml += '<tr><td style="padding:6px 8px;">' + dt + '</td>' +
+            '<td style="padding:6px 8px;">' + (EVENT_LABELS[ev.event_type] || ev.event_type) + '</td>' +
+            '<td style="padding:6px 8px;color:var(--text2);font-size:11px;">' + (ev.ip || '—') + '</td></tr>';
+        }
+      } else {
+        eventsHtml = '<tr><td colspan="3" style="padding:14px;text-align:center;color:var(--text2);">Žádné eventy.</td></tr>';
+      }
+
+      var modelsHtml = '';
+      if (d.models && d.models.length) {
+        for (var j = 0; j < d.models.length; j++) {
+          var m = d.models[j];
+          var dt2 = new Date(m.created_at).toLocaleString('cs-CZ', { dateStyle: 'short', timeStyle: 'short' });
+          var zisk = m.computed_json && m.computed_json.zisk;
+          var nav = m.computed_json && m.computed_json.navratnost_roku;
+          modelsHtml += '<tr><td style="padding:6px 8px;">' + dt2 + '</td>' +
+            '<td style="padding:6px 8px;">' + esc(m.name) + '</td>' +
+            '<td style="padding:6px 8px;text-align:right;">' + (typeof zisk === 'number' ? Math.round(zisk) + ' €' : '—') + '</td>' +
+            '<td style="padding:6px 8px;text-align:right;">' + (typeof nav === 'number' && isFinite(nav) ? nav.toFixed(1) + ' let' : '—') + '</td></tr>';
+        }
+      } else {
+        modelsHtml = '<tr><td colspan="4" style="padding:14px;text-align:center;color:var(--text2);">Zákazník zatím neuložil žádný model.</td></tr>';
+      }
+
+      var html = '<div class="modal-overlay" onclick="if(event.target===this)closeModal()">' +
+        '<div class="modal" style="width:820px;max-width:95vw;">' +
+          '<h2>📊 ' + esc(d.name) + (d.company ? ' <span style="font-weight:400;color:var(--text2);font-size:14px;">— ' + esc(d.company) + '</span>' : '') + '</h2>' +
+          '<div style="font-size:13px;color:var(--text2);margin-bottom:14px;">' + esc(d.email) + ' · vytvořeno ' + new Date(d.created_at).toLocaleDateString('cs-CZ') + '</div>' +
+          '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:18px;">' +
+            statCard('Otevření', d.open_count, '#10b981') +
+            statCard('Uložené modely', d.save_count, '#eab308') +
+            statCard('Eventy', (d.events || []).length, '#6c5ce7') +
+          '</div>' +
+          '<div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--text2);">' +
+            '<div><strong style="color:var(--text);">Sdílený odkaz:</strong></div>' +
+            '<div style="word-break:break-all;color:#a5b4fc;margin-top:4px;">' + esc(d.share_link) + '</div>' +
+          '</div>' +
+          '<style>@keyframes spin { to { transform: rotate(360deg); } }</style>' +
+          buildAiSummaryBlock(d) +
+          '<div class="tool-section-title">Uložené modely</div>' +
+          '<div style="overflow-x:auto;margin-bottom:18px;"><table style="width:100%;font-size:12px;border-collapse:collapse;">' +
+            '<thead><tr style="border-bottom:1px solid var(--border);color:var(--text2);"><th style="text-align:left;padding:6px 8px;">Datum</th><th style="text-align:left;padding:6px 8px;">Název</th><th style="text-align:right;padding:6px 8px;">Zisk/měs</th><th style="text-align:right;padding:6px 8px;">Návratnost</th></tr></thead>' +
+            '<tbody>' + modelsHtml + '</tbody>' +
+          '</table></div>' +
+          '<div class="tool-section-title">Event log (posledních 50)</div>' +
+          '<div style="overflow-x:auto;max-height:240px;overflow-y:auto;"><table style="width:100%;font-size:12px;border-collapse:collapse;">' +
+            '<thead><tr style="border-bottom:1px solid var(--border);color:var(--text2);"><th style="text-align:left;padding:6px 8px;">Kdy</th><th style="text-align:left;padding:6px 8px;">Akce</th><th style="text-align:left;padding:6px 8px;">IP</th></tr></thead>' +
+            '<tbody>' + eventsHtml + '</tbody>' +
+          '</table></div>' +
+          '<div class="modal-actions"><button class="btn btn-secondary" onclick="closeModal()">Zavřít</button></div>' +
+        '</div></div>';
+      document.getElementById('modal-root').innerHTML = html;
+    }
+
+    function statCard(label, value, color) {
+      return '<div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:14px;">' +
+        '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.6px;color:var(--text2);">' + label + '</div>' +
+        '<div style="font-size:24px;font-weight:700;color:' + color + ';margin-top:4px;">' + value + '</div>' +
+      '</div>';
     }
 
     async function loadPricelist() {

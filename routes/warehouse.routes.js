@@ -7,6 +7,11 @@ const router = express.Router();
 const { prisma } = require('../config/database');
 const { requireAuth } = require('../middleware/auth');
 const { logAudit, diffObjects, makeSnapshot } = require('../services/audit');
+const { buildShareUrl: buildOrderShareUrl } = require('../services/share-url');
+const {
+  releaseOrderToProduction,
+  shouldRelease,
+} = require('../services/orders/release-to-production');
 
 router.use(requireAuth);
 
@@ -305,6 +310,8 @@ async function enrichOrdersWithProductionDates(orders) {
       items,
       production_start_last: orderLatestStart,   // start NEJPOZDĚJŠÍHO slotu
       production_finish_last: orderLatestEnd,    // end NEJPOZDĚJŠÍHO slotu (= kdy je objednávka hotová)
+      // Externí share URL (přes SHARE_BASE_URL — typicky bestseries.cash)
+      share_url: o.share_token ? buildOrderShareUrl('/order/' + o.share_token) : null,
     };
   });
 }
@@ -380,7 +387,10 @@ router.post('/orders/:id/share', async (req, res, next) => {
 
     // Pokud už má token, vrať ho
     if (order.share_token) {
-      return res.json({ share_token: order.share_token });
+      return res.json({
+        share_token: order.share_token,
+        share_url: buildOrderShareUrl('/order/' + order.share_token),
+      });
     }
 
     // Vygeneruj unikátní token
@@ -392,12 +402,162 @@ router.post('/orders/:id/share', async (req, res, next) => {
         where: { id: parseInt(req.params.id) },
         data: { share_token: token },
       });
-      res.json({ share_token: updated.share_token });
+      res.json({
+        share_token: updated.share_token,
+        share_url: buildOrderShareUrl('/order/' + updated.share_token),
+      });
     } catch (dbErr) {
       // Sloupec share_token pravděpodobně ještě neexistuje — nasaďte migraci
       console.error('Share token DB error (spusťte migraci):', dbErr.message);
       res.status(503).json({ error: 'Sdílení není dostupné — nasaďte databázovou migraci (npx prisma migrate deploy)' });
     }
+  } catch (err) { next(err); }
+});
+
+// =============================================================================
+// PLATBA NA PRODEJNÍ OBJEDNÁVCE — záloha/doplatek + auto-uvolnění do výroby
+// =============================================================================
+//
+// Pevné podcesty pod /orders/:id (přesně před dynamickou PUT /:id).
+
+// PUT /api/wh/orders/:id/payment-config
+//   Nastaví parametry platby (rozdělení, výši zálohy, kdy uvolnit výrobu).
+//   body: { payment_split?, deposit_amount?, deposit_percent?, release_on_deposit? }
+router.put('/orders/:id/payment-config', async (req, res, next) => {
+  try {
+    const orderId = parseInt(req.params.id, 10);
+    if (isNaN(orderId)) return res.status(400).json({ error: 'Neplatné ID' });
+
+    const order = await prisma.order.findUnique({ where: { id: orderId } });
+    if (!order) return res.status(404).json({ error: 'Objednávka nenalezena' });
+    if (order.type !== 'sales') {
+      return res.status(400).json({ error: 'Platby řešíme jen pro prodejní objednávky' });
+    }
+
+    const { payment_split, deposit_amount, deposit_percent, release_on_deposit } = req.body || {};
+    const data = {};
+    if (payment_split !== undefined) data.payment_split = !!payment_split;
+    if (deposit_amount !== undefined) {
+      data.deposit_amount = deposit_amount === null || deposit_amount === '' ? null : deposit_amount;
+    }
+    if (deposit_percent !== undefined) {
+      data.deposit_percent = deposit_percent === null || deposit_percent === '' ? null : parseInt(deposit_percent, 10);
+    }
+    if (release_on_deposit !== undefined) data.release_on_deposit = !!release_on_deposit;
+
+    // Když uživatel zruší payment_split, vyčistíme zálohové údaje (ale ne final_paid — to je platná platba).
+    if (data.payment_split === false) {
+      data.deposit_amount = null;
+      data.deposit_percent = null;
+      data.deposit_paid = false;
+      data.deposit_paid_at = null;
+    }
+
+    const updated = await prisma.order.update({ where: { id: orderId }, data });
+    res.json(updated);
+  } catch (err) { next(err); }
+});
+
+// POST /api/wh/orders/:id/payment
+//   Manuálně označí platbu jako přijatou. Backend rozhodne, jestli překlopit
+//   status na 'confirmed' a/nebo rozpadnout objednávku do výroby.
+//
+//   body: { kind: 'deposit' | 'final' | 'full', paid: boolean (default true) }
+//     - 'deposit': označí zálohu (vyžaduje payment_split=true)
+//     - 'final':   označí doplatek (vyžaduje payment_split=true)
+//     - 'full':    označí jednorázovou platbu (vyžaduje payment_split=false)
+//
+//   Vrací: { order, released? (info o uvolnění do výroby pokud proběhlo) }
+//
+//   TODO (Účetní iniciativa): místo manuálního označení tu bude trigger
+//   z BankTransaction → Invoice → Order auto-párovače.
+router.post('/orders/:id/payment', async (req, res, next) => {
+  try {
+    const orderId = parseInt(req.params.id, 10);
+    if (isNaN(orderId)) return res.status(400).json({ error: 'Neplatné ID' });
+
+    const { kind, paid } = req.body || {};
+    if (!['deposit', 'final', 'full'].includes(kind)) {
+      return res.status(400).json({ error: "kind musí být 'deposit' | 'final' | 'full'" });
+    }
+    const isPaid = paid === undefined ? true : !!paid;
+
+    const order = await prisma.order.findUnique({ where: { id: orderId } });
+    if (!order) return res.status(404).json({ error: 'Objednávka nenalezena' });
+    if (order.type !== 'sales') {
+      return res.status(400).json({ error: 'Platby řešíme jen pro prodejní objednávky' });
+    }
+
+    // Validace dle režimu split
+    if ((kind === 'deposit' || kind === 'final') && !order.payment_split) {
+      return res.status(400).json({ error: 'Objednávka není rozdělená na zálohu + doplatek' });
+    }
+    if (kind === 'full' && order.payment_split) {
+      return res.status(400).json({ error: "Použij 'deposit' nebo 'final' (objednávka je rozdělená)" });
+    }
+
+    const data = {};
+    const now = isPaid ? new Date() : null;
+    if (kind === 'deposit') {
+      data.deposit_paid = isPaid;
+      data.deposit_paid_at = now;
+    } else if (kind === 'final') {
+      data.final_paid = isPaid;
+      data.final_paid_at = now;
+    } else if (kind === 'full') {
+      // jednorázová platba: final_paid drží celkovou částku
+      data.final_paid = isPaid;
+      data.final_paid_at = now;
+    }
+
+    // Auto-status: jakmile přijde záloha nebo plná platba, překlopíme na 'confirmed'
+    // (zachováme 'cancelled' / 'delivered' / cokoli pokročilejšího beze změny).
+    const updated = await prisma.order.update({ where: { id: orderId }, data });
+
+    let statusChanged = null;
+    if (isPaid && ['new', 'quoted', 'ordered'].includes(updated.status)) {
+      const after = await prisma.order.update({
+        where: { id: orderId },
+        data: { status: 'confirmed' },
+      });
+      statusChanged = { from: updated.status, to: after.status };
+    }
+
+    // Načti znovu (s případnou aktualizací statusu) a rozhodni o uvolnění do výroby
+    const fresh = await prisma.order.findUnique({ where: { id: orderId } });
+
+    let releaseResult = null;
+    if (shouldRelease(fresh)) {
+      releaseResult = await releaseOrderToProduction(orderId, {
+        createdById: req.user?.person_id || null,
+      });
+    }
+
+    res.json({
+      order: fresh,
+      status_changed: statusChanged,
+      release: releaseResult,
+    });
+  } catch (err) { next(err); }
+});
+
+// POST /api/wh/orders/:id/release-to-production
+//   Ruční override — uvolnit do výroby i bez zaplacení (např. interní zakázka).
+router.post('/orders/:id/release-to-production', async (req, res, next) => {
+  try {
+    const orderId = parseInt(req.params.id, 10);
+    if (isNaN(orderId)) return res.status(400).json({ error: 'Neplatné ID' });
+
+    const result = await releaseOrderToProduction(orderId, {
+      createdById: req.user?.person_id || null,
+    });
+    if (!result.released && result.reason === 'order_not_found') {
+      return res.status(404).json({ error: 'Objednávka nenalezena' });
+    }
+    if (!result.released && result.reason === 'not_a_sales_order') {
+      return res.status(400).json({ error: 'Jen prodejní objednávka se rozpadá do výroby' });
+    }
+    res.json(result);
   } catch (err) { next(err); }
 });
 

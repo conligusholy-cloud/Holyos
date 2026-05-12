@@ -30,10 +30,10 @@ model User {
   updated_at     DateTime @updatedAt
 
   // Vztahy
-  person      Person?     @relation("UserPerson")
-  sessions    Session[]
-  admin_tasks          AdminTask[] @relation("AdminTaskCreator")
-  admin_tasks_assigned AdminTask[] @relation("AdminTaskAssignee")
+  person               Person?      @relation("UserPerson")
+  sessions             Session[]
+  admin_tasks          AdminTask[]  @relation("AdminTaskCreator")
+  admin_tasks_assigned AdminTask[]  @relation("AdminTaskAssignee")
   slot_schemes_created SlotScheme[] @relation("SlotSchemeCreator")
 
   // Messaging (user-to-user chat, oddělený od AI Conversation)
@@ -52,10 +52,14 @@ model User {
   orders_approved_user Order[] @relation("OrderApproverUser")
 
   // AI Vývojář — kdo upravil settings / vytvořil repo
-  agent_settings_updated  AgentSettings[]  @relation("AgentSettingsUpdater")
-  agent_repos_created     AgentRepo[]      @relation("AgentRepoCreator")
-  agent_rules_created     AgentRule[]      @relation("AgentRuleCreator")
-  agent_approvals_decided AgentApproval[]  @relation("AgentApprovalDecider")
+  agent_settings_updated  AgentSettings[] @relation("AgentSettingsUpdater")
+  agent_repos_created     AgentRepo[]     @relation("AgentRepoCreator")
+  agent_rules_created     AgentRule[]     @relation("AgentRuleCreator")
+  agent_approvals_decided AgentApproval[] @relation("AgentApprovalDecider")
+
+  // Obchodní pomůcky — kdo založil příjemce / sdílel pomůcku
+  business_tool_recipients_created BusinessToolRecipient[] @relation("BusinessToolRecipientCreator")
+  business_tool_defaults_updated   BusinessToolDefaults[]  @relation("BusinessToolDefaultsUpdater")
 
   @@map("users")
 }
@@ -490,24 +494,24 @@ model Company {
   updated_at DateTime @updatedAt
 
   orders               Order[]
-  supplied_materials   Material[]          @relation("MaterialSupplier")
-  preferred_for_rules  StockRule[]         @relation("StockRuleSupplier")
-  people               Person[]            @relation("PersonCompany")
-  roles                Role[]              @relation("RoleCompany")
+  supplied_materials   Material[]               @relation("MaterialSupplier")
+  preferred_for_rules  StockRule[]              @relation("StockRuleSupplier")
+  people               Person[]                 @relation("PersonCompany")
+  roles                Role[]                   @relation("RoleCompany")
   // Fleet — servisní firmy a pneuservisy
-  vehicle_services     VehicleService[]    @relation("VehicleServiceCompany")
-  vehicle_tire_changes VehicleTireChange[] @relation("VehicleTireCompany")
+  vehicle_services     VehicleService[]         @relation("VehicleServiceCompany")
+  vehicle_tire_changes VehicleTireChange[]      @relation("VehicleTireCompany")
   // Provozovny (více poboček pod jednou firmou v adresáři)
-  branches             CompanyBranch[]     @relation("CompanyBranches")
+  branches             CompanyBranch[]          @relation("CompanyBranches")
   // SKLAD 2.0 — dodavatel/odběratel na skladovém dokumentu (DL, výdejka)
-  warehouse_documents  WarehouseDocument[] @relation("WarehouseDocumentPartner")
-  supplied_lots        MaterialLot[]       @relation("MaterialLotSupplier")
+  warehouse_documents  WarehouseDocument[]      @relation("WarehouseDocumentPartner")
+  supplied_lots        MaterialLot[]            @relation("MaterialLotSupplier")
   // Účetní doklady — faktury přijaté (AP) i vydané (AR)
-  invoices             Invoice[]           @relation("InvoiceCompany")
+  invoices             Invoice[]                @relation("InvoiceCompany")
   // Pojišťovny — pokud je firma vedená jako pojišťovna v adresáři, zde jsou navázané pojistky
   insurance_policies   VehicleInsurancePolicy[] @relation("InsuranceCompany")
   // Factorify nákupní ceník
-  supplier_price_lists SupplierPriceList[] @relation("SupplierPriceListSupplier")
+  supplier_price_lists SupplierPriceList[]      @relation("SupplierPriceListSupplier")
 
   @@index([ico])
   @@index([type])
@@ -530,6 +534,28 @@ model Order {
   expected_delivery DateTime? @db.Date
   delivered_at      DateTime? @db.Date
   share_token       String?   @unique @db.VarChar(64)
+
+  // Sledování platby (prodejní objednávka) — Fáze "Platba před výrobou"
+  // payment_split: false = jedna platba na celou částku;
+  //                true  = záloha + doplatek (split payment)
+  // deposit_amount / deposit_percent: alternativy pro výši zálohy (jedna z nich),
+  //   pokud je payment_split=false, jsou ignorovány.
+  // release_on_deposit: true (default) = po zaplacení zálohy se objednávka rozpadne
+  //   do výroby; false = výroba čeká na plné doplacení.
+  // deposit_paid / final_paid: ručně označená potvrzení (zatím manuál; připraveno
+  //   na auto-párování BankTransaction → Invoice → Order v Účetní iniciativě).
+  // released_at: kdy se Order rozpadla do výroby (idempotence — druhé volání
+  //   release už nedělá nic). Pokud non-split, "deposit_paid" se neuvažuje a
+  //   trigger je výhradně final_paid.
+  payment_split      Boolean   @default(false)
+  deposit_amount     Decimal?  @db.Decimal(12, 2)
+  deposit_percent    Int?
+  deposit_paid       Boolean   @default(false)
+  deposit_paid_at    DateTime?
+  final_paid         Boolean   @default(false)
+  final_paid_at      DateTime?
+  release_on_deposit Boolean   @default(true)
+  released_at        DateTime?
 
   // Schvalovací workflow (manuální vs MRP autogen) — Fáze "Schvalování objednávek"
   // approval_status: pending | submitted | approved | rejected | auto_approved
@@ -574,6 +600,9 @@ model Order {
   @@index([factorify_id])
   @@index([cost_center_id])
   @@index([project_id])
+  @@index([deposit_paid])
+  @@index([final_paid])
+  @@index([released_at])
   @@map("orders")
 }
 
@@ -962,19 +991,19 @@ model AdminTask {
   deleted_at DateTime?
 
   // AI Vývojář — pole pro modul, který autonomně řeší úkoly
-  assignable_to_ai    Boolean @default(false)
-  acceptance_criteria String? @db.Text
-  affected_module     String? @db.VarChar(100)
-  target_repo_id      String?
+  assignable_to_ai         Boolean   @default(false)
+  acceptance_criteria      String?   @db.Text
+  affected_module          String?   @db.VarChar(100)
+  target_repo_id           String?
   // Mix-autonomy: change_type určuje výchozí autonomy podle typu (mapping
   // v services/ai-developer/autonomy.js). autonomy_override per-task přebije
   // mapping, null = použij mapping podle change_type, fallback na settings.
-  change_type         String? @db.VarChar(30)  // documentation | ui_change | bug_fix | refactor | new_feature | integration | data_migration
-  autonomy_override   String? @db.VarChar(20)  // full_auto | pr_review | plan_review
+  change_type              String?   @db.VarChar(30) // documentation | ui_change | bug_fix | refactor | new_feature | integration | data_migration
+  autonomy_override        String?   @db.VarChar(20) // full_auto | pr_review | plan_review
   // AI suitability scoring (Fáze 4): Claude haiku ohodnotí jak vhodný je úkol pro AI Vývojáře
-  ai_suitability_score      Int?    // 0-100, vyšší = vhodnější pro AI
-  ai_suitability_reasoning  String? @db.Text  // krátké vysvětlení proč (česky)
-  ai_suitability_at         DateTime? @db.Timestamptz  // kdy byl score vyhodnocen
+  ai_suitability_score     Int? // 0-100, vyšší = vhodnější pro AI
+  ai_suitability_reasoning String?   @db.Text // krátké vysvětlení proč (česky)
+  ai_suitability_at        DateTime? @db.Timestamptz // kdy byl score vyhodnocen
 
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
@@ -1003,18 +1032,18 @@ model AdminTask {
 // SlotScheme (kde valid_from ≤ pondělí_týdne ≤ valid_to nebo valid_to IS NULL)
 // a vykreslí všechna jeho okna (SlotSchemeWindow).
 model SlotScheme {
-  id          Int       @id @default(autoincrement())
+  id         Int       @id @default(autoincrement())
   // Datum, od kterého schéma platí. Backend normalizuje na pondělí daného týdne.
-  valid_from  DateTime  @db.Date
+  valid_from DateTime  @db.Date
   // Datum, dokdy schéma platí. NULL = aktuální (open-ended).
   // Při vytvoření nového schématu se předchozí (které mělo valid_to NULL)
   // automaticky uzavře na den - 1 před novým valid_from.
-  valid_to    DateTime? @db.Date
+  valid_to   DateTime? @db.Date
   // Volitelný popisek pro UI ("zimní rozvrh", "od září 2026", …)
-  note        String?   @db.VarChar(255)
-  created_by  Int?
-  created_at  DateTime  @default(now())
-  updated_at  DateTime  @updatedAt
+  note       String?   @db.VarChar(255)
+  created_by Int?
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
 
   windows SlotSchemeWindow[]
   creator User?              @relation("SlotSchemeCreator", fields: [created_by], references: [id], onDelete: SetNull)
@@ -1030,8 +1059,8 @@ model SlotScheme {
 model SlotSchemeWindow {
   id         Int     @id @default(autoincrement())
   scheme_id  Int
-  start_day  Int     // 0..6
-  end_day    Int     // 0..6, pokud < start_day, okno přechází přes víkend
+  start_day  Int // 0..6
+  end_day    Int // 0..6, pokud < start_day, okno přechází přes víkend
   // Pořadí pro stabilní vykreslení (1. slot, 2. slot, …) v rámci týdne
   sort_order Int     @default(0)
   // Volitelný název ("Slot A", "Expres", …) — pro UI rozlišení v kalendáři
@@ -1788,12 +1817,12 @@ model VehicleInsurancePolicy {
   vehicle    Vehicle @relation(fields: [vehicle_id], references: [id], onDelete: Cascade)
 
   // Typ: "pov" (povinné ručení) | "havarijni" | "jine"
-  policy_type    String    @db.VarChar(30)
+  policy_type  String   @db.VarChar(30)
   // Pojišťovna — preferovaně FK na adresář firem (Company),
   //   company_name zůstává jako fallback / textový snapshot pro starší data.
-  company_id     Int?
-  company        Company?  @relation("InsuranceCompany", fields: [company_id], references: [id], onDelete: SetNull)
-  company_name   String?   @db.VarChar(255) // Pojišťovna (text fallback)
+  company_id   Int?
+  company      Company? @relation("InsuranceCompany", fields: [company_id], references: [id], onDelete: SetNull)
+  company_name String?  @db.VarChar(255) // Pojišťovna (text fallback)
 
   // Doplňková krytí — checkboxy v UI. Jedna pojistka může mít víc krytí.
   has_havarijni Boolean @default(false) // Havarijní pojištění
@@ -3665,14 +3694,14 @@ model NormovaniSession {
   person_id Int
 
   // FY reference (jen jako identifikátory, ne FK)
-  fy_batch_id        String  @db.VarChar(50)  // = Batch.id (= Batch.number)
-  fy_batch_number    String  @db.VarChar(50)  // duplicitně pro lidsky čitelný export
-  fy_goods_id        String? @db.VarChar(50)  // Batch.goods.id
-  fy_goods_code      String? @db.VarChar(100) // Batch.goods.code (BS-S-0381)
-  fy_goods_name      String? @db.VarChar(500) // Batch.goods.name
-  fy_workflow_id     String? @db.VarChar(50)  // Batch.workflow.id
-  fy_operation_id    String  @db.VarChar(50)  // WorkflowOperation.id zvolené operace
-  fy_operation_name  String? @db.VarChar(500) // WorkflowOperation.operationName
+  fy_batch_id       String  @db.VarChar(50) // = Batch.id (= Batch.number)
+  fy_batch_number   String  @db.VarChar(50) // duplicitně pro lidsky čitelný export
+  fy_goods_id       String? @db.VarChar(50) // Batch.goods.id
+  fy_goods_code     String? @db.VarChar(100) // Batch.goods.code (BS-S-0381)
+  fy_goods_name     String? @db.VarChar(500) // Batch.goods.name
+  fy_workflow_id    String? @db.VarChar(50) // Batch.workflow.id
+  fy_operation_id   String  @db.VarChar(50) // WorkflowOperation.id zvolené operace
+  fy_operation_name String? @db.VarChar(500) // WorkflowOperation.operationName
 
   // Pracoviště (z WorkflowOperation.stage.referenceName, např. "Lakovací BOX")
   workplace_label String? @db.VarChar(255)
@@ -3689,8 +3718,8 @@ model NormovaniSession {
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
 
-  person Person            @relation("NormovaniSessionPerson", fields: [person_id], references: [id])
-  events NormovaniEvent[]  @relation("NormovaniSessionEvents")
+  person Person           @relation("NormovaniSessionPerson", fields: [person_id], references: [id])
+  events NormovaniEvent[] @relation("NormovaniSessionEvents")
 
   @@index([person_id])
   @@index([fy_batch_id])
@@ -3701,22 +3730,22 @@ model NormovaniSession {
 }
 
 model NormovaniEvent {
-  id         Int    @id @default(autoincrement())
+  id         Int @id @default(autoincrement())
   session_id Int
 
   // start = chytl díl do ruky, end = díl namontován/dokončen
   event_type String @db.VarChar(10)
 
   // FY OperationBillOfMaterialsItem reference (string, ne FK)
-  fy_item_id   String  @db.VarChar(50)  // BOM item.id z FY (např. 46669)
-  fy_goods_id  String? @db.VarChar(50)  // BOM item.goods.id (např. 973)
-  item_code    String? @db.VarChar(100) // goods.code (např. NA0692)
-  item_name    String? @db.VarChar(500) // goods.name
-  item_unit    String? @db.VarChar(20)  // goods.unit (l, ks, m...)
-  item_qr      String? @db.VarChar(255) // QR kód, pokud byl pro vyhledání naskenován
-  quantity     Decimal? @db.Decimal(12, 4) // očekávané množství z BOM (pro export)
+  fy_item_id  String   @db.VarChar(50) // BOM item.id z FY (např. 46669)
+  fy_goods_id String?  @db.VarChar(50) // BOM item.goods.id (např. 973)
+  item_code   String?  @db.VarChar(100) // goods.code (např. NA0692)
+  item_name   String?  @db.VarChar(500) // goods.name
+  item_unit   String?  @db.VarChar(20) // goods.unit (l, ks, m...)
+  item_qr     String?  @db.VarChar(255) // QR kód, pokud byl pro vyhledání naskenován
+  quantity    Decimal? @db.Decimal(12, 4) // očekávané množství z BOM (pro export)
 
-  occurred_at  DateTime @default(now())
+  occurred_at DateTime @default(now())
 
   notes String? @db.Text
 
@@ -3738,17 +3767,17 @@ model NormovaniEvent {
 // libovolný počet příloh (PDF, Word, atd.) přes /api/storage/upload.
 
 model Directive {
-  id           Int     @id @default(autoincrement())
-  code         String  @unique @db.VarChar(50)         // např. "SM-001", "MP-HR-002"
-  title        String  @db.VarChar(500)                // krátký název směrnice
-  category     String  @default("obecne") @db.VarChar(50) // obecne, hr, vyroba, sklad, kvalita, bozp, atd.
-  content      String? @db.Text                        // tělo směrnice (markdown / HTML)
-  version      String  @default("1.0") @db.VarChar(20) // verze dokumentu
-  status       String  @default("draft") @db.VarChar(20) // draft, active, archived
-  effective_from DateTime? @db.Date                    // platnost od
-  effective_to   DateTime? @db.Date                    // platnost do
-  tags         Json?                                   // pole stringů — volné štítky
-  attachments  Json?                                   // [{ url, name, size, mime }, ...]
+  id             Int       @id @default(autoincrement())
+  code           String    @unique @db.VarChar(50) // např. "SM-001", "MP-HR-002"
+  title          String    @db.VarChar(500) // krátký název směrnice
+  category       String    @default("obecne") @db.VarChar(50) // obecne, hr, vyroba, sklad, kvalita, bozp, atd.
+  content        String?   @db.Text // tělo směrnice (markdown / HTML)
+  version        String    @default("1.0") @db.VarChar(20) // verze dokumentu
+  status         String    @default("draft") @db.VarChar(20) // draft, active, archived
+  effective_from DateTime? @db.Date // platnost od
+  effective_to   DateTime? @db.Date // platnost do
+  tags           Json? // pole stringů — volné štítky
+  attachments    Json? // [{ url, name, size, mime }, ...]
 
   // Audit
   created_by Int?
@@ -3762,7 +3791,6 @@ model Directive {
   @@map("directives")
 }
 
-
 // =============================================================================
 // AI VÝVOJÁŘ — autonomní agent, který přijímá úkoly z AdminTask, kódí v sandboxu
 // a otevírá PR. UI v super admin sekci, komunikace přes ChatChannel typu 'task'.
@@ -3771,15 +3799,15 @@ model Directive {
 
 // Singleton — nastavení agenta (limity, master switch). Vždy id=1.
 model AgentSettings {
-  id                      Int      @id @default(1)
-  enabled                 Boolean  @default(false) // Master kill switch
-  default_autonomy        String   @default("pr_review") @db.VarChar(20) // full_auto | pr_review | plan_review
-  max_concurrent_runs     Int      @default(1)
-  max_runs_per_day        Int      @default(5)
-  daily_token_budget      Int      @default(1000000) // hrubý strop pro tokens_used / den
-  default_timeout_minutes Int      @default(30)
-  max_commits_per_run     Int      @default(10) // pojistka proti zacyklení
-  auto_merge_wait_minutes Int      @default(15)
+  id                      Int     @id @default(1)
+  enabled                 Boolean @default(false) // Master kill switch
+  default_autonomy        String  @default("pr_review") @db.VarChar(20) // full_auto | pr_review | plan_review
+  max_concurrent_runs     Int     @default(1)
+  max_runs_per_day        Int     @default(5)
+  daily_token_budget      Int     @default(1000000) // hrubý strop pro tokens_used / den
+  default_timeout_minutes Int     @default(30)
+  max_commits_per_run     Int     @default(10) // pojistka proti zacyklení
+  auto_merge_wait_minutes Int     @default(15)
 
   updated_by Int?
   updated_at DateTime @updatedAt
@@ -3873,13 +3901,13 @@ model AgentRunEvent {
 // Fázi 2/3 — backend check zatím neumí. value='*' nebo prefix-match logiku
 // si dopíšeme, až bude potřeba.
 model AgentRule {
-  id            String   @id @default(uuid())
-  kind          String   @db.VarChar(30)  // forbidden | requires_approval | allowed
-  scope         String   @db.VarChar(30)  // path_pattern | module | operation_type | db_table | repo
-  value         String   @db.Text          // regex pattern (bez /.../ obalu) nebo název modulu / operace
-  description   String?  @db.Text          // popis pro člověka (proč pravidlo existuje)
-  active        Boolean  @default(true)
-  blocked_count Int      @default(0)       // kolikrát toto pravidlo zablokovalo agenta — pro statistiku v UI
+  id            String  @id @default(uuid())
+  kind          String  @db.VarChar(30) // forbidden | requires_approval | allowed
+  scope         String  @db.VarChar(30) // path_pattern | module | operation_type | db_table | repo
+  value         String  @db.Text // regex pattern (bez /.../ obalu) nebo název modulu / operace
+  description   String? @db.Text // popis pro člověka (proč pravidlo existuje)
+  active        Boolean @default(true)
+  blocked_count Int     @default(0) // kolikrát toto pravidlo zablokovalo agenta — pro statistiku v UI
 
   created_by Int?
   created_at DateTime @default(now())
@@ -3901,13 +3929,13 @@ model AgentRule {
 model AgentApproval {
   id           String    @id @default(uuid())
   run_id       String
-  kind         String    @db.VarChar(30)  // plan_review | pr_review | rule_override
+  kind         String    @db.VarChar(30) // plan_review | pr_review | rule_override
   requested_at DateTime  @default(now())
   decided_at   DateTime?
   decided_by   Int?
-  decision     String    @default("pending") @db.VarChar(20)  // pending | approved | rejected | expired
+  decision     String    @default("pending") @db.VarChar(20) // pending | approved | rejected | expired
   comment      String?   @db.Text
-  payload      Json?     // strukturovaný kontext: plán, diff, rule violation, ...
+  payload      Json? // strukturovaný kontext: plán, diff, rule violation, ...
 
   run     AgentRun @relation(fields: [run_id], references: [id], onDelete: Cascade)
   decider User?    @relation("AgentApprovalDecider", fields: [decided_by], references: [id], onDelete: SetNull)
@@ -3915,4 +3943,86 @@ model AgentApproval {
   @@index([run_id])
   @@index([decision])
   @@map("agent_approvals")
+}
+
+// =============================================================================
+// OBCHODNÍ POMŮCKY — sdílení sales-aid nástrojů se zákazníky + tracking
+// =============================================================================
+
+model BusinessToolRecipient {
+  id          Int       @id @default(autoincrement())
+  tool        String    @db.VarChar(60) // 'pradlomat-economy', 'margin-calc', ...
+  name        String    @db.VarChar(255)
+  email       String    @db.VarChar(255)
+  company     String?   @db.VarChar(255)
+  note        String?   @db.Text
+  share_token String    @unique @db.VarChar(80)
+  created_by  Int
+  created_at  DateTime  @default(now())
+  last_opened DateTime?
+  open_count  Int       @default(0)
+  save_count  Int       @default(0)
+
+  // AI shrnutí chování zákazníka (cache; regenerace na vyžádání)
+  ai_summary_text         String?   @db.Text
+  ai_summary_generated_at DateTime?
+  ai_summary_model        String?   @db.VarChar(60)
+
+  creator User                @relation("BusinessToolRecipientCreator", fields: [created_by], references: [id])
+  models  BusinessToolModel[]
+  events  BusinessToolEvent[]
+
+  @@index([created_by])
+  @@index([tool])
+  @@index([share_token])
+  @@map("business_tool_recipients")
+}
+
+model BusinessToolModel {
+  id            Int      @id @default(autoincrement())
+  recipient_id  Int
+  name          String   @default("Pracovní model") @db.VarChar(255)
+  data_json     Json // snapshot vstupů (state)
+  computed_json Json? // snapshot vypočítaných výstupů (volitelný, pro audit)
+  saved_from    String   @default("customer") @db.VarChar(20) // 'customer' | 'admin'
+  created_at    DateTime @default(now())
+
+  recipient BusinessToolRecipient @relation(fields: [recipient_id], references: [id], onDelete: Cascade)
+
+  @@index([recipient_id])
+  @@map("business_tool_models")
+}
+
+model BusinessToolEvent {
+  id           Int      @id @default(autoincrement())
+  recipient_id Int
+  event_type   String   @db.VarChar(30) // 'sent' | 'opened' | 'edited' | 'saved' | 'exported' | 'resent'
+  payload      Json?
+  ip           String?  @db.VarChar(45)
+  user_agent   String?  @db.Text
+  created_at   DateTime @default(now())
+
+  recipient BusinessToolRecipient @relation(fields: [recipient_id], references: [id], onDelete: Cascade)
+
+  @@index([recipient_id])
+  @@index([event_type])
+  @@index([created_at])
+  @@map("business_tool_events")
+}
+
+// Globální výchozí hodnoty pomůcky (singleton per tool). Adminem nastavený
+// startovací stav, který se použije pro každého nového příjemce + pro otevření
+// nástroje v admin pohledu.
+model BusinessToolDefaults {
+  id         Int      @id @default(autoincrement())
+  tool       String   @unique @db.VarChar(60)
+  data_json  Json
+  locks_json Json     @default("{}") // { field_key: true } — pole, která zákazník nesmí měnit
+  updated_by Int?
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  updater User? @relation("BusinessToolDefaultsUpdater", fields: [updated_by], references: [id], onDelete: SetNull)
+
+  @@map("business_tool_defaults")
 }
