@@ -14,8 +14,12 @@ const { spawn } = require('child_process');
 const { messagesCreate } = require('../anthropic-retry');
 
 const MODEL = process.env.AI_DEV_MODEL || 'claude-sonnet-4-6';
-const MAX_TURNS = 25;
-const MAX_TOKENS_PER_TURN = 4096;
+const MAX_TURNS = parseInt(process.env.AI_DEV_MAX_TURNS || '25', 10);
+// 16 384 — výrazně více než 4 096, ať write_file velkého souboru (např. routes/*.js
+// ~30–50 kB) projde v jednom turnu bez useknutí. Důvod: stop_reason='max_tokens'
+// uřízne tool_use blok mid-content, agent.js to pak nesprávně interpretoval jako
+// "skončil bez finish()" a celý běh zhavaroval (#49, 12.5.2026: 288k tokens, 0 commitů).
+const MAX_TOKENS_PER_TURN = parseInt(process.env.AI_DEV_MAX_TOKENS_PER_TURN || '16384', 10);
 const MAX_READ_BYTES = 200_000;
 
 // Forbidden paths — agent je nesmí číst ani psát.
@@ -285,6 +289,7 @@ async function runAgent({ workdir, task, repo, rules, presetPlan, onEvent }) {
   let totalInputTokens = 0;
   let totalOutputTokens = 0;
   let summary = null;
+  let _finishNudgeSent = false;
   const fileChanges = new Set();
 
   for (let turn = 0; turn < MAX_TURNS; turn++) {
@@ -316,9 +321,59 @@ async function runAgent({ workdir, task, repo, rules, presetPlan, onEvent }) {
     // Přidej assistant turn do messages
     messages.push({ role: 'assistant', content: response.content });
 
+    // stop_reason='max_tokens' znamená, že odpověď byla useknutá kvůli limitu —
+    // tool_use blok je neúplný (např. write_file s mid-content cutoff). Nesmí
+    // se to brát jako "vzdal to"; pošli nudge user-message a dej Sonnetu šanci
+    // pokračovat. Tool_use bloky s neúplným input.content do tool_results
+    // neposíláme — Sonnet vidí, že tool nezvládl run a zkusí to znovu menší.
+    if (response.stop_reason === 'max_tokens') {
+      messages.push({
+        role: 'user',
+        content:
+          'Tvoje předchozí odpověď byla useknutá kvůli limitu max_tokens (' +
+          MAX_TOKENS_PER_TURN +
+          '). Tool_use bloky v ní nebyly dokončeny a nemohly se provést. ' +
+          'Pokračuj — pokud potřebuješ napsat velký soubor, rozděl write_file ' +
+          'na menší úseky (po sekcích) nebo nahraď jen klíčové změny místo ' +
+          'celého obsahu. Až budeš mít všechny změny hotové, zavolej finish().',
+      });
+      if (onEvent) {
+        await onEvent('decision', {
+          action: 'max_tokens_recovery',
+          turn,
+          note: 'Předchozí turn useknut, posílám nudge.',
+        });
+      }
+      continue;
+    }
+
     if (response.stop_reason !== 'tool_use') {
-      // Claude se rozhodl skončit bez volání finish — bereme jako neúspěch
-      summary = summary || 'Agent skončil bez volání finish().';
+      // Sonnet vrátil text bez tool_use (end_turn / stop_sequence) — buď je
+      // přesvědčen, že je hotov ale zapomněl finish(), nebo si není jistý.
+      // Pošli jednorázový nudge; pokud i další turn skončí bez tool_use,
+      // bereme to jako neúspěch.
+      if (!_finishNudgeSent) {
+        _finishNudgeSent = true;
+        messages.push({
+          role: 'user',
+          content:
+            'Skončil jsi turn bez volání žádného nástroje. Pokud jsi hotov, ' +
+            'zavolej finish() s česky napsaným shrnutím změn (4–6 vět) pro PR ' +
+            'description. Pokud ještě hotov nejsi, pokračuj s tool callem ' +
+            '(write_file, read_file, run_shell). Žádný čistě textový turn už ' +
+            'nedělej.',
+        });
+        if (onEvent) {
+          await onEvent('decision', {
+            action: 'no_tool_nudge',
+            turn,
+            note: 'Sonnet skončil bez tool_use, posílám připomenutí finish().',
+          });
+        }
+        continue;
+      }
+      // I po nudge zase bez tool_use — vzdáváme to.
+      summary = summary || 'Agent skončil bez volání finish() i po nudge.';
       break;
     }
 
