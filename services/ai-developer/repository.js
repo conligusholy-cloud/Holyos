@@ -397,11 +397,15 @@ async function listQueue({ limit = 10 } = {}) {
   // - RUNNING_STATUSES: agent právě pracuje
   // - pr_open: čeká na review člověka
   // - failed/escalated mladší než FAILED_BACKOFF_MINUTES: nedávno spadl,
-  //   nezvedat 30 min, ať Tomáš stihne změnit target_repo / AC. Bez toho
-  //   by se cyklus opakoval každých 30 s a pálil tokeny (viz incident
-  //   2026-05-06: úkol #42 spálil 360 000 tokenů ve 39 retry pokusech).
-  const FAILED_BACKOFF_MINUTES = 30;
+  //   nezvedat krátkodobě (default 30 min).
+  // - failed >= MAX_FAILS_PER_24H za posledních 24 h: úkol je toxic, agent ho
+  //   nikdy nedotáhne (#42 incident: 39× retry / 360k tokens; #49 incident
+  //   2026-05-12: 4× retry / 1,2M tokens). Vyžaduje manuální reset přes UI
+  //   (Tomáš musí upravit AC / target_repo a re-pushnout úkol do fronty).
+  const FAILED_BACKOFF_MINUTES = parseInt(process.env.AI_DEV_FAILED_BACKOFF_MIN || '30', 10);
+  const MAX_FAILS_PER_24H = parseInt(process.env.AI_DEV_MAX_FAILS_PER_24H || '2', 10);
   const backoffCutoff = new Date(Date.now() - FAILED_BACKOFF_MINUTES * 60_000);
+  const dayAgo = new Date(Date.now() - 24 * 60 * 60_000);
 
   const taskIds = candidates.map((t) => t.id);
   const blocking = await prisma.agentRun.findMany({
@@ -419,7 +423,25 @@ async function listQueue({ limit = 10 } = {}) {
   });
   const busyTaskIds = new Set(blocking.map((r) => r.task_id));
 
-  return candidates.filter((t) => !busyTaskIds.has(t.id));
+  // Spočti failure rate per task za posledních 24 h.
+  const recentFails = await prisma.agentRun.groupBy({
+    by: ['task_id'],
+    where: {
+      task_id: { in: taskIds },
+      status: { in: ['failed', 'escalated'] },
+      updated_at: { gte: dayAgo },
+    },
+    _count: { _all: true },
+  });
+  const toxicTaskIds = new Set(
+    recentFails
+      .filter((r) => (r._count?._all || 0) >= MAX_FAILS_PER_24H)
+      .map((r) => r.task_id)
+  );
+
+  return candidates.filter(
+    (t) => !busyTaskIds.has(t.id) && !toxicTaskIds.has(t.id)
+  );
 }
 
 // ─── Auto-merge kandidáti ──────────────────────────────────────────────────
