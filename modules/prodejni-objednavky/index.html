@@ -2538,6 +2538,35 @@
     var _cashflowView = 'timeline';
     var _cashflowCalAnchor = null; // první den zobrazeného měsíce v kalendáři
 
+    // Symbol pro měnu — kalendář i timeline pracují s reálnou měnou objednávky, ne s pevně psaným „Kč".
+    function cfCurSymbol(c) {
+      if (c === 'EUR') return '€';
+      if (c === 'USD') return '$';
+      if (c === 'GBP') return '£';
+      if (c === 'PLN') return 'zł';
+      if (c === 'HUF') return 'Ft';
+      return 'Kč';
+    }
+    // Naformátuje částku s odpovídajícím symbolem dle měny.
+    function cfFmtMoney(n, currency) {
+      return Math.round(n).toLocaleString('cs-CZ') + ' ' + cfCurSymbol(currency || 'CZK');
+    }
+    // Sečte částky a vrátí buď jednoměnový výsledek („123 €"), nebo mix měn rozdělený („+").
+    function cfFmtMixed(amountsByCur) {
+      var keys = Object.keys(amountsByCur).filter(function (k) { return amountsByCur[k] > 0.5; });
+      if (!keys.length) return '0 ' + cfCurSymbol('CZK');
+      // CZK na konec, EUR jako první preferovanou alternativu — aby zápis byl konzistentní.
+      keys.sort(function (a, b) {
+        if (a === b) return 0;
+        if (a === 'EUR') return -1;
+        if (b === 'EUR') return 1;
+        if (a === 'CZK') return 1;
+        if (b === 'CZK') return -1;
+        return a.localeCompare(b);
+      });
+      return keys.map(function (k) { return cfFmtMoney(amountsByCur[k], k); }).join(' + ');
+    }
+
     async function loadCashflow() {
       var timelineEl = document.getElementById('cf-timeline');
       if (timelineEl) timelineEl.innerHTML = '<div style="padding:30px;color:var(--text2);font-style:italic;">Načítám platby…</div>';
@@ -2558,9 +2587,12 @@
     //   - záloha:  pokud existuje deposit invoice (invoice_role='deposit') → její date_due,
     //              jinak heuristika: order.created_at + 7 dní (odhad — vyznačíme ~).
     //   - doplatek: pokud existuje final_invoice → final_invoice.date_due,
-    //              jinak heuristika: expected_delivery + final_invoice_lead_days (odhad).
+    //              jinak heuristika: production_finish_last − 14 dní (resp. − final_invoice_lead_days),
+    //              tj. doplatek má padnout 14 dní PŘED dokončením výroby poslední položky,
+    //              aby bylo možné zboží uvolnit oproti zaplacenému doplatku.
     //   - jednorázová platba (payment_split=false):
-    //              pokud final_invoice → date_due, jinak expected_delivery nebo created_at+14d (odhad).
+    //              pokud final_invoice → date_due, jinak production_finish_last − 14 dní,
+    //              fallback expected_delivery − 14 dní nebo created_at+14d (odhad).
     function buildPaymentsFromOrders(orders) {
       var out = [];
       var today = new Date(); today.setHours(0, 0, 0, 0);
@@ -2604,19 +2636,28 @@
           var finalAmt = total - depositAmt;
           if (finalAmt > 0.01) {
             var finalDate, finalEstimated = true;
+            // Kolik dní PŘED koncem výroby má doplatek padnout (default 14).
+            var leadDays = (o.final_invoice_lead_days != null ? parseInt(o.final_invoice_lead_days, 10) : 14);
+            if (!isFinite(leadDays)) leadDays = 14;
             if (o.final_paid && o.final_paid_at) {
               finalDate = new Date(o.final_paid_at);
               finalEstimated = false;
             } else if (o.final_invoice && o.final_invoice.date_due) {
               finalDate = new Date(o.final_invoice.date_due);
               finalEstimated = false;
+            } else if (o.production_finish_last) {
+              // Doplatek splatný 14 dní PŘED dokončením výroby poslední položky.
+              var pf = new Date(o.production_finish_last);
+              pf.setDate(pf.getDate() - leadDays);
+              finalDate = pf;
             } else if (o.expected_delivery) {
+              // Fallback — pokud nemáme rozplánovanou výrobu, použij očekávané dodání mínus lead.
               var ed = new Date(o.expected_delivery);
-              ed.setDate(ed.getDate() + (o.final_invoice_lead_days || 14));
+              ed.setDate(ed.getDate() - leadDays);
               finalDate = ed;
             } else if (o.created_at) {
               var c = new Date(o.created_at);
-              c.setDate(c.getDate() + 30 + (o.final_invoice_lead_days || 14));
+              c.setDate(c.getDate() + 30 - leadDays);
               finalDate = c;
             }
             if (finalDate) {
@@ -2636,14 +2677,23 @@
           // ── JEDNORÁZOVÁ PLATBA (záloha = celá objednávka) ──
           if (total > 0) {
             var fullDate, fullEstimated = true;
+            // Stejné lead-time pravidlo jako u doplatku — splatnost 14 dní před dokončením výroby.
+            var leadDaysFull = (o.final_invoice_lead_days != null ? parseInt(o.final_invoice_lead_days, 10) : 14);
+            if (!isFinite(leadDaysFull)) leadDaysFull = 14;
             if (o.final_paid && o.final_paid_at) {
               fullDate = new Date(o.final_paid_at);
               fullEstimated = false;
             } else if (o.final_invoice && o.final_invoice.date_due) {
               fullDate = new Date(o.final_invoice.date_due);
               fullEstimated = false;
+            } else if (o.production_finish_last) {
+              var pfFull = new Date(o.production_finish_last);
+              pfFull.setDate(pfFull.getDate() - leadDaysFull);
+              fullDate = pfFull;
             } else if (o.expected_delivery) {
-              fullDate = new Date(o.expected_delivery);
+              var edFull = new Date(o.expected_delivery);
+              edFull.setDate(edFull.getDate() - leadDaysFull);
+              fullDate = edFull;
             } else if (o.created_at) {
               var cc = new Date(o.created_at);
               cc.setDate(cc.getDate() + 14);
@@ -2697,40 +2747,43 @@
       var monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
       var monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 1);
 
-      var sumPending = 0, sumOverdue = 0, sumThisMonth = 0, sumReceivedYTD = 0;
+      // Mícháme více měn — držíme součty per měna a v UI je zobrazíme zvlášť.
+      var sumPending = {}, sumOverdue = {}, sumThisMonth = {}, sumReceivedYTD = {};
       var countPending = 0, countOverdue = 0, countThisMonth = 0;
       var yearStart = new Date(today.getFullYear(), 0, 1);
 
+      function bump(bag, cur, amt) { bag[cur] = (bag[cur] || 0) + amt; }
+
       _cashflowPayments.forEach(function (p) {
+        var cur = p.currency || 'CZK';
         if (!p.paid) {
-          if (p.overdue) { sumOverdue += p.amount; countOverdue++; }
-          else { sumPending += p.amount; countPending++; }
-          if (p.date >= monthStart && p.date < monthEnd) { sumThisMonth += p.amount; countThisMonth++; }
+          if (p.overdue) { bump(sumOverdue, cur, p.amount); countOverdue++; }
+          else { bump(sumPending, cur, p.amount); countPending++; }
+          if (p.date >= monthStart && p.date < monthEnd) { bump(sumThisMonth, cur, p.amount); countThisMonth++; }
         } else {
-          if (p.date >= yearStart) sumReceivedYTD += p.amount;
+          if (p.date >= yearStart) bump(sumReceivedYTD, cur, p.amount);
         }
       });
 
-      function fmt(n) { return Math.round(n).toLocaleString('cs-CZ') + ' Kč'; }
       box.innerHTML =
         '<div class="cf-stat pending">' +
           '<div class="cf-stat-label">Tento měsíc očekáváno</div>' +
-          '<div class="cf-stat-value">' + fmt(sumThisMonth) + '</div>' +
+          '<div class="cf-stat-value">' + cfFmtMixed(sumThisMonth) + '</div>' +
           '<div class="cf-stat-sub">' + countThisMonth + ' plateb</div>' +
         '</div>' +
         '<div class="cf-stat pending">' +
           '<div class="cf-stat-label">Celkem nezaplaceno</div>' +
-          '<div class="cf-stat-value">' + fmt(sumPending) + '</div>' +
+          '<div class="cf-stat-value">' + cfFmtMixed(sumPending) + '</div>' +
           '<div class="cf-stat-sub">' + countPending + ' očekávaných plateb</div>' +
         '</div>' +
         '<div class="cf-stat warn">' +
           '<div class="cf-stat-label">Po splatnosti</div>' +
-          '<div class="cf-stat-value">' + fmt(sumOverdue) + '</div>' +
+          '<div class="cf-stat-value">' + cfFmtMixed(sumOverdue) + '</div>' +
           '<div class="cf-stat-sub">' + countOverdue + ' plateb v prodlení</div>' +
         '</div>' +
         '<div class="cf-stat ok">' +
           '<div class="cf-stat-label">Přijato letos</div>' +
-          '<div class="cf-stat-value">' + fmt(sumReceivedYTD) + '</div>' +
+          '<div class="cf-stat-value">' + cfFmtMixed(sumReceivedYTD) + '</div>' +
           '<div class="cf-stat-sub">Od 1. ledna ' + today.getFullYear() + '</div>' +
         '</div>';
     }
@@ -2769,9 +2822,13 @@
         var monthPayments = payments.filter(function (p) {
           return p.date.getFullYear() === y && p.date.getMonth() === mi;
         });
-        var sumIn = 0, sumPend = 0;
+        // Součty per měna — abychom mohli mix měn zobrazit korektně místo „X Kč".
+        var sumInByCur = {}, sumPendByCur = {};
+        var totalIn = 0, totalPend = 0;
         monthPayments.forEach(function (p) {
-          if (p.paid) sumIn += p.amount; else sumPend += p.amount;
+          var cur = p.currency || 'CZK';
+          if (p.paid) { sumInByCur[cur] = (sumInByCur[cur] || 0) + p.amount; totalIn += p.amount; }
+          else { sumPendByCur[cur] = (sumPendByCur[cur] || 0) + p.amount; totalPend += p.amount; }
         });
         var isCurrent = (y === nowYear && mi === nowMonth);
 
@@ -2779,9 +2836,9 @@
           '<div class="cf-month-head' + (isCurrent ? ' current' : '') + '">' +
             '<div class="cf-month-title">' + monthNames[mi] + ' ' + y + '</div>' +
             '<div class="cf-month-sub">' +
-              (sumIn > 0 ? '<span class="cf-incoming">✓ ' + Math.round(sumIn).toLocaleString('cs-CZ') + ' Kč</span>' : '') +
-              (sumPend > 0 ? '<span class="cf-pending">⏳ ' + Math.round(sumPend).toLocaleString('cs-CZ') + ' Kč</span>' : '') +
-              (sumIn === 0 && sumPend === 0 ? '<span style="color:var(--text2);font-style:italic;">bez plateb</span>' : '') +
+              (totalIn > 0 ? '<span class="cf-incoming">✓ ' + cfFmtMixed(sumInByCur) + '</span>' : '') +
+              (totalPend > 0 ? '<span class="cf-pending">⏳ ' + cfFmtMixed(sumPendByCur) + '</span>' : '') +
+              (totalIn === 0 && totalPend === 0 ? '<span style="color:var(--text2);font-style:italic;">bez plateb</span>' : '') +
             '</div>' +
           '</div>' +
           '<div class="cf-month-body">';
@@ -2892,10 +2949,11 @@
           '<div class="cf-cal-day-num">' + d.getDate() + '</div>';
         dayPays.forEach(function (p) {
           var cls = p.paid ? 'paid' : (p.overdue ? 'overdue' : 'pending');
+          var sym = cfCurSymbol(p.currency);
           var amt = Math.round(p.amount).toLocaleString('cs-CZ');
           var kind = p.kind === 'deposit' ? 'Z' : (p.kind === 'final' ? 'D' : 'P');
-          var title = (p.order.order_number || '') + ' — ' + ((p.order.company && p.order.company.name) || '') + ' — ' + amt + ' Kč';
-          html += '<div class="cf-cal-pill ' + cls + '" title="' + esc(title) + '" onclick="event.stopPropagation();openOrderDetail(' + p.order.id + ')">' + kind + ' ' + amt + '</div>';
+          var title = (p.order.order_number || '') + ' — ' + ((p.order.company && p.order.company.name) || '') + ' — ' + amt + ' ' + sym;
+          html += '<div class="cf-cal-pill ' + cls + '" title="' + esc(title) + '" onclick="event.stopPropagation();openOrderDetail(' + p.order.id + ')">' + kind + ' ' + amt + ' ' + sym + '</div>';
         });
         html += '</div>';
       }
@@ -3079,10 +3137,16 @@
       }
     }
 
-    // share_link už buduje backend přes SHARE_BASE_URL → frontend ho jen použije
+    // share_link buduje backend přes SHARE_BASE_URL → frontend ho použije.
+    // Pojistka: pokud backend nemá env nastavený a vrátí jen path, doplň origin.
     async function copyShareLink(id, shareLink) {
       var url = shareLink || '';
       if (!url) { alert('Odkaz není dostupný.'); return; }
+      if (!/^https?:\/\//i.test(url)) {
+        // Relativní cesta → admin doména. Upozorni že to není bestseries.cash.
+        url = window.location.origin + url;
+        console.warn('[shareLink] backend vrátil relativní cestu — nastav SHARE_BASE_URL v Railway env');
+      }
       try {
         await navigator.clipboard.writeText(url);
         alert('Odkaz zkopírován do schránky:\n' + url);
