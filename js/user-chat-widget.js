@@ -35,7 +35,7 @@
       border-radius: 14px; box-shadow: 0 12px 40px rgba(0,0,0,0.45);
       display: none; overflow: hidden;
     }
-    .uchat-panel.open { display: grid; grid-template-columns: 240px 1fr; }
+    .uchat-panel.open { display: grid; grid-template-columns: 240px 1fr; grid-template-rows: minmax(0, 1fr); }
     /* Drag & drop stav — fialový obrys přes celý panel */
     .uchat-panel.dragging { border-color: #a78bfa; box-shadow: 0 0 0 3px rgba(168,139,250,0.35), 0 12px 40px rgba(0,0,0,0.45); }
     .uchat-drop-hint {
@@ -46,7 +46,7 @@
     }
     .uchat-panel.dragging .uchat-drop-hint { display: flex; }
 
-    .uchat-sidebar { border-right: 1px solid var(--border, rgba(255,255,255,0.08)); display: flex; flex-direction: column; min-width: 0; }
+    .uchat-sidebar { border-right: 1px solid var(--border, rgba(255,255,255,0.08)); display: flex; flex-direction: column; min-width: 0; min-height: 0; height: 100%; max-height: 100%; overflow: hidden; }
     .uchat-sidebar header { padding: 10px 12px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border, rgba(255,255,255,0.08)); }
     .uchat-sidebar h3 { margin: 0; font-size: 13px; font-weight: 600; color: var(--text, #fff); }
     .uchat-sidebar .new-btn { background: rgba(108,92,231,0.2); color: #a78bfa; border: none; padding: 4px 10px; border-radius: 6px; font-size: 11px; cursor: pointer; }
@@ -93,7 +93,7 @@
     .uchat-loader::before { content: ''; display: inline-block; width: 20px; height: 20px; border: 2px solid rgba(108,92,231,0.3); border-top-color: #a78bfa; border-radius: 50%; animation: uchat-spin 0.8s linear infinite; margin-right: 8px; vertical-align: middle; }
     @keyframes uchat-spin { to { transform: rotate(360deg); } }
 
-    .uchat-main { display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; }
+    .uchat-main { display: flex; flex-direction: column; min-width: 0; min-height: 0; height: 100%; max-height: 100%; overflow: hidden; }
     .uchat-main header { padding: 10px 14px; border-bottom: 1px solid var(--border, rgba(255,255,255,0.08)); display: flex; justify-content: space-between; align-items: center; gap: 10px; }
     .uchat-main h3 { margin: 0; font-size: 13px; font-weight: 600; color: var(--text, #fff); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .uchat-main .close-btn { background: none; border: none; color: var(--text2, #a3a3b2); cursor: pointer; font-size: 18px; padding: 2px 6px; border-radius: 4px; }
@@ -176,7 +176,7 @@
     @media (max-width: 768px) {
       .uchat-bubble { top: 14px; right: 102px; width: 34px; height: 34px; font-size: 15px; }
       .uchat-bubble .dot { min-width: 16px; height: 16px; font-size: 9px; }
-      .uchat-panel { top: 54px; right: 8px; left: 8px; width: auto; max-width: none; height: calc(100vh - 70px); grid-template-columns: 1fr; }
+      .uchat-panel { top: 54px; right: 8px; left: 8px; width: auto; max-width: none; height: calc(100vh - 70px); grid-template-columns: 1fr; grid-template-rows: minmax(0, 1fr); }
       .uchat-panel.open .uchat-sidebar { display: none; }
       .uchat-panel.open.show-list .uchat-sidebar { display: flex; }
       .uchat-panel.open.show-list .uchat-main { display: none; }
