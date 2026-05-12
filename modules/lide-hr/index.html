@@ -341,6 +341,7 @@
 
       <div class="tab" data-tab="roles" onclick="switchTab('roles')">🔑 Role a oprávnění</div>
       <div class="tab" data-tab="documents" onclick="switchTab('documents')">📄 Dokumenty</div>
+      <div class="tab" data-tab="applicants" onclick="switchTab('applicants')">🎯 Uchazeči o práci</div>
     </div>
 
     <!-- Stats bar -->
@@ -661,8 +662,87 @@
         </div>
       </div>
 
+      <!-- TAB: Uchazeči o práci -->
+      <div class="tab-content" id="tab-applicants">
+        <div style="margin-bottom:16px; padding:14px 18px; background:rgba(108,92,231,0.08); border-left:3px solid #6c5ce7; border-radius:0 8px 8px 0; line-height:1.6;">
+          <strong style="color:#6c5ce7;">🎯 Uchazeči o práci</strong><br>
+          <span style="color:var(--text2); font-size:13px;">Evidence kandidátů s chutí pracovat — manuálně zadaní, z Facebook Lead Ads reklamy, doporučení nebo z webu. Po stavu „Přijat" jedním kliknutím založíš zaměstnance v sekci Lidé.</span>
+        </div>
+
+        <!-- Status kanban-like stats -->
+        <div id="applicant-stats" style="display:grid; grid-template-columns:repeat(6,1fr); gap:10px; margin-bottom:16px;"></div>
+
+        <div class="toolbar">
+          <input type="text" id="applicant-search" placeholder="🔍 Hledat (jméno, e-mail, telefon, pozice)…" oninput="loadApplicants()" style="width:300px;">
+          <select id="applicant-status-filter" onchange="loadApplicants()">
+            <option value="">Všechny stavy</option>
+            <option value="new">Nový</option>
+            <option value="contacted">Kontaktováno</option>
+            <option value="interview">Pohovor</option>
+            <option value="offer">Nabídka</option>
+            <option value="hired">Přijat</option>
+            <option value="rejected">Odmítnut</option>
+          </select>
+          <select id="applicant-source-filter" onchange="loadApplicants()">
+            <option value="">Všechny zdroje</option>
+            <option value="manual">Manuální</option>
+            <option value="facebook_ads">Facebook Lead Ads</option>
+            <option value="referral">Doporučení</option>
+            <option value="web">Web</option>
+            <option value="csv_import">CSV import</option>
+            <option value="other">Jiný</option>
+          </select>
+          <div style="flex:1"></div>
+          <button class="btn btn-secondary" onclick="openMetaSetupInfo()" title="Jak napojit Facebook Lead Ads">🔗 FB napojení</button>
+          <button class="btn btn-primary" onclick="openApplicantModal()">+ Nový uchazeč</button>
+        </div>
+
+        <div id="applicants-table"></div>
+      </div>
+
     </div>
   </div>
+
+  <style>
+    /* Aplicants — badges */
+    .badge-status-new        { background: rgba(99,102,241,0.18);  color: #818cf8; }
+    .badge-status-contacted  { background: rgba(59,130,246,0.18);  color: #60a5fa; }
+    .badge-status-interview  { background: rgba(245,158,11,0.18);  color: #fbbf24; }
+    .badge-status-offer      { background: rgba(168,85,247,0.18);  color: #c084fc; }
+    .badge-status-hired      { background: rgba(16,185,129,0.20);  color: #34d399; }
+    .badge-status-rejected   { background: rgba(239,68,68,0.18);   color: #f87171; }
+    .badge-source-manual        { background: rgba(156,163,175,0.18); color: #d1d5db; }
+    .badge-source-facebook_ads  { background: rgba(59,89,152,0.25);   color: #93c5fd; }
+    .badge-source-referral      { background: rgba(16,185,129,0.15);  color: #6ee7b7; }
+    .badge-source-web           { background: rgba(108,92,231,0.18);  color: #a78bfa; }
+    .badge-source-csv_import    { background: rgba(234,179,8,0.15);   color: #fde047; }
+    .badge-source-other         { background: rgba(156,163,175,0.18); color: #d1d5db; }
+
+    .stat-card.applicant-stat { cursor: pointer; }
+    .stat-card.applicant-stat.active { border-color: #6c5ce7; }
+
+    /* Timeline */
+    .timeline { display:flex; flex-direction:column; gap:10px; max-height:400px; overflow-y:auto; padding-right:6px; }
+    .timeline-item {
+      background: var(--bg); border: 1px solid var(--border); border-left: 3px solid #6c5ce7;
+      border-radius: 8px; padding: 10px 14px;
+    }
+    .timeline-item.kind-call          { border-left-color: #10b981; }
+    .timeline-item.kind-email         { border-left-color: #3b82f6; }
+    .timeline-item.kind-meeting       { border-left-color: #f59e0b; }
+    .timeline-item.kind-sms           { border-left-color: #8b5cf6; }
+    .timeline-item.kind-status_change { border-left-color: #ef4444; }
+    .timeline-item.kind-system        { border-left-color: #6b7280; }
+    .timeline-meta { font-size: 11px; color: var(--text2); margin-bottom: 4px; display:flex; justify-content:space-between; gap:10px; }
+    .timeline-content { font-size: 13px; color: var(--text); line-height: 1.45; white-space:pre-wrap; }
+
+    @media (max-width: 900px) {
+      #applicant-stats { grid-template-columns: repeat(3, 1fr) !important; }
+    }
+    @media (max-width: 500px) {
+      #applicant-stats { grid-template-columns: repeat(2, 1fr) !important; }
+    }
+  </style>
 
   <div id="modal-root"></div>
 
@@ -705,6 +785,7 @@
       if (tab === 'org') loadDepartments();
       if (tab === 'roles') loadRoles();
       if (tab === 'documents') { loadDocuments(); populateDocPersonFilter(); }
+      if (tab === 'applicants') { loadApplicantStats(); loadApplicants(); }
     }
 
     // ============================================================
@@ -3126,6 +3207,481 @@
         opt.textContent = p.last_name + ' ' + p.first_name;
         sel.appendChild(opt);
       }
+    }
+
+    // ============================================================
+    // UCHAZEČI O PRÁCI (job applicants)
+    // ============================================================
+    const APPLICANT_STATUS_LABELS = {
+      new: 'Nový', contacted: 'Kontaktováno', interview: 'Pohovor',
+      offer: 'Nabídka', hired: 'Přijat', rejected: 'Odmítnut',
+    };
+    const APPLICANT_SOURCE_LABELS = {
+      manual: 'Manuální', facebook_ads: '📘 Facebook Ads', referral: 'Doporučení',
+      web: 'Web', csv_import: 'CSV import', other: 'Jiný',
+    };
+    const APPLICANT_KIND_LABELS = {
+      note: '📝 Poznámka', call: '📞 Hovor', email: '✉️ E-mail',
+      meeting: '🤝 Schůzka', sms: '💬 SMS',
+      status_change: '🔄 Změna stavu', system: '⚙️ Systém',
+    };
+
+    async function loadApplicantStats() {
+      try {
+        const res = await fetch('/api/hr/applicants/stats');
+        if (!res.ok) { document.getElementById('applicant-stats').innerHTML = ''; return; }
+        const s = await res.json();
+        const sb = document.getElementById('applicant-stats');
+        const currentStatus = document.getElementById('applicant-status-filter').value;
+        const items = [
+          { key: '',          label: 'Celkem',       value: s.total, color: '#6c5ce7' },
+          { key: 'new',       label: 'Nový',         value: s.new, color: '#818cf8' },
+          { key: 'contacted', label: 'Kontaktováno', value: s.contacted, color: '#60a5fa' },
+          { key: 'interview', label: 'Pohovor',      value: s.interview, color: '#fbbf24' },
+          { key: 'offer',     label: 'Nabídka',      value: s.offer, color: '#c084fc' },
+          { key: 'hired',     label: 'Přijat',       value: s.hired, color: '#34d399' },
+        ];
+        sb.innerHTML = items.map(i => `
+          <div class="stat-card applicant-stat ${currentStatus === i.key ? 'active' : ''}"
+               onclick="setApplicantStatusFilter('${i.key}')">
+            <div class="stat-value" style="color:${i.color}">${i.value || 0}</div>
+            <div class="stat-label">${i.label}</div>
+          </div>
+        `).join('');
+      } catch (e) { console.error('Applicant stats:', e); }
+    }
+
+    function setApplicantStatusFilter(status) {
+      document.getElementById('applicant-status-filter').value = status;
+      loadApplicantStats();
+      loadApplicants();
+    }
+
+    async function loadApplicants() {
+      const search = document.getElementById('applicant-search').value;
+      const status = document.getElementById('applicant-status-filter').value;
+      const source = document.getElementById('applicant-source-filter').value;
+      const params = new URLSearchParams();
+      if (search) params.append('search', search);
+      if (status) params.append('status', status);
+      if (source) params.append('source', source);
+      try {
+        const res = await fetch('/api/hr/applicants?' + params.toString());
+        const list = await res.json();
+        renderApplicants(list);
+      } catch (e) { console.error('Load applicants:', e); }
+    }
+
+    function renderApplicants(list) {
+      const box = document.getElementById('applicants-table');
+      if (!list || list.length === 0) {
+        box.innerHTML = `
+          <div class="empty-state">
+            <div class="empty-icon">🎯</div>
+            <h3>Žádní uchazeči</h3>
+            <p>Zatím tu nikdo není. Přidej prvního uchazeče tlačítkem „+ Nový uchazeč" nebo napoj Facebook Lead Ads.</p>
+          </div>`;
+        return;
+      }
+      const rows = list.map(a => {
+        const fullName = ((a.last_name || '') + ' ' + a.first_name).trim();
+        const assigned = a.assigned_to ? (a.assigned_to.last_name + ' ' + a.assigned_to.first_name) : '—';
+        const sourceLabel = APPLICANT_SOURCE_LABELS[a.source] || a.source;
+        const statusLabel = APPLICANT_STATUS_LABELS[a.status] || a.status;
+        const created = new Date(a.created_at).toLocaleDateString('cs-CZ');
+        const cvIcon = a.cv_filename ? '<span title="' + escapeHtml(a.cv_filename) + '" style="color:#34d399;">📎</span>' : '';
+        return `
+          <tr onclick="openApplicantDetail(${a.id})">
+            <td><span class="person-name">${escapeHtml(fullName) || '—'}</span> ${cvIcon}</td>
+            <td>${a.email ? escapeHtml(a.email) : '—'}</td>
+            <td>${a.phone ? escapeHtml(a.phone) : '—'}</td>
+            <td>${a.position ? escapeHtml(a.position) : '—'}</td>
+            <td><span class="badge badge-source-${a.source}">${sourceLabel}</span></td>
+            <td><span class="badge badge-status-${a.status}">${statusLabel}</span></td>
+            <td>${escapeHtml(assigned)}</td>
+            <td style="color:var(--text2); font-size:11px;">${created}</td>
+            <td onclick="event.stopPropagation()">
+              <button class="btn btn-sm btn-danger" onclick="deleteApplicant(${a.id})" title="Smazat">×</button>
+            </td>
+          </tr>`;
+      }).join('');
+      box.innerHTML = `
+        <div style="overflow-x:auto;">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Jméno</th><th>E-mail</th><th>Telefon</th><th>Pozice</th>
+                <th>Zdroj</th><th>Stav</th><th>Náborář</th><th>Vloženo</th><th></th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>`;
+    }
+
+    function escapeHtml(s) {
+      return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
+    // ─── Modal: nový/editovat uchazeč ─────────────────────────────────
+    function openApplicantModal(applicant) {
+      const a = applicant || {};
+      const isEdit = !!a.id;
+      const employees = (people || []).filter(p => p.type === 'employee');
+      const assigneeOpts = ['<option value="">— bez náboráře —</option>']
+        .concat(employees.map(p => `<option value="${p.id}" ${a.assigned_to_id == p.id ? 'selected' : ''}>${escapeHtml(p.last_name + ' ' + p.first_name)}</option>`))
+        .join('');
+
+      const modal = document.getElementById('modal-root');
+      modal.innerHTML = `
+        <div class="modal-overlay" onclick="if(event.target===this) closeApplicantModal()">
+          <div class="modal" style="width:680px;">
+            <h2>${isEdit ? '✏️ Upravit uchazeče' : '+ Nový uchazeč'}</h2>
+            <div class="form-grid">
+              <div class="form-group"><label>Křestní jméno *</label><input id="ap-fn" value="${escapeHtml(a.first_name || '')}"></div>
+              <div class="form-group"><label>Příjmení</label><input id="ap-ln" value="${escapeHtml(a.last_name || '')}"></div>
+              <div class="form-group"><label>E-mail</label><input id="ap-em" type="email" value="${escapeHtml(a.email || '')}"></div>
+              <div class="form-group"><label>Telefon</label><input id="ap-ph" value="${escapeHtml(a.phone || '')}"></div>
+              <div class="form-group full"><label>Pozice / o co má zájem</label><input id="ap-pos" placeholder="např. operátor stroje, šička, řidič…" value="${escapeHtml(a.position || '')}"></div>
+              <div class="form-group">
+                <label>Zdroj</label>
+                <select id="ap-src">
+                  ${Object.entries(APPLICANT_SOURCE_LABELS).map(([k,v]) =>
+                    `<option value="${k}" ${a.source === k ? 'selected' : ''}>${v}</option>`).join('')}
+                </select>
+              </div>
+              <div class="form-group"><label>Detail zdroje</label><input id="ap-srcd" placeholder="ID kampaně, jméno doporučitele…" value="${escapeHtml(a.source_detail || '')}"></div>
+              <div class="form-group">
+                <label>Stav</label>
+                <select id="ap-status">
+                  ${Object.entries(APPLICANT_STATUS_LABELS).map(([k,v]) =>
+                    `<option value="${k}" ${(a.status || 'new') === k ? 'selected' : ''}>${v}</option>`).join('')}
+                </select>
+              </div>
+              <div class="form-group"><label>Náborář (HR)</label><select id="ap-assign">${assigneeOpts}</select></div>
+              <div class="form-group full"><label>Životopis (PDF, DOC…)</label>
+                <input id="ap-cv" type="file" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document">
+                ${a.cv_filename ? `<div style="font-size:11px; color:#34d399; margin-top:4px;">📎 Aktuální CV: ${escapeHtml(a.cv_filename)} <a href="/api/hr/applicants/${a.id}/cv" target="_blank" style="color:#a78bfa;">stáhnout</a></div>` : ''}
+              </div>
+              <div class="form-group full"><label>Poznámky</label><textarea id="ap-notes" rows="3">${escapeHtml(a.notes || '')}</textarea></div>
+            </div>
+            <div class="modal-actions">
+              <button class="btn btn-secondary" onclick="closeApplicantModal()">Zrušit</button>
+              <button class="btn btn-primary" onclick="saveApplicant(${a.id || 'null'})">${isEdit ? 'Uložit' : 'Vytvořit'}</button>
+            </div>
+          </div>
+        </div>`;
+    }
+
+    function closeApplicantModal() {
+      document.getElementById('modal-root').innerHTML = '';
+    }
+
+    async function saveApplicant(id) {
+      const payload = {
+        first_name: document.getElementById('ap-fn').value.trim(),
+        last_name: document.getElementById('ap-ln').value.trim(),
+        email: document.getElementById('ap-em').value.trim(),
+        phone: document.getElementById('ap-ph').value.trim(),
+        position: document.getElementById('ap-pos').value.trim(),
+        source: document.getElementById('ap-src').value,
+        source_detail: document.getElementById('ap-srcd').value.trim(),
+        status: document.getElementById('ap-status').value,
+        assigned_to_id: document.getElementById('ap-assign').value || null,
+        notes: document.getElementById('ap-notes').value.trim(),
+      };
+      if (!payload.first_name) { alert('Křestní jméno je povinné'); return; }
+
+      // CV — pokud uploadnul, převedeme na base64
+      const cvFile = document.getElementById('ap-cv').files[0];
+      if (cvFile) {
+        if (cvFile.size > 8 * 1024 * 1024) { alert('Soubor je větší než 8 MB.'); return; }
+        const b64 = await new Promise((resolve, reject) => {
+          const r = new FileReader();
+          r.onload = () => resolve(String(r.result).split(',').pop());
+          r.onerror = reject;
+          r.readAsDataURL(cvFile);
+        });
+        payload.cv_data = b64;
+        payload.cv_filename = cvFile.name;
+        payload.cv_mime = cvFile.type || 'application/octet-stream';
+      }
+
+      try {
+        const url = id ? `/api/hr/applicants/${id}` : '/api/hr/applicants';
+        const method = id ? 'PUT' : 'POST';
+        const res = await fetch(url, {
+          method,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          alert(err.error || 'Uložení selhalo');
+          return;
+        }
+        closeApplicantModal();
+        loadApplicants();
+        loadApplicantStats();
+      } catch (e) { console.error(e); alert('Uložení selhalo'); }
+    }
+
+    async function deleteApplicant(id) {
+      if (!confirm('Opravdu smazat uchazeče? Tato akce smaže i celou historii komunikace.')) return;
+      const res = await fetch(`/api/hr/applicants/${id}`, { method: 'DELETE' });
+      if (!res.ok) { alert('Smazání selhalo'); return; }
+      loadApplicants();
+      loadApplicantStats();
+    }
+
+    // ─── Detail s časovou osou ─────────────────────────────────────────
+    async function openApplicantDetail(id) {
+      try {
+        const res = await fetch(`/api/hr/applicants/${id}`);
+        if (!res.ok) { alert('Nelze načíst detail'); return; }
+        const a = await res.json();
+        renderApplicantDetail(a);
+      } catch (e) { console.error(e); }
+    }
+
+    function renderApplicantDetail(a) {
+      const fullName = ((a.last_name || '') + ' ' + a.first_name).trim() || '—';
+      const statusOpts = Object.entries(APPLICANT_STATUS_LABELS)
+        .map(([k,v]) => `<option value="${k}" ${a.status === k ? 'selected' : ''}>${v}</option>`).join('');
+      const timelineHtml = (a.applicant_notes || []).map(n => {
+        const when = new Date(n.created_at).toLocaleString('cs-CZ');
+        const author = n.author ? `${n.author.last_name || ''} ${n.author.first_name}`.trim() : 'systém';
+        const kindLabel = APPLICANT_KIND_LABELS[n.kind] || n.kind;
+        return `
+          <div class="timeline-item kind-${n.kind}">
+            <div class="timeline-meta"><span>${kindLabel} · ${escapeHtml(author)}</span><span>${when}</span></div>
+            <div class="timeline-content">${escapeHtml(n.content)}</div>
+          </div>`;
+      }).join('') || '<div style="color:var(--text2); font-size:12px;">Zatím žádné záznamy</div>';
+
+      const convertedBlock = a.converted_person_id
+        ? `<div style="background:rgba(16,185,129,0.1); border:1px solid rgba(16,185,129,0.3); padding:10px 14px; border-radius:8px; margin-bottom:12px;">
+             ✅ Přijat — vytvořen zaměstnanec
+             <a href="#" onclick="event.preventDefault(); closeApplicantModal(); switchTab('people'); setTimeout(()=>openPersonModal(${a.converted_person_id}), 200);" style="color:#34d399; font-weight:600; margin-left:6px;">
+               ${escapeHtml((a.converted_person && (a.converted_person.last_name + ' ' + a.converted_person.first_name)) || '#' + a.converted_person_id)} →
+             </a>
+           </div>`
+        : `<div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">
+             <button class="btn btn-primary" onclick="openConvertModal(${a.id})">✅ Přijmout = vytvořit zaměstnance</button>
+           </div>`;
+
+      const modal = document.getElementById('modal-root');
+      modal.innerHTML = `
+        <div class="modal-overlay" onclick="if(event.target===this) closeApplicantModal()">
+          <div class="modal modal-fullwidth" style="width:1000px; max-width:95vw;">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px; margin-bottom:14px;">
+              <div>
+                <h2 style="margin-bottom:4px;">🎯 ${escapeHtml(fullName)}</h2>
+                <div style="font-size:12px; color:var(--text2);">
+                  ${a.email ? escapeHtml(a.email) + ' · ' : ''}${a.phone ? escapeHtml(a.phone) : ''}
+                  ${a.position ? ' · ' + escapeHtml(a.position) : ''}
+                </div>
+              </div>
+              <div style="display:flex; gap:8px;">
+                <span class="badge badge-source-${a.source}">${APPLICANT_SOURCE_LABELS[a.source] || a.source}</span>
+                <span class="badge badge-status-${a.status}">${APPLICANT_STATUS_LABELS[a.status] || a.status}</span>
+              </div>
+            </div>
+
+            ${convertedBlock}
+
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:20px;">
+              <div>
+                <div style="font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; color:var(--text2); margin-bottom:8px;">Změnit stav</div>
+                <div style="display:flex; gap:8px; margin-bottom:14px;">
+                  <select id="ap-detail-status" style="flex:1; background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:8px 12px; color:var(--text);">${statusOpts}</select>
+                  <button class="btn btn-secondary" onclick="changeApplicantStatus(${a.id})">Uložit stav</button>
+                </div>
+
+                ${a.cv_filename ? `
+                  <div style="font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; color:var(--text2); margin-bottom:8px;">Životopis</div>
+                  <div style="margin-bottom:14px;">
+                    <a href="/api/hr/applicants/${a.id}/cv" target="_blank" class="btn btn-secondary" style="text-decoration:none;">📎 ${escapeHtml(a.cv_filename)}</a>
+                  </div>` : ''}
+
+                ${a.notes ? `
+                  <div style="font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; color:var(--text2); margin-bottom:8px;">Poznámky</div>
+                  <div style="background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:10px 14px; white-space:pre-wrap; font-size:13px; margin-bottom:14px;">${escapeHtml(a.notes)}</div>` : ''}
+
+                <div style="font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; color:var(--text2); margin-bottom:8px;">Přidat záznam</div>
+                <div style="display:flex; gap:8px; margin-bottom:8px;">
+                  <select id="ap-note-kind" style="background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:8px 12px; color:var(--text); font-size:13px;">
+                    <option value="note">📝 Poznámka</option>
+                    <option value="call">📞 Hovor</option>
+                    <option value="email">✉️ E-mail</option>
+                    <option value="meeting">🤝 Schůzka</option>
+                    <option value="sms">💬 SMS</option>
+                  </select>
+                </div>
+                <textarea id="ap-note-content" rows="3" placeholder="Obsah záznamu — co bylo domluveno…" style="width:100%; background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:10px; color:var(--text); font-family:inherit; font-size:13px;"></textarea>
+                <div style="display:flex; gap:8px; margin-top:10px;">
+                  <button class="btn btn-primary" onclick="addApplicantNote(${a.id})">+ Přidat záznam</button>
+                  <div style="flex:1"></div>
+                  <button class="btn btn-secondary" onclick="closeApplicantModal(); openApplicantModal(${JSON.stringify(a).replace(/"/g,'&quot;')})">✏️ Upravit</button>
+                </div>
+              </div>
+
+              <div>
+                <div style="font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; color:var(--text2); margin-bottom:8px;">Časová osa komunikace</div>
+                <div class="timeline" id="ap-timeline">${timelineHtml}</div>
+              </div>
+            </div>
+
+            <div class="modal-actions">
+              <button class="btn btn-secondary" onclick="closeApplicantModal()">Zavřít</button>
+            </div>
+          </div>
+        </div>`;
+    }
+
+    async function changeApplicantStatus(id) {
+      const status = document.getElementById('ap-detail-status').value;
+      const res = await fetch(`/api/hr/applicants/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status }),
+      });
+      if (!res.ok) { alert('Změna stavu selhala'); return; }
+      openApplicantDetail(id);
+      loadApplicants();
+      loadApplicantStats();
+    }
+
+    async function addApplicantNote(id) {
+      const kind = document.getElementById('ap-note-kind').value;
+      const content = document.getElementById('ap-note-content').value.trim();
+      if (!content) { alert('Obsah záznamu je prázdný'); return; }
+      const res = await fetch(`/api/hr/applicants/${id}/notes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ kind, content }),
+      });
+      if (!res.ok) { alert('Přidání selhalo'); return; }
+      openApplicantDetail(id);
+    }
+
+    function openConvertModal(id) {
+      // Modal pro převod uchazeče na zaměstnance — pár klíčových polí, zbytek doplní v Lidé.
+      const departmentsOpts = (departments && departments.length
+        ? '<option value="">— nezařadit —</option>' + departments.map(d => `<option value="${d.id}">${escapeHtml(d.name)}</option>`).join('')
+        : '<option value="">(žádná oddělení)</option>');
+      const rolesOpts = (roles && roles.length
+        ? '<option value="">— bez role —</option>' + roles.map(r => `<option value="${r.id}">${escapeHtml(r.name)}</option>`).join('')
+        : '<option value="">(žádné role)</option>');
+
+      const modal = document.getElementById('modal-root');
+      modal.innerHTML = `
+        <div class="modal-overlay" onclick="if(event.target===this) closeApplicantModal()">
+          <div class="modal" style="width:560px;">
+            <h2>✅ Přijmout uchazeče = vytvořit zaměstnance</h2>
+            <p style="color:var(--text2); font-size:13px; margin-bottom:18px;">Z údajů uchazeče (jméno, e-mail, telefon, poznámky) vznikne nová osoba v sekci Lidé. Uchazeč zůstane v archivu se stavem „Přijat".</p>
+            <div class="form-grid">
+              <div class="form-group">
+                <label>Nástup</label>
+                <input id="cv-hire-date" type="date" value="${new Date().toISOString().slice(0,10)}">
+              </div>
+              <div class="form-group">
+                <label>Typ smlouvy</label>
+                <select id="cv-contract">
+                  <option value="">—</option>
+                  <option value="HPP">HPP</option>
+                  <option value="DPP">DPP</option>
+                  <option value="DPC">DPČ</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Oddělení</label>
+                <select id="cv-dept">${departmentsOpts}</select>
+              </div>
+              <div class="form-group">
+                <label>Role</label>
+                <select id="cv-role">${rolesOpts}</select>
+              </div>
+              <div class="form-group">
+                <label>Hodinová sazba (Kč)</label>
+                <input id="cv-hourly" type="number" step="0.01">
+              </div>
+              <div class="form-group">
+                <label>Měsíční mzda (Kč)</label>
+                <input id="cv-monthly" type="number" step="1">
+              </div>
+            </div>
+            <div class="modal-actions">
+              <button class="btn btn-secondary" onclick="openApplicantDetail(${id})">Zpět</button>
+              <button class="btn btn-primary" onclick="convertApplicant(${id})">✅ Přijmout</button>
+            </div>
+          </div>
+        </div>`;
+    }
+
+    async function convertApplicant(id) {
+      const payload = {
+        hire_date: document.getElementById('cv-hire-date').value || null,
+        contract_type: document.getElementById('cv-contract').value || null,
+        department_id: document.getElementById('cv-dept').value || null,
+        role_id: document.getElementById('cv-role').value || null,
+        hourly_rate: document.getElementById('cv-hourly').value || null,
+        monthly_salary: document.getElementById('cv-monthly').value || null,
+      };
+      const res = await fetch(`/api/hr/applicants/${id}/convert`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        alert(err.error || 'Převod selhal');
+        return;
+      }
+      const result = await res.json();
+      closeApplicantModal();
+      loadApplicants();
+      loadApplicantStats();
+      loadStats();
+      loadPeople();
+      alert(`✅ Hotovo — vytvořen zaměstnanec #${result.person.id}`);
+    }
+
+    function openMetaSetupInfo() {
+      const modal = document.getElementById('modal-root');
+      modal.innerHTML = `
+        <div class="modal-overlay" onclick="if(event.target===this) closeApplicantModal()">
+          <div class="modal" style="width:640px;">
+            <h2>🔗 Napojení Facebook Lead Ads (Rychlé formuláře)</h2>
+            <div style="background:rgba(16,185,129,0.08); border-left:3px solid #10b981; padding:10px 14px; border-radius:0 8px 8px 0; font-size:13px; color:var(--text); margin-bottom:14px;">
+              Sbíráš kontakty přes <strong>Rychlé formuláře</strong> (Instant Forms) ve FB/IG reklamě — to je přesně to, co tento webhook umí přijmout. Když uživatel formulář odešle, FB pošle událost <code>leadgen</code> na náš endpoint a HolyOS si stáhne vyplněná pole.
+            </div>
+            <div style="font-size:13px; line-height:1.7; color:var(--text); margin-bottom:16px;">
+              Co je potřeba nastavit jednorázově:
+              <ol style="margin:10px 0 0 22px; padding:0; color:var(--text2);">
+                <li>Vytvořit <strong>Meta Business App</strong> na <a href="https://developers.facebook.com/" target="_blank" style="color:#a78bfa;">developers.facebook.com</a>.</li>
+                <li>Přidat produkt <strong>Webhooks</strong> a v sekci <em>Page</em> nastavit <strong>leadgen</strong> subscription.</li>
+                <li>Jako Callback URL zadat:<br><code style="background:var(--bg); padding:4px 8px; border-radius:6px; display:inline-block; margin-top:4px;">https://app.holyos.cz/api/hr/applicants/meta-webhook</code></li>
+                <li>Verify token zadat shodný s ENV proměnnou <code>META_LEAD_VERIFY_TOKEN</code>.</li>
+                <li>Vygenerovat <strong>Page Access Token</strong> pro stránku, ze které běží reklamy, a uložit do ENV jako <code>META_PAGE_ACCESS_TOKEN</code>.</li>
+                <li>App Secret uložit jako <code>META_APP_SECRET</code> (ověření podpisu webhooku).</li>
+                <li>Stránku přihlásit k odběru: v Page Settings → Lead Ads přiřadit aplikaci.</li>
+              </ol>
+            </div>
+            <div style="background:rgba(108,92,231,0.08); border-left:3px solid #6c5ce7; padding:10px 14px; border-radius:0 8px 8px 0; font-size:12px; color:var(--text2); margin-bottom:8px;">
+              <strong style="color:#a78bfa;">Mapování polí z Rychlého formuláře →</strong><br>
+              <code>full_name</code> / <code>name</code> → jméno + příjmení (rozdělí se podle mezery)<br>
+              <code>email</code> → e-mail · <code>phone_number</code> / <code>phone</code> → telefon<br>
+              <code>position</code> / <code>job_title</code> → pozice<br>
+              Vlastní otázky ve formuláři pojmenuj klíči s těmito názvy (FB to umožňuje v editoru u každé otázky → „API name" / „ID otázky"). Po prvním zachyceném leadu se uchazeč objeví v seznamu se zdrojem <strong>📘 Facebook Ads</strong>.
+            </div>
+            <div class="modal-actions">
+              <button class="btn btn-primary" onclick="closeApplicantModal()">OK</button>
+            </div>
+          </div>
+        </div>`;
     }
 
     // ============================================================

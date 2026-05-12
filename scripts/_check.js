@@ -1,0 +1,3158 @@
+
+    const ORDER_STATUSES = {
+      new: { label: 'Nový', color: '#3b82f6' },
+      quoted: { label: 'Poptáno', color: '#3b82f6' },
+      ordered: { label: 'Objednáno', color: '#8b5cf6' },
+      confirmed: { label: 'Potvrzeno', color: '#f59e0b' },
+      delivered: { label: 'Doručeno', color: '#10b981' },
+      cancelled: { label: 'Zrušeno', color: '#ef4444' },
+    };
+
+    function esc(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+
+    // Vykreslí badge stavu + případný sub-badge platby (Záloha ✓ / Doplaceno / Čeká…).
+    // Vrací HTML pro vložení do buňky. opts.size = 'sm' (default) | 'lg' (pro detail).
+    function renderStatusBadges(order, opts) {
+      opts = opts || {};
+      const st = ORDER_STATUSES[order.status] || { label: order.status, color: '#9ca3af' };
+      const sizeCss = opts.size === 'lg' ? 'font-size:13px;padding:4px 12px;' : '';
+      const mainBadge = '<span class="badge" style="background:' + st.color + '22;color:' + st.color + ';' + sizeCss + '">' + st.label + '</span>';
+
+      // Sub-badge platby — relevantní jen pro prodejní objednávku, status ordered+ a !cancelled
+      if (order.type && order.type !== 'sales') return mainBadge;
+      if (!['ordered','confirmed','delivered'].includes(order.status)) return mainBadge;
+
+      let subLabel = '';
+      let subColor = '';
+      let subIcon = '';
+      if (order.payment_split) {
+        if (order.final_paid) {
+          subLabel = 'Doplaceno'; subColor = '#10b981'; subIcon = '✓';
+        } else if (order.deposit_paid) {
+          subLabel = 'Záloha'; subColor = '#10b981'; subIcon = '✓';
+        } else {
+          subLabel = 'Čeká na zálohu'; subColor = '#94a3b8'; subIcon = '⏳';
+        }
+      } else {
+        if (order.final_paid) {
+          subLabel = 'Zaplaceno'; subColor = '#10b981'; subIcon = '✓';
+        } else {
+          subLabel = 'Čeká na platbu'; subColor = '#94a3b8'; subIcon = '⏳';
+        }
+      }
+      const subSizeCss = opts.size === 'lg' ? 'font-size:12px;padding:3px 10px;' : 'font-size:10px;padding:2px 6px;';
+      const subBadge = '<span class="badge" style="background:' + subColor + '22;color:' + subColor + ';margin-left:4px;' + subSizeCss + '" title="Stav platby">' + subIcon + ' ' + subLabel + '</span>';
+      return mainBadge + subBadge;
+    }
+
+    let companies = [];
+    let materials = [];
+    let products = [];
+
+    // ============================================================
+    // STATS
+    // ============================================================
+    async function loadStats() {
+      try {
+        const res = await fetch('/api/wh/orders?type=sales');
+        const orders = await res.json();
+        const total = orders.length;
+        const active = orders.filter(o => !['cancelled','delivered'].includes(o.status)).length;
+        const delivered = orders.filter(o => o.status === 'delivered').length;
+
+        // Sectene hodnoty zvlast pro kazdou menu — michat CZK a EUR do jednoho cisla by bylo zavadejici.
+        const byCurrency = {};
+        for (const o of orders) {
+          const cur = o.currency || 'CZK';
+          byCurrency[cur] = (byCurrency[cur] || 0) + parseFloat(o.total_amount || 0);
+        }
+
+        // Kurzy z CNB (cache 1h na backendu). Fallback na priblizne sazby kdyby spadlo.
+        let fxRates = { CZK: 1, EUR: 25, USD: 22 };
+        let fxSource = 'fallback';
+        let fxValidFor = '';
+        try {
+          const fxRes = await fetch('/api/wh/exchange-rates');
+          if (fxRes.ok) {
+            const fxData = await fxRes.json();
+            if (fxData && fxData.rates) fxRates = fxData.rates;
+            fxSource = fxData.source || 'CNB';
+            fxValidFor = fxData.valid_for || '';
+          }
+        } catch(e) { console.warn('fx rates fetch fail', e); }
+
+        const curSymbol = { CZK: 'Kč', EUR: '€', USD: '$', GBP: '£', PLN: 'zł', HUF: 'Ft' };
+        // Razeni: CZK prvni, pak EUR, pak ostatni abecedne
+        const curOrder = Object.keys(byCurrency).sort((a, b) => {
+          if (a === 'CZK') return -1;
+          if (b === 'CZK') return 1;
+          if (a === 'EUR') return -1;
+          if (b === 'EUR') return 1;
+          return a.localeCompare(b);
+        });
+
+        // Souhrnna hodnota prepoctena na CZK (vsechny meny secteny v Kc)
+        let totalCzk = 0;
+        for (const c of curOrder) {
+          const rate = fxRates[c] || 1;
+          totalCzk += byCurrency[c] * rate;
+        }
+
+        function fmt(v, cur) {
+          return Math.round(v).toLocaleString('cs-CZ') + ' ' + (curSymbol[cur] || cur);
+        }
+
+        let valueHtml;
+        if (curOrder.length === 0) {
+          valueHtml = '<div class="stat-value">0 Kč</div>';
+        } else if (curOrder.length === 1 && curOrder[0] === 'CZK') {
+          // Jen CZK — zadny prepocet nepotreba
+          valueHtml = '<div class="stat-value">' + fmt(byCurrency.CZK, 'CZK') + '</div>';
+        } else if (curOrder.length === 1) {
+          // Jen jedna cizi mena — ukaz nahore hodnotu, pod tim ≈ Kc
+          const c = curOrder[0];
+          const czkEquiv = byCurrency[c] * (fxRates[c] || 0);
+          valueHtml = '<div class="stat-value">' + fmt(byCurrency[c], c) + '</div>' +
+            '<div style="font-size:12px;color:var(--text2);margin-top:2px;font-weight:500;">≈ ' + fmt(czkEquiv, 'CZK') + '</div>';
+        } else {
+          // Vic men — kazdou samostatne na radek, pod tim celkovy prepocet na Kc
+          valueHtml = curOrder.map(c =>
+            '<div class="stat-value" style="font-size:16px;line-height:1.25;">' + fmt(byCurrency[c], c) + '</div>'
+          ).join('') +
+          '<div style="font-size:12px;color:var(--text2);margin-top:3px;font-weight:500;border-top:1px dashed var(--border);padding-top:3px;">≈ ' + fmt(totalCzk, 'CZK') + ' celkem</div>';
+        }
+
+        // Tooltip s informaci o zdroji kurzu
+        const fxTooltip = fxSource === 'CNB'
+          ? 'Kurz ČNB' + (fxValidFor ? ' ze dne ' + fxValidFor : '')
+          : 'Kurz — fallback (CNB API nedostupne)';
+
+        document.getElementById('stats-bar').innerHTML =
+          '<div class="stat-card"><div class="stat-value">' + total + '</div><div class="stat-label">Objednávek celkem</div></div>' +
+          '<div class="stat-card"><div class="stat-value" style="color:#8b5cf6">' + active + '</div><div class="stat-label">Aktivních</div></div>' +
+          '<div class="stat-card"><div class="stat-value" style="color:#10b981">' + delivered + '</div><div class="stat-label">Doručeno</div></div>' +
+          '<div class="stat-card" title="' + fxTooltip + '">' + valueHtml + '<div class="stat-label">Celková hodnota</div></div>';
+      } catch(e) { console.error(e); }
+    }
+
+    // ============================================================
+    // OBJEDNÁVKY
+    // ============================================================
+    async function loadOrders() {
+      const search = document.getElementById('order-search')?.value || '';
+      const status = document.getElementById('order-status-filter')?.value || '';
+      let url = '/api/wh/orders?type=sales';
+      if (status) url += '&status=' + status;
+      if (search) url += '&search=' + encodeURIComponent(search);
+      try {
+        const res = await fetch(url);
+        const orders = await res.json();
+        renderOrders(orders);
+      } catch(e) { console.error(e); }
+    }
+
+    function renderOrders(list) {
+      const el = document.getElementById('orders-table');
+      if (!list.length) {
+        el.innerHTML = '<div class="empty-state"><div class="empty-icon">💰</div><h3>Žádné prodejní objednávky</h3><p>Vytvořte první prodejní objednávku.</p></div>';
+        return;
+      }
+      let html = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr><th>Číslo</th><th>Odběratel</th><th>Stav</th><th>Položek</th><th>Celkem</th><th title="Datum slíbené zákazníkovi">📅 Zákazník</th><th title="Doplatková faktura — datum vystavení / částka / stav platby">💵 Doplatek</th><th title="Konec posledního výrobního slotu">🏭 Výroba do</th><th>Akce</th></tr></thead><tbody>';
+      for (const o of list) {
+        const st = ORDER_STATUSES[o.status] || { label: o.status, color: '#9ca3af' };
+        html += '<tr onclick="openOrderDetail(' + o.id + ')">';
+        html += '<td class="person-name">' + o.order_number + '</td>';
+        html += '<td>' + (o.company?.name || o.company_name || '—') + '</td>';
+        html += '<td>' + renderStatusBadges({ ...o, type: 'sales' }) + '</td>';
+        // Interni warning: pokud alespon 1 polozka nema napojeny Product, zakaznik
+        // ji neodesle do vyroby (nema co vyrobit). Red ⚠ badge vedle poctu polozek.
+        const itemsArr = Array.isArray(o.items) ? o.items : [];
+        const unlinkedCount = itemsArr.filter(it => !it.product_id && !it.product).length;
+        const itemsNum = o.items_count || itemsArr.length || 0;
+        const linkWarning = unlinkedCount > 0
+          ? ' <span title="' + unlinkedCount + ' z ' + itemsNum + ' polo\u017eek nem\u00e1 napojen\u00fd V\u00fdrobek \u2014 nespadne do v\u00fdroby" style="display:inline-flex;align-items:center;gap:3px;background:rgba(239,68,68,0.15);color:#ef4444;border:1px solid rgba(239,68,68,0.35);padding:1px 6px;border-radius:6px;font-size:10px;font-weight:700;margin-left:6px;vertical-align:middle;">\u26a0 ' + unlinkedCount + '</span>'
+          : '';
+        html += '<td>' + itemsNum + linkWarning + '</td>';
+        html += '<td style="font-weight:600;">' + parseFloat(o.total_amount || 0).toLocaleString('cs-CZ') + ' ' + (o.currency || 'CZK') + '</td>';
+        html += '<td>' + (o.expected_delivery ? new Date(o.expected_delivery).toLocaleDateString('cs-CZ') : '—') + '</td>';
+        html += '<td>' + renderFinalInvoiceCell(o) + '</td>';
+        html += '<td>' + (o.production_finish_last
+          ? '<span style="color:#10b981;font-weight:600;">' + new Date(o.production_finish_last).toLocaleDateString('cs-CZ') + '</span>'
+          : '<span style="color:var(--text2);">—</span>') + '</td>';
+        html += '<td><button class="btn btn-danger btn-sm" onclick="event.stopPropagation();deleteOrder(' + o.id + ')">🗑️</button></td>';
+        html += '</tr>';
+      }
+      html += '</tbody></table></div>';
+      el.innerHTML = html;
+    }
+
+    // ============================================================
+    // MODAL: Nová / Editovat objednávku
+    // ============================================================
+    async function reloadCompanies() {
+      try { const r = await fetch('/api/wh/companies'); companies = await r.json(); } catch(e) {}
+    }
+
+    async function openOrderModal(id) {
+      // Načti všechny společnosti (ne jen customers — uživatel může mít firmu s jiným typem)
+      await reloadCompanies();
+
+      let o = {};
+      if (id) { try { const r = await fetch('/api/wh/orders/' + id); o = await r.json(); } catch(e) {} }
+      const compOpts = companies.map(c => '<option value="' + c.id + '"' + (o.company_id === c.id ? ' selected' : '') + '>' + c.name + (c.type ? ' (' + COMPANY_LABELS[c.type] + ')' : '') + '</option>').join('');
+
+      // ─── NOVÁ OBJEDNÁVKA — minimalistický krok ───
+      // Položky, výrobní sloty, termíny dodání a odkaz pro zákazníka se řeší
+      // až v detail dialogu (openOrderDetail). Sjednocuje UX zadávání a úpravy.
+      if (!id) {
+        _pendingItems = [];
+        document.getElementById('modal-root').innerHTML =
+          '<div class="modal-overlay" onclick="if(event.target===this)closeModal()">' +
+            '<div class="modal" style="width:640px;max-width:95vw;">' +
+              '<h2>Nová prodejní objednávka</h2>' +
+              '<p style="font-size:12px;color:var(--text2);margin-bottom:16px;">Stačí vybrat odběratele a měnu. Položky, termíny dodání a odkaz pro zákazníka nastavíte v dalším kroku.</p>' +
+              '<form onsubmit="saveOrder(event, null)">' +
+                '<input type="hidden" name="type" value="sales">' +
+                '<input type="hidden" name="status" value="new">' +
+                '<div class="form-group">' +
+                  '<label>Odběratel *</label>' +
+                  '<div style="display:flex;gap:6px;">' +
+                    '<select name="company_id" id="order-company-select" required style="flex:1"><option value="">— Vyberte odběratele —</option>' + compOpts + '</select>' +
+                    '<button type="button" class="btn btn-sm" style="white-space:nowrap;padding:6px 10px;" onclick="toggleNewCompanyForm()">+ Nový</button>' +
+                  '</div>' +
+                '</div>' +
+                '<div id="new-company-form" style="display:none;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;margin:8px 0 12px;">' +
+                  '<div style="font-size:13px;font-weight:600;margin-bottom:8px;color:#eab308;">Nový odběratel</div>' +
+                  '<div style="display:flex;gap:8px;align-items:end;margin-bottom:10px;">' +
+                    '<div class="form-group" style="flex:1;"><label>IČO (dohledání z ARES)</label><input type="text" id="new-comp-ico" placeholder="Zadejte IČO..." maxlength="8"></div>' +
+                    '<button type="button" class="btn btn-secondary btn-sm" onclick="lookupARESNewCompany()" style="margin-bottom:2px;">ARES</button>' +
+                  '</div>' +
+                  '<div class="form-grid">' +
+                    '<div class="form-group full"><label>Název firmy *</label><input type="text" id="new-comp-name" placeholder="Název společnosti"></div>' +
+                    '<div class="form-group"><label>DIČ</label><input type="text" id="new-comp-dic" placeholder="CZ12345678"></div>' +
+                    '<div class="form-group"><label>Typ</label><select id="new-comp-type"><option value="customer" selected>Odběratel</option><option value="supplier">Dodavatel</option><option value="both">Dodavatel/Odběratel</option><option value="cooperation">Kooperace</option></select></div>' +
+                    '<div class="form-group full"><label>Adresa</label><input type="text" id="new-comp-address" placeholder="Ulice a č.p."></div>' +
+                    '<div class="form-group"><label>Město</label><input type="text" id="new-comp-city" placeholder="Město"></div>' +
+                    '<div class="form-group"><label>PSČ</label><input type="text" id="new-comp-zip" placeholder="12345" maxlength="5"></div>' +
+                    '<div class="form-group"><label>Země</label><select id="new-comp-country">' + HolyCountries.renderOptions('CZ') + '</select></div>' +
+                    '<div class="form-group"><label>Kontaktní osoba</label><input type="text" id="new-comp-contact" placeholder="Jméno Příjmení"></div>' +
+                    '<div class="form-group"><label>Email</label><input type="email" id="new-comp-email" placeholder="info@firma.cz"></div>' +
+                    '<div class="form-group"><label>Telefon</label><input type="text" id="new-comp-phone" placeholder="+420..."></div>' +
+                    '<div class="form-group"><label>Splatnost (dní)</label><input type="number" id="new-comp-payment" value="14" min="0"></div>' +
+                  '</div>' +
+                  '<div style="display:flex;gap:8px;margin-top:10px;">' +
+                    '<button type="button" class="btn btn-primary btn-sm" onclick="createNewCompany()">Vytvořit a vybrat</button>' +
+                    '<button type="button" class="btn btn-secondary btn-sm" onclick="toggleNewCompanyForm()">Zrušit</button>' +
+                  '</div>' +
+                '</div>' +
+                '<div class="form-grid">' +
+                  '<div class="form-group"><label>Měna</label><select name="currency"><option value="CZK" selected>CZK (Kč)</option><option value="EUR">EUR (€)</option></select></div>' +
+                  '<div class="form-group"><label>Poznámka</label><input type="text" name="note" placeholder="Nepovinné..."></div>' +
+                '</div>' +
+                '<div class="modal-actions">' +
+                  '<button type="button" class="btn btn-secondary" onclick="closeModal()">Zrušit</button>' +
+                  '<button type="submit" class="btn btn-primary">Vytvořit a pokračovat</button>' +
+                '</div>' +
+              '</form>' +
+            '</div>' +
+          '</div>';
+        return;
+      }
+
+      const statusOpts = Object.entries(ORDER_STATUSES).map(([k,v]) => '<option value="' + k + '"' + (o.status === k ? ' selected' : '') + '>' + v.label + '</option>').join('');
+
+      // Načti výrobky z tabulky Product (ne materiály)
+      if (products.length === 0) {
+        try {
+          let r = await fetch('/api/production/products?type=product&configurator=true');
+          if (!r.ok) r = await fetch('/api/production/products?type=product'); // fallback bez filtru
+          const data = await r.json();
+          products = Array.isArray(data) ? data : [];
+        } catch(e) { products = []; }
+      }
+      const prodOpts = products.map(p =>
+        '<option value="' + p.id + '" data-name="' + p.name + '" data-unit="ks" data-price="0" data-code="' + p.code + '">' +
+        p.code + ' — ' + p.name +
+        '</option>'
+      ).join('');
+
+      // Existující položky (při editaci)
+      let existingItems = [];
+      if (id && o.items) existingItems = o.items;
+      _pendingItems = existingItems.map(it => ({
+        id: it.id || null, product_id: it.product_id || it.material_id,
+        material_id: it.material_id, name: it.name, quantity: parseFloat(it.quantity),
+        unit: it.unit, unit_price: parseFloat(it.unit_price || 0),
+        total_price: parseFloat(it.total_price || 0),
+      }));
+
+      document.getElementById('modal-root').innerHTML = '<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal" style="width:900px;max-width:95vw;"><h2>' + (id ? '✏️ Upravit objednávku' : '➕ Nová prodejní objednávka') + '</h2>' +
+        '<form onsubmit="saveOrder(event,' + (id || 'null') + ')">' +
+          '<input type="hidden" name="type" value="sales">' +
+          '<div class="form-grid">' +
+            '<div class="form-group">' +
+              '<label>Odběratel *</label>' +
+              '<div style="display:flex;gap:6px;">' +
+                '<select name="company_id" id="order-company-select" required style="flex:1"><option value="">— Vyberte odběratele —</option>' + compOpts + '</select>' +
+                '<button type="button" class="btn btn-sm" style="white-space:nowrap;padding:6px 10px;" onclick="toggleNewCompanyForm()">+ Nový</button>' +
+              '</div>' +
+            '</div>' +
+            '<div class="form-group"><label>Stav</label><select name="status">' + statusOpts + '</select></div>' +
+          '</div>' +
+          '<div id="new-company-form" style="display:none;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;margin:8px 0 12px;">' +
+            '<div style="font-size:13px;font-weight:600;margin-bottom:8px;color:#eab308;">🏢 Nový odběratel</div>' +
+            '<div style="display:flex;gap:8px;align-items:end;margin-bottom:10px;">' +
+              '<div class="form-group" style="flex:1;"><label>IČO (dohledání z ARES)</label><input type="text" id="new-comp-ico" placeholder="Zadejte IČO..." maxlength="8"></div>' +
+              '<button type="button" class="btn btn-secondary btn-sm" onclick="lookupARESNewCompany()" style="margin-bottom:2px;">🔍 ARES</button>' +
+            '</div>' +
+            '<div class="form-grid">' +
+              '<div class="form-group full"><label>Název firmy *</label><input type="text" id="new-comp-name" placeholder="Název společnosti"></div>' +
+              '<div class="form-group"><label>DIČ</label><input type="text" id="new-comp-dic" placeholder="CZ12345678"></div>' +
+              '<div class="form-group"><label>Typ</label><select id="new-comp-type"><option value="customer" selected>Odběratel</option><option value="supplier">Dodavatel</option><option value="both">Dodavatel/Odběratel</option><option value="cooperation">Kooperace</option></select></div>' +
+              '<div class="form-group full"><label>Adresa</label><input type="text" id="new-comp-address" placeholder="Ulice a č.p."></div>' +
+              '<div class="form-group"><label>Město</label><input type="text" id="new-comp-city" placeholder="Město"></div>' +
+              '<div class="form-group"><label>PSČ</label><input type="text" id="new-comp-zip" placeholder="12345" maxlength="5"></div>' +
+                    '<div class="form-group"><label>Země</label><select id="new-comp-country">' + HolyCountries.renderOptions('CZ') + '</select></div>' +
+              '<div class="form-group"><label>Kontaktní osoba</label><input type="text" id="new-comp-contact" placeholder="Jméno Příjmení"></div>' +
+              '<div class="form-group"><label>Email</label><input type="email" id="new-comp-email" placeholder="info@firma.cz"></div>' +
+              '<div class="form-group"><label>Telefon</label><input type="text" id="new-comp-phone" placeholder="+420..."></div>' +
+              '<div class="form-group"><label>Splatnost (dní)</label><input type="number" id="new-comp-payment" value="14" min="0"></div>' +
+            '</div>' +
+            '<div style="display:flex;gap:8px;margin-top:10px;">' +
+              '<button type="button" class="btn btn-primary btn-sm" onclick="createNewCompany()">✅ Vytvořit a vybrat</button>' +
+              '<button type="button" class="btn btn-secondary btn-sm" onclick="toggleNewCompanyForm()">Zrušit</button>' +
+            '</div>' +
+          '</div>' +
+          '<div class="form-grid">' +
+            '<div class="form-group"><label>Očekávané datum zákazník</label><input type="date" name="expected_delivery" value="' + (o.expected_delivery ? o.expected_delivery.split('T')[0] : '') + '" title="Kdy jsme zákazníkovi slíbili dodání. Datum pro výrobu se dopočítá ze slotů."></div>' +
+            '<div class="form-group"><label>Měna</label><select name="currency" onchange="renderPendingItems()"><option value="CZK"' + ((o.currency||'CZK')==='CZK'?' selected':'') + '>CZK (Kč)</option><option value="EUR"' + (o.currency==='EUR'?' selected':'') + '>EUR (€)</option></select></div>' +
+          '</div>' +
+
+          // === POLOŽKY ===
+          '<div style="border-top:1px solid var(--border);margin:16px 0 12px;padding-top:14px;">' +
+            '<h3 style="font-size:14px;margin-bottom:10px;">📦 Položky (výrobky)</h3>' +
+            '<div id="order-items-list"></div>' +
+            '<div style="margin-top:8px;padding:12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;">' +
+              '<div style="display:flex;gap:6px;align-items:end;flex-wrap:wrap;">' +
+                '<div class="form-group" style="flex:2;min-width:180px;"><label>Výrobek</label><select id="add-item-product"><option value="">— Vyberte výrobek —</option>' + prodOpts + '</select></div>' +
+                '<input type="hidden" id="add-item-qty" value="1">' +
+                '<div class="form-group" style="width:50px;"><label>Jedn.</label><input type="text" id="add-item-unit" value="ks" readonly style="background:var(--surface);"></div>' +
+                '<div class="form-group" style="width:110px;"><label>Cena/ks bez DPH</label><input type="number" id="add-item-price" value="0" step="0.01"></div>' +
+              '</div>' +
+              '<div style="font-size:11px;color:var(--text2);margin-top:6px;">💡 Každý výrobek = 1 řádek. Pro více kusů stejné konfigurace použijte tlačítko <strong>🔁 Duplikovat</strong> u přidané položky.</div>' +
+              '<div style="margin-top:8px;text-align:right;">' +
+                '<button type="button" class="btn btn-primary btn-sm" onclick="openProductConfigurator()">+ Přidat položku</button>' +
+              '</div>' +
+            '</div>' +
+          '</div>' +
+
+          '<div class="form-group full" style="margin-top:12px;"><label>Poznámka</label><textarea name="note">' + (o.note || '') + '</textarea></div>' +
+
+          // === ODKAZ PRO ZÁKAZNÍKA ===
+          (id ? '<div style="border-top:1px solid var(--border);margin:16px 0 12px;padding-top:14px;">' +
+            '<h3 style="font-size:14px;margin-bottom:8px;">🔗 Odkaz pro zákazníka' +
+              (o.status && o.status !== 'new'
+                ? ' <span style="font-size:11px;color:#f59e0b;background:rgba(245,158,11,0.12);padding:2px 8px;border-radius:10px;margin-left:6px;">🔒 Deaktivován</span>'
+                : ''
+              ) +
+            '</h3>' +
+            '<p style="font-size:11px;color:var(--text2);margin-bottom:8px;">Zákazník uvidí přehled objednávky, může konfigurovat produkty a vybírat termíny dodání. Odkaz je aktivní jen ve stavu <strong>Nový</strong>.</p>' +
+            '<div id="customer-link-area">' +
+              (o.share_token
+                ? (o.status && o.status !== 'new'
+                    ? '<div style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.25);border-radius:8px;padding:10px 14px;font-family:monospace;font-size:11px;color:var(--text2);word-break:break-all;opacity:0.5;text-decoration:line-through;">' + (o.share_url || (window.location.origin + '/order/' + o.share_token)) + '</div>'
+                    : '<div style="display:flex;gap:8px;align-items:center;">' +
+                        '<input type="text" readonly value="' + (o.share_url || (window.location.origin + '/order/' + o.share_token)) + '" id="modal-share-url" style="flex:1;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:12px;font-family:monospace;" onclick="this.select()">' +
+                        '<button type="button" class="btn btn-sm btn-primary" onclick="copyModalShareUrl()">📋</button>' +
+                      '</div>'
+                  )
+                : (o.status && o.status !== 'new'
+                    ? '<div style="font-size:12px;color:var(--text2);font-style:italic;">Vytvoření odkazu není možné — objednávka není ve stavu Nový.</div>'
+                    : '<button type="button" class="btn btn-sm" style="background:rgba(59,130,246,0.12);color:#3b82f6;border-color:rgba(59,130,246,0.25);" onclick="generateShareLink(' + id + ')">🔗 Vygenerovat odkaz</button>'
+                  )
+              ) +
+            '</div>' +
+          '</div>' : '') +
+
+          '<div class="modal-actions"><button type="button" class="btn btn-secondary" onclick="closeModal()">Zrušit</button><button type="submit" class="btn btn-primary">' + (id ? 'Uložit' : 'Vytvořit') + '</button></div>' +
+        '</form></div></div>';
+
+      renderPendingItems();
+    }
+
+    const COMPANY_LABELS = { own: 'Moje firma', supplier: 'Dodavatel', customer: 'Odběratel', cooperation: 'Kooperace', both: 'Dodavatel/Odběratel' };
+
+    function toggleNewCompanyForm() {
+      const form = document.getElementById('new-company-form');
+      if (form) form.style.display = form.style.display === 'none' ? 'block' : 'none';
+    }
+
+    async function lookupARESNewCompany() {
+      const ico = document.getElementById('new-comp-ico')?.value.trim();
+      if (!ico) { alert('Zadejte IČO'); return; }
+      try {
+        const res = await fetch('/api/wh/ares/' + ico);
+        const data = await res.json();
+        if (data.error) { alert(data.error); return; }
+        if (data.name) document.getElementById('new-comp-name').value = data.name;
+        if (data.dic) document.getElementById('new-comp-dic').value = data.dic;
+        if (data.address) document.getElementById('new-comp-address').value = data.address;
+        if (data.city) document.getElementById('new-comp-city').value = data.city;
+        if (data.zip) document.getElementById('new-comp-zip').value = data.zip;
+      } catch(e) { alert('Chyba při vyhledávání v ARES'); }
+    }
+
+    async function createNewCompany() {
+      const name = document.getElementById('new-comp-name')?.value.trim();
+      if (!name) { alert('Zadejte název firmy.'); return; }
+
+      const data = {
+        name: name,
+        ico: document.getElementById('new-comp-ico')?.value.trim() || null,
+        dic: document.getElementById('new-comp-dic')?.value.trim() || null,
+        type: document.getElementById('new-comp-type')?.value || 'customer',
+        address: document.getElementById('new-comp-address')?.value.trim() || null,
+        city: document.getElementById('new-comp-city')?.value.trim() || null,
+        zip: document.getElementById('new-comp-zip')?.value.trim() || null,
+        country: document.getElementById('new-comp-country')?.value || 'CZ',
+        contact_person: document.getElementById('new-comp-contact')?.value.trim() || null,
+        email: document.getElementById('new-comp-email')?.value.trim() || null,
+        phone: document.getElementById('new-comp-phone')?.value.trim() || null,
+        payment_terms_days: parseInt(document.getElementById('new-comp-payment')?.value) || 14,
+        active: true,
+      };
+
+      try {
+        const res = await fetch('/api/wh/companies', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data),
+        });
+        if (!res.ok) throw new Error('Chyba ' + res.status);
+        const newComp = await res.json();
+
+        // Přidej do seznamu a vyber v selectu
+        companies.push(newComp);
+        const sel = document.getElementById('order-company-select');
+        const opt = document.createElement('option');
+        opt.value = newComp.id;
+        opt.textContent = newComp.name + ' (Odběratel)';
+        opt.selected = true;
+        sel.appendChild(opt);
+
+        // Schovat formulář
+        document.getElementById('new-company-form').style.display = 'none';
+      } catch(e) {
+        alert('Chyba při vytváření firmy: ' + e.message);
+      }
+    }
+
+    // --- Správa položek v modalu ---
+    let _pendingItems = [];
+
+    let _currentConfigGroups = [];
+
+    // =================================================================
+    // MODÁLNÍ KONFIGURÁTOR — přívětivý průvodce konfigurací výrobku
+    // =================================================================
+    async function openProductConfigurator() {
+      const sel = document.getElementById('add-item-product');
+      const opt = sel.selectedOptions[0];
+      if (!opt || !opt.value) { alert('Nejprve vyberte výrobek.'); return; }
+
+      const productId = parseInt(opt.value);
+      const productName = opt.dataset.name || opt.textContent;
+      const productCode = opt.dataset.code || '';
+      const basePrice = parseFloat(document.getElementById('add-item-price').value) || 0;
+      const qty = parseFloat(document.getElementById('add-item-qty').value) || 1;
+      const unit = document.getElementById('add-item-unit').value || 'ks';
+
+      // Načti konfiguraci
+      let groups = [];
+      try {
+        const res = await fetch('/api/production/products/' + productId + '/config');
+        groups = await res.json();
+      } catch(e) { console.error(e); }
+
+      _currentConfigGroups = groups;
+
+      // Pokud výrobek nemá konfigurace, přidej rovnou
+      // (vždy 1 ks; pro víc kusů uživatel duplikuje řádek)
+      if (!groups || groups.length === 0) {
+        _pendingItems.push({
+          product_id: productId,
+          name: productName,
+          quantity: 1,
+          unit: unit,
+          unit_price: basePrice,
+          total_price: basePrice,
+          configs: [],
+          config_summary: '',
+        });
+        sel.value = '';
+        document.getElementById('add-item-qty').value = 1;
+        document.getElementById('add-item-price').value = 0;
+        renderPendingItems();
+        return;
+      }
+
+      // Otevři modální konfigurátor
+      const cfgModal = document.createElement('div');
+      cfgModal.id = 'cfg-modal-overlay';
+      cfgModal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:10001;display:flex;align-items:center;justify-content:center;';
+      cfgModal.onclick = function(e) { if (e.target === cfgModal) cfgModal.remove(); };
+
+      const curSym = currencySymbol(getSelectedCurrency());
+
+      let html = '<div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:0;width:650px;max-width:95vw;max-height:90vh;overflow:hidden;display:flex;flex-direction:column;">';
+
+      // Header
+      html += '<div style="padding:20px 24px 16px;border-bottom:1px solid var(--border);background:linear-gradient(135deg,rgba(234,179,8,0.08) 0%,transparent 100%);">';
+      html += '<div style="display:flex;align-items:center;gap:12px;">';
+      html += '<div style="width:44px;height:44px;border-radius:10px;background:rgba(234,179,8,0.15);display:flex;align-items:center;justify-content:center;font-size:22px;">⚙️</div>';
+      html += '<div><h3 style="margin:0;font-size:16px;">Konfigurace výrobku</h3>';
+      html += '<div style="font-size:12px;color:var(--text2);margin-top:2px;"><span style="font-family:monospace;color:#eab308;">' + esc(productCode) + '</span> · ' + esc(productName) + '</div></div></div></div>';
+
+      // Body — scrollable
+      html += '<div style="flex:1;overflow-y:auto;padding:20px 24px;">';
+
+      for (const g of groups) {
+        html += '<div style="margin-bottom:16px;">';
+        html += '<div style="font-size:13px;font-weight:600;margin-bottom:6px;">' + esc(g.name) + (g.required ? ' <span style="color:#ef4444;">*</span>' : '') + '</div>';
+
+        if (g.type === 'single_select') {
+          // Kartičkový výběr — jedna volba
+          html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px;">';
+          for (const o of g.options) {
+            const price = parseFloat(o.price_modifier) || 0;
+            const priceTag = price !== 0 ? '<div style="font-size:11px;font-weight:600;color:' + (price > 0 ? '#ef4444' : '#10b981') + ';margin-top:4px;">' + (price > 0 ? '+' : '') + price.toLocaleString('cs-CZ') + ' ' + curSym + '</div>' : '';
+            const isDefault = o.is_default;
+            html += '<label style="display:block;cursor:pointer;">';
+            html += '<input type="radio" name="cfgm_group_' + g.id + '" value="' + o.id + '" data-price="' + o.price_modifier + '" data-group-name="' + esc(g.name) + '" data-opt-name="' + esc(o.name) + '"' + (isDefault ? ' checked' : '') + ' class="cfgm-radio" style="display:none;">';
+            html += '<div class="cfgm-card" style="border:2px solid ' + (isDefault ? '#eab308' : 'var(--border)') + ';border-radius:10px;padding:10px 14px;transition:all 0.15s;background:' + (isDefault ? 'rgba(234,179,8,0.06)' : 'var(--bg)') + ';">';
+            html += '<div style="font-size:13px;font-weight:600;">' + esc(o.name) + '</div>';
+            if (isDefault) html += '<div style="font-size:10px;color:#eab308;margin-top:2px;">● Standard</div>';
+            html += priceTag;
+            html += '</div></label>';
+          }
+          html += '</div>';
+
+        } else if (g.type === 'multi_select') {
+          html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px;">';
+          for (const o of g.options) {
+            const price = parseFloat(o.price_modifier) || 0;
+            const priceTag = price !== 0 ? '<div style="font-size:11px;font-weight:600;color:' + (price > 0 ? '#ef4444' : '#10b981') + ';margin-top:4px;">' + (price > 0 ? '+' : '') + price.toLocaleString('cs-CZ') + ' ' + curSym + '</div>' : '';
+            html += '<label style="display:block;cursor:pointer;">';
+            html += '<input type="checkbox" value="' + o.id + '" data-price="' + o.price_modifier + '" data-group-name="' + esc(g.name) + '" data-opt-name="' + esc(o.name) + '"' + (o.is_default ? ' checked' : '') + ' class="cfgm-check" data-group-id="' + g.id + '" style="display:none;">';
+            html += '<div class="cfgm-card" style="border:2px solid ' + (o.is_default ? '#eab308' : 'var(--border)') + ';border-radius:10px;padding:10px 14px;transition:all 0.15s;background:' + (o.is_default ? 'rgba(234,179,8,0.06)' : 'var(--bg)') + ';">';
+            html += '<div style="display:flex;align-items:center;gap:6px;"><span class="cfgm-checkmark" style="width:18px;height:18px;border:2px solid ' + (o.is_default ? '#eab308' : 'var(--border)') + ';border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:12px;color:#eab308;">' + (o.is_default ? '✓' : '') + '</span><span style="font-size:13px;font-weight:600;">' + esc(o.name) + '</span></div>';
+            html += priceTag;
+            html += '</div></label>';
+          }
+          html += '</div>';
+
+        } else if (g.type === 'boolean') {
+          const yesOpt = g.options.find(o => o.code.toLowerCase().includes('ano') || o.code.toLowerCase().includes('yes') || o.code.toLowerCase() === 'true');
+          const noOpt = g.options.find(o => o.code.toLowerCase().includes('ne') || o.code.toLowerCase().includes('no') || o.code.toLowerCase() === 'false');
+          html += '<div style="display:flex;gap:10px;">';
+          [yesOpt, noOpt].filter(Boolean).forEach(o => {
+            html += '<label style="display:block;cursor:pointer;flex:1;">';
+            html += '<input type="radio" name="cfgm_group_' + g.id + '" value="' + o.id + '" data-price="' + o.price_modifier + '" data-group-name="' + esc(g.name) + '" data-opt-name="' + esc(o.name) + '"' + (o.is_default ? ' checked' : '') + ' class="cfgm-radio" style="display:none;">';
+            html += '<div class="cfgm-card" style="border:2px solid ' + (o.is_default ? '#eab308' : 'var(--border)') + ';border-radius:10px;padding:12px 16px;text-align:center;transition:all 0.15s;background:' + (o.is_default ? 'rgba(234,179,8,0.06)' : 'var(--bg)') + ';">';
+            html += '<div style="font-size:14px;font-weight:600;">' + esc(o.name) + '</div></div></label>';
+          });
+          html += '</div>';
+
+        } else if (g.type === 'text') {
+          html += '<input type="text" class="cfgm-text" data-group-id="' + g.id + '" data-group-name="' + esc(g.name) + '" placeholder="Zadejte..." style="width:100%;background:var(--bg);border:2px solid var(--border);border-radius:10px;padding:10px 14px;color:var(--text);font-size:13px;transition:border-color 0.15s;">';
+        }
+
+        html += '</div>';
+      }
+
+      html += '</div>'; // end body
+
+      // Footer — cenový souhrn + tlačítka
+      html += '<div style="padding:16px 24px;border-top:1px solid var(--border);background:var(--bg);">';
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;">';
+      html += '<div><div style="font-size:12px;color:var(--text2);">Celková cena položky</div>';
+      const _sym = currencySymbol(getSelectedCurrency());
+      html += '<div id="cfgm-total-price" style="font-size:20px;font-weight:700;color:#eab308;">' + (basePrice * qty).toLocaleString('cs-CZ') + ' ' + _sym + ' bez DPH</div></div>';
+      html += '<div style="display:flex;gap:8px;">';
+      html += '<button class="btn btn-secondary" onclick="document.getElementById(\'cfg-modal-overlay\').remove()">Zrušit</button>';
+      html += '<button class="btn btn-primary" onclick="confirmProductConfig()">✅ Přidat do objednávky</button>';
+      html += '</div></div></div>';
+
+      html += '</div>';
+      cfgModal.innerHTML = html;
+      document.body.appendChild(cfgModal);
+
+      // Event listeners pro interaktivitu kartiček
+      cfgModal.querySelectorAll('.cfgm-radio').forEach(radio => {
+        radio.addEventListener('change', function() {
+          // Odbarvi všechny v skupině
+          const name = this.name;
+          cfgModal.querySelectorAll('input[name="' + name + '"]').forEach(r => {
+            const card = r.nextElementSibling;
+            if (r.checked) { card.style.borderColor = '#eab308'; card.style.background = 'rgba(234,179,8,0.06)'; }
+            else { card.style.borderColor = 'var(--border)'; card.style.background = 'var(--bg)'; }
+          });
+          updateCfgmPrice();
+        });
+      });
+
+      cfgModal.querySelectorAll('.cfgm-check').forEach(chk => {
+        chk.addEventListener('change', function() {
+          const card = this.nextElementSibling;
+          const mark = card.querySelector('.cfgm-checkmark');
+          if (this.checked) { card.style.borderColor = '#eab308'; card.style.background = 'rgba(234,179,8,0.06)'; if (mark) { mark.style.borderColor = '#eab308'; mark.textContent = '✓'; } }
+          else { card.style.borderColor = 'var(--border)'; card.style.background = 'var(--bg)'; if (mark) { mark.style.borderColor = 'var(--border)'; mark.textContent = ''; } }
+          updateCfgmPrice();
+        });
+      });
+
+      cfgModal.querySelectorAll('.cfgm-text').forEach(inp => {
+        inp.addEventListener('focus', function() { this.style.borderColor = '#eab308'; });
+        inp.addEventListener('blur', function() { this.style.borderColor = 'var(--border)'; });
+      });
+
+      // Cenový update funkce
+      window._cfgm_basePrice = basePrice;
+      window._cfgm_qty = qty;
+      window._cfgm_productId = productId;
+      window._cfgm_productName = productName;
+      window._cfgm_unit = unit;
+      updateCfgmPrice();
+    }
+
+    function updateCfgmPrice() {
+      let extra = 0;
+      document.querySelectorAll('#cfg-modal-overlay .cfgm-radio:checked, #cfg-modal-overlay .cfgm-check:checked').forEach(el => {
+        extra += parseFloat(el.dataset.price) || 0;
+      });
+      const total = (window._cfgm_basePrice + extra) * window._cfgm_qty;
+      const el = document.getElementById('cfgm-total-price');
+      if (el) el.textContent = total.toLocaleString('cs-CZ') + ' ' + currencySymbol(getSelectedCurrency()) + ' bez DPH';
+    }
+
+    function confirmProductConfig() {
+      // Sesbírej výběry
+      const configs = [];
+      const configLabels = [];
+      let priceExtra = 0;
+
+      // Radio (single_select + boolean)
+      document.querySelectorAll('#cfg-modal-overlay .cfgm-radio:checked').forEach(r => {
+        configs.push({ option_id: parseInt(r.value) });
+        configLabels.push(r.dataset.groupName + ': ' + r.dataset.optName);
+        priceExtra += parseFloat(r.dataset.price) || 0;
+      });
+
+      // Checkboxy (multi_select)
+      document.querySelectorAll('#cfg-modal-overlay .cfgm-check:checked').forEach(chk => {
+        configs.push({ option_id: parseInt(chk.value) });
+        configLabels.push(chk.dataset.groupName + ': ' + chk.dataset.optName);
+        priceExtra += parseFloat(chk.dataset.price) || 0;
+      });
+
+      // Text
+      document.querySelectorAll('#cfg-modal-overlay .cfgm-text').forEach(inp => {
+        if (inp.value.trim()) {
+          configs.push({ custom_value: inp.value.trim(), _group_id: parseInt(inp.dataset.groupId) });
+          configLabels.push(inp.dataset.groupName + ': ' + inp.value.trim());
+        }
+      });
+
+      // Validace povinných skupin
+      for (const g of _currentConfigGroups) {
+        if (g.required) {
+          const hasSelection = configs.some(c => {
+            if (c.option_id) {
+              return g.options.some(o => o.id === c.option_id);
+            }
+            return false;
+          });
+          if (!hasSelection) { alert('Vyplňte povinnou skupinu: ' + g.name); return; }
+        }
+      }
+
+      const finalPrice = window._cfgm_basePrice + priceExtra;
+
+      _pendingItems.push({
+        product_id: window._cfgm_productId,
+        name: window._cfgm_productName,
+        quantity: 1, // Vždy 1 kus — duplikace řeší řádky, ne quantity
+        unit: window._cfgm_unit,
+        unit_price: finalPrice,
+        total_price: finalPrice,
+        configs: configs,
+        config_summary: configLabels.join(' · '),
+      });
+
+      // Reset hlavní formulář
+      document.getElementById('add-item-product').value = '';
+      document.getElementById('add-item-qty').value = 1;
+      document.getElementById('add-item-price').value = 0;
+      document.getElementById('add-item-unit').value = 'ks';
+      _currentConfigGroups = [];
+
+      // Zavři modal
+      document.getElementById('cfg-modal-overlay')?.remove();
+      renderPendingItems();
+    }
+
+    function removePendingItem(idx) {
+      _pendingItems.splice(idx, 1);
+      renderPendingItems();
+    }
+
+    // Duplikuje položku v pending listu (deep clone včetně configs pole)
+    function duplicatePendingItem(idx) {
+      const src = _pendingItems[idx];
+      if (!src) return;
+      const clone = {
+        product_id: src.product_id,
+        material_id: src.material_id,
+        name: src.name,
+        quantity: 1,
+        unit: src.unit,
+        unit_price: src.unit_price,
+        total_price: src.unit_price,
+        configs: Array.isArray(src.configs) ? src.configs.map(c => ({ ...c })) : [],
+        config_summary: src.config_summary,
+      };
+      _pendingItems.splice(idx + 1, 0, clone); // vlož hned za originál
+      renderPendingItems();
+    }
+
+    // Duplikace existující položky (uložené v DB) — přes backend
+    async function duplicateOrderItem(itemId, orderId) {
+      try {
+        const r = await fetch('/api/wh/orders/' + orderId + '/items/' + itemId + '/duplicate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+        });
+        if (!r.ok) { const err = await r.json().catch(() => ({})); alert('Chyba: ' + (err.error || r.status)); return; }
+        // Obnov seznam objednavek na pozadi a znovu otevri detail dialog stejne objednavky.
+        // openOrderDetail si data natahne sam z API — nepotrebuje zadnou globalni promennou.
+        await loadOrders();
+        await loadStats();
+        openOrderDetail(orderId);
+      } catch (e) { alert('Chyba: ' + e.message); }
+    }
+
+    function getSelectedCurrency() {
+      const sel = document.querySelector('select[name="currency"]');
+      return sel ? sel.value : 'CZK';
+    }
+    function currencySymbol(c) { return c === 'EUR' ? '€' : 'Kč'; }
+
+    function renderPendingItems() {
+      const el = document.getElementById('order-items-list');
+      if (!el) return;
+      if (_pendingItems.length === 0) {
+        el.innerHTML = '<div style="color:var(--text2);font-size:12px;padding:8px 0;">Zatím žádné položky — přidejte výrobky níže.</div>';
+        return;
+      }
+      const cur = getSelectedCurrency();
+      const sym = currencySymbol(cur);
+      let total = 0;
+      let html = '<table class="data-table" style="font-size:12px;"><thead><tr><th>#</th><th>Výrobek</th><th>Jedn.</th><th style="text-align:right">Cena/ks bez DPH</th><th style="text-align:right">Celkem bez DPH</th><th></th></tr></thead><tbody>';
+      _pendingItems.forEach((it, i) => {
+        const rowTotal = 1 * it.unit_price;
+        total += rowTotal;
+        const configLine = it.config_summary ? '<div style="font-size:11px;color:var(--text2);margin-top:2px;">⚙️ ' + it.config_summary + '</div>' : '';
+        html += '<tr>' +
+          '<td style="color:var(--text2);font-size:11px;">' + (i + 1) + '</td>' +
+          '<td><span class="person-name">' + it.name + '</span>' + configLine + '</td>' +
+          '<td>' + it.unit + '</td>' +
+          '<td style="text-align:right">' + it.unit_price.toLocaleString('cs-CZ') + ' ' + sym + '</td>' +
+          '<td style="text-align:right;font-weight:600;">' + rowTotal.toLocaleString('cs-CZ') + ' ' + sym + '</td>' +
+          '<td style="white-space:nowrap;">' +
+            '<button type="button" class="btn btn-sm" style="background:rgba(59,130,246,0.12);color:#3b82f6;border-color:rgba(59,130,246,0.25);padding:2px 8px;margin-right:4px;" onclick="duplicatePendingItem(' + i + ')" title="Duplikovat se stejnou konfigurací">🔁</button>' +
+            '<button type="button" class="btn btn-danger btn-sm" onclick="removePendingItem(' + i + ')" style="padding:2px 8px;">✕</button>' +
+          '</td>' +
+        '</tr>';
+      });
+      html += '<tr style="border-top:2px solid var(--border);"><td colspan="4" style="text-align:right;font-weight:600;">Celkem bez DPH (' + _pendingItems.length + ' ks):</td><td style="text-align:right;font-weight:700;font-size:14px;color:#eab308;">' + total.toLocaleString('cs-CZ') + ' ' + sym + '</td><td></td></tr>';
+      html += '</tbody></table>';
+      el.innerHTML = html;
+    }
+
+    async function saveOrder(e, id) {
+      e.preventDefault();
+      const form = new FormData(e.target);
+      const raw = Object.fromEntries(form.entries());
+
+      // Validace
+      const companyId = parseInt(raw.company_id);
+      if (!companyId) { alert('Vyberte odběratele.'); return; }
+
+      const data = {
+        type: raw.type || 'sales',
+        company_id: companyId,
+        status: raw.status || 'new',
+        currency: raw.currency || 'CZK',
+        note: raw.note || '',
+        expected_delivery: raw.expected_delivery || null,
+        items_count: _pendingItems.length,
+        total_amount: _pendingItems.reduce((sum, it) => sum + (it.quantity * it.unit_price), 0),
+      };
+
+      try {
+        let orderId = id;
+
+        if (id) {
+          // Editace existující objednávky
+          const res = await fetch('/api/wh/orders/' + id, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+          if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.error || 'Chyba při ukládání (' + res.status + ')'); }
+        } else {
+          // Nová objednávka
+          data.order_number = 'SO-' + Date.now().toString(36).toUpperCase();
+          const res = await fetch('/api/wh/orders', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+          if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.error || 'Chyba při vytváření (' + res.status + ')'); }
+          const newOrder = await res.json();
+          orderId = newOrder.id;
+        }
+
+        // Přidej/aktualizuj položky k objednávce
+        if (_pendingItems.length > 0 && orderId) {
+          for (const item of _pendingItems) {
+            if (item.id) {
+              // Aktualizuj existující položku
+              await fetch('/api/wh/orders/' + orderId + '/items/' + item.id, {
+                method: 'PUT', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  quantity: item.quantity,
+                  unit_price: item.unit_price,
+                  total_price: item.quantity * item.unit_price,
+                }),
+              }).catch(e => console.error('Update item error:', e));
+              continue;
+            }
+            const itemRes = await fetch('/api/wh/orders/' + orderId + '/items', {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                product_id: item.product_id || null,
+                name: item.name,
+                quantity: item.quantity,
+                unit: item.unit,
+                unit_price: item.unit_price,
+                total_price: item.quantity * item.unit_price,
+              }),
+            });
+            if (!itemRes.ok) { console.error('Chyba přidání položky:', await itemRes.text()); continue; }
+            const savedItem = await itemRes.json();
+
+            // Ulož konfiguraci položky
+            if (item.configs && item.configs.length > 0 && savedItem.id) {
+              await fetch('/api/production/order-items/' + savedItem.id + '/config', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ configs: item.configs }),
+              }).catch(e => console.error('Config save error:', e));
+            }
+          }
+
+          // Aktualizuj celkovou částku
+          await fetch('/api/wh/orders/' + orderId, {
+            method: 'PUT', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ items_count: _pendingItems.length, total_amount: data.total_amount }),
+          });
+        }
+
+        _pendingItems = [];
+        closeModal();
+        loadOrders();
+        loadStats();
+        // Po vytvoření NOVÉ objednávky rovnou otevři detail dialog — tam
+        // uživatel přidá položky, nastaví výrobní sloty a vygeneruje odkaz
+        // pro zákazníka. Sjednocuje UX zadávání a úpravy.
+        if (!id && orderId) {
+          setTimeout(() => openOrderDetail(orderId), 50);
+        }
+      } catch(e) { alert('Chyba: ' + e.message); console.error('saveOrder error:', e); }
+    }
+
+    // ============================================================
+    // DETAIL objednávky
+    // ============================================================
+    // ─── Výrobní sloty — cache ────────────────────────────────────────────
+    let _availableSlots = [];    // surové DB sloty
+    let _slotWindows = [];       // generovaná okna s matchnutými DB sloty
+    let _slotConfig = { startDay: 1, endDay: 5 }; // Po–Pá
+
+    function _getSlotDays() {
+      var d = _slotConfig.endDay - _slotConfig.startDay + 1;
+      return d <= 0 ? d + 7 : d;
+    }
+
+    function _getSlotStartDate() {
+      var d = new Date();
+      d.setDate(d.getDate() - 56);
+      var diff = (d.getDay() - _slotConfig.startDay + 7) % 7;
+      d.setDate(d.getDate() - diff);
+      d.setHours(0,0,0,0);
+      return d;
+    }
+
+    function _generateSlotWindows() {
+      var windows = [];
+      var start = _getSlotStartDate();
+      var end = new Date(start);
+      end.setFullYear(end.getFullYear() + 2);
+      var d = new Date(start);
+      var days = _getSlotDays();
+      while (d < end) {
+        var slotStart = new Date(d);
+        var slotEnd = new Date(d);
+        slotEnd.setDate(slotEnd.getDate() + days - 1);
+        windows.push({ start: new Date(slotStart), end: new Date(slotEnd) });
+        d.setDate(d.getDate() + 7);
+      }
+      return windows;
+    }
+
+    function _findDbSlotForWindow(win) {
+      for (var i = 0; i < _availableSlots.length; i++) {
+        var s = _availableSlots[i];
+        var sStart = new Date(s.start_date); sStart.setHours(0,0,0,0);
+        var sEnd = new Date(s.end_date); sEnd.setHours(0,0,0,0);
+        if (sStart <= win.end && sEnd >= win.start) return s;
+      }
+      return null;
+    }
+
+    function _buildSlotWindows() {
+      var windows = _generateSlotWindows();
+      var today = new Date(); today.setHours(0,0,0,0);
+      _slotWindows = windows.map(function(win) {
+        var matched = _findDbSlotForWindow(win);
+        var isPast = win.end < today; // Neobsazený slot v minulosti → blokován
+        if (matched) {
+          var hasAssign = matched.assignments && matched.assignments.length > 0;
+          var isBlocked = matched.status === 'blocked';
+          var pastEmpty = isPast && !hasAssign && !isBlocked;
+          return {
+            id: matched.id,
+            start: win.start,
+            end: win.end,
+            start_date: matched.start_date,
+            end_date: matched.end_date,
+            status: pastEmpty ? 'blocked' : matched.status,
+            assignments: matched.assignments || [],
+            from_db: true,
+          };
+        } else {
+          return {
+            id: null,
+            start: win.start,
+            end: win.end,
+            start_date: win.start.toISOString(),
+            end_date: win.end.toISOString(),
+            status: isPast ? 'blocked' : 'open',
+            assignments: [],
+            from_db: false,
+          };
+        }
+      });
+    }
+
+    async function loadAvailableSlots() {
+      try {
+        // Načti slot config z localStorage (stejně jako výrobní sloty modul)
+        try {
+          var cfg = JSON.parse(localStorage.getItem('holyos_slot_config'));
+          if (cfg && cfg.startDay != null) _slotConfig = cfg;
+        } catch(e) {}
+        // Načti DB sloty
+        const now = _getSlotStartDate();
+        const future = new Date(now); future.setFullYear(future.getFullYear() + 2);
+        const from = now.toISOString().split('T')[0];
+        const to = future.toISOString().split('T')[0];
+        const res = await fetch('/api/slots?from=' + from + '&to=' + to, { credentials: 'include' });
+        const all = await res.json();
+        if (!Array.isArray(all)) { _availableSlots = []; } else { _availableSlots = all; }
+        _buildSlotWindows();
+      } catch(e) { _availableSlots = []; _slotWindows = []; }
+    }
+
+    function getSlotForItem(itemId) {
+      for (const slot of _availableSlots) {
+        if (slot.assignments) {
+          for (const a of slot.assignments) {
+            if (a.order_item_id === itemId) return slot;
+          }
+        }
+      }
+      return null;
+    }
+
+    function getFreeSlots() {
+      return _availableSlots.filter(function(s) {
+        return s.status === 'open' && (!s.assignments || s.assignments.length === 0);
+      });
+    }
+
+    function formatSlotLabel(slot) {
+      const start = new Date(slot.start_date);
+      const end = new Date(slot.end_date);
+      return start.getDate() + '.' + (start.getMonth()+1) + '. – ' + end.getDate() + '.' + (end.getMonth()+1) + '.' + end.getFullYear();
+    }
+
+    async function assignSlotToItem(itemId, slotId, orderId, productName, customerName, quantity, startDate, endDate) {
+      try {
+        var actualSlotId = slotId;
+
+        // Pokud slot neexistuje v DB (generované okno), vytvoř ho
+        if (!slotId && startDate && endDate) {
+          var sd = new Date(startDate), ed = new Date(endDate);
+          var slotName = 'Slot ' + sd.getDate() + '.' + (sd.getMonth()+1) + '.–' + ed.getDate() + '.' + (ed.getMonth()+1) + '.';
+          var createRes = await fetch('/api/slots', {
+            method: 'POST', credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              name: slotName,
+              start_date: sd.toISOString(),
+              end_date: ed.toISOString(),
+              capacity_hours: 8,
+              status: 'open',
+              color: '#3b82f6'
+            })
+          });
+          if (createRes.ok) {
+            var newSlot = await createRes.json();
+            actualSlotId = newSlot.id;
+          } else {
+            console.error('Chyba při vytváření slotu'); return;
+          }
+        }
+
+        if (!actualSlotId) return;
+
+        // Vytvoř SlotAssignment
+        await fetch('/api/slots/' + actualSlotId + '/assignments', {
+          method: 'POST', credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            order_item_id: itemId,
+            order_id: orderId,
+            product_name: productName || 'Položka',
+            customer_name: customerName || '',
+            quantity: parseFloat(quantity) || 1,
+            estimated_hours: 0,
+            priority: 0,
+            status: 'planned'
+          })
+        });
+        // Aktualizuj slot na full
+        await fetch('/api/slots/' + actualSlotId, {
+          method: 'PUT', credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: 'full' })
+        });
+        await loadAvailableSlots();
+        await recalcOrder(orderId);
+        openOrderDetail(orderId);
+        loadOrders();
+      } catch(e) { console.error(e); }
+    }
+
+    async function removeSlotFromItem(assignmentId, slotId, orderId) {
+      try {
+        await fetch('/api/slots/assignments/' + assignmentId, { method: 'DELETE', credentials: 'include' });
+        // Vrať slot na open
+        await fetch('/api/slots/' + slotId, {
+          method: 'PUT', credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: 'open' })
+        });
+        await loadAvailableSlots();
+        await recalcOrder(orderId);
+        openOrderDetail(orderId);
+        loadOrders();
+      } catch(e) { console.error(e); }
+    }
+
+    // ─── Inline slot timeline v detailu objednávky ─────────────────────
+    function buildOrderSlotTimeline(orderId, items, order) {
+      if (!_slotWindows || _slotWindows.length === 0) return '<div style="color:var(--text2);font-size:12px;padding:8px;">Žádné výrobní sloty.</div>';
+      const CZ_MONTHS = ['Leden','Únor','Březen','Duben','Květen','Červen','Červenec','Srpen','Září','Říjen','Listopad','Prosinec'];
+      const W = 100;
+      const today = new Date(); today.setHours(0,0,0,0);
+
+      // Měsíce
+      const monthSpans = {};
+      _slotWindows.forEach(function(s) {
+        const d = s.start;
+        const key = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
+        if (!monthSpans[key]) monthSpans[key] = { label: CZ_MONTHS[d.getMonth()] + ' ' + d.getFullYear(), count: 0 };
+        monthSpans[key].count++;
+      });
+
+      let html = '<div class="stl-wrap"><div class="stl-scroll" id="stl-scroll-' + orderId + '">';
+
+      // Month header
+      html += '<div class="stl-header">';
+      Object.keys(monthSpans).sort().forEach(function(k) {
+        const m = monthSpans[k];
+        html += '<div class="stl-month" style="width:' + (m.count*W) + 'px;min-width:' + (m.count*W) + 'px;">' + m.label + '</div>';
+      });
+      html += '</div>';
+
+      // Date header
+      html += '<div class="stl-dates">';
+      _slotWindows.forEach(function(s) {
+        const sd = s.start, ed = s.end;
+        const label = sd.getDate() + '.' + (sd.getMonth()+1) + '. – ' + ed.getDate() + '.' + (ed.getMonth()+1) + '.';
+        const isToday = today >= sd && today <= ed;
+        html += '<div class="stl-date' + (isToday ? ' today' : '') + '">' + label + '</div>';
+      });
+      html += '</div>';
+
+      // Slot row — generovaná okna s matchnutými DB sloty
+      html += '<div class="stl-row">';
+      _slotWindows.forEach(function(slot) {
+        const isFree = (!slot.assignments || slot.assignments.length === 0) && slot.status !== 'blocked' && slot.status !== 'full';
+        const isBlocked = slot.status === 'blocked';
+        const myAssign = slot.assignments ? slot.assignments.find(function(a) { return a.order_id === orderId; }) : null;
+        const cls = myAssign ? 'mine' : (isFree ? 'free' : (isBlocked ? 'blocked' : 'occupied'));
+        // V obsazeném slotu, který patří této objednávce, zobrazíme výrobní číslo kiosku
+        // — je to hlavní identifikátor pro výrobu. Když není, fallback na ✓.
+        var serial = '';
+        if (myAssign) {
+          serial = (myAssign.order_item && myAssign.order_item.serial_number) || '';
+        }
+        const label = myAssign
+          ? (serial ? '<span style="font-family:monospace;font-size:11px;font-weight:700;">' + esc(serial) + '</span>' : '✓')
+          : (isFree ? 'Volný' : '');
+
+        var click = '';
+        if (isFree) {
+          if (slot.id) {
+            click = ' onclick="pickSlotForActiveItem(' + slot.id + ',' + orderId + ',null,null)"';
+          } else {
+            click = ' onclick="pickSlotForActiveItem(null,' + orderId + ',\'' + slot.start.toISOString() + '\',\'' + slot.end.toISOString() + '\')"';
+          }
+        }
+        const titleAttr = myAssign && serial ? ' title="Výrobní č. ' + esc(serial) + '"' : '';
+        html += '<div class="stl-cell"><div class="stl-slot ' + cls + '"' + click + titleAttr + '>' + label + '</div></div>';
+      });
+
+      // Today line
+      var slotIdx = 0;
+      for (var i = 0; i < _slotWindows.length; i++) {
+        var sd = _slotWindows[i].start, ed = _slotWindows[i].end;
+        if (today >= sd && today <= ed) { slotIdx = i; break; }
+        if (today < sd) { slotIdx = Math.max(0, i - 0.5); break; }
+        slotIdx = i;
+      }
+      html += '<div class="stl-today" style="left:' + (slotIdx*W + W/2) + 'px;"><div class="stl-today-label">DNES</div></div>';
+      html += '</div></div></div>';
+      return html;
+    }
+
+    let _activePickItemId = null;
+    let _activePickOrderId = null;
+    let _activePickProductName = '';
+    let _activePickCustomerName = '';
+    let _activePickQuantity = 1;
+
+    function activateSlotPickForItem(itemId, orderId, productName, customerName, quantity) {
+      _activePickItemId = itemId;
+      _activePickOrderId = orderId;
+      _activePickProductName = productName;
+      _activePickCustomerName = customerName;
+      _activePickQuantity = quantity;
+      // Zvýrazni řádek
+      document.querySelectorAll('.modal tr').forEach(function(r) { r.style.background = ''; });
+      // Scroll timeline into view
+      var el = document.getElementById('stl-scroll-' + orderId);
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    async function pickSlotForActiveItem(slotId, orderId, startDate, endDate) {
+      if (!_activePickItemId) {
+        alert('Nejdřív klikněte na "Vybrat termín" u položky.');
+        return;
+      }
+      await assignSlotToItem(_activePickItemId, slotId, _activePickOrderId, _activePickProductName, _activePickCustomerName, _activePickQuantity, startDate, endDate);
+      _activePickItemId = null;
+    }
+
+    async function openOrderDetail(id) {
+      try {
+        const res = await fetch('/api/wh/orders/' + id);
+        const order = await res.json();
+        // Aktivni polozky ceniku pro dropdown 'Z ceniku' pri pridavani polozky
+        let pricelistItems = [];
+        try {
+          const plRes = await fetch('/api/wh/pricelist?active=true');
+          if (plRes.ok) pricelistItems = await plRes.json();
+        } catch(e) { console.warn('pricelist fetch fail', e); }
+        if (products.length === 0) { try { const r2 = await fetch('/api/production/products?type=product'); products = await r2.json(); } catch(e) {} }
+        if (companies.length === 0) await reloadCompanies();
+        if (_availableSlots.length === 0) await loadAvailableSlots();
+        const st = ORDER_STATUSES[order.status] || { label: order.status, color: '#9ca3af' };
+        const statusOpts = Object.entries(ORDER_STATUSES).map(([k,v]) => '<option value="' + k + '"' + (order.status === k ? ' selected' : '') + '>' + v.label + '</option>').join('');
+
+        const isEditable = order.status === 'new' || order.status === 'quoted';
+        const isLocked = order.status === 'ordered' || order.status === 'confirmed' || order.status === 'delivered' || order.status === 'in_production';
+
+        // Načti konfigurace pro položky
+        const itemConfigs = {};
+        if (order.items) {
+          for (const it of order.items) {
+            try {
+              const cfgRes = await fetch('/api/production/order-items/' + it.id + '/config');
+              const cfgs = await cfgRes.json();
+              if (cfgs.length > 0) itemConfigs[it.id] = cfgs;
+            } catch(e) {}
+          }
+        }
+
+        // Banner: zákazník potvrdil konfiguraci
+        let bannerHtml = '';
+        if (order.status === 'ordered') {
+          bannerHtml = '<div style="background:rgba(139,92,246,0.12);border:1px solid rgba(139,92,246,0.3);border-radius:10px;padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;gap:10px;">' +
+            '<div style="font-size:24px;">✅</div>' +
+            '<div><strong style="color:#8b5cf6;">Zákazník potvrdil konfiguraci</strong>' +
+            '<div style="font-size:12px;color:var(--text2);margin-top:2px;">Objednávka je zamčena. Položky a konfigurace nelze měnit.</div></div>' +
+          '</div>';
+        }
+
+        let itemsHtml = '';
+        if (order.items && order.items.length > 0) {
+          itemsHtml = '<table class="data-table"><thead><tr><th>Položka</th><th title="Výrobní číslo kiosku — viditelné i ve výrobních slotech">🔢 Výrobní č.</th><th>Množství</th><th>Jednotka</th><th>Cena/ks</th><th>Celkem</th><th title="První den výrobního slotu — pro plánování výroby">🏭 Výroba od</th><th>Termín dodání</th><th title="Interní — pro výrobu a definici výbavy. Zákazník toto nevidí.">🔗 Výrobek</th>' + (isEditable ? '<th></th>' : '') + '</tr></thead><tbody>';
+          for (const it of order.items) {
+            let configLine = '';
+            if (itemConfigs[it.id]) {
+              const labels = itemConfigs[it.id].map(c => {
+                if (c.option && c.option.group) return c.option.group.name + ': ' + c.option.name;
+                if (c.custom_value) return c.custom_value;
+                return '';
+              }).filter(Boolean);
+              if (labels.length) configLine = '<div style="font-size:11px;color:var(--text2);margin-top:2px;">⚙️ ' + labels.join(' · ') + '</div>';
+            }
+
+            // Najdi přiřazený slot pro tuto položku
+            const assignedSlot = getSlotForItem(it.id);
+            let slotHtml = '';
+            if (assignedSlot) {
+              const deliveryDate = new Date(assignedSlot.end_date).toLocaleDateString('cs-CZ');
+              const assignment = assignedSlot.assignments.find(a => a.order_item_id === it.id);
+              slotHtml = '<div style="display:flex;align-items:center;gap:4px;">' +
+                '<span style="background:rgba(249,115,22,0.15);color:#f97316;padding:3px 8px;border-radius:6px;font-size:11px;font-weight:600;">' + deliveryDate + '</span>';
+              if (isEditable && assignment) {
+                slotHtml += '<button style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:14px;padding:2px;" onclick="removeSlotFromItem(' + assignment.id + ',' + assignedSlot.id + ',' + id + ')" title="Zrušit termín">✕</button>';
+              }
+              slotHtml += '</div>';
+            } else if (isEditable) {
+              // Tlačítko pro aktivaci výběru na timeline
+              slotHtml = '<button class="btn btn-sm" style="background:rgba(16,185,129,0.12);color:#10b981;border-color:rgba(16,185,129,0.25);font-size:11px;padding:4px 10px;" onclick="activateSlotPickForItem(' + it.id + ',' + id + ',\'' + (it.name||'').replace(/'/g,"\\'") + '\',\'' + (order.company?.name||'').replace(/'/g,"\\'") + '\',' + (it.quantity||1) + ')">📅 Vybrat termín</button>';
+            } else {
+              slotHtml = '<span style="color:var(--text2);font-size:11px;">—</span>';
+            }
+
+            // Výroba od = první den přiřazeného slotu (z backendu — it.production_start)
+            const prodStartCell = it.production_start
+              ? '<span style="background:rgba(16,185,129,0.12);color:#10b981;padding:3px 8px;border-radius:6px;font-size:11px;font-weight:600;">' + new Date(it.production_start).toLocaleDateString('cs-CZ') + '</span>'
+              : '<span style="color:var(--text2);font-size:11px;">—</span>';
+
+            if (isEditable) {
+              // Dvouradkovy nazev: prvni radek bold (typicky EN), druhy maly gray (typicky CS)
+              const nameParts = (it.name || '—').split('\n');
+              const nameTop = esc(nameParts[0] || '—');
+              const nameBottom = nameParts.length > 1 ? esc(nameParts.slice(1).join(' ')) : '';
+              const nameCell = '<span class="person-name">' + nameTop + '</span>' +
+                (nameBottom ? '<div style="font-size:11px;color:var(--text2);margin-top:2px;font-style:italic;">' + nameBottom + '</div>' : '');
+              // Výrobní číslo kiosku — editovatelné inline, bez přenačtení modalu
+              const serialCellEditable = '<input type="text" value="' + esc(it.serial_number || '') + '" placeholder="—" maxlength="100" style="width:120px;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:4px 8px;color:var(--text);font-size:12px;font-family:monospace;" onchange="updateOrderItemSerial(' + it.id + ',' + id + ',this.value,this)" title="Výrobní číslo kiosku (např. SN-2026-001)">';
+              itemsHtml += '<tr>';
+              itemsHtml += '<td>' + nameCell + configLine + '</td>';
+              itemsHtml += '<td>' + serialCellEditable + '</td>';
+              itemsHtml += '<td style="font-weight:600;">1</td>'; // Vždy 1 ks — multiplikace řešena duplikací řádku
+              itemsHtml += '<td>' + it.unit + '</td>';
+              itemsHtml += '<td><input type="number" value="' + parseFloat(it.unit_price || 0) + '" step="0.01" style="width:90px;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:4px 8px;color:var(--text);font-size:13px;" onchange="updateOrderItem(' + it.id + ',' + id + ',\'unit_price\',this.value,1)"></td>';
+              itemsHtml += '<td style="font-weight:600;">' + parseFloat(it.total_price || 0).toLocaleString('cs-CZ') + ' ' + currencySymbol(order.currency) + '</td>';
+              itemsHtml += '<td>' + prodStartCell + '</td>';
+              itemsHtml += '<td>' + slotHtml + '</td>';
+              // Pripojeny vyrobek — interne pouze, pro vyrobu/vybavu. Cerveny warning kdyz chybi.
+              const productCell = it.product
+                ? '<div style="font-size:12px;"><span style="color:#8b5cf6;font-weight:600;">' + esc(it.product.code) + '</span><div style="color:var(--text2);font-size:11px;margin-top:1px;">' + esc(it.product.name) + '</div></div>'
+                : '<span style="display:inline-flex;align-items:center;gap:4px;background:rgba(239,68,68,0.15);color:#ef4444;border:1px solid rgba(239,68,68,0.35);padding:2px 8px;border-radius:6px;font-size:11px;font-weight:700;">⚠ Nenapojeno</span>';
+              itemsHtml += '<td>' + productCell + '</td>';
+              itemsHtml += '<td style="white-space:nowrap;">' +
+                '<button class="btn btn-sm" style="background:rgba(59,130,246,0.12);color:#3b82f6;border-color:rgba(59,130,246,0.25);font-size:11px;padding:4px 8px;margin-right:4px;" onclick="duplicateOrderItem(' + it.id + ',' + id + ')" title="Duplikovat se stejnou konfigurací">🔁</button>' +
+                '<button class="btn btn-danger btn-sm" onclick="deleteOrderItem(' + it.id + ',' + id + ')">🗑️</button>' +
+                '</td>';
+              itemsHtml += '</tr>';
+            } else {
+              const nameParts2 = (it.name || '—').split('\n');
+              const nameTop2 = esc(nameParts2[0] || '—');
+              const nameBottom2 = nameParts2.length > 1 ? esc(nameParts2.slice(1).join(' ')) : '';
+              const nameCell2 = '<span class="person-name">' + nameTop2 + '</span>' +
+                (nameBottom2 ? '<div style="font-size:11px;color:var(--text2);margin-top:2px;font-style:italic;">' + nameBottom2 + '</div>' : '');
+              // Výrobní číslo — jen zobrazit, zamčený stav
+              const serialCellLocked = it.serial_number
+                ? '<span style="font-family:monospace;font-size:12px;background:rgba(139,92,246,0.12);color:#8b5cf6;padding:3px 8px;border-radius:6px;font-weight:600;">' + esc(it.serial_number) + '</span>'
+                : '<span style="color:var(--text2);font-size:11px;">—</span>';
+              itemsHtml += '<tr>';
+              itemsHtml += '<td>' + nameCell2 + configLine + '</td>';
+              itemsHtml += '<td>' + serialCellLocked + '</td>';
+              itemsHtml += '<td>' + it.quantity + '</td><td>' + it.unit + '</td>';
+              itemsHtml += '<td>' + parseFloat(it.unit_price || 0).toLocaleString('cs-CZ') + ' ' + currencySymbol(order.currency) + '</td>';
+              itemsHtml += '<td style="font-weight:600;">' + parseFloat(it.total_price || 0).toLocaleString('cs-CZ') + ' ' + currencySymbol(order.currency) + '</td>';
+              itemsHtml += '<td>' + prodStartCell + '</td>';
+              itemsHtml += '<td>' + slotHtml + '</td>';
+              const productCell2 = it.product
+                ? '<div style="font-size:12px;"><span style="color:#8b5cf6;font-weight:600;">' + esc(it.product.code) + '</span><div style="color:var(--text2);font-size:11px;margin-top:1px;">' + esc(it.product.name) + '</div></div>'
+                : '<span style="display:inline-flex;align-items:center;gap:4px;background:rgba(239,68,68,0.15);color:#ef4444;border:1px solid rgba(239,68,68,0.35);padding:2px 8px;border-radius:6px;font-size:11px;font-weight:700;">⚠ Nenapojeno</span>';
+              itemsHtml += '<td>' + productCell2 + '</td>';
+              itemsHtml += '</tr>';
+            }
+          }
+          itemsHtml += '</tbody></table>';
+        } else {
+          itemsHtml = '<div style="color:var(--text2);font-size:13px;padding:12px;">Zatím žádné položky</div>';
+        }
+
+        const prodDetailOpts = products.map(p => '<option value="' + p.id + '">' + p.code + ' — ' + p.name + '</option>').join('');
+
+        // Moznosti z ceniku — priklada data-* atributy pro auto-fill do form fields
+        const plOpts = pricelistItems.map(function(pl) {
+          const priceCzk = pl.price_czk != null ? parseFloat(pl.price_czk) : null;
+          const priceEur = pl.price_eur != null ? parseFloat(pl.price_eur) : null;
+          const truckCzk = pl.truck_price_czk != null ? parseFloat(pl.truck_price_czk) : null;
+          const truckEur = pl.truck_price_eur != null ? parseFloat(pl.truck_price_eur) : null;
+          // Popisek: nazev + aktualni cena podle meny + produkt code
+          const priceForCurrency = order.currency === 'EUR' ? priceEur : priceCzk;
+          const currencySym = order.currency === 'EUR' ? '€' : 'Kč';
+          const pricePart = priceForCurrency != null
+            ? ' — ' + priceForCurrency.toLocaleString('cs-CZ') + ' ' + currencySym
+            : ' — bez ceny ' + currencySym;
+          const prodPart = pl.product ? ' [' + pl.product.code + ']' : ' ⚠ nenapojeno';
+          return '<option value="' + pl.id + '"' +
+            ' data-name-cs="' + esc(pl.name_cs) + '"' +
+            ' data-name-en="' + esc(pl.name_en || '') + '"' +
+            ' data-product-id="' + (pl.product_id || '') + '"' +
+            ' data-price-czk="' + (priceCzk != null ? priceCzk : '') + '"' +
+            ' data-price-eur="' + (priceEur != null ? priceEur : '') + '"' +
+            ' data-truck-czk="' + (truckCzk != null ? truckCzk : '') + '"' +
+            ' data-truck-eur="' + (truckEur != null ? truckEur : '') + '"' +
+            '>' + esc(pl.name_cs) + pricePart + prodPart + '</option>';
+        }).join('');
+
+        // Sekce přidávání položek (jen pokud je editovatelné)
+        let addItemSection = '';
+        if (isEditable) {
+          // Vse do jednoho flex radku: cenik, kamion, cena, tlacitko.
+          // Nazev je hidden — plni se z vybrane polozky ceniku.
+          if (pricelistItems.length === 0) {
+            addItemSection = '<div style="border-top:1px solid var(--border);padding-top:16px;">' +
+              '<h3 style="font-size:14px;margin-bottom:8px;">➕ Přidat položku</h3>' +
+              '<div style="padding:14px;background:rgba(234,179,8,0.08);border:1px solid rgba(234,179,8,0.3);border-radius:8px;font-size:13px;color:var(--text2);">' +
+                '⚠️ V ceníku zatím nejsou žádné aktivní položky. Přidejte je v záložce <strong style="color:#eab308;">💰 Ceník</strong>, pak se sem budou dát vkládat.' +
+              '</div>' +
+            '</div>';
+          } else {
+            addItemSection = '<div style="border-top:1px solid var(--border);padding-top:16px;">' +
+              '<h3 style="font-size:14px;margin-bottom:8px;">➕ Přidat položku</h3>' +
+              '<form onsubmit="addOrderItem(event,' + id + ')" style="display:flex;gap:10px;flex-wrap:wrap;align-items:end;background:rgba(234,179,8,0.06);border:1px solid rgba(234,179,8,0.2);border-radius:8px;padding:10px 12px;">' +
+                // Vsechny nazev/produkt/mnozstvi/jednotka se plni automaticky — uzivatel vidi jen cenik + cenu.
+                '<input type="hidden" name="product_id" id="add-item-product-hidden" value="">' +
+                '<input type="hidden" name="name" id="add-item-name-hidden" value="">' +
+                '<input type="hidden" name="quantity" value="1">' +
+                '<input type="hidden" name="unit" value="ks">' +
+                '<div class="form-group" style="flex:3;min-width:260px;margin-bottom:0;">' +
+                  '<label style="color:#eab308;font-weight:600;">💰 Položka z ceníku (měna: ' + order.currency + ')</label>' +
+                  '<select id="add-item-pricelist" required onchange="fillFromPricelist(this, \'' + order.currency + '\', document.getElementById(\'add-item-truck\').checked)">' +
+                    '<option value="">— Vyberte položku —</option>' + plOpts +
+                  '</select>' +
+                '</div>' +
+                '<label style="display:flex;align-items:center;gap:6px;cursor:pointer;margin-bottom:6px;font-size:13px;white-space:nowrap;" title="Pouzit kamionovou (velkoobchodni) cenu">' +
+                  '<input type="checkbox" id="add-item-truck" onchange="fillFromPricelist(document.getElementById(\'add-item-pricelist\'), \'' + order.currency + '\', this.checked)" style="width:16px;height:16px;cursor:pointer;">' +
+                  '<span style="color:#0ea5e9;font-weight:600;">🚛 Kamion</span>' +
+                '</label>' +
+                '<div class="form-group" style="width:130px;margin-bottom:0;"><label>Cena/ks</label><input type="number" name="unit_price" value="0" step="0.01" title="Auto-doplneno z ceniku; lze prepsat"></div>' +
+                '<button type="submit" class="btn btn-primary btn-sm" style="margin-bottom:2px;">+ Přidat</button>' +
+              '</form>' +
+              '<div style="font-size:11px;color:var(--text2);margin-top:6px;">💡 Každá položka = 1 kus = 1 řádek. Pro další stejný kus použijte <strong>🔁 Duplikovat</strong> u existující položky.</div>' +
+            '</div>';
+          }
+        }
+
+        document.getElementById('modal-root').innerHTML = '<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal" style="width:1280px;max-width:96vw;">' +
+          '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">' +
+            '<h2 style="margin:0;">' + order.order_number + '</h2>' +
+            '<div style="display:flex;gap:8px;align-items:center;">' +
+              '<select onchange="updateOrderStatus(' + id + ',this.value)" style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:6px 10px;color:var(--text);font-size:12px;">' + statusOpts + '</select>' +
+              renderStatusBadges({ ...order, type: 'sales' }, { size: 'lg' }) +
+            '</div>' +
+          '</div>' +
+          bannerHtml +
+
+          // ─── Editovatelné hlavní údaje objednávky ───
+          (isEditable ? (function() {
+            var compEditOpts = companies.map(function(c) {
+              return '<option value="' + c.id + '"' + (order.company_id === c.id ? ' selected' : '') + '>' + c.name + '</option>';
+            }).join('');
+            // Computed production dates (read-only) — přicházejí z backendu
+            const prodStart = order.production_start_last
+              ? new Date(order.production_start_last).toLocaleDateString('cs-CZ')
+              : '—';
+            const prodFinish = order.production_finish_last
+              ? new Date(order.production_finish_last).toLocaleDateString('cs-CZ')
+              : '—';
+            return '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;padding:16px;background:var(--bg);border:1px solid var(--border);border-radius:10px;">' +
+              '<div class="form-group"><label style="font-size:11px;color:var(--text2);">Odběratel</label><select id="detail-company" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:6px 10px;color:var(--text);font-size:13px;" onchange="updateOrderField(' + id + ',\'company_id\',this.value)">' + compEditOpts + '</select></div>' +
+              '<div class="form-group"><label style="font-size:11px;color:var(--text2);">Měna</label><select id="detail-currency" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:6px 10px;color:var(--text);font-size:13px;" onchange="updateOrderField(' + id + ',\'currency\',this.value)">' +
+                '<option value="CZK"' + ((order.currency||'CZK')==='CZK'?' selected':'') + '>CZK (Kč)</option>' +
+                '<option value="EUR"' + (order.currency==='EUR'?' selected':'') + '>EUR (€)</option>' +
+              '</select></div>' +
+              '<div class="form-group"><label style="font-size:11px;color:var(--text2);">📅 Očekávané datum — zákazník</label><input type="date" id="detail-delivery" value="' + (order.expected_delivery ? new Date(order.expected_delivery).toISOString().split('T')[0] : '') + '" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:6px 10px;color:var(--text);font-size:13px;" onchange="updateOrderField(' + id + ',\'expected_delivery\',this.value)" title="Datum slíbené zákazníkovi"></div>' +
+              '<div class="form-group"><label style="font-size:11px;color:var(--text2);">🏭 Očekávané datum — výroba <span style="color:var(--text2);font-weight:400;">(z posledního slotu)</span></label>' +
+                '<div style="background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.2);border-radius:8px;padding:6px 10px;font-size:13px;color:#10b981;display:flex;justify-content:space-between;gap:8px;">' +
+                  '<span title="Start posledního slotu">▶ ' + prodStart + '</span>' +
+                  '<span style="color:var(--text2);">→</span>' +
+                  '<span title="Konec posledního slotu">■ ' + prodFinish + '</span>' +
+                '</div>' +
+              '</div>' +
+              '<div class="form-group" style="grid-column:1 / -1;"><label style="font-size:11px;color:var(--text2);">Poznámka</label><input type="text" id="detail-note" value="' + (order.note || '').replace(/"/g, '&quot;') + '" placeholder="Poznámka..." style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:6px 10px;color:var(--text);font-size:13px;" onchange="updateOrderField(' + id + ',\'note\',this.value)"></div>' +
+            '</div>';
+          })() :
+          '<div style="font-size:13px;color:var(--text2);margin-bottom:16px;">💰 Prodejní · ' + (order.company?.name || '—') + ' · Celkem: <strong style="color:var(--text);">' + parseFloat(order.total_amount || 0).toLocaleString('cs-CZ') + ' ' + (order.currency || 'CZK') + '</strong></div>') +
+
+          (isLocked ? '<div style="font-size:11px;color:var(--text2);background:var(--bg);border-radius:8px;padding:8px 12px;margin-bottom:12px;">🔒 Objednávka je zamčená — pro editaci změňte stav zpět na Nový.</div>' : '') +
+          '<div style="border-top:1px solid var(--border);padding-top:16px;margin-bottom:12px;"><h3 style="font-size:14px;margin-bottom:8px;">📦 Položky</h3>' + itemsHtml + '</div>' +
+          addItemSection +
+          (isEditable ? '<div style="border-top:1px solid var(--border);padding-top:14px;margin-top:12px;"><h3 style="font-size:14px;margin-bottom:4px;">📅 Výrobní sloty — termín dodání</h3><div style="font-size:11px;color:var(--text2);margin-bottom:6px;">Klikněte na &quot;Vybrat termín&quot; u položky, pak klikněte na volný slot v časové ose.</div>' + buildOrderSlotTimeline(id, order.items || [], order) + '</div>' : '') +
+
+          // ─── Panel Platba (viditelný od stavu 'ordered' dál) ───
+          (['ordered','confirmed','delivered'].includes(order.status) ? renderPaymentPanel(order) : '') +
+
+          // ─── Odkaz pro zákazníka ───
+          '<div style="border-top:1px solid var(--border);padding-top:14px;margin-top:12px;">' +
+            '<h3 style="font-size:14px;margin-bottom:8px;">🔗 Odkaz pro zákazníka' +
+              (order.status !== 'new'
+                ? ' <span style="font-size:11px;color:#f59e0b;background:rgba(245,158,11,0.12);padding:2px 8px;border-radius:10px;margin-left:6px;">🔒 Deaktivován</span>'
+                : ''
+              ) +
+            '</h3>' +
+            '<div id="customer-link-area">' +
+              (order.share_token
+                ? (order.status !== 'new'
+                    // Neaktivní stav — odkaz zamčený, nelze kopírovat ani otevírat
+                    ? '<div style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.25);border-radius:8px;padding:10px 14px;">' +
+                        '<div style="font-size:12px;color:var(--text2);margin-bottom:6px;">Odkaz je aktivní jen když je objednávka ve stavu <strong style="color:#3b82f6;">Nový</strong>. Zákazník se teď po kliknutí dozví, že už je objednávka zpracovaná.</div>' +
+                        '<div style="font-family:monospace;font-size:11px;color:var(--text2);word-break:break-all;opacity:0.5;text-decoration:line-through;">' + (order.share_url || (window.location.origin + '/order/' + order.share_token)) + '</div>' +
+                      '</div>'
+                    // Aktivní stav
+                    : '<div style="display:flex;gap:8px;align-items:center;">' +
+                        '<input type="text" readonly value="' + (order.share_url || (window.location.origin + '/order/' + order.share_token)) + '" id="modal-share-url" style="flex:1;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:12px;font-family:monospace;" onclick="this.select()">' +
+                        '<button type="button" class="btn btn-sm btn-primary" onclick="copyModalShareUrl()">📋</button>' +
+                      '</div>'
+                  )
+                : (order.status !== 'new'
+                    ? '<div style="font-size:12px;color:var(--text2);font-style:italic;">Vytvoření odkazu není možné — objednávka není ve stavu Nový.</div>'
+                    : '<button type="button" class="btn btn-sm" style="background:rgba(59,130,246,0.12);color:#3b82f6;border-color:rgba(59,130,246,0.25);" onclick="generateShareLink(' + id + ')">🔗 Vygenerovat odkaz</button>'
+                  )
+              ) +
+            '</div>' +
+          '</div>' +
+
+          '<div class="modal-actions" style="margin-top:20px;">' +
+            '<div style="flex:1;"></div>' +
+            // Fáze 6 — Vystavit fakturu (jen pro objednávky, které mají položky a nejsou cancelled)
+            ((order.items && order.items.length > 0 && order.status !== 'cancelled')
+              ? '<button class="btn btn-secondary" onclick="createInvoiceFromOrder(' + id + ')" title="Vystaví fakturu (AR) z této objednávky">💼 Vystavit fakturu</button>'
+              : '') +
+            '<button class="btn btn-primary" onclick="saveAndCloseDetail(' + id + ')">✅ Uložit</button>' +
+            '<button class="btn btn-secondary" onclick="closeModal()">Zavřít</button>' +
+          '</div>' +
+        '</div></div>';
+
+        // Drag-to-scroll na timeline
+        var stlEl = document.getElementById('stl-scroll-' + id);
+        if (stlEl) {
+          var drag = false, sx = 0, sl = 0;
+          stlEl.addEventListener('mousedown', function(e) { drag = true; sx = e.pageX; sl = stlEl.scrollLeft; stlEl.style.cursor = 'grabbing'; });
+          document.addEventListener('mouseup', function() { drag = false; if (stlEl) stlEl.style.cursor = 'grab'; });
+          document.addEventListener('mousemove', function(e) { if (!drag) return; e.preventDefault(); stlEl.scrollLeft = sl - (e.pageX - sx); });
+        }
+      } catch(e) { console.error(e); }
+    }
+
+    // ============================================================
+    // DOPLATKOVÁ FAKTURA — buňka v seznamu + sekce v detail panelu
+    // ============================================================
+
+    function renderFinalInvoiceCell(order) {
+      const inv = order.final_invoice;
+      if (!inv) {
+        // Pokud má rozdělenou platbu se zaplacenou zálohou — čekáme na worker
+        if (order.payment_split && order.deposit_paid) {
+          return '<span style="font-size:11px;color:var(--text2);font-style:italic;">⏳ čeká na vystavení</span>';
+        }
+        return '<span style="color:var(--text2);">—</span>';
+      }
+      const today = new Date(); today.setHours(0,0,0,0);
+      const due = inv.date_due ? new Date(inv.date_due) : null;
+      const overdue = due && inv.status !== 'paid' && due < today;
+      let pillColor = '#3b82f6'; // issued
+      let pillLabel = 'Vystaveno';
+      if (inv.status === 'paid') { pillColor = '#10b981'; pillLabel = 'Zaplaceno'; }
+      else if (overdue) { pillColor = '#ef4444'; pillLabel = 'Po splatnosti'; }
+      const dateStr = inv.date_issued ? new Date(inv.date_issued).toLocaleDateString('cs-CZ') : '—';
+      const amountStr = parseFloat(inv.total || 0).toLocaleString('cs-CZ') + ' ' + (inv.currency || 'CZK');
+      return '<div style="display:flex;flex-direction:column;gap:2px;font-size:11px;">' +
+        '<span style="font-weight:600;color:var(--text);" title="' + esc(inv.invoice_number) + '">' + dateStr + '</span>' +
+        '<span style="color:var(--text2);">' + amountStr + '</span>' +
+        '<span style="display:inline-flex;align-items:center;gap:3px;background:' + pillColor + '22;color:' + pillColor + ';padding:1px 6px;border-radius:6px;font-size:10px;font-weight:600;width:fit-content;">' + pillLabel + '</span>' +
+      '</div>';
+    }
+
+    function renderFinalInvoiceSection(order) {
+      const inv = order.final_invoice;
+      const leadDays = order.final_invoice_lead_days != null ? order.final_invoice_lead_days : 14;
+
+      // Když není rozdělená platba — sekce se nezobrazí vůbec
+      if (!order.payment_split) return '';
+
+      let body = '';
+      if (inv) {
+        const today = new Date(); today.setHours(0,0,0,0);
+        const due = inv.date_due ? new Date(inv.date_due) : null;
+        const overdue = due && inv.status !== 'paid' && due < today;
+        let pillColor = '#3b82f6'; let pillLabel = '📤 Vystaveno';
+        if (inv.status === 'paid') { pillColor = '#10b981'; pillLabel = '✓ Zaplaceno'; }
+        else if (overdue) { pillColor = '#ef4444'; pillLabel = '⚠ Po splatnosti'; }
+        const dateIss = inv.date_issued ? new Date(inv.date_issued).toLocaleDateString('cs-CZ') : '—';
+        const dateDue = inv.date_due ? new Date(inv.date_due).toLocaleDateString('cs-CZ') : '—';
+        const amount = parseFloat(inv.total || 0).toLocaleString('cs-CZ') + ' ' + (inv.currency || 'CZK');
+        body = '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;padding:10px;background:var(--surface);border:1px solid var(--border);border-radius:8px;font-size:12px;">' +
+          '<div><div style="color:var(--text2);font-size:11px;">Číslo</div><div style="font-weight:600;font-family:monospace;">' + esc(inv.invoice_number) + '</div></div>' +
+          '<div><div style="color:var(--text2);font-size:11px;">Vystaveno</div><div style="font-weight:600;">' + dateIss + '</div></div>' +
+          '<div><div style="color:var(--text2);font-size:11px;">Splatno</div><div style="font-weight:600;">' + dateDue + '</div></div>' +
+          '<div><div style="color:var(--text2);font-size:11px;">Částka</div><div style="font-weight:600;color:#f59e0b;">' + amount + '</div></div>' +
+          '<div style="grid-column:1 / -1;display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--border);padding-top:8px;margin-top:2px;">' +
+            '<span style="display:inline-flex;align-items:center;gap:4px;background:' + pillColor + '22;color:' + pillColor + ';padding:3px 10px;border-radius:6px;font-weight:600;">' + pillLabel + '</span>' +
+            '<a href="/modules/ucetni-doklady/index.html?invoice=' + inv.id + '" style="color:#3b82f6;text-decoration:none;font-size:11px;">Otevřít v Účetních dokladech →</a>' +
+          '</div>' +
+        '</div>';
+      } else {
+        const eligible = order.deposit_paid;
+        const hint = eligible
+          ? 'Worker vystaví fakturu automaticky <strong>' + leadDays + ' dní před začátkem výroby</strong>. Pokud potřebuješ vystavit hned, klikni níže.'
+          : 'Faktura na doplatek se vystaví automaticky <strong>' + leadDays + ' dní před začátkem výroby</strong>, jakmile zákazník zaplatí zálohu.';
+        body = '<div style="padding:10px;background:var(--surface);border:1px solid var(--border);border-radius:8px;font-size:12px;color:var(--text2);">' +
+          hint +
+          '<div style="display:flex;align-items:center;gap:8px;margin-top:8px;">' +
+            '<label style="font-size:11px;color:var(--text2);">Dní před výroba od:</label>' +
+            '<input type="number" min="0" max="180" id="lead-days-' + order.id + '" value="' + leadDays + '" style="width:70px;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:4px 8px;color:var(--text);font-size:12px;" onchange="updateLeadDays(' + order.id + ',this.value)">' +
+            '<button class="btn btn-sm" style="background:rgba(245,158,11,0.12);color:#f59e0b;border-color:rgba(245,158,11,0.3);margin-left:auto;" onclick="issueFinalInvoiceNow(' + order.id + ')">📄 Vystavit doplatkovou fakturu hned</button>' +
+          '</div>' +
+        '</div>';
+      }
+
+      return '<div style="margin-top:12px;">' +
+        '<div style="font-size:12px;color:var(--text2);margin-bottom:6px;font-weight:600;">💵 Faktura na doplatek</div>' +
+        body +
+      '</div>';
+    }
+
+    async function updateLeadDays(orderId, v) {
+      try {
+        await fetch('/api/wh/orders/' + orderId + '/payment-config', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ final_invoice_lead_days: parseInt(v, 10) || 14 }),
+        });
+      } catch(e) { console.error(e); }
+    }
+
+    async function issueFinalInvoiceNow(orderId) {
+      if (!confirm('Vystavit doplatkovou fakturu hned? Worker by ji vystavil automaticky N dní před začátkem výroby.')) return;
+      try {
+        const res = await fetch('/api/wh/orders/' + orderId + '/issue-final-invoice', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ skipEligibilityChecks: false }),
+        });
+        const j = await res.json();
+        if (!res.ok) {
+          alert('Nelze vystavit: ' + (j.error || 'neznámá chyba'));
+          return;
+        }
+        alert('✓ Vystavena faktura ' + (j.invoice?.invoice_number || ''));
+        openOrderDetail(orderId);
+        loadOrders();
+      } catch(e) { console.error(e); alert('Chyba při vystavení faktury'); }
+    }
+
+    // ============================================================
+    // PLATBA — záloha / doplatek / plná platba + uvolnění do výroby
+    // ============================================================
+
+    // Vypočítá výši zálohy z deposit_amount nebo deposit_percent.
+    function computeDepositValue(order) {
+      const total = parseFloat(order.total_amount || 0);
+      if (order.deposit_amount != null && order.deposit_amount !== '') {
+        return parseFloat(order.deposit_amount);
+      }
+      if (order.deposit_percent != null && order.deposit_percent !== '') {
+        return Math.round((total * parseInt(order.deposit_percent, 10) / 100) * 100) / 100;
+      }
+      return null;
+    }
+
+    function fmtMoney(v, cur) {
+      return parseFloat(v || 0).toLocaleString('cs-CZ', { maximumFractionDigits: 2 }) + ' ' + (cur || 'CZK');
+    }
+
+    // Vrátí HTML panelu Platba pro detail objednávky.
+    function renderPaymentPanel(order) {
+      const cur = order.currency || 'CZK';
+      const total = parseFloat(order.total_amount || 0);
+      const dep = computeDepositValue(order);
+      const rest = dep != null ? Math.max(0, total - dep) : null;
+      const oid = order.id;
+
+      // Stav uvolnění do výroby
+      const releaseInfo = order.released_at
+        ? '<span style="display:inline-flex;align-items:center;gap:4px;background:rgba(16,185,129,0.15);color:#10b981;padding:3px 10px;border-radius:6px;font-size:11px;font-weight:600;">🏭 Uvolněno do výroby ' + new Date(order.released_at).toLocaleDateString('cs-CZ') + '</span>'
+        : '<span style="display:inline-flex;align-items:center;gap:4px;background:rgba(148,163,184,0.15);color:var(--text2);padding:3px 10px;border-radius:6px;font-size:11px;font-weight:500;">⏳ Čeká na uvolnění do výroby</span>';
+
+      // Konfigurace platby
+      const splitOn = !!order.payment_split;
+      const releaseOnDeposit = order.release_on_deposit !== false; // default true
+      const depAmount = order.deposit_amount != null ? order.deposit_amount : '';
+      const depPercent = order.deposit_percent != null ? order.deposit_percent : '';
+
+      // Tlačítka platby
+      let paymentButtons = '';
+      if (splitOn) {
+        const depBtn = order.deposit_paid
+          ? '<span style="display:inline-flex;align-items:center;gap:6px;background:rgba(16,185,129,0.15);color:#10b981;padding:6px 12px;border-radius:8px;font-size:12px;font-weight:600;">✓ Záloha přijata ' + (order.deposit_paid_at ? new Date(order.deposit_paid_at).toLocaleDateString('cs-CZ') : '') + ' <button onclick="markPayment(' + oid + ',\'deposit\',false)" style="background:none;border:none;color:#10b981;cursor:pointer;opacity:0.5;font-size:12px;" title="Zrušit označení">✕</button></span>'
+          : '<button class="btn btn-sm" style="background:rgba(59,130,246,0.12);color:#3b82f6;border-color:rgba(59,130,246,0.3);" onclick="markPayment(' + oid + ',\'deposit\',true)">💰 Záloha přišla' + (dep != null ? ' (' + fmtMoney(dep, cur) + ')' : '') + '</button>';
+        const finBtn = order.final_paid
+          ? '<span style="display:inline-flex;align-items:center;gap:6px;background:rgba(16,185,129,0.15);color:#10b981;padding:6px 12px;border-radius:8px;font-size:12px;font-weight:600;">✓ Doplatek přijat ' + (order.final_paid_at ? new Date(order.final_paid_at).toLocaleDateString('cs-CZ') : '') + ' <button onclick="markPayment(' + oid + ',\'final\',false)" style="background:none;border:none;color:#10b981;cursor:pointer;opacity:0.5;font-size:12px;" title="Zrušit označení">✕</button></span>'
+          : '<button class="btn btn-sm" style="background:rgba(245,158,11,0.12);color:#f59e0b;border-color:rgba(245,158,11,0.3);" onclick="markPayment(' + oid + ',\'final\',true)">💵 Doplatek přišel' + (rest != null ? ' (' + fmtMoney(rest, cur) + ')' : '') + '</button>';
+        paymentButtons = depBtn + ' ' + finBtn;
+      } else {
+        const fullBtn = order.final_paid
+          ? '<span style="display:inline-flex;align-items:center;gap:6px;background:rgba(16,185,129,0.15);color:#10b981;padding:6px 12px;border-radius:8px;font-size:12px;font-weight:600;">✓ Zaplaceno ' + (order.final_paid_at ? new Date(order.final_paid_at).toLocaleDateString('cs-CZ') : '') + ' <button onclick="markPayment(' + oid + ',\'full\',false)" style="background:none;border:none;color:#10b981;cursor:pointer;opacity:0.5;font-size:12px;" title="Zrušit označení">✕</button></span>'
+          : '<button class="btn btn-sm btn-primary" onclick="markPayment(' + oid + ',\'full\',true)">💰 Platba přišla' + (total ? ' (' + fmtMoney(total, cur) + ')' : '') + '</button>';
+        paymentButtons = fullBtn;
+      }
+
+      return '<div style="border-top:1px solid var(--border);padding-top:14px;margin-top:12px;">' +
+        '<h3 style="font-size:14px;margin-bottom:10px;display:flex;align-items:center;gap:8px;">💳 Platba ' + releaseInfo + '</h3>' +
+        '<div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:14px;">' +
+          // Řádek 1: režim platby
+          '<div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:' + (splitOn ? '12px' : '8px') + ';">' +
+            '<label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;">' +
+              '<input type="checkbox"' + (splitOn ? ' checked' : '') + ' onchange="togglePaymentSplit(' + oid + ',this.checked)"> ' +
+              'Rozdělená platba (záloha + doplatek)' +
+            '</label>' +
+            (splitOn ? '<label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;color:var(--text2);">' +
+              '<input type="checkbox"' + (releaseOnDeposit ? ' checked' : '') + ' onchange="toggleReleaseOnDeposit(' + oid + ',this.checked)"> ' +
+              'Uvolnit výrobu už po záloze' +
+            '</label>' : '') +
+          '</div>' +
+          // Řádek 2: nastavení výše zálohy (jen u split)
+          (splitOn ? '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px;">' +
+            '<div><label style="font-size:11px;color:var(--text2);">Záloha — částka</label>' +
+              '<input type="number" step="0.01" id="dep-amount-' + oid + '" value="' + depAmount + '" placeholder="—" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:6px 10px;color:var(--text);font-size:13px;" onchange="updateDepositAmount(' + oid + ',this.value)"></div>' +
+            '<div><label style="font-size:11px;color:var(--text2);">…nebo % z celkem</label>' +
+              '<input type="number" min="0" max="100" id="dep-percent-' + oid + '" value="' + depPercent + '" placeholder="—" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:6px 10px;color:var(--text);font-size:13px;" onchange="updateDepositPercent(' + oid + ',this.value)"></div>' +
+            '<div><label style="font-size:11px;color:var(--text2);">Vypočtené hodnoty</label>' +
+              '<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;line-height:1.4;">' +
+                'Záloha: <strong>' + (dep != null ? fmtMoney(dep, cur) : '—') + '</strong><br>' +
+                'Doplatek: <strong>' + (rest != null ? fmtMoney(rest, cur) : '—') + '</strong>' +
+              '</div></div>' +
+          '</div>' : '') +
+          // Řádek 3: tlačítka platby
+          '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">' + paymentButtons + '</div>' +
+          // Sekce s doplatkovou fakturou (vidí se jen u rozdělené platby)
+          renderFinalInvoiceSection(order) +
+          // Footer s info o budoucí automatice
+          '<div style="font-size:11px;color:var(--text2);margin-top:10px;font-style:italic;">' +
+            'ℹ️ Zatím se platba označuje ručně. Připravujeme auto-párování s bankovním výpisem (Účetní iniciativa).' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+    }
+
+    // Toggle: rozdělená platba ano/ne
+    async function togglePaymentSplit(orderId, on) {
+      try {
+        await fetch('/api/wh/orders/' + orderId + '/payment-config', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ payment_split: !!on }),
+        });
+        openOrderDetail(orderId);
+        loadOrders();
+      } catch(e) { console.error(e); alert('Nepodařilo se uložit nastavení platby.'); }
+    }
+
+    // Toggle: uvolnit výrobu už po záloze
+    async function toggleReleaseOnDeposit(orderId, on) {
+      try {
+        await fetch('/api/wh/orders/' + orderId + '/payment-config', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ release_on_deposit: !!on }),
+        });
+      } catch(e) { console.error(e); }
+    }
+
+    async function updateDepositAmount(orderId, v) {
+      try {
+        await fetch('/api/wh/orders/' + orderId + '/payment-config', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            deposit_amount: v === '' ? null : parseFloat(v),
+            // když uživatel zadá pevnou částku, vyčistíme procenta (jen jedno z dvou)
+            deposit_percent: null,
+          }),
+        });
+        openOrderDetail(orderId);
+      } catch(e) { console.error(e); }
+    }
+
+    async function updateDepositPercent(orderId, v) {
+      try {
+        await fetch('/api/wh/orders/' + orderId + '/payment-config', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            deposit_percent: v === '' ? null : parseInt(v, 10),
+            deposit_amount: null,
+          }),
+        });
+        openOrderDetail(orderId);
+      } catch(e) { console.error(e); }
+    }
+
+    // Manuální označení platby (zatím; auto-párování s bankou bude později).
+    // kind: 'deposit' | 'final' | 'full'
+    async function markPayment(orderId, kind, paid) {
+      try {
+        const res = await fetch('/api/wh/orders/' + orderId + '/payment', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ kind, paid }),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          alert('Chyba: ' + (err.error || 'nelze označit platbu'));
+          return;
+        }
+        const result = await res.json();
+        // Když se rozpadla objednávka do výroby, ukaž souhrn
+        if (result.release && result.release.released && result.release.batches?.length) {
+          const cnt = result.release.batches.length;
+          const numbers = result.release.batches.map(b => b.batch_number).join(', ');
+          alert('✅ Platba označena. Vytvořeno ' + cnt + ' výrobních dávek: ' + numbers);
+        }
+        openOrderDetail(orderId);
+        loadOrders();
+        loadStats();
+      } catch(e) {
+        console.error(e);
+        alert('Síťová chyba při označení platby.');
+      }
+    }
+
+    // Doplni formu pro pridani polozky z vybrane polozky ceniku.
+    // currency = 'CZK' | 'EUR'; useTruck = true pouzije kamionovou cenu.
+    function fillFromPricelist(sel, currency, useTruck) {
+      if (!sel || !sel.value) return;
+      const opt = sel.options[sel.selectedIndex];
+      if (!opt) return;
+      // Najdi sourozenec form (Pridat polozku) ve stejnem containeru
+      const container = sel.closest('div').parentElement.parentElement;
+      const form = container ? container.querySelector('form[onsubmit*="addOrderItem"]') : null;
+      if (!form) return;
+      const nameCs = opt.dataset.nameCs || '';
+      const nameEn = opt.dataset.nameEn || '';
+      const productId = opt.dataset.productId || '';
+      const priceCzk = opt.dataset.priceCzk;
+      const priceEur = opt.dataset.priceEur;
+      const truckCzk = opt.dataset.truckCzk;
+      const truckEur = opt.dataset.truckEur;
+      // Propis produkt
+      const prodSel = form.querySelector('[name="product_id"]');
+      if (prodSel) prodSel.value = productId || '';
+      // Propis nazev (EN preferovan pri EUR mene, pokud existuje)
+      const nameInp = form.querySelector('[name="name"]');
+      if (nameInp) {
+        // Dvouradkovy nazev: EN nahore, CS dole. Pokud EN chybi, jen CS.
+        // Pro EUR menu preferujeme EN; oba pak stejne, jen poradi je konzistentni.
+        if (nameEn && nameCs && nameEn !== nameCs) {
+          nameInp.value = nameEn + '\n' + nameCs;
+        } else {
+          nameInp.value = nameCs || nameEn || '';
+        }
+      }
+      // Propis cenu podle meny a podle useTruck
+      const priceInp = form.querySelector('[name="unit_price"]');
+      if (priceInp) {
+        let price;
+        if (useTruck) {
+          price = currency === 'EUR' ? truckEur : truckCzk;
+        } else {
+          price = currency === 'EUR' ? priceEur : priceCzk;
+        }
+        priceInp.value = price || '0';
+      }
+    }
+
+    function fillItemPrice(sel) {
+      const prod = products.find(p => p.id === parseInt(sel.value));
+      if (prod) {
+        const form = sel.closest('form');
+        form.querySelector('[name="name"]').value = prod.name;
+        form.querySelector('[name="unit"]').value = 'ks';
+      }
+    }
+
+    async function addOrderItem(e, orderId) {
+      e.preventDefault();
+      const form = new FormData(e.target);
+      const data = Object.fromEntries(form.entries());
+      data.product_id = parseInt(data.product_id) || null;
+      data.quantity = parseFloat(data.quantity);
+      data.unit_price = parseFloat(data.unit_price || 0);
+      data.total_price = data.quantity * data.unit_price;
+      if (!data.name && !data.product_id) { alert('Vyberte položku z ceníku.'); return; }
+      await fetch('/api/wh/orders/' + orderId + '/items', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+      await recalcOrder(orderId);
+      openOrderDetail(orderId);
+      loadOrders();
+      loadStats();
+    }
+
+    // Uloží rozepsanou položku z formuláře (pokud je vyplněná) a zavře modal
+    // Fáze 6 — Vystavit fakturu z objednávky
+    async function createInvoiceFromOrder(orderId) {
+      if (!confirm('Vystavit fakturu z této objednávky?\n\nFaktura se vytvoří jako draft a otevře se v novém okně modulu Účetní doklady.')) return;
+
+      try {
+        const token = sessionStorage.getItem('token') || '';
+        const res = await fetch('/api/accounting/invoices/from-order', {
+          method: 'POST',
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { 'Authorization': 'Bearer ' + token } : {}),
+          },
+          body: JSON.stringify({ order_id: orderId }),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          alert('Chyba: ' + (err.error || res.status));
+          return;
+        }
+        const invoice = await res.json();
+        alert('✅ Faktura ' + invoice.invoice_number + ' vytvořena.\n\nOtevírám detail v Účetních dokladech…');
+        // Otevři detail faktury v novém tabu
+        window.open('/modules/ucetni-doklady/index.html#invoice=' + invoice.id, '_blank');
+      } catch (e) {
+        alert('Chyba: ' + e.message);
+      }
+    }
+
+    async function saveAndCloseDetail(orderId) {
+      // Najdi formulář pro přidání položky v detailu
+      const form = document.querySelector('.modal form[onsubmit*="addOrderItem"]');
+      if (form) {
+        const fd = new FormData(form);
+        const raw = Object.fromEntries(fd.entries());
+        const hasProduct = parseInt(raw.product_id) > 0;
+        const hasName = (raw.name || '').trim().length > 0;
+        const hasPrice = parseFloat(raw.unit_price || 0) > 0;
+        // Pokud je vyplněný výrobek nebo název — ulož položku
+        if (hasProduct || hasName) {
+          const data = {
+            product_id: parseInt(raw.product_id) || null,
+            name: raw.name || '',
+            quantity: parseFloat(raw.quantity) || 1,
+            unit: raw.unit || 'ks',
+            unit_price: parseFloat(raw.unit_price || 0),
+            total_price: (parseFloat(raw.quantity) || 1) * parseFloat(raw.unit_price || 0),
+          };
+          await fetch('/api/wh/orders/' + orderId + '/items', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+          });
+        }
+      }
+      await recalcOrder(orderId);
+      closeModal();
+      loadOrders();
+      loadStats();
+    }
+
+    // ─── Přepočítej celkovou částku + datum dodání na objednávce ─────────
+    async function recalcOrder(orderId) {
+      try {
+        // Načti aktuální objednávku s položkami
+        const res = await fetch('/api/wh/orders/' + orderId);
+        const order = await res.json();
+        const items = order.items || [];
+        const totalAmount = items.reduce(function(sum, it) { return sum + parseFloat(it.total_price || 0); }, 0);
+        const itemsCount = items.length;
+
+        // Najdi nejpozdější slot přiřazený k položkám této objednávky
+        let latestEndDate = null;
+        for (const slot of _availableSlots) {
+          if (slot.assignments) {
+            for (const a of slot.assignments) {
+              if (a.order_id === orderId || items.some(function(it) { return it.id === a.order_item_id; })) {
+                const endDate = new Date(slot.end_date);
+                if (!latestEndDate || endDate > latestEndDate) latestEndDate = endDate;
+              }
+            }
+          }
+        }
+
+        const updateData = { items_count: itemsCount, total_amount: totalAmount };
+        if (latestEndDate) {
+          updateData.expected_delivery = latestEndDate.toISOString().split('T')[0];
+        }
+
+        await fetch('/api/wh/orders/' + orderId, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updateData),
+        });
+      } catch(e) { console.error('recalcOrder error:', e); }
+    }
+
+    // Výrobní číslo kiosku — uloží bez přenačtení modalu (aby input nezrušil fokus).
+    // Po uložení jen krátce blikne input, aby bylo vidět že se uložilo.
+    async function updateOrderItemSerial(itemId, orderId, value, inputEl) {
+      const serial = (value || '').trim();
+      try {
+        const res = await fetch('/api/wh/orders/' + orderId + '/items/' + itemId, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ serial_number: serial }),
+        });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        if (inputEl) {
+          const orig = inputEl.style.borderColor;
+          inputEl.style.borderColor = '#10b981';
+          setTimeout(function() { inputEl.style.borderColor = orig || ''; }, 600);
+        }
+        // Neprovádíme openOrderDetail — ztratil by se fokus + zákazník neví kam koukat.
+        // Tabulku objednávek ale aktualizujeme (třeba pro filtr/hledání později).
+        loadOrders();
+      } catch (e) {
+        console.error('Uložení výrobního čísla selhalo', e);
+        if (inputEl) inputEl.style.borderColor = '#ef4444';
+        alert('Nepodařilo se uložit výrobní číslo.');
+      }
+    }
+
+    async function updateOrderItem(itemId, orderId, field, value, otherValue) {
+      const data = {};
+      if (field === 'quantity') {
+        data.quantity = parseFloat(value);
+        data.unit_price = parseFloat(otherValue);
+      } else if (field === 'unit_price') {
+        data.unit_price = parseFloat(value);
+        data.quantity = parseFloat(otherValue);
+      }
+      data.total_price = (data.quantity || 0) * (data.unit_price || 0);
+      try {
+        await fetch('/api/wh/orders/' + orderId + '/items/' + itemId, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data),
+        });
+        await recalcOrder(orderId);
+        openOrderDetail(orderId);
+        loadOrders();
+        loadStats();
+      } catch(e) { console.error(e); }
+    }
+
+    async function deleteOrderItem(itemId, orderId) {
+      if (!confirm('Smazat tuto položku?')) return;
+      await fetch('/api/wh/orders/' + orderId + '/items/' + itemId, { method: 'DELETE' });
+      await recalcOrder(orderId);
+      openOrderDetail(orderId);
+      loadOrders();
+      loadStats();
+    }
+
+    async function updateOrderField(id, field, value) {
+      try {
+        var body = {};
+        body[field] = value;
+        if (field === 'company_id') body[field] = parseInt(value);
+        await fetch('/api/wh/orders/' + id, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        loadOrders();
+        loadStats();
+      } catch(e) { console.error(e); }
+    }
+
+    async function updateOrderStatus(id, status) {
+      await fetch('/api/wh/orders/' + id, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }) });
+      loadOrders();
+      loadStats();
+    }
+
+    async function deleteOrder(id) {
+      if (!confirm('Opravdu smazat tuto objednávku?')) return;
+      await fetch('/api/wh/orders/' + id, { method: 'DELETE' });
+      loadOrders();
+      loadStats();
+    }
+
+    // ============================================================
+    // HELPERS
+    // ============================================================
+    async function generateShareLink(orderId) {
+      try {
+        const res = await fetch('/api/wh/orders/' + orderId + '/share', { method: 'POST' });
+        const data = await res.json();
+        if (!data.share_token) { alert(data.error || 'Chyba při generování odkazu.'); return; }
+        // share_url buduje backend (SHARE_BASE_URL → bestseries.cash); fallback na window.location
+        const shareUrl = data.share_url || (window.location.origin + '/order/' + data.share_token);
+        var area = document.getElementById('customer-link-area');
+        if (area) {
+          area.innerHTML = '<div style="display:flex;gap:8px;align-items:center;">' +
+            '<input type="text" readonly value="' + shareUrl + '" id="modal-share-url" style="flex:1;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:12px;font-family:monospace;" onclick="this.select()">' +
+            '<button type="button" class="btn btn-sm btn-primary" onclick="copyModalShareUrl()">📋</button>' +
+          '</div>';
+        }
+      } catch(e) { alert('Chyba: ' + e.message); }
+    }
+
+    function copyModalShareUrl() {
+      var inp = document.getElementById('modal-share-url');
+      if (!inp) return;
+      inp.select();
+      navigator.clipboard.writeText(inp.value).then(function() {
+        var btn = inp.nextElementSibling;
+        if (btn) { btn.textContent = '✅'; setTimeout(function() { btn.textContent = '📋'; }, 2000); }
+      });
+    }
+
+    async function shareOrder(orderId) {
+      try {
+        const res = await fetch('/api/wh/orders/' + orderId + '/share', { method: 'POST' });
+        const data = await res.json();
+        if (!data.share_token) { alert(data.error || 'Chyba při generování odkazu.'); return; }
+
+        const shareUrl = data.share_url || (window.location.origin + '/order/' + data.share_token);
+
+        // Zobraz modal s odkazem
+        const m = document.createElement('div');
+        m.id = 'share-modal-overlay';
+        m.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:10002;display:flex;align-items:center;justify-content:center;';
+        m.onclick = function(e) { if (e.target === m) m.remove(); };
+        m.innerHTML = '<div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:24px;width:500px;max-width:95vw;">' +
+          '<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">' +
+            '<div style="width:40px;height:40px;border-radius:10px;background:rgba(59,130,246,0.15);display:flex;align-items:center;justify-content:center;font-size:20px;">🔗</div>' +
+            '<div><h3 style="margin:0;font-size:16px;">Odkaz pro zákazníka</h3>' +
+            '<p style="font-size:12px;color:var(--text2);margin:2px 0 0;">Zákazník uvidí readonly přehled objednávky bez přihlášení</p></div>' +
+          '</div>' +
+          '<div style="display:flex;gap:8px;align-items:center;">' +
+            '<input type="text" readonly value="' + shareUrl + '" id="share-url-input" style="flex:1;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text);font-size:13px;font-family:monospace;" onclick="this.select()">' +
+            '<button class="btn btn-primary" onclick="copyShareUrl()">📋 Kopírovat</button>' +
+          '</div>' +
+          '<div id="share-copy-msg" style="font-size:12px;color:#10b981;margin-top:8px;display:none;">✅ Odkaz zkopírován do schránky</div>' +
+          '<div style="margin-top:16px;text-align:right;">' +
+            '<button class="btn btn-secondary" onclick="closeShareModal()">Zavřít</button>' +
+          '</div>' +
+        '</div>';
+        document.body.appendChild(m);
+
+        // Automaticky vyber text
+        setTimeout(function() { document.getElementById('share-url-input')?.select(); }, 100);
+      } catch(e) { alert('Chyba: ' + e.message); }
+    }
+
+    function closeShareModal() {
+      const el = document.getElementById('share-modal-overlay');
+      if (el) el.remove();
+    }
+
+    function copyShareUrl() {
+      const input = document.getElementById('share-url-input');
+      if (input) {
+        input.select();
+        navigator.clipboard.writeText(input.value).then(function() {
+          const msg = document.getElementById('share-copy-msg');
+          if (msg) msg.style.display = 'block';
+          setTimeout(function() { if (msg) msg.style.display = 'none'; }, 3000);
+        });
+      }
+    }
+
+    function closeModal() { document.getElementById('modal-root').innerHTML = ''; _pendingItems = []; }
+
+    // ============================================================
+    // CENIK (sales pricelist)
+    // ============================================================
+    function updatePlProductWarning() {
+      var sel = document.getElementById('pl-product-select');
+      var warn = document.getElementById('pl-product-warning');
+      if (!sel || !warn) return;
+      warn.style.display = sel.value ? 'none' : 'flex';
+    }
+
+    function switchTab(name) {
+      ['orders', 'pricelist', 'cashflow', 'tools'].forEach(function(t) {
+        var el = document.getElementById('tab-' + t);
+        if (el) el.style.display = (t === name) ? '' : 'none';
+        var btn = document.querySelector('.tab-btn[data-tab="' + t + '"]');
+        if (btn) btn.classList.toggle('active', t === name);
+      });
+      if (name === 'pricelist') loadPricelist();
+      if (name === 'cashflow') loadCashflow();
+      if (name === 'tools') initToolsTab();
+    }
+
+    // ============================================================
+    // CASH FLOW — časová osa očekávaných záloh a doplatků
+    // ============================================================
+    var _cashflowPayments = [];   // pole { date, amount, kind, paid, overdue, order, estimated }
+    var _cashflowView = 'timeline';
+    var _cashflowCalAnchor = null; // první den zobrazeného měsíce v kalendáři
+
+    // FX kurzy pro přibližný přepočet cizích měn na CZK — načítáme z /api/wh/exchange-rates při loadCashflow.
+    // Stejný princip jako loadStats v záložce Objednávky: pod EUR/USD apod. ukážeme „≈ X Kč".
+    var _cfFxRates = { CZK: 1, EUR: 25, USD: 22, GBP: 29, PLN: 6, HUF: 0.065 }; // fallback dokud nenačteme z CNB
+    var _cfFxSource = 'fallback';
+    var _cfFxValidFor = '';
+
+    // Symbol pro měnu — kalendář i timeline pracují s reálnou měnou objednávky, ne s pevně psaným „Kč".
+    function cfCurSymbol(c) {
+      if (c === 'EUR') return '€';
+      if (c === 'USD') return '$';
+      if (c === 'GBP') return '£';
+      if (c === 'PLN') return 'zł';
+      if (c === 'HUF') return 'Ft';
+      return 'Kč';
+    }
+    // Naformátuje částku s odpovídajícím symbolem dle měny.
+    function cfFmtMoney(n, currency) {
+      return Math.round(n).toLocaleString('cs-CZ') + ' ' + cfCurSymbol(currency || 'CZK');
+    }
+    // Sečte částky a vrátí buď jednoměnový výsledek („123 €"), nebo mix měn rozdělený („+").
+    function cfFmtMixed(amountsByCur) {
+      var keys = Object.keys(amountsByCur).filter(function (k) { return amountsByCur[k] > 0.5; });
+      if (!keys.length) return '0 ' + cfCurSymbol('CZK');
+      // CZK na konec, EUR jako první preferovanou alternativu — aby zápis byl konzistentní.
+      keys.sort(function (a, b) {
+        if (a === b) return 0;
+        if (a === 'EUR') return -1;
+        if (b === 'EUR') return 1;
+        if (a === 'CZK') return 1;
+        if (b === 'CZK') return -1;
+        return a.localeCompare(b);
+      });
+      return keys.map(function (k) { return cfFmtMoney(amountsByCur[k], k); }).join(' + ');
+    }
+
+    // Spočítá přibližný součet cizích měn přepočtený do CZK (CZK část se nepřičítá zpět — ta už je v Kč).
+    // Vrací číslo (může být 0, pokud žádná cizí měna).
+    function cfCzkApproxFromMixed(amountsByCur) {
+      var sum = 0;
+      Object.keys(amountsByCur).forEach(function (k) {
+        if (k === 'CZK') return;
+        var rate = _cfFxRates[k] || 0;
+        sum += (amountsByCur[k] || 0) * rate;
+      });
+      return sum;
+    }
+    // HTML sub-řádek „≈ X Kč" pro stat karty/měsíční hlavičky. Vrací prázdno, pokud nejsou cizí měny.
+    // opts: { size:px, marginTop:px, label:string ('' = bez popisku, např. „+ CZK celkem") }
+    function cfRenderCzkApprox(amountsByCur, opts) {
+      var amt = cfCzkApproxFromMixed(amountsByCur);
+      if (amt <= 0.5) return '';
+      opts = opts || {};
+      var size = opts.size || 12;
+      var marginTop = opts.marginTop || 2;
+      var label = (opts.label != null) ? opts.label : '';
+      return '<div style="font-size:' + size + 'px;color:var(--text2);margin-top:' + marginTop + 'px;font-weight:500;">≈ ' + cfFmtMoney(amt, 'CZK') + (label ? ' ' + label : '') + '</div>';
+    }
+    // Přibližný přepočet jedné částky v dané měně na CZK.
+    function cfCzkApproxSingle(amount, currency) {
+      var cur = currency || 'CZK';
+      if (cur === 'CZK') return 0;
+      var rate = _cfFxRates[cur] || 0;
+      return (amount || 0) * rate;
+    }
+    // Tooltip s informací o zdroji kurzu (CNB s datem, případně fallback).
+    function cfFxTooltip() {
+      return _cfFxSource === 'CNB'
+        ? 'Kurz ČNB' + (_cfFxValidFor ? ' ze dne ' + _cfFxValidFor : '')
+        : 'Kurz — fallback (CNB API nedostupné)';
+    }
+
+    async function loadCashflow() {
+      var timelineEl = document.getElementById('cf-timeline');
+      if (timelineEl) timelineEl.innerHTML = '<div style="padding:30px;color:var(--text2);font-style:italic;">Načítám platby…</div>';
+      try {
+        // Načti FX kurzy (CNB, cache 1h na backendu) pro přibližný přepočet EUR/USD/… na Kč.
+        // Stejný princip jako loadStats v záložce Objednávky. Pokud spadne, držíme fallback hodnoty.
+        try {
+          var fxRes = await fetch('/api/wh/exchange-rates');
+          if (fxRes.ok) {
+            var fxData = await fxRes.json();
+            if (fxData && fxData.rates) _cfFxRates = fxData.rates;
+            _cfFxSource = fxData.source || 'CNB';
+            _cfFxValidFor = fxData.valid_for || '';
+          }
+        } catch (fxe) { console.warn('cashflow fx rates fetch fail', fxe); }
+
+        var res = await fetch('/api/wh/orders?type=sales');
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        var orders = await res.json();
+        _cashflowPayments = buildPaymentsFromOrders(orders);
+        renderCashflow();
+      } catch (e) {
+        console.error('loadCashflow:', e);
+        if (timelineEl) timelineEl.innerHTML = '<div style="padding:30px;color:#ef4444;">Chyba při načítání: ' + (e.message || e) + '</div>';
+      }
+    }
+
+    // Z objednávek vyrobí pole jednotlivých plateb (záloha/doplatek/celá).
+    // Logika dat:
+    //   - záloha:  pokud existuje deposit invoice (invoice_role='deposit') → její date_due,
+    //              jinak heuristika: order.created_at + 7 dní (odhad — vyznačíme ~).
+    //   - doplatek: pokud existuje final_invoice → final_invoice.date_due,
+    //              jinak heuristika: production_finish_last − 14 dní (resp. − final_invoice_lead_days),
+    //              tj. doplatek má padnout 14 dní PŘED dokončením výroby poslední položky,
+    //              aby bylo možné zboží uvolnit oproti zaplacenému doplatku.
+    //   - jednorázová platba (payment_split=false):
+    //              pokud final_invoice → date_due, jinak production_finish_last − 14 dní,
+    //              fallback expected_delivery − 14 dní nebo created_at+14d (odhad).
+    function buildPaymentsFromOrders(orders) {
+      var out = [];
+      var today = new Date(); today.setHours(0, 0, 0, 0);
+      orders.forEach(function (o) {
+        // Zrušené objednávky cash flow neovlivňují.
+        if (o.status === 'cancelled') return;
+
+        var total = parseFloat(o.total_amount || 0) || 0;
+        var currency = o.currency || 'CZK';
+
+        if (o.payment_split) {
+          // ── ZÁLOHA ──
+          var depositAmt = 0;
+          if (o.deposit_amount != null) depositAmt = parseFloat(o.deposit_amount) || 0;
+          else if (o.deposit_percent != null) depositAmt = total * (parseFloat(o.deposit_percent) / 100);
+
+          var depositDate, depositEstimated = true;
+          if (o.deposit_paid && o.deposit_paid_at) {
+            depositDate = new Date(o.deposit_paid_at);
+            depositEstimated = false;
+          } else if (o.created_at) {
+            // Heuristika — záloha typicky do týdne od potvrzení objednávky.
+            var base = new Date(o.created_at);
+            base.setDate(base.getDate() + 7);
+            depositDate = base;
+          }
+          if (depositDate && depositAmt > 0) {
+            out.push({
+              date: depositDate,
+              amount: depositAmt,
+              currency: currency,
+              kind: 'deposit',
+              paid: !!o.deposit_paid,
+              overdue: !o.deposit_paid && depositDate < today,
+              order: o,
+              estimated: depositEstimated && !o.deposit_paid,
+            });
+          }
+
+          // ── DOPLATEK ──
+          var finalAmt = total - depositAmt;
+          if (finalAmt > 0.01) {
+            var finalDate, finalEstimated = true;
+            // Kolik dní PŘED koncem výroby má doplatek padnout (default 14).
+            var leadDays = (o.final_invoice_lead_days != null ? parseInt(o.final_invoice_lead_days, 10) : 14);
+            if (!isFinite(leadDays)) leadDays = 14;
+            if (o.final_paid && o.final_paid_at) {
+              finalDate = new Date(o.final_paid_at);
+              finalEstimated = false;
+            } else if (o.final_invoice && o.final_invoice.date_due) {
+              finalDate = new Date(o.final_invoice.date_due);
+              finalEstimated = false;
+            } else if (o.production_finish_last) {
+              // Doplatek splatný 14 dní PŘED dokončením výroby poslední položky.
+              var pf = new Date(o.production_finish_last);
+              pf.setDate(pf.getDate() - leadDays);
+              finalDate = pf;
+            } else if (o.expected_delivery) {
+              // Fallback — pokud nemáme rozplánovanou výrobu, použij očekávané dodání mínus lead.
+              var ed = new Date(o.expected_delivery);
+              ed.setDate(ed.getDate() - leadDays);
+              finalDate = ed;
+            } else if (o.created_at) {
+              var c = new Date(o.created_at);
+              c.setDate(c.getDate() + 30 - leadDays);
+              finalDate = c;
+            }
+            if (finalDate) {
+              out.push({
+                date: finalDate,
+                amount: finalAmt,
+                currency: currency,
+                kind: 'final',
+                paid: !!o.final_paid,
+                overdue: !o.final_paid && finalDate < today,
+                order: o,
+                estimated: finalEstimated && !o.final_paid,
+              });
+            }
+          }
+        } else {
+          // ── JEDNORÁZOVÁ PLATBA (záloha = celá objednávka) ──
+          if (total > 0) {
+            var fullDate, fullEstimated = true;
+            // Stejné lead-time pravidlo jako u doplatku — splatnost 14 dní před dokončením výroby.
+            var leadDaysFull = (o.final_invoice_lead_days != null ? parseInt(o.final_invoice_lead_days, 10) : 14);
+            if (!isFinite(leadDaysFull)) leadDaysFull = 14;
+            if (o.final_paid && o.final_paid_at) {
+              fullDate = new Date(o.final_paid_at);
+              fullEstimated = false;
+            } else if (o.final_invoice && o.final_invoice.date_due) {
+              fullDate = new Date(o.final_invoice.date_due);
+              fullEstimated = false;
+            } else if (o.production_finish_last) {
+              var pfFull = new Date(o.production_finish_last);
+              pfFull.setDate(pfFull.getDate() - leadDaysFull);
+              fullDate = pfFull;
+            } else if (o.expected_delivery) {
+              var edFull = new Date(o.expected_delivery);
+              edFull.setDate(edFull.getDate() - leadDaysFull);
+              fullDate = edFull;
+            } else if (o.created_at) {
+              var cc = new Date(o.created_at);
+              cc.setDate(cc.getDate() + 14);
+              fullDate = cc;
+            }
+            if (fullDate) {
+              out.push({
+                date: fullDate,
+                amount: total,
+                currency: currency,
+                kind: 'full',
+                paid: !!o.final_paid,
+                overdue: !o.final_paid && fullDate < today,
+                order: o,
+                estimated: fullEstimated && !o.final_paid,
+              });
+            }
+          }
+        }
+      });
+      // Vzestupně podle data
+      out.sort(function (a, b) { return a.date - b.date; });
+      return out;
+    }
+
+    function filterPayments() {
+      var statusF = (document.getElementById('cf-filter-status') || {}).value || 'all';
+      var kindF = (document.getElementById('cf-filter-kind') || {}).value || 'all';
+      return _cashflowPayments.filter(function (p) {
+        if (kindF !== 'all' && p.kind !== kindF) {
+          // Při filtru kind='final' chceme vidět i 'full' (de facto jeden doplatek).
+          if (!(kindF === 'final' && p.kind === 'full')) return false;
+        }
+        if (statusF === 'paid' && !p.paid) return false;
+        if (statusF === 'pending' && (p.paid || p.overdue)) return false;
+        if (statusF === 'overdue' && !p.overdue) return false;
+        return true;
+      });
+    }
+
+    function renderCashflow() {
+      renderCashflowStats();
+      if (_cashflowView === 'timeline') renderCashflowTimeline();
+      else renderCashflowCalendar();
+    }
+
+    function renderCashflowStats() {
+      var box = document.getElementById('cf-stats');
+      if (!box) return;
+      var today = new Date(); today.setHours(0, 0, 0, 0);
+      var monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+      var monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 1);
+
+      // Mícháme více měn — držíme součty per měna a v UI je zobrazíme zvlášť.
+      var sumPending = {}, sumOverdue = {}, sumThisMonth = {}, sumReceivedYTD = {};
+      var countPending = 0, countOverdue = 0, countThisMonth = 0;
+      var yearStart = new Date(today.getFullYear(), 0, 1);
+
+      function bump(bag, cur, amt) { bag[cur] = (bag[cur] || 0) + amt; }
+
+      _cashflowPayments.forEach(function (p) {
+        var cur = p.currency || 'CZK';
+        if (!p.paid) {
+          if (p.overdue) { bump(sumOverdue, cur, p.amount); countOverdue++; }
+          else { bump(sumPending, cur, p.amount); countPending++; }
+          if (p.date >= monthStart && p.date < monthEnd) { bump(sumThisMonth, cur, p.amount); countThisMonth++; }
+        } else {
+          if (p.date >= yearStart) bump(sumReceivedYTD, cur, p.amount);
+        }
+      });
+
+      // Pod hodnotou v cizí měně ukážeme přibližný součet v Kč (stejný princip jako záložka Objednávky).
+      // Stat karty mají užší layout — držíme menší font (11 px) a CSS proměnnou na barvu.
+      var approxOpts = { size: 11, marginTop: 3 };
+      var fxTooltip = cfFxTooltip();
+
+      box.innerHTML =
+        '<div class="cf-stat pending" title="' + esc(fxTooltip) + '">' +
+          '<div class="cf-stat-label">Tento měsíc očekáváno</div>' +
+          '<div class="cf-stat-value">' + cfFmtMixed(sumThisMonth) + '</div>' +
+          cfRenderCzkApprox(sumThisMonth, approxOpts) +
+          '<div class="cf-stat-sub">' + countThisMonth + ' plateb</div>' +
+        '</div>' +
+        '<div class="cf-stat pending" title="' + esc(fxTooltip) + '">' +
+          '<div class="cf-stat-label">Celkem nezaplaceno</div>' +
+          '<div class="cf-stat-value">' + cfFmtMixed(sumPending) + '</div>' +
+          cfRenderCzkApprox(sumPending, approxOpts) +
+          '<div class="cf-stat-sub">' + countPending + ' očekávaných plateb</div>' +
+        '</div>' +
+        '<div class="cf-stat warn" title="' + esc(fxTooltip) + '">' +
+          '<div class="cf-stat-label">Po splatnosti</div>' +
+          '<div class="cf-stat-value">' + cfFmtMixed(sumOverdue) + '</div>' +
+          cfRenderCzkApprox(sumOverdue, approxOpts) +
+          '<div class="cf-stat-sub">' + countOverdue + ' plateb v prodlení</div>' +
+        '</div>' +
+        '<div class="cf-stat ok" title="' + esc(fxTooltip) + '">' +
+          '<div class="cf-stat-label">Přijato letos</div>' +
+          '<div class="cf-stat-value">' + cfFmtMixed(sumReceivedYTD) + '</div>' +
+          cfRenderCzkApprox(sumReceivedYTD, approxOpts) +
+          '<div class="cf-stat-sub">Od 1. ledna ' + today.getFullYear() + '</div>' +
+        '</div>';
+    }
+
+    function renderCashflowTimeline() {
+      var el = document.getElementById('cf-timeline');
+      if (!el) return;
+      var payments = filterPayments();
+
+      if (!payments.length) {
+        el.innerHTML = '<div style="padding:40px;color:var(--text2);text-align:center;font-style:italic;width:100%;">Žádné platby pro zvolený filtr.</div>';
+        return;
+      }
+
+      // Měsíční seznam — od (nejdřív měsíc dnešní nebo první platby) po (poslední platba)
+      var today = new Date(); today.setHours(0, 0, 0, 0);
+      var firstDate = payments[0].date < today ? payments[0].date : today;
+      var lastDate = payments[payments.length - 1].date > today ? payments[payments.length - 1].date : today;
+
+      var months = [];
+      var cur = new Date(firstDate.getFullYear(), firstDate.getMonth(), 1);
+      var endM = new Date(lastDate.getFullYear(), lastDate.getMonth(), 1);
+      while (cur <= endM) {
+        months.push(new Date(cur));
+        cur.setMonth(cur.getMonth() + 1);
+      }
+      // Bezpečnostní limit — kdyby šly objednávky daleko do budoucnosti, neukazujeme víc než 24 měsíců.
+      if (months.length > 24) months = months.slice(0, 24);
+
+      var monthNames = ['Leden', 'Únor', 'Březen', 'Duben', 'Květen', 'Červen', 'Červenec', 'Srpen', 'Září', 'Říjen', 'Listopad', 'Prosinec'];
+      var nowMonth = today.getMonth(), nowYear = today.getFullYear();
+
+      var html = '';
+      months.forEach(function (m) {
+        var y = m.getFullYear(), mi = m.getMonth();
+        var monthPayments = payments.filter(function (p) {
+          return p.date.getFullYear() === y && p.date.getMonth() === mi;
+        });
+        // Součty per měna — abychom mohli mix měn zobrazit korektně místo „X Kč".
+        var sumInByCur = {}, sumPendByCur = {};
+        var totalIn = 0, totalPend = 0;
+        monthPayments.forEach(function (p) {
+          var cur = p.currency || 'CZK';
+          if (p.paid) { sumInByCur[cur] = (sumInByCur[cur] || 0) + p.amount; totalIn += p.amount; }
+          else { sumPendByCur[cur] = (sumPendByCur[cur] || 0) + p.amount; totalPend += p.amount; }
+        });
+        var isCurrent = (y === nowYear && mi === nowMonth);
+
+        // Pro „≈ X Kč" sub-řádek pod hlavičkou měsíce — sečteme cizí měny napříč příchozími+očekávanými
+        // a vykreslíme až pod cf-month-sub (kompaktnější než per-řádek u každé spojené měny).
+        var sumAllByCur = {};
+        Object.keys(sumInByCur).forEach(function (k) { sumAllByCur[k] = (sumAllByCur[k] || 0) + sumInByCur[k]; });
+        Object.keys(sumPendByCur).forEach(function (k) { sumAllByCur[k] = (sumAllByCur[k] || 0) + sumPendByCur[k]; });
+        var approxHtml = cfRenderCzkApprox(sumAllByCur, { size: 10, marginTop: 2 });
+
+        html += '<div class="cf-month-col">' +
+          '<div class="cf-month-head' + (isCurrent ? ' current' : '') + '"' + (approxHtml ? ' title="' + esc(cfFxTooltip()) + '"' : '') + '>' +
+            '<div class="cf-month-title">' + monthNames[mi] + ' ' + y + '</div>' +
+            '<div class="cf-month-sub">' +
+              (totalIn > 0 ? '<span class="cf-incoming">✓ ' + cfFmtMixed(sumInByCur) + '</span>' : '') +
+              (totalPend > 0 ? '<span class="cf-pending">⏳ ' + cfFmtMixed(sumPendByCur) + '</span>' : '') +
+              (totalIn === 0 && totalPend === 0 ? '<span style="color:var(--text2);font-style:italic;">bez plateb</span>' : '') +
+            '</div>' +
+            approxHtml +
+          '</div>' +
+          '<div class="cf-month-body">';
+        if (!monthPayments.length) {
+          html += '<div class="cf-month-empty">— žádná platba —</div>';
+        } else {
+          monthPayments.forEach(function (p) { html += renderPaymentCard(p); });
+        }
+        html += '</div></div>';
+      });
+      el.innerHTML = html;
+
+      // Auto-scroll na aktuální měsíc (pokud existuje ve view)
+      var scroll = document.querySelector('#cf-view-timeline .cf-timeline-scroll');
+      var currentHead = el.querySelector('.cf-month-head.current');
+      if (scroll && currentHead) {
+        var rect = currentHead.getBoundingClientRect();
+        var parentRect = scroll.getBoundingClientRect();
+        scroll.scrollLeft += rect.left - parentRect.left - 12;
+      }
+    }
+
+    function renderPaymentCard(p) {
+      var statusCls = p.paid ? 'paid' : (p.overdue ? 'overdue' : 'pending');
+      var statusLabel = p.paid ? '✓ Zaplaceno' : (p.overdue ? '⚠ Po splatnosti' : '⏳ Očekává se');
+      var kindLabel = p.kind === 'deposit' ? 'Záloha' : (p.kind === 'final' ? 'Doplatek' : 'Platba');
+      var dateStr = p.date.toLocaleDateString('cs-CZ', { day: 'numeric', month: 'numeric' });
+      if (p.estimated) dateStr = '~ ' + dateStr;
+      var curCode = p.currency || 'CZK';
+      var amountStr = Math.round(p.amount).toLocaleString('cs-CZ') + ' ' + curCode;
+      // ≈ Kč přibližná hodnota pod hlavní částkou — jen pro cizí měnu, kurz z CNB cache.
+      var approxHtml = '';
+      if (curCode !== 'CZK') {
+        var czkAmt = cfCzkApproxSingle(p.amount, curCode);
+        if (czkAmt > 0.5) {
+          approxHtml = '<div class="cf-payment-approx" title="' + esc(cfFxTooltip()) + '">≈ ' + cfFmtMoney(czkAmt, 'CZK') + '</div>';
+        }
+      }
+      var orderNum = p.order.order_number || '—';
+      var customer = (p.order.company && p.order.company.name) || '—';
+      var orderId = p.order.id;
+      var estimatedNote = p.estimated ? '<div class="cf-payment-estimated">~ Odhadovaný termín (faktura ještě nebyla vystavena)</div>' : '';
+      return '<div class="cf-payment ' + statusCls + '" onclick="openOrderDetail(' + orderId + ')">' +
+        '<div class="cf-payment-top">' +
+          '<span class="cf-payment-date">' + dateStr + '</span>' +
+          '<span class="cf-payment-kind ' + p.kind + '">' + kindLabel + '</span>' +
+        '</div>' +
+        '<div class="cf-payment-amount">' + amountStr + '</div>' +
+        approxHtml +
+        '<div class="cf-payment-ref">' +
+          '<span class="cf-order-num">' + esc(orderNum) + '</span>' +
+          '<span style="text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:140px;" title="' + esc(customer) + '">' + esc(customer) + '</span>' +
+        '</div>' +
+        '<span class="cf-payment-status ' + statusCls + '">' + statusLabel + '</span>' +
+        estimatedNote +
+      '</div>';
+    }
+
+    function setCashflowView(view) {
+      _cashflowView = view;
+      var btns = document.querySelectorAll('.cf-view-switch button');
+      btns.forEach(function (b) { b.classList.toggle('active', b.getAttribute('data-cf-view') === view); });
+      document.getElementById('cf-view-timeline').style.display = (view === 'timeline') ? '' : 'none';
+      document.getElementById('cf-view-calendar').style.display = (view === 'calendar') ? '' : 'none';
+      renderCashflow();
+    }
+
+    function cfCalShift(dir) {
+      var today = new Date();
+      if (dir === 0) _cashflowCalAnchor = new Date(today.getFullYear(), today.getMonth(), 1);
+      else {
+        if (!_cashflowCalAnchor) _cashflowCalAnchor = new Date(today.getFullYear(), today.getMonth(), 1);
+        _cashflowCalAnchor.setMonth(_cashflowCalAnchor.getMonth() + dir);
+      }
+      renderCashflowCalendar();
+    }
+
+    function renderCashflowCalendar() {
+      var grid = document.getElementById('cf-cal-grid');
+      var titleEl = document.getElementById('cf-cal-title');
+      if (!grid || !titleEl) return;
+      var today = new Date(); today.setHours(0, 0, 0, 0);
+      if (!_cashflowCalAnchor) _cashflowCalAnchor = new Date(today.getFullYear(), today.getMonth(), 1);
+      var anchor = _cashflowCalAnchor;
+      var monthNames = ['leden', 'únor', 'březen', 'duben', 'květen', 'červen', 'červenec', 'srpen', 'září', 'říjen', 'listopad', 'prosinec'];
+      titleEl.textContent = monthNames[anchor.getMonth()] + ' ' + anchor.getFullYear();
+
+      // Mřížka — začínáme pondělím týdne v němž padne 1. den měsíce.
+      var firstOfMonth = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
+      var firstDow = (firstOfMonth.getDay() + 6) % 7; // 0 = pondělí
+      var gridStart = new Date(firstOfMonth);
+      gridStart.setDate(gridStart.getDate() - firstDow);
+
+      var payments = filterPayments();
+
+      // Group payments by yyyy-mm-dd
+      var byDay = {};
+      payments.forEach(function (p) {
+        var key = p.date.getFullYear() + '-' + (p.date.getMonth() + 1) + '-' + p.date.getDate();
+        if (!byDay[key]) byDay[key] = [];
+        byDay[key].push(p);
+      });
+
+      var html = '';
+      ['Po', 'Út', 'St', 'Čt', 'Pá', 'So', 'Ne'].forEach(function (d) {
+        html += '<div class="cf-cal-dow">' + d + '</div>';
+      });
+      // 6 řádků × 7 dní = 42 buněk
+      for (var i = 0; i < 42; i++) {
+        var d = new Date(gridStart);
+        d.setDate(gridStart.getDate() + i);
+        d.setHours(0, 0, 0, 0);
+        var isOther = d.getMonth() !== anchor.getMonth();
+        var isToday = d.getTime() === today.getTime();
+        var key = d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate();
+        var dayPays = byDay[key] || [];
+        html += '<div class="cf-cal-day' + (isOther ? ' other-month' : '') + (isToday ? ' today' : '') + '">' +
+          '<div class="cf-cal-day-num">' + d.getDate() + '</div>';
+        dayPays.forEach(function (p) {
+          var cls = p.paid ? 'paid' : (p.overdue ? 'overdue' : 'pending');
+          var sym = cfCurSymbol(p.currency);
+          var amt = Math.round(p.amount).toLocaleString('cs-CZ');
+          var kind = p.kind === 'deposit' ? 'Z' : (p.kind === 'final' ? 'D' : 'P');
+          var title = (p.order.order_number || '') + ' — ' + ((p.order.company && p.order.company.name) || '') + ' — ' + amt + ' ' + sym;
+          html += '<div class="cf-cal-pill ' + cls + '" title="' + esc(title) + '" onclick="event.stopPropagation();openOrderDetail(' + p.order.id + ')">' + kind + ' ' + amt + ' ' + sym + '</div>';
+        });
+        html += '</div>';
+      }
+      grid.innerHTML = html;
+    }
+
+    // ============================================================
+    // OBCHODNI POMUCKY (tools tab)
+    // ============================================================
+    var _activeTool = 'pradlomat-economy';
+    var _pradlomatMounted = false;
+    var _toolsTabInited = false;
+
+    function initToolsTab() {
+      mountPradlomatIfNeeded();
+      // Vždy refreshni seznam příjemců při přepnutí na tab (rychlé fetch)
+      loadRecipients();
+      _toolsTabInited = true;
+    }
+    async function mountPradlomatIfNeeded() {
+      if (_pradlomatMounted) return;
+      var root = document.getElementById('pradlomat-tool-root');
+      if (!(root && window.PradlomatTool && typeof window.PradlomatTool.mount === 'function')) return;
+
+      // 1) Načti server-side výchozí hodnoty + lock state (pokud admin nějaké uložil).
+      var initialState = null;
+      var initialLocks = {};
+      try {
+        var res = await fetch('/api/tools/defaults/pradlomat-economy');
+        if (res.ok) {
+          var d = await res.json();
+          if (d && d.data_json) initialState = d.data_json;
+          if (d && d.locks_json) initialLocks = d.locks_json;
+        }
+      } catch (e) { /* tichá fallback na JS DEFAULTS */ }
+
+      // 2) Mount v admin režimu: lockable=true (vykreslí lock toggle u žlutých inputů).
+      //    onSaveDefaults dostává { state, locks } a PUT-ne to na backend.
+      window.PradlomatTool.mount(root, {
+        initialState: initialState,
+        locks: initialLocks,
+        lockable: true,
+        onSaveDefaults: async function (state, locks) {
+          var r = await fetch('/api/tools/defaults/pradlomat-economy', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ data_json: state, locks_json: locks }),
+          });
+          if (!r.ok) {
+            var err = {};
+            try { err = await r.json(); } catch (_) {}
+            throw new Error(err.error || 'HTTP ' + r.status);
+          }
+          return await r.json();
+        },
+      });
+      _pradlomatMounted = true;
+    }
+    function switchTool(name) {
+      _activeTool = name;
+      var items = document.querySelectorAll('.tools-nav-item');
+      for (var i = 0; i < items.length; i++) {
+        items[i].classList.toggle('active', items[i].getAttribute('data-tool') === name);
+      }
+      var views = document.querySelectorAll('.tool-view');
+      for (var j = 0; j < views.length; j++) {
+        views[j].style.display = (views[j].getAttribute('data-tool-view') === name) ? '' : 'none';
+      }
+      if (name === 'pradlomat-economy') {
+        mountPradlomatIfNeeded();
+        loadRecipients();
+      }
+    }
+
+    // ── Recipient management ─────────────────────────────────────
+    async function loadRecipients() {
+      var listEl = document.getElementById('recipients-list');
+      if (!listEl) return;
+      try {
+        var res = await fetch('/api/tools/recipients?tool=pradlomat-economy');
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        var items = await res.json();
+        renderRecipients(items);
+      } catch (e) {
+        listEl.innerHTML = '<div class="recipient-empty" style="color:#ef4444;border-color:rgba(239,68,68,0.3);">Nepodařilo se načíst příjemce: ' + esc(e.message) + '</div>';
+      }
+    }
+
+    function renderRecipients(items) {
+      var listEl = document.getElementById('recipients-list');
+      if (!listEl) return;
+      if (!items.length) {
+        listEl.innerHTML = '<div class="recipient-empty">Zatím jsi nikomu odkaz neposlal. Klikni na <strong>+ Odeslat nový odkaz</strong> a založ prvního příjemce.</div>';
+        return;
+      }
+      var html = '';
+      for (var i = 0; i < items.length; i++) {
+        var r = items[i];
+        var lastOpened = r.last_opened
+          ? new Date(r.last_opened).toLocaleString('cs-CZ', { dateStyle: 'short', timeStyle: 'short' })
+          : '<span style="color:var(--text2);">neotevřeno</span>';
+        var sent = new Date(r.created_at).toLocaleDateString('cs-CZ');
+        html +=
+          '<div class="recipient-row" data-id="' + r.id + '">' +
+            '<div><div class="r-name">' + esc(r.name) + '</div>' +
+              (r.company ? '<div class="r-stat">' + esc(r.company) + '</div>' : '') +
+            '</div>' +
+            '<div class="r-email">' + esc(r.email) + '<div class="r-stat">odesláno ' + sent + '</div></div>' +
+            '<div class="r-stat" title="Kolikrát zákazník otevřel odkaz">👁 <strong>' + r.open_count + '</strong>' +
+              '<div style="margin-top:2px;font-size:10px;">poslední: ' + lastOpened + '</div></div>' +
+            '<div class="r-stat" title="Kolik modelů zákazník uložil">💾 <strong>' + r.save_count + '</strong>' +
+              '<div style="margin-top:2px;font-size:10px;">uložené modely</div></div>' +
+            '<div class="r-actions">' +
+              '<button class="btn btn-secondary btn-sm" title="Kopírovat odkaz" onclick="copyShareLink(' + r.id + ', \'' + esc(r.share_link || '') + '\')">🔗</button>' +
+              '<button class="btn btn-secondary btn-sm" title="Detail + log" onclick="openRecipientDetail(' + r.id + ')">📊</button>' +
+              '<button class="btn btn-secondary btn-sm" title="Poslat znovu" onclick="resendShareLink(' + r.id + ')">✉️</button>' +
+              '<button class="btn btn-danger btn-sm" title="Smazat" onclick="deleteRecipient(' + r.id + ')">🗑️</button>' +
+            '</div>' +
+          '</div>';
+      }
+      listEl.innerHTML = html;
+    }
+
+    function openRecipientModal() {
+      var html = '<div class="modal-overlay" onclick="if(event.target===this)closeModal()">' +
+        '<div class="modal" style="width:540px;">' +
+          '<h2>📤 Odeslat odkaz na pomůcku</h2>' +
+          '<div class="form-grid">' +
+            '<div class="form-group"><label>Jméno kontaktu *</label><input id="rcp-name" type="text" placeholder="Jan Novák"></div>' +
+            '<div class="form-group"><label>Firma</label><input id="rcp-company" type="text" placeholder="ACME s.r.o."></div>' +
+            '<div class="form-group full"><label>E-mail *</label><input id="rcp-email" type="email" placeholder="jan@acme.cz"></div>' +
+            '<div class="form-group full"><label>Poznámka pro zákazníka (vložená do e-mailu)</label><textarea id="rcp-note" placeholder="Pane Nováku, posílám slíbený model návratnosti..."></textarea></div>' +
+            '<div class="form-group full" style="flex-direction:row;align-items:center;gap:8px;">' +
+              '<input id="rcp-send" type="checkbox" checked style="width:auto;">' +
+              '<label for="rcp-send" style="margin:0;cursor:pointer;">Odeslat e-mail teď (Microsoft Graph / SMTP)</label>' +
+            '</div>' +
+          '</div>' +
+          '<div class="modal-actions">' +
+            '<button class="btn btn-secondary" onclick="closeModal()">Zrušit</button>' +
+            '<button class="btn btn-primary" onclick="submitRecipient()">Vytvořit a odeslat</button>' +
+          '</div>' +
+        '</div></div>';
+      document.getElementById('modal-root').innerHTML = html;
+      setTimeout(function () { var el = document.getElementById('rcp-name'); if (el) el.focus(); }, 50);
+    }
+
+    async function submitRecipient() {
+      var name = (document.getElementById('rcp-name') || {}).value || '';
+      var email = (document.getElementById('rcp-email') || {}).value || '';
+      var company = (document.getElementById('rcp-company') || {}).value || '';
+      var note = (document.getElementById('rcp-note') || {}).value || '';
+      var send = (document.getElementById('rcp-send') || {}).checked;
+      if (!name.trim()) { alert('Vyplň jméno.'); return; }
+      if (!email.trim()) { alert('Vyplň e-mail.'); return; }
+      try {
+        var res = await fetch('/api/tools/recipients', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            tool: 'pradlomat-economy',
+            name: name.trim(),
+            email: email.trim(),
+            company: company.trim() || null,
+            note: note.trim() || null,
+            send_email: !!send,
+          }),
+        });
+        var data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'HTTP ' + res.status);
+        closeModal();
+        var msg = '✓ Příjemce vytvořen. Odkaz: ' + data.share_link;
+        if (data.email_result && data.email_result.sent) {
+          msg += '\n\n✓ E-mail odeslán (' + (data.email_result.via || 'smtp') + ').';
+        } else if (send) {
+          msg += '\n\n⚠️ E-mail se nepodařilo odeslat: ' + (data.email_result && data.email_result.skipped || 'neznámá chyba') + '. Odkaz můžeš poslat ručně.';
+        }
+        alert(msg);
+        loadRecipients();
+      } catch (e) {
+        alert('Chyba: ' + e.message);
+      }
+    }
+
+    // share_link buduje backend přes SHARE_BASE_URL → frontend ho použije.
+    // Pojistka: pokud backend nemá env nastavený a vrátí jen path, doplň origin.
+    async function copyShareLink(id, shareLink) {
+      var url = shareLink || '';
+      if (!url) { alert('Odkaz není dostupný.'); return; }
+      if (!/^https?:\/\//i.test(url)) {
+        // Relativní cesta → admin doména. Upozorni že to není bestseries.cash.
+        url = window.location.origin + url;
+        console.warn('[shareLink] backend vrátil relativní cestu — nastav SHARE_BASE_URL v Railway env');
+      }
+      try {
+        await navigator.clipboard.writeText(url);
+        alert('Odkaz zkopírován do schránky:\n' + url);
+      } catch (e) {
+        prompt('Zkopíruj odkaz ručně:', url);
+      }
+    }
+
+    async function resendShareLink(id) {
+      if (!confirm('Poslat odkaz znovu na stejný e-mail?')) return;
+      try {
+        var res = await fetch('/api/tools/recipients/' + id + '/resend', { method: 'POST' });
+        var data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'HTTP ' + res.status);
+        alert(data.email_result && data.email_result.sent
+          ? '✓ E-mail odeslán znovu.'
+          : '⚠️ E-mail se nepodařilo odeslat: ' + (data.email_result && data.email_result.skipped));
+      } catch (e) {
+        alert('Chyba: ' + e.message);
+      }
+    }
+
+    async function deleteRecipient(id) {
+      if (!confirm('Opravdu smazat příjemce? Smazat všechny jeho uložené modely a event log?')) return;
+      try {
+        var res = await fetch('/api/tools/recipients/' + id, { method: 'DELETE' });
+        if (!res.ok) {
+          var data = await res.json();
+          throw new Error(data.error || 'HTTP ' + res.status);
+        }
+        loadRecipients();
+      } catch (e) {
+        alert('Chyba: ' + e.message);
+      }
+    }
+
+    async function openRecipientDetail(id) {
+      try {
+        var res = await fetch('/api/tools/recipients/' + id);
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        var d = await res.json();
+        renderRecipientDetail(d);
+      } catch (e) {
+        alert('Chyba: ' + e.message);
+      }
+    }
+
+    // ── AI shrnutí ───────────────────────────────────────────────
+    var _aiSummaryBusy = {};
+
+    function buildAiSummaryBlock(d) {
+      var hasSummary = !!d.ai_summary_text;
+      var generatedAt = d.ai_summary_generated_at
+        ? new Date(d.ai_summary_generated_at).toLocaleString('cs-CZ', { dateStyle: 'short', timeStyle: 'short' })
+        : null;
+      var stale = !!d.ai_summary_stale;
+
+      var body;
+      if (!hasSummary) {
+        body =
+          '<div style="padding:18px;text-align:center;color:var(--text2);font-size:13px;">' +
+            'AI shrnutí zatím nebylo vygenerováno.<br>' +
+            '<span style="font-size:11px;opacity:0.7;">Claude (sonnet-4-6) projde event log + uložené modely a sepíše, jak zákazník s pomůckou pracuje.</span>' +
+          '</div>';
+      } else {
+        body =
+          '<div id="ai-summary-text" style="font-size:13px;line-height:1.6;color:var(--text);white-space:pre-wrap;">' +
+            esc(d.ai_summary_text) +
+          '</div>' +
+          '<div style="margin-top:10px;font-size:11px;color:var(--text2);">' +
+            'Vygenerováno ' + generatedAt + ' · ' + esc(d.ai_summary_model || 'claude') +
+            (stale ? ' · <span style="color:#f59e0b;font-weight:600;">⚠ shrnutí je zastaralé (zákazník mezitím něco změnil)</span>' : '') +
+          '</div>';
+      }
+
+      var btnLabel = hasSummary ? (stale ? 'Aktualizovat' : 'Regenerovat') : 'Vygenerovat AI shrnutí';
+      var btnCls = (!hasSummary || stale) ? 'btn-primary' : 'btn-secondary';
+
+      return (
+        '<div id="ai-summary-block" style="background:linear-gradient(135deg,rgba(108,92,231,0.10),rgba(59,130,246,0.04));border:1px solid rgba(108,92,231,0.30);border-radius:10px;padding:14px 16px;margin-bottom:18px;">' +
+          '<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">' +
+            '<span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.6px;color:#a5b4fc;">🤖 AI shrnutí chování</span>' +
+            '<div style="flex:1"></div>' +
+            '<button id="ai-summary-btn" class="btn ' + btnCls + ' btn-sm" onclick="regenerateAiSummary(' + d.id + ')">' + btnLabel + '</button>' +
+          '</div>' +
+          '<div id="ai-summary-body">' + body + '</div>' +
+        '</div>'
+      );
+    }
+
+    async function regenerateAiSummary(id) {
+      if (_aiSummaryBusy[id]) return;
+      _aiSummaryBusy[id] = true;
+      var btn = document.getElementById('ai-summary-btn');
+      var body = document.getElementById('ai-summary-body');
+      if (btn) { btn.disabled = true; btn.textContent = 'Generuji…'; }
+      if (body) {
+        body.innerHTML =
+          '<div style="padding:24px;text-align:center;color:var(--text2);font-size:13px;">' +
+            '<div style="display:inline-block;width:24px;height:24px;border:3px solid var(--border);border-top-color:#6c5ce7;border-radius:50%;animation:spin 0.8s linear infinite;"></div>' +
+            '<div style="margin-top:10px;">Claude čte event log a uložené modely…</div>' +
+          '</div>';
+      }
+      try {
+        var res = await fetch('/api/tools/recipients/' + id + '/ai-summary', { method: 'POST' });
+        var data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'HTTP ' + res.status);
+        if (body) {
+          body.innerHTML =
+            '<div id="ai-summary-text" style="font-size:13px;line-height:1.6;color:var(--text);white-space:pre-wrap;">' +
+              esc(data.text) +
+            '</div>' +
+            '<div style="margin-top:10px;font-size:11px;color:var(--text2);">' +
+              'Vygenerováno ' + new Date(data.generated_at).toLocaleString('cs-CZ', { dateStyle: 'short', timeStyle: 'short' }) +
+              ' · ' + esc(data.model) +
+              (data.tokens_in ? ' · ' + data.tokens_in + ' → ' + data.tokens_out + ' tokenů' : '') +
+            '</div>';
+        }
+        if (btn) { btn.disabled = false; btn.classList.remove('btn-primary'); btn.classList.add('btn-secondary'); btn.textContent = 'Regenerovat'; }
+      } catch (e) {
+        if (body) {
+          body.innerHTML = '<div style="padding:14px;color:#ef4444;font-size:13px;">Chyba: ' + esc(e.message) + '</div>';
+        }
+        if (btn) { btn.disabled = false; btn.textContent = 'Zkusit znovu'; }
+      } finally {
+        _aiSummaryBusy[id] = false;
+      }
+    }
+
+    function renderRecipientDetail(d) {
+      var EVENT_LABELS = {
+        sent: '📤 Odesláno', opened: '👁 Otevřeno', edited: '✏️ Upraveno',
+        saved: '💾 Uloženo', exported: '⬇ Export', resent: '🔁 Posláno znovu', viewed: '👁 Náhled',
+      };
+      var eventsHtml = '';
+      if (d.events && d.events.length) {
+        for (var i = 0; i < d.events.length; i++) {
+          var ev = d.events[i];
+          var dt = new Date(ev.created_at).toLocaleString('cs-CZ', { dateStyle: 'short', timeStyle: 'medium' });
+          eventsHtml += '<tr><td style="padding:6px 8px;">' + dt + '</td>' +
+            '<td style="padding:6px 8px;">' + (EVENT_LABELS[ev.event_type] || ev.event_type) + '</td>' +
+            '<td style="padding:6px 8px;color:var(--text2);font-size:11px;">' + (ev.ip || '—') + '</td></tr>';
+        }
+      } else {
+        eventsHtml = '<tr><td colspan="3" style="padding:14px;text-align:center;color:var(--text2);">Žádné eventy.</td></tr>';
+      }
+
+      var modelsHtml = '';
+      if (d.models && d.models.length) {
+        for (var j = 0; j < d.models.length; j++) {
+          var m = d.models[j];
+          var dt2 = new Date(m.created_at).toLocaleString('cs-CZ', { dateStyle: 'short', timeStyle: 'short' });
+          var zisk = m.computed_json && m.computed_json.zisk;
+          var nav = m.computed_json && m.computed_json.navratnost_roku;
+          modelsHtml += '<tr><td style="padding:6px 8px;">' + dt2 + '</td>' +
+            '<td style="padding:6px 8px;">' + esc(m.name) + '</td>' +
+            '<td style="padding:6px 8px;text-align:right;">' + (typeof zisk === 'number' ? Math.round(zisk) + ' €' : '—') + '</td>' +
+            '<td style="padding:6px 8px;text-align:right;">' + (typeof nav === 'number' && isFinite(nav) ? nav.toFixed(1) + ' let' : '—') + '</td></tr>';
+        }
+      } else {
+        modelsHtml = '<tr><td colspan="4" style="padding:14px;text-align:center;color:var(--text2);">Zákazník zatím neuložil žádný model.</td></tr>';
+      }
+
+      var html = '<div class="modal-overlay" onclick="if(event.target===this)closeModal()">' +
+        '<div class="modal" style="width:820px;max-width:95vw;">' +
+          '<h2>📊 ' + esc(d.name) + (d.company ? ' <span style="font-weight:400;color:var(--text2);font-size:14px;">— ' + esc(d.company) + '</span>' : '') + '</h2>' +
+          '<div style="font-size:13px;color:var(--text2);margin-bottom:14px;">' + esc(d.email) + ' · vytvořeno ' + new Date(d.created_at).toLocaleDateString('cs-CZ') + '</div>' +
+          '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:18px;">' +
+            statCard('Otevření', d.open_count, '#10b981') +
+            statCard('Uložené modely', d.save_count, '#eab308') +
+            statCard('Eventy', (d.events || []).length, '#6c5ce7') +
+          '</div>' +
+          '<div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--text2);">' +
+            '<div><strong style="color:var(--text);">Sdílený odkaz:</strong></div>' +
+            '<div style="word-break:break-all;color:#a5b4fc;margin-top:4px;">' + esc(d.share_link) + '</div>' +
+          '</div>' +
+          '<style>@keyframes spin { to { transform: rotate(360deg); } }</style>' +
+          buildAiSummaryBlock(d) +
+          '<div class="tool-section-title">Uložené modely</div>' +
+          '<div style="overflow-x:auto;margin-bottom:18px;"><table style="width:100%;font-size:12px;border-collapse:collapse;">' +
+            '<thead><tr style="border-bottom:1px solid var(--border);color:var(--text2);"><th style="text-align:left;padding:6px 8px;">Datum</th><th style="text-align:left;padding:6px 8px;">Název</th><th style="text-align:right;padding:6px 8px;">Zisk/měs</th><th style="text-align:right;padding:6px 8px;">Návratnost</th></tr></thead>' +
+            '<tbody>' + modelsHtml + '</tbody>' +
+          '</table></div>' +
+          '<div class="tool-section-title">Event log (posledních 50)</div>' +
+          '<div style="overflow-x:auto;max-height:240px;overflow-y:auto;"><table style="width:100%;font-size:12px;border-collapse:collapse;">' +
+            '<thead><tr style="border-bottom:1px solid var(--border);color:var(--text2);"><th style="text-align:left;padding:6px 8px;">Kdy</th><th style="text-align:left;padding:6px 8px;">Akce</th><th style="text-align:left;padding:6px 8px;">IP</th></tr></thead>' +
+            '<tbody>' + eventsHtml + '</tbody>' +
+          '</table></div>' +
+          '<div class="modal-actions"><button class="btn btn-secondary" onclick="closeModal()">Zavřít</button></div>' +
+        '</div></div>';
+      document.getElementById('modal-root').innerHTML = html;
+    }
+
+    function statCard(label, value, color) {
+      return '<div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:14px;">' +
+        '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.6px;color:var(--text2);">' + label + '</div>' +
+        '<div style="font-size:24px;font-weight:700;color:' + color + ';margin-top:4px;">' + value + '</div>' +
+      '</div>';
+    }
+
+    async function loadPricelist() {
+      var search = document.getElementById('pricelist-search') ? document.getElementById('pricelist-search').value : '';
+      var filter = document.getElementById('pricelist-filter') ? document.getElementById('pricelist-filter').value : '';
+      var url = '/api/wh/pricelist';
+      var params = [];
+      if (search) params.push('search=' + encodeURIComponent(search));
+      if (filter === 'active') params.push('active=true');
+      if (filter === 'inactive') params.push('active=false');
+      if (params.length) url += '?' + params.join('&');
+      try {
+        var res = await fetch(url);
+        var items = await res.json();
+        renderPricelist(items);
+      } catch(e) { console.error(e); }
+    }
+
+    function renderPricelist(list) {
+      var el = document.getElementById('pricelist-table');
+      if (!list.length) {
+        el.innerHTML = '<div class="empty-state"><div class="empty-icon">💰</div><h3>Prázdný ceník</h3><p>Vytvořte první položku prodejního ceníku.</p></div>';
+        return;
+      }
+      var html = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr>' +
+        '<th>Název (CZ)</th><th>Název (EN)</th>' +
+        '<th style="text-align:right" title="Maloobchodni">Cena CZK</th>' +
+        '<th style="text-align:right" title="Maloobchodni">Cena EUR</th>' +
+        '<th style="text-align:right" title="Kamionova / velkoobchodni">🚛 CZK</th>' +
+        '<th style="text-align:right" title="Kamionova / velkoobchodni">🚛 EUR</th>' +
+        '<th>Výrobek</th><th>Stav</th><th>Akce</th></tr></thead><tbody>';
+      for (var i = 0; i < list.length; i++) {
+        var it = list[i];
+        var statusCss = it.active ? 'background:rgba(16,185,129,0.12);color:#10b981' : 'background:rgba(156,163,175,0.12);color:#9ca3af';
+        var statusLbl = it.active ? 'Aktivní' : 'Zrušeno';
+        var rowStyle = it.product ? '' : 'background:rgba(239,68,68,0.08);';
+        html += '<tr style="' + rowStyle + '" onclick="openPricelistModal(' + it.id + ')">';
+        html += '<td class="person-name">' + esc(it.name_cs) + '</td>';
+        html += '<td>' + (it.name_en ? esc(it.name_en) : '<span style="color:var(--text2)">—</span>') + '</td>';
+        html += '<td style="text-align:right;font-weight:600;">' + (it.price_czk != null ? parseFloat(it.price_czk).toLocaleString('cs-CZ') + ' Kč' : '<span style="color:var(--text2)">—</span>') + '</td>';
+        html += '<td style="text-align:right;font-weight:600;">' + (it.price_eur != null ? parseFloat(it.price_eur).toLocaleString('cs-CZ') + ' €' : '<span style="color:var(--text2)">—</span>') + '</td>';
+        html += '<td style="text-align:right;font-weight:600;color:#0ea5e9;">' + (it.truck_price_czk != null ? parseFloat(it.truck_price_czk).toLocaleString('cs-CZ') + ' Kč' : '<span style="color:var(--text2)">—</span>') + '</td>';
+        html += '<td style="text-align:right;font-weight:600;color:#0ea5e9;">' + (it.truck_price_eur != null ? parseFloat(it.truck_price_eur).toLocaleString('cs-CZ') + ' €' : '<span style="color:var(--text2)">—</span>') + '</td>';
+        html += '<td>' + (it.product
+          ? '<span style="color:#8b5cf6;font-weight:600">' + esc(it.product.code) + '</span> — ' + esc(it.product.name)
+          : '<span style="display:inline-flex;align-items:center;gap:6px;background:rgba(239,68,68,0.15);color:#ef4444;border:1px solid rgba(239,68,68,0.4);padding:3px 10px;border-radius:8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;animation:pulse-warn 1.8s ease-in-out infinite;">⚠ Nenapojeno</span>') + '</td>';
+        html += '<td><span class="badge" style="' + statusCss + '">' + statusLbl + '</span></td>';
+        html += '<td><button class="btn btn-danger btn-sm" onclick="event.stopPropagation();deletePricelistItem(' + it.id + ')">🗑️</button></td>';
+        html += '</tr>';
+      }
+      html += '</tbody></table></div>';
+      el.innerHTML = html;
+    }
+
+    async function openPricelistModal(id) {
+      var item = {};
+      if (id) {
+        try { var r = await fetch('/api/wh/pricelist/' + id); item = await r.json(); } catch(e) {}
+      }
+      if (products.length === 0) {
+        try {
+          var pr = await fetch('/api/production/products?type=product');
+          var pd = await pr.json();
+          products = Array.isArray(pd) ? pd : [];
+        } catch(e) {}
+      }
+      var prodOpts = products.map(function(p) {
+        return '<option value="' + p.id + '"' + (item.product_id === p.id ? ' selected' : '') + '>' + esc(p.code) + ' — ' + esc(p.name) + '</option>';
+      }).join('');
+
+      document.getElementById('modal-root').innerHTML =
+        '<div class="modal-overlay" onclick="if(event.target===this)closeModal()">' +
+          '<div class="modal" style="width:640px;max-width:95vw;">' +
+            '<h2>' + (id ? '✏️ Upravit položku ceníku' : '➕ Nová položka ceníku') + '</h2>' +
+            '<form onsubmit="savePricelistItem(event, ' + (id || 'null') + ')">' +
+              '<div class="form-grid">' +
+                '<div class="form-group full"><label>Název (česky) *</label><input type="text" name="name_cs" required value="' + esc(item.name_cs || '') + '" placeholder="Např. Stůl dubový 120cm"></div>' +
+                '<div class="form-group full"><label>Název (anglicky)</label><input type="text" name="name_en" value="' + esc(item.name_en || '') + '" placeholder="e.g. Oak table 120cm"></div>' +
+                '<div class="form-group full" style="grid-column:1/-1;margin-top:4px;"><label style="display:block;font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px;">Maloobchodní cena (bez DPH)</label></div>' +
+                '<div class="form-group"><label>Cena v Kč</label><input type="number" step="0.01" min="0" name="price_czk" value="' + (item.price_czk != null ? item.price_czk : '') + '" placeholder="0.00"></div>' +
+                '<div class="form-group"><label>Cena v EUR</label><input type="number" step="0.01" min="0" name="price_eur" value="' + (item.price_eur != null ? item.price_eur : '') + '" placeholder="0.00"></div>' +
+                '<div class="form-group full" style="grid-column:1/-1;margin-top:4px;"><label style="display:block;font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px;">🚛 Kamionová (velkoobchodní) cena (bez DPH)</label></div>' +
+                '<div class="form-group"><label>Cena v Kč</label><input type="number" step="0.01" min="0" name="truck_price_czk" value="' + (item.truck_price_czk != null ? item.truck_price_czk : '') + '" placeholder="0.00"></div>' +
+                '<div class="form-group"><label>Cena v EUR</label><input type="number" step="0.01" min="0" name="truck_price_eur" value="' + (item.truck_price_eur != null ? item.truck_price_eur : '') + '" placeholder="0.00"></div>' +
+                '<div class="form-group full"><label>Výrobek (volitelné — propojí cenu s existujícím kusem ve výrobě)</label><select name="product_id" id="pl-product-select" onchange="updatePlProductWarning()"><option value="">— Bez napojení —</option>' + prodOpts + '</select>' +
+                  '<div id="pl-product-warning" style="display:' + (item.product_id ? 'none' : 'flex') + ';margin-top:8px;padding:10px 14px;background:rgba(239,68,68,0.12);border:1.5px solid #ef4444;border-radius:8px;color:#ef4444;font-size:13px;font-weight:600;align-items:center;gap:10px;animation:pulse-warn 1.8s ease-in-out infinite;">⚠️ <span>Položka není napojena na výrobek! Zvažte výběr výrobku pro propojení s výrobou.</span></div>' +
+                '</div>' +
+                '<div class="form-group full"><label>Poznámka</label><textarea name="note" rows="2" placeholder="Interní poznámka...">' + esc(item.note || '') + '</textarea></div>' +
+                '<div class="form-group full"><label style="display:flex;align-items:center;gap:8px;cursor:pointer;"><input type="checkbox" name="active"' + (item.active === false ? '' : ' checked') + '> <span>Aktivní položka (zobrazí se v nabídce při tvorbě objednávky)</span></label></div>' +
+              '</div>' +
+              '<div class="modal-actions">' +
+                '<button type="button" class="btn btn-secondary" onclick="closeModal()">Zrušit</button>' +
+                '<button type="submit" class="btn btn-primary">' + (id ? 'Uložit' : 'Vytvořit') + '</button>' +
+              '</div>' +
+            '</form>' +
+          '</div>' +
+        '</div>';
+    }
+
+    async function savePricelistItem(e, id) {
+      e.preventDefault();
+      var form = new FormData(e.target);
+      var data = {
+        name_cs: form.get('name_cs'),
+        name_en: form.get('name_en') || null,
+        price_czk: form.get('price_czk') ? parseFloat(form.get('price_czk')) : null,
+        price_eur: form.get('price_eur') ? parseFloat(form.get('price_eur')) : null,
+        truck_price_czk: form.get('truck_price_czk') ? parseFloat(form.get('truck_price_czk')) : null,
+        truck_price_eur: form.get('truck_price_eur') ? parseFloat(form.get('truck_price_eur')) : null,
+        product_id: form.get('product_id') ? parseInt(form.get('product_id'), 10) : null,
+        note: form.get('note') || null,
+        active: form.has('active'),
+      };
+      try {
+        var url = id ? ('/api/wh/pricelist/' + id) : '/api/wh/pricelist';
+        var method = id ? 'PUT' : 'POST';
+        var res = await fetch(url, { method: method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+        if (!res.ok) {
+          var err = await res.json().catch(function() { return {}; });
+          throw new Error(err.error || ('Chyba při ukládání (' + res.status + ')'));
+        }
+        closeModal();
+        loadPricelist();
+      } catch(e) { alert('Chyba: ' + e.message); }
+    }
+
+    async function deletePricelistItem(id) {
+      if (!confirm('Opravdu smazat tuto položku ceníku?')) return;
+      try {
+        var res = await fetch('/api/wh/pricelist/' + id, { method: 'DELETE' });
+        if (!res.ok) { alert('Chyba při mazání'); return; }
+        loadPricelist();
+      } catch(e) { alert('Chyba: ' + e.message); }
+    }
+
+    // ============================================================
+    // INIT
+    // ============================================================
+    loadStats();
+    loadOrders();
+  

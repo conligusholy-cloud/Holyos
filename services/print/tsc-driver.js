@@ -1,24 +1,30 @@
-// HolyOS — TSC TC200 driver
+// HolyOS — TSC driver (TC200, TE210, podobné)
 //
-// Čistý TCP socket bridge: pošle ZPL stream na (ip:port) a zavře spojení.
-// TSC TC200 firmware v ZPL emulačním módu akceptuje ZPL přes raw TCP socket
+// Čistý TCP socket bridge: pošle byty na (ip:port) a zavře spojení.
+// TSC firmware (jak v ZPL emulaci, tak nativní TSPL) akceptuje raw socket
 // bez handshake / odpovědi. Úspěch posuzujeme podle zápisu do socketu bez chyby.
 //
-// Ping: otevře TCP spojení, okamžitě zavře. Měří latenci.
+// Tři režimy:
+//   - sendZpl({ ip, port, zpl })       — ZPL string → UTF-8 bytes
+//   - sendRaw({ ip, port, payload })   — libovolný Buffer (TSPL + BITMAP binární data,
+//                                         emulace, byte stream)
+//   - ping({ ip, port })               — TCP connect + close, měření latence
 
 const net = require('net');
 
 /**
- * Pošle ZPL payload na tiskárnu přes TCP socket.
+ * Pošle raw byty na tiskárnu přes TCP socket. Univerzální — funguje pro ZPL,
+ * TSPL, TSPL+BITMAP binární data, nebo cokoli jiného.
  *
  * @param {object} opts
- * @param {string} opts.ip       - IP adresa tiskárny
- * @param {number} opts.port     - TCP port
- * @param {string} opts.zpl      - ZPL tělo (raw string)
- * @param {number} [opts.timeoutMs=5000] - timeout pro connect + send
+ * @param {string}  opts.ip
+ * @param {number}  opts.port
+ * @param {Buffer}  opts.payload         - kompletní byte stream
+ * @param {number}  [opts.timeoutMs=10000] - delší timeout, BITMAP joby jsou velké
+ * @param {number}  [opts.drainMs=500]     - po write počkej, ať firmware doráží
  * @returns {Promise<{ok: boolean, latencyMs: number, bytes: number, error?: string}>}
  */
-function sendZpl({ ip, port, zpl, timeoutMs = 5000 }) {
+function sendRaw({ ip, port, payload, timeoutMs = 10000, drainMs = 500 }) {
   return new Promise((resolve) => {
     const start = Date.now();
     const socket = new net.Socket();
@@ -42,19 +48,37 @@ function sendZpl({ ip, port, zpl, timeoutMs = 5000 }) {
     });
 
     socket.connect(port, ip, () => {
-      const buf = Buffer.from(zpl, 'utf8');
-      socket.write(buf, (err) => {
+      socket.write(payload, (err) => {
         if (err) {
           finish({ ok: false, bytes: 0, error: err.message });
           return;
         }
-        // TSC TC200 neposílá ACK. Dáme jí 200 ms na zpracování
-        // (malý ZPL se odbaví okamžitě) a socket zavřeme.
+        // TSC neposílá ACK — dáme tiskárně čas na zpracování velkých BITMAP jobů,
+        // pak teprve socket zavřeme.
         setTimeout(() => {
-          socket.end(() => finish({ ok: true, bytes: buf.length }));
-        }, 200);
+          socket.end(() => finish({ ok: true, bytes: payload.length }));
+        }, drainMs);
       });
     });
+  });
+}
+
+/**
+ * Pošle ZPL payload (string) na tiskárnu. Wrapper okolo sendRaw — UTF-8 encode.
+ *
+ * @param {object} opts
+ * @param {string} opts.ip
+ * @param {number} opts.port
+ * @param {string} opts.zpl
+ * @param {number} [opts.timeoutMs=5000]
+ * @returns {Promise<{ok: boolean, latencyMs: number, bytes: number, error?: string}>}
+ */
+function sendZpl({ ip, port, zpl, timeoutMs = 5000 }) {
+  return sendRaw({
+    ip, port,
+    payload: Buffer.from(zpl, 'utf8'),
+    timeoutMs,
+    drainMs: 200, // ZPL joby jsou typicky malé
   });
 }
 
@@ -82,4 +106,4 @@ function ping({ ip, port, timeoutMs = 2000 }) {
   });
 }
 
-module.exports = { sendZpl, ping };
+module.exports = { sendZpl, sendRaw, ping };
