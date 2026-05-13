@@ -3666,6 +3666,12 @@
                   <button class="btn btn-secondary" onclick="changeApplicantStatus(${a.id})">Uložit stav</button>
                 </div>
 
+                <div style="font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; color:var(--text2); margin-bottom:8px;">Pozice / o co má zájem</div>
+                <div style="display:flex; gap:8px; margin-bottom:14px;">
+                  <input id="ap-detail-position" value="${escapeHtml(a.position || '')}" placeholder="např. operátor, šička, řidič…" style="flex:1; background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:8px 12px; color:var(--text); font-size:13px;">
+                  <button class="btn btn-secondary" onclick="changeApplicantPosition(${a.id})">Uložit pozici</button>
+                </div>
+
                 ${a.cv_filename ? `
                   <div style="font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; color:var(--text2); margin-bottom:8px;">Životopis</div>
                   <div style="margin-bottom:14px;">
@@ -3718,6 +3724,18 @@
       openApplicantDetail(id);
       loadApplicants();
       loadApplicantStats();
+    }
+
+    async function changeApplicantPosition(id) {
+      const position = document.getElementById('ap-detail-position').value.trim();
+      const res = await fetch(`/api/hr/applicants/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ position }),
+      });
+      if (!res.ok) { alert('Změna pozice selhala'); return; }
+      openApplicantDetail(id);
+      loadApplicants();
     }
 
     async function addApplicantNote(id) {
