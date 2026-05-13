@@ -3830,11 +3830,27 @@
             </div>
             <div id="csv-import-status" style="margin-top:14px; font-size:13px;"></div>
             <div class="modal-actions">
+              <button class="btn btn-danger" onclick="deleteAllCsvImported()" title="Smaže všechny uchazeče importované z CSV (pro reimport)">🗑 Vymazat všechny CSV importované</button>
+              <div style="flex:1"></div>
               <button class="btn btn-secondary" onclick="closeApplicantModal()">Zrušit</button>
               <button class="btn btn-primary" id="csv-import-btn" onclick="submitCsvImport()">📥 Importovat</button>
             </div>
           </div>
         </div>`;
+    }
+
+    async function deleteAllCsvImported() {
+      if (!confirm('Opravdu smazat VŠECHNY uchazeče importované z CSV (source_detail začíná csv:)? Tato akce je nevratná.')) return;
+      try {
+        const res = await fetch('/api/hr/applicants/bulk-csv', { method: 'DELETE' });
+        const data = await res.json();
+        if (!res.ok) { alert(data.error || 'Smazání selhalo'); return; }
+        const status = document.getElementById('csv-import-status');
+        status.innerHTML = `<div style="background:rgba(239,68,68,0.1); border:1px solid rgba(239,68,68,0.3); padding:10px 14px; border-radius:8px; color:var(--text);">🗑 Smazáno <strong>${data.deleted}</strong> CSV importovaných uchazečů. Nyní můžeš znovu nahrát CSV.</div>`;
+        loadApplicants();
+        loadApplicantStats();
+        loadStats();
+      } catch (e) { alert('Chyba: ' + e.message); }
     }
 
     async function submitCsvImport() {
