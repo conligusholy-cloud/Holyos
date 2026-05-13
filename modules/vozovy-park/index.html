@@ -2628,20 +2628,3 @@
   </script>
 </body>
 </html>
-      } catch (e) { alert('Chyba: ' + e.message); }
-    }
-
-    // ─── Init ──────────────────────────────────────────────────────────────
-    (async function() {
-      initCompanyFilter();
-      // Otevřít modal vozidla pokud je ?id=X v URL (kliknutí z notifikace)
-      await Promise.all([loadDrivers(), loadVehicles(), loadStats()]);
-      const params = new URLSearchParams(window.location.search);
-      const openId = params.get('id');
-      if (openId) openVehicleModal(parseInt(openId));
-    })();
-  </script>
-</body>
-</html>
-ody>
-</html>
