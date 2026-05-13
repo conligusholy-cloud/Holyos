@@ -771,11 +771,9 @@
               '<header>' +
                 '<span class="type-badge ' + escHtml(p.policy_type) + '">' + (POLICY_TYPES[p.policy_type] || p.policy_type) + '</span>' +
                 '<div style="display:flex;gap:6px;">' +
-                  // 'Zobrazit' otevře dokument v novém tabu (PDF/obrázek se zobrazí inline);
-                  // U pojistky držíme 2 separátní soubory — Smlouvu a Zelenou kartu —
-                  // a pro každý zvlášť tlačítko Zobrazit (pokud existuje).
-                  (p.contract_url ? '<a class="btn btn-sm btn-secondary" href="' + escHtml(p.contract_url) + '" target="_blank" rel="noopener" title="Zobrazit smlouvu">📄 Smlouva</a>' : '') +
-                  (p.file_url ? '<a class="btn btn-sm btn-secondary" href="' + escHtml(p.file_url) + '" target="_blank" rel="noopener" title="Zobrazit zelenou kartu">🟢 Zelená karta</a>' : '') +
+                  // U pojistky držíme pouze 1 soubor — Zelenou kartu.
+                  // Po kliknutí se náhled otevře v samostatném okně přes openPolicyFilePreview().
+                  (p.file_url ? '<button type="button" class="btn btn-sm btn-secondary" onclick="openPolicyFilePreview(\'' + escHtml(p.file_url) + '\',\'' + escHtml(p.file_name || 'Zelená karta') + '\')" title="Otevřít náhled Zelené karty v novém okně">🟢 Zelená karta</button>' : '') +
                   // Přejmenováno z '✏️ Upravit' — jasně sdělujeme, že jde i o úpravu uloženého dokumentu (souboru).
                   '<button type="button" class="btn btn-sm btn-secondary" onclick="showPolicyForm(' + vehicleId + ',' + p.id + ')" title="Upravit pojistku včetně uloženého dokumentu">📝 Upravit dokument</button>' +
                   '<button type="button" class="btn btn-sm btn-danger" onclick="deletePolicy(' + p.id + ',' + vehicleId + ')">🗑️</button>' +
@@ -819,29 +817,34 @@
       const valTo = p && p.valid_to ? toDateInput(p.valid_to) : '';
       const premium = p && p.premium_amount != null ? Number(p.premium_amount) : '';
 
-      // Helper — vyrobí jeden řádek souborového pole (Smlouva / Zelená karta).
-      // Vlevo: label + file input. Vpravo: 'Zobrazit' + 'Odebrat' (pokud existuje
+      // Helper — vyrobí jeden řádek souborového pole (Zelená karta).
+      // Vlevo: label + file input. Vpravo: 'Náhled' + 'Odebrat' (pokud existuje
       // uložený soubor). Tlačítko Odebrat nastaví hidden flag a UI ihned vyčistí.
+      // Náhled se otevírá v samostatném okně přes openPolicyFilePreview().
       function fileFieldHtml(idPrefix, label, currentUrl, currentName) {
         const hasFile = !!currentUrl;
+        const safeUrl = escHtml(currentUrl || '');
+        const safeName = escHtml(currentName || 'Zelená karta');
         return '<div class="form-group full" style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;">' +
           '<div style="flex:1;min-width:240px;">' +
             '<label>' + label + '</label>' +
             '<input type="file" id="' + idPrefix + '-file" accept="image/*,application/pdf" style="width:100%;">' +
             (hasFile
               ? '<div id="' + idPrefix + '-current" style="font-size:12px;color:var(--text2);margin-top:4px;">' +
-                  'Aktuálně: <a class="dl" href="' + escHtml(currentUrl) + '" target="_blank" rel="noopener">📎 ' + escHtml(currentName || 'stáhnout') + '</a>' +
+                  'Aktuálně: <a href="javascript:void(0)" onclick="openPolicyFilePreview(\'' + safeUrl + '\',\'' + safeName + '\')" title="Otevřít náhled v novém okně">📎 ' + escHtml(currentName || 'Zelená karta') + '</a>' +
                 '</div>'
               : '') +
             '<input type="hidden" id="' + idPrefix + '-remove" value="0">' +
           '</div>' +
+          (hasFile
+            ? '<button type="button" class="btn btn-sm btn-secondary" onclick="openPolicyFilePreview(\'' + safeUrl + '\',\'' + safeName + '\')" title="Otevřít náhled v novém okně">👁️ Náhled</button>'
+            : '') +
           (hasFile
             ? '<button type="button" class="btn btn-sm btn-danger" onclick="removePolicyFile(\'' + idPrefix + '\')" id="' + idPrefix + '-remove-btn" title="Odebrat tento soubor při uložení">🗑️ Odebrat</button>'
             : '') +
         '</div>';
       }
 
-      const contractField = fileFieldHtml('p-contract', 'Smlouva scan', p && p.contract_url, p && p.contract_name);
       const greenCardField = fileFieldHtml('p-greencard', 'Zelená karta', p && p.file_url, p && p.file_name);
 
       const title = editing ? 'Upravit pojistku' : 'Nová pojistka';
@@ -872,7 +875,6 @@
           '<div class="form-group"><label>Platnost od</label><input type="date" id="p-from" value="' + valFrom + '"></div>' +
           '<div class="form-group"><label>Platnost do</label><input type="date" id="p-to" value="' + valTo + '"></div>' +
           '<div class="form-group full"><label>Poznámka</label><textarea id="p-note">' + escHtml(p && p.note || '') + '</textarea></div>' +
-          contractField +
           greenCardField +
         '</div>' +
         '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;">' +
@@ -880,6 +882,27 @@
           '<button type="button" class="btn btn-sm btn-primary" onclick="savePolicy(' + saveArg + ')">' + submitLabel + '</button>' +
         '</div>' +
       '</div>';
+    }
+
+    // Otevře přiložený soubor (Zelená karta) v samostatném okně náhledu.
+    // PDF/obrázek se zobrazí inline díky toolbaru prohlížeče. Když je popup zablokován,
+    // fallback na otevření v nové záložce.
+    function openPolicyFilePreview(url, name) {
+      if (!url) { alert('Soubor není uložen.'); return; }
+      const title = (name || 'Zelená karta').replace(/"/g, '&quot;');
+      const w = 900, h = 720;
+      const left = Math.max(0, Math.round((screen.availWidth  - w) / 2));
+      const top  = Math.max(0, Math.round((screen.availHeight - h) / 2));
+      const features = 'noopener,noreferrer,width=' + w + ',height=' + h + ',left=' + left + ',top=' + top + ',resizable=yes,scrollbars=yes';
+      const win = window.open(url, '_blank', features);
+      if (!win) {
+        // Popup blocker fallback — otevři v normální nové záložce
+        const a = document.createElement('a');
+        a.href = url; a.target = '_blank'; a.rel = 'noopener'; a.click();
+      } else {
+        try { win.document.title = title; } catch (_) { /* cross-origin guard */ }
+        win.focus();
+      }
     }
 
     // Klik na "Odebrat" — označíme hidden flag, schováme aktuální popis souboru
@@ -940,18 +963,6 @@
       const gcRemove = document.getElementById('p-greencard-remove');
       if (gcRemove && gcRemove.value === '1') data.remove_green_card = true;
 
-      // Smlouva scan — nový upload?
-      const ctFile = document.getElementById('p-contract-file');
-      if (ctFile && ctFile.files && ctFile.files[0]) {
-        const file = ctFile.files[0];
-        if (file.size > 20 * 1024 * 1024) { alert('Smlouva je větší než 20 MB.'); return; }
-        data.contract_data = await fileToBase64(file);
-        data.contract_file_name = file.name;
-        data.contract_mime_type = file.type || null;
-      }
-      // Smlouva scan — Odebrat?
-      const ctRemove = document.getElementById('p-contract-remove');
-      if (ctRemove && ctRemove.value === '1') data.remove_contract = true;
       try {
         const editing = policyId != null;
         const url = editing
@@ -2616,4 +2627,21 @@
     })();
   </script>
 </body>
+</html>
+      } catch (e) { alert('Chyba: ' + e.message); }
+    }
+
+    // ─── Init ──────────────────────────────────────────────────────────────
+    (async function() {
+      initCompanyFilter();
+      // Otevřít modal vozidla pokud je ?id=X v URL (kliknutí z notifikace)
+      await Promise.all([loadDrivers(), loadVehicles(), loadStats()]);
+      const params = new URLSearchParams(window.location.search);
+      const openId = params.get('id');
+      if (openId) openVehicleModal(parseInt(openId));
+    })();
+  </script>
+</body>
+</html>
+ody>
 </html>
