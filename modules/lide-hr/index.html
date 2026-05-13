@@ -3452,7 +3452,9 @@
         const assigned = a.assigned_to ? (a.assigned_to.last_name + ' ' + a.assigned_to.first_name) : '—';
         const sourceLabel = APPLICANT_SOURCE_LABELS[a.source] || a.source;
         const statusLabel = APPLICANT_STATUS_LABELS[a.status] || a.status;
-        const created = new Date(a.created_at).toLocaleDateString('cs-CZ');
+        const createdDate = new Date(a.created_at);
+        const created = createdDate.toLocaleDateString('cs-CZ') + ' ' +
+          createdDate.toLocaleTimeString('cs-CZ', { hour: '2-digit', minute: '2-digit' });
         const cvIcon = a.cv_filename ? '<span title="' + escapeHtml(a.cv_filename) + '" style="color:#34d399;">📎</span>' : '';
         return `
           <tr onclick="openApplicantDetail(${a.id})">
