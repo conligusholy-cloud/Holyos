@@ -14,12 +14,17 @@ const { spawn } = require('child_process');
 const { messagesCreate } = require('../anthropic-retry');
 
 const MODEL = process.env.AI_DEV_MODEL || 'claude-sonnet-4-6';
-const MAX_TURNS = parseInt(process.env.AI_DEV_MAX_TURNS || '25', 10);
+const MAX_TURNS = parseInt(process.env.AI_DEV_MAX_TURNS || '18', 10);
 // 16 384 — výrazně více než 4 096, ať write_file velkého souboru (např. routes/*.js
 // ~30–50 kB) projde v jednom turnu bez useknutí. Důvod: stop_reason='max_tokens'
 // uřízne tool_use blok mid-content, agent.js to pak nesprávně interpretoval jako
 // "skončil bez finish()" a celý běh zhavaroval (#49, 12.5.2026: 288k tokens, 0 commitů).
 const MAX_TOKENS_PER_TURN = parseInt(process.env.AI_DEV_MAX_TOKENS_PER_TURN || '16384', 10);
+// Hard cap na input tokens per run — pojistka proti runaway loopu, kdyby stagnation
+// detection selhala. 800k * Sonnet input ~$3/M = max $2.40 na run.
+const MAX_INPUT_TOKENS_PER_RUN = parseInt(process.env.AI_DEV_MAX_INPUT_TOKENS || '800000', 10);
+// Po kolika turnech bez file_change pošleme stagnation nudge.
+const STAGNATION_TURNS = parseInt(process.env.AI_DEV_STAGNATION_TURNS || '3', 10);
 const MAX_READ_BYTES = 200_000;
 
 // Forbidden paths — agent je nesmí číst ani psát.
@@ -235,11 +240,20 @@ AKCEPTAČNÍ KRITÉRIA:
 ${task.acceptance_criteria || '(nestanovena — zeptej se přes finish s ohlášením, že chybí AC)'}
 
 POSTUP:
-1. Prozkoumej strukturu repa pomocí list_files / read_file.
+1. Prozkoumej strukturu repa pomocí list_files / read_file (max 5–8 kol).
 2. Najdi soubory, které je potřeba změnit nebo vytvořit.
 3. Proveď změny pomocí write_file.
 4. Pokud existují testy nebo lintery, spusť je přes run_shell (whitelist: npm test, npm run lint, npm run build, npx eslint, npx prettier).
-5. Až jsi hotov, zavolej finish() s krátkým shrnutím (česky, 4–6 vět) pro PR description.
+5. JAKMILE tvoje write_file změny pokrývají všechna AC, ZAVOLEJ finish() OKAMŽITĚ.
+   Shrnutí česky, 4–6 vět pro PR description. NEPOKRAČUJ v exploring po dokončení.
+
+KRITICKÉ PRAVIDLO COST AWARENESS:
+- Každý turn = celá historie znovu přes drahý Sonnet model. Zbytečné read_file po
+  dokončení změn pálí peníze majitele (1 turn ≈ $0.10–$0.50 na Tier 2).
+- Pokud si nejsi 100% jistý, jestli jsi hotov, finish() RADŠI BRZO s tím co máš.
+  Review udělá člověk; nedotažené detaily se dají dořešit v dalším úkolu.
+- Po 3 turnech bez write_file dostaneš nudge — pak okamžitě finish, nebo udělej
+  konkrétní write_file (žádné další list_files).
 
 PRAVIDLA:
 - NIKDY neměň: .env*, secrets/, *.key, *.pem, prisma/migrations/, node_modules/.
@@ -290,6 +304,9 @@ async function runAgent({ workdir, task, repo, rules, presetPlan, onEvent }) {
   let totalOutputTokens = 0;
   let summary = null;
   let _finishNudgeSent = false;
+  let _stagnationNudgeSent = false;
+  let _finishCalledAny = false;
+  let lastFileChangeTurn = -1;
   const fileChanges = new Set();
 
   for (let turn = 0; turn < MAX_TURNS; turn++) {
@@ -303,6 +320,23 @@ async function runAgent({ workdir, task, repo, rules, presetPlan, onEvent }) {
 
     totalInputTokens += response.usage?.input_tokens || 0;
     totalOutputTokens += response.usage?.output_tokens || 0;
+
+    // VRSTVA 2 — Token budget guard. Pokud agent přeskočí ekonomickou hranici,
+    // okamžitě přerušíme. Runner pak otevře PR pokud existují file_changes.
+    if (totalInputTokens > MAX_INPUT_TOKENS_PER_RUN) {
+      summary = summary ||
+        'Token budget vyčerpán (' + totalInputTokens + '/' + MAX_INPUT_TOKENS_PER_RUN +
+        ' input tokens). PR otevřen pokud existují file_changes.';
+      if (onEvent) {
+        await onEvent('decision', {
+          action: 'token_budget_exceeded',
+          input_tokens: totalInputTokens,
+          output_tokens: totalOutputTokens,
+          file_changes: fileChanges.size,
+        });
+      }
+      break;
+    }
 
     if (onEvent) {
       await onEvent('llm_message', {
@@ -437,11 +471,13 @@ async function runAgent({ workdir, task, repo, rules, presetPlan, onEvent }) {
 
       if (block.name === 'write_file' && result?.ok) {
         fileChanges.add(block.input.path);
+        lastFileChangeTurn = turn;
         if (onEvent) await onEvent('file_change', { path: block.input.path, bytes: result.bytes });
       }
 
       if (block.name === 'finish') {
         finishCalled = true;
+        _finishCalledAny = true;
         summary = (block.input && block.input.summary) || 'Hotovo.';
       }
 
@@ -455,6 +491,36 @@ async function runAgent({ workdir, task, repo, rules, presetPlan, onEvent }) {
     messages.push({ role: 'user', content: toolResults });
 
     if (finishCalled) break;
+
+    // VRSTVA 1 — Stagnation detection.
+    // Agent legitimně exploruje na začátku (read_file / list_files), pak by měl
+    // udělat changes a finishovat. Pokud po prvním write_file proběhly STAGNATION_TURNS
+    // kol bez další změny, je vysoká pravděpodobnost že je hotov ale jen exploruje.
+    // Pošleme mu jasný signál.
+    if (
+      !_stagnationNudgeSent &&
+      lastFileChangeTurn >= 0 &&
+      turn - lastFileChangeTurn >= STAGNATION_TURNS
+    ) {
+      _stagnationNudgeSent = true;
+      messages.push({
+        role: 'user',
+        content:
+          'Posledních ' + STAGNATION_TURNS + ' kol jsi neudělal žádnou změnu souboru. ' +
+          'Pokud jsi splnil akceptační kritéria, zavolej OKAMŽITĚ finish() s česky ' +
+          'napsaným shrnutím (4–6 vět) pro PR description. Nepokračuj v dalším ' +
+          'exploring — pálíš peníze majitele. Pokud máš ještě jednu konkrétní ' +
+          'změnu, popiš ji jednou větou a hned ji udělej write_file callem.',
+      });
+      if (onEvent) {
+        await onEvent('decision', {
+          action: 'stagnation_nudge',
+          turn,
+          last_file_change_turn: lastFileChangeTurn,
+          stagnant_turns: turn - lastFileChangeTurn,
+        });
+      }
+    }
   }
 
   if (!summary) {
@@ -463,6 +529,7 @@ async function runAgent({ workdir, task, repo, rules, presetPlan, onEvent }) {
 
   return {
     summary,
+    finishCalled: _finishCalledAny,
     tokensUsed: totalInputTokens + totalOutputTokens,
     inputTokens: totalInputTokens,
     outputTokens: totalOutputTokens,
