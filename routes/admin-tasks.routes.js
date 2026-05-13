@@ -475,8 +475,27 @@ router.post('/draft-chat', async (req, res, next) => {
     try {
       result = await acChat.chatDraft({ draft, history, userMessage: message, pageContext });
     } catch (e) {
-      console.error('[ac-chat draft] failed:', e.message);
-      return res.status(500).json({ error: 'AC chat (draft) selhal: ' + e.message });
+      // Detailní log pro debug — celá exception trace + Anthropic error code.
+      console.error('[ac-chat draft] failed:', {
+        message: e.message,
+        status: e.status || e.statusCode || null,
+        anthropicError: e.error || e.response?.data || null,
+        stack: e.stack ? e.stack.split('\n').slice(0, 5).join('\n') : null,
+      });
+      // Mapuj Anthropic chyby na proper HTTP status + retry hint pro klienta.
+      const upstreamStatus = e.status || e.statusCode;
+      const retryable = upstreamStatus === 429 || upstreamStatus === 503 ||
+                        upstreamStatus === 529 || (upstreamStatus >= 500 && upstreamStatus < 600);
+      const retryAfter = e.headers && e.headers['retry-after']
+        ? Number(e.headers['retry-after'])
+        : (retryable ? 5 : null);
+      const httpStatus = upstreamStatus === 429 ? 429 : (retryable ? 503 : 500);
+      return res.status(httpStatus).json({
+        error: e.message || 'AC chat (draft) selhal',
+        retryable,
+        retry_after: retryAfter,
+        code: upstreamStatus || 'unknown',
+      });
     }
 
     res.json({

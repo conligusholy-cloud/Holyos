@@ -4,6 +4,7 @@
 
 function renderSidebar(activeModule) {
   var modules = [
+    { id: 'obchod',              name: 'Obchod',              icon: '&#128188;', color: '#ec4899', active: true },
     { id: 'lide-hr',             name: 'Lidé a HR',           icon: '&#128101;', color: '#6c5ce7', active: true },
     { id: 'metodicke-pokyny',    name: 'Metodické pokyny a směrnice', icon: '&#128218;', color: '#a78bfa', active: true },
     { id: 'vytvoreni-arealu',    name: 'Vytvoření areálu',    icon: '&#9998;', color: '#8b5cf6', active: true },
@@ -26,6 +27,7 @@ function renderSidebar(activeModule) {
     { id: 'normovani-fy',         name: 'Normování',           icon: '&#9201;',   color: '#6366f1', active: true },
     { id: 'normovani-prehled',    name: 'Normy',               icon: '&#128202;', color: '#8b5cf6', active: true },
     { id: 'vozovy-park',          name: 'Vozový park',         icon: '&#128663;', color: '#0ea5e9', active: true },
+    { id: 'site-development',     name: 'Site Development',    icon: '&#128506;', color: '#14b8a6', active: true },
     { id: 'chat',                 name: 'Zprávy',              icon: '&#128172;', color: '#a78bfa', active: true },
     { id: 'kiosky',               name: 'Kiosky',              icon: '&#128433;', color: '#06b6d4', active: true },
     { id: 'planovani-vyroby',   name: 'Plánování výroby',    icon: '&#128197;', color: '#3b82f6', active: true },
@@ -866,6 +868,15 @@ function sendAiMessage() {
   _aiChatState.messages.push({ role: 'user', text: text });
   if (_aiChatState.step === 0) { _aiChatState.description = text; _aiChatState.step = 1; }
 
+  // === Robustní fix proti HTTP 500 ===
+  // Single-flight: pokud běží předchozí request, nepouštět druhý
+  if (_aiChatState._inFlight) {
+    if (input) input.value = text;
+    return;
+  }
+  _aiChatState._inFlight = true;
+  _aiChatState._lastUserText = text;
+
   _aiChatState.messages.push({ role: 'bot', text: '\u23F3 Alan p\u0159em\u00FD\u0161l\u00ED...', _pending: true });
   if (input) input.value = '';
   renderAiChat();
@@ -874,32 +885,64 @@ function sendAiMessage() {
   var tk = sessionStorage.getItem('token');
   if (tk) headers['Authorization'] = 'Bearer ' + tk;
 
-  fetch('/api/admin-tasks/draft-chat', {
-    method: 'POST',
-    credentials: 'include',
-    headers: headers,
-    body: JSON.stringify({
-      message: text,
-      history: _aiChatState.history || [],
-      draft: _aiChatState.draft || {},
-      page_context: { path: _aiChatState.pagePath, title: _aiChatState.pageTitle },
-    }),
-  }).then(function(r) {
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    return r.json();
-  }).then(function(data) {
-    _aiChatState.messages = _aiChatState.messages.filter(function(m) { return !m._pending; });
-    _aiChatState.messages.push({ role: 'bot', text: data.ai_message || '(Alan: bez textu)' });
-    if (data.draft) _aiChatState.draft = data.draft;
-    if (data.history) _aiChatState.history = data.history;
-    if (data.finalized) { _aiChatState.finalized = true; _aiChatState.summary = data.summary; }
-    if (data.escalate) { _aiChatState.escalateReason = data.escalate_reason; }
-    renderAiChat();
-  }).catch(function(e) {
-    _aiChatState.messages = _aiChatState.messages.filter(function(m) { return !m._pending; });
-    _aiChatState.messages.push({ role: 'bot', text: '\u26A0\uFE0F Chyba: ' + e.message + ' (zkus znovu)' });
-    renderAiChat();
+  var requestBody = JSON.stringify({
+    message: text,
+    history: _aiChatState.history || [],
+    draft: _aiChatState.draft || {},
+    page_context: { path: _aiChatState.pagePath, title: _aiChatState.pageTitle },
   });
+
+  // Auto-retry s exponential backoff (max 4 pokusy, 2/4/8/15 s)
+  function attemptDraftChat(attempt) {
+    if (attempt > 1) {
+      var pendingMsg = _aiChatState.messages.find(function(m) { return m._pending; });
+      if (pendingMsg) pendingMsg.text = '\u23F3 Alan p\u0159em\u00FD\u0161l\u00ED... (pokus ' + attempt + '/4)';
+      renderAiChat();
+    }
+    return fetch('/api/admin-tasks/draft-chat', {
+      method: 'POST',
+      credentials: 'include',
+      headers: headers,
+      body: requestBody,
+    }).then(function(r) {
+      if (!r.ok) {
+        return r.json().catch(function() { return {}; }).then(function(body) {
+          var err = new Error(body.error || ('HTTP ' + r.status));
+          err._retryable = body.retryable === true || r.status === 429 || r.status === 503 || r.status === 504;
+          err._retryAfter = body.retry_after ? body.retry_after * 1000 : null;
+          throw err;
+        });
+      }
+      return r.json();
+    }).then(function(data) {
+      _aiChatState._inFlight = false;
+      _aiChatState.messages = _aiChatState.messages.filter(function(m) { return !m._pending; });
+      _aiChatState.messages.push({ role: 'bot', text: data.ai_message || '(Alan: bez textu)' });
+      if (data.draft) _aiChatState.draft = data.draft;
+      if (data.history) _aiChatState.history = data.history;
+      if (data.finalized) { _aiChatState.finalized = true; _aiChatState.summary = data.summary; }
+      if (data.escalate) { _aiChatState.escalateReason = data.escalate_reason; }
+      renderAiChat();
+    }).catch(function(e) {
+      var retryable = e._retryable || /Failed to fetch|NetworkError|429|503|504/.test(e.message);
+      var retryAfter = e._retryAfter || Math.min(2000 * Math.pow(2, attempt - 1), 15000);
+      if (retryable && attempt < 4) {
+        return new Promise(function(resolve) {
+          setTimeout(function() { resolve(attemptDraftChat(attempt + 1)); }, retryAfter);
+        });
+      }
+      _aiChatState._inFlight = false;
+      _aiChatState.messages = _aiChatState.messages.filter(function(m) { return !m._pending; });
+      var userFriendly = retryable
+        ? '\u26A0\uFE0F AI je momentálně přetížený. Zkus to za chvíli — text máš zpět v poli.'
+        : '\u26A0\uFE0F Chyba: ' + e.message;
+      _aiChatState.messages.push({ role: 'bot', text: userFriendly });
+      if (input && _aiChatState._lastUserText) input.value = _aiChatState._lastUserText;
+      renderAiChat();
+    });
+  }
+
+  attemptDraftChat(1);
 }
 
 function analyzeFollowup(newText, allText, pageTitle) {
