@@ -1170,44 +1170,56 @@
     // `prefix` = 's' nebo 'tc' (kvůli unikátním id).
     // `companyId` = aktuálně vybraná firma (nebo null — picker je pak neaktivní).
     // `selectedBranchIds` = pole čísel (id provozoven, které už byly vybrány).
+    // ─── Branch picker — OPRAVENÁ verze (bug fix: provozovna se zobrazuje přímo v kolonce) ─
+    // Vybraná provozovna se zobrazuje přímo ve <select> elementu (= v kolonce Místo výměny).
+    // Jedno kliknutí na provozovnu v dropdownu ji okamžitě vybere — bez tlačítka "+ Vybrat".
     function branchPickerHtml(prefix, companyId, selectedBranchIds) {
       const sel = (selectedBranchIds || []).map(Number).filter(n => !isNaN(n));
       const branches = getBranchesForCompany(companyId);
-      const remaining = branches.filter(b => !sel.includes(b.id));
+      // Všechny provozovny firmy jako options; vybraná je označena selected → zobrazí se v selectu.
       let optHtml = '<option value="">— vyber provozovnu —</option>';
-      remaining.forEach(b => {
-        optHtml += '<option value="' + b.id + '">' + escHtml(formatBranchLabel(b)) + '</option>';
+      branches.forEach(b => {
+        const isSelected = sel.includes(b.id);
+        optHtml += '<option value="' + b.id + '"' + (isSelected ? ' selected' : '') + '>'
+          + escHtml(formatBranchLabel(b)) + '</option>';
       });
-      const chipsHtml = sel.map(bid => {
-        const b = branches.find(x => x.id === bid);
-        const label = b ? formatBranchLabel(b) : ('Provozovna #' + bid);
-        return '<span class="branch-chip" data-bid="' + bid + '" style="display:inline-flex;align-items:center;gap:6px;background:var(--bg2,#f3f4f6);border:1px solid var(--border,#e5e7eb);padding:4px 10px;border-radius:14px;font-size:12px;margin:2px 4px 2px 0;">' +
-          '📍 ' + escHtml(label) +
-          ' <button type="button" onclick="removeBranchChip(\'' + prefix + '\',' + bid + ')" style="background:none;border:0;cursor:pointer;color:var(--text2,#6b7280);font-size:14px;line-height:1;padding:0;" title="Odebrat">×</button>' +
-        '</span>';
-      }).join('');
       const isDisabled = !companyId || branches.length === 0;
       const helpHtml = !companyId
         ? '<div style="color:var(--text2,#6b7280);font-size:11px;margin-top:6px;">💡 Nejdřív vyber firmu provádějící servis.</div>'
         : (branches.length === 0
-            ? '<div style="color:var(--text2,#6b7280);font-size:11px;margin-top:6px;">⚠️ Tato firma zatím nemá v adresáři žádné provozovny. Otevři 📇 <strong>Adresář firem</strong> a přidej provozovny tlačítkem „+ Přidat".</div>'
-            : (remaining.length === 0
-                ? '<div style="color:var(--text2,#6b7280);font-size:11px;margin-top:6px;">Všechny provozovny této firmy jsou vybrané.</div>'
-                : ''));
+            ? '<div style="color:var(--text2,#6b7280);font-size:11px;margin-top:6px;">⚠️ Tato firma zatím nemá v adresáři žádné provozovny. Otevři 📇 <strong>Adresář firem</strong> a přidej provozovny tlačítkem „+ Přidat\".</div>'
+            : '');
+      // data-branch-ids uchovává aktuální výběr pro save funkce.
+      // hidden chips div zachováme kvůli getSelectedBranchIds().
       return '<div id="' + prefix + '-branch-picker" data-company-id="' + (companyId || '') + '">' +
         '<div style="display:flex;gap:6px;align-items:stretch;">' +
-          '<select id="' + prefix + '-branch-select" style="flex:1;"' + (isDisabled || remaining.length === 0 ? ' disabled' : '') + '>' + optHtml + '</select>' +
-          '<button type="button" class="btn btn-sm btn-secondary" onclick="addBranchChip(\'' + prefix + '\')"' + (isDisabled || remaining.length === 0 ? ' disabled' : '') + '>+ Vybrat</button>' +
+          '<select id="' + prefix + '-branch-select" style="flex:1;"' +
+          (isDisabled ? ' disabled' : '') +
+          ' onchange="onBranchSelect(\'' + prefix + '\')"' +
+          '>' + optHtml + '</select>' +
         '</div>' +
-        '<div id="' + prefix + '-branch-chips" data-branch-ids="' + sel.join(',') + '" style="margin-top:6px;min-height:8px;">' + chipsHtml + '</div>' +
+        '<div id="' + prefix + '-branch-chips" data-branch-ids="' + sel.join(',') + '" style="display:none;"></div>' +
         helpHtml +
       '</div>';
     }
 
+    // Okamžitý výběr provozovny při změně selectu — zapíše do hidden data-branch-ids.
+    function onBranchSelect(prefix) {
+      const selectEl = document.getElementById(prefix + '-branch-select');
+      const chips = document.getElementById(prefix + '-branch-chips');
+      if (!selectEl || !chips) return;
+      chips.dataset.branchIds = selectEl.value ? selectEl.value : '';
+    }
+
     function getSelectedBranchIds(prefix) {
       const chips = document.getElementById(prefix + '-branch-chips');
-      if (!chips) return [];
-      return (chips.dataset.branchIds || '').split(',').filter(Boolean).map(Number).filter(n => !isNaN(n));
+      // Primárně čteme z data-branch-ids (nastaveného přes onBranchSelect).
+      // Fallback: přečíst přímo hodnotu selectu.
+      const fromData = chips ? (chips.dataset.branchIds || '').split(',').filter(Boolean).map(Number).filter(n => !isNaN(n)) : [];
+      if (fromData.length > 0) return fromData;
+      const sel = document.getElementById(prefix + '-branch-select');
+      if (sel && sel.value) return [parseInt(sel.value)].filter(n => !isNaN(n));
+      return [];
     }
 
     // Při změně firmy v dropdownu — přečíst nový company id a překreslit picker provozoven.
@@ -1220,24 +1232,14 @@
       picker.outerHTML = branchPickerHtml(prefix, newCompanyId, []);
     }
 
-    // Přidá vybranou hodnotu z dropdownu do chipů (multi-select „+ Vybrat").
-    function addBranchChip(prefix) {
-      const sel = document.getElementById(prefix + '-branch-select');
-      if (!sel || !sel.value) return;
-      const bid = parseInt(sel.value);
-      const cur = getSelectedBranchIds(prefix);
-      if (cur.includes(bid)) return;
-      cur.push(bid);
-      const picker = document.getElementById(prefix + '-branch-picker');
-      const companyId = picker && picker.dataset.companyId ? parseInt(picker.dataset.companyId) : null;
-      picker.outerHTML = branchPickerHtml(prefix, companyId, cur);
-    }
+    // addBranchChip — zachováno kvůli zpětné kompatibilitě, výběr probíhá přes onBranchSelect.
+    function addBranchChip(prefix) { onBranchSelect(prefix); }
 
     function removeBranchChip(prefix, branchId) {
-      const cur = getSelectedBranchIds(prefix).filter(x => x !== branchId);
-      const picker = document.getElementById(prefix + '-branch-picker');
-      const companyId = picker && picker.dataset.companyId ? parseInt(picker.dataset.companyId) : null;
-      picker.outerHTML = branchPickerHtml(prefix, companyId, cur);
+      const chips = document.getElementById(prefix + '-branch-chips');
+      if (chips) chips.dataset.branchIds = '';
+      const sel = document.getElementById(prefix + '-branch-select');
+      if (sel) sel.value = '';
     }
 
     // Otevře modal s rychlým formulářem pro založení firmy — po uložení ji vybere v dropdownu `selectId`.
