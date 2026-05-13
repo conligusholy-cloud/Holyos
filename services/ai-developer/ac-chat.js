@@ -22,6 +22,22 @@ const { messagesCreate } = require('../anthropic-retry');
 const AC_CHAT_MODEL = process.env.AI_DEV_AC_CHAT_MODEL || 'claude-haiku-4-5-20251001';
 const AC_CHAT_MAX_TOKENS = 2048;
 
+// stripToolUses — vrátí jen text bloky z Anthropic response.content.
+// Bez tohohle by tool_use bloky zůstaly v history a další API call by selhal
+// s 400 'tool_use ids were found without tool_result blocks immediately after'.
+// Sonnet tool_use bloky v history nepotřebuje — efekt (update_ac_fields apod.)
+// proběhl server-side a frontend draft se updatoval přes 'updates' return value.
+function stripToolUses(content) {
+  if (!Array.isArray(content)) return content;
+  const textOnly = content.filter((b) => b.type === 'text');
+  if (textOnly.length === 0) {
+    // Sonnet vrátil jen tool_use bez textu — pošli prázdnou textovku, ať
+    // Anthropic přijme assistant turn (assistant nesmí být prázdný array).
+    return [{ type: 'text', text: '(akce provedena)' }];
+  }
+  return textOnly;
+}
+
 const TOOLS = [
   {
     name: 'update_basic_fields',
@@ -240,10 +256,12 @@ async function chat({ task, history = [], userMessage }) {
   }
 
   // Build new history (push our turn + assistant turn)
+  // POZOR: stripToolUses() je nutný — bez něj 400 invalid_request_error
+  // ('tool_use ids were found without tool_result blocks') v dalším volání.
   const newHistory = [
     ...history,
     { role: 'user', content: userMessage },
-    { role: 'assistant', content: response.content },
+    { role: 'assistant', content: stripToolUses(response.content) },
   ];
 
   return {
@@ -361,10 +379,12 @@ KOMU PÍŠEŠ: zaměstnancům HolyOSu (skladnice, HR-istka, mistr), kteří nezn
     }
   }
 
+  // POZOR: stripToolUses() je nutný — bez něj 400 invalid_request_error
+  // ('tool_use ids were found without tool_result blocks') v dalším volání.
   const newHistory = [
     ...history,
     { role: 'user', content: userMessage },
-    { role: 'assistant', content: response.content },
+    { role: 'assistant', content: stripToolUses(response.content) },
   ];
 
   // Merge updates do draftu (pro frontend pohodlí — vrátíme updated draft)
