@@ -39,7 +39,11 @@ param(
 
     [switch]$All,
 
-    [switch]$WaitForDeploy
+    [switch]$WaitForDeploy,
+
+    [switch]$DryRun,
+
+    [string[]]$Files = @()
 )
 
 # POZOR: NIKDY nepouzivej $ErrorActionPreference = "Stop" pro tento skript.
@@ -133,18 +137,40 @@ if ($ApplyScript -ne "") {
 
 # --- 4) git add ---
 Write-Step "git add"
-if ($All) {
-    git add .
+if ($Files.Count -gt 0) {
+    # Explicit seznam souboru - nejbezpecnejsi varianta, jen co rekneme
+    foreach ($f in $Files) {
+        if (Test-Path $f) {
+            cmd /c "git add `"$f`" 2>nul 1>nul"
+        } else {
+            Write-Warn "Soubor neexistuje: $f"
+        }
+    }
+    Write-Done "Staged: $($Files.Count) explicitnich souboru"
+} elseif ($All) {
+    cmd /c "git add . 2>nul 1>nul"
     Write-Done "Staged: vsechny zmeny (-All)"
 } else {
     foreach ($path in $SafePaths) {
         if (Test-Path $path) {
-            # Stderr (LF/CRLF warningy) presmerovat do null, stdout silent.
-            # 2>$null + | Out-Null nestaci - PS strict by stale chytil exception.
             cmd /c "git add `"$path`" 2>nul 1>nul"
         }
     }
     Write-Done "Staged: bezpecne HolyOS adresare (whitelist)"
+}
+
+# --- 4b) Dry run - ukaz co se commitne a zeptej se ---
+if ($DryRun) {
+    Write-Step "DRY RUN - co by se commitlo:"
+    cmd /c "git diff --cached --stat"
+    Write-Host ""
+    $confirm = Read-Host "Pokracovat s commit + push? (y/N)"
+    if ($confirm -ne "y" -and $confirm -ne "Y") {
+        Write-Warn "Zrusil jsi commit. Unstaging zmeny..."
+        cmd /c "git reset HEAD 2>nul"
+        Write-Done "Reset hotov. Konec."
+        exit 0
+    }
 }
 
 # --- 5) git commit ---
