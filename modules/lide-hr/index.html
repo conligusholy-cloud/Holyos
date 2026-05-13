@@ -863,6 +863,16 @@
         person = await res.json();
       }
 
+      // Zapamatuj si původní hodnoty kritických datumů (ochrana proti samovolnému
+      // smazání hire_date a spol. — viz požadavek #57). slice(0,10) převede ISO
+      // na 'YYYY-MM-DD' pro shodu s value v <input type="date">.
+      const __dateSlice = (v) => (v ? String(v).slice(0, 10) : '');
+      window.__personEditOriginal = person ? {
+        hire_date: __dateSlice(person.hire_date),
+        end_date: __dateSlice(person.end_date),
+        birth_date: __dateSlice(person.birth_date),
+      } : { hire_date: '', end_date: '', birth_date: '' };
+
       // Load deps for dropdowns
       await Promise.all([loadDepartmentsData(), loadRolesData()]);
 
@@ -1050,6 +1060,23 @@
               </div>
             </div>
 
+            ${isEdit ? `
+            <div id="resume-section" style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border);">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+                <div style="font-size:12px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px;">📎 Životopis</div>
+                <label class="btn btn-secondary btn-sm" style="cursor:pointer;margin:0;font-size:12px;">
+                  Nahrát soubor
+                  <input type="file" id="resume-file-input" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" style="display:none" onchange="uploadResume(this, ${id})">
+                </label>
+              </div>
+              <div id="resume-list" style="font-size:13px;color:var(--text2);">Načítám…</div>
+            </div>
+            ` : `
+            <div id="resume-section-hint" style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border);font-size:12px;color:var(--text2);">
+              📎 <strong>Životopis</strong> bude možné nahrát po uložení tohoto kontaktu.
+            </div>
+            `}
+
             <div id="emergency-fields" style="${showEmp ? '' : 'display:none'}">
               <div style="font-size:12px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px;margin:20px 0 10px;padding-top:16px;border-top:1px solid var(--border);">Nouzový kontakt</div>
               <div class="form-grid">
@@ -1150,6 +1177,109 @@
       </div>`;
 
       document.getElementById('modal-root').innerHTML = html;
+
+      // V edit režimu hned po vykreslení modalu načti existující životopisy
+      if (isEdit) loadResumes(id);
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    // Životopisy (ukládají se jako Document s type='cv', category='cv')
+    // ──────────────────────────────────────────────────────────────
+    async function loadResumes(personId) {
+      const el = document.getElementById('resume-list');
+      if (!el) return;
+      try {
+        const r = await fetch('/api/hr/documents?person_id=' + personId + '&type=cv');
+        const list = await r.json();
+        if (!Array.isArray(list) || list.length === 0) {
+          el.innerHTML = '<div style="padding:10px 12px;background:var(--surface);border:1px dashed var(--border);border-radius:8px;color:var(--text2);">Žádný životopis zatím nebyl nahrán.</div>';
+          return;
+        }
+        let html = '<div style="display:flex;flex-direction:column;gap:6px;">';
+        for (const d of list) {
+          const dateStr = d.created_at ? new Date(d.created_at).toLocaleDateString('cs-CZ') : '';
+          const sizeKb = d.file_size ? (Math.round(d.file_size / 1024) + ' kB') : '';
+          const meta = [dateStr, sizeKb].filter(Boolean).join(' · ');
+          const fname = d.file_name || d.title || ('Životopis #' + d.id);
+          html += '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;background:var(--surface);border:1px solid var(--border);border-radius:8px;">'
+            + '<div style="display:flex;align-items:center;gap:10px;min-width:0;">'
+            +   '<span style="font-size:18px;">📎</span>'
+            +   '<div style="min-width:0;">'
+            +     '<div style="font-weight:500;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + escapeHtml(fname) + '</div>'
+            +     (meta ? '<div style="font-size:11px;color:var(--text2);">' + meta + '</div>' : '')
+            +   '</div>'
+            + '</div>'
+            + '<div style="display:flex;gap:6px;flex-shrink:0;">'
+            +   '<a class="btn btn-secondary btn-sm" href="/api/hr/documents/' + d.id + '/download" target="_blank" style="text-decoration:none;">⬇️ Stáhnout</a>'
+            +   '<button type="button" class="btn btn-danger btn-sm" onclick="deleteResume(' + d.id + ', ' + personId + ')">🗑️</button>'
+            + '</div>'
+            + '</div>';
+        }
+        html += '</div>';
+        el.innerHTML = html;
+      } catch (e) {
+        console.error('Načtení životopisů selhalo', e);
+        el.innerHTML = '<div style="color:#ef4444;">Nepodařilo se načíst životopisy.</div>';
+      }
+    }
+
+    async function uploadResume(input, personId) {
+      const file = input.files && input.files[0];
+      if (!file) return;
+      if (file.size > 10 * 1024 * 1024) {
+        alert('Soubor je příliš velký (max 10 MB).');
+        input.value = '';
+        return;
+      }
+      const el = document.getElementById('resume-list');
+      if (el) el.innerHTML = '<div style="color:var(--text2);">Nahrávám soubor…</div>';
+
+      // Soubor přečíst jako base64 (data URL ponecháme — backend i existující tab Dokumenty
+      // si data-URL umí přečíst)
+      const b64 = await new Promise((resolve, reject) => {
+        const r = new FileReader();
+        r.onload = () => resolve(r.result);
+        r.onerror = () => reject(r.error);
+        r.readAsDataURL(file);
+      });
+
+      const payload = {
+        person_id: personId,
+        title: file.name.replace(/\.[^.]+$/, '') || 'Životopis',
+        type: 'cv',
+        category: 'cv',
+        status: 'active',
+        file_data: b64,
+        file_name: file.name,
+        file_type: file.type || 'application/octet-stream',
+        file_size: file.size,
+      };
+      try {
+        const r = await fetch('/api/hr/documents', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        if (!r.ok) {
+          const err = await r.json().catch(() => ({}));
+          throw new Error(err.error || 'Nahrávání selhalo');
+        }
+      } catch (e) {
+        alert('Nepodařilo se nahrát životopis: ' + (e.message || e));
+      } finally {
+        input.value = '';
+        loadResumes(personId);
+      }
+    }
+
+    async function deleteResume(id, personId) {
+      if (!confirm('Smazat tento životopis?')) return;
+      try {
+        await fetch('/api/hr/documents/' + id, { method: 'DELETE' });
+      } catch (e) {
+        alert('Mazání selhalo: ' + (e.message || e));
+      }
+      loadResumes(personId);
     }
 
     function processPhotoFile(file) {
@@ -1225,6 +1355,39 @@
       if (data.department_id) data.department_id = parseInt(data.department_id);
       if (data.role_id) data.role_id = parseInt(data.role_id);
       if (data.active !== null && data.active !== undefined) data.active = parseInt(data.active);
+
+      // ── Ochrana proti samovolnému smazání kritických datumů (požadavek #57) ──
+      // Pokud uživatel editoval existující osobu a některé z datumových polí
+      // bylo dříve vyplněno, ale teď je prázdné, vyžádáme potvrzení. Bez něj
+      // pole z těla request odebereme (backend tak v update režimu DB nepřepíše
+      // na NULL — viz sanitizePersonData v hr.routes.js). Souhlasné smazání se
+      // backendu signalizuje seznamem __clear_dates.
+      if (id) {
+        const orig = window.__personEditOriginal || {};
+        const dateFieldLabels = {
+          hire_date: 'Datum nástupu',
+          end_date: 'Datum konce pracovního poměru',
+          birth_date: 'Datum narození',
+        };
+        const toClear = [];
+        for (const f of Object.keys(dateFieldLabels)) {
+          const origHad = !!orig[f];
+          const nowEmpty = !data[f];
+          if (origHad && nowEmpty) {
+            const ok = confirm(
+              `Opravdu chcete smazat pole "${dateFieldLabels[f]}" (původně: ${orig[f]})?\n\n` +
+              `OK = smazat   ·   Storno = zachovat původní hodnotu`
+            );
+            if (ok) {
+              toClear.push(f);
+            } else {
+              // Odeber pole z těla — backend ho v update režimu vynechá.
+              delete data[f];
+            }
+          }
+        }
+        if (toClear.length) data.__clear_dates = toClear;
+      }
 
       const url = id ? '/api/hr/people/' + id : '/api/hr/people';
       const method = id ? 'PUT' : 'POST';
@@ -2789,12 +2952,12 @@
     }
 
     const DOC_CATEGORIES = {
-      contract: 'Smlouva', amendment: 'Dodatek', agreement: 'Dohoda',
+      cv: 'Životopis', contract: 'Smlouva', amendment: 'Dodatek', agreement: 'Dohoda',
       certificate: 'Certifikát', id_document: 'Osobní doklad', medical: 'Zdravotní',
       training: 'Školení', general: 'Ostatní'
     };
     const DOC_CATEGORY_COLORS = {
-      contract: '#6c5ce7', amendment: '#3b82f6', agreement: '#8b5cf6',
+      cv: '#a78bfa', contract: '#6c5ce7', amendment: '#3b82f6', agreement: '#8b5cf6',
       certificate: '#f59e0b', id_document: '#ef4444', medical: '#10b981',
       training: '#06b6d4', general: '#9ca3af'
     };

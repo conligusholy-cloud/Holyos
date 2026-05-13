@@ -679,7 +679,14 @@ router.get('/people/:id', async (req, res, next) => {
 
 // Sanitizace dat pro Person model — jen povolená pole se správnými typy
 // currentUser = req.user (volitelný) — pro kontrolu oprávnění
-function sanitizePersonData(body, currentUser) {
+// opts.mode = 'create' | 'update' (default 'update')
+//   V režimu 'update' jsou kritická datumová pole chráněna před samovolným smazáním:
+//   prázdná/null hodnota se IGNORUJE (nezmění DB), pokud klient explicitně neuvede
+//   pole `__clear_dates: [...]` se seznamem polí ke smazání. Důvod: zabránit ztrátě
+//   datumu nástupu při uložení formuláře, kde se datum z nějakého důvodu (omyl,
+//   rendering, klávesa Backspace) zobrazí jako prázdné. (Požadavek #57)
+function sanitizePersonData(body, currentUser, opts = {}) {
+  const mode = opts.mode === 'create' ? 'create' : 'update';
   const data = {};
   // String pole
   const strFields = ['type', 'first_name', 'last_name', 'email', 'phone', 'notes',
@@ -689,10 +696,20 @@ function sanitizePersonData(body, currentUser) {
   for (const f of strFields) {
     if (f in body) data[f] = body[f] || null;
   }
-  // Datum pole
+  // Datum pole — chráněna v update režimu před nechtěným smazáním
   const dateFields = ['hire_date', 'end_date', 'birth_date'];
+  const clearList = Array.isArray(body.__clear_dates) ? body.__clear_dates : [];
   for (const f of dateFields) {
-    if (f in body) data[f] = body[f] ? new Date(body[f]) : null;
+    if (!(f in body)) continue;
+    const v = body[f];
+    if (v) {
+      data[f] = new Date(v);
+    } else if (mode === 'create' || clearList.includes(f)) {
+      // Tvorba osoby: null je legitimní výchozí stav.
+      // Update: smazání povoleno pouze pokud klient explicitně potvrdil (__clear_dates).
+      data[f] = null;
+    }
+    // Jinak: pole v update režimu bez hodnoty se ignoruje (ochrana proti přepsání na NULL).
   }
   // Integer FK pole
   const intFields = ['department_id', 'role_id', 'supervisor_id', 'shift_id', 'user_id', 'company_id', 'leave_entitlement_days', 'leave_carryover'];
@@ -736,7 +753,7 @@ function sanitizeRoleData(body) {
 router.post('/people', async (req, res, next) => {
   try {
     const person = await prisma.person.create({
-      data: sanitizePersonData(req.body, req.user),
+      data: sanitizePersonData(req.body, req.user, { mode: 'create' }),
       include: { department: true, role: true, company: true },
     });
     await logAudit({
@@ -756,7 +773,7 @@ router.put('/people/:id', async (req, res, next) => {
     const before = await prisma.person.findUnique({ where: { id: parseInt(req.params.id) } });
     const person = await prisma.person.update({
       where: { id: parseInt(req.params.id) },
-      data: sanitizePersonData(req.body, req.user),
+      data: sanitizePersonData(req.body, req.user, { mode: 'update' }),
       include: { department: true, role: true, company: true },
     });
     const changes = diffObjects(before, person);
@@ -1508,6 +1525,31 @@ router.get('/documents', async (req, res, next) => {
       orderBy: { created_at: 'desc' },
     });
     res.json(docs);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/hr/documents/:id/download — stažení souboru (binární stream)
+// Pozn.: pevná podcesta musí být DEFINOVÁNA NAD dynamickou /documents/:id
+router.get('/documents/:id(\\d+)/download', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const doc = await prisma.document.findUnique({
+      where: { id },
+      select: { file_data: true, file_name: true, file_type: true, title: true },
+    });
+    if (!doc || !doc.file_data) return res.status(404).json({ error: 'Soubor nenalezen' });
+    // file_data může být uložené jako čistý base64 NEBO jako data-URL ("data:application/pdf;base64,..."),
+    // protože UI v existujícím tabu Dokumenty ukládá výstup z FileReader.readAsDataURL().
+    // Ošetříme oba případy.
+    const raw = String(doc.file_data || '');
+    const b64 = raw.startsWith('data:') ? raw.split(',', 2)[1] || '' : raw;
+    const buf = Buffer.from(b64, 'base64');
+    const safeName = (doc.file_name || doc.title || 'dokument').replace(/[\r\n"]/g, '');
+    res.setHeader('Content-Type', doc.file_type || 'application/octet-stream');
+    res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(safeName)}"`);
+    res.send(buf);
   } catch (err) {
     next(err);
   }
