@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Site Development | HOLYOS</title>
+  <link rel="icon" type="image/svg+xml" href="../../logo-holyos-icon.svg">
+  <base href="../../">
+  <link rel="stylesheet" href="css/dashboard.css">
+  <style>
+    .main-wrapper { margin-left: var(--sidebar-w); flex: 1; min-height: 100vh; display: flex; flex-direction: column; }
+
+    .page-header {
+      display:flex; align-items:center; gap:12px; padding:20px 24px;
+      border-bottom:1px solid var(--border); flex-wrap:wrap;
+    }
+    .page-header h1 { font-size:18px; font-weight:700; margin:0; }
+    .page-header .count { font-size:13px; color:var(--text2); margin-left:4px; }
+    .search-box {
+      margin-left:auto; padding:8px 14px; background:var(--surface2); color:var(--text);
+      border:1px solid var(--border); border-radius:8px; font-size:13px; width:240px;
+    }
+    .search-box:focus { border-color:#14b8a6; outline:none; }
+
+    .content { padding:0 24px 24px; }
+    .toolbar { display:flex; gap:12px; margin:16px 0; align-items:center; flex-wrap:wrap; }
+
+    .btn { padding:8px 18px; border-radius:8px; border:1px solid var(--border); font-size:13px; font-weight:500; cursor:pointer; transition:all 0.15s; display:inline-flex; align-items:center; gap:6px; background:transparent; color:var(--text); }
+    .btn-primary { background:#14b8a6; color:#fff; border-color:#14b8a6; }
+    .btn-primary:hover { background:#0d9488; }
+    .btn-secondary { background:var(--surface2); color:var(--text); }
+    .btn-secondary:hover { background:var(--border); }
+    .btn-danger { background:rgba(239,68,68,0.15); color:#ef4444; border-color:rgba(239,68,68,0.3); }
+    .btn-danger:hover { background:rgba(239,68,68,0.25); }
+    .btn-sm { padding:5px 12px; font-size:12px; }
+
+    .stats-row { display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:12px; margin-bottom:16px; }
+    .stat-card { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:14px 16px; }
+    .stat-card .stat-label { font-size:11px; color:var(--text2); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:4px; }
+    .stat-card .stat-value { font-size:22px; font-weight:700; }
+    .stat-card.active   { border-color:rgba(20,184,166,0.3); background:rgba(20,184,166,0.06); }
+    .stat-card.active   .stat-value { color:#14b8a6; }
+    .stat-card.contract { border-color:rgba(99,102,241,0.3);  background:rgba(99,102,241,0.06); }
+    .stat-card.contract .stat-value { color:#6366f1; }
+    .stat-card.lost     { border-color:rgba(148,163,184,0.3); background:rgba(148,163,184,0.06); }
+    .stat-card.lost     .stat-value { color:#94a3b8; }
+
+    .filters { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+    .filter-select { padding:6px 10px; background:var(--surface2); color:var(--text); border:1px solid var(--border); border-radius:7px; font-size:12px; }
+
+    .data-table { width:100%; border-collapse:separate; border-spacing:0; }
+    .data-table thead { position:sticky; top:0; z-index:1; }
+    .data-table th { background:var(--surface2); padding:10px 12px; text-align:left; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; color:var(--text2); border-bottom:1px solid var(--border); cursor:pointer; user-select:none; }
+    .data-table th:hover { color:var(--text); }
+    .data-table td { padding:10px 12px; font-size:13px; border-bottom:1px solid rgba(255,255,255,0.04); vertical-align:middle; }
+    .data-table tr { cursor:pointer; }
+    .data-table tr:hover td { background:rgba(20,184,166,0.06); }
+
+    .col-toggle { display:flex; gap:8px; flex-wrap:wrap; padding:8px 0; }
+    .col-toggle label { display:inline-flex; align-items:center; gap:4px; font-size:12px; color:var(--text2); cursor:pointer; padding:3px 8px; border:1px solid var(--border); border-radius:6px; background:var(--surface2); }
+    .col-toggle label.active { color:#14b8a6; border-color:#14b8a6; }
+
+    .badge { display:inline-block; padding:2px 8px; border-radius:10px; font-size:11px; font-weight:500; }
+    .badge-lead         { background:rgba(148,163,184,0.18); color:#94a3b8; }
+    .badge-researching  { background:rgba(14,165,233,0.18); color:#0ea5e9; }
+    .badge-negotiating  { background:rgba(245,158,11,0.18); color:#f59e0b; }
+    .badge-contract     { background:rgba(99,102,241,0.20); color:#a5b4fc; }
+    .badge-operational  { background:rgba(20,184,166,0.20); color:#14b8a6; }
+    .badge-rejected     { background:rgba(239,68,68,0.18); color:#ef4444; }
+    .badge-lost         { background:rgba(100,116,139,0.20); color:#64748b; }
+    .badge-type-rent     { background:rgba(20,184,166,0.15); color:#14b8a6; }
+    .badge-type-purchase { background:rgba(168,85,247,0.15); color:#a855f7; }
+    .badge-type-other    { background:rgba(148,163,184,0.15); color:#94a3b8; }
+
+    .score-bar { display:inline-block; width:80px; height:8px; border-radius:4px; background:var(--surface2); position:relative; overflow:hidden; vertical-align:middle; margin-right:6px; }
+    .score-bar > div { height:100%; background:linear-gradient(90deg, #ef4444 0%, #f59e0b 50%, #14b8a6 100%); }
+
+    .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:200; display:flex; align-items:center; justify-content:center; padding:16px; }
+    .modal { background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:28px; width:920px; max-width:96vw; max-height:92vh; overflow-y:auto; }
+    .modal h2 { font-size:18px; margin-bottom:20px; }
+    .modal-actions { display:flex; gap:10px; justify-content:flex-end; margin-top:24px; padding-top:16px; border-top:1px solid var(--border); }
+
+    .site-tabs { display:flex; gap:2px; border-bottom:1px solid var(--border); margin-bottom:18px; flex-wrap:wrap; }
+    .site-tab { padding:10px 16px; background:transparent; border:none; color:var(--text2); font-size:13px; font-weight:500; cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-1px; transition:color 0.15s, border-color 0.15s; }
+    .site-tab:hover { color:var(--text); }
+    .site-tab.active { color:#14b8a6; border-bottom-color:#14b8a6; }
+    .site-tab-panel { display:none; }
+    .site-tab-panel.active { display:block; }
+
+    .form-grid { display:grid; grid-template-columns:repeat(2, 1fr); gap:14px; }
+    .form-grid.full { grid-template-columns:1fr; }
+    .form-row { display:flex; flex-direction:column; gap:4px; }
+    .form-row label { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; color:var(--text2); }
+    .form-row input, .form-row select, .form-row textarea {
+      padding:8px 12px; background:var(--bg); color:var(--text); border:1px solid var(--border);
+      border-radius:7px; font-size:13px; font-family:inherit;
+    }
+    .form-row textarea { min-height:70px; resize:vertical; }
+    .form-row input:focus, .form-row select:focus, .form-row textarea:focus { border-color:#14b8a6; outline:none; }
+    .form-row.span2 { grid-column:1 / -1; }
+
+    .checkbox-row { display:flex; gap:16px; flex-wrap:wrap; padding:6px 0; }
+    .checkbox-row label { display:inline-flex; gap:6px; align-items:center; font-size:13px; color:var(--text); cursor:pointer; }
+
+    .comm-list { display:flex; flex-direction:column; gap:10px; max-height:340px; overflow-y:auto; padding-right:4px; }
+    .comm-item { background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:10px 14px; }
+    .comm-item .head { display:flex; gap:8px; align-items:baseline; font-size:12px; color:var(--text2); }
+    .comm-item .head .channel { font-weight:700; color:var(--text); text-transform:uppercase; font-size:11px; }
+    .comm-item .body { font-size:13px; margin-top:6px; color:var(--text); white-space:pre-wrap; }
+    .comm-item .followup { font-size:11px; color:#f59e0b; margin-top:4px; }
+
+    .contact-card { display:flex; gap:12px; padding:10px 14px; background:var(--bg); border:1px solid var(--border); border-radius:8px; align-items:center; }
+    .contact-card.primary { border-color:#14b8a6; background:rgba(20,184,166,0.05); }
+    .contact-card .info { flex:1; }
+    .contact-card .name { font-weight:600; }
+    .contact-card .meta { font-size:11px; color:var(--text2); margin-top:2px; }
+
+    .photo-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(140px, 1fr)); gap:10px; }
+    .photo-grid .photo { position:relative; aspect-ratio:1; background:var(--bg); border:1px solid var(--border); border-radius:8px; overflow:hidden; cursor:pointer; }
+    .photo-grid .photo img { width:100%; height:100%; object-fit:cover; display:block; }
+    .photo-grid .photo .del { position:absolute; top:4px; right:4px; background:rgba(0,0,0,0.7); color:#fff; border:none; border-radius:4px; padding:2px 6px; font-size:11px; cursor:pointer; display:none; }
+    .photo-grid .photo:hover .del { display:block; }
+    .photo-grid .add { aspect-ratio:1; border:2px dashed var(--border); border-radius:8px; display:flex; align-items:center; justify-content:center; color:var(--text2); cursor:pointer; font-size:32px; transition:border-color 0.15s, color 0.15s; }
+    .photo-grid .add:hover { border-color:#14b8a6; color:#14b8a6; }
+
+    .empty-state { padding:80px 20px; text-align:center; color:var(--text2); }
+    .empty-state .empty-icon { font-size:48px; margin-bottom:12px; }
+    .empty-state h3 { font-size:16px; color:var(--text); margin-bottom:6px; }
+
+    .compare-bar { position:fixed; bottom:0; left:var(--sidebar-w); right:0; background:var(--surface); border-top:1px solid #14b8a6; padding:14px 24px; z-index:50; display:none; gap:16px; align-items:center; }
+    .compare-bar.visible { display:flex; }
+    .compare-bar .pills { display:flex; gap:6px; flex-wrap:wrap; flex:1; }
+    .compare-bar .pill { background:rgba(20,184,166,0.15); color:#14b8a6; padding:4px 10px; border-radius:14px; font-size:12px; display:inline-flex; gap:6px; align-items:center; }
+    .compare-bar .pill .x { cursor:pointer; opacity:0.6; }
+    .compare-bar .pill .x:hover { opacity:1; }
+
+    .compare-table th { font-size:11px; }
+    .compare-table td { vertical-align:top; font-size:13px; }
+    .compare-table .name-cell { font-weight:600; color:#14b8a6; }
+  </style>
+</head>
+<body>
+  <div id="sidebar"></div>
+  <div class="main-wrapper">
+    <div class="page-header">
+      <span style="font-size:28px;">🗺️</span>
+      <div>
+        <h1>Site Development <span class="count" id="site-count"></span></h1>
+      </div>
+      <input type="text" class="search-box" id="site-search" placeholder="Hledat název, adresu, město, vlastníka..." oninput="onSearchInput()">
+      <button class="btn btn-secondary" onclick="openImportModal()" title="Hromadný import lokalit ze seznamu">📋 Import seznamu</button>
+      <button class="btn btn-primary" onclick="openSiteModal()">+ Nová lokalita</button>
+    </div>
+
+    <div class="content">
+      <!-- Statistiky -->
+      <div class="stats-row" id="stats-row"></div>
+
+      <!-- Filtry + výběr sloupců -->
+      <div class="toolbar">
+        <div class="filters">
+          <select class="filter-select" id="filter-status" onchange="applyFilters()">
+            <option value="">Všechny stavy</option>
+            <option value="lead">Lead</option>
+            <option value="researching">Průzkum</option>
+            <option value="negotiating">Vyjednávání</option>
+            <option value="contract">Smlouva</option>
+            <option value="operational">V provozu</option>
+            <option value="rejected">Zamítnuto</option>
+            <option value="lost">Ztraceno</option>
+          </select>
+          <select class="filter-select" id="filter-type" onchange="applyFilters()">
+            <option value="">Všechny typy</option>
+            <option value="rent">Pronájem</option>
+            <option value="purchase">Nákup pozemku</option>
+            <option value="other">Jiné</option>
+          </select>
+          <input type="text" class="filter-select" id="filter-city" placeholder="Město" oninput="onSearchInput()" style="width:140px;">
+        </div>
+      </div>
+
+      <div class="col-toggle" id="col-toggle"></div>
+
+      <div id="sites-table"></div>
+    </div>
+  </div>
+
+  <div id="modal-root"></div>
+
+  <!-- Spodní lišta pro porovnání více lokalit -->
+  <div class="compare-bar" id="compare-bar">
+    <strong style="color:#14b8a6;">Porovnat:</strong>
+    <div class="pills" id="compare-pills"></div>
+    <button class="btn btn-primary btn-sm" onclick="openCompareModal()">Otevřít porovnání</button>
+    <button class="btn btn-secondary btn-sm" onclick="clearCompare()">Vymazat</button>
+  </div>
+
+  <script>
+    var s = document.createElement('script');
+    s.src = 'js/sidebar.js?v=' + Date.now();
+    s.onload = function() { renderSidebar('site-development'); };
+    document.head.appendChild(s);
+  </script>
+
+  <script src="modules/site-development/app.js?v=20260513"></script>
+</body>
+</html>

@@ -36,16 +36,29 @@ router.get('/meta-webhook', (req, res) => {
 // POST — příjem leadgen události z FB
 router.post('/meta-webhook', async (req, res, next) => {
   try {
+    console.log('[meta-webhook] POST received', {
+      headers: { signature: req.headers['x-hub-signature-256'], ua: req.headers['user-agent'] },
+      body_preview: JSON.stringify(req.body).slice(0, 500),
+    });
     // Ověření podpisu (X-Hub-Signature-256) — pokud máme app secret v env
     const appSecret = process.env.META_APP_SECRET;
     if (appSecret) {
       const signature = req.headers['x-hub-signature-256'];
-      if (!signature) return res.status(401).json({ error: 'Chybí podpis' });
+      if (!signature) {
+        console.warn('[meta-webhook] Missing signature header — request rejected');
+        return res.status(401).json({ error: 'Chybí podpis' });
+      }
       const expected = 'sha256=' + crypto
         .createHmac('sha256', appSecret)
         .update(JSON.stringify(req.body))
         .digest('hex');
-      if (signature !== expected) return res.status(401).json({ error: 'Neplatný podpis' });
+      if (signature !== expected) {
+        console.warn('[meta-webhook] Signature mismatch', { received: signature, expected });
+        return res.status(401).json({ error: 'Neplatný podpis' });
+      }
+      console.log('[meta-webhook] Signature OK');
+    } else {
+      console.log('[meta-webhook] META_APP_SECRET not set — skipping signature check');
     }
 
     const entries = req.body.entry || [];
@@ -121,6 +134,110 @@ router.post('/meta-webhook', async (req, res, next) => {
     console.error('Meta webhook error:', err);
     // FB očekává 200; chybu zaloguj, ale neodmítej znovu-doručení
     res.status(200).send('OK');
+  }
+});
+
+// ─── MAKE.COM WEBHOOK (BEZ autentizace pro requireAuth, ALE s API key) ───
+// Make.com FB Lead Ads modul stáhne lead z FB a pošle HTTP POST na náš endpoint.
+// Ověření: Authorization header musí mít Bearer token shodný s ENV MAKE_WEBHOOK_API_KEY.
+//
+// Očekávaný payload (přímo z Make HTTP modulu, mapování polí z FB Lead Ads):
+// {
+//   "first_name": "Jan", "last_name": "Novák",       // nebo "full_name": "Jan Novák"
+//   "email": "jan@example.com",
+//   "phone": "+420...",                              // nebo "phone_number"
+//   "position": "operátor",                          // volitelné
+//   "lead_id": "12345",                              // ID leadu z FB (idempotence)
+//   "form_id": "...", "page_id": "...", "ad_id": "...", // volitelné metadata
+//   "raw": { ... }                                   // celý lead JSON (volitelné)
+// }
+router.post('/make-webhook', async (req, res, next) => {
+  try {
+    // Ověření API klíče
+    const apiKey = process.env.MAKE_WEBHOOK_API_KEY;
+    if (!apiKey) {
+      console.warn('[make-webhook] MAKE_WEBHOOK_API_KEY není nastaven v env — odmítám');
+      return res.status(503).json({ error: 'Webhook není nakonfigurován' });
+    }
+    const authHeader = req.headers.authorization || '';
+    // Make.com a podobné nástroje občas posílají Authorization bez prefixu „Bearer".
+    // Akceptujeme: „Bearer <key>", samotný „<key>", x-api-key, nebo ?api_key=
+    const provided = authHeader.startsWith('Bearer ')
+      ? authHeader.slice(7)
+      : (authHeader || req.query.api_key || req.headers['x-api-key'] || '');
+    if (provided !== apiKey) {
+      console.warn('[make-webhook] Neplatný API key', { providedPrefix: provided.slice(0, 8) });
+      return res.status(401).json({ error: 'Neplatný API klíč' });
+    }
+
+    const body = req.body || {};
+    console.log('[make-webhook] Přijat lead', { preview: JSON.stringify(body).slice(0, 500) });
+
+    // Mapování polí — Make může poslat různé varianty
+    let firstName = body.first_name || body.firstName || '';
+    let lastName = body.last_name || body.lastName || '';
+    if (!firstName && body.full_name) {
+      const parts = String(body.full_name).trim().split(/\s+/);
+      firstName = parts[0] || '';
+      lastName = parts.slice(1).join(' ') || '';
+    }
+    if (!firstName && body.name) {
+      const parts = String(body.name).trim().split(/\s+/);
+      firstName = parts[0] || '';
+      lastName = parts.slice(1).join(' ') || '';
+    }
+    if (!firstName) firstName = 'Neznámý';
+
+    const email = body.email || null;
+    const phone = body.phone || body.phone_number || body.telefon || null;
+    const position = body.position || body.job_title || body.pozice || null;
+    const leadId = body.lead_id || body.leadgen_id || body.id || null;
+    const formId = body.form_id || null;
+    const pageId = body.page_id || null;
+    const adId = body.ad_id || null;
+
+    // Idempotence — pokud Make poslal stejný lead znovu, neulož duplikát
+    if (leadId) {
+      const existing = await prisma.jobApplicant.findUnique({
+        where: { meta_lead_id: String(leadId) },
+      });
+      if (existing) {
+        console.log('[make-webhook] Lead už existuje, ignoruji', { leadId, applicantId: existing.id });
+        return res.json({ ok: true, applicant_id: existing.id, duplicate: true });
+      }
+    }
+
+    const created = await prisma.jobApplicant.create({
+      data: {
+        first_name: firstName,
+        last_name: lastName || null,
+        email,
+        phone,
+        position,
+        source: 'facebook_ads',
+        source_detail: adId ? `ad:${adId}` : (formId ? `form:${formId}` : 'via Make.com'),
+        status: 'new',
+        meta_lead_id: leadId ? String(leadId) : null,
+        meta_form_id: formId ? String(formId) : null,
+        meta_page_id: pageId ? String(pageId) : null,
+        meta_ad_id: adId ? String(adId) : null,
+        meta_raw: body.raw || body,
+        applicant_notes: {
+          create: {
+            kind: 'system',
+            content: leadId
+              ? `Lead přijat z Facebook Lead Ads přes Make.com (lead_id=${leadId})`
+              : 'Lead přijat z Facebook Lead Ads přes Make.com',
+          },
+        },
+      },
+    });
+
+    console.log('[make-webhook] Vytvořen applicant', { id: created.id, name: `${firstName} ${lastName}`.trim() });
+    res.status(201).json({ ok: true, applicant_id: created.id });
+  } catch (err) {
+    console.error('[make-webhook] Chyba:', err);
+    res.status(500).json({ error: 'Server error', detail: err.message });
   }
 });
 

@@ -45,6 +45,11 @@
     .stl-slot.occupied { background: rgba(249,115,22,0.12); color: #f97316; border: 1px solid rgba(249,115,22,0.2); opacity: 0.6; }
     .stl-slot.blocked { background: rgba(239,68,68,0.1); color: #ef4444; border: 1px solid rgba(239,68,68,0.15); opacity: 0.5; }
     .stl-slot.mine { background: rgba(139,92,246,0.2); color: #a78bfa; border: 2px solid #8b5cf6; }
+    /* Rezervace — slot vybraný obchodníkem, čeká na zaplacení zálohy (default 72 h) */
+    .stl-slot.reserved { background: rgba(234,179,8,0.18); color: #facc15; border: 1px dashed rgba(234,179,8,0.6); }
+    .stl-slot.reserved.mine { background: rgba(234,179,8,0.28); color: #fde047; border: 2px solid #eab308; }
+    .stl-slot.reserved .stl-countdown { display: block; font-size: 9px; font-weight: 500; opacity: 0.85; margin-top: 2px; }
+    .stl-slot.reserved.expired { background: rgba(239,68,68,0.15); color: #ef4444; border-color: rgba(239,68,68,0.5); }
     .stl-today { position: absolute; top: 0; bottom: 0; width: 2px; background: #ef4444; z-index: 2; pointer-events: none; }
     .stl-today-label { position: absolute; top: -13px; font-size: 8px; color: #ef4444; font-weight: 700; transform: translateX(-50%); }
 
@@ -1411,6 +1416,20 @@
       return start.getDate() + '.' + (start.getMonth()+1) + '. – ' + end.getDate() + '.' + (end.getMonth()+1) + '.' + end.getFullYear();
     }
 
+    // Formátování zbývajícího času pro countdown rezervace.
+    function formatRemainingUntil(isoDt) {
+      if (!isoDt) return '';
+      var ms = new Date(isoDt).getTime() - Date.now();
+      if (ms <= 0) return 'Vypršelo';
+      var totalMin = Math.floor(ms / 60000);
+      var d = Math.floor(totalMin / (60 * 24));
+      var h = Math.floor((totalMin % (60 * 24)) / 60);
+      var m = totalMin % 60;
+      if (d > 0) return d + 'd ' + h + 'h';
+      if (h > 0) return h + 'h ' + m + 'm';
+      return m + 'm';
+    }
+
     async function assignSlotToItem(itemId, slotId, orderId, productName, customerName, quantity, startDate, endDate) {
       try {
         var actualSlotId = slotId;
@@ -1441,7 +1460,18 @@
 
         if (!actualSlotId) return;
 
-        // Vytvoř SlotAssignment
+        // Zjisti, jestli objednávka už zaplatila zálohu — pak nevytváříme rezervaci,
+        // ale rovnou potvrzené přiřazení. Jinak rezervace na 72 h (server default).
+        var isPaid = false;
+        try {
+          var oRes = await fetch('/api/wh/orders/' + orderId, { credentials: 'include' });
+          if (oRes.ok) {
+            var oData = await oRes.json();
+            isPaid = !!(oData && (oData.deposit_paid || oData.final_paid));
+          }
+        } catch(_) { /* fallback: rezervace */ }
+
+        // Vytvoř SlotAssignment — s rezervací nebo rovnou potvrzeně
         await fetch('/api/slots/' + actualSlotId + '/assignments', {
           method: 'POST', credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
@@ -1453,7 +1483,8 @@
             quantity: parseFloat(quantity) || 1,
             estimated_hours: 0,
             priority: 0,
-            status: 'planned'
+            status: 'planned',
+            reserve: !isPaid
           })
         });
         // Aktualizuj slot na full
@@ -1527,16 +1558,40 @@
         const isFree = (!slot.assignments || slot.assignments.length === 0) && slot.status !== 'blocked' && slot.status !== 'full';
         const isBlocked = slot.status === 'blocked';
         const myAssign = slot.assignments ? slot.assignments.find(function(a) { return a.order_id === orderId; }) : null;
-        const cls = myAssign ? 'mine' : (isFree ? 'free' : (isBlocked ? 'blocked' : 'occupied'));
-        // V obsazeném slotu, který patří této objednávce, zobrazíme výrobní číslo kiosku
-        // — je to hlavní identifikátor pro výrobu. Když není, fallback na ✓.
+
+        // Rezervace — slot.assignments[*].reservation_status === 'reserved'
+        const anyReserved = slot.assignments && slot.assignments.some(function(a) { return a.reservation_status === 'reserved'; });
+        const myReservation = myAssign && myAssign.reservation_status === 'reserved' ? myAssign : null;
+        const expired = myReservation && myReservation.reserved_until && new Date(myReservation.reserved_until).getTime() < Date.now();
+
+        var cls;
+        if (myReservation) cls = 'reserved mine' + (expired ? ' expired' : '');
+        else if (myAssign) cls = 'mine';
+        else if (anyReserved) cls = 'reserved';
+        else if (isFree) cls = 'free';
+        else if (isBlocked) cls = 'blocked';
+        else cls = 'occupied';
+
         var serial = '';
         if (myAssign) {
           serial = (myAssign.order_item && myAssign.order_item.serial_number) || '';
         }
-        const label = myAssign
-          ? (serial ? '<span style="font-family:monospace;font-size:11px;font-weight:700;">' + esc(serial) + '</span>' : '✓')
-          : (isFree ? 'Volný' : '');
+        var label;
+        if (myReservation) {
+          var remaining = formatRemainingUntil(myReservation.reserved_until);
+          label = '<span style="font-size:10px;">Rezervováno</span>'
+                + '<span class="stl-countdown" data-reserved-until="' + esc(myReservation.reserved_until) + '">' + esc(remaining) + '</span>';
+        } else if (myAssign) {
+          label = serial
+            ? '<span style="font-family:monospace;font-size:11px;font-weight:700;">' + esc(serial) + '</span>'
+            : '✓';
+        } else if (anyReserved) {
+          label = '<span style="font-size:10px;">Rezervováno</span>';
+        } else if (isFree) {
+          label = 'Volný';
+        } else {
+          label = '';
+        }
 
         var click = '';
         if (isFree) {
@@ -1546,7 +1601,13 @@
             click = ' onclick="pickSlotForActiveItem(null,' + orderId + ',\'' + slot.start.toISOString() + '\',\'' + slot.end.toISOString() + '\')"';
           }
         }
-        const titleAttr = myAssign && serial ? ' title="Výrobní č. ' + esc(serial) + '"' : '';
+        var titleAttr = '';
+        if (myReservation) {
+          var untilDate = new Date(myReservation.reserved_until);
+          titleAttr = ' title="Rezervace platí do ' + untilDate.toLocaleString('cs-CZ') + ' — po zaplacení zálohy se potvrdí, jinak slot uvolníme."';
+        } else if (myAssign && serial) {
+          titleAttr = ' title="Výrobní č. ' + esc(serial) + '"';
+        }
         html += '<div class="stl-cell"><div class="stl-slot ' + cls + '"' + click + titleAttr + '>' + label + '</div></div>';
       });
 
@@ -3567,6 +3628,23 @@
     // ============================================================
     loadStats();
     loadOrders();
+
+    // Countdown tick — každou minutu aktualizuje text "Zbývá Xd Yh" u rezervací.
+    setInterval(function() {
+      var els = document.querySelectorAll('.stl-countdown[data-reserved-until]');
+      var anyExpired = false;
+      els.forEach(function(el) {
+        var iso = el.getAttribute('data-reserved-until');
+        var newText = formatRemainingUntil(iso);
+        if (el.textContent !== newText) el.textContent = newText;
+        if (newText === 'Vypršelo') {
+          anyExpired = true;
+          var parent = el.closest('.stl-slot');
+          if (parent && !parent.classList.contains('expired')) parent.classList.add('expired');
+        }
+      });
+      if (anyExpired) loadAvailableSlots().catch(function(){});
+    }, 60 * 1000);
   </script>
 </body>
 </html>
