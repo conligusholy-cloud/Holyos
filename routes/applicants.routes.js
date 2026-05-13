@@ -312,6 +312,8 @@ router.post('/import-csv', async (req, res, next) => {
     }
 
     // Parser data 05/13/2026 1:47am → Date
+    // FB Lead Center exportuje časy v lokálním pražském čase, takže
+    // interpretujeme jako Europe/Prague a převedeme na UTC pro uložení.
     function parseDate(s) {
       if (!s) return null;
       const m = String(s).match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2})\s*(am|pm)?$/i);
@@ -324,7 +326,12 @@ router.post('/import-csv', async (req, res, next) => {
       const ap = (m[6] || '').toLowerCase();
       if (ap === 'pm' && hh < 12) hh += 12;
       if (ap === 'am' && hh === 12) hh = 0;
-      const d = new Date(Date.UTC(yyyy, mm - 1, dd, hh, mi));
+      // Heuristika DST: duben–říjen = CEST (+02:00), zbytek = CET (+01:00).
+      // Drobné nepřesnosti kolem přechodu DST nás nezajímají, jde o lead timestamps.
+      const isCEST = mm >= 4 && mm <= 10;
+      const offsetHours = isCEST ? 2 : 1;
+      // Naivní Praha → UTC: odečteme offset.
+      const d = new Date(Date.UTC(yyyy, mm - 1, dd, hh - offsetHours, mi));
       return isNaN(d.getTime()) ? null : d;
     }
 
@@ -390,6 +397,17 @@ router.post('/import-csv', async (req, res, next) => {
     }
 
     res.json({ ok: true, imported, skipped, errors, total: lines.length - 1 });
+  } catch (err) { next(err); }
+});
+
+// DELETE /api/hr/applicants/bulk-csv — smaže všechny uchazeče importované z CSV
+// (source_detail začíná "csv:"). Pomocník pro reimport po opravě parseru.
+router.delete('/bulk-csv', async (req, res, next) => {
+  try {
+    const result = await prisma.jobApplicant.deleteMany({
+      where: { source_detail: { startsWith: 'csv:' } },
+    });
+    res.json({ ok: true, deleted: result.count });
   } catch (err) { next(err); }
 });
 
