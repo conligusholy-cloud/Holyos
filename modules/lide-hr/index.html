@@ -694,6 +694,7 @@
           </select>
           <div style="flex:1"></div>
           <button class="btn btn-secondary" onclick="openMetaSetupInfo()" title="Jak napojit Facebook Lead Ads">🔗 FB napojení</button>
+          <button class="btn btn-secondary" onclick="openCsvImportModal()" title="Hromadný import z FB Lead Center CSV">📥 Import CSV</button>
           <button class="btn btn-primary" onclick="openApplicantModal()">+ Nový uchazeč</button>
         </div>
 
@@ -3810,6 +3811,71 @@
       loadStats();
       loadPeople();
       alert(`✅ Hotovo — vytvořen zaměstnanec #${result.person.id}`);
+    }
+
+    function openCsvImportModal() {
+      const modal = document.getElementById('modal-root');
+      modal.innerHTML = `
+        <div class="modal-overlay" onclick="if(event.target===this) closeApplicantModal()">
+          <div class="modal" style="width:640px;">
+            <h2>📥 Import CSV z FB Lead Center</h2>
+            <div style="font-size:13px; line-height:1.6; color:var(--text2); margin-bottom:14px;">
+              Stáhni si CSV soubor z <strong>Business Manager → Lead Center → Stáhnout data</strong> (po odfiltrování období) a nahraj ho sem. HolyOS rozpozná sloupce <code>Jméno</code>, <code>E-mail</code>, <code>Telefon</code>, <code>Formulář</code> a vytvoří záznamy. Duplicity podle e-mailu / telefonu se přeskočí.
+            </div>
+            <div class="form-group full">
+              <label>CSV soubor</label>
+              <input id="csv-file" type="file" accept=".csv,text/csv">
+            </div>
+            <div id="csv-import-status" style="margin-top:14px; font-size:13px;"></div>
+            <div class="modal-actions">
+              <button class="btn btn-secondary" onclick="closeApplicantModal()">Zrušit</button>
+              <button class="btn btn-primary" id="csv-import-btn" onclick="submitCsvImport()">📥 Importovat</button>
+            </div>
+          </div>
+        </div>`;
+    }
+
+    async function submitCsvImport() {
+      const fileInput = document.getElementById('csv-file');
+      const status = document.getElementById('csv-import-status');
+      const btn = document.getElementById('csv-import-btn');
+      const f = fileInput.files[0];
+      if (!f) { status.innerHTML = '<span style="color:#ef4444;">Vyber CSV soubor.</span>'; return; }
+
+      btn.disabled = true;
+      status.innerHTML = '<span style="color:var(--text2);">⏳ Načítám soubor…</span>';
+      try {
+        const text = await f.text();
+        status.innerHTML = '<span style="color:var(--text2);">⏳ Posílám na server…</span>';
+        const res = await fetch('/api/hr/applicants/import-csv', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ csv: text }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          status.innerHTML = '<span style="color:#ef4444;">Chyba: ' + escapeHtml(data.error || 'neznámá chyba') + '</span>';
+          btn.disabled = false;
+          return;
+        }
+        const errCount = (data.errors || []).length;
+        status.innerHTML = `
+          <div style="background:rgba(16,185,129,0.1); border:1px solid rgba(16,185,129,0.3); padding:10px 14px; border-radius:8px; color:var(--text);">
+            ✅ Importováno: <strong>${data.imported}</strong> z ${data.total}<br>
+            ⏭ Přeskočeno (duplicity / dummy): <strong>${data.skipped}</strong><br>
+            ${errCount ? '⚠️ Chyby: <strong>' + errCount + '</strong>' : ''}
+          </div>`;
+        loadApplicants();
+        loadApplicantStats();
+        loadStats();
+        btn.textContent = 'Hotovo — Zavřít';
+        btn.disabled = false;
+        btn.onclick = closeApplicantModal;
+      } catch (e) {
+        console.error(e);
+        status.innerHTML = '<span style="color:#ef4444;">Chyba při čtení souboru.</span>';
+        btn.disabled = false;
+      }
     }
 
     function openMetaSetupInfo() {

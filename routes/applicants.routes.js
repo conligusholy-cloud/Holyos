@@ -244,6 +244,155 @@ router.post('/make-webhook', async (req, res, next) => {
 // ─── od tady všechno za přihlášením ──────────────────────────────────────
 router.use(requireAuth);
 
+// POST /api/hr/applicants/import-csv — hromadný import CSV z FB Lead Center
+// Očekávaný formát (česky export):
+//   Vytvořeno,Jméno,E-mail,Zdroj,Formulář,Kanál,Fáze,Vlastník,Štítky,Telefon,...
+//   05/13/2026 1:47am,Josef Hauk,haukjosef1@gmail.com,Placeno,Nábor -nábor - platny,...,+420604373206,,
+//
+// Body: { csv: "<celý obsah CSV souboru jako string>" }
+// Vrací: { ok, imported, skipped, errors }
+router.post('/import-csv', async (req, res, next) => {
+  try {
+    const csv = (req.body && req.body.csv) || '';
+    if (!csv || typeof csv !== 'string') {
+      return res.status(400).json({ error: 'Chybí CSV obsah v poli "csv"' });
+    }
+
+    // Naivní CSV parser — bere v potaz uvozovky a oddělovač čárkou
+    function parseCsvLine(line) {
+      const out = [];
+      let cur = '';
+      let inQuotes = false;
+      for (let i = 0; i < line.length; i++) {
+        const ch = line[i];
+        if (inQuotes) {
+          if (ch === '"' && line[i + 1] === '"') { cur += '"'; i++; }
+          else if (ch === '"') { inQuotes = false; }
+          else { cur += ch; }
+        } else {
+          if (ch === ',') { out.push(cur); cur = ''; }
+          else if (ch === '"' && cur === '') { inQuotes = true; }
+          else { cur += ch; }
+        }
+      }
+      out.push(cur);
+      return out.map(s => s.trim());
+    }
+
+    const lines = csv.split(/\r?\n/).filter(l => l.trim().length > 0);
+    if (lines.length < 2) {
+      return res.status(400).json({ error: 'CSV neobsahuje žádná data (jen hlavička nebo prázdné)' });
+    }
+
+    // Hlavička — normalizovat (lower, bez diakritiky) pro mapování
+    function norm(s) {
+      return String(s || '')
+        .toLowerCase()
+        .normalize('NFD').replace(/[̀-ͯ]/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+    }
+    const header = parseCsvLine(lines[0]).map(norm);
+    const idx = {
+      created:  header.indexOf('vytvoreno'),
+      name:     header.indexOf('jmeno'),
+      email:    header.indexOf('e-mail'),
+      source:   header.indexOf('zdroj'),
+      form:     header.indexOf('formular'),
+      phone:    header.indexOf('telefon'),
+    };
+    // E-mail někdy uveden jako "email"
+    if (idx.email === -1) idx.email = header.indexOf('email');
+
+    if (idx.name === -1 || idx.email === -1) {
+      return res.status(400).json({
+        error: 'CSV neobsahuje povinné sloupce Jméno / E-mail',
+        header,
+      });
+    }
+
+    // Parser data 05/13/2026 1:47am → Date
+    function parseDate(s) {
+      if (!s) return null;
+      const m = String(s).match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2})\s*(am|pm)?$/i);
+      if (!m) return null;
+      const mm = parseInt(m[1], 10);
+      const dd = parseInt(m[2], 10);
+      const yyyy = parseInt(m[3], 10);
+      let hh = parseInt(m[4], 10);
+      const mi = parseInt(m[5], 10);
+      const ap = (m[6] || '').toLowerCase();
+      if (ap === 'pm' && hh < 12) hh += 12;
+      if (ap === 'am' && hh === 12) hh = 0;
+      const d = new Date(Date.UTC(yyyy, mm - 1, dd, hh, mi));
+      return isNaN(d.getTime()) ? null : d;
+    }
+
+    let imported = 0;
+    let skipped = 0;
+    const errors = [];
+
+    for (let i = 1; i < lines.length; i++) {
+      const row = parseCsvLine(lines[i]);
+      const fullName = (idx.name >= 0 ? row[idx.name] : '') || '';
+      const email = (idx.email >= 0 ? row[idx.email] : '') || '';
+      const phone = (idx.phone >= 0 ? row[idx.phone] : '') || '';
+      const form = (idx.form >= 0 ? row[idx.form] : '') || '';
+      const created = (idx.created >= 0 ? row[idx.created] : '') || '';
+
+      if (!fullName && !email) {
+        skipped++; continue;
+      }
+      // Pomineme zjevné dummy testovací leady
+      if (/^<\s*test/i.test(fullName) || /dummy data/i.test(fullName)) {
+        skipped++; continue;
+      }
+
+      const parts = fullName.trim().split(/\s+/);
+      const firstName = parts[0] || 'Neznámý';
+      const lastName = parts.slice(1).join(' ') || null;
+
+      // Idempotence: pokud už existuje uchazeč se stejným email nebo telefon,
+      // přeskočíme (nepřepisujeme).
+      const dupWhere = [];
+      if (email) dupWhere.push({ email: { equals: email, mode: 'insensitive' } });
+      if (phone) dupWhere.push({ phone });
+      if (dupWhere.length > 0) {
+        const existing = await prisma.jobApplicant.findFirst({ where: { OR: dupWhere } });
+        if (existing) { skipped++; continue; }
+      }
+
+      try {
+        const createdAt = parseDate(created);
+        await prisma.jobApplicant.create({
+          data: {
+            first_name: firstName,
+            last_name: lastName,
+            email: email || null,
+            phone: phone || null,
+            source: 'facebook_ads',
+            source_detail: form ? `csv:${form}` : 'csv:lead-center',
+            status: 'new',
+            ...(createdAt ? { created_at: createdAt } : {}),
+            applicant_notes: {
+              create: {
+                kind: 'system',
+                content: `Importováno z FB Lead Center CSV (formulář: ${form || 'neznámý'}, vytvořeno: ${created || '—'})`,
+                author_id: req.user.person ? req.user.person.id : null,
+              },
+            },
+          },
+        });
+        imported++;
+      } catch (e) {
+        errors.push({ row: i + 1, name: fullName, error: e.message });
+      }
+    }
+
+    res.json({ ok: true, imported, skipped, errors, total: lines.length - 1 });
+  } catch (err) { next(err); }
+});
+
 // GET /api/hr/applicants — seznam s filtry
 router.get('/', async (req, res, next) => {
   try {
