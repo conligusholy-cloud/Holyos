@@ -20,6 +20,7 @@ const chat = require('./chat');
 const git = require('./git');
 const github = require('./github');
 const { runAgent, buildForbiddenChecker } = require('./agent');
+const autoSummary = require('./auto-summary');
 const triageModule = require('./triage');
 const plannerModule = require('./planner');
 const { resolveAutonomy } = require('./autonomy');
@@ -403,10 +404,39 @@ async function processTask(task, options = {}) {
       onEvent: async (kind, payload) => log(kind, payload),
     });
 
+    // VRSTVA 3 — Haiku auto-summary když agent skončil bez finish() ale má changes.
+    // Fallback summary jako 'Agent dosáhl maxima X kol' není dobrý PR description.
+    // Generujeme smysluplné shrnutí z task AC + file_changes + recent text_blocks.
+    let autoSummaryTokens = 0;
+    if (!agentResult.finishCalled && (agentResult.fileChanges || []).length > 0) {
+      try {
+        const enriched = await repository.getRunWithEvents(run.id, { eventsLimit: 30 });
+        const result = await autoSummary.generateSummary({
+          task,
+          fileChanges: agentResult.fileChanges,
+          events: enriched?.events || [],
+        });
+        if (result.summary && result.summary.length > 30) {
+          await log('decision', {
+            action: 'auto_summary_generated',
+            tokens_used: result.tokensUsed,
+            original_fallback: String(agentResult.summary || '').slice(0, 120),
+          });
+          agentResult.summary = result.summary;
+          autoSummaryTokens = result.tokensUsed;
+        }
+      } catch (e) {
+        console.warn('[ai-dev/runner] auto-summary failed:', e.message);
+        await log('error', { phase: 'auto_summary', message: e.message });
+      }
+    }
+
     await log('decision', {
       action: 'agent_done',
       summary: agentResult.summary,
       tokens_used: agentResult.tokensUsed,
+      auto_summary_tokens: autoSummaryTokens,
+      finish_called: agentResult.finishCalled,
       file_changes: agentResult.fileChanges,
     });
 
@@ -414,7 +444,7 @@ async function processTask(task, options = {}) {
     // zůstane v DB pro Audit log (aby uživatel viděl, co agent navrhoval).
     await repository.updateRun(run.id, {
       summary: agentResult.summary,
-      tokens_used: triageTokens + plannerTokens + agentResult.tokensUsed,
+      tokens_used: triageTokens + plannerTokens + agentResult.tokensUsed + autoSummaryTokens,
     });
 
     // ── 4) Forbidden check ─────────────────────────────────────────────
