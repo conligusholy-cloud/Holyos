@@ -818,30 +818,40 @@
       const premium = p && p.premium_amount != null ? Number(p.premium_amount) : '';
 
       // Helper — vyrobí jeden řádek souborového pole (Zelená karta).
-      // Vlevo: label + file input. Vpravo: 'Náhled' + 'Odebrat' (pokud existuje
-      // uložený soubor). Tlačítko Odebrat nastaví hidden flag a UI ihned vyčistí.
-      // Náhled se otevírá v samostatném okně přes openPolicyFilePreview().
+      // Layout: [📂 Vybrat soubor] [📎 chip s názvem souboru — klik=náhled v okně] [🗑️ Odebrat]
+      // Native file input je vizuálně skrytý, klikání zprostředkuje <label for> tlačítkem.
+      // Po výběru nového souboru přepíše chip funkce onPolicyFilePicked() — používá blob URL.
       function fileFieldHtml(idPrefix, label, currentUrl, currentName) {
         const hasFile = !!currentUrl;
         const safeUrl = escHtml(currentUrl || '');
         const safeName = escHtml(currentName || 'Zelená karta');
-        return '<div class="form-group full" style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;">' +
-          '<div style="flex:1;min-width:240px;">' +
-            '<label>' + label + '</label>' +
-            '<input type="file" id="' + idPrefix + '-file" accept="image/*,application/pdf" style="width:100%;">' +
+        const chipStyleSaved = 'display:inline-flex;align-items:center;gap:6px;padding:6px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--accent,#0ea5e9);text-decoration:none;font-size:13px;cursor:pointer;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+        const chip = hasFile
+          ? '<a href="javascript:void(0)" id="' + idPrefix + '-chip"' +
+              ' onclick="openPolicyFilePreview(\'' + safeUrl + '\',\'' + safeName + '\')"' +
+              ' title="Kliknutím otevřeš náhled v novém okně"' +
+              ' style="' + chipStyleSaved + '">' +
+              '📎 ' + escHtml(currentName || 'Zelená karta') +
+            '</a>'
+          : '<span id="' + idPrefix + '-chip" style="font-size:13px;color:var(--text2);font-style:italic;">Soubor nevybrán</span>';
+        return '<div class="form-group full">' +
+          '<label>' + label + '</label>' +
+          '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:4px;">' +
+            // Tlačítko "Vybrat soubor" — label pro skrytý file input (klikatelný)
+            '<label for="' + idPrefix + '-file" class="btn btn-sm btn-secondary" style="cursor:pointer;margin:0;display:inline-flex;align-items:center;gap:6px;">📂 Vybrat soubor</label>' +
+            '<input type="file" id="' + idPrefix + '-file" accept="image/*,application/pdf"' +
+              ' style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0;"' +
+              ' onchange="onPolicyFilePicked(this, \'' + idPrefix + '\')">' +
+            // Chip s názvem souboru — klikatelný = náhled
+            chip +
+            // Tlačítko Odebrat (jen pokud existuje uložený soubor)
             (hasFile
-              ? '<div id="' + idPrefix + '-current" style="font-size:12px;color:var(--text2);margin-top:4px;">' +
-                  'Aktuálně: <a href="javascript:void(0)" onclick="openPolicyFilePreview(\'' + safeUrl + '\',\'' + safeName + '\')" title="Otevřít náhled v novém okně">📎 ' + escHtml(currentName || 'Zelená karta') + '</a>' +
-                '</div>'
+              ? '<button type="button" class="btn btn-sm btn-danger" id="' + idPrefix + '-remove-btn"' +
+                  ' onclick="removePolicyFile(\'' + idPrefix + '\')"' +
+                  ' title="Odebrat tento soubor při uložení">🗑️ Odebrat</button>'
               : '') +
             '<input type="hidden" id="' + idPrefix + '-remove" value="0">' +
           '</div>' +
-          (hasFile
-            ? '<button type="button" class="btn btn-sm btn-secondary" onclick="openPolicyFilePreview(\'' + safeUrl + '\',\'' + safeName + '\')" title="Otevřít náhled v novém okně">👁️ Náhled</button>'
-            : '') +
-          (hasFile
-            ? '<button type="button" class="btn btn-sm btn-danger" onclick="removePolicyFile(\'' + idPrefix + '\')" id="' + idPrefix + '-remove-btn" title="Odebrat tento soubor při uložení">🗑️ Odebrat</button>'
-            : '') +
         '</div>';
       }
 
@@ -905,15 +915,42 @@
       }
     }
 
-    // Klik na "Odebrat" — označíme hidden flag, schováme aktuální popis souboru
-    // i samotné tlačítko. Při uložení backend nullne URL a smaže soubor z disku.
+    // Po výběru nového souboru přes "Vybrat soubor" přepiš chip — název + klik=náhled.
+    // Pro náhled vyrobíme blob URL z lokálního souboru, aby šel otevřít okamžitě před uložením.
+    function onPolicyFilePicked(input, idPrefix) {
+      const chip = document.getElementById(idPrefix + '-chip');
+      if (!chip) return;
+      const file = input.files && input.files[0];
+      if (!file) return;
+      const blobUrl = URL.createObjectURL(file);
+      const a = document.createElement('a');
+      a.id = idPrefix + '-chip';
+      a.href = 'javascript:void(0)';
+      a.title = 'Kliknutím otevřeš náhled vybraného souboru v novém okně';
+      a.style.cssText = 'display:inline-flex;align-items:center;gap:6px;padding:6px 12px;background:var(--surface2);border:1px solid var(--accent,#0ea5e9);border-radius:6px;color:var(--accent,#0ea5e9);text-decoration:none;font-size:13px;cursor:pointer;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+      a.textContent = '📎 ' + file.name + ' · nový výběr';
+      a.onclick = function () { openPolicyFilePreview(blobUrl, file.name); };
+      chip.replaceWith(a);
+      // Když uživatel mezi tím klikl na Odebrat, ale teď vybral nový soubor, resetuj remove flag
+      const flag = document.getElementById(idPrefix + '-remove');
+      if (flag) flag.value = '0';
+    }
+
+    // Klik na "Odebrat" — označíme hidden flag, přepíšeme chip na warning + skryjeme tlačítko.
+    // Při uložení backend nullne URL a smaže soubor z disku.
     function removePolicyFile(prefix) {
       const flag = document.getElementById(prefix + '-remove');
-      const cur = document.getElementById(prefix + '-current');
+      const chip = document.getElementById(prefix + '-chip');
       const btn = document.getElementById(prefix + '-remove-btn');
       const fileInp = document.getElementById(prefix + '-file');
       if (flag) flag.value = '1';
-      if (cur) cur.innerHTML = '<span style="color:#ef4444;">⚠️ Bude odebráno při uložení</span>';
+      if (chip) {
+        const span = document.createElement('span');
+        span.id = prefix + '-chip';
+        span.style.cssText = 'font-size:13px;color:#ef4444;font-style:italic;';
+        span.textContent = '⚠️ Bude odebráno při uložení';
+        chip.replaceWith(span);
+      }
       if (btn) btn.style.display = 'none';
       if (fileInp) fileInp.value = ''; // Když má někdo už vybraný nový soubor, ten zruš taky
     }
