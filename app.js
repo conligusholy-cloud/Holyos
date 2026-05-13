@@ -58,6 +58,7 @@ const normovaniRoutes = require('./routes/normovani.routes');
 const directivesRoutes = require('./routes/directives.routes');
 const agentRoutes = require('./routes/agent.routes');
 const businessToolsRoutes = require('./routes/business-tools.routes');
+const siteDevelopmentRoutes = require('./routes/site-development.routes');
 
 // ─── Inicializace aplikace ────────────────────────────────────────────────
 
@@ -479,6 +480,7 @@ app.use('/api/normovani', normovaniRoutes);
 app.use('/api/directives', directivesRoutes);
 app.use('/api/agent', agentRoutes); // AI Vývojář (modul #13) — super-admin only
 app.use('/api/tools', businessToolsRoutes); // Obchodní pomůcky (sales-aid)
+app.use('/api/sites', siteDevelopmentRoutes); // Site Development — řízení expanze (vyhledávání lokalit, pozemků, smluv)
 
 // ─── Legacy storage proxy (kompatibilita s persistent-storage.js) ──────────
 
@@ -691,6 +693,12 @@ app.listen(PORT, async () => {
     finalInvoiceWorker.start();
   } catch (err) {
     console.error('[app] final-invoice-worker nelze spustit:', err.message);
+  }
+  try {
+    const slotReservationWorker = require('./services/slot-reservation-worker');
+    slotReservationWorker.start();
+  } catch (err) {
+    console.error('[app] slot-reservation-worker nelze spustit:', err.message);
   }
   console.log('=========================================');
   console.log('  HolyOS v0.5.0');

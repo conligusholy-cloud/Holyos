@@ -205,6 +205,16 @@ model Person {
   applicant_converted  JobApplicant?   @relation("ApplicantConverted")
   applicant_notes_written ApplicantNote[] @relation("ApplicantNoteAuthor")
 
+  // Obchod — potenciální zákazníci přiřazení tomuto obchodníkovi
+  sales_contacts_assigned SalesContact[]     @relation("SalesContactAssignee")
+  sales_notes_written     SalesContactNote[] @relation("SalesNoteAuthor")
+  sales_events_organized  SalesEvent[]       @relation("SalesEventOrganizer")
+
+  // Site Development — vyhledávání a řízení lokalit pro prádlomaty
+  sites_assigned         Site[]              @relation("SiteAssignee")
+  sites_created          Site[]              @relation("SiteCreator")
+  site_comms_written     SiteCommunication[] @relation("SiteCommunicationAuthor")
+
   @@index([department_id])
   @@index([role_id])
   @@index([company_id])
@@ -517,6 +527,12 @@ model Company {
   insurance_policies   VehicleInsurancePolicy[] @relation("InsuranceCompany")
   // Factorify nákupní ceník
   supplier_price_lists SupplierPriceList[]      @relation("SupplierPriceListSupplier")
+
+  // Obchod — kontakty, které byly převedeny do Company (won deal)
+  sales_contacts_converted SalesContact[]      @relation("SalesContactConverted")
+
+  // Site Development — firma jako vlastník / pronajímatel lokality
+  sites_owned             Site[]               @relation("SiteCompany")
 
   @@index([ico])
   @@index([type])
@@ -4138,4 +4154,285 @@ model ApplicantNote {
   @@index([applicant_id])
   @@index([author_id])
   @@map("applicant_notes")
+}
+
+// =============================================================================
+// MODUL OBCHOD — Sales CRM (potenciální zákazníci prádelen)
+// =============================================================================
+
+model SalesContact {
+  id                   Int     @id @default(autoincrement())
+  first_name           String  @db.VarChar(255)
+  last_name            String? @db.VarChar(255)
+  email                String? @db.VarChar(255)
+  phone                String? @db.VarChar(50)
+  company_name         String? @db.VarChar(255)
+  position             String? @db.VarChar(255)
+  web                  String? @db.VarChar(500)
+  address              String? @db.VarChar(255)
+  city                 String? @db.VarChar(100)
+  zip                  String? @db.VarChar(10)
+  source               String  @default("manual") @db.VarChar(50)
+  source_detail        String? @db.VarChar(255)
+  status               String  @default("new") @db.VarChar(30)
+  potential            String  @default("medium") @db.VarChar(20)
+  expected_value       Decimal? @db.Decimal(12, 2)
+  next_action_at       DateTime?
+  notes                String? @db.Text
+  assigned_to_id       Int?
+  assigned_to          Person? @relation("SalesContactAssignee", fields: [assigned_to_id], references: [id], onDelete: SetNull)
+  converted_company_id Int?
+  converted_company    Company? @relation("SalesContactConverted", fields: [converted_company_id], references: [id], onDelete: SetNull)
+  converted_at         DateTime?
+  meta_lead_id         String? @unique @db.VarChar(255)
+  meta_form_id         String? @db.VarChar(255)
+  meta_page_id         String? @db.VarChar(255)
+  meta_ad_id           String? @db.VarChar(255)
+  meta_raw             Json?
+  linkedin_id          String? @db.VarChar(255)
+  linkedin_url         String? @db.VarChar(500)
+  created_at           DateTime @default(now())
+  updated_at           DateTime @updatedAt
+
+  sales_notes  SalesContactNote[]
+  sales_events SalesEvent[]
+
+  @@index([status])
+  @@index([source])
+  @@index([potential])
+  @@index([assigned_to_id])
+  @@index([converted_company_id])
+  @@index([next_action_at])
+  @@map("sales_contacts")
+}
+
+model SalesContactNote {
+  id         Int          @id @default(autoincrement())
+  contact_id Int
+  contact    SalesContact @relation(fields: [contact_id], references: [id], onDelete: Cascade)
+
+  author_id Int?
+  author    Person? @relation("SalesNoteAuthor", fields: [author_id], references: [id], onDelete: SetNull)
+
+  kind    String @default("note") @db.VarChar(30)
+  content String @db.Text
+
+  old_status String? @db.VarChar(30)
+  new_status String? @db.VarChar(30)
+
+  created_at DateTime @default(now())
+
+  @@index([contact_id])
+  @@index([author_id])
+  @@map("sales_contact_notes")
+}
+
+model SalesEvent {
+  id         Int           @id @default(autoincrement())
+  contact_id Int?
+  contact    SalesContact? @relation(fields: [contact_id], references: [id], onDelete: Cascade)
+
+  organizer_id Int?
+  organizer    Person? @relation("SalesEventOrganizer", fields: [organizer_id], references: [id], onDelete: SetNull)
+
+  title       String  @db.VarChar(500)
+  description String? @db.Text
+  event_type  String  @default("meeting") @db.VarChar(30)
+  location    String? @db.VarChar(500)
+
+  start_at DateTime
+  end_at   DateTime?
+  all_day  Boolean   @default(false)
+
+  status      String @default("planned") @db.VarChar(20)
+  reminder_min Int?
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@index([contact_id])
+  @@index([organizer_id])
+  @@index([start_at])
+  @@index([status])
+  @@map("sales_events")
+}
+
+// =============================================================================
+// SITE DEVELOPMENT — vyhledávání a řízení lokalit pro prádlomaty
+// =============================================================================
+// Hlavní entita: potenciální lokalita / pozemek. Uživatel ji zadá ručně nebo
+// importem. Pracuje s ní (komunikace, fotky, finanční podmínky, katastr) a
+// vyhodnocuje její vhodnost (skóre, status).
+//
+// Typy `site_type`: rent / purchase / other
+// `status` pipeline: lead → researching → negotiating → contract → operational
+//                    (boční: rejected, lost)
+// =============================================================================
+
+model Site {
+  id Int @id @default(autoincrement())
+
+  name        String  @db.VarChar(255)
+  site_type   String  @default("rent") @db.VarChar(20)
+  status      String  @default("lead") @db.VarChar(30)
+  description String? @db.Text
+
+  address      String? @db.VarChar(500)
+  city         String? @db.VarChar(120)
+  zip          String? @db.VarChar(10)
+  country      String? @default("CZ") @db.VarChar(60)
+  latitude     Decimal? @db.Decimal(10, 7)
+  longitude    Decimal? @db.Decimal(10, 7)
+  map_link     String?  @db.Text
+
+  owner_name    String? @db.VarChar(255)
+  owner_phone   String? @db.VarChar(40)
+  owner_email   String? @db.VarChar(255)
+  owner_note    String? @db.Text
+  company_id    Int?
+  company       Company? @relation("SiteCompany", fields: [company_id], references: [id], onDelete: SetNull)
+
+  rent_monthly         Decimal? @db.Decimal(12, 2)
+  rent_currency        String?  @default("CZK") @db.VarChar(3)
+  deposit              Decimal? @db.Decimal(12, 2)
+  energy_deposit       Decimal? @db.Decimal(12, 2)
+  energy_monthly       Decimal? @db.Decimal(12, 2)
+  other_costs_monthly  Decimal? @db.Decimal(12, 2)
+  purchase_price       Decimal? @db.Decimal(14, 2)
+  contract_terms       String?  @db.Text
+  contract_start       DateTime? @db.Date
+  contract_end         DateTime? @db.Date
+
+  area_m2          Decimal? @db.Decimal(10, 2)
+  ceiling_height_m Decimal? @db.Decimal(5, 2)
+  electricity_kw   Decimal? @db.Decimal(8, 2)
+  water_supply     Boolean?
+  sewage           Boolean?
+  parking          Boolean?
+  capacity_note    String?  @db.Text
+
+  cadastral_area    String? @db.VarChar(255)
+  cadastral_parcel  String? @db.VarChar(120)
+  cadastral_lv      String? @db.VarChar(40)
+  cadastral_link    String? @db.Text
+
+  score            Int?
+  pros             String? @db.Text
+  cons             String? @db.Text
+  rejection_reason String? @db.Text
+
+  assigned_to_id Int?
+  assigned_to    Person? @relation("SiteAssignee", fields: [assigned_to_id], references: [id], onDelete: SetNull)
+  created_by_id  Int?
+  created_by     Person? @relation("SiteCreator", fields: [created_by_id], references: [id], onDelete: SetNull)
+
+  pradlomat_ref String? @db.VarChar(255)
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  contacts        SiteContact[]
+  communications  SiteCommunication[]
+  photos          SitePhoto[]
+  documents       SiteDocument[]
+
+  @@index([status])
+  @@index([site_type])
+  @@index([city])
+  @@index([assigned_to_id])
+  @@index([created_by_id])
+  @@index([company_id])
+  @@index([created_at])
+  @@map("sites")
+}
+
+model SiteContact {
+  id      Int  @id @default(autoincrement())
+  site_id Int
+  site    Site @relation(fields: [site_id], references: [id], onDelete: Cascade)
+
+  name        String  @db.VarChar(255)
+  role        String? @db.VarChar(120)
+  phone       String? @db.VarChar(40)
+  email       String? @db.VarChar(255)
+  company     String? @db.VarChar(255)
+  note        String? @db.Text
+  is_primary  Boolean @default(false)
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@index([site_id])
+  @@index([is_primary])
+  @@map("site_contacts")
+}
+
+model SiteCommunication {
+  id      Int  @id @default(autoincrement())
+  site_id Int
+  site    Site @relation(fields: [site_id], references: [id], onDelete: Cascade)
+
+  channel    String   @default("note") @db.VarChar(20)
+  subject    String?  @db.VarChar(500)
+  body       String   @db.Text
+  occurred_at DateTime @default(now())
+
+  author_id Int?
+  author    Person? @relation("SiteCommunicationAuthor", fields: [author_id], references: [id], onDelete: SetNull)
+
+  followup_at DateTime?
+  followup_done Boolean  @default(false)
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@index([site_id])
+  @@index([occurred_at])
+  @@index([followup_at])
+  @@index([channel])
+  @@map("site_communications")
+}
+
+model SitePhoto {
+  id      Int  @id @default(autoincrement())
+  site_id Int
+  site    Site @relation(fields: [site_id], references: [id], onDelete: Cascade)
+
+  file_path    String  @db.VarChar(500)
+  url          String? @db.VarChar(500)
+  caption      String? @db.VarChar(500)
+  mime_type    String? @db.VarChar(80)
+  size_bytes   Int?
+  sort_order   Int     @default(0)
+
+  created_at DateTime @default(now())
+
+  @@index([site_id])
+  @@index([sort_order])
+  @@map("site_photos")
+}
+
+model SiteDocument {
+  id      Int  @id @default(autoincrement())
+  site_id Int
+  site    Site @relation(fields: [site_id], references: [id], onDelete: Cascade)
+
+  doc_type   String  @default("other") @db.VarChar(30)
+  title      String  @db.VarChar(500)
+  file_path  String? @db.VarChar(500)
+  external_url String? @db.Text
+  size_bytes Int?
+  mime_type  String? @db.VarChar(80)
+  note       String? @db.Text
+
+  signed_at  DateTime?
+  valid_from DateTime?
+  valid_to   DateTime?
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@index([site_id])
+  @@index([doc_type])
+  @@map("site_documents")
 }

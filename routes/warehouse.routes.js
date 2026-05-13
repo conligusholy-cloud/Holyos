@@ -553,6 +553,17 @@ router.post('/orders/:id/payment', async (req, res, next) => {
     // Načti znovu (s případnou aktualizací statusu) a rozhodni o uvolnění do výroby
     const fresh = await prisma.order.findUnique({ where: { id: orderId } });
 
+    // Po zaplacení zálohy automaticky potvrď všechny rezervace slotů,
+    // které patří této objednávce. Idempotentní: updateMany s reservation_status=reserved.
+    let reservationsConfirmed = 0;
+    if (isPaid && (kind === 'deposit' || kind === 'full')) {
+      const confirmRes = await prisma.slotAssignment.updateMany({
+        where: { order_id: orderId, reservation_status: 'reserved' },
+        data: { reservation_status: 'confirmed', reservation_confirmed_at: new Date() },
+      });
+      reservationsConfirmed = confirmRes.count;
+    }
+
     let releaseResult = null;
     if (shouldRelease(fresh)) {
       releaseResult = await releaseOrderToProduction(orderId, {
@@ -580,6 +591,7 @@ router.post('/orders/:id/payment', async (req, res, next) => {
       status_changed: statusChanged,
       release: releaseResult,
       final_invoice_update: finalInvoiceUpdate,
+      reservations_confirmed: reservationsConfirmed,
     });
   } catch (err) { next(err); }
 });
