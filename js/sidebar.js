@@ -487,8 +487,95 @@ function extractMentions(text) {
   return found;
 }
 
+// === Draft chat persistence (recovery po refresh / 502 / zavření) ===
+// Klíč per stránka — různé stránky mají různé kontexty, ať se nemíchají.
+function _aiChatDraftKey(pagePath) {
+  return 'holyos:ai-chat-draft:' + (pagePath || window.location.pathname);
+}
+
+function _persistAiChatState() {
+  try {
+    if (!_aiChatState || _aiChatState.finalized) return;
+    if (!_aiChatState.messages || _aiChatState.messages.length < 2) return; // jen iniciální bot zpráva
+    // POZOR: screenshot (base64 datauri) může mít stovky kB. Vynech ho,
+    // jinak rychle narazíme na localStorage quota (typicky 5 MB).
+    // attachments stejně tak — uchováváme jen metadata, ne data.
+    var snapshot = {
+      messages: _aiChatState.messages.filter(function(m) { return !m._pending; }),
+      step: _aiChatState.step,
+      description: _aiChatState.description,
+      draft: _aiChatState.draft,
+      history: _aiChatState.history,
+      pagePath: _aiChatState.pagePath,
+      pageTitle: _aiChatState.pageTitle,
+      answers: _aiChatState.answers,
+      savedAt: Date.now(),
+    };
+    localStorage.setItem(_aiChatDraftKey(_aiChatState.pagePath), JSON.stringify(snapshot));
+  } catch (e) {
+    // Quota exceeded nebo localStorage disabled — ignoruj, nelze nic dělat
+    console.warn('[ai-chat] persist failed:', e.message);
+  }
+}
+
+function _restoreAiChatState(pagePath) {
+  try {
+    var raw = localStorage.getItem(_aiChatDraftKey(pagePath));
+    if (!raw) return null;
+    var parsed = JSON.parse(raw);
+    // Expirace — drafty starší než 24h zahodit (asi se na ně zapomnělo)
+    if (parsed.savedAt && Date.now() - parsed.savedAt > 24 * 3600 * 1000) {
+      localStorage.removeItem(_aiChatDraftKey(pagePath));
+      return null;
+    }
+    return parsed;
+  } catch (e) {
+    console.warn('[ai-chat] restore failed:', e.message);
+    return null;
+  }
+}
+
+function _clearAiChatDraft(pagePath) {
+  try { localStorage.removeItem(_aiChatDraftKey(pagePath)); } catch (_) {}
+}
+
+// Tlačítko "Začít znova" v UI — exposed globally pro onclick
+window.restartAiChat = function() {
+  if (!confirm('Opravdu začít znova? Aktuální konverzace s Alanem se ztratí.')) return;
+  _clearAiChatDraft(_aiChatState.pagePath);
+  openAiChat();
+};
+
 function openAiChat() {
   var page = getCurrentPageInfo();
+
+  // === Recovery z localStorage ===
+  var restored = _restoreAiChatState(page.path);
+  if (restored && restored.messages && restored.messages.length >= 2) {
+    _aiChatState = {
+      messages: restored.messages || [],
+      step: restored.step || 0,
+      description: restored.description || '',
+      draft: restored.draft || {},
+      history: restored.history || [],
+      finalized: false,
+      summary: null,
+      escalateReason: null,
+      screenshot: null,
+      attachments: [],
+      pagePath: restored.pagePath || page.path,
+      pageTitle: restored.pageTitle || page.title,
+      answers: restored.answers || {},
+    };
+    // Hlavička indikující recovery + tlačítko Začít znova
+    _aiChatState.messages.push({
+      role: 'bot',
+      text: '\u23EA Pokračujeme tam kde jsme skončili. Pokud chceš začít znova, klikni vpravo nahoře \u201CZačít znova\u201D.'
+    });
+    renderAiChat();
+    return;
+  }
+
   _aiChatState = {
     messages: [],
     step: 0,
@@ -920,7 +1007,13 @@ function sendAiMessage() {
       _aiChatState.messages.push({ role: 'bot', text: data.ai_message || '(Alan: bez textu)' });
       if (data.draft) _aiChatState.draft = data.draft;
       if (data.history) _aiChatState.history = data.history;
-      if (data.finalized) { _aiChatState.finalized = true; _aiChatState.summary = data.summary; }
+      if (data.finalized) {
+        _aiChatState.finalized = true;
+        _aiChatState.summary = data.summary;
+        _clearAiChatDraft(_aiChatState.pagePath); // úkol vytvořen, draft už netřeba
+      } else {
+        _persistAiChatState(); // průběžná záloha pro recovery po refresh/502
+      }
       if (data.escalate) { _aiChatState.escalateReason = data.escalate_reason; }
       renderAiChat();
     }).catch(function(e) {
@@ -938,6 +1031,7 @@ function sendAiMessage() {
         : '\u26A0\uFE0F Chyba: ' + e.message;
       _aiChatState.messages.push({ role: 'bot', text: userFriendly });
       if (input && _aiChatState._lastUserText) input.value = _aiChatState._lastUserText;
+      _persistAiChatState(); // ulož i errorový stav, ať po refresh user neztratí kontext
       renderAiChat();
     });
   }
