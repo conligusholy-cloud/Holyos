@@ -11,6 +11,7 @@ const { createNotification } = require('./notifications.routes');
 const { getBlockingRunForTask, RUNNING_STATUSES } = require('../services/ai-developer/repository');
 const acChat = require('../services/ai-developer/ac-chat');
 const suitability = require('../services/ai-developer/suitability');
+const chat = require('../services/ai-developer/chat');
 
 router.use(requireAuth);
 
@@ -287,6 +288,74 @@ async function evaluateSuitabilityAsync(taskId) {
   // Jen JEMNĚ — nepřepisujeme pokud už něco je (uživatel může mít vlastní volbu).
   if (result.recommendedChangeType && !task.change_type) data.change_type = result.recommendedChangeType;
   await prisma.adminTask.update({ where: { id: taskId }, data });
+
+  // AUTO-ASSIGN: pokud score >= threshold, automaticky předej AI Vývojáři.
+  await maybeAutoAssignToAI(taskId, result.score);
+}
+
+// AUTO-ASSIGN HELPER
+// Když suitability skóre překročí threshold, automaticky nastav assignable_to_ai
+// + target_repo_id (default první aktivní repo) + autonomy_override (default pr_review).
+// Tomáš pak ručně už nemusí klikat 'Přidat AI Vývojáři'.
+async function maybeAutoAssignToAI(taskId, score) {
+  const threshold = parseInt(process.env.AI_AUTO_ASSIGN_THRESHOLD || '70', 10);
+  if (!Number.isFinite(score) || score < threshold) return false;
+
+  const task = await prisma.adminTask.findUnique({
+    where: { id: taskId },
+    select: {
+      id: true, page_title: true, assignable_to_ai: true,
+      target_repo_id: true, autonomy_override: true,
+      acceptance_criteria: true, status: true,
+    },
+  });
+  if (!task) return false;
+  if (task.assignable_to_ai) return false; // už předáno dřív
+  if (!task.acceptance_criteria || task.acceptance_criteria.length < 20) {
+    console.log('[auto-assign] task #' + taskId + ' skip — chybí AC');
+    return false;
+  }
+  if (task.status === 'done' || task.status === 'archived') return false;
+
+  // Vyber target_repo_id — pokud už ho task má, použij; jinak env nebo první aktivní
+  let repoId = task.target_repo_id;
+  if (!repoId) {
+    if (process.env.AI_AUTO_ASSIGN_REPO_ID) {
+      repoId = parseInt(process.env.AI_AUTO_ASSIGN_REPO_ID, 10);
+    } else {
+      const defaultRepo = await prisma.agentRepo.findFirst({
+        where: { active: true },
+        orderBy: { id: 'asc' },
+      });
+      if (!defaultRepo) {
+        console.warn('[auto-assign] task #' + taskId + ' — žádný aktivní repo, skip');
+        return false;
+      }
+      repoId = defaultRepo.id;
+    }
+  }
+
+  const autonomy = task.autonomy_override || process.env.AI_AUTO_ASSIGN_AUTONOMY || 'pr_review';
+
+  await prisma.adminTask.update({
+    where: { id: taskId },
+    data: {
+      assignable_to_ai: true,
+      target_repo_id: repoId,
+      autonomy_override: autonomy,
+    },
+  });
+  console.log('[auto-assign] task #' + taskId + ' → AI Vývojář (score=' + score + '/100, repo=' + repoId + ', autonomy=' + autonomy + ')');
+
+  // Chat notif do task threadu
+  try {
+    await chat.postMessage(taskId,
+      '🤖 **Úkol automaticky předán AI Vývojáři** (skóre ' + score + '/100 ≥ ' + threshold + ').\n\n' +
+      'Worker ho vyzvedne v dalším pollu (~30 s). Pokud chceš zrušit, klikni "Uvolnit z AI" v UI úkolu.'
+    );
+  } catch (e) { console.warn('[auto-assign] chat notif failed:', e.message); }
+
+  return true;
 }
 
 // POST /api/admin-tasks/:id/evaluate-suitability — re-evaluate manuálně z UI
