@@ -293,21 +293,32 @@ router.post('/import-csv', async (req, res, next) => {
         .trim();
     }
     const header = parseCsvLine(lines[0]).map(norm);
+    // Najde první sloupec, jehož normalizovaný název je v aliasu seznamu
+    function findCol(aliases) {
+      for (const a of aliases) {
+        const i = header.indexOf(a);
+        if (i !== -1) return i;
+      }
+      return -1;
+    }
     const idx = {
-      created:  header.indexOf('vytvoreno'),
-      name:     header.indexOf('jmeno'),
-      email:    header.indexOf('e-mail'),
-      source:   header.indexOf('zdroj'),
-      form:     header.indexOf('formular'),
-      phone:    header.indexOf('telefon'),
+      created:    findCol(['vytvoreno', 'created_time', 'created', 'datum']),
+      name:       findCol(['jmeno', 'cele_jmeno', 'full_name', 'name', 'celé_jméno']),
+      firstName:  findCol(['first_name', 'firstname', 'krestni_jmeno']),
+      lastName:   findCol(['last_name', 'lastname', 'prijmeni']),
+      email:      findCol(['e-mail', 'email']),
+      source:     findCol(['zdroj', 'source', 'platform']),
+      form:       findCol(['formular', 'form_name', 'form']),
+      phone:      findCol(['telefon', 'phone', 'phone_number']),
     };
-    // E-mail někdy uveden jako "email"
-    if (idx.email === -1) idx.email = header.indexOf('email');
 
-    if (idx.name === -1 || idx.email === -1) {
+    // Validace — musí mít alespoň jméno (nebo first+last) a email
+    const hasName = idx.name !== -1 || (idx.firstName !== -1 && idx.lastName !== -1);
+    if (!hasName || idx.email === -1) {
       return res.status(400).json({
-        error: 'CSV neobsahuje povinné sloupce Jméno / E-mail',
+        error: 'CSV neobsahuje povinné sloupce pro jméno (Jméno / celé_jméno / full_name) nebo e-mail',
         header,
+        detected: idx,
       });
     }
 
@@ -342,22 +353,31 @@ router.post('/import-csv', async (req, res, next) => {
     for (let i = 1; i < lines.length; i++) {
       const row = parseCsvLine(lines[i]);
       const fullName = (idx.name >= 0 ? row[idx.name] : '') || '';
+      const firstFromCol = (idx.firstName >= 0 ? row[idx.firstName] : '') || '';
+      const lastFromCol = (idx.lastName >= 0 ? row[idx.lastName] : '') || '';
       const email = (idx.email >= 0 ? row[idx.email] : '') || '';
       const phone = (idx.phone >= 0 ? row[idx.phone] : '') || '';
       const form = (idx.form >= 0 ? row[idx.form] : '') || '';
       const created = (idx.created >= 0 ? row[idx.created] : '') || '';
 
-      if (!fullName && !email) {
+      if (!fullName && !firstFromCol && !email) {
         skipped++; continue;
       }
       // Pomineme zjevné dummy testovací leady
-      if (/^<\s*test/i.test(fullName) || /dummy data/i.test(fullName)) {
+      const checkName = fullName || `${firstFromCol} ${lastFromCol}`.trim();
+      if (/^<\s*test/i.test(checkName) || /dummy data/i.test(checkName)) {
         skipped++; continue;
       }
 
-      const parts = fullName.trim().split(/\s+/);
-      const firstName = parts[0] || 'Neznámý';
-      const lastName = parts.slice(1).join(' ') || null;
+      let firstName, lastName;
+      if (firstFromCol) {
+        firstName = firstFromCol;
+        lastName = lastFromCol || null;
+      } else {
+        const parts = fullName.trim().split(/\s+/);
+        firstName = parts[0] || 'Neznámý';
+        lastName = parts.slice(1).join(' ') || null;
+      }
 
       // Idempotence: pokud už existuje uchazeč se stejným email nebo telefon,
       // přeskočíme (nepřepisujeme).
@@ -406,6 +426,22 @@ router.delete('/bulk-csv', async (req, res, next) => {
   try {
     const result = await prisma.jobApplicant.deleteMany({
       where: { source_detail: { startsWith: 'csv:' } },
+    });
+    res.json({ ok: true, deleted: result.count });
+  } catch (err) { next(err); }
+});
+
+// DELETE /api/hr/applicants/bulk-unknown — smaže všechny "neznámé" uchazeče
+// (first_name = "Neznámý" a žádný e-mail ani telefon). Vznikají při zachycení
+// starých FB leadů, ke kterým Meta po 90 dnech nevrací PII data.
+router.delete('/bulk-unknown', async (req, res, next) => {
+  try {
+    const result = await prisma.jobApplicant.deleteMany({
+      where: {
+        first_name: 'Neznámý',
+        email: null,
+        phone: null,
+      },
     });
     res.json({ ok: true, deleted: result.count });
   } catch (err) { next(err); }
