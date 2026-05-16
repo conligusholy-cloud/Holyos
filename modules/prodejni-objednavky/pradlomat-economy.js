@@ -223,31 +223,35 @@
       '.pe-section-head .pe-h-tag { margin-left: auto; font-size: 10px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; color: #9ca3af; }' +
       '.pe-section-body { padding: 14px 16px; display: grid; gap: 10px; }' +
       '.pe-collapsed .pe-section-body { display: none; }' +
-      '.pe-row { display: grid; grid-template-columns: 1fr 130px 70px; gap: 10px; align-items: center; font-size: 13px; }' +
-      '.pe-row.lockable { grid-template-columns: 1fr 130px 50px 34px; }' +
-      '.pe-row.compact { grid-template-columns: 1fr 130px; }' +
+      // Tracky používáme minmax(0,X) aby intrinsic šířka inputu nezpůsobila overflow celé sekce.
+      '.pe-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 130px) 70px; gap: 10px; align-items: center; font-size: 13px; }' +
+      '.pe-row.lockable { grid-template-columns: minmax(0, 1fr) minmax(0, 130px) 50px 34px; }' +
+      '.pe-row.compact { grid-template-columns: minmax(0, 1fr) minmax(0, 130px); }' +
       '.pe-row label { color: var(--text); }' +
       '.pe-row .pe-unit { font-size: 11px; color: var(--text2); text-align: left; }' +
-      '.pe-input { background: #fef3c7; color: #1f2937; border: 1px solid #f59e0b; border-radius: 6px; padding: 6px 10px; font-size: 13px; font-weight: 600; text-align: right; font-family: inherit; }' +
+      // CRITICAL FIX: input má intrinsic min-width ~150px → roztahoval grid tracky a přesahoval viewport.
+      // min-width:0 + width:100% + box-sizing:border-box ho přinutí respektovat šířku grid buňky.
+      '.pe-input { background: #fef3c7; color: #1f2937; border: 1px solid #f59e0b; border-radius: 6px; padding: 6px 10px; font-size: 13px; font-weight: 600; text-align: right; font-family: inherit; min-width: 0; width: 100%; box-sizing: border-box; }' +
       '.pe-input:focus { outline: none; border-color: #f59e0b; box-shadow: 0 0 0 2px rgba(245,158,11,0.3); }' +
       '.pe-input.pe-input-locked { background: #fde68a; border-color: #d97706; border-width: 2px; }' +
-      '.pe-lock-btn { background: transparent; border: 1px solid var(--border); border-radius: 6px; width: 30px; height: 30px; cursor: pointer; font-size: 13px; padding: 0; transition: all 0.15s; line-height: 1; display: inline-flex; align-items: center; justify-content: center; }' +
+      '.pe-lock-btn { background: transparent; border: 1px solid var(--border); border-radius: 6px; width: 30px; height: 30px; cursor: pointer; font-size: 13px; padding: 0; transition: all 0.15s; line-height: 1; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }' +
       '.pe-lock-btn:hover { background: var(--surface2); }' +
       '.pe-lock-btn.locked { background: rgba(217,119,6,0.15); border-color: rgba(217,119,6,0.5); }' +
       '.pe-locked-display { cursor: not-allowed; }' + // dědí .pe-readonly — šedý chip, bílý text, bez zámku
-      // 10letý plán rozvoje
-      '.pe-years-grid { display: grid; grid-template-columns: repeat(10, 1fr); gap: 6px; margin-bottom: 14px; }' +
-      '.pe-year-cell { display: flex; flex-direction: column; align-items: stretch; gap: 4px; }' +
-      '.pe-year-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; color: var(--text2); text-align: center; }' +
-      '.pe-year-input { text-align: center !important; padding: 6px 4px !important; font-size: 14px !important; }' +
-      '.pe-projection-summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 16px; }' +
-      '.pe-mini-card { background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }' +
+      // 10letý plán rozvoje — VŽDY 5 sloupců × 2 řady. Konzistentní layout od mobilu po 4K.
+      '.pe-years-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; margin-bottom: 14px; }' +
+      '.pe-year-cell { display: flex; flex-direction: column; align-items: stretch; gap: 4px; min-width: 0; }' +
+      '.pe-year-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; color: var(--text2); text-align: center; }' +
+      '.pe-year-input { text-align: center !important; padding: 7px 4px !important; font-size: 15px !important; }' +
+      // Summary cards — auto-fit s minmax: vejdou se 4 v řadě na widescreenu, 2 v řadě na úzkém, 1 na phone.
+      '.pe-projection-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; margin-bottom: 16px; }' +
+      '.pe-mini-card { background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; min-width: 0; }' +
       '.pe-mini-card .pe-mc-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text2); margin-bottom: 4px; }' +
-      '.pe-mini-card .pe-mc-value { font-size: 20px; font-weight: 700; color: #eab308; }' +
+      '.pe-mini-card .pe-mc-value { font-size: 20px; font-weight: 700; color: #eab308; word-break: break-word; }' +
       '.pe-mini-card.ok .pe-mc-value { color: #10b981; }' +
       '.pe-mini-card.neg .pe-mc-value { color: #ef4444; }' +
-      // Chart wrap — horizontální scroll, pokud je SVG širší než container (Mac viewport s úzkou pracovní plochou)
-      '.pe-projection-chart-wrap { padding: 14px; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; overflow-x: auto; overflow-y: hidden; -webkit-overflow-scrolling: touch; }' +
+      // Chart wrap — žádný horizontální scroll, chart se škáluje přes viewBox SVG. Overflow:hidden jen pro jistotu.
+      '.pe-projection-chart-wrap { padding: 14px; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }' +
       '.pe-chart-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; margin-bottom: 12px; }' +
       '.pe-chart-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; color: var(--text2); }' +
       '.pe-chart-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; color: var(--text); }' +
@@ -256,9 +260,9 @@
       '.pe-leg-sw { width: 14px; height: 10px; border-radius: 2px; flex-shrink: 0; }' +
       '.pe-leg-green { background: linear-gradient(180deg, #34d399, #059669); }' +
       '.pe-leg-line { background: #eab308; height: 3px; border-radius: 2px; }' +
-      // aspect-ratio = bezpečný fallback pro Safari/Mac (height:auto na SVG s viewBox má historicky bugy);
-      // min-width drží chart čitelný — pod ním se aktivuje horizontální scroll wrappera.
-      '.pe-svg { width: 100%; height: auto; display: block; font-family: inherit; aspect-ratio: 1000 / 360; min-width: 640px; max-height: 460px; }' +
+      // SVG se škáluje přes viewBox (1000×360). aspect-ratio = bezpečný fallback pro Safari (height:auto na SVG má bugy).
+      // Žádný min-width: chart se VŽDY vejde do svého kontejneru, na malých telefonech jen je menší.
+      '.pe-svg { width: 100%; height: auto; display: block; font-family: inherit; aspect-ratio: 1000 / 360; max-height: 460px; }' +
       // Swipe hint — defaultně skrytý, na úzkých displejích se ukáže
       '.pe-chart-swipe-hint { display: none; text-align: center; font-size: 10px; color: var(--text2); margin-top: 6px; padding-top: 6px; border-top: 1px dashed var(--border); }' +
       // SVG text velikosti — pevné (CSS screen pixels, ne viewBox units)
@@ -271,25 +275,10 @@
       '.pe-svg .pe-x-axis .pe-x-year { font-size: 13px; font-weight: 700; fill: #e5e7eb; }' +
       '.pe-svg .pe-x-axis .pe-x-sub { font-size: 11px; fill: #9ca3af; }' +
       '.pe-svg .pe-legend text { font-size: 13px; fill: #e5e7eb; }' +
-      // Mac/úzký laptop (typicky 13" MacBook s HolyOS sidebar ~720-1100px content) — kompaktnější year grid,
-      // nižší summary cards, aby celá projekční sekce zůstala v jednom záběru.
-      '@media (max-width: 1100px) {' +
-        '.pe-years-grid { grid-template-columns: repeat(5, 1fr); gap: 8px; row-gap: 10px; }' +
-        '.pe-year-input { font-size: 14px !important; padding: 7px 4px !important; }' +
-        '.pe-year-label { font-size: 10px; }' +
-        '.pe-projection-summary { gap: 8px; }' +
-        '.pe-mini-card { padding: 10px 12px; }' +
-        '.pe-mini-card .pe-mc-value { font-size: 18px; }' +
-        '.pe-projection-chart-wrap { padding: 12px; }' +
-      '}' +
-      // Tablet/phone — horizontální scroll chartu (chart si zachová čitelnost, user scrolluje)
+      // Tablet/phone — kompaktnější textové prvky, SVG text se přepne na user-units pro lepší škálování.
+      // Žádné horizontální scrolly: vše se škáluje do dostupného místa.
       '@media (max-width: 720px) {' +
-        '.pe-years-grid { grid-template-columns: repeat(5, 1fr); }' +
-        '.pe-projection-summary { grid-template-columns: repeat(2, 1fr); }' +
         '.pe-projection-chart-wrap { padding: 12px 10px; }' +
-        '.pe-projection-chart-wrap > #pe-projection-chart { min-width: 700px; }' +
-        '.pe-svg { min-width: 700px; aspect-ratio: 1000 / 360; }' +
-        '.pe-chart-swipe-hint { display: block; }' +
         '.pe-mini-card { padding: 10px 12px; }' +
         '.pe-mini-card .pe-mc-value { font-size: 17px; }' +
         '.pe-mini-card .pe-mc-label { font-size: 9px; }' +
@@ -297,15 +286,28 @@
         '.pe-chart-head { gap: 4px 10px; }' +
         '.pe-chart-title { font-size: 10px; }' +
         '.pe-chart-legend { font-size: 11px; gap: 4px 10px; }' +
-        '.pe-year-input { font-size: 15px !important; padding: 8px 4px !important; }' +
+        '.pe-year-input { font-size: 14px !important; padding: 6px 3px !important; }' +
         '.pe-year-label { font-size: 9px; }' +
+        '.pe-years-grid { gap: 6px; }' +
+        // SVG text — na malých displejích kompenzace přes viewBox scale (text se jinak zmenšuje s chartem)
+        '.pe-svg .pe-y-left text, .pe-svg .pe-y-right text { font-size: 18px; }' +
+        '.pe-svg .pe-bar-label, .pe-svg .pe-cum-label { font-size: 17px; }' +
+        '.pe-svg .pe-x-axis .pe-x-year { font-size: 18px; }' +
+        '.pe-svg .pe-x-axis .pe-x-sub { font-size: 14px; }' +
       '}' +
-      // Phone — ještě užší layout
+      // Phone — extra compact pro malé displeje. Year grid stále 5 cols, ale extra těsná mezera.
       '@media (max-width: 480px) {' +
-        '.pe-projection-summary { grid-template-columns: 1fr 1fr; gap: 8px; }' +
-        '.pe-years-grid { grid-template-columns: repeat(5, 1fr); gap: 4px; }' +
+        '.pe-years-grid { gap: 4px; }' +
+        '.pe-year-input { padding: 5px 2px !important; font-size: 13px !important; }' +
+        '.pe-mini-card .pe-mc-value { font-size: 15px; }' +
+        // Chart text ještě o něco větší vůči user-units (chart je vizuálně velmi malý)
+        '.pe-svg .pe-y-left text, .pe-svg .pe-y-right text { font-size: 22px; }' +
+        '.pe-svg .pe-bar-label, .pe-svg .pe-cum-label { font-size: 20px; }' +
+        '.pe-svg .pe-x-axis .pe-x-year { font-size: 22px; }' +
+        '.pe-svg .pe-x-axis .pe-x-sub { font-size: 17px; }' +
       '}' +
-      '.pe-readonly { background: var(--surface2); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; font-size: 13px; font-weight: 600; text-align: right; }' +
+      // Stejné fix jako .pe-input: readonly chip musí respektovat šířku grid buňky.
+      '.pe-readonly { background: var(--surface2); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; font-size: 13px; font-weight: 600; text-align: right; min-width: 0; width: 100%; box-sizing: border-box; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }' +
       '.pe-readonly.emp { background: rgba(234,179,8,0.10); color: #eab308; border-color: rgba(234,179,8,0.35); }' +
       '.pe-results { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; padding: 18px; background: linear-gradient(135deg, rgba(234,179,8,0.06), rgba(234,179,8,0.02)); border: 1px solid rgba(234,179,8,0.3); border-radius: 12px; }' +
       '.pe-result-card { background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 14px; }' +
