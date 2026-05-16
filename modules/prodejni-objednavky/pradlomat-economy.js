@@ -246,7 +246,8 @@
       '.pe-mini-card .pe-mc-value { font-size: 20px; font-weight: 700; color: #eab308; }' +
       '.pe-mini-card.ok .pe-mc-value { color: #10b981; }' +
       '.pe-mini-card.neg .pe-mc-value { color: #ef4444; }' +
-      '.pe-projection-chart-wrap { padding: 14px; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }' +
+      // Chart wrap — horizontální scroll, pokud je SVG širší než container (Mac viewport s úzkou pracovní plochou)
+      '.pe-projection-chart-wrap { padding: 14px; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; overflow-x: auto; overflow-y: hidden; -webkit-overflow-scrolling: touch; }' +
       '.pe-chart-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; margin-bottom: 12px; }' +
       '.pe-chart-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; color: var(--text2); }' +
       '.pe-chart-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; color: var(--text); }' +
@@ -255,7 +256,9 @@
       '.pe-leg-sw { width: 14px; height: 10px; border-radius: 2px; flex-shrink: 0; }' +
       '.pe-leg-green { background: linear-gradient(180deg, #34d399, #059669); }' +
       '.pe-leg-line { background: #eab308; height: 3px; border-radius: 2px; }' +
-      '.pe-svg { width: 100%; height: auto; display: block; font-family: inherit; }' +
+      // aspect-ratio = bezpečný fallback pro Safari/Mac (height:auto na SVG s viewBox má historicky bugy);
+      // min-width drží chart čitelný — pod ním se aktivuje horizontální scroll wrappera.
+      '.pe-svg { width: 100%; height: auto; display: block; font-family: inherit; aspect-ratio: 1000 / 360; min-width: 640px; max-height: 460px; }' +
       // Swipe hint — defaultně skrytý, na úzkých displejích se ukáže
       '.pe-chart-swipe-hint { display: none; text-align: center; font-size: 10px; color: var(--text2); margin-top: 6px; padding-top: 6px; border-top: 1px dashed var(--border); }' +
       // SVG text velikosti — pevné (CSS screen pixels, ne viewBox units)
@@ -268,13 +271,24 @@
       '.pe-svg .pe-x-axis .pe-x-year { font-size: 13px; font-weight: 700; fill: #e5e7eb; }' +
       '.pe-svg .pe-x-axis .pe-x-sub { font-size: 11px; fill: #9ca3af; }' +
       '.pe-svg .pe-legend text { font-size: 13px; fill: #e5e7eb; }' +
+      // Mac/úzký laptop (typicky 13" MacBook s HolyOS sidebar ~720-1100px content) — kompaktnější year grid,
+      // nižší summary cards, aby celá projekční sekce zůstala v jednom záběru.
+      '@media (max-width: 1100px) {' +
+        '.pe-years-grid { grid-template-columns: repeat(5, 1fr); gap: 8px; row-gap: 10px; }' +
+        '.pe-year-input { font-size: 14px !important; padding: 7px 4px !important; }' +
+        '.pe-year-label { font-size: 10px; }' +
+        '.pe-projection-summary { gap: 8px; }' +
+        '.pe-mini-card { padding: 10px 12px; }' +
+        '.pe-mini-card .pe-mc-value { font-size: 18px; }' +
+        '.pe-projection-chart-wrap { padding: 12px; }' +
+      '}' +
       // Tablet/phone — horizontální scroll chartu (chart si zachová čitelnost, user scrolluje)
       '@media (max-width: 720px) {' +
         '.pe-years-grid { grid-template-columns: repeat(5, 1fr); }' +
         '.pe-projection-summary { grid-template-columns: repeat(2, 1fr); }' +
-        '.pe-projection-chart-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; padding: 12px 10px; }' +
+        '.pe-projection-chart-wrap { padding: 12px 10px; }' +
         '.pe-projection-chart-wrap > #pe-projection-chart { min-width: 700px; }' +
-        '.pe-svg { width: 100%; min-width: 700px; }' +
+        '.pe-svg { min-width: 700px; aspect-ratio: 1000 / 360; }' +
         '.pe-chart-swipe-hint { display: block; }' +
         '.pe-mini-card { padding: 10px 12px; }' +
         '.pe-mini-card .pe-mc-value { font-size: 17px; }' +
@@ -746,12 +760,13 @@
 
     // Jednotná viewBox geometrie — legenda + titulek jsou v HTML nad SVG,
     // takže uvnitř SVG nepotřebujeme padding pro ně. CSS škáluje font.
+    // 1000×360 (poměr 2.78:1) — kompaktnější vertikálně, lépe se vejde na Mac viewport.
     var W = 1000;
-    var H = 380;
-    var padL = 80;   // levá Y osa (bary)
-    var padR = 80;   // pravá Y osa (kumulativní)
-    var padT = 28;   // jen dýchání nahoru pro labely bar tops
-    var padB = 60;   // X labely
+    var H = 360;
+    var padL = 64;   // levá Y osa (bary) — užší (krátké labely k/M €)
+    var padR = 64;   // pravá Y osa (kumulativní)
+    var padT = 26;   // jen dýchání nahoru pro labely bar tops
+    var padB = 56;   // X labely (Rok N + extra řádek)
     var innerW = W - padL - padR;
     var innerH = H - padT - padB;
     var bandW = innerW / data.length;
