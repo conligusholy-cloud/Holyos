@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+  <meta name="theme-color" content="#0b1020">
+  <title>Hugo — Servisní asistent | Best Series</title>
+  <link rel="manifest" href="/hugo/manifest.webmanifest">
+  <style>
+    :root {
+      --bg: #0b1020;
+      --surface: #131a2e;
+      --surface2: #1c2540;
+      --border: rgba(255,255,255,0.08);
+      --text: #e8ebf5;
+      --text2: #8b94b3;
+      --accent: #22d3ee;
+      --accent-hover: #06b6d4;
+      --user: #22d3ee;
+      --assistant: #2d3b5f;
+      --danger: #ef4444;
+    }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); height: 100%; overscroll-behavior: none; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif; -webkit-font-smoothing: antialiased; }
+    button, input, textarea, select { font-family: inherit; }
+
+    /* App shell */
+    .hugo-app { display: flex; flex-direction: column; height: 100vh; height: 100dvh; max-width: 720px; margin: 0 auto; }
+
+    .hugo-top {
+      display: flex; align-items: center; gap: 10px; padding: 12px 16px;
+      background: var(--surface); border-bottom: 1px solid var(--border);
+      padding-top: max(12px, env(safe-area-inset-top));
+    }
+    .hugo-logo {
+      width: 38px; height: 38px; border-radius: 10px;
+      background: linear-gradient(135deg, #22d3ee, #06b6d4);
+      display: flex; align-items: center; justify-content: center; font-size: 18px;
+      box-shadow: 0 2px 10px rgba(34,211,238,0.3);
+    }
+    .hugo-name { font-weight: 700; font-size: 16px; }
+    .hugo-tag { font-size: 11px; color: var(--text2); margin-top: 1px; }
+    .hugo-menu { margin-left: auto; background: transparent; border: none; color: var(--text2); cursor: pointer; padding: 6px; font-size: 22px; }
+
+    .hugo-content { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+
+    /* LOGIN screen */
+    .login-wrap { display: flex; flex-direction: column; padding: 32px 20px; max-width: 420px; margin: 0 auto; min-height: 100%; }
+    .login-hero { text-align: center; padding: 40px 0 32px; }
+    .login-hero .logo-big {
+      width: 84px; height: 84px; margin: 0 auto 16px; border-radius: 22px;
+      background: linear-gradient(135deg, #22d3ee, #06b6d4);
+      display: flex; align-items: center; justify-content: center; font-size: 40px;
+      box-shadow: 0 10px 40px rgba(34,211,238,0.35);
+    }
+    .login-hero h1 { font-size: 28px; margin: 0 0 6px; }
+    .login-hero p { color: var(--text2); font-size: 14px; margin: 0; line-height: 1.5; }
+    .login-card {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 20px;
+    }
+    .login-card .field { margin-bottom: 14px; }
+    .login-card label { display: block; font-size: 11px; color: var(--text2); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
+    .login-card input {
+      width: 100%; padding: 13px 14px; background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 10px; color: var(--text); font-size: 16px;
+    }
+    .login-card input:focus { outline: none; border-color: var(--accent); }
+    .login-btn {
+      width: 100%; padding: 14px; background: linear-gradient(135deg, #22d3ee, #06b6d4); color: #001;
+      border: none; border-radius: 10px; font-size: 15px; font-weight: 600; cursor: pointer; margin-top: 6px;
+    }
+    .login-btn:disabled { opacity: 0.5; }
+    .login-error { color: var(--danger); font-size: 13px; margin-top: 10px; text-align: center; }
+    .login-foot { text-align: center; font-size: 12px; color: var(--text2); margin-top: 24px; line-height: 1.5; }
+
+    /* CHAT screen */
+    .chat-wrap { display: flex; flex-direction: column; height: 100%; }
+    .chat-list { flex: 1; overflow-y: auto; padding: 16px; -webkit-overflow-scrolling: touch; }
+    .chat-empty {
+      text-align: center; padding: 28px 16px; color: var(--text2); font-size: 14px;
+    }
+    .chat-empty .b { font-size: 36px; margin-bottom: 8px; }
+    .chat-suggestions { display: flex; flex-direction: column; gap: 8px; margin-top: 20px; }
+    .chat-sug {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+      padding: 12px 14px; text-align: left; color: var(--text); cursor: pointer; font-size: 14px;
+    }
+    .chat-sug:hover { border-color: var(--accent); }
+
+    .msg-row { margin-bottom: 14px; }
+    .msg-bubble {
+      max-width: 86%; padding: 10px 14px; border-radius: 14px;
+      font-size: 14px; line-height: 1.5; word-wrap: break-word;
+    }
+    .msg-row.user .msg-bubble {
+      background: var(--user); color: #001; margin-left: auto;
+      border-bottom-right-radius: 4px;
+    }
+    .msg-row.assistant .msg-bubble {
+      background: var(--assistant); color: var(--text);
+      border-bottom-left-radius: 4px;
+    }
+    .msg-meta {
+      font-size: 10px; color: var(--text2); margin-top: 4px;
+    }
+    .msg-row.user .msg-meta { text-align: right; }
+    .msg-citations { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px; }
+    .msg-cite {
+      display: inline-flex; align-items: center; gap: 4px; background: rgba(34,211,238,0.12);
+      color: var(--accent); border: 1px solid rgba(34,211,238,0.25); border-radius: 12px;
+      padding: 3px 10px; font-size: 11px; cursor: pointer;
+    }
+    .msg-feedback { display: flex; gap: 6px; margin-top: 6px; }
+    .fb-btn {
+      background: transparent; border: 1px solid var(--border); color: var(--text2);
+      border-radius: 12px; padding: 3px 10px; font-size: 11px; cursor: pointer;
+    }
+    .fb-btn.active { border-color: var(--accent); color: var(--accent); }
+
+    .typing { color: var(--text2); font-size: 13px; font-style: italic; padding: 0 4px; }
+    .typing::after { content: '●●●'; animation: dots 1.4s infinite; letter-spacing: 2px; }
+    @keyframes dots { 0%, 20% { opacity: 0.2; } 50% { opacity: 1; } 100% { opacity: 0.2; } }
+
+    .chat-input {
+      display: flex; gap: 8px; padding: 10px 12px; border-top: 1px solid var(--border);
+      background: var(--surface); padding-bottom: max(10px, env(safe-area-inset-bottom));
+    }
+    .chat-input textarea {
+      flex: 1; padding: 12px 14px; background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 22px; color: var(--text); font-size: 16px; resize: none; max-height: 120px;
+      min-height: 44px;
+    }
+    .chat-input textarea:focus { outline: none; border-color: var(--accent); }
+    .send-btn {
+      width: 44px; height: 44px; border-radius: 50%; border: none;
+      background: linear-gradient(135deg, #22d3ee, #06b6d4); color: #001;
+      cursor: pointer; font-size: 18px; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .send-btn:disabled { opacity: 0.4; }
+
+    /* Bottom nav */
+    .bottom-nav {
+      display: flex; background: var(--surface); border-top: 1px solid var(--border);
+      padding-bottom: max(0px, env(safe-area-inset-bottom));
+    }
+    .bn-item {
+      flex: 1; padding: 10px 6px; text-align: center; background: transparent; border: none;
+      color: var(--text2); cursor: pointer; font-size: 11px; font-weight: 500;
+    }
+    .bn-item .ico { font-size: 20px; display: block; margin-bottom: 2px; }
+    .bn-item.active { color: var(--accent); }
+
+    /* GUIDES screen */
+    .guides-wrap { padding: 14px; }
+    .guides-search {
+      width: 100%; padding: 11px 14px; background: var(--surface); border: 1px solid var(--border);
+      border-radius: 12px; color: var(--text); font-size: 15px; margin-bottom: 12px;
+    }
+    .guide-card {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+      padding: 14px; margin-bottom: 10px; cursor: pointer;
+    }
+    .guide-card:hover { border-color: var(--accent); }
+    .guide-card h3 { margin: 0 0 4px; font-size: 14px; }
+    .guide-card .summary { font-size: 12px; color: var(--text2); line-height: 1.4; }
+    .guide-kind {
+      display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 10px;
+      background: var(--surface2); color: var(--text2); margin-right: 6px;
+    }
+
+    /* Article viewer */
+    .article-view {
+      padding: 16px; padding-top: max(16px, env(safe-area-inset-top));
+    }
+    .article-view h1 { font-size: 20px; margin: 12px 0 16px; }
+    .article-view h2 { font-size: 16px; margin: 14px 0 6px; }
+    .article-view h3 { font-size: 14px; margin: 12px 0 4px; }
+    .article-view p { margin: 8px 0; font-size: 14px; line-height: 1.55; }
+    .article-view ul, .article-view ol { margin: 8px 0 8px 22px; font-size: 14px; line-height: 1.55; }
+    .article-view code { background: var(--surface2); padding: 1px 5px; border-radius: 4px; font-size: 13px; }
+    .article-view pre { background: var(--surface2); padding: 10px; border-radius: 8px; overflow-x: auto; }
+    .article-view a { color: var(--accent); }
+    .back-btn {
+      background: transparent; border: none; color: var(--accent); padding: 8px 0;
+      cursor: pointer; font-size: 14px; display: inline-flex; align-items: center; gap: 4px;
+    }
+
+    /* Profile */
+    .profile-wrap { padding: 24px 16px; }
+    .profile-row {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 14px; background: var(--surface); border: 1px solid var(--border);
+      border-radius: 12px; margin-bottom: 8px;
+    }
+    .profile-row .label { font-size: 11px; color: var(--text2); text-transform: uppercase; letter-spacing: 0.5px; }
+    .profile-row .value { font-size: 14px; }
+    .logout-btn {
+      width: 100%; padding: 14px; background: rgba(239,68,68,0.15); color: var(--danger);
+      border: 1px solid rgba(239,68,68,0.3); border-radius: 12px; font-size: 15px;
+      cursor: pointer; margin-top: 20px;
+    }
+
+    /* Hide on small heights (split-view) */
+    @media (min-width: 720px) {
+      .hugo-app { box-shadow: 0 0 60px rgba(0,0,0,0.5); }
+    }
+  </style>
+</head>
+<body>
+  <div class="hugo-app" id="app">
+    <!-- Vykresleno JS -->
+  </div>
+
+  <script src="/hugo/app.js"></script>
+</body>
+</html>

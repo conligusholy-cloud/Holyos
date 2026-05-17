@@ -12,6 +12,11 @@ const router = express.Router();
 const crypto = require('crypto');
 const { prisma } = require('../config/database');
 const { requireAuth } = require('../middleware/auth');
+const {
+  SALES_LEAD_ROLE_NAME,
+  resolveSalesRole,
+  buildContactVisibilityFilter,
+} = require('./sales.helpers');
 
 // ─── Konstanty ───────────────────────────────────────────────────────────
 const SALES_STATUSES   = ['new', 'contacted', 'qualified', 'meeting', 'proposal', 'won', 'lost'];
@@ -180,10 +185,14 @@ router.post('/webhook/linkedin', async (req, res) => {
 // ─── Od tady všechno za přihlášením ──────────────────────────────────────
 router.use(requireAuth);
 
-// GET /api/sales/contacts — seznam s filtry
+// GET /api/sales/contacts — seznam s filtry (role-aware)
+//   - admin / vedoucí obchodu: vidí vše, lze filtrovat ?seller_id=
+//   - obchodník: jen kontakty, kde je sám přidělen a ZÁROVEŇ není sdílený
+//     (sdílené kontakty vidí pouze vedoucí/admin)
 router.get('/contacts', async (req, res, next) => {
   try {
-    const { status, source, potential, assigned_to_id, converted, search } = req.query;
+    const roleCtx = await resolveSalesRole(req);
+    const { status, source, potential, assigned_to_id, seller_id, converted, search } = req.query;
     const where = {};
     if (status) where.status = status;
     if (source) where.source = source;
@@ -202,6 +211,15 @@ router.get('/contacts', async (req, res, next) => {
       ];
     }
 
+    // Vedoucí/admin: volitelný filtr "zobraz kontakty, kde je obchodník X"
+    if (roleCtx.canManageSales && seller_id) {
+      where.assignments = { some: { person_id: parseInt(seller_id, 10) } };
+    }
+
+    // Obchodník: viditelnost vlastních (nesdílených) kontaktů
+    const visibility = buildContactVisibilityFilter(roleCtx);
+    if (visibility) Object.assign(where, visibility);
+
     const contacts = await prisma.salesContact.findMany({
       where,
       orderBy: { created_at: 'desc' },
@@ -219,6 +237,16 @@ router.get('/contacts', async (req, res, next) => {
         converted_company_id: true, converted_at: true,
         assigned_to: { select: { id: true, first_name: true, last_name: true } },
         converted_company: { select: { id: true, name: true } },
+        assignments: {
+          select: {
+            id: true,
+            person_id: true,
+            commission_pct: true,
+            commission_locked_pct: true,
+            commission_locked_at: true,
+            person: { select: { id: true, first_name: true, last_name: true } },
+          },
+        },
         _count: { select: { sales_notes: true, sales_events: true } },
       },
     });
@@ -227,12 +255,17 @@ router.get('/contacts', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// GET /api/sales/contacts/stats — počty podle status / potential
+// GET /api/sales/contacts/stats — počty podle status / potential (role-aware)
 router.get('/contacts/stats', async (req, res, next) => {
   try {
-    const byStatus    = await prisma.salesContact.groupBy({ by: ['status'],    _count: { _all: true } });
-    const byPotential = await prisma.salesContact.groupBy({ by: ['potential'], _count: { _all: true } });
-    const bySource    = await prisma.salesContact.groupBy({ by: ['source'],    _count: { _all: true } });
+    const roleCtx = await resolveSalesRole(req);
+    const visibility = buildContactVisibilityFilter(roleCtx);
+    const baseWhere = visibility || {};
+
+    // Pro role-filtrovaný groupBy musíme použít where
+    const byStatus    = await prisma.salesContact.groupBy({ by: ['status'],    where: baseWhere, _count: { _all: true } });
+    const byPotential = await prisma.salesContact.groupBy({ by: ['potential'], where: baseWhere, _count: { _all: true } });
+    const bySource    = await prisma.salesContact.groupBy({ by: ['source'],    where: baseWhere, _count: { _all: true } });
 
     const result = { total: 0, by_status: {}, by_potential: {}, by_source: {} };
     SALES_STATUSES.forEach(s => { result.by_status[s] = 0; });
@@ -247,10 +280,11 @@ router.get('/contacts/stats', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// GET /api/sales/contacts/:id — detail vč. časové osy a událostí
+// GET /api/sales/contacts/:id — detail vč. časové osy, událostí a přidělení
 router.get('/contacts/:id(\\d+)', async (req, res, next) => {
   try {
     const id = parseInt(req.params.id, 10);
+    const roleCtx = await resolveSalesRole(req);
     const contact = await prisma.salesContact.findUnique({
       where: { id },
       include: {
@@ -264,9 +298,26 @@ router.get('/contacts/:id(\\d+)', async (req, res, next) => {
           orderBy: { start_at: 'asc' },
           include: { organizer: { select: { id: true, first_name: true, last_name: true } } },
         },
+        assignments: {
+          orderBy: { created_at: 'asc' },
+          include: {
+            person:       { select: { id: true, first_name: true, last_name: true } },
+            assigned_by:  { select: { id: true, first_name: true, last_name: true } },
+          },
+        },
       },
     });
     if (!contact) return res.status(404).json({ error: 'Kontakt nenalezen' });
+
+    // Kontrola viditelnosti — obchodník vidí jen vlastní (nesdílené)
+    if (!roleCtx.canManageSales) {
+      const assignedIds = contact.assignments.map(a => a.person_id);
+      const isOnlyMine = assignedIds.length === 1 && assignedIds[0] === roleCtx.viewerPersonId;
+      if (!isOnlyMine) {
+        return res.status(403).json({ error: 'Nemáte oprávnění k tomuto kontaktu' });
+      }
+    }
+
     res.json(contact);
   } catch (err) { next(err); }
 });
@@ -596,6 +647,363 @@ router.post('/contacts/:id(\\d+)/convert-to-company', async (req, res, next) => 
     });
 
     res.status(201).json({ ok: true, company: result });
+  } catch (err) { next(err); }
+});
+
+// ─── Role & přidělení obchodníků (assignments) ───────────────────────────
+
+// GET /api/sales/me — vrací informace o roli aktuálního uživatele
+//   { viewerPersonId, isAdmin, isSalesLead, canManageSales }
+// Frontend si z toho odvodí, jaké UI prvky zobrazit (filtr Obchodník,
+// tlačítko Přidělit, vstup pro %).
+router.get('/me', async (req, res, next) => {
+  try {
+    const roleCtx = await resolveSalesRole(req);
+    res.json(roleCtx);
+  } catch (err) { next(err); }
+});
+
+// GET /api/sales/sellers — seznam aktivních obchodníků
+//   Pouze vedoucí/admin smí volat (jinak nic užitečného nevrátí).
+//   Vrací Person aktivní + s rolí "Obchodník" nebo "Vedoucí obchodu".
+router.get('/sellers', async (req, res, next) => {
+  try {
+    const roleCtx = await resolveSalesRole(req);
+    if (!roleCtx.canManageSales) {
+      return res.status(403).json({ error: 'Pouze vedoucí obchodu nebo admin' });
+    }
+    const sellers = await prisma.person.findMany({
+      where: {
+        active: true,
+        role: { name: { in: ['Obchodník', SALES_LEAD_ROLE_NAME] } },
+      },
+      orderBy: [{ last_name: 'asc' }, { first_name: 'asc' }],
+      select: {
+        id: true,
+        first_name: true,
+        last_name: true,
+        email: true,
+        role: { select: { id: true, name: true } },
+      },
+    });
+    res.json(sellers);
+  } catch (err) { next(err); }
+});
+
+// POST /api/sales/contacts/:id/assignments — přidělit obchodníka kontaktu
+//   Body: { person_id, commission_pct? }
+//   Pouze vedoucí/admin.
+router.post('/contacts/:id(\\d+)/assignments', async (req, res, next) => {
+  try {
+    const roleCtx = await resolveSalesRole(req);
+    if (!roleCtx.canManageSales) {
+      return res.status(403).json({ error: 'Pouze vedoucí obchodu nebo admin smí přidělovat' });
+    }
+
+    const contactId = parseInt(req.params.id, 10);
+    const { person_id, commission_pct } = req.body || {};
+    if (!person_id) return res.status(400).json({ error: 'Chybí person_id (obchodník)' });
+
+    const personId = parseInt(person_id, 10);
+    const contact = await prisma.salesContact.findUnique({ where: { id: contactId } });
+    if (!contact) return res.status(404).json({ error: 'Kontakt nenalezen' });
+
+    const person = await prisma.person.findUnique({ where: { id: personId } });
+    if (!person) return res.status(404).json({ error: 'Osoba nenalezena' });
+
+    // Validace %
+    let pct = null;
+    if (commission_pct !== undefined && commission_pct !== null && commission_pct !== '') {
+      pct = Number(commission_pct);
+      if (!isFinite(pct) || pct < 0 || pct > 100) {
+        return res.status(400).json({ error: 'Provize musí být 0–100 %' });
+      }
+    }
+
+    const assignment = await prisma.salesContactAssignment.upsert({
+      where: { contact_id_person_id: { contact_id: contactId, person_id: personId } },
+      create: {
+        contact_id: contactId,
+        person_id: personId,
+        commission_pct: pct,
+        assigned_by_id: roleCtx.viewerPersonId,
+      },
+      update: {}, // existující přidělení nepřepisujeme — na to je PUT
+      include: {
+        person:      { select: { id: true, first_name: true, last_name: true } },
+        assigned_by: { select: { id: true, first_name: true, last_name: true } },
+      },
+    });
+
+    await prisma.salesContactNote.create({
+      data: {
+        contact_id: contactId,
+        kind: 'system',
+        content: `Přidělen obchodník: ${person.first_name} ${person.last_name || ''}`.trim()
+          + (pct != null ? ` (provize ${pct} %)` : ''),
+        author_id: roleCtx.viewerPersonId,
+      },
+    });
+
+    res.status(201).json(assignment);
+  } catch (err) { next(err); }
+});
+
+// PUT /api/sales/contacts/:contactId/assignments/:personId — změna % provize
+//   Body: { commission_pct }
+//   Pouze vedoucí/admin. Pokud je už locked, zápis odmítneme (musí se nejdřív unlock).
+router.put('/contacts/:contactId(\\d+)/assignments/:personId(\\d+)', async (req, res, next) => {
+  try {
+    const roleCtx = await resolveSalesRole(req);
+    if (!roleCtx.canManageSales) {
+      return res.status(403).json({ error: 'Pouze vedoucí obchodu nebo admin' });
+    }
+    const contactId = parseInt(req.params.contactId, 10);
+    const personId  = parseInt(req.params.personId, 10);
+    const { commission_pct } = req.body || {};
+
+    const existing = await prisma.salesContactAssignment.findUnique({
+      where: { contact_id_person_id: { contact_id: contactId, person_id: personId } },
+    });
+    if (!existing) return res.status(404).json({ error: 'Přidělení nenalezeno' });
+    if (existing.commission_locked_at) {
+      return res.status(400).json({
+        error: 'Provize je uzamčená (objednávka zaplacena). Pro změnu musí vedoucí nejdříve odemknout.',
+      });
+    }
+
+    let pct = null;
+    if (commission_pct !== undefined && commission_pct !== null && commission_pct !== '') {
+      pct = Number(commission_pct);
+      if (!isFinite(pct) || pct < 0 || pct > 100) {
+        return res.status(400).json({ error: 'Provize musí být 0–100 %' });
+      }
+    }
+
+    const updated = await prisma.salesContactAssignment.update({
+      where: { contact_id_person_id: { contact_id: contactId, person_id: personId } },
+      data: { commission_pct: pct },
+      include: {
+        person:      { select: { id: true, first_name: true, last_name: true } },
+        assigned_by: { select: { id: true, first_name: true, last_name: true } },
+      },
+    });
+
+    await prisma.salesContactNote.create({
+      data: {
+        contact_id: contactId,
+        kind: 'system',
+        content: `Provize aktualizována: ${pct != null ? pct + ' %' : '—'}`,
+        author_id: roleCtx.viewerPersonId,
+      },
+    });
+
+    res.json(updated);
+  } catch (err) { next(err); }
+});
+
+// POST /api/sales/contacts/:contactId/assignments/:personId/lock — uzamknutí %
+//   Volá se ve chvíli, kdy je objednávka zaplacena. Aktuální `commission_pct`
+//   se zkopíruje do `commission_locked_pct` a další změny defaultu už tento
+//   záznam neovlivní.
+//   Body (volitelně): { commission_pct } — pokud chce vedoucí lockonout jinou
+//   hodnotu než aktuální default.
+router.post('/contacts/:contactId(\\d+)/assignments/:personId(\\d+)/lock', async (req, res, next) => {
+  try {
+    const roleCtx = await resolveSalesRole(req);
+    if (!roleCtx.canManageSales) {
+      return res.status(403).json({ error: 'Pouze vedoucí obchodu nebo admin' });
+    }
+    const contactId = parseInt(req.params.contactId, 10);
+    const personId  = parseInt(req.params.personId, 10);
+    const existing = await prisma.salesContactAssignment.findUnique({
+      where: { contact_id_person_id: { contact_id: contactId, person_id: personId } },
+    });
+    if (!existing) return res.status(404).json({ error: 'Přidělení nenalezeno' });
+
+    let pct = existing.commission_pct;
+    if (req.body && req.body.commission_pct !== undefined) {
+      pct = Number(req.body.commission_pct);
+      if (!isFinite(pct) || pct < 0 || pct > 100) {
+        return res.status(400).json({ error: 'Provize musí být 0–100 %' });
+      }
+    }
+    if (pct == null) {
+      return res.status(400).json({ error: 'Nelze uzamknout — provize není nastavena' });
+    }
+
+    const updated = await prisma.salesContactAssignment.update({
+      where: { contact_id_person_id: { contact_id: contactId, person_id: personId } },
+      data: {
+        commission_locked_pct: pct,
+        commission_locked_at:  new Date(),
+      },
+      include: {
+        person: { select: { id: true, first_name: true, last_name: true } },
+      },
+    });
+
+    await prisma.salesContactNote.create({
+      data: {
+        contact_id: contactId,
+        kind: 'system',
+        content: `Provize uzamčena (${pct} %) — obchod ukončen / objednávka zaplacena.`,
+        author_id: roleCtx.viewerPersonId,
+      },
+    });
+
+    res.json(updated);
+  } catch (err) { next(err); }
+});
+
+// POST /api/sales/contacts/:contactId/assignments/:personId/unlock — odemčení %
+//   Audit-only operace. Pouze admin nebo vedoucí obchodu.
+router.post('/contacts/:contactId(\\d+)/assignments/:personId(\\d+)/unlock', async (req, res, next) => {
+  try {
+    const roleCtx = await resolveSalesRole(req);
+    if (!roleCtx.canManageSales) {
+      return res.status(403).json({ error: 'Pouze vedoucí obchodu nebo admin' });
+    }
+    const contactId = parseInt(req.params.contactId, 10);
+    const personId  = parseInt(req.params.personId, 10);
+    const updated = await prisma.salesContactAssignment.update({
+      where: { contact_id_person_id: { contact_id: contactId, person_id: personId } },
+      data: { commission_locked_pct: null, commission_locked_at: null },
+    });
+    await prisma.salesContactNote.create({
+      data: {
+        contact_id: contactId,
+        kind: 'system',
+        content: 'Provize odemčena pro úpravu.',
+        author_id: roleCtx.viewerPersonId,
+      },
+    });
+    res.json(updated);
+  } catch (err) { next(err); }
+});
+
+// DELETE /api/sales/contacts/:contactId/assignments/:personId — odebrat přidělení
+router.delete('/contacts/:contactId(\\d+)/assignments/:personId(\\d+)', async (req, res, next) => {
+  try {
+    const roleCtx = await resolveSalesRole(req);
+    if (!roleCtx.canManageSales) {
+      return res.status(403).json({ error: 'Pouze vedoucí obchodu nebo admin' });
+    }
+    const contactId = parseInt(req.params.contactId, 10);
+    const personId  = parseInt(req.params.personId, 10);
+
+    const existing = await prisma.salesContactAssignment.findUnique({
+      where: { contact_id_person_id: { contact_id: contactId, person_id: personId } },
+      include: { person: { select: { first_name: true, last_name: true } } },
+    });
+    if (!existing) return res.status(404).json({ error: 'Přidělení nenalezeno' });
+    if (existing.commission_locked_at) {
+      return res.status(400).json({
+        error: 'Přidělení má uzamčenou provizi — nejdřív odemkněte.',
+      });
+    }
+
+    await prisma.salesContactAssignment.delete({
+      where: { contact_id_person_id: { contact_id: contactId, person_id: personId } },
+    });
+
+    await prisma.salesContactNote.create({
+      data: {
+        contact_id: contactId,
+        kind: 'system',
+        content: `Odebráno přidělení: ${existing.person.first_name} ${existing.person.last_name || ''}`.trim(),
+        author_id: roleCtx.viewerPersonId,
+      },
+    });
+
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
+// GET /api/sales/commissions/summary — souhrn provizí
+//   - obchodník: jeho vlastní souhrn (forced filtr na Person.id přihlášeného)
+//   - vedoucí/admin: lze předat ?person_id= pro filtr
+//   Vrací: { person_id, person_name, items: [{ contact, commission_pct, locked_pct,
+//     locked_at, expected_value, est_commission }], totals: { count, expected, est }}
+router.get('/commissions/summary', async (req, res, next) => {
+  try {
+    const roleCtx = await resolveSalesRole(req);
+    let targetPersonId = roleCtx.viewerPersonId;
+    if (roleCtx.canManageSales && req.query.person_id) {
+      targetPersonId = parseInt(req.query.person_id, 10);
+    }
+    if (!targetPersonId) {
+      return res.status(400).json({ error: 'Chybí person_id (a uživatel není svázán s Person)' });
+    }
+
+    const assignments = await prisma.salesContactAssignment.findMany({
+      where: { person_id: targetPersonId },
+      orderBy: { created_at: 'desc' },
+      include: {
+        contact: {
+          select: {
+            id: true,
+            first_name: true, last_name: true,
+            company_name: true,
+            status: true,
+            expected_value: true,
+            converted_company_id: true,
+            converted_at: true,
+          },
+        },
+      },
+    });
+
+    const person = await prisma.person.findUnique({
+      where: { id: targetPersonId },
+      select: { id: true, first_name: true, last_name: true },
+    });
+
+    let totalExpected = 0;
+    let totalEstCommission = 0;
+    let totalLockedCommission = 0;
+    let wonCount = 0;
+
+    const items = assignments.map(a => {
+      const ev = a.contact.expected_value ? Number(a.contact.expected_value) : 0;
+      const activePct = a.commission_locked_pct != null
+        ? Number(a.commission_locked_pct)
+        : (a.commission_pct != null ? Number(a.commission_pct) : null);
+      const estCommission = (activePct != null && ev) ? (ev * activePct / 100) : 0;
+      const isWon = a.contact.status === 'won' || !!a.contact.converted_company_id;
+
+      totalExpected += ev;
+      totalEstCommission += estCommission;
+      if (a.commission_locked_pct != null) {
+        totalLockedCommission += estCommission;
+      }
+      if (isWon) wonCount += 1;
+
+      return {
+        assignment_id: a.id,
+        contact: a.contact,
+        commission_pct: a.commission_pct,
+        commission_locked_pct: a.commission_locked_pct,
+        commission_locked_at:  a.commission_locked_at,
+        expected_value: a.contact.expected_value,
+        active_pct: activePct,
+        est_commission: estCommission,
+        is_locked: !!a.commission_locked_at,
+        is_won: isWon,
+      };
+    });
+
+    res.json({
+      person,
+      items,
+      totals: {
+        contacts:        items.length,
+        won_count:       wonCount,
+        expected_value:  totalExpected,
+        est_commission:  totalEstCommission,
+        locked_commission: totalLockedCommission,
+      },
+    });
   } catch (err) { next(err); }
 });
 

@@ -224,6 +224,8 @@
             <option value="no">Nepřevedené</option>
             <option value="yes">Převedené na firmu</option>
           </select>
+          <!-- Filtr Obchodník — render pouze pro vedoucí/admin (přidává app.js) -->
+          <span id="seller-filter-slot"></span>
         </div>
       </div>
 
@@ -232,6 +234,8 @@
         <button class="view-tab active" data-view="list"     onclick="switchView('list')">📋 Seznam</button>
         <button class="view-tab"        data-view="pipeline" onclick="switchView('pipeline')">📊 Pipeline</button>
         <button class="view-tab"        data-view="calendar" onclick="switchView('calendar')">📅 Kalendář</button>
+        <!-- Záložka Provize — vždy se přidá (vedoucí vidí všechny, obchodník svoje) -->
+        <span id="commissions-tab-slot"></span>
       </div>
 
       <!-- Seznam -->
@@ -254,6 +258,11 @@
         </div>
         <div class="cal-grid" id="cal-grid"></div>
       </div>
+
+      <!-- Provize -->
+      <div class="view-panel" data-view="commissions">
+        <div id="commissions-panel"></div>
+      </div>
     </div>
   </div>
 
@@ -266,6 +275,6 @@
     document.head.appendChild(s);
   </script>
 
-  <script src="modules/obchod/app.js?v=20260512"></script>
+  <script src="modules/obchod/app.js?v=20260516"></script>
 </body>
 </html>

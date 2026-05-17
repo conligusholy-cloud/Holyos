@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Servis | HOLYOS</title>
+  <link rel="icon" type="image/svg+xml" href="../../logo-holyos-icon.svg">
+  <base href="../../">
+  <link rel="stylesheet" href="css/dashboard.css">
+  <style>
+    .main-wrapper { margin-left: var(--sidebar-w); flex: 1; min-height: 100vh; display: flex; flex-direction: column; }
+    .page-header {
+      display:flex; align-items:center; gap:12px; padding:20px 24px;
+      border-bottom:1px solid var(--border); flex-wrap:wrap;
+    }
+    .page-header h1 { font-size:18px; font-weight:700; margin:0; }
+    .page-header .count { font-size:13px; color:var(--text2); margin-left:4px; }
+
+    .content { padding:0 24px 24px; }
+    .toolbar { display:flex; gap:12px; margin:16px 0; align-items:center; flex-wrap:wrap; }
+
+    .btn { padding:8px 18px; border-radius:8px; border:1px solid var(--border); font-size:13px; font-weight:500; cursor:pointer; transition:all 0.15s; display:inline-flex; align-items:center; gap:6px; background:transparent; color:var(--text); }
+    .btn-primary { background:#22d3ee; color:#001; border-color:#22d3ee; }
+    .btn-primary:hover { background:#06b6d4; }
+    .btn-secondary { background:var(--surface2); color:var(--text); }
+    .btn-secondary:hover { background:var(--border); }
+    .btn-danger { background:rgba(239,68,68,0.15); color:#ef4444; border-color:rgba(239,68,68,0.3); }
+    .btn-danger:hover { background:rgba(239,68,68,0.25); }
+    .btn-sm { padding:5px 12px; font-size:12px; }
+
+    /* Hlavní taby modulu */
+    .module-tabs { display:flex; gap:2px; border-bottom:1px solid var(--border); padding:0 24px; }
+    .module-tab { padding:12px 20px; background:transparent; border:none; color:var(--text2); font-size:13px; font-weight:500; cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-1px; transition:color 0.15s, border-color 0.15s; }
+    .module-tab:hover { color:var(--text); }
+    .module-tab.active { color:#22d3ee; border-bottom-color:#22d3ee; }
+
+    .module-panel { display:none; }
+    .module-panel.active { display:block; }
+
+    .data-table { width:100%; border-collapse:separate; border-spacing:0; }
+    .data-table thead { position:sticky; top:0; z-index:1; }
+    .data-table th { background:var(--surface2); padding:10px 12px; text-align:left; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; color:var(--text2); border-bottom:1px solid var(--border); }
+    .data-table td { padding:10px 12px; font-size:13px; border-bottom:1px solid rgba(255,255,255,0.04); vertical-align:middle; }
+    .data-table tr:hover td { background:rgba(34,211,238,0.06); }
+
+    .badge { display:inline-block; padding:2px 8px; border-radius:10px; font-size:11px; font-weight:500; }
+    .badge-guide      { background:rgba(59,130,246,0.15);  color:#3b82f6; }
+    .badge-case       { background:rgba(245,158,11,0.18);  color:#f59e0b; }
+    .badge-checklist  { background:rgba(34,197,94,0.18);   color:#22c55e; }
+    .badge-faq        { background:rgba(168,139,250,0.18); color:#a78bfa; }
+    .badge-published  { background:rgba(34,197,94,0.18);   color:#22c55e; }
+    .badge-draft      { background:rgba(148,163,184,0.15); color:#94a3b8; }
+    .badge-archived   { background:rgba(239,68,68,0.18);   color:#ef4444; }
+    .badge-internal   { background:rgba(239,68,68,0.18);   color:#ef4444; }
+    .badge-partner    { background:rgba(34,211,238,0.18);  color:#22d3ee; }
+
+    .filters { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+    .filter-input { padding:6px 10px; background:var(--surface2); color:var(--text); border:1px solid var(--border); border-radius:7px; font-size:12px; }
+    .filter-input:focus { border-color:#22d3ee; outline:none; }
+
+    /* Modal */
+    .modal-overlay { position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.6); z-index:200; display:flex; align-items:center; justify-content:center; padding:20px; }
+    .modal { background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:24px; width:920px; max-width:96vw; max-height:92vh; overflow-y:auto; }
+    .modal h2 { font-size:18px; margin-bottom:18px; }
+    .modal-actions { display:flex; gap:10px; justify-content:flex-end; margin-top:20px; padding-top:14px; border-top:1px solid var(--border); }
+    .form-row { margin-bottom:12px; }
+    .form-row label { display:block; font-size:11px; color:var(--text2); margin-bottom:4px; text-transform:uppercase; letter-spacing:0.5px; }
+    .form-row input, .form-row textarea, .form-row select {
+      width:100%; padding:8px 12px; background:var(--surface2); border:1px solid var(--border); border-radius:8px; color:var(--text); font-size:13px; font-family:inherit;
+    }
+    .form-row input:focus, .form-row textarea:focus, .form-row select:focus { border-color:#22d3ee; outline:none; }
+    .form-grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+    .form-grid-3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; }
+
+    /* Markdown editor split */
+    .md-editor { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+    .md-editor textarea { min-height:360px; font-family:'Consolas','Monaco',monospace; font-size:13px; line-height:1.5; }
+    .md-preview { background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:14px; min-height:360px; max-height:480px; overflow-y:auto; font-size:13px; line-height:1.6; }
+    .md-preview h1 { font-size:20px; margin:16px 0 8px; }
+    .md-preview h2 { font-size:16px; margin:14px 0 6px; }
+    .md-preview h3 { font-size:14px; margin:12px 0 4px; }
+    .md-preview p { margin:6px 0; }
+    .md-preview ul, .md-preview ol { margin:6px 0 6px 22px; }
+    .md-preview code { background:var(--surface2); padding:1px 5px; border-radius:4px; font-family:'Consolas',monospace; font-size:12px; }
+    .md-preview pre { background:var(--surface2); padding:10px; border-radius:6px; overflow-x:auto; }
+    .md-preview a { color:#22d3ee; }
+
+    @media (max-width: 900px) {
+      .form-grid-2, .form-grid-3, .md-editor { grid-template-columns:1fr; }
+    }
+
+    /* Multi-select chips */
+    .chip-pick {
+      background:var(--surface2); border:1px solid var(--border); border-radius:8px; padding:8px; min-height:38px;
+      display:flex; flex-wrap:wrap; gap:6px; align-items:center;
+    }
+    .chip {
+      display:inline-flex; align-items:center; gap:4px; padding:3px 8px; background:rgba(34,211,238,0.15);
+      color:#22d3ee; border-radius:12px; font-size:12px;
+    }
+    .chip .x { cursor:pointer; opacity:0.6; }
+    .chip .x:hover { opacity:1; }
+    .chip-pick select { flex:1; min-width:140px; background:transparent; border:none; color:var(--text); font-size:12px; }
+
+    .empty-state { padding:48px 20px; text-align:center; color:var(--text2); font-size:13px; }
+    .empty-state .ico { font-size:32px; opacity:0.4; margin-bottom:10px; }
+
+    /* Chat audit */
+    .chat-log { background:var(--bg); border:1px solid var(--border); border-radius:10px; padding:16px; max-height:60vh; overflow-y:auto; }
+    .chat-bubble { padding:10px 14px; border-radius:10px; margin-bottom:8px; font-size:13px; line-height:1.5; max-width:80%; }
+    .chat-bubble.user { background:rgba(34,211,238,0.15); margin-left:auto; }
+    .chat-bubble.assistant { background:var(--surface2); }
+    .chat-bubble .meta { font-size:10px; color:var(--text2); margin-top:4px; }
+  </style>
+</head>
+<body class="dashboard">
+  <aside class="sidebar" id="sidebar"></aside>
+
+  <div class="main-wrapper">
+    <header class="page-header">
+      <h1>🔧 Servis</h1>
+      <span class="count" id="header-count">Znalostní báze pro servisáky + Hugo AI pro partnery</span>
+    </header>
+
+    <nav class="module-tabs">
+      <button class="module-tab active" data-tab="articles">📝 Články</button>
+      <button class="module-tab" data-tab="appliances">⚙️ Spotřebiče</button>
+      <button class="module-tab" data-tab="categories">🏷️ Kategorie</button>
+      <button class="module-tab" data-tab="partners">👥 Partneři</button>
+      <button class="module-tab" data-tab="chat">💬 Hugo konverzace</button>
+    </nav>
+
+    <main class="content">
+      <!-- Tab: Články -->
+      <section class="module-panel active" id="panel-articles">
+        <div class="toolbar">
+          <button class="btn btn-primary" onclick="openArticleModal()">+ Nový článek</button>
+          <div class="filters">
+            <input class="filter-input" id="filter-q" placeholder="Hledej…" oninput="loadArticles()">
+            <select class="filter-input" id="filter-kind" onchange="loadArticles()">
+              <option value="">Všechny druhy</option>
+              <option value="GUIDE">Návod</option>
+              <option value="CASE">Řešený případ</option>
+              <option value="CHECKLIST">Kontrolní postup</option>
+              <option value="FAQ">FAQ</option>
+            </select>
+            <select class="filter-input" id="filter-status" onchange="loadArticles()">
+              <option value="">Všechny stavy</option>
+              <option value="draft">Koncept</option>
+              <option value="published">Publikováno</option>
+              <option value="archived">Archivováno</option>
+            </select>
+            <select class="filter-input" id="filter-category" onchange="loadArticles()">
+              <option value="">Všechny kategorie</option>
+            </select>
+            <select class="filter-input" id="filter-product" onchange="loadArticles()">
+              <option value="">Všechny produkty</option>
+            </select>
+          </div>
+        </div>
+        <div style="background:var(--surface); border:1px solid var(--border); border-radius:10px; overflow:hidden;">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th style="width:36%">Název</th>
+                <th>Druh</th>
+                <th>Kategorie</th>
+                <th>Produkty</th>
+                <th>Viditelnost</th>
+                <th>Stav</th>
+                <th>Aktualizace</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="articles-tbody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Tab: Spotřebiče -->
+      <section class="module-panel" id="panel-appliances">
+        <div class="toolbar">
+          <button class="btn btn-primary" onclick="openApplianceModal()">+ Nový spotřebič</button>
+          <input class="filter-input" id="filter-app-q" placeholder="Hledej spotřebič…" oninput="loadAppliances()">
+        </div>
+        <div style="background:var(--surface); border:1px solid var(--border); border-radius:10px; overflow:hidden;">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Název</th>
+                <th>Výrobce</th>
+                <th>Model</th>
+                <th>Produkty</th>
+                <th>Články</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="appliances-tbody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Tab: Kategorie -->
+      <section class="module-panel" id="panel-categories">
+        <div class="toolbar">
+          <button class="btn btn-primary" onclick="openCategoryModal()">+ Nová kategorie</button>
+        </div>
+        <div style="background:var(--surface); border:1px solid var(--border); border-radius:10px; overflow:hidden;">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Název</th>
+                <th>Ikona</th>
+                <th>Barva</th>
+                <th>Pořadí</th>
+                <th>Článků</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="categories-tbody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Tab: Partneři -->
+      <section class="module-panel" id="panel-partners">
+        <div class="toolbar">
+          <button class="btn btn-primary" onclick="openPartnerModal()">+ Nový partner</button>
+          <div style="font-size:12px;color:var(--text2)">Partneři se přihlašují na bestseries.cash/hugo</div>
+        </div>
+        <div style="background:var(--surface); border:1px solid var(--border); border-radius:10px; overflow:hidden;">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Username</th>
+                <th>Jméno</th>
+                <th>Firma</th>
+                <th>Email</th>
+                <th>Produkty</th>
+                <th>Konverzací</th>
+                <th>Poslední login</th>
+                <th>Stav</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="partners-tbody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Tab: Hugo konverzace -->
+      <section class="module-panel" id="panel-chat">
+        <div class="toolbar">
+          <select class="filter-input" id="chat-filter-partner" onchange="loadChatSessions()">
+            <option value="">Všichni partneři</option>
+          </select>
+          <label style="font-size:12px;color:var(--text2);display:inline-flex;gap:6px;align-items:center;">
+            <input type="checkbox" id="chat-filter-attn" onchange="loadChatSessions()">
+            Jen "Hugo nepomohl"
+          </label>
+        </div>
+        <div style="background:var(--surface); border:1px solid var(--border); border-radius:10px; overflow:hidden;">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th style="width:50%">Téma</th>
+                <th>Partner</th>
+                <th>Zpráv</th>
+                <th>Stav</th>
+                <th>Aktualizováno</th>
+              </tr>
+            </thead>
+            <tbody id="chat-sessions-tbody"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div id="modal-root"></div>
+
+  <script src="js/sidebar.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      renderSidebar('servis');
+    });
+  </script>
+  <script src="modules/servis/app.js"></script>
+</body>
+</html>
