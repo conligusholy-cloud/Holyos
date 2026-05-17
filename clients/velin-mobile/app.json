@@ -1,0 +1,31 @@
+{
+  "expo": {
+    "name": "Velín",
+    "slug": "velin",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "scheme": "velin",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "cz.bestseries.velin",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Velín potřebuje polohu, aby poznal, že jsi přišel do práce (docházka GPS).",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Velín potřebuje polohu, aby poznal, že jsi přišel do práce (docházka GPS)."
+      }
+    },
+    "android": {
+      "package": "cz.bestseries.velin",
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION"
+      ]
+    },
+    "extra": {
+      "apiBase": "https://app.holyos.cz"
+    },
+    "plugins": [
+      "expo-secure-store"
+    ]
+  }
+}

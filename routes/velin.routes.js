@@ -18,7 +18,7 @@ const router = express.Router();
 const { z } = require('zod');
 const { prisma } = require('../config/database');
 const { requireAuth } = require('../middleware/auth');
-const { requireVelinDevice } = require('../middleware/velin-auth');
+const { requireVelinAuth } = require('../middleware/velin-auth');
 const {
   generateActivationCode,
   generateDeviceToken,
@@ -454,10 +454,86 @@ router.post('/devices/login', async (req, res, next) => {
 });
 
 // =============================================================================
-// 3) MOBILE endpoints — vyžadují device token (requireVelinDevice)
+// 2b) Registrace zařízení po HolyOS přihlášení (Fáze 0c primární cesta)
+// =============================================================================
+// Mobil se přihlásí přes /api/auth/login (HolyOS username + password), uloží
+// JWT do SecureStore, a hned poté zavolá /api/velin/devices/register s tímto
+// JWT v Authorization headeru. Endpoint upsertne DeviceRegistration vázanou
+// na Person přihlášeného Usera. Tím získá HolyOS evidenci jeho zařízení a
+// scheduler na něj může pushovat. JWT se používá i pro další volání.
+
+const registerDeviceSchema = z.object({
+  expo_push_token: z.string(),
+  platform: z.enum(['ios', 'android']),
+  device_label: z.string().max(255).optional(),
+  app_version: z.string().max(30).optional(),
+  os_version: z.string().max(30).optional(),
+});
+
+router.post('/devices/register', requireAuth, async (req, res, next) => {
+  try {
+    if (!req.user?.person?.id) {
+      return res.status(403).json({ error: 'Tvůj účet nemá propojený Person record — zařízení nelze registrovat' });
+    }
+    const parsed = registerDeviceSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'Neplatný vstup', details: parsed.error.format() });
+    const body = parsed.data;
+    const personId = req.user.person.id;
+
+    // device_token_hash je v této cestě nepoužívaný (auth jde přes JWT), ale
+    // model ho vyžaduje NOT NULL. Uložíme placeholder bcrypt hash náhodné
+    // hodnoty — nikdy ho nikdo neověřuje (JWT se ověřuje proti User tabulce).
+    const placeholder = await hashSecret(generateDeviceToken());
+
+    const existing = await prisma.deviceRegistration.findUnique({
+      where: { expo_push_token: body.expo_push_token },
+    });
+    let device;
+    if (existing) {
+      device = await prisma.deviceRegistration.update({
+        where: { id: existing.id },
+        data: {
+          person_id: personId,
+          platform: body.platform,
+          device_label: body.device_label || existing.device_label,
+          app_version: body.app_version || existing.app_version,
+          os_version: body.os_version || existing.os_version,
+          active: true,
+          revoked_at: null,
+          revoke_reason: null,
+          last_seen_at: new Date(),
+        },
+      });
+    } else {
+      device = await prisma.deviceRegistration.create({
+        data: {
+          person_id: personId,
+          expo_push_token: body.expo_push_token,
+          device_token_hash: placeholder,
+          platform: body.platform,
+          device_label: body.device_label || null,
+          app_version: body.app_version || null,
+          os_version: body.os_version || null,
+        },
+      });
+    }
+
+    res.status(201).json({
+      ok: true,
+      device: {
+        id: device.id,
+        platform: device.platform,
+        device_label: device.device_label,
+      },
+    });
+  } catch (err) { next(err); }
+});
+
+// =============================================================================
+// 3) MOBILE endpoints — vyžadují HolyOS JWT NEBO device token (hybrid)
 // =============================================================================
 const mobile = express.Router();
-mobile.use(requireVelinDevice);
+mobile.use(requireVelinAuth);
 
 // GET /api/velin/me
 mobile.get('/me', async (req, res) => {
