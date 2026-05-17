@@ -34,10 +34,14 @@ function todayKey() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+// Stejná logika jako v routes/velin.routes.js — pražský kalendářní den
 function startOfToday() {
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  return d;
+  const tz = process.env.VELIN_TZ || 'Europe/Prague';
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: tz,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(new Date());
+  return new Date(parts + 'T00:00:00Z');
 }
 
 async function handleMorningGenerate() {

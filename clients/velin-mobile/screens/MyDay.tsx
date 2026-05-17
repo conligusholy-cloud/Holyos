@@ -15,9 +15,12 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { api, ApiError } from '../lib/api';
 import { loadAuth } from '../lib/auth';
 import { colors, radius, spacing } from '../lib/theme';
+import type { RootStackParamList } from '../App';
 
 type Task = {
   id: number;
@@ -38,6 +41,7 @@ type DayData = {
 };
 
 export default function MyDay() {
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [data, setData] = useState<DayData | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -71,6 +75,13 @@ export default function MyDay() {
   useEffect(() => {
     load();
   }, [load]);
+
+  // Při návratu z TaskDetail refreshneme, ať vidíme aktuální stav
+  useFocusEffect(useCallback(() => { load(); }, [load]));
+
+  function openTask(taskId: number) {
+    navigation.navigate('TaskDetail', { taskId });
+  }
 
   if (loading) {
     return (
@@ -107,7 +118,7 @@ export default function MyDay() {
           <View style={styles.section}>
             <Text style={styles.sectionHeader}>⚠ Nedokončené z minulých dnů ({overdue.length})</Text>
             {overdue.map((t) => (
-              <TaskCard key={t.id} task={t} overdue />
+              <TaskCard key={t.id} task={t} overdue onPress={() => openTask(t.id)} />
             ))}
           </View>
         )}
@@ -120,7 +131,7 @@ export default function MyDay() {
               <Text style={styles.emptyTextSmall}>Když přijde nový úkol, dorazí ti push notifikace.</Text>
             </View>
           ) : (
-            tasks.map((t) => <TaskCard key={t.id} task={t} />)
+            tasks.map((t) => <TaskCard key={t.id} task={t} onPress={() => openTask(t.id)} />)
           )}
         </View>
       </ScrollView>
@@ -128,14 +139,11 @@ export default function MyDay() {
   );
 }
 
-function TaskCard({ task, overdue }: { task: Task; overdue?: boolean }) {
+function TaskCard({ task, overdue, onPress }: { task: Task; overdue?: boolean; onPress: () => void }) {
   return (
     <TouchableOpacity
       style={[styles.taskCard, overdue && styles.taskCardOverdue]}
-      onPress={() => {
-        // Fáze 1 přidá navigaci do detailu úkolu
-        console.log('[MyDay] tap task', task.id);
-      }}
+      onPress={onPress}
     >
       <View style={styles.taskHead}>
         <Text style={styles.taskTitle} numberOfLines={2}>
