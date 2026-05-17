@@ -6,6 +6,7 @@ function renderSidebar(activeModule) {
   var modules = [
     { id: 'obchod',              name: 'Obchod',              icon: '&#128188;', color: '#ec4899', active: true },
     { id: 'lide-hr',             name: 'Lidé a HR',           icon: '&#128101;', color: '#6c5ce7', active: true },
+    { id: 'velin',                name: 'Velín (mobil)',       icon: '&#128752;', color: '#6366f1', active: true },
     { id: 'metodicke-pokyny',    name: 'Metodické pokyny a směrnice', icon: '&#128218;', color: '#a78bfa', active: true },
     { id: 'vytvoreni-arealu',    name: 'Vytvoření areálu',    icon: '&#9998;', color: '#8b5cf6', active: true },
     { id: 'programovani-vyroby', name: 'Programování výroby', icon: '&#9881;', color: '#f59e0b', active: true },

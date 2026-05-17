@@ -126,6 +126,19 @@ model Person {
   // výkresy ze SolidWorksu přes desktop klient HolyOS CAD Bridge.
   can_upload_cad Boolean @default(false)
 
+  // ─── Velín (mobilní aplikace) ───────────────────────────────────────────
+  // Aktivační kód = jednorázový string vygenerovaný adminem v HolyOS, který
+  // kolega zadá v aplikaci spolu s vlastním PIN. Po úspěšné aktivaci se kód
+  // smaže a místo něj je v Person.velin_pin_hash bcrypt hash zvoleného PINu.
+  // DeviceRegistration drží konkrétní zařízení (push token + platform).
+  velin_pin_hash              String?   @db.VarChar(255)
+  velin_activation_code       String?   @db.VarChar(20)
+  velin_activation_expires_at DateTime?
+  velin_activated_at          DateTime?
+  // Tichý režim — žádné push notifikace mezi quiet_from..quiet_to (HH:MM, lokální čas)
+  velin_quiet_from            String?   @db.VarChar(5)
+  velin_quiet_to              String?   @db.VarChar(5)
+
   // Dovolená
   leave_entitlement_days Int?
   leave_carryover        Int?
@@ -217,6 +230,16 @@ model Person {
   sites_assigned         Site[]              @relation("SiteAssignee")
   sites_created          Site[]              @relation("SiteCreator")
   site_comms_written     SiteCommunication[] @relation("SiteCommunicationAuthor")
+
+  // Velín — mobilní aplikace pro řízení dne
+  velin_daily_plans          DailyPlan[]          @relation("DailyPlanPerson")
+  velin_assignments          TaskAssignment[]     @relation("TaskAssignmentPerson")
+  velin_assignments_created  TaskAssignment[]     @relation("TaskAssignmentCreator")
+  velin_task_messages        TaskMessage[]        @relation("TaskMessageAuthor")
+  velin_evening_reflections  EveningReflection[]  @relation("EveningReflectionPerson")
+  velin_skill_profile        PersonSkillProfile?  @relation("PersonSkillProfilePerson")
+  velin_devices              DeviceRegistration[] @relation("DeviceRegistrationPerson")
+  velin_attendance           AttendancePunch[]    @relation("AttendancePunchPerson")
 
   @@index([department_id])
   @@index([role_id])
@@ -4803,4 +4826,239 @@ model ServiceChatCitation {
   @@index([message_id])
   @@index([article_id])
   @@map("service_chat_citations")
+}
+
+// =============================================================================
+// VELÍN — Mobilní aplikace pro řízení dne kolegů
+// =============================================================================
+// Velín je kapesní agent pro každého kolegu. Dostane denní plán (DailyPlan),
+// úkoly (TaskAssignment) z plánovače výroby / od vedoucího / od AI dispečera,
+// chatuje nad nimi (TaskMessage), večer odevzdá zpětnou vazbu (EveningReflection)
+// a docházku punctuje GPS (AttendancePunch) v rámci provozu (GeoFence).
+// Auth: Person.velin_pin_hash + DeviceRegistration s push tokenem (Expo).
+
+// Denní plán jedné osoby na konkrétní den. Generuje se ráno z plánovače
+// výroby + ad-hoc úkolů od vedoucích + AI návrhů. Po publikaci se uzamkne
+// (kolega neuvidí čerstvé draft změny mid-day).
+model DailyPlan {
+  id                Int       @id @default(autoincrement())
+  person_id         Int
+  date              DateTime  @db.Date
+  generated_by      String    @default("system") @db.VarChar(20) // system | manager | ai | self
+  generated_at      DateTime  @default(now())
+  morning_pushed_at DateTime?
+  evening_pushed_at DateTime?
+  status            String    @default("draft") @db.VarChar(20) // draft | published | locked
+  ai_summary        String?   @db.Text // krátké AI shrnutí dne pro vedoucího
+
+  person      Person           @relation("DailyPlanPerson", fields: [person_id], references: [id], onDelete: Cascade)
+  assignments TaskAssignment[] @relation("TaskAssignmentDailyPlan")
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@unique([person_id, date])
+  @@index([date, status])
+  @@map("velin_daily_plans")
+}
+
+// Konkrétní úkol pro osobu. Zdroj může být plánovač výroby (BatchOperation),
+// ad-hoc úkol od vedoucího (AdminTask), AI dispečer, nebo self-task.
+// Lifecycle: proposed → accepted → in_progress → done | blocked | cancelled.
+model TaskAssignment {
+  id              Int       @id @default(autoincrement())
+  daily_plan_id   Int?
+  person_id       Int
+
+  // Kdo úkol vytvořil — buď konkrétní osoba (vedoucí) přes Person FK, nebo
+  // systém / AI agent (created_by="system" / "ai_dispatcher", created_by_person_id=null)
+  created_by      String    @default("system") @db.VarChar(20) // system | manager | ai | self
+  created_by_person_id Int?
+
+  // Origin reference — odkaz na zdrojový objekt (BatchOperation, AdminTask…)
+  source          String    @default("manager") @db.VarChar(30) // production | manager | ai_dispatcher | self | agenda
+  source_ref_type String?   @db.VarChar(50) // "BatchOperation" | "AdminTask" | "ProductionBatch" | ...
+  source_ref_id   Int?
+
+  title           String    @db.VarChar(500)
+  description     String?   @db.Text
+  priority        Int       @default(3) // 1=critical, 5=low
+  estimated_min   Int?       // norma TAC+Tpz nebo manuální odhad
+  due_at          DateTime?
+
+  status          String    @default("proposed") @db.VarChar(20)
+  // proposed → accepted → in_progress → blocked → done | cancelled | timed_out
+  accepted_at     DateTime?
+  started_at      DateTime?
+  completed_at    DateTime?
+  blocked_at      DateTime?
+  blocked_reason  String?   @db.Text
+  cancelled_at    DateTime?
+  cancel_reason   String?   @db.VarChar(500)
+
+  actual_min      Int?       // skutečný čas po dokončení (vyplní kolega)
+
+  location_hint     String?  @db.VarChar(255) // "Hala A", "Sklad-A-RK"
+  requires_gps_fence Boolean @default(false)
+  fence_id          Int?     // pokud requires_gps_fence=true, který fence
+
+  daily_plan        DailyPlan?    @relation("TaskAssignmentDailyPlan", fields: [daily_plan_id], references: [id], onDelete: SetNull)
+  person            Person        @relation("TaskAssignmentPerson", fields: [person_id], references: [id], onDelete: Cascade)
+  creator_person    Person?       @relation("TaskAssignmentCreator", fields: [created_by_person_id], references: [id], onDelete: SetNull)
+  fence             GeoFence?     @relation(fields: [fence_id], references: [id], onDelete: SetNull)
+  messages          TaskMessage[]
+  feedback          TaskFeedback?
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@index([person_id, status])
+  @@index([due_at])
+  @@index([daily_plan_id])
+  @@index([source, source_ref_type, source_ref_id])
+  @@map("velin_task_assignments")
+}
+
+// Chat nad úkolem — kolega↔vedoucí, kolega↔AI Hugo, system notifikace.
+model TaskMessage {
+  id              Int      @id @default(autoincrement())
+  task_id         Int
+  author_kind     String   @db.VarChar(20) // person | ai | system
+  author_person_id Int?
+  body            String   @db.Text
+  attachments     Json?     // [{kind:"photo", url:"...", caption:"..."}]
+  read_at         DateTime?
+  created_at      DateTime @default(now())
+
+  task   TaskAssignment @relation(fields: [task_id], references: [id], onDelete: Cascade)
+  author Person?        @relation("TaskMessageAuthor", fields: [author_person_id], references: [id], onDelete: SetNull)
+
+  @@index([task_id, created_at])
+  @@map("velin_task_messages")
+}
+
+// Feedback k jednomu úkolu (na konci úkolu, krátký — self_rating + blokátory).
+// Pozn.: agregovaná denní reflexe je v EveningReflection.
+model TaskFeedback {
+  id              Int       @id @default(autoincrement())
+  task_id         Int       @unique
+  self_rating     Int?      // 1-5 sebehodnocení splnění úkolu
+  difficulty      Int?      // 1-5 jak bylo náročné
+  time_actual_min Int?
+  blockers        String?   @db.Text
+  free_text       String?   @db.Text
+  ai_summary      String?   @db.Text // Claude Haiku shrnutí pro vedoucího
+  created_at      DateTime  @default(now())
+
+  task TaskAssignment @relation(fields: [task_id], references: [id], onDelete: Cascade)
+
+  @@map("velin_task_feedbacks")
+}
+
+// Denní reflexe — strukturovaný formulář na konci směny. Jedna na osobu/den.
+model EveningReflection {
+  id              Int       @id @default(autoincrement())
+  person_id       Int
+  date            DateTime  @db.Date
+  mood            Int?      // 1-5
+  energy          Int?      // 1-5
+  wins            String?   @db.Text
+  struggles       String?   @db.Text
+  tomorrow_focus  String?   @db.Text
+  free_text       String?   @db.Text
+  ai_summary      String?   @db.Text // shrnutí pro vedoucího (Claude Haiku)
+  submitted_at    DateTime  @default(now())
+
+  person Person @relation("EveningReflectionPerson", fields: [person_id], references: [id], onDelete: Cascade)
+
+  @@unique([person_id, date])
+  @@index([date])
+  @@map("velin_evening_reflections")
+}
+
+// Skill profile osoby — co umí, jak rychle, případná omezení/certifikace.
+// AI dispečer (Mistr) z toho čte při výběru kandidáta na úkol.
+model PersonSkillProfile {
+  id              Int       @id @default(autoincrement())
+  person_id       Int       @unique
+  // Volné pole: [{key:"sewing", level:4, certified:true, valid_to:"2027-01-01"}]
+  skills          Json      @default("[]")
+  preferred_shift String?   @db.VarChar(20) // morning | afternoon | night | flex
+  speed_factor    Float     @default(1.0)   // 1.2 = o 20 % rychlejší než norma
+  notes           String?   @db.Text
+  updated_at      DateTime  @updatedAt
+
+  person Person @relation("PersonSkillProfilePerson", fields: [person_id], references: [id], onDelete: Cascade)
+
+  @@map("velin_skill_profiles")
+}
+
+// Registrované zařízení s Expo push tokenem. Jedna osoba může mít víc zařízení
+// (telefon + tablet) — push posíláme na všechny active.
+model DeviceRegistration {
+  id              Int       @id @default(autoincrement())
+  person_id       Int
+  expo_push_token String    @unique @db.VarChar(255)
+  // Server-side bearer token pro mobile API (oddělený od HolyOS web JWT).
+  // Generuje se při aktivaci, hashuje se v DB (bcrypt) a kolega ho neuvidí.
+  device_token_hash String  @db.VarChar(255)
+  platform        String    @db.VarChar(10) // ios | android
+  device_label    String?   @db.VarChar(255) // "iPhone 15 Tomáš"
+  app_version     String?   @db.VarChar(30)
+  os_version      String?   @db.VarChar(30)
+  last_seen_at    DateTime  @default(now())
+  active          Boolean   @default(true)
+  revoked_at      DateTime?
+  revoke_reason   String?   @db.VarChar(255)
+  created_at      DateTime  @default(now())
+
+  person Person @relation("DeviceRegistrationPerson", fields: [person_id], references: [id], onDelete: Cascade)
+
+  @@index([person_id, active])
+  @@map("velin_device_registrations")
+}
+
+// Docházkové punche přes mobilní aplikaci. Inside_fence se vyhodnotí
+// proti GeoFence — pokud false a fence vyžadovaný, vyžádá si admin schválení.
+model AttendancePunch {
+  id            Int       @id @default(autoincrement())
+  person_id     Int
+  kind          String    @db.VarChar(20) // in | out | break_start | break_end
+  source        String    @default("pracacek_gps") @db.VarChar(30) // pracacek_gps | pracacek_manual | kiosk | admin
+  lat           Float?
+  lng           Float?
+  accuracy_m    Float?
+  inside_fence  Boolean   @default(false)
+  fence_id      Int?
+  punched_at    DateTime  @default(now())
+  // Pokud admin punch ručně schválil ex-post (např. GPS selhalo)
+  approved_by_user_id Int?
+  approved_at   DateTime?
+  notes         String?   @db.Text
+
+  person Person     @relation("AttendancePunchPerson", fields: [person_id], references: [id], onDelete: Cascade)
+  fence  GeoFence?  @relation(fields: [fence_id], references: [id], onDelete: SetNull)
+
+  @@index([person_id, punched_at])
+  @@index([fence_id])
+  @@map("velin_attendance_punches")
+}
+
+// GeoFence — kruhová zóna kolem provozu. Telefon vyhodnocuje inside_fence
+// proti center_lat/lng + radius_m. Více fence = více provozů.
+model GeoFence {
+  id          Int       @id @default(autoincrement())
+  name        String    @db.VarChar(255) // "Provoz Velké Hamry"
+  center_lat  Float
+  center_lng  Float
+  radius_m    Int       @default(150) // typicky 100–300 m
+  active      Boolean   @default(true)
+  notes       String?   @db.Text
+  created_at  DateTime  @default(now())
+  updated_at  DateTime  @updatedAt
+
+  task_assignments  TaskAssignment[]
+  attendance_punches AttendancePunch[]
+
+  @@map("velin_geo_fences")
 }
