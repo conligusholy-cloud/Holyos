@@ -388,6 +388,116 @@
     });
   };
 
+  // ─── Manuály k spotřebiči — upload / list / delete ───────────────────────
+
+  function fmtBytes(b) {
+    if (!b) return '';
+    if (b < 1024) return b + ' B';
+    if (b < 1024 * 1024) return Math.round(b / 1024) + ' kB';
+    return (b / 1024 / 1024).toFixed(1) + ' MB';
+  }
+
+  async function loadManualsList(applianceId) {
+    const listEl = document.getElementById('manuals-list');
+    if (!listEl) return;
+    try {
+      const manuals = await api('/api/service/appliances/' + applianceId + '/manuals');
+      if (!manuals.length) {
+        listEl.innerHTML = '<div style="font-size:12px;color:var(--text2);font-style:italic;padding:6px 0;">Zatím žádné nahrané manuály.</div>';
+        return;
+      }
+      listEl.innerHTML = manuals.map(m => `
+        <div style="display:flex; align-items:center; gap:10px; padding:8px 12px; background:var(--bg); border:1px solid var(--border); border-radius:8px; margin-bottom:6px;">
+          <div style="font-size:20px;">${(m.mime_type || '').includes('pdf') ? '📕' : '📎'}</div>
+          <div style="flex:1; min-width:0;">
+            <div style="font-size:13px; font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(m.title)}</div>
+            <div style="font-size:11px; color:var(--text2);">
+              ${fmtBytes(m.size_bytes)}${m.page_count ? ' · ' + m.page_count + ' str.' : ''}${m.language ? ' · ' + m.language.toUpperCase() : ''}
+              · ${new Date(m.created_at).toLocaleDateString('cs-CZ')}
+            </div>
+          </div>
+          <a class="btn btn-sm btn-secondary" href="/api/service/manuals/${m.id}/download" target="_blank" title="Otevřít">↗</a>
+          <button class="btn btn-sm btn-danger" onclick="window.__servis_deleteManual(${m.id}, ${applianceId})" title="Smazat">✕</button>
+        </div>
+      `).join('');
+    } catch (err) {
+      listEl.innerHTML = `<div style="font-size:12px;color:#ef4444;">Chyba: ${escapeHtml(err.message)}</div>`;
+    }
+  }
+
+  window.__servis_deleteManual = async function (manualId, applianceId) {
+    if (!confirm('Smazat tento manuál? Soubor se odstraní z disku a Hugo už z něj nebude čerpat.')) return;
+    try {
+      await api('/api/service/manuals/' + manualId, { method: 'DELETE' });
+      await loadManualsList(applianceId);
+    } catch (err) { alert('Chyba mazání: ' + err.message); }
+  };
+
+  function setupManualsSection(applianceId) {
+    loadManualsList(applianceId);
+    const drop = document.getElementById('manuals-drop');
+    const fileInput = document.getElementById('manuals-file');
+    if (!drop || !fileInput) return;
+
+    drop.addEventListener('click', () => fileInput.click());
+
+    drop.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      drop.style.borderColor = '#22d3ee';
+      drop.style.background = 'rgba(34,211,238,0.06)';
+    });
+    drop.addEventListener('dragleave', () => {
+      drop.style.borderColor = 'var(--border)';
+      drop.style.background = '';
+    });
+    drop.addEventListener('drop', async (e) => {
+      e.preventDefault();
+      drop.style.borderColor = 'var(--border)';
+      drop.style.background = '';
+      const files = Array.from(e.dataTransfer.files || []);
+      await uploadManuals(applianceId, files);
+    });
+
+    fileInput.addEventListener('change', async () => {
+      const files = Array.from(fileInput.files || []);
+      await uploadManuals(applianceId, files);
+      fileInput.value = '';
+    });
+  }
+
+  async function uploadManuals(applianceId, files) {
+    if (!files.length) return;
+    const listEl = document.getElementById('manuals-list');
+    for (const file of files) {
+      // Show uploading row
+      const tmpRow = document.createElement('div');
+      tmpRow.style.cssText = 'display:flex; align-items:center; gap:10px; padding:8px 12px; background:rgba(34,211,238,0.05); border:1px solid rgba(34,211,238,0.2); border-radius:8px; margin-bottom:6px; opacity:0.7;';
+      tmpRow.innerHTML = `<div style="font-size:20px;">⏳</div><div style="flex:1;"><div style="font-size:13px;">${escapeHtml(file.name)}</div><div style="font-size:11px;color:var(--text2);">Nahrávám a extrahuji text…</div></div>`;
+      if (listEl) listEl.prepend(tmpRow);
+
+      try {
+        const fd = new FormData();
+        fd.append('file', file);
+        fd.append('title', file.name.replace(/\.[^.]+$/, ''));
+        const token = sessionStorage.getItem('token');
+        const headers = {};
+        if (token) headers['Authorization'] = 'Bearer ' + token;
+        const r = await fetch('/api/service/appliances/' + applianceId + '/manuals', {
+          method: 'POST', headers, credentials: 'include', body: fd,
+        });
+        if (!r.ok) {
+          const err = await r.json().catch(() => ({}));
+          throw new Error(err.error || ('HTTP ' + r.status));
+        }
+      } catch (err) {
+        alert('Chyba uploadu "' + file.name + '": ' + err.message);
+      } finally {
+        tmpRow.remove();
+      }
+    }
+    await loadManualsList(applianceId);
+  }
+
   window.openApplianceModal = async function (id) {
     const item = id ? await api('/api/service/appliances/' + id) : null;
     const root = document.getElementById('modal-root');
@@ -436,6 +546,22 @@
           </select>
         </div>
       </div>
+      ${item ? `
+        <div class="form-row" id="manuals-section">
+          <label>Manuály a dokumenty (PDF — Hugo z nich čerpá)</label>
+          <div id="manuals-list" style="margin-bottom:10px;"></div>
+          <div id="manuals-drop" style="border:2px dashed var(--border); border-radius:10px; padding:18px; text-align:center; color:var(--text2); font-size:13px; cursor:pointer;">
+            <div style="font-size:24px; margin-bottom:4px;">📎</div>
+            <div>Přetáhni sem PDF (max 50 MB) nebo <span style="color:#22d3ee; text-decoration:underline;">klikni a vyber soubor</span></div>
+            <div style="font-size:11px; margin-top:6px;">Po nahrání Hugo z dokumentu čerpá při dotazech partnerů.</div>
+            <input type="file" id="manuals-file" accept="application/pdf,image/*,text/plain" multiple style="display:none;">
+          </div>
+        </div>
+      ` : `
+        <div class="form-row" style="font-size:12px; color:var(--text2); padding:10px; background:rgba(34,211,238,0.04); border-radius:8px; border:1px solid rgba(34,211,238,0.15);">
+          ℹ️ Nejdřív spotřebič ulož — pak budeš moct přidávat PDF manuály.
+        </div>
+      `}
       <div class="modal-actions">
         ${item ? '<button class="btn btn-danger" onclick="window.__servis_deleteAppliance('+item.id+')">Smazat</button>' : ''}
         <button class="btn btn-secondary" onclick="document.getElementById('modal-root').innerHTML=''">Zrušit</button>
@@ -443,6 +569,11 @@
       </div>
     `;
     root.appendChild(overlay);
+
+    // Pokud editujeme existující spotřebič → načti manuály a nabídni upload
+    if (item && item.id) {
+      setupManualsSection(item.id);
+    }
 
     const pickedSet = new Set(Array.from(links.keys()));
     renderPickChips('pick-app-products', pickedSet, id => products.find(p => p.id === id), id => `${products.find(p => p.id === id)?.code || ''} ${products.find(p => p.id === id)?.name || '#'+id}`);

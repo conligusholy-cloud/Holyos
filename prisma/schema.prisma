@@ -4524,9 +4524,32 @@ model ServiceAppliance {
 
   product_links ServiceProductAppliance[]
   articles      ServiceArticleAppliance[]
+  manuals       ServiceApplianceManual[]
 
   @@index([material_id])
   @@map("service_appliances")
+}
+
+// PDF manuál výrobce přiložený ke spotřebiči. Při uploadu extrahujeme text
+// (pdf-parse) a uložíme do extracted_text — Hugo z něj pak čerpá při RAG retrievalu.
+model ServiceApplianceManual {
+  id             Int     @id @default(autoincrement())
+  appliance_id   Int
+  title          String  @db.VarChar(500)
+  file_path      String  @db.VarChar(500) // relativní cesta k souboru v data/service-manuals/<id>/
+  mime_type      String? @db.VarChar(80)
+  size_bytes     Int?
+  page_count     Int?
+  language       String? @db.VarChar(5)
+  extracted_text String? @db.Text // plain text z PDF pro Hugo retrieval (ILIKE search)
+
+  appliance ServiceAppliance @relation(fields: [appliance_id], references: [id], onDelete: Cascade)
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@index([appliance_id])
+  @@map("service_appliance_manuals")
 }
 
 // M:N Product ↔ ServiceAppliance — který spotřebič je v kterém produktu, kde

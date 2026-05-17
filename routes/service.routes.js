@@ -7,10 +7,54 @@ const express = require('express');
 const router = express.Router();
 const { z } = require('zod');
 const bcrypt = require('bcryptjs');
+const fs = require('fs');
+const fsp = require('fs/promises');
+const path = require('path');
+const multer = require('multer');
 const { prisma } = require('../config/database');
 const { requireAuth } = require('../middleware/auth');
 
 router.use(requireAuth);
+
+// Storage pro PDF manuály — Railway persistent volume mountnutý do /app/data
+const MANUALS_DIR = path.join(__dirname, '..', 'data', 'service-manuals');
+if (!fs.existsSync(MANUALS_DIR)) {
+  fs.mkdirSync(MANUALS_DIR, { recursive: true });
+}
+
+// Multer — memory storage, 50 MB limit
+const manualUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 50 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    // Akceptujeme: PDF, obrázky, Word, Excel
+    const ok = /^(application\/pdf|image\/|application\/msword|application\/vnd\.openxmlformats-officedocument|application\/vnd\.ms-excel|text\/plain)/i
+      .test(file.mimetype || '');
+    if (!ok) return cb(new Error('Nepodporovaný typ souboru: ' + file.mimetype), false);
+    cb(null, true);
+  },
+});
+
+// Extrakce textu z PDF (best-effort, vrací prázdný řetězec při chybě)
+async function extractPdfText(buffer) {
+  try {
+    const pdfParse = require('pdf-parse');
+    const parsed = await pdfParse(buffer);
+    return {
+      text: (parsed.text || '').trim(),
+      pages: parsed.numpages || null,
+    };
+  } catch (err) {
+    console.warn('[service-manuals] PDF parse failed:', err.message);
+    return { text: '', pages: null };
+  }
+}
+
+// Bezpečné jméno souboru — povolíme jen ASCII písmena, číslice, tečka, podtržítko, pomlčka
+function safeFileName(original) {
+  const base = (original || 'manual').normalize('NFD').replace(/[̀-ͯ]/g, '');
+  return base.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 200);
+}
 
 // ─── Pomocné funkce ────────────────────────────────────────────────────────
 
@@ -122,6 +166,124 @@ router.get('/appliances', async (req, res, next) => {
       },
     });
     res.json(items);
+  } catch (err) { next(err); }
+});
+
+// ─── MANUÁLY KE SPOTŘEBIČŮM (PDF + extrakce textu pro Hugo) ────────────────
+// POZOR: pevné podcesty pod /appliances/:id musí být NAD dynamickou route /:id.
+
+// GET seznam manuálů pro spotřebič
+router.get('/appliances/:id/manuals', async (req, res, next) => {
+  try {
+    const applianceId = parseInt(req.params.id, 10);
+    const items = await prisma.serviceApplianceManual.findMany({
+      where: { appliance_id: applianceId },
+      orderBy: { created_at: 'desc' },
+      select: {
+        id: true, title: true, file_path: true, mime_type: true,
+        size_bytes: true, page_count: true, language: true, created_at: true,
+        // extracted_text: false — neposíláme do listu, je velký
+      },
+    });
+    res.json(items);
+  } catch (err) { next(err); }
+});
+
+// POST upload nového manuálu (multipart/form-data, field name "file")
+router.post('/appliances/:id/manuals', manualUpload.single('file'), async (req, res, next) => {
+  try {
+    const applianceId = parseInt(req.params.id, 10);
+    if (!req.file) return res.status(400).json({ error: 'Chybí soubor (form field "file")' });
+
+    const appliance = await prisma.serviceAppliance.findUnique({ where: { id: applianceId } });
+    if (!appliance) return res.status(404).json({ error: 'Spotřebič nenalezen' });
+
+    // Extrakce textu pro Hugo retrieval — jen pro PDF
+    let extracted = { text: '', pages: null };
+    if ((req.file.mimetype || '').toLowerCase() === 'application/pdf') {
+      extracted = await extractPdfText(req.file.buffer);
+    }
+
+    // Ulož soubor na disk
+    const dir = path.join(MANUALS_DIR, String(applianceId));
+    await fsp.mkdir(dir, { recursive: true });
+    const fileName = Date.now() + '_' + safeFileName(req.file.originalname);
+    const fullPath = path.join(dir, fileName);
+    await fsp.writeFile(fullPath, req.file.buffer);
+
+    // Relativní cesta od repo rootu (pro pozdější server.sendFile)
+    const relPath = path.relative(path.join(__dirname, '..'), fullPath).replace(/\\/g, '/');
+
+    const manual = await prisma.serviceApplianceManual.create({
+      data: {
+        appliance_id: applianceId,
+        title: (req.body.title || req.file.originalname || 'Manuál').slice(0, 500),
+        file_path: relPath,
+        mime_type: req.file.mimetype,
+        size_bytes: req.file.size,
+        page_count: extracted.pages,
+        language: req.body.language || null,
+        extracted_text: extracted.text || null,
+      },
+      select: {
+        id: true, title: true, file_path: true, mime_type: true,
+        size_bytes: true, page_count: true, language: true, created_at: true,
+      },
+    });
+    res.status(201).json({
+      ...manual,
+      extracted_chars: extracted.text ? extracted.text.length : 0,
+    });
+  } catch (err) {
+    if (err.code === 'LIMIT_FILE_SIZE') return res.status(413).json({ error: 'Soubor je větší než 50 MB' });
+    next(err);
+  }
+});
+
+// Stažení / náhled jednoho manuálu (servíruje se inline pro PDF)
+router.get('/manuals/:id/download', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const m = await prisma.serviceApplianceManual.findUnique({ where: { id } });
+    if (!m) return res.status(404).json({ error: 'Manuál nenalezen' });
+    const absPath = path.join(__dirname, '..', m.file_path);
+    if (!fs.existsSync(absPath)) return res.status(404).json({ error: 'Soubor chybí na disku' });
+    if (m.mime_type) res.type(m.mime_type);
+    res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(m.title)}"`);
+    res.sendFile(absPath);
+  } catch (err) { next(err); }
+});
+
+// PATCH — přejmenování / jazyk
+router.patch('/manuals/:id', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const schema = z.object({
+      title: z.string().min(1).max(500).optional(),
+      language: z.string().max(5).optional().nullable(),
+    });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'Neplatná data' });
+    const updated = await prisma.serviceApplianceManual.update({
+      where: { id }, data: parsed.data,
+      select: { id: true, title: true, language: true },
+    });
+    res.json(updated);
+  } catch (err) { next(err); }
+});
+
+router.delete('/manuals/:id', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const m = await prisma.serviceApplianceManual.findUnique({ where: { id } });
+    if (!m) return res.json({ ok: true });
+    // Best-effort smazání souboru
+    try {
+      const absPath = path.join(__dirname, '..', m.file_path);
+      await fsp.unlink(absPath);
+    } catch (_) { /* soubor mohl být odstraněn jinak */ }
+    await prisma.serviceApplianceManual.delete({ where: { id } });
+    res.json({ ok: true });
   } catch (err) { next(err); }
 });
 
