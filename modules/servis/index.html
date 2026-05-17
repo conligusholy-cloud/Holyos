@@ -89,18 +89,73 @@
       .form-grid-2, .form-grid-3, .md-editor { grid-template-columns:1fr; }
     }
 
+    /* Dark color-scheme — nativní dropdowny (select option) pak Chrome renderuje
+       tmavé, ne bílé. Bez toho byly options na Windows nečitelné. */
+    html, body, select, input, textarea { color-scheme: dark; }
+
     /* Multi-select chips */
     .chip-pick {
-      background:var(--surface2); border:1px solid var(--border); border-radius:8px; padding:8px; min-height:38px;
+      background:var(--bg); border:1px solid var(--border); border-radius:10px; padding:8px 10px; min-height:42px;
       display:flex; flex-wrap:wrap; gap:6px; align-items:center;
+      transition: border-color 0.15s;
     }
+    .chip-pick:hover, .chip-pick:focus-within { border-color: #22d3ee; }
     .chip {
-      display:inline-flex; align-items:center; gap:4px; padding:3px 8px; background:rgba(34,211,238,0.15);
-      color:#22d3ee; border-radius:12px; font-size:12px;
+      display:inline-flex; align-items:center; gap:6px; padding:5px 10px;
+      background:rgba(34,211,238,0.15); color:#22d3ee;
+      border:1px solid rgba(34,211,238,0.35);
+      border-radius:14px; font-size:12px; font-weight:500;
     }
-    .chip .x { cursor:pointer; opacity:0.6; }
-    .chip .x:hover { opacity:1; }
-    .chip-pick select { flex:1; min-width:140px; background:transparent; border:none; color:var(--text); font-size:12px; }
+    .chip .x {
+      cursor:pointer; opacity:0.7; width:16px; height:16px; border-radius:50%;
+      display:inline-flex; align-items:center; justify-content:center;
+      background:rgba(34,211,238,0.2); font-size:11px; line-height:1;
+    }
+    .chip .x:hover { opacity:1; background:rgba(239,68,68,0.4); color:#fff; }
+    .chip-pick select {
+      flex:1; min-width:160px; background:var(--surface2); color:var(--text); font-size:13px;
+      border:1px solid transparent; border-radius:6px; padding:5px 8px; cursor:pointer;
+    }
+    .chip-pick select:hover { border-color: rgba(34,211,238,0.4); }
+    .chip-pick select:focus { outline:none; border-color: #22d3ee; }
+
+    /* Searchable picker (Material kód spotřebiče) */
+    .searchable-pick { position: relative; }
+    .searchable-pick .picked {
+      background:var(--bg); border:1px solid var(--border); border-radius:10px; padding:8px 12px;
+      display:flex; align-items:center; gap:10px; cursor:pointer; min-height:42px;
+    }
+    .searchable-pick .picked:hover { border-color:#22d3ee; }
+    .searchable-pick .picked .code {
+      font-family:'Consolas',monospace; font-size:12px; color:#22d3ee;
+      background:rgba(34,211,238,0.12); padding:2px 8px; border-radius:8px;
+    }
+    .searchable-pick .picked .name { flex:1; font-size:13px; }
+    .searchable-pick .picked .clear { cursor:pointer; opacity:0.5; padding:0 4px; font-size:18px; }
+    .searchable-pick .picked .clear:hover { opacity:1; color:#ef4444; }
+    .searchable-pick .placeholder { color:var(--text2); font-size:13px; font-style:italic; }
+    .searchable-pick input.search {
+      width:100%; padding:9px 14px; background:var(--bg); border:1px solid var(--border);
+      border-radius:10px; color:var(--text); font-size:13px;
+    }
+    .searchable-pick input.search:focus { outline:none; border-color:#22d3ee; }
+    .searchable-pick .results {
+      position:absolute; top:calc(100% + 4px); left:0; right:0; z-index:300;
+      background:var(--surface); border:1px solid #22d3ee; border-radius:10px;
+      max-height:280px; overflow-y:auto; box-shadow:0 10px 30px rgba(0,0,0,0.5);
+    }
+    .searchable-pick .results .item {
+      padding:10px 14px; display:flex; gap:10px; align-items:center; cursor:pointer;
+      border-bottom:1px solid rgba(255,255,255,0.04); font-size:13px;
+    }
+    .searchable-pick .results .item:hover, .searchable-pick .results .item.kbd {
+      background:rgba(34,211,238,0.1);
+    }
+    .searchable-pick .results .item .code {
+      font-family:'Consolas',monospace; font-size:11px; color:#22d3ee;
+      background:rgba(34,211,238,0.12); padding:2px 7px; border-radius:6px; flex-shrink:0;
+    }
+    .searchable-pick .results .empty { padding:14px; color:var(--text2); font-style:italic; font-size:13px; text-align:center; }
 
     .empty-state { padding:48px 20px; text-align:center; color:var(--text2); font-size:13px; }
     .empty-state .ico { font-size:32px; opacity:0.4; margin-bottom:10px; }
