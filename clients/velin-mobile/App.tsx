@@ -23,12 +23,14 @@ import Gate from './screens/Gate';
 import Login from './screens/Login';
 import MyDay from './screens/MyDay';
 import Me from './screens/Me';
+import TaskDetail from './screens/TaskDetail';
 import { colors } from './lib/theme';
 
 export type RootStackParamList = {
   Gate: undefined;
   Login: undefined;
   Tabs: undefined;
+  TaskDetail: { taskId: number };
 };
 
 export type TabsParamList = {
@@ -100,6 +102,11 @@ export default function App() {
           <Stack.Screen name="Gate" component={Gate} />
           <Stack.Screen name="Login" component={Login} />
           <Stack.Screen name="Tabs" component={TabsRoot} />
+          <Stack.Screen
+            name="TaskDetail"
+            component={TaskDetail}
+            options={{ animation: 'slide_from_right' }}
+          />
         </Stack.Navigator>
       </NavigationContainer>
     </SafeAreaProvider>

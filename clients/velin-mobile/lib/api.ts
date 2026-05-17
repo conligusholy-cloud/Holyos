@@ -34,10 +34,12 @@ export type LoginResponse = {
   };
 };
 
+const DEFAULT_TIMEOUT_MS = 15000;
+
 async function request<T>(
   method: 'GET' | 'POST' | 'PUT' | 'DELETE',
   path: string,
-  options: { jwt?: string | null; body?: unknown } = {}
+  options: { jwt?: string | null; body?: unknown; timeoutMs?: number } = {}
 ): Promise<T> {
   const headers: Record<string, string> = {
     Accept: 'application/json',
@@ -45,11 +47,26 @@ async function request<T>(
   if (options.body !== undefined) headers['Content-Type'] = 'application/json';
   if (options.jwt) headers['Authorization'] = `Bearer ${options.jwt}`;
 
-  const res = await fetch(`${API_BASE}${path}`, {
-    method,
-    headers,
-    body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
-  });
+  const controller = new AbortController();
+  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}${path}`, {
+      method,
+      headers,
+      body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+      signal: controller.signal,
+    });
+  } catch (err: any) {
+    clearTimeout(timeoutId);
+    if (err?.name === 'AbortError') {
+      throw new ApiError(0, `Časový limit ${timeoutMs} ms vypršel — server neodpověděl`, null);
+    }
+    throw new ApiError(0, err?.message || 'Síťová chyba', null);
+  }
+  clearTimeout(timeoutId);
 
   let body: any = null;
   const text = await res.text();

@@ -31,10 +31,19 @@ const scheduler = require('../services/workers/velin-scheduler');
 
 // ─── Helpers ─────────────────────────────────────────────────────────────
 
+// Vrátí Date objekt ukazující na UTC půlnoc *pražského* kalendářního dne.
+// Důvod: PostgreSQL DATE sloupec ukládá jen kalendářní den; když na Railway (UTC)
+// uděláme `new Date().setHours(0,0,0,0)`, dostaneme UTC midnight, který v CES
+// odpovídá včerejšku (pokud je čas mezi 22:00 a 24:00 lokálně). Tím by se úkoly
+// zakládaly pod předchozí den. Tady to počítáme přes Intl s Europe/Prague.
 function startOfToday() {
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  return d;
+  const tz = process.env.VELIN_TZ || 'Europe/Prague';
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: tz,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(new Date());
+  // en-CA formátuje jako "YYYY-MM-DD"
+  return new Date(parts + 'T00:00:00Z');
 }
 
 function asDate(input) {
