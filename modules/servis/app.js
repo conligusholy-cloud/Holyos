@@ -439,8 +439,15 @@
     } catch (err) { alert('Chyba mazání: ' + err.message); }
   };
 
-  function setupManualsSection(applianceId) {
-    loadManualsList(applianceId);
+  function setupManualsSection(ctx) {
+    // Pokud už spotřebič existuje, načti seznam. Jinak ukaž prázdný placeholder.
+    if (ctx.applianceId) {
+      loadManualsList(ctx.applianceId);
+    } else {
+      const listEl = document.getElementById('manuals-list');
+      if (listEl) listEl.innerHTML = '<div style="font-size:12px;color:var(--text2);font-style:italic;padding:6px 0;">Zatím žádné manuály. Přetáhni PDF — spotřebič se automaticky uloží.</div>';
+    }
+
     const drop = document.getElementById('manuals-drop');
     const fileInput = document.getElementById('manuals-file');
     if (!drop || !fileInput) return;
@@ -461,21 +468,61 @@
       drop.style.borderColor = 'var(--border)';
       drop.style.background = '';
       const files = Array.from(e.dataTransfer.files || []);
-      await uploadManuals(applianceId, files);
+      await uploadManuals(ctx, files);
     });
 
     fileInput.addEventListener('change', async () => {
       const files = Array.from(fileInput.files || []);
-      await uploadManuals(applianceId, files);
+      await uploadManuals(ctx, files);
       fileInput.value = '';
     });
   }
 
-  async function uploadManuals(applianceId, files) {
+  // Auto-save nového spotřebiče — když user přetáhne PDF před uložením.
+  // Vyžaduje vyplněný název, zbytek je volitelný.
+  async function autoSaveApplianceFromForm() {
+    const name = (document.getElementById('ap-name')?.value || '').trim();
+    if (!name) {
+      alert('Vyplň prosím nejdřív "Název" spotřebiče — pak můžeš nahrávat manuály.');
+      document.getElementById('ap-name')?.focus();
+      return null;
+    }
+    const payload = {
+      name,
+      manufacturer: (document.getElementById('ap-mfr')?.value || '').trim() || null,
+      model_code: (document.getElementById('ap-model')?.value || '').trim() || null,
+      manual_url: (document.getElementById('ap-manual')?.value || '').trim() || null,
+      description: (document.getElementById('ap-desc')?.value || '').trim() || null,
+      material_id: parseInt(document.getElementById('ap-material-id')?.value, 10) || null,
+      // product_links přidáme až při finálním uložení (uživatel je třeba ještě vybere)
+    };
+    try {
+      const created = await api('/api/service/appliances', { method: 'POST', body: payload });
+      // Upravit hlavičku modalu, ať bylo jasné, že už editujeme
+      const h2 = document.querySelector('#modal-root .modal h2');
+      if (h2) h2.textContent = '⚙️ Upravit spotřebič: ' + name;
+      return created.id;
+    } catch (err) {
+      alert('Nepodařilo se uložit spotřebič: ' + err.message);
+      return null;
+    }
+  }
+
+  async function uploadManuals(ctx, files) {
     if (!files.length) return;
+
+    // Pokud spotřebič ještě nemá ID → auto-save
+    if (!ctx.applianceId) {
+      const newId = await autoSaveApplianceFromForm();
+      if (!newId) return;
+      ctx.applianceId = newId;
+      // Příště už `window.__servis_saveAppliance` neudělá POST, ale PUT — proto
+      // updatneme i interní data, kterou používá tlačítko "Uložit" v patičce.
+      window.__servis_appliance_just_created = newId;
+    }
+
     const listEl = document.getElementById('manuals-list');
     for (const file of files) {
-      // Show uploading row
       const tmpRow = document.createElement('div');
       tmpRow.style.cssText = 'display:flex; align-items:center; gap:10px; padding:8px 12px; background:rgba(34,211,238,0.05); border:1px solid rgba(34,211,238,0.2); border-radius:8px; margin-bottom:6px; opacity:0.7;';
       tmpRow.innerHTML = `<div style="font-size:20px;">⏳</div><div style="flex:1;"><div style="font-size:13px;">${escapeHtml(file.name)}</div><div style="font-size:11px;color:var(--text2);">Nahrávám a extrahuji text…</div></div>`;
@@ -488,7 +535,7 @@
         const token = sessionStorage.getItem('token');
         const headers = {};
         if (token) headers['Authorization'] = 'Bearer ' + token;
-        const r = await fetch('/api/service/appliances/' + applianceId + '/manuals', {
+        const r = await fetch('/api/service/appliances/' + ctx.applianceId + '/manuals', {
           method: 'POST', headers, credentials: 'include', body: fd,
         });
         if (!r.ok) {
@@ -501,7 +548,7 @@
         tmpRow.remove();
       }
     }
-    await loadManualsList(applianceId);
+    await loadManualsList(ctx.applianceId);
   }
 
   // ─── Searchable Material picker — kód spotřebiče vybíraný ze zboží ────────
@@ -688,22 +735,16 @@
           </select>
         </div>
       </div>
-      ${item ? `
-        <div class="form-row" id="manuals-section">
-          <label>Manuály a dokumenty (PDF — Hugo z nich čerpá)</label>
-          <div id="manuals-list" style="margin-bottom:10px;"></div>
-          <div id="manuals-drop" style="border:2px dashed var(--border); border-radius:10px; padding:18px; text-align:center; color:var(--text2); font-size:13px; cursor:pointer;">
-            <div style="font-size:24px; margin-bottom:4px;">📎</div>
-            <div>Přetáhni sem PDF (max 50 MB) nebo <span style="color:#22d3ee; text-decoration:underline;">klikni a vyber soubor</span></div>
-            <div style="font-size:11px; margin-top:6px;">Po nahrání Hugo z dokumentu čerpá při dotazech partnerů.</div>
-            <input type="file" id="manuals-file" accept="application/pdf,image/*,text/plain" multiple style="display:none;">
-          </div>
+      <div class="form-row" id="manuals-section">
+        <label>Manuály a dokumenty (PDF — Hugo z nich čerpá)</label>
+        <div id="manuals-list" style="margin-bottom:10px;"></div>
+        <div id="manuals-drop" style="border:2px dashed var(--border); border-radius:10px; padding:18px; text-align:center; color:var(--text2); font-size:13px; cursor:pointer;">
+          <div style="font-size:24px; margin-bottom:4px;">📎</div>
+          <div>Přetáhni sem PDF (max 50 MB) nebo <span style="color:#22d3ee; text-decoration:underline;">klikni a vyber soubor</span></div>
+          <div style="font-size:11px; margin-top:6px;">${item ? 'Po nahrání Hugo z dokumentu čerpá při dotazech partnerů.' : 'Po prvním uploadu se spotřebič automaticky uloží (vyžaduje vyplněný název).'}</div>
+          <input type="file" id="manuals-file" accept="application/pdf,image/*,text/plain" multiple style="display:none;">
         </div>
-      ` : `
-        <div class="form-row" style="font-size:12px; color:var(--text2); padding:10px; background:rgba(34,211,238,0.04); border-radius:8px; border:1px solid rgba(34,211,238,0.15);">
-          ℹ️ Nejdřív spotřebič ulož — pak budeš moct přidávat PDF manuály.
-        </div>
-      `}
+      </div>
       <div class="modal-actions">
         ${item ? '<button class="btn btn-danger" onclick="window.__servis_deleteAppliance('+item.id+')">Smazat</button>' : ''}
         <button class="btn btn-secondary" onclick="document.getElementById('modal-root').innerHTML=''">Zrušit</button>
@@ -712,10 +753,11 @@
     `;
     root.appendChild(overlay);
 
-    // Pokud editujeme existující spotřebič → načti manuály a nabídni upload
-    if (item && item.id) {
-      setupManualsSection(item.id);
-    }
+    // applianceId se může změnit v průběhu — když uživatel přetáhne PDF do
+    // nového spotřebiče, auto-save vytvoří záznam a ID se vyplní.
+    // Sdíleno přes objekt, aby setupManualsSection četl aktuální hodnotu.
+    const ctx = { applianceId: (item && item.id) || null };
+    setupManualsSection(ctx);
 
     // Inicializace Material pickeru pro „Kód ze zboží"
     setupMaterialPicker('ap-material-picker', {
@@ -749,8 +791,11 @@
       };
       if (!payload.name) { alert('Název je povinný'); return; }
       try {
-        if (id) await api('/api/service/appliances/' + id, { method: 'PUT', body: payload });
+        // Pokud byl spotřebič mezitím auto-uložen (kvůli PDF dropu) → použij to ID místo původního null
+        const effectiveId = id || ctx.applianceId || window.__servis_appliance_just_created || null;
+        if (effectiveId) await api('/api/service/appliances/' + effectiveId, { method: 'PUT', body: payload });
         else await api('/api/service/appliances', { method: 'POST', body: payload });
+        window.__servis_appliance_just_created = null;
         root.innerHTML = '';
         await loadAppliances();
       } catch (err) { alert('Chyba: ' + err.message); }
