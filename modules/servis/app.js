@@ -9,10 +9,16 @@
   // ─── State ────────────────────────────────────────────────────────────────
 
   let categories = [];
-  let products = [];
+  let products = [];      // všechny produkty (Product, type='product' nebo 'semi-product')
   let appliances = [];
   let partners = [];
   let companies = [];
+
+  // Helper: jen "skutečné" výrobky (ne polotovary) — používáme pro výběr,
+  // kde se má spotřebič / článek / partner napojit na hotový výrobek (prádlomat).
+  function realProducts() {
+    return products.filter(p => !p.type || p.type === 'product');
+  }
 
   // ─── HTTP helper ──────────────────────────────────────────────────────────
 
@@ -99,8 +105,8 @@
   function fillProductFilter() {
     const sel = document.getElementById('filter-product');
     if (!sel) return;
-    sel.innerHTML = '<option value="">Všechny produkty</option>' +
-      products.map(p => `<option value="${p.id}">${p.code || ''} ${p.name}</option>`).join('');
+    sel.innerHTML = '<option value="">Všechny výrobky</option>' +
+      realProducts().map(p => `<option value="${p.id}">${p.code || ''} ${p.name}</option>`).join('');
   }
 
   // ─── ČLÁNKY ──────────────────────────────────────────────────────────────
@@ -228,7 +234,7 @@
           <div class="chip-pick" id="pick-products">
             <select onchange="window.__servis_pickProduct(this)">
               <option value="">+ Přidat produkt…</option>
-              ${products.map(p => `<option value="${p.id}">${p.code || ''} ${p.name}</option>`).join('')}
+              ${realProducts().map(p => `<option value="${p.id}">${p.code || ''} ${p.name}</option>`).join('')}
             </select>
           </div>
         </div>
@@ -498,10 +504,143 @@
     await loadManualsList(applianceId);
   }
 
+  // ─── Searchable Material picker — kód spotřebiče vybíraný ze zboží ────────
+  // Debounce + ILIKE search přes /api/wh/materials. Zobrazuje top 20 výsledků.
+  function setupMaterialPicker(containerId, opts) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    let selected = null; // { id, code, name }
+
+    function renderEmpty() {
+      container.innerHTML = `
+        <input class="search" placeholder="🔍 Vyhledej v katalogu zboží (kód nebo název)…" autocomplete="off">
+        <div class="results" style="display:none;"></div>
+      `;
+      const input = container.querySelector('input.search');
+      const results = container.querySelector('.results');
+      let timer = null;
+      let activeIdx = -1;
+      let lastItems = [];
+
+      function close() { results.style.display = 'none'; activeIdx = -1; }
+      function open() { results.style.display = 'block'; }
+
+      async function search(q) {
+        try {
+          const url = '/api/wh/materials' + (q ? '?search=' + encodeURIComponent(q) : '');
+          const data = await api(url);
+          lastItems = (data || []).slice(0, 20);
+          if (!lastItems.length) {
+            results.innerHTML = '<div class="empty">Žádné položky neodpovídají</div>';
+          } else {
+            results.innerHTML = lastItems.map((m, i) => `
+              <div class="item" data-idx="${i}">
+                <span class="code">${escapeHtml(m.code || '—')}</span>
+                <span style="flex:1;">${escapeHtml(m.name || '')}</span>
+                ${m.barcode ? `<span style="font-size:11px;color:var(--text2);">${escapeHtml(m.barcode)}</span>` : ''}
+              </div>
+            `).join('');
+            results.querySelectorAll('.item').forEach(node => {
+              node.addEventListener('click', () => {
+                const idx = parseInt(node.dataset.idx, 10);
+                pick(lastItems[idx]);
+              });
+            });
+          }
+          open();
+        } catch (err) {
+          results.innerHTML = `<div class="empty">Chyba: ${escapeHtml(err.message)}</div>`;
+          open();
+        }
+      }
+
+      function pick(mat) {
+        selected = { id: mat.id, code: mat.code, name: mat.name };
+        opts && opts.onPick && opts.onPick(selected);
+        close();
+        renderPicked();
+      }
+
+      input.addEventListener('input', () => {
+        const q = input.value.trim();
+        clearTimeout(timer);
+        timer = setTimeout(() => search(q), 200);
+      });
+      input.addEventListener('focus', () => {
+        if (!results.children.length) search('');
+        else open();
+      });
+      input.addEventListener('keydown', (e) => {
+        const items = results.querySelectorAll('.item');
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          activeIdx = Math.min(items.length - 1, activeIdx + 1);
+          items.forEach((n, i) => n.classList.toggle('kbd', i === activeIdx));
+          if (items[activeIdx]) items[activeIdx].scrollIntoView({ block: 'nearest' });
+        } else if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          activeIdx = Math.max(0, activeIdx - 1);
+          items.forEach((n, i) => n.classList.toggle('kbd', i === activeIdx));
+        } else if (e.key === 'Enter') {
+          if (activeIdx >= 0 && lastItems[activeIdx]) {
+            e.preventDefault();
+            pick(lastItems[activeIdx]);
+          }
+        } else if (e.key === 'Escape') {
+          close();
+        }
+      });
+
+      document.addEventListener('click', (e) => {
+        if (!container.contains(e.target)) close();
+      });
+    }
+
+    function renderPicked() {
+      if (!selected) return renderEmpty();
+      container.innerHTML = `
+        <div class="picked">
+          <span class="code">${escapeHtml(selected.code || '—')}</span>
+          <span class="name">${escapeHtml(selected.name || '')}</span>
+          <span class="clear" title="Odebrat výběr">✕</span>
+        </div>
+      `;
+      container.querySelector('.picked .clear').addEventListener('click', () => {
+        selected = null;
+        opts && opts.onPick && opts.onPick(null);
+        renderEmpty();
+      });
+      // Klik kdekoli na picked → odemkne search input pro výměnu výběru
+      container.querySelector('.picked .name').addEventListener('click', () => {
+        renderEmpty();
+        setTimeout(() => container.querySelector('input.search')?.focus(), 10);
+      });
+    }
+
+    // Inicializace — pokud máme initial material_id, dotahneme jeho data
+    if (opts && opts.initialId) {
+      // Doptáme se backendu, ať máme aktuální code/name (pokud byl Material smazaný, fallback na initialCode)
+      api('/api/wh/materials/' + opts.initialId).then(m => {
+        if (m && m.id) {
+          selected = { id: m.id, code: m.code, name: m.name };
+          renderPicked();
+        } else if (opts.initialCode) {
+          // Fallback — material nenalezen, zobraz placeholder s kódem
+          selected = { id: null, code: opts.initialCode, name: '(materiál v katalogu nenalezen)' };
+          renderPicked();
+        } else {
+          renderEmpty();
+        }
+      }).catch(() => renderEmpty());
+    } else {
+      renderEmpty();
+    }
+  }
+
   window.openApplianceModal = async function (id) {
     const item = id ? await api('/api/service/appliances/' + id) : null;
     const root = document.getElementById('modal-root');
-    const data = item || { name: '', manufacturer: '', model_code: '', description: '', manual_url: '', photo_url: '', product_links: [] };
+    const data = item || { name: '', manufacturer: '', model_code: '', description: '', manual_url: '', photo_url: '', material_id: null, product_links: [] };
     const links = new Map();
     (data.product_links || []).forEach(pl => links.set(pl.product_id, pl));
 
@@ -525,8 +664,11 @@
       </div>
       <div class="form-grid-2">
         <div class="form-row">
-          <label>Model / kód</label>
-          <input id="ap-model" value="${escapeHtml(data.model_code || '')}" placeholder="Např. MV-300">
+          <label>Kód ze zboží (Material z katalogu)</label>
+          <div id="ap-material-picker" class="searchable-pick"></div>
+          <!-- skryté pole — drží vybrané material_id pro save -->
+          <input type="hidden" id="ap-material-id" value="${data.material_id || ''}">
+          <input type="hidden" id="ap-model" value="${escapeHtml(data.model_code || '')}">
         </div>
         <div class="form-row">
           <label>Odkaz na manuál výrobce (volitelné)</label>
@@ -538,11 +680,11 @@
         <textarea id="ap-desc" rows="3" placeholder="Krátký popis funkce a umístění…">${escapeHtml(data.description || '')}</textarea>
       </div>
       <div class="form-row">
-        <label>V kterých produktech je</label>
+        <label>V kterých výrobcích je</label>
         <div class="chip-pick" id="pick-app-products">
           <select onchange="window.__servis_pickAppProduct(this)">
             <option value="">+ Přidat produkt…</option>
-            ${products.map(p => `<option value="${p.id}">${p.code || ''} ${p.name}</option>`).join('')}
+            ${realProducts().map(p => `<option value="${p.id}">${p.code || ''} ${p.name}</option>`).join('')}
           </select>
         </div>
       </div>
@@ -575,6 +717,16 @@
       setupManualsSection(item.id);
     }
 
+    // Inicializace Material pickeru pro „Kód ze zboží"
+    setupMaterialPicker('ap-material-picker', {
+      initialId: data.material_id || null,
+      initialCode: data.model_code || null,
+      onPick: (mat) => {
+        document.getElementById('ap-material-id').value = mat ? mat.id : '';
+        document.getElementById('ap-model').value = mat ? (mat.code || '') : '';
+      },
+    });
+
     const pickedSet = new Set(Array.from(links.keys()));
     renderPickChips('pick-app-products', pickedSet, id => products.find(p => p.id === id), id => `${products.find(p => p.id === id)?.code || ''} ${products.find(p => p.id === id)?.name || '#'+id}`);
 
@@ -592,6 +744,7 @@
         model_code: document.getElementById('ap-model').value.trim() || null,
         manual_url: document.getElementById('ap-manual').value.trim() || null,
         description: document.getElementById('ap-desc').value.trim() || null,
+        material_id: parseInt(document.getElementById('ap-material-id').value, 10) || null,
         product_links: Array.from(pickedSet).map(pid => ({ product_id: pid })),
       };
       if (!payload.name) { alert('Název je povinný'); return; }
@@ -864,7 +1017,7 @@
         <div class="chip-pick" id="pick-p-products">
           <select onchange="window.__servis_pickPProduct(this)">
             <option value="">+ Přidat produkt…</option>
-            ${products.map(p => `<option value="${p.id}">${p.code || ''} ${p.name}</option>`).join('')}
+            ${realProducts().map(p => `<option value="${p.id}">${p.code || ''} ${p.name}</option>`).join('')}
           </select>
         </div>
       </div>
