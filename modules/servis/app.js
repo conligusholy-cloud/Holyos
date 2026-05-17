@@ -12,6 +12,7 @@
   let products = [];
   let appliances = [];
   let partners = [];
+  let companies = [];
 
   // ─── HTTP helper ──────────────────────────────────────────────────────────
 
@@ -72,12 +73,14 @@
 
   (async function init() {
     try {
-      const [cats, prods] = await Promise.all([
+      const [cats, prods, comps] = await Promise.all([
         api('/api/service/categories'),
-        api('/api/production/products').catch(() => []), // fallback pokud endpoint neexistuje pod jiným prefixem
+        api('/api/production/products').catch(() => []),
+        api('/api/wh/companies?active=true').catch(() => []),
       ]);
       categories = cats || [];
       products = Array.isArray(prods) ? prods : (prods && prods.items) || [];
+      companies = Array.isArray(comps) ? comps : [];
       fillCategoryFilter();
       fillProductFilter();
       await loadArticles();
@@ -550,6 +553,19 @@
 
   // ─── PARTNEŘI ────────────────────────────────────────────────────────────
 
+  // Copy odkazu na Huga (banner v tabu Partneři)
+  window.__servis_copyHugoUrl = async function (btn) {
+    const url = 'https://bestseries.cash/hugo';
+    try {
+      await navigator.clipboard.writeText(url);
+      const orig = btn.innerHTML;
+      btn.innerHTML = '✓ Zkopírováno';
+      setTimeout(() => { btn.innerHTML = orig; }, 1500);
+    } catch (_) {
+      prompt('Zkopíruj URL ručně:', url);
+    }
+  };
+
   window.loadPartners = async function () {
     partners = await api('/api/service/partners');
     const tbody = document.getElementById('partners-tbody');
@@ -589,25 +605,68 @@
     overlay.addEventListener('click', e => { if (e.target === overlay) root.innerHTML = ''; });
     const modal = el('div', { class: 'modal', style: { width: '680px' } });
     overlay.appendChild(modal);
+    const shareBlock = id ? `
+      <div style="margin-bottom:18px; background:rgba(34,211,238,0.06); border:1px solid rgba(34,211,238,0.2); border-radius:10px; padding:12px 14px;">
+        <div style="font-size:11px; color:var(--text2); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:8px;">Sdílet přístup s partnerem</div>
+        <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+          <code style="background:var(--bg); padding:6px 10px; border-radius:6px; font-size:12px;">https://bestseries.cash/hugo</code>
+          <button class="btn btn-sm btn-secondary" onclick="window.__servis_copyShareInfo(${id})">📋 Kopírovat údaje</button>
+          <button class="btn btn-sm btn-secondary" onclick="window.__servis_emailShareInfo(${id})">✉️ Poslat e-mailem</button>
+        </div>
+      </div>
+    ` : '';
+
     modal.innerHTML = `
       <h2>${id ? '👤 Upravit partnera' : '👤 Nový partner'}</h2>
+      ${shareBlock}
       <div class="form-grid-2">
         <div class="form-row"><label>Username (login)</label><input id="p-username" value="${escapeHtml(data.username)}" ${id ? 'readonly style="opacity:0.6"' : ''}></div>
         <div class="form-row"><label>Zobrazované jméno</label><input id="p-name" value="${escapeHtml(data.display_name)}"></div>
       </div>
+      <div class="form-row">
+        <label>Firma (z adresáře)</label>
+        <select id="p-company">
+          <option value="">— bez firmy / soukromý partner —</option>
+          ${companies.map(c => `<option value="${c.id}" ${(data.company?.id || data.company_id) === c.id ? 'selected' : ''}>${escapeHtml(c.name)}${c.ico ? ' (IČO ' + escapeHtml(c.ico) + ')' : ''}</option>`).join('')}
+        </select>
+        <div style="font-size:11px; color:var(--text2); margin-top:4px;">
+          Firma se hledá v <a href="/modules/nakup-sklad/index.html#companies" target="_blank" style="color:#22d3ee;">adresáři</a>. Pokud tam ještě není, založ ji nejdřív tam.
+        </div>
+      </div>
       <div class="form-grid-2">
-        <div class="form-row"><label>Email</label><input id="p-email" type="email" value="${escapeHtml(data.email || '')}"></div>
-        <div class="form-row"><label>Telefon</label><input id="p-phone" value="${escapeHtml(data.phone || '')}"></div>
+        <div class="form-row"><label>Email</label><input id="p-email" type="email" value="${escapeHtml(data.email || '')}" placeholder="kontakt@firma.cz"></div>
+        <div class="form-row"><label>Telefon</label><input id="p-phone" value="${escapeHtml(data.phone || '')}" placeholder="+420 ..."></div>
       </div>
       <div class="form-grid-2">
         <div class="form-row">
-          <label>Jazyk</label>
+          <label>Výchozí jazyk</label>
           <select id="p-lang">
-            <option value="cs" ${data.language==='cs'?'selected':''}>Čeština</option>
-            <option value="en" ${data.language==='en'?'selected':''}>English</option>
-            <option value="de" ${data.language==='de'?'selected':''}>Deutsch</option>
-            <option value="sk" ${data.language==='sk'?'selected':''}>Slovenčina</option>
-            <option value="pl" ${data.language==='pl'?'selected':''}>Polski</option>
+            <option value="cs" ${data.language==='cs'?'selected':''}>🇨🇿 Čeština</option>
+            <option value="sk" ${data.language==='sk'?'selected':''}>🇸🇰 Slovenčina</option>
+            <option value="en" ${data.language==='en'?'selected':''}>🇬🇧 English</option>
+            <option value="de" ${data.language==='de'?'selected':''}>🇩🇪 Deutsch</option>
+            <option value="pl" ${data.language==='pl'?'selected':''}>🇵🇱 Polski</option>
+            <option value="hu" ${data.language==='hu'?'selected':''}>🇭🇺 Magyar</option>
+            <option value="ro" ${data.language==='ro'?'selected':''}>🇷🇴 Română</option>
+            <option value="hr" ${data.language==='hr'?'selected':''}>🇭🇷 Hrvatski</option>
+            <option value="sl" ${data.language==='sl'?'selected':''}>🇸🇮 Slovenščina</option>
+            <option value="sr" ${data.language==='sr'?'selected':''}>🇷🇸 Srpski</option>
+            <option value="bg" ${data.language==='bg'?'selected':''}>🇧🇬 Български</option>
+            <option value="fr" ${data.language==='fr'?'selected':''}>🇫🇷 Français</option>
+            <option value="es" ${data.language==='es'?'selected':''}>🇪🇸 Español</option>
+            <option value="it" ${data.language==='it'?'selected':''}>🇮🇹 Italiano</option>
+            <option value="pt" ${data.language==='pt'?'selected':''}>🇵🇹 Português</option>
+            <option value="nl" ${data.language==='nl'?'selected':''}>🇳🇱 Nederlands</option>
+            <option value="el" ${data.language==='el'?'selected':''}>🇬🇷 Ελληνικά</option>
+            <option value="da" ${data.language==='da'?'selected':''}>🇩🇰 Dansk</option>
+            <option value="sv" ${data.language==='sv'?'selected':''}>🇸🇪 Svenska</option>
+            <option value="no" ${data.language==='no'?'selected':''}>🇳🇴 Norsk</option>
+            <option value="fi" ${data.language==='fi'?'selected':''}>🇫🇮 Suomi</option>
+            <option value="et" ${data.language==='et'?'selected':''}>🇪🇪 Eesti</option>
+            <option value="lv" ${data.language==='lv'?'selected':''}>🇱🇻 Latviešu</option>
+            <option value="lt" ${data.language==='lt'?'selected':''}>🇱🇹 Lietuvių</option>
+            <option value="uk" ${data.language==='uk'?'selected':''}>🇺🇦 Українська</option>
+            <option value="ru" ${data.language==='ru'?'selected':''}>🇷🇺 Русский</option>
           </select>
         </div>
         <div class="form-row">
@@ -646,12 +705,46 @@
       renderPickChips('pick-p-products', productIds, id => products.find(p => p.id === id), id => `${products.find(p => p.id === id)?.code || ''} ${products.find(p => p.id === id)?.name || '#'+id}`);
     };
 
+    window.__servis_copyShareInfo = async function (partnerId) {
+      const p = partners.find(x => x.id === partnerId);
+      if (!p) return;
+      const txt = `Vítejte v servisní podpoře Best Series.\n\n` +
+        `Adresa: https://bestseries.cash/hugo\n` +
+        `Přihlašovací jméno: ${p.username}\n` +
+        `Heslo: (zaslané samostatně)\n\n` +
+        `Po přihlášení vám bude k dispozici AI servisní asistent Hugo — pomůže s běžnými dotazy 24/7.`;
+      try {
+        await navigator.clipboard.writeText(txt);
+        alert('Údaje zkopírovány do schránky.');
+      } catch (_) {
+        prompt('Zkopíruj ručně:', txt);
+      }
+    };
+
+    window.__servis_emailShareInfo = function (partnerId) {
+      const p = partners.find(x => x.id === partnerId);
+      if (!p) return;
+      const subject = encodeURIComponent('Přístup k servisní podpoře Best Series (Hugo)');
+      const body = encodeURIComponent(
+        `Dobrý den ${p.display_name || ''},\n\n` +
+        `níže najdete přístup k naší servisní podpoře a AI asistentovi Hugovi.\n\n` +
+        `Adresa:           https://bestseries.cash/hugo\n` +
+        `Přihlašovací jméno: ${p.username}\n` +
+        `Heslo:            (zasíláme samostatně z bezpečnostních důvodů)\n\n` +
+        `Hugo zná naše návody a postupy a je k dispozici 24/7. Pokud byste potřebovali přímý kontakt na servisního technika, ozvěte se nám.\n\n` +
+        `S pozdravem,\nBest Series s.r.o.`
+      );
+      const to = p.email || '';
+      window.location.href = `mailto:${to}?subject=${subject}&body=${body}`;
+    };
+
     window.__servis_savePartner = async function (id) {
       const payload = {
         username: document.getElementById('p-username').value.trim(),
         display_name: document.getElementById('p-name').value.trim(),
         email: document.getElementById('p-email').value.trim() || null,
         phone: document.getElementById('p-phone').value.trim() || null,
+        company_id: parseInt(document.getElementById('p-company').value, 10) || null,
         language: document.getElementById('p-lang').value,
         active: document.getElementById('p-active').value === 'true',
         product_ids: Array.from(productIds),

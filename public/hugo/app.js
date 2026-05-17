@@ -7,6 +7,9 @@
 (function () {
   'use strict';
 
+  // ─── i18n shortcut ───────────────────────────────────────────────────────
+  const t = (k) => (window.HugoI18n ? window.HugoI18n.t(k) : k);
+
   // ─── State ────────────────────────────────────────────────────────────────
 
   const State = {
@@ -15,8 +18,8 @@
     sessionId: null,
     messages: [], // { id, role, body, retrieved?, citations?, feedback? }
     sending: false,
-    guides: null, // {kind: [...]} groupped
-    articleView: null, // article object
+    guides: null,
+    articleView: null,
   };
 
   // localStorage token fallback (pokud httpOnly cookie nefunguje, např. cross-domain PWA)
@@ -58,11 +61,62 @@
     try {
       const me = await api('/api/hugo/me');
       State.partner = me;
+      // Pokud má partner v profilu jazyk a lišil by se od aktuálního, použij ten z profilu.
+      if (me.language && window.HugoI18n && me.language !== window.HugoI18n.getLang()) {
+        window.HugoI18n.setLang(me.language);
+      }
       State.view = 'chat';
     } catch (_) {
       State.view = 'login';
     }
     render();
+  }
+
+  // Změna jazyka — uloží se do localStorage i na backend (best-effort)
+  async function changeLanguage(code) {
+    if (!window.HugoI18n) return;
+    window.HugoI18n.setLang(code);
+    // Pokud je partner přihlášený, ulož i do jeho profilu (Hugo pak odpovídá v tom jazyce)
+    if (State.partner) {
+      try {
+        await api('/api/hugo/me', { method: 'PATCH', body: { language: code } });
+        State.partner.language = code;
+      } catch (_) { /* tichý fail, UI funguje i bez serveru */ }
+    }
+    render();
+  }
+
+  function showLanguageMenu() {
+    if (!window.HugoI18n) return;
+    const overlay = document.createElement('div');
+    overlay.className = 'lang-menu';
+    overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+
+    const inner = document.createElement('div');
+    inner.className = 'lang-menu-inner';
+    inner.innerHTML = `<div class="lang-menu-title">${t('profile.language') || 'Language'}</div>`;
+    overlay.appendChild(inner);
+
+    const cur = window.HugoI18n.getLang();
+    window.HugoI18n.listLangs().forEach(L => {
+      const btn = document.createElement('button');
+      btn.className = 'lang-item' + (L.code === cur ? ' active' : '');
+      btn.innerHTML = `<span class="flag">${L.flag}</span><span>${escapeHtml(L.name)}</span>`;
+      btn.addEventListener('click', async () => {
+        overlay.remove();
+        await changeLanguage(L.code);
+      });
+      inner.appendChild(btn);
+    });
+    document.body.appendChild(overlay);
+  }
+
+  function langButtonHtml() {
+    if (!window.HugoI18n) return '';
+    const cur = window.HugoI18n.getLang();
+    const L = window.HugoI18n.listLangs().find(x => x.code === cur);
+    if (!L) return '';
+    return `<button class="lang-btn" id="lang-btn" title="${escapeHtml(L.name)}">${L.flag} <span class="caret">▾</span></button>`;
   }
 
   // ─── Render ───────────────────────────────────────────────────────────────
@@ -80,30 +134,35 @@
 
   function renderLogin(root) {
     root.innerHTML = `
+      <div style="display:flex; padding:14px 14px 0; padding-top:max(14px, env(safe-area-inset-top));">
+        ${langButtonHtml()}
+      </div>
       <div class="login-wrap">
         <div class="login-hero">
           <div class="logo-big">🔧</div>
           <h1>Hugo</h1>
-          <p>Tvůj servisní asistent.<br>K dispozici 24/7 pro partnery Best Series.</p>
+          <p>${t('app.tagline')}<br>${t('app.tagline2')}</p>
         </div>
         <div class="login-card">
           <div class="field">
-            <label>Přihlašovací jméno</label>
+            <label>${t('login.username')}</label>
             <input id="login-username" autocomplete="username" autocapitalize="none" autocorrect="off">
           </div>
           <div class="field">
-            <label>Heslo</label>
+            <label>${t('login.password')}</label>
             <input id="login-password" type="password" autocomplete="current-password">
           </div>
-          <button class="login-btn" id="login-btn">Přihlásit se</button>
+          <button class="login-btn" id="login-btn">${t('login.submit')}</button>
           <div class="login-error" id="login-error" style="display:none"></div>
         </div>
         <div class="login-foot">
-          Best Series s.r.o. · Servisní podpora<br>
-          Pokud nemáš účet, napiš na <a href="mailto:servis@bestseries.cz" style="color:var(--accent)">servis@bestseries.cz</a>.
+          ${t('login.footer')}<br>
+          ${t('login.no_account')} <a href="mailto:servis@bestseries.cz" style="color:var(--accent)">servis@bestseries.cz</a>.
         </div>
       </div>
     `;
+    const langBtn = document.getElementById('lang-btn');
+    if (langBtn) langBtn.addEventListener('click', showLanguageMenu);
     const btn = document.getElementById('login-btn');
     const errBox = document.getElementById('login-error');
     const uname = document.getElementById('login-username');
@@ -117,7 +176,7 @@
     async function submit() {
       errBox.style.display = 'none';
       btn.disabled = true;
-      btn.textContent = 'Přihlašuji…';
+      btn.textContent = t('login.submitting');
       try {
         const r = await fetch('/api/hugo/auth/login', {
           method: 'POST',
@@ -126,13 +185,13 @@
           body: JSON.stringify({ username: uname.value.trim(), password: pwd.value }),
         });
         const data = await r.json();
-        if (!r.ok) { throw new Error(data.error || 'Přihlášení selhalo'); }
+        if (!r.ok) { throw new Error(data.error || t('login.bad_credentials')); }
         if (data.token) setBearer(data.token);
         await bootstrap();
       } catch (err) {
         showError(err.message);
         btn.disabled = false;
-        btn.textContent = 'Přihlásit se';
+        btn.textContent = t('login.submit');
       }
     }
     btn.addEventListener('click', submit);
@@ -148,9 +207,10 @@
         <div class="hugo-logo">🔧</div>
         <div>
           <div class="hugo-name">Hugo</div>
-          <div class="hugo-tag">${escapeHtml(State.partner?.company?.name || State.partner?.display_name || 'Servisní asistent')}</div>
+          <div class="hugo-tag">${escapeHtml(State.partner?.company?.name || State.partner?.display_name || t('chat.tagline_default'))}</div>
         </div>
-        <button class="hugo-menu" id="new-chat-btn" title="Nová konverzace">＋</button>
+        ${langButtonHtml()}
+        <button class="hugo-menu" id="new-chat-btn" title="${t('chat.new_confirm')}" style="margin-left:8px;">＋</button>
       </div>
       <div class="hugo-content">
         <div class="chat-wrap">
@@ -158,12 +218,14 @@
         </div>
       </div>
       <div class="chat-input">
-        <textarea id="chat-text" placeholder="Napiš, s čím potřebuješ pomoct…" rows="1"></textarea>
-        <button class="send-btn" id="send-btn" title="Odeslat">→</button>
+        <textarea id="chat-text" placeholder="${t('chat.placeholder')}" rows="1"></textarea>
+        <button class="send-btn" id="send-btn" title="Send">→</button>
       </div>
       ${bottomNavHtml('chat')}
     `;
     attachBottomNav();
+    const langBtn = document.getElementById('lang-btn');
+    if (langBtn) langBtn.addEventListener('click', showLanguageMenu);
     const list = document.getElementById('chat-list');
     const text = document.getElementById('chat-text');
     const sendBtn = document.getElementById('send-btn');
@@ -172,31 +234,34 @@
     function rerender() {
       list.innerHTML = '';
       if (!State.messages.length && !State.sending) {
+        // Otázky pro suggestion chips — pošleme Hugovi celou větu (lokalizovanou).
+        // Hugo odpoví v aktuálním jazyce, takže i suggestion text píšeme v UI jazyce.
         list.innerHTML = `
           <div class="chat-empty">
             <div class="b">👋</div>
-            <div>Zeptej se Huga na cokoliv ohledně provozu prádlomatu.</div>
+            <div>${t('chat.empty_hello')}</div>
             <div class="chat-suggestions">
-              <button class="chat-sug" data-text="Buben dělá divný zvuk při ždímání. Co s tím?">🔊 Buben dělá divný zvuk při ždímání</button>
-              <button class="chat-sug" data-text="Displej nesvítí. Jak postupovat?">📺 Displej nesvítí</button>
-              <button class="chat-sug" data-text="Stroj nevpouští vodu — co kontrolovat?">💧 Stroj nevpouští vodu</button>
-              <button class="chat-sug" data-text="Jaký je doporučený interval údržby?">📅 Interval údržby</button>
+              <button class="chat-sug">${t('chat.sug.drum_noise')}</button>
+              <button class="chat-sug">${t('chat.sug.display_off')}</button>
+              <button class="chat-sug">${t('chat.sug.no_water')}</button>
+              <button class="chat-sug">${t('chat.sug.maintenance')}</button>
             </div>
           </div>
         `;
         list.querySelectorAll('.chat-sug').forEach(btn => {
           btn.addEventListener('click', () => {
-            text.value = btn.dataset.text;
+            // Vezmi text z popisku tlačítka (odstraň úvodní emoji + mezeru)
+            text.value = btn.textContent.replace(/^\s*\p{Emoji}+\s*/u, '').trim();
             send();
           });
         });
       } else {
         State.messages.forEach(m => list.appendChild(messageBubble(m)));
         if (State.sending) {
-          const t = document.createElement('div');
-          t.className = 'msg-row assistant';
-          t.innerHTML = `<div class="msg-bubble"><span class="typing">Hugo přemýšlí</span></div>`;
-          list.appendChild(t);
+          const node = document.createElement('div');
+          node.className = 'msg-row assistant';
+          node.innerHTML = `<div class="msg-bubble"><span class="typing">${t('chat.thinking')}</span></div>`;
+          list.appendChild(node);
         }
         list.scrollTop = list.scrollHeight;
       }
@@ -245,7 +310,7 @@
     });
     sendBtn.addEventListener('click', send);
     newBtn.addEventListener('click', () => {
-      if (State.messages.length && !confirm('Začít novou konverzaci? Aktuální zůstane v historii.')) return;
+      if (State.messages.length && !confirm(t('chat.new_confirm'))) return;
       State.sessionId = null;
       State.messages = [];
       rerender();
@@ -286,13 +351,13 @@
       fb.className = 'msg-feedback';
       const helpful = document.createElement('button');
       helpful.className = 'fb-btn' + (m.feedback === 'helpful' ? ' active' : '');
-      helpful.textContent = '👍 Pomohlo';
+      helpful.textContent = t('chat.helpful');
       helpful.addEventListener('click', async () => {
         try { await api('/api/hugo/messages/' + m.id + '/feedback', { method: 'POST', body: { feedback: 'helpful' } }); m.feedback = 'helpful'; render(); } catch (_) {}
       });
       const notHelpful = document.createElement('button');
       notHelpful.className = 'fb-btn' + (m.feedback === 'not_helpful' ? ' active' : '');
-      notHelpful.textContent = '👎 Nepomohlo';
+      notHelpful.textContent = t('chat.not_helpful');
       notHelpful.addEventListener('click', async () => {
         try { await api('/api/hugo/messages/' + m.id + '/feedback', { method: 'POST', body: { feedback: 'not_helpful' } }); m.feedback = 'not_helpful'; render(); } catch (_) {}
       });
@@ -311,19 +376,22 @@
       <div class="hugo-top">
         <div class="hugo-logo">📚</div>
         <div>
-          <div class="hugo-name">Návody</div>
-          <div class="hugo-tag">Pro tvoje produkty</div>
+          <div class="hugo-name">${t('guides.title')}</div>
+          <div class="hugo-tag">${t('guides.subtitle')}</div>
         </div>
+        ${langButtonHtml()}
       </div>
       <div class="hugo-content">
         <div class="guides-wrap">
-          <input class="guides-search" id="guides-q" placeholder="🔍 Hledat v návodech…">
-          <div id="guides-list">Načítám…</div>
+          <input class="guides-search" id="guides-q" placeholder="${t('guides.search')}">
+          <div id="guides-list">${t('article.loading')}</div>
         </div>
       </div>
       ${bottomNavHtml('guides')}
     `;
     attachBottomNav();
+    const langBtn = document.getElementById('lang-btn');
+    if (langBtn) langBtn.addEventListener('click', showLanguageMenu);
 
     const listEl = document.getElementById('guides-list');
     const searchEl = document.getElementById('guides-q');
@@ -335,10 +403,11 @@
         if (q) params.set('q', q);
         const items = await api('/api/hugo/articles?' + params.toString());
         if (!items.length) {
-          listEl.innerHTML = `<div class="chat-empty"><div class="b">📭</div>Žádné návody pro tvoje produkty.</div>`;
+          listEl.innerHTML = `<div class="chat-empty"><div class="b">📭</div>${t('guides.empty')}</div>`;
           return;
         }
-        const kindLabels = { GUIDE: 'Návod', CASE: 'Případ', CHECKLIST: 'Kontrola', FAQ: 'FAQ' };
+        // Kindy zatím necháváme univerzálně (rozumějí všichni). Lze později rozšířit.
+        const kindLabels = { GUIDE: 'Guide', CASE: 'Case', CHECKLIST: 'Checklist', FAQ: 'FAQ' };
         listEl.innerHTML = items.map(a => `
           <div class="guide-card" data-id="${a.id}">
             <div>
@@ -383,16 +452,16 @@
     root.innerHTML = `
       <div class="hugo-content">
         <div class="article-view">
-          <button class="back-btn" id="back-btn">← Zpět</button>
+          <button class="back-btn" id="back-btn">${t('article.back')}</button>
           ${a ? `
             <h1>${escapeHtml(a.title)}</h1>
             ${a.summary ? '<p style="color:var(--text2);font-style:italic;">' + escapeHtml(a.summary) + '</p>' : ''}
             <div>${mdToHtml(a.body_md)}</div>
             ${a.attachments && a.attachments.length ? `
-              <h2>📎 Přílohy</h2>
+              <h2>${t('article.attachments')}</h2>
               <ul>${a.attachments.map(at => `<li><a href="${escapeHtml(at.url || at.file_path || '#')}" target="_blank">${escapeHtml(at.title)}</a></li>`).join('')}</ul>
             ` : ''}
-          ` : '<div class="chat-empty">Načítám…</div>'}
+          ` : `<div class="chat-empty">${t('article.loading')}</div>`}
         </div>
       </div>
       ${bottomNavHtml('guides')}
@@ -409,30 +478,39 @@
 
   function renderProfile(root) {
     const p = State.partner || {};
-    const productList = (p.products || []).map(pr => `#${pr.product_id}${pr.serial_no ? ' (' + pr.serial_no + ')' : ''}`).join(', ') || '—';
+    const dash = t('common.dash') || '—';
+    const productList = (p.products || []).map(pr => `#${pr.product_id}${pr.serial_no ? ' (' + pr.serial_no + ')' : ''}`).join(', ') || dash;
+    const curLang = (window.HugoI18n && window.HugoI18n.getLang()) || 'cs';
+    const curLangObj = window.HugoI18n && window.HugoI18n.listLangs().find(l => l.code === curLang);
+    const curLangLabel = curLangObj ? `${curLangObj.flag} ${curLangObj.name}` : curLang;
     root.innerHTML = `
       <div class="hugo-top">
         <div class="hugo-logo">👤</div>
         <div>
-          <div class="hugo-name">${escapeHtml(p.display_name || '—')}</div>
+          <div class="hugo-name">${escapeHtml(p.display_name || dash)}</div>
           <div class="hugo-tag">${escapeHtml(p.company?.name || p.username || '')}</div>
         </div>
       </div>
       <div class="hugo-content">
         <div class="profile-wrap">
-          <div class="profile-row"><div><div class="label">Username</div><div class="value">${escapeHtml(p.username || '—')}</div></div></div>
-          <div class="profile-row"><div><div class="label">Email</div><div class="value">${escapeHtml(p.email || '—')}</div></div></div>
-          <div class="profile-row"><div><div class="label">Telefon</div><div class="value">${escapeHtml(p.phone || '—')}</div></div></div>
-          <div class="profile-row"><div><div class="label">Firma</div><div class="value">${escapeHtml(p.company?.name || '—')}</div></div></div>
-          <div class="profile-row"><div><div class="label">Tvoje produkty</div><div class="value">${escapeHtml(productList)}</div></div></div>
-          <button class="logout-btn" id="logout-btn">Odhlásit se</button>
+          <div class="profile-row"><div><div class="label">${t('profile.username')}</div><div class="value">${escapeHtml(p.username || dash)}</div></div></div>
+          <div class="profile-row"><div><div class="label">${t('profile.email')}</div><div class="value">${escapeHtml(p.email || dash)}</div></div></div>
+          <div class="profile-row"><div><div class="label">${t('profile.phone')}</div><div class="value">${escapeHtml(p.phone || dash)}</div></div></div>
+          <div class="profile-row"><div><div class="label">${t('profile.company')}</div><div class="value">${escapeHtml(p.company?.name || dash)}</div></div></div>
+          <div class="profile-row"><div><div class="label">${t('profile.products')}</div><div class="value">${escapeHtml(productList)}</div></div></div>
+          <button class="profile-row" id="lang-row" style="border:1px solid var(--border); width:100%; cursor:pointer;">
+            <div style="text-align:left;"><div class="label">${t('profile.language')}</div><div class="value">${curLangLabel}</div></div>
+            <div style="opacity:0.5; font-size:18px;">›</div>
+          </button>
+          <button class="logout-btn" id="logout-btn">${t('profile.logout')}</button>
         </div>
       </div>
       ${bottomNavHtml('profile')}
     `;
     attachBottomNav();
+    document.getElementById('lang-row').addEventListener('click', showLanguageMenu);
     document.getElementById('logout-btn').addEventListener('click', async () => {
-      if (!confirm('Opravdu se odhlásit?')) return;
+      if (!confirm(t('profile.logout_confirm'))) return;
       try { await fetch('/api/hugo/auth/logout', { method: 'POST', credentials: 'include' }); } catch (_) {}
       clearBearer();
       State.partner = null;
@@ -448,9 +526,9 @@
   function bottomNavHtml(active) {
     return `
       <div class="bottom-nav">
-        <button class="bn-item ${active === 'chat' ? 'active' : ''}" data-view="chat"><span class="ico">💬</span>Hugo</button>
-        <button class="bn-item ${active === 'guides' ? 'active' : ''}" data-view="guides"><span class="ico">📚</span>Návody</button>
-        <button class="bn-item ${active === 'profile' ? 'active' : ''}" data-view="profile"><span class="ico">👤</span>Profil</button>
+        <button class="bn-item ${active === 'chat' ? 'active' : ''}" data-view="chat"><span class="ico">💬</span>${t('nav.chat')}</button>
+        <button class="bn-item ${active === 'guides' ? 'active' : ''}" data-view="guides"><span class="ico">📚</span>${t('nav.guides')}</button>
+        <button class="bn-item ${active === 'profile' ? 'active' : ''}" data-view="profile"><span class="ico">👤</span>${t('nav.profile')}</button>
       </div>
     `;
   }
