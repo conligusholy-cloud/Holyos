@@ -553,17 +553,64 @@
 
   // ─── PARTNEŘI ────────────────────────────────────────────────────────────
 
-  // Copy odkazu na Huga (banner v tabu Partneři)
+  // Robustní copy-to-clipboard — fallback přes execCommand pro HTTP / staré prohlížeče
+  async function copyText(text) {
+    // Cesta 1: moderní async API (vyžaduje HTTPS nebo localhost)
+    if (navigator.clipboard && window.isSecureContext) {
+      try {
+        await navigator.clipboard.writeText(text);
+        return true;
+      } catch (_) { /* spadneme na fallback */ }
+    }
+    // Cesta 2: skrytá textarea + execCommand (funguje skoro všude)
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.setAttribute('readonly', '');
+      ta.style.position = 'fixed';
+      ta.style.top = '0';
+      ta.style.left = '0';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      ta.setSelectionRange(0, text.length);
+      const ok = document.execCommand('copy');
+      document.body.removeChild(ta);
+      if (ok) return true;
+    } catch (_) {}
+    return false;
+  }
+
+  function visualConfirm(btn, okText, originalText) {
+    const orig = originalText || btn.innerHTML;
+    btn.innerHTML = okText;
+    setTimeout(() => { btn.innerHTML = orig; }, 1500);
+  }
+
+  // Napojení copy tlačítka v banneru (DOMContentLoaded už proběhl než se sem dostaneme,
+  // ale element je v staticky vyrenderovaném HTML, takže ho najdeme rovnou).
+  (function attachShareBannerCopy() {
+    const btn = document.getElementById('hugo-copy-btn');
+    if (!btn) return;
+    btn.addEventListener('click', async () => {
+      const url = 'https://bestseries.cash/hugo';
+      const ok = await copyText(url);
+      if (ok) {
+        visualConfirm(btn, '✓ Zkopírováno');
+      } else {
+        // Poslední záchrana — prompt s předvybraným textem, který může ručně Ctrl+C
+        prompt('Stiskni Ctrl+C pro zkopírování:', url);
+      }
+    });
+  })();
+
+  // Zachováno pro starší volání (modul Partner detail) — používá stejnou robustní funkci.
   window.__servis_copyHugoUrl = async function (btn) {
     const url = 'https://bestseries.cash/hugo';
-    try {
-      await navigator.clipboard.writeText(url);
-      const orig = btn.innerHTML;
-      btn.innerHTML = '✓ Zkopírováno';
-      setTimeout(() => { btn.innerHTML = orig; }, 1500);
-    } catch (_) {
-      prompt('Zkopíruj URL ručně:', url);
-    }
+    const ok = await copyText(url);
+    if (ok) visualConfirm(btn, '✓ Zkopírováno');
+    else prompt('Stiskni Ctrl+C:', url);
   };
 
   window.loadPartners = async function () {
@@ -641,32 +688,32 @@
         <div class="form-row">
           <label>Výchozí jazyk</label>
           <select id="p-lang">
-            <option value="cs" ${data.language==='cs'?'selected':''}>🇨🇿 Čeština</option>
-            <option value="sk" ${data.language==='sk'?'selected':''}>🇸🇰 Slovenčina</option>
-            <option value="en" ${data.language==='en'?'selected':''}>🇬🇧 English</option>
-            <option value="de" ${data.language==='de'?'selected':''}>🇩🇪 Deutsch</option>
-            <option value="pl" ${data.language==='pl'?'selected':''}>🇵🇱 Polski</option>
-            <option value="hu" ${data.language==='hu'?'selected':''}>🇭🇺 Magyar</option>
-            <option value="ro" ${data.language==='ro'?'selected':''}>🇷🇴 Română</option>
-            <option value="hr" ${data.language==='hr'?'selected':''}>🇭🇷 Hrvatski</option>
-            <option value="sl" ${data.language==='sl'?'selected':''}>🇸🇮 Slovenščina</option>
-            <option value="sr" ${data.language==='sr'?'selected':''}>🇷🇸 Srpski</option>
-            <option value="bg" ${data.language==='bg'?'selected':''}>🇧🇬 Български</option>
-            <option value="fr" ${data.language==='fr'?'selected':''}>🇫🇷 Français</option>
-            <option value="es" ${data.language==='es'?'selected':''}>🇪🇸 Español</option>
-            <option value="it" ${data.language==='it'?'selected':''}>🇮🇹 Italiano</option>
-            <option value="pt" ${data.language==='pt'?'selected':''}>🇵🇹 Português</option>
-            <option value="nl" ${data.language==='nl'?'selected':''}>🇳🇱 Nederlands</option>
-            <option value="el" ${data.language==='el'?'selected':''}>🇬🇷 Ελληνικά</option>
-            <option value="da" ${data.language==='da'?'selected':''}>🇩🇰 Dansk</option>
-            <option value="sv" ${data.language==='sv'?'selected':''}>🇸🇪 Svenska</option>
-            <option value="no" ${data.language==='no'?'selected':''}>🇳🇴 Norsk</option>
-            <option value="fi" ${data.language==='fi'?'selected':''}>🇫🇮 Suomi</option>
-            <option value="et" ${data.language==='et'?'selected':''}>🇪🇪 Eesti</option>
-            <option value="lv" ${data.language==='lv'?'selected':''}>🇱🇻 Latviešu</option>
-            <option value="lt" ${data.language==='lt'?'selected':''}>🇱🇹 Lietuvių</option>
-            <option value="uk" ${data.language==='uk'?'selected':''}>🇺🇦 Українська</option>
-            <option value="ru" ${data.language==='ru'?'selected':''}>🇷🇺 Русский</option>
+            <option value="cs" ${data.language==='cs'?'selected':''}>CZ — Čeština</option>
+            <option value="sk" ${data.language==='sk'?'selected':''}>SK — Slovenčina</option>
+            <option value="en" ${data.language==='en'?'selected':''}>EN — English</option>
+            <option value="de" ${data.language==='de'?'selected':''}>DE — Deutsch</option>
+            <option value="pl" ${data.language==='pl'?'selected':''}>PL — Polski</option>
+            <option value="hu" ${data.language==='hu'?'selected':''}>HU — Magyar</option>
+            <option value="ro" ${data.language==='ro'?'selected':''}>RO — Română</option>
+            <option value="hr" ${data.language==='hr'?'selected':''}>HR — Hrvatski</option>
+            <option value="sl" ${data.language==='sl'?'selected':''}>SI — Slovenščina</option>
+            <option value="sr" ${data.language==='sr'?'selected':''}>RS — Srpski</option>
+            <option value="bg" ${data.language==='bg'?'selected':''}>BG — Български</option>
+            <option value="fr" ${data.language==='fr'?'selected':''}>FR — Français</option>
+            <option value="es" ${data.language==='es'?'selected':''}>ES — Español</option>
+            <option value="it" ${data.language==='it'?'selected':''}>IT — Italiano</option>
+            <option value="pt" ${data.language==='pt'?'selected':''}>PT — Português</option>
+            <option value="nl" ${data.language==='nl'?'selected':''}>NL — Nederlands</option>
+            <option value="el" ${data.language==='el'?'selected':''}>GR — Ελληνικά</option>
+            <option value="da" ${data.language==='da'?'selected':''}>DK — Dansk</option>
+            <option value="sv" ${data.language==='sv'?'selected':''}>SE — Svenska</option>
+            <option value="no" ${data.language==='no'?'selected':''}>NO — Norsk</option>
+            <option value="fi" ${data.language==='fi'?'selected':''}>FI — Suomi</option>
+            <option value="et" ${data.language==='et'?'selected':''}>EE — Eesti</option>
+            <option value="lv" ${data.language==='lv'?'selected':''}>LV — Latviešu</option>
+            <option value="lt" ${data.language==='lt'?'selected':''}>LT — Lietuvių</option>
+            <option value="uk" ${data.language==='uk'?'selected':''}>UA — Українська</option>
+            <option value="ru" ${data.language==='ru'?'selected':''}>RU — Русский</option>
           </select>
         </div>
         <div class="form-row">
