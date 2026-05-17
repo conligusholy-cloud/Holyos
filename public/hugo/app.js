@@ -101,7 +101,7 @@
     window.HugoI18n.listLangs().forEach(L => {
       const btn = document.createElement('button');
       btn.className = 'lang-item' + (L.code === cur ? ' active' : '');
-      btn.innerHTML = `<span class="flag">${L.flag}</span><span>${escapeHtml(L.name)}</span>`;
+      btn.innerHTML = `<span class="flag">${window.HugoI18n.flagImg(L, 28)}</span><span>${escapeHtml(L.name)}</span>`;
       btn.addEventListener('click', async () => {
         overlay.remove();
         await changeLanguage(L.code);
@@ -116,7 +116,7 @@
     const cur = window.HugoI18n.getLang();
     const L = window.HugoI18n.listLangs().find(x => x.code === cur);
     if (!L) return '';
-    return `<button class="lang-btn" id="lang-btn" title="${escapeHtml(L.name)}">${L.flag} <span class="caret">▾</span></button>`;
+    return `<button class="lang-btn" id="lang-btn" title="${escapeHtml(L.name)}">${window.HugoI18n.flagImg(L, 22)} <span class="caret">▾</span></button>`;
   }
 
   // ─── Render ───────────────────────────────────────────────────────────────
@@ -482,7 +482,7 @@
     const productList = (p.products || []).map(pr => `#${pr.product_id}${pr.serial_no ? ' (' + pr.serial_no + ')' : ''}`).join(', ') || dash;
     const curLang = (window.HugoI18n && window.HugoI18n.getLang()) || 'cs';
     const curLangObj = window.HugoI18n && window.HugoI18n.listLangs().find(l => l.code === curLang);
-    const curLangLabel = curLangObj ? `${curLangObj.flag} ${curLangObj.name}` : curLang;
+    const curLangLabel = curLangObj ? `${window.HugoI18n.flagImg(curLangObj, 22)} ${escapeHtml(curLangObj.name)}` : curLang;
     root.innerHTML = `
       <div class="hugo-top">
         <div class="hugo-logo">👤</div>

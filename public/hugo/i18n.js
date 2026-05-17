@@ -6,39 +6,54 @@
 (function (global) {
   'use strict';
 
+  // country = ISO 3166-1 alpha-2 (lowercase) — používáme pro načítání PNG vlajek
+  // z flagcdn.com (free CDN, ~1 kB na obrázek). Windows totiž nemá font pro
+  // emoji vlajky, takže emoji vykresluje jen jako 2-písmenné kódy "CZ", "SK"…
   const LANGS = [
     // Středoevropské + Best Series trhy
-    { code: 'cs', name: 'Čeština',     flag: '🇨🇿' },
-    { code: 'sk', name: 'Slovenčina',  flag: '🇸🇰' },
-    { code: 'en', name: 'English',     flag: '🇬🇧' },
-    { code: 'de', name: 'Deutsch',     flag: '🇩🇪' },
-    { code: 'pl', name: 'Polski',      flag: '🇵🇱' },
-    { code: 'hu', name: 'Magyar',      flag: '🇭🇺' },
-    { code: 'ro', name: 'Română',      flag: '🇷🇴' },
-    { code: 'hr', name: 'Hrvatski',    flag: '🇭🇷' },
-    { code: 'sl', name: 'Slovenščina', flag: '🇸🇮' },
-    { code: 'sr', name: 'Srpski',      flag: '🇷🇸' },
-    { code: 'bg', name: 'Български',   flag: '🇧🇬' },
+    { code: 'cs', name: 'Čeština',     country: 'cz' },
+    { code: 'sk', name: 'Slovenčina',  country: 'sk' },
+    { code: 'en', name: 'English',     country: 'gb' },
+    { code: 'de', name: 'Deutsch',     country: 'de' },
+    { code: 'pl', name: 'Polski',      country: 'pl' },
+    { code: 'hu', name: 'Magyar',      country: 'hu' },
+    { code: 'ro', name: 'Română',      country: 'ro' },
+    { code: 'hr', name: 'Hrvatski',    country: 'hr' },
+    { code: 'sl', name: 'Slovenščina', country: 'si' },
+    { code: 'sr', name: 'Srpski',      country: 'rs' },
+    { code: 'bg', name: 'Български',   country: 'bg' },
     // Západ
-    { code: 'fr', name: 'Français',    flag: '🇫🇷' },
-    { code: 'es', name: 'Español',     flag: '🇪🇸' },
-    { code: 'it', name: 'Italiano',    flag: '🇮🇹' },
-    { code: 'pt', name: 'Português',   flag: '🇵🇹' },
-    { code: 'nl', name: 'Nederlands',  flag: '🇳🇱' },
-    { code: 'el', name: 'Ελληνικά',    flag: '🇬🇷' },
+    { code: 'fr', name: 'Français',    country: 'fr' },
+    { code: 'es', name: 'Español',     country: 'es' },
+    { code: 'it', name: 'Italiano',    country: 'it' },
+    { code: 'pt', name: 'Português',   country: 'pt' },
+    { code: 'nl', name: 'Nederlands',  country: 'nl' },
+    { code: 'el', name: 'Ελληνικά',    country: 'gr' },
     // Sever
-    { code: 'da', name: 'Dansk',       flag: '🇩🇰' },
-    { code: 'sv', name: 'Svenska',     flag: '🇸🇪' },
-    { code: 'no', name: 'Norsk',       flag: '🇳🇴' },
-    { code: 'fi', name: 'Suomi',       flag: '🇫🇮' },
+    { code: 'da', name: 'Dansk',       country: 'dk' },
+    { code: 'sv', name: 'Svenska',     country: 'se' },
+    { code: 'no', name: 'Norsk',       country: 'no' },
+    { code: 'fi', name: 'Suomi',       country: 'fi' },
     // Pobaltí
-    { code: 'et', name: 'Eesti',       flag: '🇪🇪' },
-    { code: 'lv', name: 'Latviešu',    flag: '🇱🇻' },
-    { code: 'lt', name: 'Lietuvių',    flag: '🇱🇹' },
+    { code: 'et', name: 'Eesti',       country: 'ee' },
+    { code: 'lv', name: 'Latviešu',    country: 'lv' },
+    { code: 'lt', name: 'Lietuvių',    country: 'lt' },
     // Východ
-    { code: 'uk', name: 'Українська',  flag: '🇺🇦' },
-    { code: 'ru', name: 'Русский',     flag: '🇷🇺' },
+    { code: 'uk', name: 'Українська',  country: 'ua' },
+    { code: 'ru', name: 'Русский',     country: 'ru' },
   ];
+
+  // Vrátí HTML img tag s vlajkou pro daný jazyk.
+  // Velikost je responsive — vlevo low-DPI w40, retina dotáhne přes srcset.
+  function flagImg(L, size) {
+    if (!L) return '';
+    const cc = L.country || L.code;
+    const px = size || 22;
+    return `<img class="hugo-flag" src="https://flagcdn.com/w40/${cc}.png" `
+      + `srcset="https://flagcdn.com/w80/${cc}.png 2x, https://flagcdn.com/w160/${cc}.png 4x" `
+      + `alt="${cc.toUpperCase()}" `
+      + `style="width:${px}px;height:auto;border-radius:3px;vertical-align:middle;box-shadow:0 0 0 1px rgba(255,255,255,0.08);">`;
+  }
 
   // Sada překládaných stringů. Key = path-like identifier.
   // Pravidlo: pokud klíč chybí v některém jazyce → fallback na 'en' → poslední fallback na 'cs'.
@@ -746,5 +761,5 @@
 
   function listLangs() { return LANGS.slice(); }
 
-  global.HugoI18n = { t, setLang, getLang, listLangs };
+  global.HugoI18n = { t, setLang, getLang, listLangs, flagImg };
 })(window);

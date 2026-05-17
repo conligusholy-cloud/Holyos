@@ -453,12 +453,14 @@ app.get('/share/tools/:tool/:token', (req, res) => {
 // Hugo — AI servisák pro partnery (mountnuté na bestseries.cash/hugo).
 // Stránka má vlastní mobile-first UI, žádný HolyOS sidebar/topbar.
 // SPA-like routing: /hugo, /hugo/login, /hugo/chat → vždy index.html, klient pak řeší tab.
-app.get('/hugo', (req, res) => {
+// HTML servírujeme s no-cache, ať browser vždy vidí aktuální ?v= cache-bust query
+// na script tagy. JS soubory si pak cachovat může — query string je sám invaliduje.
+function serveHugoHtml(req, res) {
+  res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
   res.sendFile(path.join(__dirname, 'public', 'hugo', 'index.html'));
-});
-app.get('/hugo/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'hugo', 'index.html'));
-});
+}
+app.get('/hugo', serveHugoHtml);
+app.get('/hugo/', serveHugoHtml);
 
 // ─── API Routes ────────────────────────────────────────────────────────────
 
