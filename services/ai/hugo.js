@@ -23,12 +23,33 @@ function buildSystemPrompt({ partner, language, retrievedArticles }) {
 
   const lang = (language || partner?.language || 'cs').toLowerCase();
   const langInstruction = ({
-    cs: 'Odpovídej česky.',
+    cs: 'Odpovídej česky (Czech).',
+    sk: 'Odpovedaj po slovensky (Slovak).',
     en: 'Reply in English.',
-    de: 'Antworte auf Deutsch.',
-    pl: 'Odpowiadaj po polsku.',
-    sk: 'Odpovedaj po slovensky.',
-  })[lang] || 'Odpovídej v jazyce uživatele.';
+    de: 'Antworte auf Deutsch (German).',
+    pl: 'Odpowiadaj po polsku (Polish).',
+    hu: 'Válaszolj magyarul (Hungarian).',
+    ro: 'Răspunde în limba română (Romanian).',
+    hr: 'Odgovaraj na hrvatskom (Croatian).',
+    sl: 'Odgovori v slovenščini (Slovenian).',
+    sr: 'Одговарај на српском (Serbian).',
+    bg: 'Отговаряй на български (Bulgarian).',
+    es: 'Responde en español (Spanish).',
+    it: 'Rispondi in italiano (Italian).',
+    fr: 'Réponds en français (French).',
+    pt: 'Responde em português (Portuguese).',
+    nl: 'Antwoord in het Nederlands (Dutch).',
+    el: 'Απάντησε στα ελληνικά (Greek).',
+    da: 'Svar på dansk (Danish).',
+    sv: 'Svara på svenska (Swedish).',
+    no: 'Svar på norsk (Norwegian).',
+    fi: 'Vastaa suomeksi (Finnish).',
+    et: 'Vasta eesti keeles (Estonian).',
+    lv: 'Atbildi latviešu valodā (Latvian).',
+    lt: 'Atsakyk lietuviškai (Lithuanian).',
+    ru: 'Отвечай по-русски (Russian).',
+    uk: 'Відповідай українською (Ukrainian).',
+  })[lang] || `Reply in the user's language (detect from their message).`;
 
   const knowledgeBlock = (retrievedArticles && retrievedArticles.length)
     ? retrievedArticles.map((a, i) => `

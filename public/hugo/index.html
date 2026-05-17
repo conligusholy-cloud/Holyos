@@ -43,6 +43,31 @@
     .hugo-tag { font-size: 11px; color: var(--text2); margin-top: 1px; }
     .hugo-menu { margin-left: auto; background: transparent; border: none; color: var(--text2); cursor: pointer; padding: 6px; font-size: 22px; }
 
+    /* Language switcher */
+    .lang-btn {
+      background: transparent; border: 1px solid var(--border); border-radius: 18px;
+      padding: 6px 12px; color: var(--text); cursor: pointer; font-size: 14px;
+      display: inline-flex; align-items: center; gap: 6px; margin-left: auto;
+    }
+    .lang-btn .caret { font-size: 10px; opacity: 0.6; }
+    .lang-menu {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.55); z-index: 1000;
+      display: flex; align-items: flex-end; padding-bottom: env(safe-area-inset-bottom);
+    }
+    .lang-menu-inner {
+      background: var(--surface); width: 100%; max-width: 720px; margin: 0 auto;
+      border-radius: 18px 18px 0 0; padding: 14px; max-height: 70vh; overflow-y: auto;
+    }
+    .lang-menu-title { font-size: 12px; color: var(--text2); text-transform: uppercase; letter-spacing: 0.5px; padding: 6px 10px 10px; }
+    .lang-item {
+      display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 10px;
+      cursor: pointer; background: transparent; border: none; color: var(--text); width: 100%;
+      text-align: left; font-size: 15px;
+    }
+    .lang-item:hover { background: var(--surface2); }
+    .lang-item.active { background: rgba(34,211,238,0.12); color: var(--accent); font-weight: 600; }
+    .lang-item .flag { font-size: 22px; line-height: 1; }
+
     .hugo-content { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
 
     /* LOGIN screen */
@@ -213,6 +238,7 @@
     <!-- Vykresleno JS -->
   </div>
 
+  <script src="/hugo/i18n.js"></script>
   <script src="/hugo/app.js"></script>
 </body>
 </html>
