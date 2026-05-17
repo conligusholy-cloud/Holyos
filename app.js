@@ -61,6 +61,7 @@ const businessToolsRoutes = require('./routes/business-tools.routes');
 const siteDevelopmentRoutes = require('./routes/site-development.routes');
 const serviceRoutes = require('./routes/service.routes');
 const hugoRoutes = require('./routes/hugo.routes');
+const velinRoutes = require('./routes/velin.routes');
 
 // ─── Inicializace aplikace ────────────────────────────────────────────────
 
@@ -497,6 +498,7 @@ app.use('/api/tools', businessToolsRoutes); // Obchodní pomůcky (sales-aid)
 app.use('/api/sites', siteDevelopmentRoutes); // Site Development — řízení expanze (vyhledávání lokalit, pozemků, smluv)
 app.use('/api/service', serviceRoutes); // Servis — interní admin (znalostní báze pro servisáky)
 app.use('/api/hugo', hugoRoutes);        // Hugo AI servisák — partner login + chat (bestseries.cash)
+app.use('/api/velin', velinRoutes); // Velín — mobilní aplikace pro řízení dne kolegů
 
 // ─── Legacy storage proxy (kompatibilita s persistent-storage.js) ──────────
 
@@ -715,6 +717,12 @@ app.listen(PORT, async () => {
     slotReservationWorker.start();
   } catch (err) {
     console.error('[app] slot-reservation-worker nelze spustit:', err.message);
+  }
+  try {
+    const velinScheduler = require('./services/workers/velin-scheduler');
+    velinScheduler.start();
+  } catch (err) {
+    console.error('[app] velin-scheduler nelze spustit:', err.message);
   }
   console.log('=========================================');
   console.log('  HolyOS v0.5.0');
