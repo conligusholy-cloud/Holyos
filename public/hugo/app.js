@@ -234,27 +234,13 @@
     function rerender() {
       list.innerHTML = '';
       if (!State.messages.length && !State.sending) {
-        // Otázky pro suggestion chips — pošleme Hugovi celou větu (lokalizovanou).
-        // Hugo odpoví v aktuálním jazyce, takže i suggestion text píšeme v UI jazyce.
+        // Prázdný stav — jen pozdrav, žádné suggestion chips (uživatel je nechce).
         list.innerHTML = `
           <div class="chat-empty">
             <div class="b">👋</div>
             <div>${t('chat.empty_hello')}</div>
-            <div class="chat-suggestions">
-              <button class="chat-sug">${t('chat.sug.drum_noise')}</button>
-              <button class="chat-sug">${t('chat.sug.display_off')}</button>
-              <button class="chat-sug">${t('chat.sug.no_water')}</button>
-              <button class="chat-sug">${t('chat.sug.maintenance')}</button>
-            </div>
           </div>
         `;
-        list.querySelectorAll('.chat-sug').forEach(btn => {
-          btn.addEventListener('click', () => {
-            // Vezmi text z popisku tlačítka (odstraň úvodní emoji + mezeru)
-            text.value = btn.textContent.replace(/^\s*\p{Emoji}+\s*/u, '').trim();
-            send();
-          });
-        });
       } else {
         State.messages.forEach(m => list.appendChild(messageBubble(m)));
         if (State.sending) {
