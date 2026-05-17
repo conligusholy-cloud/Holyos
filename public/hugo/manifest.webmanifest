@@ -1,0 +1,20 @@
+{
+  "name": "Hugo — servisní asistent",
+  "short_name": "Hugo",
+  "description": "AI servisní asistent pro partnery Best Series. Návody, troubleshooting, kontrolní postupy 24/7.",
+  "start_url": "/hugo",
+  "scope": "/hugo",
+  "display": "standalone",
+  "background_color": "#0b1020",
+  "theme_color": "#22d3ee",
+  "lang": "cs",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/hugo/icon-192.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

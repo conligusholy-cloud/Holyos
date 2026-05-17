@@ -209,6 +209,9 @@ model Person {
   sales_contacts_assigned SalesContact[]     @relation("SalesContactAssignee")
   sales_notes_written     SalesContactNote[] @relation("SalesNoteAuthor")
   sales_events_organized  SalesEvent[]       @relation("SalesEventOrganizer")
+  // Obchod — M:N přidělení obchodníka ke kontaktu + jeho provize
+  sales_assignments         SalesContactAssignment[] @relation("SalesAssignmentPerson")
+  sales_assignments_created SalesContactAssignment[] @relation("SalesAssignmentCreator")
 
   // Site Development — vyhledávání a řízení lokalit pro prádlomaty
   sites_assigned         Site[]              @relation("SiteAssignee")
@@ -533,6 +536,9 @@ model Company {
 
   // Site Development — firma jako vlastník / pronajímatel lokality
   sites_owned             Site[]               @relation("SiteCompany")
+
+  // Servis — partneři (PartnerAccount) provázaní s touto firmou (Hugo login)
+  partner_accounts        PartnerAccount[]     @relation("PartnerCompany")
 
   @@index([ico])
   @@index([type])
@@ -4196,6 +4202,7 @@ model SalesContact {
 
   sales_notes  SalesContactNote[]
   sales_events SalesEvent[]
+  assignments  SalesContactAssignment[]
 
   @@index([status])
   @@index([source])
@@ -4255,6 +4262,40 @@ model SalesEvent {
   @@index([start_at])
   @@index([status])
   @@map("sales_events")
+}
+
+// SalesContactAssignment — M:N přidělení obchodníka ke kontaktu + provize
+// Jeden kontakt může mít více obchodníků (např. sdílený lead). Vedoucí obchodu
+// nebo admin zde nastavují individuální % provize. Po zaplacení objednávky se
+// hodnota uzamkne (locked_*) a další změny defaultu už neovlivní tento obchod.
+model SalesContactAssignment {
+  id         Int          @id @default(autoincrement())
+  contact_id Int
+  contact    SalesContact @relation(fields: [contact_id], references: [id], onDelete: Cascade)
+
+  person_id Int
+  person    Person @relation("SalesAssignmentPerson", fields: [person_id], references: [id], onDelete: Cascade)
+
+  // Aktuální (default) % provize. Nastavuje vedoucí, mění se libovolně.
+  commission_pct Decimal? @db.Decimal(5, 2)
+
+  // Zafixovaná % v okamžiku, kdy byl obchod uzavřen (objednávka zaplacena).
+  // Pokud je vyplněno, považuje se za neměnné — slouží pro výpočet vyplacených
+  // provizí. Změna commission_pct po locked_at už neovlivní tento záznam.
+  commission_locked_pct Decimal?  @db.Decimal(5, 2)
+  commission_locked_at  DateTime?
+
+  // Kdo přidělil (vedoucí / admin)
+  assigned_by_id Int?
+  assigned_by    Person? @relation("SalesAssignmentCreator", fields: [assigned_by_id], references: [id], onDelete: SetNull)
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@unique([contact_id, person_id])
+  @@index([contact_id])
+  @@index([person_id])
+  @@map("sales_contact_assignments")
 }
 
 // =============================================================================
@@ -4435,4 +4476,308 @@ model SiteDocument {
   @@index([site_id])
   @@index([doc_type])
   @@map("site_documents")
+}
+
+// =============================================================================
+// SERVIS — Znalostní báze pro servisáky + AI chat Hugo pro partnery
+// =============================================================================
+// Cíl: Naši servisáci v HolyOS spravují návody, řešené případy, kontrolní postupy.
+// Partneři na bestseries.cash se přihlásí k AI servisákovi Hugo, který nad touto
+// znalostní bází radí. Hugo má vlastní login (PartnerAccount), oddělený od interního
+// User auth. Znalost je vázána na Product (prádlomat 750, 1000, …) a Appliance
+// (motor, čerpadlo, řídicí jednotka, displej, mince…).
+
+// Kategorie servisních článků — Mechanika / Elektro / Voda / Software / Údržba…
+model ServiceCategory {
+  id          Int     @id @default(autoincrement())
+  name        String  @unique @db.VarChar(100)
+  slug        String  @unique @db.VarChar(120)
+  icon        String? @db.VarChar(10)
+  color       String? @db.VarChar(20)
+  sort_order  Int     @default(0)
+  description String? @db.Text
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  articles ServiceArticle[]
+
+  @@map("service_categories")
+}
+
+// Spotřebič — fyzický komponent uvnitř produktu (motor, čerpadlo, kompresor,
+// displej, mincovník…). Volitelně provázáno s Material (BOM položka).
+model ServiceAppliance {
+  id           Int     @id @default(autoincrement())
+  name         String  @db.VarChar(255)
+  manufacturer String? @db.VarChar(255)
+  model_code   String? @db.VarChar(100)
+  description  String? @db.Text
+  manual_url   String? @db.VarChar(500) // externí PDF manuál výrobce
+  photo_url    String? @db.VarChar(500)
+
+  // Volitelná vazba na Material (BOM položka — pokud se spotřebič i objednává jako materiál)
+  material_id Int?
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  product_links ServiceProductAppliance[]
+  articles      ServiceArticleAppliance[]
+
+  @@index([material_id])
+  @@map("service_appliances")
+}
+
+// M:N Product ↔ ServiceAppliance — který spotřebič je v kterém produktu, kde
+model ServiceProductAppliance {
+  id           Int     @id @default(autoincrement())
+  product_id   Int
+  appliance_id Int
+  position     String? @db.VarChar(255) // "v zadní části, vlevo nahoře"
+  quantity     Int     @default(1)
+
+  appliance ServiceAppliance @relation(fields: [appliance_id], references: [id], onDelete: Cascade)
+
+  created_at DateTime @default(now())
+
+  @@unique([product_id, appliance_id])
+  @@index([product_id])
+  @@index([appliance_id])
+  @@map("service_product_appliances")
+}
+
+// Servisní článek — návod / řešený případ / kontrolní postup / FAQ
+model ServiceArticle {
+  id          Int     @id @default(autoincrement())
+  title       String  @db.VarChar(500)
+  slug        String  @unique @db.VarChar(550)
+  kind        String  @default("GUIDE") @db.VarChar(20) // GUIDE | CASE | CHECKLIST | FAQ
+  summary     String? @db.VarChar(1000) // krátký výtah pro vyhledávání + chat citace
+  body_md     String  @db.Text          // Markdown
+  body_search String? @db.Text          // body bez Markdown syntaxe pro ILIKE search (auto-generated)
+  tags        Json    @default("[]")    // ["motor", "hlučnost", "vibrace"]
+
+  // Viditelnost — internal = jen servisáci v HolyOS, partner = Hugo to může citovat partnerům
+  visibility String @default("partner") @db.VarChar(20) // internal | partner
+  status     String @default("draft") @db.VarChar(20)   // draft | published | archived
+
+  category_id Int?
+  category    ServiceCategory? @relation(fields: [category_id], references: [id], onDelete: SetNull)
+
+  // Autor (servisák, který článek napsal)
+  author_person_id Int?
+
+  // Statistiky pro retrieval
+  views_count    Int @default(0)
+  helpful_count  Int @default(0)
+  not_helpful_count Int @default(0)
+
+  // Vazby M:N
+  products   ServiceArticleProduct[]
+  appliances ServiceArticleAppliance[]
+
+  attachments ServiceArticleAttachment[]
+  embeddings  ServiceArticleEmbedding[]
+  citations   ServiceChatCitation[]
+
+  published_at DateTime?
+  created_at   DateTime @default(now())
+  updated_at   DateTime @updatedAt
+
+  @@index([kind])
+  @@index([status])
+  @@index([visibility])
+  @@index([category_id])
+  @@index([author_person_id])
+  @@map("service_articles")
+}
+
+// M:N — článek se týká konkrétních produktů (prádlomat 750, 1000…)
+model ServiceArticleProduct {
+  id         Int @id @default(autoincrement())
+  article_id Int
+  product_id Int
+
+  article ServiceArticle @relation(fields: [article_id], references: [id], onDelete: Cascade)
+
+  @@unique([article_id, product_id])
+  @@index([product_id])
+  @@map("service_article_products")
+}
+
+// M:N — článek se týká konkrétních spotřebičů (motor, čerpadlo…)
+model ServiceArticleAppliance {
+  id           Int @id @default(autoincrement())
+  article_id   Int
+  appliance_id Int
+
+  article   ServiceArticle   @relation(fields: [article_id], references: [id], onDelete: Cascade)
+  appliance ServiceAppliance @relation(fields: [appliance_id], references: [id], onDelete: Cascade)
+
+  @@unique([article_id, appliance_id])
+  @@index([appliance_id])
+  @@map("service_article_appliances")
+}
+
+// Přílohy článku — PDF, fotky, videa
+model ServiceArticleAttachment {
+  id         Int    @id @default(autoincrement())
+  article_id Int
+  title      String @db.VarChar(255)
+  file_path  String? @db.VarChar(500)
+  url        String? @db.VarChar(500)
+  mime_type  String? @db.VarChar(80)
+  size_bytes Int?
+  sort_order Int    @default(0)
+
+  article ServiceArticle @relation(fields: [article_id], references: [id], onDelete: Cascade)
+
+  created_at DateTime @default(now())
+
+  @@index([article_id])
+  @@map("service_article_attachments")
+}
+
+// Embeddings pro RAG — pgvector, připraveno pro budoucí AI retrieval.
+// V MVP zatím nepoužívané (Hugo používá ILIKE/fulltext), ale schema je hotové
+// aby bylo později jednoduché doplnit Voyage/OpenAI embedding worker.
+model ServiceArticleEmbedding {
+  id          Int    @id @default(autoincrement())
+  article_id  Int
+  chunk_index Int    @default(0)
+  chunk_text  String @db.Text
+  // Embedding vector (1536-dim pro OpenAI text-embedding-3-small / Voyage voyage-2)
+  // Až bude aktivováno, doplnit přes raw SQL: ALTER TABLE service_article_embeddings ADD COLUMN embedding vector(1536);
+  // Zatím držíme jen text chunky.
+
+  article ServiceArticle @relation(fields: [article_id], references: [id], onDelete: Cascade)
+
+  created_at DateTime @default(now())
+
+  @@index([article_id])
+  @@map("service_article_embeddings")
+}
+
+// Partner — externí uživatel, který se přihlašuje na bestseries.cash k Hugovi.
+// Oddělené od User (interní HolyOS). Vlastní username + bcrypt password_hash.
+model PartnerAccount {
+  id            Int     @id @default(autoincrement())
+  username      String  @unique @db.VarChar(100)
+  email         String? @db.VarChar(255)
+  phone         String? @db.VarChar(20)
+  display_name  String  @db.VarChar(255)
+  password_hash String  @db.VarChar(255)
+  active        Boolean @default(true)
+  // Volitelná vazba na Company v adresáři (partner = naše zákaznická firma)
+  company_id    Int?
+  company       Company? @relation("PartnerCompany", fields: [company_id], references: [id], onDelete: SetNull)
+  // Volitelná vazba na konkrétní kontaktní osobu (Person)
+  contact_person_id Int?
+  language          String @default("cs") @db.VarChar(5) // cs | en | de | pl
+
+  last_login_at DateTime?
+  last_ip       String?   @db.VarChar(45)
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  products      PartnerProductAccess[]
+  chat_sessions ServiceChatSession[]
+
+  @@index([company_id])
+  @@index([active])
+  @@map("partner_accounts")
+}
+
+// M:N — které produkty (prádlomaty) má partner přidělené.
+// Hugo retrieval filtruje znalostní bázi podle těchto produktů.
+model PartnerProductAccess {
+  id         Int @id @default(autoincrement())
+  partner_id Int
+  product_id Int
+  // Volitelné sériové číslo konkrétního kusu, který partner provozuje
+  serial_no String? @db.VarChar(100)
+
+  partner PartnerAccount @relation(fields: [partner_id], references: [id], onDelete: Cascade)
+
+  created_at DateTime @default(now())
+
+  @@unique([partner_id, product_id, serial_no])
+  @@index([product_id])
+  @@map("partner_product_access")
+}
+
+// Chat session s Hugem — jedna session = jedno otevření chatu, držíme do
+// auto-archivace po N hodinách neaktivity.
+model ServiceChatSession {
+  id         Int     @id @default(autoincrement())
+  partner_id Int
+  title      String? @db.VarChar(500) // auto-generovaný název z první otázky
+  language   String  @default("cs") @db.VarChar(5)
+  status     String  @default("active") @db.VarChar(20) // active | archived
+
+  partner  PartnerAccount       @relation(fields: [partner_id], references: [id], onDelete: Cascade)
+  messages ServiceChatMessage[]
+
+  // Audit — co se odehrálo
+  message_count Int @default(0)
+  // Příznak: dostala některá zpráva v této session feedback "Hugo nepomohl"?
+  needs_attention Boolean @default(false)
+
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+  closed_at  DateTime?
+
+  @@index([partner_id])
+  @@index([status])
+  @@index([needs_attention])
+  @@map("service_chat_sessions")
+}
+
+// Jedna zpráva v Hugově chatu.
+model ServiceChatMessage {
+  id         Int    @id @default(autoincrement())
+  session_id Int
+  role       String @db.VarChar(20) // user | assistant | system
+  body       String @db.Text
+
+  // Které články Hugo použil jako kontext / odkazoval na ně.
+  // citations = strukturovaná tabulka, retrieved_article_ids = jen IDs pro audit.
+  retrieved_article_ids Json @default("[]") // [12, 34, 56]
+  // Volitelný feedback od partnera
+  feedback String? @db.VarChar(20) // helpful | not_helpful | null
+
+  // Token spotřeba (pro audit nákladů)
+  tokens_input  Int?
+  tokens_output Int?
+  model         String? @db.VarChar(50)
+
+  session   ServiceChatSession   @relation(fields: [session_id], references: [id], onDelete: Cascade)
+  citations ServiceChatCitation[]
+
+  created_at DateTime @default(now())
+
+  @@index([session_id])
+  @@index([role])
+  @@map("service_chat_messages")
+}
+
+// Strukturovaná citace = explicitní odkaz z Hugovy zprávy na konkrétní ServiceArticle.
+// Umožňuje partnerovi v UI kliknout na "Více v návodu X" a otevřít plný článek.
+model ServiceChatCitation {
+  id         Int @id @default(autoincrement())
+  message_id Int
+  article_id Int
+  // Pořadí citace v rámci zprávy (1, 2, 3…)
+  position   Int @default(0)
+
+  message ServiceChatMessage @relation(fields: [message_id], references: [id], onDelete: Cascade)
+  article ServiceArticle     @relation(fields: [article_id], references: [id], onDelete: Cascade)
+
+  created_at DateTime @default(now())
+
+  @@index([message_id])
+  @@index([article_id])
+  @@map("service_chat_citations")
 }

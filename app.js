@@ -59,6 +59,8 @@ const directivesRoutes = require('./routes/directives.routes');
 const agentRoutes = require('./routes/agent.routes');
 const businessToolsRoutes = require('./routes/business-tools.routes');
 const siteDevelopmentRoutes = require('./routes/site-development.routes');
+const serviceRoutes = require('./routes/service.routes');
+const hugoRoutes = require('./routes/hugo.routes');
 
 // ─── Inicializace aplikace ────────────────────────────────────────────────
 
@@ -448,6 +450,16 @@ app.get('/share/tools/:tool/:token', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'tool-share.html'));
 });
 
+// Hugo — AI servisák pro partnery (mountnuté na bestseries.cash/hugo).
+// Stránka má vlastní mobile-first UI, žádný HolyOS sidebar/topbar.
+// SPA-like routing: /hugo, /hugo/login, /hugo/chat → vždy index.html, klient pak řeší tab.
+app.get('/hugo', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'hugo', 'index.html'));
+});
+app.get('/hugo/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'hugo', 'index.html'));
+});
+
 // ─── API Routes ────────────────────────────────────────────────────────────
 
 app.use('/api/auth', authRoutes);
@@ -481,6 +493,8 @@ app.use('/api/directives', directivesRoutes);
 app.use('/api/agent', agentRoutes); // AI Vývojář (modul #13) — super-admin only
 app.use('/api/tools', businessToolsRoutes); // Obchodní pomůcky (sales-aid)
 app.use('/api/sites', siteDevelopmentRoutes); // Site Development — řízení expanze (vyhledávání lokalit, pozemků, smluv)
+app.use('/api/service', serviceRoutes); // Servis — interní admin (znalostní báze pro servisáky)
+app.use('/api/hugo', hugoRoutes);        // Hugo AI servisák — partner login + chat (bestseries.cash)
 
 // ─── Legacy storage proxy (kompatibilita s persistent-storage.js) ──────────
 

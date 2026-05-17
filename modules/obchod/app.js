@@ -14,6 +14,15 @@ let searchTimer = null;
 let openContactId = null;
 let calCursor = new Date(); calCursor.setDate(1);
 
+// Role kontext — kdo je přihlášen, co smí
+let roleCtx = { viewerPersonId: null, isAdmin: false, isSalesLead: false, canManageSales: false };
+// Seznam obchodníků (jen pro vedoucí/admin) — pro filtr "podle obchodníka" a přidělování
+let sellers = [];
+// Aktivní filtr "zobraz kontakty obchodníka X" (jen pro vedoucí/admin)
+let filterSellerId = '';
+// Cache souhrnu provizí pro aktuálně zobrazený pohled (vedoucí přepíná, obchodník = svůj)
+let commissionsSummary = null;
+
 const STATUS_LABELS = {
   new: 'Nový', contacted: 'Kontaktován', qualified: 'Kvalifikován',
   meeting: 'Schůzka', proposal: 'Nabídka', won: 'Vyhráno', lost: 'Ztraceno',
@@ -105,6 +114,7 @@ async function loadContacts() {
     if (fSource)    params.set('source',    fSource);
     if (fConv)      params.set('converted', fConv);
     if (search)     params.set('search',    search);
+    if (roleCtx.canManageSales && filterSellerId) params.set('seller_id', filterSellerId);
     contacts = await api('GET', '/contacts' + (params.toString() ? '?' + params.toString() : ''));
   } catch (e) {
     console.error('Contacts:', e);
@@ -115,6 +125,43 @@ async function loadContacts() {
   renderContactsTable();
   renderPipeline();
 }
+
+// ─── Role + obchodníci ──────────────────────────────────────────────────
+async function loadRoleAndSellers() {
+  try { roleCtx = await api('GET', '/me'); }
+  catch (e) { console.error('Role:', e); }
+  if (roleCtx && roleCtx.canManageSales) {
+    try { sellers = await api('GET', '/sellers'); }
+    catch (e) { console.error('Sellers:', e); sellers = []; }
+  }
+  // Vyrenderuje filtr Obchodník + případnou záložku "Mé provize"
+  renderRoleSpecificUI();
+}
+
+function renderRoleSpecificUI() {
+  // Filtr "Obchodník" v toolbar — jen pro vedoucí/admin
+  const slot = document.getElementById('seller-filter-slot');
+  if (slot) {
+    if (roleCtx.canManageSales) {
+      const opts = ['<option value="">Všichni obchodníci</option>']
+        .concat(sellers.map(s => `<option value="${s.id}" ${filterSellerId == s.id ? 'selected' : ''}>${esc(s.first_name)} ${esc(s.last_name || '')}</option>`));
+      slot.innerHTML = `<select class="filter-select" id="f-seller" onchange="onSellerFilter()">${opts.join('')}</select>`;
+    } else {
+      slot.innerHTML = '';
+    }
+  }
+  // Záložka "Mé provize" — vidí jak obchodník (sebe), tak vedoucí (přepínatelně)
+  const tabSlot = document.getElementById('commissions-tab-slot');
+  if (tabSlot) {
+    tabSlot.innerHTML = '<button class="view-tab" data-view="commissions" onclick="switchView(\'commissions\')">💰 ' + (roleCtx.canManageSales ? 'Provize' : 'Mé provize') + '</button>';
+  }
+}
+
+window.onSellerFilter = function() {
+  const el = document.getElementById('f-seller');
+  filterSellerId = el ? el.value : '';
+  reload();
+};
 
 async function loadEvents() {
   try {
@@ -307,8 +354,79 @@ window.calToday = function() { calCursor = new Date(); calCursor.setDate(1); loa
 window.switchView = function(v) {
   document.querySelectorAll('.view-tab').forEach(t => t.classList.toggle('active', t.dataset.view === v));
   document.querySelectorAll('.view-panel').forEach(p => p.classList.toggle('active', p.dataset.view === v));
-  if (v === 'calendar') loadEvents();
+  if (v === 'calendar')    loadEvents();
+  if (v === 'commissions') loadCommissions();
 };
+
+// ─── Mé provize / Provize (vedoucí přepíná obchodníka) ──────────────────
+async function loadCommissions(personIdOverride) {
+  const panel = document.getElementById('commissions-panel');
+  if (!panel) return;
+  panel.innerHTML = '<div style="padding:24px; color:var(--text2);">Načítám…</div>';
+  try {
+    let url = '/commissions/summary';
+    const pid = personIdOverride != null ? personIdOverride : (roleCtx.canManageSales ? (document.getElementById('comm-seller') && document.getElementById('comm-seller').value) : null);
+    if (pid) url += '?person_id=' + encodeURIComponent(pid);
+    commissionsSummary = await api('GET', url);
+  } catch (e) {
+    panel.innerHTML = '<div style="padding:24px; color:#ef4444;">Chyba: ' + esc(e.message) + '</div>';
+    return;
+  }
+  renderCommissions();
+}
+
+function renderCommissions() {
+  const panel = document.getElementById('commissions-panel');
+  if (!panel) return;
+  const s = commissionsSummary;
+  if (!s) { panel.innerHTML = ''; return; }
+  const headerControls = roleCtx.canManageSales
+    ? `<div style="display:flex; gap:10px; align-items:center; margin-bottom:14px; flex-wrap:wrap;">
+        <label style="font-size:12px; color:var(--text2);">Obchodník:</label>
+        <select id="comm-seller" class="filter-select" onchange="loadCommissions(this.value)">
+          ${sellers.map(x => `<option value="${x.id}" ${s.person && s.person.id === x.id ? 'selected' : ''}>${esc(x.first_name)} ${esc(x.last_name || '')}</option>`).join('')}
+        </select>
+       </div>`
+    : `<div style="margin-bottom:14px; font-size:14px; color:var(--text2);">Provize pro: <strong>${esc((s.person && s.person.first_name) || '')} ${esc((s.person && s.person.last_name) || '')}</strong></div>`;
+
+  const totalsRow = `
+    <div class="stats-row" style="margin-bottom:16px;">
+      <div class="stat-card"><div class="stat-label">Kontakty</div><div class="stat-value">${s.totals.contacts}</div></div>
+      <div class="stat-card won"><div class="stat-label">Vyhráno</div><div class="stat-value">${s.totals.won_count}</div></div>
+      <div class="stat-card"><div class="stat-label">Předpokl. obrat</div><div class="stat-value">${fmtMoney(s.totals.expected_value)}</div></div>
+      <div class="stat-card high"><div class="stat-label">Předpokl. provize</div><div class="stat-value">${fmtMoney(s.totals.est_commission)}</div></div>
+      <div class="stat-card hot"><div class="stat-label">Uzamčeno</div><div class="stat-value">${fmtMoney(s.totals.locked_commission)}</div></div>
+    </div>`;
+
+  if (!s.items.length) {
+    panel.innerHTML = headerControls + totalsRow + '<div class="empty-state"><div class="empty-icon">💸</div><h3>Žádné přidělené kontakty</h3><p>Až ti vedoucí přidělí kontakty, uvidíš tady svoje provize.</p></div>';
+    return;
+  }
+
+  let table = '<table class="data-table"><thead><tr>'
+    + '<th>Kontakt</th><th>Firma</th><th>Stav</th>'
+    + '<th>Hodnota</th><th>Aktuální %</th><th>Uzamčené %</th><th>Odhad provize</th><th></th>'
+    + '</tr></thead><tbody>';
+  for (const it of s.items) {
+    const c = it.contact;
+    const fullName = esc(c.first_name) + (c.last_name ? ' ' + esc(c.last_name) : '');
+    const wonBadge = it.is_won ? '<span class="badge badge-status-won">✓ Vyhráno</span>' : '';
+    const lockBadge = it.is_locked ? '<span class="badge badge-status-proposal" style="margin-left:4px;">🔒 Uzamčeno</span>' : '';
+    table += `<tr onclick="openContactDetail(${c.id})">
+      <td><strong>${fullName}</strong> ${wonBadge}${lockBadge}</td>
+      <td>${esc(c.company_name || '—')}</td>
+      <td><span class="badge badge-status-${esc(c.status)}">${esc(STATUS_LABELS[c.status] || c.status)}</span></td>
+      <td>${fmtMoney(c.expected_value)}</td>
+      <td>${it.commission_pct != null ? Number(it.commission_pct).toFixed(2) + ' %' : '—'}</td>
+      <td>${it.commission_locked_pct != null ? Number(it.commission_locked_pct).toFixed(2) + ' %' : '—'}</td>
+      <td><strong>${fmtMoney(it.est_commission)}</strong></td>
+      <td><button class="btn btn-sm btn-secondary" onclick="event.stopPropagation(); openContactDetail(${c.id})">Detail</button></td>
+    </tr>`;
+  }
+  table += '</tbody></table>';
+  panel.innerHTML = headerControls + totalsRow + table;
+}
+window.loadCommissions = loadCommissions;
 
 // ─── Search & filter ────────────────────────────────────────────────────
 window.onSearch = function() {
@@ -462,6 +580,7 @@ window.openContactDetail = async function(id) {
         <button class="det-tab active" data-panel="info"     onclick="switchDetTab('info')">ℹ️ Info</button>
         <button class="det-tab"        data-panel="timeline" onclick="switchDetTab('timeline')">💬 Časová osa (${contact.sales_notes.length})</button>
         <button class="det-tab"        data-panel="events"   onclick="switchDetTab('events')">📅 Události (${contact.sales_events.length})</button>
+        <button class="det-tab"        data-panel="assignments" onclick="switchDetTab('assignments')">👥 Obchodníci (${(contact.assignments || []).length})</button>
         ${!contact.converted_company_id ? '<button class="det-tab" data-panel="convert" onclick="switchDetTab(\'convert\')">🏢 Převést na firmu</button>' : ''}
       </div>
 
@@ -473,6 +592,9 @@ window.openContactDetail = async function(id) {
       </div>
       <div class="det-panel" data-panel="events">
         ${renderEventsPanel(contact)}
+      </div>
+      <div class="det-panel" data-panel="assignments">
+        ${renderAssignmentsPanel(contact)}
       </div>
       ${!contact.converted_company_id ? '<div class="det-panel" data-panel="convert">' + renderConvertPanel(contact) + '</div>' : ''}
 
@@ -592,6 +714,123 @@ function renderEventsPanel(c) {
   html += '</div>';
   return html;
 }
+
+// ─── Přidělení obchodníků + provize ─────────────────────────────────────
+function renderAssignmentsPanel(c) {
+  const assignments = c.assignments || [];
+  const canManage = !!roleCtx.canManageSales;
+
+  let html = '<div style="padding:10px 14px; background:rgba(99,102,241,0.08); border:1px solid rgba(99,102,241,0.3); border-radius:8px; margin-bottom:14px; font-size:13px;">'
+    + (canManage
+        ? 'Přiděl kontakt jednomu nebo více obchodníkům. Provizi nastavuj individuálně. Po zaplacení objednávky % uzamkni — další změny defaultu už neovlivní vyplacenou provizi.'
+        : 'Tady vidíš obchodníky přidělené k tomuto kontaktu a aktuální % provize. Změnu provádí vedoucí obchodu.')
+    + '</div>';
+
+  if (canManage) {
+    const sellerOpts = sellers
+      .filter(s => !assignments.some(a => a.person_id === s.id))
+      .map(s => `<option value="${s.id}">${esc(s.first_name)} ${esc(s.last_name || '')}${s.role && s.role.name === 'Vedoucí obchodu' ? ' (vedoucí)' : ''}</option>`)
+      .join('');
+    html += `<div class="note-form" style="margin-bottom:14px;">
+      <div class="row" style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+        <label style="font-size:12px; color:var(--text2);">Přidělit obchodníka:</label>
+        <select id="asg-person" style="flex:1; min-width:180px; background:var(--surface2); border:1px solid var(--border); border-radius:6px; padding:7px 9px; color:var(--text);">
+          ${sellerOpts || '<option value="">— Nikdo k přidělení —</option>'}
+        </select>
+        <label style="font-size:12px; color:var(--text2);">% provize:</label>
+        <input id="asg-pct" type="number" step="0.5" min="0" max="100" placeholder="(volitelně)" style="width:120px; background:var(--surface2); border:1px solid var(--border); border-radius:6px; padding:7px 9px; color:var(--text);">
+        <button class="btn btn-sm btn-primary" onclick="addAssignment(${c.id})" ${!sellerOpts ? 'disabled' : ''}>+ Přidělit</button>
+      </div>
+    </div>`;
+  }
+
+  if (!assignments.length) {
+    html += '<div style="text-align:center; color:var(--text2); padding:24px;">Zatím není přidělen žádný obchodník.</div>';
+    return html;
+  }
+
+  html += '<table class="data-table"><thead><tr>'
+    + '<th>Obchodník</th><th>Provize (%)</th><th>Uzamčená (%)</th><th>Přidělil</th><th>Datum</th>'
+    + (canManage ? '<th>Akce</th>' : '')
+    + '</tr></thead><tbody>';
+  for (const a of assignments) {
+    const p = a.person || {};
+    const fullName = esc(p.first_name || '?') + (p.last_name ? ' ' + esc(p.last_name) : '');
+    const by = a.assigned_by ? esc(a.assigned_by.first_name) + ' ' + esc(a.assigned_by.last_name || '') : '—';
+    const lockBadge = a.commission_locked_at ? ' <span class="badge badge-status-proposal">🔒</span>' : '';
+    const pctCell = canManage && !a.commission_locked_at
+      ? `<input type="number" step="0.5" min="0" max="100" id="pct-${c.id}-${p.id}" value="${a.commission_pct != null ? a.commission_pct : ''}" placeholder="—" style="width:90px; background:var(--surface2); border:1px solid var(--border); border-radius:6px; padding:5px 8px; color:var(--text); font-size:12px;">`
+      : (a.commission_pct != null ? Number(a.commission_pct).toFixed(2) + ' %' : '—');
+    const lockedCell = a.commission_locked_pct != null ? Number(a.commission_locked_pct).toFixed(2) + ' %' : '—';
+    const actionCell = canManage
+      ? `<td style="white-space:nowrap;">`
+        + (!a.commission_locked_at
+            ? `<button class="btn btn-sm btn-secondary" onclick="updateAssignmentPct(${c.id}, ${p.id})">💾 Uložit %</button>
+               <button class="btn btn-sm btn-success" onclick="lockAssignment(${c.id}, ${p.id})">🔒 Uzamknout</button>`
+            : `<button class="btn btn-sm btn-secondary" onclick="unlockAssignment(${c.id}, ${p.id})">🔓 Odemknout</button>`)
+        + ` <button class="btn btn-sm btn-danger" onclick="removeAssignment(${c.id}, ${p.id})">🗑</button>`
+      + `</td>`
+      : '';
+    html += `<tr>
+      <td><strong>${fullName}</strong>${lockBadge}</td>
+      <td>${pctCell}</td>
+      <td>${lockedCell}</td>
+      <td>${by}</td>
+      <td>${fmtDateTime(a.created_at)}</td>
+      ${actionCell}
+    </tr>`;
+  }
+  html += '</tbody></table>';
+  return html;
+}
+
+window.addAssignment = async function(contactId) {
+  const personId = document.getElementById('asg-person').value;
+  const pct      = document.getElementById('asg-pct').value;
+  if (!personId) { alert('Vyberte obchodníka'); return; }
+  try {
+    await api('POST', '/contacts/' + contactId + '/assignments',
+      { person_id: parseInt(personId, 10), commission_pct: pct === '' ? null : Number(pct) });
+    openContactDetail(contactId);
+  } catch (e) { alert('Chyba: ' + e.message); }
+};
+
+window.updateAssignmentPct = async function(contactId, personId) {
+  const el = document.getElementById('pct-' + contactId + '-' + personId);
+  const pct = el ? el.value : '';
+  try {
+    await api('PUT', '/contacts/' + contactId + '/assignments/' + personId,
+      { commission_pct: pct === '' ? null : Number(pct) });
+    openContactDetail(contactId);
+  } catch (e) { alert('Chyba: ' + e.message); }
+};
+
+window.lockAssignment = async function(contactId, personId) {
+  if (!confirm('Uzamknout aktuální % provize? Další změny defaultu už neovlivní tento záznam — používej až po zaplacení objednávky.')) return;
+  const el = document.getElementById('pct-' + contactId + '-' + personId);
+  const pct = el && el.value !== '' ? Number(el.value) : undefined;
+  try {
+    await api('POST', '/contacts/' + contactId + '/assignments/' + personId + '/lock',
+      pct != null ? { commission_pct: pct } : {});
+    openContactDetail(contactId);
+  } catch (e) { alert('Chyba: ' + e.message); }
+};
+
+window.unlockAssignment = async function(contactId, personId) {
+  if (!confirm('Odemknout uzamčenou provizi? Bude možné ji znovu měnit.')) return;
+  try {
+    await api('POST', '/contacts/' + contactId + '/assignments/' + personId + '/unlock');
+    openContactDetail(contactId);
+  } catch (e) { alert('Chyba: ' + e.message); }
+};
+
+window.removeAssignment = async function(contactId, personId) {
+  if (!confirm('Odebrat tohoto obchodníka z kontaktu?')) return;
+  try {
+    await api('DELETE', '/contacts/' + contactId + '/assignments/' + personId);
+    openContactDetail(contactId);
+  } catch (e) { alert('Chyba: ' + e.message); }
+};
 
 function renderConvertPanel(c) {
   return `<form id="convert-form" onsubmit="event.preventDefault(); convertContact(${c.id})">
@@ -738,6 +977,8 @@ window.deleteEvent = async function(id) {
 
 // ─── Init ────────────────────────────────────────────────────────────────
 (async function init() {
+  // Nejdřív role + seznam obchodníků — frontend tak ví, jaké UI render­ovat
+  await loadRoleAndSellers();
   await Promise.all([loadContacts(), loadStats(), loadEvents()]);
   // Pokud je v URL ?id=X, otevřeme detail (deeplink z notifikací)
   const params = new URLSearchParams(window.location.search);
