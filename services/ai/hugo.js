@@ -10,11 +10,13 @@ const { prisma } = require('../../config/database');
 
 const HUGO_MODEL = process.env.HUGO_MODEL || 'claude-sonnet-4-6';
 const RETRIEVAL_LIMIT = 6;
+const MANUAL_PASSAGE_LIMIT = 4;     // max kolik PDF pasáží přidáme do kontextu
+const MANUAL_PASSAGE_CHARS = 1500;  // délka okna kolem zásahu v extrahovaném textu
 const MAX_HISTORY_TURNS = 10;
 
 // ─── Persona ───────────────────────────────────────────────────────────────
 
-function buildSystemPrompt({ partner, language, retrievedArticles }) {
+function buildSystemPrompt({ partner, language, retrievedArticles, retrievedManuals }) {
   const partnerName = partner?.display_name || 'partner';
   const companyName = partner?.company?.name || 'svojí firmě';
   const productList = (partner?.products || [])
@@ -58,6 +60,14 @@ ${a.summary ? 'Souhrn: ' + a.summary + '\n' : ''}${(a.body_md || '').slice(0, 25
 `).join('\n---\n')
     : '(žádné dohledané články z databáze)';
 
+  // Pasáže z PDF manuálů výrobců (extrahované při uploadu, čerpá z nich Hugo)
+  const manualBlock = (retrievedManuals && retrievedManuals.length)
+    ? '\n\n## Pasáže z PDF manuálů výrobců (relevantní podle dotazu):\n\n' + retrievedManuals.map((m, i) => `
+[M${i + 1}] Manuál "${m.title}" — spotřebič: ${m.appliance_name}${m.appliance_manufacturer ? ' (' + m.appliance_manufacturer + ')' : ''}${m.page_count ? ' · ' + m.page_count + ' str.' : ''}
+${m.passage}
+`).join('\n---\n')
+    : '';
+
   return `Jsi **Hugo**, AI servisní asistent společnosti Best Series pro partnery provozující naše prádlomaty.
 
 Tvoje role:
@@ -75,11 +85,13 @@ Partner, se kterým mluvíš:
 
 K dispozici máš tyto články z naší servisní znalostní báze (filtrované podle produktů partnera):
 
-${knowledgeBlock}
+${knowledgeBlock}${manualBlock}
 
 Pravidla:
-- **Vždy** vychazej z výše uvedených článků, když jsou relevantní. Pokud cituješ článek, zmínit jeho číslo v hranatých závorkách na konci věty, např. "Odpojte přívod vody [1]."
-- Pokud žádný článek neodpovídá problému, řekni že nemáš v bázi konkrétní postup, a navrhni postupovat obecně + zavolat servis.
+- **Vždy** vychazej z výše uvedených článků a manuálů, když jsou relevantní.
+- Když cituješ článek, zmínit jeho číslo v hranatých závorkách: "Odpojte přívod vody [1]."
+- Když cituješ pasáž z PDF manuálu výrobce, použij notaci [M1], [M2] atd. — partner v UI uvidí, ze kterého manuálu informace pochází.
+- Pokud žádný zdroj neodpovídá problému, řekni že nemáš v bázi konkrétní postup, a navrhni postupovat obecně + zavolat servis.
 - Neimprovizuj nebezpečné rady (vysoké napětí, plyn, voda pod tlakem) — vždy doporuč odborníka.
 - Buď stručný — 3–6 vět maximum, pokud nejde o detailní návod.
 - Konec odpovědi: pokud problém nezavíráš, polož 1 upřesňující otázku.`;
@@ -146,6 +158,74 @@ async function retrieveArticles({ query, partner, limit = RETRIEVAL_LIMIT }) {
   return articles.slice(0, limit);
 }
 
+/**
+ * Najdi relevantní pasáže z PDF manuálů výrobců. Spotřebič musí být v jednom
+ * z produktů, které partner provozuje. Vracíme okno ~MANUAL_PASSAGE_CHARS znaků
+ * kolem prvního zásahu, aby kontextové okno Claude nepřeteklo.
+ */
+async function retrieveManualPassages({ query, partner, limit = MANUAL_PASSAGE_LIMIT }) {
+  const productIds = (partner?.products || []).map(p => p.product_id);
+  const q = String(query || '').trim();
+  if (!q || q.length < 3) return [];
+
+  const tokens = q.split(/\s+/).filter(t => t.length >= 3).slice(0, 6).map(t => t.toLowerCase());
+  if (!tokens.length) return [];
+
+  // Najdi manuály vázané na spotřebiče, které jsou v partnerových produktech.
+  // Pokud partner nemá přiřazené produkty (onboarding), zatím manuály nevracíme,
+  // ať Hugo nezmate kontextem k cizím spotřebičům.
+  if (!productIds.length) return [];
+
+  const manuals = await prisma.serviceApplianceManual.findMany({
+    where: {
+      extracted_text: { not: null },
+      OR: tokens.map(t => ({ extracted_text: { contains: t, mode: 'insensitive' } })),
+      appliance: {
+        product_links: { some: { product_id: { in: productIds } } },
+      },
+    },
+    include: {
+      appliance: { select: { name: true, manufacturer: true, model_code: true } },
+    },
+    take: limit * 3,
+  });
+
+  // Pro každý manuál vytáhni okno textu kolem prvního zásahu nejdelšího tokenu
+  const longestToken = tokens.slice().sort((a, b) => b.length - a.length)[0];
+  const passages = manuals.map(m => {
+    const text = (m.extracted_text || '').replace(/\s+/g, ' ');
+    const idxFor = (tok) => {
+      const i = text.toLowerCase().indexOf(tok);
+      return i >= 0 ? i : -1;
+    };
+    // Najdi pozici zásahu — preferuj nejdelší token
+    let hit = idxFor(longestToken);
+    if (hit < 0) {
+      for (const t of tokens) {
+        hit = idxFor(t);
+        if (hit >= 0) break;
+      }
+    }
+    if (hit < 0) return null;
+    const start = Math.max(0, hit - Math.floor(MANUAL_PASSAGE_CHARS / 3));
+    const end = Math.min(text.length, start + MANUAL_PASSAGE_CHARS);
+    const passage = (start > 0 ? '…' : '') + text.slice(start, end).trim() + (end < text.length ? '…' : '');
+    // Skóre = počet různých tokenů, které se v textu vyskytují
+    const score = tokens.reduce((s, t) => s + (text.toLowerCase().includes(t) ? 1 : 0), 0);
+    return {
+      id: m.id,
+      title: m.title,
+      page_count: m.page_count,
+      appliance_name: m.appliance?.name || '',
+      appliance_manufacturer: m.appliance?.manufacturer || null,
+      passage,
+      score,
+    };
+  }).filter(Boolean).sort((a, b) => b.score - a.score).slice(0, limit);
+
+  return passages;
+}
+
 // ─── Hlavní entry point ───────────────────────────────────────────────────
 
 /**
@@ -186,14 +266,18 @@ async function sendMessage({ partner, sessionId, message }) {
     data: { session_id: session.id, role: 'user', body: message },
   });
 
-  // 4. Retrieval — najdi relevantní články
-  const retrieved = await retrieveArticles({ query: message, partner });
+  // 4. Retrieval — najdi relevantní články + pasáže z PDF manuálů
+  const [retrieved, retrievedManuals] = await Promise.all([
+    retrieveArticles({ query: message, partner }),
+    retrieveManualPassages({ query: message, partner }),
+  ]);
 
   // 5. Sestav prompty pro Claude
   const systemPrompt = buildSystemPrompt({
     partner,
     language: session.language,
     retrievedArticles: retrieved,
+    retrievedManuals,
   });
 
   const messages = previousMessages
@@ -208,7 +292,7 @@ async function sendMessage({ partner, sessionId, message }) {
     const assistantBody = retrieved.length
       ? `Mám pro tebe relevantní článek: **${retrieved[0].title}**.\n\n${retrieved[0].summary || retrieved[0].body_md.slice(0, 500)}\n\n_(AI služba není v tuto chvíli aktivní — vrátil jsem ti přímý odkaz na nejbližší článek.)_`
       : 'Nepodařilo se mi v naší databázi najít konkrétní postup. Doporučuji kontaktovat servis Best Series.';
-    return await persistAssistantTurn({ session, userMessage, assistantBody, retrieved, tokensIn: null, tokensOut: null });
+    return await persistAssistantTurn({ session, userMessage, assistantBody, retrieved, retrievedManuals, tokensIn: null, tokensOut: null });
   }
 
   const client = new Anthropic({ apiKey });
@@ -237,10 +321,10 @@ async function sendMessage({ partner, sessionId, message }) {
     assistantBody = '⚠️ Omlouvám se, AI služba má momentálně problém. Zkus to prosím za chvíli, nebo zavolej servis Best Series.';
   }
 
-  return await persistAssistantTurn({ session, userMessage, assistantBody, retrieved, tokensIn, tokensOut });
+  return await persistAssistantTurn({ session, userMessage, assistantBody, retrieved, retrievedManuals, tokensIn, tokensOut });
 }
 
-async function persistAssistantTurn({ session, userMessage, assistantBody, retrieved, tokensIn, tokensOut }) {
+async function persistAssistantTurn({ session, userMessage, assistantBody, retrieved, retrievedManuals, tokensIn, tokensOut }) {
   const retrievedIds = retrieved.map(a => a.id);
 
   const assistantMessage = await prisma.$transaction(async (tx) => {
@@ -291,6 +375,13 @@ async function persistAssistantTurn({ session, userMessage, assistantBody, retri
       slug: a.slug,
       summary: a.summary,
     })),
+    retrieved_manuals: (retrievedManuals || []).map(m => ({
+      id: m.id,
+      title: m.title,
+      appliance: m.appliance_name,
+      manufacturer: m.appliance_manufacturer,
+      page_count: m.page_count,
+    })),
   };
 }
 
@@ -339,6 +430,7 @@ async function recordFeedback({ partner, messageId, feedback }) {
 module.exports = {
   sendMessage,
   retrieveArticles,
+  retrieveManualPassages,
   recordFeedback,
   HUGO_MODEL,
 };

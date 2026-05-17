@@ -228,6 +228,7 @@ router.post('/chat', async (req, res, next) => {
         created_at: result.assistant_message.created_at,
       },
       retrieved: result.retrieved,
+      retrieved_manuals: result.retrieved_manuals || [],
     });
   } catch (err) { next(err); }
 });
