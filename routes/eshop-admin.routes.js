@@ -217,6 +217,66 @@ router.delete('/pricelists/:pricelistId/items/:itemId', async (req, res, next) =
   } catch (err) { next(err); }
 });
 
+// Hromadný import položek ceníku — paste-text z Excelu (tab/čárka/středník separator).
+// Formát: "kod_materialu<tab>cena_bez_dph" per řádek. Header se pozná podle toho,
+// že 2. sloupec první řádky není parsovatelný jako číslo — řádek se přeskočí.
+// Update-or-insert chování — pro existující (pricelist, material) přepíše cenu.
+const csvImportSchema = z.object({
+  csv: z.string().min(1).max(500000), // 500 KB raw text
+});
+
+router.post('/pricelists/:id/import-csv', async (req, res, next) => {
+  try {
+    const pricelist_id = parseInt(req.params.id, 10);
+    const pl = await prisma.eshopPricelist.findUnique({ where: { id: pricelist_id }, select: { id: true } });
+    if (!pl) return res.status(404).json({ error: 'Ceník nenalezen' });
+    const parsed = csvImportSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'Neplatná data', detail: parsed.error.flatten() });
+
+    const lines = parsed.data.csv.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    const result = { inserted: 0, updated: 0, skipped: 0, errors: [] };
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const parts = line.split(/[\t,;]/).map(s => s.trim().replace(/^"(.*)"$/, '$1'));
+      if (parts.length < 2) { result.errors.push({ line: i + 1, error: 'málo polí', raw: line }); continue; }
+      const code = parts[0];
+      const priceStr = parts[1].replace(/\s/g, '').replace(',', '.'); // CZ čárka → tečka
+      const price = parseFloat(priceStr);
+      if (Number.isNaN(price)) {
+        if (i === 0) { result.skipped++; continue; } // pravděpodobně header
+        result.errors.push({ line: i + 1, error: 'cena není číslo', raw: line });
+        continue;
+      }
+      if (price < 0) { result.errors.push({ line: i + 1, error: 'záporná cena', raw: line }); continue; }
+      const m = await prisma.material.findUnique({ where: { code }, select: { id: true } });
+      if (!m) { result.errors.push({ line: i + 1, error: `kód "${code}" nenalezen`, raw: line }); continue; }
+
+      try {
+        const existing = await prisma.eshopPricelistItem.findUnique({
+          where: { pricelist_id_material_id: { pricelist_id, material_id: m.id } },
+        });
+        if (existing) {
+          await prisma.eshopPricelistItem.update({
+            where: { id: existing.id },
+            data: { price_excl_vat: price },
+          });
+          result.updated++;
+        } else {
+          await prisma.eshopPricelistItem.create({
+            data: { pricelist_id, material_id: m.id, price_excl_vat: price },
+          });
+          result.inserted++;
+        }
+      } catch (e) {
+        result.errors.push({ line: i + 1, error: e.message, raw: line });
+      }
+    }
+
+    res.json(result);
+  } catch (err) { next(err); }
+});
+
 // ═══════════════════════════════════════════════════════════════════════════
 // DOPRAVA (eshop_shipping_methods)
 // ═══════════════════════════════════════════════════════════════════════════
