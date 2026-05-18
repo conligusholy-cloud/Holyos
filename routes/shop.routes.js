@@ -565,4 +565,32 @@ router.get('/orders/:id', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// Storno objednávky partnerem — povoleno jen ve stavu 'new' (ještě nebyla
+// potvrzena adminem). Pro 'confirmed' a pozdější stavy musí storno udělat admin.
+router.post('/orders/:id/cancel', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const reason = (req.body && typeof req.body.reason === 'string') ? req.body.reason.slice(0, 255) : 'cancelled_by_partner';
+    const o = await prisma.shopOrder.findFirst({
+      where: { id, partner_id: req.partner.id },
+      select: { id: true, status: true, order_number: true },
+    });
+    if (!o) return res.status(404).json({ error: 'Objednávka nenalezena' });
+    if (o.status !== 'new') {
+      return res.status(409).json({
+        error: `Objednávka už je ve stavu "${o.status}", nelze ji zrušit. Kontaktujte nás na servis@bestseries.cz.`,
+      });
+    }
+    const updated = await prisma.shopOrder.update({
+      where: { id },
+      data: {
+        status: 'cancelled',
+        cancel_reason: reason,
+        cancelled_at: new Date(),
+      },
+    });
+    res.json(updated);
+  } catch (err) { next(err); }
+});
+
 module.exports = router;
