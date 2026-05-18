@@ -188,6 +188,23 @@
         <thead><tr><th>Stav</th><th class="num">Počet</th><th>Graf</th><th class="num">%</th></tr></thead>
         <tbody>${statusHtml}</tbody>
       </table>
+
+      ${(s.low_stock || []).length ? `
+        <h3 style="font-size:14px; margin:20px 0 8px;">⚠️ Nízké zásoby (${s.low_stock.length})</h3>
+        <div style="font-size:12px; color:var(--text2); margin-bottom:8px;">Položky prodávané v eshopu, jejichž current_stock klesl pod min_stock. Doporučení: doplnit u dodavatele, případně dočasně skrýt v Katalog tabu.</div>
+        <table class="data-table">
+          <thead><tr><th>Kód</th><th>Název</th><th class="num">Skladem</th><th class="num">Min.</th><th class="num">Chybí</th></tr></thead>
+          <tbody>${s.low_stock.map(ls => `
+            <tr>
+              <td><code>${esc(ls.code)}</code></td>
+              <td>${esc(ls.name)}</td>
+              <td class="num">${Number(ls.current_stock).toFixed(2)} ${esc(ls.unit || '')}</td>
+              <td class="num">${Number(ls.min_stock).toFixed(2)}</td>
+              <td class="num" style="color:#ef4444; font-weight:600;">${Number(ls.shortage).toFixed(2)}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      ` : ''}
     `;
   }
 

@@ -868,6 +868,31 @@ router.get('/stats/dashboard', async (req, res, next) => {
       conversion = { error: e.message };
     }
 
+    // 6) Low-stock alert — Material.sells_on_eshop=true + current_stock < min_stock
+    // (Prisma raw, protože column-vs-column srovnání není v Prisma where podporováno)
+    const lowStockRaw = await prisma.$queryRaw`
+      SELECT m.id, m.code, m.name, m.unit,
+             m.current_stock::numeric as current_stock,
+             m.min_stock::numeric as min_stock,
+             m.eshop_warehouse_id
+      FROM materials m
+      WHERE m.sells_on_eshop = TRUE
+        AND m.status = 'active'
+        AND m.min_stock IS NOT NULL
+        AND m.current_stock < m.min_stock
+      ORDER BY (m.min_stock - m.current_stock) DESC
+      LIMIT 20
+    `;
+    const lowStock = lowStockRaw.map(m => ({
+      id: m.id,
+      code: m.code,
+      name: m.name,
+      unit: m.unit,
+      current_stock: Number(m.current_stock),
+      min_stock: Number(m.min_stock),
+      shortage: Number(m.min_stock) - Number(m.current_stock),
+    }));
+
     res.json({
       period: { from, to },
       summary: {
@@ -881,6 +906,7 @@ router.get('/stats/dashboard', async (req, res, next) => {
       revenue_by_month: revenueByMonth,
       top_companies: topCompanies,
       conversion,
+      low_stock: lowStock,
     });
   } catch (err) { next(err); }
 });
