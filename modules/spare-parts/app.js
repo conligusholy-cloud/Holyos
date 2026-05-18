@@ -446,6 +446,7 @@
         <div style="margin-bottom:12px; display:flex; gap:8px; align-items:center;">
           <input type="text" id="pi-search" placeholder="Hledat materiál (kód/název)" class="filter-input" style="flex:1;">
           <button class="btn btn-secondary btn-sm" onclick="findMaterialForPricelist(${pl.id})">Najít a přidat</button>
+          <button class="btn btn-primary btn-sm" onclick="bulkImportPricelist(${pl.id})" title="Vlož z Excelu (kód, cena)">📥 Hromadný import</button>
         </div>
         <table class="data-table">
           <thead><tr><th>Kód</th><th>Název</th><th>Cena bez DPH</th><th></th></tr></thead>
@@ -486,6 +487,34 @@
     if (!confirm2('Smazat položku z ceníku?')) return;
     try {
       await fetchJSON(`${API}/pricelists/${pricelistId}/items/${itemId}`, { method: 'DELETE' });
+      editPricelist(pricelistId);
+    } catch (err) { alert('Chyba: ' + err.message); }
+  };
+
+  window.bulkImportPricelist = function (pricelistId) {
+    openModal('Hromadný import cen', `
+      <p style="font-size:13px; color:var(--text2); margin:0 0 8px;">
+        Vlož data z Excelu — dva sloupce: <strong>kód materiálu</strong>, <strong>cena bez DPH</strong>. Tabem nebo čárkou oddělené.
+        Header se přeskočí automaticky. Existující položky se přepíšou novou cenou.
+      </p>
+      <textarea id="bulk-csv" rows="14" style="width:100%; font-family:monospace; font-size:12px; padding:10px; background:var(--surface2); color:var(--text); border:1px solid var(--border); border-radius:8px; box-sizing:border-box;" placeholder="kód\tcena\nM-001\t89.00\nM-002\t12.50\n..."></textarea>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" onclick="closeModal()">Zrušit</button>
+        <button class="btn btn-primary" onclick="runBulkImport(${pricelistId})">Importovat</button>
+      </div>`);
+  };
+
+  window.runBulkImport = async function (pricelistId) {
+    const csv = document.getElementById('bulk-csv').value;
+    if (!csv.trim()) { alert('Žádná data k importu.'); return; }
+    try {
+      const r = await fetchJSON(`${API}/pricelists/${pricelistId}/import-csv`, {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ csv }),
+      });
+      const errPreview = r.errors.slice(0, 8).map(e => `  ř. ${e.line}: ${e.error} (${e.raw || ''})`).join('\n');
+      alert(`Import dokončen.\n\nVloženo:     ${r.inserted}\nAktualizováno: ${r.updated}\nPřeskočeno:    ${r.skipped} (header)\nChyby:         ${r.errors.length}\n${errPreview ? '\n' + errPreview : ''}${r.errors.length > 8 ? '\n…a další' : ''}`);
+      closeModal();
       editPricelist(pricelistId);
     } catch (err) { alert('Chyba: ' + err.message); }
   };
