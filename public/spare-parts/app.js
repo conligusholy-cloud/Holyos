@@ -213,9 +213,23 @@
     }
   }
 
+  function renderCategoryChips() {
+    // Filtrujeme jen kategorie, které mají alespoň jeden eshop-produkt (z _count.materials).
+    // "Vše" chip resetuje filter; activeCategory='' znamená vše.
+    const cats = (State.categories || []).filter(c => !c._count || c._count.materials > 0);
+    if (!cats.length && !State.activeCategory) return '';
+    const allActive = !State.activeCategory ? 'active' : '';
+    let html = `<div class="cat-chips"><button class="cat-chip ${allActive}" onclick="ShopApp.onCategory('')">Vše</button>`;
+    cats.forEach(c => {
+      const active = String(State.activeCategory) === String(c.id) ? 'active' : '';
+      const cnt = c._count ? c._count.materials : 0;
+      html += `<button class="cat-chip ${active}" onclick="ShopApp.onCategory(${c.id})">${esc(c.icon || '')} ${esc(c.name)}${cnt ? ` <span class="cnt">${cnt}</span>` : ''}</button>`;
+    });
+    html += '</div>';
+    return html;
+  }
+
   function renderCatalog() {
-    const catOpts = '<option value="">Všechny kategorie</option>' +
-      State.categories.map(c => `<option value="${c.id}"${State.activeCategory == c.id ? ' selected' : ''}>${esc(c.icon || '')} ${esc(c.name)}</option>`).join('');
     const grid = State.products.length ? `
       <div class="product-grid">
         ${State.products.map(p => `
@@ -227,14 +241,14 @@
             <div class="product-stock">Skladem ${p.available_qty} ${esc(p.unit || '')}</div>
           </div>`).join('')}
       </div>
-    ` : `<div class="empty"><div class="icon">📭</div>Žádné produkty</div>`;
+    ` : `<div class="empty"><div class="icon">📭</div>${State.searchQ || State.activeCategory ? 'Nic neodpovídá filtru.' : 'Zatím žádné produkty.'}</div>`;
     return `
       ${topBar('Náhradní díly', State.me && State.me.company ? State.me.company.name : '')}
       <div class="shop-content">
         <div class="filters-row">
           <input type="search" placeholder="🔍 Hledat kód/název" value="${esc(State.searchQ)}" oninput="ShopApp.onSearch(this.value)">
-          <select onchange="ShopApp.onCategory(this.value)">${catOpts}</select>
         </div>
+        ${renderCategoryChips()}
         ${grid}
       </div>
       ${bottomNav()}`;
