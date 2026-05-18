@@ -466,6 +466,20 @@ function serveHugoHtml(req, res) {
 app.get('/hugo', serveHugoHtml);
 app.get('/hugo/', serveHugoHtml);
 
+// Spare Parts Shop — partner-facing eshop náhradních dílů na bestseries.cash/spare-parts.
+// Stejný princip jako Hugo: SPA HTML pro libovolnou cestu pod /spare-parts/*.
+function serveSparePartsHtml(req, res) {
+  res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.sendFile(path.join(__dirname, 'public', 'spare-parts', 'index.html'));
+}
+app.get('/spare-parts', serveSparePartsHtml);
+app.get('/spare-parts/', serveSparePartsHtml);
+app.get('/spare-parts/app.js', (req, res) => {
+  res.set('Cache-Control', 'public, max-age=300');
+  res.sendFile(path.join(__dirname, 'public', 'spare-parts', 'app.js'));
+});
+app.get(/^\/spare-parts\/(?!app\.js).*$/, serveSparePartsHtml);
+
 // ─── API Routes ────────────────────────────────────────────────────────────
 
 app.use('/api/auth', authRoutes);
