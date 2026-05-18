@@ -182,9 +182,27 @@
           <span style="flex:1;"></span>
           <button class="btn btn-secondary btn-sm" id="catalog-refresh">↻ Aktualizovat</button>
         </div>
+        <div id="catalog-bulk-bar" style="display:none; align-items:center; gap:12px; padding:10px 14px; background:rgba(245,158,11,0.08); border:1px solid rgba(245,158,11,0.3); border-radius:10px; margin-bottom:12px; flex-wrap:wrap;">
+          <span style="font-weight:600; font-size:13px;">Vybráno <span id="catalog-bulk-count">0</span> položek</span>
+          <select class="filter-select" id="catalog-bulk-action" onchange="onCatalogBulkActionChange()">
+            <option value="enable">Označit jako: Prodávat na eshopu</option>
+            <option value="disable">Označit jako: Neprodávat</option>
+            <option value="set_category">Nastavit kategorii…</option>
+            <option value="set_warehouse">Nastavit sklad…</option>
+          </select>
+          <span id="catalog-bulk-category-wrap" style="display:none;">
+            <select class="filter-select" id="catalog-bulk-category"></select>
+          </span>
+          <span id="catalog-bulk-warehouse-wrap" style="display:none;">
+            <select class="filter-select" id="catalog-bulk-warehouse"></select>
+          </span>
+          <button class="btn btn-primary btn-sm" onclick="applyCatalogBulk()">Aplikovat</button>
+          <button class="btn btn-secondary btn-sm" onclick="toggleCatalogAll(false)">Zrušit výběr</button>
+        </div>
         <table class="data-table">
           <thead>
             <tr>
+              <th style="width:36px;"><input type="checkbox" onchange="toggleCatalogAll(this.checked)" title="Vybrat vše"></th>
               <th>Kód</th><th>Název</th><th>Eshop</th><th>Sklad</th><th>Kategorie</th>
               <th class="num">Stav (sklad)</th><th></th>
             </tr>

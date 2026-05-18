@@ -638,6 +638,34 @@ router.get('/materials', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// Hromadná editace eshop nastavení — admin Katalog tab "vybrané položky" akce.
+// Akce: enable / disable / set_category (value: int|null) / set_warehouse (value: int|null)
+const bulkEshopSchema = z.object({
+  material_ids: z.array(z.number().int()).min(1).max(500),
+  action: z.enum(['enable', 'disable', 'set_category', 'set_warehouse']),
+  value: z.number().int().nullable().optional(),
+});
+
+router.post('/materials/bulk-eshop', async (req, res, next) => {
+  try {
+    const parsed = bulkEshopSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'Neplatná data', detail: parsed.error.flatten() });
+    const { material_ids, action, value } = parsed.data;
+
+    let data = {};
+    if (action === 'enable') data = { sells_on_eshop: true };
+    else if (action === 'disable') data = { sells_on_eshop: false };
+    else if (action === 'set_category') data = { eshop_category_id: value || null };
+    else if (action === 'set_warehouse') data = { eshop_warehouse_id: value || null };
+
+    const result = await prisma.material.updateMany({
+      where: { id: { in: material_ids } },
+      data,
+    });
+    res.json({ updated: result.count, action, ids: material_ids.length });
+  } catch (err) { next(err); }
+});
+
 router.patch('/materials/:id/eshop', async (req, res, next) => {
   try {
     const id = parseInt(req.params.id, 10);
