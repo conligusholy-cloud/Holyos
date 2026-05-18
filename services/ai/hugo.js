@@ -13,6 +13,105 @@ const RETRIEVAL_LIMIT = 6;
 const MANUAL_PASSAGE_LIMIT = 4;     // max kolik PDF pasáží přidáme do kontextu
 const MANUAL_PASSAGE_CHARS = 1500;  // délka okna kolem zásahu v extrahovaném textu
 const MAX_HISTORY_TURNS = 10;
+const TOOL_USE_MAX_ITERATIONS = 3; // ochrana proti smyčkám tool-use ↔ tool_result
+
+// ─── Tool: search_shop_products (Spare Parts Shop) ─────────────────────────
+//
+// Hugo umí během konverzace zavolat tento nástroj a vyhledat náhradní díly v
+// eshopu pro konkrétní firmu partnera (cena z přiřazeného ceníku, dostupnost
+// v eshop skladu po odečtu rezervací). Pokud partner nemá ceník, tool vrátí
+// prázdný seznam s hintem.
+
+const SHOP_TOOL = {
+  name: 'search_shop_products',
+  description: 'Vyhledá náhradní díly v eshopu Best Series Spare Parts Shop. Použij když partner ptá na konkrétní díl (motor, řemen, ventil, čerpadlo, displej...) nebo když navrhuješ co objednat. Vrátí seznam položek s názvem, cenou v partnerově ceníku a dostupností. Pokud partner nemá přiřazený ceník nebo položka není v katalogu, vrátí prázdný seznam s hintem. URL na detail produktu posílej partnerovi v odpovědi.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      query: { type: 'string', description: 'Klíčová slova pro hledání — název dílu, kód, EAN. Hledá v kódu, názvu i marketing popisu.' },
+    },
+    required: ['query'],
+  },
+};
+
+async function executeSearchShopProducts({ query, partner }) {
+  if (!partner || !partner.company || !partner.company.id) {
+    return { products: [], hint: 'Partner nemá v profilu firmu — eshop dostupný není.' };
+  }
+  const co = await prisma.company.findUnique({
+    where: { id: partner.company.id },
+    select: {
+      eshop_pricelist_id: true,
+      eshop_pricelist: { select: { id: true, currency: true, vat_pct: true, active: true, name: true } },
+    },
+  });
+  if (!co || !co.eshop_pricelist_id || !co.eshop_pricelist || !co.eshop_pricelist.active) {
+    return { products: [], hint: 'Partner nemá přiřazený aktivní ceník pro Spare Parts Shop. Neuvádět konkrétní ceny.' };
+  }
+  const q = String(query || '').trim();
+  if (q.length < 2) return { products: [], hint: 'Příliš krátký dotaz, zadej alespoň 2 znaky.' };
+
+  const materials = await prisma.material.findMany({
+    where: {
+      sells_on_eshop: true,
+      status: 'active',
+      OR: [
+        { code: { contains: q, mode: 'insensitive' } },
+        { name: { contains: q, mode: 'insensitive' } },
+        { eshop_description: { contains: q, mode: 'insensitive' } },
+      ],
+    },
+    select: { id: true, code: true, name: true, unit: true, eshop_warehouse_id: true, eshop_description: true },
+    take: 10,
+  });
+  if (!materials.length) return { products: [], hint: 'Nic v katalogu Spare Parts Shop neodpovídá.' };
+
+  const items = await prisma.eshopPricelistItem.findMany({
+    where: { pricelist_id: co.eshop_pricelist_id, material_id: { in: materials.map(m => m.id) } },
+    select: { material_id: true, price_excl_vat: true },
+  });
+  const priceMap = new Map(items.map(i => [i.material_id, Number(i.price_excl_vat)]));
+
+  const out = [];
+  const vat = Number(co.eshop_pricelist.vat_pct);
+  const baseUrl = process.env.SHARE_BASE_URL || 'https://bestseries.cash';
+  for (const m of materials) {
+    const price = priceMap.get(m.id);
+    if (price == null) continue;
+    let stock = 0;
+    if (m.eshop_warehouse_id) {
+      const s = await prisma.stock.aggregate({
+        where: { material_id: m.id, location: { warehouse_id: m.eshop_warehouse_id } },
+        _sum: { quantity: true },
+      });
+      stock = Number(s._sum.quantity || 0);
+    }
+    const reserved = await prisma.shopOrderItem.aggregate({
+      where: { material_id: m.id, order: { status: { in: ['new', 'confirmed', 'picking'] } } },
+      _sum: { quantity: true },
+    });
+    const available = Math.max(0, stock - Number(reserved._sum.quantity || 0));
+    if (available <= 0) continue;
+    out.push({
+      code: m.code,
+      name: m.name,
+      unit: m.unit,
+      price_excl_vat: price,
+      price_incl_vat: Math.round(price * (1 + vat / 100) * 100) / 100,
+      currency: co.eshop_pricelist.currency,
+      available_qty: available,
+      url: `${baseUrl}/spare-parts`,
+    });
+  }
+  return out.length
+    ? { products: out, hint: `Nalezeno ${out.length} položek pro "${q}".` }
+    : { products: [], hint: 'Položky odpovídají dotazu, ale nejsou skladem v eshop skladu.' };
+}
+
+async function executeHugoTool({ name, input, partner }) {
+  if (name === 'search_shop_products') return executeSearchShopProducts({ query: input.query, partner });
+  return { error: `Neznámý nástroj: ${name}` };
+}
 
 // ─── Persona ───────────────────────────────────────────────────────────────
 
@@ -86,6 +185,8 @@ Partner, se kterým mluvíš:
 K dispozici máš tyto články z naší servisní znalostní báze (filtrované podle produktů partnera):
 
 ${knowledgeBlock}${manualBlock}
+
+Můžeš zavolat nástroj **search_shop_products** pokud zjistíš, že partner potřebuje konkrétní náhradní díl. Nástroj vyhledá v eshopu Best Series Spare Parts Shop, vrátí ti název, cenu z partnerova ceníku, dostupnost a URL na detail produktu. Když vrátí položku, uveď ji v odpovědi (kód, název, cena s DPH a URL). Pokud vrátí prázdný seznam s hintem o chybějícím ceníku, NEUVÁDĚJ konkrétní cenu a navrhni partnerovi kontakt na servis.
 
 Pravidla:
 - **Vždy** vychazej z výše uvedených článků a manuálů, když jsou relevantní.
@@ -297,34 +398,68 @@ async function sendMessage({ partner, sessionId, message }) {
 
   const client = new Anthropic({ apiKey });
   let assistantBody = '';
-  let tokensIn = null;
-  let tokensOut = null;
+  let tokensIn = 0;
+  let tokensOut = 0;
+  const toolCalls = []; // audit, co Hugo volal
 
   try {
-    const resp = await client.messages.create({
-      model: HUGO_MODEL,
-      max_tokens: 1024,
-      system: systemPrompt,
-      messages,
-    });
-    assistantBody = (resp.content || [])
-      .filter(b => b.type === 'text')
-      .map(b => b.text)
-      .join('\n')
-      .trim();
-    if (resp.usage) {
-      tokensIn = resp.usage.input_tokens;
-      tokensOut = resp.usage.output_tokens;
+    // Tool-use smyčka: Claude může chtít zavolat tool, my mu pošleme výsledek
+    // a počkáme na další stop_reason. Max 3 iterace, aby se nezacyklilo.
+    let iter = 0;
+    while (iter < TOOL_USE_MAX_ITERATIONS) {
+      iter++;
+      const resp = await client.messages.create({
+        model: HUGO_MODEL,
+        max_tokens: 1024,
+        system: systemPrompt,
+        tools: [SHOP_TOOL],
+        messages,
+      });
+      if (resp.usage) {
+        tokensIn += resp.usage.input_tokens || 0;
+        tokensOut += resp.usage.output_tokens || 0;
+      }
+      // Vyextrahuj text bloky pro assistant body (pokud končí stop=end_turn)
+      const textParts = (resp.content || []).filter(b => b.type === 'text').map(b => b.text);
+      const toolUseBlocks = (resp.content || []).filter(b => b.type === 'tool_use');
+      if (resp.stop_reason === 'tool_use' && toolUseBlocks.length) {
+        // Připojíme celou assistant content (text + tool_use bloky) do historie
+        messages.push({ role: 'assistant', content: resp.content });
+        const toolResults = [];
+        for (const tu of toolUseBlocks) {
+          const result = await executeHugoTool({ name: tu.name, input: tu.input || {}, partner });
+          toolCalls.push({ name: tu.name, input: tu.input, result_summary: result.hint || (Array.isArray(result.products) ? `${result.products.length} produkts` : 'ok') });
+          toolResults.push({
+            type: 'tool_result',
+            tool_use_id: tu.id,
+            content: JSON.stringify(result),
+          });
+        }
+        messages.push({ role: 'user', content: toolResults });
+        continue; // další iterace s tool_result v historii
+      }
+      // Konec — má text odpověď
+      assistantBody = textParts.join('\n').trim();
+      if (!assistantBody) {
+        assistantBody = '⚠️ Neumím momentálně odpovědět. Zkus to prosím znovu nebo zavolej servis Best Series.';
+      }
+      break;
+    }
+    if (iter >= TOOL_USE_MAX_ITERATIONS && !assistantBody) {
+      assistantBody = '⚠️ Konverzace byla příliš dlouhá na automatické vyřešení. Doporučuji zavolat servis Best Series.';
     }
   } catch (err) {
     console.error('[hugo] Claude API chyba:', err.message);
     assistantBody = '⚠️ Omlouvám se, AI služba má momentálně problém. Zkus to prosím za chvíli, nebo zavolej servis Best Series.';
   }
 
-  return await persistAssistantTurn({ session, userMessage, assistantBody, retrieved, retrievedManuals, tokensIn, tokensOut });
+  return await persistAssistantTurn({ session, userMessage, assistantBody, retrieved, retrievedManuals, tokensIn: tokensIn || null, tokensOut: tokensOut || null, toolCalls });
 }
 
-async function persistAssistantTurn({ session, userMessage, assistantBody, retrieved, retrievedManuals, tokensIn, tokensOut }) {
+async function persistAssistantTurn({ session, userMessage, assistantBody, retrieved, retrievedManuals, tokensIn, tokensOut, toolCalls }) {
+  if (toolCalls && toolCalls.length) {
+    console.log(`[hugo] tool calls for session ${session.id}:`, JSON.stringify(toolCalls));
+  }
   const retrievedIds = retrieved.map(a => a.id);
 
   const assistantMessage = await prisma.$transaction(async (tx) => {
