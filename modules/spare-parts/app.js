@@ -363,6 +363,63 @@
   // ═════════════════════════════════════════════════════════════════════════
 
   let _catalogCategories = [];
+  let _catalogSelected = new Set();
+  let _catalogWarehouses = [];
+
+  function refreshCatalogBulkBar() {
+    const bar = document.getElementById('catalog-bulk-bar');
+    if (!bar) return;
+    const n = _catalogSelected.size;
+    if (n === 0) { bar.style.display = 'none'; return; }
+    bar.style.display = 'flex';
+    document.getElementById('catalog-bulk-count').textContent = n;
+  }
+
+  window.toggleCatalogRow = function (id, checked) {
+    if (checked) _catalogSelected.add(id);
+    else _catalogSelected.delete(id);
+    refreshCatalogBulkBar();
+  };
+
+  window.toggleCatalogAll = function (checked) {
+    document.querySelectorAll('.catalog-row-cb').forEach(cb => {
+      cb.checked = checked;
+      const id = parseInt(cb.dataset.id, 10);
+      if (checked) _catalogSelected.add(id);
+      else _catalogSelected.delete(id);
+    });
+    refreshCatalogBulkBar();
+  };
+
+  window.applyCatalogBulk = async function () {
+    const action = document.getElementById('catalog-bulk-action').value;
+    let value = null;
+    if (action === 'set_category') {
+      const sel = document.getElementById('catalog-bulk-category');
+      value = sel && sel.value ? parseInt(sel.value, 10) : null;
+    } else if (action === 'set_warehouse') {
+      const sel = document.getElementById('catalog-bulk-warehouse');
+      value = sel && sel.value ? parseInt(sel.value, 10) : null;
+    }
+    if (!_catalogSelected.size) { alert('Nic není vybráno.'); return; }
+    const ids = Array.from(_catalogSelected);
+    if (!confirm2(`Aplikovat akci "${action}" na ${ids.length} položek?`)) return;
+    try {
+      const r = await fetchJSON(`${API}/materials/bulk-eshop`, {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ material_ids: ids, action, value }),
+      });
+      _catalogSelected.clear();
+      loadCatalog();
+      alert(`Aktualizováno ${r.updated} položek.`);
+    } catch (err) { alert('Chyba: ' + err.message); }
+  };
+
+  window.onCatalogBulkActionChange = function () {
+    const action = document.getElementById('catalog-bulk-action').value;
+    document.getElementById('catalog-bulk-category-wrap').style.display = action === 'set_category' ? 'block' : 'none';
+    document.getElementById('catalog-bulk-warehouse-wrap').style.display = action === 'set_warehouse' ? 'block' : 'none';
+  };
 
   async function loadCatalog() {
     if (!_catalogCategories.length) {
@@ -370,6 +427,16 @@
       const sel = document.getElementById('catalog-category');
       sel.innerHTML = '<option value="">Všechny kategorie</option>' +
         _catalogCategories.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
+      // Také naplň bulk dropdowny
+      const bcSel = document.getElementById('catalog-bulk-category');
+      if (bcSel) bcSel.innerHTML = '<option value="">— bez kategorie —</option>' +
+        _catalogCategories.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
+    }
+    if (!_catalogWarehouses.length) {
+      try { _catalogWarehouses = await fetchJSON(`${API}/warehouses`); } catch (_e) { _catalogWarehouses = []; }
+      const bwSel = document.getElementById('catalog-bulk-warehouse');
+      if (bwSel) bwSel.innerHTML = '<option value="">— žádný —</option>' +
+        _catalogWarehouses.map(w => `<option value="${w.id}">${esc(w.name)}${w.code ? ' (' + esc(w.code) + ')' : ''}</option>`).join('');
     }
 
     const tbody = document.getElementById('catalog-tbody');
@@ -390,6 +457,7 @@
       }
       tbody.innerHTML = items.map(m => `
         <tr>
+          <td><input type="checkbox" class="catalog-row-cb" data-id="${m.id}" ${_catalogSelected.has(m.id) ? 'checked' : ''} onchange="toggleCatalogRow(${m.id}, this.checked)"></td>
           <td><code>${esc(m.code)}</code></td>
           <td>${esc(m.name)}</td>
           <td>${m.sells_on_eshop ? '<span class="badge badge-active">Ano</span>' : '<span class="badge badge-inactive">Ne</span>'}</td>
@@ -398,6 +466,7 @@
           <td class="num">${Number(m.current_stock || 0).toFixed(2)} ${esc(m.unit || '')}</td>
           <td><button class="btn btn-secondary btn-sm" onclick="editMaterialEshop(${m.id})">Eshop nastavení</button></td>
         </tr>`).join('');
+      refreshCatalogBulkBar();
     } catch (err) {
       tbody.innerHTML = `<tr><td colspan="7" class="empty-state">Chyba: ${esc(err.message)}</td></tr>`;
     }
