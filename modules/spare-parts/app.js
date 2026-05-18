@@ -249,6 +249,14 @@
   document.getElementById('orders-search').addEventListener('input', debounce(loadOrders, 350));
   document.getElementById('orders-status').addEventListener('change', loadOrders);
 
+  window.exportOrdersCsv = function () {
+    const status = document.getElementById('orders-status').value;
+    const params = new URLSearchParams();
+    if (status) params.set('status', status);
+    // Otevře v novém okně — browser stáhne soubor díky Content-Disposition
+    window.location.href = `${API}/orders/export.csv?${params}`;
+  };
+
   window.openOrder = async function (id) {
     try {
       const o = await fetchJSON(`${API}/orders/${id}`);

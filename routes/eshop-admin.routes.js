@@ -433,6 +433,97 @@ router.get('/orders', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// CSV export objednávek — pro účetní. Filtr identický s /orders, ale vrací
+// text/csv attachment s detailem položek (jeden řádek per item × order).
+router.get('/orders/export.csv', async (req, res, next) => {
+  try {
+    const status = req.query.status ? String(req.query.status) : null;
+    const from = req.query.from ? new Date(String(req.query.from)) : null;
+    const to = req.query.to ? new Date(String(req.query.to)) : null;
+    const where = {};
+    if (status) where.status = status;
+    if (from || to) where.created_at = {};
+    if (from) where.created_at.gte = from;
+    if (to) where.created_at.lte = to;
+
+    const orders = await prisma.shopOrder.findMany({
+      where,
+      orderBy: { created_at: 'desc' },
+      include: {
+        partner: { select: { display_name: true, email: true } },
+        company: { select: { name: true, ico: true, dic: true } },
+        shipping_method: { select: { name: true } },
+        payment_method: { select: { name: true, code: true } },
+        items: { orderBy: { id: 'asc' } },
+      },
+    });
+
+    // CSV escape — text musí být v uvozovkách, vnitřní " se zdvojí
+    const esc = (v) => {
+      if (v == null) return '';
+      const s = String(v);
+      return /[,;"\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+    };
+    const header = [
+      'Cislo', 'Datum', 'Stav', 'Partner', 'PartnerEmail', 'Firma', 'IC', 'DIC',
+      'Adresa', 'Mesto', 'PSC', 'Zeme',
+      'Doprava', 'Platba', 'Mena',
+      'Pol_Kod', 'Pol_Nazev', 'Pol_Mnozstvi', 'Pol_Jednotka', 'Pol_CenaJednotka', 'Pol_CenaCelkem',
+      'Mezisoucet', 'CenaDopravy', 'PoplPlatby', 'CelkemBezDPH', 'DPH%', 'CelkemSDPH',
+      'Tracking', 'Dopravce', 'Poznamka',
+    ].join(';');
+
+    const rows = [header];
+    for (const o of orders) {
+      const baseRow = [
+        o.order_number,
+        new Date(o.created_at).toISOString().slice(0, 10),
+        o.status,
+        o.partner ? o.partner.display_name : '',
+        o.partner ? (o.partner.email || '') : '',
+        o.company ? o.company.name : (o.ship_to_company || ''),
+        o.company ? (o.company.ico || '') : '',
+        o.company ? (o.company.dic || '') : '',
+        o.ship_to_address, o.ship_to_city, o.ship_to_zip, o.ship_to_country,
+        o.shipping_method ? o.shipping_method.name : '',
+        o.payment_method ? o.payment_method.name : '',
+        o.currency,
+      ];
+      const trailing = [
+        Number(o.subtotal_excl).toFixed(2),
+        Number(o.shipping_excl).toFixed(2),
+        Number(o.payment_fee_excl).toFixed(2),
+        Number(o.total_excl).toFixed(2),
+        Number(o.vat_pct).toFixed(2),
+        Number(o.total_incl_vat).toFixed(2),
+        o.tracking_number || '',
+        o.tracking_carrier || '',
+        o.customer_note || '',
+      ];
+      if (o.items.length === 0) {
+        rows.push([...baseRow, '', '', '', '', '', '', ...trailing].map(esc).join(';'));
+      } else {
+        for (const it of o.items) {
+          rows.push([
+            ...baseRow,
+            it.material_code, it.material_name,
+            Number(it.quantity).toFixed(3), it.unit,
+            Number(it.unit_price_excl).toFixed(2),
+            Number(it.total_excl).toFixed(2),
+            ...trailing,
+          ].map(esc).join(';'));
+        }
+      }
+    }
+
+    const filename = `eshop-orders-${new Date().toISOString().slice(0, 10)}.csv`;
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    // BOM pro Excel CZ — aby správně rozpoznal UTF-8
+    res.send('\uFEFF' + rows.join('\n'));
+  } catch (err) { next(err); }
+});
+
 router.get('/orders/stats', async (req, res, next) => {
   // Statistika po stavech — pro dashboard tile v admin UI.
   try {
