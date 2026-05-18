@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Spare Parts Shop | HOLYOS</title>
+  <link rel="icon" type="image/svg+xml" href="../../logo-holyos-icon.svg">
+  <base href="../../">
+  <link rel="stylesheet" href="css/dashboard.css">
+  <style>
+    .main-wrapper { margin-left: var(--sidebar-w); flex: 1; min-height: 100vh; display: flex; flex-direction: column; }
+    .page-header {
+      display:flex; align-items:center; gap:12px; padding:20px 24px;
+      border-bottom:1px solid var(--border); flex-wrap:wrap;
+    }
+    .page-header h1 { font-size:18px; font-weight:700; margin:0; }
+    .page-header .count { font-size:13px; color:var(--text2); margin-left:4px; }
+
+    .content { padding:0 24px 24px; }
+    .toolbar { display:flex; gap:12px; margin:16px 0; align-items:center; flex-wrap:wrap; }
+
+    .btn { padding:8px 18px; border-radius:8px; border:1px solid var(--border); font-size:13px; font-weight:500; cursor:pointer; transition:all 0.15s; display:inline-flex; align-items:center; gap:6px; background:transparent; color:var(--text); }
+    .btn-primary { background:#f59e0b; color:#1a0f00; border-color:#f59e0b; font-weight:600; }
+    .btn-primary:hover { background:#d97706; }
+    .btn-secondary { background:var(--surface2); color:var(--text); }
+    .btn-secondary:hover { background:var(--border); }
+    .btn-danger { background:rgba(239,68,68,0.15); color:#ef4444; border-color:rgba(239,68,68,0.3); }
+    .btn-danger:hover { background:rgba(239,68,68,0.25); }
+    .btn-sm { padding:5px 12px; font-size:12px; }
+
+    /* Hlavní taby modulu */
+    .module-tabs { display:flex; gap:2px; border-bottom:1px solid var(--border); padding:0 24px; overflow-x:auto; }
+    .module-tab { padding:12px 18px; background:transparent; border:none; color:var(--text2); font-size:13px; font-weight:500; cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-1px; transition:color 0.15s, border-color 0.15s; white-space:nowrap; }
+    .module-tab:hover { color:var(--text); }
+    .module-tab.active { color:#f59e0b; border-bottom-color:#f59e0b; }
+
+    .module-panel { display:none; }
+    .module-panel.active { display:block; }
+
+    .data-table { width:100%; border-collapse:separate; border-spacing:0; }
+    .data-table thead { position:sticky; top:0; z-index:1; }
+    .data-table th { background:var(--surface2); padding:10px 12px; text-align:left; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; color:var(--text2); border-bottom:1px solid var(--border); }
+    .data-table td { padding:10px 12px; font-size:13px; border-bottom:1px solid rgba(255,255,255,0.04); vertical-align:middle; }
+    .data-table tr:hover td { background:rgba(245,158,11,0.06); }
+    .data-table .num { text-align:right; font-variant-numeric: tabular-nums; }
+
+    .badge { display:inline-block; padding:2px 8px; border-radius:10px; font-size:11px; font-weight:500; white-space:nowrap; }
+    .badge-new        { background:rgba(99,102,241,0.18); color:#818cf8; }
+    .badge-confirmed  { background:rgba(34,211,238,0.18); color:#22d3ee; }
+    .badge-picking    { background:rgba(245,158,11,0.18); color:#f59e0b; }
+    .badge-shipped    { background:rgba(139,92,246,0.18); color:#a78bfa; }
+    .badge-delivered  { background:rgba(34,197,94,0.18);  color:#22c55e; }
+    .badge-closed     { background:rgba(148,163,184,0.15); color:#94a3b8; }
+    .badge-cancelled  { background:rgba(239,68,68,0.18);  color:#ef4444; }
+    .badge-active     { background:rgba(34,197,94,0.18);  color:#22c55e; }
+    .badge-inactive   { background:rgba(148,163,184,0.15); color:#94a3b8; }
+    .badge-noprice    { background:rgba(239,68,68,0.18);  color:#ef4444; }
+
+    .filters { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+    .filter-input, .filter-select { padding:6px 10px; background:var(--surface2); color:var(--text); border:1px solid var(--border); border-radius:7px; font-size:12px; }
+    .filter-input:focus, .filter-select:focus { border-color:#f59e0b; outline:none; }
+
+    .form-row { display:flex; gap:12px; margin-bottom:12px; flex-wrap:wrap; }
+    .form-row > div { flex:1; min-width:160px; }
+    .form-row label { display:block; font-size:11px; color:var(--text2); margin-bottom:4px; text-transform:uppercase; letter-spacing:0.5px; }
+    .form-row input, .form-row select, .form-row textarea {
+      width:100%; padding:8px 10px; background:var(--surface2); color:var(--text);
+      border:1px solid var(--border); border-radius:7px; font-size:13px; box-sizing:border-box;
+    }
+    .form-row input:focus, .form-row select:focus, .form-row textarea:focus { border-color:#f59e0b; outline:none; }
+    .form-row textarea { resize:vertical; min-height:80px; font-family:inherit; }
+
+    /* Modal */
+    .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.7); z-index:200; display:none; align-items:center; justify-content:center; padding:20px; }
+    .modal-overlay.active { display:flex; }
+    .modal { background:var(--surface); border-radius:12px; max-width:700px; width:100%; max-height:90vh; overflow-y:auto; padding:24px; border:1px solid var(--border); }
+    .modal-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; padding-bottom:12px; border-bottom:1px solid var(--border); }
+    .modal-header h2 { margin:0; font-size:16px; }
+    .modal-close { background:transparent; border:none; color:var(--text2); font-size:22px; cursor:pointer; padding:0 8px; }
+    .modal-actions { display:flex; gap:8px; justify-content:flex-end; margin-top:16px; padding-top:12px; border-top:1px solid var(--border); }
+
+    .empty-state { padding:40px 20px; text-align:center; color:var(--text2); font-size:13px; }
+    .stat-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(140px, 1fr)); gap:12px; margin:12px 0; }
+    .stat-card { background:var(--surface2); padding:14px 16px; border-radius:10px; border:1px solid var(--border); }
+    .stat-card .label { font-size:11px; color:var(--text2); text-transform:uppercase; letter-spacing:0.5px; }
+    .stat-card .value { font-size:22px; font-weight:700; margin-top:4px; }
+
+    .order-detail-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin:16px 0; }
+    .order-detail-grid .block { background:var(--surface2); padding:12px; border-radius:8px; border:1px solid var(--border); }
+    .order-detail-grid .label { font-size:11px; color:var(--text2); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:6px; }
+    .order-detail-grid .value { font-size:13px; }
+    .order-actions { display:flex; gap:8px; flex-wrap:wrap; margin:12px 0; padding:12px; background:rgba(245,158,11,0.05); border-radius:10px; border:1px solid rgba(245,158,11,0.2); }
+
+    @media (max-width: 768px) {
+      .main-wrapper { margin-left: 0; }
+      .order-detail-grid { grid-template-columns:1fr; }
+    }
+  </style>
+</head>
+<body>
+  <aside class="sidebar"></aside>
+  <div class="main-wrapper">
+    <div class="page-header">
+      <span style="font-size:24px;">🛒</span>
+      <h1>Spare Parts Shop</h1>
+      <span class="count" id="header-count"></span>
+      <span style="flex:1;"></span>
+      <a href="/spare-parts" target="_blank" class="btn btn-secondary btn-sm" title="Otevřít partner-facing eshop">↗ Partner shop</a>
+    </div>
+
+    <nav class="module-tabs">
+      <button class="module-tab active" data-tab="orders">📦 Objednávky</button>
+      <button class="module-tab" data-tab="catalog">📋 Katalog</button>
+      <button class="module-tab" data-tab="pricelists">💰 Ceníky</button>
+      <button class="module-tab" data-tab="assignments">🏢 Přiřazení ceníků</button>
+      <button class="module-tab" data-tab="shipping">🚚 Doprava</button>
+      <button class="module-tab" data-tab="payments">💳 Platby</button>
+      <button class="module-tab" data-tab="categories">🏷️ Kategorie</button>
+      <button class="module-tab" data-tab="settings">⚙️ Nastavení</button>
+    </nav>
+
+    <div class="content">
+      <!-- TAB: OBJEDNÁVKY -->
+      <div class="module-panel active" id="panel-orders">
+        <div class="stat-grid" id="orders-stats"></div>
+        <div class="toolbar">
+          <div class="filters">
+            <input type="text" class="filter-input" id="orders-search" placeholder="🔍 Číslo, jméno, firma...">
+            <select class="filter-select" id="orders-status">
+              <option value="">Všechny stavy</option>
+              <option value="new">Nová</option>
+              <option value="confirmed">Potvrzená</option>
+              <option value="picking">Pickování</option>
+              <option value="shipped">Odeslaná</option>
+              <option value="delivered">Doručená</option>
+              <option value="closed">Uzavřená</option>
+              <option value="cancelled">Zrušená</option>
+            </select>
+          </div>
+          <span style="flex:1;"></span>
+          <button class="btn btn-secondary btn-sm" id="orders-refresh">↻ Aktualizovat</button>
+        </div>
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Číslo</th><th>Stav</th><th>Datum</th><th>Partner</th><th>Firma</th>
+              <th class="num">Položek</th><th class="num">Celkem</th><th></th>
+            </tr>
+          </thead>
+          <tbody id="orders-tbody"></tbody>
+        </table>
+      </div>
+
+      <!-- TAB: KATALOG -->
+      <div class="module-panel" id="panel-catalog">
+        <div class="toolbar">
+          <div class="filters">
+            <input type="text" class="filter-input" id="catalog-search" placeholder="🔍 Kód, název, EAN...">
+            <select class="filter-select" id="catalog-category"><option value="">Všechny kategorie</option></select>
+            <label style="font-size:12px; color:var(--text2); display:flex; align-items:center; gap:6px;">
+              <input type="checkbox" id="catalog-only-eshop"> Jen prodávané v eshopu
+            </label>
+          </div>
+          <span style="flex:1;"></span>
+          <button class="btn btn-secondary btn-sm" id="catalog-refresh">↻ Aktualizovat</button>
+        </div>
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Kód</th><th>Název</th><th>Eshop</th><th>Sklad</th><th>Kategorie</th>
+              <th class="num">Stav (sklad)</th><th></th>
+            </tr>
+          </thead>
+          <tbody id="catalog-tbody"></tbody>
+        </table>
+      </div>
+
+      <!-- TAB: CENÍKY -->
+      <div class="module-panel" id="panel-pricelists">
+        <div class="toolbar">
+          <button class="btn btn-primary btn-sm" id="pricelist-new">+ Nový ceník</button>
+          <span style="flex:1;"></span>
+          <button class="btn btn-secondary btn-sm" id="pricelist-refresh">↻ Aktualizovat</button>
+        </div>
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Název</th><th>Měna</th><th class="num">DPH</th><th class="num">Položek</th>
+              <th class="num">Firem</th><th>Stav</th><th></th>
+            </tr>
+          </thead>
+          <tbody id="pricelists-tbody"></tbody>
+        </table>
+      </div>
+
+      <!-- TAB: PŘIŘAZENÍ -->
+      <div class="module-panel" id="panel-assignments">
+        <div class="toolbar">
+          <div class="filters">
+            <input type="text" class="filter-input" id="assign-search" placeholder="🔍 Firma, IČO...">
+            <select class="filter-select" id="assign-filter">
+              <option value="">Všechny firmy</option>
+              <option value="assigned">Jen s ceníkem</option>
+              <option value="unassigned">Jen bez ceníku</option>
+            </select>
+          </div>
+          <span style="flex:1;"></span>
+          <button class="btn btn-secondary btn-sm" id="assign-refresh">↻ Aktualizovat</button>
+        </div>
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Firma</th><th>IČO</th><th>Země</th><th>Partneři</th><th>Ceník</th><th></th>
+            </tr>
+          </thead>
+          <tbody id="assignments-tbody"></tbody>
+        </table>
+      </div>
+
+      <!-- TAB: DOPRAVA -->
+      <div class="module-panel" id="panel-shipping">
+        <div class="toolbar">
+          <button class="btn btn-primary btn-sm" id="shipping-new">+ Nový způsob</button>
+          <span style="flex:1;"></span>
+          <button class="btn btn-secondary btn-sm" id="shipping-refresh">↻ Aktualizovat</button>
+        </div>
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Název</th><th class="num">Cena bez DPH</th><th>Měna</th>
+              <th class="num">Zdarma od</th><th>Stav</th><th></th>
+            </tr>
+          </thead>
+          <tbody id="shipping-tbody"></tbody>
+        </table>
+      </div>
+
+      <!-- TAB: PLATBY -->
+      <div class="module-panel" id="panel-payments">
+        <div class="toolbar">
+          <button class="btn btn-primary btn-sm" id="payment-new">+ Nový způsob</button>
+          <span style="flex:1;"></span>
+          <button class="btn btn-secondary btn-sm" id="payment-refresh">↻ Aktualizovat</button>
+        </div>
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Název</th><th>Kód</th><th class="num">Poplatek</th><th>Stav</th><th></th>
+            </tr>
+          </thead>
+          <tbody id="payments-tbody"></tbody>
+        </table>
+      </div>
+
+      <!-- TAB: KATEGORIE -->
+      <div class="module-panel" id="panel-categories">
+        <div class="toolbar">
+          <button class="btn btn-primary btn-sm" id="category-new">+ Nová kategorie</button>
+          <span style="flex:1;"></span>
+          <button class="btn btn-secondary btn-sm" id="category-refresh">↻ Aktualizovat</button>
+        </div>
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Název</th><th>Slug</th><th>Ikona</th><th class="num">Materiálů</th><th></th>
+            </tr>
+          </thead>
+          <tbody id="categories-tbody"></tbody>
+        </table>
+      </div>
+
+      <!-- TAB: NASTAVENÍ -->
+      <div class="module-panel" id="panel-settings">
+        <div style="max-width:600px;">
+          <div class="form-row">
+            <div>
+              <label>Notifikační e-mail (nová objednávka)</label>
+              <input type="email" id="set-notification-email" placeholder="servis@bestseries.cz">
+              <div style="font-size:11px; color:var(--text2); margin-top:4px;">Pokud prázdné, použije se env <code>ESHOP_NOTIFICATION_EMAIL</code>.</div>
+            </div>
+            <div>
+              <label>Velín push — odpovědná osoba</label>
+              <select id="set-notification-person"><option value="">— žádná —</option></select>
+              <div style="font-size:11px; color:var(--text2); margin-top:4px;">Mobilní notifikace přes Velín aplikaci.</div>
+            </div>
+          </div>
+          <div class="form-row">
+            <div>
+              <label>Výchozí měna</label>
+              <input type="text" id="set-default-currency" maxlength="3" placeholder="EUR">
+            </div>
+            <div>
+              <label>Výchozí DPH (%)</label>
+              <input type="number" id="set-default-vat" step="0.01" placeholder="21">
+            </div>
+            <div>
+              <label>Hodin do auto-release rezervace</label>
+              <input type="number" id="set-reservation-hours" min="1" max="720" placeholder="72">
+              <div style="font-size:11px; color:var(--text2); margin-top:4px;">Po této době se neuhrazená objednávka (stav <code>new</code>) automaticky zruší.</div>
+            </div>
+          </div>
+          <div class="form-row">
+            <div>
+              <label>Kontaktní e-mail (eshop footer)</label>
+              <input type="email" id="set-contact-email">
+            </div>
+            <div>
+              <label>Kontaktní telefon (eshop footer)</label>
+              <input type="text" id="set-contact-phone">
+            </div>
+          </div>
+          <div class="form-row">
+            <div style="flex:none; width:100%;">
+              <label>Footer HTML (zobrazí se na konci partner UI)</label>
+              <textarea id="set-footer-html" rows="3" placeholder="<p>...</p>"></textarea>
+            </div>
+          </div>
+          <div style="display:flex; gap:8px;">
+            <button class="btn btn-primary" id="settings-save">Uložit</button>
+            <span id="settings-msg" style="align-self:center; font-size:12px; color:var(--text2);"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal container -->
+  <div class="modal-overlay" id="modal-overlay">
+    <div class="modal" id="modal">
+      <div class="modal-header">
+        <h2 id="modal-title">Modal</h2>
+        <button class="modal-close" onclick="closeModal()">×</button>
+      </div>
+      <div id="modal-body"></div>
+    </div>
+  </div>
+
+  <script src="js/sidebar.js?v=2026-05-18-1"></script>
+  <script>renderSidebar('spare-parts');</script>
+  <script src="modules/spare-parts/app.js?v=2026-05-18-1"></script>
+</body>
+</html>

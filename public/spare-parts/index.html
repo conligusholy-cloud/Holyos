@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Spare Parts Shop — Best Series</title>
+  <link rel="icon" type="image/svg+xml" href="/logo-holyos-icon.svg">
+  <style>
+    :root {
+      --bg: #0a0a14;
+      --surface: #15151f;
+      --surface2: #1f1f2e;
+      --text: #e8e8f0;
+      --text2: #9999b0;
+      --border: #2a2a3e;
+      --accent: #f59e0b;
+      --accent2: #fbbf24;
+      --danger: #ef4444;
+      --success: #22c55e;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin:0; padding:0; background:var(--bg); color:var(--text); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; -webkit-font-smoothing:antialiased; }
+    a { color:var(--accent); }
+
+    .shop-app { max-width:720px; margin:0 auto; min-height:100vh; display:flex; flex-direction:column; }
+
+    /* TOP BAR */
+    .shop-top {
+      display:flex; align-items:center; gap:12px; padding:14px 16px;
+      background:var(--surface); border-bottom:1px solid var(--border);
+      position:sticky; top:0; z-index:10;
+    }
+    .shop-logo { font-size:26px; }
+    .shop-name { font-weight:700; font-size:16px; flex:1; }
+    .shop-tag { font-size:11px; color:var(--text2); font-weight:normal; display:block; }
+    .top-btn {
+      background:transparent; border:1px solid var(--border); color:var(--text);
+      padding:6px 10px; border-radius:8px; cursor:pointer; font-size:13px;
+      text-decoration:none; display:inline-flex; align-items:center; gap:4px;
+    }
+    .cart-badge { position:relative; }
+    .cart-badge .count {
+      position:absolute; top:-6px; right:-6px; background:var(--accent); color:#000;
+      border-radius:10px; padding:1px 5px; font-size:10px; font-weight:700; min-width:16px; text-align:center;
+    }
+
+    /* CONTENT */
+    .shop-content { flex:1; padding:16px; padding-bottom:80px; }
+
+    /* CATALOG */
+    .filters-row { display:flex; gap:8px; margin-bottom:12px; }
+    .filters-row input, .filters-row select {
+      flex:1; padding:10px 12px; background:var(--surface); color:var(--text);
+      border:1px solid var(--border); border-radius:8px; font-size:14px;
+    }
+    .product-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(160px, 1fr)); gap:12px; }
+    .product-card {
+      background:var(--surface); border:1px solid var(--border); border-radius:12px;
+      padding:12px; cursor:pointer; transition:transform 0.1s, border-color 0.1s;
+    }
+    .product-card:hover { transform:translateY(-2px); border-color:var(--accent); }
+    .product-photo {
+      width:100%; aspect-ratio:1; background:var(--surface2); border-radius:8px;
+      margin-bottom:8px; display:flex; align-items:center; justify-content:center;
+      font-size:40px; color:var(--text2); overflow:hidden;
+    }
+    .product-photo img { width:100%; height:100%; object-fit:cover; }
+    .product-code { font-size:11px; color:var(--text2); font-family:monospace; }
+    .product-name { font-size:13px; font-weight:600; margin:4px 0; line-height:1.3; }
+    .product-price { font-size:15px; font-weight:700; color:var(--accent); }
+    .product-stock { font-size:11px; color:var(--text2); margin-top:4px; }
+
+    /* PRODUCT DETAIL */
+    .product-detail .photo { width:100%; max-height:300px; background:var(--surface); border-radius:12px; display:flex; align-items:center; justify-content:center; font-size:80px; color:var(--text2); margin-bottom:12px; overflow:hidden; }
+    .product-detail .photo img { max-width:100%; max-height:300px; object-fit:contain; }
+    .product-detail h1 { font-size:20px; margin:8px 0; }
+    .product-detail .desc { color:var(--text2); font-size:14px; line-height:1.6; margin:12px 0; white-space:pre-wrap; }
+    .qty-row { display:flex; align-items:center; gap:8px; margin:16px 0; }
+    .qty-row button { width:36px; height:36px; border-radius:8px; background:var(--surface); border:1px solid var(--border); color:var(--text); font-size:18px; cursor:pointer; }
+    .qty-row input { width:80px; text-align:center; padding:8px; background:var(--surface); border:1px solid var(--border); border-radius:8px; color:var(--text); font-size:16px; }
+
+    /* CART */
+    .cart-item { display:flex; gap:10px; padding:12px; background:var(--surface); border:1px solid var(--border); border-radius:10px; margin-bottom:8px; }
+    .cart-item .photo { width:60px; height:60px; background:var(--surface2); border-radius:8px; flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:24px; color:var(--text2); }
+    .cart-item .photo img { width:100%; height:100%; object-fit:cover; border-radius:8px; }
+    .cart-item .info { flex:1; min-width:0; }
+    .cart-item .info .name { font-size:13px; font-weight:600; }
+    .cart-item .info .code { font-size:11px; color:var(--text2); font-family:monospace; }
+    .cart-item .info .price { font-size:13px; color:var(--accent); margin-top:4px; }
+    .cart-item .actions { display:flex; flex-direction:column; align-items:flex-end; gap:6px; }
+    .cart-item .qty { display:flex; align-items:center; gap:6px; }
+    .cart-item .qty input { width:48px; text-align:center; padding:4px; background:var(--surface2); border:1px solid var(--border); border-radius:6px; color:var(--text); font-size:13px; }
+    .cart-summary { margin-top:16px; padding:12px; background:var(--surface); border:1px solid var(--border); border-radius:10px; }
+    .summary-row { display:flex; justify-content:space-between; padding:4px 0; font-size:13px; }
+    .summary-row.total { font-size:16px; font-weight:700; border-top:1px solid var(--border); padding-top:8px; margin-top:8px; }
+
+    /* CHECKOUT */
+    .form-group { margin-bottom:12px; }
+    .form-group label { display:block; font-size:11px; color:var(--text2); margin-bottom:4px; text-transform:uppercase; letter-spacing:0.5px; }
+    .form-group input, .form-group select, .form-group textarea {
+      width:100%; padding:10px 12px; background:var(--surface); color:var(--text);
+      border:1px solid var(--border); border-radius:8px; font-size:14px;
+    }
+    .radio-list { display:flex; flex-direction:column; gap:6px; }
+    .radio-card { display:flex; align-items:center; gap:10px; padding:12px; background:var(--surface); border:1px solid var(--border); border-radius:10px; cursor:pointer; }
+    .radio-card:has(input:checked) { border-color:var(--accent); background:rgba(245,158,11,0.05); }
+    .radio-card input { margin:0; }
+    .radio-card .label { flex:1; font-weight:600; font-size:13px; }
+    .radio-card .price { color:var(--accent); font-weight:600; font-size:13px; }
+    .radio-card .desc { font-size:11px; color:var(--text2); margin-top:2px; }
+
+    /* ORDERS HISTORY */
+    .order-row { display:flex; justify-content:space-between; align-items:center; padding:14px; background:var(--surface); border:1px solid var(--border); border-radius:10px; margin-bottom:8px; cursor:pointer; }
+    .order-row:hover { border-color:var(--accent); }
+    .order-row .num { font-weight:700; font-family:monospace; }
+    .order-row .date { font-size:11px; color:var(--text2); }
+    .order-row .total { font-weight:700; color:var(--accent); }
+    .status-badge { display:inline-block; padding:2px 8px; border-radius:10px; font-size:10px; font-weight:600; }
+    .status-new { background:rgba(99,102,241,0.2); color:#818cf8; }
+    .status-confirmed { background:rgba(34,211,238,0.2); color:#22d3ee; }
+    .status-picking { background:rgba(245,158,11,0.2); color:#f59e0b; }
+    .status-shipped { background:rgba(139,92,246,0.2); color:#a78bfa; }
+    .status-delivered { background:rgba(34,197,94,0.2); color:#22c55e; }
+    .status-closed { background:rgba(148,163,184,0.2); color:#94a3b8; }
+    .status-cancelled { background:rgba(239,68,68,0.2); color:#ef4444; }
+
+    /* BUTTONS */
+    .btn { padding:12px 18px; border-radius:10px; border:1px solid var(--border); font-size:14px; font-weight:600; cursor:pointer; display:inline-flex; align-items:center; gap:6px; background:var(--surface); color:var(--text); transition:all 0.15s; text-decoration:none; }
+    .btn:hover { background:var(--surface2); }
+    .btn-primary { background:var(--accent); color:#000; border-color:var(--accent); }
+    .btn-primary:hover { background:var(--accent2); }
+    .btn-block { width:100%; justify-content:center; }
+    .btn:disabled { opacity:0.5; cursor:not-allowed; }
+
+    /* BOTTOM NAV */
+    .bottom-nav {
+      position:fixed; bottom:0; left:0; right:0; max-width:720px; margin:0 auto;
+      display:flex; background:var(--surface); border-top:1px solid var(--border);
+      padding:8px 0; padding-bottom:max(8px, env(safe-area-inset-bottom));
+      z-index:10;
+    }
+    .bottom-nav .nav-item {
+      flex:1; display:flex; flex-direction:column; align-items:center; gap:2px;
+      padding:6px; background:transparent; border:none; color:var(--text2); font-size:11px; cursor:pointer;
+      text-decoration:none;
+    }
+    .bottom-nav .nav-item.active { color:var(--accent); }
+    .bottom-nav .nav-item .icon { font-size:20px; }
+
+    /* LOGIN */
+    .login-card { background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:24px; max-width:380px; margin:40px auto; }
+    .login-card h1 { font-size:20px; margin:0 0 8px; }
+    .login-card .sub { font-size:13px; color:var(--text2); margin-bottom:20px; }
+
+    /* MISC */
+    .empty { text-align:center; padding:60px 20px; color:var(--text2); font-size:14px; }
+    .empty .icon { font-size:48px; margin-bottom:12px; opacity:0.5; }
+    .error { color:var(--danger); font-size:13px; margin:8px 0; }
+    .success { color:var(--success); font-size:13px; margin:8px 0; }
+    .toast { position:fixed; bottom:80px; left:50%; transform:translateX(-50%); background:var(--surface); border:1px solid var(--accent); padding:10px 16px; border-radius:10px; font-size:13px; z-index:100; box-shadow:0 4px 12px rgba(0,0,0,0.4); }
+  </style>
+</head>
+<body>
+  <div class="shop-app" id="app">
+    <div class="empty"><div class="icon">⏳</div>Načítám…</div>
+  </div>
+  <script src="/spare-parts/app.js?v=2026-05-18-1"></script>
+</body>
+</html>

@@ -111,12 +111,18 @@
     document.body.appendChild(overlay);
   }
 
+  function shopButtonHtml() {
+    // Spare Parts Shop — proklik z Huga do eshopu na bestseries.cash/spare-parts
+    return `<a href="/spare-parts" class="hugo-menu" title="Spare Parts Shop" style="text-decoration:none; margin-right:4px; cursor:pointer; line-height:1;">🛒</a>`;
+  }
+
   function langButtonHtml() {
-    if (!window.HugoI18n) return '';
+    const shop = shopButtonHtml();
+    if (!window.HugoI18n) return shop;
     const cur = window.HugoI18n.getLang();
     const L = window.HugoI18n.listLangs().find(x => x.code === cur);
-    if (!L) return '';
-    return `<button class="lang-btn" id="lang-btn" title="${escapeHtml(L.name)}">${window.HugoI18n.flagImg(L, 22)} <span class="caret">▾</span></button>`;
+    if (!L) return shop;
+    return `${shop}<button class="lang-btn" id="lang-btn" title="${escapeHtml(L.name)}">${window.HugoI18n.flagImg(L, 22)} <span class="caret">▾</span></button>`;
   }
 
   // ─── Render ───────────────────────────────────────────────────────────────
