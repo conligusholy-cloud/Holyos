@@ -562,8 +562,29 @@
           ${esc(o.ship_to_address)}<br>
           ${esc(o.ship_to_zip)} ${esc(o.ship_to_city)}, ${esc(o.ship_to_country)}
         </div>
+        ${o.status === 'new' ? `
+          <div style="margin-top:16px; padding:12px; background:rgba(239,68,68,0.05); border:1px solid rgba(239,68,68,0.2); border-radius:10px;">
+            <div style="font-size:12px; color:var(--text2); margin-bottom:8px;">Objednávka zatím není potvrzená — můžete ji do 72 hodin sami stornovat.</div>
+            <button class="btn" style="background:var(--danger); color:#fff; border-color:var(--danger);" onclick="ShopApp.cancelOrder(${o.id})">Zrušit objednávku</button>
+          </div>
+        ` : ''}
       </div>
       ${bottomNav()}`;
+  }
+
+  async function cancelOrder(id) {
+    if (!confirm('Opravdu chcete tuto objednávku zrušit? Tato akce je nevratná.')) return;
+    State.view = 'loading'; render();
+    try {
+      await api(`/orders/${id}/cancel`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ reason: 'cancelled_by_partner' }) });
+      toast('Objednávka byla zrušena.');
+      // Reload list
+      State.orders = await api('/orders');
+      State.view = 'orders';
+      render();
+    } catch (err) {
+      State.error = err.message; State.view = 'error'; render();
+    }
   }
 
   function renderProfile() {
@@ -645,6 +666,7 @@
     setField: function (key, value) { State.checkout[key] = value; },
     submitOrder: submitOrder,
     openOrder: openOrder,
+    cancelOrder: cancelOrder,
   };
 
   bootstrap();
