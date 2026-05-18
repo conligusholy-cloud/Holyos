@@ -63,6 +63,8 @@ const salesRoutes = require('./routes/sales.routes');
 const serviceRoutes = require('./routes/service.routes');
 const hugoRoutes = require('./routes/hugo.routes');
 const velinRoutes = require('./routes/velin.routes');
+const eshopAdminRoutes = require('./routes/eshop-admin.routes');
+const shopRoutes = require('./routes/shop.routes');
 
 // ─── Inicializace aplikace ────────────────────────────────────────────────
 
@@ -501,6 +503,8 @@ app.use('/api/sites', siteDevelopmentRoutes); // Site Development — řízení 
 app.use('/api/service', serviceRoutes); // Servis — interní admin (znalostní báze pro servisáky)
 app.use('/api/hugo', hugoRoutes);        // Hugo AI servisák — partner login + chat (bestseries.cash)
 app.use('/api/velin', velinRoutes); // Velín — mobilní aplikace pro řízení dne kolegů
+app.use('/api/eshop-admin', eshopAdminRoutes); // Spare Parts Shop — admin CRUD (interní login)
+app.use('/api/shop', shopRoutes); // Spare Parts Shop — partner-facing API (bestseries.cash)
 
 // ─── Legacy storage proxy (kompatibilita s persistent-storage.js) ──────────
 
@@ -725,6 +729,12 @@ app.listen(PORT, async () => {
     velinScheduler.start();
   } catch (err) {
     console.error('[app] velin-scheduler nelze spustit:', err.message);
+  }
+  try {
+    const eshopReleaseWorker = require('./services/eshop/auto-release-worker');
+    eshopReleaseWorker.start();
+  } catch (err) {
+    console.error('[app] eshop-release-worker nelze spustit:', err.message);
   }
   console.log('=========================================');
   console.log('  HolyOS v0.5.0');
