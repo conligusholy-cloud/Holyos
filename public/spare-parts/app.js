@@ -589,8 +589,47 @@
             <button class="btn" style="background:var(--danger); color:#fff; border-color:var(--danger);" onclick="ShopApp.cancelOrder(${o.id})">Zrušit objednávku</button>
           </div>
         ` : ''}
+        ${(o.status === 'delivered' || o.status === 'closed' || o.status === 'shipped') ? `
+          <div style="margin-top:16px; padding:12px; background:rgba(34,197,94,0.05); border:1px solid rgba(34,197,94,0.2); border-radius:10px;">
+            <div style="font-size:12px; color:var(--text2); margin-bottom:8px;">Potřebujete to znovu? Přidáme stejné položky do košíku za aktuální ceny.</div>
+            <button class="btn btn-primary" onclick="ShopApp.reorder(${o.id})">🔄 Objednat znovu</button>
+          </div>
+        ` : ''}
       </div>
       ${bottomNav()}`;
+  }
+
+  async function reorderOrder(orderId) {
+    State.view = 'loading'; render();
+    try {
+      const o = State.selectedOrder && State.selectedOrder.id === orderId
+        ? State.selectedOrder
+        : await api(`/orders/${orderId}`);
+      let added = 0, skipped = 0;
+      for (const it of o.items) {
+        if (it.material_id == null) { skipped++; continue; }
+        try {
+          const product = await api(`/products/${it.material_id}`);
+          if (product.available_qty > 0) {
+            const qty = Math.min(Number(it.quantity), product.available_qty);
+            addToCart(product, qty);
+            added++;
+          } else {
+            skipped++;
+          }
+        } catch (_e) {
+          skipped++; // produkt už není v katalogu
+        }
+      }
+      State.view = 'cart';
+      render();
+      toast(skipped > 0
+        ? `Přidáno ${added} položek do košíku, ${skipped} už není dostupných.`
+        : `Přidáno ${added} položek do košíku.`,
+        4000);
+    } catch (err) {
+      State.error = err.message; State.view = 'error'; render();
+    }
   }
 
   async function cancelOrder(id) {
@@ -688,6 +727,7 @@
     submitOrder: submitOrder,
     openOrder: openOrder,
     cancelOrder: cancelOrder,
+    reorder: reorderOrder,
   };
 
   bootstrap();
