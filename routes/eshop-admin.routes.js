@@ -667,6 +667,134 @@ router.put('/settings', async (req, res, next) => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
+// STATISTIKY (dashboard)
+// ═══════════════════════════════════════════════════════════════════════════
+
+router.get('/stats/dashboard', async (req, res, next) => {
+  try {
+    // Period: default posledních 90 dnů, lze přepsat ?from=YYYY-MM-DD&to=YYYY-MM-DD
+    const now = new Date();
+    const defaultFrom = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+    const from = req.query.from ? new Date(String(req.query.from)) : defaultFrom;
+    const to = req.query.to ? new Date(String(req.query.to)) : now;
+
+    // Pouze NE-cancelled objednávky se počítají jako "skutečné"
+    const baseWhere = {
+      created_at: { gte: from, lte: to },
+      status: { not: 'cancelled' },
+    };
+
+    // 1) Souhrn — počet, celkový revenue, průměr objednávky
+    const [totalAgg, statusGroups] = await Promise.all([
+      prisma.shopOrder.aggregate({
+        where: baseWhere,
+        _count: { _all: true },
+        _sum: { total_incl_vat: true },
+        _avg: { total_incl_vat: true },
+      }),
+      prisma.shopOrder.groupBy({
+        by: ['status'],
+        where: { created_at: { gte: from, lte: to } },
+        _count: { _all: true },
+      }),
+    ]);
+
+    const statusCounts = { new: 0, confirmed: 0, picking: 0, shipped: 0, delivered: 0, closed: 0, cancelled: 0 };
+    statusGroups.forEach(g => { statusCounts[g.status] = g._count._all; });
+
+    // 2) Top-selling položky — agregace přes ShopOrderItem
+    const topItemsRaw = await prisma.shopOrderItem.groupBy({
+      by: ['material_id', 'material_code', 'material_name'],
+      where: { order: baseWhere },
+      _sum: { quantity: true, total_excl: true },
+      orderBy: { _sum: { total_excl: 'desc' } },
+      take: 10,
+    });
+    const topItems = topItemsRaw.map(t => ({
+      material_id: t.material_id,
+      code: t.material_code,
+      name: t.material_name,
+      qty: Number(t._sum.quantity || 0),
+      revenue: Number(t._sum.total_excl || 0),
+    }));
+
+    // 3) Revenue per měsíc (posledních 12 měsíců) — Postgres date_trunc
+    // Prisma nemá nativní date_trunc, použijeme raw SQL
+    const monthly = await prisma.$queryRaw`
+      SELECT
+        TO_CHAR(date_trunc('month', created_at), 'YYYY-MM') as month,
+        COUNT(*)::int as order_count,
+        COALESCE(SUM(total_incl_vat), 0)::numeric as revenue
+      FROM eshop_orders
+      WHERE status != 'cancelled' AND created_at >= ${new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000)}
+      GROUP BY date_trunc('month', created_at)
+      ORDER BY date_trunc('month', created_at) ASC
+    `;
+    const revenueByMonth = monthly.map(m => ({
+      month: m.month,
+      orders: Number(m.order_count),
+      revenue: Number(m.revenue),
+    }));
+
+    // 4) Top firmy (kdo nejvíc nakupuje)
+    const topCompaniesRaw = await prisma.shopOrder.groupBy({
+      by: ['company_id'],
+      where: { ...baseWhere, company_id: { not: null } },
+      _count: { _all: true },
+      _sum: { total_incl_vat: true },
+      orderBy: { _sum: { total_incl_vat: 'desc' } },
+      take: 10,
+    });
+    const companyIds = topCompaniesRaw.map(t => t.company_id).filter(Boolean);
+    const companies = companyIds.length
+      ? await prisma.company.findMany({ where: { id: { in: companyIds } }, select: { id: true, name: true, ico: true } })
+      : [];
+    const companyMap = new Map(companies.map(c => [c.id, c]));
+    const topCompanies = topCompaniesRaw.map(t => ({
+      company_id: t.company_id,
+      name: companyMap.get(t.company_id) ? companyMap.get(t.company_id).name : '(neznámá)',
+      orders: t._count._all,
+      revenue: Number(t._sum.total_incl_vat || 0),
+    }));
+
+    // 5) Conversion — kolik Hugo sessions / kolik objednávek (period)
+    let conversion = null;
+    try {
+      const [sessions, partnersWithOrders] = await Promise.all([
+        prisma.serviceChatSession.count({ where: { created_at: { gte: from, lte: to } } }),
+        prisma.shopOrder.findMany({
+          where: baseWhere,
+          select: { partner_id: true },
+          distinct: ['partner_id'],
+        }),
+      ]);
+      conversion = {
+        hugo_sessions: sessions,
+        partners_with_orders: partnersWithOrders.length,
+        rate: sessions > 0 ? Math.round((partnersWithOrders.length / sessions) * 10000) / 100 : 0,
+      };
+    } catch (e) {
+      conversion = { error: e.message };
+    }
+
+    res.json({
+      period: { from, to },
+      summary: {
+        total_orders: totalAgg._count._all || 0,
+        total_revenue: Number(totalAgg._sum.total_incl_vat || 0),
+        avg_order_value: Number(totalAgg._avg.total_incl_vat || 0),
+        cancelled: statusCounts.cancelled,
+      },
+      status_counts: statusCounts,
+      top_items: topItems,
+      revenue_by_month: revenueByMonth,
+      top_companies: topCompanies,
+      conversion,
+    });
+  } catch (err) { next(err); }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
 // LOOKUP — Warehouses a Persons (pro selecty v UI)
 // ═══════════════════════════════════════════════════════════════════════════
 

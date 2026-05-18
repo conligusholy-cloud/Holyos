@@ -74,7 +74,8 @@
   });
 
   function loadTab(id) {
-    if (id === 'orders') loadOrders();
+    if (id === 'stats') loadStats();
+    else if (id === 'orders') loadOrders();
     else if (id === 'catalog') loadCatalog();
     else if (id === 'pricelists') loadPricelists();
     else if (id === 'assignments') loadAssignments();
@@ -83,6 +84,116 @@
     else if (id === 'categories') loadCategories();
     else if (id === 'settings') loadSettings();
   }
+
+  // ═════════════════════════════════════════════════════════════════════════
+  // STATISTIKY (dashboard)
+  // ═════════════════════════════════════════════════════════════════════════
+
+  async function loadStats() {
+    const root = document.getElementById('stats-content');
+    root.innerHTML = '<div class="empty-state">Načítám…</div>';
+    const fromEl = document.getElementById('stats-from');
+    const toEl = document.getElementById('stats-to');
+    const params = new URLSearchParams();
+    if (fromEl.value) params.set('from', fromEl.value);
+    if (toEl.value) params.set('to', toEl.value);
+    try {
+      const s = await fetchJSON(`${API}/stats/dashboard?${params}`);
+      renderStats(s);
+    } catch (err) {
+      root.innerHTML = `<div class="empty-state">Chyba: ${esc(err.message)}</div>`;
+    }
+  }
+
+  function renderStats(s) {
+    const cur = (s.top_items[0] && s.top_items[0].currency) || (s.revenue_by_month[0] && 'EUR') || 'EUR';
+    // Top item bar chart
+    const maxRevenue = Math.max(...s.top_items.map(t => t.revenue), 1);
+    const topItemsHtml = s.top_items.length ? s.top_items.map(t => `
+      <div style="display:grid; grid-template-columns:160px 1fr 110px 70px; gap:8px; align-items:center; padding:6px 0; border-bottom:1px solid var(--border);">
+        <code style="font-size:11px; color:var(--text2);">${esc(t.code)}</code>
+        <div style="font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(t.name)}</div>
+        <div style="background:rgba(245,158,11,0.15); border-radius:4px; height:18px; position:relative; overflow:hidden;">
+          <div style="background:#f59e0b; height:100%; width:${(t.revenue / maxRevenue * 100).toFixed(0)}%;"></div>
+        </div>
+        <div class="num" style="font-size:12px; font-weight:600;">${Number(t.revenue).toFixed(0)} ${cur}</div>
+      </div>`).join('') : '<div class="empty-state">Žádné prodeje v období.</div>';
+
+    // Revenue by month bars
+    const maxMonth = Math.max(...s.revenue_by_month.map(m => m.revenue), 1);
+    const monthsHtml = s.revenue_by_month.length ? `
+      <div style="display:grid; grid-template-columns:repeat(${s.revenue_by_month.length}, 1fr); gap:6px; align-items:flex-end; height:140px; margin-bottom:8px;">
+        ${s.revenue_by_month.map(m => `
+          <div style="display:flex; flex-direction:column; align-items:center; height:100%;">
+            <div style="flex:1; display:flex; align-items:flex-end; width:100%;">
+              <div style="background:linear-gradient(180deg, #fbbf24, #f59e0b); width:100%; height:${(m.revenue / maxMonth * 100).toFixed(0)}%; border-radius:4px 4px 0 0; min-height:2px;" title="${m.revenue.toFixed(0)} ${cur}"></div>
+            </div>
+            <div style="font-size:10px; color:var(--text2); margin-top:4px;">${esc(m.month.slice(5))}</div>
+            <div style="font-size:11px; font-weight:600;">${m.revenue >= 1000 ? (m.revenue/1000).toFixed(1) + 'k' : Math.round(m.revenue)}</div>
+          </div>`).join('')}
+      </div>` : '<div class="empty-state">Žádná data.</div>';
+
+    // Top companies
+    const topCoHtml = s.top_companies.length ? s.top_companies.map(c => `
+      <tr><td>${esc(c.name)}</td><td class="num">${c.orders}</td><td class="num">${Number(c.revenue).toFixed(0)} ${cur}</td></tr>`).join('')
+      : '<tr><td colspan="3" class="empty-state">Žádné firmy v období.</td></tr>';
+
+    // Status distribution
+    const statusOrder = ['new','confirmed','picking','shipped','delivered','closed','cancelled'];
+    const statusLabels = { new:'Nové', confirmed:'Potvrzené', picking:'Pickování', shipped:'Odeslané', delivered:'Doručené', closed:'Uzavřené', cancelled:'Zrušené' };
+    const totalStatus = statusOrder.reduce((a, k) => a + (s.status_counts[k] || 0), 0);
+    const statusHtml = statusOrder.map(k => {
+      const n = s.status_counts[k] || 0;
+      const pct = totalStatus > 0 ? (n / totalStatus * 100).toFixed(0) : 0;
+      return `<tr>
+        <td>${esc(statusLabels[k])}</td>
+        <td class="num">${n}</td>
+        <td><div style="background:rgba(245,158,11,0.15); border-radius:4px; height:8px; overflow:hidden;"><div style="background:#f59e0b; height:100%; width:${pct}%;"></div></div></td>
+        <td class="num">${pct} %</td>
+      </tr>`;
+    }).join('');
+
+    const c = s.conversion || {};
+    document.getElementById('stats-content').innerHTML = `
+      <div class="stat-grid">
+        <div class="stat-card"><div class="label">Objednávky</div><div class="value">${s.summary.total_orders}</div></div>
+        <div class="stat-card"><div class="label">Tržby (s DPH)</div><div class="value">${Math.round(s.summary.total_revenue).toLocaleString('cs-CZ')} ${cur}</div></div>
+        <div class="stat-card"><div class="label">Průměrná objednávka</div><div class="value">${Math.round(s.summary.avg_order_value)} ${cur}</div></div>
+        <div class="stat-card"><div class="label">Zrušené</div><div class="value" style="color:#ef4444;">${s.summary.cancelled}</div></div>
+        ${c.hugo_sessions != null ? `
+          <div class="stat-card"><div class="label">Hugo sessions</div><div class="value">${c.hugo_sessions}</div></div>
+          <div class="stat-card"><div class="label">Konverze sessions→nákup</div><div class="value">${c.rate} %</div></div>
+        ` : ''}
+      </div>
+
+      <h3 style="font-size:14px; margin:20px 0 8px;">Tržby per měsíc (12 měsíců)</h3>
+      ${monthsHtml}
+
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-top:20px;">
+        <div>
+          <h3 style="font-size:14px; margin:0 0 8px;">Top 10 prodávaných položek (revenue)</h3>
+          ${topItemsHtml}
+        </div>
+        <div>
+          <h3 style="font-size:14px; margin:0 0 8px;">Top 10 firem (revenue)</h3>
+          <table class="data-table">
+            <thead><tr><th>Firma</th><th class="num">Obj.</th><th class="num">Tržby</th></tr></thead>
+            <tbody>${topCoHtml}</tbody>
+          </table>
+        </div>
+      </div>
+
+      <h3 style="font-size:14px; margin:20px 0 8px;">Rozdělení objednávek podle stavu</h3>
+      <table class="data-table">
+        <thead><tr><th>Stav</th><th class="num">Počet</th><th>Graf</th><th class="num">%</th></tr></thead>
+        <tbody>${statusHtml}</tbody>
+      </table>
+    `;
+  }
+
+  document.getElementById('stats-refresh').addEventListener('click', loadStats);
+  document.getElementById('stats-from').addEventListener('change', loadStats);
+  document.getElementById('stats-to').addEventListener('change', loadStats);
 
   // ═════════════════════════════════════════════════════════════════════════
   // OBJEDNÁVKY
@@ -869,5 +980,5 @@
     };
   }
 
-  loadOrders(); // initial load
+  loadStats(); // initial load — dashboard tab je defaultní
 })();
