@@ -14,7 +14,7 @@ const { prisma } = require('../config/database');
 const { requireAuth } = require('../middleware/auth');
 
 // ─── Konstanty ───────────────────────────────────────────────────────────
-const APPLICANT_STATUSES = ['new', 'contacted', 'interview', 'offer', 'hired', 'rejected'];
+const APPLICANT_STATUSES = ['new', 'contacted', 'unreachable', 'interview', 'offer', 'hired', 'rejected'];
 const APPLICANT_SOURCES = ['manual', 'facebook_ads', 'referral', 'web', 'csv_import', 'other'];
 
 // ─── META WEBHOOK (BEZ autentizace) ──────────────────────────────────────

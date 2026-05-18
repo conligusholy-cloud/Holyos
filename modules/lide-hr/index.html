@@ -670,7 +670,7 @@
         </div>
 
         <!-- Status kanban-like stats -->
-        <div id="applicant-stats" style="display:grid; grid-template-columns:repeat(6,1fr); gap:10px; margin-bottom:16px;"></div>
+        <div id="applicant-stats" style="display:grid; grid-template-columns:repeat(7,1fr); gap:10px; margin-bottom:16px;"></div>
 
         <div class="toolbar">
           <input type="text" id="applicant-search" placeholder="🔍 Hledat (jméno, e-mail, telefon, pozice)…" oninput="loadApplicants()" style="width:300px;">
@@ -678,6 +678,7 @@
             <option value="">Všechny stavy</option>
             <option value="new">Nový</option>
             <option value="contacted">Kontaktováno</option>
+            <option value="unreachable">Nedovoláno</option>
             <option value="interview">Pohovor</option>
             <option value="offer">Nabídka</option>
             <option value="hired">Přijat</option>
@@ -708,6 +709,7 @@
     /* Aplicants — badges */
     .badge-status-new        { background: rgba(99,102,241,0.18);  color: #818cf8; }
     .badge-status-contacted  { background: rgba(59,130,246,0.18);  color: #60a5fa; }
+    .badge-status-unreachable{ background: rgba(234,88,12,0.18);   color: #fb923c; }
     .badge-status-interview  { background: rgba(245,158,11,0.18);  color: #fbbf24; }
     .badge-status-offer      { background: rgba(168,85,247,0.18);  color: #c084fc; }
     .badge-status-hired      { background: rgba(16,185,129,0.20);  color: #34d399; }
@@ -3377,8 +3379,8 @@
     // UCHAZEČI O PRÁCI (job applicants)
     // ============================================================
     const APPLICANT_STATUS_LABELS = {
-      new: 'Nový', contacted: 'Kontaktováno', interview: 'Pohovor',
-      offer: 'Nabídka', hired: 'Přijat', rejected: 'Odmítnut',
+      new: 'Nový', contacted: 'Kontaktováno', unreachable: 'Nedovoláno',
+      interview: 'Pohovor', offer: 'Nabídka', hired: 'Přijat', rejected: 'Odmítnut',
     };
     const APPLICANT_SOURCE_LABELS = {
       manual: 'Manuální', facebook_ads: '📘 Facebook Ads', referral: 'Doporučení',
@@ -3401,6 +3403,7 @@
           { key: '',          label: 'Celkem',       value: s.total, color: '#6c5ce7' },
           { key: 'new',       label: 'Nový',         value: s.new, color: '#818cf8' },
           { key: 'contacted', label: 'Kontaktováno', value: s.contacted, color: '#60a5fa' },
+          { key: 'unreachable', label: 'Nedovoláno', value: s.unreachable, color: '#fb923c' },
           { key: 'interview', label: 'Pohovor',      value: s.interview, color: '#fbbf24' },
           { key: 'offer',     label: 'Nabídka',      value: s.offer, color: '#c084fc' },
           { key: 'hired',     label: 'Přijat',       value: s.hired, color: '#34d399' },
