@@ -111,6 +111,20 @@
     return Math.round(State.cart.reduce((a, it) => a + it.price_excl_vat * it.quantity, 0) * 100) / 100;
   }
 
+  // ─── Tracking helper ─────────────────────────────────────────────────────
+
+  function trackingUrl(carrier, number) {
+    if (!carrier || !number) return null;
+    const c = String(carrier).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+    const n = encodeURIComponent(String(number).trim());
+    if (/zasilkovna|packeta/.test(c)) return `https://tracking.packeta.com/cs_CZ/?id=${n}`;
+    if (/dpd/.test(c)) return `https://tracking.dpd.cz/cs/parcels?query=${n}`;
+    if (/gls/.test(c)) return `https://gls-group.eu/CZ/cs/sledovani-zasilek?match=${n}`;
+    if (/ppl/.test(c)) return `https://www.ppl.cz/vyhledat-zasilku?shipmentId=${n}`;
+    if (/cesk[aá] po[sš]ta|czech post|cposta/.test(c)) return `https://www.ceskaposta.cz/vnitrostatni-sluzby/dohledani-zasilky?searchPhrase=${n}`;
+    return null; // neznámý dopravce — neukazujeme link, jen text
+  }
+
   // ─── Bootstrap ──────────────────────────────────────────────────────────
 
   async function bootstrap() {
@@ -536,7 +550,14 @@
           <span class="status-badge status-${esc(o.status)}">${esc(o.status)}</span>
           <span style="color:var(--text2); font-size:12px; margin-left:8px;">${esc(fmtDate(o.created_at))}</span>
         </div>
-        ${o.tracking_number ? `<div class="cart-summary" style="margin-bottom:12px;"><strong>Sledování:</strong> ${esc(o.tracking_carrier || '')} ${esc(o.tracking_number)}</div>` : ''}
+        ${o.tracking_number ? (() => {
+          const url = trackingUrl(o.tracking_carrier, o.tracking_number);
+          const txt = `${esc(o.tracking_carrier || 'Dopravce')} — ${esc(o.tracking_number)}`;
+          return `<div class="cart-summary" style="margin-bottom:12px;">
+            <div style="font-size:11px; color:var(--text2); text-transform:uppercase; margin-bottom:4px;">📦 Sledování zásilky</div>
+            ${url ? `<a href="${url}" target="_blank" rel="noopener" style="color:var(--accent); font-weight:600; text-decoration:none;">${txt} ↗</a>` : `<span style="font-weight:600;">${txt}</span>`}
+          </div>`;
+        })() : ''}
         ${o.items.map(it => `
           <div class="cart-item">
             <div class="photo">📦</div>
