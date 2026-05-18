@@ -109,7 +109,8 @@
     </div>
 
     <nav class="module-tabs">
-      <button class="module-tab active" data-tab="orders">📦 Objednávky</button>
+      <button class="module-tab active" data-tab="stats">📊 Statistiky</button>
+      <button class="module-tab" data-tab="orders">📦 Objednávky</button>
       <button class="module-tab" data-tab="catalog">📋 Katalog</button>
       <button class="module-tab" data-tab="pricelists">💰 Ceníky</button>
       <button class="module-tab" data-tab="assignments">🏢 Přiřazení ceníků</button>
@@ -120,8 +121,24 @@
     </nav>
 
     <div class="content">
+      <!-- TAB: STATISTIKY -->
+      <div class="module-panel active" id="panel-stats">
+        <div class="toolbar">
+          <div class="filters">
+            <label style="font-size:12px; color:var(--text2); display:flex; align-items:center; gap:6px;">Od:
+              <input type="date" id="stats-from" class="filter-input"></label>
+            <label style="font-size:12px; color:var(--text2); display:flex; align-items:center; gap:6px;">Do:
+              <input type="date" id="stats-to" class="filter-input"></label>
+            <button class="btn btn-secondary btn-sm" id="stats-refresh">↻ Aktualizovat</button>
+          </div>
+        </div>
+        <div id="stats-content">
+          <div class="empty-state">Načítám…</div>
+        </div>
+      </div>
+
       <!-- TAB: OBJEDNÁVKY -->
-      <div class="module-panel active" id="panel-orders">
+      <div class="module-panel" id="panel-orders">
         <div class="stat-grid" id="orders-stats"></div>
         <div class="toolbar">
           <div class="filters">
