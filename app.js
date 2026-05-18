@@ -59,6 +59,7 @@ const directivesRoutes = require('./routes/directives.routes');
 const agentRoutes = require('./routes/agent.routes');
 const businessToolsRoutes = require('./routes/business-tools.routes');
 const siteDevelopmentRoutes = require('./routes/site-development.routes');
+const salesRoutes = require('./routes/sales.routes');
 const serviceRoutes = require('./routes/service.routes');
 const hugoRoutes = require('./routes/hugo.routes');
 const velinRoutes = require('./routes/velin.routes');
@@ -495,6 +496,7 @@ app.use('/api/normovani', normovaniRoutes);
 app.use('/api/directives', directivesRoutes);
 app.use('/api/agent', agentRoutes); // AI Vývojář (modul #13) — super-admin only
 app.use('/api/tools', businessToolsRoutes); // Obchodní pomůcky (sales-aid)
+app.use('/api/sales', salesRoutes); // Obchod — CRM (SalesContact, pipeline, kalendář, webhooky FB/IG/LinkedIn)
 app.use('/api/sites', siteDevelopmentRoutes); // Site Development — řízení expanze (vyhledávání lokalit, pozemků, smluv)
 app.use('/api/service', serviceRoutes); // Servis — interní admin (znalostní báze pro servisáky)
 app.use('/api/hugo', hugoRoutes);        // Hugo AI servisák — partner login + chat (bestseries.cash)
