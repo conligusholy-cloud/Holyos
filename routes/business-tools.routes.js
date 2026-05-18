@@ -23,6 +23,29 @@ function isSupportedTool(slug) {
   return Object.prototype.hasOwnProperty.call(SUPPORTED_TOOLS, slug);
 }
 
+// Podporované jazykové mutace pro veřejnou share stránku.
+// Při rozšíření o další jazyk přidej i překlady v pradlomat-economy.js (window.PRADLOMAT_I18N).
+const SUPPORTED_LANGUAGES = ['cs', 'en', 'de', 'fr'];
+
+// Vrátí očištěné pole jazykových kódů; vždy obsahuje alespoň 'cs'.
+function sanitizeLanguages(input) {
+  if (!Array.isArray(input)) return ['cs'];
+  const seen = new Set();
+  const out = [];
+  for (const raw of input) {
+    if (typeof raw !== 'string') continue;
+    const code = raw.toLowerCase().trim();
+    if (!SUPPORTED_LANGUAGES.includes(code)) continue;
+    if (seen.has(code)) continue;
+    seen.add(code);
+    out.push(code);
+  }
+  if (!out.length) out.push('cs');
+  // Garantovat 'cs' jako fallback (always-available default)
+  if (!seen.has('cs')) out.push('cs');
+  return out;
+}
+
 function generateShareToken() {
   return crypto.randomBytes(24).toString('hex'); // 48 hex znaků
 }
@@ -93,6 +116,11 @@ router.get('/share/:token', async (req, res, next) => {
 
     const meta = SUPPORTED_TOOLS[recipient.tool] || { title: recipient.tool, description: '' };
 
+    // languages může být null pro staré záznamy před migrací — fallback na ['cs'].
+    const languages = (Array.isArray(recipient.languages) && recipient.languages.length)
+      ? recipient.languages
+      : ['cs'];
+
     res.json({
       recipient: {
         id: recipient.id,
@@ -103,6 +131,7 @@ router.get('/share/:token', async (req, res, next) => {
         note: recipient.note,
       },
       tool: { slug: recipient.tool, ...meta },
+      languages,
       defaults_json: defaultsRow ? defaultsRow.data_json : null,
       locks_json: defaultsRow ? (defaultsRow.locks_json || {}) : {},
       models: recipient.models.map((m) => ({
@@ -277,6 +306,7 @@ router.get('/recipients', async (req, res, next) => {
       note: r.note,
       share_token: r.share_token,
       share_link: buildPublicShareUrl('/share/tools/' + r.tool + '/' + r.share_token),
+      languages: (Array.isArray(r.languages) && r.languages.length) ? r.languages : ['cs'],
       created_at: r.created_at,
       last_opened: r.last_opened,
       open_count: r.open_count,
@@ -299,7 +329,7 @@ router.get('/tools-meta', (req, res) => {
 // POST /api/tools/recipients — založí příjemce + pošle email
 router.post('/recipients', async (req, res, next) => {
   try {
-    const { tool, name, email, company, note, send_email } = req.body || {};
+    const { tool, name, email, company, note, send_email, languages } = req.body || {};
 
     if (!tool || !isSupportedTool(tool)) {
       return res.status(400).json({ error: 'Neznámá pomůcka (tool)' });
@@ -311,6 +341,9 @@ router.post('/recipients', async (req, res, next) => {
       return res.status(400).json({ error: 'Neplatný e-mail' });
     }
 
+    // Pořadí v poli definuje výchozí jazyk při prvním otevření (první kód).
+    const langs = sanitizeLanguages(languages);
+
     const token = generateShareToken();
 
     const recipient = await prisma.businessToolRecipient.create({
@@ -321,6 +354,7 @@ router.post('/recipients', async (req, res, next) => {
         company: company ? String(company).trim().slice(0, 255) : null,
         note: note ? String(note).trim().slice(0, 2000) : null,
         share_token: token,
+        languages: langs,
         created_by: req.user.id,
       },
     });
@@ -434,6 +468,9 @@ router.patch('/recipients/:id', async (req, res, next) => {
     if (typeof req.body.note === 'string') data.note = req.body.note.trim().slice(0, 2000) || null;
     if (typeof req.body.email === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(req.body.email)) {
       data.email = req.body.email.trim().toLowerCase().slice(0, 255);
+    }
+    if (Array.isArray(req.body.languages)) {
+      data.languages = sanitizeLanguages(req.body.languages);
     }
     if (!Object.keys(data).length) return res.status(400).json({ error: 'Nic k aktualizaci' });
 

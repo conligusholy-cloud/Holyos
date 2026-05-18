@@ -14,6 +14,19 @@
   'use strict';
 
   // ─────────────────────────────────────────────────────────────────
+  // 0) i18n helper — fallback na český klíč pokud window.PradlomatI18n
+  //    není načten (např. v admin UI v Prodejních objednávkách).
+  // ─────────────────────────────────────────────────────────────────
+  function _t(s) {
+    var i = global.PradlomatI18n;
+    return (i && typeof i.t === 'function') ? i.t(s) : s;
+  }
+  function _loc() {
+    var i = global.PradlomatI18n;
+    return (i && typeof i.locale === 'function') ? i.locale() : 'cs-CZ';
+  }
+
+  // ─────────────────────────────────────────────────────────────────
   // 1) Výchozí vstupy (přesně podle Excelu, hardcoded žlutá pole)
   // ─────────────────────────────────────────────────────────────────
   var DEFAULTS = {
@@ -199,12 +212,12 @@
   function fmtEur(n, decimals) {
     if (!isFinite(n)) return '∞';
     var d = decimals == null ? 0 : decimals;
-    return n.toLocaleString('cs-CZ', { minimumFractionDigits: d, maximumFractionDigits: d }) + ' €';
+    return n.toLocaleString(_loc(), { minimumFractionDigits: d, maximumFractionDigits: d }) + ' €';
   }
   function fmtNum(n, decimals) {
     if (!isFinite(n)) return '∞';
     var d = decimals == null ? 1 : decimals;
-    return n.toLocaleString('cs-CZ', { minimumFractionDigits: d, maximumFractionDigits: d });
+    return n.toLocaleString(_loc(), { minimumFractionDigits: d, maximumFractionDigits: d });
   }
 
   // ─────────────────────────────────────────────────────────────────
@@ -354,7 +367,7 @@
     if (LOCKABLE) {
       lockCell = '<button type="button" class="pe-lock-btn' + (locked ? ' locked' : '') +
         '" data-lock-key="' + key + '" onclick="window.PradlomatTool._toggleLock(\'' + key + '\')" title="' +
-        (locked ? 'Zamčeno — zákazník nesmí měnit. Klik pro odemčení.' : 'Odemčené — zákazník může měnit. Klik pro zamčení.') +
+        (locked ? _t('Zamčeno — zákazník nesmí měnit. Klik pro odemčení.') : _t('Odemčené — zákazník může měnit. Klik pro zamčení.')) +
         '">' + (locked ? '🔒' : '🔓') + '</button>';
     }
 
@@ -402,141 +415,141 @@
 
     // Toolbar
     var saveDefaultsBtn = ON_SAVE_DEFAULTS
-      ? '<button class="btn btn-primary btn-sm" onclick="window.PradlomatTool._saveAsDefaults()">💾 Uložit jako výchozí</button>'
+      ? '<button class="btn btn-primary btn-sm" onclick="window.PradlomatTool._saveAsDefaults()">' + _t('💾 Uložit jako výchozí') + '</button>'
       : '';
     html +=
       '<div class="pe-toolbar">' +
-        '<span class="pe-legend"><span class="pe-sw"></span> Editovatelné</span>' +
-        '<span class="pe-legend"><span class="pe-sw ro"></span> Vypočítané</span>' +
+        '<span class="pe-legend"><span class="pe-sw"></span> ' + _t('Editovatelné') + '</span>' +
+        '<span class="pe-legend"><span class="pe-sw ro"></span> ' + _t('Vypočítané') + '</span>' +
         '<div style="flex:1"></div>' +
         saveDefaultsBtn +
-        '<button class="btn btn-secondary btn-sm" onclick="window.PradlomatTool.resetDefaults()">↺ Tovární hodnoty</button>' +
-        '<button class="btn btn-secondary btn-sm" onclick="window.PradlomatTool.exportJSON()">⬇ Stáhnout model (JSON)</button>' +
+        '<button class="btn btn-secondary btn-sm" onclick="window.PradlomatTool.resetDefaults()">' + _t('↺ Tovární hodnoty') + '</button>' +
+        '<button class="btn btn-secondary btn-sm" onclick="window.PradlomatTool.exportJSON()">' + _t('⬇ Stáhnout model (JSON)') + '</button>' +
       '</div>';
 
     // Výsledky nahoře (sticky-feel)
     html +=
       '<div class="pe-results" id="pe-results-block">' +
-        '<div class="pe-result-card" id="pe-rc-investice"><div class="pe-rc-label">Investice celkem</div><div class="pe-rc-value">—</div><div class="pe-rc-sub">na jedno místo</div></div>' +
-        '<div class="pe-result-card" id="pe-rc-obrat"><div class="pe-rc-label">Obrat / měsíc</div><div class="pe-rc-value">—</div><div class="pe-rc-sub" id="pe-rc-obrat-sub">— zákazníků</div></div>' +
-        '<div class="pe-result-card" id="pe-rc-zisk"><div class="pe-rc-label">Zisk / měsíc</div><div class="pe-rc-value">—</div><div class="pe-rc-sub">po všech nákladech vč. servisu</div></div>' +
-        '<div class="pe-result-card" id="pe-rc-navratnost"><div class="pe-rc-label">Návratnost</div><div class="pe-rc-value">—</div><div class="pe-rc-sub" id="pe-rc-navratnost-sub">— měsíců</div></div>' +
+        '<div class="pe-result-card" id="pe-rc-investice"><div class="pe-rc-label">' + _t('Investice celkem') + '</div><div class="pe-rc-value">—</div><div class="pe-rc-sub">' + _t('na jedno místo') + '</div></div>' +
+        '<div class="pe-result-card" id="pe-rc-obrat"><div class="pe-rc-label">' + _t('Obrat / měsíc') + '</div><div class="pe-rc-value">—</div><div class="pe-rc-sub" id="pe-rc-obrat-sub">—' + _t(' zákazníků / měs') + '</div></div>' +
+        '<div class="pe-result-card" id="pe-rc-zisk"><div class="pe-rc-label">' + _t('Zisk / měsíc') + '</div><div class="pe-rc-value">—</div><div class="pe-rc-sub">' + _t('po všech nákladech vč. servisu') + '</div></div>' +
+        '<div class="pe-result-card" id="pe-rc-navratnost"><div class="pe-rc-label">' + _t('Návratnost') + '</div><div class="pe-rc-value">—</div><div class="pe-rc-sub" id="pe-rc-navratnost-sub">—' + _t(' měsíců') + '</div></div>' +
       '</div>';
 
     // Sekce: Investiční náklady
     var s1 =
-      inputRow('Cena prádlomatu', 'cena_pradlomatu', '€', 100, 0) +
-      inputRow('Ø cena projekt + povolení', 'cena_projekt', '€', 10, 0) +
-      inputRow('Ø cena přípojek', 'cena_pripojek', '€', 10, 0) +
-      outRow('Investice celkem', 'investice_celkem', '€', true);
-    html += section('investice', '🏗️', 'Investiční náklady', 'jednorázové', s1);
+      inputRow(_t('Cena prádlomatu'), 'cena_pradlomatu', '€', 100, 0) +
+      inputRow(_t('Ø cena projekt + povolení'), 'cena_projekt', '€', 10, 0) +
+      inputRow(_t('Ø cena přípojek'), 'cena_pripojek', '€', 10, 0) +
+      outRow(_t('Investice celkem'), 'investice_celkem', '€', true);
+    html += section('investice', '🏗️', _t('Investiční náklady'), _t('jednorázové'), s1);
 
     // Sekce: Modelace
     var s2 =
-      inputRow('Ø obrat na zákazníka', 'obrat_na_zakaznika', '€', 0.1, 2) +
-      inputRow('Počet zákazníků za den', 'zakazniku_za_den', 'ks/den', 0.1, 1) +
-      outRow('Počet zákazníků za měsíc', 'zakazniku_mesic', 'ks') +
-      outRow('Obrat / den', 'obrat_den', '€') +
-      outRow('Obrat / měsíc', 'obrat_mesic', '€', true) +
-      outRow('Náklad pracích cyklů / měsíc', 'naklad_pracich_cyklu_mesic', '€') +
-      outRow('Ø náklad na zákazníka (ze zdroj. dat)', 'naklad_na_zakaznika', '€');
-    html += section('modelace', '📈', 'Modelace — měsíční', 'klíčový vstup', s2);
+      inputRow(_t('Ø obrat na zákazníka'), 'obrat_na_zakaznika', '€', 0.1, 2) +
+      inputRow(_t('Počet zákazníků za den'), 'zakazniku_za_den', _t('ks/den'), 0.1, 1) +
+      outRow(_t('Počet zákazníků za měsíc'), 'zakazniku_mesic', _t('ks')) +
+      outRow(_t('Obrat / den'), 'obrat_den', '€') +
+      outRow(_t('Obrat / měsíc'), 'obrat_mesic', '€', true) +
+      outRow(_t('Náklad pracích cyklů / měsíc'), 'naklad_pracich_cyklu_mesic', '€') +
+      outRow(_t('Ø náklad na zákazníka (ze zdroj. dat)'), 'naklad_na_zakaznika', '€');
+    html += section('modelace', '📈', _t('Modelace — měsíční'), _t('klíčový vstup'), s2);
 
     // Sekce: Měsíční fixní náklady
     var s3 =
-      inputRow('Pravidelná údržba', 'udrzba', '€/měs', 1, 0) +
-      inputRow('Software', 'software', '€/měs', 1, 0) +
-      inputRow('Internet', 'internet', '€/měs', 1, 0) +
-      inputRow('Infolinka', 'infolinka', '€/měs', 1, 0) +
-      inputRow('Pojištění', 'pojisteni', '€/měs', 1, 0) +
-      inputRow('Nájem', 'najem', '€/měs', 1, 0) +
-      inputRow('Servis', 'servis', '€/měs', 1, 0) +
-      outRow('Fixní náklady celkem', 'fixni_mesic', '€/měs', true);
-    html += section('fixni', '💸', 'Měsíční fixní náklady', '', s3);
+      inputRow(_t('Pravidelná údržba'), 'udrzba', _t('€/měs'), 1, 0) +
+      inputRow(_t('Software'), 'software', _t('€/měs'), 1, 0) +
+      inputRow(_t('Internet'), 'internet', _t('€/měs'), 1, 0) +
+      inputRow(_t('Infolinka'), 'infolinka', _t('€/měs'), 1, 0) +
+      inputRow(_t('Pojištění'), 'pojisteni', _t('€/měs'), 1, 0) +
+      inputRow(_t('Nájem'), 'najem', _t('€/měs'), 1, 0) +
+      inputRow(_t('Servis'), 'servis', _t('€/měs'), 1, 0) +
+      outRow(_t('Fixní náklady celkem'), 'fixni_mesic', _t('€/měs'), true);
+    html += section('fixni', '💸', _t('Měsíční fixní náklady'), '', s3);
 
     // Sekce: Cena energií
     var s4 =
-      inputRow('Elektrika', 'cena_elektriny', '€/kWh', 0.001, 4) +
-      inputRow('Vodné', 'cena_vodne', '€/m³', 0.001, 3) +
-      inputRow('Stočné', 'cena_stocne', '€/m³', 0.001, 3);
-    html += section('energie', '⚡', 'Cena energií', 'zdrojová data', s4, true);
+      inputRow(_t('Elektrika'), 'cena_elektriny', _t('€/kWh'), 0.001, 4) +
+      inputRow(_t('Vodné'), 'cena_vodne', _t('€/m³'), 0.001, 3) +
+      inputRow(_t('Stočné'), 'cena_stocne', _t('€/m³'), 0.001, 3);
+    html += section('energie', '⚡', _t('Cena energií'), _t('zdrojová data'), s4, true);
 
     // Sekce: DPH + ceny služeb (s DPH → bez DPH)
     var s5 =
-      inputRow('DPH (sazba)', 'dph', '%', 0.01, 2) +
+      inputRow(_t('DPH (sazba)'), 'dph', '%', 0.01, 2) +
       '<div style="margin-top:6px;padding-top:10px;border-top:1px dashed var(--border);">' +
-      '<div style="font-size:11px;color:var(--text2);margin-bottom:8px;">Cena služeb (vstup s DPH, automaticky bez DPH):</div>' +
-      inputRow('Malá pračka', 'cena_mala_pracka', '€ s DPH', 0.01, 3) +
-      outRow('… bez DPH', 'bez_mala', '€') +
-      inputRow('Malá pračka s aviváží', 'cena_mala_pracka_aviv', '€ s DPH', 0.01, 3) +
-      outRow('… bez DPH', 'bez_mala_aviv', '€') +
-      inputRow('Velká pračka', 'cena_velka_pracka', '€ s DPH', 0.01, 3) +
-      outRow('… bez DPH', 'bez_velka', '€') +
-      inputRow('Velká pračka s aviváží', 'cena_velka_pracka_aviv', '€ s DPH', 0.01, 3) +
-      outRow('… bez DPH', 'bez_velka_aviv', '€') +
-      inputRow('Sušička 15 min', 'cena_susicka_15', '€ s DPH', 0.01, 3) +
-      outRow('… bez DPH', 'bez_susicka_15', '€') +
-      inputRow('Čistící program', 'cena_cistici_program', '€ s DPH', 0.01, 3) +
-      outRow('… bez DPH', 'bez_cistici', '€') +
+      '<div style="font-size:11px;color:var(--text2);margin-bottom:8px;">' + _t('Cena služeb (vstup s DPH, automaticky bez DPH):') + '</div>' +
+      inputRow(_t('Malá pračka'), 'cena_mala_pracka', _t('€ s DPH'), 0.01, 3) +
+      outRow(_t('… bez DPH'), 'bez_mala', '€') +
+      inputRow(_t('Malá pračka s aviváží'), 'cena_mala_pracka_aviv', _t('€ s DPH'), 0.01, 3) +
+      outRow(_t('… bez DPH'), 'bez_mala_aviv', '€') +
+      inputRow(_t('Velká pračka'), 'cena_velka_pracka', _t('€ s DPH'), 0.01, 3) +
+      outRow(_t('… bez DPH'), 'bez_velka', '€') +
+      inputRow(_t('Velká pračka s aviváží'), 'cena_velka_pracka_aviv', _t('€ s DPH'), 0.01, 3) +
+      outRow(_t('… bez DPH'), 'bez_velka_aviv', '€') +
+      inputRow(_t('Sušička 15 min'), 'cena_susicka_15', _t('€ s DPH'), 0.01, 3) +
+      outRow(_t('… bez DPH'), 'bez_susicka_15', '€') +
+      inputRow(_t('Čistící program'), 'cena_cistici_program', _t('€ s DPH'), 0.01, 3) +
+      outRow(_t('… bez DPH'), 'bez_cistici', '€') +
       '</div>';
-    html += section('sluzby', '💰', 'DPH a cena služeb', 'zdrojová data', s5, true);
+    html += section('sluzby', '💰', _t('DPH a cena služeb'), _t('zdrojová data'), s5, true);
 
     // Sekce: Detergenty
     var s6 =
-      inputRow('Cena prášku', 'cena_prasku', '€/l', 0.01, 3) +
-      inputRow('Cena aviváže', 'cena_avivaze', '€/l', 0.01, 3);
-    html += section('detergenty', '🧴', 'Cena detergentů', 'zdrojová data', s6, true);
+      inputRow(_t('Cena prášku'), 'cena_prasku', _t('€/l'), 0.01, 3) +
+      inputRow(_t('Cena aviváže'), 'cena_avivaze', _t('€/l'), 0.01, 3);
+    html += section('detergenty', '🧴', _t('Cena detergentů'), _t('zdrojová data'), s6, true);
 
     // Sekce: Velká pračka spotřeba
     var s7 =
-      inputRow('Voda', 'voda_velka', 'l/cyklus', 1, 0) +
-      inputRow('Elektrika', 'el_velka', 'kWh/cyklus', 0.01, 2) +
-      inputRow('Prášek', 'prasek_velka', 'l/cyklus', 0.01, 2) +
-      inputRow('Aviváž', 'aviv_velka', 'l/cyklus', 0.01, 2) +
-      '<div style="margin-top:6px;padding-top:10px;border-top:1px dashed var(--border);font-size:11px;color:var(--text2);margin-bottom:4px;">Náklad na cyklus (bez DPH):</div>' +
-      outRow('Voda + stočné', 'naklad_voda_velka', '€') +
-      outRow('Elektrika', 'naklad_el_velka', '€') +
-      outRow('Prášek', 'naklad_prasek_velka', '€') +
-      outRow('Aviváž', 'naklad_aviv_velka', '€') +
-      outRow('Bez aviváže celkem', 'naklad_velka_bez_aviv', '€') +
-      outRow('S aviváží celkem', 'naklad_velka_s_aviv', '€') +
-      outRow('Průměr velké pračky', 'naklad_velka_prumer', '€', true);
-    html += section('velka_pracka', '🧺', 'Velká pračka — spotřeba a náklady', 'zdrojová data', s7, true);
+      inputRow(_t('Voda'), 'voda_velka', _t('l/cyklus'), 1, 0) +
+      inputRow(_t('Elektrika'), 'el_velka', _t('kWh/cyklus'), 0.01, 2) +
+      inputRow(_t('Prášek'), 'prasek_velka', _t('l/cyklus'), 0.01, 2) +
+      inputRow(_t('Aviváž'), 'aviv_velka', _t('l/cyklus'), 0.01, 2) +
+      '<div style="margin-top:6px;padding-top:10px;border-top:1px dashed var(--border);font-size:11px;color:var(--text2);margin-bottom:4px;">' + _t('Náklad na cyklus (bez DPH):') + '</div>' +
+      outRow(_t('Voda + stočné'), 'naklad_voda_velka', '€') +
+      outRow(_t('Elektrika'), 'naklad_el_velka', '€') +
+      outRow(_t('Prášek'), 'naklad_prasek_velka', '€') +
+      outRow(_t('Aviváž'), 'naklad_aviv_velka', '€') +
+      outRow(_t('Bez aviváže celkem'), 'naklad_velka_bez_aviv', '€') +
+      outRow(_t('S aviváží celkem'), 'naklad_velka_s_aviv', '€') +
+      outRow(_t('Průměr velké pračky'), 'naklad_velka_prumer', '€', true);
+    html += section('velka_pracka', '🧺', _t('Velká pračka — spotřeba a náklady'), _t('zdrojová data'), s7, true);
 
     // Sekce: Malá pračka spotřeba
     var s8 =
-      inputRow('Voda', 'voda_mala', 'l/cyklus', 1, 0) +
-      inputRow('Elektrika', 'el_mala', 'kWh/cyklus', 0.01, 2) +
-      inputRow('Prášek', 'prasek_mala', 'l/cyklus', 0.01, 2) +
-      inputRow('Aviváž', 'aviv_mala', 'l/cyklus', 0.01, 2) +
-      '<div style="margin-top:6px;padding-top:10px;border-top:1px dashed var(--border);font-size:11px;color:var(--text2);margin-bottom:4px;">Náklad na cyklus (bez DPH):</div>' +
-      outRow('Voda + stočné', 'naklad_voda_mala', '€') +
-      outRow('Elektrika', 'naklad_el_mala', '€') +
-      outRow('Prášek', 'naklad_prasek_mala', '€') +
-      outRow('Aviváž', 'naklad_aviv_mala', '€') +
-      outRow('Bez aviváže celkem', 'naklad_mala_bez_aviv', '€') +
-      outRow('S aviváží celkem', 'naklad_mala_s_aviv', '€') +
-      outRow('Průměr malé pračky', 'naklad_mala_prumer', '€', true);
-    html += section('mala_pracka', '🧺', 'Malá pračka — spotřeba a náklady', 'zdrojová data', s8, true);
+      inputRow(_t('Voda'), 'voda_mala', _t('l/cyklus'), 1, 0) +
+      inputRow(_t('Elektrika'), 'el_mala', _t('kWh/cyklus'), 0.01, 2) +
+      inputRow(_t('Prášek'), 'prasek_mala', _t('l/cyklus'), 0.01, 2) +
+      inputRow(_t('Aviváž'), 'aviv_mala', _t('l/cyklus'), 0.01, 2) +
+      '<div style="margin-top:6px;padding-top:10px;border-top:1px dashed var(--border);font-size:11px;color:var(--text2);margin-bottom:4px;">' + _t('Náklad na cyklus (bez DPH):') + '</div>' +
+      outRow(_t('Voda + stočné'), 'naklad_voda_mala', '€') +
+      outRow(_t('Elektrika'), 'naklad_el_mala', '€') +
+      outRow(_t('Prášek'), 'naklad_prasek_mala', '€') +
+      outRow(_t('Aviváž'), 'naklad_aviv_mala', '€') +
+      outRow(_t('Bez aviváže celkem'), 'naklad_mala_bez_aviv', '€') +
+      outRow(_t('S aviváží celkem'), 'naklad_mala_s_aviv', '€') +
+      outRow(_t('Průměr malé pračky'), 'naklad_mala_prumer', '€', true);
+    html += section('mala_pracka', '🧺', _t('Malá pračka — spotřeba a náklady'), _t('zdrojová data'), s8, true);
 
     // Sekce: Sušička
     var s9 =
-      inputRow('Sušička 15 min', 'susicka_15', 'kWh', 0.1, 1) +
-      outRow('Sušička 30 min', 'susicka_30', 'kWh') +
-      inputRow('Sušička 45 min', 'susicka_45', 'kWh', 0.1, 1) +
-      '<div style="margin-top:6px;padding-top:10px;border-top:1px dashed var(--border);font-size:11px;color:var(--text2);margin-bottom:4px;">Náklad na sušení:</div>' +
-      outRow('15 min', 'naklad_susicka_15', '€') +
-      outRow('30 min', 'naklad_susicka_30', '€') +
-      outRow('45 min', 'naklad_susicka_45', '€') +
-      outRow('Ø praní (velká+malá)', 'prumer_prani', '€') +
-      outRow('Ø sušení (15+30 min)', 'prumer_suseni', '€') +
-      outRow('Ø celkem na zákazníka', 'naklad_na_zakaznika', '€', true);
-    html += section('susicka', '♨️', 'Sušička — spotřeba a souhrn nákladů', 'zdrojová data', s9, true);
+      inputRow(_t('Sušička 15 min'), 'susicka_15', 'kWh', 0.1, 1) +
+      outRow(_t('Sušička 30 min'), 'susicka_30', 'kWh') +
+      inputRow(_t('Sušička 45 min'), 'susicka_45', 'kWh', 0.1, 1) +
+      '<div style="margin-top:6px;padding-top:10px;border-top:1px dashed var(--border);font-size:11px;color:var(--text2);margin-bottom:4px;">' + _t('Náklad na sušení:') + '</div>' +
+      outRow(_t('15 min'), 'naklad_susicka_15', '€') +
+      outRow(_t('30 min'), 'naklad_susicka_30', '€') +
+      outRow(_t('45 min'), 'naklad_susicka_45', '€') +
+      outRow(_t('Ø praní (velká+malá)'), 'prumer_prani', '€') +
+      outRow(_t('Ø sušení (15+30 min)'), 'prumer_suseni', '€') +
+      outRow(_t('Ø celkem na zákazníka'), 'naklad_na_zakaznika', '€', true);
+    html += section('susicka', '♨️', _t('Sušička — spotřeba a souhrn nákladů'), _t('zdrojová data'), s9, true);
 
     // Vizualizace struktury nákladů
     html +=
       '<div class="pe-bar-wrap">' +
-        '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.6px;color:var(--text2);margin-bottom:10px;">Struktura měsíčních toků</div>' +
+        '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.6px;color:var(--text2);margin-bottom:10px;">' + _t('Struktura měsíčních toků') + '</div>' +
         '<div id="pe-bars"></div>' +
       '</div>';
 
@@ -545,26 +558,26 @@
       '<div class="pe-section" data-section="projection" style="margin-top:18px;">' +
         '<div class="pe-section-head" onclick="window.PradlomatTool._toggleSection(this)">' +
           '<span class="pe-h-icon">📈</span>' +
-          '<h3>10letý plán rozvoje</h3>' +
-          '<span class="pe-h-tag">vlastní síť prádlomatů</span>' +
+          '<h3>' + _t('10letý plán rozvoje') + '</h3>' +
+          '<span class="pe-h-tag">' + _t('vlastní síť prádlomatů') + '</span>' +
           '<span style="font-size:14px;color:var(--text2);">▾</span>' +
         '</div>' +
         '<div class="pe-section-body">' +
           '<div style="font-size:12px;color:var(--text2);line-height:1.5;margin-bottom:10px;">' +
-            'Kolik nových prádlomatů uvedete do provozu v každém roce? Pomůcka spočítá kumulativní zisk pro celou rostoucí síť.' +
+            _t('Kolik nových prádlomatů uvedete do provozu v každém roce? Pomůcka spočítá kumulativní zisk pro celou rostoucí síť.') +
           '</div>' +
           '<div class="pe-years-grid" id="pe-years-grid">' + buildYearsGrid() + '</div>' +
           '<div class="pe-projection-summary" id="pe-projection-summary"></div>' +
           '<div class="pe-projection-chart-wrap">' +
             '<div class="pe-chart-head">' +
-              '<div class="pe-chart-title">Roční zisk a kumulativní cashflow (10 let)</div>' +
+              '<div class="pe-chart-title">' + _t('Roční zisk a kumulativní cashflow (10 let)') + '</div>' +
               '<div class="pe-chart-legend">' +
-                '<span class="pe-leg-item"><span class="pe-leg-sw pe-leg-green"></span><span>Roční provozní zisk <em>(levá osa)</em></span></span>' +
-                '<span class="pe-leg-item"><span class="pe-leg-sw pe-leg-line"></span><span>Kumulativní cashflow <em>(pravá osa)</em></span></span>' +
+                '<span class="pe-leg-item"><span class="pe-leg-sw pe-leg-green"></span><span>' + _t('Roční provozní zisk') + ' <em>' + _t('(levá osa)') + '</em></span></span>' +
+                '<span class="pe-leg-item"><span class="pe-leg-sw pe-leg-line"></span><span>' + _t('Kumulativní cashflow') + ' <em>' + _t('(pravá osa)') + '</em></span></span>' +
               '</div>' +
             '</div>' +
             '<div id="pe-projection-chart"></div>' +
-            '<div class="pe-chart-swipe-hint">← Tažením doleva zobrazíte další roky →</div>' +
+            '<div class="pe-chart-swipe-hint">' + _t('← Tažením doleva zobrazíte další roky →') + '</div>' +
           '</div>' +
         '</div>' +
       '</div>';
@@ -652,13 +665,13 @@
     }
 
     // Hlavní výsledky
-    setResultCard('pe-rc-investice', fmtEur(r.investice_celkem, 0), 'na jedno místo');
-    setResultCard('pe-rc-obrat', fmtEur(r.obrat_mesic, 0), fmtNum(r.zakazniku_mesic, 0) + ' zákazníků / měs');
-    setResultCard('pe-rc-zisk', fmtEur(r.zisk, 0), r.zisk >= 0 ? 'po všech nákladech vč. servisu' : 'ZTRÁTOVÝ provoz', r.zisk < 0 ? 'neg' : 'ok');
+    setResultCard('pe-rc-investice', fmtEur(r.investice_celkem, 0), _t('na jedno místo'));
+    setResultCard('pe-rc-obrat', fmtEur(r.obrat_mesic, 0), fmtNum(r.zakazniku_mesic, 0) + _t(' zákazníků / měs'));
+    setResultCard('pe-rc-zisk', fmtEur(r.zisk, 0), r.zisk >= 0 ? _t('po všech nákladech vč. servisu') : _t('ZTRÁTOVÝ provoz'), r.zisk < 0 ? 'neg' : 'ok');
     if (isFinite(r.navratnost_mesicu) && r.navratnost_mesicu > 0) {
-      setResultCard('pe-rc-navratnost', fmtNum(r.navratnost_roku, 1) + ' let', fmtNum(r.navratnost_mesicu, 0) + ' měsíců');
+      setResultCard('pe-rc-navratnost', fmtNum(r.navratnost_roku, 1) + _t(' let'), fmtNum(r.navratnost_mesicu, 0) + _t(' měsíců'));
     } else {
-      setResultCard('pe-rc-navratnost', '∞', 'při této modelaci se neuhradí', 'neg');
+      setResultCard('pe-rc-navratnost', '∞', _t('při této modelaci se neuhradí'), 'neg');
     }
 
     renderBars(r);
@@ -681,10 +694,10 @@
     var holder = ROOT.querySelector('#pe-bars');
     if (!holder) return;
     var items = [
-      { label: 'Obrat', value: r.obrat_mesic, color: '#10b981' },
-      { label: 'Náklad pracích cyklů', value: r.naklad_pracich_cyklu_mesic, color: '#f97316' },
-      { label: 'Fixní náklady', value: r.fixni_mesic, color: '#ef4444' },
-      { label: 'Zisk', value: r.zisk, color: r.zisk >= 0 ? '#eab308' : '#dc2626' }
+      { label: _t('Obrat'), value: r.obrat_mesic, color: '#10b981' },
+      { label: _t('Náklad pracích cyklů'), value: r.naklad_pracich_cyklu_mesic, color: '#f97316' },
+      { label: _t('Fixní náklady'), value: r.fixni_mesic, color: '#ef4444' },
+      { label: _t('Zisk'), value: r.zisk, color: r.zisk >= 0 ? '#eab308' : '#dc2626' }
     ];
     var max = Math.max.apply(null, items.map(function (x) { return Math.abs(x.value); }));
     if (max <= 0) max = 1;
@@ -719,11 +732,11 @@
       var lockBtn = LOCKABLE
         ? '<button type="button" class="pe-lock-btn' + (locked ? ' locked' : '') +
           '" data-lock-key="' + key + '" onclick="window.PradlomatTool._toggleLock(\'' + key + '\')" title="' +
-          (locked ? 'Zamčeno' : 'Odemčené') + '">' + (locked ? '🔒' : '🔓') + '</button>'
+          (locked ? _t('Zamčeno') : _t('Odemčené')) + '">' + (locked ? '🔒' : '🔓') + '</button>'
         : '';
       html +=
         '<div class="pe-year-cell">' +
-          '<div class="pe-year-label">Rok ' + y + '</div>' +
+          '<div class="pe-year-label">' + _t('Rok ') + y + '</div>' +
           cell +
           lockBtn +
         '</div>';
@@ -734,23 +747,23 @@
   function renderProjectionSummary(r) {
     var el = ROOT.querySelector('#pe-projection-summary');
     if (!el || !r.projection) return;
-    var bk = r.breakeven_year != null ? r.breakeven_year + '. rok' : 'po 10 letech ne';
+    var bk = r.breakeven_year != null ? (r.breakeven_year + '. ' + _t('rok')) : _t('po 10 letech ne');
     var cumCls = r.total_cumulative_10y >= 0 ? 'ok' : 'neg';
     el.innerHTML =
       '<div class="pe-mini-card">' +
-        '<div class="pe-mc-label">Prádlomatů po 10 letech</div>' +
+        '<div class="pe-mc-label">' + _t('Prádlomatů po 10 letech') + '</div>' +
         '<div class="pe-mc-value">' + r.total_stock_10y + '</div>' +
       '</div>' +
       '<div class="pe-mini-card">' +
-        '<div class="pe-mc-label">Roční zisk v 10. roce</div>' +
+        '<div class="pe-mc-label">' + _t('Roční zisk v 10. roce') + '</div>' +
         '<div class="pe-mc-value">' + fmtEur(r.total_annual_profit_10y, 0) + '</div>' +
       '</div>' +
       '<div class="pe-mini-card ' + cumCls + '">' +
-        '<div class="pe-mc-label">Kumulativní zisk po 10 letech</div>' +
+        '<div class="pe-mc-label">' + _t('Kumulativní zisk po 10 letech') + '</div>' +
         '<div class="pe-mc-value">' + fmtEur(r.total_cumulative_10y, 0) + '</div>' +
       '</div>' +
       '<div class="pe-mini-card">' +
-        '<div class="pe-mc-label">První kladná kumulace</div>' +
+        '<div class="pe-mc-label">' + _t('První kladná kumulace') + '</div>' +
         '<div class="pe-mc-value" style="font-size:16px;">' + bk + '</div>' +
       '</div>';
   }
@@ -903,10 +916,10 @@
       var x = xCenter(i);
       var y1 = padT + innerH + 18;
       var y2 = padT + innerH + 36;
-      s += '<text class="pe-x-year" x="' + x.toFixed(1) + '" y="' + y1 + '" text-anchor="middle">Rok ' + d.year + '</text>';
+      s += '<text class="pe-x-year" x="' + x.toFixed(1) + '" y="' + y1 + '" text-anchor="middle">' + _t('Rok ') + d.year + '</text>';
       var extra = (d.new_machines > 0
-        ? '+' + d.new_machines + (d.new_machines === 1 ? ' stroj' : (d.new_machines < 5 ? ' stroje' : ' strojů'))
-        : 'beze změny');
+        ? '+' + d.new_machines + (d.new_machines === 1 ? _t(' stroj') : (d.new_machines < 5 ? _t(' stroje') : _t(' strojů')))
+        : _t('beze změny'));
       s += '<text class="pe-x-sub" x="' + x.toFixed(1) + '" y="' + y2 + '" text-anchor="middle">' + extra + '</text>';
     });
     s += '</g>';
@@ -956,14 +969,14 @@
     if (typeof ON_SAVE_DEFAULTS !== 'function') return;
     var btn = ROOT && ROOT.querySelector('.pe-toolbar .btn-primary');
     var orig = btn ? btn.innerHTML : null;
-    if (btn) { btn.disabled = true; btn.innerHTML = 'Ukládám…'; }
+    if (btn) { btn.disabled = true; btn.innerHTML = _t('Ukládám…'); }
     var state = Object.assign({}, STATE);
     var locks = Object.assign({}, LOCKS);
     Promise.resolve(ON_SAVE_DEFAULTS(state, locks)).then(function () {
-      if (btn) { btn.innerHTML = '✓ Uloženo'; setTimeout(function () { if (btn.isConnected) btn.innerHTML = orig; btn.disabled = false; }, 1800); }
+      if (btn) { btn.innerHTML = _t('✓ Uloženo'); setTimeout(function () { if (btn.isConnected) btn.innerHTML = orig; btn.disabled = false; }, 1800); }
     }).catch(function (e) {
-      if (btn) { btn.innerHTML = '✗ Chyba'; btn.disabled = false; }
-      alert('Nepodařilo se uložit výchozí hodnoty: ' + (e && e.message || e));
+      if (btn) { btn.innerHTML = _t('✗ Chyba'); btn.disabled = false; }
+      alert(_t('Nepodařilo se uložit výchozí hodnoty: ') + (e && e.message || e));
     });
   }
 
@@ -981,8 +994,8 @@
       btn.classList.toggle('locked', !!LOCKS[key]);
       btn.innerHTML = LOCKS[key] ? '🔒' : '🔓';
       btn.title = LOCKS[key]
-        ? 'Zamčeno — zákazník nesmí měnit. Klik pro odemčení.'
-        : 'Odemčené — zákazník může měnit. Klik pro zamčení.';
+        ? _t('Zamčeno — zákazník nesmí měnit. Klik pro odemčení.')
+        : _t('Odemčené — zákazník může měnit. Klik pro zamčení.');
     }
     if (inp) inp.classList.toggle('pe-input-locked', !!LOCKS[key]);
     if (row) row.classList.toggle('is-locked', !!LOCKS[key]);

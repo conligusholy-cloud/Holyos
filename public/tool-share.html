@@ -45,6 +45,33 @@
     .share-toolbar .left-info { font-size: 12px; color: var(--text2); flex: 1; min-width: 240px; }
     .share-toolbar .left-info strong { color: #eab308; }
 
+    /* Language switcher (flag buttons) — v hlavičce vpravo */
+    .lang-switcher { display: inline-flex; gap: 4px; flex-wrap: wrap; align-items: center; }
+    .lang-switcher .lang-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 8px;
+      background: rgba(255,255,255,0.10);
+      border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 16px;
+      line-height: 1;
+      color: #fff;
+      transition: all 0.12s;
+      font-family: inherit;
+    }
+    .lang-switcher .lang-btn:hover { background: rgba(255,255,255,0.18); }
+    .lang-switcher .lang-btn.active { background: rgba(255,255,255,0.30); border-color: rgba(255,255,255,0.55); box-shadow: 0 0 0 1px rgba(255,255,255,0.2); }
+    .lang-switcher .lang-btn .lang-code { font-size: 10px; font-weight: 700; letter-spacing: 0.5px; opacity: 0.85; text-transform: uppercase; }
+    @media (max-width: 640px) {
+      .lang-switcher { width: 100%; justify-content: flex-start; margin-top: 4px; }
+    }
+    @media print {
+      .lang-switcher { display: none !important; }
+    }
+
     .btn {
       padding: 8px 16px;
       border-radius: 8px;
@@ -249,6 +276,7 @@
       .pe-year-cell .pe-year-label { color: #555 !important; }
     }
   </style>
+  <script src="/modules/prodejni-objednavky/pradlomat-i18n.js"></script>
   <script src="/modules/prodejni-objednavky/pradlomat-economy.js"></script>
 </head>
 <body>
@@ -263,22 +291,24 @@
         <strong id="share-recipient-name"></strong>
         <span id="share-recipient-company"></span>
       </div>
+      <!-- Vlajkový language switcher — naplňuje se v JS podle data.languages -->
+      <div class="lang-switcher" id="lang-switcher" style="display:none;"></div>
     </div>
   </header>
 
   <div class="share-toolbar" id="share-toolbar" style="display:none;">
-    <div class="left-info">
+    <div class="left-info" id="share-toolbar-info">
       💡 Žlutá pole můžete <strong>libovolně měnit</strong> a zkoušet různé scénáře. Ostatní hodnoty se přepočítají automaticky.
     </div>
-    <button class="btn btn-sm" onclick="resetToDefaults()">↺ Výchozí</button>
-    <button class="btn btn-sm" onclick="downloadPdf()">📄 Stáhnout PDF</button>
-    <button class="btn btn-primary btn-sm" onclick="openSaveModal()">💾 Uložit můj model</button>
+    <button class="btn btn-sm" id="btn-reset" onclick="resetToDefaults()">↺ Výchozí</button>
+    <button class="btn btn-sm" id="btn-pdf" onclick="downloadPdf()">📄 Stáhnout PDF</button>
+    <button class="btn btn-primary btn-sm" id="btn-save" onclick="openSaveModal()">💾 Uložit můj model</button>
   </div>
 
   <main class="share-content">
     <div id="loading" class="loading">
       <div class="spinner"></div>
-      <div style="font-size:13px;color:var(--text2);">Načítám pomůcku…</div>
+      <div style="font-size:13px;color:var(--text2);" id="loading-text">Načítám pomůcku…</div>
     </div>
 
     <div id="error" class="error-box" style="display:none;">
@@ -288,7 +318,7 @@
 
     <div id="content" style="display:none;">
       <div id="models-strip-wrap" style="display:none;">
-        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.6px;color:var(--text2);margin-bottom:6px;">Vaše uložené modely</div>
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.6px;color:var(--text2);margin-bottom:6px;" id="models-strip-title">Vaše uložené modely</div>
         <div class="models-strip" id="models-strip"></div>
       </div>
       <div id="tool-root"></div>
@@ -308,11 +338,115 @@
       var SHARE_DATA = null;
       var EDIT_DEBOUNCE = null;
 
+      // ─── i18n helpers ─────────────────────────────────────────────
+      // Vlajka pro každý jazyk + lokalizovaný název (pro tooltip)
+      var LANG_META = {
+        cs: { flag: '🇨🇿', label: 'Čeština' },
+        en: { flag: '🇬🇧', label: 'English' },
+        de: { flag: '🇩🇪', label: 'Deutsch' },
+        fr: { flag: '🇫🇷', label: 'Français' }
+      };
+
+      function tt(s) {
+        return (window.PradlomatI18n && typeof window.PradlomatI18n.t === 'function')
+          ? window.PradlomatI18n.t(s) : s;
+      }
+
+      // Aplikuje překlady na statické texty mimo PradlomatTool (header, toolbar, modal-y).
+      // Volá se po setLang().
+      function applyChromeTranslations() {
+        var data = SHARE_DATA || {};
+        var title = (data.tool && data.tool.title) || 'Obchodní pomůcka';
+        var translatedTitle = tt(title);
+        document.getElementById('share-title').textContent = translatedTitle;
+        document.title = translatedTitle + ' | HolyOS';
+        if (data.tool && data.tool.description) {
+          document.getElementById('share-subtitle').textContent = tt(data.tool.description);
+        } else {
+          document.getElementById('share-subtitle').textContent = tt('Interaktivní model návratnosti');
+        }
+
+        var loadingTxt = document.getElementById('loading-text');
+        if (loadingTxt) loadingTxt.textContent = tt('Načítám pomůcku…');
+
+        var errTitle = document.getElementById('error-title');
+        if (errTitle) errTitle.textContent = tt('Odkaz nelze otevřít');
+
+        var info = document.getElementById('share-toolbar-info');
+        if (info) {
+          // Plný překlad celé věty (klíč obsahuje <strong>) — držíme HTML v DOMu.
+          info.innerHTML = '💡 ' + tt('Žlutá pole můžete libovolně měnit a zkoušet různé scénáře. Ostatní hodnoty se přepočítají automaticky.')
+            .replace(tt('libovolně měnit'), '<strong>' + tt('libovolně měnit') + '</strong>');
+        }
+        setText('btn-reset', tt('↺ Výchozí'));
+        setText('btn-pdf', tt('📄 Stáhnout PDF'));
+        setText('btn-save', tt('💾 Uložit můj model'));
+        setText('models-strip-title', tt('Vaše uložené modely'));
+      }
+
+      function setText(id, text) {
+        var el = document.getElementById(id);
+        if (el) el.textContent = text;
+      }
+
+      // Vykreslí language switcher na základě data.languages a aktivního jazyka.
+      function renderLanguageSwitcher(languages, active) {
+        var wrap = document.getElementById('lang-switcher');
+        if (!wrap) return;
+        var codes = (Array.isArray(languages) && languages.length) ? languages : ['cs'];
+        if (codes.length < 2) { wrap.style.display = 'none'; return; }  // jen jeden jazyk → switcher nepotřebujeme
+        wrap.style.display = '';
+        var html = '';
+        for (var i = 0; i < codes.length; i++) {
+          var c = codes[i];
+          var meta = LANG_META[c] || { flag: '🏳️', label: c };
+          var isActive = c === active;
+          html += '<button type="button" class="lang-btn' + (isActive ? ' active' : '') +
+            '" data-code="' + c + '" title="' + meta.label + '" aria-label="' + meta.label + '">' +
+            '<span>' + meta.flag + '</span>' +
+            '<span class="lang-code">' + c.toUpperCase() + '</span>' +
+            '</button>';
+        }
+        wrap.innerHTML = html;
+        var btns = wrap.querySelectorAll('.lang-btn');
+        for (var j = 0; j < btns.length; j++) {
+          btns[j].addEventListener('click', function (e) {
+            var code = this.getAttribute('data-code');
+            switchLanguage(code);
+          });
+        }
+      }
+
+      // Přepne aktivní jazyk: setLang v helperu, re-mount tool, re-render chrome.
+      function switchLanguage(code) {
+        if (!window.PradlomatI18n) return;
+        window.PradlomatI18n.setLang(code);
+        try { localStorage.setItem('pradlomat_lang_' + TOKEN, code); } catch (e) { /* private mode */ }
+        if (SHARE_DATA && SHARE_DATA.languages) {
+          renderLanguageSwitcher(SHARE_DATA.languages, code);
+        }
+        applyChromeTranslations();
+        // Re-render uložených modelů (formátování data podle locale)
+        if (SHARE_DATA && SHARE_DATA.models) renderModelsStrip(SHARE_DATA.models);
+        // Re-mount tool — vyrenderuje sekce s novými stringy
+        if (SHARE_DATA && window.PradlomatTool) mountTool(SHARE_DATA);
+        logEvent('viewed', { language: code });
+      }
+
+      // Zvolí výchozí jazyk: localStorage > první v languages > 'cs'.
+      function pickInitialLanguage(languages) {
+        var saved = null;
+        try { saved = localStorage.getItem('pradlomat_lang_' + TOKEN); } catch (e) { /* noop */ }
+        if (saved && languages && languages.indexOf(saved) >= 0) return saved;
+        if (languages && languages.length) return languages[0];
+        return 'cs';
+      }
+
       function showError(msg) {
         document.getElementById('loading').style.display = 'none';
         document.getElementById('content').style.display = 'none';
         document.getElementById('error').style.display = '';
-        document.getElementById('error-msg').textContent = msg || 'Zkuste obnovit stránku nebo kontaktujte odesílatele.';
+        document.getElementById('error-msg').textContent = msg || tt('Zkuste obnovit stránku nebo kontaktujte odesílatele.');
       }
 
       function toast(msg, cls) {
@@ -335,7 +469,7 @@
 
       function load() {
         if (!TOKEN || TOKEN.length < 16) {
-          showError('Odkaz je neplatný. Zkontrolujte, prosím, URL.');
+          showError(tt('Odkaz je neplatný. Zkontrolujte, prosím, URL.'));
           return;
         }
         fetch('/api/tools/share/' + encodeURIComponent(TOKEN), { headers: { 'Accept': 'application/json' } })
@@ -347,22 +481,25 @@
           })
           .then(function (data) {
             SHARE_DATA = data;
-            renderHeader(data);
+
+            // i18n bootstrap — pick initial language, nastav v helperu, vyrendruj switcher.
+            var langs = (Array.isArray(data.languages) && data.languages.length) ? data.languages : ['cs'];
+            var initialLang = pickInitialLanguage(langs);
+            if (window.PradlomatI18n) window.PradlomatI18n.setLang(initialLang);
+            renderLanguageSwitcher(langs, initialLang);
+
+            renderRecipientInfo(data);
+            applyChromeTranslations();
             renderModelsStrip(data.models);
             mountTool(data);
           })
           .catch(function (e) {
-            showError(e.message || 'Odkaz nelze otevřít.');
+            showError(e.message || tt('Odkaz nelze otevřít'));
           });
       }
 
-      function renderHeader(data) {
-        var title = (data.tool && data.tool.title) || 'Obchodní pomůcka';
-        document.getElementById('share-title').textContent = title;
-        document.title = title + ' | HolyOS';
-        if (data.tool && data.tool.description) {
-          document.getElementById('share-subtitle').textContent = data.tool.description;
-        }
+      // Údaje o příjemci (nebudou se překládat — jméno/firma je vlastní jméno)
+      function renderRecipientInfo(data) {
         if (data.recipient) {
           document.getElementById('share-recipient').style.display = '';
           document.getElementById('share-recipient-name').textContent = data.recipient.name || '';
@@ -375,10 +512,11 @@
         var wrap = document.getElementById('models-strip-wrap');
         var strip = document.getElementById('models-strip');
         wrap.style.display = '';
+        var locale = (window.PradlomatI18n && window.PradlomatI18n.locale) ? window.PradlomatI18n.locale() : 'cs-CZ';
         var html = '';
         for (var i = 0; i < models.length; i++) {
           var m = models[i];
-          var dt = new Date(m.created_at).toLocaleString('cs-CZ', { dateStyle: 'short', timeStyle: 'short' });
+          var dt = new Date(m.created_at).toLocaleString(locale, { dateStyle: 'short', timeStyle: 'short' });
           html += '<div class="model-chip" data-idx="' + i + '" onclick="window._shareLoadModel(' + i + ')"><strong>' +
             escapeHtml(m.name) + '</strong><span>' + dt + '</span></div>';
         }
@@ -396,7 +534,7 @@
         document.getElementById('content').style.display = '';
 
         if (TOOL !== 'pradlomat-economy' || !window.PradlomatTool) {
-          showError('Tato pomůcka zatím není podporována.');
+          showError(tt('Tato pomůcka zatím není podporována.'));
           return;
         }
 
@@ -437,12 +575,12 @@
             EDIT_DEBOUNCE = setTimeout(function () { logEvent('edited'); }, 1500);
           },
         });
-        toast('Načten model: ' + m.name, 'ok');
+        toast(tt('Načten model: ') + m.name, 'ok');
       };
 
       window.resetToDefaults = function () {
         if (window.PradlomatTool) window.PradlomatTool.resetDefaults();
-        toast('Obnovenoo výchozí nastavení', 'ok');
+        toast(tt('Obnoveno výchozí nastavení'), 'ok');
       };
 
       window.exportJson = function () {
@@ -471,16 +609,17 @@
       };
 
       window.openSaveModal = function () {
-        var defaultName = 'Můj model ' + new Date().toLocaleString('cs-CZ', { dateStyle: 'short', timeStyle: 'short' });
+        var locale = (window.PradlomatI18n && window.PradlomatI18n.locale) ? window.PradlomatI18n.locale() : 'cs-CZ';
+        var defaultName = tt('Můj model') + ' ' + new Date().toLocaleString(locale, { dateStyle: 'short', timeStyle: 'short' });
         var html =
           '<div class="save-modal-overlay" onclick="if(event.target===this)window.closeSaveModal()">' +
             '<div class="save-modal">' +
-              '<h3>💾 Uložit můj model</h3>' +
-              '<input id="save-model-name" type="text" placeholder="Název modelu" value="' + escapeHtml(defaultName) + '">' +
-              '<div style="font-size:11px;color:var(--text2);margin-top:8px;line-height:1.5;">Uložená varianta se objeví v záhlaví nahoře a kdykoliv se k ní můžete vrátit. Odesilatele to také uvidí.</div>' +
+              '<h3>' + tt('💾 Uložit můj model') + '</h3>' +
+              '<input id="save-model-name" type="text" placeholder="' + tt('Název modelu') + '" value="' + escapeHtml(defaultName) + '">' +
+              '<div style="font-size:11px;color:var(--text2);margin-top:8px;line-height:1.5;">' + tt('Uložená varianta se objeví v záhlaví nahoře a kdykoliv se k ní můžete vrátit. Odesilatele to také uvidí.') + '</div>' +
               '<div class="save-modal-actions">' +
-                '<button class="btn btn-sm" onclick="window.closeSaveModal()">Zrušit</button>' +
-                '<button class="btn btn-primary btn-sm" onclick="window.doSaveModel()">Uložit</button>' +
+                '<button class="btn btn-sm" onclick="window.closeSaveModal()">' + tt('Zrušit') + '</button>' +
+                '<button class="btn btn-primary btn-sm" onclick="window.doSaveModel()">' + tt('Uložit') + '</button>' +
               '</div>' +
             '</div>' +
           '</div>';
@@ -498,7 +637,7 @@
       window.doSaveModel = function () {
         var nameEl = document.getElementById('save-model-name');
         var name = nameEl ? nameEl.value.trim() : '';
-        if (!name) name = 'Pracovní model';
+        if (!name) name = tt('Pracovní model');
         var state = window.PradlomatTool.getState();
         var computed = window.PradlomatTool.getComputed();
         fetch('/api/tools/share/' + encodeURIComponent(TOKEN) + '/model', {
@@ -516,10 +655,10 @@
             SHARE_DATA.models.unshift({ id: m.id, name: m.name, created_at: m.created_at, data_json: state });
             renderModelsStrip(SHARE_DATA.models);
             window.closeSaveModal();
-            toast('✓ Model uložen', 'ok');
+            toast(tt('✓ Model uložen'), 'ok');
           })
           .catch(function (e) {
-            toast('Nepodařilo se uložit: ' + e.message, 'err');
+            toast(tt('Nepodařilo se uložit: ') + e.message, 'err');
           });
       };
 

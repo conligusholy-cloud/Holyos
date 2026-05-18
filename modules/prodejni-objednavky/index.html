@@ -119,6 +119,19 @@
     .recipient-row .r-stat strong { color: #eab308; font-size: 14px; }
     .recipient-row .r-actions { display: flex; gap: 6px; }
     .recipient-empty { text-align: center; padding: 28px 12px; color: var(--text2); font-size: 13px; border: 1px dashed var(--border); border-radius: 10px; background: rgba(255,255,255,0.02); }
+
+    /* Vlajkový picker jazyků v dialogu „Odeslat odkaz" */
+    .lang-picker { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+    .lang-chip { display: inline-flex; align-items: center; gap: 8px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); cursor: pointer; user-select: none; transition: all 0.12s; font-size: 13px; font-weight: 500; color: var(--text); }
+    .lang-chip:hover { background: var(--surface2); }
+    .lang-chip input { display: none; }
+    .lang-chip.active { background: rgba(234,179,8,0.12); border-color: rgba(234,179,8,0.55); color: #eab308; }
+    .lang-chip .lc-flag { font-size: 18px; line-height: 1; }
+    .lang-chip .lc-locked { font-size: 10px; color: var(--text2); margin-left: 4px; }
+    .lang-chip.active .lc-locked { color: rgba(234,179,8,0.7); }
+    /* Vlajky v seznamu příjemců */
+    .r-langs { display: inline-flex; gap: 3px; font-size: 14px; line-height: 1; }
+    .r-langs span { opacity: 0.85; }
     .pm-placeholder { padding: 28px; text-align: center; color: var(--text2); border: 1px dashed var(--border); border-radius: 10px; background: rgba(234,179,8,0.04); }
     .pm-placeholder .pmp-icon { font-size: 40px; margin-bottom: 10px; opacity: 0.6; }
     .pm-placeholder code { background: var(--surface2); padding: 2px 6px; border-radius: 4px; color: #eab308; font-size: 12px; }
@@ -3192,6 +3205,9 @@
         listEl.innerHTML = '<div class="recipient-empty">Zatím jsi nikomu odkaz neposlal. Klikni na <strong>+ Odeslat nový odkaz</strong> a založ prvního příjemce.</div>';
         return;
       }
+      // Lookup table kód → vlajka, pro vykreslení v řádku.
+      var FLAGS = { cs: '🇨🇿', en: '🇬🇧', de: '🇩🇪', fr: '🇫🇷' };
+
       var html = '';
       for (var i = 0; i < items.length; i++) {
         var r = items[i];
@@ -3199,9 +3215,18 @@
           ? new Date(r.last_opened).toLocaleString('cs-CZ', { dateStyle: 'short', timeStyle: 'short' })
           : '<span style="color:var(--text2);">neotevřeno</span>';
         var sent = new Date(r.created_at).toLocaleDateString('cs-CZ');
+
+        // Vlaječky vybraných jazyků (i pro staré záznamy bez languages → ['cs'])
+        var langCodes = (r.languages && r.languages.length) ? r.languages : ['cs'];
+        var langHtml = '<span class="r-langs" title="Dostupné jazyky: ' + langCodes.join(', ') + '">';
+        for (var li = 0; li < langCodes.length; li++) {
+          langHtml += '<span>' + (FLAGS[langCodes[li]] || '🏳️') + '</span>';
+        }
+        langHtml += '</span>';
+
         html +=
           '<div class="recipient-row" data-id="' + r.id + '">' +
-            '<div><div class="r-name">' + esc(r.name) + '</div>' +
+            '<div><div class="r-name">' + esc(r.name) + ' ' + langHtml + '</div>' +
               (r.company ? '<div class="r-stat">' + esc(r.company) + '</div>' : '') +
             '</div>' +
             '<div class="r-email">' + esc(r.email) + '<div class="r-stat">odesláno ' + sent + '</div></div>' +
@@ -3220,15 +3245,44 @@
       listEl.innerHTML = html;
     }
 
+    // Podporované jazyky veřejné stránky — drž synchronně s SUPPORTED_LANGUAGES
+    // v routes/business-tools.routes.js a s window.PRADLOMAT_I18N v pradlomat-economy.js.
+    var SHARE_LANGS = [
+      { code: 'cs', flag: '🇨🇿', label: 'Čeština' },
+      { code: 'en', flag: '🇬🇧', label: 'Angličtina' },
+      { code: 'de', flag: '🇩🇪', label: 'Němčina' },
+      { code: 'fr', flag: '🇫🇷', label: 'Francouzština' }
+    ];
+
     function openRecipientModal() {
+      var langChips = '';
+      for (var i = 0; i < SHARE_LANGS.length; i++) {
+        var L = SHARE_LANGS[i];
+        // Čeština je vždy aktivní (vychozí fallback) a uzamčená.
+        var isCs = L.code === 'cs';
+        langChips +=
+          '<label class="lang-chip' + (isCs ? ' active' : '') + '" data-code="' + L.code + '">' +
+            '<input type="checkbox" data-lang="' + L.code + '"' + (isCs ? ' checked disabled' : '') + '>' +
+            '<span class="lc-flag">' + L.flag + '</span>' +
+            '<span>' + L.label + '</span>' +
+            (isCs ? '<span class="lc-locked">výchozí</span>' : '') +
+          '</label>';
+      }
       var html = '<div class="modal-overlay" onclick="if(event.target===this)closeModal()">' +
-        '<div class="modal" style="width:540px;">' +
+        '<div class="modal" style="width:560px;">' +
           '<h2>📤 Odeslat odkaz na pomůcku</h2>' +
           '<div class="form-grid">' +
             '<div class="form-group"><label>Jméno kontaktu *</label><input id="rcp-name" type="text" placeholder="Jan Novák"></div>' +
             '<div class="form-group"><label>Firma</label><input id="rcp-company" type="text" placeholder="ACME s.r.o."></div>' +
             '<div class="form-group full"><label>E-mail *</label><input id="rcp-email" type="email" placeholder="jan@acme.cz"></div>' +
             '<div class="form-group full"><label>Poznámka pro zákazníka (vložená do e-mailu)</label><textarea id="rcp-note" placeholder="Pane Nováku, posílám slíbený model návratnosti..."></textarea></div>' +
+            '<div class="form-group full">' +
+              '<label>Dostupné jazyky na veřejné stránce</label>' +
+              '<div class="lang-picker" id="rcp-langs">' + langChips + '</div>' +
+              '<div style="font-size:11px;color:var(--text2);margin-top:6px;line-height:1.4;">' +
+                'Návštěvník si bude moct přepnout text mezi vybranými jazyky. Čeština je vždy dostupná jako výchozí.' +
+              '</div>' +
+            '</div>' +
             '<div class="form-group full" style="flex-direction:row;align-items:center;gap:8px;">' +
               '<input id="rcp-send" type="checkbox" checked style="width:auto;">' +
               '<label for="rcp-send" style="margin:0;cursor:pointer;">Odeslat e-mail teď (Microsoft Graph / SMTP)</label>' +
@@ -3240,7 +3294,33 @@
           '</div>' +
         '</div></div>';
       document.getElementById('modal-root').innerHTML = html;
+
+      // Vizuální toggle pro lang-chip (input je uvnitř <label>, takže klik chytá změnu stavu).
+      var picker = document.getElementById('rcp-langs');
+      if (picker) {
+        picker.addEventListener('change', function (e) {
+          var inp = e.target;
+          if (!inp || inp.tagName !== 'INPUT') return;
+          var chip = inp.closest('.lang-chip');
+          if (chip) chip.classList.toggle('active', !!inp.checked);
+        });
+      }
+
       setTimeout(function () { var el = document.getElementById('rcp-name'); if (el) el.focus(); }, 50);
+    }
+
+    // Vytáhne kódy zaškrtnutých jazyků z modálu. Vždy obsahuje 'cs' jako fallback.
+    function collectSelectedLanguages() {
+      var picker = document.getElementById('rcp-langs');
+      var codes = ['cs'];
+      if (!picker) return codes;
+      var inputs = picker.querySelectorAll('input[type="checkbox"][data-lang]');
+      for (var i = 0; i < inputs.length; i++) {
+        if (!inputs[i].checked) continue;
+        var c = inputs[i].getAttribute('data-lang');
+        if (c && c !== 'cs' && codes.indexOf(c) === -1) codes.push(c);
+      }
+      return codes;
     }
 
     async function submitRecipient() {
@@ -3251,6 +3331,7 @@
       var send = (document.getElementById('rcp-send') || {}).checked;
       if (!name.trim()) { alert('Vyplň jméno.'); return; }
       if (!email.trim()) { alert('Vyplň e-mail.'); return; }
+      var languages = collectSelectedLanguages();
       try {
         var res = await fetch('/api/tools/recipients', {
           method: 'POST',
@@ -3262,6 +3343,7 @@
             company: company.trim() || null,
             note: note.trim() || null,
             send_email: !!send,
+            languages: languages,
           }),
         });
         var data = await res.json();

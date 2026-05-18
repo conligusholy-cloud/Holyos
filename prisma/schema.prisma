@@ -4032,6 +4032,10 @@ model BusinessToolRecipient {
   open_count  Int       @default(0)
   save_count  Int       @default(0)
 
+  // Jazykové mutace dostupné na veřejné share stránce (např. ["cs","en","de","fr"]).
+  // První kód v poli = výchozí jazyk při otevření odkazu. Default ["cs"].
+  languages   String[]  @default(["cs"])
+
   // AI shrnutí chování zákazníka (cache; regenerace na vyžádání)
   ai_summary_text         String?   @db.Text
   ai_summary_generated_at DateTime?
