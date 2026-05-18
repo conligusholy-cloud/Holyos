@@ -241,6 +241,9 @@ model Person {
   velin_devices              DeviceRegistration[] @relation("DeviceRegistrationPerson")
   velin_attendance           AttendancePunch[]    @relation("AttendancePunchPerson")
 
+  // Spare Parts Shop — odpovědná osoba pro Velín push notifikaci o nové eshop objednávce
+  eshop_settings_notified    EshopSettings[]      @relation("EshopSettingsNotifyPerson")
+
   @@index([department_id])
   @@index([role_id])
   @@index([company_id])
@@ -531,6 +534,9 @@ model Company {
   // Factorify migrace
   factorify_id String? @db.VarChar(100) // Company.id
 
+  // Spare Parts Shop — přiřazený ceník (bez ceníku partner nemůže nakupovat na bestseries.cash/spare-parts)
+  eshop_pricelist_id Int?
+
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
 
@@ -563,9 +569,14 @@ model Company {
   // Servis — partneři (PartnerAccount) provázaní s touto firmou (Hugo login)
   partner_accounts        PartnerAccount[]     @relation("PartnerCompany")
 
+  // Spare Parts Shop — ceník platný pro tuto firmu a její eshopové objednávky
+  eshop_pricelist         EshopPricelist?      @relation("CompanyEshopPricelist", fields: [eshop_pricelist_id], references: [id], onDelete: SetNull)
+  shop_orders             ShopOrder[]          @relation("ShopOrderCompany")
+
   @@index([ico])
   @@index([type])
   @@index([factorify_id])
+  @@index([eshop_pricelist_id])
   @@map("companies")
 }
 
@@ -725,6 +736,8 @@ model Warehouse {
   inventories         Inventory[]
   workstations_input  Workstation[]       @relation("WorkstationInputWarehouse")
   workstations_output Workstation[]       @relation("WorkstationOutputWarehouse")
+  // Spare Parts Shop — Materials, které mají tento Warehouse zvolený jako zdroj eshop zásoby
+  eshop_materials     Material[]          @relation("MaterialEshopWarehouse")
 
   @@index([factorify_id])
   @@map("warehouses")
@@ -873,6 +886,18 @@ model Material {
   production_note        String?   @db.Text
   factorify_id           String?   @db.VarChar(100)
 
+  // Spare Parts Shop — eshop náhradních dílů na bestseries.cash/spare-parts.
+  // sells_on_eshop = flag, zda Material vystupuje v partner-facing katalogu.
+  // eshop_warehouse_id = ze kterého skladu se počítá dostupnost (Stock přes
+  //   location.warehouse_id, ne přes Material.current_stock; viz memory
+  //   holyos_stock_warehouse_join). eshop_description = marketing copy (Markdown),
+  //   eshop_image_path = primární obrázek pro katalog (fallback na photo_url).
+  sells_on_eshop      Boolean @default(false)
+  eshop_warehouse_id  Int?
+  eshop_description   String? @db.Text
+  eshop_image_path    String? @db.VarChar(500)
+  eshop_category_id   Int?
+
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
 
@@ -895,10 +920,19 @@ model Material {
   // Plánovač
   bom_snapshot_items BomSnapshotItem[]
 
+  // Spare Parts Shop — vazby
+  eshop_category        EshopCategory?       @relation("MaterialEshopCategory", fields: [eshop_category_id], references: [id], onDelete: SetNull)
+  eshop_warehouse       Warehouse?           @relation("MaterialEshopWarehouse", fields: [eshop_warehouse_id], references: [id], onDelete: SetNull)
+  eshop_pricelist_items EshopPricelistItem[]
+  shop_order_items      ShopOrderItem[]
+
   @@index([code])
   @@index([supplier_id])
   @@index([factorify_id])
   @@index([sector])
+  @@index([sells_on_eshop])
+  @@index([eshop_category_id])
+  @@index([eshop_warehouse_id])
   @@map("materials")
 }
 
@@ -4734,6 +4768,8 @@ model PartnerAccount {
 
   products      PartnerProductAccess[]
   chat_sessions ServiceChatSession[]
+  // Spare Parts Shop — objednávky, které tento partner vytvořil
+  shop_orders   ShopOrder[]            @relation("ShopOrderPartner")
 
   @@index([company_id])
   @@index([active])
@@ -5065,4 +5101,234 @@ model GeoFence {
   attendance_punches AttendancePunch[]
 
   @@map("velin_geo_fences")
+}
+
+// =============================================================================
+// SPARE PARTS SHOP — partner-facing eshop náhradních dílů na bestseries.cash/spare-parts
+// =============================================================================
+// Sdílí login s Hugem (PartnerAccount). Vlastní agenda objednávek (ShopOrder)
+// oddělená od výrobních Order. Skladová dostupnost se počítá nad Stock přes
+// EshopMaterial.eshop_warehouse_id (viz memory holyos_stock_warehouse_join).
+//
+// Rozhodnutí 2026-05-18 (memory holyos_eshop_iniciativa):
+// - Primární měna EUR (model multi-currency, CZK později jako další pricelist)
+// - Rezervace skladu hned při vytvoření (status='new'), auto-release po
+//   ESHOP_RESERVATION_HOURS hodinách neaktivity (default 72)
+// - Notifikace nové objednávky: e-mail + Velín push na Person z EshopSettings
+// =============================================================================
+
+// Kategorie zboží v eshopu — motory, řemeny, čerpadla, elektronika, doplňky...
+// Hierarchická (parent_id) pro budoucí filter sidebar; ve Fázi 1 jen flat.
+model EshopCategory {
+  id          Int     @id @default(autoincrement())
+  name        String  @unique @db.VarChar(100)
+  slug        String  @unique @db.VarChar(120)
+  icon        String? @db.VarChar(10)
+  description String? @db.Text
+  sort_order  Int     @default(0)
+  parent_id   Int?
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  parent    EshopCategory?  @relation("EshopCategoryHierarchy", fields: [parent_id], references: [id], onDelete: SetNull)
+  children  EshopCategory[] @relation("EshopCategoryHierarchy")
+  materials Material[]      @relation("MaterialEshopCategory")
+
+  @@index([parent_id])
+  @@index([sort_order])
+  @@map("eshop_categories")
+}
+
+// Ceník — per měna, per firma (Company.eshop_pricelist_id). Bez ceníku
+// přiřazeného firmě nevidí partner žádné ceny → tlačítko shopu disabled.
+model EshopPricelist {
+  id          Int      @id @default(autoincrement())
+  name        String   @db.VarChar(255) // "Standard EUR", "Velkoodběr CZ"
+  currency    String   @default("EUR") @db.VarChar(3)
+  vat_pct     Decimal  @default(21) @db.Decimal(5, 2)
+  active      Boolean  @default(true)
+  description String?  @db.Text
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  items     EshopPricelistItem[]
+  companies Company[]            @relation("CompanyEshopPricelist")
+
+  @@index([active])
+  @@map("eshop_pricelists")
+}
+
+// Položka ceníku — cena bez DPH za jeden Material. Per (pricelist, material) unique.
+model EshopPricelistItem {
+  id             Int     @id @default(autoincrement())
+  pricelist_id   Int
+  material_id    Int
+  price_excl_vat Decimal @db.Decimal(12, 2)
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  pricelist EshopPricelist @relation(fields: [pricelist_id], references: [id], onDelete: Cascade)
+  material  Material       @relation(fields: [material_id], references: [id], onDelete: Cascade)
+
+  @@unique([pricelist_id, material_id])
+  @@index([pricelist_id])
+  @@index([material_id])
+  @@map("eshop_pricelist_items")
+}
+
+// Způsob dopravy — Zásilkovna, kurýr, osobní odběr...
+// free_above_amount = doprava zdarma od částky (currency match s objednávkou).
+model EshopShippingMethod {
+  id                Int      @id @default(autoincrement())
+  name              String   @db.VarChar(255)
+  description       String?  @db.Text
+  price_excl_vat    Decimal  @db.Decimal(10, 2)
+  vat_pct           Decimal  @default(21) @db.Decimal(5, 2)
+  free_above_amount Decimal? @db.Decimal(12, 2)
+  currency          String   @default("EUR") @db.VarChar(3)
+  active            Boolean  @default(true)
+  sort_order        Int      @default(0)
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  shop_orders ShopOrder[] @relation("ShopOrderShipping")
+
+  @@index([active])
+  @@map("eshop_shipping_methods")
+}
+
+// Způsob platby — bankovní převod, dobírka, hotově, online card (Fáze 2).
+model EshopPaymentMethod {
+  id           Int     @id @default(autoincrement())
+  name         String  @db.VarChar(255) // "Bankovní převod", "Dobírka"
+  code         String  @unique @db.VarChar(50) // 'bank_transfer' | 'cod' | 'cash' | 'card'
+  description  String? @db.Text
+  fee_excl_vat Decimal @default(0) @db.Decimal(10, 2)
+  vat_pct      Decimal @default(21) @db.Decimal(5, 2)
+  active       Boolean @default(true)
+  sort_order   Int     @default(0)
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  shop_orders ShopOrder[] @relation("ShopOrderPayment")
+
+  @@index([active])
+  @@map("eshop_payment_methods")
+}
+
+// Eshopová objednávka — samostatná agenda, oddělená od výrobních Order.
+// Adresa + ceny jsou snapshotované v okamžiku objednávky (audit; firma se
+// později může změnit, ale historická objednávka drží svůj stav).
+// Workflow: new → confirmed → picking → shipped → delivered → closed
+//                                                              ↘ cancelled
+model ShopOrder {
+  id                  Int     @id @default(autoincrement())
+  order_number        String  @unique @db.VarChar(50) // např. E2026-00001
+  partner_id          Int
+  company_id          Int?
+  shipping_method_id  Int
+  payment_method_id   Int
+
+  // Adresa dodání — snapshot v okamžiku objednávky
+  ship_to_name    String  @db.VarChar(255)
+  ship_to_company String? @db.VarChar(255)
+  ship_to_address String  @db.VarChar(500)
+  ship_to_city    String  @db.VarChar(120)
+  ship_to_zip     String  @db.VarChar(20)
+  ship_to_country String  @default("CZ") @db.VarChar(2)
+  ship_to_email   String? @db.VarChar(255)
+  ship_to_phone   String? @db.VarChar(40)
+
+  customer_note   String? @db.Text
+
+  // Celkové částky — snapshot v okamžiku objednávky (z partnerova ceníku)
+  currency         String  @db.VarChar(3)
+  vat_pct          Decimal @db.Decimal(5, 2)
+  subtotal_excl    Decimal @db.Decimal(12, 2)
+  shipping_excl    Decimal @db.Decimal(10, 2)
+  payment_fee_excl Decimal @default(0) @db.Decimal(10, 2)
+  total_excl       Decimal @db.Decimal(12, 2)
+  total_incl_vat   Decimal @db.Decimal(12, 2)
+
+  // Workflow stav
+  status        String    @default("new") @db.VarChar(20) // new | confirmed | picking | shipped | delivered | closed | cancelled
+  cancel_reason String?   @db.VarChar(255) // např. "auto_release_expired" pro auto-release worker
+
+  // Tracking
+  tracking_number  String? @db.VarChar(100)
+  tracking_carrier String? @db.VarChar(60)
+
+  // Audit milníky workflow
+  confirmed_at DateTime?
+  picked_at    DateTime?
+  shipped_at   DateTime?
+  delivered_at DateTime?
+  closed_at    DateTime?
+  cancelled_at DateTime?
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  partner         PartnerAccount      @relation("ShopOrderPartner", fields: [partner_id], references: [id], onDelete: Restrict)
+  company         Company?            @relation("ShopOrderCompany", fields: [company_id], references: [id], onDelete: SetNull)
+  shipping_method EshopShippingMethod @relation("ShopOrderShipping", fields: [shipping_method_id], references: [id], onDelete: Restrict)
+  payment_method  EshopPaymentMethod  @relation("ShopOrderPayment", fields: [payment_method_id], references: [id], onDelete: Restrict)
+  items           ShopOrderItem[]
+
+  @@index([partner_id])
+  @@index([company_id])
+  @@index([status])
+  @@index([created_at])
+  @@index([partner_id, status])
+  @@map("eshop_orders")
+}
+
+// Položka eshopové objednávky. material_id je nullable — kdyby byl Material
+// později smazán, zachováme aspoň snapshot kódu+názvu+ceny pro audit.
+model ShopOrderItem {
+  id              Int     @id @default(autoincrement())
+  order_id        Int
+  material_id     Int?
+  material_code   String  @db.VarChar(50)
+  material_name   String  @db.VarChar(255)
+  quantity        Decimal @db.Decimal(10, 3)
+  unit            String  @default("ks") @db.VarChar(20)
+  unit_price_excl Decimal @db.Decimal(12, 2)
+  total_excl      Decimal @db.Decimal(12, 2)
+
+  created_at DateTime @default(now())
+
+  order    ShopOrder @relation(fields: [order_id], references: [id], onDelete: Cascade)
+  material Material? @relation(fields: [material_id], references: [id], onDelete: SetNull)
+
+  @@index([order_id])
+  @@index([material_id])
+  @@map("eshop_order_items")
+}
+
+// Globální konfigurace eshopu — singleton (id=1). Admin UI tab Nastavení.
+// notification_person_id = osoba, která dostane Velín push při nové objednávce
+// (vedle nebo místo e-mailu).
+model EshopSettings {
+  id                     Int      @id @default(autoincrement())
+  notification_email     String?  @db.VarChar(255) // fallback na env ESHOP_NOTIFICATION_EMAIL
+  notification_person_id Int?
+  default_currency       String   @default("EUR") @db.VarChar(3)
+  default_vat_pct        Decimal  @default(21) @db.Decimal(5, 2)
+  reservation_hours      Int      @default(72) // override env ESHOP_RESERVATION_HOURS
+  footer_html            String?  @db.Text
+  contact_email          String?  @db.VarChar(255)
+  contact_phone          String?  @db.VarChar(40)
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  notification_person Person? @relation("EshopSettingsNotifyPerson", fields: [notification_person_id], references: [id], onDelete: SetNull)
+
+  @@map("eshop_settings")
 }
