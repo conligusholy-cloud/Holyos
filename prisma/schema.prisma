@@ -5263,6 +5263,10 @@ model ShopOrder {
   tracking_number  String? @db.VarChar(100)
   tracking_carrier String? @db.VarChar(60)
 
+  // Fakturace — po dodání admin vygeneruje Invoice (issued/ar), ID se uloží sem.
+  // Bez explicitní @relation — informativní pointer, nikoli DB FK.
+  invoice_id Int?
+
   // Audit milníky workflow
   confirmed_at DateTime?
   picked_at    DateTime?

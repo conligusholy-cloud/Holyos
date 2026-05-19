@@ -9,6 +9,7 @@ const router = express.Router();
 const { z } = require('zod');
 const { prisma } = require('../config/database');
 const { requireAuth } = require('../middleware/auth');
+const { generateInvoiceNumber } = require('../services/accountant/invoice-numbering');
 
 router.use(requireAuth);
 
@@ -554,6 +555,14 @@ router.get('/orders/:id', async (req, res, next) => {
         },
       },
     });
+    // Doplnit info o případné navázané faktuře (lookup bez relation v Prisma)
+    if (o && o.invoice_id) {
+      const inv = await prisma.invoice.findUnique({
+        where: { id: o.invoice_id },
+        select: { id: true, invoice_number: true, total: true, currency: true, status: true, paid_amount: true, date_due: true },
+      });
+      o.invoice = inv;
+    }
     if (!o) return res.status(404).json({ error: 'Objednávka nenalezena' });
     res.json(o);
   } catch (err) { next(err); }
@@ -567,6 +576,137 @@ const orderPatchSchema = z.object({
   tracking_number: z.string().max(100).optional().nullable(),
   tracking_carrier: z.string().max(60).optional().nullable(),
   cancel_reason: z.string().max(255).optional().nullable(),
+});
+
+// Vytvoření faktury vydané z eshop objednávky. Povoleno pro status 'delivered'
+// nebo 'closed' a jen pokud objednávka ještě nemá invoice_id. Generuje Invoice
+// (issued/ar) přes existing accounting infrastructure (generateInvoiceNumber).
+// Items: každý ShopOrderItem → InvoiceItem + samostatné řádky pro dopravu a
+// platební poplatek (pokud > 0). Měna a vat_pct se přebírají ze ShopOrder.
+router.post('/orders/:id/invoice', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const order = await prisma.shopOrder.findUnique({
+      where: { id },
+      include: {
+        items: { orderBy: { id: 'asc' } },
+        company: true,
+        shipping_method: true,
+        payment_method: true,
+      },
+    });
+    if (!order) return res.status(404).json({ error: 'Objednávka nenalezena' });
+    if (order.invoice_id) return res.status(409).json({ error: `Pro tuto objednávku už existuje faktura (id ${order.invoice_id}).`, invoice_id: order.invoice_id });
+    if (!order.company_id) return res.status(400).json({ error: 'Objednávka nemá přiřazenou firmu (company_id) — fakturu nelze vystavit.' });
+    if (!['delivered', 'closed', 'shipped'].includes(order.status)) {
+      return res.status(409).json({ error: `Objednávka je ve stavu "${order.status}", fakturu lze vytvořit jen pro shipped/delivered/closed.` });
+    }
+
+    const invoiceNumber = await generateInvoiceNumber('issued');
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const due = new Date(today.getTime() + 14 * 86400000); // splatnost 14 dní
+    const vatRate = Number(order.vat_pct);
+
+    // Sestavit řádky faktury — produkty + doprava + případný poplatek za platbu
+    const lines = [];
+    let lineOrder = 1;
+    for (const it of order.items) {
+      const qty = Number(it.quantity);
+      const unitPrice = Number(it.unit_price_excl);
+      const subtotal = Math.round(qty * unitPrice * 100) / 100;
+      const vatAmount = Math.round(subtotal * vatRate / 100 * 100) / 100;
+      const total = Math.round((subtotal + vatAmount) * 100) / 100;
+      lines.push({
+        line_order: lineOrder++,
+        description: `${it.material_name} (${it.material_code})`,
+        quantity: qty,
+        unit: it.unit || 'ks',
+        unit_price: unitPrice,
+        vat_rate: vatRate,
+        subtotal: subtotal.toFixed(2),
+        vat_amount: vatAmount.toFixed(2),
+        total: total.toFixed(2),
+        material_id: it.material_id || null,
+      });
+    }
+    if (Number(order.shipping_excl) > 0) {
+      const subtotal = Number(order.shipping_excl);
+      const vatAmount = Math.round(subtotal * vatRate / 100 * 100) / 100;
+      lines.push({
+        line_order: lineOrder++,
+        description: `Doprava — ${order.shipping_method ? order.shipping_method.name : '-'}`,
+        quantity: 1,
+        unit: 'ks',
+        unit_price: subtotal,
+        vat_rate: vatRate,
+        subtotal: subtotal.toFixed(2),
+        vat_amount: vatAmount.toFixed(2),
+        total: (subtotal + vatAmount).toFixed(2),
+      });
+    }
+    if (Number(order.payment_fee_excl) > 0) {
+      const subtotal = Number(order.payment_fee_excl);
+      const vatAmount = Math.round(subtotal * vatRate / 100 * 100) / 100;
+      lines.push({
+        line_order: lineOrder++,
+        description: `Poplatek za platbu — ${order.payment_method ? order.payment_method.name : '-'}`,
+        quantity: 1,
+        unit: 'ks',
+        unit_price: subtotal,
+        vat_rate: vatRate,
+        subtotal: subtotal.toFixed(2),
+        vat_amount: vatAmount.toFixed(2),
+        total: (subtotal + vatAmount).toFixed(2),
+      });
+    }
+
+    const totalSubtotal = lines.reduce((s, l) => s + Number(l.subtotal), 0);
+    const totalVat = lines.reduce((s, l) => s + Number(l.vat_amount), 0);
+    const totalAmount = lines.reduce((s, l) => s + Number(l.total), 0);
+    const vs = invoiceNumber.replace(/\D/g, '').slice(-10);
+
+    const invoice = await prisma.$transaction(async (tx) => {
+      const inv = await tx.invoice.create({
+        data: {
+          invoice_number: invoiceNumber,
+          type: 'issued',
+          direction: 'ar',
+          company_id: order.company_id,
+          currency: order.currency,
+          exchange_rate: 1,
+          subtotal: totalSubtotal.toFixed(2),
+          vat_amount: totalVat.toFixed(2),
+          total: totalAmount.toFixed(2),
+          vat_regime: 'standard',
+          date_issued: today,
+          date_taxable: today,
+          date_due: due,
+          payment_method: 'bank_transfer',
+          variable_symbol: vs,
+          status: 'draft',
+          source: 'from_shop_order',
+          note: `Eshop objednávka ${order.order_number} (Spare Parts Shop)`,
+          created_by_user_id: req.user && req.user.id ? req.user.id : null,
+          items: { create: lines },
+        },
+        include: { items: true },
+      });
+      await tx.shopOrder.update({
+        where: { id: order.id },
+        data: { invoice_id: inv.id },
+      });
+      return inv;
+    });
+
+    res.status(201).json({
+      invoice_id: invoice.id,
+      invoice_number: invoice.invoice_number,
+      variable_symbol: invoice.variable_symbol,
+      total: invoice.total,
+      currency: invoice.currency,
+      url: `/modules/ucetni-doklady/index.html?invoice=${invoice.id}`,
+    });
+  } catch (err) { next(err); }
 });
 
 router.patch('/orders/:id', async (req, res, next) => {
@@ -634,6 +774,21 @@ router.get('/materials', async (req, res, next) => {
         eshop_warehouse: { select: { id: true, name: true, code: true } },
       },
     });
+
+    // Doplnit reserved_qty (kusy v otevřených ShopOrder ve stavech
+    // new/confirmed/picking) jedním bulk dotazem, ne N+1.
+    if (items.length) {
+      const reservations = await prisma.shopOrderItem.groupBy({
+        by: ['material_id'],
+        where: {
+          material_id: { in: items.map(i => i.id) },
+          order: { status: { in: ['new', 'confirmed', 'picking'] } },
+        },
+        _sum: { quantity: true },
+      });
+      const reservMap = new Map(reservations.map(r => [r.material_id, Number(r._sum.quantity || 0)]));
+      items.forEach(i => { i.reserved_qty = reservMap.get(i.id) || 0; });
+    }
     res.json(items);
   } catch (err) { next(err); }
 });
