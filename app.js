@@ -750,6 +750,12 @@ app.listen(PORT, async () => {
   } catch (err) {
     console.error('[app] eshop-release-worker nelze spustit:', err.message);
   }
+  try {
+    const eshopLowStockWorker = require('./services/eshop/low-stock-worker');
+    eshopLowStockWorker.start();
+  } catch (err) {
+    console.error('[app] eshop-low-stock-worker nelze spustit:', err.message);
+  }
   console.log('=========================================');
   console.log('  HolyOS v0.5.0');
   console.log('  Listening on port ' + PORT);

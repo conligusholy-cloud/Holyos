@@ -336,11 +336,37 @@
           <input type="text" id="order-tracking" class="filter-input" placeholder="Tracking number" value="${esc(o.tracking_number || '')}" style="flex:1; min-width:160px;">
           <input type="text" id="order-carrier" class="filter-input" placeholder="Dopravce" value="${esc(o.tracking_carrier || '')}" style="width:140px;">
           <button class="btn btn-primary btn-sm" onclick="saveOrder(${o.id})">Uložit</button>
-        </div>`;
+        </div>
+        ${o.invoice ? `
+          <div style="margin-top:12px; padding:12px; background:rgba(34,197,94,0.05); border:1px solid rgba(34,197,94,0.2); border-radius:10px;">
+            <div style="font-size:11px; color:var(--text2); text-transform:uppercase; margin-bottom:4px;">🧾 Faktura</div>
+            <a href="/modules/ucetni-doklady/index.html?invoice=${o.invoice.id}" target="_blank" style="font-weight:600; color:var(--text); text-decoration:none;">
+              ${esc(o.invoice.invoice_number)} ↗
+            </a>
+            — ${esc(fmtMoney(o.invoice.total, o.invoice.currency))}
+            <span class="badge badge-${esc(o.invoice.status)}" style="margin-left:8px;">${esc(o.invoice.status)}</span>
+            ${Number(o.invoice.paid_amount || 0) > 0 ? ` · zaplaceno ${esc(fmtMoney(o.invoice.paid_amount, o.invoice.currency))}` : ''}
+          </div>
+        ` : (['shipped', 'delivered', 'closed'].includes(o.status) && o.company_id ? `
+          <div style="margin-top:12px; padding:12px; background:rgba(245,158,11,0.05); border:1px solid rgba(245,158,11,0.2); border-radius:10px;">
+            <div style="font-size:12px; color:var(--text2); margin-bottom:8px;">Objednávka je dodaná — můžeš z ní vygenerovat fakturu vydanou (AR).</div>
+            <button class="btn btn-primary btn-sm" onclick="createInvoiceFromOrder(${o.id})">🧾 Vytvořit fakturu</button>
+          </div>
+        ` : '')}`;
       openModal(`Objednávka ${o.order_number}`, body);
     } catch (err) {
       alert('Chyba: ' + err.message);
     }
+  };
+
+  window.createInvoiceFromOrder = async function (id) {
+    if (!confirm2('Vygenerovat fakturu (AR/issued) z této objednávky?')) return;
+    try {
+      const r = await fetchJSON(`${API}/orders/${id}/invoice`, { method: 'POST' });
+      alert(`Faktura ${r.invoice_number} vytvořena.\nVS: ${r.variable_symbol}\nCelkem: ${r.total} ${r.currency}`);
+      closeModal();
+      loadOrders();
+    } catch (err) { alert('Chyba: ' + err.message); }
   };
 
   window.saveOrder = async function (id) {
