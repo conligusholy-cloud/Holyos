@@ -5267,6 +5267,14 @@ model ShopOrder {
   // Bez explicitní @relation — informativní pointer, nikoli DB FK.
   invoice_id Int?
 
+  // Auto-pick (Fáze 3) — po confirmu objednávky admin vyrobí Batch (sector='eshop')
+  // se všemi položkami. Také informativní pointer bez @relation.
+  pick_batch_id Int?
+
+  // Fakturace — po dodání admin vygeneruje Invoice (issued/ar), ID se uloží sem.
+  // Bez explicitní @relation — informativní pointer, nikoli DB FK.
+  invoice_id Int?
+
   // Audit milníky workflow
   confirmed_at DateTime?
   picked_at    DateTime?

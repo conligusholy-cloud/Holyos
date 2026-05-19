@@ -352,6 +352,21 @@
             <div style="font-size:12px; color:var(--text2); margin-bottom:8px;">Objednávka je dodaná — můžeš z ní vygenerovat fakturu vydanou (AR).</div>
             <button class="btn btn-primary btn-sm" onclick="createInvoiceFromOrder(${o.id})">🧾 Vytvořit fakturu</button>
           </div>
+        ` : '')}
+        ${o.pick_batch ? `
+          <div style="margin-top:12px; padding:12px; background:rgba(99,102,241,0.05); border:1px solid rgba(99,102,241,0.2); border-radius:10px;">
+            <div style="font-size:11px; color:var(--text2); text-transform:uppercase; margin-bottom:4px;">📦 Pickovací dávka</div>
+            <a href="/modules/davky/index.html?batch=${o.pick_batch.id}" target="_blank" style="font-weight:600; color:var(--text); text-decoration:none;">
+              ${esc(o.pick_batch.number)} ↗
+            </a>
+            <span class="badge" style="margin-left:8px; background:rgba(99,102,241,0.2); color:#818cf8;">${esc(o.pick_batch.status)}</span>
+            ${o.pick_batch.assignee ? ` · ${esc(o.pick_batch.assignee.first_name)} ${esc(o.pick_batch.assignee.last_name)}` : ''}
+          </div>
+        ` : (['confirmed', 'picking'].includes(o.status) ? `
+          <div style="margin-top:12px; padding:12px; background:rgba(99,102,241,0.05); border:1px solid rgba(99,102,241,0.2); border-radius:10px;">
+            <div style="font-size:12px; color:var(--text2); margin-bottom:8px;">Objednávka je potvrzená — vygeneruj pickovací dávku do Sklad PWA.</div>
+            <button class="btn btn-primary btn-sm" onclick="createPickBatch(${o.id})">📦 Vygenerovat pickovací dávku</button>
+          </div>
         ` : '')}`;
       openModal(`Objednávka ${o.order_number}`, body);
     } catch (err) {
@@ -364,6 +379,18 @@
     try {
       const r = await fetchJSON(`${API}/orders/${id}/invoice`, { method: 'POST' });
       alert(`Faktura ${r.invoice_number} vytvořena.\nVS: ${r.variable_symbol}\nCelkem: ${r.total} ${r.currency}`);
+      closeModal();
+      loadOrders();
+    } catch (err) { alert('Chyba: ' + err.message); }
+  };
+
+  window.createPickBatch = async function (id) {
+    if (!confirm2('Vygenerovat pickovací dávku pro tuto objednávku? Objednávka přejde do stavu "picking".')) return;
+    try {
+      const r = await fetchJSON(`${API}/orders/${id}/create-pick-batch`, { method: 'POST' });
+      if (confirm(`Dávka ${r.batch_number} vytvořena (${r.items_count} položek). Otevřít teď v modulu Pickovací dávky?`)) {
+        window.open(r.url, '_blank');
+      }
       closeModal();
       loadOrders();
     } catch (err) { alert('Chyba: ' + err.message); }
