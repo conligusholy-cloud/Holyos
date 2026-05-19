@@ -5,6 +5,7 @@
 const express = require('express');
 const router = express.Router();
 const { prisma } = require('../config/database');
+const { scheduleBatch } = require('../services/planning/scheduler');
 
 // =============================================================================
 // HELPER: Rekurzivní načítání sub-produktů (polotovar → polotovar → ... do hloubky)
@@ -1873,12 +1874,24 @@ router.get('/batches/:id', async (req, res, next) => {
           orderBy: { sequence: 'asc' },
         },
         slot_assignments: {
-          include: { slot: { select: { id: true, start_date: true, end_date: true } } },
+          include: {
+            slot: { select: { id: true, start_date: true, end_date: true } },
+          },
         },
       },
     });
     if (!batch) return res.status(404).json({ error: 'Dávka nenalezena' });
-    res.json(batch);
+
+    // Doplň related sales orders (přes SlotAssignment.order_id) — pro proklik z UI
+    const orderIds = [...new Set((batch.slot_assignments || []).map(sa => sa.order_id).filter(Boolean))];
+    let relatedOrders = [];
+    if (orderIds.length > 0) {
+      relatedOrders = await prisma.order.findMany({
+        where: { id: { in: orderIds }, type: 'sales' },
+        select: { id: true, order_number: true, status: true, company: { select: { id: true, name: true } } },
+      });
+    }
+    res.json({ ...batch, related_orders: relatedOrders });
   } catch (err) { next(err); }
 });
 
@@ -1999,8 +2012,8 @@ router.put('/batches/:id', async (req, res, next) => {
 });
 
 // POST /api/production/batches/:id/release — přechod planned → released.
-// Při release se dávka přiřadí k pracovním pozicím (BatchOperation se zatím
-// vytváří externě plánovačem; tento endpoint jen přepíná stav).
+// Po release automaticky pustí scheduler (RCCP V2) — best-effort. Pokud scheduler
+// selže, release přesto úspěšný a chyba se loguje (release nesmí být blokovaný).
 router.post('/batches/:id/release', async (req, res, next) => {
   try {
     const id = parseInt(req.params.id, 10);
@@ -2016,7 +2029,17 @@ router.post('/batches/:id/release', async (req, res, next) => {
       where: { id },
       data: { status: 'released' },
     });
-    res.json(updated);
+
+    // Auto-schedule po release (best-effort, neblokuje response)
+    let scheduleResult = null;
+    try {
+      scheduleResult = await scheduleBatch(id);
+    } catch (e) {
+      console.error(`[release/${id}] auto-schedule failed:`, e.message);
+      scheduleResult = { error: e.message };
+    }
+
+    res.json({ ...updated, _schedule: scheduleResult });
   } catch (err) { next(err); }
 });
 

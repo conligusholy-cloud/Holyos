@@ -147,6 +147,7 @@
       <button class="btn btn-secondary" onclick="openWorkstationQueue()" title="Vytížení pracovišť — kolik práce čeká">🏭 Vytížení</button>
       <button class="btn btn-secondary" onclick="openAuditLog()" title="Audit log akcí v kioscích za dnešek">📜 Audit</button>
       <button class="btn btn-secondary" onclick="openPurchaseReport()" title="Konsolidovaný nákupní report přes všechny aktivní dávky">📋 Nákupní report</button>
+      <button class="btn btn-secondary" onclick="scheduleAllBatches()" title="Bulk re-plán všech aktivních dávek s ohledem na shift, queue, SlotBlock">📅 Naplánuj vše</button>
       <button class="btn btn-secondary" onclick="loadAll()">🔄 Obnovit</button>
       <button class="btn btn-primary" onclick="openCreateModal()">+ Nová dávka</button>
     </div>
@@ -355,6 +356,23 @@
     return String(v ?? '').toLowerCase().includes(fv);
   }
 
+  // ─── Bulk re-plán všech aktivních dávek ───────────────────────────────────
+  window.scheduleAllBatches = async function() {
+    if (!confirm('Spustit bulk re-plán všech aktivních dávek (planned/released/paused)?\n\nVšechny non-started operace dostanou nové planned_start/end podle priority a queue konfliktů.')) return;
+    try {
+      const r = await fetch('/api/planning/schedule-all', { method: 'POST', headers: authHeaders() });
+      if (!r.ok) throw new Error((await r.json()).error || 'HTTP ' + r.status);
+      const summary = await r.json();
+      const failedList = summary.results.filter(x => !x.ok).map(x => `${x.batch_number}: ${x.error}`).join('\n');
+      let msg = `📅 Bulk plánování dokončeno\n\nÚspěch: ${summary.ok}/${summary.total}\nChyb: ${summary.failed}`;
+      if (failedList) msg += '\n\nChyby:\n' + failedList;
+      alert(msg);
+      await loadAll();
+    } catch (err) {
+      alert('Chyba bulk plánu: ' + err.message);
+    }
+  };
+
   // ─── Načtení dat ──────────────────────────────────────────────────────────
   async function loadAll() {
     try {
@@ -499,7 +517,12 @@
         if (!r.ok) throw new Error((await r.json()).error || 'HTTP ' + r.status);
         const result = await r.json();
         if (result.warning) alert('⚠️ ' + result.warning);
-        else alert(`📅 Naplánováno ${result.operations_scheduled} operací\nZačátek: ${new Date(result.plan_start).toLocaleString('cs-CZ')}\nKonec: ${new Date(result.plan_end).toLocaleString('cs-CZ')}\nCelkem ${result.total_minutes} minut`);
+        else {
+          const work = result.work_minutes != null ? result.work_minutes : (result.total_minutes || 0);
+          const wait = result.wait_minutes || 0;
+          const shiftInfo = result.shift_config?.enabled ? `Shift: ${result.shift_config.start}–${result.shift_config.end}` : 'Shift: 24/7';
+          alert(`📅 Naplánováno ${result.operations_scheduled} operací\nZačátek: ${new Date(result.plan_start).toLocaleString('cs-CZ')}\nKonec: ${new Date(result.plan_end).toLocaleString('cs-CZ')}\nPráce: ${work} min | čekání: ${wait} min (idle ${result.idle_pct || 0}%)\n${shiftInfo}`);
+        }
       }
       await loadAll();
     } catch (err) {
@@ -561,17 +584,26 @@
 
     // Operace
     const ops = (b.batch_operations || []).sort((a, c) => a.sequence - c.sequence);
-    const opsRows = ops.map(op => `
+    const opsRows = ops.map(op => {
+      // Plánované trvání (z planned_start/end) — i když operace ještě neběžela
+      let plannedMin = null;
+      if (op.planned_start && op.planned_end) {
+        plannedMin = Math.round((new Date(op.planned_end) - new Date(op.planned_start)) / 60000);
+      }
+      const planStyle = 'color:var(--text2); font-size:10px; line-height:1.2;';
+      const realStyle = 'line-height:1.2;';
+      return `
       <tr>
         <td class="col-num">${op.sequence}</td>
         <td><strong>${escHtml(op.operation?.name || '')}</strong></td>
         <td>${escHtml(op.workstation?.name || '—')}</td>
         <td>${statusBadge(op.status)}</td>
         <td>${op.assigned_person ? escHtml(op.assigned_person.first_name + ' ' + op.assigned_person.last_name) : '—'}</td>
-        <td>${fmtDateTime(op.started_at)}</td>
-        <td>${fmtDateTime(op.finished_at)}</td>
-        <td class="col-num">${op.duration_minutes != null ? op.duration_minutes + ' min' : '—'}</td>
-      </tr>`).join('');
+        <td>${op.planned_start ? `<div style="${planStyle}">📅 ${fmtDateTime(op.planned_start)}</div>` : ''}<div style="${realStyle}">${op.started_at ? '▶ ' + fmtDateTime(op.started_at) : '—'}</div></td>
+        <td>${op.planned_end ? `<div style="${planStyle}">📅 ${fmtDateTime(op.planned_end)}</div>` : ''}<div style="${realStyle}">${op.finished_at ? '✓ ' + fmtDateTime(op.finished_at) : '—'}</div></td>
+        <td class="col-num">${plannedMin != null ? `<div style="${planStyle}">📅 ${plannedMin} min</div>` : ''}<div style="${realStyle}">${op.duration_minutes != null ? op.duration_minutes + ' min' : '—'}</div></td>
+      </tr>`;
+    }).join('');
     const opsHtml = ops.length === 0
       ? '<div style="color:var(--text2); padding:14px; text-align:center;">Žádné BatchOperation. Použij „⚙️ Generuj op." v hlavní tabulce.</div>'
       : `<table class="dense" style="width:100%; margin-bottom:18px;">
@@ -587,13 +619,45 @@
         ? `<div style="color:#22c55e;">✓ Všech ${mrp.summary.items_count} materiálů na skladě</div>`
         : `<div>
             <strong style="color:#ef4444;">⚠️ Chybí ${mrp.summary.shortage_count} z ${mrp.summary.items_count} materiálů</strong>
-            <ul style="margin:6px 0 0; padding-left:20px; font-size:12px;">
-              ${mrp.items.filter(it => it.shortage > 0).slice(0, 5).map(it =>
-                `<li>${escHtml(it.material?.code || '')} ${escHtml(it.material?.name?.slice(0, 40) || '')} — chybí <strong>${it.shortage} ${escHtml(it.unit)}</strong>${it.expected_delivery ? ' (dodání '+it.expected_delivery+')' : ''}</li>`
-              ).join('')}
-              ${mrp.items.filter(it => it.shortage > 0).length > 5 ? `<li>+${mrp.items.filter(it => it.shortage > 0).length - 5} dalších…</li>` : ''}
-            </ul>
-            <div style="margin-top:6px; font-size:11px; color:var(--text2);">Detailní rozpis v "📊 MRP" v hlavní tabulce.</div>
+            <table class="dense" style="width:100%; margin-top:8px; font-size:12px;">
+              <thead><tr class="head-titles" style="font-size:11px;">
+                <th style="text-align:left;">Materiál</th>
+                <th class="col-num">Chybí</th>
+                <th style="text-align:left;">Objednáno / Dorazí</th>
+                <th style="text-align:left;">Nákupní objednávka</th>
+              </tr></thead>
+              <tbody>
+              ${mrp.items.filter(it => it.shortage > 0).slice(0, 8).map(it => {
+                const onQty = it.on_order?.qty || 0;
+                const overQty = it.on_order?.overdue_qty || 0;
+                const eta = it.on_order?.next_delivery;
+                let cell;
+                if (onQty > 0) {
+                  cell = `<span style="color:#22c55e;">📦 <strong>${onQty} ${escHtml(it.unit)}</strong>${eta ? ' · dorazí ' + new Date(eta).toLocaleDateString('cs-CZ') : ' · ETA neznámá'}</span>`;
+                  if (overQty > 0) cell += ` <span style="color:#f59e0b; font-size:11px;">(+ ${overQty} ${escHtml(it.unit)} po termínu — stale data)</span>`;
+                } else if (overQty > 0) {
+                  cell = `<span style="color:#f59e0b;">⚠️ ${overQty} ${escHtml(it.unit)} po termínu (stará PO bez dodání)</span>`;
+                } else {
+                  cell = '<span style="color:#ef4444;">❌ není objednáno</span>';
+                }
+                // Sloupec Nákupní objednávka — sloučí active + overdue sources
+                const allSources = [...(it.on_order?.sources || []), ...(it.on_order?.overdue_sources || [])];
+                const poCell = allSources.length === 0
+                  ? '<span style="color:var(--text2);">—</span>'
+                  : [...new Map(allSources.map(x => [x.order_id, x])).values()]
+                      .map(x => `<a href="modules/nakup-sklad/index.html#order-${x.order_id}" target="_blank" title="${escHtml(x.item_status || '')}" style="color:#6c8cff; text-decoration:none;">${escHtml(x.order_number || '#' + x.order_id)}</a>`)
+                      .join(', ');
+                return `<tr>
+                  <td><strong>${escHtml(it.material?.code || '')}</strong> ${escHtml(it.material?.name?.slice(0, 50) || '')}</td>
+                  <td class="col-num"><strong>${it.shortage} ${escHtml(it.unit)}</strong></td>
+                  <td>${cell}</td>
+                  <td>${poCell}</td>
+                </tr>`;
+              }).join('')}
+              ${mrp.items.filter(it => it.shortage > 0).length > 8 ? `<tr><td colspan="4" style="text-align:center; color:var(--text2); font-size:11px;">+${mrp.items.filter(it => it.shortage > 0).length - 8} dalších v "📊 MRP" detailu</td></tr>` : ''}
+              </tbody>
+            </table>
+            <div style="margin-top:6px; font-size:11px; color:var(--text2);">Plný rozpis v "📊 MRP" v hlavní tabulce.</div>
           </div>`;
 
     // Audit (poslední akce)
@@ -1011,6 +1075,11 @@
 
     const itemsRows = items.map(it => {
       const shortClass = it.shortage > 0 ? 'bool-no' : 'bool-yes';
+      const onOrderCell = it.on_order && it.on_order.qty > 0
+        ? `<div style="color:#22c55e;"><strong>📦 ${it.on_order.qty} ${escHtml(it.unit)}</strong></div>${it.on_order.next_delivery ? `<div style="font-size:11px; color:var(--text2);">dorazí ${new Date(it.on_order.next_delivery).toLocaleDateString('cs-CZ')}</div>` : ''}`
+        : (it.shortage > 0 ? '<span style="color:#ef4444;">❌ neobjednáno</span>' : '—');
+      const openShortage = it.open_shortage != null ? it.open_shortage : it.shortage;
+      const openCls = openShortage > 0 ? 'bool-no' : 'bool-yes';
       return `
         <tr>
           <td><strong>${escHtml(it.material?.code || '')}</strong></td>
@@ -1019,7 +1088,8 @@
           <td class="col-num"><strong>${it.needed}</strong></td>
           <td class="col-num">${it.stock?.available ?? '—'}</td>
           <td class="col-num bool-cell ${shortClass}">${it.shortage > 0 ? it.shortage : '✓'}</td>
-          <td>${it.expected_delivery || '—'}</td>
+          <td>${onOrderCell}</td>
+          <td class="col-num bool-cell ${openCls}">${openShortage > 0 ? openShortage : '✓'}</td>
           <td>${escHtml(it.supplier?.name || '—')}</td>
         </tr>`;
     }).join('');
@@ -1056,7 +1126,7 @@
           <div style="overflow-x:auto;">
             <table class="dense" style="width:100%;">
               <thead><tr class="head-titles">
-                <th>Kód</th><th>Název</th><th>Per ks</th><th>Potřeba</th><th>Skladem</th><th>Chybí</th><th>Dodání</th><th>Dodavatel</th>
+                <th>Kód</th><th>Název</th><th>Per ks</th><th>Potřeba</th><th>Skladem</th><th>Chybí (hrubě)</th><th>Objednáno / Dorazí</th><th>Chybí po obj.</th><th>Dodavatel</th>
               </tr></thead>
               <tbody>${itemsRows || '<tr><td colspan="8" style="text-align:center; padding:24px;">Žádné položky BOM</td></tr>'}</tbody>
             </table>

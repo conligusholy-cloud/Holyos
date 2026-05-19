@@ -17,7 +17,7 @@ const { computeMrpForBatch } = require('../../services/planning/mrp');
 const { computePrePickForBatch } = require('../../services/planning/pre-pick');
 const { computePurchaseReport } = require('../../services/planning/purchase-report');
 const { checkAndCloseBatch } = require('../../services/planning/batch-state');
-const { scheduleBatch } = require('../../services/planning/scheduler');
+const { scheduleBatch, scheduleAllActive } = require('../../services/planning/scheduler');
 
 function getPlanningTools() {
   return [
@@ -219,8 +219,13 @@ function getPlanningTools() {
     },
     {
       name: 'schedule_batch',
-      description: 'Naive sekvenční scheduling — nastaví planned_start/planned_end pro každou BatchOperation. V1 ignoruje shift hours a queue na pracovišti (jen sériově od batch.planned_start nebo NOW).',
-      input_schema: { type: 'object', properties: { batch_id: { type: 'number' } }, required: ['batch_id'] },
+      description: 'RCCP V2 scheduling — nastaví planned_start/planned_end pro každou BatchOperation s ohledem na shift (env SCHEDULER_SHIFT_*), queue na pracovišti a SlotBlock. Volitelně exclusive=true ignoruje frontu jiných dávek. Setup time (ProductOperation.preparation_time) zahrnut.',
+      input_schema: { type: 'object', properties: { batch_id: { type: 'number' }, exclusive: { type: 'boolean', default: false, description: 'Re-plán "od nuly" — ignoruje existující queue' } }, required: ['batch_id'] },
+    },
+    {
+      name: 'schedule_all_batches',
+      description: 'Bulk re-plán všech aktivních dávek (planned/released/paused). Před spuštěním promaže planned_start/end u non-started operací, pak řadí dávky podle priority DESC + planned_end ASC a postupně volá scheduleBatch s queue uvědoměním. Vrací souhrn úspěch/chyba per dávka.',
+      input_schema: { type: 'object', properties: {} },
     },
     {
       name: 'unblock_operation',
@@ -769,7 +774,13 @@ async function executePlanningTool(toolName, params, prisma) {
 
     // ─── schedule_batch ──────────────────────────────────────────────────
     case 'schedule_batch': {
-      const result = await scheduleBatch(params.batch_id);
+      const result = await scheduleBatch(params.batch_id, { exclusive: params.exclusive === true });
+      return result;
+    }
+
+    // ─── schedule_all_batches ────────────────────────────────────────────
+    case 'schedule_all_batches': {
+      const result = await scheduleAllActive();
       return result;
     }
 
