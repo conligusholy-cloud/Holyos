@@ -15,7 +15,7 @@ const { computeMrpForBatch } = require('../services/planning/mrp');
 const { computePrePickForBatch } = require('../services/planning/pre-pick');
 const { computePurchaseReport } = require('../services/planning/purchase-report');
 const { checkAndCloseBatch } = require('../services/planning/batch-state');
-const { scheduleBatch } = require('../services/planning/scheduler');
+const { scheduleBatch, scheduleAllActive } = require('../services/planning/scheduler');
 
 // =============================================================================
 // BOM SNAPSHOTS — zamražený kusovník pro plánování dávky
@@ -295,18 +295,32 @@ router.post('/batches/:id/resume', async (req, res, next) => {
 });
 
 // POST /api/planning/batches/:id/schedule
-//   Naive sekvenční scheduling: nastaví planned_start/planned_end pro každou
-//   BatchOperation. Ignoruje shift hours a queue na pracovišti (V1).
+//   RCCP V2 scheduling: nastaví planned_start/planned_end pro každou BatchOperation
+//   s ohledem na shift (env SCHEDULER_SHIFT_*), queue na pracovišti a SlotBlock.
+//   Body (optional): { exclusive: true } — ignoruje frontu jiných dávek (re-plán od nuly).
 router.post('/batches/:id/schedule', async (req, res, next) => {
   try {
     const id = parseInt(req.params.id, 10);
     if (isNaN(id)) return res.status(400).json({ error: 'Neplatné ID' });
-    const result = await scheduleBatch(id);
+    const exclusive = (req.body || {}).exclusive === true;
+    const result = await scheduleBatch(id, { exclusive });
     res.json(result);
   } catch (err) {
     if (/nenalezena/.test(err.message)) return res.status(404).json({ error: err.message });
     next(err);
   }
+});
+
+// POST /api/planning/schedule-all
+//   Bulk re-plán všech aktivních dávek (planned/released/paused).
+//   Před spuštěním promaže planned_start/end u non-started operací,
+//   pak řadí dávky podle priority DESC, planned_end ASC a postupně volá scheduleBatch.
+//   Vrací souhrn { total, ok, failed, results: [...] }.
+router.post('/schedule-all', async (req, res, next) => {
+  try {
+    const result = await scheduleAllActive();
+    res.json(result);
+  } catch (err) { next(err); }
 });
 
 // POST /api/planning/batches/:id/check-completion

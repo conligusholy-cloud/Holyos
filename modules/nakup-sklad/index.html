@@ -284,6 +284,19 @@
       confirmed: { label: 'Potvrzeno', color: '#f59e0b' },
       delivered: { label: 'Doručeno', color: '#10b981' },
       cancelled: { label: 'Zrušeno', color: '#ef4444' },
+      imported: { label: 'Importováno', color: '#9ca3af' },
+      completed: { label: 'Ukončeno', color: '#10b981' },
+      pending: { label: 'Čeká', color: '#f59e0b' },
+      partial: { label: 'Částečně doručeno', color: '#3b82f6' },
+      closed: { label: 'Uzavřeno', color: '#10b981' },
+      done: { label: 'Hotovo', color: '#10b981' },
+    };
+    const ITEM_STATUSES = {
+      pending: { label: 'Čeká', color: '#9ca3af' },
+      ordered: { label: 'Objednáno', color: '#8b5cf6' },
+      partial: { label: 'Částečně doručeno', color: '#3b82f6' },
+      completed: { label: 'Ukončeno', color: '#10b981' },
+      cancelled: { label: 'Zrušeno', color: '#ef4444' },
     };
     const ORDER_TYPES = { purchase: '🛒 Nákupní', sales: '💰 Prodejní', cooperation: '🤝 Kooperační' };
     const COMPANY_TYPES = { own: 'Moje firma', supplier: 'Dodavatel', customer: 'Odběratel', cooperation: 'Kooperace', both: 'Dodavatel/Odběratel' };
@@ -647,10 +660,17 @@
 
         let itemsHtml = '';
         if (order.items && order.items.length > 0) {
-          itemsHtml = '<table class="data-table"><thead><tr><th>Položka</th><th>Množství</th><th>Jednotka</th><th>Cena/ks</th><th>Celkem</th><th></th></tr></thead><tbody>';
+          itemsHtml = '<table class="data-table"><thead><tr><th>Položka</th><th>Stav</th><th>Množství</th><th>Doručeno</th><th>Termín dodání</th><th>Jednotka</th><th>Cena/ks</th><th>Celkem</th><th></th></tr></thead><tbody>';
           for (const it of order.items) {
+            const its = ITEM_STATUSES[it.status] || { label: it.status || '—', color: '#9ca3af' };
+            const delivered = it.delivered_quantity != null ? it.delivered_quantity : 0;
+            const eta = it.expected_delivery ? new Date(it.expected_delivery).toLocaleDateString('cs-CZ') : '—';
             itemsHtml += '<tr><td class="person-name">' + (it.name || it.material_name || '—') + '</td>';
-            itemsHtml += '<td>' + it.quantity + '</td><td>' + it.unit + '</td>';
+            itemsHtml += '<td><span class="badge" style="background:' + its.color + '22;color:' + its.color + ';font-size:11px;padding:3px 8px;">' + its.label + '</span></td>';
+            itemsHtml += '<td>' + it.quantity + '</td>';
+            itemsHtml += '<td>' + delivered + '</td>';
+            itemsHtml += '<td>' + eta + '</td>';
+            itemsHtml += '<td>' + it.unit + '</td>';
             itemsHtml += '<td>' + (it.unit_price||0).toLocaleString('cs-CZ') + ' Kč</td>';
             itemsHtml += '<td style="font-weight:600;">' + (it.total_price||0).toLocaleString('cs-CZ') + ' Kč</td>';
             itemsHtml += '<td><button class="btn btn-danger btn-sm" onclick="deleteOrderItem(' + it.id + ',' + id + ')">🗑️</button></td></tr>';
@@ -670,7 +690,7 @@
               '<span class="badge" style="background:' + st.color + '22;color:' + st.color + ';font-size:13px;padding:4px 12px;">' + st.label + '</span>' +
             '</div>' +
           '</div>' +
-          '<div style="font-size:13px;color:var(--text2);margin-bottom:16px;">' + (ORDER_TYPES[order.type]||order.type) + ' · ' + (order.company_name||'—') + ' · Celkem: <strong style="color:var(--text);">' + (order.total_amount||0).toLocaleString('cs-CZ') + ' ' + (order.currency||'CZK') + '</strong></div>' +
+          '<div style="font-size:13px;color:var(--text2);margin-bottom:16px;">' + (ORDER_TYPES[order.type]||order.type) + ' · ' + (order.company_name||'—') + ' · Celkem: <strong style="color:var(--text);">' + (order.total_amount||0).toLocaleString('cs-CZ') + ' ' + (order.currency||'CZK') + '</strong>' + (order.expected_delivery ? ' · Termín dodání: <strong style="color:var(--text);">' + new Date(order.expected_delivery).toLocaleDateString('cs-CZ') + '</strong>' : '') + '</div>' +
           '<div style="border-top:1px solid var(--border);padding-top:16px;margin-bottom:12px;"><h3 style="font-size:14px;margin-bottom:8px;">📦 Položky</h3>' + itemsHtml + '</div>' +
           '<div style="border-top:1px solid var(--border);padding-top:16px;">' +
             '<h3 style="font-size:14px;margin-bottom:8px;">➕ Přidat položku</h3>' +
@@ -2166,6 +2186,20 @@
     // ============================================================
     loadStats();
     loadDashboard();
+
+    // Deep link — pokud v URL hash #order-N, přepni na tab Objednávky a otevři detail
+    (function handleDeepLink() {
+      const m = (window.location.hash || '').match(/^#order-(\d+)$/);
+      if (m) {
+        const orderId = parseInt(m[1], 10);
+        setTimeout(() => {
+          if (typeof switchTab === 'function') switchTab('orders');
+          setTimeout(() => {
+            if (typeof openOrderDetail === 'function') openOrderDetail(orderId);
+          }, 350);
+        }, 200);
+      }
+    })();
   </script>
 </body>
 </html>

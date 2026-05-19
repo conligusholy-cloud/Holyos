@@ -30,16 +30,29 @@ const BS_CUSTOM_FIELDS = ['STAV', 'DUVOD', 'POPT', ' REASON', 'SCHASTAV', 'PLAT'
 
 /**
  * Mapuje state Factorify PurchaseOrderItem → status HolyOS OrderItem.
- *   CANCELLED → 'cancelled'
- *   DELIVERED → 'completed'
- *   ostatní (NEW, PARTIAL, OPEN, ...) → 'pending'
+ *
+ * Reálný histogram z probe (14696 items):
+ *   FINISHED   12893  → 'completed'    (Ukončeno — doručeno + zaúčtováno + zaplaceno)
+ *   DELIVERED   1076  → 'completed'    (Doručeno)
+ *   CANCELLED    322  → 'cancelled'
+ *   ORDERED      197  → 'ordered'      (Objednáno)
+ *   CONFIRMED    122  → 'confirmed'    (Potvrzeno dodavatelem)
+ *   NEW           50  → 'new'          (Nová položka)
+ *   DEMANDED      36  → 'quoted'       (Poptáno)
+ *
+ * Defenzivně podporujeme i COMPLETED/CLOSED/PARTIAL pro případ jiných Factorify
+ * instalací nebo budoucích změn.
  */
 function mapItemStatus(state) {
   if (!state) return 'pending';
   const s = String(state).toUpperCase();
   if (s === 'CANCELLED' || s === 'CANCELED') return 'cancelled';
-  if (s === 'DELIVERED' || s === 'COMPLETED' || s === 'CLOSED') return 'completed';
+  if (s === 'FINISHED' || s === 'DELIVERED' || s === 'COMPLETED' || s === 'CLOSED') return 'completed';
   if (s === 'PARTIAL' || s === 'PARTIALLY_DELIVERED') return 'partial';
+  if (s === 'ORDERED') return 'ordered';
+  if (s === 'CONFIRMED') return 'confirmed';
+  if (s === 'DEMANDED') return 'quoted';
+  if (s === 'NEW') return 'new';
   return 'pending';
 }
 
@@ -56,6 +69,16 @@ function mapOrderStatus(raw, items = []) {
   // Faktorify má STAV jako string "OK", null, nebo nic.
   const stav = getStr(raw, 'STAV');
   if (stav === 'OK') return 'completed';
+
+  // Pokud máme items, zkusíme agregovat
+  if (items.length > 0) {
+    const statuses = items.map(it => mapItemStatus(getStr(it, 'state')));
+    if (statuses.every(s => s === 'completed' || s === 'cancelled')) {
+      return statuses.every(s => s === 'cancelled') ? 'cancelled' : 'completed';
+    }
+    if (statuses.some(s => s === 'ordered' || s === 'confirmed')) return 'ordered';
+    if (statuses.some(s => s === 'completed')) return 'partial';
+  }
   return 'imported';
 }
 

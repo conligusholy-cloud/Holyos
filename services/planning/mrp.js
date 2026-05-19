@@ -119,6 +119,71 @@ async function computeMrpForBatch(batchId, opts = {}) {
     stockMap.set(s.material_id, { total, reserved, available: total - reserved });
   }
 
+  // ── 2b. Otevřené nákupní objednávky per material ─────────────────────────
+  //   Order.type='purchase', status nepředstavuje uzavřený stav (vylučujeme
+  //   delivered/cancelled/closed). Z OrderItem počítáme open_qty = quantity -
+  //   delivered_quantity. Nejbližší expected_delivery (per material) jako ETA.
+  // Filtr otevřených PO položek:
+  //  - OrderItem.status NE 'completed'/'cancelled' (Factorify mapper převádí
+  //    DELIVERED/COMPLETED/CLOSED/Ukončeno → 'completed'; ten by neměl figurovat
+  //    jako "na cestě", i kdyby delivered_quantity zůstalo 0 kvůli neúplné migraci).
+  //  - Order.status NE delivered/cancelled/closed/done/completed (Order-level uzávěr).
+  const openOrderItems = await tx.orderItem.findMany({
+    where: {
+      material_id: { in: materialIds },
+      status: { notIn: ['completed', 'cancelled'] },
+      order: {
+        type: 'purchase',
+        status: { notIn: ['delivered', 'cancelled', 'closed', 'done', 'completed'] },
+      },
+    },
+    select: {
+      material_id: true,
+      quantity: true,
+      delivered_quantity: true,
+      expected_delivery: true,
+      status: true,
+      order: { select: { id: true, order_number: true, expected_delivery: true, status: true } },
+    },
+  });
+  // Rozděl PO na aktivní (ETA >= dnes nebo bez date) a overdue (ETA < dnes).
+  // Overdue obvykle stará Factorify migrační data, která visí v DB — do plánování
+  // nevstupují (nelze čekat na dodávku z minulosti), ale ukazujeme je samostatně.
+  const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
+  const openOrdersMap = new Map(); // material_id -> { qty_on_order, next_delivery, sources, overdue_qty, overdue_sources }
+  for (const oi of openOrderItems) {
+    const ordered = Number(oi.quantity || 0);
+    const delivered = Number(oi.delivered_quantity || 0);
+    const remaining = +(ordered - delivered).toFixed(4);
+    if (remaining <= 0) continue;
+    if (!openOrdersMap.has(oi.material_id)) {
+      openOrdersMap.set(oi.material_id, {
+        qty_on_order: 0, next_delivery: null, sources: [],
+        overdue_qty: 0, overdue_sources: [],
+      });
+    }
+    const slot = openOrdersMap.get(oi.material_id);
+    const eta = oi.expected_delivery || oi.order?.expected_delivery || null;
+    const isOverdue = eta && new Date(eta) < todayStart;
+    const entry = {
+      order_id: oi.order.id,
+      order_number: oi.order.order_number,
+      remaining,
+      expected_delivery: eta,
+      item_status: oi.status,
+    };
+    if (isOverdue) {
+      slot.overdue_qty = +(slot.overdue_qty + remaining).toFixed(4);
+      slot.overdue_sources.push(entry);
+    } else {
+      slot.qty_on_order = +(slot.qty_on_order + remaining).toFixed(4);
+      if (eta && (!slot.next_delivery || new Date(eta) < new Date(slot.next_delivery))) {
+        slot.next_delivery = eta;
+      }
+      slot.sources.push(entry);
+    }
+  }
+
   // ── 3. Sestav per-material analýzu ────────────────────────────────────────
   const today = new Date();
   const items = bomItems.map(b => {
@@ -134,6 +199,9 @@ async function computeMrpForBatch(batchId, opts = {}) {
       expected_delivery = d.toISOString().slice(0, 10);
     }
 
+    const onOrder = openOrdersMap.get(b.material_id) || { qty_on_order: 0, next_delivery: null, sources: [], overdue_qty: 0, overdue_sources: [] };
+    const openShortage = +Math.max(0, shortage - onOrder.qty_on_order).toFixed(4);
+
     return {
       material_id: b.material_id,
       material: m ? { id: m.id, code: m.code, name: m.name, unit: m.unit, lead_time_days: m.lead_time_days } : null,
@@ -142,6 +210,14 @@ async function computeMrpForBatch(batchId, opts = {}) {
       needed,
       stock: stock,
       shortage,
+      on_order: {
+        qty: onOrder.qty_on_order,
+        next_delivery: onOrder.next_delivery,
+        sources: onOrder.sources,
+        overdue_qty: onOrder.overdue_qty,
+        overdue_sources: onOrder.overdue_sources,
+      },
+      open_shortage: openShortage,   // skutečně nepokrytý nedostatek (shortage − on_order)
       expected_delivery,
       supplier: m?.supplier || null,
     };
@@ -173,6 +249,8 @@ async function computeMrpForBatch(batchId, opts = {}) {
     });
 
   const shortageCount = items.filter(it => it.shortage > 0).length;
+  const onOrderCount = items.filter(it => it.on_order.qty > 0).length;
+  const openShortageCount = items.filter(it => it.open_shortage > 0).length;
 
   return {
     batch: {
@@ -185,6 +263,8 @@ async function computeMrpForBatch(batchId, opts = {}) {
       all_materials_ok: shortageCount === 0,
       items_count: items.length,
       shortage_count: shortageCount,
+      on_order_count: onOrderCount,
+      open_shortage_count: openShortageCount,  // chybí I po zahrnutí otevřených PO
     },
     po_proposals: poProposals,
   };
