@@ -709,6 +709,108 @@ router.post('/orders/:id/invoice', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// Auto-pick generování (Fáze 3 brief) — z eshop objednávky vyrobíme Batch
+// (sector='eshop') se všemi položkami. Povoleno pro status='confirmed' nebo
+// 'picking'. Optimální from_location se nastaví, pokud existuje Stock pro
+// materiál v eshop warehouse (jinak fallback na první lokaci s pozitivním
+// množstvím). Po vytvoření Batch objednávka přepne na 'picking'.
+router.post('/orders/:id/create-pick-batch', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const order = await prisma.shopOrder.findUnique({
+      where: { id },
+      include: { items: { orderBy: { id: 'asc' } } },
+    });
+    if (!order) return res.status(404).json({ error: 'Objednávka nenalezena' });
+    if (order.pick_batch_id) return res.status(409).json({
+      error: `Pro tuto objednávku už existuje pickovací dávka (id ${order.pick_batch_id}).`,
+      batch_id: order.pick_batch_id,
+    });
+    if (!['confirmed', 'picking'].includes(order.status)) {
+      return res.status(409).json({
+        error: `Objednávka je ve stavu "${order.status}", dávku lze vytvořit jen pro confirmed/picking.`,
+      });
+    }
+    if (!order.items.length) return res.status(400).json({ error: 'Objednávka nemá položky.' });
+
+    const year = new Date().getFullYear();
+    const prefix = `BAT-${year}-`;
+    const last = await prisma.batch.findFirst({
+      where: { number: { startsWith: prefix } },
+      orderBy: { number: 'desc' },
+      select: { number: true },
+    });
+    let seq = 1;
+    if (last && last.number) {
+      const tail = last.number.slice(prefix.length);
+      const n = parseInt(tail, 10);
+      if (!Number.isNaN(n)) seq = n + 1;
+    }
+    const batchNumber = `${prefix}${String(seq).padStart(5, '0')}`;
+
+    const materialIds = order.items.filter(it => it.material_id).map(it => it.material_id);
+    const stocks = materialIds.length ? await prisma.stock.findMany({
+      where: { material_id: { in: materialIds }, quantity: { gt: 0 } },
+      include: {
+        location: { select: { id: true, label: true, warehouse_id: true } },
+        material: { select: { eshop_warehouse_id: true } },
+      },
+      orderBy: { quantity: 'desc' },
+    }) : [];
+    const bestLocByMat = new Map();
+    for (const s of stocks) {
+      if (bestLocByMat.has(s.material_id)) continue;
+      if (s.material.eshop_warehouse_id && s.location.warehouse_id === s.material.eshop_warehouse_id) {
+        bestLocByMat.set(s.material_id, s.location_id);
+      }
+    }
+    for (const s of stocks) {
+      if (!bestLocByMat.has(s.material_id)) bestLocByMat.set(s.material_id, s.location_id);
+    }
+
+    const batch = await prisma.$transaction(async (tx) => {
+      const b = await tx.batch.create({
+        data: {
+          number: batchNumber,
+          sector: 'eshop',
+          status: 'open',
+          note: `Spare Parts Shop objednávka ${order.order_number} — ${order.ship_to_name}`,
+          items: {
+            create: order.items
+              .filter(it => it.material_id)
+              .map((it, idx) => ({
+                material_id: it.material_id,
+                from_location_id: bestLocByMat.get(it.material_id) || null,
+                quantity: Number(it.quantity),
+                status: 'pending',
+                sort_order: idx,
+              })),
+          },
+        },
+        include: {
+          items: { include: { material: { select: { code: true, name: true } } } },
+        },
+      });
+      await tx.shopOrder.update({
+        where: { id: order.id },
+        data: {
+          pick_batch_id: b.id,
+          status: order.status === 'confirmed' ? 'picking' : order.status,
+          picked_at: order.picked_at || new Date(),
+        },
+      });
+      return b;
+    });
+
+    res.status(201).json({
+      batch_id: batch.id,
+      batch_number: batch.number,
+      items_count: batch.items.length,
+      url: `/modules/davky/index.html?batch=${batch.id}`,
+    });
+  } catch (err) { next(err); }
+});
+
 router.patch('/orders/:id', async (req, res, next) => {
   try {
     const id = parseInt(req.params.id, 10);
