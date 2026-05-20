@@ -126,8 +126,39 @@ router.post('/logout', (req, res) => {
 });
 
 // GET /api/auth/me — aktuální uživatel
-router.get('/me', requireAuth, async (req, res) => {
-  res.json({ user: req.user });
+// Vrátí i `allowed_modules` (mapa module_id → access_level), aby si sidebar
+// a další moduly mohly filtrovat viditelnost. Admin a super admin nemají
+// omezení — `allowed_modules` je v takovém případě `null` (= vidí vše).
+router.get('/me', requireAuth, async (req, res, next) => {
+  try {
+    let allowed_modules = null;
+
+    if (!req.user.isSuperAdmin && req.user.role !== 'admin') {
+      // Načti roli přihlášeného uživatele a její oprávnění (přes person → role)
+      const person = await prisma.person.findFirst({
+        where: { user_id: req.user.id },
+        include: {
+          role: {
+            include: { permissions: true },
+          },
+        },
+      });
+
+      const perms = (person && person.role && person.role.permissions) || [];
+      // Vrátíme mapu module_id → access_level. Hodnoty 'none' filtrujeme pryč,
+      // takže když module_id v mapě není, znamená to "nemá přístup".
+      allowed_modules = {};
+      for (const p of perms) {
+        if (p.access_level && p.access_level !== 'none') {
+          allowed_modules[p.module_id] = p.access_level;
+        }
+      }
+    }
+
+    res.json({ user: req.user, allowed_modules });
+  } catch (err) {
+    next(err);
+  }
 });
 
 // GET /api/auth/users — seznam uživatelů (admin)
