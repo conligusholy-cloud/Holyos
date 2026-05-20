@@ -454,6 +454,11 @@ app.get('/share/tools/:tool/:token', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'tool-share.html'));
 });
 
+// Veřejná zásady ochrany osobních údajů (vyžaduje Apple App Store / TestFlight review)
+app.get('/privacy', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'privacy.html'));
+});
+
 // Hugo — AI servisák pro partnery (mountnuté na bestseries.cash/hugo).
 // Stránka má vlastní mobile-first UI, žádný HolyOS sidebar/topbar.
 // SPA-like routing: /hugo, /hugo/login, /hugo/chat → vždy index.html, klient pak řeší tab.

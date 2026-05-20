@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Zásady ochrany osobních údajů — Velín / HolyOS</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 40px 24px 80px;
+      line-height: 1.65;
+      color: #1e293b;
+      background: #ffffff;
+    }
+    h1 { font-size: 28px; margin-top: 0; }
+    h2 { font-size: 20px; margin-top: 32px; color: #6366f1; }
+    h3 { font-size: 16px; margin-top: 20px; }
+    p, li { font-size: 15px; }
+    .meta { color: #64748b; font-size: 13px; margin-bottom: 32px; }
+    .lang-switch { text-align: right; margin-bottom: 16px; }
+    .lang-switch a { color: #6366f1; text-decoration: none; font-size: 13px; }
+    code { background: #f1f5f9; padding: 1px 6px; border-radius: 4px; font-size: 13px; }
+    hr { border: none; border-top: 1px solid #e2e8f0; margin: 48px 0; }
+    @media (prefers-color-scheme: dark) {
+      body { background: #0f172a; color: #f1f5f9; }
+      h2 { color: #a5b4fc; }
+      .meta { color: #94a3b8; }
+      code { background: #1e293b; }
+      hr { border-top-color: #334155; }
+      .lang-switch a { color: #a5b4fc; }
+    }
+  </style>
+</head>
+<body>
+  <div class="lang-switch">
+    <a href="#english">English version below ↓</a>
+  </div>
+
+  <h1>Zásady ochrany osobních údajů</h1>
+  <p class="meta">Velín · HolyOS · Best Series s.r.o. · platné od 20. května 2026</p>
+
+  <h2>1. Správce osobních údajů</h2>
+  <p>
+    Správcem osobních údajů je společnost <strong>Best Series s.r.o.</strong>,
+    IČO 05643724, se sídlem v České republice. Kontaktní e-mail pro otázky
+    týkající se ochrany osobních údajů: <code>tomas.holy@bestseries.cz</code>.
+  </p>
+
+  <h2>2. Komu jsou aplikace Velín a HolyOS určeny</h2>
+  <p>
+    <strong>Velín</strong> je mobilní aplikace a <strong>HolyOS</strong> je
+    webový systém určené výhradně pro interní použití zaměstnanci a
+    spolupracovníky Best Series s.r.o. Aplikace nejsou určeny široké veřejnosti.
+    Přístup je možný pouze s firemním uživatelským účtem vytvořeným
+    administrátorem.
+  </p>
+
+  <h2>3. Jaké údaje zpracováváme</h2>
+  <h3>3.1 Identifikační a pracovní údaje</h3>
+  <p>
+    Jméno, příjmení, e-mail, telefonní číslo, pracovní pozice, oddělení,
+    nadřízený, uživatelské jméno a heslo (heslo je v databázi uložené
+    zahashované přes bcrypt). Tyto údaje shromažďujeme od zaměstnance v
+    okamžiku nástupu nebo při vytvoření účtu administrátorem.
+  </p>
+
+  <h3>3.2 Pracovní data</h3>
+  <p>
+    Denní plán úkolů, stav úkolů (přijato / probíhá / hotovo / blokováno),
+    chat zprávy nad úkolem, večerní zpětná vazba (nálada, energie, blokátory),
+    docházka, čas strávený na úkolu.
+  </p>
+
+  <h3>3.3 Technické údaje</h3>
+  <p>
+    Push notifikační token (Expo Push Token) pro doručování notifikací,
+    typ zařízení (iOS / Android), verze aplikace, čas posledního přihlášení,
+    IP adresa.
+  </p>
+
+  <h3>3.4 Polohové údaje (volitelné)</h3>
+  <p>
+    Pouze v případě, že zaměstnanec povolí — GPS souřadnice v okamžiku
+    příchodu/odchodu do/z pracoviště pro vyhodnocení GPS docházkového oblouku
+    (geo fence). Souřadnice se zaznamenávají jen v okamžiku punche, ne kontinuálně.
+  </p>
+
+  <h2>4. Účel zpracování</h2>
+  <p>
+    Plnění pracovní smlouvy a zákonných povinností zaměstnavatele:
+    organizace práce, evidence pracovní doby (zákoník práce § 96),
+    bezpečnost a ochrana zdraví při práci (BOZP), mzdové zpracování,
+    interní komunikace, řízení výroby.
+  </p>
+
+  <h2>5. Právní základ zpracování</h2>
+  <p>
+    Zpracování probíhá na základě <strong>plnění smlouvy</strong>
+    (pracovní smlouva, čl. 6 odst. 1 písm. b) GDPR) a
+    <strong>plnění právních povinností</strong> (čl. 6 odst. 1 písm. c) GDPR).
+    Polohové údaje zpracováváme na základě <strong>výslovného souhlasu</strong>
+    zaměstnance (čl. 6 odst. 1 písm. a) GDPR), který může kdykoliv odvolat.
+  </p>
+
+  <h2>6. Doba uchování</h2>
+  <p>
+    Osobní údaje uchováváme po dobu trvání pracovněprávního vztahu a následně:
+  </p>
+  <ul>
+    <li>Mzdové údaje: 30 let (zákon o organizaci a provádění sociálního zabezpečení)</li>
+    <li>Údaje pro účetnictví: 10 let (zákon o účetnictví)</li>
+    <li>Ostatní pracovní data (úkoly, chat, docházka): 3 roky po skončení pracovního vztahu</li>
+    <li>Push tokeny: smazány do 30 dnů po odhlášení nebo neaktivitě</li>
+    <li>GPS docházkové záznamy: 1 rok</li>
+  </ul>
+
+  <h2>7. Komu data předáváme</h2>
+  <p>
+    Údaje primárně zpracováváme my (Best Series s.r.o.). V technické rovině
+    využíváme tyto zpracovatele:
+  </p>
+  <ul>
+    <li><strong>Railway Corp.</strong> — cloud hosting databáze a serveru (USA, SCC dle GDPR)</li>
+    <li><strong>Apple Inc.</strong> — Apple Push Notification Service pro doručování notifikací na iOS</li>
+    <li><strong>Google LLC</strong> — Firebase Cloud Messaging pro Android (až bude implementováno)</li>
+    <li><strong>Anthropic PBC</strong> — Claude API pro AI asistenty Hugo a Mistr (jen anonymizovaná data úkolů, ne osobní identifikátory)</li>
+  </ul>
+  <p>
+    Údaje nepředáváme třetím stranám pro marketingové účely a neprodáváme je.
+  </p>
+
+  <h2>8. Práva subjektu údajů</h2>
+  <p>
+    V souladu s GDPR (čl. 15 – 22) má každý zaměstnanec právo:
+  </p>
+  <ul>
+    <li>na přístup ke svým osobním údajům</li>
+    <li>na opravu nepřesných údajů</li>
+    <li>na výmaz údajů („právo být zapomenut") po skončení pracovního vztahu mimo zákonné lhůty uchování</li>
+    <li>na omezení zpracování</li>
+    <li>na přenositelnost údajů</li>
+    <li>vznést námitku proti zpracování</li>
+    <li>odvolat souhlas se zpracováním polohových údajů</li>
+    <li>podat stížnost u Úřadu pro ochranu osobních údajů (<code>www.uoou.cz</code>)</li>
+  </ul>
+  <p>
+    Pro uplatnění práv pište na <code>tomas.holy@bestseries.cz</code>.
+    Odpovíme do 30 dnů.
+  </p>
+
+  <h2>9. Zabezpečení</h2>
+  <p>
+    Hesla jsou uložena zahashovaná (bcrypt). Komunikace mezi aplikací Velín a
+    serverem HolyOS je šifrovaná (TLS 1.2+). Push tokeny jsou uloženy v
+    šifrovaném úložišti zařízení (iOS Keychain, Android Keystore). Přístup do
+    databáze je omezen na administrátora a vývojový tým.
+  </p>
+
+  <h2>10. Změny zásad</h2>
+  <p>
+    Tyto zásady můžeme aktualizovat. Materiální změny oznámíme zaměstnancům
+    minimálně 14 dnů předem prostřednictvím aplikace nebo e-mailu.
+  </p>
+
+  <hr>
+
+  <h1 id="english">Privacy Policy (English)</h1>
+  <p class="meta">Velín · HolyOS · Best Series s.r.o. · effective May 20, 2026</p>
+
+  <h2>1. Data Controller</h2>
+  <p>
+    The data controller is <strong>Best Series s.r.o.</strong>, ID 05643724,
+    based in the Czech Republic. Contact email for privacy matters:
+    <code>tomas.holy@bestseries.cz</code>.
+  </p>
+
+  <h2>2. Who is Velín / HolyOS for</h2>
+  <p>
+    <strong>Velín</strong> (mobile app) and <strong>HolyOS</strong> (web system)
+    are tools for <strong>internal use only</strong> by employees and
+    contractors of Best Series s.r.o. They are not intended for the general
+    public. Access requires a company account created by an administrator.
+  </p>
+
+  <h2>3. What data we collect</h2>
+  <ul>
+    <li><strong>Identification:</strong> Name, email, phone, position, department, supervisor, username, hashed password (bcrypt)</li>
+    <li><strong>Work data:</strong> Daily task plan, task states, chat messages, evening reflections (mood, energy, blockers), attendance, time spent</li>
+    <li><strong>Technical:</strong> Push notification token, device type, app version, last login time, IP address</li>
+    <li><strong>Location (opt-in):</strong> GPS coordinates only at attendance punch-in/out, not continuous tracking</li>
+  </ul>
+
+  <h2>4. Purpose</h2>
+  <p>
+    Performance of the employment contract and legal obligations: work
+    organization, attendance records (Czech Labor Code §96), occupational
+    safety, payroll, internal communication, production management.
+  </p>
+
+  <h2>5. Legal basis</h2>
+  <p>
+    Processing is based on <strong>contract performance</strong> (Art. 6(1)(b)
+    GDPR), <strong>legal obligation</strong> (Art. 6(1)(c) GDPR), and for
+    location data on <strong>explicit consent</strong> (Art. 6(1)(a) GDPR)
+    which can be withdrawn at any time.
+  </p>
+
+  <h2>6. Data retention</h2>
+  <ul>
+    <li>Payroll data: 30 years (Social Security Act)</li>
+    <li>Accounting data: 10 years (Accounting Act)</li>
+    <li>Other work data: 3 years after employment ends</li>
+    <li>Push tokens: deleted within 30 days of logout or inactivity</li>
+    <li>GPS attendance: 1 year</li>
+  </ul>
+
+  <h2>7. Third-party processors</h2>
+  <ul>
+    <li><strong>Railway Corp.</strong> — cloud hosting (USA, SCC under GDPR)</li>
+    <li><strong>Apple Inc.</strong> — APNs for iOS push notifications</li>
+    <li><strong>Google LLC</strong> — FCM for Android (when implemented)</li>
+    <li><strong>Anthropic PBC</strong> — Claude API for AI assistants (anonymized task data only)</li>
+  </ul>
+  <p>We do not share data for marketing or sell it to third parties.</p>
+
+  <h2>8. Your rights (GDPR Art. 15-22)</h2>
+  <ul>
+    <li>Access your data</li>
+    <li>Rectify inaccuracies</li>
+    <li>Erase data after employment (outside statutory retention)</li>
+    <li>Restrict or object to processing</li>
+    <li>Data portability</li>
+    <li>Withdraw consent for location data</li>
+    <li>Lodge a complaint with the Czech Data Protection Authority (<code>www.uoou.cz</code>)</li>
+  </ul>
+  <p>Contact <code>tomas.holy@bestseries.cz</code>. We respond within 30 days.</p>
+
+  <h2>9. Security</h2>
+  <p>
+    Passwords are bcrypt-hashed. App-to-server communication uses TLS 1.2+.
+    Push tokens are stored in encrypted device storage (iOS Keychain, Android
+    Keystore). Database access is restricted to administrator and development team.
+  </p>
+
+  <h2>10. Changes</h2>
+  <p>
+    We may update this policy. Material changes are announced to employees
+    at least 14 days in advance via the app or email.
+  </p>
+
+  <p class="meta" style="margin-top: 60px; text-align: center;">
+    © 2026 Best Series s.r.o. · IČO 05643724 ·
+    <code>tomas.holy@bestseries.cz</code>
+  </p>
+</body>
+</html>
