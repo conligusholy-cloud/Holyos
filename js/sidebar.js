@@ -61,24 +61,10 @@ function renderSidebar(activeModule) {
       '</div>' +
     '</a>' +
     '<div class="sidebar-label">Moduly</div>' +
-    '<nav class="sidebar-nav">';
-
-  modules.forEach(function(m) {
-    var isActive = m.id === activeModule;
-    var cls = 'sidebar-item' + (isActive ? ' active' : '') + (!m.active ? ' disabled' : '');
-    // Moduly s výběrovou stránkou (simulace.html) odkazují na ni, ostatní na index.html
-    var entryPage = (m.id === 'vytvoreni-arealu' || m.id === 'programovani-vyroby') ? 'simulace.html' : 'index.html';
-    var href = m.active ? (basePath + 'modules/' + m.id + '/' + entryPage) : '#';
-    var tag = m.active ? '' : '<div class="sidebar-item-tag">Připravuje se</div>';
-
-    html += '<a class="' + cls + '" href="' + href + '">' +
-      '<div class="sidebar-icon" style="background:' + m.color + '22; color:' + m.color + ';">' + m.icon + '</div>' +
-      '<div class="sidebar-item-info">' +
-        '<div class="sidebar-item-name">' + m.name + '</div>' +
-        tag +
-      '</div>' +
-    '</a>';
-  });
+    '<nav class="sidebar-nav" id="sidebar-nav-modules" data-pending-render="1">';
+  // POZN.: skutečné položky modulů se vykreslí až po /api/auth/me, aby
+  // se promítly oprávnění role (allowed_modules). Do té doby je nav prázdný —
+  // krátký FOUC je lepší než ukázat moduly, do kterých uživatel nemá vstoupit.
 
   html += '</nav>';
 
@@ -116,6 +102,35 @@ function renderSidebar(activeModule) {
   }).then(function(data) {
     if (!data) return; // redirected
     var u = data.user || data;
+    // allowed_modules: null = vidí vše (admin/super admin), jinak mapa { module_id: 'read'|'write' }
+    var allowedModules = data.allowed_modules;
+    var seesAll = (allowedModules === null || allowedModules === undefined) ||
+                  u.role === 'admin' || u.isSuperAdmin || u.is_super_admin;
+
+    // Vykresli moduly v sidebaru — buď všechny (admin/super admin), nebo jen
+    // ty, ke kterým má uživatel oprávnění (read/write).
+    var navEl = document.getElementById('sidebar-nav-modules');
+    if (navEl) {
+      var navHtml = '';
+      modules.forEach(function(m) {
+        if (!seesAll && !(allowedModules && allowedModules[m.id])) return; // nevidí
+        var isActive = m.id === activeModule;
+        var cls = 'sidebar-item' + (isActive ? ' active' : '') + (!m.active ? ' disabled' : '');
+        var entryPage = (m.id === 'vytvoreni-arealu' || m.id === 'programovani-vyroby') ? 'simulace.html' : 'index.html';
+        var href = m.active ? (basePath + 'modules/' + m.id + '/' + entryPage) : '#';
+        var tag = m.active ? '' : '<div class="sidebar-item-tag">Připravuje se</div>';
+        navHtml += '<a class="' + cls + '" href="' + href + '">' +
+          '<div class="sidebar-icon" style="background:' + m.color + '22; color:' + m.color + ';">' + m.icon + '</div>' +
+          '<div class="sidebar-item-info">' +
+            '<div class="sidebar-item-name">' + m.name + '</div>' +
+            tag +
+          '</div>' +
+        '</a>';
+      });
+      navEl.innerHTML = navHtml;
+      navEl.removeAttribute('data-pending-render');
+    }
+
     var el = document.getElementById('sidebar-user-info');
     if (el) el.textContent = u.displayName || u.username || '';
     // Pokud je admin, přidat odkaz na správu uživatelů
@@ -159,7 +174,30 @@ function renderSidebar(activeModule) {
         });
       }
     }
-  }).catch(function() {});
+  }).catch(function() {
+    // Síťová chyba — sidebar nesmí zůstat prázdný. Renderuj všechny aktivní moduly
+    // jako fallback. Pokud uživatel není přihlášený, 401 ho stejně přesměruje výš.
+    var navEl = document.getElementById('sidebar-nav-modules');
+    if (navEl && navEl.getAttribute('data-pending-render')) {
+      var navHtml = '';
+      modules.forEach(function(m) {
+        var isActive = m.id === activeModule;
+        var cls = 'sidebar-item' + (isActive ? ' active' : '') + (!m.active ? ' disabled' : '');
+        var entryPage = (m.id === 'vytvoreni-arealu' || m.id === 'programovani-vyroby') ? 'simulace.html' : 'index.html';
+        var href = m.active ? (basePath + 'modules/' + m.id + '/' + entryPage) : '#';
+        var tag = m.active ? '' : '<div class="sidebar-item-tag">Připravuje se</div>';
+        navHtml += '<a class="' + cls + '" href="' + href + '">' +
+          '<div class="sidebar-icon" style="background:' + m.color + '22; color:' + m.color + ';">' + m.icon + '</div>' +
+          '<div class="sidebar-item-info">' +
+            '<div class="sidebar-item-name">' + m.name + '</div>' +
+            tag +
+          '</div>' +
+        '</a>';
+      });
+      navEl.innerHTML = navHtml;
+      navEl.removeAttribute('data-pending-render');
+    }
+  });
 
   // Create hamburger button for mobile
   initHamburger();

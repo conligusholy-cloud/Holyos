@@ -2553,18 +2553,23 @@
       const savedRole = await res.json();
       const roleId = id || savedRole.id;
 
-      // Save permissions for this role
-      const perms = {};
+      // Save permissions for this role — backend čeká { permissions: [{ module_id, access_level }] }
+      const permsList = [];
+      const permsMap = {};
       for (const m of PERM_MODULES) {
-        perms[m.id] = form.get('perm_' + m.id) || 'none';
+        const level = form.get('perm_' + m.id) || 'none';
+        permsMap[m.id] = level;
+        if (level && level !== 'none') {
+          permsList.push({ module_id: m.id, access_level: level });
+        }
       }
       try {
         await fetch('/api/hr/permissions/' + roleId, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(perms)
+          body: JSON.stringify({ permissions: permsList })
         });
-        allPermissions[String(roleId)] = perms;
+        allPermissions[String(roleId)] = permsMap;
       } catch (e) { console.error('Permissions save error:', e); }
 
       closeModal();
@@ -2580,25 +2585,58 @@
     // ============================================================
     // PERMISSIONS MATRIX
     // ============================================================
+    // Seznam musí zrcadlit sidebar (js/sidebar.js). Pokud přidáš nový modul
+    // do sidebaru, přidej ho i sem, jinak ho admin nebude moct zaškrtnout.
     const PERM_MODULES = [
-      { id: 'lide-hr', name: 'Lidé a HR', color: '#6c5ce7' },
-      { id: 'vytvoreni-arealu', name: 'Vytvoření areálu', color: '#8b5cf6' },
-      { id: 'programovani-vyroby', name: 'Programování výroby', color: '#f59e0b' },
-      { id: 'simulace-vyroby', name: 'Simulace výroby', color: '#22c55e' },
-      { id: 'pracovni-postup', name: 'Pracovní postup', color: '#06b6d4' },
-      { id: 'planovani', name: 'Plánování výroby', color: '#3b82f6' },
-      { id: 'material', name: 'Materiálový tok', color: '#10b981' },
-      { id: 'sklady', name: 'Správa skladů', color: '#f59e0b' },
-      { id: 'reporty', name: 'Reporty a analýzy', color: '#ef4444' },
-      { id: 'nastaveni', name: 'Nastavení', color: '#6c8cff' },
+      { id: 'obchod',              name: 'Obchod',                 color: '#ec4899' },
+      { id: 'lide-hr',             name: 'Lidé a HR',              color: '#6c5ce7' },
+      { id: 'velin',               name: 'Velín (mobil)',          color: '#6366f1' },
+      { id: 'metodicke-pokyny',    name: 'Metodické pokyny a směrnice', color: '#a78bfa' },
+      { id: 'vytvoreni-arealu',    name: 'Vytvoření areálu',       color: '#8b5cf6' },
+      { id: 'programovani-vyroby', name: 'Programování výroby',    color: '#f59e0b' },
+      { id: 'simulace-vyroby',     name: 'Simulace výroby',        color: '#22c55e' },
+      { id: 'pracovni-postup',     name: 'Pracovní postup',        color: '#06b6d4' },
+      { id: 'nakup-sklad',         name: 'Nákup a sklad',          color: '#10b981' },
+      { id: 'prodejni-objednavky', name: 'Prodejní objednávky',    color: '#eab308' },
+      { id: 'vyrobni-sloty',       name: 'Výrobní sloty',          color: '#f97316' },
+      { id: 'sklady',              name: 'Sklady',                 color: '#f59e0b' },
+      { id: 'tiskarny',            name: 'Tiskárny',               color: '#10b981' },
+      { id: 'doklady',             name: 'Skladové doklady',       color: '#8b5cf6' },
+      { id: 'ucetni-doklady',      name: 'Účetní doklady',         color: '#0891b2' },
+      { id: 'banky',               name: 'Banky',                  color: '#0ea5e9' },
+      { id: 'banka-pravidla',      name: 'Pravidla párování',      color: '#a855f7' },
+      { id: 'pokladna',            name: 'Pokladna',               color: '#10b981' },
+      { id: 'naklady',             name: 'Náklady',                color: '#ef4444' },
+      { id: 'davky',               name: 'Pickovací dávky',        color: '#f59e0b' },
+      { id: 'pracoviste',          name: 'Pracoviště',             color: '#14b8a6' },
+      { id: 'normovani-fy',        name: 'Normování',              color: '#6366f1' },
+      { id: 'normovani-prehled',   name: 'Normy',                  color: '#8b5cf6' },
+      { id: 'vozovy-park',         name: 'Vozový park',            color: '#0ea5e9' },
+      { id: 'servis',              name: 'Servis',                 color: '#22d3ee' },
+      { id: 'spare-parts',         name: 'Spare Parts Shop',       color: '#f59e0b' },
+      { id: 'site-development',    name: 'Site Development',       color: '#14b8a6' },
+      { id: 'chat',                name: 'Zprávy',                 color: '#a78bfa' },
+      { id: 'kiosky',              name: 'Kiosky',                 color: '#06b6d4' },
+      { id: 'planovani-vyroby',    name: 'Plánování výroby',       color: '#3b82f6' },
     ];
 
+    // Mapa role_id -> { module_id: access_level }
     let allPermissions = {};
 
     async function loadPermissions() {
       try {
         const res = await fetch('/api/hr/permissions');
-        allPermissions = await res.json();
+        const rows = await res.json();
+        // Backend vrací array; přeskupíme do mapy role_id → { module_id: access_level }
+        const grouped = {};
+        if (Array.isArray(rows)) {
+          for (const r of rows) {
+            const key = String(r.role_id);
+            if (!grouped[key]) grouped[key] = {};
+            grouped[key][r.module_id] = r.access_level;
+          }
+        }
+        allPermissions = grouped;
       } catch (e) { allPermissions = {}; }
     }
 

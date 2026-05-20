@@ -1459,19 +1459,44 @@ router.get('/permissions', async (req, res, next) => {
 });
 
 // POST /api/hr/permissions/:roleId
+// Přijme buď array `{ permissions: [{ module_id, access_level }, ...] }`,
+// nebo mapu `{ module_id: access_level, ... }` (frontend lide-hr ji posílá takhle).
+// Záznamy s 'none' nebo prázdnou hodnotou se neukládají — chybí = nemá přístup.
 router.post('/permissions/:roleId', async (req, res, next) => {
   try {
     const roleId = parseInt(req.params.roleId);
-    const { permissions } = req.body; // [{ module_id, access_level }]
+    if (Number.isNaN(roleId)) {
+      return res.status(400).json({ error: 'Neplatné role_id' });
+    }
+
+    const body = req.body || {};
+    let permArr = [];
+    if (Array.isArray(body.permissions)) {
+      permArr = body.permissions;
+    } else if (Array.isArray(body)) {
+      permArr = body;
+    } else if (body.permissions && typeof body.permissions === 'object') {
+      permArr = Object.entries(body.permissions).map(([module_id, access_level]) => ({ module_id, access_level }));
+    } else if (typeof body === 'object') {
+      // Holá mapa { module_id: access_level } přímo v body
+      permArr = Object.entries(body)
+        .filter(([k, v]) => typeof v === 'string' && k !== 'permissions')
+        .map(([module_id, access_level]) => ({ module_id, access_level }));
+    }
+
+    // Normalizace + filtr neplatných / 'none' záznamů
+    const toCreate = permArr
+      .filter(p => p && p.module_id && typeof p.access_level === 'string' && p.access_level !== 'none')
+      .map(p => ({
+        role_id: roleId,
+        module_id: String(p.module_id),
+        access_level: p.access_level,
+      }));
 
     // Smazat stávající a vytvořit nové (transakce)
     await prisma.$transaction([
       prisma.permission.deleteMany({ where: { role_id: roleId } }),
-      ...permissions.map(p =>
-        prisma.permission.create({
-          data: { role_id: roleId, module_id: p.module_id, access_level: p.access_level },
-        })
-      ),
+      ...toCreate.map(data => prisma.permission.create({ data })),
     ]);
 
     const updated = await prisma.permission.findMany({
