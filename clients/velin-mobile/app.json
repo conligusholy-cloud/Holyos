@@ -2,27 +2,52 @@
   "expo": {
     "name": "Velín",
     "slug": "velin",
-    "version": "0.1.0",
+    "version": "0.1.1",
     "orientation": "portrait",
+    "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
     "scheme": "velin",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/ca3b48b8-37fb-4726-80ce-19a053ff96a5",
+      "enabled": true,
+      "fallbackToCacheTimeout": 0,
+      "checkAutomatically": "ON_LOAD"
+    },
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#FCBF24"
+    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "cz.bestseries.velin",
+      "buildNumber": "2",
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "Velín potřebuje polohu, aby poznal, že jsi přišel do práce (docházka GPS).",
-        "NSLocationAlwaysAndWhenInUseUsageDescription": "Velín potřebuje polohu, aby poznal, že jsi přišel do práce (docházka GPS)."
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Velín potřebuje polohu, aby poznal, že jsi přišel do práce (docházka GPS).",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
       "package": "cz.bestseries.velin",
+      "versionCode": 2,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#FCBF24"
+      },
       "permissions": [
         "ACCESS_COARSE_LOCATION",
         "ACCESS_FINE_LOCATION"
       ]
     },
     "extra": {
-      "apiBase": "https://app.holyos.cz"
+      "apiBase": "https://app.holyos.cz",
+      "eas": {
+        "projectId": "ca3b48b8-37fb-4726-80ce-19a053ff96a5"
+      }
     },
     "plugins": [
       "expo-secure-store"

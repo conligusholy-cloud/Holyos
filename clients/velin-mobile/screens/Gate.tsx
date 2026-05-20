@@ -1,16 +1,22 @@
 // =============================================================================
 // Gate — startovací obrazovka, rozhodne kam jít dál
 // =============================================================================
+// Strategie: OFFLINE-FIRST.
 // 1) Načte uložený JWT ze SecureStore.
 // 2) Pokud žádný → Login.
-// 3) Pokud nějaký, ověří ho voláním /api/velin/me. Když 401 → smaže a Login.
-//    Když OK → Tabs (MyDay).
+// 3) Pokud nějaký → rovnou Tabs (MyDay). Validace tokenu probíhá až tam:
+//    MyDay zavolá /api/velin/my-day a:
+//      - 401 → clearAuth + Login (token expiroval / je neplatný)
+//      - network/timeout → zobrazí "Zkusit znovu" tlačítko, token nemažeme
+//      - 200 → render
+//
+// Důsledek: Gate je velmi rychlá (jen čtení SecureStore, ~10 ms), žádný
+// síťový roundtrip. Appka se otevírá okamžitě jako Slack / Instagram.
 
 import React, { useEffect } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { loadAuth, clearAuth } from '../lib/auth';
-import { api, ApiError } from '../lib/api';
+import { loadAuth } from '../lib/auth';
 import { colors } from '../lib/theme';
 import type { RootStackParamList } from '../App';
 
@@ -20,17 +26,9 @@ export default function Gate({ navigation }: Props) {
   useEffect(() => {
     (async () => {
       const auth = await loadAuth();
-      if (!auth.jwt) {
-        navigation.replace('Login');
-        return;
-      }
-      try {
-        await api.me(auth.jwt);
+      if (auth.jwt) {
         navigation.replace('Tabs');
-      } catch (err) {
-        if (err instanceof ApiError && err.status === 401) {
-          await clearAuth();
-        }
+      } else {
         navigation.replace('Login');
       }
     })();

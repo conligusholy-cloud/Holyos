@@ -12,19 +12,40 @@
 //
 // Status bar je světlý (na tmavém pozadí).
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { NavigationContainer, DarkTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Text } from 'react-native';
+import * as Updates from 'expo-updates';
 import Gate from './screens/Gate';
 import Login from './screens/Login';
 import MyDay from './screens/MyDay';
 import Me from './screens/Me';
 import TaskDetail from './screens/TaskDetail';
 import { colors } from './lib/theme';
+
+// =============================================================================
+// OTA Updates — tichá kontrola při startu
+// =============================================================================
+// V dev (`expo start`) Updates.isEnabled === false → useEffect okamžitě skončí.
+// V preview/production buildu se na startu zeptáme EAS Update, jestli existuje
+// novější bundle pro aktuální runtimeVersion (= app.version z app.json). Pokud
+// ano, stáhneme a hned reloadneme app; jinak pojede aktuální verze.
+async function checkForOtaUpdate(): Promise<void> {
+  if (!Updates.isEnabled) return;
+  try {
+    const result = await Updates.checkForUpdateAsync();
+    if (result.isAvailable) {
+      await Updates.fetchUpdateAsync();
+      await Updates.reloadAsync();
+    }
+  } catch {
+    // Tichý fail — bez sítě / EAS výpadek apod. Appka pojede s aktuálním bundle.
+  }
+}
 
 export type RootStackParamList = {
   Gate: undefined;
@@ -91,6 +112,10 @@ const navTheme = {
 };
 
 export default function App() {
+  useEffect(() => {
+    checkForOtaUpdate();
+  }, []);
+
   return (
     <SafeAreaProvider>
       <NavigationContainer theme={navTheme}>
