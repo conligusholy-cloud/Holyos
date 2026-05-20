@@ -2,9 +2,20 @@
 // MyDay — hlavní obrazovka, dnešní plán a úkoly
 // =============================================================================
 // GET /api/velin/my-day → DailyPlan s assignments + overdue z minulých dnů.
-// Tap na úkol → TaskDetail (Fáze 1 — zatím jen logujeme).
+// Tap na úkol → TaskDetail.
+//
+// Strategie: STALE-WHILE-REVALIDATE.
+//   1) Při mountu načteme cache (lib/cache.ts) → pokud existuje, hned ji
+//      vyrendrujeme (žádný spinner) a označíme jako "stale".
+//   2) Paralelně zavoláme API.
+//   3) Při úspěchu: nahradíme data čerstvými + uložíme do cache.
+//   4) Při network/timeout: necháme data z cache + ukážeme proužek
+//      "Server neodpovídá, naposledy obnoveno před X min".
+//   5) Při 401: smažeme auth + reset na Login.
+//
+// Cache key obsahuje person_id (aby více kolegů na jednom iPadu nesdíleli plán).
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   RefreshControl,
@@ -18,9 +29,15 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { api, ApiError } from '../lib/api';
-import { loadAuth } from '../lib/auth';
+import { loadAuth, clearAuth } from '../lib/auth';
+import { getCache, setCache, formatCacheAge } from '../lib/cache';
 import { colors, radius, spacing } from '../lib/theme';
 import type { RootStackParamList } from '../App';
+
+// Stavy chyb pro UI rozhodování.
+type LoadError =
+  | { kind: 'network' }       // timeout / offline / DNS — token NEMAŽEME
+  | { kind: 'server'; message: string }; // 5xx, 400, atd.
 
 type Task = {
   id: number;
@@ -40,50 +57,90 @@ type DayData = {
   overdue: Task[];
 };
 
+function cacheKey(personId: number | null) {
+  return `my-day:${personId ?? 'unknown'}`;
+}
+
 export default function MyDay() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [data, setData] = useState<DayData | null>(null);
+  const [cacheAge, setCacheAge] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<LoadError | null>(null);
   const [greeting, setGreeting] = useState('');
+  const mountedRef = useRef(true);
 
-  const load = useCallback(async () => {
-    setError(null);
+  useEffect(() => () => { mountedRef.current = false; }, []);
+
+  const load = useCallback(async (mode: 'mount' | 'refresh') => {
     const auth = await loadAuth();
     if (!auth.jwt) {
-      setError('Nepřihlášen.');
-      setLoading(false);
+      await clearAuth();
+      navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
       return;
     }
-    setGreeting(buildGreeting(auth.displayName || auth.username));
+    if (mountedRef.current) {
+      setGreeting(buildGreeting(auth.displayName || auth.username));
+    }
+    const key = cacheKey(auth.personId);
+
+    if (mode === 'mount') {
+      const cached = await getCache<DayData>(key);
+      if (cached && mountedRef.current) {
+        setData(cached.value);
+        setCacheAge(formatCacheAge(cached.savedAt));
+        setLoading(false);
+      }
+    }
+
     try {
-      const d = await api.myDay(auth.jwt);
-      setData(d as DayData);
+      const fresh = (await api.myDay(auth.jwt)) as DayData;
+      if (!mountedRef.current) return;
+      setData(fresh);
+      setCacheAge(null);
+      setError(null);
+      await setCache(key, fresh);
     } catch (err) {
+      if (!mountedRef.current) return;
       if (err instanceof ApiError) {
-        setError(err.message);
+        if (err.status === 401) {
+          await clearAuth();
+          navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
+          return;
+        }
+        if (err.status === 0) {
+          setError({ kind: 'network' });
+        } else {
+          setError({ kind: 'server', message: err.message });
+        }
       } else {
-        setError('Nepodařilo se načíst dnešní plán.');
+        setError({ kind: 'server', message: 'Nepodařilo se načíst dnešní plán.' });
       }
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      if (mountedRef.current) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
-  }, []);
+  }, [navigation]);
 
   useEffect(() => {
-    load();
+    load('mount');
   }, [load]);
 
-  // Při návratu z TaskDetail refreshneme, ať vidíme aktuální stav
-  useFocusEffect(useCallback(() => { load(); }, [load]));
+  useFocusEffect(useCallback(() => { load('refresh'); }, [load]));
 
   function openTask(taskId: number) {
     navigation.navigate('TaskDetail', { taskId });
   }
 
-  if (loading) {
+  function handleRetry() {
+    setError(null);
+    load('refresh');
+  }
+
+  if (loading && !data) {
     return (
       <SafeAreaView style={styles.center} edges={['top']}>
         <ActivityIndicator size="large" color={colors.accent} />
@@ -91,8 +148,26 @@ export default function MyDay() {
     );
   }
 
+  if (!data && error && error.kind === 'network') {
+    return (
+      <SafeAreaView style={styles.center} edges={['top']}>
+        <View style={styles.retryBox}>
+          <Text style={styles.retryEmoji}>📡</Text>
+          <Text style={styles.retryTitle}>Server neodpovídá</Text>
+          <Text style={styles.retrySub}>
+            Možná je v cold startu nebo nemáš signál. Zůstáváš přihlášen.
+          </Text>
+          <TouchableOpacity style={styles.retryBtn} onPress={handleRetry}>
+            <Text style={styles.retryBtnText}>Zkusit znovu</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   const tasks = data?.plan?.assignments || [];
   const overdue = data?.overdue || [];
+  const hasStaleData = data && (cacheAge !== null || error !== null);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -103,7 +178,7 @@ export default function MyDay() {
             refreshing={refreshing}
             onRefresh={() => {
               setRefreshing(true);
-              load();
+              load('refresh');
             }}
             tintColor={colors.accent}
           />
@@ -112,7 +187,18 @@ export default function MyDay() {
         <Text style={styles.greeting}>{greeting}</Text>
         <Text style={styles.subhead}>{czechDate(new Date(data?.date || Date.now()))}</Text>
 
-        {error ? <Text style={styles.error}>{error}</Text> : null}
+        {hasStaleData && (
+          <TouchableOpacity onPress={handleRetry} style={styles.staleBanner} activeOpacity={0.7}>
+            <Text style={styles.staleBannerText}>
+              {error && error.kind === 'network'
+                ? `📡 Server neodpovídá. Vidíš plán${cacheAge ? ` z ${cacheAge}` : ''}.`
+                : error && error.kind === 'server'
+                ? `⚠ ${error.message}${cacheAge ? ` · plán z ${cacheAge}` : ''}`
+                : `🕓 Naposledy obnoveno ${cacheAge}`}
+            </Text>
+            <Text style={styles.staleBannerHint}>Klepni pro obnovení</Text>
+          </TouchableOpacity>
+        )}
 
         {overdue.length > 0 && (
           <View style={styles.section}>
@@ -262,4 +348,32 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   statusBadgeText: { fontSize: 11, fontWeight: '600' },
+  retryBox: { alignItems: 'center', paddingHorizontal: spacing.xl, maxWidth: 320 },
+  retryEmoji: { fontSize: 48, marginBottom: spacing.md },
+  retryTitle: { color: colors.text, fontSize: 20, fontWeight: '700', marginBottom: spacing.sm },
+  retrySub: {
+    color: colors.text2,
+    fontSize: 14,
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: spacing.xl,
+  },
+  retryBtn: {
+    backgroundColor: colors.accent,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.md,
+    borderRadius: radius.md,
+  },
+  retryBtnText: { color: '#0b1220', fontSize: 15, fontWeight: '700' },
+  staleBanner: {
+    backgroundColor: colors.surface2,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    marginBottom: spacing.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  staleBannerText: { color: colors.text, fontSize: 13, fontWeight: '500' },
+  staleBannerHint: { color: colors.text2, fontSize: 11, marginTop: 2 },
 });

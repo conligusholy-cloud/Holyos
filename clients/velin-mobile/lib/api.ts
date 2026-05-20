@@ -35,6 +35,9 @@ export type LoginResponse = {
 };
 
 const DEFAULT_TIMEOUT_MS = 15000;
+// /me a /my-day kvůli Railway cold startu — server po nečinnosti spí
+// a první request po probuzení může trvat 15–25 s. 30 s má rezervu.
+const SLOW_ENDPOINT_TIMEOUT_MS = 30000;
 
 async function request<T>(
   method: 'GET' | 'POST' | 'PUT' | 'DELETE',
@@ -106,10 +109,16 @@ export const api = {
 
   // Velín — moje denní data
   me: (jwt: string) =>
-    request<{ person: any; device: any }>('GET', '/api/velin/me', { jwt }),
+    request<{ person: any; device: any }>('GET', '/api/velin/me', {
+      jwt,
+      timeoutMs: SLOW_ENDPOINT_TIMEOUT_MS,
+    }),
 
   myDay: (jwt: string) =>
-    request<{ date: string; plan: any; overdue: any[] }>('GET', '/api/velin/my-day', { jwt }),
+    request<{ date: string; plan: any; overdue: any[] }>('GET', '/api/velin/my-day', {
+      jwt,
+      timeoutMs: SLOW_ENDPOINT_TIMEOUT_MS,
+    }),
 
   // Velín — úkoly
   getTask: (jwt: string, id: number) =>
