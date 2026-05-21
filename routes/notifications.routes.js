@@ -15,9 +15,21 @@ const { prisma } = require('../config/database');
 const { requireAuth, JWT_SECRET } = require('../middleware/auth');
 const bus = require('../services/notification-bus');
 const { sendMail } = require('../services/email');
+const { notifyPerson } = require('../services/push/expo-push');
 
 // Typy notifikací, pro které odesíláme email (ostatní jen v appce)
 const EMAIL_TYPES = new Set(['chat_message', 'task_status', 'mention']);
+
+// Typy notifikací, pro které posíláme Expo push na Velín mobilní zařízení.
+// notifyPerson() sám respektuje quiet_from/quiet_to na Person — tichý push
+// během noci je tedy automatický.
+const PUSH_TYPES = new Set([
+  'chat_message',
+  'task_status',
+  'task_deployed',
+  'mention',
+  // 'system' záměrně neposíláme — admin oznámení jdou jen na web
+]);
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -170,7 +182,7 @@ async function createNotification({ userId, type, title, body = null, link = nul
     data: { user_id: userId, type, title, body, link, meta: meta || undefined },
   });
 
-  // Push do SSE (instant)
+  // Push do SSE (instant — pro web realtime)
   const delivered = bus.publishToUser(userId, 'notification', n);
 
   // Email — jen pro vybrané typy a jen když user není aktivně online (nebo vynucený)
@@ -182,7 +194,49 @@ async function createNotification({ userId, type, title, body = null, link = nul
     });
   }
 
+  // Expo push na Velín mobilní zařízení (fire-and-forget). Posíláme i když user
+  // sedí na webu — telefon stejně cinkne. Velín scheduler nemůže rozeznat
+  // "aktuálně otevřená appka" → nech to na samotném Expo / iOS, který appce
+  // notifikaci nedoručí znovu, pokud už je vidět ve foregroundu.
+  if (PUSH_TYPES.has(type)) {
+    sendPushForNotification(userId, n).catch(e => {
+      console.error('[Notif push] chyba:', e.message);
+    });
+  }
+
   return n;
+}
+
+// Najdi Person.id pro daného User.id a pošli mu Expo push.
+// notifyPerson() sám:
+//   - respektuje Person.velin_quiet_from/to (tichý režim přes noc),
+//   - načte aktivní DeviceRegistration záznamy a pošle batch,
+//   - odfiltruje neplatné tokeny.
+async function sendPushForNotification(userId, notification) {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { person: { select: { id: true } } },
+  });
+  if (!user || !user.person) return; // user bez Personu = bez mobilu
+
+  // Krátký body pro lock-screen (Expo má ~178 chars limit, raději bezpečně 140)
+  const pushBody = notification.body
+    ? (notification.body.length > 140 ? notification.body.slice(0, 137) + '…' : notification.body)
+    : null;
+
+  await notifyPerson(prisma, user.person.id, {
+    title: notification.title,
+    body: pushBody || undefined,
+    data: {
+      notification_id: notification.id,
+      type: notification.type,
+      link: notification.link,
+      // meta z DB Notification (např. { channel_id, message_id } pro chat)
+      ...(notification.meta || {}),
+    },
+    // 'default' zvuk pro běžné, později rozšířit pro urgent
+    sound: 'default',
+  });
 }
 
 async function sendEmailForNotification(userId, notification) {
