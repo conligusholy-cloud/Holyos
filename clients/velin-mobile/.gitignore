@@ -14,3 +14,7 @@ web-build/
 .env.local
 ios/
 android/
+
+build-*.json
+prebuild-log.txt
+
