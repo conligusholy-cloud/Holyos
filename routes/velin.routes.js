@@ -780,6 +780,323 @@ mobile.post('/attendance/punch', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// =============================================================================
+// CHAT — mobile proxy nad existujícím ChatChannel/ChatMessage backendem
+// =============================================================================
+// Reuse ChatChannel/ChatChannelMember/ChatMessage modelů a stejné Prisma queries
+// jako routes/messages.routes.js (web), ale autorizace přes requireVelinAuth
+// (mobile JWT) místo requireAuth.
+//
+// Endpointy:
+//   GET    /api/velin/chat/channels                       — moje channels + unread count
+//   POST   /api/velin/chat/channels/direct                — { user_id } → otevři/vytvoř DM
+//   GET    /api/velin/chat/users/searchable               — directory pro DM picker
+//   GET    /api/velin/chat/channels/:id/messages          — paginated zprávy
+//   POST   /api/velin/chat/channels/:id/messages          — send (text + attachments)
+//   POST   /api/velin/chat/channels/:id/read              — mark read
+//
+// Push notifikace běží přes createNotification z notifications.routes.js,
+// které od 2026-05-21 posílá Expo push všem DeviceRegistration záznamům.
+
+const { createNotification } = require('./notifications.routes');
+
+// Sdílený helper — ověř, že volající je členem kanálu.
+async function chatEnsureMember(channelId, userId) {
+  const m = await prisma.chatChannelMember.findUnique({
+    where: { channel_id_user_id: { channel_id: channelId, user_id: userId } },
+  });
+  if (!m) {
+    const err = new Error('Nemáš přístup do tohoto kanálu');
+    err.status = 403;
+    throw err;
+  }
+  return m;
+}
+
+// ─── POZOR: pevné podcesty PŘED dynamickou /:id ─────────────────────────────
+// Memory `holyos_express_route_order` — Express posuzuje routy v pořadí, pevné
+// stringy musí být před parametrizovanou cestou, jinak ji dynamic přepíše.
+
+// POST /chat/channels/direct — vytvořit/otevřít 1:1 s userId
+mobile.post('/chat/channels/direct', async (req, res, next) => {
+  try {
+    const otherId = parseInt(req.body.user_id, 10);
+    if (!Number.isInteger(otherId) || otherId <= 0) {
+      return res.status(400).json({ error: 'Chybí user_id' });
+    }
+    if (otherId === req.user.id) {
+      return res.status(400).json({ error: 'Nelze chatovat sám se sebou' });
+    }
+
+    // Existuje už direct channel mezi námi?
+    const existing = await prisma.chatChannel.findFirst({
+      where: {
+        type: 'direct',
+        members: { every: { user_id: { in: [req.user.id, otherId] } } },
+        AND: [
+          { members: { some: { user_id: req.user.id } } },
+          { members: { some: { user_id: otherId } } },
+        ],
+      },
+      include: { members: true },
+    });
+    if (existing && existing.members.length === 2) {
+      return res.json({ channel: existing });
+    }
+
+    // Vytvoř nový DM
+    const channel = await prisma.chatChannel.create({
+      data: {
+        type: 'direct',
+        created_by: req.user.id,
+        members: {
+          create: [
+            { user_id: req.user.id, role: 'admin' },
+            { user_id: otherId, role: 'member' },
+          ],
+        },
+      },
+      include: { members: true },
+    });
+    res.status(201).json({ channel });
+  } catch (err) { next(err); }
+});
+
+// GET /chat/users/searchable — directory pro DM picker (jen aktivní persons)
+mobile.get('/chat/users/searchable', async (req, res, next) => {
+  try {
+    const q = String(req.query.q || '').trim().toLowerCase();
+    const users = await prisma.user.findMany({
+      where: {
+        id: { not: req.user.id },
+        person: { active: true },
+      },
+      select: {
+        id: true,
+        username: true,
+        display_name: true,
+        person: { select: { first_name: true, last_name: true, photo_url: true } },
+      },
+      orderBy: { display_name: 'asc' },
+      take: 100,
+    });
+    const filtered = q
+      ? users.filter(u =>
+          (u.display_name || '').toLowerCase().includes(q) ||
+          (u.username || '').toLowerCase().includes(q) ||
+          (u.person?.first_name || '').toLowerCase().includes(q) ||
+          (u.person?.last_name || '').toLowerCase().includes(q)
+        )
+      : users;
+    res.json(filtered);
+  } catch (err) { next(err); }
+});
+
+// GET /chat/channels — moje channels s unread count, sortované by last_message_at
+mobile.get('/chat/channels', async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const memberships = await prisma.chatChannelMember.findMany({
+      where: { user_id: userId },
+      include: {
+        channel: {
+          include: {
+            members: {
+              include: {
+                user: {
+                  select: {
+                    id: true, username: true, display_name: true,
+                    person: { select: { photo_url: true, first_name: true, last_name: true } },
+                  },
+                },
+              },
+            },
+            messages: {
+              orderBy: { created_at: 'desc' },
+              take: 1,
+              select: {
+                id: true, content: true, created_at: true, attachments: true,
+                sender: { select: { id: true, display_name: true, username: true } },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    // Zjisti unread count per channel (zprávy s created_at > last_read_at)
+    const channels = await Promise.all(memberships.map(async m => {
+      const where = { channel_id: m.channel_id };
+      if (m.last_read_at) where.created_at = { gt: m.last_read_at };
+      const unread = await prisma.chatMessage.count({ where });
+      return {
+        id: m.channel.id,
+        type: m.channel.type,
+        name: m.channel.name,
+        topic: m.channel.topic,
+        last_message_at: m.channel.last_message_at,
+        muted: m.muted,
+        unread,
+        members: m.channel.members,
+        last_message: m.channel.messages[0] || null,
+      };
+    }));
+
+    // Sort: by last_message_at desc
+    channels.sort((a, b) =>
+      new Date(b.last_message_at).getTime() - new Date(a.last_message_at).getTime()
+    );
+
+    res.json(channels);
+  } catch (err) { next(err); }
+});
+
+// GET /chat/channels/:id/messages — paginated, ?before=<msgId>&limit=50
+mobile.get('/chat/channels/:id/messages', async (req, res, next) => {
+  try {
+    await chatEnsureMember(req.params.id, req.user.id);
+    const limit = Math.min(parseInt(req.query.limit, 10) || 50, 100);
+    const before = req.query.before ? String(req.query.before) : null;
+
+    // Pokud máme `before`, najdi created_at té zprávy a vrať starší
+    let beforeDate = null;
+    if (before) {
+      const ref = await prisma.chatMessage.findUnique({
+        where: { id: before },
+        select: { created_at: true },
+      });
+      if (ref) beforeDate = ref.created_at;
+    }
+
+    const messages = await prisma.chatMessage.findMany({
+      where: {
+        channel_id: req.params.id,
+        ...(beforeDate ? { created_at: { lt: beforeDate } } : {}),
+      },
+      include: {
+        sender: {
+          select: {
+            id: true, username: true, display_name: true,
+            person: { select: { photo_url: true } },
+          },
+        },
+      },
+      orderBy: { created_at: 'desc' },
+      take: limit,
+    });
+
+    // Vrátíme chronologicky (nejstarší první) — frontend dělá scroll nahoru
+    res.json(messages.reverse());
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message });
+    next(err);
+  }
+});
+
+// POST /chat/channels/:id/messages — send (text + attachments)
+mobile.post('/chat/channels/:id/messages', async (req, res, next) => {
+  try {
+    await chatEnsureMember(req.params.id, req.user.id);
+
+    const content = String(req.body.content || '').trim();
+    const rawAttachments = Array.isArray(req.body.attachments) ? req.body.attachments : [];
+    const attachments = rawAttachments.slice(0, 20).map(a => ({
+      kind: (a && a.kind === 'image') ? 'image' : 'file',
+      url: String(a?.url || '').slice(0, 1000),
+      name: a?.name ? String(a.name).slice(0, 255) : undefined,
+      size: typeof a?.size === 'number' ? a.size : undefined,
+      mime: a?.mime ? String(a.mime).slice(0, 100) : undefined,
+    })).filter(a => a.url);
+
+    if (!content && attachments.length === 0) {
+      return res.status(400).json({ error: 'Prázdná zpráva' });
+    }
+    if (content.length > 10000) {
+      return res.status(400).json({ error: 'Zpráva je příliš dlouhá' });
+    }
+
+    const channelId = req.params.id;
+    const message = await prisma.chatMessage.create({
+      data: {
+        channel_id: channelId,
+        sender_id: req.user.id,
+        sender_type: 'user',
+        content,
+        attachments: attachments.length ? attachments : undefined,
+      },
+      include: {
+        sender: {
+          select: {
+            id: true, username: true, display_name: true,
+            person: { select: { photo_url: true } },
+          },
+        },
+      },
+    });
+
+    // Hned vrátíme klientovi, side-effects na pozadí (push, last_message_at)
+    res.status(201).json(message);
+
+    (async () => {
+      try {
+        const [, members] = await Promise.all([
+          prisma.chatChannel.update({
+            where: { id: channelId },
+            data: { last_message_at: message.created_at },
+          }),
+          prisma.chatChannelMember.findMany({
+            where: { channel_id: channelId },
+            include: { channel: { select: { type: true, name: true } } },
+          }),
+        ]);
+
+        const senderLabel = req.user.displayName || req.user.username;
+        const channelMeta = members[0]?.channel || {};
+        let preview = content.length > 80 ? content.slice(0, 80) + '…' : content;
+        if (!preview && attachments.length) {
+          const hasImg = attachments.some(a => a.kind === 'image');
+          preview = hasImg ? `📷 Obrázek (${attachments.length})` : `📎 Soubor (${attachments.length})`;
+        }
+        const link = `/modules/chat/?channel=${channelId}`;
+
+        const toNotify = members.filter(m => m.user_id !== req.user.id && !m.muted);
+        await Promise.all(toNotify.map(m => {
+          let title = senderLabel;
+          if (channelMeta.type === 'group' && channelMeta.name) title = `${senderLabel} v ${channelMeta.name}`;
+          return createNotification({
+            userId: m.user_id,
+            type: 'chat_message',
+            title,
+            body: preview,
+            link,
+            meta: { channel_id: channelId, message_id: message.id },
+          });
+        }));
+      } catch (bgErr) {
+        console.error('[velin chat] background side-effects:', bgErr.message);
+      }
+    })();
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message });
+    next(err);
+  }
+});
+
+// POST /chat/channels/:id/read — mark read do teď
+mobile.post('/chat/channels/:id/read', async (req, res, next) => {
+  try {
+    await chatEnsureMember(req.params.id, req.user.id);
+    await prisma.chatChannelMember.update({
+      where: { channel_id_user_id: { channel_id: req.params.id, user_id: req.user.id } },
+      data: { last_read_at: new Date() },
+    });
+    res.json({ ok: true });
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message });
+    next(err);
+  }
+});
+
 router.use('/', mobile);
 
 // ─── Helpers (geo) ───────────────────────────────────────────────────────
