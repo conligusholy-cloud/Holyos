@@ -19,6 +19,7 @@
     "preview": {
       "distribution": "store",
       "channel": "preview",
+      "autoIncrement": true,
       "ios": {
         "resourceClass": "m-medium"
       },
@@ -35,6 +36,19 @@
     }
   },
   "submit": {
-    "production": {}
+    "preview": {
+      "ios": {
+        "appleId": "holyto@atlas.cz",
+        "ascAppId": "6771508478",
+        "appleTeamId": "DMRFBM25Q8"
+      }
+    },
+    "production": {
+      "ios": {
+        "appleId": "holyto@atlas.cz",
+        "ascAppId": "6771508478",
+        "appleTeamId": "DMRFBM25Q8"
+      }
+    }
   }
 }
