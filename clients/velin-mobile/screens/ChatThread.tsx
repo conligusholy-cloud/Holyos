@@ -120,14 +120,19 @@ export default function ChatThread({ route }: Props) {
     if (!content.trim() && attachments.length === 0) return;
 
     const auth = await loadAuth();
-    if (!auth.jwt || !auth.userId) return;
+    if (!auth.jwt) return;
+    // POZOR: auth.userId může být null u starších uživatelů, kteří se nepřihlásili
+    // znovu po doručení Krok D OTA (KEY_USER_ID nebyl ještě v SecureStore).
+    // Backend identifikuje uživatele z JWT, takže send funguje i bez userId — jen
+    // bubliny budou všechny vlevo (sender_id !== null userId). Doporučit re-login.
+    const localUserId = auth.userId || -1;
 
     tmpCounter.current += 1;
     const tmpId = `tmp-${Date.now()}-${tmpCounter.current}`;
     const tmpMsg: LocalMessage = {
       id: tmpId,
       channel_id: channelId,
-      sender_id: auth.userId,
+      sender_id: localUserId,
       sender_type: 'user',
       sender_label: null,
       content: content.trim(),
@@ -136,7 +141,7 @@ export default function ChatThread({ route }: Props) {
       deleted_at: null,
       created_at: new Date().toISOString(),
       sender: {
-        id: auth.userId,
+        id: localUserId,
         username: auth.username || '',
         display_name: auth.displayName || auth.username || '',
         person: null,
