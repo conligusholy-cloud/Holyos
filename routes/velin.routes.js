@@ -15,6 +15,7 @@
 
 const express = require('express');
 const router = express.Router();
+const multer = require('multer');
 const { z } = require('zod');
 const { prisma } = require('../config/database');
 const { requireAuth } = require('../middleware/auth');
@@ -28,6 +29,14 @@ const {
   isPinValidFormat,
 } = require('../services/velin/auth');
 const scheduler = require('../services/workers/velin-scheduler');
+const r2 = require('../services/storage/r2');
+
+// Multer in-memory storage pro chat attachmenty (max 15 MB).
+// Nepoužíváme disk — soubor jde rovnou z paměti do R2 a buffer se uvolní.
+const chatUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 15 * 1024 * 1024 }, // 15 MB
+});
 
 // ─── Helpers ─────────────────────────────────────────────────────────────
 
@@ -816,6 +825,49 @@ async function chatEnsureMember(channelId, userId) {
 // ─── POZOR: pevné podcesty PŘED dynamickou /:id ─────────────────────────────
 // Memory `holyos_express_route_order` — Express posuzuje routy v pořadí, pevné
 // stringy musí být před parametrizovanou cestou, jinak ji dynamic přepíše.
+
+// POST /chat/upload — multipart upload fotky/souboru, vrátí URL pro attachments[]
+//
+// Klient pošle multipart/form-data s polem `file` + volitelný `channel_id`
+// pro logování/audit. Backend uploadne do R2, vrátí strukturu, kterou klient
+// vloží do `attachments` při POST /chat/channels/:id/messages.
+//
+// Response: { kind, url, name, size, mime }
+mobile.post('/chat/upload', chatUpload.single('file'), async (req, res, next) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'Chybí soubor (field name: file)' });
+    }
+    const { buffer, mimetype, originalname, size } = req.file;
+    const safeName = String(originalname || 'soubor').slice(0, 255);
+    const channelId = String(req.body.channel_id || 'misc').slice(0, 64);
+
+    const ext = r2.extFromMimeOrName(mimetype, safeName);
+    const key = r2.buildKey('chat', channelId, ext);
+
+    const { url } = await r2.putObject(key, buffer, mimetype);
+    if (!url) {
+      return res.status(503).json({ error: 'R2 public URL není nakonfigurované' });
+    }
+
+    res.status(201).json({
+      kind: r2.kindFromMime(mimetype),
+      url,
+      name: safeName,
+      size,
+      mime: mimetype || 'application/octet-stream',
+    });
+  } catch (err) {
+    if (err && err.code === 'LIMIT_FILE_SIZE') {
+      return res.status(413).json({ error: 'Soubor je příliš velký (max 15 MB)' });
+    }
+    if (err && err.status === 503) {
+      return res.status(503).json({ error: err.message });
+    }
+    console.error('[velin chat] upload error:', err);
+    next(err);
+  }
+});
 
 // POST /chat/channels/direct — vytvořit/otevřít 1:1 s userId
 mobile.post('/chat/channels/direct', async (req, res, next) => {
