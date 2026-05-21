@@ -28,6 +28,8 @@
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "Velín potřebuje polohu, aby poznal, že jsi přišel do práce (docházka GPS).",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "Velín potřebuje polohu, aby poznal, že jsi přišel do práce (docházka GPS).",
+        "NSCameraUsageDescription": "Velín potřebuje přístup k fotoaparátu, abys mohl posílat fotky kolegům do chatu.",
+        "NSPhotoLibraryUsageDescription": "Velín potřebuje přístup k fotkám, abys mohl vybrat fotku z galerie a poslat ji kolegům.",
         "ITSAppUsesNonExemptEncryption": false
       }
     },
@@ -50,7 +52,14 @@
       }
     },
     "plugins": [
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Velín potřebuje přístup k fotkám, abys mohl vybrat fotku z galerie a poslat ji kolegům.",
+          "cameraPermission": "Velín potřebuje přístup k fotoaparátu, abys mohl posílat fotky kolegům do chatu."
+        }
+      ]
     ]
   }
 }

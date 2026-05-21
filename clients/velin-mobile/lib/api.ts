@@ -259,6 +259,58 @@ export const api = {
     const qs = q ? `?q=${encodeURIComponent(q)}` : '';
     return request<SearchableUser[]>('GET', `/api/velin/chat/users/searchable${qs}`, { jwt });
   },
+
+  // Chat upload — fotky/soubory přes multipart/form-data.
+  // file.uri = lokální path z expo-image-picker / expo-document-picker.
+  // Vrátí strukturu kompatibilní s ChatAttachment (kind, url, name, size, mime).
+  chatUpload: async (
+    jwt: string,
+    file: { uri: string; name: string; mime: string },
+    channelId?: string
+  ): Promise<ChatAttachment> => {
+    const formData = new FormData();
+    // RN FormData přijímá { uri, name, type } jako "file" object
+    formData.append('file', {
+      uri: file.uri,
+      name: file.name,
+      type: file.mime,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any);
+    if (channelId) formData.append('channel_id', channelId);
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 s upload
+
+    try {
+      const res = await fetch(`${API_BASE}/api/velin/chat/upload`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${jwt}`,
+          // POZOR: NEnastavujeme Content-Type — fetch dosadí multipart boundary sám
+        },
+        body: formData as any,
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+
+      const text = await res.text();
+      let body: any = null;
+      try { body = text ? JSON.parse(text) : null; } catch { body = text; }
+
+      if (!res.ok) {
+        const message = (body && body.error) || `HTTP ${res.status}`;
+        throw new ApiError(res.status, message, body);
+      }
+      return body as ChatAttachment;
+    } catch (err: any) {
+      clearTimeout(timeoutId);
+      if (err instanceof ApiError) throw err;
+      if (err?.name === 'AbortError') {
+        throw new ApiError(0, 'Upload trval příliš dlouho (60 s)', null);
+      }
+      throw new ApiError(0, err?.message || 'Síťová chyba při uploadu', null);
+    }
+  },
 };
 
 export { API_BASE };
