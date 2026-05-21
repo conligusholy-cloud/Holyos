@@ -30,6 +30,7 @@ import Me from './screens/Me';
 import TaskDetail from './screens/TaskDetail';
 import ChatList from './screens/ChatList';
 import ChatThread from './screens/ChatThread';
+import NewChat from './screens/NewChat';
 import { colors } from './lib/theme';
 
 // =============================================================================
@@ -58,6 +59,7 @@ export type RootStackParamList = {
   Tabs: undefined;
   TaskDetail: { taskId: number };
   ChatThread: { channelId: string; channelTitle?: string };
+  NewChat: undefined;
 };
 
 export type TabsParamList = {
@@ -151,6 +153,11 @@ export default function App() {
             name="ChatThread"
             component={ChatThread}
             options={{ animation: 'slide_from_right' }}
+          />
+          <Stack.Screen
+            name="NewChat"
+            component={NewChat}
+            options={{ animation: 'slide_from_bottom', presentation: 'modal' }}
           />
         </Stack.Navigator>
       </NavigationContainer>

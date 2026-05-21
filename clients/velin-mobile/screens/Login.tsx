@@ -53,6 +53,7 @@ export default function Login({ navigation }: Props) {
       }
       await saveAuth({
         jwt: loginRes.token,
+        userId: user.id,
         personId,
         displayName: user.displayName || user.display_name || user.username,
         username: user.username,

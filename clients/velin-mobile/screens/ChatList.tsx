@@ -103,8 +103,9 @@ export default function ChatList() {
       navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
       return;
     }
-    // myUserId potřebujeme pro DM rendering — vezmu z personId fallback
-    if (mountedRef.current) setMyUserId(auth.personId);
+    // myUserId = User.id (ChatChannelMember.user_id je taky User.id z backendu).
+    // NE personId — chat ownership běží přes User model.
+    if (mountedRef.current) setMyUserId(auth.userId);
 
     const key = cacheKey(auth.personId);
 
@@ -203,7 +204,16 @@ export default function ChatList() {
           />
         }
       >
-        <Text style={styles.header}>Chat</Text>
+        <View style={styles.headerRow}>
+          <Text style={styles.header}>Chat</Text>
+          <TouchableOpacity
+            style={styles.newChatBtn}
+            onPress={() => navigation.navigate('NewChat')}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.newChatBtnText}>✏️  Nová</Text>
+          </TouchableOpacity>
+        </View>
 
         {hasStale && (
           <TouchableOpacity onPress={handleRetry} style={styles.staleBanner} activeOpacity={0.7}>
@@ -295,11 +305,27 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bg },
   scroll: { padding: spacing.lg, paddingBottom: 48 },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: spacing.lg,
+  },
   header: {
     color: colors.text,
     fontSize: 28,
     fontWeight: '700',
-    marginBottom: spacing.lg,
+  },
+  newChatBtn: {
+    backgroundColor: colors.accent,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.md,
+  },
+  newChatBtnText: {
+    color: '#0b1220',
+    fontSize: 14,
+    fontWeight: '700',
   },
   emptyCard: {
     backgroundColor: colors.surface,
