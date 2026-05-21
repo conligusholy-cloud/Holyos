@@ -4,11 +4,14 @@
 // Strom obrazovek:
 //
 //   Stack:
-//     Gate    — kontrola JWT, rozhoduje kam pokračovat
-//     Login   — HolyOS přihlášení (username + heslo)
-//     Tabs    — hlavní část po loginu
+//     Gate         — kontrola JWT, rozhoduje kam pokračovat
+//     Login        — HolyOS přihlášení (username + heslo)
+//     Tabs         — hlavní část po loginu
 //       └── MyDay  — dnešní plán
+//       └── Chat   — chat (DM + kanály + task chaty)
 //       └── Me     — profil + odhlášení
+//     TaskDetail   — detail úkolu (stack push z MyDay)
+//     ChatThread   — konkrétní chat (stack push z ChatList)
 //
 // Status bar je světlý (na tmavém pozadí).
 
@@ -25,6 +28,8 @@ import Login from './screens/Login';
 import MyDay from './screens/MyDay';
 import Me from './screens/Me';
 import TaskDetail from './screens/TaskDetail';
+import ChatList from './screens/ChatList';
+import ChatThread from './screens/ChatThread';
 import { colors } from './lib/theme';
 
 // =============================================================================
@@ -52,10 +57,12 @@ export type RootStackParamList = {
   Login: undefined;
   Tabs: undefined;
   TaskDetail: { taskId: number };
+  ChatThread: { channelId: string; channelTitle?: string };
 };
 
 export type TabsParamList = {
   MyDay: undefined;
+  Chat: undefined;
   Me: undefined;
 };
 
@@ -85,6 +92,14 @@ function TabsRoot() {
         options={{
           title: 'Dnes',
           tabBarIcon: ({ color }) => <Text style={{ fontSize: 22, color }}>📅</Text>,
+        }}
+      />
+      <Tabs.Screen
+        name="Chat"
+        component={ChatList}
+        options={{
+          title: 'Chat',
+          tabBarIcon: ({ color }) => <Text style={{ fontSize: 22, color }}>💬</Text>,
         }}
       />
       <Tabs.Screen
@@ -130,6 +145,11 @@ export default function App() {
           <Stack.Screen
             name="TaskDetail"
             component={TaskDetail}
+            options={{ animation: 'slide_from_right' }}
+          />
+          <Stack.Screen
+            name="ChatThread"
+            component={ChatThread}
             options={{ animation: 'slide_from_right' }}
           />
         </Stack.Navigator>
