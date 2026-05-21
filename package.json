@@ -21,6 +21,7 @@
   "private": true,
   "dependencies": {
     "@anthropic-ai/sdk": "^0.52.0",
+    "@aws-sdk/client-s3": "^3.1051.0",
     "@azure/msal-node": "^5.1.4",
     "@prisma/client": "^6.19.3",
     "@prisma/engines": "^6.19.3",
