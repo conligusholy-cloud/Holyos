@@ -35,8 +35,8 @@ export type LoginResponse = {
 };
 
 const DEFAULT_TIMEOUT_MS = 15000;
-// /me a /my-day kvůli Railway cold startu — server po nečinnosti spí
-// a první request po probuzení může trvat 15–25 s. 30 s má rezervu.
+// /me, /my-day, chat endpointy kvůli Railway cold startu — server po nečinnosti
+// spí a první request po probuzení může trvat 15–25 s. 30 s má rezervu.
 const SLOW_ENDPOINT_TIMEOUT_MS = 30000;
 
 async function request<T>(
@@ -85,6 +85,86 @@ async function request<T>(
   }
   return body as T;
 }
+
+// ─── Chat typy (deklarované nahoře, ať je `api` níže může referovat) ────────
+
+export type ChatAttachment = {
+  kind: 'image' | 'file';
+  url: string;
+  name?: string;
+  size?: number;
+  mime?: string;
+};
+
+export type ChatMemberUser = {
+  id: number;
+  username: string;
+  display_name: string;
+  person: {
+    photo_url: string | null;
+    first_name: string | null;
+    last_name: string | null;
+  } | null;
+};
+
+export type ChatChannelMember = {
+  id: number;
+  user_id: number;
+  role: string;
+  last_read_at: string | null;
+  muted: boolean;
+  user: ChatMemberUser;
+};
+
+export type ChatLastMessage = {
+  id: string;
+  content: string;
+  created_at: string;
+  attachments: ChatAttachment[] | null;
+  sender: { id: number; display_name: string; username: string } | null;
+};
+
+export type ChatChannelSummary = {
+  id: string;
+  type: 'direct' | 'group' | 'task' | 'system';
+  name: string | null;
+  topic: string | null;
+  last_message_at: string;
+  muted: boolean;
+  unread: number;
+  members: ChatChannelMember[];
+  last_message: ChatLastMessage | null;
+};
+
+export type ChatMessage = {
+  id: string;
+  channel_id: string;
+  sender_id: number | null;
+  sender_type: 'user' | 'system' | 'ai';
+  sender_label: string | null;
+  content: string;
+  attachments: ChatAttachment[] | null;
+  edited_at: string | null;
+  deleted_at: string | null;
+  created_at: string;
+  sender: {
+    id: number;
+    username: string;
+    display_name: string;
+    person: { photo_url: string | null } | null;
+  } | null;
+};
+
+export type SearchableUser = {
+  id: number;
+  username: string;
+  display_name: string;
+  person: {
+    first_name: string | null;
+    last_name: string | null;
+    photo_url: string | null;
+  } | null;
+};
 
 export const api = {
   // HolyOS auth
@@ -138,6 +218,47 @@ export const api = {
 
   sendMessage: (jwt: string, taskId: number, body: string) =>
     request<{ message: any }>('POST', `/api/velin/tasks/${taskId}/messages`, { jwt, body: { body } }),
+
+  // ─── Chat ─────────────────────────────────────────────────────────────────
+  chatChannels: (jwt: string) =>
+    request<ChatChannelSummary[]>('GET', '/api/velin/chat/channels', {
+      jwt,
+      timeoutMs: SLOW_ENDPOINT_TIMEOUT_MS,
+    }),
+
+  chatMessages: (jwt: string, channelId: string, before?: string, limit = 50) => {
+    const qs = new URLSearchParams();
+    if (before) qs.set('before', before);
+    qs.set('limit', String(limit));
+    return request<ChatMessage[]>(
+      'GET',
+      `/api/velin/chat/channels/${channelId}/messages?${qs.toString()}`,
+      { jwt, timeoutMs: SLOW_ENDPOINT_TIMEOUT_MS }
+    );
+  },
+
+  chatSend: (jwt: string, channelId: string, content: string, attachments: ChatAttachment[] = []) =>
+    request<ChatMessage>('POST', `/api/velin/chat/channels/${channelId}/messages`, {
+      jwt,
+      body: { content, attachments },
+    }),
+
+  chatMarkRead: (jwt: string, channelId: string) =>
+    request<{ ok: true }>('POST', `/api/velin/chat/channels/${channelId}/read`, {
+      jwt,
+      body: {},
+    }),
+
+  chatDirectChannel: (jwt: string, userId: number) =>
+    request<{ channel: any }>('POST', '/api/velin/chat/channels/direct', {
+      jwt,
+      body: { user_id: userId },
+    }),
+
+  chatSearchableUsers: (jwt: string, q = '') => {
+    const qs = q ? `?q=${encodeURIComponent(q)}` : '';
+    return request<SearchableUser[]>('GET', `/api/velin/chat/users/searchable${qs}`, { jwt });
+  },
 };
 
 export { API_BASE };
