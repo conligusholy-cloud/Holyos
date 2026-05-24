@@ -114,6 +114,7 @@
       'Náklad pracích cyklů / měsíc': 'Wash cycle cost / month',
       'Ø náklad na zákazníka (ze zdroj. dat)': 'Ø cost per customer (from source data)',
       'Ø náklad na zákazníka': 'Ø cost per customer',
+      'Celkem na zákazníka': 'Total per customer',
 
       // Fixed costs
       'Pravidelná údržba': 'Regular maintenance',
@@ -291,6 +292,7 @@
       'Náklad pracích cyklů / měsíc': 'Waschzyklus-Kosten / Monat',
       'Ø náklad na zákazníka (ze zdroj. dat)': 'Ø Kosten pro Kunde (aus Quelldaten)',
       'Ø náklad na zákazníka': 'Ø Kosten pro Kunde',
+      'Celkem na zákazníka': 'Gesamt pro Kunde',
 
       'Pravidelná údržba': 'Regelmäßige Wartung',
       'Software': 'Software',
@@ -458,6 +460,7 @@
       'Náklad pracích cyklů / měsíc': 'Coût des cycles de lavage / mois',
       'Ø náklad na zákazníka (ze zdroj. dat)': 'Ø coût par client (données sources)',
       'Ø náklad na zákazníka': 'Ø coût par client',
+      'Celkem na zákazníka': 'Total par client',
 
       'Pravidelná údržba': 'Maintenance régulière',
       'Software': 'Logiciel',

@@ -452,7 +452,7 @@
       outRow(_t('Obrat / den'), 'obrat_den', '€') +
       outRow(_t('Obrat / měsíc'), 'obrat_mesic', '€', true) +
       outRow(_t('Náklad pracích cyklů / měsíc'), 'naklad_pracich_cyklu_mesic', '€') +
-      outRow(_t('Ø náklad na zákazníka (ze zdroj. dat)'), 'naklad_na_zakaznika', '€');
+      outRow(_t('Celkem na zákazníka'), 'naklad_na_zakaznika', '€', true);
     html += section('modelace', '📈', _t('Modelace — měsíční'), _t('klíčový vstup'), s2);
 
     // Sekce: Měsíční fixní náklady
@@ -543,7 +543,7 @@
       outRow(_t('45 min'), 'naklad_susicka_45', '€') +
       outRow(_t('Ø praní (velká+malá)'), 'prumer_prani', '€') +
       outRow(_t('Ø sušení (15+30 min)'), 'prumer_suseni', '€') +
-      outRow(_t('Ø celkem na zákazníka'), 'naklad_na_zakaznika', '€', true);
+      outRow(_t('Celkem na zákazníka'), 'naklad_na_zakaznika', '€', true);
     html += section('susicka', '♨️', _t('Sušička — spotřeba a souhrn nákladů'), _t('zdrojová data'), s9, true);
 
     // Vizualizace struktury nákladů
@@ -656,8 +656,8 @@
     ];
     for (var i = 0; i < fields.length; i++) {
       // Některé klíče (např. naklad_na_zakaznika) figurují ve více sekcích —
-      // querySelectorAll naplní VŠECHNY výskyty, aby se „Ø celkem na zákazníka"
-      // v sekci Sušička aktualizoval stejnou logikou jako průměry u praček.
+      // querySelectorAll naplní VŠECHNY výskyty, aby se „Celkem na zákazníka"
+      // (v sekci Modelace i Sušička) aktualizoval stejnou logikou jako u praček.
       var els = ROOT.querySelectorAll('#pe-out-' + fields[i][0]);
       var v = r[fields[i][0]];
       if (typeof v !== 'number') continue;
