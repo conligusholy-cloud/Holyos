@@ -209,6 +209,23 @@
     .cf-legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 11px; color: var(--text2); margin-top: 12px; }
     .cf-legend-item { display: inline-flex; align-items: center; gap: 5px; }
     .cf-legend-dot { width: 10px; height: 10px; border-radius: 3px; }
+
+    /* Per-zákazník view (souhrn plateb agregovaný na odběratele) */
+    .cf-customer-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 0; overflow: hidden; }
+    .cf-customer-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 13px; }
+    .cf-customer-table thead th { background: var(--surface2); padding: 10px 14px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text2); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 1; }
+    .cf-customer-table tbody td { padding: 12px 14px; border-bottom: 1px solid rgba(255,255,255,0.04); vertical-align: top; }
+    .cf-customer-table tbody tr:hover td { background: rgba(234,179,8,0.05); }
+    .cf-customer-table .cfc-name { font-weight: 600; color: var(--text); }
+    .cf-customer-table .cfc-num { font-weight: 700; text-align: right; white-space: nowrap; }
+    .cf-customer-table .cfc-num.ok { color: #10b981; }
+    .cf-customer-table .cfc-num.pending { color: #f59e0b; }
+    .cf-customer-table .cfc-num.overdue { color: #ef4444; }
+    .cf-customer-table .cfc-num.total { color: var(--text); }
+    .cf-customer-table .cfc-sub { font-size: 11px; color: var(--text2); font-weight: 500; margin-top: 2px; }
+    .cf-customer-table .cfc-count { color: var(--text2); font-size: 11px; }
+    .cf-customer-table tfoot td { background: var(--surface2); padding: 12px 14px; font-weight: 700; border-top: 2px solid var(--border); }
+    .cf-customer-empty { padding: 40px; text-align: center; color: var(--text2); font-style: italic; }
   </style>
   <script src="/js/countries.js"></script>
   <script src="modules/prodejni-objednavky/pradlomat-economy.js"></script>
@@ -282,6 +299,7 @@
         <div class="cf-view-switch">
           <button type="button" data-cf-view="timeline" class="active" onclick="setCashflowView('timeline')">📈 Časová osa</button>
           <button type="button" data-cf-view="calendar" onclick="setCashflowView('calendar')">📅 Kalendář</button>
+          <button type="button" data-cf-view="customer" onclick="setCashflowView('customer')">👥 Per zákazník</button>
         </div>
         <select id="cf-filter-status" onchange="renderCashflow()">
           <option value="all">Všechny platby</option>
@@ -315,6 +333,11 @@
           <div style="width:120px;"></div>
         </div>
         <div class="cf-cal-grid" id="cf-cal-grid"></div>
+      </div>
+
+      <!-- Per-zákazník view: souhrn plateb agregovaný na odběratele -->
+      <div id="cf-view-customer" class="cf-customer-wrap" style="display:none;">
+        <div id="cf-customer-table"><div class="cf-customer-empty">Načítám…</div></div>
       </div>
 
       <div class="cf-legend">
@@ -2866,7 +2889,8 @@
     function renderCashflow() {
       renderCashflowStats();
       if (_cashflowView === 'timeline') renderCashflowTimeline();
-      else renderCashflowCalendar();
+      else if (_cashflowView === 'calendar') renderCashflowCalendar();
+      else if (_cashflowView === 'customer') renderCashflowCustomer();
     }
 
     function renderCashflowStats() {
@@ -3049,6 +3073,8 @@
       btns.forEach(function (b) { b.classList.toggle('active', b.getAttribute('data-cf-view') === view); });
       document.getElementById('cf-view-timeline').style.display = (view === 'timeline') ? '' : 'none';
       document.getElementById('cf-view-calendar').style.display = (view === 'calendar') ? '' : 'none';
+      var custEl = document.getElementById('cf-view-customer');
+      if (custEl) custEl.style.display = (view === 'customer') ? '' : 'none';
       renderCashflow();
     }
 
@@ -3114,6 +3140,125 @@
         html += '</div>';
       }
       grid.innerHTML = html;
+    }
+
+    // ============================================================
+    // PER-ZÁKAZNÍK VIEW (Cash flow tab)
+    // ============================================================
+    // Agreguje platby (záloha+doplatek / jednorázová) per odběratel.
+    // Respektuje stávající filtr status/kind ve cf-toolbaru — když uživatel
+    // filtruje na „pouze nezaplacené", tabulka ukáže pouze nezaplacené.
+    // Mix měn řešíme stejně jako stat karty — per měna + přibližný součet v CZK.
+    function renderCashflowCustomer() {
+      var holder = document.getElementById('cf-customer-table');
+      if (!holder) return;
+      var payments = filterPayments();
+
+      if (!payments.length) {
+        holder.innerHTML = '<div class="cf-customer-empty">Žádné platby pro zvolený filtr.</div>';
+        return;
+      }
+
+      // Group by company.id (fallback company.name pokud chybí id)
+      var groups = {}; // key -> { name, payments[], paidByCur, pendingByCur, overdueByCur, totalByCur, countPaid, countPending, countOverdue, totalCount }
+      payments.forEach(function (p) {
+        var co = p.order && p.order.company;
+        var key = co && co.id != null ? 'id:' + co.id : ('name:' + ((co && co.name) || '—'));
+        var name = (co && co.name) || '—';
+        if (!groups[key]) {
+          groups[key] = {
+            name: name,
+            paidByCur: {}, pendingByCur: {}, overdueByCur: {}, totalByCur: {},
+            countPaid: 0, countPending: 0, countOverdue: 0, totalCount: 0,
+          };
+        }
+        var g = groups[key];
+        var cur = p.currency || 'CZK';
+        g.totalByCur[cur] = (g.totalByCur[cur] || 0) + p.amount;
+        g.totalCount++;
+        if (p.paid) {
+          g.paidByCur[cur] = (g.paidByCur[cur] || 0) + p.amount;
+          g.countPaid++;
+        } else if (p.overdue) {
+          g.overdueByCur[cur] = (g.overdueByCur[cur] || 0) + p.amount;
+          g.countOverdue++;
+        } else {
+          g.pendingByCur[cur] = (g.pendingByCur[cur] || 0) + p.amount;
+          g.countPending++;
+        }
+      });
+
+      // Pro řazení použijeme přibližný součet v CZK (mix měn → 1 číslo).
+      function approxTotalCzk(byCur) {
+        var sum = 0;
+        Object.keys(byCur).forEach(function (k) {
+          if (k === 'CZK') sum += byCur[k];
+          else sum += cfCzkApproxSingle(byCur[k], k);
+        });
+        return sum;
+      }
+
+      var rows = Object.keys(groups).map(function (k) {
+        var g = groups[k];
+        g._sortKey = approxTotalCzk(g.totalByCur);
+        return g;
+      });
+      // Sestupně podle celkové částky (přepočtené na CZK).
+      rows.sort(function (a, b) { return b._sortKey - a._sortKey; });
+
+      // Souhrny do tfoot — sečteme přes všechny zákazníky.
+      var sumPaidAll = {}, sumPendingAll = {}, sumOverdueAll = {}, sumTotalAll = {};
+      var totalCountAll = 0;
+      function bump(bag, src) { Object.keys(src).forEach(function (k) { bag[k] = (bag[k] || 0) + src[k]; }); }
+      rows.forEach(function (g) {
+        bump(sumPaidAll, g.paidByCur);
+        bump(sumPendingAll, g.pendingByCur);
+        bump(sumOverdueAll, g.overdueByCur);
+        bump(sumTotalAll, g.totalByCur);
+        totalCountAll += g.totalCount;
+      });
+
+      var approxOpts = { size: 10, marginTop: 2 };
+      function cellMixed(byCur, cls) {
+        if (!Object.keys(byCur).length) return '<td class="cfc-num ' + cls + '" style="color:var(--text2);">—</td>';
+        return '<td class="cfc-num ' + cls + '">' + cfFmtMixed(byCur) + cfRenderCzkApprox(byCur, approxOpts) + '</td>';
+      }
+
+      var html = '<table class="cf-customer-table"><thead><tr>' +
+        '<th>Odběratel</th>' +
+        '<th style="text-align:right;">Zaplaceno</th>' +
+        '<th style="text-align:right;">Očekává se</th>' +
+        '<th style="text-align:right;">Po splatnosti</th>' +
+        '<th style="text-align:right;">Celkem</th>' +
+        '<th style="text-align:right;">Plateb</th>' +
+        '</tr></thead><tbody>';
+
+      rows.forEach(function (g) {
+        var countParts = [];
+        if (g.countPaid) countParts.push('<span style="color:#10b981;">' + g.countPaid + ' ✓</span>');
+        if (g.countPending) countParts.push('<span style="color:#f59e0b;">' + g.countPending + ' ⏳</span>');
+        if (g.countOverdue) countParts.push('<span style="color:#ef4444;">' + g.countOverdue + ' ⚠</span>');
+        html += '<tr>' +
+          '<td class="cfc-name">' + esc(g.name) + '</td>' +
+          cellMixed(g.paidByCur, 'ok') +
+          cellMixed(g.pendingByCur, 'pending') +
+          cellMixed(g.overdueByCur, 'overdue') +
+          cellMixed(g.totalByCur, 'total') +
+          '<td class="cfc-num cfc-count">' + g.totalCount + (countParts.length ? '<div class="cfc-sub">' + countParts.join(' · ') + '</div>' : '') + '</td>' +
+        '</tr>';
+      });
+
+      // Footer — součty napříč všemi zákazníky.
+      html += '</tbody><tfoot><tr>' +
+        '<td>Celkem (' + rows.length + ' zákazníků)</td>' +
+        cellMixed(sumPaidAll, 'ok') +
+        cellMixed(sumPendingAll, 'pending') +
+        cellMixed(sumOverdueAll, 'overdue') +
+        cellMixed(sumTotalAll, 'total') +
+        '<td class="cfc-num">' + totalCountAll + '</td>' +
+        '</tr></tfoot></table>';
+
+      holder.innerHTML = html;
     }
 
     // ============================================================
