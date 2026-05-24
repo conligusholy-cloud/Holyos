@@ -750,7 +750,6 @@
   function renderProjectionSummary(r) {
     var el = ROOT.querySelector('#pe-projection-summary');
     if (!el || !r.projection) return;
-    var bk = r.breakeven_year != null ? (r.breakeven_year + '. ' + _t('rok')) : _t('po 10 letech ne');
     var cumCls = r.total_cumulative_10y >= 0 ? 'ok' : 'neg';
     el.innerHTML =
       '<div class="pe-mini-card">' +
@@ -764,10 +763,6 @@
       '<div class="pe-mini-card ' + cumCls + '">' +
         '<div class="pe-mc-label">' + _t('Kumulativní zisk po 10 letech') + '</div>' +
         '<div class="pe-mc-value">' + fmtEur(r.total_cumulative_10y, 0) + '</div>' +
-      '</div>' +
-      '<div class="pe-mini-card">' +
-        '<div class="pe-mc-label">' + _t('První kladná kumulace') + '</div>' +
-        '<div class="pe-mc-value" style="font-size:16px;">' + bk + '</div>' +
       '</div>';
   }
 
