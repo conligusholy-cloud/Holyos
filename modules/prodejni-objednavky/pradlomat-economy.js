@@ -655,12 +655,15 @@
       ['prumer_prani', 3], ['prumer_suseni', 3]
     ];
     for (var i = 0; i < fields.length; i++) {
-      var el = ROOT.querySelector('#pe-out-' + fields[i][0]);
-      if (el) {
-        var v = r[fields[i][0]];
-        if (typeof v === 'number') {
-          el.textContent = fmtNum(v, fields[i][1]);
-        }
+      // Některé klíče (např. naklad_na_zakaznika) figurují ve více sekcích —
+      // querySelectorAll naplní VŠECHNY výskyty, aby se „Ø celkem na zákazníka"
+      // v sekci Sušička aktualizoval stejnou logikou jako průměry u praček.
+      var els = ROOT.querySelectorAll('#pe-out-' + fields[i][0]);
+      var v = r[fields[i][0]];
+      if (typeof v !== 'number') continue;
+      var txt = fmtNum(v, fields[i][1]);
+      for (var j = 0; j < els.length; j++) {
+        els[j].textContent = txt;
       }
     }
 
