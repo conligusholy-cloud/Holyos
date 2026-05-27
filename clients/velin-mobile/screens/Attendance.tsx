@@ -9,6 +9,7 @@
 //   - Tlačítka Příchod / Odchod (nebo Začátek pauzy / Konec pauzy podle stavu)
 //   - Seznam dnešních punches (kdy + jak — manual/auto geofence + GPS přesnost)
 //   - Tlačítko Auto GPS docházka (Fáze 3 — opt-in)
+//   - Tlačítko Vytvořit nový provoz z aktuální polohy (admin/manager)
 //
 // Background GPS geofencing implementuje lib/geofence.ts (Krok E).
 
@@ -98,21 +99,61 @@ export default function Attendance() {
     if (!auth.jwt) return;
 
     // Volitelně získat aktuální polohu (pokud uživatel povolil)
+    // 3-stupňová strategie:
+    //  1) Čerstvá poloha s Balanced accuracy a krátkým timeoutem (4 s).
+    //  2) Pokud selže → cached lastKnown (max 2 min stará).
+    //  3) Pokud nic → posíláme bez GPS (backend dovoluje null).
+    // Důvod: po multi-sample měření v NewGeoFence (8× BestForNavigation) je
+    // GPS subsystem busy a Balanced fix může chvíli klopýtat. Cached lastKnown
+    // má v té situaci téměř vždy čerstvý fix od posledního měření.
     let lat: number | null = null;
     let lng: number | null = null;
     let accuracy_m: number | null = null;
     try {
       const perm = await Location.getForegroundPermissionsAsync();
       if (perm.granted) {
-        const pos = await Location.getCurrentPositionAsync({
+        // Krok 1: pokus o čerstvý fix s timeoutem
+        const freshPromise = Location.getCurrentPositionAsync({
           accuracy: Location.Accuracy.Balanced,
         });
-        lat = pos.coords.latitude;
-        lng = pos.coords.longitude;
-        accuracy_m = pos.coords.accuracy ?? null;
+        const timeoutPromise = new Promise<null>((resolve) =>
+          setTimeout(() => resolve(null), 4000)
+        );
+        const pos = await Promise.race([freshPromise, timeoutPromise]);
+
+        if (pos && 'coords' in pos) {
+          lat = pos.coords.latitude;
+          lng = pos.coords.longitude;
+          accuracy_m = pos.coords.accuracy ?? null;
+        } else {
+          // Krok 2: fallback na cached lastKnown
+          try {
+            const cached = await Location.getLastKnownPositionAsync({
+              maxAge: 120_000,
+              requiredAccuracy: 200,
+            });
+            if (cached) {
+              lat = cached.coords.latitude;
+              lng = cached.coords.longitude;
+              accuracy_m = cached.coords.accuracy ?? null;
+              console.warn('[Attendance] GPS timeout → použit lastKnown', {
+                lat,
+                lng,
+                accuracy_m,
+              });
+            } else {
+              console.warn('[Attendance] GPS timeout + žádný lastKnown — punch bez GPS');
+            }
+          } catch (cacheErr) {
+            console.warn('[Attendance] lastKnown selhal:', cacheErr);
+          }
+        }
+      } else {
+        console.warn('[Attendance] permission not granted — punch bez GPS');
       }
-    } catch {
-      // GPS selhala — pokračujeme bez souřadnic
+    } catch (e) {
+      // GPS úplně selhala — pokračujeme bez souřadnic, ale logujeme
+      console.warn('[Attendance] GPS chyba:', e);
     }
 
     setSubmitting(true);
@@ -206,6 +247,18 @@ export default function Attendance() {
             thumbColor="#fff"
           />
         </View>
+
+        {/* Vytvoř nový provoz z aktuální polohy (admin/manager) */}
+        <TouchableOpacity
+          style={styles.newFenceBtn}
+          onPress={() => navigation.navigate('NewGeoFence')}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.newFenceBtnText}>➕ Vytvořit nový provoz (zde jsem)</Text>
+          <Text style={styles.newFenceBtnSub}>
+            Postav se doprostřed dílny nebo k bráně a Velín si zapamatuje GPS. Jen pro vedoucí.
+          </Text>
+        </TouchableOpacity>
 
         {/* Seznam dnešních punches */}
         <Text style={styles.sectionTitle}>Dnešní záznamy ({punches.length})</Text>
@@ -335,7 +388,7 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   newFenceBtnText: { color: colors.text, fontSize: 14, fontWeight: '600' },
-  newFenceBtnSub: { color: colors.text2, fontSize: 11, marginTop: 2 },
+  newFenceBtnSub: { color: colors.text2, fontSize: 11, marginTop: 2, textAlign: 'center' },
 
   sectionTitle: {
     color: colors.text2,
