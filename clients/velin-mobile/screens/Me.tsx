@@ -6,14 +6,16 @@ import React, { useEffect, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { CommonActions, useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { loadAuth, clearAuth, AuthSnapshot } from '../lib/auth';
 import { API_BASE } from '../lib/api';
 import { colors, radius, spacing } from '../lib/theme';
+import type { RootStackParamList } from '../App';
 import Constants from 'expo-constants';
 
 export default function Me() {
   const [auth, setAuth] = useState<AuthSnapshot | null>(null);
-  const navigation = useNavigation();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const appVersion = Constants.expoConfig?.version || '0.1.0';
 
   useEffect(() => {
@@ -56,6 +58,13 @@ export default function Me() {
           <Row label="HolyOS" value={API_BASE} />
           <Row label="Verze aplikace" value={appVersion} />
         </View>
+
+        <TouchableOpacity
+          style={styles.reflectionBtn}
+          onPress={() => navigation.navigate('EveningReflection')}
+        >
+          <Text style={styles.reflectionBtnText}>🌙  Dnešní reflexe</Text>
+        </TouchableOpacity>
 
         <TouchableOpacity style={styles.logoutBtn} onPress={confirmLogout}>
           <Text style={styles.logoutText}>Odhlásit se</Text>
@@ -113,6 +122,16 @@ const styles = StyleSheet.create({
   },
   rowLabel: { color: colors.text2, fontSize: 13 },
   rowValue: { color: colors.text, fontSize: 13, flexShrink: 1, textAlign: 'right' },
+  reflectionBtn: {
+    backgroundColor: colors.accent,
+    borderRadius: radius.md,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.xl,
+    marginTop: spacing.xxl,
+    alignItems: 'center',
+    width: '100%',
+  },
+  reflectionBtnText: { color: '#0b1220', fontWeight: '700', fontSize: 15 },
   logoutBtn: {
     backgroundColor: 'rgba(239,68,68,0.15)',
     borderColor: 'rgba(239,68,68,0.3)',
@@ -120,7 +139,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.xl,
-    marginTop: spacing.xxl,
+    marginTop: spacing.md,
   },
   logoutText: { color: colors.danger, fontWeight: '600', fontSize: 15 },
   footer: { color: colors.text2, fontSize: 11, marginTop: spacing.xxl },

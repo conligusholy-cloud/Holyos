@@ -103,6 +103,7 @@
         <button class="tab" data-tab="devices">📱 Zařízení</button>
         <button class="tab" data-tab="skills">⭐ Skill profily</button>
         <button class="tab" data-tab="fences">🗺️ Geo fence</button>
+        <button class="tab" data-tab="reflections">🌙 Reflexe</button>
       </div>
 
       <div class="tab-panel active" id="tab-today">
@@ -141,6 +142,19 @@
           <button class="btn btn-primary btn-sm" id="btn-new-fence">+ Nový provoz (geo fence)</button>
         </div>
         <div id="fences-list"></div>
+      </div>
+
+      <div class="tab-panel" id="tab-reflections">
+        <div class="filter-row">
+          <label style="color:var(--text2);font-size:12px;">Od</label>
+          <input type="date" id="refl-from" class="input-sm" />
+          <label style="color:var(--text2);font-size:12px;">Do</label>
+          <input type="date" id="refl-to" class="input-sm" />
+          <button class="btn btn-sm" id="btn-refl-reload">Načíst</button>
+          <span id="refl-stats-summary" style="color:var(--text2);font-size:12px;margin-left:auto;"></span>
+        </div>
+        <div id="refl-stats-by-person" style="margin-bottom:16px;"></div>
+        <div id="refl-table-wrap"></div>
       </div>
     </div>
   </div>

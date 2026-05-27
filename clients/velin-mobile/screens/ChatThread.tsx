@@ -1,22 +1,21 @@
 // =============================================================================
-// ChatThread — konkrétní chat, scroll zpráv + send box
+// ChatThread — konkrétní chat, scroll zpráv + send box + polish (Krok G)
 // =============================================================================
-// GET /api/velin/chat/channels/:id/messages?limit=50 — posledních 50 zpráv.
+// GET /api/velin/chat/channels/:id/messages?limit=50&before=<id> — paginated.
 // POST /api/velin/chat/channels/:id/messages — odeslat (s optimistic UI).
 // POST /api/velin/chat/channels/:id/read — mark read při otevření / focus.
+// POST /api/velin/chat/upload — multipart upload pro fotky/soubory.
 //
-// "isMe" = porovnání sender_id (= User.id z backendu) s auth.userId
-// uloženým v SecureStore při loginu. NE personId — chat využívá User model.
+// Krok G polish:
+//   - Tap na obrázek v bublině → fullscreen Modal s velkým náhledem
+//   - Tap na soubor → Linking.openURL (iOS Files / Quick Look)
+//   - Pull-to-refresh (RefreshControl) — táhni shora, refetch
+//   - Paginace — scroll k vrcholu, načte starší (?before=<msgId>)
+//   - Tap na ❌ failed bublinu → retry send
 //
-// Bubliny:
-//   - mé (vpravo): accent indigo s tmavým textem
-//   - cizí (vlevo): surface2 (světlejší slate) s avatarem
-//
-// Optimistic send:
-//   1) User klikne Odeslat → vytvoříme local message s id 'tmp-<n>', status 'sending'.
-//   2) Vyčistíme input, přidáme zprávu do listu okamžitě.
-//   3) Pošleme přes API. Po úspěchu nahradíme tmp zprávu reálnou.
-//   4) Po failu označíme jako 'failed' (TODO retry tap).
+// "isMe" = sender_id (User.id) === auth.userId. Permissivní guard:
+//   pokud auth.userId chybí (starší SecureStore před isMe fixem), send
+//   stále funguje — backend identifikuje z JWT.
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -25,7 +24,11 @@ import {
   FlatList,
   Image,
   KeyboardAvoidingView,
+  Linking,
+  Modal,
   Platform,
+  Pressable,
+  RefreshControl,
   StyleSheet,
   Text,
   TextInput,
@@ -33,7 +36,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp, NativeStackScreenProps } from '@react-navigation/native-stack';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
@@ -48,6 +51,8 @@ type LocalMessage = ChatMessage & {
   _status?: 'sending' | 'sent' | 'failed';
 };
 
+const PAGE_LIMIT = 50;
+
 export default function ChatThread({ route }: Props) {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { channelId, channelTitle } = route.params;
@@ -56,8 +61,12 @@ export default function ChatThread({ route }: Props) {
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const [hasMoreOlder, setHasMoreOlder] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [myUserId, setMyUserId] = useState<number | null>(null);
+  const [fullscreenImage, setFullscreenImage] = useState<string | null>(null);
   const mountedRef = useRef(true);
   const tmpCounter = useRef(0);
   const flatListRef = useRef<FlatList<LocalMessage>>(null);
@@ -74,20 +83,39 @@ export default function ChatThread({ route }: Props) {
     });
   }, [navigation, channelTitle]);
 
-  const loadMessages = useCallback(async () => {
+  // Hlavní načítací funkce. `mode`:
+  //   'mount' — první načtení (full reset)
+  //   'refresh' — pull-to-refresh (full reset, ale bez velkého spinneru)
+  //   'older' — paginace, načte starší a appendne nahoru
+  const loadMessages = useCallback(async (mode: 'mount' | 'refresh' | 'older') => {
     const auth = await loadAuth();
     if (!auth.jwt) {
       await clearAuth();
       navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
       return;
     }
-    // myUserId = User.id (chat backend ho vrací jako sender_id)
     if (mountedRef.current) setMyUserId(auth.userId);
 
     try {
-      const fresh = await api.chatMessages(auth.jwt, channelId);
+      let before: string | undefined;
+      if (mode === 'older' && messages.length > 0) {
+        // První zpráva (nejstarší) — paginace si vezme starší než ona
+        before = messages[0].id;
+        if (!before || before.startsWith('tmp-')) return; // optimistic zpráva, paginate dál ne
+      }
+
+      const fresh = await api.chatMessages(auth.jwt, channelId, before, PAGE_LIMIT);
       if (!mountedRef.current) return;
-      setMessages(fresh as LocalMessage[]);
+
+      if (mode === 'older') {
+        // Appendni nahoru (jsou starší než aktuální nejstarší)
+        setMessages((prev) => [...(fresh as LocalMessage[]), ...prev]);
+        if (fresh.length < PAGE_LIMIT) setHasMoreOlder(false);
+      } else {
+        // Mount nebo refresh — kompletní replace
+        setMessages(fresh as LocalMessage[]);
+        setHasMoreOlder(fresh.length >= PAGE_LIMIT);
+      }
       setError(null);
       api.chatMarkRead(auth.jwt, channelId).catch(() => { /* silent */ });
     } catch (err) {
@@ -103,28 +131,31 @@ export default function ChatThread({ route }: Props) {
         setError('Nepodařilo se načíst zprávy.');
       }
     } finally {
-      if (mountedRef.current) setLoading(false);
+      if (mountedRef.current) {
+        setLoading(false);
+        setRefreshing(false);
+        setLoadingOlder(false);
+      }
     }
-  }, [channelId, navigation]);
+  }, [channelId, navigation, messages]);
 
   useEffect(() => {
-    loadMessages();
-  }, [loadMessages]);
+    loadMessages('mount');
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [channelId]);
 
-  useFocusEffect(useCallback(() => { loadMessages(); }, [loadMessages]));
+  useFocusEffect(useCallback(() => {
+    loadMessages('refresh');
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [channelId]));
 
-  // Společná pošli funkce — content + volitelné attachments[].
-  // Optimistic UI: hned přidá tmp zprávu, po confirmu nahradí reálnou.
+  // Pošli zprávu — společně pro text i attachment.
   async function sendMessage(content: string, attachments: ChatAttachment[] = []) {
     if (sending) return;
     if (!content.trim() && attachments.length === 0) return;
 
     const auth = await loadAuth();
     if (!auth.jwt) return;
-    // POZOR: auth.userId může být null u starších uživatelů, kteří se nepřihlásili
-    // znovu po doručení Krok D OTA (KEY_USER_ID nebyl ještě v SecureStore).
-    // Backend identifikuje uživatele z JWT, takže send funguje i bez userId — jen
-    // bubliny budou všechny vlevo (sender_id !== null userId). Doporučit re-login.
     const localUserId = auth.userId || -1;
 
     tmpCounter.current += 1;
@@ -172,18 +203,19 @@ export default function ChatThread({ route }: Props) {
     sendMessage(draft);
   }
 
-  // ─── Attachments ──────────────────────────────────────────────────────────
-  //
-  // Tři tlačítka v send baru — 📷 kamera, 🖼 galerie, 📎 soubor.
-  // Po výběru: upload na R2 → poslat ChatMessage s attachments[].
+  // Retry: tap na failed bublinu → smaž ji a pošli znovu se stejným obsahem
+  function handleRetry(failed: LocalMessage) {
+    setMessages((prev) => prev.filter((m) => m.id !== failed.id));
+    sendMessage(failed.content, failed.attachments || []);
+  }
 
+  // Attachments — kamera, galerie, soubor
   async function uploadAndSend(file: { uri: string; name: string; mime: string }) {
     const auth = await loadAuth();
     if (!auth.jwt) return;
     setSending(true);
     try {
       const attachment = await api.chatUpload(auth.jwt, file, channelId);
-      // Pošli zprávu s tímhle attachmentem (text z draftu jako caption, pokud je)
       await sendMessage(draft, [attachment]);
     } catch (err) {
       const msg = err instanceof ApiError ? err.message : 'Upload selhal.';
@@ -196,15 +228,12 @@ export default function ChatThread({ route }: Props) {
   async function handleCamera() {
     const perm = await ImagePicker.requestCameraPermissionsAsync();
     if (!perm.granted) {
-      Alert.alert(
-        'Přístup k fotoaparátu',
-        'Povol Velínu používat fotoaparát v Nastavení iPhonu.'
-      );
+      Alert.alert('Přístup k fotoaparátu', 'Povol Velínu používat fotoaparát v Nastavení iPhonu.');
       return;
     }
     const result = await ImagePicker.launchCameraAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      quality: 0.7,           // ~70 % kvalita = malý soubor, ale stále hezký
+      quality: 0.7,
       allowsEditing: false,
     });
     if (result.canceled || !result.assets || result.assets.length === 0) return;
@@ -219,10 +248,7 @@ export default function ChatThread({ route }: Props) {
   async function handleGallery() {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) {
-      Alert.alert(
-        'Přístup k fotkám',
-        'Povol Velínu používat tvoje fotky v Nastavení iPhonu.'
-      );
+      Alert.alert('Přístup k fotkám', 'Povol Velínu používat tvoje fotky v Nastavení iPhonu.');
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -254,6 +280,20 @@ export default function ChatThread({ route }: Props) {
     });
   }
 
+  // File tap — otevři v iOS Files / Quick Look
+  async function openExternalFile(url: string) {
+    try {
+      const can = await Linking.canOpenURL(url);
+      if (!can) {
+        Alert.alert('Nelze otevřít', 'Tento soubor iOS neumí přímo otevřít.');
+        return;
+      }
+      await Linking.openURL(url);
+    } catch (e) {
+      Alert.alert('Chyba', 'Nepodařilo se otevřít soubor.');
+    }
+  }
+
   if (loading && messages.length === 0) {
     return (
       <SafeAreaView style={styles.center} edges={['bottom']}>
@@ -282,14 +322,35 @@ export default function ChatThread({ route }: Props) {
                 message={item}
                 isMe={isMine}
                 showSenderName={!sameAuthorAsPrev && !isMine}
+                onImageTap={(url) => setFullscreenImage(url)}
+                onFileTap={openExternalFile}
+                onRetry={() => handleRetry(item)}
               />
             );
           }}
           contentContainerStyle={styles.list}
           onContentSizeChange={() => {
-            // Auto-scroll na konec při nové zprávě
             flatListRef.current?.scrollToEnd({ animated: true });
           }}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => {
+                setRefreshing(true);
+                loadMessages('refresh');
+              }}
+              tintColor={colors.accent}
+            />
+          }
+          // Paginace: když uživatel scrollne k vrcholu, načti starší
+          onScroll={(e) => {
+            const y = e.nativeEvent.contentOffset.y;
+            if (y < 50 && hasMoreOlder && !loadingOlder && messages.length > 0) {
+              setLoadingOlder(true);
+              loadMessages('older');
+            }
+          }}
+          scrollEventThrottle={400}
           ListEmptyComponent={
             !loading && !error ? (
               <View style={styles.emptyState}>
@@ -298,38 +359,29 @@ export default function ChatThread({ route }: Props) {
             ) : null
           }
           ListHeaderComponent={
-            error ? (
-              <View style={styles.errorBanner}>
-                <Text style={styles.errorText}>⚠ {error}</Text>
-              </View>
-            ) : null
+            <>
+              {loadingOlder && (
+                <View style={styles.olderLoader}>
+                  <ActivityIndicator color={colors.accent} size="small" />
+                </View>
+              )}
+              {error && (
+                <View style={styles.errorBanner}>
+                  <Text style={styles.errorText}>⚠ {error}</Text>
+                </View>
+              )}
+            </>
           }
         />
 
         <View style={styles.sendBar}>
-          {/* Attachment tlačítka */}
-          <TouchableOpacity
-            style={styles.attachBtn}
-            onPress={handleCamera}
-            disabled={sending}
-            activeOpacity={0.6}
-          >
+          <TouchableOpacity style={styles.attachBtn} onPress={handleCamera} disabled={sending} activeOpacity={0.6}>
             <Text style={styles.attachIcon}>📷</Text>
           </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.attachBtn}
-            onPress={handleGallery}
-            disabled={sending}
-            activeOpacity={0.6}
-          >
+          <TouchableOpacity style={styles.attachBtn} onPress={handleGallery} disabled={sending} activeOpacity={0.6}>
             <Text style={styles.attachIcon}>🖼</Text>
           </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.attachBtn}
-            onPress={handleFile}
-            disabled={sending}
-            activeOpacity={0.6}
-          >
+          <TouchableOpacity style={styles.attachBtn} onPress={handleFile} disabled={sending} activeOpacity={0.6}>
             <Text style={styles.attachIcon}>📎</Text>
           </TouchableOpacity>
 
@@ -356,6 +408,30 @@ export default function ChatThread({ route }: Props) {
           </TouchableOpacity>
         </View>
       </SafeAreaView>
+
+      {/* Fullscreen image preview — tap mimo / na X zavře */}
+      <Modal
+        visible={fullscreenImage !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setFullscreenImage(null)}
+      >
+        <Pressable style={styles.fullscreenBg} onPress={() => setFullscreenImage(null)}>
+          {fullscreenImage && (
+            <Image
+              source={{ uri: fullscreenImage }}
+              style={styles.fullscreenImage}
+              resizeMode="contain"
+            />
+          )}
+          <TouchableOpacity
+            style={styles.fullscreenClose}
+            onPress={() => setFullscreenImage(null)}
+          >
+            <Text style={styles.fullscreenCloseText}>✕</Text>
+          </TouchableOpacity>
+        </Pressable>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
@@ -364,25 +440,32 @@ function Bubble({
   message,
   isMe,
   showSenderName,
+  onImageTap,
+  onFileTap,
+  onRetry,
 }: {
   message: LocalMessage;
   isMe: boolean;
   showSenderName: boolean;
+  onImageTap: (url: string) => void;
+  onFileTap: (url: string) => void;
+  onRetry: () => void;
 }) {
   const time = new Date(message.created_at).toLocaleTimeString('cs-CZ', {
     hour: '2-digit',
     minute: '2-digit',
   });
+  const isFailed = message._status === 'failed';
+
+  // Cely Bubble je touchable jen pokud je failed (=retry). Jinak jednotlivé části.
+  const Wrap: any = isFailed ? Pressable : View;
+  const wrapProps = isFailed ? { onPress: onRetry } : {};
 
   return (
     <View style={[styles.row, isMe ? styles.rowMe : styles.rowOther]}>
-      {/* Avatar jen u cizích zpráv (vlevo) */}
       {!isMe && (
         message.sender?.person?.photo_url ? (
-          <Image
-            source={{ uri: message.sender.person.photo_url }}
-            style={styles.avatar}
-          />
+          <Image source={{ uri: message.sender.person.photo_url }} style={styles.avatar} />
         ) : (
           <View style={[styles.avatar, styles.avatarFallback]}>
             <Text style={styles.avatarInitial}>
@@ -392,7 +475,7 @@ function Bubble({
         )
       )}
 
-      <View style={[styles.bubble, isMe ? styles.bubbleMe : styles.bubbleOther]}>
+      <Wrap {...wrapProps} style={[styles.bubble, isMe ? styles.bubbleMe : styles.bubbleOther, isFailed && styles.bubbleFailed]}>
         {showSenderName && message.sender?.display_name && (
           <Text style={styles.senderName}>{message.sender.display_name}</Text>
         )}
@@ -405,19 +488,19 @@ function Bubble({
           <View style={styles.attachments}>
             {message.attachments.map((a, i) =>
               a.kind === 'image' ? (
-                <Image
-                  key={i}
-                  source={{ uri: a.url }}
-                  style={styles.imageAttachment}
-                  resizeMode="cover"
-                />
+                <TouchableOpacity key={i} onPress={() => onImageTap(a.url)} activeOpacity={0.85}>
+                  <Image
+                    source={{ uri: a.url }}
+                    style={styles.imageAttachment}
+                    resizeMode="cover"
+                  />
+                </TouchableOpacity>
               ) : (
-                <Text
-                  key={i}
-                  style={[styles.attachmentLabel, isMe ? styles.textMe : styles.textOther]}
-                >
-                  📎 {a.name || a.url.split('/').pop()}
-                </Text>
+                <TouchableOpacity key={i} onPress={() => onFileTap(a.url)} activeOpacity={0.65}>
+                  <Text style={[styles.attachmentLabel, isMe ? styles.textMe : styles.textOther]}>
+                    📎 {a.name || a.url.split('/').pop()}
+                  </Text>
+                </TouchableOpacity>
               )
             )}
           </View>
@@ -427,11 +510,11 @@ function Bubble({
           {message._status === 'sending' && (
             <Text style={[styles.status, isMe ? styles.timeMe : styles.timeOther]}> · odesílá se…</Text>
           )}
-          {message._status === 'failed' && (
-            <Text style={[styles.status, { color: colors.danger }]}> · ! nedoručeno</Text>
+          {isFailed && (
+            <Text style={[styles.status, { color: colors.danger }]}> · ! tap pro retry</Text>
           )}
         </View>
-      </View>
+      </Wrap>
     </View>
   );
 }
@@ -450,8 +533,8 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(239,68,68,0.3)',
   },
   errorText: { color: colors.danger, fontSize: 13 },
+  olderLoader: { paddingVertical: spacing.md, alignItems: 'center' },
 
-  // Řádek zprávy — wrap pro avatar + bubble
   row: {
     flexDirection: 'row',
     alignItems: 'flex-end',
@@ -461,7 +544,6 @@ const styles = StyleSheet.create({
   rowMe: { justifyContent: 'flex-end' },
   rowOther: { justifyContent: 'flex-start' },
 
-  // Avatar cizí strany
   avatar: {
     width: 28,
     height: 28,
@@ -472,44 +554,33 @@ const styles = StyleSheet.create({
   avatarFallback: { alignItems: 'center', justifyContent: 'center' },
   avatarInitial: { color: colors.text, fontSize: 12, fontWeight: '700' },
 
-  // Bublina obecně
   bubble: {
     maxWidth: '78%',
     borderRadius: 18,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
   },
-  // Mé zprávy — indigo accent, tmavý text
-  bubbleMe: {
-    backgroundColor: colors.accent,
-    borderBottomRightRadius: 4,
-    marginLeft: 'auto',
-  },
-  // Cizí — světlejší slate pro lepší kontrast (oproti původnímu surface)
-  bubbleOther: {
-    backgroundColor: colors.surface2,
-    borderBottomLeftRadius: 4,
-  },
+  bubbleMe: { backgroundColor: colors.accent, borderBottomRightRadius: 4, marginLeft: 'auto' },
+  bubbleOther: { backgroundColor: colors.surface2, borderBottomLeftRadius: 4 },
+  bubbleFailed: { opacity: 0.7, borderWidth: 1, borderColor: colors.danger },
 
-  senderName: {
-    color: colors.accent2,
-    fontSize: 11,
-    fontWeight: '700',
-    marginBottom: 2,
-  },
+  senderName: { color: colors.accent2, fontSize: 11, fontWeight: '700', marginBottom: 2 },
   text: { fontSize: 15, lineHeight: 20 },
-  textMe: { color: '#0b1220' },         // tmavý text na indigo bublině
-  textOther: { color: colors.text },    // světlý text na slate bublině
+  textMe: { color: '#0b1220' },
+  textOther: { color: colors.text },
 
   attachments: { marginTop: spacing.xs },
   attachmentLabel: { fontSize: 13, marginTop: 2 },
 
-  meta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 2,
-    justifyContent: 'flex-end',
+  imageAttachment: {
+    width: 220,
+    height: 220,
+    borderRadius: radius.md,
+    marginTop: spacing.xs,
+    backgroundColor: colors.surface,
   },
+
+  meta: { flexDirection: 'row', alignItems: 'center', marginTop: 2, justifyContent: 'flex-end' },
   time: { fontSize: 10 },
   timeMe: { color: 'rgba(11,18,32,0.6)' },
   timeOther: { color: colors.text2 },
@@ -549,22 +620,30 @@ const styles = StyleSheet.create({
   sendBtnDisabled: { opacity: 0.4 },
   sendBtnText: { color: '#0b1220', fontWeight: '700', fontSize: 15 },
 
-  // Attachment tlačítka — 📷 🖼 📎 — kompaktní, vedle input pole
-  attachBtn: {
-    width: 36,
-    height: 36,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 4,
-  },
+  attachBtn: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center', marginRight: 4 },
   attachIcon: { fontSize: 20 },
 
-  // Image attachment v bublině — fullscreen-ready thumbnail
-  imageAttachment: {
-    width: 220,
-    height: 220,
-    borderRadius: radius.md,
-    marginTop: spacing.xs,
-    backgroundColor: colors.surface,
+  // Fullscreen image modal
+  fullscreenBg: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.95)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
+  fullscreenImage: {
+    width: '100%',
+    height: '100%',
+  },
+  fullscreenClose: {
+    position: 'absolute',
+    top: 48,
+    right: 16,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  fullscreenCloseText: { color: '#fff', fontSize: 22, fontWeight: '700' },
 });

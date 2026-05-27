@@ -155,6 +155,20 @@ export type ChatMessage = {
   } | null;
 };
 
+export type EveningReflection = {
+  id: number;
+  person_id: number;
+  date: string;
+  mood: number | null;
+  energy: number | null;
+  wins: string | null;
+  struggles: string | null;
+  tomorrow_focus: string | null;
+  free_text: string | null;
+  ai_summary: string | null;
+  submitted_at: string;
+};
+
 export type SearchableUser = {
   id: number;
   username: string;
@@ -259,6 +273,32 @@ export const api = {
     const qs = q ? `?q=${encodeURIComponent(q)}` : '';
     return request<SearchableUser[]>('GET', `/api/velin/chat/users/searchable${qs}`, { jwt });
   },
+
+  // ─── Večerní reflexe (Fáze 2) ────────────────────────────────────────────
+  getEveningReflection: (jwt: string, date?: string) => {
+    const qs = date ? `?date=${encodeURIComponent(date)}` : '';
+    return request<{ reflection: EveningReflection | null; date: string }>(
+      'GET',
+      `/api/velin/feedback/evening${qs}`,
+      { jwt }
+    );
+  },
+
+  submitEveningReflection: (
+    jwt: string,
+    data: {
+      mood?: number | null;
+      energy?: number | null;
+      wins?: string | null;
+      struggles?: string | null;
+      tomorrow_focus?: string | null;
+      free_text?: string | null;
+    }
+  ) =>
+    request<{ reflection: EveningReflection }>('POST', '/api/velin/feedback/evening', {
+      jwt,
+      body: data,
+    }),
 
   // Chat upload — fotky/soubory přes multipart/form-data.
   // file.uri = lokální path z expo-image-picker / expo-document-picker.

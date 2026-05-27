@@ -346,6 +346,118 @@ admin.post('/trigger/evening-push', async (req, res, next) => {
   try { await scheduler.handleEveningPush(); res.json({ ok: true }); } catch (e) { next(e); }
 });
 
+// ─── Večerní reflexe — admin view ───────────────────────────────────────────
+//
+// GET /api/velin/admin/reflections?from=YYYY-MM-DD&to=YYYY-MM-DD&person_id=<id>
+//
+// Vrací list reflexí s person.first_name/last_name pro tabulku v admin UI.
+// Default rozsah: posledních 7 dní. Person filtr volitelný.
+//
+// Response: {
+//   reflections: [{ id, date, mood, energy, wins, struggles, tomorrow_focus,
+//                    free_text, ai_summary, submitted_at, person: {...} }],
+//   stats: {
+//     by_person: [{ person_id, name, count, avg_mood, avg_energy, last_date }],
+//     total: { count, avg_mood, avg_energy }
+//   }
+// }
+admin.get('/reflections', async (req, res, next) => {
+  try {
+    // Default = posledních 7 dní (včetně dneška)
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const sevenAgo = new Date(today);
+    sevenAgo.setDate(sevenAgo.getDate() - 6);
+
+    const fromStr = String(req.query.from || '').trim();
+    const toStr = String(req.query.to || '').trim();
+    const from = fromStr ? new Date(fromStr) : sevenAgo;
+    const to = toStr ? new Date(toStr) : today;
+    // Inkluzivní `to` — přidej 23:59:59 ať se zachytí celý den
+    to.setHours(23, 59, 59, 999);
+
+    const personId = req.query.person_id ? parseInt(req.query.person_id, 10) : null;
+
+    const where = {
+      date: { gte: from, lte: to },
+      ...(personId ? { person_id: personId } : {}),
+    };
+
+    const reflections = await prisma.eveningReflection.findMany({
+      where,
+      include: {
+        person: {
+          select: {
+            id: true,
+            first_name: true,
+            last_name: true,
+            photo_url: true,
+          },
+        },
+      },
+      orderBy: [{ date: 'desc' }, { submitted_at: 'desc' }],
+    });
+
+    // Agregace per person
+    const byPersonMap = new Map();
+    for (const r of reflections) {
+      const pid = r.person_id;
+      if (!byPersonMap.has(pid)) {
+        byPersonMap.set(pid, {
+          person_id: pid,
+          name: `${r.person?.first_name || ''} ${r.person?.last_name || ''}`.trim() || `#${pid}`,
+          count: 0,
+          mood_sum: 0,
+          mood_count: 0,
+          energy_sum: 0,
+          energy_count: 0,
+          last_date: null,
+        });
+      }
+      const entry = byPersonMap.get(pid);
+      entry.count += 1;
+      if (typeof r.mood === 'number') {
+        entry.mood_sum += r.mood;
+        entry.mood_count += 1;
+      }
+      if (typeof r.energy === 'number') {
+        entry.energy_sum += r.energy;
+        entry.energy_count += 1;
+      }
+      if (!entry.last_date || r.date > entry.last_date) entry.last_date = r.date;
+    }
+    const by_person = Array.from(byPersonMap.values()).map((p) => ({
+      person_id: p.person_id,
+      name: p.name,
+      count: p.count,
+      avg_mood: p.mood_count ? +(p.mood_sum / p.mood_count).toFixed(2) : null,
+      avg_energy: p.energy_count ? +(p.energy_sum / p.energy_count).toFixed(2) : null,
+      last_date: p.last_date,
+    })).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+
+    // Celkový průměr
+    let mood_sum = 0, mood_count = 0, energy_sum = 0, energy_count = 0;
+    for (const r of reflections) {
+      if (typeof r.mood === 'number') { mood_sum += r.mood; mood_count += 1; }
+      if (typeof r.energy === 'number') { energy_sum += r.energy; energy_count += 1; }
+    }
+    const total = {
+      count: reflections.length,
+      avg_mood: mood_count ? +(mood_sum / mood_count).toFixed(2) : null,
+      avg_energy: energy_count ? +(energy_sum / energy_count).toFixed(2) : null,
+    };
+
+    res.json({
+      from,
+      to,
+      reflections,
+      stats: { by_person, total },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.use('/admin', admin);
 
 // =============================================================================
@@ -719,6 +831,25 @@ mobile.post('/tasks/:id/messages', async (req, res, next) => {
       },
     });
     res.status(201).json({ message: msg });
+  } catch (err) { next(err); }
+});
+
+// GET /api/velin/feedback/evening?date=YYYY-MM-DD (default: dnes)
+// Vrátí už uloženou reflexi pro daný den, nebo null (pro pre-fill ve screen).
+mobile.get('/feedback/evening', async (req, res, next) => {
+  try {
+    let date;
+    if (req.query.date) {
+      date = new Date(String(req.query.date));
+      date.setHours(0, 0, 0, 0);
+    } else {
+      date = startOfToday();
+    }
+    const personId = req.velin.person.id;
+    const reflection = await prisma.eveningReflection.findUnique({
+      where: { person_id_date: { person_id: personId, date } },
+    });
+    res.json({ reflection: reflection || null, date });
   } catch (err) { next(err); }
 });
 
