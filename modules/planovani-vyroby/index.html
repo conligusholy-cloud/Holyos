@@ -325,6 +325,7 @@
         buttons.push(`<button class="btn btn-sm btn-secondary" data-action="mrp" data-id="${v.id}" title="MRP — kontrola materiálu pro tuto dávku">📊 MRP</button>`);
         buttons.push(`<button class="btn btn-sm btn-secondary" data-action="pre-pick" data-id="${v.id}" title="Pre-pick — návrh transferů materiálu na pracoviště">🚚 Pre-pick</button>`);
         if (opCount > 0 && v.status !== 'done' && v.status !== 'cancelled') buttons.push(`<button class="btn btn-sm btn-secondary" data-action="schedule" data-id="${v.id}" title="Naplánovat časy operací (planned_start/end)">📅 Naplánuj</button>`);
+        if (opCount > 0 && v.status !== 'done' && v.status !== 'cancelled') buttons.push(`<button class="btn btn-sm btn-secondary" data-action="push-velin" data-id="${v.id}" title="Pošli operace s přiřazeným kolegou do Velína (mobilní úkoly)">🚀 Pošli do Velína</button>`);
         if (v.status === 'planned') buttons.push(`<button class="btn btn-sm btn-success" data-action="release" data-id="${v.id}" title="Vydat do výroby">▶ Vydat</button>`);
         if (v.status === 'released' || v.status === 'in_progress') buttons.push(`<button class="btn btn-sm btn-secondary" data-action="pause" data-id="${v.id}" title="Pozastavit">⏸️</button>`);
         if (v.status === 'paused') buttons.push(`<button class="btn btn-sm btn-success" data-action="resume" data-id="${v.id}" title="Obnovit">▶ Obnovit</button>`);
@@ -521,8 +522,17 @@
           const work = result.work_minutes != null ? result.work_minutes : (result.total_minutes || 0);
           const wait = result.wait_minutes || 0;
           const shiftInfo = result.shift_config?.enabled ? `Shift: ${result.shift_config.start}–${result.shift_config.end}` : 'Shift: 24/7';
-          alert(`📅 Naplánováno ${result.operations_scheduled} operací\nZačátek: ${new Date(result.plan_start).toLocaleString('cs-CZ')}\nKonec: ${new Date(result.plan_end).toLocaleString('cs-CZ')}\nPráce: ${work} min | čekání: ${wait} min (idle ${result.idle_pct || 0}%)\n${shiftInfo}`);
+          const velinInfo = result.velin_sync
+            ? `\n🚀 Velín: ${result.velin_sync.created || 0} nových úkolů, ${result.velin_sync.updated || 0} aktualizovaných, ${result.velin_sync.skipped || 0} bez kolegy${result.velin_sync.errored ? `, ${result.velin_sync.errored} chyb` : ''}`
+            : '';
+          alert(`📅 Naplánováno ${result.operations_scheduled} operací\nZačátek: ${new Date(result.plan_start).toLocaleString('cs-CZ')}\nKonec: ${new Date(result.plan_end).toLocaleString('cs-CZ')}\nPráce: ${work} min | čekání: ${wait} min (idle ${result.idle_pct || 0}%)\n${shiftInfo}${velinInfo}`);
         }
+      } else if (action === 'push-velin') {
+        const r = await fetch(`/api/planning/batches/${id}/push-to-velin`, { method: 'POST', headers: authHeaders() });
+        if (!r.ok) throw new Error((await r.json()).error || 'HTTP ' + r.status);
+        const result = await r.json();
+        const c = result.count || {};
+        alert(`🚀 Posláno do Velína\n• Nové úkoly: ${c.created || 0}\n• Aktualizované: ${c.updated || 0}\n• Bez kolegy / bez plánu: ${c.skipped || 0}${c.errored ? `\n• Chyby: ${c.errored}` : ''}`);
       }
       await loadAll();
     } catch (err) {
