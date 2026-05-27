@@ -30,6 +30,7 @@ const {
 } = require('../services/velin/auth');
 const scheduler = require('../services/workers/velin-scheduler');
 const r2 = require('../services/storage/r2');
+const velinBridge = require('../services/planning/velin-bridge');
 
 // Multer in-memory storage pro chat attachmenty (max 15 MB).
 // Nepoužíváme disk — soubor jde rovnou z paměti do R2 a buffer se uvolní.
@@ -837,7 +838,53 @@ mobile.get('/tasks/:id', async (req, res, next) => {
     if (task.person_id !== req.velin.person.id) {
       return res.status(403).json({ error: 'Tento úkol není přidělen tobě' });
     }
-    res.json({ task });
+
+    // Pokud úkol pochází z plánovače (source='production', source_ref_type='BatchOperation'),
+    // dopočítej info o dávce: číslo + produkt + pracoviště. Použito v mobilu pro
+    // badge 🏭 + číslo dávky + pracoviště u úkolu (Krok D Fáze 4).
+    let batchInfo = null;
+    if (task.source === 'production' && task.source_ref_type === 'BatchOperation' && task.source_ref_id) {
+      try {
+        const op = await prisma.batchOperation.findUnique({
+          where: { id: task.source_ref_id },
+          select: {
+            id: true,
+            status: true,
+            planned_start: true,
+            planned_end: true,
+            batch: {
+              select: {
+                id: true,
+                batch_number: true,
+                quantity: true,
+                product: { select: { id: true, name: true, code: true } },
+              },
+            },
+            operation: { select: { id: true, name: true } },
+            workstation: { select: { id: true, name: true } },
+          },
+        });
+        if (op) {
+          batchInfo = {
+            batch_operation_id: op.id,
+            op_status: op.status,
+            planned_start: op.planned_start,
+            planned_end: op.planned_end,
+            operation_name: op.operation?.name || null,
+            batch_id: op.batch?.id || null,
+            batch_number: op.batch?.batch_number || null,
+            batch_quantity: op.batch?.quantity || null,
+            product_name: op.batch?.product?.name || null,
+            product_code: op.batch?.product?.code || null,
+            workstation_name: op.workstation?.name || null,
+          };
+        }
+      } catch (e) {
+        console.warn('[velin] batchInfo lookup selhal:', e.message);
+      }
+    }
+
+    res.json({ task, batchInfo });
   } catch (err) { next(err); }
 });
 
@@ -852,6 +899,23 @@ async function transitionTask(req, res, next, opts) {
     }
     const data = opts.data(task, req);
     const updated = await prisma.taskAssignment.update({ where: { id }, data });
+
+    // Round-trip do plánovače: pokud má úkol source_ref_type='BatchOperation'
+    // a opts.bridgeAction je definovaná, propíšeme status zpět do BatchOperation.
+    // Bridge je idempotentní a tichý — chyba zde nesmí shodit celý request.
+    if (opts.bridgeAction && updated.source_ref_type === 'BatchOperation' && updated.source_ref_id) {
+      try {
+        const bridgePayload = opts.bridgePayload ? opts.bridgePayload(updated, req) : {};
+        await velinBridge.propagateTaskStatusToBatchOperation(
+          updated.id,
+          opts.bridgeAction,
+          bridgePayload
+        );
+      } catch (e) {
+        console.warn('[velin/transitionTask] back-prop do BatchOperation selhal:', e.message);
+      }
+    }
+
     res.json({ task: updated });
   } catch (err) { next(err); }
 }
@@ -859,11 +923,13 @@ async function transitionTask(req, res, next, opts) {
 mobile.post('/tasks/:id/accept', (req, res, next) =>
   transitionTask(req, res, next, {
     data: () => ({ status: 'accepted', accepted_at: new Date() }),
+    // accept = jen kolega potvrdil "ano udělám" → BatchOperation zůstává planned
   }));
 
 mobile.post('/tasks/:id/start', (req, res, next) =>
   transitionTask(req, res, next, {
     data: () => ({ status: 'in_progress', started_at: new Date(), accepted_at: undefined }),
+    bridgeAction: 'start',
   }));
 
 mobile.post('/tasks/:id/block', (req, res, next) =>
@@ -873,6 +939,10 @@ mobile.post('/tasks/:id/block', (req, res, next) =>
       blocked_at: new Date(),
       blocked_reason: (r.body && String(r.body.reason || '').slice(0, 5000)) || 'bez důvodu',
     }),
+    bridgeAction: 'block',
+    bridgePayload: (task, r) => ({
+      reason: (r.body && String(r.body.reason || '').slice(0, 5000)) || 'bez důvodu',
+    }),
   }));
 
 mobile.post('/tasks/:id/complete', (req, res, next) =>
@@ -881,6 +951,10 @@ mobile.post('/tasks/:id/complete', (req, res, next) =>
       status: 'done',
       completed_at: new Date(),
       actual_min: Number.isFinite(r.body?.actual_min) ? r.body.actual_min : null,
+    }),
+    bridgeAction: 'complete',
+    bridgePayload: (task, r) => ({
+      actual_min: Number.isFinite(r.body?.actual_min) ? r.body.actual_min : undefined,
     }),
   }));
 
