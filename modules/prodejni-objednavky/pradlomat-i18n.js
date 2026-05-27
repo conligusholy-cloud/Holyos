@@ -562,4 +562,7 @@
     var d = DICT[ACTIVE];
     if (d && Object.prototype.hasOwnProperty.call(d, key)) return d[key];
     return key;
- 
+  }
+
+  global.PradlomatI18n = { setLang: setLang, getLang: getLang, locale: locale, t: t, _dict: DICT };
+})(typeof window !== 'undefined' ? window : this);

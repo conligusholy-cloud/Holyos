@@ -1552,9 +1552,14 @@
       const selectedMat = materialId ? allMaterials.find(m => m.id == materialId) : null;
       const displayName = selectedMat ? selectedMat.name + ' (' + selectedMat.code + ')' : '';
 
+      // BUG #68 fix: Enter v políčku Hledat = auto-vybrat první výsledek.
+      // Bez tohohle uživatel napsal "NA0265", stiskl Enter, řádek vypadal hotový,
+      // ale .mat-select hidden input zůstal prázdný → save řádek tiše přeskočil.
+      // Reset výběru při dalším psaní (input event) → zabraň "duch" výběru,
+      // kdy uživatel přepíše text, ale .mat-select pořád ukazuje starý materiál.
       row.innerHTML =
         '<div class="search-select">' +
-          '<input type="text" class="ss-input" placeholder="Hledat zboží..." value="' + esc(displayName) + '" onfocus="openSearchSelect(this)" oninput="filterSearchSelect(this)">' +
+          '<input type="text" class="ss-input" placeholder="Hledat zboží (vyber z nabídky nebo Enter)..." value="' + esc(displayName) + '" onfocus="openSearchSelect(this)" oninput="onSearchSelectInput(this)" onkeydown="onSearchSelectKey(event, this)">' +
           '<input type="hidden" class="mat-select" value="' + (materialId || '') + '">' +
           '<div class="ss-dropdown"></div>' +
         '</div>' +
@@ -1563,6 +1568,50 @@
         '<button class="btn" onclick="this.parentElement.remove()" style="padding:4px 8px;font-size:11px;">&times;</button>';
 
       container.appendChild(row);
+    }
+
+    // Wrapper kolem filterSearchSelect — zruší předchozí výběr (.mat-select),
+    // pokud uživatel přepisuje text. Bez tohohle by .mat-select držel starý
+    // materiál i po přepsání hledacího políčka a save by uložil jiný materiál
+    // než ten, který má uživatel v políčku.
+    function onSearchSelectInput(input) {
+      const ss = input.parentElement;
+      const hidden = ss.querySelector('.mat-select');
+      const row = ss.closest('.mat-row');
+      const typed = (input.value || '').trim();
+      // Pokud uživatel napsal něco jiného než label vybraného materiálu, reset.
+      if (hidden && hidden.value) {
+        const selectedMat = allMaterials.find(m => String(m.id) === String(hidden.value));
+        const expectedLabel = selectedMat ? (selectedMat.name + ' (' + selectedMat.code + ')') : '';
+        if (typed !== expectedLabel) {
+          hidden.value = '';
+          if (row) row.dataset.materialId = '';
+          if (row) row.dataset.productId = '';
+        }
+      }
+      // Odstraň zvýraznění chyby — uživatel řádek edituje
+      if (row) { row.style.outline = ''; row.style.background = ''; }
+      filterSearchSelect(input);
+    }
+
+    // Enter = auto-vybrat první položku z otevřeného dropdownu.
+    // Bez tohohle Enter neselektoval, save tiše dropnul řádek.
+    function onSearchSelectKey(ev, input) {
+      if (ev.key === 'Enter') {
+        ev.preventDefault();
+        const dd = input.parentElement.querySelector('.ss-dropdown');
+        const first = dd && dd.querySelector('.ss-item');
+        if (first) {
+          // Simuluj kliknutí — položka má onmousedown handler
+          const e = new MouseEvent('mousedown', { bubbles: true });
+          first.dispatchEvent(e);
+          input.blur();
+        }
+      } else if (ev.key === 'Escape') {
+        const dd = input.parentElement.querySelector('.ss-dropdown');
+        if (dd) dd.classList.remove('open');
+        input.blur();
+      }
     }
 
     function openSearchSelect(input) {
@@ -1637,14 +1686,52 @@
       const name = document.getElementById('op-name').value.trim();
       if (!name) return toast('Vyplňte název operace', true);
 
-      // Sesbírej materiály z modálu — s product_id pokud existuje
+      // Sesbírej materiály z modálu — s product_id pokud existuje.
+      //
+      // BUG #68 fix: dřív jsme tu tiše přeskakovali řádky, kde uživatel napsal
+      // text do vyhledávacího políčka, ale neklikl na konkrétní položku
+      // z dropdownu (.mat-select hidden input zůstal prázdný). PUT pak smazal
+      // staré materiály a žádné nové nevytvořil — rozpiska se "ztratila"
+      // bez jediné chybové hlášky. Teď takový řádek hlásíme a uložení
+      // přerušíme, ať uživatel může chybu opravit.
       const matRows = document.querySelectorAll('#mat-rows .mat-row');
       const materials = [];
-      matRows.forEach(row => {
-        const materialId = parseInt(row.querySelector('.mat-select').value);
-        const qty = parseFloat(row.querySelector('.mat-qty').value);
-        const unit = row.querySelector('.mat-unit').value || 'ks';
-        if (!materialId || !qty) return;
+      const incomplete = []; // {idx, reason, typedText}
+      matRows.forEach((row, idx) => {
+        const selectEl = row.querySelector('.mat-select');
+        const qtyEl    = row.querySelector('.mat-qty');
+        const unitEl   = row.querySelector('.mat-unit');
+        const inputEl  = row.querySelector('.ss-input');
+        const materialId = parseInt(selectEl && selectEl.value);
+        const qty        = parseFloat(qtyEl && qtyEl.value);
+        const unit       = (unitEl && unitEl.value) ? unitEl.value : 'ks';
+        const typedText  = (inputEl && inputEl.value || '').trim();
+
+        // Úplně prázdný řádek (žádný text, žádné množství) — nechtěný "+ Přidat materiál"
+        // klik. Klidně přeskoč, není to data loss.
+        const isEmptyRow = !typedText && (!qtyEl || qtyEl.value === '' || qty === 1);
+        if (!materialId && isEmptyRow) return;
+
+        // Něco vyplněno, ale chybí jednoznačně vybraný materiál → ohlaš.
+        if (!materialId) {
+          incomplete.push({
+            idx: idx + 1,
+            reason: typedText
+              ? 'Materiál „' + typedText + '" není vybraný z nabídky (klikni na položku v rozbalovacím seznamu).'
+              : 'Materiál není vyplněný.',
+            row,
+          });
+          return;
+        }
+        if (Number.isNaN(qty) || qty <= 0) {
+          incomplete.push({
+            idx: idx + 1,
+            reason: 'Množství u materiálu musí být kladné číslo (řádek ' + (idx + 1) + ').',
+            row,
+          });
+          return;
+        }
+
         // Použij linked_product_id přímo z dat (uložen v dataset.productId při výběru)
         // Fallback: hledej přes allProductsList a allMaterials
         let productId = row.dataset.productId ? parseInt(row.dataset.productId) : null;
@@ -1665,6 +1752,24 @@
           unit,
         });
       });
+
+      // Pokud existuje nedořešený řádek, zvýrazni ho a uložení přeruš.
+      if (incomplete.length > 0) {
+        // Vizuální zvýraznění problémových řádků
+        document.querySelectorAll('#mat-rows .mat-row').forEach(r => {
+          r.style.outline = '';
+          r.style.background = '';
+        });
+        incomplete.forEach(it => {
+          if (it.row) {
+            it.row.style.outline = '2px solid #ef4444';
+            it.row.style.background = 'rgba(239,68,68,0.08)';
+          }
+        });
+        const lines = incomplete.map(it => '• Řádek ' + it.idx + ': ' + it.reason).join('\n');
+        alert('Operace se NEULOŽÍ — některé řádky materiálu nejsou platné:\n\n' + lines + '\n\nOprav nebo smaž označené řádky a zkus to znovu.');
+        return; // přeruš save — modal zůstává otevřený
+      }
 
       const data = {
         product_id: product.id,

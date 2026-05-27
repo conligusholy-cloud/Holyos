@@ -359,16 +359,45 @@
       const [ship, pay] = await Promise.all([api('/shipping-methods'), api('/payment-methods')]);
       State.shippingMethods = ship;
       State.paymentMethods = pay;
-      // Předvyplň adresu z firmy
+
+      // Předvyplnění z poslední ne-cancelled objednávky (perzistence napříč
+      // checkouty) — jen pokud pole jsou prázdná. Fail-tolerant: chyba načtení
+      // neblokuje checkout, jen předvyplnění z firmy/profilu zafunguje místo toho.
+      let lastOrder = null;
+      try {
+        const orders = await api('/orders');
+        lastOrder = (orders || []).find(o => o.status !== 'cancelled');
+        // GET /orders vrací list bez ship_to_*, musíme detail
+        if (lastOrder) {
+          lastOrder = await api(`/orders/${lastOrder.id}`);
+        }
+      } catch (_e) { /* ignore */ }
+
+      const c = State.checkout;
+      if (lastOrder) {
+        c.ship_to_name    = c.ship_to_name    || lastOrder.ship_to_name    || '';
+        c.ship_to_company = c.ship_to_company || lastOrder.ship_to_company || '';
+        c.ship_to_address = c.ship_to_address || lastOrder.ship_to_address || '';
+        c.ship_to_city    = c.ship_to_city    || lastOrder.ship_to_city    || '';
+        c.ship_to_zip     = c.ship_to_zip     || lastOrder.ship_to_zip     || '';
+        c.ship_to_country = c.ship_to_country || lastOrder.ship_to_country || 'CZ';
+        c.ship_to_email   = c.ship_to_email   || lastOrder.ship_to_email   || '';
+        c.ship_to_phone   = c.ship_to_phone   || lastOrder.ship_to_phone   || '';
+        c.shipping_method_id = c.shipping_method_id || (lastOrder.shipping_method && lastOrder.shipping_method.id) || null;
+        c.payment_method_id  = c.payment_method_id  || (lastOrder.payment_method  && lastOrder.payment_method.id)  || null;
+      }
+
+      // Fallback: pokud pořád prázdné, vezmi z firmy/profilu
       if (State.me && State.me.company) {
-        State.checkout.ship_to_company = State.checkout.ship_to_company || State.me.company.name;
+        c.ship_to_company = c.ship_to_company || State.me.company.name;
       }
       if (State.me && State.me.partner) {
-        State.checkout.ship_to_name = State.checkout.ship_to_name || State.me.partner.display_name;
-        State.checkout.ship_to_email = State.checkout.ship_to_email || State.me.partner.email || '';
+        c.ship_to_name  = c.ship_to_name  || State.me.partner.display_name;
+        c.ship_to_email = c.ship_to_email || State.me.partner.email || '';
       }
-      if (!State.checkout.shipping_method_id && ship.length) State.checkout.shipping_method_id = ship[0].id;
-      if (!State.checkout.payment_method_id && pay.length) State.checkout.payment_method_id = pay[0].id;
+      if (!c.shipping_method_id && ship.length) c.shipping_method_id = ship[0].id;
+      if (!c.payment_method_id && pay.length) c.payment_method_id = pay[0].id;
+
       State.view = 'checkout';
       render();
     } catch (err) { State.error = err.message; State.view = 'error'; render(); }
