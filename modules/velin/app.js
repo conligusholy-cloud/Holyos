@@ -546,7 +546,118 @@
   document.addEventListener('DOMContentLoaded', () => {
     const btn = document.getElementById('btn-refl-reload');
     if (btn) btn.addEventListener('click', loadReflections);
+    const attBtn = document.getElementById('btn-att-reload');
+    if (attBtn) attBtn.addEventListener('click', loadAttendance);
   });
+
+  // ─── Docházka — admin (Fáze 3) ─────────────────────────────────────────
+  async function loadAttendance() {
+    const fromInp = $('#att-from');
+    const toInp = $('#att-to');
+    if (!fromInp.value || !toInp.value) {
+      const today = new Date();
+      const week = new Date();
+      week.setDate(week.getDate() - 6);
+      const fmt = (d) => d.toISOString().slice(0, 10);
+      if (!fromInp.value) fromInp.value = fmt(week);
+      if (!toInp.value) toInp.value = fmt(today);
+    }
+    const qs = `?from=${fromInp.value}&to=${toInp.value}`;
+    const { summary, punches } = await apiGet('/admin/attendance' + qs);
+
+    const summaryWrap = $('#att-summary-wrap');
+    const punchesWrap = $('#att-punches-wrap');
+    const statsSpan = $('#att-stats-summary');
+
+    statsSpan.textContent = `${summary.length} dní/osoba · ${punches.length} záznamů`;
+
+    if (summary.length === 0) {
+      summaryWrap.innerHTML = '';
+      punchesWrap.innerHTML = `<div style="padding:24px;text-align:center;color:var(--text2);">Žádné záznamy v tomto rozsahu.</div>`;
+      return;
+    }
+
+    // Souhrn per (person, day) — tabulka s hodinami v provozu
+    summaryWrap.innerHTML = `
+      <table class="data-table">
+        <thead><tr>
+          <th>Datum</th>
+          <th>Kolega</th>
+          <th>Příchod</th>
+          <th>Odchod</th>
+          <th>Hodiny</th>
+          <th>Záznamů</th>
+          <th>Zdroj</th>
+        </tr></thead>
+        <tbody>
+          ${summary.map((s) => {
+            const dateLocal = new Date(s.date + 'T00:00:00').toLocaleDateString('cs-CZ', { day: 'numeric', month: 'numeric', weekday: 'short' });
+            const arrival = s.first_in ? new Date(s.first_in).toLocaleTimeString('cs-CZ', { hour: '2-digit', minute: '2-digit' }) : '—';
+            const departure = s.last_out ? new Date(s.last_out).toLocaleTimeString('cs-CZ', { hour: '2-digit', minute: '2-digit' }) : '—';
+            const hours = s.hours_in_provoz != null ? `${s.hours_in_provoz} h` : '—';
+            const srcBadges = s.sources.map((src) => {
+              const isAuto = src === 'velin_geofence_auto';
+              return `<span style="font-size:10px;padding:2px 6px;border-radius:4px;margin-right:2px;background:${isAuto ? 'rgba(99,102,241,0.18)' : 'rgba(148,163,184,0.18)'};color:${isAuto ? '#a5b4fc' : '#cbd5e1'};">${isAuto ? '🛰' : '✋'}</span>`;
+            }).join('');
+            return `
+              <tr>
+                <td>${dateLocal}</td>
+                <td>${escapeHtml(s.name)}</td>
+                <td>${arrival}</td>
+                <td>${departure}</td>
+                <td style="font-weight:600;color:${s.hours_in_provoz && s.hours_in_provoz >= 7 ? '#22c55e' : 'var(--text)'};">${hours}</td>
+                <td>${s.punch_count}</td>
+                <td>${srcBadges}</td>
+              </tr>
+            `;
+          }).join('')}
+        </tbody>
+      </table>
+    `;
+
+    // Detailní punches níže (collapsible by default — pro Fázi 3 MVP necháváme jako tabulku)
+    punchesWrap.innerHTML = `
+      <h3 style="color:var(--text2);font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;margin:0 0 8px;">Detail záznamů (${punches.length})</h3>
+      <table class="data-table">
+        <thead><tr>
+          <th>Čas</th>
+          <th>Kolega</th>
+          <th>Typ</th>
+          <th>Zdroj</th>
+          <th>V provoze</th>
+          <th>GPS</th>
+        </tr></thead>
+        <tbody>
+          ${punches.slice(0, 200).map((p) => {
+            const ts = new Date(p.punched_at).toLocaleString('cs-CZ', { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' });
+            const name = `${p.person?.first_name || ''} ${p.person?.last_name || ''}`.trim() || `#${p.person_id}`;
+            const gps = p.lat != null && p.lng != null
+              ? `${p.lat.toFixed(5)}, ${p.lng.toFixed(5)}${p.accuracy_m ? ` (±${Math.round(p.accuracy_m)}m)` : ''}`
+              : '—';
+            return `
+              <tr>
+                <td>${ts}</td>
+                <td>${escapeHtml(name)}</td>
+                <td>${kindLabel(p.kind)}</td>
+                <td>${p.source === 'velin_geofence_auto' ? '🛰 auto' : '✋ ručně'}</td>
+                <td>${p.inside_fence ? '✓' : '—'}</td>
+                <td style="font-size:11px;color:var(--text2);">${gps}</td>
+              </tr>
+            `;
+          }).join('')}
+        </tbody>
+      </table>
+      ${punches.length > 200 ? `<div style="padding:12px;text-align:center;color:var(--text2);font-size:12px;">Zobrazeno prvních 200 z ${punches.length}. Zúžit rozsah dat pro úplný přehled.</div>` : ''}
+    `;
+  }
+
+  function kindLabel(k) {
+    if (k === 'in') return 'Příchod';
+    if (k === 'out') return 'Odchod';
+    if (k === 'break_start') return 'Pauza start';
+    if (k === 'break_end') return 'Pauza konec';
+    return k;
+  }
 
   // ─── Dispatcher ────────────────────────────────────────────────────────
   function loadTab(name) {
@@ -556,6 +667,7 @@
     if (name === 'skills')      return loadSkills();
     if (name === 'fences')      return loadFences();
     if (name === 'reflections') return loadReflections();
+    if (name === 'attendance')  return loadAttendance();
   }
 
   // Init

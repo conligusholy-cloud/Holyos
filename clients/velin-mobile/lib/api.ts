@@ -155,6 +155,20 @@ export type ChatMessage = {
   } | null;
 };
 
+export type AttendancePunch = {
+  id: number;
+  person_id: number;
+  kind: 'in' | 'out' | 'break_start' | 'break_end';
+  source: string;
+  lat: number | null;
+  lng: number | null;
+  accuracy_m: number | null;
+  inside_fence: boolean;
+  fence_id: number | null;
+  punched_at: string;
+  notes: string | null;
+};
+
 export type EveningReflection = {
   id: number;
   person_id: number;
@@ -351,6 +365,29 @@ export const api = {
       throw new ApiError(0, err?.message || 'Síťová chyba při uploadu', null);
     }
   },
+
+  // ─── Docházka (Fáze 3) ───────────────────────────────────────────────────
+  attendanceToday: (jwt: string) =>
+    request<{ punches: AttendancePunch[]; currentState: 'in' | 'out' | 'break' }>(
+      'GET',
+      '/api/velin/attendance/today',
+      { jwt }
+    ),
+
+  attendancePunch: (
+    jwt: string,
+    data: {
+      kind: 'in' | 'out' | 'break_start' | 'break_end';
+      lat?: number | null;
+      lng?: number | null;
+      accuracy_m?: number | null;
+      source?: 'velin_manual' | 'velin_geofence_auto';
+    }
+  ) =>
+    request<{ punch: AttendancePunch }>('POST', '/api/velin/attendance/punch', {
+      jwt,
+      body: data,
+    }),
 };
 
 export { API_BASE };
