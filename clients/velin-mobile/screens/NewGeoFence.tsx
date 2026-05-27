@@ -6,7 +6,7 @@
 //   2) Otevře tento screen z Attendance
 //   3) Vyplní název + radius (default 150 m)
 //   4) Stiskne "Změřit a vytvořit"
-//   5) Velín si vyžádá foreground GPS, zjistí lat/lng s vysokou přesností
+//   5) Velín si vyžádá foreground GPS, posbírá 8 vzorků a vezme medián
 //   6) POST /api/velin/fences/from-here (admin guard na backendu)
 //   7) Alert s úspěchem → goBack
 //
@@ -34,13 +34,40 @@ import { loadAuth, clearAuth } from '../lib/auth';
 import { colors, radius, spacing } from '../lib/theme';
 import type { RootStackParamList } from '../App';
 
+// =============================================================================
+// Vícenásobné měření — medián z 8 vzorků
+// =============================================================================
+// Single-shot GPS má v dílně (kovová střecha, panely) typickou přesnost 15-40 m
+// s rozptylem ±10 m mezi po sobě jdoucími měřeními. Když změříme 8× za sebou
+// a vezmeme medián lat/lng, vychýlené vzorky (outliers) se odfiltrují a střed
+// kruhu sedne přesněji do reálného středu provozu.
+//
+// SAMPLE_INTERVAL_MS = 900 — telefon má dost času zachytit nové satelitní fixy.
+// Outlier filter (>30 m) se aplikuje jen pokud zbyde alespoň 4 dobré vzorky.
+const SAMPLE_COUNT = 8;
+const SAMPLE_INTERVAL_MS = 900;
+
+function median(nums: number[]): number {
+  const sorted = [...nums].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0
+    ? (sorted[mid - 1] + sorted[mid]) / 2
+    : sorted[mid];
+}
+
 export default function NewGeoFence() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [name, setName] = useState('');
   const [radiusM, setRadiusM] = useState('150');
   const [measuring, setMeasuring] = useState(false);
+  const [measureProgress, setMeasureProgress] = useState(0);
   const [submitting, setSubmitting] = useState(false);
-  const [position, setPosition] = useState<{ lat: number; lng: number; accuracy: number } | null>(null);
+  const [position, setPosition] = useState<{
+    lat: number;
+    lng: number;
+    accuracy: number;
+    samples: number;
+  } | null>(null);
 
   useEffect(() => {
     navigation.setOptions({
@@ -54,6 +81,7 @@ export default function NewGeoFence() {
 
   async function handleMeasure() {
     setMeasuring(true);
+    setMeasureProgress(0);
     try {
       const perm = await Location.requestForegroundPermissionsAsync();
       if (!perm.granted) {
@@ -63,19 +91,55 @@ export default function NewGeoFence() {
         );
         return;
       }
-      // High accuracy = trvá déle (5-10 s), ale výrazně přesnější
-      const pos = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.Highest,
-      });
+
+      // Posbírej SAMPLE_COUNT vzorků s krátkou pauzou mezi nimi
+      const samples: Array<{ lat: number; lng: number; accuracy: number }> = [];
+      for (let i = 0; i < SAMPLE_COUNT; i++) {
+        try {
+          const pos = await Location.getCurrentPositionAsync({
+            accuracy: Location.Accuracy.BestForNavigation,
+          });
+          samples.push({
+            lat: pos.coords.latitude,
+            lng: pos.coords.longitude,
+            accuracy: pos.coords.accuracy || 999,
+          });
+        } catch {
+          // Tichý fail jednoho vzorku — pokračujeme dál
+        }
+        setMeasureProgress(i + 1);
+        if (i < SAMPLE_COUNT - 1) {
+          await new Promise((resolve) => setTimeout(resolve, SAMPLE_INTERVAL_MS));
+        }
+      }
+
+      if (samples.length === 0) {
+        Alert.alert(
+          'Chyba GPS',
+          'Nepodařilo se získat žádnou polohu. Zkus to venku, kde lépe vidíš oblohu.'
+        );
+        return;
+      }
+
+      // Outlier filter: pokud máme aspoň 4 vzorky lepší než 30 m, použij jen ty
+      const goodSamples = samples.filter((s) => s.accuracy <= 30);
+      const useSamples = goodSamples.length >= 4 ? goodSamples : samples;
+
+      const medLat = median(useSamples.map((s) => s.lat));
+      const medLng = median(useSamples.map((s) => s.lng));
+      const bestAccuracy = Math.min(...useSamples.map((s) => s.accuracy));
+
       setPosition({
-        lat: pos.coords.latitude,
-        lng: pos.coords.longitude,
-        accuracy: pos.coords.accuracy || 0,
+        lat: medLat,
+        lng: medLng,
+        accuracy: bestAccuracy,
+        samples: useSamples.length,
       });
     } catch (e) {
       Alert.alert('Chyba GPS', 'Nepodařilo se získat polohu. Zkus to znovu venku, lépe vidí satelity.');
     } finally {
       setMeasuring(false);
+      setMeasureProgress(0);
     }
   }
 
@@ -137,8 +201,9 @@ export default function NewGeoFence() {
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
           <Text style={styles.intro}>
             Postav se přesně doprostřed provozu (např. uprostřed dílny, nebo u brány) a stiskni
-            <Text style={{ fontWeight: '700' }}> Změřit polohu</Text>. Velín si vezme přesné GPS
-            souřadnice a vytvoří z nich kruh, ve kterém pak automaticky pozná příchod/odchod.
+            <Text style={{ fontWeight: '700' }}> Změřit polohu</Text>. Velín posbírá 8 GPS vzorků
+            a vezme z nich medián — to výrazně zpřesní střed kruhu i uvnitř budovy. Měření trvá
+            cca 10 sekund, drž telefon klidně.
           </Text>
 
           <Text style={styles.label}>Název provozu</Text>
@@ -175,25 +240,30 @@ export default function NewGeoFence() {
             {measuring ? (
               <>
                 <ActivityIndicator color={colors.text} />
-                <Text style={styles.measureBtnText}>  Měřím polohu…</Text>
+                <Text style={styles.measureBtnText}>
+                  {`  Měřím polohu… ${measureProgress}/${SAMPLE_COUNT}`}
+                </Text>
               </>
             ) : (
               <Text style={styles.measureBtnText}>
-                {position ? '🛰  Změřit znovu' : '🛰  Změřit polohu (5-10 s)'}
+                {position ? '🛰  Změřit znovu' : '🛰  Změřit polohu (cca 10 s)'}
               </Text>
             )}
           </TouchableOpacity>
 
           {position && (
             <View style={styles.posCard}>
-              <Text style={styles.posTitle}>📍 Poloha zaznamenána</Text>
+              <Text style={styles.posTitle}>📍 Poloha zaznamenána (medián)</Text>
               <Text style={styles.posValue}>
                 {position.lat.toFixed(6)}, {position.lng.toFixed(6)}
               </Text>
-              <Text style={styles.posMeta}>Přesnost: ±{Math.round(position.accuracy)} m</Text>
+              <Text style={styles.posMeta}>
+                Přesnost: ±{Math.round(position.accuracy)} m · {position.samples} vzorků
+              </Text>
               {position.accuracy > 30 && (
                 <Text style={styles.posWarn}>
-                  ⚠ Přesnost horší než 30 m — zkus změřit venku s viditelnou oblohou.
+                  ⚠ Přesnost horší než 30 m — pro lepší výsledek zkus měřit venku s viditelnou
+                  oblohou, nebo zvyš poloměr ({Math.max(150, Math.round(position.accuracy * 3))} m).
                 </Text>
               )}
             </View>
