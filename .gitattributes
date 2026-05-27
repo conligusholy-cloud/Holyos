@@ -1,0 +1,18 @@
+﻿# Defaultně auto-detekce + LF v repu
+* text=auto eol=lf
+
+# Windows-specific soubory drž v CRLF
+*.bat   text eol=crlf
+*.cmd   text eol=crlf
+*.ps1   text eol=crlf
+
+# Binární soubory — Git je nesmí měnit
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.pdf   binary
+*.zip   binary
+*.xlsx  binary
+*.docx  binary
+*.pptx  binary
