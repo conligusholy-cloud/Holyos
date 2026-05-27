@@ -16,6 +16,7 @@ const { computePrePickForBatch } = require('../services/planning/pre-pick');
 const { computePurchaseReport } = require('../services/planning/purchase-report');
 const { checkAndCloseBatch } = require('../services/planning/batch-state');
 const { scheduleBatch, scheduleAllActive } = require('../services/planning/scheduler');
+const { syncBatchToVelin } = require('../services/planning/velin-bridge');
 
 // =============================================================================
 // BOM SNAPSHOTS — zamražený kusovník pro plánování dávky
@@ -302,8 +303,27 @@ router.post('/batches/:id/schedule', async (req, res, next) => {
   try {
     const id = parseInt(req.params.id, 10);
     if (isNaN(id)) return res.status(400).json({ error: 'Neplatné ID' });
-    const exclusive = (req.body || {}).exclusive === true;
+    const body = req.body || {};
+    const exclusive = body.exclusive === true;
+    // Defaultně po každém schedule pošli operace do Velína. Lze vypnout
+    // přes body.syncVelin = false (např. při testech / dry-run).
+    const syncVelin = body.syncVelin !== false;
     const result = await scheduleBatch(id, { exclusive });
+
+    if (syncVelin) {
+      try {
+        const velinResults = await syncBatchToVelin(id);
+        const created = velinResults.filter(r => r.created).length;
+        const updated = velinResults.filter(r => r.task && !r.created).length;
+        const skipped = velinResults.filter(r => r.skipped).length;
+        const errored = velinResults.filter(r => r.error).length;
+        result.velin_sync = { created, updated, skipped, errored };
+      } catch (e) {
+        console.warn('[planning] syncBatchToVelin selhal:', e.message);
+        result.velin_sync = { error: e.message };
+      }
+    }
+
     res.json(result);
   } catch (err) {
     if (/nenalezena/.test(err.message)) return res.status(404).json({ error: err.message });
@@ -319,8 +339,54 @@ router.post('/batches/:id/schedule', async (req, res, next) => {
 router.post('/schedule-all', async (req, res, next) => {
   try {
     const result = await scheduleAllActive();
+
+    // Po bulk re-plánu pošli všechny úspěšně naplánované dávky do Velína.
+    // Disable přes ?syncVelin=false nebo body { syncVelin: false }.
+    const syncVelin =
+      (req.body || {}).syncVelin !== false && req.query.syncVelin !== 'false';
+    if (syncVelin) {
+      const velinAgg = { created: 0, updated: 0, skipped: 0, errored: 0 };
+      for (const r of result.results || []) {
+        if (!r.ok) continue;
+        try {
+          const velinResults = await syncBatchToVelin(r.batch_id);
+          velinAgg.created += velinResults.filter(x => x.created).length;
+          velinAgg.updated += velinResults.filter(x => x.task && !x.created).length;
+          velinAgg.skipped += velinResults.filter(x => x.skipped).length;
+          velinAgg.errored += velinResults.filter(x => x.error).length;
+        } catch (e) {
+          console.warn(`[planning] syncBatchToVelin(${r.batch_id}) selhal:`, e.message);
+          velinAgg.errored++;
+        }
+      }
+      result.velin_sync = velinAgg;
+    }
+
     res.json(result);
   } catch (err) { next(err); }
+});
+
+// POST /api/planning/batches/:id/push-to-velin
+//   Manuální tlačítko v UI plánovače — pošle všechny operace dávky do Velína
+//   bez nutnosti re-scheduluje (užitečné, když se mění assignee nebo
+//   priorita beze změny plánu). Idempotentní.
+//   Vrací { count: { created, updated, skipped, errored }, results }.
+router.post('/batches/:id/push-to-velin', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ error: 'Neplatné ID' });
+
+    const results = await syncBatchToVelin(id);
+    const count = {
+      created: results.filter(r => r.created).length,
+      updated: results.filter(r => r.task && !r.created).length,
+      skipped: results.filter(r => r.skipped).length,
+      errored: results.filter(r => r.error).length,
+    };
+    res.json({ batch_id: id, count, results });
+  } catch (err) {
+    next(err);
+  }
 });
 
 // POST /api/planning/batches/:id/check-completion
