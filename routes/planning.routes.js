@@ -17,6 +17,7 @@ const { computePurchaseReport } = require('../services/planning/purchase-report'
 const { checkAndCloseBatch } = require('../services/planning/batch-state');
 const { scheduleBatch, scheduleAllActive } = require('../services/planning/scheduler');
 const { syncBatchToVelin } = require('../services/planning/velin-bridge');
+const { autoAssignBatch } = require('../services/planning/mistr-dispatcher');
 
 // =============================================================================
 // BOM SNAPSHOTS — zamražený kusovník pro plánování dávky
@@ -322,6 +323,38 @@ router.post('/batches/:id/schedule', async (req, res, next) => {
         console.warn('[planning] syncBatchToVelin selhal:', e.message);
         result.velin_sync = { error: e.message };
       }
+
+      // Mistr dispečer — autonomní přiřazení nepřiřazených operací
+      // (Fáze 5 Krok E). Disable přes body.mistrAuto = false.
+      const mistrAuto = body.mistrAuto !== false;
+      if (mistrAuto) {
+        try {
+          const mistr = await autoAssignBatch(id);
+          result.mistr_auto = {
+            assigned: mistr.assigned.length,
+            skipped: mistr.skipped.length,
+            details: mistr.assigned.map(a => ({
+              op_id: a.op_id,
+              op_name: a.op_name,
+              person_id: a.person_id,
+              person_name: a.person_name,
+              score: a.score,
+              reason: (a.reasons || []).slice(0, 2).join('; '),
+            })),
+          };
+          // Re-sync — Mistr přiřadil → musíme nově poslat do Velína
+          if (mistr.assigned.length > 0) {
+            try {
+              const reSync = await syncBatchToVelin(id);
+              result.velin_sync.created += reSync.filter(r => r.created).length;
+              result.velin_sync.updated += reSync.filter(r => r.task && !r.created).length;
+            } catch {}
+          }
+        } catch (e) {
+          console.warn('[planning] mistr autoAssign selhal:', e.message);
+          result.mistr_auto = { error: e.message };
+        }
+      }
     }
 
     res.json(result);
@@ -362,8 +395,43 @@ router.post('/schedule-all', async (req, res, next) => {
       result.velin_sync = velinAgg;
     }
 
+    // Mistr dispečer — autonomně přiřaď unassigned operace ve všech úspěšně
+    // naplánovaných dávkách (Fáze 5 Krok E).
+    const mistrAuto =
+      (req.body || {}).mistrAuto !== false && req.query.mistrAuto !== 'false';
+    if (mistrAuto) {
+      const mistrAgg = { assigned: 0, skipped: 0 };
+      for (const r of result.results || []) {
+        if (!r.ok) continue;
+        try {
+          const m = await autoAssignBatch(r.batch_id);
+          mistrAgg.assigned += m.assigned.length;
+          mistrAgg.skipped += m.skipped.length;
+        } catch (e) {
+          console.warn(`[planning] mistr autoAssign(${r.batch_id}) selhal:`, e.message);
+        }
+      }
+      result.mistr_auto = mistrAgg;
+    }
+
     res.json(result);
   } catch (err) { next(err); }
+});
+
+// POST /api/planning/batches/:id/auto-assign
+//   Manuální tlačítko v UI plánovače — spustí Mistra na konkrétní dávce
+//   bez re-plánu. Užitečné když přibyly nové Velín-kolegové nebo někdo zrušil
+//   assignee a chceme to autonomně doplnit.
+router.post('/batches/:id/auto-assign', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ error: 'Neplatné ID' });
+    const dryRun = (req.body || {}).dryRun === true || req.query.dryRun === 'true';
+    const result = await autoAssignBatch(id, { dryRun });
+    res.json({ batch_id: id, dryRun, ...result });
+  } catch (err) {
+    next(err);
+  }
 });
 
 // POST /api/planning/batches/:id/push-to-velin

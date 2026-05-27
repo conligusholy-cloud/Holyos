@@ -454,7 +454,7 @@
   // ─── Render Agent Cards ───
   function renderAgentCards() {
     const grid = document.getElementById('agents-grid');
-    const colors = { mistr:'#06b6d4', personalista:'#6c5ce7', skladnik:'#f59e0b', koordinator:'#3b82f6', technik:'#ef4444' };
+    const colors = { mistr:'#06b6d4', mistr_dispecer:'#10b981', personalista:'#6c5ce7', skladnik:'#f59e0b', koordinator:'#3b82f6', technik:'#ef4444' };
 
     let html = assistants.map(a => {
       const icon = a.config?.icon || '🤖';

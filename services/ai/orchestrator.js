@@ -17,6 +17,7 @@ const { getFleetTools, executeFleetTool } = require('../../mcp-servers/fleet-ser
 const { getCadTools, executeCadTool } = require('../../mcp-servers/cad-server');
 const { getAccountingTools, executeAccountingTool } = require('../../mcp-servers/accounting-server');
 const { getPlanningTools, executePlanningTool } = require('../../mcp-servers/planning-server');
+const { getPeopleTools, executePeopleTool } = require('../../mcp-servers/people-server');
 
 // ─── Mapování: agent slug → MCP servery (tools + executory) ────────────────
 const AGENT_MCP_MAP = {
@@ -89,6 +90,26 @@ const AGENT_MCP_MAP = {
       return executeWarehouseTool(tool, params, prisma);
     },
   },
+  // Velín dispečer — Fáze 5. Mistr autonomně přiřazuje úkoly z plánovače
+  // kolegům s aktivním Velín zařízením podle skill profile + workload.
+  mistr_dispecer: {
+    servers: ['people', 'planning', 'production', 'hr'],
+    getTools: () => [
+      ...getPeopleTools(),
+      ...getPlanningTools(),
+      ...getProductionTools(),
+      ...getHrTools(),
+    ],
+    execute: (tool, params) => {
+      const peopleNames = getPeopleTools().map(t => t.name);
+      const planningNames = getPlanningTools().map(t => t.name);
+      const prodNames = getProductionTools().map(t => t.name);
+      if (peopleNames.includes(tool)) return executePeopleTool(tool, params, prisma);
+      if (planningNames.includes(tool)) return executePlanningTool(tool, params, prisma);
+      if (prodNames.includes(tool)) return executeProductionTool(tool, params, prisma);
+      return executeHrTool(tool, params, prisma);
+    },
+  },
 };
 
 // ─── Intent Detection (rychlý routing přes Haiku) ──────────────────────────
@@ -103,6 +124,7 @@ const KEYWORD_MAP = {
   konstrukter:     /výkres|solidwork|sldprt|sldasm|slddrw|cad|sestav|kusovník|konfigurac|součástk|díl(ů|y|u)?\b/i,
   ucetni:          /faktur|účet|úhrad|platb|banka|výpis|párov|nezaplacen|po splatnosti|kpc|abo|VS\b|variabiln|DPH|dlužník|pohledáv/i,
   planovac:        /plánov|dávk(a|y|u)|batch|MRP|BOM|snapshot|kapacit|nákupní návrh|disponibil|short(age|ka)|kompetenc|PALETA|prádlomat/i,
+  mistr_dispecer:  /dispeč|dispěč|přiřa[ďc]|kdo by měl|kdo udělá|komu přidělit|velin.*úkol|workload|vytížen[ií]|mistr disp/i,
 };
 
 const MODULE_ASSISTANT_MAP = {
