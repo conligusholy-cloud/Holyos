@@ -525,7 +525,12 @@
           const velinInfo = result.velin_sync
             ? `\n🚀 Velín: ${result.velin_sync.created || 0} nových úkolů, ${result.velin_sync.updated || 0} aktualizovaných, ${result.velin_sync.skipped || 0} bez kolegy${result.velin_sync.errored ? `, ${result.velin_sync.errored} chyb` : ''}`
             : '';
-          alert(`📅 Naplánováno ${result.operations_scheduled} operací\nZačátek: ${new Date(result.plan_start).toLocaleString('cs-CZ')}\nKonec: ${new Date(result.plan_end).toLocaleString('cs-CZ')}\nPráce: ${work} min | čekání: ${wait} min (idle ${result.idle_pct || 0}%)\n${shiftInfo}${velinInfo}`);
+          const mistrInfo = result.mistr_auto && result.mistr_auto.assigned !== undefined
+            ? (result.mistr_auto.assigned > 0
+                ? `\n🤖 Mistr: ${result.mistr_auto.assigned} úkolů auto-přiřazeno${result.mistr_auto.skipped ? `, ${result.mistr_auto.skipped} přeskočeno (chybí kompetence)` : ''}`
+                : `\n🤖 Mistr: nic k auto-přiřazení`)
+            : '';
+          alert(`📅 Naplánováno ${result.operations_scheduled} operací\nZačátek: ${new Date(result.plan_start).toLocaleString('cs-CZ')}\nKonec: ${new Date(result.plan_end).toLocaleString('cs-CZ')}\nPráce: ${work} min | čekání: ${wait} min (idle ${result.idle_pct || 0}%)\n${shiftInfo}${velinInfo}${mistrInfo}`);
         }
       } else if (action === 'push-velin') {
         const r = await fetch(`/api/planning/batches/${id}/push-to-velin`, { method: 'POST', headers: authHeaders() });
