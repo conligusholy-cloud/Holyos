@@ -104,6 +104,7 @@
         <button class="tab" data-tab="skills">⭐ Skill profily</button>
         <button class="tab" data-tab="fences">🗺️ Geo fence</button>
         <button class="tab" data-tab="reflections">🌙 Reflexe</button>
+        <button class="tab" data-tab="attendance">⏱ Docházka</button>
       </div>
 
       <div class="tab-panel active" id="tab-today">
@@ -155,6 +156,19 @@
         </div>
         <div id="refl-stats-by-person" style="margin-bottom:16px;"></div>
         <div id="refl-table-wrap"></div>
+      </div>
+
+      <div class="tab-panel" id="tab-attendance">
+        <div class="filter-row">
+          <label style="color:var(--text2);font-size:12px;">Od</label>
+          <input type="date" id="att-from" class="input-sm" />
+          <label style="color:var(--text2);font-size:12px;">Do</label>
+          <input type="date" id="att-to" class="input-sm" />
+          <button class="btn btn-sm" id="btn-att-reload">Načíst</button>
+          <span id="att-stats-summary" style="color:var(--text2);font-size:12px;margin-left:auto;"></span>
+        </div>
+        <div id="att-summary-wrap"></div>
+        <div id="att-punches-wrap" style="margin-top:24px;"></div>
       </div>
     </div>
   </div>

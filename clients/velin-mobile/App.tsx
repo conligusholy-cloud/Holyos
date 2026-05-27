@@ -39,6 +39,7 @@ import ChatList from './screens/ChatList';
 import ChatThread from './screens/ChatThread';
 import NewChat from './screens/NewChat';
 import EveningReflection from './screens/EveningReflection';
+import Attendance from './screens/Attendance';
 import { colors } from './lib/theme';
 
 // =============================================================================
@@ -65,6 +66,7 @@ export type RootStackParamList = {
   ChatThread: { channelId: string; channelTitle?: string };
   NewChat: undefined;
   EveningReflection: undefined;
+  Attendance: undefined;
 };
 
 export type TabsParamList = {
@@ -249,6 +251,11 @@ export default function App() {
             name="EveningReflection"
             component={EveningReflection}
             options={{ animation: 'slide_from_bottom', presentation: 'modal' }}
+          />
+          <Stack.Screen
+            name="Attendance"
+            component={Attendance}
+            options={{ animation: 'slide_from_right' }}
           />
         </Stack.Navigator>
       </NavigationContainer>

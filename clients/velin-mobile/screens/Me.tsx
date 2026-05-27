@@ -61,6 +61,13 @@ export default function Me() {
 
         <TouchableOpacity
           style={styles.reflectionBtn}
+          onPress={() => navigation.navigate('Attendance')}
+        >
+          <Text style={styles.reflectionBtnText}>⏱  Docházka</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.reflectionBtn, { marginTop: spacing.md }]}
           onPress={() => navigation.navigate('EveningReflection')}
         >
           <Text style={styles.reflectionBtnText}>🌙  Dnešní reflexe</Text>
