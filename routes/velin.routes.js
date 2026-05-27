@@ -458,6 +458,82 @@ admin.get('/reflections', async (req, res, next) => {
   }
 });
 
+// ─── Docházka — admin view (Fáze 3) ────────────────────────────────────────
+//
+// GET /api/velin/admin/attendance?from=YYYY-MM-DD&to=YYYY-MM-DD&person_id=<id>
+//
+// Vrací punches v rozsahu + day-by-day souhrn per person (kdo přišel kdy,
+// poslední odchod, suma hodin).
+admin.get('/attendance', async (req, res, next) => {
+  try {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const sevenAgo = new Date(today);
+    sevenAgo.setDate(sevenAgo.getDate() - 6);
+
+    const fromStr = String(req.query.from || '').trim();
+    const toStr = String(req.query.to || '').trim();
+    const from = fromStr ? new Date(fromStr) : sevenAgo;
+    const to = toStr ? new Date(toStr) : today;
+    to.setHours(23, 59, 59, 999);
+
+    const personId = req.query.person_id ? parseInt(req.query.person_id, 10) : null;
+
+    const where = {
+      punched_at: { gte: from, lte: to },
+      ...(personId ? { person_id: personId } : {}),
+    };
+
+    const punches = await prisma.attendancePunch.findMany({
+      where,
+      include: {
+        person: { select: { id: true, first_name: true, last_name: true, photo_url: true } },
+        fence: { select: { id: true, name: true } },
+      },
+      orderBy: [{ punched_at: 'asc' }],
+    });
+
+    // Souhrn per (person, date): první 'in' = arrival, poslední 'out' = departure
+    const dayMap = new Map(); // key: `${person_id}|${YYYY-MM-DD}`
+    for (const p of punches) {
+      const dateStr = p.punched_at.toISOString().slice(0, 10);
+      const key = `${p.person_id}|${dateStr}`;
+      if (!dayMap.has(key)) {
+        dayMap.set(key, {
+          person_id: p.person_id,
+          name: `${p.person?.first_name || ''} ${p.person?.last_name || ''}`.trim() || `#${p.person_id}`,
+          date: dateStr,
+          first_in: null,
+          last_out: null,
+          punch_count: 0,
+          inside_fence_count: 0,
+          sources: new Set(),
+        });
+      }
+      const entry = dayMap.get(key);
+      entry.punch_count += 1;
+      if (p.inside_fence) entry.inside_fence_count += 1;
+      entry.sources.add(p.source);
+      if (p.kind === 'in' && !entry.first_in) entry.first_in = p.punched_at;
+      if (p.kind === 'out') entry.last_out = p.punched_at;
+    }
+
+    const summary = Array.from(dayMap.values())
+      .map((d) => ({
+        ...d,
+        sources: Array.from(d.sources),
+        hours_in_provoz: d.first_in && d.last_out
+          ? +((d.last_out.getTime() - d.first_in.getTime()) / (1000 * 60 * 60)).toFixed(2)
+          : null,
+      }))
+      .sort((a, b) => (a.date === b.date ? a.name.localeCompare(b.name) : b.date.localeCompare(a.date)));
+
+    res.json({ from, to, punches, summary });
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.use('/admin', admin);
 
 // =============================================================================
@@ -885,13 +961,53 @@ mobile.post('/feedback/evening', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// GET /api/velin/attendance/today
+// Vrátí dnešní punches kolegy + (volitelně) jejich derivovaný stav (in/out).
+mobile.get('/attendance/today', async (req, res, next) => {
+  try {
+    const today = startOfToday();
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const punches = await prisma.attendancePunch.findMany({
+      where: {
+        person_id: req.velin.person.id,
+        punched_at: { gte: today, lt: tomorrow },
+      },
+      orderBy: { punched_at: 'asc' },
+    });
+    // Derivuj aktuální stav: poslední 'in'/'out' určuje currentState
+    let currentState = 'out';
+    for (const p of punches) {
+      if (p.kind === 'in') currentState = 'in';
+      else if (p.kind === 'out') currentState = 'out';
+      else if (p.kind === 'break_start') currentState = 'break';
+      else if (p.kind === 'break_end') currentState = 'in';
+    }
+    res.json({ punches, currentState });
+  } catch (err) { next(err); }
+});
+
 // POST /api/velin/attendance/punch
+//
+// Body: { kind: 'in'|'out'|'break_start'|'break_end', lat?, lng?, accuracy_m?, source? }
+//
+// source default: 'velin_manual' (kolega klikl tlačítko)
+//   'velin_geofence_auto' — background task při entry/exit z geofence
+//   'velin_gps' (legacy) — zachovaný pro Fázi 0 klienty
+//
+// Pokud máme souřadnice, vyhodnotíme dovnitř/ven z aktivních fences.
+// Backend nevyžaduje, aby punch byl uvnitř fence — admin pak může schvalovat
+// ručně přes approved_by_user_id (pro výjimky / GPS selhání).
 mobile.post('/attendance/punch', async (req, res, next) => {
   try {
-    const { kind, lat, lng, accuracy_m } = req.body || {};
+    const { kind, lat, lng, accuracy_m, source: bodySource } = req.body || {};
     if (!['in', 'out', 'break_start', 'break_end'].includes(kind)) {
       return res.status(400).json({ error: 'Neplatný kind' });
     }
+
+    // Sanitizovat source — povolíme jen 4 hodnoty
+    const ALLOWED_SOURCES = ['velin_manual', 'velin_geofence_auto', 'velin_gps', 'kiosk'];
+    const source = ALLOWED_SOURCES.includes(bodySource) ? bodySource : 'velin_manual';
 
     // Pokud máme souřadnice, vyhodnoť proti aktivním fence
     let inside_fence = false;
@@ -908,7 +1024,7 @@ mobile.post('/attendance/punch', async (req, res, next) => {
       data: {
         person_id: req.velin.person.id,
         kind,
-        source: 'velin_gps',
+        source,
         lat: typeof lat === 'number' ? lat : null,
         lng: typeof lng === 'number' ? lng : null,
         accuracy_m: typeof accuracy_m === 'number' ? accuracy_m : null,
