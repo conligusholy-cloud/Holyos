@@ -961,6 +961,46 @@ mobile.post('/feedback/evening', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// POST /api/velin/fences/from-here
+//
+// Vytvoří nový GeoFence ze souřadnic, které klient pošle (typicky z mobilní
+// GPS). Restrict na admin/super-admin/manager — běžný kolega nemá smysl
+// definovat provoz. Mobile UI tlačítko zobrazujeme jen těmto rolím.
+//
+// Body: { name: string, lat: number, lng: number, radius_m?: number = 150 }
+mobile.post('/fences/from-here', async (req, res, next) => {
+  try {
+    const u = req.user || {};
+    const isAdmin = u.isSuperAdmin === true
+      || u.role === 'admin'
+      || u.role === 'super_admin'
+      || u.role === 'manager';
+    if (!isAdmin) {
+      return res.status(403).json({ error: 'Provoz může vytvořit jen vedoucí.' });
+    }
+    const { name, lat, lng, radius_m, notes } = req.body || {};
+    if (!name || typeof name !== 'string' || name.trim().length === 0) {
+      return res.status(400).json({ error: 'Chybí název provozu' });
+    }
+    if (typeof lat !== 'number' || typeof lng !== 'number') {
+      return res.status(400).json({ error: 'Chybí lat/lng' });
+    }
+    const radius = Math.max(20, Math.min(2000, parseInt(radius_m, 10) || 150));
+
+    const fence = await prisma.geoFence.create({
+      data: {
+        name: name.trim().slice(0, 255),
+        center_lat: lat,
+        center_lng: lng,
+        radius_m: radius,
+        active: true,
+        notes: notes ? String(notes).slice(0, 1000) : null,
+      },
+    });
+    res.status(201).json({ fence });
+  } catch (err) { next(err); }
+});
+
 // GET /api/velin/attendance/today
 // Vrátí dnešní punches kolegy + (volitelně) jejich derivovaný stav (in/out).
 mobile.get('/attendance/today', async (req, res, next) => {

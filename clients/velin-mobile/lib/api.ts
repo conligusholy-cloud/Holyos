@@ -388,6 +388,19 @@ export const api = {
       jwt,
       body: data,
     }),
+
+  // Vytvořit GeoFence z aktuální polohy (admin/manager only).
+  // Použití: kolega-šéf se postaví doprostřed dílny a stiskne "Vytvořit
+  // provoz tady" — Velín vezme GPS a zaregistruje fence v jednom kroku.
+  createGeoFenceFromHere: (
+    jwt: string,
+    data: { name: string; lat: number; lng: number; radius_m?: number; notes?: string }
+  ) =>
+    request<{ fence: { id: number; name: string; center_lat: number; center_lng: number; radius_m: number } }>(
+      'POST',
+      '/api/velin/fences/from-here',
+      { jwt, body: data }
+    ),
 };
 
 export { API_BASE };

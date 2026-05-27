@@ -40,6 +40,7 @@ import ChatThread from './screens/ChatThread';
 import NewChat from './screens/NewChat';
 import EveningReflection from './screens/EveningReflection';
 import Attendance from './screens/Attendance';
+import NewGeoFence from './screens/NewGeoFence';
 import { colors } from './lib/theme';
 
 // =============================================================================
@@ -67,6 +68,7 @@ export type RootStackParamList = {
   NewChat: undefined;
   EveningReflection: undefined;
   Attendance: undefined;
+  NewGeoFence: undefined;
 };
 
 export type TabsParamList = {
@@ -256,6 +258,11 @@ export default function App() {
             name="Attendance"
             component={Attendance}
             options={{ animation: 'slide_from_right' }}
+          />
+          <Stack.Screen
+            name="NewGeoFence"
+            component={NewGeoFence}
+            options={{ animation: 'slide_from_bottom', presentation: 'modal' }}
           />
         </Stack.Navigator>
       </NavigationContainer>
