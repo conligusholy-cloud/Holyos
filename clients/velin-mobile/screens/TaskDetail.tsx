@@ -45,6 +45,22 @@ type Message = {
   author?: Author | null;
 };
 
+// Info o dávce z plánovače (Fáze 4 — Krok D). Backend ho posílá jen pokud
+// task.source === 'production' a source_ref_type === 'BatchOperation'.
+type BatchInfo = {
+  batch_operation_id: number;
+  op_status: string;
+  planned_start: string | null;
+  planned_end: string | null;
+  operation_name: string | null;
+  batch_id: number | null;
+  batch_number: string | null;
+  batch_quantity: number | null;
+  product_name: string | null;
+  product_code: string | null;
+  workstation_name: string | null;
+};
+
 type Task = {
   id: number;
   title: string;
@@ -69,6 +85,7 @@ type Task = {
 export default function TaskDetail({ route, navigation }: Props) {
   const { taskId } = route.params;
   const [task, setTask] = useState<Task | null>(null);
+  const [batchInfo, setBatchInfo] = useState<BatchInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -90,6 +107,7 @@ export default function TaskDetail({ route, navigation }: Props) {
     try {
       const res = await api.getTask(auth.jwt, taskId);
       setTask(res.task as Task);
+      setBatchInfo((res as any).batchInfo || null);
     } catch (err) {
       if (err instanceof ApiError) setError(err.message);
       else setError('Nepodařilo se načíst úkol.');
@@ -225,9 +243,50 @@ export default function TaskDetail({ route, navigation }: Props) {
             {task.estimated_min ? <Chip text={`⏱ ${task.estimated_min} min`} /> : null}
             {task.due_at ? <Chip text={`📅 ${shortTime(task.due_at)}`} /> : null}
             {task.location_hint ? <Chip text={`📍 ${task.location_hint}`} /> : null}
-            <Chip text={`🏷 ${task.source}`} />
+            {batchInfo ? <Chip text="🏭 Z výroby" highlight /> : <Chip text={`🏷 ${task.source}`} />}
             {task.priority <= 2 ? <Chip text="🔴 priorita" highlight /> : null}
           </View>
+
+          {batchInfo ? (
+            <View style={styles.batchCard}>
+              <Text style={styles.batchCardTitle}>🏭 Dávka z plánovače</Text>
+              {batchInfo.batch_number ? (
+                <View style={styles.batchRow}>
+                  <Text style={styles.batchLabel}>Dávka</Text>
+                  <Text style={styles.batchValue}>{batchInfo.batch_number}</Text>
+                </View>
+              ) : null}
+              {batchInfo.product_name ? (
+                <View style={styles.batchRow}>
+                  <Text style={styles.batchLabel}>Výrobek</Text>
+                  <Text style={styles.batchValue}>
+                    {batchInfo.product_name}
+                    {batchInfo.batch_quantity ? ` · ${batchInfo.batch_quantity} ks` : ''}
+                  </Text>
+                </View>
+              ) : null}
+              {batchInfo.workstation_name ? (
+                <View style={styles.batchRow}>
+                  <Text style={styles.batchLabel}>Pracoviště</Text>
+                  <Text style={styles.batchValue}>{batchInfo.workstation_name}</Text>
+                </View>
+              ) : null}
+              {batchInfo.operation_name ? (
+                <View style={styles.batchRow}>
+                  <Text style={styles.batchLabel}>Operace</Text>
+                  <Text style={styles.batchValue}>{batchInfo.operation_name}</Text>
+                </View>
+              ) : null}
+              {batchInfo.planned_start && batchInfo.planned_end ? (
+                <View style={styles.batchRow}>
+                  <Text style={styles.batchLabel}>Plán</Text>
+                  <Text style={styles.batchValue}>
+                    {shortTime(batchInfo.planned_start)} – {shortTime(batchInfo.planned_end)}
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+          ) : null}
 
           {task.description ? (
             <View style={styles.descBox}>
@@ -413,6 +472,18 @@ const styles = StyleSheet.create({
   chipTextHighlight: { color: '#fca5a5', fontWeight: '600' },
 
   descBox: { backgroundColor: colors.surface, borderRadius: radius.md, padding: spacing.lg, borderWidth: 1, borderColor: colors.border, marginBottom: spacing.md },
+  batchCard: {
+    backgroundColor: 'rgba(99,102,241,0.1)',
+    borderRadius: radius.md,
+    padding: spacing.md,
+    borderWidth: 1,
+    borderColor: 'rgba(99,102,241,0.35)',
+    marginBottom: spacing.md,
+  },
+  batchCardTitle: { color: colors.text, fontSize: 13, fontWeight: '700', marginBottom: spacing.sm },
+  batchRow: { flexDirection: 'row', paddingVertical: 3 },
+  batchLabel: { color: colors.text2, fontSize: 12, width: 90 },
+  batchValue: { color: colors.text, fontSize: 13, flex: 1, fontWeight: '500' },
   descText: { color: colors.text, fontSize: 14, lineHeight: 22 },
 
   blockBox: { backgroundColor: 'rgba(239,68,68,0.08)', borderRadius: radius.md, padding: spacing.lg, borderWidth: 1, borderColor: 'rgba(239,68,68,0.3)', marginBottom: spacing.md },
