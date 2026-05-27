@@ -12,17 +12,24 @@
 //       └── Me     — profil + odhlášení
 //     TaskDetail   — detail úkolu (stack push z MyDay)
 //     ChatThread   — konkrétní chat (stack push z ChatList)
+//     NewChat      — výběr kolegy pro nové DM (modal)
 //
+// Push deep-link: tap na notifikaci s data.channel_id → otevři ChatThread.
 // Status bar je světlý (na tmavém pozadí).
 
 import React, { useEffect } from 'react';
 import { StatusBar } from 'expo-status-bar';
-import { NavigationContainer, DarkTheme } from '@react-navigation/native';
+import {
+  NavigationContainer,
+  DarkTheme,
+  createNavigationContainerRef,
+} from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Text } from 'react-native';
 import * as Updates from 'expo-updates';
+import * as Notifications from 'expo-notifications';
 import Gate from './screens/Gate';
 import Login from './screens/Login';
 import MyDay from './screens/MyDay';
@@ -31,15 +38,12 @@ import TaskDetail from './screens/TaskDetail';
 import ChatList from './screens/ChatList';
 import ChatThread from './screens/ChatThread';
 import NewChat from './screens/NewChat';
+import EveningReflection from './screens/EveningReflection';
 import { colors } from './lib/theme';
 
 // =============================================================================
 // OTA Updates — tichá kontrola při startu
 // =============================================================================
-// V dev (`expo start`) Updates.isEnabled === false → useEffect okamžitě skončí.
-// V preview/production buildu se na startu zeptáme EAS Update, jestli existuje
-// novější bundle pro aktuální runtimeVersion (= app.version z app.json). Pokud
-// ano, stáhneme a hned reloadneme app; jinak pojede aktuální verze.
 async function checkForOtaUpdate(): Promise<void> {
   if (!Updates.isEnabled) return;
   try {
@@ -49,7 +53,7 @@ async function checkForOtaUpdate(): Promise<void> {
       await Updates.reloadAsync();
     }
   } catch {
-    // Tichý fail — bez sítě / EAS výpadek apod. Appka pojede s aktuálním bundle.
+    // Tichý fail — bez sítě / EAS výpadek apod.
   }
 }
 
@@ -60,6 +64,7 @@ export type RootStackParamList = {
   TaskDetail: { taskId: number };
   ChatThread: { channelId: string; channelTitle?: string };
   NewChat: undefined;
+  EveningReflection: undefined;
 };
 
 export type TabsParamList = {
@@ -70,6 +75,77 @@ export type TabsParamList = {
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tabs = createBottomTabNavigator<TabsParamList>();
+
+// =============================================================================
+// Navigation ref — pro programové navigování z handlerů mimo komponenty
+// =============================================================================
+// Push notif handler musí naviovat zvenku React stromu (Notifications API
+// nemá přístup k useNavigation). Containerref to umožňuje.
+export const navigationRef = createNavigationContainerRef<RootStackParamList>();
+
+// =============================================================================
+// Push deep-link — tap na chat_message notifikaci otevře ChatThread
+// =============================================================================
+// Backend pošle push s data = { channel_id, message_id, type: 'chat_message' }.
+// Když uživatel tapne na notifikaci:
+//   1) Pokud má channel_id, naviguj na Tabs → ChatThread.
+//   2) Pokud app je studeně otevřená (kliknutí z killed state), pomocí
+//      getLastNotificationResponseAsync zachytíme i ten případ.
+//
+// POZOR: Nezasahujeme do navigace dokud Gate nedoběhne — Gate sám rozhodne,
+// zda jít na Login (chybí JWT) nebo Tabs. Pak handler navigace.navigate
+// pushne ChatThread na zásobník.
+function handleNotificationTap(data: any) {
+  if (!data || typeof data !== 'object') return;
+
+  // Routing podle typu/kind notifikace:
+  // - kind='evening_reflection' (velin-scheduler 16:30) → EveningReflection modal
+  // - channel_id (createNotification pro chat_message) → ChatThread
+  // - jinak: žádná specifická navigace, jen otevřít app.
+  let target: { name: keyof RootStackParamList; params?: any } | null = null;
+
+  if (data.kind === 'evening_reflection' || data.type === 'evening_reflection') {
+    target = { name: 'EveningReflection' };
+  } else if (typeof data.channel_id === 'string' && data.channel_id) {
+    target = {
+      name: 'ChatThread',
+      params: {
+        channelId: data.channel_id,
+        channelTitle: typeof data.title === 'string' ? data.title : undefined,
+      },
+    };
+  }
+
+  if (!target) return;
+
+  // Počkej, až navigation ref bude ready (Gate doběhl). Lehký retry:
+  const tryNavigate = (attempts = 0) => {
+    if (!navigationRef.isReady()) {
+      if (attempts < 20) {
+        setTimeout(() => tryNavigate(attempts + 1), 200);
+      }
+      return;
+    }
+    try {
+      navigationRef.navigate(target!.name as any, target!.params);
+    } catch (e) {
+      console.warn('[push] navigate failed:', e);
+    }
+  };
+  tryNavigate();
+}
+
+const navTheme = {
+  ...DarkTheme,
+  colors: {
+    ...DarkTheme.colors,
+    background: colors.bg,
+    card: colors.surface,
+    border: colors.border,
+    primary: colors.accent,
+    text: colors.text,
+  },
+};
 
 function TabsRoot() {
   return (
@@ -116,26 +192,36 @@ function TabsRoot() {
   );
 }
 
-const navTheme = {
-  ...DarkTheme,
-  colors: {
-    ...DarkTheme.colors,
-    background: colors.bg,
-    card: colors.surface,
-    border: colors.border,
-    primary: colors.accent,
-    text: colors.text,
-  },
-};
-
 export default function App() {
+  // OTA check při startu
   useEffect(() => {
     checkForOtaUpdate();
   }, []);
 
+  // Push tap handler — registrujeme jednou při mountu App.
+  useEffect(() => {
+    // Studený start: app byl zabit, klik na notifikaci ho znovu otevírá.
+    // Expo nabízí lastNotificationResponse jako "co bylo posledně tapnuté".
+    Notifications.getLastNotificationResponseAsync().then((response) => {
+      if (response?.notification?.request?.content?.data) {
+        handleNotificationTap(response.notification.request.content.data);
+      }
+    });
+
+    // Teplý start / běžící app: listener na nové tapy.
+    const subscription = Notifications.addNotificationResponseReceivedListener(
+      (response) => {
+        const data = response?.notification?.request?.content?.data;
+        if (data) handleNotificationTap(data);
+      }
+    );
+
+    return () => subscription.remove();
+  }, []);
+
   return (
     <SafeAreaProvider>
-      <NavigationContainer theme={navTheme}>
+      <NavigationContainer ref={navigationRef} theme={navTheme}>
         <StatusBar style="light" />
         <Stack.Navigator
           initialRouteName="Gate"
@@ -157,6 +243,11 @@ export default function App() {
           <Stack.Screen
             name="NewChat"
             component={NewChat}
+            options={{ animation: 'slide_from_bottom', presentation: 'modal' }}
+          />
+          <Stack.Screen
+            name="EveningReflection"
+            component={EveningReflection}
             options={{ animation: 'slide_from_bottom', presentation: 'modal' }}
           />
         </Stack.Navigator>

@@ -430,13 +430,132 @@
     });
   }
 
+  // ─── Reflexe — list + statistiky (Fáze 2) ──────────────────────────────
+  async function loadReflections() {
+    const fromInp = $('#refl-from');
+    const toInp = $('#refl-to');
+    // Default: posledních 7 dní
+    if (!fromInp.value || !toInp.value) {
+      const today = new Date();
+      const week = new Date();
+      week.setDate(week.getDate() - 6);
+      const fmt = (d) => d.toISOString().slice(0, 10);
+      if (!fromInp.value) fromInp.value = fmt(week);
+      if (!toInp.value) toInp.value = fmt(today);
+    }
+    const qs = `?from=${fromInp.value}&to=${toInp.value}`;
+    const { reflections, stats } = await apiGet('/admin/reflections' + qs);
+
+    // Souhrn vpravo nahoře
+    const summary = $('#refl-stats-summary');
+    if (stats.total.count === 0) {
+      summary.textContent = 'Žádné reflexe v tomto rozsahu.';
+    } else {
+      const moodTxt = stats.total.avg_mood != null ? `mood Ø ${stats.total.avg_mood}` : '';
+      const energyTxt = stats.total.avg_energy != null ? `energy Ø ${stats.total.avg_energy}` : '';
+      summary.textContent = `${stats.total.count} reflexí · ${[moodTxt, energyTxt].filter(Boolean).join(' · ')}`;
+    }
+
+    // Per-person agregace (karty)
+    const byPersonWrap = $('#refl-stats-by-person');
+    if (stats.by_person.length === 0) {
+      byPersonWrap.innerHTML = '';
+    } else {
+      byPersonWrap.innerHTML = `
+        <div style="display:grid;grid-template-columns:repeat(auto-fill, minmax(200px, 1fr));gap:8px;">
+          ${stats.by_person.map((p) => {
+            const moodEmoji = moodToEmoji(p.avg_mood);
+            const moodCol = moodColor(p.avg_mood);
+            return `
+              <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 12px;">
+                <div style="font-weight:600;color:var(--text);font-size:13px;">${escapeHtml(p.name)}</div>
+                <div style="display:flex;gap:8px;align-items:center;margin-top:6px;">
+                  <span style="font-size:22px;">${moodEmoji}</span>
+                  <div style="font-size:11px;color:var(--text2);">
+                    ${p.count} reflexí<br/>
+                    ${p.avg_mood != null ? `mood <span style="color:${moodCol};font-weight:600;">${p.avg_mood}</span>` : ''}
+                    ${p.avg_energy != null ? ` · energy ${p.avg_energy}` : ''}
+                  </div>
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      `;
+    }
+
+    // Tabulka s detailem
+    const tableWrap = $('#refl-table-wrap');
+    if (reflections.length === 0) {
+      tableWrap.innerHTML = `<div style="padding:24px;text-align:center;color:var(--text2);">Zatím žádné reflexe.</div>`;
+      return;
+    }
+    tableWrap.innerHTML = `
+      <table class="data-table">
+        <thead><tr>
+          <th>Datum</th>
+          <th>Kolega</th>
+          <th>Mood</th>
+          <th>Energie</th>
+          <th>Co se povedlo</th>
+          <th>Co bylo těžké</th>
+          <th>Zítra</th>
+          <th>Volné</th>
+        </tr></thead>
+        <tbody>
+          ${reflections.map((r) => {
+            const name = `${r.person?.first_name || ''} ${r.person?.last_name || ''}`.trim() || `#${r.person_id}`;
+            const dateStr = new Date(r.date).toLocaleDateString('cs-CZ', { day: 'numeric', month: 'numeric' });
+            return `
+              <tr>
+                <td>${dateStr}</td>
+                <td>${escapeHtml(name)}</td>
+                <td>${moodToEmoji(r.mood)} ${r.mood ?? ''}</td>
+                <td>${r.energy ?? ''}</td>
+                <td style="max-width:200px;white-space:normal;font-size:12px;">${escapeHtml(r.wins || '—')}</td>
+                <td style="max-width:200px;white-space:normal;font-size:12px;">${escapeHtml(r.struggles || '—')}</td>
+                <td style="max-width:200px;white-space:normal;font-size:12px;">${escapeHtml(r.tomorrow_focus || '—')}</td>
+                <td style="max-width:200px;white-space:normal;font-size:12px;">${escapeHtml(r.free_text || '—')}</td>
+              </tr>
+            `;
+          }).join('')}
+        </tbody>
+      </table>
+    `;
+  }
+
+  function moodToEmoji(m) {
+    if (m == null) return '—';
+    if (m <= 1.5) return '😞';
+    if (m <= 2.5) return '😕';
+    if (m <= 3.5) return '😐';
+    if (m <= 4.5) return '🙂';
+    return '😄';
+  }
+  function moodColor(m) {
+    if (m == null) return 'var(--text2)';
+    if (m <= 2) return '#ef4444';
+    if (m <= 3) return '#f59e0b';
+    return '#22c55e';
+  }
+  function escapeHtml(s) {
+    return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
+  // Inicializace tlačítka pro reload reflexí
+  document.addEventListener('DOMContentLoaded', () => {
+    const btn = document.getElementById('btn-refl-reload');
+    if (btn) btn.addEventListener('click', loadReflections);
+  });
+
   // ─── Dispatcher ────────────────────────────────────────────────────────
   function loadTab(name) {
-    if (name === 'today')   return loadToday();
-    if (name === 'tasks')   return loadTasks();
-    if (name === 'devices') return loadDevices();
-    if (name === 'skills')  return loadSkills();
-    if (name === 'fences')  return loadFences();
+    if (name === 'today')       return loadToday();
+    if (name === 'tasks')       return loadTasks();
+    if (name === 'devices')     return loadDevices();
+    if (name === 'skills')      return loadSkills();
+    if (name === 'fences')      return loadFences();
+    if (name === 'reflections') return loadReflections();
   }
 
   // Init
