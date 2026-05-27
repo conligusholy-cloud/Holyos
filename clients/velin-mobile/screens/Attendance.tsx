@@ -325,6 +325,18 @@ const styles = StyleSheet.create({
   autoTitle: { color: colors.text, fontSize: 15, fontWeight: '600' },
   autoSub: { color: colors.text2, fontSize: 12, marginTop: 2, lineHeight: 16 },
 
+  newFenceBtn: {
+    backgroundColor: colors.surface2,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    alignItems: 'center',
+    marginBottom: spacing.xl,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  newFenceBtnText: { color: colors.text, fontSize: 14, fontWeight: '600' },
+  newFenceBtnSub: { color: colors.text2, fontSize: 11, marginTop: 2 },
+
   sectionTitle: {
     color: colors.text2,
     fontSize: 12,
