@@ -660,6 +660,8 @@
     if (btn) btn.addEventListener('click', loadReflections);
     const attBtn = document.getElementById('btn-att-reload');
     if (attBtn) attBtn.addEventListener('click', loadAttendance);
+    const perfBtn = document.getElementById('btn-perf-reload');
+    if (perfBtn) perfBtn.addEventListener('click', loadPerformance);
   });
 
   // ─── Docházka — admin (Fáze 3) ─────────────────────────────────────────
@@ -780,8 +782,79 @@
     if (name === 'fences')      return loadFences();
     if (name === 'reflections') return loadReflections();
     if (name === 'attendance')  return loadAttendance();
+    if (name === 'performance') return loadPerformance();
   }
 
   // Init
+  // ─── Výkon — admin (Fáze 6) ────────────────────────────────────────────
+  async function loadPerformance() {
+    const fromInp = $('#perf-from');
+    const toInp = $('#perf-to');
+    if (!fromInp.value || !toInp.value) {
+      const today = new Date();
+      const month = new Date();
+      month.setDate(month.getDate() - 29);
+      const fmt = (d) => d.toISOString().slice(0, 10);
+      if (!fromInp.value) fromInp.value = fmt(month);
+      if (!toInp.value) toInp.value = fmt(today);
+    }
+    const cardsWrap = $('#perf-cards-wrap');
+    const tableWrap = $('#perf-table-wrap');
+    cardsWrap.innerHTML = '<div class="empty-state">Načítám…</div>';
+    tableWrap.innerHTML = '';
+    try {
+      const qs = '?from=' + fromInp.value + '&to=' + toInp.value;
+      const data = await apiGet('/admin/performance' + qs);
+      const summary = $('#perf-stats-summary');
+      if (data.total.tasks_done === 0) {
+        summary.textContent = 'Žádné dokončené úkoly v tomto období.';
+        cardsWrap.innerHTML = '<div class="empty-state"><div class="empty-icon">📊</div><h3>Zatím žádná data</h3><p>Až kolegové dokončí úkoly s vyplněným časem, uvidíš tu výkon.</p></div>';
+        return;
+      }
+      summary.textContent = data.total.tasks_done + ' dokončených úkolů · celková efektivita ' +
+        (data.total.efficiency_pct != null ? data.total.efficiency_pct + ' %' : '—');
+
+      cardsWrap.innerHTML = '<div style="display:grid;grid-template-columns:repeat(auto-fill, minmax(240px, 1fr));gap:8px;">' +
+        data.people.map(function (p) {
+          var effCol = p.efficiency_pct == null ? 'var(--text2)'
+            : p.efficiency_pct >= 100 ? '#22c55e'
+            : p.efficiency_pct >= 80 ? '#f59e0b' : '#ef4444';
+          var sfBtn = p.suggested_speed_factor != null
+            ? '<button class="btn btn-sm btn-secondary" data-apply-sf="' + p.person_id + '" data-sf="' + p.suggested_speed_factor + '" style="margin-top:8px;width:100%">⚙️ Nastav speed ' + p.suggested_speed_factor + '×</button>'
+            : '';
+          return '<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px;">' +
+            '<div style="font-weight:600;color:var(--text);font-size:13px;">' + escapeHtml(p.name) + '</div>' +
+            '<div style="display:flex;align-items:baseline;gap:6px;margin-top:8px;">' +
+              '<span style="font-size:26px;font-weight:700;color:' + effCol + '">' + (p.efficiency_pct != null ? p.efficiency_pct + '%' : '—') + '</span>' +
+              '<span style="font-size:11px;color:var(--text2)">efektivita</span>' +
+            '</div>' +
+            '<div style="font-size:11px;color:var(--text2);margin-top:6px;line-height:1.6">' +
+              p.tasks_done + ' úkolů · norma ' + p.norm_min + ' min · realita ' + p.real_min + ' min<br/>' +
+              (p.avg_self_rating != null ? 'sebehodnocení ⭐ ' + p.avg_self_rating : 'bez hodnocení') +
+              (p.ai_dispatched ? ' · 🤖 ' + p.ai_dispatched + ' od Mistra' : '') +
+            '</div>' + sfBtn +
+          '</div>';
+        }).join('') + '</div>';
+
+      // Apply speed factor tlačítka
+      cardsWrap.querySelectorAll('[data-apply-sf]').forEach(function (btn) {
+        btn.addEventListener('click', async function () {
+          var pid = parseInt(btn.dataset.applySf, 10);
+          var sf = parseFloat(btn.dataset.sf);
+          if (!confirm('Nastavit kolegovi speed_factor na ' + sf + '×? Mistr ho pak použije při plánování.')) return;
+          try {
+            await apiSend('POST', '/admin/performance/apply-speed/' + pid, { speed_factor: sf });
+            btn.textContent = '✓ Uloženo';
+            btn.disabled = true;
+          } catch (e) {
+            alert('Chyba: ' + e.message);
+          }
+        });
+      });
+    } catch (e) {
+      cardsWrap.innerHTML = '<div class="empty-state" style="color:#ef4444">Chyba: ' + escapeHtml(e.message) + '</div>';
+    }
+  }
+
   loadToday();
 })();

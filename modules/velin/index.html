@@ -105,6 +105,7 @@
         <button class="tab" data-tab="fences">🗺️ Geo fence</button>
         <button class="tab" data-tab="reflections">🌙 Reflexe</button>
         <button class="tab" data-tab="attendance">⏱ Docházka</button>
+        <button class="tab" data-tab="performance">📊 Výkon</button>
       </div>
 
       <div class="tab-panel active" id="tab-today">
@@ -169,6 +170,19 @@
         </div>
         <div id="att-summary-wrap"></div>
         <div id="att-punches-wrap" style="margin-top:24px;"></div>
+      </div>
+
+      <div class="tab-panel" id="tab-performance">
+        <div class="filter-row">
+          <label style="color:var(--text2);font-size:12px;">Od</label>
+          <input type="date" id="perf-from" class="input-sm" />
+          <label style="color:var(--text2);font-size:12px;">Do</label>
+          <input type="date" id="perf-to" class="input-sm" />
+          <button class="btn btn-sm" id="btn-perf-reload">Načíst</button>
+          <span id="perf-stats-summary" style="color:var(--text2);font-size:12px;margin-left:auto;"></span>
+        </div>
+        <div id="perf-cards-wrap" style="margin-bottom:16px;"></div>
+        <div id="perf-table-wrap"></div>
       </div>
     </div>
   </div>

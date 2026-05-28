@@ -323,6 +323,139 @@ admin.put('/skill-profiles/:personId', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// ─── Performance vyhodnocení (Fáze 6) ───────────────────────────────────────
+// GET /api/velin/admin/performance?from=YYYY-MM-DD&to=YYYY-MM-DD&person_id=<id>
+// Agregace dokončených úkolů per osoba: norma (estimated_min) vs realita
+// (actual_min), efektivita, počet úkolů, průměrné sebehodnocení.
+admin.get('/performance', async (req, res, next) => {
+  try {
+    const from = asDate(req.query.from);
+    const to = asDate(req.query.to);
+    const personId = req.query.person_id ? parseInt(req.query.person_id, 10) : null;
+
+    const where = { status: 'done' };
+    if (personId) where.person_id = personId;
+    if (from || to) {
+      where.completed_at = {};
+      if (from) where.completed_at.gte = from;
+      if (to) {
+        const toEnd = new Date(to);
+        toEnd.setHours(23, 59, 59, 999);
+        where.completed_at.lte = toEnd;
+      }
+    }
+
+    const tasks = await prisma.taskAssignment.findMany({
+      where,
+      select: {
+        id: true,
+        person_id: true,
+        estimated_min: true,
+        actual_min: true,
+        started_at: true,
+        completed_at: true,
+        source: true,
+        person: { select: { first_name: true, last_name: true } },
+        feedback: { select: { self_rating: true } },
+      },
+    });
+
+    // Agregace per osoba
+    const byPerson = {};
+    for (const t of tasks) {
+      const pid = t.person_id;
+      if (!byPerson[pid]) {
+        byPerson[pid] = {
+          person_id: pid,
+          name: t.person ? `${t.person.first_name} ${t.person.last_name}`.trim() : `#${pid}`,
+          tasks_done: 0,
+          norm_min: 0,          // suma estimated_min (jen úkoly, co normu mají)
+          real_min: 0,          // suma actual_min nebo dopočet z timestamps
+          tasks_with_norm: 0,
+          tasks_with_real: 0,
+          rating_sum: 0,
+          rating_count: 0,
+          ai_dispatched: 0,
+        };
+      }
+      const a = byPerson[pid];
+      a.tasks_done++;
+      if (t.source === 'ai_dispatcher') a.ai_dispatched++;
+
+      // Realita: prioritně actual_min, fallback dopočet z timestampů
+      let real = null;
+      if (Number.isFinite(t.actual_min) && t.actual_min > 0) {
+        real = t.actual_min;
+      } else if (t.started_at && t.completed_at) {
+        real = Math.max(1, Math.round((new Date(t.completed_at) - new Date(t.started_at)) / 60000));
+      }
+
+      if (Number.isFinite(t.estimated_min) && t.estimated_min > 0) {
+        a.norm_min += t.estimated_min;
+        a.tasks_with_norm++;
+        if (real != null) {
+          a.real_min += real;
+          a.tasks_with_real++;
+        }
+      }
+
+      if (t.feedback && Number.isFinite(t.feedback.self_rating)) {
+        a.rating_sum += t.feedback.self_rating;
+        a.rating_count++;
+      }
+    }
+
+    const people = Object.values(byPerson).map((a) => {
+      // Efektivita = norma / realita × 100 (>100 % = rychlejší než norma)
+      const efficiency = a.real_min > 0 ? Math.round((a.norm_min / a.real_min) * 100) : null;
+      // Doporučený speed_factor z poměru (kolik× je reálně rychlejší/pomalejší)
+      const suggestedSpeed = a.real_min > 0 ? Math.round((a.norm_min / a.real_min) * 100) / 100 : null;
+      return {
+        ...a,
+        efficiency_pct: efficiency,
+        avg_self_rating: a.rating_count > 0 ? Math.round((a.rating_sum / a.rating_count) * 10) / 10 : null,
+        suggested_speed_factor: suggestedSpeed,
+      };
+    }).sort((x, y) => (y.efficiency_pct || 0) - (x.efficiency_pct || 0));
+
+    // Celkový souhrn
+    const totalNorm = people.reduce((s2, p) => s2 + p.norm_min, 0);
+    const totalReal = people.reduce((s2, p) => s2 + p.real_min, 0);
+
+    res.json({
+      from: from ? from.toISOString().slice(0, 10) : null,
+      to: to ? to.toISOString().slice(0, 10) : null,
+      total: {
+        people: people.length,
+        tasks_done: people.reduce((s2, p) => s2 + p.tasks_done, 0),
+        norm_min: totalNorm,
+        real_min: totalReal,
+        efficiency_pct: totalReal > 0 ? Math.round((totalNorm / totalReal) * 100) : null,
+      },
+      people,
+    });
+  } catch (err) { next(err); }
+});
+
+// POST /api/velin/admin/performance/apply-speed/:personId
+// Body: { speed_factor: number } — zapíše doporučený speed_factor do profilu.
+admin.post('/performance/apply-speed/:personId', async (req, res, next) => {
+  try {
+    const personId = parseInt(req.params.personId, 10);
+    if (!Number.isFinite(personId)) return res.status(400).json({ error: 'Neplatné personId' });
+    const sf = parseFloat((req.body || {}).speed_factor);
+    if (!Number.isFinite(sf) || sf < 0.3 || sf > 3) {
+      return res.status(400).json({ error: 'speed_factor musí být mezi 0.3 a 3' });
+    }
+    const upserted = await prisma.personSkillProfile.upsert({
+      where: { person_id: personId },
+      create: { person_id: personId, skills: [], speed_factor: sf },
+      update: { speed_factor: sf },
+    });
+    res.json({ profile: upserted });
+  } catch (err) { next(err); }
+});
+
 // ─── GeoFence CRUD ───────────────────────────────────────────────────────
 admin.get('/fences', async (req, res, next) => {
   try {
