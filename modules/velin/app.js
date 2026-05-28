@@ -322,32 +322,142 @@
   }
 
   // ─── Tab: Skill profily ────────────────────────────────────────────────
+  let _peopleSkillsCache = [];
+
   async function loadSkills() {
     const wrap = $('#skills-list');
     wrap.innerHTML = '<div class="empty-state">Načítám…</div>';
     try {
-      const { profiles } = await apiGet('/admin/skill-profiles');
-      if (profiles.length === 0) {
-        wrap.innerHTML = `<div class="empty-state"><div class="empty-icon">⭐</div><h3>Žádné skill profily</h3><p>Až bude potřeba (Fáze 5: AI dispečer), naplníme profily kolegů.</p></div>`;
+      const { people } = await apiGet('/admin/people-skills');
+      _peopleSkillsCache = people;
+      if (people.length === 0) {
+        wrap.innerHTML = `<div class="empty-state"><div class="empty-icon">⭐</div><h3>Žádní aktivní lidé</h3></div>`;
         return;
       }
       wrap.innerHTML = `
+        <p style="color:var(--text2);font-size:13px;margin:0 0 12px">
+          Vyplň kolegům dovednosti — AI dispečer Mistr podle nich vybírá, kdo dostane jaký úkol.
+          Bez vyplněných skills přiřazuje jen podle role a vytížení.
+        </p>
         <table class="data-table">
-          <thead><tr><th>Osoba</th><th>Skills</th><th>Směna</th><th>Speed factor</th><th>Poznámka</th></tr></thead>
-          <tbody>${profiles.map((p) => `
+          <thead><tr><th>Osoba</th><th>Role</th><th>Dovednosti</th><th>Směna</th><th>Rychlost</th><th>Zařízení</th><th></th></tr></thead>
+          <tbody>${people.map((p) => {
+            const skills = (p.profile && Array.isArray(p.profile.skills)) ? p.profile.skills : [];
+            const skillsTxt = skills.length
+              ? skills.map(sk => `${escapeHtml(sk.key)} L${sk.level || 1}${sk.certified ? ' ✓' : ''}`).join(', ')
+              : '<span style="color:var(--text2)">—</span>';
+            const sf = p.profile ? p.profile.speed_factor : 1.0;
+            return `
             <tr>
-              <td>${escapeHtml((p.person.first_name||'') + ' ' + (p.person.last_name||''))}</td>
-              <td><code style="font-size:11px">${escapeHtml(JSON.stringify(p.skills || []))}</code></td>
-              <td>${escapeHtml(p.preferred_shift || '—')}</td>
-              <td>${p.speed_factor}×</td>
-              <td>${escapeHtml(p.notes || '')}</td>
-            </tr>`).join('')}
+              <td><b>${escapeHtml(p.name)}</b></td>
+              <td style="font-size:12px;color:var(--text2)">${escapeHtml(p.role || '—')}</td>
+              <td style="font-size:12px">${skillsTxt}</td>
+              <td>${escapeHtml((p.profile && p.profile.preferred_shift) || '—')}</td>
+              <td>${sf}×</td>
+              <td>${p.has_device ? '<span class="badge b-done">📱</span>' : '<span class="badge b-cancelled">—</span>'}</td>
+              <td><button class="btn btn-sm btn-secondary" data-edit-skill="${p.id}">✏️ Upravit</button></td>
+            </tr>`;
+          }).join('')}
           </tbody>
         </table>
       `;
+      wrap.querySelectorAll('[data-edit-skill]').forEach((btn) => {
+        btn.addEventListener('click', () => openSkillEditor(parseInt(btn.dataset.editSkill, 10)));
+      });
     } catch (e) {
       wrap.innerHTML = `<div class="empty-state" style="color:#ef4444">Chyba: ${escapeHtml(e.message)}</div>`;
     }
+  }
+
+  function openSkillEditor(personId) {
+    const person = _peopleSkillsCache.find((p) => p.id === personId);
+    if (!person) return;
+    const prof = person.profile || {};
+    const skills = Array.isArray(prof.skills) ? prof.skills : [];
+
+    function skillRow(sk) {
+      sk = sk || { key: '', level: 3, certified: false };
+      return `
+        <div class="skill-row" style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
+          <input type="text" class="sk-key" placeholder="dovednost (např. sewing, welding)" value="${escapeHtml(sk.key || '')}" style="flex:2">
+          <select class="sk-level" style="flex:0 0 90px">
+            ${[1,2,3,4,5].map(l => `<option value="${l}"${(sk.level||3)===l?' selected':''}>L${l}</option>`).join('')}
+          </select>
+          <label style="display:flex;align-items:center;gap:4px;font-size:12px;white-space:nowrap">
+            <input type="checkbox" class="sk-cert"${sk.certified?' checked':''}> certifik.
+          </label>
+          <button type="button" class="btn btn-sm btn-secondary sk-del">✕</button>
+        </div>`;
+    }
+
+    openModal(`
+      <h2 style="margin-top:0">Skill profil — ${escapeHtml(person.name)}</h2>
+      <div style="font-size:12px;color:var(--text2);margin-bottom:12px">${escapeHtml(person.role || '')}${person.department ? ' · ' + escapeHtml(person.department) : ''}</div>
+
+      <label style="font-weight:600;font-size:13px">Dovednosti</label>
+      <div id="sk-rows" style="margin:8px 0">${skills.map(skillRow).join('') || skillRow()}</div>
+      <button type="button" id="sk-add" class="btn btn-sm btn-secondary" style="margin-bottom:16px">+ Přidat dovednost</button>
+
+      <div style="display:flex;gap:16px;margin-bottom:16px">
+        <div style="flex:1">
+          <label style="font-weight:600;font-size:13px">Preferovaná směna</label>
+          <select id="sk-shift" style="width:100%;margin-top:4px">
+            ${['','morning','afternoon','night','flex'].map(v => `<option value="${v}"${(prof.preferred_shift||'')===v?' selected':''}>${v||'—'}</option>`).join('')}
+          </select>
+        </div>
+        <div style="flex:1">
+          <label style="font-weight:600;font-size:13px">Rychlost (speed factor)</label>
+          <input type="number" id="sk-speed" step="0.05" min="0.5" max="2" value="${prof.speed_factor || 1.0}" style="width:100%;margin-top:4px">
+          <div style="font-size:11px;color:var(--text2)">1.0 = norma, 1.2 = o 20 % rychlejší</div>
+        </div>
+      </div>
+
+      <label style="font-weight:600;font-size:13px">Poznámka</label>
+      <textarea id="sk-notes" rows="2" style="width:100%;margin-top:4px">${escapeHtml(prof.notes || '')}</textarea>
+
+      <div class="modal-actions" style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end">
+        <button class="btn btn-secondary" onclick="window.__velinCloseModal()">Zrušit</button>
+        <button class="btn btn-primary" id="sk-save">💾 Uložit</button>
+      </div>
+    `);
+
+    const rowsWrap = $('#sk-rows');
+    $('#sk-add').addEventListener('click', () => {
+      const tmp = document.createElement('div');
+      tmp.innerHTML = skillRow();
+      const el = tmp.firstElementChild;
+      rowsWrap.appendChild(el);
+      el.querySelector('.sk-del').addEventListener('click', () => el.remove());
+    });
+    rowsWrap.querySelectorAll('.sk-del').forEach((b) => {
+      b.addEventListener('click', () => b.closest('.skill-row').remove());
+    });
+
+    $('#sk-save').addEventListener('click', async () => {
+      const newSkills = [];
+      rowsWrap.querySelectorAll('.skill-row').forEach((row) => {
+        const key = row.querySelector('.sk-key').value.trim();
+        if (!key) return;
+        newSkills.push({
+          key,
+          level: parseInt(row.querySelector('.sk-level').value, 10) || 3,
+          certified: row.querySelector('.sk-cert').checked,
+        });
+      });
+      const body = {
+        skills: newSkills,
+        preferred_shift: $('#sk-shift').value || null,
+        speed_factor: parseFloat($('#sk-speed').value) || 1.0,
+        notes: $('#sk-notes').value.trim() || null,
+      };
+      try {
+        await apiSend('PUT', '/admin/skill-profiles/' + personId, body);
+        closeModal();
+        loadSkills();
+      } catch (e) {
+        alert('Chyba uložení: ' + e.message);
+      }
+    });
   }
 
   // ─── Tab: Geo fence ────────────────────────────────────────────────────
@@ -501,6 +611,7 @@
           <th>Co bylo těžké</th>
           <th>Zítra</th>
           <th>Volné</th>
+          <th>🤖 Shrnutí</th>
         </tr></thead>
         <tbody>
           ${reflections.map((r) => {
@@ -516,6 +627,7 @@
                 <td style="max-width:200px;white-space:normal;font-size:12px;">${escapeHtml(r.struggles || '—')}</td>
                 <td style="max-width:200px;white-space:normal;font-size:12px;">${escapeHtml(r.tomorrow_focus || '—')}</td>
                 <td style="max-width:200px;white-space:normal;font-size:12px;">${escapeHtml(r.free_text || '—')}</td>
+                <td style="max-width:240px;white-space:normal;font-size:12px;color:var(--text2);font-style:italic;">${r.ai_summary ? escapeHtml(r.ai_summary) : '<span style=\'opacity:.5\'>generuje se…</span>'}</td>
               </tr>
             `;
           }).join('')}

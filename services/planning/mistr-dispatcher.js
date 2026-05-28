@@ -138,7 +138,7 @@ async function autoAssignBatch(batchId, opts = {}) {
     // 4b) Pošli úkol do Velína (push notif kolegovi)
     let velinResult = null;
     try {
-      velinResult = await syncBatchOperationToVelin(op.id);
+      velinResult = await syncBatchOperationToVelin(op.id, { source: 'ai_dispatcher' });
     } catch (e) {
       console.warn(`[mistr-dispatcher] velin sync(${op.id}) selhal:`, e.message);
     }
@@ -225,8 +225,130 @@ async function loadTodayWorkloadMap(prisma, personIds) {
   return map;
 }
 
+/**
+ * Velín→Mistr loop (Fáze 5 Krok F): když kolega blokne výrobní úkol, Mistr
+ * najde náhradníka a navrhne ho vedoucímu (notifikace, NE auto-přiřazení —
+ * záskok schvaluje člověk). Fire-and-forget z block action.
+ *
+ * @param batchOpId — BatchOperation, jejíž TaskAssignment byl blokován
+ * @param opts — { prisma?, blockedReason? }
+ * @returns { candidate, op_name } nebo null
+ */
+async function suggestReplacementForBlockedOp(batchOpId, opts = {}) {
+  const prisma = opts.prisma || defaultPrisma;
+  const blockedReason = opts.blockedReason || 'bez důvodu';
+
+  const op = await prisma.batchOperation.findUnique({
+    where: { id: batchOpId },
+    select: {
+      id: true,
+      planned_start: true,
+      assigned_person_id: true,
+      assigned_person: {
+        select: {
+          id: true, first_name: true, last_name: true,
+          supervisor_id: true,
+        },
+      },
+      operation: { select: { name: true, description: true } },
+      batch: { select: { batch_number: true, product: { select: { name: true } } } },
+    },
+  });
+  if (!op) return null;
+
+  const blockedPersonId = op.assigned_person_id;
+  const blockedName = op.assigned_person
+    ? `${op.assigned_person.first_name} ${op.assigned_person.last_name}`.trim()
+    : 'kolega';
+
+  // Najdi náhradníka (vyloučit blokujícího)
+  const people = await prisma.person.findMany({
+    where: {
+      active: true,
+      velin_devices: { some: { active: true } },
+      id: blockedPersonId ? { not: blockedPersonId } : undefined,
+    },
+    select: {
+      id: true, first_name: true, last_name: true,
+      role: { select: { name: true } },
+      velin_skill_profile: { select: { skills: true, preferred_shift: true, speed_factor: true } },
+    },
+  });
+
+  let candidate = null;
+  if (people.length > 0) {
+    const wlMap = await loadTodayWorkloadMap(prisma, people.map(p => p.id));
+    const scored = people.map(p => {
+      const { score, reasons } = scoreCandidate(p, op.operation, wlMap);
+      return { person_id: p.id, name: `${p.first_name} ${p.last_name}`.trim(), score, reasons };
+    });
+    scored.sort((a, b) => b.score - a.score);
+    candidate = scored[0] && scored[0].score >= MIN_AUTO_ASSIGN_SCORE ? scored[0] : (scored[0] || null);
+  }
+
+  // Komu poslat notifikaci: supervisor blokujícího → jeho User; fallback vedoucí/admin role
+  const recipientUserIds = await resolveSupervisorUserIds(prisma, op.assigned_person?.supervisor_id);
+
+  if (recipientUserIds.length > 0) {
+    const { createNotification } = require('../../routes/notifications.routes');
+    const opLabel = `${op.operation?.name || 'operace'} · ${op.batch?.product?.name || ''} ${op.batch?.batch_number || ''}`.trim();
+    const candidateText = candidate
+      ? `Návrh záskoku: ${candidate.name} (skóre ${candidate.score}) — ${(candidate.reasons || []).slice(0, 2).join('; ')}`
+      : 'Mistr nenašel vhodného náhradníka — vyřeš ručně.';
+    for (const uid of recipientUserIds) {
+      try {
+        await createNotification({
+          userId: uid,
+          type: 'task_status',
+          title: `⛔ ${blockedName} blokuje úkol: ${opLabel}`,
+          body: `Důvod: ${blockedReason}\n🤖 ${candidateText}`,
+          link: '/modules/planovani-vyroby',
+          meta: { batch_operation_id: op.id, blocked_person_id: blockedPersonId, suggested_person_id: candidate?.person_id || null },
+        });
+      } catch (e) {
+        console.warn('[mistr-dispatcher] notif vedoucímu selhala:', e.message);
+      }
+    }
+  }
+
+  return { candidate, op_name: op.operation?.name || null, notified: recipientUserIds.length };
+}
+
+// Najdi User.id vedoucích, kterým poslat eskalaci blokátoru.
+async function resolveSupervisorUserIds(prisma, supervisorPersonId) {
+  const ids = new Set();
+  // 1) Přímý supervisor blokujícího kolegy
+  if (supervisorPersonId) {
+    const supUser = await prisma.user.findFirst({
+      where: { person: { id: supervisorPersonId } },
+      select: { id: true },
+    });
+    if (supUser) ids.add(supUser.id);
+  }
+  // 2) Fallback — Useři s rolí vedoucí/mistr/admin
+  if (ids.size === 0) {
+    const leaders = await prisma.user.findMany({
+      where: {
+        person: { role: { name: { contains: 'edoucí', mode: 'insensitive' } } },
+      },
+      select: { id: true },
+      take: 5,
+    });
+    for (const u of leaders) ids.add(u.id);
+  }
+  return [...ids];
+}
+
+function suggestReplacementInBackground(batchOpId, opts = {}) {
+  suggestReplacementForBlockedOp(batchOpId, opts).catch((e) => {
+    console.warn('[mistr-dispatcher] suggestReplacement selhal:', e.message);
+  });
+}
+
 module.exports = {
   autoAssignBatch,
   autoAssignAllUnassigned,
+  suggestReplacementForBlockedOp,
+  suggestReplacementInBackground,
   MIN_AUTO_ASSIGN_SCORE,
 };
