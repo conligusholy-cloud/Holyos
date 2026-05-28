@@ -243,7 +243,7 @@ export default function TaskDetail({ route, navigation }: Props) {
             {task.estimated_min ? <Chip text={`⏱ ${task.estimated_min} min`} /> : null}
             {task.due_at ? <Chip text={`📅 ${shortTime(task.due_at)}`} /> : null}
             {task.location_hint ? <Chip text={`📍 ${task.location_hint}`} /> : null}
-            {batchInfo ? <Chip text="🏭 Z výroby" highlight /> : <Chip text={`🏷 ${task.source}`} />}
+            {batchInfo ? <Chip text={task.source === 'ai_dispatcher' ? '🤖 Od Mistra' : '🏭 Z výroby'} highlight /> : <Chip text={`🏷 ${task.source}`} />}
             {task.priority <= 2 ? <Chip text="🔴 priorita" highlight /> : null}
           </View>
 

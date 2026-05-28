@@ -60,7 +60,7 @@ async function ensureDailyPlan(personId, dateInput) {
  *
  * @returns { task, created } — task = TaskAssignment, created = true pokud nový
  */
-async function syncBatchOperationToVelin(batchOpId, { sendPush = true } = {}) {
+async function syncBatchOperationToVelin(batchOpId, { sendPush = true, source = 'production' } = {}) {
   const op = await prisma.batchOperation.findUnique({
     where: { id: batchOpId },
     include: {
@@ -107,7 +107,7 @@ async function syncBatchOperationToVelin(batchOpId, { sendPush = true } = {}) {
     estimated_min: estMin,
     due_at: op.planned_end,
     location_hint: wsName || null,
-    source: 'production',
+    source, // 'production' (ruční plán) | 'ai_dispatcher' (Mistr)
     source_ref_type: 'BatchOperation',
     source_ref_id: op.id,
     created_by: 'system',

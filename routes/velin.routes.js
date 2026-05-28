@@ -31,6 +31,8 @@ const {
 const scheduler = require('../services/workers/velin-scheduler');
 const r2 = require('../services/storage/r2');
 const velinBridge = require('../services/planning/velin-bridge');
+const reflectionSummary = require('../services/velin/reflection-summary');
+const mistrDispatcher = require('../services/planning/mistr-dispatcher');
 
 // Multer in-memory storage pro chat attachmenty (max 15 MB).
 // Nepoužíváme disk — soubor jde rovnou z paměti do R2 a buffer se uvolní.
@@ -261,6 +263,38 @@ admin.get('/skill-profiles', async (req, res, next) => {
       include: { person: { select: { id: true, first_name: true, last_name: true } } },
     });
     res.json({ profiles });
+  } catch (err) { next(err); }
+});
+
+// GET /api/velin/admin/people-skills — všichni aktivní lidé + jejich skill profil (i null).
+// Pro editor skill profilů (Mistr dispečer potřebuje vyplněné skills, jinak skóruje naslepo).
+admin.get('/people-skills', async (req, res, next) => {
+  try {
+    const people = await prisma.person.findMany({
+      where: { active: true },
+      select: {
+        id: true,
+        first_name: true,
+        last_name: true,
+        role: { select: { name: true } },
+        department: { select: { name: true } },
+        velin_devices: { where: { active: true }, select: { id: true } },
+        velin_skill_profile: {
+          select: { skills: true, preferred_shift: true, speed_factor: true, notes: true, updated_at: true },
+        },
+      },
+      orderBy: [{ last_name: 'asc' }, { first_name: 'asc' }],
+    });
+    res.json({
+      people: people.map(p => ({
+        id: p.id,
+        name: (p.first_name + ' ' + p.last_name).trim(),
+        role: p.role?.name || null,
+        department: p.department?.name || null,
+        has_device: (p.velin_devices || []).length > 0,
+        profile: p.velin_skill_profile || null,
+      })),
+    });
   } catch (err) { next(err); }
 });
 
@@ -843,7 +877,7 @@ mobile.get('/tasks/:id', async (req, res, next) => {
     // dopočítej info o dávce: číslo + produkt + pracoviště. Použito v mobilu pro
     // badge 🏭 + číslo dávky + pracoviště u úkolu (Krok D Fáze 4).
     let batchInfo = null;
-    if (task.source === 'production' && task.source_ref_type === 'BatchOperation' && task.source_ref_id) {
+    if ((task.source === 'production' || task.source === 'ai_dispatcher') && task.source_ref_type === 'BatchOperation' && task.source_ref_id) {
       try {
         const op = await prisma.batchOperation.findUnique({
           where: { id: task.source_ref_id },
@@ -913,6 +947,13 @@ async function transitionTask(req, res, next, opts) {
         );
       } catch (e) {
         console.warn('[velin/transitionTask] back-prop do BatchOperation selhal:', e.message);
+      }
+
+      // Velín→Mistr loop (Fáze 5 Krok F): při blokaci výrobního úkolu nech
+      // Mistra najít náhradníka a navrhnout ho vedoucímu (fire-and-forget).
+      if (opts.bridgeAction === 'block') {
+        const reason = (req.body && req.body.reason) || 'bez důvodu';
+        mistrDispatcher.suggestReplacementInBackground(updated.source_ref_id, { blockedReason: reason });
       }
     }
 
@@ -1031,6 +1072,11 @@ mobile.post('/feedback/evening', async (req, res, next) => {
         submitted_at: new Date(),
       },
     });
+
+    // Fáze 2 Krok F — vygeneruj AI summary pro vedoucího (fire-and-forget,
+    // neblokuje odpověď kolegovi). Uloží se do reflection.ai_summary.
+    reflectionSummary.generateInBackground(upserted.id);
+
     res.json({ reflection: upserted });
   } catch (err) { next(err); }
 });

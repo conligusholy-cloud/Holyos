@@ -458,7 +458,7 @@ async function proposeAssignmentToVelin(params, prisma) {
   let velinResult = null;
   try {
     const { syncBatchOperationToVelin } = require('../../services/planning/velin-bridge');
-    velinResult = await syncBatchOperationToVelin(opId);
+    velinResult = await syncBatchOperationToVelin(opId, { source: 'ai_dispatcher' });
   } catch (e) {
     console.warn('[people-server] velin-bridge selhal:', e.message);
   }
