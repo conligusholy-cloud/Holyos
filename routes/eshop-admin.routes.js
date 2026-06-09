@@ -895,6 +895,27 @@ router.get('/materials', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// Detail jednoho materiálu pro modal "Eshop nastavení".
+// Dřív frontend načítal celý seznam (limit 200) a hledal přes .find — to selhalo
+// u položek mimo limit (typicky nové zboží se sells_on_eshop=false, řazené na konec),
+// takže šly vyfiltrovat, ale nešly otevřít → "Materiál neexistuje". Cílený dotaz na id.
+router.get('/materials/:id', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (Number.isNaN(id)) return res.status(400).json({ error: 'Neplatné ID' });
+    const m = await prisma.material.findUnique({
+      where: { id },
+      select: {
+        ...materialEshopSelect,
+        eshop_category: { select: { id: true, name: true } },
+        eshop_warehouse: { select: { id: true, name: true, code: true } },
+      },
+    });
+    if (!m) return res.status(404).json({ error: 'Materiál neexistuje' });
+    res.json(m);
+  } catch (err) { next(err); }
+});
+
 // Hromadná editace eshop nastavení — admin Katalog tab "vybrané položky" akce.
 // Akce: enable / disable / set_category (value: int|null) / set_warehouse (value: int|null)
 const bulkEshopSchema = z.object({
