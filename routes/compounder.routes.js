@@ -91,11 +91,66 @@ router.post('/track', async (req, res) => {
   res.status(204).end();
 });
 
-// ─── VEŘEJNÉ: reakce na push notifikaci (stub) ──────────────────────────────
-// Service worker hlásí open/dismiss/akci na notifikaci.
-// TODO (další fáze): párovat s odeslanou notifikací a měřit reakci.
-router.post('/push-reaction', (req, res) => {
+// ─── VEŘEJNÉ: reakce na push notifikaci ─────────────────────────────────────
+// Service worker hlásí open/dismiss/akci. id = "<lead_id>.<nonce>" → svážeme s leadem.
+router.post('/push-reaction', async (req, res) => {
+  try {
+    const b = req.body || {};
+    const id = String(b.id || '');
+    const leadId = Number(id.split('.')[0]) || null;
+    await prisma.compounderEvent.create({
+      data: {
+        sid: 'push' + (leadId ? ':' + leadId : ''),
+        event: 'push_reaction',
+        props: { action: b.action || 'open', push_id: id, lead_id: leadId || undefined },
+        ip: clientIp(req),
+      },
+    });
+  } catch (e) { /* best-effort */ }
   res.status(204).end();
+});
+
+// ─── PUSH: VAPID public key (veřejné) ───────────────────────────────────────
+router.get('/push/key', (req, res) => {
+  res.json({ key: process.env.VAPID_PUBLIC_KEY || null });
+});
+
+// ─── PUSH: uložení odběru (veřejné). t = portal token → svázání s leadem ─────
+router.post('/push/subscribe', async (req, res, next) => {
+  try {
+    const b = req.body || {};
+    const sub = b.subscription || {};
+    if (!sub.endpoint || !sub.keys || !sub.keys.p256dh || !sub.keys.auth) {
+      return res.status(400).json({ error: 'Neplatná subscription' });
+    }
+    const leadId = b.t ? verifyPortalToken(String(b.t)) : null;
+    const endpoint = String(sub.endpoint).slice(0, 500);
+    const data = {
+      p256dh: String(sub.keys.p256dh).slice(0, 255),
+      auth: String(sub.keys.auth).slice(0, 255),
+      lead_id: leadId || null,
+      sid: b.sid ? String(b.sid).slice(0, 64) : null,
+      lang: b.lang ? String(b.lang).slice(0, 10) : null,
+      ua: req.headers['user-agent'] ? String(req.headers['user-agent']).slice(0, 1000) : null,
+    };
+    await prisma.compounderPushSub.upsert({
+      where: { endpoint },
+      update: data,
+      create: Object.assign({ endpoint }, data),
+    });
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
+// ─── PUSH: odeslání (admin). { leadId? | broadcast:true, title, body, url? } ──
+router.post('/push/send', requireAuth, async (req, res, next) => {
+  try {
+    const { leadId, broadcast, title, body, url } = req.body || {};
+    if (!title) return res.status(400).json({ error: 'Chybí titulek' });
+    if (!leadId && !broadcast) return res.status(400).json({ error: 'Zadej leadId nebo broadcast=true' });
+    const r = await sendCompounderPush({ leadId: leadId ? Number(leadId) : null, title, body, url });
+    res.json(r);
+  } catch (err) { next(err); }
 });
 
 // ─── VEŘEJNÉ: Compounder Portal — validace magic-link tokenu ─────────────────
@@ -296,6 +351,60 @@ async function sendPortalInvite(d, portalUrl) {
     link: portalUrl,
     linkLabel: 'Otevřít Compounder Portal',
   });
+}
+
+// ─── Web Push (VAPID) — odesílání ────────────────────────────────────────────
+let _webpush = null;
+let _webpushReady = false;
+function getWebpush() {
+  if (_webpushReady) return _webpush;
+  _webpushReady = true;
+  try { _webpush = require('web-push'); } catch (e) { _webpush = null; return null; }
+  const pub = process.env.VAPID_PUBLIC_KEY;
+  const priv = process.env.VAPID_PRIVATE_KEY;
+  if (pub && priv) {
+    try { _webpush.setVapidDetails(process.env.VAPID_SUBJECT || 'mailto:info@bestseries.cz', pub, priv); }
+    catch (e) { console.error('[compounder] VAPID setup:', e.message); }
+  }
+  return _webpush;
+}
+
+// Odešle push odběrům leada (leadId) nebo všem (leadId=null = broadcast).
+// Vrací { sent, failed, removed }. Volatelné i z workeru (automatika).
+async function sendCompounderPush({ leadId, title, body, url }) {
+  const wp = getWebpush();
+  if (!wp) return { sent: 0, failed: 0, removed: 0, error: 'web-push není nainstalován' };
+  if (!process.env.VAPID_PUBLIC_KEY || !process.env.VAPID_PRIVATE_KEY) {
+    return { sent: 0, failed: 0, removed: 0, error: 'chybí VAPID klíče v env' };
+  }
+  const where = leadId ? { lead_id: leadId } : {};
+  const subs = await prisma.compounderPushSub.findMany({ where, take: 5000 });
+  let sent = 0, failed = 0, removed = 0;
+  const nonce = Date.now().toString(36);
+  for (const s of subs) {
+    const payload = JSON.stringify({
+      title,
+      body: body || '',
+      url: url || (process.env.COMPOUNDER_BASE_URL || 'https://www.compounder.world') + '/portal',
+      id: (s.lead_id || 0) + '.' + nonce,
+    });
+    try {
+      await wp.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, payload);
+      sent++;
+      await prisma.compounderPushSub.update({ where: { endpoint: s.endpoint }, data: { last_sent_at: new Date() } }).catch(() => {});
+    } catch (e) {
+      if (e && (e.statusCode === 404 || e.statusCode === 410)) {
+        removed++;
+        await prisma.compounderPushSub.delete({ where: { endpoint: s.endpoint } }).catch(() => {});
+      } else {
+        failed++;
+      }
+    }
+  }
+  await prisma.compounderEvent.create({
+    data: { sid: 'admin', event: 'push_sent', props: { lead_id: leadId || undefined, sent, failed, removed, title } },
+  }).catch(() => {});
+  return { sent, failed, removed };
 }
 
 module.exports = router;

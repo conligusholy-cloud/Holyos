@@ -2687,7 +2687,7 @@
         var top = (s.topSections||[]).slice(0,4).map(function(x){ return cmpEsc(x.section)+' ('+x.count+')'; }).join(' · ') || '—';
         el.innerHTML = '<div style="display:flex;gap:22px;flex-wrap:wrap;align-items:center;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 18px;">' +
           cmpStat('Návštěvy 30d', s.sessions) + cmpStat('Eventy', s.events) + cmpStat('Registrace', s.registrations) + cmpStat('Konverze', s.conversionPct + ' %') +
-          '<div style="color:var(--text2);font-size:12px;max-width:340px;">Top sekce: ' + top + '</div></div>';
+          '<div style="color:var(--text2);font-size:12px;max-width:340px;">Top sekce: ' + top + '</div>' + '<button onclick="cmpPushBroadcast()" style="margin-left:auto;background:#eab308;color:#1a1408;border:none;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:600;cursor:pointer;">\ud83d\udce3 Push vsem</button>' + '</div>';
       } catch(e){}
     }
     function cmpEvtLabel(e){
@@ -2726,8 +2726,18 @@
           var tm = new Date(e.at).toLocaleTimeString('cs-CZ');
           return '<div style="display:flex;gap:10px;font-size:12.5px;padding:3px 0;border-bottom:1px solid rgba(255,255,255,0.04);"><span style="color:var(--text2);width:70px;flex:0 0 auto;">'+tm+'</span><span>'+cmpEvtLabel(e)+'</span></div>';
         }).join('');
-        td.innerHTML = head + '<div>' + rows + '</div>';
+        td.innerHTML = head + '<div style="margin:6px 0 10px;"><button onclick="cmpPushLead(' + id + ')" style="background:#eab308;color:#1a1408;border:none;border-radius:8px;padding:7px 12px;font-size:12.5px;font-weight:600;cursor:pointer;">\ud83d\udce3 Poslat push tomuto leadovi</button></div>' + '<div>' + rows + '</div>';
       } catch(e) { td.innerHTML = '<div style="color:#ef4444;font-size:13px;">Chyba načítání aktivity.</div>'; }
+    }
+    async function cmpPushBroadcast(){
+      var title = prompt('Titulek push notifikace (vsem odberatelum):'); if (!title) return;
+      var body = prompt('Text (nepovinne):') || '';
+      try { var r = await fetch('/api/compounder/push/send', { method:'POST', credentials:'include', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ broadcast:true, title:title, body:body }) }); var j = await r.json(); alert(j.error ? ('Chyba: '+j.error) : ('Odeslano: '+j.sent+', selhalo: '+j.failed+', odebrano: '+j.removed)); } catch(e){ alert('Chyba odeslani.'); }
+    }
+    async function cmpPushLead(id){
+      var title = prompt('Titulek push notifikace (tomuto leadovi):'); if (!title) return;
+      var body = prompt('Text (nepovinne):') || '';
+      try { var r = await fetch('/api/compounder/push/send', { method:'POST', credentials:'include', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ leadId:id, title:title, body:body }) }); var j = await r.json(); alert(j.error ? ('Chyba: '+j.error) : ('Odeslano: '+j.sent+', selhalo: '+j.failed)); } catch(e){ alert('Chyba odeslani.'); }
     }
     async function cmpSetStatus(id, status) {
       try { await fetch('/api/compounder/leads/' + id, { method:'PATCH', credentials:'include', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ status: status }) }); } catch(e) {}

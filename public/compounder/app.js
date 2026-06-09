@@ -199,10 +199,63 @@
   });
   window.addEventListener("appinstalled", function(){ track("app_installed", {}); });
 
-  /* ---------- service worker ---------- */
+  /* ---------- service worker + push ---------- */
   if ("serviceWorker" in navigator){
     window.addEventListener("load", function(){
-      navigator.serviceWorker.register("sw.js").catch(function(){});
+      navigator.serviceWorker.register("sw.js").then(function(){ setTimeout(initPush, 6000); }).catch(function(){});
+    });
+  }
+
+  /* ---------- web push opt-in (re-prompt po 7 dnech) ---------- */
+  function urlB64(s){ var pad="=".repeat((4-s.length%4)%4); var b=(s+pad).replace(/-/g,"+").replace(/_/g,"/"); var raw=atob(b); var arr=new Uint8Array(raw.length); for(var i=0;i<raw.length;i++)arr[i]=raw.charCodeAt(i); return arr; }
+  // portal stránka může přepsat (přidá { t: token } pro svázání s leadem)
+  window.__compounderPushExtra = window.__compounderPushExtra || function(){ return {}; };
+  function initPush(){
+    try{
+      if (!("PushManager" in window) || !("Notification" in window)) return;
+      if (Notification.permission === "denied") return;
+      if (Notification.permission === "granted") { subscribePush(); return; }
+      var asked = +(localStorage.getItem("compounder.push.askedAt")||0);
+      if (Date.now() - asked < 7*24*3600*1000) return;       // re-prompt jen po týdnu
+      if (installBar && installBar.classList.contains("show")) return; // nepřekrývat install banner
+      showPushBanner();
+    }catch(e){}
+  }
+  function pushTexts(){
+    var l = window.__compounderLang || "en";
+    if (l==="cs") return { t:"Dostávejte novinky o Compoundingu", b:"Zapnout" };
+    if (l==="de") return { t:"Erhalten Sie Compounding-News", b:"Aktivieren" };
+    return { t:"Get Compounding updates", b:"Enable" };
+  }
+  function showPushBanner(){
+    localStorage.setItem("compounder.push.askedAt", Date.now());
+    var tx = pushTexts();
+    var bar = document.createElement("div");
+    bar.className = "install show"; bar.style.bottom = "18px";
+    var span = document.createElement("span"); span.textContent = tx.t;
+    var ok = document.createElement("button"); ok.className="btn btn-gold btn-sm"; ok.textContent = tx.b;
+    var no = document.createElement("button"); no.className="btn btn-ghost btn-sm"; no.textContent="✕";
+    bar.appendChild(span); bar.appendChild(ok); bar.appendChild(no); document.body.appendChild(bar);
+    ok.addEventListener("click", function(){ bar.remove(); requestPush(); });
+    no.addEventListener("click", function(){ bar.remove(); });
+  }
+  function requestPush(){
+    Notification.requestPermission().then(function(p){ track("push_permission",{outcome:p}); if (p==="granted") subscribePush(); });
+  }
+  function subscribePush(){
+    navigator.serviceWorker.ready.then(function(reg){
+      fetch("/api/compounder/push/key").then(function(r){return r.json();}).then(function(j){
+        if (!j || !j.key) return;
+        reg.pushManager.getSubscription().then(function(existing){
+          var p = existing ? Promise.resolve(existing) : reg.pushManager.subscribe({ userVisibleOnly:true, applicationServerKey: urlB64(j.key) });
+          p.then(function(sub){
+            var extra = (window.__compounderPushExtra && window.__compounderPushExtra()) || {};
+            fetch("/api/compounder/push/subscribe", { method:"POST", headers:{"Content-Type":"application/json"},
+              body: JSON.stringify(Object.assign({ subscription: sub.toJSON(), sid: SID, lang: window.__compounderLang }, extra)) }).catch(function(){});
+            track("push_subscribed", {});
+          }).catch(function(){});
+        });
+      }).catch(function(){});
     });
   }
 })();
