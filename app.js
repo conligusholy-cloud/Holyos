@@ -622,7 +622,12 @@ app.use((req, res, next) => {
 });
 
 // (2) app.holyos.cz/compounder/ → tentýž web na podcestě (trailing slash kvůli relativním cestám).
-app.get('/compounder', (req, res) => res.redirect(301, '/compounder/'));
+// Pozn: Express má strict routing vypnuté, takže '/compounder' matchuje i '/compounder/'.
+// Redirect proto pustíme jen když lomítko opravdu chybí, jinak by vznikla smyčka.
+app.get('/compounder', (req, res, next) => {
+  if (req.path === '/compounder') return res.redirect(301, '/compounder/');
+  next();
+});
 app.get('/compounder/', serveCompounderHtml);
 app.use('/compounder', compounderStatic);
 
