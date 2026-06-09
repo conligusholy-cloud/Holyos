@@ -269,6 +269,7 @@
         <input type="text" id="cmp-search" placeholder="Hledat jméno/e-mail…" onkeyup="if(event.key==='Enter')loadCompounderLeads()" style="flex:1; min-width:160px;">
         <button class="btn" onclick="loadCompounderLeads()">↻ Obnovit</button>
       </div>
+      <div id="cmp-summary" style="margin-bottom:14px;"></div>
       <div id="cmp-leads-table"><div style="color:var(--text2);padding:20px;">Načítám…</div></div>
     </div>
 
@@ -2648,6 +2649,7 @@
     async function loadCompounderLeads() {
       var box = document.getElementById('cmp-leads-table');
       if (!box) return;
+      cmpSummary();
       var st = (document.getElementById('cmp-status-filter')||{}).value || '';
       var rl = (document.getElementById('cmp-role-filter')||{}).value || '';
       var q = (document.getElementById('cmp-search')||{}).value || '';
@@ -2658,21 +2660,74 @@
         if (!r.ok) throw new Error('HTTP ' + r.status);
         var leads = await r.json();
         if (!leads.length) { box.innerHTML = '<div style="color:var(--text2);padding:24px;">Zatím žádné registrace.</div>'; return; }
-        var h = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr><th>Vytvořeno</th><th>Jméno</th><th>E-mail</th><th>Role</th><th>Jazyk</th><th>Stav</th><th>Poznámka</th></tr></thead><tbody>';
+        var h = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr><th></th><th>Vytvořeno</th><th>Jméno</th><th>E-mail</th><th>Role</th><th>Jazyk</th><th>Stav</th><th>Poznámka</th></tr></thead><tbody>';
         leads.forEach(function(l) {
           var dt = new Date(l.created_at).toLocaleString('cs-CZ');
           var roleLabel = l.role === 'distributor' ? 'Distributor' : 'Compounder';
-          var sel = '<select onchange="cmpSetStatus(' + l.id + ', this.value)" style="background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:12px;">';
+          var sel = '<select onclick="event.stopPropagation()" onchange="cmpSetStatus(' + l.id + ', this.value)" style="background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:12px;">';
           Object.keys(CMP_STATUS).forEach(function(k){ sel += '<option value="' + k + '"' + (l.status===k?' selected':'') + '>' + CMP_STATUS[k] + '</option>'; });
           sel += '</select>';
           var noteVal = cmpEsc(l.notes||'');
-          h += '<tr style="cursor:default;"><td style="white-space:nowrap;">' + dt + '</td><td>' + cmpEsc(l.name) + '</td><td><a href="mailto:' + cmpEsc(l.email) + '" style="color:#eab308;">' + cmpEsc(l.email) + '</a></td><td>' + roleLabel + '</td><td>' + cmpEsc((l.lang||'').toUpperCase()) + '</td><td>' + sel + '</td><td><input type="text" value="' + noteVal + '" placeholder="—" onblur="cmpSetNote(' + l.id + ', this.value)" style="width:150px;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:12px;"></td></tr>';
+          h += '<tr data-lead="' + l.id + '" onclick="cmpActivity(' + l.id + ', this)" title="Klikni pro cestu zákazníka" style="cursor:pointer;"><td style="color:var(--text2);">▸</td><td style="white-space:nowrap;">' + dt + '</td><td>' + cmpEsc(l.name) + '</td><td><a href="mailto:' + cmpEsc(l.email) + '" onclick="event.stopPropagation()" style="color:#eab308;">' + cmpEsc(l.email) + '</a></td><td>' + roleLabel + '</td><td>' + cmpEsc((l.lang||'').toUpperCase()) + '</td><td>' + sel + '</td><td><input type="text" value="' + noteVal + '" placeholder="—" onclick="event.stopPropagation()" onblur="cmpSetNote(' + l.id + ', this.value)" style="width:140px;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:12px;"></td></tr>';
         });
         h += '</tbody></table></div>';
         box.innerHTML = h;
       } catch(e) {
         box.innerHTML = '<div style="color:#ef4444;padding:20px;">Chyba načítání leadů: ' + cmpEsc(e.message) + '</div>';
       }
+    }
+    function cmpStat(k, v){ return '<div><div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--text2);">'+k+'</div><div style="font-size:18px;font-weight:700;color:#eab308;">'+v+'</div></div>'; }
+    async function cmpSummary() {
+      var el = document.getElementById('cmp-summary');
+      if (!el) return;
+      try {
+        var r = await fetch('/api/compounder/analytics/summary?days=30', { credentials:'include' });
+        if (!r.ok) return;
+        var s = await r.json();
+        var top = (s.topSections||[]).slice(0,4).map(function(x){ return cmpEsc(x.section)+' ('+x.count+')'; }).join(' · ') || '—';
+        el.innerHTML = '<div style="display:flex;gap:22px;flex-wrap:wrap;align-items:center;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 18px;">' +
+          cmpStat('Návštěvy 30d', s.sessions) + cmpStat('Eventy', s.events) + cmpStat('Registrace', s.registrations) + cmpStat('Konverze', s.conversionPct + ' %') +
+          '<div style="color:var(--text2);font-size:12px;max-width:340px;">Top sekce: ' + top + '</div></div>';
+      } catch(e){}
+    }
+    function cmpEvtLabel(e){
+      var p = e.props||{}; var ev = e.event;
+      if (ev==='page_view') return '👁️ Otevřel web';
+      if (ev==='section_view') return '📄 Sekce: '+cmpEsc(p.section||'?');
+      if (ev==='cta_click') return '🖱️ Klik: '+cmpEsc(p.label||'CTA');
+      if (ev==='register_submit') return '📝 Odeslal registraci';
+      if (ev==='register_success') return '✅ Registrace ('+cmpEsc(p.role||'')+')';
+      if (ev==='card_flip') return '💳 Otočil kartu';
+      if (ev==='lang_change') return '🌐 Jazyk → '+cmpEsc(p.lang||'');
+      if (ev==='portal_view') return '🔑 Otevřel Portal';
+      if (ev==='install_choice') return '📲 Instalace PWA: '+cmpEsc(p.outcome||'');
+      if (ev==='page_leave') return '🚪 Odešel';
+      return cmpEsc(ev);
+    }
+    async function cmpActivity(id, row) {
+      var nx = row.nextElementSibling;
+      if (nx && nx.className === 'cmp-act-row') { nx.remove(); row.firstChild.textContent='▸'; return; }
+      row.firstChild.textContent='▾';
+      var tr = document.createElement('tr'); tr.className='cmp-act-row';
+      var td = document.createElement('td'); td.colSpan = 8; td.style.background='rgba(234,179,8,0.04)'; td.style.padding='14px 18px';
+      td.innerHTML = '<div style="color:var(--text2);font-size:13px;">Načítám cestu…</div>';
+      tr.appendChild(td); row.parentNode.insertBefore(tr, row.nextSibling);
+      try {
+        var r = await fetch('/api/compounder/leads/'+id+'/activity', { credentials:'include' });
+        var a = await r.json();
+        if (!a.count) { td.innerHTML = '<div style="color:var(--text2);font-size:13px;">Žádná zaznamenaná aktivita (registrace ručně nebo před zapnutím analytiky).</div>'; return; }
+        var mins = Math.round((a.totalMs||0)/60000);
+        var head = '<div style="display:flex;gap:18px;flex-wrap:wrap;margin-bottom:10px;font-size:12px;color:var(--text2);">' +
+          '<span><b style="color:var(--text)">'+a.count+'</b> eventů</span>' +
+          '<span>Portal: <b style="color:'+(a.portalOpened?'#10b981':'var(--text2)')+'">'+(a.portalOpened?'otevřel':'ne')+'</b></span>' +
+          (mins?('<span>Čas: <b style="color:var(--text)">~'+mins+' min</b></span>'):'') +
+          '<span>Od '+new Date(a.first).toLocaleString('cs-CZ')+'</span></div>';
+        var rows = a.events.map(function(e){
+          var tm = new Date(e.at).toLocaleTimeString('cs-CZ');
+          return '<div style="display:flex;gap:10px;font-size:12.5px;padding:3px 0;border-bottom:1px solid rgba(255,255,255,0.04);"><span style="color:var(--text2);width:70px;flex:0 0 auto;">'+tm+'</span><span>'+cmpEvtLabel(e)+'</span></div>';
+        }).join('');
+        td.innerHTML = head + '<div>' + rows + '</div>';
+      } catch(e) { td.innerHTML = '<div style="color:#ef4444;font-size:13px;">Chyba načítání aktivity.</div>'; }
     }
     async function cmpSetStatus(id, status) {
       try { await fetch('/api/compounder/leads/' + id, { method:'PATCH', credentials:'include', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ status: status }) }); } catch(e) {}

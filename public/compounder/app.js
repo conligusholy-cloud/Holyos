@@ -124,7 +124,7 @@
         return r.json().catch(function(){ return {}; });
       }).then(function(resp){
         msg.className = "reg-msg ok"; msg.textContent = window.__t("s7.ok");
-        track("register_success", {role:data.role});
+        track("register_success", {role:data.role, lead_id: (resp && resp.id) || null});
         if (resp && resp.portalUrl) {
           setTimeout(function(){ location.href = resp.portalUrl; }, 1400);
         } else {
