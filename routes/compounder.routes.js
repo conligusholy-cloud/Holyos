@@ -13,6 +13,8 @@ const { z } = require('zod');
 const { prisma } = require('../config/database');
 const { requireAuth } = require('../middleware/auth');
 const { createNotification } = require('./notifications.routes');
+const { sendMail } = require('../services/email');
+const crypto = require('crypto');
 
 // ─── Pomocné ─────────────────────────────────────────────────────────────
 
@@ -53,9 +55,12 @@ router.post('/register', async (req, res, next) => {
       select: { id: true, role: true, created_at: true },
     });
     console.log(`[compounder] Nový lead #${lead.id} (${d.role}): ${d.email}`);
+    const portalUrl = `${portalBase()}/portal?t=${makePortalToken(lead.id)}`;
     // Notifikace kompetentní osobě (in-app zvonek) — fire-and-forget, ať chyba neshodí registraci.
     notifyNewLead(lead.id, d).catch((e) => console.error('[compounder] notifikace selhala:', e.message));
-    return res.status(201).json({ ok: true, id: lead.id });
+    // Magic-link e-mail do Portalu — fire-and-forget.
+    sendPortalInvite(d, portalUrl).catch((e) => console.error('[compounder] e-mail Portalu selhal:', e.message));
+    return res.status(201).json({ ok: true, id: lead.id, portalUrl });
   } catch (err) {
     next(err);
   }
@@ -74,6 +79,24 @@ router.post('/track', (req, res) => {
 // TODO (další fáze): párovat s odeslanou notifikací a měřit reakci.
 router.post('/push-reaction', (req, res) => {
   res.status(204).end();
+});
+
+// ─── VEŘEJNÉ: Compounder Portal — validace magic-link tokenu ─────────────────
+// GET /api/compounder/portal/session?t=TOKEN
+// Token je HMAC-podepsaný (lead id + podpis), bez DB sloupce. Ověří se serverem.
+router.get('/portal/session', async (req, res, next) => {
+  try {
+    const id = verifyPortalToken(String(req.query.t || ''));
+    if (!id) return res.status(401).json({ ok: false, error: 'Neplatný nebo chybějící přístupový odkaz.' });
+    const lead = await prisma.compounderLead.findUnique({
+      where: { id },
+      select: { id: true, name: true, role: true, lang: true },
+    });
+    if (!lead) return res.status(404).json({ ok: false, error: 'Registrace nenalezena.' });
+    return res.json({ ok: true, name: lead.name, role: lead.role, lang: lead.lang });
+  } catch (err) {
+    next(err);
+  }
 });
 
 // ─── ADMIN: výpis leadů (vyžaduje přihlášení) ───────────────────────────────
@@ -146,6 +169,46 @@ async function notifyNewLead(leadId, d) {
       meta: { lead_id: leadId, role: d.role, email: d.email },
     });
   }
+}
+
+// ─── Compounder Portal — magic-link token (HMAC, bez DB sloupce) ─────────────
+function portalSecret() {
+  return process.env.COMPOUNDER_TOKEN_SECRET || process.env.JWT_SECRET || 'compounder-portal-secret';
+}
+function portalBase() {
+  return (process.env.COMPOUNDER_BASE_URL || 'https://www.compounder.world').replace(/\/+$/, '');
+}
+function makePortalToken(leadId) {
+  const sig = crypto.createHmac('sha256', portalSecret()).update('compounder:' + leadId).digest('base64url');
+  return leadId + '.' + sig;
+}
+function verifyPortalToken(token) {
+  if (!token || typeof token !== 'string' || token.indexOf('.') < 0) return null;
+  const parts = token.split('.');
+  const id = Number(parts[0]);
+  const sig = parts[1];
+  if (!Number.isInteger(id) || id <= 0 || !sig) return null;
+  const expected = crypto.createHmac('sha256', portalSecret()).update('compounder:' + id).digest('base64url');
+  const a = Buffer.from(sig);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
+  return id;
+}
+async function sendPortalInvite(d, portalUrl) {
+  const from = process.env.COMPOUNDER_MAIL_FROM || process.env.SMTP_FROM || process.env.INVOICE_IMAP_USER;
+  await sendMail({
+    to: d.email,
+    from,
+    subject: 'Vstup do Compounder Portalu',
+    preheader: 'Váš osobní přístup k ekonomice, návratnosti a parametrům Compounderu.',
+    body:
+      `Dobrý den, ${d.name},\n\n` +
+      `děkujeme za zájem o Compounding. Tímto odkazem se dostanete do Compounder Portalu — ` +
+      `ekonomika, návratnost, technické parametry, přípojky, půdorysy a distribuční model.\n\n` +
+      `Odkaz je osobní, nesdílejte ho.`,
+    link: portalUrl,
+    linkLabel: 'Otevřít Compounder Portal',
+  });
 }
 
 module.exports = router;
