@@ -54,7 +54,7 @@ async function translateBatch(client, code, name, src) {
   const sys =
     'You are a professional translator for a premium fintech / real-estate brand website (Compounder by Best Series). ' +
     'Translate the given UI strings from English into ' + name + ' (' + code + '). Rules:\n' +
-    '- Keep these brand terms EXACTLY as-is, untranslated: Compounder, Compounding, Compounder Machine, Compounder Card, Compounder Portal, Best Series, Speed Queen.\n' +
+    '- Keep these brand terms EXACTLY as-is, untranslated: Compounder, Compounding, Compounder Machine, Compounder Card, Compounder Portal, Best Series.\n' +
     '- Keep ALL placeholders unchanged, e.g. {pct}.\n' +
     '- Keep units / symbols unchanged: €, V, A, m, 24/7, 3/4", LTE, 5G, ROI.\n' +
     '- Tone: concise, confident, premium. Use the natural formal register of the language.\n' +
