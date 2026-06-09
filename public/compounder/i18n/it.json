@@ -175,5 +175,15 @@
  "p.u.months": "mesi",
  "p.u.loss": "in perdita",
  "hero.line1": "Non vendiamo lavanderie.",
- "hero.line2": "Vendiamo Compounding."
+ "hero.line2": "Vendiamo Compounding.",
+ "p.ver.title": "Versioni, disegni e allacciamenti",
+ "p.ver.lead": "Tre misure della Compounder Machine. Ogni PDF contiene il disegno quotato e gli allacciamenti necessari.",
+ "p.ver.v2": "Compounder 2",
+ "p.ver.v3": "Compounder 3",
+ "p.ver.v4": "Compounder 4",
+ "p.ver.el": "Elettricità",
+ "p.ver.water": "Acqua",
+ "p.ver.sewage": "Scarico",
+ "p.ver.dl": "Scarica disegno + allacciamenti (PDF)",
+ "p.ver.note": "Altezza circa 2 390 mm. Elettricità, acqua e scarico sono convogliati in un unico pozzetto. Specifica finale in base alla configurazione."
 }

@@ -175,5 +175,15 @@
  "p.u.months": "xhur",
  "p.u.loss": "b'telf",
  "hero.line1": "Aħna ma nbigħux ħwienet tal-ħasil.",
- "hero.line2": "Aħna nbigħu Compounding."
+ "hero.line2": "Aħna nbigħu Compounding.",
+ "p.ver.title": "Verżjonijiet, tpinġijiet u konnessjonijiet",
+ "p.ver.lead": "Tliet daqsijiet tal-Compounder Machine. Kull PDF fih it-tpinġija bid-dimensjonijiet u l-konnessjonijiet meħtieġa.",
+ "p.ver.v2": "Compounder 2",
+ "p.ver.v3": "Compounder 3",
+ "p.ver.v4": "Compounder 4",
+ "p.ver.el": "Elettriku",
+ "p.ver.water": "Ilma",
+ "p.ver.sewage": "Drenaġġ",
+ "p.ver.dl": "Niżżel it-tpinġija + konnessjonijiet (PDF)",
+ "p.ver.note": "Għoli madwar 2 390 mm. L-elettriku, l-ilma u d-drenaġġ jitwasslu f'bir wieħed. Speċifikazzjoni finali skont il-konfigurazzjoni."
 }

@@ -175,5 +175,15 @@
  "p.u.months": "maanden",
  "p.u.loss": "verlieslatend",
  "hero.line1": "Wij verkopen geen wasserettes.",
- "hero.line2": "Wij verkopen Compounding."
+ "hero.line2": "Wij verkopen Compounding.",
+ "p.ver.title": "Versies, tekeningen en aansluitingen",
+ "p.ver.lead": "Drie maten van de Compounder Machine. Elke PDF bevat de gemaatvoerde tekening en de vereiste aansluitingen.",
+ "p.ver.v2": "Compounder 2",
+ "p.ver.v3": "Compounder 3",
+ "p.ver.v4": "Compounder 4",
+ "p.ver.el": "Elektra",
+ "p.ver.water": "Water",
+ "p.ver.sewage": "Riolering",
+ "p.ver.dl": "Tekening + aansluitingen downloaden (PDF)",
+ "p.ver.note": "Hoogte ca. 2 390 mm. Elektriciteit, water en riolering worden naar één put geleid. Definitieve specificatie per configuratie."
 }

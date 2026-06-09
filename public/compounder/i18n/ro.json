@@ -175,5 +175,15 @@
  "p.u.months": "luni",
  "p.u.loss": "pe pierdere",
  "hero.line1": "Nu vindem spălătorii.",
- "hero.line2": "Vindem Compounding."
+ "hero.line2": "Vindem Compounding.",
+ "p.ver.title": "Versiuni, desene și racorduri",
+ "p.ver.lead": "Trei dimensiuni ale Compounder Machine. Fiecare PDF conține desenul cotat și racordurile necesare.",
+ "p.ver.v2": "Compounder 2",
+ "p.ver.v3": "Compounder 3",
+ "p.ver.v4": "Compounder 4",
+ "p.ver.el": "Electricitate",
+ "p.ver.water": "Apă",
+ "p.ver.sewage": "Canalizare",
+ "p.ver.dl": "Descarcă desenul + racordurile (PDF)",
+ "p.ver.note": "Înălțime cca. 2 390 mm. Electricitatea, apa și canalizarea sunt aduse într-un singur cămin. Specificație finală în funcție de configurație."
 }

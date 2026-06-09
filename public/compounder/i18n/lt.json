@@ -175,5 +175,15 @@
  "p.u.months": "mėn.",
  "p.u.loss": "nuostolinga",
  "hero.line1": "Mes neparduodame skalbyklų.",
- "hero.line2": "Mes parduodame Compounding."
+ "hero.line2": "Mes parduodame Compounding.",
+ "p.ver.title": "Versijos, brėžiniai ir prijungimai",
+ "p.ver.lead": "Trys Compounder Machine dydžiai. Kiekviename PDF yra brėžinys su matmenimis ir reikalingi prijungimai.",
+ "p.ver.v2": "Compounder 2",
+ "p.ver.v3": "Compounder 3",
+ "p.ver.v4": "Compounder 4",
+ "p.ver.el": "Elektra",
+ "p.ver.water": "Vanduo",
+ "p.ver.sewage": "Kanalizacija",
+ "p.ver.dl": "Atsisiųsti brėžinį + prijungimus (PDF)",
+ "p.ver.note": "Aukštis apie 2 390 mm. Elektra, vanduo ir kanalizacija suvedami į vieną šulinį. Galutinė specifikacija pagal konfigūraciją."
 }

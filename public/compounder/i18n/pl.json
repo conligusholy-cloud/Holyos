@@ -175,5 +175,15 @@
  "p.u.months": "miesięcy",
  "p.u.loss": "na minusie",
  "hero.line1": "Nie sprzedajemy pralni.",
- "hero.line2": "Sprzedajemy Compounding."
+ "hero.line2": "Sprzedajemy Compounding.",
+ "p.ver.title": "Wersje, rysunki i przyłącza",
+ "p.ver.lead": "Trzy rozmiary Compounder Machine. Każdy plik PDF zawiera rysunek z wymiarami oraz wymagane przyłącza.",
+ "p.ver.v2": "Compounder 2",
+ "p.ver.v3": "Compounder 3",
+ "p.ver.v4": "Compounder 4",
+ "p.ver.el": "Elektryka",
+ "p.ver.water": "Woda",
+ "p.ver.sewage": "Kanalizacja",
+ "p.ver.dl": "Pobierz rysunek + przyłącza (PDF)",
+ "p.ver.note": "Wysokość ok. 2 390 mm. Prąd, woda i kanalizacja są sprowadzone do jednej studzienki. Ostateczna specyfikacja zależna od konfiguracji."
 }

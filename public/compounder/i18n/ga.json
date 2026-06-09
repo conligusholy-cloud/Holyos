@@ -175,5 +175,15 @@
  "p.u.months": "mí",
  "p.u.loss": "ag caillteanas",
  "hero.line1": "Ní dhíolaimid neachtlanna.",
- "hero.line2": "Díolaimid Compounding."
+ "hero.line2": "Díolaimid Compounding.",
+ "p.ver.title": "Leaganacha, líníochtaí agus naisc",
+ "p.ver.lead": "Trí mhéid den Compounder Machine. Tá an líníocht thomhaiste agus na naisc riachtanacha i ngach PDF.",
+ "p.ver.v2": "Compounder 2",
+ "p.ver.v3": "Compounder 3",
+ "p.ver.v4": "Compounder 4",
+ "p.ver.el": "Leictreachas",
+ "p.ver.water": "Uisce",
+ "p.ver.sewage": "Séarachas",
+ "p.ver.dl": "Íoslódáil líníocht + naisc (PDF)",
+ "p.ver.note": "Airde tuairim is 2 390 mm. Tugtar leictreachas, uisce agus séarachas isteach i ndúchan amháin. Sonraíocht dheiridh de réir na cumraíochta."
 }

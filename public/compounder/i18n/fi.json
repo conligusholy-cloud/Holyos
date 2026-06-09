@@ -175,5 +175,15 @@
  "p.u.months": "kuukautta",
  "p.u.loss": "tappiollinen",
  "hero.line1": "Emme myy pesuloita.",
- "hero.line2": "Myymme Compounding."
+ "hero.line2": "Myymme Compounding.",
+ "p.ver.title": "Versiot, piirustukset ja liitännät",
+ "p.ver.lead": "Compounder Machine kolmessa koossa. Jokainen PDF sisältää mitoitetun piirustuksen ja vaaditut liitännät.",
+ "p.ver.v2": "Compounder 2",
+ "p.ver.v3": "Compounder 3",
+ "p.ver.v4": "Compounder 4",
+ "p.ver.el": "Sähkö",
+ "p.ver.water": "Vesi",
+ "p.ver.sewage": "Viemäri",
+ "p.ver.dl": "Lataa piirustus + liitännät (PDF)",
+ "p.ver.note": "Korkeus n. 2 390 mm. Sähkö, vesi ja viemäri tuodaan yhteen kaivoon. Lopullinen erittely kokoonpanon mukaan."
 }
