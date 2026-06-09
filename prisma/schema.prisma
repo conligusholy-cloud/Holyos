@@ -1688,6 +1688,11 @@ model SlotAssignment {
   status          String  @default("planned") @db.VarChar(20) // planned, in_progress, done
   note            String? @db.Text
 
+  // Rezervace slotu na 3 dny (migrace 20260513120000_add_slot_reservation).
+  reservation_status       String?   @db.VarChar(20)
+  reserved_until           DateTime?
+  reservation_confirmed_at DateTime?
+
   created_at DateTime @default(now())
 
   slot       ProductionSlot   @relation(fields: [slot_id], references: [id], onDelete: Cascade)
@@ -1699,6 +1704,8 @@ model SlotAssignment {
   @@index([order_item_id])
   @@index([batch_id])
   @@index([status])
+  @@index([reservation_status])
+  @@index([reserved_until])
   @@map("slot_assignments")
 }
 
