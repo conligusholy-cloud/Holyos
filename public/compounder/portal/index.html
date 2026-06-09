@@ -112,7 +112,6 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
     <a href="#parametry" data-i18n="p.nav.params">Technical parameters</a>
     <a href="#pripojky" data-i18n="p.nav.conn">Connections</a>
     <a href="#pudorysy" data-i18n="p.nav.plans">Floor plans</a>
-    <a href="#distribuce" data-i18n="p.nav.dist">Distribution model</a>
   </nav>
 
   <div class="wrap">
@@ -228,17 +227,6 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
       </div>
       <p class="note" data-i18n="p.ver.note">Height approx. 2 390 mm. Electricity, water and sewage are brought into one manhole. Final spec per configuration.</p>
     </section>
-
-    <section class="blk" id="distribuce">
-      <div class="eyebrow" data-i18n="p.dist.eyebrow">Distribution model</div>
-      <h2 data-i18n="p.dist.title">Two ways to build</h2>
-      <p class="lead" data-i18n="p.dist.lead">A Compounder builds a portfolio of assets. A Distributor helps create new Compounders.</p>
-      <div class="cards2">
-        <div class="tile"><div class="ic" data-i18n="p.dist.c">Compounder</div><h4 data-i18n="p.dist.ch">Investor</h4><p data-i18n="p.dist.cp">Acquires Compounder Machines, reinvests cashflow and scales the portfolio. One asset funds the next.</p></div>
-        <div class="tile"><div class="ic" data-i18n="p.dist.d">Distributor</div><h4 data-i18n="p.dist.dh">Multiplier</h4><p data-i18n="p.dist.dp">Operates their own machines, distributes Compounder Machines and helps create new Compounders.</p></div>
-      </div>
-      <p class="note" data-i18n="p.dist.note">We'll discuss specific terms, prices and availability in person — we'll get in touch.</p>
-    </section>
   </div>
 
   <footer data-i18n="p.footer">COMPOUNDER · Best Series — We build Compounder Machines. · compounder.world</footer>
@@ -296,7 +284,6 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
     });
     sel.addEventListener("change", function(){ pSetLang(sel.value, recalc); });
   }
-  // gate text hned lokalizuj
   pSetLang(pDetect(), null);
 
   var qs = new URLSearchParams(location.search);
@@ -325,7 +312,6 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
         document.getElementById("hi").textContent = pT("p.hi") + (first ? (", " + first) : "");
         initCalc(); initNav();
       });
-      // analytika — portal_view svázané se session i s lead_id
       try {
         var sid = localStorage.getItem("compounder.sid");
         if (!sid) { sid = "s_" + Date.now().toString(36) + Math.random().toString(36).slice(2,8); localStorage.setItem("compounder.sid", sid); }
@@ -383,7 +369,6 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
     }, { passive:true });
   }
 
-  // web push opt-in (svázané s leadem přes token)
   function pUrlB64(s){ var pad="=".repeat((4-s.length%4)%4); var b=(s+pad).replace(/-/g,"+").replace(/_/g,"/"); var raw=atob(b); var arr=new Uint8Array(raw.length); for(var i=0;i<raw.length;i++)arr[i]=raw.charCodeAt(i); return arr; }
   function initPortalPush(tok){
     try{
