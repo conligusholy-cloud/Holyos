@@ -1,0 +1,17 @@
+# Soubory/složky, které se NEMAJÍ nahrávat na Railway při `railway up`.
+# (kód + build se nahrává; tohle jsou velké nepotřebné věci)
+
+# Podklady (fotky/videa pro práci, ne pro server)
+podklady/
+
+# Lokální data — na Railway je persistent volume /app/data
+data/
+
+# Zálohy, buildy APK a nástroje
+backups/
+*.apk
+*.jar
+
+# Logy a velké dumpy
+*.log
+goods-*.json
