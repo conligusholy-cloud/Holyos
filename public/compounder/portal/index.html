@@ -268,6 +268,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
         if (navigator.sendBeacon) navigator.sendBeacon('/api/compounder/track', new Blob([JSON.stringify(pl)], { type: 'application/json' }));
         else fetch('/api/compounder/track', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(pl), keepalive: true }).catch(function(){});
       } catch(e) {}
+      initPortalPush(token);
     })
     .catch(function(){ showDenied('Nepodařilo se ověřit přístup. Zkuste odkaz z e-mailu znovu.'); });
 
@@ -321,6 +322,44 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
       secs.forEach(function(s,i){ if (s && s.offsetTop <= y) idx = i; });
       links.forEach(function(a,i){ a.classList.toggle('active', i === idx); });
     }, { passive:true });
+  }
+
+  // ── web push opt-in (svázané s leadem přes token) ──
+  function pUrlB64(s){ var pad="=".repeat((4-s.length%4)%4); var b=(s+pad).replace(/-/g,"+").replace(/_/g,"/"); var raw=atob(b); var arr=new Uint8Array(raw.length); for(var i=0;i<raw.length;i++)arr[i]=raw.charCodeAt(i); return arr; }
+  function initPortalPush(tok){
+    try{
+      if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) return;
+      navigator.serviceWorker.register("sw.js").catch(function(){});
+      if (Notification.permission === "denied") return;
+      if (Notification.permission === "granted") { portalSubscribe(tok); return; }
+      var asked = +(localStorage.getItem("compounder.push.askedAt")||0);
+      if (Date.now() - asked < 7*24*3600*1000) return;
+      localStorage.setItem("compounder.push.askedAt", Date.now());
+      portalPushBanner(tok);
+    }catch(e){}
+  }
+  function portalPushBanner(tok){
+    var bar = document.createElement("div");
+    bar.style.cssText = "position:fixed;bottom:18px;left:50%;transform:translateX(-50%);z-index:60;background:var(--surface-2);border:1px solid var(--line);border-radius:14px;padding:12px 14px 12px 18px;display:flex;align-items:center;gap:14px;box-shadow:0 18px 50px rgba(0,0,0,.5);max-width:92vw;";
+    var sp = document.createElement("span"); sp.style.cssText="font-size:13.5px;color:var(--muted);"; sp.textContent="Upozorníme vás na novinky a dostupnost";
+    var ok = document.createElement("button"); ok.className="btn"; ok.style.cssText="padding:9px 18px;font-size:13px;margin:0;"; ok.textContent="Zapnout";
+    var no = document.createElement("button"); no.textContent="✕"; no.style.cssText="background:transparent;border:1px solid var(--line);color:var(--text);border-radius:999px;padding:9px 14px;cursor:pointer;font-family:inherit;";
+    bar.appendChild(sp); bar.appendChild(ok); bar.appendChild(no); document.body.appendChild(bar);
+    ok.onclick=function(){ bar.remove(); Notification.requestPermission().then(function(p){ if(p==="granted") portalSubscribe(tok); }); };
+    no.onclick=function(){ bar.remove(); };
+  }
+  function portalSubscribe(tok){
+    navigator.serviceWorker.ready.then(function(reg){
+      fetch("/api/compounder/push/key").then(function(r){return r.json();}).then(function(j){
+        if (!j||!j.key) return;
+        reg.pushManager.getSubscription().then(function(ex){
+          var pr = ex ? Promise.resolve(ex) : reg.pushManager.subscribe({ userVisibleOnly:true, applicationServerKey: pUrlB64(j.key) });
+          pr.then(function(sub){
+            fetch("/api/compounder/push/subscribe", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ subscription: sub.toJSON(), t: tok }) }).catch(function(){});
+          }).catch(function(){});
+        });
+      }).catch(function(){});
+    });
   }
 })();
 </script>

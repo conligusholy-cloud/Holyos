@@ -5410,3 +5410,24 @@ model CompounderEvent {
   @@index([created_at])
   @@map("compounder_events")
 }
+
+// =============================================================================
+// COMPOUNDER â€” push odbÄ›ry (Web Push / VAPID) pro compounder.world
+// =============================================================================
+// OdbÄ›r push notifikacĂ­ z prohlĂ­ĹľeÄŤe. lead_id spojuje odbÄ›r s registrovanĂ˝m
+// leadem (pĹ™es magic-link token), sid s anonymnĂ­ session.
+model CompounderPushSub {
+  id           Int       @id @default(autoincrement())
+  endpoint     String    @unique @db.VarChar(500)
+  p256dh       String    @db.VarChar(255)
+  auth         String    @db.VarChar(255)
+  lead_id      Int?
+  sid          String?   @db.VarChar(64)
+  lang         String?   @db.VarChar(10)
+  ua           String?   @db.Text
+  last_sent_at DateTime?
+  created_at   DateTime  @default(now())
+
+  @@index([lead_id])
+  @@map("compounder_push_subs")
+}
