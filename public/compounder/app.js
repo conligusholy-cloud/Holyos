@@ -162,22 +162,55 @@
   if (loginClose) loginClose.addEventListener("click", closeLogin);
   if (loginModal) loginModal.addEventListener("click", function(e){ if (e.target === loginModal) closeLogin(); });
   document.addEventListener("keydown", function(e){ if (e.key==="Escape") closeLogin(); });
+  function loginMsgEl(){ return document.getElementById("loginMsg"); }
+  // přihlášení heslem → uloží dlouhý token a otevře portál
+  function doPasswordLogin(email, password, msg, btn){
+    btn.disabled = true; msg.className="reg-msg"; msg.textContent = window.__t("login.sending");
+    track("login_password_submit",{});
+    fetch("/api/compounder/login", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ email: email, password: password, lang: window.__compounderLang })
+    }).then(function(r){ return r.json().then(function(j){ return {ok:r.ok, j:j}; }); })
+      .then(function(res){
+        if (res.ok && res.j && res.j.token){
+          try{ localStorage.setItem("compounder.portal.token", res.j.token); }catch(_){}
+          track("login_password_success",{});
+          msg.className="reg-msg ok"; msg.textContent = window.__t("login.ok2");
+          setTimeout(function(){ location.href = "/portal"; }, 500);
+        } else {
+          msg.className="reg-msg err"; msg.textContent = window.__t("login.badcreds");
+          btn.disabled = false;
+        }
+      }).catch(function(){ msg.className="reg-msg err"; msg.textContent = window.__t("login.err"); btn.disabled = false; });
+  }
+  // přihlášení odkazem (magic link) na e-mail
+  function doLinkLogin(email, msg, btn){
+    btn.disabled = true; msg.className="reg-msg"; msg.textContent = window.__t("login.sending");
+    track("login_link_submit",{});
+    fetch("/api/compounder/login", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ email: email, lang: window.__compounderLang })
+    }).then(function(r){ return r.json().catch(function(){ return {}; }); })
+      .then(function(){ msg.className="reg-msg ok"; msg.textContent = window.__t("login.ok"); })
+      .catch(function(){ msg.className="reg-msg ok"; msg.textContent = window.__t("login.ok"); })
+      .finally(function(){ btn.disabled = false; });
+  }
   if (loginForm){
     loginForm.addEventListener("submit", function(e){
       e.preventDefault();
-      var msg = document.getElementById("loginMsg");
+      var msg = loginMsgEl();
       var btn = loginForm.querySelector("button[type=submit]");
       var email = (loginForm.email.value||"").trim();
+      var pw = (loginForm.password && loginForm.password.value) || "";
       if (!/.+@.+\..+/.test(email)){ msg.className="reg-msg err"; msg.textContent = window.__t("login.err"); return; }
-      btn.disabled = true; msg.className="reg-msg"; msg.textContent = window.__t("login.sending");
-      track("login_submit",{});
-      fetch("/api/compounder/login", {
-        method:"POST", headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({ email: email, lang: window.__compounderLang })
-      }).then(function(r){ return r.json().catch(function(){ return {}; }); })
-        .then(function(){ msg.className="reg-msg ok"; msg.textContent = window.__t("login.ok"); loginForm.reset(); })
-        .catch(function(){ msg.className="reg-msg ok"; msg.textContent = window.__t("login.ok"); })
-        .finally(function(){ btn.disabled = false; });
+      if (pw) doPasswordLogin(email, pw, msg, btn);
+      else doLinkLogin(email, msg, btn);   // bez hesla → pošli odkaz
+    });
+    var sendLinkBtn = document.getElementById("loginSendLink");
+    if (sendLinkBtn) sendLinkBtn.addEventListener("click", function(){
+      var msg = loginMsgEl(); var email = (loginForm.email.value||"").trim();
+      if (!/.+@.+\..+/.test(email)){ msg.className="reg-msg err"; msg.textContent = window.__t("login.err"); return; }
+      doLinkLogin(email, msg, sendLinkBtn);
     });
   }
 
@@ -241,7 +274,10 @@
   window.addEventListener("appinstalled", function(){ track("app_installed", {}); });
 
   /* ---------- platform detection ---------- */
-  var IS_IOS = /iphone|ipad|ipod/i.test(navigator.userAgent || "") || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  var UA = navigator.userAgent || "";
+  var IS_IOS = /iphone|ipad|ipod/i.test(UA) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  // iOS Chrome/Firefox/Edge NEumí instalaci PWA — to umí jen Safari (omezení Applu).
+  var IS_IOS_NONSAFARI = IS_IOS && /(CriOS|FxiOS|EdgiOS|OPiOS|GSA|mercury)/i.test(UA);
   var IS_STANDALONE = (window.navigator.standalone === true) || (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches);
 
   /* ---------- service worker + push + iOS install hint ---------- */
@@ -254,6 +290,14 @@
   window.addEventListener("load", function(){ setTimeout(initIosHint, 4500); });
   function iosHintText(){
     var l = window.__compounderLang || "en";
+    // iOS Chrome/Firefox/Edge: instalaci umí jen Safari → nasměruj tam.
+    if (IS_IOS_NONSAFARI){
+      if (l === "cs") return "Na iPhonu jde appka nainstalovat jen v Safari. Otevři compounder.world v Safari → Sdílet → „Přidat na plochu“.";
+      if (l === "de") return "Auf dem iPhone geht die Installation nur in Safari. Öffne compounder.world in Safari → Teilen → „Zum Home-Bildschirm“.";
+      if (l === "sk") return "Na iPhone sa appka inštaluje len v Safari. Otvor compounder.world v Safari → Zdieľať → „Pridať na plochu“.";
+      if (l === "pl") return "Na iPhonie instalacja działa tylko w Safari. Otwórz compounder.world w Safari → Udostępnij → „Dodaj do ekranu“.";
+      return "On iPhone the app installs only in Safari. Open compounder.world in Safari → Share → “Add to Home Screen”.";
+    }
     if (l === "cs") return "Nainstaluj appku: ťukni na Sdílet a „Přidat na plochu“.";
     if (l === "de") return "App installieren: tippe auf Teilen, dann „Zum Home-Bildschirm“.";
     if (l === "sk") return "Nainštaluj appku: ťukni na Zdieľať a „Pridať na plochu“.";

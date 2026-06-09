@@ -554,11 +554,14 @@ footer .fl a:hover{color:var(--text)}
     <button class="modal-x" id="loginClose" aria-label="✕">✕</button>
     <span class="eyebrow" data-i18n="login.eyebrow">Returning Compounder</span>
     <h3 id="loginTitle" data-i18n="login.title">Log in</h3>
-    <p class="modal-lead" data-i18n="login.lead">Enter your email and we'll send you a sign-in link.</p>
+    <p class="modal-lead" data-i18n="login.lead">Sign in to the Compounder Portal.</p>
     <form id="loginForm" novalidate>
       <label data-i18n="login.email">Email</label>
       <input type="email" name="email" autocomplete="email" required />
-      <button type="submit" class="btn btn-gold" data-i18n="login.submit">Send sign-in link</button>
+      <label data-i18n="login.password">Password</label>
+      <input type="password" name="password" autocomplete="current-password" />
+      <button type="submit" class="btn btn-gold" data-i18n="login.loginbtn">Log in</button>
+      <button type="button" class="btn btn-ghost" id="loginSendLink" style="width:100%;justify-content:center;margin-top:10px" data-i18n="login.sendlink">Email me a sign-in link instead</button>
       <p class="reg-msg" id="loginMsg" role="status"></p>
     </form>
   </div>
