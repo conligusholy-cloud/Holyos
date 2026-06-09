@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="cs">
+<html lang="en">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
@@ -21,9 +21,6 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',-apple-system,'S
 h1,h2,h3{font-family:'Space Grotesk','Inter',sans-serif;letter-spacing:-.01em}
 a{color:var(--gold-soft);text-decoration:none}
 .wrap{max-width:1060px;margin:0 auto;padding:0 24px}
-.gold{background:var(--gold-grad);-webkit-background-clip:text;background-clip:text;color:transparent}
-
-/* gate / loading */
 #gate{min-height:100svh;display:flex;align-items:center;justify-content:center;text-align:center;padding:40px}
 #gate .box{max-width:460px}
 .brand{font-family:'Space Grotesk';font-weight:700;letter-spacing:.2em;font-size:20px;margin-bottom:24px}
@@ -32,33 +29,29 @@ a{color:var(--gold-soft);text-decoration:none}
 .btn{display:inline-flex;align-items:center;gap:8px;font-weight:600;font-size:14px;padding:12px 24px;border-radius:999px;border:none;cursor:pointer;font-family:inherit;background:var(--gold-grad);color:#1a1408;margin-top:18px}
 .spinner{width:26px;height:26px;border:2px solid var(--line);border-top-color:var(--gold);border-radius:50%;animation:spin 1s linear infinite;margin:0 auto 18px}
 @keyframes spin{to{transform:rotate(360deg)}}
-
-/* app */
 #app{display:none}
 header.top{position:sticky;top:0;z-index:30;background:rgba(10,10,11,.82);backdrop-filter:blur(14px);border-bottom:1px solid var(--line)}
-.top-in{display:flex;align-items:center;justify-content:space-between;padding:14px 24px;max-width:1060px;margin:0 auto}
+.top-in{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:14px 24px;max-width:1060px;margin:0 auto}
 .top .brand{margin:0;font-size:16px}
+.top-right{display:flex;align-items:center;gap:14px}
 .top .hi{font-size:13px;color:var(--muted)}
+.lang-select{background:transparent;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:6px 12px;font-size:12px;font-family:inherit;cursor:pointer}
+.lang-select option{background:#141417;color:#f4f4f2}
 .subnav{display:flex;gap:6px;overflow-x:auto;padding:10px 24px;border-bottom:1px solid var(--line);background:var(--bg-2);position:sticky;top:51px;z-index:20}
 .subnav a{white-space:nowrap;font-size:13px;color:var(--muted);padding:7px 14px;border-radius:999px;border:1px solid transparent}
 .subnav a:hover{color:var(--text)}
 .subnav a.active{color:var(--gold-soft);border-color:rgba(201,162,75,.35);background:rgba(201,162,75,.07)}
-
 section.blk{padding:48px 0;border-top:1px solid var(--line)}
 section.blk:first-of-type{border-top:none}
 .eyebrow{font-size:11px;letter-spacing:.28em;text-transform:uppercase;color:var(--gold);font-weight:600;margin-bottom:12px}
 .blk h2{font-size:clamp(24px,3.5vw,34px);font-weight:700;margin-bottom:8px}
 .blk .lead{color:var(--muted);max-width:680px;margin-bottom:26px}
-
-/* metric cards */
 .metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:28px}
 .metric{background:linear-gradient(180deg,var(--surface),var(--bg-2));border:1px solid var(--line);border-radius:16px;padding:20px}
 .metric .k{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted-2);margin-bottom:8px}
 .metric .v{font-family:'Space Grotesk';font-weight:700;font-size:28px}
 .metric .v.gold{background:var(--gold-grad);-webkit-background-clip:text;background-clip:text;color:transparent}
 .metric .s{font-size:12px;color:var(--muted);margin-top:4px}
-
-/* input groups */
 .calc{display:grid;grid-template-columns:1fr 1fr;gap:28px}
 @media(max-width:760px){.calc{grid-template-columns:1fr}.metrics{grid-template-columns:1fr 1fr}}
 .panel{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:22px}
@@ -71,10 +64,7 @@ section.blk:first-of-type{border-top:none}
 .row .u{font-size:13px;color:var(--muted-2);width:30px}
 .row.calc-out input{background:var(--surface-2);border-color:var(--line);color:var(--text);cursor:default}
 .note{font-size:12px;color:var(--muted-2);margin-top:8px}
-
-/* tables / lists */
 table.t{width:100%;border-collapse:separate;border-spacing:0;font-size:14px}
-table.t th{text-align:left;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted-2);padding:10px 12px;border-bottom:1px solid var(--line)}
 table.t td{padding:11px 12px;border-bottom:1px solid rgba(255,255,255,.05);color:var(--muted)}
 table.t td:first-child{color:var(--text)}
 .cards2{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}
@@ -91,240 +81,266 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
 </head>
 <body>
 
-<!-- GATE / loader -->
 <div id="gate">
   <div class="box">
     <div class="brand">COMP<b>OU</b>NDER</div>
     <div id="gate-loading">
       <div class="spinner"></div>
-      <div class="muted">Ověřuji přístup…</div>
+      <div class="muted" data-i18n="p.verify">Verifying access…</div>
     </div>
     <div id="gate-denied" style="display:none">
-      <h2 style="font-size:22px;margin-bottom:10px">Přístup nenalezen</h2>
-      <p class="muted" id="gate-msg">Tento odkaz není platný nebo vypršel.</p>
-      <a class="btn" href="/">Zpět na compounder.world</a>
+      <h2 style="font-size:22px;margin-bottom:10px" data-i18n="p.denied.title">Access not found</h2>
+      <p class="muted" id="gate-msg" data-i18n="p.denied.msg">This link is invalid or has expired.</p>
+      <a class="btn" href="/" data-i18n="p.back">Back to compounder.world</a>
     </div>
   </div>
 </div>
 
-<!-- APP -->
 <div id="app">
   <header class="top">
     <div class="top-in">
       <div class="brand">COMP<b>OU</b>NDER <span style="color:var(--muted-2);font-weight:400;letter-spacing:.04em">· Portal</span></div>
-      <div class="hi" id="hi"></div>
+      <div class="top-right">
+        <div class="hi" id="hi"></div>
+        <select class="lang-select" id="pLang" aria-label="Language"></select>
+      </div>
     </div>
   </header>
   <nav class="subnav" id="subnav">
-    <a href="#ekonomika" class="active">Ekonomika</a>
-    <a href="#navratnost">Návratnost</a>
-    <a href="#parametry">Technické parametry</a>
-    <a href="#pripojky">Přípojky</a>
-    <a href="#pudorysy">Půdorysy</a>
-    <a href="#distribuce">Distribuční model</a>
+    <a href="#ekonomika" class="active" data-i18n="p.nav.eko">Economics</a>
+    <a href="#navratnost" data-i18n="p.nav.ret">Return</a>
+    <a href="#parametry" data-i18n="p.nav.params">Technical parameters</a>
+    <a href="#pripojky" data-i18n="p.nav.conn">Connections</a>
+    <a href="#pudorysy" data-i18n="p.nav.plans">Floor plans</a>
+    <a href="#distribuce" data-i18n="p.nav.dist">Distribution model</a>
   </nav>
 
   <div class="wrap">
-
-    <!-- EKONOMIKA -->
     <section class="blk" id="ekonomika">
-      <div class="eyebrow">Ekonomika</div>
-      <h2>Ekonomika jednoho Compounderu</h2>
-      <p class="lead">Živý model. Žlutá pole jsou vstupy — uprav je podle své lokality a okamžitě uvidíš obrat, zisk a návratnost. Hodnoty jsou orientační.</p>
-
+      <div class="eyebrow" data-i18n="p.eko.eyebrow">Economics</div>
+      <h2 data-i18n="p.eko.title">Economics of one Compounder</h2>
+      <p class="lead" data-i18n="p.eko.lead">A live model. Yellow fields are inputs — adjust them to your location and instantly see revenue, profit and payback. Figures are indicative.</p>
       <div class="metrics">
-        <div class="metric"><div class="k">Investice celkem</div><div class="v gold" id="m-invest">—</div><div class="s">na jedno místo</div></div>
-        <div class="metric"><div class="k">Obrat / měsíc</div><div class="v" id="m-revenue">—</div><div class="s" id="m-cust">—</div></div>
-        <div class="metric"><div class="k">Zisk / měsíc</div><div class="v" id="m-profit">—</div><div class="s">po všech nákladech</div></div>
-        <div class="metric"><div class="k">Návratnost</div><div class="v gold" id="m-payback">—</div><div class="s" id="m-payback-m">—</div></div>
+        <div class="metric"><div class="k" data-i18n="p.m.invest">Total investment</div><div class="v gold" id="m-invest">—</div><div class="s" data-i18n="p.m.invests">per location</div></div>
+        <div class="metric"><div class="k" data-i18n="p.m.rev">Revenue / month</div><div class="v" id="m-revenue">—</div><div class="s" id="m-cust">—</div></div>
+        <div class="metric"><div class="k" data-i18n="p.m.profit">Profit / month</div><div class="v" id="m-profit">—</div><div class="s" data-i18n="p.m.profits">after all costs</div></div>
+        <div class="metric"><div class="k" data-i18n="p.m.payback">Payback</div><div class="v gold" id="m-payback">—</div><div class="s" id="m-payback-m">—</div></div>
       </div>
-
       <div class="calc">
         <div class="panel">
-          <h3>Investiční náklady (jednorázové)</h3>
-          <div class="row"><label>Cena Compounderu</label><div class="unit"><input type="number" id="i-machine" value="52000"><span class="u">€</span></div></div>
-          <div class="row"><label>Projekt + povolení</label><div class="unit"><input type="number" id="i-permit" value="825"><span class="u">€</span></div></div>
-          <div class="row"><label>Přípojky</label><div class="unit"><input type="number" id="i-conn" value="2889"><span class="u">€</span></div></div>
-          <div class="row calc-out"><label>Investice celkem</label><div class="unit"><input type="text" id="o-invest" readonly><span class="u">€</span></div></div>
+          <h3 data-i18n="p.inv.title">Investment (one-off)</h3>
+          <div class="row"><label data-i18n="p.inv.machine">Compounder price</label><div class="unit"><input type="number" id="i-machine" value="52000"><span class="u">€</span></div></div>
+          <div class="row"><label data-i18n="p.inv.permit">Project + permits</label><div class="unit"><input type="number" id="i-permit" value="825"><span class="u">€</span></div></div>
+          <div class="row"><label data-i18n="p.inv.conn">Connections</label><div class="unit"><input type="number" id="i-conn" value="2889"><span class="u">€</span></div></div>
+          <div class="row calc-out"><label data-i18n="p.inv.total">Total investment</label><div class="unit"><input type="text" id="o-invest" readonly><span class="u">€</span></div></div>
         </div>
         <div class="panel">
-          <h3>Provoz (měsíčně)</h3>
-          <div class="row"><label>Zákazníků / den</label><div class="unit"><input type="number" id="i-perday" value="8"><span class="u">ks</span></div></div>
-          <div class="row"><label>Ø útrata / zákazník</label><div class="unit"><input type="number" step="0.1" id="i-spend" value="11.37"><span class="u">€</span></div></div>
-          <div class="row"><label>Provozní náklady / měs</label><div class="unit"><input type="number" id="i-cost" value="765"><span class="u">€</span></div></div>
-          <div class="row calc-out"><label>Měsíční zisk</label><div class="unit"><input type="text" id="o-profit" readonly><span class="u">€</span></div></div>
-          <div class="note">Náklady = nájem + energie + servis + ostatní. Počítáme 30,4 dne/měsíc.</div>
+          <h3 data-i18n="p.op.title">Operation (monthly)</h3>
+          <div class="row"><label data-i18n="p.op.perday">Customers / day</label><div class="unit"><input type="number" id="i-perday" value="8"><span class="u">ks</span></div></div>
+          <div class="row"><label data-i18n="p.op.spend">Avg spend / customer</label><div class="unit"><input type="number" step="0.1" id="i-spend" value="11.37"><span class="u">€</span></div></div>
+          <div class="row"><label data-i18n="p.op.cost">Operating costs / month</label><div class="unit"><input type="number" id="i-cost" value="765"><span class="u">€</span></div></div>
+          <div class="row calc-out"><label data-i18n="p.op.profit">Monthly profit</label><div class="unit"><input type="text" id="o-profit" readonly><span class="u">€</span></div></div>
+          <div class="note" data-i18n="p.op.note">Costs = rent + energy + service + other. We assume 30.4 days/month.</div>
         </div>
       </div>
     </section>
 
-    <!-- NÁVRATNOST -->
     <section class="blk" id="navratnost">
-      <div class="eyebrow">Návratnost</div>
-      <h2>Kdy se Compounder vrátí</h2>
-      <p class="lead">Návratnost = investice ÷ měsíční zisk. Po jejím dosažení je další cashflow čistý výnos — a financuje další Compounder.</p>
+      <div class="eyebrow" data-i18n="p.ret.eyebrow">Return</div>
+      <h2 data-i18n="p.ret.title">When the Compounder pays off</h2>
+      <p class="lead" data-i18n="p.ret.lead">Payback = investment ÷ monthly profit. After it, the cashflow is pure return — and funds the next Compounder.</p>
       <div class="metrics">
-        <div class="metric"><div class="k">Návratnost</div><div class="v gold" id="r-payback">—</div><div class="s" id="r-payback-m">—</div></div>
-        <div class="metric"><div class="k">Roční zisk</div><div class="v" id="r-yearprofit">—</div><div class="s">po návratnosti čistý</div></div>
-        <div class="metric"><div class="k">Výnos p.a. (ROI)</div><div class="v" id="r-roi">—</div><div class="s">zisk / investice</div></div>
-        <div class="metric"><div class="k">Zisk za 5 let</div><div class="v gold" id="r-5y">—</div><div class="s">jeden Compounder</div></div>
+        <div class="metric"><div class="k" data-i18n="p.m.payback">Payback</div><div class="v gold" id="r-payback">—</div><div class="s" id="r-payback-m">—</div></div>
+        <div class="metric"><div class="k" data-i18n="p.ret.year">Annual profit</div><div class="v" id="r-yearprofit">—</div><div class="s" data-i18n="p.ret.years">net after payback</div></div>
+        <div class="metric"><div class="k" data-i18n="p.ret.roi">Yield p.a. (ROI)</div><div class="v" id="r-roi">—</div><div class="s" data-i18n="p.ret.rois">profit / investment</div></div>
+        <div class="metric"><div class="k" data-i18n="p.ret.5y">Profit over 5 years</div><div class="v gold" id="r-5y">—</div><div class="s" data-i18n="p.ret.5ys">one Compounder</div></div>
       </div>
       <div class="panel" style="max-width:560px">
-        <h3>Splacení investice v čase</h3>
+        <h3 data-i18n="p.ret.bartitle">Investment paid off over time</h3>
         <div class="bar"><span id="r-bar" style="width:0%"></span></div>
         <div class="note" id="r-bar-note">—</div>
       </div>
     </section>
 
-    <!-- TECHNICKÉ PARAMETRY -->
     <section class="blk" id="parametry">
-      <div class="eyebrow">Technické parametry</div>
-      <h2>Compounder Machine</h2>
-      <p class="lead">Venkovní automatizované aktivum. Parametry jsou orientační — finální specifikace dle konfigurace.</p>
-      <table class="t">
-        <tbody>
-          <tr><td>Typ</td><td>Venkovní samoobslužný kiosk (outdoor)</td></tr>
-          <tr><td>Rozměry (D × Š × V)</td><td>orientačně 6,0 × 2,5 × 2,8 m</td></tr>
-          <tr><td>Praní + sušení</td><td>profesionální kapacita, plně automatizováno</td></tr>
-          <tr><td>Platby</td><td>karta / mobil / bezhotovostně 24/7</td></tr>
-          <tr><td>Provoz</td><td>24/7, bez obsluhy, vzdálený dohled</td></tr>
-          <tr><td>Konstrukce</td><td>celokovová, klimatizovaná, antivandal</td></tr>
-        </tbody>
-      </table>
-      <p class="note">Detailní datasheet doplníme — napiš si o něj.</p>
+      <div class="eyebrow" data-i18n="p.par.eyebrow">Technical parameters</div>
+      <h2 data-i18n="p.par.title">Compounder Machine</h2>
+      <p class="lead" data-i18n="p.par.lead">An outdoor automated asset. Parameters are indicative — final spec per configuration.</p>
+      <table class="t"><tbody>
+        <tr><td data-i18n="p.par.type">Type</td><td data-i18n="p.par.typev">Outdoor self-service kiosk</td></tr>
+        <tr><td data-i18n="p.par.dim">Dimensions (L × W × H)</td><td data-i18n="p.par.dimv">approx. 6.0 × 2.5 × 2.8 m</td></tr>
+        <tr><td data-i18n="p.par.wash">Washing + drying</td><td data-i18n="p.par.washv">professional capacity, fully automated</td></tr>
+        <tr><td data-i18n="p.par.pay">Payments</td><td data-i18n="p.par.payv">card / mobile / cashless 24/7</td></tr>
+        <tr><td data-i18n="p.par.op">Operation</td><td data-i18n="p.par.opv">24/7, unattended, remote monitoring</td></tr>
+        <tr><td data-i18n="p.par.con">Construction</td><td data-i18n="p.par.conv">all-metal, climate-controlled, anti-vandal</td></tr>
+      </tbody></table>
+      <p class="note" data-i18n="p.par.note">Detailed datasheet on request.</p>
     </section>
 
-    <!-- PŘÍPOJKY -->
     <section class="blk" id="pripojky">
-      <div class="eyebrow">Přípojky</div>
-      <h2>Co lokalita potřebuje</h2>
-      <p class="lead">Compounder se umisťuje na zpevněnou plochu. Potřebné přípojky:</p>
+      <div class="eyebrow" data-i18n="p.conn.eyebrow">Connections</div>
+      <h2 data-i18n="p.conn.title">What the location needs</h2>
+      <p class="lead" data-i18n="p.conn.lead">The Compounder sits on a paved surface. Required connections:</p>
       <div class="cards2">
-        <div class="tile"><div class="ic">Voda</div><h4>Studená voda</h4><p>Standardní vodovodní přípojka, orientačně 3/4". Ohřev řeší stroj.</p></div>
-        <div class="tile"><div class="ic">Elektřina</div><h4>Silová přípojka</h4><p>400 V / orientačně 3×25 A. Přesný příkon dle konfigurace.</p></div>
-        <div class="tile"><div class="ic">Odpad</div><h4>Kanalizace</h4><p>Napojení na splaškovou kanalizaci nebo jímku.</p></div>
-        <div class="tile"><div class="ic">Konektivita</div><h4>Internet</h4><p>LTE/5G v ceně dohledu; volitelně pevné připojení.</p></div>
+        <div class="tile"><div class="ic" data-i18n="p.conn.water">Water</div><h4 data-i18n="p.conn.waterh">Cold water</h4><p data-i18n="p.conn.waterp">Standard water connection, approx. 3/4". Heating is handled by the machine.</p></div>
+        <div class="tile"><div class="ic" data-i18n="p.conn.el">Electricity</div><h4 data-i18n="p.conn.elh">Power connection</h4><p data-i18n="p.conn.elp">400 V / approx. 3×25 A. Exact load per configuration.</p></div>
+        <div class="tile"><div class="ic" data-i18n="p.conn.drain">Drain</div><h4 data-i18n="p.conn.drainh">Sewerage</h4><p data-i18n="p.conn.drainp">Connection to sewerage or a tank.</p></div>
+        <div class="tile"><div class="ic" data-i18n="p.conn.net">Connectivity</div><h4 data-i18n="p.conn.neth">Internet</h4><p data-i18n="p.conn.netp">LTE/5G included for monitoring; fixed line optional.</p></div>
       </div>
-      <p class="note">Průměrná cena přípojek je v modelu ekonomiky (výchozí 2 889 €) — uprav dle lokality.</p>
+      <p class="note" data-i18n="p.conn.note">Average connection cost is in the economics model — adjust per location.</p>
     </section>
 
-    <!-- PŮDORYSY -->
     <section class="blk" id="pudorysy">
-      <div class="eyebrow">Půdorysy</div>
-      <h2>Umístění a půdorys</h2>
-      <p class="lead">Zástavbové výkresy a varianty umístění na pozemku.</p>
-      <div class="ph">Půdorysy a zástavbové výkresy připravujeme <span class="soon">Brzy</span><br><span style="font-size:12px">Pošleme na vyžádání podle konkrétní lokality.</span></div>
+      <div class="eyebrow" data-i18n="p.plans.eyebrow">Floor plans</div>
+      <h2 data-i18n="p.plans.title">Placement and floor plan</h2>
+      <p class="lead" data-i18n="p.plans.lead">Layout drawings and placement options on the plot.</p>
+      <div class="ph"><span data-i18n="p.plans.ph">Floor plans and layout drawings are in preparation</span> <span class="soon" data-i18n="p.plans.soon">Soon</span><br><span style="font-size:12px" data-i18n="p.plans.ph2">Sent on request per specific location.</span></div>
     </section>
 
-    <!-- DISTRIBUČNÍ MODEL -->
     <section class="blk" id="distribuce">
-      <div class="eyebrow">Distribuční model</div>
-      <h2>Dvě cesty, jak budovat</h2>
-      <p class="lead">Compounder buduje portfolio aktiv. Distributor pomáhá vytvářet nové Compoundery.</p>
+      <div class="eyebrow" data-i18n="p.dist.eyebrow">Distribution model</div>
+      <h2 data-i18n="p.dist.title">Two ways to build</h2>
+      <p class="lead" data-i18n="p.dist.lead">A Compounder builds a portfolio of assets. A Distributor helps create new Compounders.</p>
       <div class="cards2">
-        <div class="tile"><div class="ic">Compounder</div><h4>Investor</h4><p>Pořizuje Compounder Machines, reinvestuje cashflow a škáluje portfolio. Jedno aktivum financuje další.</p></div>
-        <div class="tile"><div class="ic">Distributor</div><h4>Multiplikátor</h4><p>Provozuje vlastní stroje, distribuuje Compounder Machines a pomáhá vytvářet nové Compoundery.</p></div>
+        <div class="tile"><div class="ic" data-i18n="p.dist.c">Compounder</div><h4 data-i18n="p.dist.ch">Investor</h4><p data-i18n="p.dist.cp">Acquires Compounder Machines, reinvests cashflow and scales the portfolio. One asset funds the next.</p></div>
+        <div class="tile"><div class="ic" data-i18n="p.dist.d">Distributor</div><h4 data-i18n="p.dist.dh">Multiplier</h4><p data-i18n="p.dist.dp">Operates their own machines, distributes Compounder Machines and helps create new Compounders.</p></div>
       </div>
-      <p class="note">O konkrétních podmínkách, cenách a dostupnosti se domluvíme osobně — ozveme se vám.</p>
+      <p class="note" data-i18n="p.dist.note">We'll discuss specific terms, prices and availability in person — we'll get in touch.</p>
     </section>
   </div>
 
-  <footer>COMPOUNDER · Best Series — We build Compounder Machines. · compounder.world</footer>
+  <footer data-i18n="p.footer">COMPOUNDER · Best Series — We build Compounder Machines. · compounder.world</footer>
 </div>
 
+<script src="i18n.js"></script>
 <script>
 (function(){
   "use strict";
-  var qs = new URLSearchParams(location.search);
-  var token = qs.get('t') || localStorage.getItem('compounder.portal.token') || '';
-
-  function showDenied(msg){
-    document.getElementById('gate-loading').style.display = 'none';
-    var d = document.getElementById('gate-denied'); d.style.display = 'block';
-    if (msg) document.getElementById('gate-msg').textContent = msg;
+  var I18N = window.COMPOUNDER_I18N || { base:"en", path:"i18n/", LANGS:{en:"English"}, strings:{en:{}} };
+  var DICT = {};
+  function pT(k){ return DICT[k] != null ? DICT[k] : ((I18N.strings[I18N.base]||{})[k] || k); }
+  window.__pt = pT;
+  function pApply(){
+    document.querySelectorAll("[data-i18n]").forEach(function(el){
+      var k = el.getAttribute("data-i18n"); var v = pT(k);
+      if (v != null) el.textContent = v;
+    });
   }
-  function fmt(n){ return Math.round(n).toLocaleString('cs-CZ'); }
+  function pDetect(){
+    var s = localStorage.getItem("compounder.lang");
+    if (s && I18N.LANGS[s]) return s;
+    var n = navigator.languages || [navigator.language || "en"];
+    for (var i=0;i<n.length;i++){ var c=(n[i]||"").slice(0,2).toLowerCase(); if (I18N.LANGS[c]) return c; }
+    return I18N.base;
+  }
+  function pSetLang(lang, cb){
+    localStorage.setItem("compounder.lang", lang);
+    document.documentElement.lang = lang;
+    function done(loaded){
+      var base = I18N.strings[I18N.base] || {}; DICT = {};
+      for (var k in base) DICT[k] = base[k];
+      for (var k2 in loaded){ if (loaded[k2] != null && loaded[k2] !== "") DICT[k2] = loaded[k2]; }
+      pApply(); if (cb) cb();
+    }
+    if (lang === I18N.base || I18N.strings[lang]) { done(I18N.strings[lang] || {}); }
+    else { fetch(I18N.path + lang + ".json").then(function(r){ return r.ok ? r.json() : {}; })
+      .then(function(j){ I18N.strings[lang] = j || {}; done(j || {}); }).catch(function(){ done({}); }); }
+  }
+  function pBuildSelect(cur){
+    var sel = document.getElementById("pLang"); if (!sel) return;
+    Object.keys(I18N.LANGS).forEach(function(code){
+      var o = document.createElement("option"); o.value = code; o.textContent = code.toUpperCase();
+      o.title = I18N.LANGS[code]; if (code === cur) o.selected = true; sel.appendChild(o);
+    });
+    sel.addEventListener("change", function(){ pSetLang(sel.value, recalc); });
+  }
+  // gate text hned lokalizuj
+  pSetLang(pDetect(), null);
 
-  if (!token) { showDenied('Chybí přístupový odkaz. Zaregistrujte se na compounder.world.'); return; }
+  var qs = new URLSearchParams(location.search);
+  var token = qs.get("t") || localStorage.getItem("compounder.portal.token") || "";
+  function showDenied(msg){
+    document.getElementById("gate-loading").style.display = "none";
+    var d = document.getElementById("gate-denied"); d.style.display = "block";
+    if (msg) document.getElementById("gate-msg").textContent = msg;
+  }
+  function fmt(n){ return Math.round(n).toLocaleString(document.documentElement.lang || "en"); }
 
-  fetch('/api/compounder/portal/session?t=' + encodeURIComponent(token), { credentials:'include' })
+  if (!token) { showDenied(pT("p.denied.msg")); return; }
+
+  fetch("/api/compounder/portal/session?t=" + encodeURIComponent(token), { credentials:"include" })
     .then(function(r){ return r.json().then(function(j){ return { ok:r.ok, j:j }; }); })
     .then(function(res){
       if (!res.ok || !res.j.ok) { showDenied(res.j && res.j.error); return; }
-      localStorage.setItem('compounder.portal.token', token);
-      // čistý URL bez tokenu v adresním řádku
-      try { history.replaceState({}, '', location.pathname); } catch(e){}
-      document.getElementById('gate').style.display = 'none';
-      var app = document.getElementById('app'); app.style.display = 'block';
-      var first = (res.j.name || '').split(' ')[0];
-      document.getElementById('hi').textContent = first ? ('Vítejte, ' + first) : 'Vítejte';
-      initCalc();
-      initNav();
+      localStorage.setItem("compounder.portal.token", token);
+      try { history.replaceState({}, "", location.pathname); } catch(e){}
+      document.getElementById("gate").style.display = "none";
+      document.getElementById("app").style.display = "block";
+      var first = (res.j.name || "").split(" ")[0];
+      pBuildSelect(pDetect());
+      pSetLang(pDetect(), function(){
+        document.getElementById("hi").textContent = pT("p.hi") + (first ? (", " + first) : "");
+        initCalc(); initNav();
+      });
       // analytika — portal_view svázané se session i s lead_id
       try {
-        var sid = localStorage.getItem('compounder.sid');
-        if (!sid) { sid = 's_' + Date.now().toString(36) + Math.random().toString(36).slice(2,8); localStorage.setItem('compounder.sid', sid); }
-        var pl = { sid: sid, event: 'portal_view', props: { lead_id: res.j.id, role: res.j.role }, path: '/portal', lang: res.j.lang || null, ts: Date.now() };
-        if (navigator.sendBeacon) navigator.sendBeacon('/api/compounder/track', new Blob([JSON.stringify(pl)], { type: 'application/json' }));
-        else fetch('/api/compounder/track', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(pl), keepalive: true }).catch(function(){});
+        var sid = localStorage.getItem("compounder.sid");
+        if (!sid) { sid = "s_" + Date.now().toString(36) + Math.random().toString(36).slice(2,8); localStorage.setItem("compounder.sid", sid); }
+        var pl = { sid: sid, event: "portal_view", props: { lead_id: res.j.id, role: res.j.role }, path: "/portal", lang: res.j.lang || null, ts: Date.now() };
+        if (navigator.sendBeacon) navigator.sendBeacon("/api/compounder/track", new Blob([JSON.stringify(pl)], { type: "application/json" }));
+        else fetch("/api/compounder/track", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(pl), keepalive: true }).catch(function(){});
       } catch(e) {}
       initPortalPush(token);
     })
-    .catch(function(){ showDenied('Nepodařilo se ověřit přístup. Zkuste odkaz z e-mailu znovu.'); });
+    .catch(function(){ showDenied(pT("p.denied.msg")); });
 
-  // ── živá ekonomika ──
   function val(id){ var v = parseFloat(document.getElementById(id).value); return isNaN(v) ? 0 : v; }
   function initCalc(){
-    ['i-machine','i-permit','i-conn','i-perday','i-spend','i-cost'].forEach(function(id){
-      document.getElementById(id).addEventListener('input', recalc);
+    ["i-machine","i-permit","i-conn","i-perday","i-spend","i-cost"].forEach(function(id){
+      document.getElementById(id).addEventListener("input", recalc);
     });
     recalc();
   }
   function recalc(){
-    var invest = val('i-machine') + val('i-permit') + val('i-conn');
-    var custMonth = val('i-perday') * 30.4;
-    var revenue = custMonth * val('i-spend');
-    var profit = revenue - val('i-cost');
+    var invest = val("i-machine") + val("i-permit") + val("i-conn");
+    var custMonth = val("i-perday") * 30.4;
+    var revenue = custMonth * val("i-spend");
+    var profit = revenue - val("i-cost");
     var paybackM = profit > 0 ? invest / profit : 0;
     var paybackY = paybackM / 12;
-
-    document.getElementById('o-invest').value = fmt(invest);
-    document.getElementById('o-profit').value = fmt(profit);
-    document.getElementById('m-invest').textContent = fmt(invest) + ' €';
-    document.getElementById('m-revenue').textContent = fmt(revenue) + ' €';
-    document.getElementById('m-cust').textContent = fmt(custMonth) + ' zákazníků / měs';
-    document.getElementById('m-profit').textContent = fmt(profit) + ' €';
-    var pb = profit > 0 ? (paybackY.toFixed(1) + ' let') : '—';
-    document.getElementById('m-payback').textContent = pb;
-    document.getElementById('m-payback-m').textContent = profit > 0 ? (Math.round(paybackM) + ' měsíců') : 'při ztrátě';
-
-    // návratnost sekce
-    document.getElementById('r-payback').textContent = pb;
-    document.getElementById('r-payback-m').textContent = profit > 0 ? (Math.round(paybackM) + ' měsíců') : 'při ztrátě';
-    document.getElementById('r-yearprofit').textContent = fmt(profit * 12) + ' €';
+    document.getElementById("o-invest").value = fmt(invest);
+    document.getElementById("o-profit").value = fmt(profit);
+    document.getElementById("m-invest").textContent = fmt(invest) + " €";
+    document.getElementById("m-revenue").textContent = fmt(revenue) + " €";
+    document.getElementById("m-cust").textContent = fmt(custMonth) + " " + pT("p.m.custmo");
+    document.getElementById("m-profit").textContent = fmt(profit) + " €";
+    var pb = profit > 0 ? (paybackY.toFixed(1) + " " + pT("p.u.years")) : "—";
+    var pbm = profit > 0 ? (Math.round(paybackM) + " " + pT("p.u.months")) : pT("p.u.loss");
+    document.getElementById("m-payback").textContent = pb;
+    document.getElementById("m-payback-m").textContent = pbm;
+    document.getElementById("r-payback").textContent = pb;
+    document.getElementById("r-payback-m").textContent = pbm;
+    document.getElementById("r-yearprofit").textContent = fmt(profit * 12) + " €";
     var roi = invest > 0 ? (profit * 12 / invest * 100) : 0;
-    document.getElementById('r-roi').textContent = roi > 0 ? (roi.toFixed(0) + ' %') : '—';
-    document.getElementById('r-5y').textContent = fmt(profit * 60 - invest) + ' €';
-    var pct = paybackY > 0 ? Math.min(100, 100 / paybackY) : 0; // splaceno za 1. rok (%)
-    document.getElementById('r-bar').style.width = pct.toFixed(0) + '%';
-    document.getElementById('r-bar-note').textContent = profit > 0
-      ? ('Za první rok splaceno ' + pct.toFixed(0) + ' % investice.')
-      : 'Při aktuálních hodnotách je provoz ve ztrátě.';
+    document.getElementById("r-roi").textContent = roi > 0 ? (roi.toFixed(0) + " %") : "—";
+    document.getElementById("r-5y").textContent = fmt(profit * 60 - invest) + " €";
+    var pct = paybackY > 0 ? Math.min(100, 100 / paybackY) : 0;
+    document.getElementById("r-bar").style.width = pct.toFixed(0) + "%";
+    document.getElementById("r-bar-note").textContent = profit > 0
+      ? pT("p.ret.paid").replace("{pct}", pct.toFixed(0))
+      : pT("p.ret.loss");
   }
-
-  // ── subnav scrollspy ──
   function initNav(){
-    var links = Array.prototype.slice.call(document.querySelectorAll('.subnav a'));
-    var secs = links.map(function(a){ return document.querySelector(a.getAttribute('href')); });
-    window.addEventListener('scroll', function(){
-      var y = window.scrollY + 120;
-      var idx = 0;
+    var links = Array.prototype.slice.call(document.querySelectorAll(".subnav a"));
+    var secs = links.map(function(a){ return document.querySelector(a.getAttribute("href")); });
+    window.addEventListener("scroll", function(){
+      var y = window.scrollY + 120; var idx = 0;
       secs.forEach(function(s,i){ if (s && s.offsetTop <= y) idx = i; });
-      links.forEach(function(a,i){ a.classList.toggle('active', i === idx); });
+      links.forEach(function(a,i){ a.classList.toggle("active", i === idx); });
     }, { passive:true });
   }
 
-  // ── web push opt-in (svázané s leadem přes token) ──
+  // web push opt-in (svázané s leadem přes token)
   function pUrlB64(s){ var pad="=".repeat((4-s.length%4)%4); var b=(s+pad).replace(/-/g,"+").replace(/_/g,"/"); var raw=atob(b); var arr=new Uint8Array(raw.length); for(var i=0;i<raw.length;i++)arr[i]=raw.charCodeAt(i); return arr; }
   function initPortalPush(tok){
     try{
@@ -341,8 +357,8 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
   function portalPushBanner(tok){
     var bar = document.createElement("div");
     bar.style.cssText = "position:fixed;bottom:18px;left:50%;transform:translateX(-50%);z-index:60;background:var(--surface-2);border:1px solid var(--line);border-radius:14px;padding:12px 14px 12px 18px;display:flex;align-items:center;gap:14px;box-shadow:0 18px 50px rgba(0,0,0,.5);max-width:92vw;";
-    var sp = document.createElement("span"); sp.style.cssText="font-size:13.5px;color:var(--muted);"; sp.textContent="Upozorníme vás na novinky a dostupnost";
-    var ok = document.createElement("button"); ok.className="btn"; ok.style.cssText="padding:9px 18px;font-size:13px;margin:0;"; ok.textContent="Zapnout";
+    var sp = document.createElement("span"); sp.style.cssText="font-size:13.5px;color:var(--muted);"; sp.textContent = pT("p.push");
+    var ok = document.createElement("button"); ok.className="btn"; ok.style.cssText="padding:9px 18px;font-size:13px;margin:0;"; ok.textContent = pT("p.push.btn");
     var no = document.createElement("button"); no.textContent="✕"; no.style.cssText="background:transparent;border:1px solid var(--line);color:var(--text);border-radius:999px;padding:9px 14px;cursor:pointer;font-family:inherit;";
     bar.appendChild(sp); bar.appendChild(ok); bar.appendChild(no); document.body.appendChild(bar);
     ok.onclick=function(){ bar.remove(); Notification.requestPermission().then(function(p){ if(p==="granted") portalSubscribe(tok); }); };

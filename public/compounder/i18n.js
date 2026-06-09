@@ -9,8 +9,11 @@ window.COMPOUNDER_I18N = {
   path: "i18n/",
   // 24 úředních jazyků EU (kód → vlastní název)
   LANGS: {
-    en: "English", cs: "Čeština", de: "Deutsch", sk: "Slovenčina", pl: "Polski",
-    fr: "Français", es: "Español", it: "Italiano", nl: "Nederlands", pt: "Português", ro: "Română"
+    en: "English", bg: "Български", cs: "Čeština", da: "Dansk", de: "Deutsch",
+    el: "Ελληνικά", es: "Español", et: "Eesti", fi: "Suomi", fr: "Français",
+    ga: "Gaeilge", hr: "Hrvatski", hu: "Magyar", it: "Italiano", lt: "Lietuvių",
+    lv: "Latviešu", mt: "Malti", nl: "Nederlands", pl: "Polski", pt: "Português",
+    ro: "Română", sk: "Slovenčina", sl: "Slovenščina", sv: "Svenska"
   },
   strings: {
     en: {
@@ -46,7 +49,8 @@ window.COMPOUNDER_I18N = {
       "p.conn.water":"Water","p.conn.waterh":"Cold water","p.conn.waterp":"Standard water connection, approx. 3/4\". Heating is handled by the machine.","p.conn.el":"Electricity","p.conn.elh":"Power connection","p.conn.elp":"400 V / approx. 3×25 A. Exact load per configuration.","p.conn.drain":"Drain","p.conn.drainh":"Sewerage","p.conn.drainp":"Connection to sewerage or a tank.","p.conn.net":"Connectivity","p.conn.neth":"Internet","p.conn.netp":"LTE/5G included for monitoring; fixed line optional.","p.conn.note":"Average connection cost is in the economics model — adjust per location.",
       "p.plans.eyebrow":"Floor plans","p.plans.title":"Placement and floor plan","p.plans.lead":"Layout drawings and placement options on the plot.","p.plans.soon":"Soon","p.plans.ph":"Floor plans and layout drawings are in preparation","p.plans.ph2":"Sent on request per specific location.",
       "p.dist.eyebrow":"Distribution model","p.dist.title":"Two ways to build","p.dist.lead":"A Compounder builds a portfolio of assets. A Distributor helps create new Compounders.","p.dist.c":"Compounder","p.dist.ch":"Investor","p.dist.cp":"Acquires Compounder Machines, reinvests cashflow and scales the portfolio. One asset funds the next.","p.dist.d":"Distributor","p.dist.dh":"Multiplier","p.dist.dp":"Operates their own machines, distributes Compounder Machines and helps create new Compounders.","p.dist.note":"We'll discuss specific terms, prices and availability in person — we'll get in touch.",
-      "p.push":"We'll notify you about news and availability","p.push.btn":"Enable","p.footer":"COMPOUNDER · Best Series — We build Compounder Machines. · compounder.world"
+      "p.push":"We'll notify you about news and availability","p.push.btn":"Enable","p.footer":"COMPOUNDER · Best Series — We build Compounder Machines. · compounder.world",
+      "p.u.years":"years","p.u.months":"months","p.u.loss":"at a loss"
     }
   }
 };
