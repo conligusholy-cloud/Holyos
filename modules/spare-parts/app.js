@@ -532,13 +532,14 @@
 
   window.editMaterialEshop = async function (id) {
     try {
-      const [warehouses, categories] = await Promise.all([
+      // Pozn: materiál načítáme cíleně přes /materials/:id, ne hledáním ve výpisu
+      // (ten je stránkovaný na 200 položek a nové zboží se sells_on_eshop=false do něj
+      //  nemuselo spadnout → modal pak hlásil chybu i u existujícího materiálu).
+      const [warehouses, categories, m] = await Promise.all([
         fetchJSON(`${API}/warehouses`),
         _catalogCategories.length ? Promise.resolve(_catalogCategories) : fetchJSON(`${API}/categories`),
+        fetchJSON(`${API}/materials/${id}`),
       ]);
-      const materials = await fetchJSON(`${API}/materials?q=`);
-      const m = materials.find(x => x.id === id);
-      if (!m) { alert('Materiál nenalezen'); return; }
       const whOpts = '<option value="">— žádný —</option>' +
         warehouses.map(w => `<option value="${w.id}"${m.eshop_warehouse_id===w.id?' selected':''}>${esc(w.name)} (${esc(w.code||'')})</option>`).join('');
       const catOpts = '<option value="">— bez kategorie —</option>' +
