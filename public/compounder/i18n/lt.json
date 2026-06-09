@@ -185,5 +185,16 @@
  "p.ver.water": "Vanduo",
  "p.ver.sewage": "Kanalizacija",
  "p.ver.dl": "Atsisiųsti brėžinį + prijungimus (PDF)",
- "p.ver.note": "Aukštis apie 2 390 mm. Elektra, vanduo ir kanalizacija suvedami į vieną šulinį. Galutinė specifikacija pagal konfigūraciją."
+ "p.ver.note": "Aukštis apie 2 390 mm. Elektra, vanduo ir kanalizacija suvedami į vieną šulinį. Galutinė specifikacija pagal konfigūraciją.",
+ "login.link": "Prisijungti",
+ "login.eyebrow": "Sugrįžtantis Compounder",
+ "login.title": "Prisijungimas",
+ "login.lead": "Įveskite el. paštą ir atsiųsime jums prisijungimo nuorodą.",
+ "login.email": "El. paštas",
+ "login.submit": "Siųsti prisijungimo nuorodą",
+ "login.sending": "Siunčiama…",
+ "login.ok": "Jei jūsų el. paštą žinome, išsiuntėme prisijungimo nuorodą. Patikrinkite pašto dėžutę.",
+ "login.err": "Įveskite galiojantį el. paštą.",
+ "p.login.title": "Prisijungti prie Portal",
+ "p.login.lead": "Įveskite el. paštą ir atsiųsime jums prisijungimo nuorodą (galioja 24 valandas)."
 }

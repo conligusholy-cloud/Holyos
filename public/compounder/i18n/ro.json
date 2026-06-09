@@ -185,5 +185,16 @@
  "p.ver.water": "Apă",
  "p.ver.sewage": "Canalizare",
  "p.ver.dl": "Descarcă desenul + racordurile (PDF)",
- "p.ver.note": "Înălțime cca. 2 390 mm. Electricitatea, apa și canalizarea sunt aduse într-un singur cămin. Specificație finală în funcție de configurație."
+ "p.ver.note": "Înălțime cca. 2 390 mm. Electricitatea, apa și canalizarea sunt aduse într-un singur cămin. Specificație finală în funcție de configurație.",
+ "login.link": "Autentificare",
+ "login.eyebrow": "Compounder care revine",
+ "login.title": "Autentificare",
+ "login.lead": "Introduceți e-mailul și vă vom trimite un link de autentificare.",
+ "login.email": "E-mail",
+ "login.submit": "Trimite linkul de autentificare",
+ "login.sending": "Se trimite…",
+ "login.ok": "Dacă vă cunoaștem e-mailul, am trimis un link de autentificare. Verificați-vă inboxul.",
+ "login.err": "Introduceți un e-mail valid.",
+ "p.login.title": "Autentificare în Portal",
+ "p.login.lead": "Introduceți e-mailul și vă vom trimite un link de autentificare (valabil 24 de ore)."
 }

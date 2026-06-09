@@ -280,6 +280,36 @@ footer .fl a:hover{color:var(--text)}
 .install.show{transform:translateX(-50%) translateY(0)}
 .install span{font-size:13.5px;color:var(--muted)}
 
+/* login odkaz v nav */
+.nav-login{font-size:14px;color:var(--muted);white-space:nowrap;cursor:pointer}
+.nav-login:hover{color:var(--text)}
+
+/* login modal */
+.modal-ov{
+  position:fixed;inset:0;z-index:120;display:none;align-items:center;justify-content:center;
+  background:rgba(0,0,0,.66);backdrop-filter:blur(6px);padding:20px;
+}
+.modal-ov.show{display:flex}
+.modal{
+  position:relative;width:100%;max-width:420px;background:var(--surface);
+  border:1px solid var(--line);border-radius:22px;padding:38px 34px;text-align:left;
+  box-shadow:0 30px 80px rgba(0,0,0,.6);
+}
+.modal h3{font-size:26px;margin:10px 0 6px}
+.modal-lead{color:var(--muted);font-size:14.5px;margin-bottom:22px}
+.modal label{display:block;font-size:12.5px;letter-spacing:.06em;color:var(--muted);margin-bottom:8px;text-transform:uppercase}
+.modal input{
+  width:100%;background:var(--bg-2);border:1px solid var(--line);border-radius:12px;
+  padding:14px 16px;color:var(--text);font-size:15px;font-family:inherit;transition:border-color .25s;margin-bottom:18px;
+}
+.modal input:focus{outline:none;border-color:var(--gold)}
+.modal .btn-gold{width:100%;justify-content:center}
+.modal-x{
+  position:absolute;top:14px;right:14px;background:transparent;border:0;color:var(--muted-2);
+  font-size:18px;cursor:pointer;line-height:1;padding:6px;
+}
+.modal-x:hover{color:var(--text)}
+
 @media(max-width:860px){
   .nav-links{display:none}
   .traits,.compare,.audiences{grid-template-columns:1fr}
@@ -299,6 +329,7 @@ footer .fl a:hover{color:var(--text)}
       <a href="#card" data-i18n="nav.card">The Card</a>
     </div>
     <select class="lang-select" id="langSelect" aria-label="Language"></select>
+    <a href="#" class="nav-login" id="loginLink" data-i18n="login.link">Log in</a>
     <a href="#register" class="btn btn-gold btn-sm" data-i18n="nav.cta">Become a Compounder</a>
   </div>
 </nav>
@@ -515,6 +546,22 @@ footer .fl a:hover{color:var(--text)}
   <span data-i18n="install.text">Install Compounder on your desktop</span>
   <button class="btn btn-gold btn-sm" id="installBtn" data-i18n="install.btn">Install</button>
   <button class="btn btn-ghost btn-sm" id="installClose">✕</button>
+</div>
+
+<!-- LOGIN MODAL (vracející se uživatel — přihlášení přes odkaz v e-mailu) -->
+<div class="modal-ov" id="loginModal" aria-hidden="true">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="loginTitle">
+    <button class="modal-x" id="loginClose" aria-label="✕">✕</button>
+    <span class="eyebrow" data-i18n="login.eyebrow">Returning Compounder</span>
+    <h3 id="loginTitle" data-i18n="login.title">Log in</h3>
+    <p class="modal-lead" data-i18n="login.lead">Enter your email and we'll send you a sign-in link.</p>
+    <form id="loginForm" novalidate>
+      <label data-i18n="login.email">Email</label>
+      <input type="email" name="email" autocomplete="email" required />
+      <button type="submit" class="btn btn-gold" data-i18n="login.submit">Send sign-in link</button>
+      <p class="reg-msg" id="loginMsg" role="status"></p>
+    </form>
+  </div>
 </div>
 
 <script src="i18n.js"></script>

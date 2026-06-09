@@ -185,5 +185,16 @@
  "p.ver.water": "Vesi",
  "p.ver.sewage": "Kanalisatsioon",
  "p.ver.dl": "Laadi alla joonis + ühendused (PDF)",
- "p.ver.note": "Kõrgus ligikaudu 2 390 mm. Elekter, vesi ja kanalisatsioon juhitakse ühte kaevu. Lõplik spetsifikatsioon sõltub konfiguratsioonist."
+ "p.ver.note": "Kõrgus ligikaudu 2 390 mm. Elekter, vesi ja kanalisatsioon juhitakse ühte kaevu. Lõplik spetsifikatsioon sõltub konfiguratsioonist.",
+ "login.link": "Logi sisse",
+ "login.eyebrow": "Naasev Compounder",
+ "login.title": "Logi sisse",
+ "login.lead": "Sisestage oma e-post ja saadame teile sisselogimislingi.",
+ "login.email": "E-post",
+ "login.submit": "Saada sisselogimislink",
+ "login.sending": "Saadan…",
+ "login.ok": "Kui teame teie e-posti, saatsime sisselogimislingi. Kontrollige postkasti.",
+ "login.err": "Sisestage kehtiv e-post.",
+ "p.login.title": "Logi Portali sisse",
+ "p.login.lead": "Sisestage oma e-post ja saadame teile sisselogimislingi (kehtib 24 tundi)."
 }

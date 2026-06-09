@@ -185,5 +185,16 @@
  "p.ver.water": "Wasser",
  "p.ver.sewage": "Abwasser",
  "p.ver.dl": "Zeichnung + Anschlüsse herunterladen (PDF)",
- "p.ver.note": "Höhe ca. 2 390 mm. Strom, Wasser und Abwasser werden in einen Schacht geführt. Endgültige Spezifikation je nach Konfiguration."
+ "p.ver.note": "Höhe ca. 2 390 mm. Strom, Wasser und Abwasser werden in einen Schacht geführt. Endgültige Spezifikation je nach Konfiguration.",
+ "login.link": "Anmelden",
+ "login.eyebrow": "Wiederkehrender Compounder",
+ "login.title": "Anmelden",
+ "login.lead": "Geben Sie Ihre E-Mail ein und wir senden Ihnen einen Anmeldelink.",
+ "login.email": "E-Mail",
+ "login.submit": "Anmeldelink senden",
+ "login.sending": "Senden…",
+ "login.ok": "Wenn wir Ihre E-Mail kennen, haben wir einen Anmeldelink gesendet. Prüfen Sie Ihr Postfach.",
+ "login.err": "Bitte geben Sie eine gültige E-Mail ein.",
+ "p.login.title": "Beim Portal anmelden",
+ "p.login.lead": "Geben Sie Ihre E-Mail ein und wir senden Ihnen einen Anmeldelink (24 Stunden gültig)."
 }

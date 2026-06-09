@@ -171,6 +171,39 @@ router.get('/portal/session', async (req, res, next) => {
   }
 });
 
+// ─── VEŘEJNÉ: přihlášení vracejícího se leada (magic link na e-mail) ─────────
+// POST /api/compounder/login  { email, lang? }
+// Najde lead dle e-mailu a pošle přihlašovací odkaz (platí 24 h). Odpověď je
+// VŽDY neutrální ({ ok: true }) — neprozrazuje, zda e-mail známe.
+const loginSchema = z.object({
+  email: z.string().trim().email().max(255),
+  lang: z.string().trim().max(10).optional().nullable(),
+});
+router.post('/login', async (req, res, next) => {
+  try {
+    const parsed = loginSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ ok: false, error: 'Neplatný e-mail.' });
+    const email = parsed.data.email;
+    const lead = await prisma.compounderLead.findFirst({
+      where: { email: { equals: email, mode: 'insensitive' } },
+      orderBy: { created_at: 'desc' },
+      select: { id: true, name: true, email: true },
+    });
+    if (lead) {
+      const url = `${portalBase()}/portal?t=${makeLoginToken(lead.id)}`;
+      sendPortalLogin({ name: lead.name, email: lead.email }, url)
+        .catch((e) => console.error('[compounder] login e-mail selhal:', e.message));
+      console.log(`[compounder] Přihlašovací odkaz odeslán pro lead #${lead.id}`);
+    } else {
+      console.log(`[compounder] Přihlášení – neznámý e-mail: ${email}`);
+    }
+    // Vždy stejná odpověď (anti-enumeration).
+    return res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // ─── ADMIN: výpis leadů (vyžaduje přihlášení) ───────────────────────────────
 
 // GET /api/compounder/leads?status=new&role=compounder&search=...
@@ -320,21 +353,42 @@ function portalSecret() {
 function portalBase() {
   return (process.env.COMPOUNDER_BASE_URL || 'https://www.compounder.world').replace(/\/+$/, '');
 }
-function makePortalToken(leadId) {
-  const sig = crypto.createHmac('sha256', portalSecret()).update('compounder:' + leadId).digest('base64url');
-  return leadId + '.' + sig;
+function hmacSig(payload) {
+  return crypto.createHmac('sha256', portalSecret()).update(payload).digest('base64url');
 }
+function safeEqStr(a, b) {
+  const ba = Buffer.from(String(a || ''));
+  const bb = Buffer.from(String(b || ''));
+  return ba.length === bb.length && crypto.timingSafeEqual(ba, bb);
+}
+// Permanentní token (registrace) — formát: id.sig
+function makePortalToken(leadId) {
+  return leadId + '.' + hmacSig('compounder:' + leadId);
+}
+// Časově omezený přihlašovací token — formát: id.exp.sig (exp = ms epoch). Default 24 h.
+function makeLoginToken(leadId, ttlMs) {
+  const exp = Date.now() + (ttlMs || 24 * 3600 * 1000);
+  return leadId + '.' + exp + '.' + hmacSig('compounder:' + leadId + ':' + exp);
+}
+// Ověří oba formáty: 2-part permanentní (registrace) i 3-part s expirací (login).
 function verifyPortalToken(token) {
   if (!token || typeof token !== 'string' || token.indexOf('.') < 0) return null;
   const parts = token.split('.');
   const id = Number(parts[0]);
-  const sig = parts[1];
-  if (!Number.isInteger(id) || id <= 0 || !sig) return null;
-  const expected = crypto.createHmac('sha256', portalSecret()).update('compounder:' + id).digest('base64url');
-  const a = Buffer.from(sig);
-  const b = Buffer.from(expected);
-  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
-  return id;
+  if (!Number.isInteger(id) || id <= 0) return null;
+  if (parts.length === 2) {
+    // permanentní (registrace)
+    if (!parts[1]) return null;
+    return safeEqStr(parts[1], hmacSig('compounder:' + id)) ? id : null;
+  }
+  if (parts.length === 3) {
+    // časově omezený login token: id.exp.sig
+    const exp = Number(parts[1]);
+    if (!Number.isInteger(exp) || !parts[2]) return null;
+    if (Date.now() > exp) return null; // expirovaný
+    return safeEqStr(parts[2], hmacSig('compounder:' + id + ':' + exp)) ? id : null;
+  }
+  return null;
 }
 async function sendPortalInvite(d, portalUrl) {
   const from = process.env.COMPOUNDER_MAIL_FROM || process.env.SMTP_FROM || process.env.INVOICE_IMAP_USER;
@@ -350,6 +404,21 @@ async function sendPortalInvite(d, portalUrl) {
       `Odkaz je osobní, nesdílejte ho.`,
     link: portalUrl,
     linkLabel: 'Otevřít Compounder Portal',
+  });
+}
+async function sendPortalLogin(d, url) {
+  const from = process.env.COMPOUNDER_MAIL_FROM || process.env.SMTP_FROM || process.env.INVOICE_IMAP_USER;
+  await sendMail({
+    to: d.email,
+    from,
+    subject: 'Přihlášení do Compounder Portalu',
+    preheader: 'Odkaz pro přihlášení do Compounder Portalu (platí 24 hodin).',
+    body:
+      `Dobrý den${d.name ? ', ' + d.name : ''},\n\n` +
+      `tímto odkazem se přihlásíte do Compounder Portalu. Odkaz je platný 24 hodin a je osobní — nesdílejte ho.\n\n` +
+      `Pokud jste o přihlášení nežádali, tento e-mail klidně ignorujte.`,
+    link: url,
+    linkLabel: 'Přihlásit se do Portalu',
   });
 }
 

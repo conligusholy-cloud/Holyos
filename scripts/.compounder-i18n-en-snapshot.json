@@ -190,5 +190,16 @@
  "p.ver.water": "Water",
  "p.ver.sewage": "Sewage",
  "p.ver.dl": "Download drawing + connections (PDF)",
- "p.ver.note": "Height approx. 2 390 mm. Electricity, water and sewage are brought into one manhole. Final spec per configuration."
+ "p.ver.note": "Height approx. 2 390 mm. Electricity, water and sewage are brought into one manhole. Final spec per configuration.",
+ "login.link": "Log in",
+ "login.eyebrow": "Returning Compounder",
+ "login.title": "Log in",
+ "login.lead": "Enter your email and we'll send you a sign-in link.",
+ "login.email": "Email",
+ "login.submit": "Send sign-in link",
+ "login.sending": "Sending…",
+ "login.ok": "If we know your email, we've sent a sign-in link. Check your inbox.",
+ "login.err": "Please enter a valid email.",
+ "p.login.title": "Sign in to the Portal",
+ "p.login.lead": "Enter your email and we'll send you a sign-in link (valid 24 hours)."
 }

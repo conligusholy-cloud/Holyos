@@ -185,5 +185,16 @@
  "p.ver.water": "Água",
  "p.ver.sewage": "Esgoto",
  "p.ver.dl": "Descarregar desenho + ligações (PDF)",
- "p.ver.note": "Altura aprox. 2 390 mm. Eletricidade, água e esgoto são conduzidos a uma única caixa. Especificação final consoante a configuração."
+ "p.ver.note": "Altura aprox. 2 390 mm. Eletricidade, água e esgoto são conduzidos a uma única caixa. Especificação final consoante a configuração.",
+ "login.link": "Entrar",
+ "login.eyebrow": "Compounder recorrente",
+ "login.title": "Entrar",
+ "login.lead": "Introduza o seu e-mail e enviar-lhe-emos um link de acesso.",
+ "login.email": "E-mail",
+ "login.submit": "Enviar link de acesso",
+ "login.sending": "A enviar…",
+ "login.ok": "Se conhecermos o seu e-mail, enviámos um link de acesso. Verifique a caixa de entrada.",
+ "login.err": "Introduza um e-mail válido.",
+ "p.login.title": "Entrar no Portal",
+ "p.login.lead": "Introduza o seu e-mail e enviar-lhe-emos um link de acesso (válido 24 horas)."
 }

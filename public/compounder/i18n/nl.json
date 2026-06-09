@@ -185,5 +185,16 @@
  "p.ver.water": "Water",
  "p.ver.sewage": "Riolering",
  "p.ver.dl": "Tekening + aansluitingen downloaden (PDF)",
- "p.ver.note": "Hoogte ca. 2 390 mm. Elektriciteit, water en riolering worden naar één put geleid. Definitieve specificatie per configuratie."
+ "p.ver.note": "Hoogte ca. 2 390 mm. Elektriciteit, water en riolering worden naar één put geleid. Definitieve specificatie per configuratie.",
+ "login.link": "Inloggen",
+ "login.eyebrow": "Terugkerende Compounder",
+ "login.title": "Inloggen",
+ "login.lead": "Voer je e-mail in en we sturen je een inloglink.",
+ "login.email": "E-mail",
+ "login.submit": "Inloglink versturen",
+ "login.sending": "Versturen…",
+ "login.ok": "Als we je e-mail kennen, hebben we een inloglink gestuurd. Controleer je inbox.",
+ "login.err": "Voer een geldig e-mailadres in.",
+ "p.login.title": "Inloggen op het Portal",
+ "p.login.lead": "Voer je e-mail in en we sturen je een inloglink (24 uur geldig)."
 }

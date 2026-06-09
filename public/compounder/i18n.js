@@ -35,8 +35,9 @@ window.COMPOUNDER_I18N = {
       "footer.by":"A Best Series company. We build Compounder Machines.",
       "install.text":"Install Compounder on your desktop","install.btn":"Install",
       "push.text":"Get Compounding updates","push.btn":"Enable",
+      "login.link":"Log in","login.eyebrow":"Returning Compounder","login.title":"Log in","login.lead":"Enter your email and we'll send you a sign-in link.","login.email":"Email","login.submit":"Send sign-in link","login.sending":"Sending…","login.ok":"If we know your email, we've sent a sign-in link. Check your inbox.","login.err":"Please enter a valid email.",
 
-      "p.verify":"Verifying access…","p.denied.title":"Access not found","p.denied.msg":"This link is invalid or has expired.","p.back":"Back to compounder.world","p.hi":"Welcome",
+      "p.verify":"Verifying access…","p.denied.title":"Access not found","p.denied.msg":"This link is invalid or has expired.","p.back":"Back to compounder.world","p.hi":"Welcome","p.login.title":"Sign in to the Portal","p.login.lead":"Enter your email and we'll send you a sign-in link (valid 24 hours).",
       "p.nav.eko":"Economics","p.nav.ret":"Return","p.nav.params":"Technical parameters","p.nav.conn":"Connections","p.nav.plans":"Floor plans","p.nav.dist":"Distribution model",
       "p.eko.eyebrow":"Economics","p.eko.title":"Economics of one Compounder","p.eko.lead":"A live model. Yellow fields are inputs — adjust them to your location and instantly see revenue, profit and payback. Figures are indicative.",
       "p.m.invest":"Total investment","p.m.invests":"per location","p.m.rev":"Revenue / month","p.m.profit":"Profit / month","p.m.profits":"after all costs","p.m.payback":"Payback","p.m.custmo":"customers / mo",

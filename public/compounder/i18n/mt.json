@@ -185,5 +185,16 @@
  "p.ver.water": "Ilma",
  "p.ver.sewage": "Drenaġġ",
  "p.ver.dl": "Niżżel it-tpinġija + konnessjonijiet (PDF)",
- "p.ver.note": "Għoli madwar 2 390 mm. L-elettriku, l-ilma u d-drenaġġ jitwasslu f'bir wieħed. Speċifikazzjoni finali skont il-konfigurazzjoni."
+ "p.ver.note": "Għoli madwar 2 390 mm. L-elettriku, l-ilma u d-drenaġġ jitwasslu f'bir wieħed. Speċifikazzjoni finali skont il-konfigurazzjoni.",
+ "login.link": "Idħol",
+ "login.eyebrow": "Compounder li jirritorna",
+ "login.title": "Idħol",
+ "login.lead": "Daħħal l-email tiegħek u nibagħtulek link biex tidħol.",
+ "login.email": "Email",
+ "login.submit": "Ibgħat il-link biex tidħol",
+ "login.sending": "Qed jintbagħat…",
+ "login.ok": "Jekk nafu l-email tiegħek, bgħatna link biex tidħol. Iċċekkja l-inbox tiegħek.",
+ "login.err": "Daħħal email validu.",
+ "p.login.title": "Idħol fil-Portal",
+ "p.login.lead": "Daħħal l-email tiegħek u nibagħtulek link biex tidħol (validu għal 24 siegħa)."
 }

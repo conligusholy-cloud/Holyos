@@ -185,5 +185,16 @@
  "p.ver.water": "Voda",
  "p.ver.sewage": "Kanalizácia",
  "p.ver.dl": "Stiahnuť výkres + prípojky (PDF)",
- "p.ver.note": "Výška cca 2 390 mm. Elektrina, voda a kanalizácia sú zvedené do jednej šachty. Finálna špecifikácia podľa konfigurácie."
+ "p.ver.note": "Výška cca 2 390 mm. Elektrina, voda a kanalizácia sú zvedené do jednej šachty. Finálna špecifikácia podľa konfigurácie.",
+ "login.link": "Prihlásiť sa",
+ "login.eyebrow": "Vracajúci sa Compounder",
+ "login.title": "Prihlásenie",
+ "login.lead": "Zadajte e-mail a pošleme vám odkaz na prihlásenie.",
+ "login.email": "E-mail",
+ "login.submit": "Poslať odkaz na prihlásenie",
+ "login.sending": "Odosielam…",
+ "login.ok": "Ak váš e-mail poznáme, poslali sme odkaz na prihlásenie. Skontrolujte schránku.",
+ "login.err": "Zadajte platný e-mail.",
+ "p.login.title": "Prihlásenie do Portalu",
+ "p.login.lead": "Zadajte e-mail a pošleme vám odkaz na prihlásenie (platí 24 hodín)."
 }
