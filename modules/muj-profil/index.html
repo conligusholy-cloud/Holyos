@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Můj profil | HOLYOS</title>
+  <link rel="icon" type="image/svg+xml" href="../../logo-holyos-icon.svg">
+  <base href="../../">
+  <link rel="stylesheet" href="css/dashboard.css">
+  <style>
+    .main-wrapper { margin-left: var(--sidebar-w); flex: 1; min-height: 100vh; display: flex; flex-direction: column; }
+
+    .profile-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 18px 20px; margin-bottom: 20px; }
+    .profile-card h2 { font-size: 15px; margin: 0 0 4px; }
+    .profile-card .muted { color: var(--text2); font-size: 13px; }
+
+    .req-list { display: flex; flex-direction: column; gap: 10px; }
+    .req-row { display: flex; align-items: center; gap: 14px; padding: 14px 16px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; transition: background 0.15s; }
+    .req-row:hover { background: rgba(108,92,231,0.05); }
+    .req-body { flex: 1; min-width: 0; }
+    .req-title { font-size: 14px; font-weight: 500; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .req-meta { font-size: 12px; color: var(--text2); margin-top: 4px; display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+
+    .status-badge { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+    .status-new { background: rgba(59,130,246,0.15); color: #3b82f6; }
+    .status-in_progress { background: rgba(245,158,11,0.15); color: #f59e0b; }
+    .status-done { background: rgba(34,197,94,0.15); color: #22c55e; }
+    .status-cancelled { background: rgba(239,68,68,0.15); color: #ef4444; }
+
+    .btn-trash { flex-shrink: 0; width: 36px; height: 36px; border-radius: 8px; border: 1px solid rgba(239,68,68,0.3); background: rgba(239,68,68,0.08); color: #ef4444; cursor: pointer; font-size: 16px; display: flex; align-items: center; justify-content: center; transition: all 0.15s; }
+    .btn-trash:hover { background: rgba(239,68,68,0.2); }
+    .btn-trash:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .empty-state { text-align: center; padding: 60px 20px; color: var(--text2); }
+    .empty-state-icon { font-size: 48px; margin-bottom: 12px; }
+
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 999; }
+    .modal { background: var(--bg); border: 1px solid var(--border); border-radius: 12px; padding: 24px; max-width: 460px; width: 90%; }
+    .modal h3 { margin: 0 0 10px; font-size: 16px; }
+    .modal p { color: var(--text2); font-size: 13px; line-height: 1.5; margin: 0; }
+    .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
+    .btn { padding: 8px 16px; border-radius: 8px; font-size: 13px; cursor: pointer; border: 1px solid var(--border); }
+    .btn-secondary { background: var(--surface); color: var(--text); }
+    .btn-secondary:hover { background: var(--surface2); }
+    .btn-danger { background: #ef4444; color: #fff; border-color: #ef4444; }
+    .btn-danger:hover { background: #dc2626; }
+    .btn-danger:disabled { opacity: 0.6; cursor: not-allowed; }
+
+    @media (max-width: 768px) {
+      .main-wrapper { margin-left: 0 !important; }
+      .main-header { padding-left: 56px !important; }
+      .main-content { padding: 16px !important; }
+      .modal-overlay { align-items: flex-end; }
+      .modal { max-width: 100%; width: 100%; border-radius: 14px 14px 0 0; }
+    }
+  </style>
+</head>
+<body>
+  <aside id="sidebar" class="sidebar"></aside>
+  <div class="main-wrapper">
+    <div class="main-header">
+      <div>
+        <h1 style="display:flex;align-items:center;gap:10px;">
+          <span style="font-size:24px;">&#128100;</span> Můj profil
+        </h1>
+        <p style="color:var(--text2);font-size:13px;">Tvoje osobní nastavení a požadavky na AI asistenta</p>
+      </div>
+    </div>
+    <div class="main-content">
+      <div class="profile-card" id="profile-card">
+        <h2 id="profile-name">Načítám…</h2>
+        <div class="muted" id="profile-username"></div>
+      </div>
+
+      <h2 style="font-size:15px;margin:0 0 12px;display:flex;align-items:center;gap:8px;">
+        <span>&#129302;</span> Moje požadavky na AI asistenta
+      </h2>
+      <p style="color:var(--text2);font-size:13px;margin:0 0 16px;">
+        Tady jsou požadavky, které jsi odeslal/a. Ten, který nedává smysl nebo byl odeslán omylem, můžeš zrušit ikonou koše.
+      </p>
+      <div id="req-list" class="req-list"></div>
+    </div>
+  </div>
+  <div id="modal-root"></div>
+
+  <script>
+    // Načti sidebar (a top bar) — stejný vzor jako ostatní moduly
+    var s = document.createElement('script');
+    s.src = '/js/sidebar.js?v=' + Date.now();
+    s.onload = function() {
+      renderSidebar('muj-profil');
+      if (typeof initDate === 'function') initDate();
+    };
+    document.head.appendChild(s);
+  </script>
+
+  <script>
+  (function() {
+    // Helper — autentizovaný fetch. Auth jde primárně přes HttpOnly cookie
+    // (credentials:'include'), token v sessionStorage je fallback (zpětná kompat.).
+    function api(path, opts) {
+      opts = opts || {};
+      var headers = Object.assign({ 'Content-Type': 'application/json' }, opts.headers || {});
+      var token = sessionStorage.getItem('token');
+      if (token) headers['Authorization'] = 'Bearer ' + token;
+      return fetch(path, Object.assign({ credentials: 'include' }, opts, { headers: headers }));
+    }
+
+    var STATUS_LABELS = {
+      new: 'Čeká na zpracování',
+      in_progress: 'Zpracovává se',
+      done: 'Hotovo',
+      cancelled: 'Zrušeno',
+    };
+
+    function escapeHtml(str) {
+      return String(str == null ? '' : str)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
+    function formatDate(iso) {
+      if (!iso) return '';
+      try {
+        return new Date(iso).toLocaleDateString('cs-CZ', { day: 'numeric', month: 'numeric', year: 'numeric' });
+      } catch (e) { return ''; }
+    }
+
+    function reqTitle(t) {
+      var title = (t.page_title && t.page_title.trim()) || (t.description && t.description.trim()) || ('Požadavek #' + t.id);
+      if (title.length > 90) title = title.slice(0, 90) + '…';
+      return title;
+    }
+
+    // Načti profil přihlášeného uživatele
+    function loadProfile() {
+      api('/api/auth/me').then(function(r) {
+        if (!r.ok) return null;
+        return r.json();
+      }).then(function(data) {
+        if (!data) return;
+        var u = data.user || data;
+        var nameEl = document.getElementById('profile-name');
+        var userEl = document.getElementById('profile-username');
+        if (nameEl) nameEl.textContent = u.displayName || u.display_name || u.username || 'Uživatel';
+        if (userEl && u.username) userEl.textContent = '@' + u.username;
+      }).catch(function() {});
+    }
+
+    // Načti vlastní požadavky
+    function loadRequests() {
+      var list = document.getElementById('req-list');
+      list.innerHTML = '<div class="empty-state"><div class="empty-state-icon">⏳</div>Načítám tvoje požadavky…</div>';
+      api('/api/admin-tasks/mine').then(function(r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+      }).then(function(tasks) {
+        renderRequests(tasks || []);
+      }).catch(function(e) {
+        list.innerHTML = '<div class="empty-state"><div class="empty-state-icon">⚠️</div>Nepodařilo se načíst požadavky: ' + escapeHtml(e.message) + '</div>';
+      });
+    }
+
+    function renderRequests(tasks) {
+      var list = document.getElementById('req-list');
+      if (!tasks.length) {
+        list.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📭</div>Zatím jsi neodeslal/a žádný požadavek na AI asistenta.</div>';
+        return;
+      }
+      list.innerHTML = '';
+      tasks.forEach(function(t) {
+        var statusKey = t.status || 'new';
+        var statusLabel = STATUS_LABELS[statusKey] || statusKey;
+        var row = document.createElement('div');
+        row.className = 'req-row';
+        row.id = 'req-' + t.id;
+        // Hotový požadavek nelze zrušit — koš je disabled
+        var disabled = statusKey === 'done';
+        row.innerHTML =
+          '<div class="req-body">' +
+            '<div class="req-title">' + escapeHtml(reqTitle(t)) + '</div>' +
+            '<div class="req-meta">' +
+              '<span>📅 ' + escapeHtml(formatDate(t.created_at)) + '</span>' +
+              '<span class="status-badge status-' + escapeHtml(statusKey) + '">' + escapeHtml(statusLabel) + '</span>' +
+            '</div>' +
+          '</div>' +
+          '<button class="btn-trash" title="' + (disabled ? 'Hotový požadavek nelze zrušit' : 'Zrušit požadavek') + '"' +
+            (disabled ? ' disabled' : '') + '>🗑️</button>';
+        if (!disabled) {
+          row.querySelector('.btn-trash').addEventListener('click', function() {
+            openConfirm(t);
+          });
+        }
+        list.appendChild(row);
+      });
+    }
+
+    // Potvrzovací dialog před zrušením
+    function openConfirm(task) {
+      var root = document.getElementById('modal-root');
+      root.innerHTML =
+        '<div class="modal-overlay" id="confirm-overlay">' +
+          '<div class="modal">' +
+            '<h3>Opravdu zrušit požadavek?</h3>' +
+            '<p>„' + escapeHtml(reqTitle(task)) + '"<br><br>Tato akce požadavek odebere z tvého seznamu.</p>' +
+            '<div class="modal-actions">' +
+              '<button class="btn btn-secondary" id="confirm-cancel">Ne, ponechat</button>' +
+              '<button class="btn btn-danger" id="confirm-ok">Ano, zrušit</button>' +
+            '</div>' +
+          '</div>' +
+        '</div>';
+      function close() { root.innerHTML = ''; }
+      document.getElementById('confirm-cancel').addEventListener('click', close);
+      document.getElementById('confirm-overlay').addEventListener('click', function(e) {
+        if (e.target.id === 'confirm-overlay') close();
+      });
+      var okBtn = document.getElementById('confirm-ok');
+      okBtn.addEventListener('click', function() {
+        okBtn.disabled = true;
+        okBtn.textContent = 'Ruším…';
+        cancelRequest(task.id).then(function() {
+          close();
+          var row = document.getElementById('req-' + task.id);
+          if (row) row.remove();
+          // Pokud zmizel poslední, ukaž prázdný stav
+          var list = document.getElementById('req-list');
+          if (list && !list.children.length) renderRequests([]);
+        }).catch(function(e) {
+          okBtn.disabled = false;
+          okBtn.textContent = 'Ano, zrušit';
+          alert('Zrušení se nepodařilo: ' + e.message);
+        });
+      });
+    }
+
+    function cancelRequest(id) {
+      return api('/api/admin-tasks/mine/' + id + '/cancel', { method: 'POST' }).then(function(r) {
+        if (!r.ok) {
+          return r.json().catch(function() { return {}; }).then(function(body) {
+            throw new Error(body.error || ('HTTP ' + r.status));
+          });
+        }
+        return r.json();
+      });
+    }
+
+    loadProfile();
+    loadRequests();
+  })();
+  </script>
+</body>
+</html>

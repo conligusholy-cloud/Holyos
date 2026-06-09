@@ -79,6 +79,74 @@ router.get('/stats/summary', async (req, res, next) => {
   }
 });
 
+// =============================================================================
+// VLASTNÍ POŽADAVKY UŽIVATELE (osobní profil)
+// Tyto routy MUSÍ být PŘED dynamickou /:id (jinak by „mine" spadlo do /:id).
+// =============================================================================
+
+// GET /api/admin-tasks/mine — moje vlastní požadavky (které jsem sám vytvořil)
+// Vrací jen aktivní (nesmazané) položky s titulkem, datem a stavem. Slouží
+// osobnímu profilu, aby si uživatel mohl spravovat (zrušit) své požadavky
+// a nezatěžoval admina.
+router.get('/mine', async (req, res, next) => {
+  try {
+    const tasks = await prisma.adminTask.findMany({
+      where: {
+        created_by: req.user.id,
+        deleted_at: null,
+      },
+      orderBy: { created_at: 'desc' },
+      select: {
+        id: true,
+        page_title: true,
+        description: true,
+        status: true,
+        priority: true,
+        created_at: true,
+      },
+    });
+    res.json(tasks);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/admin-tasks/mine/:id/cancel — zrušení vlastního požadavku
+// Bezpečnostní pravidlo: uživatel smí zrušit jen SVŮJ požadavek (created_by).
+// Zrušení = soft delete (přesun do Koše) + status 'cancelled', aby admin
+// případně viděl historii. Hotové požadavky už zrušit nelze.
+router.post('/mine/:id/cancel', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ error: 'Neplatné ID' });
+
+    const existing = await prisma.adminTask.findUnique({
+      where: { id },
+      select: { id: true, created_by: true, status: true, deleted_at: true },
+    });
+    if (!existing) return res.status(404).json({ error: 'Požadavek nenalezen' });
+
+    // Vlastnictví — cizí požadavek zrušit nelze
+    if (existing.created_by !== req.user.id) {
+      return res.status(403).json({ error: 'Tento požadavek nepatří tobě, nemůžeš ho zrušit.' });
+    }
+    if (existing.deleted_at) {
+      return res.status(400).json({ error: 'Požadavek už byl zrušen.' });
+    }
+    if (existing.status === 'done') {
+      return res.status(400).json({ error: 'Hotový požadavek nelze zrušit.' });
+    }
+
+    await prisma.adminTask.update({
+      where: { id },
+      data: { deleted_at: new Date(), status: 'cancelled' },
+    });
+    res.json({ ok: true, cancelled: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // GET /api/admin-tasks — seznam úkolů
 // Query param `view` přepíná sekci:
 //   active (default) — naplánované + rozpracované (nejsou smazané)
