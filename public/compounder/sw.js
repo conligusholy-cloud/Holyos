@@ -1,6 +1,6 @@
 /* COMPOUNDER service worker — offline shell + push notifications (Phase: scaffold).
    Bump CACHE when static assets change. */
-var CACHE = "compounder-v1";
+var CACHE = "compounder-v2";
 var CORE = [
   "./",
   "./index.html",
@@ -29,6 +29,18 @@ self.addEventListener("fetch", function(e){
   var url = new URL(req.url);
   // never cache API calls (registration / analytics / push)
   if (url.pathname.indexOf("/api/") === 0) return;
+  // i18n (i18n.js + i18n/<code>.json) — VŽDY network-first, ať se překlady po deployi
+  // ihned aktualizují (jinak SW servíruje starou verzi a Portal ukáže syrové klíče).
+  if (/(?:^|\/)i18n\.js$/.test(url.pathname) || /\/i18n\/[a-z]{2}\.json$/.test(url.pathname)){
+    e.respondWith(
+      fetch(req).then(function(res){
+        var copy = res.clone();
+        caches.open(CACHE).then(function(c){ c.put(req, copy); });
+        return res;
+      }).catch(function(){ return caches.match(req); })
+    );
+    return;
+  }
   // network-first for the document, cache-first for static assets
   if (req.mode === "navigate"){
     e.respondWith(fetch(req).catch(function(){ return caches.match("./index.html"); }));
