@@ -587,24 +587,44 @@ app.use((req, res, next) => {
 const isDev = process.env.NODE_ENV !== 'production';
 const staticOpts = isDev ? { maxAge: 0, etag: false, lastModified: false } : { maxAge: '1h' };
 
-// Compounder — brandový PWA web na compounder.world (public/compounder).
-// Vlastní statický mount PŘED generickým, aby sw.js a manifest šly s no-cache
-// (jinak by se nainstalovaná PWA neaktualizovala). Stránka má vlastní UI bez
-// HolyOS sidebaru/topbaru. Bare /compounder i /compounder/ → index.html.
-app.use('/compounder', express.static(path.join(__dirname, 'public', 'compounder'), {
+// Compounder — brandový PWA web (public/compounder). Web používá relativní cesty,
+// takže funguje dvěma způsoby:
+//   (1) na vlastní doméně compounder.world — servírováno z ROOTu domény (host routing),
+//   (2) na app.holyos.cz/compounder/ — servírováno z podcesty.
+// sw.js a manifest jdou s no-cache, ať se nainstalovaná PWA aktualizuje.
+const COMPOUNDER_DIR = path.join(__dirname, 'public', 'compounder');
+const COMPOUNDER_HOSTS = (process.env.COMPOUNDER_HOSTS || 'compounder.world,www.compounder.world')
+  .split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+function reqHostname(req) {
+  // za Railway proxy je původní doména v X-Forwarded-Host
+  const h = (req.headers['x-forwarded-host'] || req.headers.host || '').split(',')[0].trim();
+  return h.split(':')[0].toLowerCase();
+}
+const compounderStatic = express.static(COMPOUNDER_DIR, {
   ...staticOpts,
+  index: false, // index.html servírujeme ručně (no-cache), ne přes directory index
   setHeaders(res, filePath) {
     if (filePath.endsWith('sw.js') || filePath.endsWith('.webmanifest')) {
       res.setHeader('Cache-Control', 'no-cache');
     }
   },
-}));
+});
 function serveCompounderHtml(req, res) {
   res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
-  res.sendFile(path.join(__dirname, 'public', 'compounder', 'index.html'));
+  res.sendFile(path.join(COMPOUNDER_DIR, 'index.html'));
 }
-app.get('/compounder', serveCompounderHtml);
+
+// (1) Vlastní doména compounder.world → web na rootu domény.
+app.use((req, res, next) => {
+  if (!COMPOUNDER_HOSTS.includes(reqHostname(req))) return next();
+  if (req.path.startsWith('/api/') || req.path.startsWith('/storage/')) return next();
+  compounderStatic(req, res, () => serveCompounderHtml(req, res));
+});
+
+// (2) app.holyos.cz/compounder/ → tentýž web na podcestě (trailing slash kvůli relativním cestám).
+app.get('/compounder', (req, res) => res.redirect(301, '/compounder/'));
 app.get('/compounder/', serveCompounderHtml);
+app.use('/compounder', compounderStatic);
 
 app.use(express.static(path.join(__dirname, 'public'), staticOpts));
 app.use('/modules', express.static(path.join(__dirname, 'modules'), staticOpts));
