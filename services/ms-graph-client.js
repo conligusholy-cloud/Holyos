@@ -165,19 +165,34 @@ async function sendMailAs(fromUpn, { to, subject, textBody, htmlBody, attachment
   }
 
   const url = `${GRAPH_BASE}/users/${encodeURIComponent(fromUpn)}/sendMail`;
-  const r = await fetch(url, {
-    method: 'POST',
-    headers: {
-      ...(await authHeaders()),
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ message, saveToSentItems }),
-  });
-  if (!r.ok) {
-    const txt = await r.text().catch(() => '');
-    throw new Error(`Graph sendMailAs selhal (${r.status}): ${txt.slice(0, 400)}`);
+  async function post(msg) {
+    const r = await fetch(url, {
+      method: 'POST',
+      headers: { ...(await authHeaders()), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: msg, saveToSentItems }),
+    });
+    if (!r.ok) {
+      const txt = await r.text().catch(() => '');
+      const err = new Error(`Graph sendMailAs selhal (${r.status}): ${txt.slice(0, 400)}`);
+      err.status = r.status;
+      throw err;
+    }
+    return { ok: true };
   }
-  return { ok: true };
+
+  try {
+    return await post(message);
+  } catch (e) {
+    // Vlastní jméno/adresa odesílatele (message.from) může být v některých tenantech
+    // odmítnuto (ErrorAccessDenied). Aby e-mail vždy odešel, zkus to ještě jednou bez něj.
+    if (message.from) {
+      console.error('[graph] odeslání s vlastním from selhalo (' + e.message + ') — zkouším bez from');
+      const fallback = Object.assign({}, message);
+      delete fallback.from;
+      return await post(fallback);
+    }
+    throw e;
+  }
 }
 
 function isConfigured() {
