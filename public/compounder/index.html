@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>COMPOUNDER — We sell Compounding. Freedom.</title>
+<meta name="description" content="We don't sell laundromats. We sell Compounding. Build wealth through automated, income-generating assets. Become a Compounder." />
+<meta name="theme-color" content="#0a0a0b" />
+<link rel="manifest" href="/compounder/manifest.webmanifest" />
+<link rel="icon" href="/compounder/assets/icon.svg" type="image/svg+xml" />
+<link rel="apple-touch-icon" href="/compounder/assets/icon-180.png" />
+<meta property="og:title" content="COMPOUNDER — We sell Compounding." />
+<meta property="og:description" content="The result is only one. Freedom." />
+<meta property="og:type" content="website" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet" />
+<style>
+:root{
+  --bg:#0a0a0b;
+  --bg-2:#101012;
+  --surface:#141417;
+  --surface-2:#1b1b1f;
+  --line:rgba(255,255,255,.08);
+  --text:#f4f4f2;
+  --muted:#9b9ba3;
+  --muted-2:#6c6c75;
+  --gold:#c9a24b;
+  --gold-soft:#d8bd78;
+  --gold-grad:linear-gradient(135deg,#f6e6ad 0%,#cda454 42%,#9a7a34 100%);
+  --bronze:#b08d57;
+  --maxw:1180px;
+  --ease:cubic-bezier(.22,.61,.36,1);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{
+  background:var(--bg);
+  color:var(--text);
+  font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  font-weight:400;
+  line-height:1.6;
+  -webkit-font-smoothing:antialiased;
+  overflow-x:hidden;
+}
+::selection{background:var(--gold);color:#0a0a0b}
+a{color:inherit;text-decoration:none}
+.wrap{max-width:var(--maxw);margin:0 auto;padding:0 28px}
+.eyebrow{
+  font-size:12px;letter-spacing:.32em;text-transform:uppercase;
+  color:var(--gold);font-weight:600;margin-bottom:22px;display:inline-block;
+}
+h1,h2,h3{font-family:'Space Grotesk','Inter',sans-serif;line-height:1.08;letter-spacing:-.02em}
+.display{font-weight:700}
+.muted{color:var(--muted)}
+
+/* ===== NAV ===== */
+nav{
+  position:fixed;top:0;left:0;right:0;z-index:50;
+  display:flex;align-items:center;justify-content:space-between;
+  padding:18px 28px;
+  background:rgba(10,10,11,0);
+  backdrop-filter:blur(0px);
+  transition:background .4s var(--ease),backdrop-filter .4s var(--ease),border-color .4s;
+  border-bottom:1px solid transparent;
+}
+nav.scrolled{background:rgba(10,10,11,.72);backdrop-filter:blur(14px);border-bottom:1px solid var(--line)}
+.brand{font-family:'Space Grotesk';font-weight:700;letter-spacing:.22em;font-size:15px}
+.brand b{background:var(--gold-grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+.nav-right{display:flex;align-items:center;gap:22px}
+.nav-links{display:flex;gap:26px}
+.nav-links a{font-size:13.5px;color:var(--muted);transition:color .25s}
+.nav-links a:hover{color:var(--text)}
+.lang-select{
+  background:transparent;color:var(--muted);border:1px solid var(--line);
+  border-radius:999px;padding:6px 12px;font-size:12px;font-family:inherit;
+  cursor:pointer;letter-spacing:.05em;
+}
+.lang-select:hover{color:var(--text);border-color:rgba(255,255,255,.22)}
+.lang-select option{background:#141417;color:#f4f4f2}
+.btn{
+  display:inline-flex;align-items:center;gap:9px;
+  font-weight:600;font-size:14px;letter-spacing:.01em;
+  padding:12px 24px;border-radius:999px;cursor:pointer;border:none;
+  transition:transform .2s var(--ease),box-shadow .3s,opacity .2s;
+  font-family:inherit;
+}
+.btn-gold{background:var(--gold-grad);color:#1a1408;box-shadow:0 6px 26px rgba(201,162,75,.22)}
+.btn-gold:hover{transform:translateY(-2px);box-shadow:0 10px 34px rgba(201,162,75,.34)}
+.btn-ghost{background:transparent;color:var(--text);border:1px solid rgba(255,255,255,.18)}
+.btn-ghost:hover{border-color:var(--gold);color:var(--gold-soft)}
+.btn-sm{padding:9px 18px;font-size:13px}
+
+/* ===== HERO ===== */
+.hero{
+  min-height:100svh;display:flex;flex-direction:column;justify-content:center;
+  position:relative;text-align:center;padding:120px 28px 80px;overflow:hidden;
+}
+.hero::before{
+  content:"";position:absolute;inset:0;z-index:0;
+  background:
+    radial-gradient(60% 50% at 50% 8%,rgba(201,162,75,.14),transparent 70%),
+    radial-gradient(40% 40% at 80% 90%,rgba(176,141,87,.08),transparent 70%);
+}
+.hero-grid{
+  position:absolute;inset:0;z-index:0;opacity:.35;
+  background-image:linear-gradient(rgba(255,255,255,.025) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.025) 1px,transparent 1px);
+  background-size:64px 64px;
+  mask-image:radial-gradient(ellipse 70% 60% at 50% 40%,#000 30%,transparent 75%);
+}
+.hero-inner{position:relative;z-index:1;max-width:920px;margin:0 auto}
+.wordmark{
+  font-family:'Space Grotesk';font-weight:700;
+  font-size:clamp(44px,9vw,108px);letter-spacing:.06em;line-height:1;
+  margin-bottom:34px;
+}
+.wordmark span{background:var(--gold-grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+.hero-claim{
+  font-family:'Space Grotesk';font-weight:500;
+  font-size:clamp(22px,3.6vw,40px);line-height:1.22;letter-spacing:-.02em;
+  margin:0 auto 14px;max-width:760px;
+}
+.hero-claim .dim{color:var(--muted-2)}
+.hero-freedom{
+  font-family:'Space Grotesk';font-weight:700;
+  font-size:clamp(30px,5vw,60px);letter-spacing:.01em;margin:10px 0 40px;
+  background:var(--gold-grad);-webkit-background-clip:text;background-clip:text;color:transparent;
+}
+.hero-cta{display:flex;gap:14px;justify-content:center;flex-wrap:wrap}
+.scroll-hint{
+  position:absolute;bottom:28px;left:50%;transform:translateX(-50%);z-index:1;
+  font-size:11px;letter-spacing:.28em;text-transform:uppercase;color:var(--muted-2);
+  display:flex;flex-direction:column;align-items:center;gap:10px;
+}
+.scroll-hint .line{width:1px;height:38px;background:linear-gradient(var(--gold),transparent);animation:drop 2.4s var(--ease) infinite}
+@keyframes drop{0%{transform:scaleY(0);transform-origin:top}50%{transform:scaleY(1);transform-origin:top}51%{transform-origin:bottom}100%{transform:scaleY(0);transform-origin:bottom}}
+
+/* ===== SECTIONS ===== */
+section{position:relative}
+.sec{padding:120px 0;border-top:1px solid var(--line)}
+.sec-head{max-width:720px;margin-bottom:64px}
+.sec h2{font-size:clamp(30px,4.6vw,52px);font-weight:700;margin-bottom:22px}
+.sec .lead{font-size:clamp(17px,2vw,21px);color:var(--muted);line-height:1.65}
+.reveal{opacity:0;transform:translateY(28px);transition:opacity .9s var(--ease),transform .9s var(--ease)}
+.reveal.in{opacity:1;transform:none}
+
+/* traits / two-col */
+.traits{display:grid;grid-template-columns:repeat(3,1fr);gap:26px;margin-top:14px}
+.trait{
+  background:linear-gradient(180deg,var(--surface),var(--bg-2));
+  border:1px solid var(--line);border-radius:18px;padding:34px 30px;
+  transition:transform .4s var(--ease),border-color .4s;
+}
+.trait:hover{transform:translateY(-6px);border-color:rgba(201,162,75,.35)}
+.trait .n{font-family:'Space Grotesk';font-size:13px;color:var(--gold);letter-spacing:.2em;margin-bottom:18px}
+.trait h3{font-size:21px;font-weight:600;margin-bottom:12px}
+.trait p{color:var(--muted);font-size:15px}
+
+/* compounding visual */
+.compound{display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;margin:50px 0 10px}
+.cnode{
+  display:flex;align-items:center;justify-content:center;
+  font-family:'Space Grotesk';font-weight:700;
+  width:clamp(56px,9vw,92px);height:clamp(56px,9vw,92px);border-radius:16px;
+  border:1px solid var(--line);background:var(--surface);
+  font-size:clamp(20px,3.2vw,34px);color:var(--text);
+  opacity:0;transform:scale(.6);transition:all .55s var(--ease);
+}
+.cnode.lit{opacity:1;transform:scale(1);border-color:rgba(201,162,75,.5);box-shadow:0 0 34px rgba(201,162,75,.16)}
+.cnode.inf{background:var(--gold-grad);color:#1a1408;border:none}
+.carrow{color:var(--muted-2);font-size:22px;opacity:0;transition:opacity .5s}
+.carrow.lit{opacity:1;color:var(--gold)}
+.compound-note{text-align:center;color:var(--muted-2);font-size:14px;letter-spacing:.04em}
+
+/* machine compare */
+.compare{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:14px}
+.compare .card{border:1px solid var(--line);border-radius:18px;padding:34px;background:var(--surface)}
+.compare .card.hl{background:linear-gradient(180deg,rgba(201,162,75,.06),var(--surface));border-color:rgba(201,162,75,.4)}
+.compare h3{font-size:13px;letter-spacing:.18em;text-transform:uppercase;color:var(--muted-2);margin-bottom:22px}
+.compare .card.hl h3{color:var(--gold)}
+.compare ul{list-style:none;display:flex;flex-direction:column;gap:14px}
+.compare li{display:flex;gap:12px;align-items:flex-start;color:var(--muted);font-size:15.5px}
+.compare li .mk{color:var(--gold);flex:0 0 auto;margin-top:2px}
+.compare .card.hl li{color:var(--text)}
+
+/* audiences */
+.audiences{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:14px}
+.aud{border:1px solid var(--line);border-radius:18px;padding:38px 34px;background:var(--surface);transition:border-color .4s,transform .4s var(--ease)}
+.aud:hover{border-color:rgba(201,162,75,.35);transform:translateY(-4px)}
+.aud .role{font-family:'Space Grotesk';font-size:13px;letter-spacing:.2em;text-transform:uppercase;color:var(--gold);margin-bottom:14px}
+.aud h3{font-size:26px;font-weight:700;margin-bottom:14px}
+.aud p{color:var(--muted);margin-bottom:18px}
+.aud .tags{display:flex;flex-wrap:wrap;gap:9px}
+.aud .tags span{font-size:12.5px;color:var(--muted);border:1px solid var(--line);padding:6px 13px;border-radius:999px}
+
+/* ===== CARD SECTION ===== */
+.card-sec{text-align:center}
+.cardstage{perspective:1600px;display:flex;justify-content:center;margin:54px 0 30px}
+.metalcard{
+  position:relative;width:min(420px,86vw);aspect-ratio:1.586/1;
+  transform-style:preserve-3d;transition:transform 1s var(--ease);cursor:pointer;
+}
+.metalcard.flipped{transform:rotateY(180deg)}
+.face{
+  position:absolute;inset:0;backface-visibility:hidden;border-radius:18px;
+  padding:30px;display:flex;flex-direction:column;justify-content:space-between;
+  box-shadow:0 30px 80px rgba(0,0,0,.6),inset 0 1px 0 rgba(255,255,255,.08);
+  overflow:hidden;
+}
+.face::after{
+  content:"";position:absolute;inset:0;
+  background:linear-gradient(115deg,transparent 30%,rgba(255,255,255,.16) 48%,transparent 62%);
+  background-size:240% 240%;animation:shine 6s linear infinite;pointer-events:none;
+}
+@keyframes shine{0%{background-position:120% 0}100%{background-position:-120% 0}}
+.face.front{
+  background:
+    radial-gradient(120% 140% at 0% 0%,#2a2a2e,#0c0c0e 70%),
+    linear-gradient(135deg,#1c1c20,#0a0a0b);
+  border:1px solid rgba(201,162,75,.28);
+}
+.face.back{
+  transform:rotateY(180deg);
+  background:linear-gradient(135deg,#15130d,#0a0a0b);
+  border:1px solid rgba(201,162,75,.28);
+  align-items:center;justify-content:center;gap:20px;
+}
+.card-top{display:flex;justify-content:space-between;align-items:flex-start}
+.card-brand{font-family:'Space Grotesk';font-weight:700;letter-spacing:.2em;font-size:18px;background:var(--gold-grad);-webkit-background-clip:text;background-clip:text;color:transparent;text-align:left}
+.card-chip{width:42px;height:30px;border-radius:6px;background:linear-gradient(135deg,#e8d39a,#a8842f);opacity:.9}
+.card-mid{text-align:left}
+.card-mid .stable{font-size:11px;letter-spacing:.26em;color:var(--bronze);text-transform:uppercase}
+.card-freedom{font-family:'Space Grotesk';font-weight:700;font-size:30px;letter-spacing:.04em;background:var(--gold-grad);-webkit-background-clip:text;background-clip:text;color:transparent;text-align:left}
+.card-seq{font-family:'Space Grotesk';font-weight:700;font-size:clamp(18px,4.4vw,26px);letter-spacing:.05em;color:var(--gold-soft)}
+.card-compounding{font-size:12px;letter-spacing:.36em;color:var(--muted);text-transform:uppercase}
+.card-qr{width:78px;height:78px;border-radius:10px;background:#fff;padding:7px}
+.card-qr svg{width:100%;height:100%}
+.card-hint{font-size:12.5px;color:var(--muted-2);letter-spacing:.12em;text-transform:uppercase}
+
+/* ===== REGISTER ===== */
+.register{background:linear-gradient(180deg,var(--bg),#0e0d0a);text-align:center}
+.reg-card{
+  max-width:560px;margin:46px auto 0;background:var(--surface);
+  border:1px solid var(--line);border-radius:22px;padding:42px 38px;text-align:left;
+}
+.field{margin-bottom:18px}
+.field label{display:block;font-size:12.5px;letter-spacing:.06em;color:var(--muted);margin-bottom:8px;text-transform:uppercase}
+.field input{
+  width:100%;background:var(--bg-2);border:1px solid var(--line);border-radius:12px;
+  padding:14px 16px;color:var(--text);font-size:15px;font-family:inherit;transition:border-color .25s;
+}
+.field input:focus{outline:none;border-color:var(--gold)}
+.seg{display:flex;gap:10px}
+.seg label{
+  flex:1;border:1px solid var(--line);border-radius:12px;padding:14px;text-align:center;
+  cursor:pointer;color:var(--muted);font-size:14px;transition:all .25s;text-transform:none;letter-spacing:0;
+}
+.seg input{position:absolute;opacity:0;pointer-events:none}
+.seg label.sel{border-color:var(--gold);color:var(--text);background:rgba(201,162,75,.08)}
+.reg-card .btn-gold{width:100%;justify-content:center;margin-top:8px}
+.reg-msg{margin-top:16px;font-size:14px;text-align:center;min-height:20px}
+.reg-msg.ok{color:var(--gold-soft)}
+.reg-msg.err{color:#e07a6b}
+.reg-small{margin-top:14px;font-size:12.5px;color:var(--muted-2);text-align:center}
+
+/* ===== FOOTER ===== */
+footer{border-top:1px solid var(--line);padding:48px 28px;text-align:center;color:var(--muted-2);font-size:13px}
+footer .brand{display:inline-block;margin-bottom:16px}
+footer .fl{display:flex;gap:22px;justify-content:center;margin-bottom:20px;flex-wrap:wrap}
+footer .fl a{color:var(--muted);font-size:13px}
+footer .fl a:hover{color:var(--text)}
+
+/* install banner */
+.install{
+  position:fixed;bottom:18px;left:50%;transform:translateX(-50%) translateY(140%);
+  z-index:60;background:var(--surface-2);border:1px solid var(--line);border-radius:14px;
+  padding:12px 14px 12px 18px;display:flex;align-items:center;gap:16px;
+  box-shadow:0 18px 50px rgba(0,0,0,.5);transition:transform .5s var(--ease);max-width:92vw;
+}
+.install.show{transform:translateX(-50%) translateY(0)}
+.install span{font-size:13.5px;color:var(--muted)}
+
+@media(max-width:860px){
+  .nav-links{display:none}
+  .traits,.compare,.audiences{grid-template-columns:1fr}
+  .sec{padding:84px 0}
+}
+</style>
+</head>
+<body>
+
+<nav id="nav">
+  <a href="#top" class="brand">COMP<b>OU</b>NDER</a>
+  <div class="nav-right">
+    <div class="nav-links">
+      <a href="#compounder" data-i18n="nav.compounder">The Compounder</a>
+      <a href="#compounding" data-i18n="nav.compounding">Compounding</a>
+      <a href="#machine" data-i18n="nav.machine">The Machine</a>
+      <a href="#card" data-i18n="nav.card">The Card</a>
+    </div>
+    <select class="lang-select" id="langSelect" aria-label="Language"></select>
+    <a href="#register" class="btn btn-gold btn-sm" data-i18n="nav.cta">Become a Compounder</a>
+  </div>
+</nav>
+
+<!-- HERO -->
+<header class="hero" id="top">
+  <div class="hero-grid"></div>
+  <div class="hero-inner">
+    <h1 class="wordmark">COMP<span>OU</span>NDER</h1>
+    <p class="hero-claim"><span class="dim" data-i18n="hero.line1">We don't sell laundromats.</span><br/><span data-i18n="hero.line2">We sell Compounding.</span></p>
+    <p class="hero-claim muted" data-i18n="hero.line3">The result is only one.</p>
+    <div class="hero-freedom" data-i18n="hero.freedom">Freedom.</div>
+    <div class="hero-cta">
+      <a href="#register" class="btn btn-gold" data-i18n="hero.cta">Become a Compounder</a>
+      <a href="#compounding" class="btn btn-ghost" data-i18n="hero.cta2">How it works</a>
+    </div>
+  </div>
+  <div class="scroll-hint"><span data-i18n="hero.scroll">Scroll</span><span class="line"></span></div>
+</header>
+
+<!-- WHAT IS A COMPOUNDER -->
+<section class="sec" id="compounder">
+  <div class="wrap reveal">
+    <div class="sec-head">
+      <span class="eyebrow" data-i18n="s1.eyebrow">The mindset</span>
+      <h2 data-i18n="s1.title">What is a Compounder?</h2>
+      <p class="lead" data-i18n="s1.lead">A Compounder is a person — and a way of thinking. A Compounder doesn't work for money. They build assets that work for them.</p>
+    </div>
+    <div class="traits">
+      <div class="trait"><div class="n">01</div><h3 data-i18n="s1.t1h">Builds assets</h3><p data-i18n="s1.t1p">Acquires income-generating assets instead of liabilities.</p></div>
+      <div class="trait"><div class="n">02</div><h3 data-i18n="s1.t2h">Reinvests cashflow</h3><p data-i18n="s1.t2p">Every euro earned funds the next asset in the network.</p></div>
+      <div class="trait"><div class="n">03</div><h3 data-i18n="s1.t3h">Thinks long-term</h3><p data-i18n="s1.t3p">No get-rich-quick. Freedom is built, compounded, sustained.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- WHAT IS COMPOUNDING -->
+<section class="sec" id="compounding">
+  <div class="wrap reveal">
+    <div class="sec-head">
+      <span class="eyebrow" data-i18n="s2.eyebrow">The engine</span>
+      <h2 data-i18n="s2.title">What is Compounding?</h2>
+      <p class="lead" data-i18n="s2.lead">One asset earns enough to fund the next. The next funds another. The result is a network of assets generating income every single day of the year.</p>
+    </div>
+    <div class="compound" id="compoundGraph">
+      <div class="cnode" data-d="0">1</div><span class="carrow" data-d="0">→</span>
+      <div class="cnode" data-d="1">2</div><span class="carrow" data-d="1">→</span>
+      <div class="cnode" data-d="2">4</div><span class="carrow" data-d="2">→</span>
+      <div class="cnode" data-d="3">8</div><span class="carrow" data-d="3">→</span>
+      <div class="cnode" data-d="4">16</div><span class="carrow" data-d="4">→</span>
+      <div class="cnode inf" data-d="5">∞</div>
+    </div>
+    <p class="compound-note" data-i18n="s2.note">One Compounder Machine → cashflow → the next Compounder Machine.</p>
+  </div>
+</section>
+
+<!-- WHAT IS A COMPOUNDER MACHINE -->
+<section class="sec" id="machine">
+  <div class="wrap reveal">
+    <div class="sec-head">
+      <span class="eyebrow" data-i18n="s3.eyebrow">The product</span>
+      <h2 data-i18n="s3.title">What is a Compounder Machine?</h2>
+      <p class="lead" data-i18n="s3.lead">An automated asset engineered for long-term cashflow. The first Compounder Machine is an outdoor self-service laundromat — but the idea is bigger than washing. We're not building a better Speed Queen. We're creating a new category.</p>
+    </div>
+    <div class="compare">
+      <div class="card">
+        <h3 data-i18n="s3.oldh">Indoor laundromat</h3>
+        <ul>
+          <li><span class="mk">—</span><span data-i18n="s3.o1">Needs a building</span></li>
+          <li><span class="mk">—</span><span data-i18n="s3.o2">The customer must come inside</span></li>
+          <li><span class="mk">—</span><span data-i18n="s3.o3">Perceived as just a laundromat</span></li>
+        </ul>
+      </div>
+      <div class="card hl">
+        <h3 data-i18n="s3.newh">Outdoor Compounder Machine</h3>
+        <ul>
+          <li><span class="mk">+</span><span data-i18n="s3.n1">An outdoor kiosk — no building required</span></li>
+          <li><span class="mk">+</span><span data-i18n="s3.n2">An automated, income-generating asset</span></li>
+          <li><span class="mk">+</span><span data-i18n="s3.n3">Deployable across many new locations</span></li>
+          <li><span class="mk">+</span><span data-i18n="s3.n4">The customer drives straight to the service</span></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- REAL STABLE EFFICIENT -->
+<section class="sec" id="traits">
+  <div class="wrap reveal">
+    <div class="sec-head">
+      <span class="eyebrow" data-i18n="s4.eyebrow">Why it works</span>
+      <h2 data-i18n="s4.title">Real. Stable. Efficient.</h2>
+    </div>
+    <div class="traits">
+      <div class="trait"><div class="n" data-i18n="s4.t1k">REAL</div><h3 data-i18n="s4.t1h">A tangible asset</h3><p data-i18n="s4.t1p">Physical infrastructure you own — not a paper promise.</p></div>
+      <div class="trait"><div class="n" data-i18n="s4.t2k">STABLE</div><h3 data-i18n="s4.t2h">Recurring demand</h3><p data-i18n="s4.t2p">Daily, year-round cashflow from an everyday need.</p></div>
+      <div class="trait"><div class="n" data-i18n="s4.t3k">EFFICIENT</div><h3 data-i18n="s4.t3h">Automated by design</h3><p data-i18n="s4.t3p">Minimal operation. The machine works so you don't have to.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- AUDIENCES -->
+<section class="sec" id="who">
+  <div class="wrap reveal">
+    <div class="sec-head">
+      <span class="eyebrow" data-i18n="s5.eyebrow">Who builds with us</span>
+      <h2 data-i18n="s5.title">Two ways to compound.</h2>
+    </div>
+    <div class="audiences">
+      <div class="aud">
+        <div class="role" data-i18n="s5.r1">Compounder</div>
+        <h3 data-i18n="s5.r1h">The investor</h3>
+        <p data-i18n="s5.r1p">Doesn't care about a washing machine. Cares about yield and growth — building assets, generating cashflow, scaling a portfolio toward freedom.</p>
+        <div class="tags"><span data-i18n="s5.r1a">Build assets</span><span data-i18n="s5.r1b">Generate cashflow</span><span data-i18n="s5.r1c">Scale portfolio</span></div>
+      </div>
+      <div class="aud">
+        <div class="role" data-i18n="s5.r2">Distributor</div>
+        <h3 data-i18n="s5.r2h">The multiplier</h3>
+        <p data-i18n="s5.r2p">More than a reseller. Operates their own machines, distributes Compounder Machines, and helps create new Compounders.</p>
+        <div class="tags"><span data-i18n="s5.r2a">Operate machines</span><span data-i18n="s5.r2b">Distribute</span><span data-i18n="s5.r2c">Create Compounders</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- COMPOUNDER CARD -->
+<section class="sec card-sec" id="card">
+  <div class="wrap reveal">
+    <div class="sec-head" style="margin:0 auto 10px;text-align:center">
+      <span class="eyebrow" data-i18n="s6.eyebrow">The key to the ecosystem</span>
+      <h2 data-i18n="s6.title">The Compounder Card</h2>
+      <p class="lead" data-i18n="s6.lead" style="margin:0 auto">A metal card. Your ticket into the Compounder ecosystem.</p>
+    </div>
+    <div class="cardstage">
+      <div class="metalcard" id="metalcard" role="button" tabindex="0" aria-label="Flip card">
+        <div class="face front">
+          <div class="card-top">
+            <div class="card-brand">COMPOUNDER</div>
+            <div class="card-chip"></div>
+          </div>
+          <div class="card-mid">
+            <div class="stable">REAL. STABLE. EFFICIENT.</div>
+            <div class="card-freedom">FREEDOM.</div>
+          </div>
+        </div>
+        <div class="face back">
+          <div class="card-seq">1 → 2 → 4 → 8 → 16 → ∞</div>
+          <div class="card-compounding">COMPOUNDING</div>
+          <div class="card-qr">
+            <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" fill="#0a0a0b">
+              <rect x="0" y="0" width="30" height="30"/><rect x="8" y="8" width="14" height="14" fill="#fff"/>
+              <rect x="70" y="0" width="30" height="30"/><rect x="78" y="8" width="14" height="14" fill="#fff"/>
+              <rect x="0" y="70" width="30" height="30"/><rect x="8" y="78" width="14" height="14" fill="#fff"/>
+              <rect x="40" y="0" width="8" height="8"/><rect x="56" y="0" width="8" height="8"/>
+              <rect x="40" y="16" width="8" height="8"/><rect x="0" y="40" width="8" height="8"/>
+              <rect x="16" y="40" width="8" height="8"/><rect x="40" y="40" width="8" height="8"/>
+              <rect x="56" y="48" width="8" height="8"/><rect x="72" y="40" width="8" height="8"/>
+              <rect x="88" y="40" width="8" height="8"/><rect x="40" y="56" width="8" height="8"/>
+              <rect x="72" y="56" width="8" height="8"/><rect x="40" y="72" width="8" height="8"/>
+              <rect x="56" y="72" width="8" height="8"/><rect x="72" y="72" width="8" height="8"/>
+              <rect x="88" y="72" width="8" height="8"/><rect x="56" y="88" width="8" height="8"/>
+              <rect x="72" y="88" width="8" height="8"/>
+            </svg>
+          </div>
+        </div>
+      </div>
+    </div>
+    <p class="card-hint" data-i18n="s6.hint">Tap the card to turn it over</p>
+  </div>
+</section>
+
+<!-- REGISTER -->
+<section class="sec register" id="register">
+  <div class="wrap reveal">
+    <span class="eyebrow" data-i18n="s7.eyebrow">Join the ecosystem</span>
+    <h2 data-i18n="s7.title">Become a Compounder</h2>
+    <p class="lead" style="max-width:560px;margin:0 auto" data-i18n="s7.lead">Register to unlock the Compounder Portal: economics, returns, technical parameters, connections, floor plans and the distribution model.</p>
+    <form class="reg-card" id="regForm" novalidate>
+      <div class="field">
+        <label data-i18n="s7.name">Full name</label>
+        <input type="text" name="name" autocomplete="name" required />
+      </div>
+      <div class="field">
+        <label data-i18n="s7.email">Email</label>
+        <input type="email" name="email" autocomplete="email" required />
+      </div>
+      <div class="field">
+        <label data-i18n="s7.role">I want to join as</label>
+        <div class="seg" id="roleSeg">
+          <label class="sel"><input type="radio" name="role" value="compounder" checked /><span data-i18n="s7.roleA">Compounder</span></label>
+          <label><input type="radio" name="role" value="distributor" /><span data-i18n="s7.roleB">Distributor</span></label>
+        </div>
+      </div>
+      <button type="submit" class="btn btn-gold" data-i18n="s7.submit">Request access</button>
+      <div class="reg-msg" id="regMsg"></div>
+      <p class="reg-small" data-i18n="s7.small">By registering you agree to be contacted about the Compounder ecosystem.</p>
+    </form>
+  </div>
+</section>
+
+<footer>
+  <a href="#top" class="brand">COMP<b>OU</b>NDER</a>
+  <div class="fl">
+    <a href="#compounder" data-i18n="nav.compounder">The Compounder</a>
+    <a href="#machine" data-i18n="nav.machine">The Machine</a>
+    <a href="#card" data-i18n="nav.card">The Card</a>
+    <a href="#register" data-i18n="nav.cta">Become a Compounder</a>
+  </div>
+  <div data-i18n="footer.by">A Best Series company. We build Compounder Machines.</div>
+  <div style="margin-top:8px;color:#55555c">© <span id="yr"></span> Compounder · compounder.world</div>
+</footer>
+
+<div class="install" id="install">
+  <span data-i18n="install.text">Install Compounder on your desktop</span>
+  <button class="btn btn-gold btn-sm" id="installBtn" data-i18n="install.btn">Install</button>
+  <button class="btn btn-ghost btn-sm" id="installClose">✕</button>
+</div>
+
+<script src="/compounder/i18n.js"></script>
+<script src="/compounder/app.js"></script>
+</body>
+</html>

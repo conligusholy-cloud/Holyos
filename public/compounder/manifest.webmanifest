@@ -1,0 +1,19 @@
+{
+  "name": "Compounder",
+  "short_name": "Compounder",
+  "description": "We don't sell laundromats. We sell Compounding. Freedom.",
+  "id": "/compounder/",
+  "start_url": "/compounder/?source=pwa",
+  "scope": "/compounder/",
+  "display": "standalone",
+  "background_color": "#0a0a0b",
+  "theme_color": "#0a0a0b",
+  "orientation": "any",
+  "categories": ["finance", "business", "lifestyle"],
+  "icons": [
+    { "src": "/compounder/assets/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/compounder/assets/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/compounder/assets/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/compounder/assets/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
