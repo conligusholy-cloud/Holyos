@@ -185,5 +185,16 @@
  "p.ver.water": "Vatten",
  "p.ver.sewage": "Avlopp",
  "p.ver.dl": "Ladda ner ritning + anslutningar (PDF)",
- "p.ver.note": "Höjd ca 2 390 mm. El, vatten och avlopp dras till en brunn. Slutlig specifikation efter konfiguration."
+ "p.ver.note": "Höjd ca 2 390 mm. El, vatten och avlopp dras till en brunn. Slutlig specifikation efter konfiguration.",
+ "login.link": "Logga in",
+ "login.eyebrow": "Återkommande Compounder",
+ "login.title": "Logga in",
+ "login.lead": "Ange din e-post så skickar vi en inloggningslänk.",
+ "login.email": "E-post",
+ "login.submit": "Skicka inloggningslänk",
+ "login.sending": "Skickar…",
+ "login.ok": "Om vi känner till din e-post har vi skickat en inloggningslänk. Kolla din inkorg.",
+ "login.err": "Ange en giltig e-post.",
+ "p.login.title": "Logga in på Portal",
+ "p.login.lead": "Ange din e-post så skickar vi en inloggningslänk (giltig i 24 timmar)."
 }

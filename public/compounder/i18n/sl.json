@@ -185,5 +185,16 @@
  "p.ver.water": "Voda",
  "p.ver.sewage": "Kanalizacija",
  "p.ver.dl": "Prenesi načrt + priključke (PDF)",
- "p.ver.note": "Višina pribl. 2 390 mm. Elektrika, voda in kanalizacija so speljane v en jašek. Končna specifikacija glede na konfiguracijo."
+ "p.ver.note": "Višina pribl. 2 390 mm. Elektrika, voda in kanalizacija so speljane v en jašek. Končna specifikacija glede na konfiguracijo.",
+ "login.link": "Prijava",
+ "login.eyebrow": "Vračajoči se Compounder",
+ "login.title": "Prijava",
+ "login.lead": "Vnesite svoj e-poštni naslov in poslali vam bomo povezavo za prijavo.",
+ "login.email": "E-pošta",
+ "login.submit": "Pošlji povezavo za prijavo",
+ "login.sending": "Pošiljanje…",
+ "login.ok": "Če vaš e-naslov poznamo, smo poslali povezavo za prijavo. Preverite predal.",
+ "login.err": "Vnesite veljaven e-naslov.",
+ "p.login.title": "Prijava v Portal",
+ "p.login.lead": "Vnesite svoj e-poštni naslov in poslali vam bomo povezavo za prijavo (velja 24 ur)."
 }

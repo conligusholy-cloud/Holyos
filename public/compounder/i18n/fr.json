@@ -185,5 +185,16 @@
  "p.ver.water": "Eau",
  "p.ver.sewage": "Eaux usées",
  "p.ver.dl": "Télécharger le plan + raccordements (PDF)",
- "p.ver.note": "Hauteur env. 2 390 mm. Électricité, eau et eaux usées sont amenées dans un seul regard. Spécification finale selon la configuration."
+ "p.ver.note": "Hauteur env. 2 390 mm. Électricité, eau et eaux usées sont amenées dans un seul regard. Spécification finale selon la configuration.",
+ "login.link": "Se connecter",
+ "login.eyebrow": "Compounder de retour",
+ "login.title": "Connexion",
+ "login.lead": "Saisissez votre e-mail et nous vous enverrons un lien de connexion.",
+ "login.email": "E-mail",
+ "login.submit": "Envoyer le lien de connexion",
+ "login.sending": "Envoi…",
+ "login.ok": "Si nous connaissons votre e-mail, nous avons envoyé un lien de connexion. Vérifiez votre boîte de réception.",
+ "login.err": "Veuillez saisir un e-mail valide.",
+ "p.login.title": "Se connecter au Portal",
+ "p.login.lead": "Saisissez votre e-mail et nous vous enverrons un lien de connexion (valable 24 heures)."
 }

@@ -89,9 +89,15 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
       <div class="muted" data-i18n="p.verify">Verifying access…</div>
     </div>
     <div id="gate-denied" style="display:none">
-      <h2 style="font-size:22px;margin-bottom:10px" data-i18n="p.denied.title">Access not found</h2>
-      <p class="muted" id="gate-msg" data-i18n="p.denied.msg">This link is invalid or has expired.</p>
-      <a class="btn" href="/" data-i18n="p.back">Back to compounder.world</a>
+      <h2 style="font-size:22px;margin-bottom:10px" data-i18n="p.login.title">Sign in to the Portal</h2>
+      <p class="muted" id="gate-msg" data-i18n="p.login.lead">Enter your email and we'll send you a sign-in link (valid 24 hours).</p>
+      <form id="gateLogin" style="margin:20px 0 8px;text-align:left">
+        <input type="email" name="email" autocomplete="email" required placeholder="email@…"
+          style="width:100%;background:var(--bg-2);border:1px solid var(--line);border-radius:12px;padding:13px 15px;color:var(--text);font-size:15px;font-family:inherit;margin-bottom:12px" />
+        <button type="submit" class="btn" style="width:100%;justify-content:center;margin:0" data-i18n="login.submit">Send sign-in link</button>
+        <p class="muted" id="gateLoginMsg" role="status" style="min-height:18px;margin-top:12px;font-size:13.5px"></p>
+      </form>
+      <a class="muted" href="/" style="font-size:13px;text-decoration:underline" data-i18n="p.back">Back to compounder.world</a>
     </div>
   </div>
 </div>
@@ -310,12 +316,30 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
   }
   function fmt(n){ return Math.round(n).toLocaleString(document.documentElement.lang || "en"); }
 
-  if (!token) { showDenied(pT("p.denied.msg")); return; }
+  // přihlášení přes e-mail přímo z brány (neplatný/expirovaný/chybějící odkaz)
+  (function initGateLogin(){
+    var gf = document.getElementById("gateLogin"); if (!gf) return;
+    gf.addEventListener("submit", function(e){
+      e.preventDefault();
+      var m = document.getElementById("gateLoginMsg");
+      var b = gf.querySelector("button[type=submit]");
+      var email = (gf.email.value || "").trim();
+      if (!/.+@.+\..+/.test(email)){ m.style.color = "#e07a6b"; m.textContent = pT("login.err"); return; }
+      b.disabled = true; m.style.color = ""; m.textContent = pT("login.sending");
+      fetch("/api/compounder/login", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ email: email, lang: pDetect() }) })
+        .then(function(r){ return r.json().catch(function(){ return {}; }); })
+        .then(function(){ m.style.color = "var(--gold-soft)"; m.textContent = pT("login.ok"); gf.reset(); })
+        .catch(function(){ m.style.color = "var(--gold-soft)"; m.textContent = pT("login.ok"); })
+        .finally(function(){ b.disabled = false; });
+    });
+  })();
+
+  if (!token) { showDenied(pT("p.login.lead")); return; }
 
   fetch("/api/compounder/portal/session?t=" + encodeURIComponent(token), { credentials:"include" })
     .then(function(r){ return r.json().then(function(j){ return { ok:r.ok, j:j }; }); })
     .then(function(res){
-      if (!res.ok || !res.j.ok) { showDenied(res.j && res.j.error); return; }
+      if (!res.ok || !res.j.ok) { showDenied(); return; }
       localStorage.setItem("compounder.portal.token", token);
       try { history.replaceState({}, "", location.pathname); } catch(e){}
       document.getElementById("gate").style.display = "none";
@@ -336,7 +360,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
       } catch(e) {}
       initPortalPush(token);
     })
-    .catch(function(){ showDenied(pT("p.denied.msg")); });
+    .catch(function(){ showDenied(); });
 
   function val(id){ var v = parseFloat(document.getElementById(id).value); return isNaN(v) ? 0 : v; }
   function initCalc(){

@@ -185,5 +185,16 @@
  "p.ver.water": "Vesi",
  "p.ver.sewage": "Viemäri",
  "p.ver.dl": "Lataa piirustus + liitännät (PDF)",
- "p.ver.note": "Korkeus n. 2 390 mm. Sähkö, vesi ja viemäri tuodaan yhteen kaivoon. Lopullinen erittely kokoonpanon mukaan."
+ "p.ver.note": "Korkeus n. 2 390 mm. Sähkö, vesi ja viemäri tuodaan yhteen kaivoon. Lopullinen erittely kokoonpanon mukaan.",
+ "login.link": "Kirjaudu",
+ "login.eyebrow": "Palaava Compounder",
+ "login.title": "Kirjaudu",
+ "login.lead": "Anna sähköpostisi, niin lähetämme sinulle kirjautumislinkin.",
+ "login.email": "Sähköposti",
+ "login.submit": "Lähetä kirjautumislinkki",
+ "login.sending": "Lähetetään…",
+ "login.ok": "Jos tunnemme sähköpostisi, lähetimme kirjautumislinkin. Tarkista postilaatikkosi.",
+ "login.err": "Anna kelvollinen sähköposti.",
+ "p.login.title": "Kirjaudu Portaliin",
+ "p.login.lead": "Anna sähköpostisi, niin lähetämme sinulle kirjautumislinkin (voimassa 24 tuntia)."
 }

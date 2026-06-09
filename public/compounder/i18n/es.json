@@ -185,5 +185,16 @@
  "p.ver.water": "Agua",
  "p.ver.sewage": "Saneamiento",
  "p.ver.dl": "Descargar plano + conexiones (PDF)",
- "p.ver.note": "Altura aprox. 2 390 mm. La electricidad, el agua y el saneamiento se conducen a una sola arqueta. Especificación final según la configuración."
+ "p.ver.note": "Altura aprox. 2 390 mm. La electricidad, el agua y el saneamiento se conducen a una sola arqueta. Especificación final según la configuración.",
+ "login.link": "Iniciar sesión",
+ "login.eyebrow": "Compounder recurrente",
+ "login.title": "Iniciar sesión",
+ "login.lead": "Introduce tu correo y te enviaremos un enlace de acceso.",
+ "login.email": "Correo electrónico",
+ "login.submit": "Enviar enlace de acceso",
+ "login.sending": "Enviando…",
+ "login.ok": "Si conocemos tu correo, hemos enviado un enlace de acceso. Revisa tu bandeja de entrada.",
+ "login.err": "Introduce un correo válido.",
+ "p.login.title": "Acceder al Portal",
+ "p.login.lead": "Introduce tu correo y te enviaremos un enlace de acceso (válido 24 horas)."
 }

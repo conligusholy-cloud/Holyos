@@ -185,5 +185,16 @@
  "p.ver.water": "Acqua",
  "p.ver.sewage": "Scarico",
  "p.ver.dl": "Scarica disegno + allacciamenti (PDF)",
- "p.ver.note": "Altezza circa 2 390 mm. Elettricità, acqua e scarico sono convogliati in un unico pozzetto. Specifica finale in base alla configurazione."
+ "p.ver.note": "Altezza circa 2 390 mm. Elettricità, acqua e scarico sono convogliati in un unico pozzetto. Specifica finale in base alla configurazione.",
+ "login.link": "Accedi",
+ "login.eyebrow": "Compounder di ritorno",
+ "login.title": "Accedi",
+ "login.lead": "Inserisci la tua email e ti invieremo un link di accesso.",
+ "login.email": "Email",
+ "login.submit": "Invia link di accesso",
+ "login.sending": "Invio…",
+ "login.ok": "Se conosciamo la tua email, abbiamo inviato un link di accesso. Controlla la posta.",
+ "login.err": "Inserisci un'email valida.",
+ "p.login.title": "Accedi al Portal",
+ "p.login.lead": "Inserisci la tua email e ti invieremo un link di accesso (valido 24 ore)."
 }

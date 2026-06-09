@@ -185,5 +185,16 @@
  "p.ver.water": "Vand",
  "p.ver.sewage": "Kloak",
  "p.ver.dl": "Download tegning + tilslutninger (PDF)",
- "p.ver.note": "Højde ca. 2 390 mm. El, vand og kloak føres til én brønd. Endelig specifikation efter konfiguration."
+ "p.ver.note": "Højde ca. 2 390 mm. El, vand og kloak føres til én brønd. Endelig specifikation efter konfiguration.",
+ "login.link": "Log ind",
+ "login.eyebrow": "Tilbagevendende Compounder",
+ "login.title": "Log ind",
+ "login.lead": "Indtast din e-mail, så sender vi dig et login-link.",
+ "login.email": "E-mail",
+ "login.submit": "Send login-link",
+ "login.sending": "Sender…",
+ "login.ok": "Hvis vi kender din e-mail, har vi sendt et login-link. Tjek din indbakke.",
+ "login.err": "Indtast en gyldig e-mail.",
+ "p.login.title": "Log ind på Portal",
+ "p.login.lead": "Indtast din e-mail, så sender vi dig et login-link (gyldigt i 24 timer)."
 }

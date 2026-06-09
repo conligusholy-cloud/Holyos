@@ -185,5 +185,16 @@
  "p.ver.water": "Woda",
  "p.ver.sewage": "Kanalizacja",
  "p.ver.dl": "Pobierz rysunek + przyłącza (PDF)",
- "p.ver.note": "Wysokość ok. 2 390 mm. Prąd, woda i kanalizacja są sprowadzone do jednej studzienki. Ostateczna specyfikacja zależna od konfiguracji."
+ "p.ver.note": "Wysokość ok. 2 390 mm. Prąd, woda i kanalizacja są sprowadzone do jednej studzienki. Ostateczna specyfikacja zależna od konfiguracji.",
+ "login.link": "Zaloguj się",
+ "login.eyebrow": "Powracający Compounder",
+ "login.title": "Logowanie",
+ "login.lead": "Podaj e-mail, a wyślemy Ci link do logowania.",
+ "login.email": "E-mail",
+ "login.submit": "Wyślij link do logowania",
+ "login.sending": "Wysyłanie…",
+ "login.ok": "Jeśli znamy Twój e-mail, wysłaliśmy link do logowania. Sprawdź skrzynkę.",
+ "login.err": "Podaj prawidłowy e-mail.",
+ "p.login.title": "Zaloguj się do Portalu",
+ "p.login.lead": "Podaj e-mail, a wyślemy Ci link do logowania (ważny 24 godziny)."
 }

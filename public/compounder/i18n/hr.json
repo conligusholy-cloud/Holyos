@@ -185,5 +185,16 @@
  "p.ver.water": "Voda",
  "p.ver.sewage": "Kanalizacija",
  "p.ver.dl": "Preuzmi nacrt + priključke (PDF)",
- "p.ver.note": "Visina oko 2 390 mm. Struja, voda i kanalizacija dovode se u jedno okno. Konačna specifikacija prema konfiguraciji."
+ "p.ver.note": "Visina oko 2 390 mm. Struja, voda i kanalizacija dovode se u jedno okno. Konačna specifikacija prema konfiguraciji.",
+ "login.link": "Prijava",
+ "login.eyebrow": "Povratni Compounder",
+ "login.title": "Prijava",
+ "login.lead": "Unesite svoj e-mail i poslat ćemo vam poveznicu za prijavu.",
+ "login.email": "E-mail",
+ "login.submit": "Pošalji poveznicu za prijavu",
+ "login.sending": "Slanje…",
+ "login.ok": "Ako poznajemo vaš e-mail, poslali smo poveznicu za prijavu. Provjerite pristiglu poštu.",
+ "login.err": "Unesite valjani e-mail.",
+ "p.login.title": "Prijava u Portal",
+ "p.login.lead": "Unesite svoj e-mail i poslat ćemo vam poveznicu za prijavu (vrijedi 24 sata)."
 }

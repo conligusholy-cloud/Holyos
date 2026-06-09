@@ -185,5 +185,16 @@
  "p.ver.water": "Víz",
  "p.ver.sewage": "Csatorna",
  "p.ver.dl": "Rajz + csatlakozások letöltése (PDF)",
- "p.ver.note": "Magasság kb. 2 390 mm. Az áram, a víz és a csatorna egy aknába van vezetve. Végleges specifikáció a konfigurációtól függően."
+ "p.ver.note": "Magasság kb. 2 390 mm. Az áram, a víz és a csatorna egy aknába van vezetve. Végleges specifikáció a konfigurációtól függően.",
+ "login.link": "Bejelentkezés",
+ "login.eyebrow": "Visszatérő Compounder",
+ "login.title": "Bejelentkezés",
+ "login.lead": "Adja meg e-mail-címét, és küldünk egy bejelentkezési linket.",
+ "login.email": "E-mail",
+ "login.submit": "Bejelentkezési link küldése",
+ "login.sending": "Küldés…",
+ "login.ok": "Ha ismerjük az e-mail-címét, küldtünk egy bejelentkezési linket. Nézze meg a postaládáját.",
+ "login.err": "Adjon meg egy érvényes e-mail-címet.",
+ "p.login.title": "Bejelentkezés a Portalba",
+ "p.login.lead": "Adja meg e-mail-címét, és küldünk egy bejelentkezési linket (24 óráig érvényes)."
 }

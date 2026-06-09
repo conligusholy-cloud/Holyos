@@ -185,5 +185,16 @@
  "p.ver.water": "Uisce",
  "p.ver.sewage": "Séarachas",
  "p.ver.dl": "Íoslódáil líníocht + naisc (PDF)",
- "p.ver.note": "Airde tuairim is 2 390 mm. Tugtar leictreachas, uisce agus séarachas isteach i ndúchan amháin. Sonraíocht dheiridh de réir na cumraíochta."
+ "p.ver.note": "Airde tuairim is 2 390 mm. Tugtar leictreachas, uisce agus séarachas isteach i ndúchan amháin. Sonraíocht dheiridh de réir na cumraíochta.",
+ "login.link": "Logáil isteach",
+ "login.eyebrow": "Compounder ag filleadh",
+ "login.title": "Logáil isteach",
+ "login.lead": "Cuir isteach do ríomhphost agus seolfaimid nasc logála isteach chugat.",
+ "login.email": "Ríomhphost",
+ "login.submit": "Seol nasc logála isteach",
+ "login.sending": "Á sheoladh…",
+ "login.ok": "Má tá aithne againn ar do ríomhphost, sheolamar nasc logála isteach. Seiceáil do bhosca isteach.",
+ "login.err": "Cuir isteach ríomhphost bailí.",
+ "p.login.title": "Logáil isteach sa Portal",
+ "p.login.lead": "Cuir isteach do ríomhphost agus seolfaimid nasc logála isteach chugat (bailí ar feadh 24 uair)."
 }

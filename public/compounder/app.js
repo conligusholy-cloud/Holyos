@@ -151,6 +151,36 @@
     });
   }
 
+  /* ---------- login modal (vracející se uživatel) ---------- */
+  var loginModal = document.getElementById("loginModal");
+  var loginLink = document.getElementById("loginLink");
+  var loginClose = document.getElementById("loginClose");
+  var loginForm = document.getElementById("loginForm");
+  function openLogin(e){ if (e) e.preventDefault(); if (!loginModal) return; loginModal.classList.add("show"); loginModal.setAttribute("aria-hidden","false"); var i=loginForm&&loginForm.querySelector("input[name=email]"); if(i) setTimeout(function(){i.focus();},60); track("login_open",{}); }
+  function closeLogin(){ if (!loginModal) return; loginModal.classList.remove("show"); loginModal.setAttribute("aria-hidden","true"); }
+  if (loginLink) loginLink.addEventListener("click", openLogin);
+  if (loginClose) loginClose.addEventListener("click", closeLogin);
+  if (loginModal) loginModal.addEventListener("click", function(e){ if (e.target === loginModal) closeLogin(); });
+  document.addEventListener("keydown", function(e){ if (e.key==="Escape") closeLogin(); });
+  if (loginForm){
+    loginForm.addEventListener("submit", function(e){
+      e.preventDefault();
+      var msg = document.getElementById("loginMsg");
+      var btn = loginForm.querySelector("button[type=submit]");
+      var email = (loginForm.email.value||"").trim();
+      if (!/.+@.+\..+/.test(email)){ msg.className="reg-msg err"; msg.textContent = window.__t("login.err"); return; }
+      btn.disabled = true; msg.className="reg-msg"; msg.textContent = window.__t("login.sending");
+      track("login_submit",{});
+      fetch("/api/compounder/login", {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ email: email, lang: window.__compounderLang })
+      }).then(function(r){ return r.json().catch(function(){ return {}; }); })
+        .then(function(){ msg.className="reg-msg ok"; msg.textContent = window.__t("login.ok"); loginForm.reset(); })
+        .catch(function(){ msg.className="reg-msg ok"; msg.textContent = window.__t("login.ok"); })
+        .finally(function(){ btn.disabled = false; });
+    });
+  }
+
   /* ---------- analytics beacon ---------- */
   var SID = (function(){
     var s = localStorage.getItem("compounder.sid");

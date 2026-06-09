@@ -185,5 +185,16 @@
  "p.ver.water": "Ūdens",
  "p.ver.sewage": "Kanalizācija",
  "p.ver.dl": "Lejupielādēt rasējumu + pieslēgumus (PDF)",
- "p.ver.note": "Augstums apm. 2 390 mm. Elektrība, ūdens un kanalizācija tiek novadīti vienā akā. Galīgā specifikācija atkarībā no konfigurācijas."
+ "p.ver.note": "Augstums apm. 2 390 mm. Elektrība, ūdens un kanalizācija tiek novadīti vienā akā. Galīgā specifikācija atkarībā no konfigurācijas.",
+ "login.link": "Pieteikties",
+ "login.eyebrow": "Atgriežas Compounder",
+ "login.title": "Pieteikšanās",
+ "login.lead": "Ievadiet savu e-pastu, un mēs nosūtīsim jums pieteikšanās saiti.",
+ "login.email": "E-pasts",
+ "login.submit": "Nosūtīt pieteikšanās saiti",
+ "login.sending": "Sūta…",
+ "login.ok": "Ja jūsu e-pastu zinām, esam nosūtījuši pieteikšanās saiti. Pārbaudiet iesūtni.",
+ "login.err": "Ievadiet derīgu e-pastu.",
+ "p.login.title": "Pieteikties Portal",
+ "p.login.lead": "Ievadiet savu e-pastu, un mēs nosūtīsim jums pieteikšanās saiti (derīga 24 stundas)."
 }
