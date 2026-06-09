@@ -210,11 +210,40 @@
   });
   window.addEventListener("appinstalled", function(){ track("app_installed", {}); });
 
-  /* ---------- service worker + push ---------- */
+  /* ---------- platform detection ---------- */
+  var IS_IOS = /iphone|ipad|ipod/i.test(navigator.userAgent || "") || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  var IS_STANDALONE = (window.navigator.standalone === true) || (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches);
+
+  /* ---------- service worker + push + iOS install hint ---------- */
   if ("serviceWorker" in navigator){
     window.addEventListener("load", function(){
       navigator.serviceWorker.register("sw.js").then(function(){ setTimeout(initPush, 6000); }).catch(function(){});
     });
+  }
+  // iOS Safari nemá beforeinstallprompt → ukaž ruční návod "Přidat na plochu".
+  window.addEventListener("load", function(){ setTimeout(initIosHint, 4500); });
+  function iosHintText(){
+    var l = window.__compounderLang || "en";
+    if (l === "cs") return "Nainstaluj appku: ťukni na Sdílet a „Přidat na plochu“.";
+    if (l === "de") return "App installieren: tippe auf Teilen, dann „Zum Home-Bildschirm“.";
+    if (l === "sk") return "Nainštaluj appku: ťukni na Zdieľať a „Pridať na plochu“.";
+    if (l === "pl") return "Zainstaluj aplikację: dotknij Udostępnij i „Dodaj do ekranu“.";
+    return "Install the app: tap Share, then “Add to Home Screen”.";
+  }
+  function initIosHint(){
+    try{
+      if (!IS_IOS || IS_STANDALONE) return;
+      var asked = +(localStorage.getItem("compounder.ios.askedAt")||0);
+      if (Date.now() - asked < 7*24*3600*1000) return;
+      if (installBar && installBar.classList.contains("show")) return;
+      localStorage.setItem("compounder.ios.askedAt", Date.now());
+      var bar = document.createElement("div"); bar.className = "install show"; bar.style.bottom = "18px";
+      var sp = document.createElement("span"); sp.textContent = iosHintText();
+      var no = document.createElement("button"); no.className = "btn btn-ghost btn-sm"; no.textContent = "✕";
+      bar.appendChild(sp); bar.appendChild(no); document.body.appendChild(bar);
+      no.addEventListener("click", function(){ bar.remove(); });
+      track("ios_install_hint", {});
+    }catch(e){}
   }
 
   /* ---------- web push opt-in (re-prompt po 7 dnech) ---------- */
@@ -223,6 +252,7 @@
   window.__compounderPushExtra = window.__compounderPushExtra || function(){ return {}; };
   function initPush(){
     try{
+      if (IS_IOS && !IS_STANDALONE) return; // iOS push jen v nainstalované PWA (z plochy)
       if (!("PushManager" in window) || !("Notification" in window)) return;
       if (Notification.permission === "denied") return;
       if (Notification.permission === "granted") { subscribePush(); return; }
