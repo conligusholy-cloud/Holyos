@@ -15,6 +15,7 @@ const { requireAuth } = require('../middleware/auth');
 const { createNotification } = require('./notifications.routes');
 const { sendMail } = require('../services/email');
 const crypto = require('crypto');
+const bcrypt = require('bcryptjs');
 
 // ─── Pomocné ─────────────────────────────────────────────────────────────
 
@@ -162,10 +163,10 @@ router.get('/portal/session', async (req, res, next) => {
     if (!id) return res.status(401).json({ ok: false, error: 'Neplatný nebo chybějící přístupový odkaz.' });
     const lead = await prisma.compounderLead.findUnique({
       where: { id },
-      select: { id: true, name: true, role: true, lang: true },
+      select: { id: true, name: true, role: true, lang: true, password_hash: true },
     });
     if (!lead) return res.status(404).json({ ok: false, error: 'Registrace nenalezena.' });
-    return res.json({ ok: true, id: lead.id, name: lead.name, role: lead.role, lang: lead.lang });
+    return res.json({ ok: true, id: lead.id, name: lead.name, role: lead.role, lang: lead.lang, has_password: !!lead.password_hash });
   } catch (err) {
     next(err);
   }
@@ -177,6 +178,7 @@ router.get('/portal/session', async (req, res, next) => {
 // VŽDY neutrální ({ ok: true }) — neprozrazuje, zda e-mail známe.
 const loginSchema = z.object({
   email: z.string().trim().email().max(255),
+  password: z.string().min(1).max(200).optional().nullable(),
   lang: z.string().trim().max(10).optional().nullable(),
 });
 router.post('/login', async (req, res, next) => {
@@ -184,11 +186,28 @@ router.post('/login', async (req, res, next) => {
     const parsed = loginSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ ok: false, error: 'Neplatný e-mail.' });
     const email = parsed.data.email;
+    const password = parsed.data.password;
     const lead = await prisma.compounderLead.findFirst({
       where: { email: { equals: email, mode: 'insensitive' } },
       orderBy: { created_at: 'desc' },
-      select: { id: true, name: true, email: true },
+      select: { id: true, name: true, email: true, role: true, lang: true, password_hash: true },
     });
+
+    // ── Přihlášení HESLEM ──────────────────────────────────────────────────
+    if (password) {
+      const ok = lead && lead.password_hash && await bcrypt.compare(password, lead.password_hash);
+      if (!ok) {
+        // generická hláška (neprozrazuje, zda chyba je e-mail nebo heslo)
+        return res.status(401).json({ ok: false, error: 'Neplatný e-mail nebo heslo.' });
+      }
+      console.log(`[compounder] Přihlášení heslem: lead #${lead.id}`);
+      return res.json({
+        ok: true, token: makeSessionToken(lead.id),
+        id: lead.id, name: lead.name, role: lead.role, lang: lead.lang,
+      });
+    }
+
+    // ── Přihlášení ODKAZEM (magic link) ────────────────────────────────────
     if (lead) {
       const url = `${portalBase()}/portal?t=${makeLoginToken(lead.id)}`;
       sendPortalLogin({ name: lead.name, email: lead.email }, url)
@@ -199,6 +218,28 @@ router.post('/login', async (req, res, next) => {
     }
     // Vždy stejná odpověď (anti-enumeration).
     return res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/compounder/set-password  { t: token, password }
+// Nastaví/změní heslo přihlášeného leada. Vyžaduje platný token (z odkazu nebo session).
+const setPwSchema = z.object({
+  t: z.string().min(3),
+  password: z.string().min(6).max(200),
+});
+router.post('/set-password', async (req, res, next) => {
+  try {
+    const parsed = setPwSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ ok: false, error: 'Heslo musí mít alespoň 6 znaků.' });
+    const id = verifyPortalToken(parsed.data.t);
+    if (!id) return res.status(401).json({ ok: false, error: 'Neplatný nebo vypršelý přístup.' });
+    const hash = await bcrypt.hash(parsed.data.password, 10);
+    await prisma.compounderLead.update({ where: { id }, data: { password_hash: hash } });
+    console.log(`[compounder] Heslo nastaveno pro lead #${id}`);
+    // vrať čerstvý dlouhý token, ať zůstane přihlášen
+    return res.json({ ok: true, token: makeSessionToken(id) });
   } catch (err) {
     next(err);
   }
@@ -369,6 +410,10 @@ function makePortalToken(leadId) {
 function makeLoginToken(leadId, ttlMs) {
   const exp = Date.now() + (ttlMs || 24 * 3600 * 1000);
   return leadId + '.' + exp + '.' + hmacSig('compounder:' + leadId + ':' + exp);
+}
+// Dlouhá session ("zůstat přihlášen") — ~1 rok. Stejný formát id.exp.sig.
+function makeSessionToken(leadId) {
+  return makeLoginToken(leadId, 365 * 24 * 3600 * 1000);
 }
 // Ověří oba formáty: 2-part permanentní (registrace) i 3-part s expirací (login).
 function verifyPortalToken(token) {

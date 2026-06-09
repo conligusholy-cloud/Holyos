@@ -93,8 +93,11 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
       <p class="muted" id="gate-msg" data-i18n="p.login.lead">Enter your email and we'll send you a sign-in link (valid 24 hours).</p>
       <form id="gateLogin" style="margin:20px 0 8px;text-align:left">
         <input type="email" name="email" autocomplete="email" required placeholder="email@…"
+          style="width:100%;background:var(--bg-2);border:1px solid var(--line);border-radius:12px;padding:13px 15px;color:var(--text);font-size:15px;font-family:inherit;margin-bottom:10px" />
+        <input type="password" name="password" autocomplete="current-password" data-ph="login.password" placeholder="Password"
           style="width:100%;background:var(--bg-2);border:1px solid var(--line);border-radius:12px;padding:13px 15px;color:var(--text);font-size:15px;font-family:inherit;margin-bottom:12px" />
-        <button type="submit" class="btn" style="width:100%;justify-content:center;margin:0" data-i18n="login.submit">Send sign-in link</button>
+        <button type="submit" class="btn" style="width:100%;justify-content:center;margin:0" data-i18n="login.loginbtn">Log in</button>
+        <button type="button" id="gateSendLink" class="muted" style="width:100%;margin-top:12px;background:transparent;border:0;font-size:13px;text-decoration:underline;cursor:pointer;color:var(--muted)" data-i18n="login.sendlink">Email me a sign-in link instead</button>
         <p class="muted" id="gateLoginMsg" role="status" style="min-height:18px;margin-top:12px;font-size:13.5px"></p>
       </form>
       <a class="muted" href="/" style="font-size:13px;text-decoration:underline" data-i18n="p.back">Back to compounder.world</a>
@@ -119,6 +122,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
     <a href="#pripojky" data-i18n="p.nav.conn">Connections</a>
     <a href="#pudorysy" data-i18n="p.nav.plans">Floor plans</a>
     <a href="#distribuce" data-i18n="p.nav.dist">Distribution model</a>
+    <a href="#ucet" data-i18n="p.nav.acc">Account</a>
   </nav>
 
   <div class="wrap">
@@ -245,6 +249,20 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
       </div>
       <p class="note" data-i18n="p.dist.note">We'll discuss specific terms, prices and availability in person — we'll get in touch.</p>
     </section>
+
+    <section class="blk" id="ucet">
+      <div class="eyebrow" data-i18n="p.acc.eyebrow">Account</div>
+      <h2 data-i18n="p.acc.title">Password & sign-in</h2>
+      <p class="lead" data-i18n="p.acc.lead">Set a password to sign in faster next time — you'll stay signed in on this device.</p>
+      <div class="panel" style="max-width:460px">
+        <form id="pwForm">
+          <div class="row"><label data-i18n="p.acc.pw">New password</label><div class="unit"><input type="password" id="acc-pw" autocomplete="new-password" minlength="6"></div></div>
+          <button type="submit" class="btn btn-gold" style="margin:6px 0 0;width:100%;justify-content:center" data-i18n="p.acc.save">Save password</button>
+          <p class="note" id="pwMsg" role="status" style="min-height:18px"></p>
+        </form>
+        <button type="button" id="pLogout" class="btn" style="width:100%;justify-content:center;margin-top:8px;background:transparent;border:1px solid var(--line);color:var(--muted)" data-i18n="p.acc.logout">Log out</button>
+      </div>
+    </section>
   </div>
 
   <footer data-i18n="p.footer">COMPOUNDER · Best Series — We build Compounder Machines. · compounder.world</footer>
@@ -319,18 +337,67 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
   // přihlášení přes e-mail přímo z brány (neplatný/expirovaný/chybějící odkaz)
   (function initGateLogin(){
     var gf = document.getElementById("gateLogin"); if (!gf) return;
+    var pwi = gf.querySelector("input[name=password]"); if (pwi) pwi.placeholder = pT("login.password");
+    function m(){ return document.getElementById("gateLoginMsg"); }
+    function gerr(t){ var e=m(); e.style.color="#e07a6b"; e.textContent=t; }
+    function gok(t){ var e=m(); e.style.color="var(--gold-soft)"; e.textContent=t; }
+    function gwait(t){ var e=m(); e.style.color=""; e.textContent=t; }
+    function pwLogin(email, pw, btn){
+      btn.disabled=true; gwait(pT("login.sending"));
+      fetch("/api/compounder/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email:email,password:pw,lang:pDetect()})})
+        .then(function(r){ return r.json().then(function(j){ return {ok:r.ok,j:j}; }); })
+        .then(function(res){
+          if(res.ok && res.j && res.j.token){ try{ localStorage.setItem("compounder.portal.token", res.j.token); }catch(_){}
+            gok(pT("login.ok2")); setTimeout(function(){ location.href="/portal"; }, 400); }
+          else { gerr(pT("login.badcreds")); btn.disabled=false; }
+        }).catch(function(){ gerr(pT("login.err")); btn.disabled=false; });
+    }
+    function linkLogin(email, btn){
+      btn.disabled=true; gwait(pT("login.sending"));
+      fetch("/api/compounder/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email:email,lang:pDetect()})})
+        .then(function(r){ return r.json().catch(function(){ return {}; }); })
+        .then(function(){ gok(pT("login.ok")); })
+        .catch(function(){ gok(pT("login.ok")); })
+        .finally(function(){ btn.disabled=false; });
+    }
     gf.addEventListener("submit", function(e){
       e.preventDefault();
-      var m = document.getElementById("gateLoginMsg");
-      var b = gf.querySelector("button[type=submit]");
-      var email = (gf.email.value || "").trim();
-      if (!/.+@.+\..+/.test(email)){ m.style.color = "#e07a6b"; m.textContent = pT("login.err"); return; }
-      b.disabled = true; m.style.color = ""; m.textContent = pT("login.sending");
-      fetch("/api/compounder/login", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ email: email, lang: pDetect() }) })
-        .then(function(r){ return r.json().catch(function(){ return {}; }); })
-        .then(function(){ m.style.color = "var(--gold-soft)"; m.textContent = pT("login.ok"); gf.reset(); })
-        .catch(function(){ m.style.color = "var(--gold-soft)"; m.textContent = pT("login.ok"); })
-        .finally(function(){ b.disabled = false; });
+      var email=(gf.email.value||"").trim(); var pw=(pwi&&pwi.value)||"";
+      var b=gf.querySelector("button[type=submit]");
+      if(!/.+@.+\..+/.test(email)){ gerr(pT("login.err")); return; }
+      if(pw) pwLogin(email, pw, b); else linkLogin(email, b);
+    });
+    var sl=document.getElementById("gateSendLink");
+    if(sl) sl.addEventListener("click", function(){ var email=(gf.email.value||"").trim(); if(!/.+@.+\..+/.test(email)){ gerr(pT("login.err")); return; } linkLogin(email, sl); });
+  })();
+
+  // nastavení/změna hesla + odhlášení (prvky jsou v #app, registrace handlerů je neškodná)
+  (function initAccount(){
+    var lo = document.getElementById("pLogout");
+    if (lo) lo.addEventListener("click", function(){
+      try{ localStorage.removeItem("compounder.portal.token"); }catch(_){}
+      location.href = "/";
+    });
+    var pf = document.getElementById("pwForm");
+    if (pf) pf.addEventListener("submit", function(e){
+      e.preventDefault();
+      var msg = document.getElementById("pwMsg");
+      var btn = pf.querySelector("button[type=submit]");
+      var pw = (document.getElementById("acc-pw").value || "");
+      if (pw.length < 6){ msg.style.color="#e07a6b"; msg.textContent = pT("p.acc.min"); return; }
+      var tok = ""; try{ tok = localStorage.getItem("compounder.portal.token") || ""; }catch(_){}
+      if (!tok){ msg.style.color="#e07a6b"; msg.textContent = pT("login.err"); return; }
+      btn.disabled = true; msg.style.color=""; msg.textContent = pT("login.sending");
+      fetch("/api/compounder/set-password", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ t: tok, password: pw }) })
+        .then(function(r){ return r.json().then(function(j){ return {ok:r.ok,j:j}; }); })
+        .then(function(res){
+          if (res.ok && res.j && res.j.ok){
+            if (res.j.token){ try{ localStorage.setItem("compounder.portal.token", res.j.token); }catch(_){} }
+            msg.style.color="var(--gold-soft)"; msg.textContent = pT("p.acc.saved");
+            document.getElementById("acc-pw").value = "";
+          } else { msg.style.color="#e07a6b"; msg.textContent = (res.j && res.j.error) || pT("p.acc.min"); }
+        }).catch(function(){ msg.style.color="#e07a6b"; msg.textContent = pT("login.err"); })
+        .finally(function(){ btn.disabled = false; });
     });
   })();
 
