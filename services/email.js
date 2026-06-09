@@ -170,6 +170,7 @@ async function sendMail({ to, subject, body, from, fromName, link, linkLabel, pr
           attachments: Array.isArray(attachments) ? attachments : undefined,
           fromName: fromName || undefined,
         });
+        console.log(`[Email] odesláno přes Graph → ${to} (from ${from}${fromName ? ' / ' + fromName : ''})`);
         return { sent: true, via: 'graph', from };
       }
     } catch (e) {
