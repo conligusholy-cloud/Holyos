@@ -732,6 +732,12 @@ const policySchema = z.object({
   mime_type: z.string().optional().nullable(),
   // Příznak pro odebrání — UI tlačítko "Odebrat"
   remove_green_card: z.boolean().optional(),
+  // Smlouva (contract_url) — upload base64, samostatný soubor pod Zelenou kartou
+  contract_data: z.string().optional().nullable(),
+  contract_name: z.string().optional().nullable(),
+  contract_mime: z.string().optional().nullable(),
+  // Příznak pro odebrání smlouvy — UI tlačítko "Odebrat"
+  remove_contract: z.boolean().optional(),
 });
 
 function toPolicyData(data, vehicleId) {
@@ -756,6 +762,12 @@ function toPolicyData(data, vehicleId) {
     const saved = saveBase64File(vehicleId, data.file_data, data.file_name, data.mime_type);
     out.file_url = saved.url;
     out.file_name = saved.original_name;
+  }
+  // Smlouva — upload nového souboru
+  if (data.contract_data) {
+    const saved = saveBase64File(vehicleId, data.contract_data, data.contract_name, data.contract_mime);
+    out.contract_url = saved.url;
+    out.contract_name = saved.original_name;
   }
   return out;
 }
@@ -858,6 +870,17 @@ router.put('/policies/:policyId', async (req, res, next) => {
       removeStoredFile(existing.file_url);
       data.file_url = null;
       data.file_name = null;
+    }
+    // Smlouva — pokud se neuploaduje nová, ponech stávající
+    if (!parsed.data.contract_data) {
+      delete data.contract_url;
+      delete data.contract_name;
+    }
+    // Odebrat smlouvu — nullovat URL a smazat fyzický soubor
+    if (parsed.data.remove_contract) {
+      removeStoredFile(existing.contract_url);
+      data.contract_url = null;
+      data.contract_name = null;
     }
     delete data.vehicle_id; // není v update změnitelné
     const policy = await prisma.vehicleInsurancePolicy.update({

@@ -774,6 +774,8 @@
                   // U pojistky držíme pouze 1 soubor — Zelenou kartu.
                   // Po kliknutí se náhled otevře v samostatném okně přes openPolicyFilePreview().
                   (p.file_url ? '<button type="button" class="btn btn-sm btn-secondary" onclick="openPolicyFilePreview(\'' + escHtml(p.file_url) + '\',\'' + escHtml(p.file_name || 'Zelená karta') + '\')" title="Otevřít náhled Zelené karty v novém okně">🟢 Zelená karta</button>' : '') +
+                  // Smlouva — zobrazí se jen pokud je k pojistce přiložena.
+                  (p.contract_url ? '<button type="button" class="btn btn-sm btn-secondary" onclick="openPolicyFilePreview(\'' + escHtml(p.contract_url) + '\',\'' + escHtml(p.contract_name || 'Smlouva') + '\')" title="Otevřít náhled Smlouvy v novém okně">📄 Smlouva</button>' : '') +
                   // Přejmenováno z '✏️ Upravit' — jasně sdělujeme, že jde i o úpravu uloženého dokumentu (souboru).
                   '<button type="button" class="btn btn-sm btn-secondary" onclick="showPolicyForm(' + vehicleId + ',' + p.id + ')" title="Upravit pojistku včetně uloženého dokumentu">📝 Upravit dokument</button>' +
                   '<button type="button" class="btn btn-sm btn-danger" onclick="deletePolicy(' + p.id + ',' + vehicleId + ')">🗑️</button>' +
@@ -824,14 +826,14 @@
       function fileFieldHtml(idPrefix, label, currentUrl, currentName) {
         const hasFile = !!currentUrl;
         const safeUrl = escHtml(currentUrl || '');
-        const safeName = escHtml(currentName || 'Zelená karta');
+        const safeName = escHtml(currentName || label);
         const chipStyleSaved = 'display:inline-flex;align-items:center;gap:6px;padding:6px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--accent,#0ea5e9);text-decoration:none;font-size:13px;cursor:pointer;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
         const chip = hasFile
           ? '<a href="javascript:void(0)" id="' + idPrefix + '-chip"' +
               ' onclick="openPolicyFilePreview(\'' + safeUrl + '\',\'' + safeName + '\')"' +
               ' title="Kliknutím otevřeš náhled v novém okně"' +
               ' style="' + chipStyleSaved + '">' +
-              '📎 ' + escHtml(currentName || 'Zelená karta') +
+              '📎 ' + escHtml(currentName || label) +
             '</a>'
           : '<span id="' + idPrefix + '-chip" style="font-size:13px;color:var(--text2);font-style:italic;">Soubor nevybrán</span>';
         return '<div class="form-group full">' +
@@ -856,6 +858,7 @@
       }
 
       const greenCardField = fileFieldHtml('p-greencard', 'Zelená karta', p && p.file_url, p && p.file_name);
+      const contractField  = fileFieldHtml('p-contract', 'Smlouva', p && p.contract_url, p && p.contract_name);
 
       const title = editing ? 'Upravit pojistku' : 'Nová pojistka';
       const submitLabel = editing ? 'Uložit změny' : 'Uložit pojistku';
@@ -886,6 +889,7 @@
           '<div class="form-group"><label>Platnost do</label><input type="date" id="p-to" value="' + valTo + '"></div>' +
           '<div class="form-group full"><label>Poznámka</label><textarea id="p-note">' + escHtml(p && p.note || '') + '</textarea></div>' +
           greenCardField +
+          contractField +
         '</div>' +
         '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;">' +
           '<button type="button" class="btn btn-sm btn-secondary" onclick="cancelPolicyForm()">Zrušit</button>' +
@@ -999,6 +1003,19 @@
       // Zelená karta — Odebrat?
       const gcRemove = document.getElementById('p-greencard-remove');
       if (gcRemove && gcRemove.value === '1') data.remove_green_card = true;
+
+      // Smlouva — nový upload?
+      const ctFile = document.getElementById('p-contract-file');
+      if (ctFile && ctFile.files && ctFile.files[0]) {
+        const file = ctFile.files[0];
+        if (file.size > 20 * 1024 * 1024) { alert('Smlouva je větší než 20 MB.'); return; }
+        data.contract_data = await fileToBase64(file);
+        data.contract_name = file.name;
+        data.contract_mime = file.type || null;
+      }
+      // Smlouva — Odebrat?
+      const ctRemove = document.getElementById('p-contract-remove');
+      if (ctRemove && ctRemove.value === '1') data.remove_contract = true;
 
       try {
         const editing = policyId != null;
