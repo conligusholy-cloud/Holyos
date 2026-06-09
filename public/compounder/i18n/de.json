@@ -175,5 +175,15 @@
  "p.u.months": "Monate",
  "p.u.loss": "defizitär",
  "hero.line1": "Wir verkaufen keine Waschsalons.",
- "hero.line2": "Wir verkaufen Compounding."
+ "hero.line2": "Wir verkaufen Compounding.",
+ "p.ver.title": "Versionen, Zeichnungen & Anschlüsse",
+ "p.ver.lead": "Drei Größen der Compounder Machine. Jedes PDF enthält die bemaßte Zeichnung und die erforderlichen Anschlüsse.",
+ "p.ver.v2": "Compounder 2",
+ "p.ver.v3": "Compounder 3",
+ "p.ver.v4": "Compounder 4",
+ "p.ver.el": "Elektro",
+ "p.ver.water": "Wasser",
+ "p.ver.sewage": "Abwasser",
+ "p.ver.dl": "Zeichnung + Anschlüsse herunterladen (PDF)",
+ "p.ver.note": "Höhe ca. 2 390 mm. Strom, Wasser und Abwasser werden in einen Schacht geführt. Endgültige Spezifikation je nach Konfiguration."
 }

@@ -175,5 +175,15 @@
  "p.u.months": "mesecev",
  "p.u.loss": "v izgubi",
  "hero.line1": "Ne prodajamo pralnic.",
- "hero.line2": "Prodajamo Compounding."
+ "hero.line2": "Prodajamo Compounding.",
+ "p.ver.title": "Različice, načrti in priključki",
+ "p.ver.lead": "Tri velikosti Compounder Machine. Vsak PDF vsebuje kotirani načrt in potrebne priključke.",
+ "p.ver.v2": "Compounder 2",
+ "p.ver.v3": "Compounder 3",
+ "p.ver.v4": "Compounder 4",
+ "p.ver.el": "Elektrika",
+ "p.ver.water": "Voda",
+ "p.ver.sewage": "Kanalizacija",
+ "p.ver.dl": "Prenesi načrt + priključke (PDF)",
+ "p.ver.note": "Višina pribl. 2 390 mm. Elektrika, voda in kanalizacija so speljane v en jašek. Končna specifikacija glede na konfiguracijo."
 }

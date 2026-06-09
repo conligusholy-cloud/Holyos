@@ -175,5 +175,15 @@
  "p.u.months": "mjeseci",
  "p.u.loss": "u gubitku",
  "hero.line1": "Ne prodajemo praonice.",
- "hero.line2": "Prodajemo Compounding."
+ "hero.line2": "Prodajemo Compounding.",
+ "p.ver.title": "Verzije, nacrti i priključci",
+ "p.ver.lead": "Tri veličine Compounder Machine. Svaki PDF sadrži kotirani nacrt i potrebne priključke.",
+ "p.ver.v2": "Compounder 2",
+ "p.ver.v3": "Compounder 3",
+ "p.ver.v4": "Compounder 4",
+ "p.ver.el": "Struja",
+ "p.ver.water": "Voda",
+ "p.ver.sewage": "Kanalizacija",
+ "p.ver.dl": "Preuzmi nacrt + priključke (PDF)",
+ "p.ver.note": "Visina oko 2 390 mm. Struja, voda i kanalizacija dovode se u jedno okno. Konačna specifikacija prema konfiguraciji."
 }

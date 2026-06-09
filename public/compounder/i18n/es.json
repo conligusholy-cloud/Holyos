@@ -175,5 +175,15 @@
  "p.u.months": "meses",
  "p.u.loss": "en pérdidas",
  "hero.line1": "No vendemos lavanderías.",
- "hero.line2": "Vendemos Compounding."
+ "hero.line2": "Vendemos Compounding.",
+ "p.ver.title": "Versiones, planos y conexiones",
+ "p.ver.lead": "Tres tamaños de la Compounder Machine. Cada PDF incluye el plano acotado y las conexiones necesarias.",
+ "p.ver.v2": "Compounder 2",
+ "p.ver.v3": "Compounder 3",
+ "p.ver.v4": "Compounder 4",
+ "p.ver.el": "Electricidad",
+ "p.ver.water": "Agua",
+ "p.ver.sewage": "Saneamiento",
+ "p.ver.dl": "Descargar plano + conexiones (PDF)",
+ "p.ver.note": "Altura aprox. 2 390 mm. La electricidad, el agua y el saneamiento se conducen a una sola arqueta. Especificación final según la configuración."
 }

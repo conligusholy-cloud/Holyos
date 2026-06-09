@@ -175,5 +175,15 @@
  "p.u.months": "månader",
  "p.u.loss": "förlust",
  "hero.line1": "Vi säljer inte tvättomater.",
- "hero.line2": "Vi säljer Compounding."
+ "hero.line2": "Vi säljer Compounding.",
+ "p.ver.title": "Versioner, ritningar och anslutningar",
+ "p.ver.lead": "Tre storlekar av Compounder Machine. Varje PDF innehåller den måttsatta ritningen och de anslutningar som krävs.",
+ "p.ver.v2": "Compounder 2",
+ "p.ver.v3": "Compounder 3",
+ "p.ver.v4": "Compounder 4",
+ "p.ver.el": "El",
+ "p.ver.water": "Vatten",
+ "p.ver.sewage": "Avlopp",
+ "p.ver.dl": "Ladda ner ritning + anslutningar (PDF)",
+ "p.ver.note": "Höjd ca 2 390 mm. El, vatten och avlopp dras till en brunn. Slutlig specifikation efter konfiguration."
 }

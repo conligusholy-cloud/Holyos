@@ -175,5 +175,15 @@
  "p.u.months": "hónap",
  "p.u.loss": "veszteséges",
  "hero.line1": "Nem mosodákat árulunk.",
- "hero.line2": "Compoundingot árulunk."
+ "hero.line2": "Compoundingot árulunk.",
+ "p.ver.title": "Változatok, rajzok és csatlakozások",
+ "p.ver.lead": "A Compounder Machine három mérete. Minden PDF tartalmazza a méretezett rajzot és a szükséges csatlakozásokat.",
+ "p.ver.v2": "Compounder 2",
+ "p.ver.v3": "Compounder 3",
+ "p.ver.v4": "Compounder 4",
+ "p.ver.el": "Elektromos",
+ "p.ver.water": "Víz",
+ "p.ver.sewage": "Csatorna",
+ "p.ver.dl": "Rajz + csatlakozások letöltése (PDF)",
+ "p.ver.note": "Magasság kb. 2 390 mm. Az áram, a víz és a csatorna egy aknába van vezetve. Végleges specifikáció a konfigurációtól függően."
 }

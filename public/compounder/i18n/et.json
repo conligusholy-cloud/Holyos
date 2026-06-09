@@ -175,5 +175,15 @@
  "p.u.months": "kuud",
  "p.u.loss": "kahjumis",
  "hero.line1": "Me ei müü pesumaju.",
- "hero.line2": "Me müüme Compounding."
+ "hero.line2": "Me müüme Compounding.",
+ "p.ver.title": "Versioonid, joonised ja ühendused",
+ "p.ver.lead": "Compounder Machine kolm suurust. Iga PDF sisaldab mõõtudega joonist ja nõutavaid ühendusi.",
+ "p.ver.v2": "Compounder 2",
+ "p.ver.v3": "Compounder 3",
+ "p.ver.v4": "Compounder 4",
+ "p.ver.el": "Elekter",
+ "p.ver.water": "Vesi",
+ "p.ver.sewage": "Kanalisatsioon",
+ "p.ver.dl": "Laadi alla joonis + ühendused (PDF)",
+ "p.ver.note": "Kõrgus ligikaudu 2 390 mm. Elekter, vesi ja kanalisatsioon juhitakse ühte kaevu. Lõplik spetsifikatsioon sõltub konfiguratsioonist."
 }

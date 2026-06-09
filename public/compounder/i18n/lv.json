@@ -175,5 +175,15 @@
  "p.u.months": "mēneši",
  "p.u.loss": "zaudējumos",
  "hero.line1": "Mēs nepārdodam veļas mazgātavas.",
- "hero.line2": "Mēs pārdodam Compounding."
+ "hero.line2": "Mēs pārdodam Compounding.",
+ "p.ver.title": "Versijas, rasējumi un pieslēgumi",
+ "p.ver.lead": "Trīs Compounder Machine izmēri. Katrā PDF ir rasējums ar izmēriem un nepieciešamie pieslēgumi.",
+ "p.ver.v2": "Compounder 2",
+ "p.ver.v3": "Compounder 3",
+ "p.ver.v4": "Compounder 4",
+ "p.ver.el": "Elektrība",
+ "p.ver.water": "Ūdens",
+ "p.ver.sewage": "Kanalizācija",
+ "p.ver.dl": "Lejupielādēt rasējumu + pieslēgumus (PDF)",
+ "p.ver.note": "Augstums apm. 2 390 mm. Elektrība, ūdens un kanalizācija tiek novadīti vienā akā. Galīgā specifikācija atkarībā no konfigurācijas."
 }

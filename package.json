@@ -7,13 +7,14 @@
     "dev": "node --watch app.js",
     "start": "npx prisma generate && npx prisma migrate deploy && node app.js",
     "start:legacy": "node server.js",
-    "build": "npx prisma generate && npm --prefix clients/pwa-sklad ci && npm --prefix clients/pwa-sklad run build",
+    "build": "npx prisma generate && npm --prefix clients/pwa-sklad ci && npm --prefix clients/pwa-sklad run build && (node scripts/compounder-i18n-sync.js || echo \"i18n-sync preskoceno\")",
     "db:migrate": "npx prisma migrate dev",
     "db:push": "npx prisma db push",
     "db:seed": "node scripts/migrate-json-to-postgres.js",
     "db:studio": "npx prisma studio",
     "typecheck": "tsc --noEmit",
-    "test": "node scripts/patch-fleet-frontend.js"
+    "test": "node scripts/patch-fleet-frontend.js",
+    "i18n:sync": "node scripts/compounder-i18n-sync.js"
   },
   "engines": {
     "node": ">=22.0.0"
