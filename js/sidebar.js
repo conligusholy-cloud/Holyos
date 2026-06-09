@@ -132,7 +132,16 @@ function renderSidebar(activeModule) {
     }
 
     var el = document.getElementById('sidebar-user-info');
-    if (el) el.textContent = u.displayName || u.username || '';
+    if (el) {
+      // Jméno přihlášeného uživatele je odkaz na osobní profil (Můj profil),
+      // kde si může spravovat své požadavky na AI asistenta.
+      var displayName = u.displayName || u.username || '';
+      el.innerHTML = '<a href="/modules/muj-profil/index.html" title="Můj profil" ' +
+        'style="display:flex; align-items:center; gap:7px; color:var(--text2); text-decoration:none;">' +
+        '<span style="font-size:14px;">&#128100;</span>' +
+        '<span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">' + displayName + '</span>' +
+        '</a>';
+    }
     // Pokud je admin, přidat odkaz na správu uživatelů
     if (u.role === 'admin') {
       var nav = document.querySelector('.sidebar-nav');
