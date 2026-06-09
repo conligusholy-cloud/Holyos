@@ -37,7 +37,7 @@ header.top{position:sticky;top:0;z-index:30;background:rgba(10,10,11,.82);backdr
 .top .hi{font-size:13px;color:var(--muted)}
 .lang-select{background:transparent;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:6px 12px;font-size:12px;font-family:inherit;cursor:pointer}
 .lang-select option{background:#141417;color:#f4f4f2}
-.subnav{display:flex;gap:6px;overflow-x:auto;padding:10px 24px;border-bottom:1px solid var(--line);background:var(--bg-2);position:sticky;top:51px;z-index:20}
+.subnav{display:flex;gap:6px;overflow-x:auto;padding:10px max(24px, (100% - 1060px) / 2 + 24px);border-bottom:1px solid var(--line);background:var(--bg-2);position:sticky;top:51px;z-index:20}
 .subnav a{white-space:nowrap;font-size:13px;color:var(--muted);padding:7px 14px;border-radius:999px;border:1px solid transparent}
 .subnav a:hover{color:var(--text)}
 .subnav a.active{color:var(--gold-soft);border-color:rgba(201,162,75,.35);background:rgba(201,162,75,.07)}
