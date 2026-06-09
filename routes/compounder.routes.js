@@ -12,6 +12,7 @@ const router = express.Router();
 const { z } = require('zod');
 const { prisma } = require('../config/database');
 const { requireAuth } = require('../middleware/auth');
+const { createNotification } = require('./notifications.routes');
 
 // ─── Pomocné ─────────────────────────────────────────────────────────────
 
@@ -52,7 +53,8 @@ router.post('/register', async (req, res, next) => {
       select: { id: true, role: true, created_at: true },
     });
     console.log(`[compounder] Nový lead #${lead.id} (${d.role}): ${d.email}`);
-    // TODO (další fáze): notifikace do Velína / e-mail vážnému zájemci, napojení do Portálu.
+    // Notifikace kompetentní osobě (in-app zvonek) — fire-and-forget, ať chyba neshodí registraci.
+    notifyNewLead(lead.id, d).catch((e) => console.error('[compounder] notifikace selhala:', e.message));
     return res.status(201).json({ ok: true, id: lead.id });
   } catch (err) {
     next(err);
@@ -120,5 +122,30 @@ router.patch('/leads/:id', requireAuth, async (req, res, next) => {
     next(err);
   }
 });
+
+// Notifikace na nový lead. Cíl = env COMPOUNDER_NOTIFY_USER_ID (konkrétní kompetentní
+// osoba), jinak fallback na všechny super-adminy (ať Tomáš dostane upozornění i bez configu).
+// Vytvoří in-app notifikaci (zvonek + SSE realtime); chyba se jen zaloguje.
+async function notifyNewLead(leadId, d) {
+  let userIds = [];
+  const envId = Number(process.env.COMPOUNDER_NOTIFY_USER_ID);
+  if (Number.isInteger(envId) && envId > 0) {
+    userIds = [envId];
+  } else {
+    const admins = await prisma.user.findMany({ where: { is_super_admin: true }, select: { id: true } });
+    userIds = admins.map((u) => u.id);
+  }
+  const roleLabel = d.role === 'distributor' ? 'Distributor' : 'Compounder';
+  for (const userId of userIds) {
+    await createNotification({
+      userId,
+      type: 'compounder_lead',
+      title: `🌐 Nový Compounder lead: ${d.name}`,
+      body: `${roleLabel} — ${d.email}`,
+      link: '/modules/prodejni-objednavky/index.html',
+      meta: { lead_id: leadId, role: d.role, email: d.email },
+    });
+  }
+}
 
 module.exports = router;
