@@ -130,7 +130,7 @@ async function sendReply(userPrincipalName, { to, subject, body }) {
  * @param {boolean} [args.saveToSentItems=true]
  * @returns {Promise<{ ok: true }>}
  */
-async function sendMailAs(fromUpn, { to, subject, textBody, htmlBody, attachments, saveToSentItems = true }) {
+async function sendMailAs(fromUpn, { to, subject, textBody, htmlBody, attachments, saveToSentItems = true, fromName, replyTo }) {
   if (!fromUpn) throw new Error('sendMailAs: chybí fromUpn');
   if (!to) throw new Error('sendMailAs: chybí to');
 
@@ -145,6 +145,10 @@ async function sendMailAs(fromUpn, { to, subject, textBody, htmlBody, attachment
       : { contentType: 'Text', content: textBody || '' },
     toRecipients: recipients,
   };
+
+  // Vlastní zobrazované jméno odesílatele (adresa zůstává fromUpn — povolená schránka).
+  if (fromName) message.from = { emailAddress: { name: fromName, address: fromUpn } };
+  if (replyTo) message.replyTo = [{ emailAddress: { address: replyTo } }];
 
   if (Array.isArray(attachments) && attachments.length > 0) {
     message.attachments = attachments.map(a => {

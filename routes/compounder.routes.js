@@ -390,11 +390,16 @@ function verifyPortalToken(token) {
   }
   return null;
 }
+function compounderMailFromName() {
+  return process.env.COMPOUNDER_MAIL_FROM_NAME || 'Compounder · World';
+}
 async function sendPortalInvite(d, portalUrl) {
   const from = process.env.COMPOUNDER_MAIL_FROM || process.env.SMTP_FROM || process.env.INVOICE_IMAP_USER;
   await sendMail({
     to: d.email,
     from,
+    fromName: compounderMailFromName(),
+    brand: 'compounder',
     subject: 'Vstup do Compounder Portalu',
     preheader: 'Váš osobní přístup k ekonomice, návratnosti a parametrům Compounderu.',
     body:
@@ -411,6 +416,8 @@ async function sendPortalLogin(d, url) {
   await sendMail({
     to: d.email,
     from,
+    fromName: compounderMailFromName(),
+    brand: 'compounder',
     subject: 'Přihlášení do Compounder Portalu',
     preheader: 'Odkaz pro přihlášení do Compounder Portalu (platí 24 hodin).',
     body:
