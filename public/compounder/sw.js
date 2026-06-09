@@ -2,12 +2,12 @@
    Bump CACHE when static assets change. */
 var CACHE = "compounder-v1";
 var CORE = [
-  "/compounder/",
-  "/compounder/index.html",
-  "/compounder/app.js",
-  "/compounder/i18n.js",
-  "/compounder/manifest.webmanifest",
-  "/compounder/assets/icon.svg"
+  "./",
+  "./index.html",
+  "./app.js",
+  "./i18n.js",
+  "./manifest.webmanifest",
+  "./assets/icon.svg"
 ];
 
 self.addEventListener("install", function(e){
@@ -31,7 +31,7 @@ self.addEventListener("fetch", function(e){
   if (url.pathname.indexOf("/api/") === 0) return;
   // network-first for the document, cache-first for static assets
   if (req.mode === "navigate"){
-    e.respondWith(fetch(req).catch(function(){ return caches.match("/compounder/index.html"); }));
+    e.respondWith(fetch(req).catch(function(){ return caches.match("./index.html"); }));
     return;
   }
   e.respondWith(
@@ -52,9 +52,9 @@ self.addEventListener("push", function(e){
   var title = data.title || "Compounder";
   var opts = {
     body: data.body || "",
-    icon: "/compounder/assets/icon-192.png",
-    badge: "/compounder/assets/icon-192.png",
-    data: { url: data.url || "/compounder/", id: data.id || null },
+    icon: "./assets/icon-192.png",
+    badge: "./assets/icon-192.png",
+    data: { url: data.url || "./", id: data.id || null },
     actions: data.actions || [],
     tag: data.tag || "compounder",
     renotify: true
@@ -65,14 +65,14 @@ self.addEventListener("push", function(e){
 self.addEventListener("notificationclick", function(e){
   e.notification.close();
   var d = e.notification.data || {};
-  var url = d.url || "/compounder/";
+  var url = d.url || "./";
   // report the reaction back to the backend so we know it was opened / which action
   var beacon = fetch("/api/compounder/push-reaction", {
     method:"POST", headers:{"Content-Type":"application/json"}, keepalive:true,
     body: JSON.stringify({ id:d.id||null, action:e.action||"open", ts:Date.now() })
   }).catch(function(){});
   e.waitUntil(Promise.all([beacon, self.clients.matchAll({type:"window", includeUncontrolled:true}).then(function(list){
-    for (var i=0;i<list.length;i++){ if (list[i].url.indexOf("/compounder")>-1 && "focus" in list[i]) return list[i].focus(); }
+    for (var i=0;i<list.length;i++){ if ("focus" in list[i]) return list[i].focus(); }
     if (self.clients.openWindow) return self.clients.openWindow(url);
   })]));
 });
