@@ -9,24 +9,35 @@
   /* ---------- language ---------- */
   function detectLang(){
     var saved = localStorage.getItem("compounder.lang");
-    if (saved && I18N.strings[saved]) return saved;
+    if (saved && I18N.LANGS[saved]) return saved;
     var nav = (navigator.languages || [navigator.language || "en"]);
     for (var i=0;i<nav.length;i++){
       var code = (nav[i]||"").slice(0,2).toLowerCase();
-      if (I18N.strings[code]) return code;
+      if (I18N.LANGS[code]) return code;
     }
-    return "en";
+    return I18N.base;
   }
-  function applyLang(lang){
-    var dict = I18N.strings[lang] || I18N.strings.en;
+  function applyDict(lang){
+    var base = I18N.strings[I18N.base] || {};
+    var loaded = I18N.strings[lang] || {};
+    var dict = {};
+    for (var k in base) dict[k] = base[k];
+    for (var k2 in loaded){ if (loaded[k2] != null && loaded[k2] !== "") dict[k2] = loaded[k2]; }
     document.documentElement.lang = lang;
     document.querySelectorAll("[data-i18n]").forEach(function(el){
-      var k = el.getAttribute("data-i18n");
-      if (dict[k] != null) el.textContent = dict[k];
+      var key = el.getAttribute("data-i18n");
+      if (dict[key] != null) el.textContent = dict[key];
     });
-    localStorage.setItem("compounder.lang", lang);
     window.__compounderLang = lang;
-    window.__t = function(k){ return (dict[k]!=null?dict[k]:(I18N.strings.en[k]||k)); };
+    window.__compounderDict = dict;
+    window.__t = function(k){ return (dict[k] != null ? dict[k] : k); };
+  }
+  function applyLang(lang){
+    localStorage.setItem("compounder.lang", lang);
+    if (lang === I18N.base || I18N.strings[lang]) { applyDict(lang); return; }
+    fetch(I18N.path + lang + ".json").then(function(r){ return r.ok ? r.json() : {}; })
+      .then(function(j){ I18N.strings[lang] = j || {}; applyDict(lang); })
+      .catch(function(){ applyDict(I18N.base); });
   }
   function buildLangSelect(current){
     var sel = document.getElementById("langSelect");
