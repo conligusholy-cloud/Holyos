@@ -260,6 +260,14 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
       document.getElementById('hi').textContent = first ? ('Vítejte, ' + first) : 'Vítejte';
       initCalc();
       initNav();
+      // analytika — portal_view svázané se session i s lead_id
+      try {
+        var sid = localStorage.getItem('compounder.sid');
+        if (!sid) { sid = 's_' + Date.now().toString(36) + Math.random().toString(36).slice(2,8); localStorage.setItem('compounder.sid', sid); }
+        var pl = { sid: sid, event: 'portal_view', props: { lead_id: res.j.id, role: res.j.role }, path: '/portal', lang: res.j.lang || null, ts: Date.now() };
+        if (navigator.sendBeacon) navigator.sendBeacon('/api/compounder/track', new Blob([JSON.stringify(pl)], { type: 'application/json' }));
+        else fetch('/api/compounder/track', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(pl), keepalive: true }).catch(function(){});
+      } catch(e) {}
     })
     .catch(function(){ showDenied('Nepodařilo se ověřit přístup. Zkuste odkaz z e-mailu znovu.'); });
 

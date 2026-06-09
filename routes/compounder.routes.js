@@ -66,11 +66,28 @@ router.post('/register', async (req, res, next) => {
   }
 });
 
-// ─── VEŘEJNÉ: analytika chování (stub) ──────────────────────────────────────
-// Frontend posílá beacon s eventy (page_view, section_view, cta_click, …).
-// TODO (další fáze): ukládat do CompounderEvent + per-user dashboard.
-// Zatím přijmeme a zahodíme, ať web nehází chyby.
-router.post('/track', (req, res) => {
+// ─── VEŘEJNÉ: analytika chování ─────────────────────────────────────────────
+// Frontend posílá beacon s eventy (page_view, section_view, cta_click, portal_view…).
+// register_success nese v props lead_id → spojení session ↔ lead. Nikdy nesmí shodit web.
+router.post('/track', async (req, res) => {
+  try {
+    const b = req.body || {};
+    if (b && b.event && b.sid) {
+      await prisma.compounderEvent.create({
+        data: {
+          sid: String(b.sid).slice(0, 64),
+          event: String(b.event).slice(0, 60),
+          props: (b.props && typeof b.props === 'object') ? b.props : undefined,
+          path: b.path ? String(b.path).slice(0, 300) : null,
+          lang: b.lang ? String(b.lang).slice(0, 10) : null,
+          ua: req.headers['user-agent'] ? String(req.headers['user-agent']).slice(0, 1000) : null,
+          ip: clientIp(req),
+        },
+      });
+    }
+  } catch (e) {
+    // analytika je best-effort
+  }
   res.status(204).end();
 });
 
@@ -93,7 +110,7 @@ router.get('/portal/session', async (req, res, next) => {
       select: { id: true, name: true, role: true, lang: true },
     });
     if (!lead) return res.status(404).json({ ok: false, error: 'Registrace nenalezena.' });
-    return res.json({ ok: true, name: lead.name, role: lead.role, lang: lead.lang });
+    return res.json({ ok: true, id: lead.id, name: lead.name, role: lead.role, lang: lead.lang });
   } catch (err) {
     next(err);
   }
@@ -142,6 +159,76 @@ router.patch('/leads/:id', requireAuth, async (req, res, next) => {
     res.json(lead);
   } catch (err) {
     if (err.code === 'P2025') return res.status(404).json({ error: 'Lead nenalezen' });
+    next(err);
+  }
+});
+
+// ─── ADMIN: cesta konkrétního leadu (per-lead analytika) ────────────────────
+// GET /api/compounder/leads/:id/activity — eventy svázané s leadem přes sid
+// (z register_success) NEBO přímo otagované props.lead_id (portal).
+router.get('/leads/:id/activity', requireAuth, async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'Neplatné ID' });
+    const reg = await prisma.compounderEvent.findFirst({
+      where: { event: 'register_success', props: { path: ['lead_id'], equals: id } },
+      orderBy: { created_at: 'asc' },
+      select: { sid: true },
+    });
+    const or = [{ props: { path: ['lead_id'], equals: id } }];
+    if (reg && reg.sid) or.push({ sid: reg.sid });
+    const events = await prisma.compounderEvent.findMany({
+      where: { OR: or },
+      orderBy: { created_at: 'asc' },
+      take: 500,
+    });
+    const sections = {};
+    let portalOpened = false;
+    let totalMs = 0;
+    events.forEach((e) => {
+      const p = e.props || {};
+      if (e.event === 'section_view' && p.section) sections[p.section] = (sections[p.section] || 0) + 1;
+      if (e.event === 'portal_view') portalOpened = true;
+      if (e.event === 'page_leave' && p.ms) totalMs += Number(p.ms) || 0;
+    });
+    res.json({
+      count: events.length,
+      first: events[0] ? events[0].created_at : null,
+      last: events.length ? events[events.length - 1].created_at : null,
+      portalOpened,
+      totalMs,
+      sections,
+      events: events.map((e) => ({ event: e.event, props: e.props, path: e.path, at: e.created_at })),
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/compounder/analytics/summary?days=30 — souhrnné metriky webu
+router.get('/analytics/summary', requireAuth, async (req, res, next) => {
+  try {
+    const days = Math.min(365, Math.max(1, Number(req.query.days) || 30));
+    const since = new Date(Date.now() - days * 24 * 3600 * 1000);
+    const [events, sessions, registrations, secEvents] = await Promise.all([
+      prisma.compounderEvent.count({ where: { created_at: { gte: since } } }),
+      prisma.compounderEvent.findMany({ where: { created_at: { gte: since } }, select: { sid: true }, distinct: ['sid'] }),
+      prisma.compounderEvent.count({ where: { created_at: { gte: since }, event: 'register_success' } }),
+      prisma.compounderEvent.findMany({ where: { created_at: { gte: since }, event: 'section_view' }, select: { props: true }, take: 5000 }),
+    ]);
+    const sessionCount = sessions.length;
+    const sec = {};
+    secEvents.forEach((e) => { const s = e.props && e.props.section; if (s) sec[s] = (sec[s] || 0) + 1; });
+    const topSections = Object.keys(sec).map((k) => ({ section: k, count: sec[k] })).sort((a, b) => b.count - a.count).slice(0, 8);
+    res.json({
+      days,
+      sessions: sessionCount,
+      events,
+      registrations,
+      conversionPct: sessionCount ? Math.round((registrations / sessionCount) * 1000) / 10 : 0,
+      topSections,
+    });
+  } catch (err) {
     next(err);
   }
 });

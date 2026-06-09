@@ -5388,3 +5388,25 @@ model CompounderLead {
   @@index([email])
   @@map("compounder_leads")
 }
+
+// =============================================================================
+// COMPOUNDER â€” analytika chovĂˇnĂ­ (eventy z webu i Portalu compounder.world)
+// =============================================================================
+// AnonymnĂ­ behaviorĂˇlnĂ­ eventy (sid = session id z prohlĂ­ĹľeÄŤe). register_success
+// nese v props lead_id â†’ spojenĂ­ session â†” lead pro per-lead cestu.
+model CompounderEvent {
+  id         Int      @id @default(autoincrement())
+  sid        String   @db.VarChar(64)
+  event      String   @db.VarChar(60)
+  props      Json?
+  path       String?  @db.VarChar(300)
+  lang       String?  @db.VarChar(10)
+  ua         String?  @db.Text
+  ip         String?  @db.VarChar(64)
+  created_at DateTime @default(now())
+
+  @@index([sid])
+  @@index([event])
+  @@index([created_at])
+  @@map("compounder_events")
+}
