@@ -192,9 +192,41 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
 
     <section class="blk" id="pudorysy">
       <div class="eyebrow" data-i18n="p.plans.eyebrow">Floor plans</div>
-      <h2 data-i18n="p.plans.title">Placement and floor plan</h2>
-      <p class="lead" data-i18n="p.plans.lead">Layout drawings and placement options on the plot.</p>
-      <div class="ph"><span data-i18n="p.plans.ph">Floor plans and layout drawings are in preparation</span> <span class="soon" data-i18n="p.plans.soon">Soon</span><br><span style="font-size:12px" data-i18n="p.plans.ph2">Sent on request per specific location.</span></div>
+      <h2 data-i18n="p.ver.title">Versions, drawings & connections</h2>
+      <p class="lead" data-i18n="p.ver.lead">Three sizes of the Compounder Machine. Each PDF contains the dimensioned drawing and the required connections.</p>
+      <div class="cards2">
+        <div class="tile">
+          <div class="ic" data-i18n="p.ver.v2">Compounder 2</div>
+          <h4>2 606 × 2 015 mm</h4>
+          <table class="t" style="margin:4px 0 14px;"><tbody>
+            <tr><td data-i18n="p.ver.el">Electrical</td><td>3×380 V 50 Hz · C40A · CYKY 5×6</td></tr>
+            <tr><td data-i18n="p.ver.water">Water</td><td>DN25 · 1,2 bar</td></tr>
+            <tr><td data-i18n="p.ver.sewage">Sewage</td><td>DN110</td></tr>
+          </tbody></table>
+          <a class="btn" style="margin:0;font-size:13px;padding:10px 18px;" href="docs/compounder-2.pdf" target="_blank" rel="noopener" onclick="portalDocDl('v2')" data-i18n="p.ver.dl">Download drawing + connections (PDF)</a>
+        </div>
+        <div class="tile">
+          <div class="ic" data-i18n="p.ver.v3">Compounder 3</div>
+          <h4>3 182 × 2 015 mm</h4>
+          <table class="t" style="margin:4px 0 14px;"><tbody>
+            <tr><td data-i18n="p.ver.el">Electrical</td><td>3×380 V 50 Hz · C40A · CYKY 5×6</td></tr>
+            <tr><td data-i18n="p.ver.water">Water</td><td>DN25 · 1,2 bar</td></tr>
+            <tr><td data-i18n="p.ver.sewage">Sewage</td><td>DN110</td></tr>
+          </tbody></table>
+          <a class="btn" style="margin:0;font-size:13px;padding:10px 18px;" href="docs/compounder-3.pdf" target="_blank" rel="noopener" onclick="portalDocDl('v3')" data-i18n="p.ver.dl">Download drawing + connections (PDF)</a>
+        </div>
+        <div class="tile">
+          <div class="ic" data-i18n="p.ver.v4">Compounder 4</div>
+          <h4>4 302 × 2 006 mm</h4>
+          <table class="t" style="margin:4px 0 14px;"><tbody>
+            <tr><td data-i18n="p.ver.el">Electrical</td><td>3×380 V 50 Hz · C63A · CYKY 5×10</td></tr>
+            <tr><td data-i18n="p.ver.water">Water</td><td>DN25 · 1,2 bar</td></tr>
+            <tr><td data-i18n="p.ver.sewage">Sewage</td><td>DN110</td></tr>
+          </tbody></table>
+          <a class="btn" style="margin:0;font-size:13px;padding:10px 18px;" href="docs/compounder-4.pdf" target="_blank" rel="noopener" onclick="portalDocDl('v4')" data-i18n="p.ver.dl">Download drawing + connections (PDF)</a>
+        </div>
+      </div>
+      <p class="note" data-i18n="p.ver.note">Height approx. 2 390 mm. Electricity, water and sewage are brought into one manhole. Final spec per configuration.</p>
     </section>
 
     <section class="blk" id="distribuce">
@@ -218,8 +250,18 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
   "use strict";
   var I18N = window.COMPOUNDER_I18N || { base:"en", path:"i18n/", LANGS:{en:"English"}, strings:{en:{}} };
   var DICT = {};
+  var PORTAL_LEAD_ID = null;
   function pT(k){ return DICT[k] != null ? DICT[k] : ((I18N.strings[I18N.base]||{})[k] || k); }
   window.__pt = pT;
+  // stažení dokumentace verze → analytika (kdo má zájem o kterou velikost)
+  window.portalDocDl = function(ver){
+    try{
+      var sid = localStorage.getItem("compounder.sid") || "";
+      var pl = { sid: sid, event: "doc_download", props: { version: ver, lead_id: PORTAL_LEAD_ID }, path: "/portal", ts: Date.now() };
+      if (navigator.sendBeacon) navigator.sendBeacon("/api/compounder/track", new Blob([JSON.stringify(pl)], { type: "application/json" }));
+      else fetch("/api/compounder/track", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(pl), keepalive: true }).catch(function(){});
+    }catch(e){}
+  };
   function pApply(){
     document.querySelectorAll("[data-i18n]").forEach(function(el){
       var k = el.getAttribute("data-i18n"); var v = pT(k);
@@ -277,6 +319,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
       document.getElementById("gate").style.display = "none";
       document.getElementById("app").style.display = "block";
       var first = (res.j.name || "").split(" ")[0];
+      PORTAL_LEAD_ID = res.j.id;
       pBuildSelect(pDetect());
       pSetLang(pDetect(), function(){
         document.getElementById("hi").textContent = pT("p.hi") + (first ? (", " + first) : "");

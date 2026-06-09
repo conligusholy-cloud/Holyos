@@ -50,7 +50,8 @@ window.COMPOUNDER_I18N = {
       "p.plans.eyebrow":"Floor plans","p.plans.title":"Placement and floor plan","p.plans.lead":"Layout drawings and placement options on the plot.","p.plans.soon":"Soon","p.plans.ph":"Floor plans and layout drawings are in preparation","p.plans.ph2":"Sent on request per specific location.",
       "p.dist.eyebrow":"Distribution model","p.dist.title":"Two ways to build","p.dist.lead":"A Compounder builds a portfolio of assets. A Distributor helps create new Compounders.","p.dist.c":"Compounder","p.dist.ch":"Investor","p.dist.cp":"Acquires Compounder Machines, reinvests cashflow and scales the portfolio. One asset funds the next.","p.dist.d":"Distributor","p.dist.dh":"Multiplier","p.dist.dp":"Operates their own machines, distributes Compounder Machines and helps create new Compounders.","p.dist.note":"We'll discuss specific terms, prices and availability in person — we'll get in touch.",
       "p.push":"We'll notify you about news and availability","p.push.btn":"Enable","p.footer":"COMPOUNDER · Best Series — We build Compounder Machines. · compounder.world",
-      "p.u.years":"years","p.u.months":"months","p.u.loss":"at a loss"
+      "p.u.years":"years","p.u.months":"months","p.u.loss":"at a loss",
+      "p.ver.title":"Versions, drawings & connections","p.ver.lead":"Three sizes of the Compounder Machine. Each PDF contains the dimensioned drawing and the required connections.","p.ver.v2":"Compounder 2","p.ver.v3":"Compounder 3","p.ver.v4":"Compounder 4","p.ver.el":"Electrical","p.ver.water":"Water","p.ver.sewage":"Sewage","p.ver.dl":"Download drawing + connections (PDF)","p.ver.note":"Height approx. 2 390 mm. Electricity, water and sewage are brought into one manhole. Final spec per configuration."
     }
   }
 };

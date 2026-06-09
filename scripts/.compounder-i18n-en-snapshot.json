@@ -180,5 +180,15 @@
  "p.footer": "COMPOUNDER · Best Series — We build Compounder Machines. · compounder.world",
  "p.u.years": "years",
  "p.u.months": "months",
- "p.u.loss": "at a loss"
+ "p.u.loss": "at a loss",
+ "p.ver.title": "Versions, drawings & connections",
+ "p.ver.lead": "Three sizes of the Compounder Machine. Each PDF contains the dimensioned drawing and the required connections.",
+ "p.ver.v2": "Compounder 2",
+ "p.ver.v3": "Compounder 3",
+ "p.ver.v4": "Compounder 4",
+ "p.ver.el": "Electrical",
+ "p.ver.water": "Water",
+ "p.ver.sewage": "Sewage",
+ "p.ver.dl": "Download drawing + connections (PDF)",
+ "p.ver.note": "Height approx. 2 390 mm. Electricity, water and sewage are brought into one manhole. Final spec per configuration."
 }

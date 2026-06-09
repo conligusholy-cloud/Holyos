@@ -2700,6 +2700,7 @@
       if (ev==='card_flip') return '💳 Otočil kartu';
       if (ev==='lang_change') return '🌐 Jazyk → '+cmpEsc(p.lang||'');
       if (ev==='portal_view') return '🔑 Otevřel Portal';
+      if (ev==='doc_download') return '📄 Stáhl výkres: '+cmpEsc(p.version||'');
       if (ev==='install_choice') return '📲 Instalace PWA: '+cmpEsc(p.outcome||'');
       if (ev==='page_leave') return '🚪 Odešel';
       return cmpEsc(ev);
