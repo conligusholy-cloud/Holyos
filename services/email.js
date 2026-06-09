@@ -57,9 +57,49 @@ function escapeHtml(s) {
     .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 
-function renderEmailHtml({ title, body, link, linkLabel = 'Otevřít v HolyOS', preheader }) {
+function renderEmailHtml({ title, body, link, linkLabel = 'Otevřít v HolyOS', preheader, brand }) {
   const appUrl = process.env.APP_URL || '';
   const fullLink = link && link.startsWith('http') ? link : (appUrl ? appUrl.replace(/\/$/, '') + link : link);
+
+  // ── Compounder brand (tmavá grafika webu, zlaté akcenty) ──────────────────
+  if (brand === 'compounder') {
+    const site = 'https://www.compounder.world';
+    const cLink = link && link.startsWith('http') ? link : site + (link || '');
+    const bodyHtml = body ? escapeHtml(body).replace(/\n/g, '<br>') : '';
+    return `<!DOCTYPE html>
+<html lang="cs"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width"><meta name="color-scheme" content="dark"><meta name="supported-color-schemes" content="dark"></head>
+<body style="margin:0;padding:0;background:#08080a;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#e9e9ec;">
+  ${preheader ? `<div style="display:none;max-height:0;overflow:hidden;opacity:0;">${escapeHtml(preheader)}</div>` : ''}
+  <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#08080a;padding:32px 0;">
+    <tr><td align="center">
+      <table width="560" cellpadding="0" cellspacing="0" border="0" style="max-width:560px;background:#141418;border:1px solid #26262c;border-radius:18px;overflow:hidden;">
+        <tr><td style="padding:30px 34px 22px;border-bottom:1px solid #222228;">
+          <div style="font-size:21px;font-weight:700;letter-spacing:.14em;color:#f4f4f6;">COMP<span style="color:#c9a24b;">OU</span>NDER</div>
+          <div style="font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:#8a8a92;margin-top:6px;">Compounder · World</div>
+        </td></tr>
+        <tr><td style="padding:30px 34px 8px;">
+          <div style="font-size:22px;font-weight:600;color:#f4f4f6;line-height:1.3;">${escapeHtml(title || '')}</div>
+        </td></tr>
+        <tr><td style="padding:14px 34px 4px;">
+          ${bodyHtml ? `<div style="font-size:15px;line-height:1.7;color:#b9b9c0;">${bodyHtml}</div>` : ''}
+          ${cLink ? `
+            <div style="margin:26px 0 8px;">
+              <a href="${escapeHtml(cLink)}" style="display:inline-block;padding:14px 26px;background:#c9a24b;color:#0a0a0c;text-decoration:none;border-radius:10px;font-size:14px;font-weight:700;letter-spacing:.01em;">
+                ${escapeHtml(linkLabel || 'Otevřít')}
+              </a>
+            </div>
+            <div style="font-size:12px;color:#6f6f78;margin-top:14px;word-break:break-all;">${escapeHtml(cLink)}</div>` : ''}
+        </td></tr>
+        <tr><td style="padding:24px 34px 30px;border-top:1px solid #222228;margin-top:18px;font-size:11.5px;color:#6f6f78;text-align:center;">
+          COMPOUNDER · Best Series — We build Compounder Machines.<br>
+          <a href="${site}" style="color:#c9a24b;text-decoration:none;">compounder.world</a>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body></html>`;
+  }
+
   return `<!DOCTYPE html>
 <html lang="cs"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width"></head>
 <body style="margin:0;padding:0;background:#f4f4f7;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;color:#333;">
@@ -112,7 +152,7 @@ function renderEmailHtml({ title, body, link, linkLabel = 'Otevřít v HolyOS', 
  * @param {Array}  [args.attachments]   Pole attachments [{ filename, content, contentType }]
  *                                      Použito mj. pro PDF fakturu (Fáze 6).
  */
-async function sendMail({ to, subject, body, from, link, linkLabel, preheader, attachments }) {
+async function sendMail({ to, subject, body, from, fromName, link, linkLabel, preheader, attachments, brand }) {
   if (!to) return { sent: false, skipped: 'no-recipient' };
 
   // 1) Microsoft Graph send-as (preferovaná cesta pokud je `from` zadán a Graph
@@ -121,13 +161,14 @@ async function sendMail({ to, subject, body, from, link, linkLabel, preheader, a
     try {
       const msGraph = require('./ms-graph-client');
       if (msGraph.isConfigured && msGraph.isConfigured()) {
-        const html = renderEmailHtml({ title: subject, body, link, linkLabel, preheader });
+        const html = renderEmailHtml({ title: subject, body, link, linkLabel, preheader, brand });
         await msGraph.sendMailAs(from, {
           to,
           subject: subject || 'HolyOS — notifikace',
           textBody: body ? body + (link ? `\n\n${link}` : '') : '',
           htmlBody: html,
           attachments: Array.isArray(attachments) ? attachments : undefined,
+          fromName: fromName || undefined,
         });
         return { sent: true, via: 'graph', from };
       }
@@ -141,7 +182,9 @@ async function sendMail({ to, subject, body, from, link, linkLabel, preheader, a
   const tx = getTransporter();
   if (!tx) return { sent: false, skipped: 'no-transporter' };
 
-  const fromHeader = from || process.env.SMTP_FROM || process.env.SMTP_USER || 'holyos@localhost';
+  var baseFrom = from || process.env.SMTP_FROM || process.env.SMTP_USER || 'holyos@localhost';
+  // Když je zadané jméno odesílatele a adresa není už ve formátu "Jméno <adresa>", slož ho.
+  const fromHeader = (fromName && baseFrom.indexOf('<') < 0) ? `"${fromName}" <${baseFrom}>` : baseFrom;
 
   try {
     const mailOpts = {
@@ -149,7 +192,7 @@ async function sendMail({ to, subject, body, from, link, linkLabel, preheader, a
       to,
       subject: subject || 'HolyOS — notifikace',
       text: body ? body + (link ? `\n\n${link}` : '') : '',
-      html: renderEmailHtml({ title: subject, body, link, linkLabel, preheader }),
+      html: renderEmailHtml({ title: subject, body, link, linkLabel, preheader, brand }),
     };
     if (Array.isArray(attachments) && attachments.length > 0) {
       mailOpts.attachments = attachments;
