@@ -29,6 +29,21 @@ function parseDate(v) {
   return isNaN(d.getTime()) ? null : d;
 }
 
+// Helper — normalizuje nullable unikátní textová pole materiálu.
+// Prázdný string "" není NULL, takže @unique constraint povolí jen JEDEN
+// záznam s "". Editační formulář posílá barcode: "" pro zboží bez kódu, což
+// po prvním uložení způsobí kolizi (P2002) u všech dalších. Prázdné/whitespace
+// hodnoty proto převedeme na null — NULLů smí být v unikátním sloupci víc.
+function normalizeMaterialBody(body) {
+  const data = { ...body };
+  for (const field of ['barcode']) {
+    if (field in data && typeof data[field] === 'string' && data[field].trim() === '') {
+      data[field] = null;
+    }
+  }
+  return data;
+}
+
 // ─── FIRMY ─────────────────────────────────────────────────────────────────
 
 // GET /api/wh/companies
@@ -179,7 +194,7 @@ router.get('/materials/:id', async (req, res, next) => {
 // POST /api/wh/materials
 router.post('/materials', async (req, res, next) => {
   try {
-    const material = await prisma.material.create({ data: req.body });
+    const material = await prisma.material.create({ data: normalizeMaterialBody(req.body) });
     await logAudit({ action: 'create', entity: 'material', entity_id: material.id, description: `Vytvořen materiál: ${material.name}`, snapshot: makeSnapshot(material), user: req.user });
     res.status(201).json(material);
   } catch (err) {
@@ -191,7 +206,7 @@ router.post('/materials', async (req, res, next) => {
 router.put('/materials/:id', async (req, res, next) => {
   try {
     const before = await prisma.material.findUnique({ where: { id: parseInt(req.params.id) } });
-    const material = await prisma.material.update({ where: { id: parseInt(req.params.id) }, data: req.body });
+    const material = await prisma.material.update({ where: { id: parseInt(req.params.id) }, data: normalizeMaterialBody(req.body) });
     const changes = diffObjects(before, material);
     if (changes) await logAudit({ action: 'update', entity: 'material', entity_id: material.id, description: `Upraven materiál: ${material.name}`, changes, snapshot: makeSnapshot(before), user: req.user });
     res.json(material);
@@ -221,7 +236,7 @@ router.post('/materials/bulk', async (req, res, next) => {
     }
 
     const result = await prisma.material.createMany({
-      data: materials,
+      data: materials.map(normalizeMaterialBody),
       skipDuplicates: true,
     });
 
