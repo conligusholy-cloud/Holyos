@@ -613,11 +613,16 @@ function serveCompounderHtml(req, res) {
   res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
   res.sendFile(path.join(COMPOUNDER_DIR, 'index.html'));
 }
+function serveCompounderPortal(req, res) {
+  res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.sendFile(path.join(COMPOUNDER_DIR, 'portal', 'index.html'));
+}
 
-// (1) Vlastní doména compounder.world → web na rootu domény.
+// (1) Vlastní doména compounder.world → web na rootu domény (+ /portal gated stránka).
 app.use((req, res, next) => {
   if (!COMPOUNDER_HOSTS.includes(reqHostname(req))) return next();
   if (req.path.startsWith('/api/') || req.path.startsWith('/storage/')) return next();
+  if (req.path === '/portal' || req.path === '/portal/') return serveCompounderPortal(req, res);
   compounderStatic(req, res, () => serveCompounderHtml(req, res));
 });
 
@@ -629,6 +634,8 @@ app.get('/compounder', (req, res, next) => {
   next();
 });
 app.get('/compounder/', serveCompounderHtml);
+app.get('/compounder/portal', serveCompounderPortal);
+app.get('/compounder/portal/', serveCompounderPortal);
 app.use('/compounder', compounderStatic);
 
 app.use(express.static(path.join(__dirname, 'public'), staticOpts));

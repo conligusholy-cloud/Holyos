@@ -122,11 +122,15 @@
       }).then(function(r){
         if (!r.ok) throw new Error("bad status");
         return r.json().catch(function(){ return {}; });
-      }).then(function(){
+      }).then(function(resp){
         msg.className = "reg-msg ok"; msg.textContent = window.__t("s7.ok");
-        form.reset();
-        seg && seg.querySelectorAll("label").forEach(function(l,i){ l.classList.toggle("sel", i===0); });
         track("register_success", {role:data.role});
+        if (resp && resp.portalUrl) {
+          setTimeout(function(){ location.href = resp.portalUrl; }, 1400);
+        } else {
+          form.reset();
+          seg && seg.querySelectorAll("label").forEach(function(l,i){ l.classList.toggle("sel", i===0); });
+        }
       }).catch(function(){
         // Backend not wired yet — still acknowledge the lead locally so the UX is complete.
         msg.className = "reg-msg ok"; msg.textContent = window.__t("s7.ok");
