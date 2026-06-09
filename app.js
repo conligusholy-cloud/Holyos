@@ -65,6 +65,7 @@ const hugoRoutes = require('./routes/hugo.routes');
 const velinRoutes = require('./routes/velin.routes');
 const eshopAdminRoutes = require('./routes/eshop-admin.routes');
 const shopRoutes = require('./routes/shop.routes');
+const compounderRoutes = require('./routes/compounder.routes');
 
 // ─── Inicializace aplikace ────────────────────────────────────────────────
 
@@ -524,6 +525,7 @@ app.use('/api/hugo', hugoRoutes);        // Hugo AI servisák — partner login 
 app.use('/api/velin', velinRoutes); // Velín — mobilní aplikace pro řízení dne kolegů
 app.use('/api/eshop-admin', eshopAdminRoutes); // Spare Parts Shop — admin CRUD (interní login)
 app.use('/api/shop', shopRoutes); // Spare Parts Shop — partner-facing API (bestseries.cash)
+app.use('/api/compounder', compounderRoutes); // Compounder — veřejný web compounder.world (registrace leadů, analytika, push)
 
 // ─── Legacy storage proxy (kompatibilita s persistent-storage.js) ──────────
 
@@ -584,6 +586,26 @@ app.use((req, res, next) => {
 // Servíruj frontend — v development režimu bez cache pro snadnější vývoj
 const isDev = process.env.NODE_ENV !== 'production';
 const staticOpts = isDev ? { maxAge: 0, etag: false, lastModified: false } : { maxAge: '1h' };
+
+// Compounder — brandový PWA web na compounder.world (public/compounder).
+// Vlastní statický mount PŘED generickým, aby sw.js a manifest šly s no-cache
+// (jinak by se nainstalovaná PWA neaktualizovala). Stránka má vlastní UI bez
+// HolyOS sidebaru/topbaru. Bare /compounder i /compounder/ → index.html.
+app.use('/compounder', express.static(path.join(__dirname, 'public', 'compounder'), {
+  ...staticOpts,
+  setHeaders(res, filePath) {
+    if (filePath.endsWith('sw.js') || filePath.endsWith('.webmanifest')) {
+      res.setHeader('Cache-Control', 'no-cache');
+    }
+  },
+}));
+function serveCompounderHtml(req, res) {
+  res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.sendFile(path.join(__dirname, 'public', 'compounder', 'index.html'));
+}
+app.get('/compounder', serveCompounderHtml);
+app.get('/compounder/', serveCompounderHtml);
+
 app.use(express.static(path.join(__dirname, 'public'), staticOpts));
 app.use('/modules', express.static(path.join(__dirname, 'modules'), staticOpts));
 app.use('/css', express.static(path.join(__dirname, 'css'), staticOpts));

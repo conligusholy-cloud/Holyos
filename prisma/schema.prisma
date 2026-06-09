@@ -5340,3 +5340,44 @@ model EshopSettings {
 
   @@map("eshop_settings")
 }
+
+// =============================================================================
+// COMPOUNDER — brandový web compounder.world (iniciativa Compounder)
+// =============================================================================
+
+// Lead z registrace na compounder.world. Veřejná registrace (bez auth) —
+// návštěvník vyplní jméno + e-mail a zvolí, zda chce vstoupit jako Compounder
+// (investor) nebo Distributor. Slouží k identifikaci vážných zájemců a vstupu
+// do Compounder Portal. Oddělené od JobApplicant i SalesContact (jiný kontext).
+model CompounderLead {
+  id    Int    @id @default(autoincrement())
+  name  String @db.VarChar(255)
+  email String @db.VarChar(255)
+
+  // compounder | distributor
+  role String @default("compounder") @db.VarChar(20)
+
+  // Preferovaný jazyk z webu (ISO kód: en, cs, de…)
+  lang String? @db.VarChar(10)
+
+  // Stav zpracování leadu
+  status String @default("new") @db.VarChar(30)
+  // new | contacted | qualified | converted | rejected
+
+  // Zdroj a kontext příchodu
+  source     String  @default("web") @db.VarChar(50)
+  ref        String? @db.VarChar(500) // document.referrer
+  ip         String? @db.VarChar(64)
+  user_agent String? @db.Text
+
+  // Volné poznámky obchodníka
+  notes String? @db.Text
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@index([status])
+  @@index([role])
+  @@index([email])
+  @@map("compounder_leads")
+}
