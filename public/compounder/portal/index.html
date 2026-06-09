@@ -251,9 +251,12 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
     }catch(e){}
   };
   function pApply(){
+    var enb = (I18N.strings[I18N.base] || {});
     document.querySelectorAll("[data-i18n]").forEach(function(el){
-      var k = el.getAttribute("data-i18n"); var v = pT(k);
-      if (v != null) el.textContent = v;
+      var k = el.getAttribute("data-i18n");
+      // jen pokud máme skutečný překlad nebo anglickou bázi; jinak nech HTML default (nikdy syrový klíč)
+      var v = (DICT[k] != null && DICT[k] !== "") ? DICT[k] : enb[k];
+      if (v != null && v !== "") el.textContent = v;
     });
   }
   function pDetect(){
