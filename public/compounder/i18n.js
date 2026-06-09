@@ -9,7 +9,8 @@ window.COMPOUNDER_I18N = {
   path: "i18n/",
   // 24 úředních jazyků EU (kód → vlastní název)
   LANGS: {
-    en: "English", cs: "Čeština", de: "Deutsch", sk: "Slovenčina", pl: "Polski"
+    en: "English", cs: "Čeština", de: "Deutsch", sk: "Slovenčina", pl: "Polski",
+    fr: "Français", es: "Español", it: "Italiano", nl: "Nederlands", pt: "Português", ro: "Română"
   },
   strings: {
     en: {
