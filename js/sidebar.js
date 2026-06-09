@@ -334,6 +334,10 @@ function initAiButton() {
     .ai-chat-header { padding: 16px 20px; background: linear-gradient(135deg, rgba(108,92,231,0.15), rgba(9,132,227,0.1));
       border-bottom: 1px solid rgba(108,92,231,0.2); display: flex; align-items: center; justify-content: space-between; }
     .ai-chat-header h3 { font-size: 15px; color: #e8e8f0; margin: 0; }
+    .ai-chat-header-actions { display: flex; align-items: center; gap: 10px; }
+    .ai-chat-restart { background: rgba(108,92,231,0.18); border: 1px solid rgba(108,92,231,0.4); color: #c7bdf5;
+      font-size: 12px; cursor: pointer; padding: 5px 10px; border-radius: 8px; line-height: 1; white-space: nowrap; }
+    .ai-chat-restart:hover { background: rgba(108,92,231,0.32); color: #fff; }
     .ai-chat-close { background: none; border: none; color: #8888aa; font-size: 20px; cursor: pointer; padding: 0 4px; }
     .ai-chat-close:hover { color: #e8e8f0; }
     .ai-chat-body { padding: 16px 20px; overflow-y: auto; flex: 1; }
@@ -672,8 +676,12 @@ function renderAiChat() {
   var chat = document.createElement('div');
   chat.className = 'ai-chat';
 
-  // Header
-  chat.innerHTML = '<div class="ai-chat-header"><h3>🤖 AI Asistent</h3><button class="ai-chat-close" onclick="closeAiChat()">&times;</button></div>';
+  // Header — vždy viditelné tlačítko "Začít znovu" (smaže draft, zůstaneš přihlášený)
+  chat.innerHTML = '<div class="ai-chat-header"><h3>🤖 AI Asistent</h3>' +
+    '<div class="ai-chat-header-actions">' +
+    '<button class="ai-chat-restart" onclick="restartAiChat()" title="Smazat aktuální draft a začít nový požadavek">↺ Začít znovu</button>' +
+    '<button class="ai-chat-close" onclick="closeAiChat()">&times;</button>' +
+    '</div></div>';
 
   // Body
   var body = document.createElement('div');
