@@ -501,6 +501,7 @@
     if (q) params.set('q', q);
     if (cat) params.set('category_id', cat);
     if (onlyEshop) params.set('only_eshop', '1');
+    params.set('limit', '1000'); // načti vše, ať se po rolování zobrazí všechny položky
 
     try {
       const items = await fetchJSON(`${API}/materials?${params}`);
