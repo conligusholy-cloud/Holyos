@@ -845,7 +845,7 @@
 
       const showSnTab = !!(id && m.save_sn_first_scan);
       const showLotTab = !!(id && (m.expirable || m.distinguish_batches));
-      document.getElementById('modal-root').innerHTML = '<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal modal-wide" style="max-height:94vh"><h2>' + (id?'✏️ Upravit zboží':'➕ Nové zboží') + '</h2>' +
+      document.getElementById('modal-root').innerHTML = '<div class="modal-overlay"><div class="modal modal-wide" style="max-height:94vh"><h2>' + (id?'✏️ Upravit zboží':'➕ Nové zboží') + '</h2>' +
         '<div class="sub-tabs" style="margin-bottom:12px">' +
           '<div class="sub-tab mat-tab active" data-tab="general" onclick="switchMatTab(\'general\')">Obecné</div>' +
           '<div class="sub-tab mat-tab" data-tab="technical" onclick="switchMatTab(\'technical\')">Výkres / Tech</div>' +
