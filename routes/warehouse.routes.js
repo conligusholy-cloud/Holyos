@@ -44,6 +44,25 @@ function normalizeMaterialBody(body) {
   return data;
 }
 
+// Vygeneruje unikátní kód materiálu, když uživatel nechá pole "Kód" prázdné
+// (formulář slibuje "Auto"). Formát: MAT-000001 — sekvenčně podle nejvyššího
+// existujícího MAT- čísla. Pole code je @unique a NENÍ nullable, takže prázdný
+// string "" smí být v DB jen jednou; bez tohoto by druhý a další uživatel
+// narazil na P2002 (409 Duplicitní záznam, field: ["code"]).
+async function generateMaterialCode() {
+  const last = await prisma.material.findFirst({
+    where: { code: { startsWith: 'MAT-' } },
+    orderBy: { code: 'desc' },
+    select: { code: true },
+  });
+  let next = 1;
+  if (last) {
+    const n = parseInt(last.code.slice(4), 10);
+    if (!isNaN(n)) next = n + 1;
+  }
+  return 'MAT-' + String(next).padStart(6, '0');
+}
+
 // ─── FIRMY ─────────────────────────────────────────────────────────────────
 
 // GET /api/wh/companies
@@ -194,7 +213,28 @@ router.get('/materials/:id', async (req, res, next) => {
 // POST /api/wh/materials
 router.post('/materials', async (req, res, next) => {
   try {
-    const material = await prisma.material.create({ data: normalizeMaterialBody(req.body) });
+    const data = normalizeMaterialBody(req.body);
+    // Prázdný/chybějící kód → auto-generuj (formulář slibuje "Auto").
+    const autoCode = !data.code || String(data.code).trim() === '';
+    if (autoCode) data.code = await generateMaterialCode();
+
+    // Při souběhu dvou uživatelů může vygenerovaný kód kolidovat (P2002).
+    // Pro auto-kódy zkusíme znovu s dalším pořadovým číslem.
+    let material;
+    for (let attempt = 0; ; attempt++) {
+      try {
+        material = await prisma.material.create({ data });
+        break;
+      } catch (err) {
+        const dupCode = err.code === 'P2002' && (err.meta?.target || []).includes('code');
+        if (autoCode && dupCode && attempt < 5) {
+          data.code = await generateMaterialCode();
+          continue;
+        }
+        throw err;
+      }
+    }
+
     await logAudit({ action: 'create', entity: 'material', entity_id: material.id, description: `Vytvořen materiál: ${material.name}`, snapshot: makeSnapshot(material), user: req.user });
     res.status(201).json(material);
   } catch (err) {
