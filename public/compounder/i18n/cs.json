@@ -310,5 +310,8 @@
  "p.ct.sending": "Odesílám…",
  "p.ct.ok": "Děkujeme — brzy se vám ozveme.",
  "p.ct.err": "Něco se nepovedlo. Zkuste to prosím znovu.",
- "p.ct.errphone": "Zadejte platné telefonní číslo."
+ "p.ct.errphone": "Zadejte platné telefonní číslo.",
+ "p.ct.distcta": "Mám zájem → nechte kontakt",
+ "p.ct.disttitle": "Stát se distributorem",
+ "p.ct.distmsg": "Distribuci řeší majitel Best Series individuálně. Nechte mu prosím své telefonní číslo a on se vám ozve."
 }

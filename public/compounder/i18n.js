@@ -73,7 +73,7 @@ window.COMPOUNDER_I18N = {
       "p.loc.ph":"Street, city…","p.loc.btn":"Assess location","p.loc.loading":"Analysing the location…","p.loc.err":"Something went wrong. Please try again.","p.loc.errshort":"Enter a full address.",
       "p.loc.mscore":"Success score","p.loc.mest":"Est. customers / day","p.loc.mests":"AI estimate","p.loc.mpop":"People within 15 km","p.loc.mreq":"Share to win over","p.loc.mpark":"Parking nearby","p.loc.permonth":"customers / mo","p.loc.none":"none found","p.loc.parkimmediate":"Right by the entrance",
       "p.loc.disc":"Indicative estimate from OpenStreetMap + AI. Always verify on site.",
-      "p.ct.eyebrow":"Contact","p.ct.title":"Talk to the owner of Best Series","p.ct.lead":"Want to discuss it in person? Leave your number and we'll call you back.","p.ct.btn":"Connect with the owner","p.ct.phone":"Phone number","p.ct.send":"Ask us to call you","p.ct.sending":"Sending…","p.ct.ok":"Thank you — we'll call you soon.","p.ct.err":"Something went wrong. Please try again.","p.ct.errphone":"Enter a valid phone number."
+      "p.ct.eyebrow":"Contact","p.ct.title":"Talk to the owner of Best Series","p.ct.lead":"Want to discuss it in person? Leave your number and we'll call you back.","p.ct.btn":"Connect with the owner","p.ct.phone":"Phone number","p.ct.send":"Ask us to call you","p.ct.sending":"Sending…","p.ct.ok":"Thank you — we'll call you soon.","p.ct.err":"Something went wrong. Please try again.","p.ct.errphone":"Enter a valid phone number.","p.ct.distcta":"I'm interested → leave a contact","p.ct.disttitle":"Become a Distributor","p.ct.distmsg":"Distribution is handled personally by the owner of Best Series. Leave your number and he'll get in touch with you."
     }
   }
 };

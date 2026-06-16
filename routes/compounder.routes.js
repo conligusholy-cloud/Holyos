@@ -327,6 +327,7 @@ router.post('/portal/location-assess', async (req, res, next) => {
 const contactSchema = z.object({
   t: z.string().min(1),
   phone: z.string().trim().min(5).max(40),
+  intent: z.enum(['contact', 'distributor']).optional(),
 });
 router.post('/portal/contact-request', async (req, res, next) => {
   try {
@@ -343,8 +344,9 @@ router.post('/portal/contact-request', async (req, res, next) => {
     });
     if (!lead) return res.status(404).json({ ok: false, error: 'Účet nenalezen.' });
 
+    const isDist = parsed.data.intent === 'distributor';
     const stamp = new Date().toISOString().slice(0, 16).replace('T', ' ');
-    const note = '[' + stamp + '] Požádal o telefonický kontakt: ' + phone;
+    const note = '[' + stamp + '] ' + (isDist ? 'Zájem o DISTRIBUCI — kontakt: ' : 'Požádal o telefonický kontakt: ') + phone;
     await prisma.compounderLead.update({
       where: { id: leadId },
       data: { phone: phone, status: 'qualified', notes: lead.notes ? (lead.notes + '\n' + note) : note },
@@ -352,9 +354,9 @@ router.post('/portal/contact-request', async (req, res, next) => {
 
     prisma.compounderEvent.create({ data: {
       sid: 'contact:' + leadId, event: 'contact_request',
-      props: { lead_id: leadId, phone: phone }, path: '/portal', ip: clientIp(req),
+      props: { lead_id: leadId, phone: phone, intent: isDist ? 'distributor' : 'contact' }, path: '/portal', ip: clientIp(req),
     } }).catch(() => {});
-    notifyOwnersContact(lead, phone).catch((e) => console.error('[compounder] contact mail:', e && e.message));
+    notifyOwnersContact(lead, phone, isDist).catch((e) => console.error('[compounder] contact mail:', e && e.message));
     console.log('[compounder] Žádost o kontakt: lead #' + leadId);
     return res.json({ ok: true });
   } catch (err) { next(err); }
@@ -974,16 +976,21 @@ function locationReportFallback(facts, lang) {
 }
 
 // E-mail majitelům Best Series, když lead z portálu požádá o kontakt.
-async function notifyOwnersContact(lead, phone) {
+async function notifyOwnersContact(lead, phone, isDist) {
   const recipients = (process.env.COMPOUNDER_OWNER_EMAILS || 'jan.holy@bestseries.cz,tomas.holy@bestseries.cz')
     .split(',').map((s) => s.trim()).filter(Boolean);
   const from = process.env.COMPOUNDER_MAIL_FROM || process.env.SMTP_FROM || process.env.INVOICE_IMAP_USER;
   const base = process.env.HOLYOS_BASE_URL || 'https://app.holyos.cz';
   const adminUrl = base + '/modules/prodejni-objednavky/index.html';
   const roleLabel = lead.role === 'distributor' ? 'Distributor' : 'Compounder';
-  const subject = 'Compounder: žádost o kontakt — ' + (lead.name || lead.email);
+  const subject = isDist
+    ? ('Compounder: zájem o DISTRIBUCI — ' + (lead.name || lead.email))
+    : ('Compounder: žádost o kontakt — ' + (lead.name || lead.email));
+  const intro = isDist
+    ? ((lead.name || '(bez jména)') + ' (' + roleLabel + ') má zájem o DISTRIBUCI a žádá o osobní kontakt.')
+    : ((lead.name || '(bez jména)') + ' (' + roleLabel + ') žádá, abychom se s ním spojili.');
   const body =
-    (lead.name || '(bez jména)') + ' (' + roleLabel + ') žádá, abychom se s ním spojili.\n\n' +
+    intro + '\n\n' +
     'Telefon: ' + phone + '\n' +
     'E-mail: ' + lead.email + '\n\n' +
     'Telefonní číslo je uložené u profilu kontaktu v administraci leadů — odtud mu můžeš zavolat.';

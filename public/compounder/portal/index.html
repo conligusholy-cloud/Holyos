@@ -421,7 +421,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
       <p class="lead" data-i18n="p.dist.lead">A Compounder builds a portfolio of assets. A Distributor helps create new Compounders.</p>
       <div class="cards2">
         <div class="tile"><div class="ic" data-i18n="p.dist.c">Compounder</div><p data-i18n="p.dist.cp">Acquires Compounder Machines, reinvests cashflow and scales the portfolio. One asset funds the next.</p></div>
-        <div class="tile"><div class="ic" data-i18n="p.dist.d">Distributor</div><p data-i18n="p.dist.dp">Operates their own machines, distributes Compounder Machines and helps create new Compounders.</p></div>
+        <div class="tile" id="distCard" style="cursor:pointer" role="button" tabindex="0"><div class="ic" data-i18n="p.dist.d">Distributor</div><p data-i18n="p.dist.dp">Operates their own machines, distributes Compounder Machines and helps create new Compounders.</p><p class="note" style="margin-top:10px;color:var(--gold-soft)" data-i18n="p.ct.distcta">I'm interested → leave a contact</p></div>
       </div>
       <p class="note" data-i18n="p.dist.note">We'll discuss specific terms, prices and availability in person — we'll get in touch.</p>
     </section>
@@ -454,13 +454,13 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
       </div>
     </section>
 
-    <section class="blk" id="kontakt">
+    <section class="blk" id="kontakt" style="text-align:center">
       <div class="eyebrow" data-i18n="p.ct.eyebrow">Contact</div>
       <h2 data-i18n="p.ct.title">Talk to the owner of Best Series</h2>
-      <p class="lead" data-i18n="p.ct.lead">Want to discuss it in person? Leave your number and we'll call you back.</p>
-      <div class="panel" style="max-width:460px">
+      <p class="lead" data-i18n="p.ct.lead" style="margin:0 auto 26px">Want to discuss it in person? Leave your number and we'll call you back.</p>
+      <div class="panel" style="max-width:460px;margin:0 auto">
         <button type="button" id="ct-open" class="btn btn-gold" style="width:100%;justify-content:center" data-i18n="p.ct.btn">Connect with the owner</button>
-        <div id="ct-form" style="display:none;margin-top:16px">
+        <div id="ct-form" style="display:none;margin-top:16px;text-align:left">
           <div class="row" style="margin-bottom:6px">
             <label data-i18n="p.ct.phone">Phone number</label>
             <div class="unit"><input type="tel" id="ct-phone" placeholder="+420…" autocomplete="tel" style="width:170px"></div>
@@ -485,6 +485,21 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
         <p class="note" id="pwMsg" role="status" style="min-height:18px"></p>
       </form>
       <button type="button" id="pLogout" class="btn" style="width:100%;justify-content:center;margin-top:8px;background:transparent;border:1px solid var(--line);color:var(--muted)" data-i18n="p.acc.logout">Log out</button>
+    </div>
+  </div>
+
+  <div class="acc-modal" id="distModal" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="distTitle">
+    <div class="acc-card">
+      <button type="button" class="acc-x" id="distClose" aria-label="✕">✕</button>
+      <div class="eyebrow" data-i18n="p.dist.eyebrow">Distribution model</div>
+      <h2 id="distTitle" style="font-size:22px;margin:4px 0 8px" data-i18n="p.ct.disttitle">Become a Distributor</h2>
+      <p class="lead" style="margin-bottom:18px" data-i18n="p.ct.distmsg">Distribution is handled personally by the owner of Best Series. Leave your number and he'll get in touch with you.</p>
+      <div class="row" style="margin-bottom:6px">
+        <label data-i18n="p.ct.phone">Phone number</label>
+        <div class="unit"><input type="tel" id="dist-phone" placeholder="+420…" autocomplete="tel"></div>
+      </div>
+      <button type="button" id="dist-send" class="btn btn-gold" style="width:100%;justify-content:center;margin-top:8px" data-i18n="p.ct.send">Ask us to call you</button>
+      <p class="note" id="dist-msg" role="status" style="min-height:18px;margin-top:8px"></p>
     </div>
   </div>
 
@@ -656,7 +671,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
       pSetLang(pDetect(), function(){
         document.getElementById("hi").textContent = pT("p.hi") + (first ? (", " + first) : "");
         var gb = document.getElementById("gearBtn"); if (gb){ gb.setAttribute("aria-label", pT("p.nav.acc")); gb.title = pT("p.nav.acc"); }
-        initCalc(); initNav(); initGallery(); initMilestones(); initLocation(); initContact();
+        initCalc(); initNav(); initGallery(); initMilestones(); initLocation(); initContact(); initDistModal();
       });
       try {
         var sid = localStorage.getItem("compounder.sid");
@@ -885,10 +900,40 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
       if (val.replace(/[^\d]/g, "").length < 6){ msg.style.color = "#e07a6b"; msg.textContent = pT("p.ct.errphone"); return; }
       var tok = ""; try { tok = localStorage.getItem("compounder.portal.token") || ""; } catch(_){}
       send.disabled = true; msg.style.color = ""; msg.textContent = pT("p.ct.sending");
-      fetch("/api/compounder/portal/contact-request", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ t: tok, phone: val }) })
+      fetch("/api/compounder/portal/contact-request", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ t: tok, phone: val, intent: "contact" }) })
         .then(function(r){ return r.json().then(function(j){ return { ok: r.ok, j: j }; }); })
         .then(function(res){
           if (res.ok && res.j && res.j.ok){ msg.style.color = "var(--gold-soft)"; msg.textContent = pT("p.ct.ok"); form.querySelector(".row").style.display = "none"; send.style.display = "none"; }
+          else { msg.style.color = "#e07a6b"; msg.textContent = (res.j && res.j.error) || pT("p.ct.err"); send.disabled = false; }
+        })
+        .catch(function(){ msg.style.color = "#e07a6b"; msg.textContent = pT("p.ct.err"); send.disabled = false; });
+    }
+    if (send) send.addEventListener("click", submit);
+    if (phone) phone.addEventListener("keydown", function(e){ if (e.key === "Enter"){ e.preventDefault(); submit(); } });
+  }
+  function initDistModal(){
+    var card = document.getElementById("distCard");
+    var modal = document.getElementById("distModal");
+    var closeBtn = document.getElementById("distClose");
+    var send = document.getElementById("dist-send");
+    var phone = document.getElementById("dist-phone");
+    var msg = document.getElementById("dist-msg");
+    if (!modal) return;
+    function openM(){ modal.classList.add("open"); modal.setAttribute("aria-hidden", "false"); if (phone) phone.focus(); }
+    function shutM(){ modal.classList.remove("open"); modal.setAttribute("aria-hidden", "true"); }
+    if (card){ card.addEventListener("click", openM); card.addEventListener("keydown", function(e){ if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openM(); } }); }
+    if (closeBtn) closeBtn.addEventListener("click", shutM);
+    modal.addEventListener("click", function(e){ if (e.target === modal) shutM(); });
+    document.addEventListener("keydown", function(e){ if (e.key === "Escape" && modal.classList.contains("open")) shutM(); });
+    function submit(){
+      var val = (phone.value || "").trim();
+      if (val.replace(/[^\d]/g, "").length < 6){ msg.style.color = "#e07a6b"; msg.textContent = pT("p.ct.errphone"); return; }
+      var tok = ""; try { tok = localStorage.getItem("compounder.portal.token") || ""; } catch(_){}
+      send.disabled = true; msg.style.color = ""; msg.textContent = pT("p.ct.sending");
+      fetch("/api/compounder/portal/contact-request", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ t: tok, phone: val, intent: "distributor" }) })
+        .then(function(r){ return r.json().then(function(j){ return { ok: r.ok, j: j }; }); })
+        .then(function(res){
+          if (res.ok && res.j && res.j.ok){ msg.style.color = "var(--gold-soft)"; msg.textContent = pT("p.ct.ok"); if (phone) phone.disabled = true; send.style.display = "none"; }
           else { msg.style.color = "#e07a6b"; msg.textContent = (res.j && res.j.error) || pT("p.ct.err"); send.disabled = false; }
         })
         .catch(function(){ msg.style.color = "#e07a6b"; msg.textContent = pT("p.ct.err"); send.disabled = false; });
