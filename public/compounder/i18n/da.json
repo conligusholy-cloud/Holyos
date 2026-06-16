@@ -296,5 +296,6 @@
  "p.loc.none": "ingen fundet",
  "p.loc.disc": "Vejledende estimat fra OpenStreetMap + AI. Verificér altid på stedet.",
  "install.ios": "Sådan installerer du appen: tryk på Del-knappen nederst på skærmen, og vælg derefter Føj til hjemmeskærm.",
- "install.iosSafari": "På iPhone kan appen kun installeres i Safari. Åbn compounder.world i Safari, tryk på Del-knappen, og vælg derefter Føj til hjemmeskærm."
+ "install.iosSafari": "På iPhone kan appen kun installeres i Safari. Åbn compounder.world i Safari, tryk på Del-knappen, og vælg derefter Føj til hjemmeskærm.",
+ "p.loc.parkimmediate": "Lige ved indgangen"
 }

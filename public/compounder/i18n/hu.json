@@ -296,5 +296,6 @@
  "p.loc.none": "nem található",
  "p.loc.disc": "Tájékoztató becslés az OpenStreetMap + AI alapján. Mindig ellenőrizze a helyszínen.",
  "install.ios": "Az alkalmazás telepítéséhez: érintse meg a Megosztás gombot a képernyő alján, majd válassza a Főképernyőre adás lehetőséget.",
- "install.iosSafari": "iPhone-on az alkalmazás kizárólag Safariban telepíthető. Nyissa meg a compounder.world oldalt Safariban, érintse meg a Megosztás gombot, majd válassza a Főképernyőre adás lehetőséget."
+ "install.iosSafari": "iPhone-on az alkalmazás kizárólag Safariban telepíthető. Nyissa meg a compounder.world oldalt Safariban, érintse meg a Megosztás gombot, majd válassza a Főképernyőre adás lehetőséget.",
+ "p.loc.parkimmediate": "Közvetlenül a bejáratnál"
 }

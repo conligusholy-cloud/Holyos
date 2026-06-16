@@ -296,5 +296,6 @@
  "p.loc.none": "nie znaleziono",
  "p.loc.disc": "Szacunek orientacyjny na podstawie OpenStreetMap + AI. Zawsze weryfikuj na miejscu.",
  "install.ios": "Aby zainstalować aplikację: naciśnij przycisk Udostępnij na dole ekranu, a następnie wybierz Dodaj do ekranu głównego.",
- "install.iosSafari": "Na iPhonie aplikację można zainstalować wyłącznie w Safari. Otwórz compounder.world w Safari, naciśnij przycisk Udostępnij, a następnie wybierz Dodaj do ekranu głównego."
+ "install.iosSafari": "Na iPhonie aplikację można zainstalować wyłącznie w Safari. Otwórz compounder.world w Safari, naciśnij przycisk Udostępnij, a następnie wybierz Dodaj do ekranu głównego.",
+ "p.loc.parkimmediate": "Tuż przy wejściu"
 }

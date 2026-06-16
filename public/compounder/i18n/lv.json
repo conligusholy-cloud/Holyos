@@ -296,5 +296,6 @@
  "p.loc.none": "nav atrasts",
  "p.loc.disc": "Indikatīvs aprēķins no OpenStreetMap + AI. Vienmēr pārbaudiet klātienē.",
  "install.ios": "Lai instalētu lietotni: pieskarieties pogai Kopīgot ekrāna apakšā, pēc tam izvēlieties Pievienot sākuma ekrānam.",
- "install.iosSafari": "iPhone ierīcē lietotni var instalēt tikai Safari pārlūkā. Atveriet compounder.world Safari pārlūkā, pieskarieties pogai Kopīgot, pēc tam izvēlieties Pievienot sākuma ekrānam."
+ "install.iosSafari": "iPhone ierīcē lietotni var instalēt tikai Safari pārlūkā. Atveriet compounder.world Safari pārlūkā, pieskarieties pogai Kopīgot, pēc tam izvēlieties Pievienot sākuma ekrānam.",
+ "p.loc.parkimmediate": "Tieši pie ieejas"
 }

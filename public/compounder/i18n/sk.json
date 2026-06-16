@@ -296,5 +296,6 @@
  "p.loc.none": "žiadne nenájdené",
  "p.loc.disc": "Orientačný odhad z OpenStreetMap + AI. Vždy overte na mieste.",
  "install.ios": "Ak chcete nainštalovať aplikáciu: klepnite na tlačidlo Zdieľať v dolnej časti obrazovky a vyberte Pridať na plochu.",
- "install.iosSafari": "Na iPhone je možné aplikáciu nainštalovať iba cez Safari. Otvorte compounder.world v Safari, klepnite na tlačidlo Zdieľať a vyberte Pridať na plochu."
+ "install.iosSafari": "Na iPhone je možné aplikáciu nainštalovať iba cez Safari. Otvorte compounder.world v Safari, klepnite na tlačidlo Zdieľať a vyberte Pridať na plochu.",
+ "p.loc.parkimmediate": "Priamo pri vchode"
 }

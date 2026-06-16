@@ -301,5 +301,6 @@
  "p.loc.mpark": "Parking nearby",
  "p.loc.permonth": "customers / mo",
  "p.loc.none": "none found",
+ "p.loc.parkimmediate": "Right by the entrance",
  "p.loc.disc": "Indicative estimate from OpenStreetMap + AI. Always verify on site."
 }

@@ -296,5 +296,6 @@
  "p.loc.none": "nenhum encontrado",
  "p.loc.disc": "Estimativa indicativa baseada no OpenStreetMap + IA. Verifique sempre no local.",
  "install.ios": "Para instalar a aplicação: toque no botão Partilhar na parte inferior do ecrã e, em seguida, escolha Adicionar ao ecrã principal.",
- "install.iosSafari": "No iPhone, a aplicação só pode ser instalada no Safari. Abra compounder.world no Safari, toque no botão Partilhar e, em seguida, escolha Adicionar ao ecrã principal."
+ "install.iosSafari": "No iPhone, a aplicação só pode ser instalada no Safari. Abra compounder.world no Safari, toque no botão Partilhar e, em seguida, escolha Adicionar ao ecrã principal.",
+ "p.loc.parkimmediate": "Mesmo à entrada"
 }

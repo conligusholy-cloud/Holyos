@@ -294,6 +294,7 @@
  "p.loc.mpark": "Parkování v okolí",
  "p.loc.permonth": "zákazníků / měs.",
  "p.loc.none": "nenalezeno",
+ "p.loc.parkimmediate": "Přímo u vchodu",
  "p.loc.disc": "Orientační odhad z OpenStreetMap + AI. Vždy ověřte přímo na místě.",
  "install.ios": "Chcete-li nainstalovat aplikaci: klepněte na tlačítko Sdílet v dolní části obrazovky a vyberte Přidat na plochu.",
  "install.iosSafari": "Na iPhonu lze aplikaci nainstalovat pouze v Safari. Otevřete compounder.world v Safari, klepněte na tlačítko Sdílet a vyberte Přidat na plochu."

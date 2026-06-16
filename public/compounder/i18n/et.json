@@ -296,5 +296,6 @@
  "p.loc.none": "ühtegi ei leitud",
  "p.loc.disc": "Indikatiivne hinnang OpenStreetMap + AI põhjal. Kontrolli alati kohapeal.",
  "install.ios": "Rakenduse installimiseks: puudutage ekraani allosas olevat jagamisnuppu, seejärel valige Lisa avakuvale.",
- "install.iosSafari": "iPhone'is saab rakenduse installida ainult Safaris. Avage compounder.world Safaris, puudutage jagamisnuppu, seejärel valige Lisa avakuvale."
+ "install.iosSafari": "iPhone'is saab rakenduse installida ainult Safaris. Avage compounder.world Safaris, puudutage jagamisnuppu, seejärel valige Lisa avakuvale.",
+ "p.loc.parkimmediate": "Otse sissepääsu juures"
 }

@@ -264,19 +264,23 @@ router.post('/portal/location-assess', async (req, res, next) => {
     const geo = await geocodeAddress(parsed.data.address);
     if (!geo) return res.status(422).json({ ok: false, error: 'Adresu se nepodařilo najít.' });
 
-    // 2) parkoviště poblíž + populace v okruhu 15 km (OSM Overpass)
-    const [parking, pop] = await Promise.all([
-      osmParking(geo.lat, geo.lon),
+    // 2) parkoviště + okolní podniky + populace v okruhu 15 km (OSM Overpass)
+    const [near, pop] = await Promise.all([
+      osmNearby(geo.lat, geo.lon),
       osmPopulation(geo.lat, geo.lon, 15000),
     ]);
+    const parking = near.parking, anchors = near.anchors;
 
     const monthlyCustomers = Math.round(perDay * 30.4);
     const requiredPct = (pop.population > 0) ? (monthlyCustomers / pop.population * 100) : null;
+    // U velkého obchodu (do 150 m) nebo s parkovištěm do 30 m je parkování bezprostřední.
+    const parkingImmediate = (parking.nearest_m != null && parking.nearest_m <= 30) || (anchors.nearest_retail_m != null && anchors.nearest_retail_m <= 150);
 
     const facts = {
       address: geo.display_name, lat: geo.lat, lon: geo.lon,
-      parking_count: parking.count, nearest_parking_m: parking.nearest_m,
+      parking_count: parking.count, nearest_parking_m: parking.nearest_m, parking_immediate: parkingImmediate,
       population_15km: pop.population, places: pop.places.slice(0, 12),
+      anchors: anchors.list, anchor_count: anchors.count, nearest_retail_m: anchors.nearest_retail_m,
       per_day: perDay, monthly_customers: monthlyCustomers,
       required_pct: requiredPct == null ? null : Number(requiredPct.toFixed(2)),
     };
@@ -708,18 +712,36 @@ function haversineM(lat1, lon1, lat2, lon2) {
   const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * toR) * Math.cos(lat2 * toR) * Math.sin(dLon / 2) ** 2;
   return Math.round(R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
 }
-async function osmParking(lat, lon) {
-  const q = '[out:json][timeout:20];(nwr[amenity=parking](around:600,' + lat + ',' + lon + '););out center 40;';
+// Jedním dotazem: parkoviště + okolní podniky generující provoz (anchors).
+async function osmNearby(lat, lon) {
+  const q = '[out:json][timeout:25];(' +
+    'nwr[amenity=parking](around:600,' + lat + ',' + lon + ');' +
+    'nwr[shop~"^(supermarket|hypermarket|mall|department_store|convenience|wholesale)$"](around:700,' + lat + ',' + lon + ');' +
+    'nwr[amenity~"^(marketplace|fuel)$"](around:700,' + lat + ',' + lon + ');' +
+    ');out center 80;';
   const j = await overpassQuery(q);
   const els = (j && j.elements) || [];
-  let nearest = null;
+  let parkCount = 0, parkNearest = null, nearestRetail = null;
+  const anchors = [];
+  const retail = { supermarket: 1, hypermarket: 1, mall: 1, department_store: 1, convenience: 1, wholesale: 1 };
   els.forEach((e) => {
-    const ll = e.center || e;
-    if (ll.lat == null) return;
+    const ll = e.center || e; if (ll.lat == null) return;
+    const t = e.tags || {};
     const d = haversineM(lat, lon, ll.lat, ll.lon);
-    if (nearest == null || d < nearest) nearest = d;
+    if (t.amenity === 'parking') {
+      parkCount++;
+      if (parkNearest == null || d < parkNearest) parkNearest = d;
+      return;
+    }
+    const type = t.shop || t.amenity || '?';
+    anchors.push({ name: t.name || t.brand || type, type: type, dist: d });
+    if (retail[t.shop] && (nearestRetail == null || d < nearestRetail)) nearestRetail = d;
   });
-  return { count: els.length, nearest_m: nearest };
+  anchors.sort((a, b) => a.dist - b.dist);
+  return {
+    parking: { count: parkCount, nearest_m: parkNearest },
+    anchors: { list: anchors.slice(0, 15), count: anchors.length, nearest_retail_m: nearestRetail },
+  };
 }
 async function osmPopulation(lat, lon, radius) {
   const q = '[out:json][timeout:25];node(around:' + radius + ',' + lat + ',' + lon + ')[place][population];out 100;';
@@ -742,7 +764,7 @@ async function locationReportAI(facts, lang) {
     const Anthropic = require('@anthropic-ai/sdk');
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
     const model = process.env.COMPOUNDER_LOCATION_MODEL || 'claude-sonnet-4-6';
-    const sys = 'Jsi analytik lokality pro venkovní samoobslužnou prádelnu (Compounder Machine). Z dodaných dat napiš stručné, věcné zhodnocení místa. Odpověz POUZE platným JSON bez markdownu ve tvaru: {"verdict":"<2-4 slova>","scorePct":<celé 0-100>,"summary":"<2-4 věty>","factors":[{"label":"<krátké>","value":"<krátké>","good":<true|false>}],"recommendation":"<1-2 věty>"}. Klíčový faktor je required_pct = jaké procento populace v okruhu musí přijít prát; čím nižší, tím lépe (<0,5 % výborné, 0,5-1 % dobré, 1-2 % střední, 2-5 % náročné, >5 % velmi náročné). Parkoviště poblíž je zásadní plus. Pokud population_15km = 0, jde o chybějící data z OpenStreetMap — uveď to a buď opatrný. Populace z OSM je orientační. Piš v jazyce s kódem: ' + lang + '.';
+    const sys = 'Jsi analytik lokality pro venkovní samoobslužnou prádelnu (Compounder Machine). Z dodaných dat napiš stručné, věcné zhodnocení místa. Odpověz POUZE platným JSON bez markdownu ve tvaru: {"verdict":"<2-4 slova>","scorePct":<celé 0-100>,"summary":"<2-4 věty>","factors":[{"label":"<krátké>","value":"<krátké>","good":<true|false>}],"recommendation":"<1-2 věty>"}. Klíčový faktor je required_pct = jaké procento populace v okruhu musí přijít prát; čím nižší, tím lépe (<0,5 % výborné, 0,5-1 % dobré, 1-2 % střední, 2-5 % náročné, >5 % velmi náročné). V datech je i seznam okolních podniků (anchors) s typem a vzdáleností — supermarkety, hypermarkety, obchodní domy, tržnice a čerpací stanice generují denní provoz lidí; odhadni z nich potenciální denní průtok zákazníků kolem místa a zohledni ho ve skóre (vyšší provoz = vyšší šance) a přidej faktor o provozu/návštěvnosti v okolí. Parkoviště poblíž je zásadní plus; pokud parking_immediate je true (místo je přímo u velkého obchodu), ber parkování jako bezprostřední (u vchodu). Pokud population_15km = 0, jde o chybějící data z OpenStreetMap — uveď to a buď opatrný. Populace z OSM je orientační. Piš v jazyce s kódem: ' + lang + '.';
     const usr = 'Data o místě (JSON):\n' + JSON.stringify(facts);
     const msg = await client.messages.create({ model, max_tokens: 900, system: sys, messages: [{ role: 'user', content: usr }] });
     let text = (msg && msg.content && msg.content[0] && msg.content[0].text) || '';

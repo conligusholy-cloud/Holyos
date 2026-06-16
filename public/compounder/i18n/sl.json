@@ -296,5 +296,6 @@
  "p.loc.none": "ni najdenih",
  "p.loc.disc": "Okvirna ocena iz OpenStreetMap + AI. Vedno preverite na kraju samem.",
  "install.ios": "Za namestitev aplikacije: tapnite gumb Deli na dnu zaslona, nato izberite Dodaj na začetni zaslon.",
- "install.iosSafari": "Na iPhonu je aplikacijo mogoče namestiti samo v brskalniku Safari. Odprite compounder.world v brskalniku Safari, tapnite gumb Deli, nato izberite Dodaj na začetni zaslon."
+ "install.iosSafari": "Na iPhonu je aplikacijo mogoče namestiti samo v brskalniku Safari. Odprite compounder.world v brskalniku Safari, tapnite gumb Deli, nato izberite Dodaj na začetni zaslon.",
+ "p.loc.parkimmediate": "Tik ob vhodu"
 }

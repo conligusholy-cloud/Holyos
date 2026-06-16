@@ -296,5 +296,6 @@
  "p.loc.none": "ei löydetty",
  "p.loc.disc": "Alustava arvio OpenStreetMap + AI. Varmista aina paikan päällä.",
  "install.ios": "Asenna sovellus: napauta näytön alareunassa olevaa Jaa-painiketta ja valitse Lisää Koti-näytölle.",
- "install.iosSafari": "iPhonella sovellus voidaan asentaa vain Safarissa. Avaa compounder.world Safarissa, napauta Jaa-painiketta ja valitse Lisää Koti-näytölle."
+ "install.iosSafari": "iPhonella sovellus voidaan asentaa vain Safarissa. Avaa compounder.world Safarissa, napauta Jaa-painiketta ja valitse Lisää Koti-näytölle.",
+ "p.loc.parkimmediate": "Heti sisäänkäynnin vieressä"
 }

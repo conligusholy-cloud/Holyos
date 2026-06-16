@@ -296,5 +296,6 @@
  "p.loc.none": "geen gevonden",
  "p.loc.disc": "Indicatieve schatting op basis van OpenStreetMap + AI. Verifieer altijd ter plaatse.",
  "install.ios": "Om de app te installeren: tik op de Deel-knop onderaan het scherm en kies vervolgens Zet op beginscherm.",
- "install.iosSafari": "Op iPhone kan de app alleen worden geïnstalleerd via Safari. Open compounder.world in Safari, tik op de Deel-knop en kies vervolgens Zet op beginscherm."
+ "install.iosSafari": "Op iPhone kan de app alleen worden geïnstalleerd via Safari. Open compounder.world in Safari, tik op de Deel-knop en kies vervolgens Zet op beginscherm.",
+ "p.loc.parkimmediate": "Direct bij de ingang"
 }

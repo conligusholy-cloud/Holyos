@@ -821,7 +821,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
     setText("loc-pop", (f.population_15km || 0).toLocaleString(lng));
     setText("loc-req", f.required_pct == null ? "—" : (f.required_pct + " %"));
     setText("loc-reqs", (f.monthly_customers || 0).toLocaleString(lng) + " " + pT("p.loc.permonth"));
-    setText("loc-park", f.parking_count > 0 ? (f.parking_count + (f.nearest_parking_m != null ? (" · " + f.nearest_parking_m + " m") : "")) : pT("p.loc.none"));
+    setText("loc-park", f.parking_immediate ? pT("p.loc.parkimmediate") : (f.parking_count > 0 ? (f.parking_count + (f.nearest_parking_m != null ? (" · " + f.nearest_parking_m + " m") : "")) : pT("p.loc.none")));
     document.getElementById("loc-summary").textContent = r.summary || "";
     var fc = document.getElementById("loc-factors"); fc.innerHTML = "";
     (r.factors || []).forEach(function(x){

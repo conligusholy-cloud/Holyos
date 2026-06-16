@@ -296,5 +296,6 @@
  "p.loc.none": "gan ceann ar bith",
  "p.loc.disc": "Meastachán táscach ó OpenStreetMap + AI. Fíoraigh i gcónaí ar an láthair.",
  "install.ios": "Chun an aip a shuiteáil: buail an cnaipe Comhroinnt ag bun an scáileáin, ansin roghnaigh Cuir le Scáileán Baile.",
- "install.iosSafari": "Ar iPhone ní féidir an aip a shuiteáil ach in Safari. Oscail compounder.world in Safari, buail an cnaipe Comhroinnt, ansin roghnaigh Cuir le Scáileán Baile."
+ "install.iosSafari": "Ar iPhone ní féidir an aip a shuiteáil ach in Safari. Oscail compounder.world in Safari, buail an cnaipe Comhroinnt, ansin roghnaigh Cuir le Scáileán Baile.",
+ "p.loc.parkimmediate": "Díreach ag an mbealach isteach"
 }

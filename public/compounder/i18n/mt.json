@@ -296,5 +296,6 @@
  "p.loc.none": "ma nstab xejn",
  "p.loc.disc": "Stima indikattiva minn OpenStreetMap + AI. Dejjem ivverifika fuq il-post.",
  "install.ios": "Biex tinstalla l-app: agħfas il-buttuna Share fil-qiegħ tal-iskrin, imbagħad agħżel Add to Home Screen.",
- "install.iosSafari": "Fuq iPhone l-app tista' tiġi installata biss permezz ta' Safari. Iftaħ compounder.world f'Safari, agħfas il-buttuna Share, imbagħad agħżel Add to Home Screen."
+ "install.iosSafari": "Fuq iPhone l-app tista' tiġi installata biss permezz ta' Safari. Iftaħ compounder.world f'Safari, agħfas il-buttuna Share, imbagħad agħżel Add to Home Screen.",
+ "p.loc.parkimmediate": "Ħdejn id-daħla"
 }

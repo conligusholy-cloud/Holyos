@@ -296,5 +296,6 @@
  "p.loc.none": "niciunul găsit",
  "p.loc.disc": "Estimare orientativă bazată pe OpenStreetMap + AI. Verificați întotdeauna la fața locului.",
  "install.ios": "Pentru a instala aplicația: apasă butonul Share din partea de jos a ecranului, apoi alege Add to Home Screen.",
- "install.iosSafari": "Pe iPhone, aplicația poate fi instalată doar în Safari. Deschide compounder.world în Safari, apasă butonul Share, apoi alege Add to Home Screen."
+ "install.iosSafari": "Pe iPhone, aplicația poate fi instalată doar în Safari. Deschide compounder.world în Safari, apasă butonul Share, apoi alege Add to Home Screen.",
+ "p.loc.parkimmediate": "Chiar la intrare"
 }

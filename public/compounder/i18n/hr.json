@@ -296,5 +296,6 @@
  "p.loc.none": "nije pronađeno",
  "p.loc.disc": "Okvirna procjena temeljena na OpenStreetMap + AI. Uvijek provjerite na licu mjesta.",
  "install.ios": "Za instalaciju aplikacije: dodirnite gumb Dijeli na dnu zaslona, zatim odaberite Dodaj na početni zaslon.",
- "install.iosSafari": "Na iPhoneu aplikacija se može instalirati samo u Safariju. Otvorite compounder.world u Safariju, dodirnite gumb Dijeli, zatim odaberite Dodaj na početni zaslon."
+ "install.iosSafari": "Na iPhoneu aplikacija se može instalirati samo u Safariju. Otvorite compounder.world u Safariju, dodirnite gumb Dijeli, zatim odaberite Dodaj na početni zaslon.",
+ "p.loc.parkimmediate": "Odmah uz ulaz"
 }

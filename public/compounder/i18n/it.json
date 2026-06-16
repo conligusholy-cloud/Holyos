@@ -296,5 +296,6 @@
  "p.loc.none": "nessuno trovato",
  "p.loc.disc": "Stima indicativa basata su OpenStreetMap + AI. Verificare sempre sul posto.",
  "install.ios": "Per installare l'app: tocca il pulsante Condividi nella parte inferiore dello schermo, quindi scegli Aggiungi alla schermata Home.",
- "install.iosSafari": "Su iPhone l'app può essere installata solo tramite Safari. Apri compounder.world in Safari, tocca il pulsante Condividi, quindi scegli Aggiungi alla schermata Home."
+ "install.iosSafari": "Su iPhone l'app può essere installata solo tramite Safari. Apri compounder.world in Safari, tocca il pulsante Condividi, quindi scegli Aggiungi alla schermata Home.",
+ "p.loc.parkimmediate": "Subito all'ingresso"
 }
