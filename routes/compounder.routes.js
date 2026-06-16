@@ -357,6 +357,7 @@ router.post('/portal/contact-request', async (req, res, next) => {
       props: { lead_id: leadId, phone: phone, intent: isDist ? 'distributor' : 'contact' }, path: '/portal', ip: clientIp(req),
     } }).catch(() => {});
     notifyOwnersContact(lead, phone, isDist).catch((e) => console.error('[compounder] contact mail:', e && e.message));
+    notifyContactUsers(lead, phone, isDist).catch((e) => console.error('[compounder] contact notif:', e && e.message));
     console.log('[compounder] Žádost o kontakt: lead #' + leadId);
     return res.json({ ok: true });
   } catch (err) { next(err); }
@@ -999,6 +1000,38 @@ async function notifyOwnersContact(lead, phone, isDist) {
       to: to, from: from, fromName: compounderMailFromName(), brand: 'compounder',
       subject: subject, body: body, link: adminUrl, linkLabel: 'Otevřít kontakt',
     }).catch((e) => console.error('[compounder] owner mail ' + to + ':', e && e.message));
+  }
+}
+
+// In-app notifikace (zvonek + Velín) majitelům při žádosti o kontakt.
+async function notifyContactUsers(lead, phone, isDist) {
+  let userIds = [];
+  const envIds = (process.env.COMPOUNDER_NOTIFY_USER_IDS || '')
+    .split(',').map((s) => Number(s.trim())).filter((n) => Number.isInteger(n) && n > 0);
+  if (envIds.length) {
+    userIds = envIds;
+  } else {
+    const ownerEmails = (process.env.COMPOUNDER_OWNER_EMAILS || 'jan.holy@bestseries.cz,tomas.holy@bestseries.cz')
+      .split(',').map((s) => s.trim()).filter(Boolean);
+    const persons = await prisma.person.findMany({
+      where: { user_id: { not: null }, OR: ownerEmails.map((e) => ({ email: { equals: e, mode: 'insensitive' } })) },
+      select: { user_id: true },
+    });
+    userIds = persons.map((p) => p.user_id).filter(Boolean);
+  }
+  if (!userIds.length) {
+    const admins = await prisma.user.findMany({ where: { is_super_admin: true }, select: { id: true } });
+    userIds = admins.map((u) => u.id);
+  }
+  const roleLabel = lead.role === 'distributor' ? 'Distributor' : 'Compounder';
+  const title = isDist ? ('📞 Zájem o distribuci: ' + (lead.name || lead.email)) : ('📞 Žádost o kontakt: ' + (lead.name || lead.email));
+  const body = roleLabel + ' · tel: ' + phone;
+  for (const userId of userIds) {
+    await createNotification({
+      userId, type: 'compounder_contact', title, body,
+      link: '/modules/prodejni-objednavky/index.html',
+      meta: { lead_id: lead.id, phone: phone, intent: isDist ? 'distributor' : 'contact' },
+    }).catch(() => {});
   }
 }
 
