@@ -541,6 +541,10 @@
 
   function renderMessageBody(text, retrieved) {
     let s = escapeHtml(text);
+    // Markdown odkazy [text](url) → klikatelné, otevřít v novém okně.
+    // Musí běžet PŘED citacemi [N], aby se label nepopral s citační notací.
+    s = s.replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, (m, label, url) =>
+      `<a href="${url}" target="_blank" rel="noopener noreferrer">${label}</a>`);
     // Citace [1], [2]… → klikatelné (interní handling)
     s = s.replace(/\[(\d+)\]/g, (m, n) => {
       const idx = parseInt(n, 10);

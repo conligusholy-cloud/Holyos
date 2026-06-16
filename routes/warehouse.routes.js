@@ -125,12 +125,103 @@ router.delete('/companies/:id', async (req, res, next) => {
   }
 });
 
+// ─── KATEGORIE ZBOŽÍ ───────────────────────────────────────────────────────
+// Stromová hierarchie (osnova) — spravuje se v záložce Kategorie modulu
+// Nákup a sklad, zboží se zařazuje přes Material.category_id.
+
+// Vrátí množinu ID kategorie + všech jejích potomků (pro filtr podstromem).
+async function collectCategorySubtreeIds(rootId) {
+  const all = await prisma.materialCategory.findMany({ select: { id: true, parent_id: true } });
+  const byParent = new Map();
+  for (const c of all) {
+    if (!byParent.has(c.parent_id)) byParent.set(c.parent_id, []);
+    byParent.get(c.parent_id).push(c.id);
+  }
+  const ids = [];
+  const queue = [rootId];
+  while (queue.length) {
+    const id = queue.shift();
+    ids.push(id);
+    for (const childId of byParent.get(id) || []) queue.push(childId);
+  }
+  return ids;
+}
+
+// GET /api/wh/categories — plochý seznam (strom skládá frontend podle parent_id)
+router.get('/categories', async (req, res, next) => {
+  try {
+    const categories = await prisma.materialCategory.findMany({
+      include: { _count: { select: { materials: true, children: true } } },
+      orderBy: [{ sort_order: 'asc' }, { name: 'asc' }],
+    });
+    res.json(categories);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/wh/categories
+router.post('/categories', async (req, res, next) => {
+  try {
+    const { name, parent_id, description, sort_order } = req.body;
+    if (!name || !String(name).trim()) {
+      return res.status(400).json({ error: 'Název kategorie je povinný' });
+    }
+    const category = await prisma.materialCategory.create({
+      data: {
+        name: String(name).trim(),
+        parent_id: parent_id ? parseInt(parent_id) : null,
+        description: description || null,
+        sort_order: Number.isFinite(parseInt(sort_order)) ? parseInt(sort_order) : 0,
+      },
+    });
+    res.status(201).json(category);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// PUT /api/wh/categories/:id
+router.put('/categories/:id', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id);
+    const { name, parent_id, description, sort_order } = req.body;
+    // Ochrana proti cyklu: kategorie nesmí být zanořená sama do sebe / svého podstromu
+    if (parent_id) {
+      const subtreeIds = await collectCategorySubtreeIds(id);
+      if (subtreeIds.includes(parseInt(parent_id))) {
+        return res.status(400).json({ error: 'Kategorii nelze zanořit do jejího vlastního podstromu' });
+      }
+    }
+    const data = {};
+    if (name !== undefined) data.name = String(name).trim();
+    if (parent_id !== undefined) data.parent_id = parent_id ? parseInt(parent_id) : null;
+    if (description !== undefined) data.description = description || null;
+    if (sort_order !== undefined) data.sort_order = parseInt(sort_order) || 0;
+    const category = await prisma.materialCategory.update({ where: { id }, data });
+    res.json(category);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// DELETE /api/wh/categories/:id — podkategorie se přesunou na root,
+// zboží zůstane nezařazené (FK má ON DELETE SET NULL)
+router.delete('/categories/:id', async (req, res, next) => {
+  try {
+    await prisma.materialCategory.delete({ where: { id: parseInt(req.params.id) } });
+    res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // ─── MATERIÁLY ─────────────────────────────────────────────────────────────
 
 // GET /api/wh/materials
 router.get('/materials', async (req, res, next) => {
   try {
-    const { search, type, low_stock } = req.query;
+    const { search, type, low_stock, category_id } = req.query;
     const where = { status: 'active' };
     if (type) where.type = type;
     if (search) {
@@ -140,11 +231,18 @@ router.get('/materials', async (req, res, next) => {
         { barcode: { contains: search } },
       ];
     }
+    // Filtr kategorie: "none" = nezařazené, jinak ID kategorie včetně podstromu
+    if (category_id === 'none') {
+      where.category_id = null;
+    } else if (category_id) {
+      where.category_id = { in: await collectCategorySubtreeIds(parseInt(category_id)) };
+    }
 
     let materials = await prisma.material.findMany({
       where,
       include: {
         supplier: { select: { id: true, name: true } },
+        category: { select: { id: true, name: true, parent_id: true } },
       },
       orderBy: { name: 'asc' },
     });
@@ -281,6 +379,33 @@ router.post('/materials/bulk', async (req, res, next) => {
     });
 
     res.status(201).json({ created: result.count });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/wh/materials/bulk-category — hromadné přiřazení kategorie
+// Body: { material_ids: number[], category_id: number|null } (null = vyřadit z kategorie)
+router.post('/materials/bulk-category', async (req, res, next) => {
+  try {
+    const { material_ids, category_id } = req.body;
+    if (!Array.isArray(material_ids) || material_ids.length === 0) {
+      return res.status(400).json({ error: 'Očekáváno neprázdné pole material_ids' });
+    }
+    const ids = material_ids.map(Number).filter(Number.isFinite);
+    const catId = category_id === null || category_id === '' || category_id === undefined
+      ? null
+      : parseInt(category_id);
+    if (catId !== null) {
+      const exists = await prisma.materialCategory.findUnique({ where: { id: catId } });
+      if (!exists) return res.status(404).json({ error: 'Kategorie nenalezena' });
+    }
+    const result = await prisma.material.updateMany({
+      where: { id: { in: ids } },
+      data: { category_id: catId },
+    });
+    await logAudit({ action: 'update', entity: 'material', entity_id: null, description: `Hromadně přiřazena kategorie (${catId === null ? 'odebráno' : 'ID ' + catId}) u ${result.count} položek zboží`, user: req.user });
+    res.json({ updated: result.count });
   } catch (err) {
     next(err);
   }

@@ -126,6 +126,12 @@
       background: var(--assistant); color: var(--text);
       border-bottom-left-radius: 4px;
     }
+    /* Odkazy v Hugově odpovědi — světlé, dobře čitelné na tmavé bublině */
+    .msg-bubble a {
+      color: #f1f5f9; text-decoration: underline; text-underline-offset: 2px;
+      font-weight: 600; word-break: break-word;
+    }
+    .msg-bubble a:hover { color: #ffffff; }
     .msg-meta {
       font-size: 10px; color: var(--text2); margin-top: 4px;
     }

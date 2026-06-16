@@ -13,7 +13,7 @@ const RETRIEVAL_LIMIT = 6;
 const MANUAL_PASSAGE_LIMIT = 4;     // max kolik PDF pasáží přidáme do kontextu
 const MANUAL_PASSAGE_CHARS = 1500;  // délka okna kolem zásahu v extrahovaném textu
 const MAX_HISTORY_TURNS = 10;
-const TOOL_USE_MAX_ITERATIONS = 3; // ochrana proti smyčkám tool-use ↔ tool_result
+const TOOL_USE_MAX_ITERATIONS = 4; // ochrana proti smyčkám tool-use ↔ tool_result (3 nástroje: shop, list, search)
 
 // ─── Tool: search_shop_products (Spare Parts Shop) ─────────────────────────
 //
@@ -108,8 +108,103 @@ async function executeSearchShopProducts({ query, partner }) {
     : { products: [], hint: 'Položky odpovídají dotazu, ale nejsou skladem v eshop skladu.' };
 }
 
+// ─── Tool: list_appliance_manuals (PDF návody ke stažení) ──────────────────
+//
+// Hugo standardně čerpá z extrahovaného textu manuálů (pasáže [M1], [M2]).
+// Tento nástroj použije JEN když partner explicitně chce samotný PDF dokument
+// ("pošli mi instalační manuál", "kde stáhnu katalog ND"). Vrátí seznam manuálů
+// dostupných pro spotřebiče v partnerových produktech + přímý odkaz ke stažení.
+
+const MANUALS_TOOL = {
+  name: 'list_appliance_manuals',
+  description: 'Vrátí seznam PDF manuálů (návody, katalogy náhradních dílů, instalační/programovací manuály) dostupných pro spotřebiče v produktech partnera, včetně přímého odkazu ke stažení (download_url). Volej POUZE když partner výslovně chce samotný dokument/PDF ke stažení nebo se ptá "kde najdu / pošli mi / stáhnu manuál/návod/katalog". NEVOLÁJ jen pro zodpovězení technického dotazu — na to slouží pasáže [M1], [M2] v kontextu. Vrácené download_url předej partnerovi v odpovědi jako klikatelný odkaz.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      query: { type: 'string', description: 'Volitelný filtr podle názvu manuálu, názvu spotřebiče nebo modelu (např. "instalační", "programovací", "katalog", "SY180"). Prázdné = vrátit všechny dostupné manuály.' },
+    },
+  },
+};
+
+async function executeListApplianceManuals({ query, partner }) {
+  const productIds = (partner?.products || []).map(p => p.product_id);
+  if (!productIds.length) {
+    return { manuals: [], hint: 'Partner nemá přiřazené produkty — manuály nejsou dostupné. Navrhni kontakt na servis.' };
+  }
+  const q = String(query || '').trim();
+  const baseUrl = process.env.SHARE_BASE_URL || 'https://bestseries.cash';
+
+  const manuals = await prisma.serviceApplianceManual.findMany({
+    where: {
+      appliance: { product_links: { some: { product_id: { in: productIds } } } },
+      ...(q.length >= 2 ? {
+        OR: [
+          { title: { contains: q, mode: 'insensitive' } },
+          { appliance: { name: { contains: q, mode: 'insensitive' } } },
+          { appliance: { model_code: { contains: q, mode: 'insensitive' } } },
+          { appliance: { manufacturer: { contains: q, mode: 'insensitive' } } },
+        ],
+      } : {}),
+    },
+    include: { appliance: { select: { name: true, manufacturer: true } } },
+    orderBy: { title: 'asc' },
+    take: 25,
+  });
+
+  if (!manuals.length) {
+    return { manuals: [], hint: q ? `Žádný manuál neodpovídá "${q}".` : 'Pro produkty partnera nejsou nahrané žádné manuály.' };
+  }
+  return {
+    manuals: manuals.map(m => ({
+      title: m.title,
+      appliance: m.appliance?.name || '',
+      manufacturer: m.appliance?.manufacturer || null,
+      page_count: m.page_count,
+      language: m.language,
+      download_url: `${baseUrl}/api/hugo/manuals/${m.id}/download`,
+    })),
+    hint: `Nalezeno ${manuals.length} manuálů. Pošli partnerovi download_url jako odkaz.`,
+  };
+}
+
+// ─── Tool: search_manuals (aktivní fulltext v PDF manuálech) ───────────────
+//
+// Na rozdíl od pasivních pasáží [M1]/[M2] (předpočítané z celé otázky) dává
+// tento nástroj Hugovi možnost cíleně hledat konkrétní klíčová slova (chybový
+// kód, díl, operace) — sám si zvolí dotaz a najde přesnější pasáž.
+
+const SEARCH_MANUALS_TOOL = {
+  name: 'search_manuals',
+  description: 'Fulltextově prohledá PDF manuály výrobce (instalační, programovací, katalog ND) navázané na spotřebiče v produktech partnera a vrátí relevantní pasáže. Volej VŽDY, když partner řeší technický problém (chybový kód, porucha, postup, parametr, programování) a v kontextu výše nemáš dost informací z pasáží [M1]/[M2]. Zadej konkrétní klíčová slova z dotazu (např. chybový kód "E11", "ložisko", "odčerpání vody"). Z vrácených pasáží poraď a uveď, z jakého manuálu informace pochází.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      query: { type: 'string', description: 'Klíčová slova k vyhledání v manuálech — chybový kód, název dílu, název operace. Klidně víc slov.' },
+    },
+    required: ['query'],
+  },
+};
+
+async function executeSearchManuals({ query, partner }) {
+  const passages = await retrieveManualPassages({ query, partner, limit: MANUAL_PASSAGE_LIMIT });
+  if (!passages.length) {
+    return { passages: [], hint: 'V manuálech jsem k tomuto dotazu nic nenašel. Poraď obecně a zvaž doporučení servisu.' };
+  }
+  return {
+    passages: passages.map(p => ({
+      manual: p.title,
+      appliance: p.appliance_name,
+      page_count: p.page_count,
+      passage: p.passage,
+    })),
+    hint: `Nalezeno ${passages.length} pasáží. Poraď z nich a uveď, z jakého manuálu informace pochází.`,
+  };
+}
+
 async function executeHugoTool({ name, input, partner }) {
   if (name === 'search_shop_products') return executeSearchShopProducts({ query: input.query, partner });
+  if (name === 'list_appliance_manuals') return executeListApplianceManuals({ query: input.query, partner });
+  if (name === 'search_manuals') return executeSearchManuals({ query: input.query, partner });
   return { error: `Neznámý nástroj: ${name}` };
 }
 
@@ -187,6 +282,14 @@ K dispozici máš tyto články z naší servisní znalostní báze (filtrované
 ${knowledgeBlock}${manualBlock}
 
 Můžeš zavolat nástroj **search_shop_products** pokud zjistíš, že partner potřebuje konkrétní náhradní díl. Nástroj vyhledá v eshopu Best Series Spare Parts Shop, vrátí ti název, cenu z partnerova ceníku, dostupnost a URL na detail produktu. Když vrátí položku, uveď ji v odpovědi (kód, název, cena s DPH a URL). Pokud vrátí prázdný seznam s hintem o chybějícím ceníku, NEUVÁDĚJ konkrétní cenu a navrhni partnerovi kontakt na servis.
+
+Pro technické dotazy máš nástroj **search_manuals** — cíleně prohledá PDF manuály výrobce a vrátí relevantní pasáže. **Vždy** ho použij, když partner řeší konkrétní problém (chybový kód, porucha, postup, parametr, programování) a pasáže [M1]/[M2] výše ti nestačí. Zadej konkrétní klíčová slova (chybový kód, název dílu, operace). Z vrácených pasáží poraď krok po kroku a uveď, z jakého manuálu informace pochází. Teprve když ani v manuálech nic nenajdeš, postupuj obecně a doporuč servis.
+
+Máš také nástroj **list_appliance_manuals** — vrátí PDF manuály ke stažení (návody, katalogy ND, instalační/programovací manuály) pro spotřebiče partnerových produktů včetně odkazu. Pravidla pro manuály:
+- Na běžné technické dotazy odpovídej z pasáží [M1], [M2] nebo z nástroje search_manuals — **nevolej** list_appliance_manuals jen kvůli zodpovězení dotazu.
+- Nástroj zavolej **jen když partner výslovně chce samotný dokument** ("pošli mi instalační manuál", "kde stáhnu katalog ND", "máš celý návod?").
+- Když nástroj vrátí manuály, předej partnerovi pole download_url jako odkaz spolu s názvem manuálu. Nikdy odkaz nevymýšlej — použij přesně to, co nástroj vrátil.
+- Manuály vypisuj jako jednoduchý seznam (NE tabulku), každý na samostatném řádku ve formátu markdown odkazu: 📄 [Název manuálu (počet stran)](download_url). Pokud je manuálů víc spotřebičů, seskup je krátkým nadpisem podle spotřebiče.
 
 Pravidla:
 - **Vždy** vychazej z výše uvedených článků a manuálů, když jsou relevantní.
@@ -412,7 +515,7 @@ async function sendMessage({ partner, sessionId, message }) {
         model: HUGO_MODEL,
         max_tokens: 1024,
         system: systemPrompt,
-        tools: [SHOP_TOOL],
+        tools: [SHOP_TOOL, MANUALS_TOOL, SEARCH_MANUALS_TOOL],
         messages,
       });
       if (resp.usage) {

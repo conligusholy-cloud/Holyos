@@ -101,6 +101,7 @@
       <div class="tab" data-tab="movements" onclick="switchTab('movements')">🔄 Pohyby</div>
       <div class="tab" data-tab="inventories" onclick="switchTab('inventories')">📋 Inventury</div>
       <div class="tab" data-tab="forecast" onclick="switchTab('forecast')">📈 Výhled nákupu</div>
+      <div class="tab" data-tab="categories" onclick="switchTab('categories')">🗂️ Kategorie</div>
     </div>
 
     <div class="stats-bar" id="stats-bar"></div>
@@ -169,12 +170,21 @@
             <option value="new">Nový</option>
             <option value="first_run">První běh</option>
           </select>
+          <select id="mat-cat-filter" onchange="loadMaterials()">
+            <option value="">Všechny kategorie</option>
+          </select>
           <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text2);cursor:pointer;">
             <input type="checkbox" id="mat-low-stock" onchange="loadMaterials()"> Pod minimem
           </label>
           <div style="flex:1"></div>
           <button class="btn btn-secondary" onclick="openCSVImport()">📥 Import z CSV</button>
           <button class="btn btn-primary" onclick="openMaterialModal()">+ Nové zboží</button>
+        </div>
+        <div id="mat-bulk-bar" style="display:none;align-items:center;gap:10px;margin-bottom:12px;padding:10px 14px;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.35);border-radius:10px;font-size:13px;">
+          <span id="mat-bulk-count" style="font-weight:600;"></span>
+          <select id="mat-bulk-cat" style="min-width:220px;"></select>
+          <button class="btn btn-primary btn-sm" onclick="bulkAssignCategory()">Přiřadit kategorii</button>
+          <button class="btn btn-secondary btn-sm" onclick="clearMatSelection()">Zrušit výběr</button>
         </div>
         <div id="materials-table"></div>
       </div>
@@ -250,6 +260,16 @@
         </div>
         <div id="forecast-table"></div>
       </div>
+
+      <!-- TAB: Kategorie zboží -->
+      <div class="tab-content" id="tab-categories">
+        <div class="toolbar">
+          <span style="font-size:13px;color:var(--text2);">Stromová osnova kategorií — zboží zařadíte v záložce Zboží (hromadně přes zaškrtávátka, nebo jednotlivě v detailu).</span>
+          <div style="flex:1"></div>
+          <button class="btn btn-primary" onclick="openCategoryModal()">+ Nová kategorie</button>
+        </div>
+        <div id="categories-tree"></div>
+      </div>
     </div>
   </div>
 
@@ -318,7 +338,8 @@
       if (tab === 'dashboard') loadDashboard();
       if (tab === 'companies') loadCompanies();
       if (tab === 'orders') loadOrders();
-      if (tab === 'materials') loadMaterials();
+      if (tab === 'materials') { loadMaterials(); populateMatCatFilter(); }
+      if (tab === 'categories') loadCategoriesTab();
       if (tab === 'stock') { loadStock(); populateStockWhFilter(); }
       if (tab === 'movements') { loadMovements(); populateMovementFilters(); }
       if (tab === 'inventories') { loadInventories(); initInvWhFilter(); }
@@ -771,18 +792,22 @@
       const type = document.getElementById('mat-type-filter')?.value || '';
       const status = document.getElementById('mat-status-filter')?.value || '';
       const lowStock = document.getElementById('mat-low-stock')?.checked;
+      const catFilter = document.getElementById('mat-cat-filter')?.value || '';
       const params = new URLSearchParams();
       if (search) params.set('search', search);
       if (type) params.set('type', type);
       if (status) params.set('status', status);
       if (lowStock) params.set('low_stock', 'true');
+      if (catFilter) params.set('category_id', catFilter);
       try { const r = await fetch('/api/wh/materials?' + params); materials = await r.json(); renderMaterials(materials); } catch(e) { console.error(e); }
     }
 
     function renderMaterials(list) {
       const el = document.getElementById('materials-table');
-      if (!list.length) { el.innerHTML = '<div class="empty-state"><div class="empty-icon">📦</div><h3>Žádné zboží</h3><p>Přidejte první zboží nebo importujte z CSV.</p></div>'; return; }
-      let html = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr><th></th><th>ID</th><th>Typ</th><th>Kód</th><th>Název</th><th>Stav</th><th>Jedn.</th><th>Cena</th><th>Sklad</th><th>Min.</th><th>Dodavatel</th><th></th></tr></thead><tbody>';
+      if (!list.length) { el.innerHTML = '<div class="empty-state"><div class="empty-icon">📦</div><h3>Žádné zboží</h3><p>Přidejte první zboží nebo importujte z CSV.</p></div>'; updateMatBulkBar(); return; }
+      let html = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr>' +
+        '<th style="width:34px"><input type="checkbox" id="mat-check-all" onclick="event.stopPropagation();toggleAllMatSelection(this.checked)"></th>' +
+        '<th></th><th>ID</th><th>Typ</th><th>Kód</th><th>Název</th><th>Kategorie</th><th>Stav</th><th>Jedn.</th><th>Cena</th><th>Sklad</th><th>Min.</th><th>Dodavatel</th><th></th></tr></thead><tbody>';
       for (const m of list) {
         const stock = Number(m.current_stock) || 0;
         const minStock = Number(m.min_stock) || 0;
@@ -799,12 +824,15 @@
         const thumb = m.photo_url
           ? '<img src="' + m.photo_url + '" loading="lazy" onclick="event.stopPropagation();openImageLightbox(this.src,\'' + escName + '\')" onerror="this.replaceWith(Object.assign(document.createElement(\'div\'),{textContent:\'📦\',style:\'font-size:18px;opacity:.4;text-align:center\'}))" style="width:36px;height:36px;border-radius:6px;object-fit:cover;background:var(--surface2);border:1px solid var(--border);display:block;cursor:zoom-in" title="Klik = velký náhled">'
           : '<div style="width:36px;height:36px;border-radius:6px;background:var(--surface2);border:1px solid var(--border);"></div>';
+        const catLabel = m.category ? esc(catPathName(m.category.id) || m.category.name) : '—';
         html += '<tr onclick="openMaterialModal(' + m.id + ')">';
+        html += '<td style="width:34px" onclick="event.stopPropagation()"><input type="checkbox" class="mat-row-check" data-mid="' + m.id + '"' + (matSelection.has(m.id) ? ' checked' : '') + ' onclick="toggleMatSelection(' + m.id + ', this.checked)"></td>';
         html += '<td style="width:48px;padding:4px 8px">' + thumb + '</td>';
         html += '<td style="font-family:monospace;color:var(--text2);font-size:12px">' + m.id + '</td>';
         html += '<td><span class="badge" style="background:' + tColor + '22;color:' + tColor + '">' + tLabel + '</span></td>';
         html += '<td style="font-family:monospace;color:var(--text2);font-size:12px">' + (m.code||'—') + '</td>';
         html += '<td class="person-name">' + m.name + '</td>';
+        html += '<td style="font-size:12px;color:var(--text2);white-space:nowrap">' + catLabel + '</td>';
         html += '<td><span class="badge" style="background:' + sColor + '22;color:' + sColor + '">' + sLabel + '</span></td>';
         html += '<td>' + (m.unit||'ks') + '</td>';
         html += '<td>' + price.toLocaleString('cs-CZ') + ' Kč</td>';
@@ -819,6 +847,7 @@
       }
       html += '</tbody></table></div>';
       el.innerHTML = html;
+      updateMatBulkBar();
     }
 
     let matModalTab = 'general';
@@ -830,6 +859,7 @@
 
     async function openMaterialModal(id) {
       if (companies.length === 0) { try { const r = await fetch('/api/wh/companies?type=supplier'); companies = await r.json(); } catch(e) {} }
+      if (matCategories.length === 0) await loadCategoryData();
       let m = {};
       if (id) {
         try {
@@ -866,6 +896,7 @@
             '<div class="form-group"><label>SN mask</label><input type="text" name="sn_mask" value="' + v('sn_mask') + '"></div>' +
             '<div class="form-group"><label style="display:flex;align-items:center;gap:6px"><input type="checkbox" name="uses_service_eshop"' + c('uses_service_eshop') + '> Používá servis / e-shop</label></div>' +
             '<div class="form-group"><label>Typ *</label><select name="type"><option value="material"' + s('type','material') + '>Materiál</option><option value="product"' + s('type','product') + '>Výrobek</option><option value="goods"' + s('type','goods') + '>Zboží</option><option value="semi_product"' + s('type','semi_product') + '>Polotovar</option></select></div>' +
+            '<div class="form-group"><label>Kategorie</label><select name="category_id"><option value="">— Bez kategorie —</option>' + buildCatOptions(m.category_id) + '</select></div>' +
             '<div class="form-group"><label>Pomocná klasifikace</label><input type="text" name="classification" value="' + v('classification') + '"></div>' +
             '<div class="form-group"><label>Interní hodnota</label><input type="text" name="internal_value" value="' + v('internal_value') + '"></div>' +
             '<div class="form-group"><label>Rodina</label><input type="text" name="family" value="' + v('family') + '"></div>' +
@@ -1093,6 +1124,7 @@
         }
       }
       if (typeof d.supplier_id === 'string' && d.supplier_id) d.supplier_id = parseInt(d.supplier_id);
+      if (typeof d.category_id === 'string' && d.category_id) d.category_id = parseInt(d.category_id);
       // Checkboxes (unchecked = not in FormData)
       const cbs = ['non_stock','uses_service_eshop','distinguish_batches','interchangeable_batches','no_availability_check','check_availability_stage','check_availability_expedition','plan_orders','mandatory_scan','save_sn_first_scan','temp_barcode','auto_complete_after_bom_scan','exact_consumption','ignore','ignore_forecast_eval','split_receipt_by_sales_items','expirable','allow_rotation'];
       for (const cb of cbs) d[cb] = f.has(cb);
@@ -1113,6 +1145,194 @@
       if (!confirm('Smazat zboží?')) return;
       await fetch('/api/wh/materials/' + id, { method: 'DELETE' });
       loadMaterials(); loadStats();
+    }
+
+    // ============================================================
+    // KATEGORIE ZBOŽÍ — stromová osnova + hromadné přiřazení
+    // ============================================================
+    let matCategories = [];       // plochý seznam z API (strom skládáme přes parent_id)
+    let matSelection = new Set(); // vybraná ID zboží pro hromadné akce
+
+    async function loadCategoryData() {
+      try { const r = await fetch('/api/wh/categories'); matCategories = await r.json(); }
+      catch(e) { console.error(e); matCategories = []; }
+    }
+
+    // Plná cesta kategorie: "Hutní materiál › Profily"
+    function catPathName(id) {
+      const byId = new Map(matCategories.map(c => [c.id, c]));
+      const parts = [];
+      let cur = byId.get(id), guard = 0;
+      while (cur && guard++ < 20) { parts.unshift(cur.name); cur = byId.get(cur.parent_id); }
+      return parts.join(' › ');
+    }
+
+    // <option> strom s odsazením; excludeSubtreeOf vynechá vlastní podstrom (výběr rodiče)
+    function buildCatOptions(selectedId, excludeSubtreeOf) {
+      const excluded = new Set();
+      if (excludeSubtreeOf) {
+        const collect = (pid) => { excluded.add(pid); matCategories.filter(c => c.parent_id === pid).forEach(ch => collect(ch.id)); };
+        collect(excludeSubtreeOf);
+      }
+      let html = '';
+      const walk = (parentId, depth) => {
+        matCategories.filter(c => c.parent_id === parentId && !excluded.has(c.id)).forEach(c => {
+          const indent = '    '.repeat(depth);
+          html += '<option value="' + c.id + '"' + (selectedId === c.id ? ' selected' : '') + '>' + indent + (depth ? '└ ' : '') + esc(c.name) + '</option>';
+          walk(c.id, depth + 1);
+        });
+      };
+      walk(null, 0);
+      return html;
+    }
+
+    async function populateMatCatFilter() {
+      await loadCategoryData();
+      const sel = document.getElementById('mat-cat-filter');
+      if (sel) {
+        const cur = sel.value;
+        sel.innerHTML = '<option value="">Všechny kategorie</option><option value="none">Bez kategorie</option>' + buildCatOptions(null);
+        sel.value = cur;
+        if (sel.value !== cur) sel.value = ''; // vybraná kategorie už neexistuje
+      }
+      const bulkSel = document.getElementById('mat-bulk-cat');
+      if (bulkSel) bulkSel.innerHTML = '<option value="">— Bez kategorie —</option>' + buildCatOptions(null);
+    }
+
+    // --- Hromadný výběr v tabulce Zboží ---
+    function toggleMatSelection(id, checked) {
+      if (checked) matSelection.add(id); else matSelection.delete(id);
+      updateMatBulkBar();
+    }
+    function toggleAllMatSelection(checked) {
+      document.querySelectorAll('.mat-row-check').forEach(cb => {
+        cb.checked = checked;
+        const id = parseInt(cb.dataset.mid);
+        if (checked) matSelection.add(id); else matSelection.delete(id);
+      });
+      updateMatBulkBar();
+    }
+    function clearMatSelection() {
+      matSelection.clear();
+      document.querySelectorAll('.mat-row-check').forEach(cb => cb.checked = false);
+      const all = document.getElementById('mat-check-all');
+      if (all) all.checked = false;
+      updateMatBulkBar();
+    }
+    function updateMatBulkBar() {
+      const bar = document.getElementById('mat-bulk-bar');
+      if (!bar) return;
+      bar.style.display = matSelection.size ? 'flex' : 'none';
+      const cnt = document.getElementById('mat-bulk-count');
+      if (cnt) cnt.textContent = 'Vybráno: ' + matSelection.size;
+    }
+    async function bulkAssignCategory() {
+      if (!matSelection.size) return;
+      const sel = document.getElementById('mat-bulk-cat');
+      const catId = sel && sel.value ? parseInt(sel.value) : null;
+      const catName = catId ? catPathName(catId) : 'Bez kategorie';
+      if (!confirm('Přiřadit kategorii „' + catName + '" u ' + matSelection.size + ' položek zboží?')) return;
+      const res = await fetch('/api/wh/materials/bulk-category', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ material_ids: [...matSelection], category_id: catId }),
+      });
+      if (!res.ok) { alert('Hromadné přiřazení selhalo (' + res.status + ')'); return; }
+      clearMatSelection();
+      loadMaterials();
+    }
+
+    // --- Záložka Kategorie ---
+    async function loadCategoriesTab() {
+      await loadCategoryData();
+      renderCategoryTree();
+    }
+
+    function renderCategoryTree() {
+      const el = document.getElementById('categories-tree');
+      if (!el) return;
+      if (!matCategories.length) {
+        el.innerHTML = '<div class="empty-state"><div class="empty-icon">🗂️</div><h3>Žádné kategorie</h3><p>Vytvořte první kategorii a postavte si osnovu zboží.</p></div>';
+        return;
+      }
+      let html = '<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:6px 0;">';
+      const walk = (parentId, depth) => {
+        matCategories.filter(c => c.parent_id === parentId).forEach(c => {
+          const matCount = c._count ? c._count.materials : 0;
+          html += '<div style="display:flex;align-items:center;gap:10px;padding:8px 16px;padding-left:' + (16 + depth * 28) + 'px;border-bottom:1px solid rgba(255,255,255,0.04);">';
+          html += '<span style="opacity:.5">' + (depth ? '└' : '🗂️') + '</span>';
+          html += '<span style="font-weight:600;font-size:13px">' + esc(c.name) + '</span>';
+          html += '<span class="badge" style="background:#3b82f622;color:#3b82f6;cursor:pointer" title="Zobrazit zboží v kategorii (vč. podkategorií)" onclick="filterMaterialsByCategory(' + c.id + ')">' + matCount + ' zboží</span>';
+          if (c.description) html += '<span style="font-size:12px;color:var(--text2)">' + esc(c.description) + '</span>';
+          html += '<div style="flex:1"></div>';
+          html += '<button class="btn btn-secondary btn-sm" style="padding:4px 8px" title="Přidat podkategorii" onclick="openCategoryModal(null,' + c.id + ')">+ podkategorie</button>';
+          html += '<button class="btn btn-secondary btn-sm" style="padding:4px 8px" title="Upravit" onclick="openCategoryModal(' + c.id + ')">✏️</button>';
+          html += '<button class="btn btn-danger btn-sm" style="padding:4px 8px" title="Smazat" onclick="deleteCategory(' + c.id + ')">✕</button>';
+          html += '</div>';
+          walk(c.id, depth + 1);
+        });
+      };
+      walk(null, 0);
+      html += '</div>';
+      el.innerHTML = html;
+    }
+
+    function filterMaterialsByCategory(id) {
+      switchTab('materials');
+      // mat-cat-filter se plní asynchronně v populateMatCatFilter — nastav až po naplnění
+      setTimeout(() => {
+        const sel = document.getElementById('mat-cat-filter');
+        if (sel) { sel.value = String(id); loadMaterials(); }
+      }, 350);
+    }
+
+    function openCategoryModal(id, parentId) {
+      const cat = id ? matCategories.find(c => c.id === id) : null;
+      const escAttr = (str) => esc(str).replace(/"/g, '&quot;');
+      const parentOpts = buildCatOptions(cat ? cat.parent_id : (parentId || null), id || null);
+      document.getElementById('modal-root').innerHTML = '<div class="modal-overlay"><div class="modal"><h2>' + (id ? '✏️ Upravit kategorii' : '➕ Nová kategorie') + '</h2>' +
+        '<form onsubmit="saveCategory(event,' + (id || 'null') + ')">' +
+          '<div class="form-group"><label>Název *</label><input type="text" name="name" value="' + (cat ? escAttr(cat.name) : '') + '" required autofocus></div>' +
+          '<div class="form-group"><label>Nadřazená kategorie</label><select name="parent_id"><option value="">— Žádná (hlavní úroveň) —</option>' + parentOpts + '</select></div>' +
+          '<div class="form-group"><label>Pořadí</label><input type="number" name="sort_order" value="' + (cat ? cat.sort_order : 0) + '" step="1"></div>' +
+          '<div class="form-group"><label>Popis</label><textarea name="description" rows="2">' + (cat && cat.description ? esc(cat.description) : '') + '</textarea></div>' +
+          '<div class="modal-actions"><button type="button" class="btn btn-secondary" onclick="closeModal()">Zrušit</button><button type="submit" class="btn btn-primary">' + (id ? 'Uložit' : 'Vytvořit') + '</button></div>' +
+        '</form></div></div>';
+    }
+
+    async function saveCategory(e, id) {
+      e.preventDefault();
+      const f = new FormData(e.target);
+      const data = {
+        name: f.get('name'),
+        parent_id: f.get('parent_id') ? parseInt(f.get('parent_id')) : null,
+        sort_order: parseInt(f.get('sort_order')) || 0,
+        description: f.get('description') || null,
+      };
+      const res = await fetch(id ? '/api/wh/categories/' + id : '/api/wh/categories', {
+        method: id ? 'PUT' : 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) {
+        let msg = '';
+        try { msg = (await res.json()).error || ''; } catch(_) {}
+        alert('Uložení selhalo (' + res.status + ')' + (msg ? ': ' + msg : ''));
+        return;
+      }
+      closeModal();
+      await loadCategoryData();
+      renderCategoryTree();
+    }
+
+    async function deleteCategory(id) {
+      const cat = matCategories.find(c => c.id === id);
+      const hasChildren = matCategories.some(c => c.parent_id === id);
+      if (!confirm('Smazat kategorii „' + (cat ? cat.name : id) + '"?' + (hasChildren ? '\nPodkategorie se přesunou na hlavní úroveň.' : '') + '\nZboží zůstane nezařazené.')) return;
+      const res = await fetch('/api/wh/categories/' + id, { method: 'DELETE' });
+      if (!res.ok) { alert('Smazání selhalo (' + res.status + ')'); return; }
+      await loadCategoryData();
+      renderCategoryTree();
     }
 
     // ============================================================

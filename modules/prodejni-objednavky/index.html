@@ -2660,7 +2660,7 @@
         if (!r.ok) throw new Error('HTTP ' + r.status);
         var leads = await r.json();
         if (!leads.length) { box.innerHTML = '<div style="color:var(--text2);padding:24px;">Zatím žádné registrace.</div>'; return; }
-        var h = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr><th></th><th>Vytvořeno</th><th>Jméno</th><th>E-mail</th><th>Role</th><th>Jazyk</th><th>Stav</th><th>Poznámka</th></tr></thead><tbody>';
+        var h = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr><th></th><th>Vytvořeno</th><th>Jméno</th><th>E-mail</th><th>Role</th><th>Jazyk</th><th>Stav</th><th>Poznámka</th><th></th></tr></thead><tbody>';
         leads.forEach(function(l) {
           var dt = new Date(l.created_at).toLocaleString('cs-CZ');
           var roleLabel = l.role === 'distributor' ? 'Distributor' : 'Compounder';
@@ -2668,7 +2668,7 @@
           Object.keys(CMP_STATUS).forEach(function(k){ sel += '<option value="' + k + '"' + (l.status===k?' selected':'') + '>' + CMP_STATUS[k] + '</option>'; });
           sel += '</select>';
           var noteVal = cmpEsc(l.notes||'');
-          h += '<tr data-lead="' + l.id + '" onclick="cmpActivity(' + l.id + ', this)" title="Klikni pro cestu zákazníka" style="cursor:pointer;"><td style="color:var(--text2);">▸</td><td style="white-space:nowrap;">' + dt + '</td><td>' + cmpEsc(l.name) + '</td><td><a href="mailto:' + cmpEsc(l.email) + '" onclick="event.stopPropagation()" style="color:#eab308;">' + cmpEsc(l.email) + '</a></td><td>' + roleLabel + '</td><td>' + cmpEsc((l.lang||'').toUpperCase()) + '</td><td>' + sel + '</td><td><input type="text" value="' + noteVal + '" placeholder="—" onclick="event.stopPropagation()" onblur="cmpSetNote(' + l.id + ', this.value)" style="width:140px;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:12px;"></td></tr>';
+          h += '<tr data-lead="' + l.id + '" onclick="cmpActivity(' + l.id + ', this)" title="Klikni pro cestu zákazníka" style="cursor:pointer;"><td style="color:var(--text2);">▸</td><td style="white-space:nowrap;">' + dt + '</td><td>' + cmpEsc(l.name) + '</td><td><a href="mailto:' + cmpEsc(l.email) + '" onclick="event.stopPropagation()" style="color:#eab308;">' + cmpEsc(l.email) + '</a></td><td>' + roleLabel + '</td><td>' + cmpEsc((l.lang||'').toUpperCase()) + '</td><td>' + sel + '</td><td><input type="text" value="' + noteVal + '" placeholder="—" onclick="event.stopPropagation()" onblur="cmpSetNote(' + l.id + ', this.value)" style="width:140px;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:12px;"></td><td><button onclick="event.stopPropagation();cmpDeleteLead(' + l.id + ', ' + JSON.stringify(l.name).replace(/"/g,'&quot;') + ')" title="Smazat lead" style="background:transparent;color:#ef4444;border:1px solid rgba(239,68,68,0.4);border-radius:6px;padding:4px 9px;font-size:12px;cursor:pointer;">🗑</button></td></tr>';
         });
         h += '</tbody></table></div>';
         box.innerHTML = h;
@@ -2710,7 +2710,7 @@
       if (nx && nx.className === 'cmp-act-row') { nx.remove(); row.firstChild.textContent='▸'; return; }
       row.firstChild.textContent='▾';
       var tr = document.createElement('tr'); tr.className='cmp-act-row';
-      var td = document.createElement('td'); td.colSpan = 8; td.style.background='rgba(234,179,8,0.04)'; td.style.padding='14px 18px';
+      var td = document.createElement('td'); td.colSpan = 9; td.style.background='rgba(234,179,8,0.04)'; td.style.padding='14px 18px';
       td.innerHTML = '<div style="color:var(--text2);font-size:13px;">Načítám cestu…</div>';
       tr.appendChild(td); row.parentNode.insertBefore(tr, row.nextSibling);
       try {
@@ -2745,6 +2745,14 @@
     }
     async function cmpSetNote(id, notes) {
       try { await fetch('/api/compounder/leads/' + id, { method:'PATCH', credentials:'include', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ notes: notes }) }); } catch(e) {}
+    }
+    async function cmpDeleteLead(id, name) {
+      if (!confirm('Smazat lead "' + (name||'') + '"? Tuto akci nelze vrátit.')) return;
+      try {
+        var r = await fetch('/api/compounder/leads/' + id, { method:'DELETE', credentials:'include' });
+        if (!r.ok) { var j = await r.json().catch(function(){return {};}); alert('Chyba: ' + (j.error || ('HTTP ' + r.status))); return; }
+        loadCompounderLeads();
+      } catch(e) { alert('Chyba mazání leadu.'); }
     }
 
     function switchTab(name) {

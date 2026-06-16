@@ -36,6 +36,8 @@ header.top{position:sticky;top:0;z-index:30;background:rgba(10,10,11,.82);backdr
 .top-right{display:flex;align-items:center;gap:14px}
 .top .hi{font-size:13px;color:var(--muted)}
 .lang-select{background:transparent;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:6px 12px;font-size:12px;font-family:inherit;cursor:pointer}
+.gear{display:inline-flex;align-items:center;justify-content:center;color:var(--muted);transition:color .2s,transform .3s var(--ease)}
+.gear:hover{color:var(--gold-soft);transform:rotate(40deg)}
 .lang-select option{background:#141417;color:#f4f4f2}
 .subnav{display:flex;gap:6px;overflow-x:auto;padding:10px max(24px, (100% - 1060px) / 2 + 24px);border-bottom:1px solid var(--line);background:var(--bg-2);position:sticky;top:51px;z-index:20}
 .subnav a{white-space:nowrap;font-size:13px;color:var(--muted);padding:7px 14px;border-radius:999px;border:1px solid transparent}
@@ -68,6 +70,12 @@ table.t{width:100%;border-collapse:separate;border-spacing:0;font-size:14px}
 table.t td{padding:11px 12px;border-bottom:1px solid rgba(255,255,255,.05);color:var(--muted)}
 table.t td:first-child{color:var(--text)}
 .cards2{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}
+.btn-reset{background:transparent;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:8px 16px;font-size:13px;font-family:inherit;cursor:pointer;transition:all .2s}
+.btn-reset:hover{color:var(--gold-soft);border-color:rgba(201,162,75,.45)}
+.conn-grid{grid-template-columns:repeat(5,1fr)}
+.conn-grid .tile{padding:16px}
+@media(max-width:900px){.conn-grid{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:560px){.conn-grid{grid-template-columns:1fr}}
 .tile{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:20px}
 .tile h4{font-size:15px;font-weight:600;margin-bottom:8px}
 .tile p{font-size:13.5px;color:var(--muted)}
@@ -77,6 +85,48 @@ table.t td:first-child{color:var(--text)}
 footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;color:var(--muted-2);font-size:12px;margin-top:20px}
 .bar{height:8px;border-radius:999px;background:var(--surface-2);overflow:hidden;margin:6px 0 2px}
 .bar>span{display:block;height:100%;background:var(--gold-grad)}
+/* Galerie */
+.gal-tabs{display:flex;gap:8px;margin:4px 0 18px;flex-wrap:wrap}
+.gal-tab{font-size:13px;color:var(--muted);padding:8px 16px;border-radius:999px;border:1px solid var(--line);background:transparent;cursor:pointer;font-family:inherit}
+.gal-tab:hover{color:var(--text)}
+.gal-tab.active{color:#1a1408;background:var(--gold-grad);border-color:transparent;font-weight:600}
+.gal-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px}
+.gal-grid img{width:100%;height:200px;object-fit:cover;border-radius:12px;border:1px solid var(--line);cursor:pointer;transition:transform .25s var(--ease),border-color .25s;display:block}
+.gal-grid img:hover{transform:translateY(-3px);border-color:rgba(201,162,75,.45)}
+.gal-videos{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:16px}
+.gal-vid{background:var(--surface);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.gal-vid video{width:100%;height:440px;object-fit:contain;display:block;background:#000}
+.gal-vid .cap{padding:11px 14px;font-size:13px;color:var(--muted)}
+.gal-hidden{display:none}
+.lbox{position:fixed;inset:0;background:rgba(0,0,0,.93);display:none;align-items:center;justify-content:center;z-index:100;padding:20px}
+.lbox.open{display:flex}
+.lbox img{max-width:96vw;max-height:90vh;border-radius:8px;box-shadow:0 10px 60px rgba(0,0,0,.6)}
+.lbox .lb-x{position:absolute;top:16px;right:22px;font-size:30px;color:#fff;background:none;border:none;cursor:pointer;line-height:1}
+.lbox .lb-nav{position:absolute;top:50%;transform:translateY(-50%);font-size:38px;color:#fff;background:none;border:none;cursor:pointer;padding:12px 18px;opacity:.75}
+.lbox .lb-nav:hover{opacity:1}
+.lbox .lb-prev{left:6px}.lbox .lb-next{right:6px}
+@media(max-width:760px){.gal-grid{grid-template-columns:repeat(auto-fill,minmax(140px,1fr))}.gal-grid img{height:150px}.gal-videos{grid-template-columns:1fr}}
+/* Gold & Diamond */
+.tier{display:flex;flex-direction:column}
+.tier .tbadge{align-self:flex-start;display:inline-flex;align-items:center;gap:8px;font-size:11px;letter-spacing:.16em;text-transform:uppercase;font-weight:700;padding:6px 13px;border-radius:999px;margin-bottom:14px}
+.tier.gold .tbadge{color:#1a1408;background:var(--gold-grad)}
+.tier.dia .tbadge{color:#0a1420;background:linear-gradient(135deg,#dbe9ff 0%,#9fc1ec 45%,#6f93c4 100%)}
+.tier.dia{border-color:rgba(159,193,236,.30)}
+.tfoot{display:flex;align-items:baseline;gap:8px;border-top:1px solid var(--line);padding-top:14px;margin-top:auto;font-size:13px;color:var(--muted)}
+.tfoot b{font-family:'Space Grotesk';font-weight:700;font-size:22px;color:var(--text)}
+.tper{margin-left:auto;font-family:'Space Grotesk';font-weight:700;font-size:22px}
+.tper.gold-t{color:var(--gold-soft)}
+.tper.dia-t{color:#9fc1ec}
+.ublk-h{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted-2);margin-bottom:14px}
+.unit-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+.unit-item{display:flex;gap:10px;font-size:14px;color:var(--text);align-items:flex-start}
+.unit-item .d{flex:0 0 auto;width:7px;height:7px;border-radius:50%;background:var(--gold);margin-top:7px}
+.unit-item b{font-weight:700}
+.mile-chart{position:relative;height:240px}
+.mtoggle{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 18px}
+.mtoggle button{flex:1;min-width:160px;padding:11px 16px;border-radius:12px;border:1px solid var(--line);background:transparent;color:var(--muted);font-family:inherit;font-size:14px;font-weight:600;cursor:pointer}
+.mtoggle button:hover{color:var(--text)}
+.mtoggle button.active{color:#1a1408;background:var(--gold-grad);border-color:transparent}
 </style>
 </head>
 <body>
@@ -111,6 +161,9 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
       <div class="brand">COMP<b>OU</b>NDER <span style="color:var(--muted-2);font-weight:400;letter-spacing:.04em">· Portal</span></div>
       <div class="top-right">
         <div class="hi" id="hi"></div>
+        <a href="#ucet" class="gear" id="gearBtn" aria-label="Account" title="Account">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+        </a>
         <select class="lang-select" id="pLang" aria-label="Language"></select>
       </div>
     </div>
@@ -118,11 +171,13 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
   <nav class="subnav" id="subnav">
     <a href="#ekonomika" class="active" data-i18n="p.nav.eko">Economics</a>
     <a href="#navratnost" data-i18n="p.nav.ret">Return</a>
+    <a href="#milniky" data-i18n="p.nav.milestones">Gold &amp; Diamond</a>
     <a href="#parametry" data-i18n="p.nav.params">Technical parameters</a>
+    <a href="#galerie" data-i18n="p.nav.gallery">Gallery</a>
     <a href="#pripojky" data-i18n="p.nav.conn">Connections</a>
     <a href="#pudorysy" data-i18n="p.nav.plans">Floor plans</a>
     <a href="#distribuce" data-i18n="p.nav.dist">Distribution model</a>
-    <a href="#ucet" data-i18n="p.nav.acc">Account</a>
+    <a href="#lokalita" data-i18n="p.nav.location">Location check</a>
   </nav>
 
   <div class="wrap">
@@ -135,6 +190,9 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
         <div class="metric"><div class="k" data-i18n="p.m.rev">Revenue / month</div><div class="v" id="m-revenue">—</div><div class="s" id="m-cust">—</div></div>
         <div class="metric"><div class="k" data-i18n="p.m.profit">Profit / month</div><div class="v" id="m-profit">—</div><div class="s" data-i18n="p.m.profits">after all costs</div></div>
         <div class="metric"><div class="k" data-i18n="p.m.payback">Payback</div><div class="v gold" id="m-payback">—</div><div class="s" id="m-payback-m">—</div></div>
+      </div>
+      <div style="display:flex;justify-content:flex-end;margin-bottom:12px">
+        <button type="button" id="eko-reset" class="btn-reset" data-i18n="p.eko.reset">↺ Reset to default values</button>
       </div>
       <div class="calc">
         <div class="panel">
@@ -152,6 +210,10 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
           <div class="row calc-out"><label data-i18n="p.op.profit">Monthly profit</label><div class="unit"><input type="text" id="o-profit" readonly><span class="u">€</span></div></div>
           <div class="note" data-i18n="p.op.note">Costs = rent + energy + service + other. We assume 30.4 days/month.</div>
         </div>
+      </div>
+      <div style="margin-top:24px;text-align:center">
+        <a id="eko-detail-link" href="#" target="_blank" rel="noopener" class="btn" style="display:none;justify-content:center" data-i18n="p.eko.detail">View the detailed breakdown</a>
+        <div class="note" style="margin-top:10px" data-i18n="p.eko.detailnote">See exactly where these numbers come from — the full, editable model.</div>
       </div>
     </section>
 
@@ -172,6 +234,70 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
       </div>
     </section>
 
+    <section class="blk" id="milniky">
+      <div class="eyebrow" data-i18n="p.mile.eyebrow">The flywheel</div>
+      <h2 data-i18n="p.mile.title">Gold &amp; Diamond Compounder</h2>
+      <p class="lead" data-i18n="p.mile.lead">Two milestones on the way to a self-funding portfolio — calculated live from the economics above.</p>
+
+      <div class="cards2" style="margin-bottom:22px">
+        <div class="tile tier gold">
+          <span class="tbadge" data-i18n="p.mile.gold">Gold Compounder</span>
+          <p style="font-size:14px;color:var(--muted);margin-bottom:14px" data-i18n="p.mile.goldp">The fleet earns enough to buy one new Compounder every month — it grows on its own.</p>
+          <div class="tfoot">
+            <span class="tneed"><span data-i18n="p.mile.need">You need</span> <b id="ml-gold">—</b> <span data-i18n="p.mile.unitskiosk">machines</span></span>
+            <span class="tper gold-t">+1<span data-i18n="p.mile.permo">/mo</span></span>
+          </div>
+        </div>
+        <div class="tile tier dia">
+          <span class="tbadge" data-i18n="p.mile.dia">Diamond Compounder</span>
+          <p style="font-size:14px;color:var(--muted);margin-bottom:14px" data-i18n="p.mile.diap">The fleet earns enough for four new Compounders every month — a whole self-contained unit.</p>
+          <div class="tfoot">
+            <span class="tneed"><span data-i18n="p.mile.need">You need</span> <b id="ml-dia">—</b> <span data-i18n="p.mile.unitskiosk">machines</span></span>
+            <span class="tper dia-t">+4<span data-i18n="p.mile.permo">/mo</span></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel" style="margin-bottom:22px">
+        <div class="ublk-h" data-i18n="p.mile.unittitle">Every month one unstoppable unit is added</div>
+        <div class="unit-grid" style="margin-bottom:18px">
+          <div class="unit-item"><span class="d"></span><span data-i18n="p.mile.u1">4 machines = 1 truck</span></div>
+          <div class="unit-item"><span class="d"></span><span data-i18n="p.mile.u2">2 people + van + excavator</span></div>
+          <div class="unit-item"><span class="d"></span><span data-i18n="p.mile.u3">4 connections / month</span></div>
+        </div>
+        <div class="ublk-h" style="border-top:1px solid var(--line);padding-top:16px" data-i18n="p.mile.teamtitle">The team that runs a Diamond fleet</div>
+        <div class="unit-grid">
+          <div class="unit-item"><span class="d"></span><span><span data-i18n="p.mile.scoutL">Site scout</span>: <b id="ml-scout">1</b></span></div>
+          <div class="unit-item"><span class="d"></span><span><span data-i18n="p.mile.maintL">Maintenance</span>: <b id="ml-maint">—</b></span></div>
+          <div class="unit-item"><span class="d"></span><span><span data-i18n="p.mile.serviceL">Service</span>: <b id="ml-serv">—</b></span></div>
+        </div>
+      </div>
+
+      <div class="panel" style="margin-bottom:22px">
+        <div class="mile-chart"><canvas id="ml-chart"></canvas></div>
+        <div class="note" id="ml-cap" style="text-align:center;margin-top:10px">—</div>
+      </div>
+
+      <div class="panel">
+        <div class="row" style="margin-bottom:6px">
+          <label data-i18n="p.mile.q">How fast do you want to reach Diamond?</label>
+          <div class="unit"><input type="number" id="ml-years" value="3" min="1" max="10" step="0.5"><span class="u" data-i18n="p.mile.years">years</span></div>
+        </div>
+        <div class="ublk-h" style="margin:16px 0 10px" data-i18n="p.mile.after">What to do after Diamond (next 10 years)</div>
+        <div class="mtoggle">
+          <button type="button" id="ml-mode-full" class="active" data-i18n="p.mile.modefull">Full reinvestment</button>
+          <button type="button" id="ml-mode-steady" data-i18n="p.mile.modesteady">Keep +4 / month</button>
+        </div>
+        <div class="metrics" style="margin-bottom:0">
+          <div class="metric"><div class="k" data-i18n="p.mile.capown">Your capital to Diamond</div><div class="v gold" id="ml-capown">—</div></div>
+          <div class="metric"><div class="k" data-i18n="p.mile.fleet10">Fleet after 10 years</div><div class="v" id="ml-fleet10">—</div></div>
+          <div class="metric"><div class="k" id="ml-month10-l">Monthly profit after 10 years</div><div class="v" id="ml-month10">—</div></div>
+          <div class="metric"><div class="k" id="ml-cum10-l">Total profit over 10 years</div><div class="v gold" id="ml-cum10">—</div></div>
+        </div>
+        <div class="note" id="ml-note" style="margin-top:14px">—</div>
+      </div>
+    </section>
+
     <section class="blk" id="parametry">
       <div class="eyebrow" data-i18n="p.par.eyebrow">Technical parameters</div>
       <h2 data-i18n="p.par.title">Compounder Machine</h2>
@@ -187,17 +313,61 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
       <p class="note" data-i18n="p.par.note">Detailed datasheet on request.</p>
     </section>
 
+    <section class="blk" id="galerie">
+      <div class="eyebrow" data-i18n="p.gal.eyebrow">Gallery</div>
+      <h2 data-i18n="p.gal.title">See the Compounder Machine</h2>
+      <p class="lead" data-i18n="p.gal.lead">Real installations and product videos.</p>
+      <div class="gal-tabs">
+        <button type="button" class="gal-tab active" data-galtab="fotky" data-i18n="p.gal.tphotos">Photos</button>
+        <button type="button" class="gal-tab" data-galtab="videa" data-i18n="p.gal.tvideos">Videos</button>
+      </div>
+      <div id="gal-fotky" class="gal-grid">
+        <img src="assets/gallery/g01-t.jpg" data-full="assets/gallery/g01.jpg" loading="lazy" alt="Compounder Machine">
+        <img src="assets/gallery/g02-t.jpg" data-full="assets/gallery/g02.jpg" loading="lazy" alt="Compounder Machine">
+        <img src="assets/gallery/g03-t.jpg" data-full="assets/gallery/g03.jpg" loading="lazy" alt="Compounder Machine">
+        <img src="assets/gallery/g04-t.jpg" data-full="assets/gallery/g04.jpg" loading="lazy" alt="Compounder Machine">
+        <img src="assets/gallery/g05-t.jpg" data-full="assets/gallery/g05.jpg" loading="lazy" alt="Compounder Machine">
+        <img src="assets/gallery/g06-t.jpg" data-full="assets/gallery/g06.jpg" loading="lazy" alt="Compounder Machine">
+        <img src="assets/gallery/g07-t.jpg" data-full="assets/gallery/g07.jpg" loading="lazy" alt="Compounder Machine">
+        <img src="assets/gallery/g08-t.jpg" data-full="assets/gallery/g08.jpg" loading="lazy" alt="Compounder Machine">
+        <img src="assets/gallery/g09-t.jpg" data-full="assets/gallery/g09.jpg" loading="lazy" alt="Compounder Machine">
+        <img src="assets/gallery/g10-t.jpg" data-full="assets/gallery/g10.jpg" loading="lazy" alt="Compounder Machine">
+        <img src="assets/gallery/g11-t.jpg" data-full="assets/gallery/g11.jpg" loading="lazy" alt="Compounder Machine">
+        <img src="assets/gallery/g12-t.jpg" data-full="assets/gallery/g12.jpg" loading="lazy" alt="Compounder Machine">
+      </div>
+      <div id="gal-videa" class="gal-videos gal-hidden">
+        <div class="gal-vid"><video src="assets/gallery-video/v-produkt.mp4" poster="assets/gallery-video/v-produkt.jpg" controls preload="none" playsinline></video><div class="cap" data-i18n="p.gal.v1">Product video</div></div>
+        <div class="gal-vid"><video src="assets/gallery-video/v-krok.mp4" poster="assets/gallery-video/v-krok.jpg" controls preload="none" playsinline></video><div class="cap" data-i18n="p.gal.v2">Step by step</div></div>
+        <div class="gal-vid"><video src="assets/gallery-video/v-technicke.mp4" poster="assets/gallery-video/v-technicke.jpg" controls preload="none" playsinline></video><div class="cap" data-i18n="p.gal.v3">Technical specification</div></div>
+        <div class="gal-vid"><video src="assets/gallery-video/v-cesta.mp4" poster="assets/gallery-video/v-cesta.jpg" controls preload="none" playsinline></video><div class="cap" data-i18n="p.gal.v4">User journey</div></div>
+        <div class="gal-vid"><video src="assets/gallery-video/v-domacnost.mp4" poster="assets/gallery-video/v-domacnost.jpg" controls preload="none" playsinline></video><div class="cap" data-i18n="p.gal.v5">Household laundry</div></div>
+        <div class="gal-vid"><video src="assets/gallery-video/v-deka.mp4" poster="assets/gallery-video/v-deka.jpg" controls preload="none" playsinline></video><div class="cap" data-i18n="p.gal.v6">Big blanket</div></div>
+        <div class="gal-vid"><video src="assets/gallery-video/v-chalupar.mp4" poster="assets/gallery-video/v-chalupar.jpg" controls preload="none" playsinline></video><div class="cap" data-i18n="p.gal.v7">Cottage owner</div></div>
+        <div class="gal-vid"><video src="assets/gallery-video/v-cestovatel.mp4" poster="assets/gallery-video/v-cestovatel.jpg" controls preload="none" playsinline></video><div class="cap" data-i18n="p.gal.v8">Traveler</div></div>
+      </div>
+      <p class="note" data-i18n="p.gal.note">Photos and videos of real Compounder Machine installations. Final look per configuration.</p>
+    </section>
+
+    <!-- Lightbox pro fotky -->
+    <div class="lbox" id="lbox" aria-hidden="true">
+      <button type="button" class="lb-x" id="lb-x" aria-label="✕">✕</button>
+      <button type="button" class="lb-nav lb-prev" id="lb-prev" aria-label="←">‹</button>
+      <img id="lb-img" src="" alt="">
+      <button type="button" class="lb-nav lb-next" id="lb-next" aria-label="→">›</button>
+    </div>
+
     <section class="blk" id="pripojky">
       <div class="eyebrow" data-i18n="p.conn.eyebrow">Connections</div>
       <h2 data-i18n="p.conn.title">What the location needs</h2>
-      <p class="lead" data-i18n="p.conn.lead">The Compounder sits on a paved surface. Required connections:</p>
-      <div class="cards2">
+      <p class="lead" data-i18n="p.conn.lead">The Compounder Machine sits on a paved surface; parking in the immediate vicinity is one of the most important factors. What the location needs:</p>
+      <div class="cards2 conn-grid">
+        <div class="tile"><div class="ic" data-i18n="p.conn.park">Parking</div><h4 data-i18n="p.conn.parkh">Right next to the unit</h4><p data-i18n="p.conn.parkp">Parking in the immediate vicinity is one of the most important factors — customers drive straight to the service.</p></div>
         <div class="tile"><div class="ic" data-i18n="p.conn.water">Water</div><h4 data-i18n="p.conn.waterh">Cold water</h4><p data-i18n="p.conn.waterp">Standard water connection, approx. 3/4". Heating is handled by the machine.</p></div>
         <div class="tile"><div class="ic" data-i18n="p.conn.el">Electricity</div><h4 data-i18n="p.conn.elh">Power connection</h4><p data-i18n="p.conn.elp">400 V / approx. 3×25 A. Exact load per configuration.</p></div>
-        <div class="tile"><div class="ic" data-i18n="p.conn.drain">Drain</div><h4 data-i18n="p.conn.drainh">Sewerage</h4><p data-i18n="p.conn.drainp">Connection to sewerage or a tank.</p></div>
-        <div class="tile"><div class="ic" data-i18n="p.conn.net">Connectivity</div><h4 data-i18n="p.conn.neth">Internet</h4><p data-i18n="p.conn.netp">LTE/5G included for monitoring; fixed line optional.</p></div>
+        <div class="tile"><div class="ic" data-i18n="p.conn.drain">Drain</div><h4 data-i18n="p.conn.drainh">Sewerage</h4><p data-i18n="p.conn.drainp">Ideally DN 110 mm. Connection to sewerage or a tank.</p></div>
+        <div class="tile"><div class="ic" data-i18n="p.conn.net">Connectivity</div><h4 data-i18n="p.conn.neth">Internet</h4><p data-i18n="p.conn.netp">Not included — set up a local data SIM and insert it into the router the Compounder is equipped with.</p></div>
       </div>
-      <p class="note" data-i18n="p.conn.note">Average connection cost is in the economics model — adjust per location.</p>
+      <p class="note" data-i18n="p.conn.note">Connection costs are highly individual; the average is included in the economics model.</p>
     </section>
 
     <section class="blk" id="pudorysy">
@@ -250,6 +420,33 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
       <p class="note" data-i18n="p.dist.note">We'll discuss specific terms, prices and availability in person — we'll get in touch.</p>
     </section>
 
+    <section class="blk" id="lokalita">
+      <div class="eyebrow" data-i18n="p.loc.eyebrow">Location check</div>
+      <h2 data-i18n="p.loc.title">AI location assessment</h2>
+      <p class="lead" data-i18n="p.loc.lead">Enter an address — AI checks for parking, counts people within 15 km and, based on your customers/day above, estimates what share of them you'd need to win over. You get a short success report.</p>
+      <div class="panel" style="margin-bottom:22px">
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+          <input type="text" id="loc-addr" placeholder="Street, city…" style="flex:1;min-width:220px;background:var(--in);border:1px solid rgba(201,162,75,.4);border-radius:8px;padding:11px 13px;color:var(--gold-soft);font-size:14px;font-family:inherit">
+          <button type="button" id="loc-btn" class="btn" style="margin:0" data-i18n="p.loc.btn">Assess location</button>
+        </div>
+        <p class="note" id="loc-msg" role="status" style="min-height:18px;margin-top:10px"></p>
+      </div>
+      <div id="loc-result" style="display:none">
+        <div class="metrics">
+          <div class="metric"><div class="k" data-i18n="p.loc.mscore">Success score</div><div class="v gold" id="loc-score">—</div><div class="s" id="loc-verdict">—</div></div>
+          <div class="metric"><div class="k" data-i18n="p.loc.mpop">People within 15 km</div><div class="v" id="loc-pop">—</div></div>
+          <div class="metric"><div class="k" data-i18n="p.loc.mreq">Share to win over</div><div class="v" id="loc-req">—</div><div class="s" id="loc-reqs">—</div></div>
+          <div class="metric"><div class="k" data-i18n="p.loc.mpark">Parking nearby</div><div class="v" id="loc-park">—</div></div>
+        </div>
+        <div class="panel">
+          <p id="loc-summary" style="font-size:14.5px;color:var(--text);margin-bottom:14px"></p>
+          <div id="loc-factors" class="unit-grid" style="margin-bottom:14px"></div>
+          <p id="loc-reco" class="note" style="font-size:13.5px;display:none"></p>
+          <p class="note" style="margin-top:12px;color:var(--muted-2)" data-i18n="p.loc.disc">Indicative estimate from OpenStreetMap + AI. Always verify on site.</p>
+        </div>
+      </div>
+    </section>
+
     <section class="blk" id="ucet">
       <div class="eyebrow" data-i18n="p.acc.eyebrow">Account</div>
       <h2 data-i18n="p.acc.title">Password & sign-in</h2>
@@ -268,6 +465,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
   <footer data-i18n="p.footer">COMPOUNDER · Best Series — We build Compounder Machines. · compounder.world</footer>
 </div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="i18n.js"></script>
 <script>
 (function(){
@@ -275,6 +473,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
   var I18N = window.COMPOUNDER_I18N || { base:"en", path:"i18n/", LANGS:{en:"English"}, strings:{en:{}} };
   var DICT = {};
   var PORTAL_LEAD_ID = null;
+  var mileChart = null, mileMode = "full";
   function pT(k){ return DICT[k] != null ? DICT[k] : ((I18N.strings[I18N.base]||{})[k] || k); }
   window.__pt = pT;
   // stažení dokumentace verze → analytika (kdo má zájem o kterou velikost)
@@ -416,7 +615,8 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
       pBuildSelect(pDetect());
       pSetLang(pDetect(), function(){
         document.getElementById("hi").textContent = pT("p.hi") + (first ? (", " + first) : "");
-        initCalc(); initNav();
+        var gb = document.getElementById("gearBtn"); if (gb){ gb.setAttribute("aria-label", pT("p.nav.acc")); gb.title = pT("p.nav.acc"); }
+        initCalc(); initNav(); initGallery(); initMilestones(); initLocation();
       });
       try {
         var sid = localStorage.getItem("compounder.sid");
@@ -426,13 +626,33 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
         else fetch("/api/compounder/track", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(pl), keepalive: true }).catch(function(){});
       } catch(e) {}
       initPortalPush(token);
+      loadEkoDetailLink(token);
     })
     .catch(function(){ showDenied(); });
 
+  // Osobní odkaz na detailní ekonomiku (per účet, sledovaný zvlášť).
+  function loadEkoDetailLink(tok){
+    fetch("/api/compounder/portal/economy-link?t=" + encodeURIComponent(tok), { credentials:"include" })
+      .then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(j){
+        if (!j || !j.ok || !j.url) return;
+        var a = document.getElementById("eko-detail-link");
+        if (a){ a.href = j.url; a.style.display = "inline-flex"; }
+      })
+      .catch(function(){});
+  }
+
   function val(id){ var v = parseFloat(document.getElementById(id).value); return isNaN(v) ? 0 : v; }
   function initCalc(){
-    ["i-machine","i-permit","i-conn","i-perday","i-spend","i-cost"].forEach(function(id){
+    var ids = ["i-machine","i-permit","i-conn","i-perday","i-spend","i-cost"];
+    ids.forEach(function(id){
       document.getElementById(id).addEventListener("input", recalc);
+    });
+    // Reset na výchozí (tovární) hodnoty — bere původní value z HTML (defaultValue).
+    var rb = document.getElementById("eko-reset");
+    if (rb) rb.addEventListener("click", function(){
+      ids.forEach(function(id){ var el = document.getElementById(id); if (el) el.value = el.defaultValue; });
+      recalc();
     });
     recalc();
   }
@@ -464,6 +684,152 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
     document.getElementById("r-bar-note").textContent = profit > 0
       ? pT("p.ret.paid").replace("{pct}", pct.toFixed(0))
       : pT("p.ret.loss");
+    renderMilestones(invest, profit);
+  }
+
+  // ——— Gold & Diamond (napojeno na živý model výše) ———
+  function mlLang(){ return document.documentElement.lang || "en"; }
+  function setText(id, v){ var e = document.getElementById(id); if (e) e.textContent = v; }
+  function moneyBig(v){
+    if (v >= 1000000) return (v / 1000000).toLocaleString(mlLang(), { maximumFractionDigits: 1 }) + " " + pT("p.mile.mln");
+    return fmt(v) + " €";
+  }
+  function projectFromGold(net, inv, goldT, diaT){
+    var M = goldT, bank = 0, arr = [goldT], dM = null;
+    for (var i = 1; i <= 120; i++){
+      bank += M * net; while (bank >= inv){ bank -= inv; M++; }
+      arr.push(M);
+      if (M >= diaT){ dM = i; break; }
+    }
+    return { arr: arr, dM: dM };
+  }
+  function rampToDiamond(net, inv, diaT, Tm){
+    var fleet = 0, bank = 0, own = 0;
+    for (var m = 1; m <= Tm; m++){
+      var target = Math.round(diaT * m / Tm), add = target - fleet; if (add < 0) add = 0;
+      var cost = add * inv, fromBank = Math.min(bank, cost);
+      own += cost - fromBank; bank -= fromBank; fleet = target; bank += fleet * net;
+    }
+    return { own: own, bankLeft: bank };
+  }
+  function reinvestFull(net, inv, start, bank0){
+    var f = start, b = bank0, c = 0;
+    for (var m = 1; m <= 120; m++){ var p = f * net; c += p; b += p; while (b >= inv){ b -= inv; f++; } }
+    return { endFleet: f, cum: c, monthlyEnd: f * net };
+  }
+  function steadyPlus4(net, inv, start, bank0){
+    var f = start, c = bank0;
+    for (var m = 1; m <= 120; m++){ var inc = f * net - 4 * inv; if (inc < 0) inc = 0; c += inc; f += 4; }
+    return { endFleet: f, cum: c, monthlyEnd: Math.max(0, f * net - 4 * inv) };
+  }
+  function drawMileChart(arr, diaT){
+    if (typeof Chart === "undefined") return;
+    var ctx = document.getElementById("ml-chart"); if (!ctx) return;
+    var labels = arr.map(function(_, i){ return i; });
+    var dLine = arr.map(function(){ return diaT; });
+    if (mileChart) mileChart.destroy();
+    mileChart = new Chart(ctx, {
+      type: "line",
+      data: { labels: labels, datasets: [
+        { label: pT("p.mile.legfleet"), data: arr, borderColor: "#c9a24b", backgroundColor: "rgba(201,162,75,.12)", fill: true, tension: .25, pointRadius: 0, borderWidth: 2 },
+        { label: pT("p.mile.legdia"), data: dLine, borderColor: "#8fb8e8", borderDash: [5,5], pointRadius: 0, borderWidth: 1.5, fill: false }
+      ]},
+      options: { responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { labels: { color: "#9b9ba3", boxWidth: 14, font: { size: 12 } } } },
+        scales: {
+          x: { title: { display: true, text: pT("p.mile.xaxis"), color: "#6c6c75", font: { size: 11 } }, ticks: { color: "#6c6c75", maxTicksLimit: 10, font: { size: 11 } }, grid: { display: false } },
+          y: { ticks: { color: "#6c6c75", font: { size: 11 } }, grid: { color: "rgba(255,255,255,.06)" }, beginAtZero: false }
+        }
+      }
+    });
+  }
+  function initMilestones(){
+    var y = document.getElementById("ml-years"); if (y) y.addEventListener("input", recalc);
+    var bf = document.getElementById("ml-mode-full"), bs = document.getElementById("ml-mode-steady");
+    if (bf) bf.addEventListener("click", function(){ mileMode = "full"; recalc(); });
+    if (bs) bs.addEventListener("click", function(){ mileMode = "steady"; recalc(); });
+  }
+  function renderMilestones(invest, profit){
+    if (!document.getElementById("ml-gold")) return;
+    var net = profit;
+    var goldT = net > 0 ? Math.max(1, Math.ceil(invest / net)) : null;
+    var diaT  = net > 0 ? Math.max(1, Math.ceil(4 * invest / net)) : null;
+    setText("ml-gold", goldT || "—");
+    setText("ml-dia", diaT || "—");
+    var fleet = diaT || 0;
+    setText("ml-maint", net > 0 ? Math.max(1, Math.ceil(fleet / 80)) : "—");
+    setText("ml-serv",  net > 0 ? Math.max(1, Math.ceil(fleet / 50)) : "—");
+
+    var bf = document.getElementById("ml-mode-full"), bs = document.getElementById("ml-mode-steady");
+    if (bf) bf.classList.toggle("active", mileMode === "full");
+    if (bs) bs.classList.toggle("active", mileMode === "steady");
+    setText("ml-month10-l", pT("p.mile.month10p"));
+    setText("ml-cum10-l",   pT("p.mile.cum10p"));
+    setText("ml-note",      pT(mileMode === "full" ? "p.mile.notefull" : "p.mile.notesteady"));
+
+    if (!goldT){
+      setText("ml-capown", "—"); setText("ml-fleet10", "—"); setText("ml-month10", "—"); setText("ml-cum10", "—");
+      setText("ml-cap", pT("p.mile.caploss"));
+      if (mileChart){ mileChart.destroy(); mileChart = null; }
+      return;
+    }
+    var p = projectFromGold(net, invest, goldT, diaT);
+    var cap = pT("p.mile.capbase");
+    if (p.dM) cap += " " + pT("p.mile.capdia").replace("{n}", p.dM);
+    setText("ml-cap", cap);
+
+    var years = Math.min(10, Math.max(1, parseFloat(document.getElementById("ml-years").value) || 3));
+    var Tm = Math.round(years * 12);
+    var ramp = rampToDiamond(net, invest, diaT, Tm);
+    var r10 = mileMode === "full" ? reinvestFull(net, invest, diaT, ramp.bankLeft) : steadyPlus4(net, invest, diaT, ramp.bankLeft);
+    setText("ml-capown", moneyBig(ramp.own));
+    setText("ml-fleet10", r10.endFleet.toLocaleString(mlLang()));
+    setText("ml-month10", moneyBig(r10.monthlyEnd));
+    setText("ml-cum10", moneyBig(r10.cum));
+
+    drawMileChart(p.arr, diaT);
+  }
+  function locEsc(s){ var d = document.createElement("div"); d.textContent = String(s == null ? "" : s); return d.innerHTML; }
+  function initLocation(){
+    var inp = document.getElementById("loc-addr"); if (inp) inp.placeholder = pT("p.loc.ph");
+    var btn = document.getElementById("loc-btn"); if (!btn) return;
+    btn.addEventListener("click", runLocation);
+    if (inp) inp.addEventListener("keydown", function(e){ if (e.key === "Enter"){ e.preventDefault(); runLocation(); } });
+  }
+  function runLocation(){
+    var inp = document.getElementById("loc-addr"), addr = (inp.value || "").trim();
+    var msg = document.getElementById("loc-msg"), btn = document.getElementById("loc-btn");
+    if (addr.length < 3){ msg.style.color = "#e07a6b"; msg.textContent = pT("p.loc.errshort"); return; }
+    var tok = ""; try { tok = localStorage.getItem("compounder.portal.token") || ""; } catch(_){}
+    var pd = parseFloat(document.getElementById("i-perday").value); if (isNaN(pd)) pd = 8;
+    btn.disabled = true; msg.style.color = ""; msg.textContent = pT("p.loc.loading");
+    fetch("/api/compounder/portal/location-assess", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ t: tok, address: addr, perDay: pd, lang: mlLang() }) })
+      .then(function(r){ return r.json().then(function(j){ return { ok: r.ok, j: j }; }); })
+      .then(function(res){
+        if (!res.ok || !res.j || !res.j.ok){ msg.style.color = "#e07a6b"; msg.textContent = (res.j && res.j.error) || pT("p.loc.err"); return; }
+        msg.textContent = ""; renderLocation(res.j);
+      })
+      .catch(function(){ msg.style.color = "#e07a6b"; msg.textContent = pT("p.loc.err"); })
+      .finally(function(){ btn.disabled = false; });
+  }
+  function renderLocation(data){
+    var f = data.facts || {}, r = data.report || {}, lng = mlLang();
+    document.getElementById("loc-result").style.display = "block";
+    setText("loc-score", (r.scorePct != null ? r.scorePct : "—") + " %");
+    setText("loc-verdict", r.verdict || "");
+    setText("loc-pop", (f.population_15km || 0).toLocaleString(lng));
+    setText("loc-req", f.required_pct == null ? "—" : (f.required_pct + " %"));
+    setText("loc-reqs", (f.monthly_customers || 0).toLocaleString(lng) + " " + pT("p.loc.permonth"));
+    setText("loc-park", f.parking_count > 0 ? (f.parking_count + (f.nearest_parking_m != null ? (" · " + f.nearest_parking_m + " m") : "")) : pT("p.loc.none"));
+    document.getElementById("loc-summary").textContent = r.summary || "";
+    var fc = document.getElementById("loc-factors"); fc.innerHTML = "";
+    (r.factors || []).forEach(function(x){
+      var d = document.createElement("div"); d.className = "unit-item";
+      var dot = document.createElement("span"); dot.className = "d"; dot.style.background = x.good ? "#5dcaa5" : "var(--muted-2)";
+      var sp = document.createElement("span"); sp.innerHTML = "<b>" + locEsc(x.label) + "</b>: " + locEsc(x.value);
+      d.appendChild(dot); d.appendChild(sp); fc.appendChild(d);
+    });
+    var reco = document.getElementById("loc-reco"); reco.textContent = r.recommendation || ""; reco.style.display = r.recommendation ? "block" : "none";
   }
   function initNav(){
     var links = Array.prototype.slice.call(document.querySelectorAll(".subnav a"));
@@ -473,6 +839,40 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
       secs.forEach(function(s,i){ if (s && s.offsetTop <= y) idx = i; });
       links.forEach(function(a,i){ a.classList.toggle("active", i === idx); });
     }, { passive:true });
+  }
+
+  function initGallery(){
+    // Taby Fotky / Videa
+    var tabs = Array.prototype.slice.call(document.querySelectorAll(".gal-tab"));
+    var panes = { fotky: document.getElementById("gal-fotky"), videa: document.getElementById("gal-videa") };
+    tabs.forEach(function(t){
+      t.addEventListener("click", function(){
+        var key = t.getAttribute("data-galtab");
+        tabs.forEach(function(x){ x.classList.toggle("active", x === t); });
+        Object.keys(panes).forEach(function(k){ if (panes[k]) panes[k].classList.toggle("gal-hidden", k !== key); });
+        // při odchodu z videí zastav přehrávání
+        if (key !== "videa" && panes.videa) panes.videa.querySelectorAll("video").forEach(function(v){ try{v.pause();}catch(e){} });
+      });
+    });
+    // Lightbox pro fotky
+    var imgs = Array.prototype.slice.call(document.querySelectorAll("#gal-fotky img"));
+    var lb = document.getElementById("lbox"), lbImg = document.getElementById("lb-img");
+    var cur = 0;
+    function show(i){ cur = (i + imgs.length) % imgs.length; lbImg.src = imgs[cur].getAttribute("data-full"); }
+    function open(i){ show(i); lb.classList.add("open"); lb.setAttribute("aria-hidden","false"); }
+    function close(){ lb.classList.remove("open"); lb.setAttribute("aria-hidden","true"); lbImg.src = ""; }
+    imgs.forEach(function(im, i){ im.addEventListener("click", function(){ open(i); }); });
+    var x = document.getElementById("lb-x"), prev = document.getElementById("lb-prev"), next = document.getElementById("lb-next");
+    if (x) x.addEventListener("click", close);
+    if (prev) prev.addEventListener("click", function(){ show(cur - 1); });
+    if (next) next.addEventListener("click", function(){ show(cur + 1); });
+    if (lb) lb.addEventListener("click", function(e){ if (e.target === lb) close(); });
+    document.addEventListener("keydown", function(e){
+      if (!lb || !lb.classList.contains("open")) return;
+      if (e.key === "Escape") close();
+      else if (e.key === "ArrowLeft") show(cur - 1);
+      else if (e.key === "ArrowRight") show(cur + 1);
+    });
   }
 
   function pUrlB64(s){ var pad="=".repeat((4-s.length%4)%4); var b=(s+pad).replace(/-/g,"+").replace(/_/g,"/"); var raw=atob(b); var arr=new Uint8Array(raw.length); for(var i=0;i<raw.length;i++)arr[i]=raw.charCodeAt(i); return arr; }

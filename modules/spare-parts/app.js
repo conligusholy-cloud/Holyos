@@ -550,6 +550,10 @@
           <div>
             <label><input type="checkbox" id="m-sells" ${m.sells_on_eshop?'checked':''}> Prodávat na eshopu</label>
           </div>
+          <div>
+            <label><input type="checkbox" id="m-backorder" ${m.eshop_allow_backorder?'checked':''}> Nabízet i bez skladu (na objednávku)</label>
+            <div style="font-size:11px; color:var(--text2); margin-top:4px;">Díl půjde objednat i při nulové dostupnosti.</div>
+          </div>
         </div>
         <div class="form-row">
           <div>
@@ -584,6 +588,7 @@
   window.saveMaterialEshop = async function (id) {
     const data = {
       sells_on_eshop: document.getElementById('m-sells').checked,
+      eshop_allow_backorder: document.getElementById('m-backorder').checked,
       eshop_warehouse_id: parseInt(document.getElementById('m-warehouse').value, 10) || null,
       eshop_category_id: parseInt(document.getElementById('m-category').value, 10) || null,
       eshop_description: document.getElementById('m-description').value.trim() || null,

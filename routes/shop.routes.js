@@ -152,11 +152,35 @@ router.get('/me', async (req, res, next) => {
 
 router.get('/categories', async (req, res, next) => {
   try {
-    const items = await prisma.eshopCategory.findMany({
+    const categories = await prisma.eshopCategory.findMany({
       orderBy: [{ sort_order: 'asc' }, { name: 'asc' }],
-      include: { _count: { select: { materials: { where: { sells_on_eshop: true } } } } },
     });
-    res.json(items);
+
+    // Badge počty musí odpovídat tomu, co partner reálně uvidí v /products,
+    // jinak chip ukazuje počet, na který se po rozkliknutí nedá dostat
+    // (kategorie hlásí 1, ale "Nic neodpovídá filtru"). Proto počítáme přes
+    // stejné podmínky viditelnosti: sells_on_eshop + active + má cenu v ceníku
+    // partnera + skladem > 0.
+    const pl = await getPricelistForPartner(req);
+    if (!pl) {
+      // Bez ceníku partner stejně nic nevidí — vrať nulové počty.
+      return res.json(categories.map(c => ({ ...c, _count: { materials: 0 } })));
+    }
+
+    const materials = await prisma.material.findMany({
+      where: { sells_on_eshop: true, status: 'active', eshop_category_id: { not: null } },
+      select: { id: true, sells_on_eshop: true, eshop_allow_backorder: true, eshop_warehouse_id: true, eshop_category_id: true },
+    });
+    const priceMap = await getPricesForMaterials(pl.id, materials.map(m => m.id));
+    const counts = new Map();
+    for (const m of materials) {
+      if (priceMap.get(m.id) == null) continue;       // bez ceny ho neukazujeme
+      const available = await availableForEshop(m);
+      if (available <= 0 && !m.eshop_allow_backorder) continue;  // out-of-stock skryjeme, ale "na objednávku" necháme
+      counts.set(m.eshop_category_id, (counts.get(m.eshop_category_id) || 0) + 1);
+    }
+
+    res.json(categories.map(c => ({ ...c, _count: { materials: counts.get(c.id) || 0 } })));
   } catch (err) { next(err); }
 });
 
@@ -189,7 +213,7 @@ router.get('/products', async (req, res, next) => {
       take: 500,
       select: {
         id: true, code: true, name: true, unit: true, photo_url: true,
-        eshop_warehouse_id: true, sells_on_eshop: true,
+        eshop_warehouse_id: true, sells_on_eshop: true, eshop_allow_backorder: true,
         eshop_description: true, eshop_image_path: true,
         eshop_category: { select: { id: true, name: true, slug: true } },
       },
@@ -202,7 +226,7 @@ router.get('/products', async (req, res, next) => {
       const price = priceMap.get(m.id);
       if (price == null) continue; // bez ceny ho v katalogu neukazujeme
       const available = await availableForEshop(m);
-      if (available <= 0) continue; // out-of-stock skryjeme
+      if (available <= 0 && !m.eshop_allow_backorder) continue; // out-of-stock skryjeme, "na objednávku" necháme
       out.push({
         id: m.id,
         code: m.code,
@@ -216,6 +240,7 @@ router.get('/products', async (req, res, next) => {
         price_incl_vat: Math.round(price * (1 + Number(pl.vat_pct) / 100) * 100) / 100,
         currency: pl.currency,
         available_qty: available,
+        backorder: !!m.eshop_allow_backorder,
       });
     }
 
@@ -237,7 +262,7 @@ router.get('/products/:id', async (req, res, next) => {
       where: { id },
       select: {
         id: true, code: true, name: true, unit: true, photo_url: true,
-        sells_on_eshop: true, eshop_warehouse_id: true, status: true,
+        sells_on_eshop: true, eshop_allow_backorder: true, eshop_warehouse_id: true, status: true,
         eshop_description: true, eshop_image_path: true,
         eshop_category: { select: { id: true, name: true, slug: true } },
       },
@@ -262,6 +287,7 @@ router.get('/products/:id', async (req, res, next) => {
       price_incl_vat: Math.round(price * (1 + Number(pl.vat_pct) / 100) * 100) / 100,
       currency: pl.currency,
       available_qty: available,
+      backorder: !!m.eshop_allow_backorder,
     });
   } catch (err) { next(err); }
 });
@@ -318,7 +344,7 @@ router.post('/cart/validate', async (req, res, next) => {
     const materialIds = parsed.data.items.map(it => it.material_id);
     const materials = await prisma.material.findMany({
       where: { id: { in: materialIds }, sells_on_eshop: true, status: 'active' },
-      select: { id: true, code: true, name: true, unit: true, sells_on_eshop: true, eshop_warehouse_id: true },
+      select: { id: true, code: true, name: true, unit: true, sells_on_eshop: true, eshop_allow_backorder: true, eshop_warehouse_id: true },
     });
     const matMap = new Map(materials.map(m => [m.id, m]));
     const priceMap = await getPricesForMaterials(pl.id, materialIds);
@@ -339,12 +365,13 @@ router.post('/cart/validate', async (req, res, next) => {
         continue;
       }
       const available = await availableForEshop(m);
-      const effectiveQty = Math.min(qty, available);
+      // "Na objednávku" díl bere plné množství bez ohledu na sklad.
+      const effectiveQty = m.eshop_allow_backorder ? qty : Math.min(qty, available);
       if (effectiveQty <= 0) {
         issues.push({ material_id: ci.material_id, error: 'out_of_stock', message: `${m.name} už není skladem.` });
         continue;
       }
-      if (effectiveQty < qty) {
+      if (!m.eshop_allow_backorder && effectiveQty < qty) {
         issues.push({
           material_id: ci.material_id,
           error: 'insufficient_stock',
@@ -435,7 +462,7 @@ router.post('/orders', async (req, res, next) => {
     const materialIds = body.items.map(it => it.material_id);
     const materials = await prisma.material.findMany({
       where: { id: { in: materialIds }, sells_on_eshop: true, status: 'active' },
-      select: { id: true, code: true, name: true, unit: true, eshop_warehouse_id: true, sells_on_eshop: true },
+      select: { id: true, code: true, name: true, unit: true, eshop_warehouse_id: true, sells_on_eshop: true, eshop_allow_backorder: true },
     });
     const matMap = new Map(materials.map(m => [m.id, m]));
     const priceMap = await getPricesForMaterials(pl.id, materialIds);
@@ -449,8 +476,11 @@ router.post('/orders', async (req, res, next) => {
       if (price == null) return res.status(400).json({ error: `${m.name}: bez ceny v ceníku.` });
       const qty = Number(ci.quantity);
       if (!(qty > 0)) return res.status(400).json({ error: `${m.name}: neplatné množství.` });
-      const available = await availableForEshop(m);
-      if (available < qty) return res.status(409).json({ error: `${m.name}: skladem jen ${available} ${m.unit}, požadováno ${qty}.`, material_id: m.id, available });
+      // "Na objednávku" díl povolíme objednat i bez skladu (oversell je záměr).
+      if (!m.eshop_allow_backorder) {
+        const available = await availableForEshop(m);
+        if (available < qty) return res.status(409).json({ error: `${m.name}: skladem jen ${available} ${m.unit}, požadováno ${qty}.`, material_id: m.id, available });
+      }
       const total = Math.round(qty * price * 100) / 100;
       subtotal += total;
       itemRows.push({

@@ -5,6 +5,8 @@
 
 const express = require('express');
 const router = express.Router();
+const path = require('path');
+const fs = require('fs');
 const { z } = require('zod');
 const bcrypt = require('bcryptjs');
 const { prisma } = require('../config/database');
@@ -198,6 +200,34 @@ router.get('/articles/:id', async (req, res, next) => {
     }).catch(() => {});
 
     res.json(article);
+  } catch (err) { next(err); }
+});
+
+// ─── PDF MANUÁLY (download pro partnera) ──────────────────────────────────
+
+// GET /api/hugo/manuals/:id/download — stáhne PDF manuál spotřebiče.
+// Partner smí jen manuály spotřebičů, které jsou v jeho přiřazených produktech.
+router.get('/manuals/:id/download', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const productIds = (req.partner.products || []).map(p => p.product_id);
+    if (!productIds.length) {
+      return res.status(403).json({ error: 'Nemáš přiřazené produkty, k manuálu nemáš přístup' });
+    }
+    // Manuál musí patřit spotřebiči, který je v některém z partnerových produktů
+    const m = await prisma.serviceApplianceManual.findFirst({
+      where: {
+        id,
+        appliance: { product_links: { some: { product_id: { in: productIds } } } },
+      },
+    });
+    if (!m) return res.status(404).json({ error: 'Manuál nenalezen nebo k němu nemáš přístup' });
+
+    const absPath = path.join(__dirname, '..', m.file_path);
+    if (!fs.existsSync(absPath)) return res.status(404).json({ error: 'Soubor chybí na disku' });
+    if (m.mime_type) res.type(m.mime_type);
+    res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(m.title)}"`);
+    res.sendFile(absPath);
   } catch (err) { next(err); }
 });
 

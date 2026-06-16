@@ -175,7 +175,7 @@
 
     root.innerHTML = '';
     const overlay = el('div', { class: 'modal-overlay' });
-    overlay.addEventListener('click', e => { if (e.target === overlay) root.innerHTML = ''; });
+    // Záměrně NEzavíráme kliknutím mimo — jen křížkem (ochrana rozepsaného článku)
     const modal = el('div', { class: 'modal' });
     overlay.appendChild(modal);
 
@@ -333,7 +333,7 @@
     };
   }
 
-  function renderPickChips(containerId, set, getter, labelFn) {
+  function renderPickChips(containerId, set, getter, labelFn, onChange) {
     const c = document.getElementById(containerId);
     if (!c) return;
     const select = c.querySelector('select');
@@ -341,10 +341,11 @@
     Array.from(set).forEach(id => {
       const chip = el('span', { class: 'chip' },
         labelFn(id),
-        el('span', { class: 'x', onclick: () => { set.delete(id); renderPickChips(containerId, set, getter, labelFn); } }, '✕'),
+        el('span', { class: 'x', onclick: () => { set.delete(id); renderPickChips(containerId, set, getter, labelFn, onChange); if (onChange) onChange(); } }, '✕'),
       );
       c.insertBefore(chip, select);
     });
+    if (onChange) onChange();
   }
 
   function escapeHtml(s) {
@@ -1058,7 +1059,13 @@
         </select>
       </div>
       <div class="form-row">
-        <label>Produkty (prádlomaty) přiřazené partnerovi — Hugo bude omezený na tyto</label>
+        <label style="display:flex; align-items:center; justify-content:space-between; gap:12px;">
+          <span>Produkty (prádlomaty) přiřazené partnerovi — Hugo bude omezený na tyto</span>
+          <span style="display:inline-flex; align-items:center; gap:6px; font-weight:normal; text-transform:none; letter-spacing:0; cursor:pointer;">
+            <input type="checkbox" id="p-products-all" onchange="window.__servis_togglePAllProducts(this)" ${realProducts().length && realProducts().every(p => productIds.has(p.id)) ? 'checked' : ''}>
+            Všechny produkty
+          </span>
+        </label>
         <div class="chip-pick" id="pick-p-products">
           <select onchange="window.__servis_pickPProduct(this)">
             <option value="">+ Přidat produkt…</option>
@@ -1072,13 +1079,27 @@
         <button class="btn btn-primary" onclick="window.__servis_savePartner(${id || 'null'})">Uložit</button>
       </div>
     `;
+    // Synchronizuje stav zaškrtávátka „Všechny produkty" podle aktuálního výběru
+    function syncPAllProductsCheckbox() {
+      const cb = document.getElementById('p-products-all');
+      if (!cb) return;
+      const all = realProducts();
+      cb.checked = all.length > 0 && all.every(p => productIds.has(p.id));
+    }
+    const pProductLabel = id => `${products.find(p => p.id === id)?.code || ''} ${products.find(p => p.id === id)?.name || '#'+id}`;
     root.appendChild(overlay);
-    renderPickChips('pick-p-products', productIds, id => products.find(p => p.id === id), id => `${products.find(p => p.id === id)?.code || ''} ${products.find(p => p.id === id)?.name || '#'+id}`);
+    renderPickChips('pick-p-products', productIds, id => products.find(p => p.id === id), pProductLabel, syncPAllProductsCheckbox);
     window.__servis_pickPProduct = function (sel) {
       const id = parseInt(sel.value, 10);
       if (id) productIds.add(id);
       sel.value = '';
-      renderPickChips('pick-p-products', productIds, id => products.find(p => p.id === id), id => `${products.find(p => p.id === id)?.code || ''} ${products.find(p => p.id === id)?.name || '#'+id}`);
+      renderPickChips('pick-p-products', productIds, id => products.find(p => p.id === id), pProductLabel, syncPAllProductsCheckbox);
+    };
+    // Jedním zaškrtávátkem vybere / zruší všechny produkty
+    window.__servis_togglePAllProducts = function (cb) {
+      productIds.clear();
+      if (cb.checked) realProducts().forEach(p => productIds.add(p.id));
+      renderPickChips('pick-p-products', productIds, id => products.find(p => p.id === id), pProductLabel, syncPAllProductsCheckbox);
     };
 
     window.__servis_copyShareInfo = async function (partnerId) {

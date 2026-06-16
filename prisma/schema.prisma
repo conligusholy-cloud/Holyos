@@ -773,6 +773,28 @@ model WarehouseLocation {
   @@map("warehouse_locations")
 }
 
+// Kategorie zboží — stromová hierarchie (osnova) pro modul Nákup a sklad.
+// Spravuje se v záložce "Kategorie", zboží se zařazuje přes Material.category_id.
+// Stejný název smí existovat pod různými rodiči (např. "Profily" ve dvou větvích).
+model MaterialCategory {
+  id          Int     @id @default(autoincrement())
+  name        String  @db.VarChar(100)
+  description String? @db.Text
+  sort_order  Int     @default(0)
+  parent_id   Int?
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  parent    MaterialCategory?  @relation("MaterialCategoryHierarchy", fields: [parent_id], references: [id], onDelete: SetNull)
+  children  MaterialCategory[] @relation("MaterialCategoryHierarchy")
+  materials Material[]         @relation("MaterialCategory")
+
+  @@index([parent_id])
+  @@index([sort_order])
+  @@map("material_categories")
+}
+
 model Material {
   id          Int     @id @default(autoincrement())
   code        String  @unique @db.VarChar(50)
@@ -893,15 +915,22 @@ model Material {
   //   holyos_stock_warehouse_join). eshop_description = marketing copy (Markdown),
   //   eshop_image_path = primární obrázek pro katalog (fallback na photo_url).
   sells_on_eshop      Boolean @default(false)
+  // eshop_allow_backorder = nabízet díl i když není skladem ("na objednávku").
+  // Když true, katalog ho ukáže a objednávku povolí i při nulové dostupnosti.
+  eshop_allow_backorder Boolean @default(false)
   eshop_warehouse_id  Int?
   eshop_description   String? @db.Text
   eshop_image_path    String? @db.VarChar(500)
   eshop_category_id   Int?
 
+  // Kategorie zboží (interní osnova skladu — nezaměňovat s eshop_category_id)
+  category_id Int?
+
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
 
   // Vztahy
+  category                MaterialCategory?      @relation("MaterialCategory", fields: [category_id], references: [id], onDelete: SetNull)
   supplier                Company?               @relation("MaterialSupplier", fields: [supplier_id], references: [id])
   movements               InventoryMovement[]
   order_items             OrderItem[]
@@ -927,6 +956,7 @@ model Material {
   shop_order_items      ShopOrderItem[]
 
   @@index([code])
+  @@index([category_id])
   @@index([supplier_id])
   @@index([factorify_id])
   @@index([sector])
@@ -4067,11 +4097,15 @@ model BusinessToolRecipient {
   company     String?   @db.VarChar(255)
   note        String?   @db.Text
   share_token String    @unique @db.VarChar(80)
-  created_by  Int
+  created_by  Int?
   created_at  DateTime  @default(now())
   last_opened DateTime?
   open_count  Int       @default(0)
   save_count  Int       @default(0)
+
+  // Když příjemce vznikl automaticky pro leada z compounder.world (Portal),
+  // odkazuje na jeho CompounderLead.id — umožní sledovat ekonomiku per účet.
+  compounder_lead_id Int?
 
   // Jazykové mutace dostupné na veřejné share stránce (např. ["cs","en","de","fr"]).
   // První kód v poli = výchozí jazyk při otevření odkazu. Default ["cs"].
@@ -4082,13 +4116,14 @@ model BusinessToolRecipient {
   ai_summary_generated_at DateTime?
   ai_summary_model        String?   @db.VarChar(60)
 
-  creator User                @relation("BusinessToolRecipientCreator", fields: [created_by], references: [id])
+  creator User?               @relation("BusinessToolRecipientCreator", fields: [created_by], references: [id])
   models  BusinessToolModel[]
   events  BusinessToolEvent[]
 
   @@index([created_by])
   @@index([tool])
   @@index([share_token])
+  @@index([compounder_lead_id])
   @@map("business_tool_recipients")
 }
 

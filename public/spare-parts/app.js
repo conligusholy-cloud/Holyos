@@ -133,10 +133,11 @@
       loadCart();
       if (!State.me.has_access) {
         State.view = 'no-access';
+        render();
       } else {
         State.view = 'catalog';
+        loadCatalog(); // rovnou načti produkty, ať úvodní obrazovka není prázdná
       }
-      render();
     } catch (err) {
       if (err.message === '401') return;
       State.view = 'error';
@@ -252,7 +253,7 @@
             <div class="product-code">${esc(p.code)}</div>
             <div class="product-name">${esc(p.name)}</div>
             <div class="product-price">${esc(fmt(p.price_incl_vat, p.currency))}</div>
-            <div class="product-stock">Skladem ${p.available_qty} ${esc(p.unit || '')}</div>
+            <div class="product-stock">${p.available_qty > 0 ? `Skladem ${p.available_qty} ${esc(p.unit || '')}` : (p.backorder ? '<span style="color:var(--accent);">Na objednávku</span>' : 'Vyprodáno')}</div>
           </div>`).join('')}
       </div>
     ` : `<div class="empty"><div class="icon">📭</div>${State.searchQ || State.activeCategory ? 'Nic neodpovídá filtru.' : 'Zatím žádné produkty.'}</div>`;
@@ -293,11 +294,11 @@
         <div style="margin:16px 0;">
           <div style="font-size:24px; font-weight:700; color:var(--accent);">${esc(fmt(p.price_incl_vat, p.currency))} <span style="font-size:13px; color:var(--text2); font-weight:normal;">s DPH</span></div>
           <div style="font-size:13px; color:var(--text2);">${esc(fmt(p.price_excl_vat, p.currency))} bez DPH</div>
-          <div style="font-size:12px; color:var(--text2); margin-top:4px;">Skladem ${p.available_qty} ${esc(p.unit || '')}</div>
+          <div style="font-size:12px; color:var(--text2); margin-top:4px;">${p.available_qty > 0 ? `Skladem ${p.available_qty} ${esc(p.unit || '')}` : (p.backorder ? '<span style="color:var(--accent);">Na objednávku — dodáme po naskladnění</span>' : 'Vyprodáno')}</div>
         </div>
         <div class="qty-row">
           <button onclick="ShopApp.qtyAdjust(-1)">−</button>
-          <input type="number" id="prod-qty" value="${State.productQty || 1}" min="1" max="${p.available_qty}" onchange="ShopApp.qtySet(this.value)">
+          <input type="number" id="prod-qty" value="${State.productQty || 1}" min="1"${p.backorder && p.available_qty <= 0 ? '' : ` max="${p.available_qty}"`} onchange="ShopApp.qtySet(this.value)">
           <button onclick="ShopApp.qtyAdjust(1)">+</button>
           <span style="color:var(--text2);">${esc(p.unit || '')}</span>
         </div>
@@ -736,12 +737,14 @@
     onCategory: function (v) { State.activeCategory = v; loadCatalog(); },
     openProduct: openProduct,
     qtyAdjust: function (d) {
-      const max = (State.selectedProduct && State.selectedProduct.available_qty) || 999;
+      const p = State.selectedProduct;
+      const max = (p && p.backorder) ? 9999 : ((p && p.available_qty) || 999);
       State.productQty = Math.max(1, Math.min(max, (State.productQty || 1) + d));
       document.getElementById('prod-qty').value = State.productQty;
     },
     qtySet: function (v) {
-      const max = (State.selectedProduct && State.selectedProduct.available_qty) || 999;
+      const p = State.selectedProduct;
+      const max = (p && p.backorder) ? 9999 : ((p && p.available_qty) || 999);
       State.productQty = Math.max(1, Math.min(max, parseInt(v, 10) || 1));
     },
     addCurrentToCart: function () {

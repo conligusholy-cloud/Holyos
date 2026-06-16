@@ -210,6 +210,7 @@ async function dumpGoods() {
       drawn_by: trimStr(getStr(g, 'CAD_kreslil'), 100),
       toolbox_name: trimStr(getStr(g, 'CAD_Název'), 255),
       photo_url: getStr(g, 'photoUrl', 'PhotoUrl'),
+      sells_on_eshop: getBool(g, 'usesServiceEshop', 'serviceEshop', 'usesEshop', 'eshop', 'usesServiceShop', 'serviceShop'),
     };
 
     // Uložit do Materials

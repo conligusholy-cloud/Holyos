@@ -14,6 +14,7 @@ const { prisma } = require('../config/database');
 const { requireAuth } = require('../middleware/auth');
 const { createNotification } = require('./notifications.routes');
 const { sendMail } = require('../services/email');
+const { inviteEmail, loginEmail } = require('../services/compounder-emails');
 const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 
@@ -172,6 +173,133 @@ router.get('/portal/session', async (req, res, next) => {
   }
 });
 
+// GET /api/compounder/portal/economy-link?t=<token>
+// Vrátí (a při prvním přístupu vytvoří) OSOBNÍ share odkaz na detailní model
+// "Ekonomika prádlomatu" pro daného leada. Každý účet z Portalu má vlastní
+// token, takže prohlížení detailní ekonomiky lze sledovat per účet.
+router.get('/portal/economy-link', async (req, res, next) => {
+  try {
+    const id = verifyPortalToken(String(req.query.t || ''));
+    if (!id) return res.status(401).json({ ok: false, error: 'Neplatný nebo chybějící přístupový odkaz.' });
+    const lead = await prisma.compounderLead.findUnique({
+      where: { id },
+      select: { id: true, name: true, email: true, lang: true },
+    });
+    if (!lead) return res.status(404).json({ ok: false, error: 'Registrace nenalezena.' });
+
+    const TOOL = 'pradlomat-economy';
+    // Jazyky shodné s compounder webem (model je přeložený do všech); první kód
+    // = výchozí jazyk odkazu, nastavený podle jazyka leada z registrace.
+    const ALL_LANGS = ['cs', 'en', 'de', 'fr', 'bg', 'da', 'el', 'es', 'et', 'fi', 'ga', 'hr', 'hu', 'it', 'lt', 'lv', 'mt', 'nl', 'pl', 'pt', 'ro', 'sk', 'sl', 'sv'];
+    const code = String(lead.lang || '').toLowerCase().split(/[-_]/)[0];
+    const pref = ALL_LANGS.includes(code) ? code : 'en';
+    const languages = [pref, ...ALL_LANGS.filter((l) => l !== pref)];
+
+    // Najdi existující osobní odkaz tohoto leada, jinak ho vytvoř.
+    let recipient = await prisma.businessToolRecipient.findFirst({
+      where: { tool: TOOL, compounder_lead_id: lead.id },
+      select: { id: true, share_token: true },
+    });
+    if (!recipient) {
+      recipient = await prisma.businessToolRecipient.create({
+        data: {
+          tool: TOOL,
+          name: lead.name,
+          email: lead.email,
+          company: 'Compounder Portal',
+          note: 'Auto: lead z compounder.world (per-účet sledování ekonomiky)',
+          share_token: crypto.randomBytes(24).toString('hex'),
+          languages,
+          compounder_lead_id: lead.id,
+          created_by: null,
+        },
+        select: { id: true, share_token: true },
+      });
+    } else {
+      // Udrž jazykovou paritu i pro dříve vytvořené odkazy (default = jazyk leada).
+      await prisma.businessToolRecipient.update({
+        where: { id: recipient.id },
+        data: { languages },
+      }).catch(() => {});
+    }
+    // Odkaz vede na compounder.world (ne bestseries.cash) — share stránka se
+    // tam zobrazí v Compounder brandu. Routa /share/tools/* je host-agnostická.
+    const url = portalBase() + '/share/tools/' + TOOL + '/' + recipient.share_token;
+    return res.json({ ok: true, url });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ─── VEŘEJNÉ: AI zhodnocení místa (Compounder Portal, pro přihlášené leady) ──
+// POST /api/compounder/portal/location-assess  { t, address, perDay }
+// Geokóduje adresu (OSM Nominatim), zjistí parkoviště a populaci v okruhu 15 km
+// (OSM Overpass) a nechá Claude napsat krátkou statistickou zprávu + odhad úspěchu.
+const locAssessSchema = z.object({
+  t: z.string().min(1),
+  address: z.string().trim().min(3).max(200),
+  perDay: z.coerce.number().min(0).max(100000).optional(),
+  lang: z.string().trim().max(10).optional(),
+});
+router.post('/portal/location-assess', async (req, res, next) => {
+  try {
+    const parsed = locAssessSchema.safeParse(req.body || {});
+    if (!parsed.success) return res.status(400).json({ ok: false, error: 'Neplatný vstup.' });
+    const leadId = verifyPortalToken(parsed.data.t);
+    if (!leadId) return res.status(401).json({ ok: false, error: 'Neplatný přístup.' });
+
+    // jednoduchý rate limit proti zneužití (každé zhodnocení je placené AI volání)
+    if (!locRateOk(clientIp(req), leadId)) {
+      return res.status(429).json({ ok: false, error: 'Příliš mnoho dotazů. Zkus to prosím za chvíli.' });
+    }
+
+    const lead = await prisma.compounderLead.findUnique({ where: { id: leadId }, select: { lang: true } });
+    // Jazyk zprávy = aktuálně zvolený jazyk stránky (z požadavku), jinak jazyk leada, jinak EN.
+    const reqLang = parsed.data.lang ? String(parsed.data.lang).toLowerCase().split(/[-_]/)[0] : '';
+    const leadLang = (lead && lead.lang) ? String(lead.lang).toLowerCase().split(/[-_]/)[0] : '';
+    const lang = /^[a-z]{2}$/.test(reqLang) ? reqLang : (/^[a-z]{2}$/.test(leadLang) ? leadLang : 'en');
+    const perDay = Number(parsed.data.perDay) > 0 ? Number(parsed.data.perDay) : 8;
+
+    // 1) geokódování adresy
+    const geo = await geocodeAddress(parsed.data.address);
+    if (!geo) return res.status(422).json({ ok: false, error: 'Adresu se nepodařilo najít.' });
+
+    // 2) parkoviště poblíž + populace v okruhu 15 km (OSM Overpass)
+    const [parking, pop] = await Promise.all([
+      osmParking(geo.lat, geo.lon),
+      osmPopulation(geo.lat, geo.lon, 15000),
+    ]);
+
+    const monthlyCustomers = Math.round(perDay * 30.4);
+    const requiredPct = (pop.population > 0) ? (monthlyCustomers / pop.population * 100) : null;
+
+    const facts = {
+      address: geo.display_name, lat: geo.lat, lon: geo.lon,
+      parking_count: parking.count, nearest_parking_m: parking.nearest_m,
+      population_15km: pop.population, places: pop.places.slice(0, 12),
+      per_day: perDay, monthly_customers: monthlyCustomers,
+      required_pct: requiredPct == null ? null : Number(requiredPct.toFixed(2)),
+    };
+
+    // 3) AI zpráva (s fallbackem, kdyby AI selhala)
+    let report = await locationReportAI(facts, lang);
+    if (!report) report = locationReportFallback(facts, lang);
+
+    // log do analytiky (best-effort)
+    try {
+      await prisma.compounderEvent.create({ data: {
+        sid: 'loc:' + leadId, event: 'location_assess',
+        props: { lead_id: leadId, address: geo.display_name, pop: pop.population, req_pct: facts.required_pct, score: report.scorePct },
+        path: '/portal', ip: clientIp(req),
+      }});
+    } catch (e) { /* best-effort */ }
+
+    return res.json({ ok: true, facts, report });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // ─── VEŘEJNÉ: přihlášení vracejícího se leada (magic link na e-mail) ─────────
 // POST /api/compounder/login  { email, lang? }
 // Najde lead dle e-mailu a pošle přihlašovací odkaz (platí 24 h). Odpověď je
@@ -210,7 +338,7 @@ router.post('/login', async (req, res, next) => {
     // ── Přihlášení ODKAZEM (magic link) ────────────────────────────────────
     if (lead) {
       const url = `${portalBase()}/portal?t=${makeLoginToken(lead.id)}`;
-      sendPortalLogin({ name: lead.name, email: lead.email }, url)
+      sendPortalLogin({ name: lead.name, email: lead.email, lang: lead.lang }, url)
         .catch((e) => console.error('[compounder] login e-mail selhal:', e.message));
       console.log(`[compounder] Přihlašovací odkaz odeslán pro lead #${lead.id}`);
     } else {
@@ -286,6 +414,19 @@ router.patch('/leads/:id', requireAuth, async (req, res, next) => {
     if (!parsed.success) return res.status(400).json({ error: 'Neplatná data', detail: parsed.error.flatten() });
     const lead = await prisma.compounderLead.update({ where: { id }, data: parsed.data });
     res.json(lead);
+  } catch (err) {
+    if (err.code === 'P2025') return res.status(404).json({ error: 'Lead nenalezen' });
+    next(err);
+  }
+});
+
+// DELETE /api/compounder/leads/:id — smazání leadu (testovací průchod procesem)
+router.delete('/leads/:id', requireAuth, async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'Neplatné ID' });
+    await prisma.compounderLead.delete({ where: { id } });
+    res.json({ ok: true });
   } catch (err) {
     if (err.code === 'P2025') return res.status(404).json({ error: 'Lead nenalezen' });
     next(err);
@@ -440,37 +581,33 @@ function compounderMailFromName() {
 }
 async function sendPortalInvite(d, portalUrl) {
   const from = process.env.COMPOUNDER_MAIL_FROM || process.env.SMTP_FROM || process.env.INVOICE_IMAP_USER;
+  // E-mail v jazyce, který zájemce zvolil na webu (d.lang); fallback angličtina.
+  const t = inviteEmail(d.name, d.lang);
   await sendMail({
     to: d.email,
     from,
     fromName: compounderMailFromName(),
     brand: 'compounder',
-    subject: 'Vstup do Compounder Portalu',
-    preheader: 'Váš osobní přístup k ekonomice, návratnosti a parametrům Compounderu.',
-    body:
-      `Dobrý den, ${d.name},\n\n` +
-      `děkujeme za zájem o Compounding. Tímto odkazem se dostanete do Compounder Portalu — ` +
-      `ekonomika, návratnost, technické parametry, přípojky, půdorysy a distribuční model.\n\n` +
-      `Odkaz je osobní, nesdílejte ho.`,
+    subject: t.subject,
+    preheader: t.preheader,
+    body: t.body,
     link: portalUrl,
-    linkLabel: 'Otevřít Compounder Portal',
+    linkLabel: t.linkLabel,
   });
 }
 async function sendPortalLogin(d, url) {
   const from = process.env.COMPOUNDER_MAIL_FROM || process.env.SMTP_FROM || process.env.INVOICE_IMAP_USER;
+  const t = loginEmail(d.name, d.lang);
   await sendMail({
     to: d.email,
     from,
     fromName: compounderMailFromName(),
     brand: 'compounder',
-    subject: 'Přihlášení do Compounder Portalu',
-    preheader: 'Odkaz pro přihlášení do Compounder Portalu (platí 24 hodin).',
-    body:
-      `Dobrý den${d.name ? ', ' + d.name : ''},\n\n` +
-      `tímto odkazem se přihlásíte do Compounder Portalu. Odkaz je platný 24 hodin a je osobní — nesdílejte ho.\n\n` +
-      `Pokud jste o přihlášení nežádali, tento e-mail klidně ignorujte.`,
+    subject: t.subject,
+    preheader: t.preheader,
+    body: t.body,
     link: url,
-    linkLabel: 'Přihlásit se do Portalu',
+    linkLabel: t.linkLabel,
   });
 }
 
@@ -526,6 +663,110 @@ async function sendCompounderPush({ leadId, title, body, url }) {
     data: { sid: 'admin', event: 'push_sent', props: { lead_id: leadId || undefined, sent, failed, removed, title } },
   }).catch(() => {});
   return { sent, failed, removed };
+}
+
+// ─── Location-assess helpers ────────────────────────────────────────────────
+const _locHits = new Map(); // "ip|lead" → [timestamps]; jednoduchý in-memory limiter
+function locRateOk(ip, leadId) {
+  const key = (ip || '?') + '|' + leadId;
+  const now = Date.now(), win = 60 * 60 * 1000, max = 8;
+  const arr = (_locHits.get(key) || []).filter((t) => now - t < win);
+  if (arr.length >= max) { _locHits.set(key, arr); return false; }
+  arr.push(now); _locHits.set(key, arr);
+  if (_locHits.size > 5000) _locHits.clear();
+  return true;
+}
+function locUA() { return 'CompounderPortal/1.0 (+https://compounder.world)'; }
+async function locFetchJson(url, opts, ms) {
+  const ctrl = new AbortController();
+  const to = setTimeout(() => ctrl.abort(), ms || 9000);
+  try {
+    const r = await fetch(url, Object.assign({ signal: ctrl.signal, headers: { 'User-Agent': locUA(), 'Accept': 'application/json' } }, opts || {}));
+    if (!r.ok) return null;
+    return await r.json();
+  } catch (e) { return null; } finally { clearTimeout(to); }
+}
+async function geocodeAddress(address) {
+  const url = 'https://nominatim.openstreetmap.org/search?format=json&limit=1&q=' + encodeURIComponent(address);
+  const j = await locFetchJson(url);
+  if (!Array.isArray(j) || !j.length) return null;
+  const x = j[0];
+  const lat = parseFloat(x.lat), lon = parseFloat(x.lon);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+  return { lat, lon, display_name: x.display_name || address };
+}
+async function overpassQuery(query) {
+  return locFetchJson('https://overpass-api.de/api/interpreter', {
+    method: 'POST',
+    headers: { 'User-Agent': locUA(), 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: 'data=' + encodeURIComponent(query),
+  }, 14000);
+}
+function haversineM(lat1, lon1, lat2, lon2) {
+  const R = 6371000, toR = Math.PI / 180;
+  const dLat = (lat2 - lat1) * toR, dLon = (lon2 - lon1) * toR;
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * toR) * Math.cos(lat2 * toR) * Math.sin(dLon / 2) ** 2;
+  return Math.round(R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
+}
+async function osmParking(lat, lon) {
+  const q = '[out:json][timeout:20];(nwr[amenity=parking](around:600,' + lat + ',' + lon + '););out center 40;';
+  const j = await overpassQuery(q);
+  const els = (j && j.elements) || [];
+  let nearest = null;
+  els.forEach((e) => {
+    const ll = e.center || e;
+    if (ll.lat == null) return;
+    const d = haversineM(lat, lon, ll.lat, ll.lon);
+    if (nearest == null || d < nearest) nearest = d;
+  });
+  return { count: els.length, nearest_m: nearest };
+}
+async function osmPopulation(lat, lon, radius) {
+  const q = '[out:json][timeout:25];node(around:' + radius + ',' + lat + ',' + lon + ')[place][population];out 100;';
+  const j = await overpassQuery(q);
+  const els = (j && j.elements) || [];
+  let total = 0; const places = [];
+  els.forEach((e) => {
+    const raw = (e.tags && e.tags.population) || '';
+    const p = parseInt(String(raw).replace(/[^0-9]/g, ''), 10);
+    if (!Number.isFinite(p) || p <= 0) return;
+    total += p;
+    places.push({ name: (e.tags && (e.tags.name || e.tags['name:en'])) || '?', population: p, place: e.tags && e.tags.place });
+  });
+  places.sort((a, b) => b.population - a.population);
+  return { population: total, places };
+}
+async function locationReportAI(facts, lang) {
+  if (!process.env.ANTHROPIC_API_KEY) return null;
+  try {
+    const Anthropic = require('@anthropic-ai/sdk');
+    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    const model = process.env.COMPOUNDER_LOCATION_MODEL || 'claude-sonnet-4-6';
+    const sys = 'Jsi analytik lokality pro venkovní samoobslužnou prádelnu (Compounder Machine). Z dodaných dat napiš stručné, věcné zhodnocení místa. Odpověz POUZE platným JSON bez markdownu ve tvaru: {"verdict":"<2-4 slova>","scorePct":<celé 0-100>,"summary":"<2-4 věty>","factors":[{"label":"<krátké>","value":"<krátké>","good":<true|false>}],"recommendation":"<1-2 věty>"}. Klíčový faktor je required_pct = jaké procento populace v okruhu musí přijít prát; čím nižší, tím lépe (<0,5 % výborné, 0,5-1 % dobré, 1-2 % střední, 2-5 % náročné, >5 % velmi náročné). Parkoviště poblíž je zásadní plus. Pokud population_15km = 0, jde o chybějící data z OpenStreetMap — uveď to a buď opatrný. Populace z OSM je orientační. Piš v jazyce s kódem: ' + lang + '.';
+    const usr = 'Data o místě (JSON):\n' + JSON.stringify(facts);
+    const msg = await client.messages.create({ model, max_tokens: 900, system: sys, messages: [{ role: 'user', content: usr }] });
+    let text = (msg && msg.content && msg.content[0] && msg.content[0].text) || '';
+    text = text.replace(/^```(json)?/i, '').replace(/```\s*$/, '').trim();
+    const j = JSON.parse(text);
+    return {
+      verdict: String(j.verdict || '').slice(0, 60),
+      scorePct: Math.max(0, Math.min(100, Math.round(Number(j.scorePct) || 0))),
+      summary: String(j.summary || '').slice(0, 1200),
+      factors: Array.isArray(j.factors) ? j.factors.slice(0, 8).map((f) => ({ label: String(f.label || '').slice(0, 60), value: String(f.value || '').slice(0, 80), good: !!f.good })) : [],
+      recommendation: String(j.recommendation || '').slice(0, 600),
+    };
+  } catch (e) { return null; }
+}
+function locationReportFallback(facts, lang) {
+  const rp = facts.required_pct;
+  let score = 50;
+  if (rp != null) score = rp < 0.5 ? 88 : rp < 1 ? 74 : rp < 2 ? 58 : rp < 5 ? 38 : 18;
+  if (facts.parking_count > 0) score = Math.min(100, score + 6);
+  const cs = lang === 'cs';
+  const summary = cs
+    ? ('V okruhu 15 km žije přibližně ' + facts.population_15km.toLocaleString('cs') + ' lidí. Pro ' + facts.monthly_customers + ' zákazníků měsíčně potřebuješ přesvědčit ' + (rp == null ? '— (chybí data)' : (rp + ' %')) + ' z nich. Parkoviště v okolí: ' + facts.parking_count + '. Čísla jsou orientační (OpenStreetMap).')
+    : ('About ' + facts.population_15km.toLocaleString('en') + ' people live within 15 km. For ' + facts.monthly_customers + ' monthly customers you need ' + (rp == null ? '— (no data)' : (rp + ' %')) + ' of them. Nearby parking: ' + facts.parking_count + '. Figures are indicative (OpenStreetMap).');
+  return { verdict: cs ? 'Orientační' : 'Indicative', scorePct: score, summary, factors: [], recommendation: '' };
 }
 
 module.exports = router;

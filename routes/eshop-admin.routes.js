@@ -34,6 +34,7 @@ const materialEshopSelect = {
   photo_url: true,
   current_stock: true,
   sells_on_eshop: true,
+  eshop_allow_backorder: true,
   eshop_warehouse_id: true,
   eshop_description: true,
   eshop_image_path: true,
@@ -841,11 +842,35 @@ router.patch('/orders/:id', async (req, res, next) => {
 
 const materialEshopSchema = z.object({
   sells_on_eshop: z.boolean().optional(),
+  eshop_allow_backorder: z.boolean().optional(),
   eshop_warehouse_id: z.number().int().optional().nullable(),
   eshop_description: z.string().optional().nullable(),
   eshop_image_path: z.string().max(500).optional().nullable(),
   eshop_category_id: z.number().int().optional().nullable(),
 });
+
+// Reálný skladový stav ze Stock tabulky (NE z denormalizovaného Material.current_stock,
+// které se plní jen přes Sklad 2.0 moves.service.js a u Factorify importů zůstává 0).
+// Viz memory holyos_stock_warehouse_join. Respektuje eshop_warehouse_id stejně jako
+// picking logika výše: pokud je nastaven, počítá jen lokace toho skladu (co je fyzicky
+// na eshop skladu), jinak sumuje přes všechny lokace (celkový fyzický stav).
+// Vrací Map<material_id, Number>. Přepisuje current_stock v odpovědi (frontend čte to pole).
+async function realStockMap(items) {
+  if (!items.length) return new Map();
+  const ids = items.map(i => i.id);
+  const ewById = new Map(items.map(i => [i.id, i.eshop_warehouse_id]));
+  const stockRows = await prisma.stock.findMany({
+    where: { material_id: { in: ids } },
+    select: { material_id: true, quantity: true, location: { select: { warehouse_id: true } } },
+  });
+  const map = new Map();
+  for (const s of stockRows) {
+    const ew = ewById.get(s.material_id);
+    if (ew && s.location.warehouse_id !== ew) continue; // jen eshop sklad, je-li určen
+    map.set(s.material_id, (map.get(s.material_id) || 0) + Number(s.quantity));
+  }
+  return map;
+}
 
 // Helper pro list Materials s filtrem na eshop — výpis pro tab Katalog.
 router.get('/materials', async (req, res, next) => {
@@ -890,6 +915,10 @@ router.get('/materials', async (req, res, next) => {
       });
       const reservMap = new Map(reservations.map(r => [r.material_id, Number(r._sum.quantity || 0)]));
       items.forEach(i => { i.reserved_qty = reservMap.get(i.id) || 0; });
+
+      // STAV (SKLAD) = reálná zásoba ze Stock, ne stale Material.current_stock.
+      const stockMap = await realStockMap(items);
+      items.forEach(i => { i.current_stock = stockMap.get(i.id) || 0; });
     }
     res.json(items);
   } catch (err) { next(err); }
@@ -912,6 +941,9 @@ router.get('/materials/:id', async (req, res, next) => {
       },
     });
     if (!m) return res.status(404).json({ error: 'Materiál neexistuje' });
+    // STAV (SKLAD) = reálná zásoba ze Stock, ne stale Material.current_stock.
+    const stockMap = await realStockMap([m]);
+    m.current_stock = stockMap.get(m.id) || 0;
     res.json(m);
   } catch (err) { next(err); }
 });

@@ -288,21 +288,11 @@
   }
   // iOS Safari nemá beforeinstallprompt → ukaž ruční návod "Přidat na plochu".
   window.addEventListener("load", function(){ setTimeout(initIosHint, 4500); });
+  // Text bere ze stejného i18n slovníku jako zbytek stránky → vždy v jazyce
+  // stránky a přeložený do všech jazyků (sync skript). Base (EN) je vždy fallback.
   function iosHintText(){
-    var l = window.__compounderLang || "en";
-    // iOS Chrome/Firefox/Edge: instalaci umí jen Safari → nasměruj tam.
-    if (IS_IOS_NONSAFARI){
-      if (l === "cs") return "Na iPhonu jde appka nainstalovat jen v Safari. Otevři compounder.world v Safari → Sdílet → „Přidat na plochu“.";
-      if (l === "de") return "Auf dem iPhone geht die Installation nur in Safari. Öffne compounder.world in Safari → Teilen → „Zum Home-Bildschirm“.";
-      if (l === "sk") return "Na iPhone sa appka inštaluje len v Safari. Otvor compounder.world v Safari → Zdieľať → „Pridať na plochu“.";
-      if (l === "pl") return "Na iPhonie instalacja działa tylko w Safari. Otwórz compounder.world w Safari → Udostępnij → „Dodaj do ekranu“.";
-      return "On iPhone the app installs only in Safari. Open compounder.world in Safari → Share → “Add to Home Screen”.";
-    }
-    if (l === "cs") return "Nainstaluj appku: ťukni na Sdílet a „Přidat na plochu“.";
-    if (l === "de") return "App installieren: tippe auf Teilen, dann „Zum Home-Bildschirm“.";
-    if (l === "sk") return "Nainštaluj appku: ťukni na Zdieľať a „Pridať na plochu“.";
-    if (l === "pl") return "Zainstaluj aplikację: dotknij Udostępnij i „Dodaj do ekranu“.";
-    return "Install the app: tap Share, then “Add to Home Screen”.";
+    var t = window.__t || function(k){ return k; };
+    return IS_IOS_NONSAFARI ? t("install.iosSafari") : t("install.ios");
   }
   function initIosHint(){
     try{
