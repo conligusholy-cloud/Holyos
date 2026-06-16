@@ -72,6 +72,7 @@
  "s7.ok": "Vítejte. Otevírám váš Compounder Portal…",
  "s7.err": "Něco se nepovedlo. Zkuste to prosím znovu.",
  "s7.sending": "Odesílám…",
+ "s7.existing": "Už jste zaregistrovaní — poslali jsme vám přihlašovací odkaz e-mailem.",
  "footer.by": "Společnost Best Series. Stavíme Compounder Machines.",
  "install.text": "Nainstalovat Compounder na plochu",
  "install.btn": "Instalovat",

@@ -31,7 +31,7 @@ window.COMPOUNDER_I18N = {
       "s5.r2":"Distributor","s5.r2h":"The multiplier","s5.r2p":"More than a reseller. Operates their own machines, distributes Compounder Machines, and helps create new Compounders.","s5.r2a":"Operate machines","s5.r2b":"Distribute","s5.r2c":"Create Compounders",
       "s6.eyebrow":"The key to the ecosystem","s6.title":"The Compounder Card","s6.lead":"A metal card. Your ticket into the Compounder ecosystem.","s6.hint":"Tap the card to turn it over",
       "s7.eyebrow":"Join the ecosystem","s7.title":"Become a Compounder","s7.lead":"Register to unlock the Compounder Portal: economics, returns, technical parameters, connections, floor plans and the distribution model.","s7.name":"Full name","s7.email":"Email","s7.role":"I want to join as","s7.roleA":"Compounder","s7.roleB":"Distributor","s7.submit":"Request access","s7.small":"By registering you agree to be contacted about the Compounder ecosystem.",
-      "s7.ok":"Welcome. Opening your Compounder Portal…","s7.err":"Something went wrong. Please try again.","s7.sending":"Sending…",
+      "s7.ok":"Welcome. Opening your Compounder Portal…","s7.err":"Something went wrong. Please try again.","s7.sending":"Sending…","s7.existing":"You're already registered — we've emailed you a sign-in link.",
       "footer.by":"A Best Series company. We build Compounder Machines.",
       "install.text":"Install Compounder on your desktop","install.btn":"Install",
       "install.ios":"To install the app: tap the Share button at the bottom of the screen, then choose Add to Home Screen.","install.iosSafari":"On iPhone the app can only be installed in Safari. Open compounder.world in Safari, tap the Share button, then choose Add to Home Screen.",

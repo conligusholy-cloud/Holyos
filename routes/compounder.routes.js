@@ -43,6 +43,20 @@ router.post('/register', async (req, res, next) => {
       return res.status(400).json({ error: 'Neplatná data', detail: parsed.error.flatten() });
     }
     const d = parsed.data;
+    // Dedup: e-mail smí být zaregistrovaný jen jednou. Při opakované registraci
+    // nezakládáme duplicitu, ale pošleme přihlašovací odkaz v jazyce stránky.
+    const existing = await prisma.compounderLead.findFirst({
+      where: { email: { equals: d.email, mode: 'insensitive' } },
+      orderBy: { created_at: 'desc' },
+      select: { id: true, name: true, email: true, lang: true },
+    });
+    if (existing) {
+      const loginUrl = `${portalBase()}/portal?t=${makeLoginToken(existing.id)}`;
+      sendPortalLogin({ name: existing.name || d.name, email: existing.email, lang: d.lang || existing.lang }, loginUrl)
+        .catch((e) => console.error('[compounder] login e-mail (duplicitní registrace):', e.message));
+      console.log(`[compounder] Duplicitní registrace ${d.email} → poslán přihlašovací odkaz (lead #${existing.id})`);
+      return res.json({ ok: true, existing: true });
+    }
     const lead = await prisma.compounderLead.create({
       data: {
         name: d.name,
@@ -336,6 +350,10 @@ router.post('/portal/contact-request', async (req, res, next) => {
       data: { phone: phone, status: 'qualified', notes: lead.notes ? (lead.notes + '\n' + note) : note },
     });
 
+    prisma.compounderEvent.create({ data: {
+      sid: 'contact:' + leadId, event: 'contact_request',
+      props: { lead_id: leadId, phone: phone }, path: '/portal', ip: clientIp(req),
+    } }).catch(() => {});
     notifyOwnersContact(lead, phone).catch((e) => console.error('[compounder] contact mail:', e && e.message));
     console.log('[compounder] Žádost o kontakt: lead #' + leadId);
     return res.json({ ok: true });
@@ -515,6 +533,47 @@ router.get('/leads/:id/activity', requireAuth, async (req, res, next) => {
   } catch (err) {
     next(err);
   }
+});
+
+// GET /api/compounder/leads/:id/ai-eval — AI vyhodnocení leada (warmth, byznys, signály)
+router.get('/leads/:id/ai-eval', requireAuth, async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'Neplatné ID' });
+    const lead = await prisma.compounderLead.findUnique({
+      where: { id },
+      select: { id: true, name: true, email: true, role: true, lang: true, status: true, notes: true, phone: true, created_at: true },
+    });
+    if (!lead) return res.status(404).json({ error: 'Lead nenalezen' });
+
+    const reg = await prisma.compounderEvent.findFirst({
+      where: { event: 'register_success', props: { path: ['lead_id'], equals: id } },
+      orderBy: { created_at: 'asc' }, select: { sid: true },
+    });
+    const or = [{ props: { path: ['lead_id'], equals: id } }];
+    if (reg && reg.sid) or.push({ sid: reg.sid });
+    const events = await prisma.compounderEvent.findMany({ where: { OR: or }, orderBy: { created_at: 'asc' }, take: 500 });
+
+    const sections = {}; const evCounts = {}; const locChecks = []; let portalOpened = false; let totalMs = 0;
+    events.forEach((e) => {
+      const p = e.props || {}; evCounts[e.event] = (evCounts[e.event] || 0) + 1;
+      if (e.event === 'section_view' && p.section) sections[p.section] = (sections[p.section] || 0) + 1;
+      if (e.event === 'portal_view') portalOpened = true;
+      if (e.event === 'page_leave' && p.ms) totalMs += Number(p.ms) || 0;
+      if (e.event === 'location_assess') locChecks.push({ address: p.address, pop: p.pop, req_pct: p.req_pct, score: p.score });
+    });
+    const facts = {
+      name: lead.name, role: lead.role, lang: lead.lang, status: lead.status,
+      has_phone: !!lead.phone,
+      requested_contact: (evCounts['contact_request'] > 0) || /Požádal o telefonický kontakt/.test(lead.notes || ''),
+      notes: (lead.notes || '').slice(0, 1500), created_at: lead.created_at,
+      total_events: events.length, portal_opened: portalOpened, minutes: Math.round((totalMs || 0) / 60000),
+      sections: sections, event_counts: evCounts, location_checks: locChecks.slice(0, 6),
+    };
+    let out = await leadEvalAI(facts);
+    if (!out) out = leadEvalFallback(facts);
+    res.json(out);
+  } catch (err) { next(err); }
 });
 
 // GET /api/compounder/analytics/summary?days=30 — souhrnné metriky webu
@@ -903,6 +962,43 @@ async function notifyOwnersContact(lead, phone) {
       subject: subject, body: body, link: adminUrl, linkLabel: 'Otevřít kontakt',
     }).catch((e) => console.error('[compounder] owner mail ' + to + ':', e && e.message));
   }
+}
+
+// AI vyhodnocení leada (pro administraci, výstup česky).
+async function leadEvalAI(facts) {
+  if (!process.env.ANTHROPIC_API_KEY) return null;
+  try {
+    const Anthropic = require('@anthropic-ai/sdk');
+    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    const model = process.env.COMPOUNDER_LOCATION_MODEL || 'claude-sonnet-4-6';
+    const sys = 'Jsi obchodní analytik. Z aktivity zájemce (lead) na webu compounder.world (prémiové samoobslužné prádelny jako investiční aktivum) vyhodnoť, jak je "zahřátý" a o jak velkém byznysu uvažuje. Data: počet eventů, čas na webu, jestli otevřel Portal, navštívené sekce (sections), počty typů eventů (event_counts), kontroly lokalit (location_checks – populace/potřebný podíl/skóre), jestli požádal o kontakt (requested_contact / has_phone), stav a poznámky. Silné signály zájmu: požádal o kontakt, opakované kontroly lokalit, čas v ekonomice/návratnosti/Gold & Diamond, otevřený Portal. Odpověz POUZE platným JSON bez markdownu: {"warmthPct":<celé 0-100>,"warmth":"<2-3 slova, např. Studený/Vlažný/Zahřátý/Horký>","summary":"<2-4 věty česky>","businessSize":"<krátce: o jakém rozsahu uvažuje, např. jeden kiosk / malá síť / regionální síť / nejasné>","signals":[{"label":"<krátké>","value":"<krátké>","good":<true|false>}]}. Piš česky.';
+    const usr = 'Lead (JSON):\n' + JSON.stringify(facts);
+    const msg = await client.messages.create({ model, max_tokens: 700, system: sys, messages: [{ role: 'user', content: usr }] });
+    let text = (msg && msg.content && msg.content[0] && msg.content[0].text) || '';
+    text = text.replace(/^```(json)?/i, '').replace(/```\s*$/, '').trim();
+    const j = JSON.parse(text);
+    return {
+      warmthPct: Math.max(0, Math.min(100, Math.round(Number(j.warmthPct) || 0))),
+      warmth: String(j.warmth || '').slice(0, 40),
+      summary: String(j.summary || '').slice(0, 1200),
+      businessSize: String(j.businessSize || '').slice(0, 200),
+      signals: Array.isArray(j.signals) ? j.signals.slice(0, 8).map((s) => ({ label: String(s.label || '').slice(0, 60), value: String(s.value || '').slice(0, 80), good: !!s.good })) : [],
+    };
+  } catch (e) { return null; }
+}
+function leadEvalFallback(facts) {
+  let s = 15;
+  if (facts.requested_contact || facts.has_phone) s += 35;
+  if (facts.portal_opened) s += 15;
+  s += Math.min(20, Object.keys(facts.sections || {}).length * 3);
+  if ((facts.location_checks || []).length > 0) s += 12;
+  if (facts.minutes >= 5) s += 8;
+  s = Math.max(0, Math.min(100, s));
+  const warmth = s >= 70 ? 'Horký' : s >= 45 ? 'Zahřátý' : s >= 25 ? 'Vlažný' : 'Studený';
+  const summary = 'Lead s ' + facts.total_events + ' eventy' + (facts.portal_opened ? ', otevřel Portal' : '') +
+    ((facts.location_checks || []).length ? (', ' + facts.location_checks.length + 'x kontrola lokality') : '') +
+    (facts.requested_contact ? ', požádal o telefonický kontakt' : '') + '.';
+  return { warmthPct: s, warmth: warmth, summary: summary, businessSize: '—', signals: [] };
 }
 
 module.exports = router;

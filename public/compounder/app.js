@@ -134,6 +134,13 @@
         if (!r.ok) throw new Error("bad status");
         return r.json().catch(function(){ return {}; });
       }).then(function(resp){
+        if (resp && resp.existing) {
+          msg.className = "reg-msg ok"; msg.textContent = window.__t("s7.existing");
+          track("register_existing", {role:data.role});
+          form.reset();
+          seg && seg.querySelectorAll("label").forEach(function(l,i){ l.classList.toggle("sel", i===0); });
+          return;
+        }
         msg.className = "reg-msg ok"; msg.textContent = window.__t("s7.ok");
         track("register_success", {role:data.role, lead_id: (resp && resp.id) || null});
         if (resp && resp.portalUrl) {

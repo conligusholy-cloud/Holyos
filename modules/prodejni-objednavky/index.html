@@ -2701,6 +2701,8 @@
       if (ev==='lang_change') return '🌐 Jazyk → '+cmpEsc(p.lang||'');
       if (ev==='portal_view') return '🔑 Otevřel Portal';
       if (ev==='doc_download') return '📄 Stáhl výkres: '+cmpEsc(p.version||'');
+      if (ev==='location_assess') return '📍 Zhodnotil lokalitu: '+cmpEsc((p.address||'').slice(0,40));
+      if (ev==='contact_request') return '📞 Požádal o kontakt: '+cmpEsc(p.phone||'');
       if (ev==='install_choice') return '📲 Instalace PWA: '+cmpEsc(p.outcome||'');
       if (ev==='page_leave') return '🚪 Odešel';
       return cmpEsc(ev);
@@ -2727,7 +2729,13 @@
           var tm = new Date(e.at).toLocaleTimeString('cs-CZ');
           return '<div style="display:flex;gap:10px;font-size:12.5px;padding:3px 0;border-bottom:1px solid rgba(255,255,255,0.04);"><span style="color:var(--text2);width:70px;flex:0 0 auto;">'+tm+'</span><span>'+cmpEvtLabel(e)+'</span></div>';
         }).join('');
-        td.innerHTML = head + '<div style="margin:6px 0 10px;"><button onclick="cmpPushLead(' + id + ')" style="background:#eab308;color:#1a1408;border:none;border-radius:8px;padding:7px 12px;font-size:12.5px;font-weight:600;cursor:pointer;">\ud83d\udce3 Poslat push tomuto leadovi</button></div>' + '<div>' + rows + '</div>';
+        td.innerHTML = head +
+          '<div style="margin:6px 0 10px;display:flex;gap:8px;flex-wrap:wrap;">' +
+            '<button onclick="cmpAiEval(' + id + ',this)" style="background:#8b5cf6;color:#fff;border:none;border-radius:8px;padding:7px 12px;font-size:12.5px;font-weight:600;cursor:pointer;">\ud83e\udd16 AI vyhodnocen\u00ed</button>' +
+            '<button onclick="cmpPushLead(' + id + ')" style="background:#eab308;color:#1a1408;border:none;border-radius:8px;padding:7px 12px;font-size:12.5px;font-weight:600;cursor:pointer;">\ud83d\udce3 Poslat push tomuto leadovi</button>' +
+          '</div>' +
+          '<div id="cmp-ai-' + id + '"></div>' +
+          '<div>' + rows + '</div>';
       } catch(e) { td.innerHTML = '<div style="color:#ef4444;font-size:13px;">Chyba načítání aktivity.</div>'; }
     }
     async function cmpPushBroadcast(){
@@ -2739,6 +2747,28 @@
       var title = prompt('Titulek push notifikace (tomuto leadovi):'); if (!title) return;
       var body = prompt('Text (nepovinne):') || '';
       try { var r = await fetch('/api/compounder/push/send', { method:'POST', credentials:'include', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ leadId:id, title:title, body:body }) }); var j = await r.json(); alert(j.error ? ('Chyba: '+j.error) : ('Odeslano: '+j.sent+', selhalo: '+j.failed)); } catch(e){ alert('Chyba odeslani.'); }
+    }
+    async function cmpAiEval(id, btn){
+      var box = document.getElementById('cmp-ai-' + id); if (!box) return;
+      if (btn) { btn.disabled = true; btn.textContent = '🤖 Vyhodnocuji…'; }
+      box.innerHTML = '<div style="color:var(--text2);font-size:13px;padding:8px 0;">Analyzuji aktivitu…</div>';
+      try {
+        var r = await fetch('/api/compounder/leads/' + id + '/ai-eval', { credentials:'include' });
+        var a = await r.json();
+        if (!r.ok) throw new Error((a && a.error) || 'err');
+        var pct = a.warmthPct || 0;
+        var col = pct >= 70 ? '#ef4444' : pct >= 45 ? '#eab308' : pct >= 25 ? '#3b82f6' : 'var(--text2)';
+        var sig = (a.signals || []).map(function(x){ return '<span style="display:inline-flex;align-items:center;gap:5px;font-size:12px;background:rgba(255,255,255,0.05);border-radius:999px;padding:3px 10px;margin:2px 4px 2px 0;"><span style="width:7px;height:7px;border-radius:50%;background:' + (x.good ? '#10b981' : 'var(--text2)') + '"></span>' + cmpEsc(x.label) + ': ' + cmpEsc(x.value) + '</span>'; }).join('');
+        box.innerHTML =
+          '<div style="background:rgba(139,92,246,0.06);border:1px solid rgba(139,92,246,0.25);border-radius:12px;padding:14px 16px;margin:4px 0 12px;">' +
+          '<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;"><b style="color:' + col + ';font-size:15px;">' + cmpEsc(a.warmth || '') + '</b><span style="color:var(--text2);font-size:13px;">' + pct + '/100</span></div>' +
+          '<div style="height:7px;border-radius:999px;background:rgba(255,255,255,0.08);overflow:hidden;margin-bottom:10px;"><span style="display:block;height:100%;width:' + pct + '%;background:' + col + ';"></span></div>' +
+          '<div style="font-size:13.5px;color:var(--text);margin-bottom:8px;">' + cmpEsc(a.summary || '') + '</div>' +
+          (a.businessSize ? ('<div style="font-size:13px;color:var(--text2);margin-bottom:8px;">Rozsah byznysu: <b style="color:var(--text)">' + cmpEsc(a.businessSize) + '</b></div>') : '') +
+          (sig ? ('<div>' + sig + '</div>') : '') +
+          '</div>';
+      } catch(e) { box.innerHTML = '<div style="color:#ef4444;font-size:13px;padding:8px 0;">Chyba AI vyhodnocení.</div>'; }
+      finally { if (btn) { btn.disabled = false; btn.textContent = '🤖 AI vyhodnocení'; } }
     }
     async function cmpSetStatus(id, status) {
       try { await fetch('/api/compounder/leads/' + id, { method:'PATCH', credentials:'include', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ status: status }) }); } catch(e) {}
