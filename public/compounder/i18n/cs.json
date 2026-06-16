@@ -289,6 +289,8 @@
  "p.loc.err": "Něco se pokazilo. Zkuste to prosím znovu.",
  "p.loc.errshort": "Zadejte úplnou adresu.",
  "p.loc.mscore": "Skóre úspěchu",
+ "p.loc.mest": "Odhad zákazníků / den",
+ "p.loc.mests": "AI odhad",
  "p.loc.mpop": "Lidé v okruhu 15 km",
  "p.loc.mreq": "Podíl k získání",
  "p.loc.mpark": "Parkování v okolí",

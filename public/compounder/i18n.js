@@ -71,7 +71,7 @@ window.COMPOUNDER_I18N = {
       "p.nav.location":"Location check",
       "p.loc.eyebrow":"Location check","p.loc.title":"AI location assessment","p.loc.lead":"Enter an address — AI checks for parking, counts people within 15 km and, based on your customers/day above, estimates what share of them you'd need to win over. You get a short success report.",
       "p.loc.ph":"Street, city…","p.loc.btn":"Assess location","p.loc.loading":"Analysing the location…","p.loc.err":"Something went wrong. Please try again.","p.loc.errshort":"Enter a full address.",
-      "p.loc.mscore":"Success score","p.loc.mpop":"People within 15 km","p.loc.mreq":"Share to win over","p.loc.mpark":"Parking nearby","p.loc.permonth":"customers / mo","p.loc.none":"none found","p.loc.parkimmediate":"Right by the entrance",
+      "p.loc.mscore":"Success score","p.loc.mest":"Est. customers / day","p.loc.mests":"AI estimate","p.loc.mpop":"People within 15 km","p.loc.mreq":"Share to win over","p.loc.mpark":"Parking nearby","p.loc.permonth":"customers / mo","p.loc.none":"none found","p.loc.parkimmediate":"Right by the entrance",
       "p.loc.disc":"Indicative estimate from OpenStreetMap + AI. Always verify on site."
     }
   }

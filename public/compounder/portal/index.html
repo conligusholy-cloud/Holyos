@@ -440,6 +440,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
       <div id="loc-result" style="display:none">
         <div class="metrics">
           <div class="metric"><div class="k" data-i18n="p.loc.mscore">Success score</div><div class="v gold" id="loc-score">—</div><div class="s" id="loc-verdict">—</div></div>
+          <div class="metric"><div class="k" data-i18n="p.loc.mest">Est. customers / day</div><div class="v gold" id="loc-estperday">—</div><div class="s" data-i18n="p.loc.mests">AI estimate</div></div>
           <div class="metric"><div class="k" data-i18n="p.loc.mpop">People within 15 km</div><div class="v" id="loc-pop">—</div></div>
           <div class="metric"><div class="k" data-i18n="p.loc.mreq">Share to win over</div><div class="v" id="loc-req">—</div><div class="s" id="loc-reqs">—</div></div>
           <div class="metric"><div class="k" data-i18n="p.loc.mpark">Parking nearby</div><div class="v" id="loc-park">—</div></div>
@@ -839,6 +840,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
     document.getElementById("loc-result").style.display = "block";
     setText("loc-score", (r.scorePct != null ? r.scorePct : "—") + " %");
     setText("loc-verdict", r.verdict || "");
+    setText("loc-estperday", r.estPerDay != null ? r.estPerDay : "—");
     setText("loc-pop", (f.population_15km || 0).toLocaleString(lng));
     setText("loc-req", f.required_pct == null ? "—" : (f.required_pct + " %"));
     setText("loc-reqs", (f.monthly_customers || 0).toLocaleString(lng) + " " + pT("p.loc.permonth"));

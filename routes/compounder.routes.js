@@ -275,9 +275,12 @@ router.post('/portal/location-assess', async (req, res, next) => {
     const requiredPct = (pop.population > 0) ? (monthlyCustomers / pop.population * 100) : null;
     // U velkého obchodu (do 150 m) nebo s parkovištěm do 30 m je parkování bezprostřední.
     const parkingImmediate = (parking.nearest_m != null && parking.nearest_m <= 30) || (anchors.nearest_retail_m != null && anchors.nearest_retail_m <= 150);
+    const reg = regionBenchmark(geo.country_code);
 
     const facts = {
       address: geo.display_name, lat: geo.lat, lon: geo.lon,
+      country: geo.country, country_code: geo.country_code,
+      region: reg.region, region_perday_norm: reg.perday,
       parking_count: parking.count, nearest_parking_m: parking.nearest_m, parking_immediate: parkingImmediate,
       population_15km: pop.population, population_source: pop.source || 'OpenStreetMap', places: pop.places.slice(0, 12),
       anchors: anchors.list, anchor_count: anchors.count, nearest_retail_m: anchors.nearest_retail_m,
@@ -691,13 +694,23 @@ async function locFetchJson(url, opts, ms) {
   } catch (e) { return null; } finally { clearTimeout(to); }
 }
 async function geocodeAddress(address) {
-  const url = 'https://nominatim.openstreetmap.org/search?format=json&limit=1&q=' + encodeURIComponent(address);
+  const url = 'https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=1&q=' + encodeURIComponent(address);
   const j = await locFetchJson(url);
   if (!Array.isArray(j) || !j.length) return null;
   const x = j[0];
   const lat = parseFloat(x.lat), lon = parseFloat(x.lon);
   if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
-  return { lat, lon, display_name: x.display_name || address };
+  const cc = (x.address && x.address.country_code) ? String(x.address.country_code).toLowerCase() : '';
+  const country = (x.address && x.address.country) || '';
+  return { lat, lon, display_name: x.display_name || address, country_code: cc, country: country };
+}
+// Regionální zvyk prát ve veřejných prádelnách → typický počet zákazníků/den.
+function regionBenchmark(cc) {
+  var west = ['gb', 'ie', 'fr', 'es', 'pt', 'it', 'be', 'nl', 'lu', 'mt', 'cy'];
+  var east = ['bg', 'ro', 'hr', 'rs', 'lt', 'lv', 'ee', 'ua', 'gr', 'md', 'ba', 'mk', 'al', 'me', 'xk'];
+  if (west.indexOf(cc) >= 0) return { region: 'West', perday: 12 };
+  if (east.indexOf(cc) >= 0) return { region: 'East', perday: 6 };
+  return { region: 'Central', perday: 7.5 };
 }
 async function overpassQuery(query) {
   return locFetchJson('https://overpass-api.de/api/interpreter', {
@@ -791,7 +804,7 @@ async function locationReportAI(facts, lang) {
     const Anthropic = require('@anthropic-ai/sdk');
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
     const model = process.env.COMPOUNDER_LOCATION_MODEL || 'claude-sonnet-4-6';
-    const sys = 'Jsi analytik lokality pro venkovní samoobslužnou prádelnu (Compounder Machine). Z dodaných dat napiš stručné, věcné zhodnocení místa. Odpověz POUZE platným JSON bez markdownu ve tvaru: {"verdict":"<2-4 slova>","scorePct":<celé 0-100>,"summary":"<2-4 věty>","factors":[{"label":"<krátké>","value":"<krátké>","good":<true|false>}],"recommendation":"<1-2 věty>"}. Klíčový faktor je required_pct = jaké procento populace v okruhu musí přijít prát; čím nižší, tím lépe (do 1,5 % velmi dobré, 1,5-3 % dobré, 3-6 % náročné, >6 % velmi náročné). Zohledni i absolutní spádovou populaci v okruhu 15 km: ~15 000 a více je dobré, ~10 000 je hraniční a výrazně pod 10 000 je rizikové (málo lidí provoz neuživí). V datech je i seznam okolních podniků (anchors) s typem a vzdáleností — supermarkety, hypermarkety, obchodní domy, tržnice a čerpací stanice generují denní provoz lidí; odhadni z nich potenciální denní průtok zákazníků kolem místa a zohledni ho ve skóre (vyšší provoz = vyšší šance) a přidej faktor o provozu/návštěvnosti v okolí. Parkoviště poblíž je zásadní plus; pokud parking_immediate je true (místo je přímo u velkého obchodu), ber parkování jako bezprostřední (u vchodu). Populace pochází ze zdroje population_source (GeoNames je výrazně přesnější než OpenStreetMap) a je orientační — u velkých měst zasahujících jen částečně do okruhu může být nadhodnocená, u malých obcí bez dat naopak podhodnocená; krátce to zmiň. Pokud population_15km = 0, jde o chybějící data — buď opatrný. Piš v jazyce s kódem: ' + lang + '.';
+    const sys = 'Jsi analytik lokality pro venkovní samoobslužnou prádelnu (Compounder Machine). Z dodaných dat napiš stručné, věcné zhodnocení místa. Odpověz POUZE platným JSON bez markdownu ve tvaru: {"verdict":"<2-4 slova>","scorePct":<celé 0-100>,"summary":"<2-4 věty>","factors":[{"label":"<krátké>","value":"<krátké>","good":<true|false>}],"recommendation":"<1-2 věty>","estPerDay":<celé číslo, odhad zákazníků/den>}. Klíčový faktor je required_pct = jaké procento populace v okruhu musí přijít prát; čím nižší, tím lépe (do 1,5 % velmi dobré, 1,5-3 % dobré, 3-6 % náročné, >6 % velmi náročné). Zohledni i absolutní spádovou populaci v okruhu 15 km: ~15 000 a více je dobré, ~10 000 je hraniční a výrazně pod 10 000 je rizikové (málo lidí provoz neuživí). Zohledni také regionální zvyk prát ve veřejných prádelnách (pole region a region_perday_norm): v západní Evropě jsou lidé zvyklejší (IE, GB, ES, FR apod. ~12 zákazníků/den), střední Evropa ~7,5/den, východní Evropa ~6/den. Porovnej předpokládaný per_day s region_perday_norm — pokud je per_day pod regionálním zvykem, je plán reálnější (vyšší šance), pokud výrazně nad, je optimistický; krátce to zmiň. V datech je i seznam okolních podniků (anchors) s typem a vzdáleností — supermarkety, hypermarkety, obchodní domy, tržnice a čerpací stanice generují denní provoz lidí; odhadni z nich potenciální denní průtok zákazníků kolem místa a zohledni ho ve skóre (vyšší provoz = vyšší šance) a přidej faktor o provozu/návštěvnosti v okolí. Parkoviště poblíž je zásadní plus; pokud parking_immediate je true (místo je přímo u velkého obchodu), ber parkování jako bezprostřední (u vchodu). Populace pochází ze zdroje population_source (GeoNames je výrazně přesnější než OpenStreetMap) a je orientační — u velkých měst zasahujících jen částečně do okruhu může být nadhodnocená, u malých obcí bez dat naopak podhodnocená; krátce to zmiň. Pokud population_15km = 0, jde o chybějící data — buď opatrný. Pole estPerDay = realistický odhad zákazníků/den pro jeden kiosk na této lokalitě: vyjdi z region_perday_norm a uprav podle velikosti obce, okolního provozu (anchors) a parkování; spádová populace je sekundární. Kalibrace: středoevropské okresní město ~10 tis. obyvatel se supermarkety v okolí ≈ 9 zákazníků/den. Piš v jazyce s kódem: ' + lang + '.';
     const usr = 'Data o místě (JSON):\n' + JSON.stringify(facts);
     const msg = await client.messages.create({ model, max_tokens: 900, system: sys, messages: [{ role: 'user', content: usr }] });
     let text = (msg && msg.content && msg.content[0] && msg.content[0].text) || '';
@@ -803,6 +816,7 @@ async function locationReportAI(facts, lang) {
       summary: String(j.summary || '').slice(0, 1200),
       factors: Array.isArray(j.factors) ? j.factors.slice(0, 8).map((f) => ({ label: String(f.label || '').slice(0, 60), value: String(f.value || '').slice(0, 80), good: !!f.good })) : [],
       recommendation: String(j.recommendation || '').slice(0, 600),
+      estPerDay: (j.estPerDay != null && isFinite(j.estPerDay)) ? Math.max(0, Math.min(100, Math.round(Number(j.estPerDay)))) : null,
     };
   } catch (e) { return null; }
 }
@@ -815,11 +829,23 @@ function locationReportFallback(facts, lang) {
   var pop15 = facts.population_15km || 0;
   if (pop15 > 0 && pop15 < 10000) score = Math.min(score, 35);
   else if (pop15 >= 10000 && pop15 < 15000) score = Math.min(score, 55);
+  // Regionální zvyk: per_day pod normou regionu = reálnější (+), výrazně nad = optimistické (−).
+  var norm = facts.region_perday_norm;
+  if (norm && facts.per_day) {
+    if (facts.per_day <= norm) score = Math.min(100, score + 5);
+    else if (facts.per_day > norm * 1.3) score = Math.max(0, score - 10);
+  }
   const cs = lang === 'cs';
   const summary = cs
     ? ('V okruhu 15 km žije přibližně ' + facts.population_15km.toLocaleString('cs') + ' lidí. Pro ' + facts.monthly_customers + ' zákazníků měsíčně potřebuješ přesvědčit ' + (rp == null ? '— (chybí data)' : (rp + ' %')) + ' z nich. Parkoviště v okolí: ' + facts.parking_count + '. Čísla jsou orientační (OpenStreetMap).')
     : ('About ' + facts.population_15km.toLocaleString('en') + ' people live within 15 km. For ' + facts.monthly_customers + ' monthly customers you need ' + (rp == null ? '— (no data)' : (rp + ' %')) + ' of them. Nearby parking: ' + facts.parking_count + '. Figures are indicative (OpenStreetMap).');
-  return { verdict: cs ? 'Orientační' : 'Indicative', scorePct: score, summary, factors: [], recommendation: '' };
+  // Odhad zákazníků/den: regionální norma upravená o okolní provoz, parkování a populaci.
+  var est = facts.region_perday_norm || 7.5;
+  if (facts.anchor_count >= 4) est += 1; else if (facts.anchor_count >= 1) est += 0.5;
+  if (facts.parking_immediate) est += 0.5;
+  if (pop15 > 0 && pop15 < 8000) est -= 2; else if (pop15 > 0 && pop15 < 12000) est -= 1;
+  est = Math.max(1, Math.round(est));
+  return { verdict: cs ? 'Orientační' : 'Indicative', scorePct: score, summary, factors: [], recommendation: '', estPerDay: est };
 }
 
 module.exports = router;
