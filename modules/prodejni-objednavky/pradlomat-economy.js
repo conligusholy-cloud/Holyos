@@ -424,7 +424,7 @@
         '<div style="flex:1"></div>' +
         saveDefaultsBtn +
         '<button class="btn btn-secondary btn-sm" onclick="window.PradlomatTool.resetDefaults()">' + _t('↺ Tovární hodnoty') + '</button>' +
-        '<button class="btn btn-secondary btn-sm" onclick="window.PradlomatTool.exportJSON()">' + _t('⬇ Stáhnout model (JSON)') + '</button>' +
+        '<button class="btn btn-secondary btn-sm pe-btn-json" onclick="window.PradlomatTool.exportJSON()">' + _t('⬇ Stáhnout model (JSON)') + '</button>' +
       '</div>';
 
     // Výsledky nahoře (sticky-feel)

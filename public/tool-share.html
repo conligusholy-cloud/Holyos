@@ -5,6 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Ekonomika prádlomatu | HolyOS</title>
   <link rel="icon" type="image/svg+xml" href="/logo-holyos-icon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
   <style>
     :root {
       --bg: #0f0f10;
@@ -275,11 +278,61 @@
       .pe-mini-card.neg .pe-mc-value { color: #b91c1c !important; }
       .pe-year-cell .pe-year-label { color: #555 !important; }
     }
+
+    /* ─── Compounder brand mode (compounder.world) ──────────────────
+       Aktivuje se přidáním třídy .compounder na <body> (JS dle hostu).
+       Skryje modrou HolyOS lištu a nasadí Compounder Portal brand. */
+    body.compounder { --bg: #0a0a0b; --surface: #141417; --surface2: #1b1b1f; --border: rgba(255,255,255,.08); --text: #f4f4f2; --text2: #9b9ba3; background: var(--bg); font-family: 'Inter', -apple-system, 'Segoe UI', sans-serif; }
+    body.compounder h1, body.compounder h2, body.compounder h3 { font-family: 'Space Grotesk', 'Inter', sans-serif; letter-spacing: -.01em; }
+    body.compounder .share-header { display: none; }
+    body.compounder .btn-primary { background: linear-gradient(135deg, #f6e6ad 0%, #cda454 42%, #9a7a34 100%); border-color: #cda454; color: #1a1408; }
+    body.compounder .btn-primary:hover { filter: brightness(1.05); background: linear-gradient(135deg, #f6e6ad 0%, #cda454 42%, #9a7a34 100%); }
+    body.compounder .loading .spinner { border-top-color: #c9a24b; }
+    body.compounder .model-chip:hover { border-color: #c9a24b; }
+    body.compounder .share-toolbar .left-info strong { color: #cda454; }
+
+    .cmp-topbar { position: sticky; top: 0; z-index: 30; background: rgba(10,10,11,.85); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border-bottom: 1px solid rgba(255,255,255,.08); }
+    .cmp-topin { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 14px 24px; max-width: 1100px; margin: 0 auto; }
+    .cmp-topbrand { display: inline-flex; align-items: center; gap: 10px; font-family: 'Space Grotesk', 'Inter', sans-serif; font-weight: 700; letter-spacing: .2em; font-size: 16px; color: #f4f4f2; text-decoration: none; }
+    .cmp-topbrand:hover .cmp-arrow { transform: translateX(-3px); }
+    .cmp-arrow { display: inline-flex; color: #9b9ba3; transition: transform .2s; font-size: 18px; }
+    .cmp-wordmark b { background: linear-gradient(135deg, #f6e6ad 0%, #cda454 42%, #9a7a34 100%); -webkit-background-clip: text; background-clip: text; color: transparent; }
+    .cmp-tag { font-size: 11px; letter-spacing: .15em; color: #9b9ba3; text-transform: uppercase; font-family: 'Inter', sans-serif; font-weight: 600; }
+    .cmp-topright { display: flex; align-items: center; gap: 12px; }
+    /* Skrýt vývojářské "Stáhnout model (JSON)" na zákaznické Compounder stránce */
+    body.compounder .pe-btn-json { display: none !important; }
+    /* Jazyky jako rozklikávací dropdown (stejně jako Compounder Portal) */
+    .cmp-lang-select { background: transparent; color: #9b9ba3; border: 1px solid rgba(255,255,255,.12); border-radius: 999px; padding: 7px 14px; font-size: 13px; font-family: inherit; cursor: pointer; max-width: 200px; }
+    .cmp-lang-select:hover { color: #f4f4f2; border-color: rgba(201,162,75,.4); }
+    .cmp-lang-select:focus { outline: none; border-color: #cda454; }
+    .cmp-lang-select option { background: #141417; color: #f4f4f2; }
+    .cmp-pagetitle { font-size: 24px; font-weight: 700; margin: 6px 0 16px; }
+    body.compounder .lang-switcher .lang-btn { background: rgba(255,255,255,.06); border-color: rgba(255,255,255,.12); color: #f4f4f2; }
+    body.compounder .lang-switcher .lang-btn:hover { background: rgba(255,255,255,.12); }
+    body.compounder .lang-switcher .lang-btn.active { background: rgba(201,162,75,.18); border-color: rgba(201,162,75,.55); box-shadow: 0 0 0 1px rgba(201,162,75,.25); }
+    @media (max-width: 640px) {
+      .cmp-topin { padding: 12px 16px; }
+      .cmp-topbrand { font-size: 14px; }
+      .cmp-pagetitle { font-size: 19px; }
+    }
+    @media print { .cmp-topbar { display: none !important; } }
   </style>
   <script src="/modules/prodejni-objednavky/pradlomat-i18n.js"></script>
   <script src="/modules/prodejni-objednavky/pradlomat-economy.js"></script>
 </head>
 <body>
+  <!-- Compounder Portal brand bar — zobrazí se jen na compounder.world (JS). -->
+  <header class="cmp-topbar" id="cmp-topbar" style="display:none;">
+    <div class="cmp-topin">
+      <a href="/portal" class="cmp-topbrand" id="cmp-topbrand" title="Compounder Portal">
+        <span class="cmp-arrow">←</span>
+        <span class="cmp-wordmark">COMP<b>OU</b>NDER</span>
+        <span class="cmp-tag">Portal</span>
+      </a>
+      <div class="cmp-topright" id="cmp-topright"></div>
+    </div>
+  </header>
+
   <header class="share-header">
     <div class="share-header-inner">
       <div class="share-icon">📊</div>
@@ -317,6 +370,7 @@
     </div>
 
     <div id="content" style="display:none;">
+      <h1 class="cmp-pagetitle" id="cmp-pagetitle" style="display:none;"></h1>
       <div id="models-strip-wrap" style="display:none;">
         <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.6px;color:var(--text2);margin-bottom:6px;" id="models-strip-title">Vaše uložené modely</div>
         <div class="models-strip" id="models-strip"></div>
@@ -338,13 +392,49 @@
       var SHARE_DATA = null;
       var EDIT_DEBOUNCE = null;
 
+      // Compounder brand mode — když je share stránka otevřená na compounder.world,
+      // skryjeme modrou HolyOS lištu a nasadíme Compounder Portal brand + tlačítko zpět.
+      var COMPOUNDER_HOSTS = ['compounder.world', 'www.compounder.world'];
+      var IS_COMPOUNDER = COMPOUNDER_HOSTS.indexOf((location.hostname || '').toLowerCase()) >= 0;
+
+      function setupCompounderBrand() {
+        if (!IS_COMPOUNDER) return;
+        document.body.classList.add('compounder');
+        var bar = document.getElementById('cmp-topbar');
+        if (bar) bar.style.display = '';
+        // Přesuň jazykový přepínač do brand lišty (renderuje se podle data.languages).
+        var sw = document.getElementById('lang-switcher');
+        var right = document.getElementById('cmp-topright');
+        if (sw && right) right.appendChild(sw);
+      }
+
       // ─── i18n helpers ─────────────────────────────────────────────
       // Vlajka pro každý jazyk + lokalizovaný název (pro tooltip)
       var LANG_META = {
         cs: { flag: '🇨🇿', label: 'Čeština' },
         en: { flag: '🇬🇧', label: 'English' },
         de: { flag: '🇩🇪', label: 'Deutsch' },
-        fr: { flag: '🇫🇷', label: 'Français' }
+        fr: { flag: '🇫🇷', label: 'Français' },
+        bg: { flag: '🇧🇬', label: 'Български' },
+        da: { flag: '🇩🇰', label: 'Dansk' },
+        el: { flag: '🇬🇷', label: 'Ελληνικά' },
+        es: { flag: '🇪🇸', label: 'Español' },
+        et: { flag: '🇪🇪', label: 'Eesti' },
+        fi: { flag: '🇫🇮', label: 'Suomi' },
+        ga: { flag: '🇮🇪', label: 'Gaeilge' },
+        hr: { flag: '🇭🇷', label: 'Hrvatski' },
+        hu: { flag: '🇭🇺', label: 'Magyar' },
+        it: { flag: '🇮🇹', label: 'Italiano' },
+        lt: { flag: '🇱🇹', label: 'Lietuvių' },
+        lv: { flag: '🇱🇻', label: 'Latviešu' },
+        mt: { flag: '🇲🇹', label: 'Malti' },
+        nl: { flag: '🇳🇱', label: 'Nederlands' },
+        pl: { flag: '🇵🇱', label: 'Polski' },
+        pt: { flag: '🇵🇹', label: 'Português' },
+        ro: { flag: '🇷🇴', label: 'Română' },
+        sk: { flag: '🇸🇰', label: 'Slovenčina' },
+        sl: { flag: '🇸🇮', label: 'Slovenščina' },
+        sv: { flag: '🇸🇪', label: 'Svenska' }
       };
 
       function tt(s) {
@@ -359,7 +449,12 @@
         var title = (data.tool && data.tool.title) || 'Obchodní pomůcka';
         var translatedTitle = tt(title);
         document.getElementById('share-title').textContent = translatedTitle;
-        document.title = translatedTitle + ' | HolyOS';
+        document.title = IS_COMPOUNDER ? (translatedTitle + ' | Compounder') : (translatedTitle + ' | HolyOS');
+        // V Compounder módu ukážeme název jako nadpis stránky (modrá lišta je skrytá).
+        if (IS_COMPOUNDER) {
+          var pt = document.getElementById('cmp-pagetitle');
+          if (pt) { pt.textContent = translatedTitle; pt.style.display = ''; }
+        }
         if (data.tool && data.tool.description) {
           document.getElementById('share-subtitle').textContent = tt(data.tool.description);
         } else {
@@ -396,6 +491,22 @@
         var codes = (Array.isArray(languages) && languages.length) ? languages : ['cs'];
         if (codes.length < 2) { wrap.style.display = 'none'; return; }  // jen jeden jazyk → switcher nepotřebujeme
         wrap.style.display = '';
+
+        // Compounder mód: rozklikávací dropdown jako v Portalu (24 jazyků = moc dlaždic).
+        if (IS_COMPOUNDER) {
+          var opts = '';
+          for (var k = 0; k < codes.length; k++) {
+            var ck = codes[k];
+            var mk = LANG_META[ck] || { flag: '🏳️', label: ck };
+            opts += '<option value="' + ck + '"' + (ck === active ? ' selected' : '') + '>' +
+              mk.flag + '  ' + mk.label + '</option>';
+          }
+          wrap.innerHTML = '<select class="cmp-lang-select" id="cmp-lang-select" aria-label="Language">' + opts + '</select>';
+          var sel = document.getElementById('cmp-lang-select');
+          if (sel) sel.addEventListener('change', function () { switchLanguage(this.value); });
+          return;
+        }
+
         var html = '';
         for (var i = 0; i < codes.length; i++) {
           var c = codes[i];
@@ -662,7 +773,8 @@
           });
       };
 
-      // Zobraz toolbar a načti
+      // Zobraz toolbar, nastav brand (compounder.world) a načti
+      setupCompounderBrand();
       document.getElementById('share-toolbar').style.display = '';
       load();
     })();

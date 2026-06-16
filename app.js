@@ -622,6 +622,11 @@ function serveCompounderPortal(req, res) {
 app.use((req, res, next) => {
   if (!COMPOUNDER_HOSTS.includes(reqHostname(req))) return next();
   if (req.path.startsWith('/api/') || req.path.startsWith('/storage/')) return next();
+  // Sdílené appové assety + share stránka nástrojů (Compounder Portal odkazuje na
+  // /share/tools/...) musí projít na reálné routy, ne do compounder catch-all.
+  if (req.path.startsWith('/share/') || req.path.startsWith('/modules/') ||
+      req.path.startsWith('/css/') || req.path.startsWith('/js/') ||
+      req.path.startsWith('/dist/')) return next();
   if (req.path === '/portal' || req.path === '/portal/') return serveCompounderPortal(req, res);
   compounderStatic(req, res, () => serveCompounderHtml(req, res));
 });
