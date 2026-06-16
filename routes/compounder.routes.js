@@ -615,7 +615,7 @@ router.get('/analytics/summary', requireAuth, async (req, res, next) => {
     const [events, sessions, registrations, secEvents] = await Promise.all([
       prisma.compounderEvent.count({ where: { created_at: { gte: since } } }),
       prisma.compounderEvent.findMany({ where: { created_at: { gte: since } }, select: { sid: true }, distinct: ['sid'] }),
-      prisma.compounderEvent.count({ where: { created_at: { gte: since }, event: 'register_success' } }),
+      prisma.compounderLead.count({ where: { created_at: { gte: since } } }),
       prisma.compounderEvent.findMany({ where: { created_at: { gte: since }, event: 'section_view' }, select: { props: true }, take: 5000 }),
     ]);
     const sessionCount = sessions.length;
