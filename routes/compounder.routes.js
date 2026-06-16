@@ -454,6 +454,37 @@ router.get('/leads', requireAuth, async (req, res, next) => {
       orderBy: { created_at: 'desc' },
       take: 500,
     });
+    // Levná míra zahřátí z eventů otagovaných lead_id (bez AI) — pro rozumný počet leadů.
+    if (leads.length && leads.length <= 200) {
+      const ids = leads.map((l) => l.id);
+      const evs = await prisma.compounderEvent.findMany({
+        where: { OR: ids.map((id) => ({ props: { path: ['lead_id'], equals: id } })) },
+        select: { event: true, props: true },
+        take: 20000,
+      });
+      const c = {};
+      evs.forEach((e) => {
+        const lid = e.props && e.props.lead_id; if (lid == null) return;
+        const x = c[lid] || (c[lid] = { portal: 0, doc: 0, loc: 0, contact: 0 });
+        if (e.event === 'portal_view') x.portal++;
+        else if (e.event === 'doc_download') x.doc++;
+        else if (e.event === 'location_assess') x.loc++;
+        else if (e.event === 'contact_request') x.contact++;
+      });
+      leads.forEach((l) => {
+        const x = c[l.id] || { portal: 0, doc: 0, loc: 0, contact: 0 };
+        let s = 10;
+        if (x.portal > 0) s += 15;
+        if (x.doc > 0) s += 10;
+        if (x.loc > 0) s += 15; if (x.loc >= 3) s += 5;
+        const requested = x.contact > 0 || !!l.phone || /Požádal o telefonický kontakt/.test(l.notes || '');
+        if (requested) s += 40;
+        if (l.status === 'qualified' || l.status === 'converted') s += 10;
+        l.warmthPct = Math.max(0, Math.min(100, s));
+        l.requestedContact = requested;
+        l.hasPhone = !!l.phone;
+      });
+    }
     res.json(leads);
   } catch (err) {
     next(err);
