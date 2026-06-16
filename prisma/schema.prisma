@@ -5395,6 +5395,8 @@ model CompounderLead {
   id    Int    @id @default(autoincrement())
   name  String @db.VarChar(255)
   email String @db.VarChar(255)
+  // Telefon z portálu (žádost o kontakt) — uloží si ho lead sám přes tlačítko
+  phone String? @db.VarChar(40)
 
   // compounder | distributor
   role String @default("compounder") @db.VarChar(20)

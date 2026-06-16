@@ -454,6 +454,23 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
       </div>
     </section>
 
+    <section class="blk" id="kontakt">
+      <div class="eyebrow" data-i18n="p.ct.eyebrow">Contact</div>
+      <h2 data-i18n="p.ct.title">Talk to the owner of Best Series</h2>
+      <p class="lead" data-i18n="p.ct.lead">Want to discuss it in person? Leave your number and we'll call you back.</p>
+      <div class="panel" style="max-width:460px">
+        <button type="button" id="ct-open" class="btn btn-gold" style="width:100%;justify-content:center" data-i18n="p.ct.btn">Connect with the owner</button>
+        <div id="ct-form" style="display:none;margin-top:16px">
+          <div class="row" style="margin-bottom:6px">
+            <label data-i18n="p.ct.phone">Phone number</label>
+            <div class="unit"><input type="tel" id="ct-phone" placeholder="+420…" autocomplete="tel" style="width:170px"></div>
+          </div>
+          <button type="button" id="ct-send" class="btn btn-gold" style="width:100%;justify-content:center;margin-top:8px" data-i18n="p.ct.send">Ask us to call you</button>
+          <p class="note" id="ct-msg" role="status" style="min-height:18px;margin-top:8px"></p>
+        </div>
+      </div>
+    </section>
+
   </div>
 
   <div class="acc-modal" id="accModal" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="accTitle">
@@ -639,7 +656,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
       pSetLang(pDetect(), function(){
         document.getElementById("hi").textContent = pT("p.hi") + (first ? (", " + first) : "");
         var gb = document.getElementById("gearBtn"); if (gb){ gb.setAttribute("aria-label", pT("p.nav.acc")); gb.title = pT("p.nav.acc"); }
-        initCalc(); initNav(); initGallery(); initMilestones(); initLocation();
+        initCalc(); initNav(); initGallery(); initMilestones(); initLocation(); initContact();
       });
       try {
         var sid = localStorage.getItem("compounder.sid");
@@ -854,6 +871,30 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
       d.appendChild(dot); d.appendChild(sp); fc.appendChild(d);
     });
     var reco = document.getElementById("loc-reco"); reco.textContent = r.recommendation || ""; reco.style.display = r.recommendation ? "block" : "none";
+  }
+  function initContact(){
+    var open = document.getElementById("ct-open");
+    var form = document.getElementById("ct-form");
+    var send = document.getElementById("ct-send");
+    var phone = document.getElementById("ct-phone");
+    var msg = document.getElementById("ct-msg");
+    if (!open || !form) return;
+    open.addEventListener("click", function(){ form.style.display = "block"; open.style.display = "none"; if (phone) phone.focus(); });
+    function submit(){
+      var val = (phone.value || "").trim();
+      if (val.replace(/[^\d]/g, "").length < 6){ msg.style.color = "#e07a6b"; msg.textContent = pT("p.ct.errphone"); return; }
+      var tok = ""; try { tok = localStorage.getItem("compounder.portal.token") || ""; } catch(_){}
+      send.disabled = true; msg.style.color = ""; msg.textContent = pT("p.ct.sending");
+      fetch("/api/compounder/portal/contact-request", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ t: tok, phone: val }) })
+        .then(function(r){ return r.json().then(function(j){ return { ok: r.ok, j: j }; }); })
+        .then(function(res){
+          if (res.ok && res.j && res.j.ok){ msg.style.color = "var(--gold-soft)"; msg.textContent = pT("p.ct.ok"); form.querySelector(".row").style.display = "none"; send.style.display = "none"; }
+          else { msg.style.color = "#e07a6b"; msg.textContent = (res.j && res.j.error) || pT("p.ct.err"); send.disabled = false; }
+        })
+        .catch(function(){ msg.style.color = "#e07a6b"; msg.textContent = pT("p.ct.err"); send.disabled = false; });
+    }
+    if (send) send.addEventListener("click", submit);
+    if (phone) phone.addEventListener("keydown", function(e){ if (e.key === "Enter"){ e.preventDefault(); submit(); } });
   }
   function initNav(){
     var links = Array.prototype.slice.call(document.querySelectorAll(".subnav a"));

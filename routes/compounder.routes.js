@@ -307,6 +307,41 @@ router.post('/portal/location-assess', async (req, res, next) => {
   }
 });
 
+// ─── VEŘEJNÉ: žádost o kontakt (Compounder Portal) ──────────────────────────
+// POST /api/compounder/portal/contact-request  { t, phone }
+// Uloží telefon k profilu leada a pošle notifikaci majitelům Best Series.
+const contactSchema = z.object({
+  t: z.string().min(1),
+  phone: z.string().trim().min(5).max(40),
+});
+router.post('/portal/contact-request', async (req, res, next) => {
+  try {
+    const parsed = contactSchema.safeParse(req.body || {});
+    if (!parsed.success) return res.status(400).json({ ok: false, error: 'Zadej platné telefonní číslo.' });
+    const leadId = verifyPortalToken(parsed.data.t);
+    if (!leadId) return res.status(401).json({ ok: false, error: 'Neplatný přístup.' });
+    if (!locRateOk(clientIp(req), leadId)) return res.status(429).json({ ok: false, error: 'Příliš mnoho požadavků. Zkus to prosím za chvíli.' });
+
+    const phone = parsed.data.phone.replace(/[^\d+ ()\/-]/g, '').slice(0, 40);
+    const lead = await prisma.compounderLead.findUnique({
+      where: { id: leadId },
+      select: { id: true, name: true, email: true, role: true, notes: true },
+    });
+    if (!lead) return res.status(404).json({ ok: false, error: 'Účet nenalezen.' });
+
+    const stamp = new Date().toISOString().slice(0, 16).replace('T', ' ');
+    const note = '[' + stamp + '] Požádal o telefonický kontakt: ' + phone;
+    await prisma.compounderLead.update({
+      where: { id: leadId },
+      data: { phone: phone, status: 'qualified', notes: lead.notes ? (lead.notes + '\n' + note) : note },
+    });
+
+    notifyOwnersContact(lead, phone).catch((e) => console.error('[compounder] contact mail:', e && e.message));
+    console.log('[compounder] Žádost o kontakt: lead #' + leadId);
+    return res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
 // ─── VEŘEJNÉ: přihlášení vracejícího se leada (magic link na e-mail) ─────────
 // POST /api/compounder/login  { email, lang? }
 // Najde lead dle e-mailu a pošle přihlašovací odkaz (platí 24 h). Odpověď je
@@ -846,6 +881,28 @@ function locationReportFallback(facts, lang) {
   if (pop15 > 0 && pop15 < 8000) est -= 2; else if (pop15 > 0 && pop15 < 12000) est -= 1;
   est = Math.max(1, Math.round(est));
   return { verdict: cs ? 'Orientační' : 'Indicative', scorePct: score, summary, factors: [], recommendation: '', estPerDay: est };
+}
+
+// E-mail majitelům Best Series, když lead z portálu požádá o kontakt.
+async function notifyOwnersContact(lead, phone) {
+  const recipients = (process.env.COMPOUNDER_OWNER_EMAILS || 'jan.holy@bestseries.cz,tomas.holy@bestseries.cz')
+    .split(',').map((s) => s.trim()).filter(Boolean);
+  const from = process.env.COMPOUNDER_MAIL_FROM || process.env.SMTP_FROM || process.env.INVOICE_IMAP_USER;
+  const base = process.env.HOLYOS_BASE_URL || 'https://app.holyos.cz';
+  const adminUrl = base + '/modules/prodejni-objednavky/index.html';
+  const roleLabel = lead.role === 'distributor' ? 'Distributor' : 'Compounder';
+  const subject = 'Compounder: žádost o kontakt — ' + (lead.name || lead.email);
+  const body =
+    (lead.name || '(bez jména)') + ' (' + roleLabel + ') žádá, abychom se s ním spojili.\n\n' +
+    'Telefon: ' + phone + '\n' +
+    'E-mail: ' + lead.email + '\n\n' +
+    'Telefonní číslo je uložené u profilu kontaktu v administraci leadů — odtud mu můžeš zavolat.';
+  for (const to of recipients) {
+    await sendMail({
+      to: to, from: from, fromName: compounderMailFromName(), brand: 'compounder',
+      subject: subject, body: body, link: adminUrl, linkLabel: 'Otevřít kontakt',
+    }).catch((e) => console.error('[compounder] owner mail ' + to + ':', e && e.message));
+  }
 }
 
 module.exports = router;

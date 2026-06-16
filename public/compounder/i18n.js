@@ -72,7 +72,8 @@ window.COMPOUNDER_I18N = {
       "p.loc.eyebrow":"Location check","p.loc.title":"AI location assessment","p.loc.lead":"Enter an address — AI checks for parking, counts people within 15 km and, based on your customers/day above, estimates what share of them you'd need to win over. You get a short success report.",
       "p.loc.ph":"Street, city…","p.loc.btn":"Assess location","p.loc.loading":"Analysing the location…","p.loc.err":"Something went wrong. Please try again.","p.loc.errshort":"Enter a full address.",
       "p.loc.mscore":"Success score","p.loc.mest":"Est. customers / day","p.loc.mests":"AI estimate","p.loc.mpop":"People within 15 km","p.loc.mreq":"Share to win over","p.loc.mpark":"Parking nearby","p.loc.permonth":"customers / mo","p.loc.none":"none found","p.loc.parkimmediate":"Right by the entrance",
-      "p.loc.disc":"Indicative estimate from OpenStreetMap + AI. Always verify on site."
+      "p.loc.disc":"Indicative estimate from OpenStreetMap + AI. Always verify on site.",
+      "p.ct.eyebrow":"Contact","p.ct.title":"Talk to the owner of Best Series","p.ct.lead":"Want to discuss it in person? Leave your number and we'll call you back.","p.ct.btn":"Connect with the owner","p.ct.phone":"Phone number","p.ct.send":"Ask us to call you","p.ct.sending":"Sending…","p.ct.ok":"Thank you — we'll call you soon.","p.ct.err":"Something went wrong. Please try again.","p.ct.errphone":"Enter a valid phone number."
     }
   }
 };

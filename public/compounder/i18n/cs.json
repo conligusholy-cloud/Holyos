@@ -299,5 +299,15 @@
  "p.loc.parkimmediate": "Přímo u vchodu",
  "p.loc.disc": "Orientační odhad z OpenStreetMap + AI. Vždy ověřte přímo na místě.",
  "install.ios": "Chcete-li nainstalovat aplikaci: klepněte na tlačítko Sdílet v dolní části obrazovky a vyberte Přidat na plochu.",
- "install.iosSafari": "Na iPhonu lze aplikaci nainstalovat pouze v Safari. Otevřete compounder.world v Safari, klepněte na tlačítko Sdílet a vyberte Přidat na plochu."
+ "install.iosSafari": "Na iPhonu lze aplikaci nainstalovat pouze v Safari. Otevřete compounder.world v Safari, klepněte na tlačítko Sdílet a vyberte Přidat na plochu.",
+ "p.ct.eyebrow": "Kontakt",
+ "p.ct.title": "Spojte se s majitelem Best Series",
+ "p.ct.lead": "Chcete to probrat osobně? Nechte nám číslo a zavoláme vám zpět.",
+ "p.ct.btn": "Spojit se s majitelem",
+ "p.ct.phone": "Telefonní číslo",
+ "p.ct.send": "Chci, abyste mi zavolali",
+ "p.ct.sending": "Odesílám…",
+ "p.ct.ok": "Děkujeme — brzy se vám ozveme.",
+ "p.ct.err": "Něco se nepovedlo. Zkuste to prosím znovu.",
+ "p.ct.errphone": "Zadejte platné telefonní číslo."
 }
