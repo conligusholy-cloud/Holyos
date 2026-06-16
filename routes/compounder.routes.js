@@ -358,6 +358,7 @@ router.post('/portal/contact-request', async (req, res, next) => {
     } }).catch(() => {});
     notifyOwnersContact(lead, phone, isDist).catch((e) => console.error('[compounder] contact mail:', e && e.message));
     notifyContactUsers(lead, phone, isDist).catch((e) => console.error('[compounder] contact notif:', e && e.message));
+    notifyContactTask(lead, phone, isDist).catch((e) => console.error('[compounder] velín task:', e && e.message));
     console.log('[compounder] Žádost o kontakt: lead #' + leadId);
     return res.json({ ok: true });
   } catch (err) { next(err); }
@@ -1000,6 +1001,56 @@ async function notifyOwnersContact(lead, phone, isDist) {
       to: to, from: from, fromName: compounderMailFromName(), brand: 'compounder',
       subject: subject, body: body, link: adminUrl, linkLabel: 'Otevřít kontakt',
     }).catch((e) => console.error('[compounder] owner mail ' + to + ':', e && e.message));
+  }
+}
+
+// Začátek dnešního dne ve VELIN_TZ — shodné s velin.routes (klíč denního plánu).
+function startOfTodayCmp() {
+  const tz = process.env.VELIN_TZ || 'Europe/Prague';
+  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+  return new Date(parts + 'T00:00:00Z');
+}
+// Vytvoří úkol "Zavolat …" na dnešek do Velínu (denní plán) Janovi/Tomášovi + push.
+async function notifyContactTask(lead, phone, isDist) {
+  const ownerEmails = (process.env.COMPOUNDER_OWNER_EMAILS || 'jan.holy@bestseries.cz,tomas.holy@bestseries.cz')
+    .split(',').map((s) => s.trim()).filter(Boolean);
+  const persons = await prisma.person.findMany({
+    where: { OR: ownerEmails.map((e) => ({ email: { equals: e, mode: 'insensitive' } })) },
+    select: { id: true },
+  });
+  let personIds = persons.map((p) => p.id);
+  if (!personIds.length) {
+    const admins = await prisma.user.findMany({ where: { is_super_admin: true }, select: { person: { select: { id: true } } } });
+    personIds = admins.map((a) => a.person && a.person.id).filter(Boolean);
+  }
+  if (!personIds.length) return;
+  const today = startOfTodayCmp();
+  const title = (isDist ? 'Zavolat zájemci o distribuci: ' : 'Zavolat kontaktu: ') + (lead.name || lead.email);
+  const desc = 'Telefon: ' + phone + '\nE-mail: ' + lead.email + (isDist ? '\nZájem: distribuce' : '') + '\nZdroj: Compounder portál.';
+  let notifyPerson = null;
+  try { notifyPerson = require('../services/push/expo-push').notifyPerson; } catch (e) { /* push volitelný */ }
+  for (const personId of personIds) {
+    try {
+      const plan = await prisma.dailyPlan.upsert({
+        where: { person_id_date: { person_id: personId, date: today } },
+        create: { person_id: personId, date: today, generated_by: 'manager', status: 'published' },
+        update: {},
+      });
+      const task = await prisma.taskAssignment.create({
+        data: {
+          daily_plan_id: plan.id, person_id: personId,
+          created_by: 'manager', source: 'manager',
+          title: title, description: desc, priority: 2, status: 'proposed',
+        },
+      });
+      if (notifyPerson) {
+        notifyPerson(prisma, personId, {
+          title: isDist ? '📞 Zájem o distribuci' : '📞 Žádost o kontakt',
+          body: (lead.name || lead.email) + ' — ' + phone,
+          data: { kind: 'task_assigned', task_id: task.id },
+        }).catch(() => {});
+      }
+    } catch (e) { console.error('[compounder] velín task person ' + personId + ':', e && e.message); }
   }
 }
 
