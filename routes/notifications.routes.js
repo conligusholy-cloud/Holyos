@@ -28,6 +28,7 @@ const PUSH_TYPES = new Set([
   'task_status',
   'task_deployed',
   'mention',
+  'compounder_contact', // žádost o kontakt z portálu → push na Velín (Jan/Tomáš)
   // 'system' záměrně neposíláme — admin oznámení jdou jen na web
 ]);
 
