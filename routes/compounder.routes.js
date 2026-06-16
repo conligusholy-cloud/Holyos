@@ -267,7 +267,7 @@ router.post('/portal/location-assess', async (req, res, next) => {
     // 2) parkoviště + okolní podniky + populace v okruhu 15 km (OSM Overpass)
     const [near, pop] = await Promise.all([
       osmNearby(geo.lat, geo.lon),
-      osmPopulation(geo.lat, geo.lon, 15000),
+      populationLookup(geo.lat, geo.lon, 15),
     ]);
     const parking = near.parking, anchors = near.anchors;
 
@@ -279,7 +279,7 @@ router.post('/portal/location-assess', async (req, res, next) => {
     const facts = {
       address: geo.display_name, lat: geo.lat, lon: geo.lon,
       parking_count: parking.count, nearest_parking_m: parking.nearest_m, parking_immediate: parkingImmediate,
-      population_15km: pop.population, places: pop.places.slice(0, 12),
+      population_15km: pop.population, population_source: pop.source || 'OpenStreetMap', places: pop.places.slice(0, 12),
       anchors: anchors.list, anchor_count: anchors.count, nearest_retail_m: anchors.nearest_retail_m,
       per_day: perDay, monthly_customers: monthlyCustomers,
       required_pct: requiredPct == null ? null : Number(requiredPct.toFixed(2)),
@@ -758,13 +758,40 @@ async function osmPopulation(lat, lon, radius) {
   places.sort((a, b) => b.population - a.population);
   return { population: total, places };
 }
+// GeoNames: populace obcí v okruhu (z národních statistik) — funguje po celé
+// Evropě/světě a je výrazně úplnější než OSM. Vyžaduje free username
+// v GEONAMES_USERNAME (geonames.org → Free Web Services).
+async function geonamesPopulation(lat, lon, radiusKm) {
+  const user = process.env.GEONAMES_USERNAME;
+  if (!user) return null;
+  const url = 'https://secure.geonames.org/findNearbyPlaceNameJSON?lat=' + lat + '&lng=' + lon +
+    '&radius=' + radiusKm + '&maxRows=500&style=FULL&featureClass=P&username=' + encodeURIComponent(user);
+  const j = await locFetchJson(url, null, 12000);
+  if (!j || !Array.isArray(j.geonames)) return null;
+  let total = 0; const places = [];
+  j.geonames.forEach((g) => {
+    const p = parseInt(g.population, 10);
+    if (!Number.isFinite(p) || p <= 0) return;
+    total += p;
+    places.push({ name: g.name, population: p, place: g.fcodeName || g.fcode });
+  });
+  places.sort((a, b) => b.population - a.population);
+  return { population: total, places: places };
+}
+// Nejdřív GeoNames (přesnější), fallback OpenStreetMap.
+async function populationLookup(lat, lon, radiusKm) {
+  const gn = await geonamesPopulation(lat, lon, radiusKm);
+  if (gn && gn.population > 0) return Object.assign(gn, { source: 'GeoNames' });
+  const osm = await osmPopulation(lat, lon, radiusKm * 1000);
+  return Object.assign(osm, { source: 'OpenStreetMap' });
+}
 async function locationReportAI(facts, lang) {
   if (!process.env.ANTHROPIC_API_KEY) return null;
   try {
     const Anthropic = require('@anthropic-ai/sdk');
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
     const model = process.env.COMPOUNDER_LOCATION_MODEL || 'claude-sonnet-4-6';
-    const sys = 'Jsi analytik lokality pro venkovní samoobslužnou prádelnu (Compounder Machine). Z dodaných dat napiš stručné, věcné zhodnocení místa. Odpověz POUZE platným JSON bez markdownu ve tvaru: {"verdict":"<2-4 slova>","scorePct":<celé 0-100>,"summary":"<2-4 věty>","factors":[{"label":"<krátké>","value":"<krátké>","good":<true|false>}],"recommendation":"<1-2 věty>"}. Klíčový faktor je required_pct = jaké procento populace v okruhu musí přijít prát; čím nižší, tím lépe (<0,5 % výborné, 0,5-1 % dobré, 1-2 % střední, 2-5 % náročné, >5 % velmi náročné). V datech je i seznam okolních podniků (anchors) s typem a vzdáleností — supermarkety, hypermarkety, obchodní domy, tržnice a čerpací stanice generují denní provoz lidí; odhadni z nich potenciální denní průtok zákazníků kolem místa a zohledni ho ve skóre (vyšší provoz = vyšší šance) a přidej faktor o provozu/návštěvnosti v okolí. Parkoviště poblíž je zásadní plus; pokud parking_immediate je true (místo je přímo u velkého obchodu), ber parkování jako bezprostřední (u vchodu). Pokud population_15km = 0, jde o chybějící data z OpenStreetMap — uveď to a buď opatrný. Populace z OSM je orientační. Piš v jazyce s kódem: ' + lang + '.';
+    const sys = 'Jsi analytik lokality pro venkovní samoobslužnou prádelnu (Compounder Machine). Z dodaných dat napiš stručné, věcné zhodnocení místa. Odpověz POUZE platným JSON bez markdownu ve tvaru: {"verdict":"<2-4 slova>","scorePct":<celé 0-100>,"summary":"<2-4 věty>","factors":[{"label":"<krátké>","value":"<krátké>","good":<true|false>}],"recommendation":"<1-2 věty>"}. Klíčový faktor je required_pct = jaké procento populace v okruhu musí přijít prát; čím nižší, tím lépe (<0,5 % výborné, 0,5-1 % dobré, 1-2 % střední, 2-5 % náročné, >5 % velmi náročné). V datech je i seznam okolních podniků (anchors) s typem a vzdáleností — supermarkety, hypermarkety, obchodní domy, tržnice a čerpací stanice generují denní provoz lidí; odhadni z nich potenciální denní průtok zákazníků kolem místa a zohledni ho ve skóre (vyšší provoz = vyšší šance) a přidej faktor o provozu/návštěvnosti v okolí. Parkoviště poblíž je zásadní plus; pokud parking_immediate je true (místo je přímo u velkého obchodu), ber parkování jako bezprostřední (u vchodu). Populace pochází ze zdroje population_source (GeoNames je výrazně přesnější než OpenStreetMap) a je orientační — u velkých měst zasahujících jen částečně do okruhu může být nadhodnocená, u malých obcí bez dat naopak podhodnocená; krátce to zmiň. Pokud population_15km = 0, jde o chybějící data — buď opatrný. Piš v jazyce s kódem: ' + lang + '.';
     const usr = 'Data o místě (JSON):\n' + JSON.stringify(facts);
     const msg = await client.messages.create({ model, max_tokens: 900, system: sys, messages: [{ role: 'user', content: usr }] });
     let text = (msg && msg.content && msg.content[0] && msg.content[0].text) || '';
