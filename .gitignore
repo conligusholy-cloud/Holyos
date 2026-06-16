@@ -54,6 +54,9 @@ tmp/
 
 data/
 
+# Podklady (raw videa/fotky pro práci, ne pro web ani server) — ~870 MB
+podklady/
+
 # AI Vývojář — dokumentace v repu
 !docs/ai-vyvojar/
 !docs/ai-vyvojar/**
