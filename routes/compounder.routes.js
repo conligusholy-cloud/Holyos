@@ -567,7 +567,7 @@ router.get('/leads/:id/ai-eval', requireAuth, async (req, res, next) => {
       has_phone: !!lead.phone,
       requested_contact: (evCounts['contact_request'] > 0) || /Požádal o telefonický kontakt/.test(lead.notes || ''),
       notes: (lead.notes || '').slice(0, 1500), created_at: lead.created_at,
-      total_events: events.length, portal_opened: portalOpened, minutes: Math.round((totalMs || 0) / 60000),
+      total_events: events.length, portal_opened: portalOpened, minutes: totalMs > 0 ? Math.round(totalMs / 60000) : null,
       sections: sections, event_counts: evCounts, location_checks: locChecks.slice(0, 6),
     };
     let out = await leadEvalAI(facts);
@@ -971,7 +971,7 @@ async function leadEvalAI(facts) {
     const Anthropic = require('@anthropic-ai/sdk');
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
     const model = process.env.COMPOUNDER_LOCATION_MODEL || 'claude-sonnet-4-6';
-    const sys = 'Jsi obchodní analytik. Z aktivity zájemce (lead) na webu compounder.world (prémiové samoobslužné prádelny jako investiční aktivum) vyhodnoť, jak je "zahřátý" a o jak velkém byznysu uvažuje. Data: počet eventů, čas na webu, jestli otevřel Portal, navštívené sekce (sections), počty typů eventů (event_counts), kontroly lokalit (location_checks – populace/potřebný podíl/skóre), jestli požádal o kontakt (requested_contact / has_phone), stav a poznámky. Silné signály zájmu: požádal o kontakt, opakované kontroly lokalit, čas v ekonomice/návratnosti/Gold & Diamond, otevřený Portal. Odpověz POUZE platným JSON bez markdownu: {"warmthPct":<celé 0-100>,"warmth":"<2-3 slova, např. Studený/Vlažný/Zahřátý/Horký>","summary":"<2-4 věty česky>","businessSize":"<krátce: o jakém rozsahu uvažuje, např. jeden kiosk / malá síť / regionální síť / nejasné>","signals":[{"label":"<krátké>","value":"<krátké>","good":<true|false>}]}. Piš česky.';
+    const sys = 'Jsi obchodní analytik. Z aktivity zájemce (lead) na webu compounder.world (prémiové samoobslužné prádelny jako investiční aktivum) vyhodnoť, jak je "zahřátý" a o jak velkém byznysu uvažuje. Data: počet eventů, čas na webu, jestli otevřel Portal, navštívené sekce (sections), počty typů eventů (event_counts), kontroly lokalit (location_checks – populace/potřebný podíl/skóre), jestli požádal o kontakt (requested_contact / has_phone), stav a poznámky. Silné signály zájmu: požádal o kontakt, opakované kontroly lokalit, čas v ekonomice/návratnosti/Gold & Diamond, otevřený Portal. Odpověz POUZE platným JSON bez markdownu: {"warmthPct":<celé 0-100>,"warmth":"<2-3 slova, např. Studený/Vlažný/Zahřátý/Horký>","summary":"<2-4 věty česky>","businessSize":"<krátce: o jakém rozsahu uvažuje, např. jeden kiosk / malá síť / regionální síť / nejasné>","signals":[{"label":"<krátké>","value":"<krátké>","good":<true|false>}]}. Pokud je minutes null nebo 0, čas na webu se nezměřil — neber to jako slabinu ani nezájem, jen to nezmiňuj. Piš česky.';
     const usr = 'Lead (JSON):\n' + JSON.stringify(facts);
     const msg = await client.messages.create({ model, max_tokens: 700, system: sys, messages: [{ role: 'user', content: usr }] });
     let text = (msg && msg.content && msg.content[0] && msg.content[0].text) || '';
