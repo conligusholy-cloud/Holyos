@@ -36,8 +36,13 @@ header.top{position:sticky;top:0;z-index:30;background:rgba(10,10,11,.82);backdr
 .top-right{display:flex;align-items:center;gap:14px}
 .top .hi{font-size:13px;color:var(--muted)}
 .lang-select{background:transparent;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:6px 12px;font-size:12px;font-family:inherit;cursor:pointer}
-.gear{display:inline-flex;align-items:center;justify-content:center;color:var(--muted);transition:color .2s,transform .3s var(--ease)}
+.gear{display:inline-flex;align-items:center;justify-content:center;color:var(--muted);background:none;border:none;padding:0;cursor:pointer;transition:color .2s,transform .3s var(--ease)}
 .gear:hover{color:var(--gold-soft);transform:rotate(40deg)}
+.acc-modal{position:fixed;inset:0;z-index:200;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;padding:20px}
+.acc-modal.open{display:flex}
+.acc-modal .acc-card{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:24px;max-width:420px;width:100%;position:relative}
+.acc-modal .acc-x{position:absolute;top:12px;right:14px;background:none;border:none;color:var(--muted);font-size:22px;line-height:1;cursor:pointer}
+.acc-modal .acc-x:hover{color:var(--text)}
 .lang-select option{background:#141417;color:#f4f4f2}
 .subnav{display:flex;gap:6px;overflow-x:auto;padding:10px max(24px, (100% - 1060px) / 2 + 24px);border-bottom:1px solid var(--line);background:var(--bg-2);position:sticky;top:51px;z-index:20;scrollbar-width:none;-ms-overflow-style:none}
 .subnav::-webkit-scrollbar{display:none}
@@ -162,9 +167,9 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
       <div class="brand">COMP<b>OU</b>NDER <span style="color:var(--muted-2);font-weight:400;letter-spacing:.04em">· Portal</span></div>
       <div class="top-right">
         <div class="hi" id="hi"></div>
-        <a href="#ucet" class="gear" id="gearBtn" aria-label="Account" title="Account">
+        <button type="button" class="gear" id="gearBtn" aria-label="Account" title="Account" aria-haspopup="dialog">
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
-        </a>
+        </button>
         <select class="lang-select" id="pLang" aria-label="Language"></select>
       </div>
     </div>
@@ -448,19 +453,21 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
       </div>
     </section>
 
-    <section class="blk" id="ucet">
+  </div>
+
+  <div class="acc-modal" id="accModal" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="accTitle">
+    <div class="acc-card">
+      <button type="button" class="acc-x" id="accClose" aria-label="✕">✕</button>
       <div class="eyebrow" data-i18n="p.acc.eyebrow">Account</div>
-      <h2 data-i18n="p.acc.title">Password & sign-in</h2>
-      <p class="lead" data-i18n="p.acc.lead">Set a password to sign in faster next time — you'll stay signed in on this device.</p>
-      <div class="panel" style="max-width:460px">
-        <form id="pwForm">
-          <div class="row"><label data-i18n="p.acc.pw">New password</label><div class="unit"><input type="password" id="acc-pw" autocomplete="new-password" minlength="6"></div></div>
-          <button type="submit" class="btn btn-gold" style="margin:6px 0 0;width:100%;justify-content:center" data-i18n="p.acc.save">Save password</button>
-          <p class="note" id="pwMsg" role="status" style="min-height:18px"></p>
-        </form>
-        <button type="button" id="pLogout" class="btn" style="width:100%;justify-content:center;margin-top:8px;background:transparent;border:1px solid var(--line);color:var(--muted)" data-i18n="p.acc.logout">Log out</button>
-      </div>
-    </section>
+      <h2 id="accTitle" style="font-size:22px;margin:4px 0 8px" data-i18n="p.acc.title">Password & sign-in</h2>
+      <p class="lead" style="margin-bottom:18px" data-i18n="p.acc.lead">Set a password to sign in faster next time — you'll stay signed in on this device.</p>
+      <form id="pwForm">
+        <div class="row"><label data-i18n="p.acc.pw">New password</label><div class="unit"><input type="password" id="acc-pw" autocomplete="new-password" minlength="6"></div></div>
+        <button type="submit" class="btn btn-gold" style="margin:6px 0 0;width:100%;justify-content:center" data-i18n="p.acc.save">Save password</button>
+        <p class="note" id="pwMsg" role="status" style="min-height:18px"></p>
+      </form>
+      <button type="button" id="pLogout" class="btn" style="width:100%;justify-content:center;margin-top:8px;background:transparent;border:1px solid var(--line);color:var(--muted)" data-i18n="p.acc.logout">Log out</button>
+    </div>
   </div>
 
   <footer data-i18n="p.footer">COMPOUNDER · Best Series — We build Compounder Machines. · compounder.world</footer>
@@ -599,6 +606,20 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
         }).catch(function(){ msg.style.color="#e07a6b"; msg.textContent = pT("login.err"); })
         .finally(function(){ btn.disabled = false; });
     });
+  })();
+
+  // Účet otevřený přes ozubené kolečko (modal), ne jako sekce na stránce.
+  (function initAccModal(){
+    var gear = document.getElementById("gearBtn");
+    var modal = document.getElementById("accModal");
+    var closeBtn = document.getElementById("accClose");
+    if (!modal) return;
+    function openM(){ modal.classList.add("open"); modal.setAttribute("aria-hidden", "false"); }
+    function shutM(){ modal.classList.remove("open"); modal.setAttribute("aria-hidden", "true"); }
+    if (gear) gear.addEventListener("click", function(e){ e.preventDefault(); openM(); });
+    if (closeBtn) closeBtn.addEventListener("click", shutM);
+    modal.addEventListener("click", function(e){ if (e.target === modal) shutM(); });
+    document.addEventListener("keydown", function(e){ if (e.key === "Escape" && modal.classList.contains("open")) shutM(); });
   })();
 
   if (!token) { showDenied(pT("p.login.lead")); return; }
