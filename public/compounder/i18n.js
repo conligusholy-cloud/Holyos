@@ -17,9 +17,9 @@ window.COMPOUNDER_I18N = {
   },
   strings: {
     en: {
-      "nav.compounder":"The Compounder","nav.compounding":"Compounding","nav.machine":"Compounder Machine","nav.card":"The Card","nav.cta":"Become a Compounder",
+      "nav.compounder":"The Compounder","nav.compounding":"Compounding","nav.machine":"Compounder Machine","nav.card":"The Card","nav.cta":"Get complete information",
       "hero.line1":"We don't sell laundromats.","hero.line2":"We sell Compounding.","hero.line3":"The result is only one.","hero.freedom":"Freedom.",
-      "hero.cta":"Become a Compounder","hero.cta2":"How it works","hero.scroll":"Scroll",
+      "hero.cta":"Get complete information","hero.cta2":"How it works","hero.scroll":"Scroll",
       "s1.eyebrow":"The mindset","s1.title":"What is a Compounder?","s1.lead":"A Compounder is a person — and a way of thinking. A Compounder doesn't work for money. They build assets that work for them.",
       "s1.t1h":"Builds assets","s1.t1p":"Acquires income-generating assets instead of liabilities.","s1.t2h":"Reinvests cashflow","s1.t2p":"Every euro earned funds the next asset in the network.","s1.t3h":"Thinks long-term","s1.t3p":"No get-rich-quick. Freedom is built, compounded, sustained.",
       "s2.eyebrow":"The engine","s2.title":"What is Compounding?","s2.lead":"One asset earns enough to fund the next. The next funds another. The result is a network of assets generating income every single day of the year.","s2.note":"One Compounder Machine → cashflow → the next Compounder Machine.",
