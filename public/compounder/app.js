@@ -10,12 +10,7 @@
   function detectLang(){
     var saved = localStorage.getItem("compounder.lang");
     if (saved && I18N.LANGS[saved]) return saved;
-    var nav = (navigator.languages || [navigator.language || "en"]);
-    for (var i=0;i<nav.length;i++){
-      var code = (nav[i]||"").slice(0,2).toLowerCase();
-      if (I18N.LANGS[code]) return code;
-    }
-    return I18N.base;
+    return I18N.base; // výchozí angličtina (nepřebíráme jazyk prohlížeče)
   }
   function applyDict(lang){
     var base = I18N.strings[I18N.base] || {};

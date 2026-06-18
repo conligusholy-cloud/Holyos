@@ -547,9 +547,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
   function pDetect(){
     var s = localStorage.getItem("compounder.lang");
     if (s && I18N.LANGS[s]) return s;
-    var n = navigator.languages || [navigator.language || "en"];
-    for (var i=0;i<n.length;i++){ var c=(n[i]||"").slice(0,2).toLowerCase(); if (I18N.LANGS[c]) return c; }
-    return I18N.base;
+    return I18N.base; // výchozí angličtina (nepřebíráme jazyk prohlížeče)
   }
   function pSetLang(lang, cb){
     localStorage.setItem("compounder.lang", lang);
