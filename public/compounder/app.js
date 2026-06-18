@@ -8,7 +8,7 @@
 
   /* ---------- language ---------- */
   function detectLang(){
-    var saved = localStorage.getItem("compounder.lang");
+    var saved = localStorage.getItem("compounder.lang2");
     if (saved && I18N.LANGS[saved]) return saved;
     return I18N.base; // výchozí angličtina (nepřebíráme jazyk prohlížeče)
   }
@@ -28,7 +28,7 @@
     window.__t = function(k){ return (dict[k] != null ? dict[k] : k); };
   }
   function applyLang(lang){
-    localStorage.setItem("compounder.lang", lang);
+    localStorage.setItem("compounder.lang2", lang);
     if (lang === I18N.base || I18N.strings[lang]) { applyDict(lang); return; }
     fetch(I18N.path + lang + ".json").then(function(r){ return r.ok ? r.json() : {}; })
       .then(function(j){ I18N.strings[lang] = j || {}; applyDict(lang); })

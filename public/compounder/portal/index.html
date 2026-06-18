@@ -545,12 +545,12 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
     });
   }
   function pDetect(){
-    var s = localStorage.getItem("compounder.lang");
+    var s = localStorage.getItem("compounder.lang2");
     if (s && I18N.LANGS[s]) return s;
     return I18N.base; // výchozí angličtina (nepřebíráme jazyk prohlížeče)
   }
   function pSetLang(lang, cb){
-    localStorage.setItem("compounder.lang", lang);
+    localStorage.setItem("compounder.lang2", lang);
     document.documentElement.lang = lang;
     function done(loaded){
       var base = I18N.strings[I18N.base] || {}; DICT = {};
