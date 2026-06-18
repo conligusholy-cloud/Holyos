@@ -28,6 +28,7 @@ const PUSH_TYPES = new Set([
   'task_status',
   'task_deployed',
   'mention',
+  'compounder_lead', // nový Compounder z webu → push na Velín (Jan/Tomáš)
   // 'compounder_contact' nemá push zde — mobilní push jde z Velín úkolu (task_assigned)
   // 'system' záměrně neposíláme — admin oznámení jdou jen na web
 ]);

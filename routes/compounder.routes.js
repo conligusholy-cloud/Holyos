@@ -642,15 +642,25 @@ router.get('/analytics/summary', requireAuth, async (req, res, next) => {
 // Notifikace na nový lead. Cíl = env COMPOUNDER_NOTIFY_USER_ID (konkrétní kompetentní
 // osoba), jinak fallback na všechny super-adminy (ať Tomáš dostane upozornění i bez configu).
 // Vytvoří in-app notifikaci (zvonek + SSE realtime); chyba se jen zaloguje.
+// Cíloví uživatelé notifikací = Jan & Tomáš (COMPOUNDER_OWNER_EMAILS / _IDS),
+// fallback super-admini. Sdíleno pro nový lead i žádost o kontakt.
+async function resolveOwnerUserIds() {
+  const envIds = (process.env.COMPOUNDER_NOTIFY_USER_IDS || '')
+    .split(',').map((s) => Number(s.trim())).filter((n) => Number.isInteger(n) && n > 0);
+  if (envIds.length) return envIds;
+  const ownerEmails = (process.env.COMPOUNDER_OWNER_EMAILS || 'jan.holy@bestseries.cz,tomas.holy@bestseries.cz')
+    .split(',').map((s) => s.trim()).filter(Boolean);
+  const persons = await prisma.person.findMany({
+    where: { user_id: { not: null }, OR: ownerEmails.map((e) => ({ email: { equals: e, mode: 'insensitive' } })) },
+    select: { user_id: true },
+  });
+  const ids = persons.map((p) => p.user_id).filter(Boolean);
+  if (ids.length) return ids;
+  const admins = await prisma.user.findMany({ where: { is_super_admin: true }, select: { id: true } });
+  return admins.map((u) => u.id);
+}
 async function notifyNewLead(leadId, d) {
-  let userIds = [];
-  const envId = Number(process.env.COMPOUNDER_NOTIFY_USER_ID);
-  if (Number.isInteger(envId) && envId > 0) {
-    userIds = [envId];
-  } else {
-    const admins = await prisma.user.findMany({ where: { is_super_admin: true }, select: { id: true } });
-    userIds = admins.map((u) => u.id);
-  }
+  const userIds = await resolveOwnerUserIds();
   const roleLabel = d.role === 'distributor' ? 'Distributor' : 'Compounder';
   for (const userId of userIds) {
     await createNotification({
