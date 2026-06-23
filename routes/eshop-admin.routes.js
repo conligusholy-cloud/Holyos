@@ -130,7 +130,8 @@ router.get('/pricelists/:id', async (req, res, next) => {
       include: {
         companies: { select: { id: true, name: true, ico: true } },
         items: {
-          orderBy: { id: 'asc' },
+          // Nejnověji přidaný díl první (vyšší id = později vložený)
+          orderBy: { id: 'desc' },
           include: { material: { select: { id: true, code: true, name: true, unit: true } } },
         },
       },
