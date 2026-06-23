@@ -113,12 +113,18 @@
     .tool-head p { font-size: 12px; color: var(--text2); margin-top: 4px; }
     .tool-section-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; color: var(--text2); margin: 22px 0 10px; }
 
-    .recipient-row { display: grid; grid-template-columns: 1.4fr 1.4fr 0.9fr 0.9fr auto; gap: 10px; align-items: center; padding: 12px 14px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg); margin-bottom: 8px; font-size: 13px; }
+    .recipient-row { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1.4fr) minmax(0, 0.9fr) minmax(0, 0.9fr) auto; gap: 10px; align-items: center; padding: 12px 14px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg); margin-bottom: 8px; font-size: 13px; }
+    .recipient-row > div { min-width: 0; }
     .recipient-row .r-name { font-weight: 600; color: var(--text); }
-    .recipient-row .r-email { color: var(--text2); }
+    .recipient-row .r-email { color: var(--text2); word-break: break-word; }
+    .recipient-row .r-langs { display: inline-flex; flex-wrap: wrap; gap: 1px; vertical-align: middle; }
     .recipient-row .r-stat { font-size: 11px; color: var(--text2); }
     .recipient-row .r-stat strong { color: #eab308; font-size: 14px; }
-    .recipient-row .r-actions { display: flex; gap: 6px; }
+    .recipient-row .r-actions { display: flex; gap: 6px; flex-shrink: 0; flex-wrap: wrap; justify-content: flex-end; }
+    @media (max-width: 760px) {
+      .recipient-row { grid-template-columns: minmax(0, 1fr) auto; }
+      .recipient-row .r-actions { grid-column: 1 / -1; justify-content: flex-start; }
+    }
     .recipient-empty { text-align: center; padding: 28px 12px; color: var(--text2); font-size: 13px; border: 1px dashed var(--border); border-radius: 10px; background: rgba(255,255,255,0.02); }
 
     /* Vlajkový picker jazyků v dialogu „Odeslat odkaz" */
