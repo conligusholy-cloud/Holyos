@@ -1,6 +1,11 @@
 # Soubory/složky, které se NEMAJÍ nahrávat na Railway při `railway up`.
 # (kód + build se nahrává; tohle jsou velké nepotřebné věci)
 
+# Závislosti — Railway si je instaluje sám (npm install při buildu).
+# BEZ tohohle se nahrávaly stovky MB a upload na pomalé síti timeoutoval.
+node_modules/
+.git/
+
 # Podklady (fotky/videa pro práci, ne pro server)
 podklady/
 
