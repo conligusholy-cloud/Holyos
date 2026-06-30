@@ -319,6 +319,7 @@
   </style>
   <script src="/modules/prodejni-objednavky/pradlomat-i18n.js"></script>
   <script src="/modules/prodejni-objednavky/pradlomat-economy.js"></script>
+  <script src="/modules/prodejni-objednavky/pradlomat-balicek.js"></script>
 </head>
 <body>
   <!-- Compounder Portal brand bar — zobrazí se jen na compounder.world (JS). -->
@@ -391,6 +392,13 @@
       var TOKEN = pathParts[3] || '';
       var SHARE_DATA = null;
       var EDIT_DEBOUNCE = null;
+
+      // Vrátí API objekt správné pomůcky podle slugu (každá má vlastní global).
+      function toolApi() {
+        if (TOOL === 'pradlomat-economy') return window.PradlomatTool || null;
+        if (TOOL === 'pradlomat-balicek') return window.PradlomatBalicekTool || null;
+        return null;
+      }
 
       // Compounder brand mode — když je share stránka otevřená na compounder.world,
       // skryjeme modrou HolyOS lištu a nasadíme Compounder Portal brand + tlačítko zpět.
@@ -540,7 +548,7 @@
         // Re-render uložených modelů (formátování data podle locale)
         if (SHARE_DATA && SHARE_DATA.models) renderModelsStrip(SHARE_DATA.models);
         // Re-mount tool — vyrenderuje sekce s novými stringy
-        if (SHARE_DATA && window.PradlomatTool) mountTool(SHARE_DATA);
+        if (SHARE_DATA && toolApi()) mountTool(SHARE_DATA);
         logEvent('viewed', { language: code });
       }
 
@@ -644,9 +652,17 @@
         document.getElementById('loading').style.display = 'none';
         document.getElementById('content').style.display = '';
 
-        if (TOOL !== 'pradlomat-economy' || !window.PradlomatTool) {
+        var API = toolApi();
+        if (!API) {
           showError(tt('Tato pomůcka zatím není podporována.'));
           return;
+        }
+
+        // Titulek stránky podle pomůcky (z backendu)
+        if (data.tool && data.tool.title) {
+          var th = document.getElementById('share-title');
+          if (th) th.textContent = data.tool.title;
+          try { document.title = data.tool.title; } catch (e) { /* noop */ }
         }
 
         // Fallback chain: poslední uložený zákazníkův model → server defaults → JS factory
@@ -658,7 +674,7 @@
         }
         var locks = (data.locks_json && typeof data.locks_json === 'object') ? data.locks_json : {};
 
-        window.PradlomatTool.mount(document.getElementById('tool-root'), {
+        API.mount(document.getElementById('tool-root'), {
           initialState: initialState,
           locks: locks,
           enforceLocks: true,
@@ -677,7 +693,9 @@
         if (!SHARE_DATA || !SHARE_DATA.models || !SHARE_DATA.models[idx]) return;
         var m = SHARE_DATA.models[idx];
         var locks = (SHARE_DATA.locks_json && typeof SHARE_DATA.locks_json === 'object') ? SHARE_DATA.locks_json : {};
-        window.PradlomatTool.mount(document.getElementById('tool-root'), {
+        var API = toolApi();
+        if (!API) return;
+        API.mount(document.getElementById('tool-root'), {
           initialState: m.data_json,
           locks: locks,
           enforceLocks: true,
@@ -690,23 +708,26 @@
       };
 
       window.resetToDefaults = function () {
-        if (window.PradlomatTool) window.PradlomatTool.resetDefaults();
+        var API = toolApi();
+        if (API) API.resetDefaults();
         toast(tt('Obnoveno výchozí nastavení'), 'ok');
       };
 
       window.exportJson = function () {
-        if (window.PradlomatTool) window.PradlomatTool.exportJSON();
+        var API = toolApi();
+        if (API) API.exportJSON();
         logEvent('exported', { kind: 'json' });
       };
 
       window.downloadPdf = function () {
         // Před tiskem expanduj všechny sbalené sekce (CSS pro @media print to také forsuje,
         // ale tady to děláme explicitně aby uživatel viděl preview ve správném stavu).
-        var collapsed = document.querySelectorAll('.pe-section.pe-collapsed');
+        var collapsed = document.querySelectorAll('.pe-section.pe-collapsed, .peb-section.peb-collapsed');
         var toReopen = [];
         for (var i = 0; i < collapsed.length; i++) {
-          collapsed[i].classList.remove('pe-collapsed');
-          toReopen.push(collapsed[i]);
+          var ccls = collapsed[i].classList.contains('peb-collapsed') ? 'peb-collapsed' : 'pe-collapsed';
+          collapsed[i].classList.remove(ccls);
+          toReopen.push({ el: collapsed[i], cls: ccls });
         }
         logEvent('exported', { kind: 'pdf' });
         // Necháme krátkou pauzu na re-render rozbalení, pak tiskneme.
@@ -714,7 +735,7 @@
           window.print();
           // Po zavření print dialogu (lehce neuchopitelné — print je sync) vrátíme původní stav.
           setTimeout(function () {
-            for (var j = 0; j < toReopen.length; j++) toReopen[j].classList.add('pe-collapsed');
+            for (var j = 0; j < toReopen.length; j++) toReopen[j].el.classList.add(toReopen[j].cls);
           }, 200);
         }, 80);
       };
@@ -749,8 +770,10 @@
         var nameEl = document.getElementById('save-model-name');
         var name = nameEl ? nameEl.value.trim() : '';
         if (!name) name = tt('Pracovní model');
-        var state = window.PradlomatTool.getState();
-        var computed = window.PradlomatTool.getComputed();
+        var API = toolApi();
+        if (!API) { toast(tt('Tato pomůcka zatím není podporována.'), 'err'); return; }
+        var state = API.getState();
+        var computed = API.getComputed();
         fetch('/api/tools/share/' + encodeURIComponent(TOKEN) + '/model', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

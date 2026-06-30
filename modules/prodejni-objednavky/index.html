@@ -236,6 +236,7 @@
   </style>
   <script src="/js/countries.js"></script>
   <script src="modules/prodejni-objednavky/pradlomat-economy.js"></script>
+  <script src="modules/prodejni-objednavky/pradlomat-balicek.js"></script>
 </head>
 <body>
   <div id="sidebar"></div>
@@ -389,6 +390,10 @@
             <span class="tn-icon">📊</span>
             <span>Ekonomika prádlomatu</span>
           </div>
+          <div class="tools-nav-item" data-tool="pradlomat-balicek" onclick="switchTool('pradlomat-balicek')">
+            <span class="tn-icon">📦</span>
+            <span>Prádlomat — servisní balíček</span>
+          </div>
           <div class="tools-nav-item" data-tool="margin-calc" onclick="switchTool('margin-calc')">
             <span class="tn-icon">🧮</span>
             <span>Kalkulačka marže</span>
@@ -419,12 +424,37 @@
             <!-- Sekce: Spravce kontaktu -->
             <div class="tool-section-title" style="display:flex;align-items:center;gap:10px;margin-top:32px;">
               <span style="flex:1">Příjemci &amp; statistiky využití</span>
-              <button class="btn btn-primary btn-sm" onclick="openRecipientModal()">+ Odeslat nový odkaz</button>
+              <button class="btn btn-primary btn-sm" onclick="openRecipientModal('pradlomat-economy')">+ Odeslat nový odkaz</button>
             </div>
             <div id="recipients-list">
               <div class="recipient-empty">
                 Zatím jsi nikomu odkaz neposlal. Klikni na <strong>+ Odeslat nový odkaz</strong> a založ prvního příjemce.<br>
                 <span style="font-size:11px;opacity:0.7;">Backend (token + email přes Microsoft Graph + tracking otevření a uložení modelů) navážu v dalším kroku.</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tool: Ekonomika pradlomatu - servisni balicek -->
+          <div class="tool-view" data-tool-view="pradlomat-balicek" style="display:none;">
+            <div class="tool-head">
+              <div class="tool-head-icon">📦</div>
+              <div style="flex:1">
+                <h2>Prádlomat — servisní balíček</h2>
+                <p>Model z pohledu provozovatele. Servisní balíček = % z obratu (zahrnuje údržbu, servis, software, infolinku, internet, prací prášek a aviváž). Stánek, elektriku, vodu a nájem si platí provozovatel sám. Žlutá pole jsou vstupy, ostatní se počítají automaticky.</p>
+              </div>
+            </div>
+
+            <!-- Živá editovatelná tabulka (montuje pradlomat-balicek.js) -->
+            <div id="pradlomat-balicek-root"></div>
+
+            <!-- Sekce: Spravce kontaktu -->
+            <div class="tool-section-title" style="display:flex;align-items:center;gap:10px;margin-top:32px;">
+              <span style="flex:1">Příjemci &amp; statistiky využití</span>
+              <button class="btn btn-primary btn-sm" onclick="openRecipientModal('pradlomat-balicek')">+ Odeslat nový odkaz</button>
+            </div>
+            <div id="recipients-list-balicek">
+              <div class="recipient-empty">
+                Zatím jsi nikomu odkaz neposlal. Klikni na <strong>+ Odeslat nový odkaz</strong> a založ prvního příjemce.
               </div>
             </div>
           </div>
@@ -3494,6 +3524,45 @@
       });
       _pradlomatMounted = true;
     }
+    var _balicekMounted = false;
+    async function mountBalicekIfNeeded() {
+      if (_balicekMounted) return;
+      var root = document.getElementById('pradlomat-balicek-root');
+      if (!(root && window.PradlomatBalicekTool && typeof window.PradlomatBalicekTool.mount === 'function')) return;
+
+      // 1) Načti server-side výchozí hodnoty + lock state (pokud admin nějaké uložil).
+      var initialState = null;
+      var initialLocks = {};
+      try {
+        var res = await fetch('/api/tools/defaults/pradlomat-balicek');
+        if (res.ok) {
+          var d = await res.json();
+          if (d && d.data_json) initialState = d.data_json;
+          if (d && d.locks_json) initialLocks = d.locks_json;
+        }
+      } catch (e) { /* tichá fallback na JS DEFAULTS */ }
+
+      // 2) Mount v admin režimu: lockable=true + onSaveDefaults (stejně jako Ekonomika).
+      window.PradlomatBalicekTool.mount(root, {
+        initialState: initialState,
+        locks: initialLocks,
+        lockable: true,
+        onSaveDefaults: async function (state, locks) {
+          var r = await fetch('/api/tools/defaults/pradlomat-balicek', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ data_json: state, locks_json: locks }),
+          });
+          if (!r.ok) {
+            var err = {};
+            try { err = await r.json(); } catch (_) {}
+            throw new Error(err.error || 'HTTP ' + r.status);
+          }
+          return await r.json();
+        },
+      });
+      _balicekMounted = true;
+    }
     function switchTool(name) {
       _activeTool = name;
       var items = document.querySelectorAll('.tools-nav-item');
@@ -3507,25 +3576,36 @@
       if (name === 'pradlomat-economy') {
         mountPradlomatIfNeeded();
         loadRecipients();
+      } else if (name === 'pradlomat-balicek') {
+        mountBalicekIfNeeded();
+        loadRecipients('pradlomat-balicek');
       }
     }
 
-    // ── Recipient management ─────────────────────────────────────
-    async function loadRecipients() {
-      var listEl = document.getElementById('recipients-list');
+    // ── Recipient management (tool-aware) ────────────────────────
+    // Vrátí kontejner seznamu příjemců pro daný tool.
+    function recipientsContainer(tool) {
+      return document.getElementById(tool === 'pradlomat-balicek' ? 'recipients-list-balicek' : 'recipients-list');
+    }
+    async function loadRecipients(tool) {
+      tool = tool || 'pradlomat-economy';
+      var listEl = recipientsContainer(tool);
       if (!listEl) return;
       try {
-        var res = await fetch('/api/tools/recipients?tool=pradlomat-economy');
+        var res = await fetch('/api/tools/recipients?tool=' + encodeURIComponent(tool));
         if (!res.ok) throw new Error('HTTP ' + res.status);
         var items = await res.json();
-        renderRecipients(items);
+        renderRecipients(items, listEl);
       } catch (e) {
         listEl.innerHTML = '<div class="recipient-empty" style="color:#ef4444;border-color:rgba(239,68,68,0.3);">Nepodařilo se načíst příjemce: ' + esc(e.message) + '</div>';
       }
     }
+    // Reload seznamu pro právě aktivní pomůcku (po smazání / znovuodeslání).
+    function reloadActiveRecipients() {
+      loadRecipients(_activeTool === 'pradlomat-balicek' ? 'pradlomat-balicek' : 'pradlomat-economy');
+    }
 
-    function renderRecipients(items) {
-      var listEl = document.getElementById('recipients-list');
+    function renderRecipients(items, listEl) {
       if (!listEl) return;
       if (!items.length) {
         listEl.innerHTML = '<div class="recipient-empty">Zatím jsi nikomu odkaz neposlal. Klikni na <strong>+ Odeslat nový odkaz</strong> a založ prvního příjemce.</div>';
@@ -3580,7 +3660,9 @@
       { code: 'fr', flag: '🇫🇷', label: 'Francouzština' }
     ];
 
-    function openRecipientModal() {
+    var _modalTool = 'pradlomat-economy';
+    function openRecipientModal(tool) {
+      _modalTool = (tool === 'pradlomat-balicek') ? 'pradlomat-balicek' : 'pradlomat-economy';
       var langChips = '';
       for (var i = 0; i < SHARE_LANGS.length; i++) {
         var L = SHARE_LANGS[i];
@@ -3663,7 +3745,7 @@
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            tool: 'pradlomat-economy',
+            tool: _modalTool,
             name: name.trim(),
             email: email.trim(),
             company: company.trim() || null,
@@ -3682,7 +3764,7 @@
           msg += '\n\n⚠️ E-mail se nepodařilo odeslat: ' + (data.email_result && data.email_result.skipped || 'neznámá chyba') + '. Odkaz můžeš poslat ručně.';
         }
         alert(msg);
-        loadRecipients();
+        loadRecipients(_modalTool);
       } catch (e) {
         alert('Chyba: ' + e.message);
       }
@@ -3728,7 +3810,7 @@
           var data = await res.json();
           throw new Error(data.error || 'HTTP ' + res.status);
         }
-        loadRecipients();
+        reloadActiveRecipients();
       } catch (e) {
         alert('Chyba: ' + e.message);
       }

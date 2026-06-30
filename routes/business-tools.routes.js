@@ -17,6 +17,10 @@ const SUPPORTED_TOOLS = {
     title: 'Ekonomika prádlomatu',
     description: 'Editovatelný model návratnosti pro jeden prádlomat',
   },
+  'pradlomat-balicek': {
+    title: 'Prádlomat — servisní balíček',
+    description: 'Model návratnosti se servisním balíčkem (% z obratu) z pohledu provozovatele',
+  },
 };
 
 function isSupportedTool(slug) {
