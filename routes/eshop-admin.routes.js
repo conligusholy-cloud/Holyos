@@ -38,7 +38,11 @@ const materialEshopSelect = {
   eshop_warehouse_id: true,
   eshop_description: true,
   eshop_image_path: true,
-  eshop_category_id: true,
+};
+
+// Kategorie dílu (M:N, požadavek #85) — sdílený include pro list i detail.
+const eshopCategoriesInclude = {
+  eshop_categories: { select: { id: true, name: true }, orderBy: { name: 'asc' } },
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -293,6 +297,7 @@ const shippingSchema = z.object({
   currency: z.string().length(3).optional(),
   active: z.boolean().optional(),
   sort_order: z.number().int().optional(),
+  price_on_request: z.boolean().optional(),
 });
 
 router.get('/shipping-methods', async (req, res, next) => {
@@ -603,6 +608,11 @@ router.post('/orders/:id/invoice', async (req, res, next) => {
     if (!['delivered', 'closed', 'shipped'].includes(order.status)) {
       return res.status(409).json({ error: `Objednávka je ve stavu "${order.status}", fakturu lze vytvořit jen pro shipped/delivered/closed.` });
     }
+    // Pojistka: dokud není definována cena dopravy (agenda Doprava), fakturu
+    // nelze vystavit — jinak by šla zákazníkovi bez reálné ceny přepravy.
+    if (order.shipping_price_status !== 'defined') {
+      return res.status(409).json({ error: 'Cena dopravy zatím není definovaná. Doplň ji v modulu Doprava, teprve pak lze vytvořit fakturu.' });
+    }
 
     const invoiceNumber = await generateInvoiceNumber('issued');
     const today = new Date(); today.setHours(0, 0, 0, 0);
@@ -831,8 +841,37 @@ router.patch('/orders/:id', async (req, res, next) => {
     const o = await prisma.shopOrder.update({
       where: { id },
       data,
-      include: { items: true, partner: { select: { id: true, display_name: true } } },
+      include: {
+        items: true,
+        partner: { select: { id: true, display_name: true } },
+        shipping_method: { select: { price_on_request: true } },
+      },
     });
+
+    // Po potvrzení objednávky s kurýrem (price_on_request) a nedefinovanou cenou
+    // dopravy automaticky založíme požadavek do agendy Doprava (pokud ještě není).
+    if (data.status === 'confirmed'
+        && o.shipping_method && o.shipping_method.price_on_request
+        && o.shipping_price_status !== 'defined') {
+      try {
+        const existing = await prisma.shippingRequest.findFirst({
+          where: { order_id: o.id, status: { not: 'cancelled' } },
+          select: { id: true },
+        });
+        if (!existing) {
+          const settings = await prisma.eshopSettings.findUnique({ where: { id: 1 }, select: { shipping_markup_pct: true } });
+          await prisma.shippingRequest.create({
+            data: {
+              order_id: o.id,
+              currency: o.currency,
+              markup_pct: settings ? Number(settings.shipping_markup_pct) : 0,
+              created_by: req.user && req.user.id ? req.user.id : null,
+            },
+          });
+        }
+      } catch (e) { console.warn('[eshop-admin] auto ShippingRequest selhalo:', e.message); }
+    }
+
     res.json(o);
   } catch (err) { next(err); }
 });
@@ -847,7 +886,8 @@ const materialEshopSchema = z.object({
   eshop_warehouse_id: z.number().int().optional().nullable(),
   eshop_description: z.string().optional().nullable(),
   eshop_image_path: z.string().max(500).optional().nullable(),
-  eshop_category_id: z.number().int().optional().nullable(),
+  // M:N (požadavek #85) — pole ID kategorií; když je přítomné, kompletně přenastaví přiřazení.
+  eshop_category_ids: z.array(z.number().int()).optional(),
 });
 
 // Reálný skladový stav ze Stock tabulky (NE z denormalizovaného Material.current_stock,
@@ -883,7 +923,8 @@ router.get('/materials', async (req, res, next) => {
 
     const where = { status: 'active' };
     if (onlyEshop) where.sells_on_eshop = true;
-    if (categoryId) where.eshop_category_id = categoryId;
+    // Filtr na kategorii — díl se zobrazí, má-li danou kategorii mezi svými (M:N).
+    if (categoryId) where.eshop_categories = { some: { id: categoryId } };
     if (q) {
       where.OR = [
         { code: { contains: q, mode: 'insensitive' } },
@@ -898,7 +939,7 @@ router.get('/materials', async (req, res, next) => {
       take: limit,
       select: {
         ...materialEshopSelect,
-        eshop_category: { select: { id: true, name: true } },
+        ...eshopCategoriesInclude,
         eshop_warehouse: { select: { id: true, name: true, code: true } },
       },
     });
@@ -937,7 +978,7 @@ router.get('/materials/:id', async (req, res, next) => {
       where: { id },
       select: {
         ...materialEshopSelect,
-        eshop_category: { select: { id: true, name: true } },
+        ...eshopCategoriesInclude,
         eshop_warehouse: { select: { id: true, name: true, code: true } },
       },
     });
@@ -950,10 +991,12 @@ router.get('/materials/:id', async (req, res, next) => {
 });
 
 // Hromadná editace eshop nastavení — admin Katalog tab "vybrané položky" akce.
-// Akce: enable / disable / set_category (value: int|null) / set_warehouse (value: int|null)
+// Akce: enable / disable / set_warehouse (value: int|null)
+//       set_category  — přenastaví kategorie na jednu (value) nebo žádnou (null)
+//       add_category  — přidá kategorii (value) k existujícím (M:N, požadavek #85)
 const bulkEshopSchema = z.object({
   material_ids: z.array(z.number().int()).min(1).max(500),
-  action: z.enum(['enable', 'disable', 'set_category', 'set_warehouse']),
+  action: z.enum(['enable', 'disable', 'set_category', 'add_category', 'set_warehouse']),
   value: z.number().int().nullable().optional(),
 });
 
@@ -963,10 +1006,24 @@ router.post('/materials/bulk-eshop', async (req, res, next) => {
     if (!parsed.success) return res.status(400).json({ error: 'Neplatná data', detail: parsed.error.flatten() });
     const { material_ids, action, value } = parsed.data;
 
+    // Kategorie jsou M:N relace — nejdou přes updateMany, řešíme transakcí update operací.
+    if (action === 'set_category' || action === 'add_category') {
+      const rel = action === 'set_category'
+        ? (value ? { set: [{ id: value }] } : { set: [] })   // přenastav na jednu / vyprázdni
+        : (value ? { connect: [{ id: value }] } : null);      // přidej k existujícím
+      if (!rel) return res.status(400).json({ error: 'Pro přidání kategorie chybí hodnota' });
+      await prisma.$transaction(
+        material_ids.map(mid => prisma.material.update({
+          where: { id: mid },
+          data: { eshop_categories: rel },
+        }))
+      );
+      return res.json({ updated: material_ids.length, action, ids: material_ids.length });
+    }
+
     let data = {};
     if (action === 'enable') data = { sells_on_eshop: true };
     else if (action === 'disable') data = { sells_on_eshop: false };
-    else if (action === 'set_category') data = { eshop_category_id: value || null };
     else if (action === 'set_warehouse') data = { eshop_warehouse_id: value || null };
 
     const result = await prisma.material.updateMany({
@@ -982,12 +1039,18 @@ router.patch('/materials/:id/eshop', async (req, res, next) => {
     const id = parseInt(req.params.id, 10);
     const parsed = materialEshopSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: 'Neplatná data', detail: parsed.error.flatten() });
+    // Pole kategorií je M:N relace — vytáhneme ho z dat a přenastavíme přes `set`.
+    const { eshop_category_ids, ...scalarData } = parsed.data;
+    const data = { ...scalarData };
+    if (eshop_category_ids) {
+      data.eshop_categories = { set: eshop_category_ids.map(cid => ({ id: cid })) };
+    }
     const m = await prisma.material.update({
       where: { id },
-      data: parsed.data,
+      data,
       select: {
         ...materialEshopSelect,
-        eshop_category: { select: { id: true, name: true } },
+        ...eshopCategoriesInclude,
         eshop_warehouse: { select: { id: true, name: true, code: true } },
       },
     });

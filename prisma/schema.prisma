@@ -173,6 +173,7 @@ model Person {
   orders_created              Order[]                @relation("OrderCreatedBy")
   orders_approved             Order[]                @relation("OrderApprovedBy")
   inventory_movements         InventoryMovement[]    @relation("MovementCreatedBy")
+  shipping_requests           ShippingRequest[]      @relation("ShippingRequestAssignee")
   managed_warehouses          Warehouse[]            @relation("WarehouseManager")
   inventories_created         Inventory[]            @relation("InventoryCreatedBy")
   inventory_counted           InventoryItem[]        @relation("InventoryCountedBy")
@@ -921,9 +922,10 @@ model Material {
   eshop_warehouse_id  Int?
   eshop_description   String? @db.Text
   eshop_image_path    String? @db.VarChar(500)
-  eshop_category_id   Int?
+  // Pozn.: dřívější jednočetná FK eshop_category_id byla nahrazena M:N relací
+  // eshop_categories (požadavek #85 — díl může patřit do více eshop kategorií).
 
-  // Kategorie zboží (interní osnova skladu — nezaměňovat s eshop_category_id)
+  // Kategorie zboží (interní osnova skladu — nezaměňovat s eshop kategoriemi)
   category_id Int?
 
   created_at DateTime @default(now())
@@ -950,7 +952,8 @@ model Material {
   bom_snapshot_items BomSnapshotItem[]
 
   // Spare Parts Shop — vazby
-  eshop_category        EshopCategory?       @relation("MaterialEshopCategory", fields: [eshop_category_id], references: [id], onDelete: SetNull)
+  // M:N kategorie (požadavek #85): díl může patřit do více eshop kategorií současně.
+  eshop_categories      EshopCategory[]      @relation("MaterialEshopCategories")
   eshop_warehouse       Warehouse?           @relation("MaterialEshopWarehouse", fields: [eshop_warehouse_id], references: [id], onDelete: SetNull)
   eshop_pricelist_items EshopPricelistItem[]
   shop_order_items      ShopOrderItem[]
@@ -961,7 +964,6 @@ model Material {
   @@index([factorify_id])
   @@index([sector])
   @@index([sells_on_eshop])
-  @@index([eshop_category_id])
   @@index([eshop_warehouse_id])
   @@map("materials")
 }
@@ -5175,7 +5177,8 @@ model EshopCategory {
 
   parent    EshopCategory?  @relation("EshopCategoryHierarchy", fields: [parent_id], references: [id], onDelete: SetNull)
   children  EshopCategory[] @relation("EshopCategoryHierarchy")
-  materials Material[]      @relation("MaterialEshopCategory")
+  // M:N (požadavek #85) — díly přiřazené do této kategorie; jeden díl jich může mít víc.
+  materials Material[]      @relation("MaterialEshopCategories")
 
   @@index([parent_id])
   @@index([sort_order])
@@ -5233,6 +5236,10 @@ model EshopShippingMethod {
   currency          String   @default("EUR") @db.VarChar(3)
   active            Boolean  @default(true)
   sort_order        Int      @default(0)
+  // price_on_request = cena dopravy se v checkoutu NEpočítá; doplní ji až
+  // agenda Doprava (kurýr do zahraničí). Objednávka jde do stavu shipping
+  // pending a faktura se nesmí vytvořit, dokud cena není definována.
+  price_on_request  Boolean  @default(false)
 
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
@@ -5301,6 +5308,12 @@ model ShopOrder {
   status        String    @default("new") @db.VarChar(20) // new | confirmed | picking | shipped | delivered | closed | cancelled
   cancel_reason String?   @db.VarChar(255) // např. "auto_release_expired" pro auto-release worker
 
+  // Doprava — stav ceny. 'defined' = cena dopravy je známá (výchozí pro běžné
+  // metody i historické objednávky). 'pending' = kurýr price_on_request, cenu
+  // teprve doplní agenda Doprava přes ShippingRequest. Faktura se nesmí
+  // vytvořit, dokud není 'defined'.
+  shipping_price_status String @default("defined") @db.VarChar(20)
+
   // Tracking
   tracking_number  String? @db.VarChar(100)
   tracking_carrier String? @db.VarChar(60)
@@ -5329,6 +5342,7 @@ model ShopOrder {
   shipping_method EshopShippingMethod @relation("ShopOrderShipping", fields: [shipping_method_id], references: [id], onDelete: Restrict)
   payment_method  EshopPaymentMethod  @relation("ShopOrderPayment", fields: [payment_method_id], references: [id], onDelete: Restrict)
   items           ShopOrderItem[]
+  shipping_requests ShippingRequest[]
 
   @@index([partner_id])
   @@index([company_id])
@@ -5336,6 +5350,43 @@ model ShopOrder {
   @@index([created_at])
   @@index([partner_id, status])
   @@map("eshop_orders")
+}
+
+// Požadavek na dopravu (agenda Doprava). Vzniká u eshop objednávek s kurýrem
+// (price_on_request). Řešitel poptá cenu u dopravce, zapíše domluvený náklad
+// + provizi (%), systém dopočte prodejní cenu (sell_excl) a po potvrzení ji
+// zapíše do ShopOrder.shipping_excl + shipping_price_status='defined'.
+// Workflow: new → quoting → quoted → confirmed (↘ cancelled)
+model ShippingRequest {
+  id       Int @id @default(autoincrement())
+  order_id Int
+
+  status String @default("new") @db.VarChar(20) // new | quoting | quoted | confirmed | cancelled
+
+  carrier    String? @db.VarChar(120) // zvolený dopravce (DPD, GLS, DHL…)
+  quote_note String? @db.Text         // kam/komu poptáno, čísla poptávek, poznámky
+
+  // Ceny (bez DPH), v měně objednávky
+  currency   String  @default("EUR") @db.VarChar(3)
+  cost_excl  Decimal @default(0) @db.Decimal(10, 2)  // domluvená nákupní cena dopravy
+  markup_pct Decimal @default(0) @db.Decimal(5, 2)   // provize (% navýšení)
+  sell_excl  Decimal @default(0) @db.Decimal(10, 2)  // dopočet = cost × (1 + markup/100)
+
+  assigned_to Int? // Person, který zásilku řeší
+  created_by  Int? // User, který požadavek založil
+
+  created_at  DateTime  @default(now())
+  updated_at  DateTime  @updatedAt
+  quoted_at   DateTime?
+  confirmed_at DateTime?
+
+  order    ShopOrder @relation(fields: [order_id], references: [id], onDelete: Cascade)
+  assignee Person?   @relation("ShippingRequestAssignee", fields: [assigned_to], references: [id], onDelete: SetNull)
+
+  @@index([order_id])
+  @@index([status])
+  @@index([assigned_to])
+  @@map("shipping_requests")
 }
 
 // Položka eshopové objednávky. material_id je nullable — kdyby byl Material
@@ -5371,6 +5422,9 @@ model EshopSettings {
   default_currency       String   @default("EUR") @db.VarChar(3)
   default_vat_pct        Decimal  @default(21) @db.Decimal(5, 2)
   reservation_hours      Int      @default(72) // override env ESHOP_RESERVATION_HOURS
+  // Výchozí provize (% navýšení) na dopravu — předvyplní se u nové zásilky
+  // v agendě Doprava, lze přepsat u konkrétní zásilky.
+  shipping_markup_pct    Decimal  @default(0) @db.Decimal(5, 2)
   footer_html            String?  @db.Text
   contact_email          String?  @db.VarChar(255)
   contact_phone          String?  @db.VarChar(40)

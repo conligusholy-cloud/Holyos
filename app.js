@@ -65,6 +65,7 @@ const hugoRoutes = require('./routes/hugo.routes');
 const velinRoutes = require('./routes/velin.routes');
 const eshopAdminRoutes = require('./routes/eshop-admin.routes');
 const shopRoutes = require('./routes/shop.routes');
+const shippingRoutes = require('./routes/shipping.routes');
 const compounderRoutes = require('./routes/compounder.routes');
 
 // ─── Inicializace aplikace ────────────────────────────────────────────────
@@ -525,6 +526,7 @@ app.use('/api/hugo', hugoRoutes);        // Hugo AI servisák — partner login 
 app.use('/api/velin', velinRoutes); // Velín — mobilní aplikace pro řízení dne kolegů
 app.use('/api/eshop-admin', eshopAdminRoutes); // Spare Parts Shop — admin CRUD (interní login)
 app.use('/api/shop', shopRoutes); // Spare Parts Shop — partner-facing API (bestseries.cash)
+app.use('/api/shipping', shippingRoutes); // Doprava — agenda požadavků na dopravu (interní login)
 app.use('/api/compounder', compounderRoutes); // Compounder — veřejný web compounder.world (registrace leadů, analytika, push)
 
 // ─── Legacy storage proxy (kompatibilita s persistent-storage.js) ──────────

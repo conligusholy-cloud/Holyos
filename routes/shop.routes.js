@@ -168,8 +168,8 @@ router.get('/categories', async (req, res, next) => {
     }
 
     const materials = await prisma.material.findMany({
-      where: { sells_on_eshop: true, status: 'active', eshop_category_id: { not: null } },
-      select: { id: true, sells_on_eshop: true, eshop_allow_backorder: true, eshop_warehouse_id: true, eshop_category_id: true },
+      where: { sells_on_eshop: true, status: 'active', eshop_categories: { some: {} } },
+      select: { id: true, sells_on_eshop: true, eshop_allow_backorder: true, eshop_warehouse_id: true, eshop_categories: { select: { id: true } } },
     });
     const priceMap = await getPricesForMaterials(pl.id, materials.map(m => m.id));
     const counts = new Map();
@@ -177,7 +177,10 @@ router.get('/categories', async (req, res, next) => {
       if (priceMap.get(m.id) == null) continue;       // bez ceny ho neukazujeme
       const available = await availableForEshop(m);
       if (available <= 0 && !m.eshop_allow_backorder) continue;  // out-of-stock skryjeme, ale "na objednávku" necháme
-      counts.set(m.eshop_category_id, (counts.get(m.eshop_category_id) || 0) + 1);
+      // M:N (požadavek #85) — díl se započítá do každé své kategorie.
+      for (const c of m.eshop_categories) {
+        counts.set(c.id, (counts.get(c.id) || 0) + 1);
+      }
     }
 
     res.json(categories.map(c => ({ ...c, _count: { materials: counts.get(c.id) || 0 } })));
@@ -198,7 +201,8 @@ router.get('/products', async (req, res, next) => {
     const sort = req.query.sort || 'name'; // name | price_asc | price_desc
 
     const where = { sells_on_eshop: true, status: 'active' };
-    if (categoryId) where.eshop_category_id = categoryId;
+    // Filtr na kategorii — díl se zobrazí, má-li danou kategorii mezi svými (M:N, požadavek #85).
+    if (categoryId) where.eshop_categories = { some: { id: categoryId } };
     if (q) {
       where.OR = [
         { code: { contains: q, mode: 'insensitive' } },
@@ -215,7 +219,7 @@ router.get('/products', async (req, res, next) => {
         id: true, code: true, name: true, unit: true, photo_url: true,
         eshop_warehouse_id: true, sells_on_eshop: true, eshop_allow_backorder: true,
         eshop_description: true, eshop_image_path: true,
-        eshop_category: { select: { id: true, name: true, slug: true } },
+        eshop_categories: { select: { id: true, name: true, slug: true }, orderBy: { name: 'asc' } },
       },
     });
 
@@ -234,7 +238,8 @@ router.get('/products', async (req, res, next) => {
         unit: m.unit,
         photo_url: m.eshop_image_path || m.photo_url || null,
         description: m.eshop_description || null,
-        category: m.eshop_category,
+        categories: m.eshop_categories,                 // M:N — všechny kategorie dílu (požadavek #85)
+        category: m.eshop_categories[0] || null,        // zpětná kompatibilita (první kategorie)
         price_excl_vat: price,
         vat_pct: Number(pl.vat_pct),
         price_incl_vat: Math.round(price * (1 + Number(pl.vat_pct) / 100) * 100) / 100,
@@ -264,7 +269,7 @@ router.get('/products/:id', async (req, res, next) => {
         id: true, code: true, name: true, unit: true, photo_url: true,
         sells_on_eshop: true, eshop_allow_backorder: true, eshop_warehouse_id: true, status: true,
         eshop_description: true, eshop_image_path: true,
-        eshop_category: { select: { id: true, name: true, slug: true } },
+        eshop_categories: { select: { id: true, name: true, slug: true }, orderBy: { name: 'asc' } },
       },
     });
     if (!m || !m.sells_on_eshop || m.status !== 'active') return res.status(404).json({ error: 'Produkt nenalezen' });
@@ -281,7 +286,8 @@ router.get('/products/:id', async (req, res, next) => {
       unit: m.unit,
       photo_url: m.eshop_image_path || m.photo_url || null,
       description: m.eshop_description || null,
-      category: m.eshop_category,
+      categories: m.eshop_categories,                 // M:N — všechny kategorie dílu (požadavek #85)
+      category: m.eshop_categories[0] || null,        // zpětná kompatibilita (první kategorie)
       price_excl_vat: price,
       vat_pct: Number(pl.vat_pct),
       price_incl_vat: Math.round(price * (1 + Number(pl.vat_pct) / 100) * 100) / 100,
@@ -400,7 +406,7 @@ router.post('/cart/validate', async (req, res, next) => {
     if (parsed.data.payment_method_id) {
       payment = await prisma.eshopPaymentMethod.findUnique({ where: { id: parsed.data.payment_method_id } });
     }
-    const shippingExcl = shipping
+    const shippingExcl = (shipping && !shipping.price_on_request)
       ? (shipping.free_above_amount && subtotal >= Number(shipping.free_above_amount) ? 0 : Number(shipping.price_excl_vat))
       : 0;
     const paymentFeeExcl = payment ? Number(payment.fee_excl_vat) : 0;
@@ -494,9 +500,14 @@ router.post('/orders', async (req, res, next) => {
       });
     }
 
-    const shippingExcl = (shipping.free_above_amount && subtotal >= Number(shipping.free_above_amount))
+    // U kurýra "cena na vyžádání" (price_on_request) se doprava v checkoutu
+    // NEpočítá — cenu doplní agenda Doprava po nacenění a promítne ji do faktury.
+    const shippingPending = !!shipping.price_on_request;
+    const shippingExcl = shippingPending
       ? 0
-      : Number(shipping.price_excl_vat);
+      : ((shipping.free_above_amount && subtotal >= Number(shipping.free_above_amount))
+          ? 0
+          : Number(shipping.price_excl_vat));
     const paymentFeeExcl = Number(payment.fee_excl_vat);
     const totalExcl = Math.round((subtotal + shippingExcl + paymentFeeExcl) * 100) / 100;
     const vatPct = Number(pl.vat_pct);
@@ -527,6 +538,7 @@ router.post('/orders', async (req, res, next) => {
             vat_pct: vatPct,
             subtotal_excl: Math.round(subtotal * 100) / 100,
             shipping_excl: shippingExcl,
+            shipping_price_status: shippingPending ? 'pending' : 'defined',
             payment_fee_excl: paymentFeeExcl,
             total_excl: totalExcl,
             total_incl_vat: totalIncl,

@@ -967,6 +967,12 @@
         <div><label><input type="checkbox" id="sh-active" ${s.active?'checked':''}> Aktivní</label></div>
         <div><label>Pořadí</label><input type="number" id="sh-sort" value="${esc(s.sort_order || 0)}"></div>
       </div>
+      <div class="form-row">
+        <div style="flex:none; width:100%;">
+          <label><input type="checkbox" id="sh-por" ${s.price_on_request?'checked':''}> Cena na vyžádání (kurýr do zahraničí)</label>
+          <div style="font-size:11px; color:var(--text2); margin-top:4px;">Cena dopravy se v košíku nepočítá; doplní ji agenda Doprava a promítne do faktury. Fakturu nelze vystavit, dokud cena není potvrzena.</div>
+        </div>
+      </div>
       <div class="modal-actions">
         <button class="btn btn-secondary" onclick="closeModal()">Zrušit</button>
         <button class="btn btn-primary" onclick="saveShipping(${id == null ? 'null' : id})">Uložit</button>
@@ -983,6 +989,7 @@
       currency: (document.getElementById('sh-currency').value.trim() || 'EUR').toUpperCase(),
       active: document.getElementById('sh-active').checked,
       sort_order: parseInt(document.getElementById('sh-sort').value, 10) || 0,
+      price_on_request: document.getElementById('sh-por').checked,
     };
     if (!data.name) { alert('Vyplň název.'); return; }
     try {

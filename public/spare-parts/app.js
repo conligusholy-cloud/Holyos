@@ -289,7 +289,7 @@
         <div class="photo">${p.photo_url ? `<img src="${esc(p.photo_url)}" alt="">` : '📦'}</div>
         <div style="font-size:12px; color:var(--text2); font-family:monospace;">${esc(p.code)}</div>
         <h1>${esc(p.name)}</h1>
-        ${p.category ? `<div style="color:var(--text2); font-size:13px;">${esc(p.category.name)}</div>` : ''}
+        ${(p.categories && p.categories.length) ? `<div style="color:var(--text2); font-size:13px;">${p.categories.map(c => esc(c.name)).join(', ')}</div>` : (p.category ? `<div style="color:var(--text2); font-size:13px;">${esc(p.category.name)}</div>` : '')}
         ${p.description ? `<div class="desc">${esc(p.description)}</div>` : ''}
         <div style="margin:16px 0;">
           <div style="font-size:24px; font-weight:700; color:var(--accent);">${esc(fmt(p.price_incl_vat, p.currency))} <span style="font-size:13px; color:var(--text2); font-weight:normal;">s DPH</span></div>
