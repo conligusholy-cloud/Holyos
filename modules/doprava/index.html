@@ -131,6 +131,15 @@
           <p style="font-size:12px; color:var(--text2); margin:0 0 12px;">
             Předvyplní se u každé nové zásilky jako navýšení domluvené ceny dopravy. U konkrétní zásilky lze přepsat.
           </p>
+
+          <label style="display:block; margin:8px 0 4px;">Notifikace do Velína — odpovědné osoby</label>
+          <p style="font-size:12px; color:var(--text2); margin:0 0 8px;">
+            Komu přijde push do Velína (a zvonek v HolyOS), když z eshopu vznikne nový požadavek na dopravu. V seznamu jsou jen lidé s aktivním Velínem.
+          </p>
+          <div id="notify-list" style="display:flex; flex-direction:column; gap:2px; margin-bottom:12px; max-height:40vh; overflow-y:auto;">
+            <span style="font-size:12px; color:var(--text2);">Načítám…</span>
+          </div>
+
           <div style="display:flex; gap:8px; align-items:center;">
             <button class="btn btn-primary" id="settings-save">Uložit</button>
             <span id="settings-msg" style="font-size:12px; color:var(--text2);"></span>

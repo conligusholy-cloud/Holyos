@@ -186,18 +186,38 @@
   };
 
   // ─── Nastavení ────────────────────────────────────────────────────────────────
+  function renderNotifyList(people, selectedIds) {
+    const box = document.getElementById('notify-list');
+    if (!box) return;
+    const sel = new Set((selectedIds || []).map(Number));
+    if (!people || !people.length) {
+      box.innerHTML = '<span style="font-size:12px; color:var(--text2);">Zatím nikdo nemá aktivovaný Velín se zařízením.</span>';
+      return;
+    }
+    box.innerHTML = people.map(p => `
+      <label style="display:flex; align-items:center; gap:10px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; cursor:pointer;">
+        <input type="checkbox" class="notify-cb" value="${p.id}" ${sel.has(p.id) ? 'checked' : ''} style="width:16px; height:16px;">
+        <span style="font-weight:600;">${esc(p.name)}</span>
+        <span style="margin-left:auto; font-size:12px; color:var(--text2);">${p.role ? esc(p.role) + ' · ' : ''}${p.devices} zař.</span>
+      </label>`).join('');
+  }
+
   async function loadSettings() {
     try {
       const s = await fetchJSON(`${API}/settings`);
       document.getElementById('set-markup').value = s.shipping_markup_pct != null ? s.shipping_markup_pct : 0;
+      renderNotifyList(s.people || [], s.notify_person_ids || []);
     } catch (err) { /* ignore */ }
   }
   document.getElementById('settings-save').addEventListener('click', async () => {
     const msg = document.getElementById('settings-msg');
     try {
       const pct = parseFloat(document.getElementById('set-markup').value) || 0;
+      const notify_person_ids = Array.from(document.querySelectorAll('#notify-list .notify-cb:checked'))
+        .map(cb => parseInt(cb.value, 10));
       await fetchJSON(`${API}/settings`, {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shipping_markup_pct: pct }),
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ shipping_markup_pct: pct, notify_person_ids }),
       });
       msg.textContent = '✓ Uloženo';
       setTimeout(() => { msg.textContent = ''; }, 2500);

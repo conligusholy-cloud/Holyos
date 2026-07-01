@@ -11,6 +11,8 @@ const router = express.Router();
 const { z } = require('zod');
 const { prisma } = require('../config/database');
 const { requireAuth } = require('../middleware/auth');
+const { getSetting, setSetting } = require('../services/settings');
+const { getEligibleVelinPeople, notifyNewShippingRequest, NOTIFY_SETTING_KEY } = require('../services/shipping/notify');
 
 router.use(requireAuth);
 
@@ -24,16 +26,22 @@ function calcSell(cost, markupPct) {
 // ─── Nastavení: výchozí provize (%) ──────────────────────────────────────────
 router.get('/settings', async (req, res, next) => {
   try {
-    const s = await prisma.eshopSettings.findUnique({
-      where: { id: 1 },
-      select: { shipping_markup_pct: true },
+    const [s, notifyPersonIds, people] = await Promise.all([
+      prisma.eshopSettings.findUnique({ where: { id: 1 }, select: { shipping_markup_pct: true } }),
+      getSetting(NOTIFY_SETTING_KEY, { type: 'json', defaultValue: [] }),
+      getEligibleVelinPeople(prisma),
+    ]);
+    res.json({
+      shipping_markup_pct: s ? Number(s.shipping_markup_pct) : 0,
+      notify_person_ids: Array.isArray(notifyPersonIds) ? notifyPersonIds : [],
+      people,
     });
-    res.json({ shipping_markup_pct: s ? Number(s.shipping_markup_pct) : 0 });
   } catch (err) { next(err); }
 });
 
 const settingsSchema = z.object({
   shipping_markup_pct: z.union([z.number(), z.string()]).transform(v => Number(v)),
+  notify_person_ids: z.array(z.union([z.number(), z.string()])).optional(),
 });
 router.put('/settings', async (req, res, next) => {
   try {
@@ -47,7 +55,25 @@ router.put('/settings', async (req, res, next) => {
       update: { shipping_markup_pct: pct },
       select: { shipping_markup_pct: true },
     });
-    res.json({ shipping_markup_pct: Number(s.shipping_markup_pct) });
+
+    // Příjemci notifikace (volitelně) — ukládáme do AppSetting (bez migrace).
+    let savedIds;
+    if (parsed.data.notify_person_ids !== undefined) {
+      savedIds = [...new Set(parsed.data.notify_person_ids
+        .map((n) => parseInt(n, 10))
+        .filter((n) => Number.isInteger(n) && n > 0))];
+      await setSetting(NOTIFY_SETTING_KEY, savedIds, {
+        type: 'json',
+        scope: 'shipping',
+        description: 'Person.id příjemců push+zvonek notifikace o novém požadavku na dopravu',
+        userId: req.user && req.user.id ? req.user.id : undefined,
+      });
+    }
+
+    res.json({
+      shipping_markup_pct: Number(s.shipping_markup_pct),
+      ...(savedIds !== undefined ? { notify_person_ids: savedIds } : {}),
+    });
   } catch (err) { next(err); }
 });
 
@@ -132,6 +158,11 @@ router.post('/requests', async (req, res, next) => {
       },
     });
     res.status(201).json(created);
+
+    // Notifikace odpovědným osobám (push do Velína + zvonek). Fire-and-forget.
+    setImmediate(() => notifyNewShippingRequest(prisma, { orderId: order.id }).catch((e) =>
+      console.warn('[shipping] notify (manual create) selhalo:', e.message)
+    ));
   } catch (err) { next(err); }
 });
 

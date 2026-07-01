@@ -10,6 +10,7 @@ const { z } = require('zod');
 const { prisma } = require('../config/database');
 const { requireAuth } = require('../middleware/auth');
 const { generateInvoiceNumber } = require('../services/accountant/invoice-numbering');
+const { notifyNewShippingRequest } = require('../services/shipping/notify');
 
 router.use(requireAuth);
 
@@ -868,6 +869,11 @@ router.patch('/orders/:id', async (req, res, next) => {
               created_by: req.user && req.user.id ? req.user.id : null,
             },
           });
+          // Notifikace odpovědným osobám (push do Velína + zvonek). Fire-and-forget.
+          setImmediate(() => notifyNewShippingRequest(prisma, {
+            orderId: o.id,
+            order: { id: o.id, order_number: o.order_number, ship_to_country: o.ship_to_country, ship_to_name: o.ship_to_name, ship_to_company: o.ship_to_company },
+          }).catch((err) => console.warn('[eshop-admin] shipping notify selhalo:', err.message)));
         }
       } catch (e) { console.warn('[eshop-admin] auto ShippingRequest selhalo:', e.message); }
     }
