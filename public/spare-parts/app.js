@@ -456,8 +456,8 @@
           <div class="form-group" style="flex:2;"><label>Město *</label><input type="text" value="${esc(c.ship_to_city)}" oninput="ShopApp.setField('ship_to_city', this.value)"></div>
           <div class="form-group" style="width:80px;"><label>Země</label><input type="text" maxlength="2" value="${esc(c.ship_to_country)}" oninput="ShopApp.setField('ship_to_country', this.value.toUpperCase())"></div>
         </div>
-        <div class="form-group"><label>E-mail</label><input type="email" value="${esc(c.ship_to_email)}" oninput="ShopApp.setField('ship_to_email', this.value)"></div>
-        <div class="form-group"><label>Telefon</label><input type="text" value="${esc(c.ship_to_phone)}" oninput="ShopApp.setField('ship_to_phone', this.value)"></div>
+        <div class="form-group"><label>E-mail *</label><input type="email" value="${esc(c.ship_to_email)}" oninput="ShopApp.setField('ship_to_email', this.value)"></div>
+        <div class="form-group"><label>Telefon *</label><input type="tel" value="${esc(c.ship_to_phone)}" oninput="ShopApp.setField('ship_to_phone', this.value)"></div>
         <div class="form-group"><label>Poznámka (volitelně)</label><textarea rows="2" oninput="ShopApp.setField('customer_note', this.value)">${esc(c.customer_note)}</textarea></div>
 
         <div class="cart-summary">
@@ -478,6 +478,8 @@
     const c = State.checkout;
     if (!c.shipping_method_id || !c.payment_method_id) { toast('Vyber dopravu a platbu'); return; }
     if (!c.ship_to_name || !c.ship_to_address || !c.ship_to_city || !c.ship_to_zip) { toast('Vyplň povinné údaje adresy'); return; }
+    if (!c.ship_to_email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(c.ship_to_email)) { toast('Zadej platný e-mail'); return; }
+    if (!c.ship_to_phone || c.ship_to_phone.trim().length < 6) { toast('Zadej telefonní číslo'); return; }
     const body = {
       items: State.cart.map(it => ({ material_id: it.material_id, quantity: it.quantity })),
       shipping_method_id: c.shipping_method_id,

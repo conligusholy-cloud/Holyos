@@ -442,8 +442,8 @@ const orderCreateSchema = z.object({
   ship_to_city: z.string().min(1).max(120),
   ship_to_zip: z.string().min(1).max(20),
   ship_to_country: z.string().length(2).optional(),
-  ship_to_email: z.string().email().optional().nullable(),
-  ship_to_phone: z.string().max(40).optional().nullable(),
+  ship_to_email: z.string().email('Zadej platný e-mail.'),
+  ship_to_phone: z.string().min(6, 'Zadej telefonní číslo.').max(40),
   customer_note: z.string().max(2000).optional().nullable(),
 });
 
