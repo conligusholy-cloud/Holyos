@@ -36,6 +36,17 @@
     return v + ' ' + (currency || '');
   }
 
+  // Parsuj cenu z uživatelského vstupu (prompt/input) — akceptuj českou
+  // čárku i tečku jako desetinný oddělovač a zachovej přesnost na haléře.
+  // parseFloat("150,50") by jinak vrátil 150 → tichá ztráta haléřů.
+  function parsePrice(raw) {
+    if (raw == null) return NaN;
+    const normalized = String(raw).trim().replace(/\s/g, '').replace(',', '.');
+    const n = parseFloat(normalized);
+    if (Number.isNaN(n)) return NaN;
+    return Math.round(n * 100) / 100; // 2 desetinná místa
+  }
+
   function fmtDate(s) {
     if (!s) return '—';
     const d = new Date(s);
@@ -447,9 +458,10 @@
   window.applyCatalogBulk = async function () {
     const action = document.getElementById('catalog-bulk-action').value;
     let value = null;
-    if (action === 'set_category') {
+    if (action === 'set_category' || action === 'add_category') {
       const sel = document.getElementById('catalog-bulk-category');
       value = sel && sel.value ? parseInt(sel.value, 10) : null;
+      if (action === 'add_category' && !value) { alert('Vyber kategorii, kterou chceš přidat.'); return; }
     } else if (action === 'set_warehouse') {
       const sel = document.getElementById('catalog-bulk-warehouse');
       value = sel && sel.value ? parseInt(sel.value, 10) : null;
@@ -470,7 +482,7 @@
 
   window.onCatalogBulkActionChange = function () {
     const action = document.getElementById('catalog-bulk-action').value;
-    document.getElementById('catalog-bulk-category-wrap').style.display = action === 'set_category' ? 'block' : 'none';
+    document.getElementById('catalog-bulk-category-wrap').style.display = (action === 'set_category' || action === 'add_category') ? 'block' : 'none';
     document.getElementById('catalog-bulk-warehouse-wrap').style.display = action === 'set_warehouse' ? 'block' : 'none';
   };
 
@@ -516,7 +528,7 @@
           <td>${esc(m.name)}</td>
           <td>${m.sells_on_eshop ? '<span class="badge badge-active">Ano</span>' : '<span class="badge badge-inactive">Ne</span>'}</td>
           <td>${esc(m.eshop_warehouse ? m.eshop_warehouse.name : '—')}</td>
-          <td>${esc(m.eshop_category ? m.eshop_category.name : '—')}</td>
+          <td>${(m.eshop_categories && m.eshop_categories.length) ? m.eshop_categories.map(c => esc(c.name)).join(', ') : '—'}</td>
           <td class="num">${Number(m.current_stock || 0).toFixed(2)} ${esc(m.unit || '')}</td>
           <td><button class="btn btn-secondary btn-sm" onclick="editMaterialEshop(${m.id})">Eshop nastavení</button></td>
         </tr>`).join('');
@@ -543,8 +555,11 @@
       ]);
       const whOpts = '<option value="">— žádný —</option>' +
         warehouses.map(w => `<option value="${w.id}"${m.eshop_warehouse_id===w.id?' selected':''}>${esc(w.name)} (${esc(w.code||'')})</option>`).join('');
-      const catOpts = '<option value="">— bez kategorie —</option>' +
-        categories.map(c => `<option value="${c.id}"${m.eshop_category_id===c.id?' selected':''}>${esc(c.name)}</option>`).join('');
+      // M:N kategorie (požadavek #85) — checkbox seznam, lze vybrat víc kategorií najednou.
+      const selectedCatIds = new Set((m.eshop_categories || []).map(c => c.id));
+      const catChecks = categories.length
+        ? categories.map(c => `<label style="display:inline-flex; align-items:center; gap:6px; margin:3px 12px 3px 0; font-weight:normal; cursor:pointer;"><input type="checkbox" class="m-category-cb" value="${c.id}"${selectedCatIds.has(c.id)?' checked':''}> ${esc(c.name)}</label>`).join('')
+        : '<span style="color:var(--text2); font-size:13px;">Žádné kategorie. Vytvoř je v záložce Kategorie.</span>';
       openModal(`${m.code} — ${m.name}`, `
         <div class="form-row">
           <div>
@@ -561,8 +576,8 @@
             <select id="m-warehouse">${whOpts}</select>
           </div>
           <div>
-            <label>Kategorie</label>
-            <select id="m-category">${catOpts}</select>
+            <label>Kategorie (lze vybrat více)</label>
+            <div id="m-categories" style="display:flex; flex-wrap:wrap; max-height:150px; overflow:auto; border:1px solid var(--border, #ddd); border-radius:6px; padding:8px;">${catChecks}</div>
           </div>
         </div>
         <div class="form-row">
@@ -586,11 +601,13 @@
   };
 
   window.saveMaterialEshop = async function (id) {
+    const eshop_category_ids = Array.from(document.querySelectorAll('.m-category-cb:checked'))
+      .map(cb => parseInt(cb.value, 10));
     const data = {
       sells_on_eshop: document.getElementById('m-sells').checked,
       eshop_allow_backorder: document.getElementById('m-backorder').checked,
       eshop_warehouse_id: parseInt(document.getElementById('m-warehouse').value, 10) || null,
-      eshop_category_id: parseInt(document.getElementById('m-category').value, 10) || null,
+      eshop_category_ids, // M:N (požadavek #85) — pole vybraných kategorií
       eshop_description: document.getElementById('m-description').value.trim() || null,
       eshop_image_path: document.getElementById('m-image').value.trim() || null,
     };
@@ -696,11 +713,17 @@
     } catch (err) { alert('Chyba: ' + err.message); }
   };
 
+  // Stav otevřeného ceníku — pro živý filtr a označení „už v ceníku".
+  let _plMatIds = new Set();
+  let _plCurrency = '';
+
   window.editPricelist = async function (id) {
     try {
       const pl = await fetchJSON(`${API}/pricelists/${id}`);
+      _plMatIds = new Set(pl.items.map(it => it.material.id));
+      _plCurrency = pl.currency;
       const itemsHtml = pl.items.map(it => `
-        <tr>
+        <tr data-search="${esc((it.material.code + ' ' + it.material.name).toLowerCase())}">
           <td><code>${esc(it.material.code)}</code></td>
           <td>${esc(it.material.name)}</td>
           <td><input type="number" step="0.01" value="${esc(it.price_excl_vat)}" id="pi-${it.id}" style="width:100px;" class="filter-input"> ${esc(pl.currency)}</td>
@@ -708,38 +731,87 @@
               <button class="btn btn-danger btn-sm" onclick="deletePricelistItem(${pl.id}, ${it.id})">×</button></td>
         </tr>`).join('');
       openModal(`Položky: ${pl.name}`, `
-        <div style="margin-bottom:12px; display:flex; gap:8px; align-items:center;">
-          <input type="text" id="pi-search" placeholder="Hledat materiál (kód/název)" class="filter-input" style="flex:1;">
+        <div style="margin-bottom:8px; display:flex; gap:8px; align-items:center;">
+          <input type="text" id="pi-search" placeholder="Hledat materiál (kód/název)" class="filter-input" style="flex:1;" oninput="filterPricelistItems()">
           <button class="btn btn-secondary btn-sm" onclick="findMaterialForPricelist(${pl.id})">Najít a přidat</button>
           <button class="btn btn-primary btn-sm" onclick="bulkImportPricelist(${pl.id})" title="Vlož z Excelu (kód, cena)">📥 Hromadný import</button>
         </div>
+        <div id="pi-count" style="font-size:12px; color:var(--text2); margin-bottom:8px;">V ceníku: ${pl.items.length} položek</div>
+        <div id="pi-add-results"></div>
         <table class="data-table">
           <thead><tr><th>Kód</th><th>Název</th><th>Cena bez DPH</th><th></th></tr></thead>
-          <tbody>${itemsHtml || '<tr><td colspan="4" class="empty-state">Zatím žádné položky.</td></tr>'}</tbody>
+          <tbody id="pi-items-body">${itemsHtml || '<tr class="pi-empty-row"><td colspan="4" class="empty-state">Zatím žádné položky.</td></tr>'}</tbody>
         </table>`);
     } catch (err) { alert('Chyba: ' + err.message); }
   };
 
+  // Živý filtr seznamu už přidaných položek — hned vidíš, jestli tam materiál je.
+  window.filterPricelistItems = function () {
+    const box = document.getElementById('pi-search');
+    if (!box) return;
+    const q = box.value.trim().toLowerCase();
+    const rows = document.querySelectorAll('#pi-items-body tr[data-search]');
+    let visible = 0;
+    rows.forEach(tr => {
+      const match = !q || tr.getAttribute('data-search').includes(q);
+      tr.style.display = match ? '' : 'none';
+      if (match) visible++;
+    });
+    const cnt = document.getElementById('pi-count');
+    if (cnt) {
+      if (!q) cnt.textContent = `V ceníku: ${rows.length} položek`;
+      else if (visible) cnt.innerHTML = `<span style="color:#22c55e;">✓ V ceníku nalezeno: ${visible}</span>`;
+      else cnt.innerHTML = `<span style="color:var(--text2);">Není v ceníku — klikni „Najít a přidat".</span>`;
+    }
+  };
+
   window.findMaterialForPricelist = async function (pricelistId) {
     const q = document.getElementById('pi-search').value.trim();
-    if (!q) return;
+    const box = document.getElementById('pi-add-results');
+    if (!q) { if (box) box.innerHTML = ''; return; }
     try {
       const mats = await fetchJSON(`${API}/materials?q=${encodeURIComponent(q)}&limit=20`);
-      if (!mats.length) { alert('Nic nenalezeno'); return; }
-      // Inline výběr — pro MVP vybíráme první match
-      const m = mats[0];
-      const price = prompt(`Cena bez DPH pro "${m.name}":`, '0');
-      if (price == null) return;
+      if (!mats.length) {
+        box.innerHTML = '<div style="padding:10px; font-size:13px; color:var(--text2); border:1px solid var(--border); border-radius:8px; margin-bottom:12px;">Nic nenalezeno.</div>';
+        return;
+      }
+      const rows = mats.map(m => {
+        const already = _plMatIds.has(m.id);
+        const action = already
+          ? '<span class="badge badge-active">✓ už v ceníku</span>'
+          : `<button class="btn btn-primary btn-sm" onclick="addMaterialToPricelist(${pricelistId}, ${m.id}, this)">Přidat</button>`;
+        return `<div style="display:flex; align-items:center; gap:10px; padding:8px 10px; border-bottom:1px solid var(--border);">
+            <code style="min-width:70px;">${esc(m.code)}</code>
+            <span style="flex:1;">${esc(m.name)}</span>
+            ${action}
+          </div>`;
+      }).join('');
+      box.innerHTML = `<div style="border:1px solid var(--border); border-radius:8px; margin-bottom:12px; max-height:260px; overflow:auto;">
+          <div style="padding:6px 10px; font-size:12px; color:var(--text2); background:var(--surface2);">Nalezeno ${mats.length} — zelené už v ceníku jsou</div>
+          ${rows}
+        </div>`;
+    } catch (err) { alert('Chyba: ' + err.message); }
+  };
+
+  window.addMaterialToPricelist = async function (pricelistId, materialId, btn) {
+    const priceRaw = prompt(`Cena bez DPH (${_plCurrency}):`, '0');
+    if (priceRaw == null) return;
+    const price = parsePrice(priceRaw);
+    if (Number.isNaN(price) || price < 0) { alert('Neplatná cena. Zadej kladné číslo, např. 150,50'); return; }
+    try {
       await fetchJSON(`${API}/pricelists/${pricelistId}/items`, {
         method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ material_id: m.id, price_excl_vat: parseFloat(price) }),
+        body: JSON.stringify({ material_id: materialId, price_excl_vat: price }),
       });
+      _plMatIds.add(materialId);
+      if (btn) btn.outerHTML = '<span class="badge badge-active">✓ už v ceníku</span>';
       editPricelist(pricelistId);
     } catch (err) { alert('Chyba: ' + err.message); }
   };
 
   window.savePricelistItem = async function (pricelistId, itemId) {
-    const price = parseFloat(document.getElementById(`pi-${itemId}`).value);
+    const price = parsePrice(document.getElementById(`pi-${itemId}`).value);
+    if (Number.isNaN(price) || price < 0) { alert('Neplatná cena. Zadej kladné číslo, např. 150,50'); return; }
     try {
       await fetchJSON(`${API}/pricelists/${pricelistId}/items/${itemId}`, {
         method: 'PUT', headers: {'Content-Type':'application/json'},
