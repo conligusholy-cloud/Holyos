@@ -18,15 +18,31 @@ import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { loadAuth } from '../lib/auth';
 import { colors } from '../lib/theme';
+import { registerForPushNotifications } from '../lib/push';
+import { api } from '../lib/api';
 import type { RootStackParamList } from '../App';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Gate'>;
+
+// Fire-and-forget: zaregistruj push token i pro už přihlášeného uživatele.
+// Registrace při loginu (Login.tsx) nepokryje uživatele, kteří appku jen
+// updatnou (Gate je pustí rovnou do Tabs). Backend registraci dělá idempotentně
+// (upsert podle expo_push_token), takže opakované volání při každém startu nevadí.
+async function ensurePushRegistered(jwt: string): Promise<void> {
+  try {
+    const device = await registerForPushNotifications();
+    if (device) await api.registerDevice(jwt, device);
+  } catch (e: any) {
+    console.warn('[Gate] Push registrace selhala:', e?.message || e);
+  }
+}
 
 export default function Gate({ navigation }: Props) {
   useEffect(() => {
     (async () => {
       const auth = await loadAuth();
       if (auth.jwt) {
+        ensurePushRegistered(auth.jwt); // fire-and-forget, neblokuje navigaci
         navigation.replace('Tabs');
       } else {
         navigation.replace('Login');
