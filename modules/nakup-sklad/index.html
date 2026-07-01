@@ -871,7 +871,16 @@
       const supOpts = companies.filter(c => c.type==='supplier'||c.type==='both').map(c => '<option value="' + c.id + '"' + (m.supplier_id===c.id?' selected':'') + '>' + c.name + '</option>').join('');
       const s = (f, v) => m[f] === v ? ' selected' : '';
       const c = (f) => m[f] ? ' checked' : '';
-      const v = (f, def) => m[f] !== undefined && m[f] !== null ? m[f] : (def !== undefined ? def : '');
+      // Escapování pro HTML atribut value="...". Bez toho název s dvojitou uvozovkou
+      // (palcové rozměry vodoinstalace, např. Koleno 1/2") rozbije atribut a hodnota
+      // se v poli tiše ořízne — po uložení se pak název zkomolí, i když ho nikdo neměnil.
+      const escAttr = (val) => String(val == null ? '' : val)
+        .replace(/&/g, '&amp;').replace(/"/g, '&quot;')
+        .replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      const v = (f, def) => {
+        const raw = m[f] !== undefined && m[f] !== null ? m[f] : (def !== undefined ? def : '');
+        return escAttr(raw);
+      };
 
       const showSnTab = !!(id && m.save_sn_first_scan);
       const showLotTab = !!(id && (m.expirable || m.distinguish_batches));
@@ -1977,34 +1986,171 @@
       }
     }
 
+    // Mapy pro převod textu z vyhledávacího pole na material_id.
+    let mvMatByLabel = new Map();   // "KÓD — Název" -> id
+    let mvMatByCode = new Map();    // "KÓD" (upper) -> id
+
+    function mvEsc(s) {
+      return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+
     async function openMovementModal() {
       if (materials.length === 0) { try { const r = await fetch('/api/wh/materials'); materials = await r.json(); } catch(e) {} }
       if (warehouses.length === 0) { try { const r = await fetch('/api/wh/warehouses'); warehouses = await r.json(); } catch(e) {} }
-      const matOpts = materials.map(m => '<option value="' + m.id + '">' + m.code + ' — ' + m.name + '</option>').join('');
-      const whOpts = warehouses.map(w => '<option value="' + w.id + '">' + w.name + '</option>').join('');
+
+      // Postav vyhledávací datalist + mapy pro resolve na uložení.
+      mvMatByLabel = new Map();
+      mvMatByCode = new Map();
+      const matOpts = materials.map(m => {
+        const label = m.code + ' — ' + m.name;
+        mvMatByLabel.set(label, m.id);
+        mvMatByCode.set(String(m.code).toUpperCase(), m.id);
+        return '<option value="' + mvEsc(label) + '"></option>';
+      }).join('');
+      const whOpts = warehouses.map(w => '<option value="' + w.id + '">' + mvEsc(w.name) + '</option>').join('');
       const typeOpts = Object.entries(MV_TYPES).map(([k,v]) => '<option value="' + k + '">' + v.label + '</option>').join('');
 
-      document.getElementById('modal-root').innerHTML = '<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal" style="max-width:500px;"><h2>➕ Nový skladový pohyb</h2>' +
-        '<form onsubmit="saveMovement(event)"><div class="form-grid">' +
-          '<div class="form-group"><label>Typ *</label><select name="type" required>' + typeOpts + '</select></div>' +
-          '<div class="form-group"><label>Sklad *</label><select name="warehouse_id" required>' + whOpts + '</select></div>' +
-          '<div class="form-group full"><label>Zboží *</label><select name="material_id" required>' + matOpts + '</select></div>' +
-          '<div class="form-group"><label>Množství *</label><input type="number" name="quantity" required min="0.01" step="0.01"></div>' +
-          '<div class="form-group"><label>Cena/ks</label><input type="number" name="unit_price" step="0.01" value="0"></div>' +
-          '<div class="form-group full"><label>Poznámka</label><textarea name="note"></textarea></div>' +
-        '</div><div class="modal-actions"><button type="button" class="btn btn-secondary" onclick="closeModal()">Zrušit</button><button type="submit" class="btn btn-primary">Zaznamenat</button></div></form></div></div>';
+      document.getElementById('modal-root').innerHTML =
+        '<div class="modal-overlay" onclick="if(event.target===this)closeModal()">' +
+        '<div class="modal modal-wide" style="resize:both;overflow:auto;min-width:680px;min-height:420px;max-height:94vh;display:flex;flex-direction:column;">' +
+          '<h2>➕ Nový skladový pohyb</h2>' +
+          '<form onsubmit="saveMovement(event)" style="display:flex;flex-direction:column;gap:16px;flex:1;min-height:0;">' +
+            '<div class="form-grid" style="grid-template-columns:1fr 1fr 1fr;">' +
+              '<div class="form-group"><label>Typ *</label><select id="mv-type" name="type" required onchange="onMvTypeChange()">' + typeOpts + '</select></div>' +
+              '<div class="form-group"><label>Sklad *</label><select id="mv-wh" name="warehouse_id" required onchange="onMvWarehouseChange()">' + whOpts + '</select></div>' +
+              '<div class="form-group"><label id="mv-loc-label">Lokace *</label><select id="mv-loc" required><option value="">Načítám…</option></select></div>' +
+              '<div class="form-group" id="mv-loc2-group" style="display:none;"><label>Cílová lokace *</label><select id="mv-loc2"><option value="">Načítám…</option></select></div>' +
+            '</div>' +
+            '<datalist id="mv-mat-list">' + matOpts + '</datalist>' +
+            '<div style="display:flex;flex-direction:column;min-height:0;flex:1;">' +
+              '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">' +
+                '<label style="font-size:12px;font-weight:500;color:var(--text2);">Položky *</label>' +
+                '<button type="button" class="btn btn-secondary" onclick="addMvRow()">+ Přidat řádek</button>' +
+              '</div>' +
+              '<div style="overflow:auto;flex:1;min-height:120px;border:1px solid var(--border);border-radius:8px;">' +
+                '<table style="width:100%;border-collapse:collapse;font-size:13px;">' +
+                  '<thead><tr style="text-align:left;color:var(--text2);">' +
+                    '<th style="padding:8px 10px;">Zboží (kód nebo název)</th>' +
+                    '<th style="padding:8px 10px;width:120px;">Množství</th>' +
+                    '<th style="padding:8px 10px;width:120px;">Cena/ks</th>' +
+                    '<th style="width:44px;"></th>' +
+                  '</tr></thead>' +
+                  '<tbody id="mv-rows"></tbody>' +
+                '</table>' +
+              '</div>' +
+            '</div>' +
+            '<div class="form-group full"><label>Poznámka</label><textarea name="note" style="min-height:48px;"></textarea></div>' +
+            '<div class="modal-actions"><button type="button" class="btn btn-secondary" onclick="closeModal()">Zrušit</button><button type="submit" class="btn btn-primary">Zaznamenat</button></div>' +
+          '</form>' +
+        '</div></div>';
+
+      addMvRow(); addMvRow(); addMvRow();
+      onMvTypeChange();
+      await onMvWarehouseChange();
+    }
+
+    function addMvRow() {
+      const tb = document.getElementById('mv-rows');
+      if (!tb) return;
+      const tr = document.createElement('tr');
+      tr.style.borderTop = '1px solid var(--border)';
+      tr.innerHTML =
+        '<td style="padding:6px 10px;"><input list="mv-mat-list" class="mv-mat" placeholder="Začni psát kód nebo název…" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:7px 10px;color:var(--text);font-size:13px;"></td>' +
+        '<td style="padding:6px 10px;"><input type="number" class="mv-qty" min="0.01" step="0.01" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:7px 10px;color:var(--text);font-size:13px;"></td>' +
+        '<td style="padding:6px 10px;"><input type="number" class="mv-price" step="0.01" value="0" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:7px 10px;color:var(--text);font-size:13px;"></td>' +
+        '<td style="padding:6px 4px;text-align:center;"><button type="button" class="btn btn-secondary" style="padding:4px 8px;" onclick="this.closest(\'tr\').remove()">✕</button></td>';
+      tb.appendChild(tr);
+    }
+
+    function onMvTypeChange() {
+      const type = document.getElementById('mv-type').value;
+      const isTransfer = type === 'transfer';
+      document.getElementById('mv-loc2-group').style.display = isTransfer ? '' : 'none';
+      document.getElementById('mv-loc-label').textContent = isTransfer ? 'Zdrojová lokace *' : 'Lokace *';
+    }
+
+    async function onMvWarehouseChange() {
+      const whId = document.getElementById('mv-wh').value;
+      const loc = document.getElementById('mv-loc');
+      const loc2 = document.getElementById('mv-loc2');
+      loc.innerHTML = '<option value="">Načítám…</option>';
+      if (loc2) loc2.innerHTML = '<option value="">Načítám…</option>';
+      let locations = [];
+      try {
+        const r = await fetch('/api/wh/warehouses/' + whId);
+        const wh = await r.json();
+        locations = wh.locations || [];
+      } catch(e) { console.error(e); }
+      if (!locations.length) {
+        loc.innerHTML = '<option value="">— sklad nemá lokace —</option>';
+        if (loc2) loc2.innerHTML = '<option value="">— sklad nemá lokace —</option>';
+        return;
+      }
+      const opts = locations.map(l => '<option value="' + l.id + '">' + mvEsc(l.label) + '</option>').join('');
+      loc.innerHTML = opts;
+      if (loc2) loc2.innerHTML = opts;
+    }
+
+    function resolveMvMaterialId(raw) {
+      const s = raw.trim();
+      if (mvMatByLabel.has(s)) return mvMatByLabel.get(s);
+      const code = s.split(' — ')[0].trim().toUpperCase();
+      if (mvMatByCode.has(code)) return mvMatByCode.get(code);
+      return null;
     }
 
     async function saveMovement(e) {
       e.preventDefault();
-      const f = new FormData(e.target);
-      const data = {};
-      for (const [k,v] of f.entries()) data[k] = v;
-      data.material_id = parseInt(data.material_id);
-      data.warehouse_id = parseInt(data.warehouse_id);
-      data.quantity = parseFloat(data.quantity);
-      data.unit_price = parseFloat(data.unit_price) || 0;
-      await fetch('/api/wh/movements', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(data) });
+      const type = document.getElementById('mv-type').value;
+      const warehouse_id = parseInt(document.getElementById('mv-wh').value);
+      const locVal = document.getElementById('mv-loc').value;
+      const loc2El = document.getElementById('mv-loc2');
+      const loc2Val = loc2El ? loc2El.value : '';
+      const note = e.target.note.value || null;
+
+      if (!locVal) { alert('Vyber lokaci.'); return; }
+      if (type === 'transfer' && !loc2Val) { alert('Vyber cílovou lokaci.'); return; }
+      if (type === 'transfer' && locVal === loc2Val) { alert('Zdrojová a cílová lokace nesmí být stejná.'); return; }
+
+      const items = [];
+      for (const tr of document.querySelectorAll('#mv-rows tr')) {
+        const raw = tr.querySelector('.mv-mat').value.trim();
+        if (!raw) continue;
+        const mid = resolveMvMaterialId(raw);
+        if (!mid) { alert('Nenašel jsem zboží: „' + raw + '". Vyber položku z našeptávače.'); return; }
+        const qty = parseFloat(tr.querySelector('.mv-qty').value);
+        if (!qty || qty <= 0) { alert('Zadej platné množství u: „' + raw + '".'); return; }
+        const price = parseFloat(tr.querySelector('.mv-price').value) || 0;
+        items.push({ material_id: mid, quantity: qty, unit_price: price });
+      }
+      if (!items.length) { alert('Přidej alespoň jednu položku.'); return; }
+
+      const btn = e.submitter; if (btn) { btn.disabled = true; btn.textContent = 'Ukládám…'; }
+      try {
+        for (const it of items) {
+          const body = {
+            type, warehouse_id,
+            material_id: it.material_id,
+            quantity: it.quantity,
+            unit_price: it.unit_price,
+            note,
+            client_uuid: (crypto.randomUUID ? crypto.randomUUID() : (Date.now() + '-' + Math.random())),
+          };
+          if (type === 'transfer') { body.from_location_id = parseInt(locVal); body.to_location_id = parseInt(loc2Val); }
+          else { body.location_id = parseInt(locVal); }
+          const r = await fetch('/api/wh/moves', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+          if (!r.ok) {
+            const err = await r.json().catch(() => ({}));
+            alert('Chyba u položky #' + it.material_id + ': ' + (err.error ? JSON.stringify(err.error) : ('HTTP ' + r.status)));
+            if (btn) { btn.disabled = false; btn.textContent = 'Zaznamenat'; }
+            return;
+          }
+        }
+      } catch (err) {
+        alert('Chyba při ukládání: ' + err.message);
+        if (btn) { btn.disabled = false; btn.textContent = 'Zaznamenat'; }
+        return;
+      }
       closeModal(); loadMovements(); loadStats(); loadMaterials();
     }
 
