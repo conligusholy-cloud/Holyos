@@ -969,7 +969,7 @@
       </div>
       <div class="form-row">
         <div style="flex:none; width:100%;">
-          <label><input type="checkbox" id="sh-por" ${s.price_on_request?'checked':''}> Cena na vyžádání (kurýr do zahraničí)</label>
+          <label><input type="checkbox" id="sh-por" ${s.price_on_request?'checked':''}> Cena na vyžádání (kurýr)</label>
           <div style="font-size:11px; color:var(--text2); margin-top:4px;">Cena dopravy se v košíku nepočítá; doplní ji agenda Doprava a promítne do faktury. Fakturu nelze vystavit, dokud cena není potvrzena.</div>
         </div>
       </div>
