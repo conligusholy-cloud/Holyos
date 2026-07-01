@@ -38,6 +38,7 @@
     "android": {
       "package": "cz.bestseries.velin",
       "versionCode": 2,
+      "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#FCBF24"
@@ -58,6 +59,7 @@
     },
     "plugins": [
       "expo-secure-store",
+      "expo-notifications",
       [
         "expo-image-picker",
         {

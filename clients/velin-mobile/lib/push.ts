@@ -86,7 +86,19 @@ export async function registerForPushNotifications(): Promise<DeviceMeta | null>
       os_version: `${Platform.OS} ${Device.osVersion || ''}`.trim(),
     };
   } catch (err: any) {
-    console.error('[push] Nepodařilo se získat Expo push token:', err?.message || err);
+    const msg = err?.message || String(err);
+    // Android bez nakonfigurovaného FCM (chybí google-services.json + EAS FCM
+    // credentials) → getExpoPushTokenAsync vyhodí chybu a zařízení se nikdy
+    // nezaregistruje na backendu (nebude vidět v modulu Velín → Zařízení).
+    if (Platform.OS === 'android') {
+      console.error(
+        '[push] Android: nepodařilo se získat Expo push token. ' +
+        'Nejspíš chybí FCM (google-services.json + EAS FCM V1 credentials). Detail:',
+        msg
+      );
+    } else {
+      console.error('[push] Nepodařilo se získat Expo push token:', msg);
+    }
     return null;
   }
 }
