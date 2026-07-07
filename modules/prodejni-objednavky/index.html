@@ -268,6 +268,7 @@
         </label>
         <span id="kv-generated" style="color:var(--text2); font-size:12px;"></span>
         <button class="btn" onclick="loadKioskValues(true)">↻ Obnovit</button>
+        <button class="btn" onclick="openCompoundingSettings()" title="Nastavení: ceník a cena lokality" style="padding:8px 12px;">⚙️</button>
       </div>
       <div id="kv-summary" style="margin-bottom:14px;"></div>
       <div id="kv-table"><div style="color:var(--text2);padding:20px;">Načítám…</div></div>
@@ -2861,6 +2862,8 @@
     // Data tahá server-side proxy /api/compounder/kiosk-values (klíč drží server).
     // ============================================================
     var _kioskData = null; // celá odpověď { kiosks, summary, ... }
+    var _compoundingSettings = { pricelist: { v2: { eur: null }, v3: { eur: null }, v4: { eur: null } }, locationMonths: 12 };
+    var _kvFxRates = { CZK: 1, EUR: 25 }; // 1 EUR ≈ X CZK (fallback dokud nenačteme z CNB)
 
     function kvEsc(s) {
       return String(s == null ? '' : s).replace(/[&<>"']/g, function(c) {
@@ -2897,6 +2900,15 @@
       if (!box) return;
       box.innerHTML = '<div style="color:var(--text2);padding:20px;">Načítám hodnoty lokalit ze SIS…</div>';
       if (sumEl) sumEl.innerHTML = '';
+      // Nastavení (ceník + počet měsíců) a kurz EUR — nejsou kritické, chyby ignorujeme.
+      try {
+        var sr = await fetch('/api/compounder/compounding-settings', { credentials: 'include' });
+        if (sr.ok) _compoundingSettings = await sr.json();
+      } catch (e) {}
+      try {
+        var fr = await fetch('/api/wh/exchange-rates');
+        if (fr.ok) { var fx = await fr.json(); if (fx && fx.rates) _kvFxRates = fx.rates; }
+      } catch (e) {}
       try {
         var r = await fetch('/api/compounder/kiosk-values' + (fresh ? '?fresh=1' : ''), { credentials: 'include' });
         var data = await r.json().catch(function(){ return {}; });
@@ -2933,21 +2945,31 @@
         if (!q) return true;
         return (String(k.code || '') + ' ' + String(k.label || '') + ' ' + String(k.companyName || '')).toLowerCase().indexOf(q) !== -1;
       });
-      // Řazení: nejhodnotnější lokalita nahoře
-      filtered.sort(function(a, b) { return (b.kioskValue || 0) - (a.kioskValue || 0); });
+
+      // Cena lokality = Ø top 3 × počet měsíců (z nastavení). Ø top 3 převedeme na CZK
+      // kurzem (Best Series lokality jsou v CZK, ale ať to sedí i pro cizí měnu).
+      var num = function(v) { return (typeof v === 'number' && isFinite(v)) ? v : 0; };
+      var months = (_compoundingSettings && Number.isFinite(_compoundingSettings.locationMonths)) ? _compoundingSettings.locationMonths : 12;
+      var locVal = function(k) {
+        var cur = k.currency || 'CZK';
+        var rate = _kvFxRates[cur] || 1;
+        return num(k.avgTop3) * rate * months;
+      };
+
+      // Řazení: nejhodnotnější lokalita nahoře (dle ceny lokality)
+      filtered.sort(function(a, b) { return locVal(b) - locVal(a); });
 
       // Souhrn — počítáme z okruhu Best Series (ať KPI sedí s tabulkou). Hodnota lokalit je v CZK.
-      var num = function(v) { return (typeof v === 'number' && isFinite(v)) ? v : 0; };
       var s = {
         kioskCount: baseList.length,
         inIncubator: baseList.filter(function(k) { return k.inIncubator; }).length,
-        totalKioskValue: baseList.reduce(function(a, k) { return a + num(k.kioskValue); }, 0),
+        totalLocationValue: baseList.reduce(function(a, k) { return a + locVal(k); }, 0),
         totalTransactions: baseList.reduce(function(a, k) { return a + num(k.transactions); }, 0),
       };
       if (sumEl) {
         sumEl.innerHTML = '<div style="display:flex;gap:12px;flex-wrap:wrap;">' +
           kvStat('Lokalit celkem', kvNum(s.kioskCount), (s.inIncubator + ' v inkubátoru')) +
-          kvStat('Hodnota lokalit', kvMoney(s.totalKioskValue, valCur), 'součet, ' + valCur) +
+          kvStat('Hodnota lokalit', kvMoney(s.totalLocationValue, 'CZK'), 'Ø top 3 × ' + months + ' měs.') +
           kvStat('Transakce (měsíc)', kvNum(s.totalTransactions), 'napříč lokalitami') +
           '</div>';
       }
@@ -2960,6 +2982,7 @@
       var h = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr>' +
         '<th>Kód</th><th>Lokalita</th><th>Provozovatel</th>' +
         '<th style="text-align:right;">Ø top 3</th>' +
+        '<th style="text-align:right;">Cena lokality</th>' +
         '<th>Stav</th></tr></thead><tbody>';
       filtered.forEach(function(k) {
         var cur = k.currency || 'CZK';
@@ -2971,11 +2994,105 @@
           '<td>' + kvEsc(k.label) + '</td>' +
           '<td style="color:var(--text2);">' + kvEsc(k.companyName) + '</td>' +
           '<td style="text-align:right;white-space:nowrap;color:var(--text2);">' + kvMoney(k.avgTop3, cur) + '</td>' +
+          '<td style="text-align:right;white-space:nowrap;font-weight:700;color:#eab308;">' + kvMoney(locVal(k), 'CZK') + '</td>' +
           '<td>' + badge + '</td>' +
           '</tr>';
       });
       h += '</tbody></table></div>';
+      h += '<div style="color:var(--text2);font-size:11px;margin-top:8px;">Cena lokality = Ø top 3 × ' + months + ' měsíců (nastavíš přes ⚙️). Zobrazeno v CZK.</div>';
       box.innerHTML = h;
+    }
+
+    // Přepočet EUR → CZK aktuálním kurzem (pro náhled v ceníku).
+    function kvEurToCzk(eur) {
+      var rate = _kvFxRates.EUR || 25;
+      if (typeof eur !== 'number' || !isFinite(eur)) return null;
+      return eur * rate;
+    }
+    // Živý náhled CZK vedle EUR inputu v modálu nastavení.
+    function kvSettingsPreview(ver) {
+      var inp = document.getElementById('kvset-' + ver);
+      var out = document.getElementById('kvset-czk-' + ver);
+      if (!inp || !out) return;
+      var eur = parseFloat(String(inp.value).replace(',', '.'));
+      var czk = kvEurToCzk(eur);
+      out.textContent = (czk == null) ? '—' : ('≈ ' + Math.round(czk).toLocaleString('cs-CZ') + ' Kč');
+    }
+
+    function openCompoundingSettings() {
+      var st = _compoundingSettings || {};
+      var pl = st.pricelist || {};
+      var months = Number.isFinite(st.locationMonths) ? st.locationMonths : 12;
+      var rate = _kvFxRates.EUR || 25;
+      function verRow(ver, label) {
+        var eur = (pl[ver] && pl[ver].eur != null) ? pl[ver].eur : '';
+        return '<div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;">' +
+          '<div style="width:60px;font-weight:600;">' + label + '</div>' +
+          '<div style="position:relative;">' +
+            '<input type="number" min="0" step="1" id="kvset-' + ver + '" value="' + eur + '" oninput="kvSettingsPreview(\'' + ver + '\')" placeholder="0" style="width:150px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 32px 8px 12px;color:var(--text);font-size:14px;">' +
+            '<span style="position:absolute;right:12px;top:50%;transform:translateY(-50%);color:var(--text2);font-size:13px;">€</span>' +
+          '</div>' +
+          '<div id="kvset-czk-' + ver + '" style="color:var(--text2);font-size:13px;min-width:120px;">' + (eur !== '' ? ('≈ ' + Math.round(eur * rate).toLocaleString('cs-CZ') + ' Kč') : '—') + '</div>' +
+          '</div>';
+      }
+      var html = '<div class="modal-overlay" onclick="if(event.target===this)closeModal()">' +
+        '<div class="modal" style="width:560px;max-width:95vw;">' +
+        '<h2>⚙️ Nastavení Compounding</h2>' +
+        '<div style="margin-bottom:6px;font-weight:600;font-size:14px;">Ceník prádlomatu (cena bez DPH)</div>' +
+        '<div style="color:var(--text2);font-size:12px;margin-bottom:12px;">Zadej cenu v EUR — CZK se dopočítá aktuálním kurzem ČNB (1 € ≈ ' + (Math.round(rate * 100) / 100).toLocaleString('cs-CZ') + ' Kč).</div>' +
+        verRow('v2', 'V2') + verRow('v3', 'V3') + verRow('v4', 'V4') +
+        '<hr style="border:none;border-top:1px solid var(--border);margin:18px 0;">' +
+        '<div style="margin-bottom:6px;font-weight:600;font-size:14px;">Cena lokality</div>' +
+        '<div style="color:var(--text2);font-size:12px;margin-bottom:12px;">Cena lokality = Ø top 3 × počet měsíců.</div>' +
+        '<div style="display:flex;align-items:center;gap:12px;">' +
+          '<div style="width:120px;">Počet měsíců</div>' +
+          '<input type="number" min="1" max="600" step="1" id="kvset-months" value="' + months + '" style="width:120px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:14px;">' +
+        '</div>' +
+        '<div id="kvset-err" style="color:#ef4444;font-size:13px;margin-top:12px;display:none;"></div>' +
+        '<div class="modal-actions">' +
+          '<button type="button" class="btn btn-secondary" onclick="closeModal()">Zrušit</button>' +
+          '<button type="button" class="btn btn-primary" onclick="saveCompoundingSettings()">Uložit</button>' +
+        '</div>' +
+        '</div></div>';
+      document.getElementById('modal-root').innerHTML = html;
+    }
+
+    async function saveCompoundingSettings() {
+      var errEl = document.getElementById('kvset-err');
+      function showErr(m) { if (errEl) { errEl.textContent = m; errEl.style.display = 'block'; } }
+      function parseEur(ver) {
+        var raw = String((document.getElementById('kvset-' + ver) || {}).value || '').trim().replace(',', '.');
+        if (raw === '') return null;
+        var n = parseFloat(raw);
+        return (isFinite(n) && n >= 0) ? n : NaN;
+      }
+      var v2 = parseEur('v2'), v3 = parseEur('v3'), v4 = parseEur('v4');
+      if ([v2, v3, v4].some(function(x) { return typeof x === 'number' && isNaN(x); })) {
+        return showErr('Ceny musí být nezáporná čísla (nebo prázdné).');
+      }
+      var months = parseInt(String((document.getElementById('kvset-months') || {}).value || '').trim(), 10);
+      if (!(months >= 1 && months <= 600)) {
+        return showErr('Počet měsíců musí být 1 až 600.');
+      }
+      var payload = {
+        pricelist: { v2: { eur: v2 }, v3: { eur: v3 }, v4: { eur: v4 } },
+        locationMonths: months,
+      };
+      try {
+        var r = await fetch('/api/compounder/compounding-settings', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify(payload),
+        });
+        var data = await r.json().catch(function() { return {}; });
+        if (!r.ok) throw new Error(data.error || ('HTTP ' + r.status));
+        _compoundingSettings = data.settings || payload;
+        closeModal();
+        renderKioskValues();
+      } catch (e) {
+        showErr('Uložení selhalo: ' + kvEsc(e.message));
+      }
     }
 
     // ============================================================

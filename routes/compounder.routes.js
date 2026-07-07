@@ -15,6 +15,7 @@ const { requireAuth } = require('../middleware/auth');
 const { createNotification } = require('./notifications.routes');
 const { sendMail } = require('../services/email');
 const { inviteEmail, loginEmail } = require('../services/compounder-emails');
+const { getSetting, setSetting } = require('../services/settings');
 const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 
@@ -726,6 +727,67 @@ router.get('/kiosk-values', requireAuth, async (req, res, next) => {
     };
     _kioskCache = { at: Date.now(), data: out };
     res.json(out);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ─── Nastavení modulu Compounding (ceník V2/V3/V4 + cena lokality) ─────────
+// Uloženo jako jeden JSON AppSetting (klíč 'compounding.settings'), sdílené pro
+// všechny uživatele. Ceny ceníku se zadávají v EUR bez DPH (CZK se dopočítá
+// kurzem na frontendu). locationMonths = násobitel pro cenu lokality
+// (cena lokality = Ø top 3 × locationMonths).
+const COMPOUNDING_SETTINGS_KEY = 'compounding.settings';
+const COMPOUNDING_SETTINGS_DEFAULT = {
+  pricelist: { v2: { eur: null }, v3: { eur: null }, v4: { eur: null } },
+  locationMonths: 12,
+};
+
+const compoundingSettingsSchema = z.object({
+  pricelist: z.object({
+    v2: z.object({ eur: z.number().nonnegative().nullable() }),
+    v3: z.object({ eur: z.number().nonnegative().nullable() }),
+    v4: z.object({ eur: z.number().nonnegative().nullable() }),
+  }),
+  locationMonths: z.number().int().min(1).max(600),
+});
+
+// GET /api/compounder/compounding-settings
+router.get('/compounding-settings', requireAuth, async (req, res, next) => {
+  try {
+    const val = await getSetting(COMPOUNDING_SETTINGS_KEY, {
+      type: 'json',
+      defaultValue: COMPOUNDING_SETTINGS_DEFAULT,
+    });
+    // Sloučení s defaultem — kdyby v uložené hodnotě chyběl nějaký klíč.
+    const merged = {
+      pricelist: {
+        v2: { eur: (val && val.pricelist && val.pricelist.v2 && val.pricelist.v2.eur != null) ? val.pricelist.v2.eur : null },
+        v3: { eur: (val && val.pricelist && val.pricelist.v3 && val.pricelist.v3.eur != null) ? val.pricelist.v3.eur : null },
+        v4: { eur: (val && val.pricelist && val.pricelist.v4 && val.pricelist.v4.eur != null) ? val.pricelist.v4.eur : null },
+      },
+      locationMonths: (val && Number.isFinite(val.locationMonths)) ? val.locationMonths : 12,
+    };
+    res.json(merged);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// PUT /api/compounder/compounding-settings
+router.put('/compounding-settings', requireAuth, async (req, res, next) => {
+  try {
+    const parsed = compoundingSettingsSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: 'Neplatná data nastavení', detail: parsed.error.flatten() });
+    }
+    await setSetting(COMPOUNDING_SETTINGS_KEY, parsed.data, {
+      type: 'json',
+      scope: 'compounding',
+      description: 'Compounding — ceník V2/V3/V4 (EUR bez DPH) + počet měsíců pro cenu lokality',
+      userId: req.user && req.user.id,
+    });
+    res.json({ ok: true, settings: parsed.data });
   } catch (err) {
     next(err);
   }
