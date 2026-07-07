@@ -2993,6 +2993,7 @@
         '<th style="text-align:right;">Průměrný obrat s DPH</th>' +
         '<th style="text-align:right;">Obrat bez DPH</th>' +
         '<th style="text-align:right;">Cena lokality</th>' +
+        '<th style="text-align:right;">Cena lokality (ROI 25 %)</th>' +
         '<th style="text-align:right;">Cena kiosku</th>' +
         '<th style="text-align:right;">Celková cena</th>' +
         '<th style="text-align:right;">Servisní smlouva (' + (Number.isFinite(_compoundingSettings.servicePct) ? _compoundingSettings.servicePct : 15) + ' %)</th>' +
@@ -3031,6 +3032,7 @@
           '<td style="text-align:right;white-space:nowrap;color:var(--text2);">' + kvMoney(k.avgTop3, cur) + '</td>' +
           '<td style="text-align:right;white-space:nowrap;color:var(--text2);">' + kvMoney(Math.round(_obratBez), 'CZK') + '</td>' +
           '<td style="text-align:right;white-space:nowrap;font-weight:700;">' + kvMoney(locVal(k), 'CZK') + '</td>' +
+          '<td style="text-align:right;white-space:nowrap;color:#3b82f6;">' + ((_vmRow.machine != null && _cistyZisk > 0 && (_cistyZisk * 48 - _vmRow.machine) > 0) ? kvMoney(Math.round(_cistyZisk * 48 - _vmRow.machine), 'CZK') : '<span style="color:var(--text2);">—</span>') + '</td>' +
           '<td style="text-align:right;white-space:nowrap;color:var(--text2);">' + (_vmRow.machine != null ? kvMoney(_vmRow.machine, 'CZK') : '<span style="color:var(--text2);">—</span>') + '</td>' +
           '<td style="text-align:right;white-space:nowrap;font-weight:700;color:#eab308;">' + (_vmRow.machine != null ? kvMoney(locVal(k) + _vmRow.machine, 'CZK') : '<span style="color:var(--text2);">—</span>') + '</td>' +
           '<td style="text-align:right;white-space:nowrap;color:#ef4444;">' + kvMoney(Math.round(_servis), 'CZK') + _mes + '</td>' +
