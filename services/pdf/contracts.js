@@ -568,6 +568,7 @@ function renderServisni(d) {
       <li>Smlouva se uzavírá na dobu ${v(d.term_type, 12)} a nabývá účinnosti dnem podpisu.</li>
       <li>Smlouvu lze ukončit dohodou nebo písemnou výpovědí kterékoli strany i bez uvedení důvodu s výpovědní dobou ${v(d.notice_months, 3)} měsíce, počínající prvním dnem měsíce následujícího po doručení výpovědi.</li>
       <li>Od smlouvy lze odstoupit při podstatném porušení povinností druhou stranou, které nebylo odstraněno ani v dodatečné přiměřené lhůtě.</li>
+      <li>Ukončením této smlouvy <strong>nezaniká potřeba systémových služeb</strong> nezbytných pro provoz Kiosku (čl. III odst. 1), které si objednatel nemůže zajistit sám. Okamžikem ukončení smlouvy proto <strong>automaticky začíná samostatná fakturace systémových služeb</strong> ve výši ${v(d.system_value, 8)} za Stroj, a to až do jejich případného písemného odhlášení objednatelem.</li>
     </ol>
 
     <h2>Článek VIII — Závěrečná ustanovení</h2>
