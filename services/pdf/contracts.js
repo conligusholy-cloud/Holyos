@@ -175,9 +175,8 @@ const SCHEMAS = {
   servisni: [
     SELLER_GROUP('Poskytovatel (provozovatel)'),
     BUYER_GROUP('Objednatel (vlastník kiosku)'),
-    { key: 'subject', title: 'Předmět a rozsah', fields: [
+    { key: 'subject', title: 'Předmět a lokalita', fields: [
       { name: 'location_desc', label: 'Lokalita / umístění kiosku', type: 'text' },
-      { name: 'service_scope', label: 'Rozsah zajištění provozu', type: 'textarea' },
     ]},
     { key: 'fee', title: 'Odměna', fields: [
       { name: 'fee_pct', label: 'Odměna (%)', type: 'text' },
@@ -185,11 +184,9 @@ const SCHEMAS = {
       { name: 'billing_period', label: 'Zúčtovací období', type: 'text' },
       { name: 'due_days', label: 'Splatnost (dní)', type: 'text' },
       { name: 'settlement', label: 'Vypořádání tržeb', type: 'textarea' },
-      { name: 'parts_included', label: 'Náhradní díly / materiál v odměně', type: 'text' },
+      { name: 'system_value', label: 'Hodnota systémových služeb samostatně', type: 'text' },
     ]},
-    { key: 'terms', title: 'Podmínky a ukončení', fields: [
-      { name: 'reaction_time', label: 'Reakční doba na závadu', type: 'text' },
-      { name: 'fix_time', label: 'Lhůta odstranění závady', type: 'text' },
+    { key: 'terms', title: 'Trvání a podpis', fields: [
       { name: 'term_type', label: 'Doba trvání', type: 'text' },
       { name: 'notice_months', label: 'Výpovědní doba (měsíců)', type: 'text' },
       { name: 'place_signed', label: 'Místo podpisu', type: 'text' },
@@ -284,21 +281,12 @@ function buildDefaults(type, site, our) {
     return {
       ...base,
       location_desc: loc,
-      service_scope: [
-        'preventivní údržba a pravidelné servisní prohlídky',
-        'opravy a odstraňování závad, zajištění náhradních dílů',
-        'doplňování spotřebního materiálu',
-        'vzdálený monitoring, dohled a technická podpora',
-        'inkaso tržeb a jejich vyúčtování',
-      ].join('\n'),
       fee_pct: '15',
-      fee_base: 'z celkových tržeb (obratu) dosažených provozem kiosku za příslušné období, bez DPH',
+      fee_base: 'z obratu s DPH dosaženého provozem kiosku za příslušné období',
       billing_period: 'kalendářní měsíc',
       due_days: '14',
-      settlement: 'Poskytovatel inkasuje tržby, sráží si odměnu 15 % a zbývající částku poukazuje objednateli.',
-      parts_included: 'nejsou zahrnuty (hradí objednatel proti doložení)',
-      reaction_time: '48 hodin',
-      fix_time: '5 pracovních dní',
+      settlement: 'Poskytovatel inkasuje tržby (výběry) z kiosku, sráží si odměnu 15 % a zbývající částku poukazuje objednateli.',
+      system_value: '100 EUR / měsíc',
       term_type: 'neurčitou',
       notice_months: '3',
       place_signed: site?.city || '',
@@ -507,10 +495,6 @@ function renderKupni(d) {
 }
 
 function renderServisni(d) {
-  const scope = String(d.service_scope || '').split('\n').filter(x => x.trim());
-  const scopeHtml = scope.length
-    ? `<ol class="letters">${scope.map(x => `<li>${esc(x.trim())}</li>`).join('')}</ol>`
-    : `<p>${v('', 40)}</p>`;
   const body = `
     <h2>Smluvní strany</h2>
     ${partyBlock('Poskytovatel', d, 'seller')}
@@ -518,47 +502,76 @@ function renderServisni(d) {
     ${partyBlock('Objednatel', d, 'buyer')}
     <p class="note">(společně dále jen „smluvní strany")</p>
 
-    <h2>Článek I — Předmět smlouvy</h2>
+    <h2>Preambule</h2>
     <ol>
-      <li>Objednatel je vlastníkem / provozovatelem kiosku umístěného na lokalitě ${v(d.location_desc)} (dále jen „kiosek").</li>
-      <li>Předmětem smlouvy je závazek poskytovatele komplexně zajišťovat provoz kiosku a závazek objednatele platit za tuto činnost sjednanou odměnu.</li>
-      <li>Zajištění provozu zahrnuje zejména:</li>
+      <li>Poskytovatel je výrobcem a provozovatelem samoobslužných prádelen (prádlomatů) provozovaných pod značkou <strong>Best Series</strong>.</li>
+      <li>Objednatel je vlastníkem Kiosku umístěného na Lokalitě: ${v(d.location_desc)}.</li>
+      <li>Předmětem této smlouvy je <strong>komplexní zajištění provozu Kiosku</strong> poskytovatelem za odměnu dle článku IV, a to pod značkou Best Series.</li>
     </ol>
-    ${scopeHtml}
 
-    <h2>Článek II — Odměna poskytovatele</h2>
+    <h2>Článek I — Výklad pojmů</h2>
+    <ol class="letters">
+      <li><strong>Kiosek</strong> — prádlomat objednatele umístěný na Lokalitě;</li>
+      <li><strong>Lokalita</strong> — provozní místo Kiosku;</li>
+      <li><strong>Systémové služby</strong> — software a systémové služby dle čl. III odst. 1;</li>
+      <li><strong>Servisní poplatek</strong> — odměna poskytovatele dle článku IV;</li>
+      <li><strong>Obrat</strong> — tržby dosažené provozem Kiosku včetně DPH za zúčtovací období.</li>
+    </ol>
+
+    <h2>Článek II — Předmět smlouvy</h2>
     <ol>
-      <li>Za komplexní zajištění provozu náleží poskytovateli odměna ve výši <strong>${v(d.fee_pct, 4)} %</strong> ${v(d.fee_base)}.</li>
+      <li>Poskytovatel se zavazuje pro objednatele <strong>komplexně zajišťovat provoz Kiosku</strong> v rozsahu článku III a objednatel se zavazuje platit za tuto činnost Servisní poplatek dle článku IV.</li>
+      <li>Provoz Kiosku probíhá pod jednotnou značkou a pravidly <strong>Best Series</strong>.</li>
+    </ol>
+
+    <h2>Článek III — Rozsah služeb v Servisním poplatku</h2>
+    <p style="margin:2px 0 6px;">Servisní poplatek dle článku IV zahrnuje:</p>
+    <ol>
+      <li><strong>Systémové a softwarové služby</strong>, zejména: telemetrie a vzdálený monitoring Kiosku; správa a zpracování plateb; hlášení a evidence závad; řízení personálu údržby a servisu; výběry tržeb; aktualizace platebních terminálů na aktuální platební metody a protokoly; e-mailový klient pro zasílání dokladů; exporty do účetnictví; aplikace pro zákazníky; SMS brána (SMS zákazníkovi před koncem pracího cyklu); servisní aplikace; e-shop s náhradními díly; servisní manuály. <em>(Samostatná hodnota systémových služeb bez servisní smlouvy činí ${v(d.system_value, 8)}.)</em></li>
+      <li><strong>Pravidelná údržba</strong>: kontrola stavu, umytí skeletu, vyčištění filtrů, doplnění detergentů, odečty energií a pravidelné vzorkování a revize dle platné legislativy.</li>
+      <li><strong>Infolinka 24/7</strong>: nepřetržitá zákaznická linka, na níž je zákazníkovi poskytnuta rada a řešení problému.</li>
+      <li><strong>Servisní výjezdy</strong>: práce a výjezd jsou zahrnuty; hradí se pouze <strong>materiál</strong> — lze-li jej uplatnit z reklamace, řeší se reklamací, jinak materiál hradí objednatel (vlastník Kiosku).</li>
+      <li><strong>Detergenty</strong>: zahrnuty v Servisním poplatku.</li>
+      <li><strong>Poplatky za platební terminály a platební brány</strong>: zahrnuty v Servisním poplatku.</li>
+    </ol>
+
+    <h2>Článek IV — Servisní poplatek (odměna)</h2>
+    <ol>
+      <li>Za zajištění provozu dle článku III náleží poskytovateli odměna ve výši <strong>${v(d.fee_pct, 4)} %</strong> ${v(d.fee_base)}.</li>
       <li>Odměna se zúčtovává za ${v(d.billing_period)} a je splatná na základě daňového dokladu se splatností ${v(d.due_days, 4)} dní.</li>
       <li>Vypořádání tržeb: ${v(d.settlement)}.</li>
-      <li>Náklady na náhradní díly a spotřební materiál ${v(d.parts_included)}.</li>
-      <li>Po dohodě lze k odměně připočítat nájem za místo (dle skutečnosti) a energie (dle aktuální spotřeby).</li>
-      <li>Systémové a softwarové služby (poplatek 100 EUR) jsou zahrnuty v odměně poskytovatele.</li>
       <li>K odměně bude připočtena DPH v zákonné výši.</li>
     </ol>
 
-    <h2>Článek III — Práva a povinnosti stran</h2>
+    <h2>Článek V — Náklady mimo Servisní poplatek</h2>
     <ol>
-      <li>Poskytovatel zajišťuje provoz s odbornou péčí, v souladu s pokyny výrobce a právními předpisy; na nahlášenou závadu reaguje v době ${v(d.reaction_time, 10)} a odstraní ji ve lhůtě ${v(d.fix_time, 10)}, nebrání-li tomu okolnosti nezávislé na jeho vůli.</li>
-      <li>Poskytovatel vede evidenci zásahů a je oprávněn plnit prostřednictvím poddodavatelů, za jejichž činnost odpovídá jako za vlastní.</li>
-      <li>Objednatel poskytuje nezbytnou součinnost a přístup ke kiosku, řádně a včas hradí odměnu a bez zbytečného odkladu oznamuje závady.</li>
+      <li>Do Servisního poplatku (${v(d.fee_pct, 4)} %) <strong>nespadají</strong> náklady na <strong>nájem Lokality</strong> a <strong>energie</strong>.</li>
+      <li>Tyto náklady mohou být objednateli fakturovány jako <strong>samostatná položka (doložka) k této smlouvě</strong> — nájem dle skutečné výše a energie dle aktuální spotřeby; <strong>nejsou</strong> součástí Servisního poplatku.</li>
     </ol>
 
-    <h2>Článek IV — Doba trvání a ukončení</h2>
+    <h2>Článek VI — Práva a povinnosti stran</h2>
+    <ol>
+      <li>Poskytovatel zajišťuje provoz s odbornou péčí, v souladu s pokyny výrobce a právními předpisy, vede evidenci zásahů a je oprávněn plnit prostřednictvím poddodavatelů, za jejichž činnost odpovídá jako za vlastní.</li>
+      <li>Objednatel poskytuje nezbytnou součinnost a přístup ke Kiosku a Lokalitě, řádně a včas hradí odměnu a bez zbytečného odkladu oznamuje závady.</li>
+    </ol>
+
+    <h2>Článek VII — Doba trvání a ukončení</h2>
     <ol>
       <li>Smlouva se uzavírá na dobu ${v(d.term_type, 12)} a nabývá účinnosti dnem podpisu.</li>
       <li>Smlouvu lze ukončit dohodou nebo písemnou výpovědí kterékoli strany i bez uvedení důvodu s výpovědní dobou ${v(d.notice_months, 3)} měsíce, počínající prvním dnem měsíce následujícího po doručení výpovědi.</li>
       <li>Od smlouvy lze odstoupit při podstatném porušení povinností druhou stranou, které nebylo odstraněno ani v dodatečné přiměřené lhůtě.</li>
     </ol>
 
-    <h2>Článek V — Závěrečná ustanovení</h2>
+    <h2>Článek VIII — Závěrečná ustanovení</h2>
     <ol>
       <li>Smluvní strany zachovávají mlčenlivost o důvěrných informacích a zpracovávají osobní údaje v souladu s GDPR.</li>
-      <li>Vztahy neupravené smlouvou se řídí občanským zákoníkem a předpisy ČR; změny jen písemnými dodatky.</li>
-      <li>Smlouva je vyhotovena ve dvou stejnopisech; strany ji uzavírají svobodně a vážně.</li>
+      <li>Žádná ze stran neodpovídá za nesplnění povinnosti způsobené vyšší mocí; po dobu jejího trvání se lhůty přiměřeně prodlužují.</li>
+      <li>Vztahy neupravené smlouvou se řídí právem České republiky; změny jen písemnými, vzestupně číslovanými dodatky.</li>
+      <li>Je-li některé ustanovení neplatné či neúčinné, nemá to vliv na platnost ostatních.</li>
+      <li>Smlouva je vyhotovena ve dvou stejnopisech (nebo elektronicky s uznávanými podpisy); strany ji uzavírají svobodně a vážně.</li>
     </ol>
     ${sigBlock('Poskytovatel', 'Objednatel', d.place_signed)}`;
-  return shell('Servisní smlouva', 'o zajištění provozu kiosku', body);
+  return shell('Servisní smlouva', 'o komplexním zajištění provozu prádlomatu', body);
 }
 
 function renderRezervacni(d) {
