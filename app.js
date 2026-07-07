@@ -456,6 +456,11 @@ app.get('/share/tools/:tool/:token', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'tool-share.html'));
 });
 
+// Veřejná stránka pro vyplnění hlavičky smlouvy protistranou (token-based, bez auth)
+app.get('/smlouva/:token', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'contract-fill.html'));
+});
+
 // Veřejná zásady ochrany osobních údajů (vyžaduje Apple App Store / TestFlight review)
 app.get('/privacy', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'privacy.html'));

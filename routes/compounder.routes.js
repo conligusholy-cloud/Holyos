@@ -18,6 +18,7 @@ const { inviteEmail, loginEmail } = require('../services/compounder-emails');
 const { getSetting, setSetting, getOurCompany } = require('../services/settings');
 const contracts = require('../services/pdf/contracts');
 const crypto = require('crypto');
+const { buildShareUrl, getAppUrl } = require('../services/share-url');
 const bcrypt = require('bcryptjs');
 
 // ─── Pomocné ─────────────────────────────────────────────────────────────
@@ -1483,6 +1484,86 @@ router.post('/contracts/:id(\\d+)/pdf', requireAuth, async (req, res, next) => {
     res.setHeader('Content-Disposition', 'attachment; filename="' + base + '.pdf"');
     res.setHeader('Content-Length', pdf.length);
     res.send(pdf);
+  } catch (err) { next(err); }
+});
+
+
+// ─── Sdílený odkaz pro protistranu (vyplnění hlavičky) ───────────────────────
+// POST vygenerovat/obnovit veřejný odkaz; nastaví stav na 'odeslano'.
+router.post('/contracts/:id(\\d+)/share', requireAuth, async (req, res, next) => {
+  try {
+    const row = await prisma.compoundingContract.findUnique({ where: { id: Number(req.params.id) } });
+    if (!row) return res.status(404).json({ error: 'Smlouva nenalezena' });
+    const token = row.share_token || crypto.randomBytes(24).toString('hex');
+    const expires = new Date(Date.now() + 30 * 24 * 3600 * 1000);
+    await prisma.compoundingContract.update({
+      where: { id: row.id },
+      data: {
+        share_token: token,
+        share_expires_at: expires,
+        status: row.status === 'koncept' ? 'odeslano' : row.status,
+      },
+    });
+    res.json({ url: buildShareUrl('/smlouva/' + token), token });
+  } catch (err) { next(err); }
+});
+
+// GET veřejné (bez auth) — schéma hlavičky + případně už vyplněné hodnoty
+router.get('/contracts/public/:token', async (req, res, next) => {
+  try {
+    const row = await prisma.compoundingContract.findUnique({ where: { share_token: String(req.params.token || '') } });
+    if (!row) return res.status(404).json({ error: 'Odkaz nenalezen nebo neplatný' });
+    if (row.share_expires_at && new Date(row.share_expires_at) < new Date()) {
+      return res.status(410).json({ error: 'Platnost odkazu vypršela' });
+    }
+    const groups = contracts.SCHEMAS[row.type] || [];
+    const buyerGroup = groups.find((g) => g.key === 'buyer');
+    const fields = buyerGroup ? buyerGroup.fields : [];
+    const values = {};
+    fields.forEach((f) => { values[f.name] = (row.fields && row.fields[f.name] != null) ? row.fields[f.name] : ''; });
+    res.json({
+      typeLabel: contracts.TYPE_LABEL[row.type] || 'Smlouva',
+      kioskLabel: row.kiosk_label || '',
+      status: row.status,
+      fields, values,
+    });
+  } catch (err) { next(err); }
+});
+
+// POST veřejné (bez auth) — protistrana uloží hlavičku; stav 'vyplneno' + notifikace
+router.post('/contracts/public/:token', async (req, res, next) => {
+  try {
+    const row = await prisma.compoundingContract.findUnique({ where: { share_token: String(req.params.token || '') } });
+    if (!row) return res.status(404).json({ error: 'Odkaz nenalezen' });
+    if (row.share_expires_at && new Date(row.share_expires_at) < new Date()) {
+      return res.status(410).json({ error: 'Platnost odkazu vypršela' });
+    }
+    const groups = contracts.SCHEMAS[row.type] || [];
+    const buyerGroup = groups.find((g) => g.key === 'buyer');
+    const allowed = new Set((buyerGroup ? buyerGroup.fields : []).map((f) => f.name));
+    const incoming = (req.body && req.body.fields) || {};
+    const merged = Object.assign({}, row.fields || {});
+    Object.keys(incoming).forEach((k) => {
+      if (allowed.has(k)) merged[k] = String(incoming[k] == null ? '' : incoming[k]).slice(0, 500);
+    });
+    await prisma.compoundingContract.update({
+      where: { id: row.id },
+      data: { fields: merged, status: 'vyplneno', filled_at: new Date() },
+    });
+    try {
+      const ids = await resolveOwnerUserIds();
+      const label = (contracts.TYPE_LABEL[row.type] || 'Smlouva') + ' — ' + (row.kiosk_code || '');
+      const link = (getAppUrl() || '') + '/modules/prodejni-objednavky/index.html';
+      for (const uid of ids) {
+        await createNotification({
+          userId: uid, type: 'contract_filled',
+          title: 'Vyplněná hlavička smlouvy',
+          body: label + ' — protistrana vyplnila své údaje.',
+          link,
+        }).catch(() => {});
+      }
+    } catch (e) { console.error('[contract-fill notify]', e); }
+    res.json({ ok: true });
   } catch (err) { next(err); }
 });
 

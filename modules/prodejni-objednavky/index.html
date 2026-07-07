@@ -3185,6 +3185,7 @@
           '</div>' +
           '<select onchange="setContractStatus(' + x.id + ',this.value,\'' + ca + '\')" style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:4px 6px;color:var(--text);font-size:12px;">' + opts + '</select>' +
           '<button type="button" class="btn btn-sm btn-secondary" title="Upravit" onclick="editCompoundingContract(' + x.id + ',\'' + ca + '\')">✏️</button>' +
+          '<button type="button" class="btn btn-sm btn-secondary" title="Odkaz pro protistranu (vyplnění hlavičky)" onclick="shareContract(' + x.id + ',\'' + ca + '\')">🔗</button>' +
           '<button type="button" class="btn btn-sm btn-primary" title="Stáhnout PDF" onclick="contractPdfById(' + x.id + ')">PDF</button>' +
           '<button type="button" class="btn btn-sm btn-danger" title="Smazat" onclick="deleteCompoundingContract(' + x.id + ',\'' + ca + '\')">🗑</button>' +
           '</div>';
@@ -3347,6 +3348,20 @@
       var x = _contractCache[id];
       if (!x) { alert('Smlouva nenalezena.'); return; }
       openCompoundingContractForm(x.type, code, { id: id, fields: x.fields || {} });
+    }
+
+    async function shareContract(id, code) {
+      var url;
+      try {
+        var r = await fetch('/api/compounder/contracts/' + id + '/share', {
+          method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: '{}',
+        });
+        if (!r.ok) throw new Error('http');
+        url = (await r.json()).url;
+      } catch (e) { alert('Vytvoření odkazu selhalo.'); return; }
+      try { await navigator.clipboard.writeText(url); } catch (e) {}
+      window.prompt('Odkaz pro protistranu (zkopírován do schránky). Pošlete jí ho k vyplnění hlavičky:', url);
+      loadContractList(code);
     }
 
 
