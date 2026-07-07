@@ -141,6 +141,11 @@ const SCHEMAS = {
       { name: 'production_term', label: 'Orientační termín vyrobení', type: 'text' },
       { name: 'warranty_months', label: 'Záruka (měsíců)', type: 'text' },
     ]},
+    { key: 'buyback', title: 'Předkupní právo a odkup', fields: [
+      { name: 'buyback_decision_months', label: 'Lhůta na rozhodnutí (měsíců)', type: 'text' },
+      { name: 'buyback_key_months', label: 'Násobek obratu pro klíč (×)', type: 'text' },
+      { name: 'resale_commission_pct', label: 'Provize za zprostředkování (%)', type: 'text' },
+    ]},
     { key: 'system', title: 'Systémové služby a podpis', fields: [
       { name: 'system_fee', label: 'Systémový poplatek (měsíc/stroj)', type: 'text' },
       { name: 'place_signed', label: 'Místo podpisu', type: 'text' },
@@ -238,7 +243,10 @@ function buildDefaults(type, site, our) {
       reservation_credit: '',
       payment_days: '2',
       production_term: '',
-      warranty_months: '24',
+      warranty_months: '12',
+      buyback_decision_months: '12',
+      buyback_key_months: '12',
+      resale_commission_pct: '10',
       system_fee: '',
       place_signed: site?.city || '',
     };
@@ -388,7 +396,8 @@ function renderKupni(d) {
       <li><strong>Vlastnické právo ke stroji přechází na kupujícího okamžikem jeho vyrobení.</strong></li>
       <li>Po vyrobení prodávající v rámci sjednané ceny zajistí výměnu stávajícího kiosku za nový stroj kupujícího na lokalitě a jeho uvedení do provozu; o předání se sepíše předávací protokol.</li>
       <li>Nebezpečí škody na stroji přechází na kupujícího jeho předáním (instalací) na lokalitě.</li>
-      <li>Prodávající poskytuje na stroj záruku za jakost v délce ${v(d.warranty_months, 4)} měsíců od předání; záruka se nevztahuje na běžné opotřebení, neodborný zásah, nesprávnou obsluhu a vyšší moc.</li>
+      <li>Je-li kupujícím právnická osoba (podnikatel), poskytuje prodávající na stroj záruku za jakost v délce <strong>${v(d.warranty_months, 4)} měsíců</strong> od předání. Je-li kupujícím spotřebitel (fyzická osoba nepodnikající), řídí se jeho práva z vadného plnění příslušnými ustanoveními občanského zákoníku. Záruka se nevztahuje na běžné opotřebení, neodborný zásah, nesprávnou obsluhu a vyšší moc.</li>
+      <li>Náhradní díly a servisní práce <strong>mimo záruku</strong> (po uplynutí záruční doby nebo mimo rozsah záruky) hradí kupující.</li>
     </ol>
 
     <h2>Článek VI — Ukončení nájmu lokality a relokace</h2>
@@ -405,7 +414,15 @@ function renderKupni(d) {
       <li>Provozní režim si kupující zvolí: a) provoz prostřednictvím prodávajícího dle samostatné servisní smlouvy (odměna 13 % z obratu, systémové služby zahrnuty), nebo b) samostatný provoz, kdy systémové služby dle odst. 1 hradí kupující samostatně dle odst. 2.</li>
     </ol>
 
-    <h2>Článek VIII — Závěrečná ustanovení</h2>
+    <h2>Článek VIII — Předkupní právo prodávajícího a zpětný odkup</h2>
+    <ol>
+      <li>Kupující zřizuje ve prospěch prodávajícího <strong>předkupní právo</strong> ke stroji, a to jak k samotnému stroji, tak ke stroji společně s právem provozu na lokalitě („místem"). Zamýšlí-li kupující stroj (samostatně či s místem) převést na třetí osobu, je povinen jej nejprve písemně nabídnout prodávajícímu.</li>
+      <li>Prodávající má na rozhodnutí o využití předkupního práva lhůtu <strong>${v(d.buyback_decision_months, 3)} měsíců</strong> od doručení oznámení kupujícího.</li>
+      <li>Kupní cena při zpětném odkupu se stanoví podle klíče: <strong>aktuální hodnota stroje + ${v(d.buyback_key_months, 3)}× průměrný obrat s DPH</strong> (hodnota místa).</li>
+      <li>Nevyužije-li prodávající předkupní právo, může kupujícímu nabídnout <strong>zprostředkování prodeje stroje</strong> třetí osobě prostřednictvím systému prodávajícího za provizi <strong>${v(d.resale_commission_pct, 3)} %</strong> z prodejní ceny; prodejní cena se stanoví podle téhož klíče dle odstavce 3.</li>
+    </ol>
+
+    <h2>Článek IX — Závěrečná ustanovení</h2>
     <ol>
       <li>Změny smlouvy jen písemnými, vzestupně číslovanými dodatky.</li>
       <li>Vztahy neupravené smlouvou se řídí občanským zákoníkem a předpisy ČR.</li>
