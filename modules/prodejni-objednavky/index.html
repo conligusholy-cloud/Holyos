@@ -2920,10 +2920,15 @@
       var kiosks = Array.isArray(_kioskData.kiosks) ? _kioskData.kiosks.slice() : [];
       var valCur = _kioskData.valueCurrency || 'CZK';
 
-      // Filtry (klientské)
+      // Základní okruh: pouze prádlomaty provozované Best Series s.r.o.
+      var baseList = kiosks.filter(function(k) {
+        return String(k.companyName || '').trim().toLowerCase().indexOf('best series') !== -1;
+      });
+
+      // Filtry (klientské) nad základním okruhem
       var q = ((document.getElementById('kv-search') || {}).value || '').trim().toLowerCase();
       var incOnly = !!((document.getElementById('kv-incubator-only') || {}).checked);
-      var filtered = kiosks.filter(function(k) {
+      var filtered = baseList.filter(function(k) {
         if (incOnly && !k.inIncubator) return false;
         if (!q) return true;
         return (String(k.code || '') + ' ' + String(k.label || '') + ' ' + String(k.companyName || '')).toLowerCase().indexOf(q) !== -1;
@@ -2931,28 +2936,30 @@
       // Řazení: nejhodnotnější lokalita nahoře
       filtered.sort(function(a, b) { return (b.kioskValue || 0) - (a.kioskValue || 0); });
 
-      // Souhrn — počítáme ze všech kiosků (summary z backendu), hodnota lokalit je v CZK.
-      var s = _kioskData.summary || {};
+      // Souhrn — počítáme z okruhu Best Series (ať KPI sedí s tabulkou). Hodnota lokalit je v CZK.
+      var num = function(v) { return (typeof v === 'number' && isFinite(v)) ? v : 0; };
+      var s = {
+        kioskCount: baseList.length,
+        inIncubator: baseList.filter(function(k) { return k.inIncubator; }).length,
+        totalKioskValue: baseList.reduce(function(a, k) { return a + num(k.kioskValue); }, 0),
+        totalTransactions: baseList.reduce(function(a, k) { return a + num(k.transactions); }, 0),
+      };
       if (sumEl) {
         sumEl.innerHTML = '<div style="display:flex;gap:12px;flex-wrap:wrap;">' +
-          kvStat('Lokalit celkem', kvNum(s.kioskCount), (s.inIncubator != null ? (s.inIncubator + ' v inkubátoru') : '')) +
+          kvStat('Lokalit celkem', kvNum(s.kioskCount), (s.inIncubator + ' v inkubátoru')) +
           kvStat('Hodnota lokalit', kvMoney(s.totalKioskValue, valCur), 'součet, ' + valCur) +
           kvStat('Transakce (měsíc)', kvNum(s.totalTransactions), 'napříč lokalitami') +
           '</div>';
       }
 
       if (!filtered.length) {
-        box.innerHTML = '<div style="color:var(--text2);padding:24px;">Žádné lokality neodpovídají filtru.</div>';
+        box.innerHTML = '<div style="color:var(--text2);padding:24px;">Žádné lokality Best Series neodpovídají filtru.</div>';
         return;
       }
 
       var h = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr>' +
         '<th>Kód</th><th>Lokalita</th><th>Provozovatel</th>' +
-        '<th style="text-align:right;">Obrat (měsíc)</th>' +
-        '<th style="text-align:right;">Ø měsíc</th>' +
-        '<th style="text-align:right;">Transakce</th>' +
         '<th style="text-align:right;">Ø top 3</th>' +
-        '<th style="text-align:right;">Hodnota lokality</th>' +
         '<th>Stav</th></tr></thead><tbody>';
       filtered.forEach(function(k) {
         var cur = k.currency || 'CZK';
@@ -2963,16 +2970,11 @@
           '<td style="font-weight:600;white-space:nowrap;">' + kvEsc(k.code) + '</td>' +
           '<td>' + kvEsc(k.label) + '</td>' +
           '<td style="color:var(--text2);">' + kvEsc(k.companyName) + '</td>' +
-          '<td style="text-align:right;white-space:nowrap;">' + kvMoney(k.revenue, cur) + '</td>' +
-          '<td style="text-align:right;white-space:nowrap;color:var(--text2);">' + kvMoney(k.avgMonthly, cur) + '</td>' +
-          '<td style="text-align:right;">' + kvNum(k.transactions) + '</td>' +
           '<td style="text-align:right;white-space:nowrap;color:var(--text2);">' + kvMoney(k.avgTop3, cur) + '</td>' +
-          '<td style="text-align:right;white-space:nowrap;font-weight:700;color:#eab308;">' + kvMoney(k.kioskValue, valCur) + '</td>' +
           '<td>' + badge + '</td>' +
           '</tr>';
       });
       h += '</tbody></table></div>';
-      h += '<div style="color:var(--text2);font-size:11px;margin-top:8px;">Hodnota lokality je v ' + kvEsc(valCur) + ' (Ø top 3 × 12 + 1 500 000, bez DPH). Obraty jsou v měně dané lokality.</div>';
       box.innerHTML = h;
     }
 
