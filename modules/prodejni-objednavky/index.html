@@ -269,6 +269,9 @@
         <label style="display:flex; align-items:center; gap:6px; color:var(--text2); font-size:13px;">
           <input type="checkbox" id="kv-incubator-only" onchange="renderKioskValues()"> jen v inkubátoru
         </label>
+        <label style="display:flex; align-items:center; gap:6px; color:var(--text2); font-size:13px;">
+          <input type="checkbox" id="kv-forsale-only" onchange="renderKioskValues()"> jen nabízené
+        </label>
         <span id="kv-generated" style="color:var(--text2); font-size:12px;"></span>
         <button class="btn" onclick="loadKioskValues(true)">↻ Obnovit</button>
         <button class="btn" onclick="openCompoundingSettings()" title="Nastavení: ceník a cena lokality" style="padding:8px 12px;">⚙️</button>
@@ -2867,6 +2870,14 @@
     var _kioskData = null; // celá odpověď { kiosks, summary, ... }
     var _compoundingSettings = { pricelist: { v2: { eur: null }, v3: { eur: null }, v4: { eur: null } }, locationMonths: 12, servicePct: 15, energyPct: 9.5, locationPriceMode: 'months', locationRoiPct: 25 };
     var _kioskConfig = {}; // mapa { [code]: { version, rentMonthlyCzk } }
+    var _kvSort = { key: null, dir: -1 };
+    function kvSort(key) {
+      if (_kvSort.key === key) { _kvSort.dir = -_kvSort.dir; }
+      else { _kvSort.key = key; _kvSort.dir = (key === 'code' || key === 'label' || key === 'company' || key === 'version' || key === 'stav') ? 1 : -1; }
+      renderKioskValues();
+    }
+    window.kvSort = kvSort;
+    function kvSortArrow(key) { return _kvSort.key === key ? (_kvSort.dir < 0 ? ' \u25BC' : ' \u25B2') : ''; }
     var _kvFxRates = { CZK: 1, EUR: 25 }; // 1 EUR ≈ X CZK (fallback dokud nenačteme z CNB)
 
     function kvEsc(s) {
@@ -2948,8 +2959,10 @@
       // Filtry (klientské) nad základním okruhem
       var q = ((document.getElementById('kv-search') || {}).value || '').trim().toLowerCase();
       var incOnly = !!((document.getElementById('kv-incubator-only') || {}).checked);
+      var forSaleOnly = !!((document.getElementById('kv-forsale-only') || {}).checked);
       var filtered = baseList.filter(function(k) {
         if (incOnly && !k.inIncubator) return false;
+        if (forSaleOnly && !((_kioskConfig[k.code] || {}).forSale)) return false;
         if (!q) return true;
         return (String(k.code || '') + ' ' + String(k.label || '') + ' ' + String(k.companyName || '')).toLowerCase().indexOf(q) !== -1;
       });
@@ -2982,7 +2995,45 @@
       };
 
       // Řazení: nejhodnotnější lokalita nahoře (dle ceny lokality)
-      filtered.sort(function(a, b) { return locVal(b) - locVal(a); });
+      function kvCellVal(k, key) {
+        var cfg = _kioskConfig[k.code] || {};
+        var machine = _kvVerMachine(k.code).machine;
+        var obratBez = num(k.avgTop3) / 1.21;
+        var servis = num(k.avgTop3) * (svcPct / 100);
+        var najem = (typeof cfg.rentMonthlyCzk === 'number' && isFinite(cfg.rentMonthlyCzk)) ? cfg.rentMonthlyCzk : 0;
+        var energie = obratBez * (enPct / 100);
+        var cisty = obratBez - servis - najem - energie;
+        var total = (machine != null) ? (locVal(k) + machine) : null;
+        switch (key) {
+          case 'code': return String(k.code || '');
+          case 'label': return String(k.label || '');
+          case 'company': return String(k.companyName || '');
+          case 'version': return String(cfg.version || '').toUpperCase();
+          case 'obrat': return num(k.avgTop3);
+          case 'obratBez': return obratBez;
+          case 'lokalita': return locVal(k);
+          case 'kiosek': return machine != null ? machine : -1;
+          case 'celkova': return total != null ? total : -1;
+          case 'servis': return servis;
+          case 'najem': return najem;
+          case 'energie': return energie;
+          case 'cashflow': return cisty;
+          case 'roi': return (total > 0) ? (cisty * 12 / total * 100) : -1;
+          case 'marze': return (obratBez > 0) ? (cisty / obratBez * 100) : -1;
+          case 'forsale': return cfg.forSale ? 1 : 0;
+          case 'stav': return k.inIncubator ? 'Inkubátor' : 'Zavedená';
+          default: return 0;
+        }
+      }
+      if (_kvSort.key) {
+        filtered.sort(function(a, b) {
+          var va = kvCellVal(a, _kvSort.key), vb = kvCellVal(b, _kvSort.key);
+          if (typeof va === 'string' || typeof vb === 'string') return String(va).localeCompare(String(vb), 'cs') * _kvSort.dir;
+          return (va - vb) * _kvSort.dir;
+        });
+      } else {
+        filtered.sort(function(a, b) { return locVal(b) - locVal(a); });
+      }
 
       // Souhrn — počítáme z okruhu Best Series (ať KPI sedí s tabulkou). Hodnota lokalit je v CZK.
       var s = {
@@ -3004,22 +3055,27 @@
         return;
       }
 
+      function kvTh(key, label, align) {
+        var st = 'cursor:pointer;' + (align === 'r' ? 'text-align:right;' : (align === 'c' ? 'text-align:center;' : ''));
+        return '<th style="' + st + '" onclick="kvSort(\'' + key + '\')">' + label + kvSortArrow(key) + '</th>';
+      }
       var h = '<div style="overflow-x:auto;"><table class="data-table kv-compact"><thead><tr>' +
-        '<th>Kód</th><th>Lokalita</th><th>Provozovatel</th>' +
-        '<th>Verze</th>' +
-        '<th style="text-align:right;">Průměrný obrat s DPH</th>' +
-        '<th style="text-align:right;">Obrat bez DPH</th>' +
-        '<th style="text-align:right;">Cena lokality</th>' +
-        '<th style="text-align:right;">Cena kiosku</th>' +
-        '<th style="text-align:right;">Celková cena</th>' +
-        '<th style="text-align:right;">Servisní smlouva (' + (Number.isFinite(_compoundingSettings.servicePct) ? _compoundingSettings.servicePct : 15) + ' %)</th>' +
-        '<th style="text-align:right;">Nájem</th>' +
-        '<th style="text-align:right;">Odhad energií (' + (Number.isFinite(_compoundingSettings.energyPct) ? _compoundingSettings.energyPct : 9.5) + ' %)</th>' +
-        '<th style="text-align:right;">Odhad měs. cash flow</th>' +
-        '<th style="text-align:right;">ROI (roční)</th>' +
-        '<th style="text-align:right;">Provozní marže</th>' +
-        '<th style="text-align:center;">Nabízet</th>' +
-        '<th>Stav</th><th></th></tr></thead><tbody>';
+        kvTh('code', 'Kód', '') + kvTh('label', 'Lokalita', '') + kvTh('company', 'Provozovatel', '') +
+        kvTh('version', 'Verze', '') +
+        kvTh('obrat', 'Průměrný obrat s DPH', 'r') +
+        kvTh('obratBez', 'Obrat bez DPH', 'r') +
+        kvTh('lokalita', 'Cena lokality', 'r') +
+        kvTh('kiosek', 'Cena kiosku', 'r') +
+        kvTh('celkova', 'Celková cena', 'r') +
+        kvTh('servis', 'Servisní smlouva (' + (Number.isFinite(_compoundingSettings.servicePct) ? _compoundingSettings.servicePct : 15) + ' %)', 'r') +
+        kvTh('najem', 'Nájem', 'r') +
+        kvTh('energie', 'Odhad energií (' + (Number.isFinite(_compoundingSettings.energyPct) ? _compoundingSettings.energyPct : 9.5) + ' %)', 'r') +
+        kvTh('cashflow', 'Odhad měs. cash flow', 'r') +
+        kvTh('roi', 'ROI (roční)', 'r') +
+        kvTh('marze', 'Provozní marže', 'r') +
+        kvTh('forsale', 'Nabízet', 'c') +
+        kvTh('stav', 'Stav', '') +
+        '<th></th></tr></thead><tbody>';
       filtered.forEach(function(k) {
         var cur = k.currency || 'CZK';
         var badge = k.inIncubator
