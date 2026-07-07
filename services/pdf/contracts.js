@@ -530,7 +530,7 @@ function renderServisni(d) {
       <li><strong>Systémové a softwarové služby</strong>, zejména: telemetrie a vzdálený monitoring Kiosku; správa a zpracování plateb; hlášení a evidence závad; řízení personálu údržby a servisu; výběry tržeb; aktualizace platebních terminálů na aktuální platební metody a protokoly; e-mailový klient pro zasílání dokladů; exporty do účetnictví; aplikace pro zákazníky; SMS brána (SMS zákazníkovi před koncem pracího cyklu); servisní aplikace; e-shop s náhradními díly; servisní manuály. <em>(Samostatná hodnota systémových služeb bez servisní smlouvy činí ${v(d.system_value, 8)}.)</em></li>
       <li><strong>Pravidelná údržba</strong>: kontrola stavu, umytí skeletu, vyčištění filtrů, doplnění detergentů, odečty energií a pravidelné vzorkování a revize dle platné legislativy.</li>
       <li><strong>Infolinka 24/7</strong>: nepřetržitá zákaznická linka, na níž je zákazníkovi poskytnuta rada a řešení problému.</li>
-      <li><strong>Servisní výjezdy</strong>: práce a výjezd jsou zahrnuty; hradí se pouze <strong>materiál</strong> — lze-li jej uplatnit z reklamace, řeší se reklamací, jinak materiál hradí objednatel (vlastník Kiosku).</li>
+      <li><strong>Servisní výjezdy</strong>: práce a výjezd jsou zahrnuty; hradí se pouze <strong>materiál</strong> — lze-li jej uplatnit z reklamace, řeší se reklamací, jinak materiál hradí objednatel (vlastník Kiosku). Poskytovatel zahájí řešení oznámené závady bez zbytečného odkladu, nejpozději do <strong>jednoho pracovního dne</strong>.</li>
       <li><strong>Detergenty</strong>: zahrnuty v Servisním poplatku.</li>
       <li><strong>Poplatky za platební terminály a platební brány</strong>: zahrnuty v Servisním poplatku.</li>
     </ol>
@@ -561,6 +561,8 @@ function renderServisni(d) {
     <ol>
       <li>Poskytovatel zajišťuje provoz s odbornou péčí, v souladu s pokyny výrobce a právními předpisy, vede evidenci zásahů a je oprávněn plnit prostřednictvím poddodavatelů, za jejichž činnost odpovídá jako za vlastní.</li>
       <li>Objednatel poskytuje nezbytnou součinnost a přístup ke Kiosku a Lokalitě, řádně a včas hradí odměnu a bez zbytečného odkladu oznamuje závady.</li>
+      <li>Software, telemetrie, aplikace, databáze, platební a systémové služby <strong>zůstávají ve vlastnictví poskytovatele</strong>; objednatel k nim po dobu poskytování služeb získává pouze právo užívání.</li>
+      <li>Objednatel <strong>nesmí bez předchozího písemného souhlasu</strong> poskytovatele zasahovat do softwaru, řídicího systému, telemetrie, platebních systémů a elektroniky Kiosku.</li>
     </ol>
 
     <h2>Článek VII — Doba trvání a ukončení</h2>
@@ -568,13 +570,14 @@ function renderServisni(d) {
       <li>Smlouva se uzavírá na dobu ${v(d.term_type, 12)} a nabývá účinnosti dnem podpisu.</li>
       <li>Smlouvu lze ukončit dohodou nebo písemnou výpovědí kterékoli strany i bez uvedení důvodu s výpovědní dobou ${v(d.notice_months, 3)} měsíce, počínající prvním dnem měsíce následujícího po doručení výpovědi.</li>
       <li>Od smlouvy lze odstoupit při podstatném porušení povinností druhou stranou, které nebylo odstraněno ani v dodatečné přiměřené lhůtě.</li>
-      <li>Ukončením této smlouvy <strong>nezaniká potřeba systémových služeb</strong> nezbytných pro provoz Kiosku (čl. III odst. 1), které si objednatel nemůže zajistit sám. Okamžikem ukončení smlouvy proto <strong>automaticky začíná samostatná fakturace systémových služeb</strong> ve výši ${v(d.system_value, 8)} za Stroj, a to až do jejich případného písemného odhlášení objednatelem.</li>
+      <li>Systémové služby (čl. III odst. 1) jsou nezbytné pro provoz Kiosku a objednatel je nemůže zajistit vlastními prostředky. <strong>Ukončením této smlouvy právo objednatele na systémové služby nezaniká</strong> a tyto se od okamžiku ukončení poskytují na základě samostatného závazku za poplatek <strong>${v(d.system_value, 8)}</strong> za Stroj. Tento závazek trvá, dokud jej objednatel písemně neukončí; bez systémových služeb pozbývá Kiosek provozuschopnosti.</li>
     </ol>
 
     <h2>Článek VIII — Závěrečná ustanovení</h2>
     <ol>
       <li>Smluvní strany zachovávají mlčenlivost o důvěrných informacích a zpracovávají osobní údaje v souladu s GDPR.</li>
       <li>Žádná ze stran neodpovídá za nesplnění povinnosti způsobené vyšší mocí; po dobu jejího trvání se lhůty přiměřeně prodlužují.</li>
+      <li>Poskytovatel neodpovídá za škody způsobené vyšší mocí, výpadkem dodávek energií či internetového připojení nebo zásahem třetích osob.</li>
       <li>Vztahy neupravené smlouvou se řídí právem České republiky; změny jen písemnými, vzestupně číslovanými dodatky.</li>
       <li>Je-li některé ustanovení neplatné či neúčinné, nemá to vliv na platnost ostatních.</li>
       <li>Smlouva je vyhotovena ve dvou stejnopisech (nebo elektronicky s uznávanými podpisy); strany ji uzavírají svobodně a vážně.</li>
