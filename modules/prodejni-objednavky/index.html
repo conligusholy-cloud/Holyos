@@ -3018,6 +3018,7 @@
           case 'najem': return najem;
           case 'energie': return energie;
           case 'cashflow': return cisty;
+          case 'yield': return cisty * 12;
           case 'roi': return (total > 0) ? (cisty * 12 / total * 100) : -1;
           case 'marze': return (obratBez > 0) ? (cisty / obratBez * 100) : -1;
           case 'forsale': return cfg.forSale ? 1 : 0;
@@ -3071,6 +3072,7 @@
         kvTh('najem', 'Nájem', 'r') +
         kvTh('energie', 'Odhad energií (' + (Number.isFinite(_compoundingSettings.energyPct) ? _compoundingSettings.energyPct : 9.5) + ' %)', 'r') +
         kvTh('cashflow', 'Odhad měs. cash flow', 'r') +
+        kvTh('yield', 'Yield (roční výnos)', 'r') +
         kvTh('roi', 'ROI (roční)', 'r') +
         kvTh('marze', 'Provozní marže', 'r') +
         kvTh('forsale', 'Nabízet', 'c') +
@@ -3110,6 +3112,7 @@
           '<td style="text-align:right;white-space:nowrap;color:#ef4444;">' + (_najemVal ? (kvMoney(_najemVal, 'CZK') + _mes) : '<span style="color:var(--text2);">—</span>') + '</td>' +
           '<td style="text-align:right;white-space:nowrap;color:#ef4444;">' + kvMoney(Math.round(_energie), 'CZK') + _mes + '</td>' +
           '<td style="text-align:right;white-space:nowrap;font-weight:700;color:' + (_cistyZisk >= 0 ? '#10b981' : '#ef4444') + ';">' + kvMoney(Math.round(_cistyZisk), 'CZK') + _mes + '</td>' +
+          '<td style="text-align:right;white-space:nowrap;font-weight:700;color:#10b981;">' + kvMoney(Math.round(_cistyZisk * 12), 'CZK') + '<span style="color:var(--text2);font-size:11px;"> /rok</span></td>' +
           '<td style="text-align:right;white-space:nowrap;font-weight:700;color:#10b981;">' + ((_vmRow.machine != null && (locVal(k) + _vmRow.machine) > 0) ? ((_cistyZisk * 12 / (locVal(k) + _vmRow.machine) * 100).toFixed(1).replace('.', ',') + ' %') : '<span style="color:var(--text2);">—</span>') + '</td>' +
           '<td style="text-align:right;white-space:nowrap;font-weight:700;color:' + (_cistyZisk >= 0 ? '#10b981' : '#ef4444') + ';">' + (_obratBez > 0 ? ((_cistyZisk / _obratBez * 100).toFixed(1).replace('.', ',') + ' %') : '<span style="color:var(--text2);">—</span>') + '</td>' +
           '<td style="text-align:center;"><input type="checkbox" onclick="event.stopPropagation()" onchange="toggleForSale(\'' + codeAttr + '\', this.checked)"' + (cfg.forSale ? ' checked' : '') + '></td>' +
