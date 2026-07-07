@@ -639,6 +639,98 @@ router.get('/analytics/summary', requireAuth, async (req, res, next) => {
   }
 });
 
+// ─── SIS API proxy: hodnota lokalit prádlomatů (kiosk-values) ──────────────
+// Modul Compounding (tab v Prodejních objednávkách) potřebuje obraty a hodnoty
+// lokalit z externího SIS API. Klíč DRŽÍME NA SERVERU (X-API-Key) — do frontendu
+// posíláme jen data, nikdy klíč. Krátká in-memory cache šetří volání SIS.
+//
+// GET /api/compounder/kiosk-values
+//   → { generatedAt, period, yearFrom, valueCurrency, kiosks:[...], summary:{...} }
+let _kioskCache = { at: 0, data: null };
+const KIOSK_CACHE_MS = 60 * 1000; // 60 s
+
+router.get('/kiosk-values', requireAuth, async (req, res, next) => {
+  try {
+    const apiKey = process.env.SIS_KIOSK_API_KEY;
+    if (!apiKey) {
+      return res.status(503).json({
+        error: 'SIS API není nakonfigurováno',
+        detail: 'Chybí SIS_KIOSK_API_KEY v prostředí serveru.',
+      });
+    }
+    const apiUrl = process.env.SIS_KIOSK_API_URL
+      || 'https://sis-test.infinitygrid.cloud/api/public/kiosk-values';
+
+    // Cache (obejít přes ?fresh=1)
+    const fresh = req.query.fresh === '1' || req.query.fresh === 'true';
+    if (!fresh && _kioskCache.data && (Date.now() - _kioskCache.at) < KIOSK_CACHE_MS) {
+      return res.json({ ..._kioskCache.data, cached: true });
+    }
+
+    // Volání SIS s timeoutem, ať nám nevisí request donekonečna.
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 12000);
+    let sisRes;
+    try {
+      sisRes = await fetch(apiUrl, {
+        headers: { 'X-API-Key': apiKey, 'Accept': 'application/json' },
+        signal: controller.signal,
+      });
+    } catch (e) {
+      clearTimeout(timeout);
+      const aborted = e && e.name === 'AbortError';
+      return res.status(502).json({
+        error: aborted ? 'SIS API neodpovědělo včas' : 'Nepodařilo se spojit se SIS API',
+        detail: String(e && e.message || e),
+      });
+    }
+    clearTimeout(timeout);
+
+    if (sisRes.status === 401) {
+      return res.status(502).json({ error: 'SIS API: chybí nebo neplatný klíč (401)' });
+    }
+    if (sisRes.status === 403) {
+      return res.status(502).json({ error: 'SIS API: špatný klíč (403)' });
+    }
+    if (!sisRes.ok) {
+      return res.status(502).json({ error: 'SIS API vrátilo chybu ' + sisRes.status });
+    }
+
+    let payload;
+    try {
+      payload = await sisRes.json();
+    } catch (e) {
+      return res.status(502).json({ error: 'SIS API: neplatná JSON odpověď', detail: String(e.message || e) });
+    }
+
+    const kiosks = Array.isArray(payload.kiosks) ? payload.kiosks : [];
+    // Souhrn: hodnota lokalit (kioskValue) je vždy v CZK (viz valueCurrency).
+    // Obraty jsou v měně kiosku, takže je do jednoho čísla neslučujeme.
+    const num = (v) => (typeof v === 'number' && isFinite(v)) ? v : 0;
+    const summary = {
+      kioskCount: kiosks.length,
+      inIncubator: kiosks.filter((k) => k.inIncubator).length,
+      totalKioskValue: kiosks.reduce((s, k) => s + num(k.kioskValue), 0), // CZK
+      totalTransactions: kiosks.reduce((s, k) => s + num(k.transactions), 0),
+      valueCurrency: payload.valueCurrency || 'CZK',
+    };
+
+    const out = {
+      generatedAt: payload.generatedAt || null,
+      period: payload.period || null,
+      yearFrom: payload.yearFrom || null,
+      valueCurrency: payload.valueCurrency || 'CZK',
+      kiosks,
+      summary,
+      cached: false,
+    };
+    _kioskCache = { at: Date.now(), data: out };
+    res.json(out);
+  } catch (err) {
+    next(err);
+  }
+});
+
 // Notifikace na nový lead. Cíl = env COMPOUNDER_NOTIFY_USER_ID (konkrétní kompetentní
 // osoba), jinak fallback na všechny super-adminy (ať Tomáš dostane upozornění i bez configu).
 // Vytvoří in-app notifikaci (zvonek + SSE realtime); chyba se jen zaloguje.

@@ -256,6 +256,21 @@
       <button type="button" class="tab-btn" data-tab="cashflow" onclick="switchTab('cashflow')">💸 Cash flow</button>
       <button type="button" class="tab-btn" data-tab="tools" onclick="switchTab('tools')">🧰 Obchodní pomůcky</button>
       <button type="button" class="tab-btn" data-tab="compounder" onclick="switchTab('compounder')">🌐 Compounder</button>
+      <button type="button" class="tab-btn" data-tab="compounding" onclick="switchTab('compounding')">🧺 Compounding</button>
+    </div>
+
+    <!-- TAB: Compounding — hodnota lokalit prádlomatů ze SIS API -->
+    <div id="tab-compounding" style="display:none; padding:20px 24px 24px;">
+      <div class="toolbar" style="margin-bottom:14px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+        <input type="text" id="kv-search" placeholder="Hledat kód / lokalitu / provozovatele…" onkeyup="renderKioskValues()" style="flex:1; min-width:220px;">
+        <label style="display:flex; align-items:center; gap:6px; color:var(--text2); font-size:13px;">
+          <input type="checkbox" id="kv-incubator-only" onchange="renderKioskValues()"> jen v inkubátoru
+        </label>
+        <span id="kv-generated" style="color:var(--text2); font-size:12px;"></span>
+        <button class="btn" onclick="loadKioskValues(true)">↻ Obnovit</button>
+      </div>
+      <div id="kv-summary" style="margin-bottom:14px;"></div>
+      <div id="kv-table"><div style="color:var(--text2);padding:20px;">Načítám…</div></div>
     </div>
 
     <!-- TAB: Compounder leady (compounder.world) -->
@@ -2828,7 +2843,7 @@
     }
 
     function switchTab(name) {
-      ['orders', 'pricelist', 'cashflow', 'tools', 'compounder'].forEach(function(t) {
+      ['orders', 'pricelist', 'cashflow', 'tools', 'compounder', 'compounding'].forEach(function(t) {
         var el = document.getElementById('tab-' + t);
         if (el) el.style.display = (t === name) ? '' : 'none';
         var btn = document.querySelector('.tab-btn[data-tab="' + t + '"]');
@@ -2838,6 +2853,127 @@
       if (name === 'cashflow') loadCashflow();
       if (name === 'tools') initToolsTab();
       if (name === 'compounder') loadCompounderLeads();
+      if (name === 'compounding') loadKioskValues();
+    }
+
+    // ============================================================
+    // COMPOUNDING — hodnota lokalit prádlomatů (kiosků) ze SIS API
+    // Data tahá server-side proxy /api/compounder/kiosk-values (klíč drží server).
+    // ============================================================
+    var _kioskData = null; // celá odpověď { kiosks, summary, ... }
+
+    function kvEsc(s) {
+      return String(s == null ? '' : s).replace(/[&<>"']/g, function(c) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+      });
+    }
+    function kvCurSymbol(c) {
+      if (c === 'EUR') return '€';
+      if (c === 'USD') return '$';
+      if (c === 'GBP') return '£';
+      if (c === 'PLN') return 'zł';
+      if (c === 'HUF') return 'Ft';
+      return 'Kč';
+    }
+    function kvMoney(n, currency) {
+      if (typeof n !== 'number' || !isFinite(n)) return '—';
+      return Math.round(n).toLocaleString('cs-CZ') + ' ' + kvCurSymbol(currency || 'CZK');
+    }
+    function kvNum(n) {
+      if (typeof n !== 'number' || !isFinite(n)) return '—';
+      return Math.round(n).toLocaleString('cs-CZ');
+    }
+    function kvStat(label, value, sub) {
+      return '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 18px;min-width:150px;">' +
+        '<div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--text2);">' + kvEsc(label) + '</div>' +
+        '<div style="font-size:20px;font-weight:700;color:#eab308;margin-top:2px;">' + value + '</div>' +
+        (sub ? '<div style="font-size:11px;color:var(--text2);margin-top:2px;">' + kvEsc(sub) + '</div>' : '') +
+        '</div>';
+    }
+
+    async function loadKioskValues(fresh) {
+      var box = document.getElementById('kv-table');
+      var sumEl = document.getElementById('kv-summary');
+      if (!box) return;
+      box.innerHTML = '<div style="color:var(--text2);padding:20px;">Načítám hodnoty lokalit ze SIS…</div>';
+      if (sumEl) sumEl.innerHTML = '';
+      try {
+        var r = await fetch('/api/compounder/kiosk-values' + (fresh ? '?fresh=1' : ''), { credentials: 'include' });
+        var data = await r.json().catch(function(){ return {}; });
+        if (!r.ok) throw new Error(data.error || ('HTTP ' + r.status));
+        _kioskData = data;
+        var gen = document.getElementById('kv-generated');
+        if (gen && data.generatedAt) {
+          gen.textContent = 'Aktualizováno ' + new Date(data.generatedAt).toLocaleString('cs-CZ') + (data.cached ? ' (cache)' : '');
+        }
+        renderKioskValues();
+      } catch (e) {
+        _kioskData = null;
+        box.innerHTML = '<div style="color:#ef4444;padding:20px;">Chyba načítání ze SIS API: ' + kvEsc(e.message) + '</div>';
+      }
+    }
+
+    function renderKioskValues() {
+      var box = document.getElementById('kv-table');
+      var sumEl = document.getElementById('kv-summary');
+      if (!box || !_kioskData) return;
+      var kiosks = Array.isArray(_kioskData.kiosks) ? _kioskData.kiosks.slice() : [];
+      var valCur = _kioskData.valueCurrency || 'CZK';
+
+      // Filtry (klientské)
+      var q = ((document.getElementById('kv-search') || {}).value || '').trim().toLowerCase();
+      var incOnly = !!((document.getElementById('kv-incubator-only') || {}).checked);
+      var filtered = kiosks.filter(function(k) {
+        if (incOnly && !k.inIncubator) return false;
+        if (!q) return true;
+        return (String(k.code || '') + ' ' + String(k.label || '') + ' ' + String(k.companyName || '')).toLowerCase().indexOf(q) !== -1;
+      });
+      // Řazení: nejhodnotnější lokalita nahoře
+      filtered.sort(function(a, b) { return (b.kioskValue || 0) - (a.kioskValue || 0); });
+
+      // Souhrn — počítáme ze všech kiosků (summary z backendu), hodnota lokalit je v CZK.
+      var s = _kioskData.summary || {};
+      if (sumEl) {
+        sumEl.innerHTML = '<div style="display:flex;gap:12px;flex-wrap:wrap;">' +
+          kvStat('Lokalit celkem', kvNum(s.kioskCount), (s.inIncubator != null ? (s.inIncubator + ' v inkubátoru') : '')) +
+          kvStat('Hodnota lokalit', kvMoney(s.totalKioskValue, valCur), 'součet, ' + valCur) +
+          kvStat('Transakce (měsíc)', kvNum(s.totalTransactions), 'napříč lokalitami') +
+          '</div>';
+      }
+
+      if (!filtered.length) {
+        box.innerHTML = '<div style="color:var(--text2);padding:24px;">Žádné lokality neodpovídají filtru.</div>';
+        return;
+      }
+
+      var h = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr>' +
+        '<th>Kód</th><th>Lokalita</th><th>Provozovatel</th>' +
+        '<th style="text-align:right;">Obrat (měsíc)</th>' +
+        '<th style="text-align:right;">Ø měsíc</th>' +
+        '<th style="text-align:right;">Transakce</th>' +
+        '<th style="text-align:right;">Ø top 3</th>' +
+        '<th style="text-align:right;">Hodnota lokality</th>' +
+        '<th>Stav</th></tr></thead><tbody>';
+      filtered.forEach(function(k) {
+        var cur = k.currency || 'CZK';
+        var badge = k.inIncubator
+          ? '<span style="background:rgba(59,130,246,0.15);color:#3b82f6;border:1px solid rgba(59,130,246,0.4);border-radius:6px;padding:2px 8px;font-size:11px;">Inkubátor</span>'
+          : '<span style="background:rgba(16,185,129,0.15);color:#10b981;border:1px solid rgba(16,185,129,0.4);border-radius:6px;padding:2px 8px;font-size:11px;">Zavedená</span>';
+        h += '<tr style="cursor:default;">' +
+          '<td style="font-weight:600;white-space:nowrap;">' + kvEsc(k.code) + '</td>' +
+          '<td>' + kvEsc(k.label) + '</td>' +
+          '<td style="color:var(--text2);">' + kvEsc(k.companyName) + '</td>' +
+          '<td style="text-align:right;white-space:nowrap;">' + kvMoney(k.revenue, cur) + '</td>' +
+          '<td style="text-align:right;white-space:nowrap;color:var(--text2);">' + kvMoney(k.avgMonthly, cur) + '</td>' +
+          '<td style="text-align:right;">' + kvNum(k.transactions) + '</td>' +
+          '<td style="text-align:right;white-space:nowrap;color:var(--text2);">' + kvMoney(k.avgTop3, cur) + '</td>' +
+          '<td style="text-align:right;white-space:nowrap;font-weight:700;color:#eab308;">' + kvMoney(k.kioskValue, valCur) + '</td>' +
+          '<td>' + badge + '</td>' +
+          '</tr>';
+      });
+      h += '</tbody></table></div>';
+      h += '<div style="color:var(--text2);font-size:11px;margin-top:8px;">Hodnota lokality je v ' + kvEsc(valCur) + ' (Ø top 3 × 12 + 1 500 000, bez DPH). Obraty jsou v měně dané lokality.</div>';
+      box.innerHTML = h;
     }
 
     // ============================================================
