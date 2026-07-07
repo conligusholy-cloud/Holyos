@@ -152,12 +152,18 @@ const SCHEMAS = {
       { name: 'reservation_credit', label: 'Odečet rezervačního poplatku', type: 'text' },
       { name: 'payment_days', label: 'Splatnost / účinnost (dní)', type: 'text' },
     ]},
-    { key: 'delivery', title: 'Dodání a záruka', fields: [
-      { name: 'warranty_months', label: 'Záruka (měsíců)', type: 'text' },
+    { key: 'warranty', title: 'Záruka a reklamace', fields: [
+      { name: 'warranty_months', label: 'Záruka pro podnikatele (měsíců)', type: 'text' },
+      { name: 'complaint_contact', label: 'Kontakt pro reklamace', type: 'text' },
+    ]},
+    { key: 'service', title: 'Servis', fields: [
+      { name: 'reaction_time', label: 'Reakční doba na závadu', type: 'text' },
+      { name: 'fix_time', label: 'Lhůta odstranění závady', type: 'text' },
     ]},
     { key: 'buyback', title: 'Předkupní právo a odkup', fields: [
       { name: 'buyback_decision_months', label: 'Lhůta na rozhodnutí (měsíců)', type: 'text' },
       { name: 'buyback_key_months', label: 'Násobek obratu pro klíč (×)', type: 'text' },
+      { name: 'amortization_pct', label: 'Roční amortizace stroje (%)', type: 'text' },
       { name: 'resale_commission_pct', label: 'Provize za zprostředkování (%)', type: 'text' },
     ]},
     { key: 'system', title: 'Systémové služby a podpis', fields: [
@@ -261,8 +267,12 @@ function buildDefaults(type, site, our) {
       reservation_credit: '',
       payment_days: '2',
       warranty_months: '12',
+      complaint_contact: our?.email || '',
+      reaction_time: '48 hodin',
+      fix_time: '5 pracovních dní',
       buyback_decision_months: '12',
       buyback_key_months: '12',
+      amortization_pct: '10',
       resale_commission_pct: '10',
       system_fee: '100 EUR / měsíc',
       place_signed: site?.city || '',
@@ -370,85 +380,127 @@ function renderKupni(d) {
     ${partyBlock('Kupující', d, 'buyer')}
     <p class="note">(společně dále jen „smluvní strany")</p>
 
-    <h2>Článek I — Předmět koupě</h2>
+    <h2>Preambule</h2>
     <ol>
-      <li>Předmětem smlouvy je prodej nového zařízení — prádlomatu (dále jen „stroj"): typ / verze <strong>${v(d.kiosek_type)}</strong>, výrobce prodávající. Stroj bude teprve vyroben a dodán způsobem dle článku V.</li>
-      <li>Stroj verze <strong>${v(d.kiosek_type)}</strong> je sestaven z: ${v(d.kiosek_spec)}. Součástí dodávky je dále software a řídicí systém stroje, dokumentace, návod a prohlášení o shodě.</li>
-      <li>Stroj je určen k provozu na lokalitě: ${v(d.location_desc)} (dále jen „lokalita").</li>
-      <li>Prodávající prohlašuje, že bude výlučným výrobcem a vlastníkem stroje až do přechodu vlastnického práva dle článku V a že stroj nebude zatížen právy třetích osob.</li>
+      <li>Prodávající je výrobcem a provozovatelem samoobslužných prádelen (prádlomatů) provozovaných pod značkou <strong>Best Series</strong>.</li>
+      <li>Na Lokalitě dle této smlouvy <strong>již stojí a je v plném provozu</strong> prádlomat prodávajícího, který obsluhuje zákazníky, generuje reálný obrat a zajišťuje nepřetržitý provoz.</li>
+      <li>Předmětem této smlouvy je prodej nového Stroje kupujícímu a současně převod <strong>ekonomického užívání této zavedené a fungující Lokality</strong> tak, aby kupující od okamžiku účinnosti smlouvy čerpal přínos již existujícího provozu a klientely a <strong>nikdy nečekal na zahájení podnikání</strong>.</li>
+      <li>Nový Stroj bude vyroben prodávajícím a po dokončení výroby jím bude <strong>bez přerušení provozu</strong> nahrazen stávající Stroj na Lokalitě.</li>
     </ol>
 
-    <h2>Článek II — Postavení lokality</h2>
-    <ol>
-      <li>Kupující bere na vědomí, že <strong>nenabývá žádná práva k lokalitě</strong> — pozemku, prostoru, nájmu ani přípojkám. Užívací právo k lokalitě náleží prodávajícímu (na základě nájmu, nebo jako vlastníku pozemku).</li>
-      <li>Kupní cenou kupující nabývá právo, aby jeho stroj byl provozován na této zavedené a ověřené lokalitě a těžil z jejího zavedeného provozu a klientely, po dobu trvání užívacího práva prodávajícího k lokalitě.</li>
-      <li>Za jednostranné ukončení nájmu ze strany pronajímatele lokality prodávající neodpovídá; v takovém případě se uplatní článek VI.</li>
-      <li>Je-li stroj provozován na lokalitě Best Series, zavazuje se kupující provozovat jej pod značkou (brandem) Best Series.</li>
+    <h2>Článek I — Výklad pojmů</h2>
+    <ol class="letters">
+      <li><strong>Stroj</strong> — nové zařízení (prádlomat) verze <strong>${v(d.kiosek_type)}</strong> specifikované v Příloze č. 1;</li>
+      <li><strong>Lokalita</strong> — provozní místo dle článku III: ${v(d.location_desc)};</li>
+      <li><strong>Zavedený provoz</strong> — již existující, funkční a výnosný provoz prádlomatu na Lokalitě ke dni účinnosti smlouvy;</li>
+      <li><strong>Výrobní slot</strong> — konkrétní výrobní kapacita ve výrobním plánu prodávajícího přidělovaná dle článku VI;</li>
+      <li><strong>Systémové služby</strong> — služby dle článku IX nezbytné pro dlouhodobou provozuschopnost Stroje.</li>
     </ol>
 
-    <h2>Článek III — Kupní cena</h2>
+    <h2>Článek II — Předmět koupě</h2>
+    <ol>
+      <li>Předmětem smlouvy je závazek prodávajícího <strong>vyrobit a dodat</strong> kupujícímu nový Stroj verze <strong>${v(d.kiosek_type)}</strong> a současně převést na kupujícího <strong>ekonomické užívání Zavedeného provozu Lokality</strong>, a závazek kupujícího zaplatit kupní cenu a Stroj převzít.</li>
+      <li>Sestava Stroje dle verze ${v(d.kiosek_type)}: ${v(d.kiosek_spec)}. Součástí dodávky je software a řídicí systém Stroje, dokumentace, návod a prohlášení o shodě.</li>
+      <li>Předmět koupě tvoří <strong>nedělitelný celek</strong> — Stroj a ekonomické užívání Lokality nelze převádět odděleně, není-li dále stanoveno jinak.</li>
+      <li>Prodávající prohlašuje, že bude výlučným výrobcem a vlastníkem Stroje až do přechodu vlastnického práva dle článku VI a že Stroj nebude zatížen právy třetích osob.</li>
+    </ol>
+
+    <h2>Článek III — Postavení Lokality</h2>
+    <ol>
+      <li>Kupující bere na vědomí a výslovně souhlasí, že <strong>nenabývá žádná věcná ani závazková práva k Lokalitě</strong> — zejména k pozemku, prostoru, nájmu ani přípojkám. Užívací právo k Lokalitě náleží výhradně prodávajícímu (na základě nájmu, nebo jako vlastníku pozemku).</li>
+      <li>Kupující kupní cenou nabývá <strong>ekonomické právo</strong> provozovat svůj Stroj na této zavedené a ověřené Lokalitě a <strong>těžit z jejího Zavedeného provozu a klientely</strong> po dobu trvání užívacího práva prodávajícího k Lokalitě.</li>
+      <li>Předmětem koupě tedy <strong>není</strong> nájem, pozemek ani jiné právo k nemovitosti, nýbrž <strong>ekonomická hodnota zavedeného a fungujícího provozu</strong>.</li>
+      <li>Je-li Stroj provozován na Lokalitě Best Series, zavazuje se kupující provozovat jej výhradně <strong>pod značkou (brandem) Best Series</strong> a dodržovat její jednotná pravidla.</li>
+    </ol>
+
+    <h2>Článek IV — Kupní cena</h2>
     <ol>
       <li>Kupní cena je složena ze dvou složek:</li>
     </ol>
     <ol class="letters">
-      <li>cena stroje: <strong>${v(d.price_machine, 12)} Kč</strong> bez DPH;</li>
-      <li>cena lokality (příplatek za umístění na zavedené lokalitě), stanovená jako <strong>průměrný obrat s DPH</strong> ${v(d.avg_turnover_vat, 10)} Kč × ${v(d.location_months, 4)} měsíců = <strong>${v(d.price_location, 12)} Kč</strong> bez DPH.</li>
+      <li>cena Stroje: <strong>${v(d.price_machine, 12)} Kč</strong> bez DPH;</li>
+      <li>cena Lokality (úplata za převzetí ekonomického užívání Zavedeného provozu), stanovená jako <strong>průměrný obrat s DPH</strong> ${v(d.avg_turnover_vat, 10)} Kč × ${v(d.location_months, 4)} měsíců = <strong>${v(d.price_location, 12)} Kč</strong> bez DPH.</li>
     </ol>
     <ol start="2">
       <li>Celková kupní cena činí <strong>${v(d.price_total, 12)} Kč</strong> bez DPH; k ceně bude připočtena DPH v zákonné výši.</li>
-      <li>Byla-li k téže lokalitě uzavřena rezervační smlouva, započítává se již uhrazený rezervační poplatek ${v(d.reservation_credit, 10)} Kč na kupní cenu.</li>
-      <li>Cena zahrnuje výrobu nového stroje, jeho instalaci a výměnu za stávající kiosek na lokalitě dle článku V.</li>
+      <li>Byla-li k téže Lokalitě uzavřena rezervační smlouva, započítává se již uhrazený rezervační poplatek ${v(d.reservation_credit, 10)} Kč na kupní cenu.</li>
+      <li>Kupní cena zahrnuje výrobu nového Stroje, jeho instalaci a výměnu za stávající Stroj na Lokalitě dle článku VI.</li>
     </ol>
 
-    <h2>Článek IV — Platební podmínky a účinnost</h2>
+    <h2>Článek V — Platební podmínky a účinnost</h2>
     <ol>
-      <li>Kupující hradí <strong>celou kupní cenu najednou</strong>, sníženou o případný již uhrazený rezervační poplatek dle článku III.</li>
+      <li>Kupující hradí <strong>celou kupní cenu jednorázově předem</strong>, sníženou o případný již uhrazený rezervační poplatek dle článku IV.</li>
+      <li>Smluvní strany výslovně sjednávají, že plná úhrada předem je <strong>vyvážená a odpovídá povaze plnění</strong>, neboť kupující od okamžiku účinnosti smlouvy čerpá ekonomický přínos Zavedeného provozu Lokality (nikoli až po dodání nového Stroje) a prodávající zároveň na základě úhrady zařazuje Stroj do výroby dle článku VI.</li>
       <li>Kupní cena je splatná do <strong>${v(d.payment_days, 3)} dnů</strong> od podpisu smlouvy, bezhotovostně na účet prodávajícího.</li>
-      <li>Smlouva se stává <strong>účinnou (aktivní) dnem připsání</strong> kupní ceny na účet prodávajícího. Nebude-li kupní cena v této lhůtě uhrazena, smlouva <strong>nenabývá účinnosti</strong> a hledí se na ni, jako by nebyla uzavřena. V takovém případě je prodávající oprávněn nabídnout či prodat danou lokalitu jinému zájemci.</li>
+      <li>Smlouva se stává <strong>účinnou dnem připsání</strong> celé kupní ceny na účet prodávajícího. Nebude-li kupní cena v této lhůtě uhrazena, smlouva <strong>nenabývá účinnosti</strong> a hledí se na ni, jako by nebyla uzavřena; prodávající je pak oprávněn nabídnout či prodat Lokalitu jinému zájemci.</li>
     </ol>
 
-    <h2>Článek V — Výroba, dodání a přechod vlastnictví</h2>
+    <h2>Článek VI — Výroba, dodání a přechod vlastnictví</h2>
     <ol>
-      <li>Po uhrazení kupní ceny prodávající zařadí nový stroj do výroby dle aktuálně volných výrobních slotů. Konkrétní termín výroby sdělí prodávající kupujícímu po zaplacení kupní ceny a naplánování konkrétního výrobního slotu.</li>
-      <li>Do vyrobení nového stroje prodávající provozuje na lokalitě vlastní kiosek, aby byl provoz a výnos lokality zajištěn od počátku.</li>
-      <li><strong>Vlastnické právo ke stroji přechází na kupujícího okamžikem jeho vyrobení.</strong></li>
-      <li>Po vyrobení prodávající v rámci sjednané ceny zajistí výměnu stávajícího kiosku za nový stroj kupujícího na lokalitě a jeho uvedení do provozu; o předání se sepíše předávací protokol.</li>
-      <li>Nebezpečí škody na stroji přechází na kupujícího jeho předáním (instalací) na lokalitě.</li>
-      <li>Je-li kupujícím právnická osoba (podnikatel), poskytuje prodávající na stroj záruku za jakost v délce <strong>${v(d.warranty_months, 4)} měsíců</strong> od předání. Je-li kupujícím spotřebitel (fyzická osoba nepodnikající), řídí se jeho práva z vadného plnění příslušnými ustanoveními občanského zákoníku. Záruka se nevztahuje na běžné opotřebení, neodborný zásah, nesprávnou obsluhu a vyšší moc.</li>
+      <li><strong>Výrobní slot.</strong> Po připsání celé kupní ceny zařadí prodávající Stroj do výroby přidělením výrobního slotu. Výrobní slot je přidělován <strong>v pořadí podle okamžiku úplné úhrady kupní ceny jednotlivých objednávek</strong> (princip „kdo dříve plně zaplatí, dříve vyrábí"). Konkrétní termín výroby sdělí prodávající kupujícímu po zaplacení kupní ceny a naplánování výrobního slotu.</li>
+      <li><strong>Kontinuita provozu.</strong> Do dokončení výroby a výměny provozuje na Lokalitě vlastní Stroj prodávajícího, takže provoz a výnos Lokality jsou zajištěny od okamžiku účinnosti bez přerušení; kupující nečeká na zahájení podnikání.</li>
+      <li><strong>Výměna bez přerušení.</strong> Po dokončení výroby prodávající v rámci sjednané ceny zajistí výměnu stávajícího Stroje za nový Stroj kupujícího na Lokalitě a jeho uvedení do provozu tak, aby nedošlo k přerušení provozu Lokality. O předání se sepíše předávací protokol (Příloha č. 2).</li>
+      <li><strong>Vlastnické právo</strong> ke Stroji přechází na kupujícího okamžikem jeho vyrobení.</li>
+      <li><strong>Nebezpečí škody</strong> na Stroji přechází na kupujícího jeho předáním (instalací) na Lokalitě.</li>
+    </ol>
+
+    <h2>Článek VII — Záruka a reklamace</h2>
+    <ol>
+      <li>Je-li kupujícím <strong>právnická osoba (podnikatel)</strong>, poskytuje prodávající na Stroj <strong>záruku za jakost v délce ${v(d.warranty_months, 3)} měsíců</strong> od předání. Je-li kupujícím <strong>spotřebitel</strong>, řídí se jeho práva z vadného plnění příslušnými ustanoveními občanského zákoníku.</li>
+      <li>Záruka <strong>zahrnuje</strong> vady materiálu a výroby Stroje a jeho funkčních celků, které se projeví při obvyklém provozu.</li>
+      <li>Záruka <strong>nezahrnuje</strong>: běžné opotřebení a spotřební díly; vady vzniklé nesprávnou obsluhou, neodborným zásahem, zanedbáním údržby či provozem v rozporu s návodem; poškození třetí osobou, živly či vyšší mocí; a vady vzniklé nedodržením Systémových služeb dle článku IX.</li>
+      <li><strong>Reklamace</strong> se uplatňuje písemně (na ${v(d.complaint_contact)}) bez zbytečného odkladu po zjištění vady, s popisem vady a poskytnutím součinnosti. Prodávající vadu posoudí a v případě oprávněné reklamace ji odstraní v přiměřené lhůtě opravou nebo výměnou dílu.</li>
       <li>Náhradní díly a servisní práce <strong>mimo záruku</strong> (po uplynutí záruční doby nebo mimo rozsah záruky) hradí kupující.</li>
     </ol>
 
-    <h2>Článek VI — Ukončení nájmu lokality a relokace</h2>
+    <h2>Článek VIII — Servisní služby</h2>
     <ol>
-      <li>Dojde-li k ukončení užívacího práva prodávajícího k lokalitě ze strany pronajímatele (výpověď apod.), nabídne prodávající kupujícímu náhradní řešení: zajištění nové srovnatelné lokality, vyřešení přípojek a přepravu stroje.</li>
-      <li>Náhradní řešení se poskytuje jako služba za reálné aktuální tržní ceny stanovené dle konkrétní nové lokality a rozsahu prací; ceny budou kupujícímu předem sděleny a odsouhlaseny.</li>
+      <li>Kupující hlásí závady prodávajícímu na ${v(d.complaint_contact)}.</li>
+      <li>Prodávající vyvine úsilí reagovat na nahlášenou závadu v reakční době <strong>${v(d.reaction_time, 8)}</strong> a odstranit ji ve lhůtě <strong>${v(d.fix_time, 10)}</strong>, nebrání-li tomu okolnosti nezávislé na jeho vůli.</li>
+      <li>Prodávající provádí <strong>vzdálenou diagnostiku</strong> Stroje a je oprávněn provádět servis prostřednictvím poddodavatelů, za jejichž činnost odpovídá jako za vlastní.</li>
+      <li>Rozsah a ceny servisu nad rámec této smlouvy se řídí samostatnou servisní smlouvou nebo platným ceníkem prodávajícího.</li>
+    </ol>
+
+    <h2>Článek IX — Systémové služby a provozní režim</h2>
+    <ol>
+      <li>Kupující bere na vědomí, že <strong>dlouhodobý provoz Stroje není možný bez Systémových služeb</strong> prodávajícího, jimiž jsou zejména: správa systému a softwaru Stroje, odesílání SMS telemetrie zákazníkům, software pro sledování výkonu Stroje a systém pro správu a řízení personálu provozu. Tyto služby zajišťují funkčnost, bezpečnost, aktualizace a výkon Stroje.</li>
+      <li>Systémové služby jsou poskytovány za poplatek <strong>${v(d.system_fee, 10)}</strong> za Stroj a jsou podmínkou dlouhodobé provozuschopnosti Stroje.</li>
+      <li>Provozní režim si kupující zvolí: <strong>a) provoz prostřednictvím prodávajícího</strong> dle samostatné servisní smlouvy — odměna <strong>15 % z obratu</strong>, v níž jsou Systémové služby (poplatek 100 EUR) již zahrnuty; po dohodě lze k 15 % připočítat nájem za místo (dle skutečnosti) a energie (dle aktuální spotřeby). <strong>b) samostatný provoz</strong> — kupující hradí veškeré náklady provozu sám a nad rámec toho poplatek 100 EUR za Systémové služby dle odstavců 1 a 2.</li>
+    </ol>
+
+    <h2>Článek X — Předkupní právo a zpětný odkup</h2>
+    <ol>
+      <li>Kupující zřizuje ve prospěch prodávajícího <strong>předkupní právo</strong> ke Stroji, a to jak k samotnému Stroji, tak ke Stroji společně s ekonomickým užíváním Lokality („místem"). Zamýšlí-li kupující převést Stroj (samostatně či s místem) na třetí osobu, je povinen jej <strong>nejprve písemně nabídnout prodávajícímu</strong> za podmínek dle odstavce 3.</li>
+      <li>Prodávající má na rozhodnutí o využití předkupního práva lhůtu <strong>${v(d.buyback_decision_months, 3)} měsíců</strong> od doručení písemného oznámení kupujícího obsahujícího podstatné náležitosti zamýšleného převodu.</li>
+      <li>Kupní cena při zpětném odkupu = <strong>aktuální hodnota Stroje + ${v(d.buyback_key_months, 3)}× průměrný obrat s DPH</strong> (hodnota místa), kde <strong>aktuální hodnota Stroje</strong> = pořizovací cena Stroje snížená o lineární opotřebení <strong>${v(d.amortization_pct, 3)} % ročně</strong> za dobu užívání; při neshodě stran se hodnota Stroje určí znaleckým posudkem, jehož náklady nesou strany rovným dílem.</li>
+      <li>Nevyužije-li prodávající předkupní právo, může kupujícímu nabídnout <strong>zprostředkování prodeje Stroje</strong> třetí osobě prostřednictvím systému prodávajícího za provizi <strong>${v(d.resale_commission_pct, 3)} %</strong> z prodejní ceny stanovené dle téhož klíče.</li>
+    </ol>
+
+    <h2>Článek XI — Ukončení užívacího práva k Lokalitě a relokace</h2>
+    <ol>
+      <li>Dojde-li k ukončení užívacího práva prodávajícího k Lokalitě ze strany pronajímatele (výpověď apod.), nabídne prodávající kupujícímu náhradní řešení: zajištění nové srovnatelné lokality, vyřešení přípojek a přepravu Stroje.</li>
+      <li>Náhradní řešení se poskytuje jako služba za reálné aktuální tržní ceny dle konkrétní nové lokality a rozsahu prací; ceny budou předem sděleny a odsouhlaseny.</li>
       <li>Stroj zůstává ve vlastnictví kupujícího; přijetí náhradní lokality není povinné.</li>
     </ol>
 
-    <h2>Článek VII — Systémové služby a provozní režim</h2>
+    <h2>Článek XII — Vyšší moc</h2>
     <ol>
-      <li>Kupující bere na vědomí, že <strong>dlouhodobý provoz stroje není možný bez systémových a softwarových služeb</strong> prodávajícího, jimiž jsou zejména: správa systému a softwaru stroje, odesílání SMS telemetrie zákazníkům, software pro sledování výkonu stroje a systém pro správu a řízení personálu provozu.</li>
-      <li>Tyto služby jsou poskytovány za poplatek ${v(d.system_fee, 10)} a jsou podmínkou dlouhodobé provozuschopnosti stroje.</li>
-      <li>Provozní režim si kupující zvolí: <strong>a) provoz prostřednictvím prodávajícího</strong> dle samostatné servisní smlouvy — odměna <strong>15 % z obratu</strong>, v níž jsou systémové a softwarové služby (poplatek 100 EUR) již zahrnuty; po dohodě lze k 15 % připočítat nájem za místo (dle skutečnosti) a energie (dle aktuální spotřeby). <strong>b) samostatný provoz</strong> — kupující hradí veškeré náklady provozu sám a nad rámec toho poplatek 100 EUR za zajištění softwarového servisu dle odstavců 1 a 2.</li>
+      <li>Žádná ze stran neodpovídá za nesplnění povinnosti způsobené <strong>vyšší mocí</strong> (okolnosti mimořádné, nepředvídatelné a neodvratitelné — zejména živelní události, válka, epidemie, výpadky dodávek či energií, úřední opatření).</li>
+      <li>Dotčená strana druhou stranu o vyšší moci bez zbytečného odkladu vyrozumí. Po dobu trvání vyšší moci se lhůty (zejména výrobní) přiměřeně prodlužují.</li>
     </ol>
 
-    <h2>Článek VIII — Předkupní právo prodávajícího a zpětný odkup</h2>
+    <h2>Článek XIII — Závěrečná ustanovení</h2>
     <ol>
-      <li>Kupující zřizuje ve prospěch prodávajícího <strong>předkupní právo</strong> ke stroji, a to jak k samotnému stroji, tak ke stroji společně s právem provozu na lokalitě („místem"). Zamýšlí-li kupující stroj (samostatně či s místem) převést na třetí osobu, je povinen jej nejprve písemně nabídnout prodávajícímu.</li>
-      <li>Prodávající má na rozhodnutí o využití předkupního práva lhůtu <strong>${v(d.buyback_decision_months, 3)} měsíců</strong> od doručení oznámení kupujícího.</li>
-      <li>Kupní cena při zpětném odkupu se stanoví podle klíče: <strong>aktuální hodnota stroje + ${v(d.buyback_key_months, 3)}× průměrný obrat s DPH</strong> (hodnota místa).</li>
-      <li>Nevyužije-li prodávající předkupní právo, může kupujícímu nabídnout <strong>zprostředkování prodeje stroje</strong> třetí osobě prostřednictvím systému prodávajícího za provizi <strong>${v(d.resale_commission_pct, 3)} %</strong> z prodejní ceny; prodejní cena se stanoví podle téhož klíče dle odstavce 3.</li>
+      <li>Doručování se provádí na kontaktní adresy a e-maily uvedené v záhlaví.</li>
+      <li>Smlouva a vztahy z ní se řídí právem České republiky; k řešení sporů jsou příslušné soudy České republiky.</li>
+      <li>Změny jen písemnými, vzestupně číslovanými dodatky.</li>
+      <li>Je-li některé ustanovení neplatné či neúčinné, nemá to vliv na platnost ostatních; strany je nahradí ustanovením obsahově nejbližším.</li>
+      <li>Smlouva představuje úplné ujednání stran a nahrazuje předchozí ujednání o témže předmětu.</li>
+      <li>Smlouva je vyhotovena ve dvou stejnopisech (nebo elektronicky s uznávanými podpisy); strany ji uzavírají svobodně, vážně a bez tísně.</li>
     </ol>
-
-    <h2>Článek IX — Závěrečná ustanovení</h2>
-    <ol>
-      <li>Změny smlouvy jen písemnými, vzestupně číslovanými dodatky.</li>
-      <li>Vztahy neupravené smlouvou se řídí občanským zákoníkem a předpisy ČR.</li>
-      <li>Je-li některé ustanovení neplatné či neúčinné, nemá to vliv na platnost ostatních.</li>
-      <li>Smlouva je vyhotovena ve dvou stejnopisech (nebo elektronicky s uznávanými podpisy); strany ji uzavírají svobodně a vážně.</li>
-    </ol>
+    <p class="attach"><strong>Přílohy:</strong> č. 1 — Technická specifikace Stroje (dle verze); č. 2 — Předávací protokol (sériová čísla, specifikace, fotodokumentace, revize, verze SW, seznam dokumentace).</p>
     ${sigBlock('Prodávající', 'Kupující', d.place_signed)}`;
-  return shell('Kupní smlouva', 'na dodávku prádlomatu', body);
+  return shell('Kupní smlouva', 'na dodávku prádlomatu a převzetí zavedené lokality', body);
 }
 
 function renderServisni(d) {
