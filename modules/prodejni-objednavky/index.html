@@ -2865,7 +2865,7 @@
     // Data tahá server-side proxy /api/compounder/kiosk-values (klíč drží server).
     // ============================================================
     var _kioskData = null; // celá odpověď { kiosks, summary, ... }
-    var _compoundingSettings = { pricelist: { v2: { eur: null }, v3: { eur: null }, v4: { eur: null } }, locationMonths: 12, servicePct: 15, energyPct: 9.5 };
+    var _compoundingSettings = { pricelist: { v2: { eur: null }, v3: { eur: null }, v4: { eur: null } }, locationMonths: 12, servicePct: 15, energyPct: 9.5, locationPriceMode: 'months', locationRoiPct: 25 };
     var _kioskConfig = {}; // mapa { [code]: { version, rentMonthlyCzk } }
     var _kvFxRates = { CZK: 1, EUR: 25 }; // 1 EUR ≈ X CZK (fallback dokud nenačteme z CNB)
 
@@ -2958,9 +2958,26 @@
       // kurzem (Best Series lokality jsou v CZK, ale ať to sedí i pro cizí měnu).
       var num = function(v) { return (typeof v === 'number' && isFinite(v)) ? v : 0; };
       var months = (_compoundingSettings && Number.isFinite(_compoundingSettings.locationMonths)) ? _compoundingSettings.locationMonths : 12;
+      var svcPct = (Number.isFinite(_compoundingSettings.servicePct) ? _compoundingSettings.servicePct : 15);
+      var enPct = (Number.isFinite(_compoundingSettings.energyPct) ? _compoundingSettings.energyPct : 9.5);
+      var priceMode = (_compoundingSettings.locationPriceMode === 'roi') ? 'roi' : 'months';
+      var roiPct = (Number.isFinite(_compoundingSettings.locationRoiPct) ? _compoundingSettings.locationRoiPct : 25);
       var locVal = function(k) {
         var cur = k.currency || 'CZK';
         var rate = _kvFxRates[cur] || 1;
+        if (priceMode === 'roi') {
+          var machine2 = _kvVerMachine(k.code).machine;
+          if (machine2 == null) return 0;
+          var cfg2 = _kioskConfig[k.code] || {};
+          var obratBez2 = num(k.avgTop3) / 1.21;
+          var servis2 = num(k.avgTop3) * (svcPct / 100);
+          var najem2 = (typeof cfg2.rentMonthlyCzk === 'number' && isFinite(cfg2.rentMonthlyCzk)) ? cfg2.rentMonthlyCzk : 0;
+          var energie2 = obratBez2 * (enPct / 100);
+          var cisty2 = obratBez2 - servis2 - najem2 - energie2;
+          var target2 = cisty2 * (1200 / (roiPct > 0 ? roiPct : 25));
+          var vloc = target2 - machine2;
+          return vloc > 0 ? vloc : 0;
+        }
         return num(k.avgTop3) * rate * months;
       };
 
@@ -2993,7 +3010,6 @@
         '<th style="text-align:right;">Průměrný obrat s DPH</th>' +
         '<th style="text-align:right;">Obrat bez DPH</th>' +
         '<th style="text-align:right;">Cena lokality</th>' +
-        '<th style="text-align:right;">Cena lokality (ROI 25 %)</th>' +
         '<th style="text-align:right;">Cena kiosku</th>' +
         '<th style="text-align:right;">Celková cena</th>' +
         '<th style="text-align:right;">Servisní smlouva (' + (Number.isFinite(_compoundingSettings.servicePct) ? _compoundingSettings.servicePct : 15) + ' %)</th>' +
@@ -3032,7 +3048,6 @@
           '<td style="text-align:right;white-space:nowrap;color:var(--text2);">' + kvMoney(k.avgTop3, cur) + '</td>' +
           '<td style="text-align:right;white-space:nowrap;color:var(--text2);">' + kvMoney(Math.round(_obratBez), 'CZK') + '</td>' +
           '<td style="text-align:right;white-space:nowrap;font-weight:700;">' + kvMoney(locVal(k), 'CZK') + '</td>' +
-          '<td style="text-align:right;white-space:nowrap;color:#3b82f6;">' + ((_vmRow.machine != null && _cistyZisk > 0 && (_cistyZisk * 48 - _vmRow.machine) > 0) ? kvMoney(Math.round(_cistyZisk * 48 - _vmRow.machine), 'CZK') : '<span style="color:var(--text2);">—</span>') + '</td>' +
           '<td style="text-align:right;white-space:nowrap;color:var(--text2);">' + (_vmRow.machine != null ? kvMoney(_vmRow.machine, 'CZK') : '<span style="color:var(--text2);">—</span>') + '</td>' +
           '<td style="text-align:right;white-space:nowrap;font-weight:700;color:#eab308;">' + (_vmRow.machine != null ? kvMoney(locVal(k) + _vmRow.machine, 'CZK') : '<span style="color:var(--text2);">—</span>') + '</td>' +
           '<td style="text-align:right;white-space:nowrap;color:#ef4444;">' + kvMoney(Math.round(_servis), 'CZK') + _mes + '</td>' +
@@ -3050,7 +3065,7 @@
           '</tr>';
       });
       h += '</tbody></table></div>';
-      h += '<div style="color:var(--text2);font-size:11px;margin-top:8px;">Cena lokality = průměrný obrat s DPH × ' + months + ' měsíců (nastavíš přes ⚙️). Zobrazeno v CZK.</div>';
+      h += '<div style="color:var(--text2);font-size:11px;margin-top:8px;">' + (priceMode === 'roi' ? ('Cena lokality dopočtena tak, aby ROI = ' + roiPct + ' %') : ('Cena lokality = průměrný obrat s DPH × ' + months + ' měsíců')) + ' (nastavíš přes ⚙️). Zobrazeno v CZK.</div>';
       box.innerHTML = h;
     }
 
@@ -3074,6 +3089,8 @@
       var st = _compoundingSettings || {};
       var pl = st.pricelist || {};
       var months = Number.isFinite(st.locationMonths) ? st.locationMonths : 12;
+      var priceMode = (st.locationPriceMode === 'roi') ? 'roi' : 'months';
+      var roiPct = Number.isFinite(st.locationRoiPct) ? st.locationRoiPct : 25;
       var rate = _kvFxRates.EUR || 25;
       function verRow(ver, label) {
         var eur = (pl[ver] && pl[ver].eur != null) ? pl[ver].eur : '';
@@ -3094,10 +3111,26 @@
         verRow('v2', 'V2') + verRow('v3', 'V3') + verRow('v4', 'V4') +
         '<hr style="border:none;border-top:1px solid var(--border);margin:18px 0;">' +
         '<div style="margin-bottom:6px;font-weight:600;font-size:14px;">Cena lokality</div>' +
-        '<div style="color:var(--text2);font-size:12px;margin-bottom:12px;">Cena lokality = průměrný obrat s DPH × počet měsíců.</div>' +
-        '<div style="display:flex;align-items:center;gap:12px;">' +
+        '<div style="color:var(--text2);font-size:12px;margin-bottom:12px;">Způsob výpočtu ceny lokality v tabulce.</div>' +
+        '<div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;">' +
+          '<div style="width:120px;">Způsob</div>' +
+          '<select id="kvset-pricemode" style="flex:1;max-width:300px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:14px;">' +
+            '<option value="months"' + (priceMode !== 'roi' ? ' selected' : '') + '>Průměrný obrat s DPH × počet měsíců</option>' +
+            '<option value="roi"' + (priceMode === 'roi' ? ' selected' : '') + '>Dopočet dle cílového ROI</option>' +
+          '</select>' +
+        '</div>' +
+        '<div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;">' +
           '<div style="width:120px;">Počet měsíců</div>' +
           '<input type="number" min="1" max="600" step="1" id="kvset-months" value="' + months + '" style="width:120px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:14px;">' +
+          '<div style="color:var(--text2);font-size:12px;">pro variantu „× měsíce"</div>' +
+        '</div>' +
+        '<div style="display:flex;align-items:center;gap:12px;">' +
+          '<div style="width:120px;">Cílové ROI (roční)</div>' +
+          '<div style="position:relative;">' +
+            '<input type="number" min="1" max="100" step="0.5" id="kvset-roipct" value="' + roiPct + '" style="width:120px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 32px 8px 12px;color:var(--text);font-size:14px;">' +
+            '<span style="position:absolute;right:12px;top:50%;transform:translateY(-50%);color:var(--text2);font-size:13px;">%</span>' +
+          '</div>' +
+          '<div style="color:var(--text2);font-size:12px;">pro variantu „dle ROI"</div>' +
         '</div>' +
         '<hr style="border:none;border-top:1px solid var(--border);margin:18px 0;">' +
         '<div style="margin-bottom:6px;font-weight:600;font-size:14px;">Servisní smlouva</div>' +
@@ -3143,6 +3176,12 @@
       if (!(months >= 1 && months <= 600)) {
         return showErr('Počet měsíců musí být 1 až 600.');
       }
+      var priceMode = String((document.getElementById('kvset-pricemode') || {}).value || 'months');
+      if (priceMode !== 'roi') priceMode = 'months';
+      var roiPct = parseFloat(String((document.getElementById('kvset-roipct') || {}).value || '').trim().replace(',', '.'));
+      if (!(roiPct >= 1 && roiPct <= 100)) {
+        return showErr('Cílové ROI musí být 1 až 100 %.');
+      }
       var servicePct = parseFloat(String((document.getElementById('kvset-servicepct') || {}).value || '').trim().replace(',', '.'));
       if (!(servicePct >= 0 && servicePct <= 100)) {
         return showErr('Servisní odměna musí být 0 až 100 %.');
@@ -3156,6 +3195,8 @@
         locationMonths: months,
         servicePct: servicePct,
         energyPct: energyPct,
+        locationPriceMode: priceMode,
+        locationRoiPct: roiPct,
       };
       try {
         var r = await fetch('/api/compounder/compounding-settings', {
