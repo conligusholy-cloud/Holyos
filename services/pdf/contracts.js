@@ -402,7 +402,7 @@ function renderKupni(d) {
 
     <h2>Článek IV — Platební podmínky a účinnost</h2>
     <ol>
-      <li>Kupující hradí <strong>celou kupní cenu najednou</strong> (bez zálohy), sníženou o případný již uhrazený rezervační poplatek dle článku III.</li>
+      <li>Kupující hradí <strong>celou kupní cenu najednou</strong>, sníženou o případný již uhrazený rezervační poplatek dle článku III.</li>
       <li>Kupní cena je splatná do <strong>${v(d.payment_days, 3)} dnů</strong> od podpisu smlouvy, bezhotovostně na účet prodávajícího.</li>
       <li>Smlouva se stává <strong>účinnou (aktivní) dnem připsání</strong> kupní ceny na účet prodávajícího. Nebude-li kupní cena v této lhůtě uhrazena, smlouva <strong>nenabývá účinnosti</strong> a hledí se na ni, jako by nebyla uzavřena. V takovém případě je prodávající oprávněn nabídnout či prodat danou lokalitu jinému zájemci.</li>
     </ol>
