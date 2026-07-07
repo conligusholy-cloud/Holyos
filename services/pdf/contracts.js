@@ -543,10 +543,18 @@ function renderServisni(d) {
       <li>K odměně bude připočtena DPH v zákonné výši.</li>
     </ol>
 
-    <h2>Článek V — Náklady mimo Servisní poplatek</h2>
+    <h2>Článek V — Fakturace: servisní poplatek, nájem a energie</h2>
     <ol>
-      <li>Do Servisního poplatku (${v(d.fee_pct, 4)} %) <strong>nespadají</strong> náklady na <strong>nájem Lokality</strong> a <strong>energie</strong>.</li>
-      <li>Tyto náklady mohou být objednateli fakturovány jako <strong>samostatná položka (doložka) k této smlouvě</strong> — nájem dle skutečné výše a energie dle aktuální spotřeby; <strong>nejsou</strong> součástí Servisního poplatku.</li>
+      <li>Celková fakturace objednateli zahrnuje <strong>tři samostatné položky</strong>:</li>
+    </ol>
+    <ol class="letters">
+      <li><strong>Servisní poplatek</strong> ve výši <strong>${v(d.fee_pct, 4)} % z obratu s DPH</strong> (zahrnuje výhradně služby dle článku III);</li>
+      <li><strong>Nájem Lokality</strong> — dle skutečné výše;</li>
+      <li><strong>Energie</strong> — dle aktuální spotřeby.</li>
+    </ol>
+    <ol start="2">
+      <li>Položky nájem a energie jsou fakturovány jako <strong>samostatné položky</strong> a <strong>nejsou</strong> součástí servisního poplatku dle článku IV.</li>
+      <li>Nájem a energie se objednateli <strong>přefakturovávají pouze tehdy, je-li Lokalita zajištěna poskytovatelem</strong> (Best Series je nájemcem prostoru, resp. vlastníkem pozemku). Provozuje-li objednatel Stroj na vlastní lokalitě, nájem ani energie se neúčtují.</li>
     </ol>
 
     <h2>Článek VI — Práva a povinnosti stran</h2>
