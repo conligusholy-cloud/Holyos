@@ -2862,7 +2862,7 @@
     // Data tahá server-side proxy /api/compounder/kiosk-values (klíč drží server).
     // ============================================================
     var _kioskData = null; // celá odpověď { kiosks, summary, ... }
-    var _compoundingSettings = { pricelist: { v2: { eur: null }, v3: { eur: null }, v4: { eur: null } }, locationMonths: 12 };
+    var _compoundingSettings = { pricelist: { v2: { eur: null }, v3: { eur: null }, v4: { eur: null } }, locationMonths: 12, servicePct: 15 };
     var _kioskConfig = {}; // mapa { [code]: { version, rentMonthlyCzk } }
     var _kvFxRates = { CZK: 1, EUR: 25 }; // 1 EUR ≈ X CZK (fallback dokud nenačteme z CNB)
 
@@ -3014,7 +3014,7 @@
           '<td style="text-align:right;white-space:nowrap;font-weight:700;color:#eab308;">' + kvMoney(locVal(k), 'CZK') + '</td>' +
           '<td style="text-align:right;white-space:nowrap;color:var(--text2);">' + (_vmRow.machine != null ? kvMoney(_vmRow.machine, 'CZK') : '<span style="color:var(--text2);">—</span>') + '</td>' +
           '<td style="text-align:right;white-space:nowrap;font-weight:700;">' + (_vmRow.machine != null ? kvMoney(locVal(k) + _vmRow.machine, 'CZK') : '<span style="color:var(--text2);">—</span>') + '</td>' +
-          '<td style="text-align:right;white-space:nowrap;color:#10b981;">' + kvMoney(Math.round(num(k.avgTop3) * 0.15), 'CZK') + '<span style="color:var(--text2);font-size:11px;"> /měs</span></td>' +
+          '<td style="text-align:right;white-space:nowrap;color:#10b981;">' + kvMoney(Math.round(num(k.avgTop3) * ((Number.isFinite(_compoundingSettings.servicePct) ? _compoundingSettings.servicePct : 15) / 100)), 'CZK') + '<span style="color:var(--text2);font-size:11px;"> /měs</span></td>' +
           '<td style="white-space:nowrap;">' + verLabel + '</td>' +
           '<td style="text-align:right;white-space:nowrap;">' + rentLabel + '</td>' +
           '<td>' + badge + '</td>' +
@@ -3074,6 +3074,16 @@
           '<div style="width:120px;">Počet měsíců</div>' +
           '<input type="number" min="1" max="600" step="1" id="kvset-months" value="' + months + '" style="width:120px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:14px;">' +
         '</div>' +
+        '<hr style="border:none;border-top:1px solid var(--border);margin:18px 0;">' +
+        '<div style="margin-bottom:6px;font-weight:600;font-size:14px;">Servisní smlouva</div>' +
+        '<div style="color:var(--text2);font-size:12px;margin-bottom:12px;">Odměna za servisní smlouvu (% z průměrného obratu s DPH). Promítne se do tabulky i do smluv.</div>' +
+        '<div style="display:flex;align-items:center;gap:12px;">' +
+          '<div style="width:120px;">Servisní odměna</div>' +
+          '<div style="position:relative;">' +
+            '<input type="number" min="0" max="100" step="0.1" id="kvset-servicepct" value="' + (Number.isFinite(st.servicePct) ? st.servicePct : 15) + '" style="width:120px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 32px 8px 12px;color:var(--text);font-size:14px;">' +
+            '<span style="position:absolute;right:12px;top:50%;transform:translateY(-50%);color:var(--text2);font-size:13px;">%</span>' +
+          '</div>' +
+        '</div>' +
         '<div id="kvset-err" style="color:#ef4444;font-size:13px;margin-top:12px;display:none;"></div>' +
         '<div class="modal-actions">' +
           '<button type="button" class="btn btn-secondary" onclick="closeModal()">Zrušit</button>' +
@@ -3100,9 +3110,14 @@
       if (!(months >= 1 && months <= 600)) {
         return showErr('Počet měsíců musí být 1 až 600.');
       }
+      var servicePct = parseFloat(String((document.getElementById('kvset-servicepct') || {}).value || '').trim().replace(',', '.'));
+      if (!(servicePct >= 0 && servicePct <= 100)) {
+        return showErr('Servisní odměna musí být 0 až 100 %.');
+      }
       var payload = {
         pricelist: { v2: { eur: v2 }, v3: { eur: v3 }, v4: { eur: v4 } },
         locationMonths: months,
+        servicePct: servicePct,
       };
       try {
         var r = await fetch('/api/compounder/compounding-settings', {

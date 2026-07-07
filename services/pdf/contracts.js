@@ -168,6 +168,7 @@ const SCHEMAS = {
       { name: 'removal_notice_months', label: 'Oznámení o odstranění stroje (měsíců)', type: 'text' },
     ]},
     { key: 'system', title: 'Systémové služby a podpis', fields: [
+      { name: 'service_pct', label: 'Servisní odměna (%)', type: 'text' },
       { name: 'system_fee', label: 'Systémový poplatek (měsíc/stroj)', type: 'text' },
       { name: 'place_signed', label: 'Místo podpisu', type: 'text' },
     ]},
@@ -273,6 +274,7 @@ function buildDefaults(type, site, our) {
       amortization_pct: '10',
       resale_commission_pct: '10',
       removal_notice_months: '3',
+      service_pct: String(site?._servicePct != null ? site._servicePct : 15),
       system_fee: '100 EUR / měsíc',
       place_signed: site?.city || '',
     };
@@ -281,7 +283,7 @@ function buildDefaults(type, site, our) {
     return {
       ...base,
       location_desc: loc,
-      fee_pct: '15',
+      fee_pct: String(site?._servicePct != null ? site._servicePct : 15),
       fee_base: 'z obratu s DPH dosaženého provozem kiosku za příslušné období',
       billing_period: 'kalendářní měsíc',
       due_days: '14',
@@ -456,7 +458,7 @@ function renderKupni(d) {
     <ol>
       <li>Kupující bere na vědomí, že <strong>dlouhodobý provoz Stroje není možný bez Systémových služeb</strong> prodávajícího, jimiž jsou zejména: správa systému a softwaru Stroje, odesílání SMS telemetrie zákazníkům, software pro sledování výkonu Stroje a systém pro správu a řízení personálu provozu. Tyto služby zajišťují funkčnost, bezpečnost, aktualizace a výkon Stroje.</li>
       <li>Systémové služby jsou poskytovány za poplatek <strong>${v(d.system_fee, 10)}</strong> za Stroj a jsou podmínkou dlouhodobé provozuschopnosti Stroje.</li>
-      <li>Provozní režim si kupující zvolí: <strong>a) provoz prostřednictvím prodávajícího</strong> dle samostatné servisní smlouvy — odměna <strong>15 % z obratu</strong>, v níž jsou Systémové služby (poplatek 100 EUR) již zahrnuty; po dohodě lze k 15 % připočítat nájem za místo (dle skutečnosti) a energie (dle aktuální spotřeby). <strong>b) samostatný provoz</strong> — kupující hradí veškeré náklady provozu sám a nad rámec toho poplatek 100 EUR za Systémové služby dle odstavců 1 a 2.</li>
+      <li>Provozní režim si kupující zvolí: <strong>a) provoz prostřednictvím prodávajícího</strong> dle samostatné servisní smlouvy — odměna <strong>${v(d.service_pct, 3)} % z obratu</strong>, v níž jsou Systémové služby (poplatek 100 EUR) již zahrnuty; po dohodě lze k této odměně připočítat nájem za místo (dle skutečnosti) a energie (dle aktuální spotřeby). <strong>b) samostatný provoz</strong> — kupující hradí veškeré náklady provozu sám a nad rámec toho poplatek 100 EUR za Systémové služby dle odstavců 1 a 2.</li>
     </ol>
 
     <h2>Článek X — Předkupní právo a zpětný odkup</h2>

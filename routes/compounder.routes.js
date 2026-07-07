@@ -743,6 +743,7 @@ const COMPOUNDING_SETTINGS_KEY = 'compounding.settings';
 const COMPOUNDING_SETTINGS_DEFAULT = {
   pricelist: { v2: { eur: null }, v3: { eur: null }, v4: { eur: null } },
   locationMonths: 12,
+  servicePct: 15,
 };
 
 const compoundingSettingsSchema = z.object({
@@ -752,6 +753,7 @@ const compoundingSettingsSchema = z.object({
     v4: z.object({ eur: z.number().nonnegative().nullable() }),
   }),
   locationMonths: z.number().int().min(1).max(600),
+  servicePct: z.number().min(0).max(100).optional(),
 });
 
 // GET /api/compounder/compounding-settings
@@ -769,6 +771,7 @@ router.get('/compounding-settings', requireAuth, async (req, res, next) => {
         v4: { eur: (val && val.pricelist && val.pricelist.v4 && val.pricelist.v4.eur != null) ? val.pricelist.v4.eur : null },
       },
       locationMonths: (val && Number.isFinite(val.locationMonths)) ? val.locationMonths : 12,
+      servicePct: (val && Number.isFinite(val.servicePct)) ? val.servicePct : 15,
     };
     res.json(merged);
   } catch (err) {
@@ -1350,6 +1353,8 @@ router.get('/contracts/:type(kupni|servisni|rezervacni)/prefill', requireAuth, a
     const monthsNum = (q.months != null && q.months !== '') ? Number(q.months) : null;
     const machineNum = (q.machine != null && q.machine !== '') ? Number(q.machine) : null;
     const ver = String(q.ver || '').slice(0, 4);
+    const _cs = await getSetting(COMPOUNDING_SETTINGS_KEY, { type: 'json', defaultValue: COMPOUNDING_SETTINGS_DEFAULT }).catch(() => null);
+    const _servicePct = (_cs && Number.isFinite(_cs.servicePct)) ? _cs.servicePct : 15;
     const pseudoSite = {
       name: code ? ('Lokalita ' + code) : (label || ''),
       address: label, city: '', zip: '', country: 'CZ',
@@ -1359,6 +1364,7 @@ router.get('/contracts/:type(kupni|servisni|rezervacni)/prefill', requireAuth, a
       _locationMonths: (monthsNum != null && isFinite(monthsNum)) ? monthsNum : 12,
       _version: ver || null,
       _machinePrice: (machineNum != null && isFinite(machineNum)) ? machineNum : null,
+      _servicePct,
     };
     const our = await getOurCompany().catch(() => null);
     res.json(contracts.getPrefill(type, pseudoSite, our));
