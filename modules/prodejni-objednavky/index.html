@@ -2990,7 +2990,7 @@
         '<th style="text-align:right;">Cena lokality</th>' +
         '<th style="text-align:right;">Cena kiosku</th>' +
         '<th style="text-align:right;">Celková cena</th>' +
-        '<th style="text-align:right;">Servisní smlouva</th>' +
+        '<th style="text-align:right;">Servisní smlouva (' + (Number.isFinite(_compoundingSettings.servicePct) ? _compoundingSettings.servicePct : 15) + ' %)</th>' +
         '<th>Verze</th>' +
         '<th style="text-align:right;">Nájem</th>' +
         '<th>Stav</th><th></th></tr></thead><tbody>';
@@ -3171,7 +3171,7 @@
         '<div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:8px;">NOVÁ SMLOUVA</div>' +
         '<div style="display:flex;flex-direction:column;gap:8px;">' +
           _contractCreateRow('kupni', '📄 Kupní smlouva', ca) +
-          _contractCreateRow('servisni', '🔧 Servisní smlouva (15 %)', ca) +
+          _contractCreateRow('servisni', '🔧 Servisní smlouva (' + (Number.isFinite(_compoundingSettings.servicePct) ? _compoundingSettings.servicePct : 15) + ' %)', ca) +
           _contractCreateRow('rezervacni', '📌 Rezervační smlouva', ca) +
         '</div>' +
         '<div class="modal-actions"><button type="button" class="btn btn-secondary" onclick="closeModal()">Zavřít</button></div>' +
