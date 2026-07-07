@@ -2999,7 +2999,7 @@
         '<th style="text-align:right;">Nájem</th>' +
         '<th style="text-align:right;">Odhad energií (' + (Number.isFinite(_compoundingSettings.energyPct) ? _compoundingSettings.energyPct : 9.5) + ' %)</th>' +
         '<th style="text-align:right;">Odhad. čistý zisk</th>' +
-        '<th style="text-align:right;">Návratnost (měs.)</th>' +
+        '<th style="text-align:right;">ROI (roční)</th>' +
         '<th style="text-align:right;">Provozní marže</th>' +
         '<th>Stav</th><th></th></tr></thead><tbody>';
       filtered.forEach(function(k) {
@@ -3036,7 +3036,7 @@
           '<td style="text-align:right;white-space:nowrap;color:#ef4444;">' + (_najemVal ? (kvMoney(_najemVal, 'CZK') + _mes) : '<span style="color:var(--text2);">—</span>') + '</td>' +
           '<td style="text-align:right;white-space:nowrap;color:#ef4444;">' + kvMoney(Math.round(_energie), 'CZK') + _mes + '</td>' +
           '<td style="text-align:right;white-space:nowrap;font-weight:700;color:' + (_cistyZisk >= 0 ? '#10b981' : '#ef4444') + ';">' + kvMoney(Math.round(_cistyZisk), 'CZK') + _mes + '</td>' +
-          '<td style="text-align:right;white-space:nowrap;">' + ((_vmRow.machine != null && _cistyZisk > 0) ? (Math.round((locVal(k) + _vmRow.machine) / _cistyZisk).toLocaleString('cs-CZ') + '<span style="color:var(--text2);font-size:11px;"> měs.</span>') : '<span style="color:var(--text2);">—</span>') + '</td>' +
+          '<td style="text-align:right;white-space:nowrap;font-weight:700;color:#10b981;">' + ((_vmRow.machine != null && (locVal(k) + _vmRow.machine) > 0) ? ((_cistyZisk * 12 / (locVal(k) + _vmRow.machine) * 100).toFixed(1).replace('.', ',') + ' %') : '<span style="color:var(--text2);">—</span>') + '</td>' +
           '<td style="text-align:right;white-space:nowrap;font-weight:700;color:' + (_cistyZisk >= 0 ? '#10b981' : '#ef4444') + ';">' + (_obratBez > 0 ? ((_cistyZisk / _obratBez * 100).toFixed(1).replace('.', ',') + ' %') : '<span style="color:var(--text2);">—</span>') + '</td>' +
           '<td>' + badge + '</td>' +
           '<td style="text-align:right;white-space:nowrap;">' +
