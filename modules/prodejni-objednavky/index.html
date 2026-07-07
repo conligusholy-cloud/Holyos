@@ -2990,6 +2990,7 @@
         '<th style="text-align:right;">Cena lokality</th>' +
         '<th style="text-align:right;">Cena kiosku</th>' +
         '<th style="text-align:right;">Celková cena</th>' +
+        '<th style="text-align:right;">Servisní smlouva</th>' +
         '<th>Verze</th>' +
         '<th style="text-align:right;">Nájem</th>' +
         '<th>Stav</th><th></th></tr></thead><tbody>';
@@ -3013,6 +3014,7 @@
           '<td style="text-align:right;white-space:nowrap;font-weight:700;color:#eab308;">' + kvMoney(locVal(k), 'CZK') + '</td>' +
           '<td style="text-align:right;white-space:nowrap;color:var(--text2);">' + (_vmRow.machine != null ? kvMoney(_vmRow.machine, 'CZK') : '<span style="color:var(--text2);">—</span>') + '</td>' +
           '<td style="text-align:right;white-space:nowrap;font-weight:700;">' + (_vmRow.machine != null ? kvMoney(locVal(k) + _vmRow.machine, 'CZK') : '<span style="color:var(--text2);">—</span>') + '</td>' +
+          '<td style="text-align:right;white-space:nowrap;color:#10b981;">' + kvMoney(Math.round(num(k.avgTop3) * 0.15), 'CZK') + '<span style="color:var(--text2);font-size:11px;"> /měs</span></td>' +
           '<td style="white-space:nowrap;">' + verLabel + '</td>' +
           '<td style="text-align:right;white-space:nowrap;">' + rentLabel + '</td>' +
           '<td>' + badge + '</td>' +
