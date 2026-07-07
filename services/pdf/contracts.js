@@ -267,7 +267,7 @@ function buildDefaults(type, site, our) {
       reservation_credit: '',
       payment_days: '2',
       warranty_months: '12',
-      complaint_contact: our?.email || '',
+      complaint_contact: 'info@bestseries.cz',
       reaction_time: '48 hodin',
       fix_time: '5 pracovních dní',
       buyback_decision_months: '12',
