@@ -3365,7 +3365,7 @@
         pf = await r.json();
       } catch (e) { alert('Nepodařilo se načíst mustr.'); return; }
       var fields = Object.assign({}, pf.values || {});
-      Object.keys(fields).forEach(function(kk) { if (kk.indexOf('buyer_') === 0) fields[kk] = ''; });
+      Object.keys(fields).forEach(function(kk) { if (kk.indexOf('buyer_') === 0 || kk.indexOf('seller_') === 0) fields[kk] = ''; });
       try {
         var pr = await fetch('/api/compounder/contracts/' + type + '/pdf', {
           method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
