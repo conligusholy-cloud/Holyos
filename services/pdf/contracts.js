@@ -124,26 +124,25 @@ const SCHEMAS = {
     SELLER_GROUP('Prodávající'),
     BUYER_GROUP('Kupující'),
     { key: 'subject', title: 'Předmět koupě', fields: [
-      { name: 'kiosek_type', label: 'Označení / typ kiosku', type: 'text' },
-      { name: 'kiosek_sn', label: 'Výrobní / sériové číslo', type: 'text' },
-      { name: 'location_desc', label: 'Umístění / lokalita', type: 'text' },
-      { name: 'kiosek_spec', label: 'Technická specifikace a výbava', type: 'textarea' },
+      { name: 'kiosek_type', label: 'Typ / verze prádlomatu', type: 'text' },
+      { name: 'location_desc', label: 'Lokalita (kód a adresa)', type: 'text' },
+      { name: 'kiosek_spec', label: 'Výbava / software / příslušenství', type: 'textarea' },
     ]},
-    { key: 'price', title: 'Cena a platby', fields: [
-      { name: 'price', label: 'Kupní cena (bez DPH)', type: 'text' },
-      { name: 'price_words', label: 'Cena slovy', type: 'text' },
-      { name: 'price_includes', label: 'Cena zahrnuje', type: 'text' },
-      { name: 'deposit_pct', label: 'Záloha (%)', type: 'text' },
-      { name: 'deposit_due_days', label: 'Splatnost zálohy (dní)', type: 'text' },
-      { name: 'balance_due_days', label: 'Splatnost doplatku (dní)', type: 'text' },
-      { name: 'interest_rate', label: 'Úrok z prodlení', type: 'text' },
+    { key: 'price', title: 'Kupní cena', fields: [
+      { name: 'price_machine', label: 'Cena stroje (bez DPH)', type: 'text' },
+      { name: 'avg_turnover_vat', label: 'Průměrný obrat s DPH (měsíčně)', type: 'text' },
+      { name: 'location_months', label: 'Počet měsíců (pro cenu lokality)', type: 'text' },
+      { name: 'price_location', label: 'Cena lokality (bez DPH)', type: 'text' },
+      { name: 'price_total', label: 'Celková cena (bez DPH)', type: 'text' },
+      { name: 'reservation_credit', label: 'Odečet rezervačního poplatku', type: 'text' },
+      { name: 'payment_days', label: 'Splatnost / účinnost (dní)', type: 'text' },
     ]},
-    { key: 'terms', title: 'Předání, záruka, podpis', fields: [
-      { name: 'handover_place', label: 'Místo předání', type: 'text' },
-      { name: 'handover_date', label: 'Termín předání', type: 'text' },
-      { name: 'ownership_transfer', label: 'Přechod vlastnictví', type: 'text' },
+    { key: 'delivery', title: 'Výroba, dodání, záruka', fields: [
+      { name: 'production_term', label: 'Orientační termín vyrobení', type: 'text' },
       { name: 'warranty_months', label: 'Záruka (měsíců)', type: 'text' },
-      { name: 'complaint_contact', label: 'Kontakt pro reklamace', type: 'text' },
+    ]},
+    { key: 'system', title: 'Systémové služby a podpis', fields: [
+      { name: 'system_fee', label: 'Systémový poplatek (měsíc/stroj)', type: 'text' },
       { name: 'place_signed', label: 'Místo podpisu', type: 'text' },
     ]},
   ],
@@ -225,24 +224,22 @@ function buildDefaults(type, site, our) {
   const addr = joinAddr(site) || (site?.name || '');
 
   if (type === 'kupni') {
+    const months = site?._locationMonths != null ? site._locationMonths : 12;
     return {
       ...base,
-      kiosek_type: site?.pradlomat_ref || 'prádlomat 750',
-      kiosek_sn: '',
+      kiosek_type: site?.pradlomat_ref || 'V3',
       location_desc: loc,
-      kiosek_spec: '',
-      price: site?.purchase_price != null ? String(site.purchase_price) : '',
-      price_words: '',
-      price_includes: 'dopravu, instalaci a uvedení do provozu',
-      deposit_pct: '50',
-      deposit_due_days: '7',
-      balance_due_days: '14',
-      interest_rate: '0,05 % z dlužné částky za každý den prodlení',
-      handover_place: addr,
-      handover_date: '',
-      ownership_transfer: 'úplným zaplacením kupní ceny',
+      kiosek_spec: 'software a řídicí systém stroje, dokumentace, návod, prohlášení o shodě',
+      price_machine: '',
+      avg_turnover_vat: site?._avgTurnover != null ? String(site._avgTurnover) : '',
+      location_months: String(months),
+      price_location: site?.purchase_price != null ? String(site.purchase_price) : '',
+      price_total: '',
+      reservation_credit: '',
+      payment_days: '2',
+      production_term: '',
       warranty_months: '24',
-      complaint_contact: our?.email || '',
+      system_fee: '',
       place_signed: site?.city || '',
     };
   }
@@ -350,49 +347,74 @@ function renderKupni(d) {
 
     <h2>Článek I — Předmět koupě</h2>
     <ol>
-      <li>Předmětem této smlouvy je závazek prodávajícího odevzdat kupujícímu níže specifikovaný kiosek a umožnit mu nabýt vlastnické právo k němu, a závazek kupujícího kiosek převzít a zaplatit kupní cenu.</li>
-      <li>Kiosek je specifikován takto: označení / typ <strong>${v(d.kiosek_type)}</strong>, výrobní / sériové číslo ${v(d.kiosek_sn, 14)}, umístění / lokalita ${v(d.location_desc)}.</li>
-      <li>Technická specifikace a výbava: ${v(d.kiosek_spec)}.</li>
-      <li>Prodávající prohlašuje, že je výlučným vlastníkem kiosku, že kiosek není zatížen právy třetích osob a že jeho prodeji nebrání žádná právní ani faktická překážka.</li>
+      <li>Předmětem smlouvy je prodej nového zařízení — prádlomatu (dále jen „stroj"): typ / verze <strong>${v(d.kiosek_type)}</strong>, výrobce prodávající. Stroj bude teprve vyroben a dodán způsobem dle článku V.</li>
+      <li>Součástí dodávky je: ${v(d.kiosek_spec)}.</li>
+      <li>Stroj je určen k provozu na lokalitě: ${v(d.location_desc)} (dále jen „lokalita").</li>
+      <li>Prodávající prohlašuje, že bude výlučným výrobcem a vlastníkem stroje až do přechodu vlastnického práva dle článku V a že stroj nebude zatížen právy třetích osob.</li>
     </ol>
 
-    <h2>Článek II — Kupní cena a platební podmínky</h2>
+    <h2>Článek II — Postavení lokality</h2>
     <ol>
-      <li>Kupní cena kiosku činí <strong>${v(d.price, 14)} Kč</strong> (slovy: ${v(d.price_words)}) bez DPH. K ceně bude připočtena DPH v zákonné výši.</li>
-      <li>Kupní cena zahrnuje ${v(d.price_includes)}.</li>
-      <li>Kupující uhradí cenu takto: záloha ve výši ${v(d.deposit_pct, 5)} % se splatností ${v(d.deposit_due_days, 4)} dní na základě zálohové faktury a doplatek se splatností ${v(d.balance_due_days, 4)} dní od předání.</li>
-      <li>Cena se hradí bezhotovostně na účet prodávajícího; je uhrazena dnem připsání na účet.</li>
-      <li>V případě prodlení kupujícího s úhradou je prodávající oprávněn požadovat úrok z prodlení ve výši ${v(d.interest_rate)}.</li>
+      <li>Kupující bere na vědomí, že <strong>nenabývá žádná práva k lokalitě</strong> — pozemku, prostoru, nájmu ani přípojkám. Užívací právo k lokalitě náleží prodávajícímu (na základě nájmu, nebo jako vlastníku pozemku).</li>
+      <li>Kupní cenou kupující nabývá právo, aby jeho stroj byl provozován na této zavedené a ověřené lokalitě a těžil z jejího zavedeného provozu a klientely, po dobu trvání užívacího práva prodávajícího k lokalitě.</li>
+      <li>Za jednostranné ukončení nájmu ze strany pronajímatele lokality prodávající neodpovídá; v takovém případě se uplatní článek VI.</li>
     </ol>
 
-    <h2>Článek III — Předání a převzetí</h2>
+    <h2>Článek III — Kupní cena</h2>
     <ol>
-      <li>Prodávající předá kiosek kupujícímu v místě ${v(d.handover_place)}, v termínu ${v(d.handover_date, 14)}.</li>
-      <li>O předání a převzetí bude sepsán předávací protokol podepsaný oběma stranami, obsahující stav kiosku, předané příslušenství a dokumentaci, případně zjištěné vady.</li>
-      <li>Nebezpečí škody na kiosku přechází na kupujícího okamžikem převzetí.</li>
-      <li>Vlastnické právo ke kiosku přechází na kupujícího ${v(d.ownership_transfer)}.</li>
+      <li>Kupní cena je složena ze dvou složek:</li>
+    </ol>
+    <ol class="letters">
+      <li>cena stroje: <strong>${v(d.price_machine, 12)} Kč</strong> bez DPH;</li>
+      <li>cena lokality (příplatek za umístění na zavedené lokalitě), stanovená jako <strong>průměrný obrat s DPH</strong> ${v(d.avg_turnover_vat, 10)} Kč × ${v(d.location_months, 4)} měsíců = <strong>${v(d.price_location, 12)} Kč</strong> bez DPH.</li>
+    </ol>
+    <ol start="2">
+      <li>Celková kupní cena činí <strong>${v(d.price_total, 12)} Kč</strong> bez DPH; k ceně bude připočtena DPH v zákonné výši.</li>
+      <li>Byla-li k téže lokalitě uzavřena rezervační smlouva, započítává se již uhrazený rezervační poplatek ${v(d.reservation_credit, 10)} Kč na kupní cenu.</li>
+      <li>Cena zahrnuje výrobu nového stroje, jeho instalaci a výměnu za stávající kiosek na lokalitě dle článku V.</li>
     </ol>
 
-    <h2>Článek IV — Záruka a odpovědnost za vady</h2>
+    <h2>Článek IV — Platební podmínky a účinnost</h2>
     <ol>
-      <li>Prodávající poskytuje na kiosek záruku za jakost v délce ${v(d.warranty_months, 4)} měsíců ode dne předání.</li>
-      <li>Záruka se nevztahuje na vady způsobené neodborným zásahem, nesprávnou obsluhou, běžným opotřebením, zásahem třetí osoby nebo vyšší mocí.</li>
-      <li>Vady je kupující povinen bez zbytečného odkladu písemně reklamovat na adresu ${v(d.complaint_contact)}.</li>
-      <li>Navazující servisní zajištění je upraveno samostatnou servisní smlouvou.</li>
+      <li>Kupující hradí <strong>celou kupní cenu najednou</strong> (bez zálohy), sníženou o případný již uhrazený rezervační poplatek dle článku III.</li>
+      <li>Kupní cena je splatná do <strong>${v(d.payment_days, 3)} dnů</strong> od podpisu smlouvy, bezhotovostně na účet prodávajícího.</li>
+      <li>Smlouva se stává <strong>účinnou (aktivní) dnem připsání</strong> kupní ceny na účet prodávajícího. Nebude-li kupní cena v této lhůtě uhrazena, smlouva <strong>nenabývá účinnosti</strong> a hledí se na ni, jako by nebyla uzavřena.</li>
     </ol>
 
-    <h2>Článek V — Závěrečná ustanovení</h2>
+    <h2>Článek V — Výroba, dodání a přechod vlastnictví</h2>
     <ol>
-      <li>Smlouva nabývá platnosti a účinnosti dnem podpisu oběma stranami.</li>
+      <li>Po uhrazení kupní ceny prodávající zařadí nový stroj do výroby dle aktuálně volných výrobních slotů; orientační termín vyrobení ${v(d.production_term, 12)}.</li>
+      <li>Do vyrobení nového stroje prodávající provozuje na lokalitě vlastní kiosek, aby byl provoz a výnos lokality zajištěn od počátku.</li>
+      <li><strong>Vlastnické právo ke stroji přechází na kupujícího okamžikem jeho vyrobení.</strong></li>
+      <li>Po vyrobení prodávající v rámci sjednané ceny zajistí výměnu stávajícího kiosku za nový stroj kupujícího na lokalitě a jeho uvedení do provozu; o předání se sepíše předávací protokol.</li>
+      <li>Nebezpečí škody na stroji přechází na kupujícího jeho předáním (instalací) na lokalitě.</li>
+      <li>Prodávající poskytuje na stroj záruku za jakost v délce ${v(d.warranty_months, 4)} měsíců od předání; záruka se nevztahuje na běžné opotřebení, neodborný zásah, nesprávnou obsluhu a vyšší moc.</li>
+    </ol>
+
+    <h2>Článek VI — Ukončení nájmu lokality a relokace</h2>
+    <ol>
+      <li>Dojde-li k ukončení užívacího práva prodávajícího k lokalitě ze strany pronajímatele (výpověď apod.), nabídne prodávající kupujícímu náhradní řešení: zajištění nové srovnatelné lokality, vyřešení přípojek a přepravu stroje.</li>
+      <li>Náhradní řešení se poskytuje jako služba za reálné aktuální tržní ceny stanovené dle konkrétní nové lokality a rozsahu prací; ceny budou kupujícímu předem sděleny a odsouhlaseny.</li>
+      <li>Stroj zůstává ve vlastnictví kupujícího; přijetí náhradní lokality není povinné.</li>
+    </ol>
+
+    <h2>Článek VII — Systémové služby a provozní režim</h2>
+    <ol>
+      <li>Kupující bere na vědomí, že <strong>dlouhodobý provoz stroje není možný bez systémových a softwarových služeb</strong> prodávajícího, jimiž jsou zejména: správa systému a softwaru stroje, odesílání SMS telemetrie zákazníkům, software pro sledování výkonu stroje a systém pro správu a řízení personálu provozu.</li>
+      <li>Tyto služby jsou poskytovány za poplatek ${v(d.system_fee, 10)} a jsou podmínkou dlouhodobé provozuschopnosti stroje.</li>
+      <li>Provozní režim si kupující zvolí: a) provoz prostřednictvím prodávajícího dle samostatné servisní smlouvy (odměna 13 % z obratu, systémové služby zahrnuty), nebo b) samostatný provoz, kdy systémové služby dle odst. 1 hradí kupující samostatně dle odst. 2.</li>
+    </ol>
+
+    <h2>Článek VIII — Závěrečná ustanovení</h2>
+    <ol>
+      <li>Změny smlouvy jen písemnými, vzestupně číslovanými dodatky.</li>
       <li>Vztahy neupravené smlouvou se řídí občanským zákoníkem a předpisy ČR.</li>
-      <li>Smlouvu lze měnit pouze písemnými, vzestupně číslovanými dodatky.</li>
       <li>Je-li některé ustanovení neplatné či neúčinné, nemá to vliv na platnost ostatních.</li>
-      <li>Smlouva je vyhotovena ve dvou stejnopisech s platností originálu (nebo elektronicky s uznávanými podpisy).</li>
-      <li>Smluvní strany prohlašují, že si smlouvu přečetly, souhlasí s jejím obsahem a uzavírají ji svobodně a vážně.</li>
+      <li>Smlouva je vyhotovena ve dvou stejnopisech (nebo elektronicky s uznávanými podpisy); strany ji uzavírají svobodně a vážně.</li>
     </ol>
-    <p class="attach"><strong>Přílohy:</strong> č. 1 — Technická specifikace kiosku.</p>
+    <p class="attach"><strong>Přílohy:</strong> č. 1 — Specifikace stroje.</p>
     ${sigBlock('Prodávající', 'Kupující', d.place_signed)}`;
-  return shell('Kupní smlouva', 'na dodávku kiosku', body);
+  return shell('Kupní smlouva', 'na dodávku prádlomatu', body);
 }
 
 function renderServisni(d) {

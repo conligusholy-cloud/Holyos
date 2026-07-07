@@ -1345,11 +1345,15 @@ router.get('/contracts/:type/prefill', requireAuth, async (req, res, next) => {
     const code = String(q.code || '').slice(0, 40);
     const label = String(q.label || '').slice(0, 300);
     const priceNum = (q.price != null && q.price !== '') ? Number(q.price) : null;
+    const avgNum = (q.avg != null && q.avg !== '') ? Number(q.avg) : null;
+    const monthsNum = (q.months != null && q.months !== '') ? Number(q.months) : null;
     const pseudoSite = {
       name: code ? ('Lokalita ' + code) : (label || ''),
       address: label, city: '', zip: '', country: 'CZ',
       purchase_price: (priceNum != null && isFinite(priceNum)) ? priceNum : null,
       pradlomat_ref: code, contacts: [],
+      _avgTurnover: (avgNum != null && isFinite(avgNum)) ? avgNum : null,
+      _locationMonths: (monthsNum != null && isFinite(monthsNum)) ? monthsNum : 12,
     };
     const our = await getOurCompany().catch(() => null);
     res.json(contracts.getPrefill(type, pseudoSite, our));

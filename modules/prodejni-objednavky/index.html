@@ -2951,7 +2951,7 @@
         return (String(k.code || '') + ' ' + String(k.label || '') + ' ' + String(k.companyName || '')).toLowerCase().indexOf(q) !== -1;
       });
 
-      // Cena lokality = Ø top 3 × počet měsíců (z nastavení). Ø top 3 převedeme na CZK
+      // Cena lokality = průměrný obrat s DPH × počet měsíců (z nastavení). průměrný obrat s DPH převedeme na CZK
       // kurzem (Best Series lokality jsou v CZK, ale ať to sedí i pro cizí měnu).
       var num = function(v) { return (typeof v === 'number' && isFinite(v)) ? v : 0; };
       var months = (_compoundingSettings && Number.isFinite(_compoundingSettings.locationMonths)) ? _compoundingSettings.locationMonths : 12;
@@ -2974,7 +2974,7 @@
       if (sumEl) {
         sumEl.innerHTML = '<div style="display:flex;gap:12px;flex-wrap:wrap;">' +
           kvStat('Lokalit celkem', kvNum(s.kioskCount), (s.inIncubator + ' v inkubátoru')) +
-          kvStat('Hodnota lokalit', kvMoney(s.totalLocationValue, 'CZK'), 'Ø top 3 × ' + months + ' měs.') +
+          kvStat('Hodnota lokalit', kvMoney(s.totalLocationValue, 'CZK'), 'průměrný obrat s DPH × ' + months + ' měs.') +
           kvStat('Transakce (měsíc)', kvNum(s.totalTransactions), 'napříč lokalitami') +
           '</div>';
       }
@@ -2986,7 +2986,7 @@
 
       var h = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr>' +
         '<th>Kód</th><th>Lokalita</th><th>Provozovatel</th>' +
-        '<th style="text-align:right;">Ø top 3</th>' +
+        '<th style="text-align:right;">Průměrný obrat s DPH</th>' +
         '<th style="text-align:right;">Cena lokality</th>' +
         '<th>Verze</th>' +
         '<th style="text-align:right;">Nájem</th>' +
@@ -3018,7 +3018,7 @@
           '</tr>';
       });
       h += '</tbody></table></div>';
-      h += '<div style="color:var(--text2);font-size:11px;margin-top:8px;">Cena lokality = Ø top 3 × ' + months + ' měsíců (nastavíš přes ⚙️). Zobrazeno v CZK.</div>';
+      h += '<div style="color:var(--text2);font-size:11px;margin-top:8px;">Cena lokality = průměrný obrat s DPH × ' + months + ' měsíců (nastavíš přes ⚙️). Zobrazeno v CZK.</div>';
       box.innerHTML = h;
     }
 
@@ -3062,7 +3062,7 @@
         verRow('v2', 'V2') + verRow('v3', 'V3') + verRow('v4', 'V4') +
         '<hr style="border:none;border-top:1px solid var(--border);margin:18px 0;">' +
         '<div style="margin-bottom:6px;font-weight:600;font-size:14px;">Cena lokality</div>' +
-        '<div style="color:var(--text2);font-size:12px;margin-bottom:12px;">Cena lokality = Ø top 3 × počet měsíců.</div>' +
+        '<div style="color:var(--text2);font-size:12px;margin-bottom:12px;">Cena lokality = průměrný obrat s DPH × počet měsíců.</div>' +
         '<div style="display:flex;align-items:center;gap:12px;">' +
           '<div style="width:120px;">Počet měsíců</div>' +
           '<input type="number" min="1" max="600" step="1" id="kvset-months" value="' + months + '" style="width:120px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:14px;">' +
@@ -3145,7 +3145,9 @@
     async function openCompoundingContractForm(type, code) {
       var k = kvFindKiosk(code) || { code: code, label: '' };
       var price = _kvLocationPrice(k);
-      var qs = 'code=' + encodeURIComponent(code) + '&label=' + encodeURIComponent(k.label || '') + (price != null ? ('&price=' + price) : '');
+      var avg = (typeof k.avgTop3 === 'number' && isFinite(k.avgTop3)) ? Math.round(k.avgTop3) : '';
+      var months = (_compoundingSettings && Number.isFinite(_compoundingSettings.locationMonths)) ? _compoundingSettings.locationMonths : 12;
+      var qs = 'code=' + encodeURIComponent(code) + '&label=' + encodeURIComponent(k.label || '') + (price != null ? ('&price=' + price) : '') + '&avg=' + avg + '&months=' + months;
       var pf;
       try {
         var r = await fetch('/api/compounder/contracts/' + type + '/prefill?' + qs, { credentials: 'include' });
