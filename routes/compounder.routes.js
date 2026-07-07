@@ -1337,7 +1337,7 @@ function leadEvalFallback(facts) {
 // Bezstavové: data lokality přijdou z frontendu (SIS kiosk-values), ne z DB.
 // GET prefill — schéma polí + předvyplněné hodnoty (prodávající = naše firma,
 // protistrana zůstává prázdná k ručnímu doplnění).
-router.get('/contracts/:type/prefill', requireAuth, async (req, res, next) => {
+router.get('/contracts/:type(kupni|servisni|rezervacni)/prefill', requireAuth, async (req, res, next) => {
   try {
     const { type } = req.params;
     if (!contracts.isValidType(type)) return res.status(400).json({ error: 'Neznámý typ smlouvy' });
@@ -1361,7 +1361,7 @@ router.get('/contracts/:type/prefill', requireAuth, async (req, res, next) => {
 });
 
 // POST vygenerovat PDF smlouvy z (upravených) polí. Vrací PDF ke stažení.
-router.post('/contracts/:type/pdf', requireAuth, async (req, res, next) => {
+router.post('/contracts/:type(kupni|servisni|rezervacni)/pdf', requireAuth, async (req, res, next) => {
   try {
     const { type } = req.params;
     if (!contracts.isValidType(type)) return res.status(400).json({ error: 'Neznámý typ smlouvy' });
@@ -1383,5 +1383,107 @@ router.post('/contracts/:type/pdf', requireAuth, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+
+
+// ─── Evidence smluv u lokality (Compounding) ─────────────────────────────────
+const CONTRACT_STATES = ['koncept', 'odeslano', 'vyplneno', 'podepsano'];
+function _safeContractName(s) {
+  return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^A-Za-z0-9_-]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 80);
+}
+
+// GET seznam smluv u lokality (dle kódu)
+router.get('/contracts/list', requireAuth, async (req, res, next) => {
+  try {
+    const code = String(req.query.code || '').slice(0, 40);
+    if (!code) return res.status(400).json({ error: 'Chybí kód lokality' });
+    const rows = await prisma.compoundingContract.findMany({
+      where: { kiosk_code: code },
+      orderBy: { created_at: 'desc' },
+      select: {
+        id: true, type: true, status: true, kiosk_label: true, fields: true,
+        share_token: true, filled_at: true, signed_at: true,
+        created_at: true, updated_at: true,
+      },
+    });
+    res.json(rows);
+  } catch (err) { next(err); }
+});
+
+// POST uložit koncept / aktualizovat smlouvu
+router.post('/contracts/save', requireAuth, async (req, res, next) => {
+  try {
+    const b = req.body || {};
+    const type = String(b.type || '');
+    if (!contracts.isValidType(type)) return res.status(400).json({ error: 'Neznámý typ smlouvy' });
+    const code = String(b.code || '').slice(0, 40);
+    if (!code) return res.status(400).json({ error: 'Chybí kód lokality' });
+    const fields = (b.fields && typeof b.fields === 'object') ? b.fields : {};
+    let row;
+    if (b.id) {
+      row = await prisma.compoundingContract.update({
+        where: { id: Number(b.id) },
+        data: { fields, kiosk_label: b.label ? String(b.label).slice(0, 300) : undefined },
+      });
+    } else {
+      row = await prisma.compoundingContract.create({
+        data: {
+          kiosk_code: code,
+          kiosk_label: b.label ? String(b.label).slice(0, 300) : null,
+          type, fields, status: 'koncept',
+          created_by_id: (req.user && req.user.id) || null,
+        },
+      });
+    }
+    res.json({ id: row.id, status: row.status });
+  } catch (err) { next(err); }
+});
+
+// PATCH změna stavu smlouvy
+router.patch('/contracts/:id(\\d+)/status', requireAuth, async (req, res, next) => {
+  try {
+    const status = String((req.body && req.body.status) || '');
+    if (!CONTRACT_STATES.includes(status)) return res.status(400).json({ error: 'Neplatný stav' });
+    const data = { status };
+    if (status === 'podepsano') data.signed_at = new Date();
+    const row = await prisma.compoundingContract.update({ where: { id: Number(req.params.id) }, data });
+    res.json({ id: row.id, status: row.status });
+  } catch (err) {
+    if (err.code === 'P2025') return res.status(404).json({ error: 'Smlouva nenalezena' });
+    next(err);
+  }
+});
+
+// DELETE smlouvu
+router.delete('/contracts/:id(\\d+)', requireAuth, async (req, res, next) => {
+  try {
+    await prisma.compoundingContract.delete({ where: { id: Number(req.params.id) } });
+    res.json({ ok: true });
+  } catch (err) {
+    if (err.code === 'P2025') return res.status(404).json({ error: 'Smlouva nenalezena' });
+    next(err);
+  }
+});
+
+// POST vygenerovat PDF z uložené smlouvy (volitelně z upravených polí)
+router.post('/contracts/:id(\\d+)/pdf', requireAuth, async (req, res, next) => {
+  try {
+    const row = await prisma.compoundingContract.findUnique({ where: { id: Number(req.params.id) } });
+    if (!row) return res.status(404).json({ error: 'Smlouva nenalezena' });
+    const fields = (req.body && req.body.fields) || row.fields || {};
+    let pdf;
+    try {
+      pdf = await contracts.generateContractPdf(row.type, fields);
+    } catch (e) {
+      console.error('[contract-pdf] Generování selhalo:', e);
+      return res.status(500).json({ error: 'PDF generování selhalo: ' + e.message });
+    }
+    const base = _safeContractName(contracts.TYPE_LABEL[row.type]) + '_' + _safeContractName(row.kiosk_code || ('id' + row.id));
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', 'attachment; filename="' + base + '.pdf"');
+    res.setHeader('Content-Length', pdf.length);
+    res.send(pdf);
+  } catch (err) { next(err); }
+});
 
 module.exports = router;

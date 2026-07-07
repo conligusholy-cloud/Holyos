@@ -5524,3 +5524,29 @@ model CompounderPushSub {
   @@index([lead_id])
   @@map("compounder_push_subs")
 }
+
+// =============================================================================
+// COMPOUNDING — evidence smluv k lokalitám (kupní/servisní/rezervační)
+// =============================================================================
+// Smlouvy generované u lokalit prádlomatů (tab Compounding). Lokalita je
+// identifikovaná kódem ze SIS (kiosk_code), ne přes Site. fields = uložené
+// hodnoty polí smlouvy, share_token = veřejný odkaz na vyplnění hlavičky.
+model CompoundingContract {
+  id               Int       @id @default(autoincrement())
+  kiosk_code       String    @db.VarChar(40)
+  kiosk_label      String?   @db.VarChar(300)
+  type             String    @db.VarChar(20)   // kupni | servisni | rezervacni
+  status           String    @default("koncept") @db.VarChar(20) // koncept|odeslano|vyplneno|podepsano
+  fields           Json      @default("{}")
+  share_token      String?   @unique @db.VarChar(64)
+  share_expires_at DateTime?
+  filled_at        DateTime?
+  signed_at        DateTime?
+  created_by_id    Int?
+  created_at       DateTime  @default(now())
+  updated_at       DateTime  @updatedAt
+
+  @@index([kiosk_code])
+  @@index([status])
+  @@map("compounding_contracts")
+}

@@ -3129,20 +3129,69 @@
       var k = kvFindKiosk(code) || { code: code, label: '' };
       var ca = kvEsc(code).replace(/\x27/g, '&#39;');
       var html = '<div class="modal-overlay" onclick="if(event.target===this)closeModal()">' +
-        '<div class="modal" style="width:460px;max-width:95vw;">' +
+        '<div class="modal" style="width:640px;max-width:96vw;max-height:90vh;overflow:auto;">' +
         '<h2>📄 Smlouvy — ' + kvEsc(k.code) + '</h2>' +
-        '<div style="color:var(--text2);font-size:13px;margin:-10px 0 18px;">' + kvEsc(k.label || '') + '</div>' +
-        '<div style="display:flex;flex-direction:column;gap:10px;">' +
-          '<button type="button" class="btn btn-primary" onclick="openCompoundingContractForm(\'kupni\',\'' + ca + '\')">📄 Kupní smlouva</button>' +
-          '<button type="button" class="btn btn-primary" onclick="openCompoundingContractForm(\'servisni\',\'' + ca + '\')">🔧 Servisní smlouva (13 %)</button>' +
-          '<button type="button" class="btn btn-primary" onclick="openCompoundingContractForm(\'rezervacni\',\'' + ca + '\')">📌 Rezervační smlouva</button>' +
+        '<div style="color:var(--text2);font-size:13px;margin:-10px 0 16px;">' + kvEsc(k.label || '') + '</div>' +
+        '<div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:8px;">VYTVOŘENÉ SMLOUVY</div>' +
+        '<div id="contract-list" style="margin-bottom:18px;"><div style="color:var(--text2);font-size:13px;">Načítám…</div></div>' +
+        '<div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:8px;">NOVÁ SMLOUVA</div>' +
+        '<div style="display:flex;flex-direction:column;gap:8px;">' +
+          _contractCreateRow('kupni', '📄 Kupní smlouva', ca) +
+          _contractCreateRow('servisni', '🔧 Servisní smlouva (13 %)', ca) +
+          _contractCreateRow('rezervacni', '📌 Rezervační smlouva', ca) +
         '</div>' +
         '<div class="modal-actions"><button type="button" class="btn btn-secondary" onclick="closeModal()">Zavřít</button></div>' +
         '</div></div>';
       document.getElementById('modal-root').innerHTML = html;
+      loadContractList(code);
     }
 
-    async function openCompoundingContractForm(type, code) {
+    function _contractCreateRow(type, label, ca) {
+      return '<div style="display:flex;gap:8px;">' +
+        '<button type="button" class="btn btn-primary" style="flex:1;" onclick="openCompoundingContractForm(\'' + type + '\',\'' + ca + '\')">' + label + '</button>' +
+        '<button type="button" class="btn btn-secondary" title="Stáhnout mustr (prázdná hlavička)" onclick="generateMustr(\'' + type + '\',\'' + ca + '\')">Mustr</button>' +
+        '</div>';
+    }
+
+    var CONTRACT_STATUS_LABEL = { koncept: 'Koncept', odeslano: 'Odesláno', vyplneno: 'Vyplněno', podepsano: 'Podepsáno' };
+    var CONTRACT_STATUS_COLOR = { koncept: '#6b7280', odeslano: '#3b82f6', vyplneno: '#eab308', podepsano: '#10b981' };
+    var CONTRACT_TYPE_LABEL = { kupni: 'Kupní', servisni: 'Servisní', rezervacni: 'Rezervační' };
+    var _contractCache = {};
+
+    async function loadContractList(code) {
+      var box = document.getElementById('contract-list');
+      if (!box) return;
+      var rows;
+      try {
+        var r = await fetch('/api/compounder/contracts/list?code=' + encodeURIComponent(code), { credentials: 'include' });
+        if (!r.ok) throw new Error('http');
+        rows = await r.json();
+      } catch (e) { box.innerHTML = '<div style="color:#ef4444;font-size:13px;">Nepodařilo se načíst smlouvy.</div>'; return; }
+      _contractCache = {};
+      rows.forEach(function(x) { _contractCache[x.id] = x; });
+      if (!rows.length) { box.innerHTML = '<div style="color:var(--text2);font-size:13px;">Zatím žádné smlouvy.</div>'; return; }
+      var ca = kvEsc(code).replace(/\x27/g, '&#39;');
+      box.innerHTML = rows.map(function(x) {
+        var col = CONTRACT_STATUS_COLOR[x.status] || '#6b7280';
+        var opts = ['koncept', 'odeslano', 'vyplneno', 'podepsano'].map(function(st) {
+          return '<option value="' + st + '"' + (x.status === st ? ' selected' : '') + '>' + CONTRACT_STATUS_LABEL[st] + '</option>';
+        }).join('');
+        var when = x.created_at ? new Date(x.created_at).toLocaleDateString('cs-CZ') : '';
+        return '<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;">' +
+          '<span style="width:9px;height:9px;border-radius:50%;background:' + col + ';flex:none;"></span>' +
+          '<div style="flex:1;min-width:0;">' +
+            '<div style="font-weight:600;font-size:13px;">' + (CONTRACT_TYPE_LABEL[x.type] || x.type) + ' smlouva</div>' +
+            '<div style="color:var(--text2);font-size:11px;">' + when + (x.filled_at ? ' • vyplněno protistranou' : '') + '</div>' +
+          '</div>' +
+          '<select onchange="setContractStatus(' + x.id + ',this.value,\'' + ca + '\')" style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:4px 6px;color:var(--text);font-size:12px;">' + opts + '</select>' +
+          '<button type="button" class="btn btn-sm btn-secondary" title="Upravit" onclick="editCompoundingContract(' + x.id + ',\'' + ca + '\')">✏️</button>' +
+          '<button type="button" class="btn btn-sm btn-primary" title="Stáhnout PDF" onclick="contractPdfById(' + x.id + ')">PDF</button>' +
+          '<button type="button" class="btn btn-sm btn-danger" title="Smazat" onclick="deleteCompoundingContract(' + x.id + ',\'' + ca + '\')">🗑</button>' +
+          '</div>';
+      }).join('');
+    }
+
+    async function openCompoundingContractForm(type, code, existing) {
       var k = kvFindKiosk(code) || { code: code, label: '' };
       var price = _kvLocationPrice(k);
       var avg = (typeof k.avgTop3 === 'number' && isFinite(k.avgTop3)) ? Math.round(k.avgTop3) : '';
@@ -3154,8 +3203,13 @@
         if (!r.ok) throw new Error('http');
         pf = await r.json();
       } catch (e) { alert('Nepodařilo se načíst předlohu smlouvy.'); return; }
+      var saved = (existing && existing.fields) ? existing.fields : null;
+      function valOf(name) {
+        if (saved && saved[name] != null) return saved[name];
+        return (pf.values && pf.values[name] != null) ? pf.values[name] : '';
+      }
       function field(f) {
-        var val = (pf.values && pf.values[f.name] != null) ? pf.values[f.name] : '';
+        var val = valOf(f.name);
         var id = 'cf_' + f.name;
         if (f.type === 'textarea') {
           return '<div style="display:flex;flex-direction:column;gap:4px;margin-bottom:8px;">' +
@@ -3172,39 +3226,129 @@
           g.fields.map(field).join('') + '</fieldset>';
       }).join('');
       var ca = kvEsc(code).replace(/\x27/g, '&#39;');
+      var eid = existing && existing.id ? existing.id : '';
       var html = '<div class="modal-overlay" onclick="if(event.target===this)closeModal()">' +
         '<div class="modal" style="width:680px;max-width:96vw;max-height:90vh;overflow:auto;">' +
         '<h2>' + kvEsc(pf.label || 'Smlouva') + ' — ' + kvEsc(k.code) + '</h2>' +
-        '<div style="color:var(--text2);font-size:12px;margin:-8px 0 14px;">Uprav pole a vygeneruj PDF. Prázdná pole se v PDF vykreslí jako tečkovaná linka k dopsání.</div>' +
+        '<div style="color:var(--text2);font-size:12px;margin:-8px 0 14px;">Uprav pole. Prázdná pole se v PDF vykreslí jako tečkovaná linka k dopsání.</div>' +
+        '<input type="hidden" id="cf__id" value="' + eid + '"><input type="hidden" id="cf__type" value="' + type + '"><input type="hidden" id="cf__code" value="' + ca + '">' +
         groups +
         '<div class="modal-actions">' +
           '<button type="button" class="btn btn-secondary" onclick="openContractPicker(\'' + ca + '\')" style="margin-right:auto;">← Zpět</button>' +
-          '<button type="button" class="btn btn-primary" onclick="generateCompoundingContract(\'' + type + '\',\'' + ca + '\')">📄 Stáhnout PDF</button>' +
+          '<button type="button" class="btn btn-secondary" onclick="saveCompoundingContract(false)">💾 Uložit koncept</button>' +
+          '<button type="button" class="btn btn-primary" onclick="saveCompoundingContract(true)">📄 Uložit + PDF</button>' +
         '</div></div></div>';
       document.getElementById('modal-root').innerHTML = html;
     }
 
-    async function generateCompoundingContract(type, code) {
+    function _collectContractFields() {
       var fields = {};
-      document.querySelectorAll('[id^="cf_"]').forEach(function(el) { fields[el.id.slice(3)] = el.value; });
-      var r;
-      try {
-        r = await fetch('/api/compounder/contracts/' + type + '/pdf', {
-          method: 'POST', credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ fields: fields, code: code }),
-        });
-      } catch (e) { alert('Generování PDF selhalo.'); return; }
-      if (!r.ok) { alert('Generování PDF selhalo.'); return; }
-      var blob = await r.blob();
-      var cd = r.headers.get('Content-Disposition') || '';
-      var m = cd.match(/filename="([^"]+)"/);
-      var name = m ? m[1] : (type + '.pdf');
+      document.querySelectorAll('[id^="cf_"]').forEach(function(el) {
+        if (el.id === 'cf__id' || el.id === 'cf__type' || el.id === 'cf__code') return;
+        fields[el.id.slice(3)] = el.value;
+      });
+      return fields;
+    }
+
+    function _downloadBlob(blob, name) {
       var url = URL.createObjectURL(blob);
       var a = document.createElement('a');
       a.href = url; a.download = name; document.body.appendChild(a); a.click();
       a.remove(); URL.revokeObjectURL(url);
     }
+
+    async function saveCompoundingContract(thenPdf) {
+      var id = document.getElementById('cf__id').value;
+      var type = document.getElementById('cf__type').value;
+      var code = document.getElementById('cf__code').value;
+      var k = kvFindKiosk(code) || { label: '' };
+      var fields = _collectContractFields();
+      var saved;
+      try {
+        var r = await fetch('/api/compounder/contracts/save', {
+          method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: id || undefined, type: type, code: code, label: k.label || '', fields: fields }),
+        });
+        if (!r.ok) throw new Error('http');
+        saved = await r.json();
+      } catch (e) { alert('Uložení selhalo.'); return; }
+      if (thenPdf) {
+        try {
+          var pr = await fetch('/api/compounder/contracts/' + saved.id + '/pdf', {
+            method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ fields: fields }),
+          });
+          if (pr.ok) {
+            var cd = pr.headers.get('Content-Disposition') || '';
+            var m = cd.match(/filename="([^"]+)"/);
+            _downloadBlob(await pr.blob(), m ? m[1] : (type + '.pdf'));
+          }
+        } catch (e) { /* PDF chyba nebrání uložení */ }
+      }
+      openContractPicker(code);
+    }
+
+    async function generateMustr(type, code) {
+      var k = kvFindKiosk(code) || { code: code, label: '' };
+      var price = _kvLocationPrice(k);
+      var avg = (typeof k.avgTop3 === 'number' && isFinite(k.avgTop3)) ? Math.round(k.avgTop3) : '';
+      var months = (_compoundingSettings && Number.isFinite(_compoundingSettings.locationMonths)) ? _compoundingSettings.locationMonths : 12;
+      var qs = 'code=' + encodeURIComponent(code) + '&label=' + encodeURIComponent(k.label || '') + (price != null ? ('&price=' + price) : '') + '&avg=' + avg + '&months=' + months;
+      var pf;
+      try {
+        var r = await fetch('/api/compounder/contracts/' + type + '/prefill?' + qs, { credentials: 'include' });
+        if (!r.ok) throw new Error('http');
+        pf = await r.json();
+      } catch (e) { alert('Nepodařilo se načíst mustr.'); return; }
+      var fields = Object.assign({}, pf.values || {});
+      Object.keys(fields).forEach(function(kk) { if (kk.indexOf('buyer_') === 0) fields[kk] = ''; });
+      try {
+        var pr = await fetch('/api/compounder/contracts/' + type + '/pdf', {
+          method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fields: fields, code: code }),
+        });
+        if (!pr.ok) throw new Error('http');
+        var cd = pr.headers.get('Content-Disposition') || '';
+        var m = cd.match(/filename="([^"]+)"/);
+        _downloadBlob(await pr.blob(), m ? m[1] : ('mustr_' + type + '.pdf'));
+      } catch (e) { alert('Generování mustru selhalo.'); }
+    }
+
+    async function contractPdfById(id) {
+      try {
+        var r = await fetch('/api/compounder/contracts/' + id + '/pdf', {
+          method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: '{}',
+        });
+        if (!r.ok) throw new Error('http');
+        var cd = r.headers.get('Content-Disposition') || '';
+        var m = cd.match(/filename="([^"]+)"/);
+        _downloadBlob(await r.blob(), m ? m[1] : ('smlouva_' + id + '.pdf'));
+      } catch (e) { alert('Stažení PDF selhalo.'); }
+    }
+
+    async function setContractStatus(id, status, code) {
+      try {
+        await fetch('/api/compounder/contracts/' + id + '/status', {
+          method: 'PATCH', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: status }),
+        });
+      } catch (e) { alert('Změna stavu selhala.'); }
+      loadContractList(code);
+    }
+
+    async function deleteCompoundingContract(id, code) {
+      if (!confirm('Smazat tuto smlouvu?')) return;
+      try { await fetch('/api/compounder/contracts/' + id, { method: 'DELETE', credentials: 'include' }); }
+      catch (e) { alert('Smazání selhalo.'); return; }
+      loadContractList(code);
+    }
+
+    function editCompoundingContract(id, code) {
+      var x = _contractCache[id];
+      if (!x) { alert('Smlouva nenalezena.'); return; }
+      openCompoundingContractForm(x.type, code, { id: id, fields: x.fields || {} });
+    }
+
 
     function kvFindKiosk(code) {
       var list = (_kioskData && Array.isArray(_kioskData.kiosks)) ? _kioskData.kiosks : [];
