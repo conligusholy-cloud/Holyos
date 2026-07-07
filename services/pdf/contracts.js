@@ -165,6 +165,7 @@ const SCHEMAS = {
       { name: 'buyback_key_months', label: 'Násobek obratu pro klíč (×)', type: 'text' },
       { name: 'amortization_pct', label: 'Roční amortizace stroje (%)', type: 'text' },
       { name: 'resale_commission_pct', label: 'Provize za zprostředkování (%)', type: 'text' },
+      { name: 'removal_notice_months', label: 'Oznámení o odstranění stroje (měsíců)', type: 'text' },
     ]},
     { key: 'system', title: 'Systémové služby a podpis', fields: [
       { name: 'system_fee', label: 'Systémový poplatek (měsíc/stroj)', type: 'text' },
@@ -274,6 +275,7 @@ function buildDefaults(type, site, our) {
       buyback_key_months: '12',
       amortization_pct: '10',
       resale_commission_pct: '10',
+      removal_notice_months: '3',
       system_fee: '100 EUR / měsíc',
       place_signed: site?.city || '',
     };
@@ -411,6 +413,7 @@ function renderKupni(d) {
       <li>Kupující kupní cenou nabývá <strong>ekonomické právo</strong> provozovat svůj Stroj na této zavedené a ověřené Lokalitě a <strong>těžit z jejího Zavedeného provozu a klientely</strong> po dobu trvání užívacího práva prodávajícího k Lokalitě.</li>
       <li>Předmětem koupě tedy <strong>není</strong> nájem, pozemek ani jiné právo k nemovitosti, nýbrž <strong>ekonomická hodnota zavedeného a fungujícího provozu</strong>.</li>
       <li>Je-li Stroj provozován na Lokalitě Best Series, zavazuje se kupující provozovat jej výhradně <strong>pod značkou (brandem) Best Series</strong> a dodržovat její jednotná pravidla.</li>
+      <li>Zamýšlí-li kupující odstranit svůj Stroj z Lokality, je povinen to prodávajícímu <strong>písemně oznámit nejméně ${v(d.removal_notice_months, 3)} měsíce předem</strong>.</li>
     </ol>
 
     <h2>Článek IV — Kupní cena</h2>
