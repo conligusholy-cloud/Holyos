@@ -807,8 +807,9 @@ router.put('/compounding-settings', requireAuth, async (req, res, next) => {
 const COMPOUNDING_KIOSKS_KEY = 'compounding.kiosks';
 
 const kioskConfigSchema = z.object({
-  version: z.enum(['v2', 'v3', 'v4']).nullable(),
-  rentMonthlyCzk: z.number().nonnegative().nullable(),
+  version: z.enum(['v2', 'v3', 'v4']).nullable().optional(),
+  rentMonthlyCzk: z.number().nonnegative().nullable().optional(),
+  forSale: z.boolean().optional(),
 });
 
 // GET /api/compounder/kiosk-config → celá mapa { [code]: {version, rentMonthlyCzk} }
@@ -832,7 +833,7 @@ router.put('/kiosk-config/:code', requireAuth, async (req, res, next) => {
     }
     const map = await getSetting(COMPOUNDING_KIOSKS_KEY, { type: 'json', defaultValue: {} });
     const next_ = (map && typeof map === 'object') ? { ...map } : {};
-    next_[code] = parsed.data;
+    next_[code] = { ...(next_[code] || {}), ...parsed.data };
     await setSetting(COMPOUNDING_KIOSKS_KEY, next_, {
       type: 'json',
       scope: 'compounding',

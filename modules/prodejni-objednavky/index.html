@@ -3001,6 +3001,7 @@
         '<th style="text-align:right;">Odhad měs. cash flow</th>' +
         '<th style="text-align:right;">ROI (roční)</th>' +
         '<th style="text-align:right;">Provozní marže</th>' +
+        '<th style="text-align:center;">Nabízet</th>' +
         '<th>Stav</th><th></th></tr></thead><tbody>';
       filtered.forEach(function(k) {
         var cur = k.currency || 'CZK';
@@ -3038,6 +3039,7 @@
           '<td style="text-align:right;white-space:nowrap;font-weight:700;color:' + (_cistyZisk >= 0 ? '#10b981' : '#ef4444') + ';">' + kvMoney(Math.round(_cistyZisk), 'CZK') + _mes + '</td>' +
           '<td style="text-align:right;white-space:nowrap;font-weight:700;color:#10b981;">' + ((_vmRow.machine != null && (locVal(k) + _vmRow.machine) > 0) ? ((_cistyZisk * 12 / (locVal(k) + _vmRow.machine) * 100).toFixed(1).replace('.', ',') + ' %') : '<span style="color:var(--text2);">—</span>') + '</td>' +
           '<td style="text-align:right;white-space:nowrap;font-weight:700;color:' + (_cistyZisk >= 0 ? '#10b981' : '#ef4444') + ';">' + (_obratBez > 0 ? ((_cistyZisk / _obratBez * 100).toFixed(1).replace('.', ',') + ' %') : '<span style="color:var(--text2);">—</span>') + '</td>' +
+          '<td style="text-align:center;"><input type="checkbox" onclick="event.stopPropagation()" onchange="toggleForSale(\'' + codeAttr + '\', this.checked)"' + (cfg.forSale ? ' checked' : '') + '></td>' +
           '<td>' + badge + '</td>' +
           '<td style="text-align:right;white-space:nowrap;">' +
             '<button class="btn" onclick="openContractPicker(\'' + codeAttr + '\')" title="Smlouvy" style="padding:4px 9px;font-size:13px;margin-right:4px;">📄</button>' +
@@ -3501,6 +3503,17 @@
       } catch (e) {
         showErr('Uložení selhalo: ' + kvEsc(e.message));
       }
+    }
+
+    async function toggleForSale(code, checked) {
+      var cfg = _kioskConfig[code] || {};
+      _kioskConfig[code] = Object.assign({}, cfg, { forSale: !!checked });
+      try {
+        await fetch('/api/compounder/kiosk-config/' + encodeURIComponent(code), {
+          method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ forSale: !!checked }),
+        });
+      } catch (e) { alert('Uložení selhalo.'); }
     }
 
     // ============================================================
