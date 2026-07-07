@@ -3011,7 +3011,10 @@
           '<td style="white-space:nowrap;">' + verLabel + '</td>' +
           '<td style="text-align:right;white-space:nowrap;">' + rentLabel + '</td>' +
           '<td>' + badge + '</td>' +
-          '<td style="text-align:right;"><button class="btn" onclick="openKioskConfig(\'' + codeAttr + '\')" title="Nastavit verzi a nájem" style="padding:4px 9px;font-size:13px;">⚙️</button></td>' +
+          '<td style="text-align:right;white-space:nowrap;">' +
+            '<button class="btn" onclick="openContractPicker(\'' + codeAttr + '\')" title="Smlouvy" style="padding:4px 9px;font-size:13px;margin-right:4px;">📄</button>' +
+            '<button class="btn" onclick="openKioskConfig(\'' + codeAttr + '\')" title="Nastavit verzi a nájem" style="padding:4px 9px;font-size:13px;">⚙️</button>' +
+          '</td>' +
           '</tr>';
       });
       h += '</tbody></table></div>';
@@ -3112,6 +3115,95 @@
     }
 
     // ─── Per-lokalita nastavení (verze kiosku + měsíční nájem) ───
+    // ─── Smlouvy k lokalitě (📄 u řádku Compounding) ───────────────────────────
+    function _kvLocationPrice(k) {
+      if (!k) return null;
+      var cur = k.currency || 'CZK';
+      var rate = (_kvFxRates && _kvFxRates[cur]) ? _kvFxRates[cur] : 1;
+      var months = (_compoundingSettings && Number.isFinite(_compoundingSettings.locationMonths)) ? _compoundingSettings.locationMonths : 12;
+      var v = (typeof k.avgTop3 === 'number' && isFinite(k.avgTop3)) ? k.avgTop3 : 0;
+      return Math.round(v * rate * months);
+    }
+
+    function openContractPicker(code) {
+      var k = kvFindKiosk(code) || { code: code, label: '' };
+      var ca = kvEsc(code).replace(/\x27/g, '&#39;');
+      var html = '<div class="modal-overlay" onclick="if(event.target===this)closeModal()">' +
+        '<div class="modal" style="width:460px;max-width:95vw;">' +
+        '<h2>📄 Smlouvy — ' + kvEsc(k.code) + '</h2>' +
+        '<div style="color:var(--text2);font-size:13px;margin:-10px 0 18px;">' + kvEsc(k.label || '') + '</div>' +
+        '<div style="display:flex;flex-direction:column;gap:10px;">' +
+          '<button type="button" class="btn btn-primary" onclick="openCompoundingContractForm(\'kupni\',\'' + ca + '\')">📄 Kupní smlouva</button>' +
+          '<button type="button" class="btn btn-primary" onclick="openCompoundingContractForm(\'servisni\',\'' + ca + '\')">🔧 Servisní smlouva (13 %)</button>' +
+          '<button type="button" class="btn btn-primary" onclick="openCompoundingContractForm(\'rezervacni\',\'' + ca + '\')">📌 Rezervační smlouva</button>' +
+        '</div>' +
+        '<div class="modal-actions"><button type="button" class="btn btn-secondary" onclick="closeModal()">Zavřít</button></div>' +
+        '</div></div>';
+      document.getElementById('modal-root').innerHTML = html;
+    }
+
+    async function openCompoundingContractForm(type, code) {
+      var k = kvFindKiosk(code) || { code: code, label: '' };
+      var price = _kvLocationPrice(k);
+      var qs = 'code=' + encodeURIComponent(code) + '&label=' + encodeURIComponent(k.label || '') + (price != null ? ('&price=' + price) : '');
+      var pf;
+      try {
+        var r = await fetch('/api/compounder/contracts/' + type + '/prefill?' + qs, { credentials: 'include' });
+        if (!r.ok) throw new Error('http');
+        pf = await r.json();
+      } catch (e) { alert('Nepodařilo se načíst předlohu smlouvy.'); return; }
+      function field(f) {
+        var val = (pf.values && pf.values[f.name] != null) ? pf.values[f.name] : '';
+        var id = 'cf_' + f.name;
+        if (f.type === 'textarea') {
+          return '<div style="display:flex;flex-direction:column;gap:4px;margin-bottom:8px;">' +
+            '<label style="font-size:12px;color:var(--text2);">' + kvEsc(f.label) + '</label>' +
+            '<textarea id="' + id + '" rows="3" style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--text);font-size:13px;">' + kvEsc(val) + '</textarea></div>';
+        }
+        return '<div style="display:flex;flex-direction:column;gap:4px;margin-bottom:8px;">' +
+          '<label style="font-size:12px;color:var(--text2);">' + kvEsc(f.label) + '</label>' +
+          '<input id="' + id + '" type="text" value="' + kvEsc(val).replace(/"/g, '&quot;') + '" style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--text);font-size:13px;"></div>';
+      }
+      var groups = (pf.groups || []).map(function(g) {
+        return '<fieldset style="border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:12px;">' +
+          '<legend style="font-size:12px;font-weight:700;padding:0 6px;">' + kvEsc(g.title) + '</legend>' +
+          g.fields.map(field).join('') + '</fieldset>';
+      }).join('');
+      var ca = kvEsc(code).replace(/\x27/g, '&#39;');
+      var html = '<div class="modal-overlay" onclick="if(event.target===this)closeModal()">' +
+        '<div class="modal" style="width:680px;max-width:96vw;max-height:90vh;overflow:auto;">' +
+        '<h2>' + kvEsc(pf.label || 'Smlouva') + ' — ' + kvEsc(k.code) + '</h2>' +
+        '<div style="color:var(--text2);font-size:12px;margin:-8px 0 14px;">Uprav pole a vygeneruj PDF. Prázdná pole se v PDF vykreslí jako tečkovaná linka k dopsání.</div>' +
+        groups +
+        '<div class="modal-actions">' +
+          '<button type="button" class="btn btn-secondary" onclick="openContractPicker(\'' + ca + '\')" style="margin-right:auto;">← Zpět</button>' +
+          '<button type="button" class="btn btn-primary" onclick="generateCompoundingContract(\'' + type + '\',\'' + ca + '\')">📄 Stáhnout PDF</button>' +
+        '</div></div></div>';
+      document.getElementById('modal-root').innerHTML = html;
+    }
+
+    async function generateCompoundingContract(type, code) {
+      var fields = {};
+      document.querySelectorAll('[id^="cf_"]').forEach(function(el) { fields[el.id.slice(3)] = el.value; });
+      var r;
+      try {
+        r = await fetch('/api/compounder/contracts/' + type + '/pdf', {
+          method: 'POST', credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fields: fields, code: code }),
+        });
+      } catch (e) { alert('Generování PDF selhalo.'); return; }
+      if (!r.ok) { alert('Generování PDF selhalo.'); return; }
+      var blob = await r.blob();
+      var cd = r.headers.get('Content-Disposition') || '';
+      var m = cd.match(/filename="([^"]+)"/);
+      var name = m ? m[1] : (type + '.pdf');
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url; a.download = name; document.body.appendChild(a); a.click();
+      a.remove(); URL.revokeObjectURL(url);
+    }
+
     function kvFindKiosk(code) {
       var list = (_kioskData && Array.isArray(_kioskData.kiosks)) ? _kioskData.kiosks : [];
       for (var i = 0; i < list.length; i++) { if (String(list[i].code) === String(code)) return list[i]; }

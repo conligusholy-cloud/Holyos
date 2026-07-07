@@ -509,17 +509,11 @@ function renderDocsTab(s){
         </div>
         ${d.note?`<div class="meta" style="margin-top:4px;">${esc(d.note)}</div>`:''}
         ${d.external_url?`<a href="${esc(d.external_url)}" target="_blank" style="font-size:12px;color:#14b8a6;">Otevřít odkaz</a>`:''}
-        ${d.file_path?`<a href="/api/sites/documents/${d.id}/download" style="font-size:12px;color:#14b8a6;">Stáhnout PDF</a>`:''}
       </div>
       <button class="btn btn-sm btn-danger" onclick="delDoc(${d.id})">Smazat</button>
     </div>`).join('') || '<div style="color:var(--text2);font-size:13px;">Zatím žádné dokumenty.</div>';
 
-  return `<div class="contract-gen" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;">
-      <button class="btn btn-sm btn-primary" onclick="openContractForm('kupni')">📄 Kupní smlouva</button>
-      <button class="btn btn-sm btn-primary" onclick="openContractForm('servisni')">🔧 Servisní smlouva</button>
-      <button class="btn btn-sm btn-primary" onclick="openContractForm('rezervacni')">📌 Rezervační smlouva</button>
-    </div>
-    <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:14px;">${docs}</div>
+  return `<div style="display:flex;flex-direction:column;gap:10px;margin-bottom:14px;">${docs}</div>
     <h3 style="font-size:14px;margin-bottom:8px;">Přidat dokument / smlouvu</h3>
     <div class="form-grid">
       ${inp('Název *','doc_title','')}
@@ -758,59 +752,5 @@ if (document.readyState === 'interactive' || document.readyState === 'complete')
 
 window.onSearchInput = onSearchInput;
 window.applyFilters = applyFilters;
-
-
-// ─── Generování smluv k lokalitě (kupní / servisní / rezervační) ─────────────
-async function openContractForm(type) {
-  if (!currentSite || !currentSite.id) { alert('Nejprve ulož lokalitu.'); return; }
-  const r = await fetch('/api/sites/' + currentSite.id + '/contracts/' + type + '/prefill', fetchOpts());
-  if (!r.ok) { alert('Nepodařilo se načíst předlohu smlouvy.'); return; }
-  const pf = await r.json();
-  const groupsHtml = (pf.groups || []).map(g => `
-    <fieldset class="contract-group" style="border:1px solid var(--border,#e2e2e2);border-radius:8px;padding:10px 12px;margin-bottom:12px;">
-      <legend style="font-size:12px;font-weight:700;padding:0 6px;">${esc(g.title)}</legend>
-      <div class="form-grid">
-        ${g.fields.map(f => {
-          const val = pf.values[f.name] != null ? pf.values[f.name] : '';
-          return f.type === 'textarea' ? txt(f.label, 'cf_' + f.name, val) : inp(f.label, 'cf_' + f.name, val, 'text');
-        }).join('')}
-      </div>
-    </fieldset>`).join('');
-  openModal(`
-    <h2>${esc(pf.label)} — ${esc(currentSite.name || ('Lokalita #' + currentSite.id))}</h2>
-    <p style="color:var(--text2);font-size:12px;margin-bottom:12px;">Uprav pole a vygeneruj PDF. Prázdná pole se v PDF vykreslí jako tečkovaná linka k dopsání.</p>
-    <div class="contract-form">${groupsHtml}</div>
-    <div class="modal-actions">
-      <button class="btn btn-secondary" onclick="renderSiteModal();switchTab('docs')" style="margin-right:auto;">← Zpět</button>
-      <button class="btn btn-secondary" onclick="generateContract('${type}', true)">💾 Uložit + PDF</button>
-      <button class="btn btn-primary" onclick="generateContract('${type}', false)">📄 Stáhnout PDF</button>
-    </div>
-  `);
-}
-window.openContractForm = openContractForm;
-
-function collectContractFields() {
-  const fields = {};
-  document.querySelectorAll('[name^="cf_"]').forEach(el => { fields[el.name.slice(3)] = el.value; });
-  return fields;
-}
-
-async function generateContract(type, save) {
-  const fields = collectContractFields();
-  const r = await fetch('/api/sites/' + currentSite.id + '/contracts/' + type + '/pdf',
-    fetchOpts({ method: 'POST', body: JSON.stringify({ fields, save: !!save }) }));
-  if (!r.ok) { alert('Generování PDF selhalo.'); return; }
-  const blob = await r.blob();
-  const cd = r.headers.get('Content-Disposition') || '';
-  const m = cd.match(/filename="([^"]+)"/);
-  const name = m ? m[1] : (type + '.pdf');
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = name; document.body.appendChild(a); a.click();
-  a.remove(); URL.revokeObjectURL(url);
-  if (save) { await refreshCurrent(); renderSiteModal(); switchTab('docs'); }
-}
-window.generateContract = generateContract;
-
 
 })();

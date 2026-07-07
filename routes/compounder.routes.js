@@ -15,7 +15,8 @@ const { requireAuth } = require('../middleware/auth');
 const { createNotification } = require('./notifications.routes');
 const { sendMail } = require('../services/email');
 const { inviteEmail, loginEmail } = require('../services/compounder-emails');
-const { getSetting, setSetting } = require('../services/settings');
+const { getSetting, setSetting, getOurCompany } = require('../services/settings');
+const contracts = require('../services/pdf/contracts');
 const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 
@@ -1330,5 +1331,53 @@ function leadEvalFallback(facts) {
     (facts.requested_contact ? ', požádal o telefonický kontakt' : '') + '.';
   return { warmthPct: s, warmth: warmth, summary: summary, businessSize: '—', signals: [] };
 }
+
+
+// ─── Smlouvy k lokalitě prádlomatu (Compounding tab) ─────────────────────────
+// Bezstavové: data lokality přijdou z frontendu (SIS kiosk-values), ne z DB.
+// GET prefill — schéma polí + předvyplněné hodnoty (prodávající = naše firma,
+// protistrana zůstává prázdná k ručnímu doplnění).
+router.get('/contracts/:type/prefill', requireAuth, async (req, res, next) => {
+  try {
+    const { type } = req.params;
+    if (!contracts.isValidType(type)) return res.status(400).json({ error: 'Neznámý typ smlouvy' });
+    const q = req.query || {};
+    const code = String(q.code || '').slice(0, 40);
+    const label = String(q.label || '').slice(0, 300);
+    const priceNum = (q.price != null && q.price !== '') ? Number(q.price) : null;
+    const pseudoSite = {
+      name: code ? ('Lokalita ' + code) : (label || ''),
+      address: label, city: '', zip: '', country: 'CZ',
+      purchase_price: (priceNum != null && isFinite(priceNum)) ? priceNum : null,
+      pradlomat_ref: code, contacts: [],
+    };
+    const our = await getOurCompany().catch(() => null);
+    res.json(contracts.getPrefill(type, pseudoSite, our));
+  } catch (err) { next(err); }
+});
+
+// POST vygenerovat PDF smlouvy z (upravených) polí. Vrací PDF ke stažení.
+router.post('/contracts/:type/pdf', requireAuth, async (req, res, next) => {
+  try {
+    const { type } = req.params;
+    if (!contracts.isValidType(type)) return res.status(400).json({ error: 'Neznámý typ smlouvy' });
+    const fields = (req.body && req.body.fields) || {};
+    let pdf;
+    try {
+      pdf = await contracts.generateContractPdf(type, fields);
+    } catch (e) {
+      console.error('[compounder-contract-pdf] Generování selhalo:', e);
+      return res.status(500).json({ error: 'PDF generování selhalo: ' + e.message });
+    }
+    const safe = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '')
+      .replace(/[^A-Za-z0-9_-]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 80);
+    const base = safe(contracts.TYPE_LABEL[type]) + (req.body && req.body.code ? ('_' + safe(req.body.code)) : '');
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', 'attachment; filename="' + base + '.pdf"');
+    res.setHeader('Content-Length', pdf.length);
+    res.send(pdf);
+  } catch (err) { next(err); }
+});
+
 
 module.exports = router;
