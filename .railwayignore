@@ -20,3 +20,10 @@ backups/
 # Logy a velké dumpy
 *.log
 goods-*.json
+
+# Klientské aplikace — server je nenasazuje/neservíruje (nasazují se zvlášť).
+# BEZ tohohle mělo clients/cad-bridge ~3,7 GB (staré .msi/.exe buildy) a upload timeoutoval.
+clients/cad-bridge/
+clients/velin-mobile/
+# PWA sklad: server servíruje jen dist/, node_modules netřeba nahrávat
+clients/pwa-sklad/node_modules/
