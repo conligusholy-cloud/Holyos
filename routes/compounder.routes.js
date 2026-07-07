@@ -793,6 +793,50 @@ router.put('/compounding-settings', requireAuth, async (req, res, next) => {
   }
 });
 
+// ─── Per-lokalita konfigurace (verze kiosku + měsíční nájem) ───────────────
+// Uloženo jako jedna JSON mapa (klíč 'compounding.kiosks'), kde klíč = kód kiosku
+// a hodnota = { version: 'v2'|'v3'|'v4'|null, rentMonthlyCzk: number|null }.
+const COMPOUNDING_KIOSKS_KEY = 'compounding.kiosks';
+
+const kioskConfigSchema = z.object({
+  version: z.enum(['v2', 'v3', 'v4']).nullable(),
+  rentMonthlyCzk: z.number().nonnegative().nullable(),
+});
+
+// GET /api/compounder/kiosk-config → celá mapa { [code]: {version, rentMonthlyCzk} }
+router.get('/kiosk-config', requireAuth, async (req, res, next) => {
+  try {
+    const map = await getSetting(COMPOUNDING_KIOSKS_KEY, { type: 'json', defaultValue: {} });
+    res.json(map && typeof map === 'object' ? map : {});
+  } catch (err) {
+    next(err);
+  }
+});
+
+// PUT /api/compounder/kiosk-config/:code → upsert konfigurace jedné lokality
+router.put('/kiosk-config/:code', requireAuth, async (req, res, next) => {
+  try {
+    const code = String(req.params.code || '').trim().slice(0, 40);
+    if (!code) return res.status(400).json({ error: 'Chybí kód lokality' });
+    const parsed = kioskConfigSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: 'Neplatná data konfigurace', detail: parsed.error.flatten() });
+    }
+    const map = await getSetting(COMPOUNDING_KIOSKS_KEY, { type: 'json', defaultValue: {} });
+    const next_ = (map && typeof map === 'object') ? { ...map } : {};
+    next_[code] = parsed.data;
+    await setSetting(COMPOUNDING_KIOSKS_KEY, next_, {
+      type: 'json',
+      scope: 'compounding',
+      description: 'Compounding — per-lokalita: verze kiosku + měsíční nájem (CZK)',
+      userId: req.user && req.user.id,
+    });
+    res.json({ ok: true, code, config: parsed.data });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // Notifikace na nový lead. Cíl = env COMPOUNDER_NOTIFY_USER_ID (konkrétní kompetentní
 // osoba), jinak fallback na všechny super-adminy (ať Tomáš dostane upozornění i bez configu).
 // Vytvoří in-app notifikaci (zvonek + SSE realtime); chyba se jen zaloguje.

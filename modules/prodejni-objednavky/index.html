@@ -2863,6 +2863,7 @@
     // ============================================================
     var _kioskData = null; // celá odpověď { kiosks, summary, ... }
     var _compoundingSettings = { pricelist: { v2: { eur: null }, v3: { eur: null }, v4: { eur: null } }, locationMonths: 12 };
+    var _kioskConfig = {}; // mapa { [code]: { version, rentMonthlyCzk } }
     var _kvFxRates = { CZK: 1, EUR: 25 }; // 1 EUR ≈ X CZK (fallback dokud nenačteme z CNB)
 
     function kvEsc(s) {
@@ -2904,6 +2905,10 @@
       try {
         var sr = await fetch('/api/compounder/compounding-settings', { credentials: 'include' });
         if (sr.ok) _compoundingSettings = await sr.json();
+      } catch (e) {}
+      try {
+        var cr = await fetch('/api/compounder/kiosk-config', { credentials: 'include' });
+        if (cr.ok) { var cm = await cr.json(); if (cm && typeof cm === 'object') _kioskConfig = cm; }
       } catch (e) {}
       try {
         var fr = await fetch('/api/wh/exchange-rates');
@@ -2983,19 +2988,30 @@
         '<th>Kód</th><th>Lokalita</th><th>Provozovatel</th>' +
         '<th style="text-align:right;">Ø top 3</th>' +
         '<th style="text-align:right;">Cena lokality</th>' +
-        '<th>Stav</th></tr></thead><tbody>';
+        '<th>Verze</th>' +
+        '<th style="text-align:right;">Nájem</th>' +
+        '<th>Stav</th><th></th></tr></thead><tbody>';
       filtered.forEach(function(k) {
         var cur = k.currency || 'CZK';
         var badge = k.inIncubator
           ? '<span style="background:rgba(59,130,246,0.15);color:#3b82f6;border:1px solid rgba(59,130,246,0.4);border-radius:6px;padding:2px 8px;font-size:11px;">Inkubátor</span>'
           : '<span style="background:rgba(16,185,129,0.15);color:#10b981;border:1px solid rgba(16,185,129,0.4);border-radius:6px;padding:2px 8px;font-size:11px;">Zavedená</span>';
+        var cfg = _kioskConfig[k.code] || {};
+        var verLabel = cfg.version ? cfg.version.toUpperCase() : '<span style="color:var(--text2);">—</span>';
+        var rentLabel = (typeof cfg.rentMonthlyCzk === 'number' && isFinite(cfg.rentMonthlyCzk))
+          ? (kvMoney(cfg.rentMonthlyCzk, 'CZK') + '<span style="color:var(--text2);font-size:11px;"> /měs</span>')
+          : '<span style="color:var(--text2);">—</span>';
+        var codeAttr = kvEsc(k.code).replace(/'/g, '&#39;');
         h += '<tr style="cursor:default;">' +
           '<td style="font-weight:600;white-space:nowrap;">' + kvEsc(k.code) + '</td>' +
           '<td>' + kvEsc(k.label) + '</td>' +
           '<td style="color:var(--text2);">' + kvEsc(k.companyName) + '</td>' +
           '<td style="text-align:right;white-space:nowrap;color:var(--text2);">' + kvMoney(k.avgTop3, cur) + '</td>' +
           '<td style="text-align:right;white-space:nowrap;font-weight:700;color:#eab308;">' + kvMoney(locVal(k), 'CZK') + '</td>' +
+          '<td style="white-space:nowrap;">' + verLabel + '</td>' +
+          '<td style="text-align:right;white-space:nowrap;">' + rentLabel + '</td>' +
           '<td>' + badge + '</td>' +
+          '<td style="text-align:right;"><button class="btn" onclick="openKioskConfig(\'' + codeAttr + '\')" title="Nastavit verzi a nájem" style="padding:4px 9px;font-size:13px;">⚙️</button></td>' +
           '</tr>';
       });
       h += '</tbody></table></div>';
@@ -3088,6 +3104,75 @@
         var data = await r.json().catch(function() { return {}; });
         if (!r.ok) throw new Error(data.error || ('HTTP ' + r.status));
         _compoundingSettings = data.settings || payload;
+        closeModal();
+        renderKioskValues();
+      } catch (e) {
+        showErr('Uložení selhalo: ' + kvEsc(e.message));
+      }
+    }
+
+    // ─── Per-lokalita nastavení (verze kiosku + měsíční nájem) ───
+    function kvFindKiosk(code) {
+      var list = (_kioskData && Array.isArray(_kioskData.kiosks)) ? _kioskData.kiosks : [];
+      for (var i = 0; i < list.length; i++) { if (String(list[i].code) === String(code)) return list[i]; }
+      return null;
+    }
+    function openKioskConfig(code) {
+      var k = kvFindKiosk(code) || { code: code, label: '' };
+      var cfg = _kioskConfig[code] || {};
+      var ver = cfg.version || '';
+      var rent = (typeof cfg.rentMonthlyCzk === 'number' && isFinite(cfg.rentMonthlyCzk)) ? cfg.rentMonthlyCzk : '';
+      function opt(v, label) {
+        return '<option value="' + v + '"' + (ver === v ? ' selected' : '') + '>' + label + '</option>';
+      }
+      var html = '<div class="modal-overlay" onclick="if(event.target===this)closeModal()">' +
+        '<div class="modal" style="width:460px;max-width:95vw;">' +
+        '<h2>⚙️ ' + kvEsc(k.code) + '</h2>' +
+        '<div style="color:var(--text2);font-size:13px;margin:-10px 0 16px;">' + kvEsc(k.label || '') + '</div>' +
+        '<div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;">' +
+          '<div style="width:130px;">Verze kiosku</div>' +
+          '<select id="kcfg-version" style="width:180px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:14px;">' +
+            opt('', '— nezvoleno —') + opt('v2', 'V2') + opt('v3', 'V3') + opt('v4', 'V4') +
+          '</select>' +
+        '</div>' +
+        '<div style="display:flex;align-items:center;gap:12px;">' +
+          '<div style="width:130px;">Nájem (měsíční)</div>' +
+          '<div style="position:relative;">' +
+            '<input type="number" min="0" step="1" id="kcfg-rent" value="' + rent + '" placeholder="0" style="width:160px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 40px 8px 12px;color:var(--text);font-size:14px;">' +
+            '<span style="position:absolute;right:12px;top:50%;transform:translateY(-50%);color:var(--text2);font-size:13px;">Kč</span>' +
+          '</div>' +
+        '</div>' +
+        '<div id="kcfg-err" style="color:#ef4444;font-size:13px;margin-top:12px;display:none;"></div>' +
+        '<div class="modal-actions">' +
+          '<button type="button" class="btn btn-secondary" onclick="closeModal()">Zrušit</button>' +
+          '<button type="button" class="btn btn-primary" onclick="saveKioskConfig(\'' + kvEsc(code).replace(/\x27/g, "&#39;") + '\')">Uložit</button>' +
+        '</div>' +
+        '</div></div>';
+      document.getElementById('modal-root').innerHTML = html;
+    }
+
+    async function saveKioskConfig(code) {
+      var errEl = document.getElementById('kcfg-err');
+      function showErr(m) { if (errEl) { errEl.textContent = m; errEl.style.display = 'block'; } }
+      var ver = String((document.getElementById('kcfg-version') || {}).value || '');
+      var version = (ver === 'v2' || ver === 'v3' || ver === 'v4') ? ver : null;
+      var rawRent = String((document.getElementById('kcfg-rent') || {}).value || '').trim().replace(',', '.');
+      var rentMonthlyCzk = null;
+      if (rawRent !== '') {
+        var n = parseFloat(rawRent);
+        if (!(isFinite(n) && n >= 0)) return showErr('Nájem musí být nezáporné číslo (nebo prázdné).');
+        rentMonthlyCzk = n;
+      }
+      try {
+        var r = await fetch('/api/compounder/kiosk-config/' + encodeURIComponent(code), {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ version: version, rentMonthlyCzk: rentMonthlyCzk }),
+        });
+        var data = await r.json().catch(function() { return {}; });
+        if (!r.ok) throw new Error(data.error || ('HTTP ' + r.status));
+        _kioskConfig[code] = data.config || { version: version, rentMonthlyCzk: rentMonthlyCzk };
         closeModal();
         renderKioskValues();
       } catch (e) {
