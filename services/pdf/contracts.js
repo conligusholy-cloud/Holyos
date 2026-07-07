@@ -69,6 +69,21 @@ function v(val, width) {
   return esc(val).replace(/\n/g, '<br>');
 }
 
+function fmtNum(n) {
+  const num = Number(n);
+  if (!isFinite(num)) return '';
+  return Math.round(num).toLocaleString('cs-CZ').replace(/\u00A0/g, ' ').replace(/\u202F/g, ' ');
+}
+
+const VERSION_SPEC = {
+  V2: 'velká pračka 18 kg, sušička 18 kg',
+  V3: 'malá pračka 8 kg, velká pračka 18 kg, sušička 18 kg',
+  V4: 'velká pračka 18 kg, velká pračka 18 kg, sušička 18 kg, sušička 18 kg',
+};
+function versionSpec(ver) {
+  return VERSION_SPEC[String(ver || '').toUpperCase()] || '';
+}
+
 function fmtDate(d) {
   if (!d) return '';
   const dt = new Date(d);
@@ -137,8 +152,7 @@ const SCHEMAS = {
       { name: 'reservation_credit', label: 'Odečet rezervačního poplatku', type: 'text' },
       { name: 'payment_days', label: 'Splatnost / účinnost (dní)', type: 'text' },
     ]},
-    { key: 'delivery', title: 'Výroba, dodání, záruka', fields: [
-      { name: 'production_term', label: 'Orientační termín vyrobení', type: 'text' },
+    { key: 'delivery', title: 'Dodání a záruka', fields: [
       { name: 'warranty_months', label: 'Záruka (měsíců)', type: 'text' },
     ]},
     { key: 'buyback', title: 'Předkupní právo a odkup', fields: [
@@ -230,24 +244,27 @@ function buildDefaults(type, site, our) {
 
   if (type === 'kupni') {
     const months = site?._locationMonths != null ? site._locationMonths : 12;
+    const machine = (site?._machinePrice != null && site._machinePrice !== '') ? Number(site._machinePrice) : null;
+    const locPrice = site?.purchase_price != null ? Number(site.purchase_price) : null;
+    const total = (machine != null || locPrice != null) ? ((machine || 0) + (locPrice || 0)) : null;
+    const ver = String(site?._version || site?.pradlomat_ref || '').toUpperCase();
     return {
       ...base,
-      kiosek_type: site?.pradlomat_ref || 'V3',
+      kiosek_type: ver,
       location_desc: loc,
-      kiosek_spec: 'software a řídicí systém stroje, dokumentace, návod, prohlášení o shodě',
-      price_machine: '',
-      avg_turnover_vat: site?._avgTurnover != null ? String(site._avgTurnover) : '',
+      kiosek_spec: versionSpec(ver),
+      price_machine: machine != null ? fmtNum(machine) : '',
+      avg_turnover_vat: site?._avgTurnover != null ? fmtNum(site._avgTurnover) : '',
       location_months: String(months),
-      price_location: site?.purchase_price != null ? String(site.purchase_price) : '',
-      price_total: '',
+      price_location: locPrice != null ? fmtNum(locPrice) : '',
+      price_total: total != null ? fmtNum(total) : '',
       reservation_credit: '',
       payment_days: '2',
-      production_term: '',
       warranty_months: '12',
       buyback_decision_months: '12',
       buyback_key_months: '12',
       resale_commission_pct: '10',
-      system_fee: '',
+      system_fee: '100 EUR / měsíc',
       place_signed: site?.city || '',
     };
   }
@@ -262,11 +279,11 @@ function buildDefaults(type, site, our) {
         'vzdálený monitoring, dohled a technická podpora',
         'inkaso tržeb a jejich vyúčtování',
       ].join('\n'),
-      fee_pct: '13',
+      fee_pct: '15',
       fee_base: 'z celkových tržeb (obratu) dosažených provozem kiosku za příslušné období, bez DPH',
       billing_period: 'kalendářní měsíc',
       due_days: '14',
-      settlement: 'Poskytovatel inkasuje tržby, sráží si odměnu 13 % a zbývající částku poukazuje objednateli.',
+      settlement: 'Poskytovatel inkasuje tržby, sráží si odměnu 15 % a zbývající částku poukazuje objednateli.',
       parts_included: 'nejsou zahrnuty (hradí objednatel proti doložení)',
       reaction_time: '48 hodin',
       fix_time: '5 pracovních dní',
@@ -356,7 +373,7 @@ function renderKupni(d) {
     <h2>Článek I — Předmět koupě</h2>
     <ol>
       <li>Předmětem smlouvy je prodej nového zařízení — prádlomatu (dále jen „stroj"): typ / verze <strong>${v(d.kiosek_type)}</strong>, výrobce prodávající. Stroj bude teprve vyroben a dodán způsobem dle článku V.</li>
-      <li>Součástí dodávky je: ${v(d.kiosek_spec)}.</li>
+      <li>Stroj verze <strong>${v(d.kiosek_type)}</strong> je sestaven z: ${v(d.kiosek_spec)}. Součástí dodávky je dále software a řídicí systém stroje, dokumentace, návod a prohlášení o shodě.</li>
       <li>Stroj je určen k provozu na lokalitě: ${v(d.location_desc)} (dále jen „lokalita").</li>
       <li>Prodávající prohlašuje, že bude výlučným výrobcem a vlastníkem stroje až do přechodu vlastnického práva dle článku V a že stroj nebude zatížen právy třetích osob.</li>
     </ol>
@@ -366,6 +383,7 @@ function renderKupni(d) {
       <li>Kupující bere na vědomí, že <strong>nenabývá žádná práva k lokalitě</strong> — pozemku, prostoru, nájmu ani přípojkám. Užívací právo k lokalitě náleží prodávajícímu (na základě nájmu, nebo jako vlastníku pozemku).</li>
       <li>Kupní cenou kupující nabývá právo, aby jeho stroj byl provozován na této zavedené a ověřené lokalitě a těžil z jejího zavedeného provozu a klientely, po dobu trvání užívacího práva prodávajícího k lokalitě.</li>
       <li>Za jednostranné ukončení nájmu ze strany pronajímatele lokality prodávající neodpovídá; v takovém případě se uplatní článek VI.</li>
+      <li>Je-li stroj provozován na lokalitě Best Series, zavazuje se kupující provozovat jej pod značkou (brandem) Best Series.</li>
     </ol>
 
     <h2>Článek III — Kupní cena</h2>
@@ -386,12 +404,12 @@ function renderKupni(d) {
     <ol>
       <li>Kupující hradí <strong>celou kupní cenu najednou</strong> (bez zálohy), sníženou o případný již uhrazený rezervační poplatek dle článku III.</li>
       <li>Kupní cena je splatná do <strong>${v(d.payment_days, 3)} dnů</strong> od podpisu smlouvy, bezhotovostně na účet prodávajícího.</li>
-      <li>Smlouva se stává <strong>účinnou (aktivní) dnem připsání</strong> kupní ceny na účet prodávajícího. Nebude-li kupní cena v této lhůtě uhrazena, smlouva <strong>nenabývá účinnosti</strong> a hledí se na ni, jako by nebyla uzavřena.</li>
+      <li>Smlouva se stává <strong>účinnou (aktivní) dnem připsání</strong> kupní ceny na účet prodávajícího. Nebude-li kupní cena v této lhůtě uhrazena, smlouva <strong>nenabývá účinnosti</strong> a hledí se na ni, jako by nebyla uzavřena. V takovém případě je prodávající oprávněn nabídnout či prodat danou lokalitu jinému zájemci.</li>
     </ol>
 
     <h2>Článek V — Výroba, dodání a přechod vlastnictví</h2>
     <ol>
-      <li>Po uhrazení kupní ceny prodávající zařadí nový stroj do výroby dle aktuálně volných výrobních slotů; orientační termín vyrobení ${v(d.production_term, 12)}.</li>
+      <li>Po uhrazení kupní ceny prodávající zařadí nový stroj do výroby dle aktuálně volných výrobních slotů. Konkrétní termín výroby sdělí prodávající kupujícímu po zaplacení kupní ceny a naplánování konkrétního výrobního slotu.</li>
       <li>Do vyrobení nového stroje prodávající provozuje na lokalitě vlastní kiosek, aby byl provoz a výnos lokality zajištěn od počátku.</li>
       <li><strong>Vlastnické právo ke stroji přechází na kupujícího okamžikem jeho vyrobení.</strong></li>
       <li>Po vyrobení prodávající v rámci sjednané ceny zajistí výměnu stávajícího kiosku za nový stroj kupujícího na lokalitě a jeho uvedení do provozu; o předání se sepíše předávací protokol.</li>
@@ -411,7 +429,7 @@ function renderKupni(d) {
     <ol>
       <li>Kupující bere na vědomí, že <strong>dlouhodobý provoz stroje není možný bez systémových a softwarových služeb</strong> prodávajícího, jimiž jsou zejména: správa systému a softwaru stroje, odesílání SMS telemetrie zákazníkům, software pro sledování výkonu stroje a systém pro správu a řízení personálu provozu.</li>
       <li>Tyto služby jsou poskytovány za poplatek ${v(d.system_fee, 10)} a jsou podmínkou dlouhodobé provozuschopnosti stroje.</li>
-      <li>Provozní režim si kupující zvolí: a) provoz prostřednictvím prodávajícího dle samostatné servisní smlouvy (odměna 13 % z obratu, systémové služby zahrnuty), nebo b) samostatný provoz, kdy systémové služby dle odst. 1 hradí kupující samostatně dle odst. 2.</li>
+      <li>Provozní režim si kupující zvolí: <strong>a) provoz prostřednictvím prodávajícího</strong> dle samostatné servisní smlouvy — odměna <strong>15 % z obratu</strong>, v níž jsou systémové a softwarové služby (poplatek 100 EUR) již zahrnuty; po dohodě lze k 15 % připočítat nájem za místo (dle skutečnosti) a energie (dle aktuální spotřeby). <strong>b) samostatný provoz</strong> — kupující hradí veškeré náklady provozu sám a nad rámec toho poplatek 100 EUR za zajištění softwarového servisu dle odstavců 1 a 2.</li>
     </ol>
 
     <h2>Článek VIII — Předkupní právo prodávajícího a zpětný odkup</h2>
@@ -429,7 +447,6 @@ function renderKupni(d) {
       <li>Je-li některé ustanovení neplatné či neúčinné, nemá to vliv na platnost ostatních.</li>
       <li>Smlouva je vyhotovena ve dvou stejnopisech (nebo elektronicky s uznávanými podpisy); strany ji uzavírají svobodně a vážně.</li>
     </ol>
-    <p class="attach"><strong>Přílohy:</strong> č. 1 — Specifikace stroje.</p>
     ${sigBlock('Prodávající', 'Kupující', d.place_signed)}`;
   return shell('Kupní smlouva', 'na dodávku prádlomatu', body);
 }
@@ -460,6 +477,8 @@ function renderServisni(d) {
       <li>Odměna se zúčtovává za ${v(d.billing_period)} a je splatná na základě daňového dokladu se splatností ${v(d.due_days, 4)} dní.</li>
       <li>Vypořádání tržeb: ${v(d.settlement)}.</li>
       <li>Náklady na náhradní díly a spotřební materiál ${v(d.parts_included)}.</li>
+      <li>Po dohodě lze k odměně připočítat nájem za místo (dle skutečnosti) a energie (dle aktuální spotřeby).</li>
+      <li>Systémové a softwarové služby (poplatek 100 EUR) jsou zahrnuty v odměně poskytovatele.</li>
       <li>K odměně bude připočtena DPH v zákonné výši.</li>
     </ol>
 

@@ -1348,6 +1348,8 @@ router.get('/contracts/:type(kupni|servisni|rezervacni)/prefill', requireAuth, a
     const priceNum = (q.price != null && q.price !== '') ? Number(q.price) : null;
     const avgNum = (q.avg != null && q.avg !== '') ? Number(q.avg) : null;
     const monthsNum = (q.months != null && q.months !== '') ? Number(q.months) : null;
+    const machineNum = (q.machine != null && q.machine !== '') ? Number(q.machine) : null;
+    const ver = String(q.ver || '').slice(0, 4);
     const pseudoSite = {
       name: code ? ('Lokalita ' + code) : (label || ''),
       address: label, city: '', zip: '', country: 'CZ',
@@ -1355,6 +1357,8 @@ router.get('/contracts/:type(kupni|servisni|rezervacni)/prefill', requireAuth, a
       pradlomat_ref: code, contacts: [],
       _avgTurnover: (avgNum != null && isFinite(avgNum)) ? avgNum : null,
       _locationMonths: (monthsNum != null && isFinite(monthsNum)) ? monthsNum : 12,
+      _version: ver || null,
+      _machinePrice: (machineNum != null && isFinite(machineNum)) ? machineNum : null,
     };
     const our = await getOurCompany().catch(() => null);
     res.json(contracts.getPrefill(type, pseudoSite, our));

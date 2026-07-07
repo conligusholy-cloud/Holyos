@@ -3125,6 +3125,18 @@
       return Math.round(v * rate * months);
     }
 
+    function _kvVerMachine(code) {
+      var cfg = (typeof _kioskConfig !== 'undefined' && _kioskConfig[code]) ? _kioskConfig[code] : {};
+      var ver = cfg.version || '';
+      var machine = null;
+      var pl = (_compoundingSettings && _compoundingSettings.pricelist) ? _compoundingSettings.pricelist[ver] : null;
+      if (pl && pl.eur != null && pl.eur !== '') {
+        var rate = (_kvFxRates && _kvFxRates.EUR) ? _kvFxRates.EUR : 25;
+        machine = Math.round(Number(pl.eur) * rate);
+      }
+      return { ver: ver, machine: machine };
+    }
+
     function openContractPicker(code) {
       var k = kvFindKiosk(code) || { code: code, label: '' };
       var ca = kvEsc(code).replace(/\x27/g, '&#39;');
@@ -3137,7 +3149,7 @@
         '<div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:8px;">NOVÁ SMLOUVA</div>' +
         '<div style="display:flex;flex-direction:column;gap:8px;">' +
           _contractCreateRow('kupni', '📄 Kupní smlouva', ca) +
-          _contractCreateRow('servisni', '🔧 Servisní smlouva (13 %)', ca) +
+          _contractCreateRow('servisni', '🔧 Servisní smlouva (15 %)', ca) +
           _contractCreateRow('rezervacni', '📌 Rezervační smlouva', ca) +
         '</div>' +
         '<div class="modal-actions"><button type="button" class="btn btn-secondary" onclick="closeModal()">Zavřít</button></div>' +
@@ -3197,7 +3209,8 @@
       var price = _kvLocationPrice(k);
       var avg = (typeof k.avgTop3 === 'number' && isFinite(k.avgTop3)) ? Math.round(k.avgTop3) : '';
       var months = (_compoundingSettings && Number.isFinite(_compoundingSettings.locationMonths)) ? _compoundingSettings.locationMonths : 12;
-      var qs = 'code=' + encodeURIComponent(code) + '&label=' + encodeURIComponent(k.label || '') + (price != null ? ('&price=' + price) : '') + '&avg=' + avg + '&months=' + months;
+      var _vm = _kvVerMachine(code);
+      var qs = 'code=' + encodeURIComponent(code) + '&label=' + encodeURIComponent(k.label || '') + (price != null ? ('&price=' + price) : '') + '&avg=' + avg + '&months=' + months + '&ver=' + encodeURIComponent(_vm.ver) + '&machine=' + (_vm.machine != null ? _vm.machine : '');
       var pf;
       try {
         var r = await fetch('/api/compounder/contracts/' + type + '/prefill?' + qs, { credentials: 'include' });
@@ -3294,7 +3307,8 @@
       var price = _kvLocationPrice(k);
       var avg = (typeof k.avgTop3 === 'number' && isFinite(k.avgTop3)) ? Math.round(k.avgTop3) : '';
       var months = (_compoundingSettings && Number.isFinite(_compoundingSettings.locationMonths)) ? _compoundingSettings.locationMonths : 12;
-      var qs = 'code=' + encodeURIComponent(code) + '&label=' + encodeURIComponent(k.label || '') + (price != null ? ('&price=' + price) : '') + '&avg=' + avg + '&months=' + months;
+      var _vm = _kvVerMachine(code);
+      var qs = 'code=' + encodeURIComponent(code) + '&label=' + encodeURIComponent(k.label || '') + (price != null ? ('&price=' + price) : '') + '&avg=' + avg + '&months=' + months + '&ver=' + encodeURIComponent(_vm.ver) + '&machine=' + (_vm.machine != null ? _vm.machine : '');
       var pf;
       try {
         var r = await fetch('/api/compounder/contracts/' + type + '/prefill?' + qs, { credentials: 'include' });
