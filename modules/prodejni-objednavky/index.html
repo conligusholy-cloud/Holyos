@@ -2862,7 +2862,7 @@
     // Data tahá server-side proxy /api/compounder/kiosk-values (klíč drží server).
     // ============================================================
     var _kioskData = null; // celá odpověď { kiosks, summary, ... }
-    var _compoundingSettings = { pricelist: { v2: { eur: null }, v3: { eur: null }, v4: { eur: null } }, locationMonths: 12, servicePct: 15 };
+    var _compoundingSettings = { pricelist: { v2: { eur: null }, v3: { eur: null }, v4: { eur: null } }, locationMonths: 12, servicePct: 15, energyPct: 9.5 };
     var _kioskConfig = {}; // mapa { [code]: { version, rentMonthlyCzk } }
     var _kvFxRates = { CZK: 1, EUR: 25 }; // 1 EUR ≈ X CZK (fallback dokud nenačteme z CNB)
 
@@ -2987,12 +2987,14 @@
       var h = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr>' +
         '<th>Kód</th><th>Lokalita</th><th>Provozovatel</th>' +
         '<th style="text-align:right;">Průměrný obrat s DPH</th>' +
+        '<th style="text-align:right;">Obrat bez DPH</th>' +
         '<th style="text-align:right;">Cena lokality</th>' +
         '<th style="text-align:right;">Cena kiosku</th>' +
         '<th style="text-align:right;">Celková cena</th>' +
         '<th style="text-align:right;">Servisní smlouva (' + (Number.isFinite(_compoundingSettings.servicePct) ? _compoundingSettings.servicePct : 15) + ' %)</th>' +
         '<th>Verze</th>' +
         '<th style="text-align:right;">Nájem</th>' +
+        '<th style="text-align:right;">Odhad energií (' + (Number.isFinite(_compoundingSettings.energyPct) ? _compoundingSettings.energyPct : 9.5) + ' %)</th>' +
         '<th>Stav</th><th></th></tr></thead><tbody>';
       filtered.forEach(function(k) {
         var cur = k.currency || 'CZK';
@@ -3011,12 +3013,14 @@
           '<td>' + kvEsc(k.label) + '</td>' +
           '<td style="color:var(--text2);">' + kvEsc(k.companyName) + '</td>' +
           '<td style="text-align:right;white-space:nowrap;color:var(--text2);">' + kvMoney(k.avgTop3, cur) + '</td>' +
+          '<td style="text-align:right;white-space:nowrap;color:var(--text2);">' + kvMoney(Math.round(num(k.avgTop3) / 1.21), 'CZK') + '</td>' +
           '<td style="text-align:right;white-space:nowrap;font-weight:700;color:#eab308;">' + kvMoney(locVal(k), 'CZK') + '</td>' +
           '<td style="text-align:right;white-space:nowrap;color:var(--text2);">' + (_vmRow.machine != null ? kvMoney(_vmRow.machine, 'CZK') : '<span style="color:var(--text2);">—</span>') + '</td>' +
           '<td style="text-align:right;white-space:nowrap;font-weight:700;">' + (_vmRow.machine != null ? kvMoney(locVal(k) + _vmRow.machine, 'CZK') : '<span style="color:var(--text2);">—</span>') + '</td>' +
           '<td style="text-align:right;white-space:nowrap;color:#10b981;">' + kvMoney(Math.round(num(k.avgTop3) * ((Number.isFinite(_compoundingSettings.servicePct) ? _compoundingSettings.servicePct : 15) / 100)), 'CZK') + '<span style="color:var(--text2);font-size:11px;"> /měs</span></td>' +
           '<td style="white-space:nowrap;">' + verLabel + '</td>' +
           '<td style="text-align:right;white-space:nowrap;">' + rentLabel + '</td>' +
+          '<td style="text-align:right;white-space:nowrap;color:var(--text2);">' + kvMoney(Math.round((num(k.avgTop3) / 1.21) * ((Number.isFinite(_compoundingSettings.energyPct) ? _compoundingSettings.energyPct : 9.5) / 100)), 'CZK') + '<span style="color:var(--text2);font-size:11px;"> /měs</span></td>' +
           '<td>' + badge + '</td>' +
           '<td style="text-align:right;white-space:nowrap;">' +
             '<button class="btn" onclick="openContractPicker(\'' + codeAttr + '\')" title="Smlouvy" style="padding:4px 9px;font-size:13px;margin-right:4px;">📄</button>' +
@@ -3084,6 +3088,14 @@
             '<span style="position:absolute;right:12px;top:50%;transform:translateY(-50%);color:var(--text2);font-size:13px;">%</span>' +
           '</div>' +
         '</div>' +
+        '<div style="display:flex;align-items:center;gap:12px;margin-top:10px;">' +
+          '<div style="width:120px;">Odhad energií</div>' +
+          '<div style="position:relative;">' +
+            '<input type="number" min="0" max="100" step="0.1" id="kvset-energypct" value="' + (Number.isFinite(st.energyPct) ? st.energyPct : 9.5) + '" style="width:120px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 32px 8px 12px;color:var(--text);font-size:14px;">' +
+            '<span style="position:absolute;right:12px;top:50%;transform:translateY(-50%);color:var(--text2);font-size:13px;">%</span>' +
+          '</div>' +
+          '<div style="color:var(--text2);font-size:12px;">z obratu bez DPH</div>' +
+        '</div>' +
         '<div id="kvset-err" style="color:#ef4444;font-size:13px;margin-top:12px;display:none;"></div>' +
         '<div class="modal-actions">' +
           '<button type="button" class="btn btn-secondary" onclick="closeModal()">Zrušit</button>' +
@@ -3114,10 +3126,15 @@
       if (!(servicePct >= 0 && servicePct <= 100)) {
         return showErr('Servisní odměna musí být 0 až 100 %.');
       }
+      var energyPct = parseFloat(String((document.getElementById('kvset-energypct') || {}).value || '').trim().replace(',', '.'));
+      if (!(energyPct >= 0 && energyPct <= 100)) {
+        return showErr('Odhad energií musí být 0 až 100 %.');
+      }
       var payload = {
         pricelist: { v2: { eur: v2 }, v3: { eur: v3 }, v4: { eur: v4 } },
         locationMonths: months,
         servicePct: servicePct,
+        energyPct: energyPct,
       };
       try {
         var r = await fetch('/api/compounder/compounding-settings', {

@@ -744,6 +744,7 @@ const COMPOUNDING_SETTINGS_DEFAULT = {
   pricelist: { v2: { eur: null }, v3: { eur: null }, v4: { eur: null } },
   locationMonths: 12,
   servicePct: 15,
+  energyPct: 9.5,
 };
 
 const compoundingSettingsSchema = z.object({
@@ -754,6 +755,7 @@ const compoundingSettingsSchema = z.object({
   }),
   locationMonths: z.number().int().min(1).max(600),
   servicePct: z.number().min(0).max(100).optional(),
+  energyPct: z.number().min(0).max(100).optional(),
 });
 
 // GET /api/compounder/compounding-settings
@@ -772,6 +774,7 @@ router.get('/compounding-settings', requireAuth, async (req, res, next) => {
       },
       locationMonths: (val && Number.isFinite(val.locationMonths)) ? val.locationMonths : 12,
       servicePct: (val && Number.isFinite(val.servicePct)) ? val.servicePct : 15,
+      energyPct: (val && Number.isFinite(val.energyPct)) ? val.energyPct : 9.5,
     };
     res.json(merged);
   } catch (err) {
