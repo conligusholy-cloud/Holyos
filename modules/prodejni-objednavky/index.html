@@ -2988,6 +2988,8 @@
         '<th>Kód</th><th>Lokalita</th><th>Provozovatel</th>' +
         '<th style="text-align:right;">Průměrný obrat s DPH</th>' +
         '<th style="text-align:right;">Cena lokality</th>' +
+        '<th style="text-align:right;">Cena kiosku</th>' +
+        '<th style="text-align:right;">Celková cena</th>' +
         '<th>Verze</th>' +
         '<th style="text-align:right;">Nájem</th>' +
         '<th>Stav</th><th></th></tr></thead><tbody>';
@@ -2997,6 +2999,7 @@
           ? '<span style="background:rgba(59,130,246,0.15);color:#3b82f6;border:1px solid rgba(59,130,246,0.4);border-radius:6px;padding:2px 8px;font-size:11px;">Inkubátor</span>'
           : '<span style="background:rgba(16,185,129,0.15);color:#10b981;border:1px solid rgba(16,185,129,0.4);border-radius:6px;padding:2px 8px;font-size:11px;">Zavedená</span>';
         var cfg = _kioskConfig[k.code] || {};
+        var _vmRow = _kvVerMachine(k.code);
         var verLabel = cfg.version ? cfg.version.toUpperCase() : '<span style="color:var(--text2);">—</span>';
         var rentLabel = (typeof cfg.rentMonthlyCzk === 'number' && isFinite(cfg.rentMonthlyCzk))
           ? (kvMoney(cfg.rentMonthlyCzk, 'CZK') + '<span style="color:var(--text2);font-size:11px;"> /měs</span>')
@@ -3008,6 +3011,8 @@
           '<td style="color:var(--text2);">' + kvEsc(k.companyName) + '</td>' +
           '<td style="text-align:right;white-space:nowrap;color:var(--text2);">' + kvMoney(k.avgTop3, cur) + '</td>' +
           '<td style="text-align:right;white-space:nowrap;font-weight:700;color:#eab308;">' + kvMoney(locVal(k), 'CZK') + '</td>' +
+          '<td style="text-align:right;white-space:nowrap;color:var(--text2);">' + (_vmRow.machine != null ? kvMoney(_vmRow.machine, 'CZK') : '<span style="color:var(--text2);">—</span>') + '</td>' +
+          '<td style="text-align:right;white-space:nowrap;font-weight:700;">' + (_vmRow.machine != null ? kvMoney(locVal(k) + _vmRow.machine, 'CZK') : '<span style="color:var(--text2);">—</span>') + '</td>' +
           '<td style="white-space:nowrap;">' + verLabel + '</td>' +
           '<td style="text-align:right;white-space:nowrap;">' + rentLabel + '</td>' +
           '<td>' + badge + '</td>' +
