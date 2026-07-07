@@ -73,6 +73,9 @@
     .data-table td { padding: 10px 14px; font-size: 13px; border-bottom: 1px solid rgba(255,255,255,0.04); vertical-align: middle; }
     .data-table tr:hover td { background: rgba(234,179,8,0.06); }
     .data-table tr { cursor: pointer; }
+    .kv-compact th { padding: 7px 7px; font-size: 10px; letter-spacing: 0.2px; }
+    .kv-compact td { padding: 7px 7px; font-size: 11px; }
+    .kv-compact td span { font-size: 10px !important; }
 
     .badge { display: inline-block; padding: 3px 10px; border-radius: 6px; font-size: 11px; font-weight: 600; }
     .person-name { font-weight: 600; color: var(--text); }
@@ -2984,7 +2987,7 @@
         return;
       }
 
-      var h = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr>' +
+      var h = '<div style="overflow-x:auto;"><table class="data-table kv-compact"><thead><tr>' +
         '<th>Kód</th><th>Lokalita</th><th>Provozovatel</th>' +
         '<th>Verze</th>' +
         '<th style="text-align:right;">Průměrný obrat s DPH</th>' +
