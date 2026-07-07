@@ -15,6 +15,8 @@ const fs = require('fs');
 const { z } = require('zod');
 const { prisma } = require('../config/database');
 const { requireAuth } = require('../middleware/auth');
+const contracts = require('../services/pdf/contracts');
+const { getOurCompany } = require('../services/settings');
 
 // ─── Konstanty ──────────────────────────────────────────────────────────────
 const SITE_TYPES   = ['rent', 'purchase', 'other'];
@@ -624,6 +626,83 @@ router.get('/meta/enums', (req, res) => {
     comm_channels: COMM_CHANNELS,
     doc_types: DOC_TYPES,
   });
+});
+
+// ─── Smlouvy k lokalitě (generování PDF: kupní / servisní / rezervační) ──────
+const _safeName = (s) => String(s || '')
+  .normalize('NFD').replace(/[̀-ͯ]/g, '')
+  .replace(/[^A-Za-z0-9_-]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 80);
+
+// GET prefill — schéma polí + předvyplněné hodnoty z dat lokality
+router.get('/:id(\\d+)/contracts/:type/prefill', async (req, res, next) => {
+  try {
+    const { type } = req.params;
+    if (!contracts.isValidType(type)) return res.status(400).json({ error: 'Neznámý typ smlouvy' });
+    const id = parseInt(req.params.id, 10);
+    const site = await prisma.site.findUnique({
+      where: { id },
+      include: { company: true, contacts: { orderBy: [{ is_primary: 'desc' }, { id: 'asc' }] } },
+    });
+    if (!site) return res.status(404).json({ error: 'Lokalita nenalezena' });
+    const our = await getOurCompany().catch(() => null);
+    res.json(contracts.getPrefill(type, site, our));
+  } catch (err) { next(err); }
+});
+
+// POST vygenerovat PDF smlouvy (volitelně uložit jako dokument lokality)
+router.post('/:id(\\d+)/contracts/:type/pdf', async (req, res, next) => {
+  try {
+    const { type } = req.params;
+    if (!contracts.isValidType(type)) return res.status(400).json({ error: 'Neznámý typ smlouvy' });
+    const id = parseInt(req.params.id, 10);
+    const site = await prisma.site.findUnique({ where: { id }, select: { id: true, name: true } });
+    if (!site) return res.status(404).json({ error: 'Lokalita nenalezena' });
+
+    const fields = (req.body && req.body.fields) || {};
+    let pdf;
+    try {
+      pdf = await contracts.generateContractPdf(type, fields);
+    } catch (e) {
+      console.error('[contract-pdf] Generování selhalo:', e);
+      return res.status(500).json({ error: 'PDF generování selhalo: ' + e.message });
+    }
+
+    const baseName = `${_safeName(contracts.TYPE_LABEL[type])}_${_safeName(site.name) || ('lokalita_' + id)}`;
+
+    if (req.body && req.body.save) {
+      const filename = `${Date.now()}_${baseName}.pdf`;
+      const filePath = path.join(DOCS_DIR, filename);
+      fs.writeFileSync(filePath, pdf);
+      await prisma.siteDocument.create({
+        data: {
+          site_id: id,
+          doc_type: 'contract',
+          title: req.body.title || `${contracts.TYPE_LABEL[type]} — ${site.name || ('lokalita #' + id)}`,
+          file_path: filePath,
+          mime_type: 'application/pdf',
+          size_bytes: pdf.length,
+        },
+      });
+    }
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${baseName}.pdf"`);
+    res.setHeader('Content-Length', pdf.length);
+    res.send(pdf);
+  } catch (err) { next(err); }
+});
+
+// GET stažení dříve uloženého dokumentu (PDF uložené na disku)
+router.get('/documents/:did(\\d+)/download', async (req, res, next) => {
+  try {
+    const doc = await prisma.siteDocument.findUnique({ where: { id: parseInt(req.params.did, 10) } });
+    if (!doc || !doc.file_path || !fs.existsSync(doc.file_path)) {
+      return res.status(404).json({ error: 'Soubor nenalezen' });
+    }
+    res.setHeader('Content-Type', doc.mime_type || 'application/octet-stream');
+    res.setHeader('Content-Disposition', `attachment; filename="${path.basename(doc.file_path)}"`);
+    fs.createReadStream(doc.file_path).pipe(res);
+  } catch (err) { next(err); }
 });
 
 module.exports = router;
