@@ -2811,6 +2811,9 @@
       var tr = document.createElement('tr'); tr.className='cmp-act-row';
       var td = document.createElement('td'); td.colSpan = 10; td.style.background='rgba(234,179,8,0.04)'; td.style.padding='14px 18px';
       td.innerHTML = cmpSecBlock(id, row.getAttribute('data-sections')||'');
+      var resDiv = document.createElement('div'); resDiv.innerHTML = '<div style="color:var(--text2);font-size:13px;">Načítám rezervace…</div>';
+      td.appendChild(resDiv);
+      cmpLeadReservations(id, resDiv);
       var body = document.createElement('div'); body.innerHTML = '<div style="color:var(--text2);font-size:13px;">Načítám cestu…</div>';
       td.appendChild(body);
       tr.appendChild(td); row.parentNode.insertBefore(tr, row.nextSibling);
@@ -2839,30 +2842,67 @@
           '<div>' + rows + '</div>';
       } catch(e) { body.innerHTML = '<div style="color:#ef4444;font-size:13px;">Chyba načítání aktivity.</div>'; }
     }
+
+    async function cmpLeadReservations(id, el) {
+      try {
+        var r = await fetch('/api/compounder/leads/' + id + '/reservations', { credentials: 'include' });
+        var j = await r.json();
+        var res = j.reservations || [], cons = j.contracts || [];
+        if (!res.length && !cons.length) { el.innerHTML = ''; return; }
+        var STAT = (typeof RES_STATUS !== 'undefined') ? RES_STATUS : {};
+        var CT = { kupni: 'Kupní', rezervacni: 'Rezervační', servisni: 'Servisní' };
+        var CS = { koncept: 'koncept', odeslano: 'odesláno', vyplneno: 'vyplněno', podepsano: 'PODEPSÁNO' };
+        function d(x) { return x ? new Date(x).toLocaleDateString('cs-CZ') : '—'; }
+        function remain(x) { if (!x) return ''; var ms = new Date(x).getTime() - Date.now(); if (ms <= 0) return ' · prošlo'; var dd = Math.floor(ms / 86400000); var hh = Math.floor((ms % 86400000) / 3600000); return ' · zbývá ' + (dd > 0 ? (dd + ' d ') : '') + hh + ' h'; }
+        var html = '<div style="margin:4px 0 12px;padding:12px 14px;background:rgba(201,162,75,.06);border:1px solid rgba(201,162,75,.25);border-radius:10px;">' +
+          '<div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--text2);margin-bottom:8px;">Rezervace lokalit</div>';
+        if (!res.length) { html += '<div style="color:var(--text2);font-size:13px;">Žádná rezervace tohoto leada.</div>'; }
+        res.forEach(function(x) {
+          var cForCode = cons.filter(function(c) { return c.kiosk_code === x.kiosk_code; });
+          var badge = (x.status === 'completed') ? '#10b981' : (x.status === 'active' ? '#eab308' : (x.status === 'reserved' ? '#3b82f6' : 'var(--text2)'));
+          html += '<div style="padding:8px 0;border-top:1px solid rgba(255,255,255,.05);">' +
+            '<div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;"><b>' + kvEsc(x.kiosk_code) + '</b>' +
+            '<span style="color:' + badge + ';font-weight:600;">' + (STAT[x.status] || x.status) + '</span></div>' +
+            '<div style="color:var(--text2);font-size:12px;margin-top:4px;">Podpis do ' + d(x.sign_until) + remain(x.sign_until) +
+            ' · Poplatek do ' + d(x.fee_until) + ' · Rezervace do ' + d(x.reserved_until) + remain(x.reserved_until) + '</div>';
+          if (cForCode.length) {
+            html += '<div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;">' + cForCode.map(function(c) {
+              var col = (c.status === 'podepsano') ? '#10b981' : 'var(--text2)';
+              return '<span style="font-size:11.5px;border:1px solid var(--border);border-radius:999px;padding:2px 9px;color:' + col + ';">' + (CT[c.type] || c.type) + ': ' + (CS[c.status] || c.status) + '</span>';
+            }).join('') + '</div>';
+          }
+          html += '</div>';
+        });
+        html += '</div>';
+        el.innerHTML = html;
+      } catch (e) { el.innerHTML = '<div style="color:#ef4444;font-size:12px;">Chyba načítání rezervací.</div>'; }
+    }
     function cmpSecBlock(id, csv){
       var have = String(csv||'').split(',').map(function(x){return x.trim();}).filter(Boolean);
       var defs = [['ekonomika','Provozovatel'],['nabidka','Investor'],['distributor','Distributor']];
       var boxes = defs.map(function(d){
         var ch = have.indexOf(d[0])!==-1 ? ' checked' : '';
-        return '<label style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--text);cursor:pointer;"><input type="checkbox" value="'+d[0]+'"'+ch+' onchange="cmpSetSections('+id+', this)"> '+d[1]+'</label>';
+        return '<label style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--text);cursor:pointer;"><input type="checkbox" value="'+d[0]+'"'+ch+'> '+d[1]+'</label>';
       }).join('');
       return '<div data-secctl="'+id+'" style="margin-bottom:12px;padding:10px 12px;background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:8px;">'
         + '<div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--text2);margin-bottom:8px;">Viditelné sekce na portálu</div>'
-        + '<div style="display:flex;gap:16px;flex-wrap:wrap;">'+boxes+'</div>'
-        + '<div style="font-size:11px;color:var(--text2);margin-top:8px;">Nic zaškrtnutého = lead vidí jen úvodní stránku s filozofií. <span data-secmsg="'+id+'"></span></div>'
+        + '<div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center;">'+boxes+'</div>'
+        + '<div style="display:flex;align-items:center;gap:12px;margin-top:10px;"><button type="button" class="btn btn-primary" style="padding:6px 14px;font-size:12.5px;" onclick="cmpSaveSections('+id+')">Uložit</button><span data-secmsg="'+id+'" style="font-size:12px;"></span></div>'
+        + '<div style="font-size:11px;color:var(--text2);margin-top:8px;">Nic zaškrtnutého = lead vidí jen úvodní stránku s filozofií.</div>'
         + '</div>';
     }
-    async function cmpSetSections(id, cb){
-      var wrap = cb.closest('[data-secctl]'); if(!wrap) return;
+    async function cmpSaveSections(id){
+      var wrap = document.querySelector('[data-secctl="'+id+'"]'); if(!wrap) return;
       var vals = Array.prototype.slice.call(wrap.querySelectorAll('input[type=checkbox]')).filter(function(x){return x.checked;}).map(function(x){return x.value;});
       var msg = wrap.querySelector('[data-secmsg]'); if(msg){ msg.style.color='#10b981'; msg.textContent='Ukládám…'; }
       try {
         var r = await fetch('/api/compounder/leads/'+id, { method:'PATCH', credentials:'include', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ sections: vals }) });
         if(!r.ok) throw new Error();
         var rowEl = document.querySelector('tr[data-lead="'+id+'"]'); if(rowEl) rowEl.setAttribute('data-sections', vals.join(','));
-        if(msg){ msg.style.color='#10b981'; msg.textContent='Uloženo ✓'; setTimeout(function(){ if(msg) msg.textContent=''; }, 1800); }
+        if(msg){ msg.style.color='#10b981'; msg.textContent='Uloženo ✓'; setTimeout(function(){ if(msg) msg.textContent=''; }, 2200); }
       } catch(e){ if(msg){ msg.style.color='#ef4444'; msg.textContent='Chyba uložení'; } }
     }
+    window.cmpSaveSections = cmpSaveSections;
     async function cmpPushBroadcast(){
       var title = prompt('Titulek push notifikace (vsem odberatelum):'); if (!title) return;
       var body = prompt('Text (nepovinne):') || '';
@@ -3325,6 +3365,10 @@
           '<div style="width:160px;">Výchozí měna nabídky</div>' +
           '<select id="kvset-defcur" style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:14px;"><option value="CZK"' + (defCur==="CZK"?' selected':'') + '>Kč</option><option value="EUR"' + (defCur==="EUR"?' selected':'') + '>€ EUR</option></select>' +
         '</div>' +
+        '<hr style="border:none;border-top:1px solid var(--border);margin:18px 0;">' +
+        '<div style="margin-bottom:6px;font-weight:600;font-size:14px;">🔔 Velín notifikace</div>' +
+        '<div style="color:var(--text2);font-size:12px;margin-bottom:10px;">Komu chodí push do Velína + zvonek v HolyOS o rezervacích a smlouvách (celý proces). Zobrazují se jen lidé s aktivním Velín zařízením.</div>' +
+        '<div id="kvset-velin-people" style="display:flex;flex-direction:column;gap:7px;font-size:13px;color:var(--text);">Načítám…</div>' +
         '<div id="kvset-err" style="color:#ef4444;font-size:13px;margin-top:12px;display:none;"></div>' +
         '<div class="modal-actions">' +
           '<button type="button" class="btn btn-secondary" onclick="closeModal()">Zrušit</button>' +
@@ -3332,6 +3376,31 @@
         '</div>' +
         '</div></div>';
       document.getElementById('modal-root').innerHTML = html;
+      loadCompoundingNotify();
+    }
+
+    async function loadCompoundingNotify() {
+      var box = document.getElementById('kvset-velin-people');
+      if (!box) return;
+      try {
+        var r = await fetch('/api/compounder/notify-settings', { credentials: 'include' });
+        var j = await r.json();
+        var sel = {}; (j.selected || []).forEach(function(id){ sel[id] = true; });
+        if (!j.people || !j.people.length) {
+          box.innerHTML = '<span style="color:var(--text2);">Zatím nikdo nemá aktivní Velín zařízení. Push nikam nedorazí — nejdřív aktivujte Velín.</span>';
+          return;
+        }
+        box.innerHTML = j.people.map(function(p) {
+          var ch = sel[p.id] ? ' checked' : '';
+          return '<label style="display:flex;align-items:center;gap:8px;cursor:pointer;">' +
+            '<input type="checkbox" class="kvset-velin-cb" value="' + p.id + '"' + ch + '> ' +
+            '<span>' + kvEsc(p.name) + (p.role ? (' <span style="color:var(--text2);">· ' + kvEsc(p.role) + '</span>') : '') + '</span>' +
+            '<span style="color:var(--text2);font-size:11px;">(' + p.devices + ' zař.)</span>' +
+            '</label>';
+        }).join('');
+      } catch (e) {
+        box.innerHTML = '<span style="color:#ef4444;">Chyba načítání příjemců.</span>';
+      }
     }
 
     async function saveCompoundingSettings() {
@@ -3407,6 +3476,17 @@
         var data = await r.json().catch(function() { return {}; });
         if (!r.ok) throw new Error(data.error || ('HTTP ' + r.status));
         _compoundingSettings = data.settings || payload;
+        // Uložit příjemce Velín notifikací
+        try {
+          var pids = Array.prototype.slice.call(document.querySelectorAll('.kvset-velin-cb'))
+            .filter(function(cb){ return cb.checked; })
+            .map(function(cb){ return parseInt(cb.value, 10); })
+            .filter(function(n){ return Number.isInteger(n); });
+          await fetch('/api/compounder/notify-settings', {
+            method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
+            body: JSON.stringify({ person_ids: pids }),
+          });
+        } catch (e2) { /* nekritické */ }
         closeModal();
         renderKioskValues();
       } catch (e) {
@@ -5039,86 +5119,4 @@
             '<form onsubmit="savePricelistItem(event, ' + (id || 'null') + ')">' +
               '<div class="form-grid">' +
                 '<div class="form-group full"><label>Název (česky) *</label><input type="text" name="name_cs" required value="' + esc(item.name_cs || '') + '" placeholder="Např. Stůl dubový 120cm"></div>' +
-                '<div class="form-group full"><label>Název (anglicky)</label><input type="text" name="name_en" value="' + esc(item.name_en || '') + '" placeholder="e.g. Oak table 120cm"></div>' +
-                '<div class="form-group full" style="grid-column:1/-1;margin-top:4px;"><label style="display:block;font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px;">Maloobchodní cena (bez DPH)</label></div>' +
-                '<div class="form-group"><label>Cena v Kč</label><input type="number" step="0.01" min="0" name="price_czk" value="' + (item.price_czk != null ? item.price_czk : '') + '" placeholder="0.00"></div>' +
-                '<div class="form-group"><label>Cena v EUR</label><input type="number" step="0.01" min="0" name="price_eur" value="' + (item.price_eur != null ? item.price_eur : '') + '" placeholder="0.00"></div>' +
-                '<div class="form-group full" style="grid-column:1/-1;margin-top:4px;"><label style="display:block;font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px;">🚛 Kamionová (velkoobchodní) cena (bez DPH)</label></div>' +
-                '<div class="form-group"><label>Cena v Kč</label><input type="number" step="0.01" min="0" name="truck_price_czk" value="' + (item.truck_price_czk != null ? item.truck_price_czk : '') + '" placeholder="0.00"></div>' +
-                '<div class="form-group"><label>Cena v EUR</label><input type="number" step="0.01" min="0" name="truck_price_eur" value="' + (item.truck_price_eur != null ? item.truck_price_eur : '') + '" placeholder="0.00"></div>' +
-                '<div class="form-group full"><label>Výrobek (volitelné — propojí cenu s existujícím kusem ve výrobě)</label><select name="product_id" id="pl-product-select" onchange="updatePlProductWarning()"><option value="">— Bez napojení —</option>' + prodOpts + '</select>' +
-                  '<div id="pl-product-warning" style="display:' + (item.product_id ? 'none' : 'flex') + ';margin-top:8px;padding:10px 14px;background:rgba(239,68,68,0.12);border:1.5px solid #ef4444;border-radius:8px;color:#ef4444;font-size:13px;font-weight:600;align-items:center;gap:10px;animation:pulse-warn 1.8s ease-in-out infinite;">⚠️ <span>Položka není napojena na výrobek! Zvažte výběr výrobku pro propojení s výrobou.</span></div>' +
-                '</div>' +
-                '<div class="form-group full"><label>Poznámka</label><textarea name="note" rows="2" placeholder="Interní poznámka...">' + esc(item.note || '') + '</textarea></div>' +
-                '<div class="form-group full"><label style="display:flex;align-items:center;gap:8px;cursor:pointer;"><input type="checkbox" name="active"' + (item.active === false ? '' : ' checked') + '> <span>Aktivní položka (zobrazí se v nabídce při tvorbě objednávky)</span></label></div>' +
-              '</div>' +
-              '<div class="modal-actions">' +
-                '<button type="button" class="btn btn-secondary" onclick="closeModal()">Zrušit</button>' +
-                '<button type="submit" class="btn btn-primary">' + (id ? 'Uložit' : 'Vytvořit') + '</button>' +
-              '</div>' +
-            '</form>' +
-          '</div>' +
-        '</div>';
-    }
-
-    async function savePricelistItem(e, id) {
-      e.preventDefault();
-      var form = new FormData(e.target);
-      var data = {
-        name_cs: form.get('name_cs'),
-        name_en: form.get('name_en') || null,
-        price_czk: form.get('price_czk') ? parseFloat(form.get('price_czk')) : null,
-        price_eur: form.get('price_eur') ? parseFloat(form.get('price_eur')) : null,
-        truck_price_czk: form.get('truck_price_czk') ? parseFloat(form.get('truck_price_czk')) : null,
-        truck_price_eur: form.get('truck_price_eur') ? parseFloat(form.get('truck_price_eur')) : null,
-        product_id: form.get('product_id') ? parseInt(form.get('product_id'), 10) : null,
-        note: form.get('note') || null,
-        active: form.has('active'),
-      };
-      try {
-        var url = id ? ('/api/wh/pricelist/' + id) : '/api/wh/pricelist';
-        var method = id ? 'PUT' : 'POST';
-        var res = await fetch(url, { method: method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
-        if (!res.ok) {
-          var err = await res.json().catch(function() { return {}; });
-          throw new Error(err.error || ('Chyba při ukládání (' + res.status + ')'));
-        }
-        closeModal();
-        loadPricelist();
-      } catch(e) { alert('Chyba: ' + e.message); }
-    }
-
-    async function deletePricelistItem(id) {
-      if (!confirm('Opravdu smazat tuto položku ceníku?')) return;
-      try {
-        var res = await fetch('/api/wh/pricelist/' + id, { method: 'DELETE' });
-        if (!res.ok) { alert('Chyba při mazání'); return; }
-        loadPricelist();
-      } catch(e) { alert('Chyba: ' + e.message); }
-    }
-
-    // ============================================================
-    // INIT
-    // ============================================================
-    loadStats();
-    loadOrders();
-
-    // Countdown tick — každou minutu aktualizuje text "Zbývá Xd Yh" u rezervací.
-    setInterval(function() {
-      var els = document.querySelectorAll('.stl-countdown[data-reserved-until]');
-      var anyExpired = false;
-      els.forEach(function(el) {
-        var iso = el.getAttribute('data-reserved-until');
-        var newText = formatRemainingUntil(iso);
-        if (el.textContent !== newText) el.textContent = newText;
-        if (newText === 'Vypršelo') {
-          anyExpired = true;
-          var parent = el.closest('.stl-slot');
-          if (parent && !parent.classList.contains('expired')) parent.classList.add('expired');
-        }
-      });
-      if (anyExpired) loadAvailableSlots().catch(function(){});
-    }, 60 * 1000);
-  </script>
-</body>
-</html>
+                '<div class="form-group full"><label>Název (anglicky)</label><input type="text" name="name_en" value="' + esc(item.name_en || '') 

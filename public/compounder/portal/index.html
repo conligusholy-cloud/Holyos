@@ -860,7 +860,10 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
     if(!arr.length){ box.innerHTML = toggle + '<div class="muted">Aktuálně nejsou k dispozici žádné nabízené lokality.</div>'; return; }
     box.innerHTML = toggle + arr.map(function(o){
       var btn = o.reserved
-        ? '<div style="min-width:130px;text-align:center;color:var(--muted);font-size:13px;font-weight:700;border:1px solid var(--line);border-radius:999px;padding:10px 12px">Rezervováno</div>'
+        ? '<div style="min-width:130px;text-align:center">' +
+            '<div style="color:var(--muted);font-size:13px;font-weight:700;border:1px solid var(--line);border-radius:999px;padding:10px 12px">Rezervováno</div>' +
+            (o.reservedUntil ? '<div class="res-countdown" data-until="' + offEsc(o.reservedUntil) + '" style="font-size:11px;color:var(--gold-soft);margin-top:6px;font-weight:600">' + offCountdown(o.reservedUntil) + '</div>' : '') +
+          '</div>'
         : '<button type="button" class="btn" style="min-width:130px;justify-content:center" onclick="openReserveModal(\'' + offEsc(o.code).replace(/'/g,"&#39;") + '\')">Rezervovat</button>';
       return '<div style="display:flex;align-items:center;gap:18px;flex-wrap:wrap;border:1px solid var(--line);border-radius:14px;padding:14px 16px;background:var(--bg-2);'+(o.reserved?'opacity:.55':'')+'">' +
         '<div style="flex:2;min-width:190px">' +
@@ -878,6 +881,18 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
         btn +
       '</div>';
     }).join("");
+    if(!window._offCountTimer){ window._offCountTimer = setInterval(offTickCountdowns, 1000); }
+  }
+  function offCountdown(iso){
+    var ms = new Date(iso).getTime() - Date.now();
+    if(!(ms > 0)) return "rezervace vypršela";
+    var d = Math.floor(ms/86400000), h = Math.floor((ms%86400000)/3600000), m = Math.floor((ms%3600000)/60000), s = Math.floor((ms%60000)/1000);
+    function p(n){ return (n<10?'0':'')+n; }
+    return "zbývá " + (d>0?(d+" d "):"") + p(h)+":"+p(m)+":"+p(s);
+  }
+  function offTickCountdowns(){
+    var els = document.querySelectorAll('.res-countdown');
+    for(var i=0;i<els.length;i++){ var u = els[i].getAttribute('data-until'); if(u) els[i].textContent = offCountdown(u); }
   }
   window._resO = null; window._resMode = 'reserve';
   window.closeReserveModal = function(){ var m=document.getElementById("resModal"); if(m) m.remove(); };
