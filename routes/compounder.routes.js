@@ -598,10 +598,11 @@ router.get('/leads', requireAuth, async (req, res, next) => {
       const ids = leads.map((l) => l.id);
       const evs = await prisma.compounderEvent.findMany({
         where: { OR: ids.map((id) => ({ props: { path: ['lead_id'], equals: id } })) },
-        select: { event: true, props: true },
+        select: { event: true, props: true, created_at: true },
         take: 20000,
       });
       const c = {};
+      const last = {}; // poslední aktivita (max created_at) na leada
       evs.forEach((e) => {
         const lid = e.props && e.props.lead_id; if (lid == null) return;
         const x = c[lid] || (c[lid] = { portal: 0, doc: 0, loc: 0, contact: 0 });
@@ -609,9 +610,12 @@ router.get('/leads', requireAuth, async (req, res, next) => {
         else if (e.event === 'doc_download') x.doc++;
         else if (e.event === 'location_assess') x.loc++;
         else if (e.event === 'contact_request') x.contact++;
+        const t = e.created_at ? new Date(e.created_at).getTime() : 0;
+        if (t && (!last[lid] || t > last[lid])) last[lid] = t;
       });
       leads.forEach((l) => {
         const x = c[l.id] || { portal: 0, doc: 0, loc: 0, contact: 0 };
+        l.lastActivityAt = last[l.id] ? new Date(last[l.id]).toISOString() : null;
         let s = 10;
         if (x.portal > 0) s += 15;
         if (x.doc > 0) s += 10;
