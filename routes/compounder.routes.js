@@ -373,7 +373,8 @@ router.post('/portal/contact-request', async (req, res, next) => {
       props: { lead_id: leadId, phone: phone, intent: isDist ? 'distributor' : 'contact' }, path: '/portal', ip: clientIp(req),
     } }).catch(() => {});
     notifyOwnersContact(lead, phone, isDist).catch((e) => console.error('[compounder] contact mail:', e && e.message));
-    notifyContactUsers(lead, phone, isDist).catch((e) => console.error('[compounder] contact notif:', e && e.message));
+    // Velín push + zvonek Janovi & Tomášovi (stejný kanál jako rezervace, nastavitelní příjemci).
+    compounderNotify.notifyContactRequest(prisma, { lead, phone, isDist }).catch((e) => console.error('[compounder] contact velín:', e && e.message));
     notifyContactTask(lead, phone, isDist).catch((e) => console.error('[compounder] velín task:', e && e.message));
     console.log('[compounder] Žádost o kontakt: lead #' + leadId);
     return res.json({ ok: true });
@@ -533,19 +534,20 @@ router.post('/leads', requireAuth, async (req, res, next) => {
     const name = String(b.name || '').trim().slice(0, 255);
     const email = String(b.email || '').trim().toLowerCase().slice(0, 255);
     const role = (b.role === 'distributor') ? 'distributor' : 'compounder';
+    const lang = b.lang ? String(b.lang).trim().toLowerCase().slice(0, 10) : null;
     if (!email || email.indexOf('@') === -1) return res.status(400).json({ error: 'Neplatný e-mail' });
     const existing = await prisma.compounderLead.findFirst({
       where: { email: { equals: email, mode: 'insensitive' } }, select: { id: true },
     });
     if (existing) return res.status(409).json({ error: 'Tento e-mail už je zaregistrovaný.', id: existing.id });
     const lead = await prisma.compounderLead.create({
-      data: { name: name || email, email, role, source: 'admin', status: 'new' },
-      select: { id: true, name: true, email: true, role: true },
+      data: { name: name || email, email, role, lang, source: 'admin', status: 'new' },
+      select: { id: true, name: true, email: true, role: true, lang: true },
     });
-    console.log(`[compounder] Admin vytvořil lead #${lead.id} (${role}): ${email}`);
+    console.log(`[compounder] Admin vytvořil lead #${lead.id} (${role}, ${lang || '—'}): ${email}`);
     if (b.sendInvite) {
       const url = `${portalBase()}/portal?t=${makeLoginToken(lead.id)}`;
-      sendPortalLogin({ name: lead.name, email: lead.email, lang: null }, url)
+      sendPortalLogin({ name: lead.name, email: lead.email, lang: lead.lang }, url)
         .catch((e) => console.error('[compounder] pozvánka e-mail selhala:', e.message));
     }
     res.status(201).json({ ok: true, lead });
@@ -1447,13 +1449,8 @@ async function notifyContactTask(lead, phone, isDist) {
           title: title, description: desc, priority: 2, status: 'proposed',
         },
       });
-      if (notifyPerson) {
-        notifyPerson(prisma, personId, {
-          title: isDist ? '📞 Zájem o distribuci' : '📞 Žádost o kontakt',
-          body: (lead.name || lead.email) + ' — ' + phone,
-          data: { kind: 'task_assigned', task_id: task.id },
-        }).catch(() => {});
-      }
+      // Push + zvonek řeší sjednocený compounderNotify.notifyContactRequest (bez duplicit).
+      void task;
     } catch (e) { console.error('[compounder] velín task person ' + personId + ':', e && e.message); }
   }
 }
@@ -1833,7 +1830,10 @@ router.get('/portal/offered-locations', async (req, res, next) => {
     const signDays = Number.isFinite(cs.reservationSignDays) ? cs.reservationSignDays : 1;
     const payDays = Number.isFinite(cs.reservationPayDays) ? cs.reservationPayDays : 1;
     const reblockDays = Number.isFinite(cs.reservationReblockDays) ? cs.reservationReblockDays : 2;
-    const defCur = (cs.defaultCurrency === 'EUR') ? 'EUR' : 'CZK';
+    // Výchozí měna se řídí jazykem leada: čeština → CZK, jinak EUR (fallback = globální nastavení).
+    const _lead = await prisma.compounderLead.findUnique({ where: { id: leadId }, select: { lang: true } }).catch(() => null);
+    const _leadLang = (_lead && _lead.lang) ? _lead.lang.toLowerCase() : null;
+    const defCur = _leadLang ? (_leadLang.indexOf('cs') === 0 ? 'CZK' : 'EUR') : ((cs.defaultCurrency === 'EUR') ? 'EUR' : 'CZK');
 
     const num = (v) => (typeof v === 'number' && isFinite(v)) ? v : 0;
     const svcPct = Number.isFinite(cs.servicePct) ? cs.servicePct : 15;

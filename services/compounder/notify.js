@@ -154,6 +154,20 @@ async function notifyContractEvent(prisma, { contract, event }) {
   } catch (e) { console.error('[compounder-notify] contract', event, e.message); }
 }
 
+// Žádost o telefonický kontakt z portálu (lead nechal telefon) → Velín push + zvonek
+// stejným kanálem jako rezervace/smlouvy. Příjemci = compounder.velin_notify_person_ids
+// (fallback majitelé Jan + Tomáš).
+async function notifyContactRequest(prisma, { lead, phone, isDist }) {
+  try {
+    if (!lead) return;
+    const who = lead.name || lead.email || ('lead #' + lead.id);
+    const roleLabel = lead.role === 'distributor' ? 'Distributor' : 'Compounder';
+    const title = isDist ? ('📞 Zájem o distribuci — ' + who) : ('📞 Žádost o kontakt — ' + who);
+    const body = roleLabel + ' žádá o telefonický kontakt. Tel: ' + (phone || '—') + (lead.email ? (' · ' + lead.email) : '');
+    await dispatch(prisma, { title, body, data: { type: 'compounder_contact', lead_id: lead.id, phone: phone, intent: isDist ? 'distributor' : 'contact' } });
+  } catch (e) { console.error('[compounder-notify] contact', e.message); }
+}
+
 module.exports = {
   NOTIFY_SETTING_KEY,
   getEligibleVelinPeople,
@@ -161,4 +175,5 @@ module.exports = {
   resolveRecipientPersonIds,
   notifyReservationEvent,
   notifyContractEvent,
+  notifyContactRequest,
 };
