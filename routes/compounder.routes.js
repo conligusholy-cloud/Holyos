@@ -173,6 +173,15 @@ router.post('/push/send', requireAuth, async (req, res, next) => {
 });
 
 // ─── VEŘEJNÉ: Compounder Portal — validace magic-link tokenu ─────────────────
+// Odemykatelné skupiny sekcí portálu. Úvodní "filozofie" je vždy viditelná (mimo tento seznam).
+// null/prázdné = nic odemčeno → lead vidí jen úvodní stránku s filozofií.
+const SECTION_GROUPS = ['ekonomika', 'nabidka', 'distributor'];
+function resolveSections(csv) {
+  if (csv == null || String(csv).trim() === '') return [];
+  const set = String(csv).split(',').map((s) => s.trim()).filter((s) => SECTION_GROUPS.includes(s));
+  return Array.from(new Set(set));
+}
+
 // GET /api/compounder/portal/session?t=TOKEN
 // Token je HMAC-podepsaný (lead id + podpis), bez DB sloupce. Ověří se serverem.
 router.get('/portal/session', async (req, res, next) => {
@@ -181,10 +190,10 @@ router.get('/portal/session', async (req, res, next) => {
     if (!id) return res.status(401).json({ ok: false, error: 'Neplatný nebo chybějící přístupový odkaz.' });
     const lead = await prisma.compounderLead.findUnique({
       where: { id },
-      select: { id: true, name: true, role: true, lang: true, password_hash: true },
+      select: { id: true, name: true, role: true, lang: true, visible_sections: true, password_hash: true },
     });
     if (!lead) return res.status(404).json({ ok: false, error: 'Registrace nenalezena.' });
-    return res.json({ ok: true, id: lead.id, name: lead.name, role: lead.role, lang: lead.lang, has_password: !!lead.password_hash });
+    return res.json({ ok: true, id: lead.id, name: lead.name, role: lead.role, lang: lead.lang, sections: resolveSections(lead.visible_sections), has_password: !!lead.password_hash });
   } catch (err) {
     next(err);
   }
@@ -598,6 +607,8 @@ router.get('/leads', requireAuth, async (req, res, next) => {
 const patchSchema = z.object({
   status: z.enum(['new', 'contacted', 'qualified', 'converted', 'rejected']).optional(),
   notes: z.string().max(5000).optional().nullable(),
+  // Viditelné sekce portálu: pole klíčů skupin nebo CSV. [] => jen úvodní filozofie.
+  sections: z.union([z.array(z.string()), z.string()]).optional(),
 });
 
 router.patch('/leads/:id', requireAuth, async (req, res, next) => {
@@ -606,7 +617,17 @@ router.patch('/leads/:id', requireAuth, async (req, res, next) => {
     if (!Number.isInteger(id)) return res.status(400).json({ error: 'Neplatné ID' });
     const parsed = patchSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: 'Neplatná data', detail: parsed.error.flatten() });
-    const lead = await prisma.compounderLead.update({ where: { id }, data: parsed.data });
+    const data = {};
+    if (parsed.data.status !== undefined) data.status = parsed.data.status;
+    if (parsed.data.notes !== undefined) data.notes = parsed.data.notes;
+    if (parsed.data.sections !== undefined) {
+      const arr = Array.isArray(parsed.data.sections)
+        ? parsed.data.sections
+        : String(parsed.data.sections).split(',');
+      const clean = arr.map((s) => String(s).trim()).filter((s) => SECTION_GROUPS.includes(s));
+      data.visible_sections = clean.length ? Array.from(new Set(clean)).join(',') : '';
+    }
+    const lead = await prisma.compounderLead.update({ where: { id }, data });
     res.json(lead);
   } catch (err) {
     if (err.code === 'P2025') return res.status(404).json({ error: 'Lead nenalezen' });
@@ -845,6 +866,12 @@ const COMPOUNDING_SETTINGS_DEFAULT = {
   locationRoiPct: 25,
   buybackPct: 65,
   buybackYears: 5,
+  reservationFeePerDayCzk: 20000,
+  reservationHoldHours: 1,
+  reservationSignDays: 1,
+  reservationPayDays: 1,
+  reservationReblockDays: 2,
+  defaultCurrency: 'CZK',
 };
 
 const compoundingSettingsSchema = z.object({
@@ -860,6 +887,12 @@ const compoundingSettingsSchema = z.object({
   locationRoiPct: z.number().min(1).max(100).optional(),
   buybackPct: z.number().min(0).max(100).optional(),
   buybackYears: z.number().min(1).max(50).optional(),
+  reservationFeePerDayCzk: z.number().int().min(0).max(10000000).optional(),
+  reservationHoldHours: z.number().min(0).max(720).optional(),
+  reservationSignDays: z.number().int().min(0).max(365).optional(),
+  reservationPayDays: z.number().int().min(0).max(365).optional(),
+  reservationReblockDays: z.number().int().min(0).max(365).optional(),
+  defaultCurrency: z.enum(['CZK', 'EUR']).optional(),
 });
 
 // GET /api/compounder/compounding-settings
@@ -883,6 +916,12 @@ router.get('/compounding-settings', requireAuth, async (req, res, next) => {
       locationRoiPct: (val && Number.isFinite(val.locationRoiPct)) ? val.locationRoiPct : 25,
       buybackPct: (val && Number.isFinite(val.buybackPct)) ? val.buybackPct : 65,
       buybackYears: (val && Number.isFinite(val.buybackYears)) ? val.buybackYears : 5,
+      reservationFeePerDayCzk: (val && Number.isFinite(val.reservationFeePerDayCzk)) ? val.reservationFeePerDayCzk : 20000,
+      reservationHoldHours: (val && Number.isFinite(val.reservationHoldHours)) ? val.reservationHoldHours : 1,
+      reservationSignDays: (val && Number.isFinite(val.reservationSignDays)) ? val.reservationSignDays : 1,
+      reservationPayDays: (val && Number.isFinite(val.reservationPayDays)) ? val.reservationPayDays : 1,
+      reservationReblockDays: (val && Number.isFinite(val.reservationReblockDays)) ? val.reservationReblockDays : 2,
+      defaultCurrency: (val && (val.defaultCurrency === 'EUR' || val.defaultCurrency === 'CZK')) ? val.defaultCurrency : 'CZK',
     };
     res.json(merged);
   } catch (err) {
@@ -1743,6 +1782,13 @@ router.get('/portal/offered-locations', async (req, res, next) => {
     const cfgMap = (await getSetting(COMPOUNDING_KIOSKS_KEY, { type: 'json', defaultValue: {} })) || {};
     const kiosks = await portalKiosks();
     const eur = await eurToCzk();
+    const busy = await activeReservationCodes();
+    const feePerDay = Number.isFinite(cs.reservationFeePerDayCzk) ? cs.reservationFeePerDayCzk : 20000;
+    const holdHours = Number.isFinite(cs.reservationHoldHours) ? cs.reservationHoldHours : 1;
+    const signDays = Number.isFinite(cs.reservationSignDays) ? cs.reservationSignDays : 1;
+    const payDays = Number.isFinite(cs.reservationPayDays) ? cs.reservationPayDays : 1;
+    const reblockDays = Number.isFinite(cs.reservationReblockDays) ? cs.reservationReblockDays : 2;
+    const defCur = (cs.defaultCurrency === 'EUR') ? 'EUR' : 'CZK';
 
     const num = (v) => (typeof v === 'number' && isFinite(v)) ? v : 0;
     const svcPct = Number.isFinite(cs.servicePct) ? cs.servicePct : 15;
@@ -1790,11 +1836,12 @@ router.get('/portal/offered-locations', async (req, res, next) => {
           guaranteePct: buybackPct,
           guaranteeYears: buybackYears,
           guaranteeValue: total != null ? Math.round(total * buybackPct / 100) : null,
+          reserved: busy.has(k.code),
         };
       })
       .sort((a, b) => (b.yearlyYield || 0) - (a.yearlyYield || 0));
 
-    res.json({ ok: true, currency: 'CZK', count: list.length, locations: list });
+    res.json({ ok: true, currency: 'CZK', defaultCurrency: defCur, eurRate: eur, feePerDayCzk: feePerDay, reservation: { feePerDayCzk: feePerDay, holdHours, signDays, payDays, reblockDays }, count: list.length, locations: list });
   } catch (err) { next(err); }
 });
 
@@ -1819,6 +1866,153 @@ router.post('/portal/reserve-interest', async (req, res, next) => {
     } catch (e) { console.error('[reserve-interest notify]', e); }
     res.json({ ok: true });
   } catch (err) { next(err); }
+});
+
+// =============================================================================
+// COMPOUNDING — rezervace lokalit
+// =============================================================================
+const RES_ACTIVE = ['reserved', 'active'];
+
+// Lazy expirace prošlých rezervací (uvolní lokalitu ostatním).
+async function expireStaleReservations() {
+  const now = new Date();
+  try {
+    await prisma.locationReservation.updateMany({
+      where: { status: 'reserved', fee_until: { lt: now } },
+      data: { status: 'expired', cancel_reason: 'Rezervační poplatek nepřišel včas' },
+    });
+    await prisma.locationReservation.updateMany({
+      where: { status: 'active', reserved_until: { lt: now } },
+      data: { status: 'expired', cancel_reason: 'Kupní smlouva nedokončena v rezervační době' },
+    });
+  } catch (e) { /* tabulka nemusí existovat před migrací */ }
+}
+
+async function activeReservationCodes() {
+  await expireStaleReservations();
+  try {
+    const rows = await prisma.locationReservation.findMany({
+      where: { status: { in: RES_ACTIVE } }, select: { kiosk_code: true },
+    });
+    return new Set(rows.map((r) => r.kiosk_code));
+  } catch (e) { return new Set(); }
+}
+
+const reserveSchema = z.object({
+  t: z.string(),
+  code: z.string().min(1).max(40),
+  days: z.number().int().min(1).max(365),
+  totalPrice: z.number().int().nonnegative().optional(),
+  buyer: z.object({
+    name: z.string().max(255).optional(),
+    email: z.string().max(255).optional(),
+    phone: z.string().max(40).optional(),
+    ico: z.string().max(20).optional(),
+    address: z.string().max(500).optional(),
+  }).optional(),
+});
+
+// POST /api/compounder/portal/reserve — vytvoří rezervaci (blokuje lokalitu)
+router.post('/portal/reserve', async (req, res, next) => {
+  try {
+    const parsed = reserveSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ ok: false, error: 'Neplatná data rezervace.' });
+    const { t, code, days } = parsed.data;
+    const leadId = verifyPortalToken(t);
+    if (!leadId) return res.status(401).json({ ok: false, error: 'Neplatný nebo chybějící přístupový odkaz.' });
+
+    await expireStaleReservations();
+
+    const busy = await prisma.locationReservation.findFirst({
+      where: { kiosk_code: code, status: { in: RES_ACTIVE } }, select: { id: true },
+    });
+    if (busy) return res.status(409).json({ ok: false, error: 'Tato lokalita je právě rezervovaná někým jiným. Zkuste to prosím později nebo vyberte jinou.' });
+
+    const cs = await getSetting(COMPOUNDING_SETTINGS_KEY, { type: 'json', defaultValue: COMPOUNDING_SETTINGS_DEFAULT });
+    const feePerDay = Number.isFinite(cs.reservationFeePerDayCzk) ? cs.reservationFeePerDayCzk : 20000;
+    const signDays = Number.isFinite(cs.reservationSignDays) ? cs.reservationSignDays : 1;
+    const payDays = Number.isFinite(cs.reservationPayDays) ? cs.reservationPayDays : 1;
+    const reblockDays = Number.isFinite(cs.reservationReblockDays) ? cs.reservationReblockDays : 2;
+
+    if (reblockDays > 0) {
+      const since = new Date(Date.now() - reblockDays * 86400000);
+      const recent = await prisma.locationReservation.findFirst({
+        where: { kiosk_code: code, lead_id: leadId, status: { in: ['cancelled', 'expired'] }, updated_at: { gt: since } },
+        select: { id: true },
+      });
+      if (recent) return res.status(429).json({ ok: false, error: 'Tuto lokalitu můžete znovu rezervovat až za ' + reblockDays + ' dny (od zrušení předchozí rezervace).' });
+    }
+
+    const now = new Date();
+    const feeTotal = days * feePerDay;
+    const signUntil = new Date(now.getTime() + signDays * 86400000);
+    const feeUntil = new Date(signUntil.getTime() + payDays * 86400000);
+    const reservedUntil = new Date(now.getTime() + days * 86400000);
+    const b = parsed.data.buyer || {};
+
+    const rec = await prisma.locationReservation.create({
+      data: {
+        kiosk_code: code, lead_id: leadId,
+        buyer_name: b.name || null, buyer_email: b.email || null, buyer_phone: b.phone || null,
+        buyer_ico: b.ico || null, buyer_address: b.address || null,
+        days, fee_per_day: feePerDay, fee_total: feeTotal,
+        purchase_price: (parsed.data.totalPrice != null) ? parsed.data.totalPrice : null,
+        currency: 'CZK', status: 'reserved',
+        sign_until: signUntil, fee_until: feeUntil, reserved_until: reservedUntil,
+      },
+    });
+
+    try {
+      const ids = await resolveOwnerUserIds();
+      const who = (b.name || b.email || ('lead #' + leadId));
+      const title = 'Nová rezervace lokality ' + code;
+      const body = who + ' rezervoval(a) ' + code + ' na ' + days + ' dní. Poplatek ' + feeTotal.toLocaleString('cs-CZ') + ' Kč. Podpis do ' + signUntil.toLocaleDateString('cs-CZ') + ', poplatek do ' + feeUntil.toLocaleDateString('cs-CZ') + '.' + (b.phone ? (' Tel: ' + b.phone) : '');
+      const link = (getAppUrl() || '') + '/modules/prodejni-objednavky/index.html';
+      for (const uid of ids) await createNotification({ userId: uid, type: 'compounder_reservation', title, body, link }).catch(() => {});
+    } catch (e) { console.error('[reserve notify]', e); }
+
+    res.json({ ok: true, id: rec.id, code, days, feePerDay, feeTotal, signUntil, feeUntil, reservedUntil });
+  } catch (err) { next(err); }
+});
+
+// GET /api/compounder/reservations — admin přehled
+router.get('/reservations', requireAuth, async (req, res, next) => {
+  try {
+    await expireStaleReservations();
+    const status = req.query.status ? String(req.query.status) : null;
+    const where = {};
+    if (status) where.status = status;
+    const rows = await prisma.locationReservation.findMany({ where, orderBy: { created_at: 'desc' }, take: 500 });
+    res.json(rows);
+  } catch (err) { next(err); }
+});
+
+const resPatchSchema = z.object({
+  action: z.enum(['fee_paid', 'purchase_paid', 'cancel', 'reopen']),
+  cancel_reason: z.string().max(200).optional(),
+});
+
+// PATCH /api/compounder/reservations/:id — admin akce (platba / zrušení)
+router.patch('/reservations/:id', requireAuth, async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'Neplatné ID' });
+    const parsed = resPatchSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'Neplatná data' });
+    const now = new Date();
+    const data = {};
+    switch (parsed.data.action) {
+      case 'fee_paid': data.fee_paid_at = now; data.signed_at = now; data.status = 'active'; break;
+      case 'purchase_paid': data.purchase_paid_at = now; data.status = 'completed'; break;
+      case 'cancel': data.status = 'cancelled'; data.cancel_reason = parsed.data.cancel_reason || 'Zrušeno ručně'; break;
+      case 'reopen': data.status = 'cancelled'; data.cancel_reason = 'Uvolněno ručně'; break;
+    }
+    const rec = await prisma.locationReservation.update({ where: { id }, data });
+    res.json(rec);
+  } catch (err) {
+    if (err.code === 'P2025') return res.status(404).json({ error: 'Rezervace nenalezena' });
+    next(err);
+  }
 });
 
 module.exports = router;

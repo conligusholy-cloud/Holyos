@@ -275,6 +275,7 @@
         <span id="kv-generated" style="color:var(--text2); font-size:12px;"></span>
         <button class="btn" onclick="loadKioskValues(true)">↻ Obnovit</button>
         <button class="btn" onclick="openCompoundingSettings()" title="Nastavení: ceník a cena lokality" style="padding:8px 12px;">⚙️</button>
+        <button class="btn" onclick="openReservationsModal()" title="Přehled rezervací lokalit" style="padding:8px 12px;">📋 Rezervace</button>
       </div>
       <div id="kv-summary" style="margin-bottom:14px;"></div>
       <div id="kv-table"><div style="color:var(--text2);padding:20px;">Načítám…</div></div>
@@ -2764,7 +2765,7 @@
           var wlabel = w==null?'—':(w>=70?'Horký':w>=45?'Zahřátý':w>=25?'Vlažný':'Studený');
           var phoneBadge = l.requestedContact ? ('<span title="Požádal o kontakt' + (l.hasPhone?(' · '+cmpEsc(l.phone||'')):'') + '" style="margin-left:6px;">📞</span>') : '';
           var warmthCell = '<td style="white-space:nowrap;"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:'+wcol+';vertical-align:middle;margin-right:6px;"></span><span style="color:'+wcol+';font-size:12.5px;">'+wlabel+'</span>'+(w!=null?(' <span style="color:var(--text2);font-size:11px;">'+w+'</span>'):'')+phoneBadge+'</td>';
-          h += '<tr data-lead="' + l.id + '" onclick="cmpActivity(' + l.id + ', this)" title="Klikni pro cestu zákazníka" style="cursor:pointer;"><td style="color:var(--text2);">▸</td><td style="white-space:nowrap;">' + dt + '</td><td>' + cmpEsc(l.name) + '</td><td><a href="mailto:' + cmpEsc(l.email) + '" onclick="event.stopPropagation()" style="color:#eab308;">' + cmpEsc(l.email) + '</a></td><td>' + roleLabel + '</td><td>' + cmpEsc((l.lang||'').toUpperCase()) + '</td>' + warmthCell + '<td>' + sel + '</td><td><input type="text" value="' + noteVal + '" placeholder="—" onclick="event.stopPropagation()" onblur="cmpSetNote(' + l.id + ', this.value)" style="width:140px;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:12px;"></td><td><button onclick="event.stopPropagation();cmpDeleteLead(' + l.id + ', ' + JSON.stringify(l.name).replace(/"/g,'&quot;') + ')" title="Smazat lead" style="background:transparent;color:#ef4444;border:1px solid rgba(239,68,68,0.4);border-radius:6px;padding:4px 9px;font-size:12px;cursor:pointer;">🗑</button></td></tr>';
+          h += '<tr data-lead="' + l.id + '" data-sections="' + cmpEsc(l.visible_sections||'') + '" onclick="cmpActivity(' + l.id + ', this)" title="Klikni pro cestu zákazníka" style="cursor:pointer;"><td style="color:var(--text2);">▸</td><td style="white-space:nowrap;">' + dt + '</td><td>' + cmpEsc(l.name) + '</td><td><a href="mailto:' + cmpEsc(l.email) + '" onclick="event.stopPropagation()" style="color:#eab308;">' + cmpEsc(l.email) + '</a></td><td>' + roleLabel + '</td><td>' + cmpEsc((l.lang||'').toUpperCase()) + '</td>' + warmthCell + '<td>' + sel + '</td><td><input type="text" value="' + noteVal + '" placeholder="—" onclick="event.stopPropagation()" onblur="cmpSetNote(' + l.id + ', this.value)" style="width:140px;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:12px;"></td><td><button onclick="event.stopPropagation();cmpDeleteLead(' + l.id + ', ' + JSON.stringify(l.name).replace(/"/g,'&quot;') + ')" title="Smazat lead" style="background:transparent;color:#ef4444;border:1px solid rgba(239,68,68,0.4);border-radius:6px;padding:4px 9px;font-size:12px;cursor:pointer;">🗑</button></td></tr>';
         });
         h += '</tbody></table></div>';
         box.innerHTML = h;
@@ -2809,12 +2810,14 @@
       row.firstChild.textContent='▾';
       var tr = document.createElement('tr'); tr.className='cmp-act-row';
       var td = document.createElement('td'); td.colSpan = 10; td.style.background='rgba(234,179,8,0.04)'; td.style.padding='14px 18px';
-      td.innerHTML = '<div style="color:var(--text2);font-size:13px;">Načítám cestu…</div>';
+      td.innerHTML = cmpSecBlock(id, row.getAttribute('data-sections')||'');
+      var body = document.createElement('div'); body.innerHTML = '<div style="color:var(--text2);font-size:13px;">Načítám cestu…</div>';
+      td.appendChild(body);
       tr.appendChild(td); row.parentNode.insertBefore(tr, row.nextSibling);
       try {
         var r = await fetch('/api/compounder/leads/'+id+'/activity', { credentials:'include' });
         var a = await r.json();
-        if (!a.count) { td.innerHTML = '<div style="color:var(--text2);font-size:13px;">Žádná zaznamenaná aktivita (registrace ručně nebo před zapnutím analytiky).</div>'; return; }
+        if (!a.count) { body.innerHTML = '<div style="color:var(--text2);font-size:13px;">Žádná zaznamenaná aktivita (registrace ručně nebo před zapnutím analytiky).</div>'; return; }
         var mins = Math.round((a.totalMs||0)/60000);
         var head = '<div style="display:flex;gap:18px;flex-wrap:wrap;margin-bottom:10px;font-size:12px;color:var(--text2);">' +
           '<span><b style="color:var(--text)">'+a.count+'</b> eventů</span>' +
@@ -2825,14 +2828,38 @@
           var tm = new Date(e.at).toLocaleTimeString('cs-CZ');
           return '<div style="display:flex;gap:10px;font-size:12.5px;padding:3px 0;border-bottom:1px solid rgba(255,255,255,0.04);"><span style="color:var(--text2);width:70px;flex:0 0 auto;">'+tm+'</span><span>'+cmpEvtLabel(e)+'</span></div>';
         }).join('');
-        td.innerHTML = head +
+        body.innerHTML = head +
           '<div style="margin:6px 0 10px;display:flex;gap:8px;flex-wrap:wrap;">' +
             '<button onclick="cmpAiEval(' + id + ',this)" style="background:#8b5cf6;color:#fff;border:none;border-radius:8px;padding:7px 12px;font-size:12.5px;font-weight:600;cursor:pointer;">\ud83e\udd16 AI vyhodnocen\u00ed</button>' +
             '<button onclick="cmpPushLead(' + id + ')" style="background:#eab308;color:#1a1408;border:none;border-radius:8px;padding:7px 12px;font-size:12.5px;font-weight:600;cursor:pointer;">\ud83d\udce3 Poslat push tomuto leadovi</button>' +
           '</div>' +
           '<div id="cmp-ai-' + id + '"></div>' +
           '<div>' + rows + '</div>';
-      } catch(e) { td.innerHTML = '<div style="color:#ef4444;font-size:13px;">Chyba načítání aktivity.</div>'; }
+      } catch(e) { body.innerHTML = '<div style="color:#ef4444;font-size:13px;">Chyba načítání aktivity.</div>'; }
+    }
+    function cmpSecBlock(id, csv){
+      var have = String(csv||'').split(',').map(function(x){return x.trim();}).filter(Boolean);
+      var defs = [['ekonomika','Ekonomika prádlomatu'],['nabidka','Nabídka lokalit'],['distributor','Distributorský systém']];
+      var boxes = defs.map(function(d){
+        var ch = have.indexOf(d[0])!==-1 ? ' checked' : '';
+        return '<label style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--text);cursor:pointer;"><input type="checkbox" value="'+d[0]+'"'+ch+' onchange="cmpSetSections('+id+', this)"> '+d[1]+'</label>';
+      }).join('');
+      return '<div data-secctl="'+id+'" style="margin-bottom:12px;padding:10px 12px;background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:8px;">'
+        + '<div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--text2);margin-bottom:8px;">Viditelné sekce na portálu</div>'
+        + '<div style="display:flex;gap:16px;flex-wrap:wrap;">'+boxes+'</div>'
+        + '<div style="font-size:11px;color:var(--text2);margin-top:8px;">Nic zaškrtnutého = lead vidí jen úvodní stránku s filozofií. <span data-secmsg="'+id+'"></span></div>'
+        + '</div>';
+    }
+    async function cmpSetSections(id, cb){
+      var wrap = cb.closest('[data-secctl]'); if(!wrap) return;
+      var vals = Array.prototype.slice.call(wrap.querySelectorAll('input[type=checkbox]')).filter(function(x){return x.checked;}).map(function(x){return x.value;});
+      var msg = wrap.querySelector('[data-secmsg]'); if(msg){ msg.style.color='#10b981'; msg.textContent='Ukládám…'; }
+      try {
+        var r = await fetch('/api/compounder/leads/'+id, { method:'PATCH', credentials:'include', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ sections: vals }) });
+        if(!r.ok) throw new Error();
+        var rowEl = document.querySelector('tr[data-lead="'+id+'"]'); if(rowEl) rowEl.setAttribute('data-sections', vals.join(','));
+        if(msg){ msg.style.color='#10b981'; msg.textContent='Uloženo ✓'; setTimeout(function(){ if(msg) msg.textContent=''; }, 1800); }
+      } catch(e){ if(msg){ msg.style.color='#ef4444'; msg.textContent='Chyba uložení'; } }
     }
     async function cmpPushBroadcast(){
       var title = prompt('Titulek push notifikace (vsem odberatelum):'); if (!title) return;
@@ -3194,6 +3221,12 @@
       var roiPct = Number.isFinite(st.locationRoiPct) ? st.locationRoiPct : 25;
       var buybackPct = Number.isFinite(st.buybackPct) ? st.buybackPct : 65;
       var buybackYears = Number.isFinite(st.buybackYears) ? st.buybackYears : 5;
+      var resFee = Number.isFinite(st.reservationFeePerDayCzk) ? st.reservationFeePerDayCzk : 20000;
+      var resHold = Number.isFinite(st.reservationHoldHours) ? st.reservationHoldHours : 1;
+      var resSign = Number.isFinite(st.reservationSignDays) ? st.reservationSignDays : 1;
+      var resPay = Number.isFinite(st.reservationPayDays) ? st.reservationPayDays : 1;
+      var resReblock = Number.isFinite(st.reservationReblockDays) ? st.reservationReblockDays : 2;
+      var defCur = (st.defaultCurrency === 'EUR') ? 'EUR' : 'CZK';
       var rate = _kvFxRates.EUR || 25;
       function verRow(ver, label) {
         var eur = (pl[ver] && pl[ver].eur != null) ? pl[ver].eur : '';
@@ -3269,6 +3302,27 @@
           '<input type="number" min="1" max="50" step="1" id="kvset-buybackyears" value="' + buybackYears + '" style="width:120px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:14px;">' +
           '<div style="color:var(--text2);font-size:12px;">letech provozu</div>' +
         '</div>' +
+        '<hr style="border:none;border-top:1px solid var(--border);margin:18px 0;">' +
+        '<div style="margin-bottom:6px;font-weight:600;font-size:14px;">Rezervace lokality</div>' +
+        '<div style="color:var(--text2);font-size:12px;margin-bottom:12px;">Poplatek za rezervaci (odečítá se z kupní ceny) a lhůty procesu.</div>' +
+        '<div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;">' +
+          '<div style="width:160px;">Poplatek / den</div>' +
+          '<div style="position:relative;">' +
+            '<input type="number" min="0" step="500" id="kvset-resfee" value="' + resFee + '" style="width:150px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:14px;padding-right:44px;">' +
+            '<span style="position:absolute;right:12px;top:50%;transform:translateY(-50%);color:var(--text2);font-size:13px;">Kč</span>' +
+          '</div>' +
+          '<div style="color:var(--text2);font-size:12px;">odečte se z kupní ceny</div>' +
+        '</div>' +
+        '<div style="display:flex;align-items:center;gap:14px;margin-bottom:10px;flex-wrap:wrap;">' +
+          '<label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);">Hlavička online (h)<input type="number" min="0" max="720" id="kvset-resholdh" value="' + resHold + '" style="width:64px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:14px;"></label>' +
+          '<label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);">Podpis (dny)<input type="number" min="0" max="365" id="kvset-ressign" value="' + resSign + '" style="width:64px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:14px;"></label>' +
+          '<label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);">Platba poté (dny)<input type="number" min="0" max="365" id="kvset-respay" value="' + resPay + '" style="width:64px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:14px;"></label>' +
+          '<label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);">Blokace znovu (dny)<input type="number" min="0" max="365" id="kvset-resreblock" value="' + resReblock + '" style="width:64px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:14px;"></label>' +
+        '</div>' +
+        '<div style="display:flex;align-items:center;gap:12px;">' +
+          '<div style="width:160px;">Výchozí měna nabídky</div>' +
+          '<select id="kvset-defcur" style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:14px;"><option value="CZK"' + (defCur==="CZK"?' selected':'') + '>Kč</option><option value="EUR"' + (defCur==="EUR"?' selected':'') + '>€ EUR</option></select>' +
+        '</div>' +
         '<div id="kvset-err" style="color:#ef4444;font-size:13px;margin-top:12px;display:none;"></div>' +
         '<div class="modal-actions">' +
           '<button type="button" class="btn btn-secondary" onclick="closeModal()">Zrušit</button>' +
@@ -3317,6 +3371,14 @@
       if (!(energyPct >= 0 && energyPct <= 100)) {
         return showErr('Odhad energií musí být 0 až 100 %.');
       }
+      var resFeeV = parseInt(String((document.getElementById('kvset-resfee') || {}).value || '').trim(), 10);
+      if (!(resFeeV >= 0)) { return showErr('Poplatek za rezervaci musí být nezáporné číslo.'); }
+      var resHoldV = parseInt(String((document.getElementById('kvset-resholdh') || {}).value || '').trim(), 10);
+      var resSignV = parseInt(String((document.getElementById('kvset-ressign') || {}).value || '').trim(), 10);
+      var resPayV = parseInt(String((document.getElementById('kvset-respay') || {}).value || '').trim(), 10);
+      var resReblockV = parseInt(String((document.getElementById('kvset-resreblock') || {}).value || '').trim(), 10);
+      if (![resHoldV, resSignV, resPayV, resReblockV].every(function(x){ return x >= 0 && x <= 720; })) { return showErr('Lhůty rezervace musí být nezáporná čísla.'); }
+      var defCurV = String((document.getElementById('kvset-defcur') || {}).value || 'CZK'); if (defCurV !== 'EUR') defCurV = 'CZK';
       var payload = {
         pricelist: { v2: { eur: v2 }, v3: { eur: v3 }, v4: { eur: v4 } },
         locationMonths: months,
@@ -3326,6 +3388,12 @@
         locationRoiPct: roiPct,
         buybackPct: buybackPct,
         buybackYears: buybackYears,
+        reservationFeePerDayCzk: resFeeV,
+        reservationHoldHours: resHoldV,
+        reservationSignDays: resSignV,
+        reservationPayDays: resPayV,
+        reservationReblockDays: resReblockV,
+        defaultCurrency: defCurV,
       };
       try {
         var r = await fetch('/api/compounder/compounding-settings', {
@@ -3343,6 +3411,55 @@
         showErr('Uložení selhalo: ' + kvEsc(e.message));
       }
     }
+
+    // ─── Rezervace lokalit (📋) ───────────────────────────────────────────────
+    var RES_STATUS = { reserved:'Rezervováno (čeká poplatek)', active:'Aktivní (čeká kupní smlouvu)', completed:'Dokončeno', cancelled:'Zrušeno', expired:'Propadlo' };
+    function resFmtCzk(n){ return (n==null)?'—':(Math.round(n).toLocaleString('cs-CZ')+' Kč'); }
+    function resDate(d){ return d ? new Date(d).toLocaleDateString('cs-CZ') : '—'; }
+    function openReservationsModal(){
+      var opts = ['<option value="">Všechny stavy</option>'].concat(Object.keys(RES_STATUS).map(function(k){ return '<option value="'+k+'">'+RES_STATUS[k]+'</option>'; })).join('');
+      var html = '<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal" style="width:1000px;max-width:96vw;">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;"><h2 style="margin:0;">📋 Rezervace lokalit</h2><button class="btn btn-secondary" onclick="closeModal()">Zavřít</button></div>' +
+        '<div style="display:flex;gap:8px;margin-bottom:12px;align-items:center;"><select id="resf-status" onchange="loadReservationsRows()" style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:13px;">'+opts+'</select><button class="btn" onclick="loadReservationsRows()">↻ Obnovit</button></div>' +
+        '<div id="res-rows"><div style="color:var(--text2);padding:16px;">Načítám…</div></div>' +
+      '</div></div>';
+      document.getElementById('modal-root').innerHTML = html;
+      loadReservationsRows();
+    }
+    window.openReservationsModal = openReservationsModal;
+    async function loadReservationsRows(){
+      var box = document.getElementById('res-rows'); if(!box) return;
+      var st = (document.getElementById('resf-status')||{}).value || '';
+      box.innerHTML = '<div style="color:var(--text2);padding:16px;">Načítám…</div>';
+      try {
+        var r = await fetch('/api/compounder/reservations' + (st?('?status='+encodeURIComponent(st)):''), { credentials:'include' });
+        var rows = await r.json();
+        if(!rows.length){ box.innerHTML = '<div style="color:var(--text2);padding:16px;">Žádné rezervace.</div>'; return; }
+        var h = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr><th>Vytvořeno</th><th>Lokalita</th><th>Kupující</th><th>Dny</th><th>Poplatek</th><th>Kupní cena</th><th>Stav</th><th>Lhůty</th><th>Akce</th></tr></thead><tbody>';
+        rows.forEach(function(x){
+          var act='';
+          if(x.status==='reserved'){ act = '<button class="btn" style="padding:4px 8px;font-size:12px;" onclick="resAction('+x.id+',\'fee_paid\')">Poplatek přišel</button> <button class="btn btn-secondary" style="padding:4px 8px;font-size:12px;" onclick="resAction('+x.id+',\'cancel\')">Zrušit</button>'; }
+          else if(x.status==='active'){ act = '<button class="btn" style="padding:4px 8px;font-size:12px;" onclick="resAction('+x.id+',\'purchase_paid\')">Kupní cena přišla</button> <button class="btn btn-secondary" style="padding:4px 8px;font-size:12px;" onclick="resAction('+x.id+',\'cancel\')">Zrušit</button>'; }
+          else { act = '<span style="color:var(--text2);font-size:12px;">'+(x.cancel_reason?kvEsc(x.cancel_reason):'—')+'</span>'; }
+          var buyer = kvEsc(x.buyer_name||'') + (x.buyer_phone?('<br><span style="color:var(--text2);font-size:11px;">'+kvEsc(x.buyer_phone)+'</span>'):'');
+          var lhuty = 'Podpis: '+resDate(x.sign_until)+'<br>Poplatek: '+resDate(x.fee_until)+'<br>Konec: '+resDate(x.reserved_until);
+          var scol = x.status==='completed'?'#10b981':((x.status==='cancelled'||x.status==='expired')?'#ef4444':'#eab308');
+          h += '<tr><td style="white-space:nowrap;">'+resDate(x.created_at)+'</td><td>'+kvEsc(x.kiosk_code)+'</td><td>'+buyer+'</td><td>'+x.days+'</td><td style="white-space:nowrap;">'+resFmtCzk(x.fee_total)+'</td><td style="white-space:nowrap;">'+resFmtCzk(x.purchase_price)+'</td><td><span style="color:'+scol+';font-size:12px;font-weight:600;">'+(RES_STATUS[x.status]||x.status)+'</span></td><td style="font-size:11px;white-space:nowrap;">'+lhuty+'</td><td style="white-space:nowrap;">'+act+'</td></tr>';
+        });
+        h += '</tbody></table></div>';
+        box.innerHTML = h;
+      } catch(e){ box.innerHTML = '<div style="color:#ef4444;padding:16px;">Chyba načítání rezervací.</div>'; }
+    }
+    window.loadReservationsRows = loadReservationsRows;
+    async function resAction(id, action){
+      if((action==='cancel') && !confirm('Opravdu zrušit rezervaci? Lokalita se uvolní ostatním.')) return;
+      try {
+        var r = await fetch('/api/compounder/reservations/'+id, { method:'PATCH', credentials:'include', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action: action }) });
+        if(!r.ok) throw new Error();
+        loadReservationsRows();
+      } catch(e){ alert('Akci se nepodařilo provést.'); }
+    }
+    window.resAction = resAction;
 
     // ─── Per-lokalita nastavení (verze kiosku + měsíční nájem) ───
     // ─── Smlouvy k lokalitě (📄 u řádku Compounding) ───────────────────────────

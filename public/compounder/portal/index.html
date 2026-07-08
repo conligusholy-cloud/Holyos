@@ -175,19 +175,36 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
     </div>
   </header>
   <nav class="subnav" id="subnav">
-    <a href="#ekonomika" class="active" data-i18n="p.nav.eko">Economics</a>
+    <a href="#filozofie" class="active">Filozofie</a>
+    <a href="#ekonomika" data-i18n="p.nav.eko">Economics</a>
     <a href="#nabidka">Nabídka lokalit</a>
-    <a href="#navratnost" data-i18n="p.nav.ret">Return</a>
-    <a href="#milniky" data-i18n="p.nav.milestones">Gold &amp; Diamond</a>
-    <a href="#parametry" data-i18n="p.nav.params">Technical parameters</a>
-    <a href="#galerie" data-i18n="p.nav.gallery">Gallery</a>
-    <a href="#pripojky" data-i18n="p.nav.conn">Connections</a>
-    <a href="#pudorysy" data-i18n="p.nav.plans">Floor plans</a>
-    <a href="#distribuce" data-i18n="p.nav.dist">Distribution model</a>
-    <a href="#lokalita" data-i18n="p.nav.location">Location check</a>
+    <a href="#navratnost">Distributorský systém</a>
   </nav>
 
   <div class="wrap">
+    <section class="blk" id="filozofie">
+      <div class="eyebrow">Filozofie</div>
+      <h2>Myšlenka Compoundingu</h2>
+      <p class="lead">Compounding je princip, kdy hodnota neroste skokem, ale sama ze sebe — krok za krokem, rok za rokem. Nezačínáte na zelené louce; vstupujete do místa, které už funguje, má své zákazníky a svůj ověřený obrat. Od prvního dne stavíte na něčem, co stojí.</p>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin-top:22px">
+        <div style="background:var(--surface,#141417);border:1px solid var(--line,rgba(255,255,255,.10));border-radius:16px;padding:20px">
+          <div style="font-size:22px;margin-bottom:8px">📍</div>
+          <div style="font-weight:700;margin-bottom:6px">Zavedené místo</div>
+          <div style="color:var(--muted,#9b9ba3);font-size:14px;line-height:1.55">Ověřený provoz s reálnou historií, ne příslib. Vyděláváte od začátku, bez fáze náběhu.</div>
+        </div>
+        <div style="background:var(--surface,#141417);border:1px solid var(--line,rgba(255,255,255,.10));border-radius:16px;padding:20px">
+          <div style="font-size:22px;margin-bottom:8px">📈</div>
+          <div style="font-weight:700;margin-bottom:6px">Hodnota roste sama</div>
+          <div style="color:var(--muted,#9b9ba3);font-size:14px;line-height:1.55">Výnos, který se opakuje a znovu investuje. Malé kroky se v čase skládají do velkého celku.</div>
+        </div>
+        <div style="background:var(--surface,#141417);border:1px solid var(--line,rgba(255,255,255,.10));border-radius:16px;padding:20px">
+          <div style="font-size:22px;margin-bottom:8px">🕊️</div>
+          <div style="font-weight:700;margin-bottom:6px">Svoboda</div>
+          <div style="color:var(--muted,#9b9ba3);font-size:14px;line-height:1.55">Aktivum, které pracuje za vás. O provoz se postaráme my — vy sklízíte výsledek.</div>
+        </div>
+      </div>
+      <p class="lead" style="margin-top:22px;color:var(--muted,#9b9ba3)">Až budete chtít vidět konkrétní ekonomiku a nabídku lokalit, rádi vám další sekce odemkneme.</p>
+    </section>
     <section class="blk" id="ekonomika">
       <div class="eyebrow" data-i18n="p.eko.eyebrow">Economics</div>
       <h2 data-i18n="p.eko.title">Economics of one Compounder</h2>
@@ -683,13 +700,23 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
       document.getElementById("app").style.display = "block";
       var first = (res.j.name || "").split(" ")[0];
       PORTAL_LEAD_ID = res.j.id;
-      // Sekce jen pro distributory (ostatní registrovaní vidí jen Nabídku lokalit, Gold & Diamond, Galerii)
-      if (res.j.role !== 'distributor') {
-        ['navratnost','parametry','pripojky','pudorysy','distribuce','lokalita','milniky'].forEach(function(id){
-          var sec = document.getElementById(id); if (sec) sec.style.display = 'none';
-          var link = document.querySelector('#subnav a[href="#' + id + '"]'); if (link) link.style.display = 'none';
-        });
-      }
+      // Viditelnost sekcí dle povolení leadu; úvodní "Filozofie" je vždy viditelná.
+      var ALLOWED = Array.isArray(res.j.sections) ? res.j.sections : [];
+      var SECTION_GROUP = {
+        ekonomika:'ekonomika', nabidka:'nabidka',
+        navratnost:'distributor', milniky:'distributor', parametry:'distributor',
+        galerie:'distributor', pripojky:'distributor', pudorysy:'distributor',
+        distribuce:'distributor', lokalita:'distributor'
+      };
+      Object.keys(SECTION_GROUP).forEach(function(id){
+        var vis = ALLOWED.indexOf(SECTION_GROUP[id]) !== -1;
+        var sec = document.getElementById(id); if (sec) sec.style.display = vis ? '' : 'none';
+      });
+      var NAV_GROUP = { ekonomika:'ekonomika', nabidka:'nabidka', navratnost:'distributor' };
+      Object.keys(NAV_GROUP).forEach(function(href){
+        var link = document.querySelector('#subnav a[href="#' + href + '"]');
+        if (link) link.style.display = (ALLOWED.indexOf(NAV_GROUP[href]) !== -1) ? '' : 'none';
+      });
       pBuildSelect(pDetect());
       pSetLang(pDetect(), function(){
         document.getElementById("hi").textContent = pT("p.hi") + (first ? (", " + first) : "");
@@ -709,8 +736,14 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
     })
     .catch(function(){ showDenied(); });
 
+  var OFFERS = { data:null, cur:'CZK', eur:25, feePerDay:20000, cfg:{ holdHours:1, signDays:1, payDays:1, reblockDays:2 } };
   function offEsc(x){ return String(x==null?"":x).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
-  function offFmt(n){ return (n==null)?"—":(Math.round(n).toLocaleString("cs-CZ")+" Kč"); }
+  function offTok(){ try{ return localStorage.getItem("compounder.portal.token")||""; }catch(_){ return ""; } }
+  function offMoney(czk){
+    if(czk==null) return "—";
+    if(OFFERS.cur==='EUR'){ return Math.round(czk/(OFFERS.eur||25)).toLocaleString("cs-CZ")+" €"; }
+    return Math.round(czk).toLocaleString("cs-CZ")+" Kč";
+  }
   function offMetric(k,v){ return '<div><div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">'+k+'</div><div style="font-weight:700;font-size:15px;margin-top:2px">'+v+'</div></div>'; }
   function loadOffers(tok){
     var box = document.getElementById("offers-list");
@@ -719,36 +752,158 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
       .then(function(r){ return r.json(); })
       .then(function(d){
         if(!d || !d.ok){ box.innerHTML = '<div class="muted">Nabídku se nepodařilo načíst.</div>'; return; }
-        if(!d.locations || !d.locations.length){ box.innerHTML = '<div class="muted">Aktuálně nejsou k dispozici žádné nabízené lokality.</div>'; return; }
-        box.innerHTML = d.locations.map(function(o){
-          return '<div style="display:flex;align-items:center;gap:18px;flex-wrap:wrap;border:1px solid var(--line);border-radius:14px;padding:14px 16px;background:var(--bg-2)">' +
-            '<div style="flex:2;min-width:190px">' +
-              '<div style="font-weight:800;font-size:15px">' + offEsc(o.label||o.code) + '</div>' +
-              '<div style="font-size:12px;color:var(--muted)">Verze ' + offEsc(o.version||"—") + '</div>' +
-            '</div>' +
-            '<div style="flex:1;min-width:110px">' + offMetric("Cena", offFmt(o.totalPrice)) + '</div>' +
-            '<div style="flex:1;min-width:110px">' + offMetric("Roční výnos", offFmt(o.yearlyYield)) + '</div>' +
-            '<div style="flex:1.3;min-width:150px">' +
-              '<div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Garance odkupu</div>' +
-              '<div style="font-weight:700;font-size:15px;margin-top:2px">' + (o.guaranteeValue!=null?offFmt(o.guaranteeValue):"—") + '</div>' +
-              (o.guaranteeValue!=null ? '<div style="font-size:11px;color:var(--muted);font-weight:400;margin-top:2px">'+o.guaranteePct+' %, '+o.guaranteeYears+'. rok</div>' : '') +
-            '</div>' +
-            '<div style="flex:1.2;min-width:130px"><div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Celkem za ' + o.guaranteeYears + ' let</div><div style="font-weight:800;font-size:15px;margin-top:2px;color:var(--gold-soft)">' + (o.guaranteeValue!=null ? offFmt((o.yearlyYield||0)*o.guaranteeYears + o.guaranteeValue) : "—") + '</div></div>' +
-            '<button type="button" class="btn" style="min-width:130px;justify-content:center" onclick="reserveLocation(\'' + offEsc(o.code).replace(/'/g,"&#39;") + '\', this)">Rezervovat</button>' +
-          '</div>';
-        }).join("");
+        OFFERS.data = d.locations || [];
+        OFFERS.cur = (d.defaultCurrency==='EUR') ? 'EUR' : 'CZK';
+        OFFERS.eur = d.eurRate || 25;
+        OFFERS.feePerDay = d.feePerDayCzk || 20000;
+        if(d.reservation){ OFFERS.cfg = d.reservation; }
+        renderOffers();
       })
       .catch(function(){ box.innerHTML = '<div class="muted">Nabídku se nepodařilo načíst.</div>'; });
   }
-  window.reserveLocation = function(code, btn){
-    if(!window.confirm("Odeslat zájem o rezervaci lokality " + code + "? Ozveme se vám s dalšími kroky.")) return;
-    var tok=""; try{ tok = localStorage.getItem("compounder.portal.token")||""; }catch(_){}
-    if(btn){ btn.disabled=true; btn.textContent="Odesílám…"; }
-    fetch("/api/compounder/portal/reserve-interest",{ method:"POST", credentials:"include", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ t: tok, code: code }) })
-      .then(function(r){ return r.json(); })
-      .then(function(d){ if(d && d.ok){ if(btn) btn.textContent="Zájem odeslán ✓"; } else { alert("Nepodařilo se odeslat."); if(btn){ btn.disabled=false; btn.textContent="Rezervovat"; } } })
-      .catch(function(){ alert("Nepodařilo se odeslat."); if(btn){ btn.disabled=false; btn.textContent="Rezervovat"; } });
+  window.offSetCur = function(c){ OFFERS.cur = c; renderOffers(); };
+  function offCurBtn(c,label){
+    var on = OFFERS.cur===c;
+    return '<button type="button" onclick="offSetCur(\''+c+'\')" style="border:1px solid '+(on?'var(--gold)':'var(--line)')+';background:'+(on?'var(--gold)':'transparent')+';color:'+(on?'#241c05':'var(--muted)')+';border-radius:999px;padding:5px 14px;font-size:13px;font-weight:700;cursor:pointer">'+label+'</button>';
+  }
+  function renderOffers(){
+    var box = document.getElementById("offers-list");
+    if(!box) return;
+    var arr = OFFERS.data || [];
+    var toggle = '<div style="display:flex;justify-content:flex-end;align-items:center;gap:6px;margin-bottom:10px"><span style="font-size:12px;color:var(--muted);margin-right:4px">Měna:</span>'+offCurBtn('CZK','Kč')+offCurBtn('EUR','€')+'</div>';
+    if(!arr.length){ box.innerHTML = toggle + '<div class="muted">Aktuálně nejsou k dispozici žádné nabízené lokality.</div>'; return; }
+    box.innerHTML = toggle + arr.map(function(o){
+      var btn = o.reserved
+        ? '<div style="min-width:130px;text-align:center;color:var(--muted);font-size:13px;font-weight:700;border:1px solid var(--line);border-radius:999px;padding:10px 12px">Rezervováno</div>'
+        : '<button type="button" class="btn" style="min-width:130px;justify-content:center" onclick="openReserveModal(\'' + offEsc(o.code).replace(/'/g,"&#39;") + '\')">Rezervovat</button>';
+      return '<div style="display:flex;align-items:center;gap:18px;flex-wrap:wrap;border:1px solid var(--line);border-radius:14px;padding:14px 16px;background:var(--bg-2);'+(o.reserved?'opacity:.55':'')+'">' +
+        '<div style="flex:2;min-width:190px">' +
+          '<div style="font-weight:800;font-size:15px">' + offEsc(o.label||o.code) + '</div>' +
+          '<div style="font-size:12px;color:var(--muted)">Verze ' + offEsc(o.version||"—") + '</div>' +
+        '</div>' +
+        '<div style="flex:1;min-width:110px">' + offMetric("Cena", offMoney(o.totalPrice)) + '</div>' +
+        '<div style="flex:1;min-width:110px">' + offMetric("Roční výnos", offMoney(o.yearlyYield)) + '</div>' +
+        '<div style="flex:1.3;min-width:150px">' +
+          '<div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Garance odkupu</div>' +
+          '<div style="font-weight:700;font-size:15px;margin-top:2px">' + offMoney(o.guaranteeValue) + '</div>' +
+          (o.guaranteeValue!=null ? '<div style="font-size:11px;color:var(--muted);font-weight:400;margin-top:2px">'+o.guaranteePct+' %, '+o.guaranteeYears+'. rok</div>' : '') +
+        '</div>' +
+        '<div style="flex:1.2;min-width:130px"><div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Celkem za ' + o.guaranteeYears + ' let</div><div style="font-weight:800;font-size:15px;margin-top:2px;color:var(--gold-soft)">' + (o.guaranteeValue!=null ? offMoney((o.yearlyYield||0)*o.guaranteeYears + o.guaranteeValue) : "—") + '</div></div>' +
+        btn +
+      '</div>';
+    }).join("");
+  }
+  window._resO = null; window._resMode = 'reserve';
+  window.closeReserveModal = function(){ var m=document.getElementById("resModal"); if(m) m.remove(); };
+  function resField(id,label,ph,type){
+    return '<label style="display:block;font-size:12px;color:var(--muted);margin:10px 0 4px">'+label+'</label><input id="'+id+'" type="'+(type||'text')+'" placeholder="'+(ph||'')+'" style="width:100%;background:#0e0e10;border:1px solid var(--line);border-radius:10px;padding:11px 12px;color:var(--text);font-size:14px">';
+  }
+  window.openReserveModal = function(code){
+    var o = (OFFERS.data||[]).find(function(x){ return x.code===code; });
+    if(!o) return;
+    window._resO = o; window._resMode = 'reserve';
+    var cfg = OFFERS.cfg || {}; var fee = OFFERS.feePerDay || 20000;
+    closeReserveModal();
+    var ov = document.createElement("div");
+    ov.id = "resModal";
+    ov.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.66);display:flex;align-items:flex-start;justify-content:center;padding:20px;overflow:auto;z-index:9999";
+    ov.addEventListener("click", function(e){ if(e.target===ov) closeReserveModal(); });
+    var proc = '<ol style="margin:0;padding-left:18px;color:var(--muted);font-size:12.5px;line-height:1.65">'
+      + '<li>Rezervace probíhá online — na vyplnění hlavičky smlouvy máte <b style="color:var(--text)">'+(cfg.holdHours||1)+' h</b>.</li>'
+      + '<li>Vyberete počet dní. Poplatek <b style="color:var(--text)">'+offMoney(fee)+' / den</b> se <b style="color:var(--text)">odečte z kupní ceny</b>.</li>'
+      + '<li>Podpis rezervační smlouvy do <b style="color:var(--text)">'+(cfg.signDays||1)+' dne</b>, poplatek připsaný do <b style="color:var(--text)">'+((cfg.signDays||1)+(cfg.payDays||1))+'. dne</b> — jinak rezervace propadá a lokalita se uvolní.</li>'
+      + '<li>Kupní smlouva podepsaná a zaplacená <b style="color:var(--text)">do konce rezervační doby</b>.</li>'
+      + '<li>Po zrušení lze stejnou lokalitu znovu rezervovat až za <b style="color:var(--text)">'+(cfg.reblockDays||2)+' dny</b>.</li>'
+      + '</ol>';
+    var card = ''
+      + '<div style="width:100%;max-width:520px;background:var(--surface,#141417);border:1px solid var(--line);border-radius:18px;padding:22px 22px 24px;box-shadow:0 24px 60px rgba(0,0,0,.5)">'
+      + '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:6px"><div><div style="font-size:12px;color:var(--gold-soft);text-transform:uppercase;letter-spacing:1px">Rezervace lokality</div><h3 style="margin:4px 0 0;font-size:19px">'+offEsc(o.label||o.code)+'</h3><div style="font-size:12px;color:var(--muted)">Verze '+offEsc(o.version||'—')+' · Cena '+offMoney(o.totalPrice)+'</div></div>'
+      + '<button type="button" onclick="closeReserveModal()" style="background:transparent;border:none;color:var(--muted);font-size:24px;cursor:pointer;line-height:1">×</button></div>'
+      + '<div style="background:rgba(255,255,255,.03);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin:12px 0 16px">'+proc+'</div>'
+      + '<div style="display:flex;gap:8px;margin-bottom:6px">'
+      +   '<button type="button" id="res-tab-reserve" onclick="resSetMode(\'reserve\')" class="btn" style="flex:1;justify-content:center">Rezervovat</button>'
+      +   '<button type="button" id="res-tab-buy" onclick="resSetMode(\'buy\')" style="flex:1;justify-content:center;border:1px solid var(--line);background:transparent;color:var(--text);border-radius:999px;padding:12px;font-weight:700;cursor:pointer">Koupit rovnou</button>'
+      + '</div>'
+      + '<div id="res-daysblock" style="margin-top:12px">'
+      +   '<label style="display:block;font-size:12px;color:var(--muted);margin:6px 0 4px">Počet dní rezervace</label>'
+      +   '<input id="res-days" type="number" min="1" max="365" value="7" style="width:100%;background:#0e0e10;border:1px solid var(--line);border-radius:10px;padding:11px 12px;color:var(--text);font-size:15px">'
+      +   '<div style="display:flex;justify-content:space-between;gap:10px;margin-top:10px;font-size:13px"><span style="color:var(--muted)">Rezervační poplatek</span><b id="res-fee">—</b></div>'
+      +   '<div style="display:flex;justify-content:space-between;gap:10px;margin-top:4px;font-size:13px"><span style="color:var(--muted)">Kupní cena po odečtení poplatku</span><b id="res-after" style="color:var(--gold-soft)">—</b></div>'
+      + '</div>'
+      + '<div style="margin-top:8px;border-top:1px solid var(--line);padding-top:10px"><div style="font-size:12px;color:var(--gold-soft);text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px">Hlavička smlouvy</div>'
+      +   resField('res-name','Jméno / firma','Jan Novák / Firma s.r.o.')
+      +   resField('res-email','E-mail','vas@email.cz','email')
+      +   resField('res-phone','Telefon','+420 …','tel')
+      +   resField('res-ico','IČO (nepovinné)','')
+      +   resField('res-addr','Adresa (nepovinné)','')
+      + '</div>'
+      + '<button type="button" id="res-confirm" class="btn" style="width:100%;justify-content:center;margin-top:16px" onclick="resSubmit()">Závazně rezervovat</button>'
+      + '<div id="res-msg" style="min-height:18px;margin-top:10px;font-size:13px;text-align:center"></div>'
+      + '</div>';
+    ov.innerHTML = card;
+    document.body.appendChild(ov);
+    var di = document.getElementById("res-days"); if(di) di.addEventListener("input", resRecalc);
+    // prefill jméno z pozdravu
+    try { var hi = (document.getElementById("hi")||{}).textContent||""; var nm = hi.replace(/^[^,]*,\s*/,""); if(nm && document.getElementById("res-name")) document.getElementById("res-name").value = nm; } catch(_){}
+    resRecalc();
   };
+  window.resSetMode = function(m){
+    window._resMode = m;
+    var db = document.getElementById("res-daysblock"); if(db) db.style.display = (m==='reserve')?'block':'none';
+    var cf = document.getElementById("res-confirm"); if(cf) cf.textContent = (m==='reserve')?'Závazně rezervovat':'Odeslat nezávaznou poptávku ke koupi';
+    var tr = document.getElementById("res-tab-reserve"), tb = document.getElementById("res-tab-buy");
+    if(tr&&tb){
+      var on = 'flex:1;justify-content:center'; var off = 'flex:1;justify-content:center;border:1px solid var(--line);background:transparent;color:var(--text);border-radius:999px;padding:12px;font-weight:700;cursor:pointer';
+      tr.className = (m==='reserve')?'btn':''; tr.style.cssText = (m==='reserve')?on:off;
+      tb.className = (m==='buy')?'btn':''; tb.style.cssText = (m==='buy')?on:off;
+    }
+  };
+  function resRecalc(){
+    var di = document.getElementById("res-days"); if(!di) return;
+    var days = Math.max(1, parseInt(di.value,10)||1);
+    var fee = (OFFERS.feePerDay||20000)*days;
+    var fe = document.getElementById("res-fee"); if(fe) fe.textContent = offMoney(fee);
+    var o = window._resO; var af = document.getElementById("res-after");
+    if(af){ af.textContent = (o && o.totalPrice!=null) ? offMoney(Math.max(0,o.totalPrice - fee)) : "—"; }
+  }
+  window.resSubmit = function(){
+    var o = window._resO; if(!o) return;
+    var msg = document.getElementById("res-msg"); var cf = document.getElementById("res-confirm");
+    var tok = offTok();
+    var buyer = {
+      name: (document.getElementById("res-name")||{}).value||"",
+      email: (document.getElementById("res-email")||{}).value||"",
+      phone: (document.getElementById("res-phone")||{}).value||"",
+      ico: (document.getElementById("res-ico")||{}).value||"",
+      address: (document.getElementById("res-addr")||{}).value||""
+    };
+    if(msg){ msg.style.color=""; msg.textContent=""; }
+    if(!buyer.name || !buyer.email || !buyer.phone){ if(msg){ msg.style.color="#ef4444"; msg.textContent="Vyplňte prosím jméno, e-mail a telefon."; } return; }
+    if(cf){ cf.disabled=true; cf.textContent="Odesílám…"; }
+    if(window._resMode==='buy'){
+      fetch("/api/compounder/portal/reserve-interest",{ method:"POST", credentials:"include", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ t: tok, code: o.code }) })
+        .then(function(r){ return r.json(); })
+        .then(function(d){ if(d&&d.ok){ resDone("Děkujeme! Poptávku ke koupi jsme přijali a brzy se vám ozveme."); } else { resErr((d&&d.error)||"Nepodařilo se odeslat."); } })
+        .catch(function(){ resErr("Nepodařilo se odeslat."); });
+      return;
+    }
+    var days = Math.max(1, parseInt((document.getElementById("res-days")||{}).value,10)||1);
+    fetch("/api/compounder/portal/reserve",{ method:"POST", credentials:"include", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ t: tok, code: o.code, days: days, totalPrice: o.totalPrice, buyer: buyer }) })
+      .then(function(r){ return r.json().then(function(j){ return { s:r.status, j:j }; }); })
+      .then(function(x){
+        if(x.j && x.j.ok){
+          var su = x.j.signUntil ? new Date(x.j.signUntil).toLocaleDateString("cs-CZ") : "";
+          var fu = x.j.feeUntil ? new Date(x.j.feeUntil).toLocaleDateString("cs-CZ") : "";
+          resDone("Rezervováno ✓ Poplatek "+offMoney(x.j.feeTotal)+". Rezervační smlouvu podepište do "+su+", poplatek uhraďte do "+fu+". Ozveme se vám s podklady.");
+          var t = offTok(); setTimeout(function(){ loadOffers(t); }, 2200);
+        } else {
+          resErr((x.j && x.j.error) || "Rezervaci se nepodařilo vytvořit.");
+        }
+      })
+      .catch(function(){ resErr("Rezervaci se nepodařilo vytvořit."); });
+  };
+  function resDone(t){ var m=document.getElementById("res-msg"); var cf=document.getElementById("res-confirm"); if(m){ m.style.color="var(--gold-soft)"; m.textContent=t; } if(cf){ cf.textContent="Hotovo ✓"; } }
+  function resErr(t){ var m=document.getElementById("res-msg"); var cf=document.getElementById("res-confirm"); if(m){ m.style.color="#ef4444"; m.textContent=t; } if(cf){ cf.disabled=false; cf.textContent=(window._resMode==='reserve')?'Závazně rezervovat':'Odeslat nezávaznou poptávku ke koupi'; } }
 
   // Osobní odkaz na detailní ekonomiku (per účet, sledovaný zvlášť).
   function loadEkoDetailLink(tok){
