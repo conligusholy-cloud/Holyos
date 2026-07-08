@@ -594,15 +594,78 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
   var mileChart = null, mileMode = "full";
   function pT(k){ return DICT[k] != null ? DICT[k] : ((I18N.strings[I18N.base]||{})[k] || k); }
   window.__pt = pT;
-  // stažení dokumentace verze → analytika (kdo má zájem o kterou velikost)
-  window.portalDocDl = function(ver){
+  // Jednotné odeslání analytického eventu (beacon). Vše se váže na lead_id.
+  function pSid(){
+    var s = localStorage.getItem("compounder.sid");
+    if (!s){ s = "s_" + Date.now().toString(36) + Math.random().toString(36).slice(2,8); localStorage.setItem("compounder.sid", s); }
+    return s;
+  }
+  function pTrack(event, props){
     try{
-      var sid = localStorage.getItem("compounder.sid") || "";
-      var pl = { sid: sid, event: "doc_download", props: { version: ver, lead_id: PORTAL_LEAD_ID }, path: "/portal", ts: Date.now() };
+      var pl = { sid: pSid(), event: event,
+                 props: Object.assign({ lead_id: PORTAL_LEAD_ID }, props || {}),
+                 path: "/portal" + (location.hash || ""), lang: document.documentElement.lang || null,
+                 ts: Date.now(), w: window.innerWidth };
       if (navigator.sendBeacon) navigator.sendBeacon("/api/compounder/track", new Blob([JSON.stringify(pl)], { type: "application/json" }));
       else fetch("/api/compounder/track", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(pl), keepalive: true }).catch(function(){});
     }catch(e){}
-  };
+  }
+  window.__portalTrack = pTrack;
+  // stažení dokumentace verze → analytika (kdo má zájem o kterou velikost)
+  window.portalDocDl = function(ver){ pTrack("doc_download", { version: ver }); };
+
+  // ── Plné auto-trackování chování v portálu (klikací mapa, čas, scroll) ──────
+  // Popíše čitelně, na co lead klikl: preferuje data-track, pak aria-label, text,
+  // nakonec tag#id. Ke každému kliku přidá i sekci/stránku, kde k němu došlo.
+  function pElLabel(el){
+    if (!el || el.nodeType !== 1) return "?";
+    var dt = el.getAttribute("data-track") || el.getAttribute("aria-label");
+    if (dt) return dt.trim().slice(0, 60);
+    var t = (el.textContent || "").replace(/\s+/g, " ").trim();
+    if (t) return t.slice(0, 60);
+    var tag = (el.tagName || "").toLowerCase();
+    if (el.id) return tag + "#" + el.id;
+    var cls = (el.className && el.className.toString ? el.className.toString() : "").split(" ").filter(Boolean)[0];
+    return tag + (cls ? "." + cls : "");
+  }
+  function pElSection(el){
+    var s = el.closest ? el.closest("section[id]") : null;
+    return s ? s.id : null;
+  }
+  function pInitAutoTrack(){
+    if (window.__portalAutoInit) return; window.__portalAutoInit = true;
+    // Každý smysluplný klik (tlačítko, odkaz, tab, karta, ikonka…).
+    document.addEventListener("click", function(e){
+      var t = e.target;
+      var el = t.closest ? t.closest("a,button,[role=button],[data-track],[data-galtab],.tab,.gal-tab,.btn,summary,label,input[type=submit],input[type=button]") : null;
+      if (!el) return;
+      pTrack("click", {
+        label: pElLabel(el),
+        tag: (el.tagName || "").toLowerCase(),
+        id: el.id || null,
+        sec: pElSection(el),
+        href: (el.getAttribute && el.getAttribute("href")) || null
+      });
+    }, true);
+    // Maximální hloubka scrollu v rámci aktuální stránky.
+    var maxDepth = 0;
+    function onScroll(){
+      var h = document.documentElement;
+      var sc = (h.scrollTop || document.body.scrollTop);
+      var max = (h.scrollHeight - h.clientHeight) || 1;
+      var d = Math.min(100, Math.round((sc / max) * 100));
+      if (d > maxDepth) maxDepth = d;
+    }
+    window.addEventListener("scroll", onScroll, { passive: true });
+    // Konec návštěvy — pošli celkový čas a max scroll.
+    var start = Date.now(); var ended = false;
+    function endVisit(){
+      if (ended) return; ended = true;
+      pTrack("visit_end", { ms: Date.now() - start, depth: maxDepth, page: window.__portalPage || null });
+    }
+    window.addEventListener("pagehide", endVisit);
+    document.addEventListener("visibilitychange", function(){ if (document.visibilityState === "hidden") endVisit(); });
+  }
   function pApply(){
     var enb = (I18N.strings[I18N.base] || {});
     document.querySelectorAll("[data-i18n]").forEach(function(el){
@@ -767,19 +830,18 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
       });
       // Výchozí stránka po přihlášení: Filozofie (taby přepínají jednotlivé stránky)
       pShowPage('filozofie');
-      pBuildSelect(pDetect());
-      pSetLang(pDetect(), function(){
+      // Výchozí jazyk = jazyk nastavený u leadu (pokud si uživatel na tomto zařízení sám nevybral jiný).
+      var _stored = null; try { _stored = localStorage.getItem("compounder.lang2"); } catch(_){}
+      var _leadLang = (res.j.lang || "").toLowerCase();
+      var initLang = (_stored && I18N.LANGS[_stored]) ? _stored : ((_leadLang && I18N.LANGS[_leadLang]) ? _leadLang : pDetect());
+      pBuildSelect(initLang);
+      pSetLang(initLang, function(){
         document.getElementById("hi").textContent = pT("p.hi") + (first ? (", " + first) : "");
         var gb = document.getElementById("gearBtn"); if (gb){ gb.setAttribute("aria-label", pT("p.nav.acc")); gb.title = pT("p.nav.acc"); }
         initCalc(); initNav(); initGallery(); initMilestones(); initLocation(); initContact(); initDistModal();
       });
-      try {
-        var sid = localStorage.getItem("compounder.sid");
-        if (!sid) { sid = "s_" + Date.now().toString(36) + Math.random().toString(36).slice(2,8); localStorage.setItem("compounder.sid", sid); }
-        var pl = { sid: sid, event: "portal_view", props: { lead_id: res.j.id, role: res.j.role }, path: "/portal", lang: res.j.lang || null, ts: Date.now() };
-        if (navigator.sendBeacon) navigator.sendBeacon("/api/compounder/track", new Blob([JSON.stringify(pl)], { type: "application/json" }));
-        else fetch("/api/compounder/track", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(pl), keepalive: true }).catch(function(){});
-      } catch(e) {}
+      pTrack("portal_view", { role: res.j.role });
+      pInitAutoTrack();
       initPortalPush(token);
       loadEkoDetailLink(token);
       loadOffers(token);
@@ -1321,6 +1383,12 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
       a.classList.toggle('active', NAVHREF_PAGE[href] === page);
     });
     try { window.scrollTo(0,0); } catch(e){}
+    // Analytika: přepnutí stránky/tabu v portálu.
+    if (window.__portalPage !== page) {
+      var from = window.__portalPage || null;
+      window.__portalPage = page;
+      if (window.__portalTrack) window.__portalTrack("page_switch", { page: page, from: from });
+    }
   }
   function initNav(){
     Array.prototype.slice.call(document.querySelectorAll('#subnav a')).forEach(function(a){

@@ -2716,22 +2716,30 @@
         '<div style="margin-bottom:10px;"><label style="display:block;font-size:12px;color:var(--text2);margin-bottom:4px;">Jméno</label><input type="text" id="al-name" placeholder="Jan Novák" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:9px 11px;color:var(--text);font-size:14px;"></div>' +
         '<div style="margin-bottom:10px;"><label style="display:block;font-size:12px;color:var(--text2);margin-bottom:4px;">E-mail *</label><input type="email" id="al-email" placeholder="jan@firma.cz" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:9px 11px;color:var(--text);font-size:14px;"></div>' +
         '<div style="margin-bottom:12px;"><label style="display:block;font-size:12px;color:var(--text2);margin-bottom:4px;">Role</label><select id="al-role" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:9px 11px;color:var(--text);font-size:14px;"><option value="compounder">Compounder</option><option value="distributor">Distributor</option></select></div>' +
+        '<div style="margin-bottom:12px;"><label style="display:block;font-size:12px;color:var(--text2);margin-bottom:4px;">Jazyk (e-mail i portál)</label><select id="al-lang" onchange="alLangHint()" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:9px 11px;color:var(--text);font-size:14px;"><option value="cs">Čeština</option><option value="en">English</option><option value="de">Deutsch</option><option value="sk">Slovenčina</option><option value="pl">Polski</option></select><div id="al-curhint" style="font-size:12px;color:var(--text2);margin-top:6px;">Měna na portálu: <b>Kč</b></div></div>' +
         '<label style="display:flex;align-items:center;gap:8px;font-size:13px;"><input type="checkbox" id="al-invite" checked> Rovnou poslat přihlašovací odkaz e-mailem</label>' +
         '<div id="al-err" style="color:#ef4444;font-size:13px;margin-top:10px;display:none;"></div>' +
         '<div class="modal-actions"><button type="button" class="btn btn-secondary" onclick="closeModal()">Zrušit</button><button type="button" class="btn btn-primary" onclick="submitAddLead()">Přidat</button></div>' +
         '</div></div>';
     }
     window.openAddLead = openAddLead;
+    function alLangHint(){
+      var el=document.getElementById('al-lang'); var h=document.getElementById('al-curhint');
+      if(!el||!h) return;
+      h.innerHTML = (el.value==='cs') ? 'Měna na portálu: <b>Kč</b>' : 'Měna na portálu: <b>€ (EUR)</b>';
+    }
+    window.alLangHint = alLangHint;
     async function submitAddLead(){
       var name=(document.getElementById('al-name').value||'').trim();
       var email=(document.getElementById('al-email').value||'').trim();
       var role=document.getElementById('al-role').value;
+      var lang=(document.getElementById('al-lang')||{}).value||'cs';
       var invite=document.getElementById('al-invite').checked;
       var err=document.getElementById('al-err');
       function showErr(m){ err.textContent=m; err.style.display='block'; }
       if(!email||email.indexOf('@')===-1){ return showErr('Zadejte platný e-mail.'); }
       try{
-        var r=await fetch('/api/compounder/leads',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:name,email:email,role:role,sendInvite:invite})});
+        var r=await fetch('/api/compounder/leads',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:name,email:email,role:role,lang:lang,sendInvite:invite})});
         var d=await r.json().catch(function(){return{};});
         if(!r.ok){ return showErr(d.error||('Chyba '+r.status)); }
         closeModal(); loadCompounderLeads();

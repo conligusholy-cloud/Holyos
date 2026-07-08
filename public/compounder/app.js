@@ -248,12 +248,32 @@
     }, {threshold:0.5});
     document.querySelectorAll("section[id], header[id]").forEach(function(s){ sio.observe(s); });
   }
-  // CTA clicks
-  document.querySelectorAll('a.btn, .btn-gold').forEach(function(b){
-    b.addEventListener("click", function(){ track("cta_click", {label:(b.textContent||"").trim().slice(0,40), href:b.getAttribute("href")||null}); });
-  });
-  // time on page
-  window.addEventListener("beforeunload", function(){ track("page_leave", {ms: Math.round(performance.now())}); });
+  // klikací mapa — zachytí KAŽDÝ smysluplný klik, ne jen CTA
+  function elLabel(el){
+    var dt = el.getAttribute("data-track") || el.getAttribute("aria-label");
+    if (dt) return dt.trim().slice(0,60);
+    var t = (el.textContent||"").replace(/\s+/g," ").trim();
+    if (t) return t.slice(0,60);
+    var tag = (el.tagName||"").toLowerCase();
+    if (el.id) return tag+"#"+el.id;
+    var cls = (el.className && el.className.toString ? el.className.toString() : "").split(" ").filter(Boolean)[0];
+    return tag + (cls ? "."+cls : "");
+  }
+  function elSection(el){ var s = el.closest ? el.closest("section[id], header[id]") : null; return s ? s.id : null; }
+  document.addEventListener("click", function(e){
+    var el = e.target.closest ? e.target.closest("a,button,[role=button],[data-track],.tab,.btn,.btn-gold,summary,label,input[type=submit],input[type=button]") : null;
+    if (!el) return;
+    var isCta = el.classList && (el.classList.contains("btn") || el.classList.contains("btn-gold"));
+    track(isCta ? "cta_click" : "click", { label: elLabel(el), tag:(el.tagName||"").toLowerCase(), id: el.id||null, sec: elSection(el), href: el.getAttribute("href")||null });
+  }, true);
+  // hloubka scrollu na stránce
+  var maxDepth = 0;
+  window.addEventListener("scroll", function(){
+    var h = document.documentElement, sc = h.scrollTop || document.body.scrollTop, max = (h.scrollHeight - h.clientHeight) || 1;
+    var d = Math.min(100, Math.round((sc/max)*100)); if (d > maxDepth) maxDepth = d;
+  }, {passive:true});
+  // time on page + max scroll
+  window.addEventListener("beforeunload", function(){ track("page_leave", {ms: Math.round(performance.now()), depth: maxDepth}); });
 
   /* ---------- PWA install ---------- */
   var deferredPrompt = null;
