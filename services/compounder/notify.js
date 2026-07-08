@@ -168,6 +168,21 @@ async function notifyContactRequest(prisma, { lead, phone, isDist }) {
   } catch (e) { console.error('[compounder-notify] contact', e.message); }
 }
 
+// Poptávka nákupu Compounderu z portálu (rezervace volného výrobního slotu) →
+// Velín push + zvonek stejným kanálem jako rezervace/kontakt.
+async function notifyPurchaseInquiry(prisma, { lead, count, locations, phone }) {
+  try {
+    if (!lead) return;
+    const who = lead.name || lead.email || ('lead #' + lead.id);
+    const n = Number(count) || 1;
+    const title = '🛒 Poptávka nákupu — ' + n + '× Compounder';
+    const body = who + ' poptává ' + n + '× Compounder (volné výrobní sloty).'
+      + (locations ? (' Umístění: ' + String(locations).slice(0, 120) + '.') : '')
+      + (phone ? (' Tel: ' + phone) : '');
+    await dispatch(prisma, { title, body, data: { type: 'compounder_purchase', lead_id: lead.id, count: n } });
+  } catch (e) { console.error('[compounder-notify] purchase', e.message); }
+}
+
 module.exports = {
   NOTIFY_SETTING_KEY,
   getEligibleVelinPeople,
@@ -176,4 +191,5 @@ module.exports = {
   notifyReservationEvent,
   notifyContractEvent,
   notifyContactRequest,
+  notifyPurchaseInquiry,
 };

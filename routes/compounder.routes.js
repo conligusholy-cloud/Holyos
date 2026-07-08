@@ -524,6 +524,62 @@ router.post('/portal/access-request', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// ─── VEŘEJNÉ: poptávka nákupu Compounderu (rezervace volného výrobního slotu) ─
+// POST /api/compounder/portal/purchase-inquiry
+// Zákazník z portálu pošle poptávku (hlavička + počet kiosků + umístění). Uloží se
+// jako poznámka + event k leadovi a odejde upozornění majitelům (Velín push+zvonek).
+const purchaseSchema = z.object({
+  t: z.string().min(3),
+  name: z.string().max(255).optional().nullable(),
+  ico: z.string().max(20).optional().nullable(),
+  address: z.string().max(500).optional().nullable(),
+  email: z.string().max(255).optional().nullable(),
+  phone: z.string().max(40).optional().nullable(),
+  count: z.coerce.number().int().min(1).max(999),
+  locations: z.string().trim().min(1).max(2000),
+  note: z.string().max(2000).optional().nullable(),
+});
+router.post('/portal/purchase-inquiry', async (req, res, next) => {
+  try {
+    const parsed = purchaseSchema.safeParse(req.body || {});
+    if (!parsed.success) return res.status(400).json({ ok: false, error: 'Vyplňte prosím počet kiosků a jejich umístění.' });
+    const leadId = verifyPortalToken(parsed.data.t);
+    if (!leadId) return res.status(401).json({ ok: false, error: 'Neplatný přístup.' });
+    if (!locRateOk(clientIp(req), leadId)) return res.status(429).json({ ok: false, error: 'Příliš mnoho požadavků. Zkus to prosím za chvíli.' });
+
+    const d = parsed.data;
+    const phone = d.phone ? d.phone.replace(/[^\d+ ()\/-]/g, '').slice(0, 40) : null;
+    const lead = await prisma.compounderLead.findUnique({
+      where: { id: leadId },
+      select: { id: true, name: true, email: true, role: true, notes: true },
+    });
+    if (!lead) return res.status(404).json({ ok: false, error: 'Účet nenalezen.' });
+
+    const stamp = new Date().toISOString().slice(0, 16).replace('T', ' ');
+    const noteText = '[' + stamp + '] POPTÁVKA NÁKUPU — ' + d.count + '× Compounder'
+      + '\nUmístění: ' + d.locations
+      + (d.name ? ('\nHlavička: ' + d.name + (d.ico ? (' · IČO ' + d.ico) : '')) : '')
+      + (d.address ? ('\nAdresa: ' + d.address) : '')
+      + (phone ? ('\nTel: ' + phone) : '')
+      + (d.email ? ('\nE-mail: ' + d.email) : '')
+      + (d.note ? ('\nPoznámka: ' + d.note) : '');
+    await prisma.compounderLead.update({
+      where: { id: leadId },
+      data: { phone: phone || undefined, status: 'qualified', notes: lead.notes ? (lead.notes + '\n\n' + noteText) : noteText },
+    });
+
+    prisma.compounderEvent.create({ data: {
+      sid: 'buy:' + leadId, event: 'purchase_inquiry',
+      props: { lead_id: leadId, count: d.count, locations: String(d.locations).slice(0, 300), ico: d.ico || null, address: (d.address || '').slice(0, 200) || null, phone: phone, note: (d.note || '').slice(0, 300) || null },
+      path: '/portal', ip: clientIp(req),
+    } }).catch(() => {});
+    compounderNotify.notifyPurchaseInquiry(prisma, { lead, count: d.count, locations: d.locations, phone: phone })
+      .catch((e) => console.error('[compounder] purchase velín:', e && e.message));
+    console.log('[compounder] Poptávka nákupu: lead #' + leadId + ' (' + d.count + ' ks)');
+    return res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
 // POST /api/compounder/set-password  { t: token, password }
 // Nastaví/změní heslo přihlášeného leada. Vyžaduje platný token (z odkazu nebo session).
 const setPwSchema = z.object({

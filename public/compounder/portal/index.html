@@ -280,6 +280,26 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
         <a id="eko-detail-link" href="#" target="_blank" rel="noopener" class="btn" style="display:none;justify-content:center" data-i18n="p.eko.detail">View the detailed breakdown</a>
         <div class="note" style="margin-top:10px" data-i18n="p.eko.detailnote">See exactly where these numbers come from — the full, editable model.</div>
       </div>
+
+      <!-- Poptávka nákupu Compounderu → rezervace volného výrobního slotu -->
+      <div id="buy" style="margin-top:44px;padding:30px 26px;border:1px solid rgba(201,162,75,.32);border-radius:20px;background:radial-gradient(130% 100% at 88% 0%, rgba(201,162,75,.14), rgba(201,162,75,.03) 55%, rgba(0,0,0,0) 80%);text-align:center">
+        <div class="eyebrow" data-i18n="p.buy.eyebrow">Order</div>
+        <h3 style="font-size:clamp(21px,2.8vw,30px);font-weight:700;margin:6px 0 8px" data-i18n="p.buy.title">I want to buy a Compounder</h3>
+        <p class="note" style="max-width:580px;margin:0 auto 20px" data-i18n="p.buy.lead">Reserve a free production slot. Leave an inquiry and we'll get back to you with production and delivery dates.</p>
+        <button type="button" id="buy-open" class="btn btn-gold" style="justify-content:center" data-i18n="p.buy.cta">Buy a Compounder</button>
+        <div id="buy-form" style="display:none;margin-top:22px;text-align:left;max-width:600px;margin-left:auto;margin-right:auto">
+          <div class="row"><label data-i18n="p.buy.name">Name / company</label><div class="unit"><input type="text" id="buy-name" style="width:240px"></div></div>
+          <div class="row"><label data-i18n="p.buy.ico">Company ID (IČO)</label><div class="unit"><input type="text" id="buy-ico" style="width:240px"></div></div>
+          <div class="row"><label data-i18n="p.buy.address">Billing address</label><div class="unit"><input type="text" id="buy-address" style="width:240px"></div></div>
+          <div class="row"><label data-i18n="p.buy.email">Email</label><div class="unit"><input type="email" id="buy-email" autocomplete="email" style="width:240px"></div></div>
+          <div class="row"><label data-i18n="p.buy.phone">Phone</label><div class="unit"><input type="tel" id="buy-phone" placeholder="+420…" autocomplete="tel" style="width:240px"></div></div>
+          <div class="row"><label data-i18n="p.buy.count">Number of kiosks</label><div class="unit"><input type="number" id="buy-count" min="1" value="1" style="width:110px"></div></div>
+          <div style="margin-top:12px"><label data-i18n="p.buy.locations">Where they'll be placed</label><textarea id="buy-locations" rows="2" style="width:100%;margin-top:6px;background:var(--surface);border:1px solid var(--line);border-radius:10px;color:var(--text);padding:8px 10px;font:inherit"></textarea></div>
+          <div style="margin-top:12px"><label data-i18n="p.buy.note">Timing / note</label><textarea id="buy-note" rows="2" style="width:100%;margin-top:6px;background:var(--surface);border:1px solid var(--line);border-radius:10px;color:var(--text);padding:8px 10px;font:inherit"></textarea></div>
+          <button type="button" id="buy-send" class="btn btn-gold" style="width:100%;justify-content:center;margin-top:14px" data-i18n="p.buy.send">Send inquiry</button>
+          <p class="note" id="buy-msg" role="status" style="min-height:18px;margin-top:8px"></p>
+        </div>
+      </div>
     </section>
 
     <section class="blk" id="nabidka">
@@ -839,7 +859,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
       pSetLang(initLang, function(){
         document.getElementById("hi").textContent = pT("p.hi") + (first ? (", " + first) : "");
         var gb = document.getElementById("gearBtn"); if (gb){ gb.setAttribute("aria-label", pT("p.nav.acc")); gb.title = pT("p.nav.acc"); }
-        initCalc(); initNav(); initGallery(); initMilestones(); initLocation(); initContact(); initDistModal();
+        initCalc(); initNav(); initGallery(); initMilestones(); initLocation(); initContact(); initBuy(); initDistModal();
       });
       pTrack("portal_view", { role: res.j.role });
       pInitAutoTrack();
@@ -1309,6 +1329,32 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
       d.appendChild(dot); d.appendChild(sp); fc.appendChild(d);
     });
     var reco = document.getElementById("loc-reco"); reco.textContent = r.recommendation || ""; reco.style.display = r.recommendation ? "block" : "none";
+  }
+  function initBuy(){
+    var open = document.getElementById("buy-open");
+    var form = document.getElementById("buy-form");
+    var send = document.getElementById("buy-send");
+    var msg = document.getElementById("buy-msg");
+    if (!open || !form) return;
+    open.addEventListener("click", function(){ form.style.display = "block"; open.style.display = "none"; var n = document.getElementById("buy-name"); if (n) n.focus(); });
+    function val(id){ var e = document.getElementById(id); return e ? ((e.value || "").trim()) : ""; }
+    function submit(){
+      var count = parseInt(val("buy-count"), 10) || 0;
+      var locations = val("buy-locations");
+      if (count < 1){ msg.style.color = "#e07a6b"; msg.textContent = pT("p.buy.errcount"); return; }
+      if (!locations){ msg.style.color = "#e07a6b"; msg.textContent = pT("p.buy.errloc"); return; }
+      var tok = ""; try { tok = localStorage.getItem("compounder.portal.token") || ""; } catch(_){}
+      send.disabled = true; msg.style.color = ""; msg.textContent = pT("p.buy.sending");
+      fetch("/api/compounder/portal/purchase-inquiry", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ t: tok, name: val("buy-name"), ico: val("buy-ico"), address: val("buy-address"), email: val("buy-email"), phone: val("buy-phone"), count: count, locations: locations, note: val("buy-note") }) })
+        .then(function(r){ return r.json().then(function(j){ return { ok: r.ok, j: j }; }); })
+        .then(function(res){
+          if (res.ok && res.j && res.j.ok){ msg.style.color = "var(--gold-soft)"; msg.textContent = pT("p.buy.ok"); form.style.display = "none"; }
+          else { msg.style.color = "#e07a6b"; msg.textContent = (res.j && res.j.error) || pT("p.buy.err"); send.disabled = false; }
+        })
+        .catch(function(){ msg.style.color = "#e07a6b"; msg.textContent = pT("p.buy.err"); send.disabled = false; });
+    }
+    if (send) send.addEventListener("click", submit);
   }
   function initContact(){
     var open = document.getElementById("ct-open");
