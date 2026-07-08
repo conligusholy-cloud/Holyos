@@ -3061,6 +3061,7 @@
         return '<th style="' + st + '" onclick="kvSort(\'' + key + '\')">' + label + kvSortArrow(key) + '</th>';
       }
       var h = '<div style="overflow-x:auto;"><table class="data-table kv-compact"><thead><tr>' +
+        '<th style="text-align:right;color:var(--text2);">#</th>' +
         kvTh('code', 'Kód', '') + kvTh('label', 'Lokalita', '') + kvTh('company', 'Provozovatel', '') +
         kvTh('version', 'Verze', '') +
         kvTh('obrat', 'Průměrný obrat s DPH', 'r') +
@@ -3078,7 +3079,7 @@
         kvTh('forsale', 'Nabízet', 'c') +
         kvTh('stav', 'Stav', '') +
         '<th></th></tr></thead><tbody>';
-      filtered.forEach(function(k) {
+      filtered.forEach(function(k, _i) {
         var cur = k.currency || 'CZK';
         var badge = k.inIncubator
           ? '<span style="background:rgba(59,130,246,0.15);color:#3b82f6;border:1px solid rgba(59,130,246,0.4);border-radius:6px;padding:2px 8px;font-size:11px;">Inkubátor</span>'
@@ -3099,6 +3100,7 @@
         var _cistyZisk = _obratBez - _servis - _najemVal - _energie;
         var _mes = '<span style="color:var(--text2);font-size:11px;"> /měs</span>';
         h += '<tr style="cursor:default;">' +
+          '<td style="text-align:right;color:var(--text2);">' + (_i + 1) + '</td>' +
           '<td style="font-weight:600;white-space:nowrap;">' + kvEsc(k.code) + '</td>' +
           '<td>' + kvEsc(k.label) + '</td>' +
           '<td style="color:var(--text2);">' + kvEsc(k.companyName) + '</td>' +
