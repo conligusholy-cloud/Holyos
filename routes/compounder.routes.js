@@ -418,6 +418,77 @@ router.post('/login', async (req, res, next) => {
   }
 });
 
+// POST /portal/login-check — zjistí, zda e-mail patří pozvanému; pokud ano, pošle odkaz.
+router.post('/portal/login-check', async (req, res, next) => {
+  try {
+    const email = String((req.body || {}).email || '').trim().toLowerCase();
+    if (!email || email.indexOf('@') === -1) return res.status(400).json({ ok: false, error: 'Neplatný e-mail.' });
+    const lead = await prisma.compounderLead.findFirst({
+      where: { email: { equals: email, mode: 'insensitive' } },
+      orderBy: { created_at: 'desc' },
+      select: { id: true, name: true, email: true, lang: true },
+    });
+    if (!lead) return res.json({ ok: true, exists: false });
+    const url = `${portalBase()}/portal?t=${makeLoginToken(lead.id)}`;
+    sendPortalLogin({ name: lead.name, email: lead.email, lang: lead.lang }, url)
+      .catch((e) => console.error('[compounder] login e-mail selhal:', e.message));
+    return res.json({ ok: true, exists: true });
+  } catch (err) { next(err); }
+});
+
+// POST /portal/access-request — nepozvaný žádá o přístup (telefon + zpráva povinné) → lead „nezvaný".
+router.post('/portal/access-request', async (req, res, next) => {
+  try {
+    const b = req.body || {};
+    const email = String(b.email || '').trim().toLowerCase();
+    const phone = String(b.phone || '').trim().slice(0, 40);
+    const message = String(b.message || '').trim().slice(0, 2000);
+    const name = String(b.name || '').trim().slice(0, 255);
+    if (!email || email.indexOf('@') === -1) return res.status(400).json({ ok: false, error: 'Neplatný e-mail.' });
+    if (!phone) return res.status(400).json({ ok: false, error: 'Zadejte telefon.' });
+    if (!message) return res.status(400).json({ ok: false, error: 'Napište důvod žádosti.' });
+
+    const noteText = 'ŽÁDOST O PŘÍSTUP (nezvaný) — ' + new Date().toLocaleString('cs-CZ') + '\nDůvod: ' + message;
+    const existing = await prisma.compounderLead.findFirst({
+      where: { email: { equals: email, mode: 'insensitive' } },
+      orderBy: { created_at: 'desc' }, select: { id: true, notes: true },
+    });
+    let leadId;
+    if (existing) {
+      leadId = existing.id;
+      await prisma.compounderLead.update({
+        where: { id: existing.id },
+        data: { phone: phone || undefined, notes: (existing.notes ? (existing.notes + '\n\n') : '') + noteText },
+      });
+    } else {
+      const lead = await prisma.compounderLead.create({
+        data: {
+          name: name || '(žádost o přístup)',
+          email, phone,
+          role: 'compounder',
+          source: 'access_request',
+          status: 'new',
+          notes: noteText,
+          ip: clientIp(req),
+          user_agent: (req.headers['user-agent'] || '').slice(0, 1000) || null,
+        },
+        select: { id: true },
+      });
+      leadId = lead.id;
+    }
+    try {
+      const ids = await resolveOwnerUserIds();
+      const link = (getAppUrl() || '') + '/modules/prodejni-objednavky/index.html';
+      const title = 'Žádost o přístup (nezvaný): ' + email;
+      const body = 'E-mail: ' + email + ' • Tel: ' + phone + '\nDůvod: ' + message;
+      for (const uid of ids) {
+        await createNotification({ userId: uid, type: 'compounder_access_request', title, body, link, forceEmail: true }).catch(() => {});
+      }
+    } catch (e) { console.error('[access-request notify]', e); }
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
 // POST /api/compounder/set-password  { t: token, password }
 // Nastaví/změní heslo přihlášeného leada. Vyžaduje platný token (z odkazu nebo session).
 const setPwSchema = z.object({

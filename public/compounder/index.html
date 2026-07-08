@@ -22,7 +22,7 @@
   *{box-sizing:border-box;margin:0;padding:0}
   body{font-family:'Inter',system-ui,Arial,sans-serif;background:var(--bg);color:var(--text);
     min-height:100vh;min-height:100dvh;display:flex;align-items:center;justify-content:center;
-    padding:24px;overflow:hidden;position:relative}
+    padding:24px;position:relative}
   body::before{content:"";position:fixed;inset:0;
     background:radial-gradient(120% 90% at 50% -10%, rgba(201,162,75,.18), transparent 55%);pointer-events:none}
   .wrap{position:relative;width:100%;max-width:440px;text-align:center;animation:fade .8s ease}
@@ -39,10 +39,12 @@
     padding:24px 22px;text-align:left;box-shadow:0 20px 60px rgba(0,0,0,.4)}
   .card h1{font-size:17px;font-weight:600;margin-bottom:4px}
   .card .sub{font-size:13px;color:var(--muted);margin-bottom:16px;line-height:1.45}
-  label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px}
-  input{width:100%;background:#0e0e10;border:1px solid var(--line);border-radius:10px;
-    padding:13px 14px;color:var(--text);font-size:15px}
-  input:focus{outline:none;border-color:var(--gold)}
+  label{display:block;font-size:12px;color:var(--muted);margin:12px 0 6px}
+  label:first-of-type{margin-top:0}
+  input,textarea{width:100%;background:#0e0e10;border:1px solid var(--line);border-radius:10px;
+    padding:13px 14px;color:var(--text);font-size:15px;font-family:inherit;resize:vertical}
+  input:focus,textarea:focus{outline:none;border-color:var(--gold)}
+  input[readonly]{opacity:.7}
   .btn{width:100%;margin-top:16px;border:none;border-radius:999px;padding:14px;
     font-size:15px;font-weight:700;cursor:pointer;background:var(--gold-grad);color:#241c05}
   .btn:disabled{opacity:.6;cursor:default}
@@ -61,14 +63,29 @@
     <div class="invite">Přístup pouze pro zvané</div>
 
     <div class="card">
-      <h1>Přihlášení</h1>
-      <p class="sub">Zadejte svůj e-mail a pošleme vám přihlašovací odkaz. Přístup mají jen registrovaní.</p>
-      <form id="loginForm" novalidate>
-        <label for="email">E-mail</label>
-        <input type="email" id="email" name="email" autocomplete="email" placeholder="vas@email.cz" required />
-        <button type="submit" class="btn" id="loginBtn">Poslat přihlašovací odkaz</button>
-        <div class="msg" id="msg" role="status"></div>
-      </form>
+      <div id="loginBox">
+        <h1>Přihlášení</h1>
+        <p class="sub">Zadejte svůj e-mail a pošleme vám přihlašovací odkaz. Přístup mají jen registrovaní.</p>
+        <form id="loginForm" novalidate>
+          <label for="email">E-mail</label>
+          <input type="email" id="email" name="email" autocomplete="email" placeholder="vas@email.cz" required />
+          <button type="submit" class="btn" id="loginBtn">Poslat přihlašovací odkaz</button>
+          <div class="msg" id="msg" role="status"></div>
+        </form>
+      </div>
+
+      <div id="requestBox" style="display:none">
+        <h1>Nemáte přístup</h1>
+        <p class="sub">Tato adresa zatím není mezi pozvanými. Zanechte nám telefon a důvod — ozveme se a přístup případně zřídíme.</p>
+        <label for="req-email">E-mail</label>
+        <input type="email" id="req-email" readonly />
+        <label for="req-phone">Telefon *</label>
+        <input type="tel" id="req-phone" autocomplete="tel" placeholder="+420 …" required />
+        <label for="req-msg">Zpráva / důvod žádosti *</label>
+        <textarea id="req-msg" rows="3" placeholder="Kdo jste a proč máte zájem o přístup…" required></textarea>
+        <button type="button" class="btn" id="reqBtn">Odeslat žádost o přístup</button>
+        <div class="msg" id="req-status" role="status"></div>
+      </div>
     </div>
 
     <div class="foot">COMPOUNDER © <span id="yr"></span></div>
@@ -76,27 +93,65 @@
 
 <script>
   document.getElementById('yr').textContent = new Date().getFullYear();
-  var form = document.getElementById('loginForm');
+  var loginForm = document.getElementById('loginForm');
   var msg = document.getElementById('msg');
-  var btn = document.getElementById('loginBtn');
-  form.addEventListener('submit', function (e) {
+  var loginBtn = document.getElementById('loginBtn');
+  var loginBox = document.getElementById('loginBox');
+  var requestBox = document.getElementById('requestBox');
+
+  loginForm.addEventListener('submit', function (e) {
     e.preventDefault();
     var email = (document.getElementById('email').value || '').trim();
     if (!email || email.indexOf('@') === -1) { msg.style.color = '#ef4444'; msg.textContent = 'Zadejte platný e-mail.'; return; }
-    btn.disabled = true; btn.textContent = 'Odesílám…'; msg.style.color = ''; msg.textContent = '';
-    fetch('/api/compounder/login', {
+    loginBtn.disabled = true; loginBtn.textContent = 'Ověřuji…'; msg.style.color = ''; msg.textContent = '';
+    fetch('/api/compounder/portal/login-check', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
       body: JSON.stringify({ email: email })
     })
     .then(function (r) { return r.json().catch(function(){ return {}; }); })
-    .then(function () {
-      msg.style.color = 'var(--gold-soft)';
-      msg.textContent = 'Pokud je vaše adresa registrovaná, poslali jsme vám na e-mail přihlašovací odkaz.';
-      btn.textContent = 'Odesláno ✓';
+    .then(function (d) {
+      if (d && d.exists) {
+        msg.style.color = 'var(--gold-soft)';
+        msg.textContent = 'Poslali jsme vám na e-mail přihlašovací odkaz.';
+        loginBtn.textContent = 'Odesláno ✓';
+      } else {
+        document.getElementById('req-email').value = email;
+        loginBox.style.display = 'none';
+        requestBox.style.display = 'block';
+      }
     })
     .catch(function () {
-      msg.style.color = '#ef4444'; msg.textContent = 'Nepodařilo se odeslat. Zkuste to prosím znovu.';
-      btn.disabled = false; btn.textContent = 'Poslat přihlašovací odkaz';
+      msg.style.color = '#ef4444'; msg.textContent = 'Nepodařilo se ověřit. Zkuste to prosím znovu.';
+      loginBtn.disabled = false; loginBtn.textContent = 'Poslat přihlašovací odkaz';
+    });
+  });
+
+  var reqBtn = document.getElementById('reqBtn');
+  var reqStatus = document.getElementById('req-status');
+  reqBtn.addEventListener('click', function () {
+    var email = document.getElementById('req-email').value;
+    var phone = (document.getElementById('req-phone').value || '').trim();
+    var message = (document.getElementById('req-msg').value || '').trim();
+    reqStatus.style.color = '#ef4444';
+    if (!phone) { reqStatus.textContent = 'Zadejte prosím telefon.'; return; }
+    if (!message) { reqStatus.textContent = 'Napište prosím důvod žádosti.'; return; }
+    reqStatus.textContent = ''; reqBtn.disabled = true; reqBtn.textContent = 'Odesílám…';
+    fetch('/api/compounder/portal/access-request', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
+      body: JSON.stringify({ email: email, phone: phone, message: message })
+    })
+    .then(function (r) { return r.json().catch(function(){ return {}; }); })
+    .then(function (d) {
+      if (d && d.ok) {
+        requestBox.innerHTML = '<h1>Děkujeme</h1><p class="sub">Vaši žádost jsme přijali. Ozveme se vám co nejdříve.</p>';
+      } else {
+        reqStatus.style.color = '#ef4444'; reqStatus.textContent = (d && d.error) || 'Nepodařilo se odeslat.';
+        reqBtn.disabled = false; reqBtn.textContent = 'Odeslat žádost o přístup';
+      }
+    })
+    .catch(function () {
+      reqStatus.style.color = '#ef4444'; reqStatus.textContent = 'Nepodařilo se odeslat. Zkuste to prosím znovu.';
+      reqBtn.disabled = false; reqBtn.textContent = 'Odeslat žádost o přístup';
     });
   });
 </script>
