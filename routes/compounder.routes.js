@@ -17,6 +17,7 @@ const { sendMail } = require('../services/email');
 const { inviteEmail, loginEmail } = require('../services/compounder-emails');
 const { getSetting, setSetting, getOurCompany } = require('../services/settings');
 const contracts = require('../services/pdf/contracts');
+const compounderNotify = require('../services/compounder/notify');
 const crypto = require('crypto');
 const { buildShareUrl, getAppUrl } = require('../services/share-url');
 const bcrypt = require('bcryptjs');
@@ -1600,6 +1601,7 @@ router.post('/contracts/save', requireAuth, async (req, res, next) => {
           created_by_id: (req.user && req.user.id) || null,
         },
       });
+      compounderNotify.notifyContractEvent(prisma, { contract: row, event: 'created' }).catch(() => {});
     }
     res.json({ id: row.id, status: row.status });
   } catch (err) { next(err); }
@@ -1613,6 +1615,8 @@ router.patch('/contracts/:id(\\d+)/status', requireAuth, async (req, res, next) 
     const data = { status };
     if (status === 'podepsano') data.signed_at = new Date();
     const row = await prisma.compoundingContract.update({ where: { id: Number(req.params.id) }, data });
+    const cEv = { odeslano: 'sent', vyplneno: 'filled', podepsano: 'signed' };
+    if (cEv[status]) compounderNotify.notifyContractEvent(prisma, { contract: row, event: cEv[status] }).catch(() => {});
     res.json({ id: row.id, status: row.status });
   } catch (err) {
     if (err.code === 'P2025') return res.status(404).json({ error: 'Smlouva nenalezena' });
@@ -1669,6 +1673,7 @@ router.post('/contracts/:id(\\d+)/share', requireAuth, async (req, res, next) =>
         status: row.status === 'koncept' ? 'odeslano' : row.status,
       },
     });
+    if (row.status === 'koncept') compounderNotify.notifyContractEvent(prisma, { contract: row, event: 'sent' }).catch(() => {});
     res.json({ url: buildShareUrl('/smlouva/' + token), token });
   } catch (err) { next(err); }
 });
@@ -1711,10 +1716,11 @@ router.post('/contracts/public/:token', async (req, res, next) => {
     Object.keys(incoming).forEach((k) => {
       if (allowed.has(k)) merged[k] = String(incoming[k] == null ? '' : incoming[k]).slice(0, 500);
     });
-    await prisma.compoundingContract.update({
+    const filledRow = await prisma.compoundingContract.update({
       where: { id: row.id },
       data: { fields: merged, status: 'vyplneno', filled_at: new Date() },
     });
+    compounderNotify.notifyContractEvent(prisma, { contract: filledRow, event: 'filled' }).catch(() => {});
     try {
       const ids = await resolveOwnerUserIds();
       const label = (contracts.TYPE_LABEL[row.type] || 'Smlouva') + ' — ' + (row.kiosk_code || '');
@@ -1782,7 +1788,7 @@ router.get('/portal/offered-locations', async (req, res, next) => {
     const cfgMap = (await getSetting(COMPOUNDING_KIOSKS_KEY, { type: 'json', defaultValue: {} })) || {};
     const kiosks = await portalKiosks();
     const eur = await eurToCzk();
-    const busy = await activeReservationCodes();
+    const busyInfo = await activeReservationInfo();
     const feePerDay = Number.isFinite(cs.reservationFeePerDayCzk) ? cs.reservationFeePerDayCzk : 20000;
     const holdHours = Number.isFinite(cs.reservationHoldHours) ? cs.reservationHoldHours : 1;
     const signDays = Number.isFinite(cs.reservationSignDays) ? cs.reservationSignDays : 1;
@@ -1836,7 +1842,8 @@ router.get('/portal/offered-locations', async (req, res, next) => {
           guaranteePct: buybackPct,
           guaranteeYears: buybackYears,
           guaranteeValue: total != null ? Math.round(total * buybackPct / 100) : null,
-          reserved: busy.has(k.code),
+          reserved: busyInfo.has(k.code),
+          reservedUntil: busyInfo.has(k.code) ? (busyInfo.get(k.code).reserved_until || null) : null,
         };
       })
       .sort((a, b) => (b.yearlyYield || 0) - (a.yearlyYield || 0));
@@ -1896,6 +1903,24 @@ async function activeReservationCodes() {
     });
     return new Set(rows.map((r) => r.kiosk_code));
   } catch (e) { return new Set(); }
+}
+
+// Mapa aktivních rezervací: kiosk_code → { reserved_until, status } (nejzazší konec).
+async function activeReservationInfo() {
+  await expireStaleReservations();
+  try {
+    const rows = await prisma.locationReservation.findMany({
+      where: { status: { in: RES_ACTIVE } },
+      select: { kiosk_code: true, reserved_until: true, status: true },
+    });
+    const m = new Map();
+    for (const r of rows) {
+      const u = r.reserved_until ? new Date(r.reserved_until).getTime() : 0;
+      const cur = m.get(r.kiosk_code);
+      if (!cur || u > cur._t) m.set(r.kiosk_code, { _t: u, reserved_until: r.reserved_until, status: r.status });
+    }
+    return m;
+  } catch (e) { return new Map(); }
 }
 
 const reserveSchema = z.object({
@@ -1962,14 +1987,8 @@ router.post('/portal/reserve', async (req, res, next) => {
       },
     });
 
-    try {
-      const ids = await resolveOwnerUserIds();
-      const who = (b.name || b.email || ('lead #' + leadId));
-      const title = 'Nová rezervace lokality ' + code;
-      const body = who + ' rezervoval(a) ' + code + ' na ' + days + ' dní. Poplatek ' + feeTotal.toLocaleString('cs-CZ') + ' Kč. Podpis do ' + signUntil.toLocaleDateString('cs-CZ') + ', poplatek do ' + feeUntil.toLocaleDateString('cs-CZ') + '.' + (b.phone ? (' Tel: ' + b.phone) : '');
-      const link = (getAppUrl() || '') + '/modules/prodejni-objednavky/index.html';
-      for (const uid of ids) await createNotification({ userId: uid, type: 'compounder_reservation', title, body, link }).catch(() => {});
-    } catch (e) { console.error('[reserve notify]', e); }
+    // Velín push + zvonek nastaveným osobám (Jan/Tomáš) o nové rezervaci.
+    compounderNotify.notifyReservationEvent(prisma, { reservation: rec, event: 'created' }).catch(() => {});
 
     res.json({ ok: true, id: rec.id, code, days, feePerDay, feeTotal, signUntil, feeUntil, reservedUntil });
   } catch (err) { next(err); }
@@ -2008,11 +2027,58 @@ router.patch('/reservations/:id', requireAuth, async (req, res, next) => {
       case 'reopen': data.status = 'cancelled'; data.cancel_reason = 'Uvolněno ručně'; break;
     }
     const rec = await prisma.locationReservation.update({ where: { id }, data });
+    const evMap = { fee_paid: 'fee_paid', purchase_paid: 'purchase_paid', cancel: 'cancelled', reopen: 'cancelled' };
+    compounderNotify.notifyReservationEvent(prisma, { reservation: rec, event: evMap[parsed.data.action] }).catch(() => {});
     res.json(rec);
   } catch (err) {
     if (err.code === 'P2025') return res.status(404).json({ error: 'Rezervace nenalezena' });
     next(err);
   }
+});
+
+// ─── Nastavení příjemců Velín notifikací (ozubené kolečko) ───────────────────
+// GET vrátí seznam Velín osob + aktuálně vybrané (fallback = majitelé Jan/Tomáš).
+router.get('/notify-settings', requireAuth, async (req, res, next) => {
+  try {
+    const people = await compounderNotify.getEligibleVelinPeople(prisma);
+    let selected = await getSetting(compounderNotify.NOTIFY_SETTING_KEY, { type: 'json', defaultValue: null });
+    if (!Array.isArray(selected)) selected = await compounderNotify.defaultRecipientPersonIds(prisma);
+    res.json({ people, selected });
+  } catch (err) { next(err); }
+});
+
+const notifySettingsSchema = z.object({ person_ids: z.array(z.number().int().positive()).max(50) });
+
+// PUT uloží vybrané Person.id příjemců.
+router.put('/notify-settings', requireAuth, async (req, res, next) => {
+  try {
+    const parsed = notifySettingsSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'Neplatná data' });
+    const ids = Array.from(new Set(parsed.data.person_ids));
+    await setSetting(compounderNotify.NOTIFY_SETTING_KEY, ids, { type: 'json' });
+    res.json({ ok: true, selected: ids });
+  } catch (err) { next(err); }
+});
+
+// ─── Rezervace + smlouvy konkrétního leada (pro detail v tabu Compounder) ─────
+router.get('/leads/:id(\\d+)/reservations', requireAuth, async (req, res, next) => {
+  try {
+    await expireStaleReservations();
+    const leadId = Number(req.params.id);
+    const reservations = await prisma.locationReservation.findMany({
+      where: { lead_id: leadId }, orderBy: { created_at: 'desc' }, take: 50,
+    });
+    const codes = Array.from(new Set(reservations.map((r) => r.kiosk_code).filter(Boolean)));
+    let contracts = [];
+    if (codes.length) {
+      contracts = await prisma.compoundingContract.findMany({
+        where: { kiosk_code: { in: codes } },
+        orderBy: { created_at: 'desc' },
+        select: { id: true, kiosk_code: true, kiosk_label: true, type: true, status: true, signed_at: true, updated_at: true },
+      });
+    }
+    res.json({ reservations, contracts });
+  } catch (err) { next(err); }
 });
 
 module.exports = router;
