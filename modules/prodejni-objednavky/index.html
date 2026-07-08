@@ -2855,6 +2855,7 @@
     }
 
     async function cmpLeadReservations(id, el) {
+      if (el) el.id = 'cmp-resv-' + id;
       try {
         var r = await fetch('/api/compounder/leads/' + id + '/reservations', { credentials: 'include' });
         var j = await r.json();
@@ -2876,6 +2877,9 @@
             '<span style="color:' + badge + ';font-weight:600;">' + (STAT[x.status] || x.status) + '</span></div>' +
             '<div style="color:var(--text2);font-size:12px;margin-top:4px;">Podpis do ' + d(x.sign_until) + remain(x.sign_until) +
             ' · Poplatek do ' + d(x.fee_until) + ' · Rezervace do ' + d(x.reserved_until) + remain(x.reserved_until) + '</div>';
+          if (x.status === 'reserved' || x.status === 'active') {
+            html += '<div style="margin-top:8px;"><button onclick="cmpCancelReservation(' + x.id + ',' + id + ')" style="background:transparent;color:#ef4444;border:1px solid rgba(239,68,68,.4);border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer;">✕ Zrušit rezervaci</button></div>';
+          }
           if (cForCode.length) {
             html += '<div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;">' + cForCode.map(function(c) {
               var col = (c.status === 'podepsano') ? '#10b981' : 'var(--text2)';
@@ -2887,6 +2891,19 @@
         html += '</div>';
         el.innerHTML = html;
       } catch (e) { el.innerHTML = '<div style="color:#ef4444;font-size:12px;">Chyba načítání rezervací.</div>'; }
+    }
+
+    async function cmpCancelReservation(resId, leadId) {
+      if (!confirm('Opravdu zrušit tuto rezervaci? Lokalita se uvolní ostatním.')) return;
+      try {
+        var r = await fetch('/api/compounder/reservations/' + resId, {
+          method: 'PATCH', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
+          body: JSON.stringify({ action: 'cancel', cancel_reason: 'Zrušeno ručně v HolyOS' }),
+        });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        var el = document.getElementById('cmp-resv-' + leadId);
+        if (el) cmpLeadReservations(leadId, el);
+      } catch (e) { alert('Zrušení rezervace selhalo.'); }
     }
     function cmpSecBlock(id, csv){
       var have = String(csv||'').split(',').map(function(x){return x.trim();}).filter(Boolean);
