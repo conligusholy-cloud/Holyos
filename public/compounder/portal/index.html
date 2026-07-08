@@ -721,7 +721,11 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
             '</div>' +
             '<div style="flex:1;min-width:110px">' + offMetric("Cena", offFmt(o.totalPrice)) + '</div>' +
             '<div style="flex:1;min-width:110px">' + offMetric("Roční výnos", offFmt(o.yearlyYield)) + '</div>' +
-            '<div style="flex:1.3;min-width:150px">' + offMetric("Garance odkupu", (o.guaranteeValue!=null?(offFmt(o.guaranteeValue)+" ("+o.guaranteePct+" %, "+o.guaranteeYears+". rok)"):"—")) + '</div>' +
+            '<div style="flex:1.3;min-width:150px">' +
+              '<div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Garance odkupu</div>' +
+              '<div style="font-weight:700;font-size:15px;margin-top:2px">' + (o.guaranteeValue!=null?offFmt(o.guaranteeValue):"—") + '</div>' +
+              (o.guaranteeValue!=null ? '<div style="font-size:11px;color:var(--muted);font-weight:400;margin-top:2px">'+o.guaranteePct+' %, '+o.guaranteeYears+'. rok</div>' : '') +
+            '</div>' +
             '<button type="button" class="btn" style="min-width:130px;justify-content:center" onclick="reserveLocation(\'' + offEsc(o.code).replace(/'/g,"&#39;") + '\', this)">Rezervovat</button>' +
           '</div>';
         }).join("");
