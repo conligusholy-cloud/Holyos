@@ -2868,7 +2868,7 @@
     // Data tahá server-side proxy /api/compounder/kiosk-values (klíč drží server).
     // ============================================================
     var _kioskData = null; // celá odpověď { kiosks, summary, ... }
-    var _compoundingSettings = { pricelist: { v2: { eur: null }, v3: { eur: null }, v4: { eur: null } }, locationMonths: 12, servicePct: 15, energyPct: 9.5, locationPriceMode: 'months', locationRoiPct: 25 };
+    var _compoundingSettings = { pricelist: { v2: { eur: null }, v3: { eur: null }, v4: { eur: null } }, locationMonths: 12, servicePct: 15, energyPct: 9.5, locationPriceMode: 'months', locationRoiPct: 25, buybackPct: 65, buybackYears: 5 };
     var _kioskConfig = {}; // mapa { [code]: { version, rentMonthlyCzk } }
     var _kvSort = { key: null, dir: -1 };
     function kvSort(key) {
@@ -2975,6 +2975,8 @@
       var enPct = (Number.isFinite(_compoundingSettings.energyPct) ? _compoundingSettings.energyPct : 9.5);
       var priceMode = (_compoundingSettings.locationPriceMode === 'roi') ? 'roi' : 'months';
       var roiPct = (Number.isFinite(_compoundingSettings.locationRoiPct) ? _compoundingSettings.locationRoiPct : 25);
+      var buybackPct = (Number.isFinite(_compoundingSettings.buybackPct) ? _compoundingSettings.buybackPct : 65);
+      var buybackYears = (Number.isFinite(_compoundingSettings.buybackYears) ? _compoundingSettings.buybackYears : 5);
       var locVal = function(k) {
         var cur = k.currency || 'CZK';
         var rate = _kvFxRates[cur] || 1;
@@ -3014,6 +3016,7 @@
           case 'lokalita': return locVal(k);
           case 'kiosek': return machine != null ? machine : -1;
           case 'celkova': return total != null ? total : -1;
+          case 'guarantee': return total != null ? (total * (buybackPct / 100)) : -1;
           case 'servis': return servis;
           case 'najem': return najem;
           case 'energie': return energie;
@@ -3069,6 +3072,7 @@
         kvTh('lokalita', 'Cena lokality', 'r') +
         kvTh('kiosek', 'Cena kiosku', 'r') +
         kvTh('celkova', 'Celková cena', 'r') +
+        kvTh('guarantee', 'Garance odkupu (' + buybackPct + ' %, ' + buybackYears + '. rok)', 'r') +
         kvTh('servis', 'Servisní smlouva (' + (Number.isFinite(_compoundingSettings.servicePct) ? _compoundingSettings.servicePct : 15) + ' %)', 'r') +
         kvTh('najem', 'Nájem', 'r') +
         kvTh('energie', 'Odhad energií (' + (Number.isFinite(_compoundingSettings.energyPct) ? _compoundingSettings.energyPct : 9.5) + ' %)', 'r') +
@@ -3110,6 +3114,7 @@
           '<td style="text-align:right;white-space:nowrap;font-weight:700;">' + kvMoney(locVal(k), 'CZK') + '</td>' +
           '<td style="text-align:right;white-space:nowrap;color:var(--text2);">' + (_vmRow.machine != null ? kvMoney(_vmRow.machine, 'CZK') : '<span style="color:var(--text2);">—</span>') + '</td>' +
           '<td style="text-align:right;white-space:nowrap;font-weight:700;color:#eab308;">' + (_vmRow.machine != null ? kvMoney(locVal(k) + _vmRow.machine, 'CZK') : '<span style="color:var(--text2);">—</span>') + '</td>' +
+          '<td style="text-align:right;white-space:nowrap;color:#3b82f6;">' + (_vmRow.machine != null ? kvMoney(Math.round((locVal(k) + _vmRow.machine) * (buybackPct / 100)), 'CZK') : '<span style="color:var(--text2);">—</span>') + '</td>' +
           '<td style="text-align:right;white-space:nowrap;color:#ef4444;">' + kvMoney(Math.round(_servis), 'CZK') + _mes + '</td>' +
           '<td style="text-align:right;white-space:nowrap;color:#ef4444;">' + (_najemVal ? (kvMoney(_najemVal, 'CZK') + _mes) : '<span style="color:var(--text2);">—</span>') + '</td>' +
           '<td style="text-align:right;white-space:nowrap;color:#ef4444;">' + kvMoney(Math.round(_energie), 'CZK') + _mes + '</td>' +
@@ -3152,6 +3157,8 @@
       var months = Number.isFinite(st.locationMonths) ? st.locationMonths : 12;
       var priceMode = (st.locationPriceMode === 'roi') ? 'roi' : 'months';
       var roiPct = Number.isFinite(st.locationRoiPct) ? st.locationRoiPct : 25;
+      var buybackPct = Number.isFinite(st.buybackPct) ? st.buybackPct : 65;
+      var buybackYears = Number.isFinite(st.buybackYears) ? st.buybackYears : 5;
       var rate = _kvFxRates.EUR || 25;
       function verRow(ver, label) {
         var eur = (pl[ver] && pl[ver].eur != null) ? pl[ver].eur : '';
@@ -3211,6 +3218,22 @@
           '</div>' +
           '<div style="color:var(--text2);font-size:12px;">z obratu bez DPH</div>' +
         '</div>' +
+        '<hr style="border:none;border-top:1px solid var(--border);margin:18px 0;">' +
+        '<div style="margin-bottom:6px;font-weight:600;font-size:14px;">Garance zpětného odkupu</div>' +
+        '<div style="color:var(--text2);font-size:12px;margin-bottom:12px;">Best Series garantuje odkup po zadaném počtu let za % z celkové ceny.</div>' +
+        '<div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;">' +
+          '<div style="width:120px;">Odkup za</div>' +
+          '<div style="position:relative;">' +
+            '<input type="number" min="0" max="100" step="1" id="kvset-buybackpct" value="' + buybackPct + '" style="width:120px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 32px 8px 12px;color:var(--text);font-size:14px;">' +
+            '<span style="position:absolute;right:12px;top:50%;transform:translateY(-50%);color:var(--text2);font-size:13px;">%</span>' +
+          '</div>' +
+          '<div style="color:var(--text2);font-size:12px;">z celkové ceny</div>' +
+        '</div>' +
+        '<div style="display:flex;align-items:center;gap:12px;">' +
+          '<div style="width:120px;">Po</div>' +
+          '<input type="number" min="1" max="50" step="1" id="kvset-buybackyears" value="' + buybackYears + '" style="width:120px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:14px;">' +
+          '<div style="color:var(--text2);font-size:12px;">letech provozu</div>' +
+        '</div>' +
         '<div id="kvset-err" style="color:#ef4444;font-size:13px;margin-top:12px;display:none;"></div>' +
         '<div class="modal-actions">' +
           '<button type="button" class="btn btn-secondary" onclick="closeModal()">Zrušit</button>' +
@@ -3243,6 +3266,14 @@
       if (!(roiPct >= 1 && roiPct <= 100)) {
         return showErr('Cílové ROI musí být 1 až 100 %.');
       }
+      var buybackPct = parseFloat(String((document.getElementById('kvset-buybackpct') || {}).value || '').trim().replace(',', '.'));
+      if (!(buybackPct >= 0 && buybackPct <= 100)) {
+        return showErr('Garance odkupu musí být 0 až 100 %.');
+      }
+      var buybackYears = parseInt(String((document.getElementById('kvset-buybackyears') || {}).value || '').trim(), 10);
+      if (!(buybackYears >= 1 && buybackYears <= 50)) {
+        return showErr('Počet let odkupu musí být 1 až 50.');
+      }
       var servicePct = parseFloat(String((document.getElementById('kvset-servicepct') || {}).value || '').trim().replace(',', '.'));
       if (!(servicePct >= 0 && servicePct <= 100)) {
         return showErr('Servisní odměna musí být 0 až 100 %.');
@@ -3258,6 +3289,8 @@
         energyPct: energyPct,
         locationPriceMode: priceMode,
         locationRoiPct: roiPct,
+        buybackPct: buybackPct,
+        buybackYears: buybackYears,
       };
       try {
         var r = await fetch('/api/compounder/compounding-settings', {

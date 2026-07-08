@@ -747,6 +747,8 @@ const COMPOUNDING_SETTINGS_DEFAULT = {
   energyPct: 9.5,
   locationPriceMode: 'months',
   locationRoiPct: 25,
+  buybackPct: 65,
+  buybackYears: 5,
 };
 
 const compoundingSettingsSchema = z.object({
@@ -760,6 +762,8 @@ const compoundingSettingsSchema = z.object({
   energyPct: z.number().min(0).max(100).optional(),
   locationPriceMode: z.enum(['months', 'roi']).optional(),
   locationRoiPct: z.number().min(1).max(100).optional(),
+  buybackPct: z.number().min(0).max(100).optional(),
+  buybackYears: z.number().min(1).max(50).optional(),
 });
 
 // GET /api/compounder/compounding-settings
@@ -781,6 +785,8 @@ router.get('/compounding-settings', requireAuth, async (req, res, next) => {
       energyPct: (val && Number.isFinite(val.energyPct)) ? val.energyPct : 9.5,
       locationPriceMode: (val && (val.locationPriceMode === 'roi' || val.locationPriceMode === 'months')) ? val.locationPriceMode : 'months',
       locationRoiPct: (val && Number.isFinite(val.locationRoiPct)) ? val.locationRoiPct : 25,
+      buybackPct: (val && Number.isFinite(val.buybackPct)) ? val.buybackPct : 65,
+      buybackYears: (val && Number.isFinite(val.buybackYears)) ? val.buybackYears : 5,
     };
     res.json(merged);
   } catch (err) {
