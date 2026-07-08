@@ -175,6 +175,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
     </div>
   </header>
   <nav class="subnav" id="subnav">
+    <a href="#nabidka">Nabídka lokalit</a>
     <a href="#ekonomika" class="active" data-i18n="p.nav.eko">Economics</a>
     <a href="#navratnost" data-i18n="p.nav.ret">Return</a>
     <a href="#milniky" data-i18n="p.nav.milestones">Gold &amp; Diamond</a>
@@ -187,6 +188,14 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
   </nav>
 
   <div class="wrap">
+    <section class="blk" id="nabidka">
+      <div class="eyebrow">Nabídka</div>
+      <h2>Nabídka lokalit k prodeji</h2>
+      <p class="lead">Vyberte si zavedenou lokalitu, která už funguje a vydělává. Uvedená čísla jsou orientační podle aktuálního provozu.</p>
+      <div id="offers-list" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px;margin-top:10px;">
+        <div class="muted">Načítám nabídku…</div>
+      </div>
+    </section>
     <section class="blk" id="ekonomika">
       <div class="eyebrow" data-i18n="p.eko.eyebrow">Economics</div>
       <h2 data-i18n="p.eko.title">Economics of one Compounder</h2>
@@ -689,8 +698,48 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
       } catch(e) {}
       initPortalPush(token);
       loadEkoDetailLink(token);
+      loadOffers(token);
     })
     .catch(function(){ showDenied(); });
+
+  function offEsc(x){ return String(x==null?"":x).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
+  function offFmt(n){ return (n==null)?"—":(Math.round(n).toLocaleString("cs-CZ")+" Kč"); }
+  function offMetric(k,v){ return '<div><div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">'+k+'</div><div style="font-weight:700;font-size:15px;margin-top:2px">'+v+'</div></div>'; }
+  function loadOffers(tok){
+    var box = document.getElementById("offers-list");
+    if(!box) return;
+    fetch("/api/compounder/portal/offered-locations?t=" + encodeURIComponent(tok), { credentials:"include" })
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        if(!d || !d.ok){ box.innerHTML = '<div class="muted">Nabídku se nepodařilo načíst.</div>'; return; }
+        if(!d.locations || !d.locations.length){ box.innerHTML = '<div class="muted">Aktuálně nejsou k dispozici žádné nabízené lokality.</div>'; return; }
+        box.innerHTML = d.locations.map(function(o){
+          return '<div style="border:1px solid var(--line);border-radius:16px;padding:16px;background:var(--bg-2)">' +
+            '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px">' +
+              '<div style="font-weight:800;font-size:16px">' + offEsc(o.label||o.code) + '</div>' +
+              '<span style="font-size:12px;color:var(--muted)">' + offEsc(o.version||"") + '</span>' +
+            '</div>' +
+            '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:14px 0">' +
+              offMetric("Cena", offFmt(o.totalPrice)) +
+              offMetric("Roční výnos", offFmt(o.yearlyYield)) +
+              offMetric("ROI (ročně)", (o.roiPct!=null?(String(o.roiPct).replace(".",",")+" %"):"—")) +
+              offMetric("Garance odkupu", (o.guaranteeValue!=null?(offFmt(o.guaranteeValue)+" ("+o.guaranteePct+" %, "+o.guaranteeYears+". rok)"):"—")) +
+            '</div>' +
+            '<button type="button" class="btn" style="width:100%;justify-content:center" onclick="reserveLocation(\'' + offEsc(o.code).replace(/'/g,"&#39;") + '\', this)">Rezervovat</button>' +
+          '</div>';
+        }).join("");
+      })
+      .catch(function(){ box.innerHTML = '<div class="muted">Nabídku se nepodařilo načíst.</div>'; });
+  }
+  window.reserveLocation = function(code, btn){
+    if(!window.confirm("Odeslat zájem o rezervaci lokality " + code + "? Ozveme se vám s dalšími kroky.")) return;
+    var tok=""; try{ tok = localStorage.getItem("compounder.portal.token")||""; }catch(_){}
+    if(btn){ btn.disabled=true; btn.textContent="Odesílám…"; }
+    fetch("/api/compounder/portal/reserve-interest",{ method:"POST", credentials:"include", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ t: tok, code: code }) })
+      .then(function(r){ return r.json(); })
+      .then(function(d){ if(d && d.ok){ if(btn) btn.textContent="Zájem odeslán ✓"; } else { alert("Nepodařilo se odeslat."); if(btn){ btn.disabled=false; btn.textContent="Rezervovat"; } } })
+      .catch(function(){ alert("Nepodařilo se odeslat."); if(btn){ btn.disabled=false; btn.textContent="Rezervovat"; } });
+  };
 
   // Osobní odkaz na detailní ekonomiku (per účet, sledovaný zvlášť).
   function loadEkoDetailLink(tok){

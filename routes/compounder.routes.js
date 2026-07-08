@@ -1597,4 +1597,132 @@ router.post('/contracts/public/:token', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+
+// ─── Portál: nabídka lokalit k prodeji (jen forSale, kurátorovaná ekonomika) ──
+let _eurRate = null, _eurRateAt = 0;
+async function eurToCzk() {
+  if (_eurRate && (Date.now() - _eurRateAt) < 3600000) return _eurRate;
+  try {
+    const r = await fetch('https://api.cnb.cz/cnbapi/exrates/daily?lang=CZ');
+    if (r.ok) {
+      const d = await r.json();
+      const row = (d.rates || []).find((x) => x.currencyCode === 'EUR');
+      if (row) {
+        const amt = parseFloat(row.amount) || 1;
+        const rate = parseFloat(row.rate);
+        if (rate > 0) { _eurRate = rate / amt; _eurRateAt = Date.now(); return _eurRate; }
+      }
+    }
+  } catch (e) { /* fallback níže */ }
+  return _eurRate || 25;
+}
+
+async function portalKiosks() {
+  if (_kioskCache.data && Array.isArray(_kioskCache.data.kiosks) && (Date.now() - _kioskCache.at) < KIOSK_CACHE_MS) {
+    return _kioskCache.data.kiosks;
+  }
+  const apiKey = process.env.SIS_KIOSK_API_KEY;
+  if (!apiKey) return (_kioskCache.data && _kioskCache.data.kiosks) || [];
+  const apiUrl = process.env.SIS_KIOSK_API_URL || 'https://sis-test.infinitygrid.cloud/api/public/kiosk-values';
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 12000);
+  try {
+    const r = await fetch(apiUrl, { headers: { 'X-API-Key': apiKey, 'Accept': 'application/json' }, signal: controller.signal });
+    clearTimeout(timeout);
+    if (!r.ok) return (_kioskCache.data && _kioskCache.data.kiosks) || [];
+    const payload = await r.json();
+    return Array.isArray(payload.kiosks) ? payload.kiosks : [];
+  } catch (e) {
+    clearTimeout(timeout);
+    return (_kioskCache.data && _kioskCache.data.kiosks) || [];
+  }
+}
+
+router.get('/portal/offered-locations', async (req, res, next) => {
+  try {
+    const leadId = verifyPortalToken(String(req.query.t || ''));
+    if (!leadId) return res.status(401).json({ ok: false, error: 'Neplatný nebo chybějící přístupový odkaz.' });
+
+    const cs = await getSetting(COMPOUNDING_SETTINGS_KEY, { type: 'json', defaultValue: COMPOUNDING_SETTINGS_DEFAULT });
+    const cfgMap = (await getSetting(COMPOUNDING_KIOSKS_KEY, { type: 'json', defaultValue: {} })) || {};
+    const kiosks = await portalKiosks();
+    const eur = await eurToCzk();
+
+    const num = (v) => (typeof v === 'number' && isFinite(v)) ? v : 0;
+    const svcPct = Number.isFinite(cs.servicePct) ? cs.servicePct : 15;
+    const enPct = Number.isFinite(cs.energyPct) ? cs.energyPct : 9.5;
+    const months = Number.isFinite(cs.locationMonths) ? cs.locationMonths : 12;
+    const mode = cs.locationPriceMode === 'roi' ? 'roi' : 'months';
+    const roiPct = Number.isFinite(cs.locationRoiPct) ? cs.locationRoiPct : 25;
+    const buybackPct = Number.isFinite(cs.buybackPct) ? cs.buybackPct : 65;
+    const buybackYears = Number.isFinite(cs.buybackYears) ? cs.buybackYears : 5;
+    const pl = cs.pricelist || {};
+
+    const machinePrice = (ver) => {
+      const v = pl[ver] && pl[ver].eur != null ? Number(pl[ver].eur) : null;
+      return v != null && isFinite(v) ? Math.round(v * eur) : null;
+    };
+
+    const list = kiosks
+      .filter((k) => String(k.companyName || '').toLowerCase().includes('best series'))
+      .filter((k) => (cfgMap[k.code] || {}).forSale)
+      .map((k) => {
+        const cfg = cfgMap[k.code] || {};
+        const ver = String(cfg.version || '').toLowerCase();
+        const machine = machinePrice(ver);
+        const avg = num(k.avgTop3);
+        const obratBez = avg / 1.21;
+        const servis = avg * (svcPct / 100);
+        const najem = (typeof cfg.rentMonthlyCzk === 'number' && isFinite(cfg.rentMonthlyCzk)) ? cfg.rentMonthlyCzk : 0;
+        const energie = obratBez * (enPct / 100);
+        const cisty = obratBez - servis - najem - energie;
+        let locality;
+        if (mode === 'roi') {
+          locality = machine != null ? Math.max(0, Math.round(cisty * (1200 / (roiPct > 0 ? roiPct : 25)) - machine)) : null;
+        } else {
+          locality = Math.round(avg * months);
+        }
+        const total = (machine != null && locality != null) ? (machine + locality) : null;
+        const yearly = Math.round(cisty * 12);
+        return {
+          code: k.code,
+          label: k.label,
+          version: ver ? ver.toUpperCase() : null,
+          totalPrice: total,
+          yearlyYield: yearly,
+          roiPct: (total > 0) ? Math.round(cisty * 12 / total * 1000) / 10 : null,
+          guaranteePct: buybackPct,
+          guaranteeYears: buybackYears,
+          guaranteeValue: total != null ? Math.round(total * buybackPct / 100) : null,
+        };
+      })
+      .sort((a, b) => (b.yearlyYield || 0) - (a.yearlyYield || 0));
+
+    res.json({ ok: true, currency: 'CZK', count: list.length, locations: list });
+  } catch (err) { next(err); }
+});
+
+router.post('/portal/reserve-interest', async (req, res, next) => {
+  try {
+    const b = req.body || {};
+    const leadId = verifyPortalToken(String(b.t || ''));
+    if (!leadId) return res.status(401).json({ ok: false, error: 'Neplatný nebo chybějící přístupový odkaz.' });
+    const code = String(b.code || '').slice(0, 40);
+    const lead = await prisma.compounderLead.findUnique({
+      where: { id: leadId }, select: { id: true, name: true, email: true, phone: true },
+    }).catch(() => null);
+    try {
+      const ids = await resolveOwnerUserIds();
+      const who = (lead && (lead.name || lead.email)) || ('lead #' + leadId);
+      const title = 'Zájem o rezervaci lokality ' + (code || '');
+      const body = who + ' má zájem rezervovat lokalitu ' + (code || '') + '.' + (lead && lead.phone ? (' Tel: ' + lead.phone) : '') + (lead && lead.email ? (' E-mail: ' + lead.email) : '');
+      const link = (getAppUrl() || '') + '/modules/prodejni-objednavky/index.html';
+      for (const uid of ids) {
+        await createNotification({ userId: uid, type: 'compounder_reserve_interest', title, body, link }).catch(() => {});
+      }
+    } catch (e) { console.error('[reserve-interest notify]', e); }
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
 module.exports = router;
