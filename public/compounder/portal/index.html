@@ -284,7 +284,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
     <section class="blk" id="nabidka">
       <div class="eyebrow">Nabídka</div>
       <h2>Nabídka lokalit k prodeji</h2>
-      <p class="lead">Vyberte si zavedenou lokalitu, která už funguje a vydělává. Uvedená čísla jsou orientační podle aktuálního provozu.</p>
+      <p class="lead">Vyberte si zavedenou lokalitu, která už funguje a vydělává. Uvedená čísla jsou orientační podle aktuálního provozu. <strong>Všechny ceny jsou uvedené bez DPH.</strong></p>
       <div id="offers-list" style="display:flex;flex-direction:column;gap:10px;margin-top:10px;">
         <div class="muted">Načítám nabídku…</div>
       </div>
@@ -1347,24 +1347,4 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
     var sp = document.createElement("span"); sp.style.cssText="font-size:13.5px;color:var(--muted);"; sp.textContent = pT("p.push");
     var ok = document.createElement("button"); ok.className="btn"; ok.style.cssText="padding:9px 18px;font-size:13px;margin:0;"; ok.textContent = pT("p.push.btn");
     var no = document.createElement("button"); no.textContent="✕"; no.style.cssText="background:transparent;border:1px solid var(--line);color:var(--text);border-radius:999px;padding:9px 14px;cursor:pointer;font-family:inherit;";
-    bar.appendChild(sp); bar.appendChild(ok); bar.appendChild(no); document.body.appendChild(bar);
-    ok.onclick=function(){ bar.remove(); Notification.requestPermission().then(function(p){ if(p==="granted") portalSubscribe(tok); }); };
-    no.onclick=function(){ bar.remove(); };
-  }
-  function portalSubscribe(tok){
-    navigator.serviceWorker.ready.then(function(reg){
-      fetch("/api/compounder/push/key").then(function(r){return r.json();}).then(function(j){
-        if (!j||!j.key) return;
-        reg.pushManager.getSubscription().then(function(ex){
-          var pr = ex ? Promise.resolve(ex) : reg.pushManager.subscribe({ userVisibleOnly:true, applicationServerKey: pUrlB64(j.key) });
-          pr.then(function(sub){
-            fetch("/api/compounder/push/subscribe", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ subscription: sub.toJSON(), t: tok }) }).catch(function(){});
-          }).catch(function(){});
-        });
-      }).catch(function(){});
-    });
-  }
-})();
-</script>
-</body>
-</html>
+    bar.appendChild(sp); bar.appendChild(ok); bar.appendC
