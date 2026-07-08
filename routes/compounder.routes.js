@@ -443,6 +443,31 @@ router.post('/set-password', async (req, res, next) => {
 // ─── ADMIN: výpis leadů (vyžaduje přihlášení) ───────────────────────────────
 
 // GET /api/compounder/leads?status=new&role=compounder&search=...
+router.post('/leads', requireAuth, async (req, res, next) => {
+  try {
+    const b = req.body || {};
+    const name = String(b.name || '').trim().slice(0, 255);
+    const email = String(b.email || '').trim().toLowerCase().slice(0, 255);
+    const role = (b.role === 'distributor') ? 'distributor' : 'compounder';
+    if (!email || email.indexOf('@') === -1) return res.status(400).json({ error: 'Neplatný e-mail' });
+    const existing = await prisma.compounderLead.findFirst({
+      where: { email: { equals: email, mode: 'insensitive' } }, select: { id: true },
+    });
+    if (existing) return res.status(409).json({ error: 'Tento e-mail už je zaregistrovaný.', id: existing.id });
+    const lead = await prisma.compounderLead.create({
+      data: { name: name || email, email, role, source: 'admin', status: 'new' },
+      select: { id: true, name: true, email: true, role: true },
+    });
+    console.log(`[compounder] Admin vytvořil lead #${lead.id} (${role}): ${email}`);
+    if (b.sendInvite) {
+      const url = `${portalBase()}/portal?t=${makeLoginToken(lead.id)}`;
+      sendPortalLogin({ name: lead.name, email: lead.email, lang: null }, url)
+        .catch((e) => console.error('[compounder] pozvánka e-mail selhala:', e.message));
+    }
+    res.status(201).json({ ok: true, lead });
+  } catch (err) { next(err); }
+});
+
 router.get('/leads', requireAuth, async (req, res, next) => {
   try {
     const { status, role, search } = req.query;
