@@ -683,6 +683,13 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
       document.getElementById("app").style.display = "block";
       var first = (res.j.name || "").split(" ")[0];
       PORTAL_LEAD_ID = res.j.id;
+      // Sekce jen pro distributory (ostatní registrovaní vidí jen Nabídku lokalit, Gold & Diamond, Galerii)
+      if (res.j.role !== 'distributor') {
+        ['ekonomika','navratnost','parametry','pripojky','pudorysy','distribuce','lokalita'].forEach(function(id){
+          var sec = document.getElementById(id); if (sec) sec.style.display = 'none';
+          var link = document.querySelector('#subnav a[href="#' + id + '"]'); if (link) link.style.display = 'none';
+        });
+      }
       pBuildSelect(pDetect());
       pSetLang(pDetect(), function(){
         document.getElementById("hi").textContent = pT("p.hi") + (first ? (", " + first) : "");
