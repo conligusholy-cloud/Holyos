@@ -2752,18 +2752,23 @@
         var r = await fetch(url, { credentials: 'include' });
         if (!r.ok) throw new Error('HTTP ' + r.status);
         var leads = await r.json();
+        var resvMap = {};
+        try {
+          var rr = await fetch('/api/compounder/reservations', { credentials: 'include' });
+          var resv = await rr.json();
+          (resv || []).forEach(function(x){
+            if (x.status !== 'reserved' && x.status !== 'active') return;
+            var u = x.reserved_until ? new Date(x.reserved_until).getTime() : 0;
+            var cur = resvMap[x.lead_id];
+            if (!cur || u > cur._t) resvMap[x.lead_id] = { _t: u, status: x.status, reserved_until: x.reserved_until, kiosk_code: x.kiosk_code };
+          });
+        } catch (e) { /* rezervace jsou volitelné */ }
         if ((document.getElementById('cmp-reserved-only')||{}).checked) {
-          try {
-            var rr = await fetch('/api/compounder/reservations', { credentials: 'include' });
-            var resv = await rr.json();
-            var reservedIds = {};
-            (resv || []).forEach(function(x){ if (x.status === 'reserved' || x.status === 'active') reservedIds[x.lead_id] = true; });
-            leads = leads.filter(function(l){ return reservedIds[l.id]; });
-          } catch (e) { /* při chybě nefiltrujeme */ }
+          leads = leads.filter(function(l){ return resvMap[l.id]; });
           if (!leads.length) { box.innerHTML = '<div style="color:var(--text2);padding:24px;">Žádný lead s aktivní rezervací kiosku.</div>'; return; }
         }
         if (!leads.length) { box.innerHTML = '<div style="color:var(--text2);padding:24px;">Zatím žádné registrace.</div>'; return; }
-        var h = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr><th></th><th>Vytvořeno</th><th>Jméno</th><th>E-mail</th><th>Role</th><th>Jazyk</th><th>Zahřátí</th><th>Stav</th><th>Poznámka</th><th></th></tr></thead><tbody>';
+        var h = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr><th></th><th>Vytvořeno</th><th>Jméno</th><th>E-mail</th><th>Role</th><th>Jazyk</th><th>Zahřátí</th><th>Rezervace</th><th>Stav</th><th>Poznámka</th><th></th></tr></thead><tbody>';
         leads.forEach(function(l) {
           var dt = new Date(l.created_at).toLocaleString('cs-CZ');
           var roleLabel = l.role === 'distributor' ? 'Distributor' : 'Compounder';
@@ -2776,7 +2781,11 @@
           var wlabel = w==null?'—':(w>=70?'Horký':w>=45?'Zahřátý':w>=25?'Vlažný':'Studený');
           var phoneBadge = l.requestedContact ? ('<span title="Požádal o kontakt' + (l.hasPhone?(' · '+cmpEsc(l.phone||'')):'') + '" style="margin-left:6px;">📞</span>') : '';
           var warmthCell = '<td style="white-space:nowrap;"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:'+wcol+';vertical-align:middle;margin-right:6px;"></span><span style="color:'+wcol+';font-size:12.5px;">'+wlabel+'</span>'+(w!=null?(' <span style="color:var(--text2);font-size:11px;">'+w+'</span>'):'')+phoneBadge+'</td>';
-          h += '<tr data-lead="' + l.id + '" data-sections="' + cmpEsc(l.visible_sections||'') + '" onclick="cmpActivity(' + l.id + ', this)" title="Klikni pro cestu zákazníka" style="cursor:pointer;"><td style="color:var(--text2);">▸</td><td style="white-space:nowrap;">' + dt + '</td><td>' + cmpEsc(l.name) + '</td><td><a href="mailto:' + cmpEsc(l.email) + '" onclick="event.stopPropagation()" style="color:#eab308;">' + cmpEsc(l.email) + '</a></td><td>' + roleLabel + '</td><td>' + cmpEsc((l.lang||'').toUpperCase()) + '</td>' + warmthCell + '<td>' + sel + '</td><td><input type="text" value="' + noteVal + '" placeholder="—" onclick="event.stopPropagation()" onblur="cmpSetNote(' + l.id + ', this.value)" style="width:140px;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:12px;"></td><td><button onclick="event.stopPropagation();cmpDeleteLead(' + l.id + ', ' + JSON.stringify(l.name).replace(/"/g,'&quot;') + ')" title="Smazat lead" style="background:transparent;color:#ef4444;border:1px solid rgba(239,68,68,0.4);border-radius:6px;padding:4px 9px;font-size:12px;cursor:pointer;">🗑</button></td></tr>';
+          var rv = resvMap[l.id];
+          var resvCell = rv
+            ? '<td style="white-space:nowrap;font-size:12px;"><span style="color:'+(rv.status==='active'?'#eab308':'#3b82f6')+';font-weight:600;">'+(rv.status==='active'?'Aktivní':'Rezervováno')+'</span>'+(rv.reserved_until?('<br><span style="color:var(--text2);">do '+new Date(rv.reserved_until).toLocaleDateString('cs-CZ')+'</span>'):'')+'</td>'
+            : '<td style="color:var(--text2);">—</td>';
+          h += '<tr data-lead="' + l.id + '" data-sections="' + cmpEsc(l.visible_sections||'') + '" onclick="cmpActivity(' + l.id + ', this)" title="Klikni pro cestu zákazníka" style="cursor:pointer;"><td style="color:var(--text2);">▸</td><td style="white-space:nowrap;">' + dt + '</td><td>' + cmpEsc(l.name) + '</td><td><a href="mailto:' + cmpEsc(l.email) + '" onclick="event.stopPropagation()" style="color:#eab308;">' + cmpEsc(l.email) + '</a></td><td>' + roleLabel + '</td><td>' + cmpEsc((l.lang||'').toUpperCase()) + '</td>' + warmthCell + resvCell + '<td>' + sel + '</td><td><input type="text" value="' + noteVal + '" placeholder="—" onclick="event.stopPropagation()" onblur="cmpSetNote(' + l.id + ', this.value)" style="width:140px;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:12px;"></td><td><button onclick="event.stopPropagation();cmpDeleteLead(' + l.id + ', ' + JSON.stringify(l.name).replace(/"/g,'&quot;') + ')" title="Smazat lead" style="background:transparent;color:#ef4444;border:1px solid rgba(239,68,68,0.4);border-radius:6px;padding:4px 9px;font-size:12px;cursor:pointer;">🗑</button></td></tr>';
         });
         h += '</tbody></table></div>';
         box.innerHTML = h;
