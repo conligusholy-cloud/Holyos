@@ -847,6 +847,34 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
       })
       .catch(function(){ box.innerHTML = '<div class="muted">Nabídku se nepodařilo načíst.</div>'; });
   }
+  window.openLocPhotos = function(code){
+    var o = (OFFERS.data||[]).find(function(x){ return x.code===code; });
+    if(!o || !o.photos || !o.photos.length) return;
+    var idx = 0;
+    var ov = document.createElement("div");
+    ov.id = "locPhotos";
+    ov.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.86);z-index:10000;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px";
+    function bnav(dir,label){ return '<button type="button" data-nav="'+dir+'" style="background:rgba(255,255,255,.12);color:#fff;border:none;border-radius:50%;width:40px;height:40px;font-size:20px;cursor:pointer">'+label+'</button>'; }
+    function render(){
+      ov.innerHTML =
+        '<button type="button" data-nav="close" style="position:absolute;top:16px;right:20px;background:rgba(255,255,255,.12);color:#fff;border:none;border-radius:50%;width:40px;height:40px;font-size:22px;cursor:pointer">×</button>' +
+        '<div style="color:#fff;font-weight:700;font-size:15px;margin-bottom:12px;text-align:center">'+offEsc(o.label||o.code)+'</div>' +
+        '<img src="'+offEsc(o.photos[idx])+'" alt="" style="max-width:92vw;max-height:72vh;border-radius:12px;object-fit:contain;box-shadow:0 20px 60px rgba(0,0,0,.5)">' +
+        '<div style="display:flex;gap:14px;align-items:center;margin-top:14px">' +
+          (o.photos.length>1 ? bnav("prev","‹") : "") +
+          '<span style="color:#cfcfd6;font-size:13px">'+(idx+1)+' / '+o.photos.length+'</span>' +
+          (o.photos.length>1 ? bnav("next","›") : "") +
+        '</div>';
+    }
+    render();
+    ov.addEventListener("click", function(e){
+      var t = e.target; var nav = t && t.getAttribute ? t.getAttribute("data-nav") : null;
+      if(t===ov || nav==="close"){ ov.remove(); return; }
+      if(nav==="prev"){ idx=(idx-1+o.photos.length)%o.photos.length; render(); }
+      if(nav==="next"){ idx=(idx+1)%o.photos.length; render(); }
+    });
+    document.body.appendChild(ov);
+  };
   window.offSetCur = function(c){ OFFERS.cur = c; renderOffers(); };
   function offCurBtn(c,label){
     var on = OFFERS.cur===c;
@@ -867,7 +895,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
         : '<button type="button" class="btn" style="min-width:130px;justify-content:center" onclick="openReserveModal(\'' + offEsc(o.code).replace(/'/g,"&#39;") + '\')">Rezervovat</button>';
       return '<div style="display:flex;align-items:center;gap:18px;flex-wrap:wrap;border:1px solid var(--line);border-radius:14px;padding:14px 16px;background:var(--bg-2);'+(o.reserved?'opacity:.55':'')+'">' +
         '<div style="flex:2;min-width:190px">' +
-          '<div style="font-weight:800;font-size:15px">' + offEsc(o.label||o.code) + '</div>' +
+          '<div style="font-weight:800;font-size:15px' + ((o.photos&&o.photos.length)?';cursor:pointer' : '') + '"' + ((o.photos&&o.photos.length)?(' onclick="openLocPhotos(\'' + offEsc(o.code).replace(/'/g,"&#39;") + '\')" title="Zobrazit fotky lokality"'):'') + '>' + offEsc(o.label||o.code) + ((o.photos&&o.photos.length)?(' <span style="font-size:12px;color:var(--gold-soft);white-space:nowrap">📷 '+o.photos.length+'</span>'):'') + '</div>' +
           '<div style="font-size:12px;color:var(--muted)">Verze ' + offEsc(o.version||"—") + '</div>' +
         '</div>' +
         '<div style="flex:1;min-width:110px">' + offMetric("Cena", offMoney(o.totalPrice)) + '</div>' +

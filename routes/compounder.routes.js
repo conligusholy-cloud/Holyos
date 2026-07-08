@@ -18,6 +18,9 @@ const { inviteEmail, loginEmail } = require('../services/compounder-emails');
 const { getSetting, setSetting, getOurCompany } = require('../services/settings');
 const contracts = require('../services/pdf/contracts');
 const compounderNotify = require('../services/compounder/notify');
+const multer = require('multer');
+const { putObject: r2Put } = require('../services/storage/r2');
+const kioskPhotoUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 8 * 1024 * 1024, files: 3 } });
 const crypto = require('crypto');
 const { buildShareUrl, getAppUrl } = require('../services/share-url');
 const bcrypt = require('bcryptjs');
@@ -958,6 +961,7 @@ const kioskConfigSchema = z.object({
   version: z.enum(['v2', 'v3', 'v4']).nullable().optional(),
   rentMonthlyCzk: z.number().nonnegative().nullable().optional(),
   forSale: z.boolean().optional(),
+  photos: z.array(z.string().max(600)).max(3).optional(),
 });
 
 // GET /api/compounder/kiosk-config → celá mapa { [code]: {version, rentMonthlyCzk} }
@@ -990,6 +994,41 @@ router.put('/kiosk-config/:code', requireAuth, async (req, res, next) => {
     });
     res.json({ ok: true, code, config: parsed.data });
   } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/compounder/kiosk-config/:code/photos → nahraje až 3 fotky lokality do R2
+router.post('/kiosk-config/:code/photos', requireAuth, kioskPhotoUpload.array('photos', 3), async (req, res, next) => {
+  try {
+    const code = String(req.params.code || '').trim().slice(0, 40);
+    if (!code) return res.status(400).json({ error: 'Chybí kód lokality' });
+    const files = req.files || [];
+    if (!files.length) return res.status(400).json({ error: 'Žádné soubory' });
+
+    const map = await getSetting(COMPOUNDING_KIOSKS_KEY, { type: 'json', defaultValue: {} });
+    const next_ = (map && typeof map === 'object') ? { ...map } : {};
+    const cur = next_[code] || {};
+    const photos = Array.isArray(cur.photos) ? cur.photos.slice() : [];
+
+    for (const f of files) {
+      if (photos.length >= 3) break;
+      if (!/^image\//.test(f.mimetype || '')) continue;
+      const ext = (f.mimetype === 'image/png') ? '.png' : (f.mimetype === 'image/webp') ? '.webp' : '.jpg';
+      const key = 'compounding/' + code + '/' + crypto.randomUUID() + ext;
+      const { url } = await r2Put(key, f.buffer, f.mimetype);
+      if (url) photos.push(url);
+    }
+
+    next_[code] = { ...cur, photos: photos.slice(0, 3) };
+    await setSetting(COMPOUNDING_KIOSKS_KEY, next_, {
+      type: 'json', scope: 'compounding',
+      description: 'Compounding — per-lokalita: verze kiosku + nájem + fotky',
+      userId: req.user && req.user.id,
+    });
+    res.json({ ok: true, code, photos: next_[code].photos });
+  } catch (err) {
+    if (err && err.status === 503) return res.status(503).json({ error: 'Úložiště fotek (R2) není nakonfigurované.' });
     next(err);
   }
 });
@@ -1844,6 +1883,7 @@ router.get('/portal/offered-locations', async (req, res, next) => {
           guaranteeValue: total != null ? Math.round(total * buybackPct / 100) : null,
           reserved: busyInfo.has(k.code),
           reservedUntil: busyInfo.has(k.code) ? (busyInfo.get(k.code).reserved_until || null) : null,
+          photos: Array.isArray(cfg.photos) ? cfg.photos : [],
         };
       })
       .sort((a, b) => (b.yearlyYield || 0) - (a.yearlyYield || 0));
