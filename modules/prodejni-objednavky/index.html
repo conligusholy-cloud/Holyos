@@ -2815,11 +2815,16 @@
           '<div style="color:var(--text2);font-size:12px;max-width:340px;">Top sekce: ' + top + '</div>' + '<button onclick="cmpPushBroadcast()" style="margin-left:auto;background:#eab308;color:#1a1408;border:none;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:600;cursor:pointer;">\ud83d\udce3 Push vsem</button>' + '</div>';
       } catch(e){}
     }
+    var CMP_PAGE_NAMES = { filozofie:'Filozofie', ekonomika:'Provozovatel', nabidka:'Investor', navratnost:'Distributor', milniky:'Milníky', parametry:'Parametry', galerie:'Galerie', pripojky:'Přípojky', pudorysy:'Půdorysy', distribuce:'Distribuce', lokalita:'Lokalita', kontakt:'Kontakt' };
+    function cmpPageName(k){ return CMP_PAGE_NAMES[k] || (k||'?'); }
+    function cmpFmtDur(ms){ ms=Number(ms)||0; var s=Math.round(ms/1000); if(s<60) return s+' s'; var m=Math.floor(s/60); var r=s%60; return m+' min'+(r?(' '+r+' s'):''); }
     function cmpEvtLabel(e){
       var p = e.props||{}; var ev = e.event;
       if (ev==='page_view') return '👁️ Otevřel web';
-      if (ev==='section_view') return '📄 Sekce: '+cmpEsc(p.section||'?');
-      if (ev==='cta_click') return '🖱️ Klik: '+cmpEsc(p.label||'CTA');
+      if (ev==='section_view') return '📄 Sekce: '+cmpEsc(cmpPageName(p.section));
+      if (ev==='cta_click') return '🖱️ CTA: '+cmpEsc(p.label||'CTA')+(p.sec?(' ('+cmpEsc(cmpPageName(p.sec))+')'):'');
+      if (ev==='click') return '🖱️ Klik: '+cmpEsc(p.label||'?')+(p.sec?(' · '+cmpEsc(cmpPageName(p.sec))):'');
+      if (ev==='page_switch') return '➡️ Přešel na: '+cmpEsc(cmpPageName(p.page));
       if (ev==='register_submit') return '📝 Odeslal registraci';
       if (ev==='register_success') return '✅ Registrace ('+cmpEsc(p.role||'')+')';
       if (ev==='card_flip') return '💳 Otočil kartu';
@@ -2829,7 +2834,8 @@
       if (ev==='location_assess') return '📍 Zhodnotil lokalitu: '+cmpEsc((p.address||'').slice(0,40));
       if (ev==='contact_request') return '📞 Požádal o kontakt: '+cmpEsc(p.phone||'');
       if (ev==='install_choice') return '📲 Instalace PWA: '+cmpEsc(p.outcome||'');
-      if (ev==='page_leave') return '🚪 Odešel';
+      if (ev==='visit_end') return '🚪 Konec návštěvy'+(p.ms?(' · '+cmpFmtDur(p.ms)):'')+(p.depth!=null?(' · scroll '+p.depth+'%'):'');
+      if (ev==='page_leave') return '🚪 Odešel z webu'+(p.depth!=null?(' · scroll '+p.depth+'%'):'');
       return cmpEsc(ev);
     }
     async function cmpActivity(id, row) {
@@ -2867,9 +2873,90 @@
             '<button onclick="cmpPushLead(' + id + ')" style="background:#eab308;color:#1a1408;border:none;border-radius:8px;padding:7px 12px;font-size:12.5px;font-weight:600;cursor:pointer;">\ud83d\udce3 Poslat push tomuto leadovi</button>' +
           '</div>' +
           '<div id="cmp-ai-' + id + '"></div>' +
-          '<div>' + rows + '</div>';
+          '<div style="margin:2px 0 8px;"><button onclick="cmpToggleJourney(' + id + ',this)" style="background:transparent;color:var(--text2);border:1px solid var(--border);border-radius:8px;padding:6px 11px;font-size:12px;font-weight:600;cursor:pointer;">📋 Syrové eventy</button></div>' +
+          '<div id="cmp-journey-' + id + '">' + cmpBuildJourney(a.events) + '</div>' +
+          '<div id="cmp-raw-' + id + '" style="display:none;margin-top:8px;">' + rows + '</div>';
       } catch(e) { body.innerHTML = '<div style="color:#ef4444;font-size:13px;">Chyba načítání aktivity.</div>'; }
     }
+
+    // Přepnutí mezi „cestou uživatele" a syrovým seznamem eventů.
+    function cmpToggleJourney(id, btn){
+      var j = document.getElementById('cmp-journey-'+id), r = document.getElementById('cmp-raw-'+id);
+      if (!j || !r) return;
+      var showRaw = r.style.display === 'none';
+      r.style.display = showRaw ? '' : 'none';
+      j.style.display = showRaw ? 'none' : '';
+      btn.innerHTML = showRaw ? '🧭 Cesta uživatele' : '📋 Syrové eventy';
+    }
+    window.cmpToggleJourney = cmpToggleJourney;
+
+    // „Cesta uživatele": rozdělí eventy do návštěv (nová = portal_view/page_view
+    // nebo pauza > 30 min). V portálové návštěvě poskládá STRÁNKY v pořadí, u každé
+    // spočítá čas strávený (do dalšího přechodu) a vypíše kliky/akce na ní.
+    function cmpEvClickLabel(e){
+      var p = e.props||{};
+      if (e.event==='click' || e.event==='cta_click') return (p.label||'?');
+      return cmpEvtLabel(e); // doc_download, location_assess, contact_request…
+    }
+    function cmpBuildJourney(events){
+      if (!events || !events.length) return '<div style="color:var(--text2);font-size:13px;">Žádná zaznamenaná aktivita.</div>';
+      var GAP = 30*60*1000;
+      var visits = []; var cur = null; var lastT = 0;
+      events.forEach(function(e){
+        var t = new Date(e.at).getTime();
+        var boundary = !cur || e.event==='portal_view' || e.event==='page_view' || (t - lastT) > GAP;
+        if (boundary){ cur = { start:e.at, kind:(e.event==='portal_view'?'portal':'web'), ev:[], ms:0, depth:null, endT:t }; visits.push(cur); }
+        cur.endT = t; lastT = t;
+        if (e.event==='portal_view') cur.kind='portal';
+        if (e.event==='visit_end' || e.event==='page_leave'){ var pp=e.props||{}; if(pp.ms) cur.ms=Math.max(cur.ms, Number(pp.ms)||0); if(pp.depth!=null) cur.depth=Math.max(cur.depth||0, Number(pp.depth)||0); }
+        cur.ev.push(e);
+      });
+      return visits.map(function(v){
+        var d = new Date(v.start);
+        var when = d.toLocaleDateString('cs-CZ') + ' ' + d.toLocaleTimeString('cs-CZ').slice(0,5);
+        var icon = v.kind==='portal' ? '🔑' : '🌐';
+        var title = v.kind==='portal' ? 'Návštěva portálu' : 'Návštěva webu';
+        // Poskládej stránkové segmenty (podle page_switch); kliky/akce přiřaď k aktuální stránce.
+        var segs = []; var seg = null;
+        v.ev.forEach(function(e){
+          var t = new Date(e.at).getTime();
+          if (e.event==='page_switch'){
+            seg = { page: (e.props&&e.props.page)||'?', start:t, clicks:[] }; segs.push(seg);
+          } else if (e.event==='click' || e.event==='cta_click' || e.event==='doc_download' || e.event==='location_assess' || e.event==='contact_request' || e.event==='card_flip'){
+            if (!seg){ seg = { page:'(úvod)', start:t, clicks:[] }; segs.push(seg); }
+            seg.clicks.push(e);
+          }
+        });
+        // Čas na stránce = do začátku další stránky (poslední do konce návštěvy).
+        var html = segs.map(function(s, i){
+          var endT = (i+1<segs.length) ? segs[i+1].start : v.endT;
+          var dwell = Math.max(0, endT - s.start);
+          var clk = s.clicks.length
+            ? '<div style="margin-top:4px;padding-left:14px;border-left:2px solid rgba(255,255,255,0.08);">' + s.clicks.map(function(c){
+                var tm = new Date(c.at).toLocaleTimeString('cs-CZ');
+                return '<div style="font-size:12px;color:var(--text2);padding:1px 0;"><span style="color:var(--text2)">'+tm+'</span> · '+cmpEsc(cmpEvClickLabel(c))+'</div>';
+              }).join('') + '</div>'
+            : '<div style="font-size:11.5px;color:var(--text2);padding-left:14px;">bez kliknutí</div>';
+          return '<div style="padding:6px 0;border-top:1px solid rgba(255,255,255,0.05);">'
+            + '<div style="display:flex;gap:10px;align-items:baseline;flex-wrap:wrap;">'
+            + '<b style="font-size:13px;color:var(--text);">📄 '+cmpEsc(cmpPageName(s.page))+'</b>'
+            + '<span style="font-size:12px;color:#eab308;">⏱️ '+cmpFmtDur(dwell)+'</span>'
+            + '<span style="font-size:11.5px;color:var(--text2);">'+s.clicks.length+' akcí</span></div>'
+            + clk + '</div>';
+        }).join('');
+        if (!segs.length) html = '<div style="font-size:12.5px;color:var(--text2);">Jen otevřel, žádný pohyb po stránkách.</div>';
+        var meta = [];
+        if (v.ms) meta.push('⏱️ celkem '+cmpFmtDur(v.ms));
+        if (v.depth!=null) meta.push('↕️ scroll '+v.depth+'%');
+        return '<div style="margin:0 0 12px;padding:12px 14px;background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:10px;border-left:3px solid '+(v.kind==='portal'?'#eab308':'#3b82f6')+';">'
+          + '<div style="display:flex;gap:12px;flex-wrap:wrap;align-items:baseline;margin-bottom:6px;">'
+          + '<b style="font-size:13px;">'+icon+' '+title+'</b>'
+          + '<span style="color:var(--text2);font-size:12px;">'+when+'</span>'
+          + (meta.length?('<span style="color:var(--text2);font-size:12px;margin-left:auto;">'+meta.join(' · ')+'</span>'):'')
+          + '</div>' + html + '</div>';
+      }).join('');
+    }
+    window.cmpBuildJourney = cmpBuildJourney;
 
     async function cmpLeadReservations(id, el) {
       if (el) el.id = 'cmp-resv-' + id;
