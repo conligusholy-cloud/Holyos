@@ -5477,6 +5477,12 @@ model CompounderLead {
 
   // Heslo pro prihlaseni (bcrypt hash). Null = uzivatel heslo nenastavil (jen magic link).
   password_hash String? @db.Text
+
+  // Schválení přístupu k portálu. Relevantní pro nezvané (source='access_request'):
+  // dokud je null, nemají přístup ani přihlašovací odkaz. Ostatní zdroje (web/pozvánka)
+  // mají přístup jako dosud (nezávisle na tomto poli).
+  access_approved_at DateTime?
+
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
 

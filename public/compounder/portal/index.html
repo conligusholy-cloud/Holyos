@@ -803,7 +803,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
     .then(function(r){ return r.json().then(function(j){ return { ok:r.ok, j:j }; }); })
     .then(function(res){
       clearTimeout(_verifyTimer);
-      if (!res.ok || !res.j.ok) { showDenied(); return; }
+      if (!res.ok || !res.j.ok) { showDenied(res.j && res.j.error); return; }
       localStorage.setItem("compounder.portal.token", token);
       try { history.replaceState({}, "", location.pathname); } catch(e){}
       document.getElementById("gate").style.display = "none";

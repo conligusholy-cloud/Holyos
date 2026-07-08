@@ -2793,7 +2793,7 @@
           var resvCell = rv
             ? '<td style="white-space:nowrap;font-size:12px;"><span style="color:'+(rv.status==='active'?'#eab308':'#3b82f6')+';font-weight:600;">'+(rv.status==='active'?'Aktivní':'Rezervováno')+'</span>'+(rv.reserved_until?('<br><span style="color:var(--text2);">do '+new Date(rv.reserved_until).toLocaleDateString('cs-CZ')+'</span>'):'')+'</td>'
             : '<td style="color:var(--text2);">—</td>';
-          h += '<tr data-lead="' + l.id + '" data-sections="' + cmpEsc(l.visible_sections||'') + '" onclick="cmpActivity(' + l.id + ', this)" title="Klikni pro cestu zákazníka" style="cursor:pointer;"><td style="color:var(--text2);">▸</td><td style="white-space:nowrap;">' + dt + '</td><td>' + cmpEsc(l.name) + '</td><td><a href="mailto:' + cmpEsc(l.email) + '" onclick="event.stopPropagation()" style="color:#eab308;">' + cmpEsc(l.email) + '</a></td><td>' + roleLabel + '</td><td>' + cmpEsc((l.lang||'').toUpperCase()) + '</td>' + warmthCell + resvCell + '<td>' + sel + '</td><td><input type="text" value="' + noteVal + '" placeholder="—" onclick="event.stopPropagation()" onblur="cmpSetNote(' + l.id + ', this.value)" style="width:140px;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:12px;"></td><td><button onclick="event.stopPropagation();cmpDeleteLead(' + l.id + ', ' + JSON.stringify(l.name).replace(/"/g,'&quot;') + ')" title="Smazat lead" style="background:transparent;color:#ef4444;border:1px solid rgba(239,68,68,0.4);border-radius:6px;padding:4px 9px;font-size:12px;cursor:pointer;">🗑</button></td></tr>';
+          h += '<tr data-lead="' + l.id + '" data-sections="' + cmpEsc(l.visible_sections||'') + '" data-source="' + cmpEsc(l.source||'') + '" data-approved="' + (l.access_approved_at ? '1' : '') + '" onclick="cmpActivity(' + l.id + ', this)" title="Klikni pro cestu zákazníka" style="cursor:pointer;"><td style="color:var(--text2);">▸</td><td style="white-space:nowrap;">' + dt + '</td><td>' + cmpEsc(l.name) + '</td><td><a href="mailto:' + cmpEsc(l.email) + '" onclick="event.stopPropagation()" style="color:#eab308;">' + cmpEsc(l.email) + '</a></td><td>' + roleLabel + '</td><td>' + cmpEsc((l.lang||'').toUpperCase()) + '</td>' + warmthCell + resvCell + '<td>' + sel + '</td><td><input type="text" value="' + noteVal + '" placeholder="—" onclick="event.stopPropagation()" onblur="cmpSetNote(' + l.id + ', this.value)" style="width:140px;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:12px;"></td><td><button onclick="event.stopPropagation();cmpDeleteLead(' + l.id + ', ' + JSON.stringify(l.name).replace(/"/g,'&quot;') + ')" title="Smazat lead" style="background:transparent;color:#ef4444;border:1px solid rgba(239,68,68,0.4);border-radius:6px;padding:4px 9px;font-size:12px;cursor:pointer;">🗑</button></td></tr>';
         });
         h += '</tbody></table></div>';
         box.innerHTML = h;
@@ -2838,7 +2838,7 @@
       row.firstChild.textContent='▾';
       var tr = document.createElement('tr'); tr.className='cmp-act-row';
       var td = document.createElement('td'); td.colSpan = 10; td.style.background='rgba(234,179,8,0.04)'; td.style.padding='14px 18px';
-      td.innerHTML = cmpSecBlock(id, row.getAttribute('data-sections')||'');
+      td.innerHTML = cmpAccessBlock(id, row.getAttribute('data-source')||'', row.getAttribute('data-approved')==='1') + cmpSecBlock(id, row.getAttribute('data-sections')||'');
       var resDiv = document.createElement('div'); resDiv.innerHTML = '<div style="color:var(--text2);font-size:13px;">Načítám rezervace…</div>';
       td.appendChild(resDiv);
       cmpLeadReservations(id, resDiv);
@@ -2922,6 +2922,42 @@
         if (el) cmpLeadReservations(leadId, el);
       } catch (e) { alert('Zrušení rezervace selhalo.'); }
     }
+    // Řízení přístupu k portálu. Nezvaní (source='access_request') musí být ručně
+    // povoleni; ostatní zdroje mají přístup automaticky.
+    function cmpAccessBlock(id, source, approved){
+      if (source !== 'access_request') {
+        return '<div style="margin-bottom:12px;padding:9px 12px;background:rgba(16,185,129,0.06);border:1px solid rgba(16,185,129,0.25);border-radius:8px;font-size:12.5px;color:var(--text2);">🔓 Přístup k portálu: <b style="color:#10b981;">aktivní</b> (pozvaný / registrovaný)</div>';
+      }
+      var col = approved ? '#10b981' : '#eab308';
+      var stateTxt = approved ? 'povolen ✓' : 'čeká na schválení';
+      return '<div data-accctl="'+id+'" style="margin-bottom:12px;padding:10px 12px;background:rgba(234,179,8,0.06);border:1px solid rgba(234,179,8,0.3);border-radius:8px;">'
+        + '<div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--text2);margin-bottom:8px;">Přístup k portálu (nezvaný žadatel)</div>'
+        + '<label style="display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--text);cursor:pointer;font-weight:600;">'
+        + '<input type="checkbox" '+(approved?'checked':'')+' onchange="cmpSetAccess('+id+', this.checked, this)"> Povolit přístup'
+        + '</label>'
+        + ' <span data-accstate="'+id+'" style="font-size:12px;color:'+col+';margin-left:8px;">'+stateTxt+'</span>'
+        + '<div data-accmsg="'+id+'" style="font-size:12px;margin-top:6px;"></div>'
+        + '<div style="font-size:11px;color:var(--text2);margin-top:6px;">Po povolení dostane žadatel e-mail s odkazem do portálu. Dokud není povoleno, nemá přístup ani přihlašovací odkaz.</div>'
+        + '</div>';
+    }
+    async function cmpSetAccess(id, approved, cb){
+      var msg = document.querySelector('[data-accmsg="'+id+'"]');
+      var state = document.querySelector('[data-accstate="'+id+'"]');
+      if (cb) cb.disabled = true;
+      if (msg){ msg.style.color='var(--text2)'; msg.textContent = approved ? 'Povoluji přístup a odesílám odkaz…' : 'Odebírám přístup…'; }
+      try {
+        var r = await fetch('/api/compounder/leads/'+id+'/access', { method:'POST', credentials:'include', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ approved: approved }) });
+        var j = await r.json().catch(function(){return {};});
+        if (!r.ok) throw new Error(j.error || ('HTTP '+r.status));
+        var rowEl = document.querySelector('tr[data-lead="'+id+'"]'); if (rowEl) rowEl.setAttribute('data-approved', approved ? '1' : '');
+        if (state){ state.style.color = approved ? '#10b981' : '#eab308'; state.textContent = approved ? 'povolen ✓' : 'čeká na schválení'; }
+        if (msg){ msg.style.color='#10b981'; msg.textContent = approved ? (j.emailSent ? 'Přístup povolen, odkaz odeslán ✓' : 'Přístup povolen ✓ (e-mail se nepodařilo odeslat)') : 'Přístup odebrán'; setTimeout(function(){ if(msg) msg.textContent=''; }, 3500); }
+      } catch(e){
+        if (cb) cb.checked = !approved;
+        if (msg){ msg.style.color='#ef4444'; msg.textContent = 'Chyba: '+e.message; }
+      } finally { if (cb) cb.disabled = false; }
+    }
+    window.cmpSetAccess = cmpSetAccess;
     function cmpSecBlock(id, csv){
       var have = String(csv||'').split(',').map(function(x){return x.trim();}).filter(Boolean);
       var defs = [['ekonomika','Provozovatel'],['nabidka','Investor'],['distributor','Distributor']];

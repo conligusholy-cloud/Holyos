@@ -55,9 +55,14 @@ router.post('/register', async (req, res, next) => {
     const existing = await prisma.compounderLead.findFirst({
       where: { email: { equals: d.email, mode: 'insensitive' } },
       orderBy: { created_at: 'desc' },
-      select: { id: true, name: true, email: true, lang: true },
+      select: { id: true, name: true, email: true, lang: true, source: true, access_approved_at: true },
     });
     if (existing) {
+      // Nezvaný čekající na schválení: odkaz neposíláme, jen potvrdíme příjem.
+      if (!leadAccessAllowed(existing)) {
+        console.log(`[compounder] Duplicitní registrace ${d.email} → čeká na schválení přístupu (lead #${existing.id})`);
+        return res.json({ ok: true, existing: true, pending: true });
+      }
       const loginUrl = `${portalBase()}/portal?t=${makeLoginToken(existing.id)}`;
       sendPortalLogin({ name: existing.name || d.name, email: existing.email, lang: d.lang || existing.lang }, loginUrl)
         .catch((e) => console.error('[compounder] login e-mail (duplicitní registrace):', e.message));
@@ -186,6 +191,15 @@ function resolveSections(csv) {
   return Array.from(new Set(set));
 }
 
+// Má lead povolený přístup k portálu? Nezvaní (source='access_request') potřebují
+// ruční schválení (access_approved_at). Ostatní zdroje (web/pozvánka) mají přístup
+// jako dosud — pole se u nich neuplatňuje, aby stávající leady o přístup nepřišly.
+function leadAccessAllowed(lead) {
+  if (!lead) return false;
+  if (lead.source === 'access_request') return !!lead.access_approved_at;
+  return true;
+}
+
 // GET /api/compounder/portal/session?t=TOKEN
 // Token je HMAC-podepsaný (lead id + podpis), bez DB sloupce. Ověří se serverem.
 router.get('/portal/session', async (req, res, next) => {
@@ -194,9 +208,12 @@ router.get('/portal/session', async (req, res, next) => {
     if (!id) return res.status(401).json({ ok: false, error: 'Neplatný nebo chybějící přístupový odkaz.' });
     const lead = await prisma.compounderLead.findUnique({
       where: { id },
-      select: { id: true, name: true, role: true, lang: true, visible_sections: true, password_hash: true },
+      select: { id: true, name: true, role: true, lang: true, visible_sections: true, password_hash: true, source: true, access_approved_at: true },
     });
     if (!lead) return res.status(404).json({ ok: false, error: 'Registrace nenalezena.' });
+    if (!leadAccessAllowed(lead)) {
+      return res.status(403).json({ ok: false, pending: true, error: 'Tvoje žádost o přístup zatím čeká na schválení. Jakmile ho povolíme, dostaneš přihlašovací odkaz e-mailem.' });
+    }
     return res.json({ ok: true, id: lead.id, name: lead.name, role: lead.role, lang: lead.lang, sections: resolveSections(lead.visible_sections), has_password: !!lead.password_hash });
   } catch (err) {
     next(err);
@@ -399,12 +416,12 @@ router.post('/login', async (req, res, next) => {
     const lead = await prisma.compounderLead.findFirst({
       where: { email: { equals: email, mode: 'insensitive' } },
       orderBy: { created_at: 'desc' },
-      select: { id: true, name: true, email: true, role: true, lang: true, password_hash: true },
+      select: { id: true, name: true, email: true, role: true, lang: true, password_hash: true, source: true, access_approved_at: true },
     });
 
     // ── Přihlášení HESLEM ──────────────────────────────────────────────────
     if (password) {
-      const ok = lead && lead.password_hash && await bcrypt.compare(password, lead.password_hash);
+      const ok = lead && lead.password_hash && leadAccessAllowed(lead) && await bcrypt.compare(password, lead.password_hash);
       if (!ok) {
         // generická hláška (neprozrazuje, zda chyba je e-mail nebo heslo)
         return res.status(401).json({ ok: false, error: 'Neplatný e-mail nebo heslo.' });
@@ -417,11 +434,13 @@ router.post('/login', async (req, res, next) => {
     }
 
     // ── Přihlášení ODKAZEM (magic link) ────────────────────────────────────
-    if (lead) {
+    if (lead && leadAccessAllowed(lead)) {
       const url = `${portalBase()}/portal?t=${makeLoginToken(lead.id)}`;
       sendPortalLogin({ name: lead.name, email: lead.email, lang: lead.lang }, url)
         .catch((e) => console.error('[compounder] login e-mail selhal:', e.message));
       console.log(`[compounder] Přihlašovací odkaz odeslán pro lead #${lead.id}`);
+    } else if (lead) {
+      console.log(`[compounder] Přihlášení blokováno (nepovolený přístup): lead #${lead.id}`);
     } else {
       console.log(`[compounder] Přihlášení – neznámý e-mail: ${email}`);
     }
@@ -440,9 +459,11 @@ router.post('/portal/login-check', async (req, res, next) => {
     const lead = await prisma.compounderLead.findFirst({
       where: { email: { equals: email, mode: 'insensitive' } },
       orderBy: { created_at: 'desc' },
-      select: { id: true, name: true, email: true, lang: true },
+      select: { id: true, name: true, email: true, lang: true, source: true, access_approved_at: true },
     });
     if (!lead) return res.json({ ok: true, exists: false });
+    // Nezvaný bez schválení = tváříme se jako neexistující (nedostane odkaz).
+    if (!leadAccessAllowed(lead)) return res.json({ ok: true, exists: false, pending: true });
     const url = `${portalBase()}/portal?t=${makeLoginToken(lead.id)}`;
     sendPortalLogin({ name: lead.name, email: lead.email, lang: lead.lang }, url)
       .catch((e) => console.error('[compounder] login e-mail selhal:', e.message));
@@ -635,6 +656,45 @@ router.patch('/leads/:id', requireAuth, async (req, res, next) => {
     }
     const lead = await prisma.compounderLead.update({ where: { id }, data });
     res.json(lead);
+  } catch (err) {
+    if (err.code === 'P2025') return res.status(404).json({ error: 'Lead nenalezen' });
+    next(err);
+  }
+});
+
+// POST /api/compounder/leads/:id/access — povolení / odebrání přístupu k portálu.
+// Při povolení (approved=true) nastaví access_approved_at a pošle leadovi uvítací
+// odkaz do portálu. Při odebrání (approved=false) přístup zruší (portál i login).
+router.post('/leads/:id/access', requireAuth, async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'Neplatné ID' });
+    const approved = !!(req.body && req.body.approved);
+    const lead = await prisma.compounderLead.findUnique({
+      where: { id },
+      select: { id: true, name: true, email: true, lang: true, access_approved_at: true },
+    });
+    if (!lead) return res.status(404).json({ error: 'Lead nenalezen' });
+
+    if (!approved) {
+      await prisma.compounderLead.update({ where: { id }, data: { access_approved_at: null } });
+      console.log(`[compounder] Přístup ODEBRÁN: lead #${id}`);
+      return res.json({ ok: true, approved: false });
+    }
+
+    await prisma.compounderLead.update({
+      where: { id },
+      data: { access_approved_at: lead.access_approved_at || new Date(), status: 'qualified' },
+    });
+    // Uvítací odkaz do portálu (permanentní) — lead se dozví, že má přístup.
+    let emailSent = false;
+    try {
+      const url = `${portalBase()}/portal?t=${makePortalToken(id)}`;
+      await sendPortalInvite({ name: lead.name, email: lead.email, lang: lead.lang }, url);
+      emailSent = true;
+      console.log(`[compounder] Přístup POVOLEN + odkaz odeslán: lead #${id}`);
+    } catch (e) { console.error('[compounder] access-grant e-mail selhal:', e.message); }
+    return res.json({ ok: true, approved: true, emailSent });
   } catch (err) {
     if (err.code === 'P2025') return res.status(404).json({ error: 'Lead nenalezen' });
     next(err);
