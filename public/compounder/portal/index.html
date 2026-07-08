@@ -175,8 +175,8 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
     </div>
   </header>
   <nav class="subnav" id="subnav">
-    <a href="#nabidka">Nabídka lokalit</a>
     <a href="#ekonomika" class="active" data-i18n="p.nav.eko">Economics</a>
+    <a href="#nabidka">Nabídka lokalit</a>
     <a href="#navratnost" data-i18n="p.nav.ret">Return</a>
     <a href="#milniky" data-i18n="p.nav.milestones">Gold &amp; Diamond</a>
     <a href="#parametry" data-i18n="p.nav.params">Technical parameters</a>
@@ -188,14 +188,6 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
   </nav>
 
   <div class="wrap">
-    <section class="blk" id="nabidka">
-      <div class="eyebrow">Nabídka</div>
-      <h2>Nabídka lokalit k prodeji</h2>
-      <p class="lead">Vyberte si zavedenou lokalitu, která už funguje a vydělává. Uvedená čísla jsou orientační podle aktuálního provozu.</p>
-      <div id="offers-list" style="display:flex;flex-direction:column;gap:10px;margin-top:10px;">
-        <div class="muted">Načítám nabídku…</div>
-      </div>
-    </section>
     <section class="blk" id="ekonomika">
       <div class="eyebrow" data-i18n="p.eko.eyebrow">Economics</div>
       <h2 data-i18n="p.eko.title">Economics of one Compounder</h2>
@@ -232,6 +224,14 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
       </div>
     </section>
 
+    <section class="blk" id="nabidka">
+      <div class="eyebrow">Nabídka</div>
+      <h2>Nabídka lokalit k prodeji</h2>
+      <p class="lead">Vyberte si zavedenou lokalitu, která už funguje a vydělává. Uvedená čísla jsou orientační podle aktuálního provozu.</p>
+      <div id="offers-list" style="display:flex;flex-direction:column;gap:10px;margin-top:10px;">
+        <div class="muted">Načítám nabídku…</div>
+      </div>
+    </section>
     <section class="blk" id="navratnost">
       <div class="eyebrow" data-i18n="p.ret.eyebrow">Return</div>
       <h2 data-i18n="p.ret.title">When the Compounder pays off</h2>
@@ -685,7 +685,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
       PORTAL_LEAD_ID = res.j.id;
       // Sekce jen pro distributory (ostatní registrovaní vidí jen Nabídku lokalit, Gold & Diamond, Galerii)
       if (res.j.role !== 'distributor') {
-        ['ekonomika','navratnost','parametry','pripojky','pudorysy','distribuce','lokalita'].forEach(function(id){
+        ['navratnost','parametry','pripojky','pudorysy','distribuce','lokalita','milniky'].forEach(function(id){
           var sec = document.getElementById(id); if (sec) sec.style.display = 'none';
           var link = document.querySelector('#subnav a[href="#' + id + '"]'); if (link) link.style.display = 'none';
         });
