@@ -192,7 +192,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
       <div class="eyebrow">Nabídka</div>
       <h2>Nabídka lokalit k prodeji</h2>
       <p class="lead">Vyberte si zavedenou lokalitu, která už funguje a vydělává. Uvedená čísla jsou orientační podle aktuálního provozu.</p>
-      <div id="offers-list" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px;margin-top:10px;">
+      <div id="offers-list" style="display:flex;flex-direction:column;gap:10px;margin-top:10px;">
         <div class="muted">Načítám nabídku…</div>
       </div>
     </section>
@@ -714,18 +714,16 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
         if(!d || !d.ok){ box.innerHTML = '<div class="muted">Nabídku se nepodařilo načíst.</div>'; return; }
         if(!d.locations || !d.locations.length){ box.innerHTML = '<div class="muted">Aktuálně nejsou k dispozici žádné nabízené lokality.</div>'; return; }
         box.innerHTML = d.locations.map(function(o){
-          return '<div style="border:1px solid var(--line);border-radius:16px;padding:16px;background:var(--bg-2)">' +
-            '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px">' +
-              '<div style="font-weight:800;font-size:16px">' + offEsc(o.label||o.code) + '</div>' +
-              '<span style="font-size:12px;color:var(--muted)">' + offEsc(o.version||"") + '</span>' +
+          return '<div style="display:flex;align-items:center;gap:18px;flex-wrap:wrap;border:1px solid var(--line);border-radius:14px;padding:14px 16px;background:var(--bg-2)">' +
+            '<div style="flex:2;min-width:190px">' +
+              '<div style="font-weight:800;font-size:15px">' + offEsc(o.label||o.code) + '</div>' +
+              '<div style="font-size:12px;color:var(--muted)">Verze ' + offEsc(o.version||"—") + '</div>' +
             '</div>' +
-            '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:14px 0">' +
-              offMetric("Cena", offFmt(o.totalPrice)) +
-              offMetric("Roční výnos", offFmt(o.yearlyYield)) +
-              offMetric("ROI (ročně)", (o.roiPct!=null?(String(o.roiPct).replace(".",",")+" %"):"—")) +
-              offMetric("Garance odkupu", (o.guaranteeValue!=null?(offFmt(o.guaranteeValue)+" ("+o.guaranteePct+" %, "+o.guaranteeYears+". rok)"):"—")) +
-            '</div>' +
-            '<button type="button" class="btn" style="width:100%;justify-content:center" onclick="reserveLocation(\'' + offEsc(o.code).replace(/'/g,"&#39;") + '\', this)">Rezervovat</button>' +
+            '<div style="flex:1;min-width:110px">' + offMetric("Cena", offFmt(o.totalPrice)) + '</div>' +
+            '<div style="flex:1;min-width:110px">' + offMetric("Roční výnos", offFmt(o.yearlyYield)) + '</div>' +
+            '<div style="flex:0.7;min-width:80px">' + offMetric("ROI", (o.roiPct!=null?(String(o.roiPct).replace(".",",")+" %"):"—")) + '</div>' +
+            '<div style="flex:1.3;min-width:150px">' + offMetric("Garance odkupu", (o.guaranteeValue!=null?(offFmt(o.guaranteeValue)+" ("+o.guaranteePct+" %, "+o.guaranteeYears+". rok)"):"—")) + '</div>' +
+            '<button type="button" class="btn" style="min-width:130px;justify-content:center" onclick="reserveLocation(\'' + offEsc(o.code).replace(/'/g,"&#39;") + '\', this)">Rezervovat</button>' +
           '</div>';
         }).join("");
       })
