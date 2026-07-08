@@ -182,28 +182,68 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
   </nav>
 
   <div class="wrap">
-    <section class="blk" id="filozofie">
-      <div class="eyebrow">Filozofie</div>
-      <h2>Myšlenka Compoundingu</h2>
-      <p class="lead">Compounding je princip, kdy hodnota neroste skokem, ale sama ze sebe — krok za krokem, rok za rokem. Nezačínáte na zelené louce; vstupujete do místa, které už funguje, má své zákazníky a svůj ověřený obrat. Od prvního dne stavíte na něčem, co stojí.</p>
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin-top:22px">
-        <div style="background:var(--surface,#141417);border:1px solid var(--line,rgba(255,255,255,.10));border-radius:16px;padding:20px">
-          <div style="font-size:22px;margin-bottom:8px">📍</div>
-          <div style="font-weight:700;margin-bottom:6px">Zavedené místo</div>
-          <div style="color:var(--muted,#9b9ba3);font-size:14px;line-height:1.55">Ověřený provoz s reálnou historií, ne příslib. Vyděláváte od začátku, bez fáze náběhu.</div>
+    <section class="blk phil" id="filozofie">
+      <style>
+        #filozofie.phil{position:relative;overflow:hidden;border-radius:22px;padding:48px 40px 40px;background:radial-gradient(120% 95% at 92% -5%, rgba(201,162,75,.22) 0%, rgba(201,162,75,.06) 32%, rgba(15,15,17,0) 62%), linear-gradient(180deg,#0d0d0f 0%,#131316 100%);border:1px solid rgba(201,162,75,.18)}
+        #filozofie.phil::before{content:"";position:absolute;top:-140px;right:-70px;width:440px;height:440px;background:radial-gradient(circle,rgba(246,230,173,.32) 0%,rgba(201,162,75,.10) 38%,rgba(0,0,0,0) 70%);pointer-events:none}
+        .phil>*{position:relative}
+        .phil-eyebrow{font-size:12px;letter-spacing:.32em;text-transform:uppercase;color:var(--gold);font-weight:600;margin-bottom:14px}
+        .phil-title{font-size:clamp(40px,7.5vw,86px);line-height:.92;font-weight:800;letter-spacing:-.01em;margin:0 0 20px;text-transform:uppercase;color:#fff}
+        .phil-title .g{background:var(--gold-grad);-webkit-background-clip:text;background-clip:text;color:transparent;display:block}
+        .phil-sub{font-size:clamp(18px,2.5vw,27px);font-weight:600;color:#fff;margin:0 0 22px}
+        .phil-sub .g{color:var(--gold-soft)}
+        .phil-body{max-width:640px;color:#cfcfd6;font-size:16px;line-height:1.7;margin:0 0 22px}
+        .phil-body .g{color:var(--gold-soft);font-weight:600}
+        .phil-slogan{font-size:clamp(13px,1.7vw,16px);letter-spacing:.14em;text-transform:uppercase;color:var(--gold);font-weight:700;margin:0 0 36px}
+        .phil-slogan .w{color:#fff}
+        .phil-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:18px}
+        .phil-card{background:rgba(20,20,23,.72);border:1px solid rgba(201,162,75,.20);border-radius:18px;padding:30px 24px;text-align:center;transition:border-color .2s,transform .2s}
+        .phil-card:hover{border-color:rgba(201,162,75,.5);transform:translateY(-3px)}
+        .phil-ic{width:66px;height:66px;border-radius:50%;border:1.5px solid rgba(201,162,75,.5);display:flex;align-items:center;justify-content:center;margin:0 auto 16px;color:var(--gold-soft)}
+        .phil-ic svg{width:30px;height:30px}
+        .phil-num{font-size:13px;letter-spacing:.22em;color:var(--gold);font-weight:700;margin-bottom:5px}
+        .phil-ctitle{font-size:17px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#fff;margin-bottom:12px}
+        .phil-cbody{color:#b4b4bc;font-size:14.5px;line-height:1.6;margin-bottom:18px}
+        .phil-arrow{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--gold);font-weight:700;line-height:1.5}
+        .phil-arrow .w{color:#fff}
+        .phil-foot{display:flex;align-items:center;gap:20px;margin-top:36px;padding-top:28px;border-top:1px solid rgba(201,162,75,.18)}
+        .phil-foot .star{flex:0 0 auto;width:46px;height:46px;color:var(--gold-soft)}
+        .phil-foot .t{font-size:clamp(13px,1.7vw,16px);letter-spacing:.07em;text-transform:uppercase;color:#c9c9d0;font-weight:600;line-height:1.55}
+        .phil-foot .t .g{color:var(--gold)}
+        @media(max-width:600px){#filozofie.phil{padding:32px 20px}.phil-foot{flex-direction:column;text-align:center;gap:14px}}
+      </style>
+      <div class="phil-eyebrow">Filozofie Compoundera</div>
+      <h2 class="phil-title">Myšlenka <span class="g">Compoundera</span></h2>
+      <p class="phil-sub">Compounding není štěstí. Je to <span class="g">rozhodnutí</span>.</p>
+      <p class="phil-body">Compounding je princip, kdy hodnota neroste skokem, ale sama ze sebe — <span class="g">krok za krokem, rok za rokem</span>. Nezačínáte na zelené louce; vstupujete do místa, které už funguje, má své zákazníky a svůj ověřený obrat. Od prvního dne stavíte na něčem, co stojí.</p>
+      <p class="phil-slogan">Správná rozhodnutí dnes vytvářejí <span class="w">svobodu</span> zítra.</p>
+      <div class="phil-grid">
+        <div class="phil-card">
+          <div class="phil-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s7-6.4 7-11.5A7 7 0 0 0 5 9.5C5 14.6 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.6"/></svg></div>
+          <div class="phil-num">01</div>
+          <div class="phil-ctitle">Zavedené místo</div>
+          <div class="phil-cbody">Nevytváříme od nuly. Vstupujeme tam, kde už to funguje — ověřený provoz, reálná historie, skuteční zákazníci.</div>
+          <div class="phil-arrow">→ Nestavíme sny. <span class="w">Navazujeme na realitu.</span></div>
         </div>
-        <div style="background:var(--surface,#141417);border:1px solid var(--line,rgba(255,255,255,.10));border-radius:16px;padding:20px">
-          <div style="font-size:22px;margin-bottom:8px">📈</div>
-          <div style="font-weight:700;margin-bottom:6px">Hodnota roste sama</div>
-          <div style="color:var(--muted,#9b9ba3);font-size:14px;line-height:1.55">Výnos, který se opakuje a znovu investuje. Malé kroky se v čase skládají do velkého celku.</div>
+        <div class="phil-card">
+          <div class="phil-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 17 9 11 13 15 21 6"/><polyline points="15 6 21 6 21 12"/></svg></div>
+          <div class="phil-num">02</div>
+          <div class="phil-ctitle">Hodnota roste sama</div>
+          <div class="phil-cbody">Výnos, který se opakuje a znovu investuje. Malé kroky se v čase skládají do velkého celku.</div>
+          <div class="phil-arrow">→ <span class="w">Krok za krokem. Rok za rokem.</span></div>
         </div>
-        <div style="background:var(--surface,#141417);border:1px solid var(--line,rgba(255,255,255,.10));border-radius:16px;padding:20px">
-          <div style="font-size:22px;margin-bottom:8px">🕊️</div>
-          <div style="font-weight:700;margin-bottom:6px">Svoboda</div>
-          <div style="color:var(--muted,#9b9ba3);font-size:14px;line-height:1.55">Aktivum, které pracuje za vás. O provoz se postaráme my — vy sklízíte výsledek.</div>
+        <div class="phil-card">
+          <div class="phil-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z"/><line x1="16" y1="8" x2="2" y2="22"/><line x1="17.5" y1="15" x2="9" y2="15"/></svg></div>
+          <div class="phil-num">03</div>
+          <div class="phil-ctitle">Svoboda</div>
+          <div class="phil-cbody">Aktivum, které pracuje za vás. O provoz se postaráme my — vy sklízíte výsledek.</div>
+          <div class="phil-arrow">→ Výsledek je čas. <span class="w">A čas je svoboda.</span></div>
         </div>
       </div>
-      <p class="lead" style="margin-top:22px;color:var(--muted,#9b9ba3)">Až budete chtít vidět konkrétní ekonomiku a nabídku lokalit, rádi vám další sekce odemkneme.</p>
+      <div class="phil-foot">
+        <svg class="star" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="12" cy="12" r="10"/><polygon points="12 4 13.7 10.3 20 12 13.7 13.7 12 20 10.3 13.7 4 12 10.3 10.3" fill="currentColor" stroke="none"/></svg>
+        <div class="t">Až budete chtít vidět konkrétní ekonomiku a nabídku lokalit, <span class="g">rádi vám další sekci odemkneme.</span></div>
+      </div>
     </section>
     <section class="blk" id="ekonomika">
       <div class="eyebrow" data-i18n="p.eko.eyebrow">Economics</div>
