@@ -765,6 +765,8 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
         var link = document.querySelector('#subnav a[href="#' + href + '"]');
         if (link) link.style.display = (ALLOWED.indexOf(NAV_GROUP[href]) !== -1) ? '' : 'none';
       });
+      // Výchozí stránka po přihlášení: Filozofie (taby přepínají jednotlivé stránky)
+      pShowPage('filozofie');
       pBuildSelect(pDetect());
       pSetLang(pDetect(), function(){
         document.getElementById("hi").textContent = pT("p.hi") + (first ? (", " + first) : "");
@@ -1245,14 +1247,36 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
     if (send) send.addEventListener("click", submit);
     if (phone) phone.addEventListener("keydown", function(e){ if (e.key === "Enter"){ e.preventDefault(); submit(); } });
   }
+  // Stránky (taby): každý nav odkaz = samostatná stránka, zobrazí se jen jedna.
+  var PAGE_OF = {
+    filozofie:'filozofie',
+    ekonomika:'provozovatel',
+    nabidka:'investor',
+    navratnost:'distributor', milniky:'distributor', parametry:'distributor',
+    galerie:'distributor', pripojky:'distributor', pudorysy:'distributor',
+    distribuce:'distributor', lokalita:'distributor'
+  };
+  var NAVHREF_PAGE = { filozofie:'filozofie', ekonomika:'provozovatel', nabidka:'investor', navratnost:'distributor' };
+  function pShowPage(page){
+    Object.keys(PAGE_OF).forEach(function(id){
+      var el = document.getElementById(id);
+      if (el) el.style.display = (PAGE_OF[id] === page) ? '' : 'none';
+    });
+    document.querySelectorAll('#subnav a').forEach(function(a){
+      var href = (a.getAttribute('href')||'').replace('#','');
+      a.classList.toggle('active', NAVHREF_PAGE[href] === page);
+    });
+    try { window.scrollTo(0,0); } catch(e){}
+  }
   function initNav(){
-    var links = Array.prototype.slice.call(document.querySelectorAll(".subnav a"));
-    var secs = links.map(function(a){ return document.querySelector(a.getAttribute("href")); });
-    window.addEventListener("scroll", function(){
-      var y = window.scrollY + 120; var idx = 0;
-      secs.forEach(function(s,i){ if (s && s.offsetTop <= y) idx = i; });
-      links.forEach(function(a,i){ a.classList.toggle("active", i === idx); });
-    }, { passive:true });
+    Array.prototype.slice.call(document.querySelectorAll('#subnav a')).forEach(function(a){
+      a.addEventListener('click', function(e){
+        e.preventDefault();
+        var href = (a.getAttribute('href')||'').replace('#','');
+        var page = NAVHREF_PAGE[href];
+        if (page) pShowPage(page);
+      });
+    });
   }
 
   function initGallery(){
