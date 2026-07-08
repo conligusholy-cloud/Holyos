@@ -2839,7 +2839,7 @@
     }
     function cmpSecBlock(id, csv){
       var have = String(csv||'').split(',').map(function(x){return x.trim();}).filter(Boolean);
-      var defs = [['ekonomika','Ekonomika prádlomatu'],['nabidka','Nabídka lokalit'],['distributor','Distributorský systém']];
+      var defs = [['ekonomika','Provozovatel'],['nabidka','Investor'],['distributor','Distributor']];
       var boxes = defs.map(function(d){
         var ch = have.indexOf(d[0])!==-1 ? ' checked' : '';
         return '<label style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--text);cursor:pointer;"><input type="checkbox" value="'+d[0]+'"'+ch+' onchange="cmpSetSections('+id+', this)"> '+d[1]+'</label>';
