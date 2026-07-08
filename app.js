@@ -592,7 +592,16 @@ app.use((req, res, next) => {
 
 // Servíruj frontend — v development režimu bez cache pro snadnější vývoj
 const isDev = process.env.NODE_ENV !== 'production';
-const staticOpts = isDev ? { maxAge: 0, etag: false, lastModified: false } : { maxAge: '1h' };
+function staticNoCacheAssets(res, filePath) {
+  // HTML/JS/CSS/manifest: no-cache = prohlížeč musí revalidovat (304 když se nic nezměnilo,
+  // jinak čerstvá verze). Zabraňuje tomu, aby po deployi zůstala hodinu stará (rozbitá) verze.
+  if (/\.(html?|js|css|webmanifest)$/i.test(filePath)) {
+    res.setHeader('Cache-Control', 'no-cache');
+  }
+}
+const staticOpts = isDev
+  ? { maxAge: 0, etag: false, lastModified: false }
+  : { maxAge: '1h', etag: true, lastModified: true, setHeaders: staticNoCacheAssets };
 
 // Compounder — brandový PWA web (public/compounder). Web používá relativní cesty,
 // takže funguje dvěma způsoby:
@@ -610,11 +619,7 @@ function reqHostname(req) {
 const compounderStatic = express.static(COMPOUNDER_DIR, {
   ...staticOpts,
   index: false, // index.html servírujeme ručně (no-cache), ne přes directory index
-  setHeaders(res, filePath) {
-    if (filePath.endsWith('sw.js') || filePath.endsWith('.webmanifest')) {
-      res.setHeader('Cache-Control', 'no-cache');
-    }
-  },
+  setHeaders: staticNoCacheAssets,
 });
 function serveCompounderHtml(req, res) {
   res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
