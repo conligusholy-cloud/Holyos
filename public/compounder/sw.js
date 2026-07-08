@@ -1,60 +1,25 @@
-/* COMPOUNDER service worker — offline shell + push notifications (Phase: scaffold).
-   Bump CACHE when static assets change. */
-var CACHE = "compounder-v3";
-var CORE = [
-  "./",
-  "./index.html",
-  "./app.js",
-  "./i18n.js",
-  "./manifest.webmanifest",
-  "./assets/icon.svg"
-];
+/* COMPOUNDER service worker — push notifications + PWA install.
+   Záměrně NEcachuje a NEzasahuje do síťových requestů (portál je online-only);
+   dřívější offline caching způsoboval chyby "Failed to convert value to 'Response'"
+   a zasekával načtení. Vše (navigace, statika, API) řeší prohlížeč nativně. */
+var CACHE = "compounder-v4";
 
 self.addEventListener("install", function(e){
   self.skipWaiting();
-  e.waitUntil(caches.open(CACHE).then(function(c){ return c.addAll(CORE).catch(function(){}); }));
 });
 
 self.addEventListener("activate", function(e){
   e.waitUntil(
     caches.keys().then(function(keys){
-      return Promise.all(keys.filter(function(k){ return k!==CACHE; }).map(function(k){ return caches.delete(k); }));
+      return Promise.all(keys.map(function(k){ return caches.delete(k); }));
     }).then(function(){ return self.clients.claim(); })
   );
 });
 
-self.addEventListener("fetch", function(e){
-  var req = e.request;
-  if (req.method !== "GET") return;
-  var url = new URL(req.url);
-  if (url.protocol !== "http:" && url.protocol !== "https:") return;
-  if (url.origin !== self.location.origin) return;
-  if (url.pathname.indexOf("/api/") === 0) return;
-  if (/(?:^|\/)i18n\.js$/.test(url.pathname) || /\/i18n\/[a-z]{2}\.json$/.test(url.pathname)){
-    e.respondWith(
-      fetch(req).then(function(res){
-        var copy = res.clone();
-        caches.open(CACHE).then(function(c){ return c.put(req, copy); }).catch(function(){});
-        return res;
-      }).catch(function(){ return caches.match(req); })
-    );
-    return;
-  }
-  if (req.mode === "navigate"){
-    e.respondWith(fetch(req).catch(function(){ return caches.match("./index.html"); }));
-    return;
-  }
-  e.respondWith(
-    caches.match(req).then(function(hit){
-      return hit || fetch(req).then(function(res){
-        var copy = res.clone();
-        caches.open(CACHE).then(function(c){ return c.put(req, copy); }).catch(function(){});
-        return res;
-      }).catch(function(){ return hit; });
-    })
-  );
-});
+/* Žádný fetch handler → prohlížeč řeší všechny requesty sám (network),
+   žádné respondWith, žádné cache.put → žádné pády SW. */
 
+/* ---- Push notifications (server sends VAPID push; reaction tracked via notificationclick) ---- */
 self.addEventListener("push", function(e){
   var data = {};
   try{ data = e.data ? e.data.json() : {}; }catch(_){ data = { title:"Compounder", body: e.data && e.data.text() }; }
