@@ -3278,11 +3278,28 @@
     // ─── Smlouvy k lokalitě (📄 u řádku Compounding) ───────────────────────────
     function _kvLocationPrice(k) {
       if (!k) return null;
+      var cs = _compoundingSettings || {};
       var cur = k.currency || 'CZK';
       var rate = (_kvFxRates && _kvFxRates[cur]) ? _kvFxRates[cur] : 1;
-      var months = (_compoundingSettings && Number.isFinite(_compoundingSettings.locationMonths)) ? _compoundingSettings.locationMonths : 12;
-      var v = (typeof k.avgTop3 === 'number' && isFinite(k.avgTop3)) ? k.avgTop3 : 0;
-      return Math.round(v * rate * months);
+      var avg = (typeof k.avgTop3 === 'number' && isFinite(k.avgTop3)) ? k.avgTop3 : 0;
+      if (cs.locationPriceMode === 'roi') {
+        var machine = _kvVerMachine(k.code).machine;
+        if (machine == null) return null;
+        var cfg = _kioskConfig[k.code] || {};
+        var svc = Number.isFinite(cs.servicePct) ? cs.servicePct : 15;
+        var en = Number.isFinite(cs.energyPct) ? cs.energyPct : 9.5;
+        var roi = Number.isFinite(cs.locationRoiPct) ? cs.locationRoiPct : 25;
+        var obratBez = avg / 1.21;
+        var servis = avg * (svc / 100);
+        var najem = (typeof cfg.rentMonthlyCzk === 'number' && isFinite(cfg.rentMonthlyCzk)) ? cfg.rentMonthlyCzk : 0;
+        var energie = obratBez * (en / 100);
+        var cisty = obratBez - servis - najem - energie;
+        var target = cisty * (1200 / (roi > 0 ? roi : 25));
+        var loc = target - machine;
+        return loc > 0 ? Math.round(loc) : 0;
+      }
+      var months = Number.isFinite(cs.locationMonths) ? cs.locationMonths : 12;
+      return Math.round(avg * rate * months);
     }
 
     function _kvVerMachine(code) {

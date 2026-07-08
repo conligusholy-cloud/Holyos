@@ -145,8 +145,6 @@ const SCHEMAS = {
     ]},
     { key: 'price', title: 'Kupní cena', fields: [
       { name: 'price_machine', label: 'Cena stroje (bez DPH)', type: 'text' },
-      { name: 'avg_turnover_vat', label: 'Průměrný obrat s DPH (měsíčně)', type: 'text' },
-      { name: 'location_months', label: 'Počet měsíců (pro cenu lokality)', type: 'text' },
       { name: 'price_location', label: 'Cena lokality (bez DPH)', type: 'text' },
       { name: 'price_total', label: 'Celková cena (bez DPH)', type: 'text' },
       { name: 'reservation_credit', label: 'Odečet rezervačního poplatku', type: 'text' },
@@ -412,7 +410,7 @@ function renderKupni(d) {
     </ol>
     <ol class="letters">
       <li>cena Stroje: <strong>${v(d.price_machine, 12)} Kč</strong> bez DPH;</li>
-      <li>cena Lokality (úplata za převzetí ekonomického užívání Zavedeného provozu), stanovená jako <strong>průměrný obrat s DPH</strong> ${v(d.avg_turnover_vat, 10)} Kč × ${v(d.location_months, 4)} měsíců = <strong>${v(d.price_location, 12)} Kč</strong> bez DPH.</li>
+      <li>cena Lokality (úplata za převzetí ekonomického užívání Zavedeného provozu): <strong>${v(d.price_location, 12)} Kč</strong> bez DPH.</li>
     </ol>
     <ol start="2">
       <li>Celková kupní cena činí <strong>${v(d.price_total, 12)} Kč</strong> bez DPH; k ceně bude připočtena DPH v zákonné výši.</li>
