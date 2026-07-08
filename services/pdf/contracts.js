@@ -164,6 +164,8 @@ const SCHEMAS = {
       { name: 'amortization_pct', label: 'Roční amortizace stroje (%)', type: 'text' },
       { name: 'resale_commission_pct', label: 'Provize za zprostředkování (%)', type: 'text' },
       { name: 'removal_notice_months', label: 'Oznámení o odstranění stroje (měsíců)', type: 'text' },
+      { name: 'buyback_guarantee_pct', label: 'Garance odkupu (% celkové ceny)', type: 'text' },
+      { name: 'buyback_guarantee_years', label: 'Garance odkupu po (letech)', type: 'text' },
     ]},
     { key: 'system', title: 'Systémové služby a podpis', fields: [
       { name: 'service_pct', label: 'Servisní odměna (%)', type: 'text' },
@@ -272,6 +274,8 @@ function buildDefaults(type, site, our) {
       amortization_pct: '10',
       resale_commission_pct: '10',
       removal_notice_months: '3',
+      buyback_guarantee_pct: String(site?._buybackPct != null ? site._buybackPct : 65),
+      buyback_guarantee_years: String(site?._buybackYears != null ? site._buybackYears : 5),
       service_pct: String(site?._servicePct != null ? site._servicePct : 15),
       system_fee: '100 EUR / měsíc',
       place_signed: site?.city || '',
@@ -459,12 +463,14 @@ function renderKupni(d) {
       <li>Provozní režim si kupující zvolí: <strong>a) provoz prostřednictvím prodávajícího</strong> dle samostatné servisní smlouvy — odměna <strong>${v(d.service_pct, 3)} % z obratu</strong>, v níž jsou Systémové služby (poplatek 100 EUR) již zahrnuty; po dohodě lze k této odměně připočítat nájem za místo (dle skutečnosti) a energie (dle aktuální spotřeby). <strong>b) samostatný provoz</strong> — kupující hradí veškeré náklady provozu sám a nad rámec toho poplatek 100 EUR za Systémové služby dle odstavců 1 a 2.</li>
     </ol>
 
-    <h2>Článek X — Předkupní právo a zpětný odkup</h2>
+    <h2>Článek X — Předkupní právo a garance zpětného odkupu</h2>
     <ol>
       <li>Kupující zřizuje ve prospěch prodávajícího <strong>předkupní právo</strong> ke Stroji, a to jak k samotnému Stroji, tak ke Stroji společně s ekonomickým užíváním Lokality („místem"). Zamýšlí-li kupující převést Stroj (samostatně či s místem) na třetí osobu, je povinen jej <strong>nejprve písemně nabídnout prodávajícímu</strong> za podmínek dle odstavce 3.</li>
       <li>Prodávající má na rozhodnutí o využití předkupního práva lhůtu <strong>${v(d.buyback_decision_months, 3)} měsíců</strong> od doručení písemného oznámení kupujícího obsahujícího podstatné náležitosti zamýšleného převodu.</li>
       <li>Kupní cena při zpětném odkupu = <strong>aktuální hodnota Stroje + ${v(d.buyback_key_months, 3)}× průměrný obrat s DPH</strong> (hodnota místa), kde <strong>aktuální hodnota Stroje</strong> = pořizovací cena Stroje snížená o lineární opotřebení <strong>${v(d.amortization_pct, 3)} % ročně</strong> za dobu užívání; při neshodě stran se hodnota Stroje určí znaleckým posudkem, jehož náklady nesou strany rovným dílem.</li>
       <li>Nevyužije-li prodávající předkupní právo, může kupujícímu nabídnout <strong>zprostředkování prodeje Stroje</strong> třetí osobě prostřednictvím systému prodávajícího za provizi <strong>${v(d.resale_commission_pct, 3)} %</strong> z prodejní ceny stanovené dle téhož klíče.</li>
+      <li><strong>Garance zpětného odkupu (opce kupujícího):</strong> kupující je oprávněn (nikoli povinen) požadovat po prodávajícím zpětný odkup Stroje spolu s ekonomickým užíváním Lokality za <strong>${v(d.buyback_guarantee_pct, 3)} %</strong> celkové kupní ceny dle článku IV.</li>
+      <li>Právo dle odstavce 5 lze uplatnit <strong>pouze k ${v(d.buyback_guarantee_years, 2)}. výročí</strong> účinnosti smlouvy. Kupující je povinen prodávajícímu <strong>písemně oznámit, zda garantovaný odkup využije, nejpozději 1 rok před koncem ${v(d.buyback_guarantee_years, 2)}. roku</strong>. Neoznámí-li to v této lhůtě, právo na garantovaný odkup zaniká.</li>
     </ol>
 
     <h2>Článek XI — Ukončení užívacího práva k Lokalitě a relokace</h2>

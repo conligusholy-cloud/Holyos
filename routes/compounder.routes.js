@@ -1371,6 +1371,8 @@ router.get('/contracts/:type(kupni|servisni|rezervacni)/prefill', requireAuth, a
     const ver = String(q.ver || '').slice(0, 4);
     const _cs = await getSetting(COMPOUNDING_SETTINGS_KEY, { type: 'json', defaultValue: COMPOUNDING_SETTINGS_DEFAULT }).catch(() => null);
     const _servicePct = (_cs && Number.isFinite(_cs.servicePct)) ? _cs.servicePct : 15;
+    const _buybackPct = (_cs && Number.isFinite(_cs.buybackPct)) ? _cs.buybackPct : 65;
+    const _buybackYears = (_cs && Number.isFinite(_cs.buybackYears)) ? _cs.buybackYears : 5;
     const pseudoSite = {
       name: code ? ('Lokalita ' + code) : (label || ''),
       address: label, city: '', zip: '', country: 'CZ',
@@ -1381,6 +1383,8 @@ router.get('/contracts/:type(kupni|servisni|rezervacni)/prefill', requireAuth, a
       _version: ver || null,
       _machinePrice: (machineNum != null && isFinite(machineNum)) ? machineNum : null,
       _servicePct,
+      _buybackPct,
+      _buybackYears,
     };
     const our = await getOurCompany().catch(() => null);
     res.json(contracts.getPrefill(type, pseudoSite, our));
