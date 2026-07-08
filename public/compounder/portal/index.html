@@ -692,9 +692,14 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
 
   if (!token) { showDenied(pT("p.login.lead")); return; }
 
+  var _verifyTimer = setTimeout(function(){
+    var g = document.getElementById("gate");
+    if (g && g.style.display !== "none") { showDenied("Ověření trvá déle než obvykle. Obnovte prosím stránku (Ctrl+Shift+R)."); }
+  }, 9000);
   fetch("/api/compounder/portal/session?t=" + encodeURIComponent(token), { credentials:"include" })
     .then(function(r){ return r.json().then(function(j){ return { ok:r.ok, j:j }; }); })
     .then(function(res){
+      clearTimeout(_verifyTimer);
       if (!res.ok || !res.j.ok) { showDenied(); return; }
       localStorage.setItem("compounder.portal.token", token);
       try { history.replaceState({}, "", location.pathname); } catch(e){}
@@ -738,7 +743,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
       loadOffers(token);
       pWatchSections(token);
     })
-    .catch(function(){ showDenied(); });
+    .catch(function(){ clearTimeout(_verifyTimer); showDenied(); });
 
   // Průběžně hlídá, zda admin leadovi neodemkl nové sekce. Když ano, zobrazí
   // banner s výzvou k obnovení stránky (nové sekce se načtou až po reloadu).

@@ -1,6 +1,6 @@
 /* COMPOUNDER service worker — offline shell + push notifications (Phase: scaffold).
    Bump CACHE when static assets change. */
-var CACHE = "compounder-v2";
+var CACHE = "compounder-v3";
 var CORE = [
   "./",
   "./index.html",
@@ -27,21 +27,19 @@ self.addEventListener("fetch", function(e){
   var req = e.request;
   if (req.method !== "GET") return;
   var url = new URL(req.url);
-  // never cache API calls (registration / analytics / push)
+  if (url.protocol !== "http:" && url.protocol !== "https:") return;
+  if (url.origin !== self.location.origin) return;
   if (url.pathname.indexOf("/api/") === 0) return;
-  // i18n (i18n.js + i18n/<code>.json) — VŽDY network-first, ať se překlady po deployi
-  // ihned aktualizují (jinak SW servíruje starou verzi a Portal ukáže syrové klíče).
   if (/(?:^|\/)i18n\.js$/.test(url.pathname) || /\/i18n\/[a-z]{2}\.json$/.test(url.pathname)){
     e.respondWith(
       fetch(req).then(function(res){
         var copy = res.clone();
-        caches.open(CACHE).then(function(c){ c.put(req, copy); });
+        caches.open(CACHE).then(function(c){ return c.put(req, copy); }).catch(function(){});
         return res;
       }).catch(function(){ return caches.match(req); })
     );
     return;
   }
-  // network-first for the document, cache-first for static assets
   if (req.mode === "navigate"){
     e.respondWith(fetch(req).catch(function(){ return caches.match("./index.html"); }));
     return;
@@ -50,14 +48,13 @@ self.addEventListener("fetch", function(e){
     caches.match(req).then(function(hit){
       return hit || fetch(req).then(function(res){
         var copy = res.clone();
-        caches.open(CACHE).then(function(c){ c.put(req, copy); });
+        caches.open(CACHE).then(function(c){ return c.put(req, copy); }).catch(function(){});
         return res;
       }).catch(function(){ return hit; });
     })
   );
 });
 
-/* ---- Push notifications (server sends VAPID push; reaction tracked via notificationclick) ---- */
 self.addEventListener("push", function(e){
   var data = {};
   try{ data = e.data ? e.data.json() : {}; }catch(_){ data = { title:"Compounder", body: e.data && e.data.text() }; }
@@ -78,7 +75,6 @@ self.addEventListener("notificationclick", function(e){
   e.notification.close();
   var d = e.notification.data || {};
   var url = d.url || "./";
-  // report the reaction back to the backend so we know it was opened / which action
   var beacon = fetch("/api/compounder/push-reaction", {
     method:"POST", headers:{"Content-Type":"application/json"}, keepalive:true,
     body: JSON.stringify({ id:d.id||null, action:e.action||"open", ts:Date.now() })
