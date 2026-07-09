@@ -2319,6 +2319,62 @@ router.post('/contracts/public/:token', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// POST veřejné (bez auth) — protistrana ELEKTRONICKY PODEPÍŠE (SES). Uloží podpis
+// (obrázek), jméno, souhlas, čas, IP, user-agent a hash obsahu → stav 'podepsano'.
+router.post('/contracts/public/:token/sign', async (req, res, next) => {
+  try {
+    const row = await prisma.compoundingContract.findUnique({ where: { share_token: String(req.params.token || '') } });
+    if (!row) return res.status(404).json({ error: 'Odkaz nenalezen' });
+    if (row.share_expires_at && new Date(row.share_expires_at) < new Date()) {
+      return res.status(410).json({ error: 'Platnost odkazu vypršela' });
+    }
+    if (row.status === 'podepsano') return res.status(409).json({ error: 'Smlouva už je podepsaná.' });
+    const b = req.body || {};
+    const signerName = String(b.signer_name || '').trim().slice(0, 200);
+    const signature = String(b.signature || '');
+    const consent = !!b.consent;
+    if (!consent) return res.status(400).json({ error: 'Chybí souhlas s podpisem.' });
+    if (!signerName) return res.status(400).json({ error: 'Chybí jméno podepisujícího.' });
+    if (!/^data:image\/(png|jpeg);base64,/.test(signature) || signature.length > 400000) {
+      return res.status(400).json({ error: 'Neplatný nebo příliš velký podpis.' });
+    }
+    // Sloučení případně došlých polí hlavičky (jako u /public POST)
+    const groups = contracts.SCHEMAS[row.type] || [];
+    const buyerGroup = groups.find((g) => g.key === 'buyer');
+    const allowed = new Set((buyerGroup ? buyerGroup.fields : []).map((f) => f.name));
+    const incoming = (b.fields && typeof b.fields === 'object') ? b.fields : {};
+    const merged = Object.assign({}, row.fields || {});
+    Object.keys(incoming).forEach((k) => { if (allowed.has(k)) merged[k] = String(incoming[k] == null ? '' : incoming[k]).slice(0, 500); });
+    // Hash obsahu smlouvy (bez podpisu) jako důkaz integrity.
+    const noSig = Object.assign({}, merged); delete noSig._signature;
+    const contentHash = crypto.createHash('sha256').update(JSON.stringify({ type: row.type, kiosk: row.kiosk_code, fields: noSig })).digest('hex');
+    const signedAt = new Date();
+    merged._signature = {
+      name: signerName,
+      image: signature,
+      signed_at: signedAt.toISOString(),
+      ip: (req.headers['x-forwarded-for'] || req.socket && req.socket.remoteAddress || '').toString().split(',')[0].trim().slice(0, 64),
+      user_agent: String(req.headers['user-agent'] || '').slice(0, 300),
+      content_hash: contentHash,
+      method: 'SES-drawn',
+    };
+    const signedRow = await prisma.compoundingContract.update({
+      where: { id: row.id },
+      data: { fields: merged, status: 'podepsano', filled_at: row.filled_at || signedAt, signed_at: signedAt },
+    });
+    compounderNotify.notifyContractEvent(prisma, { contract: signedRow, event: 'signed' }).catch(() => {});
+    try {
+      const ids = await resolveOwnerUserIds();
+      const label = (contracts.TYPE_LABEL[row.type] || 'Smlouva') + ' — ' + (row.kiosk_code || '');
+      const link = (getAppUrl() || '') + '/modules/prodejni-objednavky/index.html';
+      for (const uid of ids) {
+        await createNotification({ userId: uid, type: 'contract_signed', title: 'Podepsaná smlouva', body: label + ' — protistrana elektronicky podepsala.', link }).catch(() => {});
+      }
+    } catch (e) { console.error('[contract-sign notify]', e); }
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
 
 // ─── Portál: nabídka lokalit k prodeji (jen forSale, kurátorovaná ekonomika) ──
 let _eurRate = null, _eurRateAt = 0;

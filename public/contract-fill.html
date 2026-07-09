@@ -33,7 +33,17 @@
       <h1 id="title">Vyplnění údajů ke smlouvě</h1>
       <p class="sub" id="subtitle"></p>
       <form id="form"></form>
-      <button id="submit" type="button" onclick="submitForm()">Odeslat údaje</button>
+      <div id="signblock">
+        <label>Podpis</label>
+        <div style="background:#fff;border-radius:8px;position:relative">
+          <canvas id="sigpad" style="width:100%;height:180px;display:block;touch-action:none;border-radius:8px"></canvas>
+          <button type="button" id="sigclear" onclick="clearSig()" style="position:absolute;top:6px;right:6px;width:auto;margin:0;padding:5px 10px;font-size:12px;background:#0f1115;color:#e8e8ea;border-radius:6px">Vymazat</button>
+        </div>
+        <label>Jméno podepisujícího</label>
+        <input id="signer" type="text" placeholder="Jméno a příjmení">
+        <label style="display:flex;align-items:flex-start;gap:10px;color:#e8e8ea;font-size:13px;margin-top:12px;cursor:pointer"><input type="checkbox" id="consent" style="width:auto;margin-top:2px"> Prohlašuji, že jsem se seznámil(a) s obsahem smlouvy a elektronicky ji podepisuji.</label>
+      </div>
+      <button id="submit" type="button" onclick="signContract()">Podepsat smlouvu</button>
       <div class="msg" id="msg"></div>
     </div>
     <div id="done" class="done" style="display:none;">
@@ -63,6 +73,12 @@
       if (r.status === 410) { fail('Platnost odkazu vypršela. Požádejte o nový.'); return; }
       if (!r.ok) { fail('Odkaz je neplatný nebo byl zrušen.'); return; }
       var d = await r.json();
+      if (d.status === 'podepsano') {
+        hide('loading');
+        document.getElementById('done').querySelector('.sub').textContent = 'Tato smlouva už byla elektronicky podepsána. Děkujeme.';
+        show('done');
+        return;
+      }
       schemaFields = d.fields || [];
       document.getElementById('title').textContent = d.typeLabel || 'Smlouva';
       document.getElementById('subtitle').textContent = (d.kioskLabel ? (d.kioskLabel + ' — ') : '') + 'Vyplňte prosím své identifikační údaje.';
@@ -73,6 +89,7 @@
           '<input id="fld_' + esc(f.name) + '" type="text" value="' + esc(val) + '">';
       }).join('');
       hide('loading'); show('content');
+      initSigPad();
     } catch (e) { fail('Nepodařilo se načíst formulář.'); }
   }
 
@@ -81,27 +98,56 @@
     document.getElementById('card').innerHTML = '<h1>Něco se nepovedlo</h1><p class="sub err">' + esc(text) + '</p>';
   }
 
-  window.submitForm = async function () {
+  // ── Podpisové pole (canvas) ──
+  var sigCtx = null, sigDrawing = false, sigDirty = false, sigCanvas = null;
+  window.initSigPad = function () {
+    sigCanvas = document.getElementById('sigpad');
+    if (!sigCanvas) return;
+    var ratio = window.devicePixelRatio || 1;
+    var rect = sigCanvas.getBoundingClientRect();
+    sigCanvas.width = Math.round(rect.width * ratio);
+    sigCanvas.height = Math.round(180 * ratio);
+    sigCtx = sigCanvas.getContext('2d');
+    sigCtx.scale(ratio, ratio);
+    sigCtx.strokeStyle = '#111'; sigCtx.lineWidth = 2.2; sigCtx.lineCap = 'round'; sigCtx.lineJoin = 'round';
+    function pos(e) {
+      var r = sigCanvas.getBoundingClientRect();
+      var t = (e.touches && e.touches[0]) ? e.touches[0] : e;
+      return { x: t.clientX - r.left, y: t.clientY - r.top };
+    }
+    function start(e) { e.preventDefault(); sigDrawing = true; var p = pos(e); sigCtx.beginPath(); sigCtx.moveTo(p.x, p.y); }
+    function move(e) { if (!sigDrawing) return; e.preventDefault(); var p = pos(e); sigCtx.lineTo(p.x, p.y); sigCtx.stroke(); sigDirty = true; }
+    function end() { sigDrawing = false; }
+    sigCanvas.addEventListener('mousedown', start); sigCanvas.addEventListener('mousemove', move); window.addEventListener('mouseup', end);
+    sigCanvas.addEventListener('touchstart', start, { passive: false }); sigCanvas.addEventListener('touchmove', move, { passive: false }); sigCanvas.addEventListener('touchend', end);
+  };
+  window.clearSig = function () { if (sigCtx && sigCanvas) { sigCtx.clearRect(0, 0, sigCanvas.width, sigCanvas.height); sigDirty = false; } };
+
+  window.signContract = async function () {
     var btn = document.getElementById('submit');
     var msg = document.getElementById('msg');
     msg.textContent = '';
+    var signer = (document.getElementById('signer').value || '').trim();
+    var consent = document.getElementById('consent').checked;
+    if (!sigDirty) { msg.className = 'msg err'; msg.textContent = 'Prosím nakreslete svůj podpis.'; return; }
+    if (!signer) { msg.className = 'msg err'; msg.textContent = 'Zadejte prosím jméno podepisujícího.'; return; }
+    if (!consent) { msg.className = 'msg err'; msg.textContent = 'Potvrďte prosím souhlas s podpisem.'; return; }
     var fields = {};
-    schemaFields.forEach(function (f) {
-      var el = document.getElementById('fld_' + f.name);
-      if (el) fields[f.name] = el.value;
-    });
-    btn.disabled = true; btn.textContent = 'Odesílám…';
+    schemaFields.forEach(function (f) { var el = document.getElementById('fld_' + f.name); if (el) fields[f.name] = el.value; });
+    var signature = sigCanvas.toDataURL('image/png');
+    btn.disabled = true; btn.textContent = 'Podepisuji…';
     try {
-      var r = await fetch(API, {
+      var r = await fetch(API + '/sign', {
         method: 'POST', credentials: 'omit',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fields: fields }),
+        body: JSON.stringify({ fields: fields, signer_name: signer, signature: signature, consent: true }),
       });
-      if (!r.ok) throw new Error('http');
+      if (!r.ok) { var d = await r.json().catch(function(){return{};}); throw new Error(d.error || 'http'); }
+      document.getElementById('done').querySelector('.sub').textContent = 'Smlouva byla elektronicky podepsána. Děkujeme! Kopii vám zašleme e-mailem.';
       hide('content'); show('done');
     } catch (e) {
-      btn.disabled = false; btn.textContent = 'Odeslat údaje';
-      msg.className = 'msg err'; msg.textContent = 'Odeslání selhalo, zkuste to prosím znovu.';
+      btn.disabled = false; btn.textContent = 'Podepsat smlouvu';
+      msg.className = 'msg err'; msg.textContent = 'Podpis se nezdařil: ' + (e.message || 'zkuste to prosím znovu.');
     }
   };
 
