@@ -218,7 +218,7 @@
     return '<div class="card'+(open?' open':'')+(laToday?' today':'')+'" id="card-'+l.id+'">' +
       '<div class="card-main" onclick="toggle('+l.id+')">' +
         '<span class="dot" style="background:'+st.c+'"></span>' +
-        '<div class="card-body"><div class="card-name">'+esc(l.name||l.email)+'</div><div class="card-sub">'+(subHtml||'—')+'</div></div>' +
+        '<div class="card-body"><div class="card-name">'+esc(l.name||l.email)+'</div><div class="card-sub">'+(subHtml||'—')+'</div>'+(laToday?'<div style="font-size:11px;color:#22c55e;margin-top:2px">Poslední aktivita: '+fmtD(laDate)+'</div>':'')+'</div>' +
         '<span class="badge" style="background:'+st.c+'22;color:'+st.c+'">'+st.l+'</span>' +
         '<span class="gear" onclick="event.stopPropagation();openEdit('+l.id+')" title="Upravit údaje kontaktu">⚙️</span>' +
         '<span class="chev">▸</span>' +
