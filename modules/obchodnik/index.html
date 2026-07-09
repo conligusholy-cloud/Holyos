@@ -268,7 +268,11 @@
     try {
       var r = await api('/leads', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ name:name, email:email, lang:lang, phone:phone }) });
       var j = await r.json().catch(function(){return {};});
-      if (!r.ok){ errEl.textContent = j.error || ('Chyba HTTP '+r.status); return; }
+      if (!r.ok){
+        var msg = esc(j.error || ('Chyba HTTP '+r.status));
+        if (j.owner_email){ msg += ' <a href="mailto:'+esc(j.owner_email)+'?subject='+encodeURIComponent('Compounder kontakt: '+email)+'" style="color:var(--primary);text-decoration:underline">Napsat kolegovi</a>'; }
+        errEl.innerHTML = msg; return;
+      }
       document.getElementById('a-name').value=''; document.getElementById('a-email').value=''; document.getElementById('a-phone').value='';
       closeAdd(); await load();
     } catch(e){ errEl.textContent='Nepodařilo se uložit.'; }

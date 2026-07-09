@@ -615,9 +615,29 @@ router.post('/leads', requireAuth, async (req, res, next) => {
     const phone = b.phone ? String(b.phone).trim().slice(0, 40) : null;
     if (!email || email.indexOf('@') === -1) return res.status(400).json({ error: 'Neplatný e-mail' });
     const existing = await prisma.compounderLead.findFirst({
-      where: { email: { equals: email, mode: 'insensitive' } }, select: { id: true },
+      where: { email: { equals: email, mode: 'insensitive' } },
+      select: { id: true, owner_person_id: true },
     });
-    if (existing) return res.status(409).json({ error: 'Tento e-mail už je zaregistrovaný.', id: existing.id });
+    if (existing) {
+      // Zjisti, kdo kontakt spravuje (aby se obchodníci mohli domluvit).
+      let owner = null;
+      if (existing.owner_person_id) {
+        owner = await prisma.person.findUnique({
+          where: { id: existing.owner_person_id },
+          select: { first_name: true, last_name: true, email: true },
+        });
+      }
+      const ownerName = owner ? ((owner.first_name || '') + ' ' + (owner.last_name || '')).trim() : null;
+      return res.status(409).json({
+        error: ownerName
+          ? ('Tento kontakt už spravuje ' + ownerName + '. Domluv se prosím s ním.')
+          : 'Tento e-mail už je v systému (zatím bez přiřazeného obchodníka).',
+        id: existing.id,
+        owner_person_id: existing.owner_person_id || null,
+        owner_name: ownerName,
+        owner_email: owner ? owner.email : null,
+      });
+    }
     const myPersonId = (req.user && req.user.person) ? req.user.person.id : null;
     const lead = await prisma.compounderLead.create({
       data: {
