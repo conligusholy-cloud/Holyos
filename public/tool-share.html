@@ -354,7 +354,6 @@
     <div class="left-info" id="share-toolbar-info">
       💡 Žlutá pole můžete <strong>libovolně měnit</strong> a zkoušet různé scénáře. Ostatní hodnoty se přepočítají automaticky.
     </div>
-    <span class="sh-cur" id="sh-cur" style="display:none;align-items:center;gap:5px;margin-right:6px;"></span>
     <button class="btn btn-sm" id="btn-reset" onclick="resetToDefaults()">↺ Výchozí</button>
     <button class="btn btn-sm" id="btn-pdf" onclick="downloadPdf()">📄 Stáhnout PDF</button>
     <button class="btn btn-primary btn-sm" id="btn-save" onclick="openSaveModal()">💾 Uložit můj model</button>
@@ -548,10 +547,9 @@
         applyChromeTranslations();
         // Re-render uložených modelů (formátování data podle locale)
         if (SHARE_DATA && SHARE_DATA.models) renderModelsStrip(SHARE_DATA.models);
-        // Re-mount tool — vyrenderuje sekce s novými stringy (měna se resetuje na €)
+        // Re-mount tool — vyrenderuje sekce s novými stringy (měnu drží nástroj sám)
         if (SHARE_DATA && toolApi()) mountTool(SHARE_DATA);
-        SH_CUR = 'EUR';
-        shRenderCur();
+        shLoadRates();
         logEvent('viewed', { language: code });
       }
 
@@ -652,7 +650,7 @@
       };
       function shLoadRates() {
         fetch('/api/compounder/fx-rates').then(function (r) { return r.json(); }).then(function (j) {
-          if (j && j.rates) SH_RATES = Object.assign({ CZK: 1 }, j.rates);
+          if (j && j.rates) { var API = toolApi(); if (API && typeof API.setRates === 'function') API.setRates(j.rates); }
         }).catch(function () {});
       }
 
@@ -683,7 +681,6 @@
             renderModelsStrip(data.models);
             mountTool(data);
             shLoadRates();
-            shRenderCur();
           })
           .catch(function (e) {
             showError(e.message || tt('Odkaz nelze otevřít'));

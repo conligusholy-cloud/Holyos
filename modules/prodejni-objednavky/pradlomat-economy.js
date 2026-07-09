@@ -112,6 +112,18 @@
   ];
   // Nahradí symbol '€' v jednotce aktuální měnou (např. '€/měs' → 'Kč/měs').
   function curUnit(u) { return (u == null ? '' : String(u)).replace('€', CUR.sym); }
+  // Kurzy (CZK za 1 jednotku) — přepíše host přes setRates(); symboly měn.
+  var CUR_RATES = { CZK: 1, EUR: 25, USD: 23, GBP: 29 };
+  var CUR_SYMS = { CZK: 'Kč', EUR: '€', USD: '$', GBP: '£' };
+  // Přepínač měny do vlastní lišty nástroje (vedle „Tovární hodnoty").
+  function curButtons() {
+    var html = '<span style="font-size:12px;color:var(--text2);margin:0 4px 0 2px">' + _t('Měna') + ':</span>';
+    ['CZK', 'EUR', 'USD', 'GBP'].forEach(function (c) {
+      var on = c === CUR.code;
+      html += '<button type="button" class="btn btn-sm" onclick="window.PradlomatTool._setCur(\'' + c + '\')" style="padding:6px 10px;' + (on ? 'background:#c9a24b;border-color:#c9a24b;color:#241c05;font-weight:700;' : '') + '">' + CUR_SYMS[c] + '</button>';
+    });
+    return html;
+  }
 
   // ─────────────────────────────────────────────────────────────────
   // 2) Výpočetní engine (přepis všech 40 formulí z Excelu)
@@ -436,6 +448,7 @@
         '<span class="pe-legend"><span class="pe-sw"></span> ' + _t('Editovatelné') + '</span>' +
         '<span class="pe-legend"><span class="pe-sw ro"></span> ' + _t('Vypočítané') + '</span>' +
         '<div style="flex:1"></div>' +
+        '<span class="pe-cur" style="display:inline-flex;align-items:center;gap:4px;margin-right:6px">' + curButtons() + '</span>' +
         saveDefaultsBtn +
         '<button class="btn btn-secondary btn-sm" onclick="window.PradlomatTool.resetDefaults()">' + _t('↺ Tovární hodnoty') + '</button>' +
         '<button class="btn btn-secondary btn-sm pe-btn-json" onclick="window.PradlomatTool.exportJSON()">' + _t('⬇ Stáhnout model (JSON)') + '</button>' +
@@ -1033,6 +1046,17 @@
     if (ROOT) { ROOT.innerHTML = buildHTML(); bindInputs(); }
   }
   function getCurrency() { return { code: CUR.code, sym: CUR.sym }; }
+  // Klik na měnové tlačítko v liště nástroje — přepočte poměrem kurzů.
+  function _setCur(code) {
+    if (!CUR_SYMS[code] || code === CUR.code) return;
+    var ratio = (CUR_RATES[CUR.code] || 1) / (CUR_RATES[code] || 1);
+    setCurrency(code, CUR_SYMS[code], ratio);
+  }
+  // Host dodá aktuální kurzy ČNB; překreslí lištu (aktivní tlačítko).
+  function setRates(rates) {
+    if (rates && typeof rates === 'object') CUR_RATES = Object.assign({ CZK: 1 }, rates);
+    if (ROOT) { ROOT.innerHTML = buildHTML(); bindInputs(); }
+  }
 
   function exportJSON() {
     var data = { inputs: STATE, computed: compute(STATE), generated_at: new Date().toISOString(), tool: 'pradlomat-economy', version: 1 };
@@ -1060,6 +1084,8 @@
     resetDefaults: resetDefaults,
     setCurrency: setCurrency,
     getCurrency: getCurrency,
+    _setCur: _setCur,
+    setRates: setRates,
     exportJSON: exportJSON,
     getState: getState,
     getComputed: getComputed,
