@@ -653,9 +653,6 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
 
   <footer>
     <div data-i18n="p.footer">COMPOUNDER · Best Series — We build Compounder Machines. · compounder.world</div>
-    <div style="margin-top:10px;font-size:13px;">
-      <span data-i18n="contact.owner">Jan Holý — Co-owner</span> · <a href="tel:+420733105479">+420 733 105 479</a> · <a href="mailto:jan.holy@bestseries.cz">jan.holy@bestseries.cz</a>
-    </div>
   </footer>
 </div>
 
@@ -1119,8 +1116,10 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
           '<div style="font-weight:700;font-size:15px;margin-top:2px">' + offMoney(o.guaranteeValue) + '</div>' +
           (o.guaranteeValue!=null ? '<div style="font-size:11px;color:var(--muted);font-weight:400;margin-top:2px">'+o.guaranteePct+' %, '+o.guaranteeYears+'. rok</div>' : '') +
         '</div>' +
-        '<div style="flex:1.2;min-width:130px"><div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Celkem za ' + o.guaranteeYears + ' let</div><div style="font-weight:800;font-size:15px;margin-top:2px;color:var(--gold-soft)">' + (o.guaranteeValue!=null ? offMoney((o.yearlyYield||0)*o.guaranteeYears + o.guaranteeValue) : "—") + '</div></div>' +
-        btn +
+        '<div style="flex:1.2;min-width:140px;display:flex;flex-direction:column;gap:10px;align-items:flex-start">' +
+          '<div><div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Celkem za ' + o.guaranteeYears + ' let</div><div style="font-weight:800;font-size:15px;margin-top:2px;color:var(--gold-soft)">' + (o.guaranteeValue!=null ? offMoney((o.yearlyYield||0)*o.guaranteeYears + o.guaranteeValue) : "—") + '</div></div>' +
+          btn +
+        '</div>' +
       '</div>';
     }).join("");
     if(!window._offCountTimer){ window._offCountTimer = setInterval(offTickCountdowns, 1000); }
