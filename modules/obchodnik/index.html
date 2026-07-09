@@ -72,7 +72,10 @@
         <h1>Moje kontakty</h1>
         <div class="who" id="who">…</div>
       </div>
-      <button class="logout" onclick="doLogout()">Odhlásit</button>
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="logout" onclick="openSettings()" title="Nastavení notifikací">⚙️ Notifikace</button>
+        <button class="logout" onclick="doLogout()">Odhlásit</button>
+      </div>
     </div>
     <input class="search" id="search" placeholder="Hledat jméno / e-mail…" oninput="onSearch()">
   </div>
@@ -112,6 +115,21 @@
         <button class="btn btn-p" style="flex:2" id="e-save" onclick="saveEdit()">Uložit údaje</button>
       </div>
       <p id="e-err" style="color:#fca5a5;font-size:13px;margin:8px 0 0;min-height:16px"></p>
+    </div>
+  </div>
+
+  <div class="modal" id="settings-modal">
+    <div class="sheet">
+      <h2>Nastavení notifikací</h2>
+      <p style="font-size:12px;color:var(--muted);margin:0 0 14px">Push notifikace do aplikace Velín na tvůj telefon.</p>
+      <label style="display:flex;align-items:center;gap:12px;font-size:15px;margin:10px 0;cursor:pointer"><input type="checkbox" id="ns-new" style="width:20px;height:20px;accent-color:var(--primary)"> Nový přidělený kontakt</label>
+      <label style="display:flex;align-items:center;gap:12px;font-size:15px;margin:10px 0;cursor:pointer"><input type="checkbox" id="ns-activity" style="width:20px;height:20px;accent-color:var(--primary)"> Aktivita na mém kontaktu (portál)</label>
+      <label style="display:flex;align-items:center;gap:12px;font-size:15px;margin:10px 0;cursor:pointer"><input type="checkbox" id="ns-invite" style="width:20px;height:20px;accent-color:var(--primary)"> Neotevřená pozvánka po 12 h</label>
+      <div class="actions-row">
+        <button class="btn btn-g" style="flex:1" onclick="closeSettings()">Zavřít</button>
+        <button class="btn btn-p" style="flex:2" id="ns-save" onclick="saveSettings()">Uložit</button>
+      </div>
+      <p id="ns-msg" style="font-size:12px;margin:8px 0 0;min-height:16px"></p>
     </div>
   </div>
 
@@ -558,6 +576,33 @@
       }).join('');
       box.innerHTML = '<details style="background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:10px 12px;margin:8px 0"><summary style="cursor:pointer;font-weight:700">📈 Můj plán</summary><div style="overflow-x:auto;margin-top:8px"><table style="width:100%;border-collapse:collapse;font-size:13px">'+head+rows+'</table></div><div style="font-size:11px;color:var(--muted2);margin-top:6px">Skutečnost / cíl · % plnění (cíle nastavuje vedoucí obchodu).</div></details>';
     } catch(e){}
+  }
+
+  async function openSettings(){
+    document.getElementById('ns-msg').textContent = '';
+    document.getElementById('settings-modal').classList.add('open');
+    try {
+      var r = await api('/my-notify-settings'); var j = await r.json();
+      var p = (j && j.prefs) || {};
+      document.getElementById('ns-new').checked = p.new_contact !== false;
+      document.getElementById('ns-activity').checked = p.contact_activity !== false;
+      document.getElementById('ns-invite').checked = p.invite_unopened !== false;
+    } catch(e){}
+  }
+  function closeSettings(){ document.getElementById('settings-modal').classList.remove('open'); }
+  async function saveSettings(){
+    var body = {
+      new_contact: document.getElementById('ns-new').checked,
+      contact_activity: document.getElementById('ns-activity').checked,
+      invite_unopened: document.getElementById('ns-invite').checked,
+    };
+    var btn = document.getElementById('ns-save'); btn.disabled = true; btn.textContent = 'Ukládám…';
+    try {
+      var r = await api('/my-notify-settings', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+      if (r.ok){ document.getElementById('ns-msg').innerHTML = '<span style="color:var(--converted)">✓ Uloženo</span>'; setTimeout(closeSettings, 700); }
+      else { document.getElementById('ns-msg').innerHTML = '<span style="color:#fca5a5">Uložení selhalo</span>'; }
+    } catch(e){ document.getElementById('ns-msg').innerHTML = '<span style="color:#fca5a5">Uložení selhalo</span>'; }
+    finally { btn.disabled = false; btn.textContent = 'Uložit'; }
   }
 
   async function doLogout(){ try{ await fetch('/api/auth/logout', { method:'POST', credentials:'include' }); }catch(e){} window.location.href='/login.html'; }

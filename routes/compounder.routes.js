@@ -874,6 +874,38 @@ router.post('/sales-targets', requireAuth, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// ─── Notifikace obchodníka (do Velína) ──────────────────────────────────────
+const NOTIFY_DEFAULTS = { new_contact: true, contact_activity: true, invite_unopened: true };
+async function getNotifyPrefs(personId) {
+  const v = await getSetting('sales_notify.' + personId, { type: 'json', defaultValue: null }).catch(() => null);
+  return Object.assign({}, NOTIFY_DEFAULTS, v || {});
+}
+function notifySalesperson(personId, payload) {
+  try {
+    const { notifyPerson } = require('../services/push/expo-push');
+    notifyPerson(prisma, personId, payload);
+  } catch (e) { /* push nesmí shodit operaci */ }
+}
+
+// GET /api/compounder/my-notify-settings — notifikační předvolby přihlášeného obchodníka.
+router.get('/my-notify-settings', requireAuth, async (req, res, next) => {
+  try {
+    const pid = req.user && req.user.person && req.user.person.id;
+    res.json({ ok: true, prefs: pid ? await getNotifyPrefs(pid) : NOTIFY_DEFAULTS });
+  } catch (err) { next(err); }
+});
+// POST /api/compounder/my-notify-settings {new_contact, contact_activity, invite_unopened}
+router.post('/my-notify-settings', requireAuth, async (req, res, next) => {
+  try {
+    const pid = req.user && req.user.person && req.user.person.id;
+    if (!pid) return res.status(400).json({ error: 'Uživatel nemá přiřazenou osobu' });
+    const b = req.body || {};
+    const prefs = { new_contact: !!b.new_contact, contact_activity: !!b.contact_activity, invite_unopened: !!b.invite_unopened };
+    await setSetting('sales_notify.' + pid, prefs);
+    res.json({ ok: true, prefs });
+  } catch (err) { next(err); }
+});
+
 // POST /api/compounder/leads/:id/send-access — pošle leadovi přihlašovací odkaz na portál.
 router.post('/leads/:id/send-access', requireAuth, async (req, res, next) => {
   try {
@@ -1097,6 +1129,16 @@ router.patch('/leads/:id', requireAuth, async (req, res, next) => {
       data.visible_sections = clean.length ? Array.from(new Set(clean)).join(',') : '';
     }
     const lead = await prisma.compounderLead.update({ where: { id }, data });
+    // Notifikace: nový přidělený kontakt (jinému obchodníkovi než ten, kdo přiřazuje).
+    if (parsed.data.owner_person_id) {
+      const actorPid = (req.user && req.user.person) ? req.user.person.id : null;
+      const newOwner = parsed.data.owner_person_id;
+      if (newOwner !== actorPid) {
+        getNotifyPrefs(newOwner).then((pr) => {
+          if (pr.new_contact) notifySalesperson(newOwner, { title: 'Nový přidělený kontakt', body: (lead.name || 'Kontakt') + ' byl přiřazen tobě.', data: { type: 'lead_assigned', lead_id: id } });
+        }).catch(() => {});
+      }
+    }
     res.json(lead);
   } catch (err) {
     if (err.code === 'P2025') return res.status(404).json({ error: 'Lead nenalezen' });
