@@ -100,6 +100,7 @@
   <div class="modal" id="edit-modal">
     <div class="sheet">
       <h2>Údaje kontaktu</h2>
+      <p id="e-created" style="font-size:12px;color:var(--muted);margin:0 0 12px"></p>
       <div class="field"><label>Jméno / firma</label><input class="qinput" id="e-name" placeholder="Jméno / firma"></div>
       <div class="field"><label>E-mail</label><input class="qinput" id="e-email" type="email" placeholder="email@…" inputmode="email"></div>
       <div class="field"><label>Telefon</label><div style="display:flex;gap:8px"><select id="e-dial" style="flex:0 0 120px"></select><input class="qinput" id="e-phone" type="tel" placeholder="číslo" inputmode="tel" style="flex:1"></div></div>
@@ -495,6 +496,7 @@
     document.getElementById('e-dial').innerHTML = dialOptions(sp.dial);
     document.getElementById('e-phone').value = sp.num;
     document.getElementById('e-lang').value = langCode(l.lang);
+    document.getElementById('e-created').textContent = l.created_at ? ('Vytvořeno: ' + fmtDate(l.created_at)) : '';
     document.getElementById('e-err').textContent = '';
     document.getElementById('edit-modal').classList.add('open');
   }
