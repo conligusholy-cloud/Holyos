@@ -5483,12 +5483,18 @@ model CompounderLead {
   // mají přístup jako dosud (nezávisle na tomto poli).
   access_approved_at DateTime?
 
+  // Obchod — přiřazený obchodník (komu se kontakt zobrazí na obrazovce obchodníka)
+  // a kdo kontakt založil. Odkaz na Person (bez formální relace, jméno se dohledá zvlášť).
+  owner_person_id      Int?
+  created_by_person_id Int?
+
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
 
   @@index([status])
   @@index([role])
   @@index([email])
+  @@index([owner_person_id])
   @@map("compounder_leads")
 }
 

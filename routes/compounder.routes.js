@@ -617,8 +617,13 @@ router.post('/leads', requireAuth, async (req, res, next) => {
       where: { email: { equals: email, mode: 'insensitive' } }, select: { id: true },
     });
     if (existing) return res.status(409).json({ error: 'Tento e-mail už je zaregistrovaný.', id: existing.id });
+    const myPersonId = (req.user && req.user.person) ? req.user.person.id : null;
     const lead = await prisma.compounderLead.create({
-      data: { name: name || email, email, role, lang, source: 'admin', status: 'new' },
+      data: {
+        name: name || email, email, role, lang, source: 'admin', status: 'new',
+        created_by_person_id: myPersonId,
+        owner_person_id: myPersonId, // kdo kontakt založil, ten je i jeho obchodník (lze přepsat)
+      },
       select: { id: true, name: true, email: true, role: true, lang: true },
     });
     console.log(`[compounder] Admin vytvořil lead #${lead.id} (${role}, ${lang || '—'}): ${email}`);
@@ -684,6 +689,17 @@ router.get('/leads', requireAuth, async (req, res, next) => {
         l.hasPhone = !!l.phone;
       });
     }
+    // Dohledej jména přiřazených obchodníků (owner) — jedním dotazem.
+    const ownerIds = Array.from(new Set(leads.map((l) => l.owner_person_id).filter(Boolean)));
+    if (ownerIds.length) {
+      const owners = await prisma.person.findMany({
+        where: { id: { in: ownerIds } },
+        select: { id: true, first_name: true, last_name: true },
+      });
+      const nameById = {};
+      owners.forEach((p) => { nameById[p.id] = ((p.first_name || '') + ' ' + (p.last_name || '')).trim(); });
+      leads.forEach((l) => { l.owner_name = l.owner_person_id ? (nameById[l.owner_person_id] || null) : null; });
+    }
     res.json(leads);
   } catch (err) {
     next(err);
@@ -695,6 +711,7 @@ const patchSchema = z.object({
   status: z.enum(['new', 'contacted', 'qualified', 'converted', 'rejected']).optional(),
   notes: z.string().max(5000).optional().nullable(),
   lang: z.string().trim().max(10).optional().nullable(),
+  owner_person_id: z.number().int().positive().optional().nullable(),
   // Viditelné sekce portálu: pole klíčů skupin nebo CSV. [] => jen úvodní filozofie.
   sections: z.union([z.array(z.string()), z.string()]).optional(),
 });
@@ -711,6 +728,7 @@ router.patch('/leads/:id', requireAuth, async (req, res, next) => {
     if (parsed.data.lang !== undefined) {
       data.lang = parsed.data.lang ? String(parsed.data.lang).toLowerCase().split(/[-_]/)[0].slice(0, 10) : null;
     }
+    if (parsed.data.owner_person_id !== undefined) data.owner_person_id = parsed.data.owner_person_id;
     if (parsed.data.sections !== undefined) {
       const arr = Array.isArray(parsed.data.sections)
         ? parsed.data.sections

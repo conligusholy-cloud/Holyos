@@ -2708,6 +2708,7 @@
     // ============================================================
     var CMP_STATUS = { new: 'Nový', contacted: 'Kontaktován', qualified: 'Kvalifikován', converted: 'Převeden', rejected: 'Zamítnut' };
     var CMP_LANGS = { en:'English', bg:'Български', cs:'Čeština', da:'Dansk', de:'Deutsch', el:'Ελληνικά', es:'Español', et:'Eesti', fi:'Suomi', fr:'Français', ga:'Gaeilge', hr:'Hrvatski', hu:'Magyar', it:'Italiano', lt:'Lietuvių', lv:'Latviešu', mt:'Malti', nl:'Nederlands', pl:'Polski', pt:'Português', ro:'Română', sk:'Slovenčina', sl:'Slovenščina', sv:'Svenska' };
+    var CMP_SELLERS = null; // seznam obchodníků (lazy z /api/sales/sellers); null = ještě nenačteno, [] = nedostupné
     function cmpEsc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
     function openAddLead(){
       document.getElementById('modal-root').innerHTML =
@@ -2761,6 +2762,10 @@
         var r = await fetch(url, { credentials: 'include' });
         if (!r.ok) throw new Error('HTTP ' + r.status);
         var leads = await r.json();
+        if (CMP_SELLERS === null) {
+          try { var sr = await fetch('/api/sales/sellers', { credentials: 'include' }); CMP_SELLERS = sr.ok ? await sr.json() : []; }
+          catch (e) { CMP_SELLERS = []; }
+        }
         var resvMap = {};
         try {
           var rr = await fetch('/api/compounder/reservations', { credentials: 'include' });
@@ -2777,7 +2782,7 @@
           if (!leads.length) { box.innerHTML = '<div style="color:var(--text2);padding:24px;">Žádný lead s aktivní rezervací kiosku.</div>'; return; }
         }
         if (!leads.length) { box.innerHTML = '<div style="color:var(--text2);padding:24px;">Zatím žádné registrace.</div>'; return; }
-        var h = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr><th></th><th>Vytvořeno</th><th>Poslední aktivita</th><th>Jméno</th><th>E-mail</th><th>Role</th><th>Jazyk</th><th>Zahřátí</th><th>Rezervace</th><th>Stav</th><th>Poznámka</th><th></th></tr></thead><tbody>';
+        var h = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr><th></th><th>Vytvořeno</th><th>Poslední aktivita</th><th>Jméno</th><th>E-mail</th><th>Role</th><th>Jazyk</th><th>Obchodník</th><th>Zahřátí</th><th>Rezervace</th><th>Stav</th><th>Poznámka</th><th></th></tr></thead><tbody>';
         leads.forEach(function(l) {
           var dt = new Date(l.created_at).toLocaleString('cs-CZ');
           var la = l.lastActivityAt ? new Date(l.lastActivityAt).toLocaleString('cs-CZ') : '—';
@@ -2792,6 +2797,16 @@
           if (!CMP_LANGS[langCode]) langSel += '<option value=""' + (langCode?'':' selected') + '>—</option>';
           Object.keys(CMP_LANGS).forEach(function(k){ langSel += '<option value="' + k + '"' + (langCode===k?' selected':'') + '>' + k.toUpperCase() + ' · ' + CMP_LANGS[k] + '</option>'; });
           langSel += '</select>';
+          var ownerCell;
+          if (CMP_SELLERS && CMP_SELLERS.length) {
+            var ownerSel = '<select onclick="event.stopPropagation()" onchange="cmpSetOwner(' + l.id + ', this.value)" title="Přiřazený obchodník" style="background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:12px;">';
+            ownerSel += '<option value=""' + (l.owner_person_id?'':' selected') + '>— nepřiřazeno —</option>';
+            CMP_SELLERS.forEach(function(s){ var nm = ((s.first_name||'')+' '+(s.last_name||'')).trim() || ('#'+s.id); ownerSel += '<option value="' + s.id + '"' + (l.owner_person_id===s.id?' selected':'') + '>' + cmpEsc(nm) + '</option>'; });
+            ownerSel += '</select>';
+            ownerCell = ownerSel;
+          } else {
+            ownerCell = '<span style="color:var(--text2);font-size:12px;">' + (l.owner_name ? cmpEsc(l.owner_name) : '—') + '</span>';
+          }
           var noteVal = cmpEsc(l.notes||'');
           var w = (l.warmthPct!=null) ? l.warmthPct : null;
           var wcol = w==null?'var(--text2)':(w>=70?'#ef4444':w>=45?'#eab308':w>=25?'#3b82f6':'var(--text2)');
@@ -2802,7 +2817,7 @@
           var resvCell = rv
             ? '<td style="white-space:nowrap;font-size:12px;"><span style="color:'+(rv.status==='active'?'#eab308':'#3b82f6')+';font-weight:600;">'+(rv.status==='active'?'Aktivní':'Rezervováno')+'</span>'+(rv.reserved_until?('<br><span style="color:var(--text2);">do '+new Date(rv.reserved_until).toLocaleDateString('cs-CZ')+'</span>'):'')+'</td>'
             : '<td style="color:var(--text2);">—</td>';
-          h += '<tr data-lead="' + l.id + '" data-sections="' + cmpEsc(l.visible_sections||'') + '" data-source="' + cmpEsc(l.source||'') + '" data-approved="' + (l.access_approved_at ? '1' : '') + '" onclick="cmpActivity(' + l.id + ', this)" title="Klikni pro cestu zákazníka" style="cursor:pointer;"><td style="color:var(--text2);">▸</td><td style="white-space:nowrap;">' + dt + '</td><td style="white-space:nowrap;color:' + laColor + ';font-size:12px;font-weight:' + (laToday ? '700' : '400') + ';">' + la + '</td><td>' + cmpEsc(l.name) + '</td><td><a href="mailto:' + cmpEsc(l.email) + '" onclick="event.stopPropagation()" style="color:#eab308;">' + cmpEsc(l.email) + '</a></td><td>' + roleLabel + '</td><td style="white-space:nowrap;">' + langSel + '</td>' + warmthCell + resvCell + '<td>' + sel + '</td><td><input type="text" value="' + noteVal + '" placeholder="—" onclick="event.stopPropagation()" onblur="cmpSetNote(' + l.id + ', this.value)" style="width:140px;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:12px;"></td><td><button onclick="event.stopPropagation();cmpDeleteLead(' + l.id + ', ' + JSON.stringify(l.name).replace(/"/g,'&quot;') + ')" title="Smazat lead" style="background:transparent;color:#ef4444;border:1px solid rgba(239,68,68,0.4);border-radius:6px;padding:4px 9px;font-size:12px;cursor:pointer;">🗑</button></td></tr>';
+          h += '<tr data-lead="' + l.id + '" data-sections="' + cmpEsc(l.visible_sections||'') + '" data-source="' + cmpEsc(l.source||'') + '" data-approved="' + (l.access_approved_at ? '1' : '') + '" onclick="cmpActivity(' + l.id + ', this)" title="Klikni pro cestu zákazníka" style="cursor:pointer;"><td style="color:var(--text2);">▸</td><td style="white-space:nowrap;">' + dt + '</td><td style="white-space:nowrap;color:' + laColor + ';font-size:12px;font-weight:' + (laToday ? '700' : '400') + ';">' + la + '</td><td>' + cmpEsc(l.name) + '</td><td><a href="mailto:' + cmpEsc(l.email) + '" onclick="event.stopPropagation()" style="color:#eab308;">' + cmpEsc(l.email) + '</a></td><td>' + roleLabel + '</td><td style="white-space:nowrap;">' + langSel + '</td><td style="white-space:nowrap;">' + ownerCell + '</td>' + warmthCell + resvCell + '<td>' + sel + '</td><td><input type="text" value="' + noteVal + '" placeholder="—" onclick="event.stopPropagation()" onblur="cmpSetNote(' + l.id + ', this.value)" style="width:140px;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:12px;"></td><td><button onclick="event.stopPropagation();cmpDeleteLead(' + l.id + ', ' + JSON.stringify(l.name).replace(/"/g,'&quot;') + ')" title="Smazat lead" style="background:transparent;color:#ef4444;border:1px solid rgba(239,68,68,0.4);border-radius:6px;padding:4px 9px;font-size:12px;cursor:pointer;">🗑</button></td></tr>';
         });
         h += '</tbody></table></div>';
         box.innerHTML = h;
@@ -3121,6 +3136,10 @@
     }
     async function cmpSetLang(id, lang) {
       try { await fetch('/api/compounder/leads/' + id, { method:'PATCH', credentials:'include', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ lang: lang || null }) }); } catch(e) {}
+    }
+    async function cmpSetOwner(id, ownerId) {
+      var val = ownerId ? Number(ownerId) : null;
+      try { await fetch('/api/compounder/leads/' + id, { method:'PATCH', credentials:'include', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ owner_person_id: val }) }); } catch(e) {}
     }
     async function cmpDeleteLead(id, name) {
       if (!confirm('Smazat lead "' + (name||'') + '"? Tuto akci nelze vrátit.')) return;
