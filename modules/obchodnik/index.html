@@ -103,6 +103,9 @@
 
   function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
   function langCode(l){ return (l||'').toLowerCase().split(/[-_]/)[0]; }
+  function warmth(l){ var w=l.warmthPct; if(w==null) return null; return { w:w, lbl: w>=70?'Horký':w>=45?'Zahřátý':w>=25?'Vlažný':'Studený', col: w>=70?'#ef4444':w>=45?'#eab308':w>=25?'#3b82f6':'#6b7280' }; }
+  function fmtDate(iso){ if(!iso) return '—'; var d=new Date(iso); return ('0'+d.getDate()).slice(-2)+'.'+('0'+(d.getMonth()+1)).slice(-2)+'.'+d.getFullYear()+' '+('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2); }
+  var EVENT_LABEL = { portal_view:'Otevřel portál', section_view:'Prohlížel sekci', doc_download:'Stáhl dokument', location_assess:'Zhodnotil lokalitu', contact_request:'Požádal o kontakt', register_success:'Registrace', page_leave:'Odešel ze stránky', card_flip:'Otočil kartu', page_switch:'Přepnul stránku', visit_end:'Konec návštěvy' };
 
   async function api(path, opts){
     opts = opts || {}; opts.credentials = 'include';
@@ -155,13 +158,19 @@
     var st = STATUS[l.status] || STATUS.new;
     var lc = langCode(l.lang);
     var open = state.openId === l.id;
-    var sub = [l.email, l.phone].filter(Boolean).join(' · ');
+    var wm = warmth(l);
+    var subParts = [];
+    if (l.email) subParts.push(esc(l.email));
+    if (l.phone) subParts.push(esc(l.phone));
+    var subHtml = subParts.join(' · ');
+    if (wm) subHtml += (subHtml ? ' · ' : '') + '<span style="color:'+wm.col+';font-weight:600">'+wm.lbl+' '+wm.w+'</span>';
+    if (l.requestedContact) subHtml += ' <span title="Požádal o kontakt">📞</span>';
     var statusSel = '<select onchange="setField('+l.id+',\'status\',this.value)">' + Object.keys(STATUS).map(function(k){ return '<option value="'+k+'"'+(l.status===k?' selected':'')+'>'+STATUS[k].l+'</option>'; }).join('') + '</select>';
     var langSel = '<select onchange="setField('+l.id+',\'lang\',this.value)">' + Object.keys(LANGS).map(function(k){ return '<option value="'+k+'"'+(lc===k?' selected':'')+'>'+(k?k.toUpperCase()+' · ':'')+LANGS[k]+'</option>'; }).join('') + '</select>';
     return '<div class="card'+(open?' open':'')+'" id="card-'+l.id+'">' +
       '<div class="card-main" onclick="toggle('+l.id+')">' +
         '<span class="dot" style="background:'+st.c+'"></span>' +
-        '<div class="card-body"><div class="card-name">'+esc(l.name||l.email)+'</div><div class="card-sub">'+esc(sub||'—')+'</div></div>' +
+        '<div class="card-body"><div class="card-name">'+esc(l.name||l.email)+'</div><div class="card-sub">'+(subHtml||'—')+'</div></div>' +
         '<span class="badge" style="background:'+st.c+'22;color:'+st.c+'">'+st.l+'</span>' +
         '<span class="chev">▸</span>' +
       '</div>' +
@@ -174,11 +183,48 @@
           (l.phone ? '<a href="tel:'+esc(l.phone)+'">📞 Volat</a>' : '') +
           (l.email ? '<a href="mailto:'+esc(l.email)+'">✉️ E-mail</a>' : '') +
         '</div>' +
+        '<div class="field"><label>Cesta zákazníka / analytika</label><div id="act-'+l.id+'" class="note-log">Načítám…</div></div>' +
+        '<div class="field"><button class="btn btn-g" style="width:100%" onclick="aiEval('+l.id+')">🤖 AI vyhodnocení kontaktu</button><div id="ai-'+l.id+'"></div></div>' +
       '</div>' +
     '</div>';
   }
 
-  function toggle(id){ state.openId = (state.openId===id)?null:id; render(); }
+  function toggle(id){ state.openId = (state.openId===id)?null:id; render(); if (state.openId===id) loadActivity(id); }
+
+  async function loadActivity(id){
+    var box = document.getElementById('act-'+id); if (!box) return;
+    try {
+      var r = await api('/leads/'+id+'/activity'); if (!r.ok) throw new Error();
+      var a = await r.json();
+      if (!a.count){ box.textContent = 'Zatím žádná zaznamenaná aktivita (registrace ručně nebo mimo web).'; return; }
+      var mins = Math.round((a.totalMs||0)/60000);
+      var head = (a.portalOpened ? 'Otevřel portál' : 'Portál neotevřel') + ' · ' + a.count + ' akcí' + (mins ? ' · '+mins+' min na webu' : '');
+      var secs = Object.keys(a.sections||{});
+      if (secs.length) head += '\nSekce: ' + secs.map(function(s){ return s+' ('+a.sections[s]+'×)'; }).join(', ');
+      var tl = (a.events||[]).slice(-40).reverse().map(function(e){
+        var lbl = EVENT_LABEL[e.event] || e.event;
+        var extra = (e.props && (e.props.section || e.props.doc || e.props.page)) ? (' – ' + (e.props.section||e.props.doc||e.props.page)) : '';
+        return fmtDate(e.at) + ' · ' + lbl + extra;
+      }).join('\n');
+      box.textContent = head + '\n\n' + tl;
+    } catch(e){ box.textContent = 'Analytiku se nepodařilo načíst.'; }
+  }
+
+  async function aiEval(id){
+    var out = document.getElementById('ai-'+id); if (!out) return;
+    out.innerHTML = '<div style="color:var(--muted);font-size:13px;margin-top:8px">🤖 Vyhodnocuji…</div>';
+    try {
+      var r = await api('/leads/'+id+'/ai-eval'); var j = await r.json();
+      if (!r.ok){ out.innerHTML = '<div class="err" style="margin:8px 0 0">'+esc(j.error||'Chyba')+'</div>'; return; }
+      var parts = [];
+      if (j.warmth!=null || j.warmthPct!=null) parts.push('<b>Zahřátí:</b> '+(j.warmth!=null?j.warmth:j.warmthPct));
+      if (j.summary) parts.push(esc(j.summary));
+      if (j.recommendation) parts.push('<b>Doporučení:</b> '+esc(j.recommendation));
+      if (Array.isArray(j.signals) && j.signals.length) parts.push('<b>Signály:</b> '+j.signals.map(esc).join(', '));
+      if (!parts.length) parts.push(esc(JSON.stringify(j).slice(0,600)));
+      out.innerHTML = '<div class="note-log" style="margin-top:8px">'+parts.join('<br>')+'</div>';
+    } catch(e){ out.innerHTML = '<div class="err" style="margin:8px 0 0">AI vyhodnocení selhalo.</div>'; }
+  }
 
   async function setField(id, field, value){
     var body = {}; body[field] = (field==='lang' && !value) ? null : value;
