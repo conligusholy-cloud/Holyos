@@ -774,7 +774,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
       var o = document.createElement("option"); o.value = code; o.textContent = code.toUpperCase();
       o.title = I18N.LANGS[code]; if (code === cur) o.selected = true; sel.appendChild(o);
     });
-    sel.addEventListener("change", function(){ pSetLang(sel.value, recalc); });
+    sel.addEventListener("change", function(){ pSetLang(sel.value, function(){ try{ recalc(); }catch(e){} try{ if(OFFERS && OFFERS.data) renderOffers(); }catch(e){} }); });
   }
   pSetLang(pDetect(), null);
 
