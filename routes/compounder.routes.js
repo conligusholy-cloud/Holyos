@@ -811,7 +811,7 @@ async function enrichWarmth(leads) {
     if (x.portal > 0) s += 15;
     if (x.doc > 0) s += 10;
     if (x.loc > 0) s += 15; if (x.loc >= 3) s += 5;
-    const requested = x.contact > 0 || !!l.phone || /Požádal o telefonický kontakt/.test(l.notes || '');
+    const requested = x.contact > 0 || /Požádal o telefonický kontakt/.test(l.notes || '');
     if (requested) s += 40;
     if (l.status === 'qualified' || l.status === 'converted') s += 10;
     l.warmthPct = Math.max(0, Math.min(100, s));
@@ -866,7 +866,7 @@ router.get('/leads', requireAuth, async (req, res, next) => {
         if (x.portal > 0) s += 15;
         if (x.doc > 0) s += 10;
         if (x.loc > 0) s += 15; if (x.loc >= 3) s += 5;
-        const requested = x.contact > 0 || !!l.phone || /Požádal o telefonický kontakt/.test(l.notes || '');
+        const requested = x.contact > 0 || /Požádal o telefonický kontakt/.test(l.notes || '');
         if (requested) s += 40;
         if (l.status === 'qualified' || l.status === 'converted') s += 10;
         l.warmthPct = Math.max(0, Math.min(100, s));
