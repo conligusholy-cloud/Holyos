@@ -49,6 +49,10 @@
 <script>
   var STATUS = { new:{l:'Nový',c:'var(--new)'}, contacted:{l:'Kontaktován',c:'var(--contacted)'}, qualified:{l:'Kvalifikován',c:'var(--qualified)'}, converted:{l:'Převeden',c:'var(--converted)'}, rejected:{l:'Zamítnut',c:'var(--rejected)'} };
   var RES_STATUS = { reserved:'Rezervováno', active:'Aktivní', expired:'Vypršelo', cancelled:'Zrušeno', signed:'Podepsáno' };
+  var PLABEL = { day:'Den', week:'Týden', month:'Měsíc', year:'Rok' };
+  var SELLERS = [];
+  function sellerName(s){ return ((s.first_name||'')+' '+(s.last_name||'')).trim() || ('#'+s.id); }
+  function fmtMoney(v){ return (v||0).toLocaleString('cs-CZ')+' Kč'; }
   function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
   function fmtDate(iso){ if(!iso) return '—'; var d=new Date(iso); return ('0'+d.getDate()).slice(-2)+'.'+('0'+(d.getMonth()+1)).slice(-2)+'.'+d.getFullYear()+' '+('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2); }
 
@@ -60,7 +64,9 @@
       var r = await fetch('/api/compounder/sales-overview', { credentials:'include' });
       if (r.status === 403){ box.innerHTML = '<div class="err">Tato obrazovka je jen pro vedoucího obchodu.</div>'; return; }
       if (!r.ok) throw new Error('HTTP '+r.status);
-      render(await r.json());
+      var d = await r.json();
+      try { var sr = await fetch('/api/compounder/sellers', { credentials:'include' }); SELLERS = sr.ok ? await sr.json() : []; } catch(e){ SELLERS = []; }
+      render(d);
     } catch(e){ box.innerHTML = '<div class="err">Nepodařilo se načíst přehled: '+esc(e.message)+'</div>'; }
   }
 
@@ -90,6 +96,14 @@
           '<div class="sub">'+s.total+' kontaktů · '+s.converted+' převedeno · poslední aktivita '+fmtDate(s.lastActivityAt)+'</div>' +
           statusBar(s.byStatus||{}, s.total) +
         '</div>';
+      }).join('');
+    }
+
+    h += '<h2>Cíle a plnění</h2>';
+    if (!SELLERS.length){ h += '<div class="empty">Žádní obchodníci. Zaškrtni roli Obchodník v Lidé a HR.</div>'; }
+    else {
+      h += SELLERS.map(function(s){
+        return '<details class="row" ontoggle="if(this.open) loadPlan('+s.id+')"><summary style="cursor:pointer;font-weight:700">'+esc(sellerName(s))+'</summary><div id="plan-'+s.id+'" style="margin-top:10px"><div class="muted">Klepni pro načtení…</div></div></details>';
       }).join('');
     }
 
@@ -123,6 +137,37 @@
     document.getElementById('content').innerHTML = h;
   }
   function stat(v, k){ return '<div class="stat"><div class="v">'+esc(v)+'</div><div class="k">'+esc(k)+'</div></div>'; }
+
+  async function loadPlan(pid){
+    var box = document.getElementById('plan-'+pid); if (!box) return;
+    box.innerHTML = '<div class="muted">Načítám…</div>';
+    try {
+      var r = await fetch('/api/compounder/my-plan?person_id='+pid, { credentials:'include' });
+      var j = await r.json();
+      if (!j || !j.metrics){ box.innerHTML = '<div class="muted">Nelze načíst.</div>'; return; }
+      var head = '<tr><th></th>'+j.periods.map(function(p){ return '<th style="font-size:11px;color:var(--muted2);padding:4px">'+(PLABEL[p]||p)+'</th>'; }).join('')+'</tr>';
+      var rows = j.metrics.map(function(m){
+        var cells = j.periods.map(function(p){
+          var c = (j.data[m.key] && j.data[m.key][p]) || { actual:0, target:0 };
+          var actTxt = (m.key==='revenue') ? fmtMoney(c.actual) : c.actual;
+          var pct = c.target ? Math.round(c.actual/c.target*100) : null;
+          var col = (pct==null) ? 'var(--muted)' : (pct>=100?'#22c55e':pct>=50?'#eab308':'var(--text)');
+          return '<td style="text-align:center;padding:4px">' +
+            '<div style="font-size:12px;color:'+col+';white-space:nowrap">'+actTxt+(pct!=null?(' · '+pct+'%'):'')+'</div>' +
+            '<input type="number" min="0" value="'+(c.target||'')+'" placeholder="cíl" onchange="setTarget('+pid+',\''+m.key+'\',\''+p+'\',this.value)" style="width:70px;background:var(--surface2);border:1px solid var(--line);border-radius:8px;padding:5px;color:var(--text);font-size:12px;text-align:center;margin-top:3px">' +
+          '</td>';
+        }).join('');
+        return '<tr><td style="padding:4px;color:var(--muted);white-space:nowrap">'+esc(m.label)+'</td>'+cells+'</tr>';
+      }).join('');
+      box.innerHTML = '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse">'+head+rows+'</table></div><div style="font-size:11px;color:var(--muted2);margin-top:6px">Nahoře skutečnost · % plnění; do políčka zadej cíl (uloží se hned).</div>';
+    } catch(e){ box.innerHTML = '<div class="err">Chyba načítání plánu.</div>'; }
+  }
+  async function setTarget(pid, metric, period, value){
+    try {
+      await fetch('/api/compounder/sales-targets', { method:'POST', credentials:'include', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ person_id:pid, metric:metric, period:period, value:Number(value)||0 }) });
+      loadPlan(pid);
+    } catch(e){ alert('Cíl se nepodařilo uložit.'); }
+  }
 
   async function doLogout(){ try{ await fetch('/api/auth/logout', { method:'POST', credentials:'include' }); }catch(e){} window.location.href='/login.html'; }
 
