@@ -972,15 +972,15 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
     var c = window._consultant;
     if (!c || !c.name) return;
     function e2(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(x){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[x];}); }
-    var t = document.getElementById('ct-title'); if(t){ t.removeAttribute('data-i18n'); t.textContent = 'Spojte se se svým Compounder konzultantem'; }
-    var b = document.getElementById('ct-open'); if(b){ b.removeAttribute('data-i18n'); b.textContent = 'Spojit se s konzultantem'; }
+    var t = document.getElementById('ct-title'); if(t){ t.setAttribute('data-i18n','p.ct.title2'); t.textContent = pT('p.ct.title2'); }
+    var b = document.getElementById('ct-open'); if(b){ b.setAttribute('data-i18n','p.ct.btn2'); b.textContent = pT('p.ct.btn2'); }
     var o = document.getElementById('ct-owner');
     if(o){
       var tel = (c.phone||'').replace(/\s+/g,'');
       var l2 = [];
       if(c.phone) l2.push('<a href="tel:'+e2(tel)+'" style="color:var(--gold-soft)">'+e2(c.phone)+'</a>');
       if(c.email) l2.push('<a href="mailto:'+e2(c.email)+'" style="color:var(--gold-soft)">'+e2(c.email)+'</a>');
-      o.innerHTML = '<span>'+e2(c.name)+' — Compounder konzultant</span>' + (l2.length ? ('<br>'+l2.join(' · ')) : '');
+      o.innerHTML = '<span>'+e2(c.name)+e2(pT('p.ct.consultant_suffix'))+'</span>' + (l2.length ? ('<br>'+l2.join(' · ')) : '');
     }
   }
   var CONTRACT_STATUS_PT = { koncept:"Připravuje se", odeslano:"K podpisu", vyplneno:"Vyplněno", k_podpisu:"Čeká na dokončení", podepsano:"Podepsáno" };
@@ -1041,7 +1041,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
     fetch("/api/compounder/portal/offered-locations?t=" + encodeURIComponent(tok), { credentials:"include" })
       .then(function(r){ return r.json(); })
       .then(function(d){
-        if(!d || !d.ok){ box.innerHTML = '<div class="muted">Nabídku se nepodařilo načíst.</div>'; return; }
+        if(!d || !d.ok){ box.innerHTML = '<div class="muted">' + pT("p.off.loaderr") + '</div>'; return; }
         OFFERS.data = d.locations || [];
         OFFERS.cur = (d.defaultCurrency==='EUR') ? 'EUR' : 'CZK';
         OFFERS.eur = d.eurRate || 25;
@@ -1050,7 +1050,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
         if(d.reservation){ OFFERS.cfg = d.reservation; }
         renderOffers();
       })
-      .catch(function(){ box.innerHTML = '<div class="muted">Nabídku se nepodařilo načíst.</div>'; });
+      .catch(function(){ box.innerHTML = '<div class="muted">' + pT("p.off.loaderr") + '</div>'; });
   }
   window.openLocPhotos = function(code){
     var o = (OFFERS.data||[]).find(function(x){ return x.code===code; });
@@ -1090,21 +1090,21 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
     if(!box) return;
     var arr = OFFERS.data || [];
     var toggle = '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">' +
-      '<span style="font-size:12.5px;color:var(--gold-soft);font-weight:600">Všechny ceny jsou uvedené bez DPH</span>' +
+      '<span style="font-size:12.5px;color:var(--gold-soft);font-weight:600">' + pT("p.off.vat") + '</span>' +
       '<span style="display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap"><span style="font-size:12px;color:var(--muted);margin-right:4px">Měna:</span>'+offCurBtn('CZK','Kč')+offCurBtn('EUR','€')+offCurBtn('USD','$')+offCurBtn('GBP','£')+'</span>' +
     '</div>';
-    if(!arr.length){ box.innerHTML = toggle + '<div class="muted">Aktuálně nejsou k dispozici žádné nabízené lokality.</div>'; return; }
+    if(!arr.length){ box.innerHTML = toggle + '<div class="muted">' + pT("p.off.empty") + '</div>'; return; }
     box.innerHTML = toggle + arr.map(function(o){
       var _codeEsc = offEsc(o.code).replace(/'/g,"&#39;");
       var _until = o.resUntil || o.reservedUntil;
       var _cd = _until ? ('<div class="res-countdown" data-until="' + offEsc(_until) + '" style="font-size:11px;color:var(--gold-soft);margin-top:6px;font-weight:600">' + offCountdown(_until) + '</div>') : '';
       var btn;
       if (o.reserved && o.mine) {
-        btn = '<div style="min-width:130px;text-align:center"><button type="button" class="btn" style="min-width:130px;justify-content:center" onclick="openReserveModal(\'' + _codeEsc + '\')">Dokončit rezervaci</button>' + _cd + '</div>';
+        btn = '<div style="min-width:130px;text-align:center"><button type="button" class="btn" style="min-width:130px;justify-content:center" onclick="openReserveModal(\'' + _codeEsc + '\')">' + pT("p.off.finish") + '</button>' + _cd + '</div>';
       } else if (o.reserved) {
-        btn = '<div style="min-width:130px;text-align:center"><div style="color:var(--muted);font-size:13px;font-weight:700;border:1px solid var(--line);border-radius:999px;padding:10px 12px">Obsazeno</div>' + _cd + '</div>';
+        btn = '<div style="min-width:130px;text-align:center"><div style="color:var(--muted);font-size:13px;font-weight:700;border:1px solid var(--line);border-radius:999px;padding:10px 12px">' + pT("p.off.occupied") + '</div>' + _cd + '</div>';
       } else {
-        btn = '<button type="button" class="btn" style="min-width:130px;justify-content:center" onclick="openReserveModal(\'' + _codeEsc + '\')">Rezervovat</button>';
+        btn = '<button type="button" class="btn" style="min-width:130px;justify-content:center" onclick="openReserveModal(\'' + _codeEsc + '\')">' + pT("p.off.reserve") + '</button>';
       }
       var _thumb = (o.photos && o.photos.length)
         ? '<div onclick="openLocPhotos(\'' + _codeEsc + '\')" title="Zobrazit fotky lokality" style="position:relative;flex:0 0 120px;align-self:stretch;min-height:96px;border-radius:10px;overflow:hidden;border:1px solid var(--line);cursor:pointer">' +
@@ -1116,18 +1116,18 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
         _thumb +
         '<div style="flex:2;min-width:170px">' +
           '<div style="font-weight:800;font-size:15px' + ((o.photos&&o.photos.length)?';cursor:pointer' : '') + '"' + ((o.photos&&o.photos.length)?(' onclick="openLocPhotos(\'' + _codeEsc + '\')" title="Zobrazit fotky lokality"'):'') + '>' + offEsc(o.label||o.code) + '</div>' +
-          '<div style="font-size:12px;color:var(--muted)">Verze ' + offEsc(o.version||"—") + '</div>' +
-          '<div style="margin-top:6px;display:inline-flex;align-items:center;gap:6px;background:rgba(59,130,246,.12);border:1px solid rgba(59,130,246,.35);color:#cfe0ff;font-size:11px;font-weight:600;padding:3px 9px;border-radius:999px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#93c5fd" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg> Kompletní servis a provoz zajišťujeme my</div>' +
+          '<div style="font-size:12px;color:var(--muted)">' + pT("p.off.version") + ' ' + offEsc(o.version||"—") + '</div>' +
+          '<div style="margin-top:6px;display:inline-flex;align-items:center;gap:6px;background:rgba(59,130,246,.12);border:1px solid rgba(59,130,246,.35);color:#cfe0ff;font-size:11px;font-weight:600;padding:3px 9px;border-radius:999px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#93c5fd" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg> ' + pT("p.off.service") + '</div>' +
         '</div>' +
-        '<div style="flex:1;min-width:110px">' + offMetric("Cena", offMoney(o.totalPrice)) + '</div>' +
-        '<div style="flex:1;min-width:110px">' + offMetric("Čistý roční výnos", offMoney(o.yearlyYield)) + '</div>' +
+        '<div style="flex:1;min-width:110px">' + offMetric(pT("p.off.price"), offMoney(o.totalPrice)) + '</div>' +
+        '<div style="flex:1;min-width:110px">' + offMetric(pT("p.off.yield"), offMoney(o.yearlyYield)) + '</div>' +
         '<div style="flex:1.3;min-width:150px">' +
-          '<div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Garance odkupu</div>' +
+          '<div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">' + pT("p.off.guarantee") + '</div>' +
           '<div style="font-weight:700;font-size:15px;margin-top:2px">' + offMoney(o.guaranteeValue) + '</div>' +
           (o.guaranteeValue!=null ? '<div style="font-size:11px;color:var(--muted);font-weight:400;margin-top:2px">'+o.guaranteePct+' %, '+o.guaranteeYears+'. rok</div>' : '') +
         '</div>' +
         '<div style="flex:1.2;min-width:140px;display:flex;flex-direction:column;gap:10px;align-items:flex-start">' +
-          '<div><div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Celkem za ' + o.guaranteeYears + ' let</div><div style="font-weight:800;font-size:15px;margin-top:2px;color:var(--gold-soft)">' + (o.guaranteeValue!=null ? offMoney((o.yearlyYield||0)*o.guaranteeYears + o.guaranteeValue) : "—") + '</div></div>' +
+          '<div><div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">' + pT("p.off.total").replace("{y}", o.guaranteeYears) + '</div><div style="font-weight:800;font-size:15px;margin-top:2px;color:var(--gold-soft)">' + (o.guaranteeValue!=null ? offMoney((o.yearlyYield||0)*o.guaranteeYears + o.guaranteeValue) : "—") + '</div></div>' +
           btn +
         '</div>' +
       '</div>';
