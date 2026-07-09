@@ -636,6 +636,20 @@ router.post('/leads', requireAuth, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// GET /api/compounder/sellers — obchodníci pro přiřazení vlastníka leadu.
+//   Aktivní Person s rolí "Obchodník" nebo "Vedoucí obchodu". Dostupné přihlášenému
+//   internímu uživateli (na rozdíl od /api/sales/sellers, které je jen pro vedoucí/admin).
+router.get('/sellers', requireAuth, async (req, res, next) => {
+  try {
+    const sellers = await prisma.person.findMany({
+      where: { active: true, role: { name: { in: ['Obchodník', 'Vedoucí obchodu'] } } },
+      orderBy: [{ last_name: 'asc' }, { first_name: 'asc' }],
+      select: { id: true, first_name: true, last_name: true },
+    });
+    res.json(sellers);
+  } catch (err) { next(err); }
+});
+
 router.get('/leads', requireAuth, async (req, res, next) => {
   try {
     const { status, role, search } = req.query;

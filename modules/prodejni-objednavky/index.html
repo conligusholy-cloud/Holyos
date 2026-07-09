@@ -2763,7 +2763,7 @@
         if (!r.ok) throw new Error('HTTP ' + r.status);
         var leads = await r.json();
         if (CMP_SELLERS === null) {
-          try { var sr = await fetch('/api/sales/sellers', { credentials: 'include' }); CMP_SELLERS = sr.ok ? await sr.json() : []; }
+          try { var sr = await fetch('/api/compounder/sellers', { credentials: 'include' }); CMP_SELLERS = sr.ok ? await sr.json() : []; }
           catch (e) { CMP_SELLERS = []; }
         }
         var resvMap = {};
@@ -2804,8 +2804,10 @@
             CMP_SELLERS.forEach(function(s){ var nm = ((s.first_name||'')+' '+(s.last_name||'')).trim() || ('#'+s.id); ownerSel += '<option value="' + s.id + '"' + (l.owner_person_id===s.id?' selected':'') + '>' + cmpEsc(nm) + '</option>'; });
             ownerSel += '</select>';
             ownerCell = ownerSel;
+          } else if (l.owner_name) {
+            ownerCell = '<span style="font-size:12px;">' + cmpEsc(l.owner_name) + '</span>';
           } else {
-            ownerCell = '<span style="color:var(--text2);font-size:12px;">' + (l.owner_name ? cmpEsc(l.owner_name) : '—') + '</span>';
+            ownerCell = '<span title="Přiřaď lidem roli Obchodník nebo Vedoucí obchodu v modulu Lidé a HR" style="color:var(--text2);font-size:12px;">— nejsou obchodníci —</span>';
           }
           var noteVal = cmpEsc(l.notes||'');
           var w = (l.warmthPct!=null) ? l.warmthPct : null;
