@@ -769,6 +769,93 @@ router.get('/sales-overview', requireAuth, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// ─── Osobní prodejní plán ────────────────────────────────────────────────
+const PLAN_METRICS = [
+  { key: 'new_contacts', label: 'Nové kontakty' },
+  { key: 'conversions', label: 'Převedené' },
+  { key: 'reservations', label: 'Rezervace' },
+  { key: 'revenue', label: 'Obrat (Kč)' },
+];
+const PLAN_PERIODS = ['day', 'week', 'month', 'year'];
+
+function planPeriodStart(period) {
+  const n = new Date();
+  const d = new Date(n.getFullYear(), n.getMonth(), n.getDate());
+  if (period === 'week') { const wd = (d.getDay() + 6) % 7; return new Date(d.getFullYear(), d.getMonth(), d.getDate() - wd); }
+  if (period === 'month') return new Date(n.getFullYear(), n.getMonth(), 1);
+  if (period === 'year') return new Date(n.getFullYear(), 0, 1);
+  return d;
+}
+
+async function computePlanActuals(personId) {
+  const leads = await prisma.compounderLead.findMany({
+    where: { owner_person_id: personId },
+    select: { id: true, status: true, created_at: true, updated_at: true },
+    take: 10000,
+  });
+  const leadIds = leads.map((l) => l.id);
+  let resv = [];
+  if (leadIds.length) {
+    try { resv = await prisma.locationReservation.findMany({ where: { lead_id: { in: leadIds } }, select: { created_at: true, purchase_price: true } }); } catch (e) { resv = []; }
+  }
+  const out = { new_contacts: {}, conversions: {}, reservations: {}, revenue: {} };
+  PLAN_PERIODS.forEach((p) => {
+    const from = planPeriodStart(p).getTime();
+    out.new_contacts[p] = leads.filter((l) => l.created_at && new Date(l.created_at).getTime() >= from).length;
+    out.conversions[p] = leads.filter((l) => l.status === 'converted' && l.updated_at && new Date(l.updated_at).getTime() >= from).length;
+    const rIn = resv.filter((r) => r.created_at && new Date(r.created_at).getTime() >= from);
+    out.reservations[p] = rIn.length;
+    out.revenue[p] = rIn.reduce((s, r) => s + (r.purchase_price || 0), 0);
+  });
+  return out;
+}
+
+// GET /api/compounder/my-plan?person_id= — cíle + skutečnost. person_id jen pro vedoucí/admin.
+router.get('/my-plan', requireAuth, async (req, res, next) => {
+  try {
+    const u = req.user || {};
+    const isMgr = u.isSuperAdmin || u.role === 'admin' || (u.person && u.person.is_sales_lead);
+    let personId = (u.person && u.person.id) || null;
+    if (req.query.person_id && isMgr) personId = Number(req.query.person_id);
+    if (!personId) return res.json({ ok: true, metrics: PLAN_METRICS, periods: PLAN_PERIODS, data: {} });
+    const targetsRows = await prisma.salesTarget.findMany({ where: { person_id: personId } });
+    const targets = {};
+    targetsRows.forEach((t) => { (targets[t.metric] || (targets[t.metric] = {}))[t.period] = t.value; });
+    const actuals = await computePlanActuals(personId);
+    const data = {};
+    PLAN_METRICS.forEach((m) => {
+      data[m.key] = {};
+      PLAN_PERIODS.forEach((p) => {
+        data[m.key][p] = { actual: (actuals[m.key] && actuals[m.key][p]) || 0, target: (targets[m.key] && targets[m.key][p]) || 0 };
+      });
+    });
+    res.json({ ok: true, person_id: personId, metrics: PLAN_METRICS, periods: PLAN_PERIODS, data });
+  } catch (err) { next(err); }
+});
+
+// POST /api/compounder/sales-targets {person_id, metric, period, value} — nastaví cíl (vedoucí/admin).
+router.post('/sales-targets', requireAuth, async (req, res, next) => {
+  try {
+    const u = req.user || {};
+    const isMgr = u.isSuperAdmin || u.role === 'admin' || (u.person && u.person.is_sales_lead);
+    if (!isMgr) return res.status(403).json({ error: 'Jen vedoucí obchodu nebo admin' });
+    const b = req.body || {};
+    const person_id = Number(b.person_id);
+    const metric = String(b.metric || '');
+    const period = String(b.period || '');
+    const value = Math.max(0, Math.round(Number(b.value) || 0));
+    if (!Number.isInteger(person_id)) return res.status(400).json({ error: 'Neplatné person_id' });
+    if (!PLAN_METRICS.some((m) => m.key === metric)) return res.status(400).json({ error: 'Neplatná metrika' });
+    if (PLAN_PERIODS.indexOf(period) === -1) return res.status(400).json({ error: 'Neplatná perioda' });
+    const row = await prisma.salesTarget.upsert({
+      where: { person_id_metric_period: { person_id, metric, period } },
+      update: { value },
+      create: { person_id, metric, period, value },
+    });
+    res.json({ ok: true, id: row.id, value: row.value });
+  } catch (err) { next(err); }
+});
+
 // POST /api/compounder/leads/:id/send-access — pošle leadovi přihlašovací odkaz na portál.
 router.post('/leads/:id/send-access', requireAuth, async (req, res, next) => {
   try {

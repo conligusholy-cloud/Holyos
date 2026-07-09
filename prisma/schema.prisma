@@ -5625,3 +5625,19 @@ model CompoundingContract {
   @@index([status])
   @@map("compounding_contracts")
 }
+
+// Osobní prodejní cíl obchodníka. metric: new_contacts|conversions|reservations|revenue,
+// period: day|week|month|year. value = cílová hodnota (počet, resp. Kč u revenue).
+model SalesTarget {
+  id        Int      @id @default(autoincrement())
+  person_id Int
+  metric    String   @db.VarChar(20)
+  period    String   @db.VarChar(10)
+  value     Int      @default(0)
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@unique([person_id, metric, period])
+  @@index([person_id])
+  @@map("sales_targets")
+}

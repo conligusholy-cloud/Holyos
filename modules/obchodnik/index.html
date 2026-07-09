@@ -78,6 +78,7 @@
   </div>
 
   <div class="chips" id="chips"></div>
+  <div id="myplan" style="padding:0 12px"></div>
   <div id="content"><div class="loading">Načítám…</div></div>
 
   <button class="fab" onclick="openAdd()">+ Nový kontakt</button>
@@ -164,6 +165,7 @@
       renderChips();
       buildLangOptions();
       await load();
+      loadMyPlan();
     } catch(e){ /* redirect handled */ }
   }
 
@@ -533,6 +535,29 @@
       closeEdit(); render();
     } catch(e){ errEl.textContent = 'Uložení selhalo.'; }
     finally { btn.disabled=false; btn.textContent='Uložit údaje'; }
+  }
+
+  function fmtMoney(v){ return (v||0).toLocaleString('cs-CZ')+' Kč'; }
+  var PLABEL = { day:'Den', week:'Týden', month:'Měsíc', year:'Rok' };
+  async function loadMyPlan(){
+    var box = document.getElementById('myplan'); if (!box) return;
+    try {
+      var r = await api('/my-plan'); if (!r.ok) return; var j = await r.json();
+      if (!j || !j.data || !j.metrics || !j.periods) return;
+      var head = '<tr><th></th>' + j.periods.map(function(p){ return '<th style="font-size:11px;color:var(--muted2);font-weight:600;padding:4px 6px">'+(PLABEL[p]||p)+'</th>'; }).join('') + '</tr>';
+      var rows = j.metrics.map(function(m){
+        var cells = j.periods.map(function(p){
+          var c = (j.data[m.key] && j.data[m.key][p]) || { actual:0, target:0 };
+          var val = (m.key==='revenue') ? fmtMoney(c.actual) : c.actual;
+          var tgt = c.target ? (' / ' + ((m.key==='revenue') ? fmtMoney(c.target) : c.target)) : '';
+          var pct = c.target ? Math.round(c.actual/c.target*100) : null;
+          var col = (pct==null) ? 'var(--text)' : (pct>=100?'#22c55e':pct>=50?'#eab308':'var(--muted)');
+          return '<td style="text-align:center;padding:5px 6px;color:'+col+';white-space:nowrap">'+val+tgt+(pct!=null?'<div style="font-size:10px">'+pct+'%</div>':'')+'</td>';
+        }).join('');
+        return '<tr><td style="padding:5px 6px;color:var(--muted);white-space:nowrap">'+esc(m.label)+'</td>'+cells+'</tr>';
+      }).join('');
+      box.innerHTML = '<details style="background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:10px 12px;margin:8px 0"><summary style="cursor:pointer;font-weight:700">📈 Můj plán</summary><div style="overflow-x:auto;margin-top:8px"><table style="width:100%;border-collapse:collapse;font-size:13px">'+head+rows+'</table></div><div style="font-size:11px;color:var(--muted2);margin-top:6px">Skutečnost / cíl · % plnění (cíle nastavuje vedoucí obchodu).</div></details>';
+    } catch(e){}
   }
 
   async function doLogout(){ try{ await fetch('/api/auth/logout', { method:'POST', credentials:'include' }); }catch(e){} window.location.href='/login.html'; }
