@@ -956,7 +956,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
   var OFFERS = { data:null, cur:'CZK', eur:25, feePerDay:20000, cfg:{ holdHours:1, signDays:1, payDays:1, reblockDays:2 } };
   function offEsc(x){ return String(x==null?"":x).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
   function offTok(){ try{ return localStorage.getItem("compounder.portal.token")||""; }catch(_){ return ""; } }
-  var CONTRACT_STATUS_PT = { koncept:"Připravuje se", odeslano:"K podpisu", vyplneno:"Vyplněno", podepsano:"Podepsáno" };
+  var CONTRACT_STATUS_PT = { koncept:"Připravuje se", odeslano:"K podpisu", vyplneno:"Vyplněno", k_podpisu:"Čeká na dokončení", podepsano:"Podepsáno" };
   function loadPortalContracts(tok){
     fetch("/api/compounder/portal/contracts?t=" + encodeURIComponent(tok), { credentials:"include" })
       .then(function(r){ return r.json(); })

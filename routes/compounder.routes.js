@@ -2134,7 +2134,7 @@ router.post('/contracts/:type(kupni|servisni|rezervacni)/pdf', requireAuth, asyn
 
 
 // ─── Evidence smluv u lokality (Compounding) ─────────────────────────────────
-const CONTRACT_STATES = ['koncept', 'odeslano', 'vyplneno', 'podepsano'];
+const CONTRACT_STATES = ['koncept', 'odeslano', 'vyplneno', 'k_podpisu', 'podepsano'];
 function _safeContractName(s) {
   return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '')
     .replace(/[^A-Za-z0-9_-]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 80);
@@ -2349,7 +2349,7 @@ router.post('/contracts/public/:token/sign', async (req, res, next) => {
     const noSig = Object.assign({}, merged); delete noSig._signature;
     const contentHash = crypto.createHash('sha256').update(JSON.stringify({ type: row.type, kiosk: row.kiosk_code, fields: noSig })).digest('hex');
     const signedAt = new Date();
-    merged._signature = {
+    merged._signature_customer = {
       name: signerName,
       image: signature,
       signed_at: signedAt.toISOString(),
@@ -2358,23 +2358,77 @@ router.post('/contracts/public/:token/sign', async (req, res, next) => {
       content_hash: contentHash,
       method: 'SES-drawn',
     };
-    const signedRow = await prisma.compoundingContract.update({
+    // Zákazník podepsal → čeká na náš podpis (Jan/Tomáš dostanou push + odkaz).
+    const awaitingRow = await prisma.compoundingContract.update({
       where: { id: row.id },
-      data: { fields: merged, status: 'podepsano', filled_at: row.filled_at || signedAt, signed_at: signedAt },
+      data: { fields: merged, status: 'k_podpisu', filled_at: row.filled_at || signedAt },
     });
-    compounderNotify.notifyContractEvent(prisma, { contract: signedRow, event: 'signed' }).catch(() => {});
-    try {
-      const ids = await resolveOwnerUserIds();
-      const label = (contracts.TYPE_LABEL[row.type] || 'Smlouva') + ' — ' + (row.kiosk_code || '');
-      const link = (getAppUrl() || '') + '/modules/prodejni-objednavky/index.html';
-      for (const uid of ids) {
-        await createNotification({ userId: uid, type: 'contract_signed', title: 'Podepsaná smlouva', body: label + ' — protistrana elektronicky podepsala.', link }).catch(() => {});
-      }
-    } catch (e) { console.error('[contract-sign notify]', e); }
-    res.json({ ok: true });
+    const signUrl = (getAppUrl() || '') + '/modules/podpis-smlouvy/index.html?id=' + row.id;
+    compounderNotify.notifyContractAwaitingCountersign(prisma, awaitingRow, signUrl).catch(() => {});
+    res.json({ ok: true, awaiting_countersign: true });
   } catch (err) { next(err); }
 });
 
+
+// Je přihlášený uživatel podepisující za Best Series? (admin/superadmin nebo v seznamu příjemců)
+async function isContractSigner(req) {
+  const u = req.user || {};
+  if (u.isSuperAdmin || u.role === 'admin') return true;
+  const pid = u.person && u.person.id;
+  if (!pid) return false;
+  try {
+    const ids = await compounderNotify.resolveRecipientPersonIds(prisma);
+    return Array.isArray(ids) && ids.indexOf(pid) !== -1;
+  } catch (e) { return false; }
+}
+
+// GET /api/compounder/contracts/:id/for-sign — data pro podpis za Best Series (auth, podepisující).
+router.get('/contracts/:id(\\d+)/for-sign', requireAuth, async (req, res, next) => {
+  try {
+    if (!(await isContractSigner(req))) return res.status(403).json({ error: 'Jen podepisující za Best Series.' });
+    const row = await prisma.compoundingContract.findUnique({ where: { id: Number(req.params.id) } });
+    if (!row) return res.status(404).json({ error: 'Smlouva nenalezena' });
+    const f = row.fields || {};
+    const cust = f._signature_customer || null;
+    res.json({
+      ok: true, id: row.id, type: row.type, typeLabel: contracts.TYPE_LABEL[row.type] || 'Smlouva',
+      kiosk_code: row.kiosk_code, kiosk_label: row.kiosk_label, status: row.status,
+      customer_signature: cust ? cust.image : null,
+      customer_name: cust ? cust.name : null,
+      customer_signed_at: cust ? cust.signed_at : null,
+    });
+  } catch (err) { next(err); }
+});
+
+// POST /api/compounder/contracts/:id/countersign — podpis za Best Series → stav podepsano.
+router.post('/contracts/:id(\\d+)/countersign', requireAuth, async (req, res, next) => {
+  try {
+    if (!(await isContractSigner(req))) return res.status(403).json({ error: 'Jen podepisující za Best Series.' });
+    const row = await prisma.compoundingContract.findUnique({ where: { id: Number(req.params.id) } });
+    if (!row) return res.status(404).json({ error: 'Smlouva nenalezena' });
+    if (row.status === 'podepsano') return res.status(409).json({ error: 'Smlouva už je plně podepsaná.' });
+    const b = req.body || {};
+    const signature = String(b.signature || '');
+    if (!b.consent) return res.status(400).json({ error: 'Chybí souhlas s podpisem.' });
+    if (!/^data:image\/(png|jpeg);base64,/.test(signature) || signature.length > 400000) return res.status(400).json({ error: 'Neplatný nebo příliš velký podpis.' });
+    const person = req.user.person;
+    const signerName = person ? ((person.first_name || '') + ' ' + (person.last_name || '')).trim() : (req.user.displayName || 'Best Series');
+    const merged = Object.assign({}, row.fields || {});
+    const signedAt = new Date();
+    merged._signature_bestseries = {
+      name: signerName, image: signature, signed_at: signedAt.toISOString(),
+      person_id: person ? person.id : null,
+      ip: (req.headers['x-forwarded-for'] || req.socket && req.socket.remoteAddress || '').toString().split(',')[0].trim().slice(0, 64),
+      method: 'SES-drawn',
+    };
+    const signedRow = await prisma.compoundingContract.update({
+      where: { id: row.id }, data: { fields: merged, status: 'podepsano', signed_at: signedAt },
+    });
+    compounderNotify.notifyContractEvent(prisma, { contract: signedRow, event: 'signed' }).catch(() => {});
+    // TODO Fáze B: po plném podpisu automaticky vytvořit koncept faktury dle smlouvy.
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
 
 // ─── Portál: nabídka lokalit k prodeji (jen forSale, kurátorovaná ekonomika) ──
 let _eurRate = null, _eurRateAt = 0;

@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f1115">
+<title>Podpis smlouvy — Best Series</title>
+<style>
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;background:#0f1115;color:#f2f3f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;line-height:1.45}
+  .wrap{max-width:560px;margin:0 auto;padding:24px 16px 60px}
+  h1{font-size:19px;margin:0 0 4px}
+  .sub{color:#9aa0ad;font-size:13px;margin:0 0 18px}
+  .card{background:#171a21;border:1px solid #262a33;border-radius:14px;padding:18px;margin-bottom:14px}
+  label{display:block;font-size:12px;color:#9aa0ad;margin:12px 0 4px}
+  input{width:100%;background:#0f1115;border:1px solid #2c313b;border-radius:8px;padding:10px 12px;color:#f2f3f5;font-size:14px}
+  .btn{width:100%;margin-top:20px;background:#eab308;color:#1a1a1a;border:none;border-radius:9px;padding:13px;font-size:15px;font-weight:700;cursor:pointer}
+  .btn:disabled{opacity:.6}
+  .msg{margin-top:14px;font-size:14px}
+  .err{color:#ef4444}
+  .done{text-align:center;padding:24px 0}
+  .done .big{font-size:44px}
+  .cust-sig{background:#fff;border-radius:8px;padding:6px;margin-top:4px}
+  .cust-sig img{max-width:100%;display:block}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div id="loading" class="sub">Načítám…</div>
+  <div id="content" style="display:none">
+    <h1 id="title">Podpis smlouvy</h1>
+    <p class="sub" id="subtitle"></p>
+    <div class="card">
+      <div style="font-size:12px;color:#9aa0ad">Podpis zákazníka</div>
+      <div class="cust-sig" id="cust-sig"><span style="color:#666;font-size:12px">—</span></div>
+      <div class="sub" id="cust-info" style="margin:8px 0 0"></div>
+    </div>
+    <div class="card">
+      <div style="font-size:12px;color:#9aa0ad">Váš podpis za Best Series</div>
+      <div style="background:#fff;border-radius:8px;position:relative;margin-top:6px">
+        <canvas id="sigpad" style="width:100%;height:180px;display:block;touch-action:none;border-radius:8px"></canvas>
+        <button type="button" onclick="clearSig()" style="position:absolute;top:6px;right:6px;padding:5px 10px;font-size:12px;background:#0f1115;color:#f2f3f5;border:none;border-radius:6px">Vymazat</button>
+      </div>
+      <label style="display:flex;align-items:flex-start;gap:10px;color:#f2f3f5;font-size:13px;margin-top:12px;cursor:pointer"><input type="checkbox" id="consent" style="width:auto;margin-top:2px"> Podepisuji tuto smlouvu za Best Series s.r.o.</label>
+      <button class="btn" id="submit" onclick="sign()">Podepsat za Best Series</button>
+      <div class="msg" id="msg"></div>
+    </div>
+  </div>
+  <div id="done" class="done" style="display:none">
+    <div class="big">✅</div>
+    <h1>Smlouva podepsána</h1>
+    <p class="sub">Smlouva je plně podepsaná. Zákazník bude informován.</p>
+  </div>
+</div>
+<script>
+(function(){
+  var id = new URLSearchParams(location.search).get('id');
+  var API = '/api/compounder/contracts/' + encodeURIComponent(id || '');
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+  function show(x){ document.getElementById(x).style.display=''; } function hide(x){ document.getElementById(x).style.display='none'; }
+  function fail(t){ hide('loading'); document.querySelector('.wrap').innerHTML = '<h1>Nelze podepsat</h1><p class="sub err">'+esc(t)+'</p>'; }
+
+  async function load(){
+    if (!id){ fail('Chybí ID smlouvy.'); return; }
+    var me = await fetch('/api/auth/me', { credentials:'include' }).then(function(r){ return r.ok?r.json():null; }).catch(function(){return null;});
+    if (!me || !me.user){ window.location.href = '/login.html?redirect=' + encodeURIComponent(location.pathname+location.search); return; }
+    var r = await fetch(API + '/for-sign', { credentials:'include' });
+    if (r.status === 403){ fail('Nejste oprávněn(a) podepisovat za Best Series.'); return; }
+    if (!r.ok){ fail('Smlouvu se nepodařilo načíst.'); return; }
+    var d = await r.json();
+    if (d.status === 'podepsano'){ hide('loading'); show('done'); return; }
+    document.getElementById('title').textContent = (d.typeLabel||'Smlouva');
+    document.getElementById('subtitle').textContent = (d.kiosk_label || d.kiosk_code || '') + ' — podpis za Best Series';
+    if (d.customer_signature){ document.getElementById('cust-sig').innerHTML = '<img src="'+d.customer_signature+'" alt="podpis zákazníka">'; }
+    document.getElementById('cust-info').textContent = (d.customer_name?('Podepsal: '+d.customer_name):'') + (d.customer_signed_at?(' · '+new Date(d.customer_signed_at).toLocaleString('cs-CZ')):'');
+    hide('loading'); show('content'); initSigPad();
+  }
+
+  var ctx=null, drawing=false, dirty=false, cv=null;
+  function initSigPad(){
+    cv = document.getElementById('sigpad'); var ratio = window.devicePixelRatio||1; var rect = cv.getBoundingClientRect();
+    cv.width = Math.round(rect.width*ratio); cv.height = Math.round(180*ratio);
+    ctx = cv.getContext('2d'); ctx.scale(ratio,ratio); ctx.strokeStyle='#111'; ctx.lineWidth=2.2; ctx.lineCap='round'; ctx.lineJoin='round';
+    function pos(e){ var r=cv.getBoundingClientRect(); var t=(e.touches&&e.touches[0])?e.touches[0]:e; return {x:t.clientX-r.left,y:t.clientY-r.top}; }
+    function start(e){ e.preventDefault(); drawing=true; var p=pos(e); ctx.beginPath(); ctx.moveTo(p.x,p.y); }
+    function move(e){ if(!drawing) return; e.preventDefault(); var p=pos(e); ctx.lineTo(p.x,p.y); ctx.stroke(); dirty=true; }
+    function end(){ drawing=false; }
+    cv.addEventListener('mousedown',start); cv.addEventListener('mousemove',move); window.addEventListener('mouseup',end);
+    cv.addEventListener('touchstart',start,{passive:false}); cv.addEventListener('touchmove',move,{passive:false}); cv.addEventListener('touchend',end);
+  }
+  window.clearSig = function(){ if(ctx&&cv){ ctx.clearRect(0,0,cv.width,cv.height); dirty=false; } };
+
+  window.sign = async function(){
+    var btn=document.getElementById('submit'); var msg=document.getElementById('msg'); msg.textContent='';
+    if(!dirty){ msg.className='msg err'; msg.textContent='Nakreslete prosím svůj podpis.'; return; }
+    if(!document.getElementById('consent').checked){ msg.className='msg err'; msg.textContent='Potvrďte prosím souhlas.'; return; }
+    btn.disabled=true; btn.textContent='Podepisuji…';
+    try {
+      var r = await fetch(API + '/countersign', { method:'POST', credentials:'include', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ signature: cv.toDataURL('image/png'), consent:true }) });
+      if(!r.ok){ var d=await r.json().catch(function(){return{};}); throw new Error(d.error||'chyba'); }
+      hide('content'); show('done');
+    } catch(e){ btn.disabled=false; btn.textContent='Podepsat za Best Series'; msg.className='msg err'; msg.textContent='Podpis selhal: '+(e.message||''); }
+  };
+
+  load();
+})();
+</script>
+</body>
+</html>

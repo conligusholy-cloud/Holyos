@@ -143,7 +143,7 @@
         body: JSON.stringify({ fields: fields, signer_name: signer, signature: signature, consent: true }),
       });
       if (!r.ok) { var d = await r.json().catch(function(){return{};}); throw new Error(d.error || 'http'); }
-      document.getElementById('done').querySelector('.sub').textContent = 'Smlouva byla elektronicky podepsána. Děkujeme! Kopii vám zašleme e-mailem.';
+      document.getElementById('done').querySelector('.sub').textContent = 'Váš podpis jsme přijali. Smlouvu dokončíme podpisem za Best Series a poté vám ji zašleme e-mailem.';
       hide('content'); show('done');
     } catch (e) {
       btn.disabled = false; btn.textContent = 'Podepsat smlouvu';
