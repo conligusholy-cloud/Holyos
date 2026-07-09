@@ -226,14 +226,22 @@ router.get('/portal/session', async (req, res, next) => {
     if (!id) return res.status(401).json({ ok: false, error: 'Neplatný nebo chybějící přístupový odkaz.' });
     const lead = await prisma.compounderLead.findUnique({
       where: { id },
-      select: { id: true, name: true, email: true, phone: true, role: true, lang: true, visible_sections: true, visible_templates: true, password_hash: true, source: true, access_approved_at: true },
+      select: { id: true, name: true, email: true, phone: true, role: true, lang: true, visible_sections: true, visible_templates: true, owner_person_id: true, password_hash: true, source: true, access_approved_at: true },
     });
     if (!lead) return res.status(404).json({ ok: false, error: 'Registrace nenalezena.' });
     if (!leadAccessAllowed(lead)) {
       return res.status(403).json({ ok: false, pending: true, error: 'Tvoje žádost o přístup zatím čeká na schválení. Jakmile ho povolíme, dostaneš přihlašovací odkaz e-mailem.' });
     }
     const templates = (lead.visible_templates ? lead.visible_templates.split(',') : []).map((s) => s.trim()).filter(Boolean);
-    return res.json({ ok: true, id: lead.id, name: lead.name, email: lead.email || '', phone: lead.phone || '', role: lead.role, lang: lead.lang, sections: resolveSections(lead.visible_sections), templates: templates, has_password: !!lead.password_hash });
+    // Přiřazený obchodník = "Compounder konzultant" pro kontaktní sekci portálu.
+    let consultant = null;
+    if (lead.owner_person_id) {
+      try {
+        const p = await prisma.person.findUnique({ where: { id: lead.owner_person_id }, select: { first_name: true, last_name: true, phone: true, email: true } });
+        if (p) consultant = { name: ((p.first_name || '') + ' ' + (p.last_name || '')).trim(), phone: p.phone || '', email: p.email || '' };
+      } catch (e) { /* fallback na majitele */ }
+    }
+    return res.json({ ok: true, id: lead.id, name: lead.name, email: lead.email || '', phone: lead.phone || '', role: lead.role, lang: lead.lang, sections: resolveSections(lead.visible_sections), templates: templates, consultant: consultant, has_password: !!lead.password_hash });
   } catch (err) {
     next(err);
   }

@@ -600,7 +600,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
 
     <section class="blk" id="kontakt" style="text-align:center">
       <div class="eyebrow" data-i18n="p.ct.eyebrow">Contact</div>
-      <h2 data-i18n="p.ct.title">Talk to the owner of Best Series</h2>
+      <h2 id="ct-title" data-i18n="p.ct.title">Talk to the owner of Best Series</h2>
       <p class="lead" data-i18n="p.ct.lead" style="margin:0 auto 26px">Want to discuss it in person? Leave your number and we'll call you back.</p>
       <div class="panel" style="max-width:460px;margin:0 auto">
         <button type="button" id="ct-open" class="btn btn-gold" style="width:100%;justify-content:center" data-i18n="p.ct.btn">Connect with the owner</button>
@@ -612,7 +612,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
           <button type="button" id="ct-send" class="btn btn-gold" style="width:100%;justify-content:center;margin-top:8px" data-i18n="p.ct.send">Ask us to call you</button>
           <p class="note" id="ct-msg" role="status" style="min-height:18px;margin-top:8px"></p>
         </div>
-        <p class="note" style="margin-top:16px;border-top:0.5px solid var(--line);padding-top:14px">
+        <p class="note" id="ct-owner" style="margin-top:16px;border-top:0.5px solid var(--line);padding-top:14px">
           <span data-i18n="contact.owner">Jan Holý — Co-owner</span><br>
           <a href="tel:+420733105479" style="color:var(--gold-soft)">+420 733 105 479</a> · <a href="mailto:jan.holy@bestseries.cz" style="color:var(--gold-soft)">jan.holy@bestseries.cz</a>
         </p>
@@ -890,6 +890,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
       PORTAL_LEAD_ID = res.j.id;
       window._leadEmail = res.j.email || ""; window._leadPhone = res.j.phone || "";
       window._leadTemplates = Array.isArray(res.j.templates) ? res.j.templates : [];
+      window._consultant = res.j.consultant || null;
       // Viditelnost sekcí dle povolení leadu; úvodní "Filozofie" je vždy viditelná.
       var ALLOWED = Array.isArray(res.j.sections) ? res.j.sections : [];
       PORTAL_SECTIONS = ALLOWED.slice();
@@ -916,6 +917,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
       var initLang = (_stored && I18N.LANGS[_stored]) ? _stored : ((_leadLang && I18N.LANGS[_leadLang]) ? _leadLang : pDetect());
       pBuildSelect(initLang);
       pSetLang(initLang, function(){
+        applyConsultant();
         document.getElementById("hi").textContent = pT("p.hi") + (first ? (", " + first) : "");
         var gb = document.getElementById("gearBtn"); if (gb){ gb.setAttribute("aria-label", pT("p.nav.acc")); gb.title = pT("p.nav.acc"); }
         initCalc(); initNav(); initGallery(); initMilestones(); initLocation(); initContact(); initBuy(); initDistModal();
@@ -969,6 +971,21 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
   var OFFERS = { data:null, cur:'CZK', eur:25, feePerDay:20000, cfg:{ holdHours:1, signDays:1, payDays:1, reblockDays:2 } };
   function offEsc(x){ return String(x==null?"":x).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
   function offTok(){ try{ return localStorage.getItem("compounder.portal.token")||""; }catch(_){ return ""; } }
+  function applyConsultant(){
+    var c = window._consultant;
+    if (!c || !c.name) return;
+    function e2(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(x){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[x];}); }
+    var t = document.getElementById('ct-title'); if(t){ t.removeAttribute('data-i18n'); t.textContent = 'Spojte se se svým Compounder konzultantem'; }
+    var b = document.getElementById('ct-open'); if(b){ b.removeAttribute('data-i18n'); b.textContent = 'Spojit se s konzultantem'; }
+    var o = document.getElementById('ct-owner');
+    if(o){
+      var tel = (c.phone||'').replace(/\s+/g,'');
+      var l2 = [];
+      if(c.phone) l2.push('<a href="tel:'+e2(tel)+'" style="color:var(--gold-soft)">'+e2(c.phone)+'</a>');
+      if(c.email) l2.push('<a href="mailto:'+e2(c.email)+'" style="color:var(--gold-soft)">'+e2(c.email)+'</a>');
+      o.innerHTML = '<span>'+e2(c.name)+' — Compounder konzultant</span>' + (l2.length ? ('<br>'+l2.join(' · ')) : '');
+    }
+  }
   var CONTRACT_STATUS_PT = { koncept:"Připravuje se", odeslano:"K podpisu", vyplneno:"Vyplněno", k_podpisu:"Čeká na dokončení", podepsano:"Podepsáno" };
   var TPL_LABEL_PT = { rezervacni:"Rezervační smlouva", kupni:"Kupní smlouva", servisni:"Servisní smlouva" };
   function renderPortalTemplates(tok){
