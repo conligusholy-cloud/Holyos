@@ -2894,7 +2894,7 @@
           '<span>Portal: <b style="color:'+(a.portalOpened?'#10b981':'var(--text2)')+'">'+(a.portalOpened?'otevřel':'ne')+'</b></span>' +
           (mins?('<span>Čas: <b style="color:var(--text)">~'+mins+' min</b></span>'):'') +
           '<span>Od '+new Date(a.first).toLocaleString('cs-CZ')+'</span></div>';
-        var rows = a.events.map(function(e){
+        var rows = a.events.slice().reverse().map(function(e){
           var _d = new Date(e.at);
           var dt = _d.toLocaleDateString('cs-CZ');
           var tm = _d.toLocaleTimeString('cs-CZ');
@@ -2944,7 +2944,7 @@
         if (e.event==='visit_end' || e.event==='page_leave'){ var pp=e.props||{}; if(pp.ms) cur.ms=Math.max(cur.ms, Number(pp.ms)||0); if(pp.depth!=null) cur.depth=Math.max(cur.depth||0, Number(pp.depth)||0); }
         cur.ev.push(e);
       });
-      return visits.map(function(v){
+      return visits.slice().reverse().map(function(v){
         var d = new Date(v.start);
         var when = d.toLocaleDateString('cs-CZ') + ' ' + d.toLocaleTimeString('cs-CZ').slice(0,5);
         var icon = v.kind==='portal' ? '🔑' : '🌐';

@@ -1270,11 +1270,13 @@ router.get('/leads/:id/activity', requireAuth, async (req, res, next) => {
     });
     const or = [{ props: { path: ['lead_id'], equals: id } }];
     if (reg && reg.sid) or.push({ sid: reg.sid });
-    const events = await prisma.compounderEvent.findMany({
+    // Bereme NEJNOVĚJŠÍCH 500 eventů (desc) a otočíme do chronologie — jinak by se
+    // u leada s >500 eventy nikdy nenačetla nedávná aktivita (např. ekonomika).
+    const events = (await prisma.compounderEvent.findMany({
       where: { OR: or },
-      orderBy: { created_at: 'asc' },
+      orderBy: { created_at: 'desc' },
       take: 500,
-    });
+    })).reverse();
     const sections = {};
     let portalOpened = false;
     let totalMs = 0;
@@ -1315,7 +1317,7 @@ router.get('/leads/:id/ai-eval', requireAuth, async (req, res, next) => {
     });
     const or = [{ props: { path: ['lead_id'], equals: id } }];
     if (reg && reg.sid) or.push({ sid: reg.sid });
-    const events = await prisma.compounderEvent.findMany({ where: { OR: or }, orderBy: { created_at: 'asc' }, take: 500 });
+    const events = (await prisma.compounderEvent.findMany({ where: { OR: or }, orderBy: { created_at: 'desc' }, take: 500 })).reverse();
 
     const sections = {}; const evCounts = {}; const locChecks = []; let portalOpened = false; let totalMs = 0;
     events.forEach((e) => {
