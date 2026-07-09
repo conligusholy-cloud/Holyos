@@ -665,6 +665,9 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
   var I18N = window.COMPOUNDER_I18N || { base:"en", path:"i18n/", LANGS:{en:"English"}, strings:{en:{}} };
   var DICT = {};
   var PORTAL_LEAD_ID = null;
+  // Cílová stránka z URL hashe (např. /portal#provozovatel z detailu ekonomiky).
+  // Zachytit HNED — po přihlášení se hash z URL smaže (replaceState).
+  var INIT_PAGE = (location.hash || '').replace('#', '');
   var PORTAL_SECTIONS = [];
   var PORTAL_SEC_TIMER = null;
   var mileChart = null, mileMode = "full";
@@ -908,7 +911,8 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
         if (link) link.style.display = (ALLOWED.indexOf(NAV_GROUP[href]) !== -1) ? '' : 'none';
       });
       // Výchozí stránka po přihlášení: Filozofie (taby přepínají jednotlivé stránky)
-      pShowPage('filozofie');
+      var _pgOk = { filozofie: 1, provozovatel: 1, investor: 1, distributor: 1 };
+      pShowPage(_pgOk[INIT_PAGE] ? INIT_PAGE : 'filozofie');
       // Výchozí jazyk = jazyk nastavený u leadu (pokud si uživatel na tomto zařízení sám nevybral jiný).
       var _stored = null; try { _stored = localStorage.getItem("compounder.lang2"); } catch(_){}
       var _leadLang = (res.j.lang || "").toLowerCase();
