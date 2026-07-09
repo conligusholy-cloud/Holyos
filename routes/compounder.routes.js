@@ -185,6 +185,24 @@ router.post('/push/send', requireAuth, async (req, res, next) => {
 // Odemykatelné skupiny sekcí portálu. Úvodní "filozofie" je vždy viditelná (mimo tento seznam).
 // null/prázdné = nic odemčeno → lead vidí jen úvodní stránku s filozofií.
 const SECTION_GROUPS = ['ekonomika', 'nabidka', 'distributor'];
+
+// Aktuální lidské názvy sekcí webu compounder.world + Portalu (klíč eventu → název).
+// Používá se pro AI vyhodnocení, aby popisovalo aktuální strukturu, ne interní klíče.
+const SECTION_LABELS = {
+  // Landing (compounder.world)
+  top: 'Úvod', compounder: 'Co je Compounder', compounding: 'Co je Compounding',
+  machine: 'Compounder Machine', traits: 'Proč to funguje', who: 'Pro koho',
+  card: 'Compounder Card', register: 'Registrace',
+  // Portal
+  filozofie: 'Filozofie', ekonomika: 'Provozovatel', nabidka: 'Investor', navratnost: 'Distributor',
+  milniky: 'Milníky (Gold & Diamond)', parametry: 'Parametry', galerie: 'Galerie',
+  pripojky: 'Přípojky', pudorysy: 'Půdorysy', distribuce: 'Distribuce', lokalita: 'Lokalita', kontakt: 'Kontakt',
+};
+function relabelSections(sections) {
+  const out = {};
+  Object.keys(sections || {}).forEach((k) => { out[SECTION_LABELS[k] || k] = sections[k]; });
+  return out;
+}
 function resolveSections(csv) {
   if (csv == null || String(csv).trim() === '') return [];
   const set = String(csv).split(',').map((s) => s.trim()).filter((s) => SECTION_GROUPS.includes(s));
@@ -1213,7 +1231,8 @@ router.get('/leads/:id/ai-eval', requireAuth, async (req, res, next) => {
       requested_contact: (evCounts['contact_request'] > 0) || /Požádal o telefonický kontakt/.test(lead.notes || ''),
       notes: (lead.notes || '').slice(0, 1500), created_at: lead.created_at,
       total_events: events.length, portal_opened: portalOpened, minutes: totalMs > 0 ? Math.round(totalMs / 60000) : null,
-      sections: sections, event_counts: evCounts, location_checks: locChecks.slice(0, 6),
+      sections: relabelSections(sections), event_counts: evCounts, location_checks: locChecks.slice(0, 6),
+      site_sections: Object.values(SECTION_LABELS),
     };
     let out = await leadEvalAI(facts);
     if (!out) out = leadEvalFallback(facts);
@@ -1978,7 +1997,7 @@ async function leadEvalAI(facts) {
     const Anthropic = require('@anthropic-ai/sdk');
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
     const model = process.env.COMPOUNDER_LOCATION_MODEL || 'claude-sonnet-4-6';
-    const sys = 'Jsi obchodní analytik. Z aktivity zájemce (lead) na webu compounder.world (prémiové samoobslužné prádelny jako investiční aktivum) vyhodnoť, jak je "zahřátý" a o jak velkém byznysu uvažuje. Data: počet eventů, čas na webu, jestli otevřel Portal, navštívené sekce (sections), počty typů eventů (event_counts), kontroly lokalit (location_checks – populace/potřebný podíl/skóre), jestli požádal o kontakt (requested_contact / has_phone), stav a poznámky. Silné signály zájmu: požádal o kontakt, opakované kontroly lokalit, čas v ekonomice/návratnosti/Gold & Diamond, otevřený Portal. Odpověz POUZE platným JSON bez markdownu: {"warmthPct":<celé 0-100>,"warmth":"<2-3 slova, např. Studený/Vlažný/Zahřátý/Horký>","summary":"<2-4 věty česky>","businessSize":"<krátce: o jakém rozsahu uvažuje, např. jeden kiosk / malá síť / regionální síť / nejasné>","signals":[{"label":"<krátké>","value":"<krátké>","good":<true|false>}]}. Pokud je minutes null nebo 0, čas na webu se nezměřil — neber to jako slabinu ani nezájem, jen to nezmiňuj. Piš česky.';
+    const sys = 'Jsi obchodní analytik. Z aktivity zájemce (lead) na webu compounder.world (prémiové samoobslužné prádelny jako investiční aktivum) vyhodnoť, jak je "zahřátý" a o jak velkém byznysu uvažuje. Data: počet eventů, čas na webu, jestli otevřel Portal, navštívené sekce (sections), počty typů eventů (event_counts), kontroly lokalit (location_checks – populace/potřebný podíl/skóre), jestli požádal o kontakt (requested_contact / has_phone), stav a poznámky. Silné signály zájmu: požádal o kontakt, opakované kontroly lokalit, čas v ekonomice/návratnosti/Gold & Diamond, otevřený Portal. Odpověz POUZE platným JSON bez markdownu: {"warmthPct":<celé 0-100>,"warmth":"<2-3 slova, např. Studený/Vlažný/Zahřátý/Horký>","summary":"<2-4 věty česky>","businessSize":"<krátce: o jakém rozsahu uvažuje, např. jeden kiosk / malá síť / regionální síť / nejasné>","signals":[{"label":"<krátké>","value":"<krátké>","good":<true|false>}]}. Pokud je minutes null nebo 0, čas na webu se nezměřil — neber to jako slabinu ani nezájem, jen to nezmiňuj. DŮLEŽITÉ: názvy sekcí v poli "sections" jsou už aktuální lidské názvy webu (např. Provozovatel, Investor, Distributor, Compounder Machine, Milníky, Lokalita). Odkazuj se VÝHRADNĚ na tyto názvy z dat; nevymýšlej ani nepoužívej žádné jiné/staré názvy sekcí. Kompletní aktuální struktura webu je v poli "site_sections". Piš česky.';
     const usr = 'Lead (JSON):\n' + JSON.stringify(facts);
     const msg = await client.messages.create({ model, max_tokens: 700, system: sys, messages: [{ role: 'user', content: usr }] });
     let text = (msg && msg.content && msg.content[0] && msg.content[0].text) || '';
