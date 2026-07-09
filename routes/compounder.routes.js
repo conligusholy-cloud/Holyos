@@ -226,16 +226,38 @@ router.get('/portal/session', async (req, res, next) => {
     if (!id) return res.status(401).json({ ok: false, error: 'Neplatný nebo chybějící přístupový odkaz.' });
     const lead = await prisma.compounderLead.findUnique({
       where: { id },
-      select: { id: true, name: true, role: true, lang: true, visible_sections: true, password_hash: true, source: true, access_approved_at: true },
+      select: { id: true, name: true, email: true, phone: true, role: true, lang: true, visible_sections: true, password_hash: true, source: true, access_approved_at: true },
     });
     if (!lead) return res.status(404).json({ ok: false, error: 'Registrace nenalezena.' });
     if (!leadAccessAllowed(lead)) {
       return res.status(403).json({ ok: false, pending: true, error: 'Tvoje žádost o přístup zatím čeká na schválení. Jakmile ho povolíme, dostaneš přihlašovací odkaz e-mailem.' });
     }
-    return res.json({ ok: true, id: lead.id, name: lead.name, role: lead.role, lang: lead.lang, sections: resolveSections(lead.visible_sections), has_password: !!lead.password_hash });
+    return res.json({ ok: true, id: lead.id, name: lead.name, email: lead.email || '', phone: lead.phone || '', role: lead.role, lang: lead.lang, sections: resolveSections(lead.visible_sections), has_password: !!lead.password_hash });
   } catch (err) {
     next(err);
   }
+});
+
+// GET /api/compounder/ares?ico=XXXXXXXX — doplnění firemních údajů z ARES rejstříku.
+router.get('/ares', async (req, res, next) => {
+  try {
+    const ico = String(req.query.ico || '').replace(/\D/g, '');
+    if (!/^\d{8}$/.test(ico)) return res.status(400).json({ ok: false, error: 'Neplatné IČO (8 číslic).' });
+    let r;
+    try {
+      r = await fetch('https://ares.gov.cz/ekonomicke-subjekty-v-be/rest/ekonomicke-subjekty/' + ico, { headers: { Accept: 'application/json' } });
+    } catch (e) { return res.status(502).json({ ok: false, error: 'ARES je nedostupný.' }); }
+    if (r.status === 404) return res.status(404).json({ ok: false, error: 'IČO nenalezeno v ARESu.' });
+    if (!r.ok) return res.status(502).json({ ok: false, error: 'ARES vrátil chybu.' });
+    const d = await r.json();
+    res.json({
+      ok: true,
+      ico,
+      name: d.obchodniJmeno || '',
+      address: (d.sidlo && (d.sidlo.textovaAdresa || '')) || '',
+      dic: d.dic || '',
+    });
+  } catch (err) { next(err); }
 });
 
 // GET /api/compounder/portal/contracts?t=TOKEN — smlouvy leada u jeho rezervovaných
@@ -2510,6 +2532,7 @@ router.get('/portal/offered-locations', async (req, res, next) => {
       .filter((k) => (cfgMap[k.code] || {}).forSale)
       .map((k) => {
         const cfg = cfgMap[k.code] || {};
+        const bi = busyInfo.get(k.code);
         const ver = String(cfg.version || '').toLowerCase();
         const machine = machinePrice(ver);
         const avg = num(k.avgTop3);
@@ -2536,8 +2559,11 @@ router.get('/portal/offered-locations', async (req, res, next) => {
           guaranteePct: buybackPct,
           guaranteeYears: buybackYears,
           guaranteeValue: total != null ? Math.round(total * buybackPct / 100) : null,
-          reserved: busyInfo.has(k.code),
-          reservedUntil: busyInfo.has(k.code) ? (busyInfo.get(k.code).reserved_until || null) : null,
+          reserved: !!bi,
+          reservedUntil: bi ? (bi.reserved_until || null) : null,
+          mine: bi ? (bi.lead_id === leadId) : false,
+          resStatus: bi ? bi.status : null,
+          resUntil: bi ? (bi.until || null) : null,
           photos: Array.isArray(cfg.photos) ? cfg.photos : [],
         };
       })
@@ -2574,11 +2600,16 @@ router.post('/portal/reserve-interest', async (req, res, next) => {
 // COMPOUNDING — rezervace lokalit
 // =============================================================================
 const RES_ACTIVE = ['reserved', 'active'];
+const RES_BUSY = ['hold', 'reserved', 'active']; // obsazeno pro ostatní
 
 // Lazy expirace prošlých rezervací (uvolní lokalitu ostatním).
 async function expireStaleReservations() {
   const now = new Date();
   try {
+    // Vypršelý 1h hold → smazat (nikdy se nestal rezervací, neblokuje re-rezervaci).
+    await prisma.locationReservation.deleteMany({
+      where: { status: 'hold', hold_until: { lt: now } },
+    });
     await prisma.locationReservation.updateMany({
       where: { status: 'reserved', fee_until: { lt: now } },
       data: { status: 'expired', cancel_reason: 'Rezervační poplatek nepřišel včas' },
@@ -2594,25 +2625,26 @@ async function activeReservationCodes() {
   await expireStaleReservations();
   try {
     const rows = await prisma.locationReservation.findMany({
-      where: { status: { in: RES_ACTIVE } }, select: { kiosk_code: true },
+      where: { status: { in: RES_BUSY } }, select: { kiosk_code: true },
     });
     return new Set(rows.map((r) => r.kiosk_code));
   } catch (e) { return new Set(); }
 }
 
-// Mapa aktivních rezervací: kiosk_code → { reserved_until, status } (nejzazší konec).
+// Mapa obsazených lokalit (vč. holdu): kiosk_code → { until, status, lead_id }.
 async function activeReservationInfo() {
   await expireStaleReservations();
   try {
     const rows = await prisma.locationReservation.findMany({
-      where: { status: { in: RES_ACTIVE } },
-      select: { kiosk_code: true, reserved_until: true, status: true },
+      where: { status: { in: RES_BUSY } },
+      select: { kiosk_code: true, reserved_until: true, hold_until: true, status: true, lead_id: true },
     });
     const m = new Map();
     for (const r of rows) {
-      const u = r.reserved_until ? new Date(r.reserved_until).getTime() : 0;
+      const until = r.status === 'hold' ? r.hold_until : r.reserved_until;
+      const u = until ? new Date(until).getTime() : 0;
       const cur = m.get(r.kiosk_code);
-      if (!cur || u > cur._t) m.set(r.kiosk_code, { _t: u, reserved_until: r.reserved_until, status: r.status });
+      if (!cur || u > cur._t) m.set(r.kiosk_code, { _t: u, until: until, reserved_until: r.reserved_until, status: r.status, lead_id: r.lead_id });
     }
     return m;
   } catch (e) { return new Map(); }
@@ -2633,6 +2665,36 @@ const reserveSchema = z.object({
 });
 
 // POST /api/compounder/portal/reserve — vytvoří rezervaci (blokuje lokalitu)
+// POST /api/compounder/portal/hold { t, code } — 1h blokace lokality po kliknutí Rezervovat.
+router.post('/portal/hold', async (req, res, next) => {
+  try {
+    const t = String((req.body || {}).t || '');
+    const code = String((req.body || {}).code || '').slice(0, 40);
+    const leadId = verifyPortalToken(t);
+    if (!leadId) return res.status(401).json({ ok: false, error: 'Neplatný nebo chybějící přístupový odkaz.' });
+    if (!code) return res.status(400).json({ ok: false, error: 'Chybí lokalita.' });
+    await expireStaleReservations();
+    const cs = await getSetting(COMPOUNDING_SETTINGS_KEY, { type: 'json', defaultValue: COMPOUNDING_SETTINGS_DEFAULT });
+    const holdHours = Number.isFinite(cs.reservationHoldHours) ? cs.reservationHoldHours : 1;
+    // Obsazeno někým jiným?
+    const busy = await prisma.locationReservation.findFirst({ where: { kiosk_code: code, status: { in: RES_BUSY }, NOT: { lead_id: leadId } }, select: { id: true } });
+    if (busy) return res.status(409).json({ ok: false, error: 'Tato lokalita je právě obsazená někým jiným.' });
+    // Moje existující blokace/rezervace? → vrátíme ji (můžu pokračovat).
+    const mine = await prisma.locationReservation.findFirst({ where: { kiosk_code: code, lead_id: leadId, status: { in: RES_BUSY } }, orderBy: { created_at: 'desc' } });
+    if (mine) return res.json({ ok: true, id: mine.id, status: mine.status, hold_until: mine.hold_until, reserved_until: mine.reserved_until });
+    // Blokace po nedávném zrušení
+    const reblockDays = Number.isFinite(cs.reservationReblockDays) ? cs.reservationReblockDays : 2;
+    if (reblockDays > 0) {
+      const since = new Date(Date.now() - reblockDays * 86400000);
+      const recent = await prisma.locationReservation.findFirst({ where: { kiosk_code: code, lead_id: leadId, status: { in: ['cancelled', 'expired'] }, updated_at: { gt: since } }, select: { id: true } });
+      if (recent) return res.status(429).json({ ok: false, error: 'Tuto lokalitu můžete znovu rezervovat až za ' + reblockDays + ' dny.' });
+    }
+    const holdUntil = new Date(Date.now() + holdHours * 3600000);
+    const rec = await prisma.locationReservation.create({ data: { kiosk_code: code, lead_id: leadId, status: 'hold', hold_until: holdUntil } });
+    res.json({ ok: true, id: rec.id, status: 'hold', hold_until: holdUntil });
+  } catch (err) { next(err); }
+});
+
 router.post('/portal/reserve', async (req, res, next) => {
   try {
     const parsed = reserveSchema.safeParse(req.body);
@@ -2644,7 +2706,7 @@ router.post('/portal/reserve', async (req, res, next) => {
     await expireStaleReservations();
 
     const busy = await prisma.locationReservation.findFirst({
-      where: { kiosk_code: code, status: { in: RES_ACTIVE } }, select: { id: true },
+      where: { kiosk_code: code, status: { in: RES_BUSY }, NOT: { lead_id: leadId } }, select: { id: true },
     });
     if (busy) return res.status(409).json({ ok: false, error: 'Tato lokalita je právě rezervovaná někým jiným. Zkuste to prosím později nebo vyberte jinou.' });
 
@@ -2670,17 +2732,19 @@ router.post('/portal/reserve', async (req, res, next) => {
     const reservedUntil = new Date(now.getTime() + days * 86400000);
     const b = parsed.data.buyer || {};
 
-    const rec = await prisma.locationReservation.create({
-      data: {
-        kiosk_code: code, lead_id: leadId,
-        buyer_name: b.name || null, buyer_email: b.email || null, buyer_phone: b.phone || null,
-        buyer_ico: b.ico || null, buyer_address: b.address || null,
-        days, fee_per_day: feePerDay, fee_total: feeTotal,
-        purchase_price: (parsed.data.totalPrice != null) ? parsed.data.totalPrice : null,
-        currency: 'CZK', status: 'reserved',
-        sign_until: signUntil, fee_until: feeUntil, reserved_until: reservedUntil,
-      },
-    });
+    const commonData = {
+      buyer_name: b.name || null, buyer_email: b.email || null, buyer_phone: b.phone || null,
+      buyer_ico: b.ico || null, buyer_address: b.address || null,
+      days, fee_per_day: feePerDay, fee_total: feeTotal,
+      purchase_price: (parsed.data.totalPrice != null) ? parsed.data.totalPrice : null,
+      currency: 'CZK', status: 'reserved', hold_until: null,
+      sign_until: signUntil, fee_until: feeUntil, reserved_until: reservedUntil,
+    };
+    // Převezmi můj 1h hold (pokud existuje), jinak vytvoř novou rezervaci.
+    const myHold = await prisma.locationReservation.findFirst({ where: { kiosk_code: code, lead_id: leadId, status: 'hold' }, orderBy: { created_at: 'desc' } });
+    const rec = myHold
+      ? await prisma.locationReservation.update({ where: { id: myHold.id }, data: commonData })
+      : await prisma.locationReservation.create({ data: Object.assign({ kiosk_code: code, lead_id: leadId }, commonData) });
 
     // Velín push + zvonek nastaveným osobám (Jan/Tomáš) o nové rezervaci.
     compounderNotify.notifyReservationEvent(prisma, { reservation: rec, event: 'created' }).catch(() => {});

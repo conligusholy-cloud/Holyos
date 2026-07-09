@@ -878,6 +878,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
       document.getElementById("app").style.display = "block";
       var first = (res.j.name || "").split(" ")[0];
       PORTAL_LEAD_ID = res.j.id;
+      window._leadEmail = res.j.email || ""; window._leadPhone = res.j.phone || "";
       // Viditelnost sekcí dle povolení leadu; úvodní "Filozofie" je vždy viditelná.
       var ALLOWED = Array.isArray(res.j.sections) ? res.j.sections : [];
       PORTAL_SECTIONS = ALLOWED.slice();
@@ -1045,13 +1046,17 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
     '</div>';
     if(!arr.length){ box.innerHTML = toggle + '<div class="muted">Aktuálně nejsou k dispozici žádné nabízené lokality.</div>'; return; }
     box.innerHTML = toggle + arr.map(function(o){
-      var btn = o.reserved
-        ? '<div style="min-width:130px;text-align:center">' +
-            '<div style="color:var(--muted);font-size:13px;font-weight:700;border:1px solid var(--line);border-radius:999px;padding:10px 12px">Rezervováno</div>' +
-            (o.reservedUntil ? '<div class="res-countdown" data-until="' + offEsc(o.reservedUntil) + '" style="font-size:11px;color:var(--gold-soft);margin-top:6px;font-weight:600">' + offCountdown(o.reservedUntil) + '</div>' : '') +
-          '</div>'
-        : '<button type="button" class="btn" style="min-width:130px;justify-content:center" onclick="openReserveModal(\'' + offEsc(o.code).replace(/'/g,"&#39;") + '\')">Rezervovat</button>';
       var _codeEsc = offEsc(o.code).replace(/'/g,"&#39;");
+      var _until = o.resUntil || o.reservedUntil;
+      var _cd = _until ? ('<div class="res-countdown" data-until="' + offEsc(_until) + '" style="font-size:11px;color:var(--gold-soft);margin-top:6px;font-weight:600">' + offCountdown(_until) + '</div>') : '';
+      var btn;
+      if (o.reserved && o.mine) {
+        btn = '<div style="min-width:130px;text-align:center"><button type="button" class="btn" style="min-width:130px;justify-content:center" onclick="openReserveModal(\'' + _codeEsc + '\')">Dokončit rezervaci</button>' + _cd + '</div>';
+      } else if (o.reserved) {
+        btn = '<div style="min-width:130px;text-align:center"><div style="color:var(--muted);font-size:13px;font-weight:700;border:1px solid var(--line);border-radius:999px;padding:10px 12px">Obsazeno</div>' + _cd + '</div>';
+      } else {
+        btn = '<button type="button" class="btn" style="min-width:130px;justify-content:center" onclick="openReserveModal(\'' + _codeEsc + '\')">Rezervovat</button>';
+      }
       var _thumb = (o.photos && o.photos.length)
         ? '<div onclick="openLocPhotos(\'' + _codeEsc + '\')" title="Zobrazit fotky lokality" style="position:relative;flex:0 0 auto;width:72px;height:56px;border-radius:8px;overflow:hidden;border:1px solid var(--line);cursor:pointer">' +
             '<img src="' + offEsc(o.photos[0]) + '" alt="" style="width:100%;height:100%;object-fit:cover">' +
@@ -1093,9 +1098,16 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
   function resField(id,label,ph,type){
     return '<label style="display:block;font-size:12px;color:var(--muted);margin:10px 0 4px">'+label+'</label><input id="'+id+'" type="'+(type||'text')+'" placeholder="'+(ph||'')+'" style="width:100%;background:#0e0e10;border:1px solid var(--line);border-radius:10px;padding:11px 12px;color:var(--text);font-size:14px">';
   }
-  window.openReserveModal = function(code){
+  window.openReserveModal = async function(code){
     var o = (OFFERS.data||[]).find(function(x){ return x.code===code; });
     if(!o) return;
+    // Zahaj 1h blokaci (nebo převezmi vlastní). Obsazeno jiným → nepustí dál.
+    var _tok = offTok();
+    try {
+      var hr = await fetch("/api/compounder/portal/hold", { method:"POST", credentials:"include", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ t:_tok, code:code }) });
+      var hj = await hr.json().catch(function(){return {};});
+      if(!hr.ok){ alert(hj.error || "Lokalitu teď nelze rezervovat."); loadOffers(_tok); return; }
+    } catch(e){ alert("Rezervaci se nepodařilo zahájit."); return; }
     window._resO = o; window._resMode = 'reserve';
     var cfg = OFFERS.cfg || {}; var fee = OFFERS.feePerDay || 20000;
     closeReserveModal();
@@ -1130,6 +1142,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
       +   resField('res-email','E-mail','vas@email.cz','email')
       +   resField('res-phone','Telefon','+420 …','tel')
       +   resField('res-ico','IČO (nepovinné)','')
+      +   '<button type="button" onclick="resAres()" style="margin:2px 0 6px;padding:8px 12px;background:var(--surface-2,#1b1b1f);border:1px solid var(--line);border-radius:8px;color:var(--gold-soft);font-size:12px;cursor:pointer">🔎 Načíst z ARESu</button>'
       +   resField('res-addr','Adresa (nepovinné)','')
       + '</div>'
       + '<button type="button" id="res-confirm" class="btn" style="width:100%;justify-content:center;margin-top:16px" onclick="resSubmit()">Závazně rezervovat</button>'
@@ -1140,7 +1153,25 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
     var di = document.getElementById("res-days"); if(di) di.addEventListener("input", resRecalc);
     // prefill jméno z pozdravu
     try { var hi = (document.getElementById("hi")||{}).textContent||""; var nm = hi.replace(/^[^,]*,\s*/,""); if(nm && document.getElementById("res-name")) document.getElementById("res-name").value = nm; } catch(_){}
+    // prefill e-mail a telefon z kontaktu (pokud je máme)
+    try {
+      if(window._leadEmail && document.getElementById("res-email")) document.getElementById("res-email").value = window._leadEmail;
+      if(window._leadPhone && document.getElementById("res-phone")) document.getElementById("res-phone").value = window._leadPhone;
+    } catch(_){}
     resRecalc();
+  };
+  window.resAres = async function(){
+    var icoEl = document.getElementById("res-ico"); var msg = document.getElementById("res-msg");
+    var ico = ((icoEl&&icoEl.value)||"").replace(/\D/g,"");
+    if(!/^\d{8}$/.test(ico)){ if(msg){ msg.style.color="#ef4444"; msg.textContent="Zadej platné IČO (8 číslic)."; } return; }
+    if(msg){ msg.style.color="var(--muted)"; msg.textContent="Načítám z ARESu…"; }
+    try {
+      var r = await fetch("/api/compounder/ares?ico=" + ico); var d = await r.json();
+      if(!r.ok || !d.ok){ if(msg){ msg.style.color="#ef4444"; msg.textContent=(d&&d.error)||"ARES: nenalezeno."; } return; }
+      if(d.name){ var n=document.getElementById("res-name"); if(n) n.value=d.name; }
+      if(d.address){ var a=document.getElementById("res-addr"); if(a) a.value=d.address; }
+      if(msg){ msg.style.color="var(--gold-soft)"; msg.textContent="Údaje z ARESu doplněny."; }
+    } catch(e){ if(msg){ msg.style.color="#ef4444"; msg.textContent="ARES je nedostupný."; } }
   };
   window.resSetMode = function(m){
     window._resMode = m;

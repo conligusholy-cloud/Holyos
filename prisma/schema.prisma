@@ -5535,10 +5535,12 @@ model LocationReservation {
   purchase_price Int? // snapshot celkové kupní ceny (Kč)
   currency       String @default("CZK") @db.VarChar(3)
 
-  // reserved | active | completed | cancelled | expired
+  // hold | reserved | active | completed | cancelled | expired
+  // hold = 1h blokace po kliknutí (jen rezervující smí dokončit hlavičku)
   status String @default("reserved") @db.VarChar(20)
 
   // Lhůty
+  hold_until     DateTime? // konec 1h blokace (fáze hold)
   sign_until     DateTime? // podpis rezervační smlouvy do
   fee_until      DateTime? // připsání poplatku do
   reserved_until DateTime? // konec rezervační doby (kupní smlouva do)

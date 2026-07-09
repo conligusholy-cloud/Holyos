@@ -820,6 +820,12 @@ app.listen(PORT, async () => {
     console.error('[app] dunning-worker nelze spustit:', err.message);
   }
   try {
+    const reservationSweep = require('./services/compounder/reservation-sweep');
+    reservationSweep.start();
+  } catch (err) {
+    console.error('[app] reservation-sweep nelze spustit:', err.message);
+  }
+  try {
     const aiDevWorker = require('./services/ai-developer/worker');
     aiDevWorker.start();
   } catch (err) {
