@@ -613,11 +613,17 @@ router.post('/leads', requireAuth, async (req, res, next) => {
     const role = (b.role === 'distributor') ? 'distributor' : 'compounder';
     const lang = b.lang ? String(b.lang).trim().toLowerCase().slice(0, 10) : null;
     const phone = b.phone ? String(b.phone).trim().slice(0, 40) : null;
-    if (!email || email.indexOf('@') === -1) return res.status(400).json({ error: 'Neplatný e-mail' });
-    const existing = await prisma.compounderLead.findFirst({
-      where: { email: { equals: email, mode: 'insensitive' } },
-      select: { id: true, owner_person_id: true },
-    });
+    if (email && email.indexOf('@') === -1) return res.status(400).json({ error: 'Neplatný e-mail' });
+    if (!email && !phone) return res.status(400).json({ error: 'Zadej aspoň jeden kontaktní údaj — e-mail nebo telefon.' });
+    // Ověření duplicity v DB: shoda na e-mailu, telefonu nebo jménu.
+    const dupOr = [];
+    if (email) dupOr.push({ email: { equals: email, mode: 'insensitive' } });
+    if (phone) dupOr.push({ phone: phone });
+    if (name) dupOr.push({ name: { equals: name, mode: 'insensitive' } });
+    const existing = dupOr.length ? await prisma.compounderLead.findFirst({
+      where: { OR: dupOr },
+      select: { id: true, owner_person_id: true, name: true },
+    }) : null;
     if (existing) {
       // Zjisti, kdo kontakt spravuje (aby se obchodníci mohli domluvit).
       let owner = null;
@@ -631,7 +637,7 @@ router.post('/leads', requireAuth, async (req, res, next) => {
       return res.status(409).json({
         error: ownerName
           ? ('Tento kontakt už spravuje ' + ownerName + '. Domluv se prosím s ním.')
-          : 'Tento e-mail už je v systému (zatím bez přiřazeného obchodníka).',
+          : 'Tento kontakt už je v systému (zatím bez přiřazeného obchodníka).',
         id: existing.id,
         owner_person_id: existing.owner_person_id || null,
         owner_name: ownerName,
@@ -641,7 +647,7 @@ router.post('/leads', requireAuth, async (req, res, next) => {
     const myPersonId = (req.user && req.user.person) ? req.user.person.id : null;
     const lead = await prisma.compounderLead.create({
       data: {
-        name: name || email, email, role, lang, phone, source: 'admin', status: 'new',
+        name: name || email || phone, email: email || null, role, lang, phone, source: 'admin', status: 'new',
         created_by_person_id: myPersonId,
         owner_person_id: myPersonId, // kdo kontakt založil, ten je i jeho obchodník (lze přepsat)
       },

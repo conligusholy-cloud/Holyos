@@ -86,6 +86,7 @@
       <div class="field"><label>Jméno</label><input class="qinput" id="a-name" placeholder="Jméno / firma"></div>
       <div class="field"><label>E-mail</label><input class="qinput" id="a-email" type="email" placeholder="email@…" inputmode="email"></div>
       <div class="field"><label>Telefon</label><input class="qinput" id="a-phone" type="tel" placeholder="+420…" inputmode="tel"></div>
+      <p style="font-size:12px;color:var(--muted);margin:6px 0 0">Povinný je aspoň jeden kontakt — e-mail <b>nebo</b> telefon.</p>
       <div class="field"><label>Jazyk</label><select id="a-lang"></select></div>
       <div class="actions-row">
         <button class="btn btn-g" style="flex:1" onclick="closeAdd()">Zrušit</button>
@@ -263,7 +264,8 @@
     var phone = document.getElementById('a-phone').value.trim();
     var lang = document.getElementById('a-lang').value;
     var errEl = document.getElementById('a-err');
-    if (!email || email.indexOf('@')===-1){ errEl.textContent='Zadej platný e-mail.'; return; }
+    if (email && email.indexOf('@')===-1){ errEl.textContent='Neplatný e-mail.'; return; }
+    if (!email && !phone){ errEl.textContent='Zadej aspoň jeden kontakt — e-mail nebo telefon.'; return; }
     var btn = document.getElementById('a-save'); btn.disabled=true; btn.textContent='Ukládám…';
     try {
       var r = await api('/leads', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ name:name, email:email, lang:lang, phone:phone }) });
