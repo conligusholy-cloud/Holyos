@@ -119,6 +119,17 @@ router.post('/track', async (req, res) => {
   res.status(204).end();
 });
 
+// ─── VEŘEJNÉ: aktuální kurzy (ČNB) pro přepočet měny v modelech ──────────────
+// GET /api/compounder/fx-rates → { rates: { EUR, USD, GBP } } (CZK za 1 jednotku)
+router.get('/fx-rates', async (req, res) => {
+  try {
+    const rates = await fxRatesCzk();
+    res.json({ ok: true, rates });
+  } catch (e) {
+    res.json({ ok: false, rates: { EUR: 25, USD: 23, GBP: 29 } });
+  }
+});
+
 // ─── VEŘEJNÉ: reakce na push notifikaci ─────────────────────────────────────
 // Service worker hlásí open/dismiss/akci. id = "<lead_id>.<nonce>" → svážeme s leadem.
 router.post('/push-reaction', async (req, res) => {

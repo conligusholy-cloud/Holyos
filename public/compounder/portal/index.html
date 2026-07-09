@@ -256,23 +256,24 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
         <div class="metric"><div class="k" data-i18n="p.m.profit">Profit / month</div><div class="v" id="m-profit">—</div><div class="s" data-i18n="p.m.profits">after all costs</div></div>
         <div class="metric"><div class="k" data-i18n="p.m.payback">Payback</div><div class="v gold" id="m-payback">—</div><div class="s" id="m-payback-m">—</div></div>
       </div>
-      <div style="display:flex;justify-content:flex-end;margin-bottom:12px">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+        <span id="eko-cur" style="display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap"><span style="font-size:12px;color:var(--muted);margin-right:4px">Měna:</span></span>
         <button type="button" id="eko-reset" class="btn-reset" data-i18n="p.eko.reset">↺ Reset to default values</button>
       </div>
       <div class="calc">
         <div class="panel">
           <h3 data-i18n="p.inv.title">Investment (one-off)</h3>
-          <div class="row"><label data-i18n="p.inv.machine">Compounder price</label><div class="unit"><input type="number" id="i-machine" value="52000"><span class="u">€</span></div></div>
-          <div class="row"><label data-i18n="p.inv.permit">Project + permits</label><div class="unit"><input type="number" id="i-permit" value="825"><span class="u">€</span></div></div>
-          <div class="row"><label data-i18n="p.inv.conn">Connections</label><div class="unit"><input type="number" id="i-conn" value="2889"><span class="u">€</span></div></div>
-          <div class="row calc-out"><label data-i18n="p.inv.total">Total investment</label><div class="unit"><input type="text" id="o-invest" readonly><span class="u">€</span></div></div>
+          <div class="row"><label data-i18n="p.inv.machine">Compounder price</label><div class="unit"><input type="number" id="i-machine" value="52000"><span class="u u-cur">€</span></div></div>
+          <div class="row"><label data-i18n="p.inv.permit">Project + permits</label><div class="unit"><input type="number" id="i-permit" value="825"><span class="u u-cur">€</span></div></div>
+          <div class="row"><label data-i18n="p.inv.conn">Connections</label><div class="unit"><input type="number" id="i-conn" value="2889"><span class="u u-cur">€</span></div></div>
+          <div class="row calc-out"><label data-i18n="p.inv.total">Total investment</label><div class="unit"><input type="text" id="o-invest" readonly><span class="u u-cur">€</span></div></div>
         </div>
         <div class="panel">
           <h3 data-i18n="p.op.title">Operation (monthly)</h3>
           <div class="row"><label data-i18n="p.op.perday">Customers / day</label><div class="unit"><input type="number" id="i-perday" value="8"><span class="u">ks</span></div></div>
-          <div class="row"><label data-i18n="p.op.spend">Avg spend / customer</label><div class="unit"><input type="number" step="0.1" id="i-spend" value="11.37"><span class="u">€</span></div></div>
-          <div class="row"><label data-i18n="p.op.cost">Operating costs / month</label><div class="unit"><input type="number" id="i-cost" value="765"><span class="u">€</span></div></div>
-          <div class="row calc-out"><label data-i18n="p.op.profit">Monthly profit</label><div class="unit"><input type="text" id="o-profit" readonly><span class="u">€</span></div></div>
+          <div class="row calc-out"><label data-i18n="p.op.spend">Avg spend / customer</label><div class="unit"><input type="number" step="0.1" id="i-spend" value="11.37" readonly title="Počítá se v podrobném modelu"><span class="u u-cur">€</span></div></div>
+          <div class="row calc-out"><label data-i18n="p.op.cost">Operating costs / month</label><div class="unit"><input type="number" id="i-cost" value="765" readonly title="Počítá se v podrobném modelu"><span class="u u-cur">€</span></div></div>
+          <div class="row calc-out"><label data-i18n="p.op.profit">Monthly profit</label><div class="unit"><input type="text" id="o-profit" readonly><span class="u u-cur">€</span></div></div>
           <div class="note" data-i18n="p.op.note">Costs = rent + energy + service + other. We assume 30.4 days/month.</div>
         </div>
       </div>
@@ -1305,10 +1306,46 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
     var rb = document.getElementById("eko-reset");
     if (rb) rb.addEventListener("click", function(){
       ids.forEach(function(id){ var el = document.getElementById(id); if (el) el.value = el.defaultValue; });
+      EKO_CUR = 'EUR'; ekoSwapSymbols(); ekoRenderCur();
       recalc();
     });
+    ekoRenderCur();
+    // Kurzy z ČNB (přepočet měny); při chybě zůstanou fallback hodnoty.
+    fetch('/api/compounder/fx-rates').then(function(r){ return r.json(); }).then(function(j){
+      if (j && j.rates) EKO_RATES = Object.assign({ CZK: 1 }, j.rates);
+    }).catch(function(){});
     recalc();
   }
+  // ——— Měna modelu (přepočet celého modelu dle kurzu ČNB) ———
+  var EKO_CUR = 'EUR';
+  var EKO_RATES = { CZK: 1, EUR: 25, USD: 23, GBP: 29 }; // CZK za 1 jednotku
+  var EKO_SYM = { CZK: 'Kč', EUR: '€', USD: '$', GBP: '£' };
+  var EKO_CUR_FIELDS = ['i-machine', 'i-permit', 'i-conn', 'i-spend', 'i-cost'];
+  function ekoSym(){ return EKO_SYM[EKO_CUR] || '€'; }
+  function ekoRenderCur(){
+    var wrap = document.getElementById('eko-cur'); if (!wrap) return;
+    var html = '<span style="font-size:12px;color:var(--muted);margin-right:4px">Měna:</span>';
+    ['CZK', 'EUR', 'USD', 'GBP'].forEach(function(c){
+      var on = c === EKO_CUR;
+      html += '<button type="button" onclick="ekoSetCur(\'' + c + '\')" style="border:1px solid ' + (on ? 'var(--gold)' : 'var(--line)') + ';background:' + (on ? 'var(--gold)' : 'transparent') + ';color:' + (on ? '#241c05' : 'var(--muted)') + ';border-radius:999px;padding:5px 12px;font-size:13px;font-weight:700;cursor:pointer">' + EKO_SYM[c] + '</button>';
+    });
+    wrap.innerHTML = html;
+  }
+  function ekoSwapSymbols(){
+    var us = document.querySelectorAll('#ekonomika .u-cur');
+    for (var i = 0; i < us.length; i++) us[i].textContent = ekoSym();
+  }
+  window.ekoSetCur = function(c){
+    if (!EKO_SYM[c] || c === EKO_CUR) return;
+    var ratio = (EKO_RATES[EKO_CUR] || 1) / (EKO_RATES[c] || 1);
+    EKO_CUR_FIELDS.forEach(function(id){
+      var el = document.getElementById(id); if (!el) return;
+      var v = parseFloat(el.value); if (isNaN(v)) return;
+      el.value = (v * ratio).toFixed(id === 'i-spend' ? 2 : 0);
+    });
+    EKO_CUR = c;
+    ekoSwapSymbols(); ekoRenderCur(); recalc();
+  };
   function recalc(){
     var invest = val("i-machine") + val("i-permit") + val("i-conn");
     var custMonth = val("i-perday") * 30.4;
@@ -1316,22 +1353,23 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
     var profit = revenue - val("i-cost");
     var paybackM = profit > 0 ? invest / profit : 0;
     var paybackY = paybackM / 12;
+    var S = " " + ekoSym();
     document.getElementById("o-invest").value = fmt(invest);
     document.getElementById("o-profit").value = fmt(profit);
-    document.getElementById("m-invest").textContent = fmt(invest) + " €";
-    document.getElementById("m-revenue").textContent = fmt(revenue) + " €";
+    document.getElementById("m-invest").textContent = fmt(invest) + S;
+    document.getElementById("m-revenue").textContent = fmt(revenue) + S;
     document.getElementById("m-cust").textContent = fmt(custMonth) + " " + pT("p.m.custmo");
-    document.getElementById("m-profit").textContent = fmt(profit) + " €";
+    document.getElementById("m-profit").textContent = fmt(profit) + S;
     var pb = profit > 0 ? (paybackY.toFixed(1) + " " + pT("p.u.years")) : "—";
     var pbm = profit > 0 ? (Math.round(paybackM) + " " + pT("p.u.months")) : pT("p.u.loss");
     document.getElementById("m-payback").textContent = pb;
     document.getElementById("m-payback-m").textContent = pbm;
     document.getElementById("r-payback").textContent = pb;
     document.getElementById("r-payback-m").textContent = pbm;
-    document.getElementById("r-yearprofit").textContent = fmt(profit * 12) + " €";
+    document.getElementById("r-yearprofit").textContent = fmt(profit * 12) + S;
     var roi = invest > 0 ? (profit * 12 / invest * 100) : 0;
     document.getElementById("r-roi").textContent = roi > 0 ? (roi.toFixed(0) + " %") : "—";
-    document.getElementById("r-5y").textContent = fmt(profit * 60 - invest) + " €";
+    document.getElementById("r-5y").textContent = fmt(profit * 60 - invest) + S;
     var pct = paybackY > 0 ? Math.min(100, 100 / paybackY) : 0;
     document.getElementById("r-bar").style.width = pct.toFixed(0) + "%";
     document.getElementById("r-bar-note").textContent = profit > 0
