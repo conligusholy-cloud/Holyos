@@ -29,6 +29,7 @@
   /* List */
   .list{padding:8px 12px}
   .card{background:var(--surface);border:1px solid var(--line);border-radius:14px;margin:10px 0;overflow:hidden}
+  .card.today{border-left:3px solid #22c55e}
   .card-main{display:flex;align-items:center;gap:12px;padding:14px;cursor:pointer}
   .dot{width:10px;height:10px;border-radius:50%;flex:0 0 auto}
   .card-body{flex:1;min-width:0}
@@ -140,7 +141,11 @@
   function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
   function langCode(l){ return (l||'').toLowerCase().split(/[-_]/)[0]; }
   function warmth(l){ var w=l.warmthPct; if(w==null) return null; return { w:w, lbl: w>=70?'Horký':w>=45?'Zahřátý':w>=25?'Vlažný':'Studený', col: w>=70?'#ef4444':w>=45?'#eab308':w>=25?'#3b82f6':'#6b7280' }; }
-  function fmtDate(iso){ if(!iso) return '—'; var d=new Date(iso); return ('0'+d.getDate()).slice(-2)+'.'+('0'+(d.getMonth()+1)).slice(-2)+'.'+d.getFullYear()+' '+('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2); }
+  function fmtDate(iso){ if(!iso) return '—'; var d=new Date(iso); return fmtD(d); }
+  function fmtD(d){ if(!d) return '—'; return ('0'+d.getDate()).slice(-2)+'.'+('0'+(d.getMonth()+1)).slice(-2)+'.'+d.getFullYear()+' '+('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2); }
+  function parseActLogDate(log){ if(!log) return null; var m=String(log).match(/\[(\d{2})\.(\d{2})\.(\d{4}) (\d{2}):(\d{2})\]/); return m ? new Date(+m[3], +m[2]-1, +m[1], +m[4], +m[5]) : null; }
+  function lastActivityDate(l){ var d1=l.lastActivityAt?new Date(l.lastActivityAt):null; var d2=parseActLogDate(l.activity_log); if(d1&&d2) return d1>d2?d1:d2; return d1||d2; }
+  function isTodayD(d){ if(!d) return false; var n=new Date(); return d.getFullYear()===n.getFullYear()&&d.getMonth()===n.getMonth()&&d.getDate()===n.getDate(); }
   var EVENT_LABEL = { portal_view:'Otevřel portál', section_view:'Prohlížel sekci', doc_download:'Stáhl dokument', location_assess:'Zhodnotil lokalitu', contact_request:'Požádal o kontakt', register_success:'Registrace', page_leave:'Odešel ze stránky', card_flip:'Otočil kartu', page_switch:'Přepnul stránku', visit_end:'Konec návštěvy' };
 
   async function api(path, opts){
@@ -203,12 +208,14 @@
     if (wm) subHtml += (subHtml ? ' · ' : '') + '<span style="color:'+wm.col+';font-weight:600">'+wm.lbl+' '+wm.w+'</span>';
     if (l.requestedContact) subHtml += ' <span title="Požádal o kontakt">📞</span>';
     var waNum = (l.phone||'').replace(/[^0-9]/g,'');
+    var telClean = (l.phone||'').replace(/\s+/g,'');
+    var laDate = lastActivityDate(l); var laToday = isTodayD(laDate);
     var statusSel = '<select onchange="setField('+l.id+',\'status\',this.value)">' + Object.keys(STATUS).map(function(k){ return '<option value="'+k+'"'+(l.status===k?' selected':'')+'>'+STATUS[k].l+'</option>'; }).join('') + '</select>';
     var langSel = '<select onchange="setField('+l.id+',\'lang\',this.value)">' + Object.keys(LANGS).map(function(k){ return '<option value="'+k+'"'+(lc===k?' selected':'')+'>'+(k?k.toUpperCase()+' · ':'')+LANGS[k]+'</option>'; }).join('') + '</select>';
     var secsArr = (l.visible_sections||'').split(',').map(function(s){return s.trim();}).filter(Boolean);
     var secBoxes = SECDEFS.map(function(d){ var on = secsArr.indexOf(d[0])>=0; return '<label style="display:flex;align-items:center;gap:10px;font-size:14px;margin:6px 0;cursor:pointer"><input type="checkbox" '+(on?'checked':'')+' onchange="toggleSection('+l.id+',\''+d[0]+'\',this.checked)" style="width:18px;height:18px;accent-color:var(--primary)">'+d[1]+'</label>'; }).join('');
     var accInfo = accessInfoHtml(l);
-    return '<div class="card'+(open?' open':'')+'" id="card-'+l.id+'">' +
+    return '<div class="card'+(open?' open':'')+(laToday?' today':'')+'" id="card-'+l.id+'">' +
       '<div class="card-main" onclick="toggle('+l.id+')">' +
         '<span class="dot" style="background:'+st.c+'"></span>' +
         '<div class="card-body"><div class="card-name">'+esc(l.name||l.email)+'</div><div class="card-sub">'+(subHtml||'—')+'</div></div>' +
@@ -218,10 +225,12 @@
       '</div>' +
       '<div class="detail">' +
         '<div class="actions-row" style="margin-top:12px">' +
-          (l.phone ? '<a href="tel:'+esc(l.phone)+'">📞 Volat</a>' : '') +
+          (l.phone ? '<a href="tel:'+esc(telClean)+'">📞 Volat</a>' : '') +
           (waNum ? '<a href="https://wa.me/'+waNum+'" target="_blank" rel="noopener">💬 WhatsApp</a>' : '') +
+          (l.phone ? '<a href="sms:'+esc(telClean)+'">📩 SMS</a>' : '') +
           (l.email ? '<a href="mailto:'+esc(l.email)+'">✉️ E-mail</a>' : '') +
         '</div>' +
+        '<div style="font-size:12px;margin-top:8px;color:'+(laToday?'#22c55e':'var(--muted)')+'">Poslední aktivita: '+(laDate?fmtD(laDate):'—')+'</div>' +
         '<div class="field"><label>Stav</label>'+statusSel+'</div>' +
         '<div class="field"><label>Portál</label>' +
           '<button class="btn btn-g" style="width:100%"'+(l.email?'':' disabled')+' onclick="sendAccess('+l.id+')">✉️ Odeslat přístup na portál</button>' +
