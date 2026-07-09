@@ -612,6 +612,7 @@ router.post('/leads', requireAuth, async (req, res, next) => {
     const email = String(b.email || '').trim().toLowerCase().slice(0, 255);
     const role = (b.role === 'distributor') ? 'distributor' : 'compounder';
     const lang = b.lang ? String(b.lang).trim().toLowerCase().slice(0, 10) : null;
+    const phone = b.phone ? String(b.phone).trim().slice(0, 40) : null;
     if (!email || email.indexOf('@') === -1) return res.status(400).json({ error: 'Neplatný e-mail' });
     const existing = await prisma.compounderLead.findFirst({
       where: { email: { equals: email, mode: 'insensitive' } }, select: { id: true },
@@ -620,7 +621,7 @@ router.post('/leads', requireAuth, async (req, res, next) => {
     const myPersonId = (req.user && req.user.person) ? req.user.person.id : null;
     const lead = await prisma.compounderLead.create({
       data: {
-        name: name || email, email, role, lang, source: 'admin', status: 'new',
+        name: name || email, email, role, lang, phone, source: 'admin', status: 'new',
         created_by_person_id: myPersonId,
         owner_person_id: myPersonId, // kdo kontakt založil, ten je i jeho obchodník (lze přepsat)
       },
@@ -647,6 +648,28 @@ router.get('/sellers', requireAuth, async (req, res, next) => {
       select: { id: true, first_name: true, last_name: true },
     });
     res.json(sellers);
+  } catch (err) { next(err); }
+});
+
+// GET /api/compounder/my-leads — kontakty přiřazené přihlášenému obchodníkovi.
+//   Používá obrazovka obchodníka (modules/obchodnik). Vrací jen vlastní kontakty.
+router.get('/my-leads', requireAuth, async (req, res, next) => {
+  try {
+    const meId = (req.user && req.user.person) ? req.user.person.id : null;
+    if (!meId) return res.json([]);
+    const where = { owner_person_id: meId };
+    if (req.query.status) where.status = String(req.query.status);
+    if (req.query.search) {
+      const q = String(req.query.search);
+      where.OR = [
+        { name: { contains: q, mode: 'insensitive' } },
+        { email: { contains: q, mode: 'insensitive' } },
+      ];
+    }
+    const leads = await prisma.compounderLead.findMany({
+      where, orderBy: { created_at: 'desc' }, take: 500,
+    });
+    res.json(leads);
   } catch (err) { next(err); }
 });
 

@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f1115">
+<title>Obchodník — Moje kontakty</title>
+<style>
+  :root{
+    --bg:#0f1115; --surface:#171a21; --surface2:#1f2430; --line:rgba(255,255,255,.09);
+    --text:#f2f3f5; --muted:#9aa0ad; --muted2:#6b7280; --primary:#eab308; --primary-d:#1a1408;
+    --new:#3b82f6; --contacted:#8b5cf6; --qualified:#eab308; --converted:#22c55e; --rejected:#ef4444;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;line-height:1.45}
+  body{padding-bottom:88px}
+  a{color:inherit}
+  /* Header */
+  .top{position:sticky;top:0;z-index:20;background:rgba(15,17,21,.92);backdrop-filter:blur(8px);border-bottom:1px solid var(--line);padding:14px 16px calc(10px + env(safe-area-inset-top,0)) 16px}
+  .top-row{display:flex;align-items:center;justify-content:space-between;gap:10px}
+  .top h1{font-size:18px;margin:0;font-weight:700}
+  .who{font-size:12px;color:var(--muted)}
+  .logout{background:transparent;border:1px solid var(--line);color:var(--muted);border-radius:999px;padding:7px 12px;font-size:12px;cursor:pointer}
+  .search{margin-top:10px;width:100%;background:var(--surface2);border:1px solid var(--line);border-radius:10px;padding:11px 12px;color:var(--text);font-size:15px}
+  .chips{display:flex;gap:8px;overflow-x:auto;padding:12px 16px 4px;scrollbar-width:none}
+  .chips::-webkit-scrollbar{display:none}
+  .chip{flex:0 0 auto;background:var(--surface2);border:1px solid var(--line);color:var(--muted);border-radius:999px;padding:8px 14px;font-size:13px;cursor:pointer;white-space:nowrap}
+  .chip.active{background:var(--primary);border-color:var(--primary);color:var(--primary-d);font-weight:600}
+  /* List */
+  .list{padding:8px 12px}
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:14px;margin:10px 0;overflow:hidden}
+  .card-main{display:flex;align-items:center;gap:12px;padding:14px;cursor:pointer}
+  .dot{width:10px;height:10px;border-radius:50%;flex:0 0 auto}
+  .card-body{flex:1;min-width:0}
+  .card-name{font-weight:700;font-size:15.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .card-sub{font-size:12.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
+  .badge{font-size:11px;font-weight:600;padding:3px 9px;border-radius:999px;white-space:nowrap}
+  .chev{color:var(--muted2);font-size:13px;transition:transform .2s}
+  .card.open .chev{transform:rotate(90deg)}
+  /* Detail */
+  .detail{display:none;padding:0 14px 14px;border-top:1px solid var(--line)}
+  .card.open .detail{display:block}
+  .field{margin-top:12px}
+  .field label{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted2);margin-bottom:5px}
+  select,textarea,.qinput{width:100%;background:var(--surface2);border:1px solid var(--line);border-radius:10px;padding:11px 12px;color:var(--text);font-size:15px;font-family:inherit}
+  textarea{min-height:70px;resize:vertical}
+  .quick{display:flex;gap:8px;margin-top:6px}
+  .quick .qinput{flex:1}
+  .btn{border:none;border-radius:10px;padding:11px 14px;font-size:14px;font-weight:600;cursor:pointer}
+  .btn-p{background:var(--primary);color:var(--primary-d)}
+  .btn-g{background:var(--surface2);color:var(--text);border:1px solid var(--line)}
+  .actions-row{display:flex;gap:8px;margin-top:12px}
+  .actions-row a{flex:1;text-align:center;text-decoration:none;background:var(--surface2);border:1px solid var(--line);border-radius:10px;padding:11px;font-size:14px;font-weight:600}
+  .note-log{white-space:pre-wrap;font-size:12.5px;color:var(--muted);background:var(--surface2);border:1px solid var(--line);border-radius:10px;padding:10px;margin-top:6px;max-height:150px;overflow:auto}
+  .saved{color:var(--converted);font-size:12px;margin-left:8px}
+  /* FAB + modal */
+  .fab{position:fixed;right:18px;bottom:calc(18px + env(safe-area-inset-bottom,0));background:var(--primary);color:var(--primary-d);border:none;border-radius:999px;padding:15px 20px;font-size:15px;font-weight:700;box-shadow:0 6px 20px rgba(0,0,0,.4);cursor:pointer;z-index:30}
+  .modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:flex-end;z-index:40}
+  .modal.open{display:flex}
+  .sheet{background:var(--surface);width:100%;border-radius:18px 18px 0 0;padding:18px 16px calc(20px + env(safe-area-inset-bottom,0));border-top:1px solid var(--line)}
+  .sheet h2{margin:0 0 14px;font-size:17px}
+  .empty,.loading{padding:48px 20px;text-align:center;color:var(--muted)}
+  .err{background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.4);color:#fca5a5;padding:10px 12px;border-radius:10px;margin:12px}
+</style>
+</head>
+<body>
+  <div class="top">
+    <div class="top-row">
+      <div>
+        <h1>Moje kontakty</h1>
+        <div class="who" id="who">…</div>
+      </div>
+      <button class="logout" onclick="doLogout()">Odhlásit</button>
+    </div>
+    <input class="search" id="search" placeholder="Hledat jméno / e-mail…" oninput="onSearch()">
+  </div>
+
+  <div class="chips" id="chips"></div>
+  <div id="content"><div class="loading">Načítám…</div></div>
+
+  <button class="fab" onclick="openAdd()">+ Nový kontakt</button>
+
+  <div class="modal" id="add-modal">
+    <div class="sheet">
+      <h2>Nový kontakt</h2>
+      <div class="field"><label>Jméno</label><input class="qinput" id="a-name" placeholder="Jméno / firma"></div>
+      <div class="field"><label>E-mail</label><input class="qinput" id="a-email" type="email" placeholder="email@…" inputmode="email"></div>
+      <div class="field"><label>Telefon</label><input class="qinput" id="a-phone" type="tel" placeholder="+420…" inputmode="tel"></div>
+      <div class="field"><label>Jazyk</label><select id="a-lang"></select></div>
+      <div class="actions-row">
+        <button class="btn btn-g" style="flex:1" onclick="closeAdd()">Zrušit</button>
+        <button class="btn btn-p" style="flex:2" id="a-save" onclick="saveAdd()">Uložit kontakt</button>
+      </div>
+      <p id="a-err" style="color:#fca5a5;font-size:13px;margin:8px 0 0;min-height:16px"></p>
+    </div>
+  </div>
+
+<script>
+  var API = '/api/compounder';
+  var STATUS = { new:{l:'Nový',c:'var(--new)'}, contacted:{l:'Kontaktován',c:'var(--contacted)'}, qualified:{l:'Kvalifikován',c:'var(--qualified)'}, converted:{l:'Převeden',c:'var(--converted)'}, rejected:{l:'Zamítnut',c:'var(--rejected)'} };
+  var LANGS = { '':'—', en:'English', bg:'Български', cs:'Čeština', da:'Dansk', de:'Deutsch', el:'Ελληνικά', es:'Español', et:'Eesti', fi:'Suomi', fr:'Français', ga:'Gaeilge', hr:'Hrvatski', hu:'Magyar', it:'Italiano', lt:'Lietuvių', lv:'Latviešu', mt:'Malti', nl:'Nederlands', pl:'Polski', pt:'Português', ro:'Română', sk:'Slovenčina', sl:'Slovenščina', sv:'Svenska' };
+  var state = { leads:[], filter:'', search:'', openId:null };
+
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+  function langCode(l){ return (l||'').toLowerCase().split(/[-_]/)[0]; }
+
+  async function api(path, opts){
+    opts = opts || {}; opts.credentials = 'include';
+    var r = await fetch(API + path, opts);
+    if (r.status === 401){ window.location.href = '/login.html?redirect=' + encodeURIComponent(location.pathname); throw new Error('401'); }
+    return r;
+  }
+
+  async function init(){
+    try {
+      var me = await (await fetch('/api/auth/me', { credentials:'include' })).json().catch(function(){return null;});
+      if (!me || !me.user){ window.location.href = '/login.html?redirect=' + encodeURIComponent(location.pathname); return; }
+      var p = me.user.person;
+      document.getElementById('who').textContent = p ? ((p.firstName||'')+' '+(p.lastName||'')).trim() : (me.user.displayName||'');
+      renderChips();
+      buildLangOptions();
+      await load();
+    } catch(e){ /* redirect handled */ }
+  }
+
+  function renderChips(){
+    var chips = [['','Vše']].concat(Object.keys(STATUS).map(function(k){ return [k, STATUS[k].l]; }));
+    document.getElementById('chips').innerHTML = chips.map(function(c){
+      return '<div class="chip'+(state.filter===c[0]?' active':'')+'" onclick="setFilter(\''+c[0]+'\')">'+c[1]+'</div>';
+    }).join('');
+  }
+  function setFilter(f){ state.filter=f; renderChips(); load(); }
+  var searchTimer=null;
+  function onSearch(){ clearTimeout(searchTimer); searchTimer=setTimeout(function(){ state.search=document.getElementById('search').value.trim(); load(); }, 300); }
+
+  async function load(){
+    var box = document.getElementById('content');
+    box.innerHTML = '<div class="loading">Načítám…</div>';
+    try {
+      var qs = new URLSearchParams({ status: state.filter, search: state.search }).toString();
+      var r = await api('/my-leads?' + qs);
+      if (!r.ok) throw new Error('HTTP '+r.status);
+      state.leads = await r.json();
+      render();
+    } catch(e){ box.innerHTML = '<div class="err">Nepodařilo se načíst kontakty: '+esc(e.message)+'</div>'; }
+  }
+
+  function render(){
+    var box = document.getElementById('content');
+    if (!state.leads.length){ box.innerHTML = '<div class="empty">Zatím žádné přiřazené kontakty.</div>'; return; }
+    box.innerHTML = '<div class="list">' + state.leads.map(cardHtml).join('') + '</div>';
+  }
+
+  function cardHtml(l){
+    var st = STATUS[l.status] || STATUS.new;
+    var lc = langCode(l.lang);
+    var open = state.openId === l.id;
+    var sub = [l.email, l.phone].filter(Boolean).join(' · ');
+    var statusSel = '<select onchange="setField('+l.id+',\'status\',this.value)">' + Object.keys(STATUS).map(function(k){ return '<option value="'+k+'"'+(l.status===k?' selected':'')+'>'+STATUS[k].l+'</option>'; }).join('') + '</select>';
+    var langSel = '<select onchange="setField('+l.id+',\'lang\',this.value)">' + Object.keys(LANGS).map(function(k){ return '<option value="'+k+'"'+(lc===k?' selected':'')+'>'+(k?k.toUpperCase()+' · ':'')+LANGS[k]+'</option>'; }).join('') + '</select>';
+    return '<div class="card'+(open?' open':'')+'" id="card-'+l.id+'">' +
+      '<div class="card-main" onclick="toggle('+l.id+')">' +
+        '<span class="dot" style="background:'+st.c+'"></span>' +
+        '<div class="card-body"><div class="card-name">'+esc(l.name||l.email)+'</div><div class="card-sub">'+esc(sub||'—')+'</div></div>' +
+        '<span class="badge" style="background:'+st.c+'22;color:'+st.c+'">'+st.l+'</span>' +
+        '<span class="chev">▸</span>' +
+      '</div>' +
+      '<div class="detail">' +
+        '<div class="field"><label>Stav</label>'+statusSel+'</div>' +
+        '<div class="field"><label>Jazyk</label>'+langSel+'</div>' +
+        '<div class="field"><label>Zaznamenat aktivitu</label><div class="quick"><input class="qinput" id="act-'+l.id+'" placeholder="Zavolal jsem, má zájem…"><button class="btn btn-p" onclick="addActivity('+l.id+')">Přidat</button></div></div>' +
+        '<div class="field"><label>Poznámky <span class="saved" id="saved-'+l.id+'"></span></label><textarea id="notes-'+l.id+'" onblur="setField('+l.id+',\'notes\',this.value)">'+esc(l.notes||'')+'</textarea></div>' +
+        '<div class="actions-row">' +
+          (l.phone ? '<a href="tel:'+esc(l.phone)+'">📞 Volat</a>' : '') +
+          (l.email ? '<a href="mailto:'+esc(l.email)+'">✉️ E-mail</a>' : '') +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  }
+
+  function toggle(id){ state.openId = (state.openId===id)?null:id; render(); }
+
+  async function setField(id, field, value){
+    var body = {}; body[field] = (field==='lang' && !value) ? null : value;
+    try {
+      var r = await api('/leads/'+id, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+      var lead = state.leads.find(function(x){return x.id===id;});
+      if (lead) lead[field] = body[field];
+      var sv = document.getElementById('saved-'+id); if (sv && field==='notes'){ sv.textContent='uloženo'; setTimeout(function(){sv.textContent='';},1500); }
+      if (field==='status' || field==='lang') render();
+    } catch(e){}
+  }
+
+  async function addActivity(id){
+    var inp = document.getElementById('act-'+id); var txt = (inp.value||'').trim();
+    if (!txt) return;
+    var lead = state.leads.find(function(x){return x.id===id;});
+    var now = new Date();
+    var stamp = ('0'+now.getDate()).slice(-2)+'.'+('0'+(now.getMonth()+1)).slice(-2)+'.'+now.getFullYear()+' '+('0'+now.getHours()).slice(-2)+':'+('0'+now.getMinutes()).slice(-2);
+    var line = '• ['+stamp+'] '+txt;
+    var newNotes = lead && lead.notes ? (line + '\n' + lead.notes) : line;
+    inp.value='';
+    await setField(id, 'notes', newNotes);
+    if (lead) lead.notes = newNotes;
+    render();
+  }
+
+  function buildLangOptions(){
+    document.getElementById('a-lang').innerHTML = Object.keys(LANGS).map(function(k){ return '<option value="'+k+'">'+(k?k.toUpperCase()+' · ':'')+LANGS[k]+'</option>'; }).join('');
+    document.getElementById('a-lang').value = 'cs';
+  }
+  function openAdd(){ document.getElementById('a-err').textContent=''; document.getElementById('add-modal').classList.add('open'); }
+  function closeAdd(){ document.getElementById('add-modal').classList.remove('open'); }
+  async function saveAdd(){
+    var name = document.getElementById('a-name').value.trim();
+    var email = document.getElementById('a-email').value.trim();
+    var phone = document.getElementById('a-phone').value.trim();
+    var lang = document.getElementById('a-lang').value;
+    var errEl = document.getElementById('a-err');
+    if (!email || email.indexOf('@')===-1){ errEl.textContent='Zadej platný e-mail.'; return; }
+    var btn = document.getElementById('a-save'); btn.disabled=true; btn.textContent='Ukládám…';
+    try {
+      var r = await api('/leads', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ name:name, email:email, lang:lang, phone:phone }) });
+      var j = await r.json().catch(function(){return {};});
+      if (!r.ok){ errEl.textContent = j.error || ('Chyba HTTP '+r.status); return; }
+      document.getElementById('a-name').value=''; document.getElementById('a-email').value=''; document.getElementById('a-phone').value='';
+      closeAdd(); await load();
+    } catch(e){ errEl.textContent='Nepodařilo se uložit.'; }
+    finally { btn.disabled=false; btn.textContent='Uložit kontakt'; }
+  }
+
+  async function doLogout(){ try{ await fetch('/api/auth/logout', { method:'POST', credentials:'include' }); }catch(e){} window.location.href='/login.html'; }
+
+  init();
+</script>
+</body>
+</html>
