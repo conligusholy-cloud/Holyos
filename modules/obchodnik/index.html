@@ -36,6 +36,7 @@
   .card-sub{font-size:12.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
   .badge{font-size:11px;font-weight:600;padding:3px 9px;border-radius:999px;white-space:nowrap}
   .chev{color:var(--muted2);font-size:13px;transition:transform .2s}
+  .gear{color:var(--muted2);font-size:16px;padding:4px 6px;cursor:pointer}
   .card.open .chev{transform:rotate(90deg)}
   /* Detail */
   .detail{display:none;padding:0 14px 14px;border-top:1px solid var(--line)}
@@ -93,6 +94,21 @@
         <button class="btn btn-p" style="flex:2" id="a-save" onclick="saveAdd()">Uložit kontakt</button>
       </div>
       <p id="a-err" style="color:#fca5a5;font-size:13px;margin:8px 0 0;min-height:16px"></p>
+    </div>
+  </div>
+
+  <div class="modal" id="edit-modal">
+    <div class="sheet">
+      <h2>Údaje kontaktu</h2>
+      <div class="field"><label>Jméno / firma</label><input class="qinput" id="e-name" placeholder="Jméno / firma"></div>
+      <div class="field"><label>E-mail</label><input class="qinput" id="e-email" type="email" placeholder="email@…" inputmode="email"></div>
+      <div class="field"><label>Telefon</label><input class="qinput" id="e-phone" type="tel" placeholder="+420…" inputmode="tel"></div>
+      <div class="field"><label>Jazyk</label><select id="e-lang"></select></div>
+      <div class="actions-row">
+        <button class="btn btn-g" style="flex:1" onclick="closeEdit()">Zrušit</button>
+        <button class="btn btn-p" style="flex:2" id="e-save" onclick="saveEdit()">Uložit údaje</button>
+      </div>
+      <p id="e-err" style="color:#fca5a5;font-size:13px;margin:8px 0 0;min-height:16px"></p>
     </div>
   </div>
 
@@ -177,11 +193,11 @@
         '<span class="dot" style="background:'+st.c+'"></span>' +
         '<div class="card-body"><div class="card-name">'+esc(l.name||l.email)+'</div><div class="card-sub">'+(subHtml||'—')+'</div></div>' +
         '<span class="badge" style="background:'+st.c+'22;color:'+st.c+'">'+st.l+'</span>' +
+        '<span class="gear" onclick="event.stopPropagation();openEdit('+l.id+')" title="Upravit údaje kontaktu">⚙️</span>' +
         '<span class="chev">▸</span>' +
       '</div>' +
       '<div class="detail">' +
         '<div class="field"><label>Stav</label>'+statusSel+'</div>' +
-        '<div class="field"><label>Jazyk</label>'+langSel+'</div>' +
         '<div class="field"><label>Portál</label>' +
           '<button class="btn btn-g" style="width:100%"'+(l.email?'':' disabled')+' onclick="sendAccess('+l.id+')">✉️ Odeslat přístup na portál</button>' +
           (l.email ? '' : '<div style="color:var(--muted2);font-size:12px;margin-top:4px">Kontakt nemá e-mail — přístup nelze odeslat.</div>') +
@@ -326,6 +342,41 @@
       closeAdd(); await load();
     } catch(e){ errEl.textContent='Nepodařilo se uložit.'; }
     finally { btn.disabled=false; btn.textContent='Uložit kontakt'; }
+  }
+
+  var editingId = null;
+  function openEdit(id){
+    var l = state.leads.find(function(x){return x.id===id;}); if (!l) return;
+    editingId = id;
+    if (!document.getElementById('e-lang').options.length){ document.getElementById('e-lang').innerHTML = Object.keys(LANGS).map(function(k){ return '<option value="'+k+'">'+(k?k.toUpperCase()+' · ':'')+LANGS[k]+'</option>'; }).join(''); }
+    document.getElementById('e-name').value = l.name || '';
+    document.getElementById('e-email').value = l.email || '';
+    document.getElementById('e-phone').value = l.phone || '';
+    document.getElementById('e-lang').value = langCode(l.lang);
+    document.getElementById('e-err').textContent = '';
+    document.getElementById('edit-modal').classList.add('open');
+  }
+  function closeEdit(){ document.getElementById('edit-modal').classList.remove('open'); editingId = null; }
+  async function saveEdit(){
+    if (editingId == null) return;
+    var name = document.getElementById('e-name').value.trim();
+    var email = document.getElementById('e-email').value.trim();
+    var phone = document.getElementById('e-phone').value.trim();
+    var lang = document.getElementById('e-lang').value;
+    var errEl = document.getElementById('e-err');
+    if (!name){ errEl.textContent = 'Zadej jméno.'; return; }
+    if (email && email.indexOf('@')===-1){ errEl.textContent = 'Neplatný e-mail.'; return; }
+    if (!email && !phone){ errEl.textContent = 'Zadej aspoň e-mail nebo telefon.'; return; }
+    var btn = document.getElementById('e-save'); btn.disabled=true; btn.textContent='Ukládám…';
+    try {
+      var r = await api('/leads/'+editingId, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ name:name, email:email||null, phone:phone||null, lang:lang||null }) });
+      var j = await r.json().catch(function(){return {};});
+      if (!r.ok){ errEl.textContent = j.error || ('Chyba HTTP '+r.status); return; }
+      var l = state.leads.find(function(x){return x.id===editingId;});
+      if (l){ l.name=name; l.email=email||null; l.phone=phone||null; l.lang=lang||null; }
+      closeEdit(); render();
+    } catch(e){ errEl.textContent = 'Uložení selhalo.'; }
+    finally { btn.disabled=false; btn.textContent='Uložit údaje'; }
   }
 
   async function doLogout(){ try{ await fetch('/api/auth/logout', { method:'POST', credentials:'include' }); }catch(e){} window.location.href='/login.html'; }
