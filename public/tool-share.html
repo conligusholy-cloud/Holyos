@@ -735,12 +735,13 @@
           try { document.title = data.tool.title; } catch (e) { /* noop */ }
         }
 
-        // Fallback chain: poslední uložený zákazníkův model → server defaults → JS factory
+        // Při načtení bereme VÝCHOZÍ hodnoty (server admin defaults) → refresh vždy
+        // ukáže default. Uložené modely se načtou až kliknutím na dlaždici výše.
         var initialState = null;
-        if (data.models && data.models.length && data.models[0].data_json) {
-          initialState = data.models[0].data_json;
-        } else if (data.defaults_json && typeof data.defaults_json === 'object') {
+        if (data.defaults_json && typeof data.defaults_json === 'object') {
           initialState = data.defaults_json;
+        } else if (data.models && data.models.length && data.models[0].data_json) {
+          initialState = data.models[0].data_json;
         }
         var locks = (data.locks_json && typeof data.locks_json === 'object') ? data.locks_json : {};
 
