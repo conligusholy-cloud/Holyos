@@ -709,6 +709,66 @@ router.get('/sellers', requireAuth, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// GET /api/compounder/sales-overview — přehled pro vedoucího obchodu (výkon týmu).
+router.get('/sales-overview', requireAuth, async (req, res, next) => {
+  try {
+    const u = req.user || {};
+    const isMgr = u.isSuperAdmin || u.role === 'admin' || (u.person && u.person.is_sales_lead);
+    if (!isMgr) return res.status(403).json({ error: 'Jen vedoucí obchodu nebo admin' });
+
+    const leads = await prisma.compounderLead.findMany({
+      select: { id: true, name: true, status: true, owner_person_id: true, created_at: true, updated_at: true },
+      orderBy: { updated_at: 'desc' },
+      take: 5000,
+    });
+    const ownerIds = Array.from(new Set(leads.map((l) => l.owner_person_id).filter(Boolean)));
+    const persons = ownerIds.length
+      ? await prisma.person.findMany({ where: { id: { in: ownerIds } }, select: { id: true, first_name: true, last_name: true } })
+      : [];
+    const nameById = {};
+    persons.forEach((p) => { nameById[p.id] = ((p.first_name || '') + ' ' + (p.last_name || '')).trim() || ('#' + p.id); });
+
+    const bySeller = {};
+    let unassigned = 0, converted = 0;
+    leads.forEach((l) => {
+      if (l.status === 'converted') converted++;
+      if (!l.owner_person_id) { unassigned++; return; }
+      const sid = l.owner_person_id;
+      const s = bySeller[sid] || (bySeller[sid] = { id: sid, name: nameById[sid] || ('#' + sid), total: 0, byStatus: { new: 0, contacted: 0, qualified: 0, converted: 0, rejected: 0 }, converted: 0, lastActivityAt: null });
+      s.total++;
+      if (s.byStatus[l.status] != null) s.byStatus[l.status]++;
+      if (l.status === 'converted') s.converted++;
+      const t = l.updated_at ? new Date(l.updated_at).getTime() : 0;
+      if (t && (!s.lastActivityAt || t > new Date(s.lastActivityAt).getTime())) s.lastActivityAt = l.updated_at;
+    });
+    const sellers = Object.keys(bySeller).map((k) => {
+      const s = bySeller[k];
+      s.conversionPct = s.total ? Math.round((s.converted / s.total) * 100) : 0;
+      return s;
+    }).sort((a, b) => b.total - a.total);
+
+    let resv = [];
+    try { resv = await prisma.locationReservation.findMany({ select: { lead_id: true, kiosk_code: true, status: true, reserved_until: true }, orderBy: { created_at: 'desc' }, take: 500 }); } catch (e) { resv = []; }
+    const leadById = {}; leads.forEach((l) => { leadById[l.id] = l; });
+    const resvByStatus = {};
+    const resvItems = resv.map((r) => {
+      resvByStatus[r.status] = (resvByStatus[r.status] || 0) + 1;
+      const lead = leadById[r.lead_id];
+      return { kiosk_code: r.kiosk_code, status: r.status, reserved_until: r.reserved_until, lead_name: lead ? lead.name : null, owner_name: (lead && lead.owner_person_id) ? (nameById[lead.owner_person_id] || null) : null };
+    });
+
+    const recent = leads.slice(0, 15).map((l) => ({ lead_id: l.id, name: l.name, status: l.status, owner_name: l.owner_person_id ? (nameById[l.owner_person_id] || null) : null, updated_at: l.updated_at }));
+
+    res.json({
+      ok: true,
+      totals: { leads: leads.length, converted, conversionPct: leads.length ? Math.round((converted / leads.length) * 100) : 0, unassigned },
+      sellers,
+      reservations: { total: resv.length, byStatus: resvByStatus, items: resvItems.slice(0, 50) },
+      recent,
+    });
+  } catch (err) { next(err); }
+});
+
 // POST /api/compounder/leads/:id/send-access — pošle leadovi přihlašovací odkaz na portál.
 router.post('/leads/:id/send-access', requireAuth, async (req, res, next) => {
   try {

@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f1115">
+<title>Vedoucí obchodu — Přehled</title>
+<style>
+  :root{
+    --bg:#0f1115; --surface:#171a21; --surface2:#1f2430; --line:rgba(255,255,255,.09);
+    --text:#f2f3f5; --muted:#9aa0ad; --muted2:#6b7280; --primary:#eab308; --primary-d:#1a1408;
+    --new:#3b82f6; --contacted:#8b5cf6; --qualified:#eab308; --converted:#22c55e; --rejected:#ef4444;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;line-height:1.45}
+  body{padding-bottom:40px}
+  .top{position:sticky;top:0;z-index:20;background:rgba(15,17,21,.92);backdrop-filter:blur(8px);border-bottom:1px solid var(--line);padding:14px 16px calc(12px + env(safe-area-inset-top,0)) 16px;display:flex;align-items:center;justify-content:space-between}
+  .top h1{font-size:18px;margin:0;font-weight:700}
+  .logout{background:transparent;border:1px solid var(--line);color:var(--muted);border-radius:999px;padding:7px 12px;font-size:12px;cursor:pointer}
+  .wrap{padding:12px 14px}
+  h2{font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted2);margin:22px 0 8px}
+  .cards{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+  .stat{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px}
+  .stat .v{font-size:26px;font-weight:800}
+  .stat .k{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-top:2px}
+  .row{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px;margin:10px 0}
+  .row-h{display:flex;align-items:center;justify-content:space-between;gap:10px}
+  .name{font-weight:700;font-size:15.5px}
+  .pct{font-weight:800;font-size:16px;color:var(--converted)}
+  .bar{display:flex;height:8px;border-radius:6px;overflow:hidden;margin-top:10px;background:var(--surface2)}
+  .bar span{display:block;height:100%}
+  .legend{display:flex;flex-wrap:wrap;gap:10px;margin-top:8px;font-size:11.5px;color:var(--muted)}
+  .legend b{color:var(--text);font-weight:600}
+  .sub{font-size:12px;color:var(--muted);margin-top:6px}
+  .list-item{border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin:8px 0;background:var(--surface);font-size:13.5px}
+  .badge{font-size:11px;font-weight:600;padding:2px 8px;border-radius:999px}
+  .muted{color:var(--muted)}
+  .loading,.empty,.err{padding:40px 16px;text-align:center;color:var(--muted)}
+  .err{color:#fca5a5}
+</style>
+</head>
+<body>
+  <div class="top">
+    <h1>Přehled obchodu</h1>
+    <button class="logout" onclick="doLogout()">Odhlásit</button>
+  </div>
+  <div class="wrap" id="content"><div class="loading">Načítám…</div></div>
+
+<script>
+  var STATUS = { new:{l:'Nový',c:'var(--new)'}, contacted:{l:'Kontaktován',c:'var(--contacted)'}, qualified:{l:'Kvalifikován',c:'var(--qualified)'}, converted:{l:'Převeden',c:'var(--converted)'}, rejected:{l:'Zamítnut',c:'var(--rejected)'} };
+  var RES_STATUS = { reserved:'Rezervováno', active:'Aktivní', expired:'Vypršelo', cancelled:'Zrušeno', signed:'Podepsáno' };
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+  function fmtDate(iso){ if(!iso) return '—'; var d=new Date(iso); return ('0'+d.getDate()).slice(-2)+'.'+('0'+(d.getMonth()+1)).slice(-2)+'.'+d.getFullYear()+' '+('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2); }
+
+  async function init(){
+    var box = document.getElementById('content');
+    try {
+      var meR = await fetch('/api/auth/me', { credentials:'include' });
+      if (meR.status === 401){ window.location.href = '/login.html?redirect=' + encodeURIComponent(location.pathname); return; }
+      var r = await fetch('/api/compounder/sales-overview', { credentials:'include' });
+      if (r.status === 403){ box.innerHTML = '<div class="err">Tato obrazovka je jen pro vedoucího obchodu.</div>'; return; }
+      if (!r.ok) throw new Error('HTTP '+r.status);
+      render(await r.json());
+    } catch(e){ box.innerHTML = '<div class="err">Nepodařilo se načíst přehled: '+esc(e.message)+'</div>'; }
+  }
+
+  function statusBar(bs, total){
+    if (!total) return '';
+    var order = ['new','contacted','qualified','converted','rejected'];
+    var seg = order.map(function(k){ var n=bs[k]||0; if(!n) return ''; return '<span style="width:'+(n/total*100)+'%;background:'+STATUS[k].c+'"></span>'; }).join('');
+    var leg = order.filter(function(k){return bs[k];}).map(function(k){ return '<span><b style="color:'+STATUS[k].c+'">'+bs[k]+'</b> '+STATUS[k].l+'</span>'; }).join('');
+    return '<div class="bar">'+seg+'</div><div class="legend">'+leg+'</div>';
+  }
+
+  function render(d){
+    var t = d.totals||{};
+    var h = '<div class="cards">' +
+      stat(t.leads||0, 'Kontakty') +
+      stat(t.converted||0, 'Převedeno') +
+      stat((t.conversionPct||0)+' %', 'Konverze') +
+      stat(t.unassigned||0, 'Nepřiřazeno') +
+    '</div>';
+
+    h += '<h2>Výkon obchodníků</h2>';
+    var sellers = d.sellers||[];
+    if (!sellers.length){ h += '<div class="empty">Zatím žádní obchodníci s kontakty.</div>'; }
+    else {
+      h += sellers.map(function(s){
+        return '<div class="row"><div class="row-h"><div class="name">'+esc(s.name)+'</div><div class="pct">'+s.conversionPct+' %</div></div>' +
+          '<div class="sub">'+s.total+' kontaktů · '+s.converted+' převedeno · poslední aktivita '+fmtDate(s.lastActivityAt)+'</div>' +
+          statusBar(s.byStatus||{}, s.total) +
+        '</div>';
+      }).join('');
+    }
+
+    if (t.unassigned){
+      h += '<h2>Nezpracované</h2><div class="row" style="border-color:rgba(239,68,68,.4)"><div class="name" style="color:#fca5a5">'+t.unassigned+' kontaktů bez obchodníka</div><div class="sub">Přiřaď je v modulu Prodejní objednávky → Compounder.</div></div>';
+    }
+
+    var rv = d.reservations||{};
+    h += '<h2>Rezervace ('+(rv.total||0)+')</h2>';
+    var items = rv.items||[];
+    if (!items.length){ h += '<div class="empty">Žádné rezervace.</div>'; }
+    else {
+      h += items.map(function(x){
+        return '<div class="list-item"><b>'+esc(x.kiosk_code||'—')+'</b> · '+esc(RES_STATUS[x.status]||x.status||'')+
+          (x.reserved_until? ' · do '+fmtDate(x.reserved_until):'')+
+          '<div class="muted" style="margin-top:2px">'+esc(x.lead_name||'—')+(x.owner_name?(' · '+esc(x.owner_name)):'')+'</div></div>';
+      }).join('');
+    }
+
+    h += '<h2>Poslední aktivita týmu</h2>';
+    var recent = d.recent||[];
+    if (!recent.length){ h += '<div class="empty">Zatím nic.</div>'; }
+    else {
+      h += recent.map(function(x){
+        var st = STATUS[x.status]||STATUS.new;
+        return '<div class="list-item"><div class="row-h"><span>'+esc(x.name||'—')+'</span><span class="badge" style="background:'+st.c+'22;color:'+st.c+'">'+st.l+'</span></div>' +
+          '<div class="muted" style="margin-top:2px">'+(x.owner_name?esc(x.owner_name)+' · ':'')+fmtDate(x.updated_at)+'</div></div>';
+      }).join('');
+    }
+
+    document.getElementById('content').innerHTML = h;
+  }
+  function stat(v, k){ return '<div class="stat"><div class="v">'+esc(v)+'</div><div class="k">'+esc(k)+'</div></div>'; }
+
+  async function doLogout(){ try{ await fetch('/api/auth/logout', { method:'POST', credentials:'include' }); }catch(e){} window.location.href='/login.html'; }
+
+  init();
+</script>
+</body>
+</html>
