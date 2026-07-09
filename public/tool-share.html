@@ -354,6 +354,7 @@
     <div class="left-info" id="share-toolbar-info">
       💡 Žlutá pole můžete <strong>libovolně měnit</strong> a zkoušet různé scénáře. Ostatní hodnoty se přepočítají automaticky.
     </div>
+    <span class="sh-cur" id="sh-cur" style="display:none;align-items:center;gap:5px;margin-right:6px;"></span>
     <button class="btn btn-sm" id="btn-reset" onclick="resetToDefaults()">↺ Výchozí</button>
     <button class="btn btn-sm" id="btn-pdf" onclick="downloadPdf()">📄 Stáhnout PDF</button>
     <button class="btn btn-primary btn-sm" id="btn-save" onclick="openSaveModal()">💾 Uložit můj model</button>
@@ -547,8 +548,10 @@
         applyChromeTranslations();
         // Re-render uložených modelů (formátování data podle locale)
         if (SHARE_DATA && SHARE_DATA.models) renderModelsStrip(SHARE_DATA.models);
-        // Re-mount tool — vyrenderuje sekce s novými stringy
+        // Re-mount tool — vyrenderuje sekce s novými stringy (měna se resetuje na €)
         if (SHARE_DATA && toolApi()) mountTool(SHARE_DATA);
+        SH_CUR = 'EUR';
+        shRenderCur();
         logEvent('viewed', { language: code });
       }
 
@@ -623,6 +626,36 @@
         document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'hidden') ecoEndVisit(); });
       }
 
+      // ─── Přepínač měny (Kč/€/$/£) — přepočítá celý model kurzem ČNB ──────────
+      var SH_CUR = 'EUR';
+      var SH_RATES = { CZK: 1, EUR: 25, USD: 23, GBP: 29 }; // CZK za 1 jednotku
+      var SH_SYM = { CZK: 'Kč', EUR: '€', USD: '$', GBP: '£' };
+      function shRenderCur() {
+        var wrap = document.getElementById('sh-cur'); if (!wrap) return;
+        var API = toolApi();
+        if (!API || typeof API.setCurrency !== 'function') { wrap.style.display = 'none'; return; }
+        wrap.style.display = 'inline-flex';
+        var html = '<span style="font-size:12px;color:var(--text2);margin-right:2px">' + tt('Měna') + ':</span>';
+        ['CZK', 'EUR', 'USD', 'GBP'].forEach(function (c) {
+          var on = c === SH_CUR;
+          html += '<button type="button" class="btn btn-sm" onclick="shSetCur(\'' + c + '\')" style="padding:6px 11px;' + (on ? 'background:#c9a24b;border-color:#c9a24b;color:#241c05;font-weight:700;' : '') + '">' + SH_SYM[c] + '</button>';
+        });
+        wrap.innerHTML = html;
+      }
+      window.shSetCur = function (c) {
+        if (!SH_SYM[c] || c === SH_CUR) return;
+        var API = toolApi(); if (!API || typeof API.setCurrency !== 'function') return;
+        var ratio = (SH_RATES[SH_CUR] || 1) / (SH_RATES[c] || 1);
+        API.setCurrency(c, SH_SYM[c], ratio);
+        SH_CUR = c;
+        shRenderCur();
+      };
+      function shLoadRates() {
+        fetch('/api/compounder/fx-rates').then(function (r) { return r.json(); }).then(function (j) {
+          if (j && j.rates) SH_RATES = Object.assign({ CZK: 1 }, j.rates);
+        }).catch(function () {});
+      }
+
       function load() {
         if (!TOKEN || TOKEN.length < 16) {
           showError(tt('Odkaz je neplatný. Zkontrolujte, prosím, URL.'));
@@ -649,6 +682,8 @@
             applyChromeTranslations();
             renderModelsStrip(data.models);
             mountTool(data);
+            shLoadRates();
+            shRenderCur();
           })
           .catch(function (e) {
             showError(e.message || tt('Odkaz nelze otevřít'));

@@ -99,6 +99,20 @@
     new_machines_y10: 1
   };
 
+  // ── Měna zobrazení (model je bázově v EUR; přepínač přepočítá stav i symbol) ──
+  var CUR = { code: 'EUR', sym: '€' };
+  // Peněžní pole (převádějí se při změně měny). Spotřeby (voda/el/prášek/aviváž),
+  // počty (zákazníci, stroje) a % (DPH) NEJSOU peníze → nepřevádět.
+  var CURRENCY_KEYS = [
+    'cena_pradlomatu', 'cena_projekt', 'cena_pripojek', 'obrat_na_zakaznika',
+    'udrzba', 'software', 'internet', 'infolinka', 'pojisteni', 'najem', 'servis',
+    'cena_elektriny', 'cena_vodne', 'cena_stocne',
+    'cena_mala_pracka', 'cena_mala_pracka_aviv', 'cena_velka_pracka', 'cena_velka_pracka_aviv',
+    'cena_susicka_15', 'cena_cistici_program', 'cena_prasku', 'cena_avivaze'
+  ];
+  // Nahradí symbol '€' v jednotce aktuální měnou (např. '€/měs' → 'Kč/měs').
+  function curUnit(u) { return (u == null ? '' : String(u)).replace('€', CUR.sym); }
+
   // ─────────────────────────────────────────────────────────────────
   // 2) Výpočetní engine (přepis všech 40 formulí z Excelu)
   // ─────────────────────────────────────────────────────────────────
@@ -212,7 +226,7 @@
   function fmtEur(n, decimals) {
     if (!isFinite(n)) return '∞';
     var d = decimals == null ? 0 : decimals;
-    return n.toLocaleString(_loc(), { minimumFractionDigits: d, maximumFractionDigits: d }) + ' €';
+    return n.toLocaleString(_loc(), { minimumFractionDigits: d, maximumFractionDigits: d }) + ' ' + CUR.sym;
   }
   function fmtNum(n, decimals) {
     if (!isFinite(n)) return '∞';
@@ -375,7 +389,7 @@
       '<div class="pe-row' + (LOCKABLE ? ' lockable' : '') + (locked ? ' is-locked' : '') + '">' +
         '<label for="pe-' + key + '">' + label + '</label>' +
         inputCell +
-        '<span class="pe-unit">' + (unit || '') + '</span>' +
+        '<span class="pe-unit">' + curUnit(unit) + '</span>' +
         lockCell +
       '</div>'
     );
@@ -388,7 +402,7 @@
       '<div class="pe-row' + (LOCKABLE ? ' lockable' : '') + '">' +
         '<label>' + label + '</label>' +
         '<div class="' + cls + '" id="pe-out-' + key + '">—</div>' +
-        '<span class="pe-unit">' + (unit || '') + '</span>' +
+        '<span class="pe-unit">' + curUnit(unit) + '</span>' +
         spacer +
       '</div>'
     );
@@ -932,7 +946,7 @@
     var a = Math.abs(v);
     if (a >= 1e6) return sign + (a / 1e6).toFixed(1) + ' M €';
     if (a >= 1e3) return sign + (a / 1e3).toFixed(0) + ' k €';
-    return sign + a.toFixed(0) + ' €';
+    return sign + a.toFixed(0) + ' ' + CUR.sym;
   }
 
   // ─────────────────────────────────────────────────────────────────
@@ -1006,6 +1020,20 @@
     bindInputs();
   }
 
+  // Přepnutí měny: nastaví symbol a přepočítá peněžní pole stavu poměrem kurzů
+  // (ratio = kolik nové měny za 1 jednotku staré). Payback/ROI/% zůstávají (poměry).
+  function setCurrency(code, sym, ratio) {
+    CUR = { code: code || 'EUR', sym: sym || '€' };
+    if (ratio && isFinite(ratio) && ratio !== 1) {
+      for (var i = 0; i < CURRENCY_KEYS.length; i++) {
+        var k = CURRENCY_KEYS[i];
+        if (typeof STATE[k] === 'number' && isFinite(STATE[k])) STATE[k] = STATE[k] * ratio;
+      }
+    }
+    if (ROOT) { ROOT.innerHTML = buildHTML(); bindInputs(); }
+  }
+  function getCurrency() { return { code: CUR.code, sym: CUR.sym }; }
+
   function exportJSON() {
     var data = { inputs: STATE, computed: compute(STATE), generated_at: new Date().toISOString(), tool: 'pradlomat-economy', version: 1 };
     var blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -1030,6 +1058,8 @@
   global.PradlomatTool = {
     mount: mount,
     resetDefaults: resetDefaults,
+    setCurrency: setCurrency,
+    getCurrency: getCurrency,
     exportJSON: exportJSON,
     getState: getState,
     getComputed: getComputed,
