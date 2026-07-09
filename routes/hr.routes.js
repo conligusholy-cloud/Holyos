@@ -725,6 +725,8 @@ function sanitizePersonData(body, currentUser, opts = {}) {
   const toBool = v => !!v && v !== 'false' && v !== '0';
   if ('active' in body) data.active = toBool(body.active);
   if ('can_upload_cad' in body) data.can_upload_cad = toBool(body.can_upload_cad);
+  if ('is_salesperson' in body) data.is_salesperson = toBool(body.is_salesperson);
+  if ('is_sales_lead' in body) data.is_sales_lead = toBool(body.is_sales_lead);
   // is_super_admin může měnit jen admin nebo super admin
   const isAdmin = currentUser && (currentUser.role === 'admin' || currentUser.isSuperAdmin);
   if ('is_super_admin' in body && isAdmin) {

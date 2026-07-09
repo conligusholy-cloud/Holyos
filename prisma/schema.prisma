@@ -126,6 +126,10 @@ model Person {
   // výkresy ze SolidWorksu přes desktop klient HolyOS CAD Bridge.
   can_upload_cad Boolean @default(false)
 
+  // Obchod — přístup na kioskové obrazovky (nezávislé na hlavní roli osoby)
+  is_salesperson Boolean @default(false) // obrazovka obchodníka + kandidát na vlastníka kontaktu
+  is_sales_lead  Boolean @default(false) // obrazovka vedoucího obchodu (přehled týmu)
+
   // ─── Velín (mobilní aplikace) ───────────────────────────────────────────
   // Aktivační kód = jednorázový string vygenerovaný adminem v HolyOS, který
   // kolega zadá v aplikaci spolu s vlastním PIN. Po úspěšné aktivaci se kód

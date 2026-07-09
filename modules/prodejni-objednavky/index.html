@@ -2807,7 +2807,7 @@
           } else if (l.owner_name) {
             ownerCell = '<span style="font-size:12px;">' + cmpEsc(l.owner_name) + '</span>';
           } else {
-            ownerCell = '<span title="Přiřaď lidem roli Obchodník nebo Vedoucí obchodu v modulu Lidé a HR" style="color:var(--text2);font-size:12px;">— nejsou obchodníci —</span>';
+            ownerCell = '<span title="Zaškrtni u osoby Obchodník nebo Vedoucí obchodu v modulu Lidé a HR" style="color:var(--text2);font-size:12px;">— nejsou obchodníci —</span>';
           }
           var noteVal = cmpEsc(l.notes||'');
           var w = (l.warmthPct!=null) ? l.warmthPct : null;

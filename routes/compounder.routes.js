@@ -642,7 +642,7 @@ router.post('/leads', requireAuth, async (req, res, next) => {
 router.get('/sellers', requireAuth, async (req, res, next) => {
   try {
     const sellers = await prisma.person.findMany({
-      where: { active: true, role: { name: { in: ['Obchodník', 'Vedoucí obchodu'] } } },
+      where: { active: true, OR: [{ is_salesperson: true }, { is_sales_lead: true }] },
       orderBy: [{ last_name: 'asc' }, { first_name: 'asc' }],
       select: { id: true, first_name: true, last_name: true },
     });
