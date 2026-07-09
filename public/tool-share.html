@@ -586,6 +586,43 @@
         }).catch(function () { /* noop */ });
       }
 
+      // ─── Compounder analytika (napojení na leada) ─────────────────────
+      // Zapisuje do „cesty uživatele" leada (server tag na lead_id přes recipient).
+      var ECO_START = Date.now();
+      var ECO_ENDED = false;
+      var ECO_TIMERS = {};
+      function ecoTrack(event, props) {
+        try {
+          var body = JSON.stringify({ event: event, props: props || {} });
+          var url = '/api/tools/share/' + encodeURIComponent(TOKEN) + '/track';
+          if (navigator.sendBeacon) navigator.sendBeacon(url, new Blob([body], { type: 'application/json' }));
+          else fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body, keepalive: true }).catch(function () {});
+        } catch (e) { /* noop */ }
+      }
+      function ecoSnapshot() {
+        try { var API = toolApi(); return (API && API.getState) ? API.getState() : null; } catch (e) { return null; }
+      }
+      function ecoEndVisit() {
+        if (ECO_ENDED) return; ECO_ENDED = true;
+        ecoTrack('eco_visit_end', { ms: Date.now() - ECO_START, values: ecoSnapshot() });
+      }
+      function ecoInit() {
+        // Každá změna žlutého pole → eco_edit (co, na jakou hodnotu), debounce per pole.
+        document.addEventListener('input', function (e) {
+          var el = e.target;
+          if (!el || !el.classList || !el.classList.contains('pe-input')) return;
+          var key = el.getAttribute('data-key') || '';
+          var row = el.closest ? el.closest('.pe-row') : null;
+          var lab = row ? row.querySelector('label') : null;
+          var label = lab ? (lab.textContent || '').trim() : key;
+          var value = el.value;
+          clearTimeout(ECO_TIMERS[key]);
+          ECO_TIMERS[key] = setTimeout(function () { ecoTrack('eco_edit', { key: key, label: label, value: value }); }, 1000);
+        }, true);
+        window.addEventListener('pagehide', ecoEndVisit);
+        document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'hidden') ecoEndVisit(); });
+      }
+
       function load() {
         if (!TOKEN || TOKEN.length < 16) {
           showError(tt('Odkaz je neplatný. Zkontrolujte, prosím, URL.'));
@@ -600,6 +637,7 @@
           })
           .then(function (data) {
             SHARE_DATA = data;
+            ecoTrack('eco_open', {});
 
             // i18n bootstrap — pick initial language, nastav v helperu, vyrendruj switcher.
             var langs = (Array.isArray(data.languages) && data.languages.length) ? data.languages : ['cs'];
@@ -730,6 +768,7 @@
           toReopen.push({ el: collapsed[i], cls: ccls });
         }
         logEvent('exported', { kind: 'pdf' });
+        ecoTrack('eco_pdf', {});
         // Necháme krátkou pauzu na re-render rozbalení, pak tiskneme.
         setTimeout(function () {
           window.print();
@@ -790,6 +829,7 @@
             renderModelsStrip(SHARE_DATA.models);
             window.closeSaveModal();
             toast(tt('✓ Model uložen'), 'ok');
+            ecoTrack('eco_save', { name: name });
           })
           .catch(function (e) {
             toast(tt('Nepodařilo se uložit: ') + e.message, 'err');
@@ -799,6 +839,7 @@
       // Zobraz toolbar, nastav brand (compounder.world) a načti
       setupCompounderBrand();
       document.getElementById('share-toolbar').style.display = '';
+      ecoInit();
       load();
     })();
   </script>

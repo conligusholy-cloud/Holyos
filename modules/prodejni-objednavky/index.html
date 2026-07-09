@@ -2861,6 +2861,11 @@
       if (ev==='location_assess') return '📍 Zhodnotil lokalitu: '+cmpEsc((p.address||'').slice(0,40));
       if (ev==='contact_request') return '📞 Požádal o kontakt: '+cmpEsc(p.phone||'');
       if (ev==='purchase_inquiry') return '🛒 Poptávka nákupu: '+cmpEsc(p.count||'?')+'× Compounder'+(p.locations?(' · '+cmpEsc(String(p.locations).slice(0,40))):'');
+      if (ev==='eco_open') return '📊 Otevřel ekonomický model';
+      if (ev==='eco_edit') return '✏️ Upravil: '+cmpEsc(p.label||p.key||'?')+(p.value!=null&&p.value!==''?(' → '+cmpEsc(String(p.value))):'');
+      if (ev==='eco_pdf') return '📄 Stáhl PDF modelu';
+      if (ev==='eco_save') return '💾 Uložil model'+(p.name?(' ('+cmpEsc(p.name)+')'):'');
+      if (ev==='eco_visit_end') return '📊 Konec modelu'+(p.ms?(' · '+cmpFmtDur(p.ms)):'');
       if (ev==='install_choice') return '📲 Instalace PWA: '+cmpEsc(p.outcome||'');
       if (ev==='visit_end') return '🚪 Konec návštěvy'+(p.ms?(' · '+cmpFmtDur(p.ms)):'')+(p.depth!=null?(' · scroll '+p.depth+'%'):'');
       if (ev==='page_leave') return '🚪 Odešel z webu'+(p.depth!=null?(' · scroll '+p.depth+'%'):'');
@@ -2950,7 +2955,7 @@
           var t = new Date(e.at).getTime();
           if (e.event==='page_switch'){
             seg = { page: (e.props&&e.props.page)||'?', start:t, clicks:[] }; segs.push(seg);
-          } else if (e.event==='click' || e.event==='cta_click' || e.event==='doc_download' || e.event==='location_assess' || e.event==='contact_request' || e.event==='purchase_inquiry' || e.event==='card_flip'){
+          } else if (e.event==='click' || e.event==='cta_click' || e.event==='doc_download' || e.event==='location_assess' || e.event==='contact_request' || e.event==='purchase_inquiry' || e.event==='card_flip' || e.event==='eco_open' || e.event==='eco_edit' || e.event==='eco_pdf' || e.event==='eco_save' || e.event==='eco_visit_end'){
             if (!seg){ seg = { page:'(úvod)', start:t, clicks:[] }; segs.push(seg); }
             seg.clicks.push(e);
           }

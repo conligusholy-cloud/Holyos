@@ -175,6 +175,33 @@ router.post('/share/:token/event', async (req, res, next) => {
   }
 });
 
+// POST /api/tools/share/:token/track — analytika ekonomiky napojená na compounder leada.
+// Když recipient vznikl pro leada z portálu (compounder_lead_id), zapíšeme compounderEvent
+// s props.lead_id → objeví se v „cestě uživatele" leada (admin i obrazovka obchodníka).
+router.post('/share/:token/track', async (req, res) => {
+  try {
+    const token = String(req.params.token || '').toLowerCase().replace(/[^a-f0-9]/g, '');
+    const b = req.body || {};
+    const ALLOWED = ['eco_open', 'eco_edit', 'eco_visit_end', 'eco_pdf', 'eco_save'];
+    if (!token || ALLOWED.indexOf(b.event) === -1) return res.status(204).end();
+    const recipient = await prisma.businessToolRecipient.findUnique({
+      where: { share_token: token },
+      select: { id: true, tool: true, compounder_lead_id: true },
+    });
+    if (recipient && recipient.compounder_lead_id) {
+      const props = Object.assign(
+        {},
+        (b.props && typeof b.props === 'object') ? b.props : {},
+        { lead_id: recipient.compounder_lead_id, tool: recipient.tool }
+      );
+      await prisma.compounderEvent.create({
+        data: { sid: 'eco:' + recipient.compounder_lead_id, event: String(b.event).slice(0, 60), props, path: '/share/eco', ip: getClientIp(req) },
+      }).catch(() => {});
+    }
+  } catch (e) { /* best-effort analytika */ }
+  res.status(204).end();
+});
+
 // POST /api/tools/share/:token/model  — uložit verzi modelu
 router.post('/share/:token/model', async (req, res, next) => {
   try {
