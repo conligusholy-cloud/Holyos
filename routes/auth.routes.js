@@ -8,6 +8,27 @@ const bcrypt = require('bcryptjs');
 const { prisma } = require('../config/database');
 const { generateToken, requireAuth, requireAdmin } = require('../middleware/auth');
 
+// Určí, zda je uživatel "sales-only" (jen obchodní obrazovka, bez HolyOSu).
+// Admin/super-admin NIKDY není sales-only. Sales-only = má sales flag, není admin
+// a nemá žádná modulová práva (žádná role s permissions != none).
+async function computeSalesAccess(user) {
+  const person = user.person;
+  const isAdmin = user.is_super_admin || user.role === 'admin' || (person && person.is_super_admin);
+  const hasSales = !!(person && (person.is_salesperson || person.is_sales_lead));
+  if (isAdmin || !hasSales) return { sales_only: false, sales_home: null };
+  let allowedEmpty = true;
+  if (person && person.role_id) {
+    try {
+      const role = await prisma.role.findUnique({ where: { id: person.role_id }, include: { permissions: true } });
+      const allowed = ((role && role.permissions) || []).filter((p) => p.access_level && p.access_level !== 'none');
+      allowedEmpty = allowed.length === 0;
+    } catch (e) { allowedEmpty = true; }
+  }
+  if (!allowedEmpty) return { sales_only: false, sales_home: null };
+  const home = person.is_sales_lead ? '/modules/vedouci-obchodu/index.html' : '/modules/obchodnik/index.html';
+  return { sales_only: true, sales_home: home };
+}
+
 // GET /api/auth/setup — zkontroluje jestli existují uživatelé
 router.get('/setup', async (req, res, next) => {
   try {
@@ -88,7 +109,8 @@ router.post('/login', async (req, res, next) => {
       return res.status(401).json({ error: 'Neplatné přihlašovací údaje' });
     }
 
-    const token = generateToken(user);
+    const access = await computeSalesAccess(user);
+    const token = generateToken(user, { sales_only: access.sales_only, sales_home: access.sales_home });
 
     // Nastav cookie i vrať v body (podpora obou přístupů)
     res.cookie('token', token, {
@@ -100,6 +122,8 @@ router.post('/login', async (req, res, next) => {
 
     res.json({
       token,
+      sales_only: access.sales_only,
+      home: access.sales_home,
       user: {
         id: user.id,
         username: user.username,

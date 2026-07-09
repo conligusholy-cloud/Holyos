@@ -186,8 +186,10 @@
         return r.json();
       })
       .then(function(data) {
-        // Token je nastaven jako httpOnly cookie serverem
-        // Přesměruj na původní stránku nebo dashboard
+        // Token je nastaven jako httpOnly cookie serverem.
+        // Sales-only uživatel (jen obchodní obrazovka) → rovnou na svou obrazovku.
+        if (data && data.sales_only && data.home) { window.location.href = data.home; return; }
+        // Jinak na původní stránku nebo dashboard.
         var redirect = new URLSearchParams(window.location.search).get('redirect') || '/';
         window.location.href = redirect;
       })

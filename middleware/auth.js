@@ -11,18 +11,33 @@ const JWT_EXPIRY = process.env.JWT_EXPIRY || '24h';
 /**
  * Vygeneruje JWT token pro uživatele
  */
-function generateToken(user) {
+function generateToken(user, extra) {
   return jwt.sign(
-    {
+    Object.assign({
       id: user.id,
       username: user.username,
       display_name: user.display_name || user.username,
       role: user.role,
       is_super_admin: user.is_super_admin,
-    },
+    }, extra || {}),
     JWT_SECRET,
     { expiresIn: JWT_EXPIRY }
   );
+}
+
+/**
+ * Přečte a ověří JWT z cookie/headeru bez DB dotazu. Vrací payload nebo null.
+ * Používá se pro lehký "sales gate" middleware.
+ */
+function peekToken(req) {
+  try {
+    let token = null;
+    const auth = req.headers && req.headers.authorization;
+    if (auth && auth.startsWith('Bearer ')) token = auth.slice(7);
+    else if (req.cookies && req.cookies.token) token = req.cookies.token;
+    if (!token) return null;
+    return jwt.verify(token, JWT_SECRET);
+  } catch (e) { return null; }
 }
 
 /**
@@ -159,6 +174,7 @@ async function optionalAuth(req, res, next) {
 
 module.exports = {
   generateToken,
+  peekToken,
   requireAuth,
   requireAuthOrApiKey,
   requireAdmin,

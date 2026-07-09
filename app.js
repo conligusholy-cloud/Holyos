@@ -94,6 +94,29 @@ app.use((req, res, next) => {
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
+// ─── Sales gate ────────────────────────────────────────────────────────────
+// "Sales-only" uživatel (obchodník/vedoucí bez HolyOS práv) se dostane JEN na svou
+// obrazovku + /api/auth a /api/compounder. Admin/super-admin NIKDY dotčen.
+// Nouzový vypínač: env SALES_GATE_OFF=1.
+const { peekToken } = require('./middleware/auth');
+function salesGateAllowed(pathname) {
+  if (pathname === '/api/health' || pathname === '/favicon.ico') return true;
+  if (pathname.startsWith('/api/auth') || pathname.startsWith('/api/compounder') || pathname.startsWith('/api/sales')) return true;
+  if (pathname.startsWith('/modules/obchodnik') || pathname.startsWith('/modules/vedouci-obchodu')) return true;
+  if (pathname === '/login.html' || pathname.startsWith('/login')) return true;
+  if (pathname.startsWith('/css/') || pathname.startsWith('/js/') || pathname.startsWith('/dist/')) return true;
+  if (/\.(css|js|mjs|png|jpe?g|gif|svg|ico|webp|webmanifest|woff2?|ttf|map)$/i.test(pathname)) return true;
+  return false;
+}
+app.use((req, res, next) => {
+  if (process.env.SALES_GATE_OFF === '1') return next();
+  const p = peekToken(req);
+  if (!p || !p.sales_only) return next();
+  if (salesGateAllowed(req.path)) return next();
+  if (req.path.startsWith('/api/')) return res.status(403).json({ error: 'Přístup jen pro obchodní obrazovku.' });
+  return res.redirect(302, p.sales_home || '/modules/obchodnik/index.html');
+});
+
 // Logování requestů (development)
 if (process.env.NODE_ENV !== 'production') {
   app.use((req, res, next) => {
