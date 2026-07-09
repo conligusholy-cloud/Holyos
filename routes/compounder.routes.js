@@ -2489,23 +2489,31 @@ router.post('/contracts/:id(\\d+)/countersign', requireAuth, async (req, res, ne
 });
 
 // ─── Portál: nabídka lokalit k prodeji (jen forSale, kurátorovaná ekonomika) ──
-let _eurRate = null, _eurRateAt = 0;
-async function eurToCzk() {
-  if (_eurRate && (Date.now() - _eurRateAt) < 3600000) return _eurRate;
+// Kurzy z ČNB (CZK za 1 jednotku měny). Hodinová cache + fallback, když ČNB nedostupné.
+let _fxRates = null, _fxAt = 0;
+const FX_WANT = ['EUR', 'USD', 'GBP'];
+const FX_FALLBACK = { EUR: 25, USD: 23, GBP: 29 };
+async function fxRatesCzk() {
+  if (_fxRates && (Date.now() - _fxAt) < 3600000) return _fxRates;
   try {
-    const r = await fetch('https://api.cnb.cz/cnbapi/exrates/daily?lang=CZ');
+    const r = await fetch('https://api.cnb.cz/cnbapi/exrates/daily?lang=EN');
     if (r.ok) {
       const d = await r.json();
-      const row = (d.rates || []).find((x) => x.currencyCode === 'EUR');
-      if (row) {
-        const amt = parseFloat(row.amount) || 1;
-        const rate = parseFloat(row.rate);
-        if (rate > 0) { _eurRate = rate / amt; _eurRateAt = Date.now(); return _eurRate; }
-      }
+      const out = {};
+      FX_WANT.forEach((c) => {
+        const row = (d.rates || []).find((x) => x.currencyCode === c);
+        if (row) {
+          const amt = parseFloat(row.amount) || 1;
+          const rate = parseFloat(row.rate);
+          if (rate > 0) out[c] = rate / amt;
+        }
+      });
+      if (out.EUR) { _fxRates = Object.assign({}, FX_FALLBACK, out); _fxAt = Date.now(); return _fxRates; }
     }
   } catch (e) { /* fallback níže */ }
-  return _eurRate || 25;
+  return _fxRates || FX_FALLBACK;
 }
+async function eurToCzk() { const f = await fxRatesCzk(); return f.EUR || 25; }
 
 async function portalKiosks() {
   if (_kioskCache.data && Array.isArray(_kioskCache.data.kiosks) && (Date.now() - _kioskCache.at) < KIOSK_CACHE_MS) {
@@ -2536,7 +2544,8 @@ router.get('/portal/offered-locations', async (req, res, next) => {
     const cs = await getSetting(COMPOUNDING_SETTINGS_KEY, { type: 'json', defaultValue: COMPOUNDING_SETTINGS_DEFAULT });
     const cfgMap = (await getSetting(COMPOUNDING_KIOSKS_KEY, { type: 'json', defaultValue: {} })) || {};
     const kiosks = await portalKiosks();
-    const eur = await eurToCzk();
+    const fx = await fxRatesCzk();
+    const eur = fx.EUR || 25;
     const busyInfo = await activeReservationInfo();
     const feePerDay = Number.isFinite(cs.reservationFeePerDayCzk) ? cs.reservationFeePerDayCzk : 20000;
     const holdHours = Number.isFinite(cs.reservationHoldHours) ? cs.reservationHoldHours : 1;
@@ -2605,7 +2614,7 @@ router.get('/portal/offered-locations', async (req, res, next) => {
       })
       .sort((a, b) => (b.yearlyYield || 0) - (a.yearlyYield || 0));
 
-    res.json({ ok: true, currency: 'CZK', defaultCurrency: defCur, eurRate: eur, feePerDayCzk: feePerDay, reservation: { feePerDayCzk: feePerDay, holdHours, signDays, payDays, reblockDays }, count: list.length, locations: list });
+    res.json({ ok: true, currency: 'CZK', defaultCurrency: defCur, eurRate: eur, rates: fx, feePerDayCzk: feePerDay, reservation: { feePerDayCzk: feePerDay, holdHours, signDays, payDays, reblockDays }, count: list.length, locations: list });
   } catch (err) { next(err); }
 });
 
