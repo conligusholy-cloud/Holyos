@@ -746,6 +746,7 @@
 
         API.mount(document.getElementById('tool-root'), {
           initialState: initialState,
+          defaults: (data.defaults_json && typeof data.defaults_json === 'object') ? data.defaults_json : null,
           locks: locks,
           enforceLocks: true,
           onChange: function (state, computed) {
@@ -767,6 +768,7 @@
         if (!API) return;
         API.mount(document.getElementById('tool-root'), {
           initialState: m.data_json,
+          defaults: (SHARE_DATA.defaults_json && typeof SHARE_DATA.defaults_json === 'object') ? SHARE_DATA.defaults_json : null,
           locks: locks,
           enforceLocks: true,
           onChange: function (state, computed) {

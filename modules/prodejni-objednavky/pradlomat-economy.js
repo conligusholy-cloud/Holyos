@@ -616,6 +616,7 @@
   // 7) Bind + recalc
   // ─────────────────────────────────────────────────────────────────
   var STATE = Object.assign({}, DEFAULTS);
+  var BASE_DEFAULTS = null; // výchozí hodnoty pro reset (serverové admin defaults > JS factory)
   var LOCKS = {}; // { field_key: true } — pole, která zákazník nemůže měnit
   var ROOT = null;
   var ON_CHANGE = null;
@@ -983,6 +984,11 @@
         if (k in STATE) STATE[k] = options.initialState[k];
       }
     }
+    // Výchozí hodnoty pro tlačítko „Výchozí / Tovární hodnoty": admin serverové
+    // defaults (options.defaults) mají přednost před JS factory hodnotami.
+    BASE_DEFAULTS = (options.defaults && typeof options.defaults === 'object')
+      ? Object.assign({}, DEFAULTS, options.defaults)
+      : Object.assign({}, DEFAULTS);
 
     // 3) Render.
     injectStyles();
@@ -1029,8 +1035,9 @@
   function getLocks() { return Object.assign({}, LOCKS); }
 
   function resetDefaults() {
-    STATE = Object.assign({}, DEFAULTS);
-    bindInputs();
+    STATE = Object.assign({}, BASE_DEFAULTS || DEFAULTS);
+    CUR = { code: 'EUR', sym: '€' }; // výchozí model je v eurech
+    if (ROOT) { ROOT.innerHTML = buildHTML(); bindInputs(); } else { bindInputs(); }
   }
 
   // Přepnutí měny: nastaví symbol a přepočítá peněžní pole stavu poměrem kurzů
