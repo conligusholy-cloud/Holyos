@@ -694,6 +694,7 @@ router.get('/leads', requireAuth, async (req, res, next) => {
 const patchSchema = z.object({
   status: z.enum(['new', 'contacted', 'qualified', 'converted', 'rejected']).optional(),
   notes: z.string().max(5000).optional().nullable(),
+  lang: z.string().trim().max(10).optional().nullable(),
   // Viditelné sekce portálu: pole klíčů skupin nebo CSV. [] => jen úvodní filozofie.
   sections: z.union([z.array(z.string()), z.string()]).optional(),
 });
@@ -707,6 +708,9 @@ router.patch('/leads/:id', requireAuth, async (req, res, next) => {
     const data = {};
     if (parsed.data.status !== undefined) data.status = parsed.data.status;
     if (parsed.data.notes !== undefined) data.notes = parsed.data.notes;
+    if (parsed.data.lang !== undefined) {
+      data.lang = parsed.data.lang ? String(parsed.data.lang).toLowerCase().split(/[-_]/)[0].slice(0, 10) : null;
+    }
     if (parsed.data.sections !== undefined) {
       const arr = Array.isArray(parsed.data.sections)
         ? parsed.data.sections
