@@ -154,6 +154,22 @@ async function notifyContractEvent(prisma, { contract, event }) {
   } catch (e) { console.error('[compounder-notify] contract', event, e.message); }
 }
 
+// Lokalita zablokována (1h hold po kliknutí Rezervovat). Push Janovi/Tomášovi
+// + obchodníkovi, kterému lead patří.
+async function notifyReservationHold(prisma, { reservation, leadName, ownerPersonId }) {
+  try {
+    if (!reservation) return;
+    const who = leadName || (reservation.lead_id ? ('lead #' + reservation.lead_id) : 'zájemce');
+    const title = '⏳ Lokalita blokována — ' + reservation.kiosk_code;
+    const body = who + ' zahájil(a) rezervaci ' + reservation.kiosk_code + ' (blokace 1 h na vyplnění hlavičky).';
+    const data = { type: 'compounder_reservation', event: 'hold', reservation_id: reservation.id, kiosk_code: reservation.kiosk_code };
+    await dispatch(prisma, { title, body, data });
+    if (ownerPersonId) {
+      notifyPerson(prisma, ownerPersonId, { title, body, data: Object.assign({ link: LINK }, data), sound: 'default' }).catch(() => {});
+    }
+  } catch (e) { console.error('[compounder-notify] hold', e.message); }
+}
+
 // Zákazník podepsal → čeká na náš podpis. Push našim podepisujícím + odkaz na podpis.
 async function notifyContractAwaitingCountersign(prisma, contract, signUrl) {
   try {
@@ -201,6 +217,7 @@ module.exports = {
   defaultRecipientPersonIds,
   resolveRecipientPersonIds,
   notifyReservationEvent,
+  notifyReservationHold,
   notifyContractEvent,
   notifyContractAwaitingCountersign,
   notifyContactRequest,

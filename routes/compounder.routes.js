@@ -2719,6 +2719,13 @@ router.post('/portal/hold', async (req, res, next) => {
     }
     const holdUntil = new Date(Date.now() + holdHours * 3600000);
     const rec = await prisma.locationReservation.create({ data: { kiosk_code: code, lead_id: leadId, status: 'hold', hold_until: holdUntil } });
+    // Notifikace: Jan/Tomáš + obchodník vlastnící kontakt.
+    (async () => {
+      try {
+        const l = await prisma.compounderLead.findUnique({ where: { id: leadId }, select: { name: true, owner_person_id: true } });
+        compounderNotify.notifyReservationHold(prisma, { reservation: rec, leadName: l && l.name, ownerPersonId: l && l.owner_person_id });
+      } catch (_) {}
+    })();
     res.json({ ok: true, id: rec.id, status: 'hold', hold_until: holdUntil });
   } catch (err) { next(err); }
 });

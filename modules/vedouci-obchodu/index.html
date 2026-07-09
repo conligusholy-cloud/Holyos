@@ -48,7 +48,7 @@
 
 <script>
   var STATUS = { new:{l:'Nový',c:'var(--new)'}, contacted:{l:'Kontaktován',c:'var(--contacted)'}, qualified:{l:'Kvalifikován',c:'var(--qualified)'}, converted:{l:'Převeden',c:'var(--converted)'}, rejected:{l:'Zamítnut',c:'var(--rejected)'} };
-  var RES_STATUS = { reserved:'Rezervováno', active:'Aktivní', expired:'Vypršelo', cancelled:'Zrušeno', signed:'Podepsáno' };
+  var RES_STATUS = { hold:'Blokace 1 h', reserved:'Rezervováno', active:'Aktivní', expired:'Vypršelo', cancelled:'Zrušeno', signed:'Podepsáno' };
   var PLABEL = { day:'Den', week:'Týden', month:'Měsíc', year:'Rok' };
   var SELLERS = [];
   function sellerName(s){ return ((s.first_name||'')+' '+(s.last_name||'')).trim() || ('#'+s.id); }

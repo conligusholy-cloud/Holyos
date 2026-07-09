@@ -152,7 +152,7 @@
   function combinePhone(dial, num){ num=(num||'').trim(); return num ? (dial+' '+num) : ''; }
   var SECDEFS = [['ekonomika','Provozovatel'],['nabidka','Investor'],['distributor','Distributor']];
   var TPLDEFS = [['rezervacni','Rezervační'],['kupni','Kupní'],['servisni','Servisní']];
-  var RES_STATUS = { reserved:'Rezervováno', active:'Aktivní', expired:'Vypršelo', cancelled:'Zrušeno', signed:'Podepsáno' };
+  var RES_STATUS = { hold:'Blokace 1 h', reserved:'Rezervováno', active:'Aktivní', expired:'Vypršelo', cancelled:'Zrušeno', signed:'Podepsáno' };
   var CONTRACT_TYPES = [['rezervacni','Rezervační'],['kupni','Kupní'],['servisni','Servisní']];
   var CONTRACT_STATUS = { koncept:'Koncept', odeslano:'Odesláno', vyplneno:'Vyplněno', k_podpisu:'Čeká na náš podpis', podepsano:'Podepsáno' };
   var SPEECH_OK = !!(window.SpeechRecognition || window.webkitSpeechRecognition);
