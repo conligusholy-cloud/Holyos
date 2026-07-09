@@ -186,6 +186,7 @@
     var box = document.getElementById('content');
     if (!state.leads.length){ box.innerHTML = '<div class="empty">Zatím žádné přiřazené kontakty.</div>'; return; }
     box.innerHTML = '<div class="list">' + state.leads.map(cardHtml).join('') + '</div>';
+    if (state.openId){ loadActivity(state.openId); loadReservations(state.openId); }
   }
 
   function cardHtml(l){
@@ -199,6 +200,7 @@
     var subHtml = subParts.join(' · ');
     if (wm) subHtml += (subHtml ? ' · ' : '') + '<span style="color:'+wm.col+';font-weight:600">'+wm.lbl+' '+wm.w+'</span>';
     if (l.requestedContact) subHtml += ' <span title="Požádal o kontakt">📞</span>';
+    var waNum = (l.phone||'').replace(/[^0-9]/g,'');
     var statusSel = '<select onchange="setField('+l.id+',\'status\',this.value)">' + Object.keys(STATUS).map(function(k){ return '<option value="'+k+'"'+(l.status===k?' selected':'')+'>'+STATUS[k].l+'</option>'; }).join('') + '</select>';
     var langSel = '<select onchange="setField('+l.id+',\'lang\',this.value)">' + Object.keys(LANGS).map(function(k){ return '<option value="'+k+'"'+(lc===k?' selected':'')+'>'+(k?k.toUpperCase()+' · ':'')+LANGS[k]+'</option>'; }).join('') + '</select>';
     var secsArr = (l.visible_sections||'').split(',').map(function(s){return s.trim();}).filter(Boolean);
@@ -212,6 +214,11 @@
         '<span class="chev">▸</span>' +
       '</div>' +
       '<div class="detail">' +
+        '<div class="actions-row" style="margin-top:12px">' +
+          (l.phone ? '<a href="tel:'+esc(l.phone)+'">📞 Volat</a>' : '') +
+          (waNum ? '<a href="https://wa.me/'+waNum+'" target="_blank" rel="noopener">💬 WhatsApp</a>' : '') +
+          (l.email ? '<a href="mailto:'+esc(l.email)+'">✉️ E-mail</a>' : '') +
+        '</div>' +
         '<div class="field"><label>Stav</label>'+statusSel+'</div>' +
         '<div class="field"><label>Portál</label>' +
           '<button class="btn btn-g" style="width:100%"'+(l.email?'':' disabled')+' onclick="sendAccess('+l.id+')">✉️ Odeslat přístup na portál</button>' +
@@ -219,12 +226,14 @@
           '<div id="access-msg-'+l.id+'" style="font-size:12px;margin-top:6px"></div>' +
           '<div style="margin-top:10px;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted2)">Viditelné sekce portálu</div>' + secBoxes +
         '</div>' +
-        '<div class="field"><label>Zaznamenat aktivitu</label><div class="quick"><input class="qinput" id="act-'+l.id+'" placeholder="Zavolal jsem, má zájem…"><button class="btn btn-p" onclick="addActivity('+l.id+')">Přidat</button></div></div>' +
-        '<div class="field"><label>Poznámky <span class="saved" id="saved-'+l.id+'"></span></label><textarea id="notes-'+l.id+'" onblur="setField('+l.id+',\'notes\',this.value)">'+esc(l.notes||'')+'</textarea></div>' +
-        '<div class="actions-row">' +
-          (l.phone ? '<a href="tel:'+esc(l.phone)+'">📞 Volat</a>' : '') +
-          (l.email ? '<a href="mailto:'+esc(l.email)+'">✉️ E-mail</a>' : '') +
+        '<div class="field"><label>Zaznamenat aktivitu</label>' +
+          '<div class="quick"><input class="qinput" id="act-'+l.id+'" placeholder="Zavolal jsem, má zájem…"><button class="btn btn-p" onclick="addActivity('+l.id+')">Přidat</button></div>' +
+          '<div style="display:flex;gap:8px;margin-top:8px">' +
+            '<button class="btn btn-g" style="flex:1" id="mic-'+l.id+'" onclick="dictate('+l.id+')">🎤 Diktovat</button>' +
+            '<button class="btn btn-g" style="flex:1" id="calltimer-'+l.id+'" onclick="toggleCall('+l.id+')">⏱️ Zaznamenat hovor</button>' +
+          '</div>' +
         '</div>' +
+        '<div class="field"><label>Poznámky <span class="saved" id="saved-'+l.id+'"></span></label><textarea id="notes-'+l.id+'" onblur="setField('+l.id+',\'notes\',this.value)">'+esc(l.notes||'')+'</textarea></div>' +
         '<div class="field"><label>Cesta zákazníka / analytika</label><div id="journey-'+l.id+'" class="note-log">Načítám…</div></div>' +
         '<div class="field"><label>Rezervace lokalit</label><div id="resv-'+l.id+'" class="note-log">Načítám…</div></div>' +
         '<div class="field"><button class="btn btn-g" style="width:100%" onclick="aiEval('+l.id+')">🤖 AI vyhodnocení kontaktu</button><div id="ai-'+l.id+'"></div></div>' +
@@ -232,7 +241,7 @@
     '</div>';
   }
 
-  function toggle(id){ state.openId = (state.openId===id)?null:id; render(); if (state.openId===id){ loadActivity(id); loadReservations(id); } }
+  function toggle(id){ state.openId = (state.openId===id)?null:id; render(); }
 
   async function sendAccess(id){
     var msg = document.getElementById('access-msg-'+id); if (msg) msg.innerHTML = '<span style="color:var(--muted)">Odesílám…</span>';
@@ -388,6 +397,47 @@
     await setField(id, 'notes', newNotes);
     if (lead) lead.notes = newNotes;
     render();
+  }
+
+  function fmtDur(s){ var m=Math.floor(s/60), r=s%60; return (m<10?'0':'')+m+':'+(r<10?'0':'')+r; }
+
+  var LANG_BCP = { cs:'cs-CZ', sk:'sk-SK', en:'en-US', de:'de-DE', pl:'pl-PL', hu:'hu-HU', fr:'fr-FR', it:'it-IT', es:'es-ES', pt:'pt-PT', nl:'nl-NL', ro:'ro-RO', bg:'bg-BG', el:'el-GR', hr:'hr-HR', sl:'sl-SI', da:'da-DK', sv:'sv-SE', fi:'fi-FI' };
+  var recog = null, recogBtn = null;
+  function dictate(id){
+    var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    var inp = document.getElementById('act-'+id);
+    var btn = document.getElementById('mic-'+id);
+    if (!SR){ alert('Diktování v tomto prohlížeči není podporováno (funguje hlavně na Androidu a v Chrome).'); return; }
+    if (recog){ try{ recog.stop(); }catch(e){} return; }
+    recog = new SR(); recogBtn = btn;
+    var lead = state.leads.find(function(x){return x.id===id;});
+    recog.lang = LANG_BCP[langCode(lead && lead.lang)] || 'cs-CZ';
+    recog.interimResults = false; recog.continuous = true;
+    recog.onresult = function(e){ var t=''; for (var i=e.resultIndex;i<e.results.length;i++){ t += e.results[i][0].transcript; } if (inp) inp.value = (inp.value ? inp.value+' ' : '') + t.trim(); };
+    recog.onend = function(){ if (recogBtn) recogBtn.textContent='🎤 Diktovat'; recog=null; recogBtn=null; };
+    recog.onerror = function(){ if (recogBtn) recogBtn.textContent='🎤 Diktovat'; recog=null; recogBtn=null; };
+    if (btn) btn.textContent='● Nahrávám… (klepni pro stop)';
+    try{ recog.start(); }catch(e){}
+  }
+
+  var callTimers = {};
+  function toggleCall(id){
+    var btn = document.getElementById('calltimer-'+id);
+    var inp = document.getElementById('act-'+id);
+    var t = callTimers[id];
+    if (!t){
+      callTimers[id] = { start: Date.now(), interval: setInterval(function(){
+        if (!callTimers[id] || !btn) return;
+        btn.textContent = '● Ukončit hovor (' + fmtDur(Math.floor((Date.now()-callTimers[id].start)/1000)) + ')';
+      }, 1000) };
+      if (btn) btn.textContent = '● Ukončit hovor (00:00)';
+    } else {
+      clearInterval(t.interval);
+      var s = Math.floor((Date.now()-t.start)/1000);
+      delete callTimers[id];
+      if (btn) btn.textContent = '⏱️ Zaznamenat hovor';
+      if (inp){ inp.value = 'Hovor ' + fmtDur(s) + ' – ' + (inp.value||''); inp.focus(); }
+    }
   }
 
   function buildLangOptions(){
