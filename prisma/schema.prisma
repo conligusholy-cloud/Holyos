@@ -5481,6 +5481,9 @@ model CompounderLead {
   // Které sekce portálu lead vidí (CSV klíčů skupin: ekonomika,nabidka,distributor)
   // null = výchozí (jen ekonomika)
   visible_sections String? @db.Text
+  // Zpřístupněné vzory smluv (mustry) ke čtení: CSV typů rezervacni,kupni,servisni.
+  // Prázdné = zákazník nevidí žádný vzor (výchozí).
+  visible_templates String? @db.Text
 
   // Heslo pro prihlaseni (bcrypt hash). Null = uzivatel heslo nenastavil (jen magic link).
   password_hash String? @db.Text

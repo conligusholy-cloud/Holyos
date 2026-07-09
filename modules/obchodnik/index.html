@@ -151,6 +151,7 @@
   function splitPhone(phone){ phone=(phone||'').trim(); var s=COUNTRIES.slice().sort(function(a,b){return b.d.length-a.d.length;}); for(var i=0;i<s.length;i++){ if(phone.indexOf(s[i].d)===0) return { dial:s[i].d, num: phone.slice(s[i].d.length).trim() }; } return { dial:'+420', num: phone }; }
   function combinePhone(dial, num){ num=(num||'').trim(); return num ? (dial+' '+num) : ''; }
   var SECDEFS = [['ekonomika','Provozovatel'],['nabidka','Investor'],['distributor','Distributor']];
+  var TPLDEFS = [['rezervacni','Rezervační'],['kupni','Kupní'],['servisni','Servisní']];
   var RES_STATUS = { reserved:'Rezervováno', active:'Aktivní', expired:'Vypršelo', cancelled:'Zrušeno', signed:'Podepsáno' };
   var CONTRACT_TYPES = [['rezervacni','Rezervační'],['kupni','Kupní'],['servisni','Servisní']];
   var CONTRACT_STATUS = { koncept:'Koncept', odeslano:'Odesláno', vyplneno:'Vyplněno', k_podpisu:'Čeká na náš podpis', podepsano:'Podepsáno' };
@@ -235,6 +236,8 @@
     var secsArr = (l.visible_sections||'').split(',').map(function(s){return s.trim();}).filter(Boolean);
     var secBoxes = SECDEFS.map(function(d){ var on = secsArr.indexOf(d[0])>=0; return '<label style="display:flex;align-items:center;gap:10px;font-size:14px;margin:6px 0;cursor:pointer"><input type="checkbox" '+(on?'checked':'')+' onchange="toggleSection('+l.id+',\''+d[0]+'\',this.checked)" style="width:18px;height:18px;accent-color:var(--primary)">'+d[1]+'</label>'; }).join('');
     var accInfo = accessInfoHtml(l);
+    var tplArr = (l.visible_templates||'').split(',').map(function(s){return s.trim();}).filter(Boolean);
+    var tplBoxes = TPLDEFS.map(function(d){ var on = tplArr.indexOf(d[0])>=0; return '<label style="display:flex;align-items:center;gap:10px;font-size:14px;margin:6px 0;cursor:pointer"><input type="checkbox" '+(on?'checked':'')+' onchange="toggleTemplate('+l.id+',\''+d[0]+'\',this.checked)" style="width:18px;height:18px;accent-color:var(--primary)">'+d[1]+' vzor</label>'; }).join('');
     return '<div class="card'+(open?' open':'')+(laToday?' today':'')+'" id="card-'+l.id+'">' +
       '<div class="card-main" onclick="toggle('+l.id+')">' +
         '<span class="dot" style="background:'+st.c+'"></span>' +
@@ -258,6 +261,7 @@
           '<div id="access-info-'+l.id+'" style="font-size:12px;color:var(--muted);margin-top:6px">'+accInfo+'</div>' +
           '<div id="access-msg-'+l.id+'" style="font-size:12px;margin-top:4px"></div>' +
           '<div style="margin-top:10px;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted2)">Viditelné sekce portálu</div>' + secBoxes +
+          '<div style="margin-top:10px;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted2)">Vzory smluv ke čtení (mustr)</div>' + tplBoxes +
         '</div>' +
         '<div class="field"><label>Zaznamenat aktivitu</label>' +
           '<div class="quick"><input class="qinput" id="act-'+l.id+'" placeholder="Zavolal jsem, má zájem…"><button class="btn btn-p" onclick="addActivity('+l.id+')">Přidat</button></div>' +
@@ -296,6 +300,16 @@
       if (lead){ lead.access_sent_count = (j.access_sent_count!=null? j.access_sent_count : (lead.access_sent_count||0)+1); lead.access_last_sent_at = j.access_last_sent_at || new Date().toISOString(); }
       var info = document.getElementById('access-info-'+id); if (info && lead) info.innerHTML = accessInfoHtml(lead);
     } catch(e){ if(msg) msg.innerHTML = '<span style="color:#fca5a5">Odeslání selhalo.</span>'; }
+  }
+
+  async function toggleTemplate(id, key, on){
+    var lead = state.leads.find(function(x){return x.id===id;}); if (!lead) return;
+    var arr = (lead.visible_templates||'').split(',').map(function(s){return s.trim();}).filter(Boolean);
+    var i = arr.indexOf(key);
+    if (on && i<0) arr.push(key);
+    if (!on && i>=0) arr.splice(i,1);
+    lead.visible_templates = arr.join(',');
+    try { await api('/leads/'+id, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ templates: arr }) }); } catch(e){}
   }
 
   async function toggleSection(id, key, on){

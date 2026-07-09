@@ -226,16 +226,36 @@ router.get('/portal/session', async (req, res, next) => {
     if (!id) return res.status(401).json({ ok: false, error: 'Neplatný nebo chybějící přístupový odkaz.' });
     const lead = await prisma.compounderLead.findUnique({
       where: { id },
-      select: { id: true, name: true, email: true, phone: true, role: true, lang: true, visible_sections: true, password_hash: true, source: true, access_approved_at: true },
+      select: { id: true, name: true, email: true, phone: true, role: true, lang: true, visible_sections: true, visible_templates: true, password_hash: true, source: true, access_approved_at: true },
     });
     if (!lead) return res.status(404).json({ ok: false, error: 'Registrace nenalezena.' });
     if (!leadAccessAllowed(lead)) {
       return res.status(403).json({ ok: false, pending: true, error: 'Tvoje žádost o přístup zatím čeká na schválení. Jakmile ho povolíme, dostaneš přihlašovací odkaz e-mailem.' });
     }
-    return res.json({ ok: true, id: lead.id, name: lead.name, email: lead.email || '', phone: lead.phone || '', role: lead.role, lang: lead.lang, sections: resolveSections(lead.visible_sections), has_password: !!lead.password_hash });
+    const templates = (lead.visible_templates ? lead.visible_templates.split(',') : []).map((s) => s.trim()).filter(Boolean);
+    return res.json({ ok: true, id: lead.id, name: lead.name, email: lead.email || '', phone: lead.phone || '', role: lead.role, lang: lead.lang, sections: resolveSections(lead.visible_sections), templates: templates, has_password: !!lead.password_hash });
   } catch (err) {
     next(err);
   }
+});
+
+// GET /api/compounder/portal/template/:type?t=TOKEN — VZOR (mustr) smlouvy ke čtení.
+// Vrací PDF inline (otevře se v prohlížeči, nestahuje). Jen typy zpřístupněné obchodníkem.
+router.get('/portal/template/:type(kupni|servisni|rezervacni)', async (req, res, next) => {
+  try {
+    const type = req.params.type;
+    const leadId = verifyPortalToken(String(req.query.t || ''));
+    if (!leadId) return res.status(401).send('Neplatný nebo chybějící přístupový odkaz.');
+    const lead = await prisma.compounderLead.findUnique({ where: { id: leadId }, select: { visible_templates: true } });
+    const allowed = (lead && lead.visible_templates ? lead.visible_templates.split(',') : []).map((s) => s.trim());
+    if (allowed.indexOf(type) === -1) return res.status(403).send('Tento vzor není zpřístupněn.');
+    let pdf;
+    try { pdf = await contracts.generateContractPdf(type, {}); }
+    catch (e) { return res.status(500).send('Vzor se nepodařilo vygenerovat.'); }
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', 'inline; filename="vzor-' + type + '.pdf"');
+    res.send(pdf);
+  } catch (err) { next(err); }
 });
 
 // GET /api/compounder/ares?ico=XXXXXXXX — doplnění firemních údajů z ARES rejstříku.
@@ -1121,6 +1141,8 @@ const patchSchema = z.object({
   phone: z.string().trim().max(40).optional().nullable(),
   // Viditelné sekce portálu: pole klíčů skupin nebo CSV. [] => jen úvodní filozofie.
   sections: z.union([z.array(z.string()), z.string()]).optional(),
+  // Zpřístupněné vzory smluv (mustry): pole/CSV typů rezervacni,kupni,servisni.
+  templates: z.union([z.array(z.string()), z.string()]).optional(),
 });
 
 router.patch('/leads/:id', requireAuth, async (req, res, next) => {
@@ -1149,6 +1171,12 @@ router.patch('/leads/:id', requireAuth, async (req, res, next) => {
         : String(parsed.data.sections).split(',');
       const clean = arr.map((s) => String(s).trim()).filter((s) => SECTION_GROUPS.includes(s));
       data.visible_sections = clean.length ? Array.from(new Set(clean)).join(',') : '';
+    }
+    if (parsed.data.templates !== undefined) {
+      const arr = Array.isArray(parsed.data.templates) ? parsed.data.templates : String(parsed.data.templates).split(',');
+      const valid = ['rezervacni', 'kupni', 'servisni'];
+      const clean = arr.map((s) => String(s).trim()).filter((s) => valid.includes(s));
+      data.visible_templates = clean.length ? Array.from(new Set(clean)).join(',') : '';
     }
     const lead = await prisma.compounderLead.update({ where: { id }, data });
     // Notifikace: nový přidělený kontakt (jinému obchodníkovi než ten, kdo přiřazuje).
