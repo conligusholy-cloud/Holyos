@@ -1350,7 +1350,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
   function projectFromGold(net, inv, goldT, diaT){
     var M = goldT, bank = 0, arr = [goldT], dM = null;
     for (var i = 1; i <= 120; i++){
-      bank += M * net; while (bank >= inv){ bank -= inv; M++; }
+      bank += M * net; while (bank >= inv && M < diaT){ bank -= inv; M++; }
       arr.push(M);
       if (M >= diaT){ dM = i; break; }
     }
@@ -1367,7 +1367,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
   }
   function reinvestFull(net, inv, start, bank0){
     var f = start, b = bank0, c = 0;
-    for (var m = 1; m <= 120; m++){ var p = f * net; c += p; b += p; while (b >= inv){ b -= inv; f++; } }
+    for (var m = 1; m <= 120; m++){ var p = f * net; c += p; b += p; while (b >= inv && f < 100000){ b -= inv; f++; } }
     return { endFleet: f, cum: c, monthlyEnd: f * net };
   }
   function steadyPlus4(net, inv, start, bank0){
