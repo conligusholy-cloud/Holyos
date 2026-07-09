@@ -677,6 +677,38 @@ router.get('/sellers', requireAuth, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// POST /api/compounder/leads/:id/send-access — pošle leadovi přihlašovací odkaz na portál.
+router.post('/leads/:id/send-access', requireAuth, async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'Neplatné ID' });
+    const lead = await prisma.compounderLead.findUnique({
+      where: { id }, select: { id: true, name: true, email: true, lang: true },
+    });
+    if (!lead) return res.status(404).json({ error: 'Lead nenalezen' });
+    if (!lead.email) return res.status(400).json({ error: 'Kontakt nemá e-mail — přístup nelze odeslat.' });
+    const url = `${portalBase()}/portal?t=${makeLoginToken(lead.id)}`;
+    await sendPortalLogin({ name: lead.name, email: lead.email, lang: lead.lang }, url);
+    console.log(`[compounder] Přístup (odkaz) odeslán: lead #${id}`);
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
+// GET /api/compounder/leads/:id/reservations — rezervace lokalit daného leada (read-only).
+router.get('/leads/:id/reservations', requireAuth, async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'Neplatné ID' });
+    let rows = [];
+    try {
+      rows = await prisma.locationReservation.findMany({
+        where: { lead_id: id }, orderBy: { created_at: 'desc' }, take: 50,
+      });
+    } catch (e) { rows = []; }
+    res.json(rows);
+  } catch (err) { next(err); }
+});
+
 // GET /api/compounder/my-leads — kontakty přiřazené přihlášenému obchodníkovi.
 //   Používá obrazovka obchodníka (modules/obchodnik). Vrací jen vlastní kontakty.
 router.get('/my-leads', requireAuth, async (req, res, next) => {
