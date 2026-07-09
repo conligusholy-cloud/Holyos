@@ -731,6 +731,21 @@ router.post('/leads/:id/send-access', requireAuth, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// POST /api/compounder/leads/:id/activity-log — přidá řádek do append-only logu aktivit.
+router.post('/leads/:id/activity-log', requireAuth, async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'Neplatné ID' });
+    const line = String((req.body && req.body.line) || '').trim().slice(0, 2000);
+    if (!line) return res.status(400).json({ error: 'Prázdná aktivita' });
+    const lead = await prisma.compounderLead.findUnique({ where: { id }, select: { activity_log: true } });
+    if (!lead) return res.status(404).json({ error: 'Lead nenalezen' });
+    const updated = lead.activity_log ? (line + '\n' + lead.activity_log) : line;
+    await prisma.compounderLead.update({ where: { id }, data: { activity_log: updated } });
+    res.json({ ok: true, activity_log: updated });
+  } catch (err) { next(err); }
+});
+
 // GET /api/compounder/leads/:id/reservations — rezervace lokalit daného leada (read-only).
 router.get('/leads/:id/reservations', requireAuth, async (req, res, next) => {
   try {

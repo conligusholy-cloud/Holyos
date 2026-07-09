@@ -5473,8 +5473,10 @@ model CompounderLead {
   ip         String? @db.VarChar(64)
   user_agent String? @db.Text
 
-  // Volné poznámky obchodníka
+  // Volné poznámky obchodníka (editovatelné, prázdné pole na cokoli)
   notes String? @db.Text
+  // Append-only log aktivit (řádek po řádku s časem) — nejde ručně přepisovat
+  activity_log String? @db.Text
 
   // Které sekce portálu lead vidí (CSV klíčů skupin: ekonomika,nabidka,distributor)
   // null = výchozí (jen ekonomika)

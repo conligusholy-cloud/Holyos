@@ -238,7 +238,8 @@
           '</div>' +
           '<div style="font-size:11px;color:var(--muted2);margin-top:4px">🎙️ Diktovat můžeš i mikrofonem na klávesnici telefonu (funguje na iOS i Androidu).</div>' +
         '</div>' +
-        '<div class="field"><label>Poznámky <span class="saved" id="saved-'+l.id+'"></span></label><textarea id="notes-'+l.id+'" onblur="setField('+l.id+',\'notes\',this.value)">'+esc(l.notes||'')+'</textarea></div>' +
+        '<div class="field"><label>Aktivity</label><div id="actlog-'+l.id+'" class="note-log">'+(l.activity_log ? esc(l.activity_log) : 'Zatím žádná aktivita.')+'</div></div>' +
+        '<div class="field"><label>Poznámky <span class="saved" id="saved-'+l.id+'"></span></label><textarea id="notes-'+l.id+'" placeholder="Sem si napiš cokoli…" onblur="setField('+l.id+',\'notes\',this.value)">'+esc(l.notes||'')+'</textarea></div>' +
         '<div class="field"><label>Cesta zákazníka / analytika</label><div id="journey-'+l.id+'" class="note-log">Načítám…</div></div>' +
         '<div class="field"><label>Rezervace lokalit</label><div id="resv-'+l.id+'" class="note-log">Načítám…</div></div>' +
         '<div class="field"><button class="btn btn-g" style="width:100%" onclick="aiEval('+l.id+')">🤖 AI vyhodnocení kontaktu</button><div id="ai-'+l.id+'"></div></div>' +
@@ -407,11 +408,13 @@
     var now = new Date();
     var stamp = ('0'+now.getDate()).slice(-2)+'.'+('0'+(now.getMonth()+1)).slice(-2)+'.'+now.getFullYear()+' '+('0'+now.getHours()).slice(-2)+':'+('0'+now.getMinutes()).slice(-2);
     var line = '• ['+stamp+'] '+txt;
-    var newNotes = lead && lead.notes ? (line + '\n' + lead.notes) : line;
     inp.value='';
-    await setField(id, 'notes', newNotes);
-    if (lead) lead.notes = newNotes;
-    render();
+    try {
+      var r = await api('/leads/'+id+'/activity-log', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ line: line }) });
+      var j = await r.json().catch(function(){return {};});
+      if (lead) lead.activity_log = (j && j.activity_log!=null) ? j.activity_log : (lead.activity_log ? (line+'\n'+lead.activity_log) : line);
+      render();
+    } catch(e){ inp.value = txt; alert('Aktivitu se nepodařilo uložit.'); }
   }
 
   function fmtDur(s){ var m=Math.floor(s/60), r=s%60; return (m<10?'0':'')+m+':'+(r<10?'0':'')+r; }
