@@ -689,8 +689,13 @@ router.post('/leads/:id/send-access', requireAuth, async (req, res, next) => {
     if (!lead.email) return res.status(400).json({ error: 'Kontakt nemá e-mail — přístup nelze odeslat.' });
     const url = `${portalBase()}/portal?t=${makeLoginToken(lead.id)}`;
     await sendPortalLogin({ name: lead.name, email: lead.email, lang: lead.lang }, url);
-    console.log(`[compounder] Přístup (odkaz) odeslán: lead #${id}`);
-    res.json({ ok: true });
+    const updated = await prisma.compounderLead.update({
+      where: { id },
+      data: { access_sent_count: { increment: 1 }, access_last_sent_at: new Date() },
+      select: { access_sent_count: true, access_last_sent_at: true },
+    });
+    console.log(`[compounder] Přístup (odkaz) odeslán: lead #${id} (${updated.access_sent_count}×)`);
+    res.json({ ok: true, access_sent_count: updated.access_sent_count, access_last_sent_at: updated.access_last_sent_at });
   } catch (err) { next(err); }
 });
 
@@ -765,6 +770,7 @@ async function enrichWarmth(leads) {
     l.warmthPct = Math.max(0, Math.min(100, s));
     l.requestedContact = requested;
     l.hasPhone = !!l.phone;
+    l.portalOpened = x.portal > 0;
   });
 }
 

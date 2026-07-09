@@ -5493,6 +5493,10 @@ model CompounderLead {
   owner_person_id      Int?
   created_by_person_id Int?
 
+  // Kolikrát obchodník poslal leadovi přihlašovací odkaz + kdy naposledy.
+  access_sent_count   Int       @default(0)
+  access_last_sent_at DateTime?
+
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
 
