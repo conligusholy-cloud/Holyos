@@ -147,7 +147,7 @@
  "p.op.spend": "Ø útrata / zákazník",
  "p.op.cost": "Provozní náklady / měs",
  "p.op.profit": "Měsíční zisk",
- "p.op.note": "Náklady = nájem + energie + servis + ostatní. Počítáme 30,4 dne/měsíc.",
+ "p.op.note": "Náklady = nájem + energie + servis + ostatní. Počítáme 30,5 dne/měsíc.",
  "p.ret.eyebrow": "Návratnost",
  "p.ret.title": "Kdy se Compounder vrátí",
  "p.ret.lead": "Návratnost = investice ÷ měsíční zisk. Po jejím dosažení je cashflow čistý výnos — a financuje další Compounder.",

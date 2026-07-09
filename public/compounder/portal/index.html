@@ -271,10 +271,10 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
         <div class="panel">
           <h3 data-i18n="p.op.title">Operation (monthly)</h3>
           <div class="row"><label data-i18n="p.op.perday">Customers / day</label><div class="unit"><input type="number" id="i-perday" value="8"><span class="u">ks</span></div></div>
-          <div class="row calc-out"><label data-i18n="p.op.spend">Avg spend / customer</label><div class="unit"><input type="number" step="0.1" id="i-spend" value="11.37" readonly title="Počítá se v podrobném modelu"><span class="u u-cur">€</span></div></div>
-          <div class="row calc-out"><label data-i18n="p.op.cost">Operating costs / month</label><div class="unit"><input type="number" id="i-cost" value="765" readonly title="Počítá se v podrobném modelu"><span class="u u-cur">€</span></div></div>
+          <div class="row calc-out"><label data-i18n="p.op.spend">Avg spend / customer</label><div class="unit"><input type="number" step="0.01" id="i-spend" value="11.33" readonly title="Počítá se v podrobném modelu"><span class="u u-cur">€</span></div></div>
+          <div class="row calc-out"><label data-i18n="p.op.cost">Operating costs / month</label><div class="unit"><input type="number" id="i-cost" value="767" readonly title="Počítá se v podrobném modelu"><span class="u u-cur">€</span></div></div>
           <div class="row calc-out"><label data-i18n="p.op.profit">Monthly profit</label><div class="unit"><input type="text" id="o-profit" readonly><span class="u u-cur">€</span></div></div>
-          <div class="note" data-i18n="p.op.note">Costs = rent + energy + service + other. We assume 30.4 days/month.</div>
+          <div class="note" data-i18n="p.op.note">Costs = rent + energy + service + other. We assume 30.5 days/month.</div>
         </div>
       </div>
       <div style="margin-top:24px;text-align:center">
@@ -1352,7 +1352,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
   };
   function recalc(){
     var invest = val("i-machine") + val("i-permit") + val("i-conn");
-    var custMonth = val("i-perday") * 30.4;
+    var custMonth = val("i-perday") * 30.5;
     var revenue = custMonth * val("i-spend");
     var profit = revenue - val("i-cost");
     var paybackM = profit > 0 ? invest / profit : 0;
