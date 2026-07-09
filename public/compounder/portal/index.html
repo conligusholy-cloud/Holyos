@@ -350,6 +350,12 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
       <div id="offers-list" style="display:flex;flex-direction:column;gap:10px;margin-top:10px;">
         <div class="muted">Načítám nabídku…</div>
       </div>
+      <div id="my-contracts-wrap" style="display:none;margin-top:26px">
+        <div class="eyebrow">Smlouvy</div>
+        <h2>Moje smlouvy</h2>
+        <p class="lead">Smlouvy k vaší rezervované lokalitě — přečtěte si je a elektronicky podepište.</p>
+        <div id="my-contracts" style="display:flex;flex-direction:column;gap:10px;margin-top:10px;"></div>
+      </div>
     </section>
     <section class="blk" id="navratnost">
       <div class="eyebrow" data-i18n="p.ret.eyebrow">Return</div>
@@ -907,6 +913,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
       initPortalPush(token);
       loadEkoDetailLink(token);
       loadOffers(token);
+      loadPortalContracts(token);
       pWatchSections(token);
     })
     .catch(function(){ clearTimeout(_verifyTimer); showDenied(); });
@@ -949,6 +956,30 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
   var OFFERS = { data:null, cur:'CZK', eur:25, feePerDay:20000, cfg:{ holdHours:1, signDays:1, payDays:1, reblockDays:2 } };
   function offEsc(x){ return String(x==null?"":x).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
   function offTok(){ try{ return localStorage.getItem("compounder.portal.token")||""; }catch(_){ return ""; } }
+  var CONTRACT_STATUS_PT = { koncept:"Připravuje se", odeslano:"K podpisu", vyplneno:"Vyplněno", podepsano:"Podepsáno" };
+  function loadPortalContracts(tok){
+    fetch("/api/compounder/portal/contracts?t=" + encodeURIComponent(tok), { credentials:"include" })
+      .then(function(r){ return r.json(); })
+      .then(function(j){
+        var wrap = document.getElementById("my-contracts-wrap");
+        var box = document.getElementById("my-contracts");
+        if (!wrap || !box) return;
+        var list = (j && j.contracts) || [];
+        if (!list.length){ wrap.style.display = "none"; return; }
+        wrap.style.display = "";
+        box.innerHTML = list.map(function(c){
+          var st = CONTRACT_STATUS_PT[c.status] || c.status || "";
+          var signed = (c.status === "podepsano");
+          var loc = c.kiosk_label || c.kiosk_code || "";
+          return '<div style="border:1px solid var(--line);border-radius:14px;padding:14px 16px;background:var(--bg-2);display:flex;align-items:center;gap:14px;flex-wrap:wrap">' +
+            '<div style="flex:1;min-width:160px"><div style="font-weight:700;font-size:15px">' + offEsc(c.typeLabel) + ' smlouva</div>' +
+            '<div style="font-size:12px;color:var(--muted)">' + offEsc(loc) + ' · ' + offEsc(st) + '</div></div>' +
+            '<a class="btn" style="margin-top:0;text-decoration:none" href="' + offEsc(c.url) + '" target="_blank" rel="noopener">' + (signed ? "Zobrazit" : "Přečíst a podepsat") + '</a>' +
+          '</div>';
+        }).join("");
+      })
+      .catch(function(){ /* smlouvy jsou volitelné */ });
+  }
   function offMoney(czk){
     if(czk==null) return "—";
     if(OFFERS.cur==='EUR'){ return Math.round(czk/(OFFERS.eur||25)).toLocaleString("cs-CZ")+" €"; }

@@ -220,6 +220,38 @@ router.get('/portal/session', async (req, res, next) => {
   }
 });
 
+// GET /api/compounder/portal/contracts?t=TOKEN — smlouvy leada u jeho rezervovaných
+// lokalit, které mu obchodník zpřístupnil (mají share_token). K přečtení a podpisu.
+router.get('/portal/contracts', async (req, res, next) => {
+  try {
+    const id = verifyPortalToken(String(req.query.t || ''));
+    if (!id) return res.status(401).json({ ok: false, error: 'Neplatný nebo chybějící přístupový odkaz.' });
+    let resv = [];
+    try {
+      resv = await prisma.locationReservation.findMany({
+        where: { lead_id: id }, select: { kiosk_code: true },
+      });
+    } catch (e) { resv = []; }
+    const codes = Array.from(new Set(resv.map((r) => r.kiosk_code).filter(Boolean)));
+    if (!codes.length) return res.json({ ok: true, contracts: [] });
+    const rows = await prisma.compoundingContract.findMany({
+      where: { kiosk_code: { in: codes }, share_token: { not: null } },
+      orderBy: { created_at: 'desc' },
+      select: { type: true, status: true, kiosk_code: true, kiosk_label: true, share_token: true, signed_at: true },
+    });
+    const out = rows.map((r) => ({
+      type: r.type,
+      typeLabel: contracts.TYPE_LABEL[r.type] || 'Smlouva',
+      status: r.status,
+      kiosk_code: r.kiosk_code,
+      kiosk_label: r.kiosk_label,
+      url: '/smlouva/' + r.share_token,
+      signed_at: r.signed_at,
+    }));
+    res.json({ ok: true, contracts: out });
+  } catch (err) { next(err); }
+});
+
 // GET /api/compounder/portal/economy-link?t=<token>
 // Vrátí (a při prvním přístupu vytvoří) OSOBNÍ share odkaz na detailní model
 // "Ekonomika prádlomatu" pro daného leada. Každý účet z Portalu má vlastní
