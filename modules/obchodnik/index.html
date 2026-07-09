@@ -86,7 +86,7 @@
       <h2>Nový kontakt</h2>
       <div class="field"><label>Jméno</label><input class="qinput" id="a-name" placeholder="Jméno / firma"></div>
       <div class="field"><label>E-mail</label><input class="qinput" id="a-email" type="email" placeholder="email@…" inputmode="email"></div>
-      <div class="field"><label>Telefon</label><input class="qinput" id="a-phone" type="tel" placeholder="+420…" inputmode="tel"></div>
+      <div class="field"><label>Telefon</label><div style="display:flex;gap:8px"><select id="a-dial" style="flex:0 0 120px"></select><input class="qinput" id="a-phone" type="tel" placeholder="číslo" inputmode="tel" style="flex:1"></div></div>
       <p style="font-size:12px;color:var(--muted);margin:6px 0 0">Povinný je aspoň jeden kontakt — e-mail <b>nebo</b> telefon.</p>
       <div class="field"><label>Jazyk</label><select id="a-lang"></select></div>
       <div class="actions-row">
@@ -102,7 +102,7 @@
       <h2>Údaje kontaktu</h2>
       <div class="field"><label>Jméno / firma</label><input class="qinput" id="e-name" placeholder="Jméno / firma"></div>
       <div class="field"><label>E-mail</label><input class="qinput" id="e-email" type="email" placeholder="email@…" inputmode="email"></div>
-      <div class="field"><label>Telefon</label><input class="qinput" id="e-phone" type="tel" placeholder="+420…" inputmode="tel"></div>
+      <div class="field"><label>Telefon</label><div style="display:flex;gap:8px"><select id="e-dial" style="flex:0 0 120px"></select><input class="qinput" id="e-phone" type="tel" placeholder="číslo" inputmode="tel" style="flex:1"></div></div>
       <div class="field"><label>Jazyk</label><select id="e-lang"></select></div>
       <div class="actions-row">
         <button class="btn btn-g" style="flex:1" onclick="closeEdit()">Zrušit</button>
@@ -116,6 +116,19 @@
   var API = '/api/compounder';
   var STATUS = { new:{l:'Nový',c:'var(--new)'}, contacted:{l:'Kontaktován',c:'var(--contacted)'}, qualified:{l:'Kvalifikován',c:'var(--qualified)'}, converted:{l:'Převeden',c:'var(--converted)'}, rejected:{l:'Zamítnut',c:'var(--rejected)'} };
   var LANGS = { '':'—', en:'English', bg:'Български', cs:'Čeština', da:'Dansk', de:'Deutsch', el:'Ελληνικά', es:'Español', et:'Eesti', fi:'Suomi', fr:'Français', ga:'Gaeilge', hr:'Hrvatski', hu:'Magyar', it:'Italiano', lt:'Lietuvių', lv:'Latviešu', mt:'Malti', nl:'Nederlands', pl:'Polski', pt:'Português', ro:'Română', sk:'Slovenčina', sl:'Slovenščina', sv:'Svenska' };
+  var COUNTRIES = [
+    {c:'CZ',f:'🇨🇿',d:'+420'},{c:'SK',f:'🇸🇰',d:'+421'},{c:'DE',f:'🇩🇪',d:'+49'},{c:'AT',f:'🇦🇹',d:'+43'},
+    {c:'PL',f:'🇵🇱',d:'+48'},{c:'HU',f:'🇭🇺',d:'+36'},{c:'FR',f:'🇫🇷',d:'+33'},{c:'IT',f:'🇮🇹',d:'+39'},
+    {c:'ES',f:'🇪🇸',d:'+34'},{c:'PT',f:'🇵🇹',d:'+351'},{c:'NL',f:'🇳🇱',d:'+31'},{c:'BE',f:'🇧🇪',d:'+32'},
+    {c:'GB',f:'🇬🇧',d:'+44'},{c:'IE',f:'🇮🇪',d:'+353'},{c:'DK',f:'🇩🇰',d:'+45'},{c:'SE',f:'🇸🇪',d:'+46'},
+    {c:'FI',f:'🇫🇮',d:'+358'},{c:'RO',f:'🇷🇴',d:'+40'},{c:'BG',f:'🇧🇬',d:'+359'},{c:'GR',f:'🇬🇷',d:'+30'},
+    {c:'HR',f:'🇭🇷',d:'+385'},{c:'SI',f:'🇸🇮',d:'+386'},{c:'LT',f:'🇱🇹',d:'+370'},{c:'LV',f:'🇱🇻',d:'+371'},
+    {c:'EE',f:'🇪🇪',d:'+372'},{c:'LU',f:'🇱🇺',d:'+352'},{c:'MT',f:'🇲🇹',d:'+356'},{c:'CY',f:'🇨🇾',d:'+357'},
+    {c:'CH',f:'🇨🇭',d:'+41'},{c:'NO',f:'🇳🇴',d:'+47'},{c:'US',f:'🇺🇸',d:'+1'}
+  ];
+  function dialOptions(sel){ return COUNTRIES.map(function(x){ return '<option value="'+x.d+'"'+(x.d===sel?' selected':'')+'>'+x.f+' '+x.d+'</option>'; }).join(''); }
+  function splitPhone(phone){ phone=(phone||'').trim(); var s=COUNTRIES.slice().sort(function(a,b){return b.d.length-a.d.length;}); for(var i=0;i<s.length;i++){ if(phone.indexOf(s[i].d)===0) return { dial:s[i].d, num: phone.slice(s[i].d.length).trim() }; } return { dial:'+420', num: phone }; }
+  function combinePhone(dial, num){ num=(num||'').trim(); return num ? (dial+' '+num) : ''; }
   var SECDEFS = [['ekonomika','Provozovatel'],['nabidka','Investor'],['distributor','Distributor']];
   var RES_STATUS = { reserved:'Rezervováno', active:'Aktivní', expired:'Vypršelo', cancelled:'Zrušeno', signed:'Podepsáno' };
   var CONTRACT_TYPES = [['rezervacni','Rezervační'],['kupni','Kupní'],['servisni','Servisní']];
@@ -380,13 +393,14 @@
   function buildLangOptions(){
     document.getElementById('a-lang').innerHTML = Object.keys(LANGS).map(function(k){ return '<option value="'+k+'">'+(k?k.toUpperCase()+' · ':'')+LANGS[k]+'</option>'; }).join('');
     document.getElementById('a-lang').value = 'cs';
+    document.getElementById('a-dial').innerHTML = dialOptions('+420');
   }
   function openAdd(){ document.getElementById('a-err').textContent=''; document.getElementById('add-modal').classList.add('open'); }
   function closeAdd(){ document.getElementById('add-modal').classList.remove('open'); }
   async function saveAdd(){
     var name = document.getElementById('a-name').value.trim();
     var email = document.getElementById('a-email').value.trim();
-    var phone = document.getElementById('a-phone').value.trim();
+    var phone = combinePhone(document.getElementById('a-dial').value, document.getElementById('a-phone').value);
     var lang = document.getElementById('a-lang').value;
     var errEl = document.getElementById('a-err');
     if (email && email.indexOf('@')===-1){ errEl.textContent='Neplatný e-mail.'; return; }
@@ -413,7 +427,9 @@
     if (!document.getElementById('e-lang').options.length){ document.getElementById('e-lang').innerHTML = Object.keys(LANGS).map(function(k){ return '<option value="'+k+'">'+(k?k.toUpperCase()+' · ':'')+LANGS[k]+'</option>'; }).join(''); }
     document.getElementById('e-name').value = l.name || '';
     document.getElementById('e-email').value = l.email || '';
-    document.getElementById('e-phone').value = l.phone || '';
+    var sp = splitPhone(l.phone || '');
+    document.getElementById('e-dial').innerHTML = dialOptions(sp.dial);
+    document.getElementById('e-phone').value = sp.num;
     document.getElementById('e-lang').value = langCode(l.lang);
     document.getElementById('e-err').textContent = '';
     document.getElementById('edit-modal').classList.add('open');
@@ -423,7 +439,7 @@
     if (editingId == null) return;
     var name = document.getElementById('e-name').value.trim();
     var email = document.getElementById('e-email').value.trim();
-    var phone = document.getElementById('e-phone').value.trim();
+    var phone = combinePhone(document.getElementById('e-dial').value, document.getElementById('e-phone').value);
     var lang = document.getElementById('e-lang').value;
     var errEl = document.getElementById('e-err');
     if (!name){ errEl.textContent = 'Zadej jméno.'; return; }
