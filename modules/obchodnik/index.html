@@ -118,6 +118,8 @@
   var LANGS = { '':'—', en:'English', bg:'Български', cs:'Čeština', da:'Dansk', de:'Deutsch', el:'Ελληνικά', es:'Español', et:'Eesti', fi:'Suomi', fr:'Français', ga:'Gaeilge', hr:'Hrvatski', hu:'Magyar', it:'Italiano', lt:'Lietuvių', lv:'Latviešu', mt:'Malti', nl:'Nederlands', pl:'Polski', pt:'Português', ro:'Română', sk:'Slovenčina', sl:'Slovenščina', sv:'Svenska' };
   var SECDEFS = [['ekonomika','Provozovatel'],['nabidka','Investor'],['distributor','Distributor']];
   var RES_STATUS = { reserved:'Rezervováno', active:'Aktivní', expired:'Vypršelo', cancelled:'Zrušeno', signed:'Podepsáno' };
+  var CONTRACT_TYPES = [['rezervacni','Rezervační'],['kupni','Kupní'],['servisni','Servisní']];
+  var CONTRACT_STATUS = { koncept:'Koncept', odeslano:'Odesláno', vyplneno:'Vyplněno', podepsano:'Podepsáno' };
   var state = { leads:[], filter:'', search:'', openId:null };
 
   function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
@@ -239,20 +241,80 @@
     try { await api('/leads/'+id, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ sections: secs }) }); } catch(e){}
   }
 
+  function ctId(k){ return 'ct-' + String(k||'').replace(/[^A-Za-z0-9_-]/g,'_'); }
+
   async function loadReservations(id){
     var box = document.getElementById('resv-'+id); if (!box) return;
     try {
       var r = await api('/leads/'+id+'/reservations'); var rows = await r.json();
       if (!rows.length){ box.textContent = 'Žádná rezervace lokality.'; return; }
       box.innerHTML = rows.map(function(x){
-        var parts = ['<b>'+esc(x.kiosk_code||'—')+'</b> · '+esc(RES_STATUS[x.status]||x.status||'—')];
+        var kiosk = x.kiosk_code || '';
+        var parts = ['<b>'+esc(kiosk||'—')+'</b> · '+esc(RES_STATUS[x.status]||x.status||'—')];
         if (x.sign_until) parts.push('Podpis rezervační smlouvy do: '+fmtDate(x.sign_until));
         if (x.reserved_until) parts.push('Rezervace do: '+fmtDate(x.reserved_until));
         if (x.signed_at) parts.push('Podepsáno: '+fmtDate(x.signed_at));
-        return parts.join('<br>');
-      }).join('<hr style="border:none;border-top:1px solid var(--line);margin:8px 0">') +
+        return '<div>'+parts.join('<br>')+'<div id="'+ctId(kiosk)+'" style="margin-top:8px"></div></div>';
+      }).join('<hr style="border:none;border-top:1px solid var(--line);margin:10px 0">') +
       '<div style="color:var(--muted2);font-size:11px;margin-top:8px">Rezervaci lze zrušit jen v HolyOSu.</div>';
+      var seen = {};
+      rows.forEach(function(x){ var k=x.kiosk_code||''; if (k && !seen[k]){ seen[k]=1; loadContracts(k, x.kiosk_label||k); } });
     } catch(e){ box.textContent = 'Rezervace se nepodařilo načíst.'; }
+  }
+
+  async function loadContracts(kiosk, label){
+    var box = document.getElementById(ctId(kiosk)); if (!box) return;
+    box.innerHTML = '<div style="color:var(--muted);font-size:12px">Načítám smlouvy…</div>';
+    try {
+      var r = await api('/contracts/list?code='+encodeURIComponent(kiosk));
+      var list = r.ok ? await r.json() : [];
+      var byType = {};
+      list.forEach(function(c){ if (!byType[c.type] || c.id > byType[c.type].id) byType[c.type] = c; });
+      var exists = function(t){ return !!byType[t]; };
+      box.innerHTML = '<div style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted2);margin-bottom:4px">Smlouvy</div>' +
+        CONTRACT_TYPES.map(function(d){
+          var t=d[0], lbl=d[1], c=byType[t];
+          var locked = (t==='kupni' && !exists('rezervacni')) || (t==='servisni' && !exists('kupni'));
+          var status = c ? (CONTRACT_STATUS[c.status]||c.status) : '';
+          var link = c ? ' · <a href="#" onclick="copyContractLink(event,'+c.id+')" style="color:var(--primary)">odkaz</a>' : '';
+          return '<label style="display:flex;align-items:center;gap:10px;font-size:14px;margin:6px 0;'+(locked?'opacity:.4':'cursor:pointer')+'">'+
+            '<input type="checkbox" '+(c?'checked':'')+' '+(locked?'disabled':'')+' onchange="toggleContract(this,\''+encodeURIComponent(kiosk)+'\',\''+encodeURIComponent(label)+'\',\''+t+'\','+(c?c.id:'null')+',\''+(c?c.status:'')+'\')" style="width:18px;height:18px;accent-color:var(--primary)">'+
+            '<span>'+lbl+(status?' <span style="color:var(--muted)">('+status+')</span>':'')+link+'</span>'+
+          '</label>';
+        }).join('') +
+        '<div style="color:var(--muted2);font-size:11px;margin-top:2px">Zaškrtnutí smlouvu připraví a zpřístupní zákazníkovi (odkaz k podpisu).</div>';
+    } catch(e){ box.innerHTML = '<div style="color:var(--muted2);font-size:12px">Smlouvy se nepodařilo načíst.</div>'; }
+  }
+
+  async function toggleContract(el, kioskEnc, labelEnc, type, id, status){
+    var kiosk = decodeURIComponent(kioskEnc), label = decodeURIComponent(labelEnc);
+    el.disabled = true;
+    try {
+      if (el.checked){
+        var cid = (id && id!=='null') ? id : null;
+        if (!cid){
+          var sr = await api('/contracts/save', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ type:type, code:kiosk, label:label, fields:{} }) });
+          var sj = await sr.json(); cid = sj.id;
+        }
+        await api('/contracts/'+cid+'/share', { method:'POST' });
+      } else {
+        if (id && id!=='null'){
+          if (status==='vyplneno' || status==='podepsano'){ alert('Smlouvu ve stavu „'+(CONTRACT_STATUS[status]||status)+'" nelze zrušit tady — řeš v HolyOSu.'); el.checked=true; el.disabled=false; return; }
+          await api('/contracts/'+id, { method:'DELETE' });
+        }
+      }
+      await loadContracts(kiosk, label);
+    } catch(e){ alert('Akce se smlouvou se nezdařila.'); }
+    el.disabled = false;
+  }
+
+  async function copyContractLink(e, id){
+    e.preventDefault();
+    try {
+      var r = await api('/contracts/'+id+'/share', { method:'POST' });
+      var j = await r.json();
+      if (j.url){ try { await navigator.clipboard.writeText(j.url); } catch(_){} alert('Odkaz na smlouvu (zkopírováno):\n'+j.url); }
+    } catch(err){ alert('Odkaz se nepodařilo získat.'); }
   }
 
   async function loadActivity(id){
