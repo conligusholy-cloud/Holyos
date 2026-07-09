@@ -183,7 +183,7 @@
           (l.phone ? '<a href="tel:'+esc(l.phone)+'">📞 Volat</a>' : '') +
           (l.email ? '<a href="mailto:'+esc(l.email)+'">✉️ E-mail</a>' : '') +
         '</div>' +
-        '<div class="field"><label>Cesta zákazníka / analytika</label><div id="act-'+l.id+'" class="note-log">Načítám…</div></div>' +
+        '<div class="field"><label>Cesta zákazníka / analytika</label><div id="journey-'+l.id+'" class="note-log">Načítám…</div></div>' +
         '<div class="field"><button class="btn btn-g" style="width:100%" onclick="aiEval('+l.id+')">🤖 AI vyhodnocení kontaktu</button><div id="ai-'+l.id+'"></div></div>' +
       '</div>' +
     '</div>';
@@ -192,7 +192,7 @@
   function toggle(id){ state.openId = (state.openId===id)?null:id; render(); if (state.openId===id) loadActivity(id); }
 
   async function loadActivity(id){
-    var box = document.getElementById('act-'+id); if (!box) return;
+    var box = document.getElementById('journey-'+id); if (!box) return;
     try {
       var r = await api('/leads/'+id+'/activity'); if (!r.ok) throw new Error();
       var a = await r.json();
