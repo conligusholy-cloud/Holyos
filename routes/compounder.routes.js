@@ -2584,7 +2584,8 @@ async function portalKiosks() {
 
 // Sdílený výpočet nabídky lokalit pro daného leada (globální forSale + jeho VIP).
 // Používá veřejný token endpoint i admin náhled (ikonka v HolyOS / u obchodníka).
-async function buildOfferedLocations(leadId) {
+async function buildOfferedLocations(leadId, opts) {
+    opts = opts || {}; // opts.includeHidden = i lokality bez fotky (pro admin/obchodník náhled)
     const cs = await getSetting(COMPOUNDING_SETTINGS_KEY, { type: 'json', defaultValue: COMPOUNDING_SETTINGS_DEFAULT });
     const cfgMap = (await getSetting(COMPOUNDING_KIOSKS_KEY, { type: 'json', defaultValue: {} })) || {};
     const kiosks = await portalKiosks();
@@ -2661,11 +2662,12 @@ async function buildOfferedLocations(leadId) {
           resStatus: bi ? bi.status : null,
           resUntil: bi ? (bi.until || null) : null,
           individual: isIndividual,
+          noPhoto: !(Array.isArray(cfg.photos) && cfg.photos.length > 0),
           photos: Array.isArray(cfg.photos) ? cfg.photos : [],
         };
       })
-      // Lokality bez nahrané fotky se v nabídce nezobrazují.
-      .filter((o) => Array.isArray(o.photos) && o.photos.length > 0)
+      // Lokality bez fotky: na portálu skrýt, v admin/obchodník náhledu ponechat (s flagem noPhoto).
+      .filter((o) => opts.includeHidden || !o.noPhoto)
       .sort((a, b) => {
         // VIP (individuální) nabídky nahoru, pak podle ročního výnosu.
         if (!!a.individual !== !!b.individual) return a.individual ? -1 : 1;
@@ -2688,7 +2690,7 @@ router.get('/leads/:id(\\d+)/offer-preview', requireAuth, async (req, res, next)
   try {
     const id = Number(req.params.id);
     if (!Number.isInteger(id)) return res.status(400).json({ error: 'Neplatné ID' });
-    res.json(await buildOfferedLocations(id));
+    res.json(await buildOfferedLocations(id, { includeHidden: true }));
   } catch (err) { next(err); }
 });
 

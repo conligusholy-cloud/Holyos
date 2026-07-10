@@ -3160,7 +3160,7 @@
         var rows = locs.map(function(o){
           var celkem = (o.guaranteeValue!=null) ? ((o.yearlyYield||0)*o.guaranteeYears + o.guaranteeValue) : null;
           return '<tr style="border-top:1px solid var(--border)">'
-            + '<td style="padding:6px 8px;">'+(o.individual?'⭐ ':'')+cmpEsc(o.label||o.code)+' <span style="color:var(--text2);font-size:11px;">'+cmpEsc(o.version||'')+'</span>'+(o.reserved?' <span style="color:#eab308;font-size:11px;">(obsazeno)</span>':'')+'</td>'
+            + '<td style="padding:6px 8px;">'+(o.individual?'⭐ ':'')+cmpEsc(o.label||o.code)+' <span style="color:var(--text2);font-size:11px;">'+cmpEsc(o.version||'')+'</span>'+(o.reserved?' <span style="color:#eab308;font-size:11px;">(obsazeno)</span>':'')+(o.noPhoto?' <span style="color:#eab308;font-size:11px;">⚠️ chybí fotka — leadovi se nezobrazí</span>':'')+'</td>'
             + '<td style="padding:6px 8px;text-align:right;white-space:nowrap;">'+m(o.totalPrice)+'</td>'
             + '<td style="padding:6px 8px;text-align:right;white-space:nowrap;">'+m(o.yearlyYield)+'</td>'
             + '<td style="padding:6px 8px;text-align:right;white-space:nowrap;">'+m(o.guaranteeValue)+'</td>'
