@@ -2611,8 +2611,12 @@ router.get('/portal/offered-locations', async (req, res, next) => {
     };
 
     const list = kiosks
-      .filter((k) => String(k.companyName || '').toLowerCase().includes('best series'))
-      .filter((k) => (cfgMap[k.code] || {}).forSale || extraSet.has(String(k.code || '').toUpperCase()))
+      .filter((k) => {
+        const code = String(k.code || '').toUpperCase();
+        if (extraSet.has(code)) return true; // individuální nabídka — vždy zobrazit (i mimo Best Series / ne-forSale)
+        if (!String(k.companyName || '').toLowerCase().includes('best series')) return false;
+        return (cfgMap[k.code] || {}).forSale;
+      })
       .map((k) => {
         const cfg = cfgMap[k.code] || {};
         const isIndividual = !(cfg.forSale) && extraSet.has(String(k.code || '').toUpperCase());
