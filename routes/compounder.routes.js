@@ -2656,7 +2656,11 @@ router.get('/portal/offered-locations', async (req, res, next) => {
           photos: Array.isArray(cfg.photos) ? cfg.photos : [],
         };
       })
-      .sort((a, b) => (b.yearlyYield || 0) - (a.yearlyYield || 0));
+      .sort((a, b) => {
+        // VIP (individuální) nabídky nahoru, pak podle ročního výnosu.
+        if (!!a.individual !== !!b.individual) return a.individual ? -1 : 1;
+        return (b.yearlyYield || 0) - (a.yearlyYield || 0);
+      });
 
     res.json({ ok: true, currency: 'CZK', defaultCurrency: defCur, eurRate: eur, rates: fx, feePerDayCzk: feePerDay, reservation: { feePerDayCzk: feePerDay, holdHours, signDays, payDays, reblockDays }, count: list.length, locations: list });
   } catch (err) { next(err); }
