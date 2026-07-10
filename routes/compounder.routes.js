@@ -1162,6 +1162,8 @@ const patchSchema = z.object({
   sections: z.union([z.array(z.string()), z.string()]).optional(),
   // Zpřístupněné vzory smluv (mustry): pole/CSV typů rezervacni,kupni,servisni.
   templates: z.union([z.array(z.string()), z.string()]).optional(),
+  // Individuální nabídka lokalit navíc (pole/CSV kódů kiosků).
+  extraOffers: z.union([z.array(z.string()), z.string()]).optional(),
 });
 
 router.patch('/leads/:id', requireAuth, async (req, res, next) => {
@@ -1196,6 +1198,11 @@ router.patch('/leads/:id', requireAuth, async (req, res, next) => {
       const valid = ['rezervacni', 'kupni', 'servisni'];
       const clean = arr.map((s) => String(s).trim()).filter((s) => valid.includes(s));
       data.visible_templates = clean.length ? Array.from(new Set(clean)).join(',') : '';
+    }
+    if (parsed.data.extraOffers !== undefined) {
+      const arr = Array.isArray(parsed.data.extraOffers) ? parsed.data.extraOffers : String(parsed.data.extraOffers).split(',');
+      const clean = arr.map((s) => String(s).trim().toUpperCase()).filter(Boolean).slice(0, 50);
+      data.extra_offers = clean.length ? Array.from(new Set(clean)).join(',') : '';
     }
     const lead = await prisma.compounderLead.update({ where: { id }, data });
     // Notifikace: nový přidělený kontakt (jinému obchodníkovi než ten, kdo přiřazuje).
@@ -1590,6 +1597,22 @@ router.get('/kiosk-config', requireAuth, async (req, res, next) => {
   } catch (err) {
     next(err);
   }
+});
+
+// GET /api/compounder/kiosk-options → lokality k INDIVIDUÁLNÍ nabídce
+// (Best Series, které NEJSOU v globální nabídce forSale a mají nastavenou verzi,
+// aby se u nich dala dopočítat ekonomika). Vrací [{ code, label }].
+router.get('/kiosk-options', requireAuth, async (req, res, next) => {
+  try {
+    const cfgMap = (await getSetting(COMPOUNDING_KIOSKS_KEY, { type: 'json', defaultValue: {} })) || {};
+    const kiosks = await portalKiosks();
+    const opts = kiosks
+      .filter((k) => String(k.companyName || '').toLowerCase().includes('best series'))
+      .filter((k) => { const c = cfgMap[k.code] || {}; return !c.forSale && c.version; })
+      .map((k) => ({ code: k.code, label: k.label || k.code }))
+      .sort((a, b) => String(a.label).localeCompare(String(b.label), 'cs'));
+    res.json(opts);
+  } catch (err) { next(err); }
 });
 
 // PUT /api/compounder/kiosk-config/:code → upsert konfigurace jedné lokality
@@ -2566,8 +2589,10 @@ router.get('/portal/offered-locations', async (req, res, next) => {
     const payDays = Number.isFinite(cs.reservationPayDays) ? cs.reservationPayDays : 1;
     const reblockDays = Number.isFinite(cs.reservationReblockDays) ? cs.reservationReblockDays : 2;
     // Výchozí měna se řídí jazykem leada: čeština → CZK, jinak EUR (fallback = globální nastavení).
-    const _lead = await prisma.compounderLead.findUnique({ where: { id: leadId }, select: { lang: true } }).catch(() => null);
+    const _lead = await prisma.compounderLead.findUnique({ where: { id: leadId }, select: { lang: true, extra_offers: true } }).catch(() => null);
     const _leadLang = (_lead && _lead.lang) ? _lead.lang.toLowerCase() : null;
+    // Individuální nabídka lokalit navíc pro tohoto leada (union se společnou forSale nabídkou).
+    const extraSet = new Set(String((_lead && _lead.extra_offers) || '').split(',').map((s) => s.trim().toUpperCase()).filter(Boolean));
     const defCur = _leadLang ? (_leadLang.indexOf('cs') === 0 ? 'CZK' : 'EUR') : ((cs.defaultCurrency === 'EUR') ? 'EUR' : 'CZK');
 
     const num = (v) => (typeof v === 'number' && isFinite(v)) ? v : 0;
@@ -2587,9 +2612,10 @@ router.get('/portal/offered-locations', async (req, res, next) => {
 
     const list = kiosks
       .filter((k) => String(k.companyName || '').toLowerCase().includes('best series'))
-      .filter((k) => (cfgMap[k.code] || {}).forSale)
+      .filter((k) => (cfgMap[k.code] || {}).forSale || extraSet.has(String(k.code || '').toUpperCase()))
       .map((k) => {
         const cfg = cfgMap[k.code] || {};
+        const isIndividual = !(cfg.forSale) && extraSet.has(String(k.code || '').toUpperCase());
         const bi = busyInfo.get(k.code);
         const ver = String(cfg.version || '').toLowerCase();
         const machine = machinePrice(ver);
@@ -2622,6 +2648,7 @@ router.get('/portal/offered-locations', async (req, res, next) => {
           mine: bi ? (bi.lead_id === leadId) : false,
           resStatus: bi ? bi.status : null,
           resUntil: bi ? (bi.until || null) : null,
+          individual: isIndividual,
           photos: Array.isArray(cfg.photos) ? cfg.photos : [],
         };
       })

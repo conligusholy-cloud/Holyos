@@ -2820,7 +2820,7 @@
           var resvCell = rv
             ? '<td style="white-space:nowrap;font-size:12px;"><span style="color:'+(rv.status==='active'?'#eab308':rv.status==='hold'?'#22c55e':'#3b82f6')+';font-weight:600;">'+(rv.status==='active'?'Aktivní':rv.status==='hold'?'Blokace 1 h':'Rezervováno')+'</span>'+((rv.kiosk_code)?(' <span style="color:var(--text2);">'+cmpEsc(rv.kiosk_code)+'</span>'):'')+(rv.until?('<br><span style="color:var(--text2);">do '+new Date(rv.until).toLocaleString('cs-CZ')+'</span>'):'')+'</td>'
             : '<td style="color:var(--text2);">—</td>';
-          h += '<tr data-lead="' + l.id + '" data-sections="' + cmpEsc(l.visible_sections||'') + '" data-source="' + cmpEsc(l.source||'') + '" data-approved="' + (l.access_approved_at ? '1' : '') + '" onclick="cmpActivity(' + l.id + ', this)" title="Klikni pro cestu zákazníka" style="cursor:pointer;"><td style="color:var(--text2);">▸</td><td style="white-space:nowrap;">' + dt + '</td><td style="white-space:nowrap;color:' + laColor + ';font-size:12px;font-weight:' + (laToday ? '700' : '400') + ';">' + la + '</td><td>' + cmpEsc(l.name) + '</td><td><a href="mailto:' + cmpEsc(l.email) + '" onclick="event.stopPropagation()" style="color:#eab308;">' + cmpEsc(l.email) + '</a></td><td>' + roleLabel + '</td><td style="white-space:nowrap;">' + langSel + '</td><td style="white-space:nowrap;">' + ownerCell + '</td>' + warmthCell + resvCell + '<td>' + sel + '</td><td><input type="text" value="' + noteVal + '" placeholder="—" onclick="event.stopPropagation()" onblur="cmpSetNote(' + l.id + ', this.value)" style="width:140px;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:12px;"></td><td><button onclick="event.stopPropagation();cmpDeleteLead(' + l.id + ', ' + JSON.stringify(l.name).replace(/"/g,'&quot;') + ')" title="Smazat lead" style="background:transparent;color:#ef4444;border:1px solid rgba(239,68,68,0.4);border-radius:6px;padding:4px 9px;font-size:12px;cursor:pointer;">🗑</button></td></tr>';
+          h += '<tr data-lead="' + l.id + '" data-sections="' + cmpEsc(l.visible_sections||'') + '" data-source="' + cmpEsc(l.source||'') + '" data-approved="' + (l.access_approved_at ? '1' : '') + '" data-extra="' + cmpEsc(l.extra_offers||'') + '" onclick="cmpActivity(' + l.id + ', this)" title="Klikni pro cestu zákazníka" style="cursor:pointer;"><td style="color:var(--text2);">▸</td><td style="white-space:nowrap;">' + dt + '</td><td style="white-space:nowrap;color:' + laColor + ';font-size:12px;font-weight:' + (laToday ? '700' : '400') + ';">' + la + '</td><td>' + cmpEsc(l.name) + (l.extra_offers ? ' <span title="Individuální nabídka lokalit" style="cursor:default">🎯</span>' : '') + '</td><td><a href="mailto:' + cmpEsc(l.email) + '" onclick="event.stopPropagation()" style="color:#eab308;">' + cmpEsc(l.email) + '</a></td><td>' + roleLabel + '</td><td style="white-space:nowrap;">' + langSel + '</td><td style="white-space:nowrap;">' + ownerCell + '</td>' + warmthCell + resvCell + '<td>' + sel + '</td><td><input type="text" value="' + noteVal + '" placeholder="—" onclick="event.stopPropagation()" onblur="cmpSetNote(' + l.id + ', this.value)" style="width:140px;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:12px;"></td><td><button onclick="event.stopPropagation();cmpDeleteLead(' + l.id + ', ' + JSON.stringify(l.name).replace(/"/g,'&quot;') + ')" title="Smazat lead" style="background:transparent;color:#ef4444;border:1px solid rgba(239,68,68,0.4);border-radius:6px;padding:4px 9px;font-size:12px;cursor:pointer;">🗑</button></td></tr>';
         });
         h += '</tbody></table></div>';
         box.innerHTML = h;
@@ -2877,13 +2877,14 @@
       row.firstChild.textContent='▾';
       var tr = document.createElement('tr'); tr.className='cmp-act-row';
       var td = document.createElement('td'); td.colSpan = 12; td.style.background='rgba(234,179,8,0.04)'; td.style.padding='14px 18px';
-      td.innerHTML = cmpAccessBlock(id, row.getAttribute('data-source')||'', row.getAttribute('data-approved')==='1') + cmpSecBlock(id, row.getAttribute('data-sections')||'');
+      td.innerHTML = cmpAccessBlock(id, row.getAttribute('data-source')||'', row.getAttribute('data-approved')==='1') + cmpSecBlock(id, row.getAttribute('data-sections')||'') + cmpOfferBlock(id, row.getAttribute('data-extra')||'');
       var resDiv = document.createElement('div'); resDiv.innerHTML = '<div style="color:var(--text2);font-size:13px;">Načítám rezervace…</div>';
       td.appendChild(resDiv);
       cmpLeadReservations(id, resDiv);
       var body = document.createElement('div'); body.innerHTML = '<div style="color:var(--text2);font-size:13px;">Načítám cestu…</div>';
       td.appendChild(body);
       tr.appendChild(td); row.parentNode.insertBefore(tr, row.nextSibling);
+      cmpRenderOfferChips(id); cmpFillOfferSelect(id);
       try {
         var r = await fetch('/api/compounder/leads/'+id+'/activity', { credentials:'include' });
         var a = await r.json();
@@ -3078,6 +3079,75 @@
       } finally { if (cb) cb.disabled = false; }
     }
     window.cmpSetAccess = cmpSetAccess;
+    // ── Individuální nabídka lokalit (jen tento lead) ─────────────────
+    var CMP_KIOSK_OPTS = null; var CMP_KIOSK_MAP = {};
+    function cmpOfferLabel(code){ return CMP_KIOSK_MAP[code] || code; }
+    function cmpOfferBlock(id, csv){
+      return '<div data-offerctl="'+id+'" data-offers="'+cmpEsc(String(csv||''))+'" style="margin-bottom:12px;padding:10px 12px;background:rgba(201,162,75,0.06);border:1px solid rgba(201,162,75,0.28);border-radius:8px;">'
+        + '<div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--text2);margin-bottom:8px;">🎯 Individuální nabídka lokalit (jen tento lead)</div>'
+        + '<div data-offerchips="'+id+'" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;"></div>'
+        + '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">'
+        +   '<select data-offersel="'+id+'" style="background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:12.5px;min-width:240px;max-width:100%;"><option value="">Načítám lokality…</option></select>'
+        +   '<button type="button" class="btn" style="padding:6px 12px;font-size:12.5px;" onclick="cmpAddOffer('+id+')">+ Přidat</button>'
+        +   '<button type="button" class="btn btn-primary" style="padding:6px 14px;font-size:12.5px;" onclick="cmpSaveOffers('+id+')">Uložit</button>'
+        +   '<span data-offermsg="'+id+'" style="font-size:12px;"></span>'
+        + '</div>'
+        + '<div style="font-size:11px;color:var(--text2);margin-top:8px;">Lead uvidí společnou nabídku + tyto lokality navíc.</div>'
+        + '</div>';
+    }
+    function cmpOffersOf(id){
+      var wrap = document.querySelector('[data-offerctl="'+id+'"]'); if(!wrap) return [];
+      return String(wrap.getAttribute('data-offers')||'').split(',').map(function(x){return x.trim();}).filter(Boolean);
+    }
+    function cmpSetOffersAttr(id, arr){
+      var wrap = document.querySelector('[data-offerctl="'+id+'"]'); if(wrap) wrap.setAttribute('data-offers', arr.join(','));
+    }
+    function cmpRenderOfferChips(id){
+      var box = document.querySelector('[data-offerchips="'+id+'"]'); if(!box) return;
+      var arr = cmpOffersOf(id);
+      if(!arr.length){ box.innerHTML = '<span style="color:var(--text2);font-size:12px;">Žádná individuální lokalita.</span>'; return; }
+      box.innerHTML = arr.map(function(code){
+        return '<span style="display:inline-flex;align-items:center;gap:6px;background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:999px;padding:3px 10px;font-size:12.5px;">'+cmpEsc(cmpOfferLabel(code))+' <button type="button" onclick="cmpRemoveOffer('+id+',\''+cmpEsc(code)+'\')" style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:13px;line-height:1;">✕</button></span>';
+      }).join('');
+    }
+    async function cmpEnsureKioskOpts(){
+      if(CMP_KIOSK_OPTS) return CMP_KIOSK_OPTS;
+      try{ var r = await fetch('/api/compounder/kiosk-options', { credentials:'include' }); CMP_KIOSK_OPTS = await r.json(); }
+      catch(e){ CMP_KIOSK_OPTS = []; }
+      if(!Array.isArray(CMP_KIOSK_OPTS)) CMP_KIOSK_OPTS = [];
+      CMP_KIOSK_MAP = {}; CMP_KIOSK_OPTS.forEach(function(o){ CMP_KIOSK_MAP[o.code]=o.label; });
+      return CMP_KIOSK_OPTS;
+    }
+    async function cmpFillOfferSelect(id){
+      var sel = document.querySelector('[data-offersel="'+id+'"]'); if(!sel) return;
+      await cmpEnsureKioskOpts();
+      cmpRenderOfferChips(id);
+      var have = cmpOffersOf(id);
+      var avail = CMP_KIOSK_OPTS.filter(function(o){ return have.indexOf(o.code)===-1; });
+      sel.innerHTML = avail.length
+        ? ('<option value="">— vyber lokalitu —</option>' + avail.map(function(o){ return '<option value="'+cmpEsc(o.code)+'">'+cmpEsc(o.label)+'</option>'; }).join(''))
+        : '<option value="">Žádné další lokality k nabídnutí</option>';
+    }
+    function cmpAddOffer(id){
+      var sel = document.querySelector('[data-offersel="'+id+'"]'); if(!sel || !sel.value) return;
+      var arr = cmpOffersOf(id); if(arr.indexOf(sel.value)===-1) arr.push(sel.value);
+      cmpSetOffersAttr(id, arr); cmpRenderOfferChips(id); cmpFillOfferSelect(id);
+    }
+    function cmpRemoveOffer(id, code){
+      var arr = cmpOffersOf(id).filter(function(c){return c!==code;});
+      cmpSetOffersAttr(id, arr); cmpRenderOfferChips(id); cmpFillOfferSelect(id);
+    }
+    async function cmpSaveOffers(id){
+      var msg = document.querySelector('[data-offermsg="'+id+'"]'); var arr = cmpOffersOf(id);
+      if(msg){ msg.style.color='var(--text2)'; msg.textContent='Ukládám…'; }
+      try{
+        var r = await fetch('/api/compounder/leads/'+id, { method:'PATCH', credentials:'include', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ extraOffers: arr }) });
+        if(!r.ok) throw new Error();
+        var rowEl = document.querySelector('tr[data-lead="'+id+'"]'); if(rowEl) rowEl.setAttribute('data-extra', arr.join(','));
+        if(msg){ msg.style.color='#10b981'; msg.textContent='Uloženo ✓'; setTimeout(function(){ if(msg) msg.textContent=''; }, 2200); }
+      }catch(e){ if(msg){ msg.style.color='#ef4444'; msg.textContent='Chyba uložení'; } }
+    }
+    window.cmpAddOffer = cmpAddOffer; window.cmpRemoveOffer = cmpRemoveOffer; window.cmpSaveOffers = cmpSaveOffers;
     function cmpSecBlock(id, csv){
       var have = String(csv||'').split(',').map(function(x){return x.trim();}).filter(Boolean);
       var defs = [['ekonomika','Provozovatel'],['nabidka','Investor'],['distributor','Distributor']];

@@ -5493,6 +5493,10 @@ model CompounderLead {
   // mají přístup jako dosud (nezávisle na tomto poli).
   access_approved_at DateTime?
 
+  // Individuální nabídka lokalit navíc (CSV kódů kiosků). Lead vidí společnou
+  // nabídku (forSale) PLUS tyto lokality — přidává je admin z HolyOS.
+  extra_offers String? @db.Text
+
   // Obchod — přiřazený obchodník (komu se kontakt zobrazí na obrazovce obchodníka)
   // a kdo kontakt založil. Odkaz na Person (bez formální relace, jméno se dohledá zvlášť).
   owner_person_id      Int?
