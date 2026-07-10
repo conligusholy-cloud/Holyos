@@ -3080,7 +3080,7 @@
     }
     window.cmpSetAccess = cmpSetAccess;
     // ── Individuální nabídka lokalit (jen tento lead) ─────────────────
-    var CMP_KIOSK_OPTS = null; var CMP_KIOSK_MAP = {};
+    var CMP_KIOSK_OPTS = null; var CMP_KIOSK_MAP = {}; var CMP_KIOSK_PHOTO = {};
     function cmpOfferLabel(code){ return CMP_KIOSK_MAP[code] || code; }
     function cmpOfferBlock(id, csv){
       return '<div data-offerctl="'+id+'" data-offers="'+cmpEsc(String(csv||''))+'" style="margin-bottom:12px;padding:10px 12px;background:rgba(201,162,75,0.06);border:1px solid rgba(201,162,75,0.28);border-radius:8px;">'
@@ -3092,7 +3092,7 @@
         +   '<button type="button" class="btn btn-primary" style="padding:6px 14px;font-size:12.5px;" onclick="cmpSaveOffers('+id+')">Uložit</button>'
         +   '<span data-offermsg="'+id+'" style="font-size:12px;"></span>'
         + '</div>'
-        + '<div style="font-size:11px;color:var(--text2);margin-top:8px;">Lead uvidí společnou nabídku + tyto lokality navíc.</div>'
+        + '<div style="font-size:11px;color:var(--text2);margin-top:8px;">Lead uvidí společnou nabídku + tyto lokality navíc. <b style="color:#eab308;">Lokality bez fotky se v nabídce nezobrazí</b> — fotku nahraj v konfiguraci lokalit.</div>'
         + '</div>';
     }
     function cmpOffersOf(id){
@@ -3107,7 +3107,8 @@
       var arr = cmpOffersOf(id);
       if(!arr.length){ box.innerHTML = '<span style="color:var(--text2);font-size:12px;">Žádná individuální lokalita.</span>'; return; }
       box.innerHTML = arr.map(function(code){
-        return '<span style="display:inline-flex;align-items:center;gap:6px;background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:999px;padding:3px 10px;font-size:12.5px;">'+cmpEsc(cmpOfferLabel(code))+' <button type="button" onclick="cmpRemoveOffer('+id+',\''+cmpEsc(code)+'\')" style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:13px;line-height:1;">✕</button></span>';
+        var noPhoto = (CMP_KIOSK_PHOTO[code] === false);
+        return '<span style="display:inline-flex;align-items:center;gap:6px;background:'+(noPhoto?'rgba(234,179,8,0.12)':'rgba(255,255,255,0.06)')+';border:1px solid '+(noPhoto?'rgba(234,179,8,0.5)':'var(--border)')+';border-radius:999px;padding:3px 10px;font-size:12.5px;">'+cmpEsc(cmpOfferLabel(code))+(noPhoto?' <span title="Bez fotky — v nabídce se nezobrazí. Nahraj fotku v konfiguraci lokalit." style="color:#eab308;font-weight:600;">⚠️ bez fotky</span>':'')+' <button type="button" onclick="cmpRemoveOffer('+id+',\''+cmpEsc(code)+'\')" style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:13px;line-height:1;">✕</button></span>';
       }).join('');
     }
     async function cmpEnsureKioskOpts(){
@@ -3115,7 +3116,7 @@
       try{ var r = await fetch('/api/compounder/kiosk-options', { credentials:'include' }); CMP_KIOSK_OPTS = await r.json(); }
       catch(e){ CMP_KIOSK_OPTS = []; }
       if(!Array.isArray(CMP_KIOSK_OPTS)) CMP_KIOSK_OPTS = [];
-      CMP_KIOSK_MAP = {}; CMP_KIOSK_OPTS.forEach(function(o){ CMP_KIOSK_MAP[o.code]=o.label; });
+      CMP_KIOSK_MAP = {}; CMP_KIOSK_PHOTO = {}; CMP_KIOSK_OPTS.forEach(function(o){ CMP_KIOSK_MAP[o.code]=o.label; CMP_KIOSK_PHOTO[o.code]=!!o.hasPhoto; });
       return CMP_KIOSK_OPTS;
     }
     async function cmpFillOfferSelect(id){

@@ -1609,7 +1609,7 @@ router.get('/kiosk-options', requireAuth, async (req, res, next) => {
     const opts = kiosks
       .filter((k) => String(k.companyName || '').toLowerCase().includes('best series'))
       .filter((k) => { const c = cfgMap[k.code] || {}; return !c.forSale && c.version; })
-      .map((k) => ({ code: k.code, label: k.label || k.code }))
+      .map((k) => { const c = cfgMap[k.code] || {}; return { code: k.code, label: k.label || k.code, hasPhoto: Array.isArray(c.photos) && c.photos.length > 0 }; })
       .sort((a, b) => String(a.label).localeCompare(String(b.label), 'cs'));
     res.json(opts);
   } catch (err) { next(err); }
@@ -2654,6 +2654,8 @@ async function buildOfferedLocations(leadId) {
           photos: Array.isArray(cfg.photos) ? cfg.photos : [],
         };
       })
+      // Lokality bez nahrané fotky se v nabídce nezobrazují.
+      .filter((o) => Array.isArray(o.photos) && o.photos.length > 0)
       .sort((a, b) => {
         // VIP (individuální) nabídky nahoru, pak podle ročního výnosu.
         if (!!a.individual !== !!b.individual) return a.individual ? -1 : 1;
