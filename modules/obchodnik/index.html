@@ -263,6 +263,7 @@
           '<div style="margin-top:10px;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted2)">Viditelné sekce portálu</div>' + secBoxes +
           '<div style="margin-top:10px;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted2)">Vzory smluv ke čtení (mustr)</div>' + tplBoxes +
         '</div>' +
+        '<div class="field"><label>Nabídka lokalit'+(l.extra_offers?' 🎯':'')+'</label><button class="btn btn-g" style="width:100%" onclick="showOffer('+l.id+')">👁️ Zobrazit nabídku, co lead vidí</button></div>' +
         '<div class="field"><label>Zaznamenat aktivitu</label>' +
           '<div class="quick"><input class="qinput" id="act-'+l.id+'" placeholder="Zavolal jsem, má zájem…"><button class="btn btn-p" onclick="addActivity('+l.id+')">Přidat</button></div>' +
           '<div style="display:flex;gap:8px;margin-top:8px">' +
@@ -420,6 +421,25 @@
       box.textContent = head + '\n\n' + tl;
     } catch(e){ box.textContent = 'Analytiku se nepodařilo načíst.'; }
   }
+
+  async function showOffer(id){
+    try{
+      var r = await api('/leads/'+id+'/offer-preview'); var d = await r.json();
+      if(!d || !d.ok){ alert('Nabídku se nepodařilo načíst.'); return; }
+      var locs = d.locations || [];
+      function m(v){ return (v!=null && isFinite(v)) ? Math.round(v).toLocaleString('cs-CZ')+' Kč' : '—'; }
+      var rows = locs.map(function(o){
+        var celkem=(o.guaranteeValue!=null)?((o.yearlyYield||0)*o.guaranteeYears+o.guaranteeValue):null;
+        return '<tr style="border-top:1px solid var(--line)"><td style="padding:6px 8px">'+(o.individual?'⭐ ':'')+esc(o.label||o.code)+' <span style="color:var(--muted2);font-size:11px">'+esc(o.version||'')+'</span></td><td style="padding:6px 8px;text-align:right;white-space:nowrap">'+m(o.totalPrice)+'</td><td style="padding:6px 8px;text-align:right;white-space:nowrap">'+m(o.yearlyYield)+'</td><td style="padding:6px 8px;text-align:right;white-space:nowrap">'+m(o.guaranteeValue)+'</td><td style="padding:6px 8px;text-align:right;white-space:nowrap;font-weight:700">'+m(celkem)+'</td></tr>';
+      }).join('');
+      var bodyHtml = locs.length
+        ? '<table style="width:100%;border-collapse:collapse;font-size:12.5px"><thead><tr style="color:var(--muted2);text-align:left"><th style="padding:6px 8px">Lokalita</th><th style="padding:6px 8px;text-align:right">Cena</th><th style="padding:6px 8px;text-align:right">Roční výnos</th><th style="padding:6px 8px;text-align:right">Garance</th><th style="padding:6px 8px;text-align:right">Celkem 5 let</th></tr></thead><tbody>'+rows+'</tbody></table>'
+        : '<div style="color:var(--muted2)">Žádné lokality (lead nemá odemčenou sekci Investor nebo nic není v nabídce).</div>';
+      var html = '<div data-offmodal="1" style="position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:10000;display:flex;align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)this.remove()"><div style="background:#15151a;border:1px solid var(--line);border-radius:12px;max-width:860px;width:100%;max-height:85vh;overflow:auto;padding:18px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;gap:10px"><b>Nabídka lokalit, kterou lead vidí ('+locs.length+')</b><button onclick="this.closest(\'[data-offmodal]\').remove()" style="background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer">✕</button></div>'+bodyHtml+'<div style="color:var(--muted2);font-size:11px;margin-top:10px">⭐ = VIP (individuální) nabídka · hodnoty v CZK</div></div></div>';
+      document.body.insertAdjacentHTML('beforeend', html);
+    }catch(e){ alert('Chyba načítání nabídky.'); }
+  }
+  window.showOffer = showOffer;
 
   async function aiEval(id){
     var out = document.getElementById('ai-'+id); if (!out) return;

@@ -2572,11 +2572,9 @@ async function portalKiosks() {
   }
 }
 
-router.get('/portal/offered-locations', async (req, res, next) => {
-  try {
-    const leadId = verifyPortalToken(String(req.query.t || ''));
-    if (!leadId) return res.status(401).json({ ok: false, error: 'Neplatný nebo chybějící přístupový odkaz.' });
-
+// Sdílený výpočet nabídky lokalit pro daného leada (globální forSale + jeho VIP).
+// Používá veřejný token endpoint i admin náhled (ikonka v HolyOS / u obchodníka).
+async function buildOfferedLocations(leadId) {
     const cs = await getSetting(COMPOUNDING_SETTINGS_KEY, { type: 'json', defaultValue: COMPOUNDING_SETTINGS_DEFAULT });
     const cfgMap = (await getSetting(COMPOUNDING_KIOSKS_KEY, { type: 'json', defaultValue: {} })) || {};
     const kiosks = await portalKiosks();
@@ -2662,7 +2660,23 @@ router.get('/portal/offered-locations', async (req, res, next) => {
         return (b.yearlyYield || 0) - (a.yearlyYield || 0);
       });
 
-    res.json({ ok: true, currency: 'CZK', defaultCurrency: defCur, eurRate: eur, rates: fx, feePerDayCzk: feePerDay, reservation: { feePerDayCzk: feePerDay, holdHours, signDays, payDays, reblockDays }, count: list.length, locations: list });
+    return { ok: true, currency: 'CZK', defaultCurrency: defCur, eurRate: eur, rates: fx, feePerDayCzk: feePerDay, reservation: { feePerDayCzk: feePerDay, holdHours, signDays, payDays, reblockDays }, count: list.length, locations: list };
+}
+
+router.get('/portal/offered-locations', async (req, res, next) => {
+  try {
+    const leadId = verifyPortalToken(String(req.query.t || ''));
+    if (!leadId) return res.status(401).json({ ok: false, error: 'Neplatný nebo chybějící přístupový odkaz.' });
+    res.json(await buildOfferedLocations(leadId));
+  } catch (err) { next(err); }
+});
+
+// ADMIN náhled nabídky, kterou lead reálně vidí na portálu (společné + VIP).
+router.get('/leads/:id(\\d+)/offer-preview', requireAuth, async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'Neplatné ID' });
+    res.json(await buildOfferedLocations(id));
   } catch (err) { next(err); }
 });
 

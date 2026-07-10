@@ -3084,7 +3084,7 @@
     function cmpOfferLabel(code){ return CMP_KIOSK_MAP[code] || code; }
     function cmpOfferBlock(id, csv){
       return '<div data-offerctl="'+id+'" data-offers="'+cmpEsc(String(csv||''))+'" style="margin-bottom:12px;padding:10px 12px;background:rgba(201,162,75,0.06);border:1px solid rgba(201,162,75,0.28);border-radius:8px;">'
-        + '<div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--text2);margin-bottom:8px;">🎯 Individuální nabídka lokalit (jen tento lead)</div>'
+        + '<div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--text2);margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">🎯 Individuální nabídka lokalit (jen tento lead)<button type="button" onclick="cmpShowOffer('+id+')" style="background:transparent;border:1px solid var(--border);color:var(--text2);border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer;text-transform:none;letter-spacing:0;">👁️ Zobrazit celou nabídku</button></div>'
         + '<div data-offerchips="'+id+'" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;"></div>'
         + '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">'
         +   '<select data-offersel="'+id+'" style="background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:12.5px;min-width:240px;max-width:100%;"><option value="">Načítám lokality…</option></select>'
@@ -3148,6 +3148,37 @@
       }catch(e){ if(msg){ msg.style.color='#ef4444'; msg.textContent='Chyba uložení'; } }
     }
     window.cmpAddOffer = cmpAddOffer; window.cmpRemoveOffer = cmpRemoveOffer; window.cmpSaveOffers = cmpSaveOffers;
+    // Náhled celé nabídky, kterou lead vidí na portálu (společné + VIP).
+    async function cmpShowOffer(id){
+      try{
+        var r = await fetch('/api/compounder/leads/'+id+'/offer-preview', { credentials:'include' });
+        var d = await r.json();
+        if(!d || !d.ok){ alert('Nabídku se nepodařilo načíst.'); return; }
+        var locs = d.locations || [];
+        function m(v){ return (v!=null && isFinite(v)) ? Math.round(v).toLocaleString('cs-CZ')+' Kč' : '—'; }
+        var rows = locs.map(function(o){
+          var celkem = (o.guaranteeValue!=null) ? ((o.yearlyYield||0)*o.guaranteeYears + o.guaranteeValue) : null;
+          return '<tr style="border-top:1px solid var(--border)">'
+            + '<td style="padding:6px 8px;">'+(o.individual?'⭐ ':'')+cmpEsc(o.label||o.code)+' <span style="color:var(--text2);font-size:11px;">'+cmpEsc(o.version||'')+'</span>'+(o.reserved?' <span style="color:#eab308;font-size:11px;">(obsazeno)</span>':'')+'</td>'
+            + '<td style="padding:6px 8px;text-align:right;white-space:nowrap;">'+m(o.totalPrice)+'</td>'
+            + '<td style="padding:6px 8px;text-align:right;white-space:nowrap;">'+m(o.yearlyYield)+'</td>'
+            + '<td style="padding:6px 8px;text-align:right;white-space:nowrap;">'+m(o.guaranteeValue)+'</td>'
+            + '<td style="padding:6px 8px;text-align:right;white-space:nowrap;font-weight:700;">'+m(celkem)+'</td>'
+            + '</tr>';
+        }).join('');
+        var body = locs.length
+          ? '<table style="width:100%;border-collapse:collapse;font-size:12.5px;"><thead><tr style="color:var(--text2);text-align:left;"><th style="padding:6px 8px;">Lokalita</th><th style="padding:6px 8px;text-align:right;">Cena</th><th style="padding:6px 8px;text-align:right;">Roční výnos</th><th style="padding:6px 8px;text-align:right;">Garance</th><th style="padding:6px 8px;text-align:right;">Celkem 5 let</th></tr></thead><tbody>'+rows+'</tbody></table>'
+          : '<div style="color:var(--text2);">Žádné lokality (lead nemá odemčenou sekci Investor nebo nic není v nabídce).</div>';
+        var html = '<div data-cmpmodal="1" style="position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:10000;display:flex;align-items:center;justify-content:center;padding:20px;" onclick="if(event.target===this)this.remove()">'
+          + '<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;max-width:860px;width:100%;max-height:85vh;overflow:auto;padding:20px;">'
+          + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;gap:10px;"><b style="font-size:15px;">Nabídka lokalit, kterou lead vidí ('+locs.length+')</b><button type="button" onclick="this.closest(\'[data-cmpmodal]\').remove()" style="background:none;border:none;color:var(--text2);font-size:20px;cursor:pointer;line-height:1;">✕</button></div>'
+          + body
+          + '<div style="color:var(--text2);font-size:11px;margin-top:10px;">⭐ = VIP (individuální) nabídka · hodnoty v CZK</div>'
+          + '</div></div>';
+        document.body.insertAdjacentHTML('beforeend', html);
+      }catch(e){ alert('Chyba načítání nabídky.'); }
+    }
+    window.cmpShowOffer = cmpShowOffer;
     function cmpSecBlock(id, csv){
       var have = String(csv||'').split(',').map(function(x){return x.trim();}).filter(Boolean);
       var defs = [['ekonomika','Provozovatel'],['nabidka','Investor'],['distributor','Distributor']];
