@@ -861,6 +861,12 @@ app.listen(PORT, async () => {
   } catch (err) {
     console.error('[app] eshop-low-stock-worker nelze spustit:', err.message);
   }
+  try {
+    const compounderDigest = require('./services/compounder/daily-digest-worker');
+    compounderDigest.start();
+  } catch (err) {
+    console.error('[app] compounder-digest nelze spustit:', err.message);
+  }
   console.log('=========================================');
   console.log('  HolyOS v0.5.0');
   console.log('  Listening on port ' + PORT);

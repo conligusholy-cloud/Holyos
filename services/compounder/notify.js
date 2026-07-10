@@ -211,6 +211,14 @@ async function notifyPurchaseInquiry(prisma, { lead, count, locations, phone }) 
   } catch (e) { console.error('[compounder-notify] purchase', e.message); }
 }
 
+// Obecná zpráva do Velína (push + zvonek) nastaveným příjemcům (fallback Jan/Tomáš).
+// Používá denní hodnocení leadů (daily-digest-worker).
+async function notifyOwnersMessage(prisma, { title, body, data }) {
+  try {
+    await dispatch(prisma, { title, body, data: data || { type: 'compounder_digest' } });
+  } catch (e) { console.error('[compounder-notify] message', e.message); }
+}
+
 module.exports = {
   NOTIFY_SETTING_KEY,
   getEligibleVelinPeople,
@@ -222,4 +230,5 @@ module.exports = {
   notifyContractAwaitingCountersign,
   notifyContactRequest,
   notifyPurchaseInquiry,
+  notifyOwnersMessage,
 };

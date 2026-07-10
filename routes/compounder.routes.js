@@ -1615,6 +1615,16 @@ router.get('/kiosk-options', requireAuth, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// POST /api/compounder/digest/run — ruční spuštění denního hodnocení leadů (test).
+// Normálně běží automaticky ve 23:55 (daily-digest-worker).
+router.post('/digest/run', requireAuth, async (req, res, next) => {
+  try {
+    const worker = require('../services/compounder/daily-digest-worker');
+    const r = await worker.runNow();
+    res.json(r || { ok: true });
+  } catch (err) { next(err); }
+});
+
 // PUT /api/compounder/kiosk-config/:code → upsert konfigurace jedné lokality
 router.put('/kiosk-config/:code', requireAuth, async (req, res, next) => {
   try {
