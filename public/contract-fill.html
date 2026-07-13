@@ -67,6 +67,32 @@
   var API = '/api/compounder/contracts/public/' + encodeURIComponent(token);
   var schemaFields = [];
   var REQUIRED_FIELDS = ['buyer_address', 'buyer_bank']; // povinná pole hlavičky
+  // Jazyk formuláře = jazyk smlouvy (cs/en) — vrací ho API spolu se schématem.
+  var IS_EN = false;
+  function tt(cs, en) { return IS_EN ? en : cs; }
+  var FIELD_EN = {
+    buyer_name: 'Name / company',
+    buyer_address: 'Registered office / address',
+    buyer_ico: 'Company ID',
+    buyer_dic: 'VAT ID',
+    buyer_rep: 'Represented by',
+    buyer_bank: 'Bank account',
+  };
+  function applyEnUi() {
+    if (!IS_EN) return;
+    var rp = document.getElementById('readpdf'); if (rp) rp.textContent = '📄 Read the full contract (PDF)';
+    var labels = document.querySelectorAll('#signblock label');
+    if (labels[0]) labels[0].textContent = 'Signature';
+    if (labels[1]) labels[1].textContent = 'Name of the signatory';
+    if (labels[2]) labels[2].innerHTML = 'Place of signing <span style="color:#eab308">*</span>';
+    if (labels[3] && labels[3].lastChild) labels[3].lastChild.textContent = ' I declare that I have read the contract and I am signing it electronically.';
+    var sg = document.getElementById('signer'); if (sg) sg.placeholder = 'Full name';
+    var pl = document.getElementById('place'); if (pl) pl.placeholder = 'e.g. London';
+    var sc = document.getElementById('sigclear'); if (sc) sc.textContent = 'Clear';
+    var sb = document.getElementById('submit'); if (sb) sb.textContent = 'Sign the contract';
+    var ft = document.querySelector('.foot'); if (ft) ft.textContent = 'Best Series s.r.o. • secure form';
+    var dn = document.querySelector('#done h1'); if (dn) dn.textContent = 'Thank you!';
+  }
 
   function esc(s) { return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
@@ -76,25 +102,29 @@
   async function load() {
     try {
       var r = await fetch(API, { credentials: 'omit' });
-      if (r.status === 410) { fail('Platnost odkazu vypršela. Požádejte o nový.'); return; }
-      if (!r.ok) { fail('Odkaz je neplatný nebo byl zrušen.'); return; }
+      if (r.status === 410) { fail('Platnost odkazu vypršela. Požádejte o nový. / The link has expired, please request a new one.'); return; }
+      if (!r.ok) { fail('Odkaz je neplatný nebo byl zrušen. / The link is invalid or has been cancelled.'); return; }
       var d = await r.json();
+      IS_EN = !!(d.lang && String(d.lang).toLowerCase().indexOf('cs') !== 0);
       if (d.status === 'podepsano') {
         hide('loading');
-        document.getElementById('done').querySelector('.sub').textContent = 'Tato smlouva už byla elektronicky podepsána. Děkujeme.';
+        document.getElementById('done').querySelector('.sub').textContent = tt('Tato smlouva už byla elektronicky podepsána. Děkujeme.', 'This contract has already been signed electronically. Thank you.');
+        applyEnUi();
         show('done');
         return;
       }
       schemaFields = d.fields || [];
-      document.getElementById('title').textContent = d.typeLabel || 'Smlouva';
-      document.getElementById('subtitle').textContent = (d.kioskLabel ? (d.kioskLabel + ' — ') : '') + 'Vyplňte prosím své identifikační údaje.';
+      document.getElementById('title').textContent = d.typeLabel || tt('Smlouva', 'Contract');
+      document.getElementById('subtitle').textContent = (d.kioskLabel ? (d.kioskLabel + ' — ') : '') + tt('Vyplňte prosím své identifikační údaje.', 'Please fill in your identification details.');
       var form = document.getElementById('form');
       form.innerHTML = schemaFields.map(function (f) {
         var val = (d.values && d.values[f.name] != null) ? d.values[f.name] : '';
         var req = (REQUIRED_FIELDS.indexOf(f.name) !== -1);
-        return '<label>' + esc(f.label) + (req ? ' <span style="color:#eab308">*</span>' : '') + '</label>' +
+        var lbl = IS_EN ? (FIELD_EN[f.name] || f.label) : f.label;
+        return '<label>' + esc(lbl) + (req ? ' <span style="color:#eab308">*</span>' : '') + '</label>' +
           '<input id="fld_' + esc(f.name) + '" type="text" value="' + esc(val) + '"' + (req ? ' required' : '') + '>';
       }).join('');
+      applyEnUi();
       hide('loading'); show('content');
       initSigPad();
     } catch (e) { fail('Nepodařilo se načíst formulář.'); }
@@ -139,10 +169,10 @@
     var signer = (document.getElementById('signer').value || '').trim();
     var place = ((document.getElementById('place') || {}).value || '').trim();
     var consent = document.getElementById('consent').checked;
-    if (!sigDirty) { msg.className = 'msg err'; msg.textContent = 'Prosím nakreslete svůj podpis.'; return; }
-    if (!signer) { msg.className = 'msg err'; msg.textContent = 'Zadejte prosím jméno podepisujícího.'; return; }
-    if (!place) { msg.className = 'msg err'; msg.textContent = 'Vyplňte prosím místo podpisu.'; return; }
-    if (!consent) { msg.className = 'msg err'; msg.textContent = 'Potvrďte prosím souhlas s podpisem.'; return; }
+    if (!sigDirty) { msg.className = 'msg err'; msg.textContent = tt('Prosím nakreslete svůj podpis.', 'Please draw your signature.'); return; }
+    if (!signer) { msg.className = 'msg err'; msg.textContent = tt('Zadejte prosím jméno podepisujícího.', 'Please enter the name of the signatory.'); return; }
+    if (!place) { msg.className = 'msg err'; msg.textContent = tt('Vyplňte prosím místo podpisu.', 'Please fill in the place of signing.'); return; }
+    if (!consent) { msg.className = 'msg err'; msg.textContent = tt('Potvrďte prosím souhlas s podpisem.', 'Please confirm your consent to signing.'); return; }
     var fields = {};
     schemaFields.forEach(function (f) { var el = document.getElementById('fld_' + f.name); if (el) fields[f.name] = el.value; });
     // Povinná pole hlavičky (adresa, bankovní spojení)
@@ -150,14 +180,14 @@
       var rf = REQUIRED_FIELDS[i];
       var rfEl = document.getElementById('fld_' + rf);
       if (rfEl && !String(rfEl.value || '').trim()) {
-        var lbl = (schemaFields.filter(function (f) { return f.name === rf; })[0] || {}).label || rf;
-        msg.className = 'msg err'; msg.textContent = 'Vyplňte prosím povinné pole: ' + lbl + '.';
+        var lbl = IS_EN ? (FIELD_EN[rf] || rf) : ((schemaFields.filter(function (f) { return f.name === rf; })[0] || {}).label || rf);
+        msg.className = 'msg err'; msg.textContent = tt('Vyplňte prosím povinné pole: ', 'Please fill in the required field: ') + lbl + '.';
         rfEl.focus();
         return;
       }
     }
     var signature = sigCanvas.toDataURL('image/png');
-    btn.disabled = true; btn.textContent = 'Podepisuji…';
+    btn.disabled = true; btn.textContent = tt('Podepisuji…', 'Signing…');
     try {
       var r = await fetch(API + '/sign', {
         method: 'POST', credentials: 'omit',
@@ -165,11 +195,11 @@
         body: JSON.stringify({ fields: fields, signer_name: signer, signature: signature, consent: true, place_signed: place }),
       });
       if (!r.ok) { var d = await r.json().catch(function(){return{};}); throw new Error(d.error || 'http'); }
-      document.getElementById('done').querySelector('.sub').textContent = 'Váš podpis jsme přijali. Smlouvu dokončíme podpisem za Best Series a poté vám ji zašleme e-mailem.';
+      document.getElementById('done').querySelector('.sub').textContent = tt('Váš podpis jsme přijali. Smlouvu dokončíme podpisem za Best Series a poté vám ji zašleme e-mailem.', 'We have received your signature. We will complete the contract with the Best Series signature and then send it to you by e-mail.');
       hide('content'); show('done');
     } catch (e) {
-      btn.disabled = false; btn.textContent = 'Podepsat smlouvu';
-      msg.className = 'msg err'; msg.textContent = 'Podpis se nezdařil: ' + (e.message || 'zkuste to prosím znovu.');
+      btn.disabled = false; btn.textContent = tt('Podepsat smlouvu', 'Sign the contract');
+      msg.className = 'msg err'; msg.textContent = tt('Podpis se nezdařil: ', 'Signing failed: ') + (e.message || tt('zkuste to prosím znovu.', 'please try again.'));
     }
   };
 
