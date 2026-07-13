@@ -325,6 +325,7 @@ router.get('/portal/contracts', async (req, res, next) => {
       kiosk_code: r.kiosk_code,
       kiosk_label: r.kiosk_label,
       url: '/smlouva/' + r.share_token,
+      pdf_url: '/api/compounder/contracts/public/' + r.share_token + '/pdf',
       signed_at: r.signed_at,
     }));
     res.json({ ok: true, contracts: out });
@@ -2685,7 +2686,8 @@ router.get('/contracts/public/:token/pdf', async (req, res, next) => {
   try {
     const row = await prisma.compoundingContract.findUnique({ where: { share_token: String(req.params.token || '') } });
     if (!row) return res.status(404).json({ error: 'Odkaz nenalezen nebo neplatný' });
-    if (row.share_expires_at && new Date(row.share_expires_at) < new Date()) {
+    // Plně podepsanou smlouvu si zákazník může stáhnout i po vypršení odkazu.
+    if (row.status !== 'podepsano' && row.share_expires_at && new Date(row.share_expires_at) < new Date()) {
       return res.status(410).json({ error: 'Platnost odkazu vypršela' });
     }
     const pubFields = await _enrichLegacyContract(row, _flattenLegacyContractFields(row.fields));
