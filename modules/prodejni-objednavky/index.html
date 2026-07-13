@@ -4122,7 +4122,7 @@
     function resFmtCzk(n){ return (n==null)?'—':(Math.round(n).toLocaleString('cs-CZ')+' Kč'); }
     function resDate(d){ return d ? new Date(d).toLocaleDateString('cs-CZ') : '—'; }
     function openReservationsModal(){
-      var opts = ['<option value="">Všechny stavy</option>'].concat(Object.keys(RES_STATUS).map(function(k){ return '<option value="'+k+'">'+RES_STATUS[k]+'</option>'; })).join('');
+      var opts = ['<option value="__active__">Aktivní (bez zrušených)</option>', '<option value="">Všechny stavy</option>'].concat(Object.keys(RES_STATUS).map(function(k){ return '<option value="'+k+'">'+RES_STATUS[k]+'</option>'; })).join('');
       var html = '<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal" style="width:1000px;max-width:96vw;">' +
         '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;"><h2 style="margin:0;">📋 Rezervace lokalit</h2><button class="btn btn-secondary" onclick="closeModal()">Zavřít</button></div>' +
         '<div style="display:flex;gap:8px;margin-bottom:12px;align-items:center;"><select id="resf-status" onchange="loadReservationsRows()" style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:13px;">'+opts+'</select><button class="btn" onclick="loadReservationsRows()">↻ Obnovit</button></div>' +
@@ -4135,14 +4135,15 @@
     async function loadReservationsInto(boxId, statusSelId, summaryId){
       var box = document.getElementById(boxId); if(!box) return;
       var st = (document.getElementById(statusSelId)||{}).value || '';
+      var activeOnly = (st === '__active__');
       box.innerHTML = '<div style="color:var(--text2);padding:16px;">Načítám…</div>';
       try {
-        var r = await fetch('/api/compounder/reservations' + (st?('?status='+encodeURIComponent(st)):''), { credentials:'include' });
+        var r = await fetch('/api/compounder/reservations' + ((st && !activeOnly)?('?status='+encodeURIComponent(st)):''), { credentials:'include' });
         var rows = await r.json();
         if (summaryId) {
           var sEl = document.getElementById(summaryId);
           if (sEl) {
-            if (!st) {
+            if (!st || activeOnly) {
               var cnt = {};
               rows.forEach(function(x){ cnt[x.status] = (cnt[x.status]||0)+1; });
               sEl.innerHTML = '<div style="display:flex;gap:12px;flex-wrap:wrap;">' +
@@ -4152,6 +4153,8 @@
             } else { sEl.innerHTML = ''; }
           }
         }
+        // „Aktivní" = vše mimo zrušených a propadlých.
+        if (activeOnly) rows = rows.filter(function(x){ return x.status !== 'cancelled' && x.status !== 'expired'; });
         if(!rows.length){ box.innerHTML = '<div style="color:var(--text2);padding:16px;">Žádné rezervace.</div>'; return; }
         var h = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr><th>Vytvořeno</th><th>Lokalita</th><th>Kupující</th><th>Dny</th><th>Poplatek</th><th>Kupní cena</th><th>Stav</th><th>Lhůty</th><th>Akce</th></tr></thead><tbody>';
         rows.forEach(function(x){
@@ -4176,7 +4179,8 @@
     function loadReservationsPage(){
       var sel = document.getElementById('resf-status-page');
       if (sel && !sel.options.length) {
-        sel.innerHTML = ['<option value="">Všechny stavy</option>'].concat(Object.keys(RES_STATUS).map(function(k){ return '<option value="'+k+'">'+RES_STATUS[k]+'</option>'; })).join('');
+        sel.innerHTML = ['<option value="__active__">Aktivní (bez zrušených)</option>', '<option value="">Všechny stavy</option>'].concat(Object.keys(RES_STATUS).map(function(k){ return '<option value="'+k+'">'+RES_STATUS[k]+'</option>'; })).join('');
+        sel.value = '__active__'; // výchozí: jen aktivní
       }
       return loadReservationsInto('res-rows-page', 'resf-status-page', 'res-summary-page');
     }
