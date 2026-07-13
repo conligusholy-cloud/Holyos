@@ -3726,14 +3726,16 @@ async function _buildPaymentCtx(resId) {
     const rest = Math.max(0, resv.purchase_price - (resv.fee_total || 0));
     items.push({ label: tr.buy + ' — ' + resv.kiosk_code, amount: rest, currency: cur, due: resv.reserved_until, vs });
   }
-  return { resv, bank, items, lang, tr, buyer: { name: resv.buyer_name, email: resv.buyer_email, phone: resv.buyer_phone } };
+  let eurRate = 25;
+  try { const fx = await fxRatesCzk(); if (fx && fx.EUR) eurRate = fx.EUR; } catch (e) {}
+  return { resv, bank, items, lang, tr, eurRate, buyer: { name: resv.buyer_name, email: resv.buyer_email, phone: resv.buyer_phone } };
 }
 async function _payPdf(resId) {
   const ctx = await _buildPaymentCtx(resId);
   if (!ctx) return null;
   return paymentInstructions.generatePaymentInstructionsPdf({
     title: ctx.tr.title + ' ' + ctx.resv.kiosk_code,
-    buyer: ctx.buyer, items: ctx.items, bank: ctx.bank, lang: ctx.lang,
+    buyer: ctx.buyer, items: ctx.items, bank: ctx.bank, lang: ctx.lang, eurRate: ctx.eurRate,
   });
 }
 router.get('/reservations/:id(\\d+)/payment-instructions.pdf', requireAuth, async (req, res, next) => {
