@@ -1451,7 +1451,8 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
       return;
     }
     var days = Math.max(1, parseInt((document.getElementById("res-days")||{}).value,10)||1);
-    fetch("/api/compounder/portal/reserve",{ method:"POST", credentials:"include", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ t: tok, code: o.code, days: days, totalPrice: o.totalPrice, buyer: buyer }) })
+    var _resLang = ""; try { _resLang = localStorage.getItem("compounder.lang2") || ""; } catch(_){}
+    fetch("/api/compounder/portal/reserve",{ method:"POST", credentials:"include", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ t: tok, code: o.code, days: days, totalPrice: o.totalPrice, buyer: buyer, lang: _resLang || undefined, currency: (OFFERS && OFFERS.cur) || undefined }) })
       .then(function(r){ return r.json().then(function(j){ return { s:r.status, j:j }; }); })
       .then(function(x){
         if(x.j && x.j.ok){

@@ -2573,6 +2573,33 @@ function czAmountWords(n) {
   return out.join(' ');
 }
 
+// Částka slovy (anglicky), pro celé částky. 60000 → "sixty thousand".
+const _EN_ONES = ['', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen'];
+const _EN_TENS = ['', '', 'twenty', 'thirty', 'forty', 'fifty', 'sixty', 'seventy', 'eighty', 'ninety'];
+function _enTriplet(n) {
+  let s = '';
+  const h = Math.floor(n / 100), r = n % 100;
+  if (h) s += _EN_ONES[h] + ' hundred';
+  if (r) {
+    if (s) s += ' ';
+    if (r < 20) s += _EN_ONES[r];
+    else { s += _EN_TENS[Math.floor(r / 10)]; if (r % 10) s += '-' + _EN_ONES[r % 10]; }
+  }
+  return s;
+}
+function enAmountWords(n) {
+  n = Math.round(Number(n) || 0);
+  if (n <= 0) return '';
+  const out = [];
+  const mil = Math.floor(n / 1000000);
+  const th = Math.floor((n % 1000000) / 1000);
+  const rest = n % 1000;
+  if (mil) out.push(_enTriplet(mil) + ' million');
+  if (th) out.push(_enTriplet(th) + ' thousand');
+  if (rest) out.push(_enTriplet(rest));
+  return out.join(' ');
+}
+
 // Zpětné doplnění starých (rozbitých) smluv při generování PDF: zástupci dle
 // podpisů, adresa lokality ze SIS, podmínky rezervace z rezervace v DB.
 async function _enrichLegacyContract(row, fields) {
@@ -3130,6 +3157,8 @@ const reserveSchema = z.object({
   code: z.string().min(1).max(40),
   days: z.number().int().min(1).max(365),
   totalPrice: z.number().int().nonnegative().optional(),
+  lang: z.string().max(10).optional(),     // jazyk nastavený na portálu → jazyk smlouvy
+  currency: z.string().max(5).optional(),  // měna zvolená na portálu → měna ve smlouvě
   buyer: z.object({
     name: z.string().max(255).optional(),
     email: z.string().max(255).optional(),
@@ -3239,47 +3268,68 @@ router.post('/portal/reserve', async (req, res, next) => {
       });
       if (!already) {
         const our = await getOurCompany().catch(() => null);
+        // Jazyk smlouvy = jazyk nastavený na portálu; fallback jazyk leada; jinak čeština.
+        let contractLang = String(parsed.data.lang || '').toLowerCase().slice(0, 2);
+        if (!contractLang) {
+          const _lead = await prisma.compounderLead.findUnique({ where: { id: leadId }, select: { lang: true } }).catch(() => null);
+          contractLang = String((_lead && _lead.lang) || 'cs').toLowerCase().slice(0, 2);
+        }
+        const isCs = contractLang === 'cs' || !contractLang;
         // Adresu lokality a měnu vezmeme ze SIS (kiosk-values), ne z adresy zákazníka.
         const _ki = await _sisKioskInfo(code);
         const kioskLabel = _ki.label;
-        const kioskCurrency = _ki.currency;
-        const pseudoSite = { name: 'Lokalita ' + code, address: kioskLabel, pradlomat_ref: code, purchase_price: (rec.purchase_price != null) ? rec.purchase_price : null, contacts: [] };
+        // Měna smlouvy = měna zvolená na portálu; fallback měna lokality; jinak CZK.
+        const _curBody = String(parsed.data.currency || '').toUpperCase();
+        const contractCur = (['CZK', 'EUR', 'USD', 'GBP'].indexOf(_curBody) !== -1) ? _curBody : (_ki.currency || 'CZK');
+        const pseudoSite = { name: (isCs ? 'Lokalita ' : 'Location ') + code, address: kioskLabel, pradlomat_ref: code, purchase_price: (rec.purchase_price != null) ? rec.purchase_price : null, contacts: [] };
         // POZOR: getPrefill vrací { type, label, groups, values } — pole smlouvy jsou ve .values!
         let cf = {};
         try {
-          const pf = contracts.getPrefill('rezervacni', pseudoSite, our);
+          const pf = contracts.getPrefill('rezervacni', pseudoSite, our, contractLang);
           cf = Object.assign({}, (pf && pf.values) || {});
-        } catch (e) { cf = {}; }
+        } catch (e) { cf = { _lang: isCs ? 'cs' : contractLang }; }
+        if (!isCs) cf._lang = contractLang;
         // Zájemce = zákazník (údaje z rezervačního formuláře v portálu).
         cf.buyer_name = rec.buyer_name || cf.buyer_name || '';
         cf.buyer_address = rec.buyer_address || cf.buyer_address || '';
         cf.buyer_ico = rec.buyer_ico || cf.buyer_ico || '';
         // Podmínky rezervace z právě vytvořené rezervace.
-        cf.location_name = kioskLabel ? (code + ' — ' + kioskLabel) : ('Lokalita ' + code);
+        cf.location_name = kioskLabel ? (code + ' — ' + kioskLabel) : ((isCs ? 'Lokalita ' : 'Location ') + code);
         if (kioskLabel) cf.location_address = kioskLabel;
-        // Poplatek = dny × sazba (v CZK). Když je lokalita v jiné měně, přepočteme
-        // aktuálním kurzem ČNB a do smlouvy dáme částku i měnu lokality.
+        // Poplatek = dny × sazba (v CZK). Když je zvolená jiná měna, přepočteme
+        // aktuálním kurzem ČNB a do smlouvy dáme částku i měnu.
         if (rec.fee_total != null) {
-          cf.reservation_fee = Math.round(rec.fee_total).toLocaleString('cs-CZ');
-          cf.reservation_fee_currency = 'Kč';
-          const _words = czAmountWords(rec.fee_total);
-          if (_words) cf.reservation_fee_words = _words + ' korun českých';
-          if (kioskCurrency !== 'CZK') {
+          let feeAmount = Math.round(rec.fee_total);
+          let feeCur = isCs ? 'Kč' : 'CZK';
+          if (contractCur !== 'CZK') {
             try {
               const rates = await fxRatesCzk();
-              const rate = rates && rates[kioskCurrency];
+              const rate = rates && rates[contractCur];
               if (rate > 0) {
-                cf.reservation_fee = (Math.round((rec.fee_total / rate) * 100) / 100).toLocaleString('cs-CZ');
-                cf.reservation_fee_currency = kioskCurrency;
-                cf.reservation_fee_words = ''; // slovy jen pro Kč
+                feeAmount = Math.round((rec.fee_total / rate) * 100) / 100;
+                feeCur = contractCur;
               }
             } catch (e) { /* zůstane CZK */ }
+          }
+          cf.reservation_fee = feeAmount.toLocaleString('cs-CZ');
+          cf.reservation_fee_currency = feeCur;
+          // Částka slovy: česky pro Kč, anglicky pro EN smlouvy (jen celé částky).
+          cf.reservation_fee_words = '';
+          if (Number.isInteger(feeAmount)) {
+            if (isCs && (feeCur === 'Kč' || feeCur === 'CZK')) {
+              const w = czAmountWords(feeAmount);
+              if (w) cf.reservation_fee_words = w + ' korun českých';
+            } else if (!isCs) {
+              const CURRENCY_WORDS_EN = { CZK: 'Czech crowns', EUR: 'euros', USD: 'US dollars', GBP: 'pounds sterling', 'Kč': 'Czech crowns' };
+              const w = enAmountWords(feeAmount);
+              if (w) cf.reservation_fee_words = w + ' ' + (CURRENCY_WORDS_EN[feeCur] || feeCur);
+            }
           }
         }
         // Splatnost poplatku = den podpisu smlouvy (prázdné fee_due_days → „v den podpisu").
         cf.fee_due_days = '';
-        cf.reservation_period = days + ' dní';
-        cf.reserved_until = reservedUntil.toLocaleDateString('cs-CZ');
+        cf.reservation_period = days + (isCs ? ' dní' : ' days');
+        cf.reserved_until = reservedUntil.toLocaleDateString(isCs ? 'cs-CZ' : 'en-GB');
         const token = crypto.randomBytes(24).toString('hex');
         const contract = await prisma.compoundingContract.create({
           data: { kiosk_code: code, kiosk_label: null, type: 'rezervacni', status: 'k_autorizaci', fields: cf, share_token: token, share_expires_at: new Date(Date.now() + 30 * 24 * 3600 * 1000) },
