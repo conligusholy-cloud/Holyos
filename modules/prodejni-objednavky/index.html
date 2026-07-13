@@ -3134,7 +3134,7 @@
           if (cForCode.length) {
             html += '<div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;">' + cForCode.map(function(c) {
               var col = (c.status === 'podepsano') ? '#10b981' : (c.status === 'k_autorizaci' || c.status === 'k_podpisu' ? '#eab308' : 'var(--text2)');
-              return '<span style="font-size:11.5px;border:1px solid var(--border);border-radius:999px;padding:2px 9px;color:' + col + ';">' + (CT[c.type] || c.type) + ': ' + (CS[c.status] || c.status) + '</span>';
+              return '<span onclick="event.stopPropagation();contractPdfById(' + c.id + ')" title="Stáhnout PDF smlouvy" style="cursor:pointer;font-size:11.5px;border:1px solid var(--border);border-radius:999px;padding:2px 9px;color:' + col + ';">' + (CT[c.type] || c.type) + ': ' + (CS[c.status] || c.status) + ' ⬇</span>';
             }).join('') + '</div>';
             // Smlouvy čekající na NÁŠ podpis (autorizace nebo countersign) → tlačítko na podpis přímo z HolyOS.
             cForCode.filter(function(c){ return c.status === 'k_autorizaci' || c.status === 'k_podpisu'; }).forEach(function(c){
