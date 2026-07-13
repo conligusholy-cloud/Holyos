@@ -4137,7 +4137,7 @@
           else if(x.status==='active'){ act = '<button class="btn" style="padding:4px 8px;font-size:12px;" onclick="resAction('+x.id+',\'purchase_paid\')">Kupní cena přišla</button> <button class="btn btn-secondary" style="padding:4px 8px;font-size:12px;" onclick="resAction('+x.id+',\'cancel\')">Zrušit</button>'; }
           else { act = '<span style="color:var(--text2);font-size:12px;">'+(x.cancel_reason?kvEsc(x.cancel_reason):'—')+'</span>'; }
           var buyer = kvEsc(x.buyer_name||'') + (x.buyer_phone?('<br><span style="color:var(--text2);font-size:11px;">'+kvEsc(x.buyer_phone)+'</span>'):'');
-          var lhuty = 'Podpis: '+resDate(x.sign_until)+'<br>Poplatek: '+resDate(x.fee_until)+'<br>Konec: '+resDate(x.reserved_until);
+          var lhuty = (x.signed_at ? ('Podepsáno: '+resDate(x.signed_at)) : ('Podpis do: '+resDate(x.sign_until)))+'<br>Poplatek: '+resDate(x.fee_until)+'<br>Konec: '+resDate(x.reserved_until);
           var scol = x.status==='completed'?'#10b981':((x.status==='cancelled'||x.status==='expired')?'#ef4444':'#eab308');
           var _cEsc = kvEsc(x.kiosk_code||'').replace(/'/g,'&#39;');
           var docsBtn = '<button class="btn btn-secondary" style="padding:4px 8px;font-size:12px;" onclick="openContractPicker(\''+_cEsc+'\')">📄 Smlouvy</button> ';
