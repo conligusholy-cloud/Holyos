@@ -2499,6 +2499,15 @@ function _flattenLegacyContractFields(f) {
   Object.keys(f).forEach((k) => {
     if (k !== 'type' && k !== 'label' && k !== 'groups' && k !== 'values') flat[k] = f[k];
   });
+  // U starých rozbitých smluv doplníme chybějící údaje poskytovatele (Best Series).
+  const sellerFallback = {
+    seller_name: 'BEST SERIES s.r.o.',
+    seller_address: 'Zámostní 1155/27, Slezská Ostrava, 71000 Ostrava',
+    seller_ico: '05643724',
+    seller_dic: 'CZ05643724',
+    seller_bank: '221913663/0600',
+  };
+  Object.keys(sellerFallback).forEach((k) => { if (!flat[k]) flat[k] = sellerFallback[k]; });
   return flat;
 }
 

@@ -219,12 +219,12 @@ const SCHEMAS = {
 
 function ourDefaults(our) {
   return {
-    seller_name: our?.name || 'Best Series s.r.o.',
-    seller_address: joinAddr(our),
+    seller_name: our?.name || 'BEST SERIES s.r.o.',
+    seller_address: joinAddr(our) || 'Zámostní 1155/27, Slezská Ostrava, 71000 Ostrava',
     seller_ico: our?.ico || '05643724',
-    seller_dic: our?.dic || '',
+    seller_dic: our?.dic || 'CZ05643724',
     seller_rep: '',
-    seller_bank: our?.iban || our?.bank_account || '',
+    seller_bank: our?.iban || our?.bank_account || '221913663/0600',
   };
 }
 
