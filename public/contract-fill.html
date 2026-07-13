@@ -44,6 +44,8 @@
         </div>
         <label>Jméno podepisujícího</label>
         <input id="signer" type="text" placeholder="Jméno a příjmení">
+        <label>Místo podpisu <span style="color:#eab308">*</span></label>
+        <input id="place" type="text" placeholder="např. Praha" maxlength="120" required>
         <label style="display:flex;align-items:flex-start;gap:10px;color:#e8e8ea;font-size:13px;margin-top:12px;cursor:pointer"><input type="checkbox" id="consent" style="width:auto;margin-top:2px"> Prohlašuji, že jsem se seznámil(a) s obsahem smlouvy a elektronicky ji podepisuji.</label>
       </div>
       <button id="submit" type="button" onclick="signContract()">Podepsat smlouvu</button>
@@ -64,6 +66,7 @@
   var token = parts[parts.length - 1] || '';
   var API = '/api/compounder/contracts/public/' + encodeURIComponent(token);
   var schemaFields = [];
+  var REQUIRED_FIELDS = ['buyer_address', 'buyer_bank']; // povinná pole hlavičky
 
   function esc(s) { return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
@@ -88,8 +91,9 @@
       var form = document.getElementById('form');
       form.innerHTML = schemaFields.map(function (f) {
         var val = (d.values && d.values[f.name] != null) ? d.values[f.name] : '';
-        return '<label>' + esc(f.label) + '</label>' +
-          '<input id="fld_' + esc(f.name) + '" type="text" value="' + esc(val) + '">';
+        var req = (REQUIRED_FIELDS.indexOf(f.name) !== -1);
+        return '<label>' + esc(f.label) + (req ? ' <span style="color:#eab308">*</span>' : '') + '</label>' +
+          '<input id="fld_' + esc(f.name) + '" type="text" value="' + esc(val) + '"' + (req ? ' required' : '') + '>';
       }).join('');
       hide('loading'); show('content');
       initSigPad();
@@ -133,19 +137,32 @@
     var msg = document.getElementById('msg');
     msg.textContent = '';
     var signer = (document.getElementById('signer').value || '').trim();
+    var place = ((document.getElementById('place') || {}).value || '').trim();
     var consent = document.getElementById('consent').checked;
     if (!sigDirty) { msg.className = 'msg err'; msg.textContent = 'Prosím nakreslete svůj podpis.'; return; }
     if (!signer) { msg.className = 'msg err'; msg.textContent = 'Zadejte prosím jméno podepisujícího.'; return; }
+    if (!place) { msg.className = 'msg err'; msg.textContent = 'Vyplňte prosím místo podpisu.'; return; }
     if (!consent) { msg.className = 'msg err'; msg.textContent = 'Potvrďte prosím souhlas s podpisem.'; return; }
     var fields = {};
     schemaFields.forEach(function (f) { var el = document.getElementById('fld_' + f.name); if (el) fields[f.name] = el.value; });
+    // Povinná pole hlavičky (adresa, bankovní spojení)
+    for (var i = 0; i < REQUIRED_FIELDS.length; i++) {
+      var rf = REQUIRED_FIELDS[i];
+      var rfEl = document.getElementById('fld_' + rf);
+      if (rfEl && !String(rfEl.value || '').trim()) {
+        var lbl = (schemaFields.filter(function (f) { return f.name === rf; })[0] || {}).label || rf;
+        msg.className = 'msg err'; msg.textContent = 'Vyplňte prosím povinné pole: ' + lbl + '.';
+        rfEl.focus();
+        return;
+      }
+    }
     var signature = sigCanvas.toDataURL('image/png');
     btn.disabled = true; btn.textContent = 'Podepisuji…';
     try {
       var r = await fetch(API + '/sign', {
         method: 'POST', credentials: 'omit',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fields: fields, signer_name: signer, signature: signature, consent: true }),
+        body: JSON.stringify({ fields: fields, signer_name: signer, signature: signature, consent: true, place_signed: place }),
       });
       if (!r.ok) { var d = await r.json().catch(function(){return{};}); throw new Error(d.error || 'http'); }
       document.getElementById('done').querySelector('.sub').textContent = 'Váš podpis jsme přijali. Smlouvu dokončíme podpisem za Best Series a poté vám ji zašleme e-mailem.';

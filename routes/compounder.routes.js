@@ -2769,7 +2769,14 @@ router.post('/contracts/public/:token/sign', async (req, res, next) => {
     // Zájemce zastoupen(a) = podepisující zákazník; místo podpisu z formuláře.
     if (!merged.buyer_rep) merged.buyer_rep = signerName;
     const placeSignedCust = String(b.place_signed || '').trim().slice(0, 120);
-    if (placeSignedCust && !merged.place_signed) merged.place_signed = placeSignedCust;
+    if (placeSignedCust) merged.place_signed = placeSignedCust;
+    // Povinné údaje: adresa, bankovní spojení a místo podpisu.
+    if (!String(merged.buyer_address || '').trim() || !String(merged.buyer_bank || '').trim()) {
+      return res.status(400).json({ error: 'Vyplňte prosím adresu a bankovní spojení.' });
+    }
+    if (!String(merged.place_signed || '').trim()) {
+      return res.status(400).json({ error: 'Vyplňte prosím místo podpisu.' });
+    }
     // Hash obsahu smlouvy (bez podpisu) jako důkaz integrity.
     const noSig = Object.assign({}, merged); delete noSig._signature;
     const contentHash = crypto.createHash('sha256').update(JSON.stringify({ type: row.type, kiosk: row.kiosk_code, fields: noSig })).digest('hex');

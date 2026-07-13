@@ -371,7 +371,13 @@ function sigCell(label, sig) {
   return '<div class="box"><div class="rule">' + esc(label) + '</div></div>';
 }
 function sigBlock(leftLabel, rightLabel, place, leftSig, rightSig) {
-  return '<p class="place">V ' + v(place, 18) + ' dne ..............................</p>\n  <div class="sig">' + sigCell(leftLabel, leftSig) + sigCell(rightLabel, rightSig) + '</div>';
+  // Datum podpisu = datum posledního z podpisů (kdy je smlouva uzavřena).
+  let dt = null;
+  [leftSig, rightSig].forEach((s) => {
+    if (s && s.signed_at) { const t = new Date(s.signed_at); if (!isNaN(t) && (!dt || t > dt)) dt = t; }
+  });
+  const dateStr = dt ? esc(dt.toLocaleDateString('cs-CZ')) : '..............................';
+  return '<p class="place">V ' + v(place, 18) + ' dne ' + dateStr + '</p>\n  <div class="sig">' + sigCell(leftLabel, leftSig) + sigCell(rightLabel, rightSig) + '</div>';
 }
 
 function renderKupni(d) {
