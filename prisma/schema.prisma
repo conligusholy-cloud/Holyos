@@ -5558,6 +5558,10 @@ model LocationReservation {
   signed_at        DateTime?
   cancel_reason    String?   @db.VarChar(200)
 
+  // Pokyny k platbě — kolikrát odeslány (e-mail/WhatsApp) + kdy naposledy.
+  pay_instr_sent_count   Int       @default(0)
+  pay_instr_last_sent_at DateTime?
+
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
 

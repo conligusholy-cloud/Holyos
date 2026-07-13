@@ -3797,7 +3797,8 @@ router.post('/reservations/:id(\\d+)/payment-instructions/email', requireAuth, a
       link: portalLink, linkLabel: payPortalBtn(ctx.lang),
       attachments: [{ filename: 'pokyny-k-platbe.pdf', content: pdf, contentType: 'application/pdf' }],
     });
-    res.json({ ok: true });
+    const upd = await prisma.locationReservation.update({ where: { id: Number(req.params.id) }, data: { pay_instr_sent_count: { increment: 1 }, pay_instr_last_sent_at: new Date() }, select: { pay_instr_sent_count: true, pay_instr_last_sent_at: true } });
+    res.json({ ok: true, pay_instr_sent_count: upd.pay_instr_sent_count, pay_instr_last_sent_at: upd.pay_instr_last_sent_at });
   } catch (err) { next(err); }
 });
 router.post('/reservations/:id(\\d+)/payment-instructions/whatsapp', requireAuth, async (req, res, next) => {
@@ -3808,7 +3809,8 @@ router.post('/reservations/:id(\\d+)/payment-instructions/whatsapp', requireAuth
     const url = portalBase() + '/api/compounder/reservations/pay/' + makePayToken(Number(req.params.id)) + '/pdf';
     const msg = ctx.tr.wa(ctx.buyer.name || '', ctx.resv.kiosk_code, url);
     let wa = String(ctx.buyer.phone).replace(/[^\d]/g, ''); if (wa.startsWith('00')) wa = wa.slice(2);
-    res.json({ ok: true, phone: wa, message: msg, url });
+    const upd = await prisma.locationReservation.update({ where: { id: Number(req.params.id) }, data: { pay_instr_sent_count: { increment: 1 }, pay_instr_last_sent_at: new Date() }, select: { pay_instr_sent_count: true, pay_instr_last_sent_at: true } });
+    res.json({ ok: true, phone: wa, message: msg, url, pay_instr_sent_count: upd.pay_instr_sent_count, pay_instr_last_sent_at: upd.pay_instr_last_sent_at });
   } catch (err) { next(err); }
 });
 

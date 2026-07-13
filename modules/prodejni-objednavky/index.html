@@ -4170,8 +4170,11 @@
           var scol = x.status==='completed'?'#10b981':((x.status==='cancelled'||x.status==='expired')?'#ef4444':'#eab308');
           var _cEsc = kvEsc(x.kiosk_code||'').replace(/'/g,'&#39;');
           var docsBtn = '<button class="btn btn-secondary" style="padding:4px 8px;font-size:12px;" onclick="openContractPicker(\''+_cEsc+'\')">📄 Smlouvy</button> ';
+          var paySent = (x.pay_instr_sent_count>0)
+            ? '<div style="font-size:11px;color:#10b981;margin-bottom:4px;">✅ Pokyny odeslány '+x.pay_instr_sent_count+'× · '+(x.pay_instr_last_sent_at?new Date(x.pay_instr_last_sent_at).toLocaleString('cs-CZ'):'')+'</div>'
+            : '<div style="font-size:11px;color:var(--text2);margin-bottom:4px;">Pokyny zatím neodeslány</div>';
           var payBtns = (x.status==='reserved'||x.status==='active')
-            ? '<button class="btn btn-secondary" style="padding:4px 8px;font-size:12px;" onclick="window.open(\'/api/compounder/reservations/'+x.id+'/payment-instructions.pdf\',\'_blank\')">💳 Pokyny</button> '
+            ? paySent + '<button class="btn btn-secondary" style="padding:4px 8px;font-size:12px;" onclick="window.open(\'/api/compounder/reservations/'+x.id+'/payment-instructions.pdf\',\'_blank\')">💳 Pokyny</button> '
               + '<button class="btn btn-secondary" style="padding:4px 8px;font-size:12px;" title="Poslat pokyny e-mailem" onclick="resPayEmail('+x.id+',this)">✉️</button> '
               + '<button class="btn" style="padding:4px 8px;font-size:12px;background:#25D366;color:#0a2e17;font-weight:700;" title="Poslat pokyny na WhatsApp" onclick="resPayWhatsApp('+x.id+',this)">🟢</button> '
             : '';
@@ -4211,6 +4214,7 @@
         var j = await r.json().catch(function(){return{};});
         if(!r.ok) throw new Error(j.error||('HTTP '+r.status));
         alert('Pokyny k platbě odeslány e-mailem.');
+        try{ loadReservationsPage(); loadReservationsRows(); }catch(_){}
       } catch(e){ alert('Odeslání selhalo: '+(e.message||'')); }
       finally { if(btn) btn.disabled=false; }
     }
@@ -4221,6 +4225,7 @@
         var j = await r.json().catch(function(){return{};});
         if(!r.ok) throw new Error(j.error||('HTTP '+r.status));
         window.open('https://wa.me/'+j.phone+'?text='+encodeURIComponent(j.message||''), '_blank');
+        try{ loadReservationsPage(); loadReservationsRows(); }catch(_){}
       } catch(e){ alert('Nepodařilo se připravit WhatsApp: '+(e.message||'')); }
       finally { if(btn) btn.disabled=false; }
     }
