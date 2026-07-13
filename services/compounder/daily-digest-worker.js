@@ -147,11 +147,36 @@ function buildText(d) {
   return { title: `📊 Denní hodnocení leadů — ${d.activeCount} aktivních`, body: lines.join('\n') };
 }
 
+// Vytvoří ve Velíně čitelnou položku (úkol s celým textem) — push nese jen náhled,
+// tady si Jan/Tomáš přečtou celé hodnocení v záložce „Dnes".
+async function createVelinItems(title, body) {
+  let personIds = [];
+  try { personIds = await notify.resolveRecipientPersonIds(prisma); } catch (e) { personIds = []; }
+  if (!Array.isArray(personIds) || !personIds.length) return 0;
+  const today = startOfToday();
+  let created = 0;
+  for (const pid of personIds) {
+    try {
+      const plan = await prisma.dailyPlan.upsert({
+        where: { person_id_date: { person_id: pid, date: today } },
+        create: { person_id: pid, date: today, generated_by: 'manager', status: 'published' },
+        update: {},
+      });
+      await prisma.taskAssignment.create({
+        data: { daily_plan_id: plan.id, person_id: pid, created_by: 'manager', source: 'manager', title: title, description: body, priority: 3, status: 'proposed' },
+      });
+      created += 1;
+    } catch (e) { console.error('[compounder-digest] velin item person ' + pid + ':', e.message); }
+  }
+  return created;
+}
+
 async function runDigest() {
   try {
     const d = await computeDigest();
     const msg = buildText(d);
     await notify.notifyOwnersMessage(prisma, { title: msg.title, body: msg.body, data: { type: 'compounder_digest' } });
+    await createVelinItems(msg.title, msg.body);
     _lastResult = { ok: true, at: new Date(), activeCount: d.activeCount };
     console.log(`[compounder-digest] Odesláno denní hodnocení: ${d.activeCount} aktivních leadů.`);
     return _lastResult;
