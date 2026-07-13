@@ -203,8 +203,9 @@ const SCHEMAS = {
     ]},
     { key: 'conditions', title: 'Podmínky rezervace', fields: [
       { name: 'reservation_fee', label: 'Rezervační poplatek / záloha', type: 'text' },
+      { name: 'reservation_fee_currency', label: 'Měna poplatku', type: 'text' },
       { name: 'reservation_fee_words', label: 'Poplatek slovy', type: 'text' },
-      { name: 'fee_due_days', label: 'Splatnost poplatku (dní)', type: 'text' },
+      { name: 'fee_due_days', label: 'Splatnost poplatku (dní; prázdné = v den podpisu)', type: 'text' },
       { name: 'reservation_period', label: 'Doba rezervace', type: 'text' },
       { name: 'reserved_until', label: 'Rezervováno do', type: 'text' },
       { name: 'credit_to_price', label: 'Započtení poplatku', type: 'text' },
@@ -303,8 +304,9 @@ function buildDefaults(type, site, our) {
     location_address: addr,
     reservation_desc: 'Rezervace konkrétní lokality pro budoucí umístění a provoz kiosku (prádlomatu) zájemcem.',
     reservation_fee: site?.deposit != null ? String(site.deposit) : '',
+    reservation_fee_currency: 'Kč',
     reservation_fee_words: '',
-    fee_due_days: '3',
+    fee_due_days: '',
     reservation_period: '3 dny (72 hodin)',
     reserved_until: '',
     credit_to_price: 'Rezervační poplatek se v případě uzavření kupní smlouvy započítává na kupní cenu.',
@@ -615,7 +617,7 @@ function renderRezervacni(d) {
 
     <h2>Článek II — Rezervační poplatek</h2>
     <ol>
-      <li>Zájemce se zavazuje uhradit rezervační poplatek ve výši <strong>${v(d.reservation_fee, 12)} Kč</strong> (slovy: ${v(d.reservation_fee_words)}) se splatností ${v(d.fee_due_days, 4)} dní od podpisu této smlouvy.</li>
+      <li>Zájemce se zavazuje uhradit rezervační poplatek ve výši <strong>${v(d.reservation_fee, 12)} ${esc(d.reservation_fee_currency || 'Kč')}</strong> (slovy: ${v(d.reservation_fee_words)}) se splatností ${d.fee_due_days ? (v(d.fee_due_days, 4) + ' dní od podpisu této smlouvy') : 'v den podpisu této smlouvy'}.</li>
       <li>${v(d.credit_to_price)}</li>
     </ol>
 

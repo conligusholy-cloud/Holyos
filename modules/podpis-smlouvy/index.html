@@ -41,6 +41,8 @@
         <canvas id="sigpad" style="width:100%;height:180px;display:block;touch-action:none;border-radius:8px"></canvas>
         <button type="button" onclick="clearSig()" style="position:absolute;top:6px;right:6px;padding:5px 10px;font-size:12px;background:#0f1115;color:#f2f3f5;border:none;border-radius:6px">Vymazat</button>
       </div>
+      <label for="place">Místo podpisu</label>
+      <input type="text" id="place" placeholder="např. Ostrava" maxlength="120">
       <label style="display:flex;align-items:flex-start;gap:10px;color:#f2f3f5;font-size:13px;margin-top:12px;cursor:pointer"><input type="checkbox" id="consent" style="width:auto;margin-top:2px"> Podepisuji tuto smlouvu za Best Series s.r.o.</label>
       <button class="btn" id="submit" onclick="sign()">Podepsat za Best Series</button>
       <div class="msg" id="msg"></div>
@@ -116,7 +118,7 @@
     if(!document.getElementById('consent').checked){ msg.className='msg err'; msg.textContent='Potvrďte prosím souhlas.'; return; }
     btn.disabled=true; btn.textContent='Podepisuji…';
     try {
-      var r = await fetch(API + '/countersign', { method:'POST', credentials:'include', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ signature: cv.toDataURL('image/png'), consent:true }) });
+      var r = await fetch(API + '/countersign', { method:'POST', credentials:'include', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ signature: cv.toDataURL('image/png'), consent:true, place_signed: (document.getElementById('place')||{}).value||'' }) });
       if(!r.ok){ var d=await r.json().catch(function(){return{};}); throw new Error(d.error||'chyba'); }
       hide('content'); show('done');
     } catch(e){ btn.disabled=false; btn.textContent='Podepsat za Best Series'; msg.className='msg err'; msg.textContent='Podpis selhal: '+(e.message||''); }

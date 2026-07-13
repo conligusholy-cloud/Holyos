@@ -1646,6 +1646,39 @@ router.get('/kiosk-transactions/:code', requireAuth, async (req, res, next) => {
   }
 });
 
+// ─── SIS: adresa/měna lokality podle kódu kiosku ────────────────────────────
+// Bere z cache kiosk-values; když je prošlá, načte čerstvě ze SIS (klíč na serveru).
+async function _sisKiosks() {
+  if (_kioskCache.data && (Date.now() - _kioskCache.at) < KIOSK_CACHE_MS && Array.isArray(_kioskCache.data.kiosks)) {
+    return _kioskCache.data.kiosks;
+  }
+  const apiKey = process.env.SIS_KIOSK_API_KEY;
+  const stale = (_kioskCache.data && Array.isArray(_kioskCache.data.kiosks)) ? _kioskCache.data.kiosks : [];
+  if (!apiKey) return stale;
+  const apiUrl = process.env.SIS_KIOSK_API_URL
+    || 'https://sis-test.infinitygrid.cloud/api/public/kiosk-values';
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+    const r = await fetch(apiUrl, { headers: { 'X-API-Key': apiKey, 'Accept': 'application/json' }, signal: controller.signal });
+    clearTimeout(timeout);
+    if (!r.ok) return stale;
+    const payload = await r.json();
+    return Array.isArray(payload.kiosks) ? payload.kiosks : stale;
+  } catch (e) { return stale; }
+}
+// → { label, currency } lokality; prázdné label = kiosek v SIS nenalezen.
+async function _sisKioskInfo(code) {
+  try {
+    const ks = await _sisKiosks();
+    const kk = ks.find((k) => k.code === code);
+    return {
+      label: (kk && kk.label) ? String(kk.label) : '',
+      currency: (kk && kk.currency) ? String(kk.currency).toUpperCase() : 'CZK',
+    };
+  } catch (e) { return { label: '', currency: 'CZK' }; }
+}
+
 // ─── Nastavení modulu Compounding (ceník V2/V3/V4 + cena lokality) ─────────
 // Uloženo jako jeden JSON AppSetting (klíč 'compounding.settings'), sdílené pro
 // všechny uživatele. Ceny ceníku se zadávají v EUR bez DPH (CZK se dopočítá
@@ -2515,7 +2548,15 @@ router.post('/contracts/:id(\\d+)/pdf', requireAuth, async (req, res, next) => {
   try {
     const row = await prisma.compoundingContract.findUnique({ where: { id: Number(req.params.id) } });
     if (!row) return res.status(404).json({ error: 'Smlouva nenalezena' });
-    const fields = (req.body && req.body.fields) || _flattenLegacyContractFields(row.fields);
+    let fields = (req.body && req.body.fields) || _flattenLegacyContractFields(row.fields);
+    // U starých rozbitých smluv byla adresa lokality omylem adresa zákazníka → oprav ze SIS.
+    if (!(req.body && req.body.fields) && row.fields && row.fields.groups && row.kiosk_code) {
+      const ki = await _sisKioskInfo(row.kiosk_code);
+      if (ki.label) {
+        fields.location_name = row.kiosk_code + ' — ' + ki.label;
+        fields.location_address = ki.label;
+      }
+    }
     let pdf;
     try {
       pdf = await contracts.generateContractPdf(row.type, fields);
@@ -2584,8 +2625,16 @@ router.get('/contracts/public/:token/pdf', async (req, res, next) => {
     if (row.share_expires_at && new Date(row.share_expires_at) < new Date()) {
       return res.status(410).json({ error: 'Platnost odkazu vypršela' });
     }
+    const pubFields = _flattenLegacyContractFields(row.fields);
+    if (row.fields && row.fields.groups && row.kiosk_code) {
+      const ki = await _sisKioskInfo(row.kiosk_code);
+      if (ki.label) {
+        pubFields.location_name = row.kiosk_code + ' — ' + ki.label;
+        pubFields.location_address = ki.label;
+      }
+    }
     let pdf;
-    try { pdf = await contracts.generateContractPdf(row.type, _flattenLegacyContractFields(row.fields)); }
+    try { pdf = await contracts.generateContractPdf(row.type, pubFields); }
     catch (e) { console.error('[contract public pdf]', e); return res.status(500).json({ error: 'PDF se nepodařilo vytvořit' }); }
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', 'inline; filename="' + _safeContractName(contracts.TYPE_LABEL[row.type]) + '.pdf"');
@@ -2659,6 +2708,10 @@ router.post('/contracts/public/:token/sign', async (req, res, next) => {
     const incoming = (b.fields && typeof b.fields === 'object') ? b.fields : {};
     const merged = Object.assign({}, row.fields || {});
     Object.keys(incoming).forEach((k) => { if (allowed.has(k)) merged[k] = String(incoming[k] == null ? '' : incoming[k]).slice(0, 500); });
+    // Zájemce zastoupen(a) = podepisující zákazník; místo podpisu z formuláře.
+    if (!merged.buyer_rep) merged.buyer_rep = signerName;
+    const placeSignedCust = String(b.place_signed || '').trim().slice(0, 120);
+    if (placeSignedCust && !merged.place_signed) merged.place_signed = placeSignedCust;
     // Hash obsahu smlouvy (bez podpisu) jako důkaz integrity.
     const noSig = Object.assign({}, merged); delete noSig._signature;
     const contentHash = crypto.createHash('sha256').update(JSON.stringify({ type: row.type, kiosk: row.kiosk_code, fields: noSig })).digest('hex');
@@ -2739,6 +2792,10 @@ router.post('/contracts/:id(\\d+)/countersign', requireAuth, async (req, res, ne
     const person = req.user.person;
     const signerName = person ? ((person.first_name || '') + ' ' + (person.last_name || '')).trim() : (req.user.displayName || 'Best Series');
     const merged = Object.assign({}, row.fields || {});
+    // Poskytovatel zastoupen(a) = podepisující za Best Series; místo podpisu z formuláře.
+    if (!merged.seller_rep) merged.seller_rep = signerName;
+    const placeSigned = String(b.place_signed || '').trim().slice(0, 120);
+    if (placeSigned) merged.place_signed = placeSigned;
     const signedAt = new Date();
     merged._signature_bestseries = {
       name: signerName, image: signature, signed_at: signedAt.toISOString(),
@@ -3117,13 +3174,10 @@ router.post('/portal/reserve', async (req, res, next) => {
       });
       if (!already) {
         const our = await getOurCompany().catch(() => null);
-        // Adresu lokality vezmeme z cache SIS (kiosk-values), ne z adresy zákazníka.
-        let kioskLabel = '';
-        try {
-          const ks = (_kioskCache && _kioskCache.data && Array.isArray(_kioskCache.data.kiosks)) ? _kioskCache.data.kiosks : [];
-          const kk = ks.find((k) => k.code === code);
-          kioskLabel = (kk && kk.label) ? String(kk.label) : '';
-        } catch (e) {}
+        // Adresu lokality a měnu vezmeme ze SIS (kiosk-values), ne z adresy zákazníka.
+        const _ki = await _sisKioskInfo(code);
+        const kioskLabel = _ki.label;
+        const kioskCurrency = _ki.currency;
         const pseudoSite = { name: 'Lokalita ' + code, address: kioskLabel, pradlomat_ref: code, purchase_price: (rec.purchase_price != null) ? rec.purchase_price : null, contacts: [] };
         // POZOR: getPrefill vrací { type, label, groups, values } — pole smlouvy jsou ve .values!
         let cf = {};
@@ -3138,8 +3192,24 @@ router.post('/portal/reserve', async (req, res, next) => {
         // Podmínky rezervace z právě vytvořené rezervace.
         cf.location_name = kioskLabel ? (code + ' — ' + kioskLabel) : ('Lokalita ' + code);
         if (kioskLabel) cf.location_address = kioskLabel;
-        if (rec.fee_total != null) cf.reservation_fee = Math.round(rec.fee_total).toLocaleString('cs-CZ');
-        cf.fee_due_days = String(payDays);
+        // Poplatek = dny × sazba (v CZK). Když je lokalita v jiné měně, přepočteme
+        // aktuálním kurzem ČNB a do smlouvy dáme částku i měnu lokality.
+        if (rec.fee_total != null) {
+          cf.reservation_fee = Math.round(rec.fee_total).toLocaleString('cs-CZ');
+          cf.reservation_fee_currency = 'Kč';
+          if (kioskCurrency !== 'CZK') {
+            try {
+              const rates = await fxRatesCzk();
+              const rate = rates && rates[kioskCurrency];
+              if (rate > 0) {
+                cf.reservation_fee = (Math.round((rec.fee_total / rate) * 100) / 100).toLocaleString('cs-CZ');
+                cf.reservation_fee_currency = kioskCurrency;
+              }
+            } catch (e) { /* zůstane CZK */ }
+          }
+        }
+        // Splatnost poplatku = den podpisu smlouvy (prázdné fee_due_days → „v den podpisu").
+        cf.fee_due_days = '';
         cf.reservation_period = days + ' dní';
         cf.reserved_until = reservedUntil.toLocaleDateString('cs-CZ');
         const token = crypto.randomBytes(24).toString('hex');
