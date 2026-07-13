@@ -3620,7 +3620,7 @@
         var _energie = _obratBez * (_enPct / 100);
         var _cistyZisk = _obratBez - _servis - _najemVal - _energie;
         var _mes = '<span style="color:var(--text2);font-size:11px;"> /měs</span>';
-        h += '<tr style="cursor:default;">' +
+        h += '<tr style="cursor:pointer;" title="Kliknutím zobrazíš transakce stroje" onclick="openKioskTransactions(\'' + codeAttr + '\')">' +
           '<td style="text-align:right;color:var(--text2);">' + (_i + 1) + '</td>' +
           '<td style="font-weight:600;white-space:nowrap;">' + kvEsc(k.code) + '</td>' +
           '<td>' + kvEsc(k.label) + '</td>' +
@@ -3642,7 +3642,7 @@
           '<td style="text-align:right;white-space:nowrap;font-weight:700;color:#10b981;">' + (_vmRow.machine != null ? kvMoney(Math.round(buybackYears * (_cistyZisk * 12) + (locVal(k) + _vmRow.machine) * (buybackPct / 100) - (locVal(k) + _vmRow.machine)), 'CZK') : '<span style="color:var(--text2);">—</span>') + '</td>' +
           '<td style="text-align:center;"><input type="checkbox" onclick="event.stopPropagation()" onchange="toggleForSale(\'' + codeAttr + '\', this.checked)"' + (cfg.forSale ? ' checked' : '') + '></td>' +
           '<td>' + badge + '</td>' +
-          '<td style="text-align:right;white-space:nowrap;">' +
+          '<td style="text-align:right;white-space:nowrap;" onclick="event.stopPropagation()">' +
             ((cfg.photos && cfg.photos.length) ? '<span title="' + cfg.photos.length + ' fotek nahráno" style="color:#10b981;margin-right:6px;font-size:12px;">📷' + cfg.photos.length + '</span>' : '<span title="Bez fotek" style="opacity:.3;margin-right:6px;font-size:12px;">📷</span>') +
             '<button class="btn" onclick="openContractPicker(\'' + codeAttr + '\')" title="Smlouvy" style="padding:4px 9px;font-size:13px;margin-right:4px;">📄</button>' +
             '<button class="btn" onclick="openKioskConfig(\'' + codeAttr + '\')" title="Nastavit verzi a nájem" style="padding:4px 9px;font-size:13px;">⚙️</button>' +
@@ -3650,9 +3650,111 @@
           '</tr>';
       });
       h += '</tbody></table></div>';
-      h += '<div style="color:var(--text2);font-size:11px;margin-top:8px;">' + (priceMode === 'roi' ? ('Cena lokality dopočtena tak, aby ROI = ' + roiPct + ' %') : ('Cena lokality = průměrný obrat s DPH × ' + months + ' měsíců')) + ' (nastavíš přes ⚙️). Zobrazeno v CZK.</div>';
+      h += '<div style="color:var(--text2);font-size:11px;margin-top:8px;">' + (priceMode === 'roi' ? ('Cena lokality dopočtena tak, aby ROI = ' + roiPct + ' %') : ('Cena lokality = průměrný obrat s DPH × ' + months + ' měsíců')) + ' (nastavíš přes ⚙️). Zobrazeno v CZK. Kliknutím na řádek zobrazíš transakce stroje.</div>';
       box.innerHTML = h;
     }
+
+    // ─── Detail stroje: transakce ze SIS API (proklik na řádek Compounding) ───
+    // Server-side proxy /api/compounder/kiosk-transactions/:code (klíč drží server).
+    var _kvTx = { code: null, label: '', offset: 0, limit: 20 };
+    function openKioskTransactions(code) {
+      var k = (_kioskData && Array.isArray(_kioskData.kiosks))
+        ? _kioskData.kiosks.filter(function(x) { return x.code === code; })[0] : null;
+      _kvTx = { code: code, label: k ? (k.label || '') : '', offset: 0, limit: 20 };
+      var html = '<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal" style="width:920px;max-width:96vw;">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px;">' +
+          '<h2 style="margin:0;">🧾 Transakce — ' + kvEsc(code) + '</h2>' +
+          '<div style="display:flex;gap:8px;">' +
+            '<button class="btn" onclick="loadKioskTransactions()" title="Znovu načíst">↻</button>' +
+            '<button class="btn btn-secondary" onclick="closeModal()">Zavřít</button>' +
+          '</div></div>' +
+        (_kvTx.label ? '<div style="color:var(--text2);font-size:13px;margin-bottom:12px;">' + kvEsc(_kvTx.label) + '</div>' : '<div style="margin-bottom:12px;"></div>') +
+        '<div id="kvtx-body"><div style="color:var(--text2);padding:16px;">Načítám transakce…</div></div>' +
+      '</div></div>';
+      document.getElementById('modal-root').innerHTML = html;
+      loadKioskTransactions();
+    }
+    window.openKioskTransactions = openKioskTransactions;
+
+    function kvTxPage(delta) {
+      _kvTx.offset = Math.max(0, _kvTx.offset + delta * _kvTx.limit);
+      loadKioskTransactions();
+    }
+    window.kvTxPage = kvTxPage;
+
+    function kvTxType(t) {
+      if (t === 'Washer') return '🫧 Pračka';
+      if (t === 'Dryer') return '🌀 Sušička';
+      return kvEsc(t || '—');
+    }
+    function kvTxStatus(s) {
+      var style = 'border-radius:6px;padding:2px 8px;font-size:11px;white-space:nowrap;';
+      if (s === 'Successful') return '<span style="background:rgba(16,185,129,0.15);color:#10b981;border:1px solid rgba(16,185,129,0.4);' + style + '">Úspěšná</span>';
+      if (s === 'Unknown') return '<span style="background:rgba(148,163,184,0.15);color:#94a3b8;border:1px solid rgba(148,163,184,0.4);' + style + '">Neznámá</span>';
+      return '<span style="background:rgba(239,68,68,0.15);color:#ef4444;border:1px solid rgba(239,68,68,0.4);' + style + '">' + kvEsc(s || '—') + '</span>';
+    }
+    // Rozpis plateb: seskupí stejné položky, např. "2× Bankovka 200 Kč, 3× Mince 10 Kč"
+    function kvTxPayments(list, cur) {
+      if (!Array.isArray(list) || !list.length) return '<span style="color:var(--text2);">—</span>';
+      var names = { Coin: 'Mince', Bill: 'Bankovka', Card: 'Karta', QR: 'QR', Credit: 'Kredit' };
+      var agg = {}, order = [];
+      list.forEach(function(p) {
+        var key = String(p.type || '?') + '|' + String(p.amount);
+        if (!(key in agg)) { agg[key] = 0; order.push(key); }
+        agg[key]++;
+      });
+      return order.map(function(key) {
+        var parts = key.split('|');
+        var nm = names[parts[0]] || kvEsc(parts[0]);
+        var n = agg[key];
+        return (n > 1 ? n + '× ' : '') + nm + ' ' + kvMoney(parseFloat(parts[1]), cur);
+      }).join(', ');
+    }
+
+    async function loadKioskTransactions() {
+      var box = document.getElementById('kvtx-body');
+      if (!box || !_kvTx.code) return;
+      box.innerHTML = '<div style="color:var(--text2);padding:16px;">Načítám transakce…</div>';
+      try {
+        var r = await fetch('/api/compounder/kiosk-transactions/' + encodeURIComponent(_kvTx.code)
+          + '?limit=' + _kvTx.limit + '&offset=' + _kvTx.offset, { credentials: 'include' });
+        var data = await r.json().catch(function() { return {}; });
+        if (!r.ok) throw new Error(data.error || ('HTTP ' + r.status));
+        var txs = Array.isArray(data.transactions) ? data.transactions : [];
+        var total = (typeof data.total === 'number' && isFinite(data.total)) ? data.total : txs.length;
+        if (!txs.length) {
+          box.innerHTML = '<div style="color:var(--text2);padding:16px;">Žádné transakce.</div>';
+          return;
+        }
+        var h = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr>' +
+          '<th>Datum a čas</th><th>Typ</th><th>Popis</th><th>Stav</th>' +
+          '<th style="text-align:right;">Částka</th><th>Platby</th></tr></thead><tbody>';
+        txs.forEach(function(t) {
+          var dt = t.datetime ? new Date(t.datetime).toLocaleString('cs-CZ') : '—';
+          h += '<tr>' +
+            '<td style="white-space:nowrap;">' + dt + '</td>' +
+            '<td style="white-space:nowrap;">' + kvTxType(t.type) + '</td>' +
+            '<td>' + kvEsc(t.description) + '</td>' +
+            '<td>' + kvTxStatus(t.status) + '</td>' +
+            '<td style="text-align:right;white-space:nowrap;font-weight:700;">' + kvMoney(t.amount, t.currency) + '</td>' +
+            '<td style="font-size:12px;color:var(--text2);">' + kvTxPayments(t.payments, t.currency) + '</td>' +
+            '</tr>';
+        });
+        h += '</tbody></table></div>';
+        var from = _kvTx.offset + 1, to = _kvTx.offset + txs.length;
+        h += '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;flex-wrap:wrap;gap:8px;">' +
+          '<div style="color:var(--text2);font-size:12px;">Zobrazeno ' + from + '–' + to + ' z ' + kvNum(total) + ' transakcí' +
+            (data.generatedAt ? (' · ' + new Date(data.generatedAt).toLocaleString('cs-CZ')) : '') + '</div>' +
+          '<div style="display:flex;gap:8px;">' +
+            '<button class="btn btn-secondary" style="padding:6px 12px;"' + (_kvTx.offset <= 0 ? ' disabled' : '') + ' onclick="kvTxPage(-1)">← Novější</button>' +
+            '<button class="btn btn-secondary" style="padding:6px 12px;"' + (to >= total ? ' disabled' : '') + ' onclick="kvTxPage(1)">Starší →</button>' +
+          '</div></div>';
+        box.innerHTML = h;
+      } catch (e) {
+        box.innerHTML = '<div style="color:#ef4444;padding:16px;">Chyba načítání transakcí: ' + kvEsc(e.message) + '</div>';
+      }
+    }
+    window.loadKioskTransactions = loadKioskTransactions;
 
     // Přepočet EUR → CZK aktuálním kurzem (pro náhled v ceníku).
     function kvEurToCzk(eur) {

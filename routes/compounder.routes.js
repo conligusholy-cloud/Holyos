@@ -1514,6 +1514,77 @@ router.get('/kiosk-values', requireAuth, async (req, res, next) => {
   }
 });
 
+// ─── SIS API proxy: transakce lokality (kiosk-transactions) ────────────────
+// Detail stroje v tabu Compounding: poslední transakce kiosku (pračky/sušičky,
+// částky, platby). Klíč opět DRŽÍME NA SERVERU, frontend dostává jen data.
+//
+// GET /api/compounder/kiosk-transactions/:code?limit=20&offset=0
+//   → { generatedAt, code, total, limit, offset, transactions:[...] }
+router.get('/kiosk-transactions/:code', requireAuth, async (req, res, next) => {
+  try {
+    const apiKey = process.env.SIS_KIOSK_API_KEY;
+    if (!apiKey) {
+      return res.status(503).json({
+        error: 'SIS API není nakonfigurováno',
+        detail: 'Chybí SIS_KIOSK_API_KEY v prostředí serveru.',
+      });
+    }
+    const code = String(req.params.code || '').trim();
+    if (!/^[A-Za-z0-9_-]{1,32}$/.test(code)) {
+      return res.status(400).json({ error: 'Neplatný kód kiosku' });
+    }
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 20, 1), 100);
+    const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
+
+    // URL odvodíme z SIS_KIOSK_API_URL (…/kiosk-values → …/kiosk-transactions),
+    // případně jde přenastavit vlastní proměnnou SIS_KIOSK_TX_API_URL.
+    const baseUrl = process.env.SIS_KIOSK_TX_API_URL
+      || (process.env.SIS_KIOSK_API_URL
+        ? process.env.SIS_KIOSK_API_URL.replace(/kiosk-values\/?$/, 'kiosk-transactions')
+        : 'https://sis-test.infinitygrid.cloud/api/public/kiosk-transactions');
+    const apiUrl = baseUrl.replace(/\/$/, '') + '/' + encodeURIComponent(code)
+      + '?limit=' + limit + '&offset=' + offset;
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 12000);
+    let sisRes;
+    try {
+      sisRes = await fetch(apiUrl, {
+        headers: { 'X-API-Key': apiKey, 'Accept': 'application/json' },
+        signal: controller.signal,
+      });
+    } catch (e) {
+      clearTimeout(timeout);
+      const aborted = e && e.name === 'AbortError';
+      return res.status(502).json({
+        error: aborted ? 'SIS API neodpovědělo včas' : 'Nepodařilo se spojit se SIS API',
+        detail: String(e && e.message || e),
+      });
+    }
+    clearTimeout(timeout);
+
+    if (sisRes.status === 401 || sisRes.status === 403) {
+      return res.status(502).json({ error: 'SIS API: chybí nebo neplatný klíč (' + sisRes.status + ')' });
+    }
+    if (sisRes.status === 404) {
+      return res.status(404).json({ error: 'Kiosek "' + code + '" nebyl v SIS nalezen' });
+    }
+    if (!sisRes.ok) {
+      return res.status(502).json({ error: 'SIS API vrátilo chybu ' + sisRes.status });
+    }
+
+    let payload;
+    try {
+      payload = await sisRes.json();
+    } catch (e) {
+      return res.status(502).json({ error: 'SIS API: neplatná JSON odpověď', detail: String(e.message || e) });
+    }
+    res.json(payload);
+  } catch (err) {
+    next(err);
+  }
+});
+
 // ─── Nastavení modulu Compounding (ceník V2/V3/V4 + cena lokality) ─────────
 // Uloženo jako jeden JSON AppSetting (klíč 'compounding.settings'), sdílené pro
 // všechny uživatele. Ceny ceníku se zadávají v EUR bez DPH (CZK se dopočítá
