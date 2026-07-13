@@ -260,6 +260,7 @@
       <button type="button" class="tab-btn" data-tab="tools" onclick="switchTab('tools')">🧰 Obchodní pomůcky</button>
       <button type="button" class="tab-btn" data-tab="compounder" onclick="switchTab('compounder')">🌐 Compounder</button>
       <button type="button" class="tab-btn" data-tab="compounding" onclick="switchTab('compounding')">🧺 Compounding</button>
+      <button type="button" class="tab-btn" data-tab="rezervace" onclick="switchTab('rezervace')">📋 Rezervace</button>
     </div>
 
     <!-- TAB: Compounding — hodnota lokalit prádlomatů ze SIS API -->
@@ -275,10 +276,20 @@
         <span id="kv-generated" style="color:var(--text2); font-size:12px;"></span>
         <button class="btn" onclick="loadKioskValues(true)">↻ Obnovit</button>
         <button class="btn" onclick="openCompoundingSettings()" title="Nastavení: ceník a cena lokality" style="padding:8px 12px;">⚙️</button>
-        <button class="btn" onclick="openReservationsModal()" title="Přehled rezervací lokalit" style="padding:8px 12px;">📋 Rezervace</button>
+        <button class="btn" onclick="switchTab('rezervace')" title="Přehled rezervací lokalit" style="padding:8px 12px;">📋 Rezervace</button>
       </div>
       <div id="kv-summary" style="margin-bottom:14px;"></div>
       <div id="kv-table"><div style="color:var(--text2);padding:20px;">Načítám…</div></div>
+    </div>
+
+    <!-- TAB: Rezervace lokalit -->
+    <div id="tab-rezervace" style="display:none; padding:20px 24px 24px;">
+      <div class="toolbar" style="margin-bottom:14px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+        <select id="resf-status-page" onchange="loadReservationsPage()" style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:13px;"></select>
+        <button class="btn" onclick="loadReservationsPage()">↻ Obnovit</button>
+      </div>
+      <div id="res-summary-page" style="margin-bottom:14px;"></div>
+      <div id="res-rows-page"><div style="color:var(--text2);padding:16px;">Načítám…</div></div>
     </div>
 
     <!-- TAB: Compounder leady (compounder.world) -->
@@ -3436,7 +3447,7 @@
     }
 
     function switchTab(name) {
-      ['orders', 'pricelist', 'cashflow', 'tools', 'compounder', 'compounding'].forEach(function(t) {
+      ['orders', 'pricelist', 'cashflow', 'tools', 'compounder', 'compounding', 'rezervace'].forEach(function(t) {
         var el = document.getElementById('tab-' + t);
         if (el) el.style.display = (t === name) ? '' : 'none';
         var btn = document.querySelector('.tab-btn[data-tab="' + t + '"]');
@@ -3447,6 +3458,7 @@
       if (name === 'tools') initToolsTab();
       if (name === 'compounder') loadCompounderLeads();
       if (name === 'compounding') loadKioskValues();
+      if (name === 'rezervace') loadReservationsPage();
     }
 
     // ============================================================
@@ -4097,13 +4109,26 @@
       loadReservationsRows();
     }
     window.openReservationsModal = openReservationsModal;
-    async function loadReservationsRows(){
-      var box = document.getElementById('res-rows'); if(!box) return;
-      var st = (document.getElementById('resf-status')||{}).value || '';
+    async function loadReservationsInto(boxId, statusSelId, summaryId){
+      var box = document.getElementById(boxId); if(!box) return;
+      var st = (document.getElementById(statusSelId)||{}).value || '';
       box.innerHTML = '<div style="color:var(--text2);padding:16px;">Načítám…</div>';
       try {
         var r = await fetch('/api/compounder/reservations' + (st?('?status='+encodeURIComponent(st)):''), { credentials:'include' });
         var rows = await r.json();
+        if (summaryId) {
+          var sEl = document.getElementById(summaryId);
+          if (sEl) {
+            if (!st) {
+              var cnt = {};
+              rows.forEach(function(x){ cnt[x.status] = (cnt[x.status]||0)+1; });
+              sEl.innerHTML = '<div style="display:flex;gap:12px;flex-wrap:wrap;">' +
+                kvStat('Celkem', kvNum(rows.length)) +
+                Object.keys(RES_STATUS).filter(function(k){ return cnt[k]; }).map(function(k){ return kvStat(RES_STATUS[k], kvNum(cnt[k])); }).join('') +
+                '</div>';
+            } else { sEl.innerHTML = ''; }
+          }
+        }
         if(!rows.length){ box.innerHTML = '<div style="color:var(--text2);padding:16px;">Žádné rezervace.</div>'; return; }
         var h = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr><th>Vytvořeno</th><th>Lokalita</th><th>Kupující</th><th>Dny</th><th>Poplatek</th><th>Kupní cena</th><th>Stav</th><th>Lhůty</th><th>Akce</th></tr></thead><tbody>';
         rows.forEach(function(x){
@@ -4120,13 +4145,24 @@
         box.innerHTML = h;
       } catch(e){ box.innerHTML = '<div style="color:#ef4444;padding:16px;">Chyba načítání rezervací.</div>'; }
     }
+    async function loadReservationsRows(){ return loadReservationsInto('res-rows', 'resf-status'); }
     window.loadReservationsRows = loadReservationsRows;
+    // Záložka Rezervace — plnohodnotný list rezervací (mimo modal).
+    function loadReservationsPage(){
+      var sel = document.getElementById('resf-status-page');
+      if (sel && !sel.options.length) {
+        sel.innerHTML = ['<option value="">Všechny stavy</option>'].concat(Object.keys(RES_STATUS).map(function(k){ return '<option value="'+k+'">'+RES_STATUS[k]+'</option>'; })).join('');
+      }
+      return loadReservationsInto('res-rows-page', 'resf-status-page', 'res-summary-page');
+    }
+    window.loadReservationsPage = loadReservationsPage;
     async function resAction(id, action){
       if((action==='cancel') && !confirm('Opravdu zrušit rezervaci? Lokalita se uvolní ostatním.')) return;
       try {
         var r = await fetch('/api/compounder/reservations/'+id, { method:'PATCH', credentials:'include', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action: action }) });
         if(!r.ok) throw new Error();
         loadReservationsRows();
+        loadReservationsPage();
       } catch(e){ alert('Akci se nepodařilo provést.'); }
     }
     window.resAction = resAction;
