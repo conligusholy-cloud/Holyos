@@ -1023,16 +1023,16 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
   function applyConsultant(){
     var c = window._consultant;
     if (!c || !c.name) return;
-    function e2(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(x){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[x];}); }
+    function offEsc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(x){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[x];}); }
     var t = document.getElementById('ct-title'); if(t){ t.setAttribute('data-i18n','p.ct.title2'); t.textContent = pT('p.ct.title2'); }
     var b = document.getElementById('ct-open'); if(b){ b.setAttribute('data-i18n','p.ct.btn2'); b.textContent = pT('p.ct.btn2'); }
     var o = document.getElementById('ct-owner');
     if(o){
       var tel = (c.phone||'').replace(/\s+/g,'');
       var l2 = [];
-      if(c.phone) l2.push('<a href="tel:'+e2(tel)+'" style="color:var(--gold-soft)">'+e2(c.phone)+'</a>');
-      if(c.email) l2.push('<a href="mailto:'+e2(c.email)+'" style="color:var(--gold-soft)">'+e2(c.email)+'</a>');
-      o.innerHTML = '<span>'+e2(c.name)+e2(pT('p.ct.consultant_suffix'))+'</span>' + (l2.length ? ('<br>'+l2.join(' · ')) : '');
+      if(c.phone) l2.push('<a href="tel:'+offEsc(tel)+'" style="color:var(--gold-soft)">'+offEsc(c.phone)+'</a>');
+      if(c.email) l2.push('<a href="mailto:'+offEsc(c.email)+'" style="color:var(--gold-soft)">'+offEsc(c.email)+'</a>');
+      o.innerHTML = '<span>'+offEsc(c.name)+offEsc(pT('p.ct.consultant_suffix'))+'</span>' + (l2.length ? ('<br>'+l2.join(' · ')) : '');
     }
   }
   var CONTRACT_STATUS_PT = { koncept:"Připravuje se", odeslano:"K podpisu", vyplneno:"Vyplněno", k_podpisu:"Čeká na dokončení", podepsano:"Podepsáno" };
@@ -1065,11 +1065,11 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
           else if(x.sign_until) extra.push('podpis do '+stFmtDt(x.sign_until));
           if(x.fee_paid) extra.push('poplatek zaplacen ✓');
           if(x.purchase_paid) extra.push('kupní cena zaplacena ✓');
-          h+='<div style="background:#1b1b20;border:1px solid var(--line);border-radius:10px;padding:10px 12px"><div style="font-size:13px;font-weight:600;color:#e9e9ec">📍 Rezervace '+e2(x.label)+'</div><div style="font-size:12px;color:var(--gold-soft);margin-top:2px">'+e2(x.statusLabel)+'</div>'+(extra.length?'<div style="font-size:11px;color:var(--muted);margin-top:2px">'+e2(extra.join(' · '))+'</div>':'')+'</div>';
+          h+='<div style="background:#1b1b20;border:1px solid var(--line);border-radius:10px;padding:10px 12px"><div style="font-size:13px;font-weight:600;color:#e9e9ec">📍 Rezervace '+offEsc(x.label)+'</div><div style="font-size:12px;color:var(--gold-soft);margin-top:2px">'+offEsc(x.statusLabel)+'</div>'+(extra.length?'<div style="font-size:11px;color:var(--muted);margin-top:2px">'+offEsc(extra.join(' · '))+'</div>':'')+'</div>';
         } else {
           var signed=x.status==='podepsano';
-          var link=(!signed && x.url)?(' · <a href="'+e2(x.url)+'" target="_blank" rel="noopener" style="color:var(--gold-soft)">otevřít</a>'):'';
-          h+='<div style="background:#1b1b20;border:1px solid var(--line);border-radius:10px;padding:10px 12px"><div style="font-size:13px;font-weight:600;color:#e9e9ec">📄 '+e2(x.typeLabel)+'</div><div style="font-size:12px;color:'+(signed?'#4ade80':'var(--gold-soft)')+';margin-top:2px">'+e2(ctStatusTxt(x.status))+link+'</div></div>';
+          var link=(!signed && x.url)?(' · <a href="'+offEsc(x.url)+'" target="_blank" rel="noopener" style="color:var(--gold-soft)">otevřít</a>'):'';
+          h+='<div style="background:#1b1b20;border:1px solid var(--line);border-radius:10px;padding:10px 12px"><div style="font-size:13px;font-weight:600;color:#e9e9ec">📄 '+offEsc(x.typeLabel)+'</div><div style="font-size:12px;color:'+(signed?'#4ade80':'var(--gold-soft)')+';margin-top:2px">'+offEsc(ctStatusTxt(x.status))+link+'</div></div>';
         }
       });
       h+='</div>';
@@ -1080,7 +1080,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
     if(msgs.length){
       h+='<div style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:8px">Průběh</div><div style="display:flex;flex-direction:column;gap:10px">';
       msgs.forEach(function(m){
-        h+='<div style="display:flex;gap:9px;align-items:flex-start"><div style="font-size:15px;line-height:1.2">'+e2(m.icon||'•')+'</div><div><div style="font-size:12.5px;color:#dcdce1;line-height:1.45">'+e2(m.text)+'</div><div style="font-size:11px;color:var(--muted);margin-top:1px">'+stFmtDt(m.ts)+'</div></div></div>';
+        h+='<div style="display:flex;gap:9px;align-items:flex-start"><div style="font-size:15px;line-height:1.2">'+offEsc(m.icon||'•')+'</div><div><div style="font-size:12.5px;color:#dcdce1;line-height:1.45">'+offEsc(m.text)+'</div><div style="font-size:11px;color:var(--muted);margin-top:1px">'+stFmtDt(m.ts)+'</div></div></div>';
       });
       h+='</div>';
     }
@@ -1100,14 +1100,14 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
         try{ console.log('[portal/status]', res.status, res.txt && res.txt.slice(0,200)); }catch(e){}
         if(!res.d || !res.d.ok){
           var det = (res.d && res.d.error) ? res.d.error : (res.txt ? res.txt.slice(0,100) : '');
-          if(box) box.innerHTML='<div style="color:var(--muted);font-size:13px">Stav se nepodařilo načíst (HTTP '+res.status+'). '+e2(det)+'</div>';
+          if(box) box.innerHTML='<div style="color:var(--muted);font-size:13px">Stav se nepodařilo načíst (HTTP '+res.status+'). '+offEsc(det)+'</div>';
           return;
         }
         var d=res.d;
         var badge=document.getElementById('bellBadge');
         if(badge){ if(d.actionable>0){ badge.style.display=''; badge.textContent=d.actionable; } else { badge.style.display='none'; } }
         renderStatusPanel(d);
-      }).catch(function(err){ settled=true; if(box) box.innerHTML='<div style="color:var(--muted);font-size:13px">Stav se nepodařilo načíst (síť): '+e2(String(err&&err.message||err))+'</div>'; });
+      }).catch(function(err){ settled=true; if(box) box.innerHTML='<div style="color:var(--muted);font-size:13px">Stav se nepodařilo načíst (síť): '+offEsc(String(err&&err.message||err))+'</div>'; });
   }
   (function(){
     var bell=document.getElementById('bellBtn');
