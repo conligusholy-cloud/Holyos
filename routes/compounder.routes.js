@@ -366,8 +366,10 @@ router.get('/portal/status', async (req, res, next) => {
       contractRows = await prisma.compoundingContract.findMany({
         where: { kiosk_code: { in: codes } },
         orderBy: { created_at: 'desc' },
-        select: { type: true, status: true, kiosk_code: true, kiosk_label: true, share_token: true, signed_at: true, created_at: true, updated_at: true },
+        select: { type: true, status: true, kiosk_code: true, kiosk_label: true, share_token: true, signed_at: true, created_at: true, updated_at: true, fields: true },
       });
+      // Archivované smlouvy zákazníkovi neukazujeme.
+      contractRows = contractRows.filter((c) => !(c.fields && c.fields._archived));
     }
     const msgs = []; // { ts, icon, text }
     const push = (ts, icon, text) => { if (ts && text) msgs.push({ ts: new Date(ts).toISOString(), icon, text }); };
@@ -2520,6 +2522,20 @@ router.delete('/contracts/:id(\\d+)', requireAuth, async (req, res, next) => {
     if (err.code === 'P2025') return res.status(404).json({ error: 'Smlouva nenalezena' });
     next(err);
   }
+});
+
+// POST archivovat / obnovit smlouvu — archivovaná se ZÁKAZNÍKOVI v portálu nezobrazí
+// (skrytá), ale v HolyOS zůstává kvůli historii. Příznak fields._archived.
+router.post('/contracts/:id(\\d+)/archive', requireAuth, async (req, res, next) => {
+  try {
+    const row = await prisma.compoundingContract.findUnique({ where: { id: Number(req.params.id) } });
+    if (!row) return res.status(404).json({ error: 'Smlouva nenalezena' });
+    const archived = !!(req.body && req.body.archived);
+    const merged = Object.assign({}, row.fields || {});
+    if (archived) merged._archived = true; else delete merged._archived;
+    await prisma.compoundingContract.update({ where: { id: row.id }, data: { fields: merged } });
+    res.json({ ok: true, archived });
+  } catch (err) { next(err); }
 });
 
 // POST vygenerovat PDF z uložené smlouvy (volitelně z upravených polí)
