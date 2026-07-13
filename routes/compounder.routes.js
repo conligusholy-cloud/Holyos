@@ -3748,7 +3748,9 @@ async function _buildPaymentCtx(resId) {
   }
   let eurRate = 25;
   try { const fx = await fxRatesCzk(); if (fx && fx.EUR) eurRate = fx.EUR; } catch (e) {}
-  return { resv, bank, items, lang, tr, eurRate, buyer: { name: resv.buyer_name, email: resv.buyer_email, phone: resv.buyer_phone } };
+  // Neplátce / CZ plátce → přičteme 21 % DPH; EU plátce (zahraniční DIČ) → reverse charge (0 %).
+  const reverseCharge = _isEuReverseCharge(resv.buyer_dic);
+  return { resv, bank, items, lang, tr, eurRate, reverseCharge, buyer: { name: resv.buyer_name, email: resv.buyer_email, phone: resv.buyer_phone } };
 }
 async function _payPdf(resId) {
   const ctx = await _buildPaymentCtx(resId);
@@ -3756,6 +3758,7 @@ async function _payPdf(resId) {
   return paymentInstructions.generatePaymentInstructionsPdf({
     title: ctx.tr.title + ' ' + ctx.resv.kiosk_code,
     buyer: ctx.buyer, items: ctx.items, bank: ctx.bank, lang: ctx.lang, eurRate: ctx.eurRate,
+    reverseCharge: ctx.reverseCharge, vatRate: 0.21,
   });
 }
 router.get('/reservations/:id(\\d+)/payment-instructions.pdf', requireAuth, async (req, res, next) => {
