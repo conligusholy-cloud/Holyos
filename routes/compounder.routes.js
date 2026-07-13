@@ -331,6 +331,67 @@ router.get('/portal/contracts', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// GET /api/compounder/portal/status?t=<token>
+// Stav dokumentů (rezervace + 3 smlouvy + platba) přihlášeného leada a z toho
+// automaticky vygenerovaná časová osa zpráv ("na tom se pracuje"). Bez ruční práce.
+function fmtCz(d) {
+  if (!d) return '';
+  const x = new Date(d);
+  const p = (n) => (n < 10 ? '0' + n : '' + n);
+  return `${x.getDate()}.${x.getMonth() + 1}.${x.getFullYear()} ${p(x.getHours())}:${p(x.getMinutes())}`;
+}
+const CT_STATUS_MSG = { koncept: 'je připravena', odeslano: 'vám byla zpřístupněna', vyplneno: 'čeká na váš podpis', k_podpisu: 'čeká na váš podpis', podepsano: 'je podepsaná' };
+const RES_STATUS_LABEL = { hold: 'Blokace lokality (1 h)', reserved: 'Rezervováno — čeká na podpis rezervační smlouvy', active: 'Rezervováno — poplatek přijat', completed: 'Rezervace dokončena', cancelled: 'Rezervace zrušena', expired: 'Rezervace vypršela' };
+router.get('/portal/status', async (req, res, next) => {
+  try {
+    const id = verifyPortalToken(String(req.query.t || ''));
+    if (!id) return res.status(401).json({ ok: false, error: 'Neplatný nebo chybějící přístupový odkaz.' });
+    let reservations = [];
+    try {
+      reservations = await prisma.locationReservation.findMany({
+        where: { lead_id: id, status: { notIn: ['cancelled', 'expired'] } },
+        orderBy: { created_at: 'desc' }, take: 20,
+      });
+    } catch (e) { reservations = []; }
+    const codes = Array.from(new Set(reservations.map((r) => r.kiosk_code).filter(Boolean)));
+    let contractRows = [];
+    if (codes.length) {
+      contractRows = await prisma.compoundingContract.findMany({
+        where: { kiosk_code: { in: codes } },
+        orderBy: { created_at: 'desc' },
+        select: { type: true, status: true, kiosk_code: true, kiosk_label: true, share_token: true, signed_at: true, created_at: true, updated_at: true },
+      });
+    }
+    const msgs = []; // { ts, icon, text }
+    const push = (ts, icon, text) => { if (ts && text) msgs.push({ ts: new Date(ts).toISOString(), icon, text }); };
+    let actionable = 0;
+    const docs = [];
+    reservations.forEach((r) => {
+      const lbl = r.kiosk_code || 'lokalita';
+      docs.push({ kind: 'reservation', label: lbl, status: r.status, statusLabel: RES_STATUS_LABEL[r.status] || r.status, reserved_until: r.reserved_until, sign_until: r.sign_until, fee_until: r.fee_until, fee_paid: !!r.fee_paid_at, purchase_paid: !!r.purchase_paid_at });
+      push(r.created_at, '📥', `Rezervace lokality ${lbl} přijata.`);
+      if (r.status === 'reserved') { push(r.updated_at, '✅', `Rezervace ${lbl} potvrzena — čeká na podpis rezervační smlouvy${r.sign_until ? ' do ' + fmtCz(r.sign_until) : ''}.`); }
+      if (r.status === 'active') { push(r.fee_paid_at || r.updated_at, '💰', `Rezervační poplatek přijat — lokalita ${lbl} držena${r.reserved_until ? ' do ' + fmtCz(r.reserved_until) : ''}.`); }
+      if (r.status === 'completed') { push(r.updated_at, '🎉', `Rezervace ${lbl} dokončena — vítejte mezi provozovateli Compounderu.`); }
+      if (r.fee_paid_at) push(r.fee_paid_at, '💰', `Rezervační poplatek za ${lbl} zaplacen.`);
+      if (r.purchase_paid_at) push(r.purchase_paid_at, '💰', `Kupní cena za ${lbl} zaplacena.`);
+      if ((r.status === 'reserved' || r.status === 'active') && !r.fee_paid_at) actionable++;
+    });
+    contractRows.forEach((c) => {
+      const tl = (contracts.TYPE_LABEL && contracts.TYPE_LABEL[c.type]) || 'Smlouva';
+      const signed = c.status === 'podepsano';
+      docs.push({ kind: 'contract', type: c.type, typeLabel: tl, status: c.status, url: c.share_token ? ('/smlouva/' + c.share_token) : null, signed_at: c.signed_at });
+      if (signed) { push(c.signed_at || c.updated_at, '✅', `${tl} je podepsaná.`); }
+      else {
+        push(c.updated_at || c.created_at, c.status === 'koncept' ? '📄' : '✍️', `${tl} ${CT_STATUS_MSG[c.status] || 'byla aktualizována'}.`);
+        if (c.status !== 'koncept' && c.share_token) actionable++;
+      }
+    });
+    msgs.sort((a, b) => (a.ts < b.ts ? 1 : -1));
+    res.json({ ok: true, docs, messages: msgs.slice(0, 40), actionable, count: msgs.length });
+  } catch (err) { next(err); }
+});
+
 // GET /api/compounder/portal/economy-link?t=<token>
 // Vrátí (a při prvním přístupu vytvoří) OSOBNÍ share odkaz na detailní model
 // "Ekonomika prádlomatu" pro daného leada. Každý účet z Portalu má vlastní
