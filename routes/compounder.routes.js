@@ -989,6 +989,40 @@ router.post('/leads/:id/send-access', requireAuth, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// POST /api/compounder/leads/:id/access-link — vrátí přihlašovací odkaz + text pro WhatsApp
+// (neposílá e-mail; obchodník odkaz odešle přes WhatsApp). Počítá se jako odeslání přístupu.
+const WA_MSG = {
+  cs: (n, u) => `Dobrý den${n ? ', ' + n : ''}, zde je Váš osobní přístup do Compounder Portalu (platí 24 h): ${u}`,
+  sk: (n, u) => `Dobrý deň${n ? ', ' + n : ''}, tu je Váš osobný prístup do Compounder Portálu (platí 24 h): ${u}`,
+  en: (n, u) => `Hello${n ? ' ' + n : ''}, here is your personal access to the Compounder Portal (valid 24 h): ${u}`,
+  de: (n, u) => `Hallo${n ? ' ' + n : ''}, hier ist Ihr persönlicher Zugang zum Compounder Portal (24 h gültig): ${u}`,
+  pl: (n, u) => `Dzień dobry${n ? ', ' + n : ''}, oto Twój osobisty dostęp do Compounder Portal (ważny 24 h): ${u}`,
+};
+router.post('/leads/:id/access-link', requireAuth, async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'Neplatné ID' });
+    const lead = await prisma.compounderLead.findUnique({
+      where: { id }, select: { id: true, name: true, phone: true, lang: true },
+    });
+    if (!lead) return res.status(404).json({ error: 'Lead nenalezen' });
+    if (!lead.phone) return res.status(400).json({ error: 'Kontakt nemá telefon — WhatsApp nelze použít.' });
+    const url = `${portalBase()}/portal?t=${makeLoginToken(lead.id)}`;
+    const code = String(lead.lang || 'cs').toLowerCase().split(/[-_]/)[0];
+    const msgFn = WA_MSG[code] || WA_MSG.cs;
+    const message = msgFn(lead.name || '', url);
+    // Telefon → jen číslice (wa.me formát), odstraň +, mezery, 00 prefix.
+    let wa = String(lead.phone).replace(/[^\d]/g, '');
+    if (wa.startsWith('00')) wa = wa.slice(2);
+    const updated = await prisma.compounderLead.update({
+      where: { id },
+      data: { access_sent_count: { increment: 1 }, access_last_sent_at: new Date() },
+      select: { access_sent_count: true, access_last_sent_at: true },
+    });
+    res.json({ ok: true, url, phone: wa, message, access_sent_count: updated.access_sent_count, access_last_sent_at: updated.access_last_sent_at });
+  } catch (err) { next(err); }
+});
+
 // POST /api/compounder/leads/:id/activity-log — přidá řádek do append-only logu aktivit.
 router.post('/leads/:id/activity-log', requireAuth, async (req, res, next) => {
   try {
