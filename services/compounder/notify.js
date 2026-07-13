@@ -182,6 +182,18 @@ async function notifyContractAwaitingCountersign(prisma, contract, signUrl) {
   } catch (e) { console.error('[compounder-notify] awaiting_sign', e.message); }
 }
 
+// Nová rezervační smlouva čeká na NAŠI autorizaci (my podepisujeme první, pak zákazník).
+async function notifyContractAwaitingAuthorization(prisma, contract, signUrl) {
+  try {
+    if (!contract) return;
+    const typeLabel = CONTRACT_TYPE_LABEL[contract.type] || 'Smlouva';
+    const loc = contract.kiosk_label || contract.kiosk_code || '';
+    const title = '✍️ K autorizaci: ' + typeLabel + (loc ? (' — ' + loc) : '');
+    const body = 'Nová rezervační smlouva k autorizaci — klepni pro podpis za Best Series.';
+    await dispatch(prisma, { title, body, data: { type: 'compounder_contract', event: 'awaiting_authorize', contract_id: contract.id, kiosk_code: contract.kiosk_code, link: signUrl } });
+  } catch (e) { console.error('[compounder-notify] awaiting_authorize', e.message); }
+}
+
 // Žádost o telefonický kontakt z portálu (lead nechal telefon) → Velín push + zvonek
 // stejným kanálem jako rezervace/smlouvy. Příjemci = compounder.velin_notify_person_ids
 // (fallback majitelé Jan + Tomáš).
@@ -228,6 +240,7 @@ module.exports = {
   notifyReservationHold,
   notifyContractEvent,
   notifyContractAwaitingCountersign,
+  notifyContractAwaitingAuthorization,
   notifyContactRequest,
   notifyPurchaseInquiry,
   notifyOwnersMessage,

@@ -3087,7 +3087,7 @@ router.post('/portal/reserve', async (req, res, next) => {
           data: { kiosk_code: code, kiosk_label: null, type: 'rezervacni', status: 'k_autorizaci', fields: cf, share_token: token, share_expires_at: new Date(Date.now() + 30 * 24 * 3600 * 1000) },
         });
         const signUrl = (getAppUrl() || '') + '/modules/podpis-smlouvy/index.html?id=' + contract.id;
-        compounderNotify.notifyContractAwaitingCountersign(prisma, contract, signUrl).catch(() => {});
+        compounderNotify.notifyContractAwaitingAuthorization(prisma, contract, signUrl).catch(() => {});
       }
     } catch (e) { console.error('[compounder] auto rezervační smlouva selhala:', e.message); }
 

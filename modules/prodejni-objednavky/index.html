@@ -3114,7 +3114,7 @@
         if (!res.length && !cons.length) { el.innerHTML = ''; return; }
         var STAT = (typeof RES_STATUS !== 'undefined') ? RES_STATUS : {};
         var CT = { kupni: 'Kupní', rezervacni: 'Rezervační', servisni: 'Servisní' };
-        var CS = { koncept: 'koncept', odeslano: 'odesláno', vyplneno: 'vyplněno', podepsano: 'PODEPSÁNO' };
+        var CS = { koncept: 'koncept', odeslano: 'odesláno', vyplneno: 'vyplněno', k_autorizaci: 'k autorizaci (náš podpis)', k_podpisu: 'čeká na náš podpis', k_podpisu_zakaznik: 'čeká na podpis zákazníka', podepsano: 'PODEPSÁNO' };
         function d(x) { return x ? new Date(x).toLocaleDateString('cs-CZ') : '—'; }
         function remain(x) { if (!x) return ''; var ms = new Date(x).getTime() - Date.now(); if (ms <= 0) return ' · prošlo'; var dd = Math.floor(ms / 86400000); var hh = Math.floor((ms % 86400000) / 3600000); return ' · zbývá ' + (dd > 0 ? (dd + ' d ') : '') + hh + ' h'; }
         var html = '<div style="margin:4px 0 12px;padding:12px 14px;background:rgba(201,162,75,.06);border:1px solid rgba(201,162,75,.25);border-radius:10px;">' +
@@ -3133,9 +3133,13 @@
           }
           if (cForCode.length) {
             html += '<div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;">' + cForCode.map(function(c) {
-              var col = (c.status === 'podepsano') ? '#10b981' : 'var(--text2)';
+              var col = (c.status === 'podepsano') ? '#10b981' : (c.status === 'k_autorizaci' || c.status === 'k_podpisu' ? '#eab308' : 'var(--text2)');
               return '<span style="font-size:11.5px;border:1px solid var(--border);border-radius:999px;padding:2px 9px;color:' + col + ';">' + (CT[c.type] || c.type) + ': ' + (CS[c.status] || c.status) + '</span>';
             }).join('') + '</div>';
+            // Smlouvy čekající na NÁŠ podpis (autorizace nebo countersign) → tlačítko na podpis přímo z HolyOS.
+            cForCode.filter(function(c){ return c.status === 'k_autorizaci' || c.status === 'k_podpisu'; }).forEach(function(c){
+              html += '<div style="margin-top:6px;"><a href="/modules/podpis-smlouvy/index.html?id=' + c.id + '" target="_blank" rel="noopener" style="display:inline-block;background:#eab308;color:#1a1408;text-decoration:none;border-radius:6px;padding:5px 12px;font-size:12px;font-weight:700;">✍️ Podepsat ' + (CT[c.type] || c.type).toLowerCase() + ' smlouvu za Best Series</a></div>';
+            });
           }
           html += '</div>';
         });
