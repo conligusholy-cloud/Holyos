@@ -73,6 +73,14 @@
     document.getElementById('subtitle').textContent = (d.kiosk_label || d.kiosk_code || '') + ' — podpis za Best Series';
     if (d.customer_signature){ document.getElementById('cust-sig').innerHTML = '<img src="'+d.customer_signature+'" alt="podpis zákazníka">'; }
     document.getElementById('cust-info').textContent = (d.customer_name?('Podepsal: '+d.customer_name):'') + (d.customer_signed_at?(' · '+new Date(d.customer_signed_at).toLocaleString('cs-CZ')):'');
+    var st = document.getElementById('subtitle');
+    if (st && !document.getElementById('pdf-preview')){
+      var pv = document.createElement('button');
+      pv.id='pdf-preview'; pv.type='button'; pv.textContent='📄 Náhled smlouvy (PDF)';
+      pv.style.cssText='margin:12px 0;background:#f4f4f6;border:1px solid #ccc;border-radius:8px;padding:9px 16px;cursor:pointer;font-size:14px;font-weight:600';
+      pv.onclick=previewPdf;
+      st.parentNode.insertBefore(pv, st.nextSibling);
+    }
     hide('loading'); show('content'); initSigPad();
   }
 
@@ -89,6 +97,18 @@
     cv.addEventListener('touchstart',start,{passive:false}); cv.addEventListener('touchmove',move,{passive:false}); cv.addEventListener('touchend',end);
   }
   window.clearSig = function(){ if(ctx&&cv){ ctx.clearRect(0,0,cv.width,cv.height); dirty=false; } };
+
+  async function previewPdf(){
+    var b=document.getElementById('pdf-preview'); if(b){ b.disabled=true; b.textContent='Připravuji náhled…'; }
+    try {
+      var r = await fetch(API + '/pdf', { method:'POST', credentials:'include', headers:{'Content-Type':'application/json'}, body:'{}' });
+      if(!r.ok) throw new Error('HTTP '+r.status);
+      var blob = await r.blob();
+      window.open(URL.createObjectURL(blob), '_blank');
+    } catch(e){ alert('Náhled se nepodařilo vytvořit: '+(e.message||'')); }
+    finally { if(b){ b.disabled=false; b.textContent='📄 Náhled smlouvy (PDF)'; } }
+  }
+  window.previewPdf = previewPdf;
 
   window.sign = async function(){
     var btn=document.getElementById('submit'); var msg=document.getElementById('msg'); msg.textContent='';

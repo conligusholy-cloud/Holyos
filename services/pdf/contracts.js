@@ -335,6 +335,9 @@ function shell(title, subtitle, body) {
   .sig { margin-top: 40px; display: flex; justify-content: space-between; gap: 40px; }
   .sig .box { flex: 1; text-align: center; }
   .sig .rule { border-top: 1px solid #333; margin-top: 46px; padding-top: 4px; font-weight: 700; }
+  .sig .box img.sigimg { display:block; margin:0 auto; max-height:64px; max-width:230px; }
+  .sig .box img.sigimg + .rule { margin-top: 4px; }
+  .sig .sigdate { font-size: 10px; color: #777; margin-top: 2px; }
   .place { margin-top: 26px; }
   .note { color:#666; font-size: 10px; }
   .attach { margin-top: 16px; font-size: 10.5px; }
@@ -358,12 +361,15 @@ function partyBlock(role, d, p) {
   </div>`;
 }
 
-function sigBlock(leftLabel, rightLabel, place) {
-  return `<p class="place">V ${v(place, 18)} dne ..............................</p>
-  <div class="sig">
-    <div class="box"><div class="rule">${esc(leftLabel)}</div></div>
-    <div class="box"><div class="rule">${esc(rightLabel)}</div></div>
-  </div>`;
+function sigCell(label, sig) {
+  if (sig && sig.image) {
+    var when = sig.signed_at ? ('<div class="sigdate">Podepsáno ' + new Date(sig.signed_at).toLocaleString('cs-CZ') + '</div>') : '';
+    return '<div class="box"><img class="sigimg" src="' + sig.image + '" alt="podpis"><div class="rule">' + esc(label) + (sig.name ? (' — ' + esc(sig.name)) : '') + '</div>' + when + '</div>';
+  }
+  return '<div class="box"><div class="rule">' + esc(label) + '</div></div>';
+}
+function sigBlock(leftLabel, rightLabel, place, leftSig, rightSig) {
+  return '<p class="place">V ' + v(place, 18) + ' dne ..............................</p>\n  <div class="sig">' + sigCell(leftLabel, leftSig) + sigCell(rightLabel, rightSig) + '</div>';
 }
 
 function renderKupni(d) {
@@ -496,7 +502,7 @@ function renderKupni(d) {
       <li>Smlouva je vyhotovena ve dvou stejnopisech (nebo elektronicky s uznávanými podpisy); strany ji uzavírají svobodně, vážně a bez tísně.</li>
     </ol>
     <p class="attach"><strong>Přílohy:</strong> č. 1 — Technická specifikace Stroje (dle verze); č. 2 — Předávací protokol (sériová čísla, specifikace, fotodokumentace, revize, verze SW, seznam dokumentace).</p>
-    ${sigBlock('Prodávající', 'Kupující', d.place_signed)}`;
+    ${sigBlock('Prodávající', 'Kupující', d.place_signed, d._signature_bestseries, d._signature_customer)}`;
   return shell('Kupní smlouva', 'na dodávku prádlomatu a převzetí zavedené lokality', body);
 }
 
@@ -588,7 +594,7 @@ function renderServisni(d) {
       <li>Je-li některé ustanovení neplatné či neúčinné, nemá to vliv na platnost ostatních.</li>
       <li>Smlouva je vyhotovena ve dvou stejnopisech (nebo elektronicky s uznávanými podpisy); strany ji uzavírají svobodně a vážně.</li>
     </ol>
-    ${sigBlock('Poskytovatel', 'Objednatel', d.place_signed)}`;
+    ${sigBlock('Poskytovatel', 'Objednatel', d.place_signed, d._signature_bestseries, d._signature_customer)}`;
   return shell('Servisní smlouva', 'o komplexním zajištění provozu prádlomatu', body);
 }
 
@@ -630,7 +636,7 @@ function renderRezervacni(d) {
       <li>Vztahy neupravené smlouvou se řídí občanským zákoníkem a předpisy ČR; změny jen písemnými dodatky.</li>
       <li>Smlouva je vyhotovena ve dvou stejnopisech (nebo elektronicky); strany ji uzavírají svobodně a vážně.</li>
     </ol>
-    ${sigBlock('Poskytovatel', 'Zájemce', d.place_signed)}`;
+    ${sigBlock('Poskytovatel', 'Zájemce', d.place_signed, d._signature_bestseries, d._signature_customer)}`;
   return shell('Rezervační smlouva', 'na rezervaci lokality', body);
 }
 
