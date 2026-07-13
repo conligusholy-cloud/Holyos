@@ -4156,10 +4156,10 @@
         // „Aktivní" = vše mimo zrušených a propadlých.
         if (activeOnly) rows = rows.filter(function(x){ return x.status !== 'cancelled' && x.status !== 'expired'; });
         if(!rows.length){ box.innerHTML = '<div style="color:var(--text2);padding:16px;">Žádné rezervace.</div>'; return; }
-        var h = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr><th>Vytvořeno</th><th>Lokalita</th><th>Kupující</th><th>Dny</th><th>Poplatek</th><th>Kupní cena</th><th>Stav</th><th>Lhůty</th><th>Akce</th></tr></thead><tbody>';
+        var h = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr><th>Vytvořeno</th><th>Lokalita</th><th>Kupující</th><th>Dny</th><th>Rezervace</th><th>Kupní cena</th><th>Stav</th><th>Lhůty</th><th>Akce</th></tr></thead><tbody>';
         rows.forEach(function(x){
           var act='';
-          if(x.status==='reserved'){ act = '<button class="btn" style="padding:4px 8px;font-size:12px;" onclick="resAction('+x.id+',\'fee_paid\')">Poplatek přišel</button> <button class="btn btn-secondary" style="padding:4px 8px;font-size:12px;" onclick="resAction('+x.id+',\'cancel\')">Zrušit</button>'; }
+          if(x.status==='reserved'){ act = '<button class="btn" style="padding:4px 8px;font-size:12px;" onclick="resAction('+x.id+',\'fee_paid\')">Přišla rezervace</button> <button class="btn btn-secondary" style="padding:4px 8px;font-size:12px;" onclick="resAction('+x.id+',\'cancel\')">Zrušit</button>'; }
           else if(x.status==='active'){ act = '<button class="btn" style="padding:4px 8px;font-size:12px;" onclick="resAction('+x.id+',\'purchase_paid\')">Kupní cena přišla</button> <button class="btn btn-secondary" style="padding:4px 8px;font-size:12px;color:#f59e0b;" title="Zrušit platbu poplatku (omyl)" onclick="resAction('+x.id+',\'fee_unpaid\')">↩︎ Zrušit platbu</button> <button class="btn btn-secondary" style="padding:4px 8px;font-size:12px;" onclick="resAction('+x.id+',\'cancel\')">Zrušit</button>'; }
           else if(x.status==='completed'){ act = '<span style="color:#10b981;font-size:12px;font-weight:600;">✓ Zaplaceno</span> <button class="btn btn-secondary" style="padding:4px 8px;font-size:12px;color:#f59e0b;" title="Zrušit platbu kupní ceny (omyl)" onclick="resAction('+x.id+',\'purchase_unpaid\')">↩︎ Zrušit platbu</button>'; }
           else { act = '<span style="color:var(--text2);font-size:12px;">'+(x.cancel_reason?kvEsc(x.cancel_reason):'—')+'</span>'; }
