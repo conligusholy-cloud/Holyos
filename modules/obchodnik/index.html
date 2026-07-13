@@ -256,8 +256,9 @@
         '<div style="font-size:12px;margin-top:8px;color:'+(laToday?'#22c55e':'var(--muted)')+'">Poslední aktivita: '+(laDate?fmtD(laDate):'—')+'</div>' +
         '<div class="field"><label>Stav</label>'+statusSel+'</div>' +
         '<div class="field"><label>Portál</label>' +
-          '<button class="btn btn-g" style="width:100%"'+(l.email?'':' disabled')+' onclick="sendAccess('+l.id+')">✉️ Odeslat přístup na portál</button>' +
-          (l.email ? '' : '<div style="color:var(--muted2);font-size:12px;margin-top:4px">Kontakt nemá e-mail — přístup nelze odeslat.</div>') +
+          '<button class="btn btn-g" style="width:100%"'+(l.email?'':' disabled')+' onclick="sendAccess('+l.id+')">✉️ Odeslat přístup e-mailem</button>' +
+          (l.phone ? '<button class="btn" style="width:100%;margin-top:6px;background:#25D366;color:#0a2e17;font-weight:700" onclick="sendAccessWA('+l.id+')">🟢 Poslat přístup na WhatsApp</button>' : '<div style="color:var(--muted2);font-size:12px;margin-top:4px">WhatsApp: kontakt nemá telefon.</div>') +
+          (l.email ? '' : '<div style="color:var(--muted2);font-size:12px;margin-top:4px">Kontakt nemá e-mail — e-mailem nelze odeslat.</div>') +
           '<div id="access-info-'+l.id+'" style="font-size:12px;color:var(--muted);margin-top:6px">'+accInfo+'</div>' +
           '<div id="access-msg-'+l.id+'" style="font-size:12px;margin-top:4px"></div>' +
           '<div style="margin-top:10px;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted2)">Viditelné sekce portálu</div>' + secBoxes +
@@ -301,6 +302,20 @@
       if (lead){ lead.access_sent_count = (j.access_sent_count!=null? j.access_sent_count : (lead.access_sent_count||0)+1); lead.access_last_sent_at = j.access_last_sent_at || new Date().toISOString(); }
       var info = document.getElementById('access-info-'+id); if (info && lead) info.innerHTML = accessInfoHtml(lead);
     } catch(e){ if(msg) msg.innerHTML = '<span style="color:#fca5a5">Odeslání selhalo.</span>'; }
+  }
+
+  async function sendAccessWA(id){
+    var msg = document.getElementById('access-msg-'+id); if (msg) msg.innerHTML = '<span style="color:var(--muted)">Připravuji odkaz…</span>';
+    try {
+      var r = await api('/leads/'+id+'/access-link', { method:'POST' });
+      var j = await r.json().catch(function(){return {};});
+      if (!r.ok){ if(msg) msg.innerHTML = '<span style="color:#fca5a5">'+esc(j.error||'Chyba')+'</span>'; return; }
+      window.open('https://wa.me/'+j.phone+'?text='+encodeURIComponent(j.message||''), '_blank');
+      if (msg) msg.innerHTML = '<span style="color:var(--converted)">✓ WhatsApp otevřen — odešli zprávu.</span>';
+      var lead = state.leads.find(function(x){return x.id===id;});
+      if (lead){ lead.access_sent_count = (j.access_sent_count!=null? j.access_sent_count : (lead.access_sent_count||0)+1); lead.access_last_sent_at = j.access_last_sent_at || new Date().toISOString(); }
+      var info = document.getElementById('access-info-'+id); if (info && lead) info.innerHTML = accessInfoHtml(lead);
+    } catch(e){ if(msg) msg.innerHTML = '<span style="color:#fca5a5">Nepodařilo se připravit odkaz.</span>'; }
   }
 
   async function toggleTemplate(id, key, on){
