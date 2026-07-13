@@ -313,11 +313,12 @@ router.get('/portal/contracts', async (req, res, next) => {
     } catch (e) { resv = []; }
     const codes = Array.from(new Set(resv.map((r) => r.kiosk_code).filter(Boolean)));
     if (!codes.length) return res.json({ ok: true, contracts: [] });
-    const rows = await prisma.compoundingContract.findMany({
+    let rows = await prisma.compoundingContract.findMany({
       where: { kiosk_code: { in: codes }, share_token: { not: null } },
       orderBy: { created_at: 'desc' },
-      select: { type: true, status: true, kiosk_code: true, kiosk_label: true, share_token: true, signed_at: true },
+      select: { type: true, status: true, kiosk_code: true, kiosk_label: true, share_token: true, signed_at: true, fields: true },
     });
+    rows = rows.filter((r) => !(r.fields && r.fields._archived)); // archivované zákazníkovi skryté
     const out = rows.map((r) => ({
       type: r.type,
       typeLabel: contracts.TYPE_LABEL[r.type] || 'Smlouva',
@@ -3653,11 +3654,17 @@ router.get('/leads/:id(\\d+)/reservations', requireAuth, async (req, res, next) 
     const codes = Array.from(new Set(reservations.map((r) => r.kiosk_code).filter(Boolean)));
     let contracts = [];
     if (codes.length) {
-      contracts = await prisma.compoundingContract.findMany({
+      const raw = await prisma.compoundingContract.findMany({
         where: { kiosk_code: { in: codes } },
         orderBy: { created_at: 'desc' },
-        select: { id: true, kiosk_code: true, kiosk_label: true, type: true, status: true, signed_at: true, updated_at: true },
+        select: { id: true, kiosk_code: true, kiosk_label: true, type: true, status: true, signed_at: true, updated_at: true, fields: true },
       });
+      // Nevracíme celá fields (obsahují base64 podpisy) — jen příznak archivace.
+      contracts = raw.map((c) => ({
+        id: c.id, kiosk_code: c.kiosk_code, kiosk_label: c.kiosk_label, type: c.type,
+        status: c.status, signed_at: c.signed_at, updated_at: c.updated_at,
+        archived: !!(c.fields && c.fields._archived),
+      }));
     }
     res.json({ reservations, contracts });
   } catch (err) { next(err); }

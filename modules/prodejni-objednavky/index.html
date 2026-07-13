@@ -3144,8 +3144,15 @@
           }
           if (cForCode.length) {
             html += '<div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;">' + cForCode.map(function(c) {
-              var col = (c.status === 'podepsano') ? '#10b981' : (c.status === 'k_autorizaci' || c.status === 'k_podpisu' ? '#eab308' : 'var(--text2)');
-              return '<span onclick="event.stopPropagation();contractPdfById(' + c.id + ')" title="Stáhnout PDF smlouvy" style="cursor:pointer;font-size:11.5px;border:1px solid var(--border);border-radius:999px;padding:2px 9px;color:' + col + ';">' + (CT[c.type] || c.type) + ': ' + (CS[c.status] || c.status) + ' ⬇</span>';
+              var col = c.archived ? 'var(--text2)' : ((c.status === 'podepsano') ? '#10b981' : (c.status === 'k_autorizaci' || c.status === 'k_podpisu' ? '#eab308' : 'var(--text2)'));
+              var deco = c.archived ? 'text-decoration:line-through;opacity:.6;' : '';
+              return '<span onclick="event.stopPropagation();contractPdfById(' + c.id + ')" title="Stáhnout PDF smlouvy" style="cursor:pointer;font-size:11.5px;border:1px solid var(--border);border-radius:999px;padding:2px 9px;color:' + col + ';' + deco + '">' + (c.archived ? '🗄️ ' : '') + (CT[c.type] || c.type) + ': ' + (CS[c.status] || c.status) + ' ⬇</span>';
+            }).join('') + '</div>';
+            // Archivace smlouvy — skryje ji zákazníkovi v portálu, v HolyOS zůstává.
+            html += '<div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;">' + cForCode.map(function(c) {
+              return c.archived
+                ? '<button onclick="event.stopPropagation();cmpArchiveContract(' + c.id + ',' + id + ',false)" style="background:transparent;color:var(--text2);border:1px solid var(--border);border-radius:6px;padding:3px 9px;font-size:11px;cursor:pointer;">↩︎ Obnovit ' + (CT[c.type] || c.type) + '</button>'
+                : '<button onclick="event.stopPropagation();cmpArchiveContract(' + c.id + ',' + id + ',true)" style="background:transparent;color:#f59e0b;border:1px solid rgba(245,158,11,.4);border-radius:6px;padding:3px 9px;font-size:11px;cursor:pointer;">🗄️ Archivovat ' + (CT[c.type] || c.type) + ' (skrýt zákazníkovi)</button>';
             }).join('') + '</div>';
             // Smlouvy čekající na NÁŠ podpis (autorizace nebo countersign) → tlačítko na podpis přímo z HolyOS.
             cForCode.filter(function(c){ return c.status === 'k_autorizaci' || c.status === 'k_podpisu'; }).forEach(function(c){
@@ -3171,6 +3178,19 @@
         if (el) cmpLeadReservations(leadId, el);
       } catch (e) { alert('Zrušení rezervace selhalo.'); }
     }
+    async function cmpArchiveContract(contractId, leadId, archived) {
+      if (archived && !confirm('Archivovat smlouvu? Zákazníkovi se v portálu přestane zobrazovat, v HolyOS zůstane kvůli historii.')) return;
+      try {
+        var r = await fetch('/api/compounder/contracts/' + contractId + '/archive', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
+          body: JSON.stringify({ archived: archived }),
+        });
+        if (!r.ok) { var j = await r.json().catch(function(){return{};}); throw new Error(j.error || ('HTTP ' + r.status)); }
+        var el = document.getElementById('cmp-resv-' + leadId);
+        if (el) cmpLeadReservations(leadId, el);
+      } catch (e) { alert('Změna archivace selhala: ' + (e.message || '')); }
+    }
+    window.cmpArchiveContract = cmpArchiveContract;
     // Řízení přístupu k portálu. Nezvaní (source='access_request') musí být ručně
     // povoleni; ostatní zdroje mají přístup automaticky.
     function cmpAccessBlock(id, source, approved){
