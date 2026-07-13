@@ -2774,6 +2774,8 @@ router.post('/contracts/public/:token', async (req, res, next) => {
     Object.keys(incoming).forEach((k) => {
       if (allowed.has(k)) merged[k] = String(incoming[k] == null ? '' : incoming[k]).slice(0, 500);
     });
+    // Plátce DPH z jiné země EU → režim reverse charge (dle prefixu DIČ).
+    merged._reverse_charge = _isEuReverseCharge(merged.buyer_dic);
     const filledRow = await prisma.compoundingContract.update({
       where: { id: row.id },
       data: { fields: merged, status: 'vyplneno', filled_at: new Date() },
@@ -2810,6 +2812,7 @@ async function _propagateCustomerSign(row, sigObj, buyerData, placeSigned) {
     Object.keys(buyerData || {}).forEach((k) => { m[k] = buyerData[k]; });
     if (!m.buyer_rep) m.buyer_rep = sigObj.name;
     if (placeSigned) m.place_signed = placeSigned;
+    m._reverse_charge = _isEuReverseCharge(m.buyer_dic);
     // Hash obsahu provázané smlouvy (bez podpisů).
     const noSig = Object.assign({}, m); delete noSig._signature_customer; delete noSig._signature_bestseries;
     m._signature_customer = Object.assign({}, sigObj, {
@@ -2892,6 +2895,8 @@ router.post('/contracts/public/:token/sign', async (req, res, next) => {
     Object.keys(incoming).forEach((k) => {
       if (allowed.has(k)) { merged[k] = String(incoming[k] == null ? '' : incoming[k]).slice(0, 500); buyerData[k] = merged[k]; }
     });
+    // Plátce DPH z jiné země EU → režim reverse charge (dle prefixu DIČ).
+    merged._reverse_charge = _isEuReverseCharge(merged.buyer_dic);
     // Zájemce zastoupen(a) = podepisující zákazník; místo podpisu z formuláře.
     if (!merged.buyer_rep) merged.buyer_rep = signerName;
     const placeSignedCust = String(b.place_signed || '').trim().slice(0, 120);
@@ -3285,9 +3290,18 @@ const reserveSchema = z.object({
     email: z.string().max(255).optional(),
     phone: z.string().max(40).optional(),
     ico: z.string().max(20).optional(),
+    dic: z.string().max(20).optional(), // DIČ / VAT ID (plátce DPH)
     address: z.string().max(500).optional(),
   }).optional(),
 });
+
+// Plátce DPH z jiné země EU → fakturace bez DPH (reverse charge, čl. 196 směrnice 2006/112/ES).
+// Určuje se z prefixu DIČ/VAT ID (DE…, SK…, PL…); CZ a neplátci = běžný režim s DPH.
+const EU_VAT_PREFIXES = ['AT', 'BE', 'BG', 'HR', 'CY', 'DK', 'EE', 'FI', 'FR', 'DE', 'GR', 'EL', 'HU', 'IE', 'IT', 'LV', 'LT', 'LU', 'MT', 'NL', 'PL', 'PT', 'RO', 'SK', 'SI', 'ES', 'SE'];
+function _isEuReverseCharge(dic) {
+  const p = String(dic || '').trim().toUpperCase().slice(0, 2);
+  return !!p && p !== 'CZ' && EU_VAT_PREFIXES.indexOf(p) !== -1;
+}
 
 // POST /api/compounder/portal/reserve — vytvoří rezervaci (blokuje lokalitu)
 // POST /api/compounder/portal/hold { t, code } — 1h blokace lokality po kliknutí Rezervovat.
@@ -3366,7 +3380,7 @@ router.post('/portal/reserve', async (req, res, next) => {
 
     const commonData = {
       buyer_name: b.name || null, buyer_email: b.email || null, buyer_phone: b.phone || null,
-      buyer_ico: b.ico || null, buyer_address: b.address || null,
+      buyer_ico: b.ico || null, buyer_dic: b.dic || null, buyer_address: b.address || null,
       days, fee_per_day: feePerDay, fee_total: feeTotal,
       purchase_price: (parsed.data.totalPrice != null) ? parsed.data.totalPrice : null,
       currency: 'CZK', status: 'reserved', hold_until: null,
@@ -3414,6 +3428,8 @@ router.post('/portal/reserve', async (req, res, next) => {
         cf.buyer_name = rec.buyer_name || cf.buyer_name || '';
         cf.buyer_address = rec.buyer_address || cf.buyer_address || '';
         cf.buyer_ico = rec.buyer_ico || cf.buyer_ico || '';
+        cf.buyer_dic = rec.buyer_dic || cf.buyer_dic || '';
+        cf._reverse_charge = _isEuReverseCharge(cf.buyer_dic);
         cf.seller_bank = cf.seller_bank || OUR_BANK_LINE;
         // Podmínky rezervace z právě vytvořené rezervace.
         cf.location_name = kioskLabel ? (code + ' — ' + kioskLabel) : ((isCs ? 'Lokalita ' : 'Location ') + code);
@@ -3498,6 +3514,8 @@ router.post('/portal/reserve', async (req, res, next) => {
             kf.buyer_name = rec.buyer_name || '';
             kf.buyer_address = rec.buyer_address || '';
             kf.buyer_ico = rec.buyer_ico || '';
+            kf.buyer_dic = rec.buyer_dic || '';
+            kf._reverse_charge = _isEuReverseCharge(kf.buyer_dic);
             kf.location_desc = kioskLabel ? (code + ' — ' + kioskLabel) : code;
             // Ceny v měně zvolené na portálu (kurz ČNB).
             const rate2 = (contractCur !== 'CZK') ? ((fx2 && fx2[contractCur]) || 0) : 1;
@@ -3577,6 +3595,8 @@ async function _offerServiceContract(rec) {
   sf.buyer_name = rec.buyer_name || '';
   sf.buyer_address = rec.buyer_address || '';
   sf.buyer_ico = rec.buyer_ico || '';
+  sf.buyer_dic = rec.buyer_dic || '';
+  sf._reverse_charge = _isEuReverseCharge(sf.buyer_dic);
   sf.location_desc = ki.label ? (code + ' — ' + ki.label) : code;
   const token = crypto.randomBytes(24).toString('hex');
   await prisma.compoundingContract.create({

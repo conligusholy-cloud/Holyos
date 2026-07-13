@@ -1342,7 +1342,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
     title:'Rezervace lokality', version:'Verze', price:'Cena',
     reserve:'Rezervovat', buy:'Koupit rovnou', days:'Počet dní rezervace',
     fee:'Rezervační poplatek', after:'Kupní cena po odečtení poplatku', header:'Hlavička smlouvy',
-    fname:'Jméno / firma', fphone:'Telefon', fico:'IČO (nepovinné)', faddr:'Adresa (nepovinné)',
+    fname:'Jméno / firma', fphone:'Telefon', fico:'IČO (nepovinné)', fdic:'DIČ / VAT ID (jen plátci DPH)', faddr:'Adresa (nepovinné)',
     ares:'🔎 Načíst z ARESu', submitReserve:'Závazně rezervovat', submitBuy:'Odeslat nezávaznou poptávku ke koupi',
     sending:'Odesílám…', doneBtn:'Hotovo ✓', fillReq:'Vyplňte prosím jméno, e-mail a telefon.',
     buyDone:'Děkujeme! Poptávku ke koupi jsme přijali a brzy se vám ozveme.', sendFail:'Nepodařilo se odeslat.',
@@ -1353,7 +1353,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
     title:'Location reservation', version:'Version', price:'Price',
     reserve:'Reserve', buy:'Buy now', days:'Number of reservation days',
     fee:'Reservation fee', after:'Purchase price after deducting the fee', header:'Contract header',
-    fname:'Name / company', fphone:'Phone', fico:'Company ID (optional)', faddr:'Address (optional)',
+    fname:'Name / company', fphone:'Phone', fico:'Company ID (optional)', fdic:'VAT ID (VAT payers only)', faddr:'Address (optional)',
     ares:'🔎 Load from ARES (CZ registry)', submitReserve:'Reserve bindingly', submitBuy:'Send a non-binding purchase inquiry',
     sending:'Sending…', doneBtn:'Done ✓', fillReq:'Please fill in your name, e-mail and phone.',
     buyDone:'Thank you! We have received your purchase inquiry and will contact you shortly.', sendFail:'Failed to send.',
@@ -1413,6 +1413,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
       +   resField('res-phone',resT('fphone'),'+420 …','tel')
       +   resField('res-ico',resT('fico'),'')
       +   '<button type="button" onclick="resAres()" style="margin:2px 0 6px;padding:8px 12px;background:var(--surface-2,#1b1b1f);border:1px solid var(--line);border-radius:8px;color:var(--gold-soft);font-size:12px;cursor:pointer">'+resT('ares')+'</button>'
+      +   resField('res-dic',resT('fdic'),'CZ12345678 / DE123456789')
       +   resField('res-addr',resT('faddr'),'')
       + '</div>'
       + '<button type="button" id="res-confirm" class="btn" style="width:100%;justify-content:center;margin-top:16px" onclick="resSubmit()">'+resT('submitReserve')+'</button>'
@@ -1471,6 +1472,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
       email: (document.getElementById("res-email")||{}).value||"",
       phone: (document.getElementById("res-phone")||{}).value||"",
       ico: (document.getElementById("res-ico")||{}).value||"",
+      dic: (document.getElementById("res-dic")||{}).value||"",
       address: (document.getElementById("res-addr")||{}).value||""
     };
     if(msg){ msg.style.color=""; msg.textContent=""; }

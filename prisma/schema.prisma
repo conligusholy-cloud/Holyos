@@ -5533,6 +5533,7 @@ model LocationReservation {
   buyer_email   String? @db.VarChar(255)
   buyer_phone   String? @db.VarChar(40)
   buyer_ico     String? @db.VarChar(20)
+  buyer_dic     String? @db.VarChar(20) // DIČ / VAT ID — plátce DPH; prefix země určuje reverse charge
   buyer_address String? @db.Text
 
   // Rezervace + poplatek (Kč), poplatek se odečítá z kupní ceny

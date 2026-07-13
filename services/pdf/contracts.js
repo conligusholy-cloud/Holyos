@@ -480,7 +480,9 @@ function renderKupni(d) {
       <li>cena Lokality (úplata za převzetí ekonomického užívání Zavedeného provozu): <strong>${v(d.price_location, 12)} Kč</strong> bez DPH.</li>
     </ol>
     <ol start="2">
-      <li>Celková kupní cena činí <strong>${v(d.price_total, 12)} Kč</strong> bez DPH; k ceně bude připočtena DPH v zákonné výši.</li>
+      <li>Celková kupní cena činí <strong>${v(d.price_total, 12)} Kč</strong> bez DPH; ${d._reverse_charge
+        ? 'kupující je osobou registrovanou k DPH v jiném členském státě EU — plnění je osvobozeno od české DPH a daň přizná kupující v režimu přenesené daňové povinnosti (reverse charge, čl. 196 směrnice Rady 2006/112/ES); fakturace probíhá bez DPH'
+        : 'k ceně bude připočtena DPH v zákonné výši'}.</li>
       <li>Byla-li k téže Lokalitě uzavřena rezervační smlouva, započítává se již uhrazený rezervační poplatek ${v(d.reservation_credit, 10)} Kč na kupní cenu.</li>
       <li>Kupní cena zahrnuje výrobu nového Stroje, jeho instalaci a výměnu za stávající Stroj na Lokalitě dle článku VI.</li>
     </ol>
@@ -615,7 +617,9 @@ function renderKupniEn(d) {
       <li>price of the Location (consideration for taking over the economic use of the Established Operation): <strong>${v(d.price_location, 12)} ${cur}</strong> excl. VAT.</li>
     </ol>
     <ol start="2">
-      <li>The total purchase price is <strong>${v(d.price_total, 12)} ${cur}</strong> excl. VAT; VAT at the statutory rate will be added.</li>
+      <li>The total purchase price is <strong>${v(d.price_total, 12)} ${cur}</strong> excl. VAT; ${d._reverse_charge
+        ? 'the Buyer is registered for VAT in another EU member state — the supply is exempt from Czech VAT and the Buyer accounts for the tax under the reverse charge mechanism (Art. 196 of Council Directive 2006/112/EC); invoicing is without VAT'
+        : 'VAT at the statutory rate will be added'}.</li>
       <li>If a reservation agreement has been concluded for the same Location, the reservation fee of ${v(d.reservation_credit, 10)} ${cur} already paid is credited towards the purchase price.</li>
       <li>The purchase price includes the manufacture of the new Machine, its installation and the replacement of the existing Machine at the Location under Article VI.</li>
     </ol>
@@ -745,7 +749,9 @@ function renderServisni(d) {
       <li>Za zajištění provozu dle článku III náleží poskytovateli odměna ve výši <strong>${v(d.fee_pct, 4)} %</strong> ${v(d.fee_base)}.</li>
       <li>Odměna se zúčtovává za ${v(d.billing_period)} a je splatná na základě daňového dokladu se splatností ${v(d.due_days, 4)} dní.</li>
       <li>Vypořádání tržeb: ${v(d.settlement)}.</li>
-      <li>K odměně bude připočtena DPH v zákonné výši.</li>
+      <li>${d._reverse_charge
+        ? 'Objednatel je osobou registrovanou k DPH v jiném členském státě EU — odměna je osvobozena od české DPH a daň přizná objednatel v režimu přenesené daňové povinnosti (reverse charge, čl. 196 směrnice Rady 2006/112/ES); fakturace probíhá bez DPH.'
+        : 'K odměně bude připočtena DPH v zákonné výši.'}</li>
     </ol>
 
     <h2>Článek V — Fakturace: servisní poplatek, nájem a energie</h2>
@@ -837,7 +843,9 @@ function renderServisniEn(d) {
       <li>For the operation under Article III, the Provider is entitled to remuneration of <strong>${v(d.fee_pct, 4)} %</strong> ${v(d.fee_base)}.</li>
       <li>The remuneration is settled per ${v(d.billing_period)} and is payable on the basis of a tax document with a due period of ${v(d.due_days, 4)} days.</li>
       <li>Settlement of revenue: ${v(d.settlement)}.</li>
-      <li>VAT at the statutory rate will be added to the remuneration.</li>
+      <li>${d._reverse_charge
+        ? 'The Client is registered for VAT in another EU member state — the remuneration is exempt from Czech VAT and the Client accounts for the tax under the reverse charge mechanism (Art. 196 of Council Directive 2006/112/EC); invoicing is without VAT.'
+        : 'VAT at the statutory rate will be added to the remuneration.'}</li>
     </ol>
 
     <h2>Article V — Invoicing: Service Fee, Rent and Energy</h2>
