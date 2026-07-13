@@ -2544,19 +2544,82 @@ function _flattenLegacyContractFields(f) {
   return flat;
 }
 
+// Částka slovy (česky), pro celé koruny. 60000 → „šedesát tisíc".
+const _CZ_ONES = ['', 'jedna', 'dva', 'tři', 'čtyři', 'pět', 'šest', 'sedm', 'osm', 'devět', 'deset', 'jedenáct', 'dvanáct', 'třináct', 'čtrnáct', 'patnáct', 'šestnáct', 'sedmnáct', 'osmnáct', 'devatenáct'];
+const _CZ_TENS = ['', '', 'dvacet', 'třicet', 'čtyřicet', 'padesát', 'šedesát', 'sedmdesát', 'osmdesát', 'devadesát'];
+const _CZ_HUNDREDS = ['', 'sto', 'dvě stě', 'tři sta', 'čtyři sta', 'pět set', 'šest set', 'sedm set', 'osm set', 'devět set'];
+function _czTriplet(n) {
+  let s = '';
+  const h = Math.floor(n / 100), r = n % 100;
+  if (h) s += _CZ_HUNDREDS[h];
+  if (r) {
+    if (s) s += ' ';
+    if (r < 20) s += _CZ_ONES[r];
+    else { s += _CZ_TENS[Math.floor(r / 10)]; if (r % 10) s += ' ' + _CZ_ONES[r % 10]; }
+  }
+  return s;
+}
+function czAmountWords(n) {
+  n = Math.round(Number(n) || 0);
+  if (n <= 0) return '';
+  const out = [];
+  const mil = Math.floor(n / 1000000);
+  const th = Math.floor((n % 1000000) / 1000);
+  const rest = n % 1000;
+  if (mil) out.push(mil === 1 ? 'jeden milion' : (_czTriplet(mil) + (mil <= 4 ? ' miliony' : ' milionů')));
+  if (th) out.push(th === 1 ? 'tisíc' : (_czTriplet(th) + (th >= 2 && th <= 4 ? ' tisíce' : ' tisíc')));
+  if (rest) out.push(_czTriplet(rest));
+  return out.join(' ');
+}
+
+// Zpětné doplnění starých (rozbitých) smluv při generování PDF: zástupci dle
+// podpisů, adresa lokality ze SIS, podmínky rezervace z rezervace v DB.
+async function _enrichLegacyContract(row, fields) {
+  if (!(row.fields && row.fields.groups)) return fields; // jen legacy tvar
+  // Zastoupen(a) = jména z uložených podpisů.
+  if (!fields.seller_rep && fields._signature_bestseries && fields._signature_bestseries.name) {
+    fields.seller_rep = fields._signature_bestseries.name;
+  }
+  if (!fields.buyer_rep && fields._signature_customer && fields._signature_customer.name) {
+    fields.buyer_rep = fields._signature_customer.name;
+  }
+  if (row.kiosk_code) {
+    const ki = await _sisKioskInfo(row.kiosk_code);
+    if (ki.label) {
+      fields.location_name = row.kiosk_code + ' — ' + ki.label;
+      fields.location_address = ki.label;
+    }
+  }
+  // Podmínky rezervace z poslední rezervace této lokality.
+  if (row.type === 'rezervacni' && row.kiosk_code) {
+    const resv = await prisma.locationReservation.findFirst({
+      where: { kiosk_code: row.kiosk_code },
+      orderBy: { created_at: 'desc' },
+    }).catch(() => null);
+    if (resv) {
+      if (!fields.reservation_fee && resv.fee_total != null) {
+        fields.reservation_fee = Math.round(resv.fee_total).toLocaleString('cs-CZ');
+        fields.reservation_fee_currency = 'Kč';
+        const words = czAmountWords(resv.fee_total);
+        if (words) fields.reservation_fee_words = words + ' korun českých';
+      }
+      if (resv.days) fields.reservation_period = resv.days + ' dní';
+      if (!fields.reserved_until && resv.reserved_until) {
+        fields.reserved_until = new Date(resv.reserved_until).toLocaleDateString('cs-CZ');
+      }
+      fields.fee_due_days = ''; // splatnost = den podpisu
+    }
+  }
+  return fields;
+}
+
 router.post('/contracts/:id(\\d+)/pdf', requireAuth, async (req, res, next) => {
   try {
     const row = await prisma.compoundingContract.findUnique({ where: { id: Number(req.params.id) } });
     if (!row) return res.status(404).json({ error: 'Smlouva nenalezena' });
     let fields = (req.body && req.body.fields) || _flattenLegacyContractFields(row.fields);
-    // U starých rozbitých smluv byla adresa lokality omylem adresa zákazníka → oprav ze SIS.
-    if (!(req.body && req.body.fields) && row.fields && row.fields.groups && row.kiosk_code) {
-      const ki = await _sisKioskInfo(row.kiosk_code);
-      if (ki.label) {
-        fields.location_name = row.kiosk_code + ' — ' + ki.label;
-        fields.location_address = ki.label;
-      }
-    }
+    // U starých rozbitých smluv doplň chybějící údaje (zástupci, lokalita, poplatek…).
+    if (!(req.body && req.body.fields)) fields = await _enrichLegacyContract(row, fields);
     let pdf;
     try {
       pdf = await contracts.generateContractPdf(row.type, fields);
@@ -2625,14 +2688,7 @@ router.get('/contracts/public/:token/pdf', async (req, res, next) => {
     if (row.share_expires_at && new Date(row.share_expires_at) < new Date()) {
       return res.status(410).json({ error: 'Platnost odkazu vypršela' });
     }
-    const pubFields = _flattenLegacyContractFields(row.fields);
-    if (row.fields && row.fields.groups && row.kiosk_code) {
-      const ki = await _sisKioskInfo(row.kiosk_code);
-      if (ki.label) {
-        pubFields.location_name = row.kiosk_code + ' — ' + ki.label;
-        pubFields.location_address = ki.label;
-      }
-    }
+    const pubFields = await _enrichLegacyContract(row, _flattenLegacyContractFields(row.fields));
     let pdf;
     try { pdf = await contracts.generateContractPdf(row.type, pubFields); }
     catch (e) { console.error('[contract public pdf]', e); return res.status(500).json({ error: 'PDF se nepodařilo vytvořit' }); }
@@ -3197,6 +3253,8 @@ router.post('/portal/reserve', async (req, res, next) => {
         if (rec.fee_total != null) {
           cf.reservation_fee = Math.round(rec.fee_total).toLocaleString('cs-CZ');
           cf.reservation_fee_currency = 'Kč';
+          const _words = czAmountWords(rec.fee_total);
+          if (_words) cf.reservation_fee_words = _words + ' korun českých';
           if (kioskCurrency !== 'CZK') {
             try {
               const rates = await fxRatesCzk();
@@ -3204,6 +3262,7 @@ router.post('/portal/reserve', async (req, res, next) => {
               if (rate > 0) {
                 cf.reservation_fee = (Math.round((rec.fee_total / rate) * 100) / 100).toLocaleString('cs-CZ');
                 cf.reservation_fee_currency = kioskCurrency;
+                cf.reservation_fee_words = ''; // slovy jen pro Kč
               }
             } catch (e) { /* zůstane CZK */ }
           }
