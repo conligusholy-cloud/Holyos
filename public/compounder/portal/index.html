@@ -1092,13 +1092,18 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
     var box=document.getElementById('statusPanel');
     if(box && !box.innerHTML){ box.innerHTML='<div style="color:var(--muted);font-size:13px">Načítám stav…</div>'; }
     fetch('/api/compounder/portal/status?t='+encodeURIComponent(tok), { credentials:'include' })
-      .then(function(r){ return r.json().catch(function(){ return { ok:false }; }); })
-      .then(function(d){
-        if(!d || !d.ok){ if(box) box.innerHTML='<div style="color:var(--muted);font-size:13px">Stav se teď nepodařilo načíst. Zkuste to prosím za chvíli.</div>'; return; }
+      .then(function(r){ return r.text().then(function(txt){ var d=null; try{ d=JSON.parse(txt); }catch(e){} return { status:r.status, d:d, txt:txt }; }); })
+      .then(function(res){
+        if(!res.d || !res.d.ok){
+          var det = (res.d && res.d.error) ? res.d.error : (res.txt ? res.txt.slice(0,100) : '');
+          if(box) box.innerHTML='<div style="color:var(--muted);font-size:13px">Stav se nepodařilo načíst (HTTP '+res.status+'). '+e2(det)+'</div>';
+          return;
+        }
+        var d=res.d;
         var badge=document.getElementById('bellBadge');
         if(badge){ if(d.actionable>0){ badge.style.display=''; badge.textContent=d.actionable; } else { badge.style.display='none'; } }
         renderStatusPanel(d);
-      }).catch(function(){ if(box) box.innerHTML='<div style="color:var(--muted);font-size:13px">Stav se teď nepodařilo načíst.</div>'; });
+      }).catch(function(err){ if(box) box.innerHTML='<div style="color:var(--muted);font-size:13px">Stav se nepodařilo načíst (síť): '+e2(String(err&&err.message||err))+'</div>'; });
   }
   (function(){
     var bell=document.getElementById('bellBtn');
