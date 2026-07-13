@@ -2413,7 +2413,9 @@ router.get('/contracts/:type(kupni|servisni|rezervacni)/prefill', requireAuth, a
       _buybackYears,
     };
     const our = await getOurCompany().catch(() => null);
-    res.json(contracts.getPrefill(type, pseudoSite, our));
+    const pf = contracts.getPrefill(type, pseudoSite, our);
+    if (pf && pf.values && !pf.values.seller_bank) pf.values.seller_bank = OUR_BANK_LINE;
+    res.json(pf);
   } catch (err) { next(err); }
 });
 
@@ -3401,6 +3403,7 @@ router.post('/portal/reserve', async (req, res, next) => {
         cf.buyer_name = rec.buyer_name || cf.buyer_name || '';
         cf.buyer_address = rec.buyer_address || cf.buyer_address || '';
         cf.buyer_ico = rec.buyer_ico || cf.buyer_ico || '';
+        cf.seller_bank = cf.seller_bank || OUR_BANK_LINE;
         // Podmínky rezervace z právě vytvořené rezervace.
         cf.location_name = kioskLabel ? (code + ' — ' + kioskLabel) : ((isCs ? 'Lokalita ' : 'Location ') + code);
         if (kioskLabel) cf.location_address = kioskLabel;
@@ -3675,6 +3678,12 @@ function verifyPayToken(token) {
   if (!Number.isInteger(id) || id <= 0) return null;
   return safeEqStr(p[1], hmacSig('pay:' + id)) ? id : null;
 }
+// Naše bankovní účty (Best Series s.r.o.): CZK pro tuzemské platby, EUR pro zahraniční.
+const OUR_BANK = {
+  czk: { account: '221913663', bankCode: '0600', iban: 'CZ6706000000000221913663', bic: 'AGBACZPP', name: 'BEST SERIES S.R.O.' },
+  eur: { account: '222043452', bankCode: '0600', iban: 'CZ8306000000000222043452', bic: 'AGBACZPP', name: 'BEST SERIES S.R.O.' },
+};
+const OUR_BANK_LINE = 'CZK: 221913663/0600 (IBAN CZ6706000000000221913663); EUR: 222043452/0600 (IBAN CZ8306000000000222043452, BIC AGBACZPP)';
 const PAY_L = {
   cs: { fee: 'Rezervační poplatek', buy: 'Kupní cena (po odečtení poplatku)', title: 'Pokyny k platbě — rezervace', subj: 'Pokyny k platbě — Compounder', pre: 'Údaje k úhradě rezervace a kupní ceny.', body: (n) => 'Dobrý den' + (n ? ', ' + n : '') + ',\n\nv příloze posíláme pokyny k platbě (rezervační poplatek a kupní cena) včetně QR kódů. Po přijetí platby vám vystavíme fakturu.', wa: (n, k, u) => 'Dobrý den' + (n ? ', ' + n : '') + ', zde jsou pokyny k platbě za rezervaci ' + k + ' (QR uvnitř PDF): ' + u },
   en: { fee: 'Reservation fee', buy: 'Purchase price (less reservation fee)', title: 'Payment instructions — reservation', subj: 'Payment instructions — Compounder', pre: 'Details to pay the reservation and purchase price.', body: (n) => 'Hello' + (n ? ' ' + n : '') + ',\n\nplease find attached the payment instructions (reservation fee and purchase price) including QR codes. Once received, we will issue an invoice.', wa: (n, k, u) => 'Hello' + (n ? ' ' + n : '') + ', here are the payment instructions for reservation ' + k + ' (QR inside the PDF): ' + u },
@@ -3689,18 +3698,10 @@ async function _buildPaymentCtx(resId) {
   let lang = 'cs';
   if (resv.lead_id) { try { const l = await prisma.compounderLead.findUnique({ where: { id: resv.lead_id }, select: { lang: true } }); if (l && l.lang) lang = l.lang; } catch (e) {} }
   const tr = payL(lang);
-  let accounts = [];
-  try {
-    accounts = await prisma.bankAccount.findMany({
-      where: { active: true },
-      select: { account_number: true, bank_code: true, iban: true, bic: true, currency: true, name: true },
-    });
-  } catch (e) { accounts = []; }
-  const czkA = accounts.find((a) => a.currency === 'CZK') || accounts[0] || null;
-  const eurA = accounts.find((a) => a.currency === 'EUR') || null;
+  // Tuzemské (CZK) i zahraniční (EUR) platby jdou na naše účty Best Series.
   const bank = {
-    czk: czkA ? { account: czkA.account_number, bankCode: czkA.bank_code, iban: czkA.iban, name: czkA.name } : null,
-    eur: eurA ? { iban: eurA.iban, bic: eurA.bic, name: eurA.name } : null,
+    czk: { account: OUR_BANK.czk.account, bankCode: OUR_BANK.czk.bankCode, iban: OUR_BANK.czk.iban, name: OUR_BANK.czk.name },
+    eur: { iban: OUR_BANK.eur.iban, bic: OUR_BANK.eur.bic, name: OUR_BANK.eur.name },
   };
   const cur = resv.currency || 'CZK';
   const vs = String(resv.id);
