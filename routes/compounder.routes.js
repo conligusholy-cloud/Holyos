@@ -340,7 +340,7 @@ function fmtCz(d) {
   const p = (n) => (n < 10 ? '0' + n : '' + n);
   return `${x.getDate()}.${x.getMonth() + 1}.${x.getFullYear()} ${p(x.getHours())}:${p(x.getMinutes())}`;
 }
-const CT_STATUS_MSG = { koncept: 'je připravena', odeslano: 'vám byla zpřístupněna', vyplneno: 'čeká na váš podpis', k_podpisu: 'čeká na váš podpis', podepsano: 'je podepsaná' };
+const CT_STATUS_MSG = { koncept: 'je připravena', odeslano: 'vám byla zpřístupněna', vyplneno: 'čeká na váš podpis', k_autorizaci: 'se připravuje k podpisu', k_podpisu: 'čeká na dokončení', k_podpisu_zakaznik: 'čeká na váš podpis', podepsano: 'je podepsaná' };
 const RES_STATUS_LABEL = { hold: 'Blokace lokality (1 h)', reserved: 'Rezervováno — čeká na podpis rezervační smlouvy', active: 'Rezervováno — poplatek přijat', completed: 'Rezervace dokončena', cancelled: 'Rezervace zrušena', expired: 'Rezervace vypršela' };
 router.get('/portal/status', async (req, res, next) => {
   try {
@@ -383,14 +383,20 @@ router.get('/portal/status', async (req, res, next) => {
       if (r.purchase_paid_at) push(r.purchase_paid_at, '💰', `Kupní cena za ${lbl} zaplacena.`);
       if ((r.status === 'reserved' || r.status === 'active') && !r.fee_paid_at) actionable++;
     });
+    // Stavy, kde je na řadě ZÁKAZNÍK (má podepsat).
+    const CUST_ACTION = ['odeslano', 'vyplneno', 'k_podpisu_zakaznik'];
     contractRows.forEach((c) => {
       const tl = (contracts.TYPE_LABEL && contracts.TYPE_LABEL[c.type]) || 'Smlouva';
       const signed = c.status === 'podepsano';
-      docs.push({ kind: 'contract', type: c.type, typeLabel: tl, status: c.status, url: c.share_token ? ('/smlouva/' + c.share_token) : null, signed_at: c.signed_at });
+      const custAct = CUST_ACTION.indexOf(c.status) !== -1;
+      // Odkaz k podpisu zpřístupníme jen když je na řadě zákazník (ne během naší autorizace).
+      const url = (c.share_token && custAct) ? ('/smlouva/' + c.share_token) : null;
+      docs.push({ kind: 'contract', type: c.type, typeLabel: tl, status: c.status, url: url, signed_at: c.signed_at });
       if (signed) { push(c.signed_at || c.updated_at, '✅', `${tl} je podepsaná.`); }
+      else if (c.status === 'k_autorizaci') { push(c.updated_at || c.created_at, '⏳', `${tl} se připravuje k podpisu.`); }
       else {
-        push(c.updated_at || c.created_at, c.status === 'koncept' ? '📄' : '✍️', `${tl} ${CT_STATUS_MSG[c.status] || 'byla aktualizována'}.`);
-        if (c.status !== 'koncept' && c.share_token) actionable++;
+        push(c.updated_at || c.created_at, custAct ? '✍️' : '📄', `${tl} ${CT_STATUS_MSG[c.status] || 'byla aktualizována'}.`);
+        if (custAct && c.share_token) actionable++;
       }
     });
     msgs.sort((a, b) => (a.ts < b.ts ? 1 : -1));
@@ -2595,6 +2601,7 @@ router.post('/contracts/public/:token/sign', async (req, res, next) => {
       return res.status(410).json({ error: 'Platnost odkazu vypršela' });
     }
     if (row.status === 'podepsano') return res.status(409).json({ error: 'Smlouva už je podepsaná.' });
+    if (row.status === 'k_autorizaci') return res.status(409).json({ error: 'Smlouva zatím čeká na autorizaci Best Series. Podepíšete ji hned, jakmile ji schválíme.' });
     const b = req.body || {};
     const signerName = String(b.signer_name || '').trim().slice(0, 200);
     const signature = String(b.signature || '');
@@ -2624,7 +2631,17 @@ router.post('/contracts/public/:token/sign', async (req, res, next) => {
       content_hash: contentHash,
       method: 'SES-drawn',
     };
-    // Zákazník podepsal → čeká na náš podpis (Jan/Tomáš dostanou push + odkaz).
+    // Když jsme smlouvu podepsali už dřív (rezervační flow – my první), pak podpisem
+    // zákazníka je smlouva PLNĚ podepsaná → uloží se a Velín (Jan/Tomáš) dostane notifikaci.
+    if (row.fields && row.fields._signature_bestseries) {
+      const fullRow = await prisma.compoundingContract.update({
+        where: { id: row.id },
+        data: { fields: merged, status: 'podepsano', filled_at: row.filled_at || signedAt, signed_at: signedAt },
+      });
+      compounderNotify.notifyContractEvent(prisma, { contract: fullRow, event: 'signed' }).catch(() => {});
+      return res.json({ ok: true, fully_signed: true });
+    }
+    // Klasický flow: zákazník podepsal → čeká na náš podpis (Jan/Tomáš dostanou push + odkaz).
     const awaitingRow = await prisma.compoundingContract.update({
       where: { id: row.id },
       data: { fields: merged, status: 'k_podpisu', filled_at: row.filled_at || signedAt },
@@ -2687,6 +2704,17 @@ router.post('/contracts/:id(\\d+)/countersign', requireAuth, async (req, res, ne
       ip: (req.headers['x-forwarded-for'] || req.socket && req.socket.remoteAddress || '').toString().split(',')[0].trim().slice(0, 64),
       method: 'SES-drawn',
     };
+    // "My podepisujeme první" (rezervační flow): stav k_autorizaci + zákazník ještě
+    // nepodepsal → náš podpis smlouvu NEUZAVÍRÁ, ale zpřístupní ji zákazníkovi k podpisu.
+    const weFirst = (row.status === 'k_autorizaci') && !(row.fields && row.fields._signature_customer);
+    if (weFirst) {
+      const token = row.share_token || crypto.randomBytes(24).toString('hex');
+      await prisma.compoundingContract.update({
+        where: { id: row.id },
+        data: { fields: merged, status: 'k_podpisu_zakaznik', share_token: token, share_expires_at: new Date(Date.now() + 30 * 24 * 3600 * 1000) },
+      });
+      return res.json({ ok: true, awaiting_customer: true });
+    }
     const signedRow = await prisma.compoundingContract.update({
       where: { id: row.id }, data: { fields: merged, status: 'podepsano', signed_at: signedAt },
     });
@@ -3038,6 +3066,30 @@ router.post('/portal/reserve', async (req, res, next) => {
 
     // Velín push + zvonek nastaveným osobám (Jan/Tomáš) o nové rezervaci.
     compounderNotify.notifyReservationEvent(prisma, { reservation: rec, event: 'created' }).catch(() => {});
+
+    // Automaticky vytvoř rezervační smlouvu předvyplněnou z hlavičky a pošli ji do
+    // Velína k autorizaci (podpisu za Best Series). Zákazník ji podepíše až po nás.
+    try {
+      const already = await prisma.compoundingContract.findFirst({
+        where: { kiosk_code: code, type: 'rezervacni', status: { notIn: ['podepsano'] } }, select: { id: true },
+      });
+      if (!already) {
+        const our = await getOurCompany().catch(() => null);
+        const pseudoSite = { name: 'Lokalita ' + code, address: rec.buyer_address || '', pradlomat_ref: code, purchase_price: (rec.purchase_price != null) ? rec.purchase_price : null, contacts: [] };
+        let cf = {};
+        try { cf = contracts.getPrefill('rezervacni', pseudoSite, our) || {}; } catch (e) { cf = {}; }
+        cf.buyer_name = rec.buyer_name || cf.buyer_name || '';
+        cf.buyer_address = rec.buyer_address || cf.buyer_address || '';
+        cf.buyer_ico = rec.buyer_ico || cf.buyer_ico || '';
+        cf.location_desc = code;
+        const token = crypto.randomBytes(24).toString('hex');
+        const contract = await prisma.compoundingContract.create({
+          data: { kiosk_code: code, kiosk_label: null, type: 'rezervacni', status: 'k_autorizaci', fields: cf, share_token: token, share_expires_at: new Date(Date.now() + 30 * 24 * 3600 * 1000) },
+        });
+        const signUrl = (getAppUrl() || '') + '/modules/podpis-smlouvy/index.html?id=' + contract.id;
+        compounderNotify.notifyContractAwaitingCountersign(prisma, contract, signUrl).catch(() => {});
+      }
+    } catch (e) { console.error('[compounder] auto rezervační smlouva selhala:', e.message); }
 
     res.json({ ok: true, id: rec.id, code, days, feePerDay, feeTotal, signUntil, feeUntil, reservedUntil });
   } catch (err) { next(err); }

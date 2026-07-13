@@ -1051,7 +1051,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
   }
   // ── Stav dokumentů + zprávy (zvoneček v hlavičce) ────────────────────────
   function stFmtDt(iso){ if(!iso) return ''; var d=new Date(iso); function p(n){return n<10?'0'+n:''+n;} return d.getDate()+'.'+(d.getMonth()+1)+'.'+d.getFullYear()+' '+p(d.getHours())+':'+p(d.getMinutes()); }
-  function ctStatusTxt(s){ return ({koncept:'připravena',odeslano:'zpřístupněna k přečtení',vyplneno:'čeká na váš podpis',k_podpisu:'čeká na váš podpis',podepsano:'podepsáno ✓'})[s] || s; }
+  function ctStatusTxt(s){ return ({koncept:'připravena',odeslano:'zpřístupněna k přečtení',vyplneno:'čeká na váš podpis',k_autorizaci:'připravuje se',k_podpisu:'čeká na dokončení',k_podpisu_zakaznik:'čeká na váš podpis',podepsano:'podepsáno ✓'})[s] || s; }
   function renderStatusPanel(d){
     var box=document.getElementById('statusPanel'); if(!box) return;
     var h='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px"><div style="font-weight:700;font-size:15px;color:#f4f4f6">Stav vašich dokumentů</div><button type="button" id="stClose" style="background:none;border:none;color:var(--muted);font-size:22px;cursor:pointer;line-height:1">×</button></div>';
