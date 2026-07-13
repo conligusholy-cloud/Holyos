@@ -2553,6 +2553,24 @@ router.get('/contracts/public/:token', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// GET veřejné PDF smlouvy podle tokenu — zákazník si smlouvu přečte před podpisem.
+router.get('/contracts/public/:token/pdf', async (req, res, next) => {
+  try {
+    const row = await prisma.compoundingContract.findUnique({ where: { share_token: String(req.params.token || '') } });
+    if (!row) return res.status(404).json({ error: 'Odkaz nenalezen nebo neplatný' });
+    if (row.share_expires_at && new Date(row.share_expires_at) < new Date()) {
+      return res.status(410).json({ error: 'Platnost odkazu vypršela' });
+    }
+    let pdf;
+    try { pdf = await contracts.generateContractPdf(row.type, row.fields || {}); }
+    catch (e) { console.error('[contract public pdf]', e); return res.status(500).json({ error: 'PDF se nepodařilo vytvořit' }); }
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', 'inline; filename="' + _safeContractName(contracts.TYPE_LABEL[row.type]) + '.pdf"');
+    res.setHeader('Content-Length', pdf.length);
+    res.send(pdf);
+  } catch (err) { next(err); }
+});
+
 // POST veřejné (bez auth) — protistrana uloží hlavičku; stav 'vyplneno' + notifikace
 router.post('/contracts/public/:token', async (req, res, next) => {
   try {
