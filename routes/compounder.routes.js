@@ -2694,6 +2694,7 @@ router.get('/contracts/:id(\\d+)/for-sign', requireAuth, async (req, res, next) 
     res.json({
       ok: true, id: row.id, type: row.type, typeLabel: contracts.TYPE_LABEL[row.type] || 'Smlouva',
       kiosk_code: row.kiosk_code, kiosk_label: row.kiosk_label, status: row.status,
+      share_token: row.share_token || null,
       customer_signature: cust ? cust.image : null,
       customer_name: cust ? cust.name : null,
       customer_signed_at: cust ? cust.signed_at : null,
