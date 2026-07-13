@@ -1392,7 +1392,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
           var su = x.j.signUntil ? new Date(x.j.signUntil).toLocaleDateString("cs-CZ") : "";
           var fu = x.j.feeUntil ? new Date(x.j.feeUntil).toLocaleDateString("cs-CZ") : "";
           resDone("Rezervováno ✓ Poplatek "+offMoney(x.j.feeTotal)+". Rezervační smlouvu podepište do "+su+", poplatek uhraďte do "+fu+". Ozveme se vám s podklady.");
-          var t = offTok(); setTimeout(function(){ loadOffers(t); }, 2200);
+          var t = offTok(); setTimeout(function(){ loadOffers(t); if(typeof loadStatus==='function') loadStatus(t); }, 2200);
         } else {
           resErr((x.j && x.j.error) || "Rezervaci se nepodařilo vytvořit.");
         }
