@@ -90,8 +90,9 @@ function renderEmailHtml({ title, body, link, linkLabel = 'Otevřít v HolyOS', 
             </div>
             <div style="font-size:12px;color:#6f6f78;margin-top:14px;word-break:break-all;">${escapeHtml(cLink)}</div>` : ''}
         </td></tr>
-        <tr><td style="padding:24px 34px 30px;border-top:1px solid #222228;margin-top:18px;font-size:11.5px;color:#6f6f78;text-align:center;">
-          COMPOUNDER · Best Series — We build Compounder Machines.<br>
+        <tr><td style="padding:24px 34px 30px;border-top:1px solid #222228;margin-top:18px;font-size:11.5px;color:#6f6f78;text-align:center;line-height:1.7;">
+          You are receiving this e-mail because you expressed interest in Compounding at compounder.world.<br><br>
+          COMPOUNDER · <b style="color:#8a8a92;">Best Series s.r.o.</b> · IČO 05643724 · Czech Republic<br>
           <a href="${site}" style="color:#c9a24b;text-decoration:none;">compounder.world</a>
         </td></tr>
       </table>
@@ -152,7 +153,7 @@ function renderEmailHtml({ title, body, link, linkLabel = 'Otevřít v HolyOS', 
  * @param {Array}  [args.attachments]   Pole attachments [{ filename, content, contentType }]
  *                                      Použito mj. pro PDF fakturu (Fáze 6).
  */
-async function sendMail({ to, subject, body, from, fromName, link, linkLabel, preheader, attachments, brand }) {
+async function sendMail({ to, subject, body, from, fromName, link, linkLabel, preheader, attachments, brand, replyTo }) {
   if (!to) return { sent: false, skipped: 'no-recipient' };
 
   // 1) Microsoft Graph send-as (preferovaná cesta pokud je `from` zadán a Graph
@@ -169,6 +170,7 @@ async function sendMail({ to, subject, body, from, fromName, link, linkLabel, pr
           htmlBody: html,
           attachments: Array.isArray(attachments) ? attachments : undefined,
           fromName: fromName || undefined,
+          replyTo: replyTo || undefined,
         });
         console.log(`[Email] odesláno přes Graph → ${to} (from ${from}${fromName ? ' / ' + fromName : ''})`);
         return { sent: true, via: 'graph', from };
@@ -191,6 +193,7 @@ async function sendMail({ to, subject, body, from, fromName, link, linkLabel, pr
     const mailOpts = {
       from: fromHeader,
       to,
+      replyTo: replyTo || undefined,
       subject: subject || 'HolyOS — notifikace',
       text: body ? body + (link ? `\n\n${link}` : '') : '',
       html: renderEmailHtml({ title: subject, body, link, linkLabel, preheader, brand }),
