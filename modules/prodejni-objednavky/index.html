@@ -4160,8 +4160,11 @@
         rows.forEach(function(x){
           var act='';
           if(x.status==='reserved'){ act = '<button class="btn" style="padding:4px 8px;font-size:12px;" onclick="resAction('+x.id+',\'fee_paid\')">Poplatek přišel</button> <button class="btn btn-secondary" style="padding:4px 8px;font-size:12px;" onclick="resAction('+x.id+',\'cancel\')">Zrušit</button>'; }
-          else if(x.status==='active'){ act = '<button class="btn" style="padding:4px 8px;font-size:12px;" onclick="resAction('+x.id+',\'purchase_paid\')">Kupní cena přišla</button> <button class="btn btn-secondary" style="padding:4px 8px;font-size:12px;" onclick="resAction('+x.id+',\'cancel\')">Zrušit</button>'; }
+          else if(x.status==='active'){ act = '<button class="btn" style="padding:4px 8px;font-size:12px;" onclick="resAction('+x.id+',\'purchase_paid\')">Kupní cena přišla</button> <button class="btn btn-secondary" style="padding:4px 8px;font-size:12px;color:#f59e0b;" title="Zrušit platbu poplatku (omyl)" onclick="resAction('+x.id+',\'fee_unpaid\')">↩︎ Zrušit platbu</button> <button class="btn btn-secondary" style="padding:4px 8px;font-size:12px;" onclick="resAction('+x.id+',\'cancel\')">Zrušit</button>'; }
+          else if(x.status==='completed'){ act = '<span style="color:#10b981;font-size:12px;font-weight:600;">✓ Zaplaceno</span> <button class="btn btn-secondary" style="padding:4px 8px;font-size:12px;color:#f59e0b;" title="Zrušit platbu kupní ceny (omyl)" onclick="resAction('+x.id+',\'purchase_unpaid\')">↩︎ Zrušit platbu</button>'; }
           else { act = '<span style="color:var(--text2);font-size:12px;">'+(x.cancel_reason?kvEsc(x.cancel_reason):'—')+'</span>'; }
+          var feeCell = x.fee_paid_at ? '<span style="color:#10b981;font-weight:600;">'+resFmtCzk(x.fee_total)+' ✓</span>' : resFmtCzk(x.fee_total);
+          var buyCell = x.purchase_paid_at ? '<span style="color:#10b981;font-weight:600;">'+resFmtCzk(x.purchase_price)+' ✓</span>' : resFmtCzk(x.purchase_price);
           var buyer = kvEsc(x.buyer_name||'') + (x.buyer_phone?('<br><span style="color:var(--text2);font-size:11px;">'+kvEsc(x.buyer_phone)+'</span>'):'');
           var lhuty = (x.signed_at ? ('Podepsáno: '+resDate(x.signed_at)) : ('Podpis do: '+resDate(x.sign_until)))+'<br>Poplatek: '+resDate(x.fee_until)+'<br>Konec: '+resDate(x.reserved_until);
           var scol = x.status==='completed'?'#10b981':((x.status==='cancelled'||x.status==='expired')?'#ef4444':'#eab308');
@@ -4172,7 +4175,7 @@
               + '<button class="btn btn-secondary" style="padding:4px 8px;font-size:12px;" title="Poslat pokyny e-mailem" onclick="resPayEmail('+x.id+',this)">✉️</button> '
               + '<button class="btn" style="padding:4px 8px;font-size:12px;background:#25D366;color:#0a2e17;font-weight:700;" title="Poslat pokyny na WhatsApp" onclick="resPayWhatsApp('+x.id+',this)">🟢</button> '
             : '';
-          h += '<tr><td style="white-space:nowrap;">'+resDate(x.created_at)+'</td><td>'+kvEsc(x.kiosk_code)+'</td><td>'+buyer+'</td><td>'+x.days+'</td><td style="white-space:nowrap;">'+resFmtCzk(x.fee_total)+'</td><td style="white-space:nowrap;">'+resFmtCzk(x.purchase_price)+'</td><td><span style="color:'+scol+';font-size:12px;font-weight:600;">'+(RES_STATUS[x.status]||x.status)+'</span></td><td style="font-size:11px;white-space:nowrap;">'+lhuty+'</td><td style="white-space:nowrap;">'+docsBtn+payBtns+act+'</td></tr>';
+          h += '<tr><td style="white-space:nowrap;">'+resDate(x.created_at)+'</td><td>'+kvEsc(x.kiosk_code)+'</td><td>'+buyer+'</td><td>'+x.days+'</td><td style="white-space:nowrap;">'+feeCell+'</td><td style="white-space:nowrap;">'+buyCell+'</td><td><span style="color:'+scol+';font-size:12px;font-weight:600;">'+(RES_STATUS[x.status]||x.status)+'</span></td><td style="font-size:11px;white-space:nowrap;">'+lhuty+'</td><td style="white-space:nowrap;">'+docsBtn+payBtns+act+'</td></tr>';
         });
         h += '</tbody></table></div>';
         box.innerHTML = h;
@@ -4192,6 +4195,7 @@
     window.loadReservationsPage = loadReservationsPage;
     async function resAction(id, action){
       if((action==='cancel') && !confirm('Opravdu zrušit rezervaci? Lokalita se uvolní ostatním.')) return;
+      if((action==='fee_unpaid'||action==='purchase_unpaid') && !confirm('Opravdu zrušit tuto platbu? Vrátí se do stavu „nezaplaceno".')) return;
       try {
         var r = await fetch('/api/compounder/reservations/'+id, { method:'PATCH', credentials:'include', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action: action }) });
         if(!r.ok) throw new Error();

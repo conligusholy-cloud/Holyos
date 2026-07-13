@@ -18,6 +18,7 @@ const { inviteEmail, loginEmail } = require('../services/compounder-emails');
 const { getSetting, setSetting, getOurCompany } = require('../services/settings');
 const contracts = require('../services/pdf/contracts');
 const compounderNotify = require('../services/compounder/notify');
+const digestWorker = require('../services/compounder/daily-digest-worker');
 const multer = require('multer');
 const { putObject: r2Put } = require('../services/storage/r2');
 const kioskPhotoUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 8 * 1024 * 1024, files: 3 } });
@@ -915,12 +916,17 @@ router.get('/sales-overview', requireAuth, async (req, res, next) => {
 
     const recent = leads.slice(0, 15).map((l) => ({ lead_id: l.id, name: l.name, status: l.status, owner_name: l.owner_person_id ? (nameById[l.owner_person_id] || null) : null, updated_at: l.updated_at }));
 
+    // Dnes aktivní leady (bez testovacích @bestseries.cz) — stejná logika jako denní hodnocení.
+    let activeToday = [];
+    try { const dg = await digestWorker.computeDigest(); activeToday = (dg && dg.perLead) || []; } catch (e) { activeToday = []; }
+
     res.json({
       ok: true,
       totals: { leads: leads.length, converted, conversionPct: leads.length ? Math.round((converted / leads.length) * 100) : 0, unassigned },
       sellers,
       reservations: { total: resv.length, byStatus: resvByStatus, items: resvItems.slice(0, 50) },
       recent,
+      activeToday,
     });
   } catch (err) { next(err); }
 });
@@ -2718,10 +2724,15 @@ router.get('/contracts/public/:token', async (req, res, next) => {
     const values = {};
     const rowFields = _flattenLegacyContractFields(row.fields);
     fields.forEach((f) => { values[f.name] = (rowFields[f.name] != null) ? rowFields[f.name] : ''; });
+    // Jazyk smlouvy → formulář zákazníka se zobrazí ve stejném jazyce (cs/en).
+    const _cl = String((row.fields && row.fields._lang) || 'cs').toLowerCase();
+    const _clEn = _cl.indexOf('cs') !== 0;
+    const CT_LABEL_EN = { kupni: 'Purchase Agreement', servisni: 'Service Agreement', rezervacni: 'Reservation Agreement' };
     res.json({
-      typeLabel: contracts.TYPE_LABEL[row.type] || 'Smlouva',
+      typeLabel: _clEn ? (CT_LABEL_EN[row.type] || 'Contract') : (contracts.TYPE_LABEL[row.type] || 'Smlouva'),
       kioskLabel: row.kiosk_label || '',
       status: row.status,
+      lang: _clEn ? _cl : 'cs',
       fields, values,
     });
   } catch (err) { next(err); }
@@ -3585,7 +3596,7 @@ async function _offerServiceContract(rec) {
 }
 
 const resPatchSchema = z.object({
-  action: z.enum(['fee_paid', 'purchase_paid', 'cancel', 'reopen']),
+  action: z.enum(['fee_paid', 'fee_unpaid', 'purchase_paid', 'purchase_unpaid', 'cancel', 'reopen']),
   cancel_reason: z.string().max(200).optional(),
 });
 
@@ -3600,13 +3611,15 @@ router.patch('/reservations/:id', requireAuth, async (req, res, next) => {
     const data = {};
     switch (parsed.data.action) {
       case 'fee_paid': data.fee_paid_at = now; data.signed_at = now; data.status = 'active'; break;
+      case 'fee_unpaid': data.fee_paid_at = null; data.status = 'reserved'; break;
       case 'purchase_paid': data.purchase_paid_at = now; data.status = 'completed'; break;
+      case 'purchase_unpaid': data.purchase_paid_at = null; data.status = 'active'; break;
       case 'cancel': data.status = 'cancelled'; data.cancel_reason = parsed.data.cancel_reason || 'Zrušeno ručně'; break;
       case 'reopen': data.status = 'cancelled'; data.cancel_reason = 'Uvolněno ručně'; break;
     }
     const rec = await prisma.locationReservation.update({ where: { id }, data });
     const evMap = { fee_paid: 'fee_paid', purchase_paid: 'purchase_paid', cancel: 'cancelled', reopen: 'cancelled' };
-    compounderNotify.notifyReservationEvent(prisma, { reservation: rec, event: evMap[parsed.data.action] }).catch(() => {});
+    if (evMap[parsed.data.action]) compounderNotify.notifyReservationEvent(prisma, { reservation: rec, event: evMap[parsed.data.action] }).catch(() => {});
     // Kupní cena zaplacena → nabídnout zákazníkovi kompletní servis (servisní smlouva v portálu).
     if (parsed.data.action === 'purchase_paid') {
       _offerServiceContract(rec).catch((e) => console.error('[servisni offer]', e));
