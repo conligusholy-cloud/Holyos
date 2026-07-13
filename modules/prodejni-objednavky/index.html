@@ -3154,8 +3154,11 @@
                 ? '<button onclick="event.stopPropagation();cmpArchiveContract(' + c.id + ',' + id + ',false)" style="background:transparent;color:var(--text2);border:1px solid var(--border);border-radius:6px;padding:3px 9px;font-size:11px;cursor:pointer;">↩︎ Obnovit ' + (CT[c.type] || c.type) + '</button>'
                 : '<button onclick="event.stopPropagation();cmpArchiveContract(' + c.id + ',' + id + ',true)" style="background:transparent;color:#f59e0b;border:1px solid rgba(245,158,11,.4);border-radius:6px;padding:3px 9px;font-size:11px;cursor:pointer;">🗄️ Archivovat ' + (CT[c.type] || c.type) + ' (skrýt zákazníkovi)</button>';
             }).join('') + '</div>';
-            // Smlouvy čekající na NÁŠ podpis (autorizace nebo countersign) → tlačítko na podpis přímo z HolyOS.
-            cForCode.filter(function(c){ return c.status === 'k_autorizaci' || c.status === 'k_podpisu'; }).forEach(function(c){
+            // Tlačítko podpisu jen u AKTUÁLNÍCH smluv — ne u archivovaných a ne u zrušené/vypršelé rezervace.
+            var _signable = (['cancelled','expired'].indexOf(x.status) === -1)
+              ? cForCode.filter(function(c){ return !c.archived && (c.status === 'k_autorizaci' || c.status === 'k_podpisu'); })
+              : [];
+            _signable.forEach(function(c){
               html += '<div style="margin-top:6px;"><a href="/modules/podpis-smlouvy/index.html?id=' + c.id + '" target="_blank" rel="noopener" style="display:inline-block;background:#eab308;color:#1a1408;text-decoration:none;border-radius:6px;padding:5px 12px;font-size:12px;font-weight:700;">✍️ Podepsat ' + (CT[c.type] || c.type).toLowerCase() + ' smlouvu za Best Series</a></div>';
             });
           }
