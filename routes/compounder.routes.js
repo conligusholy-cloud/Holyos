@@ -3670,4 +3670,107 @@ router.get('/leads/:id(\\d+)/reservations', requireAuth, async (req, res, next) 
   } catch (err) { next(err); }
 });
 
+// ─── Pokyny k platbě (Compounding rezervace) ─────────────────────────────────
+const paymentInstructions = require('../services/pdf/payment-instructions');
+function makePayToken(id) { return id + '.' + hmacSig('pay:' + id); }
+function verifyPayToken(token) {
+  if (!token || String(token).indexOf('.') < 0) return null;
+  const p = String(token).split('.'); const id = Number(p[0]);
+  if (!Number.isInteger(id) || id <= 0) return null;
+  return safeEqStr(p[1], hmacSig('pay:' + id)) ? id : null;
+}
+const PAY_L = {
+  cs: { fee: 'Rezervační poplatek', buy: 'Kupní cena (po odečtení poplatku)', title: 'Pokyny k platbě — rezervace', subj: 'Pokyny k platbě — Compounder', pre: 'Údaje k úhradě rezervace a kupní ceny.', body: (n) => 'Dobrý den' + (n ? ', ' + n : '') + ',\n\nv příloze posíláme pokyny k platbě (rezervační poplatek a kupní cena) včetně QR kódů. Po přijetí platby vám vystavíme fakturu.', wa: (n, k, u) => 'Dobrý den' + (n ? ', ' + n : '') + ', zde jsou pokyny k platbě za rezervaci ' + k + ' (QR uvnitř PDF): ' + u },
+  en: { fee: 'Reservation fee', buy: 'Purchase price (less reservation fee)', title: 'Payment instructions — reservation', subj: 'Payment instructions — Compounder', pre: 'Details to pay the reservation and purchase price.', body: (n) => 'Hello' + (n ? ' ' + n : '') + ',\n\nplease find attached the payment instructions (reservation fee and purchase price) including QR codes. Once received, we will issue an invoice.', wa: (n, k, u) => 'Hello' + (n ? ' ' + n : '') + ', here are the payment instructions for reservation ' + k + ' (QR inside the PDF): ' + u },
+  sk: { fee: 'Rezervačný poplatok', buy: 'Kúpna cena (po odčítaní poplatku)', title: 'Pokyny na platbu — rezervácia', subj: 'Pokyny na platbu — Compounder', pre: 'Údaje na úhradu rezervácie a kúpnej ceny.', body: (n) => 'Dobrý deň' + (n ? ', ' + n : '') + ',\n\nv prílohe posielame pokyny na platbu (rezervačný poplatok a kúpna cena) vrátane QR kódov. Po prijatí platby vystavíme faktúru.', wa: (n, k, u) => 'Dobrý deň' + (n ? ', ' + n : '') + ', tu sú pokyny na platbu za rezerváciu ' + k + ' (QR v PDF): ' + u },
+  de: { fee: 'Reservierungsgebühr', buy: 'Kaufpreis (abzüglich Gebühr)', title: 'Zahlungsanweisungen — Reservierung', subj: 'Zahlungsanweisungen — Compounder', pre: 'Angaben zur Zahlung von Reservierung und Kaufpreis.', body: (n) => 'Hallo' + (n ? ' ' + n : '') + ',\n\nim Anhang senden wir die Zahlungsanweisungen (Reservierungsgebühr und Kaufpreis) inkl. QR-Codes. Nach Zahlungseingang stellen wir eine Rechnung aus.', wa: (n, k, u) => 'Hallo' + (n ? ' ' + n : '') + ', hier sind die Zahlungsanweisungen für die Reservierung ' + k + ' (QR im PDF): ' + u },
+  pl: { fee: 'Opłata rezerwacyjna', buy: 'Cena zakupu (po odjęciu opłaty)', title: 'Instrukcje płatności — rezerwacja', subj: 'Instrukcje płatności — Compounder', pre: 'Dane do zapłaty rezerwacji i ceny zakupu.', body: (n) => 'Dzień dobry' + (n ? ' ' + n : '') + ',\n\nw załączniku przesyłamy instrukcje płatności (opłata rezerwacyjna i cena zakupu) wraz z kodami QR. Po otrzymaniu płatności wystawimy fakturę.', wa: (n, k, u) => 'Dzień dobry' + (n ? ' ' + n : '') + ', oto instrukcje płatności za rezerwację ' + k + ' (QR w PDF): ' + u },
+};
+function payL(l) { const c = String(l || 'cs').toLowerCase().split(/[-_]/)[0]; return PAY_L[c] || PAY_L.en; }
+async function _buildPaymentCtx(resId) {
+  const resv = await prisma.locationReservation.findUnique({ where: { id: resId } });
+  if (!resv) return null;
+  let lang = 'cs';
+  if (resv.lead_id) { try { const l = await prisma.compounderLead.findUnique({ where: { id: resv.lead_id }, select: { lang: true } }); if (l && l.lang) lang = l.lang; } catch (e) {} }
+  const tr = payL(lang);
+  let accounts = [];
+  try {
+    accounts = await prisma.bankAccount.findMany({
+      where: { active: true },
+      select: { account_number: true, bank_code: true, iban: true, bic: true, currency: true, name: true },
+    });
+  } catch (e) { accounts = []; }
+  const czkA = accounts.find((a) => a.currency === 'CZK') || accounts[0] || null;
+  const eurA = accounts.find((a) => a.currency === 'EUR') || null;
+  const bank = {
+    czk: czkA ? { account: czkA.account_number, bankCode: czkA.bank_code, iban: czkA.iban, name: czkA.name } : null,
+    eur: eurA ? { iban: eurA.iban, bic: eurA.bic, name: eurA.name } : null,
+  };
+  const cur = resv.currency || 'CZK';
+  const vs = String(resv.id);
+  const items = [];
+  if (resv.fee_total) items.push({ label: tr.fee + ' — ' + resv.kiosk_code, amount: resv.fee_total, currency: cur, due: resv.fee_until, vs });
+  if (resv.purchase_price != null) {
+    const rest = Math.max(0, resv.purchase_price - (resv.fee_total || 0));
+    items.push({ label: tr.buy + ' — ' + resv.kiosk_code, amount: rest, currency: cur, due: resv.reserved_until, vs });
+  }
+  return { resv, bank, items, lang, tr, buyer: { name: resv.buyer_name, email: resv.buyer_email, phone: resv.buyer_phone } };
+}
+async function _payPdf(resId) {
+  const ctx = await _buildPaymentCtx(resId);
+  if (!ctx) return null;
+  return paymentInstructions.generatePaymentInstructionsPdf({
+    title: ctx.tr.title + ' ' + ctx.resv.kiosk_code,
+    buyer: ctx.buyer, items: ctx.items, bank: ctx.bank, lang: ctx.lang,
+  });
+}
+router.get('/reservations/:id(\\d+)/payment-instructions.pdf', requireAuth, async (req, res, next) => {
+  try {
+    const pdf = await _payPdf(Number(req.params.id));
+    if (!pdf) return res.status(404).json({ error: 'Rezervace nenalezena' });
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', 'inline; filename="pokyny-k-platbe.pdf"');
+    res.send(pdf);
+  } catch (err) { next(err); }
+});
+router.get('/reservations/pay/:token/pdf', async (req, res, next) => {
+  try {
+    const id = verifyPayToken(String(req.params.token || ''));
+    if (!id) return res.status(404).json({ error: 'Neplatný odkaz' });
+    const pdf = await _payPdf(id);
+    if (!pdf) return res.status(404).json({ error: 'Rezervace nenalezena' });
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', 'inline; filename="pokyny-k-platbe.pdf"');
+    res.send(pdf);
+  } catch (err) { next(err); }
+});
+router.post('/reservations/:id(\\d+)/payment-instructions/email', requireAuth, async (req, res, next) => {
+  try {
+    const ctx = await _buildPaymentCtx(Number(req.params.id));
+    if (!ctx) return res.status(404).json({ error: 'Rezervace nenalezena' });
+    if (!ctx.buyer.email) return res.status(400).json({ error: 'Rezervace nemá e-mail kupujícího.' });
+    const pdf = await _payPdf(Number(req.params.id));
+    const from = process.env.COMPOUNDER_MAIL_FROM || process.env.SMTP_FROM || process.env.INVOICE_IMAP_USER;
+    await sendMail({
+      to: ctx.buyer.email, from, fromName: compounderMailFromName(),
+      replyTo: process.env.COMPOUNDER_MAIL_REPLYTO || from, brand: 'compounder',
+      subject: ctx.tr.subj, preheader: ctx.tr.pre,
+      body: ctx.tr.body(ctx.buyer.name || ''),
+      attachments: [{ filename: 'pokyny-k-platbe.pdf', content: pdf, contentType: 'application/pdf' }],
+    });
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+router.post('/reservations/:id(\\d+)/payment-instructions/whatsapp', requireAuth, async (req, res, next) => {
+  try {
+    const ctx = await _buildPaymentCtx(Number(req.params.id));
+    if (!ctx) return res.status(404).json({ error: 'Rezervace nenalezena' });
+    if (!ctx.buyer.phone) return res.status(400).json({ error: 'Rezervace nemá telefon kupujícího.' });
+    const url = (getAppUrl() || '') + '/api/compounder/reservations/pay/' + makePayToken(Number(req.params.id)) + '/pdf';
+    const msg = ctx.tr.wa(ctx.buyer.name || '', ctx.resv.kiosk_code, url);
+    let wa = String(ctx.buyer.phone).replace(/[^\d]/g, ''); if (wa.startsWith('00')) wa = wa.slice(2);
+    res.json({ ok: true, phone: wa, message: msg, url });
+  } catch (err) { next(err); }
+});
+
 module.exports = router;

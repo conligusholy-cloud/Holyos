@@ -1011,5 +1011,6 @@ module.exports = {
   buildDefaults,
   renderHtml,
   generateContractPdf,
+  htmlToPdfBuffer,
   SCHEMAS,
 };
