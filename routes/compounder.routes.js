@@ -2489,11 +2489,24 @@ router.delete('/contracts/:id(\\d+)', requireAuth, async (req, res, next) => {
 });
 
 // POST vygenerovat PDF z uložené smlouvy (volitelně z upravených polí)
+// Starší auto-vytvořené rezervační smlouvy měly ve fields omylem uloženou celou
+// obálku getPrefill ({type,label,groups,values,...}) místo plochých polí — PDF pak
+// vycházelo prázdné. Tohle je srovná do plochého tvaru (podpisy zůstávají).
+function _flattenLegacyContractFields(f) {
+  if (!f || typeof f !== 'object') return {};
+  if (!f.values || typeof f.values !== 'object' || !Array.isArray(f.groups)) return f;
+  const flat = Object.assign({}, f.values);
+  Object.keys(f).forEach((k) => {
+    if (k !== 'type' && k !== 'label' && k !== 'groups' && k !== 'values') flat[k] = f[k];
+  });
+  return flat;
+}
+
 router.post('/contracts/:id(\\d+)/pdf', requireAuth, async (req, res, next) => {
   try {
     const row = await prisma.compoundingContract.findUnique({ where: { id: Number(req.params.id) } });
     if (!row) return res.status(404).json({ error: 'Smlouva nenalezena' });
-    const fields = (req.body && req.body.fields) || row.fields || {};
+    const fields = (req.body && req.body.fields) || _flattenLegacyContractFields(row.fields);
     let pdf;
     try {
       pdf = await contracts.generateContractPdf(row.type, fields);
@@ -2543,7 +2556,8 @@ router.get('/contracts/public/:token', async (req, res, next) => {
     const buyerGroup = groups.find((g) => g.key === 'buyer');
     const fields = buyerGroup ? buyerGroup.fields : [];
     const values = {};
-    fields.forEach((f) => { values[f.name] = (row.fields && row.fields[f.name] != null) ? row.fields[f.name] : ''; });
+    const rowFields = _flattenLegacyContractFields(row.fields);
+    fields.forEach((f) => { values[f.name] = (rowFields[f.name] != null) ? rowFields[f.name] : ''; });
     res.json({
       typeLabel: contracts.TYPE_LABEL[row.type] || 'Smlouva',
       kioskLabel: row.kiosk_label || '',
@@ -2562,7 +2576,7 @@ router.get('/contracts/public/:token/pdf', async (req, res, next) => {
       return res.status(410).json({ error: 'Platnost odkazu vypršela' });
     }
     let pdf;
-    try { pdf = await contracts.generateContractPdf(row.type, row.fields || {}); }
+    try { pdf = await contracts.generateContractPdf(row.type, _flattenLegacyContractFields(row.fields)); }
     catch (e) { console.error('[contract public pdf]', e); return res.status(500).json({ error: 'PDF se nepodařilo vytvořit' }); }
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', 'inline; filename="' + _safeContractName(contracts.TYPE_LABEL[row.type]) + '.pdf"');
@@ -3094,13 +3108,31 @@ router.post('/portal/reserve', async (req, res, next) => {
       });
       if (!already) {
         const our = await getOurCompany().catch(() => null);
-        const pseudoSite = { name: 'Lokalita ' + code, address: rec.buyer_address || '', pradlomat_ref: code, purchase_price: (rec.purchase_price != null) ? rec.purchase_price : null, contacts: [] };
+        // Adresu lokality vezmeme z cache SIS (kiosk-values), ne z adresy zákazníka.
+        let kioskLabel = '';
+        try {
+          const ks = (_kioskCache && _kioskCache.data && Array.isArray(_kioskCache.data.kiosks)) ? _kioskCache.data.kiosks : [];
+          const kk = ks.find((k) => k.code === code);
+          kioskLabel = (kk && kk.label) ? String(kk.label) : '';
+        } catch (e) {}
+        const pseudoSite = { name: 'Lokalita ' + code, address: kioskLabel, pradlomat_ref: code, purchase_price: (rec.purchase_price != null) ? rec.purchase_price : null, contacts: [] };
+        // POZOR: getPrefill vrací { type, label, groups, values } — pole smlouvy jsou ve .values!
         let cf = {};
-        try { cf = contracts.getPrefill('rezervacni', pseudoSite, our) || {}; } catch (e) { cf = {}; }
+        try {
+          const pf = contracts.getPrefill('rezervacni', pseudoSite, our);
+          cf = Object.assign({}, (pf && pf.values) || {});
+        } catch (e) { cf = {}; }
+        // Zájemce = zákazník (údaje z rezervačního formuláře v portálu).
         cf.buyer_name = rec.buyer_name || cf.buyer_name || '';
         cf.buyer_address = rec.buyer_address || cf.buyer_address || '';
         cf.buyer_ico = rec.buyer_ico || cf.buyer_ico || '';
-        cf.location_desc = code;
+        // Podmínky rezervace z právě vytvořené rezervace.
+        cf.location_name = kioskLabel ? (code + ' — ' + kioskLabel) : ('Lokalita ' + code);
+        if (kioskLabel) cf.location_address = kioskLabel;
+        if (rec.fee_total != null) cf.reservation_fee = Math.round(rec.fee_total).toLocaleString('cs-CZ');
+        cf.fee_due_days = String(payDays);
+        cf.reservation_period = days + ' dní';
+        cf.reserved_until = reservedUntil.toLocaleDateString('cs-CZ');
         const token = crypto.randomBytes(24).toString('hex');
         const contract = await prisma.compoundingContract.create({
           data: { kiosk_code: code, kiosk_label: null, type: 'rezervacni', status: 'k_autorizaci', fields: cf, share_token: token, share_expires_at: new Date(Date.now() + 30 * 24 * 3600 * 1000) },
