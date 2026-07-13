@@ -1105,20 +1105,8 @@ router.post('/leads/:id/activity-log', requireAuth, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// GET /api/compounder/leads/:id/reservations — rezervace lokalit daného leada (read-only).
-router.get('/leads/:id/reservations', requireAuth, async (req, res, next) => {
-  try {
-    const id = Number(req.params.id);
-    if (!Number.isInteger(id)) return res.status(400).json({ error: 'Neplatné ID' });
-    let rows = [];
-    try {
-      rows = await prisma.locationReservation.findMany({
-        where: { lead_id: id }, orderBy: { created_at: 'desc' }, take: 50,
-      });
-    } catch (e) { rows = []; }
-    res.json(rows);
-  } catch (err) { next(err); }
-});
+// Pozn.: /leads/:id/reservations je definována níže (vrací {reservations, contracts}).
+// Starší duplicitní verze (vracela holé pole) odstraněna — stínila správnou routu.
 
 // GET /api/compounder/my-leads — kontakty přiřazené přihlášenému obchodníkovi.
 //   Používá obrazovka obchodníka (modules/obchodnik). Vrací jen vlastní kontakty.
