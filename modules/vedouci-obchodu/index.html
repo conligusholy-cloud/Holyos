@@ -87,6 +87,24 @@
       stat(t.unassigned||0, 'Nepřiřazeno') +
     '</div>';
 
+    var at = (d.activeToday||[]).slice();
+    // Nahoře lead s nejnovější aktivitou (podle času poslední akce).
+    at.sort(function(a,b){ return new Date(b.lastAt||0) - new Date(a.lastAt||0); });
+    h += '<h2>Dnes aktivní leady ('+at.length+')</h2>';
+    if (!at.length){ h += '<div class="empty">Dnes zatím nikdo aktivní.</div>'; }
+    else {
+      h += at.map(function(x){
+        var t = x.lastAt ? new Date(x.lastAt) : null;
+        var tim = t ? (('0'+t.getHours()).slice(-2)+':'+('0'+t.getMinutes()).slice(-2)) : '';
+        return '<div class="list-item"><div class="row-h"><span style="color:#22c55e">● <b>'+esc(x.name||'—')+'</b></span>' +
+          '<span style="font-weight:700;white-space:nowrap">'+esc(tim)+'</span></div>' +
+          '<div class="muted" style="margin-top:2px">' +
+            (x.ownerName?('obch.: <b style="color:var(--text)">'+esc(x.ownerName)+'</b> · '):'<span style="color:#fca5a5">bez obchodníka</span> · ') +
+            'zajímalo: '+esc(x.interest||'—')+' · '+(x.events||0)+' akcí'+(x.minutes?(' · '+esc(x.minutes)):'') +
+          '</div></div>';
+      }).join('');
+    }
+
     h += '<h2>Výkon obchodníků</h2>';
     var sellers = d.sellers||[];
     if (!sellers.length){ h += '<div class="empty">Zatím žádní obchodníci s kontakty.</div>'; }

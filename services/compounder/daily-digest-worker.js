@@ -58,7 +58,7 @@ async function computeDigest() {
   const since = startOfToday();
   const evs = await prisma.compounderEvent.findMany({
     where: { created_at: { gte: since } },
-    select: { event: true, props: true },
+    select: { event: true, props: true, created_at: true },
     take: 50000,
   });
   // Agregace na leada
@@ -68,8 +68,10 @@ async function computeDigest() {
     const lid = p.lead_id;
     if (lid == null) continue;
     let a = byLead.get(lid);
-    if (!a) { a = { events: 0, ms: 0, pages: {}, sections: {}, docs: 0, contact: 0, purchase: 0, eco: 0 }; byLead.set(lid, a); }
+    if (!a) { a = { events: 0, ms: 0, pages: {}, sections: {}, docs: 0, contact: 0, purchase: 0, eco: 0, lastAt: null }; byLead.set(lid, a); }
     a.events += 1;
+    // Čas poslední aktivity leada (pro „v kolik hodin byl aktivní").
+    if (e.created_at && (!a.lastAt || e.created_at > a.lastAt)) a.lastAt = e.created_at;
     if ((e.event === 'visit_end' || e.event === 'page_leave') && p.ms) a.ms += Number(p.ms) || 0;
     if (e.event === 'page_switch' && p.page) a.pages[p.page] = (a.pages[p.page] || 0) + 1;
     if (e.event === 'section_view' && p.section) a.sections[p.section] = (a.sections[p.section] || 0) + 1;
@@ -109,6 +111,7 @@ async function computeDigest() {
     perLead.push({
       id: lid, name: lead.name || lead.email || ('lead #' + lid),
       minutes: fmtMin(a.ms), ms: a.ms, events: a.events, interest,
+      lastAt: a.lastAt ? new Date(a.lastAt).toISOString() : null,
       ownerName: owner ? (ownerName.get(owner) || ('#' + owner)) : null,
     });
     if (owner) {
