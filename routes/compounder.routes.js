@@ -346,10 +346,16 @@ router.get('/portal/status', async (req, res, next) => {
   try {
     const id = verifyPortalToken(String(req.query.t || ''));
     if (!id) return res.status(401).json({ ok: false, error: 'Neplatný nebo chybějící přístupový odkaz.' });
+    // Dohledáme leada kvůli e-mailu/telefonu — rezervace mohla vzniknout pod jiným
+    // lead záznamem nebo bez lead_id (starší data), ale se stejným kontaktem.
+    const lead = await prisma.compounderLead.findUnique({ where: { id }, select: { email: true, phone: true } });
+    const or = [{ lead_id: id }];
+    if (lead && lead.email) or.push({ buyer_email: { equals: lead.email, mode: 'insensitive' } });
+    if (lead && lead.phone) or.push({ buyer_phone: lead.phone });
     let reservations = [];
     try {
       reservations = await prisma.locationReservation.findMany({
-        where: { lead_id: id, status: { notIn: ['cancelled', 'expired'] } },
+        where: { OR: or, status: { notIn: ['cancelled', 'expired'] } },
         orderBy: { created_at: 'desc' }, take: 20,
       });
     } catch (e) { reservations = []; }
