@@ -3480,6 +3480,22 @@ router.post('/portal/reserve', async (req, res, next) => {
           const alreadyKupni = await prisma.compoundingContract.findFirst({
             where: { kiosk_code: code, type: 'kupni', status: { notIn: ['podepsano'] } }, select: { id: true },
           });
+          if (alreadyKupni) {
+            // Kupní už existuje → jen ji provaž s rezervační, ať se podpisy propisují.
+            const exist = await prisma.compoundingContract.findUnique({ where: { id: alreadyKupni.id } });
+            if (exist) {
+              const ef = Object.assign({}, exist.fields || {}, { _linked_contract_id: contract.id });
+              await prisma.compoundingContract.update({
+                where: { id: exist.id },
+                data: { fields: ef, status: (exist.status === 'koncept' ? 'k_autorizaci' : exist.status) },
+              });
+              await prisma.compoundingContract.update({
+                where: { id: contract.id },
+                data: { fields: Object.assign({}, cf, { _linked_contract_id: exist.id }) },
+              });
+              kupniContract = exist;
+            }
+          }
           if (!alreadyKupni) {
             const cfgMap2 = (await getSetting(COMPOUNDING_KIOSKS_KEY, { type: 'json', defaultValue: {} })) || {};
             const cfg2 = cfgMap2[code] || {};
@@ -3563,6 +3579,90 @@ router.get('/reservations', requireAuth, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// Pojistka: když k rezervaci chybí kupní smlouva (starý deploy, dřívější přeskočení…),
+// dovytvoří se při akci „Poplatek přišel" a Velín dostane výzvu k podpisu za Best Series.
+async function _ensureKupniContract(rec) {
+  const code = rec.kiosk_code;
+  if (!code) return;
+  const already = await prisma.compoundingContract.findFirst({
+    where: { kiosk_code: code, type: 'kupni', status: { notIn: ['podepsano'] } }, select: { id: true },
+  });
+  if (already) return;
+  const our = await getOurCompany().catch(() => null);
+  let lang = 'cs';
+  try {
+    const l = rec.lead_id ? await prisma.compounderLead.findUnique({ where: { id: rec.lead_id }, select: { lang: true } }) : null;
+    if (l && l.lang) lang = String(l.lang).toLowerCase().slice(0, 2);
+  } catch (e) {}
+  const isCs = lang === 'cs' || !lang;
+  const ki = await _sisKioskInfo(code);
+  const cs = await getSetting(COMPOUNDING_SETTINGS_KEY, { type: 'json', defaultValue: COMPOUNDING_SETTINGS_DEFAULT });
+  const cfgMap = (await getSetting(COMPOUNDING_KIOSKS_KEY, { type: 'json', defaultValue: {} })) || {};
+  const cfg = cfgMap[code] || {};
+  const ks = await _sisKiosks();
+  const kk = ks.find((k) => k.code === code) || {};
+  const fx = await fxRatesCzk();
+  const eur = fx.EUR || 25;
+  const ver = String(cfg.version || '').toLowerCase();
+  const pl = cs.pricelist || {};
+  const machineCzk = (pl[ver] && pl[ver].eur != null && isFinite(Number(pl[ver].eur))) ? Math.round(Number(pl[ver].eur) * eur) : null;
+  const totalCzk = (rec.purchase_price != null) ? Number(rec.purchase_price) : null;
+  const localityCzk = (totalCzk != null && machineCzk != null) ? Math.max(0, totalCzk - machineCzk) : null;
+  const pseudo = {
+    name: (isCs ? 'Lokalita ' : 'Location ') + code,
+    address: ki.label, city: '', zip: '', country: 'CZ',
+    purchase_price: localityCzk, pradlomat_ref: code, contacts: [],
+    _avgTurnover: (typeof kk.avgTop3 === 'number' && isFinite(kk.avgTop3)) ? kk.avgTop3 : null,
+    _locationMonths: Number.isFinite(cs.locationMonths) ? cs.locationMonths : 12,
+    _version: ver || null, _machinePrice: machineCzk,
+    _servicePct: Number.isFinite(cs.servicePct) ? cs.servicePct : 15,
+    _buybackPct: Number.isFinite(cs.buybackPct) ? cs.buybackPct : 65,
+    _buybackYears: Number.isFinite(cs.buybackYears) ? cs.buybackYears : 5,
+  };
+  let kf = {};
+  try {
+    const pf = contracts.getPrefill('kupni', pseudo, our, lang);
+    kf = Object.assign({}, (pf && pf.values) || {});
+  } catch (e) { kf = {}; }
+  if (!isCs) kf._lang = lang;
+  kf.buyer_name = rec.buyer_name || '';
+  kf.buyer_address = rec.buyer_address || '';
+  kf.buyer_ico = rec.buyer_ico || '';
+  kf.buyer_dic = rec.buyer_dic || '';
+  kf._reverse_charge = _isEuReverseCharge(kf.buyer_dic);
+  kf.location_desc = ki.label ? (code + ' — ' + ki.label) : code;
+  const cur = (String(rec.currency || 'CZK').toUpperCase() !== 'CZK') ? String(rec.currency).toUpperCase() : 'CZK';
+  const rate = (cur !== 'CZK') ? ((fx && fx[cur]) || 0) : 1;
+  const priceInCur = (czk) => {
+    if (czk == null || !isFinite(czk)) return '';
+    if (cur !== 'CZK' && rate > 0) return (Math.round((czk / rate) * 100) / 100).toLocaleString('cs-CZ');
+    return Math.round(czk).toLocaleString('cs-CZ');
+  };
+  kf.price_currency = (cur !== 'CZK' && rate > 0) ? cur : (isCs ? 'Kč' : 'CZK');
+  if (machineCzk != null) kf.price_machine = priceInCur(machineCzk);
+  if (localityCzk != null) kf.price_location = priceInCur(localityCzk);
+  if (totalCzk != null) kf.price_total = priceInCur(totalCzk);
+  if (rec.fee_total != null) kf.reservation_credit = priceInCur(rec.fee_total);
+  // Provaž s poslední rezervační smlouvou téže lokality (podpisy se propisují).
+  const rez = await prisma.compoundingContract.findFirst({
+    where: { kiosk_code: code, type: 'rezervacni' }, orderBy: { created_at: 'desc' },
+  }).catch(() => null);
+  if (rez) kf._linked_contract_id = rez.id;
+  const token = crypto.randomBytes(24).toString('hex');
+  const kupni = await prisma.compoundingContract.create({
+    data: { kiosk_code: code, kiosk_label: ki.label || null, type: 'kupni', status: 'k_autorizaci', fields: kf, share_token: token, share_expires_at: new Date(Date.now() + 30 * 24 * 3600 * 1000) },
+  });
+  if (rez) {
+    await prisma.compoundingContract.update({
+      where: { id: rez.id },
+      data: { fields: Object.assign({}, rez.fields || {}, { _linked_contract_id: kupni.id }) },
+    }).catch(() => {});
+  }
+  // Výzva do Velína: podepsat kupní smlouvu za Best Series.
+  const signUrl = (getAppUrl() || '') + '/modules/podpis-smlouvy/index.html?id=' + kupni.id;
+  compounderNotify.notifyContractAwaitingAuthorization(prisma, kupni, signUrl).catch(() => {});
+}
+
 // Po zaplacení kupní ceny nabídneme zákazníkovi KOMPLETNÍ SERVIS: připraví se
 // servisní smlouva se sdíleným odkazem — zákazník ji uvidí v portálu (Moje
 // smlouvy) a pokud o servis stojí, podepíše ji; jinak ji nechá být.
@@ -3640,6 +3740,10 @@ router.patch('/reservations/:id', requireAuth, async (req, res, next) => {
     const rec = await prisma.locationReservation.update({ where: { id }, data });
     const evMap = { fee_paid: 'fee_paid', purchase_paid: 'purchase_paid', cancel: 'cancelled', reopen: 'cancelled' };
     if (evMap[parsed.data.action]) compounderNotify.notifyReservationEvent(prisma, { reservation: rec, event: evMap[parsed.data.action] }).catch(() => {});
+    // Poplatek přišel → pojistka: chybí-li kupní smlouva, dovytvoř ji a pošli k podpisu.
+    if (parsed.data.action === 'fee_paid') {
+      _ensureKupniContract(rec).catch((e) => console.error('[kupni ensure]', e));
+    }
     // Kupní cena zaplacena → nabídnout zákazníkovi kompletní servis (servisní smlouva v portálu).
     if (parsed.data.action === 'purchase_paid') {
       _offerServiceContract(rec).catch((e) => console.error('[servisni offer]', e));
