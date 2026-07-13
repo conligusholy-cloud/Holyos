@@ -2911,8 +2911,7 @@ router.post('/contracts/public/:token/sign', async (req, res, next) => {
         data: { fields: merged, status: 'podepsano', filled_at: row.filled_at || signedAt, signed_at: signedAt },
       });
       compounderNotify.notifyContractEvent(prisma, { contract: fullRow, event: 'signed' }).catch(() => {});
-      // Stejným podpisem se podepisuje i provázaná smlouva (kupní ⇄ rezervační).
-      await _propagateCustomerSign(row, merged._signature_customer, buyerData, placeSignedCust);
+      // Pozn.: podpisy se NEpropagují mezi smlouvami — každá se podepisuje zvlášť.
       // Rezervace: lhůty se počítají od DATA PODPISU rezervační smlouvy (ne od vytvoření).
       // Kontrola platby = den po podpisu; konec rezervace = podpis + počet dní ze smlouvy.
       if (row.type === 'rezervacni') {
@@ -2940,8 +2939,7 @@ router.post('/contracts/public/:token/sign', async (req, res, next) => {
     });
     const signUrl = (getAppUrl() || '') + '/modules/podpis-smlouvy/index.html?id=' + row.id;
     compounderNotify.notifyContractAwaitingCountersign(prisma, awaitingRow, signUrl).catch(() => {});
-    // Stejným podpisem se podepisuje i provázaná smlouva (kupní ⇄ rezervační).
-    await _propagateCustomerSign(row, merged._signature_customer, buyerData, placeSignedCust);
+    // Pozn.: podpisy se NEpropagují mezi smlouvami — každá se podepisuje zvlášť.
     res.json({ ok: true, awaiting_countersign: true });
   } catch (err) { next(err); }
 });
@@ -3012,16 +3010,14 @@ router.post('/contracts/:id(\\d+)/countersign', requireAuth, async (req, res, ne
         where: { id: row.id },
         data: { fields: merged, status: 'k_podpisu_zakaznik', share_token: token, share_expires_at: new Date(Date.now() + 30 * 24 * 3600 * 1000) },
       });
-      // Náš podpis se propíše i do provázané smlouvy (kupní ⇄ rezervační).
-      await _propagateCountersign(row, merged._signature_bestseries, placeSigned);
+      // Pozn.: podpisy se NEpropagují mezi smlouvami — každá se podepisuje zvlášť.
       return res.json({ ok: true, awaiting_customer: true });
     }
     const signedRow = await prisma.compoundingContract.update({
       where: { id: row.id }, data: { fields: merged, status: 'podepsano', signed_at: signedAt },
     });
     compounderNotify.notifyContractEvent(prisma, { contract: signedRow, event: 'signed' }).catch(() => {});
-    // Náš podpis se propíše i do provázané smlouvy (kupní ⇄ rezervační).
-    await _propagateCountersign(row, merged._signature_bestseries, placeSigned);
+    // Pozn.: podpisy se NEpropagují mezi smlouvami — každá se podepisuje zvlášť.
     // TODO Fáze B: po plném podpisu automaticky vytvořit koncept faktury dle smlouvy.
     res.json({ ok: true });
   } catch (err) { next(err); }
