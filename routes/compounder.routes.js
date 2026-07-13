@@ -379,7 +379,7 @@ router.get('/portal/status', async (req, res, next) => {
     const docs = [];
     reservations.forEach((r) => {
       const lbl = r.kiosk_code || 'lokalita';
-      docs.push({ kind: 'reservation', label: lbl, status: r.status, statusLabel: RES_STATUS_LABEL[r.status] || r.status, reserved_until: r.reserved_until, sign_until: r.sign_until, fee_until: r.fee_until, fee_paid: !!r.fee_paid_at, purchase_paid: !!r.purchase_paid_at });
+      docs.push({ kind: 'reservation', label: lbl, status: r.status, statusLabel: RES_STATUS_LABEL[r.status] || r.status, reserved_until: r.reserved_until, sign_until: r.sign_until, fee_until: r.fee_until, fee_paid: !!r.fee_paid_at, purchase_paid: !!r.purchase_paid_at, pay_url: (['reserved', 'active'].indexOf(r.status) !== -1) ? ('/api/compounder/reservations/pay/' + makePayToken(r.id) + '/pdf') : null });
       push(r.created_at, '📥', `Rezervace lokality ${lbl} přijata.`);
       if (r.status === 'reserved') { push(r.updated_at, '✅', `Rezervace ${lbl} potvrzena — čeká na podpis rezervační smlouvy${r.sign_until ? ' do ' + fmtCz(r.sign_until) : ''}.`); }
       if (r.status === 'active') { push(r.fee_paid_at || r.updated_at, '💰', `Rezervační poplatek přijat — lokalita ${lbl} držena${r.reserved_until ? ' do ' + fmtCz(r.reserved_until) : ''}.`); }
@@ -3705,6 +3705,8 @@ const PAY_L = {
   pl: { fee: 'Opłata rezerwacyjna', buy: 'Cena zakupu (po odjęciu opłaty)', title: 'Instrukcje płatności — rezerwacja', subj: 'Instrukcje płatności — Compounder', pre: 'Dane do zapłaty rezerwacji i ceny zakupu.', body: (n) => 'Dzień dobry' + (n ? ' ' + n : '') + ',\n\nw załączniku przesyłamy instrukcje płatności (opłata rezerwacyjna i cena zakupu) wraz z kodami QR. Po otrzymaniu płatności wystawimy fakturę.', wa: (n, k, u) => 'Dzień dobry' + (n ? ' ' + n : '') + ', oto instrukcje płatności za rezerwację ' + k + ' (QR w PDF): ' + u },
 };
 function payL(l) { const c = String(l || 'cs').toLowerCase().split(/[-_]/)[0]; return PAY_L[c] || PAY_L.en; }
+const PAY_PORTAL_BTN = { cs: 'Otevřít Compounder Portal', en: 'Open the Compounder Portal', sk: 'Otvoriť Compounder Portál', de: 'Compounder Portal öffnen', pl: 'Otwórz Compounder Portal' };
+function payPortalBtn(l) { const c = String(l || 'cs').toLowerCase().split(/[-_]/)[0]; return PAY_PORTAL_BTN[c] || PAY_PORTAL_BTN.en; }
 async function _buildPaymentCtx(resId) {
   const resv = await prisma.locationReservation.findUnique({ where: { id: resId } });
   if (!resv) return null;
@@ -3761,11 +3763,16 @@ router.post('/reservations/:id(\\d+)/payment-instructions/email', requireAuth, a
     if (!ctx.buyer.email) return res.status(400).json({ error: 'Rezervace nemá e-mail kupujícího.' });
     const pdf = await _payPdf(Number(req.params.id));
     const from = process.env.COMPOUNDER_MAIL_FROM || process.env.SMTP_FROM || process.env.INVOICE_IMAP_USER;
+    // Odkaz na PORTÁL (compounder.world), přihlášený přes token leada — žádná vazba na HolyOS.
+    const portalLink = ctx.resv.lead_id
+      ? (portalBase() + '/portal?t=' + makeLoginToken(ctx.resv.lead_id))
+      : (portalBase() + '/portal');
     await sendMail({
       to: ctx.buyer.email, from, fromName: compounderMailFromName(),
       replyTo: process.env.COMPOUNDER_MAIL_REPLYTO || from, brand: 'compounder',
       subject: ctx.tr.subj, preheader: ctx.tr.pre,
       body: ctx.tr.body(ctx.buyer.name || ''),
+      link: portalLink, linkLabel: payPortalBtn(ctx.lang),
       attachments: [{ filename: 'pokyny-k-platbe.pdf', content: pdf, contentType: 'application/pdf' }],
     });
     res.json({ ok: true });
@@ -3776,7 +3783,7 @@ router.post('/reservations/:id(\\d+)/payment-instructions/whatsapp', requireAuth
     const ctx = await _buildPaymentCtx(Number(req.params.id));
     if (!ctx) return res.status(404).json({ error: 'Rezervace nenalezena' });
     if (!ctx.buyer.phone) return res.status(400).json({ error: 'Rezervace nemá telefon kupujícího.' });
-    const url = (getAppUrl() || '') + '/api/compounder/reservations/pay/' + makePayToken(Number(req.params.id)) + '/pdf';
+    const url = portalBase() + '/api/compounder/reservations/pay/' + makePayToken(Number(req.params.id)) + '/pdf';
     const msg = ctx.tr.wa(ctx.buyer.name || '', ctx.resv.kiosk_code, url);
     let wa = String(ctx.buyer.phone).replace(/[^\d]/g, ''); if (wa.startsWith('00')) wa = wa.slice(2);
     res.json({ ok: true, phone: wa, message: msg, url });
