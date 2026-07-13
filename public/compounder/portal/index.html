@@ -1091,9 +1091,13 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
     var bell=document.getElementById('bellBtn'); if(bell) bell.style.display='';
     var box=document.getElementById('statusPanel');
     if(box && !box.innerHTML){ box.innerHTML='<div style="color:var(--muted);font-size:13px">Načítám stav…</div>'; }
+    var settled=false;
+    setTimeout(function(){ if(!settled && box){ box.innerHTML='<div style="color:var(--muted);font-size:13px">Stav se nenačetl včas (timeout 8 s). Zkuste obnovit stránku; pokud přetrvá, dej vědět.</div>'; } }, 8000);
     fetch('/api/compounder/portal/status?t='+encodeURIComponent(tok), { credentials:'include' })
       .then(function(r){ return r.text().then(function(txt){ var d=null; try{ d=JSON.parse(txt); }catch(e){} return { status:r.status, d:d, txt:txt }; }); })
       .then(function(res){
+        settled=true;
+        try{ console.log('[portal/status]', res.status, res.txt && res.txt.slice(0,200)); }catch(e){}
         if(!res.d || !res.d.ok){
           var det = (res.d && res.d.error) ? res.d.error : (res.txt ? res.txt.slice(0,100) : '');
           if(box) box.innerHTML='<div style="color:var(--muted);font-size:13px">Stav se nepodařilo načíst (HTTP '+res.status+'). '+e2(det)+'</div>';
@@ -1103,7 +1107,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
         var badge=document.getElementById('bellBadge');
         if(badge){ if(d.actionable>0){ badge.style.display=''; badge.textContent=d.actionable; } else { badge.style.display='none'; } }
         renderStatusPanel(d);
-      }).catch(function(err){ if(box) box.innerHTML='<div style="color:var(--muted);font-size:13px">Stav se nepodařilo načíst (síť): '+e2(String(err&&err.message||err))+'</div>'; });
+      }).catch(function(err){ settled=true; if(box) box.innerHTML='<div style="color:var(--muted);font-size:13px">Stav se nepodařilo načíst (síť): '+e2(String(err&&err.message||err))+'</div>'; });
   }
   (function(){
     var bell=document.getElementById('bellBtn');
