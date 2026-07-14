@@ -1675,6 +1675,7 @@ router.get('/kiosk-revenue/:code', requireAuth, async (req, res, next) => {
     const now = Date.now();
     const cut = { day: now - 86400000, week: now - 7 * 86400000, month: now - 30 * 86400000, year: now - 365 * 86400000 };
     const sums = { day: 0, week: 0, month: 0, year: 0 };
+    const daily = {}, monthly = {}; // 'YYYY-MM-DD' (30 dní) a 'YYYY-MM' (12 měsíců)
     let currency = null, count = 0, offset = 0, pages = 0, complete = false, total = 0;
     while (pages < 40) {
       const url = baseUrl + '/' + encodeURIComponent(code) + '?limit=100&offset=' + offset;
@@ -1699,13 +1700,25 @@ router.get('/kiosk-revenue/:code', requireAuth, async (req, res, next) => {
           if (ts >= cut.month) sums.month += amt;
           if (ts >= cut.week) sums.week += amt;
           if (ts >= cut.day) sums.day += amt;
+          const dO = new Date(ts);
+          const ym = dO.getFullYear() + '-' + String(dO.getMonth() + 1).padStart(2, '0');
+          monthly[ym] = (monthly[ym] || 0) + amt;
+          if (ts >= now - 30 * 86400000) {
+            const dk = ym + '-' + String(dO.getDate()).padStart(2, '0');
+            daily[dk] = (daily[dk] || 0) + amt;
+          }
         }
       }
       offset += txs.length; pages++;
       if (allOlder) { complete = true; break; }
       if (total && offset >= total) { complete = true; break; }
     }
-    const data = { code, currency: currency || 'CZK', day: sums.day, week: sums.week, month: sums.month, year: sums.year, txCount: count, complete, generatedAt: new Date().toISOString() };
+    // Časové řady pro grafy: 12 měsíců + 30 dní (souvislé, s nulami).
+    const monthsArr = [];
+    for (let i = 11; i >= 0; i--) { const dt = new Date(now); dt.setDate(1); dt.setMonth(dt.getMonth() - i); const ym = dt.getFullYear() + '-' + String(dt.getMonth() + 1).padStart(2, '0'); monthsArr.push({ label: (dt.getMonth() + 1) + '/' + String(dt.getFullYear()).slice(2), amount: Math.round(monthly[ym] || 0) }); }
+    const daysArr = [];
+    for (let i = 29; i >= 0; i--) { const dt = new Date(now - i * 86400000); const dk = dt.getFullYear() + '-' + String(dt.getMonth() + 1).padStart(2, '0') + '-' + String(dt.getDate()).padStart(2, '0'); daysArr.push({ label: dt.getDate() + '.' + (dt.getMonth() + 1) + '.', amount: Math.round(daily[dk] || 0) }); }
+    const data = { code, currency: currency || 'CZK', day: sums.day, week: sums.week, month: sums.month, year: sums.year, txCount: count, complete, monthly: monthsArr, daily: daysArr, generatedAt: new Date().toISOString() };
     _revCache[code] = { at: Date.now(), data };
     res.json(data);
   } catch (err) { next(err); }

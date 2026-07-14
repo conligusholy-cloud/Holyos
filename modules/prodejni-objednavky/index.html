@@ -4534,11 +4534,21 @@
         var d = await r.json();
         if (!r.ok) throw new Error(d.error || ('HTTP ' + r.status));
         var cur = d.currency || 'CZK';
-        function card(label, val) { return '<div style="flex:1;min-width:120px;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 16px;"><div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--text2);">' + label + '</div><div style="font-size:20px;font-weight:800;color:#10b981;margin-top:4px;">' + kvMoney(val, cur) + '</div></div>'; }
+        function card(label, val) { return '<div style="flex:1;min-width:120px;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 16px;"><div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--text2);">' + label + '</div><div style="font-size:20px;font-weight:800;color:#10b981;margin-top:4px;">' + kvMoney(val, cur) + '</div><div style="font-size:11px;color:var(--text2);margin-top:2px;">bez DPH ' + kvMoney((val || 0) / 1.21, cur) + '</div></div>'; }
+        function bars(arr, color) {
+          arr = arr || []; var max = 1; arr.forEach(function(x) { if (x.amount > max) max = x.amount; });
+          var b = arr.map(function(x) { var h = Math.round((x.amount / max) * 100); return '<div title="' + kvEsc(x.label + ': ' + kvMoney(x.amount, cur)) + '" style="flex:1;min-width:0;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;"><div style="width:72%;height:' + h + '%;min-height:2px;background:' + color + ';border-radius:3px 3px 0 0;transition:height .3s;"></div></div>'; }).join('');
+          return '<div style="display:flex;align-items:flex-end;gap:2px;height:90px;margin-top:6px;">' + b + '</div>';
+        }
+        function labels(arr, every) { arr = arr || []; return '<div style="display:flex;gap:2px;margin-top:2px;">' + arr.map(function(x, i) { return '<div style="flex:1;min-width:0;text-align:center;font-size:9px;color:var(--text2);overflow:hidden;">' + ((i % (every || 1) === 0) ? kvEsc(x.label) : '') + '</div>'; }).join('') + '</div>'; }
         var body = document.getElementById('kv-stats-body'); if (!body) return;
         body.innerHTML = '<div style="display:flex;gap:10px;flex-wrap:wrap;">' +
           card('Poslední den', d.day) + card('Poslední týden', d.week) + card('Poslední měsíc', d.month) + card('Poslední rok', d.year) +
-          '</div><div style="color:var(--text2);font-size:11px;margin-top:12px;">Součet částek transakcí ze SIS · ' + (d.txCount || 0) + ' transakcí za rok' + (d.complete ? '' : ' (částečně — velký objem)') + (d.generatedAt ? (' · ' + new Date(d.generatedAt).toLocaleString('cs-CZ')) : '') + '</div>';
+          '</div>' +
+          '<div style="font-size:11px;color:var(--text2);margin-top:6px;">Částky jsou <b>vč. DPH</b> (v závorce bez DPH, sazba 21 %).</div>' +
+          '<div style="margin-top:16px;font-size:12px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;">📈 Posledních 12 měsíců</div>' + bars(d.monthly, '#10b981') + labels(d.monthly, 1) +
+          '<div style="margin-top:16px;font-size:12px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;">📅 Posledních 30 dní</div>' + bars(d.daily, '#eab308') + labels(d.daily, 5) +
+          '<div style="color:var(--text2);font-size:11px;margin-top:14px;border-top:1px solid var(--border);padding-top:10px;">Součet částek transakcí ze SIS · ' + (d.txCount || 0) + ' transakcí za rok' + (d.complete ? '' : ' (částečně — velký objem)') + (d.generatedAt ? (' · ' + new Date(d.generatedAt).toLocaleString('cs-CZ')) : '') + '</div>';
       } catch (e) {
         var b = document.getElementById('kv-stats-body'); if (b) b.innerHTML = '<div style="color:#ef4444;padding:16px;">Tržby se nepodařilo načíst: ' + kvEsc(e.message) + '</div>';
       }
