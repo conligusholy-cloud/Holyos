@@ -285,6 +285,15 @@
     cb.addEventListener('change', upd); upd();
   });
 
+  // Vlastník místa (radio Ano/Ne) — vizuální zvýraznění.
+  Array.prototype.forEach.call(document.querySelectorAll('.owner-choice input'), function (r) {
+    r.addEventListener('change', function () {
+      Array.prototype.forEach.call(document.querySelectorAll('.owner-choice .choice'), function (c) {
+        c.classList.toggle('on', c.querySelector('input').checked);
+      });
+    });
+  });
+
   // ─── Odeslání ────────────────────────────────────────────────────────────────
   var form = $('offer-form');
   var msg = $('form-msg');
@@ -299,8 +308,10 @@
     var email = $('f-email').value.trim();
     var address = addrInput.value.trim();
 
+    var ownerSel = document.querySelector('#offer-form [name="is_owner"]:checked');
     if (name.length < 2) return showErr('Vyplňte prosím jméno.');
     if (!phone && !email) return showErr('Uveďte prosím telefon nebo e-mail.');
+    if (!ownerSel) return showErr('Uveďte prosím, zda jste vlastníkem místa.');
     if (address.length < 3) return showErr('Vyplňte prosím adresu místa.');
     if (!state.hasLocation) return showErr('Ukažte prosím na mapě, kam prádlomat umístit (vyberte adresu nebo posuňte obdélník).');
 
@@ -314,6 +325,7 @@
       latitude: state.center.lat,
       longitude: state.center.lng,
       footprint_rotation: Math.round(state.rotation * 100) / 100,
+      is_owner: ownerSel.value === 'yes',
       electricity: $('offer-form').elements['electricity'].checked,
       water: $('offer-form').elements['water'].checked,
       sewage: $('offer-form').elements['sewage'].checked,

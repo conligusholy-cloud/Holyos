@@ -4491,6 +4491,8 @@ model Site {
   // Body přípojek, které zájemce označil na mapě (sloupky). JSON:
   // { electricity: {lat,lng}, water: {lat,lng}, sewage: {lat,lng} } — klíče volitelné.
   utility_points     Json?
+  // Je zájemce vlastníkem místa/pozemku? true = ano, false = ne, null = neuvedeno.
+  is_property_owner  Boolean?
 
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt

@@ -67,6 +67,7 @@ const offerSchema = z.object({
   latitude: z.number().finite(),
   longitude: z.number().finite(),
   footprint_rotation: z.number().finite().optional(),
+  is_owner: z.boolean().optional(),
   electricity: z.boolean().optional(),
   water: z.boolean().optional(),
   sewage: z.boolean().optional(),
@@ -140,6 +141,7 @@ router.post('/offer', async (req, res, next) => {
         footprint_w_mm: 3182,
         footprint_h_mm: 2015,
         utility_points: Object.keys(pts).length ? pts : null,
+        is_property_owner: (typeof d.is_owner === 'boolean') ? d.is_owner : null,
         capacity_note: [
           'Elektřina: ' + yn(electricity) + withPin('electricity'),
           'Voda: ' + yn(water) + withPin('water'),

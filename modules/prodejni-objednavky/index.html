@@ -3610,6 +3610,7 @@
         +     '<div style="font-weight:600;font-size:15px;">'+lokEsc(s.owner_name||'—')+'</div>'
         +     (s.owner_phone?'<div style="margin-top:4px;">📞 <a href="tel:'+lokEsc(s.owner_phone)+'">'+lokEsc(s.owner_phone)+'</a></div>':'')
         +     (s.owner_email?'<div style="margin-top:4px;">✉️ <a href="mailto:'+lokEsc(s.owner_email)+'">'+lokEsc(s.owner_email)+'</a></div>':'')
+        +     '<div style="margin-top:6px;font-size:13px;">🏠 Vlastník místa: '+(s.is_property_owner===true?'<b style="color:#22c55e;">Ano</b>':(s.is_property_owner===false?'<b style="color:#f97316;">Ne</b>':'<span style="color:var(--text2);">neuvedeno</span>'))+'</div>'
         +     '<div style="margin-top:12px;font-size:12px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">Adresa</div>'
         +     '<div>'+lokEsc(s.address||'—')+'</div>'
         +     (s.city?'<div style="color:var(--text2);font-size:13px;">'+lokEsc(s.zip||'')+' '+lokEsc(s.city)+'</div>':'')

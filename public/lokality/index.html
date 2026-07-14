@@ -103,6 +103,10 @@
     .check { display: flex; align-items: center; gap: 10px; background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; cursor: pointer; font-size: 14px; user-select: none; }
     .check input { width: 18px; height: 18px; accent-color: var(--brand); }
     .check.on { border-color: var(--brand); background: rgba(51,180,230,0.08); }
+    .owner-choice { display: flex; gap: 10px; flex-wrap: wrap; }
+    .choice { display: flex; align-items: center; gap: 8px; background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 12px 16px; cursor: pointer; font-size: 14px; user-select: none; flex: 1; min-width: 180px; }
+    .choice input { width: 18px; height: 18px; accent-color: var(--brand); }
+    .choice.on { border-color: var(--brand); background: rgba(51,180,230,0.08); color: var(--brand); }
 
     /* Map */
     .map-tools { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin: 6px 0 12px; }
@@ -229,6 +233,13 @@
                 <label for="f-email">E-mail</label>
                 <input type="email" id="f-email" name="owner_email" autocomplete="email" placeholder="vas@email.cz">
                 <span class="hint">Uveďte prosím aspoň jeden kontakt — telefon nebo e-mail.</span>
+              </div>
+              <div class="fg full">
+                <label>Jste vlastníkem místa/pozemku? <span class="req-star">*</span></label>
+                <div class="owner-choice">
+                  <label class="choice"><input type="radio" name="is_owner" value="yes"> Ano, jsem vlastník</label>
+                  <label class="choice"><input type="radio" name="is_owner" value="no"> Ne, nejsem vlastník</label>
+                </div>
               </div>
               <div class="fg full">
                 <label for="f-address">Adresa místa <span class="req-star">*</span></label>
