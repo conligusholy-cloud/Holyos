@@ -99,6 +99,9 @@
     .empty-state h3 { color: var(--text); margin-bottom: 4px; }
     .empty-state p { font-size: 13px; }
 
+    /* ─── Lokality: zvětšení mapy v detailu ─── */
+    #lok-detail-map.lok-map-full { position: fixed !important; inset: 16px !important; width: auto !important; height: auto !important; z-index: 100000; box-shadow: 0 20px 80px rgba(0,0,0,0.6); }
+
     /* ─── Obchodní pomůcky (tools tab) ─── */
     #tab-tools { padding: 20px 24px 24px; }
     .tools-shell { display: grid; grid-template-columns: minmax(0, 260px) minmax(0, 1fr); gap: 20px; align-items: start; }
@@ -3626,7 +3629,8 @@
         +   '</div>'
         +   '<div>'
         +     '<div style="font-size:12px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">Umístění stroje na mapě</div>'
-        +     '<div id="lok-detail-map" style="height:300px;border-radius:10px;border:1px solid var(--border);overflow:hidden;"></div>'
+        +     '<div id="lok-detail-map" style="height:340px;border-radius:10px;border:1px solid var(--border);overflow:hidden;"></div>'
+        +     '<div style="font-size:11px;color:var(--text2);margin-top:4px;">Klikni do mapy (nebo ⛶) pro zvětšení · vpravo nahoře přepneš Satelit/Mapu.</div>'
         +     '<div style="margin-top:8px;">'+mapLinkBtn+'</div>'
         +   '</div>'
         + '</div>'
@@ -3654,7 +3658,24 @@
       var lat = parseFloat(s.latitude), lng = parseFloat(s.longitude);
       if (!isFinite(lat) || !isFinite(lng)) { el.innerHTML = '<div style="padding:20px;color:var(--text2);">Poloha neuvedena.</div>'; return; }
       var map = L.map(el, { center: [lat, lng], zoom: 20, maxZoom: 20 });
-      L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 20, maxNativeZoom: 18, attribution: 'Tiles © Esri' }).addTo(map);
+      var lokSat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 20, maxNativeZoom: 18, attribution: 'Tiles © Esri' });
+      var lokStreets = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 20, maxNativeZoom: 19, attribution: '© OpenStreetMap' });
+      var lokLabels = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}{r}.png', { maxZoom: 20, maxNativeZoom: 19, pane: 'overlayPane', opacity: 0.9 });
+      lokSat.addTo(map);
+      L.control.layers({ '🛰️ Satelit': lokSat, '🗺️ Mapa': lokStreets }, { 'Popisky ulic': lokLabels }, { position: 'topright', collapsed: false }).addTo(map);
+
+      // Zvětšení mapy — tlačítko ⛶ i klik do mapy (když je malá).
+      function lokToggleFull() { el.classList.toggle('lok-map-full'); setTimeout(function(){ try { map.invalidateSize(); } catch(e){} }, 120); }
+      var FullCtl = L.Control.extend({ options: { position: 'topleft' }, onAdd: function() {
+        var b = L.DomUtil.create('a', 'leaflet-bar');
+        b.href = '#'; b.title = 'Zvětšit / zmenšit mapu';
+        b.style.cssText = 'display:flex;align-items:center;justify-content:center;width:30px;height:30px;font-size:16px;background:#fff;color:#000;text-decoration:none;';
+        b.innerHTML = '⛶';
+        L.DomEvent.on(b, 'click', function(e){ L.DomEvent.stop(e); lokToggleFull(); });
+        return b;
+      }});
+      map.addControl(new FullCtl());
+      map.on('click', function(){ if (!el.classList.contains('lok-map-full')) lokToggleFull(); });
       var wMm = s.footprint_w_mm || 3182, hMm = s.footprint_h_mm || 2015;
       var W = wMm/1000, H = hMm/1000, rotDeg = parseFloat(s.footprint_rotation)||0;
       var a = rotDeg*Math.PI/180, hw = W/2, hh = H/2;
