@@ -161,9 +161,9 @@
     satellite.addTo(map);
     L.control.layers({ '🛰️ Satelit': satellite, '🗺️ Mapa': streets }, { 'Popisky ulic': labels }, { position: 'topright', collapsed: false }).addTo(map);
 
-    footprint = L.polygon(footprintCorners(), { color: '#16b981', weight: 2, fillColor: '#16b981', fillOpacity: 0.35 }).addTo(map);
+    footprint = L.polygon(footprintCorners(), { color: '#33b4e6', weight: 2, fillColor: '#33b4e6', fillOpacity: 0.35 }).addTo(map);
 
-    var centerIcon = L.divIcon({ className: '', iconSize: [26, 26], iconAnchor: [13, 13], html: '<div style="width:26px;height:26px;border-radius:50%;background:rgba(22,185,129,0.95);border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.5);cursor:move;display:grid;place-items:center;color:#04241a;font-weight:900;font-size:13px;">✥</div>' });
+    var centerIcon = L.divIcon({ className: '', iconSize: [26, 26], iconAnchor: [13, 13], html: '<div style="width:26px;height:26px;border-radius:50%;background:rgba(51,180,230,0.95);border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.5);cursor:move;display:grid;place-items:center;color:#04222e;font-weight:900;font-size:13px;">✥</div>' });
     var handleIcon = L.divIcon({ className: '', iconSize: [20, 20], iconAnchor: [10, 10], html: '<div style="width:20px;height:20px;border-radius:50%;background:#a855f7;border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.5);cursor:grab;"></div>' });
 
     centerMarker = L.marker(state.center, { icon: centerIcon, draggable: true, zIndexOffset: 500 }).addTo(map);

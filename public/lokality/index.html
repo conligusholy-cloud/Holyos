@@ -12,15 +12,16 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
   <style>
     :root {
-      --bg: #0d1117;
-      --bg2: #131a24;
-      --surface: #171f2b;
-      --border: #263241;
-      --text: #eef2f7;
-      --text2: #9fb0c3;
-      --brand: #16b981;
-      --brand2: #0ea371;
-      --accent: #f5b301;
+      /* Paleta laděná ke kiosku prádlomatu: tyrkysová/modrá + tmavá + stříbrná */
+      --bg: #0e1a22;
+      --bg2: #132530;
+      --surface: #16272f;
+      --border: #26404b;
+      --text: #eaf5fa;
+      --text2: #9db6c2;
+      --brand: #33b4e6;
+      --brand2: #1c93c9;
+      --accent: #8fdcf5;
       --radius: 14px;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -38,7 +39,7 @@
     .brand { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 18px; letter-spacing: 0.2px; }
     .brand .dot { width: 30px; height: 30px; border-radius: 9px; background: linear-gradient(135deg, var(--brand), var(--brand2)); display: grid; place-items: center; font-size: 17px; }
     .btn { display: inline-flex; align-items: center; gap: 8px; border: none; cursor: pointer; font-weight: 700; font-size: 15px; padding: 12px 22px; border-radius: 11px; transition: transform 0.12s, filter 0.12s, background 0.12s; font-family: inherit; }
-    .btn-primary { background: linear-gradient(135deg, var(--brand), var(--brand2)); color: #041d14; }
+    .btn-primary { background: linear-gradient(135deg, var(--brand), var(--brand2)); color: #04222e; }
     .btn-primary:hover { filter: brightness(1.06); transform: translateY(-1px); }
     .btn-ghost { background: transparent; color: var(--text); border: 1px solid var(--border); }
     .btn-ghost:hover { border-color: var(--brand); color: var(--brand); }
@@ -47,13 +48,17 @@
 
     /* ─── Hero ─── */
     .hero { position: relative; overflow: hidden; padding: 70px 0 60px; background:
-      radial-gradient(900px 400px at 82% -10%, rgba(22,185,129,0.16), transparent 60%),
-      radial-gradient(700px 380px at 8% 8%, rgba(245,179,1,0.08), transparent 55%); }
+      radial-gradient(900px 400px at 82% -10%, rgba(51,180,230,0.16), transparent 60%),
+      radial-gradient(700px 380px at 8% 8%, rgba(143,220,245,0.08), transparent 55%); }
     .hero h1 { font-size: clamp(30px, 5vw, 50px); font-weight: 850; line-height: 1.08; letter-spacing: -0.5px; }
     .hero h1 .hl { color: var(--brand); }
     .hero p.lede { margin-top: 18px; font-size: clamp(16px, 2vw, 20px); color: var(--text2); max-width: 640px; }
     .hero-cta { margin-top: 30px; display: flex; gap: 12px; flex-wrap: wrap; }
-    .eyebrow { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.2px; color: var(--accent); background: rgba(245,179,1,0.1); border: 1px solid rgba(245,179,1,0.25); padding: 6px 13px; border-radius: 999px; }
+    .hero-grid { display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 30px; align-items: center; }
+    .hero-media { display: flex; justify-content: center; }
+    .hero-media img { width: 100%; max-width: 520px; height: auto; filter: drop-shadow(0 24px 40px rgba(0,0,0,0.5)); }
+    @media (max-width: 860px) { .hero-grid { grid-template-columns: 1fr; } .hero-media { order: -1; } .hero-media img { max-width: 420px; } }
+    .eyebrow { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.2px; color: var(--accent); background: rgba(143,220,245,0.1); border: 1px solid rgba(143,220,245,0.25); padding: 6px 13px; border-radius: 999px; }
 
     /* ─── Requirements strip ─── */
     .reqs { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; margin-top: 46px; }
@@ -71,7 +76,7 @@
 
     .steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; }
     .step { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 22px; }
-    .step .n { width: 34px; height: 34px; border-radius: 10px; background: rgba(22,185,129,0.14); color: var(--brand); font-weight: 800; display: grid; place-items: center; margin-bottom: 12px; }
+    .step .n { width: 34px; height: 34px; border-radius: 10px; background: rgba(51,180,230,0.14); color: var(--brand); font-weight: 800; display: grid; place-items: center; margin-bottom: 12px; }
     .step h3 { font-size: 16px; margin-bottom: 5px; }
     .step p { font-size: 13.5px; color: var(--text2); }
 
@@ -86,18 +91,18 @@
       background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; color: var(--text); font-size: 15px; font-family: inherit; width: 100%;
     }
     .fg textarea { min-height: 84px; resize: vertical; }
-    .fg input:focus, .fg textarea:focus { outline: none; border-color: var(--brand); box-shadow: 0 0 0 3px rgba(22,185,129,0.15); }
+    .fg input:focus, .fg textarea:focus { outline: none; border-color: var(--brand); box-shadow: 0 0 0 3px rgba(51,180,230,0.15); }
     .hint { font-size: 12px; color: var(--text2); }
 
     .ac-list { position: absolute; top: 100%; left: 0; right: 0; z-index: 40; background: var(--bg2); border: 1px solid var(--border); border-top: none; border-radius: 0 0 10px 10px; max-height: 240px; overflow-y: auto; display: none; }
     .ac-list.open { display: block; }
     .ac-item { padding: 10px 14px; font-size: 13.5px; cursor: pointer; border-bottom: 1px solid rgba(255,255,255,0.04); }
-    .ac-item:hover, .ac-item.active { background: rgba(22,185,129,0.12); }
+    .ac-item:hover, .ac-item.active { background: rgba(51,180,230,0.12); }
 
     .checks { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; }
     .check { display: flex; align-items: center; gap: 10px; background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; cursor: pointer; font-size: 14px; user-select: none; }
     .check input { width: 18px; height: 18px; accent-color: var(--brand); }
-    .check.on { border-color: var(--brand); background: rgba(22,185,129,0.08); }
+    .check.on { border-color: var(--brand); background: rgba(51,180,230,0.08); }
 
     /* Map */
     .map-tools { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin: 6px 0 12px; }
@@ -111,7 +116,7 @@
     .util-btns { display: flex; gap: 10px; flex-wrap: wrap; }
     .util-btn { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; color: var(--text); font-size: 14px; font-weight: 600; cursor: pointer; font-family: inherit; transition: all 0.12s; }
     .util-btn:hover { border-color: var(--brand); }
-    .util-btn.on { background: rgba(22,185,129,0.14); border-color: var(--brand); color: var(--brand); }
+    .util-btn.on { background: rgba(51,180,230,0.14); border-color: var(--brand); color: var(--brand); }
     .util-dist { font-weight: 500; font-size: 12px; opacity: 0.85; margin-left: 2px; }
 
     .form-actions { display: flex; align-items: center; gap: 14px; margin-top: 22px; flex-wrap: wrap; }
@@ -148,12 +153,19 @@
   <main>
     <section class="hero">
       <div class="wrap">
-        <span class="eyebrow">📍 Hledáme místa pro prádlomaty</span>
-        <h1 style="margin-top:16px;">Máte volných pár metrů?<br><span class="hl">Nabídněte místo pro prádlomat.</span></h1>
-        <p class="lede">Prádlomat je samoobslužná prádelna, která se vejde na pouhých <b>6,4 m²</b>. Stačí přívod elektřiny, vody a kanalizace a parkoviště v dosahu. Zadejte adresu a přímo na mapě nám ukažte, kam se stroj vejde — o zbytek se postaráme.</p>
-        <div class="hero-cta">
-          <a href="#nabidka" class="btn btn-primary">Nabídnout místo na mapě</a>
-          <a href="#jak" class="btn btn-ghost">Jak to funguje</a>
+        <div class="hero-grid">
+          <div class="hero-text">
+            <span class="eyebrow">📍 Hledáme místa pro prádlomaty</span>
+            <h1 style="margin-top:16px;">Máte volných pár metrů?<br><span class="hl">Nabídněte místo pro prádlomat.</span></h1>
+            <p class="lede">Prádlomat je samoobslužná prádelna, která se vejde na pouhých <b>6,4 m²</b>. Stačí přívod elektřiny, vody a kanalizace a parkoviště v dosahu. Zadejte adresu a přímo na mapě nám ukažte, kam se stroj vejde — o zbytek se postaráme.</p>
+            <div class="hero-cta">
+              <a href="#nabidka" class="btn btn-primary">Nabídnout místo na mapě</a>
+              <a href="#jak" class="btn btn-ghost">Jak to funguje</a>
+            </div>
+          </div>
+          <div class="hero-media">
+            <img src="pradlomat.png" alt="Prádlomat — samoobslužná prádelna 24/7" onerror="this.parentNode.style.display='none'">
+          </div>
         </div>
 
         <div class="reqs">
