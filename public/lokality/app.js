@@ -29,7 +29,6 @@
   var utilMarkers = {}, utilLines = {};
 
   var $ = function (id) { return document.getElementById(id); };
-  document.getElementById('year').textContent = new Date().getFullYear();
 
   // ─── Geo matematika: metry → posun v lat/lng ───────────────────────────────
   function metersToLatLng(centerLat, centerLng, dxEast, dyNorth) {
