@@ -77,11 +77,13 @@
 
   function initMap() {
     if (typeof L === 'undefined') throw new Error('Leaflet se nenačetl');
-    map = L.map('map', { center: DEFAULT_CENTER, zoom: DEFAULT_ZOOM, maxZoom: 21, zoomControl: true });
+    map = L.map('map', { center: DEFAULT_CENTER, zoom: DEFAULT_ZOOM, maxZoom: 20, zoomControl: true });
 
-    var streets = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 21, maxNativeZoom: 19, attribution: '© OpenStreetMap' });
-    var satellite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 21, maxNativeZoom: 19, attribution: 'Tiles © Esri, Maxar, Earthstar Geographics' });
-    var labels = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}{r}.png', { maxZoom: 21, maxNativeZoom: 19, pane: 'overlayPane', opacity: 0.9 });
+    var streets = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 20, maxNativeZoom: 19, attribution: '© OpenStreetMap' });
+    // Esri World Imagery: satelitní dlaždice existují spolehlivě do z18 (globálně),
+    // z19 jen místy. maxNativeZoom:18 → výš se dlaždice dopočítají (žádné „not available").
+    var satellite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 20, maxNativeZoom: 18, attribution: 'Tiles © Esri, Maxar, Earthstar Geographics' });
+    var labels = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}{r}.png', { maxZoom: 20, maxNativeZoom: 19, pane: 'overlayPane', opacity: 0.9 });
     satellite.addTo(map);
     L.control.layers({ '🛰️ Satelit': satellite, '🗺️ Mapa': streets }, { 'Popisky ulic': labels }, { position: 'topright', collapsed: false }).addTo(map);
 

@@ -3645,8 +3645,8 @@
       if (!el || typeof L === 'undefined') return;
       var lat = parseFloat(s.latitude), lng = parseFloat(s.longitude);
       if (!isFinite(lat) || !isFinite(lng)) { el.innerHTML = '<div style="padding:20px;color:var(--text2);">Poloha neuvedena.</div>'; return; }
-      var map = L.map(el, { center: [lat, lng], zoom: 20, maxZoom: 21 });
-      L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 21, maxNativeZoom: 19, attribution: 'Tiles © Esri' }).addTo(map);
+      var map = L.map(el, { center: [lat, lng], zoom: 20, maxZoom: 20 });
+      L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 20, maxNativeZoom: 18, attribution: 'Tiles © Esri' }).addTo(map);
       var wMm = s.footprint_w_mm || 3182, hMm = s.footprint_h_mm || 2015;
       var W = wMm/1000, H = hMm/1000, rotDeg = parseFloat(s.footprint_rotation)||0;
       var a = rotDeg*Math.PI/180, hw = W/2, hh = H/2;
