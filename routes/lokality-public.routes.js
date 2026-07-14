@@ -13,7 +13,6 @@ const express = require('express');
 const router = express.Router();
 const { z } = require('zod');
 const { prisma } = require('../config/database');
-const compounderNotify = require('../services/compounder/notify');
 
 // User-Agent pro Nominatim (vyžadují slušné UA, jinak blokují).
 const NOMINATIM_UA = 'HolyOS-Lokality/1.0 (+https://bestseries.global; tomas.holy@bestseries.cz)';
@@ -21,6 +20,37 @@ const NOMINATIM_UA = 'HolyOS-Lokality/1.0 (+https://bestseries.global; tomas.hol
 function clientIp(req) {
   const fwd = (req.headers['x-forwarded-for'] || '').split(',')[0].trim();
   return fwd || (req.socket && req.socket.remoteAddress) || null;
+}
+
+// Notifikace o nové nabídce lokality — VŽDY Janovi a Tomášovi (majitelé), do Velína
+// (push) i jako zvonek v HolyOS. Příjemci dle COMPOUNDER_OWNER_EMAILS (default Jan+Tomáš),
+// nezávisle na nastavení příjemců Compounderu. Fire-and-forget.
+const LOKALITY_NOTIFY_LINK = '/modules/prodejni-objednavky/index.html';
+async function notifyLocationOwners(prisma, { title, body, data }) {
+  try {
+    const emails = (process.env.COMPOUNDER_OWNER_EMAILS || 'jan.holy@bestseries.cz,tomas.holy@bestseries.cz')
+      .split(',').map((s) => s.trim()).filter(Boolean);
+    const persons = await prisma.person.findMany({
+      where: { OR: emails.map((e) => ({ email: { equals: e, mode: 'insensitive' } })) },
+      select: { id: true, user_id: true },
+    });
+    if (!persons.length) return;
+    let notifyPerson = null, createNotification = null;
+    try { notifyPerson = require('../services/push/expo-push').notifyPerson; } catch (e) { /* push nedostupný */ }
+    try { createNotification = require('./notifications.routes').createNotification; } catch (e) { /* zvonek nedostupný */ }
+    for (const p of persons) {
+      if (notifyPerson) {
+        Promise.resolve(notifyPerson(prisma, p.id, { title, body, data: Object.assign({ link: LOKALITY_NOTIFY_LINK }, data || {}), sound: 'default' }))
+          .catch((e) => console.warn('[lokality] push', p.id, e && e.message));
+      }
+      if (p.user_id && createNotification) {
+        createNotification({ userId: p.user_id, type: 'system', title, body, link: LOKALITY_NOTIFY_LINK })
+          .catch((e) => console.warn('[lokality] zvonek', p.user_id, e && e.message));
+      }
+    }
+  } catch (e) {
+    console.error('[lokality] notifyLocationOwners:', e && e.message);
+  }
 }
 
 // ─── GET /api/lokality/geocode?q=adresa ─────────────────────────────────────
@@ -68,6 +98,7 @@ const offerSchema = z.object({
   longitude: z.number().finite(),
   footprint_rotation: z.number().finite().optional(),
   is_owner: z.boolean().optional(),
+  deal_type: z.enum(['rent', 'purchase', 'other']).optional(),
   electricity: z.boolean().optional(),
   water: z.boolean().optional(),
   sewage: z.boolean().optional(),
@@ -118,7 +149,7 @@ router.post('/offer', async (req, res, next) => {
     const site = await prisma.site.create({
       data: {
         name,
-        site_type: 'rent',
+        site_type: d.deal_type || 'rent',
         status: 'lead',
         public_source: 'bestseries.global',
         description: d.note || null,
@@ -152,12 +183,21 @@ router.post('/offer', async (req, res, next) => {
       select: { id: true },
     });
 
-    // Velín push + zvonek (nastavení compounder.velin_notify_person_ids, fallback Jan/Tomáš).
-    compounderNotify.notifyOwnersMessage(prisma, {
-      title: '📍 Nová nabídka lokality',
-      body: d.owner_name + ' nabízí místo pro prádlomat: ' + (d.address || d.city || '')
-        + (phone ? (' · tel ' + phone) : '') + (email ? (' · ' + email) : ''),
-      data: { type: 'site_offer', site_id: site.id, link: '/modules/prodejni-objednavky/index.html' },
+    // Velín push + zvonek — VŽDY Jan + Tomáš (majitelé). Informativní shrnutí nabídky.
+    const ownerTxt = (d.is_owner === true) ? 'Ano' : (d.is_owner === false ? 'Ne' : 'neuvedeno');
+    const dealTxt = { rent: 'Pronájem', purchase: 'Prodej pozemku', other: 'Zatím neví' }[d.deal_type || 'rent'];
+    const utilTxt = Object.keys(pts).length
+      ? Object.keys(pts).map((k) => ({ electricity: 'elektřina', water: 'voda', sewage: 'kanalizace', parking: 'parkoviště' }[k])).join(', ')
+      : 'neoznačeny';
+    notifyLocationOwners(prisma, {
+      title: '📍 Nová nabídka lokality' + (d.city ? (' — ' + d.city) : ''),
+      body: d.owner_name + ' nabízí místo pro prádlomat.'
+        + '\nZájem: ' + dealTxt
+        + '\nAdresa: ' + d.address
+        + '\nVlastník místa: ' + ownerTxt
+        + '\nKontakt: ' + (phone || '—') + (email ? (' · ' + email) : '')
+        + '\nPřípojky na mapě: ' + utilTxt,
+      data: { type: 'site_offer', site_id: site.id },
     }).catch((e) => console.error('[lokality] velín notifikace:', e && e.message));
 
     console.log('[lokality] Nová veřejná nabídka lokality #' + site.id + ' — ' + d.address + ' (ip ' + clientIp(req) + ')');

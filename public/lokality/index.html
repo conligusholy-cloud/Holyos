@@ -161,7 +161,7 @@
           <div class="hero-text">
             <span class="eyebrow">📍 Hledáme místa pro prádlomaty</span>
             <h1 style="margin-top:16px;">Máte volných pár metrů?<br><span class="hl">Nabídněte místo pro prádlomat.</span></h1>
-            <p class="lede">Prádlomat je samoobslužná prádelna, která se vejde na pouhých <b>6,4 m²</b>. Za jeho umístění vám <b>platíme měsíční nájem</b> — a o provoz, servis i úklid se staráme my. Vy jen poskytnete místo s přípojkami. Ukažte nám na mapě, kam se stroj vejde.</p>
+            <p class="lede">Prádlomat je samoobslužná prádelna, která se vejde na pouhých <b>6,4 m²</b>. Za jeho umístění vám <b>platíme měsíční nájem</b> (nebo od vás pozemek rovnou odkoupíme) — a o provoz, servis i úklid se staráme my. Vy jen poskytnete místo s přípojkami. Ukažte nám na mapě, kam se stroj vejde.</p>
             <div class="hero-cta">
               <a href="#nabidka" class="btn btn-primary">Nabídnout místo na mapě</a>
               <a href="#jak" class="btn btn-ghost">Jak to funguje</a>
@@ -188,7 +188,7 @@
           <p>Za poskytnuté místo vám platíme — a nemusíte hnout prstem.</p>
         </div>
         <div class="reqs">
-          <div class="req"><div class="ico">💰</div><h3>Pravidelný nájem</h3><p>Každý měsíc vám platíme nájem za umístění prádlomatu. Jeho výše odpovídá <b>atraktivitě lokality</b> — čím lepší poloha, návštěvnost a parkování, tím vyšší nájem.</p></div>
+          <div class="req"><div class="ico">💰</div><h3>Nájem, nebo odkup</h3><p>Za umístění prádlomatu vám platíme měsíční nájem — jeho výše odpovídá <b>atraktivitě lokality</b> (poloha, návštěvnost, parkování). Případně od vás <b>pozemek rovnou odkoupíme</b>, podle toho, co vám víc vyhovuje.</p></div>
           <div class="req"><div class="ico">🛠️</div><h3>Nulová starost</h3><p>Instalaci, provoz, servis i úklid zajišťujeme my. Vy se o nic nestaráte a nemáte s tím žádnou práci.</p></div>
           <div class="req"><div class="ico">📐</div><h3>Jen 6,4 m²</h3><p>Prádlomat zabere pouhých 6,4 m². Zhodnotíte tak i jinak nevyužitý kout, dvůr, parkoviště nebo plochu u prodejny.</p></div>
           <div class="req"><div class="ico">🤝</div><h3>Bez rizika a investic</h3><p>Nic nekupujete ani neinvestujete. Stačí poskytnout místo s přípojkami a podepsat smlouvu o umístění.</p></div>
@@ -239,6 +239,14 @@
                 <div class="owner-choice">
                   <label class="choice"><input type="radio" name="is_owner" value="yes"> Ano, jsem vlastník</label>
                   <label class="choice"><input type="radio" name="is_owner" value="no"> Ne, nejsem vlastník</label>
+                </div>
+              </div>
+              <div class="fg full">
+                <label>Máte zájem místo pronajmout, nebo pozemek prodat?</label>
+                <div class="owner-choice">
+                  <label class="choice"><input type="radio" name="deal_type" value="rent" checked> 💰 Pronájem</label>
+                  <label class="choice"><input type="radio" name="deal_type" value="purchase"> 🤝 Prodej pozemku</label>
+                  <label class="choice"><input type="radio" name="deal_type" value="other"> 🤔 Zatím nevím</label>
                 </div>
               </div>
               <div class="fg full">

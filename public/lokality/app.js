@@ -284,14 +284,17 @@
     cb.addEventListener('change', upd); upd();
   });
 
-  // Vlastník místa (radio Ano/Ne) — vizuální zvýraznění.
-  Array.prototype.forEach.call(document.querySelectorAll('.owner-choice input'), function (r) {
-    r.addEventListener('change', function () {
-      Array.prototype.forEach.call(document.querySelectorAll('.owner-choice .choice'), function (c) {
-        c.classList.toggle('on', c.querySelector('input').checked);
-      });
+  // Radio volby (vlastník místa, typ nabídky) — vizuální zvýraznění.
+  function refreshChoices() {
+    Array.prototype.forEach.call(document.querySelectorAll('.owner-choice .choice'), function (c) {
+      var inp = c.querySelector('input');
+      c.classList.toggle('on', !!(inp && inp.checked));
     });
+  }
+  Array.prototype.forEach.call(document.querySelectorAll('.owner-choice input'), function (r) {
+    r.addEventListener('change', refreshChoices);
   });
+  refreshChoices();
 
   // ─── Odeslání ────────────────────────────────────────────────────────────────
   var form = $('offer-form');
@@ -325,6 +328,7 @@
       longitude: state.center.lng,
       footprint_rotation: Math.round(state.rotation * 100) / 100,
       is_owner: ownerSel.value === 'yes',
+      deal_type: (document.querySelector('#offer-form [name="deal_type"]:checked') || {}).value || 'rent',
       electricity: $('offer-form').elements['electricity'].checked,
       water: $('offer-form').elements['water'].checked,
       sewage: $('offer-form').elements['sewage'].checked,
