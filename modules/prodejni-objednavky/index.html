@@ -242,6 +242,36 @@
     .cf-customer-table .cfc-count { color: var(--text2); font-size: 11px; }
     .cf-customer-table tfoot td { background: var(--surface2); padding: 12px 14px; font-weight: 700; border-top: 2px solid var(--border); }
     .cf-customer-empty { padding: 40px; text-align: center; color: var(--text2); font-style: italic; }
+
+    /* ─── Mobil (iPhone / Android) — responzivní optimalizace celého modulu ─── */
+    @media (max-width: 768px) {
+      .main-wrapper { margin-left: 0 !important; }
+      /* Záložky: vodorovně posuvné, nezalamovat */
+      .tab-bar { padding: 0 8px; overflow-x: auto; -webkit-overflow-scrolling: touch; flex-wrap: nowrap; }
+      .tab-bar::-webkit-scrollbar { height: 0; }
+      .tab-btn { padding: 12px 12px; font-size: 13px; white-space: nowrap; flex: 0 0 auto; }
+      /* Obsah: menší okraje */
+      .content { padding: 0 12px 20px; }
+      /* Toolbar/filtry: skládat pod sebe, plná šířka */
+      .toolbar { gap: 8px; }
+      .toolbar input[type="text"], .toolbar input[type="search"], .toolbar select { width: 100% !important; flex: 1 1 100%; min-width: 0; }
+      .toolbar .btn { flex: 1 1 auto; justify-content: center; }
+      /* KPI karty užší */
+      .stat-card { min-width: 0; padding: 12px 14px; }
+      .stat-card .stat-value { font-size: 22px; }
+      /* Tabulky: menší písmo/odsazení; scroll řeší obalové divy s overflow-x */
+      .data-table { font-size: 12px; }
+      .data-table th, .data-table td { padding: 8px 10px; }
+      /* Bezpečná horizontální scrollovatelnost tabulek i bez obalu */
+      .content > div { max-width: 100%; }
+      /* Modaly na celou obrazovku */
+      .modal-overlay { align-items: flex-start; }
+      .modal { width: 100% !important; max-width: 100vw; max-height: 100vh; min-height: 100vh; border-radius: 0; padding: 16px; }
+      .modal-actions { flex-wrap: wrap; }
+      .modal-actions .btn { flex: 1 1 auto; justify-content: center; }
+      /* Větší tap-targety */
+      .btn { padding: 10px 14px; }
+    }
   </style>
   <script src="/js/countries.js"></script>
   <script src="modules/prodejni-objednavky/pradlomat-economy.js"></script>
