@@ -69,6 +69,7 @@ router.post('/setup', async (req, res, next) => {
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
       maxAge: 24 * 60 * 60 * 1000,
+      ...(process.env.COOKIE_DOMAIN ? { domain: process.env.COOKIE_DOMAIN } : {}),
     });
 
     res.status(201).json({
@@ -145,7 +146,7 @@ router.post('/login', async (req, res, next) => {
 
 // POST /api/auth/logout
 router.post('/logout', (req, res) => {
-  res.clearCookie('token');
+  res.clearCookie('token', process.env.COOKIE_DOMAIN ? { domain: process.env.COOKIE_DOMAIN } : {});
   res.json({ ok: true });
 });
 
