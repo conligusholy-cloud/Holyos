@@ -186,6 +186,42 @@ router.post('/lokality-ai', requireAuth, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// POST /api/compounder/lokality-persona — AI vytvoří obraz ideálního zákazníka z nabídek + návštěvnosti.
+router.post('/lokality-persona', requireAuth, async (req, res, next) => {
+  try {
+    if (!process.env.ANTHROPIC_API_KEY) return res.status(503).json({ error: 'AI není nakonfigurováno (chybí ANTHROPIC_API_KEY).' });
+    const analytics = (req.body && req.body.analytics) || {};
+    let sites = [];
+    try {
+      sites = await prisma.site.findMany({
+        orderBy: { id: 'desc' }, take: 150,
+        select: { site_type: true, status: true, city: true, country: true, area_m2: true, water_supply: true, sewage: true, parking: true, score: true, rent_monthly: true, purchase_price: true },
+      });
+    } catch (e) { sites = []; }
+    const n = sites.length;
+    const by = (f) => { const m = {}; sites.forEach((s) => { const k = (s[f] != null && s[f] !== '') ? String(s[f]) : '—'; m[k] = (m[k] || 0) + 1; }); return m; };
+    const pct = (pred) => n ? Math.round(sites.filter(pred).length / n * 100) : 0;
+    const facts = {
+      offers_total: n,
+      by_type: by('site_type'), by_country: by('country'), by_status: by('status'),
+      pct_parking: pct((s) => s.parking === true), pct_water: pct((s) => s.water_supply === true), pct_sewage: pct((s) => s.sewage === true),
+      avg_area_m2: n ? Math.round(sites.reduce((a, s) => a + (Number(s.area_m2) || 0), 0) / n) : null,
+      analytics: { views: analytics.views, unique: analytics.uniqueVisitors, submits: analytics.submits, conversionPct: analytics.conversionPct, topSources: analytics.topSources, topRegions: analytics.topRegions, topClicks: analytics.topClicks },
+    };
+    const Anthropic = require('@anthropic-ai/sdk');
+    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    const model = process.env.COMPOUNDER_LOCATION_MODEL || 'claude-sonnet-4-6';
+    const sys = 'Jsi marketingový stratég. Best Series shání přes web bestseries.global majitele míst/pozemků, kteří nabídnou místo pro samoobslužný prádlomat (6,4 m²) — Best Series platí nájem nebo místo odkoupí a o provoz se stará. Cíl: definuj OBRAZ IDEÁLNÍHO ZÁKAZNÍKA (persona toho, kdo nabídne dobré místo a snadno konvertuje), aby na něj šla cílit reklama. Vyjdi z dat: reálné nabídky (typy nájem/odkup, země, přípojky, plocha, stavy) a návštěvnost (zdroje, regiony, prokliky). Když je dat málo, dopň odborným odhadem podle byznysu a označ to. Odpověz POUZE platným JSON bez markdownu: {"persona_name":"<výstižný název, např. Majitel parkoviště u supermarketu>","summary":"<2-4 věty kdo to je>","demographics":["<bod>"],"motivations":["<co ho motivuje>"],"ideal_place":["<jaké místo nabízí>"],"where_to_reach":["<kde ho hledat / kanály / cílení reklamy>"],"messaging":["<jak ho oslovit, jaké argumenty>"],"red_flags":["<koho spíš nechceme / co nefunguje>"]}. Buď konkrétní a použitelné pro nastavení reklamy. Piš česky.';
+    const usr = 'Data (JSON):\n' + JSON.stringify(facts);
+    const msg = await client.messages.create({ model, max_tokens: 1100, system: sys, messages: [{ role: 'user', content: usr }] });
+    let text = (msg && msg.content && msg.content[0] && msg.content[0].text) || '';
+    text = text.replace(/^```(json)?/i, '').replace(/```\s*$/, '').trim();
+    let j; try { j = JSON.parse(text); } catch (e) { return res.json({ ok: true, persona_name: '', summary: text.slice(0, 1200) }); }
+    const arr = (x) => Array.isArray(x) ? x.slice(0, 8).map((v) => String(v).slice(0, 200)) : [];
+    res.json({ ok: true, persona_name: String(j.persona_name || '').slice(0, 120), summary: String(j.summary || '').slice(0, 1200), demographics: arr(j.demographics), motivations: arr(j.motivations), ideal_place: arr(j.ideal_place), where_to_reach: arr(j.where_to_reach), messaging: arr(j.messaging), red_flags: arr(j.red_flags) });
+  } catch (err) { next(err); }
+});
+
 // ─── VEŘEJNÉ: aktuální kurzy (ČNB) pro přepočet měny v modelech ──────────────
 // GET /api/compounder/fx-rates → { rates: { EUR, USD, GBP } } (CZK za 1 jednotku)
 router.get('/fx-rates', async (req, res) => {
