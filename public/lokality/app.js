@@ -16,7 +16,17 @@
     center: { lat: DEFAULT_CENTER[0], lng: DEFAULT_CENTER[1] }, // .lat/.lng kompatibilní s L.latLng
     rotation: 0,          // stupně
     hasLocation: false,   // uživatel už vybral adresu / polohu?
+    utils: { electricity: null, water: null, sewage: null, parking: null }, // body přípojek {lat,lng}
   };
+
+  // Přípojky — ikona, barva, popisek a výchozí odsazení od středu (metry V, S).
+  var UTIL_META = {
+    electricity: { icon: '⚡', color: '#f5b301', label: 'Elektřina', off: [-5, 4] },
+    water:       { icon: '💧', color: '#3b82f6', label: 'Voda',       off: [5, 4] },
+    sewage:      { icon: '🚿', color: '#14b8a6', label: 'Kanalizace', off: [5, -4] },
+    parking:     { icon: '🅿️', color: '#8b5cf6', label: 'Parkoviště', off: [-5, -4] },
+  };
+  var utilMarkers = {}, utilLines = {};
 
   var $ = function (id) { return document.getElementById(id); };
   document.getElementById('year').textContent = new Date().getFullYear();
@@ -67,6 +77,50 @@
     rotLine.setLatLngs([state.center, h]);
     $('rot').value = Math.round(state.rotation) % 360;
     $('rot-val').textContent = (Math.round(state.rotation) % 360) + '°';
+    // spojnice od středu stroje k označeným přípojkám (start se posouvá se strojem)
+    Object.keys(utilLines).forEach(function (k) {
+      if (utilLines[k] && state.utils[k]) utilLines[k].setLatLngs([state.center, [state.utils[k].lat, state.utils[k].lng]]);
+    });
+  }
+
+  function makeUtilIcon(key) {
+    var m = UTIL_META[key];
+    return L.divIcon({
+      className: '', iconSize: [30, 40], iconAnchor: [15, 38],
+      html: '<div style="width:30px;height:40px;position:relative;">'
+        + '<div style="position:absolute;top:0;left:0;width:30px;height:30px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);background:' + m.color + ';border:2px solid #fff;box-shadow:0 2px 5px rgba(0,0,0,.5);"></div>'
+        + '<div style="position:absolute;top:3px;left:0;width:30px;height:24px;display:grid;place-items:center;font-size:15px;">' + m.icon + '</div>'
+        + '</div>',
+    });
+  }
+
+  function toggleUtil(key) {
+    if (!mapReady) return;
+    var btn = document.querySelector('.util-btn[data-util="' + key + '"]');
+    if (state.utils[key]) {
+      if (utilMarkers[key]) { map.removeLayer(utilMarkers[key]); delete utilMarkers[key]; }
+      if (utilLines[key]) { map.removeLayer(utilLines[key]); delete utilLines[key]; }
+      state.utils[key] = null;
+      if (btn) btn.classList.remove('on');
+      return;
+    }
+    var meta = UTIL_META[key];
+    var ll = metersToLatLng(state.center.lat, state.center.lng, meta.off[0], meta.off[1]);
+    var mk = L.marker(ll, { icon: makeUtilIcon(key), draggable: true, zIndexOffset: 400 }).addTo(map);
+    mk.bindTooltip(meta.label, { direction: 'top', offset: [0, -34] });
+    var line = L.polyline([state.center, ll], { color: meta.color, weight: 2, dashArray: '3 5', opacity: 0.85 }).addTo(map);
+    utilMarkers[key] = mk; utilLines[key] = line;
+    state.utils[key] = { lat: ll.lat, lng: ll.lng };
+    mk.on('drag', function (e) {
+      var p = e.target.getLatLng();
+      state.utils[key] = { lat: p.lat, lng: p.lng };
+      if (utilLines[key]) utilLines[key].setLatLngs([state.center, p]);
+    });
+    if (btn) btn.classList.add('on');
+    state.hasLocation = true;
+    // označený bod = přípojka k dispozici → zaškrtnout odpovídající checkbox
+    var cb = document.querySelector('#offer-form [name="' + key + '"]');
+    if (cb && !cb.checked) { cb.checked = true; var ev = document.createEvent('Event'); ev.initEvent('change', true, true); cb.dispatchEvent(ev); }
   }
 
   function flyToLocation(lat, lon) {
@@ -125,6 +179,12 @@
     var mapEl = $('map');
     if (mapEl) mapEl.innerHTML = '<div style="padding:24px;color:var(--text2);text-align:center;">Mapu se nepodařilo načíst. Nabídku můžete přesto odeslat — stačí vybrat adresu z našeptávače výše.</div>';
   }
+
+  // Tlačítka přípojek (fungují jen s načtenou mapou).
+  Array.prototype.forEach.call(document.querySelectorAll('.util-btn'), function (b) {
+    if (!mapReady) { b.disabled = true; b.style.opacity = '0.45'; b.style.cursor = 'not-allowed'; return; }
+    b.addEventListener('click', function () { toggleUtil(b.getAttribute('data-util')); });
+  });
 
   // Posuvník otočení.
   $('rot').addEventListener('input', function () {
@@ -238,6 +298,12 @@
       water: $('offer-form').elements['water'].checked,
       sewage: $('offer-form').elements['sewage'].checked,
       parking: $('offer-form').elements['parking'].checked,
+      utility_points: {
+        electricity: state.utils.electricity,
+        water: state.utils.water,
+        sewage: state.utils.sewage,
+        parking: state.utils.parking,
+      },
       note: $('f-note').value.trim(),
     };
 

@@ -4488,6 +4488,9 @@ model Site {
   footprint_rotation Decimal? @db.Decimal(6, 2)
   footprint_w_mm     Int?     @default(3182)
   footprint_h_mm     Int?     @default(2015)
+  // Body přípojek, které zájemce označil na mapě (sloupky). JSON:
+  // { electricity: {lat,lng}, water: {lat,lng}, sewage: {lat,lng} } — klíče volitelné.
+  utility_points     Json?
 
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt

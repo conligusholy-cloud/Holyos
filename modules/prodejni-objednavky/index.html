@@ -3571,7 +3571,7 @@
           + '<td style="white-space:nowrap;">'+lokDate(s.created_at)+'</td>'
           + '<td>'+contact+'</td>'
           + '<td>'+lokEsc(s.address||s.city||'—')+'</td>'
-          + '<td>'+lokYesNo(s.electricity_kw!=null?true:undefined)+'</td>'
+          + '<td>'+lokYesNo((s.utility_points&&s.utility_points.electricity)?true:(s.electricity_kw!=null?true:undefined))+'</td>'
           + '<td>'+lokYesNo(s.water_supply)+'</td>'
           + '<td>'+lokYesNo(s.sewage)+'</td>'
           + '<td>'+lokYesNo(s.parking)+'</td>'
@@ -3595,6 +3595,8 @@
       }).join('');
 
       var mapLinkBtn = s.map_link ? '<a class="btn btn-sm" href="'+lokEsc(s.map_link)+'" target="_blank" rel="noopener">🗺️ Otevřít v mapách</a>' : '';
+      var up = s.utility_points || {};
+      var pin = function(k){ return up[k] ? ' <span title="Označeno sloupkem na mapě">📍</span>' : ''; };
 
       var body = ''
         + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">'
@@ -3608,10 +3610,10 @@
         +     (s.city?'<div style="color:var(--text2);font-size:13px;">'+lokEsc(s.zip||'')+' '+lokEsc(s.city)+'</div>':'')
         +     '<div style="margin-top:12px;font-size:12px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">Přípojky a okolí</div>'
         +     '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:13px;">'
-        +       '<div>⚡ Elektřina: '+lokYesNo(s.electricity_kw!=null?true:undefined)+'</div>'
-        +       '<div>💧 Voda: '+lokYesNo(s.water_supply)+'</div>'
-        +       '<div>🚿 Kanalizace: '+lokYesNo(s.sewage)+'</div>'
-        +       '<div>🅿️ Parkoviště: '+lokYesNo(s.parking)+'</div>'
+        +       '<div>⚡ Elektřina: '+lokYesNo(up.electricity?true:(s.electricity_kw!=null?true:undefined))+pin('electricity')+'</div>'
+        +       '<div>💧 Voda: '+lokYesNo(up.water?true:s.water_supply)+pin('water')+'</div>'
+        +       '<div>🚿 Kanalizace: '+lokYesNo(up.sewage?true:s.sewage)+pin('sewage')+'</div>'
+        +       '<div>🅿️ Parkoviště: '+lokYesNo(up.parking?true:s.parking)+pin('parking')+'</div>'
         +     '</div>'
         +     (s.capacity_note?'<div style="margin-top:8px;font-size:12px;color:var(--text2);">'+lokEsc(s.capacity_note)+'</div>':'')
         +     (s.owner_note?('<div style="margin-top:12px;font-size:12px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">Poznámka zájemce</div><div style="font-size:13px;white-space:pre-wrap;">'+lokEsc(s.owner_note)+'</div>'):'')
@@ -3656,6 +3658,27 @@
         return [lat+dLat, lng+dLng];
       });
       L.polygon(pts, { color:'#16b981', weight:2, fillColor:'#16b981', fillOpacity:0.35 }).addTo(map);
+
+      // Přípojky (sloupky) označené zájemcem.
+      var UMETA = {
+        electricity: { icon:'⚡', color:'#f5b301', label:'Elektřina' },
+        water:       { icon:'💧', color:'#3b82f6', label:'Voda' },
+        sewage:      { icon:'🚿', color:'#14b8a6', label:'Kanalizace' },
+        parking:     { icon:'🅿️', color:'#8b5cf6', label:'Parkoviště' },
+      };
+      var up = s.utility_points || {};
+      Object.keys(UMETA).forEach(function(k){
+        var p = up[k];
+        if (!p || !isFinite(p.lat) || !isFinite(p.lng)) return;
+        var m = UMETA[k];
+        var icon = L.divIcon({ className:'', iconSize:[28,38], iconAnchor:[14,36], html:
+          '<div style="width:28px;height:38px;position:relative;">'
+          + '<div style="position:absolute;top:0;left:0;width:28px;height:28px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);background:'+m.color+';border:2px solid #fff;box-shadow:0 2px 5px rgba(0,0,0,.5);"></div>'
+          + '<div style="position:absolute;top:3px;left:0;width:28px;height:22px;display:grid;place-items:center;font-size:14px;">'+m.icon+'</div>'
+          + '</div>' });
+        L.marker([p.lat, p.lng], { icon: icon }).addTo(map).bindTooltip(m.label, { direction:'top', offset:[0,-32] });
+        L.polyline([[lat,lng],[p.lat,p.lng]], { color:m.color, weight:2, dashArray:'3 5', opacity:0.85 }).addTo(map);
+      });
       setTimeout(function(){ try { map.invalidateSize(); } catch(e){} }, 120);
     }
 

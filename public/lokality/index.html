@@ -108,6 +108,11 @@
     .leaflet-container { background: #0b0f14; font-family: inherit; }
     .footprint-tip { background: var(--bg2); border: 1px dashed var(--border); border-radius: 10px; padding: 10px 14px; font-size: 13px; color: var(--text2); margin-bottom: 12px; }
     .footprint-tip b { color: var(--text); }
+    .util-btns { display: flex; gap: 10px; flex-wrap: wrap; }
+    .util-btn { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; color: var(--text); font-size: 14px; font-weight: 600; cursor: pointer; font-family: inherit; transition: all 0.12s; }
+    .util-btn:hover { border-color: var(--brand); }
+    .util-btn.on { background: rgba(22,185,129,0.14); border-color: var(--brand); color: var(--brand); }
+    .util-btn.on::after { content: ' ✓ na mapě'; font-weight: 500; font-size: 12px; opacity: 0.85; }
 
     .form-actions { display: flex; align-items: center; gap: 14px; margin-top: 22px; flex-wrap: wrap; }
     .form-msg { font-size: 14px; font-weight: 600; }
@@ -219,6 +224,16 @@
               </div>
               <div id="map"></div>
               <div class="map-note"><span>🛰️</span><span>Přepněte na satelitní pohled tlačítkem vpravo nahoře v mapě, ať přesně vidíte, kam stroj postavit.</span></div>
+
+              <div id="util-tools" style="margin-top:14px;">
+                <div class="hint" style="margin-bottom:8px;">Označte na mapě sloupkem, kde je možné se připojit (nepovinné — přetáhněte špendlík na správné místo):</div>
+                <div class="util-btns">
+                  <button type="button" class="util-btn" data-util="electricity">⚡ Elektřina</button>
+                  <button type="button" class="util-btn" data-util="water">💧 Voda</button>
+                  <button type="button" class="util-btn" data-util="sewage">🚿 Kanalizace</button>
+                  <button type="button" class="util-btn" data-util="parking">🅿️ Parkoviště</button>
+                </div>
+              </div>
             </div>
 
             <div class="fg full" style="margin-top:16px;">

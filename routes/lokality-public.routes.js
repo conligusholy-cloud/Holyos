@@ -56,6 +56,7 @@ router.get('/geocode', async (req, res) => {
 });
 
 // ─── POST /api/lokality/offer ───────────────────────────────────────────────
+const pointSchema = z.object({ lat: z.number().finite(), lng: z.number().finite() });
 const offerSchema = z.object({
   owner_name: z.string().trim().min(2).max(200),
   owner_phone: z.string().trim().max(40).optional().or(z.literal('')),
@@ -70,6 +71,13 @@ const offerSchema = z.object({
   water: z.boolean().optional(),
   sewage: z.boolean().optional(),
   parking: z.boolean().optional(),
+  // Body přípojek označené na mapě (volitelné, každý klíč volitelný).
+  utility_points: z.object({
+    electricity: pointSchema.nullable().optional(),
+    water: pointSchema.nullable().optional(),
+    sewage: pointSchema.nullable().optional(),
+    parking: pointSchema.nullable().optional(),
+  }).partial().optional(),
   note: z.string().trim().max(4000).optional().or(z.literal('')),
 });
 
@@ -89,7 +97,22 @@ router.post('/offer', async (req, res, next) => {
     const lat = d.latitude, lng = d.longitude;
     const mapLink = 'https://www.openstreetmap.org/?mlat=' + lat + '&mlon=' + lng + '#map=19/' + lat + '/' + lng;
     const name = ('Nabídka: ' + (d.city ? d.city + ' — ' : '') + d.owner_name).slice(0, 255);
+
+    // Body přípojek — jen platné {lat,lng}. Označený bod zároveň znamená „k dispozici".
+    const up = d.utility_points || {};
+    const pts = {};
+    for (const k of ['electricity', 'water', 'sewage', 'parking']) {
+      if (up[k] && Number.isFinite(up[k].lat) && Number.isFinite(up[k].lng)) {
+        pts[k] = { lat: Number(up[k].lat.toFixed(7)), lng: Number(up[k].lng.toFixed(7)) };
+      }
+    }
+    const has = (k, flag) => Boolean(flag) || Boolean(pts[k]);
+    const electricity = has('electricity', d.electricity);
+    const water = has('water', d.water);
+    const sewage = has('sewage', d.sewage);
+    const parking = has('parking', d.parking);
     const yn = (v) => (v ? 'ano' : 'neuvedeno');
+    const withPin = (k) => (pts[k] ? ' (📍 na mapě)' : '');
 
     const site = await prisma.site.create({
       data: {
@@ -110,17 +133,18 @@ router.post('/offer', async (req, res, next) => {
         owner_email: email || null,
         owner_note: d.note || null,
         area_m2: '6.40',
-        water_supply: d.water ?? null,
-        sewage: d.sewage ?? null,
-        parking: d.parking ?? null,
+        water_supply: water,
+        sewage: sewage,
+        parking: parking,
         footprint_rotation: (d.footprint_rotation != null) ? Number(d.footprint_rotation).toFixed(2) : null,
         footprint_w_mm: 3182,
         footprint_h_mm: 2015,
+        utility_points: Object.keys(pts).length ? pts : null,
         capacity_note: [
-          'Elektřina: ' + yn(d.electricity),
-          'Voda: ' + yn(d.water),
-          'Kanalizace: ' + yn(d.sewage),
-          'Parkoviště v dosahu: ' + yn(d.parking),
+          'Elektřina: ' + yn(electricity) + withPin('electricity'),
+          'Voda: ' + yn(water) + withPin('water'),
+          'Kanalizace: ' + yn(sewage) + withPin('sewage'),
+          'Parkoviště v dosahu: ' + yn(parking) + withPin('parking'),
         ].join(' · '),
       },
       select: { id: true },
