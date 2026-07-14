@@ -3999,6 +3999,7 @@
           '<td>' + badge + '</td>' +
           '<td style="text-align:right;white-space:nowrap;" onclick="event.stopPropagation()">' +
             ((cfg.photos && cfg.photos.length) ? '<span title="' + cfg.photos.length + ' fotek nahráno" style="color:#10b981;margin-right:6px;font-size:12px;">📷' + cfg.photos.length + '</span>' : '<span title="Bez fotek" style="opacity:.3;margin-right:6px;font-size:12px;">📷</span>') +
+            '<button class="btn" onclick="openKioskStats(\'' + codeAttr + '\')" title="Statistika tržeb" style="padding:4px 9px;font-size:13px;margin-right:4px;">📊</button>' +
             '<button class="btn" onclick="openContractPicker(\'' + codeAttr + '\')" title="Smlouvy" style="padding:4px 9px;font-size:13px;margin-right:4px;">📄</button>' +
             '<button class="btn" onclick="openKioskConfig(\'' + codeAttr + '\')" title="Nastavit verzi a nájem" style="padding:4px 9px;font-size:13px;">⚙️</button>' +
           '</td>' +
@@ -4519,6 +4520,30 @@
       }
       return { ver: ver, machine: machine };
     }
+
+    async function openKioskStats(code) {
+      var k = kvFindKiosk(code) || { code: code, label: '' };
+      document.getElementById('modal-root').innerHTML =
+        '<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal" style="width:540px;max-width:96vw;">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;"><h2 style="margin:0;">📊 Tržby — ' + kvEsc(k.code) + '</h2><button class="btn btn-secondary" onclick="closeModal()">Zavřít</button></div>' +
+        '<div style="color:var(--text2);font-size:13px;margin-bottom:16px;">' + kvEsc(k.label || '') + '</div>' +
+        '<div id="kv-stats-body"><div style="color:var(--text2);padding:16px;">Načítám tržby…</div></div>' +
+        '</div></div>';
+      try {
+        var r = await fetch('/api/compounder/kiosk-revenue/' + encodeURIComponent(code), { credentials: 'include' });
+        var d = await r.json();
+        if (!r.ok) throw new Error(d.error || ('HTTP ' + r.status));
+        var cur = d.currency || 'CZK';
+        function card(label, val) { return '<div style="flex:1;min-width:120px;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 16px;"><div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--text2);">' + label + '</div><div style="font-size:20px;font-weight:800;color:#10b981;margin-top:4px;">' + kvMoney(val, cur) + '</div></div>'; }
+        var body = document.getElementById('kv-stats-body'); if (!body) return;
+        body.innerHTML = '<div style="display:flex;gap:10px;flex-wrap:wrap;">' +
+          card('Poslední den', d.day) + card('Poslední týden', d.week) + card('Poslední měsíc', d.month) + card('Poslední rok', d.year) +
+          '</div><div style="color:var(--text2);font-size:11px;margin-top:12px;">Součet částek transakcí ze SIS · ' + (d.txCount || 0) + ' transakcí za rok' + (d.complete ? '' : ' (částečně — velký objem)') + (d.generatedAt ? (' · ' + new Date(d.generatedAt).toLocaleString('cs-CZ')) : '') + '</div>';
+      } catch (e) {
+        var b = document.getElementById('kv-stats-body'); if (b) b.innerHTML = '<div style="color:#ef4444;padding:16px;">Tržby se nepodařilo načíst: ' + kvEsc(e.message) + '</div>';
+      }
+    }
+    window.openKioskStats = openKioskStats;
 
     function openContractPicker(code) {
       var k = kvFindKiosk(code) || { code: code, label: '' };

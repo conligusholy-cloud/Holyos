@@ -1656,6 +1656,61 @@ router.get('/kiosk-transactions/:code', requireAuth, async (req, res, next) => {
   }
 });
 
+// ─── SIS: tržby lokality po obdobích (den/týden/měsíc/rok) ──────────────────
+// Sečte částky transakcí ze SIS do košů podle data. Transakce bereme stránkovaně
+// (řazené od nejnovějších); končíme, když je celá stránka starší než rok, nebo
+// při stropu stránek. Krátká cache per kód.
+let _revCache = {};
+const REV_CACHE_MS = 5 * 60 * 1000;
+router.get('/kiosk-revenue/:code', requireAuth, async (req, res, next) => {
+  try {
+    const apiKey = process.env.SIS_KIOSK_API_KEY;
+    if (!apiKey) return res.status(503).json({ error: 'SIS API není nakonfigurováno' });
+    const code = String(req.params.code || '').trim();
+    if (!/^[A-Za-z0-9_-]{1,32}$/.test(code)) return res.status(400).json({ error: 'Neplatný kód kiosku' });
+    const cc = _revCache[code];
+    if (cc && (Date.now() - cc.at) < REV_CACHE_MS && req.query.fresh !== '1') return res.json({ ...cc.data, cached: true });
+    const baseUrl = (process.env.SIS_KIOSK_TX_API_URL
+      || (process.env.SIS_KIOSK_API_URL ? process.env.SIS_KIOSK_API_URL.replace(/kiosk-values\/?$/, 'kiosk-transactions') : 'https://sis-test.infinitygrid.cloud/api/public/kiosk-transactions')).replace(/\/$/, '');
+    const now = Date.now();
+    const cut = { day: now - 86400000, week: now - 7 * 86400000, month: now - 30 * 86400000, year: now - 365 * 86400000 };
+    const sums = { day: 0, week: 0, month: 0, year: 0 };
+    let currency = null, count = 0, offset = 0, pages = 0, complete = false, total = 0;
+    while (pages < 40) {
+      const url = baseUrl + '/' + encodeURIComponent(code) + '?limit=100&offset=' + offset;
+      const controller = new AbortController();
+      const to = setTimeout(() => controller.abort(), 12000);
+      let sisRes;
+      try { sisRes = await fetch(url, { headers: { 'X-API-Key': apiKey, 'Accept': 'application/json' }, signal: controller.signal }); }
+      catch (e) { clearTimeout(to); break; }
+      clearTimeout(to);
+      if (!sisRes.ok) break;
+      const payload = await sisRes.json().catch(() => ({}));
+      const txs = Array.isArray(payload.transactions) ? payload.transactions : [];
+      if (typeof payload.total === 'number') total = payload.total;
+      if (!txs.length) { complete = true; break; }
+      let allOlder = true;
+      for (const t of txs) {
+        const ts = t.datetime ? new Date(t.datetime).getTime() : 0;
+        const amt = Number(t.amount) || 0;
+        if (!currency && t.currency) currency = t.currency;
+        if (ts && ts >= cut.year) {
+          allOlder = false; sums.year += amt; count++;
+          if (ts >= cut.month) sums.month += amt;
+          if (ts >= cut.week) sums.week += amt;
+          if (ts >= cut.day) sums.day += amt;
+        }
+      }
+      offset += txs.length; pages++;
+      if (allOlder) { complete = true; break; }
+      if (total && offset >= total) { complete = true; break; }
+    }
+    const data = { code, currency: currency || 'CZK', day: sums.day, week: sums.week, month: sums.month, year: sums.year, txCount: count, complete, generatedAt: new Date().toISOString() };
+    _revCache[code] = { at: Date.now(), data };
+    res.json(data);
+  } catch (err) { next(err); }
+});
+
 // ─── SIS: adresa/měna lokality podle kódu kiosku ────────────────────────────
 // Bere z cache kiosk-values; když je prošlá, načte čerstvě ze SIS (klíč na serveru).
 async function _sisKiosks() {
