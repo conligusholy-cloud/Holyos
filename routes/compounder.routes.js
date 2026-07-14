@@ -1693,10 +1693,13 @@ router.get('/kiosk-revenue/:code', requireAuth, async (req, res, next) => {
       let allOlder = true;
       for (const t of txs) {
         const ts = t.datetime ? new Date(t.datetime).getTime() : 0;
+        const inYear = ts && ts >= cut.year;
+        if (inYear) allOlder = false; // stránkování řídíme podle data (všechny stavy)
+        if (String(t.status) !== 'Successful') continue; // do tržeb jen úspěšné transakce
         const amt = Number(t.amount) || 0;
         if (!currency && t.currency) currency = t.currency;
-        if (ts && ts >= cut.year) {
-          allOlder = false; sums.year += amt; count++;
+        if (inYear) {
+          sums.year += amt; count++;
           if (ts >= cut.month) sums.month += amt;
           if (ts >= cut.week) sums.week += amt;
           if (ts >= cut.day) sums.day += amt;
