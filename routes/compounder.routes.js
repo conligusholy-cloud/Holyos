@@ -130,16 +130,22 @@ router.get('/lokality-analytics', requireAuth, async (req, res, next) => {
       select: { sid: true, event: true, props: true, created_at: true },
       take: 50000,
     });
-    const viewSids = new Set();
+    const viewSids = new Set(), onlineSids = new Set();
     let views = 0, clicks = 0, submits = 0;
-    const bySource = {}, byLabel = {}, byDay = {};
+    const bySource = {}, byLabel = {}, byDay = {}, byRegion = {};
+    const REGION = { Europe: 'Evropa', America: 'Amerika', Asia: 'Asie', Africa: 'Afrika', Australia: 'Austrálie', Pacific: 'Pacifik', Atlantic: 'Atlantik', Indian: 'Indický oceán', Antarctica: 'Antarktida' };
+    const nowMs = Date.now();
     evs.forEach((e) => {
       const p = e.props || {};
+      if (nowMs - e.created_at.getTime() <= 90000) onlineSids.add(e.sid); // aktivní za posledních 90 s
       if (e.event === 'lok_view') {
         views++; viewSids.add(e.sid);
         const s = (p.utm_source ? String(p.utm_source) : (p.ref ? 'referral' : 'přímý')).slice(0, 40);
         bySource[s] = (bySource[s] || 0) + 1;
         const d = e.created_at.toISOString().slice(0, 10); byDay[d] = (byDay[d] || 0) + 1;
+        const tz = p.tz ? String(p.tz) : '';
+        const cont = tz ? (REGION[tz.split('/')[0]] || tz.split('/')[0]) : 'Neznámé';
+        byRegion[cont] = (byRegion[cont] || 0) + 1;
       } else if (e.event === 'lok_click') {
         clicks++; const l = (p.label ? String(p.label) : '').slice(0, 40); if (l) byLabel[l] = (byLabel[l] || 0) + 1;
       } else if (e.event === 'lok_submit') { submits++; }
@@ -150,7 +156,8 @@ router.get('/lokality-analytics', requireAuth, async (req, res, next) => {
     const daily = [];
     for (let i = days - 1; i >= 0; i--) { const dt = new Date(Date.now() - i * 86400000); const d = dt.toISOString().slice(0, 10); daily.push({ date: d, label: dt.getDate() + '.' + (dt.getMonth() + 1) + '.', count: byDay[d] || 0 }); }
     const conversionPct = uniqueVisitors > 0 ? Math.round((submits / uniqueVisitors) * 1000) / 10 : 0;
-    res.json({ days, views, uniqueVisitors, clicks, submits, conversionPct, topSources, topClicks, daily });
+    const topRegions = Object.entries(byRegion).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([k, v]) => ({ region: k, count: v }));
+    res.json({ days, views, uniqueVisitors, clicks, submits, conversionPct, onlineNow: onlineSids.size, topSources, topClicks, topRegions, daily });
   } catch (err) { next(err); }
 });
 

@@ -328,7 +328,10 @@
         try{ fetch('/api/compounder/track',{method:'POST',headers:{'Content-Type':'application/json'},keepalive:true,
           body:JSON.stringify({sid:sid,event:event,path:location.pathname+location.search,lang:(navigator.language||'').slice(0,10),props:props})}).catch(function(){}); }catch(e){}
       }
-      send('lok_view',{site:'lokality',utm_source:qs.get('utm_source')||null,utm_medium:qs.get('utm_medium')||null,utm_campaign:qs.get('utm_campaign')||null,ref:(document.referrer||'').slice(0,200)});
+      var tz=''; try{ tz=Intl.DateTimeFormat().resolvedOptions().timeZone||''; }catch(_){}
+      send('lok_view',{site:'lokality',utm_source:qs.get('utm_source')||null,utm_medium:qs.get('utm_medium')||null,utm_campaign:qs.get('utm_campaign')||null,ref:(document.referrer||'').slice(0,200),tz:tz});
+      function ping(){ if(document.visibilityState==='visible') send('lok_ping',{site:'lokality',tz:tz}); }
+      ping(); setInterval(ping,30000);
       document.addEventListener('click',function(e){
         var el=e.target; while(el&&el!==document&&!(el.tagName==='A'||el.tagName==='BUTTON')) el=el.parentNode;
         if(!el||el===document) return;

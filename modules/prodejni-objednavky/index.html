@@ -3748,10 +3748,17 @@
         function listBox(title, arr, keyName) { return '<div style="flex:1;min-width:220px;"><div style="font-size:12px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">' + title + '</div>' + (arr && arr.length ? arr.map(function(x) { return '<div style="display:flex;justify-content:space-between;gap:8px;padding:4px 0;border-bottom:1px solid var(--border);font-size:13px;"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + kvEsc(x[keyName] || '—') + '</span><b>' + x.count + '</b></div>'; }).join('') : '<div style="color:var(--text2);font-size:13px;">Zatím žádná data.</div>') + '</div>'; }
         var body = document.getElementById('lok-stats-body'); if (!body) return;
         body.innerHTML =
-          '<div style="display:flex;gap:10px;flex-wrap:wrap;">' + kpi('Návštěvy', kvNum(d.views), '#3b82f6') + kpi('Unikátní', kvNum(d.uniqueVisitors), '#3b82f6') + kpi('Prokliky', kvNum(d.clicks)) + kpi('Odeslané nabídky', kvNum(d.submits), '#10b981') + kpi('Konverze', d.conversionPct + ' %', '#10b981') + '</div>' +
+          '<div style="display:flex;gap:10px;flex-wrap:wrap;">' + kpi('🟢 Online teď', '<span id="lok-online-val">' + kvNum(d.onlineNow || 0) + '</span>', '#22c55e') + kpi('Návštěvy', kvNum(d.views), '#3b82f6') + kpi('Unikátní', kvNum(d.uniqueVisitors), '#3b82f6') + kpi('Prokliky', kvNum(d.clicks)) + kpi('Odeslané nabídky', kvNum(d.submits), '#10b981') + kpi('Konverze', d.conversionPct + ' %', '#10b981') + '</div>' +
           '<div style="margin-top:16px;font-size:12px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;">📈 Návštěvy v čase</div>' + bars(d.daily) +
-          '<div style="display:flex;gap:24px;flex-wrap:wrap;margin-top:18px;">' + listBox('Zdroje návštěv', d.topSources, 'source') + listBox('Na co lidé klikají', d.topClicks, 'label') + '</div>' +
+          '<div style="display:flex;gap:24px;flex-wrap:wrap;margin-top:18px;">' + listBox('Zdroje návštěv', d.topSources, 'source') + listBox('Odkud (svět)', d.topRegions, 'region') + listBox('Na co lidé klikají', d.topClicks, 'label') + '</div>' +
           '<div style="margin-top:18px;border-top:1px solid var(--border);padding-top:14px;"><button class="btn btn-primary" onclick="lokalityAiEval(this)">🤖 AI vyhodnocení konverze</button><div id="lok-ai-out" style="margin-top:12px;"></div></div>';
+        // Živý update čísla „Online teď" každých 20 s (dokud je okno otevřené).
+        if (window._lokOnlineTimer) clearInterval(window._lokOnlineTimer);
+        window._lokOnlineTimer = setInterval(async function() {
+          var el = document.getElementById('lok-online-val');
+          if (!el) { clearInterval(window._lokOnlineTimer); return; }
+          try { var rr = await fetch('/api/compounder/lokality-analytics?days=' + days, { credentials: 'include' }); var dd = await rr.json(); if (rr.ok) el.textContent = kvNum(dd.onlineNow || 0); } catch (_) {}
+        }, 20000);
       } catch (e) {
         var b = document.getElementById('lok-stats-body'); if (b) b.innerHTML = '<div style="color:#ef4444;padding:16px;">Statistiky se nepodařilo načíst: ' + kvEsc(e.message) + '</div>';
       }
