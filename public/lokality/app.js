@@ -13,7 +13,7 @@
   var DEFAULT_ZOOM = 7;
 
   var state = {
-    center: L.latLng(DEFAULT_CENTER[0], DEFAULT_CENTER[1]),
+    center: { lat: DEFAULT_CENTER[0], lng: DEFAULT_CENTER[1] }, // .lat/.lng kompatibilní s L.latLng
     rotation: 0,          // stupně
     hasLocation: false,   // uživatel už vybral adresu / polohu?
   };
@@ -53,44 +53,13 @@
   }
 
   // ─── Mapa ───────────────────────────────────────────────────────────────────
-  var map = L.map('map', { center: DEFAULT_CENTER, zoom: DEFAULT_ZOOM, maxZoom: 21, zoomControl: true });
-
-  var streets = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    maxZoom: 21, maxNativeZoom: 19, attribution: '© OpenStreetMap'
-  });
-  var satellite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-    maxZoom: 21, maxNativeZoom: 19, attribution: 'Tiles © Esri, Maxar, Earthstar Geographics'
-  });
-  var labels = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}{r}.png', {
-    maxZoom: 21, maxNativeZoom: 19, pane: 'overlayPane', opacity: 0.9
-  });
-  satellite.addTo(map);
-  L.control.layers(
-    { '🛰️ Satelit': satellite, '🗺️ Mapa': streets },
-    { 'Popisky ulic': labels },
-    { position: 'topright', collapsed: false }
-  ).addTo(map);
-
-  // Půdorys stroje (polygon).
-  var footprint = L.polygon(footprintCorners(), {
-    color: '#16b981', weight: 2, fillColor: '#16b981', fillOpacity: 0.35
-  }).addTo(map);
-
-  // Ikony pro úchyty.
-  var centerIcon = L.divIcon({
-    className: '', iconSize: [26, 26], iconAnchor: [13, 13],
-    html: '<div style="width:26px;height:26px;border-radius:50%;background:rgba(22,185,129,0.95);border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.5);cursor:move;display:grid;place-items:center;color:#04241a;font-weight:900;font-size:13px;">✥</div>'
-  });
-  var handleIcon = L.divIcon({
-    className: '', iconSize: [20, 20], iconAnchor: [10, 10],
-    html: '<div style="width:20px;height:20px;border-radius:50%;background:#a855f7;border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.5);cursor:grab;"></div>'
-  });
-
-  var centerMarker = L.marker(state.center, { icon: centerIcon, draggable: true, zIndexOffset: 500 }).addTo(map);
-  var handleMarker = L.marker(handleLatLng(), { icon: handleIcon, draggable: true, zIndexOffset: 600 }).addTo(map);
-  var rotLine = L.polyline([state.center, handleLatLng()], { color: '#a855f7', weight: 2, dashArray: '4 4' }).addTo(map);
+  // Vše kolem mapy je odolné: když se Leaflet z CDN nenačte, formulář dál funguje
+  // (adresu vybere zájemce z našeptávače, souřadnice vezmeme z geokódování).
+  var map = null, footprint = null, centerMarker = null, handleMarker = null, rotLine = null;
+  var mapReady = false;
 
   function redraw() {
+    if (!mapReady) return;
     footprint.setLatLngs(footprintCorners());
     var h = handleLatLng();
     centerMarker.setLatLng(state.center);
@@ -100,38 +69,65 @@
     $('rot-val').textContent = (Math.round(state.rotation) % 360) + '°';
   }
 
-  centerMarker.on('drag', function (e) { state.center = e.target.getLatLng(); redraw(); });
-  centerMarker.on('dragstart', function () { state.hasLocation = true; });
+  function flyToLocation(lat, lon) {
+    state.center = (typeof L !== 'undefined' && L.latLng) ? L.latLng(lat, lon) : { lat: lat, lng: lon };
+    state.hasLocation = true;
+    if (mapReady) { map.setView([lat, lon], 20); redraw(); }
+  }
 
-  handleMarker.on('drag', function (e) {
-    var m = latLngToMeters(state.center.lat, state.center.lng, e.target.getLatLng());
-    var a = Math.atan2(-m.dx, m.dy) * 180 / Math.PI; // viz footprintCorners()
-    state.rotation = (a + 360) % 360;
-    // střed necháme; jen překreslíme obdélník + čáru (handle drží prst)
-    footprint.setLatLngs(footprintCorners());
-    rotLine.setLatLngs([state.center, e.target.getLatLng()]);
-    $('rot').value = Math.round(state.rotation) % 360;
-    $('rot-val').textContent = (Math.round(state.rotation) % 360) + '°';
-  });
-  handleMarker.on('dragend', redraw);
+  function initMap() {
+    if (typeof L === 'undefined') throw new Error('Leaflet se nenačetl');
+    map = L.map('map', { center: DEFAULT_CENTER, zoom: DEFAULT_ZOOM, maxZoom: 21, zoomControl: true });
 
-  // Klik do mapy = přesun středu (když už máme lokalitu / dostatečný zoom).
-  map.on('click', function (e) {
-    if (map.getZoom() < 16) return;
-    state.center = e.latlng; state.hasLocation = true; redraw();
-  });
+    var streets = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 21, maxNativeZoom: 19, attribution: '© OpenStreetMap' });
+    var satellite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 21, maxNativeZoom: 19, attribution: 'Tiles © Esri, Maxar, Earthstar Geographics' });
+    var labels = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}{r}.png', { maxZoom: 21, maxNativeZoom: 19, pane: 'overlayPane', opacity: 0.9 });
+    satellite.addTo(map);
+    L.control.layers({ '🛰️ Satelit': satellite, '🗺️ Mapa': streets }, { 'Popisky ulic': labels }, { position: 'topright', collapsed: false }).addTo(map);
+
+    footprint = L.polygon(footprintCorners(), { color: '#16b981', weight: 2, fillColor: '#16b981', fillOpacity: 0.35 }).addTo(map);
+
+    var centerIcon = L.divIcon({ className: '', iconSize: [26, 26], iconAnchor: [13, 13], html: '<div style="width:26px;height:26px;border-radius:50%;background:rgba(22,185,129,0.95);border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.5);cursor:move;display:grid;place-items:center;color:#04241a;font-weight:900;font-size:13px;">✥</div>' });
+    var handleIcon = L.divIcon({ className: '', iconSize: [20, 20], iconAnchor: [10, 10], html: '<div style="width:20px;height:20px;border-radius:50%;background:#a855f7;border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.5);cursor:grab;"></div>' });
+
+    centerMarker = L.marker(state.center, { icon: centerIcon, draggable: true, zIndexOffset: 500 }).addTo(map);
+    handleMarker = L.marker(handleLatLng(), { icon: handleIcon, draggable: true, zIndexOffset: 600 }).addTo(map);
+    rotLine = L.polyline([state.center, handleLatLng()], { color: '#a855f7', weight: 2, dashArray: '4 4' }).addTo(map);
+
+    centerMarker.on('drag', function (e) { state.center = e.target.getLatLng(); redraw(); });
+    centerMarker.on('dragstart', function () { state.hasLocation = true; });
+
+    handleMarker.on('drag', function (e) {
+      var m = latLngToMeters(state.center.lat, state.center.lng, e.target.getLatLng());
+      var a = Math.atan2(-m.dx, m.dy) * 180 / Math.PI; // viz footprintCorners()
+      state.rotation = (a + 360) % 360;
+      footprint.setLatLngs(footprintCorners());
+      rotLine.setLatLngs([state.center, e.target.getLatLng()]);
+      $('rot').value = Math.round(state.rotation) % 360;
+      $('rot-val').textContent = (Math.round(state.rotation) % 360) + '°';
+    });
+    handleMarker.on('dragend', redraw);
+
+    // Klik do mapy = přesun středu (při dostatečném zoomu).
+    map.on('click', function (e) { if (map.getZoom() < 16) return; state.center = e.latlng; state.hasLocation = true; redraw(); });
+
+    mapReady = true;
+    redraw();
+    setTimeout(function () { try { map.invalidateSize(); } catch (e) {} }, 200);
+  }
+
+  try {
+    initMap();
+  } catch (e) {
+    console.warn('[lokality] mapa se nenačetla:', e && e.message);
+    var mapEl = $('map');
+    if (mapEl) mapEl.innerHTML = '<div style="padding:24px;color:var(--text2);text-align:center;">Mapu se nepodařilo načíst. Nabídku můžete přesto odeslat — stačí vybrat adresu z našeptávače výše.</div>';
+  }
 
   // Posuvník otočení.
   $('rot').addEventListener('input', function () {
     state.rotation = parseInt(this.value, 10) || 0; redraw();
   });
-
-  function flyToLocation(lat, lon) {
-    state.center = L.latLng(lat, lon);
-    state.hasLocation = true;
-    map.setView([lat, lon], 20);
-    redraw();
-  }
 
   $('btn-locate').addEventListener('click', function () {
     if (!navigator.geolocation) return;
@@ -141,8 +137,6 @@
       btn.textContent = '📍 Moje poloha';
     }, function () { btn.textContent = '📍 Moje poloha'; }, { enableHighAccuracy: true, timeout: 8000 });
   });
-
-  redraw();
 
   // ─── Adresní našeptávač ─────────────────────────────────────────────────────
   var addrInput = $('f-address');
