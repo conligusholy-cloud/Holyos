@@ -120,6 +120,65 @@ router.post('/track', async (req, res) => {
   res.status(204).end();
 });
 
+// GET /api/compounder/lokality-analytics?days=30 — návštěvnost webu Lokality (events lok_*).
+router.get('/lokality-analytics', requireAuth, async (req, res, next) => {
+  try {
+    const days = Math.min(Math.max(parseInt(req.query.days, 10) || 30, 1), 365);
+    const since = new Date(Date.now() - days * 86400000);
+    const evs = await prisma.compounderEvent.findMany({
+      where: { event: { startsWith: 'lok_' }, created_at: { gte: since } },
+      select: { sid: true, event: true, props: true, created_at: true },
+      take: 50000,
+    });
+    const viewSids = new Set();
+    let views = 0, clicks = 0, submits = 0;
+    const bySource = {}, byLabel = {}, byDay = {};
+    evs.forEach((e) => {
+      const p = e.props || {};
+      if (e.event === 'lok_view') {
+        views++; viewSids.add(e.sid);
+        const s = (p.utm_source ? String(p.utm_source) : (p.ref ? 'referral' : 'přímý')).slice(0, 40);
+        bySource[s] = (bySource[s] || 0) + 1;
+        const d = e.created_at.toISOString().slice(0, 10); byDay[d] = (byDay[d] || 0) + 1;
+      } else if (e.event === 'lok_click') {
+        clicks++; const l = (p.label ? String(p.label) : '').slice(0, 40); if (l) byLabel[l] = (byLabel[l] || 0) + 1;
+      } else if (e.event === 'lok_submit') { submits++; }
+    });
+    const uniqueVisitors = viewSids.size;
+    const topSources = Object.entries(bySource).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([k, v]) => ({ source: k, count: v }));
+    const topClicks = Object.entries(byLabel).sort((a, b) => b[1] - a[1]).slice(0, 12).map(([k, v]) => ({ label: k, count: v }));
+    const daily = [];
+    for (let i = days - 1; i >= 0; i--) { const dt = new Date(Date.now() - i * 86400000); const d = dt.toISOString().slice(0, 10); daily.push({ date: d, label: dt.getDate() + '.' + (dt.getMonth() + 1) + '.', count: byDay[d] || 0 }); }
+    const conversionPct = uniqueVisitors > 0 ? Math.round((submits / uniqueVisitors) * 1000) / 10 : 0;
+    res.json({ days, views, uniqueVisitors, clicks, submits, conversionPct, topSources, topClicks, daily });
+  } catch (err) { next(err); }
+});
+
+// POST /api/compounder/lokality-ai — AI vyhodnocení návštěvnosti + návrhy na vyšší konverzi.
+router.post('/lokality-ai', requireAuth, async (req, res, next) => {
+  try {
+    if (!process.env.ANTHROPIC_API_KEY) return res.status(503).json({ error: 'AI není nakonfigurováno (chybí ANTHROPIC_API_KEY).' });
+    const stats = (req.body && req.body.analytics) || {};
+    const Anthropic = require('@anthropic-ai/sdk');
+    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    const model = process.env.COMPOUNDER_LOCATION_MODEL || 'claude-sonnet-4-6';
+    const sys = 'Jsi konverzní analytik landing page. Web bestseries.global láká majitele míst/pozemků, aby nabídli místo pro samoobslužný prádlomat (platíme nájem nebo místo odkoupíme, o provoz/servis se staráme my). Cíl konverze = odeslání formuláře „Nabídnout místo". Dostaneš statistiky návštěvnosti (views, uniqueVisitors, clicks, submits, conversionPct, topSources = zdroje/UTM, topClicks = na co lidé klikají, denní řada) a strukturu stránky. Vyhodnoť, co brání vyšší konverzi, a navrhni KONKRÉTNÍ úpravy (nadpisy, CTA, formulář, důvěra/sociální důkaz, rychlost, cílení návštěvnosti). Odpověz POUZE platným JSON bez markdownu: {"summary":"<2-4 věty>","conversionRating":"<slovně: slabá/průměrná/dobrá>","insights":[{"label":"<krátce>","detail":"<1-2 věty>"}],"actions":["<konkrétní úprava od nejvíc dopadové>", "..."]}. Piš česky.';
+    const pageInfo = 'Stránka: nadpis „Máte volných pár metrů? Nabídněte místo pro prádlomat." · CTA „Nabídnout místo na mapě" a „Jak to funguje" · formulář (adresa na mapě, telefon/e-mail, vlastnictví místa, přípojky: elektřina/voda/kanalizace/parkoviště) · nabízíme nájem nebo odkup, provoz řešíme my. Prádlomat = samoobslužná prádelna 6,4 m².';
+    const usr = 'Statistiky (JSON):\n' + JSON.stringify(stats) + '\n\nStruktura stránky:\n' + pageInfo;
+    const msg = await client.messages.create({ model, max_tokens: 1000, system: sys, messages: [{ role: 'user', content: usr }] });
+    let text = (msg && msg.content && msg.content[0] && msg.content[0].text) || '';
+    text = text.replace(/^```(json)?/i, '').replace(/```\s*$/, '').trim();
+    let j; try { j = JSON.parse(text); } catch (e) { return res.json({ ok: true, summary: text.slice(0, 1200), insights: [], actions: [] }); }
+    res.json({
+      ok: true,
+      summary: String(j.summary || '').slice(0, 1200),
+      conversionRating: String(j.conversionRating || '').slice(0, 40),
+      insights: Array.isArray(j.insights) ? j.insights.slice(0, 8).map((x) => ({ label: String(x.label || '').slice(0, 80), detail: String(x.detail || '').slice(0, 300) })) : [],
+      actions: Array.isArray(j.actions) ? j.actions.slice(0, 10).map((a) => String(a).slice(0, 300)) : [],
+    });
+  } catch (err) { next(err); }
+});
+
 // ─── VEŘEJNÉ: aktuální kurzy (ČNB) pro přepočet měny v modelech ──────────────
 // GET /api/compounder/fx-rates → { rates: { EUR, USD, GBP } } (CZK za 1 jednotku)
 router.get('/fx-rates', async (req, res) => {

@@ -339,6 +339,7 @@
         </select>
         <input type="text" id="lok-search" placeholder="Hledat adresu / město / kontakt…" onkeyup="if(event.key==='Enter')loadLokality()" style="flex:1; min-width:200px;">
         <button class="btn" onclick="loadLokality()">↻ Obnovit</button>
+        <button class="btn" onclick="openLokalityStats()" title="Statistika návštěvnosti webu + AI návrhy na konverzi">📊 Statistika</button>
         <a class="btn" href="/lokality/" target="_blank" rel="noopener" title="Otevřít veřejný web pro nabídky lokalit">🌐 Veřejný web</a>
       </div>
       <div id="lok-summary" style="margin-bottom:14px;"></div>
@@ -3730,6 +3731,49 @@
       }
     }
     window.loadLokality = loadLokality;
+    var _lokStats = null;
+    async function openLokalityStats() {
+      document.getElementById('modal-root').innerHTML =
+        '<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal" style="width:720px;max-width:96vw;max-height:92vh;overflow:auto;">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;"><h2 style="margin:0;">📊 Návštěvnost webu Lokality</h2><div><select id="lok-stats-days" onchange="openLokalityStats()" style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:6px 10px;color:var(--text);font-size:13px;margin-right:8px;"><option value="7">7 dní</option><option value="30" selected>30 dní</option><option value="90">90 dní</option><option value="365">Rok</option></select><button class="btn btn-secondary" onclick="closeModal()">Zavřít</button></div></div>' +
+        '<div id="lok-stats-body"><div style="color:var(--text2);padding:16px;">Načítám statistiky…</div></div>' +
+        '</div></div>';
+      var daysSel = document.getElementById('lok-stats-days'); var days = daysSel ? daysSel.value : 30;
+      try {
+        var r = await fetch('/api/compounder/lokality-analytics?days=' + days, { credentials: 'include' });
+        var d = await r.json(); if (!r.ok) throw new Error(d.error || ('HTTP ' + r.status));
+        _lokStats = d;
+        function kpi(label, val, color) { return '<div style="flex:1;min-width:110px;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 14px;"><div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--text2);">' + label + '</div><div style="font-size:22px;font-weight:800;color:' + (color || 'var(--text)') + ';margin-top:4px;">' + val + '</div></div>'; }
+        function bars(arr) { arr = arr || []; var max = 1; arr.forEach(function(x) { if (x.count > max) max = x.count; }); return '<div style="display:flex;align-items:flex-end;gap:2px;height:80px;margin-top:6px;">' + arr.map(function(x) { var h = Math.round((x.count / max) * 100); return '<div title="' + kvEsc(x.label + ': ' + x.count) + '" style="flex:1;min-width:0;height:100%;display:flex;flex-direction:column;justify-content:flex-end;"><div style="height:' + h + '%;min-height:2px;background:#3b82f6;border-radius:3px 3px 0 0;"></div></div>'; }).join('') + '</div>'; }
+        function listBox(title, arr, keyName) { return '<div style="flex:1;min-width:220px;"><div style="font-size:12px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">' + title + '</div>' + (arr && arr.length ? arr.map(function(x) { return '<div style="display:flex;justify-content:space-between;gap:8px;padding:4px 0;border-bottom:1px solid var(--border);font-size:13px;"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + kvEsc(x[keyName] || '—') + '</span><b>' + x.count + '</b></div>'; }).join('') : '<div style="color:var(--text2);font-size:13px;">Zatím žádná data.</div>') + '</div>'; }
+        var body = document.getElementById('lok-stats-body'); if (!body) return;
+        body.innerHTML =
+          '<div style="display:flex;gap:10px;flex-wrap:wrap;">' + kpi('Návštěvy', kvNum(d.views), '#3b82f6') + kpi('Unikátní', kvNum(d.uniqueVisitors), '#3b82f6') + kpi('Prokliky', kvNum(d.clicks)) + kpi('Odeslané nabídky', kvNum(d.submits), '#10b981') + kpi('Konverze', d.conversionPct + ' %', '#10b981') + '</div>' +
+          '<div style="margin-top:16px;font-size:12px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;">📈 Návštěvy v čase</div>' + bars(d.daily) +
+          '<div style="display:flex;gap:24px;flex-wrap:wrap;margin-top:18px;">' + listBox('Zdroje návštěv', d.topSources, 'source') + listBox('Na co lidé klikají', d.topClicks, 'label') + '</div>' +
+          '<div style="margin-top:18px;border-top:1px solid var(--border);padding-top:14px;"><button class="btn btn-primary" onclick="lokalityAiEval(this)">🤖 AI vyhodnocení konverze</button><div id="lok-ai-out" style="margin-top:12px;"></div></div>';
+      } catch (e) {
+        var b = document.getElementById('lok-stats-body'); if (b) b.innerHTML = '<div style="color:#ef4444;padding:16px;">Statistiky se nepodařilo načíst: ' + kvEsc(e.message) + '</div>';
+      }
+    }
+    window.openLokalityStats = openLokalityStats;
+    async function lokalityAiEval(btn) {
+      var out = document.getElementById('lok-ai-out'); if (btn) btn.disabled = true;
+      if (out) out.innerHTML = '<div style="color:var(--text2);font-size:13px;">🤖 AI analyzuje web a návštěvnost…</div>';
+      try {
+        var r = await fetch('/api/compounder/lokality-ai', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ analytics: _lokStats }) });
+        var d = await r.json(); if (!r.ok) throw new Error(d.error || ('HTTP ' + r.status));
+        var html = '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 16px;">';
+        if (d.conversionRating) html += '<div style="font-size:12px;color:var(--text2);">Hodnocení konverze: <b style="color:var(--text);">' + kvEsc(d.conversionRating) + '</b></div>';
+        if (d.summary) html += '<div style="font-size:14px;margin-top:6px;">' + kvEsc(d.summary) + '</div>';
+        if (d.insights && d.insights.length) { html += '<div style="margin-top:10px;">' + d.insights.map(function(x) { return '<div style="font-size:13px;margin-bottom:4px;"><b>' + kvEsc(x.label) + ':</b> ' + kvEsc(x.detail) + '</div>'; }).join('') + '</div>'; }
+        if (d.actions && d.actions.length) { html += '<div style="margin-top:10px;font-size:12px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;">Doporučené úpravy</div><ol style="margin:6px 0 0;padding-left:18px;">' + d.actions.map(function(a) { return '<li style="font-size:13px;margin-bottom:4px;">' + kvEsc(a) + '</li>'; }).join('') + '</ol>'; }
+        html += '</div>';
+        if (out) out.innerHTML = html;
+      } catch (e) { if (out) out.innerHTML = '<div style="color:#ef4444;font-size:13px;">AI vyhodnocení selhalo: ' + kvEsc(e.message) + '</div>'; }
+      finally { if (btn) btn.disabled = false; }
+    }
+    window.lokalityAiEval = lokalityAiEval;
     window.openLokalityDetail = openLokalityDetail;
     window.saveLokalityStatus = saveLokalityStatus;
 

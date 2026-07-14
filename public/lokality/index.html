@@ -317,5 +317,27 @@
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
   <script src="app.js"></script>
+  <script>
+  // Analytika návštěvnosti Lokality webu (events lok_*) → sdílený /track (CompounderEvent).
+  (function(){
+    try{
+      var K='bs_lok_sid', sid=localStorage.getItem(K);
+      if(!sid){ sid=Date.now().toString(36)+Math.random().toString(36).slice(2,10); localStorage.setItem(K,sid); }
+      var qs=new URLSearchParams(location.search);
+      function send(event, props){
+        try{ fetch('/api/compounder/track',{method:'POST',headers:{'Content-Type':'application/json'},keepalive:true,
+          body:JSON.stringify({sid:sid,event:event,path:location.pathname+location.search,lang:(navigator.language||'').slice(0,10),props:props})}).catch(function(){}); }catch(e){}
+      }
+      send('lok_view',{site:'lokality',utm_source:qs.get('utm_source')||null,utm_medium:qs.get('utm_medium')||null,utm_campaign:qs.get('utm_campaign')||null,ref:(document.referrer||'').slice(0,200)});
+      document.addEventListener('click',function(e){
+        var el=e.target; while(el&&el!==document&&!(el.tagName==='A'||el.tagName==='BUTTON')) el=el.parentNode;
+        if(!el||el===document) return;
+        var label=(el.getAttribute('data-track')||(el.textContent||'').trim().slice(0,40)||el.getAttribute('href')||'');
+        if(label) send('lok_click',{site:'lokality',label:label,href:el.getAttribute('href')||null});
+      },true);
+      var f=document.getElementById('offer-form'); if(f) f.addEventListener('submit',function(){ send('lok_submit',{site:'lokality'}); });
+    }catch(e){}
+  })();
+  </script>
 </body>
 </html>
