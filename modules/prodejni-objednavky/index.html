@@ -4543,7 +4543,12 @@
         function labels(arr, every) { arr = arr || []; return '<div style="display:flex;gap:2px;margin-top:2px;">' + arr.map(function(x, i) { return '<div style="flex:1;min-width:0;text-align:center;font-size:9px;color:var(--text2);overflow:hidden;">' + ((i % (every || 1) === 0) ? kvEsc(x.label) : '') + '</div>'; }).join('') + '</div>'; }
         var body = document.getElementById('kv-stats-body'); if (!body) return;
         body.innerHTML = '<div style="display:flex;gap:10px;flex-wrap:wrap;">' +
-          card('Poslední den', d.day) + card('Poslední týden', d.week) + card('Poslední měsíc', d.month) + card('Poslední rok', d.year) +
+          card('Dnes', d.day) +
+          card('Aktuální týden', d.thisWeek) +
+          card('Předchozí týden', d.prevWeek) +
+          card('Tento měsíc' + (d.thisMonthName ? ' (' + d.thisMonthName + ')' : ''), d.thisMonth) +
+          card('Poslední celý měsíc' + (d.prevMonthName ? ' (' + d.prevMonthName + ')' : ''), d.prevMonth) +
+          card('Poslední rok', d.year) +
           '</div>' +
           '<div style="font-size:11px;color:var(--text2);margin-top:6px;">Částky jsou <b>vč. DPH</b> (v závorce bez DPH, sazba 21 %).</div>' +
           '<div style="margin-top:16px;font-size:12px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;">📈 Posledních 12 měsíců</div>' + bars(d.monthly, '#10b981') + labels(d.monthly, 1) +
