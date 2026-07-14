@@ -4478,6 +4478,17 @@ model Site {
 
   pradlomat_ref String? @db.VarChar(255)
 
+  // ─── Nabídka lokality z veřejného webu bestseries.global ───────────────────
+  // Zdroj veřejné nabídky (např. "bestseries.global"). null = interní záznam
+  // založený obchodníkem. Podle tohoto pole filtruje záložka Lokality.
+  public_source String? @db.VarChar(60)
+  // Půdorys prádlomatu, který zájemce umístil na mapu. Střed obdélníku =
+  // latitude/longitude výše. Rotace ve stupních (0 = zarovnáno sever-jih),
+  // rozměry stroje v mm (výchozí 3182 × 2015 mm = 6,4 m²).
+  footprint_rotation Decimal? @db.Decimal(6, 2)
+  footprint_w_mm     Int?     @default(3182)
+  footprint_h_mm     Int?     @default(2015)
+
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
 
@@ -4493,6 +4504,7 @@ model Site {
   @@index([created_by_id])
   @@index([company_id])
   @@index([created_at])
+  @@index([public_source])
   @@map("sites")
 }
 

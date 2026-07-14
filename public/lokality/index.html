@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Nabídněte místo pro prádlomat | Best Series</title>
+  <meta name="description" content="Máte volných 6,4 m² s přívodem elektřiny, vody a kanalizace? Nabídněte místo pro samoobslužný prádlomat. Zadejte adresu a na mapě ukažte, kam se stroj vejde.">
+  <meta property="og:title" content="Nabídněte místo pro prádlomat">
+  <meta property="og:description" content="Stačí 6,4 m² (3182 × 2015 mm), elektřina, voda, kanalizace a parkoviště v dosahu. Ukažte nám na mapě, kam se prádlomat vejde.">
+  <meta property="og:type" content="website">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"
+        integrity="sha512-h9FcoyWjHcOcmEVkxOfTLnmZFWIH0iZhZT1H2TbOq55xssQGEJHEaIm+PgoUaZbRvQTNTluNOEfb1ZRy6D3BOw=="
+        crossorigin="anonymous" referrerpolicy="no-referrer">
+  <style>
+    :root {
+      --bg: #0d1117;
+      --bg2: #131a24;
+      --surface: #171f2b;
+      --border: #263241;
+      --text: #eef2f7;
+      --text2: #9fb0c3;
+      --brand: #16b981;
+      --brand2: #0ea371;
+      --accent: #f5b301;
+      --radius: 14px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background: var(--bg); color: var(--text); line-height: 1.55; -webkit-font-smoothing: antialiased;
+    }
+    a { color: var(--brand); text-decoration: none; }
+    .wrap { max-width: 1080px; margin: 0 auto; padding: 0 20px; }
+
+    /* ─── Topbar ─── */
+    .topbar { position: sticky; top: 0; z-index: 500; background: rgba(13,17,23,0.82); backdrop-filter: blur(10px); border-bottom: 1px solid var(--border); }
+    .topbar .wrap { display: flex; align-items: center; justify-content: space-between; height: 62px; }
+    .brand { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 18px; letter-spacing: 0.2px; }
+    .brand .dot { width: 30px; height: 30px; border-radius: 9px; background: linear-gradient(135deg, var(--brand), var(--brand2)); display: grid; place-items: center; font-size: 17px; }
+    .btn { display: inline-flex; align-items: center; gap: 8px; border: none; cursor: pointer; font-weight: 700; font-size: 15px; padding: 12px 22px; border-radius: 11px; transition: transform 0.12s, filter 0.12s, background 0.12s; font-family: inherit; }
+    .btn-primary { background: linear-gradient(135deg, var(--brand), var(--brand2)); color: #041d14; }
+    .btn-primary:hover { filter: brightness(1.06); transform: translateY(-1px); }
+    .btn-ghost { background: transparent; color: var(--text); border: 1px solid var(--border); }
+    .btn-ghost:hover { border-color: var(--brand); color: var(--brand); }
+    .btn-sm { padding: 8px 14px; font-size: 13px; border-radius: 9px; }
+    .topbar .btn { padding: 9px 18px; font-size: 14px; }
+
+    /* ─── Hero ─── */
+    .hero { position: relative; overflow: hidden; padding: 70px 0 60px; background:
+      radial-gradient(900px 400px at 82% -10%, rgba(22,185,129,0.16), transparent 60%),
+      radial-gradient(700px 380px at 8% 8%, rgba(245,179,1,0.08), transparent 55%); }
+    .hero h1 { font-size: clamp(30px, 5vw, 50px); font-weight: 850; line-height: 1.08; letter-spacing: -0.5px; }
+    .hero h1 .hl { color: var(--brand); }
+    .hero p.lede { margin-top: 18px; font-size: clamp(16px, 2vw, 20px); color: var(--text2); max-width: 640px; }
+    .hero-cta { margin-top: 30px; display: flex; gap: 12px; flex-wrap: wrap; }
+    .eyebrow { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.2px; color: var(--accent); background: rgba(245,179,1,0.1); border: 1px solid rgba(245,179,1,0.25); padding: 6px 13px; border-radius: 999px; }
+
+    /* ─── Requirements strip ─── */
+    .reqs { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; margin-top: 46px; }
+    .req { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; }
+    .req .ico { font-size: 26px; }
+    .req h3 { font-size: 16px; margin: 10px 0 4px; }
+    .req p { font-size: 13.5px; color: var(--text2); }
+    .req .big { font-size: 22px; font-weight: 800; color: var(--text); }
+
+    /* ─── Section ─── */
+    section.block { padding: 56px 0; border-top: 1px solid var(--border); }
+    .sec-head { text-align: center; max-width: 680px; margin: 0 auto 34px; }
+    .sec-head h2 { font-size: clamp(24px, 3.4vw, 34px); font-weight: 820; letter-spacing: -0.3px; }
+    .sec-head p { margin-top: 10px; color: var(--text2); font-size: 16px; }
+
+    .steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; }
+    .step { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 22px; }
+    .step .n { width: 34px; height: 34px; border-radius: 10px; background: rgba(22,185,129,0.14); color: var(--brand); font-weight: 800; display: grid; place-items: center; margin-bottom: 12px; }
+    .step h3 { font-size: 16px; margin-bottom: 5px; }
+    .step p { font-size: 13.5px; color: var(--text2); }
+
+    /* ─── Form / map ─── */
+    .offer-card { background: var(--surface); border: 1px solid var(--border); border-radius: 18px; padding: 26px; box-shadow: 0 20px 60px rgba(0,0,0,0.35); }
+    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .fg { display: flex; flex-direction: column; gap: 6px; position: relative; }
+    .fg.full { grid-column: 1 / -1; }
+    .fg label { font-size: 13px; font-weight: 700; color: var(--text2); }
+    .fg .req-star { color: var(--accent); }
+    .fg input[type=text], .fg input[type=tel], .fg input[type=email], .fg textarea {
+      background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; color: var(--text); font-size: 15px; font-family: inherit; width: 100%;
+    }
+    .fg textarea { min-height: 84px; resize: vertical; }
+    .fg input:focus, .fg textarea:focus { outline: none; border-color: var(--brand); box-shadow: 0 0 0 3px rgba(22,185,129,0.15); }
+    .hint { font-size: 12px; color: var(--text2); }
+
+    .ac-list { position: absolute; top: 100%; left: 0; right: 0; z-index: 40; background: var(--bg2); border: 1px solid var(--border); border-top: none; border-radius: 0 0 10px 10px; max-height: 240px; overflow-y: auto; display: none; }
+    .ac-list.open { display: block; }
+    .ac-item { padding: 10px 14px; font-size: 13.5px; cursor: pointer; border-bottom: 1px solid rgba(255,255,255,0.04); }
+    .ac-item:hover, .ac-item.active { background: rgba(22,185,129,0.12); }
+
+    .checks { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; }
+    .check { display: flex; align-items: center; gap: 10px; background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; cursor: pointer; font-size: 14px; user-select: none; }
+    .check input { width: 18px; height: 18px; accent-color: var(--brand); }
+    .check.on { border-color: var(--brand); background: rgba(22,185,129,0.08); }
+
+    /* Map */
+    .map-tools { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin: 6px 0 12px; }
+    .map-tools .rot { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 220px; }
+    .map-tools input[type=range] { flex: 1; accent-color: var(--brand); }
+    #map { height: 440px; border-radius: 14px; border: 1px solid var(--border); overflow: hidden; z-index: 1; }
+    .map-note { font-size: 12.5px; color: var(--text2); margin-top: 8px; display: flex; gap: 8px; align-items: flex-start; }
+    .leaflet-container { background: #0b0f14; font-family: inherit; }
+    .footprint-tip { background: var(--bg2); border: 1px dashed var(--border); border-radius: 10px; padding: 10px 14px; font-size: 13px; color: var(--text2); margin-bottom: 12px; }
+    .footprint-tip b { color: var(--text); }
+
+    .form-actions { display: flex; align-items: center; gap: 14px; margin-top: 22px; flex-wrap: wrap; }
+    .form-msg { font-size: 14px; font-weight: 600; }
+    .form-msg.err { color: #ff6b6b; }
+    .form-msg.ok { color: var(--brand); }
+
+    /* Success */
+    .success { display: none; text-align: center; padding: 30px 10px; }
+    .success.show { display: block; }
+    .success .big-ico { font-size: 58px; }
+    .success h2 { font-size: 26px; margin: 12px 0 8px; }
+    .success p { color: var(--text2); max-width: 480px; margin: 0 auto; }
+
+    /* Footer */
+    footer { border-top: 1px solid var(--border); padding: 34px 0; color: var(--text2); font-size: 13.5px; }
+    footer .wrap { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+
+    @media (max-width: 720px) {
+      .form-grid { grid-template-columns: 1fr; }
+      #map { height: 360px; }
+      .hero { padding: 48px 0 40px; }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="wrap">
+      <div class="brand"><span class="dot">🧺</span> Best Series</div>
+      <a href="#nabidka" class="btn btn-primary btn-sm">Nabídnout místo</a>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div class="wrap">
+        <span class="eyebrow">📍 Hledáme místa pro prádlomaty</span>
+        <h1 style="margin-top:16px;">Máte volných pár metrů?<br><span class="hl">Nabídněte místo pro prádlomat.</span></h1>
+        <p class="lede">Prádlomat je samoobslužná prádelna, která se vejde na pouhých <b>6,4 m²</b>. Stačí přívod elektřiny, vody a kanalizace a parkoviště v dosahu. Zadejte adresu a přímo na mapě nám ukažte, kam se stroj vejde — o zbytek se postaráme.</p>
+        <div class="hero-cta">
+          <a href="#nabidka" class="btn btn-primary">Nabídnout místo na mapě</a>
+          <a href="#jak" class="btn btn-ghost">Jak to funguje</a>
+        </div>
+
+        <div class="reqs">
+          <div class="req"><div class="ico">📐</div><h3>Rozměr stroje</h3><p><span class="big">3182 × 2015 mm</span><br>tj. 6,4 m² půdorysu</p></div>
+          <div class="req"><div class="ico">⚡</div><h3>Elektřina</h3><p>Přívod elektrické energie na místě.</p></div>
+          <div class="req"><div class="ico">💧</div><h3>Voda a kanalizace</h3><p>Přívod vody a odpad (kanalizace).</p></div>
+          <div class="req"><div class="ico">🅿️</div><h3>Parkoviště v dosahu</h3><p>Ideálně parkovací místa poblíž vchodu.</p></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="jak">
+      <div class="wrap">
+        <div class="sec-head">
+          <h2>Jak to funguje</h2>
+          <p>Nabídnout místo zabere pár minut. Nemusíte nic budovat ani nakupovat.</p>
+        </div>
+        <div class="steps">
+          <div class="step"><div class="n">1</div><h3>Zadáte adresu</h3><p>Napište adresu místa, které nabízíte. Našeptávač ji najde na mapě.</p></div>
+          <div class="step"><div class="n">2</div><h3>Umístíte prádlomat</h3><p>Na mapě posunete a otočíte obdélník ve skutečném měřítku (6,4 m²) přesně tam, kam si stroj představujete.</p></div>
+          <div class="step"><div class="n">3</div><h3>Necháte kontakt</h3><p>Zanecháte telefon nebo e-mail a základní informace o přípojkách.</p></div>
+          <div class="step"><div class="n">4</div><h3>Ozveme se vám</h3><p>Místo posoudíme a spojíme se s vámi s konkrétní nabídkou.</p></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="nabidka">
+      <div class="wrap">
+        <div class="sec-head">
+          <h2>Nabídněte své místo</h2>
+          <p>Zadejte adresu, ukažte na mapě umístění stroje a nechte nám kontakt.</p>
+        </div>
+
+        <div class="offer-card">
+          <form id="offer-form" novalidate>
+            <div class="form-grid">
+              <div class="fg">
+                <label for="f-name">Jméno a příjmení <span class="req-star">*</span></label>
+                <input type="text" id="f-name" name="owner_name" autocomplete="name" placeholder="Jan Novák" required>
+              </div>
+              <div class="fg">
+                <label for="f-phone">Telefon</label>
+                <input type="tel" id="f-phone" name="owner_phone" autocomplete="tel" placeholder="+420 …">
+              </div>
+              <div class="fg">
+                <label for="f-email">E-mail</label>
+                <input type="email" id="f-email" name="owner_email" autocomplete="email" placeholder="vas@email.cz">
+                <span class="hint">Uveďte prosím aspoň jeden kontakt — telefon nebo e-mail.</span>
+              </div>
+              <div class="fg full">
+                <label for="f-address">Adresa místa <span class="req-star">*</span></label>
+                <input type="text" id="f-address" name="address" autocomplete="off" placeholder="Ulice a číslo, město" required>
+                <div class="ac-list" id="ac-list"></div>
+                <span class="hint">Začněte psát adresu — vyberte návrh, mapa se přesune na místo.</span>
+              </div>
+            </div>
+
+            <div class="fg full" style="margin-top:16px;">
+              <label>Umístění prádlomatu na mapě</label>
+              <div class="footprint-tip">Zelený obdélník je půdorys stroje ve <b>skutečném měřítku (3182 × 2015 mm)</b>. Táhněte za <b>střed</b> a posuňte ho na požadované místo, <b>fialovým úchytem</b> nebo posuvníkem ho otočte.</div>
+              <div class="map-tools">
+                <button type="button" class="btn btn-ghost btn-sm" id="btn-locate">📍 Moje poloha</button>
+                <div class="rot">
+                  <span class="hint">Otočení</span>
+                  <input type="range" id="rot" min="0" max="359" value="0" step="1">
+                  <span class="hint" id="rot-val" style="min-width:42px;text-align:right;">0°</span>
+                </div>
+              </div>
+              <div id="map"></div>
+              <div class="map-note"><span>🛰️</span><span>Přepněte na satelitní pohled tlačítkem vpravo nahoře v mapě, ať přesně vidíte, kam stroj postavit.</span></div>
+            </div>
+
+            <div class="fg full" style="margin-top:16px;">
+              <label>Co je na místě k dispozici?</label>
+              <div class="checks">
+                <label class="check"><input type="checkbox" name="electricity" value="1"> ⚡ Elektřina</label>
+                <label class="check"><input type="checkbox" name="water" value="1"> 💧 Voda</label>
+                <label class="check"><input type="checkbox" name="sewage" value="1"> 🚿 Kanalizace</label>
+                <label class="check"><input type="checkbox" name="parking" value="1"> 🅿️ Parkoviště v dosahu</label>
+              </div>
+            </div>
+
+            <div class="fg full" style="margin-top:16px;">
+              <label for="f-note">Poznámka</label>
+              <textarea id="f-note" name="note" placeholder="Např. typ prostoru, dostupnost, otevírací doba budovy, cokoli užitečného…"></textarea>
+            </div>
+
+            <div class="form-actions">
+              <button type="submit" class="btn btn-primary" id="submit-btn">Odeslat nabídku</button>
+              <span class="form-msg" id="form-msg"></span>
+            </div>
+          </form>
+
+          <div class="success" id="success">
+            <div class="big-ico">✅</div>
+            <h2>Děkujeme za nabídku!</h2>
+            <p>Vaše místo jsme přijali. Posoudíme ho a brzy se vám ozveme s konkrétní nabídkou. Můžete zavřít okno.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="wrap">
+      <div>© <span id="year"></span> Best Series s.r.o. · Prádlomaty</div>
+      <div>Napište nám: <a href="mailto:tomas.holy@bestseries.cz">tomas.holy@bestseries.cz</a></div>
+    </div>
+  </footer>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"
+          integrity="sha512-BwHfrr4c9kmRkLw6iXFdzcdWV/PGkVgiIyIWLLlTSXzWQzxuSg4DiQUCpauz/EWjgk5TYQqX/kvn9pG1NpYfqg=="
+          crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script src="app.js"></script>
+</body>
+</html>

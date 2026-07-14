@@ -38,9 +38,11 @@ import TaskDetail from './screens/TaskDetail';
 import ChatList from './screens/ChatList';
 import ChatThread from './screens/ChatThread';
 import NewChat from './screens/NewChat';
+import NotificationsHistory from './screens/NotificationsHistory';
 import EveningReflection from './screens/EveningReflection';
 import Attendance from './screens/Attendance';
 import NewGeoFence from './screens/NewGeoFence';
+import SignContract from './screens/SignContract';
 import { colors } from './lib/theme';
 
 // =============================================================================
@@ -69,11 +71,13 @@ export type RootStackParamList = {
   EveningReflection: undefined;
   Attendance: undefined;
   NewGeoFence: undefined;
+  SignContract: { contractId: number };
 };
 
 export type TabsParamList = {
   MyDay: undefined;
   Chat: undefined;
+  Alerts: undefined;
   Me: undefined;
 };
 
@@ -110,6 +114,8 @@ function handleNotificationTap(data: any) {
 
   if (data.kind === 'evening_reflection' || data.type === 'evening_reflection') {
     target = { name: 'EveningReflection' };
+  } else if (data.type === 'compounder_contract' && data.contract_id != null) {
+    target = { name: 'SignContract', params: { contractId: Number(data.contract_id) } };
   } else if (typeof data.channel_id === 'string' && data.channel_id) {
     target = {
       name: 'ChatThread',
@@ -182,6 +188,14 @@ function TabsRoot() {
         options={{
           title: 'Chat',
           tabBarIcon: ({ color }) => <Text style={{ fontSize: 22, color }}>💬</Text>,
+        }}
+      />
+      <Tabs.Screen
+        name="Alerts"
+        component={NotificationsHistory}
+        options={{
+          title: 'Notifikace',
+          tabBarIcon: ({ color }) => <Text style={{ fontSize: 22, color }}>🔔</Text>,
         }}
       />
       <Tabs.Screen
@@ -263,6 +277,11 @@ export default function App() {
             name="NewGeoFence"
             component={NewGeoFence}
             options={{ animation: 'slide_from_bottom', presentation: 'modal' }}
+          />
+          <Stack.Screen
+            name="SignContract"
+            component={SignContract}
+            options={{ animation: 'slide_from_right' }}
           />
         </Stack.Navigator>
       </NavigationContainer>

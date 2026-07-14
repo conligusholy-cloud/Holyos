@@ -87,6 +87,10 @@ router.get('/', async (req, res, next) => {
     if (site_type && SITE_TYPES.includes(site_type)) where.site_type = site_type;
     if (city) where.city = { contains: city, mode: 'insensitive' };
     if (assignedTo) where.assigned_to_id = assignedTo;
+    // Zdroj: 'public' = jen nabídky z veřejného webu (bestseries.global), 'internal' = jen interní.
+    const source = (req.query.source || '').trim();
+    if (source === 'public') where.public_source = { not: null };
+    else if (source === 'internal') where.public_source = null;
     if (q) {
       where.OR = [
         { name: { contains: q, mode: 'insensitive' } },

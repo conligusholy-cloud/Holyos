@@ -101,7 +101,7 @@ app.use(cookieParser());
 const { peekToken } = require('./middleware/auth');
 function salesGateAllowed(pathname) {
   if (pathname === '/api/health' || pathname === '/favicon.ico') return true;
-  if (pathname.startsWith('/api/auth') || pathname.startsWith('/api/compounder') || pathname.startsWith('/api/sales')) return true;
+  if (pathname.startsWith('/api/auth') || pathname.startsWith('/api/compounder') || pathname.startsWith('/api/sales') || pathname.startsWith('/api/lokality')) return true;
   if (pathname.startsWith('/modules/obchodnik') || pathname.startsWith('/modules/vedouci-obchodu') || pathname.startsWith('/modules/podpis-smlouvy')) return true;
   if (pathname === '/login.html' || pathname.startsWith('/login')) return true;
   if (pathname.startsWith('/css/') || pathname.startsWith('/js/') || pathname.startsWith('/dist/')) return true;
@@ -556,6 +556,7 @@ app.use('/api/eshop-admin', eshopAdminRoutes); // Spare Parts Shop — admin CRU
 app.use('/api/shop', shopRoutes); // Spare Parts Shop — partner-facing API (bestseries.cash)
 app.use('/api/shipping', shippingRoutes); // Doprava — agenda požadavků na dopravu (interní login)
 app.use('/api/compounder', compounderRoutes); // Compounder — veřejný web compounder.world (registrace leadů, analytika, push)
+app.use('/api/lokality', require('./routes/lokality-public.routes')); // Lokality — veřejný web bestseries.global (nabídka místa pro prádlomat)
 
 // ─── Legacy storage proxy (kompatibilita s persistent-storage.js) ──────────
 
@@ -677,6 +678,41 @@ app.get('/compounder/', serveCompounderHtml);
 app.get('/compounder/portal', serveCompounderPortal);
 app.get('/compounder/portal/', serveCompounderPortal);
 app.use('/compounder', compounderStatic);
+
+// ─── Lokality — veřejný web bestseries.global (nabídka místa pro prádlomat) ──
+// Stejný princip jako Compounder: web v public/lokality používá relativní cesty,
+//   (1) na vlastní doméně bestseries.global — servírováno z ROOTu domény,
+//   (2) na app.holyos.cz/lokality/ — tentýž web na podcestě.
+const LOKALITY_DIR = path.join(__dirname, 'public', 'lokality');
+const LOKALITY_HOSTS = (process.env.LOKALITY_HOSTS || 'bestseries.global,www.bestseries.global')
+  .split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+const lokalityStatic = express.static(LOKALITY_DIR, {
+  ...staticOpts,
+  index: false,
+  setHeaders: staticNoCacheAssets,
+});
+function serveLokalityHtml(req, res) {
+  res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.sendFile(path.join(LOKALITY_DIR, 'index.html'));
+}
+
+// (1) Vlastní doména bestseries.global → web na rootu domény.
+app.use((req, res, next) => {
+  if (!LOKALITY_HOSTS.includes(reqHostname(req))) return next();
+  if (req.path.startsWith('/api/') || req.path.startsWith('/storage/')) return next();
+  if (req.path.startsWith('/share/') || req.path.startsWith('/modules/') ||
+      req.path.startsWith('/css/') || req.path.startsWith('/js/') ||
+      req.path.startsWith('/dist/')) return next();
+  lokalityStatic(req, res, () => serveLokalityHtml(req, res));
+});
+
+// (2) app.holyos.cz/lokality/ → tentýž web na podcestě.
+app.get('/lokality', (req, res, next) => {
+  if (req.path === '/lokality') return res.redirect(301, '/lokality/');
+  next();
+});
+app.get('/lokality/', serveLokalityHtml);
+app.use('/lokality', lokalityStatic);
 
 app.use(express.static(path.join(__dirname, 'public'), staticOpts));
 app.use('/modules', express.static(path.join(__dirname, 'modules'), staticOpts));

@@ -7,6 +7,9 @@
   <link rel="icon" type="image/svg+xml" href="../../logo-holyos-icon.svg">
   <base href="../../">
   <link rel="stylesheet" href="css/dashboard.css">
+  <!-- Leaflet — mapa s půdorysem prádlomatu v detailu nabídky lokality -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" crossorigin="anonymous" referrerpolicy="no-referrer">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
   <style>
     .main-wrapper { margin-left: var(--sidebar-w); flex: 1; min-height: 100vh; display: flex; flex-direction: column; }
     .module-header { background: linear-gradient(135deg, #eab308 0%, #ca8a04 100%); padding: 28px 32px 20px; display: flex; align-items: center; gap: 16px; }
@@ -261,6 +264,7 @@
       <button type="button" class="tab-btn" data-tab="compounder" onclick="switchTab('compounder')">🌐 Compounder</button>
       <button type="button" class="tab-btn" data-tab="compounding" onclick="switchTab('compounding')">🧺 Compounding</button>
       <button type="button" class="tab-btn" data-tab="rezervace" onclick="switchTab('rezervace')">📋 Rezervace</button>
+      <button type="button" class="tab-btn" data-tab="lokality" onclick="switchTab('lokality')">📍 Lokality</button>
     </div>
 
     <!-- TAB: Compounding — hodnota lokalit prádlomatů ze SIS API -->
@@ -315,6 +319,27 @@
       </div>
       <div id="cmp-summary" style="margin-bottom:14px;"></div>
       <div id="cmp-leads-table"><div style="color:var(--text2);padding:20px;">Načítám…</div></div>
+    </div>
+
+    <!-- TAB: Lokality — nabídky míst pro prádlomat z webu bestseries.global -->
+    <div id="tab-lokality" style="display:none; padding:20px 24px 24px;">
+      <div class="toolbar" style="margin-bottom:14px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+        <select id="lok-status-filter" onchange="loadLokality()" style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:13px;">
+          <option value="">Všechny stavy</option>
+          <option value="lead">Nová nabídka</option>
+          <option value="researching">Prověřuje se</option>
+          <option value="negotiating">Vyjednává se</option>
+          <option value="contract">Smlouva</option>
+          <option value="operational">V provozu</option>
+          <option value="rejected">Zamítnuto</option>
+          <option value="lost">Ztraceno</option>
+        </select>
+        <input type="text" id="lok-search" placeholder="Hledat adresu / město / kontakt…" onkeyup="if(event.key==='Enter')loadLokality()" style="flex:1; min-width:200px;">
+        <button class="btn" onclick="loadLokality()">↻ Obnovit</button>
+        <a class="btn" href="/lokality/" target="_blank" rel="noopener" title="Otevřít veřejný web pro nabídky lokalit">🌐 Veřejný web</a>
+      </div>
+      <div id="lok-summary" style="margin-bottom:14px;"></div>
+      <div id="lok-table"><div style="color:var(--text2);padding:20px;">Načítám…</div></div>
     </div>
 
     <!-- TAB: Objednavky -->
@@ -3470,7 +3495,7 @@
     }
 
     function switchTab(name) {
-      ['orders', 'pricelist', 'cashflow', 'tools', 'compounder', 'compounding', 'rezervace'].forEach(function(t) {
+      ['orders', 'pricelist', 'cashflow', 'tools', 'compounder', 'compounding', 'rezervace', 'lokality'].forEach(function(t) {
         var el = document.getElementById('tab-' + t);
         if (el) el.style.display = (t === name) ? '' : 'none';
         var btn = document.querySelector('.tab-btn[data-tab="' + t + '"]');
@@ -3482,7 +3507,179 @@
       if (name === 'compounder') loadCompounderLeads();
       if (name === 'compounding') loadKioskValues();
       if (name === 'rezervace') loadReservationsPage();
+      if (name === 'lokality') loadLokality();
     }
+
+    // ============================================================
+    // LOKALITY — nabídky míst pro prádlomat z webu bestseries.global
+    // Data ze Site (public_source != null) přes /api/sites?source=public.
+    // ============================================================
+    var _lokItems = [];
+    var _lokMap = null, _lokFootprint = null, _lokCenter = null;
+    var LOK_STATUS = {
+      lead: { label: 'Nová nabídka', color: '#22c55e' },
+      researching: { label: 'Prověřuje se', color: '#eab308' },
+      negotiating: { label: 'Vyjednává se', color: '#f97316' },
+      contract: { label: 'Smlouva', color: '#6366f1' },
+      operational: { label: 'V provozu', color: '#14b8a6' },
+      rejected: { label: 'Zamítnuto', color: '#ef4444' },
+      lost: { label: 'Ztraceno', color: '#94a3b8' },
+    };
+    function lokEsc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
+    function lokStatusBadge(st){ var m = LOK_STATUS[st] || { label: st||'—', color: '#94a3b8' }; return '<span class="badge" style="background:'+m.color+'22;color:'+m.color+';">'+lokEsc(m.label)+'</span>'; }
+    function lokYesNo(v){ return v===true ? '<span style="color:#22c55e;">ano</span>' : (v===false ? '<span style="color:#ef4444;">ne</span>' : '<span style="color:var(--text2);">?</span>'); }
+    function lokDate(d){ try { return d ? new Date(d).toLocaleDateString('cs-CZ') : '—'; } catch(e){ return '—'; } }
+
+    async function loadLokality() {
+      var box = document.getElementById('lok-table');
+      if (box) box.innerHTML = '<div style="color:var(--text2);padding:20px;">Načítám…</div>';
+      try {
+        var status = (document.getElementById('lok-status-filter')||{}).value || '';
+        var q = ((document.getElementById('lok-search')||{}).value || '').trim();
+        var url = '/api/sites?source=public&per_page=200' + (status ? '&status='+encodeURIComponent(status) : '') + (q ? '&q='+encodeURIComponent(q) : '');
+        var r = await fetch(url, { credentials: 'include' });
+        if (!r.ok) throw new Error('http '+r.status);
+        var data = await r.json();
+        _lokItems = data.items || [];
+        renderLokality(data);
+      } catch (e) {
+        if (box) box.innerHTML = '<div style="color:#ef4444;padding:20px;">Nepodařilo se načíst lokality: '+lokEsc(e.message)+'</div>';
+      }
+    }
+
+    function renderLokality(data) {
+      var box = document.getElementById('lok-table');
+      var sum = document.getElementById('lok-summary');
+      var items = _lokItems;
+      if (sum) {
+        var newCnt = items.filter(function(s){ return s.status==='lead'; }).length;
+        sum.innerHTML = '<div class="stats-bar" style="padding:0;">'
+          + '<div class="stat-card"><div class="stat-value">'+items.length+'</div><div class="stat-label">Nabídek z webu</div></div>'
+          + '<div class="stat-card"><div class="stat-value">'+newCnt+'</div><div class="stat-label">Nových</div></div>'
+          + '</div>';
+      }
+      if (!items.length) {
+        box.innerHTML = '<div class="empty-state"><div class="empty-icon">📍</div><h3>Zatím žádné nabídky</h3><p>Nabídky míst pro prádlomat z webu bestseries.global se zobrazí zde.</p></div>';
+        return;
+      }
+      var h = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr>'
+        + '<th>Přijato</th><th>Kontakt</th><th>Adresa</th><th>El.</th><th>Voda</th><th>Kanal.</th><th>Park.</th><th>Stav</th><th></th>'
+        + '</tr></thead><tbody>';
+      items.forEach(function(s){
+        var contact = lokEsc(s.owner_name||'—') + (s.owner_phone?('<br><span style="color:var(--text2);font-size:11px;">'+lokEsc(s.owner_phone)+'</span>'):'') + (s.owner_email?('<br><span style="color:var(--text2);font-size:11px;">'+lokEsc(s.owner_email)+'</span>'):'');
+        h += '<tr onclick="openLokalityDetail('+s.id+')">'
+          + '<td style="white-space:nowrap;">'+lokDate(s.created_at)+'</td>'
+          + '<td>'+contact+'</td>'
+          + '<td>'+lokEsc(s.address||s.city||'—')+'</td>'
+          + '<td>'+lokYesNo(s.electricity_kw!=null?true:undefined)+'</td>'
+          + '<td>'+lokYesNo(s.water_supply)+'</td>'
+          + '<td>'+lokYesNo(s.sewage)+'</td>'
+          + '<td>'+lokYesNo(s.parking)+'</td>'
+          + '<td>'+lokStatusBadge(s.status)+'</td>'
+          + '<td style="text-align:right;">›</td>'
+          + '</tr>';
+      });
+      h += '</tbody></table></div>';
+      box.innerHTML = h;
+    }
+
+    async function openLokalityDetail(id) {
+      var s;
+      try {
+        var r = await fetch('/api/sites/'+id, { credentials: 'include' });
+        s = await r.json();
+      } catch(e) { alert('Nepodařilo se načíst detail.'); return; }
+
+      var statusOpts = Object.keys(LOK_STATUS).map(function(k){
+        return '<option value="'+k+'"'+(s.status===k?' selected':'')+'>'+LOK_STATUS[k].label+'</option>';
+      }).join('');
+
+      var mapLinkBtn = s.map_link ? '<a class="btn btn-sm" href="'+lokEsc(s.map_link)+'" target="_blank" rel="noopener">🗺️ Otevřít v mapách</a>' : '';
+
+      var body = ''
+        + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">'
+        +   '<div>'
+        +     '<div style="font-size:12px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">Kontakt</div>'
+        +     '<div style="font-weight:600;font-size:15px;">'+lokEsc(s.owner_name||'—')+'</div>'
+        +     (s.owner_phone?'<div style="margin-top:4px;">📞 <a href="tel:'+lokEsc(s.owner_phone)+'">'+lokEsc(s.owner_phone)+'</a></div>':'')
+        +     (s.owner_email?'<div style="margin-top:4px;">✉️ <a href="mailto:'+lokEsc(s.owner_email)+'">'+lokEsc(s.owner_email)+'</a></div>':'')
+        +     '<div style="margin-top:12px;font-size:12px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">Adresa</div>'
+        +     '<div>'+lokEsc(s.address||'—')+'</div>'
+        +     (s.city?'<div style="color:var(--text2);font-size:13px;">'+lokEsc(s.zip||'')+' '+lokEsc(s.city)+'</div>':'')
+        +     '<div style="margin-top:12px;font-size:12px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">Přípojky a okolí</div>'
+        +     '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:13px;">'
+        +       '<div>⚡ Elektřina: '+lokYesNo(s.electricity_kw!=null?true:undefined)+'</div>'
+        +       '<div>💧 Voda: '+lokYesNo(s.water_supply)+'</div>'
+        +       '<div>🚿 Kanalizace: '+lokYesNo(s.sewage)+'</div>'
+        +       '<div>🅿️ Parkoviště: '+lokYesNo(s.parking)+'</div>'
+        +     '</div>'
+        +     (s.capacity_note?'<div style="margin-top:8px;font-size:12px;color:var(--text2);">'+lokEsc(s.capacity_note)+'</div>':'')
+        +     (s.owner_note?('<div style="margin-top:12px;font-size:12px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">Poznámka zájemce</div><div style="font-size:13px;white-space:pre-wrap;">'+lokEsc(s.owner_note)+'</div>'):'')
+        +   '</div>'
+        +   '<div>'
+        +     '<div style="font-size:12px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">Umístění stroje na mapě</div>'
+        +     '<div id="lok-detail-map" style="height:300px;border-radius:10px;border:1px solid var(--border);overflow:hidden;"></div>'
+        +     '<div style="margin-top:8px;">'+mapLinkBtn+'</div>'
+        +   '</div>'
+        + '</div>'
+        + '<div style="margin-top:18px;display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;">'
+        +   '<div class="form-group"><label>Stav</label><select id="lok-detail-status" style="min-width:180px;">'+statusOpts+'</select></div>'
+        +   '<button class="btn btn-primary" onclick="saveLokalityStatus('+s.id+')">💾 Uložit stav</button>'
+        +   '<span id="lok-detail-msg" style="font-size:13px;color:var(--text2);"></span>'
+        + '</div>';
+
+      document.getElementById('modal-root').innerHTML =
+        '<div class="modal-overlay" onclick="if(event.target===this)closeModal()">'
+        + '<div class="modal" style="width:820px;max-width:96vw;">'
+        + '<h2>📍 Nabídka lokality</h2>'
+        + body
+        + '<div class="modal-actions"><button class="btn btn-secondary" onclick="closeModal()">Zavřít</button></div>'
+        + '</div></div>';
+
+      // Mapa s obdélníkem prádlomatu ve skutečném měřítku.
+      setTimeout(function(){ renderLokDetailMap(s); }, 60);
+    }
+
+    function renderLokDetailMap(s) {
+      var el = document.getElementById('lok-detail-map');
+      if (!el || typeof L === 'undefined') return;
+      var lat = parseFloat(s.latitude), lng = parseFloat(s.longitude);
+      if (!isFinite(lat) || !isFinite(lng)) { el.innerHTML = '<div style="padding:20px;color:var(--text2);">Poloha neuvedena.</div>'; return; }
+      var map = L.map(el, { center: [lat, lng], zoom: 20, maxZoom: 21 });
+      L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 21, maxNativeZoom: 19, attribution: 'Tiles © Esri' }).addTo(map);
+      var wMm = s.footprint_w_mm || 3182, hMm = s.footprint_h_mm || 2015;
+      var W = wMm/1000, H = hMm/1000, rotDeg = parseFloat(s.footprint_rotation)||0;
+      var a = rotDeg*Math.PI/180, hw = W/2, hh = H/2;
+      var pts = [[-hw,-hh],[hw,-hh],[hw,hh],[-hw,hh]].map(function(p){
+        var rx = p[0]*Math.cos(a)-p[1]*Math.sin(a), ry = p[0]*Math.sin(a)+p[1]*Math.cos(a);
+        var dLat = ry/111320, dLng = rx/(111320*Math.cos(lat*Math.PI/180));
+        return [lat+dLat, lng+dLng];
+      });
+      L.polygon(pts, { color:'#16b981', weight:2, fillColor:'#16b981', fillOpacity:0.35 }).addTo(map);
+      setTimeout(function(){ try { map.invalidateSize(); } catch(e){} }, 120);
+    }
+
+    async function saveLokalityStatus(id) {
+      var sel = document.getElementById('lok-detail-status');
+      var msg = document.getElementById('lok-detail-msg');
+      if (!sel) return;
+      if (msg) msg.textContent = 'Ukládám…';
+      try {
+        var r = await fetch('/api/sites/'+id, {
+          method: 'PUT', credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: sel.value }),
+        });
+        if (!r.ok) throw new Error('http '+r.status);
+        if (msg) { msg.textContent = 'Uloženo ✓'; msg.style.color = '#22c55e'; }
+        loadLokality();
+      } catch(e) {
+        if (msg) { msg.textContent = 'Chyba uložení.'; msg.style.color = '#ef4444'; }
+      }
+    }
+    window.loadLokality = loadLokality;
+    window.openLokalityDetail = openLokalityDetail;
+    window.saveLokalityStatus = saveLokalityStatus;
 
     // ============================================================
     // COMPOUNDING — hodnota lokalit prádlomatů (kiosků) ze SIS API

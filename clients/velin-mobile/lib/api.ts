@@ -194,6 +194,16 @@ export type SearchableUser = {
   } | null;
 };
 
+export type AppNotification = {
+  id: number;
+  type: string | null;
+  title: string | null;
+  body: string | null;
+  link: string | null;
+  read_at: string | null;
+  created_at: string;
+};
+
 export const api = {
   // HolyOS auth
   login: (username: string, password: string) =>
@@ -246,6 +256,19 @@ export const api = {
 
   sendMessage: (jwt: string, taskId: number, body: string) =>
     request<{ message: any }>('POST', `/api/velin/tasks/${taskId}/messages`, { jwt, body: { body } }),
+
+  // ─── Notifikace (historie) ───────────────────────────────────────────────
+  notifications: (jwt: string, limit = 100) =>
+    request<AppNotification[]>('GET', `/api/notifications?limit=${limit}`, {
+      jwt,
+      timeoutMs: SLOW_ENDPOINT_TIMEOUT_MS,
+    }),
+
+  markNotificationRead: (jwt: string, id: number) =>
+    request<{ ok?: boolean }>('POST', `/api/notifications/${id}/read`, { jwt, body: {} }),
+
+  markAllNotificationsRead: (jwt: string) =>
+    request<{ ok?: boolean }>('POST', '/api/notifications/read-all', { jwt, body: {} }),
 
   // ─── Chat ─────────────────────────────────────────────────────────────────
   chatChannels: (jwt: string) =>
@@ -313,6 +336,21 @@ export const api = {
       jwt,
       body: data,
     }),
+
+  // ─── Compounder smlouvy — autorizace/podpis za Best Series ───────────────
+  contractForSign: (jwt: string, id: number) =>
+    request<{
+      ok: boolean; id: number; type: string; typeLabel: string;
+      kiosk_code: string; kiosk_label: string | null; status: string;
+      share_token: string | null;
+      customer_signature: string | null; customer_name: string | null; customer_signed_at: string | null;
+    }>('GET', `/api/compounder/contracts/${id}/for-sign`, { jwt }),
+
+  contractCountersign: (jwt: string, id: number, signature: string) =>
+    request<{ ok: boolean; awaiting_customer?: boolean }>(
+      'POST', `/api/compounder/contracts/${id}/countersign`,
+      { jwt, body: { signature, consent: true } }
+    ),
 
   // Chat upload — fotky/soubory přes multipart/form-data.
   // file.uri = lokální path z expo-image-picker / expo-document-picker.

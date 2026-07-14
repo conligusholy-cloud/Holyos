@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<title>Best Series — Compounding</title>
+<style>
+  @page { size: A4; margin: 0; }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { font-family: 'Segoe UI', system-ui, Arial, sans-serif; color: #131a26; background: #d9dee6; }
+  .page { position: relative; width: 210mm; min-height: 297mm; margin: 0 auto; background: #fff; overflow: hidden; display: flex; flex-direction: column; }
+
+  /* HERO */
+  .hero { position: relative; padding: 42px 40px 34px; color: #fff;
+    background: radial-gradient(120% 140% at 85% -20%, #14b8a6 0%, #0f766e 42%, #0b3b38 100%); }
+  .hero::after { content: ""; position: absolute; right: -60px; top: -60px; width: 320px; height: 320px;
+    background: radial-gradient(circle, rgba(234,179,8,.25), transparent 62%); }
+  .brand { display: inline-flex; align-items: center; gap: 10px; font-size: 12px; letter-spacing: 4px; text-transform: uppercase; font-weight: 600; opacity: .92; }
+  .brand .dot { width: 8px; height: 8px; border-radius: 50%; background: #eab308; box-shadow: 0 0 12px #eab308; }
+  .hero h1 { font-size: 40px; line-height: 1.05; margin: 14px 0 12px; font-weight: 800; letter-spacing: -.5px; position: relative; }
+  .hero h1 span { color: #fde68a; }
+  .hero p { font-size: 15.5px; line-height: 1.55; max-width: 570px; opacity: .96; position: relative; }
+  .kickers { display: flex; gap: 10px; margin-top: 18px; position: relative; }
+  .kicker { background: rgba(255,255,255,.14); border: 1px solid rgba(255,255,255,.25); backdrop-filter: blur(4px);
+    border-radius: 999px; padding: 6px 14px; font-size: 12.5px; font-weight: 600; }
+
+  .body { padding: 26px 40px 8px; flex: 1; }
+  .sec { margin-top: 22px; }
+  .sec:first-child { margin-top: 4px; }
+  .sec-h { display: flex; align-items: center; gap: 10px; font-size: 13px; text-transform: uppercase; letter-spacing: 1.5px; font-weight: 800; color: #0f766e; margin-bottom: 12px; }
+  .sec-h::before { content: ""; width: 22px; height: 3px; border-radius: 3px; background: #eab308; }
+  .lead { font-size: 15px; line-height: 1.6; color: #33404f; }
+  .lead b { color: #0f766e; }
+
+  .steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  .step { position: relative; background: linear-gradient(180deg, #f6f9fa, #eef4f5); border: 1px solid #dde7e8; border-radius: 16px; padding: 16px 14px; }
+  .step .n { position: absolute; top: -12px; left: 14px; width: 30px; height: 30px; border-radius: 10px;
+    background: linear-gradient(135deg, #0d9488, #14b8a6); color: #fff; font-weight: 800; font-size: 15px;
+    display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 10px rgba(13,148,136,.35); }
+  .step .ic { font-size: 22px; margin: 8px 0 6px; display: block; }
+  .step .t { font-weight: 800; font-size: 14px; margin-bottom: 4px; color: #131a26; }
+  .step .d { font-size: 12px; color: #55637; color: #566173; line-height: 1.45; }
+
+  .benefits { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 24px; }
+  .benefit { display: flex; gap: 10px; font-size: 13.5px; line-height: 1.45; align-items: flex-start; }
+  .benefit .ic { flex: none; width: 20px; height: 20px; border-radius: 50%; background: #d1fae5; color: #0f766e; font-weight: 800; font-size: 12px; display: flex; align-items: center; justify-content: center; margin-top: 1px; }
+  .benefit b { color: #131a26; }
+
+  /* ECON band */
+  .econ-wrap { margin-top: 4px; border-radius: 18px; overflow: hidden; border: 1px solid #e2e8ee; }
+  .econ { display: grid; grid-template-columns: repeat(4, 1fr); background: linear-gradient(135deg, #0f766e, #0d9488); }
+  .metric { padding: 18px 14px; text-align: center; color: #fff; border-right: 1px solid rgba(255,255,255,.14); }
+  .metric:last-child { border-right: none; }
+  .metric .lbl { font-size: 10.5px; text-transform: uppercase; letter-spacing: 1px; opacity: .82; }
+  .metric .val { font-size: 24px; font-weight: 800; margin-top: 6px; letter-spacing: -.5px; }
+  .metric .val.gold { color: #fde68a; }
+  .metric .sub { font-size: 10.5px; opacity: .8; margin-top: 3px; }
+
+  /* Guarantee seal */
+  .seal { position: absolute; right: 34px; top: 300px; width: 92px; height: 92px; border-radius: 50%;
+    background: #eab308; color: #3b2f00; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    box-shadow: 0 8px 20px rgba(234,179,8,.45); transform: rotate(-8deg); border: 3px solid #fff; z-index: 3; }
+  .seal .small { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; text-align: center; line-height: 1.15; }
+  .seal .big { font-size: 15px; font-weight: 900; line-height: 1.1; margin-top: 4px; text-align: center; }
+
+  .note { font-size: 10.5px; color: #7a8494; margin-top: 12px; line-height: 1.45; padding: 0 2px; }
+
+  .footer { margin-top: auto; background: #0c1218; color: #cbd5e1; padding: 18px 40px; display: flex; justify-content: space-between; align-items: center; }
+  .footer .big { color: #fff; font-weight: 800; font-size: 15px; }
+  .footer .sub { font-size: 12.5px; opacity: .8; margin-top: 2px; }
+  .pill { display: inline-block; background: linear-gradient(135deg, #eab308, #f59e0b); color: #3b2f00; font-weight: 800; padding: 10px 18px; border-radius: 999px; font-size: 13.5px; text-decoration: none; }
+  .footer a.mail { color: #5eead4; text-decoration: none; font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="hero">
+    <div class="brand"><span class="dot"></span> Best Series &nbsp;•&nbsp; Compounding</div>
+    <h1>Vlastněte prádelnu.<br><span>O zbytek se postaráme.</span></h1>
+    <p>Koupíte si moderní prádlomat na <strong>zavedené a prověřené lokalitě</strong>, která už funguje a obsluhuje zákazníky. Žádné čekání na rozjezd — vyděláváte od prvního dne.</p>
+    <div class="kickers">
+      <div class="kicker">🚀 Vyděláváte hned</div>
+      <div class="kicker">🛠️ Kompletní servis</div>
+      <div class="kicker">🔄 Garance odkupu</div>
+    </div>
+  </div>
+
+  <div class="seal"><div class="small">Garance<br>odkupu</div><div class="big">po 5 letech</div></div>
+
+  <div class="body">
+    <div class="sec">
+      <div class="sec-h">Co získáte</div>
+      <p class="lead">Nekupujete příslib, ale <b>fungující podnikatelské místo</b>. Na lokalitě už stojí a vydělává prádlomat Best Series; po vyrobení vašeho nového stroje ho <b>bez přerušení provozu</b> vyměníme za váš. Provoz můžete přenechat nám, nebo si prádelnu vést sami.</p>
+    </div>
+
+    <div class="sec">
+      <div class="sec-h">Jak to funguje</div>
+      <div class="steps">
+        <div class="step"><div class="n">1</div><span class="ic">📍</span><div class="t">Vyberete lokalitu</div><div class="d">Zavedené místo s reálným, ověřeným obratem.</div></div>
+        <div class="step"><div class="n">2</div><span class="ic">🏭</span><div class="t">Koupíte nový stroj</div><div class="d">Vyrobíme ho a instalujeme výměnou za stávající — provoz nikdy nestojí.</div></div>
+        <div class="step"><div class="n">3</div><span class="ic">🤝</span><div class="t">Zvolíte provoz</div><div class="d">Kompletní servis od nás, nebo provoz ve vlastní režii.</div></div>
+        <div class="step"><div class="n">4</div><span class="ic">🛡️</span><div class="t">Garance odkupu</div><div class="d">Po 5 letech možnost prodat zpět za 50 % celkové ceny.</div></div>
+      </div>
+    </div>
+
+    <div class="sec">
+      <div class="sec-h">Proč Best Series</div>
+      <div class="benefits">
+        <div class="benefit"><span class="ic">✓</span><div><b>Zavedená lokalita</b> — vyděláváte od začátku, bez fáze náběhu.</div></div>
+        <div class="benefit"><span class="ic">✓</span><div><b>Kompletní servis</b> — údržba, software, telemetrie, infolinka 24/7, detergenty.</div></div>
+        <div class="benefit"><span class="ic">✓</span><div><b>Přenositelnost</b> — stroj lze kdykoli přesunout na jiné místo.</div></div>
+        <div class="benefit"><span class="ic">✓</span><div><b>Transparentní ekonomika</b> — reálná čísla lokality, ne odhady od stolu.</div></div>
+        <div class="benefit"><span class="ic">✓</span><div><b>Silná značka</b> — provoz pod jednotnou značkou Best Series.</div></div>
+        <div class="benefit"><span class="ic">✓</span><div><b>Garance odkupu 50 %</b> — jasná výstupní strategie po 5 letech.</div></div>
+      </div>
+    </div>
+
+    <div class="sec">
+      <div class="sec-h">Příklad ekonomiky lokality</div>
+      <div class="econ-wrap">
+        <div class="econ">
+          <div class="metric"><div class="lbl">Celková cena</div><div class="val">2 000 000 Kč</div><div class="sub">stroj + zavedené místo</div></div>
+          <div class="metric"><div class="lbl">Měsíční cash flow</div><div class="val gold">~ 40 000 Kč</div><div class="sub">po odečtení nákladů</div></div>
+          <div class="metric"><div class="lbl">Roční výnos</div><div class="val gold">~ 480 000 Kč</div><div class="sub">12× měsíční cash flow</div></div>
+          <div class="metric"><div class="lbl">Návratnost</div><div class="val">~ 4–5 let</div><div class="sub">dle konkrétní lokality</div></div>
+        </div>
+      </div>
+      <div class="note">Uvedená čísla jsou <strong>ilustrativní</strong> a vycházejí z reálných hodnot vybraných lokalit; konkrétní ekonomika se liší podle místa. Nejde o nabídku investičního produktu ani o příslib výnosu — předmětem je koupě zařízení, zavedeného místa a volitelná servisní smlouva. Ceny bez DPH (obrat včetně DPH).</div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <div>
+      <div class="big">Chcete konkrétní čísla pro vybranou lokalitu?</div>
+      <div class="sub">Ozvěte se a připravíme přehled na míru — <a class="mail" href="mailto:info@bestseries.cz">info@bestseries.cz</a></div>
+    </div>
+    <a class="pill" href="mailto:info@bestseries.cz">Mám zájem →</a>
+  </div>
+</div>
+</body>
+</html>

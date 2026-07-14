@@ -411,7 +411,8 @@
     const pay = State.paymentMethods.find(p => p.id === c.payment_method_id);
     const currency = State.cart[0] ? State.cart[0].currency : (State.me && State.me.currency) || 'EUR';
     const vat = State.cart[0] ? State.cart[0].vat_pct : 21;
-    const shipExcl = ship ? ((ship.free_above_amount != null && subtotal >= Number(ship.free_above_amount)) ? 0 : Number(ship.price_excl_vat)) : 0;
+    const shipOnRequest = !!(ship && ship.price_on_request);
+    const shipExcl = (ship && !shipOnRequest) ? ((ship.free_above_amount != null && subtotal >= Number(ship.free_above_amount)) ? 0 : Number(ship.price_excl_vat)) : 0;
     const payFee = pay ? Number(pay.fee_excl_vat) : 0;
     const totalExcl = Math.round((subtotal + shipExcl + payFee) * 100) / 100;
     const totalIncl = Math.round(totalExcl * (1 + vat / 100) * 100) / 100;
@@ -428,9 +429,9 @@
               <div style="flex:1;">
                 <div class="label">${esc(s.name)}</div>
                 ${s.description ? `<div class="desc">${esc(s.description)}</div>` : ''}
-                ${s.free_above_amount != null ? `<div class="desc">Zdarma od ${esc(fmt(s.free_above_amount, s.currency))}</div>` : ''}
+                ${s.price_on_request ? `<div class="desc">Cenu dopravy doplníme dle reálné sazby a uvedeme na faktuře.</div>` : (s.free_above_amount != null ? `<div class="desc">Zdarma od ${esc(fmt(s.free_above_amount, s.currency))}</div>` : '')}
               </div>
-              <div class="price">${(s.free_above_amount != null && subtotal >= Number(s.free_above_amount)) ? 'Zdarma' : esc(fmt(s.price_excl_vat, s.currency))}</div>
+              <div class="price">${s.price_on_request ? 'dle dohody' : ((s.free_above_amount != null && subtotal >= Number(s.free_above_amount)) ? 'Zdarma' : esc(fmt(s.price_excl_vat, s.currency)))}</div>
             </label>`).join('')}
         </div>
 
@@ -462,7 +463,7 @@
 
         <div class="cart-summary">
           <div class="summary-row"><span>Mezisoučet</span><span>${esc(fmt(subtotal, currency))}</span></div>
-          <div class="summary-row"><span>Doprava</span><span>${esc(fmt(shipExcl, currency))}</span></div>
+          <div class="summary-row"><span>Doprava</span><span>${shipOnRequest ? 'bude doplněna' : esc(fmt(shipExcl, currency))}</span></div>
           ${payFee > 0 ? `<div class="summary-row"><span>Poplatek za platbu</span><span>${esc(fmt(payFee, currency))}</span></div>` : ''}
           <div class="summary-row"><span>DPH (${vat} %)</span><span>${esc(fmt(totalIncl - totalExcl, currency))}</span></div>
           <div class="summary-row total"><span>Celkem s DPH</span><span>${esc(fmt(totalIncl, currency))}</span></div>

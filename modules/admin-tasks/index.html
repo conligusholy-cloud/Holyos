@@ -105,6 +105,19 @@
     .empty-tasks { text-align: center; padding: 60px 20px; color: var(--text2); }
     .empty-tasks-icon { font-size: 48px; margin-bottom: 12px; }
 
+    .settings-btn { margin-left: auto; align-self: center; background: var(--surface2); color: var(--text); border: 1px solid var(--border);
+      border-radius: 8px; padding: 8px 14px; font-size: 13px; cursor: pointer; white-space: nowrap; }
+    .settings-btn:hover { border-color: #a78bfa; color: #a78bfa; }
+
+    .notify-list { display: flex; flex-direction: column; gap: 2px; margin: 8px 0 4px; max-height: 48vh; overflow-y: auto; }
+    .notify-row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--border);
+      border-radius: 8px; cursor: pointer; }
+    .notify-row:hover { border-color: #a78bfa; }
+    .notify-row input { width: 18px; height: 18px; cursor: pointer; accent-color: #a78bfa; }
+    .notify-row .nr-name { font-weight: 600; }
+    .notify-row .nr-meta { color: var(--text2); font-size: 12px; margin-left: auto; text-align: right; }
+    .notify-empty { color: var(--text2); padding: 20px; text-align: center; font-size: 13px; }
+
     .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 999; }
     .modal { background: var(--bg); border: 1px solid var(--border); border-radius: 12px; padding: 24px; max-width: 700px; width: 95%; max-height: 85vh; overflow-y: auto; }
     .modal h3 { margin-bottom: 12px; }
@@ -140,6 +153,7 @@
         <h1>Požadavky na úpravy</h1>
         <p>Přehled požadavků z AI asistenta — zadání, screenshoty, nasazení</p>
       </div>
+      <button id="settings-btn" class="settings-btn" onclick="openNotifySettings()" title="Nastavení notifikací">⚙️ Nastavení</button>
     </div>
 
     <div class="module-body" style="padding: 20px 32px;">
@@ -1059,6 +1073,67 @@
 
     function closeModal() {
       document.getElementById('modal-root').innerHTML = '';
+    }
+
+    // ─── Nastavení notifikací (komu chodí push do Velína o novém požadavku) ─────
+    async function openNotifySettings() {
+      document.getElementById('modal-root').innerHTML = `
+        <div class="modal-overlay" onclick="if(event.target===this)closeModal()">
+          <div class="modal" style="max-width:560px;">
+            <h3>🔔 Notifikace o novém požadavku</h3>
+            <p style="color:var(--text2);font-size:13px;margin-bottom:12px;">
+              Vyber, komu dorazí push do Velína (a zvonek v HolyOS), když vznikne nový požadavek.
+              V seznamu jsou jen lidé s aktivovaným Velínem a aktivním zařízením.
+            </p>
+            <div id="notify-list" class="notify-list"><div class="notify-empty">Načítám…</div></div>
+            <div class="modal-actions">
+              <button class="task-btn" onclick="closeModal()">Zrušit</button>
+              <button class="task-btn task-btn-deploy" id="notify-save-btn" onclick="saveNotifySettings()">💾 Uložit</button>
+            </div>
+          </div>
+        </div>`;
+      try {
+        const r = await fetch('/api/admin-tasks/settings/notify');
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const data = await r.json();
+        const selected = new Set((data.person_ids || []).map(Number));
+        const people = data.people || [];
+        const box = document.getElementById('notify-list');
+        if (!box) return;
+        if (people.length === 0) {
+          box.innerHTML = `<div class="notify-empty">Zatím nikdo nemá aktivovaný Velín se zařízením.</div>`;
+          const sb = document.getElementById('notify-save-btn');
+          if (sb) sb.disabled = true;
+          return;
+        }
+        box.innerHTML = people.map(p => `
+          <label class="notify-row">
+            <input type="checkbox" value="${p.id}" ${selected.has(p.id) ? 'checked' : ''}>
+            <span class="nr-name">${escapeHtml(p.name)}</span>
+            <span class="nr-meta">${p.role ? escapeHtml(p.role) + ' · ' : ''}${p.devices} zař.</span>
+          </label>`).join('');
+      } catch (e) {
+        const box = document.getElementById('notify-list');
+        if (box) box.innerHTML = `<div class="notify-empty" style="color:#ef4444;">Chyba při načítání: ${escapeHtml(e.message)}</div>`;
+      }
+    }
+
+    async function saveNotifySettings() {
+      const btn = document.getElementById('notify-save-btn');
+      if (btn) { btn.disabled = true; btn.textContent = '⏳ Ukládám…'; }
+      const ids = Array.from(document.querySelectorAll('#notify-list input:checked')).map(i => parseInt(i.value, 10));
+      try {
+        const r = await fetch('/api/admin-tasks/settings/notify', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ person_ids: ids }),
+        });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        closeModal();
+      } catch (e) {
+        alert('Uložení selhalo: ' + e.message);
+        if (btn) { btn.disabled = false; btn.textContent = '💾 Uložit'; }
+      }
     }
 
     // ─── Chat integrace ──────────────────────────────────────────────────────

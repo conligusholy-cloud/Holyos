@@ -8,6 +8,8 @@ const router = express.Router();
 const { prisma } = require('../config/database');
 const { requireAuth } = require('../middleware/auth');
 const { createNotification } = require('./notifications.routes');
+const { getSetting, setSetting } = require('../services/settings');
+const { notifyPerson } = require('../services/push/expo-push');
 const { getBlockingRunForTask, RUNNING_STATUSES } = require('../services/ai-developer/repository');
 const acChat = require('../services/ai-developer/ac-chat');
 const suitability = require('../services/ai-developer/suitability');
@@ -32,6 +34,112 @@ const STATUS_LABELS = {
   done: '✅ Hotový',
   cancelled: '❌ Zrušený',
 };
+
+// =============================================================================
+// NASTAVENÍ — komu chodí notifikace o novém požadavku (push do Velína + zvonek)
+// =============================================================================
+// Uloženo v AppSetting jako JSON pole Person.id.
+const NOTIFY_SETTING_KEY = 'admin_tasks.velin_notify_person_ids';
+
+// Vrátí seznam osob, které lze zvolit jako příjemce — jen lidé s aktivovaným
+// Velínem a alespoň jedním aktivním zařízením (push jim reálně dorazí).
+async function getEligibleVelinPeople() {
+  const people = await prisma.person.findMany({
+    where: {
+      active: true,
+      velin_activated_at: { not: null },
+      velin_devices: { some: { active: true } },
+    },
+    select: {
+      id: true,
+      first_name: true,
+      last_name: true,
+      role: { select: { name: true } },
+      velin_devices: { where: { active: true }, select: { id: true } },
+    },
+    orderBy: [{ first_name: 'asc' }, { last_name: 'asc' }],
+  });
+  return people.map((p) => ({
+    id: p.id,
+    name: `${p.first_name} ${p.last_name}`.trim(),
+    role: p.role?.name || null,
+    devices: p.velin_devices.length,
+  }));
+}
+
+// GET /api/admin-tasks/settings/notify — aktuální nastavení + seznam možných příjemců
+router.get('/settings/notify', async (req, res, next) => {
+  try {
+    const [personIds, people] = await Promise.all([
+      getSetting(NOTIFY_SETTING_KEY, { type: 'json', defaultValue: [] }),
+      getEligibleVelinPeople(),
+    ]);
+    res.json({
+      person_ids: Array.isArray(personIds) ? personIds : [],
+      people,
+    });
+  } catch (err) { next(err); }
+});
+
+// PUT /api/admin-tasks/settings/notify — ulož seznam příjemců (pole Person.id)
+router.put('/settings/notify', async (req, res, next) => {
+  try {
+    const raw = req.body && req.body.person_ids;
+    if (!Array.isArray(raw)) {
+      return res.status(400).json({ error: 'Očekávám pole person_ids.' });
+    }
+    // Sanitizace — jen kladná celá čísla, deduplikace
+    const ids = [...new Set(raw.map((n) => parseInt(n, 10)).filter((n) => Number.isInteger(n) && n > 0))];
+    await setSetting(NOTIFY_SETTING_KEY, ids, {
+      type: 'json',
+      scope: 'admin_tasks',
+      description: 'Person.id příjemců push+zvonek notifikace o novém požadavku',
+      userId: req.user.id,
+    });
+    res.json({ ok: true, person_ids: ids });
+  } catch (err) { next(err); }
+});
+
+// Fire-and-forget: rozešli notifikaci o novém požadavku nastaveným příjemcům.
+// Push jde přímo přes notifyPerson (Velín zařízení), zvonek přes createNotification
+// pro ty příjemce, kteří mají HolyOS User účet (type 'system' → jen web, bez dvojitého pushe).
+async function notifyNewTaskRecipients(task, authorUserId) {
+  const personIds = await getSetting(NOTIFY_SETTING_KEY, { type: 'json', defaultValue: [] });
+  if (!Array.isArray(personIds) || personIds.length === 0) return;
+
+  const title = '🆕 Nový požadavek';
+  const shortDesc = (task.description || task.page_title || '').toString().replace(/\s+/g, ' ').trim();
+  const body = shortDesc ? (shortDesc.length > 140 ? shortDesc.slice(0, 137) + '…' : shortDesc) : 'Byl vytvořen nový požadavek na úpravu.';
+  const link = '/modules/admin-tasks/index.html';
+
+  // Kdo z příjemců má User účet → zvonek
+  const persons = await prisma.person.findMany({
+    where: { id: { in: personIds } },
+    select: { id: true, user_id: true },
+  });
+
+  for (const p of persons) {
+    // Push na Velín zařízení
+    notifyPerson(prisma, p.id, {
+      title,
+      body,
+      data: { type: 'admin_task_new', task_id: task.id, link },
+      sound: 'default',
+    }).catch((e) => console.warn('[admin-tasks] push příjemci', p.id, ':', e.message));
+
+    // Zvonek v HolyOS (jen když má účet). 'system' typ nepushuje → žádný dvojitý push.
+    if (p.user_id && p.user_id !== authorUserId) {
+      createNotification({
+        userId: p.user_id,
+        type: 'system',
+        title,
+        body,
+        link,
+        meta: { task_id: task.id },
+      }).catch((e) => console.warn('[admin-tasks] zvonek příjemci', p.user_id, ':', e.message));
+    }
+  }
+}
 
 // GET /api/admin-tasks/debug/screenshots — diagnostika (jen pro mě, nikoho jiného vidět neobtěžuje)
 router.get('/debug/screenshots', async (req, res, next) => {
@@ -298,6 +406,11 @@ router.post('/', async (req, res, next) => {
     // pomůže Tomášovi rychle vidět, který task je pro AI vhodný.
     setImmediate(() => evaluateSuitabilityAsync(task.id).catch((e) =>
       console.error('[admin-tasks] suitability eval failed for', task.id, ':', e.message)
+    ));
+
+    // Notifikace nastaveným příjemcům (push do Velína + zvonek). Fire-and-forget.
+    setImmediate(() => notifyNewTaskRecipients(task, req.user.id).catch((e) =>
+      console.error('[admin-tasks] notify recipients failed for', task.id, ':', e.message)
     ));
   } catch (err) {
     console.error('[admin-tasks] POST chyba:', err.message);

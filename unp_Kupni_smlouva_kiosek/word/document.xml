@@ -1,0 +1,971 @@
+<?xml version="1.0" encoding="UTF-8"?><w:document xmlns:wpc="http://schemas.microsoft.com/office/word/2010/wordprocessingCanvas" xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:wp14="http://schemas.microsoft.com/office/word/2010/wordprocessingDrawing" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:w10="urn:schemas-microsoft-com:office:word" xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml" xmlns:w15="http://schemas.microsoft.com/office/word/2012/wordml" xmlns:wpg="http://schemas.microsoft.com/office/word/2010/wordprocessingGroup" xmlns:wpi="http://schemas.microsoft.com/office/word/2010/wordprocessingInk" xmlns:wne="http://schemas.microsoft.com/office/word/2006/wordml" xmlns:wps="http://schemas.microsoft.com/office/word/2010/wordprocessingShape" xmlns:cx="http://schemas.microsoft.com/office/drawing/2014/chartex" xmlns:cx1="http://schemas.microsoft.com/office/drawing/2015/9/8/chartex" xmlns:cx2="http://schemas.microsoft.com/office/drawing/2015/10/21/chartex" xmlns:cx3="http://schemas.microsoft.com/office/drawing/2016/5/9/chartex" xmlns:cx4="http://schemas.microsoft.com/office/drawing/2016/5/10/chartex" xmlns:cx5="http://schemas.microsoft.com/office/drawing/2016/5/11/chartex" xmlns:cx6="http://schemas.microsoft.com/office/drawing/2016/5/12/chartex" xmlns:cx7="http://schemas.microsoft.com/office/drawing/2016/5/13/chartex" xmlns:cx8="http://schemas.microsoft.com/office/drawing/2016/5/14/chartex" xmlns:aink="http://schemas.microsoft.com/office/drawing/2016/ink" xmlns:am3d="http://schemas.microsoft.com/office/drawing/2017/model3d" xmlns:w16cex="http://schemas.microsoft.com/office/word/2018/wordml/cex" xmlns:w16cid="http://schemas.microsoft.com/office/word/2016/wordml/cid" xmlns:w16="http://schemas.microsoft.com/office/word/2018/wordml" xmlns:w16sdtdh="http://schemas.microsoft.com/office/word/2020/wordml/sdtdatahash" xmlns:w16se="http://schemas.microsoft.com/office/word/2015/wordml/symex" mc:Ignorable="w14 w15 wp14">
+  <w:body>
+    <w:p>
+      <w:pPr>
+        <w:pStyle w:val="Title"/>
+      </w:pPr>
+      <w:r>
+        <w:t xml:space="preserve">KUPNÍ SMLOUVA</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="240"/>
+        <w:jc w:val="center"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:i/>
+          <w:iCs/>
+          <w:sz w:val="20"/>
+          <w:szCs w:val="20"/>
+        </w:rPr>
+        <w:t xml:space="preserve">uzavřená podle § 2079 a násl. zákona č. 89/2012 Sb., občanský zákoník, v platném znění</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:pStyle w:val="Heading1"/>
+        <w:jc w:val="center"/>
+      </w:pPr>
+      <w:r>
+        <w:t xml:space="preserve">Smluvní strany</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="40"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:b/>
+          <w:bCs/>
+        </w:rPr>
+        <w:t xml:space="preserve">Prodávající:</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="120" w:line="276"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:highlight w:val="yellow"/>
+          
+        </w:rPr>
+        <w:t xml:space="preserve">Best Series s.r.o.</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="120" w:line="276"/>
+      </w:pPr>
+      <w:r>
+        <w:t xml:space="preserve">se sídlem: </w:t>
+      </w:r>
+      <w:r>
+        <w:rPr>
+          <w:highlight w:val="yellow"/>
+          
+        </w:rPr>
+        <w:t xml:space="preserve">[adresa sídla]</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="120" w:line="276"/>
+      </w:pPr>
+      <w:r>
+        <w:t xml:space="preserve">IČO: </w:t>
+      </w:r>
+      <w:r>
+        <w:rPr>
+          <w:highlight w:val="yellow"/>
+          
+        </w:rPr>
+        <w:t xml:space="preserve">05643724</w:t>
+      </w:r>
+      <w:r>
+        <w:t xml:space="preserve">, DIČ: </w:t>
+      </w:r>
+      <w:r>
+        <w:rPr>
+          <w:highlight w:val="yellow"/>
+          
+        </w:rPr>
+        <w:t xml:space="preserve">[DIČ]</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="120" w:line="276"/>
+      </w:pPr>
+      <w:r>
+        <w:t xml:space="preserve">zapsaná v obchodním rejstříku vedeném </w:t>
+      </w:r>
+      <w:r>
+        <w:rPr>
+          <w:highlight w:val="yellow"/>
+          
+        </w:rPr>
+        <w:t xml:space="preserve">[soud, oddíl, vložka]</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="120" w:line="276"/>
+      </w:pPr>
+      <w:r>
+        <w:t xml:space="preserve">zastoupená: </w:t>
+      </w:r>
+      <w:r>
+        <w:rPr>
+          <w:highlight w:val="yellow"/>
+          
+        </w:rPr>
+        <w:t xml:space="preserve">[jméno a funkce]</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="120" w:line="276"/>
+      </w:pPr>
+      <w:r>
+        <w:t xml:space="preserve">bankovní spojení: </w:t>
+      </w:r>
+      <w:r>
+        <w:rPr>
+          <w:highlight w:val="yellow"/>
+          
+        </w:rPr>
+        <w:t xml:space="preserve">[číslo účtu / IBAN]</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="40"/>
+      </w:pPr>
+      <w:r>
+        <w:t xml:space="preserve">(dále jen </w:t>
+      </w:r>
+      <w:r>
+        <w:rPr>
+          <w:b/>
+          <w:bCs/>
+        </w:rPr>
+        <w:t xml:space="preserve">„prodávající&#x201C;</w:t>
+      </w:r>
+      <w:r>
+        <w:t xml:space="preserve">)</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="40" w:before="160"/>
+      </w:pPr>
+      <w:r>
+        <w:t xml:space="preserve">a</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="40"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:b/>
+          <w:bCs/>
+        </w:rPr>
+        <w:t xml:space="preserve">Kupující:</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="120" w:line="276"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:highlight w:val="yellow"/>
+          
+        </w:rPr>
+        <w:t xml:space="preserve">[obchodní firma / jméno a příjmení]</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="120" w:line="276"/>
+      </w:pPr>
+      <w:r>
+        <w:t xml:space="preserve">se sídlem / bytem: </w:t>
+      </w:r>
+      <w:r>
+        <w:rPr>
+          <w:highlight w:val="yellow"/>
+          
+        </w:rPr>
+        <w:t xml:space="preserve">[adresa]</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="120" w:line="276"/>
+      </w:pPr>
+      <w:r>
+        <w:t xml:space="preserve">IČO: </w:t>
+      </w:r>
+      <w:r>
+        <w:rPr>
+          <w:highlight w:val="yellow"/>
+          
+        </w:rPr>
+        <w:t xml:space="preserve">[IČO]</w:t>
+      </w:r>
+      <w:r>
+        <w:t xml:space="preserve">, DIČ: </w:t>
+      </w:r>
+      <w:r>
+        <w:rPr>
+          <w:highlight w:val="yellow"/>
+          
+        </w:rPr>
+        <w:t xml:space="preserve">[DIČ]</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="120" w:line="276"/>
+      </w:pPr>
+      <w:r>
+        <w:t xml:space="preserve">zastoupený: </w:t>
+      </w:r>
+      <w:r>
+        <w:rPr>
+          <w:highlight w:val="yellow"/>
+          
+        </w:rPr>
+        <w:t xml:space="preserve">[jméno a funkce]</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="120" w:line="276"/>
+      </w:pPr>
+      <w:r>
+        <w:t xml:space="preserve">bankovní spojení: </w:t>
+      </w:r>
+      <w:r>
+        <w:rPr>
+          <w:highlight w:val="yellow"/>
+          
+        </w:rPr>
+        <w:t xml:space="preserve">[číslo účtu / IBAN]</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="120"/>
+      </w:pPr>
+      <w:r>
+        <w:t xml:space="preserve">(dále jen </w:t>
+      </w:r>
+      <w:r>
+        <w:rPr>
+          <w:b/>
+          <w:bCs/>
+        </w:rPr>
+        <w:t xml:space="preserve">„kupující&#x201C;</w:t>
+      </w:r>
+      <w:r>
+        <w:t xml:space="preserve">; společně dále jen </w:t>
+      </w:r>
+      <w:r>
+        <w:rPr>
+          <w:b/>
+          <w:bCs/>
+        </w:rPr>
+        <w:t xml:space="preserve">„smluvní strany&#x201C;</w:t>
+      </w:r>
+      <w:r>
+        <w:t xml:space="preserve">)</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:pStyle w:val="Heading1"/>
+        <w:jc w:val="center"/>
+      </w:pPr>
+      <w:r>
+        <w:t xml:space="preserve">Článek I – Předmět koupě</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:pStyle w:val="ListParagraph"/>
+        <w:numPr>
+          <w:ilvl w:val="0"/>
+          <w:numId w:val="2"/>
+        </w:numPr>
+        <w:spacing w:after="100" w:line="276"/>
+      </w:pPr>
+      <w:r>
+        <w:t xml:space="preserve">Předmětem této smlouvy je závazek prodávajícího odevzdat kupujícímu níže specifikované zařízení („</w:t>
+      </w:r>
+      <w:r>
+        <w:rPr>
+          <w:b/>
+          <w:bCs/>
+        </w:rPr>
+        <w:t xml:space="preserve">kiosek</w:t>
+      </w:r>
+      <w:r>
+        <w:t xml:space="preserve">&#x201C;) a umožnit mu nabýt vlastnické právo k němu, a závazek kupujícího kiosek převzít a zaplatit prodávajícímu kupní cenu.</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:pStyle w:val="ListParagraph"/>
+        <w:numPr>
+          <w:ilvl w:val="0"/>
+          <w:numId w:val="2"/>
+        </w:numPr>
+        <w:spacing w:after="100" w:line="276"/>
+      </w:pPr>
+      <w:r>
+        <w:t xml:space="preserve">Kiosek je specifikován takto:</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:pStyle w:val="ListParagraph"/>
+        <w:numPr>
+          <w:ilvl w:val="0"/>
+          <w:numId w:val="3"/>
+        </w:numPr>
+        <w:spacing w:after="60" w:line="276"/>
+      </w:pPr>
+      <w:r>
+        <w:t xml:space="preserve">označení / typ: </w:t>
+      </w:r>
+      <w:r>
+        <w:rPr>
+          <w:highlight w:val="yellow"/>
+          
+        </w:rPr>
+        <w:t xml:space="preserve">[např. prádlomat 750]</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:pStyle w:val="ListParagraph"/>
+        <w:numPr>
+          <w:ilvl w:val="0"/>
+          <w:numId w:val="3"/>
+        </w:numPr>
+        <w:spacing w:after="60" w:line="276"/>
+      </w:pPr>
+      <w:r>
+        <w:t xml:space="preserve">výrobní / sériové číslo: </w:t>
+      </w:r>
+      <w:r>
+        <w:rPr>
+          <w:highlight w:val="yellow"/>
+          
+        </w:rPr>
+        <w:t xml:space="preserve">[SN]</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:pStyle w:val="ListParagraph"/>
+        <w:numPr>
+          <w:ilvl w:val="0"/>
+          <w:numId w:val="3"/>
+        </w:numPr>
+        <w:spacing w:after="60" w:line="276"/>
+      </w:pPr>
+      <w:r>
+        <w:t xml:space="preserve">technická specifikace a výbava: </w:t>
+      </w:r>
+      <w:r>
+        <w:rPr>
+          <w:highlight w:val="yellow"/>
+          
+        </w:rPr>
+        <w:t xml:space="preserve">[popis, příp. odkaz na přílohu č. 1]</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:pStyle w:val="ListParagraph"/>
+        <w:numPr>
+          <w:ilvl w:val="0"/>
+          <w:numId w:val="3"/>
+        </w:numPr>
+        <w:spacing w:after="60" w:line="276"/>
+      </w:pPr>
+      <w:r>
+        <w:t xml:space="preserve">příslušenství a dokumentace: </w:t>
+      </w:r>
+      <w:r>
+        <w:rPr>
+          <w:highlight w:val="yellow"/>
+          
+        </w:rPr>
+        <w:t xml:space="preserve">[návod, záruční list, prohlášení o shodě]</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:pStyle w:val="ListParagraph"/>
+        <w:numPr>
+          <w:ilvl w:val="0"/>
+          <w:numId w:val="2"/>
+        </w:numPr>
+        <w:spacing w:after="100" w:line="276"/>
+      </w:pPr>
+      <w:r>
+        <w:t xml:space="preserve">Podrobná technická specifikace kiosku tvoří přílohu č. 1 této smlouvy, která je její nedílnou součástí.</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:pStyle w:val="ListParagraph"/>
+        <w:numPr>
+          <w:ilvl w:val="0"/>
+          <w:numId w:val="2"/>
+        </w:numPr>
+        <w:spacing w:after="100" w:line="276"/>
+      </w:pPr>
+      <w:r>
+        <w:t xml:space="preserve">Prodávající prohlašuje, že je výlučným vlastníkem kiosku, že kiosek není zatížen žádnými právy třetích osob a že jeho prodeji nebrání žádná právní ani faktická překážka.</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:pStyle w:val="Heading1"/>
+        <w:jc w:val="center"/>
+      </w:pPr>
+      <w:r>
+        <w:t xml:space="preserve">Článek II – Kupní cena a platební podmínky</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:pStyle w:val="ListParagraph"/>
+        <w:numPr>
+          <w:ilvl w:val="0"/>
+          <w:numId w:val="4"/>
+        </w:numPr>
+        <w:spacing w:after="100" w:line="276"/>
+      </w:pPr>
+      <w:r>
+        <w:t xml:space="preserve">Kupní cena kiosku činí </w:t>
+      </w:r>
+      <w:r>
+        <w:rPr>
+          <w:highlight w:val="yellow"/>
+          
+        </w:rPr>
+        <w:t xml:space="preserve">[částka]</w:t>
+      </w:r>
+      <w:r>
+        <w:t xml:space="preserve"> Kč (slovy: </w:t>
+      </w:r>
+      <w:r>
+        <w:rPr>
+          <w:highlight w:val="yellow"/>
+          
+        </w:rPr>
+        <w:t xml:space="preserve">[slovy]</w:t>
+      </w:r>
+      <w:r>
+        <w:t xml:space="preserve">) bez DPH. K ceně bude připočtena DPH v zákonné výši.</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:pStyle w:val="ListParagraph"/>
+        <w:numPr>
+          <w:ilvl w:val="0"/>
+          <w:numId w:val="4"/>
+        </w:numPr>
+        <w:spacing w:after="100" w:line="276"/>
+      </w:pPr>
+      <w:r>
+        <w:t xml:space="preserve">Kupní cena zahrnuje </w:t>
+      </w:r>
+      <w:r>
+        <w:rPr>
+          <w:highlight w:val="yellow"/>
+          
+        </w:rPr>
+        <w:t xml:space="preserve">[dopravu / instalaci / uvedení do provozu / zaškolení – upravit dle dohody]</w:t>
+      </w:r>
+      <w:r>
+        <w:t xml:space="preserve">.</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:pStyle w:val="ListParagraph"/>
+        <w:numPr>
+          <w:ilvl w:val="0"/>
+          <w:numId w:val="4"/>
+        </w:numPr>
+        <w:spacing w:after="100" w:line="276"/>
+      </w:pPr>
+      <w:r>
+        <w:t xml:space="preserve">Kupující uhradí kupní cenu takto:</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:pStyle w:val="ListParagraph"/>
+        <w:numPr>
+          <w:ilvl w:val="0"/>
+          <w:numId w:val="5"/>
+        </w:numPr>
+        <w:spacing w:after="60" w:line="276"/>
+      </w:pPr>
+      <w:r>
+        <w:t xml:space="preserve">záloha ve výši </w:t>
+      </w:r>
+      <w:r>
+        <w:rPr>
+          <w:highlight w:val="yellow"/>
+          
+        </w:rPr>
+        <w:t xml:space="preserve">[%]</w:t>
+      </w:r>
+      <w:r>
+        <w:t xml:space="preserve"> na základě zálohové faktury se splatností </w:t>
+      </w:r>
+      <w:r>
+        <w:rPr>
+          <w:highlight w:val="yellow"/>
+          
+        </w:rPr>
+        <w:t xml:space="preserve">[X]</w:t>
+      </w:r>
+      <w:r>
+        <w:t xml:space="preserve"> dní,</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:pStyle w:val="ListParagraph"/>
+        <w:numPr>
+          <w:ilvl w:val="0"/>
+          <w:numId w:val="5"/>
+        </w:numPr>
+        <w:spacing w:after="60" w:line="276"/>
+      </w:pPr>
+      <w:r>
+        <w:t xml:space="preserve">doplatek do </w:t>
+      </w:r>
+      <w:r>
+        <w:rPr>
+          <w:highlight w:val="yellow"/>
+          
+        </w:rPr>
+        <w:t xml:space="preserve">[X]</w:t>
+      </w:r>
+      <w:r>
+        <w:t xml:space="preserve"> dní od </w:t>
+      </w:r>
+      <w:r>
+        <w:rPr>
+          <w:highlight w:val="yellow"/>
+          
+        </w:rPr>
+        <w:t xml:space="preserve">[předání / vystavení faktury]</w:t>
+      </w:r>
+      <w:r>
+        <w:t xml:space="preserve">.</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:pStyle w:val="ListParagraph"/>
+        <w:numPr>
+          <w:ilvl w:val="0"/>
+          <w:numId w:val="4"/>
+        </w:numPr>
+        <w:spacing w:after="100" w:line="276"/>
+      </w:pPr>
+      <w:r>
+        <w:t xml:space="preserve">Kupní cena se hradí bezhotovostně na účet prodávajícího uvedený v záhlaví, případně na účet uvedený na faktuře. Cena je uhrazena dnem připsání na účet prodávajícího.</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:pStyle w:val="ListParagraph"/>
+        <w:numPr>
+          <w:ilvl w:val="0"/>
+          <w:numId w:val="4"/>
+        </w:numPr>
+        <w:spacing w:after="100" w:line="276"/>
+      </w:pPr>
+      <w:r>
+        <w:t xml:space="preserve">V případě prodlení kupujícího s úhradou je prodávající oprávněn požadovat úrok z prodlení ve výši </w:t>
+      </w:r>
+      <w:r>
+        <w:rPr>
+          <w:highlight w:val="yellow"/>
+          
+        </w:rPr>
+        <w:t xml:space="preserve">[0,05 % z dlužné částky za každý den prodlení]</w:t>
+      </w:r>
+      <w:r>
+        <w:t xml:space="preserve">.</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:pStyle w:val="ListParagraph"/>
+        <w:numPr>
+          <w:ilvl w:val="0"/>
+          <w:numId w:val="4"/>
+        </w:numPr>
+        <w:spacing w:after="100" w:line="276"/>
+      </w:pPr>
+      <w:r>
+        <w:t xml:space="preserve">Prodávající vystaví daňový doklad (fakturu) se všemi náležitostmi dle zákona o DPH.</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:pStyle w:val="Heading1"/>
+        <w:jc w:val="center"/>
+      </w:pPr>
+      <w:r>
+        <w:t xml:space="preserve">Článek III – Předání a převzetí</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:pStyle w:val="ListParagraph"/>
+        <w:numPr>
+          <w:ilvl w:val="0"/>
+          <w:numId w:val="6"/>
+        </w:numPr>
+        <w:spacing w:after="100" w:line="276"/>
+      </w:pPr>
+      <w:r>
+        <w:t xml:space="preserve">Prodávající předá kiosek kupujícímu v místě: </w:t>
+      </w:r>
+      <w:r>
+        <w:rPr>
+          <w:highlight w:val="yellow"/>
+          
+        </w:rPr>
+        <w:t xml:space="preserve">[místo předání]</w:t>
+      </w:r>
+      <w:r>
+        <w:t xml:space="preserve">, v termínu do </w:t>
+      </w:r>
+      <w:r>
+        <w:rPr>
+          <w:highlight w:val="yellow"/>
+          
+        </w:rPr>
+        <w:t xml:space="preserve">[datum / lhůta]</w:t>
+      </w:r>
+      <w:r>
+        <w:t xml:space="preserve">.</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:pStyle w:val="ListParagraph"/>
+        <w:numPr>
+          <w:ilvl w:val="0"/>
+          <w:numId w:val="6"/>
+        </w:numPr>
+        <w:spacing w:after="100" w:line="276"/>
+      </w:pPr>
+      <w:r>
+        <w:t xml:space="preserve">O předání a převzetí kiosku bude sepsán předávací protokol podepsaný oběma stranami, v němž bude uveden stav kiosku, předané příslušenství a dokumentace, případně zjištěné vady.</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:pStyle w:val="ListParagraph"/>
+        <w:numPr>
+          <w:ilvl w:val="0"/>
+          <w:numId w:val="6"/>
+        </w:numPr>
+        <w:spacing w:after="100" w:line="276"/>
+      </w:pPr>
+      <w:r>
+        <w:t xml:space="preserve">Nebezpečí škody na kiosku přechází na kupujícího okamžikem jeho převzetí, resp. okamžikem, kdy byl kupující v prodlení s převzetím.</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:pStyle w:val="ListParagraph"/>
+        <w:numPr>
+          <w:ilvl w:val="0"/>
+          <w:numId w:val="6"/>
+        </w:numPr>
+        <w:spacing w:after="100" w:line="276"/>
+      </w:pPr>
+      <w:r>
+        <w:t xml:space="preserve">Vlastnické právo ke kiosku přechází na kupujícího </w:t>
+      </w:r>
+      <w:r>
+        <w:rPr>
+          <w:highlight w:val="yellow"/>
+          
+        </w:rPr>
+        <w:t xml:space="preserve">[úplným zaplacením kupní ceny / okamžikem předání – zvolit]</w:t>
+      </w:r>
+      <w:r>
+        <w:t xml:space="preserve">.</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:pStyle w:val="Heading1"/>
+        <w:jc w:val="center"/>
+      </w:pPr>
+      <w:r>
+        <w:t xml:space="preserve">Článek IV – Záruka a odpovědnost za vady</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:pStyle w:val="ListParagraph"/>
+        <w:numPr>
+          <w:ilvl w:val="0"/>
+          <w:numId w:val="7"/>
+        </w:numPr>
+        <w:spacing w:after="100" w:line="276"/>
+      </w:pPr>
+      <w:r>
+        <w:t xml:space="preserve">Prodávající poskytuje na kiosek záruku za jakost v délce </w:t>
+      </w:r>
+      <w:r>
+        <w:rPr>
+          <w:highlight w:val="yellow"/>
+          
+        </w:rPr>
+        <w:t xml:space="preserve">[24]</w:t>
+      </w:r>
+      <w:r>
+        <w:t xml:space="preserve"> měsíců ode dne předání kiosku kupujícímu.</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:pStyle w:val="ListParagraph"/>
+        <w:numPr>
+          <w:ilvl w:val="0"/>
+          <w:numId w:val="7"/>
+        </w:numPr>
+        <w:spacing w:after="100" w:line="276"/>
+      </w:pPr>
+      <w:r>
+        <w:t xml:space="preserve">Záruka se nevztahuje na vady způsobené neodborným zásahem, nesprávnou obsluhou, běžným opotřebením, zásahem třetí osoby nebo vyšší mocí.</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:pStyle w:val="ListParagraph"/>
+        <w:numPr>
+          <w:ilvl w:val="0"/>
+          <w:numId w:val="7"/>
+        </w:numPr>
+        <w:spacing w:after="100" w:line="276"/>
+      </w:pPr>
+      <w:r>
+        <w:t xml:space="preserve">Kupující je povinen vady bez zbytečného odkladu po jejich zjištění písemně oznámit prodávajícímu (reklamovat) na adresu </w:t>
+      </w:r>
+      <w:r>
+        <w:rPr>
+          <w:highlight w:val="yellow"/>
+          
+        </w:rPr>
+        <w:t xml:space="preserve">[kontakt pro reklamace]</w:t>
+      </w:r>
+      <w:r>
+        <w:t xml:space="preserve">.</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:pStyle w:val="ListParagraph"/>
+        <w:numPr>
+          <w:ilvl w:val="0"/>
+          <w:numId w:val="7"/>
+        </w:numPr>
+        <w:spacing w:after="100" w:line="276"/>
+      </w:pPr>
+      <w:r>
+        <w:t xml:space="preserve">Způsob a lhůty vyřízení reklamací se řídí občanským zákoníkem; případná návaznost na servisní zajištění je upravena samostatnou servisní smlouvou.</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:pStyle w:val="Heading1"/>
+        <w:jc w:val="center"/>
+      </w:pPr>
+      <w:r>
+        <w:t xml:space="preserve">Článek V – Závěrečná ustanovení</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:pStyle w:val="ListParagraph"/>
+        <w:numPr>
+          <w:ilvl w:val="0"/>
+          <w:numId w:val="2"/>
+        </w:numPr>
+        <w:spacing w:after="100" w:line="276"/>
+      </w:pPr>
+      <w:r>
+        <w:t xml:space="preserve">Tato smlouva nabývá platnosti a účinnosti dnem podpisu oběma smluvními stranami.</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:pStyle w:val="ListParagraph"/>
+        <w:numPr>
+          <w:ilvl w:val="0"/>
+          <w:numId w:val="2"/>
+        </w:numPr>
+        <w:spacing w:after="100" w:line="276"/>
+      </w:pPr>
+      <w:r>
+        <w:t xml:space="preserve">Vztahy touto smlouvou výslovně neupravené se řídí občanským zákoníkem a dalšími právními předpisy České republiky.</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:pStyle w:val="ListParagraph"/>
+        <w:numPr>
+          <w:ilvl w:val="0"/>
+          <w:numId w:val="2"/>
+        </w:numPr>
+        <w:spacing w:after="100" w:line="276"/>
+      </w:pPr>
+      <w:r>
+        <w:t xml:space="preserve">Smlouvu lze měnit pouze písemnými, vzestupně číslovanými dodatky podepsanými oběma stranami.</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:pStyle w:val="ListParagraph"/>
+        <w:numPr>
+          <w:ilvl w:val="0"/>
+          <w:numId w:val="2"/>
+        </w:numPr>
+        <w:spacing w:after="100" w:line="276"/>
+      </w:pPr>
+      <w:r>
+        <w:t xml:space="preserve">Je-li nebo stane-li se některé ustanovení smlouvy neplatným či neúčinným, nemá to vliv na platnost ostatních ustanovení; strany takové ustanovení nahradí ustanovením obsahově nejbližším.</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:pStyle w:val="ListParagraph"/>
+        <w:numPr>
+          <w:ilvl w:val="0"/>
+          <w:numId w:val="2"/>
+        </w:numPr>
+        <w:spacing w:after="100" w:line="276"/>
+      </w:pPr>
+      <w:r>
+        <w:t xml:space="preserve">Smlouva je vyhotovena ve dvou stejnopisech s platností originálu, po jednom pro každou smluvní stranu (nebo elektronicky s uznávanými podpisy).</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:pStyle w:val="ListParagraph"/>
+        <w:numPr>
+          <w:ilvl w:val="0"/>
+          <w:numId w:val="2"/>
+        </w:numPr>
+        <w:spacing w:after="100" w:line="276"/>
+      </w:pPr>
+      <w:r>
+        <w:t xml:space="preserve">Smluvní strany prohlašují, že si smlouvu přečetly, jejímu obsahu rozumějí a uzavírají ji svobodně, vážně a bez tísně, na důkaz čehož připojují své podpisy.</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="120" w:before="240"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:b/>
+          <w:bCs/>
+        </w:rPr>
+        <w:t xml:space="preserve">Přílohy: </w:t>
+      </w:r>
+      <w:r>
+        <w:t xml:space="preserve">č. 1 – Technická specifikace kiosku; </w:t>
+      </w:r>
+      <w:r>
+        <w:rPr>
+          <w:highlight w:val="yellow"/>
+          
+        </w:rPr>
+        <w:t xml:space="preserve">[další přílohy dle potřeby]</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:spacing w:after="240" w:before="480"/>
+      </w:pPr>
+      <w:r>
+        <w:t xml:space="preserve">V ................................... dne ...................</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:tabs>
+          <w:tab w:val="left" w:pos="5400"/>
+        </w:tabs>
+        <w:spacing w:after="0" w:before="720"/>
+      </w:pPr>
+      <w:r>
+        <w:t>_______________________________	_______________________________</w:t>
+      </w:r>
+      
+      
+    </w:p>
+    <w:p>
+      <w:pPr>
+        <w:tabs>
+          <w:tab w:val="left" w:pos="5400"/>
+        </w:tabs>
+        <w:spacing w:after="0"/>
+      </w:pPr>
+      <w:r>
+        <w:rPr>
+          <w:b/>
+          <w:bCs/>
+        </w:rPr>
+        <w:t xml:space="preserve">Prodávající</w:t>
+      </w:r>
+      <w:r>
+        <w:t xml:space="preserve">	</w:t>
+      </w:r>
+      <w:r>
+        <w:rPr>
+          <w:b/>
+          <w:bCs/>
+        </w:rPr>
+        <w:t xml:space="preserve">Kupující</w:t>
+      </w:r>
+    </w:p>
+    <w:sectPr>
+      <w:footerReference w:type="default" r:id="rId7"/>
+      <w:pgSz w:w="11906" w:h="16838" w:orient="portrait"/>
+      <w:pgMar w:top="1418" w:right="1418" w:bottom="1418" w:left="1418" w:header="708" w:footer="708" w:gutter="0"/>
+      <w:pgNumType/>
+      <w:docGrid w:linePitch="360"/>
+    </w:sectPr>
+  </w:body>
+</w:document>
