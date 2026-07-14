@@ -81,6 +81,24 @@
     Object.keys(utilLines).forEach(function (k) {
       if (utilLines[k] && state.utils[k]) utilLines[k].setLatLngs([state.center, [state.utils[k].lat, state.utils[k].lng]]);
     });
+    ['electricity', 'water', 'sewage', 'parking'].forEach(updateUtilLabel);
+  }
+
+  // Vzdálenost v metrech mezi dvěma body (přes Leaflet).
+  function distM(aLat, aLng, bLat, bLng) {
+    try { return Math.round(L.latLng(aLat, aLng).distanceTo(L.latLng(bLat, bLng))); } catch (e) { return null; }
+  }
+  // Aktualizuje popisek vzdálenosti u tlačítka i špendlíku dané přípojky.
+  function updateUtilLabel(key) {
+    var span = document.querySelector('.util-dist[data-util-dist="' + key + '"]');
+    var p = state.utils[key];
+    if (!p) { if (span) span.textContent = ''; return; }
+    var d = distM(state.center.lat, state.center.lng, p.lat, p.lng);
+    var txt = (d == null) ? '' : (d + ' m');
+    if (span) span.textContent = txt ? ('· ' + txt + ' od stroje') : '';
+    if (utilMarkers[key] && utilMarkers[key].getTooltip()) {
+      utilMarkers[key].setTooltipContent(UTIL_META[key].icon + ' ' + UTIL_META[key].label + (txt ? (' · ' + txt) : ''));
+    }
   }
 
   function makeUtilIcon(key) {
@@ -107,7 +125,7 @@
     var meta = UTIL_META[key];
     var ll = metersToLatLng(state.center.lat, state.center.lng, meta.off[0], meta.off[1]);
     var mk = L.marker(ll, { icon: makeUtilIcon(key), draggable: true, zIndexOffset: 400 }).addTo(map);
-    mk.bindTooltip(meta.label, { direction: 'top', offset: [0, -34] });
+    mk.bindTooltip(meta.label, { permanent: true, direction: 'top', offset: [0, -36], className: 'util-tt' });
     var line = L.polyline([state.center, ll], { color: meta.color, weight: 2, dashArray: '3 5', opacity: 0.85 }).addTo(map);
     utilMarkers[key] = mk; utilLines[key] = line;
     state.utils[key] = { lat: ll.lat, lng: ll.lng };
@@ -115,8 +133,10 @@
       var p = e.target.getLatLng();
       state.utils[key] = { lat: p.lat, lng: p.lng };
       if (utilLines[key]) utilLines[key].setLatLngs([state.center, p]);
+      updateUtilLabel(key);
     });
     if (btn) btn.classList.add('on');
+    updateUtilLabel(key);
     state.hasLocation = true;
     // označený bod = přípojka k dispozici → zaškrtnout odpovídající checkbox
     var cb = document.querySelector('#offer-form [name="' + key + '"]');

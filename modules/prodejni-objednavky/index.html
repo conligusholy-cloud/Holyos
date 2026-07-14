@@ -3596,7 +3596,12 @@
 
       var mapLinkBtn = s.map_link ? '<a class="btn btn-sm" href="'+lokEsc(s.map_link)+'" target="_blank" rel="noopener">🗺️ Otevřít v mapách</a>' : '';
       var up = s.utility_points || {};
-      var pin = function(k){ return up[k] ? ' <span title="Označeno sloupkem na mapě">📍</span>' : ''; };
+      var slat = parseFloat(s.latitude), slng = parseFloat(s.longitude);
+      var utilDist = function(k){
+        var p = up[k]; if (!p || !isFinite(slat) || !isFinite(p.lat)) return null;
+        try { return Math.round(L.latLng(slat, slng).distanceTo(L.latLng(p.lat, p.lng))); } catch(e){ return null; }
+      };
+      var pin = function(k){ if (!up[k]) return ''; var d = utilDist(k); return ' <span title="Označeno sloupkem na mapě" style="color:#16b981;">📍'+(d!=null?(' '+d+' m'):'')+'</span>'; };
 
       var body = ''
         + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">'
@@ -3676,7 +3681,8 @@
           + '<div style="position:absolute;top:0;left:0;width:28px;height:28px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);background:'+m.color+';border:2px solid #fff;box-shadow:0 2px 5px rgba(0,0,0,.5);"></div>'
           + '<div style="position:absolute;top:3px;left:0;width:28px;height:22px;display:grid;place-items:center;font-size:14px;">'+m.icon+'</div>'
           + '</div>' });
-        L.marker([p.lat, p.lng], { icon: icon }).addTo(map).bindTooltip(m.label, { direction:'top', offset:[0,-32] });
+        var dm = null; try { dm = Math.round(L.latLng(lat,lng).distanceTo(L.latLng(p.lat,p.lng))); } catch(e){}
+        L.marker([p.lat, p.lng], { icon: icon }).addTo(map).bindTooltip(m.label + (dm!=null?(' · '+dm+' m'):''), { permanent:true, direction:'top', offset:[0,-32] });
         L.polyline([[lat,lng],[p.lat,p.lng]], { color:m.color, weight:2, dashArray:'3 5', opacity:0.85 }).addTo(map);
       });
       setTimeout(function(){ try { map.invalidateSize(); } catch(e){} }, 120);
