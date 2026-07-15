@@ -134,6 +134,8 @@ router.get('/lokality-analytics', requireAuth, async (req, res, next) => {
     let views = 0, clicks = 0, submits = 0;
     const bySource = {}, byLabel = {}, byDay = {}, byRegion = {};
     const REGION = { Europe: 'Evropa', America: 'Amerika', Asia: 'Asie', Africa: 'Afrika', Australia: 'Austrálie', Pacific: 'Pacifik', Atlantic: 'Atlantik', Indian: 'Indický oceán', Antarctica: 'Antarktida' };
+    // Časové pásmo → země (Czech). Město bereme z části za '/'. Neúplné, ale bez externí geolokace.
+    const TZ_COUNTRY = { 'Europe/Prague': 'Česko', 'Europe/Bratislava': 'Slovensko', 'Europe/Berlin': 'Německo', 'Europe/Vienna': 'Rakousko', 'Europe/Warsaw': 'Polsko', 'Europe/Budapest': 'Maďarsko', 'Europe/Paris': 'Francie', 'Europe/Madrid': 'Španělsko', 'Europe/Rome': 'Itálie', 'Europe/Amsterdam': 'Nizozemsko', 'Europe/Brussels': 'Belgie', 'Europe/Zurich': 'Švýcarsko', 'Europe/London': 'Velká Británie', 'Europe/Dublin': 'Irsko', 'Europe/Lisbon': 'Portugalsko', 'Europe/Copenhagen': 'Dánsko', 'Europe/Stockholm': 'Švédsko', 'Europe/Oslo': 'Norsko', 'Europe/Helsinki': 'Finsko', 'Europe/Athens': 'Řecko', 'Europe/Bucharest': 'Rumunsko', 'Europe/Sofia': 'Bulharsko', 'Europe/Zagreb': 'Chorvatsko', 'Europe/Ljubljana': 'Slovinsko', 'Europe/Kiev': 'Ukrajina', 'Europe/Kyiv': 'Ukrajina', 'Europe/Moscow': 'Rusko', 'Europe/Istanbul': 'Turecko', 'America/New_York': 'USA', 'America/Chicago': 'USA', 'America/Denver': 'USA', 'America/Los_Angeles': 'USA', 'America/Toronto': 'Kanada', 'America/Sao_Paulo': 'Brazílie', 'Asia/Dubai': 'SAE', 'Asia/Tokyo': 'Japonsko', 'Asia/Shanghai': 'Čína', 'Australia/Sydney': 'Austrálie' };
     const nowMs = Date.now();
     evs.forEach((e) => {
       const p = e.props || {};
@@ -144,8 +146,14 @@ router.get('/lokality-analytics', requireAuth, async (req, res, next) => {
         bySource[s] = (bySource[s] || 0) + 1;
         const d = e.created_at.toISOString().slice(0, 10); byDay[d] = (byDay[d] || 0) + 1;
         const tz = p.tz ? String(p.tz) : '';
-        const cont = tz ? (REGION[tz.split('/')[0]] || tz.split('/')[0]) : 'Neznámé';
-        byRegion[cont] = (byRegion[cont] || 0) + 1;
+        let geo = 'Neznámé';
+        if (tz) {
+          const parts = tz.split('/');
+          const city = (parts[parts.length - 1] || '').replace(/_/g, ' ');
+          const country = TZ_COUNTRY[tz] || REGION[parts[0]] || parts[0];
+          geo = city ? (country + ' · ' + city) : country;
+        }
+        byRegion[geo] = (byRegion[geo] || 0) + 1;
       } else if (e.event === 'lok_click') {
         clicks++; const l = (p.label ? String(p.label) : '').slice(0, 40); if (l) byLabel[l] = (byLabel[l] || 0) + 1;
       } else if (e.event === 'lok_submit') { submits++; }
@@ -156,7 +164,7 @@ router.get('/lokality-analytics', requireAuth, async (req, res, next) => {
     const daily = [];
     for (let i = days - 1; i >= 0; i--) { const dt = new Date(Date.now() - i * 86400000); const d = dt.toISOString().slice(0, 10); daily.push({ date: d, label: dt.getDate() + '.' + (dt.getMonth() + 1) + '.', count: byDay[d] || 0 }); }
     const conversionPct = uniqueVisitors > 0 ? Math.round((submits / uniqueVisitors) * 1000) / 10 : 0;
-    const topRegions = Object.entries(byRegion).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([k, v]) => ({ region: k, count: v }));
+    const topRegions = Object.entries(byRegion).sort((a, b) => b[1] - a[1]).slice(0, 12).map(([k, v]) => ({ region: k, count: v }));
     res.json({ days, views, uniqueVisitors, clicks, submits, conversionPct, onlineNow: onlineSids.size, topSources, topClicks, topRegions, daily });
   } catch (err) { next(err); }
 });

@@ -3780,7 +3780,7 @@
         body.innerHTML =
           '<div style="display:flex;gap:10px;flex-wrap:wrap;">' + kpi('🟢 Online teď', '<span id="lok-online-val">' + kvNum(d.onlineNow || 0) + '</span>', '#22c55e') + kpi('Návštěvy', kvNum(d.views), '#3b82f6') + kpi('Unikátní', kvNum(d.uniqueVisitors), '#3b82f6') + kpi('Prokliky', kvNum(d.clicks)) + kpi('Odeslané nabídky', kvNum(d.submits), '#10b981') + kpi('Konverze', d.conversionPct + ' %', '#10b981') + '</div>' +
           '<div style="margin-top:16px;font-size:12px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;">📈 Návštěvy v čase</div>' + bars(d.daily) +
-          '<div style="display:flex;gap:24px;flex-wrap:wrap;margin-top:18px;">' + listBox('Zdroje návštěv', d.topSources, 'source') + listBox('Odkud (svět)', d.topRegions, 'region') + listBox('Na co lidé klikají', d.topClicks, 'label') + '</div>' +
+          '<div style="display:flex;gap:24px;flex-wrap:wrap;margin-top:18px;">' + listBox('Zdroje návštěv', d.topSources, 'source') + listBox('Odkud (země · město)', d.topRegions, 'region') + listBox('Na co lidé klikají', d.topClicks, 'label') + '</div>' +
           '<div style="margin-top:18px;border-top:1px solid var(--border);padding-top:14px;display:flex;gap:8px;flex-wrap:wrap;"><button class="btn btn-primary" onclick="lokalityAiEval(this)">🤖 AI vyhodnocení konverze</button><button class="btn btn-primary" onclick="lokalityPersona(this)">🧑 AI: obraz ideálního zákazníka</button></div><div id="lok-ai-out" style="margin-top:12px;"></div>';
         // Živý update čísla „Online teď" každých 20 s (dokud je okno otevřené).
         if (window._lokOnlineTimer) clearInterval(window._lokOnlineTimer);
