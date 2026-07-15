@@ -3762,13 +3762,15 @@
     }
     window.loadLokality = loadLokality;
     var _lokStats = null;
-    async function openLokalityStats() {
+    async function openLokalityStats(daysArg) {
+      var days = (daysArg === undefined || daysArg === null || daysArg === '') ? '30' : String(daysArg);
+      var DAYS_OPTS = [['today', 'Dnes'], ['7', '7 dní'], ['30', '30 dní'], ['90', '90 dní'], ['365', 'Rok']];
+      var optsHtml = DAYS_OPTS.map(function(o) { return '<option value="' + o[0] + '"' + (o[0] === days ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('');
       document.getElementById('modal-root').innerHTML =
         '<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal" style="width:720px;max-width:96vw;max-height:92vh;overflow:auto;">' +
-        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;"><h2 style="margin:0;">📊 Návštěvnost webu Lokality</h2><div><select id="lok-stats-days" onchange="openLokalityStats()" style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:6px 10px;color:var(--text);font-size:13px;margin-right:8px;"><option value="7">7 dní</option><option value="30" selected>30 dní</option><option value="90">90 dní</option><option value="365">Rok</option></select><button class="btn btn-secondary" onclick="closeModal()">Zavřít</button></div></div>' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;"><h2 style="margin:0;">📊 Návštěvnost webu Lokality</h2><div><select id="lok-stats-days" onchange="openLokalityStats(this.value)" style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:6px 10px;color:var(--text);font-size:13px;margin-right:8px;">' + optsHtml + '</select><button class="btn btn-secondary" onclick="closeModal()">Zavřít</button></div></div>' +
         '<div id="lok-stats-body"><div style="color:var(--text2);padding:16px;">Načítám statistiky…</div></div>' +
         '</div></div>';
-      var daysSel = document.getElementById('lok-stats-days'); var days = daysSel ? daysSel.value : 30;
       try {
         var r = await fetch('/api/compounder/lokality-analytics?days=' + days, { credentials: 'include' });
         var d = await r.json(); if (!r.ok) throw new Error(d.error || ('HTTP ' + r.status));

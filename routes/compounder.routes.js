@@ -123,8 +123,15 @@ router.post('/track', async (req, res) => {
 // GET /api/compounder/lokality-analytics?days=30 — návštěvnost webu Lokality (events lok_*).
 router.get('/lokality-analytics', requireAuth, async (req, res, next) => {
   try {
-    const days = Math.min(Math.max(parseInt(req.query.days, 10) || 30, 1), 365);
-    const since = new Date(Date.now() - days * 86400000);
+    const raw = String(req.query.days || '30');
+    let days, since;
+    if (raw === 'today') {
+      const t = new Date(); t.setHours(0, 0, 0, 0);
+      since = t; days = 1;
+    } else {
+      days = Math.min(Math.max(parseInt(raw, 10) || 30, 1), 365);
+      since = new Date(Date.now() - days * 86400000);
+    }
     const evs = await prisma.compounderEvent.findMany({
       where: { event: { startsWith: 'lok_' }, created_at: { gte: since } },
       select: { sid: true, event: true, props: true, created_at: true },
