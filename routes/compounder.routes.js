@@ -156,8 +156,17 @@ router.get('/lokality-analytics', requireAuth, async (req, res, next) => {
         byRegion[geo] = (byRegion[geo] || 0) + 1;
       } else if (e.event === 'lok_click') {
         clicks++; const l = (p.label ? String(p.label) : '').slice(0, 40); if (l) byLabel[l] = (byLabel[l] || 0) + 1;
-      } else if (e.event === 'lok_submit') { submits++; }
+      }
     });
+    // Odeslané nabídky = REÁLNĚ uložené nabídky z veřejného webu (Site.public_source), ne klik-eventy.
+    // Vyloučíme vlastní/testovací e-maily (@bestseries.cz/.cash/.global).
+    try {
+      const sub = await prisma.site.findMany({
+        where: { public_source: { not: null }, created_at: { gte: since } },
+        select: { owner_email: true },
+      });
+      submits = sub.filter((s) => !/@bestseries\.(cz|cash|global)/i.test(String(s.owner_email || ''))).length;
+    } catch (e) { submits = 0; }
     const uniqueVisitors = viewSids.size;
     const topSources = Object.entries(bySource).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([k, v]) => ({ source: k, count: v }));
     const topClicks = Object.entries(byLabel).sort((a, b) => b[1] - a[1]).slice(0, 12).map(([k, v]) => ({ label: k, count: v }));
