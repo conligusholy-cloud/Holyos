@@ -82,6 +82,7 @@
 
   <div class="chips" id="chips"></div>
   <div id="myplan" style="padding:0 12px"></div>
+  <div id="lokality-sec" style="padding:0 12px"></div>
   <div id="content"><div class="loading">Načítám…</div></div>
 
   <button class="fab" onclick="openAdd()">+ Nový kontakt</button>
@@ -185,8 +186,72 @@
       buildLangOptions();
       await load();
       loadMyPlan();
+      loadLokalitySec();
     } catch(e){ /* redirect handled */ }
   }
+
+  // ─── Nabídky lokalit přiřazené obchodníkovi (Site) ──────────────────────────
+  var lokState = { items: [], openId: null };
+  function lokYN(v){ return v===true ? '<span style="color:#22c55e">ano</span>' : (v===false ? '<span style="color:#ef4444">ne</span>' : '<span style="color:var(--muted2)">?</span>'); }
+  function lokDateOnly(iso){ if(!iso) return '—'; try { return new Date(iso).toLocaleDateString('cs-CZ'); } catch(e){ return '—'; } }
+  async function loadLokalitySec(){
+    var box = document.getElementById('lokality-sec');
+    if (!box) return;
+    try {
+      var r = await fetch('/api/sites/my', { credentials:'include' });
+      if (!r.ok) { box.innerHTML=''; return; }
+      var d = await r.json();
+      lokState.items = (d && d.items) || [];
+      renderLokalitySec();
+    } catch(e){ box.innerHTML=''; }
+  }
+  function renderLokalitySec(){
+    var box = document.getElementById('lokality-sec');
+    if (!box) return;
+    if (!lokState.items.length){ box.innerHTML=''; return; }
+    var head = '<div style="display:flex;align-items:center;gap:8px;margin:14px 2px 8px;font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">📍 Nabídky lokalit <span style="background:var(--primary);color:#04121e;border-radius:10px;padding:1px 8px;font-size:12px">'+lokState.items.length+'</span></div>';
+    box.innerHTML = head + '<div class="list">' + lokState.items.map(lokCardHtml).join('') + '</div>';
+  }
+  function lokCardHtml(s){
+    var open = lokState.openId === s.id;
+    var TYPE = { rent:'Pronájem', purchase:'Prodej pozemku', other:'Zatím neví' };
+    var up = s.utility_points || {};
+    var addr = s.address || [s.zip, s.city].filter(Boolean).join(' ') || '—';
+    var telClean = (s.owner_phone||'').replace(/\s+/g,'');
+    var waNum = (s.owner_phone||'').replace(/[^0-9]/g,'');
+    var mapBtn = s.map_link ? '<a class="btn btn-g" style="width:100%" href="'+esc(s.map_link)+'" target="_blank" rel="noopener">🗺️ Otevřít v mapách</a>' :
+      ((s.latitude&&s.longitude) ? '<a class="btn btn-g" style="width:100%" href="https://www.google.com/maps?q='+s.latitude+','+s.longitude+'" target="_blank" rel="noopener">🗺️ Otevřít v mapách</a>' : '');
+    return '<div class="card'+(open?' open':'')+'" id="lokcard-'+s.id+'">' +
+      '<div class="card-main" onclick="lokToggle('+s.id+')">' +
+        '<span class="dot" style="background:#16b981"></span>' +
+        '<div class="card-body"><div class="card-name">'+esc(s.owner_name||'—')+'</div><div class="card-sub">'+esc(addr)+'</div></div>' +
+        '<span class="badge" style="background:#16b98122;color:#16b981">'+esc(TYPE[s.site_type]||'Pronájem')+'</span>' +
+        '<span class="chev">▸</span>' +
+      '</div>' +
+      '<div class="detail">' +
+        '<div class="actions-row" style="margin-top:12px">' +
+          (s.owner_phone ? '<a href="tel:'+esc(telClean)+'">📞 Volat</a>' : '') +
+          (waNum ? '<a href="https://wa.me/'+waNum+'" target="_blank" rel="noopener">💬 WhatsApp</a>' : '') +
+          (s.owner_email ? '<a href="mailto:'+esc(s.owner_email)+'">✉️ E-mail</a>' : '') +
+        '</div>' +
+        '<div class="field"><label>Kontakt</label><div style="font-size:14px">'+esc(s.owner_name||'—')+
+          (s.owner_phone?'<br>📞 '+esc(s.owner_phone):'')+(s.owner_email?'<br>✉️ '+esc(s.owner_email):'')+
+          '<br>🏠 Vlastník místa: '+(s.is_property_owner===true?'Ano':(s.is_property_owner===false?'Ne':'neuvedeno'))+'</div></div>' +
+        '<div class="field"><label>Adresa</label><div style="font-size:14px">'+esc(addr)+'</div>'+(mapBtn?('<div style="margin-top:8px">'+mapBtn+'</div>'):'')+'</div>' +
+        '<div class="field"><label>Přípojky a okolí</label><div style="font-size:14px;display:grid;grid-template-columns:1fr 1fr;gap:6px">' +
+          '<div>⚡ Elektřina: '+lokYN(up.electricity?true:(s.electricity_kw!=null?true:undefined))+'</div>' +
+          '<div>💧 Voda: '+lokYN(up.water?true:s.water_supply)+'</div>' +
+          '<div>🚿 Kanalizace: '+lokYN(up.sewage?true:s.sewage)+'</div>' +
+          '<div>🅿️ Parkoviště: '+lokYN(up.parking?true:s.parking)+'</div>' +
+        '</div></div>' +
+        (s.capacity_note?'<div class="field"><label>Kapacita / poznámka</label><div style="font-size:14px;white-space:pre-wrap">'+esc(s.capacity_note)+'</div></div>':'') +
+        (s.owner_note?'<div class="field"><label>Poznámka zájemce</label><div style="font-size:14px;white-space:pre-wrap">'+esc(s.owner_note)+'</div></div>':'') +
+        '<div style="font-size:12px;color:var(--muted);margin-top:6px">Přijato: '+lokDateOnly(s.created_at)+'</div>' +
+      '</div>' +
+    '</div>';
+  }
+  function lokToggle(id){ lokState.openId = (lokState.openId===id)?null:id; renderLokalitySec(); }
+  window.lokToggle = lokToggle;
 
   function renderChips(){
     var chips = [['','Vše']].concat(Object.keys(STATUS).map(function(k){ return [k, STATUS[k].l]; }));

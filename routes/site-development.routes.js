@@ -125,6 +125,33 @@ router.get('/', async (req, res, next) => {
   }
 });
 
+// ─── GET /api/sites/my ──────────────────────────────────────────────────────
+// Nabídky lokalit přiřazené přihlášenému obchodníkovi (assigned_to_id).
+// Používá obrazovka obchodníka (modul obchodnik). MUSÍ být nad /:id.
+router.get('/my', async (req, res, next) => {
+  try {
+    const me = actorPersonId(req);
+    if (!me) return res.json({ items: [] });
+    const items = await prisma.site.findMany({
+      where: { assigned_to_id: me },
+      orderBy: [{ created_at: 'desc' }, { id: 'desc' }],
+      take: 300,
+      select: {
+        id: true, created_at: true, status: true, site_type: true,
+        owner_name: true, owner_phone: true, owner_email: true, owner_note: true,
+        address: true, city: true, zip: true, country: true,
+        latitude: true, longitude: true, map_link: true,
+        water_supply: true, sewage: true, parking: true, electricity_kw: true,
+        utility_points: true, is_property_owner: true, capacity_note: true,
+        footprint_rotation: true, footprint_w_mm: true, footprint_h_mm: true,
+      },
+    });
+    res.json({ items });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // ─── GET /api/sites/:id ─────────────────────────────────────────────────────
 // Vrací detail se všemi relacemi (kontakty, komunikace, fotky, dokumenty).
 router.get('/:id(\\d+)', async (req, res, next) => {

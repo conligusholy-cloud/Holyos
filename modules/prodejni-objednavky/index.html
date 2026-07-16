@@ -3550,6 +3550,48 @@
     // ============================================================
     var _lokItems = [];
     var _lokMap = null, _lokFootprint = null, _lokCenter = null;
+    var LOK_SELLERS = null; // seznam obchodníků (lazy z /api/compounder/sellers)
+    async function lokLoadSellers() {
+      if (LOK_SELLERS !== null) return LOK_SELLERS;
+      try { var sr = await fetch('/api/compounder/sellers', { credentials: 'include' }); LOK_SELLERS = sr.ok ? await sr.json() : []; }
+      catch (e) { LOK_SELLERS = []; }
+      return LOK_SELLERS;
+    }
+    function lokSellerName(id) {
+      if (!id) return '';
+      var s = (LOK_SELLERS || []).filter(function(x){ return x.id === id; })[0];
+      return s ? (((s.first_name||'')+' '+(s.last_name||'')).trim() || ('#'+s.id)) : ('#'+id);
+    }
+    function lokOwnerSelect(s) {
+      if (!LOK_SELLERS || !LOK_SELLERS.length) {
+        return '<span title="Zaškrtni u osoby Obchodník nebo Vedoucí obchodu v modulu Lidé a HR" style="color:var(--text2);font-size:11px;">— nejsou obchodníci —</span>';
+      }
+      var cur = s.assigned_to_id || (s.assigned_to && s.assigned_to.id) || '';
+      var sel = '<select onclick="event.stopPropagation()" onchange="lokSetOwner(' + s.id + ', this.value)" style="background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:12px;max-width:150px;">';
+      sel += '<option value="">— nepřiřazeno —</option>';
+      LOK_SELLERS.forEach(function(x){ var nm = ((x.first_name||'')+' '+(x.last_name||'')).trim() || ('#'+x.id); sel += '<option value="' + x.id + '"' + (cur===x.id?' selected':'') + '>' + lokEsc(nm) + '</option>'; });
+      sel += '</select>';
+      return sel;
+    }
+    function lokDetailOwnerOpts(s) {
+      var cur = (s.assigned_to && s.assigned_to.id) || s.assigned_to_id || '';
+      var opts = '<option value="">— nepřiřazeno —</option>';
+      (LOK_SELLERS || []).forEach(function(x){ var nm = ((x.first_name||'')+' '+(x.last_name||'')).trim() || ('#'+x.id); opts += '<option value="' + x.id + '"' + (cur===x.id?' selected':'') + '>' + lokEsc(nm) + '</option>'; });
+      return opts;
+    }
+    async function lokSetOwner(id, val) {
+      var assigned = val ? parseInt(val, 10) : null;
+      try {
+        var r = await fetch('/api/sites/' + id, {
+          method: 'PUT', credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ assigned_to_id: assigned }),
+        });
+        if (!r.ok) throw new Error('http ' + r.status);
+        var it = _lokItems.filter(function(x){ return x.id === id; })[0];
+        if (it) { it.assigned_to_id = assigned; it.assigned_to = assigned ? { id: assigned } : null; }
+      } catch (e) { alert('Přiřazení obchodníka se nepodařilo uložit.'); }
+    }
     var LOK_STATUS = {
       lead: { label: 'Nová nabídka', color: '#22c55e' },
       researching: { label: 'Prověřuje se', color: '#eab308' },
@@ -3571,6 +3613,7 @@
         var status = (document.getElementById('lok-status-filter')||{}).value || '';
         var q = ((document.getElementById('lok-search')||{}).value || '').trim();
         var url = '/api/sites?source=public&per_page=200' + (status ? '&status='+encodeURIComponent(status) : '') + (q ? '&q='+encodeURIComponent(q) : '');
+        await lokLoadSellers();
         var r = await fetch(url, { credentials: 'include' });
         if (!r.ok) throw new Error('http '+r.status);
         var data = await r.json();
@@ -3597,7 +3640,7 @@
         return;
       }
       var h = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr>'
-        + '<th>Přijato</th><th>Kontakt</th><th>Adresa</th><th>El.</th><th>Voda</th><th>Kanal.</th><th>Park.</th><th>Stav</th><th></th>'
+        + '<th>Přijato</th><th>Kontakt</th><th>Adresa</th><th>El.</th><th>Voda</th><th>Kanal.</th><th>Park.</th><th>Obchodník</th><th>Stav</th><th></th>'
         + '</tr></thead><tbody>';
       items.forEach(function(s){
         var contact = lokEsc(s.owner_name||'—') + (s.owner_phone?('<br><span style="color:var(--text2);font-size:11px;">'+lokEsc(s.owner_phone)+'</span>'):'') + (s.owner_email?('<br><span style="color:var(--text2);font-size:11px;">'+lokEsc(s.owner_email)+'</span>'):'');
@@ -3609,6 +3652,7 @@
           + '<td>'+lokYesNo(s.water_supply)+'</td>'
           + '<td>'+lokYesNo(s.sewage)+'</td>'
           + '<td>'+lokYesNo(s.parking)+'</td>'
+          + '<td>'+lokOwnerSelect(s)+'</td>'
           + '<td>'+lokStatusBadge(s.status)+'</td>'
           + '<td style="text-align:right;">›</td>'
           + '</tr>';
@@ -3620,6 +3664,7 @@
     async function openLokalityDetail(id) {
       var s;
       try {
+        await lokLoadSellers();
         var r = await fetch('/api/sites/'+id, { credentials: 'include' });
         s = await r.json();
       } catch(e) { alert('Nepodařilo se načíst detail.'); return; }
@@ -3668,6 +3713,7 @@
         + '</div>'
         + '<div style="margin-top:18px;display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;">'
         +   '<div class="form-group"><label>Stav</label><select id="lok-detail-status" style="min-width:180px;">'+statusOpts+'</select></div>'
+        +   '<div class="form-group"><label>Obchodník</label><select id="lok-detail-owner" onchange="lokSetOwner('+s.id+', this.value)" style="min-width:180px;">'+lokDetailOwnerOpts(s)+'</select></div>'
         +   '<button class="btn btn-primary" onclick="saveLokalityStatus('+s.id+')">💾 Uložit stav</button>'
         +   '<span id="lok-detail-msg" style="font-size:13px;color:var(--text2);"></span>'
         + '</div>';
