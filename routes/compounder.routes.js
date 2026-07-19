@@ -1863,6 +1863,79 @@ router.get('/kiosk-revenue/:code', requireAuth, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// ─── SIS: jednotlivé transakce daného období (drill-down z karty tržeb) ──────
+// GET /api/compounder/kiosk-revenue/:code/transactions?period=day|thisWeek|prevWeek|thisMonth|prevMonth|year
+//   → { code, period, currency, start, end, count, successfulSum, complete, transactions:[...] }
+router.get('/kiosk-revenue/:code/transactions', requireAuth, async (req, res, next) => {
+  try {
+    const apiKey = process.env.SIS_KIOSK_API_KEY;
+    if (!apiKey) return res.status(503).json({ error: 'SIS API není nakonfigurováno' });
+    const code = String(req.params.code || '').trim();
+    if (!/^[A-Za-z0-9_-]{1,32}$/.test(code)) return res.status(400).json({ error: 'Neplatný kód kiosku' });
+    const period = String(req.query.period || 'thisWeek');
+    const now = Date.now();
+    const nowD = new Date(now);
+    const startToday = new Date(nowD.getFullYear(), nowD.getMonth(), nowD.getDate()).getTime();
+    const dow = (nowD.getDay() + 6) % 7;
+    const startThisWeek = startToday - dow * 86400000;
+    const startPrevWeek = startThisWeek - 7 * 86400000;
+    const startThisMonth = new Date(nowD.getFullYear(), nowD.getMonth(), 1).getTime();
+    const startPrevMonth = new Date(nowD.getFullYear(), nowD.getMonth() - 1, 1).getTime();
+    const yearRoll = now - 365 * 86400000;
+    const RANGES = {
+      day: [startToday, now + 1],
+      thisWeek: [startThisWeek, now + 1],
+      prevWeek: [startPrevWeek, startThisWeek],
+      thisMonth: [startThisMonth, now + 1],
+      prevMonth: [startPrevMonth, startThisMonth],
+      year: [yearRoll, now + 1],
+    };
+    const range = RANGES[period];
+    if (!range) return res.status(400).json({ error: 'Neplatné období' });
+    const [start, end] = range;
+    const baseUrl = (process.env.SIS_KIOSK_TX_API_URL
+      || (process.env.SIS_KIOSK_API_URL ? process.env.SIS_KIOSK_API_URL.replace(/kiosk-values\/?$/, 'kiosk-transactions') : 'https://sis-test.infinitygrid.cloud/api/public/kiosk-transactions')).replace(/\/$/, '');
+    let currency = null, offset = 0, pages = 0, total = 0, complete = false, successfulSum = 0;
+    const out = [];
+    const CAP = 2500;
+    while (pages < 60) {
+      const url = baseUrl + '/' + encodeURIComponent(code) + '?limit=100&offset=' + offset;
+      const controller = new AbortController();
+      const to = setTimeout(() => controller.abort(), 12000);
+      let sisRes;
+      try { sisRes = await fetch(url, { headers: { 'X-API-Key': apiKey, 'Accept': 'application/json' }, signal: controller.signal }); }
+      catch (e) { clearTimeout(to); break; }
+      clearTimeout(to);
+      if (!sisRes.ok) break;
+      const payload = await sisRes.json().catch(() => ({}));
+      const txs = Array.isArray(payload.transactions) ? payload.transactions : [];
+      if (typeof payload.total === 'number') total = payload.total;
+      if (!txs.length) { complete = true; break; }
+      let allOlder = true;
+      for (const t of txs) {
+        const ts = t.datetime ? new Date(t.datetime).getTime() : 0;
+        if (!ts) continue;
+        if (ts >= start) allOlder = false; // stránkujeme dokud nejsme celí pod začátkem okna
+        if (ts >= start && ts < end) {
+          if (!currency && t.currency) currency = t.currency;
+          if (String(t.status) === 'Successful') successfulSum += (Number(t.amount) || 0);
+          if (out.length < CAP) out.push(t);
+        }
+      }
+      offset += txs.length; pages++;
+      if (allOlder) { complete = true; break; }
+      if (total && offset >= total) { complete = true; break; }
+    }
+    out.sort((a, b) => new Date(b.datetime).getTime() - new Date(a.datetime).getTime());
+    res.json({
+      code, period, currency: currency || 'CZK', start, end,
+      count: out.length, successfulSum, complete,
+      truncated: out.length >= CAP,
+      transactions: out, generatedAt: new Date().toISOString(),
+    });
+  } catch (err) { next(err); }
+});
+
 // ─── SIS: adresa/měna lokality podle kódu kiosku ────────────────────────────
 // Bere z cache kiosk-values; když je prošlá, načte čerstvě ze SIS (klíč na serveru).
 async function _sisKiosks() {
