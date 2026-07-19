@@ -5502,6 +5502,10 @@ model CompounderLead {
   // Prázdné = zákazník nevidí žádný vzor (výchozí).
   visible_templates String? @db.Text
 
+  // Zda zákazník v portálu (sekce Investor) vidí statistiky tržeb lokalit.
+  // Výchozí false — zapíná obchodník z HolyOS pro konkrétní lead.
+  show_revenue_stats Boolean @default(false)
+
   // Heslo pro prihlaseni (bcrypt hash). Null = uzivatel heslo nenastavil (jen magic link).
   password_hash String? @db.Text
 

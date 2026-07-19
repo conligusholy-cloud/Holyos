@@ -364,7 +364,7 @@ router.get('/portal/session', async (req, res, next) => {
     if (!id) return res.status(401).json({ ok: false, error: 'Neplatný nebo chybějící přístupový odkaz.' });
     const lead = await prisma.compounderLead.findUnique({
       where: { id },
-      select: { id: true, name: true, email: true, phone: true, role: true, lang: true, visible_sections: true, visible_templates: true, owner_person_id: true, password_hash: true, source: true, access_approved_at: true },
+      select: { id: true, name: true, email: true, phone: true, role: true, lang: true, visible_sections: true, visible_templates: true, show_revenue_stats: true, owner_person_id: true, password_hash: true, source: true, access_approved_at: true },
     });
     if (!lead) return res.status(404).json({ ok: false, error: 'Registrace nenalezena.' });
     if (!leadAccessAllowed(lead)) {
@@ -379,7 +379,7 @@ router.get('/portal/session', async (req, res, next) => {
         if (p) consultant = { name: ((p.first_name || '') + ' ' + (p.last_name || '')).trim(), phone: p.phone || '', email: p.email || '' };
       } catch (e) { /* fallback na majitele */ }
     }
-    return res.json({ ok: true, id: lead.id, name: lead.name, email: lead.email || '', phone: lead.phone || '', role: lead.role, lang: lead.lang, sections: resolveSections(lead.visible_sections), templates: templates, consultant: consultant, has_password: !!lead.password_hash });
+    return res.json({ ok: true, id: lead.id, name: lead.name, email: lead.email || '', phone: lead.phone || '', role: lead.role, lang: lead.lang, sections: resolveSections(lead.visible_sections), templates: templates, showRevenueStats: !!lead.show_revenue_stats, consultant: consultant, has_password: !!lead.password_hash });
   } catch (err) {
     next(err);
   }
@@ -1395,6 +1395,8 @@ const patchSchema = z.object({
   templates: z.union([z.array(z.string()), z.string()]).optional(),
   // Individuální nabídka lokalit navíc (pole/CSV kódů kiosků).
   extraOffers: z.union([z.array(z.string()), z.string()]).optional(),
+  // Zda zákazník v portálu (Investor) vidí statistiky tržeb lokalit.
+  showRevenueStats: z.boolean().optional(),
 });
 
 router.patch('/leads/:id', requireAuth, async (req, res, next) => {
@@ -1435,6 +1437,7 @@ router.patch('/leads/:id', requireAuth, async (req, res, next) => {
       const clean = arr.map((s) => String(s).trim().toUpperCase()).filter(Boolean).slice(0, 50);
       data.extra_offers = clean.length ? Array.from(new Set(clean)).join(',') : '';
     }
+    if (parsed.data.showRevenueStats !== undefined) data.show_revenue_stats = !!parsed.data.showRevenueStats;
     const lead = await prisma.compounderLead.update({ where: { id }, data });
     // Notifikace: nový přidělený kontakt (jinému obchodníkovi než ten, kdo přiřazuje).
     if (parsed.data.owner_person_id) {
@@ -1788,152 +1791,177 @@ router.get('/kiosk-transactions/:code', requireAuth, async (req, res, next) => {
 // při stropu stránek. Krátká cache per kód.
 let _revCache = {};
 const REV_CACHE_MS = 5 * 60 * 1000;
+
+// Sdílený výpočet tržeb kiosku (interní i portálový endpoint). Vrací data objekt.
+// Vyhodí Error('SIS_NOT_CONFIGURED') / Error('BAD_CODE') když je vstup špatný.
+async function _computeKioskRevenue(code, fresh) {
+  const apiKey = process.env.SIS_KIOSK_API_KEY;
+  if (!apiKey) { const e = new Error('SIS_NOT_CONFIGURED'); e.code = 'SIS_NOT_CONFIGURED'; throw e; }
+  code = String(code || '').trim();
+  if (!/^[A-Za-z0-9_-]{1,32}$/.test(code)) { const e = new Error('BAD_CODE'); e.code = 'BAD_CODE'; throw e; }
+  const cc = _revCache[code];
+  if (cc && (Date.now() - cc.at) < REV_CACHE_MS && !fresh) return { ...cc.data, cached: true };
+  const baseUrl = (process.env.SIS_KIOSK_TX_API_URL
+    || (process.env.SIS_KIOSK_API_URL ? process.env.SIS_KIOSK_API_URL.replace(/kiosk-values\/?$/, 'kiosk-transactions') : 'https://sis-test.infinitygrid.cloud/api/public/kiosk-transactions')).replace(/\/$/, '');
+  const now = Date.now();
+  const nowD = new Date(now);
+  const CZ_MONTHS = ['leden', 'únor', 'březen', 'duben', 'květen', 'červen', 'červenec', 'srpen', 'září', 'říjen', 'listopad', 'prosinec'];
+  const startToday = new Date(nowD.getFullYear(), nowD.getMonth(), nowD.getDate()).getTime();
+  const dow = (nowD.getDay() + 6) % 7;
+  const startThisWeek = startToday - dow * 86400000;
+  const startPrevWeek = startThisWeek - 7 * 86400000;
+  const startThisMonth = new Date(nowD.getFullYear(), nowD.getMonth(), 1).getTime();
+  const startPrevMonth = new Date(nowD.getFullYear(), nowD.getMonth() - 1, 1).getTime();
+  const yearRoll = now - 365 * 86400000;
+  const chartCut = new Date(nowD.getFullYear(), nowD.getMonth() - 11, 1).getTime();
+  const day30 = now - 30 * 86400000;
+  const sums = { day: 0, thisWeek: 0, prevWeek: 0, thisMonth: 0, prevMonth: 0, year: 0 };
+  const daily = {}, monthly = {};
+  let currency = null, count = 0, offset = 0, pages = 0, complete = false, total = 0;
+  while (pages < 40) {
+    const url = baseUrl + '/' + encodeURIComponent(code) + '?limit=100&offset=' + offset;
+    const controller = new AbortController();
+    const to = setTimeout(() => controller.abort(), 12000);
+    let sisRes;
+    try { sisRes = await fetch(url, { headers: { 'X-API-Key': apiKey, 'Accept': 'application/json' }, signal: controller.signal }); }
+    catch (e) { clearTimeout(to); break; }
+    clearTimeout(to);
+    if (!sisRes.ok) break;
+    const payload = await sisRes.json().catch(() => ({}));
+    const txs = Array.isArray(payload.transactions) ? payload.transactions : [];
+    if (typeof payload.total === 'number') total = payload.total;
+    if (!txs.length) { complete = true; break; }
+    let allOlder = true;
+    for (const t of txs) {
+      const ts = t.datetime ? new Date(t.datetime).getTime() : 0;
+      const inRange = ts && ts >= chartCut;
+      if (inRange) allOlder = false;
+      if (String(t.status) !== 'Successful') continue;
+      const amt = Number(t.amount) || 0;
+      if (!currency && t.currency) currency = t.currency;
+      if (!ts) continue;
+      if (ts >= startToday) sums.day += amt;
+      if (ts >= startThisWeek) sums.thisWeek += amt;
+      if (ts >= startPrevWeek && ts < startThisWeek) sums.prevWeek += amt;
+      if (ts >= startThisMonth) sums.thisMonth += amt;
+      if (ts >= startPrevMonth && ts < startThisMonth) sums.prevMonth += amt;
+      if (ts >= yearRoll) { sums.year += amt; count++; }
+      if (inRange) {
+        const dO = new Date(ts);
+        const ym = dO.getFullYear() + '-' + String(dO.getMonth() + 1).padStart(2, '0');
+        monthly[ym] = (monthly[ym] || 0) + amt;
+        if (ts >= day30) { const dk = ym + '-' + String(dO.getDate()).padStart(2, '0'); daily[dk] = (daily[dk] || 0) + amt; }
+      }
+    }
+    offset += txs.length; pages++;
+    if (allOlder) { complete = true; break; }
+    if (total && offset >= total) { complete = true; break; }
+  }
+  const monthsArr = [];
+  for (let i = 11; i >= 0; i--) { const dt = new Date(now); dt.setDate(1); dt.setMonth(dt.getMonth() - i); const ym = dt.getFullYear() + '-' + String(dt.getMonth() + 1).padStart(2, '0'); monthsArr.push({ label: (dt.getMonth() + 1) + '/' + String(dt.getFullYear()).slice(2), amount: Math.round(monthly[ym] || 0) }); }
+  const daysArr = [];
+  for (let i = 29; i >= 0; i--) { const dt = new Date(now - i * 86400000); const dk = dt.getFullYear() + '-' + String(dt.getMonth() + 1).padStart(2, '0') + '-' + String(dt.getDate()).padStart(2, '0'); daysArr.push({ label: dt.getDate() + '.' + (dt.getMonth() + 1) + '.', amount: Math.round(daily[dk] || 0) }); }
+  const data = { code, currency: currency || 'CZK', day: sums.day, thisWeek: sums.thisWeek, prevWeek: sums.prevWeek, thisMonth: sums.thisMonth, prevMonth: sums.prevMonth, year: sums.year, thisMonthName: CZ_MONTHS[nowD.getMonth()], prevMonthName: CZ_MONTHS[new Date(startPrevMonth).getMonth()], txCount: count, complete, monthly: monthsArr, daily: daysArr, generatedAt: new Date().toISOString() };
+  _revCache[code] = { at: Date.now(), data };
+  return data;
+}
+
 router.get('/kiosk-revenue/:code', requireAuth, async (req, res, next) => {
   try {
-    const apiKey = process.env.SIS_KIOSK_API_KEY;
-    if (!apiKey) return res.status(503).json({ error: 'SIS API není nakonfigurováno' });
-    const code = String(req.params.code || '').trim();
-    if (!/^[A-Za-z0-9_-]{1,32}$/.test(code)) return res.status(400).json({ error: 'Neplatný kód kiosku' });
-    const cc = _revCache[code];
-    if (cc && (Date.now() - cc.at) < REV_CACHE_MS && req.query.fresh !== '1') return res.json({ ...cc.data, cached: true });
-    const baseUrl = (process.env.SIS_KIOSK_TX_API_URL
-      || (process.env.SIS_KIOSK_API_URL ? process.env.SIS_KIOSK_API_URL.replace(/kiosk-values\/?$/, 'kiosk-transactions') : 'https://sis-test.infinitygrid.cloud/api/public/kiosk-transactions')).replace(/\/$/, '');
-    const now = Date.now();
-    const nowD = new Date(now);
-    const CZ_MONTHS = ['leden', 'únor', 'březen', 'duben', 'květen', 'červen', 'červenec', 'srpen', 'září', 'říjen', 'listopad', 'prosinec'];
-    const startToday = new Date(nowD.getFullYear(), nowD.getMonth(), nowD.getDate()).getTime();
-    const dow = (nowD.getDay() + 6) % 7; // 0=Po … 6=Ne
-    const startThisWeek = startToday - dow * 86400000;               // pondělí tohoto týdne
-    const startPrevWeek = startThisWeek - 7 * 86400000;              // pondělí minulého týdne
-    const startThisMonth = new Date(nowD.getFullYear(), nowD.getMonth(), 1).getTime();
-    const startPrevMonth = new Date(nowD.getFullYear(), nowD.getMonth() - 1, 1).getTime();
-    const yearRoll = now - 365 * 86400000;
-    const chartCut = new Date(nowD.getFullYear(), nowD.getMonth() - 11, 1).getTime(); // start grafu 12 měsíců
-    const day30 = now - 30 * 86400000;
-    const sums = { day: 0, thisWeek: 0, prevWeek: 0, thisMonth: 0, prevMonth: 0, year: 0 };
-    const daily = {}, monthly = {}; // 'YYYY-MM-DD' (30 dní) a 'YYYY-MM' (12 měsíců)
-    let currency = null, count = 0, offset = 0, pages = 0, complete = false, total = 0;
-    while (pages < 40) {
-      const url = baseUrl + '/' + encodeURIComponent(code) + '?limit=100&offset=' + offset;
-      const controller = new AbortController();
-      const to = setTimeout(() => controller.abort(), 12000);
-      let sisRes;
-      try { sisRes = await fetch(url, { headers: { 'X-API-Key': apiKey, 'Accept': 'application/json' }, signal: controller.signal }); }
-      catch (e) { clearTimeout(to); break; }
-      clearTimeout(to);
-      if (!sisRes.ok) break;
-      const payload = await sisRes.json().catch(() => ({}));
-      const txs = Array.isArray(payload.transactions) ? payload.transactions : [];
-      if (typeof payload.total === 'number') total = payload.total;
-      if (!txs.length) { complete = true; break; }
-      let allOlder = true;
-      for (const t of txs) {
-        const ts = t.datetime ? new Date(t.datetime).getTime() : 0;
-        const inRange = ts && ts >= chartCut;
-        if (inRange) allOlder = false; // stránkování řídíme podle data (všechny stavy)
-        if (String(t.status) !== 'Successful') continue; // do tržeb jen úspěšné transakce
-        const amt = Number(t.amount) || 0;
-        if (!currency && t.currency) currency = t.currency;
-        if (!ts) continue;
-        if (ts >= startToday) sums.day += amt;
-        if (ts >= startThisWeek) sums.thisWeek += amt;
-        if (ts >= startPrevWeek && ts < startThisWeek) sums.prevWeek += amt;
-        if (ts >= startThisMonth) sums.thisMonth += amt;
-        if (ts >= startPrevMonth && ts < startThisMonth) sums.prevMonth += amt;
-        if (ts >= yearRoll) { sums.year += amt; count++; }
-        if (inRange) {
-          const dO = new Date(ts);
-          const ym = dO.getFullYear() + '-' + String(dO.getMonth() + 1).padStart(2, '0');
-          monthly[ym] = (monthly[ym] || 0) + amt;
-          if (ts >= day30) { const dk = ym + '-' + String(dO.getDate()).padStart(2, '0'); daily[dk] = (daily[dk] || 0) + amt; }
-        }
-      }
-      offset += txs.length; pages++;
-      if (allOlder) { complete = true; break; }
-      if (total && offset >= total) { complete = true; break; }
-    }
-    // Časové řady pro grafy: 12 měsíců + 30 dní (souvislé, s nulami).
-    const monthsArr = [];
-    for (let i = 11; i >= 0; i--) { const dt = new Date(now); dt.setDate(1); dt.setMonth(dt.getMonth() - i); const ym = dt.getFullYear() + '-' + String(dt.getMonth() + 1).padStart(2, '0'); monthsArr.push({ label: (dt.getMonth() + 1) + '/' + String(dt.getFullYear()).slice(2), amount: Math.round(monthly[ym] || 0) }); }
-    const daysArr = [];
-    for (let i = 29; i >= 0; i--) { const dt = new Date(now - i * 86400000); const dk = dt.getFullYear() + '-' + String(dt.getMonth() + 1).padStart(2, '0') + '-' + String(dt.getDate()).padStart(2, '0'); daysArr.push({ label: dt.getDate() + '.' + (dt.getMonth() + 1) + '.', amount: Math.round(daily[dk] || 0) }); }
-    const data = { code, currency: currency || 'CZK', day: sums.day, thisWeek: sums.thisWeek, prevWeek: sums.prevWeek, thisMonth: sums.thisMonth, prevMonth: sums.prevMonth, year: sums.year, thisMonthName: CZ_MONTHS[nowD.getMonth()], prevMonthName: CZ_MONTHS[new Date(startPrevMonth).getMonth()], txCount: count, complete, monthly: monthsArr, daily: daysArr, generatedAt: new Date().toISOString() };
-    _revCache[code] = { at: Date.now(), data };
-    res.json(data);
-  } catch (err) { next(err); }
+    const data = await _computeKioskRevenue(req.params.code, req.query.fresh === '1');
+    return res.json(data);
+  } catch (err) {
+    if (err.code === 'SIS_NOT_CONFIGURED') return res.status(503).json({ error: 'SIS API není nakonfigurováno' });
+    if (err.code === 'BAD_CODE') return res.status(400).json({ error: 'Neplatný kód kiosku' });
+    return next(err);
+  }
 });
+
 
 // ─── SIS: jednotlivé transakce daného období (drill-down z karty tržeb) ──────
 // GET /api/compounder/kiosk-revenue/:code/transactions?period=day|thisWeek|prevWeek|thisMonth|prevMonth|year
 //   → { code, period, currency, start, end, count, successfulSum, complete, transactions:[...] }
+// Sdílený výpočet transakcí daného období (interní i portálový endpoint).
+async function _computeKioskPeriodTx(code, period) {
+  const apiKey = process.env.SIS_KIOSK_API_KEY;
+  if (!apiKey) { const e = new Error('SIS_NOT_CONFIGURED'); e.code = 'SIS_NOT_CONFIGURED'; throw e; }
+  code = String(code || '').trim();
+  if (!/^[A-Za-z0-9_-]{1,32}$/.test(code)) { const e = new Error('BAD_CODE'); e.code = 'BAD_CODE'; throw e; }
+  period = String(period || 'thisWeek');
+  const now = Date.now();
+  const nowD = new Date(now);
+  const startToday = new Date(nowD.getFullYear(), nowD.getMonth(), nowD.getDate()).getTime();
+  const dow = (nowD.getDay() + 6) % 7;
+  const startThisWeek = startToday - dow * 86400000;
+  const startPrevWeek = startThisWeek - 7 * 86400000;
+  const startThisMonth = new Date(nowD.getFullYear(), nowD.getMonth(), 1).getTime();
+  const startPrevMonth = new Date(nowD.getFullYear(), nowD.getMonth() - 1, 1).getTime();
+  const yearRoll = now - 365 * 86400000;
+  const RANGES = {
+    day: [startToday, now + 1],
+    thisWeek: [startThisWeek, now + 1],
+    prevWeek: [startPrevWeek, startThisWeek],
+    thisMonth: [startThisMonth, now + 1],
+    prevMonth: [startPrevMonth, startThisMonth],
+    year: [yearRoll, now + 1],
+  };
+  const range = RANGES[period];
+  if (!range) { const e = new Error('BAD_PERIOD'); e.code = 'BAD_PERIOD'; throw e; }
+  const [start, end] = range;
+  const baseUrl = (process.env.SIS_KIOSK_TX_API_URL
+    || (process.env.SIS_KIOSK_API_URL ? process.env.SIS_KIOSK_API_URL.replace(/kiosk-values\/?$/, 'kiosk-transactions') : 'https://sis-test.infinitygrid.cloud/api/public/kiosk-transactions')).replace(/\/$/, '');
+  let currency = null, offset = 0, pages = 0, total = 0, complete = false, successfulSum = 0;
+  const out = [];
+  const CAP = 2500;
+  while (pages < 60) {
+    const url = baseUrl + '/' + encodeURIComponent(code) + '?limit=100&offset=' + offset;
+    const controller = new AbortController();
+    const to = setTimeout(() => controller.abort(), 12000);
+    let sisRes;
+    try { sisRes = await fetch(url, { headers: { 'X-API-Key': apiKey, 'Accept': 'application/json' }, signal: controller.signal }); }
+    catch (e) { clearTimeout(to); break; }
+    clearTimeout(to);
+    if (!sisRes.ok) break;
+    const payload = await sisRes.json().catch(() => ({}));
+    const txs = Array.isArray(payload.transactions) ? payload.transactions : [];
+    if (typeof payload.total === 'number') total = payload.total;
+    if (!txs.length) { complete = true; break; }
+    let allOlder = true;
+    for (const t of txs) {
+      const ts = t.datetime ? new Date(t.datetime).getTime() : 0;
+      if (!ts) continue;
+      if (ts >= start) allOlder = false;
+      if (ts >= start && ts < end) {
+        if (!currency && t.currency) currency = t.currency;
+        if (String(t.status) === 'Successful') successfulSum += (Number(t.amount) || 0);
+        if (out.length < CAP) out.push(t);
+      }
+    }
+    offset += txs.length; pages++;
+    if (allOlder) { complete = true; break; }
+    if (total && offset >= total) { complete = true; break; }
+  }
+  out.sort((a, b) => new Date(b.datetime).getTime() - new Date(a.datetime).getTime());
+  return {
+    code, period, currency: currency || 'CZK', start, end,
+    count: out.length, successfulSum, complete,
+    truncated: out.length >= CAP,
+    transactions: out, generatedAt: new Date().toISOString(),
+  };
+}
+
+function _sisErrToHttp(err, res, next) {
+  if (err.code === 'SIS_NOT_CONFIGURED') return res.status(503).json({ error: 'SIS API není nakonfigurováno' });
+  if (err.code === 'BAD_CODE') return res.status(400).json({ error: 'Neplatný kód kiosku' });
+  if (err.code === 'BAD_PERIOD') return res.status(400).json({ error: 'Neplatné období' });
+  return next(err);
+}
+
 router.get('/kiosk-revenue/:code/transactions', requireAuth, async (req, res, next) => {
   try {
-    const apiKey = process.env.SIS_KIOSK_API_KEY;
-    if (!apiKey) return res.status(503).json({ error: 'SIS API není nakonfigurováno' });
-    const code = String(req.params.code || '').trim();
-    if (!/^[A-Za-z0-9_-]{1,32}$/.test(code)) return res.status(400).json({ error: 'Neplatný kód kiosku' });
-    const period = String(req.query.period || 'thisWeek');
-    const now = Date.now();
-    const nowD = new Date(now);
-    const startToday = new Date(nowD.getFullYear(), nowD.getMonth(), nowD.getDate()).getTime();
-    const dow = (nowD.getDay() + 6) % 7;
-    const startThisWeek = startToday - dow * 86400000;
-    const startPrevWeek = startThisWeek - 7 * 86400000;
-    const startThisMonth = new Date(nowD.getFullYear(), nowD.getMonth(), 1).getTime();
-    const startPrevMonth = new Date(nowD.getFullYear(), nowD.getMonth() - 1, 1).getTime();
-    const yearRoll = now - 365 * 86400000;
-    const RANGES = {
-      day: [startToday, now + 1],
-      thisWeek: [startThisWeek, now + 1],
-      prevWeek: [startPrevWeek, startThisWeek],
-      thisMonth: [startThisMonth, now + 1],
-      prevMonth: [startPrevMonth, startThisMonth],
-      year: [yearRoll, now + 1],
-    };
-    const range = RANGES[period];
-    if (!range) return res.status(400).json({ error: 'Neplatné období' });
-    const [start, end] = range;
-    const baseUrl = (process.env.SIS_KIOSK_TX_API_URL
-      || (process.env.SIS_KIOSK_API_URL ? process.env.SIS_KIOSK_API_URL.replace(/kiosk-values\/?$/, 'kiosk-transactions') : 'https://sis-test.infinitygrid.cloud/api/public/kiosk-transactions')).replace(/\/$/, '');
-    let currency = null, offset = 0, pages = 0, total = 0, complete = false, successfulSum = 0;
-    const out = [];
-    const CAP = 2500;
-    while (pages < 60) {
-      const url = baseUrl + '/' + encodeURIComponent(code) + '?limit=100&offset=' + offset;
-      const controller = new AbortController();
-      const to = setTimeout(() => controller.abort(), 12000);
-      let sisRes;
-      try { sisRes = await fetch(url, { headers: { 'X-API-Key': apiKey, 'Accept': 'application/json' }, signal: controller.signal }); }
-      catch (e) { clearTimeout(to); break; }
-      clearTimeout(to);
-      if (!sisRes.ok) break;
-      const payload = await sisRes.json().catch(() => ({}));
-      const txs = Array.isArray(payload.transactions) ? payload.transactions : [];
-      if (typeof payload.total === 'number') total = payload.total;
-      if (!txs.length) { complete = true; break; }
-      let allOlder = true;
-      for (const t of txs) {
-        const ts = t.datetime ? new Date(t.datetime).getTime() : 0;
-        if (!ts) continue;
-        if (ts >= start) allOlder = false; // stránkujeme dokud nejsme celí pod začátkem okna
-        if (ts >= start && ts < end) {
-          if (!currency && t.currency) currency = t.currency;
-          if (String(t.status) === 'Successful') successfulSum += (Number(t.amount) || 0);
-          if (out.length < CAP) out.push(t);
-        }
-      }
-      offset += txs.length; pages++;
-      if (allOlder) { complete = true; break; }
-      if (total && offset >= total) { complete = true; break; }
-    }
-    out.sort((a, b) => new Date(b.datetime).getTime() - new Date(a.datetime).getTime());
-    res.json({
-      code, period, currency: currency || 'CZK', start, end,
-      count: out.length, successfulSum, complete,
-      truncated: out.length >= CAP,
-      transactions: out, generatedAt: new Date().toISOString(),
-    });
-  } catch (err) { next(err); }
+    const data = await _computeKioskPeriodTx(req.params.code, req.query.period);
+    res.json(data);
+  } catch (err) { _sisErrToHttp(err, res, next); }
 });
 
 // ─── SIS: adresa/měna lokality podle kódu kiosku ────────────────────────────
@@ -3472,6 +3500,41 @@ router.get('/portal/offered-locations', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// Brána pro portálové statistiky: ověří token → lead, že má show_revenue_stats
+// a že daný kód lokality je v jeho nabídce. Vrací { leadId } nebo { status, error }.
+async function _portalRevenueGate(token, code) {
+  const leadId = verifyPortalToken(String(token || ''));
+  if (!leadId) return { status: 401, error: 'Neplatný nebo chybějící přístupový odkaz.' };
+  const lead = await prisma.compounderLead.findUnique({ where: { id: leadId }, select: { show_revenue_stats: true } }).catch(() => null);
+  if (!lead || !lead.show_revenue_stats) return { status: 403, error: 'Statistiky nejsou pro tento účet dostupné.' };
+  const want = String(code || '').toUpperCase();
+  if (!want) return { status: 400, error: 'Chybí kód lokality.' };
+  const offer = await buildOfferedLocations(leadId).catch(() => null);
+  const codes = new Set(((offer && offer.locations) || []).map((l) => String(l.code || '').toUpperCase()));
+  if (!codes.has(want)) return { status: 404, error: 'Lokalita není ve tvé nabídce.' };
+  return { leadId };
+}
+
+// GET /api/compounder/portal/kiosk-revenue?t=<token>&code=<code> — tržby lokality pro zákazníka.
+router.get('/portal/kiosk-revenue', async (req, res, next) => {
+  try {
+    const g = await _portalRevenueGate(req.query.t, req.query.code);
+    if (g.status) return res.status(g.status).json({ ok: false, error: g.error });
+    const data = await _computeKioskRevenue(req.query.code, false);
+    res.json(data);
+  } catch (err) { _sisErrToHttp(err, res, next); }
+});
+
+// GET /api/compounder/portal/kiosk-revenue/transactions?t=&code=&period= — transakce období pro zákazníka.
+router.get('/portal/kiosk-revenue/transactions', async (req, res, next) => {
+  try {
+    const g = await _portalRevenueGate(req.query.t, req.query.code);
+    if (g.status) return res.status(g.status).json({ ok: false, error: g.error });
+    const data = await _computeKioskPeriodTx(req.query.code, req.query.period);
+    res.json(data);
+  } catch (err) { _sisErrToHttp(err, res, next); }
+});
+
 // ADMIN náhled nabídky, kterou lead reálně vidí na portálu (společné + VIP).
 router.get('/leads/:id(\\d+)/offer-preview', requireAuth, async (req, res, next) => {
   try {
@@ -4116,7 +4179,6 @@ async function _buildPaymentCtx(resId) {
   if (!resv) return null;
   let lang = 'cs';
   if (resv.lead_id) { try { const l = await prisma.compounderLead.findUnique({ where: { id: resv.lead_id }, select: { lang: true } }); if (l && l.lang) lang = l.lang; } catch (e) {} }
-  const tr = payL(lang);
   // Tuzemské (CZK) i zahraniční (EUR) platby jdou na naše účty Best Series.
   const bank = {
     czk: { account: OUR_BANK.czk.account, bankCode: OUR_BANK.czk.bankCode, iban: OUR_BANK.czk.iban, name: OUR_BANK.czk.name },
@@ -4168,7 +4230,6 @@ router.get('/reservations/pay/:token/pdf', async (req, res, next) => {
 router.post('/reservations/:id(\\d+)/payment-instructions/email', requireAuth, async (req, res, next) => {
   try {
     const ctx = await _buildPaymentCtx(Number(req.params.id));
-    if (!ctx) return res.status(404).json({ error: 'Rezervace nenalezena' });
     if (!ctx.buyer.email) return res.status(400).json({ error: 'Rezervace nemá e-mail kupujícího.' });
     const pdf = await _payPdf(Number(req.params.id));
     const from = process.env.COMPOUNDER_MAIL_FROM || process.env.SMTP_FROM || process.env.INVOICE_IMAP_USER;

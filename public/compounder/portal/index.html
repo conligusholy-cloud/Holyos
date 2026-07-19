@@ -942,6 +942,8 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
       window._leadEmail = res.j.email || ""; window._leadPhone = res.j.phone || "";
       window._leadTemplates = Array.isArray(res.j.templates) ? res.j.templates : [];
       window._consultant = res.j.consultant || null;
+      window._portalShowRevStats = !!res.j.showRevenueStats;
+      window._portalToken = token;
       // Viditelnost sekcí dle povolení leadu; úvodní "Filozofie" je vždy viditelná.
       var ALLOWED = Array.isArray(res.j.sections) ? res.j.sections : [];
       PORTAL_SECTIONS = ALLOWED.slice();
@@ -1301,6 +1303,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
           '<div style="font-size:12px;color:var(--muted)">' + pT("p.off.version") + ' ' + offEsc(o.version||"—") + '</div>' +
           (o.individual ? '<div style="margin-top:6px;display:inline-flex;align-items:center;gap:5px;background:linear-gradient(135deg,#f6e6ad,#cda454);color:#241c05;font-size:11px;font-weight:700;padding:3px 10px;border-radius:999px">⭐ ' + pT("p.off.vip") + '</div>' : '') +
           '<div style="margin-top:6px;display:inline-flex;align-items:center;gap:6px;background:rgba(59,130,246,.12);border:1px solid rgba(59,130,246,.35);color:#cfe0ff;font-size:11px;font-weight:600;padding:3px 9px;border-radius:999px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#93c5fd" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg> ' + pT("p.off.service") + '</div>' +
+          (window._portalShowRevStats ? ('<div style="margin-top:8px"><button type="button" onclick="openPortalRevStats(\'' + _codeEsc + '\',\'' + offEsc(o.label||o.code).replace(/\x27/g,"&#39;") + '\')" style="display:inline-flex;align-items:center;gap:7px;cursor:pointer;background:linear-gradient(135deg,#f6e6ad,#cda454);color:#241c05;font-size:12px;font-weight:700;padding:6px 12px;border:none;border-radius:999px;box-shadow:0 2px 8px rgba(201,162,75,.35)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#241c05" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg> ' + pRevT('btn') + '</button></div>') : '') +
         '</div>' +
         '<div style="flex:1;min-width:120px">' +
           '<div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">' + pT("p.off.total").replace("{y}", o.guaranteeYears) + '</div>' +
@@ -1331,6 +1334,87 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
     var els = document.querySelectorAll('.res-countdown');
     for(var i=0;i<els.length;i++){ var u = els[i].getAttribute('data-until'); if(u) els[i].textContent = offCountdown(u); }
   }
+  // ── Statistiky tržeb lokality (zlatá ikona v nabídce; jen když je povoleno) ──
+  function pRevLang(){ var l=''; try{ l=(localStorage.getItem('compounder.lang2')||'').toLowerCase().split(/[-_]/)[0]; }catch(_){} return l||'en'; }
+  var REV_T = {
+    en:{ btn:'Revenue', title:'Revenue', today:'Today', week:'This week', prevWeek:'Previous week', month:'This month', prevMonth:'Last full month', year:'Last year', inclVat:'incl. VAT', exclVat:'excl. VAT', vatNote:'Amounts incl. VAT (excl. VAT in brackets, 21%).', m12:'Last 12 months', d30:'Last 30 days', close:'Close', back:'Back', loading:'Loading revenue…', err:'Could not load revenue.', clickHint:'Tap a period to see individual transactions.', txTitle:'Transactions', dt:'Date & time', type:'Type', desc:'Description', status:'Status', amount:'Amount', revenue:'Revenue (successful)', count:'Transactions', noTx:'No transactions in this period.', source:'Sum of SIS transactions' },
+    cs:{ btn:'Tržby', title:'Tržby', today:'Dnes', week:'Aktuální týden', prevWeek:'Předchozí týden', month:'Tento měsíc', prevMonth:'Poslední celý měsíc', year:'Poslední rok', inclVat:'vč. DPH', exclVat:'bez DPH', vatNote:'Částky jsou vč. DPH (v závorce bez DPH, sazba 21 %).', m12:'Posledních 12 měsíců', d30:'Posledních 30 dní', close:'Zavřít', back:'Zpět', loading:'Načítám tržby…', err:'Tržby se nepodařilo načíst.', clickHint:'Klepni na kartu období a uvidíš jednotlivé transakce.', txTitle:'Transakce', dt:'Datum a čas', type:'Typ', desc:'Popis', status:'Stav', amount:'Částka', revenue:'Tržby (úspěšné)', count:'Transakcí', noTx:'Žádné transakce v tomto období.', source:'Součet transakcí ze SIS' }
+  };
+  function pRevT(k){ var d=REV_T[pRevLang()]||REV_T.en; return d[k]!=null?d[k]:(REV_T.en[k]||k); }
+  function revMoney(n, cur){ n=Math.round(Number(n)||0); var loc=pRevLang()==='cs'?'cs-CZ':'en-US'; var s; try{ s=n.toLocaleString(loc); }catch(_){ s=String(n); } var sym={CZK:'Kč',EUR:'€',USD:'$',GBP:'£'}[cur]||cur; return cur==='CZK'?(s+' '+sym):(sym+' '+s); }
+  function revEsc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
+  function revToken(){ return window._portalToken || (function(){ try{ return localStorage.getItem('compounder.portal.token')||''; }catch(_){ return ''; } })(); }
+  window.openPortalRevStats = function(code, label){
+    try { pTrack('revstats_open', { code: code }); } catch(e){}
+    var ov = document.createElement('div');
+    ov.id = 'revModal';
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:12000;display:flex;align-items:flex-start;justify-content:center;padding:24px 12px;overflow:auto';
+    ov.onclick = function(e){ if(e.target===ov) ov.remove(); };
+    ov.innerHTML = '<div style="background:var(--bg-2,#141416);border:1px solid var(--line,#2a2a2e);border-radius:16px;max-width:680px;width:100%;padding:20px 18px;box-shadow:0 20px 60px rgba(0,0,0,.5)">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:4px"><div style="font-weight:800;font-size:17px;color:var(--gold-soft,#e6cf8f)">📊 ' + pRevT('title') + ' — ' + revEsc(label||code) + '</div><button type="button" onclick="document.getElementById(\'revModal\').remove()" style="background:none;border:1px solid var(--line,#333);color:var(--muted,#999);border-radius:10px;padding:7px 12px;cursor:pointer;font:inherit">' + pRevT('close') + '</button></div>' +
+      '<div id="rev-body" style="margin-top:12px;color:var(--muted,#aaa)">' + pRevT('loading') + '</div>' +
+    '</div>';
+    document.body.appendChild(ov);
+    fetch('/api/compounder/portal/kiosk-revenue?t=' + encodeURIComponent(revToken()) + '&code=' + encodeURIComponent(code), { credentials:'include' })
+      .then(function(r){ return r.json().then(function(j){ return {ok:r.ok, j:j}; }); })
+      .then(function(res){
+        var body = document.getElementById('rev-body'); if(!body) return;
+        if(!res.ok){ body.innerHTML = '<div style="color:#f0a">' + revEsc((res.j&&res.j.error)||pRevT('err')) + '</div>'; return; }
+        var d = res.j, cur = d.currency || 'CZK';
+        function card(lbl, val, pk){
+          return '<div onclick="openPortalRevPeriod(\'' + revEsc(code).replace(/\x27/g,"&#39;") + '\',\'' + pk + '\',\'' + revEsc(label||code).replace(/\x27/g,"&#39;") + '\')" style="flex:1;min-width:120px;background:var(--surface,#1c1c1f);border:1px solid var(--line,#2a2a2e);border-radius:12px;padding:12px 14px;cursor:pointer;transition:border-color .15s" onmouseover="this.style.borderColor=\'var(--gold-soft,#cda454)\'" onmouseout="this.style.borderColor=\'var(--line,#2a2a2e)\'">' +
+            '<div style="font-size:10.5px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted,#999);display:flex;justify-content:space-between;align-items:center">' + lbl + '<span style="color:var(--gold-soft,#cda454)">›</span></div>' +
+            '<div style="font-size:19px;font-weight:800;color:var(--gold-soft,#e6cf8f);margin-top:4px">' + revMoney(val, cur) + '</div>' +
+            '<div style="font-size:10.5px;color:var(--muted,#888);margin-top:2px">' + pRevT('exclVat') + ' ' + revMoney((val||0)/1.21, cur) + '</div>' +
+          '</div>';
+        }
+        function bars(arr, color){ arr=arr||[]; var max=1; arr.forEach(function(x){ if(x.amount>max)max=x.amount; }); return '<div style="display:flex;align-items:flex-end;gap:2px;height:80px;margin-top:6px">' + arr.map(function(x){ var h=Math.round((x.amount/max)*100); return '<div title="' + revEsc(x.label+': '+revMoney(x.amount,cur)) + '" style="flex:1;min-width:0;height:100%;display:flex;flex-direction:column;justify-content:flex-end;align-items:center"><div style="width:72%;height:' + h + '%;min-height:2px;background:' + color + ';border-radius:3px 3px 0 0"></div></div>'; }).join('') + '</div>'; }
+        function labels(arr, every){ arr=arr||[]; return '<div style="display:flex;gap:2px;margin-top:2px">' + arr.map(function(x,i){ return '<div style="flex:1;min-width:0;text-align:center;font-size:9px;color:var(--muted,#888);overflow:hidden">' + ((i%(every||1)===0)?revEsc(x.label):'') + '</div>'; }).join('') + '</div>'; }
+        body.innerHTML = '<div style="display:flex;gap:10px;flex-wrap:wrap">' +
+          card(pRevT('today'), d.day, 'day') + card(pRevT('week'), d.thisWeek, 'thisWeek') + card(pRevT('prevWeek'), d.prevWeek, 'prevWeek') +
+          card(pRevT('month'), d.thisMonth, 'thisMonth') + card(pRevT('prevMonth'), d.prevMonth, 'prevMonth') + card(pRevT('year'), d.year, 'year') +
+          '</div>' +
+          '<div style="font-size:11px;color:var(--muted,#888);margin-top:8px">' + pRevT('vatNote') + '</div>' +
+          '<div style="font-size:11px;color:var(--gold-soft,#cda454);margin-top:4px">💡 ' + pRevT('clickHint') + '</div>' +
+          '<div style="margin-top:16px;font-size:11px;font-weight:700;color:var(--muted,#999);text-transform:uppercase;letter-spacing:.5px">📈 ' + pRevT('m12') + '</div>' + bars(d.monthly, 'var(--gold-soft,#cda454)') + labels(d.monthly, 1) +
+          '<div style="margin-top:16px;font-size:11px;font-weight:700;color:var(--muted,#999);text-transform:uppercase;letter-spacing:.5px">📅 ' + pRevT('d30') + '</div>' + bars(d.daily, '#8aa0c9') + labels(d.daily, 5) +
+          '<div style="color:var(--muted,#888);font-size:10.5px;margin-top:12px;border-top:1px solid var(--line,#2a2a2e);padding-top:8px">' + pRevT('source') + (d.generatedAt ? (' · ' + new Date(d.generatedAt).toLocaleString(pRevLang()==='cs'?'cs-CZ':'en-US')) : '') + '</div>';
+      })
+      .catch(function(){ var b=document.getElementById('rev-body'); if(b) b.innerHTML = '<div style="color:#f0a">' + pRevT('err') + '</div>'; });
+  };
+  window.openPortalRevPeriod = function(code, period, label){
+    try { pTrack('revstats_period', { code: code, period: period }); } catch(e){}
+    var titles = { day:pRevT('today'), thisWeek:pRevT('week'), prevWeek:pRevT('prevWeek'), thisMonth:pRevT('month'), prevMonth:pRevT('prevMonth'), year:pRevT('year') };
+    var ov = document.createElement('div');
+    ov.setAttribute('data-revperiod','1');
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:12001;display:flex;align-items:flex-start;justify-content:center;padding:24px 12px;overflow:auto';
+    ov.onclick = function(e){ if(e.target===ov) ov.remove(); };
+    ov.innerHTML = '<div style="background:var(--bg-2,#141416);border:1px solid var(--line,#2a2a2e);border-radius:16px;max-width:640px;width:100%;padding:20px 18px">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px"><div style="font-weight:800;font-size:16px;color:var(--gold-soft,#e6cf8f)">🧾 ' + pRevT('txTitle') + ' — ' + revEsc(titles[period]||'') + '</div><button type="button" onclick="this.closest(\'[data-revperiod]\').remove()" style="background:none;border:1px solid var(--line,#333);color:var(--muted,#999);border-radius:10px;padding:7px 12px;cursor:pointer;font:inherit">' + pRevT('back') + '</button></div>' +
+      '<div id="revp-body" style="color:var(--muted,#aaa)">' + pRevT('loading') + '</div>' +
+    '</div>';
+    document.body.appendChild(ov);
+    fetch('/api/compounder/portal/kiosk-revenue/transactions?t=' + encodeURIComponent(revToken()) + '&code=' + encodeURIComponent(code) + '&period=' + encodeURIComponent(period), { credentials:'include' })
+      .then(function(r){ return r.json().then(function(j){ return {ok:r.ok, j:j}; }); })
+      .then(function(res){
+        var body = ov.querySelector('#revp-body'); if(!body) return;
+        if(!res.ok){ body.innerHTML = '<div style="color:#f0a">' + revEsc((res.j&&res.j.error)||pRevT('err')) + '</div>'; return; }
+        var d = res.j, cur = d.currency || 'CZK', txs = d.transactions || [];
+        var head = '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">' +
+          '<div style="flex:1;min-width:130px;background:var(--surface,#1c1c1f);border:1px solid var(--line,#2a2a2e);border-radius:12px;padding:11px 13px"><div style="font-size:10.5px;text-transform:uppercase;color:var(--muted,#999)">' + pRevT('revenue') + '</div><div style="font-size:17px;font-weight:800;color:var(--gold-soft,#e6cf8f);margin-top:2px">' + revMoney(d.successfulSum, cur) + '</div><div style="font-size:10.5px;color:var(--muted,#888)">' + pRevT('exclVat') + ' ' + revMoney((d.successfulSum||0)/1.21, cur) + '</div></div>' +
+          '<div style="flex:1;min-width:130px;background:var(--surface,#1c1c1f);border:1px solid var(--line,#2a2a2e);border-radius:12px;padding:11px 13px"><div style="font-size:10.5px;text-transform:uppercase;color:var(--muted,#999)">' + pRevT('count') + '</div><div style="font-size:17px;font-weight:800;margin-top:2px">' + (d.count||0) + '</div></div>' +
+        '</div>';
+        if(!txs.length){ body.innerHTML = head + '<div style="color:var(--muted,#888)">' + pRevT('noTx') + '</div>'; return; }
+        var loc = pRevLang()==='cs'?'cs-CZ':'en-US';
+        var rows = txs.map(function(t){
+          var dt = t.datetime ? new Date(t.datetime).toLocaleString(loc) : '—';
+          return '<tr style="border-top:1px solid var(--line,#2a2a2e)"><td style="padding:6px 8px;white-space:nowrap">' + revEsc(dt) + '</td><td style="padding:6px 8px">' + revEsc(t.description||t.type||'') + '</td><td style="padding:6px 8px;white-space:nowrap;font-size:11px;color:' + (String(t.status)==='Successful'?'#4ade80':'var(--muted,#999)') + '">' + revEsc(t.status||'') + '</td><td style="padding:6px 8px;text-align:right;white-space:nowrap;font-weight:700">' + revMoney(t.amount, t.currency||cur) + '</td></tr>';
+        }).join('');
+        body.innerHTML = head + '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12.5px"><thead><tr style="color:var(--muted,#999);text-align:left"><th style="padding:6px 8px">' + pRevT('dt') + '</th><th style="padding:6px 8px">' + pRevT('desc') + '</th><th style="padding:6px 8px">' + pRevT('status') + '</th><th style="padding:6px 8px;text-align:right">' + pRevT('amount') + '</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+      })
+      .catch(function(){ var b=ov.querySelector('#revp-body'); if(b) b.innerHTML = '<div style="color:#f0a">' + pRevT('err') + '</div>'; });
+  };
+
   window._resO = null; window._resMode = 'reserve';
   window.closeReserveModal = function(){ var m=document.getElementById("resModal"); if(m) m.remove(); };
   function resField(id,label,ph,type){
