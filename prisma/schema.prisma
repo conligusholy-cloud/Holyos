@@ -4439,6 +4439,8 @@ model Site {
   owner_phone   String? @db.VarChar(40)
   owner_email   String? @db.VarChar(255)
   owner_note    String? @db.Text
+  // Poznámky obchodníka (editovatelný scratchpad, oddělené od owner_note zájemce).
+  sales_notes   String? @db.Text
   company_id    Int?
   company       Company? @relation("SiteCompany", fields: [company_id], references: [id], onDelete: SetNull)
 

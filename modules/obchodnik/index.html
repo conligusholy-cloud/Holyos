@@ -246,10 +246,84 @@
         '</div></div>' +
         (s.capacity_note?'<div class="field"><label>Kapacita / poznámka</label><div style="font-size:14px;white-space:pre-wrap">'+esc(s.capacity_note)+'</div></div>':'') +
         (s.owner_note?'<div class="field"><label>Poznámka zájemce</label><div style="font-size:14px;white-space:pre-wrap">'+esc(s.owner_note)+'</div></div>':'') +
+        '<div class="field"><label>Stav</label>'+lokStatusSel(s)+'</div>' +
+        '<div class="field"><label>Zaznamenat aktivitu</label>' +
+          '<div class="quick"><input class="qinput" id="lokact-'+s.id+'" placeholder="Zavolal jsem, má zájem…"><button class="btn btn-p" onclick="lokAddActivity('+s.id+')">Přidat</button></div>' +
+          '<div style="display:flex;gap:8px;margin-top:8px">' +
+            (SPEECH_OK ? '<button class="btn btn-g" style="flex:1" id="lokmic-'+s.id+'" onclick="lokDictate('+s.id+')">🎤 Diktovat</button>' : '') +
+            '<button class="btn btn-g" style="flex:1" id="lokcalltimer-'+s.id+'" onclick="lokToggleCall('+s.id+')">⏱️ Zaznamenat hovor</button>' +
+          '</div>' +
+        '</div>' +
+        '<div class="field"><label>Aktivity</label><div id="lokactlog-'+s.id+'" class="note-log">'+lokActivityText(s)+'</div></div>' +
+        '<div class="field"><label>Poznámky <span class="saved" id="loksaved-'+s.id+'"></span></label><textarea id="loknotes-'+s.id+'" placeholder="Sem si napiš cokoli…" onblur="lokSaveNotes('+s.id+',this.value)">'+esc(s.sales_notes||'')+'</textarea></div>' +
         '<div style="font-size:12px;color:var(--muted);margin-top:6px">Přijato: '+lokDateOnly(s.created_at)+'</div>' +
       '</div>' +
     '</div>';
   }
+  var LOK_ST = { lead:'Nová nabídka', researching:'Prověřuje se', negotiating:'Vyjednává se', contract:'Smlouva', operational:'V provozu', rejected:'Zamítnuto', lost:'Ztraceno' };
+  var LOK_CH = { call:'Hovor', email:'E-mail', meeting:'Schůzka', sms:'SMS', note:'Poznámka' };
+  function lokStatusSel(s){
+    var opts = Object.keys(LOK_ST).map(function(k){ return '<option value="'+k+'"'+(s.status===k?' selected':'')+'>'+LOK_ST[k]+'</option>'; }).join('');
+    return '<select onchange="lokSetStatus('+s.id+',this.value)">'+opts+'</select>';
+  }
+  function lokActivityText(s){
+    var arr = s.communications || [];
+    if (!arr.length) return 'Zatím žádná aktivita.';
+    return arr.map(function(c){
+      var who = c.author ? (((c.author.first_name||'')+' '+(c.author.last_name||'')).trim()) : '';
+      var ch = LOK_CH[c.channel] || '';
+      var head = fmtD(new Date(c.occurred_at)) + (ch?(' · '+ch):'') + (who?(' · '+who):'');
+      return head + '\n' + (c.body||'');
+    }).join('\n\n');
+  }
+  async function lokSetStatus(id, val){
+    try {
+      var r = await fetch('/api/sites/'+id, { method:'PUT', credentials:'include', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ status: val }) });
+      if (!r.ok) throw new Error();
+      var it = lokState.items.filter(function(x){return x.id===id;})[0]; if (it) it.status = val;
+    } catch(e){ alert('Stav se nepodařilo uložit.'); }
+  }
+  async function lokAddActivity(id){
+    var inp = document.getElementById('lokact-'+id); var txt=(inp.value||'').trim(); if(!txt) return;
+    inp.value='';
+    try {
+      var r = await fetch('/api/sites/'+id+'/communications', { method:'POST', credentials:'include', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ channel:'note', body: txt }) });
+      if(!r.ok) throw new Error();
+      var c = await r.json();
+      var it = lokState.items.filter(function(x){return x.id===id;})[0];
+      if (it){ it.communications = it.communications||[]; it.communications.unshift(c); }
+      var log = document.getElementById('lokactlog-'+id); if(log && it) log.textContent = lokActivityText(it);
+    } catch(e){ inp.value=txt; alert('Aktivitu se nepodařilo uložit.'); }
+  }
+  var lokRecog=null, lokRecogBtn=null;
+  function lokDictate(id){
+    var SR = window.SpeechRecognition||window.webkitSpeechRecognition;
+    var inp=document.getElementById('lokact-'+id); var btn=document.getElementById('lokmic-'+id);
+    if(!SR){ alert('Diktování v tomto prohlížeči není podporováno (funguje hlavně na Androidu a v Chrome).'); return; }
+    if(lokRecog){ try{lokRecog.stop();}catch(e){} return; }
+    lokRecog=new SR(); lokRecogBtn=btn; lokRecog.lang='cs-CZ'; lokRecog.interimResults=false; lokRecog.continuous=true;
+    lokRecog.onresult=function(e){ var t=''; for(var i=e.resultIndex;i<e.results.length;i++){t+=e.results[i][0].transcript;} if(inp) inp.value=(inp.value?inp.value+' ':'')+t.trim(); };
+    lokRecog.onend=function(){ if(lokRecogBtn) lokRecogBtn.textContent='🎤 Diktovat'; lokRecog=null; lokRecogBtn=null; };
+    lokRecog.onerror=lokRecog.onend;
+    if(btn) btn.textContent='● Nahrávám… (klepni pro stop)';
+    try{ lokRecog.start(); }catch(e){}
+  }
+  var lokCallTimers={};
+  function lokToggleCall(id){
+    var btn=document.getElementById('lokcalltimer-'+id); var inp=document.getElementById('lokact-'+id);
+    var t=lokCallTimers[id];
+    if(!t){ lokCallTimers[id]={start:Date.now(),interval:setInterval(function(){ if(!lokCallTimers[id]||!btn)return; btn.textContent='● Ukončit hovor ('+fmtDur(Math.floor((Date.now()-lokCallTimers[id].start)/1000))+')'; },1000)}; if(btn) btn.textContent='● Ukončit hovor (00:00)'; }
+    else { clearInterval(t.interval); var s=Math.floor((Date.now()-t.start)/1000); delete lokCallTimers[id]; if(btn) btn.textContent='⏱️ Zaznamenat hovor'; if(inp){ inp.value='Hovor '+fmtDur(s)+' – '+(inp.value||''); inp.focus(); } }
+  }
+  async function lokSaveNotes(id, val){
+    try {
+      var r = await fetch('/api/sites/'+id, { method:'PUT', credentials:'include', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ sales_notes: val }) });
+      if(!r.ok) throw new Error();
+      var it = lokState.items.filter(function(x){return x.id===id;})[0]; if(it) it.sales_notes = val;
+      var sv = document.getElementById('loksaved-'+id); if(sv){ sv.textContent='uloženo'; setTimeout(function(){ if(sv) sv.textContent=''; },1500); }
+    } catch(e){ alert('Poznámku se nepodařilo uložit.'); }
+  }
+  window.lokSetStatus = lokSetStatus; window.lokAddActivity = lokAddActivity; window.lokDictate = lokDictate; window.lokToggleCall = lokToggleCall; window.lokSaveNotes = lokSaveNotes;
   function lokToggle(id){ lokState.openId = (lokState.openId===id)?null:id; renderLokalitySec(); }
   window.lokToggle = lokToggle;
 

@@ -138,12 +138,20 @@ router.get('/my', async (req, res, next) => {
       take: 300,
       select: {
         id: true, created_at: true, status: true, site_type: true,
-        owner_name: true, owner_phone: true, owner_email: true, owner_note: true,
+        owner_name: true, owner_phone: true, owner_email: true, owner_note: true, sales_notes: true,
         address: true, city: true, zip: true, country: true,
         latitude: true, longitude: true, map_link: true,
         water_supply: true, sewage: true, parking: true, electricity_kw: true,
         utility_points: true, is_property_owner: true, capacity_note: true,
         footprint_rotation: true, footprint_w_mm: true, footprint_h_mm: true,
+        communications: {
+          orderBy: { occurred_at: 'desc' },
+          take: 40,
+          select: {
+            id: true, channel: true, body: true, occurred_at: true,
+            author: { select: { first_name: true, last_name: true } },
+          },
+        },
       },
     });
     res.json({ items });
@@ -287,6 +295,7 @@ router.post('/', async (req, res, next) => {
 const siteUpdateSchema = siteCreateSchema.partial().extend({
   rejection_reason: z.string().optional().nullable(),
   pradlomat_ref: z.string().max(255).optional().nullable(),
+  sales_notes: z.string().optional().nullable(),
 });
 
 router.put('/:id(\\d+)', async (req, res, next) => {
@@ -303,7 +312,7 @@ router.put('/:id(\\d+)', async (req, res, next) => {
       'map_link','owner_name','owner_phone','owner_email','owner_note',
       'rent_currency','contract_terms','capacity_note','cadastral_area',
       'cadastral_parcel','cadastral_lv','cadastral_link','pros','cons',
-      'rejection_reason','pradlomat_ref',
+      'rejection_reason','pradlomat_ref','sales_notes',
     ];
     for (const k of passthrough) if (k in d) upd[k] = d[k] ?? null;
 
