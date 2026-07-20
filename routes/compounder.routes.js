@@ -1832,11 +1832,9 @@ async function _computeKioskRevenue(code, fresh) {
     const txs = Array.isArray(payload.transactions) ? payload.transactions : [];
     if (typeof payload.total === 'number') total = payload.total;
     if (!txs.length) { complete = true; break; }
-    let allOlder = true;
     for (const t of txs) {
       const ts = t.datetime ? new Date(t.datetime).getTime() : 0;
       const inRange = ts && ts >= chartCut;
-      if (inRange) allOlder = false;
       if (String(t.status) !== 'Successful') continue;
       const amt = Number(t.amount) || 0;
       if (!currency && t.currency) currency = t.currency;
@@ -1855,7 +1853,6 @@ async function _computeKioskRevenue(code, fresh) {
       }
     }
     offset += txs.length; pages++;
-    if (allOlder) { complete = true; break; }
     if (total && offset >= total) { complete = true; break; }
   }
   const monthsArr = [];
@@ -1928,11 +1925,9 @@ async function _computeKioskPeriodTx(code, period) {
     const txs = Array.isArray(payload.transactions) ? payload.transactions : [];
     if (typeof payload.total === 'number') total = payload.total;
     if (!txs.length) { complete = true; break; }
-    let allOlder = true;
     for (const t of txs) {
       const ts = t.datetime ? new Date(t.datetime).getTime() : 0;
       if (!ts) continue;
-      if (ts >= start) allOlder = false;
       if (ts >= start && ts < end) {
         if (!currency && t.currency) currency = t.currency;
         if (String(t.status) === 'Successful') successfulSum += (Number(t.amount) || 0);
@@ -1940,7 +1935,6 @@ async function _computeKioskPeriodTx(code, period) {
       }
     }
     offset += txs.length; pages++;
-    if (allOlder) { complete = true; break; }
     if (total && offset >= total) { complete = true; break; }
   }
   out.sort((a, b) => new Date(b.datetime).getTime() - new Date(a.datetime).getTime());
