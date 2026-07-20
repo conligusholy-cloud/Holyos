@@ -2180,6 +2180,7 @@ router.post('/kiosk-config/:code/photos', requireAuth, kioskPhotoUpload.array('p
     const next_ = (map && typeof map === 'object') ? { ...map } : {};
     const cur = next_[code] || {};
     const photos = Array.isArray(cur.photos) ? cur.photos.slice() : [];
+    const newUrls = [];
 
     for (const f of files) {
       if (photos.length >= 3) break;
@@ -2187,10 +2188,17 @@ router.post('/kiosk-config/:code/photos', requireAuth, kioskPhotoUpload.array('p
       const ext = (f.mimetype === 'image/png') ? '.png' : (f.mimetype === 'image/webp') ? '.webp' : '.jpg';
       const key = 'compounding/' + code + '/' + crypto.randomUUID() + ext;
       const { url } = await r2Put(key, f.buffer, f.mimetype);
-      if (url) photos.push(url);
+      if (url) { photos.push(url); newUrls.push(url); }
     }
 
-    next_[code] = { ...cur, photos: photos.slice(0, 3) };
+    // Automatická detekce středu prádlomatu u nových fotek (Claude vision).
+    const focusMap = (cur.photoFocus && typeof cur.photoFocus === 'object') ? { ...cur.photoFocus } : {};
+    try {
+      const { detectPhotoFocus } = require('../services/compounder/photo-focus');
+      for (const u of newUrls) { const fp = await detectPhotoFocus(u); if (fp) focusMap[u] = fp; }
+    } catch (e) { /* detekce je best-effort */ }
+
+    next_[code] = { ...cur, photos: photos.slice(0, 3), photoFocus: focusMap };
     await setSetting(COMPOUNDING_KIOSKS_KEY, next_, {
       type: 'json', scope: 'compounding',
       description: 'Compounding — per-lokalita: verze kiosku + nájem + fotky',
@@ -3399,6 +3407,34 @@ async function portalKiosks() {
   }
 }
 
+// Lazy doplnění středu prádlomatu (Claude vision) u fotek, které ho ještě nemají.
+// Běží na pozadí, max pár detekcí na běh, aby to nezatěžovalo ani neopakovalo.
+let _focusBgRunning = false;
+async function _ensurePhotoFocusBg() {
+  if (_focusBgRunning) return;
+  _focusBgRunning = true;
+  try {
+    const { detectPhotoFocus } = require('../services/compounder/photo-focus');
+    const map = (await getSetting(COMPOUNDING_KIOSKS_KEY, { type: 'json', defaultValue: {} })) || {};
+    let changed = false, done = 0;
+    for (const code of Object.keys(map)) {
+      if (done >= 5) break;
+      const cfg = map[code] || {};
+      const photos = Array.isArray(cfg.photos) ? cfg.photos : [];
+      if (!photos.length) continue;
+      const focus = (cfg.photoFocus && typeof cfg.photoFocus === 'object') ? cfg.photoFocus : {};
+      const u = photos[0];
+      if (focus[u]) continue;
+      const fp = await detectPhotoFocus(u);
+      done++;
+      focus[u] = fp || { fx: 50, fy: 50 }; // i neúspěch uložíme (default střed), ať to nezkoušíme donekonečna
+      map[code] = { ...cfg, photoFocus: focus };
+      changed = true;
+    }
+    if (changed) await setSetting(COMPOUNDING_KIOSKS_KEY, map, { type: 'json', scope: 'compounding', description: 'Compounding kiosk config (photoFocus)' });
+  } catch (e) { /* best-effort */ } finally { _focusBgRunning = false; }
+}
+
 // Sdílený výpočet nabídky lokalit pro daného leada (globální forSale + jeho VIP).
 // Používá veřejný token endpoint i admin náhled (ikonka v HolyOS / u obchodníka).
 async function buildOfferedLocations(leadId, opts) {
@@ -3481,6 +3517,7 @@ async function buildOfferedLocations(leadId, opts) {
           individual: isIndividual,
           noPhoto: !(Array.isArray(cfg.photos) && cfg.photos.length > 0),
           photos: Array.isArray(cfg.photos) ? cfg.photos : [],
+          thumbFocus: (function(){ var ps = Array.isArray(cfg.photos) ? cfg.photos : []; var fm = (cfg.photoFocus && typeof cfg.photoFocus === 'object') ? cfg.photoFocus : {}; return (ps[0] && fm[ps[0]]) ? fm[ps[0]] : null; })(),
         };
       })
       // Lokality bez fotky: na portálu skrýt, v admin/obchodník náhledu ponechat (s flagem noPhoto).
@@ -3491,6 +3528,7 @@ async function buildOfferedLocations(leadId, opts) {
         return (b.yearlyYield || 0) - (a.yearlyYield || 0);
       });
 
+    try { _ensurePhotoFocusBg(); } catch (e) {}
     return { ok: true, currency: 'CZK', defaultCurrency: defCur, eurRate: eur, rates: fx, feePerDayCzk: feePerDay, reservation: { feePerDayCzk: feePerDay, holdHours, signDays, payDays, reblockDays }, count: list.length, locations: list };
 }
 
@@ -3522,7 +3560,7 @@ router.get('/portal/kiosk-revenue', async (req, res, next) => {
   try {
     const g = await _portalRevenueGate(req.query.t, req.query.code);
     if (g.status) return res.status(g.status).json({ ok: false, error: g.error });
-    const data = await _computeKioskRevenue(req.query.code, false);
+    const data = await _computeKioskRevenue(req.query.code, req.query.fresh === '1');
     res.json(data);
   } catch (err) { _sisErrToHttp(err, res, next); }
 });
