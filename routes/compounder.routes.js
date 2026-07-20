@@ -1895,13 +1895,19 @@ async function _computeKioskPeriodTx(code, period) {
   const startThisMonth = new Date(nowD.getFullYear(), nowD.getMonth(), 1).getTime();
   const startPrevMonth = new Date(nowD.getFullYear(), nowD.getMonth() - 1, 1).getTime();
   const yearRoll = now - 365 * 86400000;
+  // Hranice ve stejném rámci jako časy transakcí (SIS vrací lokální čas bez zóny).
+  // Nepoužíváme reálné „teď" jako horní mez — kvůli TZ serveru by to ořízlo dnešní
+  // transakce. Bereme přirozený konec dne/týdne/měsíce.
+  const startTomorrow = startToday + 86400000;
+  const startNextWeek = startThisWeek + 7 * 86400000;
+  const startNextMonth = new Date(nowD.getFullYear(), nowD.getMonth() + 1, 1).getTime();
   const RANGES = {
-    day: [startToday, now + 1],
-    thisWeek: [startThisWeek, now + 1],
+    day: [startToday, startTomorrow],
+    thisWeek: [startThisWeek, startNextWeek],
     prevWeek: [startPrevWeek, startThisWeek],
-    thisMonth: [startThisMonth, now + 1],
+    thisMonth: [startThisMonth, startNextMonth],
     prevMonth: [startPrevMonth, startThisMonth],
-    year: [yearRoll, now + 1],
+    year: [yearRoll, startTomorrow],
   };
   const range = RANGES[period];
   if (!range) { const e = new Error('BAD_PERIOD'); e.code = 'BAD_PERIOD'; throw e; }
