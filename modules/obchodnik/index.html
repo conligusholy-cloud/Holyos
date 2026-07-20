@@ -245,6 +245,7 @@
   function renderLokalitySec(){
     var box = document.getElementById('lokality-sec');
     if (!box) return;
+    if ((state.typeFilter || 'all') === 'compounder'){ box.innerHTML=''; return; }
     if (!lokState.items.length){ box.innerHTML=''; return; }
     var f = lokState.filter || 'all';
     var filtered = (f === 'all') ? lokState.items : lokState.items.filter(function(s){ return s.status === f; });
@@ -490,13 +491,18 @@
   function lokToggle(id){ lokState.openId = (lokState.openId===id)?null:id; renderLokalitySec(); }
   window.lokToggle = lokToggle;
 
+  // Horní filtr = TYP kontaktu (Vše / Lokality / Compoundeři).
   function renderChips(){
-    var chips = [['','Vše']].concat(Object.keys(STATUS).map(function(k){ return [k, STATUS[k].l]; }));
+    var chips = [['all','Vše'],['lokality','📍 Lokality'],['compounder','🌐 Compoundeři']];
+    var t = state.typeFilter || 'all';
     document.getElementById('chips').innerHTML = chips.map(function(c){
-      return '<div class="chip'+(state.filter===c[0]?' active':'')+'" onclick="setFilter(\''+c[0]+'\')">'+c[1]+'</div>';
+      return '<div class="chip'+(t===c[0]?' active':'')+'" onclick="setType(\''+c[0]+'\')">'+c[1]+'</div>';
     }).join('');
   }
-  function setFilter(f){ state.filter=f; renderChips(); load(); }
+  function setType(t){ state.typeFilter = t; renderChips(); renderLokalitySec(); render(); }
+  window.setType = setType;
+  function setLeadStatus(val){ state.leadStatusFilter = val; render(); }
+  window.setLeadStatus = setLeadStatus;
   var searchTimer=null;
   function onSearch(){ clearTimeout(searchTimer); searchTimer=setTimeout(function(){ state.search=document.getElementById('search').value.trim(); load(); }, 300); }
 
@@ -504,7 +510,7 @@
     var box = document.getElementById('content');
     box.innerHTML = '<div class="loading">Načítám…</div>';
     try {
-      var qs = new URLSearchParams({ status: state.filter, search: state.search }).toString();
+      var qs = new URLSearchParams({ status: '', search: state.search }).toString();
       var r = await api('/my-leads?' + qs);
       if (!r.ok) throw new Error('HTTP '+r.status);
       state.leads = await r.json();
@@ -514,8 +520,25 @@
 
   function render(){
     var box = document.getElementById('content');
-    if (!state.leads.length){ box.innerHTML = '<div class="empty">Zatím žádné přiřazené kontakty.</div>'; return; }
-    box.innerHTML = '<div class="list">' + state.leads.map(cardHtml).join('') + '</div>';
+    if ((state.typeFilter || 'all') === 'lokality'){ box.innerHTML = ''; return; }
+    var leads = state.leads || [];
+    if (!leads.length){ box.innerHTML = '<div class="empty">Zatím žádné přiřazené kontakty.</div>'; return; }
+    var f = state.leadStatusFilter || '';
+    var filtered = f ? leads.filter(function(l){ return (l.status||'new') === f; }) : leads;
+    var opts = '<option value="">Všechny stavy ('+leads.length+')</option>' +
+      Object.keys(STATUS).map(function(k){
+        var n = leads.filter(function(l){ return (l.status||'new') === k; }).length;
+        return '<option value="'+k+'"'+(f===k?' selected':'')+'>'+STATUS[k].l+' ('+n+')</option>';
+      }).join('');
+    var head = '<div style="display:flex;align-items:center;gap:8px;margin:14px 12px 8px;flex-wrap:wrap">' +
+      '<span style="font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">🌐 Compounder kontakty</span>' +
+      '<span style="background:var(--primary);color:#04121e;border-radius:10px;padding:1px 8px;font-size:12px">'+leads.length+'</span>' +
+      '<select onchange="setLeadStatus(this.value)" style="margin-left:auto">'+opts+'</select>' +
+      '</div>';
+    var listHtml = filtered.length
+      ? ('<div class="list">' + filtered.map(cardHtml).join('') + '</div>')
+      : '<div class="empty">Žádný kontakt v tomto stavu.</div>';
+    box.innerHTML = head + listHtml;
     if (state.openId){ loadActivity(state.openId); loadReservations(state.openId); }
   }
 
