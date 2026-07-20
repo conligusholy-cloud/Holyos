@@ -83,6 +83,7 @@
   <div class="chips" id="chips"></div>
   <div id="myplan" style="padding:0 12px"></div>
   <div id="lokality-sec" style="padding:0 12px"></div>
+  <div id="calendar-sec" style="padding:0 12px"></div>
   <div id="content"><div class="loading">Načítám…</div></div>
 
   <button class="fab" onclick="openAdd()">+ Nový kontakt</button>
@@ -131,6 +132,23 @@
         <button class="btn btn-p" style="flex:2" id="ns-save" onclick="saveSettings()">Uložit</button>
       </div>
       <p id="ns-msg" style="font-size:12px;margin:8px 0 0;min-height:16px"></p>
+    </div>
+  </div>
+
+  <div class="modal" id="meeting-modal">
+    <div class="sheet">
+      <h2 id="mt-title-h">Nová schůzka</h2>
+      <input type="hidden" id="mt-site"><input type="hidden" id="mt-lead">
+      <div class="field"><label>Název</label><input class="qinput" id="mt-title" placeholder="Schůzka"></div>
+      <div class="field"><label>Začátek</label><input class="qinput" id="mt-start" type="datetime-local"></div>
+      <div class="field"><label>Konec</label><input class="qinput" id="mt-end" type="datetime-local"></div>
+      <div class="field"><label>Místo</label><input class="qinput" id="mt-loc" placeholder="Adresa / online"></div>
+      <div class="field"><label>Poznámka</label><textarea id="mt-note" placeholder="Detaily…"></textarea></div>
+      <div class="actions-row">
+        <button class="btn btn-g" style="flex:1" onclick="closeMeeting()">Zrušit</button>
+        <button class="btn btn-p" style="flex:2" id="mt-save" onclick="saveMeeting()">Uložit schůzku</button>
+      </div>
+      <p id="mt-err" style="color:#fca5a5;font-size:13px;margin:8px 0 0;min-height:16px"></p>
     </div>
   </div>
 
@@ -187,6 +205,7 @@
       await load();
       loadMyPlan();
       loadLokalitySec();
+      loadCalendar();
     } catch(e){ /* redirect handled */ }
   }
 
@@ -234,6 +253,7 @@
           (waNum ? '<a href="https://wa.me/'+waNum+'" target="_blank" rel="noopener">💬 WhatsApp</a>' : '') +
           (s.owner_email ? '<a href="mailto:'+esc(s.owner_email)+'">✉️ E-mail</a>' : '') +
         '</div>' +
+        '<div class="field" style="margin-top:8px"><button class="btn btn-g" style="width:100%" onclick="meetingFromSite('+s.id+')">📅 Naplánovat schůzku</button></div>' +
         '<div class="field"><label>Kontakt</label><div style="font-size:14px">'+esc(s.owner_name||'—')+
           (s.owner_phone?'<br>📞 '+esc(s.owner_phone):'')+(s.owner_email?'<br>✉️ '+esc(s.owner_email):'')+
           '<br>🏠 Vlastník místa: '+(s.is_property_owner===true?'Ano':(s.is_property_owner===false?'Ne':'neuvedeno'))+'</div></div>' +
@@ -324,6 +344,78 @@
     } catch(e){ alert('Poznámku se nepodařilo uložit.'); }
   }
   window.lokSetStatus = lokSetStatus; window.lokAddActivity = lokAddActivity; window.lokDictate = lokDictate; window.lokToggleCall = lokToggleCall; window.lokSaveNotes = lokSaveNotes;
+
+  // ─── Kalendář schůzek (SalesEvent ↔ M365) ────────────────────────────────
+  var calState = { items: [] };
+  function _dtLocal(d){ var p=function(n){return(n<10?'0':'')+n;}; return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+'T'+p(d.getHours())+':'+p(d.getMinutes()); }
+  async function loadCalendar(){
+    var box=document.getElementById('calendar-sec'); if(!box) return;
+    try{
+      var now=new Date(); var from=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+      var to=new Date(from.getTime()+31*86400000);
+      var r=await fetch('/api/sales/my-calendar?from='+encodeURIComponent(from.toISOString())+'&to='+encodeURIComponent(to.toISOString()),{credentials:'include'});
+      if(!r.ok){ box.innerHTML=''; return; }
+      var d=await r.json(); var items=[];
+      (d.events||[]).forEach(function(e){ items.push({ id:e.id, source:'holyos', title:e.title, start:e.start_at, end:e.end_at, location:e.location, sync_error:e.graph_sync_error }); });
+      (d.outlook||[]).forEach(function(o){ items.push({ id:o.id, source:'outlook', title:o.title, start:o.start_at, end:o.end_at, location:o.location, web_link:o.web_link }); });
+      calState.items=items.filter(function(x){return x.start;}).sort(function(a,b){ return new Date(a.start)-new Date(b.start); });
+      renderCalendar();
+    }catch(e){ box.innerHTML=''; }
+  }
+  function renderCalendar(){
+    var box=document.getElementById('calendar-sec'); if(!box) return;
+    var items=calState.items||[];
+    var head='<div style="display:flex;align-items:center;justify-content:space-between;margin:14px 2px 8px"><div style="font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">📅 Kalendář schůzek</div><button class="btn btn-p" style="padding:6px 12px" onclick="openMeeting({})">+ Schůzka</button></div>';
+    if(!items.length){ box.innerHTML=head+'<div class="card" style="padding:14px;color:var(--muted2);font-size:13px">Žádné nadcházející schůzky.</div>'; return; }
+    var html=''; var lastDay='';
+    items.forEach(function(x){
+      var dt=new Date(x.start); var dayKey=dt.toLocaleDateString('cs-CZ',{weekday:'long',day:'numeric',month:'numeric'});
+      if(dayKey!==lastDay){ html+='<div style="font-size:12px;color:var(--muted);margin:10px 2px 4px;text-transform:capitalize">'+esc(dayKey)+'</div>'; lastDay=dayKey; }
+      var t=('0'+dt.getHours()).slice(-2)+':'+('0'+dt.getMinutes()).slice(-2);
+      var badge=x.source==='outlook'?'<span style="font-size:10px;background:rgba(0,120,212,.18);color:#4aa3e0;border-radius:6px;padding:1px 6px;margin-left:6px">Outlook</span>':'';
+      var act=x.source==='holyos'?('<span onclick="deleteMeeting('+x.id+')" title="Smazat schůzku" style="cursor:pointer;color:#fca5a5;margin-left:auto">🗑</span>'):(x.web_link?('<a href="'+esc(x.web_link)+'" target="_blank" rel="noopener" style="margin-left:auto">↗</a>'):'');
+      var warn=x.sync_error?'<div style="font-size:11px;color:#eab308;margin-top:2px">⚠ nesynchronizováno do Outlooku</div>':'';
+      html+='<div class="card" style="padding:10px 12px;display:flex;align-items:flex-start;gap:8px"><div style="font-weight:700;min-width:44px">'+t+'</div><div style="flex:1"><div style="font-size:14px">'+esc(x.title||'(bez názvu)')+badge+'</div>'+(x.location?'<div style="font-size:12px;color:var(--muted)">📍 '+esc(x.location)+'</div>':'')+warn+'</div>'+act+'</div>';
+    });
+    box.innerHTML=head+html;
+  }
+  function openMeeting(pf){
+    pf=pf||{};
+    document.getElementById('mt-err').textContent='';
+    document.getElementById('mt-title').value=pf.title||'';
+    document.getElementById('mt-loc').value=pf.location||'';
+    document.getElementById('mt-note').value='';
+    document.getElementById('mt-site').value=pf.site_id||'';
+    document.getElementById('mt-lead').value=pf.compounder_lead_id||'';
+    var start = pf.start? new Date(pf.start) : (function(){ var n=new Date(); n.setMinutes(0,0,0); n.setHours(n.getHours()+1); return n; })();
+    var end=new Date(start.getTime()+3600000);
+    document.getElementById('mt-start').value=_dtLocal(start);
+    document.getElementById('mt-end').value=_dtLocal(end);
+    document.getElementById('meeting-modal').classList.add('open');
+  }
+  function closeMeeting(){ document.getElementById('meeting-modal').classList.remove('open'); }
+  async function saveMeeting(){
+    var title=(document.getElementById('mt-title').value||'').trim();
+    var start=document.getElementById('mt-start').value; var end=document.getElementById('mt-end').value;
+    var err=document.getElementById('mt-err');
+    if(!title){ err.textContent='Zadej název.'; return; }
+    if(!start){ err.textContent='Zadej začátek.'; return; }
+    var btn=document.getElementById('mt-save'); btn.disabled=true;
+    var payload={ title:title, start_at:new Date(start).toISOString(), end_at: end? new Date(end).toISOString(): null, location:(document.getElementById('mt-loc').value||'').trim()||null, description:(document.getElementById('mt-note').value||'').trim()||null, event_type:'meeting' };
+    var sid=document.getElementById('mt-site').value; var lid=document.getElementById('mt-lead').value;
+    if(sid) payload.site_id=parseInt(sid,10); if(lid) payload.compounder_lead_id=parseInt(lid,10);
+    try{
+      var r=await fetch('/api/sales/events',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+      var j=await r.json().catch(function(){return{};});
+      if(!r.ok) throw new Error(j.error||'Chyba');
+      closeMeeting(); loadCalendar();
+    }catch(e){ err.textContent='Uložení selhalo: '+e.message; } finally{ btn.disabled=false; }
+  }
+  async function deleteMeeting(id){ if(!confirm('Smazat schůzku?')) return; try{ await fetch('/api/sales/events/'+id,{method:'DELETE',credentials:'include'}); loadCalendar(); }catch(e){} }
+  function meetingFromSite(id){ var s=calFindSite(id)||{}; var addr=s.address||[s.zip,s.city].filter(Boolean).join(' ')||''; openMeeting({ title:'Schůzka – '+(s.owner_name||'lokalita'), location:addr, site_id:id }); }
+  function meetingFromLead(id){ var l=(state.leads||[]).filter(function(x){return x.id===id;})[0]||{}; openMeeting({ title:'Schůzka – '+(l.name||l.email||'lead'), compounder_lead_id:id }); }
+  function calFindSite(id){ return (typeof lokState!=='undefined' && lokState.items ? lokState.items.filter(function(x){return x.id===id;})[0] : null); }
+  window.openMeeting=openMeeting; window.closeMeeting=closeMeeting; window.saveMeeting=saveMeeting; window.deleteMeeting=deleteMeeting; window.meetingFromSite=meetingFromSite; window.meetingFromLead=meetingFromLead; window.loadCalendar=loadCalendar;
   function lokToggle(id){ lokState.openId = (lokState.openId===id)?null:id; renderLokalitySec(); }
   window.lokToggle = lokToggle;
 
@@ -392,6 +484,7 @@
           (l.phone ? '<a href="sms:'+esc(telClean)+'">📩 SMS</a>' : '') +
           (l.email ? '<a href="mailto:'+esc(l.email)+'">✉️ E-mail</a>' : '') +
         '</div>' +
+        '<div class="field" style="margin-top:8px"><button class="btn btn-g" style="width:100%" onclick="meetingFromLead('+l.id+')">📅 Naplánovat schůzku</button></div>' +
         '<div style="font-size:12px;margin-top:8px;color:'+(laToday?'#22c55e':'var(--muted)')+'">Poslední aktivita: '+(laDate?fmtD(laDate):'—')+'</div>' +
         '<div class="field"><label>Stav</label>'+statusSel+'</div>' +
         '<div class="field"><label>Portál</label>' +
