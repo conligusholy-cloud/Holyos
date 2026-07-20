@@ -220,12 +220,20 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
         .phil-foot .t{font-size:clamp(13px,1.7vw,16px);letter-spacing:.07em;text-transform:uppercase;color:#c9c9d0;font-weight:600;line-height:1.55}
         .phil-foot .t .g{color:var(--gold)}
         @media(max-width:600px){#filozofie.phil{padding:32px 20px}.phil-foot{flex-direction:column;text-align:center;gap:14px}}
+        .phil-head{display:grid;grid-template-columns:1fr;gap:26px;align-items:center;margin-bottom:30px}
+        @media(min-width:960px){.phil-head{grid-template-columns:1.15fr .85fr;gap:40px;margin-bottom:38px}}
+        .phil-head-text{min-width:0}
+        .phil-head-media{position:relative;width:100%}
+        .phil-video{width:100%;aspect-ratio:16/9;border-radius:16px;border:1px solid rgba(201,162,75,.35);box-shadow:0 12px 44px rgba(0,0,0,.5);background:#000;display:block}
+        .phil-head-media .phil-vcap{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--gold);font-weight:700;margin-top:10px;text-align:center}
       </style>
+      <div class="phil-head"><div class="phil-head-text">
       <div class="phil-eyebrow" data-i18n="p.phil.eyebrow">Filozofie Compoundera</div>
       <h2 class="phil-title" data-i18n="p.phil.title">Myšlenka <span class="g">Compoundera</span></h2>
       <p class="phil-sub" data-i18n="p.phil.sub">Compounding není štěstí. Je to <span class="g">rozhodnutí</span>.</p>
       <p class="phil-body" data-i18n="p.phil.body">Compounding je princip, kdy hodnota neroste skokem, ale sama ze sebe — <span class="g">krok za krokem, rok za rokem</span>. Nezačínáte na zelené louce; vstupujete do místa, které už funguje, má své zákazníky a svůj ověřený obrat. Od prvního dne stavíte na něčem, co stojí.</p>
       <p class="phil-slogan" data-i18n="p.phil.slogan">Správná rozhodnutí dnes vytvářejí <span class="w">svobodu</span> zítra.</p>
+      </div><div class="phil-head-media"><video class="phil-video" controls preload="metadata" playsinline src="https://pub-359de4e17c0b4ae0bb3ea360de8502d5.r2.dev/compounding/Report%C3%A1%C5%BE.mp4"></video><div class="phil-vcap">▶ Reportáž o Compoundingu</div></div></div>
       <div class="phil-grid">
         <div class="phil-card">
           <div class="phil-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s7-6.4 7-11.5A7 7 0 0 0 5 9.5C5 14.6 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.6"/></svg></div>
