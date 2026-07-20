@@ -268,6 +268,27 @@
   function lokMeetingsBlock(siteId){ var arr=(MEET_UP.bySite&&MEET_UP.bySite[siteId])||[]; if(!arr.length) return ''; var rows=arr.map(function(e){ return '<div onclick="openMeetingById('+e.id+')" style="display:flex;gap:8px;align-items:center;cursor:pointer;padding:7px 9px;border-radius:8px;background:rgba(234,179,8,.12);border:1px solid rgba(234,179,8,.35);margin-top:6px"><span style="font-weight:700;color:#eab308;white-space:nowrap">'+_meetDT(e.start_at)+'</span><span style="flex:1;color:var(--text)">'+esc(e.title||'Schůzka')+'</span><span style="color:#eab308">✎</span></div>'; }).join(''); return '<div class="field"><label style="color:#eab308">📅 Naplánované schůzky</label>'+rows+'</div>'; }
   function openMeetingById(id){ var e=MEET_UP.byId&&MEET_UP.byId[id]; if(!e) return; openMeeting({ id:e.id, title:e.title, start:e.start_at, end:e.end_at, location:e.location, note:e.description, attendees:e.attendees, site_id:e.site_id, compounder_lead_id:e.compounder_lead_id, graph_event_id:e.graph_event_id, sync_error:e.graph_sync_error }); }
   window.openMeetingById=openMeetingById; window.loadUpcomingMeetings=loadUpcomingMeetings;
+  function _evtWhen(start,end,allDay){ try{ var s=new Date(start); var p=function(n){return(n<10?'0':'')+n;}; var d=s.toLocaleDateString('cs-CZ',{weekday:'long',day:'numeric',month:'numeric',year:'numeric'}); if(allDay) return d+' · celý den'; var t=p(s.getHours())+':'+p(s.getMinutes()); if(end){ var e=new Date(end); t+=' – '+p(e.getHours())+':'+p(e.getMinutes()); } return d+' · '+t; }catch(e){ return ''; } }
+  function closeEventInfo(){ var m=document.getElementById('evtInfo'); if(m) m.remove(); }
+  function openEventInfo(info){
+    closeEventInfo();
+    var ov=document.createElement('div'); ov.id='evtInfo';
+    ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:120;display:flex;align-items:flex-end;justify-content:center';
+    ov.onclick=function(e){ if(e.target===ov) closeEventInfo(); };
+    var when=_evtWhen(info.start,info.end,info.allDay);
+    ov.innerHTML='<div class="sheet" style="max-width:520px;width:100%">'+
+      '<div style="display:inline-flex;align-items:center;gap:8px;font-size:11px;color:#4aa3e0;background:rgba(0,120,212,.15);border-radius:6px;padding:2px 8px;margin-bottom:10px">Outlook</div>'+
+      '<h2 style="margin:0 0 8px;font-size:18px">'+esc(info.title||'Událost')+'</h2>'+
+      '<div style="color:var(--muted);font-size:14px;margin-bottom:'+(info.location?'6px':'14px')+'">🕒 '+esc(when)+'</div>'+
+      (info.location?('<div style="color:var(--muted);font-size:14px;margin-bottom:14px">📍 '+esc(info.location)+'</div>'):'')+
+      '<div class="actions-row">'+
+        '<button class="btn btn-g" style="flex:1" onclick="closeEventInfo()">Zavřít</button>'+
+        (info.web_link?('<a class="btn btn-p" style="flex:2;display:flex;align-items:center;justify-content:center;text-decoration:none" href="'+esc(info.web_link)+'" target="_blank" rel="noopener">Otevřít v Outlooku</a>'):'')+
+      '</div>'+
+    '</div>';
+    document.body.appendChild(ov);
+  }
+  window.openEventInfo=openEventInfo; window.closeEventInfo=closeEventInfo;
   function lokYN(v){ return v===true ? '<span style="color:#22c55e">ano</span>' : (v===false ? '<span style="color:#ef4444">ne</span>' : '<span style="color:var(--muted2)">?</span>'); }
   function lokDateOnly(iso){ if(!iso) return '—'; try { return new Date(iso).toLocaleDateString('cs-CZ'); } catch(e){ return '—'; } }
   async function loadLokalitySec(){
@@ -515,12 +536,12 @@
           .then(function(r){ return r.json(); })
           .then(function(d){ var evs=[];
             (d.events||[]).forEach(function(e){ evs.push({ id:'h'+e.id, title:e.title||'(schůzka)', start:e.start_at, end:e.end_at||undefined, backgroundColor:'#eab308', borderColor:'#eab308', textColor:'#1a1a1a', extendedProps:{ source:'holyos', dbId:e.id, sync_error:e.graph_sync_error, graph_event_id:e.graph_event_id, location:e.location, note:e.description, attendees:e.attendees, site_id:e.site_id, compounder_lead_id:e.compounder_lead_id } }); });
-            (d.outlook||[]).forEach(function(o){ evs.push({ id:'o'+o.id, title:o.title||'(bez názvu)', start:o.start_at, end:o.end_at||undefined, allDay:!!o.all_day, backgroundColor:'#2b6cb0', borderColor:'#2b6cb0', extendedProps:{ source:'outlook', web_link:o.web_link } }); });
+            (d.outlook||[]).forEach(function(o){ evs.push({ id:'o'+o.id, title:o.title||'(bez názvu)', start:o.start_at, end:o.end_at||undefined, allDay:!!o.all_day, backgroundColor:'#2b6cb0', borderColor:'#2b6cb0', extendedProps:{ source:'outlook', web_link:o.web_link, location:o.location } }); });
             ok(evs);
           }).catch(function(){ fail(); });
       },
       eventClick:function(arg){ var p=arg.event.extendedProps||{};
-        if(p.source==='outlook'){ if(p.web_link) window.open(p.web_link,'_blank'); return; }
+        if(p.source==='outlook'){ openEventInfo({ title:arg.event.title, start:arg.event.start, end:arg.event.end, allDay:arg.event.allDay, location:p.location, web_link:p.web_link }); return; }
         openMeeting({ id:p.dbId, title:arg.event.title, start:arg.event.start, end:arg.event.end, location:p.location, note:p.note, attendees:p.attendees, site_id:p.site_id, compounder_lead_id:p.compounder_lead_id, graph_event_id:p.graph_event_id, sync_error:p.sync_error });
       },
       dateClick:function(arg){ openMeeting({ start: arg.date }); },
