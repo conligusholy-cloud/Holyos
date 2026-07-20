@@ -447,14 +447,14 @@
         fetch('/api/sales/my-calendar?from='+encodeURIComponent(info.startStr)+'&to='+encodeURIComponent(info.endStr),{credentials:'include'})
           .then(function(r){ return r.json(); })
           .then(function(d){ var evs=[];
-            (d.events||[]).forEach(function(e){ evs.push({ id:'h'+e.id, title:e.title||'(schůzka)', start:e.start_at, end:e.end_at||undefined, backgroundColor:'#eab308', borderColor:'#eab308', textColor:'#1a1a1a', extendedProps:{ source:'holyos', dbId:e.id } }); });
+            (d.events||[]).forEach(function(e){ evs.push({ id:'h'+e.id, title:e.title||'(schůzka)', start:e.start_at, end:e.end_at||undefined, backgroundColor:'#eab308', borderColor:'#eab308', textColor:'#1a1a1a', extendedProps:{ source:'holyos', dbId:e.id, sync_error:e.graph_sync_error } }); });
             (d.outlook||[]).forEach(function(o){ evs.push({ id:'o'+o.id, title:o.title||'(bez názvu)', start:o.start_at, end:o.end_at||undefined, allDay:!!o.all_day, backgroundColor:'#2b6cb0', borderColor:'#2b6cb0', extendedProps:{ source:'outlook', web_link:o.web_link } }); });
             ok(evs);
           }).catch(function(){ fail(); });
       },
       eventClick:function(arg){ var p=arg.event.extendedProps||{};
         if(p.source==='outlook'){ if(p.web_link) window.open(p.web_link,'_blank'); return; }
-        if(confirm('Smazat schůzku „'+arg.event.title+'\u201c?')) deleteMeeting(p.dbId);
+        var m=p.sync_error?('\u26a0 Nesynchronizováno do Outlooku:\n'+p.sync_error+'\n\n'):''; if(confirm(m+'Smazat tuto schůzku?')) deleteMeeting(p.dbId);
       },
       dateClick:function(arg){ openMeeting({ start: arg.date }); },
     });
