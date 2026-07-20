@@ -478,7 +478,7 @@ async function _pushEventToGraph(ev) {
     const person = await prisma.person.findUnique({ where: { id: ev.organizer_id }, select: { email: true } });
     const upn = person && person.email;
     if (!upn) return { graph_sync_error: 'Obchodník nemá e-mail (M365 schránku)' };
-    const payload = { subject: ev.title, body: ev.description || '', start: ev.start_at, end: ev.end_at || ev.start_at, location: ev.location, allDay: ev.all_day };
+    const payload = { subject: ev.title, body: ev.description || '', start: ev.start_at, end: ev.end_at || ev.start_at, location: ev.location, allDay: ev.all_day, attendees: (ev.attendees ? String(ev.attendees).split(/[,;\s]+/).filter(Boolean) : []) };
     if (ev.graph_event_id) {
       await graph.updateCalendarEvent(upn, ev.graph_event_id, payload);
       return { graph_event_id: ev.graph_event_id, graph_calendar_user: upn, graph_sync_error: null };
@@ -524,7 +524,7 @@ router.post('/events', async (req, res, next) => {
       contact_id, title, description, event_type = 'meeting',
       location, start_at, end_at, all_day = false,
       status = 'planned', reminder_min,
-      compounder_lead_id, site_id,
+      compounder_lead_id, site_id, attendees,
     } = req.body || {};
 
     if (!title || !title.trim()) return res.status(400).json({ error: 'Název je povinný' });
@@ -547,6 +547,7 @@ router.post('/events', async (req, res, next) => {
         reminder_min: reminder_min != null && reminder_min !== '' ? parseInt(reminder_min, 10) : null,
         compounder_lead_id: compounder_lead_id ? parseInt(compounder_lead_id, 10) : null,
         site_id: site_id ? parseInt(site_id, 10) : null,
+        attendees: Array.isArray(attendees) ? (attendees.filter(Boolean).join(',') || null) : ((attendees && String(attendees).trim()) || null),
       },
       include: {
         contact:   { select: { id: true, first_name: true, last_name: true, company_name: true } },
@@ -589,6 +590,7 @@ router.put('/events/:id(\\d+)', async (req, res, next) => {
     if (b.reminder_min !== undefined) data.reminder_min = b.reminder_min != null && b.reminder_min !== '' ? parseInt(b.reminder_min, 10) : null;
     if (b.compounder_lead_id !== undefined) data.compounder_lead_id = b.compounder_lead_id ? parseInt(b.compounder_lead_id, 10) : null;
     if (b.site_id !== undefined) data.site_id = b.site_id ? parseInt(b.site_id, 10) : null;
+    if (b.attendees !== undefined) data.attendees = Array.isArray(b.attendees) ? (b.attendees.filter(Boolean).join(',') || null) : ((b.attendees && String(b.attendees).trim()) || null);
 
     let updated = await prisma.salesEvent.update({ where: { id }, data });
     const g = await _pushEventToGraph(updated);

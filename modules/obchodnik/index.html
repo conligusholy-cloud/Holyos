@@ -70,6 +70,19 @@
   .sheet h2{margin:0 0 14px;font-size:17px}
   .empty,.loading{padding:48px 20px;text-align:center;color:var(--muted)}
   .err{background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.4);color:#fca5a5;padding:10px 12px;border-radius:10px;margin:12px}
+  /* FullCalendar — moderní tmavý vzhled */
+  #fc{--fc-border-color:rgba(255,255,255,.08);--fc-page-bg-color:transparent;--fc-neutral-bg-color:rgba(255,255,255,.03);--fc-today-bg-color:rgba(234,179,8,.08);--fc-now-indicator-color:#ef4444}
+  .fc .fc-toolbar-title{font-size:18px;font-weight:800}
+  .fc .fc-button{background:var(--surface,#1c1c22);border:1px solid var(--line,#2a2a2e);color:var(--text,#eee);text-transform:none;font-weight:600;box-shadow:none;padding:6px 11px;border-radius:9px}
+  .fc .fc-button-primary:not(:disabled).fc-button-active,.fc .fc-button-primary:not(:disabled):active{background:var(--primary,#eab308);border-color:var(--primary,#eab308);color:#1a1a1a}
+  .fc .fc-button:hover{background:var(--line,#2a2a2e)}
+  .fc .fc-button:focus{box-shadow:none}
+  .fc .fc-col-header-cell-cushion,.fc .fc-daygrid-day-number,.fc .fc-timegrid-axis-cushion,.fc .fc-timegrid-slot-label-cushion,.fc .fc-list-day-text{color:var(--muted,#aaa);text-decoration:none}
+  .fc-theme-standard td,.fc-theme-standard th{border-color:rgba(255,255,255,.07)}
+  .fc .fc-event{border-radius:8px;border:none;padding:1px 5px;font-size:12px;font-weight:600;cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,.25)}
+  .fc .fc-event:hover{filter:brightness(1.08)}
+  .fc-toolbar.fc-header-toolbar{margin-bottom:12px;gap:8px;flex-wrap:wrap}
+  .fc .fc-scrollgrid{border-radius:12px;overflow:hidden}
 </style>
 </head>
 <body>
@@ -144,14 +157,17 @@
   <div class="modal" id="meeting-modal">
     <div class="sheet">
       <h2 id="mt-title-h">Nová schůzka</h2>
-      <input type="hidden" id="mt-site"><input type="hidden" id="mt-lead">
+      <div id="mt-status" style="font-size:12px;margin:-6px 0 8px;min-height:0"></div>
+      <input type="hidden" id="mt-id"><input type="hidden" id="mt-site"><input type="hidden" id="mt-lead">
       <div class="field"><label>Název</label><input class="qinput" id="mt-title" placeholder="Schůzka"></div>
       <div class="field"><label>Začátek</label><input class="qinput" id="mt-start" type="datetime-local"></div>
       <div class="field"><label>Konec</label><input class="qinput" id="mt-end" type="datetime-local"></div>
       <div class="field"><label>Místo</label><input class="qinput" id="mt-loc" placeholder="Adresa / online"></div>
+      <div class="field"><label>Pozvat (e-maily, oddělené čárkou)</label><input class="qinput" id="mt-att" placeholder="kontakt@… , kolega@bestseries.cz" inputmode="email"><div style="font-size:11px;color:var(--muted2);margin-top:4px">Pozvánka se odešle e-mailem přes Outlook. Předvyplní se kontakt; kolegu přidej čárkou.</div></div>
       <div class="field"><label>Poznámka</label><textarea id="mt-note" placeholder="Detaily…"></textarea></div>
       <div class="actions-row">
         <button class="btn btn-g" style="flex:1" onclick="closeMeeting()">Zrušit</button>
+        <button class="btn" id="mt-del" style="flex:1;display:none;background:#ef4444;color:#fff;font-weight:700" onclick="deleteMeetingFromModal()">Smazat</button>
         <button class="btn btn-p" style="flex:2" id="mt-save" onclick="saveMeeting()">Uložit schůzku</button>
       </div>
       <p id="mt-err" style="color:#fca5a5;font-size:13px;margin:8px 0 0;min-height:16px"></p>
@@ -417,13 +433,20 @@
   function openMeeting(pf){
     pf=pf||{};
     document.getElementById('mt-err').textContent='';
+    document.getElementById('mt-id').value=pf.id||'';
+    document.getElementById('mt-title-h').textContent = pf.id?'Upravit schůzku':'Nová schůzka';
+    document.getElementById('mt-save').textContent = pf.id?'Uložit změny':'Uložit schůzku';
+    var del=document.getElementById('mt-del'); if(del) del.style.display = pf.id?'':'none';
+    var st=document.getElementById('mt-status');
+    if(st){ if(pf.id && pf.graph_event_id){ st.innerHTML='✅ Synchronizováno do Outlooku'; st.style.color='#22c55e'; } else if(pf.id && pf.sync_error){ st.innerHTML='⚠ '+esc(pf.sync_error); st.style.color='#eab308'; } else { st.innerHTML=''; } }
     document.getElementById('mt-title').value=pf.title||'';
     document.getElementById('mt-loc').value=pf.location||'';
-    document.getElementById('mt-note').value='';
+    document.getElementById('mt-note').value=pf.note||'';
+    document.getElementById('mt-att').value=pf.attendees||'';
     document.getElementById('mt-site').value=pf.site_id||'';
     document.getElementById('mt-lead').value=pf.compounder_lead_id||'';
     var start = pf.start? new Date(pf.start) : (function(){ var n=new Date(); n.setMinutes(0,0,0); n.setHours(n.getHours()+1); return n; })();
-    var end=new Date(start.getTime()+3600000);
+    var end = pf.end? new Date(pf.end) : new Date(start.getTime()+3600000);
     document.getElementById('mt-start').value=_dtLocal(start);
     document.getElementById('mt-end').value=_dtLocal(end);
     document.getElementById('meeting-modal').classList.add('open');
@@ -436,19 +459,22 @@
     if(!title){ err.textContent='Zadej název.'; return; }
     if(!start){ err.textContent='Zadej začátek.'; return; }
     var btn=document.getElementById('mt-save'); btn.disabled=true;
-    var payload={ title:title, start_at:new Date(start).toISOString(), end_at: end? new Date(end).toISOString(): null, location:(document.getElementById('mt-loc').value||'').trim()||null, description:(document.getElementById('mt-note').value||'').trim()||null, event_type:'meeting' };
+    var id=document.getElementById('mt-id').value;
+    var payload={ title:title, start_at:new Date(start).toISOString(), end_at: end? new Date(end).toISOString(): null, location:(document.getElementById('mt-loc').value||'').trim()||null, description:(document.getElementById('mt-note').value||'').trim()||null, attendees:(document.getElementById('mt-att').value||'').trim(), event_type:'meeting' };
     var sid=document.getElementById('mt-site').value; var lid=document.getElementById('mt-lead').value;
     if(sid) payload.site_id=parseInt(sid,10); if(lid) payload.compounder_lead_id=parseInt(lid,10);
     try{
-      var r=await fetch('/api/sales/events',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+      var r=await fetch(id?('/api/sales/events/'+id):'/api/sales/events',{method:id?'PUT':'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
       var j=await r.json().catch(function(){return{};});
       if(!r.ok) throw new Error(j.error||'Chyba');
       closeMeeting(); _refetchCal();
     }catch(e){ err.textContent='Uložení selhalo: '+e.message; } finally{ btn.disabled=false; }
   }
   async function deleteMeeting(id){ try{ await fetch('/api/sales/events/'+id,{method:'DELETE',credentials:'include'}); _refetchCal(); }catch(e){} }
-  function meetingFromSite(id){ var s=calFindSite(id)||{}; var addr=s.address||[s.zip,s.city].filter(Boolean).join(' ')||''; openMeeting({ title:'Schůzka – '+(s.owner_name||'lokalita'), location:addr, site_id:id }); }
-  function meetingFromLead(id){ var l=(state.leads||[]).filter(function(x){return x.id===id;})[0]||{}; openMeeting({ title:'Schůzka – '+(l.name||l.email||'lead'), compounder_lead_id:id }); }
+  function deleteMeetingFromModal(){ var id=document.getElementById('mt-id').value; if(id && confirm('Smazat tuto schůzku?')){ deleteMeeting(parseInt(id,10)); closeMeeting(); } }
+  window.deleteMeetingFromModal=deleteMeetingFromModal;
+  function meetingFromSite(id){ var s=calFindSite(id)||{}; var addr=s.address||[s.zip,s.city].filter(Boolean).join(' ')||''; openMeeting({ title:'Schůzka – '+(s.owner_name||'lokalita'), location:addr, site_id:id, attendees:(s.owner_email||'') }); }
+  function meetingFromLead(id){ var l=(state.leads||[]).filter(function(x){return x.id===id;})[0]||{}; openMeeting({ title:'Schůzka – '+(l.name||l.email||'lead'), compounder_lead_id:id, attendees:(l.email||'') }); }
   function calFindSite(id){ return (typeof lokState!=='undefined' && lokState.items ? lokState.items.filter(function(x){return x.id===id;})[0] : null); }
   function _refetchCal(){ if(window._fcInst){ try{ window._fcInst.refetchEvents(); }catch(e){} } }
   function initCalendarView(){
@@ -464,14 +490,14 @@
         fetch('/api/sales/my-calendar?from='+encodeURIComponent(info.startStr)+'&to='+encodeURIComponent(info.endStr),{credentials:'include'})
           .then(function(r){ return r.json(); })
           .then(function(d){ var evs=[];
-            (d.events||[]).forEach(function(e){ evs.push({ id:'h'+e.id, title:e.title||'(schůzka)', start:e.start_at, end:e.end_at||undefined, backgroundColor:'#eab308', borderColor:'#eab308', textColor:'#1a1a1a', extendedProps:{ source:'holyos', dbId:e.id, sync_error:e.graph_sync_error, graph_event_id:e.graph_event_id } }); });
+            (d.events||[]).forEach(function(e){ evs.push({ id:'h'+e.id, title:e.title||'(schůzka)', start:e.start_at, end:e.end_at||undefined, backgroundColor:'#eab308', borderColor:'#eab308', textColor:'#1a1a1a', extendedProps:{ source:'holyos', dbId:e.id, sync_error:e.graph_sync_error, graph_event_id:e.graph_event_id, location:e.location, note:e.description, attendees:e.attendees, site_id:e.site_id, compounder_lead_id:e.compounder_lead_id } }); });
             (d.outlook||[]).forEach(function(o){ evs.push({ id:'o'+o.id, title:o.title||'(bez názvu)', start:o.start_at, end:o.end_at||undefined, allDay:!!o.all_day, backgroundColor:'#2b6cb0', borderColor:'#2b6cb0', extendedProps:{ source:'outlook', web_link:o.web_link } }); });
             ok(evs);
           }).catch(function(){ fail(); });
       },
       eventClick:function(arg){ var p=arg.event.extendedProps||{};
         if(p.source==='outlook'){ if(p.web_link) window.open(p.web_link,'_blank'); return; }
-        var m=p.graph_event_id?('\u2705 Synchronizováno do Outlooku.\n\n'):(p.sync_error?('\u26a0 Nesynchronizováno do Outlooku:\n'+p.sync_error+'\n\n'):'Zat\u00edm nesynchronizov\u00e1no do Outlooku.\n\n'); if(confirm(m+'Smazat tuto sch\u016fzku?')) deleteMeeting(p.dbId);
+        openMeeting({ id:p.dbId, title:arg.event.title, start:arg.event.start, end:arg.event.end, location:p.location, note:p.note, attendees:p.attendees, site_id:p.site_id, compounder_lead_id:p.compounder_lead_id, graph_event_id:p.graph_event_id, sync_error:p.sync_error });
       },
       dateClick:function(arg){ openMeeting({ start: arg.date }); },
     });

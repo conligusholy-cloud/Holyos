@@ -4371,6 +4371,7 @@ model SalesEvent {
   graph_event_id      String? @db.VarChar(255)
   graph_calendar_user String? @db.VarChar(255)
   graph_sync_error    String? @db.Text
+  attendees           String? @db.Text
 
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt

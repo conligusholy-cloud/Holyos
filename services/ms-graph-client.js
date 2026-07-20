@@ -253,6 +253,7 @@ async function updateCalendarEvent(userPrincipalName, eventId, ev) {
   if (ev.location != null) payload.location = { displayName: String(ev.location).slice(0, 500) };
   if (ev.start != null) { payload.start = ev.allDay ? { dateTime: new Date(ev.start).toISOString().slice(0, 10), timeZone: 'UTC' } : _toGraphDateTime(ev.start); payload.isAllDay = !!ev.allDay; }
   if (ev.end != null) { payload.end = ev.allDay ? { dateTime: new Date(ev.end).toISOString().slice(0, 10), timeZone: 'UTC' } : _toGraphDateTime(ev.end); }
+  if (Array.isArray(ev.attendees)) payload.attendees = ev.attendees.filter(Boolean).map((a) => ({ emailAddress: { address: a }, type: 'required' }));
   const url = `${GRAPH_BASE}/users/${encodeURIComponent(userPrincipalName)}/events/${encodeURIComponent(eventId)}`;
   const r = await fetch(url, { method: 'PATCH', headers: { ...(await authHeaders()), 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
   if (!r.ok) {
