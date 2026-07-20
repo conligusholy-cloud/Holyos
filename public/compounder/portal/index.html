@@ -1264,7 +1264,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
     });
     document.body.appendChild(ov);
   };
-  window.offSetCur = function(c){ OFFERS.cur = c; renderOffers(); };
+  window.offSetCur = function(c){ OFFERS.cur = c; renderOffers(); if(document.getElementById('revModal') && window._revLast){ window.openPortalRevStats(window._revLast.code, window._revLast.label); } };
   function offCurBtn(c,label){
     var on = OFFERS.cur===c;
     return '<button type="button" onclick="offSetCur(\''+c+'\')" style="border:1px solid '+(on?'var(--gold)':'var(--line)')+';background:'+(on?'var(--gold)':'transparent')+';color:'+(on?'#241c05':'var(--muted)')+';border-radius:999px;padding:5px 14px;font-size:13px;font-weight:700;cursor:pointer">'+label+'</button>';
@@ -1357,7 +1357,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
     ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:12000;display:flex;align-items:flex-start;justify-content:center;padding:24px 12px;overflow:auto';
     ov.onclick = function(e){ if(e.target===ov) ov.remove(); };
     ov.innerHTML = '<div style="background:var(--bg-2,#141416);border:1px solid var(--line,#2a2a2e);border-radius:16px;max-width:680px;width:100%;padding:20px 18px;box-shadow:0 20px 60px rgba(0,0,0,.5)">' +
-      '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:4px"><div style="font-weight:800;font-size:17px;color:var(--gold-soft,#e6cf8f)">📊 ' + pRevT('title') + ' — ' + revEsc(label||code) + '</div><div style="display:flex;gap:8px;margin-left:auto"><button type="button" onclick="refreshPortalRev()" style="background:linear-gradient(135deg,#f6e6ad,#cda454);border:none;color:#241c05;border-radius:10px;padding:7px 12px;cursor:pointer;font:inherit;font-weight:700">↻ ' + pRevT('refresh') + '</button><button type="button" onclick="document.getElementById(\'revModal\').remove()" style="background:none;border:1px solid var(--line,#333);color:var(--muted,#999);border-radius:10px;padding:7px 12px;cursor:pointer;font:inherit">' + pRevT('close') + '</button></div></div>' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:4px"><div style="font-weight:800;font-size:17px;color:var(--gold-soft,#e6cf8f)">📊 ' + pRevT('title') + ' — ' + revEsc(label||code) + '</div><button type="button" onclick="document.getElementById(\'revModal\').remove()" style="margin-left:auto;background:none;border:1px solid var(--line,#333);color:var(--muted,#999);border-radius:10px;padding:7px 12px;cursor:pointer;font:inherit">' + pRevT('close') + '</button></div>' +
       '<div id="rev-body" style="margin-top:12px;color:var(--muted,#aaa)">' + pRevT('loading') + '</div>' +
     '</div>';
     document.body.appendChild(ov);
