@@ -194,7 +194,7 @@
   var CONTRACT_TYPES = [['rezervacni','Rezervační'],['kupni','Kupní'],['servisni','Servisní']];
   var CONTRACT_STATUS = { koncept:'Koncept', odeslano:'Odesláno', vyplneno:'Vyplněno', k_podpisu:'Čeká na náš podpis', podepsano:'Podepsáno' };
   var SPEECH_OK = !!(window.SpeechRecognition || window.webkitSpeechRecognition);
-  var state = { leads:[], filter:'', search:'', openId:null };
+  var state = { leads:[], filter:'', search:'', openId:null, typeFilter:'all', leadStatusFilter:'' };
 
   function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
   function langCode(l){ return (l||'').toLowerCase().split(/[-_]/)[0]; }
@@ -463,14 +463,14 @@
         fetch('/api/sales/my-calendar?from='+encodeURIComponent(info.startStr)+'&to='+encodeURIComponent(info.endStr),{credentials:'include'})
           .then(function(r){ return r.json(); })
           .then(function(d){ var evs=[];
-            (d.events||[]).forEach(function(e){ evs.push({ id:'h'+e.id, title:e.title||'(schůzka)', start:e.start_at, end:e.end_at||undefined, backgroundColor:'#eab308', borderColor:'#eab308', textColor:'#1a1a1a', extendedProps:{ source:'holyos', dbId:e.id, sync_error:e.graph_sync_error } }); });
+            (d.events||[]).forEach(function(e){ evs.push({ id:'h'+e.id, title:e.title||'(schůzka)', start:e.start_at, end:e.end_at||undefined, backgroundColor:'#eab308', borderColor:'#eab308', textColor:'#1a1a1a', extendedProps:{ source:'holyos', dbId:e.id, sync_error:e.graph_sync_error, graph_event_id:e.graph_event_id } }); });
             (d.outlook||[]).forEach(function(o){ evs.push({ id:'o'+o.id, title:o.title||'(bez názvu)', start:o.start_at, end:o.end_at||undefined, allDay:!!o.all_day, backgroundColor:'#2b6cb0', borderColor:'#2b6cb0', extendedProps:{ source:'outlook', web_link:o.web_link } }); });
             ok(evs);
           }).catch(function(){ fail(); });
       },
       eventClick:function(arg){ var p=arg.event.extendedProps||{};
         if(p.source==='outlook'){ if(p.web_link) window.open(p.web_link,'_blank'); return; }
-        var m=p.sync_error?('\u26a0 Nesynchronizováno do Outlooku:\n'+p.sync_error+'\n\n'):''; if(confirm(m+'Smazat tuto schůzku?')) deleteMeeting(p.dbId);
+        var m=p.graph_event_id?('\u2705 Synchronizováno do Outlooku.\n\n'):(p.sync_error?('\u26a0 Nesynchronizováno do Outlooku:\n'+p.sync_error+'\n\n'):'Zat\u00edm nesynchronizov\u00e1no do Outlooku.\n\n'); if(confirm(m+'Smazat tuto sch\u016fzku?')) deleteMeeting(p.dbId);
       },
       dateClick:function(arg){ openMeeting({ start: arg.date }); },
     });

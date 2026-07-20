@@ -622,6 +622,13 @@ router.get('/my-calendar', async (req, res, next) => {
       where: { organizer_id: meId, start_at: { gte: from, lte: to } },
       orderBy: { start_at: 'asc' },
     });
+    // Auto-resync: schůzky bez graph_event_id (dřív selhaly / vznikly před povolením) zkus doposlat do M365.
+    const pending = events.filter((e) => !e.graph_event_id).slice(0, 5);
+    for (const e of pending) {
+      const g = await _pushEventToGraph(e);
+      try { await prisma.salesEvent.update({ where: { id: e.id }, data: g }); } catch (err) {}
+      Object.assign(e, g);
+    }
     let outlook = [];
     try {
       const person = await prisma.person.findUnique({ where: { id: meId }, select: { email: true } });
