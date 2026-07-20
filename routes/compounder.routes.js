@@ -1818,8 +1818,9 @@ async function _computeKioskRevenue(code, fresh) {
   const sums = { day: 0, thisWeek: 0, prevWeek: 0, thisMonth: 0, prevMonth: 0, year: 0 };
   const daily = {}, monthly = {};
   let currency = null, count = 0, offset = 0, pages = 0, complete = false, total = 0;
-  while (pages < 40) {
-    const url = baseUrl + '/' + encodeURIComponent(code) + '?limit=100&offset=' + offset;
+  while (pages < 200) {
+    if (Date.now() - now > 18000) break; // časový rozpočet — ať request neběží donekonečna
+    const url = baseUrl + '/' + encodeURIComponent(code) + '?limit=200&offset=' + offset;
     const controller = new AbortController();
     const to = setTimeout(() => controller.abort(), 12000);
     let sisRes;
@@ -1913,8 +1914,9 @@ async function _computeKioskPeriodTx(code, period) {
   let currency = null, offset = 0, pages = 0, total = 0, complete = false, successfulSum = 0;
   const out = [];
   const CAP = 2500;
-  while (pages < 60) {
-    const url = baseUrl + '/' + encodeURIComponent(code) + '?limit=100&offset=' + offset;
+  while (pages < 200) {
+    if (Date.now() - now > 18000) break; // časový rozpočet
+    const url = baseUrl + '/' + encodeURIComponent(code) + '?limit=200&offset=' + offset;
     const controller = new AbortController();
     const to = setTimeout(() => controller.abort(), 12000);
     let sisRes;
