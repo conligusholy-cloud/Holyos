@@ -240,11 +240,34 @@
       await load();
       loadMyPlan();
       loadLokalitySec();
+      loadUpcomingMeetings();
     } catch(e){ /* redirect handled */ }
   }
 
   // ─── Nabídky lokalit přiřazené obchodníkovi (Site) ──────────────────────────
   var lokState = { items: [], openId: null };
+  var MEET_UP = { bySite:{}, byLead:{}, byId:{} };
+  async function loadUpcomingMeetings(){
+    try{
+      var now=new Date(); var to=new Date(now.getTime()+180*86400000);
+      var r=await fetch('/api/sales/my-calendar?light=1&from='+encodeURIComponent(now.toISOString())+'&to='+encodeURIComponent(to.toISOString()),{credentials:'include'});
+      if(!r.ok) return; var d=await r.json();
+      var map={bySite:{},byLead:{},byId:{}};
+      (d.events||[]).forEach(function(e){ if(!e.start_at) return; if(new Date(e.start_at)<now) return; map.byId[e.id]=e;
+        if(e.site_id){ (map.bySite[e.site_id]=map.bySite[e.site_id]||[]).push(e); }
+        if(e.compounder_lead_id){ (map.byLead[e.compounder_lead_id]=map.byLead[e.compounder_lead_id]||[]).push(e); } });
+      var sortf=function(a,b){return new Date(a.start_at)-new Date(b.start_at);};
+      Object.keys(map.bySite).forEach(function(k){ map.bySite[k].sort(sortf); });
+      Object.keys(map.byLead).forEach(function(k){ map.byLead[k].sort(sortf); });
+      MEET_UP=map;
+      if(lokState.items&&lokState.items.length) renderLokalitySec();
+    }catch(e){}
+  }
+  function _meetDT(iso){ var dt=new Date(iso); var p=function(n){return(n<10?'0':'')+n;}; return p(dt.getDate())+'.'+p(dt.getMonth()+1)+'. '+p(dt.getHours())+':'+p(dt.getMinutes()); }
+  function lokNextBadge(siteId){ var arr=(MEET_UP.bySite&&MEET_UP.bySite[siteId])||[]; if(!arr.length) return ''; var dt=new Date(arr[0].start_at); var p=function(n){return(n<10?'0':'')+n;}; return '<div style="margin-top:4px"><span style="display:inline-block;background:rgba(234,179,8,.18);color:#eab308;border-radius:6px;padding:1px 7px;font-size:11px;font-weight:700">📅 '+p(dt.getDate())+'.'+p(dt.getMonth()+1)+'.'+(arr.length>1?(' +'+(arr.length-1)):'')+'</span></div>'; }
+  function lokMeetingsBlock(siteId){ var arr=(MEET_UP.bySite&&MEET_UP.bySite[siteId])||[]; if(!arr.length) return ''; var rows=arr.map(function(e){ return '<div onclick="openMeetingById('+e.id+')" style="display:flex;gap:8px;align-items:center;cursor:pointer;padding:7px 9px;border-radius:8px;background:rgba(234,179,8,.12);border:1px solid rgba(234,179,8,.35);margin-top:6px"><span style="font-weight:700;color:#eab308;white-space:nowrap">'+_meetDT(e.start_at)+'</span><span style="flex:1;color:var(--text)">'+esc(e.title||'Schůzka')+'</span><span style="color:#eab308">✎</span></div>'; }).join(''); return '<div class="field"><label style="color:#eab308">📅 Naplánované schůzky</label>'+rows+'</div>'; }
+  function openMeetingById(id){ var e=MEET_UP.byId&&MEET_UP.byId[id]; if(!e) return; openMeeting({ id:e.id, title:e.title, start:e.start_at, end:e.end_at, location:e.location, note:e.description, attendees:e.attendees, site_id:e.site_id, compounder_lead_id:e.compounder_lead_id, graph_event_id:e.graph_event_id, sync_error:e.graph_sync_error }); }
+  window.openMeetingById=openMeetingById; window.loadUpcomingMeetings=loadUpcomingMeetings;
   function lokYN(v){ return v===true ? '<span style="color:#22c55e">ano</span>' : (v===false ? '<span style="color:#ef4444">ne</span>' : '<span style="color:var(--muted2)">?</span>'); }
   function lokDateOnly(iso){ if(!iso) return '—'; try { return new Date(iso).toLocaleDateString('cs-CZ'); } catch(e){ return '—'; } }
   async function loadLokalitySec(){
@@ -294,7 +317,7 @@
     return '<div class="card'+(open?' open':'')+'" id="lokcard-'+s.id+'">' +
       '<div class="card-main" onclick="lokToggle('+s.id+')">' +
         '<span class="dot" style="background:#16b981"></span>' +
-        '<div class="card-body"><div class="card-name">'+esc(s.owner_name||'—')+'</div><div class="card-sub">'+esc(addr)+'</div></div>' +
+        '<div class="card-body"><div class="card-name">'+esc(s.owner_name||'—')+'</div><div class="card-sub">'+esc(addr)+'</div>'+lokNextBadge(s.id)+'</div>' +
         '<span class="badge" style="background:#16b98122;color:#16b981">'+esc(TYPE[s.site_type]||'Pronájem')+'</span>' +
         '<span class="chev">▸</span>' +
       '</div>' +
@@ -305,6 +328,7 @@
           (s.owner_email ? '<a href="mailto:'+esc(s.owner_email)+'">✉️ E-mail</a>' : '') +
         '</div>' +
         '<div class="field" style="margin-top:8px"><button class="btn btn-g" style="width:100%" onclick="meetingFromSite('+s.id+')">📅 Naplánovat schůzku</button></div>' +
+        lokMeetingsBlock(s.id) +
         '<div class="field"><label>Kontakt</label><div style="font-size:14px">'+esc(s.owner_name||'—')+
           (s.owner_phone?'<br>📞 '+esc(s.owner_phone):'')+(s.owner_email?'<br>✉️ '+esc(s.owner_email):'')+
           '<br>🏠 Vlastník místa: '+(s.is_property_owner===true?'Ano':(s.is_property_owner===false?'Ne':'neuvedeno'))+'</div></div>' +
@@ -467,10 +491,10 @@
       var r=await fetch(id?('/api/sales/events/'+id):'/api/sales/events',{method:id?'PUT':'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
       var j=await r.json().catch(function(){return{};});
       if(!r.ok) throw new Error(j.error||'Chyba');
-      closeMeeting(); _refetchCal();
+      closeMeeting(); _refetchCal(); loadUpcomingMeetings();
     }catch(e){ err.textContent='Uložení selhalo: '+e.message; } finally{ btn.disabled=false; }
   }
-  async function deleteMeeting(id){ try{ await fetch('/api/sales/events/'+id,{method:'DELETE',credentials:'include'}); _refetchCal(); }catch(e){} }
+  async function deleteMeeting(id){ try{ await fetch('/api/sales/events/'+id,{method:'DELETE',credentials:'include'}); _refetchCal(); loadUpcomingMeetings(); }catch(e){} }
   function deleteMeetingFromModal(){ var id=document.getElementById('mt-id').value; if(id && confirm('Smazat tuto schůzku?')){ deleteMeeting(parseInt(id,10)); closeMeeting(); } }
   window.deleteMeetingFromModal=deleteMeetingFromModal;
   function meetingFromSite(id){ var s=calFindSite(id)||{}; var addr=s.address||[s.zip,s.city].filter(Boolean).join(' ')||''; openMeeting({ title:'Schůzka – '+(s.owner_name||'lokalita'), location:addr, site_id:id, attendees:(s.owner_email||'') }); }

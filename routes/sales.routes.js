@@ -624,6 +624,8 @@ router.get('/my-calendar', async (req, res, next) => {
       where: { organizer_id: meId, start_at: { gte: from, lte: to } },
       orderBy: { start_at: 'asc' },
     });
+    // Lehký režim (?light=1): jen HolyOS schůzky, bez resyncu a Outlooku (pro odznaky u kontaktů).
+    if (req.query.light === '1') return res.json({ events, outlook: [] });
     // Auto-resync: schůzky bez graph_event_id (dřív selhaly / vznikly před povolením) zkus doposlat do M365.
     const pending = events.filter((e) => !e.graph_event_id).slice(0, 5);
     for (const e of pending) {
