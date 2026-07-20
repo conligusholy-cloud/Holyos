@@ -1350,7 +1350,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
   };
   function pRevT(k){ var d=REV_T[pRevLang()]||REV_T.en; return d[k]!=null?d[k]:(REV_T.en[k]||k); }
   // Data ze SIS jsou v CZK; zobrazíme ve zvolené měně (window._revCur) přes kurzy z nabídky.
-  function revCurNow(){ return (window.OFFERS && OFFERS.cur) || 'CZK'; }
+  function revCurNow(){ return (typeof OFFERS !== 'undefined' && OFFERS && OFFERS.cur) ? OFFERS.cur : 'CZK'; }
   function revMoney(n){ n=Number(n)||0; var loc=pRevLang()==='cs'?'cs-CZ':'en-US'; var cur=revCurNow(); var sym={CZK:'Kč',EUR:'€',USD:'$',GBP:'£'}[cur]||cur; if(cur==='CZK'){ var s0; try{s0=Math.round(n).toLocaleString(loc);}catch(_){s0=String(Math.round(n));} return s0+' '+sym; } var rate=(typeof offRate==='function')?offRate(cur):0; if(!rate){ var s1; try{s1=Math.round(n).toLocaleString(loc);}catch(_){s1=String(Math.round(n));} return s1+' Kč'; } var v=Math.round(n/rate); var s; try{s=v.toLocaleString(loc);}catch(_){s=String(v);} return sym+' '+s; }
   function revCurBtn(c,label){ var on=revCurNow()===c; return '<button type="button" onclick="setRevCur(\''+c+'\')" style="background:'+(on?'linear-gradient(135deg,#f6e6ad,#cda454)':'transparent')+';color:'+(on?'#241c05':'var(--muted,#999)')+';border:1px solid '+(on?'transparent':'var(--line,#333)')+';border-radius:999px;padding:4px 11px;cursor:pointer;font:inherit;font-size:12px;font-weight:'+(on?'700':'400')+'">'+label+'</button>'; }
   window.setRevCur = function(c){ window._revCur=c; if(window._revLast) window.openPortalRevStats(window._revLast.code, window._revLast.label); };
