@@ -246,9 +246,25 @@
     var box = document.getElementById('lokality-sec');
     if (!box) return;
     if (!lokState.items.length){ box.innerHTML=''; return; }
-    var head = '<div style="display:flex;align-items:center;gap:8px;margin:14px 2px 8px;font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">📍 Nabídky lokalit <span style="background:var(--primary);color:#04121e;border-radius:10px;padding:1px 8px;font-size:12px">'+lokState.items.length+'</span></div>';
-    box.innerHTML = head + '<div class="list">' + lokState.items.map(lokCardHtml).join('') + '</div>';
+    var f = lokState.filter || 'all';
+    var filtered = (f === 'all') ? lokState.items : lokState.items.filter(function(s){ return s.status === f; });
+    var opts = '<option value="all">Všechny stavy ('+lokState.items.length+')</option>' +
+      Object.keys(LOK_ST).map(function(k){
+        var n = lokState.items.filter(function(s){ return s.status === k; }).length;
+        return '<option value="'+k+'"'+(f===k?' selected':'')+'>'+LOK_ST[k]+' ('+n+')</option>';
+      }).join('');
+    var head = '<div style="display:flex;align-items:center;gap:8px;margin:14px 2px 8px;flex-wrap:wrap">' +
+      '<span style="font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">📍 Nabídky lokalit</span>' +
+      '<span style="background:var(--primary);color:#04121e;border-radius:10px;padding:1px 8px;font-size:12px">'+lokState.items.length+'</span>' +
+      '<select onchange="lokSetFilter(this.value)" style="margin-left:auto">'+opts+'</select>' +
+      '</div>';
+    var listHtml = filtered.length
+      ? ('<div class="list">' + filtered.map(lokCardHtml).join('') + '</div>')
+      : '<div style="padding:12px 2px;color:var(--muted);font-size:13px">Žádná nabídka v tomto stavu.</div>';
+    box.innerHTML = head + listHtml;
   }
+  function lokSetFilter(val){ lokState.filter = val; renderLokalitySec(); }
+  window.lokSetFilter = lokSetFilter;
   function lokCardHtml(s){
     var open = lokState.openId === s.id;
     var TYPE = { rent:'Pronájem', purchase:'Prodej pozemku', other:'Zatím neví' };
