@@ -17,6 +17,7 @@ const {
   resolveSalesRole,
   buildContactVisibilityFilter,
 } = require('./sales.helpers');
+const graph = require('../services/ms-graph-client');
 
 // ─── Konstanty ───────────────────────────────────────────────────────────
 const SALES_STATUSES   = ['new', 'contacted', 'qualified', 'meeting', 'proposal', 'won', 'lost'];
@@ -468,6 +469,27 @@ router.delete('/contacts/:contactId(\\d+)/notes/:noteId(\\d+)', async (req, res,
   } catch (err) { next(err); }
 });
 
+// Best-effort push SalesEvent do M365/Outlook kalendáře obchodníka (organizer).
+// Vrací pole ke uložení: { graph_event_id, graph_calendar_user, graph_sync_error }.
+async function _pushEventToGraph(ev) {
+  try {
+    if (!(graph.isConfigured && graph.isConfigured())) return { graph_sync_error: 'M365 není nakonfigurováno' };
+    if (!ev.organizer_id) return { graph_sync_error: 'Událost nemá obchodníka (organizer)' };
+    const person = await prisma.person.findUnique({ where: { id: ev.organizer_id }, select: { email: true } });
+    const upn = person && person.email;
+    if (!upn) return { graph_sync_error: 'Obchodník nemá e-mail (M365 schránku)' };
+    const payload = { subject: ev.title, body: ev.description || '', start: ev.start_at, end: ev.end_at || ev.start_at, location: ev.location, allDay: ev.all_day };
+    if (ev.graph_event_id) {
+      await graph.updateCalendarEvent(upn, ev.graph_event_id, payload);
+      return { graph_event_id: ev.graph_event_id, graph_calendar_user: upn, graph_sync_error: null };
+    }
+    const created = await graph.createCalendarEvent(upn, payload);
+    return { graph_event_id: (created && created.id) || null, graph_calendar_user: upn, graph_sync_error: null };
+  } catch (e) {
+    return { graph_sync_error: String((e && e.message) || e).slice(0, 500) };
+  }
+}
+
 // ─── Kalendář (events) ────────────────────────────────────────────────────
 
 // GET /api/sales/events — pro kalendářový pohled (filtr od/do, contact_id)
@@ -502,6 +524,7 @@ router.post('/events', async (req, res, next) => {
       contact_id, title, description, event_type = 'meeting',
       location, start_at, end_at, all_day = false,
       status = 'planned', reminder_min,
+      compounder_lead_id, site_id,
     } = req.body || {};
 
     if (!title || !title.trim()) return res.status(400).json({ error: 'Název je povinný' });
@@ -522,13 +545,23 @@ router.post('/events', async (req, res, next) => {
         all_day: !!all_day,
         status,
         reminder_min: reminder_min != null && reminder_min !== '' ? parseInt(reminder_min, 10) : null,
+        compounder_lead_id: compounder_lead_id ? parseInt(compounder_lead_id, 10) : null,
+        site_id: site_id ? parseInt(site_id, 10) : null,
       },
       include: {
         contact:   { select: { id: true, first_name: true, last_name: true, company_name: true } },
         organizer: { select: { id: true, first_name: true, last_name: true } },
       },
     });
-    res.status(201).json(created);
+    const g = await _pushEventToGraph(created);
+    const synced = await prisma.salesEvent.update({
+      where: { id: created.id }, data: g,
+      include: {
+        contact:   { select: { id: true, first_name: true, last_name: true, company_name: true } },
+        organizer: { select: { id: true, first_name: true, last_name: true } },
+      },
+    });
+    res.status(201).json(synced);
   } catch (err) { next(err); }
 });
 
@@ -554,8 +587,12 @@ router.put('/events/:id(\\d+)', async (req, res, next) => {
     if (b.all_day !== undefined)     data.all_day     = !!b.all_day;
     if (b.status !== undefined)      data.status      = b.status;
     if (b.reminder_min !== undefined) data.reminder_min = b.reminder_min != null && b.reminder_min !== '' ? parseInt(b.reminder_min, 10) : null;
+    if (b.compounder_lead_id !== undefined) data.compounder_lead_id = b.compounder_lead_id ? parseInt(b.compounder_lead_id, 10) : null;
+    if (b.site_id !== undefined) data.site_id = b.site_id ? parseInt(b.site_id, 10) : null;
 
-    const updated = await prisma.salesEvent.update({ where: { id }, data });
+    let updated = await prisma.salesEvent.update({ where: { id }, data });
+    const g = await _pushEventToGraph(updated);
+    updated = await prisma.salesEvent.update({ where: { id }, data: g });
     res.json(updated);
   } catch (err) { next(err); }
 });
@@ -564,8 +601,42 @@ router.put('/events/:id(\\d+)', async (req, res, next) => {
 router.delete('/events/:id(\\d+)', async (req, res, next) => {
   try {
     const id = parseInt(req.params.id, 10);
+    const ex = await prisma.salesEvent.findUnique({ where: { id }, select: { graph_event_id: true, graph_calendar_user: true } });
+    if (ex && ex.graph_event_id && ex.graph_calendar_user) {
+      try { await graph.deleteCalendarEvent(ex.graph_calendar_user, ex.graph_event_id); } catch (e) { /* best-effort */ }
+    }
     await prisma.salesEvent.delete({ where: { id } });
     res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
+// GET /api/sales/my-calendar?from&to — kalendář přihlášeného obchodníka:
+// HolyOS SalesEvent (organizer = já) sloučené s událostmi z jeho Outlooku (M365).
+router.get('/my-calendar', async (req, res, next) => {
+  try {
+    const meId = req.user.person ? req.user.person.id : null;
+    if (!meId) return res.json({ events: [], outlook: [] });
+    const from = req.query.from ? new Date(req.query.from) : new Date(Date.now() - 7 * 86400000);
+    const to   = req.query.to   ? new Date(req.query.to)   : new Date(Date.now() + 31 * 86400000);
+    const events = await prisma.salesEvent.findMany({
+      where: { organizer_id: meId, start_at: { gte: from, lte: to } },
+      orderBy: { start_at: 'asc' },
+    });
+    let outlook = [];
+    try {
+      const person = await prisma.person.findUnique({ where: { id: meId }, select: { email: true } });
+      if (person && person.email && graph.isConfigured && graph.isConfigured()) {
+        const raw = await graph.listCalendarView(person.email, from.toISOString(), to.toISOString());
+        const holyIds = new Set(events.map((e) => e.graph_event_id).filter(Boolean));
+        outlook = raw.filter((o) => !holyIds.has(o.id)).map((o) => ({
+          id: o.id, source: 'outlook', title: o.subject || '(bez názvu)',
+          start_at: (o.start && o.start.dateTime) ? (o.start.dateTime.endsWith('Z') ? o.start.dateTime : o.start.dateTime + 'Z') : null,
+          end_at: (o.end && o.end.dateTime) ? (o.end.dateTime.endsWith('Z') ? o.end.dateTime : o.end.dateTime + 'Z') : null,
+          all_day: !!o.isAllDay, location: (o.location && o.location.displayName) || null, web_link: o.webLink || null,
+        }));
+      }
+    } catch (e) { /* Outlook je best-effort */ }
+    res.json({ events, outlook });
   } catch (err) { next(err); }
 });
 

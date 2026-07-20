@@ -195,6 +195,85 @@ async function sendMailAs(fromUpn, { to, subject, textBody, htmlBody, attachment
   }
 }
 
+// ─── KALENDÁŘ (Outlook/M365 přes Graph) ─────────────────────────────────────
+// Vyžaduje Application permission Calendars.ReadWrite + ApplicationAccessPolicy
+// povolující přístup do schránky {userPrincipalName}. Časy posíláme v UTC.
+
+function _toGraphDateTime(d) {
+  const iso = new Date(d).toISOString().replace(/\.\d{3}Z$/, 'Z').replace('Z', '');
+  return { dateTime: iso, timeZone: 'UTC' };
+}
+
+// Události v rozsahu (calendarView) — vrací pole { id, subject, start, end, location, isAllDay, webLink, organizer }.
+async function listCalendarView(userPrincipalName, startIso, endIso, opts = {}) {
+  const { top = 200 } = opts;
+  const url = new URL(`${GRAPH_BASE}/users/${encodeURIComponent(userPrincipalName)}/calendarView`);
+  url.searchParams.set('startDateTime', new Date(startIso).toISOString());
+  url.searchParams.set('endDateTime', new Date(endIso).toISOString());
+  url.searchParams.set('$select', 'id,subject,start,end,location,isAllDay,webLink,organizer,bodyPreview,showAs');
+  url.searchParams.set('$orderby', 'start/dateTime');
+  url.searchParams.set('$top', String(top));
+  const r = await fetch(url, { headers: { ...(await authHeaders()), 'Prefer': 'outlook.timezone="UTC"' } });
+  if (!r.ok) {
+    const body = await r.text().catch(() => '');
+    const err = new Error(`Graph calendarView selhal: ${r.status} ${body.slice(0, 400)}`);
+    err.status = r.status; throw err;
+  }
+  const data = await r.json();
+  return data.value || [];
+}
+
+// Vytvoří událost v kalendáři uživatele. ev = { subject, body, start, end, location, allDay, attendees? }.
+async function createCalendarEvent(userPrincipalName, ev) {
+  const payload = {
+    subject: ev.subject || '(bez názvu)',
+    body: { contentType: 'HTML', content: ev.body || '' },
+    start: ev.allDay ? { dateTime: new Date(ev.start).toISOString().slice(0, 10), timeZone: 'UTC' } : _toGraphDateTime(ev.start),
+    end: ev.allDay ? { dateTime: new Date(ev.end || ev.start).toISOString().slice(0, 10), timeZone: 'UTC' } : _toGraphDateTime(ev.end || ev.start),
+    isAllDay: !!ev.allDay,
+  };
+  if (ev.location) payload.location = { displayName: String(ev.location).slice(0, 500) };
+  if (Array.isArray(ev.attendees) && ev.attendees.length) {
+    payload.attendees = ev.attendees.filter(Boolean).map((a) => ({ emailAddress: { address: a }, type: 'required' }));
+  }
+  const url = `${GRAPH_BASE}/users/${encodeURIComponent(userPrincipalName)}/events`;
+  const r = await fetch(url, { method: 'POST', headers: { ...(await authHeaders()), 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+  if (!r.ok) {
+    const body = await r.text().catch(() => '');
+    const err = new Error(`Graph createEvent selhal: ${r.status} ${body.slice(0, 400)}`);
+    err.status = r.status; throw err;
+  }
+  return r.json();
+}
+
+async function updateCalendarEvent(userPrincipalName, eventId, ev) {
+  const payload = {};
+  if (ev.subject != null) payload.subject = ev.subject;
+  if (ev.body != null) payload.body = { contentType: 'HTML', content: ev.body };
+  if (ev.location != null) payload.location = { displayName: String(ev.location).slice(0, 500) };
+  if (ev.start != null) { payload.start = ev.allDay ? { dateTime: new Date(ev.start).toISOString().slice(0, 10), timeZone: 'UTC' } : _toGraphDateTime(ev.start); payload.isAllDay = !!ev.allDay; }
+  if (ev.end != null) { payload.end = ev.allDay ? { dateTime: new Date(ev.end).toISOString().slice(0, 10), timeZone: 'UTC' } : _toGraphDateTime(ev.end); }
+  const url = `${GRAPH_BASE}/users/${encodeURIComponent(userPrincipalName)}/events/${encodeURIComponent(eventId)}`;
+  const r = await fetch(url, { method: 'PATCH', headers: { ...(await authHeaders()), 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+  if (!r.ok) {
+    const body = await r.text().catch(() => '');
+    const err = new Error(`Graph updateEvent selhal: ${r.status} ${body.slice(0, 400)}`);
+    err.status = r.status; throw err;
+  }
+  return r.json();
+}
+
+async function deleteCalendarEvent(userPrincipalName, eventId) {
+  const url = `${GRAPH_BASE}/users/${encodeURIComponent(userPrincipalName)}/events/${encodeURIComponent(eventId)}`;
+  const r = await fetch(url, { method: 'DELETE', headers: await authHeaders() });
+  if (!r.ok && r.status !== 404) {
+    const body = await r.text().catch(() => '');
+    const err = new Error(`Graph deleteEvent selhal: ${r.status} ${body.slice(0, 400)}`);
+    err.status = r.status; throw err;
+  }
+  return { ok: true };
+}
+
 function isConfigured() {
   return msOAuth2.isConfigured() && !!process.env.INVOICE_IMAP_USER;
 }
@@ -205,5 +284,9 @@ module.exports = {
   markAsRead,
   sendReply,
   sendMailAs,
+  listCalendarView,
+  createCalendarEvent,
+  updateCalendarEvent,
+  deleteCalendarEvent,
   isConfigured,
 };
