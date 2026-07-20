@@ -102,6 +102,10 @@ const { peekToken } = require('./middleware/auth');
 function salesGateAllowed(pathname) {
   if (pathname === '/api/health' || pathname === '/favicon.ico') return true;
   if (pathname.startsWith('/api/auth') || pathname.startsWith('/api/compounder') || pathname.startsWith('/api/sales') || pathname.startsWith('/api/lokality')) return true;
+  // Obchodník — nabídky lokalit: jen vlastní (/api/sites/my) a konkrétní lokalita
+  // podle id (detail, změna stavu/poznámky, aktivity). NE celý seznam /api/sites.
+  if (pathname === '/api/sites/my') return true;
+  if (/^\/api\/sites\/\d+(\/communications)?$/.test(pathname)) return true;
   if (pathname.startsWith('/modules/obchodnik') || pathname.startsWith('/modules/vedouci-obchodu') || pathname.startsWith('/modules/podpis-smlouvy')) return true;
   if (pathname === '/login.html' || pathname.startsWith('/login')) return true;
   if (pathname.startsWith('/css/') || pathname.startsWith('/js/') || pathname.startsWith('/dist/')) return true;
