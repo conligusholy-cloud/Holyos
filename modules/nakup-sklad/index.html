@@ -173,6 +173,9 @@
           <select id="mat-cat-filter" onchange="loadMaterials()">
             <option value="">Všechny kategorie</option>
           </select>
+          <select id="mat-supplier-filter" onchange="loadMaterials()">
+            <option value="">Všichni dodavatelé</option>
+          </select>
           <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text2);cursor:pointer;">
             <input type="checkbox" id="mat-low-stock" onchange="loadMaterials()"> Pod minimem
           </label>
@@ -338,7 +341,7 @@
       if (tab === 'dashboard') loadDashboard();
       if (tab === 'companies') loadCompanies();
       if (tab === 'orders') loadOrders();
-      if (tab === 'materials') { loadMaterials(); populateMatCatFilter(); }
+      if (tab === 'materials') { loadMaterials(); populateMatCatFilter(); populateMatSupplierFilter(); }
       if (tab === 'categories') loadCategoriesTab();
       if (tab === 'stock') { loadStock(); populateStockWhFilter(); }
       if (tab === 'movements') { loadMovements(); populateMovementFilters(); }
@@ -793,12 +796,14 @@
       const status = document.getElementById('mat-status-filter')?.value || '';
       const lowStock = document.getElementById('mat-low-stock')?.checked;
       const catFilter = document.getElementById('mat-cat-filter')?.value || '';
+      const supplierFilter = document.getElementById('mat-supplier-filter')?.value || '';
       const params = new URLSearchParams();
       if (search) params.set('search', search);
       if (type) params.set('type', type);
       if (status) params.set('status', status);
       if (lowStock) params.set('low_stock', 'true');
       if (catFilter) params.set('category_id', catFilter);
+      if (supplierFilter) params.set('supplier_id', supplierFilter);
       try { const r = await fetch('/api/wh/materials?' + params); materials = await r.json(); renderMaterials(materials); } catch(e) { console.error(e); }
     }
 
@@ -1206,6 +1211,21 @@
       }
       const bulkSel = document.getElementById('mat-bulk-cat');
       if (bulkSel) bulkSel.innerHTML = '<option value="">— Bez kategorie —</option>' + buildCatOptions(null);
+    }
+
+    // Naplní rolovací filtr dodavatelů v záložce Zboží (dodavatelé + kombinovaní)
+    async function populateMatSupplierFilter() {
+      const sel = document.getElementById('mat-supplier-filter');
+      if (!sel) return;
+      try {
+        const all = await fetch('/api/wh/companies').then(r => r.json());
+        const list = all.filter(c => c.type === 'supplier' || c.type === 'both');
+        const cur = sel.value;
+        sel.innerHTML = '<option value="">Všichni dodavatelé</option>' +
+          list.map(c => '<option value="' + c.id + '">' + esc(c.name) + '</option>').join('');
+        sel.value = cur;
+        if (sel.value !== cur) sel.value = ''; // vybraný dodavatel už není v seznamu
+      } catch(e) { console.error(e); }
     }
 
     // --- Hromadný výběr v tabulce Zboží ---

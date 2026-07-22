@@ -221,9 +221,11 @@ router.delete('/categories/:id', async (req, res, next) => {
 // GET /api/wh/materials
 router.get('/materials', async (req, res, next) => {
   try {
-    const { search, type, low_stock, category_id } = req.query;
+    const { search, type, low_stock, category_id, supplier_id } = req.query;
     const where = { status: 'active' };
     if (type) where.type = type;
+    // Filtr dodavatele — jen zboží přiřazené konkrétnímu dodavateli
+    if (supplier_id) where.supplier_id = parseInt(supplier_id);
     if (search) {
       where.OR = [
         { name: { contains: search, mode: 'insensitive' } },
