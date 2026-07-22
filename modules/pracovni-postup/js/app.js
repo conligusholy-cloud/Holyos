@@ -6,6 +6,9 @@
 // DOM reference
 const dom = {};
 
+// Přirozené řazení názvů (abecedně + číselně vzestupně)
+const _nameCollator = new Intl.Collator('cs', { numeric: true, sensitivity: 'base' });
+
 // ---- Inicializace ----
 document.addEventListener('DOMContentLoaded', () => {
   dom.productList = document.getElementById('product-list');
@@ -51,8 +54,13 @@ function renderProducts(products) {
     return;
   }
 
+  // Seřadit výrobky vzestupně podle názvu (abecedně + číselně: Díl 1, Díl 2, … Díl 10)
+  const sortedProducts = products.slice().sort((a, b) =>
+    _nameCollator.compare(a.name || '', b.name || '')
+  );
+
   let html = '<div class="product-grid">';
-  products.forEach(p => {
+  sortedProducts.forEach(p => {
     const code = p.code ? escapeHtml(p.code) : '—';
     const name = escapeHtml(p.name);
     const type = escapeHtml(p.type || 'Výrobek');

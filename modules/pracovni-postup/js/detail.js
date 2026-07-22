@@ -49,6 +49,20 @@ function locName(val) {
   return String(val);
 }
 
+// ---- Přirozené řazení názvů (abecedně + číselně vzestupně) ----
+// Díl 1, Díl 2, … Díl 10, Díl 11 (ne Díl 1, Díl 10, Díl 2)
+const _nameCollator = new Intl.Collator('cs', { numeric: true, sensitivity: 'base' });
+function compareByName(a, b) {
+  return _nameCollator.compare(a || '', b || '');
+}
+
+// Seřadit pole BOM položek (bom.goods.name) vzestupně podle názvu
+function sortBomItems(bomItems) {
+  return (bomItems || []).slice().sort((x, y) =>
+    compareByName(locName((x.goods || {}).name), locName((y.goods || {}).name))
+  );
+}
+
 // ---- Načíst detail jednoho zboží (s cache) ----
 async function fetchGoodsDetail(goodsId) {
   if (state.goodsCache[goodsId]) return state.goodsCache[goodsId];
@@ -100,7 +114,8 @@ function extractBomFromGoods(goodsData, parentCode) {
   });
 
   operations.forEach((op, opIdx) => {
-    const bomItems = op.billOfMaterialsItems || [];
+    // Položky v rámci operace seřadit vzestupně (abecedně + číselně)
+    const bomItems = sortBomItems(op.billOfMaterialsItems);
     const opName = locName(op.name) || locName(op.operationName) || '';
 
     bomItems.forEach(bom => {
@@ -497,7 +512,9 @@ function buildOpTree(goodsId, visited) {
           children: buildOpTree(g.id, visited),
         };
       })
-      .filter(Boolean);
+      .filter(Boolean)
+      // Seřadit položky vzestupně (abecedně + číselně)
+      .sort((x, y) => compareByName(x.name, y.name));
 
     // Norma — čas jednoho zpracování
     const normDuration = op.perProcessingDuration || 0;
@@ -746,7 +763,8 @@ function toggleOperationBom(arrow, opIdx) {
 
   arrow.textContent = '▲';
   const op = state.operations[opIdx];
-  const items = op.billOfMaterialsItems || [];
+  // Položky seřadit vzestupně (abecedně + číselně)
+  const items = sortBomItems(op.billOfMaterialsItems);
 
   if (items.length === 0) {
     bomEl.innerHTML = '<div class="bom-empty">Žádné zboží v operaci</div>';
