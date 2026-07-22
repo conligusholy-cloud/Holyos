@@ -647,6 +647,7 @@ router.get('/my-calendar', async (req, res, next) => {
           start_at: (o.start && o.start.dateTime) ? (o.start.dateTime.endsWith('Z') ? o.start.dateTime : o.start.dateTime + 'Z') : null,
           end_at: (o.end && o.end.dateTime) ? (o.end.dateTime.endsWith('Z') ? o.end.dateTime : o.end.dateTime + 'Z') : null,
           all_day: !!o.isAllDay, location: (o.location && o.location.displayName) || null, web_link: o.webLink || null,
+          organizer: (o.organizer && o.organizer.emailAddress) ? { name: o.organizer.emailAddress.name || '', address: o.organizer.emailAddress.address || '' } : null,
         }));
       }
     } catch (e) { outlookError = String((e && e.message) || e).slice(0, 300); }
