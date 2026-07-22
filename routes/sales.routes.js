@@ -633,10 +633,13 @@ router.get('/my-calendar', async (req, res, next) => {
       try { await prisma.salesEvent.update({ where: { id: e.id }, data: g }); } catch (err) {}
       Object.assign(e, g);
     }
-    let outlook = [];
+    let outlook = []; let outlookError = null; let outlookMailbox = null;
     try {
       const person = await prisma.person.findUnique({ where: { id: meId }, select: { email: true } });
-      if (person && person.email && graph.isConfigured && graph.isConfigured()) {
+      outlookMailbox = person && person.email ? person.email : null;
+      if (!person || !person.email) { outlookError = 'Uživatel nemá v HolyOS e-mail (M365 schránku).'; }
+      else if (!(graph.isConfigured && graph.isConfigured())) { outlookError = 'M365 (Graph) není nakonfigurováno.'; }
+      else {
         const raw = await graph.listCalendarView(person.email, from.toISOString(), to.toISOString());
         const holyIds = new Set(events.map((e) => e.graph_event_id).filter(Boolean));
         outlook = raw.filter((o) => !holyIds.has(o.id)).map((o) => ({
@@ -646,8 +649,8 @@ router.get('/my-calendar', async (req, res, next) => {
           all_day: !!o.isAllDay, location: (o.location && o.location.displayName) || null, web_link: o.webLink || null,
         }));
       }
-    } catch (e) { /* Outlook je best-effort */ }
-    res.json({ events, outlook });
+    } catch (e) { outlookError = String((e && e.message) || e).slice(0, 300); }
+    res.json({ events, outlook, outlookError, outlookMailbox });
   } catch (err) { next(err); }
 });
 
