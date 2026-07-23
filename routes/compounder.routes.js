@@ -4260,7 +4260,7 @@ router.get('/reservations/:id(\\d+)/payment-instructions.pdf', requireAuth, asyn
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', 'inline; filename="pokyny-k-platbe.pdf"');
     res.send(pdf);
-  } catch (err) { next(err); }
+  } catch (err) { console.error('[pay-pdf]', err); return res.status(500).type('text/plain; charset=utf-8').send('Nepodařilo se vytvořit PDF pokynů k platbě: ' + ((err && err.message) || String(err))); }
 });
 router.get('/reservations/pay/:token/pdf', async (req, res, next) => {
   try {
@@ -4271,7 +4271,7 @@ router.get('/reservations/pay/:token/pdf', async (req, res, next) => {
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', 'inline; filename="pokyny-k-platbe.pdf"');
     res.send(pdf);
-  } catch (err) { next(err); }
+  } catch (err) { console.error('[pay-pdf]', err); return res.status(500).type('text/plain; charset=utf-8').send('Nepodařilo se vytvořit PDF pokynů k platbě: ' + ((err && err.message) || String(err))); }
 });
 router.post('/reservations/:id(\\d+)/payment-instructions/email', requireAuth, async (req, res, next) => {
   try {
