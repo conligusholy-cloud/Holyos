@@ -357,10 +357,12 @@ function planDayFallback(ctx) {
 async function planDay(personId, dateStr, opts) {
   const date = dayDate(dateStr);
   const person = { id: personId, name: (await prisma.person.findUnique({ where: { id: personId }, select: { first_name: true, last_name: true } }).then((p) => p ? `${p.first_name || ''} ${p.last_name || ''}`.trim() : ('#' + personId)).catch(() => '#' + personId)) };
+  // Reálné osobní cíle nastav VŽDY (i když už dnešní plán existuje) — jinak by
+  // obchodníci s dřívějším plánem zůstali bez cílů (obrat 0).
+  await ensureTargets(personId).catch(() => {});
   const existing = await prisma.salesDayPlan.findUnique({ where: { person_id_date: { person_id: personId, date } }, include: { tasks: true } });
   if (existing && existing.tasks.length && !(opts && opts.force)) return { plan: existing, created: 0, skipped: true };
 
-  await ensureTargets(personId).catch(() => {}); // reálné osobní cíle musí existovat před plánem
   const ctx = await gatherPlanContext(personId);
   let out = await planDayAI(person, ctx);
   if (!out) out = planDayFallback(ctx);
