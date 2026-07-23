@@ -476,14 +476,14 @@ function renderKupni(d) {
       <li>Kupní cena je složena ze dvou složek:</li>
     </ol>
     <ol class="letters">
-      <li>cena Stroje: <strong>${v(d.price_machine, 12)} Kč</strong> bez DPH;</li>
-      <li>cena Lokality (úplata za převzetí ekonomického užívání Zavedeného provozu): <strong>${v(d.price_location, 12)} Kč</strong> bez DPH.</li>
+      <li>cena Stroje: <strong>${v(d.price_machine, 12)} ${esc(d.price_currency || 'Kč')}</strong> bez DPH;</li>
+      <li>cena Lokality (úplata za převzetí ekonomického užívání Zavedeného provozu): <strong>${v(d.price_location, 12)} ${esc(d.price_currency || 'Kč')}</strong> bez DPH.</li>
     </ol>
     <ol start="2">
-      <li>Celková kupní cena činí <strong>${v(d.price_total, 12)} Kč</strong> bez DPH; ${d._reverse_charge
+      <li>Celková kupní cena činí <strong>${v(d.price_total, 12)} ${esc(d.price_currency || 'Kč')}</strong> bez DPH; ${d._reverse_charge
         ? 'kupující je osobou registrovanou k DPH v jiném členském státě EU — plnění je osvobozeno od české DPH a daň přizná kupující v režimu přenesené daňové povinnosti (reverse charge, čl. 196 směrnice Rady 2006/112/ES); fakturace probíhá bez DPH'
         : 'k ceně bude připočtena DPH v zákonné výši'}.</li>
-      <li>Byla-li k téže Lokalitě uzavřena rezervační smlouva, započítává se již uhrazený rezervační poplatek ${v(d.reservation_credit, 10)} Kč na kupní cenu.</li>
+      <li>Byla-li k téže Lokalitě uzavřena rezervační smlouva, započítává se již uhrazený rezervační poplatek ${v(d.reservation_credit, 10)} ${esc(d.price_currency || 'Kč')} na kupní cenu.</li>
       <li>Kupní cena zahrnuje výrobu nového Stroje, jeho instalaci a výměnu za stávající Stroj na Lokalitě dle článku VI.</li>
     </ol>
 
