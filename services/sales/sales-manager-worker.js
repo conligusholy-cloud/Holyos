@@ -51,15 +51,20 @@ async function pushToPerson(personId, title, body, data) {
 }
 
 // ─── Denní plán (ráno) ─────────────────────────────────────────────────────
-async function runMorning(dateStr) {
+async function runMorning(dateStr, opts) {
   const ds = dateStr || tzToday();
+  const force = !!(opts && opts.force);
   const people = (await mgr.getActiveSalespeople()).filter((p) => p.is_salesperson);
   let planned = 0;
+  const detail = [];
   for (const p of people) {
     try {
-      const r = await mgr.planDay(p.id, ds, {});
+      const r = await mgr.planDay(p.id, ds, { force });
+      detail.push({ person_id: p.id, name: p.name, created: r.created, skipped: r.skipped });
       planned += 1;
-      if (r && r.plan) {
+      // Push jen když se plán reálně nově vygeneroval (created > 0) — catch-up po startu
+      // tak nespamuje ty, kdo už plán mají.
+      if (r && r.plan && r.created > 0) {
         const tasks = (r.plan.tasks || []).filter((t) => t.status === 'open');
         const title = '📋 Dnešní plán od AI vedoucího';
         const body = (r.plan.focus ? (r.plan.focus + '\n\n') : '') + tasks.length + ' úkolů na dnešek. Klepni pro otevření.';
@@ -68,7 +73,7 @@ async function runMorning(dateStr) {
       }
     } catch (e) { console.error('[sales-worker] planDay person ' + p.id + ':', e.message); }
   }
-  _lastResult = { kind: 'morning', at: new Date(), planned };
+  _lastResult = { kind: 'morning', at: new Date(), planned, detail };
   console.log(`[sales-worker] Ráno: naplánováno ${planned} obchodníkům (${ds}).`);
   return _lastResult;
 }
@@ -150,6 +155,16 @@ function start() {
   if (_tick) return;
   console.log('[sales-worker] start — tick 60 s; 07:00 plán, 20:00 hodnocení+report, ne 20:05 týden, konec měsíce 20:10.');
   _tick = setInterval(tick, TICK_INTERVAL_MS);
+  // Catch-up po startu serveru: pokud dnešní plány chybí, rozdej je automaticky
+  // celému týmu (bez force → nepřepíše existující). Řeší i první nasazení během dne.
+  if (process.env.SALES_MANAGER_CATCHUP !== '0') {
+    setTimeout(() => {
+      const key = tzToday();
+      if (_fired.morning === key) return; // ranní běh už proběhl dnes
+      _fired.morning = key;
+      runMorning().catch((e) => console.error('[sales-worker] catch-up:', e.message));
+    }, 20000);
+  }
 }
 function stop() { if (_tick) { clearInterval(_tick); _tick = null; } }
 

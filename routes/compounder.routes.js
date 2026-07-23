@@ -1320,6 +1320,18 @@ router.post('/sales/generate-day', requireAuth, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// POST /api/compounder/sales/generate-team {date?, force?} — rozdá denní plán VŠEM obchodníkům (vedoucí/admin).
+router.post('/sales/generate-team', requireAuth, async (req, res, next) => {
+  try {
+    if (!salesIsMgr(req.user)) return res.status(403).json({ error: 'Jen vedoucí/admin' });
+    const b = req.body || {};
+    const dateStr = String(b.date || todayStr()).slice(0, 10);
+    const worker = require('../services/sales/sales-manager-worker');
+    const out = await worker.runMorning(dateStr, { force: !!b.force });
+    res.json({ ok: true, planned: out.planned, detail: out.detail || [] });
+  } catch (err) { next(err); }
+});
+
 // POST /api/compounder/sales/review-day {person_id?, date?}
 router.post('/sales/review-day', requireAuth, async (req, res, next) => {
   try {
