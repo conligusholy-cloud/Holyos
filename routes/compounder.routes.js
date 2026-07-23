@@ -4225,6 +4225,7 @@ async function _buildPaymentCtx(resId) {
   if (!resv) return null;
   let lang = 'cs';
   if (resv.lead_id) { try { const l = await prisma.compounderLead.findUnique({ where: { id: resv.lead_id }, select: { lang: true } }); if (l && l.lang) lang = l.lang; } catch (e) {} }
+  const tr = payL(lang);
   // Tuzemské (CZK) i zahraniční (EUR) platby jdou na naše účty Best Series.
   const bank = {
     czk: { account: OUR_BANK.czk.account, bankCode: OUR_BANK.czk.bankCode, iban: OUR_BANK.czk.iban, name: OUR_BANK.czk.name },
