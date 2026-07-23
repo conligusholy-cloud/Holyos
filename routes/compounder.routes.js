@@ -3833,7 +3833,7 @@ router.post('/portal/reserve', async (req, res, next) => {
               const rates = await fxRatesCzk();
               const rate = rates && rates[contractCur];
               if (rate > 0) {
-                feeAmount = Math.round((rec.fee_total / rate) * 100) / 100;
+                feeAmount = Math.round(rec.fee_total / rate);
                 feeCur = contractCur;
               }
             } catch (e) { /* zůstane CZK */ }
@@ -3843,13 +3843,14 @@ router.post('/portal/reserve', async (req, res, next) => {
           // Částka slovy: česky pro Kč, anglicky pro EN smlouvy (jen celé částky).
           cf.reservation_fee_words = '';
           if (Number.isInteger(feeAmount)) {
-            if (isCs && (feeCur === 'Kč' || feeCur === 'CZK')) {
+            const CUR_CZ = { 'Kč': 'korun českých', CZK: 'korun českých', EUR: 'eur', USD: 'amerických dolarů', GBP: 'britských liber' };
+            const CUR_EN = { CZK: 'Czech crowns', 'Kč': 'Czech crowns', EUR: 'euros', USD: 'US dollars', GBP: 'pounds sterling' };
+            if (isCs) {
               const w = czAmountWords(feeAmount);
-              if (w) cf.reservation_fee_words = w + ' korun českých';
-            } else if (!isCs) {
-              const CURRENCY_WORDS_EN = { CZK: 'Czech crowns', EUR: 'euros', USD: 'US dollars', GBP: 'pounds sterling', 'Kč': 'Czech crowns' };
+              if (w) cf.reservation_fee_words = w + ' ' + (CUR_CZ[feeCur] || feeCur);
+            } else {
               const w = enAmountWords(feeAmount);
-              if (w) cf.reservation_fee_words = w + ' ' + (CURRENCY_WORDS_EN[feeCur] || feeCur);
+              if (w) cf.reservation_fee_words = w + ' ' + (CUR_EN[feeCur] || feeCur);
             }
           }
         }
