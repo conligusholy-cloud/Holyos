@@ -180,13 +180,18 @@
     if (!per.length){ h += '<div class="empty">Žádní aktivní obchodníci.</div>'; }
     else {
       h += per.map(function(p){
-        var rev = p.month_target_revenue ? (fmtMoney(p.month_actual_revenue)+' / '+fmtMoney(p.month_target_revenue)) : fmtMoney(p.month_actual_revenue);
+        var revPct = p.month_target_revenue ? Math.round((p.month_actual_revenue||0)/p.month_target_revenue*100) : null;
         return '<details class="row" ontoggle="if(this.open) loadPersonTasks('+p.person_id+')"><summary style="cursor:pointer;list-style:none">' +
           '<div class="row-h"><div class="name">'+esc(p.name)+' <span style="font-weight:400;color:var(--muted2);font-size:12px">▾ úkoly</span></div>'+(p.day_score!=null?'<div class="pct" style="color:'+scoreCol(p.day_score)+'">'+p.day_score+'</div>':'')+'</div>' +
           '<div class="sub">Úkoly: '+(p.tasks_done||0)+'/'+(p.tasks_assigned||0)+' splněno'+(p.tasks_skipped?(' · '+p.tasks_skipped+' přeskočeno'):'')+(p.tasks_open?(' · '+p.tasks_open+' otevřeno'):'')+'</div>' +
           (p.focus?'<div class="muted" style="margin-top:4px;font-size:12.5px">🎯 '+esc(p.focus)+'</div>':'') +
           (p.day_summary?'<div class="muted" style="margin-top:4px;font-size:12.5px">'+esc(p.day_summary)+'</div>':'') +
-          '<div class="sub" style="margin-top:4px">Obrat měsíc: '+rev+' · rezervace '+(p.month_actual_reservations||0)+'/'+(p.month_target_reservations||0)+'</div>' +
+          '<div style="margin-top:8px;padding:8px 10px;background:var(--surface2);border-radius:10px">' +
+            '<div style="font-size:11px;color:var(--muted2);text-transform:uppercase;letter-spacing:.05em">🎯 Cíl (měsíc)</div>' +
+            '<div style="font-weight:800;font-size:16px;margin-top:2px">Obrat '+fmtMoney(p.month_target_revenue||0)+'</div>' +
+            '<div class="sub">'+(p.month_target_reservations||0)+' rezervací · '+(p.month_target_new_contacts||0)+' nových kontaktů · '+(p.month_target_conversions||0)+' konverzí</div>' +
+            '<div class="sub" style="margin-top:4px">Zatím: '+fmtMoney(p.month_actual_revenue||0)+(revPct!=null?(' ('+revPct+' %)'):'')+' · '+(p.month_actual_reservations||0)+' rez. · '+(p.month_actual_new_contacts||0)+' kont.</div>' +
+          '</div>' +
           '</summary><div id="ptasks-'+p.person_id+'" style="margin-top:10px"><div class="muted">Klepni pro načtení úkolů…</div></div>' +
         '</details>';
       }).join('');

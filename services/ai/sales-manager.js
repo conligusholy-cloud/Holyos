@@ -154,10 +154,18 @@ async function gatherTargetHistory(personId) {
   const revYear = resv.filter((r) => r.created_at && new Date(r.created_at).getTime() >= yStart).reduce((s, r) => s + (r.purchase_price || 0), 0);
   const dealVals = resv.map((r) => r.purchase_price || 0).filter((v) => v > 0);
   const avgDeal = dealVals.length ? Math.round(dealVals.reduce((a, b) => a + b, 0) / dealVals.length) : 0;
-  return { total_leads: leads.length, new_leads_90d: new90, conversions_all: convAll, conversions_90d: conv90, reservations_90d: resv90.length, revenue_90d: rev90, revenue_year: revYear, avg_deal_value: avgDeal, working_days_month: workingDaysInMonth(), work_hours_per_day: WORK_HOURS };
+  // Firemní průměrná hodnota obchodu (napříč všemi rezervacemi) — fallback, když
+  // obchodník ještě nemá vlastní uzavřené obchody, aby obratový cíl nebyl 0.
+  let companyAvgDeal = 0;
+  try {
+    const all = await prisma.locationReservation.findMany({ where: { purchase_price: { gt: 0 } }, select: { purchase_price: true }, take: 3000 });
+    if (all.length) companyAvgDeal = Math.round(all.reduce((s, r) => s + (r.purchase_price || 0), 0) / all.length);
+  } catch (e) { companyAvgDeal = 0; }
+  const dealValue = avgDeal || companyAvgDeal || Number(process.env.SALES_DEFAULT_DEAL_VALUE) || 0;
+  return { total_leads: leads.length, new_leads_90d: new90, conversions_all: convAll, conversions_90d: conv90, reservations_90d: resv90.length, revenue_90d: rev90, revenue_year: revYear, avg_deal_value: avgDeal, company_avg_deal_value: companyAvgDeal, deal_value_used: dealValue, working_days_month: workingDaysInMonth(), work_hours_per_day: WORK_HOURS };
 }
 async function planTargetsAI(person, hist) {
-  const sys = 'Jsi AI vedoucí obchodu Best Series (prodej prémiových prádelen Compounder jako investice). Navrhni tomuto obchodníkovi REÁLNÉ, ale ambiciózní MĚSÍČNÍ cíle, vycházející z jeho historie a z pracovní kapacity Po–Pá, ' + WORK_HOURS + ' h/den (' + hist.working_days_month + ' pracovních dní v měsíci). Metriky: new_contacts (nové oslovené/získané kontakty za měsíc), conversions (převedené obchody), reservations (rezervace lokalit), revenue (obrat v ' + PAY_CURRENCY + '). Zásady: cíle musí být splnitelné v 8h denní kapacitě (počítej reálné časy na hovor/schůzku/nábor), ale mají tlačit na maximum prodeje. Když je historie slabá, postav cíle hlavně na náboru a schůzkách (aktivita, kterou obchodník plně ovlivní). Revenue odhadni z reservations × průměrná hodnota obchodu (avg_deal_value; když je 0, odhadni střízlivě). Odpověz POUZE platným JSON bez markdownu: {"new_contacts":<číslo/měsíc>,"conversions":<číslo/měsíc>,"reservations":<číslo/měsíc>,"revenue":<číslo/měsíc>,"rationale":"<1-2 věty česky proč>"}. Piš česky.';
+  const sys = 'Jsi AI vedoucí obchodu Best Series (prodej prémiových prádelen Compounder jako investice). Navrhni tomuto obchodníkovi REÁLNÉ, ale ambiciózní MĚSÍČNÍ cíle, vycházející z jeho historie a z pracovní kapacity Po–Pá, ' + WORK_HOURS + ' h/den (' + hist.working_days_month + ' pracovních dní v měsíci). Metriky: new_contacts (nové oslovené/získané kontakty za měsíc), conversions (převedené obchody), reservations (rezervace lokalit), revenue (obrat v ' + PAY_CURRENCY + '). Zásady: cíle musí být splnitelné v 8h denní kapacitě (počítej reálné časy na hovor/schůzku/nábor), ale mají tlačit na maximum prodeje. Když je historie slabá, postav cíle hlavně na náboru a schůzkách (aktivita, kterou obchodník plně ovlivní). Revenue odhadni z reservations × hodnota obchodu — použij deal_value_used (vlastní průměr obchodníka, jinak firemní průměr); revenue NESMÍ být 0, pokud existuje jakákoli hodnota obchodu. Odpověz POUZE platným JSON bez markdownu: {"new_contacts":<číslo/měsíc>,"conversions":<číslo/měsíc>,"reservations":<číslo/měsíc>,"revenue":<číslo/měsíc>,"rationale":"<1-2 věty česky proč>"}. Piš česky.';
   const usr = 'Obchodník: ' + person.name + '\nHistorie a kapacita (JSON):\n' + JSON.stringify(hist);
   const j = await callClaudeJSON(sys, usr, 500);
   if (!j) return null;
@@ -170,7 +178,7 @@ function targetsFallback(hist) {
   const newContacts = Math.max(Math.round((hist.new_leads_90d || 0) / 3 * 1.3), wd * 6);
   const conversions = Math.max(1, Math.round(newContacts * 0.06));
   const reservations = Math.max(1, Math.round(conversions * 0.8));
-  const revenue = reservations * (hist.avg_deal_value || 0);
+  const revenue = reservations * (hist.deal_value_used || hist.avg_deal_value || hist.company_avg_deal_value || 0);
   return { new_contacts: newContacts, conversions, reservations, revenue, rationale: 'Odvozeno z historie a kapacity 8 h/den.' };
 }
 async function saveTargets(personId, month) {
@@ -189,7 +197,9 @@ async function saveTargets(personId, month) {
 }
 async function ensureTargets(personId, opts) {
   const existing = await getTargets(personId);
-  const has = existing && ((existing.new_contacts && existing.new_contacts.month) || (existing.revenue && existing.revenue.month));
+  // Cíle považujeme za nastavené jen když mají nenulový obrat i počet nových kontaktů —
+  // jinak (např. staré cíle s obratem 0) se automaticky přepočítají.
+  const has = existing && existing.new_contacts && existing.new_contacts.month > 0 && existing.revenue && existing.revenue.month > 0;
   if (has && !(opts && opts.force)) return existing;
   const hist = await gatherTargetHistory(personId);
   const person = await prisma.person.findUnique({ where: { id: personId }, select: { first_name: true, last_name: true } }).catch(() => null);
@@ -550,6 +560,10 @@ async function buildOwnerReport(dateStr) {
       month_actual_revenue: (actuals.revenue && actuals.revenue.month) || 0,
       month_target_reservations: (targets.reservations && targets.reservations.month) || 0,
       month_actual_reservations: (actuals.reservations && actuals.reservations.month) || 0,
+      month_target_new_contacts: (targets.new_contacts && targets.new_contacts.month) || 0,
+      month_actual_new_contacts: (actuals.new_contacts && actuals.new_contacts.month) || 0,
+      month_target_conversions: (targets.conversions && targets.conversions.month) || 0,
+      month_actual_conversions: (actuals.conversions && actuals.conversions.month) || 0,
     });
   }
   return { date: dateStr, team_size: people.length, per };
