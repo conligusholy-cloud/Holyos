@@ -87,6 +87,8 @@
       stat(t.unassigned||0, 'Nepřiřazeno') +
     '</div>';
 
+    h += '<div id="ai-mgr"></div>';
+
     var at = (d.activeToday||[]).slice();
     // Nahoře lead s nejnovější aktivitou (podle času poslední akce).
     at.sort(function(a,b){ return new Date(b.lastAt||0) - new Date(a.lastAt||0); });
@@ -153,8 +155,81 @@
     }
 
     document.getElementById('content').innerHTML = h;
+    loadAiManager();
   }
   function stat(v, k){ return '<div class="stat"><div class="v">'+esc(v)+'</div><div class="k">'+esc(k)+'</div></div>'; }
+
+  // ─── AI vedoucí obchodu: přehled dne + výplatní souhrn ─────────────────────
+  async function loadAiManager(){
+    var box = document.getElementById('ai-mgr'); if(!box) return;
+    box.innerHTML = '<h2>🧭 AI vedoucí obchodu — dnešek</h2><div class="muted" style="padding:0 2px">Načítám…</div>';
+    try {
+      var r = await fetch('/api/compounder/sales/team-day', { credentials:'include' });
+      if (!r.ok){ box.innerHTML = ''; return; }
+      var d = await r.json();
+      renderAiManager(box, d);
+    } catch(e){ box.innerHTML = ''; }
+  }
+  function scoreCol(s){ return s==null?'var(--muted)':(s>=80?'#22c55e':s>=55?'#eab308':s>=30?'#f59e0b':'#ef4444'); }
+  function renderAiManager(box, d){
+    var per = d.per || [];
+    var totA = 0, totD = 0;
+    per.forEach(function(p){ totA += (p.tasks_assigned||0); totD += (p.tasks_done||0); });
+    var h = '<h2>🧭 AI vedoucí obchodu — dnešek</h2>';
+    h += '<div class="row"><div class="row-h"><div class="name">Dnešní úkoly týmu</div><button class="logout" onclick="sendOwnerReport(this)">Poslat report majitelům</button></div><div class="sub">Zadáno '+totA+' úkolů · splněno '+totD+'</div></div>';
+    if (!per.length){ h += '<div class="empty">Žádní aktivní obchodníci.</div>'; }
+    else {
+      h += per.map(function(p){
+        var rev = p.month_target_revenue ? (fmtMoney(p.month_actual_revenue)+' / '+fmtMoney(p.month_target_revenue)) : fmtMoney(p.month_actual_revenue);
+        return '<div class="row"><div class="row-h"><div class="name">'+esc(p.name)+'</div>'+(p.day_score!=null?'<div class="pct" style="color:'+scoreCol(p.day_score)+'">'+p.day_score+'</div>':'')+'</div>' +
+          '<div class="sub">Úkoly: '+(p.tasks_done||0)+'/'+(p.tasks_assigned||0)+' splněno'+(p.tasks_skipped?(' · '+p.tasks_skipped+' přeskočeno'):'')+(p.tasks_open?(' · '+p.tasks_open+' otevřeno'):'')+'</div>' +
+          (p.focus?'<div class="muted" style="margin-top:4px;font-size:12.5px">🎯 '+esc(p.focus)+'</div>':'') +
+          (p.day_summary?'<div class="muted" style="margin-top:4px;font-size:12.5px">'+esc(p.day_summary)+'</div>':'') +
+          '<div class="sub" style="margin-top:4px">Obrat měsíc: '+rev+' · rezervace '+(p.month_actual_reservations||0)+'/'+(p.month_target_reservations||0)+'</div>' +
+        '</div>';
+      }).join('');
+    }
+    h += '<h2>💰 Měsíční výplatní souhrn</h2><div id="pay-summary"><div class="muted" style="padding:0 2px">Načítám…</div></div>';
+    box.innerHTML = h;
+    loadPaySummary();
+  }
+  async function loadPaySummary(){
+    var box = document.getElementById('pay-summary'); if(!box) return;
+    try {
+      var r = await fetch('/api/compounder/sales/reviews?kind=month', { credentials:'include' });
+      if (!r.ok){ box.innerHTML = '<div class="muted">Zatím žádné měsíční hodnocení. Vygeneruje se poslední den v měsíci (nebo ručně).</div>'; return; }
+      var d = await r.json();
+      var rows = d.reviews || [];
+      if (!rows.length){ box.innerHTML = '<div class="muted">Zatím žádné měsíční hodnocení.</div>'; return; }
+      var latest = rows[0].period_start;
+      rows = rows.filter(function(x){ return x.period_start === latest; });
+      box.innerHTML = rows.map(payRowHtml).join('');
+    } catch(e){ box.innerHTML = ''; }
+  }
+  function payRowHtml(rv){
+    var cur = rv.pay_currency || 'CZK';
+    var money = function(v){ return (v!=null) ? (Number(v).toLocaleString('cs-CZ')+' '+cur) : '—'; };
+    return '<div class="row"><div class="row-h"><div class="name">'+esc(rv.person_name)+'</div><div class="pct" style="color:'+scoreCol(rv.score)+'">'+rv.score+'</div></div>' +
+      (rv.summary?'<div class="muted" style="margin-top:4px;font-size:12.5px">'+esc(rv.summary)+'</div>':'') +
+      '<div class="sub" style="margin-top:6px">Návrh: základ '+money(rv.pay_base)+' · bonus '+money(rv.pay_bonus)+' · provize '+money(rv.pay_commission)+'</div>' +
+      '<div class="name" style="margin-top:2px">Celkem návrh: '+money(rv.pay_total)+'</div>' +
+      (rv.pay_note?'<div class="muted" style="margin-top:4px;font-size:12px">'+esc(rv.pay_note)+'</div>':'') +
+      (rv.approved_at
+        ? '<div style="color:#22c55e;margin-top:8px;font-size:13px">✓ Schváleno: '+money(rv.approved_total!=null?rv.approved_total:rv.pay_total)+(rv.approved_note?(' — '+esc(rv.approved_note)):'')+'</div>'
+        : '<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap"><input id="appr-'+rv.id+'" type="number" placeholder="Schválená částka" value="'+(rv.pay_total!=null?rv.pay_total:'')+'" style="flex:1;min-width:120px;background:var(--surface2);border:1px solid var(--line);border-radius:9px;color:var(--text);padding:8px 10px"><button class="logout" style="border-color:#22c55e;color:#22c55e" onclick="approvePay('+rv.id+')">Schválit</button></div>') +
+    '</div>';
+  }
+  async function approvePay(id){
+    var inp = document.getElementById('appr-'+id); var val = inp ? inp.value : '';
+    try { await fetch('/api/compounder/sales/reviews/'+id+'/approve', { method:'POST', credentials:'include', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ approved_total: val==='' ? null : Number(val) }) }); } catch(e){}
+    loadPaySummary();
+  }
+  async function sendOwnerReport(btn){
+    if (btn){ btn.disabled = true; btn.textContent = 'Odesílám…'; }
+    try { await fetch('/api/compounder/sales/owner-report', { method:'POST', credentials:'include', headers:{'Content-Type':'application/json'}, body:'{}' }); if(btn){ btn.textContent = '✓ Odesláno'; } }
+    catch(e){ if(btn){ btn.textContent = 'Chyba'; } }
+    setTimeout(function(){ if(btn){ btn.disabled = false; btn.textContent = 'Poslat report majitelům'; } }, 1600);
+  }
 
   async function loadPlan(pid){
     var box = document.getElementById('plan-'+pid); if (!box) return;

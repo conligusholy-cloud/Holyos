@@ -19,6 +19,7 @@ const { getSetting, setSetting, getOurCompany } = require('../services/settings'
 const contracts = require('../services/pdf/contracts');
 const compounderNotify = require('../services/compounder/notify');
 const digestWorker = require('../services/compounder/daily-digest-worker');
+const salesMgr = require('../services/ai/sales-manager');
 const multer = require('multer');
 const { putObject: r2Put } = require('../services/storage/r2');
 const kioskPhotoUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 8 * 1024 * 1024, files: 3 } });
@@ -1173,6 +1174,231 @@ router.post('/my-notify-settings', requireAuth, async (req, res, next) => {
     const prefs = { new_contact: !!b.new_contact, contact_activity: !!b.contact_activity, invite_unopened: !!b.invite_unopened };
     await setSetting('sales_notify.' + pid, prefs);
     res.json({ ok: true, prefs });
+  } catch (err) { next(err); }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUTONOMNÍ AI VEDOUCÍ OBCHODU — denní úkoly, hodnocení, výplatní podklad
+// ═══════════════════════════════════════════════════════════════════════════
+function salesIsMgr(u) {
+  u = u || {};
+  return !!(u.isSuperAdmin || u.role === 'admin' || (u.person && u.person.is_sales_lead));
+}
+function salesMyPersonId(req) { return (req.user && req.user.person && req.user.person.id) || null; }
+function todayStr() { return salesMgr.tzTodayStr(); }
+
+async function loadDayPlan(personId, dateStr) {
+  const date = new Date((dateStr || todayStr()) + 'T00:00:00Z');
+  const plan = await prisma.salesDayPlan.findUnique({
+    where: { person_id_date: { person_id: personId, date } },
+    include: { tasks: { orderBy: [{ status: 'asc' }, { priority: 'asc' }, { id: 'asc' }] } },
+  });
+  return plan;
+}
+
+// GET /api/compounder/my-day?date=&person_id= — dnešní plán + úkoly.
+// person_id smí zadat jen vedoucí/admin. generate=1 vytvoří plán, pokud chybí.
+router.get('/my-day', requireAuth, async (req, res, next) => {
+  try {
+    const u = req.user || {};
+    let personId = salesMyPersonId(req);
+    if (req.query.person_id && salesIsMgr(u)) personId = Number(req.query.person_id);
+    if (!personId) return res.status(400).json({ error: 'Uživatel nemá přiřazenou osobu' });
+    const dateStr = String(req.query.date || todayStr()).slice(0, 10);
+    let plan = await loadDayPlan(personId, dateStr);
+    if (!plan && req.query.generate === '1') {
+      await salesMgr.planDay(personId, dateStr, {});
+      plan = await loadDayPlan(personId, dateStr);
+    }
+    const dayReview = await prisma.salesReview.findUnique({ where: { person_id_kind_period_start: { person_id: personId, kind: 'day', period_start: new Date(dateStr + 'T00:00:00Z') } } }).catch(() => null);
+    res.json({ ok: true, person_id: personId, date: dateStr, plan: plan || null, review: dayReview || null });
+  } catch (err) { next(err); }
+});
+
+// POST /api/compounder/tasks/:id/done {note}
+router.post('/tasks/:id/done', requireAuth, async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'Neplatné ID' });
+    const task = await prisma.salesTask.findUnique({ where: { id } });
+    if (!task) return res.status(404).json({ error: 'Úkol nenalezen' });
+    if (task.person_id !== salesMyPersonId(req) && !salesIsMgr(req.user)) return res.status(403).json({ error: 'Není váš úkol' });
+    const note = req.body && req.body.note ? String(req.body.note).slice(0, 1000) : null;
+    const upd = await prisma.salesTask.update({ where: { id }, data: { status: 'done', done_at: new Date(), done_note: note } });
+    res.json({ ok: true, task: upd });
+  } catch (err) { next(err); }
+});
+
+// POST /api/compounder/tasks/:id/skip {reason}
+router.post('/tasks/:id/skip', requireAuth, async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'Neplatné ID' });
+    const task = await prisma.salesTask.findUnique({ where: { id } });
+    if (!task) return res.status(404).json({ error: 'Úkol nenalezen' });
+    if (task.person_id !== salesMyPersonId(req) && !salesIsMgr(req.user)) return res.status(403).json({ error: 'Není váš úkol' });
+    const reason = req.body && req.body.reason ? String(req.body.reason).slice(0, 1000) : null;
+    const upd = await prisma.salesTask.update({ where: { id }, data: { status: 'skipped', skipped_reason: reason } });
+    res.json({ ok: true, task: upd });
+  } catch (err) { next(err); }
+});
+
+// POST /api/compounder/tasks/:id/reopen — vrátí úkol do open.
+router.post('/tasks/:id/reopen', requireAuth, async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'Neplatné ID' });
+    const task = await prisma.salesTask.findUnique({ where: { id } });
+    if (!task) return res.status(404).json({ error: 'Úkol nenalezen' });
+    if (task.person_id !== salesMyPersonId(req) && !salesIsMgr(req.user)) return res.status(403).json({ error: 'Není váš úkol' });
+    const upd = await prisma.salesTask.update({ where: { id }, data: { status: 'open', done_at: null, done_note: null, skipped_reason: null } });
+    res.json({ ok: true, task: upd });
+  } catch (err) { next(err); }
+});
+
+// POST /api/compounder/tasks {title, detail, kind, priority, lead_id, date} — ruční úkol (self/manager).
+router.post('/tasks', requireAuth, async (req, res, next) => {
+  try {
+    const u = req.user || {};
+    let personId = salesMyPersonId(req);
+    const b = req.body || {};
+    if (b.person_id && salesIsMgr(u)) personId = Number(b.person_id);
+    if (!personId) return res.status(400).json({ error: 'Uživatel nemá přiřazenou osobu' });
+    const title = String(b.title || '').trim().slice(0, 480);
+    if (!title) return res.status(400).json({ error: 'Chybí název úkolu' });
+    const dateStr = String(b.date || todayStr()).slice(0, 10);
+    const date = new Date(dateStr + 'T00:00:00Z');
+    const plan = await prisma.salesDayPlan.upsert({
+      where: { person_id_date: { person_id: personId, date } },
+      create: { person_id: personId, date, generated_by: salesIsMgr(u) && Number(b.person_id) === personId ? 'manager' : 'self', status: 'published' },
+      update: {},
+    });
+    const kinds = ['call', 'followup', 'invite', 'close', 'reservation', 'meeting', 'admin', 'other'];
+    const task = await prisma.salesTask.create({
+      data: {
+        day_plan_id: plan.id, person_id: personId,
+        lead_id: Number.isInteger(Number(b.lead_id)) && Number(b.lead_id) > 0 ? Number(b.lead_id) : null,
+        kind: kinds.indexOf(String(b.kind)) >= 0 ? String(b.kind) : 'other',
+        title, detail: b.detail ? String(b.detail).slice(0, 1000) : null,
+        priority: Math.max(1, Math.min(5, Math.round(Number(b.priority) || 3))),
+        status: 'open',
+      },
+    });
+    res.json({ ok: true, task });
+  } catch (err) { next(err); }
+});
+
+// GET /api/compounder/my-reviews?kind=day|week|month&limit=&person_id=
+router.get('/my-reviews', requireAuth, async (req, res, next) => {
+  try {
+    const u = req.user || {};
+    let personId = salesMyPersonId(req);
+    if (req.query.person_id && salesIsMgr(u)) personId = Number(req.query.person_id);
+    if (!personId) return res.status(400).json({ error: 'Uživatel nemá přiřazenou osobu' });
+    const kind = ['day', 'week', 'month'].indexOf(String(req.query.kind)) >= 0 ? String(req.query.kind) : null;
+    const limit = Math.min(60, Math.max(1, Number(req.query.limit) || 14));
+    const where = { person_id: personId };
+    if (kind) where.kind = kind;
+    const rows = await prisma.salesReview.findMany({ where, orderBy: { period_start: 'desc' }, take: limit });
+    res.json({ ok: true, person_id: personId, reviews: rows });
+  } catch (err) { next(err); }
+});
+
+// ─── Vedoucí / admin ─────────────────────────────────────────────────────────
+// POST /api/compounder/sales/generate-day {person_id?, date?, force?}
+router.post('/sales/generate-day', requireAuth, async (req, res, next) => {
+  try {
+    const u = req.user || {};
+    const b = req.body || {};
+    let personId = salesMyPersonId(req);
+    if (b.person_id && salesIsMgr(u)) personId = Number(b.person_id);
+    if (!personId) return res.status(400).json({ error: 'Chybí person_id' });
+    if (personId !== salesMyPersonId(req) && !salesIsMgr(u)) return res.status(403).json({ error: 'Jen vedoucí/admin' });
+    const dateStr = String(b.date || todayStr()).slice(0, 10);
+    const r = await salesMgr.planDay(personId, dateStr, { force: !!b.force });
+    res.json({ ok: true, created: r.created, skipped: r.skipped, plan: r.plan });
+  } catch (err) { next(err); }
+});
+
+// POST /api/compounder/sales/review-day {person_id?, date?}
+router.post('/sales/review-day', requireAuth, async (req, res, next) => {
+  try {
+    const u = req.user || {};
+    const b = req.body || {};
+    let personId = salesMyPersonId(req);
+    if (b.person_id && salesIsMgr(u)) personId = Number(b.person_id);
+    if (!personId) return res.status(400).json({ error: 'Chybí person_id' });
+    if (personId !== salesMyPersonId(req) && !salesIsMgr(u)) return res.status(403).json({ error: 'Jen vedoucí/admin' });
+    const dateStr = String(b.date || todayStr()).slice(0, 10);
+    const review = await salesMgr.reviewDay(personId, dateStr);
+    res.json({ ok: true, review });
+  } catch (err) { next(err); }
+});
+
+// POST /api/compounder/sales/review-period {person_id, kind, date?} — jen vedoucí/admin.
+router.post('/sales/review-period', requireAuth, async (req, res, next) => {
+  try {
+    const u = req.user || {};
+    if (!salesIsMgr(u)) return res.status(403).json({ error: 'Jen vedoucí/admin' });
+    const b = req.body || {};
+    const personId = Number(b.person_id);
+    const kind = ['week', 'month'].indexOf(String(b.kind)) >= 0 ? String(b.kind) : null;
+    if (!Number.isInteger(personId) || !kind) return res.status(400).json({ error: 'Chybí person_id nebo kind (week|month)' });
+    const dateStr = String(b.date || todayStr()).slice(0, 10);
+    const review = await salesMgr.reviewPeriod(personId, kind, dateStr);
+    res.json({ ok: true, review });
+  } catch (err) { next(err); }
+});
+
+// GET /api/compounder/sales/team-day?date= — přehled dne za celý tým (vedoucí/admin).
+router.get('/sales/team-day', requireAuth, async (req, res, next) => {
+  try {
+    if (!salesIsMgr(req.user)) return res.status(403).json({ error: 'Jen vedoucí/admin' });
+    const dateStr = String(req.query.date || todayStr()).slice(0, 10);
+    const report = await salesMgr.buildOwnerReport(dateStr);
+    res.json({ ok: true, ...report });
+  } catch (err) { next(err); }
+});
+
+// GET /api/compounder/sales/reviews?kind=month&period_start= — hodnocení celého týmu (vedoucí/admin).
+router.get('/sales/reviews', requireAuth, async (req, res, next) => {
+  try {
+    if (!salesIsMgr(req.user)) return res.status(403).json({ error: 'Jen vedoucí/admin' });
+    const kind = ['day', 'week', 'month'].indexOf(String(req.query.kind)) >= 0 ? String(req.query.kind) : 'month';
+    const where = { kind };
+    if (req.query.period_start) where.period_start = new Date(String(req.query.period_start).slice(0, 10) + 'T00:00:00Z');
+    const rows = await prisma.salesReview.findMany({ where, orderBy: [{ period_start: 'desc' }, { person_id: 'asc' }], take: 200 });
+    const pids = [...new Set(rows.map((r) => r.person_id))];
+    const people = pids.length ? await prisma.person.findMany({ where: { id: { in: pids } }, select: { id: true, first_name: true, last_name: true } }) : [];
+    const nameById = {}; people.forEach((p) => { nameById[p.id] = `${p.first_name || ''} ${p.last_name || ''}`.trim(); });
+    res.json({ ok: true, kind, reviews: rows.map((r) => ({ ...r, person_name: nameById[r.person_id] || ('#' + r.person_id) })) });
+  } catch (err) { next(err); }
+});
+
+// POST /api/compounder/sales/reviews/:id/approve {approved_total, approved_note} — schválení výplaty (vedoucí/admin).
+router.post('/sales/reviews/:id/approve', requireAuth, async (req, res, next) => {
+  try {
+    const u = req.user || {};
+    if (!salesIsMgr(u)) return res.status(403).json({ error: 'Jen vedoucí/admin' });
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'Neplatné ID' });
+    const b = req.body || {};
+    const approvedTotal = (b.approved_total == null || b.approved_total === '') ? null : Math.round(Number(b.approved_total));
+    const upd = await prisma.salesReview.update({
+      where: { id },
+      data: { approved_at: new Date(), approved_by_person_id: salesMyPersonId(req), approved_total: approvedTotal, approved_note: b.approved_note ? String(b.approved_note).slice(0, 1200) : null },
+    });
+    res.json({ ok: true, review: upd });
+  } catch (err) { next(err); }
+});
+
+// POST /api/compounder/sales/owner-report {date} — ruční odeslání denního reportu majitelům (vedoucí/admin).
+router.post('/sales/owner-report', requireAuth, async (req, res, next) => {
+  try {
+    if (!salesIsMgr(req.user)) return res.status(403).json({ error: 'Jen vedoucí/admin' });
+    const dateStr = String((req.body && req.body.date) || todayStr()).slice(0, 10);
+    const out = await salesMgr.reportToOwners(dateStr);
+    res.json({ ok: true, title: out.title, body: out.body });
   } catch (err) { next(err); }
 });
 

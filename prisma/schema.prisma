@@ -5770,3 +5770,102 @@ model SalesTarget {
   @@index([person_id])
   @@map("sales_targets")
 }
+
+// =============================================================================
+// OBCHOD — Autonomní AI vedoucí obchodu
+// =============================================================================
+// AI agent, který obchodníkovi každý den rozdá úkoly (SalesDayPlan + SalesTask),
+// večer den vyhodnotí a týdně/měsíčně sestaví hodnocení k výplatě (SalesReview).
+// Odděleno od výrobního Velína (velin_*), aby se agendy nemíchaly.
+// Vazby na Person/CompounderLead/Site jsou volné (jen ID, bez formální relace).
+
+// Denní plán obchodníka — jedna hlavička na osobu/den, sdružuje úkoly dne.
+model SalesDayPlan {
+  id           Int      @id @default(autoincrement())
+  person_id    Int
+  date         DateTime @db.Date
+  generated_by String   @default("ai") @db.VarChar(20) // ai | manager | self
+  generated_at DateTime @default(now())
+  focus        String?  @db.Text // AI shrnutí zaměření dne (1-2 věty)
+  status       String   @default("published") @db.VarChar(20) // draft | published | locked
+  morning_pushed_at DateTime?
+
+  tasks SalesTask[] @relation("SalesTaskDayPlan")
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@unique([person_id, date])
+  @@index([date])
+  @@map("sales_day_plans")
+}
+
+// Konkrétní úkol pro obchodníka na den. Zdroj = AI vedoucí (nebo ruční/self).
+model SalesTask {
+  id          Int  @id @default(autoincrement())
+  day_plan_id Int?
+  person_id   Int
+  lead_id     Int? // CompounderLead (volná vazba)
+  site_id     Int? // Site / lokalita (volná vazba)
+
+  // call | followup | invite | close | reservation | meeting | admin | other
+  kind      String @default("other") @db.VarChar(20)
+  title     String @db.VarChar(500)
+  detail    String? @db.Text
+  reasoning String? @db.Text // proč to AI navrhla
+  priority  Int    @default(3) // 1=nejvyšší … 5=nejnižší
+
+  status         String    @default("open") @db.VarChar(20) // open | done | skipped
+  done_at        DateTime?
+  done_note      String?   @db.Text
+  skipped_reason String?   @db.Text
+
+  day_plan SalesDayPlan? @relation("SalesTaskDayPlan", fields: [day_plan_id], references: [id], onDelete: SetNull)
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@index([person_id, status])
+  @@index([day_plan_id])
+  @@index([lead_id])
+  @@map("sales_tasks")
+}
+
+// Hodnocení obchodníka — denní / týdenní / měsíční. Měsíční nese i podklad
+// k výplatě (návrh + schválení vedoucím).
+model SalesReview {
+  id           Int      @id @default(autoincrement())
+  person_id    Int
+  kind         String   @db.VarChar(10) // day | week | month
+  period_start DateTime @db.Date
+  period_end   DateTime @db.Date
+
+  score        Int     @default(0) // 0-100
+  grade        String? @db.VarChar(30) // slovní stupeň: Výborný/Dobrý/Slabý…
+  summary      String? @db.Text // slovní hodnocení
+  highlights   String? @db.Text // co se povedlo
+  improvements String? @db.Text // co zlepšit
+  metrics      Json? // snapshot metrik (plán vs skutečnost, úkoly)
+
+  // Podklad k výplatě (relevantní pro week/month)
+  pay_currency   String? @db.VarChar(3)
+  pay_base       Int? // navržená základní odměna
+  pay_bonus      Int? // navržený bonus
+  pay_commission Int? // navržená provize
+  pay_total      Int? // celkem návrh
+  pay_note       String? @db.Text // zdůvodnění návrhu
+
+  // Schválení vedoucím obchodu
+  approved_at           DateTime?
+  approved_by_person_id Int?
+  approved_total        Int? // schválená výsledná částka
+  approved_note         String? @db.Text
+
+  generated_at DateTime @default(now())
+  created_at   DateTime @default(now())
+  updated_at   DateTime @updatedAt
+
+  @@unique([person_id, kind, period_start])
+  @@index([person_id, kind])
+  @@map("sales_reviews")
+}

@@ -907,6 +907,12 @@ app.listen(PORT, async () => {
   } catch (err) {
     console.error('[app] compounder-digest nelze spustit:', err.message);
   }
+  try {
+    const salesManagerWorker = require('./services/sales/sales-manager-worker');
+    salesManagerWorker.start();
+  } catch (err) {
+    console.error('[app] sales-manager-worker nelze spustit:', err.message);
+  }
   console.log('=========================================');
   console.log('  HolyOS v0.5.0');
   console.log('  Listening on port ' + PORT);
