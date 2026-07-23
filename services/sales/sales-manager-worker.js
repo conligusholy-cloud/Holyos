@@ -46,14 +46,37 @@ function isLastDayOfMonth() {
   return cur.slice(0, 7) !== tomorrow.slice(0, 7);
 }
 
-async function pushToPerson(personId, title, body, data) {
+// Doručí notifikaci obchodníkovi: push do Velína + zvonek v HolyOS, a když NEMÁ
+// aktivní Velín zařízení v telefonu, pošle ji navíc E-MAILEM (záložní kanál).
+// opts.noEmail=true potlačí e-mail (např. u večerního hodnocení, které má vlastní e-mail).
+async function pushToPerson(personId, title, body, data, opts) {
+  let person = null;
+  try {
+    person = await prisma.person.findUnique({
+      where: { id: personId },
+      select: { user_id: true, email: true, velin_devices: { where: { active: true }, select: { id: true } } },
+    });
+  } catch (e) { /* ignore */ }
   try {
     await notifyPerson(prisma, personId, { title, body, data: Object.assign({ link: LINK }, data || {}), sound: 'default' });
   } catch (e) { /* push nesmí shodit worker */ }
   try {
-    const p = await prisma.person.findUnique({ where: { id: personId }, select: { user_id: true } });
-    if (p && p.user_id) await createNotification({ userId: p.user_id, type: 'system', title, body, link: LINK });
+    if (person && person.user_id) await createNotification({ userId: person.user_id, type: 'system', title, body, link: LINK });
   } catch (e) { /* zvonek best-effort */ }
+  // E-mail fallback: bez aktivního Velín zařízení by push nedorazil.
+  const hasVelin = person && person.velin_devices && person.velin_devices.length > 0;
+  if (!(opts && opts.noEmail) && !hasVelin && person && person.email) {
+    try {
+      await sendMail({
+        to: person.email,
+        subject: title,
+        body: (body || '') + '\n\n(Tuto zprávu dostáváš e-mailem, protože nemáš aktivní aplikaci Velín v telefonu.)\n\n— AI vedoucí obchodu, Best Series',
+        from: process.env.SALES_MANAGER_FROM || undefined,
+        fromName: 'AI vedoucí obchodu',
+        link: (data && data.link) || LINK, linkLabel: 'Otevřít mou obrazovku',
+      });
+    } catch (e) { console.error('[sales-worker] email fallback ' + personId + ':', e.message); }
+  }
 }
 
 // ─── Denní plán (ráno) ─────────────────────────────────────────────────────
@@ -130,7 +153,7 @@ async function runEvening(dateStr) {
       reviewed += 1;
       if (rev) {
         const title = '📊 Hodnocení dne — skóre ' + rev.score + (rev.grade ? (' · ' + rev.grade) : '');
-        await pushToPerson(p.id, title, (rev.summary || '').slice(0, 300), { type: 'sales_review_day', date: ds });
+        await pushToPerson(p.id, title, (rev.summary || '').slice(0, 300), { type: 'sales_review_day', date: ds }, { noEmail: true });
         await sendReviewEmail(p.id, rev, ds);
       }
     } catch (e) { console.error('[sales-worker] reviewDay person ' + p.id + ':', e.message); }
