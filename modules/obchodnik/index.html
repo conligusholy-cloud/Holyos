@@ -84,6 +84,7 @@
   .fc-theme-standard td,.fc-theme-standard th{border-color:rgba(255,255,255,.07)}
   .fc .fc-event{border-radius:8px;border:none;padding:1px 5px;font-size:12px;font-weight:600;cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,.25)}
   .fc .fc-event:hover{filter:brightness(1.08)}
+  .fc .fc-event.fc-conflict{outline:2px solid #ef4444;outline-offset:-2px;box-shadow:0 0 8px rgba(239,68,68,.5)}
   .fc-toolbar.fc-header-toolbar{margin-bottom:12px;gap:8px;flex-wrap:wrap}
   .fc .fc-scrollgrid{border-radius:12px;overflow:hidden}
 </style>
@@ -543,6 +544,9 @@
           .then(function(d){ var evs=[]; window._myMbx=(d.outlookMailbox||'').toLowerCase();
             (d.events||[]).forEach(function(e){ evs.push({ id:'h'+e.id, title:e.title||'(schůzka)', start:e.start_at, end:e.end_at||undefined, backgroundColor:'#eab308', borderColor:'#eab308', textColor:'#1a1a1a', extendedProps:{ source:'holyos', dbId:e.id, sync_error:e.graph_sync_error, graph_event_id:e.graph_event_id, location:e.location, note:e.description, attendees:e.attendees, site_id:e.site_id, compounder_lead_id:e.compounder_lead_id } }); });
             (d.outlook||[]).forEach(function(o){ var org=o.organizer||null; var oa=((org&&org.address)||'').toLowerCase(); var mine=!!(window._myMbx&&oa&&oa===window._myMbx); var col=mine?'#2b6cb0':'#14b8a6'; evs.push({ id:'o'+o.id, title:o.title||'(bez názvu)', start:o.start_at, end:o.end_at||undefined, allDay:!!o.all_day, backgroundColor:col, borderColor:col, extendedProps:{ source:'outlook', web_link:o.web_link, location:o.location, organizer:org, mine:mine } }); });
+            // Detekce časových překryvů → červený rámeček (konflikt) na obě události.
+            for(var _i=0;_i<evs.length;_i++){ for(var _j=_i+1;_j<evs.length;_j++){ var _a=evs[_i],_b=evs[_j]; if(_a.allDay||_b.allDay) continue; var as=+new Date(_a.start),ae=+new Date(_a.end||_a.start),bs=+new Date(_b.start),be=+new Date(_b.end||_b.start); if(isFinite(as)&&isFinite(bs)&&as<be&&bs<ae){ _a._conflict=true; _b._conflict=true; } } }
+            evs.forEach(function(e){ if(e._conflict){ e.borderColor='#ef4444'; e.classNames=(e.classNames||[]).concat('fc-conflict'); } });
             var _n=document.getElementById('fc-note'); if(_n){ _n.innerHTML = d.outlookError ? ('\u26a0 Outlook události se nenačetly'+(d.outlookMailbox?(' ('+esc(d.outlookMailbox)+')'):'')+': '+esc(d.outlookError)) : ''; }
             ok(evs);
           }).catch(function(){ fail(); });
