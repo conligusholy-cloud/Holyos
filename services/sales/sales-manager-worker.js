@@ -22,6 +22,11 @@ const { sendMail } = require('../email');
 const TZ = process.env.VELIN_TZ || 'Europe/Prague';
 const TICK_INTERVAL_MS = 60 * 1000;
 const LINK = '/modules/obchodnik/index.html';
+// Průběžná kontrola postupu: každé 2 h během pracovní doby (Po–Pá).
+const CHECK_EVERY_H = Number(process.env.SALES_CHECK_INTERVAL_H) || 2;
+const WORK_START_HOUR = Number(process.env.SALES_WORK_START_HOUR) || 8;
+const WORK_END_HOUR = Number(process.env.SALES_WORK_END_HOUR) || 17;
+function isCheckpointHour(h) { return h > WORK_START_HOUR && h < WORK_END_HOUR && ((h - WORK_START_HOUR) % CHECK_EVERY_H) === 0; }
 let _tick = null;
 const _fired = {}; // marker -> dayKey
 let _lastResult = null;
@@ -137,6 +142,46 @@ async function runEvening(dateStr) {
   return _lastResult;
 }
 
+// ─── Průběžná kontrola postupu (každé 2 h) ────────────────────────────────────
+// Zkontroluje, jestli obchodníkovi ubývají úkoly. Když za poslední okno nesplnil
+// žádný úkol (a nějaké mu zbývají), pošle alarm; když jen zaostává za tempem dne,
+// pošle mírnější upozornění.
+async function runProgressCheck(dateStr) {
+  const ds = dateStr || tzToday();
+  const date = new Date(ds + 'T00:00:00Z');
+  const people = (await mgr.getActiveSalespeople()).filter((p) => p.is_salesperson);
+  const since = new Date(Date.now() - CHECK_EVERY_H * 3600 * 1000);
+  // Očekávané tempo: podíl uplynulé pracovní doby (WORK_START..WORK_END).
+  const nowH = tzParts().hour + tzParts().minute / 60;
+  const frac = Math.max(0, Math.min(1, (nowH - WORK_START_HOUR) / Math.max(1, (WORK_END_HOUR - WORK_START_HOUR))));
+  let alarmed = 0;
+  for (const p of people) {
+    try {
+      const plan = await prisma.salesDayPlan.findUnique({ where: { person_id_date: { person_id: p.id, date } }, include: { tasks: true } });
+      if (!plan) continue;
+      const tasks = plan.tasks || [];
+      if (!tasks.length) continue;
+      const open = tasks.filter((t) => t.status === 'open');
+      if (!open.length) continue; // hotovo → neotravovat
+      const doneTotal = tasks.filter((t) => t.status === 'done').length;
+      const doneRecent = tasks.filter((t) => t.status === 'done' && t.done_at && new Date(t.done_at) >= since).length;
+      const expectedDone = Math.round(tasks.length * frac);
+      let title = null; let body = null;
+      if (doneRecent === 0) {
+        title = '⏰ Kontrola úkolů — zaber!';
+        body = 'Za poslední ' + CHECK_EVERY_H + ' h jsi nesplnil žádný úkol. Zbývá ' + open.length + ' z ' + tasks.length + '. Pusť se do nich, ať dnešní cíle dotáhneš.';
+      } else if (doneTotal < expectedDone - 1) {
+        title = '⏳ Jsi trochu pozadu';
+        body = 'Máš hotovo ' + doneTotal + '/' + tasks.length + ', v tuto dobu bys měl mít ~' + expectedDone + '. Přidej, ať dnešek stihneš.';
+      }
+      if (title) { await pushToPerson(p.id, title, body, { type: 'sales_progress_alarm', date: ds }); alarmed += 1; }
+    } catch (e) { console.error('[sales-worker] progress check ' + p.id + ':', e.message); }
+  }
+  _lastResult = { kind: 'progress', at: new Date(), checked: people.length, alarmed };
+  console.log('[sales-worker] Průběžná kontrola: alarm ' + alarmed + '/' + people.length + ' obchodníkům (' + ds + ').');
+  return _lastResult;
+}
+
 // ─── Týdenní / měsíční hodnocení ─────────────────────────────────────────────
 async function runPeriod(kind, dateStr) {
   const ds = dateStr || tzToday();
@@ -180,6 +225,8 @@ async function tick() {
   try {
     const t = tzParts();
     if (t.hour === 7 && t.minute === 0) await fireOnce('morning', () => runMorning());
+    const weekday = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'].indexOf(t.weekday) >= 0;
+    if (weekday && t.minute === 0 && isCheckpointHour(t.hour)) await fireOnce('check-' + t.hour, () => runProgressCheck());
     if (t.hour === 20 && t.minute === 0) await fireOnce('evening', () => runEvening());
     if (t.hour === 20 && t.minute === 5 && t.weekday === 'Sun') await fireOnce('weekly', () => runWeekly());
     if (t.hour === 20 && t.minute === 10 && isLastDayOfMonth()) await fireOnce('monthly', () => runMonthly());
@@ -192,7 +239,7 @@ function start() {
     return;
   }
   if (_tick) return;
-  console.log('[sales-worker] start — tick 60 s; 07:00 plán, 20:00 hodnocení+report, ne 20:05 týden, konec měsíce 20:10.');
+  console.log('[sales-worker] start — tick 60 s; 07:00 plán, kontrola postupu à ' + CHECK_EVERY_H + ' h (' + WORK_START_HOUR + '–' + WORK_END_HOUR + ', Po–Pá), 20:00 hodnocení+report, ne 20:05 týden, konec měsíce 20:10.');
   _tick = setInterval(tick, TICK_INTERVAL_MS);
   // Catch-up po startu serveru: pokud dnešní plány chybí, rozdej je automaticky
   // celému týmu (bez force → nepřepíše existující). Řeší i první nasazení během dne.
@@ -207,4 +254,4 @@ function start() {
 }
 function stop() { if (_tick) { clearInterval(_tick); _tick = null; } }
 
-module.exports = { start, stop, runMorning, runEvening, runWeekly, runMonthly, lastResult: () => _lastResult };
+module.exports = { start, stop, runMorning, runEvening, runWeekly, runMonthly, runProgressCheck, lastResult: () => _lastResult };
