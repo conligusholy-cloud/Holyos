@@ -1105,7 +1105,7 @@
   async function doLogout(){ try{ await fetch('/api/auth/logout', { method:'POST', credentials:'include' }); }catch(e){} window.location.href='/login.html'; }
 
   // ═══ Dnešní plán / úkoly / hodnocení (AI vedoucí obchodu) ══════════════════
-  var TK_ICON = { call:'📞', followup:'🔁', invite:'✉️', close:'🤝', reservation:'🏠', meeting:'📅', admin:'🗂️', other:'•' };
+  var TK_ICON = { call:'📞', followup:'🔁', invite:'✉️', close:'🤝', reservation:'🏠', meeting:'📅', prospecting:'🎯', admin:'🗂️', other:'•' };
   function prioCol(p){ return p<=1?'#ef4444':p===2?'#f59e0b':p===3?'#eab308':'#6b7280'; }
   function scoreCol(s){ return s>=80?'#22c55e':s>=55?'#eab308':s>=30?'#f59e0b':'#ef4444'; }
 

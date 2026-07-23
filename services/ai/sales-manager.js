@@ -163,22 +163,48 @@ async function gatherPlanContext(personId) {
   const yPlan = await prisma.salesDayPlan.findUnique({ where: { person_id_date: { person_id: personId, date: dayDate(yStr) } }, include: { tasks: true } }).catch(() => null);
   const carryOver = yPlan ? yPlan.tasks.filter((t) => t.status === 'open').map((t) => ({ title: t.title, lead_id: t.lead_id, kind: t.kind })) : [];
 
+  // Kalendář — schůzky obchodníka (dnes + příštích 7 dní). Řídí strukturu dne.
+  const todayStart = dayDate(tzTodayStr());
+  const in7 = new Date(Date.now() + 7 * 86400000);
+  let events = [];
+  try {
+    events = await prisma.salesEvent.findMany({
+      where: { organizer_id: personId, start_at: { gte: todayStart, lte: in7 } },
+      orderBy: { start_at: 'asc' }, take: 60,
+      select: { title: true, start_at: true, end_at: true, location: true, event_type: true, compounder_lead_id: true },
+    });
+  } catch (e) { events = []; }
+  const todayEndMs = todayStart.getTime() + 86400000;
+  const fmtEv = (e) => ({
+    title: e.title, when: e.start_at ? new Date(e.start_at).toISOString() : null,
+    location: e.location || null, type: e.event_type || 'meeting', lead_id: e.compounder_lead_id || null,
+  });
+  const meetingsToday = events.filter((e) => e.start_at && new Date(e.start_at).getTime() < todayEndMs).map(fmtEv);
+  const meetingsUpcoming = events.filter((e) => e.start_at && new Date(e.start_at).getTime() >= todayEndMs).slice(0, 20).map(fmtEv);
+
   const targets = await getTargets(personId);
   const actuals = await computeActuals(personId);
 
   return {
     date: tzTodayStr(), leadCount: leads.length,
+    meetings_today: meetingsToday, meetings_upcoming_7d: meetingsUpcoming,
+    meetings_this_week_count: meetingsToday.length + meetingsUpcoming.filter((m) => { const d = new Date(m.when); return periodBounds('week').end.getTime() >= d.getTime(); }).length,
     leads: leadFacts, carry_over: carryOver, targets, actuals,
   };
 }
 
 // ─── planDay ───────────────────────────────────────────────────────────────
-const TASK_KINDS = ['call', 'followup', 'invite', 'close', 'reservation', 'meeting', 'admin', 'other'];
+const TASK_KINDS = ['call', 'followup', 'invite', 'close', 'reservation', 'meeting', 'prospecting', 'admin', 'other'];
 function sanitizeKind(k) { return TASK_KINDS.indexOf(String(k || '').toLowerCase()) >= 0 ? String(k).toLowerCase() : 'other'; }
 function clampPriority(p) { const n = Math.round(Number(p) || 3); return Math.max(1, Math.min(5, n)); }
 
 async function planDayAI(person, ctx) {
-  const sys = 'Jsi zkušený, náročný ale férový AI vedoucí obchodu firmy Best Series (prodej prémiových samoobslužných prádelen "Compounder" jako investičního aktiva). Tvým úkolem je obchodníkovi na dnešní den sestavit konkrétní, prioritizovaný a splnitelný seznam úkolů, které maximálně posunou obchod. Vycházej z jeho kontaktů (leadů), jejich stavu, poslední aktivity, neotevřených pozvánek, blížících se lhůt rezervací a z plnění cílů (plán vs. skutečnost). Zásady: 1) Priorita horkým leadům a hrozícím lhůtám (podpis/poplatek/expirace rezervace). 2) Oživit spící kontakty (dlouho beze změny). 3) Doslat neotevřené pozvánky. 4) MÁLO, ALE VÝSTIŽNĚ: maximálně 4–8 úkolů na celý den, žádná vata. 5) NIKDY nevytvářej duplicitní ani téměř shodné úkoly. Na jeden lead dej maximálně JEDEN úkol a slučuj související kroky do něj — např. jeden telefonát pokrývající více rezervací/kiosků téhož leada je JEDEN úkol, ne několik. 6) Každý úkol má jasnou akci a když se týká konkrétního leadu, uveď jeho lead_id. 7) VŠECHNY úkoly jsou výhradně pro tohoto jednoho obchodníka a jeho vlastní kontakty (v kontextu jsou jen jeho leady). Nikdy nevytvářej úkoly týkající se cizích kontaktů ani práce jiných obchodníků. Odpověz POUZE platným JSON bez markdownu ve tvaru: {"focus":"<1-2 věty zaměření dne česky>","tasks":[{"kind":"<call|followup|invite|close|reservation|meeting|admin|other>","title":"<krátce, konkrétně>","detail":"<co udělat, 1-2 věty>","reasoning":"<proč, krátce>","priority":<1-5>,"lead_id":<číslo nebo null>}]}. Piš česky.';
+  const sys = 'Jsi špičkový, velmi náročný ale férový AI vedoucí obchodu firmy Best Series (prodej prémiových samoobslužných prádelen "Compounder" jako investičního aktiva). Řídíš obchodníka na 100 % — sestavíš mu na dnešek plán, který ZAPLNÍ celý pracovní den a tlačí ho prodávat. Tvoje prodejní filozofie a POŘADÍ priorit dne: '
+    + '(A) SCHŮZKY Z KALENDÁŘE: projdi meetings_today — ke každé dnešní schůzce dej úkol na přípravu a k nadcházejícím (meetings_upcoming_7d) případně potvrzení/příprava. Schůzky jsou svaté, plán se staví kolem nich. '
+    + '(B) HORKÉ LEADY A LHŮTY: uzavři/posuň leady s blížící se lhůtou (podpis/poplatek/expirace rezervace) a evidentně horké kontakty. '
+    + '(C) NÁBOR A DOMLOUVÁNÍ SCHŮZEK = VĚTŠINA DNE: veškerý zbývající čas (drtivá většina) musí jít do aktivního PRODEJE — oslovování a nábor NOVÝCH kontaktů (kind "prospecting") a domlouvání nových schůzek/obchodů (kind "meeting"/"call"). I když má obchodník málo leadů nebo málo schůzek, NIKDY nenech den poloprázdný: doplň konkrétní náborové úkoly s čísly (např. "Oslov 15 nových potenciálních provozoven/investorů", "Domluv aspoň 3 nové schůzky", "Zavolej 10 studeným kontaktům"). '
+    + 'Pravidla výstupu: 1) 5–9 konkrétních úkolů, žádná vata, každý s jasnou akcí a měřitelným cílem (počty oslovení, hovorů, domluvených schůzek). 2) NIKDY duplicitní ani skoro shodné úkoly; na jeden lead max JEDEN úkol (slučuj kroky). 3) Když se úkol týká konkrétního leadu, uveď lead_id; náborové úkoly mají lead_id null. 4) VŠE je jen pro tohoto obchodníka a jeho vlastní kontakty (v kontextu jsou jen jeho leady a jeho kalendář); nikdy neplánuj cizí kontakty ani práci jiných. 5) Priorita 1 = dnešní schůzky a dnešní lhůty, 2 = horké leady, 3 = nábor a domlouvání schůzek. '
+    + 'Odpověz POUZE platným JSON bez markdownu ve tvaru: {"focus":"<1-2 věty zaměření dne, ať obchodník ví, na co dnes zabrat>","tasks":[{"kind":"<call|followup|invite|close|reservation|meeting|prospecting|admin|other>","title":"<krátce, konkrétně, s číslem kde to dává smysl>","detail":"<co přesně udělat, 1-2 věty>","reasoning":"<proč, krátce>","priority":<1-5>,"lead_id":<číslo nebo null>}]}. Piš česky.';
   const usr = 'Obchodník: ' + person.name + '\nKontext (JSON):\n' + JSON.stringify(ctx);
   const j = await callClaudeJSON(sys, usr, 1600);
   if (!j || !Array.isArray(j.tasks)) return null;
@@ -195,19 +221,30 @@ async function planDayAI(person, ctx) {
 }
 function planDayFallback(ctx) {
   const tasks = [];
+  // (A) Dnešní schůzky z kalendáře — příprava.
+  (ctx.meetings_today || []).forEach((m) => {
+    if (tasks.length >= 9) return;
+    const t = m.when ? new Date(m.when) : null;
+    const hh = t ? (('0' + t.getHours()).slice(-2) + ':' + ('0' + t.getMinutes()).slice(-2)) : '';
+    tasks.push({ kind: 'meeting', title: 'Připrav schůzku' + (hh ? ' v ' + hh : '') + ' – ' + (m.title || 'schůzka'), detail: 'Projdi kontext, cíl schůzky a další krok k uzavření.' + (m.location ? ' Místo: ' + m.location + '.' : ''), reasoning: 'Dnešní schůzka z kalendáře.', priority: 1, lead_id: m.lead_id || null });
+  });
+  // (B) Horké leady a lhůty.
   (ctx.leads || []).forEach((l) => {
-    if (tasks.length >= 8) return;
+    if (tasks.length >= 9) return;
     const r = (l.reservations || [])[0];
     if (r && (r.status === 'reserved' || r.status === 'active')) {
       tasks.push({ kind: 'close', title: 'Dotáhnout rezervaci ' + r.kiosk + ' – ' + l.name, detail: 'Hlídat podpis a poplatek, popohnat zákazníka.', reasoning: 'Běžící rezervace se lhůtou.', priority: 1, lead_id: l.id });
     } else if (l.invite_sent === 0 && l.has_email) {
-      tasks.push({ kind: 'invite', title: 'Poslat přístup do portálu – ' + l.name, detail: 'Odeslat přihlašovací odkaz a ozvat se.', reasoning: 'Ještě nedostal pozvánku.', priority: 2, lead_id: l.id });
+      tasks.push({ kind: 'invite', title: 'Poslat přístup do portálu – ' + l.name, detail: 'Odeslat přihlašovací odkaz a hned zavolat.', reasoning: 'Ještě nedostal pozvánku.', priority: 2, lead_id: l.id });
     } else if ((l.days_since_update || 0) >= 7) {
-      tasks.push({ kind: 'followup', title: 'Oživit kontakt – ' + l.name, detail: 'Zavolat/napsat, zjistit stav.', reasoning: 'Přes týden beze změny.', priority: 3, lead_id: l.id });
+      tasks.push({ kind: 'followup', title: 'Oživit kontakt – ' + l.name, detail: 'Zavolat/napsat, zjistit stav a posunout k schůzce.', reasoning: 'Přes týden beze změny.', priority: 3, lead_id: l.id });
     }
   });
-  if (!tasks.length) tasks.push({ kind: 'other', title: 'Projít své kontakty a naplánovat oslovení', detail: 'Zkontrolovat pipeline a vytipovat priority.', reasoning: 'Žádná akutní akce z dat.', priority: 3, lead_id: null });
-  return { focus: 'Zaměř se na běžící rezervace, neotevřené pozvánky a oživení spících kontaktů.', tasks: tasks.slice(0, 8) };
+  // (C) Nábor a domlouvání schůzek — vždy, aby byl den plný a prodejní.
+  tasks.push({ kind: 'prospecting', title: 'Oslov 15 nových potenciálních zákazníků', detail: 'Vytipuj a kontaktuj nové provozovny/investory (telefon, e-mail, LinkedIn).', reasoning: 'Většina dne patří náboru nových obchodů.', priority: 3, lead_id: null });
+  tasks.push({ kind: 'meeting', title: 'Domluv aspoň 3 nové schůzky', detail: 'Z oslovených kontaktů si nasaď konkrétní termíny do kalendáře.', reasoning: 'Bez schůzek není prodej.', priority: 3, lead_id: null });
+  tasks.push({ kind: 'call', title: 'Zavolej 10 kontaktům z pipeline', detail: 'Projdi kontakty a aktivně je posuň k dalšímu kroku.', reasoning: 'Denní objem hovorů drží obchod v pohybu.', priority: 4, lead_id: null });
+  return { focus: 'Dnes: nejdřív schůzky a lhůty, zbytek dne tvrdě do náboru nových kontaktů a domlouvání schůzek.', tasks: tasks.slice(0, 9) };
 }
 
 // Vytvoří/aktualizuje denní plán a úkoly. force=true přegeneruje (smaže staré open AI úkoly).
@@ -274,7 +311,7 @@ async function gatherDayResult(personId, dateStr) {
   };
 }
 async function reviewDayAI(person, result) {
-  const sys = 'Jsi AI vedoucí obchodu Best Series. Zhodnoť DNEŠNÍ výkon obchodníka na základě zadaných úkolů a toho, co reálně splnil (splněné/přeskočené/nesplněné úkoly, poznámky, nové kontakty, konverze, aktivita). Buď konkrétní a férový, oceň i pochval, ale pojmenuj i to, co nedotáhl. Odpověz POUZE platným JSON bez markdownu: {"score":<0-100>,"grade":"<1 slovo: Výborný|Dobrý|Průměrný|Slabý>","summary":"<2-4 věty česky>","highlights":"<co se povedlo, 1-2 věty nebo prázdné>","improvements":"<co zítra zlepšit, 1-2 věty>"}. Piš česky.';
+  const sys = 'Jsi náročný AI vedoucí obchodu Best Series. Zhodnoť DNEŠNÍ výkon obchodníka podle zadaných úkolů a toho, co reálně splnil (splněné/přeskočené/nesplněné úkoly, poznámky, nové kontakty, konverze, aktivita). Klíčové pro skóre: kolik toho udělal pro PRODEJ — dodržel schůzky, aktivně naboroval nové kontakty a domlouval nové schůzky, posouval leady. Samotné "být zaneprázdněný" nestačí; oceňuj konkrétní prodejní akce a výsledky. Buď konkrétní a férový, pochval co se povedlo, ale jasně pojmenuj, co nedotáhl a co musí zítra přidat. Odpověz POUZE platným JSON bez markdownu: {"score":<0-100>,"grade":"<1 slovo: Výborný|Dobrý|Průměrný|Slabý>","summary":"<2-4 věty česky>","highlights":"<co se povedlo, 1-2 věty nebo prázdné>","improvements":"<co zítra zlepšit, 1-2 věty>"}. Piš česky.';
   const usr = 'Obchodník: ' + person.name + '\nVýsledek dne (JSON):\n' + JSON.stringify(result);
   const j = await callClaudeJSON(sys, usr, 700);
   if (!j) return null;
