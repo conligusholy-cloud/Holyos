@@ -1593,9 +1593,11 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
           var _loc = resIsEn() ? "en-GB" : "cs-CZ";
           var su = x.j.signUntil ? new Date(x.j.signUntil).toLocaleDateString(_loc) : "";
           var fu = x.j.feeUntil ? new Date(x.j.feeUntil).toLocaleDateString(_loc) : "";
-          resDone(resIsEn()
+          var _doneTxt = resIsEn()
             ? ("Reserved ✓ Fee "+offMoney(x.j.feeTotal)+". Please sign the reservation agreement by "+su+" and pay the fee by "+fu+". We will contact you with the documents.")
-            : ("Rezervováno ✓ Poplatek "+offMoney(x.j.feeTotal)+". Rezervační smlouvu podepište do "+su+", poplatek uhraďte do "+fu+". Ozveme se vám s podklady."));
+            : ("Rezervováno ✓ Poplatek "+offMoney(x.j.feeTotal)+". Rezervační smlouvu podepište do "+su+", poplatek uhraďte do "+fu+". Ozveme se vám s podklady.");
+          try{ closeReserveModal(); }catch(_){}
+          showReserveConfirm(_doneTxt);
           var t = offTok(); setTimeout(function(){ loadOffers(t); if(typeof loadStatus==='function') loadStatus(t); }, 2200);
         } else {
           resErr((x.j && x.j.error) || resT('resFail'));
@@ -1605,6 +1607,18 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
   };
   function resDone(t){ var m=document.getElementById("res-msg"); var cf=document.getElementById("res-confirm"); if(m){ m.style.color="var(--gold-soft)"; m.textContent=t; } if(cf){ cf.textContent=resT('doneBtn'); } }
   function resErr(t){ var m=document.getElementById("res-msg"); var cf=document.getElementById("res-confirm"); if(m){ m.style.color="#ef4444"; m.textContent=t; } if(cf){ cf.disabled=false; cf.textContent=(window._resMode==='reserve')?resT('submitReserve'):resT('submitBuy'); } }
+  window.closeReserveConfirm = function(){ var m=document.getElementById('resConfirmOv'); if(m) m.remove(); };
+  function showReserveConfirm(text){
+    var ov=document.createElement('div'); ov.id='resConfirmOv';
+    ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:13000;display:flex;align-items:center;justify-content:center;padding:16px';
+    ov.onclick=function(e){ if(e.target===ov) closeReserveConfirm(); };
+    ov.innerHTML='<div style="background:var(--bg-2,#141416);border:1px solid var(--gold-soft,#cda454);border-radius:18px;max-width:460px;width:100%;padding:28px 24px;text-align:center;box-shadow:0 24px 70px rgba(0,0,0,.6)">'+
+      '<div style="width:58px;height:58px;border-radius:50%;background:linear-gradient(135deg,#f6e6ad,#cda454);display:flex;align-items:center;justify-content:center;margin:0 auto 18px;font-size:30px;color:#241c05;font-weight:800">\u2713</div>'+
+      '<div style="font-size:15px;line-height:1.65;color:var(--text,#eee)">'+offEsc(text)+'</div>'+
+      '<button type="button" onclick="closeReserveConfirm()" style="margin-top:22px;background:linear-gradient(135deg,#f6e6ad,#cda454);border:none;color:#241c05;border-radius:12px;padding:12px 30px;cursor:pointer;font:inherit;font-weight:700">Rozumím</button>'+
+    '</div>';
+    document.body.appendChild(ov);
+  }
 
   // Osobní odkaz na detailní ekonomiku (per účet, sledovaný zvlášť).
   function loadEkoDetailLink(tok){
