@@ -249,6 +249,10 @@ model Person {
   // Spare Parts Shop — odpovědná osoba pro Velín push notifikaci o nové eshop objednávce
   eshop_settings_notified    EshopSettings[]      @relation("EshopSettingsNotifyPerson")
 
+  // Nářezové plány — autor plánu / kdo plán provedl
+  cutting_plans_created      CuttingPlan[]          @relation("CuttingPlanCreatedBy")
+  cutting_plan_executions    CuttingPlanExecution[] @relation("CuttingPlanExecutor")
+
   @@index([department_id])
   @@index([role_id])
   @@index([company_id])
@@ -743,6 +747,9 @@ model Warehouse {
   workstations_output Workstation[]       @relation("WorkstationOutputWarehouse")
   // Spare Parts Shop — Materials, které mají tento Warehouse zvolený jako zdroj eshop zásoby
   eshop_materials     Material[]          @relation("MaterialEshopWarehouse")
+  // Nářezové plány — sklad vstupu / výstupu
+  cutting_plans_input  CuttingPlan[]      @relation("CuttingPlanInputWarehouse")
+  cutting_plans_output CuttingPlan[]      @relation("CuttingPlanOutputWarehouse")
 
   @@index([factorify_id])
   @@map("warehouses")
@@ -943,6 +950,8 @@ model Material {
   stock_rules             StockRule[]
   inventory_items         InventoryItem[]
   operation_materials     OperationMaterial[]
+  cutting_plans_input     CuttingPlan[]          @relation("CuttingPlanInput") // nářezové plány, kde je vstupní deskou
+  cutting_plan_outputs    CuttingPlanOutput[]    @relation("CuttingPlanOutputMaterial") // nářezové plány, kde je výstupním dílem
   config_option_materials ConfigOptionMaterial[] // konfigurace, které tento materiál používají
   cad_components          CadComponent[] // komponenty v CAD kusovníkách namapované na tento materiál
   stock                   Stock[] // SKLAD 2.0 — zásoby po lokacích (rychlý lookup)
@@ -1439,6 +1448,75 @@ model OperationMaterial {
   @@index([material_id])
   @@index([product_id])
   @@map("operation_materials")
+}
+
+// =============================================================================
+// VÝROBA — NÁŘEZOVÉ PLÁNY
+// =============================================================================
+// Nářezový plán = samostatná operace, do které vstupuje jeden materiál (např.
+// deska) a jejímž provedením vznikne více výstupních dílů, které se přijmou na
+// sklad. Na rozdíl od ProductOperation není vázaný na konkrétní výrobek a má
+// definované VÝSTUPY (co se přijme), ne jen vstupy (co se spotřebuje).
+// Vstupní i výstupní sklad jsou POVINNÉ — bez nich plán nelze uložit.
+model CuttingPlan {
+  id                  Int      @id @default(autoincrement())
+  code                String?  @unique @db.VarChar(50) // volitelný interní kód plánu
+  name                String   @db.VarChar(255) // název plánu, např. "Nářezový plán NA1612"
+  input_material_id   Int // vstupní materiál (deska), který se nařezáním spotřebuje
+  input_quantity      Decimal  @default(1) @db.Decimal(10, 3) // kolik vstupního materiálu spotřebuje jedno provedení
+  input_warehouse_id  Int // sklad, ze kterého se vstupní materiál vydá (povinné)
+  output_warehouse_id Int // sklad, na který se přijmou výstupní díly (povinné)
+  note                String?  @db.Text
+  created_by          Int?
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  input_material   Material               @relation("CuttingPlanInput", fields: [input_material_id], references: [id])
+  input_warehouse  Warehouse              @relation("CuttingPlanInputWarehouse", fields: [input_warehouse_id], references: [id])
+  output_warehouse Warehouse              @relation("CuttingPlanOutputWarehouse", fields: [output_warehouse_id], references: [id])
+  creator          Person?                @relation("CuttingPlanCreatedBy", fields: [created_by], references: [id])
+  outputs          CuttingPlanOutput[]
+  executions       CuttingPlanExecution[]
+
+  @@index([input_material_id])
+  @@index([input_warehouse_id])
+  @@index([output_warehouse_id])
+  @@map("cutting_plans")
+}
+
+// Výstupní díly nářezového plánu — co se po provedení přijme na sklad.
+model CuttingPlanOutput {
+  id          Int     @id @default(autoincrement())
+  plan_id     Int
+  material_id Int
+  quantity    Decimal @db.Decimal(10, 3) // počet kusů dílu na jedno provedení plánu
+  unit        String  @default("ks") @db.VarChar(20)
+
+  plan     CuttingPlan @relation(fields: [plan_id], references: [id], onDelete: Cascade)
+  material Material    @relation("CuttingPlanOutputMaterial", fields: [material_id], references: [id])
+
+  @@index([plan_id])
+  @@index([material_id])
+  @@map("cutting_plan_outputs")
+}
+
+// Záznam o provedení nářezového plánu (audit) — každé provedení zaúčtuje
+// skladové pohyby: výdej vstupního materiálu + příjem výstupních dílů.
+model CuttingPlanExecution {
+  id          Int      @id @default(autoincrement())
+  plan_id     Int
+  multiplier  Decimal  @default(1) @db.Decimal(10, 3) // kolikrát se plán provedl (násobí vstup i výstupy)
+  executed_by Int?
+  note        String?  @db.Text
+
+  created_at DateTime @default(now())
+
+  plan     CuttingPlan @relation(fields: [plan_id], references: [id], onDelete: Cascade)
+  executor Person?     @relation("CuttingPlanExecutor", fields: [executed_by], references: [id])
+
+  @@index([plan_id])
+  @@map("cutting_plan_executions")
 }
 
 // =============================================================================
@@ -5570,6 +5648,8 @@ model LocationReservation {
   buyer_ico     String? @db.VarChar(20)
   buyer_dic     String? @db.VarChar(20) // DIČ / VAT ID — plátce DPH; prefix země určuje reverse charge
   buyer_address String? @db.Text
+  buyer_rep     String? @db.VarChar(255) // zastoupen(a) / jednatel zájemce
+  buyer_bank    String? @db.VarChar(120) // bankovní spojení zájemce (IBAN)
 
   // Rezervace + poplatek (Kč), poplatek se odečítá z kupní ceny
   days           Int    @default(0)

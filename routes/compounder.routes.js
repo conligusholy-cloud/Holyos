@@ -3681,6 +3681,8 @@ const reserveSchema = z.object({
     ico: z.string().max(20).optional(),
     dic: z.string().max(20).optional(), // DIČ / VAT ID (plátce DPH)
     address: z.string().max(500).optional(),
+    rep: z.string().max(255).optional(),
+    bank: z.string().max(120).optional(),
   }).optional(),
 });
 
@@ -3770,6 +3772,7 @@ router.post('/portal/reserve', async (req, res, next) => {
     const commonData = {
       buyer_name: b.name || null, buyer_email: b.email || null, buyer_phone: b.phone || null,
       buyer_ico: b.ico || null, buyer_dic: b.dic || null, buyer_address: b.address || null,
+      buyer_rep: b.rep || null, buyer_bank: b.bank || null,
       days, fee_per_day: feePerDay, fee_total: feeTotal,
       purchase_price: (parsed.data.totalPrice != null) ? parsed.data.totalPrice : null,
       currency: 'CZK', status: 'reserved', hold_until: null,
@@ -3818,6 +3821,8 @@ router.post('/portal/reserve', async (req, res, next) => {
         cf.buyer_address = rec.buyer_address || cf.buyer_address || '';
         cf.buyer_ico = rec.buyer_ico || cf.buyer_ico || '';
         cf.buyer_dic = rec.buyer_dic || cf.buyer_dic || '';
+        cf.buyer_rep = rec.buyer_rep || cf.buyer_rep || '';
+        cf.buyer_bank = rec.buyer_bank || cf.buyer_bank || '';
         cf._reverse_charge = _isEuReverseCharge(cf.buyer_dic);
         cf.seller_bank = cf.seller_bank || OUR_BANK_LINE;
         // Podmínky rezervace z právě vytvořené rezervace.
@@ -3921,6 +3926,8 @@ router.post('/portal/reserve', async (req, res, next) => {
             kf.buyer_address = rec.buyer_address || '';
             kf.buyer_ico = rec.buyer_ico || '';
             kf.buyer_dic = rec.buyer_dic || '';
+            kf.buyer_rep = rec.buyer_rep || '';
+            kf.buyer_bank = rec.buyer_bank || '';
             kf._reverse_charge = _isEuReverseCharge(kf.buyer_dic);
             kf.location_desc = kioskLabel ? (code + ' — ' + kioskLabel) : code;
             // Ceny v měně zvolené na portálu (kurz ČNB).
@@ -4019,6 +4026,8 @@ async function _ensureKupniContract(rec) {
   kf.buyer_address = rec.buyer_address || '';
   kf.buyer_ico = rec.buyer_ico || '';
   kf.buyer_dic = rec.buyer_dic || '';
+  kf.buyer_rep = rec.buyer_rep || '';
+  kf.buyer_bank = rec.buyer_bank || '';
   kf._reverse_charge = _isEuReverseCharge(kf.buyer_dic);
   kf.location_desc = ki.label ? (code + ' — ' + ki.label) : code;
   const cur = (String(rec.currency || 'CZK').toUpperCase() !== 'CZK') ? String(rec.currency).toUpperCase() : 'CZK';
@@ -4086,6 +4095,8 @@ async function _offerServiceContract(rec) {
   sf.buyer_address = rec.buyer_address || '';
   sf.buyer_ico = rec.buyer_ico || '';
   sf.buyer_dic = rec.buyer_dic || '';
+  sf.buyer_rep = rec.buyer_rep || '';
+  sf.buyer_bank = rec.buyer_bank || '';
   sf._reverse_charge = _isEuReverseCharge(sf.buyer_dic);
   sf.location_desc = ki.label ? (code + ' — ' + ki.label) : code;
   const token = crypto.randomBytes(24).toString('hex');
