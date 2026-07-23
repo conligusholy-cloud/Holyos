@@ -17,6 +17,7 @@ const { prisma } = require('../../config/database');
 const mgr = require('../ai/sales-manager');
 const { notifyPerson } = require('../push/expo-push');
 const { createNotification } = require('../../routes/notifications.routes');
+const { sendMail } = require('../email');
 
 const TZ = process.env.VELIN_TZ || 'Europe/Prague';
 const TICK_INTERVAL_MS = 60 * 1000;
@@ -78,6 +79,41 @@ async function runMorning(dateStr, opts) {
   return _lastResult;
 }
 
+// Večerní e-mail obchodníkovi s hodnocením dne (číselné i slovní).
+function fmtCzDate(ds) {
+  try { return new Intl.DateTimeFormat('cs-CZ', { timeZone: TZ, dateStyle: 'long' }).format(new Date(ds + 'T00:00:00Z')); } catch (e) { return ds; }
+}
+async function sendReviewEmail(personId, rev, ds) {
+  try {
+    const person = await prisma.person.findUnique({ where: { id: personId }, select: { first_name: true, email: true } });
+    if (!person || !person.email) return;
+    const m = (rev && rev.metrics) || {};
+    const lines = [];
+    lines.push('Ahoj ' + (person.first_name || '') + ',');
+    lines.push('');
+    lines.push('tady je tvoje hodnocení dne ' + fmtCzDate(ds) + ' od AI vedoucího obchodu.');
+    lines.push('');
+    lines.push('SKÓRE: ' + rev.score + ' / 100' + (rev.grade ? (' (' + rev.grade + ')') : ''));
+    lines.push('Splněno úkolů: ' + (m.tasks_done != null ? m.tasks_done : '?') + ' / ' + (m.tasks_total != null ? m.tasks_total : '?')
+      + ' · nové kontakty: ' + (m.new_contacts_today || 0) + ' · konverze: ' + (m.conversions_today || 0));
+    lines.push('');
+    if (rev.summary) { lines.push('HODNOCENÍ:'); lines.push(rev.summary); lines.push(''); }
+    if (rev.highlights) { lines.push('CO SE POVEDLO:'); lines.push(rev.highlights); lines.push(''); }
+    if (rev.improvements) { lines.push('CO ZÍTRA ZLEPŠIT:'); lines.push(rev.improvements); lines.push(''); }
+    lines.push('Zítra ráno na tebe čeká nový plán. Ať se daří!');
+    lines.push('');
+    lines.push('— AI vedoucí obchodu, Best Series');
+    await sendMail({
+      to: person.email,
+      subject: '📊 Hodnocení dne ' + fmtCzDate(ds) + ' — skóre ' + rev.score + (rev.grade ? (' · ' + rev.grade) : ''),
+      body: lines.join('\n'),
+      from: process.env.SALES_MANAGER_FROM || undefined,
+      fromName: 'AI vedoucí obchodu',
+      link: '/modules/obchodnik/index.html', linkLabel: 'Otevřít mou obrazovku',
+    });
+  } catch (e) { console.error('[sales-worker] review email person ' + personId + ':', e.message); }
+}
+
 // ─── Denní hodnocení + report majitelům (večer) ──────────────────────────────
 async function runEvening(dateStr) {
   const ds = dateStr || tzToday();
@@ -90,6 +126,7 @@ async function runEvening(dateStr) {
       if (rev) {
         const title = '📊 Hodnocení dne — skóre ' + rev.score + (rev.grade ? (' · ' + rev.grade) : '');
         await pushToPerson(p.id, title, (rev.summary || '').slice(0, 300), { type: 'sales_review_day', date: ds });
+        await sendReviewEmail(p.id, rev, ds);
       }
     } catch (e) { console.error('[sales-worker] reviewDay person ' + p.id + ':', e.message); }
   }

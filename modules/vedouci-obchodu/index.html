@@ -181,17 +181,43 @@
     else {
       h += per.map(function(p){
         var rev = p.month_target_revenue ? (fmtMoney(p.month_actual_revenue)+' / '+fmtMoney(p.month_target_revenue)) : fmtMoney(p.month_actual_revenue);
-        return '<div class="row"><div class="row-h"><div class="name">'+esc(p.name)+'</div>'+(p.day_score!=null?'<div class="pct" style="color:'+scoreCol(p.day_score)+'">'+p.day_score+'</div>':'')+'</div>' +
+        return '<details class="row" ontoggle="if(this.open) loadPersonTasks('+p.person_id+')"><summary style="cursor:pointer;list-style:none">' +
+          '<div class="row-h"><div class="name">'+esc(p.name)+' <span style="font-weight:400;color:var(--muted2);font-size:12px">▾ úkoly</span></div>'+(p.day_score!=null?'<div class="pct" style="color:'+scoreCol(p.day_score)+'">'+p.day_score+'</div>':'')+'</div>' +
           '<div class="sub">Úkoly: '+(p.tasks_done||0)+'/'+(p.tasks_assigned||0)+' splněno'+(p.tasks_skipped?(' · '+p.tasks_skipped+' přeskočeno'):'')+(p.tasks_open?(' · '+p.tasks_open+' otevřeno'):'')+'</div>' +
           (p.focus?'<div class="muted" style="margin-top:4px;font-size:12.5px">🎯 '+esc(p.focus)+'</div>':'') +
           (p.day_summary?'<div class="muted" style="margin-top:4px;font-size:12.5px">'+esc(p.day_summary)+'</div>':'') +
           '<div class="sub" style="margin-top:4px">Obrat měsíc: '+rev+' · rezervace '+(p.month_actual_reservations||0)+'/'+(p.month_target_reservations||0)+'</div>' +
-        '</div>';
+          '</summary><div id="ptasks-'+p.person_id+'" style="margin-top:10px"><div class="muted">Klepni pro načtení úkolů…</div></div>' +
+        '</details>';
       }).join('');
     }
     h += '<h2>💰 Měsíční výplatní souhrn</h2><div id="pay-summary"><div class="muted" style="padding:0 2px">Načítám…</div></div>';
     box.innerHTML = h;
     loadPaySummary();
+  }
+  var TK_ICON_V = { call:'📞', followup:'🔁', invite:'✉️', close:'🤝', reservation:'🏠', meeting:'📅', prospecting:'🎯', admin:'🗂️', other:'•' };
+  function fmtMinV(m){ m=Number(m)||0; if(!m) return ''; if(m<60) return m+' min'; var h=Math.floor(m/60), r=m%60; return h+' h'+(r?(' '+r+' min'):''); }
+  function personTaskHtml(t){
+    var stcol = t.status==='done'?'#22c55e':(t.status==='skipped'?'#6b7280':'var(--primary)');
+    var stlbl = t.status==='done'?'✓ splněno':(t.status==='skipped'?'přeskočeno':'otevřeno');
+    return '<div class="list-item"><div class="row-h"><span>'+(TK_ICON_V[t.kind]||'•')+' <b>'+esc(t.title)+'</b>'+(t.est_min?' <span class="muted" style="font-weight:400">· ⏱ '+fmtMinV(t.est_min)+'</span>':'')+'</span><span class="badge" style="background:'+stcol+'22;color:'+stcol+'">'+stlbl+'</span></div>' +
+      (t.detail?'<div class="muted" style="margin-top:3px;font-size:12.5px">'+esc(t.detail)+'</div>':'') +
+      (t.reasoning?'<div class="muted" style="margin-top:2px;font-size:12px">💡 '+esc(t.reasoning)+'</div>':'') +
+    '</div>';
+  }
+  async function loadPersonTasks(pid){
+    var box = document.getElementById('ptasks-'+pid); if(!box || box.dataset.loaded==='1') return;
+    box.dataset.loaded = '1'; box.innerHTML = '<div class="muted">Načítám úkoly…</div>';
+    try {
+      var r = await fetch('/api/compounder/my-day?person_id='+pid, { credentials:'include' });
+      if (!r.ok){ box.innerHTML = '<div class="muted">Nepodařilo se načíst úkoly.</div>'; box.dataset.loaded=''; return; }
+      var d = await r.json();
+      var tasks = (d.plan && d.plan.tasks) || [];
+      if (!tasks.length){ box.innerHTML = '<div class="muted">Na dnešek zatím žádné úkoly.</div>'; return; }
+      var planMin = tasks.reduce(function(s,t){ return s+(Number(t.est_min)||0); }, 0);
+      var head = planMin ? ('<div class="sub" style="margin-bottom:6px">Naplánováno '+fmtMinV(planMin)+' / 8 h · '+tasks.length+' úkolů</div>') : '';
+      box.innerHTML = head + tasks.map(personTaskHtml).join('');
+    } catch(e){ box.innerHTML = '<div class="muted">Chyba načítání.</div>'; box.dataset.loaded=''; }
   }
   async function loadPaySummary(){
     var box = document.getElementById('pay-summary'); if(!box) return;
