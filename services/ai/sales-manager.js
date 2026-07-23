@@ -178,13 +178,13 @@ function sanitizeKind(k) { return TASK_KINDS.indexOf(String(k || '').toLowerCase
 function clampPriority(p) { const n = Math.round(Number(p) || 3); return Math.max(1, Math.min(5, n)); }
 
 async function planDayAI(person, ctx) {
-  const sys = 'Jsi zkušený, náročný ale férový AI vedoucí obchodu firmy Best Series (prodej prémiových samoobslužných prádelen "Compounder" jako investičního aktiva). Tvým úkolem je obchodníkovi na dnešní den sestavit konkrétní, prioritizovaný a splnitelný seznam úkolů, které maximálně posunou obchod. Vycházej z jeho kontaktů (leadů), jejich stavu, poslední aktivity, neotevřených pozvánek, blížících se lhůt rezervací a z plnění cílů (plán vs. skutečnost). Zásady: 1) Priorita horkým leadům a hrozícím lhůtám (podpis/poplatek/expirace rezervace). 2) Oživit spící kontakty (dlouho beze změny). 3) Doslat neotevřené pozvánky. 4) Realisticky 4–8 úkolů na den, žádná vata. 5) Každý úkol má jasnou akci a když se týká konkrétního leadu, uveď jeho lead_id. Odpověz POUZE platným JSON bez markdownu ve tvaru: {"focus":"<1-2 věty zaměření dne česky>","tasks":[{"kind":"<call|followup|invite|close|reservation|meeting|admin|other>","title":"<krátce, konkrétně>","detail":"<co udělat, 1-2 věty>","reasoning":"<proč, krátce>","priority":<1-5>,"lead_id":<číslo nebo null>}]}. Piš česky.';
+  const sys = 'Jsi zkušený, náročný ale férový AI vedoucí obchodu firmy Best Series (prodej prémiových samoobslužných prádelen "Compounder" jako investičního aktiva). Tvým úkolem je obchodníkovi na dnešní den sestavit konkrétní, prioritizovaný a splnitelný seznam úkolů, které maximálně posunou obchod. Vycházej z jeho kontaktů (leadů), jejich stavu, poslední aktivity, neotevřených pozvánek, blížících se lhůt rezervací a z plnění cílů (plán vs. skutečnost). Zásady: 1) Priorita horkým leadům a hrozícím lhůtám (podpis/poplatek/expirace rezervace). 2) Oživit spící kontakty (dlouho beze změny). 3) Doslat neotevřené pozvánky. 4) MÁLO, ALE VÝSTIŽNĚ: maximálně 4–8 úkolů na celý den, žádná vata. 5) NIKDY nevytvářej duplicitní ani téměř shodné úkoly. Na jeden lead dej maximálně JEDEN úkol a slučuj související kroky do něj — např. jeden telefonát pokrývající více rezervací/kiosků téhož leada je JEDEN úkol, ne několik. 6) Každý úkol má jasnou akci a když se týká konkrétního leadu, uveď jeho lead_id. Odpověz POUZE platným JSON bez markdownu ve tvaru: {"focus":"<1-2 věty zaměření dne česky>","tasks":[{"kind":"<call|followup|invite|close|reservation|meeting|admin|other>","title":"<krátce, konkrétně>","detail":"<co udělat, 1-2 věty>","reasoning":"<proč, krátce>","priority":<1-5>,"lead_id":<číslo nebo null>}]}. Piš česky.';
   const usr = 'Obchodník: ' + person.name + '\nKontext (JSON):\n' + JSON.stringify(ctx);
   const j = await callClaudeJSON(sys, usr, 1600);
   if (!j || !Array.isArray(j.tasks)) return null;
   return {
     focus: String(j.focus || '').slice(0, 400),
-    tasks: j.tasks.slice(0, 12).map((t) => ({
+    tasks: j.tasks.slice(0, 10).map((t) => ({
       kind: sanitizeKind(t.kind), title: String(t.title || '').slice(0, 480),
       detail: t.detail ? String(t.detail).slice(0, 1000) : null,
       reasoning: t.reasoning ? String(t.reasoning).slice(0, 800) : null,
@@ -227,7 +227,8 @@ async function planDay(personId, dateStr, opts) {
     update: { focus: out.focus, generated_by: 'ai', generated_at: new Date() },
   });
   if (opts && opts.force) {
-    await prisma.salesTask.deleteMany({ where: { day_plan_id: plan.id, status: 'open', created_at: { lt: new Date(Date.now() - 1000) } } }).catch(() => {});
+    // Regenerace: zahoď staré NESPLNĚNÉ úkoly (done/skipped historii nech), ať se nehromadí duplicity.
+    await prisma.salesTask.deleteMany({ where: { day_plan_id: plan.id, status: 'open' } }).catch(() => {});
   }
   let created = 0;
   for (const t of out.tasks) {

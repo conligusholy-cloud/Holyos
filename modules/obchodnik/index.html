@@ -1114,7 +1114,9 @@
     var box = document.getElementById('today-tasks');
     var dt = document.getElementById('today-date'); if (dt) dt.textContent = new Date().toLocaleDateString('cs-CZ',{weekday:'long',day:'numeric',month:'long'});
     try {
-      var r = await api('/my-day' + (gen===false ? '' : '?generate=1'));
+      // Úvodní načtení NEGENERUJE (žádné čekání na AI) — plán rozdá worker v 7:00
+      // nebo si ho obchodník vyžádá tlačítkem. gen===true jen na výslovnou žádost.
+      var r = await api('/my-day' + (gen===true ? '?generate=1' : ''));
       if (!r.ok){ box.innerHTML = '<div class="empty">Plán se nepodařilo načíst.</div>'; return; }
       var j = await r.json();
       renderToday(j);
@@ -1122,8 +1124,13 @@
     } catch(e){ box.innerHTML = '<div class="empty">Chyba načítání.</div>'; }
   }
   async function reloadToday(){
-    var box = document.getElementById('today-tasks'); box.innerHTML = '<div class="loading">Generuji nový plán…</div>';
-    try { await api('/sales/generate-day', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ force:true }) }); } catch(e){}
+    var box = document.getElementById('today-tasks'); box.innerHTML = '<div class="loading">Generuji nový plán… (chvíli to trvá)</div>';
+    var ctrl = new AbortController(); var to = setTimeout(function(){ ctrl.abort(); }, 90000);
+    try {
+      var r = await api('/sales/generate-day', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ force:true }), signal: ctrl.signal });
+      clearTimeout(to);
+      if (!r.ok){ box.innerHTML = '<div class="empty">Generování selhalo. Zkus to prosím znovu.</div>'; return; }
+    } catch(e){ clearTimeout(to); box.innerHTML = '<div class="empty">Generování trvalo příliš dlouho. Zkus to prosím znovu.</div>'; return; }
     loadToday(false);
   }
   function renderToday(j){
