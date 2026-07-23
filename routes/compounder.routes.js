@@ -3964,6 +3964,127 @@ router.post('/portal/reserve', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// POST /api/compounder/reservations/:id/regenerate-contracts — admin
+// Přegeneruje pole nepodepsaných smluv (rezervační + kupní) této rezervace podle
+// aktuálního kódu. Měnu a jazyk odvodí z existujících smluv (rezervace si je sama
+// nepamatuje). ID, tokeny, provázání i stav smluv zůstávají zachované.
+router.post('/reservations/:id/regenerate-contracts', requireAuth, async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id)) return res.status(400).json({ ok: false, error: 'Neplatné ID.' });
+    const rec = await prisma.locationReservation.findUnique({ where: { id } });
+    if (!rec) return res.status(404).json({ ok: false, error: 'Rezervace nenalezena.' });
+    const code = rec.kiosk_code;
+    const rezC = await prisma.compoundingContract.findFirst({ where: { kiosk_code: code, type: 'rezervacni', status: { notIn: ['podepsano'] } }, orderBy: { id: 'desc' } });
+    const kupC = await prisma.compoundingContract.findFirst({ where: { kiosk_code: code, type: 'kupni', status: { notIn: ['podepsano'] } }, orderBy: { id: 'desc' } });
+    if (!rezC && !kupC) return res.status(404).json({ ok: false, error: 'K teto rezervaci neni zadna nepodepsana smlouva k pregenerovani.' });
+
+    const exRez = (rezC && rezC.fields) || {};
+    const exKup = (kupC && kupC.fields) || {};
+    const contractLang = String(exRez._lang || exKup._lang || 'cs').toLowerCase().slice(0, 2);
+    const isCs = contractLang === 'cs' || !contractLang;
+    let contractCur = String(exKup.price_currency || exRez.reservation_fee_currency || rec.currency || 'CZK').toUpperCase();
+    if (contractCur === 'KC' || contractCur === 'KČ') contractCur = 'CZK';
+    if (['CZK', 'EUR', 'USD', 'GBP'].indexOf(contractCur) === -1) contractCur = 'CZK';
+
+    const our = await getOurCompany().catch(() => null);
+    const _ki = await _sisKioskInfo(code);
+    const kioskLabel = _ki.label;
+    const cs = await getSetting(COMPOUNDING_SETTINGS_KEY, { type: 'json', defaultValue: COMPOUNDING_SETTINGS_DEFAULT });
+    const fx = await fxRatesCzk();
+
+    // ---- Rezervacni smlouva ----
+    if (rezC) {
+      const pseudoSite = { name: (isCs ? 'Lokalita ' : 'Location ') + code, address: kioskLabel, pradlomat_ref: code, purchase_price: (rec.purchase_price != null) ? rec.purchase_price : null, contacts: [] };
+      let cf = {};
+      try { const pf = contracts.getPrefill('rezervacni', pseudoSite, our, contractLang); cf = Object.assign({}, (pf && pf.values) || {}); } catch (e) { cf = { _lang: isCs ? 'cs' : contractLang }; }
+      if (!isCs) cf._lang = contractLang;
+      cf.buyer_name = rec.buyer_name || cf.buyer_name || '';
+      cf.buyer_address = rec.buyer_address || cf.buyer_address || '';
+      cf.buyer_ico = rec.buyer_ico || cf.buyer_ico || '';
+      cf.buyer_dic = rec.buyer_dic || cf.buyer_dic || '';
+      cf.buyer_rep = rec.buyer_rep || cf.buyer_rep || '';
+      cf.buyer_bank = rec.buyer_bank || cf.buyer_bank || '';
+      cf._reverse_charge = _isEuReverseCharge(cf.buyer_dic);
+      cf.seller_bank = cf.seller_bank || OUR_BANK_LINE;
+      cf.location_name = kioskLabel ? (code + ' — ' + kioskLabel) : ((isCs ? 'Lokalita ' : 'Location ') + code);
+      if (kioskLabel) cf.location_address = kioskLabel;
+      if (rec.fee_total != null) {
+        let feeAmount = Math.round(rec.fee_total);
+        let feeCur = isCs ? 'Kč' : 'CZK';
+        if (contractCur !== 'CZK') {
+          const rate = fx && fx[contractCur];
+          if (rate > 0) { feeAmount = Math.round(rec.fee_total / rate); feeCur = contractCur; }
+        }
+        cf.reservation_fee = feeAmount.toLocaleString('cs-CZ');
+        cf.reservation_fee_currency = feeCur;
+        cf.reservation_fee_words = '';
+        if (Number.isInteger(feeAmount)) {
+          const CUR_CZ = { 'Kč': 'korun českých', CZK: 'korun českých', EUR: 'eur', USD: 'amerických dolarů', GBP: 'britských liber' };
+          const CUR_EN = { CZK: 'Czech crowns', 'Kč': 'Czech crowns', EUR: 'euros', USD: 'US dollars', GBP: 'pounds sterling' };
+          if (isCs) { const w = czAmountWords(feeAmount); if (w) cf.reservation_fee_words = w + ' ' + (CUR_CZ[feeCur] || feeCur); }
+          else { const w = enAmountWords(feeAmount); if (w) cf.reservation_fee_words = w + ' ' + (CUR_EN[feeCur] || feeCur); }
+        }
+      }
+      cf.fee_due_days = '';
+      if (rec.days != null) cf.reservation_period = rec.days + (isCs ? ' dní' : ' days');
+      if (rec.reserved_until) cf.reserved_until = new Date(rec.reserved_until).toLocaleDateString(isCs ? 'cs-CZ' : 'en-GB');
+      cf._linked_contract_id = kupC ? kupC.id : (exRez._linked_contract_id || null);
+      await prisma.compoundingContract.update({ where: { id: rezC.id }, data: { fields: cf } });
+    }
+
+    // ---- Kupni smlouva ----
+    if (kupC) {
+      const cfgMap = (await getSetting(COMPOUNDING_KIOSKS_KEY, { type: 'json', defaultValue: {} })) || {};
+      const cfg = cfgMap[code] || {};
+      const ks = await _sisKiosks();
+      const kk = ks.find((k) => k.code === code) || {};
+      const eur = fx.EUR || 25;
+      const ver = String(cfg.version || '').toLowerCase();
+      const pl = cs.pricelist || {};
+      const machineCzk = (pl[ver] && pl[ver].eur != null && isFinite(Number(pl[ver].eur))) ? Math.round(Number(pl[ver].eur) * eur) : null;
+      const totalCzk = (rec.purchase_price != null) ? Number(rec.purchase_price) : null;
+      const localityCzk = (totalCzk != null && machineCzk != null) ? Math.max(0, totalCzk - machineCzk) : null;
+      const pseudoKupni = {
+        name: (isCs ? 'Lokalita ' : 'Location ') + code, address: kioskLabel, city: '', zip: '', country: 'CZ',
+        purchase_price: localityCzk, pradlomat_ref: code, contacts: [],
+        _avgTurnover: (typeof kk.avgTop3 === 'number' && isFinite(kk.avgTop3)) ? kk.avgTop3 : null,
+        _locationMonths: Number.isFinite(cs.locationMonths) ? cs.locationMonths : 12,
+        _version: ver || null, _machinePrice: machineCzk,
+        _servicePct: Number.isFinite(cs.servicePct) ? cs.servicePct : 15,
+        _buybackPct: Number.isFinite(cs.buybackPct) ? cs.buybackPct : 65,
+        _buybackYears: Number.isFinite(cs.buybackYears) ? cs.buybackYears : 5,
+      };
+      let kf = {};
+      try { const pf = contracts.getPrefill('kupni', pseudoKupni, our, contractLang); kf = Object.assign({}, (pf && pf.values) || {}); } catch (e) { kf = {}; }
+      if (!isCs) kf._lang = contractLang;
+      kf.buyer_name = rec.buyer_name || '';
+      kf.buyer_address = rec.buyer_address || '';
+      kf.buyer_ico = rec.buyer_ico || '';
+      kf.buyer_dic = rec.buyer_dic || '';
+      kf.buyer_rep = rec.buyer_rep || '';
+      kf.buyer_bank = rec.buyer_bank || '';
+      kf._reverse_charge = _isEuReverseCharge(kf.buyer_dic);
+      kf.location_desc = kioskLabel ? (code + ' — ' + kioskLabel) : code;
+      const rate2 = (contractCur !== 'CZK') ? ((fx && fx[contractCur]) || 0) : 1;
+      const priceInCur = (czk) => {
+        if (czk == null || !isFinite(czk)) return '';
+        if (contractCur !== 'CZK' && rate2 > 0) return (Math.round((czk / rate2) * 100) / 100).toLocaleString('cs-CZ');
+        return Math.round(czk).toLocaleString('cs-CZ');
+      };
+      kf.price_currency = (contractCur !== 'CZK' && rate2 > 0) ? contractCur : (isCs ? 'Kč' : 'CZK');
+      if (machineCzk != null) kf.price_machine = priceInCur(machineCzk);
+      if (localityCzk != null) kf.price_location = priceInCur(localityCzk);
+      if (totalCzk != null) kf.price_total = priceInCur(totalCzk);
+      if (rec.fee_total != null) kf.reservation_credit = priceInCur(rec.fee_total);
+      kf._linked_contract_id = rezC ? rezC.id : (exKup._linked_contract_id || null);
+      await prisma.compoundingContract.update({ where: { id: kupC.id }, data: { fields: kf } });
+    }
+
+    res.json({ ok: true, currency: contractCur, lang: contractLang, regenerated: { rezervacni: rezC ? rezC.id : null, kupni: kupC ? kupC.id : null } });
+  } catch (err) { next(err); }
+});
+
 // GET /api/compounder/reservations — admin přehled
 router.get('/reservations', requireAuth, async (req, res, next) => {
   try {

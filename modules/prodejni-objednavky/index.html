@@ -3213,6 +3213,11 @@
                 ? '<button onclick="event.stopPropagation();cmpArchiveContract(' + c.id + ',' + id + ',false)" style="background:transparent;color:var(--text2);border:1px solid var(--border);border-radius:6px;padding:3px 9px;font-size:11px;cursor:pointer;">↩︎ Obnovit ' + (CT[c.type] || c.type) + '</button>'
                 : '<button onclick="event.stopPropagation();cmpArchiveContract(' + c.id + ',' + id + ',true)" style="background:transparent;color:#f59e0b;border:1px solid rgba(245,158,11,.4);border-radius:6px;padding:3px 9px;font-size:11px;cursor:pointer;">🗄️ Archivovat ' + (CT[c.type] || c.type) + ' (skrýt zákazníkovi)</button>';
             }).join('') + '</div>';
+            // Přegenerovat nepodepsané smlouvy podle aktuálního kódu (ceny/měna/slovy).
+            var _regenable = cForCode.filter(function(c){ return !c.archived && c.status !== 'podepsano'; });
+            if (_regenable.length) {
+              html += '<div style="margin-top:6px;"><button onclick="event.stopPropagation();cmpRegenContracts(' + x.id + ',' + id + ')" style="background:transparent;color:#c9a24b;border:1px solid rgba(201,162,75,.5);border-radius:6px;padding:3px 9px;font-size:11px;cursor:pointer;">↻ Přegenerovat smlouvy (aktuální ceny/měna)</button></div>';
+            }
             // Tlačítko podpisu jen u AKTUÁLNÍCH smluv — ne u archivovaných a ne u zrušené/vypršelé rezervace.
             var _signable = (['cancelled','expired'].indexOf(x.status) === -1)
               ? cForCode.filter(function(c){ return !c.archived && (c.status === 'k_autorizaci' || c.status === 'k_podpisu'); })
@@ -3240,6 +3245,18 @@
         if (el) cmpLeadReservations(leadId, el);
       } catch (e) { alert('Zrušení rezervace selhalo.'); }
     }
+    async function cmpRegenContracts(resId, leadId) {
+      if (!confirm('Přegenerovat nepodepsané smlouvy této rezervace podle aktuálního kódu?\n\nPřepíší se pole (ceny, měna, částka slovy, zastoupení, banka) podle aktuálních kurzů a nastavení. Podpisy, odkazy ani stav smluv se nemění.')) return;
+      try {
+        var r = await fetch('/api/compounder/reservations/' + resId + '/regenerate-contracts', { method: 'POST', credentials: 'include' });
+        var j = await r.json().catch(function(){ return {}; });
+        if (!r.ok || !j.ok) { alert('Přegenerování selhalo: ' + ((j && j.error) || ('HTTP ' + r.status))); return; }
+        alert('Smlouvy přegenerovány. Měna: ' + (j.currency || '—') + '.');
+        var el = document.getElementById('cmp-resv-' + leadId);
+        if (el) cmpLeadReservations(leadId, el);
+      } catch (e) { alert('Přegenerování selhalo.'); }
+    }
+    window.cmpRegenContracts = cmpRegenContracts;
     async function cmpArchiveContract(contractId, leadId, archived) {
       if (archived && !confirm('Archivovat smlouvu? Zákazníkovi se v portálu přestane zobrazovat, v HolyOS zůstane kvůli historii.')) return;
       try {
