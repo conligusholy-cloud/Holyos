@@ -1108,6 +1108,8 @@
   var TK_ICON = { call:'📞', followup:'🔁', invite:'✉️', close:'🤝', reservation:'🏠', meeting:'📅', prospecting:'🎯', admin:'🗂️', other:'•' };
   function prioCol(p){ return p<=1?'#ef4444':p===2?'#f59e0b':p===3?'#eab308':'#6b7280'; }
   function scoreCol(s){ return s>=80?'#22c55e':s>=55?'#eab308':s>=30?'#f59e0b':'#ef4444'; }
+  function fmtMin(m){ m=Number(m)||0; if(m<60) return m+' min'; var h=Math.floor(m/60), r=m%60; return h+' h'+(r?(' '+r+' min'):''); }
+  var WORK_MIN_DAY = 480;
 
   async function loadToday(gen){
     window._todayLoaded = true;
@@ -1145,7 +1147,9 @@
       var open = tasks.filter(function(t){ return t.status==='open'; });
       var rest = tasks.filter(function(t){ return t.status!=='open'; });
       var doneN = tasks.filter(function(t){ return t.status==='done'; }).length;
-      var prog = '<div style="font-size:12px;color:var(--muted);margin:2px 6px 8px">Splněno '+doneN+' / '+tasks.length+'</div>';
+      var planMin = tasks.reduce(function(s,t){ return s + (Number(t.est_min)||0); }, 0);
+      var capTxt = planMin ? (' · naplánováno '+fmtMin(planMin)+' / '+fmtMin(WORK_MIN_DAY)) : '';
+      var prog = '<div style="font-size:12px;color:var(--muted);margin:2px 6px 8px">Splněno '+doneN+' / '+tasks.length+capTxt+'</div>';
       box.innerHTML = prog + open.map(taskHtml).join('') + rest.map(taskHtml).join('');
     }
     renderReview(j && j.review);
@@ -1161,7 +1165,7 @@
     return '<div class="tsk'+doneCls+'">' +
       '<span class="pdot" style="background:'+prioCol(t.priority)+'"></span>' +
       '<span class="tk-ic">'+(TK_ICON[t.kind]||'•')+'</span>' +
-      '<div class="tk-body"><div class="tk-title">'+esc(t.title)+'</div>' +
+      '<div class="tk-body"><div class="tk-title">'+esc(t.title)+(t.est_min?' <span style="font-weight:600;font-size:12px;color:var(--muted2)">· ⏱ '+fmtMin(t.est_min)+'</span>':'')+'</div>' +
         (t.detail ? '<div class="tk-det">'+esc(t.detail)+'</div>' : '') +
         (t.reasoning ? '<div class="tk-why">💡 '+esc(t.reasoning)+'</div>' : '') +
         '<div class="tk-acts">'+acts+'</div>' +

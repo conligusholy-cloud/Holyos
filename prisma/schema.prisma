@@ -5814,6 +5814,7 @@ model SalesTask {
   detail    String? @db.Text
   reasoning String? @db.Text // proč to AI navrhla
   priority  Int    @default(3) // 1=nejvyšší … 5=nejnižší
+  est_min   Int? // odhad trvání v minutách (kapacita dne = Po-Pá 8 h)
 
   status         String    @default("open") @db.VarChar(20) // open | done | skipped
   done_at        DateTime?

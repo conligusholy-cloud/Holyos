@@ -108,6 +108,8 @@ async function runPeriod(kind, dateStr) {
   for (const p of people) {
     try {
       const rev = await mgr.reviewPeriod(p.id, kind, ds);
+      // Na konci měsíce rovnou obnov reálné cíle pro další období z aktuální historie.
+      if (kind === 'month') { await mgr.ensureTargets(p.id, { force: true }).catch(() => {}); }
       n += 1;
       if (rev) {
         const label = kind === 'month' ? 'Měsíční' : 'Týdenní';

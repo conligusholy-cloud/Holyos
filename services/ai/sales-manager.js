@@ -17,6 +17,27 @@ const { prisma } = require('../../config/database');
 const TZ = process.env.VELIN_TZ || 'Europe/Prague';
 const MODEL = process.env.SALES_MANAGER_MODEL || process.env.COMPOUNDER_LOCATION_MODEL || 'claude-sonnet-4-6';
 const PAY_CURRENCY = process.env.SALES_PAY_CURRENCY || 'CZK';
+// Pracovní kapacita: Po–Pá, 8 h/den (nastavitelné přes env).
+const WORK_HOURS = Number(process.env.SALES_WORK_HOURS) || 8;
+const WORK_MIN = Math.round(WORK_HOURS * 60);
+
+function isWeekday(d) { const wd = d.getUTCDay(); return wd >= 1 && wd <= 5; }
+function workingDaysInMonth(ref) {
+  const r = ref || new Date(tzTodayStr() + 'T00:00:00Z');
+  const y = r.getUTCFullYear(); const m = r.getUTCMonth();
+  const last = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
+  let n = 0;
+  for (let day = 1; day <= last; day++) { if (isWeekday(new Date(Date.UTC(y, m, day)))) n++; }
+  return n;
+}
+function workingDaysRemainingInMonth(ref) {
+  const r = ref || new Date(tzTodayStr() + 'T00:00:00Z');
+  const y = r.getUTCFullYear(); const m = r.getUTCMonth();
+  const last = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
+  let n = 0;
+  for (let day = r.getUTCDate(); day <= last; day++) { if (isWeekday(new Date(Date.UTC(y, m, day)))) n++; }
+  return Math.max(1, n);
+}
 
 // ─── Datum / periody (Europe/Prague) ─────────────────────────────────────────
 function tzTodayStr(d) {
@@ -118,6 +139,67 @@ async function getTargets(personId) {
   return t;
 }
 
+// ─── Osobní cíle: odhad z historie a rozpuštění na periody ────────────────────
+async function gatherTargetHistory(personId) {
+  const leads = await prisma.compounderLead.findMany({ where: { owner_person_id: personId }, select: { id: true, status: true, created_at: true, updated_at: true }, take: 10000 });
+  const ids = leads.map((l) => l.id);
+  let resv = [];
+  if (ids.length) { try { resv = await prisma.locationReservation.findMany({ where: { lead_id: { in: ids } }, select: { created_at: true, purchase_price: true } }); } catch (e) { resv = []; } }
+  const now = Date.now(); const d90 = now - 90 * 86400000; const yStart = new Date(new Date().getFullYear(), 0, 1).getTime();
+  const new90 = leads.filter((l) => l.created_at && new Date(l.created_at).getTime() >= d90).length;
+  const convAll = leads.filter((l) => l.status === 'converted').length;
+  const conv90 = leads.filter((l) => l.status === 'converted' && l.updated_at && new Date(l.updated_at).getTime() >= d90).length;
+  const resv90 = resv.filter((r) => r.created_at && new Date(r.created_at).getTime() >= d90);
+  const rev90 = resv90.reduce((s, r) => s + (r.purchase_price || 0), 0);
+  const revYear = resv.filter((r) => r.created_at && new Date(r.created_at).getTime() >= yStart).reduce((s, r) => s + (r.purchase_price || 0), 0);
+  const dealVals = resv.map((r) => r.purchase_price || 0).filter((v) => v > 0);
+  const avgDeal = dealVals.length ? Math.round(dealVals.reduce((a, b) => a + b, 0) / dealVals.length) : 0;
+  return { total_leads: leads.length, new_leads_90d: new90, conversions_all: convAll, conversions_90d: conv90, reservations_90d: resv90.length, revenue_90d: rev90, revenue_year: revYear, avg_deal_value: avgDeal, working_days_month: workingDaysInMonth(), work_hours_per_day: WORK_HOURS };
+}
+async function planTargetsAI(person, hist) {
+  const sys = 'Jsi AI vedoucí obchodu Best Series (prodej prémiových prádelen Compounder jako investice). Navrhni tomuto obchodníkovi REÁLNÉ, ale ambiciózní MĚSÍČNÍ cíle, vycházející z jeho historie a z pracovní kapacity Po–Pá, ' + WORK_HOURS + ' h/den (' + hist.working_days_month + ' pracovních dní v měsíci). Metriky: new_contacts (nové oslovené/získané kontakty za měsíc), conversions (převedené obchody), reservations (rezervace lokalit), revenue (obrat v ' + PAY_CURRENCY + '). Zásady: cíle musí být splnitelné v 8h denní kapacitě (počítej reálné časy na hovor/schůzku/nábor), ale mají tlačit na maximum prodeje. Když je historie slabá, postav cíle hlavně na náboru a schůzkách (aktivita, kterou obchodník plně ovlivní). Revenue odhadni z reservations × průměrná hodnota obchodu (avg_deal_value; když je 0, odhadni střízlivě). Odpověz POUZE platným JSON bez markdownu: {"new_contacts":<číslo/měsíc>,"conversions":<číslo/měsíc>,"reservations":<číslo/měsíc>,"revenue":<číslo/měsíc>,"rationale":"<1-2 věty česky proč>"}. Piš česky.';
+  const usr = 'Obchodník: ' + person.name + '\nHistorie a kapacita (JSON):\n' + JSON.stringify(hist);
+  const j = await callClaudeJSON(sys, usr, 500);
+  if (!j) return null;
+  const num = (v) => Math.max(0, Math.round(Number(v) || 0));
+  return { new_contacts: num(j.new_contacts), conversions: num(j.conversions), reservations: num(j.reservations), revenue: num(j.revenue), rationale: String(j.rationale || '').slice(0, 400) };
+}
+function targetsFallback(hist) {
+  const wd = hist.working_days_month || 21;
+  // Bez AI: postav cíle na aktivitě. ~6 nových oslovení/den jako realistický základ.
+  const newContacts = Math.max(Math.round((hist.new_leads_90d || 0) / 3 * 1.3), wd * 6);
+  const conversions = Math.max(1, Math.round(newContacts * 0.06));
+  const reservations = Math.max(1, Math.round(conversions * 0.8));
+  const revenue = reservations * (hist.avg_deal_value || 0);
+  return { new_contacts: newContacts, conversions, reservations, revenue, rationale: 'Odvozeno z historie a kapacity 8 h/den.' };
+}
+async function saveTargets(personId, month) {
+  const wd = workingDaysInMonth();
+  const per = {};
+  PLAN_METRICS.forEach((m) => {
+    const mv = Math.max(0, Math.round(month[m] || 0));
+    per[m] = { month: mv, day: Math.ceil(mv / wd), week: Math.ceil(mv / 4.345), year: mv * 12 };
+  });
+  for (const m of PLAN_METRICS) {
+    for (const p of PLAN_PERIODS) {
+      await prisma.salesTarget.upsert({ where: { person_id_metric_period: { person_id: personId, metric: m, period: p } }, update: { value: per[m][p] }, create: { person_id: personId, metric: m, period: p, value: per[m][p] } }).catch(() => {});
+    }
+  }
+  return per;
+}
+async function ensureTargets(personId, opts) {
+  const existing = await getTargets(personId);
+  const has = existing && ((existing.new_contacts && existing.new_contacts.month) || (existing.revenue && existing.revenue.month));
+  if (has && !(opts && opts.force)) return existing;
+  const hist = await gatherTargetHistory(personId);
+  const person = await prisma.person.findUnique({ where: { id: personId }, select: { first_name: true, last_name: true } }).catch(() => null);
+  const pName = person ? `${person.first_name || ''} ${person.last_name || ''}`.trim() : ('#' + personId);
+  let month = await planTargetsAI({ name: pName }, hist);
+  if (!month) month = targetsFallback(hist);
+  await saveTargets(personId, month);
+  return getTargets(personId);
+}
+
 // ─── Kontext pro plánování dne ────────────────────────────────────────────────
 async function gatherPlanContext(personId) {
   const leads = await prisma.compounderLead.findMany({
@@ -184,9 +266,12 @@ async function gatherPlanContext(personId) {
 
   const targets = await getTargets(personId);
   const actuals = await computeActuals(personId);
+  const q = (m) => (targets[m] && targets[m].day) || 0;
 
   return {
     date: tzTodayStr(), leadCount: leads.length,
+    capacity: { work_hours_per_day: WORK_HOURS, work_minutes_per_day: WORK_MIN, workdays: 'Po–Pá', working_days_left_this_month: workingDaysRemainingInMonth() },
+    daily_quota: { new_contacts: q('new_contacts'), conversions: q('conversions'), reservations: q('reservations'), revenue: q('revenue') },
     meetings_today: meetingsToday, meetings_upcoming_7d: meetingsUpcoming,
     meetings_this_week_count: meetingsToday.length + meetingsUpcoming.filter((m) => { const d = new Date(m.when); return periodBounds('week').end.getTime() >= d.getTime(); }).length,
     leads: leadFacts, carry_over: carryOver, targets, actuals,
@@ -197,6 +282,7 @@ async function gatherPlanContext(personId) {
 const TASK_KINDS = ['call', 'followup', 'invite', 'close', 'reservation', 'meeting', 'prospecting', 'admin', 'other'];
 function sanitizeKind(k) { return TASK_KINDS.indexOf(String(k || '').toLowerCase()) >= 0 ? String(k).toLowerCase() : 'other'; }
 function clampPriority(p) { const n = Math.round(Number(p) || 3); return Math.max(1, Math.min(5, n)); }
+function clampMin(m) { const n = Math.round(Number(m) || 0); if (!n) return null; return Math.max(5, Math.min(WORK_MIN, n)); }
 
 async function planDayAI(person, ctx) {
   const sys = 'Jsi špičkový, velmi náročný ale férový AI vedoucí obchodu firmy Best Series (prodej prémiových samoobslužných prádelen "Compounder" jako investičního aktiva). Řídíš obchodníka na 100 % — sestavíš mu na dnešek plán, který ZAPLNÍ celý pracovní den a tlačí ho prodávat. Tvoje prodejní filozofie a POŘADÍ priorit dne: '
@@ -204,7 +290,8 @@ async function planDayAI(person, ctx) {
     + '(B) HORKÉ LEADY A LHŮTY: uzavři/posuň leady s blížící se lhůtou (podpis/poplatek/expirace rezervace) a evidentně horké kontakty. '
     + '(C) NÁBOR A DOMLOUVÁNÍ SCHŮZEK = VĚTŠINA DNE: veškerý zbývající čas (drtivá většina) musí jít do aktivního PRODEJE — oslovování a nábor NOVÝCH kontaktů (kind "prospecting") a domlouvání nových schůzek/obchodů (kind "meeting"/"call"). I když má obchodník málo leadů nebo málo schůzek, NIKDY nenech den poloprázdný: doplň konkrétní náborové úkoly s čísly (např. "Oslov 15 nových potenciálních provozoven/investorů", "Domluv aspoň 3 nové schůzky", "Zavolej 10 studeným kontaktům"). '
     + 'Pravidla výstupu: 1) 5–9 konkrétních úkolů, žádná vata, každý s jasnou akcí a měřitelným cílem (počty oslovení, hovorů, domluvených schůzek). 2) NIKDY duplicitní ani skoro shodné úkoly; na jeden lead max JEDEN úkol (slučuj kroky). 3) Když se úkol týká konkrétního leadu, uveď lead_id; náborové úkoly mají lead_id null. 4) VŠE je jen pro tohoto obchodníka a jeho vlastní kontakty (v kontextu jsou jen jeho leady a jeho kalendář); nikdy neplánuj cizí kontakty ani práci jiných. 5) Priorita 1 = dnešní schůzky a dnešní lhůty, 2 = horké leady, 3 = nábor a domlouvání schůzek. '
-    + 'Odpověz POUZE platným JSON bez markdownu ve tvaru: {"focus":"<1-2 věty zaměření dne, ať obchodník ví, na co dnes zabrat>","tasks":[{"kind":"<call|followup|invite|close|reservation|meeting|prospecting|admin|other>","title":"<krátce, konkrétně, s číslem kde to dává smysl>","detail":"<co přesně udělat, 1-2 věty>","reasoning":"<proč, krátce>","priority":<1-5>,"lead_id":<číslo nebo null>}]}. Piš česky.';
+    + '6) ČASOVÁ KAPACITA: obchodník má dnes ' + ctx.capacity.work_minutes_per_day + ' minut (' + ctx.capacity.work_hours_per_day + ' h, Po–Pá). Každému úkolu přiřaď realistický odhad trvání est_min a součet est_min všech úkolů musí být zhruba roven denní kapacitě (nepřeplňuj ani nenech den poloprázdný). Aktivity dimenzuj tak, aby vedly k plnění DENNÍCH kvót z daily_quota (nové kontakty/konverze/rezervace/obrat na den) — pokud kvóty ještě nejsou splněné, věnuj jim odpovídající čas. '
+    + 'Odpověz POUZE platným JSON bez markdownu ve tvaru: {"focus":"<1-2 věty zaměření dne, ať obchodník ví, na co dnes zabrat>","tasks":[{"kind":"<call|followup|invite|close|reservation|meeting|prospecting|admin|other>","title":"<krátce, konkrétně, s číslem kde to dává smysl>","detail":"<co přesně udělat, 1-2 věty>","reasoning":"<proč, krátce>","priority":<1-5>,"est_min":<odhad minut>,"lead_id":<číslo nebo null>}]}. Piš česky.';
   const usr = 'Obchodník: ' + person.name + '\nKontext (JSON):\n' + JSON.stringify(ctx);
   const j = await callClaudeJSON(sys, usr, 1600);
   if (!j || !Array.isArray(j.tasks)) return null;
@@ -215,36 +302,45 @@ async function planDayAI(person, ctx) {
       detail: t.detail ? String(t.detail).slice(0, 1000) : null,
       reasoning: t.reasoning ? String(t.reasoning).slice(0, 800) : null,
       priority: clampPriority(t.priority),
+      est_min: clampMin(t.est_min),
       lead_id: Number.isInteger(t.lead_id) ? t.lead_id : (Number(t.lead_id) > 0 ? Number(t.lead_id) : null),
     })).filter((t) => t.title),
   };
 }
 function planDayFallback(ctx) {
   const tasks = [];
+  const cap = (ctx.capacity && ctx.capacity.work_minutes_per_day) || WORK_MIN;
+  const dq = ctx.daily_quota || {};
+  const newQuota = Math.max(8, dq.new_contacts || 0); // aspoň 8 oslovení/den
   // (A) Dnešní schůzky z kalendáře — příprava.
   (ctx.meetings_today || []).forEach((m) => {
     if (tasks.length >= 9) return;
     const t = m.when ? new Date(m.when) : null;
     const hh = t ? (('0' + t.getHours()).slice(-2) + ':' + ('0' + t.getMinutes()).slice(-2)) : '';
-    tasks.push({ kind: 'meeting', title: 'Připrav schůzku' + (hh ? ' v ' + hh : '') + ' – ' + (m.title || 'schůzka'), detail: 'Projdi kontext, cíl schůzky a další krok k uzavření.' + (m.location ? ' Místo: ' + m.location + '.' : ''), reasoning: 'Dnešní schůzka z kalendáře.', priority: 1, lead_id: m.lead_id || null });
+    tasks.push({ kind: 'meeting', title: 'Připrav schůzku' + (hh ? ' v ' + hh : '') + ' – ' + (m.title || 'schůzka'), detail: 'Projdi kontext, cíl schůzky a další krok k uzavření.' + (m.location ? ' Místo: ' + m.location + '.' : ''), reasoning: 'Dnešní schůzka z kalendáře.', priority: 1, est_min: 60, lead_id: m.lead_id || null });
   });
   // (B) Horké leady a lhůty.
   (ctx.leads || []).forEach((l) => {
-    if (tasks.length >= 9) return;
+    if (tasks.length >= 8) return;
     const r = (l.reservations || [])[0];
     if (r && (r.status === 'reserved' || r.status === 'active')) {
-      tasks.push({ kind: 'close', title: 'Dotáhnout rezervaci ' + r.kiosk + ' – ' + l.name, detail: 'Hlídat podpis a poplatek, popohnat zákazníka.', reasoning: 'Běžící rezervace se lhůtou.', priority: 1, lead_id: l.id });
+      tasks.push({ kind: 'close', title: 'Dotáhnout rezervaci ' + r.kiosk + ' – ' + l.name, detail: 'Hlídat podpis a poplatek, popohnat zákazníka.', reasoning: 'Běžící rezervace se lhůtou.', priority: 1, est_min: 45, lead_id: l.id });
     } else if (l.invite_sent === 0 && l.has_email) {
-      tasks.push({ kind: 'invite', title: 'Poslat přístup do portálu – ' + l.name, detail: 'Odeslat přihlašovací odkaz a hned zavolat.', reasoning: 'Ještě nedostal pozvánku.', priority: 2, lead_id: l.id });
+      tasks.push({ kind: 'invite', title: 'Poslat přístup do portálu – ' + l.name, detail: 'Odeslat přihlašovací odkaz a hned zavolat.', reasoning: 'Ještě nedostal pozvánku.', priority: 2, est_min: 20, lead_id: l.id });
     } else if ((l.days_since_update || 0) >= 7) {
-      tasks.push({ kind: 'followup', title: 'Oživit kontakt – ' + l.name, detail: 'Zavolat/napsat, zjistit stav a posunout k schůzce.', reasoning: 'Přes týden beze změny.', priority: 3, lead_id: l.id });
+      tasks.push({ kind: 'followup', title: 'Oživit kontakt – ' + l.name, detail: 'Zavolat/napsat, zjistit stav a posunout k schůzce.', reasoning: 'Přes týden beze změny.', priority: 3, est_min: 20, lead_id: l.id });
     }
   });
-  // (C) Nábor a domlouvání schůzek — vždy, aby byl den plný a prodejní.
-  tasks.push({ kind: 'prospecting', title: 'Oslov 15 nových potenciálních zákazníků', detail: 'Vytipuj a kontaktuj nové provozovny/investory (telefon, e-mail, LinkedIn).', reasoning: 'Většina dne patří náboru nových obchodů.', priority: 3, lead_id: null });
-  tasks.push({ kind: 'meeting', title: 'Domluv aspoň 3 nové schůzky', detail: 'Z oslovených kontaktů si nasaď konkrétní termíny do kalendáře.', reasoning: 'Bez schůzek není prodej.', priority: 3, lead_id: null });
-  tasks.push({ kind: 'call', title: 'Zavolej 10 kontaktům z pipeline', detail: 'Projdi kontakty a aktivně je posuň k dalšímu kroku.', reasoning: 'Denní objem hovorů drží obchod v pohybu.', priority: 4, lead_id: null });
-  return { focus: 'Dnes: nejdřív schůzky a lhůty, zbytek dne tvrdě do náboru nových kontaktů a domlouvání schůzek.', tasks: tasks.slice(0, 9) };
+  // (C) Nábor a domlouvání schůzek — zaplní zbytek denní kapacity.
+  let used = tasks.reduce((s, t) => s + (t.est_min || 0), 0);
+  const rest = Math.max(120, cap - used); // aspoň 2 h na aktivní prodej
+  const prospMin = Math.round(rest * 0.6);
+  const meetMin = Math.round(rest * 0.25);
+  const callMin = rest - prospMin - meetMin;
+  tasks.push({ kind: 'prospecting', title: 'Oslov ' + newQuota + ' nových potenciálních zákazníků', detail: 'Vytipuj a kontaktuj nové provozovny/investory (telefon, e-mail, LinkedIn).', reasoning: 'Denní kvóta náboru — většina dne patří novým obchodům.', priority: 3, est_min: prospMin, lead_id: null });
+  tasks.push({ kind: 'meeting', title: 'Domluv aspoň ' + Math.max(2, dq.reservations ? dq.reservations + 1 : 2) + ' nové schůzky', detail: 'Z oslovených kontaktů nasaď konkrétní termíny do kalendáře.', reasoning: 'Bez schůzek není prodej.', priority: 3, est_min: meetMin, lead_id: null });
+  tasks.push({ kind: 'call', title: 'Zavolej 10 kontaktům z pipeline', detail: 'Projdi kontakty a aktivně je posuň k dalšímu kroku.', reasoning: 'Denní objem hovorů drží obchod v pohybu.', priority: 4, est_min: Math.max(30, callMin), lead_id: null });
+  return { focus: 'Dnes (kapacita ' + Math.round(cap / 60) + ' h): nejdřív schůzky a lhůty, zbytek dne tvrdě do náboru a domlouvání schůzek dle denních kvót.', tasks: tasks.slice(0, 9) };
 }
 
 // Vytvoří/aktualizuje denní plán a úkoly. force=true přegeneruje (smaže staré open AI úkoly).
@@ -254,6 +350,7 @@ async function planDay(personId, dateStr, opts) {
   const existing = await prisma.salesDayPlan.findUnique({ where: { person_id_date: { person_id: personId, date } }, include: { tasks: true } });
   if (existing && existing.tasks.length && !(opts && opts.force)) return { plan: existing, created: 0, skipped: true };
 
+  await ensureTargets(personId).catch(() => {}); // reálné osobní cíle musí existovat před plánem
   const ctx = await gatherPlanContext(personId);
   let out = await planDayAI(person, ctx);
   if (!out) out = planDayFallback(ctx);
@@ -269,7 +366,7 @@ async function planDay(personId, dateStr, opts) {
   }
   let created = 0;
   for (const t of out.tasks) {
-    await prisma.salesTask.create({ data: { day_plan_id: plan.id, person_id: personId, lead_id: t.lead_id, kind: t.kind, title: t.title, detail: t.detail, reasoning: t.reasoning, priority: t.priority, status: 'open' } });
+    await prisma.salesTask.create({ data: { day_plan_id: plan.id, person_id: personId, lead_id: t.lead_id, kind: t.kind, title: t.title, detail: t.detail, reasoning: t.reasoning, priority: t.priority, est_min: t.est_min || null, status: 'open' } });
     created += 1;
   }
   const full = await prisma.salesDayPlan.findUnique({ where: { id: plan.id }, include: { tasks: true } });
@@ -490,5 +587,5 @@ async function reportToOwners(dateStr) {
 module.exports = {
   tzTodayStr, periodBounds, getActiveSalespeople,
   planDay, reviewDay, reviewPeriod, reportToOwners,
-  buildOwnerReport, computeActuals, getTargets,
+  buildOwnerReport, computeActuals, getTargets, ensureTargets,
 };
