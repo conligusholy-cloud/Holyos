@@ -20,6 +20,13 @@ const PAY_CURRENCY = process.env.SALES_PAY_CURRENCY || 'CZK';
 // Pracovní kapacita: Po–Pá, 8 h/den (nastavitelné přes env).
 const WORK_HOURS = Number(process.env.SALES_WORK_HOURS) || 8;
 const WORK_MIN = Math.round(WORK_HOURS * 60);
+// Prodejní trychtýř pro cíle — reálné B2B benchmarky pro velkou investiční
+// položku (Compounder). Vše laditelné přes env. Logika: kontakty/den → schůzky →
+// rezervace → prodeje → obrat (prodeje × cena obchodu).
+const CONTACTS_PER_DAY = Number(process.env.SALES_CONTACTS_PER_DAY) || 12;
+const RATE_CONTACT_MEETING = Number(process.env.SALES_RATE_CONTACT_MEETING) || 0.10;
+const RATE_MEETING_RESERVATION = Number(process.env.SALES_RATE_MEETING_RESERVATION) || 0.30;
+const RATE_RESERVATION_SALE = Number(process.env.SALES_RATE_RESERVATION_SALE) || 0.35;
 
 function isWeekday(d) { const wd = d.getUTCDay(); return wd >= 1 && wd <= 5; }
 function workingDaysInMonth(ref) {
@@ -172,15 +179,23 @@ async function planTargetsAI(person, hist) {
   const num = (v) => Math.max(0, Math.round(Number(v) || 0));
   return { new_contacts: num(j.new_contacts), conversions: num(j.conversions), reservations: num(j.reservations), revenue: num(j.revenue), rationale: String(j.rationale || '').slice(0, 400) };
 }
-function targetsFallback(hist) {
+// Reálné cíle z prodejního trychtýře (B2B benchmarky), NE z vymyšlených poměrů.
+function computeBenchmarkTargets(hist) {
   const wd = hist.working_days_month || 21;
-  // Bez AI: postav cíle na aktivitě. ~6 nových oslovení/den jako realistický základ.
-  const newContacts = Math.max(Math.round((hist.new_leads_90d || 0) / 3 * 1.3), wd * 6);
-  const conversions = Math.max(1, Math.round(newContacts * 0.06));
-  const reservations = Math.max(1, Math.round(conversions * 0.8));
-  const revenue = reservations * (hist.deal_value_used || hist.avg_deal_value || hist.company_avg_deal_value || 0);
-  return { new_contacts: newContacts, conversions, reservations, revenue, rationale: 'Odvozeno z historie a kapacity 8 h/den.' };
+  const price = hist.deal_value_used || hist.company_avg_deal_value || hist.avg_deal_value || Number(process.env.SALES_DEFAULT_DEAL_VALUE) || 0;
+  const contacts = CONTACTS_PER_DAY * wd;
+  const meetings = Math.round(contacts * RATE_CONTACT_MEETING);
+  const reservations = Math.max(1, Math.round(meetings * RATE_MEETING_RESERVATION));
+  const sales = Math.max(1, Math.round(reservations * RATE_RESERVATION_SALE));
+  const revenue = sales * price;
+  const pct = (r) => Math.round(r * 100);
+  return {
+    new_contacts: contacts, conversions: sales, reservations, revenue,
+    rationale: CONTACTS_PER_DAY + ' kontaktů/den × ' + wd + ' dní = ' + contacts + '; ' + pct(RATE_CONTACT_MEETING) + '% → ' + meetings + ' schůzek; ' + pct(RATE_MEETING_RESERVATION) + '% → ' + reservations + ' rezervací; ' + pct(RATE_RESERVATION_SALE) + '% → ' + sales + ' prodejů × ' + price + ' = obrat.',
+  };
 }
+// Ponecháno pro případné budoucí použití; cíle nyní počítáme deterministicky.
+function targetsFallback(hist) { return computeBenchmarkTargets(hist); }
 async function saveTargets(personId, month) {
   const wd = workingDaysInMonth();
   const per = {};
@@ -201,11 +216,9 @@ async function ensureTargets(personId, opts) {
   // jinak (např. staré cíle s obratem 0) se automaticky přepočítají.
   const has = existing && existing.new_contacts && existing.new_contacts.month > 0 && existing.revenue && existing.revenue.month > 0;
   if (has && !(opts && opts.force)) return existing;
+  // Deterministicky z prodejního trychtýře (průhledné, doložitelné, ne AI odhad).
   const hist = await gatherTargetHistory(personId);
-  const person = await prisma.person.findUnique({ where: { id: personId }, select: { first_name: true, last_name: true } }).catch(() => null);
-  const pName = person ? `${person.first_name || ''} ${person.last_name || ''}`.trim() : ('#' + personId);
-  let month = await planTargetsAI({ name: pName }, hist);
-  if (!month) month = targetsFallback(hist);
+  const month = computeBenchmarkTargets(hist);
   await saveTargets(personId, month);
   return getTargets(personId);
 }

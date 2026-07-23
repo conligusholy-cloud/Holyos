@@ -244,10 +244,15 @@ function start() {
   // Catch-up po startu serveru: pokud dnešní plány chybí, rozdej je automaticky
   // celému týmu (bez force → nepřepíše existující). Řeší i první nasazení během dne.
   if (process.env.SALES_MANAGER_CATCHUP !== '0') {
-    setTimeout(() => {
+    setTimeout(async () => {
       const key = tzToday();
       if (_fired.morning === key) return; // ranní běh už proběhl dnes
       _fired.morning = key;
+      // Přepočítej reálné cíle všem podle aktuální logiky (opraví staré/0 cíle).
+      try {
+        const people = (await mgr.getActiveSalespeople()).filter((p) => p.is_salesperson);
+        for (const p of people) { await mgr.ensureTargets(p.id, { force: true }).catch(() => {}); }
+      } catch (e) { console.error('[sales-worker] catch-up targets:', e.message); }
       runMorning().catch((e) => console.error('[sales-worker] catch-up:', e.message));
     }, 20000);
   }
