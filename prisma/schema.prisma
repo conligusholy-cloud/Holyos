@@ -5614,6 +5614,8 @@ model CompounderLead {
   // a kdo kontakt založil. Odkaz na Person (bez formální relace, jméno se dohledá zvlášť).
   owner_person_id      Int?
   created_by_person_id Int?
+  // Externí obchodník, který kontakt založil/spravuje (id z AppSetting external.sales_reps).
+  external_rep_id      Int?
 
   // Kolikrát obchodník poslal leadovi přihlašovací odkaz + kdy naposledy.
   access_sent_count   Int       @default(0)
@@ -5626,6 +5628,7 @@ model CompounderLead {
   @@index([role])
   @@index([email])
   @@index([owner_person_id])
+  @@index([external_rep_id])
   @@map("compounder_leads")
 }
 

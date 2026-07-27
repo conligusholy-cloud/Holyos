@@ -75,6 +75,22 @@
   .offer-metrics b{font-weight:800;font-size:12.5px}
   .offer-metrics b.gold{color:var(--gold2)} .offer-metrics b.green{color:var(--green)} .offer-metrics b.blue{color:var(--blue)} .offer-metrics b.def{color:var(--text)}
   .offer-metrics .ecs{font-size:9.5px}
+  select{width:100%;background:var(--surface2);border:1px solid var(--line);border-radius:10px;padding:11px 10px;color:var(--text);font-size:14px;font-family:inherit}
+  textarea{width:100%;background:var(--surface2);border:1px solid var(--line);border-radius:10px;padding:10px;color:var(--text);font-size:14px;font-family:inherit;resize:vertical}
+  .btn-g{background:var(--surface2);color:var(--text);border:1px solid var(--line)}
+  .fab{position:fixed;right:16px;bottom:calc(70px + env(safe-area-inset-bottom,0));background:var(--primary);color:var(--primary-d);border:none;border-radius:999px;padding:13px 18px;font-size:14px;font-weight:800;box-shadow:0 6px 20px rgba(0,0,0,.4);cursor:pointer;z-index:56;width:auto}
+  .ct{background:var(--surface);border:1px solid var(--line);border-radius:12px;margin:8px 0;padding:11px 13px}
+  .ct-top{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;cursor:pointer}
+  .ct-name{font-weight:700;font-size:14.5px}
+  .ct-sub{font-size:11.5px;color:var(--muted);margin-top:2px}
+  .ct-badge{font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:999px;white-space:nowrap}
+  .ct-detail{display:none;margin-top:10px;border-top:1px solid var(--line);padding-top:10px}
+  .ct.open .ct-detail{display:block}
+  .ct .lbl{font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted2);margin:8px 0 4px}
+  .ct-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+  .ct-actions .btn{width:auto;padding:9px 12px;font-size:13px}
+  .modal-ovl{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:100;display:flex;align-items:flex-end;justify-content:center}
+  .modal-card{background:var(--surface);border-top:1px solid var(--line);border-radius:18px 18px 0 0;width:100%;max-width:520px;padding:18px 16px calc(20px + env(safe-area-inset-bottom,0))}
 </style>
 </head>
 <body>
@@ -113,20 +129,26 @@
       <div id="lok-list"><div class="loading">Načítám…</div></div>
     </div>
 
-    <!-- PROVIZE -->
-    <div id="screen-prov" class="screen" style="display:none">
-      <div class="kpis">
-        <div class="kpi gold"><div class="l">Provize celkem</div><div class="v" id="k-provize">0</div><div class="s" id="k-splatnost"></div></div>
-        <div class="kpi"><div class="l">Sazba</div><div class="v" id="k-sazba">—</div><div class="s" id="k-zpusob"></div></div>
+    <!-- KONTAKTY -->
+    <div id="screen-kontakty" class="screen" style="display:none">
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
+        <input type="text" id="ct-search" placeholder="Hledat jméno / e-mail…" oninput="renderContacts()" style="flex:1">
+        <select id="ct-filter" onchange="renderContacts()" style="width:auto;min-width:130px">
+          <option value="">Všechny stavy</option>
+          <option value="new">Nový</option>
+          <option value="contacted">Kontaktováno</option>
+          <option value="qualified">Kvalifikováno</option>
+          <option value="converted">Konvertováno</option>
+          <option value="rejected">Odmítnuto</option>
+        </select>
       </div>
-      <div class="info-line" id="prov-info"></div>
-      <div class="sec-title">Provize po lokalitách</div>
-      <div id="prov-list"><div class="loading">Načítám…</div></div>
+      <div id="ct-list"><div class="loading">Načítám…</div></div>
+      <button class="fab" onclick="openNewContact()">+ Nový kontakt</button>
     </div>
 
     <nav class="tabbar">
       <button class="tab active" id="tab-lok" onclick="showScreen('lok')"><span class="ic">📍</span>Lokality</button>
-      <button class="tab" id="tab-prov" onclick="showScreen('prov')"><span class="ic">💰</span>Provize</button>
+      <button class="tab" id="tab-kontakty" onclick="showScreen('kontakty')"><span class="ic">👥</span>Kontakty</button>
     </nav>
   </div>
 
@@ -184,13 +206,6 @@
     // KPI lokality
     document.getElementById('k-pocet').textContent = kpi.pocet || 0;
     document.getElementById('k-objem').textContent = money(kpi.objem);
-    // KPI provize
-    var sazbaLbl = (kpi.sazba != null && kpi.sazba !== '') ? (kpi.zpusob_vypoctu === 'fix' ? (money(kpi.sazba) + ' /lok.') : (String(kpi.sazba).replace('.', ',') + ' %')) : '—';
-    document.getElementById('k-provize').textContent = money(kpi.provize);
-    document.getElementById('k-splatnost').textContent = 'splatnost: ' + (PAY[kpi.splatnost] || '—');
-    document.getElementById('k-sazba').textContent = sazbaLbl;
-    document.getElementById('k-zpusob').textContent = CALC[kpi.zpusob_vypoctu] || '';
-    document.getElementById('prov-info').textContent = 'Provize se počítá jako ' + (CALC[kpi.zpusob_vypoctu] || '—') + ', splatná ' + (PAY[kpi.splatnost] || 'individuálně') + '. Hodnoty jsou orientační (bez DPH, v CZK).';
     // Seznam lokalit
     var ll = document.getElementById('lok-list');
     if(!lok.length){ ll.innerHTML = '<div class="empty">Zatím nemáte přiřazené žádné lokality.</div>'; }
@@ -216,31 +231,102 @@
           '</div></div>';
       }).join('');
     }
-    // Provize agenda
-    var pl = document.getElementById('prov-list');
-    if(!lok.length){ pl.innerHTML = '<div class="empty">Žádné lokality k výpočtu provize.</div>'; }
-    else {
-      pl.innerHTML = lok.map(function(x){
-        var vipTag2 = x.vip ? ' <span style="font-size:10px;color:#cda454;border:1px solid rgba(205,164,84,.5);border-radius:6px;padding:1px 5px;">🎯 VIP</span>' : '';
-        return '<div class="card"><div class="row"><div><div class="code">' + esc(x.code) + vipTag2 + '</div><div class="name">' + esc(x.label) + '</div></div><div class="price prov">' + money(x.commission) + '</div></div>' +
-          '<div class="metrics">' +
-            '<div class="metric"><div class="ml">Celková cena</div><div class="mv">' + money(x.total) + '</div></div>' +
-            '<div class="metric"><div class="ml">Cena lokality</div><div class="mv">' + money(x.loc) + '</div></div>' +
-          '</div></div>';
-      }).join('');
-    }
   }
 
   function showScreen(s){
     document.getElementById('screen-lok').style.display = (s==='lok') ? '' : 'none';
-    document.getElementById('screen-prov').style.display = (s==='prov') ? '' : 'none';
+    document.getElementById('screen-kontakty').style.display = (s==='kontakty') ? '' : 'none';
     document.getElementById('tab-lok').classList.toggle('active', s==='lok');
-    document.getElementById('tab-prov').classList.toggle('active', s==='prov');
+    document.getElementById('tab-kontakty').classList.toggle('active', s==='kontakty');
+    if(s==='kontakty') loadContacts();
     window.scrollTo(0,0);
   }
 
   // Enter v heslu = přihlásit
   document.getElementById('in-pass').addEventListener('keydown', function(e){ if(e.key === 'Enter') doLogin(); });
+
+  // ─── Kontakty (leady vlastněné tímto obchodníkem) ───
+  var CONTACTS = [];
+  var CT_STAT = { new:'Nový', contacted:'Kontaktováno', qualified:'Kvalifikováno', converted:'Konvertováno', rejected:'Odmítnuto' };
+  var CT_COL = { new:'#3b82f6', contacted:'#8b5cf6', qualified:'#eab308', converted:'#22c55e', rejected:'#ef4444' };
+  async function loadContacts(){
+    var box=document.getElementById('ct-list'); if(!box) return;
+    try {
+      var r=await fetch(API+'/external-reps/me/leads?t='+encodeURIComponent(getToken()),{headers:{'Accept':'application/json'}});
+      if(r.status===401){ doLogout(); return; }
+      CONTACTS=await r.json(); if(!Array.isArray(CONTACTS)) CONTACTS=[];
+    } catch(e){ box.innerHTML='<div class="err">Chyba načítání kontaktů.</div>'; return; }
+    renderContacts();
+  }
+  function renderContacts(){
+    var box=document.getElementById('ct-list'); if(!box) return;
+    var q=((document.getElementById('ct-search')||{}).value||'').trim().toLowerCase();
+    var fs=((document.getElementById('ct-filter')||{}).value||'');
+    var rows=CONTACTS.filter(function(c){ if(fs && c.status!==fs) return false; if(!q) return true; return ((c.name||'')+' '+(c.email||'')+' '+(c.phone||'')).toLowerCase().indexOf(q)!==-1; });
+    if(!rows.length){ box.innerHTML='<div class="empty">Zatím žádné kontakty. Přidej první tlačítkem „+ Nový kontakt".</div>'; return; }
+    box.innerHTML=rows.map(function(c){
+      var col=CT_COL[c.status]||'var(--muted)';
+      var sub=[c.email,c.phone].filter(Boolean).join(' · ');
+      var last=c.lastActivityAt?('Poslední aktivita: '+new Date(c.lastActivityAt).toLocaleString('cs-CZ')):'';
+      var opts=Object.keys(CT_STAT).map(function(k){return '<option value="'+k+'"'+(c.status===k?' selected':'')+'>'+CT_STAT[k]+'</option>';}).join('');
+      return '<div class="ct" id="ct-'+c.id+'">'+
+        '<div class="ct-top" onclick="toggleContact('+c.id+')">'+
+          '<div style="min-width:0"><div class="ct-name">'+esc(c.name)+'</div>'+
+            (sub?('<div class="ct-sub">'+esc(sub)+'</div>'):'')+
+            (last?('<div class="ct-sub" style="color:var(--green)">'+esc(last)+'</div>'):'')+'</div>'+
+          '<span class="ct-badge" style="color:'+col+';border:1px solid '+col+'55;background:'+col+'22">'+(CT_STAT[c.status]||c.status)+'</span>'+
+        '</div>'+
+        '<div class="ct-detail">'+
+          '<div class="lbl">Stav</div><select onchange="setContactStatus('+c.id+',this.value)">'+opts+'</select>'+
+          '<div class="lbl">Poznámky</div><textarea id="ct-notes-'+c.id+'" rows="2">'+esc(c.notes||'')+'</textarea>'+
+          '<div class="ct-actions">'+
+            '<button class="btn btn-g" onclick="saveContactNotes('+c.id+')">💾 Uložit</button>'+
+            '<button class="btn btn-g" onclick="addContactActivity('+c.id+')">➕ Aktivita</button>'+
+            '<button class="btn btn-g" onclick="copyContactLink('+c.id+')">🔗 Odkaz pro zákazníka</button>'+
+          '</div>'+
+          (c.activity_log?('<div class="lbl">Aktivita</div><div style="white-space:pre-wrap;font-size:12px;color:var(--muted);background:var(--surface2);border:1px solid var(--line);border-radius:8px;padding:8px;max-height:130px;overflow:auto">'+esc(c.activity_log)+'</div>'):'')+
+        '</div></div>';
+    }).join('');
+  }
+  function toggleContact(id){ var el=document.getElementById('ct-'+id); if(el) el.classList.toggle('open'); }
+  function _ctById(id){ return CONTACTS.find(function(c){return c.id===id;}); }
+  async function _patchContact(id, body){
+    body.t=getToken();
+    var r=await fetch(API+'/external-reps/me/leads/'+id,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    var j=await r.json().catch(function(){return{};});
+    if(!r.ok||!j.ok) throw new Error(j.error||('HTTP '+r.status));
+    return j.lead;
+  }
+  async function setContactStatus(id,status){ try{ var l=await _patchContact(id,{status:status}); var c=_ctById(id); if(c)c.status=l.status; renderContacts(); var el=document.getElementById('ct-'+id); if(el)el.classList.add('open'); }catch(e){ alert('Změna selhala: '+(e.message||'')); } }
+  async function saveContactNotes(id){ var v=(document.getElementById('ct-notes-'+id)||{}).value||''; try{ var l=await _patchContact(id,{notes:v}); var c=_ctById(id); if(c)c.notes=l.notes; alert('Uloženo.'); }catch(e){ alert('Uložení selhalo: '+(e.message||'')); } }
+  async function addContactActivity(id){ var t=prompt('Záznam aktivity:'); if(!t) return; try{ var l=await _patchContact(id,{activity:t}); var c=_ctById(id); if(c){c.activity_log=l.activity_log;c.lastActivityAt=new Date().toISOString();} renderContacts(); var el=document.getElementById('ct-'+id); if(el)el.classList.add('open'); }catch(e){ alert('Selhalo: '+(e.message||'')); } }
+  function copyContactLink(id){ var c=_ctById(id); if(!c||!c.portal_url){ alert('Odkaz není k dispozici.'); return; } navigator.clipboard.writeText(c.portal_url).then(function(){ alert('Odkaz pro zákazníka zkopírován.'); }, function(){ prompt('Odkaz pro zákazníka:', c.portal_url); }); }
+  function openNewContact(){
+    var ov=document.createElement('div'); ov.className='modal-ovl'; ov.id='ct-modal';
+    ov.innerHTML='<div class="modal-card"><h3 style="margin:0 0 14px;font-size:17px">Nový kontakt</h3>'+
+      '<div class="field"><label>Jméno / firma</label><input id="nc-name"></div>'+
+      '<div class="field"><label>E-mail</label><input id="nc-email" type="email"></div>'+
+      '<div class="field"><label>Telefon</label><input id="nc-phone"></div>'+
+      '<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:6px"><button class="btn btn-g" style="width:auto" onclick="closeNewContact()">Zrušit</button><button class="btn btn-p" style="width:auto" onclick="saveNewContact()">Vytvořit</button></div></div>';
+    ov.addEventListener('click',function(e){ if(e.target===ov) closeNewContact(); });
+    document.body.appendChild(ov);
+  }
+  function closeNewContact(){ var m=document.getElementById('ct-modal'); if(m)m.remove(); }
+  async function saveNewContact(){
+    var name=(document.getElementById('nc-name')||{}).value||'';
+    var email=(document.getElementById('nc-email')||{}).value||'';
+    var phone=(document.getElementById('nc-phone')||{}).value||'';
+    if(!email.trim() && !phone.trim()){ alert('Zadej e-mail nebo telefon.'); return; }
+    try {
+      var r=await fetch(API+'/external-reps/me/leads',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({t:getToken(),name:name,email:email,phone:phone})});
+      var j=await r.json().catch(function(){return{};});
+      if(!r.ok||!j.ok) throw new Error(j.error||('HTTP '+r.status));
+      closeNewContact(); await loadContacts();
+    } catch(e){ alert('Vytvoření selhalo: '+(e.message||'')); }
+  }
+  window.renderContacts=renderContacts; window.toggleContact=toggleContact; window.setContactStatus=setContactStatus;
+  window.saveContactNotes=saveContactNotes; window.addContactActivity=addContactActivity; window.copyContactLink=copyContactLink;
+  window.openNewContact=openNewContact; window.closeNewContact=closeNewContact; window.saveNewContact=saveNewContact;
 
   // Start — auto-login z e-mailového odkazu (?t=token)
   var _urlTok = new URLSearchParams(location.search).get('t');
