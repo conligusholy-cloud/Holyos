@@ -298,6 +298,7 @@
       <button type="button" class="tab-btn" data-tab="compounding" onclick="switchTab('compounding')">🧺 Compounding</button>
       <button type="button" class="tab-btn" data-tab="rezervace" onclick="switchTab('rezervace')">📋 Rezervace</button>
       <button type="button" class="tab-btn" data-tab="lokality" onclick="switchTab('lokality')">📍 Lokality</button>
+      <button type="button" class="tab-btn" data-tab="externi" onclick="switchTab('externi')">🤝 Externí obchod</button>
     </div>
 
     <!-- TAB: Compounding — hodnota lokalit prádlomatů ze SIS API -->
@@ -317,6 +318,15 @@
       </div>
       <div id="kv-summary" style="margin-bottom:14px;"></div>
       <div id="kv-table"><div style="color:var(--text2);padding:20px;">Načítám…</div></div>
+    </div>
+
+    <!-- TAB: Externí obchod — zjednodušený přehled (kód, lokalita, provozovatel, celková cena) -->
+    <div id="tab-externi" style="display:none; padding:20px 24px 24px;">
+      <div class="toolbar" style="margin-bottom:14px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+        <input type="text" id="ext-search" placeholder="Hledat kód / lokalitu / provozovatele…" onkeyup="renderExternalTrade()" style="flex:1; min-width:220px;">
+        <button class="btn" onclick="loadKioskValues(true).then(renderExternalTrade)">↻ Obnovit</button>
+      </div>
+      <div id="ext-table"><div style="color:var(--text2);padding:20px;">Načítám…</div></div>
     </div>
 
     <!-- TAB: Rezervace lokalit -->
@@ -3564,7 +3574,7 @@
     }
 
     function switchTab(name) {
-      ['orders', 'pricelist', 'cashflow', 'tools', 'compounder', 'compounding', 'rezervace', 'lokality'].forEach(function(t) {
+      ['orders', 'pricelist', 'cashflow', 'tools', 'compounder', 'compounding', 'rezervace', 'lokality', 'externi'].forEach(function(t) {
         var el = document.getElementById('tab-' + t);
         if (el) el.style.display = (t === name) ? '' : 'none';
         var btn = document.querySelector('.tab-btn[data-tab="' + t + '"]');
@@ -3577,6 +3587,7 @@
       if (name === 'compounding') loadKioskValues();
       if (name === 'rezervace') loadReservationsPage();
       if (name === 'lokality') loadLokality();
+      if (name === 'externi') renderExternalTrade();
     }
 
     // ============================================================
@@ -4188,6 +4199,62 @@
       });
       h += '</tbody></table></div>';
       h += '<div style="color:var(--text2);font-size:11px;margin-top:8px;">' + (priceMode === 'roi' ? ('Cena lokality dopočtena tak, aby ROI = ' + roiPct + ' %') : ('Cena lokality = průměrný obrat s DPH × ' + months + ' měsíců')) + ' (nastavíš přes ⚙️). Zobrazeno v CZK. Kliknutím na řádek zobrazíš transakce stroje.</div>';
+      box.innerHTML = h;
+    }
+
+    // ─── Externí obchod — zjednodušená tabulka (kód, lokalita, provozovatel, celková cena) ───
+    function _kvExtLocVal(k) {
+      var num = function(v){ return (typeof v==='number' && isFinite(v)) ? v : 0; };
+      var cs = _compoundingSettings || {};
+      var months = Number.isFinite(cs.locationMonths) ? cs.locationMonths : 12;
+      var svcPct = Number.isFinite(cs.servicePct) ? cs.servicePct : 15;
+      var enPct = Number.isFinite(cs.energyPct) ? cs.energyPct : 9.5;
+      var priceMode = (cs.locationPriceMode === 'roi') ? 'roi' : 'months';
+      var roiPct = Number.isFinite(cs.locationRoiPct) ? cs.locationRoiPct : 25;
+      var cur = k.currency || 'CZK';
+      var rate = (_kvFxRates && _kvFxRates[cur]) || 1;
+      if (priceMode === 'roi') {
+        var machine2 = _kvVerMachine(k.code).machine;
+        if (machine2 == null) return 0;
+        var cfg2 = _kioskConfig[k.code] || {};
+        var obratBez2 = num(k.avgTop3) / 1.21;
+        var servis2 = num(k.avgTop3) * (svcPct / 100);
+        var najem2 = (typeof cfg2.rentMonthlyCzk === 'number' && isFinite(cfg2.rentMonthlyCzk)) ? cfg2.rentMonthlyCzk : 0;
+        var energie2 = obratBez2 * (enPct / 100);
+        var cisty2 = obratBez2 - servis2 - najem2 - energie2;
+        var target2 = cisty2 * (1200 / (roiPct > 0 ? roiPct : 25));
+        var vloc = target2 - machine2;
+        return vloc > 0 ? vloc : 0;
+      }
+      return num(k.avgTop3) * rate * months;
+    }
+    async function renderExternalTrade() {
+      var box = document.getElementById('ext-table');
+      if (!box) return;
+      if (!_kioskData) { box.innerHTML = '<div style="color:var(--text2);padding:20px;">Načítám hodnoty lokalit ze SIS…</div>'; await loadKioskValues(false); }
+      if (!_kioskData) { box.innerHTML = '<div style="color:#ef4444;padding:20px;">Data nejsou k dispozici.</div>'; return; }
+      var kiosks = Array.isArray(_kioskData.kiosks) ? _kioskData.kiosks.slice() : [];
+      var baseList = kiosks.filter(function(k){ return String(k.companyName || '').trim().toLowerCase().indexOf('best series') !== -1; });
+      var q = ((document.getElementById('ext-search') || {}).value || '').trim().toLowerCase();
+      var rows = baseList.filter(function(k){ if (!q) return true; return (String(k.code || '') + ' ' + String(k.label || '') + ' ' + String(k.companyName || '')).toLowerCase().indexOf(q) !== -1; });
+      rows = rows.map(function(k){ var m = _kvVerMachine(k.code).machine; var total = (m != null) ? (_kvExtLocVal(k) + m) : null; return { code: k.code, label: k.label, company: k.companyName, total: total }; });
+      rows.sort(function(a, b){ return (b.total || 0) - (a.total || 0); });
+      if (!rows.length) { box.innerHTML = '<div style="color:var(--text2);padding:24px;">Žádné lokality neodpovídají filtru.</div>'; return; }
+      var h = '<div style="overflow-x:auto;"><table class="data-table kv-compact"><thead><tr>' +
+        '<th style="text-align:right;color:var(--text2);">#</th>' +
+        '<th>Kód</th><th>Lokalita</th><th>Provozovatel</th>' +
+        '<th style="text-align:right;">Celková cena</th></tr></thead><tbody>';
+      rows.forEach(function(r, i){
+        h += '<tr>' +
+          '<td style="text-align:right;color:var(--text2);">' + (i + 1) + '</td>' +
+          '<td style="font-weight:600;white-space:nowrap;">' + kvEsc(r.code) + '</td>' +
+          '<td>' + kvEsc(r.label) + '</td>' +
+          '<td style="color:var(--text2);">' + kvEsc(r.company) + '</td>' +
+          '<td style="text-align:right;white-space:nowrap;font-weight:700;color:#eab308;">' + (r.total != null ? kvMoney(r.total, 'CZK') : '<span style="color:var(--text2);">—</span>') + '</td>' +
+          '</tr>';
+      });
+      h += '</tbody></table></div>';
+      h += '<div style="color:var(--text2);font-size:11px;margin-top:8px;">Celková cena (bez DPH) = cena lokality + cena kiosku, v CZK. Data ze SIS.</div>';
       box.innerHTML = h;
     }
 
