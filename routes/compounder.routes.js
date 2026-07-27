@@ -2656,6 +2656,7 @@ async function _extRepPortalData(rep) {
   });
   const objem = rows.reduce((a, r) => a + (r.total || 0), 0);
   const provize = rows.reduce((a, r) => a + (r.commission || 0), 0);
+  const obratSum = rows.reduce((a, r) => a + (r.obrat_bez || 0), 0);
   // Ceník strojů (bez lokality) — z pricelistu + fotek verzí.
   const _rateM = Number(rep.sazba) || 0;
   const vpMap = (cs.versionPhotos && typeof cs.versionPhotos === 'object') ? cs.versionPhotos : {};
@@ -2671,7 +2672,7 @@ async function _extRepPortalData(rep) {
     lokality: rows,
     machines: machines,
     currency: 'CZK',
-    kpi: { pocet: codes.length, objem: Math.round(objem), provize: Math.round(provize), sazba: rep.sazba, zpusob_vypoctu: rep.zpusob_vypoctu, splatnost: rep.splatnost },
+    kpi: { pocet: codes.length, objem: Math.round(objem), provize: Math.round(provize), obrat: Math.round(obratSum), sazba: rep.sazba, zpusob_vypoctu: rep.zpusob_vypoctu, splatnost: rep.splatnost },
   };
 }
 

@@ -142,6 +142,8 @@
       <div class="kpis">
         <div class="kpi"><div class="l">Moje lokality</div><div class="v" id="k-pocet">0</div><div class="s">přiřazeno</div></div>
         <div class="kpi"><div class="l">Odhad objemu</div><div class="v" id="k-objem">0</div><div class="s">∑ celkových cen · bez DPH</div></div>
+        <div class="kpi"><div class="l">Obrat lokalit</div><div class="v" id="k-obrat">0</div><div class="s">∑ měsíční obrat · bez DPH</div></div>
+        <div class="kpi gold"><div class="l">Provize celkem</div><div class="v" id="k-provize2">0</div><div class="s">možná z lokalit</div></div>
       </div>
       <div class="sec-title">Přiřazené lokality</div>
       <div id="lok-list"><div class="loading">Načítám…</div></div>
@@ -226,6 +228,8 @@
     // KPI lokality
     document.getElementById('k-pocet').textContent = kpi.pocet || 0;
     document.getElementById('k-objem').textContent = money(kpi.objem);
+    var _ko=document.getElementById('k-obrat'); if(_ko) _ko.textContent = money(kpi.obrat)+' /měs';
+    var _kp=document.getElementById('k-provize2'); if(_kp) _kp.textContent = money(kpi.provize);
     // Seznam lokalit
     var ll = document.getElementById('lok-list');
     if(!lok.length){ ll.innerHTML = '<div class="empty">Zatím nemáte přiřazené žádné lokality.</div>'; }
