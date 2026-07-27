@@ -2264,6 +2264,7 @@ const COMPOUNDING_SETTINGS_DEFAULT = {
   reservationPayDays: 1,
   reservationReblockDays: 2,
   defaultCurrency: 'CZK',
+  externalCommissionPct: 10,
 };
 
 const compoundingSettingsSchema = z.object({
@@ -2285,6 +2286,7 @@ const compoundingSettingsSchema = z.object({
   reservationPayDays: z.number().int().min(0).max(365).optional(),
   reservationReblockDays: z.number().int().min(0).max(365).optional(),
   defaultCurrency: z.enum(['CZK', 'EUR']).optional(),
+  externalCommissionPct: z.number().min(0).max(100).optional(),
 });
 
 // GET /api/compounder/compounding-settings
@@ -2314,6 +2316,7 @@ router.get('/compounding-settings', requireAuth, async (req, res, next) => {
       reservationPayDays: (val && Number.isFinite(val.reservationPayDays)) ? val.reservationPayDays : 1,
       reservationReblockDays: (val && Number.isFinite(val.reservationReblockDays)) ? val.reservationReblockDays : 2,
       defaultCurrency: (val && (val.defaultCurrency === 'EUR' || val.defaultCurrency === 'CZK')) ? val.defaultCurrency : 'CZK',
+      externalCommissionPct: (val && Number.isFinite(val.externalCommissionPct)) ? val.externalCommissionPct : 10,
     };
     res.json(merged);
   } catch (err) {

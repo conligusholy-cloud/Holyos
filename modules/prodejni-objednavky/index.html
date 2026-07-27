@@ -325,6 +325,7 @@
       <div class="toolbar" style="margin-bottom:14px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
         <input type="text" id="ext-search" placeholder="Hledat kód / lokalitu / provozovatele…" onkeyup="renderExternalTrade()" style="flex:1; min-width:220px;">
         <button class="btn" onclick="loadKioskValues(true).then(renderExternalTrade)">↻ Obnovit</button>
+        <button class="btn" onclick="openExtCommission()" title="Nastavit výši provize (%)" style="padding:8px 12px;">⚙️</button>
       </div>
       <div id="ext-table"><div style="color:var(--text2);padding:20px;">Načítám…</div></div>
     </div>
@@ -4237,26 +4238,71 @@
       var baseList = kiosks.filter(function(k){ return String(k.companyName || '').trim().toLowerCase().indexOf('best series') !== -1; });
       var q = ((document.getElementById('ext-search') || {}).value || '').trim().toLowerCase();
       var rows = baseList.filter(function(k){ if (!q) return true; return (String(k.code || '') + ' ' + String(k.label || '') + ' ' + String(k.companyName || '')).toLowerCase().indexOf(q) !== -1; });
-      rows = rows.map(function(k){ var m = _kvVerMachine(k.code).machine; var total = (m != null) ? (_kvExtLocVal(k) + m) : null; return { code: k.code, label: k.label, company: k.companyName, total: total }; });
+      var _extPct = (_compoundingSettings && Number.isFinite(_compoundingSettings.externalCommissionPct)) ? _compoundingSettings.externalCommissionPct : 10;
+      rows = rows.map(function(k){ var m = _kvVerMachine(k.code).machine; var loc = _kvExtLocVal(k); var total = (m != null) ? (loc + m) : null; return { code: k.code, label: k.label, company: k.companyName, machine: m, loc: loc, total: total }; });
       rows.sort(function(a, b){ return (b.total || 0) - (a.total || 0); });
       if (!rows.length) { box.innerHTML = '<div style="color:var(--text2);padding:24px;">Žádné lokality neodpovídají filtru.</div>'; return; }
       var h = '<div style="overflow-x:auto;"><table class="data-table kv-compact"><thead><tr>' +
         '<th style="text-align:right;color:var(--text2);">#</th>' +
         '<th>Kód</th><th>Lokalita</th><th>Provozovatel</th>' +
-        '<th style="text-align:right;">Celková cena</th></tr></thead><tbody>';
+        '<th style="text-align:right;">Cena kiosku</th>' +
+        '<th style="text-align:right;">Cena lokality</th>' +
+        '<th style="text-align:right;">Celková cena</th>' +
+        '<th style="text-align:right;">Provize (' + _extPct + ' %)</th></tr></thead><tbody>';
       rows.forEach(function(r, i){
+        var _prov = (r.total != null) ? Math.round(r.total * _extPct / 100) : null;
         h += '<tr>' +
           '<td style="text-align:right;color:var(--text2);">' + (i + 1) + '</td>' +
           '<td style="font-weight:600;white-space:nowrap;">' + kvEsc(r.code) + '</td>' +
           '<td>' + kvEsc(r.label) + '</td>' +
           '<td style="color:var(--text2);">' + kvEsc(r.company) + '</td>' +
+          '<td style="text-align:right;white-space:nowrap;color:var(--text2);">' + (r.machine != null ? kvMoney(r.machine, 'CZK') : '<span style="color:var(--text2);">—</span>') + '</td>' +
+          '<td style="text-align:right;white-space:nowrap;">' + kvMoney(r.loc, 'CZK') + '</td>' +
           '<td style="text-align:right;white-space:nowrap;font-weight:700;color:#eab308;">' + (r.total != null ? kvMoney(r.total, 'CZK') : '<span style="color:var(--text2);">—</span>') + '</td>' +
+          '<td style="text-align:right;white-space:nowrap;font-weight:700;color:#10b981;">' + (_prov != null ? kvMoney(_prov, 'CZK') : '<span style="color:var(--text2);">—</span>') + '</td>' +
           '</tr>';
       });
       h += '</tbody></table></div>';
       h += '<div style="color:var(--text2);font-size:11px;margin-top:8px;">Celková cena (bez DPH) = cena lokality + cena kiosku, v CZK. Data ze SIS.</div>';
       box.innerHTML = h;
     }
+
+    // Nastavení výše provize pro Externí obchod (uloží se do compounding-settings).
+    function openExtCommission() {
+      var cur = (_compoundingSettings && Number.isFinite(_compoundingSettings.externalCommissionPct)) ? _compoundingSettings.externalCommissionPct : 10;
+      var ov = document.createElement('div');
+      ov.id = 'ext-comm-overlay';
+      ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;';
+      ov.innerHTML = '<div style="background:var(--card,#1b1b20);border:1px solid var(--border,#333);border-radius:12px;padding:22px 24px;min-width:300px;max-width:92vw;">' +
+        '<h3 style="margin:0 0 14px;font-size:16px;">⚙️ Provize externího obchodu</h3>' +
+        '<label style="display:block;font-size:13px;color:var(--text2);margin-bottom:6px;">Výše provize z celkové ceny (%)</label>' +
+        '<input type="number" id="ext-comm-input" min="0" max="100" step="0.1" value="' + cur + '" style="width:100%;box-sizing:border-box;padding:9px 11px;border-radius:8px;border:1px solid var(--border,#333);background:var(--bg,#111);color:var(--text,#fff);font-size:15px;">' +
+        '<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:18px;">' +
+        '<button class="btn" onclick="closeExtCommission()">Zrušit</button>' +
+        '<button class="btn btn-primary" onclick="saveExtCommission()">Uložit</button>' +
+        '</div></div>';
+      ov.addEventListener('click', function(e){ if (e.target === ov) closeExtCommission(); });
+      document.body.appendChild(ov);
+      var inp = document.getElementById('ext-comm-input'); if (inp) { inp.focus(); inp.select(); }
+    }
+    function closeExtCommission() { var ov = document.getElementById('ext-comm-overlay'); if (ov) ov.remove(); }
+    async function saveExtCommission() {
+      var inp = document.getElementById('ext-comm-input');
+      var v = inp ? Number(inp.value) : NaN;
+      if (!Number.isFinite(v) || v < 0 || v > 100) { alert('Zadej procento 0–100.'); return; }
+      try {
+        var base = Object.assign({}, _compoundingSettings || {});
+        if (!base.pricelist) base.pricelist = { v2:{eur:null}, v3:{eur:null}, v4:{eur:null} };
+        if (!Number.isFinite(base.locationMonths)) base.locationMonths = 12;
+        base.externalCommissionPct = v;
+        var r = await fetch('/api/compounder/compounding-settings', { method:'PUT', credentials:'include', headers:{'Content-Type':'application/json'}, body: JSON.stringify(base) });
+        if (!r.ok) { var j = await r.json().catch(function(){return{};}); throw new Error(j.error || ('HTTP ' + r.status)); }
+        _compoundingSettings.externalCommissionPct = v;
+        closeExtCommission();
+        renderExternalTrade();
+      } catch (e) { alert('Uložení selhalo: ' + (e.message || '')); }
+    }
+    window.openExtCommission = openExtCommission; window.closeExtCommission = closeExtCommission; window.saveExtCommission = saveExtCommission;
 
     // ─── Detail stroje: transakce ze SIS API (proklik na řádek Compounding) ───
     // Server-side proxy /api/compounder/kiosk-transactions/:code (klíč drží server).
