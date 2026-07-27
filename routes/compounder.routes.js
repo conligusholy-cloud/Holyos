@@ -2784,9 +2784,48 @@ router.patch('/external-reps/me/leads/:id', async (req, res, next) => {
     if (b.status && ['new', 'contacted', 'qualified', 'converted', 'rejected'].indexOf(b.status) !== -1) data.status = b.status;
     if (b.notes !== undefined) data.notes = (b.notes === null) ? null : String(b.notes).slice(0, 5000);
     if (b.activity) { const line = '[' + new Date().toLocaleString('cs-CZ') + '] ' + String(b.activity).slice(0, 500); data.activity_log = (lead.activity_log ? (lead.activity_log + '\n') : '') + line; }
+    if (b.sections !== undefined) { const a = Array.isArray(b.sections) ? b.sections : String(b.sections || '').split(','); data.visible_sections = a.map((x) => String(x).trim()).filter(Boolean).join(','); }
+    if (b.templates !== undefined) { const a = Array.isArray(b.templates) ? b.templates : String(b.templates || '').split(','); data.visible_templates = a.map((x) => String(x).trim()).filter(Boolean).join(','); }
     const upd = await prisma.compounderLead.update({ where: { id }, data });
     _repActivity(repId, 'Upravil kontakt #' + id, null).catch(() => {});
     res.json({ ok: true, lead: upd });
+  } catch (err) { next(err); }
+});
+
+// POST /api/compounder/external-reps/me/leads/:id/send-access — pošle zákazníkovi přístup e-mailem (jen vlastní)
+router.post('/external-reps/me/leads/:id/send-access', async (req, res, next) => {
+  try {
+    const repId = verifyExtRepToken(_extRepTokenFrom(req));
+    if (!repId) return res.status(401).json({ error: 'Neplatné přihlášení.' });
+    const id = Number(req.params.id);
+    const lead = await prisma.compounderLead.findUnique({ where: { id }, select: { id: true, name: true, email: true, lang: true, external_rep_id: true } });
+    if (!lead || lead.external_rep_id !== repId) return res.status(404).json({ error: 'Kontakt nenalezen.' });
+    if (!lead.email) return res.status(400).json({ error: 'Kontakt nemá e-mail.' });
+    const url = `${portalBase()}/portal?t=${makeLoginToken(lead.id)}`;
+    await sendPortalLogin({ name: lead.name, email: lead.email, lang: lead.lang }, url);
+    const updated = await prisma.compounderLead.update({ where: { id }, data: { access_sent_count: { increment: 1 }, access_last_sent_at: new Date() }, select: { access_sent_count: true, access_last_sent_at: true } });
+    _repActivity(repId, 'Odeslal přístup e-mailem: ' + (lead.name || lead.email), null).catch(() => {});
+    res.json({ ok: true, access_sent_count: updated.access_sent_count, access_last_sent_at: updated.access_last_sent_at });
+  } catch (err) { next(err); }
+});
+
+// POST /api/compounder/external-reps/me/leads/:id/access-link — přístupový odkaz + text pro WhatsApp (jen vlastní)
+router.post('/external-reps/me/leads/:id/access-link', async (req, res, next) => {
+  try {
+    const repId = verifyExtRepToken(_extRepTokenFrom(req));
+    if (!repId) return res.status(401).json({ error: 'Neplatné přihlášení.' });
+    const id = Number(req.params.id);
+    const lead = await prisma.compounderLead.findUnique({ where: { id }, select: { id: true, name: true, phone: true, lang: true, external_rep_id: true } });
+    if (!lead || lead.external_rep_id !== repId) return res.status(404).json({ error: 'Kontakt nenalezen.' });
+    if (!lead.phone) return res.status(400).json({ error: 'Kontakt nemá telefon.' });
+    const url = `${portalBase()}/portal?t=${makeLoginToken(lead.id)}`;
+    const code = String(lead.lang || 'cs').toLowerCase().split(/[-_]/)[0];
+    const msgFn = WA_MSG[code] || WA_MSG.cs;
+    const message = msgFn(lead.name || '', url);
+    let wa = String(lead.phone).replace(/[^\d]/g, ''); if (wa.startsWith('00')) wa = wa.slice(2);
+    const updated = await prisma.compounderLead.update({ where: { id }, data: { access_sent_count: { increment: 1 }, access_last_sent_at: new Date() }, select: { access_sent_count: true, access_last_sent_at: true } });
+    _repActivity(repId, 'Poslal přístup na WhatsApp: ' + (lead.name || ''), null).catch(() => {});
+    res.json({ ok: true, url, phone: wa, message, access_sent_count: updated.access_sent_count, access_last_sent_at: updated.access_last_sent_at });
   } catch (err) { next(err); }
 });
 
