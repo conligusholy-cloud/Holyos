@@ -324,6 +324,9 @@
     <div id="tab-externi" style="display:none; padding:20px 24px 24px;">
       <div class="toolbar" style="margin-bottom:14px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
         <input type="text" id="ext-search" placeholder="Hledat kód / lokalitu / provozovatele…" onkeyup="renderExternalTrade()" style="flex:1; min-width:220px;">
+        <label style="display:flex; align-items:center; gap:6px; color:var(--text2); font-size:13px; white-space:nowrap;">
+          <input type="checkbox" id="ext-nonzero" onchange="renderExternalTrade()"> jen s nenulovou cenou
+        </label>
         <button class="btn" onclick="loadKioskValues(true).then(renderExternalTrade)">↻ Obnovit</button>
         <button class="btn" onclick="openExtCommission()" title="Nastavit výši provize (%)" style="padding:8px 12px;">⚙️</button>
       </div>
@@ -4242,6 +4245,8 @@
       var _pctM = Number.isFinite(_cs.externalCommissionMachinePct) ? _cs.externalCommissionMachinePct : 5;
       var _pctL = Number.isFinite(_cs.externalCommissionLocationPct) ? _cs.externalCommissionLocationPct : 12;
       rows = rows.map(function(k){ var m = _kvVerMachine(k.code).machine; var loc = _kvExtLocVal(k); var total = (m != null) ? (loc + m) : null; return { code: k.code, label: k.label, company: k.companyName, machine: m, loc: loc, total: total }; });
+      if (((document.getElementById('ext-nonzero') || {}).checked)) rows = rows.filter(function(r){ return r.total != null && r.total > 0; });
+      if (!rows.length) { box.innerHTML = '<div style="color:var(--text2);padding:24px;">Žádné lokality neodpovídají filtru.</div>'; return; }
       rows.sort(function(a, b){ return (b.total || 0) - (a.total || 0); });
       if (!rows.length) { box.innerHTML = '<div style="color:var(--text2);padding:24px;">Žádné lokality neodpovídají filtru.</div>'; return; }
       var h = '<div style="overflow-x:auto;"><table class="data-table kv-compact"><thead><tr>' +
