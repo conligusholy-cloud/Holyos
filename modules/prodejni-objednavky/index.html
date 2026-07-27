@@ -4267,11 +4267,12 @@
         '<th style="text-align:right;">Cena kiosku</th>' +
         '<th style="text-align:right;">Cena lokality</th>' +
         '<th style="text-align:right;">Celková cena</th>' +
+        '<th style="text-align:right;">Návratnost (celk. cena)</th>' +
         '<th style="text-align:right;">Provize ze stroje (' + _pctM + ' %)</th>' +
         '<th style="text-align:right;">Provize z lokality (' + _pctL + ' %)</th>' +
         '<th style="text-align:right;">Provize celkem</th>' +
         '<th style="text-align:right;">Nová prodejní cena</th>' +
-        '<th style="text-align:right;">Návratnost</th></tr></thead><tbody>';
+        '<th style="text-align:right;">Návratnost (nová cena)</th></tr></thead><tbody>';
       rows.forEach(function(r, i){
         var _provM = (r.machine != null) ? Math.round(r.machine * _pctM / 100) : null;
         var _provL = Math.round((r.loc || 0) * _pctL / 100);
@@ -4287,6 +4288,7 @@
           '<td style="text-align:right;white-space:nowrap;color:var(--text2);">' + (r.machine != null ? kvMoney(r.machine, 'CZK') : '<span style="color:var(--text2);">—</span>') + '</td>' +
           '<td style="text-align:right;white-space:nowrap;">' + kvMoney(r.loc, 'CZK') + '</td>' +
           '<td style="text-align:right;white-space:nowrap;font-weight:700;color:#eab308;">' + (r.total != null ? kvMoney(r.total, 'CZK') : '<span style="color:var(--text2);">—</span>') + '</td>' +
+          '<td style="text-align:right;white-space:nowrap;font-weight:700;color:#3b82f6;">' + ((r.total > 0 && r.yearNet > 0) ? ((r.total / r.yearNet).toFixed(1).replace('.', ',') + ' let') : '<span style="color:var(--text2);">—</span>') + '</td>' +
           '<td style="text-align:right;white-space:nowrap;color:#10b981;">' + (_provM != null ? kvMoney(_provM, 'CZK') : '<span style="color:var(--text2);">—</span>') + '</td>' +
           '<td style="text-align:right;white-space:nowrap;color:#10b981;">' + kvMoney(_provL, 'CZK') + '</td>' +
           '<td style="text-align:right;white-space:nowrap;font-weight:700;color:#10b981;">' + kvMoney(_provTot, 'CZK') + (_provPct != null ? ' <span style="color:var(--text2);font-weight:400;font-size:11px;">(' + _provPct + ' %)</span>' : '') + '</td>' +
