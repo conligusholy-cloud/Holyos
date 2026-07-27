@@ -951,6 +951,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
       window._leadEmail = res.j.email || ""; window._leadPhone = res.j.phone || "";
       window._leadTemplates = Array.isArray(res.j.templates) ? res.j.templates : [];
       window._consultant = res.j.consultant || null;
+      window._consultantExternal = !!res.j.consultantExternal;
       window._portalShowRevStats = !!res.j.showRevenueStats;
       window._portalToken = token;
       // Viditelnost sekcí dle povolení leadu; úvodní "Filozofie" je vždy viditelná.
@@ -1040,7 +1041,9 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
     var c = window._consultant;
     if (!c || !c.name) return;
     function offEsc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(x){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[x];}); }
-    var t = document.getElementById('ct-title'); if(t){ t.setAttribute('data-i18n','p.ct.title2'); t.textContent = pT('p.ct.title2'); }
+    var ext = !!window._consultantExternal;
+    var titleTxt = ext ? (pRevLang()==='cs' ? 'Spojte se se svým obchodníkem' : 'Contact your sales rep') : pT('p.ct.title2');
+    var t = document.getElementById('ct-title'); if(t){ t.removeAttribute('data-i18n'); t.textContent = titleTxt; }
     var b = document.getElementById('ct-open'); if(b){ b.setAttribute('data-i18n','p.ct.btn2'); b.textContent = pT('p.ct.btn2'); }
     var o = document.getElementById('ct-owner');
     if(o){
@@ -1048,7 +1051,8 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
       var l2 = [];
       if(c.phone) l2.push('<a href="tel:'+offEsc(tel)+'" style="color:var(--gold-soft)">'+offEsc(c.phone)+'</a>');
       if(c.email) l2.push('<a href="mailto:'+offEsc(c.email)+'" style="color:var(--gold-soft)">'+offEsc(c.email)+'</a>');
-      o.innerHTML = '<span>'+offEsc(c.name)+offEsc(pT('p.ct.consultant_suffix'))+'</span>' + (l2.length ? ('<br>'+l2.join(' · ')) : '');
+      var suffix = ext ? (pRevLang()==='cs' ? ' — váš obchodník' : ' — your sales rep') : pT('p.ct.consultant_suffix');
+      o.innerHTML = '<span>'+offEsc(c.name)+offEsc(suffix)+'</span>' + (l2.length ? ('<br>'+l2.join(' · ')) : '');
     }
   }
   var CONTRACT_STATUS_PT = { koncept:"Připravuje se", odeslano:"K podpisu", vyplneno:"Vyplněno", k_podpisu:"Čeká na dokončení", podepsano:"Podepsáno" };

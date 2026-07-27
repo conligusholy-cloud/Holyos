@@ -366,22 +366,34 @@ router.get('/portal/session', async (req, res, next) => {
     if (!id) return res.status(401).json({ ok: false, error: 'Neplatný nebo chybějící přístupový odkaz.' });
     const lead = await prisma.compounderLead.findUnique({
       where: { id },
-      select: { id: true, name: true, email: true, phone: true, role: true, lang: true, visible_sections: true, visible_templates: true, show_revenue_stats: true, owner_person_id: true, password_hash: true, source: true, access_approved_at: true },
+      select: { id: true, name: true, email: true, phone: true, role: true, lang: true, visible_sections: true, visible_templates: true, show_revenue_stats: true, owner_person_id: true, external_rep_id: true, password_hash: true, source: true, access_approved_at: true },
     });
     if (!lead) return res.status(404).json({ ok: false, error: 'Registrace nenalezena.' });
     if (!leadAccessAllowed(lead)) {
       return res.status(403).json({ ok: false, pending: true, error: 'Tvoje žádost o přístup zatím čeká na schválení. Jakmile ho povolíme, dostaneš přihlašovací odkaz e-mailem.' });
     }
     const templates = (lead.visible_templates ? lead.visible_templates.split(',') : []).map((s) => s.trim()).filter(Boolean);
-    // Přiřazený obchodník = "Compounder konzultant" pro kontaktní sekci portálu.
+    // Kontakt pro sekci portálu. Přednost má externí obchodník (má-li vyplněný e-mail/telefon),
+    // jinak přiřazený interní obchodník; jinak fallback na majitele (řeší frontend).
     let consultant = null;
-    if (lead.owner_person_id) {
+    let consultantExternal = false;
+    if (lead.external_rep_id) {
+      try {
+        const reps = await _loadExternalReps();
+        const rep = reps.find((r) => Number(r.id) === Number(lead.external_rep_id));
+        if (rep && (rep.email || rep.telefon)) {
+          consultant = { name: rep.jmeno || '', phone: rep.telefon || '', email: rep.email || '' };
+          consultantExternal = true;
+        }
+      } catch (e) { /* fallback níže */ }
+    }
+    if (!consultant && lead.owner_person_id) {
       try {
         const p = await prisma.person.findUnique({ where: { id: lead.owner_person_id }, select: { first_name: true, last_name: true, phone: true, email: true } });
         if (p) consultant = { name: ((p.first_name || '') + ' ' + (p.last_name || '')).trim(), phone: p.phone || '', email: p.email || '' };
       } catch (e) { /* fallback na majitele */ }
     }
-    return res.json({ ok: true, id: lead.id, name: lead.name, email: lead.email || '', phone: lead.phone || '', role: lead.role, lang: lead.lang, sections: resolveSections(lead.visible_sections), templates: templates, showRevenueStats: !!lead.show_revenue_stats, consultant: consultant, has_password: !!lead.password_hash });
+    return res.json({ ok: true, id: lead.id, name: lead.name, email: lead.email || '', phone: lead.phone || '', role: lead.role, lang: lead.lang, sections: resolveSections(lead.visible_sections), templates: templates, showRevenueStats: !!lead.show_revenue_stats, consultant: consultant, consultantExternal: consultantExternal, has_password: !!lead.password_hash });
   } catch (err) {
     next(err);
   }
