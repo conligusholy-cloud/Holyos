@@ -231,7 +231,7 @@
       ll.innerHTML = '<div class="pricenote">Všechny ceny jsou uvedené bez DPH.</div>' + lok.map(function(x){
         var nav = (x.navratnost != null) ? (String(x.navratnost).replace('.', ',') + ' let') : '—';
         var vipTag = x.vip ? '<span class="vip">🎯 VIP</span>' : '';
-        var photo = x.photo ? ('<div class="offer-photo"><img src="' + esc(x.photo) + '" alt="" onerror="this.parentNode.style.display=&#39;none&#39;"></div>') : '';
+        var photo = x.photo ? ('<div class="offer-photo" style="cursor:zoom-in" onclick="openPhoto(&#39;' + esc(x.photo) + '&#39;)"><img src="' + esc(x.photo) + '" alt="" onerror="this.parentNode.style.display=&#39;none&#39;"></div>') : '';
         var sub = esc(x.code) + (x.verze ? (' · ' + esc(x.verze)) : '');
         return '<div class="offer">' + photo +
           '<div class="offer-body">' +
@@ -257,7 +257,7 @@
     var ml=document.getElementById('machine-list');
     var machines=(DATA && DATA.machines)||[];
     if(ml){ ml.innerHTML = machines.length ? machines.map(function(mch){
-      var mphoto=mch.photo?('<div class="offer-photo"><img src="'+esc(mch.photo)+'" alt="" onerror="this.parentNode.style.display=&#39;none&#39;"></div>'):'';
+      var mphoto=mch.photo?('<div class="offer-photo" style="cursor:zoom-in" onclick="openPhoto(&#39;'+esc(mch.photo)+'&#39;)"><img src="'+esc(mch.photo)+'" alt="" onerror="this.parentNode.style.display=&#39;none&#39;"></div>'):'';
       return '<div class="offer">'+mphoto+'<div class="offer-body"><div class="offer-top"><div class="offer-name">Prádlomat '+esc(mch.ver)+' <span class="sub">· nový stroj bez lokality</span></div><div class="offer-price">'+money(mch.priceCzk)+' <span class="pd">bez DPH</span></div></div><div class="offer-metrics"><span style="color:var(--primary)">Provize <b style="color:var(--primary)">'+money(mch.commission)+'</b></span></div></div></div>';
     }).join('') : '<div class="empty" style="padding:18px">Ceník strojů zatím není nastavený (nastav ceny verzí v HolyOS).</div>'; }
   }
@@ -544,6 +544,9 @@
     catch(e){ alert('Uložení hesla selhalo: '+(e.message||'')); }
   }
   window.openSettings=openSettings; window.closeSettings=closeSettings; window.saveSettings=saveSettings; window.savePassword=savePassword;
+
+  function openPhoto(url){ if(!url) return; var ov=document.createElement('div'); ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.9);z-index:200;display:flex;align-items:center;justify-content:center;padding:20px;cursor:zoom-out'; ov.onclick=function(){ ov.remove(); }; ov.innerHTML='<img src="'+esc(url)+'" style="max-width:96vw;max-height:92vh;object-fit:contain;border-radius:8px;box-shadow:0 20px 60px rgba(0,0,0,.6)">'; document.body.appendChild(ov); }
+  window.openPhoto=openPhoto;
 
   // Start — auto-login z e-mailového odkazu (?t=token)
   var _urlTok = new URLSearchParams(location.search).get('t');
