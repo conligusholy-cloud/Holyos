@@ -4454,13 +4454,13 @@
     }
     function _exrKioskOptions(selected) {
       var sel = {}; (selected||[]).forEach(function(c){ sel[String(c)] = true; });
-      var list = (_kioskData && Array.isArray(_kioskData.kiosks)) ? _kioskData.kiosks.filter(function(k){ return String(k.companyName||'').toLowerCase().indexOf('best series') !== -1; }) : [];
+      var list = (_kioskData && Array.isArray(_kioskData.kiosks)) ? _kioskData.kiosks.filter(function(k){ if (String(k.companyName||'').toLowerCase().indexOf('best series') === -1) return false; return !!((_kioskConfig[k.code]||{}).forSale) || sel[String(k.code)]; }) : [];
       list.sort(function(a,b){ return String(a.label||a.code).localeCompare(String(b.label||b.code),'cs'); });
       return list.map(function(k){
         return '<label style="display:flex;align-items:center;gap:8px;padding:4px 2px;font-size:13px;cursor:pointer;">' +
           '<input type="checkbox" class="exr-lok" value="' + _exrEsc(k.code) + '"' + (sel[String(k.code)] ? ' checked' : '') + '>' +
           '<span style="font-weight:600;">' + _exrEsc(k.code) + '</span> <span style="color:var(--text2);">' + _exrEsc(k.label||'') + '</span></label>';
-      }).join('') || '<div style="color:var(--text2);font-size:12px;padding:8px;">Nejdřív načti lokality (záložka Compounding / Externí obchod).</div>';
+      }).join('') || '<div style="color:var(--text2);font-size:12px;padding:8px;">Žádné nabízené lokality. Označ je v záložce Compounding (sloupec „Nabízet").</div>';
     }
     function openExrForm(id) {
       var rec = id ? _exrData.find(function(x){ return x.id === id; }) : null;
@@ -4487,7 +4487,7 @@
           fld('Přihlašovací jméno', inp('exr-login', rec.login)) +
           fld('Heslo' + (rec.has_password ? ' (nastaveno)' : ''), '<input id="exr-heslo" type="password" value="" autocomplete="new-password" placeholder="' + (rec.has_password ? 'ponech prázdné = beze změny' : 'zadej heslo') + '" style="' + st + '">') +
         '</div>' +
-        fld('Přiřazené lokality', '<input type="text" id="exr-lok-filter" placeholder="Filtrovat…" onkeyup="exrFilterLok()" style="' + st + 'margin-bottom:6px;"><div id="exr-lok-box" style="max-height:200px;overflow:auto;border:1px solid var(--border,#333);border-radius:8px;padding:6px 10px;">' + _exrKioskOptions(rec.lokality) + '</div>') +
+        fld('Přiřazené lokality (nabízené v Compoundingu)', '<input type="text" id="exr-lok-filter" placeholder="Filtrovat…" onkeyup="exrFilterLok()" style="' + st + 'margin-bottom:6px;"><div id="exr-lok-box" style="max-height:200px;overflow:auto;border:1px solid var(--border,#333);border-radius:8px;padding:6px 10px;">' + _exrKioskOptions(rec.lokality) + '</div>') +
         fld('Poznámky', '<textarea id="exr-pozn" rows="3" style="' + st + 'resize:vertical;">' + _exrEsc(rec.poznamky) + '</textarea>') +
         '<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:8px;">' +
           '<button class="btn" onclick="closeExrForm()">Zrušit</button>' +
