@@ -4483,6 +4483,9 @@
           fld('Způsob výpočtu', '<select id="exr-calc" style="' + st + '">' + opt(EXR_CALC, rec.zpusob_vypoctu) + '</select>') +
           fld('Splatnost provize', '<select id="exr-pay" style="' + st + '">' + opt(EXR_PAY, rec.splatnost) + '</select>') +
           fld('Stav', '<select id="exr-stav" style="' + st + '">' + opt(EXR_STAV, rec.stav) + '</select>') +
+          '<div style="grid-column:1 / -1;font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--text2);margin:6px 0 8px;">🔑 Přihlášení do portálu obchodníka</div>' +
+          fld('Přihlašovací jméno', inp('exr-login', rec.login)) +
+          fld('Heslo' + (rec.has_password ? ' (nastaveno)' : ''), '<input id="exr-heslo" type="password" value="" autocomplete="new-password" placeholder="' + (rec.has_password ? 'ponech prázdné = beze změny' : 'zadej heslo') + '" style="' + st + '">') +
         '</div>' +
         fld('Přiřazené lokality', '<input type="text" id="exr-lok-filter" placeholder="Filtrovat…" onkeyup="exrFilterLok()" style="' + st + 'margin-bottom:6px;"><div id="exr-lok-box" style="max-height:200px;overflow:auto;border:1px solid var(--border,#333);border-radius:8px;padding:6px 10px;">' + _exrKioskOptions(rec.lokality) + '</div>') +
         fld('Poznámky', '<textarea id="exr-pozn" rows="3" style="' + st + 'resize:vertical;">' + _exrEsc(rec.poznamky) + '</textarea>') +
@@ -4515,7 +4518,10 @@
         stav: (document.getElementById('exr-stav')||{}).value,
         lokality: lok,
         poznamky: (document.getElementById('exr-pozn')||{}).value || null,
+        login: ((document.getElementById('exr-login')||{}).value || '').trim(),
       };
+      var _heslo = (document.getElementById('exr-heslo')||{}).value || '';
+      if (_heslo) body.password = _heslo;
       try {
         var url = '/api/compounder/external-reps' + (id ? ('/' + id) : '');
         var r = await fetch(url, { method: id ? 'PUT' : 'POST', credentials:'include', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
@@ -4540,7 +4546,7 @@
       h += '<div style="display:flex;align-items:center;gap:16px;margin-bottom:18px;flex-wrap:wrap;">' +
         '<div style="width:56px;height:56px;border-radius:14px;background:linear-gradient(135deg,#f6e6ad,#cda454);color:#241c05;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:20px;">' + _exrEsc(initials) + '</div>' +
         '<div style="flex:1;min-width:200px;"><div style="font-size:20px;font-weight:700;">' + _exrEsc(rec.jmeno) + ' <span style="font-size:13px;font-weight:600;color:' + badge + ';">· ' + (EXR_STAV[rec.stav]||rec.stav) + '</span></div>' +
-        '<div style="color:var(--text2);font-size:13px;margin-top:2px;">' + [rec.ico?('IČO '+_exrEsc(rec.ico)):'', _exrEsc(rec.email||''), _exrEsc(rec.telefon||'')].filter(Boolean).join(' · ') + '</div></div>' +
+        '<div style="color:var(--text2);font-size:13px;margin-top:2px;">' + [rec.ico?('IČO '+_exrEsc(rec.ico)):'', _exrEsc(rec.email||''), _exrEsc(rec.telefon||'')].filter(Boolean).join(' · ') + '</div>' + (rec.login ? ('<div style="color:var(--text2);font-size:12px;margin-top:3px;">🔑 Přihlášení: <b style="color:var(--text);">' + _exrEsc(rec.login) + '</b>' + (rec.has_password ? ' · heslo nastaveno' : ' · <span style="color:#eab308;">bez hesla</span>') + '</div>') : '') + '</div>' +
         '<button class="btn btn-primary" onclick="openExrForm(' + rec.id + ')">✏️ Upravit</button></div>';
       h += '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:18px;">' +
         kpi('Přiřazené lokality', String(codes.length)) +

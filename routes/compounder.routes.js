@@ -2442,6 +2442,8 @@ const externalRepSchema = z.object({
   lokality: z.array(z.string().max(40)).max(2000).optional(),
   stav: z.enum(['aktivni', 'neaktivni', 've_schvalovani']).optional(),
   poznamky: z.string().max(5000).nullable().optional(),
+  login: z.string().trim().max(80).nullable().optional(),
+  password: z.string().max(200).optional(),
 });
 
 async function _loadExternalReps() {
@@ -2456,9 +2458,50 @@ async function _saveExternalReps(arr, userId) {
   });
 }
 
+// Nikdy neposílej hash hesla do frontendu; místo toho příznak has_password.
+function _sanitizeRep(r) {
+  const c = Object.assign({}, r);
+  c.has_password = !!c.password_hash;
+  delete c.password_hash; delete c.password;
+  return c;
+}
+// Zpracuj login (normalizace + unikátnost) a heslo (bcrypt hash). Mutuje data.
+// Vrací { status, error } při chybě, jinak null.
+async function _prepRepCredentials(data, arr, selfId) {
+  if (data.login !== undefined) {
+    const loginNorm = String(data.login || '').trim();
+    if (loginNorm) {
+      const dup = arr.find((r) => Number(r.id) !== selfId && String(r.login || '').trim().toLowerCase() === loginNorm.toLowerCase());
+      if (dup) return { status: 409, error: 'Přihlašovací jméno už používá jiný obchodník.' };
+    }
+    data.login = loginNorm;
+  }
+  if (data.password !== undefined) {
+    const pw = String(data.password || '');
+    if (pw.length >= 4) data.password_hash = await bcrypt.hash(pw, 12);
+    else if (pw.length > 0) return { status: 400, error: 'Heslo musí mít aspoň 4 znaky.' };
+    delete data.password;
+  }
+  return null;
+}
+// Session token externího obchodníka (HMAC, formát id.exp.sig, ~1 rok).
+function makeExtRepToken(id, ttlMs) {
+  const exp = Date.now() + (ttlMs || 365 * 24 * 3600 * 1000);
+  return id + '.' + exp + '.' + hmacSig('extrep:' + id + ':' + exp);
+}
+function verifyExtRepToken(token) {
+  if (!token || typeof token !== 'string') return null;
+  const p = String(token).split('.');
+  if (p.length !== 3) return null;
+  const id = Number(p[0]), exp = Number(p[1]);
+  if (!Number.isInteger(id) || id <= 0 || !Number.isInteger(exp) || !p[2]) return null;
+  if (Date.now() > exp) return null;
+  return safeEqStr(p[2], hmacSig('extrep:' + id + ':' + exp)) ? id : null;
+}
+
 // GET /api/compounder/external-reps — seznam
 router.get('/external-reps', requireAuth, async (req, res, next) => {
-  try { res.json(await _loadExternalReps()); } catch (err) { next(err); }
+  try { res.json((await _loadExternalReps()).map(_sanitizeRep)); } catch (err) { next(err); }
 });
 
 // POST /api/compounder/external-reps — založ
@@ -2468,15 +2511,33 @@ router.post('/external-reps', requireAuth, async (req, res, next) => {
     if (!parsed.success) return res.status(400).json({ error: 'Neplatná data obchodníka', detail: parsed.error.flatten() });
     const arr = await _loadExternalReps();
     const id = arr.reduce((m, r) => Math.max(m, Number(r.id) || 0), 0) + 1;
+    const data = Object.assign({}, parsed.data);
+    const cerr = await _prepRepCredentials(data, arr, id);
+    if (cerr) return res.status(cerr.status).json({ error: cerr.error });
     const rec = Object.assign({
       id, jmeno: '', ico: '', email: '', telefon: '', adresa: '',
       sazba: null, zpusob_vypoctu: 'lokalita', splatnost: 'individ',
-      lokality: [], stav: 'aktivni', poznamky: '',
+      lokality: [], stav: 'aktivni', poznamky: '', login: '', password_hash: null,
       datum_zalozeni: new Date().toISOString().slice(0, 10),
-    }, parsed.data, { id });
+    }, data, { id });
     arr.push(rec);
     await _saveExternalReps(arr, req.user && req.user.id);
-    res.status(201).json(rec);
+    res.status(201).json(_sanitizeRep(rec));
+  } catch (err) { next(err); }
+});
+
+// POST /api/compounder/external-reps/login — přihlášení externího obchodníka (veřejné)
+router.post('/external-reps/login', async (req, res, next) => {
+  try {
+    const login = String((req.body && req.body.login) || '').trim();
+    const password = String((req.body && req.body.password) || '');
+    if (!login || !password) return res.status(400).json({ error: 'Zadejte přihlašovací jméno a heslo.' });
+    const arr = await _loadExternalReps();
+    const rep = arr.find((r) => String(r.login || '').trim().toLowerCase() === login.toLowerCase());
+    if (!rep || !rep.password_hash || rep.stav !== 'aktivni') return res.status(401).json({ error: 'Neplatné přihlášení.' });
+    const ok = await bcrypt.compare(password, rep.password_hash);
+    if (!ok) return res.status(401).json({ error: 'Neplatné přihlášení.' });
+    res.json({ ok: true, token: makeExtRepToken(rep.id), rep: _sanitizeRep(rep) });
   } catch (err) { next(err); }
 });
 
@@ -2490,9 +2551,12 @@ router.put('/external-reps/:id', requireAuth, async (req, res, next) => {
     const arr = await _loadExternalReps();
     const i = arr.findIndex((r) => Number(r.id) === id);
     if (i === -1) return res.status(404).json({ error: 'Obchodník nenalezen' });
-    arr[i] = Object.assign({}, arr[i], parsed.data, { id });
+    const data = Object.assign({}, parsed.data);
+    const cerr = await _prepRepCredentials(data, arr, id);
+    if (cerr) return res.status(cerr.status).json({ error: cerr.error });
+    arr[i] = Object.assign({}, arr[i], data, { id });
     await _saveExternalReps(arr, req.user && req.user.id);
-    res.json(arr[i]);
+    res.json(_sanitizeRep(arr[i]));
   } catch (err) { next(err); }
 });
 
