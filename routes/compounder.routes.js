@@ -2267,6 +2267,7 @@ const COMPOUNDING_SETTINGS_DEFAULT = {
   externalCommissionPct: 10,
   externalCommissionMachinePct: 5,
   externalCommissionLocationPct: 12,
+  externalMarkupPct: 20,
 };
 
 const compoundingSettingsSchema = z.object({
@@ -2291,6 +2292,7 @@ const compoundingSettingsSchema = z.object({
   externalCommissionPct: z.number().min(0).max(100).optional(),
   externalCommissionMachinePct: z.number().min(0).max(100).optional(),
   externalCommissionLocationPct: z.number().min(0).max(100).optional(),
+  externalMarkupPct: z.number().min(0).max(1000).optional(),
 });
 
 // GET /api/compounder/compounding-settings
@@ -2323,6 +2325,7 @@ router.get('/compounding-settings', requireAuth, async (req, res, next) => {
       externalCommissionPct: (val && Number.isFinite(val.externalCommissionPct)) ? val.externalCommissionPct : 10,
       externalCommissionMachinePct: (val && Number.isFinite(val.externalCommissionMachinePct)) ? val.externalCommissionMachinePct : 5,
       externalCommissionLocationPct: (val && Number.isFinite(val.externalCommissionLocationPct)) ? val.externalCommissionLocationPct : 12,
+      externalMarkupPct: (val && Number.isFinite(val.externalMarkupPct)) ? val.externalMarkupPct : 20,
     };
     res.json(merged);
   } catch (err) {
