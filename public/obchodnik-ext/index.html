@@ -430,10 +430,10 @@
     function net(n){ return (Math.round((n||0)/1.21)).toLocaleString('cs-CZ'); }
     _revData=d;
     function card(l,v,pk){ return '<div class="rev-card" style="cursor:pointer" onclick="openTxTable(&#39;'+pk+'&#39;,&#39;'+l+'&#39;)"><div class="rev-l">'+l+' ›</div><div class="rev-v">'+m(v)+'</div><div class="rev-s">bez DPH '+net(v)+' '+cur+'</div></div>'; }
-    var cards='<div class="rev-cards">'+card('Dnes',d.day,'day')+card('Aktuální týden',d.thisWeek,'thisWeek')+card('Předchozí týden',d.prevWeek,'prevWeek')+card('Tento měsíc',d.thisMonth,'thisMonth')+card('Poslední celý měsíc',d.prevMonth,'prevMonth')+card('Poslední rok',d.year,'year')+'</div>';
-    var mm=d.monthly||[]; var mx=1; mm.forEach(function(x){ if(x.amount>mx)mx=x.amount; });
+    var cards='<div class="rev-cards">'+card('Dnes',d.day,'day')+card('Aktuální týden',d.thisWeek,'thisWeek')+card('Předchozí týden',d.prevWeek,'prevWeek')+card('Tento měsíc',d.thisMonth,'thisMonth')+card('Poslední celý měsíc',d.prevMonth,'prevMonth')+card('Poslední rok',d.year,'year')+card('Poslední 2 roky',d.year2,'year2')+'</div>';
+    var mm=d.monthly24||d.monthly||[]; var mx=1; mm.forEach(function(x){ if(x.amount>mx)mx=x.amount; });
     var bars=mm.map(function(x,i){ var h=Math.round((x.amount||0)/mx*90)+4; var last=(i===mm.length-1); var st='height:'+h+'px'+(last?';background:repeating-linear-gradient(45deg,var(--gold2),var(--gold2) 3px,transparent 3px,transparent 7px);border:1px solid var(--gold2)':''); return '<div class="rev-bar"><div class="rb" style="'+st+'" title="'+esc(x.label)+': '+m(x.amount)+'"></div><div class="rev-bl">'+esc(x.label)+'</div></div>'; }).join('');
-    var chart='<div class="rev-sec">Posledních 12 měsíců</div><div class="rev-bars">'+bars+'</div>';
+    var chart='<div class="rev-sec">Posledních 24 měsíců</div><div class="rev-bars">'+bars+'</div>';
     b.innerHTML=cards+chart+'<div style="font-size:11px;color:var(--muted);margin-top:14px">Částky jsou vč. DPH (v závorce bez DPH, sazba 21 %). Zdroj: SIS'+(d.generatedAt?(' · '+new Date(d.generatedAt).toLocaleString('cs-CZ')):'')+'</div>';
   }
   function openTxTable(period, plabel){

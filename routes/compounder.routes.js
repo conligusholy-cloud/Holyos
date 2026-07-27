@@ -2052,9 +2052,10 @@ async function _computeKioskRevenue(code, fresh) {
   const startThisMonth = new Date(nowD.getFullYear(), nowD.getMonth(), 1).getTime();
   const startPrevMonth = new Date(nowD.getFullYear(), nowD.getMonth() - 1, 1).getTime();
   const yearRoll = now - 365 * 86400000;
-  const chartCut = new Date(nowD.getFullYear(), nowD.getMonth() - 11, 1).getTime();
+  const year2Roll = now - 730 * 86400000;
+  const chartCut = new Date(nowD.getFullYear(), nowD.getMonth() - 23, 1).getTime();
   const day30 = now - 30 * 86400000;
-  const sums = { day: 0, thisWeek: 0, prevWeek: 0, thisMonth: 0, prevMonth: 0, year: 0 };
+  const sums = { day: 0, thisWeek: 0, prevWeek: 0, thisMonth: 0, prevMonth: 0, year: 0, year2: 0 };
   const daily = {}, monthly = {};
   let currency = null, count = 0, offset = 0, pages = 0, complete = false, total = 0;
   while (pages < 200) {
@@ -2086,6 +2087,7 @@ async function _computeKioskRevenue(code, fresh) {
       if (ts >= startThisMonth) sums.thisMonth += amt;
       if (ts >= startPrevMonth && ts < startThisMonth) sums.prevMonth += amt;
       if (ts >= yearRoll) { sums.year += amt; count++; }
+      if (ts >= year2Roll) sums.year2 += amt;
       if (inRange) {
         const dO = new Date(ts);
         const ym = dO.getFullYear() + '-' + String(dO.getMonth() + 1).padStart(2, '0');
@@ -2099,9 +2101,11 @@ async function _computeKioskRevenue(code, fresh) {
   }
   const monthsArr = [];
   for (let i = 11; i >= 0; i--) { const dt = new Date(now); dt.setDate(1); dt.setMonth(dt.getMonth() - i); const ym = dt.getFullYear() + '-' + String(dt.getMonth() + 1).padStart(2, '0'); monthsArr.push({ label: (dt.getMonth() + 1) + '/' + String(dt.getFullYear()).slice(2), amount: Math.round(monthly[ym] || 0) }); }
+  const monthsArr24 = [];
+  for (let i = 23; i >= 0; i--) { const dt = new Date(now); dt.setDate(1); dt.setMonth(dt.getMonth() - i); const ym = dt.getFullYear() + '-' + String(dt.getMonth() + 1).padStart(2, '0'); monthsArr24.push({ label: (dt.getMonth() + 1) + '/' + String(dt.getFullYear()).slice(2), amount: Math.round(monthly[ym] || 0) }); }
   const daysArr = [];
   for (let i = 29; i >= 0; i--) { const dt = new Date(now - i * 86400000); const dk = dt.getFullYear() + '-' + String(dt.getMonth() + 1).padStart(2, '0') + '-' + String(dt.getDate()).padStart(2, '0'); daysArr.push({ label: dt.getDate() + '.' + (dt.getMonth() + 1) + '.', amount: Math.round(daily[dk] || 0) }); }
-  const data = { code, currency: currency || 'CZK', day: sums.day, thisWeek: sums.thisWeek, prevWeek: sums.prevWeek, thisMonth: sums.thisMonth, prevMonth: sums.prevMonth, year: sums.year, thisMonthName: CZ_MONTHS[nowD.getMonth()], prevMonthName: CZ_MONTHS[new Date(startPrevMonth).getMonth()], txCount: count, complete, monthly: monthsArr, daily: daysArr, generatedAt: new Date().toISOString() };
+  const data = { code, currency: currency || 'CZK', day: sums.day, thisWeek: sums.thisWeek, prevWeek: sums.prevWeek, thisMonth: sums.thisMonth, prevMonth: sums.prevMonth, year: sums.year, year2: sums.year2, thisMonthName: CZ_MONTHS[nowD.getMonth()], prevMonthName: CZ_MONTHS[new Date(startPrevMonth).getMonth()], txCount: count, complete, monthly: monthsArr, monthly24: monthsArr24, daily: daysArr, generatedAt: new Date().toISOString() };
   _revCache[code] = { at: Date.now(), data };
   return data;
 }
@@ -2150,6 +2154,7 @@ async function _computeKioskPeriodTx(code, period) {
     thisMonth: [startThisMonth, startNextMonth],
     prevMonth: [startPrevMonth, startThisMonth],
     year: [yearRoll, startTomorrow],
+    year2: [now - 730 * 86400000, startTomorrow],
   };
   const range = RANGES[period];
   if (!range) { const e = new Error('BAD_PERIOD'); e.code = 'BAD_PERIOD'; throw e; }
@@ -2158,8 +2163,8 @@ async function _computeKioskPeriodTx(code, period) {
     || (process.env.SIS_KIOSK_API_URL ? process.env.SIS_KIOSK_API_URL.replace(/kiosk-values\/?$/, 'kiosk-transactions') : 'https://sis-test.infinitygrid.cloud/api/public/kiosk-transactions')).replace(/\/$/, '');
   let currency = null, offset = 0, pages = 0, total = 0, complete = false, successfulSum = 0;
   const out = [];
-  const CAP = 2500;
-  while (pages < 200) {
+  const CAP = 20000;
+  while (pages < 400) {
     if (Date.now() - now > 18000) break; // časový rozpočet
     const url = baseUrl + '/' + encodeURIComponent(code) + '?limit=200&offset=' + offset;
     const controller = new AbortController();
