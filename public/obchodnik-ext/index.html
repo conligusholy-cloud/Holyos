@@ -291,7 +291,7 @@
     box.innerHTML=rows.map(function(c){
       var col=CT_COL[c.status]||'var(--muted)';
       var sub=[c.email,c.phone].filter(Boolean).join(' · ');
-      var last=c.lastActivityAt?('Poslední aktivita: '+new Date(c.lastActivityAt).toLocaleString('cs-CZ')):'';
+      var laDate=c.lastActivityAt||c.updated_at||c.created_at; var last=laDate?('Poslední aktivita: '+new Date(laDate).toLocaleString('cs-CZ')):'';
       var opts=Object.keys(CT_STAT).map(function(k){return '<option value="'+k+'"'+(c.status===k?' selected':'')+'>'+CT_STAT[k]+'</option>';}).join('');
       var telClean=(c.phone||'').replace(/\s/g,'');
       var waNum=(c.phone||'').replace(/[^\d]/g,''); if(waNum.indexOf('00')===0) waNum=waNum.slice(2);
