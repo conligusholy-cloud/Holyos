@@ -131,8 +131,10 @@
         <div class="mark" id="p-initials">?</div>
         <div style="min-width:0"><h1 id="p-name">—</h1><div class="sub" id="p-sub"></div></div>
       </div>
-      <button class="logout" onclick="openSettings()" title="Nastavení" style="margin-right:8px">⚙️</button>
-      <button class="logout" onclick="doLogout()">Odhlásit</button>
+      <div style="display:flex;align-items:center;gap:8px;flex:0 0 auto">
+        <button class="logout" onclick="openSettings()" title="Nastavení">⚙️</button>
+        <button class="logout" onclick="doLogout()">Odhlásit</button>
+      </div>
     </div>
 
     <!-- LOKALITY -->
@@ -165,7 +167,7 @@
     </div>
 
     <nav class="tabbar">
-      <button class="tab active" id="tab-lok" onclick="showScreen('lok')"><span class="ic">📍</span>Lokality</button>
+      <button class="tab active" id="tab-lok" onclick="showScreen('lok')"><span class="ic">🏷️</span>Na prodej</button>
       <button class="tab" id="tab-kontakty" onclick="showScreen('kontakty')"><span class="ic">👥</span>Kontakty</button>
     </nav>
   </div>
