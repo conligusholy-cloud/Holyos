@@ -300,6 +300,7 @@
       <button type="button" class="tab-btn" data-tab="lokality" onclick="switchTab('lokality')">📍 Lokality</button>
       <button type="button" class="tab-btn" data-tab="externi" onclick="switchTab('externi')">🤝 Externí obchod</button>
       <button type="button" class="tab-btn" data-tab="externisti" onclick="switchTab('externisti')">🧑‍💼 Externí obchodníci</button>
+      <button type="button" class="tab-btn" data-tab="blacklist" onclick="switchTab('blacklist')">🚫 Black list</button>
     </div>
 
     <!-- TAB: Compounding — hodnota lokalit prádlomatů ze SIS API -->
@@ -347,6 +348,19 @@
         <div id="exr-table"><div style="color:var(--text2);padding:20px;">Načítám…</div></div>
       </div>
       <div id="exr-detail-view" style="display:none;"></div>
+    </div>
+
+    <!-- TAB: Black list — do-not-contact seznam -->
+    <div id="tab-blacklist" style="display:none; padding:20px 24px 24px;">
+      <div class="toolbar" style="margin-bottom:10px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+        <input type="text" id="bl-search" placeholder="Hledat e-mail / telefon…" onkeyup="if(event.key===&#39;Enter&#39;)blSearch(this.value)" style="flex:1; min-width:220px;">
+        <button class="btn" onclick="blSearch(document.getElementById('bl-search').value)">🔍 Hledat</button>
+        <span id="bl-count" style="color:var(--text2);font-size:13px;"></span>
+        <button class="btn btn-primary" onclick="addBlacklist()">➕ Přidat</button>
+      </div>
+      <div style="color:var(--text2);font-size:12px;margin-bottom:10px;">Kontakty na tomto seznamu nelze oslovit — obchodník je nemůže založit jako lead.</div>
+      <div id="bl-table"><div style="color:var(--text2);padding:20px;">Načítám…</div></div>
+      <div id="bl-pager" style="margin-top:14px;display:flex;align-items:center;"></div>
     </div>
 
     <!-- TAB: Rezervace lokalit -->
@@ -3594,7 +3608,7 @@
     }
 
     function switchTab(name) {
-      ['orders', 'pricelist', 'cashflow', 'tools', 'compounder', 'compounding', 'rezervace', 'lokality', 'externi', 'externisti'].forEach(function(t) {
+      ['orders', 'pricelist', 'cashflow', 'tools', 'compounder', 'compounding', 'rezervace', 'lokality', 'externi', 'externisti', 'blacklist'].forEach(function(t) {
         var el = document.getElementById('tab-' + t);
         if (el) el.style.display = (t === name) ? '' : 'none';
         var btn = document.querySelector('.tab-btn[data-tab="' + t + '"]');
@@ -3609,6 +3623,7 @@
       if (name === 'lokality') loadLokality();
       if (name === 'externi') renderExternalTrade();
       if (name === 'externisti') loadExternalReps();
+      if (name === 'blacklist') loadBlacklist();
     }
 
     // ============================================================
@@ -4604,6 +4619,48 @@
     window.openExrForm = openExrForm; window.closeExrForm = closeExrForm; window.saveExr = saveExr;
     window.exrSetStav = exrSetStav; window.openExrDetail = openExrDetail; window.exrFilterLok = exrFilterLok;
     window.renderExternalRepsList = renderExternalRepsList; window.loadExternalReps = loadExternalReps;
+    var _blData={total:0,items:[]}; var _blOffset=0; var _blLimit=100; var _blSearch='';
+    async function loadBlacklist(){
+      var box=document.getElementById('bl-table'); if(!box) return;
+      box.innerHTML='<div style="color:var(--text2);padding:20px;">Načítám…</div>';
+      try {
+        var url='/api/compounder/blocklist?limit='+_blLimit+'&offset='+_blOffset+(_blSearch?('&search='+encodeURIComponent(_blSearch)):'');
+        var r=await fetch(url,{credentials:'include'}); _blData=await r.json();
+      } catch(e){ box.innerHTML='<div style="color:#ef4444;padding:20px;">Chyba načítání.</div>'; return; }
+      renderBlacklist();
+    }
+    function renderBlacklist(){
+      var box=document.getElementById('bl-table'); if(!box) return;
+      var it=_blData.items||[]; var total=_blData.total||0;
+      var cnt=document.getElementById('bl-count'); if(cnt) cnt.textContent=total.toLocaleString('cs-CZ')+' záznamů';
+      if(!it.length){ box.innerHTML='<div style="color:var(--text2);padding:24px;">Žádné záznamy.</div>'; renderBlPager(); return; }
+      var h='<div style="overflow-x:auto;"><table class="data-table kv-compact"><thead><tr><th>#</th><th>E-mail</th><th>Telefon</th><th>Zdroj</th><th></th></tr></thead><tbody>';
+      it.forEach(function(x,i){
+        h+='<tr><td style="color:var(--text2);">'+(_blOffset+i+1)+'</td><td>'+(x.email?kvEsc(x.email):'—')+'</td><td>'+(x.phone?kvEsc(x.phone):'—')+'</td><td style="color:var(--text2);font-size:12px;">'+kvEsc(x.note||'')+'</td>'+
+          '<td style="text-align:right;"><button class="btn" onclick="delBlacklist('+x.id+')" title="Odebrat" style="padding:3px 9px;font-size:12px;color:#ef4444;">🗑</button></td></tr>';
+      });
+      h+='</tbody></table></div>'; box.innerHTML=h; renderBlPager();
+    }
+    function renderBlPager(){
+      var p=document.getElementById('bl-pager'); if(!p) return;
+      var total=_blData.total||0; var from=total?(_blOffset+1):0; var to=Math.min(_blOffset+_blLimit,total);
+      p.innerHTML='<button class="btn" '+(_blOffset<=0?'disabled':'')+' onclick="blPage(-1)" style="padding:6px 12px;">← Předchozí</button>'+
+        '<span style="color:var(--text2);font-size:13px;margin:0 10px;">'+from+'–'+to+' z '+total.toLocaleString('cs-CZ')+'</span>'+
+        '<button class="btn" '+(to>=total?'disabled':'')+' onclick="blPage(1)" style="padding:6px 12px;">Další →</button>';
+    }
+    function blPage(d){ _blOffset=Math.max(0,_blOffset+d*_blLimit); loadBlacklist(); }
+    function blSearch(v){ _blSearch=v||''; _blOffset=0; loadBlacklist(); }
+    async function addBlacklist(){
+      var email=prompt('E-mail (nech prázdné, když jen telefon):')||'';
+      var phone=prompt('Telefon (nech prázdné, když jen e-mail):')||'';
+      if(!email && !phone) return;
+      try { var r=await fetch('/api/compounder/blocklist',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:email,phone:phone})}); if(!r.ok){var j=await r.json().catch(function(){return{};});throw new Error(j.error||('HTTP '+r.status));} loadBlacklist(); } catch(e){ alert('Přidání selhalo: '+(e.message||'')); }
+    }
+    async function delBlacklist(id){
+      if(!confirm('Odebrat tento kontakt z blocklistu?')) return;
+      try { await fetch('/api/compounder/blocklist/'+id,{method:'DELETE',credentials:'include'}); loadBlacklist(); } catch(e){ alert('Odebrání selhalo.'); }
+    }
+    window.loadBlacklist=loadBlacklist; window.blPage=blPage; window.blSearch=blSearch; window.addBlacklist=addBlacklist; window.delBlacklist=delBlacklist;
 
 
     // ─── Detail stroje: transakce ze SIS API (proklik na řádek Compounding) ───

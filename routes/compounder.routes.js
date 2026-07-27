@@ -2748,6 +2748,49 @@ async function _isBlocked(email, phone) {
   return !!hit;
 }
 
+// GET /api/compounder/blocklist?search=&limit=&offset= — výpis do-not-contact seznamu
+router.get('/blocklist', requireAuth, async (req, res, next) => {
+  try {
+    const q = String(req.query.search || '').trim();
+    const limit = Math.min(500, Math.max(1, Number(req.query.limit) || 100));
+    const offset = Math.max(0, Number(req.query.offset) || 0);
+    let where = {};
+    if (q) {
+      const or = [{ email: { contains: q.toLowerCase() } }];
+      const ph = q.replace(/\D/g, '');
+      if (ph) or.push({ phone: { contains: ph } });
+      where = { OR: or };
+    }
+    const [total, items] = await Promise.all([
+      prisma.compounderBlocklist.count({ where }),
+      prisma.compounderBlocklist.findMany({ where, orderBy: { id: 'asc' }, skip: offset, take: limit, select: { id: true, email: true, phone: true, note: true } }),
+    ]);
+    res.json({ total, items });
+  } catch (err) { next(err); }
+});
+
+// POST /api/compounder/blocklist — ruční přidání záznamu
+router.post('/blocklist', requireAuth, async (req, res, next) => {
+  try {
+    const b = req.body || {};
+    const email = String(b.email || '').trim().toLowerCase() || null;
+    const phone = String(b.phone || '').replace(/\D/g, '').slice(-9) || null;
+    if (!email && !phone) return res.status(400).json({ error: 'Zadej e-mail nebo telefon.' });
+    const rec = await prisma.compounderBlocklist.create({ data: { email, phone, note: 'ručně' } });
+    res.status(201).json(rec);
+  } catch (err) { next(err); }
+});
+
+// DELETE /api/compounder/blocklist/:id — odebrání záznamu
+router.delete('/blocklist/:id', requireAuth, async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id)) return res.status(400).json({ error: 'Neplatné ID' });
+    await prisma.compounderBlocklist.delete({ where: { id } }).catch(() => null);
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
 // GET /api/compounder/external-reps/me/leads — vlastní kontakty
 router.get('/external-reps/me/leads', async (req, res, next) => {
   try {
