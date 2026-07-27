@@ -2823,6 +2823,7 @@
     var CMP_STATUS = { new: 'Nový', contacted: 'Kontaktován', qualified: 'Kvalifikován', converted: 'Převeden', rejected: 'Zamítnut' };
     var CMP_LANGS = { en:'English', bg:'Български', cs:'Čeština', da:'Dansk', de:'Deutsch', el:'Ελληνικά', es:'Español', et:'Eesti', fi:'Suomi', fr:'Français', ga:'Gaeilge', hr:'Hrvatski', hu:'Magyar', it:'Italiano', lt:'Lietuvių', lv:'Latviešu', mt:'Malti', nl:'Nederlands', pl:'Polski', pt:'Português', ro:'Română', sk:'Slovenčina', sl:'Slovenščina', sv:'Svenska' };
     var CMP_SELLERS = null; // seznam obchodníků (lazy z /api/sales/sellers); null = ještě nenačteno, [] = nedostupné
+    var CMP_EXT_REPS = null; // externí obchodníci (lazy z /api/compounder/external-reps)
     function cmpEsc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
     function openAddLead(){
       document.getElementById('modal-root').innerHTML =
@@ -2924,6 +2925,10 @@
           try { var sr = await fetch('/api/compounder/sellers', { credentials: 'include' }); CMP_SELLERS = sr.ok ? await sr.json() : []; }
           catch (e) { CMP_SELLERS = []; }
         }
+        if (CMP_EXT_REPS === null) {
+          try { var er = await fetch('/api/compounder/external-reps', { credentials: 'include' }); CMP_EXT_REPS = er.ok ? await er.json() : []; }
+          catch (e) { CMP_EXT_REPS = []; }
+        }
         var resvMap = {};
         try {
           var rr = await fetch('/api/compounder/reservations', { credentials: 'include' });
@@ -3023,12 +3028,24 @@
           Object.keys(CMP_LANGS).forEach(function(k){ langSel += '<option value="' + k + '"' + (langCode===k?' selected':'') + '>' + k.toUpperCase() + ' · ' + CMP_LANGS[k] + '</option>'; });
           langSel += '</select>';
           var ownerCell;
-          if (CMP_SELLERS && CMP_SELLERS.length) {
+          if ((CMP_SELLERS && CMP_SELLERS.length) || (CMP_EXT_REPS && CMP_EXT_REPS.length)) {
+            var isExt = !l.owner_person_id && !!l.external_rep_id;
             var ownerSel = '<select onclick="event.stopPropagation()" onchange="cmpSetOwner(' + l.id + ', this.value)" title="Přiřazený obchodník" style="background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:12px;">';
-            ownerSel += '<option value=""' + (l.owner_person_id?'':' selected') + '>— nepřiřazeno —</option>';
-            CMP_SELLERS.forEach(function(s){ var nm = ((s.first_name||'')+' '+(s.last_name||'')).trim() || ('#'+s.id); ownerSel += '<option value="' + s.id + '"' + (l.owner_person_id===s.id?' selected':'') + '>' + cmpEsc(nm) + '</option>'; });
+            ownerSel += '<option value=""' + ((!l.owner_person_id && !l.external_rep_id)?' selected':'') + '>— nepřiřazeno —</option>';
+            if (CMP_SELLERS && CMP_SELLERS.length) {
+              ownerSel += '<optgroup label="Interní">';
+              CMP_SELLERS.forEach(function(s){ var nm = ((s.first_name||'')+' '+(s.last_name||'')).trim() || ('#'+s.id); ownerSel += '<option value="' + s.id + '"' + (l.owner_person_id===s.id?' selected':'') + '>' + cmpEsc(nm) + '</option>'; });
+              ownerSel += '</optgroup>';
+            }
+            if (CMP_EXT_REPS && CMP_EXT_REPS.length) {
+              ownerSel += '<optgroup label="Externí obchodníci">';
+              CMP_EXT_REPS.forEach(function(x){ var nm = (x.jmeno || x.email || ('#'+x.id)); ownerSel += '<option value="ext:' + x.id + '"' + ((isExt && Number(l.external_rep_id)===Number(x.id))?' selected':'') + '>🤝 ' + cmpEsc(nm) + '</option>'; });
+              ownerSel += '</optgroup>';
+            }
             ownerSel += '</select>';
             ownerCell = ownerSel;
+          } else if (l.external_rep_name) {
+            ownerCell = '<span style="font-size:12px;color:#eab308;">🤝 ' + cmpEsc(l.external_rep_name) + '</span>';
           } else if (l.owner_name) {
             ownerCell = '<span style="font-size:12px;">' + cmpEsc(l.owner_name) + '</span>';
           } else {
@@ -3595,8 +3612,16 @@
       try { await fetch('/api/compounder/leads/' + id, { method:'PATCH', credentials:'include', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ lang: lang || null }) }); } catch(e) {}
     }
     async function cmpSetOwner(id, ownerId) {
-      var val = ownerId ? Number(ownerId) : null;
-      try { await fetch('/api/compounder/leads/' + id, { method:'PATCH', credentials:'include', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ owner_person_id: val }) }); } catch(e) {}
+      var body;
+      if (typeof ownerId === 'string' && ownerId.indexOf('ext:') === 0) {
+        body = { external_rep_id: Number(ownerId.slice(4)), owner_person_id: null };
+      } else if (ownerId) {
+        body = { owner_person_id: Number(ownerId), external_rep_id: null };
+      } else {
+        body = { owner_person_id: null, external_rep_id: null };
+      }
+      try { await fetch('/api/compounder/leads/' + id, { method:'PATCH', credentials:'include', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) }); } catch(e) {}
+      loadCompounderLeads();
     }
     async function cmpDeleteLead(id, name) {
       if (!confirm('Smazat lead "' + (name||'') + '"? Tuto akci nelze vrátit.')) return;

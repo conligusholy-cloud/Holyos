@@ -1665,6 +1665,7 @@ const patchSchema = z.object({
   notes: z.string().max(5000).optional().nullable(),
   lang: z.string().trim().max(10).optional().nullable(),
   owner_person_id: z.number().int().positive().optional().nullable(),
+  external_rep_id: z.number().int().positive().optional().nullable(),
   name: z.string().trim().min(1).max(255).optional(),
   email: z.string().trim().max(255).optional().nullable(),
   phone: z.string().trim().max(40).optional().nullable(),
@@ -1691,6 +1692,11 @@ router.patch('/leads/:id', requireAuth, async (req, res, next) => {
       data.lang = parsed.data.lang ? String(parsed.data.lang).toLowerCase().split(/[-_]/)[0].slice(0, 10) : null;
     }
     if (parsed.data.owner_person_id !== undefined) data.owner_person_id = parsed.data.owner_person_id;
+    if (parsed.data.external_rep_id !== undefined) {
+      data.external_rep_id = parsed.data.external_rep_id;
+      if (parsed.data.external_rep_id) data.owner_person_id = null; // externí a interní obchodník se vylučují
+    }
+    if (parsed.data.owner_person_id) data.external_rep_id = null;
     if (parsed.data.name !== undefined) data.name = parsed.data.name;
     if (parsed.data.email !== undefined) {
       const em = parsed.data.email ? String(parsed.data.email).trim().toLowerCase() : '';
