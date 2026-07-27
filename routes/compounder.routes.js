@@ -2584,6 +2584,8 @@ router.post('/external-reps', requireAuth, async (req, res, next) => {
     }, data, { id });
     arr.push(rec);
     await _saveExternalReps(arr, req.user && req.user.id);
+    // Automaticky založ ukázkový self-lead v Compounder portálu (aby obchodník viděl, jak to vypadá)
+    try { rec.self_lead_id = await _ensureRepSelfLead(rec); } catch (e) { /* neblokovat vytvoření obchodníka */ }
     res.status(201).json(_sanitizeRep(rec));
   } catch (err) { next(err); }
 });
@@ -2619,6 +2621,8 @@ router.put('/external-reps/:id', requireAuth, async (req, res, next) => {
     if (cerr) return res.status(cerr.status).json({ error: cerr.error });
     arr[i] = Object.assign({}, arr[i], data, { id });
     await _saveExternalReps(arr, req.user && req.user.id);
+    // Doplň chybějící ukázkový self-lead i u dříve založených obchodníků
+    try { if (!arr[i].self_lead_id) arr[i].self_lead_id = await _ensureRepSelfLead(arr[i]); } catch (e) { /* neblokovat uložení */ }
     res.json(_sanitizeRep(arr[i]));
   } catch (err) { next(err); }
 });
