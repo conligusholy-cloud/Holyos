@@ -4243,6 +4243,7 @@
       var _pctL = Number.isFinite(_cs.externalCommissionLocationPct) ? _cs.externalCommissionLocationPct : 12;
       rows = rows.map(function(k){ var m = _kvVerMachine(k.code).machine; var loc = _kvExtLocVal(k); var total = (m != null) ? (loc + m) : null; return { code: k.code, label: k.label, company: k.companyName, machine: m, loc: loc, total: total }; });
       rows.sort(function(a, b){ return (b.total || 0) - (a.total || 0); });
+      var _sumProv = rows.reduce(function(acc, r){ var pm = (r.machine != null) ? Math.round(r.machine * _pctM / 100) : 0; var pl = Math.round((r.loc || 0) * _pctL / 100); return acc + pm + pl; }, 0);
       if (!rows.length) { box.innerHTML = '<div style="color:var(--text2);padding:24px;">Žádné lokality neodpovídají filtru.</div>'; return; }
       var h = '<div style="overflow-x:auto;"><table class="data-table kv-compact"><thead><tr>' +
         '<th style="text-align:right;color:var(--text2);">#</th>' +
@@ -4252,7 +4253,7 @@
         '<th style="text-align:right;">Celková cena</th>' +
         '<th style="text-align:right;">Provize ze stroje (' + _pctM + ' %)</th>' +
         '<th style="text-align:right;">Provize z lokality (' + _pctL + ' %)</th>' +
-        '<th style="text-align:right;">Provize celkem</th></tr></thead><tbody>';
+        '<th style="text-align:right;">Provize celkem (' + kvMoney(_sumProv, 'CZK') + ')</th></tr></thead><tbody>';
       rows.forEach(function(r, i){
         var _provM = (r.machine != null) ? Math.round(r.machine * _pctM / 100) : null;
         var _provL = Math.round((r.loc || 0) * _pctL / 100);
