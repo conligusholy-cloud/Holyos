@@ -2635,6 +2635,33 @@ router.delete('/external-reps/:id', requireAuth, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// Zajistí „ukázkový" lead pro obchodníka (aby viděl portál jako zákazník). Idempotentní.
+async function _ensureRepSelfLead(rep) {
+  try {
+    if (rep.self_lead_id) {
+      const ex = await prisma.compounderLead.findUnique({ where: { id: Number(rep.self_lead_id) }, select: { id: true } }).catch(() => null);
+      if (ex) return rep.self_lead_id;
+    }
+    const lead = await prisma.compounderLead.create({
+      data: {
+        name: (rep.jmeno || 'Obchodník') + ' (ukázka)',
+        email: rep.email || null,
+        phone: rep.telefon || null,
+        role: 'compounder', source: 'obchodnik_ext_self', status: 'new',
+        external_rep_id: rep.id,
+        visible_sections: 'ekonomika,nabidka',
+        visible_templates: 'rezervacni,kupni,servisni',
+        show_revenue_stats: true,
+      },
+      select: { id: true },
+    });
+    const arr = await _loadExternalReps();
+    const i = arr.findIndex((r) => Number(r.id) === Number(rep.id));
+    if (i !== -1) { arr[i] = Object.assign({}, arr[i], { self_lead_id: lead.id }); await _saveExternalReps(arr, null); }
+    return lead.id;
+  } catch (e) { return rep.self_lead_id || null; }
+}
+
 // Serverový výpočet dat portálu externího obchodníka (metriky lokalit + provize).
 async function _extRepPortalData(rep) {
   const kiosks = await _sisKiosks().catch(() => []);
@@ -2719,7 +2746,12 @@ router.get('/external-reps/me', async (req, res, next) => {
     if (!rep) return res.status(404).json({ error: 'Obchodník nenalezen.' });
     if (rep.stav !== 'aktivni') return res.status(403).json({ error: 'Účet není aktivní.' });
     _repActivity(repId).catch(() => {});
-    res.json(await _extRepPortalData(rep));
+    const data = await _extRepPortalData(rep);
+    try {
+      const selfLeadId = await _ensureRepSelfLead(rep);
+      if (selfLeadId) data.self_portal_url = _extPortalBase() + '/portal?t=' + makeLoginToken(selfLeadId, 365 * 24 * 3600 * 1000);
+    } catch (e) { /* ukázkový lead je best-effort */ }
+    res.json(data);
   } catch (err) { next(err); }
 });
 

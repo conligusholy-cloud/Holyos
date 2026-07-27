@@ -132,6 +132,7 @@
         <div style="min-width:0"><h1 id="p-name">—</h1><div class="sub" id="p-sub"></div></div>
       </div>
       <div style="display:flex;align-items:center;gap:8px;flex:0 0 auto">
+        <a id="p-portal-link" href="#" target="_blank" rel="noopener" class="logout" style="text-decoration:none;display:none" title="Compounder portál — jak to vidí zákazník">🌐 Portál</a>
         <button class="logout" onclick="openSettings()" title="Nastavení">⚙️</button>
         <button class="logout" onclick="doLogout()">Odhlásit</button>
       </div>
@@ -225,6 +226,7 @@
     document.getElementById('p-initials').textContent = initials(rep.jmeno);
     document.getElementById('p-name').textContent = rep.jmeno || '—';
     document.getElementById('p-sub').textContent = [rep.email, rep.telefon].filter(Boolean).join(' · ');
+    var _pl=document.getElementById('p-portal-link'); if(_pl && DATA.self_portal_url){ _pl.href=DATA.self_portal_url; _pl.style.display=''; }
     // KPI lokality
     document.getElementById('k-pocet').textContent = kpi.pocet || 0;
     document.getElementById('k-objem').textContent = money(kpi.objem);
