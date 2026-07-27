@@ -2791,6 +2791,7 @@ router.patch('/external-reps/me/leads/:id', async (req, res, next) => {
     if (b.activity) { const line = '[' + new Date().toLocaleString('cs-CZ') + '] ' + String(b.activity).slice(0, 500); data.activity_log = (lead.activity_log ? (lead.activity_log + '\n') : '') + line; }
     if (b.sections !== undefined) { const a = Array.isArray(b.sections) ? b.sections : String(b.sections || '').split(','); data.visible_sections = a.map((x) => String(x).trim()).filter(Boolean).join(','); }
     if (b.templates !== undefined) { const a = Array.isArray(b.templates) ? b.templates : String(b.templates || '').split(','); data.visible_templates = a.map((x) => String(x).trim()).filter(Boolean).join(','); }
+    if (b.show_revenue_stats !== undefined) data.show_revenue_stats = !!b.show_revenue_stats;
     const upd = await prisma.compounderLead.update({ where: { id }, data });
     _repActivity(repId, 'Upravil kontakt #' + id, null).catch(() => {});
     res.json({ ok: true, lead: upd });

@@ -322,6 +322,8 @@
           '<div class="ct-sub" style="margin-top:6px;color:'+(accSent?'var(--green)':'var(--muted2)')+'">'+esc(accInfo)+'</div>'+
           '<div class="lbl">Viditelné sekce portálu</div>'+secBoxes+
           '<div class="lbl">Vzory smluv ke čtení</div>'+tplBoxes+
+          '<div class="lbl">Statistiky tržeb pro zákazníka</div>'+
+          '<label class="ck"><input type="checkbox" '+(c.show_revenue_stats?'checked':'')+' onchange="toggleRevStats('+c.id+',this.checked)">Zobrazit zákazníkovi statistiky tržeb (sekce Investor)</label>'+
           '<div class="lbl">Zaznamenat aktivitu</div>'+
           '<div style="display:flex;gap:8px"><input id="act-'+c.id+'" placeholder="Zavolal jsem, má zájem…" style="flex:1"><button class="btn btn-p" style="width:auto" onclick="addContactActivity('+c.id+')">Přidat</button></div>'+
           (SPEECH_OK?'<button class="btn btn-g" id="mic-'+c.id+'" style="width:100%;margin-top:6px" onclick="dictate('+c.id+')">🎤 Diktovat</button>':'')+
@@ -346,6 +348,7 @@
   async function addContactActivity(id){ var inp=document.getElementById('act-'+id); var t=(inp&&inp.value||'').trim(); if(!t) return; try{ var l=await _patchContact(id,{activity:t}); var c=_ctById(id); if(c){c.activity_log=l.activity_log;c.lastActivityAt=new Date().toISOString();} renderContacts(); var el=document.getElementById('ct-'+id); if(el)el.classList.add('open'); }catch(e){ alert('Selhalo: '+(e.message||'')); } }
   async function toggleSection(id,key,on){ var c=_ctById(id); if(!c) return; var arr=(c.visible_sections||'').split(',').map(function(s){return s.trim();}).filter(Boolean); var i=arr.indexOf(key); if(on&&i<0)arr.push(key); if(!on&&i>=0)arr.splice(i,1); c.visible_sections=arr.join(','); try{ await _patchContact(id,{sections:arr}); }catch(e){ alert('Uložení sekce selhalo.'); } }
   async function toggleTemplate(id,key,on){ var c=_ctById(id); if(!c) return; var arr=(c.visible_templates||'').split(',').map(function(s){return s.trim();}).filter(Boolean); var i=arr.indexOf(key); if(on&&i<0)arr.push(key); if(!on&&i>=0)arr.splice(i,1); c.visible_templates=arr.join(','); try{ await _patchContact(id,{templates:arr}); }catch(e){ alert('Uložení vzoru selhalo.'); } }
+  async function toggleRevStats(id,on){ var c=_ctById(id); if(c)c.show_revenue_stats=on; try{ await _patchContact(id,{show_revenue_stats:on}); }catch(e){ alert('Uložení selhalo.'); } }
   async function sendAccessEmail(id){ if(!confirm('Odeslat přístupový odkaz e-mailem zákazníkovi?')) return; try{ var r=await fetch(API+'/external-reps/me/leads/'+id+'/send-access',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({t:getToken()})}); var j=await r.json().catch(function(){return{};}); if(!r.ok||!j.ok) throw new Error(j.error||('HTTP '+r.status)); var c=_ctById(id); if(c){c.access_sent_count=j.access_sent_count;c.access_last_sent_at=j.access_last_sent_at;} alert('Přístup odeslán e-mailem.'); renderContacts(); var el=document.getElementById('ct-'+id); if(el)el.classList.add('open'); }catch(e){ alert('Odeslání selhalo: '+(e.message||'')); } }
   async function sendAccessWA(id){ try{ var r=await fetch(API+'/external-reps/me/leads/'+id+'/access-link',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({t:getToken()})}); var j=await r.json().catch(function(){return{};}); if(!r.ok||!j.ok) throw new Error(j.error||('HTTP '+r.status)); var c=_ctById(id); if(c){c.access_sent_count=j.access_sent_count;c.access_last_sent_at=j.access_last_sent_at;} window.open('https://wa.me/'+j.phone+'?text='+encodeURIComponent(j.message||''),'_blank'); renderContacts(); var el=document.getElementById('ct-'+id); if(el)el.classList.add('open'); }catch(e){ alert('Selhalo: '+(e.message||'')); } }
   function copyContactLink(id){ var c=_ctById(id); if(!c||!c.portal_url){ alert('Odkaz není k dispozici.'); return; } navigator.clipboard.writeText(c.portal_url).then(function(){ alert('Odkaz pro zákazníka zkopírován.'); }, function(){ prompt('Odkaz pro zákazníka:', c.portal_url); }); }
@@ -408,6 +411,7 @@
   }
   window.loadJourney=loadJourney; window.dictate=dictate;
   window.toggleSection=toggleSection; window.toggleTemplate=toggleTemplate; window.sendAccessEmail=sendAccessEmail; window.sendAccessWA=sendAccessWA;
+  window.toggleRevStats=toggleRevStats;
 
   // ─── Tržby lokality (modal) ───
   var _revCode=null, _revData=null;
