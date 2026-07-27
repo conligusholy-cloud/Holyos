@@ -210,13 +210,14 @@ async function notifyContactRequest(prisma, { lead, phone, isDist }) {
 
 // Poptávka nákupu Compounderu z portálu (rezervace volného výrobního slotu) →
 // Velín push + zvonek stejným kanálem jako rezervace/kontakt.
-async function notifyPurchaseInquiry(prisma, { lead, count, locations, phone }) {
+async function notifyPurchaseInquiry(prisma, { lead, count, locations, phone, version }) {
   try {
     if (!lead) return;
     const who = lead.name || lead.email || ('lead #' + lead.id);
     const n = Number(count) || 1;
-    const title = '🛒 Poptávka nákupu — ' + n + '× Compounder';
-    const body = who + ' poptává ' + n + '× Compounder (volné výrobní sloty).'
+    const verLbl = version ? (' ' + version) : '';
+    const title = '🛒 Poptávka nákupu — ' + n + '× Compounder' + verLbl;
+    const body = who + ' poptává ' + n + '× Compounder' + verLbl + ' (volné výrobní sloty).'
       + (locations ? (' Umístění: ' + String(locations).slice(0, 120) + '.') : '')
       + (phone ? (' Tel: ' + phone) : '');
     await dispatch(prisma, { title, body, data: { type: 'compounder_purchase', lead_id: lead.id, count: n } });

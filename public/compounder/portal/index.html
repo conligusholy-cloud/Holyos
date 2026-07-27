@@ -344,6 +344,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
         <div class="eyebrow" data-i18n="p.buy.eyebrow">Order</div>
         <h3 style="font-size:clamp(21px,2.8vw,30px);font-weight:700;margin:6px 0 8px" data-i18n="p.buy.title">I want to buy a Compounder</h3>
         <p class="note" style="max-width:580px;margin:0 auto 20px" data-i18n="p.buy.lead">Reserve a free production slot. Leave an inquiry and we'll get back to you with production and delivery dates.</p>
+        <div id="buy-versions" style="display:flex;gap:14px;flex-wrap:wrap;justify-content:center;margin:0 auto 20px;max-width:840px"></div>
         <button type="button" id="buy-open" class="btn btn-gold" style="justify-content:center" data-i18n="p.buy.cta">Buy a Compounder</button>
         <div id="buy-form" style="display:none;margin-top:22px;text-align:left;max-width:600px;margin-left:auto;margin-right:auto">
           <div class="row"><label data-i18n="p.buy.name">Name / company</label><div class="unit"><input type="text" id="buy-name" style="width:240px"></div></div>
@@ -1863,7 +1864,27 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
     });
     var reco = document.getElementById("loc-reco"); reco.textContent = r.recommendation || ""; reco.style.display = r.recommendation ? "block" : "none";
   }
+  var _buyVersion = null;
+  function selectBuyVer(ver){
+    _buyVersion = ver;
+    var box = document.getElementById('buy-versions'); if(box){ Array.prototype.forEach.call(box.querySelectorAll('.buyver'), function(el){ var on=el.getAttribute('data-ver')===ver; el.style.borderColor=on?'var(--gold-soft)':'var(--line)'; el.style.boxShadow=on?'0 0 0 2px rgba(201,162,75,.4)':'none'; }); }
+    var f=document.getElementById('buy-form'), o=document.getElementById('buy-open'); if(f) f.style.display='block'; if(o) o.style.display='none';
+    var n=document.getElementById('buy-name'); if(n) n.focus();
+  }
+  window.selectBuyVer = selectBuyVer;
+  function loadBuyMachines(){
+    var box=document.getElementById('buy-versions'); if(!box) return;
+    fetch('/api/compounder/portal/machines').then(function(r){return r.json();}).then(function(d){
+      var m=(d&&d.machines)||[]; if(!m.length){ box.style.display='none'; return; }
+      box.innerHTML=m.map(function(x){
+        var price=(Math.round(x.priceCzk||0)).toLocaleString('cs-CZ')+' Kč';
+        var img=x.photo?('<div style="height:130px;background:#0c0e12"><img src="'+x.photo+'" alt="" style="width:100%;height:100%;object-fit:cover"></div>'):'<div style="height:130px;background:#0c0e12;display:flex;align-items:center;justify-content:center;color:var(--muted,#777);font-size:12px">bez obrázku</div>';
+        return '<div class="buyver" data-ver="'+x.ver+'" onclick="selectBuyVer(&#39;'+x.ver+'&#39;)" style="cursor:pointer;flex:1;min-width:210px;max-width:260px;border:1px solid var(--line);border-radius:16px;overflow:hidden;background:var(--surface);transition:border-color .15s,box-shadow .15s">'+img+'<div style="padding:12px 14px;text-align:center"><div style="font-weight:800;font-size:16px">Compounder '+x.ver+'</div><div style="color:var(--gold-soft);font-weight:800;font-size:17px;margin-top:4px">'+price+'</div><div class="note" style="font-size:11px;margin-top:2px">bez DPH</div></div></div>';
+      }).join('');
+    }).catch(function(){ box.style.display='none'; });
+  }
   function initBuy(){
+    loadBuyMachines();
     var open = document.getElementById("buy-open");
     var form = document.getElementById("buy-form");
     var send = document.getElementById("buy-send");
@@ -1879,7 +1900,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
       var tok = ""; try { tok = localStorage.getItem("compounder.portal.token") || ""; } catch(_){}
       send.disabled = true; msg.style.color = ""; msg.textContent = pT("p.buy.sending");
       fetch("/api/compounder/portal/purchase-inquiry", { method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ t: tok, name: val("buy-name"), ico: val("buy-ico"), address: val("buy-address"), email: val("buy-email"), phone: val("buy-phone"), count: count, locations: locations, note: val("buy-note") }) })
+        body: JSON.stringify({ t: tok, name: val("buy-name"), ico: val("buy-ico"), address: val("buy-address"), email: val("buy-email"), phone: val("buy-phone"), count: count, locations: locations, note: val("buy-note"), version: _buyVersion || null }) })
         .then(function(r){ return r.json().then(function(j){ return { ok: r.ok, j: j }; }); })
         .then(function(res){
           if (res.ok && res.j && res.j.ok){ msg.style.color = "var(--gold-soft)"; msg.textContent = pT("p.buy.ok"); form.style.display = "none"; }

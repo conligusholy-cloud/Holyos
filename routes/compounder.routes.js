@@ -846,6 +846,23 @@ router.post('/portal/access-request', async (req, res, next) => {
 // POST /api/compounder/portal/purchase-inquiry
 // Zákazník z portálu pošle poptávku (hlavička + počet kiosků + umístění). Uloží se
 // jako poznámka + event k leadovi a odejde upozornění majitelům (Velín push+zvonek).
+// GET /api/compounder/portal/machines — ceník verzí (V2/V3/V4) pro zákaznický portál
+router.get('/portal/machines', async (req, res, next) => {
+  try {
+    const cs = (await getSetting(COMPOUNDING_SETTINGS_KEY, { type: 'json', defaultValue: COMPOUNDING_SETTINGS_DEFAULT })) || {};
+    const fx = await fxRatesCzk().catch(() => ({ EUR: 25 }));
+    const eur = fx.EUR || 25;
+    const pl = cs.pricelist || {};
+    const vp = (cs.versionPhotos && typeof cs.versionPhotos === 'object') ? cs.versionPhotos : {};
+    const machines = ['v2', 'v3', 'v4'].map((v) => {
+      const eurP = (pl[v] && pl[v].eur != null && isFinite(Number(pl[v].eur))) ? Number(pl[v].eur) : null;
+      if (eurP == null) return null;
+      return { ver: v.toUpperCase(), priceCzk: Math.round(eurP * eur), photo: vp[v] || null };
+    }).filter(Boolean);
+    res.json({ machines });
+  } catch (err) { next(err); }
+});
+
 const purchaseSchema = z.object({
   t: z.string().min(3),
   name: z.string().max(255).optional().nullable(),
@@ -856,6 +873,7 @@ const purchaseSchema = z.object({
   count: z.coerce.number().int().min(1).max(999),
   locations: z.string().trim().min(1).max(2000),
   note: z.string().max(2000).optional().nullable(),
+  version: z.string().max(10).optional().nullable(),
 });
 router.post('/portal/purchase-inquiry', async (req, res, next) => {
   try {
@@ -874,7 +892,7 @@ router.post('/portal/purchase-inquiry', async (req, res, next) => {
     if (!lead) return res.status(404).json({ ok: false, error: 'Účet nenalezen.' });
 
     const stamp = new Date().toISOString().slice(0, 16).replace('T', ' ');
-    const noteText = '[' + stamp + '] POPTÁVKA NÁKUPU — ' + d.count + '× Compounder'
+    const noteText = '[' + stamp + '] POPTÁVKA NÁKUPU — ' + d.count + '× Compounder' + (d.version ? (' ' + d.version) : '')
       + '\nUmístění: ' + d.locations
       + (d.name ? ('\nHlavička: ' + d.name + (d.ico ? (' · IČO ' + d.ico) : '')) : '')
       + (d.address ? ('\nAdresa: ' + d.address) : '')
@@ -888,10 +906,10 @@ router.post('/portal/purchase-inquiry', async (req, res, next) => {
 
     prisma.compounderEvent.create({ data: {
       sid: 'buy:' + leadId, event: 'purchase_inquiry',
-      props: { lead_id: leadId, count: d.count, locations: String(d.locations).slice(0, 300), ico: d.ico || null, address: (d.address || '').slice(0, 200) || null, phone: phone, note: (d.note || '').slice(0, 300) || null },
+      props: { lead_id: leadId, count: d.count, version: d.version || null, locations: String(d.locations).slice(0, 300), ico: d.ico || null, address: (d.address || '').slice(0, 200) || null, phone: phone, note: (d.note || '').slice(0, 300) || null },
       path: '/portal', ip: clientIp(req),
     } }).catch(() => {});
-    compounderNotify.notifyPurchaseInquiry(prisma, { lead, count: d.count, locations: d.locations, phone: phone })
+    compounderNotify.notifyPurchaseInquiry(prisma, { lead, count: d.count, locations: d.locations, phone: phone, version: d.version || null })
       .catch((e) => console.error('[compounder] purchase velín:', e && e.message));
     console.log('[compounder] Poptávka nákupu: lead #' + leadId + ' (' + d.count + ' ks)');
     return res.json({ ok: true });
