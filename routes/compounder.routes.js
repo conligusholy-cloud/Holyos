@@ -2829,6 +2829,24 @@ router.post('/external-reps/me/leads/:id/access-link', async (req, res, next) =>
   } catch (err) { next(err); }
 });
 
+// GET /api/compounder/external-reps/me/leads/:id/activity — cesta zákazníka / analytika (jen vlastní)
+router.get('/external-reps/me/leads/:id/activity', async (req, res, next) => {
+  try {
+    const repId = verifyExtRepToken(_extRepTokenFrom(req));
+    if (!repId) return res.status(401).json({ error: 'Neplatné přihlášení.' });
+    const id = Number(req.params.id);
+    const lead = await prisma.compounderLead.findUnique({ where: { id }, select: { id: true, external_rep_id: true } });
+    if (!lead || lead.external_rep_id !== repId) return res.status(404).json({ error: 'Kontakt nenalezen.' });
+    const reg = await prisma.compounderEvent.findFirst({ where: { event: 'register_success', props: { path: ['lead_id'], equals: id } }, orderBy: { created_at: 'asc' }, select: { sid: true } });
+    const or = [{ props: { path: ['lead_id'], equals: id } }];
+    if (reg && reg.sid) or.push({ sid: reg.sid });
+    const events = (await prisma.compounderEvent.findMany({ where: { OR: or }, orderBy: { created_at: 'desc' }, take: 500 })).reverse();
+    const sections = {}; let portalOpened = false; let totalMs = 0;
+    events.forEach((e) => { const p = e.props || {}; if (e.event === 'section_view' && p.section) sections[p.section] = (sections[p.section] || 0) + 1; if (e.event === 'portal_view') portalOpened = true; if (e.event === 'page_leave' && p.ms) totalMs += Number(p.ms) || 0; });
+    res.json({ count: events.length, portalOpened, totalMs, sections, events: events.map((e) => ({ event: e.event, props: e.props, at: e.created_at })) });
+  } catch (err) { next(err); }
+});
+
 // GET /api/compounder/external-reps/me/kiosk-revenue?code=&t= — tržby lokality pro obchodníka
 router.get('/external-reps/me/kiosk-revenue', async (req, res, next) => {
   try {

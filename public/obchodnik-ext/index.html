@@ -267,6 +267,8 @@
   var CT_COL = { new:'#3b82f6', contacted:'#8b5cf6', qualified:'#eab308', converted:'#22c55e', rejected:'#ef4444' };
   var SECDEFS=[['ekonomika','Provozovatel'],['nabidka','Investor'],['distributor','Distributor']];
   var TPLDEFS=[['rezervacni','Rezervační'],['kupni','Kupní'],['servisni','Servisní']];
+  var EVENT_LABEL={ portal_view:'Otevřel portál', page_view:'Otevřel web', section_view:'Prohlížel sekci', click:'Klik', cta_click:'Klik na CTA', doc_download:'Stáhl dokument', location_assess:'Zhodnotil lokalitu', contact_request:'Požádal o kontakt', purchase_inquiry:'Poptávka nákupu', register_success:'Registrace', page_leave:'Odešel ze stránky', card_flip:'Otočil kartu', page_switch:'Přepnul stránku', visit_end:'Konec návštěvy', eco_open:'Otevřel ekonomický model', eco_edit:'Upravil hodnotu', eco_pdf:'Stáhl PDF modelu', eco_save:'Uložil model', eco_visit_end:'Konec modelu' };
+  var SPEECH_OK=!!(window.SpeechRecognition||window.webkitSpeechRecognition); var _recog=null;
   async function loadContacts(){
     var box=document.getElementById('ct-list'); if(!box) return;
     try {
@@ -293,7 +295,7 @@
       var tpls=(c.visible_templates||'').split(',').map(function(x){return x.trim();}).filter(Boolean);
       var secBoxes=SECDEFS.map(function(d){ var on=secs.indexOf(d[0])>=0; return '<label class="ck"><input type="checkbox" '+(on?'checked':'')+' onchange="toggleSection('+c.id+',&#39;'+d[0]+'&#39;,this.checked)">'+d[1]+'</label>'; }).join('');
       var tplBoxes=TPLDEFS.map(function(d){ var on=tpls.indexOf(d[0])>=0; return '<label class="ck"><input type="checkbox" '+(on?'checked':'')+' onchange="toggleTemplate('+c.id+',&#39;'+d[0]+'&#39;,this.checked)">'+d[1]+' vzor</label>'; }).join('');
-      var accInfo=(c.access_sent_count?('Odesláno '+c.access_sent_count+'× · naposledy '+(c.access_last_sent_at?new Date(c.access_last_sent_at).toLocaleString('cs-CZ'):'')):'Odkaz zatím neodeslán');
+      var accInfo=(c.access_sent_count?('Odesláno '+c.access_sent_count+'× · naposledy '+(c.access_last_sent_at?new Date(c.access_last_sent_at).toLocaleString('cs-CZ'):'')):'Odkaz zatím neodeslán') + (c.portalOpened?' · ✓ otevřel odkaz':'');
       return '<div class="ct" id="ct-'+c.id+'">'+
         '<div class="ct-top" onclick="toggleContact('+c.id+')">'+
           '<div style="min-width:0"><div class="ct-name">'+esc(c.name)+'</div>'+
@@ -309,22 +311,22 @@
           '</div>'+
           '<div class="lbl">Stav</div><select onchange="setContactStatus('+c.id+',this.value)">'+opts+'</select>'+
           '<div class="lbl">Přístup do portálu</div>'+
-          '<div class="ct-actions">'+
-            (c.phone?'<button class="btn btn-g" onclick="sendAccessWA('+c.id+')">🟢 WhatsApp</button>':'')+
-            '<button class="btn btn-g" onclick="copyContactLink('+c.id+')">🔗 Kopírovat odkaz</button>'+
-          '</div>'+
+          (c.phone?'<button class="btn" style="width:100%;background:#25D366;color:#0a2e17;font-weight:800" onclick="sendAccessWA('+c.id+')">🟢 Poslat přístup na WhatsApp</button>':'<div class="ct-sub">Kontakt nemá telefon — WhatsApp nelze použít.</div>')+
+          '<div class="ct-actions" style="margin-top:8px"><button class="btn btn-g" onclick="copyContactLink('+c.id+')">🔗 Kopírovat odkaz</button></div>'+
           '<div class="ct-sub" style="margin-top:6px">'+esc(accInfo)+'</div>'+
           '<div class="lbl">Viditelné sekce portálu</div>'+secBoxes+
           '<div class="lbl">Vzory smluv ke čtení</div>'+tplBoxes+
           '<div class="lbl">Zaznamenat aktivitu</div>'+
           '<div style="display:flex;gap:8px"><input id="act-'+c.id+'" placeholder="Zavolal jsem, má zájem…" style="flex:1"><button class="btn btn-p" style="width:auto" onclick="addContactActivity('+c.id+')">Přidat</button></div>'+
+          (SPEECH_OK?'<button class="btn btn-g" id="mic-'+c.id+'" style="width:100%;margin-top:6px" onclick="dictate('+c.id+')">🎤 Diktovat</button>':'')+
+          '<div class="lbl">Cesta zákazníka / analytika</div><div id="journey-'+c.id+'" style="white-space:pre-wrap;font-size:12px;color:var(--muted);background:var(--surface2);border:1px solid var(--line);border-radius:8px;padding:8px;max-height:200px;overflow:auto">Načítám…</div>'+
           '<div class="lbl">Poznámky</div><textarea id="ct-notes-'+c.id+'" rows="2">'+esc(c.notes||'')+'</textarea>'+
           '<div class="ct-actions"><button class="btn btn-g" onclick="saveContactNotes('+c.id+')">💾 Uložit poznámku</button></div>'+
           (c.activity_log?('<div class="lbl">Aktivity</div><div style="white-space:pre-wrap;font-size:12px;color:var(--muted);background:var(--surface2);border:1px solid var(--line);border-radius:8px;padding:8px;max-height:130px;overflow:auto">'+esc(c.activity_log)+'</div>'):'')+
         '</div></div>';
     }).join('');
   }
-  function toggleContact(id){ var el=document.getElementById('ct-'+id); if(el) el.classList.toggle('open'); }
+  function toggleContact(id){ var el=document.getElementById('ct-'+id); if(!el) return; el.classList.toggle('open'); if(el.classList.contains('open')) loadJourney(id); }
   function _ctById(id){ return CONTACTS.find(function(c){return c.id===id;}); }
   async function _patchContact(id, body){
     body.t=getToken();
@@ -366,6 +368,39 @@
   window.renderContacts=renderContacts; window.toggleContact=toggleContact; window.setContactStatus=setContactStatus;
   window.saveContactNotes=saveContactNotes; window.addContactActivity=addContactActivity; window.copyContactLink=copyContactLink;
   window.openNewContact=openNewContact; window.closeNewContact=closeNewContact; window.saveNewContact=saveNewContact;
+  async function loadJourney(id){
+    var box=document.getElementById('journey-'+id); if(!box) return;
+    try {
+      var r=await fetch(API+'/external-reps/me/leads/'+id+'/activity?t='+encodeURIComponent(getToken()));
+      var a=await r.json(); if(!r.ok) throw new Error(a.error||'');
+      if(!a.count){ box.textContent='Zatím žádná zaznamenaná aktivita.'; return; }
+      var mins=Math.round((a.totalMs||0)/60000);
+      var head=(a.portalOpened?'Otevřel portál':'Portál neotevřel')+' · '+a.count+' akcí'+(mins?' · '+mins+' min na webu':'');
+      var secs=Object.keys(a.sections||{});
+      if(secs.length) head+='\nSekce: '+secs.map(function(x){return x+' ('+a.sections[x]+'×)';}).join(', ');
+      var tl=(a.events||[]).slice(-40).reverse().map(function(e){
+        var lbl=EVENT_LABEL[e.event]||e.event; var p=e.props||{}; var extra='';
+        if(e.event==='eco_edit') extra=' – '+(p.label||p.key||'')+(p.value!=null&&p.value!==''?(' → '+p.value):'');
+        else if(e.event==='purchase_inquiry') extra=' – '+(p.count||'?')+'× '+(p.locations||'');
+        else if(p.section||p.doc||p.page||p.label) extra=' – '+(p.section||p.doc||p.page||p.label);
+        return (e.at?new Date(e.at).toLocaleString('cs-CZ'):'')+' · '+lbl+extra;
+      }).join('\n');
+      box.textContent=head+'\n\n'+tl;
+    } catch(e){ box.textContent='Analytiku se nepodařilo načíst.'; }
+  }
+  function dictate(id){
+    var SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+    var inp=document.getElementById('act-'+id); var btn=document.getElementById('mic-'+id);
+    if(!SR){ alert('Diktování v tomto prohlížeči není podporováno (funguje hlavně v Chrome a na Androidu).'); return; }
+    if(_recog){ try{ _recog.stop(); }catch(e){} return; }
+    _recog=new SR(); _recog.lang='cs-CZ'; _recog.interimResults=false; _recog.continuous=true;
+    _recog.onresult=function(e){ var t=''; for(var i=e.resultIndex;i<e.results.length;i++){ t+=e.results[i][0].transcript; } if(inp) inp.value=(inp.value?inp.value+' ':'')+t.trim(); };
+    _recog.onend=function(){ if(btn) btn.textContent='🎤 Diktovat'; _recog=null; };
+    _recog.onerror=function(){ if(btn) btn.textContent='🎤 Diktovat'; _recog=null; };
+    if(btn) btn.textContent='● Nahrávám… (klepni pro stop)';
+    try{ _recog.start(); }catch(e){}
+  }
+  window.loadJourney=loadJourney; window.dictate=dictate;
   window.toggleSection=toggleSection; window.toggleTemplate=toggleTemplate; window.sendAccessEmail=sendAccessEmail; window.sendAccessWA=sendAccessWA;
 
   // ─── Tržby lokality (modal) ───
