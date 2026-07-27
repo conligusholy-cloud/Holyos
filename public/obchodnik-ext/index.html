@@ -295,7 +295,8 @@
       var tpls=(c.visible_templates||'').split(',').map(function(x){return x.trim();}).filter(Boolean);
       var secBoxes=SECDEFS.map(function(d){ var on=secs.indexOf(d[0])>=0; return '<label class="ck"><input type="checkbox" '+(on?'checked':'')+' onchange="toggleSection('+c.id+',&#39;'+d[0]+'&#39;,this.checked)">'+d[1]+'</label>'; }).join('');
       var tplBoxes=TPLDEFS.map(function(d){ var on=tpls.indexOf(d[0])>=0; return '<label class="ck"><input type="checkbox" '+(on?'checked':'')+' onchange="toggleTemplate('+c.id+',&#39;'+d[0]+'&#39;,this.checked)">'+d[1]+' vzor</label>'; }).join('');
-      var accInfo=(c.access_sent_count?('Odesláno '+c.access_sent_count+'× · naposledy '+(c.access_last_sent_at?new Date(c.access_last_sent_at).toLocaleString('cs-CZ'):'')):'Odkaz zatím neodeslán') + (c.portalOpened?' · ✓ otevřel odkaz':'');
+      var accSent=!!c.access_sent_count;
+      var accInfo=(accSent?('✓ Odesláno '+c.access_sent_count+'× · naposledy '+(c.access_last_sent_at?new Date(c.access_last_sent_at).toLocaleString('cs-CZ'):'')+(c.portalOpened?' · ✓ otevřel odkaz':'')):'Odkaz zatím neodeslán');
       return '<div class="ct" id="ct-'+c.id+'">'+
         '<div class="ct-top" onclick="toggleContact('+c.id+')">'+
           '<div style="min-width:0"><div class="ct-name">'+esc(c.name)+'</div>'+
@@ -313,7 +314,7 @@
           '<div class="lbl">Přístup do portálu</div>'+
           (c.phone?'<button class="btn" style="width:100%;background:#25D366;color:#0a2e17;font-weight:800" onclick="sendAccessWA('+c.id+')">🟢 Poslat přístup na WhatsApp</button>':'<div class="ct-sub">Kontakt nemá telefon — WhatsApp nelze použít.</div>')+
           '<div class="ct-actions" style="margin-top:8px"><button class="btn btn-g" onclick="copyContactLink('+c.id+')">🔗 Kopírovat odkaz</button></div>'+
-          '<div class="ct-sub" style="margin-top:6px">'+esc(accInfo)+'</div>'+
+          '<div class="ct-sub" style="margin-top:6px;color:'+(accSent?'var(--green)':'var(--muted2)')+'">'+esc(accInfo)+'</div>'+
           '<div class="lbl">Viditelné sekce portálu</div>'+secBoxes+
           '<div class="lbl">Vzory smluv ke čtení</div>'+tplBoxes+
           '<div class="lbl">Zaznamenat aktivitu</div>'+
