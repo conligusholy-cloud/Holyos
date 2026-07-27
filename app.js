@@ -519,6 +519,14 @@ app.get('/spare-parts/app.js', (req, res) => {
 });
 app.get(/^\/spare-parts\/(?!app\.js).*$/, serveSparePartsHtml);
 
+// Portál externího obchodníka — přihlášení vlastním tokenem (external-reps/login).
+function serveObchodnikExt(req, res) {
+  res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.sendFile(path.join(__dirname, 'public', 'obchodnik-ext', 'index.html'));
+}
+app.get('/obchodnik-ext', serveObchodnikExt);
+app.get('/obchodnik-ext/', serveObchodnikExt);
+
 // ─── API Routes ────────────────────────────────────────────────────────────
 
 app.use('/api/auth', authRoutes);

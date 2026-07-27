@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f1115">
+<title>Externí obchodník</title>
+<style>
+  :root{
+    --bg:#0f1115; --surface:#171a21; --surface2:#1f2430; --line:rgba(255,255,255,.09);
+    --text:#f2f3f5; --muted:#9aa0ad; --muted2:#6b7280; --primary:#eab308; --primary-d:#1a1408;
+    --gold1:#f6e6ad; --gold2:#cda454; --green:#22c55e; --blue:#3b82f6;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;line-height:1.45}
+  body{padding-bottom:calc(60px + env(safe-area-inset-bottom,0))}
+  /* Login */
+  .login-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+  .login-card{background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:26px 22px;width:100%;max-width:360px}
+  .brand{display:flex;align-items:center;gap:12px;margin-bottom:18px}
+  .brand .mark{width:44px;height:44px;border-radius:12px;background:linear-gradient(135deg,var(--gold1),var(--gold2));color:#241c05;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:20px}
+  .brand h1{font-size:17px;margin:0}
+  .brand p{font-size:12px;color:var(--muted);margin:2px 0 0}
+  .field{margin-bottom:13px}
+  .field label{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted2);margin-bottom:5px}
+  input{width:100%;background:var(--surface2);border:1px solid var(--line);border-radius:10px;padding:12px;color:var(--text);font-size:15px;font-family:inherit}
+  .btn{border:none;border-radius:10px;padding:13px 14px;font-size:15px;font-weight:700;cursor:pointer;width:100%}
+  .btn-p{background:var(--primary);color:var(--primary-d)}
+  .err{background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.4);color:#fca5a5;padding:10px 12px;border-radius:10px;margin-bottom:12px;font-size:13px}
+  /* Top */
+  .top{position:sticky;top:0;z-index:20;background:rgba(15,17,21,.92);backdrop-filter:blur(8px);border-bottom:1px solid var(--line);padding:14px 16px calc(12px + env(safe-area-inset-top,0)) 16px;display:flex;align-items:center;justify-content:space-between;gap:10px}
+  .top .who{display:flex;align-items:center;gap:11px;min-width:0}
+  .top .who .mark{width:38px;height:38px;border-radius:11px;background:linear-gradient(135deg,var(--gold1),var(--gold2));color:#241c05;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:15px;flex:0 0 auto}
+  .top .who h1{font-size:16px;margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .top .who .sub{font-size:11.5px;color:var(--muted)}
+  .logout{background:transparent;border:1px solid var(--line);color:var(--muted);border-radius:999px;padding:8px 13px;font-size:12px;cursor:pointer;flex:0 0 auto}
+  /* Screens */
+  .screen{padding:14px 14px 8px}
+  .kpis{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
+  .kpi{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:13px 14px}
+  .kpi .l{font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted2)}
+  .kpi .v{font-size:20px;font-weight:800;margin-top:4px}
+  .kpi .s{font-size:11px;color:var(--muted);margin-top:2px}
+  .kpi.gold{background:linear-gradient(135deg,rgba(246,230,173,.10),rgba(205,164,84,.06));border-color:rgba(205,164,84,.35)}
+  .sec-title{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted2);margin:6px 2px 8px}
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:14px;margin:10px 0;padding:13px 14px}
+  .card .row{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+  .card .code{font-weight:800;font-size:15px}
+  .card .name{font-size:12.5px;color:var(--muted);margin-top:1px}
+  .card .price{font-weight:800;font-size:15px;color:var(--primary)}
+  .metrics{display:flex;gap:14px;margin-top:10px;flex-wrap:wrap}
+  .metric .ml{font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted2)}
+  .metric .mv{font-size:14px;font-weight:700;margin-top:1px}
+  .prov{color:var(--green)}
+  .nav-yrs{color:var(--blue)}
+  .empty,.loading{padding:48px 20px;text-align:center;color:var(--muted)}
+  .tabbar{position:fixed;left:0;right:0;bottom:0;height:calc(56px + env(safe-area-inset-bottom,0));padding-bottom:env(safe-area-inset-bottom,0);background:var(--surface);border-top:1px solid var(--line);display:flex;z-index:55}
+  .tabbar .tab{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;color:var(--muted);font-size:11px;background:none;border:none;cursor:pointer;font-family:inherit}
+  .tabbar .tab.active{color:var(--primary)}
+  .tabbar .tab .ic{font-size:20px;line-height:1}
+  .info-line{font-size:12.5px;color:var(--muted);background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:11px 13px;margin:2px 0 12px}
+</style>
+</head>
+<body>
+
+  <!-- LOGIN -->
+  <div id="login-view" class="login-wrap">
+    <div class="login-card">
+      <div class="brand">
+        <div class="mark">BS</div>
+        <div><h1>Externí obchodník</h1><p>Přihlášení do portálu</p></div>
+      </div>
+      <div id="login-err" class="err" style="display:none"></div>
+      <div class="field"><label>Přihlašovací jméno</label><input id="in-login" type="text" autocomplete="username" autocapitalize="none"></div>
+      <div class="field"><label>Heslo</label><input id="in-pass" type="password" autocomplete="current-password"></div>
+      <button class="btn btn-p" id="btn-login" onclick="doLogin()">Přihlásit se</button>
+    </div>
+  </div>
+
+  <!-- PORTAL -->
+  <div id="portal-view" style="display:none">
+    <div class="top">
+      <div class="who">
+        <div class="mark" id="p-initials">?</div>
+        <div style="min-width:0"><h1 id="p-name">—</h1><div class="sub" id="p-sub"></div></div>
+      </div>
+      <button class="logout" onclick="doLogout()">Odhlásit</button>
+    </div>
+
+    <!-- LOKALITY -->
+    <div id="screen-lok" class="screen">
+      <div class="kpis">
+        <div class="kpi"><div class="l">Moje lokality</div><div class="v" id="k-pocet">0</div><div class="s">přiřazeno</div></div>
+        <div class="kpi"><div class="l">Odhad objemu</div><div class="v" id="k-objem">0</div><div class="s">∑ celkových cen</div></div>
+      </div>
+      <div class="sec-title">Přiřazené lokality</div>
+      <div id="lok-list"><div class="loading">Načítám…</div></div>
+    </div>
+
+    <!-- PROVIZE -->
+    <div id="screen-prov" class="screen" style="display:none">
+      <div class="kpis">
+        <div class="kpi gold"><div class="l">Provize celkem</div><div class="v" id="k-provize">0</div><div class="s" id="k-splatnost"></div></div>
+        <div class="kpi"><div class="l">Sazba</div><div class="v" id="k-sazba">—</div><div class="s" id="k-zpusob"></div></div>
+      </div>
+      <div class="info-line" id="prov-info"></div>
+      <div class="sec-title">Provize po lokalitách</div>
+      <div id="prov-list"><div class="loading">Načítám…</div></div>
+    </div>
+
+    <nav class="tabbar">
+      <button class="tab active" id="tab-lok" onclick="showScreen('lok')"><span class="ic">📍</span>Lokality</button>
+      <button class="tab" id="tab-prov" onclick="showScreen('prov')"><span class="ic">💰</span>Provize</button>
+    </nav>
+  </div>
+
+<script>
+  var API = '/api/compounder';
+  var TKEY = 'exr_token';
+  var DATA = null;
+  var CALC = { lokalita: '% z ceny lokality', celkova: '% z celkové ceny', fix: 'fixní částka / lokalitu' };
+  var PAY = { podpis: 'při podpisu', provoz: 'po uvedení do provozu', mesicne: 'měsíčně z obratu', individ: 'individuálně' };
+
+  function esc(s){ return (s==null?'':String(s)).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+  function money(n){ return (typeof n==='number' && isFinite(n)) ? (Math.round(n).toLocaleString('cs-CZ') + ' Kč') : '—'; }
+  function getToken(){ try { return localStorage.getItem(TKEY) || ''; } catch(e){ return ''; } }
+  function setToken(t){ try { if(t) localStorage.setItem(TKEY, t); else localStorage.removeItem(TKEY); } catch(e){} }
+
+  async function doLogin(){
+    var errEl = document.getElementById('login-err'); errEl.style.display = 'none';
+    var login = (document.getElementById('in-login').value||'').trim();
+    var pass = document.getElementById('in-pass').value||'';
+    if(!login || !pass){ errEl.textContent = 'Zadejte jméno a heslo.'; errEl.style.display=''; return; }
+    var btn = document.getElementById('btn-login'); btn.disabled = true; btn.textContent = 'Přihlašuji…';
+    try {
+      var r = await fetch(API + '/external-reps/login', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ login: login, password: pass }) });
+      var j = await r.json().catch(function(){ return {}; });
+      if(!r.ok || !j.ok){ throw new Error(j.error || 'Neplatné přihlášení.'); }
+      setToken(j.token);
+      await loadPortal();
+    } catch(e){
+      errEl.textContent = e.message || 'Přihlášení selhalo.'; errEl.style.display='';
+    } finally { btn.disabled = false; btn.textContent = 'Přihlásit se'; }
+  }
+  function doLogout(){ setToken(''); DATA = null; document.getElementById('portal-view').style.display='none'; document.getElementById('login-view').style.display='flex'; }
+
+  async function loadPortal(){
+    var token = getToken();
+    if(!token){ doLogout(); return; }
+    try {
+      var r = await fetch(API + '/external-reps/me?t=' + encodeURIComponent(token), { headers: { 'Accept':'application/json' } });
+      if(r.status === 401 || r.status === 403){ setToken(''); doLogout(); return; }
+      DATA = await r.json();
+      if(!DATA || !DATA.rep){ doLogout(); return; }
+      renderPortal();
+    } catch(e){ doLogout(); }
+  }
+
+  function initials(name){ return (name||'?').trim().split(/\s+/).slice(0,2).map(function(w){ return w.charAt(0).toUpperCase(); }).join('') || '?'; }
+
+  function renderPortal(){
+    document.getElementById('login-view').style.display='none';
+    document.getElementById('portal-view').style.display='';
+    var rep = DATA.rep, kpi = DATA.kpi || {}, lok = DATA.lokality || [];
+    document.getElementById('p-initials').textContent = initials(rep.jmeno);
+    document.getElementById('p-name').textContent = rep.jmeno || '—';
+    document.getElementById('p-sub').textContent = [rep.email, rep.telefon].filter(Boolean).join(' · ');
+    // KPI lokality
+    document.getElementById('k-pocet').textContent = kpi.pocet || 0;
+    document.getElementById('k-objem').textContent = money(kpi.objem);
+    // KPI provize
+    var sazbaLbl = (kpi.sazba != null && kpi.sazba !== '') ? (kpi.zpusob_vypoctu === 'fix' ? (money(kpi.sazba) + ' /lok.') : (String(kpi.sazba).replace('.', ',') + ' %')) : '—';
+    document.getElementById('k-provize').textContent = money(kpi.provize);
+    document.getElementById('k-splatnost').textContent = 'splatnost: ' + (PAY[kpi.splatnost] || '—');
+    document.getElementById('k-sazba').textContent = sazbaLbl;
+    document.getElementById('k-zpusob').textContent = CALC[kpi.zpusob_vypoctu] || '';
+    document.getElementById('prov-info').textContent = 'Provize se počítá jako ' + (CALC[kpi.zpusob_vypoctu] || '—') + ', splatná ' + (PAY[kpi.splatnost] || 'individuálně') + '. Hodnoty jsou orientační (bez DPH, v CZK).';
+    // Seznam lokalit
+    var ll = document.getElementById('lok-list');
+    if(!lok.length){ ll.innerHTML = '<div class="empty">Zatím nemáte přiřazené žádné lokality.</div>'; }
+    else {
+      ll.innerHTML = lok.map(function(x){
+        var nav = (x.navratnost != null) ? (String(x.navratnost).replace('.', ',') + ' let') : '—';
+        return '<div class="card"><div class="row"><div><div class="code">' + esc(x.code) + '</div><div class="name">' + esc(x.label) + '</div></div><div class="price">' + money(x.total) + '</div></div>' +
+          '<div class="metrics">' +
+            '<div class="metric"><div class="ml">Cena kiosku</div><div class="mv">' + money(x.machine) + '</div></div>' +
+            '<div class="metric"><div class="ml">Cena lokality</div><div class="mv">' + money(x.loc) + '</div></div>' +
+            '<div class="metric"><div class="ml">Návratnost</div><div class="mv nav-yrs">' + nav + '</div></div>' +
+          '</div></div>';
+      }).join('');
+    }
+    // Provize agenda
+    var pl = document.getElementById('prov-list');
+    if(!lok.length){ pl.innerHTML = '<div class="empty">Žádné lokality k výpočtu provize.</div>'; }
+    else {
+      pl.innerHTML = lok.map(function(x){
+        return '<div class="card"><div class="row"><div><div class="code">' + esc(x.code) + '</div><div class="name">' + esc(x.label) + '</div></div><div class="price prov">' + money(x.commission) + '</div></div>' +
+          '<div class="metrics">' +
+            '<div class="metric"><div class="ml">Celková cena</div><div class="mv">' + money(x.total) + '</div></div>' +
+            '<div class="metric"><div class="ml">Cena lokality</div><div class="mv">' + money(x.loc) + '</div></div>' +
+          '</div></div>';
+      }).join('');
+    }
+  }
+
+  function showScreen(s){
+    document.getElementById('screen-lok').style.display = (s==='lok') ? '' : 'none';
+    document.getElementById('screen-prov').style.display = (s==='prov') ? '' : 'none';
+    document.getElementById('tab-lok').classList.toggle('active', s==='lok');
+    document.getElementById('tab-prov').classList.toggle('active', s==='prov');
+    window.scrollTo(0,0);
+  }
+
+  // Enter v heslu = přihlásit
+  document.getElementById('in-pass').addEventListener('keydown', function(e){ if(e.key === 'Enter') doLogin(); });
+
+  // Start
+  if(getToken()) loadPortal(); else doLogout();
+</script>
+</body>
+</html>

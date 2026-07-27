@@ -2572,6 +2572,71 @@ router.delete('/external-reps/:id', requireAuth, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// Serverový výpočet dat portálu externího obchodníka (metriky lokalit + provize).
+async function _extRepPortalData(rep) {
+  const codes = Array.isArray(rep.lokality) ? rep.lokality : [];
+  const kiosks = await _sisKiosks().catch(() => []);
+  const cs = (await getSetting(COMPOUNDING_SETTINGS_KEY, { type: 'json', defaultValue: COMPOUNDING_SETTINGS_DEFAULT })) || {};
+  const cfgMap = (await getSetting(COMPOUNDING_KIOSKS_KEY, { type: 'json', defaultValue: {} })) || {};
+  const fx = await fxRatesCzk().catch(() => ({ CZK: 1, EUR: 25 }));
+  const eur = fx.EUR || 25;
+  const months = Number.isFinite(cs.locationMonths) ? cs.locationMonths : 12;
+  const svc = Number.isFinite(cs.servicePct) ? cs.servicePct : 15;
+  const en = Number.isFinite(cs.energyPct) ? cs.energyPct : 9.5;
+  const priceMode = (cs.locationPriceMode === 'roi') ? 'roi' : 'months';
+  const roiPct = Number.isFinite(cs.locationRoiPct) ? cs.locationRoiPct : 25;
+  const pl = cs.pricelist || {};
+  const num = (v) => (typeof v === 'number' && isFinite(v)) ? v : 0;
+  const rate = Number(rep.sazba) || 0;
+  const rows = codes.map((code) => {
+    const k = kiosks.find((x) => String(x.code) === String(code));
+    if (!k) return { code, label: '(mimo seznam)', total: null, loc: null, machine: null, yearNet: 0, commission: null, navratnost: null };
+    const cfg = cfgMap[code] || {};
+    const ver = String(cfg.version || '').toLowerCase();
+    const machine = (pl[ver] && pl[ver].eur != null && isFinite(Number(pl[ver].eur))) ? Math.round(Number(pl[ver].eur) * eur) : null;
+    const curRate = fx[k.currency || 'CZK'] || 1;
+    const obratBez = num(k.avgTop3) / 1.21;
+    const servis = num(k.avgTop3) * (svc / 100);
+    const najem = (typeof cfg.rentMonthlyCzk === 'number' && isFinite(cfg.rentMonthlyCzk)) ? cfg.rentMonthlyCzk : 0;
+    const energie = obratBez * (en / 100);
+    let loc;
+    if (priceMode === 'roi') {
+      if (machine == null) loc = 0;
+      else { const cisty = obratBez - servis - najem - energie; const target = cisty * (1200 / (roiPct > 0 ? roiPct : 25)); loc = Math.max(0, target - machine); }
+    } else { loc = num(k.avgTop3) * curRate * months; }
+    const total = (machine != null) ? (loc + machine) : null;
+    const yearNet = (obratBez - servis - najem - energie) * 12;
+    let commission = null;
+    if (rep.zpusob_vypoctu === 'fix') commission = rate;
+    else if (rep.zpusob_vypoctu === 'celkova') commission = Math.round((total || 0) * rate / 100);
+    else commission = Math.round((loc || 0) * rate / 100);
+    const navratnost = (total > 0 && yearNet > 0) ? (Math.round(total / yearNet * 10) / 10) : null;
+    return { code, label: k.label || code, total: total != null ? Math.round(total) : null, loc: Math.round(loc || 0), machine, yearNet: Math.round(yearNet), commission, navratnost };
+  });
+  const objem = rows.reduce((a, r) => a + (r.total || 0), 0);
+  const provize = rows.reduce((a, r) => a + (r.commission || 0), 0);
+  return {
+    rep: _sanitizeRep(rep),
+    lokality: rows,
+    currency: 'CZK',
+    kpi: { pocet: codes.length, objem: Math.round(objem), provize: Math.round(provize), sazba: rep.sazba, zpusob_vypoctu: rep.zpusob_vypoctu, splatnost: rep.splatnost },
+  };
+}
+
+// GET /api/compounder/external-reps/me — data portálu (token v ?t= nebo Authorization: Bearer)
+router.get('/external-reps/me', async (req, res, next) => {
+  try {
+    const token = String(req.query.t || (req.headers.authorization || '').replace(/^Bearer\s+/i, '') || '');
+    const repId = verifyExtRepToken(token);
+    if (!repId) return res.status(401).json({ error: 'Neplatné nebo vypršelé přihlášení.' });
+    const arr = await _loadExternalReps();
+    const rep = arr.find((r) => Number(r.id) === repId);
+    if (!rep) return res.status(404).json({ error: 'Obchodník nenalezen.' });
+    if (rep.stav !== 'aktivni') return res.status(403).json({ error: 'Účet není aktivní.' });
+    res.json(await _extRepPortalData(rep));
+  } catch (err) { next(err); }
+});
+
 // POST /api/compounder/kiosk-config/:code/photos → nahraje až 3 fotky lokality do R2
 router.post('/kiosk-config/:code/photos', requireAuth, kioskPhotoUpload.array('photos', 3), async (req, res, next) => {
   try {
