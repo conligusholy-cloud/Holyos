@@ -4238,7 +4238,9 @@
       var baseList = kiosks.filter(function(k){ return String(k.companyName || '').trim().toLowerCase().indexOf('best series') !== -1; });
       var q = ((document.getElementById('ext-search') || {}).value || '').trim().toLowerCase();
       var rows = baseList.filter(function(k){ if (!q) return true; return (String(k.code || '') + ' ' + String(k.label || '') + ' ' + String(k.companyName || '')).toLowerCase().indexOf(q) !== -1; });
-      var _extPct = (_compoundingSettings && Number.isFinite(_compoundingSettings.externalCommissionPct)) ? _compoundingSettings.externalCommissionPct : 10;
+      var _cs = _compoundingSettings || {};
+      var _pctM = Number.isFinite(_cs.externalCommissionMachinePct) ? _cs.externalCommissionMachinePct : 5;
+      var _pctL = Number.isFinite(_cs.externalCommissionLocationPct) ? _cs.externalCommissionLocationPct : 12;
       rows = rows.map(function(k){ var m = _kvVerMachine(k.code).machine; var loc = _kvExtLocVal(k); var total = (m != null) ? (loc + m) : null; return { code: k.code, label: k.label, company: k.companyName, machine: m, loc: loc, total: total }; });
       rows.sort(function(a, b){ return (b.total || 0) - (a.total || 0); });
       if (!rows.length) { box.innerHTML = '<div style="color:var(--text2);padding:24px;">Žádné lokality neodpovídají filtru.</div>'; return; }
@@ -4248,9 +4250,13 @@
         '<th style="text-align:right;">Cena kiosku</th>' +
         '<th style="text-align:right;">Cena lokality</th>' +
         '<th style="text-align:right;">Celková cena</th>' +
-        '<th style="text-align:right;">Provize (' + _extPct + ' %)</th></tr></thead><tbody>';
+        '<th style="text-align:right;">Provize ze stroje (' + _pctM + ' %)</th>' +
+        '<th style="text-align:right;">Provize z lokality (' + _pctL + ' %)</th>' +
+        '<th style="text-align:right;">Provize celkem</th></tr></thead><tbody>';
       rows.forEach(function(r, i){
-        var _prov = (r.total != null) ? Math.round(r.total * _extPct / 100) : null;
+        var _provM = (r.machine != null) ? Math.round(r.machine * _pctM / 100) : null;
+        var _provL = Math.round((r.loc || 0) * _pctL / 100);
+        var _provTot = (_provM != null ? _provM : 0) + _provL;
         h += '<tr>' +
           '<td style="text-align:right;color:var(--text2);">' + (i + 1) + '</td>' +
           '<td style="font-weight:600;white-space:nowrap;">' + kvEsc(r.code) + '</td>' +
@@ -4259,7 +4265,9 @@
           '<td style="text-align:right;white-space:nowrap;color:var(--text2);">' + (r.machine != null ? kvMoney(r.machine, 'CZK') : '<span style="color:var(--text2);">—</span>') + '</td>' +
           '<td style="text-align:right;white-space:nowrap;">' + kvMoney(r.loc, 'CZK') + '</td>' +
           '<td style="text-align:right;white-space:nowrap;font-weight:700;color:#eab308;">' + (r.total != null ? kvMoney(r.total, 'CZK') : '<span style="color:var(--text2);">—</span>') + '</td>' +
-          '<td style="text-align:right;white-space:nowrap;font-weight:700;color:#10b981;">' + (_prov != null ? kvMoney(_prov, 'CZK') : '<span style="color:var(--text2);">—</span>') + '</td>' +
+          '<td style="text-align:right;white-space:nowrap;color:#10b981;">' + (_provM != null ? kvMoney(_provM, 'CZK') : '<span style="color:var(--text2);">—</span>') + '</td>' +
+          '<td style="text-align:right;white-space:nowrap;color:#10b981;">' + kvMoney(_provL, 'CZK') + '</td>' +
+          '<td style="text-align:right;white-space:nowrap;font-weight:700;color:#10b981;">' + kvMoney(_provTot, 'CZK') + '</td>' +
           '</tr>';
       });
       h += '</tbody></table></div>';
@@ -4269,35 +4277,40 @@
 
     // Nastavení výše provize pro Externí obchod (uloží se do compounding-settings).
     function openExtCommission() {
-      var cur = (_compoundingSettings && Number.isFinite(_compoundingSettings.externalCommissionPct)) ? _compoundingSettings.externalCommissionPct : 10;
+      var curM = (_compoundingSettings && Number.isFinite(_compoundingSettings.externalCommissionMachinePct)) ? _compoundingSettings.externalCommissionMachinePct : 5;
+      var curL = (_compoundingSettings && Number.isFinite(_compoundingSettings.externalCommissionLocationPct)) ? _compoundingSettings.externalCommissionLocationPct : 12;
       var ov = document.createElement('div');
       ov.id = 'ext-comm-overlay';
       ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;';
       ov.innerHTML = '<div style="background:var(--card,#1b1b20);border:1px solid var(--border,#333);border-radius:12px;padding:22px 24px;min-width:300px;max-width:92vw;">' +
         '<h3 style="margin:0 0 14px;font-size:16px;">⚙️ Provize externího obchodu</h3>' +
-        '<label style="display:block;font-size:13px;color:var(--text2);margin-bottom:6px;">Výše provize z celkové ceny (%)</label>' +
-        '<input type="number" id="ext-comm-input" min="0" max="100" step="0.1" value="' + cur + '" style="width:100%;box-sizing:border-box;padding:9px 11px;border-radius:8px;border:1px solid var(--border,#333);background:var(--bg,#111);color:var(--text,#fff);font-size:15px;">' +
+        '<label style="display:block;font-size:13px;color:var(--text2);margin-bottom:6px;">Provize ze stroje (% z ceny kiosku)</label>' +
+        '<input type="number" id="ext-comm-m" min="0" max="100" step="0.1" value="' + curM + '" style="width:100%;box-sizing:border-box;padding:9px 11px;border-radius:8px;border:1px solid var(--border,#333);background:var(--bg,#111);color:var(--text,#fff);font-size:15px;margin-bottom:14px;">' +
+        '<label style="display:block;font-size:13px;color:var(--text2);margin-bottom:6px;">Provize z lokality (% z ceny lokality)</label>' +
+        '<input type="number" id="ext-comm-l" min="0" max="100" step="0.1" value="' + curL + '" style="width:100%;box-sizing:border-box;padding:9px 11px;border-radius:8px;border:1px solid var(--border,#333);background:var(--bg,#111);color:var(--text,#fff);font-size:15px;">' +
         '<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:18px;">' +
         '<button class="btn" onclick="closeExtCommission()">Zrušit</button>' +
         '<button class="btn btn-primary" onclick="saveExtCommission()">Uložit</button>' +
         '</div></div>';
       ov.addEventListener('click', function(e){ if (e.target === ov) closeExtCommission(); });
       document.body.appendChild(ov);
-      var inp = document.getElementById('ext-comm-input'); if (inp) { inp.focus(); inp.select(); }
+      var inp = document.getElementById('ext-comm-m'); if (inp) { inp.focus(); inp.select(); }
     }
     function closeExtCommission() { var ov = document.getElementById('ext-comm-overlay'); if (ov) ov.remove(); }
     async function saveExtCommission() {
-      var inp = document.getElementById('ext-comm-input');
-      var v = inp ? Number(inp.value) : NaN;
-      if (!Number.isFinite(v) || v < 0 || v > 100) { alert('Zadej procento 0–100.'); return; }
+      var vm = Number((document.getElementById('ext-comm-m') || {}).value);
+      var vl = Number((document.getElementById('ext-comm-l') || {}).value);
+      if (!Number.isFinite(vm) || vm < 0 || vm > 100 || !Number.isFinite(vl) || vl < 0 || vl > 100) { alert('Zadej procenta 0–100.'); return; }
       try {
         var base = Object.assign({}, _compoundingSettings || {});
         if (!base.pricelist) base.pricelist = { v2:{eur:null}, v3:{eur:null}, v4:{eur:null} };
         if (!Number.isFinite(base.locationMonths)) base.locationMonths = 12;
-        base.externalCommissionPct = v;
+        base.externalCommissionMachinePct = vm;
+        base.externalCommissionLocationPct = vl;
         var r = await fetch('/api/compounder/compounding-settings', { method:'PUT', credentials:'include', headers:{'Content-Type':'application/json'}, body: JSON.stringify(base) });
         if (!r.ok) { var j = await r.json().catch(function(){return{};}); throw new Error(j.error || ('HTTP ' + r.status)); }
-        _compoundingSettings.externalCommissionPct = v;
+        _compoundingSettings.externalCommissionMachinePct = vm;
+        _compoundingSettings.externalCommissionLocationPct = vl;
         closeExtCommission();
         renderExternalTrade();
       } catch (e) { alert('Uložení selhalo: ' + (e.message || '')); }
