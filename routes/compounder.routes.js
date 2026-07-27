@@ -2589,6 +2589,8 @@ async function _extRepPortalData(rep) {
   const en = Number.isFinite(cs.energyPct) ? cs.energyPct : 9.5;
   const priceMode = (cs.locationPriceMode === 'roi') ? 'roi' : 'months';
   const roiPct = Number.isFinite(cs.locationRoiPct) ? cs.locationRoiPct : 25;
+  const buybackPct = Number.isFinite(cs.buybackPct) ? cs.buybackPct : 65;
+  const buybackYears = Number.isFinite(cs.buybackYears) ? cs.buybackYears : 5;
   const pl = cs.pricelist || {};
   const num = (v) => (typeof v === 'number' && isFinite(v)) ? v : 0;
   const rate = Number(rep.sazba) || 0;
@@ -2616,7 +2618,10 @@ async function _extRepPortalData(rep) {
     else if (rep.zpusob_vypoctu === 'celkova') commission = Math.round((total || 0) * rate / 100);
     else commission = Math.round((loc || 0) * rate / 100);
     const navratnost = (total > 0 && yearNet > 0) ? (Math.round(total / yearNet * 10) / 10) : null;
-    return { code, label: k.label || code, total: total != null ? Math.round(total) : null, loc: Math.round(loc || 0), machine, yearNet: Math.round(yearNet), commission, navratnost, vip: isVip };
+    const buyback = (total != null) ? Math.round(total * buybackPct / 100) : null;
+    const profit5 = (total != null) ? Math.round(buybackYears * yearNet + total * buybackPct / 100 - total) : null;
+    const photo = (cfg.photos && cfg.photos.length) ? cfg.photos[0] : null;
+    return { code, label: k.label || code, verze: ver ? ver.toUpperCase() : null, total: total != null ? Math.round(total) : null, loc: Math.round(loc || 0), machine, yearNet: Math.round(yearNet), profit5, buyback, buyback_pct: buybackPct, buyback_years: buybackYears, commission, navratnost, photo, vip: isVip };
   });
   const objem = rows.reduce((a, r) => a + (r.total || 0), 0);
   const provize = rows.reduce((a, r) => a + (r.commission || 0), 0);
