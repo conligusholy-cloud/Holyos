@@ -52,6 +52,7 @@ router.post('/register', async (req, res, next) => {
       return res.status(400).json({ error: 'Neplatná data', detail: parsed.error.flatten() });
     }
     const d = parsed.data;
+    if (await _isBlocked(d.email, null)) { console.log('[compounder] Registrace blokována (blocklist): ' + d.email); return res.json({ ok: true }); }
     // Dedup: e-mail smí být zaregistrovaný jen jednou. Při opakované registraci
     // nezakládáme duplicitu, ale pošleme přihlašovací odkaz v jazyce stránky.
     const existing = await prisma.compounderLead.findFirst({
@@ -798,6 +799,7 @@ router.post('/portal/access-request', async (req, res, next) => {
     if (!email || email.indexOf('@') === -1) return res.status(400).json({ ok: false, error: 'Neplatný e-mail.' });
     if (!phone) return res.status(400).json({ ok: false, error: 'Zadejte telefon.' });
     if (!message) return res.status(400).json({ ok: false, error: 'Napište důvod žádosti.' });
+    if (await _isBlocked(email, phone)) { console.log('[compounder] Žádost o přístup blokována (blocklist): ' + email); return res.json({ ok: true }); }
 
     const noteText = 'ŽÁDOST O PŘÍSTUP (nezvaný) — ' + new Date().toLocaleString('cs-CZ') + '\nDůvod: ' + message;
     const existing = await prisma.compounderLead.findFirst({
