@@ -306,12 +306,10 @@
             (c.phone?'<a href="tel:'+esc(telClean)+'">📞 Volat</a>':'')+
             (waNum?'<a href="https://wa.me/'+waNum+'" target="_blank" rel="noopener">💬 WhatsApp</a>':'')+
             (c.phone?'<a href="sms:'+esc(telClean)+'">📩 SMS</a>':'')+
-            (c.email?'<a href="mailto:'+esc(c.email)+'">✉️ E-mail</a>':'')+
           '</div>'+
           '<div class="lbl">Stav</div><select onchange="setContactStatus('+c.id+',this.value)">'+opts+'</select>'+
           '<div class="lbl">Přístup do portálu</div>'+
           '<div class="ct-actions">'+
-            '<button class="btn btn-g"'+(c.email?'':' disabled')+' onclick="sendAccessEmail('+c.id+')">✉️ Odeslat e-mailem</button>'+
             (c.phone?'<button class="btn btn-g" onclick="sendAccessWA('+c.id+')">🟢 WhatsApp</button>':'')+
             '<button class="btn btn-g" onclick="copyContactLink('+c.id+')">🔗 Kopírovat odkaz</button>'+
           '</div>'+
