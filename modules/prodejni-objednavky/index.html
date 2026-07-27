@@ -4244,7 +4244,19 @@
       var _cs = _compoundingSettings || {};
       var _pctM = Number.isFinite(_cs.externalCommissionMachinePct) ? _cs.externalCommissionMachinePct : 5;
       var _pctL = Number.isFinite(_cs.externalCommissionLocationPct) ? _cs.externalCommissionLocationPct : 12;
-      rows = rows.map(function(k){ var m = _kvVerMachine(k.code).machine; var loc = _kvExtLocVal(k); var total = (m != null) ? (loc + m) : null; return { code: k.code, label: k.label, company: k.companyName, machine: m, loc: loc, total: total }; });
+      var _svc = Number.isFinite(_cs.servicePct) ? _cs.servicePct : 15;
+      var _en = Number.isFinite(_cs.energyPct) ? _cs.energyPct : 9.5;
+      rows = rows.map(function(k){
+        var num = function(v){ return (typeof v === 'number' && isFinite(v)) ? v : 0; };
+        var cfg = _kioskConfig[k.code] || {};
+        var m = _kvVerMachine(k.code).machine;
+        var loc = _kvExtLocVal(k);
+        var total = (m != null) ? (loc + m) : null;
+        var obratBez = num(k.avgTop3) / 1.21;
+        var najem = (typeof cfg.rentMonthlyCzk === 'number' && isFinite(cfg.rentMonthlyCzk)) ? cfg.rentMonthlyCzk : 0;
+        var yearNet = (obratBez - num(k.avgTop3) * (_svc / 100) - najem - obratBez * (_en / 100)) * 12;
+        return { code: k.code, label: k.label, company: k.companyName, machine: m, loc: loc, total: total, yearNet: yearNet };
+      });
       if (((document.getElementById('ext-nonzero') || {}).checked)) rows = rows.filter(function(r){ return r.total != null && r.total > 0; });
       if (!rows.length) { box.innerHTML = '<div style="color:var(--text2);padding:24px;">Žádné lokality neodpovídají filtru.</div>'; return; }
       rows.sort(function(a, b){ return (b.total || 0) - (a.total || 0); });
@@ -4258,13 +4270,15 @@
         '<th style="text-align:right;">Provize ze stroje (' + _pctM + ' %)</th>' +
         '<th style="text-align:right;">Provize z lokality (' + _pctL + ' %)</th>' +
         '<th style="text-align:right;">Provize celkem</th>' +
-        '<th style="text-align:right;">Nová prodejní cena</th></tr></thead><tbody>';
+        '<th style="text-align:right;">Nová prodejní cena</th>' +
+        '<th style="text-align:right;">Návratnost</th></tr></thead><tbody>';
       rows.forEach(function(r, i){
         var _provM = (r.machine != null) ? Math.round(r.machine * _pctM / 100) : null;
         var _provL = Math.round((r.loc || 0) * _pctL / 100);
         var _provTot = (_provM != null ? _provM : 0) + _provL;
         var _provPct = (r.total > 0) ? (_provTot / r.total * 100).toFixed(1).replace('.', ',') : null;
         var _novaCena = (r.total != null) ? (r.total + _provTot) : null;
+        var _navrat = (_novaCena != null && r.yearNet > 0) ? (_novaCena / r.yearNet).toFixed(1).replace('.', ',') : null;
         h += '<tr>' +
           '<td style="text-align:right;color:var(--text2);">' + (i + 1) + '</td>' +
           '<td style="font-weight:600;white-space:nowrap;">' + kvEsc(r.code) + '</td>' +
@@ -4277,6 +4291,7 @@
           '<td style="text-align:right;white-space:nowrap;color:#10b981;">' + kvMoney(_provL, 'CZK') + '</td>' +
           '<td style="text-align:right;white-space:nowrap;font-weight:700;color:#10b981;">' + kvMoney(_provTot, 'CZK') + (_provPct != null ? ' <span style="color:var(--text2);font-weight:400;font-size:11px;">(' + _provPct + ' %)</span>' : '') + '</td>' +
           '<td style="text-align:right;white-space:nowrap;font-weight:700;color:#eab308;">' + (_novaCena != null ? kvMoney(_novaCena, 'CZK') : '<span style="color:var(--text2);">—</span>') + '</td>' +
+          '<td style="text-align:right;white-space:nowrap;font-weight:700;color:#3b82f6;">' + (_navrat != null ? (_navrat + ' let') : '<span style="color:var(--text2);">—</span>') + '</td>' +
           '</tr>';
       });
       h += '</tbody></table></div>';
