@@ -2852,6 +2852,67 @@ router.get('/external-reps/me/leads/:id/activity', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// GET /api/compounder/external-reps/me/profile — vlastní profil obchodníka
+router.get('/external-reps/me/profile', async (req, res, next) => {
+  try {
+    const repId = verifyExtRepToken(_extRepTokenFrom(req));
+    if (!repId) return res.status(401).json({ error: 'Neplatné přihlášení.' });
+    const arr = await _loadExternalReps();
+    const rep = arr.find((r) => Number(r.id) === repId);
+    if (!rep) return res.status(404).json({ error: 'Nenalezeno.' });
+    res.json({
+      jmeno: rep.jmeno || '', login: rep.login || '',
+      email: rep.email || '', telefon: rep.telefon || '', adresa: rep.adresa || '',
+      fakturacni_adresa: rep.fakturacni_adresa || '',
+      notify_email: rep.notify_email || '',
+      notify_contact_open: !!rep.notify_contact_open,
+      notify_contact_request: rep.notify_contact_request !== false,
+      notify_reservation: rep.notify_reservation !== false,
+      has_password: !!rep.password_hash,
+    });
+  } catch (err) { next(err); }
+});
+
+// PUT /api/compounder/external-reps/me/profile — úprava vlastního profilu
+router.put('/external-reps/me/profile', async (req, res, next) => {
+  try {
+    const repId = verifyExtRepToken(_extRepTokenFrom(req));
+    if (!repId) return res.status(401).json({ error: 'Neplatné přihlášení.' });
+    const b = req.body || {};
+    const arr = await _loadExternalReps();
+    const i = arr.findIndex((r) => Number(r.id) === repId);
+    if (i === -1) return res.status(404).json({ error: 'Nenalezeno.' });
+    const rep = Object.assign({}, arr[i]);
+    if (b.email !== undefined) rep.email = String(b.email || '').trim().slice(0, 255) || null;
+    if (b.telefon !== undefined) rep.telefon = String(b.telefon || '').trim().slice(0, 60) || null;
+    if (b.adresa !== undefined) rep.adresa = String(b.adresa || '').trim().slice(0, 400) || null;
+    if (b.fakturacni_adresa !== undefined) rep.fakturacni_adresa = String(b.fakturacni_adresa || '').trim().slice(0, 400) || null;
+    if (b.notify_email !== undefined) rep.notify_email = String(b.notify_email || '').trim().slice(0, 255) || null;
+    if (b.notify_contact_open !== undefined) rep.notify_contact_open = !!b.notify_contact_open;
+    if (b.notify_contact_request !== undefined) rep.notify_contact_request = !!b.notify_contact_request;
+    if (b.notify_reservation !== undefined) rep.notify_reservation = !!b.notify_reservation;
+    arr[i] = rep;
+    await _saveExternalReps(arr, null);
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
+// POST /api/compounder/external-reps/me/password — změna vlastního hesla
+router.post('/external-reps/me/password', async (req, res, next) => {
+  try {
+    const repId = verifyExtRepToken(_extRepTokenFrom(req));
+    if (!repId) return res.status(401).json({ error: 'Neplatné přihlášení.' });
+    const pw = String((req.body && req.body.password) || '');
+    if (pw.length < 4) return res.status(400).json({ error: 'Heslo musí mít aspoň 4 znaky.' });
+    const arr = await _loadExternalReps();
+    const i = arr.findIndex((r) => Number(r.id) === repId);
+    if (i === -1) return res.status(404).json({ error: 'Nenalezeno.' });
+    arr[i] = Object.assign({}, arr[i], { password_hash: await bcrypt.hash(pw, 12) });
+    await _saveExternalReps(arr, null);
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
 // GET /api/compounder/external-reps/me/kiosk-revenue?code=&t= — tržby lokality pro obchodníka
 router.get('/external-reps/me/kiosk-revenue', async (req, res, next) => {
   try {

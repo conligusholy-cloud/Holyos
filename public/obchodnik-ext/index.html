@@ -131,6 +131,7 @@
         <div class="mark" id="p-initials">?</div>
         <div style="min-width:0"><h1 id="p-name">—</h1><div class="sub" id="p-sub"></div></div>
       </div>
+      <button class="logout" onclick="openSettings()" title="Nastavení" style="margin-right:8px">⚙️</button>
       <button class="logout" onclick="doLogout()">Odhlásit</button>
     </div>
 
@@ -464,6 +465,56 @@
   }
   window.openTxTable=openTxTable; window.renderTxTable=renderTxTable;
   window.openRevenue=openRevenue; window.closeRevenue=closeRevenue; window.renderRevenue=renderRevenue;
+
+  // ─── Nastavení obchodníka (⚙️) ───
+  function openSettings(){
+    var ov=document.createElement('div'); ov.className='modal-ovl'; ov.id='set-modal'; ov.style.alignItems='flex-start'; ov.style.overflowY='auto'; ov.style.padding='16px';
+    ov.innerHTML='<div class="modal-card" style="border-radius:16px;max-width:520px;margin:auto"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><h3 style="margin:0;font-size:17px">⚙️ Nastavení</h3><button onclick="closeSettings()" style="background:none;border:none;color:var(--muted);font-size:22px;cursor:pointer;line-height:1">✕</button></div><div id="set-body"><div class="loading">Načítám…</div></div></div>';
+    document.body.appendChild(ov);
+    fetch(API+'/external-reps/me/profile?t='+encodeURIComponent(getToken())).then(function(r){return r.json().then(function(j){return {ok:r.ok,j:j};});}).then(function(res){ if(!res.ok) throw new Error(res.j&&res.j.error||''); renderSettings(res.j); }).catch(function(){ var b=document.getElementById('set-body'); if(b) b.innerHTML='<div class="err">Nepodařilo se načíst.</div>'; });
+  }
+  function closeSettings(){ var m=document.getElementById('set-modal'); if(m)m.remove(); }
+  function renderSettings(p){
+    var b=document.getElementById('set-body'); if(!b) return;
+    function fld(l,inner){ return '<div class="field"><label>'+l+'</label>'+inner+'</div>'; }
+    function ck(id,on,l){ return '<label class="ck"><input type="checkbox" id="'+id+'"'+(on?' checked':'')+'>'+l+'</label>'; }
+    b.innerHTML=
+      '<div class="lbl" style="margin-bottom:4px">Přihlašovací jméno</div><div class="ct-sub" style="margin-bottom:10px">'+esc(p.login||'—')+'</div>'+
+      fld('E-mail', '<input id="set-email" type="email" value="'+esc(p.email)+'">')+
+      fld('Telefon', '<input id="set-tel" value="'+esc(p.telefon)+'">')+
+      fld('Adresa', '<input id="set-adr" value="'+esc(p.adresa)+'">')+
+      fld('Fakturační adresa', '<input id="set-fakt" value="'+esc(p.fakturacni_adresa)+'">')+
+      '<div class="lbl">Notifikace</div>'+
+      fld('E-mail pro notifikace', '<input id="set-notmail" type="email" value="'+esc(p.notify_email)+'" placeholder="kam chodí notifikace">')+
+      ck('set-n1', p.notify_contact_open, 'Když můj kontakt otevře portál')+
+      ck('set-n2', p.notify_contact_request, 'Když kontakt požádá o telefonát')+
+      ck('set-n3', p.notify_reservation, 'Nová rezervace u mého kontaktu')+
+      '<div class="ct-actions" style="margin-top:12px"><button class="btn btn-p" style="width:auto" onclick="saveSettings()">💾 Uložit</button></div>'+
+      '<div class="lbl" style="margin-top:16px">Změna hesla</div>'+
+      fld('Nové heslo'+(p.has_password?' (nastaveno)':''), '<input id="set-pw" type="password" autocomplete="new-password" placeholder="'+(p.has_password?'nové heslo':'zadej heslo')+'">')+
+      '<div class="ct-actions"><button class="btn btn-g" style="width:auto" onclick="savePassword()">🔑 Uložit heslo</button></div>';
+  }
+  async function saveSettings(){
+    var body={ t:getToken(),
+      email:(document.getElementById('set-email')||{}).value||'',
+      telefon:(document.getElementById('set-tel')||{}).value||'',
+      adresa:(document.getElementById('set-adr')||{}).value||'',
+      fakturacni_adresa:(document.getElementById('set-fakt')||{}).value||'',
+      notify_email:(document.getElementById('set-notmail')||{}).value||'',
+      notify_contact_open:!!(document.getElementById('set-n1')||{}).checked,
+      notify_contact_request:!!(document.getElementById('set-n2')||{}).checked,
+      notify_reservation:!!(document.getElementById('set-n3')||{}).checked
+    };
+    try { var r=await fetch(API+'/external-reps/me/profile',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); var j=await r.json().catch(function(){return{};}); if(!r.ok||!j.ok) throw new Error(j.error||('HTTP '+r.status)); alert('Uloženo.'); }
+    catch(e){ alert('Uložení selhalo: '+(e.message||'')); }
+  }
+  async function savePassword(){
+    var pw=(document.getElementById('set-pw')||{}).value||'';
+    if(pw.length<4){ alert('Heslo musí mít aspoň 4 znaky.'); return; }
+    try { var r=await fetch(API+'/external-reps/me/password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({t:getToken(),password:pw})}); var j=await r.json().catch(function(){return{};}); if(!r.ok||!j.ok) throw new Error(j.error||('HTTP '+r.status)); alert('Heslo uloženo.'); var el=document.getElementById('set-pw'); if(el) el.value=''; }
+    catch(e){ alert('Uložení hesla selhalo: '+(e.message||'')); }
+  }
+  window.openSettings=openSettings; window.closeSettings=closeSettings; window.saveSettings=saveSettings; window.savePassword=savePassword;
 
   // Start — auto-login z e-mailového odkazu (?t=token)
   var _urlTok = new URLSearchParams(location.search).get('t');
