@@ -241,7 +241,9 @@
   // Enter v heslu = přihlásit
   document.getElementById('in-pass').addEventListener('keydown', function(e){ if(e.key === 'Enter') doLogin(); });
 
-  // Start
+  // Start — auto-login z e-mailového odkazu (?t=token)
+  var _urlTok = new URLSearchParams(location.search).get('t');
+  if(_urlTok){ setToken(_urlTok); try{ history.replaceState(null,'','/obchodnik-ext'); }catch(e){} }
   if(getToken()) loadPortal(); else doLogout();
 </script>
 </body>

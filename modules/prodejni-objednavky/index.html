@@ -4452,6 +4452,19 @@
         renderExternalRepsList();
       } catch(e) { alert('Změna stavu selhala.'); }
     }
+    async function exrSendLogin(id) {
+      var rec = _exrData.find(function(x){ return x.id === id; });
+      if (rec && !rec.email) { alert('Obchodník nemá vyplněný e-mail — doplň ho přes Upravit.'); return; }
+      if (rec && !rec.login) { alert('Nastav obchodníkovi přihlašovací jméno (a heslo) přes Upravit.'); return; }
+      if (!confirm('Odeslat přihlašovací údaje na ' + ((rec && rec.email) || '') + '?')) return;
+      try {
+        var r = await fetch('/api/compounder/external-reps/' + id + '/send-login', { method: 'POST', credentials: 'include' });
+        var j = await r.json().catch(function(){ return {}; });
+        if (!r.ok || !j.ok) throw new Error(j.error || ('HTTP ' + r.status));
+        alert('Přihlašovací údaje odeslány na ' + j.email + '.');
+      } catch(e) { alert('Odeslání selhalo: ' + (e.message || '')); }
+    }
+    window.exrSendLogin = exrSendLogin;
     function _exrKioskOptions(selected) {
       var sel = {}; (selected||[]).forEach(function(c){ sel[String(c)] = true; });
       var list = (_kioskData && Array.isArray(_kioskData.kiosks)) ? _kioskData.kiosks.filter(function(k){ if (String(k.companyName||'').toLowerCase().indexOf('best series') === -1) return false; return !((_kioskConfig[k.code]||{}).forSale) || sel[String(k.code)]; }) : [];
@@ -4551,6 +4564,7 @@
         '<div style="width:56px;height:56px;border-radius:14px;background:linear-gradient(135deg,#f6e6ad,#cda454);color:#241c05;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:20px;">' + _exrEsc(initials) + '</div>' +
         '<div style="flex:1;min-width:200px;"><div style="font-size:20px;font-weight:700;">' + _exrEsc(rec.jmeno) + ' <span style="font-size:13px;font-weight:600;color:' + badge + ';">· ' + (EXR_STAV[rec.stav]||rec.stav) + '</span></div>' +
         '<div style="color:var(--text2);font-size:13px;margin-top:2px;">' + [rec.ico?('IČO '+_exrEsc(rec.ico)):'', _exrEsc(rec.email||''), _exrEsc(rec.telefon||'')].filter(Boolean).join(' · ') + '</div>' + (rec.login ? ('<div style="color:var(--text2);font-size:12px;margin-top:3px;">🔑 Přihlášení: <b style="color:var(--text);">' + _exrEsc(rec.login) + '</b>' + (rec.has_password ? ' · heslo nastaveno' : ' · <span style="color:#eab308;">bez hesla</span>') + '</div>') : '') + '</div>' +
+        '<button class="btn" onclick="exrSendLogin(' + rec.id + ')" style="margin-right:8px;">✉️ Odeslat přihlašovací údaje</button>' +
         '<button class="btn btn-primary" onclick="openExrForm(' + rec.id + ')">✏️ Upravit</button></div>';
       h += '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:18px;">' +
         kpi('Přiřazené lokality', String(codes.length), 'společná nabídka + VIP') +

@@ -2647,6 +2647,43 @@ router.get('/external-reps/me', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// POST /api/compounder/external-reps/:id/send-login — pošle přihlašovací údaje e-mailem
+router.post('/external-reps/:id/send-login', requireAuth, async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    const arr = await _loadExternalReps();
+    const rep = arr.find((r) => Number(r.id) === id);
+    if (!rep) return res.status(404).json({ error: 'Obchodník nenalezen.' });
+    if (!rep.email) return res.status(400).json({ error: 'Obchodník nemá vyplněný e-mail.' });
+    if (!rep.login) return res.status(400).json({ error: 'Obchodník nemá nastavené přihlašovací jméno.' });
+    const base = (process.env.COMPOUNDER_BASE_URL || 'https://www.compounder.world').replace(/\/+$/, '');
+    const portalUrl = base + '/obchodnik-ext';
+    const autoUrl = portalUrl + '?t=' + encodeURIComponent(makeExtRepToken(rep.id, 30 * 24 * 3600 * 1000));
+    const from = process.env.COMPOUNDER_MAIL_FROM || process.env.SMTP_FROM || process.env.INVOICE_IMAP_USER;
+    const jmeno = String(rep.jmeno || '').trim();
+    const body = 'Dobrý den' + (jmeno ? (', ' + jmeno) : '') + ',\n\n'
+      + 'zde je přístup do vašeho obchodního portálu.\n\n'
+      + 'Adresa portálu: ' + portalUrl + '\n'
+      + 'Přihlašovací jméno: ' + rep.login + '\n'
+      + 'Heslo vám bylo předáno zvlášť.\n\n'
+      + 'Tlačítkem níže se přihlásíte jedním klikem (odkaz je platný 30 dní a je osobní — nesdílejte ho).';
+    await sendMail({
+      to: rep.email, from, fromName: compounderMailFromName(),
+      replyTo: process.env.COMPOUNDER_MAIL_REPLYTO || from,
+      brand: 'compounder',
+      subject: 'Přístup do portálu obchodníka',
+      preheader: 'Vaše přihlašovací údaje a odkaz na portál.',
+      body,
+      link: autoUrl,
+      linkLabel: 'Otevřít portál obchodníka',
+    });
+    // Zaznamenej odeslání do záznamu obchodníka.
+    const i = arr.findIndex((r) => Number(r.id) === id);
+    if (i !== -1) { arr[i] = Object.assign({}, arr[i], { login_sent_at: new Date().toISOString(), login_sent_count: (Number(arr[i].login_sent_count) || 0) + 1 }); await _saveExternalReps(arr, req.user && req.user.id); }
+    res.json({ ok: true, email: rep.email });
+  } catch (err) { next(err); }
+});
+
 // POST /api/compounder/kiosk-config/:code/photos → nahraje až 3 fotky lokality do R2
 router.post('/kiosk-config/:code/photos', requireAuth, kioskPhotoUpload.array('photos', 3), async (req, res, next) => {
   try {
