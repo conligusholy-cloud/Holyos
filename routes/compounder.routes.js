@@ -2424,6 +2424,90 @@ router.put('/kiosk-config/:code', requireAuth, async (req, res, next) => {
   }
 });
 
+// ─────────────────────────────────────────────────────────────────────────
+// EXTERNÍ OBCHODNÍCI — ruční agenda. Ukládá se do AppSetting JSON (stejně jako
+// Ceník / compounding nastavení), klíč external.sales_reps = pole záznamů.
+// ─────────────────────────────────────────────────────────────────────────
+const EXTERNAL_REPS_KEY = 'external.sales_reps';
+
+const externalRepSchema = z.object({
+  jmeno: z.string().trim().min(1).max(255),
+  ico: z.string().trim().max(40).nullable().optional(),
+  email: z.string().trim().max(255).nullable().optional(),
+  telefon: z.string().trim().max(60).nullable().optional(),
+  adresa: z.string().trim().max(400).nullable().optional(),
+  sazba: z.number().min(0).max(1000).nullable().optional(),
+  zpusob_vypoctu: z.enum(['lokalita', 'celkova', 'fix']).optional(),
+  splatnost: z.enum(['podpis', 'provoz', 'mesicne', 'individ']).optional(),
+  lokality: z.array(z.string().max(40)).max(2000).optional(),
+  stav: z.enum(['aktivni', 'neaktivni', 've_schvalovani']).optional(),
+  poznamky: z.string().max(5000).nullable().optional(),
+});
+
+async function _loadExternalReps() {
+  const arr = await getSetting(EXTERNAL_REPS_KEY, { type: 'json', defaultValue: [] });
+  return Array.isArray(arr) ? arr : [];
+}
+async function _saveExternalReps(arr, userId) {
+  await setSetting(EXTERNAL_REPS_KEY, arr, {
+    type: 'json', scope: 'external',
+    description: 'Externí obchodníci — ruční agenda (seznam zástupců, provize, lokality)',
+    userId,
+  });
+}
+
+// GET /api/compounder/external-reps — seznam
+router.get('/external-reps', requireAuth, async (req, res, next) => {
+  try { res.json(await _loadExternalReps()); } catch (err) { next(err); }
+});
+
+// POST /api/compounder/external-reps — založ
+router.post('/external-reps', requireAuth, async (req, res, next) => {
+  try {
+    const parsed = externalRepSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'Neplatná data obchodníka', detail: parsed.error.flatten() });
+    const arr = await _loadExternalReps();
+    const id = arr.reduce((m, r) => Math.max(m, Number(r.id) || 0), 0) + 1;
+    const rec = Object.assign({
+      id, jmeno: '', ico: '', email: '', telefon: '', adresa: '',
+      sazba: null, zpusob_vypoctu: 'lokalita', splatnost: 'individ',
+      lokality: [], stav: 'aktivni', poznamky: '',
+      datum_zalozeni: new Date().toISOString().slice(0, 10),
+    }, parsed.data, { id });
+    arr.push(rec);
+    await _saveExternalReps(arr, req.user && req.user.id);
+    res.status(201).json(rec);
+  } catch (err) { next(err); }
+});
+
+// PUT /api/compounder/external-reps/:id — uprav (i změna stavu = deaktivace)
+router.put('/external-reps/:id', requireAuth, async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id)) return res.status(400).json({ error: 'Neplatné ID' });
+    const parsed = externalRepSchema.partial().safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'Neplatná data obchodníka', detail: parsed.error.flatten() });
+    const arr = await _loadExternalReps();
+    const i = arr.findIndex((r) => Number(r.id) === id);
+    if (i === -1) return res.status(404).json({ error: 'Obchodník nenalezen' });
+    arr[i] = Object.assign({}, arr[i], parsed.data, { id });
+    await _saveExternalReps(arr, req.user && req.user.id);
+    res.json(arr[i]);
+  } catch (err) { next(err); }
+});
+
+// DELETE /api/compounder/external-reps/:id — smaž
+router.delete('/external-reps/:id', requireAuth, async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    const arr = await _loadExternalReps();
+    const kept = arr.filter((r) => Number(r.id) !== id);
+    if (kept.length === arr.length) return res.status(404).json({ error: 'Obchodník nenalezen' });
+    await _saveExternalReps(kept, req.user && req.user.id);
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
 // POST /api/compounder/kiosk-config/:code/photos → nahraje až 3 fotky lokality do R2
 router.post('/kiosk-config/:code/photos', requireAuth, kioskPhotoUpload.array('photos', 3), async (req, res, next) => {
   try {

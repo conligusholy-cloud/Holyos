@@ -299,6 +299,7 @@
       <button type="button" class="tab-btn" data-tab="rezervace" onclick="switchTab('rezervace')">📋 Rezervace</button>
       <button type="button" class="tab-btn" data-tab="lokality" onclick="switchTab('lokality')">📍 Lokality</button>
       <button type="button" class="tab-btn" data-tab="externi" onclick="switchTab('externi')">🤝 Externí obchod</button>
+      <button type="button" class="tab-btn" data-tab="externisti" onclick="switchTab('externisti')">🧑‍💼 Externí obchodníci</button>
     </div>
 
     <!-- TAB: Compounding — hodnota lokalit prádlomatů ze SIS API -->
@@ -331,6 +332,21 @@
         <button class="btn" onclick="openExtCommission()" title="Nastavit výši provize (%)" style="padding:8px 12px;">⚙️</button>
       </div>
       <div id="ext-table"><div style="color:var(--text2);padding:20px;">Načítám…</div></div>
+    </div>
+
+    <!-- TAB: Externí obchodníci — ruční agenda zástupců -->
+    <div id="tab-externisti" style="display:none; padding:20px 24px 24px;">
+      <div id="exr-list-view">
+        <div class="toolbar" style="margin-bottom:14px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+          <input type="text" id="exr-search" placeholder="Hledat jméno / IČO / e-mail…" onkeyup="renderExternalRepsList()" style="flex:1; min-width:220px;">
+          <label style="display:flex; align-items:center; gap:6px; color:var(--text2); font-size:13px; white-space:nowrap;">
+            <input type="checkbox" id="exr-active-only" onchange="renderExternalRepsList()"> jen aktivní
+          </label>
+          <button class="btn btn-primary" onclick="openExrForm()">➕ Přidat obchodníka</button>
+        </div>
+        <div id="exr-table"><div style="color:var(--text2);padding:20px;">Načítám…</div></div>
+      </div>
+      <div id="exr-detail-view" style="display:none;"></div>
     </div>
 
     <!-- TAB: Rezervace lokalit -->
@@ -3578,7 +3594,7 @@
     }
 
     function switchTab(name) {
-      ['orders', 'pricelist', 'cashflow', 'tools', 'compounder', 'compounding', 'rezervace', 'lokality', 'externi'].forEach(function(t) {
+      ['orders', 'pricelist', 'cashflow', 'tools', 'compounder', 'compounding', 'rezervace', 'lokality', 'externi', 'externisti'].forEach(function(t) {
         var el = document.getElementById('tab-' + t);
         if (el) el.style.display = (t === name) ? '' : 'none';
         var btn = document.querySelector('.tab-btn[data-tab="' + t + '"]');
@@ -3592,6 +3608,7 @@
       if (name === 'rezervace') loadReservationsPage();
       if (name === 'lokality') loadLokality();
       if (name === 'externi') renderExternalTrade();
+      if (name === 'externisti') loadExternalReps();
     }
 
     // ============================================================
@@ -4350,6 +4367,210 @@
       } catch (e) { alert('Uložení selhalo: ' + (e.message || '')); }
     }
     window.openExtCommission = openExtCommission; window.closeExtCommission = closeExtCommission; window.saveExtCommission = saveExtCommission;
+    // ═══════════════════════════════════════════════════════════════════════
+    // EXTERNÍ OBCHODNÍCI — ruční agenda (seznam, formulář, detail). Bez AI.
+    // Data v AppSetting JSON přes /api/compounder/external-reps.
+    // ═══════════════════════════════════════════════════════════════════════
+    var _exrData = [];
+    var EXR_STAV = { aktivni: 'Aktivní', neaktivni: 'Neaktivní', ve_schvalovani: 'Ve schvalování' };
+    var EXR_CALC = { lokalita: '% z ceny lokality', celkova: '% z celkové ceny', fix: 'fixní částka / lokalitu' };
+    var EXR_PAY = { podpis: 'při podpisu', provoz: 'po uvedení do provozu', mesicne: 'měsíčně z obratu', individ: 'individuálně' };
+    function _exrEsc(s){ return kvEsc(s == null ? '' : String(s)); }
+    function _exrKioskMetrics(k) {
+      var num = function(v){ return (typeof v === 'number' && isFinite(v)) ? v : 0; };
+      var cs = _compoundingSettings || {};
+      var svc = Number.isFinite(cs.servicePct) ? cs.servicePct : 15;
+      var en = Number.isFinite(cs.energyPct) ? cs.energyPct : 9.5;
+      var cfg = _kioskConfig[k.code] || {};
+      var m = _kvVerMachine(k.code).machine;
+      var loc = _kvExtLocVal(k);
+      var total = (m != null) ? (loc + m) : null;
+      var obratBez = num(k.avgTop3) / 1.21;
+      var najem = (typeof cfg.rentMonthlyCzk === 'number' && isFinite(cfg.rentMonthlyCzk)) ? cfg.rentMonthlyCzk : 0;
+      var yearNet = (obratBez - num(k.avgTop3) * (svc / 100) - najem - obratBez * (en / 100)) * 12;
+      return { machine: m, loc: loc, total: total, yearNet: yearNet };
+    }
+    function _exrKioskByCode(code) {
+      if (!_kioskData || !Array.isArray(_kioskData.kiosks)) return null;
+      return _kioskData.kiosks.find(function(k){ return String(k.code) === String(code); }) || null;
+    }
+    function _exrCommissionFor(rep, m) {
+      var rate = Number(rep.sazba) || 0;
+      if (rep.zpusob_vypoctu === 'fix') return rate;
+      if (rep.zpusob_vypoctu === 'celkova') return Math.round((m.total || 0) * rate / 100);
+      return Math.round((m.loc || 0) * rate / 100);
+    }
+    async function loadExternalReps() {
+      if (!_kioskData) { try { await loadKioskValues(false); } catch(e){} }
+      var box = document.getElementById('exr-table');
+      try {
+        var r = await fetch('/api/compounder/external-reps', { credentials: 'include' });
+        _exrData = await r.json();
+        if (!Array.isArray(_exrData)) _exrData = [];
+      } catch (e) { _exrData = []; if (box) box.innerHTML = '<div style="color:#ef4444;padding:20px;">Chyba načítání.</div>'; return; }
+      renderExternalRepsList();
+    }
+    function renderExternalRepsList() {
+      var lv = document.getElementById('exr-list-view'); var dv = document.getElementById('exr-detail-view');
+      if (lv) lv.style.display = ''; if (dv) dv.style.display = 'none';
+      var box = document.getElementById('exr-table'); if (!box) return;
+      var q = ((document.getElementById('exr-search') || {}).value || '').trim().toLowerCase();
+      var actOnly = !!((document.getElementById('exr-active-only') || {}).checked);
+      var rows = _exrData.filter(function(x){
+        if (actOnly && x.stav !== 'aktivni') return false;
+        if (!q) return true;
+        return ((x.jmeno||'') + ' ' + (x.ico||'') + ' ' + (x.email||'')).toLowerCase().indexOf(q) !== -1;
+      });
+      if (!rows.length) { box.innerHTML = '<div style="color:var(--text2);padding:24px;">Žádní obchodníci. Přidej prvního tlačítkem „➕ Přidat obchodníka".</div>'; return; }
+      var h = '<div style="overflow-x:auto;"><table class="data-table kv-compact"><thead><tr>' +
+        '<th>Jméno / firma</th><th>Kontakt</th><th style="text-align:right;">Provize</th><th style="text-align:right;">Lokality</th><th>Stav</th><th></th></tr></thead><tbody>';
+      rows.forEach(function(x){
+        var badge = x.stav === 'aktivni' ? '#10b981' : (x.stav === 've_schvalovani' ? '#eab308' : 'var(--text2)');
+        var kontakt = [x.email, x.telefon].filter(Boolean).join(' · ') || '<span style="color:var(--text2);">—</span>';
+        var sazba = (x.sazba != null && x.sazba !== '') ? (x.zpusob_vypoctu === 'fix' ? (kvMoney(x.sazba,'CZK') + ' /lok.') : (String(x.sazba).replace('.', ',') + ' %')) : '—';
+        h += '<tr style="cursor:pointer;" onclick="openExrDetail(' + x.id + ')">' +
+          '<td style="font-weight:600;">' + _exrEsc(x.jmeno) + (x.ico ? ('<div style="color:var(--text2);font-size:11px;">IČO ' + _exrEsc(x.ico) + '</div>') : '') + '</td>' +
+          '<td style="color:var(--text2);font-size:12px;">' + kontakt + '</td>' +
+          '<td style="text-align:right;white-space:nowrap;">' + sazba + '</td>' +
+          '<td style="text-align:right;">' + (Array.isArray(x.lokality) ? x.lokality.length : 0) + '</td>' +
+          '<td><span style="color:' + badge + ';font-weight:600;">' + (EXR_STAV[x.stav] || x.stav) + '</span></td>' +
+          '<td style="text-align:right;white-space:nowrap;" onclick="event.stopPropagation()">' +
+            '<button class="btn" onclick="openExrForm(' + x.id + ')" title="Upravit" style="padding:4px 9px;font-size:13px;margin-right:4px;">✏️</button>' +
+            (x.stav === 'aktivni'
+              ? '<button class="btn" onclick="exrSetStav(' + x.id + ',&#39;neaktivni&#39;)" title="Deaktivovat" style="padding:4px 9px;font-size:13px;">🚫</button>'
+              : '<button class="btn" onclick="exrSetStav(' + x.id + ',&#39;aktivni&#39;)" title="Aktivovat" style="padding:4px 9px;font-size:13px;">✅</button>') +
+          '</td></tr>';
+      });
+      h += '</tbody></table></div>';
+      box.innerHTML = h;
+    }
+    async function exrSetStav(id, stav) {
+      try {
+        var r = await fetch('/api/compounder/external-reps/' + id, { method:'PUT', credentials:'include', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ stav: stav }) });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        var upd = await r.json(); var i = _exrData.findIndex(function(x){ return x.id === id; }); if (i !== -1) _exrData[i] = upd;
+        renderExternalRepsList();
+      } catch(e) { alert('Změna stavu selhala.'); }
+    }
+    function _exrKioskOptions(selected) {
+      var sel = {}; (selected||[]).forEach(function(c){ sel[String(c)] = true; });
+      var list = (_kioskData && Array.isArray(_kioskData.kiosks)) ? _kioskData.kiosks.filter(function(k){ return String(k.companyName||'').toLowerCase().indexOf('best series') !== -1; }) : [];
+      list.sort(function(a,b){ return String(a.label||a.code).localeCompare(String(b.label||b.code),'cs'); });
+      return list.map(function(k){
+        return '<label style="display:flex;align-items:center;gap:8px;padding:4px 2px;font-size:13px;cursor:pointer;">' +
+          '<input type="checkbox" class="exr-lok" value="' + _exrEsc(k.code) + '"' + (sel[String(k.code)] ? ' checked' : '') + '>' +
+          '<span style="font-weight:600;">' + _exrEsc(k.code) + '</span> <span style="color:var(--text2);">' + _exrEsc(k.label||'') + '</span></label>';
+      }).join('') || '<div style="color:var(--text2);font-size:12px;padding:8px;">Nejdřív načti lokality (záložka Compounding / Externí obchod).</div>';
+    }
+    function openExrForm(id) {
+      var rec = id ? _exrData.find(function(x){ return x.id === id; }) : null;
+      rec = rec || { jmeno:'', ico:'', email:'', telefon:'', adresa:'', sazba:'', zpusob_vypoctu:'lokalita', splatnost:'individ', lokality:[], stav:'aktivni', poznamky:'' };
+      var ov = document.createElement('div'); ov.id = 'exr-form-overlay';
+      ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:flex-start;justify-content:center;overflow:auto;padding:30px 16px;';
+      var fld = function(label, inner){ return '<label style="display:block;margin-bottom:12px;"><span style="display:block;font-size:12px;color:var(--text2);margin-bottom:4px;">' + label + '</span>' + inner + '</label>'; };
+      var st = 'width:100%;box-sizing:border-box;padding:8px 10px;border-radius:8px;border:1px solid var(--border,#333);background:var(--bg,#111);color:var(--text,#fff);font-size:14px;';
+      var inp = function(idf, val, type){ return '<input id="' + idf + '" type="' + (type||'text') + '" value="' + _exrEsc(val) + '" style="' + st + '">'; };
+      var opt = function(map, cur){ return Object.keys(map).map(function(k){ return '<option value="' + k + '"' + (cur===k?' selected':'') + '>' + map[k] + '</option>'; }).join(''); };
+      ov.innerHTML = '<div style="background:var(--card,#1b1b20);border:1px solid var(--border,#333);border-radius:12px;padding:22px 24px;width:640px;max-width:96vw;">' +
+        '<h3 style="margin:0 0 16px;font-size:17px;">' + (id ? '✏️ Upravit obchodníka' : '➕ Nový externí obchodník') + '</h3>' +
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:0 16px;">' +
+          '<div style="grid-column:1 / -1;">' + fld('Jméno / název firmy *', inp('exr-jmeno', rec.jmeno)) + '</div>' +
+          fld('IČO', inp('exr-ico', rec.ico)) +
+          fld('E-mail', inp('exr-email', rec.email, 'email')) +
+          fld('Telefon', inp('exr-telefon', rec.telefon)) +
+          fld('Adresa', inp('exr-adresa', rec.adresa)) +
+          fld('Sazba provize', inp('exr-sazba', rec.sazba, 'number')) +
+          fld('Způsob výpočtu', '<select id="exr-calc" style="' + st + '">' + opt(EXR_CALC, rec.zpusob_vypoctu) + '</select>') +
+          fld('Splatnost provize', '<select id="exr-pay" style="' + st + '">' + opt(EXR_PAY, rec.splatnost) + '</select>') +
+          fld('Stav', '<select id="exr-stav" style="' + st + '">' + opt(EXR_STAV, rec.stav) + '</select>') +
+        '</div>' +
+        fld('Přiřazené lokality', '<input type="text" id="exr-lok-filter" placeholder="Filtrovat…" onkeyup="exrFilterLok()" style="' + st + 'margin-bottom:6px;"><div id="exr-lok-box" style="max-height:200px;overflow:auto;border:1px solid var(--border,#333);border-radius:8px;padding:6px 10px;">' + _exrKioskOptions(rec.lokality) + '</div>') +
+        fld('Poznámky', '<textarea id="exr-pozn" rows="3" style="' + st + 'resize:vertical;">' + _exrEsc(rec.poznamky) + '</textarea>') +
+        '<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:8px;">' +
+          '<button class="btn" onclick="closeExrForm()">Zrušit</button>' +
+          '<button class="btn btn-primary" onclick="saveExr(' + (id||'null') + ')">💾 Uložit</button>' +
+        '</div></div>';
+      ov.addEventListener('click', function(e){ if (e.target === ov) closeExrForm(); });
+      document.body.appendChild(ov);
+    }
+    function closeExrForm(){ var ov = document.getElementById('exr-form-overlay'); if (ov) ov.remove(); }
+    function exrFilterLok(){
+      var q = ((document.getElementById('exr-lok-filter')||{}).value||'').trim().toLowerCase();
+      document.querySelectorAll('#exr-lok-box label').forEach(function(l){ l.style.display = (!q || l.textContent.toLowerCase().indexOf(q) !== -1) ? '' : 'none'; });
+    }
+    async function saveExr(id) {
+      var jmeno = (document.getElementById('exr-jmeno')||{}).value || '';
+      if (!jmeno.trim()) { alert('Jméno / název firmy je povinné.'); return; }
+      var lok = Array.prototype.map.call(document.querySelectorAll('#exr-lok-box .exr-lok:checked'), function(c){ return c.value; });
+      var sazbaRaw = (document.getElementById('exr-sazba')||{}).value;
+      var body = {
+        jmeno: jmeno.trim(),
+        ico: (document.getElementById('exr-ico')||{}).value || null,
+        email: (document.getElementById('exr-email')||{}).value || null,
+        telefon: (document.getElementById('exr-telefon')||{}).value || null,
+        adresa: (document.getElementById('exr-adresa')||{}).value || null,
+        sazba: (sazbaRaw === '' || sazbaRaw == null) ? null : Number(sazbaRaw),
+        zpusob_vypoctu: (document.getElementById('exr-calc')||{}).value,
+        splatnost: (document.getElementById('exr-pay')||{}).value,
+        stav: (document.getElementById('exr-stav')||{}).value,
+        lokality: lok,
+        poznamky: (document.getElementById('exr-pozn')||{}).value || null,
+      };
+      try {
+        var url = '/api/compounder/external-reps' + (id ? ('/' + id) : '');
+        var r = await fetch(url, { method: id ? 'PUT' : 'POST', credentials:'include', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+        if (!r.ok) { var j = await r.json().catch(function(){return{};}); throw new Error(j.error || ('HTTP ' + r.status)); }
+        closeExrForm();
+        await loadExternalReps();
+      } catch(e) { alert('Uložení selhalo: ' + (e.message||'')); }
+    }
+    function openExrDetail(id) {
+      var rec = _exrData.find(function(x){ return x.id === id; }); if (!rec) return;
+      var lv = document.getElementById('exr-list-view'); var dv = document.getElementById('exr-detail-view');
+      if (lv) lv.style.display = 'none'; if (dv) dv.style.display = '';
+      var codes = Array.isArray(rec.lokality) ? rec.lokality : [];
+      var rows = codes.map(function(c){ var k = _exrKioskByCode(c); if (!k) return { code:c, label:'(mimo seznam)', metrics:null }; return { code:c, label:k.label||c, metrics:_exrKioskMetrics(k) }; });
+      var objem = rows.reduce(function(a,r){ return a + ((r.metrics && r.metrics.total) || 0); }, 0);
+      var provize = rows.reduce(function(a,r){ return a + (r.metrics ? _exrCommissionFor(rec, r.metrics) : 0); }, 0);
+      var initials = (rec.jmeno||'?').trim().split(/\s+/).slice(0,2).map(function(w){ return w.charAt(0).toUpperCase(); }).join('');
+      var sazbaLabel = (rec.sazba != null && rec.sazba !== '') ? (rec.zpusob_vypoctu === 'fix' ? (kvMoney(rec.sazba,'CZK')+' /lok.') : (String(rec.sazba).replace('.',',')+' %')) : '—';
+      function kpi(label, val, sub){ return '<div style="flex:1;min-width:150px;background:rgba(201,162,75,.06);border:1px solid rgba(201,162,75,.25);border-radius:10px;padding:12px 14px;"><div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--text2);">' + label + '</div><div style="font-size:20px;font-weight:700;margin-top:4px;">' + val + '</div>' + (sub?('<div style="font-size:11px;color:var(--text2);margin-top:2px;">'+sub+'</div>'):'') + '</div>'; }
+      var badge = rec.stav === 'aktivni' ? '#10b981' : (rec.stav === 've_schvalovani' ? '#eab308' : 'var(--text2)');
+      var h = '<button class="btn" onclick="renderExternalRepsList()" style="margin-bottom:14px;">← Zpět na seznam</button>';
+      h += '<div style="display:flex;align-items:center;gap:16px;margin-bottom:18px;flex-wrap:wrap;">' +
+        '<div style="width:56px;height:56px;border-radius:14px;background:linear-gradient(135deg,#f6e6ad,#cda454);color:#241c05;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:20px;">' + _exrEsc(initials) + '</div>' +
+        '<div style="flex:1;min-width:200px;"><div style="font-size:20px;font-weight:700;">' + _exrEsc(rec.jmeno) + ' <span style="font-size:13px;font-weight:600;color:' + badge + ';">· ' + (EXR_STAV[rec.stav]||rec.stav) + '</span></div>' +
+        '<div style="color:var(--text2);font-size:13px;margin-top:2px;">' + [rec.ico?('IČO '+_exrEsc(rec.ico)):'', _exrEsc(rec.email||''), _exrEsc(rec.telefon||'')].filter(Boolean).join(' · ') + '</div></div>' +
+        '<button class="btn btn-primary" onclick="openExrForm(' + rec.id + ')">✏️ Upravit</button></div>';
+      h += '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:18px;">' +
+        kpi('Přiřazené lokality', String(codes.length)) +
+        kpi('Sazba provize', sazbaLabel, EXR_CALC[rec.zpusob_vypoctu]||'') +
+        kpi('Odhad objemu', kvMoney(objem,'CZK'), '∑ celkových cen') +
+        kpi('Provize celkem', kvMoney(provize,'CZK'), EXR_PAY[rec.splatnost]||'') + '</div>';
+      h += '<div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--text2);margin-bottom:8px;">Přiřazené lokality</div>';
+      if (!codes.length) { h += '<div style="color:var(--text2);font-size:13px;margin-bottom:18px;">Žádné lokality. Přiřaď je přes „Upravit".</div>'; }
+      else {
+        h += '<div style="overflow-x:auto;margin-bottom:18px;"><table class="data-table kv-compact"><thead><tr><th>Kód</th><th>Lokalita</th><th style="text-align:right;">Celková cena</th><th style="text-align:right;">Provize</th><th style="text-align:right;">Návratnost</th></tr></thead><tbody>';
+        rows.forEach(function(r){
+          var m = r.metrics;
+          var prov = m ? _exrCommissionFor(rec, m) : null;
+          var nav = (m && m.total > 0 && m.yearNet > 0) ? ((m.total / m.yearNet).toFixed(1).replace('.',',') + ' let') : '—';
+          h += '<tr><td style="font-weight:600;">' + _exrEsc(r.code) + '</td><td>' + _exrEsc(r.label) + '</td>' +
+            '<td style="text-align:right;white-space:nowrap;">' + (m && m.total != null ? kvMoney(m.total,'CZK') : '—') + '</td>' +
+            '<td style="text-align:right;white-space:nowrap;color:#10b981;font-weight:700;">' + (prov != null ? kvMoney(prov,'CZK') : '—') + '</td>' +
+            '<td style="text-align:right;white-space:nowrap;color:#3b82f6;">' + nav + '</td></tr>';
+        });
+        h += '</tbody></table></div>';
+      }
+      h += '<div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--text2);margin-bottom:6px;">Poznámky</div>' +
+        '<div style="white-space:pre-wrap;color:var(--text);font-size:14px;background:var(--bg,#111);border:1px solid var(--border,#333);border-radius:8px;padding:12px 14px;min-height:44px;margin-bottom:18px;">' + (_exrEsc(rec.poznamky) || '<span style="color:var(--text2);">—</span>') + '</div>';
+      h += '<div style="border:1px dashed rgba(201,162,75,.4);border-radius:10px;padding:14px 16px;color:var(--text2);font-size:13px;">🤖 <b style="color:var(--text);">AI nástroje</b> (cenové tipy, skórování leadů, automatické oslovení) — připraveno pro další iteraci, zatím neaktivní.</div>';
+      dv.innerHTML = h;
+    }
+    window.openExrForm = openExrForm; window.closeExrForm = closeExrForm; window.saveExr = saveExr;
+    window.exrSetStav = exrSetStav; window.openExrDetail = openExrDetail; window.exrFilterLok = exrFilterLok;
+    window.renderExternalRepsList = renderExternalRepsList; window.loadExternalReps = loadExternalReps;
+
 
     // ─── Detail stroje: transakce ze SIS API (proklik na řádek Compounding) ───
     // Server-side proxy /api/compounder/kiosk-transactions/:code (klíč drží server).
