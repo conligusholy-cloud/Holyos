@@ -1645,6 +1645,14 @@ router.get('/leads', requireAuth, async (req, res, next) => {
       owners.forEach((p) => { nameById[p.id] = ((p.first_name || '') + ' ' + (p.last_name || '')).trim(); });
       leads.forEach((l) => { l.owner_name = l.owner_person_id ? (nameById[l.owner_person_id] || null) : null; });
     }
+    // Dohledej jména externích obchodníků (kdo lead založil) — pro odznak v seznamu.
+    if (leads.some((l) => l.external_rep_id)) {
+      try {
+        const reps = await _loadExternalReps();
+        const repById = {}; reps.forEach((r) => { repById[Number(r.id)] = r.jmeno || (r.email || ('#' + r.id)); });
+        leads.forEach((l) => { l.external_rep_name = l.external_rep_id ? (repById[Number(l.external_rep_id)] || null) : null; });
+      } catch (e) { /* AppSetting nemusí existovat */ }
+    }
     res.json(leads);
   } catch (err) {
     next(err);
