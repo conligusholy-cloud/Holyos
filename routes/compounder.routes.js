@@ -2656,9 +2656,20 @@ async function _extRepPortalData(rep) {
   });
   const objem = rows.reduce((a, r) => a + (r.total || 0), 0);
   const provize = rows.reduce((a, r) => a + (r.commission || 0), 0);
+  // Ceník strojů (bez lokality) — z pricelistu + fotek verzí.
+  const _rateM = Number(rep.sazba) || 0;
+  const vpMap = (cs.versionPhotos && typeof cs.versionPhotos === 'object') ? cs.versionPhotos : {};
+  const machines = ['v2', 'v3', 'v4'].map((v) => {
+    const eurP = (pl[v] && pl[v].eur != null && isFinite(Number(pl[v].eur))) ? Number(pl[v].eur) : null;
+    if (eurP == null) return null;
+    const priceCzk = Math.round(eurP * eur);
+    const commission = (rep.zpusob_vypoctu === 'fix') ? _rateM : Math.round(priceCzk * _rateM / 100);
+    return { ver: v.toUpperCase(), priceCzk, photo: vpMap[v] || null, commission };
+  }).filter(Boolean);
   return {
     rep: _sanitizeRep(rep),
     lokality: rows,
+    machines: machines,
     currency: 'CZK',
     kpi: { pocet: codes.length, objem: Math.round(objem), provize: Math.round(provize), sazba: rep.sazba, zpusob_vypoctu: rep.zpusob_vypoctu, splatnost: rep.splatnost },
   };

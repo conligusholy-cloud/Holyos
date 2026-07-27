@@ -143,6 +143,8 @@
       </div>
       <div class="sec-title">Přiřazené lokality</div>
       <div id="lok-list"><div class="loading">Načítám…</div></div>
+      <div class="sec-title" style="margin-top:20px">Prodat nový stroj (bez lokality)</div>
+      <div id="machine-list"></div>
     </div>
 
     <!-- KONTAKTY -->
@@ -252,6 +254,12 @@
           '</div></div>';
       }).join('');
     }
+    var ml=document.getElementById('machine-list');
+    var machines=(DATA && DATA.machines)||[];
+    if(ml){ ml.innerHTML = machines.length ? machines.map(function(mch){
+      var mphoto=mch.photo?('<div class="offer-photo"><img src="'+esc(mch.photo)+'" alt="" onerror="this.parentNode.style.display=&#39;none&#39;"></div>'):'';
+      return '<div class="offer">'+mphoto+'<div class="offer-body"><div class="offer-top"><div class="offer-name">Prádlomat '+esc(mch.ver)+' <span class="sub">· nový stroj bez lokality</span></div><div class="offer-price">'+money(mch.priceCzk)+' <span class="pd">bez DPH</span></div></div><div class="offer-metrics"><span style="color:var(--primary)">Provize <b style="color:var(--primary)">'+money(mch.commission)+'</b></span></div></div></div>';
+    }).join('') : '<div class="empty" style="padding:18px">Ceník strojů zatím není nastavený (nastav ceny verzí v HolyOS).</div>'; }
   }
 
   function showScreen(s){
