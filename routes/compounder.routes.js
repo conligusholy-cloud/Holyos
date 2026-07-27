@@ -2643,7 +2643,7 @@ async function _extRepPortalData(rep) {
     const buyback = (total != null) ? Math.round(total * buybackPct / 100) : null;
     const profit5 = (total != null) ? Math.round(buybackYears * yearNet + total * buybackPct / 100) : null;
     const photo = (cfg.photos && cfg.photos.length) ? cfg.photos[0] : null;
-    return { code, label: k.label || code, verze: ver ? ver.toUpperCase() : null, total: total != null ? Math.round(total) : null, loc: Math.round(loc || 0), machine, yearNet: Math.round(yearNet), profit5, buyback, buyback_pct: buybackPct, buyback_years: buybackYears, commission, navratnost, photo, vip: isVip };
+    return { code, label: k.label || code, verze: ver ? ver.toUpperCase() : null, total: total != null ? Math.round(total) : null, loc: Math.round(loc || 0), machine, obrat_bez: Math.round(obratBez), servis: Math.round(servis), najem: Math.round(najem), energie: Math.round(energie), yearNet: Math.round(yearNet), profit5, buyback, buyback_pct: buybackPct, buyback_years: buybackYears, commission, navratnost, photo, vip: isVip };
   });
   const objem = rows.reduce((a, r) => a + (r.total || 0), 0);
   const provize = rows.reduce((a, r) => a + (r.commission || 0), 0);
