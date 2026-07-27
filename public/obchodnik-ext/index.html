@@ -239,12 +239,13 @@
       ll.innerHTML = '<div class="pricenote">Všechny ceny jsou uvedené bez DPH.</div>' + lok.map(function(x){
         var nav = (x.navratnost != null) ? (String(x.navratnost).replace('.', ',') + ' let') : '—';
         var vipTag = x.vip ? '<span class="vip">🎯 VIP</span>' : '';
+        var resTag = x.reserved ? ' <span style="font-size:10px;color:#ef4444;border:1px solid rgba(239,68,68,.5);border-radius:6px;padding:1px 6px;white-space:nowrap">🔒 Rezervováno' + (x.res_until ? (' do ' + new Date(x.res_until).toLocaleDateString('cs-CZ')) : '') + '</span>' : '';
         var photo = x.photo ? ('<div class="offer-photo" style="cursor:zoom-in" onclick="openPhoto(&#39;' + esc(x.photo) + '&#39;)"><img src="' + esc(x.photo) + '" alt="" onerror="this.parentNode.style.display=&#39;none&#39;"></div>') : '';
         var sub = esc(x.code) + (x.verze ? (' · ' + esc(x.verze)) : '');
         return '<div class="offer">' + photo +
           '<div class="offer-body">' +
             '<div class="offer-top">' +
-              '<div class="offer-name">' + esc(x.label) + vipTag + ' <span class="sub">· ' + sub + '</span></div>' +
+              '<div class="offer-name">' + esc(x.label) + vipTag + resTag + ' <span class="sub">· ' + sub + '</span></div>' +
               '<div class="offer-price">' + money(x.total) + ' <span class="pd">bez DPH</span></div>' +
             '</div>' +
             '<div class="offer-metrics">' +

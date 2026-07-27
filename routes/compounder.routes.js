@@ -2684,10 +2684,17 @@ async function _extRepPortalData(rep) {
   const pl = cs.pricelist || {};
   const num = (v) => (typeof v === 'number' && isFinite(v)) ? v : 0;
   const rate = Number(rep.sazba) || 0;
+  let resMap = {};
+  try {
+    const resvs = await prisma.locationReservation.findMany({ where: { kiosk_code: { in: codes }, status: { in: ['reserved', 'active'] } }, select: { kiosk_code: true, status: true, reserved_until: true, fee_until: true, sign_until: true }, orderBy: { created_at: 'desc' } });
+    resvs.forEach((r) => { if (!resMap[r.kiosk_code]) resMap[r.kiosk_code] = r; });
+  } catch (e) { /* tabulka nemusí existovat */ }
   const rows = codes.map((code) => {
     const isVip = !!(vipSet[code] && !forSaleSet[code]);
+    const rv = resMap[String(code)];
+    const resObj = rv ? { reserved: true, res_until: (rv.reserved_until || rv.fee_until || rv.sign_until || null), res_status: rv.status } : { reserved: false, res_until: null, res_status: null };
     const k = kiosks.find((x) => String(x.code) === String(code));
-    if (!k) return { code, label: '(mimo seznam)', total: null, loc: null, machine: null, yearNet: 0, commission: null, navratnost: null, vip: isVip };
+    if (!k) return Object.assign({ code, label: '(mimo seznam)', total: null, loc: null, machine: null, yearNet: 0, commission: null, navratnost: null, vip: isVip }, resObj);
     const cfg = cfgMap[code] || {};
     const ver = String(cfg.version || '').toLowerCase();
     const machine = (pl[ver] && pl[ver].eur != null && isFinite(Number(pl[ver].eur))) ? Math.round(Number(pl[ver].eur) * eur) : null;
@@ -2711,7 +2718,7 @@ async function _extRepPortalData(rep) {
     const buyback = (total != null) ? Math.round(total * buybackPct / 100) : null;
     const profit5 = (total != null) ? Math.round(buybackYears * yearNet + total * buybackPct / 100) : null;
     const photo = (cfg.photos && cfg.photos.length) ? cfg.photos[0] : null;
-    return { code, label: k.label || code, verze: ver ? ver.toUpperCase() : null, total: total != null ? Math.round(total) : null, loc: Math.round(loc || 0), machine, obrat_bez: Math.round(obratBez), servis: Math.round(servis), servis_pct: svc, najem: Math.round(najem), energie: Math.round(energie), energie_pct: en, yearNet: Math.round(yearNet), profit5, buyback, buyback_pct: buybackPct, buyback_years: buybackYears, commission, navratnost, photo, vip: isVip };
+    return Object.assign({ code, label: k.label || code, verze: ver ? ver.toUpperCase() : null, total: total != null ? Math.round(total) : null, loc: Math.round(loc || 0), machine, obrat_bez: Math.round(obratBez), servis: Math.round(servis), servis_pct: svc, najem: Math.round(najem), energie: Math.round(energie), energie_pct: en, yearNet: Math.round(yearNet), profit5, buyback, buyback_pct: buybackPct, buyback_years: buybackYears, commission, navratnost, photo, vip: isVip }, resObj);
   });
   const objem = rows.reduce((a, r) => a + (r.total || 0), 0);
   const provize = rows.reduce((a, r) => a + (r.commission || 0), 0);
