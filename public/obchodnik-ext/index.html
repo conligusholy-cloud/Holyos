@@ -292,7 +292,7 @@
     box.innerHTML=rows.map(function(c){
       var col=CT_COL[c.status]||'var(--muted)';
       var sub=[c.email,c.phone].filter(Boolean).join(' · ');
-      var laDate=c.lastActivityAt||c.updated_at||c.created_at; var last=laDate?('Poslední aktivita: '+new Date(laDate).toLocaleString('cs-CZ')):'';
+      var lastGreen=!!c.lastActivityAt; var last=c.lastActivityAt?('Poslední aktivita: '+new Date(c.lastActivityAt).toLocaleString('cs-CZ')):(c.created_at?('Založeno '+new Date(c.created_at).toLocaleDateString('cs-CZ')+' · zatím bez aktivity na portálu'):'');
       var opts=Object.keys(CT_STAT).map(function(k){return '<option value="'+k+'"'+(c.status===k?' selected':'')+'>'+CT_STAT[k]+'</option>';}).join('');
       var telClean=(c.phone||'').replace(/\s/g,'');
       var waNum=(c.phone||'').replace(/[^\d]/g,''); if(waNum.indexOf('00')===0) waNum=waNum.slice(2);
@@ -306,7 +306,7 @@
         '<div class="ct-top" onclick="toggleContact('+c.id+')">'+
           '<div style="min-width:0"><div class="ct-name">'+esc(c.name)+'</div>'+
             (sub?('<div class="ct-sub">'+esc(sub)+'</div>'):'')+
-            (last?('<div class="ct-sub" style="color:var(--green)">'+esc(last)+'</div>'):'')+'</div>'+
+            (last?('<div class="ct-sub" style="color:'+(lastGreen?'var(--green)':'var(--muted2)')+'">'+esc(last)+'</div>'):'')+'</div>'+
           '<span class="ct-badge" style="color:'+col+';border:1px solid '+col+'55;background:'+col+'22">'+(CT_STAT[c.status]||c.status)+'</span>'+
         '</div>'+
         '<div class="ct-detail">'+
