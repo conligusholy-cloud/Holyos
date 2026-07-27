@@ -2299,6 +2299,7 @@ const compoundingSettingsSchema = z.object({
   externalCommissionMachinePct: z.number().min(0).max(100).optional(),
   externalCommissionLocationPct: z.number().min(0).max(100).optional(),
   externalMarkupPct: z.number().min(0).max(1000).optional(),
+  versionPhotos: z.object({ v2: z.string().max(600).nullable().optional(), v3: z.string().max(600).nullable().optional(), v4: z.string().max(600).nullable().optional() }).optional(),
 });
 
 // GET /api/compounder/compounding-settings
@@ -2332,6 +2333,7 @@ router.get('/compounding-settings', requireAuth, async (req, res, next) => {
       externalCommissionMachinePct: (val && Number.isFinite(val.externalCommissionMachinePct)) ? val.externalCommissionMachinePct : 5,
       externalCommissionLocationPct: (val && Number.isFinite(val.externalCommissionLocationPct)) ? val.externalCommissionLocationPct : 12,
       externalMarkupPct: (val && Number.isFinite(val.externalMarkupPct)) ? val.externalMarkupPct : 20,
+      versionPhotos: (val && val.versionPhotos && typeof val.versionPhotos === 'object') ? val.versionPhotos : {},
     };
     res.json(merged);
   } catch (err) {
@@ -2346,13 +2348,15 @@ router.put('/compounding-settings', requireAuth, async (req, res, next) => {
     if (!parsed.success) {
       return res.status(400).json({ error: 'Neplatná data nastavení', detail: parsed.error.flatten() });
     }
-    await setSetting(COMPOUNDING_SETTINGS_KEY, parsed.data, {
+    const _data = parsed.data;
+    if (_data.versionPhotos === undefined) { const _ex = await getSetting(COMPOUNDING_SETTINGS_KEY, { type: 'json', defaultValue: {} }); if (_ex && _ex.versionPhotos) _data.versionPhotos = _ex.versionPhotos; }
+    await setSetting(COMPOUNDING_SETTINGS_KEY, _data, {
       type: 'json',
       scope: 'compounding',
       description: 'Compounding — ceník V2/V3/V4 (EUR bez DPH) + počet měsíců pro cenu lokality',
       userId: req.user && req.user.id,
     });
-    res.json({ ok: true, settings: parsed.data });
+    res.json({ ok: true, settings: _data });
   } catch (err) {
     next(err);
   }
@@ -3011,6 +3015,28 @@ router.post('/kiosk-config/:code/photos', requireAuth, kioskPhotoUpload.array('p
       userId: req.user && req.user.id,
     });
     res.json({ ok: true, code, photos: next_[code].photos });
+
+// POST /api/compounder/version-photo/:ver → nahraje obrázek verze kiosku (v2/v3/v4) do R2
+router.post('/version-photo/:ver', requireAuth, kioskPhotoUpload.single('photo'), async (req, res, next) => {
+  try {
+    const ver = String(req.params.ver || '').toLowerCase();
+    if (['v2', 'v3', 'v4'].indexOf(ver) === -1) return res.status(400).json({ error: 'Neplatná verze.' });
+    const fl = req.file;
+    if (!fl || !/^image\//.test(fl.mimetype || '')) return res.status(400).json({ error: 'Nahraj obrázek.' });
+    const ext = (fl.mimetype === 'image/png') ? '.png' : (fl.mimetype === 'image/webp') ? '.webp' : '.jpg';
+    const key = 'compounding/versions/' + ver + '-' + crypto.randomUUID() + ext;
+    const { url } = await r2Put(key, fl.buffer, fl.mimetype);
+    if (!url) return res.status(503).json({ error: 'Úložiště (R2) není nakonfigurované.' });
+    const cs = (await getSetting(COMPOUNDING_SETTINGS_KEY, { type: 'json', defaultValue: COMPOUNDING_SETTINGS_DEFAULT })) || {};
+    const vp = (cs.versionPhotos && typeof cs.versionPhotos === 'object') ? { ...cs.versionPhotos } : {};
+    vp[ver] = url;
+    await setSetting(COMPOUNDING_SETTINGS_KEY, { ...cs, versionPhotos: vp }, { type: 'json', scope: 'compounding', description: 'Compounding — nastavení + fotky verzí', userId: req.user && req.user.id });
+    res.json({ ok: true, ver, url });
+  } catch (err) {
+    if (err && err.status === 503) return res.status(503).json({ error: 'Úložiště (R2) není nakonfigurované.' });
+    next(err);
+  }
+});
   } catch (err) {
     if (err && err.status === 503) return res.status(503).json({ error: 'Úložiště fotek (R2) není nakonfigurované.' });
     next(err);

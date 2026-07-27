@@ -4741,6 +4741,7 @@
       var rate = _kvFxRates.EUR || 25;
       function verRow(ver, label) {
         var eur = (pl[ver] && pl[ver].eur != null) ? pl[ver].eur : '';
+        var vphoto = ((_compoundingSettings && _compoundingSettings.versionPhotos) || {})[ver] || '';
         return '<div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;">' +
           '<div style="width:60px;font-weight:600;">' + label + '</div>' +
           '<div style="position:relative;">' +
@@ -4748,6 +4749,10 @@
             '<span style="position:absolute;right:12px;top:50%;transform:translateY(-50%);color:var(--text2);font-size:13px;">€</span>' +
           '</div>' +
           '<div id="kvset-czk-' + ver + '" style="color:var(--text2);font-size:13px;min-width:120px;">' + (eur !== '' ? ('≈ ' + Math.round(eur * rate).toLocaleString('cs-CZ') + ' Kč') : '—') + '</div>' +
+          '<div id="vphoto-' + ver + '" style="margin-left:auto;display:flex;align-items:center;gap:8px;">' +
+            (vphoto ? ('<img src="' + vphoto + '" style="width:46px;height:34px;object-fit:cover;border-radius:6px;border:1px solid var(--border);">') : '<span style="color:var(--text2);font-size:12px;">bez obrázku</span>') +
+            '<label style="cursor:pointer;"><input type="file" accept="image/*" style="display:none;" onchange="verUploadPhoto(\'' + ver + '\', this)"><span class="btn" style="padding:5px 10px;font-size:12px;">📷 ' + (vphoto ? 'Změnit' : 'Nahrát') + '</span></label>' +
+          '</div>' +
           '</div>';
       }
       var html = '<div class="modal-overlay" onclick="if(event.target===this)closeModal()">' +
@@ -5538,6 +5543,21 @@
       } catch(e){ if(msg){ msg.style.color='#ef4444'; msg.textContent='Chyba: '+kvEsc(e.message); } }
     }
     window.kcfgUploadPhotos = kcfgUploadPhotos;
+    async function verUploadPhoto(ver, input){
+      var fl=input.files&&input.files[0]; if(!fl) return;
+      var fd=new FormData(); fd.append('photo', fl);
+      try {
+        var r=await fetch('/api/compounder/version-photo/'+ver,{method:'POST',credentials:'include',body:fd});
+        var d=await r.json().catch(function(){return{};});
+        if(!r.ok||!d.ok) throw new Error(d.error||('HTTP '+r.status));
+        if(!_compoundingSettings.versionPhotos) _compoundingSettings.versionPhotos={};
+        _compoundingSettings.versionPhotos[ver]=d.url;
+        var box=document.getElementById('vphoto-'+ver);
+        if(box) box.innerHTML='<img src="'+d.url+'" style="width:46px;height:34px;object-fit:cover;border-radius:6px;border:1px solid var(--border);"><label style="cursor:pointer;margin-left:8px;"><input type="file" accept="image/*" style="display:none;" onchange="verUploadPhoto(\''+ver+'\',this)"><span class="btn" style="padding:5px 10px;font-size:12px;">📷 Změnit</span></label>';
+        input.value='';
+      } catch(e){ alert('Nahrání selhalo: '+(e.message||'')); }
+    }
+    window.verUploadPhoto = verUploadPhoto;
     async function kcfgRemovePhoto(code, idx){
       var ph = (((_kioskConfig[code]||{}).photos)||[]).slice();
       ph.splice(idx,1);
