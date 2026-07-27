@@ -2914,6 +2914,18 @@ router.post('/external-reps/me/password', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// GET /api/compounder/external-reps/me/leads/:id/offer-preview — nabídka lokalit, kterou lead vidí (jen vlastní)
+router.get('/external-reps/me/leads/:id/offer-preview', async (req, res, next) => {
+  try {
+    const repId = verifyExtRepToken(_extRepTokenFrom(req));
+    if (!repId) return res.status(401).json({ error: 'Neplatné přihlášení.' });
+    const id = Number(req.params.id);
+    const lead = await prisma.compounderLead.findUnique({ where: { id }, select: { id: true, external_rep_id: true } });
+    if (!lead || lead.external_rep_id !== repId) return res.status(404).json({ error: 'Kontakt nenalezen.' });
+    res.json(await buildOfferedLocations(id, { includeHidden: true }));
+  } catch (err) { next(err); }
+});
+
 // GET /api/compounder/external-reps/me/kiosk-revenue?code=&t= — tržby lokality pro obchodníka
 router.get('/external-reps/me/kiosk-revenue', async (req, res, next) => {
   try {
