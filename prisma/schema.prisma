@@ -5632,6 +5632,20 @@ model CompounderLead {
   @@map("compounder_leads")
 }
 
+// Do-not-contact seznam pro Compounder — obchodník nesmí oslovit tyto kontakty.
+// Ukládá se jen e-mail + telefon (normalizované), ne celý osobní záznam.
+model CompounderBlocklist {
+  id         Int      @id @default(autoincrement())
+  email      String?  @db.VarChar(255)
+  phone      String?  @db.VarChar(40)
+  note       String?  @db.VarChar(255)
+  created_at DateTime @default(now())
+
+  @@index([email])
+  @@index([phone])
+  @@map("compounder_blocklist")
+}
+
 // =============================================================================
 // COMPOUNDING — rezervace lokality (prádlomatu) k prodeji
 // =============================================================================

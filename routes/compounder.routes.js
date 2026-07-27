@@ -960,6 +960,7 @@ router.post('/leads', requireAuth, async (req, res, next) => {
         owner_email: owner ? owner.email : null,
       });
     }
+    if (await _isBlocked(email, phone)) return res.status(409).json({ error: 'Tento kontakt je na seznamu „neoslovovat".' });
     const myPersonId = (req.user && req.user.person) ? req.user.person.id : null;
     const lead = await prisma.compounderLead.create({
       data: {
@@ -2692,6 +2693,18 @@ function _extPortalBase() {
   return (process.env.COMPOUNDER_BASE_URL || 'https://www.compounder.world').replace(/\/+$/, '');
 }
 
+// Do-not-contact: kontakt je blokovaný, pokud jeho e-mail nebo telefon je v compounder_blocklist.
+async function _isBlocked(email, phone) {
+  const em = String(email || '').trim().toLowerCase();
+  const ph = String(phone || '').replace(/\D/g, '').slice(-9);
+  const or = [];
+  if (em && /.+@.+\..+/.test(em)) or.push({ email: em });
+  if (ph && ph.length >= 6) or.push({ phone: ph });
+  if (!or.length) return false;
+  const hit = await prisma.compounderBlocklist.findFirst({ where: { OR: or }, select: { id: true } }).catch(() => null);
+  return !!hit;
+}
+
 // GET /api/compounder/external-reps/me/leads — vlastní kontakty
 router.get('/external-reps/me/leads', async (req, res, next) => {
   try {
@@ -2726,6 +2739,7 @@ router.post('/external-reps/me/leads', async (req, res, next) => {
     if (name) dupOr.push({ name: { equals: name, mode: 'insensitive' } });
     const existing = dupOr.length ? await prisma.compounderLead.findFirst({ where: { OR: dupOr }, select: { id: true } }) : null;
     if (existing) return res.status(409).json({ error: 'Tento kontakt už je v systému.' });
+    if (await _isBlocked(email, phone)) return res.status(409).json({ error: 'Tento kontakt je na seznamu „neoslovovat" — nelze ho přidat.' });
     const lead = await prisma.compounderLead.create({
       data: { name: name || email || phone, email: email || null, role: 'compounder', lang, phone, source: 'obchodnik_ext', status: 'new', external_rep_id: repId },
       select: { id: true, name: true, email: true, phone: true, status: true },
@@ -2750,6 +2764,29 @@ router.patch('/external-reps/me/leads/:id', async (req, res, next) => {
     const upd = await prisma.compounderLead.update({ where: { id }, data });
     res.json({ ok: true, lead: upd });
   } catch (err) { next(err); }
+});
+
+// GET /api/compounder/external-reps/me/kiosk-revenue?code=&t= — tržby lokality pro obchodníka
+router.get('/external-reps/me/kiosk-revenue', async (req, res, next) => {
+  try {
+    const repId = verifyExtRepToken(_extRepTokenFrom(req));
+    if (!repId) return res.status(401).json({ error: 'Neplatné přihlášení.' });
+    const code = String(req.query.code || '').trim();
+    if (!code) return res.status(400).json({ error: 'Chybí kód lokality.' });
+    const arr = await _loadExternalReps();
+    const rep = arr.find((r) => Number(r.id) === repId);
+    if (!rep) return res.status(404).json({ error: 'Obchodník nenalezen.' });
+    const cfgMap = (await getSetting(COMPOUNDING_KIOSKS_KEY, { type: 'json', defaultValue: {} })) || {};
+    const isVip = Array.isArray(rep.lokality) && rep.lokality.map(String).indexOf(code) !== -1;
+    const isOffered = !!(cfgMap[code] && cfgMap[code].forSale);
+    if (!isVip && !isOffered) return res.status(403).json({ error: 'K této lokalitě nemáte přístup.' });
+    const data = await _computeKioskRevenue(code, req.query.fresh === '1');
+    return res.json(data);
+  } catch (err) {
+    if (err.code === 'SIS_NOT_CONFIGURED') return res.status(503).json({ error: 'SIS API není nakonfigurováno.' });
+    if (err.code === 'BAD_CODE') return res.status(400).json({ error: 'Neplatný kód kiosku.' });
+    return next(err);
+  }
 });
 
 // POST /api/compounder/kiosk-config/:code/photos → nahraje až 3 fotky lokality do R2
