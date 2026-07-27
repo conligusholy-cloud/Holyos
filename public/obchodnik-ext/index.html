@@ -404,7 +404,9 @@
   window.toggleSection=toggleSection; window.toggleTemplate=toggleTemplate; window.sendAccessEmail=sendAccessEmail; window.sendAccessWA=sendAccessWA;
 
   // ─── Tržby lokality (modal) ───
+  var _revCode=null, _revData=null;
   function openRevenue(code){
+    _revCode=String(code);
     var x=(DATA && DATA.lokality || []).find(function(l){return String(l.code)===String(code);});
     var label=x?x.label:code;
     var ov=document.createElement('div'); ov.className='modal-ovl'; ov.id='rev-modal'; ov.style.alignItems='flex-start'; ov.style.overflowY='auto'; ov.style.padding='16px';
@@ -421,14 +423,42 @@
     var cur=d.currency||'CZK';
     function m(n){ return (Math.round(n||0)).toLocaleString('cs-CZ')+' '+cur; }
     function net(n){ return (Math.round((n||0)/1.21)).toLocaleString('cs-CZ'); }
-    function card(l,v){ return '<div class="rev-card"><div class="rev-l">'+l+'</div><div class="rev-v">'+m(v)+'</div><div class="rev-s">bez DPH '+net(v)+' '+cur+'</div></div>'; }
-    var cards='<div class="rev-cards">'+card('Dnes',d.day)+card('Aktuální týden',d.thisWeek)+card('Předchozí týden',d.prevWeek)+card('Tento měsíc',d.thisMonth)+card('Poslední celý měsíc',d.prevMonth)+card('Poslední rok',d.year)+'</div>';
+    _revData=d;
+    function card(l,v,pk){ return '<div class="rev-card" style="cursor:pointer" onclick="openTxTable(&#39;'+pk+'&#39;,&#39;'+l+'&#39;)"><div class="rev-l">'+l+' ›</div><div class="rev-v">'+m(v)+'</div><div class="rev-s">bez DPH '+net(v)+' '+cur+'</div></div>'; }
+    var cards='<div class="rev-cards">'+card('Dnes',d.day,'day')+card('Aktuální týden',d.thisWeek,'thisWeek')+card('Předchozí týden',d.prevWeek,'prevWeek')+card('Tento měsíc',d.thisMonth,'thisMonth')+card('Poslední celý měsíc',d.prevMonth,'prevMonth')+card('Poslední rok',d.year,'year')+'</div>';
     var mm=d.monthly||[]; var mx=1; mm.forEach(function(x){ if(x.amount>mx)mx=x.amount; });
     var bars=mm.map(function(x,i){ var h=Math.round((x.amount||0)/mx*90)+4; var last=(i===mm.length-1); var st='height:'+h+'px'+(last?';background:repeating-linear-gradient(45deg,var(--gold2),var(--gold2) 3px,transparent 3px,transparent 7px);border:1px solid var(--gold2)':''); return '<div class="rev-bar"><div class="rb" style="'+st+'" title="'+esc(x.label)+': '+m(x.amount)+'"></div><div class="rev-bl">'+esc(x.label)+'</div></div>'; }).join('');
     var chart='<div class="rev-sec">Posledních 12 měsíců</div><div class="rev-bars">'+bars+'</div>';
     b.innerHTML=cards+chart+'<div style="font-size:11px;color:var(--muted);margin-top:14px">Částky jsou vč. DPH (v závorce bez DPH, sazba 21 %). Zdroj: SIS'+(d.generatedAt?(' · '+new Date(d.generatedAt).toLocaleString('cs-CZ')):'')+'</div>';
   }
-  window.openRevenue=openRevenue; window.closeRevenue=closeRevenue;
+  function openTxTable(period, plabel){
+    var b=document.getElementById('rev-body'); if(!b) return;
+    b.innerHTML='<button class="btn btn-g" style="width:auto;margin-bottom:12px" onclick="renderRevenue(_revData)">← Zpět na přehled</button><div class="loading">Načítám transakce…</div>';
+    fetch(API+'/external-reps/me/kiosk-revenue/transactions?code='+encodeURIComponent(_revCode)+'&period='+encodeURIComponent(period)+'&t='+encodeURIComponent(getToken()))
+      .then(function(r){ return r.json().then(function(j){return {ok:r.ok,j:j};}); })
+      .then(function(res){ if(!res.ok) throw new Error((res.j&&res.j.error)||'Chyba'); renderTxTable(res.j, plabel); })
+      .catch(function(e){ b.innerHTML='<button class="btn btn-g" style="width:auto;margin-bottom:12px" onclick="renderRevenue(_revData)">← Zpět</button><div class="err">'+esc(e.message||'Chyba')+'</div>'; });
+  }
+  function renderTxTable(d, plabel){
+    var b=document.getElementById('rev-body'); if(!b) return;
+    var cur=d.currency||'CZK';
+    function m(n){ return (Math.round(n||0)).toLocaleString('cs-CZ')+' '+cur; }
+    var txs=d.transactions||[];
+    var head='<button class="btn btn-g" style="width:auto;margin-bottom:12px" onclick="renderRevenue(_revData)">← Zpět na přehled</button>'+
+      '<div style="font-weight:800;margin-bottom:2px">'+esc(plabel)+' — '+txs.length+' transakcí</div>'+
+      '<div class="rev-s" style="margin-bottom:10px">Součet úspěšných: '+m(d.successfulSum)+(d.truncated?(' · zobrazeno max '+txs.length):'')+'</div>';
+    if(!txs.length){ b.innerHTML=head+'<div class="empty">Žádné transakce v tomto období.</div>'; return; }
+    var rows=txs.map(function(t){
+      var ok=String(t.status)==='Successful';
+      var dt=t.datetime?new Date(t.datetime).toLocaleString('cs-CZ'):'';
+      return '<tr><td style="padding:6px 8px;border-bottom:1px solid var(--line);white-space:nowrap">'+esc(dt)+'</td>'+
+        '<td style="padding:6px 8px;border-bottom:1px solid var(--line);text-align:right;font-weight:700">'+m(t.amount)+'</td>'+
+        '<td style="padding:6px 8px;border-bottom:1px solid var(--line);color:'+(ok?'var(--green)':'#ef4444')+'">'+esc(t.status||'')+'</td></tr>';
+    }).join('');
+    b.innerHTML=head+'<div style="overflow:auto;max-height:52vh"><table style="width:100%;border-collapse:collapse;font-size:12.5px"><thead><tr><th style="text-align:left;padding:6px 8px;color:var(--muted2)">Čas</th><th style="text-align:right;padding:6px 8px;color:var(--muted2)">Částka</th><th style="text-align:left;padding:6px 8px;color:var(--muted2)">Stav</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
+  }
+  window.openTxTable=openTxTable; window.renderTxTable=renderTxTable;
+  window.openRevenue=openRevenue; window.closeRevenue=closeRevenue; window.renderRevenue=renderRevenue;
 
   // Start — auto-login z e-mailového odkazu (?t=token)
   var _urlTok = new URLSearchParams(location.search).get('t');

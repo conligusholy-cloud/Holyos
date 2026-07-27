@@ -2871,6 +2871,30 @@ router.get('/external-reps/me/kiosk-revenue', async (req, res, next) => {
   }
 });
 
+// GET /api/compounder/external-reps/me/kiosk-revenue/transactions?code=&period=&t= — drill-down transakcí
+router.get('/external-reps/me/kiosk-revenue/transactions', async (req, res, next) => {
+  try {
+    const repId = verifyExtRepToken(_extRepTokenFrom(req));
+    if (!repId) return res.status(401).json({ error: 'Neplatné přihlášení.' });
+    const code = String(req.query.code || '').trim();
+    const period = String(req.query.period || '').trim();
+    if (!code) return res.status(400).json({ error: 'Chybí kód lokality.' });
+    const arr = await _loadExternalReps();
+    const rep = arr.find((r) => Number(r.id) === repId);
+    if (!rep) return res.status(404).json({ error: 'Obchodník nenalezen.' });
+    const cfgMap = (await getSetting(COMPOUNDING_KIOSKS_KEY, { type: 'json', defaultValue: {} })) || {};
+    const isVip = Array.isArray(rep.lokality) && rep.lokality.map(String).indexOf(code) !== -1;
+    const isOffered = !!(cfgMap[code] && cfgMap[code].forSale);
+    if (!isVip && !isOffered) return res.status(403).json({ error: 'K této lokalitě nemáte přístup.' });
+    const data = await _computeKioskPeriodTx(code, period);
+    return res.json(data);
+  } catch (err) {
+    if (err.code === 'SIS_NOT_CONFIGURED') return res.status(503).json({ error: 'SIS API není nakonfigurováno.' });
+    if (err.code === 'BAD_CODE' || err.code === 'BAD_PERIOD') return res.status(400).json({ error: 'Neplatný vstup.' });
+    return next(err);
+  }
+});
+
 // POST /api/compounder/kiosk-config/:code/photos → nahraje až 3 fotky lokality do R2
 router.post('/kiosk-config/:code/photos', requireAuth, kioskPhotoUpload.array('photos', 3), async (req, res, next) => {
   try {
