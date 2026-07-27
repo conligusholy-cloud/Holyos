@@ -4257,7 +4257,7 @@
         var yearNet = (obratBez - num(k.avgTop3) * (_svc / 100) - najem - obratBez * (_en / 100)) * 12;
         return { code: k.code, label: k.label, company: k.companyName, machine: m, loc: loc, total: total, yearNet: yearNet };
       });
-      if (((document.getElementById('ext-nonzero') || {}).checked)) rows = rows.filter(function(r){ return r.total != null && r.total > 0; });
+      if (((document.getElementById('ext-nonzero') || {}).checked)) rows = rows.filter(function(r){ return r.loc != null && r.loc > 0; });
       if (!rows.length) { box.innerHTML = '<div style="color:var(--text2);padding:24px;">Žádné lokality neodpovídají filtru.</div>'; return; }
       rows.sort(function(a, b){ return (b.total || 0) - (a.total || 0); });
       if (!rows.length) { box.innerHTML = '<div style="color:var(--text2);padding:24px;">Žádné lokality neodpovídají filtru.</div>'; return; }
