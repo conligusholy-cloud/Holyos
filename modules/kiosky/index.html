@@ -318,7 +318,7 @@
     </a>
 
     <!-- Portál externího obchodníka — samostatné přihlášení vlastním tokenem -->
-    <a href="/obchodnik-ext" target="_blank" class="kiosk-card">
+    <a href="https://www.compounder.world/obchodnik-ext" target="_blank" class="kiosk-card">
       <div class="kiosk-card-header">
         <div class="kiosk-card-icon" style="background: rgba(205, 164, 84, 0.15); color: #cda454;">🧑‍💼</div>
         <div>
@@ -332,7 +332,7 @@
       <div class="kiosk-card-footer">
         <div class="kiosk-card-status active">Aktivní</div>
         <div class="kiosk-card-actions">
-          <button class="btn-copy-link" onclick="event.preventDefault(); event.stopPropagation(); copyKioskLink(this, 'obchodnik-ext');">📋 Kopírovat odkaz</button>
+          <button class="btn-copy-link" onclick="event.preventDefault(); event.stopPropagation(); copyKioskLink(this, 'https://www.compounder.world/obchodnik-ext');">📋 Kopírovat odkaz</button>
           <div class="kiosk-card-action">Otevřít →</div>
         </div>
       </div>
@@ -345,7 +345,7 @@
 <script>renderSidebar('kiosky');</script>
 <script>
 function copyKioskLink(btn, path) {
-  var url = window.location.origin + '/' + path;
+  var url = /^https?:\/\//.test(path) ? path : (window.location.origin + '/' + path);
   navigator.clipboard.writeText(url).then(function() {
     btn.textContent = '✓ Zkopírováno';
     btn.classList.add('copied');
