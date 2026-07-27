@@ -4423,7 +4423,7 @@
       });
       if (!rows.length) { box.innerHTML = '<div style="color:var(--text2);padding:24px;">Žádní obchodníci. Přidej prvního tlačítkem „➕ Přidat obchodníka".</div>'; return; }
       var h = '<div style="overflow-x:auto;"><table class="data-table kv-compact"><thead><tr>' +
-        '<th>Jméno / firma</th><th>Kontakt</th><th style="text-align:right;">Provize</th><th style="text-align:right;">Lokality</th><th>Stav</th><th></th></tr></thead><tbody>';
+        '<th>Jméno / firma</th><th>Kontakt</th><th style="text-align:right;">Provize</th><th style="text-align:right;">VIP lok.</th><th>Stav</th><th></th></tr></thead><tbody>';
       rows.forEach(function(x){
         var badge = x.stav === 'aktivni' ? '#10b981' : (x.stav === 've_schvalovani' ? '#eab308' : 'var(--text2)');
         var kontakt = [x.email, x.telefon].filter(Boolean).join(' · ') || '<span style="color:var(--text2);">—</span>';
@@ -4454,13 +4454,13 @@
     }
     function _exrKioskOptions(selected) {
       var sel = {}; (selected||[]).forEach(function(c){ sel[String(c)] = true; });
-      var list = (_kioskData && Array.isArray(_kioskData.kiosks)) ? _kioskData.kiosks.filter(function(k){ if (String(k.companyName||'').toLowerCase().indexOf('best series') === -1) return false; return !!((_kioskConfig[k.code]||{}).forSale) || sel[String(k.code)]; }) : [];
+      var list = (_kioskData && Array.isArray(_kioskData.kiosks)) ? _kioskData.kiosks.filter(function(k){ if (String(k.companyName||'').toLowerCase().indexOf('best series') === -1) return false; return !((_kioskConfig[k.code]||{}).forSale) || sel[String(k.code)]; }) : [];
       list.sort(function(a,b){ return String(a.label||a.code).localeCompare(String(b.label||b.code),'cs'); });
       return list.map(function(k){
         return '<label style="display:flex;align-items:center;gap:8px;padding:4px 2px;font-size:13px;cursor:pointer;">' +
           '<input type="checkbox" class="exr-lok" value="' + _exrEsc(k.code) + '"' + (sel[String(k.code)] ? ' checked' : '') + '>' +
           '<span style="font-weight:600;">' + _exrEsc(k.code) + '</span> <span style="color:var(--text2);">' + _exrEsc(k.label||'') + '</span></label>';
-      }).join('') || '<div style="color:var(--text2);font-size:12px;padding:8px;">Žádné nabízené lokality. Označ je v záložce Compounding (sloupec „Nabízet").</div>';
+      }).join('') || '<div style="color:var(--text2);font-size:12px;padding:8px;">Žádné VIP lokality k přidání.</div>';
     }
     function openExrForm(id) {
       var rec = id ? _exrData.find(function(x){ return x.id === id; }) : null;
@@ -4487,7 +4487,7 @@
           fld('Přihlašovací jméno', inp('exr-login', rec.login)) +
           fld('Heslo' + (rec.has_password ? ' (nastaveno)' : ''), '<input id="exr-heslo" type="password" value="" autocomplete="new-password" placeholder="' + (rec.has_password ? 'ponech prázdné = beze změny' : 'zadej heslo') + '" style="' + st + '">') +
         '</div>' +
-        fld('Přiřazené lokality (nabízené v Compoundingu)', '<input type="text" id="exr-lok-filter" placeholder="Filtrovat…" onkeyup="exrFilterLok()" style="' + st + 'margin-bottom:6px;"><div id="exr-lok-box" style="max-height:200px;overflow:auto;border:1px solid var(--border,#333);border-radius:8px;padding:6px 10px;">' + _exrKioskOptions(rec.lokality) + '</div>') +
+        fld('VIP lokality navíc (nad společnou nabídkou)', '<input type="text" id="exr-lok-filter" placeholder="Filtrovat…" onkeyup="exrFilterLok()" style="' + st + 'margin-bottom:6px;"><div id="exr-lok-box" style="max-height:200px;overflow:auto;border:1px solid var(--border,#333);border-radius:8px;padding:6px 10px;">' + _exrKioskOptions(rec.lokality) + '</div>') +
         fld('Poznámky', '<textarea id="exr-pozn" rows="3" style="' + st + 'resize:vertical;">' + _exrEsc(rec.poznamky) + '</textarea>') +
         '<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:8px;">' +
           '<button class="btn" onclick="closeExrForm()">Zrušit</button>' +
@@ -4534,8 +4534,12 @@
       var rec = _exrData.find(function(x){ return x.id === id; }); if (!rec) return;
       var lv = document.getElementById('exr-list-view'); var dv = document.getElementById('exr-detail-view');
       if (lv) lv.style.display = 'none'; if (dv) dv.style.display = '';
-      var codes = Array.isArray(rec.lokality) ? rec.lokality : [];
-      var rows = codes.map(function(c){ var k = _exrKioskByCode(c); if (!k) return { code:c, label:'(mimo seznam)', metrics:null }; return { code:c, label:k.label||c, metrics:_exrKioskMetrics(k) }; });
+      var _forSale = Object.keys(_kioskConfig).filter(function(c){ return _kioskConfig[c] && _kioskConfig[c].forSale; });
+      var _vip = Array.isArray(rec.lokality) ? rec.lokality.map(String) : [];
+      var _vipSet = {}; _vip.forEach(function(c){ _vipSet[c] = true; });
+      var _fsSet = {}; _forSale.forEach(function(c){ _fsSet[String(c)] = true; });
+      var codes = []; var _seen = {}; _forSale.concat(_vip).forEach(function(c){ c = String(c); if(!_seen[c]){ _seen[c]=true; codes.push(c); } });
+      var rows = codes.map(function(c){ var vip = !!(_vipSet[String(c)] && !_fsSet[String(c)]); var k = _exrKioskByCode(c); if (!k) return { code:c, label:'(mimo seznam)', metrics:null, vip:vip }; return { code:c, label:k.label||c, metrics:_exrKioskMetrics(k), vip:vip }; });
       var objem = rows.reduce(function(a,r){ return a + ((r.metrics && r.metrics.total) || 0); }, 0);
       var provize = rows.reduce(function(a,r){ return a + (r.metrics ? _exrCommissionFor(rec, r.metrics) : 0); }, 0);
       var initials = (rec.jmeno||'?').trim().split(/\s+/).slice(0,2).map(function(w){ return w.charAt(0).toUpperCase(); }).join('');
@@ -4549,7 +4553,7 @@
         '<div style="color:var(--text2);font-size:13px;margin-top:2px;">' + [rec.ico?('IČO '+_exrEsc(rec.ico)):'', _exrEsc(rec.email||''), _exrEsc(rec.telefon||'')].filter(Boolean).join(' · ') + '</div>' + (rec.login ? ('<div style="color:var(--text2);font-size:12px;margin-top:3px;">🔑 Přihlášení: <b style="color:var(--text);">' + _exrEsc(rec.login) + '</b>' + (rec.has_password ? ' · heslo nastaveno' : ' · <span style="color:#eab308;">bez hesla</span>') + '</div>') : '') + '</div>' +
         '<button class="btn btn-primary" onclick="openExrForm(' + rec.id + ')">✏️ Upravit</button></div>';
       h += '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:18px;">' +
-        kpi('Přiřazené lokality', String(codes.length)) +
+        kpi('Přiřazené lokality', String(codes.length), 'společná nabídka + VIP') +
         kpi('Sazba provize', sazbaLabel, EXR_CALC[rec.zpusob_vypoctu]||'') +
         kpi('Odhad objemu', kvMoney(objem,'CZK'), '∑ celkových cen') +
         kpi('Provize celkem', kvMoney(provize,'CZK'), EXR_PAY[rec.splatnost]||'') + '</div>';
@@ -4561,7 +4565,7 @@
           var m = r.metrics;
           var prov = m ? _exrCommissionFor(rec, m) : null;
           var nav = (m && m.total > 0 && m.yearNet > 0) ? ((m.total / m.yearNet).toFixed(1).replace('.',',') + ' let') : '—';
-          h += '<tr><td style="font-weight:600;">' + _exrEsc(r.code) + '</td><td>' + _exrEsc(r.label) + '</td>' +
+          h += '<tr><td style="font-weight:600;">' + _exrEsc(r.code) + (r.vip ? ' <span style="font-size:10px;color:#cda454;border:1px solid rgba(205,164,84,.5);border-radius:5px;padding:0 5px;">🎯 VIP</span>' : '') + '</td><td>' + _exrEsc(r.label) + '</td>' +
             '<td style="text-align:right;white-space:nowrap;">' + (m && m.total != null ? kvMoney(m.total,'CZK') : '—') + '</td>' +
             '<td style="text-align:right;white-space:nowrap;color:#10b981;font-weight:700;">' + (prov != null ? kvMoney(prov,'CZK') : '—') + '</td>' +
             '<td style="text-align:right;white-space:nowrap;color:#3b82f6;">' + nav + '</td></tr>';

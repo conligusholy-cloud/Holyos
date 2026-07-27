@@ -2574,10 +2574,14 @@ router.delete('/external-reps/:id', requireAuth, async (req, res, next) => {
 
 // Serverový výpočet dat portálu externího obchodníka (metriky lokalit + provize).
 async function _extRepPortalData(rep) {
-  const codes = Array.isArray(rep.lokality) ? rep.lokality : [];
   const kiosks = await _sisKiosks().catch(() => []);
   const cs = (await getSetting(COMPOUNDING_SETTINGS_KEY, { type: 'json', defaultValue: COMPOUNDING_SETTINGS_DEFAULT })) || {};
   const cfgMap = (await getSetting(COMPOUNDING_KIOSKS_KEY, { type: 'json', defaultValue: {} })) || {};
+  // Společná nabídka (forSale) = základ pro KAŽDÉHO obchodníka; rep.lokality = VIP navíc.
+  const forSaleSet = {}; Object.keys(cfgMap).forEach((c) => { if (cfgMap[c] && cfgMap[c].forSale) forSaleSet[String(c)] = true; });
+  const vipList = (Array.isArray(rep.lokality) ? rep.lokality : []).map(String);
+  const vipSet = {}; vipList.forEach((c) => { vipSet[c] = true; });
+  const codes = Array.from(new Set(Object.keys(forSaleSet).concat(vipList)));
   const fx = await fxRatesCzk().catch(() => ({ CZK: 1, EUR: 25 }));
   const eur = fx.EUR || 25;
   const months = Number.isFinite(cs.locationMonths) ? cs.locationMonths : 12;
@@ -2589,8 +2593,9 @@ async function _extRepPortalData(rep) {
   const num = (v) => (typeof v === 'number' && isFinite(v)) ? v : 0;
   const rate = Number(rep.sazba) || 0;
   const rows = codes.map((code) => {
+    const isVip = !!(vipSet[code] && !forSaleSet[code]);
     const k = kiosks.find((x) => String(x.code) === String(code));
-    if (!k) return { code, label: '(mimo seznam)', total: null, loc: null, machine: null, yearNet: 0, commission: null, navratnost: null };
+    if (!k) return { code, label: '(mimo seznam)', total: null, loc: null, machine: null, yearNet: 0, commission: null, navratnost: null, vip: isVip };
     const cfg = cfgMap[code] || {};
     const ver = String(cfg.version || '').toLowerCase();
     const machine = (pl[ver] && pl[ver].eur != null && isFinite(Number(pl[ver].eur))) ? Math.round(Number(pl[ver].eur) * eur) : null;
@@ -2611,7 +2616,7 @@ async function _extRepPortalData(rep) {
     else if (rep.zpusob_vypoctu === 'celkova') commission = Math.round((total || 0) * rate / 100);
     else commission = Math.round((loc || 0) * rate / 100);
     const navratnost = (total > 0 && yearNet > 0) ? (Math.round(total / yearNet * 10) / 10) : null;
-    return { code, label: k.label || code, total: total != null ? Math.round(total) : null, loc: Math.round(loc || 0), machine, yearNet: Math.round(yearNet), commission, navratnost };
+    return { code, label: k.label || code, total: total != null ? Math.round(total) : null, loc: Math.round(loc || 0), machine, yearNet: Math.round(yearNet), commission, navratnost, vip: isVip };
   });
   const objem = rows.reduce((a, r) => a + (r.total || 0), 0);
   const provize = rows.reduce((a, r) => a + (r.commission || 0), 0);

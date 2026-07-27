@@ -91,7 +91,7 @@
     <div id="screen-lok" class="screen">
       <div class="kpis">
         <div class="kpi"><div class="l">Moje lokality</div><div class="v" id="k-pocet">0</div><div class="s">přiřazeno</div></div>
-        <div class="kpi"><div class="l">Odhad objemu</div><div class="v" id="k-objem">0</div><div class="s">∑ celkových cen</div></div>
+        <div class="kpi"><div class="l">Odhad objemu</div><div class="v" id="k-objem">0</div><div class="s">∑ celkových cen · bez DPH</div></div>
       </div>
       <div class="sec-title">Přiřazené lokality</div>
       <div id="lok-list"><div class="loading">Načítám…</div></div>
@@ -181,7 +181,8 @@
     else {
       ll.innerHTML = lok.map(function(x){
         var nav = (x.navratnost != null) ? (String(x.navratnost).replace('.', ',') + ' let') : '—';
-        return '<div class="card"><div class="row"><div><div class="code">' + esc(x.code) + '</div><div class="name">' + esc(x.label) + '</div></div><div class="price">' + money(x.total) + '</div></div>' +
+        var vipTag = x.vip ? ' <span style="font-size:10px;color:#cda454;border:1px solid rgba(205,164,84,.5);border-radius:6px;padding:1px 5px;">🎯 VIP</span>' : '';
+        return '<div class="card"><div class="row"><div><div class="code">' + esc(x.code) + vipTag + '</div><div class="name">' + esc(x.label) + '</div></div><div style="text-align:right"><div class="price">' + money(x.total) + '</div><div style="font-size:10px;color:var(--muted2)">bez DPH</div></div></div>' +
           '<div class="metrics">' +
             '<div class="metric"><div class="ml">Cena kiosku</div><div class="mv">' + money(x.machine) + '</div></div>' +
             '<div class="metric"><div class="ml">Cena lokality</div><div class="mv">' + money(x.loc) + '</div></div>' +
@@ -194,7 +195,8 @@
     if(!lok.length){ pl.innerHTML = '<div class="empty">Žádné lokality k výpočtu provize.</div>'; }
     else {
       pl.innerHTML = lok.map(function(x){
-        return '<div class="card"><div class="row"><div><div class="code">' + esc(x.code) + '</div><div class="name">' + esc(x.label) + '</div></div><div class="price prov">' + money(x.commission) + '</div></div>' +
+        var vipTag2 = x.vip ? ' <span style="font-size:10px;color:#cda454;border:1px solid rgba(205,164,84,.5);border-radius:6px;padding:1px 5px;">🎯 VIP</span>' : '';
+        return '<div class="card"><div class="row"><div><div class="code">' + esc(x.code) + vipTag2 + '</div><div class="name">' + esc(x.label) + '</div></div><div class="price prov">' + money(x.commission) + '</div></div>' +
           '<div class="metrics">' +
             '<div class="metric"><div class="ml">Celková cena</div><div class="mv">' + money(x.total) + '</div></div>' +
             '<div class="metric"><div class="ml">Cena lokality</div><div class="mv">' + money(x.loc) + '</div></div>' +
