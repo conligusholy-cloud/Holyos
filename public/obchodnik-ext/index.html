@@ -238,9 +238,9 @@
             '</div>' +
             '<div class="offer-metrics">' +
               '<span>Obrat bez DPH <b class="def">' + money(x.obrat_bez) + '</b>/měs</span>' +
-              '<span>Servis <b style="color:#ef4444">' + money(x.servis) + '</b>/měs</span>' +
+              '<span>Servis <b style="color:#ef4444">' + money(x.servis) + '</b>/měs <span class="ecs">(' + String(x.servis_pct != null ? x.servis_pct : 13).replace('.', ',') + ' % z obratu)</span></span>' +
               '<span>Nájem <b style="color:#ef4444">' + money(x.najem) + '</b>/měs</span>' +
-              '<span>Energie <b style="color:#ef4444">' + money(x.energie) + '</b>/měs</span>' +
+              '<span>Energie <b style="color:#ef4444">' + money(x.energie) + '</b>/měs <span class="ecs">(voda, elektřina, stočné · odhad ' + String(x.energie_pct != null ? x.energie_pct : 9.5).replace('.', ',') + ' % z obratu)</span></span>' +
               '<span>Celkem 5 let <b class="gold">' + money(x.profit5) + '</b></span>' +
               '<span>Čistý roční <b class="green">' + money(x.yearNet) + '</b></span>' +
               '<span>Garance odkupu <b class="def">' + money(x.buyback) + '</b> <span class="ecs">' + (x.buyback_pct || 50) + ' %, ' + (x.buyback_years || 5) + '. rok</span></span>' +
