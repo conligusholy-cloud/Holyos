@@ -4423,7 +4423,7 @@
       });
       if (!rows.length) { box.innerHTML = '<div style="color:var(--text2);padding:24px;">Žádní obchodníci. Přidej prvního tlačítkem „➕ Přidat obchodníka".</div>'; return; }
       var h = '<div style="overflow-x:auto;"><table class="data-table kv-compact"><thead><tr>' +
-        '<th>Jméno / firma</th><th>Kontakt</th><th style="text-align:right;">Provize</th><th style="text-align:right;">VIP lok.</th><th>Stav</th><th></th></tr></thead><tbody>';
+        '<th>Jméno / firma</th><th>Kontakt</th><th style="text-align:right;">Provize</th><th style="text-align:right;">VIP lok.</th><th style="white-space:nowrap;">Naposledy</th><th>Stav</th><th></th></tr></thead><tbody>';
       rows.forEach(function(x){
         var badge = x.stav === 'aktivni' ? '#10b981' : (x.stav === 've_schvalovani' ? '#eab308' : 'var(--text2)');
         var kontakt = [x.email, x.telefon].filter(Boolean).join(' · ') || '<span style="color:var(--text2);">—</span>';
@@ -4433,6 +4433,7 @@
           '<td style="color:var(--text2);font-size:12px;">' + kontakt + '</td>' +
           '<td style="text-align:right;white-space:nowrap;">' + sazba + '</td>' +
           '<td style="text-align:right;">' + (Array.isArray(x.lokality) ? x.lokality.length : 0) + '</td>' +
+          '<td style="color:var(--text2);font-size:12px;white-space:nowrap;">' + (x.last_seen_at ? new Date(x.last_seen_at).toLocaleString('cs-CZ') : '—') + '</td>' +
           '<td><span style="color:' + badge + ';font-weight:600;">' + (EXR_STAV[x.stav] || x.stav) + '</span></td>' +
           '<td style="text-align:right;white-space:nowrap;" onclick="event.stopPropagation()">' +
             '<button class="btn" onclick="openExrForm(' + x.id + ')" title="Upravit" style="padding:4px 9px;font-size:13px;margin-right:4px;">✏️</button>' +
@@ -4588,6 +4589,15 @@
       }
       h += '<div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--text2);margin-bottom:6px;">Poznámky</div>' +
         '<div style="white-space:pre-wrap;color:var(--text);font-size:14px;background:var(--bg,#111);border:1px solid var(--border,#333);border-radius:8px;padding:12px 14px;min-height:44px;margin-bottom:18px;">' + (_exrEsc(rec.poznamky) || '<span style="color:var(--text2);">—</span>') + '</div>';
+      var lastSeen = rec.last_seen_at ? new Date(rec.last_seen_at).toLocaleString('cs-CZ') : 'nikdy';
+      h += '<div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--text2);margin:4px 0 8px;">Aktivita obchodníka</div>';
+      h += '<div style="font-size:13px;color:var(--text2);margin-bottom:10px;">Naposledy aktivní: <b style="color:var(--text);">' + lastSeen + '</b></div>';
+      h += '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px;">' + kpi('Přihlášení', String(rec.logins || 0)) + kpi('Zobrazení tržeb', String(rec.revenue_views || 0)) + kpi('Založené kontakty', String(rec.contacts_created || 0)) + '</div>';
+      if (Array.isArray(rec.activity) && rec.activity.length) {
+        h += '<div style="background:var(--bg,#111);border:1px solid var(--border,#333);border-radius:8px;padding:6px 12px;max-height:230px;overflow:auto;margin-bottom:18px;">' + rec.activity.map(function(a){ return '<div style="font-size:12.5px;padding:4px 0;border-bottom:1px solid rgba(255,255,255,.05);"><span style="color:var(--text2);">' + _exrEsc(a.at ? new Date(a.at).toLocaleString('cs-CZ') : '') + '</span> — ' + _exrEsc(a.text || '') + '</div>'; }).join('') + '</div>';
+      } else {
+        h += '<div style="color:var(--text2);font-size:13px;margin-bottom:18px;">Zatím žádná zaznamenaná aktivita.</div>';
+      }
       h += '<div style="border:1px dashed rgba(201,162,75,.4);border-radius:10px;padding:14px 16px;color:var(--text2);font-size:13px;">🤖 <b style="color:var(--text);">AI nástroje</b> (cenové tipy, skórování leadů, automatické oslovení) — připraveno pro další iteraci, zatím neaktivní.</div>';
       dv.innerHTML = h;
     }

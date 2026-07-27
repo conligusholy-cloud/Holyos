@@ -2466,6 +2466,26 @@ function _sanitizeRep(r) {
   delete c.password_hash; delete c.password;
   return c;
 }
+
+// Zaznamenej aktivitu obchodníka: last_seen + volitelně počítadlo (incKey) a řádek do logu (text).
+async function _repActivity(repId, text, incKey) {
+  try {
+    const arr = await _loadExternalReps();
+    const i = arr.findIndex((r) => Number(r.id) === repId);
+    if (i === -1) return;
+    const rep = Object.assign({}, arr[i]);
+    const now = new Date().toISOString();
+    rep.last_seen_at = now;
+    if (incKey) rep[incKey] = (Number(rep[incKey]) || 0) + 1;
+    if (text) {
+      const act = Array.isArray(rep.activity) ? rep.activity.slice() : [];
+      act.unshift({ at: now, text: String(text).slice(0, 200) });
+      rep.activity = act.slice(0, 50);
+    }
+    arr[i] = rep;
+    await _saveExternalReps(arr, null);
+  } catch (e) { /* aktivita neblokuje hlavní request */ }
+}
 // Zpracuj login (normalizace + unikátnost) a heslo (bcrypt hash). Mutuje data.
 // Vrací { status, error } při chybě, jinak null.
 async function _prepRepCredentials(data, arr, selfId) {
@@ -2538,6 +2558,7 @@ router.post('/external-reps/login', async (req, res, next) => {
     if (!rep || !rep.password_hash || rep.stav !== 'aktivni') return res.status(401).json({ error: 'Neplatné přihlášení.' });
     const ok = await bcrypt.compare(password, rep.password_hash);
     if (!ok) return res.status(401).json({ error: 'Neplatné přihlášení.' });
+    await _repActivity(rep.id, 'Přihlášení do portálu', 'logins');
     res.json({ ok: true, token: makeExtRepToken(rep.id), rep: _sanitizeRep(rep) });
   } catch (err) { next(err); }
 });
@@ -2644,6 +2665,7 @@ router.get('/external-reps/me', async (req, res, next) => {
     const rep = arr.find((r) => Number(r.id) === repId);
     if (!rep) return res.status(404).json({ error: 'Obchodník nenalezen.' });
     if (rep.stav !== 'aktivni') return res.status(403).json({ error: 'Účet není aktivní.' });
+    _repActivity(repId).catch(() => {});
     res.json(await _extRepPortalData(rep));
   } catch (err) { next(err); }
 });
@@ -2744,6 +2766,7 @@ router.post('/external-reps/me/leads', async (req, res, next) => {
       data: { name: name || email || phone, email: email || null, role: 'compounder', lang, phone, source: 'obchodnik_ext', status: 'new', external_rep_id: repId },
       select: { id: true, name: true, email: true, phone: true, status: true },
     });
+    _repActivity(repId, 'Založil kontakt: ' + (lead.name || ''), 'contacts_created').catch(() => {});
     res.status(201).json({ ok: true, lead, portal_url: _extPortalBase() + '/portal?t=' + makeLoginToken(lead.id) });
   } catch (err) { next(err); }
 });
@@ -2762,6 +2785,7 @@ router.patch('/external-reps/me/leads/:id', async (req, res, next) => {
     if (b.notes !== undefined) data.notes = (b.notes === null) ? null : String(b.notes).slice(0, 5000);
     if (b.activity) { const line = '[' + new Date().toLocaleString('cs-CZ') + '] ' + String(b.activity).slice(0, 500); data.activity_log = (lead.activity_log ? (lead.activity_log + '\n') : '') + line; }
     const upd = await prisma.compounderLead.update({ where: { id }, data });
+    _repActivity(repId, 'Upravil kontakt #' + id, null).catch(() => {});
     res.json({ ok: true, lead: upd });
   } catch (err) { next(err); }
 });
@@ -2780,6 +2804,7 @@ router.get('/external-reps/me/kiosk-revenue', async (req, res, next) => {
     const isVip = Array.isArray(rep.lokality) && rep.lokality.map(String).indexOf(code) !== -1;
     const isOffered = !!(cfgMap[code] && cfgMap[code].forSale);
     if (!isVip && !isOffered) return res.status(403).json({ error: 'K této lokalitě nemáte přístup.' });
+    _repActivity(repId, 'Zobrazil tržby: ' + code, 'revenue_views').catch(() => {});
     const data = await _computeKioskRevenue(code, req.query.fresh === '1');
     return res.json(data);
   } catch (err) {
