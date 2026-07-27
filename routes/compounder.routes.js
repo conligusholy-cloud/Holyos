@@ -3026,6 +3026,11 @@ router.post('/kiosk-config/:code/photos', requireAuth, kioskPhotoUpload.array('p
       userId: req.user && req.user.id,
     });
     res.json({ ok: true, code, photos: next_[code].photos });
+  } catch (err) {
+    if (err && err.status === 503) return res.status(503).json({ error: 'Úložiště fotek (R2) není nakonfigurované.' });
+    next(err);
+  }
+});
 
 // POST /api/compounder/version-photo/:ver → nahraje obrázek verze kiosku (v2/v3/v4) do R2
 router.post('/version-photo/:ver', requireAuth, kioskPhotoUpload.single('photo'), async (req, res, next) => {
@@ -3045,11 +3050,6 @@ router.post('/version-photo/:ver', requireAuth, kioskPhotoUpload.single('photo')
     res.json({ ok: true, ver, url });
   } catch (err) {
     if (err && err.status === 503) return res.status(503).json({ error: 'Úložiště (R2) není nakonfigurované.' });
-    next(err);
-  }
-});
-  } catch (err) {
-    if (err && err.status === 503) return res.status(503).json({ error: 'Úložiště fotek (R2) není nakonfigurované.' });
     next(err);
   }
 });
