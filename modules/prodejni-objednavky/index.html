@@ -5234,10 +5234,11 @@
           card('Tento měsíc' + (d.thisMonthName ? ' (' + d.thisMonthName + ')' : ''), d.thisMonth, 'thisMonth') +
           card('Poslední celý měsíc' + (d.prevMonthName ? ' (' + d.prevMonthName + ')' : ''), d.prevMonth, 'prevMonth') +
           card('Poslední rok', d.year, 'year') +
+          card('Poslední 2 roky', d.year2, 'year2') +
           '</div>' +
           '<div style="font-size:11px;color:var(--text2);margin-top:8px;">💡 Klikni na kartu období a zobrazíš jednotlivé transakce.</div>' +
           '<div style="font-size:11px;color:var(--text2);margin-top:6px;">Částky jsou <b>vč. DPH</b> (v závorce bez DPH, sazba 21 %).</div>' +
-          '<div style="margin-top:16px;font-size:12px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;">📈 Posledních 12 měsíců</div>' + bars(d.monthly, '#10b981') + labels(d.monthly, 1) +
+          '<div style="margin-top:16px;font-size:12px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;">📈 Posledních 24 měsíců (2 roky)</div>' + bars(d.monthly24 || d.monthly, '#10b981') + labels(d.monthly24 || d.monthly, 2) +
           '<div style="margin-top:16px;font-size:12px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;">📅 Posledních 30 dní</div>' + bars(d.daily, '#eab308') + labels(d.daily, 5) +
           '<div style="color:var(--text2);font-size:11px;margin-top:14px;border-top:1px solid var(--border);padding-top:10px;">Součet částek transakcí ze SIS · ' + (d.txCount || 0) + ' transakcí za rok' + (d.complete ? '' : ' (částečně — velký objem)') + (d.generatedAt ? (' · ' + new Date(d.generatedAt).toLocaleString('cs-CZ')) : '') + '</div>';
       } catch (e) {
@@ -5248,7 +5249,7 @@
 
     // Drill-down: jednotlivé transakce daného období (klik na kartu tržeb).
     async function openKioskPeriod(code, period) {
-      var titles = { day:'Dnes', thisWeek:'Aktuální týden', prevWeek:'Předchozí týden', thisMonth:'Tento měsíc', prevMonth:'Poslední celý měsíc', year:'Poslední rok' };
+      var titles = { day:'Dnes', thisWeek:'Aktuální týden', prevWeek:'Předchozí týden', thisMonth:'Tento měsíc', prevMonth:'Poslední celý měsíc', year:'Poslední rok', year2:'Poslední 2 roky' };
       var title = titles[period] || 'Období';
       var host = document.getElementById('modal-root'); if (!host) return;
       var wrap = document.createElement('div');
