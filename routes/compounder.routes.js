@@ -1983,6 +1983,22 @@ router.post('/leads/:id/send-loss-email', requireAuth, async (req, res, next) =>
   } catch (err) { next(err); }
 });
 
+// GET /api/compounder/leads/:id/loss-email-status — kdy byl naposledy odeslán
+// e-mail se ztrátou a s jakou ušlou částkou (z eventů loss_email_sent) + počet.
+router.get('/leads/:id/loss-email-status', requireAuth, async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'Neplatné ID' });
+    const where = { event: 'loss_email_sent', props: { path: ['lead_id'], equals: id } };
+    const [last, count] = await Promise.all([
+      prisma.compounderEvent.findFirst({ where, orderBy: { created_at: 'desc' }, select: { created_at: true, props: true } }),
+      prisma.compounderEvent.count({ where }),
+    ]);
+    const missed = last && last.props && last.props.missed != null ? Number(last.props.missed) : null;
+    res.json({ count, lastSentAt: last ? last.created_at : null, missed });
+  } catch (err) { next(err); }
+});
+
 router.get('/leads/:id/activity', requireAuth, async (req, res, next) => {
   try {
     const id = Number(req.params.id);

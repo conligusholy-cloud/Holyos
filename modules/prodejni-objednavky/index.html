@@ -3151,7 +3151,7 @@
       var body = document.createElement('div'); body.innerHTML = '<div style="color:var(--text2);font-size:13px;">Načítám cestu…</div>';
       td.appendChild(body);
       tr.appendChild(td); row.parentNode.insertBefore(tr, row.nextSibling);
-      cmpRenderOfferChips(id); cmpFillOfferSelect(id);
+      cmpRenderOfferChips(id); cmpFillOfferSelect(id); cmpLoadLossInfo(id);
       try {
         var r = await fetch('/api/compounder/leads/'+id+'/activity', { credentials:'include' });
         var a = await r.json();
@@ -3396,6 +3396,7 @@
         + '<button type="button" onclick="cmpSendLoss(' + id + ', this)" title="Elegantní e-mail se skutečnou ušlou částkou z jeho modelu + odkaz zpět do portálu" style="background:#ef4444;color:#fff;border:none;border-radius:8px;padding:6px 14px;font-size:12.5px;font-weight:700;cursor:pointer;">📉 Odeslat e-mail se ztrátou</button>'
         + '<span data-invmsg="' + id + '" style="font-size:12px;align-self:center;color:var(--text2);"></span>'
         + '</div>'
+        + '<div data-lossinfo="' + id + '" style="font-size:11.5px;color:var(--text2);margin-top:6px;"></div>'
         + '<div style="font-size:11.5px;color:var(--text2);margin-top:8px;display:flex;align-items:center;gap:6px;"><span>⏰</span><span>E-mail se ztrátou se navíc <b>automaticky rozesílá každý čtvrtek ve 21:00</b> všem aktivním leadům (kdo už byl v portálu, nevlastní lokalitu a má uložený model).</span></div>'
         + '</div>';
     }
@@ -3415,10 +3416,29 @@
         var j = await r.json().catch(function(){ return {}; });
         if (!r.ok || !j.ok) throw new Error(j.error || ('HTTP ' + r.status));
         if (msg){ msg.style.color = '#10b981'; msg.textContent = '✅ Odesláno — ušlá částka ' + (Number(j.missed)||0).toLocaleString('cs-CZ') + ' Kč'; }
+        cmpLoadLossInfo(id);
       } catch(e){ if (msg){ msg.style.color = '#ef4444'; msg.textContent = 'Nepodařilo se: ' + e.message; } }
       finally { if (btn) btn.disabled = false; }
     }
     window.cmpSendLoss = cmpSendLoss;
+    // Načte a zobrazí, kdy byl naposledy odeslán e-mail se ztrátou a s jakou částkou.
+    async function cmpLoadLossInfo(id){
+      var el = document.querySelector('[data-lossinfo="' + id + '"]');
+      if (!el) return;
+      try {
+        var r = await fetch('/api/compounder/leads/' + id + '/loss-email-status', { credentials:'include' });
+        var j = await r.json().catch(function(){ return {}; });
+        if (!r.ok) return;
+        if (j && j.count > 0){
+          var castka = (Number(j.missed)||0).toLocaleString('cs-CZ') + ' Kč';
+          el.innerHTML = '📉 Poslední e-mail se ztrátou: <b>' + cmpFmtDt(j.lastSentAt) + '</b> · ušlá částka <b>' + castka + '</b>'
+            + (j.count > 1 ? ' <span style="color:var(--text2);">(celkem ' + j.count + '×)</span>' : '');
+        } else {
+          el.innerHTML = '📉 E-mail se ztrátou zatím neodeslán.';
+        }
+      } catch(e){ /* tichý fail — jen informativní řádek */ }
+    }
+    window.cmpLoadLossInfo = cmpLoadLossInfo;
     async function cmpSendAccess(id, btn){
       var msg = document.querySelector('[data-invmsg="' + id + '"]');
       if (btn) btn.disabled = true;
