@@ -27,3 +27,5 @@ clients/cad-bridge/
 clients/velin-mobile/
 # PWA sklad: server servíruje jen dist/, node_modules netřeba nahrávat
 clients/pwa-sklad/node_modules/
+
+.puppeteer-cache/

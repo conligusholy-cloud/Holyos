@@ -120,7 +120,7 @@ function planPeriodStartMs(period) {
 }
 async function computeActuals(personId) {
   const leads = await prisma.compounderLead.findMany({
-    where: { owner_person_id: personId },
+    where: { owner_person_id: personId, is_test: false },
     select: { id: true, status: true, created_at: true, updated_at: true }, take: 10000,
   });
   const leadIds = leads.map((l) => l.id);
@@ -148,7 +148,7 @@ async function getTargets(personId) {
 
 // ─── Osobní cíle: odhad z historie a rozpuštění na periody ────────────────────
 async function gatherTargetHistory(personId) {
-  const leads = await prisma.compounderLead.findMany({ where: { owner_person_id: personId }, select: { id: true, status: true, created_at: true, updated_at: true }, take: 10000 });
+  const leads = await prisma.compounderLead.findMany({ where: { owner_person_id: personId, is_test: false }, select: { id: true, status: true, created_at: true, updated_at: true }, take: 10000 });
   const ids = leads.map((l) => l.id);
   let resv = [];
   if (ids.length) { try { resv = await prisma.locationReservation.findMany({ where: { lead_id: { in: ids } }, select: { created_at: true, purchase_price: true } }); } catch (e) { resv = []; } }
@@ -226,7 +226,7 @@ async function ensureTargets(personId, opts) {
 // ─── Kontext pro plánování dne ────────────────────────────────────────────────
 async function gatherPlanContext(personId) {
   const leads = await prisma.compounderLead.findMany({
-    where: { owner_person_id: personId },
+    where: { owner_person_id: personId, is_test: false },
     select: {
       id: true, name: true, email: true, phone: true, role: true, lang: true, status: true,
       notes: true, activity_log: true, created_at: true, updated_at: true,
@@ -411,7 +411,7 @@ async function gatherDayResult(personId, dateStr) {
   const startMs = date.getTime();
   const endMs = startMs + 86400000;
   const leads = await prisma.compounderLead.findMany({
-    where: { owner_person_id: personId },
+    where: { owner_person_id: personId, is_test: false },
     select: { id: true, name: true, status: true, activity_log: true, created_at: true, updated_at: true }, take: 5000,
   });
   let newToday = 0; let convToday = 0; const activityLines = [];

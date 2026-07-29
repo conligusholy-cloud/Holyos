@@ -84,7 +84,7 @@ async function computeDigest() {
   if (!ids.length) return { activeCount: 0, perLead: [], perSales: [] };
 
   const leads = await prisma.compounderLead.findMany({
-    where: { id: { in: ids } },
+    where: { id: { in: ids }, is_test: false }, // testovací kontakty do denního hodnocení nepočítáme
     select: { id: true, name: true, email: true, owner_person_id: true },
   });
   const leadMap = new Map(leads.map((l) => [l.id, l]));

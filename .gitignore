@@ -60,3 +60,5 @@ podklady/
 # AI Vývojář — dokumentace v repu
 !docs/ai-vyvojar/
 !docs/ai-vyvojar/**
+
+.puppeteer-cache/

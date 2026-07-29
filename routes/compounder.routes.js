@@ -1034,6 +1034,7 @@ router.get('/sales-overview', requireAuth, async (req, res, next) => {
     if (!isMgr) return res.status(403).json({ error: 'Jen vedoucí obchodu nebo admin' });
 
     const leads = await prisma.compounderLead.findMany({
+      where: { is_test: false }, // testovací kontakty do statistik nepočítáme
       select: { id: true, name: true, status: true, owner_person_id: true, created_at: true, updated_at: true },
       orderBy: { updated_at: 'desc' },
       take: 5000,
@@ -1111,7 +1112,7 @@ function planPeriodStart(period) {
 
 async function computePlanActuals(personId) {
   const leads = await prisma.compounderLead.findMany({
-    where: { owner_person_id: personId },
+    where: { owner_person_id: personId, is_test: false },
     select: { id: true, status: true, created_at: true, updated_at: true },
     take: 10000,
   });
@@ -1527,7 +1528,7 @@ router.get('/my-leads', requireAuth, async (req, res, next) => {
   try {
     const meId = (req.user && req.user.person) ? req.user.person.id : null;
     if (!meId) return res.json([]);
-    const where = { owner_person_id: meId };
+    const where = { owner_person_id: meId, is_test: false };
     if (req.query.status) where.status = String(req.query.status);
     if (req.query.search) {
       const q = String(req.query.search);
@@ -1677,6 +1678,8 @@ const patchSchema = z.object({
   extraOffers: z.union([z.array(z.string()), z.string()]).optional(),
   // Zda zákazník v portálu (Investor) vidí statistiky tržeb lokalit.
   showRevenueStats: z.boolean().optional(),
+  // Testovací kontakt — vyřazuje lead ze statistik obchodníka.
+  isTest: z.boolean().optional(),
 });
 
 router.patch('/leads/:id', requireAuth, async (req, res, next) => {
@@ -1723,6 +1726,7 @@ router.patch('/leads/:id', requireAuth, async (req, res, next) => {
       data.extra_offers = clean.length ? Array.from(new Set(clean)).join(',') : '';
     }
     if (parsed.data.showRevenueStats !== undefined) data.show_revenue_stats = !!parsed.data.showRevenueStats;
+    if (parsed.data.isTest !== undefined) data.is_test = !!parsed.data.isTest;
     const lead = await prisma.compounderLead.update({ where: { id }, data });
     // Notifikace: nový přidělený kontakt (jinému obchodníkovi než ten, kdo přiřazuje).
     if (parsed.data.owner_person_id) {
@@ -1887,7 +1891,7 @@ router.get('/analytics/summary', requireAuth, async (req, res, next) => {
     const [events, sessions, registrations, secEvents] = await Promise.all([
       prisma.compounderEvent.count({ where: { created_at: { gte: since } } }),
       prisma.compounderEvent.findMany({ where: { created_at: { gte: since } }, select: { sid: true }, distinct: ['sid'] }),
-      prisma.compounderLead.count({ where: { created_at: { gte: since } } }),
+      prisma.compounderLead.count({ where: { created_at: { gte: since }, is_test: false } }),
       prisma.compounderEvent.findMany({ where: { created_at: { gte: since }, event: 'section_view' }, select: { props: true }, take: 5000 }),
     ]);
     const sessionCount = sessions.length;

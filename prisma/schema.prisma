@@ -5598,6 +5598,11 @@ model CompounderLead {
   // Výchozí false — zapíná obchodník z HolyOS pro konkrétní lead.
   show_revenue_stats Boolean @default(false)
 
+  // Testovací kontakt — slouží jen k testování systému. Nezapočítává se do
+  // statistik obchodníka ani do konverzí/registrací a systém ho nebere jako
+  // standardní kontakt. Výchozí false.
+  is_test Boolean @default(false)
+
   // Heslo pro prihlaseni (bcrypt hash). Null = uzivatel heslo nenastavil (jen magic link).
   password_hash String? @db.Text
 
@@ -5629,6 +5634,7 @@ model CompounderLead {
   @@index([email])
   @@index([owner_person_id])
   @@index([external_rep_id])
+  @@index([is_test])
   @@map("compounder_leads")
 }
 

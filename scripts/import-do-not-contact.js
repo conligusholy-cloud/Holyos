@@ -6,6 +6,15 @@
 // Idempotentní: smaže dřívější import (note='import') a naimportuje znovu.
 
 const fs = require('fs');
+const path = require('path');
+// Když DATABASE_URL chybí nebo není platná (např. zůstal zástupný text), načti ji z .env.
+if (!process.env.DATABASE_URL || !/^postgres(ql)?:\/\//i.test(process.env.DATABASE_URL)) {
+  try {
+    const t = fs.readFileSync(path.join(__dirname, '..', '.env'), 'utf8');
+    const m = t.match(/^DATABASE_URL\s*=\s*"?([^"\r\n]+)"?/m);
+    if (m) process.env.DATABASE_URL = m[1].trim();
+  } catch (e) { /* .env nemusí existovat */ }
+}
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 

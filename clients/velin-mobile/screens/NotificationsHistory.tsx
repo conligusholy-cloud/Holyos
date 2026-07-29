@@ -7,7 +7,11 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   FlatList,
+  Linking,
+  Modal,
+  Pressable,
   RefreshControl,
+  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -16,7 +20,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { loadAuth } from '../lib/auth';
-import { api, AppNotification } from '../lib/api';
+import { api, API_BASE, AppNotification } from '../lib/api';
 import { colors, radius, spacing } from '../lib/theme';
 
 function fmtWhen(iso: string): string {
@@ -46,6 +50,7 @@ export default function NotificationsHistory() {
   const [items, setItems] = useState<AppNotification[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [selected, setSelected] = useState<AppNotification | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -86,6 +91,17 @@ export default function NotificationsHistory() {
     } catch {
       // Tichý fail — při příštím načtení se stav srovná podle serveru.
     }
+  }
+
+  // Klik na notifikaci → otevři detail (plný text) a zároveň označ jako přečtenou.
+  function openDetail(item: AppNotification) {
+    setSelected(item);
+    markRead(item);
+  }
+
+  function openLink(link: string) {
+    const url = /^https?:\/\//i.test(link) ? link : `${API_BASE}${link.startsWith('/') ? '' : '/'}${link}`;
+    Linking.openURL(url).catch(() => {});
   }
 
   async function markAll() {
@@ -139,7 +155,7 @@ export default function NotificationsHistory() {
               <TouchableOpacity
                 style={[styles.card, isUnread && styles.cardUnread]}
                 activeOpacity={0.7}
-                onPress={() => markRead(item)}
+                onPress={() => openDetail(item)}
               >
                 <View style={styles.cardTop}>
                   <Text style={styles.icon}>{typeIcon(item.type)}</Text>
@@ -159,6 +175,40 @@ export default function NotificationsHistory() {
           }}
         />
       )}
+
+      <Modal
+        visible={!!selected}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSelected(null)}
+      >
+        <Pressable style={styles.modalOverlay} onPress={() => setSelected(null)}>
+          <Pressable style={styles.modalCard} onPress={() => {}}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalIcon}>{typeIcon(selected?.type ?? null)}</Text>
+              <Text style={styles.modalTitle}>{selected?.title || 'Notifikace'}</Text>
+            </View>
+            <Text style={styles.modalWhen}>{selected ? fmtWhen(selected.created_at) : ''}</Text>
+            <ScrollView
+              style={styles.modalBodyScroll}
+              contentContainerStyle={{ paddingBottom: spacing.md }}
+            >
+              <Text style={styles.modalBody}>{selected?.body || 'Bez podrobností.'}</Text>
+            </ScrollView>
+            {!!selected?.link && (
+              <TouchableOpacity
+                style={styles.modalLinkBtn}
+                onPress={() => selected?.link && openLink(selected.link)}
+              >
+                <Text style={styles.modalLinkText}>Otevřít v prohlížeči</Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity style={styles.modalCloseBtn} onPress={() => setSelected(null)}>
+              <Text style={styles.modalCloseText}>Zavřít</Text>
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -218,4 +268,44 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xl,
   },
   retryText: { color: colors.accent2, fontWeight: '600' },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: spacing.xl,
+  },
+  modalCard: {
+    width: '100%',
+    maxWidth: 480,
+    maxHeight: '80%',
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.xl,
+  },
+  modalHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
+  modalIcon: { fontSize: 20, marginTop: 1 },
+  modalTitle: { color: colors.text, fontSize: 17, fontWeight: '700', flex: 1, lineHeight: 22 },
+  modalWhen: { color: colors.text2, fontSize: 12, marginTop: 6, marginBottom: spacing.md },
+  modalBodyScroll: { flexGrow: 0 },
+  modalBody: { color: colors.text, fontSize: 15, lineHeight: 22 },
+  modalLinkBtn: {
+    marginTop: spacing.lg,
+    borderWidth: 1,
+    borderColor: colors.accent,
+    borderRadius: radius.md,
+    paddingVertical: spacing.sm,
+    alignItems: 'center',
+  },
+  modalLinkText: { color: colors.accent, fontWeight: '700', fontSize: 14 },
+  modalCloseBtn: {
+    marginTop: spacing.md,
+    backgroundColor: colors.accent,
+    borderRadius: radius.md,
+    paddingVertical: spacing.md,
+    alignItems: 'center',
+  },
+  modalCloseText: { color: '#fff', fontWeight: '700', fontSize: 15 },
 });

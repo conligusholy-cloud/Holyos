@@ -23,6 +23,47 @@
       background:var(--bg2, #1e2028); color:var(--text2, #8b8fa3);
     }
     .tab-btn.active .tab-count { background:var(--accent, #6366f1); color:#fff; }
+
+    /* Nářezové plány — karty */
+    .cp-toolbar { display:flex; justify-content:space-between; align-items:center; padding:14px 20px 4px; }
+    .cp-plan-card { background:var(--bg2,#1e2028); border:1px solid var(--border,#2a2d35); border-radius:12px; padding:16px 18px; margin:10px 20px; }
+    .cp-plan-head { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+    .cp-plan-name { font-size:15px; font-weight:700; color:var(--text,#e2e4e9); }
+    .cp-plan-code { font-size:12px; color:var(--text2,#8b8fa3); }
+    .cp-plan-flow { margin-top:10px; font-size:13px; color:var(--text,#e2e4e9); display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+    .cp-chip { display:inline-block; padding:3px 10px; border-radius:8px; background:var(--bg,#14161c); border:1px solid var(--border,#2a2d35); font-size:12px; }
+    .cp-chip.out { border-color:rgba(34,197,94,0.35); }
+    .cp-arrow { color:var(--accent,#6366f1); font-weight:700; }
+    .cp-plan-actions { margin-left:auto; display:flex; gap:8px; }
+    .cp-wh-line { margin-top:8px; font-size:12px; color:var(--text2,#8b8fa3); }
+
+    /* Modal */
+    .cp-modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.6); display:flex; align-items:center; justify-content:center; z-index:1000; padding:20px; }
+    .cp-modal { background:var(--bg2,#1e2028); border:1px solid var(--border,#2a2d35); border-radius:14px; width:min(640px,100%); max-height:90vh; display:flex; flex-direction:column; }
+    .cp-modal-head { display:flex; align-items:center; justify-content:space-between; padding:16px 20px; border-bottom:1px solid var(--border,#2a2d35); }
+    .cp-modal-head h2 { font-size:17px; margin:0; color:var(--text,#e2e4e9); }
+    .cp-close { background:none; border:none; color:var(--text2,#8b8fa3); font-size:26px; cursor:pointer; line-height:1; }
+    .cp-modal-body { padding:18px 20px; overflow-y:auto; }
+    .cp-modal-foot { display:flex; justify-content:flex-end; gap:10px; padding:14px 20px; border-top:1px solid var(--border,#2a2d35); }
+    .cp-row { display:flex; flex-direction:column; gap:5px; margin-bottom:12px; }
+    .cp-row label { font-size:12px; font-weight:600; color:var(--text2,#8b8fa3); }
+    .cp-row input, .cp-row select, .cp-row textarea { background:var(--bg,#14161c); border:1px solid var(--border,#2a2d35); border-radius:8px; padding:9px 11px; color:var(--text,#e2e4e9); font-size:13px; font-family:inherit; }
+    .cp-grid2 { display:flex; gap:12px; }
+    .cp-grid2 > .cp-row { flex:1; }
+    .cp-section-title { font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:var(--accent,#6366f1); margin:16px 0 8px; }
+    .cp-picker { position:relative; }
+    .cp-dropdown { position:absolute; top:100%; left:0; right:0; background:var(--bg2,#1e2028); border:1px solid var(--border,#2a2d35); border-radius:8px; margin-top:2px; max-height:220px; overflow-y:auto; z-index:10; display:none; }
+    .cp-dropdown.show { display:block; }
+    .cp-dd-item { padding:8px 11px; cursor:pointer; font-size:13px; color:var(--text,#e2e4e9); border-bottom:1px solid var(--border,#2a2d35); }
+    .cp-dd-item:hover { background:var(--bg,#14161c); }
+    .cp-dd-item .code { color:var(--accent,#6366f1); font-weight:600; }
+    .cp-dd-item .stock { color:var(--text2,#8b8fa3); font-size:11px; }
+    .cp-out-row { display:flex; gap:10px; align-items:flex-end; margin-bottom:10px; }
+    .cp-out-row .cp-picker { flex:2; }
+    .cp-out-row .cp-qty { flex:1; }
+    .cp-out-row .cp-del { background:rgba(239,68,68,0.12); border:1px solid rgba(239,68,68,0.4); color:#ef4444; border-radius:8px; padding:9px 12px; cursor:pointer; font-size:13px; }
+    .btn-primary { background:var(--accent,#6366f1); color:#fff; border-color:var(--accent,#6366f1); }
+    .btn-exec { background:rgba(34,197,94,0.15); border:1px solid rgba(34,197,94,0.45); color:#22c55e; }
   </style>
 </head>
 <body>
@@ -55,6 +96,9 @@
       <button class="tab-btn" id="tab-semi" onclick="switchTab('semi-product')">
         Polotovary <span class="tab-count" id="count-semi">&mdash;</span>
       </button>
+      <button class="tab-btn" id="tab-cutting" onclick="switchTab('cutting')">
+        Nářezové plány <span class="tab-count" id="count-cutting">&mdash;</span>
+      </button>
     </div>
 
     <!-- Product list -->
@@ -62,6 +106,69 @@
       <div class="empty-state"><p>Načítám...</p></div>
     </div>
 
+    <!-- Nářezové plány -->
+    <div class="product-list" id="cutting-list" style="display:none;">
+      <div class="empty-state"><p>Načítám...</p></div>
+    </div>
+
+  </div>
+
+  <!-- Modal: nářezový plán -->
+  <div id="plan-modal" class="cp-modal-overlay" style="display:none;">
+    <div class="cp-modal">
+      <div class="cp-modal-head">
+        <h2 id="plan-modal-title">Nový nářezový plán</h2>
+        <button class="cp-close" onclick="closePlanModal()">&times;</button>
+      </div>
+      <div class="cp-modal-body">
+        <div class="cp-row">
+          <label>Název plánu *</label>
+          <input type="text" id="pm-name" placeholder="Např. Nářezový plán NA1612">
+        </div>
+        <div class="cp-row">
+          <label>Kód plánu (volitelné)</label>
+          <input type="text" id="pm-code" placeholder="Volitelný interní kód">
+        </div>
+
+        <div class="cp-section-title">Vstup (spotřebuje se)</div>
+        <div class="cp-grid2">
+          <div class="cp-row cp-picker" style="flex:2;">
+            <label>Vstupní materiál (deska) *</label>
+            <input type="text" id="pm-input-mat" placeholder="Hledat kód nebo název..." autocomplete="off">
+            <input type="hidden" id="pm-input-mat-id">
+            <div class="cp-dropdown" id="pm-input-mat-dd"></div>
+          </div>
+          <div class="cp-row" style="flex:1;">
+            <label>Množství *</label>
+            <input type="number" id="pm-input-qty" value="1" min="0.001" step="0.001">
+          </div>
+        </div>
+
+        <div class="cp-grid2">
+          <div class="cp-row">
+            <label>Vstupní sklad (výdej) *</label>
+            <select id="pm-input-wh"><option value="">— vyber sklad —</option></select>
+          </div>
+          <div class="cp-row">
+            <label>Výstupní sklad (příjem) *</label>
+            <select id="pm-output-wh"><option value="">— vyber sklad —</option></select>
+          </div>
+        </div>
+
+        <div class="cp-section-title">Výstupní díly (přijmou se na sklad) *</div>
+        <div id="pm-outputs"></div>
+        <button class="btn" type="button" onclick="addOutputRow()">+ Přidat díl</button>
+
+        <div class="cp-row" style="margin-top:14px;">
+          <label>Poznámka</label>
+          <textarea id="pm-note" rows="2" placeholder="Volitelná poznámka"></textarea>
+        </div>
+      </div>
+      <div class="cp-modal-foot">
+        <button class="btn" onclick="closePlanModal()">Zrušit</button>
+        <button class="btn btn-primary" id="pm-save" onclick="savePlan()">Uložit</button>
+      </div>
+    </div>
   </div>
 
   <!-- Toast -->
@@ -117,8 +224,18 @@
     function switchTab(type) {
       currentType = type;
       document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-      document.getElementById(type === 'product' ? 'tab-products' : 'tab-semi').classList.add('active');
-      renderProducts();
+      const tabId = type === 'product' ? 'tab-products' : (type === 'semi-product' ? 'tab-semi' : 'tab-cutting');
+      document.getElementById(tabId).classList.add('active');
+
+      const isCutting = type === 'cutting';
+      document.getElementById('product-list').style.display = isCutting ? 'none' : '';
+      document.getElementById('cutting-list').style.display = isCutting ? '' : 'none';
+
+      if (isCutting) {
+        loadCuttingPlans();
+      } else {
+        renderProducts();
+      }
     }
 
     function renderProducts() {
@@ -225,6 +342,261 @@
       const d = document.createElement('div');
       d.textContent = s;
       return d.innerHTML;
+    }
+
+    // =========================================================================
+    // NÁŘEZOVÉ PLÁNY
+    // =========================================================================
+    let cuttingPlans = [];
+    let warehouses = [];
+    let editingPlanId = null; // null = nový, číslo = úprava
+
+    async function apiFetch(path, opts) {
+      const headers = Object.assign({ 'Accept': 'application/json', 'Content-Type': 'application/json' }, (opts && opts.headers) || {});
+      if (token) headers['Authorization'] = 'Bearer ' + token;
+      const r = await fetch(path, Object.assign({}, opts, { headers }));
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(data.error || ('API ' + r.status));
+      return data;
+    }
+
+    async function loadWarehouses() {
+      if (warehouses.length) return warehouses;
+      try { warehouses = await apiFetch('/api/wh/warehouses'); } catch (e) { warehouses = []; }
+      return warehouses;
+    }
+
+    async function loadCuttingPlans() {
+      const list = document.getElementById('cutting-list');
+      list.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p>Načítám plány...</p></div>';
+      try {
+        cuttingPlans = await apiFetch('/api/production/cutting-plans');
+        document.getElementById('count-cutting').textContent = cuttingPlans.length;
+        renderCuttingPlans();
+      } catch (e) {
+        list.innerHTML = '<div class="error-state"><div class="error-icon">&#9888;&#65039;</div><div class="error-msg">' + esc(e.message) + '</div></div>';
+      }
+    }
+
+    function renderCuttingPlans() {
+      const list = document.getElementById('cutting-list');
+      let html = '<div class="cp-toolbar"><span style="font-size:13px;color:var(--text2);">' + cuttingPlans.length + ' plánů</span>' +
+        '<button class="btn btn-primary" onclick="openPlanModal()">+ Nový nářezový plán</button></div>';
+
+      if (!cuttingPlans.length) {
+        html += '<div class="empty-state"><div class="empty-icon">&#9986;</div><p>Zatím žádné nářezové plány</p></div>';
+        list.innerHTML = html; return;
+      }
+
+      cuttingPlans.forEach(p => {
+        const inMat = p.input_material || {};
+        const inQty = Number(p.input_quantity);
+        const outputs = (p.outputs || []).map(o =>
+          '<span class="cp-chip out">' + esc((o.material && o.material.code) || '?') + ' &times;' + Number(o.quantity) + '</span>'
+        ).join(' ');
+        const execCount = (p._count && p._count.executions) || 0;
+        html += '<div class="cp-plan-card">' +
+          '<div class="cp-plan-head">' +
+            '<span class="cp-plan-name">' + esc(p.name) + '</span>' +
+            (p.code ? '<span class="cp-plan-code">' + esc(p.code) + '</span>' : '') +
+            (execCount ? '<span class="cp-plan-code">· ' + execCount + '&times; provedeno</span>' : '') +
+            '<div class="cp-plan-actions">' +
+              '<button class="btn btn-exec" onclick="executePlan(' + p.id + ')">&#9654; Provést</button>' +
+              '<button class="btn" onclick="openPlanModal(' + p.id + ')">Upravit</button>' +
+              '<button class="btn" onclick="deletePlan(' + p.id + ')">Smazat</button>' +
+            '</div>' +
+          '</div>' +
+          '<div class="cp-plan-flow">' +
+            '<span class="cp-chip">' + esc(inMat.code || '?') + ' &times;' + inQty + '</span>' +
+            '<span class="cp-arrow">&rarr;</span>' + outputs +
+          '</div>' +
+          '<div class="cp-wh-line">Výdej ze skladu: <b>' + esc((p.input_warehouse && p.input_warehouse.name) || '?') + '</b> · ' +
+            'Příjem na sklad: <b>' + esc((p.output_warehouse && p.output_warehouse.name) || '?') + '</b></div>' +
+        '</div>';
+      });
+      list.innerHTML = html;
+    }
+
+    // --- Material picker (autocomplete) ---
+    let pickerTimers = {};
+    function attachMaterialPicker(inputEl, hiddenEl, ddEl) {
+      inputEl.addEventListener('input', () => {
+        hiddenEl.value = ''; // změna textu ruší předchozí výběr
+        const q = inputEl.value.trim();
+        clearTimeout(pickerTimers[inputEl.id || 'x']);
+        if (q.length < 1) { ddEl.classList.remove('show'); ddEl.innerHTML = ''; return; }
+        pickerTimers[inputEl.id || 'x'] = setTimeout(async () => {
+          try {
+            const mats = await apiFetch('/api/production/materials?search=' + encodeURIComponent(q));
+            ddEl.innerHTML = mats.slice(0, 30).map(m =>
+              '<div class="cp-dd-item" data-id="' + m.id + '" data-label="' + esc((m.code || '') + ' — ' + (m.name || '')) + '" data-unit="' + esc(m.unit || 'ks') + '">' +
+                '<span class="code">' + esc(m.code || '') + '</span> ' + esc(m.name || '') +
+                ' <span class="stock">(sklad: ' + Number(m.current_stock || 0) + ' ' + esc(m.unit || 'ks') + ')</span>' +
+              '</div>'
+            ).join('') || '<div class="cp-dd-item">Nic nenalezeno</div>';
+            ddEl.classList.add('show');
+            ddEl.querySelectorAll('.cp-dd-item[data-id]').forEach(it => {
+              it.addEventListener('click', () => {
+                hiddenEl.value = it.getAttribute('data-id');
+                inputEl.value = it.getAttribute('data-label');
+                inputEl.dataset.unit = it.getAttribute('data-unit') || 'ks';
+                ddEl.classList.remove('show');
+              });
+            });
+          } catch (e) { ddEl.innerHTML = '<div class="cp-dd-item">Chyba: ' + esc(e.message) + '</div>'; ddEl.classList.add('show'); }
+        }, 250);
+      });
+      inputEl.addEventListener('blur', () => setTimeout(() => ddEl.classList.remove('show'), 200));
+    }
+
+    function fillWarehouseSelect(sel, selectedId) {
+      sel.innerHTML = '<option value="">— vyber sklad —</option>' +
+        warehouses.map(w => '<option value="' + w.id + '"' + (w.id === selectedId ? ' selected' : '') + '>' + esc(w.name) + (w.code ? ' (' + esc(w.code) + ')' : '') + '</option>').join('');
+    }
+
+    function addOutputRow(preset) {
+      const wrap = document.getElementById('pm-outputs');
+      const idx = wrap.children.length;
+      const row = document.createElement('div');
+      row.className = 'cp-out-row';
+      row.innerHTML =
+        '<div class="cp-row cp-picker" style="margin-bottom:0;">' +
+          '<label>Výstupní díl</label>' +
+          '<input type="text" class="pm-out-mat" id="pm-out-mat-' + idx + '" placeholder="Hledat díl..." autocomplete="off">' +
+          '<input type="hidden" class="pm-out-mat-id">' +
+          '<div class="cp-dropdown pm-out-dd"></div>' +
+        '</div>' +
+        '<div class="cp-row cp-qty" style="margin-bottom:0;"><label>Počet</label>' +
+          '<input type="number" class="pm-out-qty" value="' + (preset ? preset.quantity : 1) + '" min="0.001" step="0.001"></div>' +
+        '<button type="button" class="cp-del" title="Odebrat">&times;</button>';
+      wrap.appendChild(row);
+      const inp = row.querySelector('.pm-out-mat');
+      const hid = row.querySelector('.pm-out-mat-id');
+      const dd = row.querySelector('.pm-out-dd');
+      attachMaterialPicker(inp, hid, dd);
+      row.querySelector('.cp-del').addEventListener('click', () => row.remove());
+      if (preset) { inp.value = preset.label; hid.value = preset.material_id; }
+    }
+
+    async function openPlanModal(planId) {
+      await loadWarehouses();
+      editingPlanId = planId || null;
+      document.getElementById('plan-modal-title').textContent = editingPlanId ? 'Upravit nářezový plán' : 'Nový nářezový plán';
+      // reset
+      document.getElementById('pm-name').value = '';
+      document.getElementById('pm-code').value = '';
+      document.getElementById('pm-input-mat').value = '';
+      document.getElementById('pm-input-mat-id').value = '';
+      document.getElementById('pm-input-qty').value = '1';
+      document.getElementById('pm-note').value = '';
+      document.getElementById('pm-outputs').innerHTML = '';
+      fillWarehouseSelect(document.getElementById('pm-input-wh'), null);
+      fillWarehouseSelect(document.getElementById('pm-output-wh'), null);
+
+      // pickers na vstup
+      const inMat = document.getElementById('pm-input-mat');
+      if (!inMat.dataset.bound) {
+        attachMaterialPicker(inMat, document.getElementById('pm-input-mat-id'), document.getElementById('pm-input-mat-dd'));
+        inMat.dataset.bound = '1';
+      }
+
+      if (editingPlanId) {
+        try {
+          const p = await apiFetch('/api/production/cutting-plans/' + editingPlanId);
+          document.getElementById('pm-name').value = p.name || '';
+          document.getElementById('pm-code').value = p.code || '';
+          document.getElementById('pm-input-mat').value = ((p.input_material && p.input_material.code) || '') + ' — ' + ((p.input_material && p.input_material.name) || '');
+          document.getElementById('pm-input-mat-id').value = p.input_material_id;
+          document.getElementById('pm-input-qty').value = Number(p.input_quantity);
+          document.getElementById('pm-note').value = p.note || '';
+          fillWarehouseSelect(document.getElementById('pm-input-wh'), p.input_warehouse_id);
+          fillWarehouseSelect(document.getElementById('pm-output-wh'), p.output_warehouse_id);
+          (p.outputs || []).forEach(o => addOutputRow({
+            material_id: o.material_id, quantity: Number(o.quantity),
+            label: ((o.material && o.material.code) || '') + ' — ' + ((o.material && o.material.name) || ''),
+          }));
+        } catch (e) { showToast('Chyba: ' + e.message); }
+      } else {
+        addOutputRow();
+      }
+      document.getElementById('plan-modal').style.display = 'flex';
+    }
+
+    function closePlanModal() { document.getElementById('plan-modal').style.display = 'none'; }
+
+    function collectOutputs() {
+      const rows = document.querySelectorAll('#pm-outputs .cp-out-row');
+      const outputs = [];
+      rows.forEach(r => {
+        const id = parseInt(r.querySelector('.pm-out-mat-id').value);
+        const qty = parseFloat(r.querySelector('.pm-out-qty').value);
+        if (id && qty > 0) outputs.push({ material_id: id, quantity: qty });
+      });
+      return outputs;
+    }
+
+    async function savePlan() {
+      const name = document.getElementById('pm-name').value.trim();
+      const inputMatId = parseInt(document.getElementById('pm-input-mat-id').value);
+      const inputQty = parseFloat(document.getElementById('pm-input-qty').value);
+      const inWh = parseInt(document.getElementById('pm-input-wh').value);
+      const outWh = parseInt(document.getElementById('pm-output-wh').value);
+      const outputs = collectOutputs();
+
+      if (!name) return showToast('Vyplň název plánu');
+      if (!inputMatId) return showToast('Vyber vstupní materiál');
+      if (!inWh) return showToast('Vyber vstupní sklad');
+      if (!outWh) return showToast('Vyber výstupní sklad');
+      if (!outputs.length) return showToast('Přidej alespoň jeden výstupní díl');
+
+      const payload = {
+        name,
+        code: document.getElementById('pm-code').value.trim() || null,
+        input_material_id: inputMatId,
+        input_quantity: inputQty > 0 ? inputQty : 1,
+        input_warehouse_id: inWh,
+        output_warehouse_id: outWh,
+        note: document.getElementById('pm-note').value.trim() || null,
+        outputs,
+      };
+
+      const saveBtn = document.getElementById('pm-save');
+      saveBtn.disabled = true;
+      try {
+        if (editingPlanId) {
+          await apiFetch('/api/production/cutting-plans/' + editingPlanId, { method: 'PUT', body: JSON.stringify(payload) });
+          showToast('Plán uložen');
+        } else {
+          await apiFetch('/api/production/cutting-plans', { method: 'POST', body: JSON.stringify(payload) });
+          showToast('Plán vytvořen');
+        }
+        closePlanModal();
+        loadCuttingPlans();
+      } catch (e) { showToast('Chyba: ' + e.message); }
+      finally { saveBtn.disabled = false; }
+    }
+
+    async function deletePlan(id) {
+      const p = cuttingPlans.find(x => x.id === id);
+      if (!confirm('Opravdu smazat plán "' + ((p && p.name) || '') + '"?')) return;
+      try {
+        await apiFetch('/api/production/cutting-plans/' + id, { method: 'DELETE' });
+        showToast('Plán smazán');
+        loadCuttingPlans();
+      } catch (e) { showToast('Chyba: ' + e.message); }
+    }
+
+    async function executePlan(id) {
+      const p = cuttingPlans.find(x => x.id === id);
+      const ans = prompt('Kolikrát provést plán "' + ((p && p.name) || '') + '"?\n(vydá vstupní desku a přijme díly na sklad)', '1');
+      if (ans === null) return;
+      const mult = parseFloat(ans);
+      if (!(mult > 0)) return showToast('Zadej kladné číslo');
+      try {
+        await apiFetch('/api/production/cutting-plans/' + id + '/execute', { method: 'POST', body: JSON.stringify({ multiplier: mult }) });
+        showToast('Plán proveden — skladové pohyby zaúčtovány');
+        loadCuttingPlans();
+      } catch (e) { showToast('Chyba: ' + e.message); }
     }
 
     // === Init ===

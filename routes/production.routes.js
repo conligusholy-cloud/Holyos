@@ -3,6 +3,7 @@
 // =============================================================================
 
 const express = require('express');
+const { z } = require('zod');
 const router = express.Router();
 const { prisma } = require('../config/database');
 const { scheduleBatch } = require('../services/planning/scheduler');
@@ -1123,6 +1124,239 @@ router.delete('/operation-materials/:id', async (req, res, next) => {
   try {
     await prisma.operationMaterial.delete({ where: { id: parseInt(req.params.id) } });
     res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
+// =============================================================================
+// NÁŘEZOVÉ PLÁNY (CuttingPlan) — vstupní deska → více výstupních dílů na sklad
+// =============================================================================
+
+// Include pro plán se vším potřebným pro UI
+const CUTTING_PLAN_INCLUDE = {
+  input_material: { select: { id: true, code: true, name: true, unit: true, current_stock: true } },
+  input_warehouse: { select: { id: true, name: true, code: true } },
+  output_warehouse: { select: { id: true, name: true, code: true } },
+  outputs: {
+    include: { material: { select: { id: true, code: true, name: true, unit: true, current_stock: true } } },
+    orderBy: { id: 'asc' },
+  },
+  _count: { select: { executions: true } },
+};
+
+// Zod schéma — vstupní i výstupní sklad jsou POVINNÉ (bez nich nelze uložit).
+const cuttingPlanSchema = z.object({
+  code: z.string().trim().max(50).optional().nullable(),
+  name: z.string().trim().min(1, 'Název je povinný').max(255),
+  input_material_id: z.number().int().positive('Vyber vstupní materiál'),
+  input_quantity: z.number().positive().default(1),
+  input_warehouse_id: z.number().int().positive('Vyber vstupní sklad'),
+  output_warehouse_id: z.number().int().positive('Vyber výstupní sklad'),
+  note: z.string().trim().optional().nullable(),
+  outputs: z.array(z.object({
+    material_id: z.number().int().positive(),
+    quantity: z.number().positive(),
+    unit: z.string().trim().max(20).optional(),
+  })).min(1, 'Přidej alespoň jeden výstupní díl'),
+});
+
+// GET /api/production/cutting-plans — seznam plánů
+router.get('/cutting-plans', async (req, res, next) => {
+  try {
+    const { search } = req.query;
+    const where = {};
+    if (search) {
+      where.OR = [
+        { name: { contains: search, mode: 'insensitive' } },
+        { code: { contains: search, mode: 'insensitive' } },
+        { input_material: { code: { contains: search, mode: 'insensitive' } } },
+        { input_material: { name: { contains: search, mode: 'insensitive' } } },
+      ];
+    }
+    const plans = await prisma.cuttingPlan.findMany({
+      where,
+      include: CUTTING_PLAN_INCLUDE,
+      orderBy: { created_at: 'desc' },
+    });
+    res.json(plans);
+  } catch (err) { next(err); }
+});
+
+// GET /api/production/cutting-plans/:id — detail plánu
+router.get('/cutting-plans/:id', async (req, res, next) => {
+  try {
+    const plan = await prisma.cuttingPlan.findUnique({
+      where: { id: parseInt(req.params.id) },
+      include: {
+        ...CUTTING_PLAN_INCLUDE,
+        executions: {
+          include: { executor: { select: { id: true, first_name: true, last_name: true } } },
+          orderBy: { created_at: 'desc' },
+          take: 50,
+        },
+      },
+    });
+    if (!plan) return res.status(404).json({ error: 'Nářezový plán nenalezen' });
+    res.json(plan);
+  } catch (err) { next(err); }
+});
+
+// POST /api/production/cutting-plans — vytvoření plánu
+router.post('/cutting-plans', async (req, res, next) => {
+  try {
+    const parsed = cuttingPlanSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'Neplatná data', details: parsed.error.flatten() });
+    const d = parsed.data;
+    const plan = await prisma.cuttingPlan.create({
+      data: {
+        code: d.code || null,
+        name: d.name,
+        input_material_id: d.input_material_id,
+        input_quantity: d.input_quantity,
+        input_warehouse_id: d.input_warehouse_id,
+        output_warehouse_id: d.output_warehouse_id,
+        note: d.note || null,
+        created_by: req.user?.person?.id || null,
+        outputs: {
+          create: d.outputs.map(o => ({
+            material_id: o.material_id,
+            quantity: o.quantity,
+            unit: o.unit || 'ks',
+          })),
+        },
+      },
+      include: CUTTING_PLAN_INCLUDE,
+    });
+    res.status(201).json(plan);
+  } catch (err) {
+    if (err.code === 'P2002') return res.status(400).json({ error: 'Kód plánu už existuje' });
+    next(err);
+  }
+});
+
+// PUT /api/production/cutting-plans/:id — úprava plánu (nahradí výstupy)
+router.put('/cutting-plans/:id', async (req, res, next) => {
+  try {
+    const parsed = cuttingPlanSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'Neplatná data', details: parsed.error.flatten() });
+    const d = parsed.data;
+    const planId = parseInt(req.params.id);
+    const plan = await prisma.$transaction(async (tx) => {
+      await tx.cuttingPlan.update({
+        where: { id: planId },
+        data: {
+          code: d.code || null,
+          name: d.name,
+          input_material_id: d.input_material_id,
+          input_quantity: d.input_quantity,
+          input_warehouse_id: d.input_warehouse_id,
+          output_warehouse_id: d.output_warehouse_id,
+          note: d.note || null,
+        },
+      });
+      // Nahraď výstupy — smaž staré + vlož nové
+      await tx.cuttingPlanOutput.deleteMany({ where: { plan_id: planId } });
+      await tx.cuttingPlanOutput.createMany({
+        data: d.outputs.map(o => ({
+          plan_id: planId,
+          material_id: o.material_id,
+          quantity: o.quantity,
+          unit: o.unit || 'ks',
+        })),
+      });
+      return tx.cuttingPlan.findUnique({ where: { id: planId }, include: CUTTING_PLAN_INCLUDE });
+    });
+    res.json(plan);
+  } catch (err) {
+    if (err.code === 'P2002') return res.status(400).json({ error: 'Kód plánu už existuje' });
+    next(err);
+  }
+});
+
+// DELETE /api/production/cutting-plans/:id
+router.delete('/cutting-plans/:id', async (req, res, next) => {
+  try {
+    await prisma.cuttingPlan.delete({ where: { id: parseInt(req.params.id) } });
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
+// POST /api/production/cutting-plans/:id/execute — provedení plánu
+// Vydá vstupní materiál ze vstupního skladu a přijme výstupní díly na výstupní sklad.
+// multiplier = kolikrát se plán provedl (násobí vstup i výstupy).
+router.post('/cutting-plans/:id/execute', async (req, res, next) => {
+  try {
+    const planId = parseInt(req.params.id);
+    const multiplierSchema = z.object({
+      multiplier: z.number().positive().default(1),
+      note: z.string().trim().optional().nullable(),
+    });
+    const parsed = multiplierSchema.safeParse(req.body || {});
+    if (!parsed.success) return res.status(400).json({ error: 'Neplatná data', details: parsed.error.flatten() });
+    const multiplier = parsed.data.multiplier;
+    const personId = req.user?.person?.id || null;
+
+    const plan = await prisma.cuttingPlan.findUnique({
+      where: { id: planId },
+      include: { outputs: true },
+    });
+    if (!plan) return res.status(404).json({ error: 'Nářezový plán nenalezen' });
+    if (!plan.outputs.length) return res.status(400).json({ error: 'Plán nemá žádné výstupní díly' });
+
+    const inputQty = Number(plan.input_quantity) * multiplier;
+
+    const result = await prisma.$transaction(async (tx) => {
+      // 1) Výdej vstupního materiálu ze vstupního skladu
+      await tx.inventoryMovement.create({
+        data: {
+          material_id: plan.input_material_id,
+          warehouse_id: plan.input_warehouse_id,
+          type: 'issue',
+          quantity: inputQty,
+          reference_type: 'cutting_plan',
+          reference_id: plan.id,
+          note: `Nářezový plán: ${plan.name} (výdej vstupní desky)`,
+          created_by: personId,
+        },
+      });
+      await tx.material.update({
+        where: { id: plan.input_material_id },
+        data: { current_stock: { decrement: inputQty } },
+      });
+
+      // 2) Příjem výstupních dílů na výstupní sklad
+      for (const out of plan.outputs) {
+        const outQty = Number(out.quantity) * multiplier;
+        await tx.inventoryMovement.create({
+          data: {
+            material_id: out.material_id,
+            warehouse_id: plan.output_warehouse_id,
+            type: 'receipt',
+            quantity: outQty,
+            reference_type: 'cutting_plan',
+            reference_id: plan.id,
+            note: `Nářezový plán: ${plan.name} (příjem dílu)`,
+            created_by: personId,
+          },
+        });
+        await tx.material.update({
+          where: { id: out.material_id },
+          data: { current_stock: { increment: outQty } },
+        });
+      }
+
+      // 3) Audit záznam o provedení
+      const execution = await tx.cuttingPlanExecution.create({
+        data: {
+          plan_id: plan.id,
+          multiplier,
+          executed_by: personId,
+          note: parsed.data.note || null,
+        },
+      });
+      return execution;
+    });
+
+    res.status(201).json({ ok: true, execution: result });
   } catch (err) { next(err); }
 });
 
