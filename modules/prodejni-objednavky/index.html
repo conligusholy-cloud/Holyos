@@ -297,6 +297,7 @@
       <button type="button" class="tab-btn" data-tab="compounder" onclick="switchTab('compounder')">🌐 Compounder</button>
       <button type="button" class="tab-btn" data-tab="compounding" onclick="switchTab('compounding')">🧺 Compounding</button>
       <button type="button" class="tab-btn" data-tab="rezervace" onclick="switchTab('rezervace')">📋 Rezervace</button>
+      <button type="button" class="tab-btn" data-tab="databaze" onclick="switchTab('databaze')">🗃️ Databáze</button>
       <button type="button" class="tab-btn" data-tab="lokality" onclick="switchTab('lokality')">📍 Lokality</button>
       <button type="button" class="tab-btn" data-tab="externi" onclick="switchTab('externi')">🤝 Externí obchod</button>
       <button type="button" class="tab-btn" data-tab="externisti" onclick="switchTab('externisti')">🧑‍💼 Externí obchodníci</button>
@@ -322,10 +323,26 @@
         <button class="btn" onclick="loadKioskValues(true)">↻ Obnovit</button>
         <button class="btn" onclick="openCompoundingSettings()" title="Nastavení: ceník a cena lokality" style="padding:8px 12px;">⚙️</button>
         <button class="btn" onclick="switchTab('rezervace')" title="Přehled rezervací lokalit" style="padding:8px 12px;">📋 Rezervace</button>
-        <button class="btn" onclick="window.open('/modules/crm-databaze/index.html','_blank')" title="Databáze leadů z CRM (po deduplikaci)" style="padding:8px 12px;">🗃️ Databáze</button>
+        <button class="btn" onclick="switchTab('databaze')" title="Databáze leadů z CRM (po deduplikaci)" style="padding:8px 12px;">🗃️ Databáze</button>
       </div>
       <div id="kv-summary" style="margin-bottom:14px;"></div>
       <div id="kv-table"><div style="color:var(--text2);padding:20px;">Načítám…</div></div>
+    </div>
+
+    <!-- TAB: Databáze leadů (CRM import po deduplikaci) -->
+    <div id="tab-databaze" style="display:none; padding:20px 24px 24px;">
+      <div id="crm-cards" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px;"></div>
+      <div id="crm-segbar" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;"></div>
+      <div class="toolbar" style="margin-bottom:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        <input type="text" id="crm-q" placeholder="Hledat jméno / e-mail / telefon / město…" style="flex:1;min-width:200px;" onkeyup="if(event.key==='Enter')crmReload(1)">
+        <select id="crm-country" onchange="crmReload(1)"><option value="">Všechny země</option></select>
+        <select id="crm-owner" onchange="crmReload(1)"><option value="">Všichni obchodníci</option></select>
+        <label style="display:flex;align-items:center;gap:6px;color:var(--text2);font-size:13px;white-space:nowrap;cursor:pointer;"><input type="checkbox" id="crm-contactable" onchange="crmReload(1)"> jen s kontaktem</label>
+        <button class="btn" onclick="crmReload(1)">↻ Hledat</button>
+        <button class="btn" onclick="crmExport()" title="Export do CSV">⬇️ Export</button>
+      </div>
+      <div id="crm-table" style="overflow:auto;max-height:64vh;border:1px solid var(--line,#2a2a2e);border-radius:12px;"><div style="color:var(--text2);padding:20px;">Načítám…</div></div>
+      <div id="crm-pager" style="display:flex;gap:10px;align-items:center;justify-content:center;margin-top:14px;color:var(--text2);"></div>
     </div>
 
     <!-- TAB: Externí obchod — zjednodušený přehled (kód, lokalita, provozovatel, celková cena) -->
@@ -3731,7 +3748,7 @@
     }
 
     function switchTab(name) {
-      ['orders', 'pricelist', 'cashflow', 'tools', 'compounder', 'compounding', 'rezervace', 'lokality', 'externi', 'externisti', 'blacklist'].forEach(function(t) {
+      ['orders', 'pricelist', 'cashflow', 'tools', 'compounder', 'compounding', 'rezervace', 'databaze', 'lokality', 'externi', 'externisti', 'blacklist'].forEach(function(t) {
         var el = document.getElementById('tab-' + t);
         if (el) el.style.display = (t === name) ? '' : 'none';
         var btn = document.querySelector('.tab-btn[data-tab="' + t + '"]');
@@ -3743,11 +3760,105 @@
       if (name === 'compounder') loadCompounderLeads();
       if (name === 'compounding') loadKioskValues();
       if (name === 'rezervace') loadReservationsPage();
+      if (name === 'databaze') crmInit();
       if (name === 'lokality') loadLokality();
       if (name === 'externi') renderExternalTrade();
       if (name === 'externisti') loadExternalReps();
       if (name === 'blacklist') loadBlacklist();
     }
+
+    // ============================================================
+    // DATABÁZE LEADŮ (CRM import) — tab "databaze"
+    // ============================================================
+    var CRM_SEG = { horky:{l:'Horký',c:'#ef4444'}, volat:{l:'Volat příště',c:'#eab308'}, nedovolano:{l:'Nedovoláno',c:'#3b82f6'}, novy:{l:'Nový',c:'#22c55e'}, nezajem:{l:'Nezájem',c:'#6b7280'}, smlouva:{l:'Smlouva',c:'#a855f7'}, ostatni:{l:'Ostatní',c:'#9aa0ad'} };
+    var crmState = { segment:'', country:'', owner:'', q:'', contactable:false, page:1, pageSize:50, pages:1, total:0, statsLoaded:false };
+    function crmEsc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+    function crmNum(v){ return (Number(v)||0).toLocaleString('cs-CZ'); }
+    async function crmApi(path){ var r=await fetch('/api/sales'+path,{credentials:'include'}); if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); }
+    function crmInit(){ crmLoadStats(); crmReload(1); }
+    async function crmLoadStats(){
+      try{
+        var s=await crmApi('/crm-leads/stats');
+        document.getElementById('crm-cards').innerHTML=
+          crmCard(s.total,'Kontaktů celkem')+crmCard(s.contactable,'Oslovitelných')+
+          crmCard((s.segments.horky||0),'Horkých')+crmCard((s.segments.novy||0),'Nevytěžených (Nový)')+
+          crmCard((s.segments.nedovolano||0)+(s.segments.volat||0),'K obvolání')+crmCard(s.merged_duplicates,'Sloučených duplicit');
+        var order=['','horky','volat','nedovolano','novy','nezajem','smlouva','ostatni'];
+        document.getElementById('crm-segbar').innerHTML=order.map(function(k){
+          if(k===''){return crmSegBtn('','Vše',s.total,CRM_SEG.ostatni.c);}
+          var n=s.segments[k]||0; if(!n) return ''; return crmSegBtn(k,CRM_SEG[k].l,n,CRM_SEG[k].c);
+        }).join('');
+        var cs=document.getElementById('crm-country'); if(cs.options.length<=1){ (s.by_country||[]).forEach(function(x){var o=document.createElement('option');o.value=x.country;o.textContent=x.country+' ('+x.count+')';cs.appendChild(o);}); }
+        var os=document.getElementById('crm-owner'); if(os.options.length<=1){ (s.by_owner||[]).forEach(function(x){var o=document.createElement('option');o.value=x.owner;o.textContent=x.owner+' ('+x.count+')';os.appendChild(o);}); }
+        crmState.statsLoaded=true;
+      }catch(e){ document.getElementById('crm-cards').innerHTML='<div style="color:var(--text2);padding:10px;">Statistiky se nepodařilo načíst.</div>'; }
+    }
+    function crmCard(v,k){ return '<div style="background:var(--surface,#171a21);border:1px solid var(--line,#2a2a2e);border-radius:14px;padding:13px 15px;"><div style="font-size:24px;font-weight:800;">'+crmNum(v)+'</div><div style="font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.04em;margin-top:2px;">'+k+'</div></div>'; }
+    function crmSegBtn(k,label,n,color){ var active=crmState.segment===k; return '<div onclick="crmSetSeg(\''+k+'\')" style="border:1px solid '+(active?color:'var(--line,#2a2a2e)')+';border-radius:999px;padding:6px 13px;font-size:13px;cursor:pointer;background:'+(active?color:'var(--surface,#171a21)')+';color:'+(active?'#0e1a22':'var(--text)')+';font-weight:'+(active?'700':'400')+';white-space:nowrap;">'+(k?'<span style="color:'+(active?'#0e1a22':color)+'">●</span> ':'')+crmEsc(label)+' ('+crmNum(n)+')</div>'; }
+    function crmSetSeg(k){ crmState.segment=k; crmReload(1); crmLoadStats(); }
+    function crmQs(){
+      var p=[];
+      if(crmState.segment)p.push('segment='+encodeURIComponent(crmState.segment));
+      if(crmState.country)p.push('country='+encodeURIComponent(crmState.country));
+      if(crmState.owner)p.push('owner='+encodeURIComponent(crmState.owner));
+      if(crmState.q)p.push('q='+encodeURIComponent(crmState.q));
+      if(crmState.contactable)p.push('contactable=1');
+      p.push('page='+crmState.page); p.push('pageSize='+crmState.pageSize);
+      return p.join('&');
+    }
+    async function crmReload(page){
+      if(page)crmState.page=page;
+      crmState.q=document.getElementById('crm-q').value.trim();
+      crmState.country=document.getElementById('crm-country').value;
+      crmState.owner=document.getElementById('crm-owner').value;
+      crmState.contactable=document.getElementById('crm-contactable').checked;
+      var box=document.getElementById('crm-table');
+      try{
+        var d=await crmApi('/crm-leads?'+crmQs());
+        crmState.pages=d.pages; crmState.total=d.total;
+        crmRenderTable(d.rows);
+        document.getElementById('crm-pager').innerHTML=
+          '<button class="btn" '+(crmState.page<=1?'disabled':'')+' onclick="crmReload('+(crmState.page-1)+')">‹ Předchozí</button>'+
+          '<span>Strana '+crmState.page+' / '+(d.pages||1)+' · '+crmNum(d.total)+' záznamů</span>'+
+          '<button class="btn" '+(crmState.page>=d.pages?'disabled':'')+' onclick="crmReload('+(crmState.page+1)+')">Další ›</button>';
+      }catch(e){ box.innerHTML='<div style="color:var(--text2);padding:20px;">Databáze je prázdná nebo se nenačetla. (Spustil jsi import? node scripts/import-crm-leads.js)</div>'; document.getElementById('crm-pager').innerHTML=''; }
+    }
+    function crmRenderTable(rows){
+      var box=document.getElementById('crm-table');
+      if(!rows||!rows.length){ box.innerHTML='<div style="color:var(--text2);padding:20px;">Žádné záznamy pro tento filtr.</div>'; return; }
+      var th='<tr>'+['Jméno','Příjmení','E-mail','Telefon','Město','Země','Segment','Stav','Obchodník','Zdroj','Dup.','Poznámka'].map(function(h){return '<th style="position:sticky;top:0;background:#1b2028;text-align:left;padding:9px 10px;color:var(--text2);font-weight:600;border-bottom:1px solid var(--line,#2a2a2e);white-space:nowrap;">'+h+'</th>';}).join('')+'</tr>';
+      var body=rows.map(function(r){
+        var m=CRM_SEG[r.segment]||CRM_SEG.ostatni;
+        return '<tr>'+
+          td(crmEsc(r.first_name))+td(crmEsc(r.last_name))+
+          td(r.email?'<a href="mailto:'+crmEsc(r.email)+'" style="color:#7db3ff;text-decoration:none">'+crmEsc(r.email)+'</a>':'—')+
+          td(r.phone?'<a href="tel:'+crmEsc(r.phone)+'" style="color:#7db3ff;text-decoration:none">'+crmEsc(r.phone)+'</a>':'—')+
+          td(crmEsc(r.city))+td(crmEsc(r.country))+
+          td('<span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;background:'+m.c+'22;color:'+m.c+';white-space:nowrap;">'+m.l+'</span>')+
+          td(crmEsc(r.status))+td(crmEsc(r.owner_name))+td(crmEsc(r.source))+
+          td(r.dup_count?'<span style="background:rgba(234,179,8,.18);color:#eab308;font-size:11px;font-weight:700;border-radius:6px;padding:1px 6px;">+'+r.dup_count+'</span>':'')+
+          td('<span title="'+crmEsc(r.note)+'" style="color:var(--text2);font-size:12px;">'+crmEsc((r.note||'').slice(0,110))+'</span>')+
+        '</tr>';
+      }).join('');
+      box.innerHTML='<table style="width:100%;border-collapse:collapse;font-size:13px;">'+th+body+'</table>';
+      function td(x){ return '<td style="padding:8px 10px;border-bottom:1px solid rgba(255,255,255,.05);vertical-align:top;">'+x+'</td>'; }
+    }
+    async function crmExport(){
+      var btn=event.target; btn.disabled=true; var old=btn.textContent; btn.textContent='Exportuji…';
+      try{
+        var all=[],page=1,pages=1,cap=8000,save=crmState.page;
+        do{ crmState.page=page; var d=await crmApi('/crm-leads?'+crmQs()); all=all.concat(d.rows); pages=d.pages; page++; }while(page<=pages && all.length<cap);
+        crmState.page=save;
+        var cols=['first_name','last_name','email','phone','city','country','segment','status','owner_name','source','dup_count','note'];
+        var head=['Jméno','Příjmení','Email','Telefon','Město','Země','Segment','Stav','Obchodník','Zdroj','Duplikátů','Poznámka'];
+        var q=function(v){return '"'+String(v==null?'':v).replace(/"/g,'""')+'"';};
+        var csv=head.map(q).join(',')+'\n'+all.map(function(r){return cols.map(function(c){return q(r[c]);}).join(',');}).join('\n');
+        var blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'});
+        var a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='databaze_leadu.csv'; a.click();
+      }catch(e){ alert('Export selhal: '+e.message); }
+      finally{ btn.disabled=false; btn.textContent=old; }
+    }
+    window.crmReload=crmReload; window.crmSetSeg=crmSetSeg; window.crmExport=crmExport;
 
     // ============================================================
     // LOKALITY — nabídky míst pro prádlomat z webu bestseries.global
