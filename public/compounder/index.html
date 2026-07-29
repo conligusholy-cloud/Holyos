@@ -77,18 +77,6 @@
         </form>
       </div>
 
-      <div id="requestBox" style="display:none">
-        <h1>Nemáte přístup</h1>
-        <p class="sub">Tato adresa zatím není mezi pozvanými. Zanechte nám telefon a důvod — ozveme se a přístup případně zřídíme.</p>
-        <label for="req-email">E-mail</label>
-        <input type="email" id="req-email" readonly />
-        <label for="req-phone">Telefon *</label>
-        <input type="tel" id="req-phone" autocomplete="tel" placeholder="+420 …" required />
-        <label for="req-msg">Zpráva / důvod žádosti *</label>
-        <textarea id="req-msg" rows="3" placeholder="Kdo jste a proč máte zájem o přístup…" required></textarea>
-        <button type="button" class="btn" id="reqBtn">Odeslat žádost o přístup</button>
-        <div class="msg" id="req-status" role="status"></div>
-      </div>
     </div>
 
     <div class="foot">COMPOUNDER © <span id="yr"></span></div>
@@ -100,7 +88,6 @@
   var msg = document.getElementById('msg');
   var loginBtn = document.getElementById('loginBtn');
   var loginBox = document.getElementById('loginBox');
-  var requestBox = document.getElementById('requestBox');
 
   // Magic-link (první přihlášení / zapomenuté heslo). Když e-mail není mezi
   // pozvanými, ukáže formulář žádosti o přístup.
@@ -117,9 +104,9 @@
         msg.textContent = 'Poslali jsme vám na e-mail přihlašovací odkaz. Po přihlášení si v portálu nastavte heslo.';
         btn.textContent = 'Odesláno ✓';
       } else {
-        document.getElementById('req-email').value = email;
-        loginBox.style.display = 'none';
-        requestBox.style.display = 'block';
+        msg.style.color = '#e0b96b';
+        msg.textContent = 'Přístup je jen na pozvání. Tato adresa není mezi pozvanými — o přístup požádejte svého obchodníka.';
+        btn.disabled = false; btn.textContent = old;
       }
     })
     .catch(function () {
@@ -156,35 +143,6 @@
     var email = (document.getElementById('email').value || '').trim();
     if (!email || email.indexOf('@') === -1) { msg.style.color = '#ef4444'; msg.textContent = 'Zadejte platný e-mail.'; return; }
     sendMagicLink(email, this);
-  });
-
-  var reqBtn = document.getElementById('reqBtn');
-  var reqStatus = document.getElementById('req-status');
-  reqBtn.addEventListener('click', function () {
-    var email = document.getElementById('req-email').value;
-    var phone = (document.getElementById('req-phone').value || '').trim();
-    var message = (document.getElementById('req-msg').value || '').trim();
-    reqStatus.style.color = '#ef4444';
-    if (!phone) { reqStatus.textContent = 'Zadejte prosím telefon.'; return; }
-    if (!message) { reqStatus.textContent = 'Napište prosím důvod žádosti.'; return; }
-    reqStatus.textContent = ''; reqBtn.disabled = true; reqBtn.textContent = 'Odesílám…';
-    fetch('/api/compounder/portal/access-request', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
-      body: JSON.stringify({ email: email, phone: phone, message: message })
-    })
-    .then(function (r) { return r.json().catch(function(){ return {}; }); })
-    .then(function (d) {
-      if (d && d.ok) {
-        requestBox.innerHTML = '<h1>Děkujeme</h1><p class="sub">Vaši žádost jsme přijali. Ozveme se vám co nejdříve.</p>';
-      } else {
-        reqStatus.style.color = '#ef4444'; reqStatus.textContent = (d && d.error) || 'Nepodařilo se odeslat.';
-        reqBtn.disabled = false; reqBtn.textContent = 'Odeslat žádost o přístup';
-      }
-    })
-    .catch(function () {
-      reqStatus.style.color = '#ef4444'; reqStatus.textContent = 'Nepodařilo se odeslat. Zkuste to prosím znovu.';
-      reqBtn.disabled = false; reqBtn.textContent = 'Odeslat žádost o přístup';
-    });
   });
 </script>
 </body>

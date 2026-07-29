@@ -802,6 +802,12 @@ router.post('/portal/login-check', async (req, res, next) => {
 
 // POST /portal/access-request — nepozvaný žádá o přístup (telefon + zpráva povinné) → lead „nezvaný".
 router.post('/portal/access-request', async (req, res, next) => {
+  // Samoregistrace je VYPNUTÁ — přístup jen na pozvání od obchodníka.
+  // (Tomáš 2026-07-29: nikdo cizí se nesmí přidat sám.) Neutrální odpověď.
+  if (process.env.COMPOUNDER_ALLOW_ACCESS_REQUEST !== '1') {
+    console.log('[compounder] access-request odmítnut (samoregistrace vypnuta).');
+    return res.json({ ok: true });
+  }
   try {
     const b = req.body || {};
     const email = String(b.email || '').trim().toLowerCase();
