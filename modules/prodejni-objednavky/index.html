@@ -3518,8 +3518,9 @@
       var cfg=_kioskConfig[k.code]||{};
       var machine=_kvVerMachine(k.code).machine;
       var cur=k.currency||'CZK'; var rate=(_kvFxRates&&_kvFxRates[cur])?_kvFxRates[cur]:1;
-      var obratBez=num(k.avgTop3)/1.21;
-      var servis=num(k.avgTop3)*(svcPct/100);
+      var _o=num(k.avgTop3)*rate;
+      var obratBez=_o/1.21;
+      var servis=_o*(svcPct/100);
       var najem=(typeof cfg.rentMonthlyCzk==='number'&&isFinite(cfg.rentMonthlyCzk))?cfg.rentMonthlyCzk:0;
       var energie=obratBez*(enPct/100);
       var cisty=obratBez-servis-najem-energie;
@@ -4222,8 +4223,9 @@
           var machine2 = _kvVerMachine(k.code).machine;
           if (machine2 == null) return 0;
           var cfg2 = _kioskConfig[k.code] || {};
-          var obratBez2 = num(k.avgTop3) / 1.21;
-          var servis2 = num(k.avgTop3) * (svcPct / 100);
+          var _o2 = num(k.avgTop3) * rate;
+          var obratBez2 = _o2 / 1.21;
+          var servis2 = _o2 * (svcPct / 100);
           var najem2 = (typeof cfg2.rentMonthlyCzk === 'number' && isFinite(cfg2.rentMonthlyCzk)) ? cfg2.rentMonthlyCzk : 0;
           var energie2 = obratBez2 * (enPct / 100);
           var cisty2 = obratBez2 - servis2 - najem2 - energie2;
@@ -4238,8 +4240,10 @@
       function kvCellVal(k, key) {
         var cfg = _kioskConfig[k.code] || {};
         var machine = _kvVerMachine(k.code).machine;
-        var obratBez = num(k.avgTop3) / 1.21;
-        var servis = num(k.avgTop3) * (svcPct / 100);
+        var _rate = (_kvFxRates[k.currency || 'CZK'] || 1);
+        var _oCzk = num(k.avgTop3) * _rate;
+        var obratBez = _oCzk / 1.21;
+        var servis = _oCzk * (svcPct / 100);
         var najem = (typeof cfg.rentMonthlyCzk === 'number' && isFinite(cfg.rentMonthlyCzk)) ? cfg.rentMonthlyCzk : 0;
         var energie = obratBez * (enPct / 100);
         var cisty = obratBez - servis - najem - energie;
@@ -4249,7 +4253,7 @@
           case 'label': return String(k.label || '');
           case 'company': return String(k.companyName || '');
           case 'version': return String(cfg.version || '').toUpperCase();
-          case 'obrat': return num(k.avgTop3);
+          case 'obrat': return _oCzk;
           case 'obratBez': return obratBez;
           case 'lokalita': return locVal(k);
           case 'kiosek': return machine != null ? machine : -1;
@@ -4343,8 +4347,10 @@
         var codeAttr = kvEsc(k.code).replace(/'/g, '&#39;');
         var _svcPct = (Number.isFinite(_compoundingSettings.servicePct) ? _compoundingSettings.servicePct : 15);
         var _enPct = (Number.isFinite(_compoundingSettings.energyPct) ? _compoundingSettings.energyPct : 9.5);
-        var _obratBez = num(k.avgTop3) / 1.21;
-        var _servis = num(k.avgTop3) * (_svcPct / 100);
+        var _rate = (_kvFxRates[cur] || 1);
+        var _oCzk = num(k.avgTop3) * _rate;
+        var _obratBez = _oCzk / 1.21;
+        var _servis = _oCzk * (_svcPct / 100);
         var _najemVal = (typeof cfg.rentMonthlyCzk === 'number' && isFinite(cfg.rentMonthlyCzk)) ? cfg.rentMonthlyCzk : 0;
         var _energie = _obratBez * (_enPct / 100);
         var _cistyZisk = _obratBez - _servis - _najemVal - _energie;
@@ -4355,7 +4361,7 @@
           '<td>' + kvEsc(k.label) + '</td>' +
           '<td style="color:var(--text2);">' + kvEsc(k.companyName) + '</td>' +
           '<td style="white-space:nowrap;">' + verLabel + '</td>' +
-          '<td style="text-align:right;white-space:nowrap;color:var(--text2);">' + kvMoney(k.avgTop3, cur) + '</td>' +
+          '<td style="text-align:right;white-space:nowrap;color:var(--text2);">' + kvMoney(Math.round(_oCzk), 'CZK') + '</td>' +
           '<td style="text-align:right;white-space:nowrap;color:var(--text2);">' + kvMoney(Math.round(_obratBez), 'CZK') + '</td>' +
           '<td style="text-align:right;white-space:nowrap;font-weight:700;">' + kvMoney(locVal(k), 'CZK') + '</td>' +
           '<td style="text-align:right;white-space:nowrap;color:var(--text2);">' + (_vmRow.machine != null ? kvMoney(_vmRow.machine, 'CZK') : '<span style="color:var(--text2);">—</span>') + '</td>' +
@@ -4399,8 +4405,9 @@
         var machine2 = _kvVerMachine(k.code).machine;
         if (machine2 == null) return 0;
         var cfg2 = _kioskConfig[k.code] || {};
-        var obratBez2 = num(k.avgTop3) / 1.21;
-        var servis2 = num(k.avgTop3) * (svcPct / 100);
+        var _o2 = num(k.avgTop3) * rate;
+        var obratBez2 = _o2 / 1.21;
+        var servis2 = _o2 * (svcPct / 100);
         var najem2 = (typeof cfg2.rentMonthlyCzk === 'number' && isFinite(cfg2.rentMonthlyCzk)) ? cfg2.rentMonthlyCzk : 0;
         var energie2 = obratBez2 * (enPct / 100);
         var cisty2 = obratBez2 - servis2 - najem2 - energie2;
