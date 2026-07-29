@@ -167,7 +167,10 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
       <div class="brand">COMP<b>OU</b>NDER <span style="color:var(--muted-2);font-weight:400;letter-spacing:.04em">· Portal</span></div>
       <div id="topClock" style="display:none;flex:1;text-align:center;min-width:0">
         <div id="topClockLbl" style="font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted-2,#7a7a85)">&nbsp;</div>
-        <div id="topClockVal" style="font-size:15px;font-weight:800;color:#f0dfa8;font-variant-numeric:tabular-nums;white-space:nowrap">—</div>
+        <div style="display:flex;align-items:baseline;gap:10px;justify-content:center;flex-wrap:wrap">
+          <div id="topClockVal" style="font-size:15px;font-weight:800;color:#f0dfa8;font-variant-numeric:tabular-nums;white-space:nowrap">—</div>
+          <div id="topClockMissed" style="display:none;font-size:15px;font-weight:800;color:#ef4444;font-variant-numeric:tabular-nums;white-space:nowrap;transition:color .18s"></div>
+        </div>
       </div>
       <div class="top-right">
         <div class="hi" id="hi"></div>
@@ -1054,6 +1057,15 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
 
   // Průběžně hlídá, zda admin leadovi neodemkl nové sekce. Když ano, zobrazí
   // banner s výzvou k obnovení stránky (nové sekce se načtou až po reloadu).
+  // Částka na 2 desetinná místa v měně nastavené na portálu (živý kurz z API).
+  function pMoney2(czk){
+    if(typeof czk!=='number'||!isFinite(czk)) return '—';
+    var cur=(typeof OFFERS!=='undefined' && OFFERS && OFFERS.cur) ? OFFERS.cur : 'CZK';
+    var sym=(typeof OFF_CUR_SYM!=='undefined' && OFF_CUR_SYM[cur]) ? OFF_CUR_SYM[cur] : 'Kč';
+    var v=czk;
+    if(cur!=='CZK' && typeof offRate==='function'){ var r=offRate(cur); if(r>0) v=czk/r; }
+    return v.toLocaleString('cs-CZ',{minimumFractionDigits:2,maximumFractionDigits:2})+' '+sym;
+  }
   // Časomíra v horní liště — kolik času uběhlo od založení účtu (na všech stránkách).
   function pStartTopClock(){
     var acct=window._acctCreatedAt; if(!acct) return;
@@ -1066,6 +1078,16 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
       var ms=Math.max(0, Date.now()-new Date(acct).getTime());
       var d=Math.floor(ms/86400000), h=Math.floor(ms%86400000/3600000), m=Math.floor(ms%3600000/60000), s=Math.floor(ms%60000/1000);
       val.textContent=d+' d '+('0'+h).slice(-2)+':'+('0'+m).slice(-2)+':'+('0'+s).slice(-2);
+      var mEl=document.getElementById('topClockMissed');
+      if(mEl){
+        var yr=Number(window.__exYearly||0);
+        if(yr>0){
+          var lost=-(yr/(365*24*3600))*(ms/1000);
+          mEl.style.display='';
+          mEl.textContent='přišli jste o '+pMoney2(lost);
+          mEl.style.color='#fca5a5'; setTimeout(function(){ mEl.style.color='#ef4444'; },170);
+        } else { mEl.style.display='none'; }
+      }
     }
     tickTop();
     if(window.__topClockIv) clearInterval(window.__topClockIv);
@@ -1990,7 +2012,11 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
     if(!document.getElementById('ex-wrap')) return;
     var offer=[], selected={}, acct=window._acctCreatedAt||null, byCode={}, buyDate=null, timerIv=null;
     var investment=null, invHistory=[];
-    function fmt(n){ if(typeof n!=='number'||!isFinite(n)) return '—'; return Math.round(n).toLocaleString('cs-CZ')+' Kč'; }
+    function fmt(n){
+      if(typeof n!=='number'||!isFinite(n)) return '—';
+      if(typeof offMoney==='function'){ try{ return offMoney(n); }catch(e){} }
+      return Math.round(n).toLocaleString('cs-CZ')+' Kč';
+    }
     function profit5(o){ return (o.guaranteeYears||5)*(o.yearlyYield||0)+(o.guaranteeValue||0)-(o.totalPrice||0); }
     function card(k,v){ return '<div class="ex-card"><div class="ex-k">'+k+'</div><div class="ex-v">'+v+'</div></div>'; }
     function activeCodes(){
@@ -2009,7 +2035,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
       var t=totals(); if(!t.n) return;
       var secs=Math.max(0,(Date.now()-new Date(acct).getTime())/1000);
       var val=-(t.yr/(365*24*3600))*secs; // ztráta = záporné číslo, odečítá se v reálném čase
-      el.textContent=val.toLocaleString('cs-CZ',{minimumFractionDigits:2,maximumFractionDigits:2})+' Kč';
+      el.textContent=pMoney2(val);
       if(_lastMissed!==null && val<_lastMissed){ el.style.color='#ef4444'; setTimeout(function(){ el.style.color='#fff'; },170); }
       _lastMissed=val;
       var sub=document.getElementById('ex-missed-sub');
@@ -2082,6 +2108,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
           renderMissed();
         } else { mb.style.display='none'; mb.innerHTML=''; }
       }
+      window.__exYearly = t.yr || 0;
       renderChart(); renderTimer(); renderHint(); renderMonthly();
     }
     function autoBuild(){
