@@ -165,6 +165,10 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
   <header class="top">
     <div class="top-in">
       <div class="brand">COMP<b>OU</b>NDER <span style="color:var(--muted-2);font-weight:400;letter-spacing:.04em">· Portal</span></div>
+      <div id="topClock" style="display:none;flex:1;text-align:center;min-width:0">
+        <div style="font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted-2,#7a7a85)">Víte o tom</div>
+        <div id="topClockVal" style="font-size:15px;font-weight:800;color:#f0dfa8;font-variant-numeric:tabular-nums;white-space:nowrap">—</div>
+      </div>
       <div class="top-right">
         <div class="hi" id="hi"></div>
         <button type="button" class="gear" id="bellBtn" aria-label="Stav dokumentů" title="Stav dokumentů" style="position:relative;display:none" aria-haspopup="dialog">
@@ -1000,6 +1004,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
       window._portalShowRevStats = !!res.j.showRevenueStats;
       window._portalShowExample = !!res.j.showExample;
       window._acctCreatedAt = res.j.accountCreatedAt || null;
+      pStartTopClock();
       window._portalToken = token;
       // Viditelnost sekcí dle povolení leadu; úvodní "Filozofie" je vždy viditelná.
       var ALLOWED = Array.isArray(res.j.sections) ? res.j.sections : [];
@@ -1049,6 +1054,21 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
 
   // Průběžně hlídá, zda admin leadovi neodemkl nové sekce. Když ano, zobrazí
   // banner s výzvou k obnovení stránky (nové sekce se načtou až po reloadu).
+  // Časomíra v horní liště — kolik času uběhlo od založení účtu (na všech stránkách).
+  function pStartTopClock(){
+    var acct=window._acctCreatedAt; if(!acct) return;
+    var box=document.getElementById('topClock'), val=document.getElementById('topClockVal');
+    if(!box||!val) return;
+    box.style.display='';
+    function tickTop(){
+      var ms=Math.max(0, Date.now()-new Date(acct).getTime());
+      var d=Math.floor(ms/86400000), h=Math.floor(ms%86400000/3600000), m=Math.floor(ms%3600000/60000), s=Math.floor(ms%60000/1000);
+      val.textContent=d+' d '+('0'+h).slice(-2)+':'+('0'+m).slice(-2)+':'+('0'+s).slice(-2);
+    }
+    tickTop();
+    if(window.__topClockIv) clearInterval(window.__topClockIv);
+    window.__topClockIv=setInterval(tickTop,1000);
+  }
   function pWatchSections(tok){
     if (PORTAL_SEC_TIMER) { clearInterval(PORTAL_SEC_TIMER); }
     PORTAL_SEC_TIMER = setInterval(function(){
