@@ -3393,6 +3393,7 @@
         + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">'
         + '<button type="button" onclick="cmpSendAccess(' + id + ', this)" style="background:#eab308;color:#1a1408;border:none;border-radius:8px;padding:6px 14px;font-size:12.5px;font-weight:700;cursor:pointer;">✉️ Poslat e-mailem</button>'
         + waBtn
+        + '<button type="button" onclick="cmpSendLoss(' + id + ', this)" title="Elegantní e-mail se skutečnou ušlou částkou z jeho modelu + odkaz zpět do portálu" style="background:#ef4444;color:#fff;border:none;border-radius:8px;padding:6px 14px;font-size:12.5px;font-weight:700;cursor:pointer;">📉 Odeslat e-mail se ztrátou</button>'
         + '<span data-invmsg="' + id + '" style="font-size:12px;align-self:center;color:var(--text2);"></span>'
         + '</div></div>';
     }
@@ -3402,6 +3403,20 @@
       var row = document.querySelector('tr[data-lead="' + id + '"]');
       if (row){ row.setAttribute('data-sent-count', count); row.setAttribute('data-sent-at', sentAt || ''); }
     }
+    async function cmpSendLoss(id, btn){
+      var msg = document.querySelector('[data-invmsg="' + id + '"]');
+      if (!confirm('Odeslat zákazníkovi e-mail s aktuální ušlou částkou z jeho uloženého modelu?')) return;
+      if (btn) btn.disabled = true;
+      if (msg){ msg.style.color = 'var(--text2)'; msg.textContent = 'Počítám ztrátu a odesílám…'; }
+      try {
+        var r = await fetch('/api/compounder/leads/' + id + '/send-loss-email', { method:'POST', credentials:'include' });
+        var j = await r.json().catch(function(){ return {}; });
+        if (!r.ok || !j.ok) throw new Error(j.error || ('HTTP ' + r.status));
+        if (msg){ msg.style.color = '#10b981'; msg.textContent = '✅ Odesláno — ušlá částka ' + (Number(j.missed)||0).toLocaleString('cs-CZ') + ' Kč'; }
+      } catch(e){ if (msg){ msg.style.color = '#ef4444'; msg.textContent = 'Nepodařilo se: ' + e.message; } }
+      finally { if (btn) btn.disabled = false; }
+    }
+    window.cmpSendLoss = cmpSendLoss;
     async function cmpSendAccess(id, btn){
       var msg = document.querySelector('[data-invmsg="' + id + '"]');
       if (btn) btn.disabled = true;

@@ -1861,6 +1861,54 @@ router.get('/leads/:id/example-model', requireAuth, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// POST /api/compounder/leads/:id/send-loss-email — elegantní e-mail s aktuální
+// ušlou částkou (ze zákazníkova modelu) + odkaz zpět do portálu. Ztráta se počítá
+// stejně jako v portálu: (roční výnos vybraného portfolia / 365) × dny od založení účtu.
+router.post('/leads/:id/send-loss-email', requireAuth, async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) return res.status(400).json({ ok: false, error: 'Neplatné ID' });
+    const lead = await prisma.compounderLead.findUnique({ where: { id }, select: { id: true, name: true, email: true, lang: true, created_at: true, example_model: true } });
+    if (!lead) return res.status(404).json({ ok: false, error: 'Lead nenalezen' });
+    if (!lead.email) return res.status(400).json({ ok: false, error: 'Kontakt nemá e-mail.' });
+    let model = null; try { model = lead.example_model ? JSON.parse(lead.example_model) : null; } catch (e) { model = null; }
+    const codes = (model && Array.isArray(model.codes)) ? model.codes : [];
+    if (!codes.length) return res.status(400).json({ ok: false, error: 'Zákazník si zatím neuložil žádný model — není z čeho počítat ztrátu.' });
+    const buyDate = (model && model.buyDate) ? model.buyDate : null;
+    const offered = await buildOfferedLocations(id, { includeHidden: true }).catch(() => null);
+    const byCode = {}; if (offered && Array.isArray(offered.locations)) offered.locations.forEach((o) => { byCode[String(o.code).toUpperCase()] = o; });
+    let yr = 0, matched = 0; codes.forEach((c) => { const o = byCode[String(c).toUpperCase()]; if (o) { yr += (o.yearlyYield || 0); matched++; } });
+    if (yr <= 0) return res.status(400).json({ ok: false, error: 'Nelze spočítat roční výnos vybraných lokalit (chybí data ze SIS).' });
+    const from = new Date(lead.created_at).getTime();
+    let to = Date.now();
+    if (buyDate) { const bd = new Date(buyDate + 'T23:59:59').getTime(); if (bd > to) to = bd; }
+    const days = Math.max(0, (to - from) / 86400000);
+    const missed = Math.round((yr / 365) * days);
+    const perDay = Math.round(yr / 365);
+    const url = `${portalBase()}/portal?t=${makeLoginToken(lead.id)}`;
+    const first = (lead.name || '').split(' ')[0] || '';
+    const acctStr = new Date(lead.created_at).toLocaleDateString('cs-CZ');
+    const isEn = !!((lead.lang || '').toLowerCase().slice(0, 2)) && (lead.lang || '').toLowerCase().slice(0, 2) !== 'cs';
+    const fmtCz = (n) => (Math.round(Number(n) || 0)).toLocaleString('cs-CZ') + ' Kč';
+    const fmtEn = (n) => (Math.round(Number(n) || 0)).toLocaleString('en-US') + ' CZK';
+    let subject, body, linkLabel;
+    if (isEn) {
+      subject = `${first ? first + ', ' : ''}your hesitation has cost about ${fmtEn(missed)}`;
+      body = `Hello ${first || ''},\n\nCompounding means value grows on its own — every single day. The portfolio you saved in your Compounder portal shows exactly what you are missing in the meantime.\n\nSince your account was opened (${acctStr}), waiting has cost you an estimated ${fmtEn(missed)} in missed return. Every further day costs about ${fmtEn(perDay)}.\n\nThe sooner you step onto an established, already-earning location, the sooner the asset starts working for you.\n\nOpen your portfolio again below — it recalculates live.`;
+      linkLabel = 'Open my portal';
+    } else {
+      subject = `${first ? first + ', ' : ''}vaše váhání zatím stálo ${fmtCz(missed)}`;
+      body = `Dobrý den${first ? ' ' + first : ''},\n\nCompounding znamená, že hodnota roste sama — každý den. Portfolio, které jste si uložil(a) ve svém Compounder portálu, přesně ukazuje, kolik vám mezitím uniká.\n\nOd založení účtu (${acctStr}) vás odklad rozhodnutí stál přibližně ${fmtCz(missed)} ušlého výnosu. Každý další den vás stojí zhruba ${fmtCz(perDay)}.\n\nČím dřív vstoupíte na zavedenou, už vydělávající lokalitu, tím dřív začne aktivum pracovat za vás.\n\nVraťte se ke svému modelu níže — přepočítává se živě podle aktuálních tržeb.`;
+      linkLabel = 'Otevřít můj portál';
+    }
+    const mailFrom = process.env.COMPOUNDER_MAIL_FROM || process.env.SMTP_FROM || process.env.INVOICE_IMAP_USER;
+    await sendMail({ to: lead.email, subject, body, from: mailFrom, fromName: compounderMailFromName(), link: url, linkLabel, brand: 'compounder' });
+    try { await prisma.compounderEvent.create({ data: { sid: 'admin-loss-' + id, event: 'loss_email_sent', props: { lead_id: id, missed, yr, days: Math.round(days) }, path: '/admin' } }); } catch (e) { /* log best-effort */ }
+    console.log(`[compounder] Loss e-mail odeslán lead #${id}: ${missed} Kč (${matched}/${codes.length} lokalit).`);
+    res.json({ ok: true, missed, perDay, yr, days: Math.round(days), matched });
+  } catch (err) { next(err); }
+});
+
 router.get('/leads/:id/activity', requireAuth, async (req, res, next) => {
   try {
     const id = Number(req.params.id);
