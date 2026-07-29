@@ -946,6 +946,11 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
       try { history.replaceState({}, "", location.pathname); } catch(e){}
       document.getElementById("gate").style.display = "none";
       document.getElementById("app").style.display = "block";
+      // První přihlášení (odkazem) bez nastaveného hesla → vyzvi k nastavení hesla,
+      // aby se příště přihlásil e-mailem a heslem.
+      if (!res.j.has_password) {
+        try { setTimeout(function(){ var g=document.getElementById("gearBtn"); if(g) g.click(); var m=document.getElementById("pwMsg"); if(m){ m.style.color="var(--gold-soft)"; m.textContent="Nastavte si heslo pro příští přihlášení e-mailem."; } }, 700); } catch(e){}
+      }
       var first = (res.j.name || "").split(" ")[0];
       PORTAL_LEAD_ID = res.j.id;
       window._leadEmail = res.j.email || ""; window._leadPhone = res.j.phone || "";
