@@ -1843,6 +1843,24 @@ router.delete('/leads/:id', requireAuth, async (req, res, next) => {
 // ─── ADMIN: cesta konkrétního leadu (per-lead analytika) ────────────────────
 // GET /api/compounder/leads/:id/activity — eventy svázané s leadem přes sid
 // (z register_success) NEBO přímo otagované props.lead_id (portal).
+// GET /api/compounder/leads/:id/example-model — uložený model zákazníka (sekce
+// Příklad = skládačka portfolia) + historie všech uložení. Data jsou v
+// example_model.history (snapshoty codes/investment/buyDate/at, max 50).
+router.get('/leads/:id/example-model', requireAuth, async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'Neplatné ID' });
+    const lead = await prisma.compounderLead.findUnique({ where: { id }, select: { example_model: true, show_example: true, created_at: true } });
+    if (!lead) return res.status(404).json({ error: 'Lead nenalezen' });
+    let model = null;
+    try { model = lead.example_model ? JSON.parse(lead.example_model) : null; } catch (e) { model = null; }
+    const history = (model && Array.isArray(model.history)) ? model.history : [];
+    const invHistory = (model && Array.isArray(model.invHistory)) ? model.invHistory : [];
+    const current = model ? { codes: model.codes || [], investment: model.investment || null, buyDate: model.buyDate || null, savedAt: model.savedAt || null } : null;
+    res.json({ ok: true, showExample: !!lead.show_example, accountCreatedAt: lead.created_at, hasModel: !!model, current, history, invHistory });
+  } catch (err) { next(err); }
+});
+
 router.get('/leads/:id/activity', requireAuth, async (req, res, next) => {
   try {
     const id = Number(req.params.id);
