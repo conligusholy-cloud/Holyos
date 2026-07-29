@@ -4572,13 +4572,15 @@ router.get('/portal/example', async (req, res, next) => {
     const lead = await prisma.compounderLead.findUnique({ where: { id: leadId }, select: { show_example: true, example_model: true, created_at: true } });
     if (!lead) return res.status(404).json({ ok: false, error: 'Registrace nenalezena.' });
     if (!lead.show_example) return res.status(403).json({ ok: false, error: 'Sekce není zpřístupněna.' });
-    let codes = [], buyDate = null;
+    let codes = [], buyDate = null, investment = null, invHistory = [];
     try {
       const m = lead.example_model ? JSON.parse(lead.example_model) : null;
       if (m && Array.isArray(m.codes)) codes = m.codes.map((c) => String(c).toUpperCase());
       if (m && m.buyDate) buyDate = String(m.buyDate).slice(0, 10);
+      if (m && m.investment != null && Number.isFinite(Number(m.investment))) investment = Number(m.investment);
+      if (m && Array.isArray(m.invHistory)) invHistory = m.invHistory;
     } catch (e) { /* poškozený JSON ignoruj */ }
-    res.json({ ok: true, enabled: true, accountCreatedAt: lead.created_at, model: { codes, buyDate } });
+    res.json({ ok: true, enabled: true, accountCreatedAt: lead.created_at, model: { codes, buyDate, investment, invHistory } });
   } catch (err) { next(err); }
 });
 
@@ -4595,9 +4597,20 @@ router.post('/portal/example', async (req, res, next) => {
     // Plánované datum nákupu (start projekce) — jen YYYY-MM-DD.
     const bd = String(body.buyDate || '').slice(0, 10);
     const buyDate = /^\d{4}-\d{2}-\d{2}$/.test(bd) ? bd : null;
-    const model = { codes, buyDate, savedAt: new Date().toISOString() };
+    // Objem investice + historie zadaných hodnot (ať obchodník vidí, jak se vize vyvíjela).
+    const invNum = Number(body.investment);
+    const investment = (Number.isFinite(invNum) && invNum > 0) ? Math.round(invNum) : null;
+    let prev = null;
+    try { prev = (await prisma.compounderLead.findUnique({ where: { id: leadId }, select: { example_model: true } })).example_model; } catch (e) { prev = null; }
+    let invHistory = [];
+    try { const pm = prev ? JSON.parse(prev) : null; if (pm && Array.isArray(pm.invHistory)) invHistory = pm.invHistory; } catch (e) { invHistory = []; }
+    if (investment != null && (!invHistory.length || Number(invHistory[invHistory.length - 1].amount) !== investment)) {
+      invHistory.push({ amount: investment, at: new Date().toISOString() });
+      if (invHistory.length > 50) invHistory = invHistory.slice(-50);
+    }
+    const model = { codes, buyDate, investment, invHistory, savedAt: new Date().toISOString() };
     await prisma.compounderLead.update({ where: { id: leadId }, data: { example_model: JSON.stringify(model) } });
-    try { await prisma.compounderEvent.create({ data: { sid: 'portal-lead-' + leadId, event: 'example_save', props: { lead_id: leadId, codes }, path: '/portal#priklad' } }); } catch (e) { /* log best-effort */ }
+    try { await prisma.compounderEvent.create({ data: { sid: 'portal-lead-' + leadId, event: 'example_save', props: { lead_id: leadId, codes, investment, buyDate }, path: '/portal#priklad' } }); } catch (e) { /* log best-effort */ }
     res.json({ ok: true, model });
   } catch (err) { next(err); }
 });

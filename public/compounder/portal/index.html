@@ -446,6 +446,10 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
           <label style="font-size:13px;color:var(--muted,#9aa)">Kdy plánuji nakoupit<br>
             <input type="date" id="ex-date" style="margin-top:5px;background:#141418;color:#fff;border:1px solid var(--line,#2a2a2e);border-radius:10px;padding:9px 12px;font-size:14px">
           </label>
+          <label style="font-size:13px;color:var(--muted,#9aa)">Objem investice (Kč)<br>
+            <input type="text" inputmode="numeric" id="ex-inv" placeholder="např. 5 000 000" style="margin-top:5px;background:#141418;color:#fff;border:1px solid var(--gold,#c9a24b);border-radius:10px;padding:9px 12px;font-size:14px;min-width:170px">
+          </label>
+          <button id="ex-invapply" style="background:var(--gold,#c9a24b);color:#0e1a22;border:none;border-radius:10px;padding:10px 16px;font-weight:700;cursor:pointer">Sestavit portfolio</button>
         </div>
         <div style="display:flex;gap:12px;flex-wrap:wrap;margin:14px 0">
           <div id="ex-missed" style="display:none;flex:1;min-width:280px;background:radial-gradient(120% 95% at 90% -10%,rgba(201,162,75,.22),rgba(15,15,17,0) 60%),#131316;border:1px solid rgba(201,162,75,.3);border-radius:16px;padding:18px 20px"></div>
@@ -1961,11 +1965,16 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
   function initExample(tok){
     if(!document.getElementById('ex-wrap')) return;
     var offer=[], selected={}, acct=window._acctCreatedAt||null, byCode={}, buyDate=null, timerIv=null;
+    var investment=null, invHistory=[];
     function fmt(n){ if(typeof n!=='number'||!isFinite(n)) return '—'; return Math.round(n).toLocaleString('cs-CZ')+' Kč'; }
     function profit5(o){ return (o.guaranteeYears||5)*(o.yearlyYield||0)+(o.guaranteeValue||0)-(o.totalPrice||0); }
     function card(k,v){ return '<div class="ex-card"><div class="ex-k">'+k+'</div><div class="ex-v">'+v+'</div></div>'; }
+    function activeCodes(){
+      if(investment==null) return offer.map(function(o){ return o.code; }); // bez zadané investice = celá nabídka
+      return Object.keys(selected).filter(function(c){return selected[c];});
+    }
     function totals(){
-      var codes=Object.keys(selected).filter(function(c){return selected[c];});
+      var codes=activeCodes();
       var t={n:codes.length,inv:0,yr:0,gua:0,p5:0};
       codes.forEach(function(c){ var o=byCode[c]; if(!o) return; t.inv+=o.totalPrice||0; t.yr+=o.yearlyYield||0; t.gua+=o.guaranteeValue||0; t.p5+=profit5(o); });
       return t;
@@ -2039,13 +2048,22 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
       }
       renderChart(); renderTimer();
     }
+    function autoBuild(){
+      selected={};
+      if(investment==null) return;
+      var pool=offer.filter(function(o){ return (o.totalPrice||0)>0; })
+        .slice().sort(function(a,b){ return ((b.yearlyYield||0)/(b.totalPrice||1)) - ((a.yearlyYield||0)/(a.totalPrice||1)); });
+      var left=investment;
+      pool.forEach(function(o){ if((o.totalPrice||0)<=left){ selected[o.code]=true; left-=o.totalPrice; } });
+    }
     function renderList(){
       var box=document.getElementById('ex-list'); if(!box) return;
       if(!offer.length){ box.innerHTML='<div style="color:var(--muted,#9aa)">Nabídka je zatím prázdná.</div>'; return; }
-      box.innerHTML=offer.map(function(o){
+      var lock=(investment==null);
+      box.innerHTML=(lock?'<div style="color:var(--gold,#c9a24b);font-size:13px;margin-bottom:10px">Zadejte nejdřív objem investice — kalkulačka vám sestaví optimální portfolio. Do té doby počítáme s celou nabídkou ('+offer.length+' lokalit).</div>':'')+offer.map(function(o){
         var on=!!selected[o.code];
-        return '<label class="ex-row" style="border-color:'+(on?'var(--gold,#c9a24b)':'var(--line,#2a2a2e)')+'">'+
-          '<input type="checkbox" data-code="'+o.code+'"'+(on?' checked':'')+'>'+
+        return '<label class="ex-row" style="border-color:'+(on?'var(--gold,#c9a24b)':'var(--line,#2a2a2e)')+';'+(lock?'opacity:.55;cursor:not-allowed':'')+'">'+
+          '<input type="checkbox" data-code="'+o.code+'"'+(on?' checked':'')+(lock?' disabled':'')+'>'+
           '<span class="ex-name">'+(o.label||o.code)+(o.version?(' <span style="color:var(--muted,#9aa)">'+o.version+'</span>'):'')+'</span>'+
           '<span class="ex-fig">'+fmt(o.totalPrice)+'</span>'+
           '<span class="ex-fig" style="color:#22c55e">'+fmt(o.yearlyYield)+' /rok</span>'+
@@ -2060,6 +2078,24 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
         });
       });
     }
+    function parseInv(v){ var n=Number(String(v||'').replace(/[^0-9]/g,'')); return (isFinite(n)&&n>0)?n:null; }
+    function applyInvestment(v, opts){
+      var n=parseInv(v);
+      investment=n;
+      var ii=document.getElementById('ex-inv');
+      if(ii && n!=null) ii.value=n.toLocaleString('cs-CZ');
+      if(n!=null && !(opts&&opts.keepSelection)) autoBuild();
+      if(n!=null && !Object.keys(selected).length){
+        var msg=document.getElementById('ex-savemsg');
+        if(msg){ msg.style.color='var(--gold,#c9a24b)'; msg.textContent='Za tuto částku zatím nekoupíte celou lokalitu — vyberte si ručně, co vás zajímá.'; }
+      }
+      renderList(); recalc();
+      try{ if(typeof pTrack==='function' && n!=null) pTrack('example_investment',{ amount:n }); }catch(e){}
+    }
+    var ii=document.getElementById('ex-inv');
+    if(ii) ii.addEventListener('keydown', function(e){ if(e.key==='Enter'){ e.preventDefault(); applyInvestment(ii.value); } });
+    var ia=document.getElementById('ex-invapply');
+    if(ia) ia.addEventListener('click', function(){ applyInvestment(document.getElementById('ex-inv').value); });
     var di=document.getElementById('ex-date');
     if(di){
       var td=new Date(); di.value=td.toISOString().slice(0,10); buyDate=di.value;
@@ -2073,6 +2109,8 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
         if(e&&e.model&&Array.isArray(e.model.codes)){ e.model.codes.forEach(function(c){ if(byCode[c]) selected[c]=true; }); }
         if(e&&e.model&&e.model.buyDate&&di){ di.value=String(e.model.buyDate).slice(0,10); buyDate=di.value; }
         if(e&&e.accountCreatedAt) acct=e.accountCreatedAt;
+        if(e&&e.model&&e.model.investment!=null){ investment=Number(e.model.investment)||null; var _ii=document.getElementById('ex-inv'); if(_ii&&investment!=null) _ii.value=investment.toLocaleString('cs-CZ'); }
+        if(e&&e.model&&Array.isArray(e.model.invHistory)) invHistory=e.model.invHistory;
         renderList(); recalc();
         if(timerIv) clearInterval(timerIv); timerIv=setInterval(function(){ renderTimer(); renderMissed(); },1000);
       })
@@ -2081,7 +2119,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
     if(sv) sv.addEventListener('click', function(){
       var codes=Object.keys(selected).filter(function(c){return selected[c];});
       var msg=document.getElementById('ex-savemsg'); if(msg){ msg.style.color='var(--muted,#9aa)'; msg.textContent='Ukládám…'; }
-      fetch('/api/compounder/portal/example?t='+encodeURIComponent(tok),{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({codes:codes,buyDate:buyDate})})
+      fetch('/api/compounder/portal/example?t='+encodeURIComponent(tok),{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({codes:codes,buyDate:buyDate,investment:investment})})
         .then(function(r){return r.json();})
         .then(function(j){ if(j&&j.ok){ if(msg){ msg.style.color='#22c55e'; msg.textContent='Uloženo — model se přepočítává podle aktuálních statistik.'; } } else { if(msg){ msg.style.color='#ef4444'; msg.textContent='Uložení se nezdařilo.'; } } })
         .catch(function(){ if(msg){ msg.style.color='#ef4444'; msg.textContent='Uložení se nezdařilo.'; } });
