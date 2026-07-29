@@ -1869,8 +1869,10 @@ async function lossEmailAI(facts) {
     const Anthropic = require('@anthropic-ai/sdk');
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
     const model = process.env.COMPOUNDER_LOCATION_MODEL || 'claude-sonnet-4-6';
-    const langWord = facts.isEn ? 'anglicky' : 'česky';
-    const sys = 'Jsi špičkový copywriter prémiové značky Compounder (samoobslužné prádelny provozované jako investiční aktivum). Napiš KRÁTKÝ, elegantní a profesionální, ale živý a lidský e-mail vracejícímu se zájemci, který VÁHÁ s rozhodnutím a kvůli tomu mu uniká výnos. Cíl: vzbudit touhu vrátit se do Compounder portálu a jednat — vkusně, bez laciného nátlaku a bez klišé prodejních frází. Použij 2–4 vkusné emoji (ne přehnaně). Piš ' + langWord + '. DŮLEŽITÉ: použij PŘESNĚ tato čísla a neměň je — ušlá částka "' + facts.missed + '" a denní ztráta "' + facts.per_day + '"; zmíni i datum založení účtu "' + facts.account_opened + '". Oslov jménem, pokud je zadané. POKAŽDÉ napiš úplně jinak formulovaný e-mail (jiný začátek, jiná metafora, jiný spád, jiný předmět), i když je sdělení stejné — ať to nikdy nevypadá jako stejný e-mail. Do těla NEDÁVEJ žádný odkaz ani podpis — doplní se automaticky. Odpověz POUZE platným JSON bez markdownu: {"subject":"<poutavý předmět, klidně s 1 emoji>","body":"<tělo, 4–6 krátkých odstavců oddělených \\n\\n>"}';
+    const LANG_NAMES = { cs: 'česky', en: 'anglicky', de: 'německy', sk: 'slovensky', pl: 'polsky', es: 'španělsky', it: 'italsky', fr: 'francouzsky', pt: 'portugalsky', hr: 'chorvatsky', nl: 'nizozemsky', hu: 'maďarsky', ro: 'rumunsky', uk: 'ukrajinsky', ru: 'rusky' };
+    const lc = (facts.lang || 'cs').toLowerCase().slice(0, 2);
+    const langWord = LANG_NAMES[lc] || ('v jazyce s ISO kódem ' + lc);
+    const sys = 'Jsi špičkový copywriter prémiové značky Compounder (samoobslužné prádelny provozované jako investiční aktivum). Napiš KRÁTKÝ, elegantní a profesionální, ale živý a lidský e-mail vracejícímu se zájemci, který VÁHÁ s rozhodnutím a kvůli tomu mu uniká výnos. Cíl: vzbudit touhu vrátit se do Compounder portálu a jednat — vkusně, bez laciného nátlaku a bez klišé prodejních frází. Použij 2–4 vkusné emoji (ne přehnaně). Piš ' + langWord + '. DŮLEŽITÉ: použij PŘESNĚ tato čísla a neměň je — ušlá částka "' + facts.missed + '" a denní ztráta "' + facts.per_day + '"; zmíni i datum založení účtu "' + facts.account_opened + '". Oslov jménem, pokud je zadané. POKAŽDÉ napiš úplně jinak formulovaný e-mail (jiný začátek, jiná metafora, jiný spád, jiný předmět), i když je sdělení stejné — ať to nikdy nevypadá jako stejný e-mail. Do těla NEDÁVEJ žádný odkaz ani podpis — doplní se automaticky. Předmět MUSÍ obsahovat konkrétní ušlou částku "' + facts.missed + '" (ať je vidět i ve výpisu schránky, že čím déle čeká, tím víc ztrácí). Odpověz POUZE platným JSON bez markdownu: {"subject":"<poutavý předmět s ušlou částkou, klidně s 1 emoji>","body":"<tělo, 4–6 krátkých odstavců oddělených \\n\\n>"}';
     const usr = 'Fakta (JSON):\n' + JSON.stringify(facts) + '\nNáhodné semínko pro rozmanitost: ' + Math.random().toString(36).slice(2);
     const msg = await client.messages.create({ model, max_tokens: 900, temperature: 1, system: sys, messages: [{ role: 'user', content: usr }] });
     let text = (msg && msg.content && msg.content[0] && msg.content[0].text) || '';
@@ -1891,6 +1893,10 @@ router.post('/leads/:id/send-loss-email', requireAuth, async (req, res, next) =>
     const lead = await prisma.compounderLead.findUnique({ where: { id }, select: { id: true, name: true, email: true, lang: true, created_at: true, example_model: true } });
     if (!lead) return res.status(404).json({ ok: false, error: 'Lead nenalezen' });
     if (!lead.email) return res.status(400).json({ ok: false, error: 'Kontakt nemá e-mail.' });
+    // Jakmile lead vlastní lokalitu (kupní cena zaplacena / rezervace completed),
+    // upomínky se ztrátou se už NEPOSÍLAJÍ.
+    const owned = await prisma.locationReservation.findFirst({ where: { lead_id: id, OR: [{ purchase_paid_at: { not: null } }, { status: 'completed' }] }, select: { id: true } }).catch(() => null);
+    if (owned) return res.status(400).json({ ok: false, error: 'Lead už vlastní lokalitu — upomínky se ztrátou se neposílají.' });
     let model = null; try { model = lead.example_model ? JSON.parse(lead.example_model) : null; } catch (e) { model = null; }
     const codes = (model && Array.isArray(model.codes)) ? model.codes : [];
     if (!codes.length) return res.status(400).json({ ok: false, error: 'Zákazník si zatím neuložil žádný model — není z čeho počítat ztrátu.' });
@@ -1907,12 +1913,22 @@ router.post('/leads/:id/send-loss-email', requireAuth, async (req, res, next) =>
     const perDay = Math.round(yr / 365);
     const url = `${portalBase()}/portal?t=${makeLoginToken(lead.id)}`;
     const first = (lead.name || '').split(' ')[0] || '';
-    const acctStr = new Date(lead.created_at).toLocaleDateString('cs-CZ');
-    const isEn = !!((lead.lang || '').toLowerCase().slice(0, 2)) && (lead.lang || '').toLowerCase().slice(0, 2) !== 'cs';
-    const fmtCz = (n) => (Math.round(Number(n) || 0)).toLocaleString('cs-CZ') + ' Kč';
-    const fmtEn = (n) => (Math.round(Number(n) || 0)).toLocaleString('en-US') + ' CZK';
-    const missedStr = isEn ? fmtEn(missed) : fmtCz(missed);
-    const perDayStr = isEn ? fmtEn(perDay) : fmtCz(perDay);
+    const lang2 = (lead.lang || '').toLowerCase().slice(0, 2);
+    const isCs = (lang2 === 'cs' || lang2 === '');
+    const isEn = !isCs; // pro volbu statického fallbacku (CS vs EN)
+    // Měna dle leada (buildOfferedLocations: CZK pro cs, jinak EUR). Částky v CZK
+    // převedeme kurzem eurRate (CZK za 1 EUR).
+    const dispCur = (offered && offered.defaultCurrency) || (isCs ? 'CZK' : 'EUR');
+    const eurRate = (offered && (offered.eurRate || (offered.rates && offered.rates.EUR))) || 25;
+    const CUR_SYM = { CZK: 'Kč', EUR: '€', USD: '$', GBP: '£', PLN: 'zł' };
+    const moneyStr = (czk) => {
+      const v = (dispCur === 'CZK') ? czk : (eurRate > 0 ? czk / eurRate : czk);
+      const sym = CUR_SYM[dispCur] || dispCur;
+      return Math.round(Number(v) || 0).toLocaleString(isCs ? 'cs-CZ' : 'en-US') + ' ' + sym;
+    };
+    const acctStr = new Date(lead.created_at).toLocaleDateString(isCs ? 'cs-CZ' : 'en-GB');
+    const missedStr = moneyStr(missed);
+    const perDayStr = moneyStr(perDay);
     const linkLabel = isEn ? 'Open my portal' : 'Otevřít můj portál';
     // Statický fallback (s emoji) — použije se, když AI není dostupná.
     let subject, body;
@@ -1925,9 +1941,13 @@ router.post('/leads/:id/send-loss-email', requireAuth, async (req, res, next) =>
     }
     // Pokaždé JINÁ varianta přes AI (stejná fakta + čísla, jiný text a vkusné emoji).
     try {
-      const ai = await lossEmailAI({ name: first || null, missed: missedStr, per_day: perDayStr, account_opened: acctStr, isEn: isEn });
+      const ai = await lossEmailAI({ name: first || null, missed: missedStr, per_day: perDayStr, account_opened: acctStr, lang: lead.lang || (isCs ? 'cs' : 'en') });
       if (ai && ai.subject && ai.body) { subject = ai.subject; body = ai.body; }
     } catch (e) { /* při chybě zůstane fallback */ }
+    // Částka MUSÍ být vždy v předmětu (aby byla vidět i ve výpisu/filtru schránky).
+    if (subject.indexOf(missedStr) === -1) {
+      subject = subject.replace(/[\s.!?—–-]+$/u, '') + ' — ' + missedStr;
+    }
     const mailFrom = process.env.COMPOUNDER_MAIL_FROM || process.env.SMTP_FROM || process.env.INVOICE_IMAP_USER;
     await sendMail({ to: lead.email, subject, body, from: mailFrom, fromName: compounderMailFromName(), link: url, linkLabel, brand: 'compounder' });
     try { await prisma.compounderEvent.create({ data: { sid: 'admin-loss-' + id, event: 'loss_email_sent', props: { lead_id: id, missed, yr, days: Math.round(days) }, path: '/admin' } }); } catch (e) { /* log best-effort */ }
