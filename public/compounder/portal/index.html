@@ -1058,13 +1058,14 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
   // Průběžně hlídá, zda admin leadovi neodemkl nové sekce. Když ano, zobrazí
   // banner s výzvou k obnovení stránky (nové sekce se načtou až po reloadu).
   // Částka na 2 desetinná místa v měně nastavené na portálu (živý kurz z API).
-  function pMoney2(czk){
+  function pMoney2(czk, dec){
     if(typeof czk!=='number'||!isFinite(czk)) return '—';
+    var _d=(typeof dec==='number')?dec:2;
     var cur=(typeof OFFERS!=='undefined' && OFFERS && OFFERS.cur) ? OFFERS.cur : 'CZK';
     var sym=(typeof OFF_CUR_SYM!=='undefined' && OFF_CUR_SYM[cur]) ? OFF_CUR_SYM[cur] : 'Kč';
     var v=czk;
     if(cur!=='CZK' && typeof offRate==='function'){ var r=offRate(cur); if(r>0) v=czk/r; }
-    return v.toLocaleString('cs-CZ',{minimumFractionDigits:2,maximumFractionDigits:2})+' '+sym;
+    return v.toLocaleString('cs-CZ',{minimumFractionDigits:_d,maximumFractionDigits:_d})+' '+sym;
   }
   // Časomíra v horní liště — kolik času uběhlo od založení účtu (na všech stránkách).
   function pStartTopClock(){
@@ -1084,7 +1085,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
         if(yr>0){
           var lost=-(yr/(365*24*3600))*(ms/1000);
           mEl.style.display='';
-          mEl.textContent='přišli jste o '+pMoney2(lost);
+          mEl.textContent='přišli jste o '+pMoney2(Math.abs(lost), 3);
           mEl.style.color='#fca5a5'; setTimeout(function(){ mEl.style.color='#ef4444'; },170);
         } else { mEl.style.display='none'; }
       }
