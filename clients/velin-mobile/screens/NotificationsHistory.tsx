@@ -1,17 +1,15 @@
 // =============================================================================
 // NotificationsHistory — historie notifikací (zvonek)
 // =============================================================================
-// Nahoře nejnovější, dole nejstarší. Notifikace kliknutím NEMIZÍ — jen se
-// označí jako přečtená (zešedne). Pull-to-refresh obnoví seznam.
+// Nahoře nejnovější, dole nejstarší. Ťuknutí notifikaci ROZBALÍ přímo v seznamu
+// (celý text) a označí ji jako přečtenou (zešedne) — žádné vyskakovací okno ani
+// vnořený scroll, roluje se celý seznam nativně a plynule. Pull-to-refresh obnoví.
 
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   FlatList,
   Linking,
-  Modal,
-  Pressable,
   RefreshControl,
-  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -50,7 +48,7 @@ export default function NotificationsHistory() {
   const [items, setItems] = useState<AppNotification[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [selected, setSelected] = useState<AppNotification | null>(null);
+  const [expandedId, setExpandedId] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -93,9 +91,9 @@ export default function NotificationsHistory() {
     }
   }
 
-  // Klik na notifikaci → otevři detail (plný text) a zároveň označ jako přečtenou.
-  function openDetail(item: AppNotification) {
-    setSelected(item);
+  // Ťuk na notifikaci → rozbal/sbal přímo v řádku a označ jako přečtenou.
+  function toggle(item: AppNotification) {
+    setExpandedId((prev) => (prev === item.id ? null : item.id));
     markRead(item);
   }
 
@@ -151,64 +149,42 @@ export default function NotificationsHistory() {
           }
           renderItem={({ item }) => {
             const isUnread = !item.read_at;
+            const isOpen = expandedId === item.id;
             return (
               <TouchableOpacity
-                style={[styles.card, isUnread && styles.cardUnread]}
+                style={[styles.card, isUnread && styles.cardUnread, isOpen && styles.cardOpen]}
                 activeOpacity={0.7}
-                onPress={() => openDetail(item)}
+                onPress={() => toggle(item)}
               >
                 <View style={styles.cardTop}>
                   <Text style={styles.icon}>{typeIcon(item.type)}</Text>
-                  <Text style={[styles.cardTitle, !isUnread && styles.readText]} numberOfLines={2}>
+                  <Text
+                    style={[styles.cardTitle, !isUnread && styles.readText]}
+                    numberOfLines={isOpen ? undefined : 2}
+                  >
                     {item.title || 'Notifikace'}
                   </Text>
                   {isUnread && <View style={styles.dot} />}
                 </View>
                 {!!item.body && (
-                  <Text style={[styles.cardBody, !isUnread && styles.readText]} numberOfLines={4}>
+                  <Text
+                    style={[styles.cardBody, !isUnread && styles.readText]}
+                    numberOfLines={isOpen ? undefined : 4}
+                  >
                     {item.body}
                   </Text>
                 )}
                 <Text style={styles.when}>{fmtWhen(item.created_at)}</Text>
+                {isOpen && !!item.link && (
+                  <TouchableOpacity style={styles.linkBtn} onPress={() => openLink(item.link!)}>
+                    <Text style={styles.linkText}>Otevřít v prohlížeči</Text>
+                  </TouchableOpacity>
+                )}
               </TouchableOpacity>
             );
           }}
         />
       )}
-
-      <Modal
-        visible={!!selected}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setSelected(null)}
-      >
-        <Pressable style={styles.modalOverlay} onPress={() => setSelected(null)}>
-          <Pressable style={styles.modalCard} onPress={() => {}}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalIcon}>{typeIcon(selected?.type ?? null)}</Text>
-              <Text style={styles.modalTitle}>{selected?.title || 'Notifikace'}</Text>
-            </View>
-            <Text style={styles.modalWhen}>{selected ? fmtWhen(selected.created_at) : ''}</Text>
-            <ScrollView
-              style={styles.modalBodyScroll}
-              contentContainerStyle={{ paddingBottom: spacing.md }}
-            >
-              <Text style={styles.modalBody}>{selected?.body || 'Bez podrobností.'}</Text>
-            </ScrollView>
-            {!!selected?.link && (
-              <TouchableOpacity
-                style={styles.modalLinkBtn}
-                onPress={() => selected?.link && openLink(selected.link)}
-              >
-                <Text style={styles.modalLinkText}>Otevřít v prohlížeči</Text>
-              </TouchableOpacity>
-            )}
-            <TouchableOpacity style={styles.modalCloseBtn} onPress={() => setSelected(null)}>
-              <Text style={styles.modalCloseText}>Zavřít</Text>
-            </TouchableOpacity>
-          </Pressable>
-        </Pressable>
-      </Modal>
     </SafeAreaView>
   );
 }
@@ -244,6 +220,9 @@ const styles = StyleSheet.create({
   cardUnread: {
     borderColor: colors.accent,
   },
+  cardOpen: {
+    borderColor: colors.accent2,
+  },
   cardTop: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   icon: { fontSize: 16 },
   cardTitle: { color: colors.text, fontSize: 14.5, fontWeight: '700', flex: 1 },
@@ -256,6 +235,15 @@ const styles = StyleSheet.create({
     backgroundColor: colors.accent,
   },
   when: { color: colors.text2, fontSize: 11, marginTop: 8 },
+  linkBtn: {
+    marginTop: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.accent,
+    borderRadius: radius.md,
+    paddingVertical: spacing.sm,
+    alignItems: 'center',
+  },
+  linkText: { color: colors.accent, fontWeight: '700', fontSize: 14 },
   center: { alignItems: 'center', paddingTop: 60, paddingHorizontal: spacing.xl },
   emptyText: { color: colors.text2, fontSize: 14 },
   errorText: { color: colors.danger, fontSize: 14, textAlign: 'center' },
@@ -268,44 +256,4 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xl,
   },
   retryText: { color: colors.accent2, fontWeight: '600' },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: spacing.xl,
-  },
-  modalCard: {
-    width: '100%',
-    maxWidth: 480,
-    maxHeight: '80%',
-    backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.xl,
-  },
-  modalHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
-  modalIcon: { fontSize: 20, marginTop: 1 },
-  modalTitle: { color: colors.text, fontSize: 17, fontWeight: '700', flex: 1, lineHeight: 22 },
-  modalWhen: { color: colors.text2, fontSize: 12, marginTop: 6, marginBottom: spacing.md },
-  modalBodyScroll: { flexGrow: 0 },
-  modalBody: { color: colors.text, fontSize: 15, lineHeight: 22 },
-  modalLinkBtn: {
-    marginTop: spacing.lg,
-    borderWidth: 1,
-    borderColor: colors.accent,
-    borderRadius: radius.md,
-    paddingVertical: spacing.sm,
-    alignItems: 'center',
-  },
-  modalLinkText: { color: colors.accent, fontWeight: '700', fontSize: 14 },
-  modalCloseBtn: {
-    marginTop: spacing.md,
-    backgroundColor: colors.accent,
-    borderRadius: radius.md,
-    paddingVertical: spacing.md,
-    alignItems: 'center',
-  },
-  modalCloseText: { color: '#fff', fontWeight: '700', fontSize: 15 },
 });

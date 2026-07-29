@@ -2,14 +2,12 @@
   "expo": {
     "name": "Velín",
     "slug": "velin",
-    "version": "0.1.2",
+    "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
     "scheme": "velin",
-    "runtimeVersion": {
-      "policy": "appVersion"
-    },
+    "runtimeVersion": "1.0.0",
     "updates": {
       "url": "https://u.expo.dev/ca3b48b8-37fb-4726-80ce-19a053ff96a5",
       "enabled": true,
