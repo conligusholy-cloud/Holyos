@@ -4190,7 +4190,8 @@
       // Základní okruh: pouze prádlomaty provozované Best Series s.r.o.
       var baseList = kiosks.filter(function(k) {
         if (_kvCountry(k) !== _kvCountryTab) return false;
-        return String(k.companyName || '').trim().toLowerCase().indexOf('best series') !== -1;
+        if (_kvCountryTab === 'CZ') return String(k.companyName || '').trim().toLowerCase().indexOf('best series') !== -1;
+        return true; // Polsko/Irsko: všechny stroje dané země (provozovatel nemusí mít v názvu "Best Series")
       });
 
       // Filtry (klientské) nad základním okruhem
@@ -4293,7 +4294,13 @@
       }
 
       if (!filtered.length) {
-        box.innerHTML = '<div style="color:var(--text2);padding:24px;">Žádné lokality Best Series neodpovídají filtru.</div>';
+        var diag='';
+        if (_kvCountryTab!=='CZ' && Array.isArray(kiosks) && kiosks.length) {
+          var curs={}, comps={};
+          kiosks.forEach(function(k){ var c=String(k.currency||'?').toUpperCase(); curs[c]=(curs[c]||0)+1; comps[String(k.companyName||'?')]=1; });
+          diag='<div style="margin-top:10px;font-size:12px;color:var(--text2);line-height:1.6;">Data ze SIS obsahují měny: <b>'+Object.keys(curs).map(function(c){return c+' ('+curs[c]+')';}).join(', ')+'</b>.<br>Provozovatelé: '+Object.keys(comps).slice(0,10).map(kvEsc).join(' · ')+'.</div>';
+        }
+        box.innerHTML = '<div style="color:var(--text2);padding:24px;">Žádné lokality pro tuto zemi neodpovídají filtru.'+diag+'</div>';
         return;
       }
 
