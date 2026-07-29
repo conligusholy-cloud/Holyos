@@ -389,5 +389,6 @@
   "p.subnav.phil": "Philosophie",
   "p.subnav.oper": "Betreiber",
   "p.subnav.inv": "Investor",
-  "p.subnav.distrib": "Distributor"
+  "p.subnav.distrib": "Distributor",
+  "p.subnav.example": "Beispiel"
 }

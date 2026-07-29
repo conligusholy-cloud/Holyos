@@ -1755,6 +1755,14 @@ router.patch('/leads/:id', requireAuth, async (req, res, next) => {
         : String(parsed.data.sections).split(',');
       const clean = arr.map((s) => String(s).trim()).filter((s) => SECTION_GROUPS.includes(s));
       data.visible_sections = clean.length ? Array.from(new Set(clean)).join(',') : '';
+      // Měkký default: když se Investor (nabidka) NOVĚ zpřístupní a showExample není
+      // v požadavku explicitně, zapni i sekci „Příklad". Uplatní se jen při přechodu
+      // (nemá → má), takže pozdější ruční vypnutí Příkladu zůstane zachováno.
+      if (clean.includes('nabidka') && parsed.data.showExample === undefined) {
+        const cur = await prisma.compounderLead.findUnique({ where: { id }, select: { visible_sections: true } });
+        const hadNabidka = String((cur && cur.visible_sections) || '').split(',').map((s) => s.trim()).includes('nabidka');
+        if (!hadNabidka) data.show_example = true;
+      }
     }
     if (parsed.data.templates !== undefined) {
       const arr = Array.isArray(parsed.data.templates) ? parsed.data.templates : String(parsed.data.templates).split(',');
@@ -2844,6 +2852,7 @@ async function _ensureRepSelfLead(rep) {
         visible_sections: 'ekonomika,nabidka',
         visible_templates: 'rezervacni,kupni,servisni',
         show_revenue_stats: true,
+        show_example: true, // Investor (nabidka) zapnut → Příklad viditelný ve výchozím stavu
       },
       select: { id: true },
     });
@@ -3104,14 +3113,21 @@ router.patch('/external-reps/me/leads/:id', async (req, res, next) => {
     const repId = verifyExtRepToken(_extRepTokenFrom(req));
     if (!repId) return res.status(401).json({ error: 'Neplatné přihlášení.' });
     const id = Number(req.params.id);
-    const lead = await prisma.compounderLead.findUnique({ where: { id }, select: { id: true, external_rep_id: true, activity_log: true } });
+    const lead = await prisma.compounderLead.findUnique({ where: { id }, select: { id: true, external_rep_id: true, activity_log: true, visible_sections: true } });
     if (!lead || lead.external_rep_id !== repId) return res.status(404).json({ error: 'Kontakt nenalezen.' });
     const b = req.body || {};
     const data = {};
     if (b.status && ['new', 'contacted', 'qualified', 'converted', 'rejected'].indexOf(b.status) !== -1) data.status = b.status;
     if (b.notes !== undefined) data.notes = (b.notes === null) ? null : String(b.notes).slice(0, 5000);
     if (b.activity) { const line = '[' + new Date().toLocaleString('cs-CZ') + '] ' + String(b.activity).slice(0, 500); data.activity_log = (lead.activity_log ? (lead.activity_log + '\n') : '') + line; }
-    if (b.sections !== undefined) { const a = Array.isArray(b.sections) ? b.sections : String(b.sections || '').split(','); data.visible_sections = a.map((x) => String(x).trim()).filter(Boolean).join(','); }
+    if (b.sections !== undefined) {
+      const a = Array.isArray(b.sections) ? b.sections : String(b.sections || '').split(',');
+      const cleaned = a.map((x) => String(x).trim()).filter(Boolean);
+      data.visible_sections = cleaned.join(',');
+      // Měkký default: nové zpřístupnění Investoru (nabidka) zapne i sekci „Příklad".
+      const hadNabidka = String(lead.visible_sections || '').split(',').map((s) => s.trim()).includes('nabidka');
+      if (cleaned.includes('nabidka') && !hadNabidka) data.show_example = true;
+    }
     if (b.templates !== undefined) { const a = Array.isArray(b.templates) ? b.templates : String(b.templates || '').split(','); data.visible_templates = a.map((x) => String(x).trim()).filter(Boolean).join(','); }
     if (b.show_revenue_stats !== undefined) data.show_revenue_stats = !!b.show_revenue_stats;
     const upd = await prisma.compounderLead.update({ where: { id }, data });
