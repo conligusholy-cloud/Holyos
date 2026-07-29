@@ -166,7 +166,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
     <div class="top-in">
       <div class="brand">COMP<b>OU</b>NDER <span style="color:var(--muted-2);font-weight:400;letter-spacing:.04em">· Portal</span></div>
       <div id="topClock" style="display:none;flex:1;text-align:center;min-width:0">
-        <div style="font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted-2,#7a7a85)">Víte o tom</div>
+        <div id="topClockLbl" style="font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted-2,#7a7a85)">&nbsp;</div>
         <div id="topClockVal" style="font-size:15px;font-weight:800;color:#f0dfa8;font-variant-numeric:tabular-nums;white-space:nowrap">—</div>
       </div>
       <div class="top-right">
@@ -1060,6 +1060,8 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
     var box=document.getElementById('topClock'), val=document.getElementById('topClockVal');
     if(!box||!val) return;
     box.style.display='';
+    var lbl=document.getElementById('topClockLbl');
+    if(lbl) lbl.textContent='Víte o Compounder příležitosti od '+new Date(acct).toLocaleDateString('cs-CZ');
     function tickTop(){
       var ms=Math.max(0, Date.now()-new Date(acct).getTime());
       var d=Math.floor(ms/86400000), h=Math.floor(ms%86400000/3600000), m=Math.floor(ms%3600000/60000), s=Math.floor(ms%60000/1000);
