@@ -188,6 +188,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
     <a href="#ekonomika" data-i18n="p.subnav.oper">Provozovatel</a>
     <a href="#nabidka" data-i18n="p.subnav.inv">Investor</a>
     <a href="#navratnost" data-i18n="p.subnav.distrib">Distributor</a>
+    <a href="#priklad" id="nav-priklad" style="display:none">Příklad</a>
   </nav>
 
   <div class="wrap">
@@ -427,6 +428,30 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
         <div id="my-contracts" style="display:flex;flex-direction:column;gap:10px;margin-top:10px;"></div>
       </div>
     </section>
+    <section class="blk" id="priklad" style="display:none">
+      <style>
+        #priklad .ex-cards{display:flex;gap:12px;flex-wrap:wrap;margin:14px 0}
+        #priklad .ex-card{flex:1;min-width:150px;background:#141418;border:1px solid var(--line,#2a2a2e);border-radius:14px;padding:14px 16px}
+        #priklad .ex-k{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted,#9aa)}
+        #priklad .ex-v{font-size:22px;font-weight:800;color:#fff;margin-top:3px}
+        #priklad .ex-row{display:flex;align-items:center;gap:12px;padding:11px 14px;border:1px solid var(--line,#2a2a2e);border-radius:12px;margin-bottom:8px;cursor:pointer}
+        #priklad .ex-name{flex:1;font-weight:600;color:#fff}
+        #priklad .ex-fig{white-space:nowrap;color:#fff;font-weight:600;font-size:14px}
+      </style>
+      <div class="phil-eyebrow" style="color:var(--gold,#c9a24b);text-transform:uppercase;letter-spacing:.3em;font-size:12px;font-weight:600">Příklad</div>
+      <h2 style="font-size:clamp(28px,4vw,46px);font-weight:800;color:#fff;margin:6px 0 8px">Poskládejte si svoji budoucí realitu</h2>
+      <p style="color:var(--muted,#9aa);max-width:680px">Vyberte lokality, které byste chtěli vlastnit. Uvidíte souhrn portfolia a o kolik jste už přišli od založení účtu. Model si uložte — přepočítává se každý den podle aktuálních tržeb.</p>
+      <div id="ex-wrap">
+        <div id="ex-missed" style="display:none;background:radial-gradient(120% 95% at 90% -10%,rgba(201,162,75,.22),rgba(15,15,17,0) 60%),#131316;border:1px solid rgba(201,162,75,.3);border-radius:16px;padding:18px 20px;margin:14px 0"></div>
+        <div id="ex-summary"></div>
+        <div style="display:flex;align-items:center;gap:12px;margin:14px 0">
+          <button id="ex-save" style="background:var(--gold,#c9a24b);color:#0e1a22;border:none;border-radius:10px;padding:10px 18px;font-weight:700;cursor:pointer">Uložit můj model</button>
+          <span id="ex-savemsg" style="font-size:13px"></span>
+        </div>
+        <div id="ex-list" style="margin-top:10px"></div>
+      </div>
+    </section>
+
     <section class="blk" id="navratnost">
       <div class="eyebrow" data-i18n="p.ret.eyebrow">Return</div>
       <h2 data-i18n="p.ret.title">When the Compounder pays off</h2>
@@ -958,6 +983,8 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
       window._consultant = res.j.consultant || null;
       window._consultantExternal = !!res.j.consultantExternal;
       window._portalShowRevStats = !!res.j.showRevenueStats;
+      window._portalShowExample = !!res.j.showExample;
+      window._acctCreatedAt = res.j.accountCreatedAt || null;
       window._portalToken = token;
       // Viditelnost sekcí dle povolení leadu; úvodní "Filozofie" je vždy viditelná.
       var ALLOWED = Array.isArray(res.j.sections) ? res.j.sections : [];
@@ -978,7 +1005,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
         if (link) link.style.display = (ALLOWED.indexOf(NAV_GROUP[href]) !== -1) ? '' : 'none';
       });
       // Výchozí stránka po přihlášení: Filozofie (taby přepínají jednotlivé stránky)
-      var _pgOk = { filozofie: 1, provozovatel: 1, investor: 1, distributor: 1 };
+      var _pgOk = { filozofie: 1, provozovatel: 1, investor: 1, distributor: 1, priklad: 1 };
       pShowPage(_pgOk[INIT_PAGE] ? INIT_PAGE : 'filozofie');
       // Výchozí jazyk = jazyk nastavený u leadu (pokud si uživatel na tomto zařízení sám nevybral jiný).
       var _stored = null; try { _stored = localStorage.getItem("compounder.lang2"); } catch(_){}
@@ -996,6 +1023,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
       initPortalPush(token);
       loadEkoDetailLink(token);
       loadOffers(token);
+      if (window._portalShowExample) { var _pl=document.getElementById('nav-priklad'); if(_pl) _pl.style.display=''; try{ initExample(token); }catch(e){} }
       loadPortalContracts(token);
       loadSignedDocs(token);
       renderPortalTemplates(token);
@@ -1921,6 +1949,70 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
     }
     if (send) send.addEventListener("click", submit);
   }
+  function initExample(tok){
+    if(!document.getElementById('ex-wrap')) return;
+    var offer=[], selected={}, acct=window._acctCreatedAt||null, byCode={};
+    function fmt(n){ if(typeof n!=='number'||!isFinite(n)) return '—'; return Math.round(n).toLocaleString('cs-CZ')+' Kč'; }
+    function profit5(o){ return (o.guaranteeYears||5)*(o.yearlyYield||0)+(o.guaranteeValue||0)-(o.totalPrice||0); }
+    function card(k,v){ return '<div class="ex-card"><div class="ex-k">'+k+'</div><div class="ex-v">'+v+'</div></div>'; }
+    function recalc(){
+      var codes=Object.keys(selected).filter(function(c){return selected[c];});
+      var inv=0, yr=0, gua=0, p5=0;
+      codes.forEach(function(c){ var o=byCode[c]; if(!o) return; inv+=o.totalPrice||0; yr+=o.yearlyYield||0; gua+=o.guaranteeValue||0; p5+=profit5(o); });
+      var sum=document.getElementById('ex-summary');
+      if(sum) sum.innerHTML = codes.length
+        ? ('<div class="ex-cards">'+card('Vybráno lokalit', codes.length+'×')+card('Investice celkem', fmt(inv))+card('Roční výnos', fmt(yr))+card('Garance odkupu', fmt(gua))+card('Celkový výnos za 5 let', fmt(p5))+'</div>')
+        : '<div style="color:var(--muted,#9aa)">Zatím nemáte vybranou žádnou lokalitu. Zaškrtněte lokality níže a poskládejte si své portfolio.</div>';
+      var mb=document.getElementById('ex-missed');
+      if(mb){
+        if(codes.length && acct){
+          var days=Math.max(0, Math.floor((Date.now()-new Date(acct).getTime())/86400000));
+          var missed=(yr/365)*days;
+          mb.style.display='';
+          mb.innerHTML='<div style="font-size:13px;color:#f6e6ad;letter-spacing:.04em;text-transform:uppercase;margin-bottom:4px">Ušlý zisk</div>'+
+            '<div style="font-size:clamp(24px,4vw,38px);font-weight:800;color:#fff">'+fmt(missed)+'</div>'+
+            '<div style="color:var(--muted,#9aa);font-size:13px;margin-top:6px">Kdybyste toto portfolio vlastnili od založení účtu ('+new Date(acct).toLocaleDateString('cs-CZ')+', tj. '+days+' dní), už byste vydělali přibližně tolik. Každý den bez něj vás stojí ~'+fmt(yr/365)+'.</div>';
+        } else { mb.style.display='none'; mb.innerHTML=''; }
+      }
+    }
+    function renderList(){
+      var box=document.getElementById('ex-list'); if(!box) return;
+      if(!offer.length){ box.innerHTML='<div style="color:var(--muted,#9aa)">Nabídka je zatím prázdná.</div>'; return; }
+      box.innerHTML=offer.map(function(o){
+        var on=!!selected[o.code];
+        return '<label class="ex-row" style="border-color:'+(on?'var(--gold,#c9a24b)':'var(--line,#2a2a2e)')+'">'+
+          '<input type="checkbox" data-code="'+o.code+'"'+(on?' checked':'')+'>'+
+          '<span class="ex-name">'+(o.label||o.code)+(o.version?(' <span style="color:var(--muted,#9aa)">'+o.version+'</span>'):'')+'</span>'+
+          '<span class="ex-fig">'+fmt(o.totalPrice)+'</span>'+
+          '<span class="ex-fig" style="color:#22c55e">'+fmt(o.yearlyYield)+' /rok</span>'+
+          '</label>';
+      }).join('');
+      Array.prototype.slice.call(box.querySelectorAll('input[type=checkbox]')).forEach(function(cb){
+        cb.addEventListener('change', function(){
+          var c=cb.getAttribute('data-code');
+          if(cb.checked) selected[c]=true; else delete selected[c];
+          try{ if(typeof pTrack==='function') pTrack('example_toggle',{ code:c, on:cb.checked }); }catch(e){}
+          renderList(); recalc();
+        });
+      });
+    }
+    fetch('/api/compounder/portal/offered-locations?t='+encodeURIComponent(tok),{credentials:'include'})
+      .then(function(r){return r.json();})
+      .then(function(j){ offer=(j&&j.locations)||[]; offer.forEach(function(o){ byCode[o.code]=o; });
+        return fetch('/api/compounder/portal/example?t='+encodeURIComponent(tok),{credentials:'include'}).then(function(r){return r.ok?r.json():null;}); })
+      .then(function(e){ if(e&&e.model&&Array.isArray(e.model.codes)){ e.model.codes.forEach(function(c){ if(byCode[c]) selected[c]=true; }); } if(e&&e.accountCreatedAt) acct=e.accountCreatedAt; renderList(); recalc(); })
+      .catch(function(){ var box=document.getElementById('ex-list'); if(box) box.innerHTML='<div style="color:#ef4444">Nepodařilo se načíst nabídku.</div>'; });
+    var sv=document.getElementById('ex-save');
+    if(sv) sv.addEventListener('click', function(){
+      var codes=Object.keys(selected).filter(function(c){return selected[c];});
+      var msg=document.getElementById('ex-savemsg'); if(msg){ msg.style.color='var(--muted,#9aa)'; msg.textContent='Ukládám…'; }
+      fetch('/api/compounder/portal/example?t='+encodeURIComponent(tok),{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({codes:codes})})
+        .then(function(r){return r.json();})
+        .then(function(j){ if(j&&j.ok){ if(msg){ msg.style.color='#22c55e'; msg.textContent='Uloženo — model se přepočítává podle aktuálních statistik.'; } } else { if(msg){ msg.style.color='#ef4444'; msg.textContent='Uložení se nezdařilo.'; } } })
+        .catch(function(){ if(msg){ msg.style.color='#ef4444'; msg.textContent='Uložení se nezdařilo.'; } });
+    });
+  }
+
   function initContact(){
     var open = document.getElementById("ct-open");
     var form = document.getElementById("ct-form");
@@ -1982,9 +2074,10 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
     nabidka:'investor',
     navratnost:'distributor', milniky:'distributor', parametry:'distributor',
     galerie:'distributor', pripojky:'distributor', pudorysy:'distributor',
-    distribuce:'distributor', lokalita:'distributor'
+    distribuce:'distributor', lokalita:'distributor',
+    priklad:'priklad'
   };
-  var NAVHREF_PAGE = { filozofie:'filozofie', ekonomika:'provozovatel', nabidka:'investor', navratnost:'distributor' };
+  var NAVHREF_PAGE = { filozofie:'filozofie', ekonomika:'provozovatel', nabidka:'investor', navratnost:'distributor', priklad:'priklad' };
   function pShowPage(page){
     Object.keys(PAGE_OF).forEach(function(id){
       var el = document.getElementById(id);

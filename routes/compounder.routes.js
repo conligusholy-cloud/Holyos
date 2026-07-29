@@ -366,7 +366,7 @@ router.get('/portal/session', async (req, res, next) => {
     if (!id) return res.status(401).json({ ok: false, error: 'Neplatný nebo chybějící přístupový odkaz.' });
     const lead = await prisma.compounderLead.findUnique({
       where: { id },
-      select: { id: true, name: true, email: true, phone: true, role: true, lang: true, visible_sections: true, visible_templates: true, show_revenue_stats: true, owner_person_id: true, external_rep_id: true, password_hash: true, source: true, access_approved_at: true },
+      select: { id: true, name: true, email: true, phone: true, role: true, lang: true, visible_sections: true, visible_templates: true, show_revenue_stats: true, show_example: true, created_at: true, owner_person_id: true, external_rep_id: true, password_hash: true, source: true, access_approved_at: true },
     });
     if (!lead) return res.status(404).json({ ok: false, error: 'Registrace nenalezena.' });
     if (!leadAccessAllowed(lead)) {
@@ -393,7 +393,7 @@ router.get('/portal/session', async (req, res, next) => {
         if (p) consultant = { name: ((p.first_name || '') + ' ' + (p.last_name || '')).trim(), phone: p.phone || '', email: p.email || '' };
       } catch (e) { /* fallback na majitele */ }
     }
-    return res.json({ ok: true, id: lead.id, name: lead.name, email: lead.email || '', phone: lead.phone || '', role: lead.role, lang: lead.lang, sections: resolveSections(lead.visible_sections), templates: templates, showRevenueStats: !!lead.show_revenue_stats, consultant: consultant, consultantExternal: consultantExternal, has_password: !!lead.password_hash });
+    return res.json({ ok: true, id: lead.id, name: lead.name, email: lead.email || '', phone: lead.phone || '', role: lead.role, lang: lead.lang, sections: resolveSections(lead.visible_sections), templates: templates, showRevenueStats: !!lead.show_revenue_stats, showExample: !!lead.show_example, accountCreatedAt: lead.created_at, consultant: consultant, consultantExternal: consultantExternal, has_password: !!lead.password_hash });
   } catch (err) {
     next(err);
   }
@@ -4560,6 +4560,38 @@ router.get('/portal/offered-locations', async (req, res, next) => {
     const leadId = verifyPortalToken(String(req.query.t || ''));
     if (!leadId) return res.status(401).json({ ok: false, error: 'Neplatný nebo chybějící přístupový odkaz.' });
     res.json(await buildOfferedLocations(leadId));
+  } catch (err) { next(err); }
+});
+
+// ─── Sekce „Příklad" (skládačka portfolia) — jen pro lead se show_example ─────
+// GET /portal/example?t= → uložený model + datum založení účtu (pro ušlý zisk).
+router.get('/portal/example', async (req, res, next) => {
+  try {
+    const leadId = verifyPortalToken(String(req.query.t || ''));
+    if (!leadId) return res.status(401).json({ ok: false, error: 'Neplatný nebo chybějící přístupový odkaz.' });
+    const lead = await prisma.compounderLead.findUnique({ where: { id: leadId }, select: { show_example: true, example_model: true, created_at: true } });
+    if (!lead) return res.status(404).json({ ok: false, error: 'Registrace nenalezena.' });
+    if (!lead.show_example) return res.status(403).json({ ok: false, error: 'Sekce není zpřístupněna.' });
+    let codes = [];
+    try { const m = lead.example_model ? JSON.parse(lead.example_model) : null; if (m && Array.isArray(m.codes)) codes = m.codes.map((c) => String(c).toUpperCase()); } catch (e) { /* poškozený JSON ignoruj */ }
+    res.json({ ok: true, enabled: true, accountCreatedAt: lead.created_at, model: { codes } });
+  } catch (err) { next(err); }
+});
+
+// POST /portal/example?t= { codes:[...] } → ulož model + zaloguj vizi.
+router.post('/portal/example', async (req, res, next) => {
+  try {
+    const leadId = verifyPortalToken(String(req.query.t || ''));
+    if (!leadId) return res.status(401).json({ ok: false, error: 'Neplatný nebo chybějící přístupový odkaz.' });
+    const lead = await prisma.compounderLead.findUnique({ where: { id: leadId }, select: { show_example: true } });
+    if (!lead || !lead.show_example) return res.status(403).json({ ok: false, error: 'Sekce není zpřístupněna.' });
+    const body = req.body || {};
+    let codes = Array.isArray(body.codes) ? body.codes.map((c) => String(c).trim().toUpperCase()).filter(Boolean).slice(0, 200) : [];
+    codes = Array.from(new Set(codes));
+    const model = { codes, savedAt: new Date().toISOString() };
+    await prisma.compounderLead.update({ where: { id: leadId }, data: { example_model: JSON.stringify(model) } });
+    try { await prisma.compounderEvent.create({ data: { sid: 'portal-lead-' + leadId, event: 'example_save', props: { lead_id: leadId, codes }, path: '/portal#priklad' } }); } catch (e) { /* log best-effort */ }
+    res.json({ ok: true, model });
   } catch (err) { next(err); }
 });
 
