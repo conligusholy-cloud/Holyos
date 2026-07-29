@@ -3395,7 +3395,9 @@
         + waBtn
         + '<button type="button" onclick="cmpSendLoss(' + id + ', this)" title="Elegantní e-mail se skutečnou ušlou částkou z jeho modelu + odkaz zpět do portálu" style="background:#ef4444;color:#fff;border:none;border-radius:8px;padding:6px 14px;font-size:12.5px;font-weight:700;cursor:pointer;">📉 Odeslat e-mail se ztrátou</button>'
         + '<span data-invmsg="' + id + '" style="font-size:12px;align-self:center;color:var(--text2);"></span>'
-        + '</div></div>';
+        + '</div>'
+        + '<div style="font-size:11.5px;color:var(--text2);margin-top:8px;display:flex;align-items:center;gap:6px;"><span>⏰</span><span>E-mail se ztrátou se navíc <b>automaticky rozesílá každý čtvrtek ve 21:00</b> všem aktivním leadům (kdo už byl v portálu, nevlastní lokalitu a má uložený model).</span></div>'
+        + '</div>';
     }
     function cmpInvSetState(id, count, sentAt){
       var el = document.querySelector('[data-invstate="' + id + '"]');

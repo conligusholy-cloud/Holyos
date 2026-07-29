@@ -1883,35 +1883,33 @@ async function lossEmailAI(facts) {
   } catch (e) { console.error('[compounder] lossEmailAI selhal:', e.message); return null; }
 }
 
-// POST /api/compounder/leads/:id/send-loss-email — elegantní e-mail s aktuální
-// ušlou částkou (ze zákazníkova modelu) + odkaz zpět do portálu. Ztráta se počítá
-// stejně jako v portálu: (roční výnos vybraného portfolia / 365) × dny od založení účtu.
-router.post('/leads/:id/send-loss-email', requireAuth, async (req, res, next) => {
-  try {
-    const id = Number(req.params.id);
-    if (!Number.isInteger(id)) return res.status(400).json({ ok: false, error: 'Neplatné ID' });
-    const lead = await prisma.compounderLead.findUnique({ where: { id }, select: { id: true, name: true, email: true, lang: true, created_at: true, example_model: true } });
-    if (!lead) return res.status(404).json({ ok: false, error: 'Lead nenalezen' });
-    if (!lead.email) return res.status(400).json({ ok: false, error: 'Kontakt nemá e-mail.' });
-    // TVRDÝ STRÁŽCE: e-mail se ztrátou NIKDY nesmí jít někomu, kdo v portálu ještě
-    // nikdy nebyl (platí pro tlačítko i jakékoli budoucí automatické rozesílání).
-    const wasOnPortal = await prisma.compounderEvent.findFirst({
-      where: { event: 'portal_view', props: { path: ['lead_id'], equals: id } },
-      select: { id: true },
-    }).catch(() => null);
-    if (!wasOnPortal) return res.status(400).json({ ok: false, error: 'Zákazník ještě nikdy nebyl v portálu — e-mail se ztrátou se neodešle.' });
-    // Jakmile lead vlastní lokalitu (kupní cena zaplacena / rezervace completed),
-    // upomínky se ztrátou se už NEPOSÍLAJÍ.
-    const owned = await prisma.locationReservation.findFirst({ where: { lead_id: id, OR: [{ purchase_paid_at: { not: null } }, { status: 'completed' }] }, select: { id: true } }).catch(() => null);
-    if (owned) return res.status(400).json({ ok: false, error: 'Lead už vlastní lokalitu — upomínky se ztrátou se neposílají.' });
-    let model = null; try { model = lead.example_model ? JSON.parse(lead.example_model) : null; } catch (e) { model = null; }
-    const codes = (model && Array.isArray(model.codes)) ? model.codes : [];
-    if (!codes.length) return res.status(400).json({ ok: false, error: 'Zákazník si zatím neuložil žádný model — není z čeho počítat ztrátu.' });
-    const buyDate = (model && model.buyDate) ? model.buyDate : null;
+// Sestaví a odešle e-mail se ztrátou jednomu leadovi. Sdílená logika pro ruční
+// tlačítko i automatickou týdenní rozesílku. Vrací výsledek (neposílá HTTP odpověď).
+// Strážci: musí být v portálu (portal_view), nesmí vlastnit lokalitu, musí mít model.
+async function sendLossEmailForLead(leadId) {
+  const id = Number(leadId);
+  if (!Number.isInteger(id)) return { ok: false, code: 'bad_id', error: 'Neplatné ID' };
+  const lead = await prisma.compounderLead.findUnique({ where: { id }, select: { id: true, name: true, email: true, lang: true, created_at: true, example_model: true } });
+  if (!lead) return { ok: false, code: 'not_found', error: 'Lead nenalezen' };
+  if (!lead.email) return { ok: false, code: 'no_email', error: 'Kontakt nemá e-mail.' };
+  // TVRDÝ STRÁŽCE: e-mail se ztrátou NIKDY nesmí jít někomu, kdo v portálu ještě
+  // nikdy nebyl (platí pro tlačítko i automatické rozesílání).
+  const wasOnPortal = await prisma.compounderEvent.findFirst({
+    where: { event: 'portal_view', props: { path: ['lead_id'], equals: id } },
+    select: { id: true },
+  }).catch(() => null);
+  if (!wasOnPortal) return { ok: false, code: 'not_on_portal', error: 'Zákazník ještě nikdy nebyl v portálu — e-mail se ztrátou se neodešle.' };
+  // Jakmile lead vlastní lokalitu (kupní cena zaplacena / rezervace completed) → nic.
+  const owned = await prisma.locationReservation.findFirst({ where: { lead_id: id, OR: [{ purchase_paid_at: { not: null } }, { status: 'completed' }] }, select: { id: true } }).catch(() => null);
+  if (owned) return { ok: false, code: 'owned', error: 'Lead už vlastní lokalitu — upomínky se ztrátou se neposílají.' };
+  let model = null; try { model = lead.example_model ? JSON.parse(lead.example_model) : null; } catch (e) { model = null; }
+  const codes = (model && Array.isArray(model.codes)) ? model.codes : [];
+  if (!codes.length) return { ok: false, code: 'no_model', error: 'Zákazník si zatím neuložil žádný model — není z čeho počítat ztrátu.' };
+  const buyDate = (model && model.buyDate) ? model.buyDate : null;
     const offered = await buildOfferedLocations(id, { includeHidden: true }).catch(() => null);
     const byCode = {}; if (offered && Array.isArray(offered.locations)) offered.locations.forEach((o) => { byCode[String(o.code).toUpperCase()] = o; });
     let yr = 0, matched = 0; codes.forEach((c) => { const o = byCode[String(c).toUpperCase()]; if (o) { yr += (o.yearlyYield || 0); matched++; } });
-    if (yr <= 0) return res.status(400).json({ ok: false, error: 'Nelze spočítat roční výnos vybraných lokalit (chybí data ze SIS).' });
+    if (yr <= 0) return { ok: false, code: 'no_yield', error: 'Nelze spočítat roční výnos vybraných lokalit (chybí data ze SIS).' };
     const from = new Date(lead.created_at).getTime();
     let to = Date.now();
     if (buyDate) { const bd = new Date(buyDate + 'T23:59:59').getTime(); if (bd > to) to = bd; }
@@ -1959,7 +1957,16 @@ router.post('/leads/:id/send-loss-email', requireAuth, async (req, res, next) =>
     await sendMail({ to: lead.email, subject, body, from: mailFrom, fromName: compounderMailFromName(), link: url, linkLabel, brand: 'compounder' });
     try { await prisma.compounderEvent.create({ data: { sid: 'admin-loss-' + id, event: 'loss_email_sent', props: { lead_id: id, missed, yr, days: Math.round(days) }, path: '/admin' } }); } catch (e) { /* log best-effort */ }
     console.log(`[compounder] Loss e-mail odeslán lead #${id}: ${missed} Kč (${matched}/${codes.length} lokalit).`);
-    res.json({ ok: true, missed, perDay, yr, days: Math.round(days), matched });
+    return { ok: true, missed, perDay, yr, days: Math.round(days), matched };
+}
+router.sendLossEmailForLead = sendLossEmailForLead;
+
+// POST /api/compounder/leads/:id/send-loss-email — ruční odeslání (tenký wrapper).
+router.post('/leads/:id/send-loss-email', requireAuth, async (req, res, next) => {
+  try {
+    const r = await sendLossEmailForLead(Number(req.params.id));
+    if (!r.ok) return res.status(r.code === 'not_found' ? 404 : 400).json(r);
+    res.json(r);
   } catch (err) { next(err); }
 });
 

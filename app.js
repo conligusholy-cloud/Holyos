@@ -921,6 +921,12 @@ app.listen(PORT, async () => {
   } catch (err) {
     console.error('[app] sales-manager-worker nelze spustit:', err.message);
   }
+  try {
+    const lossEmailWorker = require('./services/compounder/loss-email-worker');
+    lossEmailWorker.start();
+  } catch (err) {
+    console.error('[app] loss-email-worker nelze spustit:', err.message);
+  }
   console.log('=========================================');
   console.log('  HolyOS v0.5.0');
   console.log('  Listening on port ' + PORT);
