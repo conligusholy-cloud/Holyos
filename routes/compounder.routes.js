@@ -1911,11 +1911,16 @@ async function sendLossEmailForLead(leadId) {
   const owned = await prisma.locationReservation.findFirst({ where: { lead_id: id, OR: [{ purchase_paid_at: { not: null } }, { status: 'completed' }] }, select: { id: true } }).catch(() => null);
   if (owned) return { ok: false, code: 'owned', error: 'Lead už vlastní lokalitu — upomínky se ztrátou se neposílají.' };
   let model = null; try { model = lead.example_model ? JSON.parse(lead.example_model) : null; } catch (e) { model = null; }
-  const codes = (model && Array.isArray(model.codes)) ? model.codes : [];
-  if (!codes.length) return { ok: false, code: 'no_model', error: 'Zákazník si zatím neuložil žádný model — není z čeho počítat ztrátu.' };
+  let codes = (model && Array.isArray(model.codes)) ? model.codes.slice() : [];
   const buyDate = (model && model.buyDate) ? model.buyDate : null;
     const offered = await buildOfferedLocations(id, { includeHidden: true }).catch(() => null);
-    const byCode = {}; if (offered && Array.isArray(offered.locations)) offered.locations.forEach((o) => { byCode[String(o.code).toUpperCase()] = o; });
+    const locs = (offered && Array.isArray(offered.locations)) ? offered.locations : [];
+    const byCode = {}; locs.forEach((o) => { byCode[String(o.code).toUpperCase()] = o; });
+    // Bez uloženého modelu předpokládáme, že zaklikal CELOU zpřístupněnou nabídku
+    // (stejně jako portál, když ještě nezadal částku) — počítáme z ní ztrátu.
+    let usedWholeOffer = false;
+    if (!codes.length) { codes = locs.filter((o) => !o.noPhoto).map((o) => o.code); usedWholeOffer = true; }
+    if (!codes.length) return { ok: false, code: 'no_offer', error: 'Zákazník nemá uložený model ani žádnou zpřístupněnou nabídku lokalit — není z čeho počítat ztrátu.' };
     let yr = 0, matched = 0; codes.forEach((c) => { const o = byCode[String(c).toUpperCase()]; if (o) { yr += (o.yearlyYield || 0); matched++; } });
     if (yr <= 0) return { ok: false, code: 'no_yield', error: 'Nelze spočítat roční výnos vybraných lokalit (chybí data ze SIS).' };
     const from = new Date(lead.created_at).getTime();
@@ -1964,8 +1969,8 @@ async function sendLossEmailForLead(leadId) {
     const mailFrom = process.env.COMPOUNDER_MAIL_FROM || process.env.SMTP_FROM || process.env.INVOICE_IMAP_USER;
     await sendMail({ to: lead.email, subject, body, from: mailFrom, fromName: compounderMailFromName(), link: url, linkLabel, brand: 'compounder' });
     try { await prisma.compounderEvent.create({ data: { sid: 'admin-loss-' + id, event: 'loss_email_sent', props: { lead_id: id, missed, yr, days: Math.round(days) }, path: '/admin' } }); } catch (e) { /* log best-effort */ }
-    console.log(`[compounder] Loss e-mail odeslán lead #${id}: ${missed} Kč (${matched}/${codes.length} lokalit).`);
-    return { ok: true, missed, perDay, yr, days: Math.round(days), matched };
+    console.log(`[compounder] Loss e-mail odeslán lead #${id}: ${missed} Kč (${matched}/${codes.length} lokalit${usedWholeOffer ? ', celá nabídka' : ''}).`);
+    return { ok: true, missed, perDay, yr, days: Math.round(days), matched, wholeOffer: usedWholeOffer };
 }
 router.sendLossEmailForLead = sendLossEmailForLead;
 
