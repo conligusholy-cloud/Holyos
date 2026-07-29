@@ -1970,6 +1970,18 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
       codes.forEach(function(c){ var o=byCode[c]; if(!o) return; t.inv+=o.totalPrice||0; t.yr+=o.yearlyYield||0; t.gua+=o.guaranteeValue||0; t.p5+=profit5(o); });
       return t;
     }
+    var _lastMissed=null;
+    function renderMissed(){
+      var el=document.getElementById('ex-missed-val'); if(!el||!acct) return;
+      var t=totals(); if(!t.n) return;
+      var secs=Math.max(0,(Date.now()-new Date(acct).getTime())/1000);
+      var val=-(t.yr/(365*24*3600))*secs; // ztráta = záporné číslo, odečítá se v reálném čase
+      el.textContent=val.toLocaleString('cs-CZ',{minimumFractionDigits:2,maximumFractionDigits:2})+' Kč';
+      if(_lastMissed!==null && val<_lastMissed){ el.style.color='#ef4444'; setTimeout(function(){ el.style.color='#fff'; },170); }
+      _lastMissed=val;
+      var sub=document.getElementById('ex-missed-sub');
+      if(sub){ var days=Math.floor(secs/86400); sub.textContent='Ztráta narůstá každou sekundu. Za '+days+' dní, co o Compounderu víte, vám uniklo '+fmt(Math.abs(val))+' — každý den bez tohoto portfolia ~'+fmt(t.yr/365)+'.'; }
+    }
     function renderTimer(){
       var box=document.getElementById('ex-timer'); if(!box) return;
       if(!acct){ box.style.display='none'; return; }
@@ -2011,16 +2023,18 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
       var t=totals();
       var sum=document.getElementById('ex-summary');
       if(sum) sum.innerHTML = t.n
-        ? ('<div class="ex-cards">'+card('Vybráno lokalit', t.n+'×')+card('Investice celkem', fmt(t.inv))+card('Roční výnos', fmt(t.yr))+card('Garance odkupu', fmt(t.gua))+card('Celkový výnos za 5 let', fmt(t.p5))+'</div>')
+        ? ('<div class="ex-cards">'+card('Vybráno lokalit', t.n+'×')+card('Investice celkem', fmt(t.inv))+card('Pravidelný měsíční výnos', fmt(t.yr/12))+card('Roční výnos', fmt(t.yr))+'</div>')
         : '<div style="color:var(--muted,#9aa)">Zatím nemáte vybranou žádnou lokalitu. Zaškrtněte lokality níže a poskládejte si své portfolio.</div>';
       var mb=document.getElementById('ex-missed');
       if(mb){
         if(t.n && acct){
-          var days=Math.max(0, Math.floor((Date.now()-new Date(acct).getTime())/86400000));
           mb.style.display='';
-          mb.innerHTML='<div style="font-size:13px;color:#f6e6ad;letter-spacing:.04em;text-transform:uppercase;margin-bottom:4px">O kolik jste přišli</div>'+
-            '<div style="font-size:clamp(24px,4vw,38px);font-weight:800;color:#fff">'+fmt((t.yr/365)*days)+'</div>'+
-            '<div style="color:var(--muted,#9aa);font-size:13px;margin-top:6px">Za '+days+' dní, co o Compounderu víte. Každý den bez tohoto portfolia vás stojí ~'+fmt(t.yr/365)+'.</div>';
+          if(!document.getElementById('ex-missed-val')){
+            mb.innerHTML='<div style="font-size:13px;color:#f6e6ad;letter-spacing:.04em;text-transform:uppercase;margin-bottom:4px">O kolik jste přišli</div>'+
+              '<div id="ex-missed-val" style="font-size:clamp(24px,4vw,38px);font-weight:800;color:#fff;font-variant-numeric:tabular-nums;transition:color .18s">—</div>'+
+              '<div id="ex-missed-sub" style="color:var(--muted,#9aa);font-size:13px;margin-top:6px"></div>';
+          }
+          renderMissed();
         } else { mb.style.display='none'; mb.innerHTML=''; }
       }
       renderChart(); renderTimer();
@@ -2060,7 +2074,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
         if(e&&e.model&&e.model.buyDate&&di){ di.value=String(e.model.buyDate).slice(0,10); buyDate=di.value; }
         if(e&&e.accountCreatedAt) acct=e.accountCreatedAt;
         renderList(); recalc();
-        if(timerIv) clearInterval(timerIv); timerIv=setInterval(renderTimer,1000);
+        if(timerIv) clearInterval(timerIv); timerIv=setInterval(function(){ renderTimer(); renderMissed(); },1000);
       })
       .catch(function(){ var box=document.getElementById('ex-list'); if(box) box.innerHTML='<div style="color:#ef4444">Nepodařilo se načíst nabídku.</div>'; });
     var sv=document.getElementById('ex-save');
