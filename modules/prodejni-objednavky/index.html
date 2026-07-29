@@ -3434,6 +3434,7 @@
         + '<div data-offerchips="'+id+'" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;"></div>'
         + '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">'
         +   '<select data-offersel="'+id+'" style="background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:12.5px;min-width:240px;max-width:100%;"><option value="">Načítám lokality…</option></select>'
+        +   '<button type="button" class="btn" style="padding:6px 12px;font-size:12.5px;" onclick="cmpPickVip('+id+')">📊 Vybrat z tabulky (s daty)</button>'
         +   '<button type="button" class="btn" style="padding:6px 12px;font-size:12.5px;" onclick="cmpAddOffer('+id+')">+ Přidat</button>'
         +   '<button type="button" class="btn btn-primary" style="padding:6px 14px;font-size:12.5px;" onclick="cmpSaveOffers('+id+')">Uložit</button>'
         +   '<span data-offermsg="'+id+'" style="font-size:12px;"></span>'
@@ -3494,6 +3495,87 @@
         if(msg){ msg.style.color='#10b981'; msg.textContent='Uloženo ✓'; setTimeout(function(){ if(msg) msg.textContent=''; }, 2200); }
       }catch(e){ if(msg){ msg.style.color='#ef4444'; msg.textContent='Chyba uložení'; } }
     }
+    // ── VIP picker: výběr individuálních lokalit z Compounding tabulky (s daty) ──
+    var _vipPick = {}; var _vipLeadId = null;
+    function _vipRow(k){
+      var num=function(v){return (typeof v==='number'&&isFinite(v))?v:0;};
+      var st=_compoundingSettings||{};
+      var months=Number.isFinite(st.locationMonths)?st.locationMonths:12;
+      var svcPct=Number.isFinite(st.servicePct)?st.servicePct:15;
+      var enPct=Number.isFinite(st.energyPct)?st.energyPct:9.5;
+      var priceMode=(st.locationPriceMode==='roi')?'roi':'months';
+      var roiPct=Number.isFinite(st.locationRoiPct)?st.locationRoiPct:25;
+      var buybackPct=Number.isFinite(st.buybackPct)?st.buybackPct:65;
+      var buybackYears=Number.isFinite(st.buybackYears)?st.buybackYears:5;
+      var cfg=_kioskConfig[k.code]||{};
+      var machine=_kvVerMachine(k.code).machine;
+      var cur=k.currency||'CZK'; var rate=(_kvFxRates&&_kvFxRates[cur])?_kvFxRates[cur]:1;
+      var obratBez=num(k.avgTop3)/1.21;
+      var servis=num(k.avgTop3)*(svcPct/100);
+      var najem=(typeof cfg.rentMonthlyCzk==='number'&&isFinite(cfg.rentMonthlyCzk))?cfg.rentMonthlyCzk:0;
+      var energie=obratBez*(enPct/100);
+      var cisty=obratBez-servis-najem-energie;
+      var locv;
+      if(priceMode==='roi'){ if(machine==null){locv=0;} else { var target=cisty*(1200/(roiPct>0?roiPct:25)); locv=target-machine; if(locv<0)locv=0; } }
+      else { locv=num(k.avgTop3)*rate*months; }
+      var total=(machine!=null)?(locv+machine):null;
+      var yr=cisty*12;
+      var roi=(total>0)?(cisty*12/total*100):null;
+      var profit5=(total!=null)?(buybackYears*(cisty*12)+total*(buybackPct/100)-total):null;
+      return { code:k.code, label:k.label||'', company:k.companyName||'', version:String(cfg.version||'').toUpperCase(), lokalita:locv, total:total, yr:yr, roi:roi, profit5:profit5, inIncubator:!!k.inIncubator };
+    }
+    function cmpVipCount(){ var el=document.getElementById('vip-count'); if(el) el.textContent='Vybráno: '+Object.keys(_vipPick).length+' lokalit'; }
+    function cmpVipRender(){
+      var box=document.getElementById('vip-table'); if(!box) return;
+      if(!_kioskData||!Array.isArray(_kioskData.kiosks)){ box.innerHTML='<div style="color:#ef4444;padding:20px;">Data lokalit se nepodařilo načíst. Zkus otevřít záložku Compounding a pak to znovu.</div>'; return; }
+      var q=((document.getElementById('vip-search')||{}).value||'').trim().toLowerCase();
+      var rows=_kioskData.kiosks.filter(function(k){ return String(k.companyName||'').toLowerCase().indexOf('best series')!==-1; }).map(_vipRow);
+      rows.sort(function(a,b){ return (b.total||0)-(a.total||0); });
+      var vis=rows.filter(function(r){ if(!q) return true; return ((r.code||'')+' '+(r.label||'')+' '+(r.company||'')).toLowerCase().indexOf(q)!==-1; });
+      var h='<div style="overflow-x:auto;"><table class="data-table" style="font-size:12.5px;"><thead><tr>'
+        +'<th style="text-align:center;">VIP</th><th>Kód</th><th>Lokalita</th><th>Provozovatel</th><th>Verze</th>'
+        +'<th style="text-align:right;">Celková cena</th><th style="text-align:right;">Cena lokality</th><th style="text-align:right;">Roční výnos</th><th style="text-align:right;">ROI</th><th style="text-align:right;">Výnos 5 let</th><th>Stav</th></tr></thead><tbody>';
+      vis.forEach(function(r){
+        h+='<tr>'
+          +'<td style="text-align:center;"><input type="checkbox" data-vip="'+kvEsc(r.code)+'"'+(_vipPick[r.code]?' checked':'')+'></td>'
+          +'<td>'+kvEsc(r.code)+'</td><td>'+kvEsc(r.label)+'</td><td>'+kvEsc(r.company)+'</td><td>'+kvEsc(r.version)+'</td>'
+          +'<td style="text-align:right;">'+kvMoney(r.total,'CZK')+'</td>'
+          +'<td style="text-align:right;">'+kvMoney(r.lokalita,'CZK')+'</td>'
+          +'<td style="text-align:right;">'+kvMoney(r.yr,'CZK')+'</td>'
+          +'<td style="text-align:right;">'+(r.roi!=null?(Math.round(r.roi*10)/10+' %'):'—')+'</td>'
+          +'<td style="text-align:right;">'+kvMoney(r.profit5,'CZK')+'</td>'
+          +'<td>'+(r.inIncubator?'Inkubátor':'Zavedená')+'</td></tr>';
+      });
+      h+='</tbody></table></div>';
+      box.innerHTML=h;
+      cmpVipCount();
+    }
+    async function cmpVipApply(id){
+      var arr=Object.keys(_vipPick);
+      cmpSetOffersAttr(id, arr); cmpRenderOfferChips(id); cmpFillOfferSelect(id);
+      await cmpSaveOffers(id);
+      var w=document.querySelector('[data-vippick]'); if(w) w.remove();
+    }
+    async function cmpPickVip(id){
+      _vipLeadId=id; _vipPick={}; cmpOffersOf(id).forEach(function(c){ _vipPick[c]=true; });
+      var wrap=document.createElement('div');
+      wrap.className='modal-overlay'; wrap.setAttribute('data-vippick','1'); wrap.style.zIndex='10050';
+      wrap.innerHTML='<div class="modal" style="width:1150px;max-width:97vw;max-height:90vh;overflow:auto;">'
+        +'<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px;"><h2 style="margin:0;font-size:18px;">🎯 Vyber VIP lokality pro tento lead</h2><button type="button" data-vipclose class="btn btn-secondary">Zavřít</button></div>'
+        +'<input type="text" id="vip-search" placeholder="Hledat kód / lokalitu / provozovatele…" style="width:100%;box-sizing:border-box;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:8px 12px;font-size:13px;margin-bottom:10px;">'
+        +'<div id="vip-table"><div style="color:var(--text2);padding:20px;">Načítám data lokalit…</div></div>'
+        +'<div style="position:sticky;bottom:0;background:var(--surface);border-top:1px solid var(--border);padding:12px 0 2px;margin-top:12px;display:flex;justify-content:space-between;align-items:center;gap:10px;"><span id="vip-count" style="font-size:12.5px;color:var(--text2);"></span><button type="button" data-vipapply class="btn btn-primary">Použít výběr</button></div>'
+        +'</div>';
+      document.body.appendChild(wrap);
+      wrap.addEventListener('click', function(e){ if(e.target===wrap) wrap.remove(); });
+      wrap.querySelector('[data-vipclose]').addEventListener('click', function(){ wrap.remove(); });
+      wrap.querySelector('[data-vipapply]').addEventListener('click', function(){ cmpVipApply(id); });
+      var si=wrap.querySelector('#vip-search'); if(si) si.addEventListener('input', cmpVipRender);
+      var vt=wrap.querySelector('#vip-table'); if(vt) vt.addEventListener('change', function(e){ var t=e.target; if(t && t.getAttribute && t.getAttribute('data-vip')!=null && t.type==='checkbox'){ var c=t.getAttribute('data-vip'); if(t.checked)_vipPick[c]=true; else delete _vipPick[c]; cmpVipCount(); } });
+      try{ if(!_kioskData) await loadKioskValues(); }catch(e){}
+      cmpVipRender();
+    }
+    window.cmpPickVip = cmpPickVip;
     window.cmpAddOffer = cmpAddOffer; window.cmpRemoveOffer = cmpRemoveOffer; window.cmpSaveOffers = cmpSaveOffers;
     // Náhled celé nabídky, kterou lead vidí na portálu (společné + VIP).
     async function cmpShowOffer(id){
