@@ -1193,7 +1193,17 @@
       '</div></div>';
   }
   async function markTaskDone(id){ try{ await api('/tasks/'+id+'/done', { method:'POST', headers:{'Content-Type':'application/json'}, body:'{}' }); }catch(e){} loadToday(false); }
-  async function markTaskSkip(id){ var reason = prompt('Proč přeskakuješ? (nepovinné)') || ''; try{ await api('/tasks/'+id+'/skip', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ reason:reason }) }); }catch(e){} loadToday(false); }
+  async function markTaskSkip(id){
+    var reason = (prompt('Proč přeskakuješ? (povinné)\n\nUvolněný čas se přesune do nových úkolů. Fond dne zkrátí jen dovolená nebo lékař.') || '').trim();
+    if(!reason){ return; }
+    try{
+      var r = await api('/tasks/'+id+'/skip', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ reason:reason }) });
+      if(!r.ok){ var j = await r.json().catch(function(){return {};}); alert(j.error || 'Přeskočení se nezdařilo.'); return; }
+      var d = await r.json().catch(function(){return {};});
+      if(d && d.replacement && d.replacement.absence){ /* dovolená/lékař — fond se zkrátil, nic nedoplňujeme */ }
+    }catch(e){}
+    loadToday(false);
+  }
   async function reopenTask(id){ try{ await api('/tasks/'+id+'/reopen', { method:'POST' }); }catch(e){} loadToday(false); }
   function openLeadFromTask(id){
     showScreen('contacts');

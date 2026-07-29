@@ -1297,9 +1297,14 @@ router.post('/tasks/:id/skip', requireAuth, async (req, res, next) => {
     const task = await prisma.salesTask.findUnique({ where: { id } });
     if (!task) return res.status(404).json({ error: 'Úkol nenalezen' });
     if (task.person_id !== salesMyPersonId(req) && !salesIsMgr(req.user)) return res.status(403).json({ error: 'Není váš úkol' });
-    const reason = req.body && req.body.reason ? String(req.body.reason).slice(0, 1000) : null;
+    const reason = req.body && req.body.reason ? String(req.body.reason).slice(0, 1000).trim() : '';
+    if (!reason) return res.status(400).json({ error: 'Uveď důvod přeskočení.' });
     const upd = await prisma.salesTask.update({ where: { id }, data: { status: 'skipped', skipped_reason: reason } });
-    res.json({ ok: true, task: upd });
+    // Uvolněný čas nesmí propadnout: AI dogeneruje náhradní úkol(y) na stejný čas
+    // (zohlední důvod). Fond dne zkrátí jen dovolená/lékař → tehdy se nedoplňuje.
+    let replacement = null;
+    try { replacement = await salesMgr.replaceSkippedTask(upd); } catch (e) { replacement = null; }
+    res.json({ ok: true, task: upd, replacement });
   } catch (err) { next(err); }
 });
 

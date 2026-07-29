@@ -620,8 +620,66 @@ async function reportToOwners(dateStr) {
   return { ok: true, title, body, report };
 }
 
+// ─── Náhrada přeskočeného úkolu ──────────────────────────────────────────────
+// Když obchodník přeskočí úkol, uvolněný čas se nesmí ztratit: AI vymyslí nový
+// úkol (nebo úkoly) na zhruba stejný počet minut a zohlední důvod přeskočení,
+// aby nenavrhla to samé nebo něco, co je podle důvodu blokované.
+// Fond dne může legitimně zkrátit JEN dovolená nebo lékař.
+function isFundReducingReason(reason) {
+  const r = String(reason || '').toLowerCase();
+  return /dovolen|l[eé]ka[řr]|doktor|nemocn|marod|nemoc/.test(r);
+}
+
+async function replaceTaskAI(person, freedMin, reason, skippedTitle, ctx, openTitles) {
+  const sys = 'Jsi náročný ale férový AI vedoucí obchodu Best Series (prodej prémiových samoobslužných prádelen "Compounder" jako investice). Obchodník právě PŘESKOČIL jeden úkol a uvolnil se mu čas. Tvým úkolem je ten čas ZNOVU ZAPLNIT prodejní prací — vymysli 1–3 NOVÉ konkrétní úkoly, jejichž součet est_min je co nejblíž zadanému uvolněnému času (nesmí zůstat prázdné okno). DŮLEŽITÉ: zohledni DŮVOD přeskočení — nenavrhuj to samé, co obchodník přeskočil, ani nic, co je podle jeho důvodu blokované. Preferuj aktivní prodej: nábor nových kontaktů (prospecting), telefonáty (call), domlouvání schůzek (meeting), follow-up. Nevytvářej duplicity k už otevřeným úkolům. Odpověz POUZE platným JSON bez markdownu: {"tasks":[{"kind":"call|prospecting|meeting|followup|admin|other","title":"<krátce, s číslem kde to dává smysl>","detail":"<co přesně udělat, 1-2 věty>","reasoning":"<proč, krátce>","priority":<1-5>,"est_min":<minuty>}]}. Součet est_min ať odpovídá uvolněnému času. Piš česky.';
+  const usr = 'Obchodník: ' + person.name
+    + '\nUvolněný čas k zaplnění (min): ' + freedMin
+    + '\nPřeskočený úkol: ' + skippedTitle
+    + '\nDŮVOD přeskočení (respektuj ho, nevracej blokované): ' + (reason || '—')
+    + '\nDenní kvóty a dosavadní plnění: ' + JSON.stringify({ quota: ctx && ctx.daily_quota, actuals: ctx && ctx.actuals })
+    + '\nUž otevřené úkoly (nevytvářej duplicity): ' + JSON.stringify(openTitles || []);
+  const j = await callClaudeJSON(sys, usr, 800);
+  if (!j || !Array.isArray(j.tasks) || !j.tasks.length) return null;
+  return j.tasks.slice(0, 3).map((t) => ({
+    kind: sanitizeKind(t.kind), title: String(t.title || '').slice(0, 480),
+    detail: t.detail ? String(t.detail).slice(0, 1000) : null,
+    reasoning: t.reasoning ? String(t.reasoning).slice(0, 800) : null,
+    priority: clampPriority(t.priority),
+    est_min: clampMin(t.est_min),
+    lead_id: null,
+  })).filter((t) => t.title);
+}
+
+async function replaceSkippedTask(skipped) {
+  try {
+    if (!skipped || !skipped.day_plan_id) return { replaced: false };
+    const reason = String(skipped.skipped_reason || '').trim();
+    // Dovolená/lékař: fond dne se legitimně krátí, nic nedoplňujeme.
+    if (isFundReducingReason(reason)) return { replaced: false, absence: true };
+    const freed = clampMin(skipped.est_min) || 30;
+    const personId = skipped.person_id;
+    const pName = await prisma.person.findUnique({ where: { id: personId }, select: { first_name: true, last_name: true } })
+      .then((p) => p ? `${p.first_name || ''} ${p.last_name || ''}`.trim() : ('#' + personId)).catch(() => '#' + personId);
+    let ctx = null; try { ctx = await gatherPlanContext(personId); } catch (e) { ctx = null; }
+    const openTasks = await prisma.salesTask.findMany({ where: { day_plan_id: skipped.day_plan_id, status: 'open' }, select: { title: true } }).catch(() => []);
+    const openTitles = openTasks.map((t) => t.title);
+    let newTasks = await replaceTaskAI({ name: pName }, freed, reason, skipped.title, ctx, openTitles).catch(() => null);
+    if (!newTasks || !newTasks.length) {
+      // Fallback bez AI: jeden náborový úkol na uvolněný čas.
+      newTasks = [{ kind: 'prospecting', title: 'Oslov nové potenciální zákazníky (náhrada za přeskočený úkol)', detail: 'Vytipuj a kontaktuj nové provozovny/investory na uvolněný čas.', reasoning: 'Uvolněný čas z přeskočeného úkolu jde do náboru — fond dne zůstává zachován.', priority: 3, est_min: freed, lead_id: null }];
+    }
+    const created = [];
+    for (const t of newTasks) {
+      const row = await prisma.salesTask.create({ data: { day_plan_id: skipped.day_plan_id, person_id: personId, lead_id: null, kind: t.kind, title: t.title, detail: t.detail, reasoning: t.reasoning, priority: t.priority, est_min: t.est_min || freed, status: 'open' } });
+      created.push(row);
+    }
+    return { replaced: true, tasks: created };
+  } catch (e) { return { replaced: false, error: String((e && e.message) || e) }; }
+}
+
 module.exports = {
   tzTodayStr, periodBounds, getActiveSalespeople,
   planDay, reviewDay, reviewPeriod, reportToOwners,
   buildOwnerReport, computeActuals, getTargets, ensureTargets,
+  replaceSkippedTask,
 };
