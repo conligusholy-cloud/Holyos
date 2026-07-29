@@ -131,8 +131,13 @@ async function sendReviewEmail(personId, rev, ds) {
     lines.push('Zítra ráno na tebe čeká nový plán. Ať se daří!');
     lines.push('');
     lines.push('— AI vedoucí obchodu, Best Series');
+    // Kopie majiteli/vedoucímu (nastav SALES_REVIEW_CC, fallback COMPOUNDER_OWNER_EMAILS).
+    const ccOwners = (process.env.SALES_REVIEW_CC || process.env.COMPOUNDER_OWNER_EMAILS || '')
+      .split(',').map((x) => x.trim()).filter(Boolean)
+      .filter((x) => x.toLowerCase() !== String(person.email).toLowerCase());
     await sendMail({
       to: person.email,
+      cc: ccOwners.length ? ccOwners : undefined,
       subject: '📊 Hodnocení dne ' + fmtCzDate(ds) + ' — skóre ' + rev.score + (rev.grade ? (' · ' + rev.grade) : ''),
       body: lines.join('\n'),
       from: process.env.SALES_MANAGER_FROM || undefined,
@@ -250,7 +255,7 @@ async function tick() {
     if (t.hour === 7 && t.minute === 0) await fireOnce('morning', () => runMorning());
     const weekday = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'].indexOf(t.weekday) >= 0;
     if (weekday && t.minute === 0 && isCheckpointHour(t.hour)) await fireOnce('check-' + t.hour, () => runProgressCheck());
-    if (t.hour === 20 && t.minute === 0) await fireOnce('evening', () => runEvening());
+    if (weekday && t.hour === 20 && t.minute === 0) await fireOnce('evening', () => runEvening());
     if (t.hour === 20 && t.minute === 5 && t.weekday === 'Sun') await fireOnce('weekly', () => runWeekly());
     if (t.hour === 20 && t.minute === 10 && isLastDayOfMonth()) await fireOnce('monthly', () => runMonthly());
   } catch (e) { console.error('[sales-worker] tick:', e.message); }

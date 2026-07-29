@@ -153,7 +153,7 @@ function renderEmailHtml({ title, body, link, linkLabel = 'Otevřít v HolyOS', 
  * @param {Array}  [args.attachments]   Pole attachments [{ filename, content, contentType }]
  *                                      Použito mj. pro PDF fakturu (Fáze 6).
  */
-async function sendMail({ to, subject, body, from, fromName, link, linkLabel, preheader, attachments, brand, replyTo }) {
+async function sendMail({ to, cc, subject, body, from, fromName, link, linkLabel, preheader, attachments, brand, replyTo }) {
   if (!to) return { sent: false, skipped: 'no-recipient' };
 
   // 1) Microsoft Graph send-as (preferovaná cesta pokud je `from` zadán a Graph
@@ -165,6 +165,7 @@ async function sendMail({ to, subject, body, from, fromName, link, linkLabel, pr
         const html = renderEmailHtml({ title: subject, body, link, linkLabel, preheader, brand });
         await msGraph.sendMailAs(from, {
           to,
+          cc: cc || undefined,
           subject: subject || 'HolyOS — notifikace',
           textBody: body ? body + (link ? `\n\n${link}` : '') : '',
           htmlBody: html,
@@ -193,6 +194,7 @@ async function sendMail({ to, subject, body, from, fromName, link, linkLabel, pr
     const mailOpts = {
       from: fromHeader,
       to,
+      cc: cc || undefined,
       replyTo: replyTo || undefined,
       subject: subject || 'HolyOS — notifikace',
       text: body ? body + (link ? `\n\n${link}` : '') : '',

@@ -3497,6 +3497,9 @@
     }
     // ── VIP picker: výběr individuálních lokalit z Compounding tabulky (s daty) ──
     var _vipPick = {}; var _vipLeadId = null;
+    var _vipSort = { key: 'total', dir: -1 };
+    function _vipSortVal(r,key){ switch(key){ case 'code':return String(r.code||''); case 'label':return String(r.label||''); case 'company':return String(r.company||''); case 'version':return String(r.version||''); case 'stav':return r.inIncubator?1:0; case 'total':return (r.total==null?-1:r.total); case 'lokalita':return (r.lokalita||0); case 'yr':return (r.yr||0); case 'roi':return (r.roi==null?-1:r.roi); case 'profit5':return (r.profit5==null?-1:r.profit5); default:return 0; } }
+    function _vipTh(key,label,align){ var ar=_vipSort.key===key?(_vipSort.dir<0?' ▼':' ▲'):''; var st='cursor:pointer;'+(align==='r'?'text-align:right;':(align==='c'?'text-align:center;':'')); return '<th data-vipsort="'+key+'" style="'+st+'">'+label+ar+'</th>'; }
     function _vipRow(k){
       var num=function(v){return (typeof v==='number'&&isFinite(v))?v:0;};
       var st=_compoundingSettings||{};
@@ -3530,11 +3533,12 @@
       if(!_kioskData||!Array.isArray(_kioskData.kiosks)){ box.innerHTML='<div style="color:#ef4444;padding:20px;">Data lokalit se nepodařilo načíst. Zkus otevřít záložku Compounding a pak to znovu.</div>'; return; }
       var q=((document.getElementById('vip-search')||{}).value||'').trim().toLowerCase();
       var rows=_kioskData.kiosks.filter(function(k){ return String(k.companyName||'').toLowerCase().indexOf('best series')!==-1; }).map(_vipRow);
-      rows.sort(function(a,b){ return (b.total||0)-(a.total||0); });
+      var sk=_vipSort.key, sd=_vipSort.dir;
+      rows.sort(function(a,b){ var va=_vipSortVal(a,sk), vb=_vipSortVal(b,sk); if(typeof va==='string'||typeof vb==='string') return String(va).localeCompare(String(vb),'cs')*sd; return (va-vb)*sd; });
       var vis=rows.filter(function(r){ if(!q) return true; return ((r.code||'')+' '+(r.label||'')+' '+(r.company||'')).toLowerCase().indexOf(q)!==-1; });
       var h='<div style="overflow-x:auto;"><table class="data-table" style="font-size:12.5px;"><thead><tr>'
-        +'<th style="text-align:center;">VIP</th><th>Kód</th><th>Lokalita</th><th>Provozovatel</th><th>Verze</th>'
-        +'<th style="text-align:right;">Celková cena</th><th style="text-align:right;">Cena lokality</th><th style="text-align:right;">Roční výnos</th><th style="text-align:right;">ROI</th><th style="text-align:right;">Výnos 5 let</th><th>Stav</th></tr></thead><tbody>';
+        +'<th style="text-align:center;">VIP</th>'+_vipTh('code','Kód','')+_vipTh('label','Lokalita','')+_vipTh('company','Provozovatel','')+_vipTh('version','Verze','')
+        +_vipTh('total','Celková cena','r')+_vipTh('lokalita','Cena lokality','r')+_vipTh('yr','Roční výnos','r')+_vipTh('roi','ROI','r')+_vipTh('profit5','Výnos 5 let','r')+_vipTh('stav','Stav','')+'</tr></thead><tbody>';
       vis.forEach(function(r){
         h+='<tr>'
           +'<td style="text-align:center;"><input type="checkbox" data-vip="'+kvEsc(r.code)+'"'+(_vipPick[r.code]?' checked':'')+'></td>'
@@ -3572,6 +3576,7 @@
       wrap.querySelector('[data-vipapply]').addEventListener('click', function(){ cmpVipApply(id); });
       var si=wrap.querySelector('#vip-search'); if(si) si.addEventListener('input', cmpVipRender);
       var vt=wrap.querySelector('#vip-table'); if(vt) vt.addEventListener('change', function(e){ var t=e.target; if(t && t.getAttribute && t.getAttribute('data-vip')!=null && t.type==='checkbox'){ var c=t.getAttribute('data-vip'); if(t.checked)_vipPick[c]=true; else delete _vipPick[c]; cmpVipCount(); } });
+      if(vt) vt.addEventListener('click', function(e){ var th=e.target && e.target.closest ? e.target.closest('th[data-vipsort]') : null; if(!th) return; var k=th.getAttribute('data-vipsort'); if(_vipSort.key===k){ _vipSort.dir=-_vipSort.dir; } else { _vipSort.key=k; _vipSort.dir=(k==='code'||k==='label'||k==='company'||k==='version'||k==='stav')?1:-1; } cmpVipRender(); });
       try{ if(!_kioskData) await loadKioskValues(); }catch(e){}
       cmpVipRender();
     }

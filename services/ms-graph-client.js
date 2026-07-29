@@ -130,12 +130,15 @@ async function sendReply(userPrincipalName, { to, subject, body }) {
  * @param {boolean} [args.saveToSentItems=true]
  * @returns {Promise<{ ok: true }>}
  */
-async function sendMailAs(fromUpn, { to, subject, textBody, htmlBody, attachments, saveToSentItems = true, fromName, replyTo }) {
+async function sendMailAs(fromUpn, { to, cc, subject, textBody, htmlBody, attachments, saveToSentItems = true, fromName, replyTo }) {
   if (!fromUpn) throw new Error('sendMailAs: chybí fromUpn');
   if (!to) throw new Error('sendMailAs: chybí to');
 
   const recipients = (Array.isArray(to) ? to : [to])
     .filter(Boolean)
+    .map(addr => ({ emailAddress: { address: addr } }));
+  const ccList = (Array.isArray(cc) ? cc : (cc ? String(cc).split(',') : []))
+    .map(a => String(a).trim()).filter(Boolean)
     .map(addr => ({ emailAddress: { address: addr } }));
 
   const message = {
@@ -145,6 +148,7 @@ async function sendMailAs(fromUpn, { to, subject, textBody, htmlBody, attachment
       : { contentType: 'Text', content: textBody || '' },
     toRecipients: recipients,
   };
+  if (ccList.length) message.ccRecipients = ccList;
 
   // Vlastní zobrazované jméno odesílatele (adresa zůstává fromUpn — povolená schránka).
   if (fromName) message.from = { emailAddress: { name: fromName, address: fromUpn } };
