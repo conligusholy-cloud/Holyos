@@ -3826,7 +3826,7 @@
     function crmRenderTable(rows){
       var box=document.getElementById('crm-table');
       if(!rows||!rows.length){ box.innerHTML='<div style="color:var(--text2);padding:20px;">Žádné záznamy pro tento filtr.</div>'; return; }
-      var th='<tr>'+['Jméno','Příjmení','E-mail','Telefon','Město','Země','Segment','Stav','Obchodník','Zdroj','Dup.','Poznámka'].map(function(h){return '<th style="position:sticky;top:0;background:#1b2028;text-align:left;padding:9px 10px;color:var(--text2);font-weight:600;border-bottom:1px solid var(--line,#2a2a2e);white-space:nowrap;">'+h+'</th>';}).join('')+'</tr>';
+      var th='<tr>'+['Jméno','Příjmení','E-mail','Telefon','Město','Země','Segment','Stav','Obchodník','Zdroj','Dup.','Poznámka','Vytvořeno'].map(function(h){return '<th style="position:sticky;top:0;background:#1b2028;text-align:left;padding:9px 10px;color:var(--text2);font-weight:600;border-bottom:1px solid var(--line,#2a2a2e);white-space:nowrap;">'+h+'</th>';}).join('')+'</tr>';
       var body=rows.map(function(r){
         var m=CRM_SEG[r.segment]||CRM_SEG.ostatni;
         return '<tr>'+
@@ -3838,6 +3838,7 @@
           td(crmEsc(r.status))+td(crmEsc(r.owner_name))+td(crmEsc(r.source))+
           td(r.dup_count?'<span style="background:rgba(234,179,8,.18);color:#eab308;font-size:11px;font-weight:700;border-radius:6px;padding:1px 6px;">+'+r.dup_count+'</span>':'')+
           td('<span title="'+crmEsc(r.note)+'" style="color:var(--text2);font-size:12px;">'+crmEsc((r.note||'').slice(0,110))+'</span>')+
+          td(r.crm_created_at?('<span style="color:var(--text2);font-size:12px;white-space:nowrap;">'+new Date(r.crm_created_at).toLocaleDateString('cs-CZ')+'</span>'):'—')+
         '</tr>';
       }).join('');
       box.innerHTML='<table style="width:100%;border-collapse:collapse;font-size:13px;">'+th+body+'</table>';
@@ -3849,8 +3850,8 @@
         var all=[],page=1,pages=1,cap=8000,save=crmState.page;
         do{ crmState.page=page; var d=await crmApi('/crm-leads?'+crmQs()); all=all.concat(d.rows); pages=d.pages; page++; }while(page<=pages && all.length<cap);
         crmState.page=save;
-        var cols=['first_name','last_name','email','phone','city','country','segment','status','owner_name','source','dup_count','note'];
-        var head=['Jméno','Příjmení','Email','Telefon','Město','Země','Segment','Stav','Obchodník','Zdroj','Duplikátů','Poznámka'];
+        var cols=['first_name','last_name','email','phone','city','country','segment','status','owner_name','source','dup_count','note','crm_created_at'];
+        var head=['Jméno','Příjmení','Email','Telefon','Město','Země','Segment','Stav','Obchodník','Zdroj','Duplikátů','Poznámka','Vytvořeno'];
         var q=function(v){return '"'+String(v==null?'':v).replace(/"/g,'""')+'"';};
         var csv=head.map(q).join(',')+'\n'+all.map(function(r){return cols.map(function(c){return q(r[c]);}).join(',');}).join('\n');
         var blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'});
