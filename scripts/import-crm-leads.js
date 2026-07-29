@@ -14,6 +14,16 @@
 'use strict';
 
 const fs = require('fs');
+const path = require('path');
+// Když DATABASE_URL chybí/není platná v prostředí, načti ji z .env (aby šel skript
+// spustit ručně bez exportu). MUSÍ být před require('../config/database').
+if (!process.env.DATABASE_URL || !/^postgres(ql)?:\/\//i.test(process.env.DATABASE_URL)) {
+  try {
+    const t = fs.readFileSync(path.join(__dirname, '..', '.env'), 'utf8');
+    const m = t.match(/^DATABASE_URL\s*=\s*"?([^"\r\n]+)"?/m);
+    if (m) process.env.DATABASE_URL = m[1].trim();
+  } catch (e) { /* .env nemusí existovat */ }
+}
 const { prisma } = require('../config/database');
 
 // ─── Minimální CSV parser (RFC 4180: uvozovky, "" escape, čárky/nové řádky uvnitř) ──
@@ -71,7 +81,7 @@ async function main() {
   const header = rows[0].map((h) => h.trim());
   const idx = {};
   header.forEach((h, i) => { if (!(h in idx)) idx[h] = i; }); // první výskyt názvu
-  const need = ['Stav', 'Typ', 'Jméno', 'Přijímení', 'Email', 'Telefon', 'Město ', 'Země', 'INFO - reklama', 'Poznámka spolupráce', 'Vytvořeno'];
+  const need = ['Stav', 'Typ', 'Jméno', 'Přijímení', 'Email', 'Telefon', 'Město', 'Země', 'INFO - reklama', 'Poznámka spolupráce', 'Vytvořeno'];
   for (const c of need) if (!(c in idx)) console.warn('POZOR: chybí sloupec "' + c + '" — bude prázdný.');
   const G = (r, name) => { const i = idx[name]; return i == null ? '' : (r[i] == null ? '' : String(r[i]).trim()); };
 
@@ -90,7 +100,7 @@ async function main() {
     if (t) key = 't:' + t; else if (em) key = 'e:' + em; else { key = 'r:' + ri; noKey++; }
     const rec = {
       first_name: G(r, 'Jméno'), last_name: G(r, 'Přijímení'),
-      email, phone, city: G(r, 'Město '), country: G(r, 'Země'),
+      email, phone, city: G(r, 'Město'), country: G(r, 'Země'),
       status: stav, segment: segOf(stav), owner_name: typ,
       source: G(r, 'INFO - reklama'), note: G(r, 'Poznámka spolupráce'),
       crm_created_at: G(r, 'Vytvořeno'),
