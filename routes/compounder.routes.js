@@ -1720,6 +1720,8 @@ const patchSchema = z.object({
   showRevenueStats: z.boolean().optional(),
   // Testovací kontakt — vyřazuje lead ze statistik obchodníka.
   isTest: z.boolean().optional(),
+  // Zpřístupnění sekce „Příklad" (skládačka portfolia) v portálu jen tomuto leadu.
+  showExample: z.boolean().optional(),
 });
 
 router.patch('/leads/:id', requireAuth, async (req, res, next) => {
@@ -1767,6 +1769,7 @@ router.patch('/leads/:id', requireAuth, async (req, res, next) => {
     }
     if (parsed.data.showRevenueStats !== undefined) data.show_revenue_stats = !!parsed.data.showRevenueStats;
     if (parsed.data.isTest !== undefined) data.is_test = !!parsed.data.isTest;
+    if (parsed.data.showExample !== undefined) data.show_example = !!parsed.data.showExample;
     const lead = await prisma.compounderLead.update({ where: { id }, data });
     // Notifikace: nový přidělený kontakt (jinému obchodníkovi než ten, kdo přiřazuje).
     if (parsed.data.owner_person_id) {

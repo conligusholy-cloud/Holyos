@@ -5603,6 +5603,12 @@ model CompounderLead {
   // standardní kontakt. Výchozí false.
   is_test Boolean @default(false)
 
+  // Sekce „Příklad" (skládačka portfolia) v portálu — viditelná jen pro tento
+  // lead, když ji obchodník zapne. Výchozí vypnuto.
+  show_example Boolean @default(false)
+  // Uložený model zákazníka (JSON): { codes:[kiosk kódy], savedAt, ... }.
+  example_model String? @db.Text
+
   // Heslo pro prihlaseni (bcrypt hash). Null = uzivatel heslo nenastavil (jen magic link).
   password_hash String? @db.Text
 
