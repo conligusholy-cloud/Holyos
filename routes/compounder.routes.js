@@ -4572,9 +4572,13 @@ router.get('/portal/example', async (req, res, next) => {
     const lead = await prisma.compounderLead.findUnique({ where: { id: leadId }, select: { show_example: true, example_model: true, created_at: true } });
     if (!lead) return res.status(404).json({ ok: false, error: 'Registrace nenalezena.' });
     if (!lead.show_example) return res.status(403).json({ ok: false, error: 'Sekce není zpřístupněna.' });
-    let codes = [];
-    try { const m = lead.example_model ? JSON.parse(lead.example_model) : null; if (m && Array.isArray(m.codes)) codes = m.codes.map((c) => String(c).toUpperCase()); } catch (e) { /* poškozený JSON ignoruj */ }
-    res.json({ ok: true, enabled: true, accountCreatedAt: lead.created_at, model: { codes } });
+    let codes = [], buyDate = null;
+    try {
+      const m = lead.example_model ? JSON.parse(lead.example_model) : null;
+      if (m && Array.isArray(m.codes)) codes = m.codes.map((c) => String(c).toUpperCase());
+      if (m && m.buyDate) buyDate = String(m.buyDate).slice(0, 10);
+    } catch (e) { /* poškozený JSON ignoruj */ }
+    res.json({ ok: true, enabled: true, accountCreatedAt: lead.created_at, model: { codes, buyDate } });
   } catch (err) { next(err); }
 });
 
@@ -4588,7 +4592,10 @@ router.post('/portal/example', async (req, res, next) => {
     const body = req.body || {};
     let codes = Array.isArray(body.codes) ? body.codes.map((c) => String(c).trim().toUpperCase()).filter(Boolean).slice(0, 200) : [];
     codes = Array.from(new Set(codes));
-    const model = { codes, savedAt: new Date().toISOString() };
+    // Plánované datum nákupu (start projekce) — jen YYYY-MM-DD.
+    const bd = String(body.buyDate || '').slice(0, 10);
+    const buyDate = /^\d{4}-\d{2}-\d{2}$/.test(bd) ? bd : null;
+    const model = { codes, buyDate, savedAt: new Date().toISOString() };
     await prisma.compounderLead.update({ where: { id: leadId }, data: { example_model: JSON.stringify(model) } });
     try { await prisma.compounderEvent.create({ data: { sid: 'portal-lead-' + leadId, event: 'example_save', props: { lead_id: leadId, codes }, path: '/portal#priklad' } }); } catch (e) { /* log best-effort */ }
     res.json({ ok: true, model });
