@@ -2073,15 +2073,23 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
     function renderMissed(){
       var el=document.getElementById('ex-missed-val'); if(!el||!acct) return;
       var t=totals(); if(!t.n) return;
-      // Od založení účtu do plánovaného data nákupu (statická částka, neblikáme).
+      // Od založení účtu do plánovaného nákupu. Čím pozdější datum, tím větší ztráta.
       var from=new Date(acct).getTime();
-      var to=buyDate?new Date(buyDate+'T00:00:00').getTime():Date.now();
-      var days=Math.max(0, Math.floor((to-from)/86400000));
-      var val=(t.yr/365)*days;
+      var toMs=Date.now();
+      if(buyDate){
+        var bd=new Date(buyDate+'T23:59:59').getTime();
+        if(bd>toMs) toMs=bd; // nákup v budoucnu → ztráta se počítá až k tomu dni
+      }
+      var daysExact=Math.max(0,(toMs-from)/86400000);
+      var val=Math.abs((t.yr/365)*daysExact);
       el.style.color='#ef4444';
       el.textContent=pMoney2(val, 0);
       var sub=document.getElementById('ex-missed-sub');
-      if(sub){ sub.textContent='Od založení účtu ('+new Date(acct).toLocaleDateString('cs-CZ')+') do vašeho plánovaného nákupu'+(buyDate?(' ('+new Date(buyDate+'T00:00:00').toLocaleDateString('cs-CZ')+')'):'')+' je to '+days+' dní. Každý den bez tohoto portfolia ~'+fmt(t.yr/365)+'.'; }
+      if(sub){
+        sub.textContent='Od založení účtu ('+new Date(acct).toLocaleDateString('cs-CZ')+') do plánovaného nákupu'
+          +(buyDate?(' ('+new Date(buyDate+'T00:00:00').toLocaleDateString('cs-CZ')+')'):'')
+          +' je to '+Math.round(daysExact)+' dní. Každý den odkladu vás stojí ~'+fmt(t.yr/365)+' — čím později nakoupíte, tím víc vám uteče.';
+      }
     }
     function renderMonthly(){
       var box=document.getElementById('ex-monthly'); if(!box) return;
