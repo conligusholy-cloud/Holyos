@@ -442,21 +442,23 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
       <h2 style="font-size:clamp(28px,4vw,46px);font-weight:800;color:#fff;margin:6px 0 8px">Poskládejte si svoji budoucí realitu</h2>
       <p style="color:var(--muted,#9aa);max-width:680px">Vyberte lokality, které byste chtěli vlastnit. Uvidíte souhrn portfolia a o kolik jste už přišli od založení účtu. Model si uložte — přepočítává se každý den podle aktuálních tržeb.</p>
       <div id="ex-wrap">
-        <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;margin:16px 0">
-          <label style="font-size:13px;color:var(--muted,#9aa)">Kdy plánuji nakoupit<br>
-            <input type="date" id="ex-date" style="margin-top:5px;background:#141418;color:#fff;border:1px solid var(--line,#2a2a2e);border-radius:10px;padding:9px 12px;font-size:14px">
+        <div style="background:radial-gradient(120% 95% at 88% -20%,rgba(201,162,75,.18),rgba(15,15,17,0) 62%),#131316;border:1px solid rgba(201,162,75,.42);border-radius:18px;padding:22px 24px;margin:18px 0">
+          <div style="font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:#f0dfa8;font-weight:700;margin-bottom:10px">Kolik chci investovat</div>
+          <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center">
+            <input type="text" inputmode="numeric" id="ex-inv" placeholder="např. 5 000 000" style="flex:1;min-width:260px;background:#0f0f11;color:#fff;border:2px solid var(--gold,#c9a24b);border-radius:14px;padding:16px 20px;font-size:clamp(24px,4vw,34px);font-weight:800;font-variant-numeric:tabular-nums">
+            <span style="font-size:clamp(20px,3vw,28px);font-weight:800;color:var(--gold,#c9a24b)">Kč</span>
+            <button id="ex-invapply" style="background:var(--gold,#c9a24b);color:#0e1a22;border:none;border-radius:14px;padding:16px 26px;font-weight:800;font-size:16px;cursor:pointer">Sestavit portfolio</button>
+          </div>
+          <div id="ex-hint" style="font-size:13.5px;color:var(--muted,#9aa);margin-top:12px;line-height:1.55"></div>
+          <label style="display:inline-block;font-size:12.5px;color:var(--muted,#9aa);margin-top:14px">Kdy plánuji nakoupit
+            <input type="date" id="ex-date" style="margin-left:8px;background:#141418;color:#fff;border:1px solid var(--line,#2a2a2e);border-radius:9px;padding:7px 10px;font-size:13px">
           </label>
-          <label style="font-size:13px;color:var(--muted,#9aa)">Objem investice (Kč)<br>
-            <input type="text" inputmode="numeric" id="ex-inv" placeholder="např. 5 000 000" style="margin-top:5px;background:#141418;color:#fff;border:1px solid var(--gold,#c9a24b);border-radius:10px;padding:9px 12px;font-size:14px;min-width:170px">
-          </label>
-          <button id="ex-invapply" style="background:var(--gold,#c9a24b);color:#0e1a22;border:none;border-radius:10px;padding:10px 16px;font-weight:700;cursor:pointer">Sestavit portfolio</button>
         </div>
         <div style="display:flex;gap:12px;flex-wrap:wrap;margin:14px 0">
           <div id="ex-missed" style="display:none;flex:1;min-width:280px;background:radial-gradient(120% 95% at 90% -10%,rgba(201,162,75,.22),rgba(15,15,17,0) 60%),#131316;border:1px solid rgba(201,162,75,.3);border-radius:16px;padding:18px 20px"></div>
           <div id="ex-timer" style="display:none;flex:1;min-width:260px;background:#131316;border:1px solid var(--line,#2a2a2e);border-radius:16px;padding:18px 20px"></div>
         </div>
         <div id="ex-summary"></div>
-        <div id="ex-chart" style="margin-top:18px"></div>
         <div style="display:flex;align-items:center;gap:12px;margin:16px 0">
           <button id="ex-save" style="background:var(--gold,#c9a24b);color:#0e1a22;border:none;border-radius:10px;padding:10px 18px;font-weight:700;cursor:pointer">Uložit můj model</button>
           <span id="ex-savemsg" style="font-size:13px"></span>
@@ -2013,7 +2015,10 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
       '<div style="display:flex;gap:3px;margin-top:3px">'+items.map(function(x){ return '<div style="flex:1;min-width:0;text-align:center;font-size:9.5px;color:var(--muted,#9aa);overflow:hidden">'+x.l+'</div>'; }).join('')+'</div>';
     }
     function renderChart(){
-      var box=document.getElementById('ex-chart'); if(!box) return;
+      var box=document.getElementById('ex-chart'); if(!box) return; // grafy odstraněny
+      box.innerHTML=''; return;
+      /* eslint-disable no-unreachable */
+      if(true){}
       var t=totals();
       if(!t.n || !t.yr){ box.innerHTML=''; return; }
       var start=buyDate?new Date(buyDate):new Date();
@@ -2046,7 +2051,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
           renderMissed();
         } else { mb.style.display='none'; mb.innerHTML=''; }
       }
-      renderChart(); renderTimer();
+      renderChart(); renderTimer(); renderHint();
     }
     function autoBuild(){
       selected={};
@@ -2055,6 +2060,29 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
         .slice().sort(function(a,b){ return ((b.yearlyYield||0)/(b.totalPrice||1)) - ((a.yearlyYield||0)/(a.totalPrice||1)); });
       var left=investment;
       pool.forEach(function(o){ if((o.totalPrice||0)<=left){ selected[o.code]=true; left-=o.totalPrice; } });
+    }
+    function cheapest(){
+      var min=null; offer.forEach(function(o){ var p=o.totalPrice||0; if(p>0 && (min==null||p<min)) min=p; }); return min;
+    }
+    function renderHint(){
+      var el=document.getElementById('ex-hint'); if(!el) return;
+      var min=cheapest();
+      if(investment==null){
+        el.innerHTML='Zadejte částku a kalkulačka vám sama sestaví nejvýnosnější portfolio. Než ji zadáte, počítáme s celou nabídkou ('+offer.length+' lokalit)'+(min?(' — nejdostupnější lokalita začíná na '+fmt(min)):'')+'.';
+        el.style.color='var(--muted,#9aa)'; return;
+      }
+      var t=totals();
+      if(min!=null && investment<min){
+        el.innerHTML='<b style="color:#f0dfa8">Na celou lokalitu to bohužel zatím nestačí.</b> Nejdostupnější zavedená lokalita je za '+fmt(min)+', chybí vám '+fmt(min-investment)+'. '+
+          'Máte dvě cesty: koupit <b>samotný stroj bez lokality</b> (najdeme pro něj místo a rozjedeme provoz), nebo <b>investici dofinancovat</b> — rád vám s tím pomůže váš konzultant, výnos lokality obvykle splátku pokryje.';
+        el.style.color='#fff'; return;
+      }
+      if(!t.n){ el.innerHTML='Za tuto částku jsme nenašli vhodnou kombinaci — zkuste ji upravit nebo si vyberte lokality ručně níže.'; el.style.color='#fff'; return; }
+      var left=investment-t.inv;
+      el.innerHTML='Sestavili jsme portfolio z <b>'+t.n+' '+(t.n===1?'lokality':(t.n<5?'lokalit':'lokalit'))+'</b> za '+fmt(t.inv)+
+        (left>1000?(' — zbývá vám '+fmt(left)+', to už můžete přidat k dalšímu nákupu.'):'.')+
+        ' Výběr si můžete níže libovolně upravit.';
+      el.style.color='var(--muted,#9aa)';
     }
     function renderList(){
       var box=document.getElementById('ex-list'); if(!box) return;
