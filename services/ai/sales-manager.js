@@ -266,7 +266,14 @@ async function gatherPlanContext(personId) {
   // Předchozí den — nesplněné úkoly (přenést).
   const yStr = tzTodayStr(new Date(Date.now() - 86400000));
   const yPlan = await prisma.salesDayPlan.findUnique({ where: { person_id_date: { person_id: personId, date: dayDate(yStr) } }, include: { tasks: true } }).catch(() => null);
-  const carryOver = yPlan ? yPlan.tasks.filter((t) => t.status === 'open').map((t) => ({ title: t.title, lead_id: t.lead_id, kind: t.kind })) : [];
+  let carryOver = yPlan ? yPlan.tasks.filter((t) => t.status === 'open').map((t) => ({ title: t.title, lead_id: t.lead_id, kind: t.kind })) : [];
+  // Vyřaď přenesené úkoly odkazující na testovací kontakt (jinak by se test lead vrátil zpět do plánu).
+  const coLeadIds = carryOver.map((t) => t.lead_id).filter(Boolean);
+  if (coLeadIds.length) {
+    const testLeads = await prisma.compounderLead.findMany({ where: { id: { in: coLeadIds }, is_test: true }, select: { id: true } }).catch(() => []);
+    const testSet = new Set(testLeads.map((x) => x.id));
+    carryOver = carryOver.filter((t) => !t.lead_id || !testSet.has(t.lead_id));
+  }
 
   // Kalendář — schůzky obchodníka (dnes + příštích 7 dní). Řídí strukturu dne.
   const todayStart = dayDate(tzTodayStr());

@@ -1232,6 +1232,31 @@ async function loadDayPlan(personId, dateStr) {
 
 // GET /api/compounder/my-day?date=&person_id= — dnešní plán + úkoly.
 // person_id smí zadat jen vedoucí/admin. generate=1 vytvoří plán, pokud chybí.
+// Živý postup kvótových úkolů podle reálné aktivity v systému (jen zobrazení,
+// úkol se NEuzavírá automaticky). Počítá se za daný den a jen aktivita obchodníka:
+//   prospecting = nové kontakty, které obchodník sám založil (ne přidělené firmou)
+//   meeting     = schůzky domluvené (vytvořené) dnes
+//   call        = hovory zaznamenané přes tlačítko (SiteCommunication channel='call')
+async function attachTaskProgress(plan, personId, dateStr) {
+  if (!plan || !Array.isArray(plan.tasks) || !plan.tasks.length) return;
+  const start = new Date(dateStr + 'T00:00:00');
+  const end = new Date(start.getTime() + 86400000);
+  const [newContacts, meetings, calls] = await Promise.all([
+    prisma.compounderLead.count({ where: { created_by_person_id: personId, is_test: false, created_at: { gte: start, lt: end } } }).catch(() => 0),
+    prisma.salesEvent.count({ where: { organizer_id: personId, created_at: { gte: start, lt: end } } }).catch(() => 0),
+    prisma.siteCommunication.count({ where: { author_id: personId, channel: 'call', occurred_at: { gte: start, lt: end } } }).catch(() => 0),
+  ]);
+  const actualByKind = { prospecting: newContacts, meeting: meetings, call: calls };
+  plan.tasks.forEach((t) => {
+    const actual = actualByKind[t.kind];
+    if (actual === undefined) return;
+    const m = String(t.title || '').match(/\d+/); // cílové číslo z názvu úkolu ("Oslov 12 nových…")
+    const target = m ? Number(m[0]) : null;
+    if (!target) return;
+    t.progress = { actual, target, metric: t.kind };
+  });
+}
+
 router.get('/my-day', requireAuth, async (req, res, next) => {
   try {
     const u = req.user || {};
@@ -1245,6 +1270,7 @@ router.get('/my-day', requireAuth, async (req, res, next) => {
       plan = await loadDayPlan(personId, dateStr);
     }
     const dayReview = await prisma.salesReview.findUnique({ where: { person_id_kind_period_start: { person_id: personId, kind: 'day', period_start: new Date(dateStr + 'T00:00:00Z') } } }).catch(() => null);
+    if (plan) await attachTaskProgress(plan, personId, dateStr).catch(() => {});
     res.json({ ok: true, person_id: personId, date: dateStr, plan: plan || null, review: dayReview || null });
   } catch (err) { next(err); }
 });

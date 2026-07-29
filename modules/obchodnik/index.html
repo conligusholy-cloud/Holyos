@@ -467,7 +467,21 @@
     var btn=document.getElementById('lokcalltimer-'+id); var inp=document.getElementById('lokact-'+id);
     var t=lokCallTimers[id];
     if(!t){ lokCallTimers[id]={start:Date.now(),interval:setInterval(function(){ if(!lokCallTimers[id]||!btn)return; btn.textContent='● Ukončit hovor ('+fmtDur(Math.floor((Date.now()-lokCallTimers[id].start)/1000))+')'; },1000)}; if(btn) btn.textContent='● Ukončit hovor (00:00)'; }
-    else { clearInterval(t.interval); var s=Math.floor((Date.now()-t.start)/1000); delete lokCallTimers[id]; if(btn) btn.textContent='⏱️ Zaznamenat hovor'; if(inp){ inp.value='Hovor '+fmtDur(s)+' – '+(inp.value||''); inp.focus(); } }
+    else { clearInterval(t.interval); var s=Math.floor((Date.now()-t.start)/1000); delete lokCallTimers[id]; if(btn) btn.textContent='⏱️ Zaznamenat hovor'; lokLogCall(id, s); }
+  }
+  async function lokLogCall(id, seconds){
+    var inp=document.getElementById('lokact-'+id);
+    var note=(inp && inp.value ? inp.value.trim() : '');
+    var body='Hovor '+fmtDur(seconds)+(note?(' – '+note):'');
+    try{
+      var r=await fetch('/api/sites/'+id+'/communications',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({channel:'call',body:body})});
+      if(!r.ok) throw new Error();
+      var c=await r.json();
+      var it=lokState.items.filter(function(x){return x.id===id;})[0];
+      if(it){ it.communications=it.communications||[]; it.communications.unshift(c); }
+      if(inp) inp.value='';
+      var log=document.getElementById('lokactlog-'+id); if(log && it) log.textContent=lokActivityText(it);
+    }catch(e){ alert('Hovor se nepodařilo zaznamenat.'); }
   }
   async function lokSaveNotes(id, val){
     try {
@@ -1154,6 +1168,13 @@
     }
     renderReview(j && j.review);
   }
+  function progHtml(p){
+    var a=p.actual||0, tg=p.target||0, pct=tg?Math.min(100,Math.round(a/tg*100)):0;
+    var done=tg>0 && a>=tg;
+    var col=done?'#22c55e':'#eab308';
+    var lbl=(p.metric==='call'?'Hovory':p.metric==='meeting'?'Schůzky':'Nové kontakty')+': '+a+' / '+tg+(done?' \u2713':'');
+    return '<div style="margin-top:6px"><div style="font-size:12px;color:'+col+';font-weight:600;margin-bottom:3px">'+lbl+'</div><div style="height:6px;background:rgba(255,255,255,.08);border-radius:4px;overflow:hidden"><div style="height:100%;width:'+pct+'%;background:'+col+';transition:width .3s"></div></div></div>';
+  }
   function taskHtml(t){
     var doneCls = t.status!=='open' ? ' done' : '';
     var acts = t.status==='open'
@@ -1168,7 +1189,7 @@
       '<div class="tk-body"><div class="tk-title">'+esc(t.title)+(t.est_min?' <span style="font-weight:600;font-size:12px;color:var(--muted2)">· ⏱ '+fmtMin(t.est_min)+'</span>':'')+'</div>' +
         (t.detail ? '<div class="tk-det">'+esc(t.detail)+'</div>' : '') +
         (t.reasoning ? '<div class="tk-why">💡 '+esc(t.reasoning)+'</div>' : '') +
-        '<div class="tk-acts">'+acts+'</div>' +
+        (t.progress ? progHtml(t.progress) : '') + '<div class="tk-acts">'+acts+'</div>' +
       '</div></div>';
   }
   async function markTaskDone(id){ try{ await api('/tasks/'+id+'/done', { method:'POST', headers:{'Content-Type':'application/json'}, body:'{}' }); }catch(e){} loadToday(false); }
