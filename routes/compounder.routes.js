@@ -1861,6 +1861,26 @@ router.get('/leads/:id/example-model', requireAuth, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// AI přepíše e-mail se ztrátou do POKAŽDÉ JINÉ podoby (stejná fakta a čísla, jiný
+// text + vkusné emoji). Vrací {subject, body} nebo null (pak se použije fallback).
+async function lossEmailAI(facts) {
+  if (!process.env.ANTHROPIC_API_KEY) return null;
+  try {
+    const Anthropic = require('@anthropic-ai/sdk');
+    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    const model = process.env.COMPOUNDER_LOCATION_MODEL || 'claude-sonnet-4-6';
+    const langWord = facts.isEn ? 'anglicky' : 'česky';
+    const sys = 'Jsi špičkový copywriter prémiové značky Compounder (samoobslužné prádelny provozované jako investiční aktivum). Napiš KRÁTKÝ, elegantní a profesionální, ale živý a lidský e-mail vracejícímu se zájemci, který VÁHÁ s rozhodnutím a kvůli tomu mu uniká výnos. Cíl: vzbudit touhu vrátit se do Compounder portálu a jednat — vkusně, bez laciného nátlaku a bez klišé prodejních frází. Použij 2–4 vkusné emoji (ne přehnaně). Piš ' + langWord + '. DŮLEŽITÉ: použij PŘESNĚ tato čísla a neměň je — ušlá částka "' + facts.missed + '" a denní ztráta "' + facts.per_day + '"; zmíni i datum založení účtu "' + facts.account_opened + '". Oslov jménem, pokud je zadané. POKAŽDÉ napiš úplně jinak formulovaný e-mail (jiný začátek, jiná metafora, jiný spád, jiný předmět), i když je sdělení stejné — ať to nikdy nevypadá jako stejný e-mail. Do těla NEDÁVEJ žádný odkaz ani podpis — doplní se automaticky. Odpověz POUZE platným JSON bez markdownu: {"subject":"<poutavý předmět, klidně s 1 emoji>","body":"<tělo, 4–6 krátkých odstavců oddělených \\n\\n>"}';
+    const usr = 'Fakta (JSON):\n' + JSON.stringify(facts) + '\nNáhodné semínko pro rozmanitost: ' + Math.random().toString(36).slice(2);
+    const msg = await client.messages.create({ model, max_tokens: 900, temperature: 1, system: sys, messages: [{ role: 'user', content: usr }] });
+    let text = (msg && msg.content && msg.content[0] && msg.content[0].text) || '';
+    text = text.replace(/^```(json)?/i, '').replace(/```\s*$/, '').trim();
+    const j = JSON.parse(text);
+    if (!j || !j.subject || !j.body) return null;
+    return { subject: String(j.subject).slice(0, 200), body: String(j.body).slice(0, 3000) };
+  } catch (e) { console.error('[compounder] lossEmailAI selhal:', e.message); return null; }
+}
+
 // POST /api/compounder/leads/:id/send-loss-email — elegantní e-mail s aktuální
 // ušlou částkou (ze zákazníkova modelu) + odkaz zpět do portálu. Ztráta se počítá
 // stejně jako v portálu: (roční výnos vybraného portfolia / 365) × dny od založení účtu.
@@ -1891,16 +1911,23 @@ router.post('/leads/:id/send-loss-email', requireAuth, async (req, res, next) =>
     const isEn = !!((lead.lang || '').toLowerCase().slice(0, 2)) && (lead.lang || '').toLowerCase().slice(0, 2) !== 'cs';
     const fmtCz = (n) => (Math.round(Number(n) || 0)).toLocaleString('cs-CZ') + ' Kč';
     const fmtEn = (n) => (Math.round(Number(n) || 0)).toLocaleString('en-US') + ' CZK';
-    let subject, body, linkLabel;
+    const missedStr = isEn ? fmtEn(missed) : fmtCz(missed);
+    const perDayStr = isEn ? fmtEn(perDay) : fmtCz(perDay);
+    const linkLabel = isEn ? 'Open my portal' : 'Otevřít můj portál';
+    // Statický fallback (s emoji) — použije se, když AI není dostupná.
+    let subject, body;
     if (isEn) {
-      subject = `${first ? first + ', ' : ''}your hesitation has cost about ${fmtEn(missed)}`;
-      body = `Hello ${first || ''},\n\nCompounding means value grows on its own — every single day. The portfolio you saved in your Compounder portal shows exactly what you are missing in the meantime.\n\nSince your account was opened (${acctStr}), waiting has cost you an estimated ${fmtEn(missed)} in missed return. Every further day costs about ${fmtEn(perDay)}.\n\nThe sooner you step onto an established, already-earning location, the sooner the asset starts working for you.\n\nOpen your portfolio again below — it recalculates live.`;
-      linkLabel = 'Open my portal';
+      subject = `⏳ ${first ? first + ', ' : ''}your hesitation has cost about ${missedStr}`;
+      body = `Hello ${first || ''}, 👋\n\nCompounding means value grows on its own — every single day. 📈 The portfolio you saved in your Compounder portal shows exactly what you are missing in the meantime.\n\nSince your account was opened (${acctStr}), waiting has cost you an estimated ${missedStr} in missed return. ⏱️ Every further day costs about ${perDayStr}.\n\nThe sooner you step onto an established, already-earning location, the sooner the asset starts working for you. 🔑\n\nOpen your portfolio again below — it recalculates live.`;
     } else {
-      subject = `${first ? first + ', ' : ''}vaše váhání zatím stálo ${fmtCz(missed)}`;
-      body = `Dobrý den${first ? ' ' + first : ''},\n\nCompounding znamená, že hodnota roste sama — každý den. Portfolio, které jste si uložil(a) ve svém Compounder portálu, přesně ukazuje, kolik vám mezitím uniká.\n\nOd založení účtu (${acctStr}) vás odklad rozhodnutí stál přibližně ${fmtCz(missed)} ušlého výnosu. Každý další den vás stojí zhruba ${fmtCz(perDay)}.\n\nČím dřív vstoupíte na zavedenou, už vydělávající lokalitu, tím dřív začne aktivum pracovat za vás.\n\nVraťte se ke svému modelu níže — přepočítává se živě podle aktuálních tržeb.`;
-      linkLabel = 'Otevřít můj portál';
+      subject = `⏳ ${first ? first + ', ' : ''}vaše váhání zatím stálo ${missedStr}`;
+      body = `Dobrý den${first ? ' ' + first : ''}, 👋\n\nCompounding znamená, že hodnota roste sama — každý den. 📈 Portfolio, které jste si uložil(a) ve svém Compounder portálu, přesně ukazuje, kolik vám mezitím uniká.\n\nOd založení účtu (${acctStr}) vás odklad rozhodnutí stál přibližně ${missedStr} ušlého výnosu. ⏱️ Každý další den vás stojí zhruba ${perDayStr}.\n\nČím dřív vstoupíte na zavedenou, už vydělávající lokalitu, tím dřív začne aktivum pracovat za vás. 🔑\n\nVraťte se ke svému modelu níže — přepočítává se živě podle aktuálních tržeb.`;
     }
+    // Pokaždé JINÁ varianta přes AI (stejná fakta + čísla, jiný text a vkusné emoji).
+    try {
+      const ai = await lossEmailAI({ name: first || null, missed: missedStr, per_day: perDayStr, account_opened: acctStr, isEn: isEn });
+      if (ai && ai.subject && ai.body) { subject = ai.subject; body = ai.body; }
+    } catch (e) { /* při chybě zůstane fallback */ }
     const mailFrom = process.env.COMPOUNDER_MAIL_FROM || process.env.SMTP_FROM || process.env.INVOICE_IMAP_USER;
     await sendMail({ to: lead.email, subject, body, from: mailFrom, fromName: compounderMailFromName(), link: url, linkLabel, brand: 'compounder' });
     try { await prisma.compounderEvent.create({ data: { sid: 'admin-loss-' + id, event: 'loss_email_sent', props: { lead_id: id, missed, yr, days: Math.round(days) }, path: '/admin' } }); } catch (e) { /* log best-effort */ }
