@@ -1270,8 +1270,11 @@ router.get('/my-day', requireAuth, async (req, res, next) => {
       plan = await loadDayPlan(personId, dateStr);
     }
     const dayReview = await prisma.salesReview.findUnique({ where: { person_id_kind_period_start: { person_id: personId, kind: 'day', period_start: new Date(dateStr + 'T00:00:00Z') } } }).catch(() => null);
+    // Hodnocení včerejšího dne (obchodník ho chce vidět i tady).
+    const prevStr = new Date(new Date(dateStr + 'T00:00:00Z').getTime() - 86400000).toISOString().slice(0, 10);
+    const prevDayReview = await prisma.salesReview.findUnique({ where: { person_id_kind_period_start: { person_id: personId, kind: 'day', period_start: new Date(prevStr + 'T00:00:00Z') } } }).catch(() => null);
     if (plan) await attachTaskProgress(plan, personId, dateStr).catch(() => {});
-    res.json({ ok: true, person_id: personId, date: dateStr, plan: plan || null, review: dayReview || null });
+    res.json({ ok: true, person_id: personId, date: dateStr, plan: plan || null, review: dayReview || null, prevDayReview: prevDayReview || null, prevDayDate: prevStr });
   } catch (err) { next(err); }
 });
 
