@@ -1893,6 +1893,13 @@ router.post('/leads/:id/send-loss-email', requireAuth, async (req, res, next) =>
     const lead = await prisma.compounderLead.findUnique({ where: { id }, select: { id: true, name: true, email: true, lang: true, created_at: true, example_model: true } });
     if (!lead) return res.status(404).json({ ok: false, error: 'Lead nenalezen' });
     if (!lead.email) return res.status(400).json({ ok: false, error: 'Kontakt nemá e-mail.' });
+    // TVRDÝ STRÁŽCE: e-mail se ztrátou NIKDY nesmí jít někomu, kdo v portálu ještě
+    // nikdy nebyl (platí pro tlačítko i jakékoli budoucí automatické rozesílání).
+    const wasOnPortal = await prisma.compounderEvent.findFirst({
+      where: { event: 'portal_view', props: { path: ['lead_id'], equals: id } },
+      select: { id: true },
+    }).catch(() => null);
+    if (!wasOnPortal) return res.status(400).json({ ok: false, error: 'Zákazník ještě nikdy nebyl v portálu — e-mail se ztrátou se neodešle.' });
     // Jakmile lead vlastní lokalitu (kupní cena zaplacena / rezervace completed),
     // upomínky se ztrátou se už NEPOSÍLAJÍ.
     const owned = await prisma.locationReservation.findFirst({ where: { lead_id: id, OR: [{ purchase_paid_at: { not: null } }, { status: 'completed' }] }, select: { id: true } }).catch(() => null);
