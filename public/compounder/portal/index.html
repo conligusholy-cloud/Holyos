@@ -2208,9 +2208,12 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
       }
       if(!t.n){ el.innerHTML='Za tuto částku jsme nenašli vhodnou kombinaci — zkuste ji upravit nebo si vyberte lokality ručně níže.'; el.style.color='#fff'; return; }
       var left=investment-t.inv;
+      var diffHtml;
+      if(left>=1000){ diffHtml=' — <b style="color:#22c55e">zbývá vám '+fmt(left)+'</b>, to už můžete přidat k dalšímu nákupu.'; }
+      else if(left<=-1000){ diffHtml=' — <b style="color:#ef4444">chybí vám '+fmt(-left)+'</b> k pořízení tohoto portfolia.'; }
+      else { diffHtml=' — <b style="color:#22c55e">přesně na částku</b>.'; }
       el.innerHTML='Sestavili jsme portfolio z <b>'+t.n+' '+(t.n===1?'lokality':(t.n<5?'lokalit':'lokalit'))+'</b> za '+fmt(t.inv)+
-        (left>1000?(' — zbývá vám '+fmt(left)+', to už můžete přidat k dalšímu nákupu.'):'.')+
-        ' Výběr si můžete níže libovolně upravit.';
+        diffHtml+' Výběr si můžete níže libovolně upravit.';
       el.style.color='var(--muted,#9aa)';
     }
     function renderList(){
