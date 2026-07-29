@@ -4602,13 +4602,28 @@ router.post('/portal/example', async (req, res, next) => {
     const investment = (Number.isFinite(invNum) && invNum > 0) ? Math.round(invNum) : null;
     let prev = null;
     try { prev = (await prisma.compounderLead.findUnique({ where: { id: leadId }, select: { example_model: true } })).example_model; } catch (e) { prev = null; }
-    let invHistory = [];
-    try { const pm = prev ? JSON.parse(prev) : null; if (pm && Array.isArray(pm.invHistory)) invHistory = pm.invHistory; } catch (e) { invHistory = []; }
+    let invHistory = [], history = [];
+    try {
+      const pm = prev ? JSON.parse(prev) : null;
+      if (pm && Array.isArray(pm.invHistory)) invHistory = pm.invHistory;
+      if (pm && Array.isArray(pm.history)) history = pm.history;
+    } catch (e) { invHistory = []; history = []; }
     if (investment != null && (!invHistory.length || Number(invHistory[invHistory.length - 1].amount) !== investment)) {
       invHistory.push({ amount: investment, at: new Date().toISOString() });
       if (invHistory.length > 50) invHistory = invHistory.slice(-50);
     }
-    const model = { codes, buyDate, investment, invHistory, savedAt: new Date().toISOString() };
+    // Historie celých modelů — ať obchodník vidí, jak zákazník nad portfoliem přemýšlel.
+    const snap = { codes, investment, buyDate, at: new Date().toISOString() };
+    const lastSnap = history.length ? history[history.length - 1] : null;
+    const sameAsLast = lastSnap
+      && String((lastSnap.codes || []).join(',')) === String(codes.join(','))
+      && Number(lastSnap.investment || 0) === Number(investment || 0)
+      && String(lastSnap.buyDate || '') === String(buyDate || '');
+    if (!sameAsLast) {
+      history.push(snap);
+      if (history.length > 50) history = history.slice(-50);
+    }
+    const model = { codes, buyDate, investment, invHistory, history, savedAt: new Date().toISOString() };
     await prisma.compounderLead.update({ where: { id: leadId }, data: { example_model: JSON.stringify(model) } });
     try { await prisma.compounderEvent.create({ data: { sid: 'portal-lead-' + leadId, event: 'example_save', props: { lead_id: leadId, codes, investment, buyDate }, path: '/portal#priklad' } }); } catch (e) { /* log best-effort */ }
     res.json({ ok: true, model });

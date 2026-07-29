@@ -2133,10 +2133,35 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
           var c=cb.getAttribute('data-code');
           if(cb.checked) selected[c]=true; else delete selected[c];
           try{ if(typeof pTrack==='function') pTrack('example_toggle',{ code:c, on:cb.checked }); }catch(e){}
-          renderList(); recalc();
+          renderList(); recalc(); markDirty();
         });
       });
     }
+    var savedSnap=null;
+    function snapNow(){ return JSON.stringify({ c:Object.keys(selected).filter(function(x){return selected[x];}).sort(), i:investment, d:buyDate }); }
+    function markDirty(){ window.__exDirty = (savedSnap!==null && snapNow()!==savedSnap); }
+    function saveModel(cb){
+      var codes=Object.keys(selected).filter(function(c){return selected[c];});
+      var msg=document.getElementById('ex-savemsg'); if(msg){ msg.style.color='var(--muted,#9aa)'; msg.textContent='Ukládám…'; }
+      return fetch('/api/compounder/portal/example?t='+encodeURIComponent(tok),{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({codes:codes,buyDate:buyDate,investment:investment})})
+        .then(function(r){return r.json();})
+        .then(function(j){
+          if(j&&j.ok){ savedSnap=snapNow(); window.__exDirty=false;
+            if(msg){ msg.style.color='#22c55e'; msg.textContent='Model uložen — přepočítává se podle aktuálních statistik.'; setTimeout(function(){ if(msg&&msg.textContent.indexOf('Model uložen')===0) msg.textContent=''; },4000); }
+          } else if(msg){ msg.style.color='#ef4444'; msg.textContent='Uložení se nezdařilo.'; }
+          if(cb) cb(j&&j.ok);
+        })
+        .catch(function(){ if(msg){ msg.style.color='#ef4444'; msg.textContent='Uložení se nezdařilo.'; } if(cb) cb(false); });
+    }
+    window.__exSave=function(cb){ saveModel(cb); };
+    window.__exDiscard=function(){ // zahoď změny → vrať uložený stav
+      try{ var sn=JSON.parse(savedSnap||'{}'); selected={}; (sn.c||[]).forEach(function(c){ selected[c]=true; }); investment=(sn.i!=null?sn.i:null); buyDate=sn.d||buyDate;
+        var ii=document.getElementById('ex-inv'); if(ii) ii.value=(investment!=null?investment.toLocaleString('cs-CZ'):'');
+        var di2=document.getElementById('ex-date'); if(di2&&buyDate) di2.value=buyDate;
+        renderList(); recalc();
+      }catch(e){}
+      window.__exDirty=false;
+    };
     function parseInv(v){ var n=Number(String(v||'').replace(/[^0-9]/g,'')); return (isFinite(n)&&n>0)?n:null; }
     function applyInvestment(v, opts){
       var n=parseInv(v);
@@ -2148,17 +2173,17 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
         var msg=document.getElementById('ex-savemsg');
         if(msg){ msg.style.color='var(--gold,#c9a24b)'; msg.textContent='Za tuto částku zatím nekoupíte celou lokalitu — vyberte si ručně, co vás zajímá.'; }
       }
-      renderList(); recalc();
+      renderList(); recalc(); markDirty();
       try{ if(typeof pTrack==='function' && n!=null) pTrack('example_investment',{ amount:n }); }catch(e){}
     }
     var ii=document.getElementById('ex-inv');
     if(ii) ii.addEventListener('keydown', function(e){ if(e.key==='Enter'){ e.preventDefault(); applyInvestment(ii.value); } });
     var ia=document.getElementById('ex-invapply');
-    if(ia) ia.addEventListener('click', function(){ applyInvestment(document.getElementById('ex-inv').value); });
+    if(ia) ia.addEventListener('click', function(){ applyInvestment(document.getElementById('ex-inv').value); if(investment!=null) saveModel(); });
     var di=document.getElementById('ex-date');
     if(di){
       var td=new Date(); di.value=td.toISOString().slice(0,10); buyDate=di.value;
-      di.addEventListener('change', function(){ buyDate=di.value||null; try{ if(typeof pTrack==='function') pTrack('example_date',{ date:buyDate }); }catch(e){} renderChart(); });
+      di.addEventListener('change', function(){ buyDate=di.value||null; try{ if(typeof pTrack==='function') pTrack('example_date',{ date:buyDate }); }catch(e){} renderChart(); markDirty(); });
     }
     fetch('/api/compounder/portal/offered-locations?t='+encodeURIComponent(tok),{credentials:'include'})
       .then(function(r){return r.json();})
@@ -2171,18 +2196,12 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
         if(e&&e.model&&e.model.investment!=null){ investment=Number(e.model.investment)||null; var _ii=document.getElementById('ex-inv'); if(_ii&&investment!=null) _ii.value=investment.toLocaleString('cs-CZ'); }
         if(e&&e.model&&Array.isArray(e.model.invHistory)) invHistory=e.model.invHistory;
         renderList(); recalc();
+        savedSnap=snapNow(); window.__exDirty=false;
         if(timerIv) clearInterval(timerIv); timerIv=setInterval(function(){ renderMissed(); },1000);
       })
       .catch(function(){ var box=document.getElementById('ex-list'); if(box) box.innerHTML='<div style="color:#ef4444">Nepodařilo se načíst nabídku.</div>'; });
     var sv=document.getElementById('ex-save');
-    if(sv) sv.addEventListener('click', function(){
-      var codes=Object.keys(selected).filter(function(c){return selected[c];});
-      var msg=document.getElementById('ex-savemsg'); if(msg){ msg.style.color='var(--muted,#9aa)'; msg.textContent='Ukládám…'; }
-      fetch('/api/compounder/portal/example?t='+encodeURIComponent(tok),{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({codes:codes,buyDate:buyDate,investment:investment})})
-        .then(function(r){return r.json();})
-        .then(function(j){ if(j&&j.ok){ if(msg){ msg.style.color='#22c55e'; msg.textContent='Uloženo — model se přepočítává podle aktuálních statistik.'; } } else { if(msg){ msg.style.color='#ef4444'; msg.textContent='Uložení se nezdařilo.'; } } })
-        .catch(function(){ if(msg){ msg.style.color='#ef4444'; msg.textContent='Uložení se nezdařilo.'; } });
-    });
+    if(sv) sv.addEventListener('click', function(){ saveModel(); });
   }
   function initContact(){
     var open = document.getElementById("ct-open");
@@ -2266,12 +2285,20 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
       if (window.__portalTrack) window.__portalTrack("page_switch", { page: page, from: from });
     }
   }
+  window.addEventListener('beforeunload', function(e){
+    if (window.__exDirty){ e.preventDefault(); e.returnValue=''; return ''; }
+  });
   function initNav(){
     Array.prototype.slice.call(document.querySelectorAll('#subnav a')).forEach(function(a){
       a.addEventListener('click', function(e){
         e.preventDefault();
         var href = (a.getAttribute('href')||'').replace('#','');
         var page = NAVHREF_PAGE[href];
+        if (window.__exDirty){
+          if (confirm('Máte neuložené změny svého modelu.\n\nOK = uložit nový model, Zrušit = nechat původní uložený model.')){
+            if (window.__exSave) { window.__exSave(function(){ if(page) pShowPage(page); }); return; }
+          } else if (window.__exDiscard) { window.__exDiscard(); }
+        }
         if (page) pShowPage(page);
       });
     });
