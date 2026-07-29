@@ -472,6 +472,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
           <span id="ex-savemsg" style="font-size:13px"></span>
         </div>
         <div id="ex-list" style="margin-top:10px"></div>
+        <div style="margin-top:18px;padding-top:14px;border-top:1px solid var(--line,#2a2a2e);color:var(--muted-2,#7a7a85);font-size:12px;line-height:1.6">Uvedená čísla jsou <b>orientační</b> — jde o modelový příklad pro lepší představu, spočítaný z aktuálních tržeb vybraných lokalit. Skutečný výnos se může lišit podle provozu, sezóny a nákladů; nejde o závaznou nabídku ani investiční poradenství.</div>
       </div>
     </section>
 
@@ -2031,28 +2032,42 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
       codes.forEach(function(c){ var o=byCode[c]; if(!o) return; t.inv+=o.totalPrice||0; t.yr+=o.yearlyYield||0; t.gua+=o.guaranteeValue||0; t.p5+=profit5(o); });
       return t;
     }
-    var _lastToday=null;
+    var _lastPer={};
     function renderToday(){
       var box=document.getElementById('ex-today'); if(!box) return;
       var t=totals();
-      if(!t.n){ box.style.display='none'; box.innerHTML=''; _lastToday=null; return; }
+      if(!t.n){ box.style.display='none'; box.innerHTML=''; _lastPer={}; return; }
       box.style.display='';
-      var mid=new Date(); mid.setHours(0,0,0,0);
-      var secs=Math.max(0,(Date.now()-mid.getTime())/1000);
-      var val=(t.yr/(365*24*3600))*secs;
-      if(!document.getElementById('ex-today-val')){
-        box.innerHTML='<div style="font-size:13px;color:#86efac;letter-spacing:.04em;text-transform:uppercase;margin-bottom:4px">Dnes už byste vydělali</div>'+
-          '<div id="ex-today-val" style="font-size:clamp(24px,4vw,38px);font-weight:800;color:#22c55e;font-variant-numeric:tabular-nums;transition:color .18s">—</div>'+
-          '<div id="ex-today-sub" style="color:var(--muted,#9aa);font-size:13px;margin-top:6px"></div>';
+      var perSec=t.yr/(365*24*3600);
+      var now=new Date();
+      var d0=new Date(now); d0.setHours(0,0,0,0);
+      var w0=new Date(now); var wd=(w0.getDay()+6)%7; w0.setDate(w0.getDate()-wd); w0.setHours(0,0,0,0); // pondělí
+      var m0=new Date(now.getFullYear(), now.getMonth(), 1, 0,0,0,0);
+      var rows=[
+        { k:'day',   l:'Dnes',         v:perSec*Math.max(0,(now-d0)/1000) },
+        { k:'week',  l:'Tento týden',  v:perSec*Math.max(0,(now-w0)/1000) },
+        { k:'month', l:'Tento měsíc',  v:perSec*Math.max(0,(now-m0)/1000) }
+      ];
+      if(!document.getElementById('ex-today-rows')){
+        box.innerHTML='<div style="font-size:13px;color:#86efac;letter-spacing:.04em;text-transform:uppercase;margin-bottom:8px">Čistý výnos, kdybyste portfolio měli</div>'+
+          '<div id="ex-today-rows"></div>'+
+          '<div style="color:var(--muted,#9aa);font-size:12.5px;margin-top:8px">Počítá se průběžně: dnes od půlnoci, týden od pondělí, měsíc od prvního dne.</div>';
       }
-      var el=document.getElementById('ex-today-val');
-      if(el){
-        el.textContent=pMoney2(val, 2);
-        if(_lastToday!==null && val>_lastToday){ el.style.color='#86efac'; setTimeout(function(){ el.style.color='#22c55e'; },170); }
-        _lastToday=val;
+      var host=document.getElementById('ex-today-rows');
+      if(host && !host.children.length){
+        host.innerHTML=rows.map(function(r){
+          return '<div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;padding:5px 0">'+
+            '<span style="font-size:12.5px;color:var(--muted,#9aa);text-transform:uppercase;letter-spacing:.04em">'+r.l+'</span>'+
+            '<span id="ex-per-'+r.k+'" style="font-size:'+(r.k==='day'?'clamp(22px,3.4vw,32px)':'clamp(16px,2.2vw,21px)')+';font-weight:800;color:#22c55e;font-variant-numeric:tabular-nums;transition:color .18s">—</span>'+
+            '</div>';
+        }).join('');
       }
-      var sub=document.getElementById('ex-today-sub');
-      if(sub) sub.textContent='Kdybyste portfolio už měli, tolik by vám vydělalo od dnešní půlnoci. Zítra se počítá znovu od nuly.';
+      rows.forEach(function(r){
+        var el=document.getElementById('ex-per-'+r.k); if(!el) return;
+        el.textContent=pMoney2(r.v, 2);
+        if(_lastPer[r.k]!=null && r.v>_lastPer[r.k]){ el.style.color='#86efac'; setTimeout(function(){ el.style.color='#22c55e'; },170); }
+        _lastPer[r.k]=r.v;
+      });
     }
     function renderMissed(){
       var el=document.getElementById('ex-missed-val'); if(!el||!acct) return;
