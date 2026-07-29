@@ -481,6 +481,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
             <input type="date" id="ex-date" style="margin-left:8px;background:#141418;color:#fff;border:1px solid var(--line,#2a2a2e);border-radius:9px;padding:7px 10px;font-size:13px">
           </label>
         </div>
+        <div id="ex-results" style="display:none">
         <div style="display:flex;gap:12px;flex-wrap:wrap;margin:14px 0">
           <div id="ex-missed" style="display:none;flex:1;min-width:280px;background:radial-gradient(120% 95% at 90% -10%,rgba(201,162,75,.22),rgba(15,15,17,0) 60%),#131316;border:1px solid rgba(201,162,75,.3);border-radius:16px;padding:18px 20px"></div>
           <div id="ex-today" style="display:none;flex:1;min-width:250px;background:radial-gradient(120% 95% at 88% -15%,rgba(34,197,94,.14),rgba(15,15,17,0) 62%),#131316;border:1px solid rgba(34,197,94,.34);border-radius:16px;padding:18px 20px"></div>
@@ -493,6 +494,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
         </div>
         <div id="ex-list" style="margin-top:10px"></div>
         <div style="margin-top:18px;padding-top:14px;border-top:1px solid var(--line,#2a2a2e);color:var(--muted-2,#7a7a85);font-size:12px;line-height:1.6">Uvedená čísla jsou <b>orientační</b> — jde o modelový příklad pro lepší představu, spočítaný z aktuálních tržeb vybraných lokalit. Skutečný výnos se může lišit podle provozu, sezóny a nákladů; nejde o závaznou nabídku ani investiční poradenství.</div>
+        </div>
       </div>
     </section>
 
@@ -2254,11 +2256,13 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
       try{ var sn=JSON.parse(savedSnap||'{}'); selected={}; (sn.c||[]).forEach(function(c){ selected[c]=true; }); investment=(sn.i!=null?sn.i:null); buyDate=sn.d||buyDate;
         var ii=document.getElementById('ex-inv'); if(ii) ii.value=(investment!=null?investment.toLocaleString('cs-CZ'):'');
         var di2=document.getElementById('ex-date'); if(di2&&buyDate) di2.value=buyDate;
-        renderList(); recalc();
+        renderList(); recalc(); exToggleResults();
       }catch(e){}
       window.__exDirty=false;
     };
     function parseInv(v){ var n=Number(String(v||'').replace(/[^0-9]/g,'')); return (isFinite(n)&&n>0)?n:null; }
+    // Dokud zákazník nezadá částku investice, ukazujeme jen vstupní okno; pak odkryjeme výsledky.
+    function exToggleResults(){ var r=document.getElementById('ex-results'); if(r) r.style.display=(investment!=null)?'':'none'; }
     function applyInvestment(v, opts){
       var n=parseInv(v);
       investment=n;
@@ -2269,11 +2273,17 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
         var msg=document.getElementById('ex-savemsg');
         if(msg){ msg.style.color='var(--gold,#c9a24b)'; msg.textContent='Za tuto částku zatím nekoupíte celou lokalitu — vyberte si ručně, co vás zajímá.'; }
       }
+      exToggleResults();
       renderList(); recalc(); markDirty();
       try{ if(typeof pTrack==='function' && n!=null) pTrack('example_investment',{ amount:n }); }catch(e){}
     }
     var ii=document.getElementById('ex-inv');
     if(ii) ii.addEventListener('keydown', function(e){ if(e.key==='Enter'){ e.preventDefault(); applyInvestment(ii.value); } });
+    // Živé oddělování tisíců při psaní částky.
+    if(ii) ii.addEventListener('input', function(){
+      var digits=ii.value.replace(/[^0-9]/g,'').slice(0,12);
+      ii.value = digits ? Number(digits).toLocaleString('cs-CZ') : '';
+    });
     var ia=document.getElementById('ex-invapply');
     if(ia) ia.addEventListener('click', function(){ applyInvestment(document.getElementById('ex-inv').value); if(investment!=null) saveModel(); });
     var di=document.getElementById('ex-date');
@@ -2293,6 +2303,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
         if(e&&e.accountCreatedAt) acct=e.accountCreatedAt;
         if(e&&e.model&&e.model.investment!=null){ investment=Number(e.model.investment)||null; var _ii=document.getElementById('ex-inv'); if(_ii&&investment!=null) _ii.value=investment.toLocaleString('cs-CZ'); }
         if(e&&e.model&&Array.isArray(e.model.invHistory)) invHistory=e.model.invHistory;
+        exToggleResults();
         renderList(); recalc();
         savedSnap=snapNow(); window.__exDirty=false;
         if(timerIv) clearInterval(timerIv); timerIv=setInterval(function(){ renderToday(); },1000);
