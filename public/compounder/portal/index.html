@@ -2023,7 +2023,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
       var t=totals();
       var sum=document.getElementById('ex-summary');
       if(sum) sum.innerHTML = t.n
-        ? ('<div class="ex-cards">'+card('Vybráno lokalit', t.n+'×')+card('Investice celkem', fmt(t.inv))+card('Pravidelný měsíční výnos', fmt(t.yr/12))+card('Roční výnos', fmt(t.yr))+'</div>')
+        ? ('<div class="ex-cards">'+card('Vybráno lokalit', t.n+'×')+card('Investice celkem', fmt(t.inv))+card('Pravidelný čistý měsíční výnos', fmt(t.yr/12))+card('Čistý roční výnos', fmt(t.yr))+'</div>')
         : '<div style="color:var(--muted,#9aa)">Zatím nemáte vybranou žádnou lokalitu. Zaškrtněte lokality níže a poskládejte si své portfolio.</div>';
       var mb=document.getElementById('ex-missed');
       if(mb){
