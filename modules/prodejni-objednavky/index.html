@@ -305,6 +305,11 @@
 
     <!-- TAB: Compounding — hodnota lokalit prádlomatů ze SIS API -->
     <div id="tab-compounding" style="display:none; padding:20px 24px 24px;">
+      <div id="kv-country-tabs" style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
+        <button type="button" class="btn" data-kvc="CZ" onclick="kvSetCountry('CZ')" style="background:#eab308;color:#0e1a22;font-weight:700;">🇨🇿 Česko</button>
+        <button type="button" class="btn" data-kvc="PL" onclick="kvSetCountry('PL')">🇵🇱 Polsko</button>
+        <button type="button" class="btn" data-kvc="IE" onclick="kvSetCountry('IE')">🇮🇪 Irsko</button>
+      </div>
       <div class="toolbar" style="margin-bottom:14px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
         <input type="text" id="kv-search" placeholder="Hledat kód / lokalitu / provozovatele…" onkeyup="renderKioskValues()" style="flex:1; min-width:220px;">
         <label style="display:flex; align-items:center; gap:6px; color:var(--text2); font-size:13px;">
@@ -4085,6 +4090,23 @@
     var _compoundingSettings = { pricelist: { v2: { eur: null }, v3: { eur: null }, v4: { eur: null } }, locationMonths: 12, servicePct: 15, energyPct: 9.5, locationPriceMode: 'months', locationRoiPct: 25, buybackPct: 65, buybackYears: 5 };
     var _kioskConfig = {}; // mapa { [code]: { version, rentMonthlyCzk } }
     var _kvSort = { key: null, dir: -1 };
+    var _kvCountryTab = 'CZ';
+    function _kvCountry(k){
+      var cur=String(k.currency||'').toUpperCase();
+      if(cur==='PLN') return 'PL';
+      if(cur==='EUR') return 'IE';
+      if(cur==='CZK') return 'CZ';
+      var t=((k.label||'')+' '+(k.companyName||'')).toLowerCase();
+      if(/polsk|poland|\bpl\b/.test(t)) return 'PL';
+      if(/irsk|ireland|\bie\b/.test(t)) return 'IE';
+      return 'CZ';
+    }
+    function kvSetCountry(c){
+      _kvCountryTab=c;
+      try{ document.querySelectorAll('#kv-country-tabs [data-kvc]').forEach(function(b){ var on=b.getAttribute('data-kvc')===c; b.style.background=on?'#eab308':''; b.style.color=on?'#0e1a22':''; b.style.fontWeight=on?'700':''; }); }catch(e){}
+      renderKioskValues();
+    }
+    window.kvSetCountry = kvSetCountry;
     function kvSort(key) {
       if (_kvSort.key === key) { _kvSort.dir = -_kvSort.dir; }
       else { _kvSort.key = key; _kvSort.dir = (key === 'code' || key === 'label' || key === 'company' || key === 'version' || key === 'stav') ? 1 : -1; }
@@ -4167,6 +4189,7 @@
 
       // Základní okruh: pouze prádlomaty provozované Best Series s.r.o.
       var baseList = kiosks.filter(function(k) {
+        if (_kvCountry(k) !== _kvCountryTab) return false;
         return String(k.companyName || '').trim().toLowerCase().indexOf('best series') !== -1;
       });
 
