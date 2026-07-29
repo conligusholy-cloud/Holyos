@@ -185,7 +185,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
   <header class="top">
     <div class="top-in">
       <div class="brand">COMP<b>OU</b>NDER <span style="color:var(--muted-2);font-weight:400;letter-spacing:.04em">· Portal</span></div>
-      <div id="topClock" style="display:none;flex:1;text-align:center;min-width:0">
+      <div id="topClock" style="display:none;flex:1;text-align:center;min-width:0;cursor:pointer" onclick="if(window.__goExample)window.__goExample()" title="Klikněte a poskládejte si vlastní portfolio v sekci Příklad">
         <div id="topClockLbl" style="font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted-2,#7a7a85)">&nbsp;</div>
         <div style="display:flex;align-items:baseline;gap:10px;justify-content:center;flex-wrap:wrap">
           <div id="topClockVal" style="font-size:15px;font-weight:800;color:#f0dfa8;font-variant-numeric:tabular-nums;white-space:nowrap">—</div>
@@ -2383,6 +2383,11 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
       if (window.__portalTrack) window.__portalTrack("page_switch", { page: page, from: from });
     }
   }
+  // Klik na časomíru/ztrátu v hlavičce → přejdi na sekci Příklad (skrz nav, ať platí
+  // i hlídání neuložených změn). Naviguje jen když je Příklad pro leada dostupný.
+  window.__goExample = function(){
+    try { var a = document.getElementById('nav-priklad'); if (a && a.offsetParent !== null) { a.click(); } } catch(e){}
+  };
   window.addEventListener('beforeunload', function(e){
     if (window.__exDirty){ e.preventDefault(); e.returnValue=''; return ''; }
   });
