@@ -463,6 +463,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
         </div>
         <div style="display:flex;gap:12px;flex-wrap:wrap;margin:14px 0">
           <div id="ex-missed" style="display:none;flex:1;min-width:280px;background:radial-gradient(120% 95% at 90% -10%,rgba(201,162,75,.22),rgba(15,15,17,0) 60%),#131316;border:1px solid rgba(201,162,75,.3);border-radius:16px;padding:18px 20px"></div>
+          <div id="ex-today" style="display:none;flex:1;min-width:250px;background:radial-gradient(120% 95% at 88% -15%,rgba(34,197,94,.14),rgba(15,15,17,0) 62%),#131316;border:1px solid rgba(34,197,94,.34);border-radius:16px;padding:18px 20px"></div>
           <div id="ex-monthly" style="display:none;flex:1;min-width:260px;background:radial-gradient(120% 95% at 88% -15%,rgba(34,197,94,.16),rgba(15,15,17,0) 62%),#131316;border:1px solid rgba(34,197,94,.42);border-radius:16px;padding:18px 20px"></div>
         </div>
         <div id="ex-summary"></div>
@@ -2030,6 +2031,29 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
       codes.forEach(function(c){ var o=byCode[c]; if(!o) return; t.inv+=o.totalPrice||0; t.yr+=o.yearlyYield||0; t.gua+=o.guaranteeValue||0; t.p5+=profit5(o); });
       return t;
     }
+    var _lastToday=null;
+    function renderToday(){
+      var box=document.getElementById('ex-today'); if(!box) return;
+      var t=totals();
+      if(!t.n){ box.style.display='none'; box.innerHTML=''; _lastToday=null; return; }
+      box.style.display='';
+      var mid=new Date(); mid.setHours(0,0,0,0);
+      var secs=Math.max(0,(Date.now()-mid.getTime())/1000);
+      var val=(t.yr/(365*24*3600))*secs;
+      if(!document.getElementById('ex-today-val')){
+        box.innerHTML='<div style="font-size:13px;color:#86efac;letter-spacing:.04em;text-transform:uppercase;margin-bottom:4px">Dnes už byste vydělali</div>'+
+          '<div id="ex-today-val" style="font-size:clamp(24px,4vw,38px);font-weight:800;color:#22c55e;font-variant-numeric:tabular-nums;transition:color .18s">—</div>'+
+          '<div id="ex-today-sub" style="color:var(--muted,#9aa);font-size:13px;margin-top:6px"></div>';
+      }
+      var el=document.getElementById('ex-today-val');
+      if(el){
+        el.textContent=pMoney2(val, 2);
+        if(_lastToday!==null && val>_lastToday){ el.style.color='#86efac'; setTimeout(function(){ el.style.color='#22c55e'; },170); }
+        _lastToday=val;
+      }
+      var sub=document.getElementById('ex-today-sub');
+      if(sub) sub.textContent='Kdybyste portfolio už měli, tolik by vám vydělalo od dnešní půlnoci. Zítra se počítá znovu od nuly.';
+    }
     function renderMissed(){
       var el=document.getElementById('ex-missed-val'); if(!el||!acct) return;
       var t=totals(); if(!t.n) return;
@@ -2038,8 +2062,8 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
       var to=buyDate?new Date(buyDate+'T00:00:00').getTime():Date.now();
       var days=Math.max(0, Math.floor((to-from)/86400000));
       var val=(t.yr/365)*days;
-      el.style.color='#fff';
-      el.textContent=pMoney2(val);
+      el.style.color='#ef4444';
+      el.textContent=pMoney2(val, 0);
       var sub=document.getElementById('ex-missed-sub');
       if(sub){ sub.textContent='Od založení účtu ('+new Date(acct).toLocaleDateString('cs-CZ')+') do vašeho plánovaného nákupu'+(buyDate?(' ('+new Date(buyDate+'T00:00:00').toLocaleDateString('cs-CZ')+')'):'')+' je to '+days+' dní. Každý den bez tohoto portfolia ~'+fmt(t.yr/365)+'.'; }
     }
@@ -2111,7 +2135,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
         } else { mb.style.display='none'; mb.innerHTML=''; }
       }
       window.__exYearly = t.yr || 0;
-      renderChart(); renderTimer(); renderHint(); renderMonthly();
+      renderChart(); renderTimer(); renderHint(); renderMonthly(); renderToday();
     }
     function autoBuild(){
       selected={};
@@ -2228,7 +2252,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
         if(e&&e.model&&Array.isArray(e.model.invHistory)) invHistory=e.model.invHistory;
         renderList(); recalc();
         savedSnap=snapNow(); window.__exDirty=false;
-        if(timerIv) clearInterval(timerIv); /* sekce: statická částka; živý counter je v horní liště */
+        if(timerIv) clearInterval(timerIv); timerIv=setInterval(function(){ renderToday(); },1000);
       })
       .catch(function(){ var box=document.getElementById('ex-list'); if(box) box.innerHTML='<div style="color:#ef4444">Nepodařilo se načíst nabídku.</div>'; });
     var sv=document.getElementById('ex-save');
