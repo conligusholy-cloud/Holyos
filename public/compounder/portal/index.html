@@ -2030,17 +2030,18 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
       codes.forEach(function(c){ var o=byCode[c]; if(!o) return; t.inv+=o.totalPrice||0; t.yr+=o.yearlyYield||0; t.gua+=o.guaranteeValue||0; t.p5+=profit5(o); });
       return t;
     }
-    var _lastMissed=null;
     function renderMissed(){
       var el=document.getElementById('ex-missed-val'); if(!el||!acct) return;
       var t=totals(); if(!t.n) return;
-      var secs=Math.max(0,(Date.now()-new Date(acct).getTime())/1000);
-      var val=-(t.yr/(365*24*3600))*secs; // ztráta = záporné číslo, odečítá se v reálném čase
+      // Od založení účtu do plánovaného data nákupu (statická částka, neblikáme).
+      var from=new Date(acct).getTime();
+      var to=buyDate?new Date(buyDate+'T00:00:00').getTime():Date.now();
+      var days=Math.max(0, Math.floor((to-from)/86400000));
+      var val=(t.yr/365)*days;
+      el.style.color='#fff';
       el.textContent=pMoney2(val);
-      if(_lastMissed!==null && val<_lastMissed){ el.style.color='#ef4444'; setTimeout(function(){ el.style.color='#fff'; },170); }
-      _lastMissed=val;
       var sub=document.getElementById('ex-missed-sub');
-      if(sub){ var days=Math.floor(secs/86400); sub.textContent='Ztráta narůstá každou sekundu. Za '+days+' dní, co o Compounderu víte, vám uniklo '+fmt(Math.abs(val))+' — každý den bez tohoto portfolia ~'+fmt(t.yr/365)+'.'; }
+      if(sub){ sub.textContent='Od založení účtu ('+new Date(acct).toLocaleDateString('cs-CZ')+') do vašeho plánovaného nákupu'+(buyDate?(' ('+new Date(buyDate+'T00:00:00').toLocaleDateString('cs-CZ')+')'):'')+' je to '+days+' dní. Každý den bez tohoto portfolia ~'+fmt(t.yr/365)+'.'; }
     }
     function renderMonthly(){
       var box=document.getElementById('ex-monthly'); if(!box) return;
@@ -2210,8 +2211,10 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
     if(ia) ia.addEventListener('click', function(){ applyInvestment(document.getElementById('ex-inv').value); if(investment!=null) saveModel(); });
     var di=document.getElementById('ex-date');
     if(di){
-      var td=new Date(); di.value=td.toISOString().slice(0,10); buyDate=di.value;
-      di.addEventListener('change', function(){ buyDate=di.value||null; try{ if(typeof pTrack==='function') pTrack('example_date',{ date:buyDate }); }catch(e){} renderChart(); markDirty(); });
+      var td=new Date(); var _today=new Date(td.getTime()-td.getTimezoneOffset()*60000).toISOString().slice(0,10);
+      di.min=_today; di.value=_today; buyDate=di.value;
+      di.addEventListener('input', function(){ if(di.value && di.value<_today){ di.value=_today; } });
+      di.addEventListener('change', function(){ buyDate=di.value||null; try{ if(typeof pTrack==='function') pTrack('example_date',{ date:buyDate }); }catch(e){} renderChart(); renderMissed(); markDirty(); });
     }
     fetch('/api/compounder/portal/offered-locations?t='+encodeURIComponent(tok),{credentials:'include'})
       .then(function(r){return r.json();})
@@ -2219,13 +2222,13 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
         return fetch('/api/compounder/portal/example?t='+encodeURIComponent(tok),{credentials:'include'}).then(function(r){return r.ok?r.json():null;}); })
       .then(function(e){
         if(e&&e.model&&Array.isArray(e.model.codes)){ e.model.codes.forEach(function(c){ if(byCode[c]) selected[c]=true; }); }
-        if(e&&e.model&&e.model.buyDate&&di){ di.value=String(e.model.buyDate).slice(0,10); buyDate=di.value; }
+        if(e&&e.model&&e.model.buyDate&&di){ var _bd=String(e.model.buyDate).slice(0,10); if(di.min && _bd<di.min) _bd=di.min; di.value=_bd; buyDate=_bd; }
         if(e&&e.accountCreatedAt) acct=e.accountCreatedAt;
         if(e&&e.model&&e.model.investment!=null){ investment=Number(e.model.investment)||null; var _ii=document.getElementById('ex-inv'); if(_ii&&investment!=null) _ii.value=investment.toLocaleString('cs-CZ'); }
         if(e&&e.model&&Array.isArray(e.model.invHistory)) invHistory=e.model.invHistory;
         renderList(); recalc();
         savedSnap=snapNow(); window.__exDirty=false;
-        if(timerIv) clearInterval(timerIv); timerIv=setInterval(function(){ renderMissed(); },1000);
+        if(timerIv) clearInterval(timerIv); /* sekce: statická částka; živý counter je v horní liště */
       })
       .catch(function(){ var box=document.getElementById('ex-list'); if(box) box.innerHTML='<div style="color:#ef4444">Nepodařilo se načíst nabídku.</div>'; });
     var sv=document.getElementById('ex-save');
