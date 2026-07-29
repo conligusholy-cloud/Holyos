@@ -460,7 +460,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
         </div>
         <div style="display:flex;gap:12px;flex-wrap:wrap;margin:14px 0">
           <div id="ex-missed" style="display:none;flex:1;min-width:280px;background:radial-gradient(120% 95% at 90% -10%,rgba(201,162,75,.22),rgba(15,15,17,0) 60%),#131316;border:1px solid rgba(201,162,75,.3);border-radius:16px;padding:18px 20px"></div>
-          <div id="ex-timer" style="display:none;flex:1;min-width:260px;background:#131316;border:1px solid var(--line,#2a2a2e);border-radius:16px;padding:18px 20px"></div>
+          <div id="ex-monthly" style="display:none;flex:1;min-width:260px;background:radial-gradient(120% 95% at 88% -15%,rgba(34,197,94,.16),rgba(15,15,17,0) 62%),#131316;border:1px solid rgba(34,197,94,.42);border-radius:16px;padding:18px 20px"></div>
         </div>
         <div id="ex-summary"></div>
         <div style="display:flex;align-items:center;gap:12px;margin:16px 0">
@@ -2013,6 +2013,15 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
       var sub=document.getElementById('ex-missed-sub');
       if(sub){ var days=Math.floor(secs/86400); sub.textContent='Ztráta narůstá každou sekundu. Za '+days+' dní, co o Compounderu víte, vám uniklo '+fmt(Math.abs(val))+' — každý den bez tohoto portfolia ~'+fmt(t.yr/365)+'.'; }
     }
+    function renderMonthly(){
+      var box=document.getElementById('ex-monthly'); if(!box) return;
+      var t=totals();
+      if(!t.n){ box.style.display='none'; box.innerHTML=''; return; }
+      box.style.display='';
+      box.innerHTML='<div style="font-size:13px;color:#86efac;letter-spacing:.04em;text-transform:uppercase;margin-bottom:4px">Pravidelný čistý měsíční výnos</div>'+
+        '<div style="font-size:clamp(28px,4.6vw,44px);font-weight:800;color:#22c55e;font-variant-numeric:tabular-nums;line-height:1.05">'+fmt(t.yr/12)+'</div>'+
+        '<div style="color:var(--muted,#9aa);font-size:13px;margin-top:6px">Každý měsíc, po odečtení servisu, nájmu i energií. Ročně '+fmt(t.yr)+'.</div>';
+    }
     function renderTimer(){
       var box=document.getElementById('ex-timer'); if(!box) return;
       if(!acct){ box.style.display='none'; return; }
@@ -2057,7 +2066,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
       var t=totals();
       var sum=document.getElementById('ex-summary');
       if(sum) sum.innerHTML = t.n
-        ? ('<div class="ex-cards">'+card('Vybráno lokalit', t.n+'×')+card('Investice celkem', fmt(t.inv))+card('Pravidelný čistý měsíční výnos', fmt(t.yr/12))+card('Čistý roční výnos', fmt(t.yr))+'</div>')
+        ? ('<div class="ex-cards">'+card('Vybráno lokalit', t.n+'×')+card('Investice celkem', fmt(t.inv))+card('Čistý roční výnos', fmt(t.yr))+'</div>')
         : '<div style="color:var(--muted,#9aa)">Zatím nemáte vybranou žádnou lokalitu. Zaškrtněte lokality níže a poskládejte si své portfolio.</div>';
       var mb=document.getElementById('ex-missed');
       if(mb){
@@ -2071,7 +2080,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
           renderMissed();
         } else { mb.style.display='none'; mb.innerHTML=''; }
       }
-      renderChart(); renderTimer(); renderHint();
+      renderChart(); renderTimer(); renderHint(); renderMonthly();
     }
     function autoBuild(){
       selected={};
@@ -2160,7 +2169,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
         if(e&&e.model&&e.model.investment!=null){ investment=Number(e.model.investment)||null; var _ii=document.getElementById('ex-inv'); if(_ii&&investment!=null) _ii.value=investment.toLocaleString('cs-CZ'); }
         if(e&&e.model&&Array.isArray(e.model.invHistory)) invHistory=e.model.invHistory;
         renderList(); recalc();
-        if(timerIv) clearInterval(timerIv); timerIv=setInterval(function(){ renderTimer(); renderMissed(); },1000);
+        if(timerIv) clearInterval(timerIv); timerIv=setInterval(function(){ renderMissed(); },1000);
       })
       .catch(function(){ var box=document.getElementById('ex-list'); if(box) box.innerHTML='<div style="color:#ef4444">Nepodařilo se načíst nabídku.</div>'; });
     var sv=document.getElementById('ex-save');
