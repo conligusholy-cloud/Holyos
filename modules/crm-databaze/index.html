@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Databáze leadů — HolyOS</title>
+<style>
+  :root{--bg:#0f1115;--surface:#171a21;--surface2:#1f2430;--line:rgba(255,255,255,.09);--text:#f2f3f5;--muted:#9aa0ad;--muted2:#6b7280;--primary:#eab308}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;line-height:1.45;font-size:14px}
+  .top{position:sticky;top:0;z-index:20;background:rgba(15,17,21,.94);backdrop-filter:blur(8px);border-bottom:1px solid var(--line);padding:12px 18px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+  .top h1{font-size:18px;margin:0;font-weight:700}
+  .top .sub{font-size:12px;color:var(--muted)}
+  .btn{background:var(--surface2);border:1px solid var(--line);color:var(--text);border-radius:9px;padding:8px 12px;font-size:13px;cursor:pointer}
+  .btn:hover{border-color:var(--primary)}
+  .btn.gold{background:var(--primary);color:#0e1a22;font-weight:700;border-color:var(--primary)}
+  .wrap{padding:16px 18px 40px}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:16px}
+  .stat{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:13px 15px}
+  .stat .v{font-size:24px;font-weight:800}
+  .stat .k{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-top:2px}
+  .segbar{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+  .seg{border:1px solid var(--line);border-radius:999px;padding:6px 13px;font-size:13px;cursor:pointer;background:var(--surface);white-space:nowrap}
+  .seg.active{background:var(--primary);color:#0e1a22;font-weight:700;border-color:var(--primary)}
+  .toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+  input,select{background:var(--surface2);border:1px solid var(--line);color:var(--text);border-radius:9px;padding:8px 10px;font-size:13px}
+  input[type=text]{flex:1;min-width:180px}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th{position:sticky;top:0;background:#1b2028;text-align:left;padding:9px 10px;color:var(--muted);font-weight:600;border-bottom:1px solid var(--line);white-space:nowrap}
+  td{padding:8px 10px;border-bottom:1px solid rgba(255,255,255,.05);vertical-align:top}
+  tr:hover td{background:rgba(255,255,255,.02)}
+  .badge{font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;white-space:nowrap}
+  .dup{background:rgba(234,179,8,.18);color:var(--primary);font-size:11px;font-weight:700;border-radius:6px;padding:1px 6px}
+  .note{color:var(--muted);font-size:12px;max-width:340px;display:inline-block}
+  a.mail{color:#7db3ff;text-decoration:none}
+  .pager{display:flex;gap:10px;align-items:center;justify-content:center;margin-top:14px;color:var(--muted)}
+  .tablewrap{background:var(--surface);border:1px solid var(--line);border-radius:14px;overflow:auto;max-height:70vh}
+  .empty{padding:40px;text-align:center;color:var(--muted)}
+</style>
+</head>
+<body>
+  <div class="top">
+    <div><h1>🗃️ Databáze leadů</h1><div class="sub" id="sub">Načítám…</div></div>
+    <div style="display:flex;gap:8px">
+      <button class="btn" onclick="exportCsv()">⬇️ Export CSV</button>
+      <button class="btn" onclick="location.href='/modules/prodejni-objednavky/index.html'">← Zpět</button>
+    </div>
+  </div>
+  <div class="wrap">
+    <div class="cards" id="cards"></div>
+    <div class="segbar" id="segbar"></div>
+    <div class="toolbar">
+      <input type="text" id="q" placeholder="Hledat jméno / e-mail / telefon / město…" onkeyup="if(event.key==='Enter')reload(1)">
+      <select id="country" onchange="reload(1)"><option value="">Všechny země</option></select>
+      <select id="owner" onchange="reload(1)"><option value="">Všichni obchodníci</option></select>
+      <label style="display:flex;align-items:center;gap:6px;color:var(--muted);font-size:13px;cursor:pointer"><input type="checkbox" id="contactable" onchange="reload(1)"> jen s kontaktem</label>
+      <button class="btn gold" onclick="reload(1)">Hledat</button>
+    </div>
+    <div class="tablewrap"><table><thead id="thead"></thead><tbody id="tbody"><tr><td class="empty">Načítám…</td></tr></tbody></table></div>
+    <div class="pager" id="pager"></div>
+  </div>
+
+<script>
+  var API='/api/sales';
+  var SEG={horky:{l:'Horký',c:'#ef4444'},volat:{l:'Volat příště',c:'#eab308'},nedovolano:{l:'Nedovoláno',c:'#3b82f6'},novy:{l:'Nový',c:'#22c55e'},nezajem:{l:'Nezájem',c:'#6b7280'},smlouva:{l:'Smlouva',c:'#a855f7'},ostatni:{l:'Ostatní',c:'#9aa0ad'}};
+  var state={segment:'',country:'',owner:'',q:'',contactable:false,page:1,pageSize:50,pages:1,total:0};
+  function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+
+  async function api(path){var r=await fetch(API+path,{credentials:'include'});if(r.status===401){location.href='/login.html?redirect='+encodeURIComponent(location.pathname);throw new Error('401');}return r.json();}
+
+  async function loadStats(){
+    var s=await api('/crm-leads/stats');
+    document.getElementById('sub').textContent=s.total.toLocaleString('cs-CZ')+' unikátních kontaktů · '+s.contactable.toLocaleString('cs-CZ')+' s kontaktem · '+s.merged_duplicates.toLocaleString('cs-CZ')+' sloučených duplicit';
+    document.getElementById('cards').innerHTML=
+      card(s.total,'Kontaktů celkem')+card(s.contactable,'Oslovitelných')+
+      card((s.segments.horky||0),'Horkých')+card((s.segments.novy||0),'Nevytěžených (Nový)')+
+      card((s.segments.nedovolano||0)+(s.segments.volat||0),'K obvolání')+card(s.merged_duplicates,'Sloučených duplicit');
+    // segmenty
+    var order=['','horky','volat','nedovolano','novy','nezajem','smlouva','ostatni'];
+    var sb=document.getElementById('segbar');
+    sb.innerHTML=order.map(function(k){
+      if(k===''){return '<div class="seg'+(state.segment===''?' active':'')+'" onclick="setSeg(\'\')">Vše ('+s.total.toLocaleString('cs-CZ')+')</div>';}
+      var n=s.segments[k]||0; if(!n) return '';
+      var m=SEG[k];
+      return '<div class="seg'+(state.segment===k?' active':'')+'" onclick="setSeg(\''+k+'\')"><span style="color:'+m.c+'">●</span> '+m.l+' ('+n.toLocaleString('cs-CZ')+')</div>';
+    }).join('');
+    // země + obchodníci do selectů (jen poprvé)
+    var cs=document.getElementById('country'); if(cs.options.length<=1){ s.by_country.forEach(function(x){var o=document.createElement('option');o.value=x.country;o.textContent=x.country+' ('+x.count+')';cs.appendChild(o);}); }
+    var os=document.getElementById('owner'); if(os.options.length<=1){ s.by_owner.forEach(function(x){var o=document.createElement('option');o.value=x.owner;o.textContent=x.owner+' ('+x.count+')';os.appendChild(o);}); }
+  }
+  function card(v,k){return '<div class="stat"><div class="v">'+(Number(v)||0).toLocaleString('cs-CZ')+'</div><div class="k">'+k+'</div></div>';}
+  function setSeg(k){state.segment=k;reload(1);document.querySelectorAll('.seg').forEach(function(e){});loadStats();}
+
+  function qs(){
+    var p=[];
+    if(state.segment)p.push('segment='+encodeURIComponent(state.segment));
+    if(state.country)p.push('country='+encodeURIComponent(state.country));
+    if(state.owner)p.push('owner='+encodeURIComponent(state.owner));
+    if(state.q)p.push('q='+encodeURIComponent(state.q));
+    if(state.contactable)p.push('contactable=1');
+    p.push('page='+state.page);p.push('pageSize='+state.pageSize);
+    return p.join('&');
+  }
+  async function reload(page){
+    if(page)state.page=page;
+    state.q=document.getElementById('q').value.trim();
+    state.country=document.getElementById('country').value;
+    state.owner=document.getElementById('owner').value;
+    state.contactable=document.getElementById('contactable').checked;
+    var d=await api('/crm-leads?'+qs());
+    state.pages=d.pages;state.total=d.total;
+    renderTable(d.rows);
+    document.getElementById('pager').innerHTML=
+      '<button class="btn" '+(state.page<=1?'disabled':'')+' onclick="reload('+(state.page-1)+')">‹ Předchozí</button>'+
+      '<span>Strana '+state.page+' / '+(d.pages||1)+' · '+d.total.toLocaleString('cs-CZ')+' záznamů</span>'+
+      '<button class="btn" '+(state.page>=d.pages?'disabled':'')+' onclick="reload('+(state.page+1)+')">Další ›</button>';
+  }
+  function renderTable(rows){
+    document.getElementById('thead').innerHTML='<tr><th>Jméno</th><th>Příjmení</th><th>E-mail</th><th>Telefon</th><th>Město</th><th>Země</th><th>Segment</th><th>Stav</th><th>Obchodník</th><th>Zdroj</th><th>Dup.</th><th>Poznámka</th></tr>';
+    var tb=document.getElementById('tbody');
+    if(!rows.length){tb.innerHTML='<tr><td colspan="12" class="empty">Žádné záznamy. (Pokud jsi ještě nespustil import, databáze je prázdná.)</td></tr>';return;}
+    tb.innerHTML=rows.map(function(r){
+      var m=SEG[r.segment]||SEG.ostatni;
+      return '<tr>'+
+        '<td>'+esc(r.first_name)+'</td><td>'+esc(r.last_name)+'</td>'+
+        '<td>'+(r.email?'<a class="mail" href="mailto:'+esc(r.email)+'">'+esc(r.email)+'</a>':'—')+'</td>'+
+        '<td>'+(r.phone?'<a class="mail" href="tel:'+esc(r.phone)+'">'+esc(r.phone)+'</a>':'—')+'</td>'+
+        '<td>'+esc(r.city)+'</td><td>'+esc(r.country)+'</td>'+
+        '<td><span class="badge" style="background:'+m.c+'22;color:'+m.c+'">'+m.l+'</span></td>'+
+        '<td>'+esc(r.status)+'</td><td>'+esc(r.owner_name)+'</td><td>'+esc(r.source)+'</td>'+
+        '<td>'+(r.dup_count?'<span class="dup">+'+r.dup_count+'</span>':'')+'</td>'+
+        '<td><span class="note" title="'+esc(r.note)+'">'+esc((r.note||'').slice(0,120))+'</span></td>'+
+      '</tr>';
+    }).join('');
+  }
+
+  async function exportCsv(){
+    var btn=event.target; btn.disabled=true; btn.textContent='Exportuji…';
+    try{
+      var all=[],page=1,pages=1,cap=8000;
+      do{
+        var save=state.page; state.page=page;
+        var d=await api('/crm-leads?'+qs()); state.page=save;
+        all=all.concat(d.rows); pages=d.pages; page++;
+      }while(page<=pages && all.length<cap);
+      var cols=['first_name','last_name','email','phone','city','country','segment','status','owner_name','source','dup_count','note'];
+      var head=['Jméno','Příjmení','Email','Telefon','Město','Země','Segment','Stav','Obchodník','Zdroj','Duplikátů','Poznámka'];
+      var q=function(v){v=String(v==null?'':v).replace(/"/g,'""');return '"'+v+'"';};
+      var csv=head.map(q).join(',')+'\n'+all.map(function(r){return cols.map(function(c){return q(r[c]);}).join(',');}).join('\n');
+      var blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'});
+      var a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='databaze_leadu.csv';a.click();
+    }catch(e){alert('Export selhal: '+e.message);}
+    finally{btn.disabled=false;btn.textContent='⬇️ Export CSV';}
+  }
+
+  (async function(){ try{ await loadStats(); await reload(1);}catch(e){} })();
+</script>
+</body>
+</html>

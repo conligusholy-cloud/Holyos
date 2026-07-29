@@ -5893,3 +5893,42 @@ model SalesReview {
   @@index([person_id, kind])
   @@map("sales_reviews")
 }
+
+// =============================================================================
+// OBCHOD — CRM databáze leadů (import z předchozího CRM, po deduplikaci)
+// =============================================================================
+// Vyčištěné a informačně sloučené kontakty ze staré databáze. Plní import skript
+// scripts/import-crm-leads.js. Segment se počítá ze stavu; dedup_key je
+// normalizovaný telefon nebo e-mail (duplicity se slučují do jednoho záznamu).
+model CrmLead {
+  id        Int    @id @default(autoincrement())
+  dedup_key String @unique @db.VarChar(140) // "t:<9 číslic>" | "e:<email>" | "r:<row>"
+
+  first_name String? @db.VarChar(200)
+  last_name  String? @db.VarChar(200)
+  email      String? @db.VarChar(255)
+  phone      String? @db.VarChar(60)
+  city       String? @db.VarChar(200)
+  country    String? @db.VarChar(120)
+
+  status      String? @db.VarChar(60) // původní Stav z CRM
+  // horky | volat | nedovolano | novy | nezajem | smlouva | ostatni
+  segment     String  @default("ostatni") @db.VarChar(20)
+  contactable Boolean @default(false)
+
+  owner_name String? @db.VarChar(200) // obchodník z CRM (sloupec Typ)
+  source     String? @db.VarChar(300) // INFO - reklama (kampaň/zdroj)
+  note       String? @db.Text // sloučené poznámky
+  dup_count  Int     @default(0) // kolik duplicit sloučeno do tohoto záznamu
+
+  crm_created_at DateTime?
+  imported_at    DateTime  @default(now())
+  created_at     DateTime  @default(now())
+  updated_at     DateTime  @updatedAt
+
+  @@index([segment])
+  @@index([contactable])
+  @@index([country])
+  @@index([owner_name])
+  @@map("crm_leads")
+}

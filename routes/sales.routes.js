@@ -186,6 +186,60 @@ router.post('/webhook/linkedin', async (req, res) => {
 // ─── Od tady všechno za přihlášením ──────────────────────────────────────
 router.use(requireAuth);
 
+// ═══════════════════════════════════════════════════════════════════════════
+// CRM DATABÁZE LEADŮ (crm_leads) — import ze starého CRM po deduplikaci
+// ═══════════════════════════════════════════════════════════════════════════
+const CRM_SEGMENTS = ['horky', 'volat', 'nedovolano', 'novy', 'nezajem', 'smlouva', 'ostatni'];
+
+// GET /api/sales/crm-leads/stats — KPI + rozpady (segment, země, zdroj, obchodník)
+router.get('/crm-leads/stats', async (req, res, next) => {
+  try {
+    const [total, contactable, dupAgg, bySeg, byCountry, byOwner] = await Promise.all([
+      prisma.crmLead.count(),
+      prisma.crmLead.count({ where: { contactable: true } }),
+      prisma.crmLead.aggregate({ _sum: { dup_count: true } }),
+      prisma.crmLead.groupBy({ by: ['segment'], _count: { _all: true } }),
+      prisma.crmLead.groupBy({ by: ['country'], _count: { _all: true } }),
+      prisma.crmLead.groupBy({ by: ['owner_name'], _count: { _all: true } }),
+    ]);
+    const seg = {}; bySeg.forEach((r) => { seg[r.segment || 'ostatni'] = r._count._all; });
+    const country = byCountry.map((r) => ({ country: r.country || '—', count: r._count._all })).sort((a, b) => b.count - a.count).slice(0, 15);
+    const owner = byOwner.map((r) => ({ owner: r.owner_name || '—', count: r._count._all })).sort((a, b) => b.count - a.count).slice(0, 15);
+    res.json({ ok: true, total, contactable, merged_duplicates: (dupAgg._sum.dup_count || 0), segments: seg, by_country: country, by_owner: owner });
+  } catch (err) { next(err); }
+});
+
+// GET /api/sales/crm-leads — seznam s filtry a stránkováním
+//   ?segment=&country=&owner=&q=&contactable=1&page=1&pageSize=50
+router.get('/crm-leads', async (req, res, next) => {
+  try {
+    const q = req.query || {};
+    const where = {};
+    if (q.segment && CRM_SEGMENTS.indexOf(String(q.segment)) >= 0) where.segment = String(q.segment);
+    if (q.country) where.country = String(q.country);
+    if (q.owner) where.owner_name = String(q.owner);
+    if (q.contactable === '1' || q.contactable === 'true') where.contactable = true;
+    if (q.q) {
+      const s = String(q.q).trim();
+      where.OR = [
+        { first_name: { contains: s, mode: 'insensitive' } },
+        { last_name: { contains: s, mode: 'insensitive' } },
+        { email: { contains: s, mode: 'insensitive' } },
+        { phone: { contains: s } },
+        { city: { contains: s, mode: 'insensitive' } },
+      ];
+    }
+    const page = Math.max(1, Number(q.page) || 1);
+    const pageSize = Math.min(200, Math.max(10, Number(q.pageSize) || 50));
+    const segOrder = { horky: 0, volat: 1, nedovolano: 2, novy: 3, nezajem: 4, smlouva: 5, ostatni: 6 };
+    const [total, rows] = await Promise.all([
+      prisma.crmLead.count({ where }),
+      prisma.crmLead.findMany({ where, orderBy: [{ segment: 'asc' }, { dup_count: 'desc' }, { id: 'asc' }], skip: (page - 1) * pageSize, take: pageSize }),
+    ]);
+    res.json({ ok: true, total, page, pageSize, pages: Math.ceil(total / pageSize), rows });
+  } catch (err) { next(err); }
+});
+
 // GET /api/sales/contacts — seznam s filtry (role-aware)
 //   - admin / vedoucí obchodu: vidí vše, lze filtrovat ?seller_id=
 //   - obchodník: jen kontakty, kde je sám přidělen a ZÁROVEŇ není sdílený
