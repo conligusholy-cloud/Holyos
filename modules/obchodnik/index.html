@@ -132,10 +132,14 @@
   <div class="modal" id="add-modal">
     <div class="sheet">
       <h2>Nový kontakt</h2>
-      <div class="field"><label>Jméno</label><input class="qinput" id="a-name" placeholder="Jméno / firma"></div>
+      <div class="field"><label>Jméno</label><input class="qinput" id="a-first" placeholder="Jméno"></div>
+      <div class="field"><label>Příjmení</label><input class="qinput" id="a-last" placeholder="Příjmení"></div>
+      <div class="field"><label>Firma</label><input class="qinput" id="a-company" placeholder="Firma (nepovinné)"></div>
       <div class="field"><label>E-mail</label><input class="qinput" id="a-email" type="email" placeholder="email@…" inputmode="email"></div>
       <div class="field"><label>Telefon</label><div style="display:flex;gap:8px"><select id="a-dial" style="flex:0 0 120px"></select><input class="qinput" id="a-phone" type="tel" placeholder="číslo" inputmode="tel" style="flex:1"></div></div>
       <p style="font-size:12px;color:var(--muted);margin:6px 0 0">Povinný je aspoň jeden kontakt — e-mail <b>nebo</b> telefon.</p>
+      <div class="field"><label>Město</label><input class="qinput" id="a-city" placeholder="Město"></div>
+      <div class="field"><label>Země</label><input class="qinput" id="a-country" placeholder="Země"></div>
       <div class="field"><label>Jazyk</label><select id="a-lang"></select></div>
       <div class="actions-row">
         <button class="btn btn-g" style="flex:1" onclick="closeAdd()">Zrušit</button>
@@ -149,9 +153,14 @@
     <div class="sheet">
       <h2>Údaje kontaktu</h2>
       <p id="e-created" style="font-size:12px;color:var(--muted);margin:0 0 12px"></p>
-      <div class="field"><label>Jméno / firma</label><input class="qinput" id="e-name" placeholder="Jméno / firma"></div>
+      <div class="field"><label>Jméno</label><input class="qinput" id="e-first" placeholder="Jméno"></div>
+      <div class="field"><label>Příjmení</label><input class="qinput" id="e-last" placeholder="Příjmení"></div>
+      <div class="field"><label>Firma</label><input class="qinput" id="e-company" placeholder="Firma (nepovinné)"></div>
       <div class="field"><label>E-mail</label><input class="qinput" id="e-email" type="email" placeholder="email@…" inputmode="email"></div>
       <div class="field"><label>Telefon</label><div style="display:flex;gap:8px"><select id="e-dial" style="flex:0 0 120px"></select><input class="qinput" id="e-phone" type="tel" placeholder="číslo" inputmode="tel" style="flex:1"></div></div>
+      <p style="font-size:12px;color:var(--muted);margin:6px 0 0">Povinný je aspoň jeden kontakt — e-mail <b>nebo</b> telefon.</p>
+      <div class="field"><label>Město</label><input class="qinput" id="e-city" placeholder="Město"></div>
+      <div class="field"><label>Země</label><input class="qinput" id="e-country" placeholder="Země"></div>
       <div class="field"><label>Jazyk</label><select id="e-lang"></select></div>
       <div class="actions-row">
         <button class="btn btn-g" style="flex:1" onclick="closeEdit()">Zrušit</button>
@@ -1007,7 +1016,12 @@
   function openAdd(){ document.getElementById('a-err').textContent=''; document.getElementById('add-modal').classList.add('open'); }
   function closeAdd(){ document.getElementById('add-modal').classList.remove('open'); }
   async function saveAdd(){
-    var name = document.getElementById('a-name').value.trim();
+    var first = document.getElementById('a-first').value.trim();
+    var last = document.getElementById('a-last').value.trim();
+    var company = document.getElementById('a-company').value.trim();
+    var city = document.getElementById('a-city').value.trim();
+    var country = document.getElementById('a-country').value.trim();
+    var name = [first, last].filter(Boolean).join(' ').trim() || company;
     var email = document.getElementById('a-email').value.trim();
     var phone = combinePhone(document.getElementById('a-dial').value, document.getElementById('a-phone').value);
     var lang = document.getElementById('a-lang').value;
@@ -1016,14 +1030,14 @@
     if (!email && !phone){ errEl.textContent='Zadej aspoň jeden kontakt — e-mail nebo telefon.'; return; }
     var btn = document.getElementById('a-save'); btn.disabled=true; btn.textContent='Ukládám…';
     try {
-      var r = await api('/leads', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ name:name, email:email, lang:lang, phone:phone }) });
+      var r = await api('/leads', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ name:name, first_name:first, last_name:last, company:company, city:city, country:country, email:email, lang:lang, phone:phone }) });
       var j = await r.json().catch(function(){return {};});
       if (!r.ok){
         var msg = esc(j.error || ('Chyba HTTP '+r.status));
         if (j.owner_email){ msg += ' <a href="mailto:'+esc(j.owner_email)+'?subject='+encodeURIComponent('Compounder kontakt: '+email)+'" style="color:var(--primary);text-decoration:underline">Napsat kolegovi</a>'; }
         errEl.innerHTML = msg; return;
       }
-      document.getElementById('a-name').value=''; document.getElementById('a-email').value=''; document.getElementById('a-phone').value='';
+      ['a-first','a-last','a-company','a-city','a-country','a-email','a-phone'].forEach(function(id){ document.getElementById(id).value=''; });
       closeAdd(); await load();
     } catch(e){ errEl.textContent='Nepodařilo se uložit.'; }
     finally { btn.disabled=false; btn.textContent='Uložit kontakt'; }
@@ -1034,7 +1048,14 @@
     var l = state.leads.find(function(x){return x.id===id;}); if (!l) return;
     editingId = id;
     if (!document.getElementById('e-lang').options.length){ document.getElementById('e-lang').innerHTML = Object.keys(LANGS).map(function(k){ return '<option value="'+k+'">'+(k?k.toUpperCase()+' · ':'')+LANGS[k]+'</option>'; }).join(''); }
-    document.getElementById('e-name').value = l.name || '';
+    // U starších kontaktů (jen name, bez strukturovaných polí) předvyplň jméno z name,
+    // ať se při uložení neztratí a jde rovnou rozdělit.
+    var hasStructured = l.first_name || l.last_name || l.company;
+    document.getElementById('e-first').value = l.first_name || (hasStructured ? '' : (l.name || ''));
+    document.getElementById('e-last').value = l.last_name || '';
+    document.getElementById('e-company').value = l.company || '';
+    document.getElementById('e-city').value = l.city || '';
+    document.getElementById('e-country').value = l.country || '';
     document.getElementById('e-email').value = l.email || '';
     var sp = splitPhone(l.phone || '');
     document.getElementById('e-dial').innerHTML = dialOptions(sp.dial);
@@ -1047,21 +1068,27 @@
   function closeEdit(){ document.getElementById('edit-modal').classList.remove('open'); editingId = null; }
   async function saveEdit(){
     if (editingId == null) return;
-    var name = document.getElementById('e-name').value.trim();
+    var cur = state.leads.find(function(x){return x.id===editingId;}) || {};
+    var first = document.getElementById('e-first').value.trim();
+    var last = document.getElementById('e-last').value.trim();
+    var company = document.getElementById('e-company').value.trim();
+    var city = document.getElementById('e-city').value.trim();
+    var country = document.getElementById('e-country').value.trim();
+    var name = [first, last].filter(Boolean).join(' ').trim() || company || (cur.name || '');
     var email = document.getElementById('e-email').value.trim();
     var phone = combinePhone(document.getElementById('e-dial').value, document.getElementById('e-phone').value);
     var lang = document.getElementById('e-lang').value;
     var errEl = document.getElementById('e-err');
-    if (!name){ errEl.textContent = 'Zadej jméno.'; return; }
+    if (!name){ errEl.textContent = 'Zadej jméno, příjmení nebo firmu.'; return; }
     if (email && email.indexOf('@')===-1){ errEl.textContent = 'Neplatný e-mail.'; return; }
     if (!email && !phone){ errEl.textContent = 'Zadej aspoň e-mail nebo telefon.'; return; }
     var btn = document.getElementById('e-save'); btn.disabled=true; btn.textContent='Ukládám…';
     try {
-      var r = await api('/leads/'+editingId, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ name:name, email:email||null, phone:phone||null, lang:lang||null }) });
+      var r = await api('/leads/'+editingId, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ name:name, first_name:first||null, last_name:last||null, company:company||null, city:city||null, country:country||null, email:email||null, phone:phone||null, lang:lang||null }) });
       var j = await r.json().catch(function(){return {};});
       if (!r.ok){ errEl.textContent = j.error || ('Chyba HTTP '+r.status); return; }
       var l = state.leads.find(function(x){return x.id===editingId;});
-      if (l){ l.name=name; l.email=email||null; l.phone=phone||null; l.lang=lang||null; }
+      if (l){ l.name=name; l.first_name=first||null; l.last_name=last||null; l.company=company||null; l.city=city||null; l.country=country||null; l.email=email||null; l.phone=phone||null; l.lang=lang||null; }
       closeEdit(); render();
     } catch(e){ errEl.textContent = 'Uložení selhalo.'; }
     finally { btn.disabled=false; btn.textContent='Uložit údaje'; }

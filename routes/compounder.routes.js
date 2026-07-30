@@ -962,7 +962,14 @@ router.post('/set-password', async (req, res, next) => {
 router.post('/leads', requireAuth, async (req, res, next) => {
   try {
     const b = req.body || {};
-    const name = String(b.name || '').trim().slice(0, 255);
+    const firstName = String(b.first_name || '').trim().slice(0, 120);
+    const lastName = String(b.last_name || '').trim().slice(0, 120);
+    const company = String(b.company || '').trim().slice(0, 200);
+    const city = String(b.city || '').trim().slice(0, 120);
+    const country = String(b.country || '').trim().slice(0, 120);
+    // Zobrazované jméno: „Jméno Příjmení" > firma > explicitně poslané name.
+    const composed = [firstName, lastName].filter(Boolean).join(' ').trim() || company;
+    const name = (composed || String(b.name || '').trim()).slice(0, 255);
     const email = String(b.email || '').trim().toLowerCase().slice(0, 255);
     const role = (b.role === 'distributor') ? 'distributor' : 'compounder';
     const lang = b.lang ? String(b.lang).trim().toLowerCase().slice(0, 10) : null;
@@ -1003,6 +1010,8 @@ router.post('/leads', requireAuth, async (req, res, next) => {
     const lead = await prisma.compounderLead.create({
       data: {
         name: name || email || phone, email: email || null, role, lang, phone, source: 'admin', status: 'new',
+        first_name: firstName || null, last_name: lastName || null, company: company || null,
+        city: city || null, country: country || null,
         created_by_person_id: myPersonId,
         owner_person_id: myPersonId, // kdo kontakt založil, ten je i jeho obchodník (lze přepsat)
       },
@@ -1708,6 +1717,11 @@ const patchSchema = z.object({
   owner_person_id: z.number().int().positive().optional().nullable(),
   external_rep_id: z.number().int().positive().optional().nullable(),
   name: z.string().trim().min(1).max(255).optional(),
+  first_name: z.string().trim().max(120).optional().nullable(),
+  last_name: z.string().trim().max(120).optional().nullable(),
+  company: z.string().trim().max(200).optional().nullable(),
+  city: z.string().trim().max(120).optional().nullable(),
+  country: z.string().trim().max(120).optional().nullable(),
   email: z.string().trim().max(255).optional().nullable(),
   phone: z.string().trim().max(40).optional().nullable(),
   // Viditelné sekce portálu: pole klíčů skupin nebo CSV. [] => jen úvodní filozofie.
@@ -1743,6 +1757,11 @@ router.patch('/leads/:id', requireAuth, async (req, res, next) => {
     }
     if (parsed.data.owner_person_id) data.external_rep_id = null;
     if (parsed.data.name !== undefined) data.name = parsed.data.name;
+    if (parsed.data.first_name !== undefined) data.first_name = parsed.data.first_name || null;
+    if (parsed.data.last_name !== undefined) data.last_name = parsed.data.last_name || null;
+    if (parsed.data.company !== undefined) data.company = parsed.data.company || null;
+    if (parsed.data.city !== undefined) data.city = parsed.data.city || null;
+    if (parsed.data.country !== undefined) data.country = parsed.data.country || null;
     if (parsed.data.email !== undefined) {
       const em = parsed.data.email ? String(parsed.data.email).trim().toLowerCase() : '';
       if (em && em.indexOf('@') === -1) return res.status(400).json({ error: 'Neplatný e-mail' });

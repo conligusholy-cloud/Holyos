@@ -5560,7 +5560,14 @@ model EshopSettings {
 // do Compounder Portal. Oddělené od JobApplicant i SalesContact (jiný kontext).
 model CompounderLead {
   id    Int    @id @default(autoincrement())
+  // Zobrazované jméno (složené) — drží se kvůli zpětné kompatibilitě (karty, dedup, notifikace).
   name  String @db.VarChar(255)
+  // Strukturované údaje kontaktu (nepovinné) — jméno, příjmení, firma, město, země.
+  first_name String? @db.VarChar(120)
+  last_name  String? @db.VarChar(120)
+  company    String? @db.VarChar(200)
+  city       String? @db.VarChar(120)
+  country    String? @db.VarChar(120)
   // E-mail je nepovinný — kontakt lze založit i jen s telefonem (aspoň jeden údaj povinný).
   email String? @db.VarChar(255)
   // Telefon z portálu (žádost o kontakt) — uloží si ho lead sám přes tlačítko
