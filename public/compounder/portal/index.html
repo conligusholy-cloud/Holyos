@@ -207,6 +207,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
         <button type="button" class="gear" id="gearBtn" aria-label="Account" title="Account" aria-haspopup="dialog">
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
         </button>
+        <select class="lang-select" id="pCur" aria-label="Currency" title="Měna / Currency"></select>
         <select class="lang-select" id="pLang" aria-label="Language"></select>
       </div>
     </div>
@@ -471,6 +472,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
       <div class="phil-eyebrow" id="ex-eyebrow" style="color:var(--gold,#c9a24b);text-transform:uppercase;letter-spacing:.3em;font-size:12px;font-weight:600">Příklad</div>
       <h2 id="ex-title" style="font-size:clamp(28px,4vw,46px);font-weight:800;color:#fff;margin:6px 0 8px">Poskládejte si svoji budoucí realitu</h2>
       <p id="ex-lead" style="color:var(--muted,#9aa);max-width:680px">Vyberte lokality, které byste chtěli vlastnit. Uvidíte souhrn portfolia a o kolik jste už přišli od založení účtu. Model si uložte — přepočítává se každý den podle aktuálních tržeb.</p>
+      <div id="ex-curbar" style="display:none"></div>
       <div id="ex-wrap">
         <div style="background:radial-gradient(120% 95% at 88% -20%,rgba(201,162,75,.18),rgba(15,15,17,0) 62%),#131316;border:1px solid rgba(201,162,75,.42);border-radius:18px;padding:22px 24px;margin:18px 0">
           <div id="ex-invlabel" style="font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:#f0dfa8;font-weight:700;margin-bottom:10px">Kolik máte v plánu investovat</div>
@@ -915,6 +917,31 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
   }
   pSetLang(pDetect(), null);
 
+  // ——— Centrální měna portálu (řídí Investora, Provozovatele/Ekonomiku, Distributora i Příklad) ———
+  var CUR_SYM = { CZK:'Kč', EUR:'€', USD:'$', GBP:'£' };
+  var PCUR = null;
+  try { PCUR = localStorage.getItem('compounder.cur2') || null; } catch(e){}
+  function pApplyCurToSections(cur){
+    // Investor + Příklad sdílejí OFFERS.cur; Ekonomika/Distributor mají EKO_CUR; hlavička se přepočítá sama.
+    if(typeof OFFERS!=='undefined' && OFFERS){ OFFERS.cur=cur; try{ if(OFFERS.data) renderOffers(); }catch(e){} }
+    try{ if(window.__exSetCur) window.__exSetCur(cur); }catch(e){}
+    try{ if(typeof ekoSetCur==='function') ekoSetCur(cur); }catch(e){}
+  }
+  function pSetCur(cur){
+    if(!CUR_SYM[cur]) return;
+    PCUR=cur; try{ localStorage.setItem('compounder.cur2', cur); }catch(e){}
+    pApplyCurToSections(cur);
+    var sel=document.getElementById('pCur'); if(sel && sel.value!==cur) sel.value=cur;
+  }
+  window.pSetCur=pSetCur;
+  function pBuildCurSelect(){
+    var sel=document.getElementById('pCur'); if(!sel) return;
+    if(!PCUR) PCUR='CZK';
+    sel.innerHTML=['CZK','EUR','USD','GBP'].map(function(c){ return '<option value="'+c+'"'+(c===PCUR?' selected':'')+'>'+CUR_SYM[c]+' '+c+'</option>'; }).join('');
+    sel.addEventListener('change', function(){ pSetCur(sel.value); });
+  }
+  pBuildCurSelect();
+
   var qs = new URLSearchParams(location.search);
   var token = qs.get("t") || localStorage.getItem("compounder.portal.token") || "";
   function showDenied(msg){
@@ -1154,7 +1181,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
     document.body.appendChild(bar);
   }
 
-  var OFFERS = { data:null, cur:'CZK', eur:25, feePerDay:20000, cfg:{ holdHours:1, signDays:1, payDays:1, reblockDays:2 } };
+  var OFFERS = { data:null, cur:(typeof PCUR!=='undefined'&&PCUR)?PCUR:'CZK', eur:25, feePerDay:20000, cfg:{ holdHours:1, signDays:1, payDays:1, reblockDays:2 } };
   function offEsc(x){ return String(x==null?"":x).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
   function offTok(){ try{ return localStorage.getItem("compounder.portal.token")||""; }catch(_){ return ""; } }
   function applyConsultant(){
@@ -1360,7 +1387,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
       .then(function(d){
         if(!d || !d.ok){ box.innerHTML = '<div class="muted">' + pT("p.off.loaderr") + '</div>'; return; }
         OFFERS.data = d.locations || [];
-        OFFERS.cur = (d.defaultCurrency==='EUR') ? 'EUR' : 'CZK';
+        OFFERS.cur = (typeof PCUR!=='undefined' && PCUR) ? PCUR : ((d.defaultCurrency==='EUR') ? 'EUR' : 'CZK');
         OFFERS.eur = d.eurRate || 25;
         OFFERS.rates = d.rates || { EUR: OFFERS.eur };
         OFFERS.feePerDay = d.feePerDayCzk || 20000;
@@ -1406,9 +1433,9 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
     var box = document.getElementById("offers-list");
     if(!box) return;
     var arr = OFFERS.data || [];
-    var toggle = '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">' +
+    // Měnu řídí centrální přepínač v horní liště.
+    var toggle = '<div style="display:flex;justify-content:flex-start;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">' +
       '<span style="font-size:12.5px;color:var(--gold-soft);font-weight:600">' + pT("p.off.vat") + '</span>' +
-      '<span style="display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap"><span style="font-size:12px;color:var(--muted);margin-right:4px">Měna:</span>'+offCurBtn('CZK','Kč')+offCurBtn('EUR','€')+offCurBtn('USD','$')+offCurBtn('GBP','£')+'</span>' +
     '</div>';
     if(!arr.length){ box.innerHTML = toggle + '<div class="muted">' + pT("p.off.empty") + '</div>'; return; }
     box.innerHTML = toggle + arr.map(function(o){
@@ -1773,12 +1800,15 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
       ids.forEach(function(id){ var el = document.getElementById(id); if (el) el.value = el.defaultValue; });
       EKO_CUR = 'EUR'; ekoSwapSymbols(); ekoRenderCur();
       recalc();
+      // Po resetu (tovární hodnoty jsou v EUR) přepočti na globálně zvolenou měnu.
+      try{ if(typeof PCUR!=='undefined' && PCUR && PCUR!=='EUR') ekoSetCur(PCUR); }catch(e){}
     });
     ekoRenderCur();
     // Kurzy z ČNB (přepočet měny); při chybě zůstanou fallback hodnoty.
     fetch('/api/compounder/fx-rates').then(function(r){ return r.json(); }).then(function(j){
       if (j && j.rates) EKO_RATES = Object.assign({ CZK: 1 }, j.rates);
-    }).catch(function(){});
+      try{ if(typeof PCUR!=='undefined' && PCUR && PCUR!==EKO_CUR) ekoSetCur(PCUR); }catch(e){}
+    }).catch(function(){ try{ if(typeof PCUR!=='undefined' && PCUR && PCUR!==EKO_CUR) ekoSetCur(PCUR); }catch(e){} });
     recalc();
   }
   // ——— Měna modelu (přepočet celého modelu dle kurzu ČNB) ———
@@ -1788,13 +1818,9 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
   var EKO_CUR_FIELDS = ['i-machine', 'i-permit', 'i-conn', 'i-spend', 'i-cost'];
   function ekoSym(){ return EKO_SYM[EKO_CUR] || '€'; }
   function ekoRenderCur(){
+    // Měnu řídí centrální přepínač v horní liště → sekční lišta se skrývá.
     var wrap = document.getElementById('eko-cur'); if (!wrap) return;
-    var html = '<span style="font-size:12px;color:var(--muted);margin-right:4px">Měna:</span>';
-    ['CZK', 'EUR', 'USD', 'GBP'].forEach(function(c){
-      var on = c === EKO_CUR;
-      html += '<button type="button" onclick="ekoSetCur(\'' + c + '\')" style="border:1px solid ' + (on ? 'var(--gold)' : 'var(--line)') + ';background:' + (on ? 'var(--gold)' : 'transparent') + ';color:' + (on ? '#241c05' : 'var(--muted)') + ';border-radius:999px;padding:5px 12px;font-size:13px;font-weight:700;cursor:pointer">' + EKO_SYM[c] + '</button>';
-    });
-    wrap.innerHTML = html;
+    wrap.style.display = 'none'; wrap.innerHTML = '';
   }
   function ekoSwapSymbols(){
     var us = document.querySelectorAll('#ekonomika .u-cur');
@@ -2045,6 +2071,25 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
       if(typeof offMoney==='function'){ try{ return offMoney(n); }catch(e){} }
       return Math.round(n).toLocaleString('cs-CZ')+' Kč';
     }
+    // ——— Měna sekce Příklad (sdílí OFFERS.cur + kurzy s Investorem) ———
+    // Investice se drží interně v CZK; do vstupu i výstupů se přepočítává dle kurzu.
+    function exCur(){ return (typeof OFFERS!=='undefined'&&OFFERS&&OFFERS.cur)?OFFERS.cur:'CZK'; }
+    function exRate(){ var c=exCur(); if(c==='CZK') return 1; var r=(typeof offRate==='function')?offRate(c):0; return r>0?r:1; }
+    function exCurSym(){ var c=exCur(); return (typeof OFF_CUR_SYM!=='undefined'&&OFF_CUR_SYM[c])?OFF_CUR_SYM[c]:'Kč'; }
+    function fillInv(){ var ii=document.getElementById('ex-inv'); if(!ii) return; ii.value=(investment==null)?'':Math.round(investment/exRate()).toLocaleString('cs-CZ'); }
+    function exCurBtn(c,label){ var on=exCur()===c; return '<button type="button" data-cur="'+c+'" style="border:1px solid '+(on?'var(--gold)':'var(--line)')+';background:'+(on?'var(--gold)':'transparent')+';color:'+(on?'#241c05':'var(--muted)')+';border-radius:999px;padding:5px 14px;font-size:13px;font-weight:700;cursor:pointer">'+label+'</button>'; }
+    function exRenderCurBar(){
+      // Měnu řídí centrální přepínač v horní liště → sekční lišta se skrývá.
+      var bar=document.getElementById('ex-curbar'); if(bar) bar.style.display='none';
+    }
+    function exSetCur(c){
+      if(typeof OFFERS==='undefined'||!OFFERS) return;
+      OFFERS.cur=c;
+      var cl=document.getElementById('ex-curlbl'); if(cl) cl.textContent=exCurSym();
+      fillInv(); exRenderCurBar();
+      renderList(); recalc();
+    }
+    window.__exSetCur=exSetCur;
     // Jazyk sekce Příklad: cs vs en podle aktuálního jazyka portálu (ostatní → en).
     function exLang(){ return ((document.documentElement.lang||'en').toLowerCase().slice(0,2)==='cs')?'cs':'en'; }
     function exT(cs,en){ return exLang()==='cs'?cs:en; }
@@ -2061,7 +2106,8 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
       };
       Object.keys(S).forEach(function(id){ var el=document.getElementById(id); if(el) el.textContent=exT(S[id][0],S[id][1]); });
       var inv=document.getElementById('ex-inv'); if(inv) inv.placeholder=exT('např. 5 000 000','e.g. 5 000 000');
-      var cl=document.getElementById('ex-curlbl'); if(cl){ var cur=(typeof OFFERS!=='undefined'&&OFFERS&&OFFERS.cur)?OFFERS.cur:'CZK'; cl.textContent=(typeof OFF_CUR_SYM!=='undefined'&&OFF_CUR_SYM[cur])?OFF_CUR_SYM[cur]:'Kč'; }
+      var cl=document.getElementById('ex-curlbl'); if(cl){ cl.textContent=exCurSym(); }
+      exRenderCurBar();
       // Vyčisti cachované karty, ať se přerenderují ve zvoleném jazyce.
       ['ex-today','ex-missed'].forEach(function(id){ var e=document.getElementById(id); if(e) e.innerHTML=''; });
       try{ recalc(); }catch(e){}
@@ -2291,7 +2337,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
     window.__exSave=function(cb){ saveModel(cb); };
     window.__exDiscard=function(){ // zahoď změny → vrať uložený stav
       try{ var sn=JSON.parse(savedSnap||'{}'); selected={}; (sn.c||[]).forEach(function(c){ selected[c]=true; }); investment=(sn.i!=null?sn.i:null); buyDate=sn.d||buyDate;
-        var ii=document.getElementById('ex-inv'); if(ii) ii.value=(investment!=null?investment.toLocaleString('cs-CZ'):'');
+        fillInv();
         var di2=document.getElementById('ex-date'); if(di2&&buyDate) di2.value=buyDate;
         renderList(); recalc(); exToggleResults();
       }catch(e){}
@@ -2301,8 +2347,8 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
     // Dokud zákazník nezadá částku investice, ukazujeme jen vstupní okno; pak odkryjeme výsledky.
     function exToggleResults(){ var r=document.getElementById('ex-results'); if(r) r.style.display=(investment!=null)?'':'none'; }
     function applyInvestment(v, opts){
-      var n=parseInv(v);
-      investment=n;
+      var n=parseInv(v);                              // zadaná částka v aktuální měně
+      investment=(n!=null)?Math.round(n*exRate()):null; // interně uloženo v CZK
       var ii=document.getElementById('ex-inv');
       if(ii && n!=null) ii.value=n.toLocaleString('cs-CZ');
       if(n!=null && !(opts&&opts.keepSelection)) autoBuild();
@@ -2312,7 +2358,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
       }
       exToggleResults();
       renderList(); recalc(); markDirty();
-      try{ if(typeof pTrack==='function' && n!=null) pTrack('example_investment',{ amount:n }); }catch(e){}
+      try{ if(typeof pTrack==='function' && n!=null) pTrack('example_investment',{ amount:investment }); }catch(e){}
     }
     var ii=document.getElementById('ex-inv');
     if(ii) ii.addEventListener('keydown', function(e){ if(e.key==='Enter'){ e.preventDefault(); applyInvestment(ii.value); } });
@@ -2334,12 +2380,19 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
     fetch('/api/compounder/portal/offered-locations?t='+encodeURIComponent(tok),{credentials:'include'})
       .then(function(r){return r.json();})
       .then(function(j){ offer=(j&&j.locations)||[]; offer.forEach(function(o){ byCode[o.code]=o; });
+        // Doplň kurzy/měnu do OFFERS, aby přepínač měny fungoval i bez návštěvy Investora.
+        if(typeof OFFERS!=='undefined' && OFFERS){
+          if(!OFFERS.rates || !Object.keys(OFFERS.rates).length){ OFFERS.rates=(j&&j.rates)||(j&&j.eurRate?{EUR:j.eurRate}:{}); }
+          if(!OFFERS.eur && j&&j.eurRate){ OFFERS.eur=j.eurRate; }
+          if(!OFFERS.cur){ OFFERS.cur=(j&&j.defaultCurrency==='EUR')?'EUR':'CZK'; }
+        }
+        exRenderCurBar();
         return fetch('/api/compounder/portal/example?t='+encodeURIComponent(tok),{credentials:'include'}).then(function(r){return r.ok?r.json():null;}); })
       .then(function(e){
         if(e&&e.model&&Array.isArray(e.model.codes)){ e.model.codes.forEach(function(c){ if(byCode[c]) selected[c]=true; }); }
         if(e&&e.model&&e.model.buyDate&&di){ var _bd=String(e.model.buyDate).slice(0,10); if(di.min && _bd<di.min) _bd=di.min; di.value=_bd; buyDate=_bd; }
         if(e&&e.accountCreatedAt) acct=e.accountCreatedAt;
-        if(e&&e.model&&e.model.investment!=null){ investment=Number(e.model.investment)||null; var _ii=document.getElementById('ex-inv'); if(_ii&&investment!=null) _ii.value=investment.toLocaleString('cs-CZ'); }
+        if(e&&e.model&&e.model.investment!=null){ investment=Number(e.model.investment)||null; fillInv(); }
         if(e&&e.model&&Array.isArray(e.model.invHistory)) invHistory=e.model.invHistory;
         exToggleResults();
         renderList(); exApplyLang();
