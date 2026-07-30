@@ -229,8 +229,8 @@ async function gatherPlanContext(personId) {
     where: { owner_person_id: personId, is_test: false },
     select: {
       id: true, name: true, email: true, phone: true, role: true, lang: true, status: true,
-      notes: true, activity_log: true, created_at: true, updated_at: true,
-      access_sent_count: true, access_last_sent_at: true,
+      notes: true, activity_log: true, created_at: true, updated_at: true, source: true,
+      access_sent_count: true, access_last_sent_at: true, access_approved_at: true,
     },
     orderBy: { updated_at: 'desc' }, take: 300,
   });
@@ -248,15 +248,33 @@ async function gatherPlanContext(personId) {
   const resvByLead = {};
   resv.forEach((r) => { (resvByLead[r.lead_id] || (resvByLead[r.lead_id] = [])).push(r); });
 
+  // Kdo už má přístup do portálu? Byl v portálu (portal_view) nebo se registroval
+  // (register_success). Slouží k tomu, aby se nezakládal úkol „poslat přístup"
+  // někomu, kdo přístup dávno má (i když se ručně neodeslala pozvánka).
+  const portalSeen = new Set();
+  if (leadIds.length) {
+    try {
+      const pv = await prisma.compounderEvent.findMany({
+        where: { event: { in: ['portal_view', 'register_success'] }, OR: leadIds.map((id) => ({ props: { path: ['lead_id'], equals: id } })) },
+        select: { props: true }, take: 20000,
+      });
+      pv.forEach((e) => { const lid = e.props && e.props.lead_id; if (lid != null) portalSeen.add(lid); });
+    } catch (e) { /* best-effort */ }
+  }
+
   const nowMs = Date.now();
   const leadFacts = leads.slice(0, 120).map((l) => {
     const lastAct = l.activity_log ? lastActivityLines(l.activity_log, 4) : [];
     const daysSinceUpdate = l.updated_at ? Math.floor((nowMs - new Date(l.updated_at).getTime()) / 86400000) : null;
+    // „Má přístup do portálu" = pozvánka odeslána / byl v portálu / registroval se /
+    // schválen přístup / registrace z webu. Kdo přístup má, nedostává úkol na pozvánku.
+    const hasPortalAccess = (l.access_sent_count || 0) > 0 || !!l.access_last_sent_at || !!l.access_approved_at || portalSeen.has(l.id) || l.source === 'web';
     return {
       id: l.id, name: l.name, status: l.status, role: l.role, lang: l.lang,
       has_phone: !!l.phone, has_email: !!l.email,
       days_since_update: daysSinceUpdate,
       invite_sent: l.access_sent_count || 0,
+      has_portal_access: hasPortalAccess,
       recent_activity: lastAct,
       notes: (l.notes || '').slice(0, 300),
       reservations: (resvByLead[l.id] || []).map((r) => ({ kiosk: r.kiosk_code, status: r.status, reserved_until: r.reserved_until, sign_until: r.sign_until, fee_until: r.fee_until })),
@@ -274,6 +292,10 @@ async function gatherPlanContext(personId) {
     const testSet = new Set(testLeads.map((x) => x.id));
     carryOver = carryOver.filter((t) => !t.lead_id || !testSet.has(t.lead_id));
   }
+  // Vyřaď přenesené úkoly „poslat přístup do portálu" u leadů, kteří přístup už mají
+  // (jinak by se chybně vygenerovaný invite úkol vracel den co den).
+  const accessibleIds = new Set(leadFacts.filter((l) => l.has_portal_access).map((l) => l.id));
+  carryOver = carryOver.filter((t) => !(t.kind === 'invite' && t.lead_id && accessibleIds.has(t.lead_id)));
 
   // Kalendář — schůzky obchodníka (dnes + příštích 7 dní). Řídí strukturu dne.
   const todayStart = dayDate(tzTodayStr());
@@ -320,6 +342,7 @@ async function planDayAI(person, ctx) {
     + '(B) HORKÉ LEADY A LHŮTY: uzavři/posuň leady s blížící se lhůtou (podpis/poplatek/expirace rezervace) a evidentně horké kontakty. '
     + '(C) NÁBOR A DOMLOUVÁNÍ SCHŮZEK = VĚTŠINA DNE: veškerý zbývající čas (drtivá většina) musí jít do aktivního PRODEJE — oslovování a nábor NOVÝCH kontaktů (kind "prospecting") a domlouvání nových schůzek/obchodů (kind "meeting"/"call"). I když má obchodník málo leadů nebo málo schůzek, NIKDY nenech den poloprázdný: doplň konkrétní náborové úkoly s čísly (např. "Oslov 15 nových potenciálních provozoven/investorů", "Domluv aspoň 3 nové schůzky", "Zavolej 10 studeným kontaktům"). '
     + 'Pravidla výstupu: 1) 5–9 konkrétních úkolů, žádná vata, každý s jasnou akcí a měřitelným cílem (počty oslovení, hovorů, domluvených schůzek). 2) NIKDY duplicitní ani skoro shodné úkoly; na jeden lead max JEDEN úkol (slučuj kroky). 3) Když se úkol týká konkrétního leadu, uveď lead_id; náborové úkoly mají lead_id null. 4) VŠE je jen pro tohoto obchodníka a jeho vlastní kontakty (v kontextu jsou jen jeho leady a jeho kalendář); nikdy neplánuj cizí kontakty ani práci jiných. 5) Priorita 1 = dnešní schůzky a dnešní lhůty, 2 = horké leady, 3 = nábor a domlouvání schůzek. '
+    + '6a) PŘÍSTUP DO PORTÁLU: úkol typu "invite" (poslat přístup / přihlašovací odkaz do portálu) navrhuj VÝHRADNĚ pro leady, které mají has_portal_access=false. Komu už has_portal_access=true (byl v portálu, registroval se nebo mu pozvánka byla odeslána), tomu NIKDY nedávej úkol na poslání přístupu — místo toho zavolej/posuň dál. '
     + '6) ČASOVÁ KAPACITA: obchodník má dnes ' + ctx.capacity.work_minutes_per_day + ' minut (' + ctx.capacity.work_hours_per_day + ' h, Po–Pá). Každému úkolu přiřaď realistický odhad trvání est_min a součet est_min všech úkolů musí být zhruba roven denní kapacitě (nepřeplňuj ani nenech den poloprázdný). Aktivity dimenzuj tak, aby vedly k plnění DENNÍCH kvót z daily_quota (nové kontakty/konverze/rezervace/obrat na den) — pokud kvóty ještě nejsou splněné, věnuj jim odpovídající čas. '
     + 'Odpověz POUZE platným JSON bez markdownu ve tvaru: {"focus":"<1-2 věty zaměření dne, ať obchodník ví, na co dnes zabrat>","tasks":[{"kind":"<call|followup|invite|close|reservation|meeting|prospecting|admin|other>","title":"<krátce, konkrétně, s číslem kde to dává smysl>","detail":"<co přesně udělat, 1-2 věty>","reasoning":"<proč, krátce>","priority":<1-5>,"est_min":<odhad minut>,"lead_id":<číslo nebo null>}]}. Piš česky.';
   const usr = 'Obchodník: ' + person.name + '\nKontext (JSON):\n' + JSON.stringify(ctx);
@@ -355,7 +378,7 @@ function planDayFallback(ctx) {
     const r = (l.reservations || [])[0];
     if (r && (r.status === 'reserved' || r.status === 'active')) {
       tasks.push({ kind: 'close', title: 'Dotáhnout rezervaci ' + r.kiosk + ' – ' + l.name, detail: 'Hlídat podpis a poplatek, popohnat zákazníka.', reasoning: 'Běžící rezervace se lhůtou.', priority: 1, est_min: 45, lead_id: l.id });
-    } else if (l.invite_sent === 0 && l.has_email) {
+    } else if (!l.has_portal_access && l.has_email) {
       tasks.push({ kind: 'invite', title: 'Poslat přístup do portálu – ' + l.name, detail: 'Odeslat přihlašovací odkaz a hned zavolat.', reasoning: 'Ještě nedostal pozvánku.', priority: 2, est_min: 20, lead_id: l.id });
     } else if ((l.days_since_update || 0) >= 7) {
       tasks.push({ kind: 'followup', title: 'Oživit kontakt – ' + l.name, detail: 'Zavolat/napsat, zjistit stav a posunout k schůzce.', reasoning: 'Přes týden beze změny.', priority: 3, est_min: 20, lead_id: l.id });
