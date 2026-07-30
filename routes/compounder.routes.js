@@ -1649,6 +1649,15 @@ router.get('/leads', requireAuth, async (req, res, next) => {
       orderBy: { created_at: 'desc' },
       take: 500,
     });
+    // Model zákazníka (skládačka portfolia): odvodíme „má model" + čas posledního uložení.
+    // Samotný example_model do seznamu neposíláme (detail si ho načítá zvlášť) — šetří payload.
+    leads.forEach((l) => {
+      let m = null; try { m = l.example_model ? JSON.parse(l.example_model) : null; } catch (e) { m = null; }
+      l.hasModel = !!m;
+      l.modelSavedAt = (m && m.savedAt) ? m.savedAt : null;
+      l.modelSeen = false; // doplní se z eventů admin_model_view níže (když jsou k dispozici)
+      l.example_model = undefined;
+    });
     // Levná míra zahřátí z eventů otagovaných lead_id (bez AI) — pro rozumný počet leadů.
     if (leads.length && leads.length <= 200) {
       const ids = leads.map((l) => l.id);
@@ -1659,6 +1668,7 @@ router.get('/leads', requireAuth, async (req, res, next) => {
       });
       const c = {};
       const last = {}; // poslední aktivita (max created_at) na leada
+      const mv = {};   // poslední „admin se podíval na model" (max created_at) na leada
       evs.forEach((e) => {
         const lid = e.props && e.props.lead_id; if (lid == null) return;
         const x = c[lid] || (c[lid] = { portal: 0, doc: 0, loc: 0, contact: 0 });
@@ -1668,6 +1678,7 @@ router.get('/leads', requireAuth, async (req, res, next) => {
         else if (e.event === 'contact_request') x.contact++;
         const t = e.created_at ? new Date(e.created_at).getTime() : 0;
         if (t && (!last[lid] || t > last[lid])) last[lid] = t;
+        if (e.event === 'admin_model_view' && t && (!mv[lid] || t > mv[lid])) mv[lid] = t;
       });
       leads.forEach((l) => {
         const x = c[l.id] || { portal: 0, doc: 0, loc: 0, contact: 0 };
@@ -1682,6 +1693,13 @@ router.get('/leads', requireAuth, async (req, res, next) => {
         l.warmthPct = Math.max(0, Math.min(100, s));
         l.requestedContact = requested;
         l.hasPhone = !!l.phone;
+        // Viděl admin aktuální model? admin_model_view musí být novější než poslední
+        // uložení modelu zákazníkem (u starých modelů bez savedAt stačí jakékoli zobrazení).
+        if (l.hasModel) {
+          const seenT = mv[l.id] || 0;
+          const savedT = l.modelSavedAt ? new Date(l.modelSavedAt).getTime() : 0;
+          l.modelSeen = seenT > 0 && (savedT === 0 || seenT >= savedT);
+        }
       });
     }
     // Dohledej jména přiřazených obchodníků (owner) — jedním dotazem.
@@ -1884,6 +1902,12 @@ router.get('/leads/:id/example-model', requireAuth, async (req, res, next) => {
     const history = (model && Array.isArray(model.history)) ? model.history : [];
     const invHistory = (model && Array.isArray(model.invHistory)) ? model.invHistory : [];
     const current = model ? { codes: model.codes || [], investment: model.investment || null, buyDate: model.buyDate || null, savedAt: model.savedAt || null } : null;
+    // Záznam „admin se podíval na model" — jen když model existuje. Slouží k odznaku
+    // viděno/neviděno v seznamu leadů (porovnává se s časem posledního uložení modelu).
+    if (model) {
+      const viewer = (req.user && req.user.person) ? req.user.person.id : (req.user ? req.user.id : null);
+      prisma.compounderEvent.create({ data: { sid: 'admin-modelview-' + id, event: 'admin_model_view', props: { lead_id: id, by: viewer }, path: '/admin' } }).catch(() => {});
+    }
     res.json({ ok: true, showExample: !!lead.show_example, accountCreatedAt: lead.created_at, hasModel: !!model, current, history, invHistory });
   } catch (err) { next(err); }
 });
