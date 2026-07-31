@@ -33,28 +33,55 @@ function tzDayKey() {
   return new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
 }
 
-async function runNow() {
-  let sendFn = null;
-  try { sendFn = require('../../routes/compounder.routes').sendLossEmailForLead; } catch (e) { /* ignore */ }
-  if (typeof sendFn !== 'function') { console.error('[loss-email] sendLossEmailForLead není dostupná.'); return { ok: false }; }
-  // Kandidáti: všichni leadi s e-mailem. Uložený model NENÍ podmínka — komu chybí,
-  // spočítá se ztráta z celé zpřístupněné nabídky (usedWholeOffer). Tvrdé strážce
-  // dořeší sama funkce: musel být v portálu (portal_view), nesmí vlastnit lokalitu
-  // a musí jít spočítat nenulový roční výnos.
-  const leads = await prisma.compounderLead.findMany({
-    where: { email: { not: null } },
-    select: { id: true }, take: 5000,
-  }).catch(() => []);
-  let sent = 0, skipped = 0, failed = 0;
-  for (const l of leads) {
-    try {
-      const r = await sendFn(l.id);
-      if (r && r.ok) sent++; else skipped++;
-    } catch (e) { failed++; console.error('[loss-email] lead ' + l.id + ':', e.message); }
-  }
-  _last = { at: new Date(), sent, skipped, failed, candidates: leads.length };
-  console.log(`[loss-email] Týdenní rozesílka: odesláno ${sent}, přeskočeno ${skipped}, chyb ${failed} (z ${leads.length} kandidátů).`);
-  return _last;
+let _running = false;
+// opts.skipSentWithinHours: nepřeposílat leadům, kterým loss e-mail odešel za posledních
+// N hodin (kvůli ručnímu „doposlání" bez duplicit). 0/undefined = poslat všem kandidátům.
+async function runNow(opts) {
+  opts = opts || {};
+  if (_running) { console.warn('[loss-email] Rozesílka už běží — druhý běh přeskočen.'); return { ok: false, busy: true }; }
+  _running = true;
+  try {
+    let sendFn = null;
+    try { sendFn = require('../../routes/compounder.routes').sendLossEmailForLead; } catch (e) { /* ignore */ }
+    if (typeof sendFn !== 'function') { console.error('[loss-email] sendLossEmailForLead není dostupná.'); return { ok: false }; }
+    // Kandidáti: všichni leadi s e-mailem. Uložený model NENÍ podmínka — komu chybí,
+    // spočítá se ztráta z celé zpřístupněné nabídky (usedWholeOffer). Tvrdé strážce
+    // dořeší sama funkce: musel být v portálu (portal_view), nesmí vlastnit lokalitu
+    // a musí jít spočítat nenulový roční výnos.
+    const leads = await prisma.compounderLead.findMany({
+      where: { email: { not: null } },
+      select: { id: true }, take: 5000,
+    }).catch(() => []);
+    // Nepřeposílat těm, kdo loss e-mail dostali v posledních N hodinách.
+    const skipHours = Number(opts.skipSentWithinHours) || 0;
+    const recent = new Set();
+    if (skipHours > 0) {
+      const since = new Date(Date.now() - skipHours * 3600 * 1000);
+      const evs = await prisma.compounderEvent.findMany({
+        where: { event: 'loss_email_sent', created_at: { gte: since } }, select: { props: true }, take: 20000,
+      }).catch(() => []);
+      evs.forEach((e) => { const lid = e.props && e.props.lead_id; if (lid != null) recent.add(lid); });
+    }
+    const toProcess = leads.filter((l) => !recent.has(l.id));
+    const skippedRecent = leads.length - toProcess.length;
+    // Náhled bez odeslání: nic neposílá, jen spočítá kolik by se zkusilo (finální
+    // strážce portal_view/owned/yield se uplatní až při reálném odeslání).
+    if (opts.dryRun) {
+      _last = { at: new Date(), dryRun: true, candidates: leads.length, skippedRecent, wouldAttempt: toProcess.length };
+      console.log(`[loss-email] DRY-RUN: kandidátů ${leads.length}, nedávno posláno ${skippedRecent}, zkusilo by se odeslat ${toProcess.length}.`);
+      return _last;
+    }
+    let sent = 0, skipped = 0, failed = 0;
+    for (const l of toProcess) {
+      try {
+        const r = await sendFn(l.id);
+        if (r && r.ok) sent++; else skipped++;
+      } catch (e) { failed++; console.error('[loss-email] lead ' + l.id + ':', e.message); }
+    }
+    _last = { at: new Date(), sent, skipped, failed, skippedRecent, candidates: leads.length };
+    console.log(`[loss-email] Rozesílka: odesláno ${sent}, přeskočeno ${skipped}, nedávno posláno ${skippedRecent}, chyb ${failed} (z ${leads.length} kandidátů).`);
+    return _last;
+  } finally { _running = false; }
 }
 
 async function tick() {
