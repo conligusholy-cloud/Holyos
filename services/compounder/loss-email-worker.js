@@ -4,7 +4,8 @@
 // Každý ČTVRTEK ve 21:00 (Europe/Prague) pošle e-mail s aktuální ušlou částkou
 // každému AKTIVNÍMU leadovi. „Aktivní" = byl aspoň jednou v portálu — tvrdé
 // pravidlo hlídá sdílená funkce sendLossEmailForLead (portal_view), plus
-// nevlastní lokalitu a má uložený model. Nikomu jinému e-mail nikdy nedorazí.
+// nevlastní lokalitu. Uložený model NENÍ podmínka: komu chybí, spočítá se ztráta
+// z celé zpřístupněné nabídky. Nikomu, kdo v portálu nebyl, e-mail nikdy nedorazí.
 //
 // Startuje z app.js: require('./services/compounder/loss-email-worker').start();
 // Ruční spuštění: .runNow(). Vypnutí: env LOSS_EMAIL_DISABLED=1.
@@ -36,10 +37,12 @@ async function runNow() {
   let sendFn = null;
   try { sendFn = require('../../routes/compounder.routes').sendLossEmailForLead; } catch (e) { /* ignore */ }
   if (typeof sendFn !== 'function') { console.error('[loss-email] sendLossEmailForLead není dostupná.'); return { ok: false }; }
-  // Kandidáti: mají e-mail a uložený model (byli v portálu). Tvrdé strážce dořeší
-  // sama funkce (portal_view, nevlastní lokalitu, nenulový výnos).
+  // Kandidáti: všichni leadi s e-mailem. Uložený model NENÍ podmínka — komu chybí,
+  // spočítá se ztráta z celé zpřístupněné nabídky (usedWholeOffer). Tvrdé strážce
+  // dořeší sama funkce: musel být v portálu (portal_view), nesmí vlastnit lokalitu
+  // a musí jít spočítat nenulový roční výnos.
   const leads = await prisma.compounderLead.findMany({
-    where: { email: { not: null }, example_model: { not: null } },
+    where: { email: { not: null } },
     select: { id: true }, take: 5000,
   }).catch(() => []);
   let sent = 0, skipped = 0, failed = 0;

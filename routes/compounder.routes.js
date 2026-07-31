@@ -1936,7 +1936,8 @@ async function lossEmailAI(facts) {
 
 // Sestaví a odešle e-mail se ztrátou jednomu leadovi. Sdílená logika pro ruční
 // tlačítko i automatickou týdenní rozesílku. Vrací výsledek (neposílá HTTP odpověď).
-// Strážci: musí být v portálu (portal_view), nesmí vlastnit lokalitu, musí mít model.
+// Strážci: musí být v portálu (portal_view), nesmí vlastnit lokalitu. Model NENÍ
+// podmínka — bez něj se ztráta počítá z celé zpřístupněné nabídky (usedWholeOffer).
 async function sendLossEmailForLead(leadId) {
   const id = Number(leadId);
   if (!Number.isInteger(id)) return { ok: false, code: 'bad_id', error: 'Neplatné ID' };
@@ -2239,6 +2240,7 @@ router.get('/kiosk-values', requireAuth, async (req, res, next) => {
       cached: false,
     };
     _kioskCache = { at: Date.now(), data: out };
+    _kioskSnapshotSave(kiosks); // best-effort trvalý fallback pro výpadky SIS
     res.json(out);
   } catch (err) {
     next(err);
@@ -4616,24 +4618,43 @@ async function fxRatesCzk() {
 }
 async function eurToCzk() { const f = await fxRatesCzk(); return f.EUR || 25; }
 
+// Trvalý fallback: poslední úspěšně načtená data kiosků ze SIS ukládáme do DB
+// (AppSetting), aby portál (nabídka lokalit) při výpadku SIS nezůstal prázdný.
+const KIOSK_SNAPSHOT_KEY = 'compounding.kiosk_values_snapshot';
+async function _kioskSnapshotSave(kiosks) {
+  try {
+    if (!Array.isArray(kiosks) || !kiosks.length) return;
+    await setSetting(KIOSK_SNAPSHOT_KEY, { kiosks, at: Date.now() }, { type: 'json', scope: 'compounding', description: 'Poslední úspěšný snapshot SIS kiosk-values (fallback při výpadku SIS)' });
+  } catch (e) { /* best-effort */ }
+}
+async function _kioskSnapshotLoad() {
+  try {
+    const s = await getSetting(KIOSK_SNAPSHOT_KEY, { type: 'json', defaultValue: null });
+    return (s && Array.isArray(s.kiosks)) ? s.kiosks : [];
+  } catch (e) { return []; }
+}
+
 async function portalKiosks() {
   if (_kioskCache.data && Array.isArray(_kioskCache.data.kiosks) && (Date.now() - _kioskCache.at) < KIOSK_CACHE_MS) {
     return _kioskCache.data.kiosks;
   }
   const apiKey = process.env.SIS_KIOSK_API_KEY;
-  if (!apiKey) return (_kioskCache.data && _kioskCache.data.kiosks) || [];
+  if (!apiKey) return (_kioskCache.data && _kioskCache.data.kiosks) || (await _kioskSnapshotLoad());
   const apiUrl = process.env.SIS_KIOSK_API_URL || 'https://sis-test.infinitygrid.cloud/api/public/kiosk-values';
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 12000);
   try {
     const r = await fetch(apiUrl, { headers: { 'X-API-Key': apiKey, 'Accept': 'application/json' }, signal: controller.signal });
     clearTimeout(timeout);
-    if (!r.ok) return (_kioskCache.data && _kioskCache.data.kiosks) || [];
+    if (!r.ok) return (_kioskCache.data && _kioskCache.data.kiosks) || (await _kioskSnapshotLoad());
     const payload = await r.json();
-    return Array.isArray(payload.kiosks) ? payload.kiosks : [];
+    const kiosks = Array.isArray(payload.kiosks) ? payload.kiosks : [];
+    if (kiosks.length) _kioskSnapshotSave(kiosks); // best-effort, nečekáme na zápis
+    return kiosks;
   } catch (e) {
     clearTimeout(timeout);
-    return (_kioskCache.data && _kioskCache.data.kiosks) || [];
+    // SIS nedostupné → poslední snapshot z DB (lepší stará nabídka než prázdno).
+    return (_kioskCache.data && _kioskCache.data.kiosks) || (await _kioskSnapshotLoad());
   }
 }
 
