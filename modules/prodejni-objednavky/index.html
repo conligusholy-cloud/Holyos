@@ -3401,6 +3401,7 @@
         + '<button type="button" onclick="cmpSendAccess(' + id + ', this)" style="background:#eab308;color:#1a1408;border:none;border-radius:8px;padding:6px 14px;font-size:12.5px;font-weight:700;cursor:pointer;">✉️ Poslat e-mailem</button>'
         + waBtn
         + '<button type="button" onclick="cmpSendLoss(' + id + ', this)" title="Elegantní e-mail se skutečnou ušlou částkou z jeho modelu + odkaz zpět do portálu" style="background:#ef4444;color:#fff;border:none;border-radius:8px;padding:6px 14px;font-size:12.5px;font-weight:700;cursor:pointer;">📉 Odeslat e-mail se ztrátou</button>'
+        + '<button type="button" onclick="cmpLossStats()" title="Celková statistika rozesílky e-mailů se ztrátou (odesláno, otevřeno, proklik)" style="background:transparent;color:#eab308;border:1px solid rgba(234,179,8,0.5);border-radius:8px;padding:6px 12px;font-size:12.5px;font-weight:600;cursor:pointer;">📊 Statistika rozesílky</button>'
         + '<span data-invmsg="' + id + '" style="font-size:12px;align-self:center;color:var(--text2);"></span>'
         + '</div>'
         + '<div data-lossinfo="' + id + '" style="font-size:11.5px;color:var(--text2);margin-top:6px;"></div>'
@@ -3446,6 +3447,50 @@
       } catch(e){ /* tichý fail — jen informativní řádek */ }
     }
     window.cmpLoadLossInfo = cmpLoadLossInfo;
+    // Modal: celková statistika kampaně „e-mail se ztrátou" (odesláno / otevřeno / proklik).
+    async function cmpLossStats(){
+      var ov=document.createElement('div');
+      ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:100000;display:flex;align-items:flex-start;justify-content:center;padding:40px 16px;overflow:auto;';
+      ov.onclick=function(e){ if(e.target===ov) ov.remove(); };
+      var box=document.createElement('div');
+      box.style.cssText='background:var(--surface);border:1px solid var(--border);border-radius:14px;max-width:920px;width:100%;padding:22px 24px;box-shadow:0 20px 80px rgba(0,0,0,0.5);';
+      box.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;"><h2 style="margin:0;font-size:18px;">📊 Statistika e-mailů se ztrátou</h2><button type="button" style="background:transparent;color:var(--text2);border:1px solid var(--border);border-radius:8px;padding:6px 12px;cursor:pointer;">Zavřít</button></div><div id="cmp-lossstats-body"><div style="color:var(--text2);font-size:13px;">Načítám…</div></div>';
+      box.querySelector('button').onclick=function(){ ov.remove(); };
+      ov.appendChild(box); document.body.appendChild(ov);
+      var body=box.querySelector('#cmp-lossstats-body');
+      try{
+        var r=await fetch('/api/compounder/loss-email/stats',{credentials:'include'});
+        var j=await r.json();
+        if(!r.ok) throw new Error(j.error||('HTTP '+r.status));
+        var card=function(k,v,s){ return '<div style="flex:1;min-width:130px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 14px;"><div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--text2);">'+k+'</div><div style="font-size:22px;font-weight:800;color:#eab308;">'+v+'</div>'+(s?'<div style="font-size:11px;color:var(--text2);margin-top:2px;">'+s+'</div>':'')+'</div>'; };
+        var cards='<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;">'
+          +card('Odesláno', j.totalSent, j.recipients+' příjemců')
+          +card('Otevřeno', j.opened+' · '+j.openRate+' %', 'měřeno pixelem')
+          +card('Proklik do portálu', j.clicked+' · '+j.clickRate+' %', 'návštěva po e-mailu')
+          +'</div>';
+        var dates=(j.byDate||[]).slice().reverse();
+        var datesHtml='';
+        if(dates.length){
+          datesHtml='<div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--text2);margin:6px 0;">Rozesílky po dnech</div><div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">'+dates.map(function(d){ var p=String(d.date).split('-'); var ds=p.length===3?(p[2]+'.'+p[1]+'.'+p[0]):d.date; return '<span style="font-size:12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:4px 10px;">'+ds+' · <b>'+d.count+'</b></span>'; }).join('')+'</div>';
+        }
+        var rows=(j.leads||[]);
+        var table;
+        if(!rows.length){ table='<div style="color:var(--text2);font-size:13px;">Zatím nebyl odeslán žádný e-mail se ztrátou.</div>'; }
+        else {
+          table='<div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--text2);margin:6px 0;">Po leadech ('+rows.length+')</div>';
+          table+='<div style="overflow:auto;max-height:50vh;"><table style="width:100%;border-collapse:collapse;font-size:12.5px;">'
+            +'<thead><tr style="text-align:left;color:var(--text2);border-bottom:1px solid var(--border);"><th style="padding:6px 8px;">Lead</th><th style="padding:6px 8px;">Posl. odesláno</th><th style="padding:6px 8px;">×</th><th style="padding:6px 8px;">Ušlá částka</th><th style="padding:6px 8px;">Otevřel</th><th style="padding:6px 8px;">Proklik</th></tr></thead><tbody>'
+            +rows.map(function(l){
+              var op=l.openedAt?('<span style="color:#10b981;">✓ '+cmpFmtDt(l.openedAt)+'</span>'):'<span style="color:var(--text2);">—</span>';
+              var cl=l.clickedAt?('<span style="color:#3b82f6;">✓ '+cmpFmtDt(l.clickedAt)+'</span>'):'<span style="color:var(--text2);">—</span>';
+              return '<tr style="border-bottom:1px solid var(--border);"><td style="padding:6px 8px;">'+cmpEsc(l.name)+(l.email?('<br><span style="color:var(--text2);font-size:11px;">'+cmpEsc(l.email)+'</span>'):'')+'</td><td style="padding:6px 8px;white-space:nowrap;">'+cmpFmtDt(l.lastSentAt)+'</td><td style="padding:6px 8px;">'+l.sends+'</td><td style="padding:6px 8px;white-space:nowrap;">'+(l.missed!=null?(Number(l.missed).toLocaleString('cs-CZ')+' Kč'):'—')+'</td><td style="padding:6px 8px;white-space:nowrap;">'+op+'</td><td style="padding:6px 8px;white-space:nowrap;">'+cl+'</td></tr>';
+            }).join('')
+            +'</tbody></table></div>';
+        }
+        body.innerHTML=cards+datesHtml+table;
+      }catch(e){ body.innerHTML='<div style="color:#ef4444;font-size:13px;">Nepodařilo se načíst statistiku: '+cmpEsc(e.message||'')+'</div>'; }
+    }
+    window.cmpLossStats=cmpLossStats;
     async function cmpSendAccess(id, btn){
       var msg = document.querySelector('[data-invmsg="' + id + '"]');
       if (btn) btn.disabled = true;

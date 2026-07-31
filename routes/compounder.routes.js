@@ -2011,7 +2011,10 @@ async function sendLossEmailForLead(leadId) {
       subject = subject.replace(/[\s.!?—–-]+$/u, '') + ' — ' + missedStr;
     }
     const mailFrom = process.env.COMPOUNDER_MAIL_FROM || process.env.SMTP_FROM || process.env.INVOICE_IMAP_USER;
-    await sendMail({ to: lead.email, subject, body, from: mailFrom, fromName: compounderMailFromName(), link: url, linkLabel, brand: 'compounder' });
+    // Sledovací pixel pro měření otevření e-mailu (loss_email_open). Podepsaný, nic neuděluje.
+    const _openTs = Date.now();
+    const trackingPixel = `${portalBase()}/api/compounder/loss-open?l=${id}&t=${_openTs}&s=${hmacSig('loss-open:' + id + ':' + _openTs)}`;
+    await sendMail({ to: lead.email, subject, body, from: mailFrom, fromName: compounderMailFromName(), link: url, linkLabel, brand: 'compounder', trackingPixel });
     try { await prisma.compounderEvent.create({ data: { sid: 'admin-loss-' + id, event: 'loss_email_sent', props: { lead_id: id, missed, yr, days: Math.round(days) }, path: '/admin' } }); } catch (e) { /* log best-effort */ }
     console.log(`[compounder] Loss e-mail odeslán lead #${id}: ${missed} Kč (${matched}/${codes.length} lokalit${usedWholeOffer ? ', celá nabídka' : ''}).`);
     return { ok: true, missed, perDay, yr, days: Math.round(days), matched, wholeOffer: usedWholeOffer };
@@ -2024,6 +2027,84 @@ router.post('/leads/:id/send-loss-email', requireAuth, async (req, res, next) =>
     const r = await sendLossEmailForLead(Number(req.params.id));
     if (!r.ok) return res.status(r.code === 'not_found' ? 404 : 400).json(r);
     res.json(r);
+  } catch (err) { next(err); }
+});
+
+// GET /api/compounder/loss-open — sledovací pixel otevření e-mailu se ztrátou.
+// VEŘEJNÉ (e-mailový klient si ho stáhne). Podepsané l+t; nic neuděluje, jen loguje
+// event loss_email_open. Vždy vrací 1×1 průhledný GIF.
+router.get('/loss-open', async (req, res) => {
+  try {
+    const id = Number(req.query.l);
+    const ts = String(req.query.t || '');
+    const sig = String(req.query.s || '');
+    if (Number.isInteger(id) && id > 0 && ts && safeEqStr(sig, hmacSig('loss-open:' + id + ':' + ts))) {
+      prisma.compounderEvent.create({ data: { sid: 'loss-open-' + id, event: 'loss_email_open', props: { lead_id: id, sent_ts: Number(ts) || null }, path: '/email', ua: String(req.headers['user-agent'] || '').slice(0, 300) } }).catch(() => {});
+    }
+  } catch (e) { /* i při chybě vrať pixel */ }
+  const gif = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64');
+  res.set('Content-Type', 'image/gif');
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+  res.set('Pragma', 'no-cache');
+  res.end(gif);
+});
+
+// GET /api/compounder/loss-email/stats — celková statistika kampaně „e-mail se ztrátou".
+// Odesláno (loss_email_sent) + otevřeno (loss_email_open, pixel) + proklik do portálu
+// (portal_view po odeslání). Vrací souhrn, rozpad po datech a rozpad po leadech.
+router.get('/loss-email/stats', requireAuth, async (req, res, next) => {
+  try {
+    const [sentEvs, openEvs, portalEvs] = await Promise.all([
+      prisma.compounderEvent.findMany({ where: { event: 'loss_email_sent' }, select: { props: true, created_at: true }, orderBy: { created_at: 'asc' }, take: 50000 }),
+      prisma.compounderEvent.findMany({ where: { event: 'loss_email_open' }, select: { props: true, created_at: true }, take: 50000 }),
+      prisma.compounderEvent.findMany({ where: { event: 'portal_view' }, select: { props: true, created_at: true }, take: 50000 }),
+    ]);
+    const tzDay = (d) => new Intl.DateTimeFormat('en-CA', { timeZone: process.env.VELIN_TZ || 'Europe/Prague', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(d));
+
+    // Odeslání po leadech: počet, poslední odeslání, poslední ušlá částka.
+    const perLead = {};
+    const byDate = {};
+    let totalSent = 0;
+    sentEvs.forEach((e) => {
+      const lid = e.props && e.props.lead_id; if (lid == null) return;
+      totalSent++;
+      const d = tzDay(e.created_at); byDate[d] = (byDate[d] || 0) + 1;
+      const t = new Date(e.created_at).getTime();
+      const r = perLead[lid] || (perLead[lid] = { lead_id: lid, sends: 0, lastSentAt: null, lastSentMs: 0, missed: null, openedAt: null, clickedAt: null });
+      r.sends++;
+      if (t >= r.lastSentMs) { r.lastSentMs = t; r.lastSentAt = e.created_at; r.missed = (e.props && e.props.missed != null) ? Number(e.props.missed) : r.missed; }
+    });
+    // Otevření: nejnovější otevření na leada (bereme jen leady, kterým jsme poslali).
+    openEvs.forEach((e) => {
+      const lid = e.props && e.props.lead_id; if (lid == null || !perLead[lid]) return;
+      const t = new Date(e.created_at).getTime();
+      if (!perLead[lid].openedAt || t > new Date(perLead[lid].openedAt).getTime()) perLead[lid].openedAt = e.created_at;
+    });
+    // Proklik do portálu: portal_view v čase >= poslední odeslání daného leada.
+    portalEvs.forEach((e) => {
+      const lid = e.props && e.props.lead_id; if (lid == null || !perLead[lid]) return;
+      const t = new Date(e.created_at).getTime();
+      if (t >= perLead[lid].lastSentMs && (!perLead[lid].clickedAt || t > new Date(perLead[lid].clickedAt).getTime())) perLead[lid].clickedAt = e.created_at;
+    });
+
+    const rows = Object.values(perLead);
+    const ids = rows.map((r) => r.lead_id);
+    const leadsInfo = ids.length ? await prisma.compounderLead.findMany({ where: { id: { in: ids } }, select: { id: true, name: true, email: true } }) : [];
+    const infoById = {}; leadsInfo.forEach((l) => { infoById[l.id] = l; });
+    rows.forEach((r) => { const li = infoById[r.lead_id] || {}; r.name = li.name || ('#' + r.lead_id); r.email = li.email || null; delete r.lastSentMs; });
+    rows.sort((a, b) => new Date(b.lastSentAt || 0) - new Date(a.lastSentAt || 0));
+
+    const recipients = rows.length;
+    const opened = rows.filter((r) => r.openedAt).length;
+    const clicked = rows.filter((r) => r.clickedAt).length;
+    const dates = Object.keys(byDate).sort().map((d) => ({ date: d, count: byDate[d] }));
+
+    res.json({
+      totalSent, recipients,
+      opened, openRate: recipients ? Math.round(opened / recipients * 1000) / 10 : 0,
+      clicked, clickRate: recipients ? Math.round(clicked / recipients * 1000) / 10 : 0,
+      byDate: dates, leads: rows,
+    });
   } catch (err) { next(err); }
 });
 

@@ -57,7 +57,8 @@ function escapeHtml(s) {
     .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 
-function renderEmailHtml({ title, body, link, linkLabel = 'Otevřít v HolyOS', preheader, brand }) {
+function renderEmailHtml({ title, body, link, linkLabel = 'Otevřít v HolyOS', preheader, brand, trackingPixel }) {
+  const pixelImg = trackingPixel ? `<img src="${escapeHtml(trackingPixel)}" width="1" height="1" alt="" style="display:block;width:1px;height:1px;border:0;overflow:hidden;">` : '';
   const appUrl = process.env.APP_URL || '';
   const fullLink = link && link.startsWith('http') ? link : (appUrl ? appUrl.replace(/\/$/, '') + link : link);
 
@@ -98,6 +99,7 @@ function renderEmailHtml({ title, body, link, linkLabel = 'Otevřít v HolyOS', 
       </table>
     </td></tr>
   </table>
+  ${pixelImg}
 </body></html>`;
   }
 
@@ -153,7 +155,7 @@ function renderEmailHtml({ title, body, link, linkLabel = 'Otevřít v HolyOS', 
  * @param {Array}  [args.attachments]   Pole attachments [{ filename, content, contentType }]
  *                                      Použito mj. pro PDF fakturu (Fáze 6).
  */
-async function sendMail({ to, cc, subject, body, from, fromName, link, linkLabel, preheader, attachments, brand, replyTo }) {
+async function sendMail({ to, cc, subject, body, from, fromName, link, linkLabel, preheader, attachments, brand, replyTo, trackingPixel }) {
   if (!to) return { sent: false, skipped: 'no-recipient' };
 
   // 1) Microsoft Graph send-as (preferovaná cesta pokud je `from` zadán a Graph
@@ -162,7 +164,7 @@ async function sendMail({ to, cc, subject, body, from, fromName, link, linkLabel
     try {
       const msGraph = require('./ms-graph-client');
       if (msGraph.isConfigured && msGraph.isConfigured()) {
-        const html = renderEmailHtml({ title: subject, body, link, linkLabel, preheader, brand });
+        const html = renderEmailHtml({ title: subject, body, link, linkLabel, preheader, brand, trackingPixel });
         await msGraph.sendMailAs(from, {
           to,
           cc: cc || undefined,
@@ -198,7 +200,7 @@ async function sendMail({ to, cc, subject, body, from, fromName, link, linkLabel
       replyTo: replyTo || undefined,
       subject: subject || 'HolyOS — notifikace',
       text: body ? body + (link ? `\n\n${link}` : '') : '',
-      html: renderEmailHtml({ title: subject, body, link, linkLabel, preheader, brand }),
+      html: renderEmailHtml({ title: subject, body, link, linkLabel, preheader, brand, trackingPixel }),
     };
     if (Array.isArray(attachments) && attachments.length > 0) {
       mailOpts.attachments = attachments;
