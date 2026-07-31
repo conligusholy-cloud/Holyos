@@ -3274,7 +3274,9 @@
         var r = await fetch('/api/compounder/leads/' + id + '/reservations', { credentials: 'include' });
         var j = await r.json();
         var res = j.reservations || [], cons = j.contracts || [];
-        if (!res.length && !cons.length) { el.innerHTML = ''; return; }
+        // Nabídka lokalit tohoto kontaktu (pro výběr volné lokality k rezervaci na důvěru).
+        var offer = [];
+        try { var ro = await fetch('/api/compounder/leads/' + id + '/offer-preview', { credentials: 'include' }); var jo = await ro.json(); offer = (jo && jo.locations) || []; } catch (e) {}
         var STAT = (typeof RES_STATUS !== 'undefined') ? RES_STATUS : {};
         var CT = { kupni: 'Kupní', rezervacni: 'Rezervační', servisni: 'Servisní' };
         var CS = { koncept: 'koncept', odeslano: 'odesláno', vyplneno: 'vyplněno', k_autorizaci: 'k autorizaci (náš podpis)', k_podpisu: 'čeká na náš podpis', k_podpisu_zakaznik: 'čeká na podpis zákazníka', podepsano: 'PODEPSÁNO' };
@@ -3282,15 +3284,38 @@
         function remain(x) { if (!x) return ''; var ms = new Date(x).getTime() - Date.now(); if (ms <= 0) return ' · prošlo'; var dd = Math.floor(ms / 86400000); var hh = Math.floor((ms % 86400000) / 3600000); return ' · zbývá ' + (dd > 0 ? (dd + ' d ') : '') + hh + ' h'; }
         var html = '<div style="margin:4px 0 12px;padding:12px 14px;background:rgba(201,162,75,.06);border:1px solid rgba(201,162,75,.25);border-radius:10px;">' +
           '<div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--text2);margin-bottom:8px;">Rezervace lokalit</div>';
-        if (!res.length) { html += '<div style="color:var(--text2);font-size:13px;">Žádná rezervace tohoto leada.</div>'; }
+        // ── Formulář: rezervace na důvěru (bez smlouvy) ──
+        (function() {
+          var free = offer.filter(function(o) { return !o.reserved && o.code; });
+          function ymd(dt) { return new Date(dt.getTime() - dt.getTimezoneOffset() * 60000).toISOString().slice(0, 10); }
+          var _now = new Date();
+          var minD = ymd(new Date(_now.getTime() + 86400000));
+          var defD = ymd(new Date(_now.getTime() + 14 * 86400000));
+          var opts = free.length
+            ? free.map(function(o) { var pr = (o.totalPrice != null) ? (' — ' + Number(o.totalPrice).toLocaleString('cs-CZ') + ' Kč') : ''; return '<option value="' + kvEsc(o.code) + '">' + kvEsc(o.code) + (o.label ? (' · ' + kvEsc(o.label)) : '') + pr + '</option>'; }).join('')
+            : '<option value="">Žádná volná lokalita v nabídce</option>';
+          html += '<div style="margin-bottom:10px;padding-bottom:10px;border-bottom:1px dashed rgba(255,255,255,.10);">' +
+            '<div style="font-size:12px;font-weight:600;margin-bottom:6px;">🤝 Rezervovat na důvěru <span style="color:var(--text2);font-weight:400;">(bez smlouvy, podání ruky)</span></div>' +
+            '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">' +
+              '<select id="cmp-trust-code-' + id + '" style="flex:1;min-width:170px;background:var(--surface,#141418);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:6px 8px;font-size:12.5px;"' + (free.length ? '' : ' disabled') + '>' + opts + '</select>' +
+              '<label style="font-size:11.5px;color:var(--text2);">do <input type="date" id="cmp-trust-until-' + id + '" value="' + defD + '" min="' + minD + '" style="background:var(--surface,#141418);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:6px 8px;font-size:12.5px;margin-left:4px;"></label>' +
+              '<button onclick="cmpReserveTrust(' + id + ')" style="background:#c9a24b;color:#241c05;border:none;border-radius:8px;padding:6px 12px;font-size:12.5px;font-weight:700;cursor:pointer;"' + (free.length ? '' : ' disabled') + '>📌 Rezervovat</button>' +
+            '</div>' +
+            '<div id="cmp-trust-msg-' + id + '" style="font-size:11.5px;margin-top:6px;"></div>' +
+          '</div>';
+        })();
+        if (!res.length) { html += '<div style="color:var(--text2);font-size:13px;">Žádná rezervace tohoto kontaktu.</div>'; }
         res.forEach(function(x) {
           var cForCode = cons.filter(function(c) { return c.kiosk_code === x.kiosk_code; });
           var badge = (x.status === 'completed') ? '#10b981' : (x.status === 'active' ? '#eab308' : (x.status === 'reserved' ? '#3b82f6' : 'var(--text2)'));
+          var trustChip = x.on_trust ? ' <span style="font-size:10.5px;background:rgba(201,162,75,.18);color:#c9a24b;border:1px solid rgba(201,162,75,.4);border-radius:999px;padding:1px 8px;">🤝 na důvěru</span>' : '';
           html += '<div style="padding:8px 0;border-top:1px solid rgba(255,255,255,.05);">' +
-            '<div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;"><b>' + kvEsc(x.kiosk_code) + '</b>' +
+            '<div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;"><b>' + kvEsc(x.kiosk_code) + '</b>' + trustChip +
             '<span style="color:' + badge + ';font-weight:600;">' + (STAT[x.status] || x.status) + '</span></div>' +
-            '<div style="color:var(--text2);font-size:12px;margin-top:4px;">Podpis do ' + d(x.sign_until) + remain(x.sign_until) +
-            ' · Poplatek do ' + d(x.fee_until) + ' · Rezervace do ' + d(x.reserved_until) + remain(x.reserved_until) + '</div>';
+            (x.on_trust
+              ? '<div style="color:var(--text2);font-size:12px;margin-top:4px;">Rezervováno na důvěru do ' + d(x.reserved_until) + remain(x.reserved_until) + '</div>'
+              : '<div style="color:var(--text2);font-size:12px;margin-top:4px;">Podpis do ' + d(x.sign_until) + remain(x.sign_until) +
+                ' · Poplatek do ' + d(x.fee_until) + ' · Rezervace do ' + d(x.reserved_until) + remain(x.reserved_until) + '</div>');
           if (x.status === 'reserved' || x.status === 'active') {
             html += '<div style="margin-top:8px;"><button onclick="cmpCancelReservation(' + x.id + ',' + id + ')" style="background:transparent;color:#ef4444;border:1px solid rgba(239,68,68,.4);border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer;">✕ Zrušit rezervaci</button></div>';
           }
@@ -3325,6 +3350,27 @@
         el.innerHTML = html;
       } catch (e) { el.innerHTML = '<div style="color:#ef4444;font-size:12px;">Chyba načítání rezervací.</div>'; }
     }
+
+    async function cmpReserveTrust(id) {
+      var sel = document.getElementById('cmp-trust-code-' + id);
+      var dt = document.getElementById('cmp-trust-until-' + id);
+      var msg = document.getElementById('cmp-trust-msg-' + id);
+      var code = sel ? sel.value : '';
+      var until = dt ? dt.value : '';
+      if (!code) { if (msg) { msg.style.color = '#ef4444'; msg.textContent = 'Vyber lokalitu.'; } return; }
+      if (msg) { msg.style.color = 'var(--text2)'; msg.textContent = 'Rezervuji…'; }
+      try {
+        var r = await fetch('/api/compounder/leads/' + id + '/reserve-trust', {
+          method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code: code, reserved_until: until }),
+        });
+        var j = await r.json().catch(function() { return {}; });
+        if (!r.ok || !j.ok) { if (msg) { msg.style.color = '#ef4444'; msg.textContent = (j && j.error) || ('Chyba HTTP ' + r.status); } return; }
+        var el = document.getElementById('cmp-resv-' + id);
+        if (el) cmpLeadReservations(id, el);
+      } catch (e) { if (msg) { msg.style.color = '#ef4444'; msg.textContent = 'Rezervace selhala.'; } }
+    }
+    window.cmpReserveTrust = cmpReserveTrust;
 
     async function cmpCancelReservation(resId, leadId) {
       if (!confirm('Opravdu zrušit tuto rezervaci? Lokalita se uvolní ostatním.')) return;

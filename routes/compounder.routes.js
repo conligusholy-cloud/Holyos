@@ -5899,6 +5899,48 @@ router.get('/leads/:id(\\d+)/reservations', requireAuth, async (req, res, next) 
   } catch (err) { next(err); }
 });
 
+// POST /api/compounder/leads/:id/reserve-trust — rezervace lokality „na důvěru"
+// (podání ruky) BEZ rezervační smlouvy a poplatku. Blokuje lokalitu jako běžná
+// rezervace a sama vyprší k zadanému termínu (reserved_until). Bez ceny (nekazí
+// prodejní statistiky) a bez generování smluv.
+router.post('/leads/:id(\\d+)/reserve-trust', requireAuth, async (req, res, next) => {
+  try {
+    const leadId = Number(req.params.id);
+    const b = req.body || {};
+    const code = String(b.code || '').trim().toUpperCase().slice(0, 40);
+    if (!code) return res.status(400).json({ error: 'Vyber lokalitu.' });
+    const lead = await prisma.compounderLead.findUnique({
+      where: { id: leadId }, select: { id: true, name: true, email: true, phone: true, lang: true },
+    });
+    if (!lead) return res.status(404).json({ error: 'Kontakt nenalezen' });
+    // Termín „rezervováno do" — konec zadaného dne; default +14 dní.
+    let until = null;
+    if (b.reserved_until) { const d = new Date(String(b.reserved_until)); if (!isNaN(d.getTime())) { d.setHours(23, 59, 59, 0); until = d; } }
+    if (!until) until = new Date(Date.now() + 14 * 86400000);
+    if (until.getTime() <= Date.now()) return res.status(400).json({ error: 'Termín musí být v budoucnu.' });
+    // Lokalita musí být v nabídce kontaktu a nesmí být obsazená někým jiným.
+    const offer = await buildOfferedLocations(leadId, { includeHidden: true });
+    const loc = (offer.locations || []).find((o) => String(o.code || '').toUpperCase() === code);
+    if (!loc) return res.status(400).json({ error: 'Tato lokalita není v nabídce tohoto kontaktu.' });
+    const busy = await activeReservationInfo();
+    const bi = busy.get(loc.code) || busy.get(code);
+    if (bi) return res.status(409).json({ error: (bi.lead_id === leadId) ? 'Tento kontakt už tuto lokalitu rezervovanou má.' : 'Lokalita je už rezervovaná někým jiným.' });
+    const days = Math.max(1, Math.ceil((until.getTime() - Date.now()) / 86400000));
+    const rec = await prisma.locationReservation.create({
+      data: {
+        kiosk_code: loc.code, lead_id: leadId, status: 'active', on_trust: true,
+        hold_until: null, sign_until: null, fee_until: null, reserved_until: until,
+        fee_paid_at: new Date(), // „na důvěru" — držíme bez poplatku
+        days, fee_per_day: 0, fee_total: 0, purchase_price: null,
+        currency: (lead.lang && lead.lang.toLowerCase().indexOf('cs') === 0) ? 'CZK' : (offer.defaultCurrency || 'CZK'),
+        buyer_name: lead.name || null, buyer_email: lead.email || null, buyer_phone: lead.phone || null,
+      },
+    });
+    console.log(`[compounder] Rezervace na důvěru: lead #${leadId} → ${loc.code} do ${until.toISOString().slice(0, 10)}`);
+    res.status(201).json({ ok: true, reservation: rec });
+  } catch (err) { next(err); }
+});
+
 // ─── Pokyny k platbě (Compounding rezervace) ─────────────────────────────────
 const paymentInstructions = require('../services/pdf/payment-instructions');
 function makePayToken(id) { return id + '.' + hmacSig('pay:' + id); }

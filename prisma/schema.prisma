@@ -5731,6 +5731,10 @@ model LocationReservation {
   // hold = 1h blokace po kliknutí (jen rezervující smí dokončit hlavičku)
   status String @default("reserved") @db.VarChar(20)
 
+  // Rezervace „na důvěru" (podání ruky) — bez rezervační smlouvy a poplatku.
+  // Blokuje lokalitu jako běžná rezervace a sama vyprší k reserved_until.
+  on_trust Boolean @default(false)
+
   // Lhůty
   hold_until     DateTime? // konec 1h blokace (fáze hold)
   sign_until     DateTime? // podpis rezervační smlouvy do
