@@ -2018,7 +2018,10 @@ async function sendLossEmailForLead(leadId) {
     if (subject.indexOf(missedStr) === -1) {
       subject = subject.replace(/[\s.!?—–-]+$/u, '') + ' — ' + missedStr;
     }
-    const mailFrom = process.env.COMPOUNDER_MAIL_FROM || process.env.SMTP_FROM || process.env.INVOICE_IMAP_USER;
+    const mailFrom = compounderMailFrom();
+    // POJISTKA: bez dedikované Compounder adresy NEODESÍLAT (nikdy nesmí jít z fakturační
+    // ani jiné schránky). Nutno nastavit COMPOUNDER_MAIL_FROM v prostředí serveru.
+    if (!mailFrom) return { ok: false, code: 'no_from', error: 'Není nastaven odesílatel COMPOUNDER_MAIL_FROM — e-mail se ztrátou se neodešle (nesmí jít z fakturační schránky).' };
     // Sledovací pixel pro měření otevření e-mailu (loss_email_open). Podepsaný, nic neuděluje.
     const _openTs = Date.now();
     const trackingPixel = `${portalBase()}/api/compounder/loss-open?l=${id}&t=${_openTs}&s=${hmacSig('loss-open:' + id + ':' + _openTs)}`;
@@ -3130,7 +3133,7 @@ router.post('/external-reps/:id/send-login', requireAuth, async (req, res, next)
     const base = (process.env.COMPOUNDER_BASE_URL || 'https://www.compounder.world').replace(/\/+$/, '');
     const portalUrl = base + '/obchodnik-ext';
     const autoUrl = portalUrl + '?t=' + encodeURIComponent(makeExtRepToken(rep.id, 30 * 24 * 3600 * 1000));
-    const from = process.env.COMPOUNDER_MAIL_FROM || process.env.SMTP_FROM || process.env.INVOICE_IMAP_USER;
+    const from = compounderMailFrom();
     const jmeno = String(rep.jmeno || '').trim();
     const body = 'Dobrý den' + (jmeno ? (', ' + jmeno) : '') + ',\n\n'
       + 'zde je přístup do vašeho obchodního portálu.\n\n'
@@ -3618,8 +3621,14 @@ function verifyPortalToken(token) {
 function compounderMailFromName() {
   return process.env.COMPOUNDER_MAIL_FROM_NAME || 'Compounder · World';
 }
+// Odesílatel Compounder e-mailů. VÝHRADNĚ dedikovaná adresa COMPOUNDER_MAIL_FROM —
+// NIKDY se nesmí spadnout na fakturační schránku (INVOICE_IMAP_USER) ani jiný box.
+// Když není nastavená, vrací null a volající e-mail neodešle (radši nic než z cizí adresy).
+function compounderMailFrom() {
+  return process.env.COMPOUNDER_MAIL_FROM || null;
+}
 async function sendPortalInvite(d, portalUrl) {
-  const from = process.env.COMPOUNDER_MAIL_FROM || process.env.SMTP_FROM || process.env.INVOICE_IMAP_USER;
+  const from = compounderMailFrom();
   // E-mail v jazyce, který zájemce zvolil na webu (d.lang); fallback angličtina.
   const t = inviteEmail(d.name, d.lang);
   await sendMail({
@@ -3636,7 +3645,7 @@ async function sendPortalInvite(d, portalUrl) {
   });
 }
 async function sendPortalLogin(d, url) {
-  const from = process.env.COMPOUNDER_MAIL_FROM || process.env.SMTP_FROM || process.env.INVOICE_IMAP_USER;
+  const from = compounderMailFrom();
   const t = loginEmail(d.name, d.lang);
   await sendMail({
     to: d.email,
@@ -3886,7 +3895,7 @@ function locationReportFallback(facts, lang) {
 async function notifyOwnersContact(lead, phone, isDist) {
   const recipients = (process.env.COMPOUNDER_OWNER_EMAILS || 'jan.holy@bestseries.cz,tomas.holy@bestseries.cz')
     .split(',').map((s) => s.trim()).filter(Boolean);
-  const from = process.env.COMPOUNDER_MAIL_FROM || process.env.SMTP_FROM || process.env.INVOICE_IMAP_USER;
+  const from = compounderMailFrom();
   const base = process.env.HOLYOS_BASE_URL || 'https://app.holyos.cz';
   const adminUrl = base + '/modules/prodejni-objednavky/index.html';
   const roleLabel = lead.role === 'distributor' ? 'Distributor' : 'Compounder';
@@ -5813,7 +5822,7 @@ router.post('/reservations/:id(\\d+)/payment-instructions/email', requireAuth, a
     const ctx = await _buildPaymentCtx(Number(req.params.id));
     if (!ctx.buyer.email) return res.status(400).json({ error: 'Rezervace nemá e-mail kupujícího.' });
     const pdf = await _payPdf(Number(req.params.id));
-    const from = process.env.COMPOUNDER_MAIL_FROM || process.env.SMTP_FROM || process.env.INVOICE_IMAP_USER;
+    const from = compounderMailFrom();
     // Odkaz na PORTÁL (compounder.world), přihlášený přes token leada — žádná vazba na HolyOS.
     const portalLink = ctx.resv.lead_id
       ? (portalBase() + '/portal?t=' + makeLoginToken(ctx.resv.lead_id))
