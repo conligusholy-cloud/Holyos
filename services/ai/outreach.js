@@ -19,7 +19,7 @@ const CHANNEL_RULES = {
 async function generateOutreach(leadFacts, opts) {
   opts = opts || {};
   const channel = CHANNEL_RULES[opts.channel] ? opts.channel : 'email';
-  if (!process.env.ANTHROPIC_API_KEY) return null;
+  if (!process.env.ANTHROPIC_API_KEY) return { error: 'Chybí ANTHROPIC_API_KEY na serveru.' };
   try {
     const Anthropic = require('@anthropic-ai/sdk');
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -51,14 +51,14 @@ async function generateOutreach(leadFacts, opts) {
     let text = (msg && msg.content && msg.content[0] && msg.content[0].text) || '';
     text = text.replace(/^```(json)?/i, '').replace(/```\s*$/, '').trim();
     const j = JSON.parse(text);
-    if (!j || !j.body) return null;
+    if (!j || !j.body) return { error: 'AI vrátila prázdnou nebo neplatnou odpověď.' };
     return {
       subject: (channel === 'email' && j.subject) ? String(j.subject).slice(0, 300) : null,
       body: String(j.body).slice(0, 4000),
     };
   } catch (e) {
     console.error('[outreach] generateOutreach selhal:', e.message);
-    return null;
+    return { error: e.message };
   }
 }
 

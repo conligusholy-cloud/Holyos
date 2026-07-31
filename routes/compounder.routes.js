@@ -2206,7 +2206,7 @@ router.post('/leads/:id/messages/generate', requireAuth, async (req, res, next) 
     const channel = ['linkedin', 'email', 'whatsapp', 'sms'].includes(b.channel) ? b.channel : 'email';
     const { generateOutreach } = require('../services/ai/outreach');
     const out = await generateOutreach(parseLeadFacts(lead), { channel, goal: b.goal, tone: b.tone });
-    if (!out) return res.status(503).json({ error: 'AI generátor není dostupný nebo selhal.' });
+    if (!out || !out.body) return res.status(503).json({ error: (out && out.error) ? ('AI: ' + out.error) : 'AI generátor není dostupný nebo selhal.' });
     res.json({ ok: true, channel, subject: out.subject, body: out.body });
   } catch (err) { next(err); }
 });
