@@ -1671,6 +1671,9 @@ router.get('/leads', requireAuth, async (req, res, next) => {
       const mv = {};   // poslední „admin se podíval na model" (max created_at) na leada
       const todayMs = {}; // čas na webu DNES (součet ms z page_leave) na leada
       const sidToLead = {}; // session sid → lead_id (pro spárování eventů bez lead_id, např. page_leave)
+      // Systémové/admin eventy — NEPOČÍTAJÍ se jako „poslední aktivita" zákazníka
+      // (jinak by odeslání loss e-mailu nebo náhled modelu vypadaly jako návštěva).
+      const SYSTEM_EVENTS = new Set(['admin_model_view', 'loss_email_sent', 'loss_email_open', 'push_open', 'push_dismiss', 'push_action']);
       const tzDayKey = (d) => new Intl.DateTimeFormat('en-CA', { timeZone: process.env.VELIN_TZ || 'Europe/Prague', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(d));
       const todayKey = tzDayKey(Date.now());
       evs.forEach((e) => {
@@ -1682,7 +1685,7 @@ router.get('/leads', requireAuth, async (req, res, next) => {
         else if (e.event === 'location_assess') x.loc++;
         else if (e.event === 'contact_request') x.contact++;
         const t = e.created_at ? new Date(e.created_at).getTime() : 0;
-        if (t && (!last[lid] || t > last[lid])) last[lid] = t;
+        if (t && !SYSTEM_EVENTS.has(e.event) && (!last[lid] || t > last[lid])) last[lid] = t;
         if (e.event === 'admin_model_view' && t && (!mv[lid] || t > mv[lid])) mv[lid] = t;
       });
       // Čas na webu DNES: page_leave nese ms (délku session), ale často bez lead_id.
