@@ -3384,10 +3384,21 @@
     function cmpFmtDt(x){ try{ return x ? new Date(x).toLocaleString('cs-CZ') : ''; }catch(e){ return ''; } }
     function cmpInviteBlock(id, count, sentAt, phone, la){
       var sent = count > 0;
-      var statusTxt = sent
-        ? ('✅ Pozvánka odeslána ' + count + '× · naposledy ' + cmpFmtDt(sentAt))
-        : '⚠️ Pozvánka zatím neodeslána';
-      var statusCol = sent ? '#10b981' : '#eab308';
+      var statusTxt, statusCol;
+      if (sent) {
+        // Ruční pozvánka odeslána.
+        statusTxt = '✅ Pozvánka odeslána ' + count + '× · naposledy ' + cmpFmtDt(sentAt);
+        statusCol = '#10b981';
+      } else if (la) {
+        // Ruční pozvánka sice neodešla, ale lead je v portálu aktivní → přístup má,
+        // varování „neodeslána" by bylo zavádějící.
+        statusTxt = '✅ Aktivní v portálu — ruční pozvánku netřeba posílat';
+        statusCol = '#10b981';
+      } else {
+        // Ani ruční pozvánka, ani žádná aktivita → tady dává varování smysl.
+        statusTxt = '⚠️ Pozvánka zatím neodeslána';
+        statusCol = '#eab308';
+      }
       var openedLine = la
         ? '<div style="font-size:12px;color:#3b82f6;margin-top:4px;">🔑 Otevřel/aktivní v portálu: ' + cmpFmtDt(la) + '</div>'
         : '<div style="font-size:12px;color:var(--text2);margin-top:4px;">Zatím žádná aktivita v portálu (neotevřel odkaz).</div>';
