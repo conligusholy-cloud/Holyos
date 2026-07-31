@@ -1687,26 +1687,32 @@ router.get('/leads', requireAuth, async (req, res, next) => {
         const t = e.created_at ? new Date(e.created_at).getTime() : 0;
         if (t && !SYSTEM_EVENTS.has(e.event) && (!last[lid] || t > last[lid])) last[lid] = t;
         if (e.event === 'admin_model_view' && t && (!mv[lid] || t > mv[lid])) mv[lid] = t;
-        // Čas v PORTÁLU dnes: visit_end nese ms (délku návštěvy) a má lead_id.
-        if (e.event === 'visit_end' && e.props && e.props.ms && e.created_at && tzDayKey(e.created_at) === todayKey) {
-          todayMs[lid] = (todayMs[lid] || 0) + (Number(e.props.ms) || 0);
-        }
       });
-      // Čas na LANDINGU dnes: page_leave nese ms, ale bez lead_id. Spárujeme přes
-      // session sid (stejně jako výpis aktivity leada). Bereme dnešní page_leave eventy
-      // pro session sids, které patří některému leadovi.
+      // Čas na webu DNES: počítáme po SESSION (sid). Pro každou session vezmeme dnešní
+      // eventy a čas = přesné ms z visit_end/page_leave (když návštěva skončila), jinak
+      // rozsah (poslední − první event). Tím naskočí čas i právě aktivnímu člověku,
+      // kterému ještě visit_end nedorazil.
       const sidList = Object.keys(sidToLead);
       if (sidList.length) {
         const since = new Date(Date.now() - 26 * 3600 * 1000); // over-fetch, přesně filtrujeme v JS
-        const pls = await prisma.compounderEvent.findMany({
-          where: { event: 'page_leave', sid: { in: sidList }, created_at: { gte: since } },
-          select: { sid: true, props: true, created_at: true }, take: 20000,
+        const sessEvents = await prisma.compounderEvent.findMany({
+          where: { sid: { in: sidList }, created_at: { gte: since } },
+          select: { sid: true, event: true, props: true, created_at: true }, take: 20000,
         }).catch(() => []);
-        pls.forEach((e) => {
-          if (!e.props || !e.props.ms || !e.created_at) return;
-          if (tzDayKey(e.created_at) !== todayKey) return;
-          const lid = sidToLead[e.sid]; if (lid == null) return;
-          todayMs[lid] = (todayMs[lid] || 0) + (Number(e.props.ms) || 0);
+        const bySid = {}; // sid → { min, max, visitMs }
+        sessEvents.forEach((e) => {
+          if (!e.created_at || tzDayKey(e.created_at) !== todayKey) return;
+          const t2 = new Date(e.created_at).getTime();
+          const rec = bySid[e.sid] || (bySid[e.sid] = { min: t2, max: t2, visitMs: 0 });
+          if (t2 < rec.min) rec.min = t2;
+          if (t2 > rec.max) rec.max = t2;
+          if ((e.event === 'visit_end' || e.event === 'page_leave') && e.props && e.props.ms) rec.visitMs = Math.max(rec.visitMs, Number(e.props.ms) || 0);
+        });
+        Object.keys(bySid).forEach((sid) => {
+          const lid = sidToLead[sid]; if (lid == null) return;
+          const rec = bySid[sid];
+          const ms = rec.visitMs > 0 ? rec.visitMs : Math.max(0, rec.max - rec.min);
+          todayMs[lid] = (todayMs[lid] || 0) + ms;
         });
       }
       leads.forEach((l) => {
@@ -2259,8 +2265,9 @@ router.get('/analytics/summary', requireAuth, async (req, res, next) => {
       prisma.compounderEvent.findMany({ where: { created_at: { gte: since } }, select: { sid: true }, distinct: ['sid'] }),
       prisma.compounderLead.count({ where: { created_at: { gte: since }, is_test: false } }),
       prisma.compounderEvent.findMany({ where: { created_at: { gte: since }, event: 'section_view' }, select: { props: true }, take: 5000 }),
-      // Dnešní portálová aktivita (přesně filtrujeme na dnešek v JS níže).
-      prisma.compounderEvent.findMany({ where: { created_at: { gte: new Date(Date.now() - 26 * 3600 * 1000) }, event: { in: ['portal_view', 'visit_end'] } }, select: { event: true, props: true, created_at: true }, take: 20000 }),
+      // Dnešní eventy (přesně filtrujeme na dnešek v JS níže) — pro počet lidí na portálu
+      // i čas studia po sessions.
+      prisma.compounderEvent.findMany({ where: { created_at: { gte: new Date(Date.now() - 26 * 3600 * 1000) } }, select: { sid: true, event: true, props: true, created_at: true }, take: 30000 }),
     ]);
     const sessionCount = sessions.length;
     const sec = {};
@@ -2270,13 +2277,22 @@ router.get('/analytics/summary', requireAuth, async (req, res, next) => {
     const tzDayKeyS = (d) => new Intl.DateTimeFormat('en-CA', { timeZone: process.env.VELIN_TZ || 'Europe/Prague', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(d));
     const todayKeyS = tzDayKeyS(Date.now());
     const todayPortalLeads = new Set();
-    let todayStudyMs = 0;
+    const bySidS = {}; // sid → { min, max, visitMs, portal } — čas po sessions
     todayEvents.forEach((e) => {
       if (tzDayKeyS(e.created_at) !== todayKeyS) return;
       const lid = e.props && e.props.lead_id;
       if (e.event === 'portal_view' && lid != null) todayPortalLeads.add(lid);
-      if (e.event === 'visit_end' && lid != null && e.props && e.props.ms) { todayStudyMs += Number(e.props.ms) || 0; todayPortalLeads.add(lid); }
+      if (!e.sid) return;
+      const t3 = new Date(e.created_at).getTime();
+      const rec = bySidS[e.sid] || (bySidS[e.sid] = { min: t3, max: t3, visitMs: 0, portal: false });
+      if (t3 < rec.min) rec.min = t3;
+      if (t3 > rec.max) rec.max = t3;
+      if ((e.event === 'visit_end' || e.event === 'page_leave') && e.props && e.props.ms) rec.visitMs = Math.max(rec.visitMs, Number(e.props.ms) || 0);
+      if (e.event === 'portal_view') rec.portal = true;
     });
+    // Čas studia = součet přes portálové sessions (přesné ms z visit_end/page_leave, jinak rozsah).
+    let todayStudyMs = 0;
+    Object.keys(bySidS).forEach((sid) => { const rec = bySidS[sid]; if (!rec.portal) return; todayStudyMs += rec.visitMs > 0 ? rec.visitMs : Math.max(0, rec.max - rec.min); });
     res.json({
       days,
       sessions: sessionCount,
