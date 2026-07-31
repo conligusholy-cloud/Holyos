@@ -3112,6 +3112,7 @@
         var top = (s.topSections||[]).slice(0,4).map(function(x){ return cmpEsc(x.section)+' ('+x.count+')'; }).join(' · ') || '—';
         el.innerHTML = '<div style="display:flex;gap:22px;flex-wrap:wrap;align-items:center;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 18px;">' +
           cmpStat('Návštěvy 30d', s.sessions) + cmpStat('Eventy', s.events) + cmpStat('Registrace', s.registrations) + cmpStat('Konverze', s.conversionPct + ' %') +
+          cmpStat('Dnes na portálu', (s.todayPortalVisitors!=null?s.todayPortalVisitors:0)) + cmpStat('Čas studia dnes', ((s.todayStudyMs>0)?cmpFmtDur(s.todayStudyMs):'0 s')) +
           '<div style="color:var(--text2);font-size:12px;max-width:340px;">Top sekce: ' + top + '</div>' + '<button onclick="cmpPushBroadcast()" style="margin-left:auto;background:#eab308;color:#1a1408;border:none;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:600;cursor:pointer;">\ud83d\udce3 Push vsem</button>' + '</div>';
       } catch(e){}
     }

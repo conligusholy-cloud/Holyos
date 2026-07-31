@@ -2251,16 +2251,29 @@ router.get('/analytics/summary', requireAuth, async (req, res, next) => {
   try {
     const days = Math.min(365, Math.max(1, Number(req.query.days) || 30));
     const since = new Date(Date.now() - days * 24 * 3600 * 1000);
-    const [events, sessions, registrations, secEvents] = await Promise.all([
+    const [events, sessions, registrations, secEvents, todayEvents] = await Promise.all([
       prisma.compounderEvent.count({ where: { created_at: { gte: since } } }),
       prisma.compounderEvent.findMany({ where: { created_at: { gte: since } }, select: { sid: true }, distinct: ['sid'] }),
       prisma.compounderLead.count({ where: { created_at: { gte: since }, is_test: false } }),
       prisma.compounderEvent.findMany({ where: { created_at: { gte: since }, event: 'section_view' }, select: { props: true }, take: 5000 }),
+      // Dnešní portálová aktivita (přesně filtrujeme na dnešek v JS níže).
+      prisma.compounderEvent.findMany({ where: { created_at: { gte: new Date(Date.now() - 26 * 3600 * 1000) }, event: { in: ['portal_view', 'visit_end'] } }, select: { event: true, props: true, created_at: true }, take: 20000 }),
     ]);
     const sessionCount = sessions.length;
     const sec = {};
     secEvents.forEach((e) => { const s = e.props && e.props.section; if (s) sec[s] = (sec[s] || 0) + 1; });
     const topSections = Object.keys(sec).map((k) => ({ section: k, count: sec[k] })).sort((a, b) => b.count - a.count).slice(0, 8);
+    // Dnes na portálu: kolik unikátních leadů + kolik času celkem strávili studiem (visit_end ms).
+    const tzDayKeyS = (d) => new Intl.DateTimeFormat('en-CA', { timeZone: process.env.VELIN_TZ || 'Europe/Prague', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(d));
+    const todayKeyS = tzDayKeyS(Date.now());
+    const todayPortalLeads = new Set();
+    let todayStudyMs = 0;
+    todayEvents.forEach((e) => {
+      if (tzDayKeyS(e.created_at) !== todayKeyS) return;
+      const lid = e.props && e.props.lead_id;
+      if (e.event === 'portal_view' && lid != null) todayPortalLeads.add(lid);
+      if (e.event === 'visit_end' && lid != null && e.props && e.props.ms) { todayStudyMs += Number(e.props.ms) || 0; todayPortalLeads.add(lid); }
+    });
     res.json({
       days,
       sessions: sessionCount,
@@ -2268,6 +2281,8 @@ router.get('/analytics/summary', requireAuth, async (req, res, next) => {
       registrations,
       conversionPct: sessionCount ? Math.round((registrations / sessionCount) * 1000) / 10 : 0,
       topSections,
+      todayPortalVisitors: todayPortalLeads.size,
+      todayStudyMs,
     });
   } catch (err) {
     next(err);
