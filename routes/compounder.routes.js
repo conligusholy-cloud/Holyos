@@ -1663,17 +1663,19 @@ router.get('/leads', requireAuth, async (req, res, next) => {
       const ids = leads.map((l) => l.id);
       const evs = await prisma.compounderEvent.findMany({
         where: { OR: ids.map((id) => ({ props: { path: ['lead_id'], equals: id } })) },
-        select: { event: true, props: true, created_at: true },
+        select: { event: true, props: true, created_at: true, sid: true },
         take: 20000,
       });
       const c = {};
       const last = {}; // poslední aktivita (max created_at) na leada
       const mv = {};   // poslední „admin se podíval na model" (max created_at) na leada
       const todayMs = {}; // čas na webu DNES (součet ms z page_leave) na leada
+      const sidToLead = {}; // session sid → lead_id (pro spárování eventů bez lead_id, např. page_leave)
       const tzDayKey = (d) => new Intl.DateTimeFormat('en-CA', { timeZone: process.env.VELIN_TZ || 'Europe/Prague', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(d));
       const todayKey = tzDayKey(Date.now());
       evs.forEach((e) => {
         const lid = e.props && e.props.lead_id; if (lid == null) return;
+        if (e.sid && sidToLead[e.sid] == null) sidToLead[e.sid] = lid;
         const x = c[lid] || (c[lid] = { portal: 0, doc: 0, loc: 0, contact: 0 });
         if (e.event === 'portal_view') x.portal++;
         else if (e.event === 'doc_download') x.doc++;
@@ -1682,11 +1684,24 @@ router.get('/leads', requireAuth, async (req, res, next) => {
         const t = e.created_at ? new Date(e.created_at).getTime() : 0;
         if (t && (!last[lid] || t > last[lid])) last[lid] = t;
         if (e.event === 'admin_model_view' && t && (!mv[lid] || t > mv[lid])) mv[lid] = t;
-        // Čas strávený na webu dnes = součet ms z page_leave eventů z dnešního dne.
-        if (e.event === 'page_leave' && e.props && e.props.ms && e.created_at && tzDayKey(e.created_at) === todayKey) {
-          todayMs[lid] = (todayMs[lid] || 0) + (Number(e.props.ms) || 0);
-        }
       });
+      // Čas na webu DNES: page_leave nese ms (délku session), ale často bez lead_id.
+      // Spárujeme ho přes session sid (stejně jako výpis aktivity leada). Bereme dnešní
+      // page_leave eventy pro session sids, které patří některému leadovi.
+      const sidList = Object.keys(sidToLead);
+      if (sidList.length) {
+        const since = new Date(Date.now() - 26 * 3600 * 1000); // over-fetch, přesně filtrujeme v JS
+        const pls = await prisma.compounderEvent.findMany({
+          where: { event: 'page_leave', sid: { in: sidList }, created_at: { gte: since } },
+          select: { sid: true, props: true, created_at: true }, take: 20000,
+        }).catch(() => []);
+        pls.forEach((e) => {
+          if (!e.props || !e.props.ms || !e.created_at) return;
+          if (tzDayKey(e.created_at) !== todayKey) return;
+          const lid = sidToLead[e.sid]; if (lid == null) return;
+          todayMs[lid] = (todayMs[lid] || 0) + (Number(e.props.ms) || 0);
+        });
+      }
       leads.forEach((l) => {
         const x = c[l.id] || { portal: 0, doc: 0, loc: 0, contact: 0 };
         l.lastActivityAt = last[l.id] ? new Date(last[l.id]).toISOString() : null;
