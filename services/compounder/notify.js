@@ -232,6 +232,18 @@ async function notifyOwnersMessage(prisma, { title, body, data }) {
   } catch (e) { console.error('[compounder-notify] message', e.message); }
 }
 
+// Nová PŘÍCHOZÍ odpověď leada na e-mail — push + zvonek majitelům (Jan + Tomáš).
+async function notifyLeadReply(prisma, { lead, preview }) {
+  try {
+    const name = (lead && lead.name) ? lead.name : 'Lead';
+    await dispatch(prisma, {
+      title: '📩 Odpověď: ' + name,
+      body: preview || 'Zákazník odpověděl na e-mail.',
+      data: { type: 'lead_reply', lead_id: (lead && lead.id) ? lead.id : null },
+    });
+  } catch (e) { console.error('[compounder-notify] lead reply', e.message); }
+}
+
 module.exports = {
   NOTIFY_SETTING_KEY,
   getEligibleVelinPeople,
@@ -245,4 +257,5 @@ module.exports = {
   notifyContactRequest,
   notifyPurchaseInquiry,
   notifyOwnersMessage,
+  notifyLeadReply,
 };

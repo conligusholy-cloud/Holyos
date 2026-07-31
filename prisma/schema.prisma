@@ -5676,6 +5676,10 @@ model LeadMessage {
   sent_at              DateTime?
   created_at           DateTime  @default(now())
 
+  // Identifikátor externí zprávy (internetMessageId) — u příchozích odpovědí z e-mailu,
+  // slouží k deduplikaci, aby se stejná odpověď nezaložila víckrát. U odchozích null.
+  ext_message_id String? @unique @db.VarChar(500)
+
   @@index([lead_id, created_at])
   @@map("lead_messages")
 }
