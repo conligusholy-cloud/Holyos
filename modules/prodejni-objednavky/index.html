@@ -403,9 +403,13 @@
           <option value="">Všechny stavy</option>
           <option value="new">Nový</option>
           <option value="nedovolano">Nedovoláno</option>
+          <option value="volat_pristi">Volat příště</option>
           <option value="contacted">Kontaktován</option>
+          <option value="schuzka">Domluvena schůzka</option>
+          <option value="schuzka_online">Domluvena schůzka online</option>
           <option value="qualified">Kvalifikován</option>
           <option value="converted">Převeden</option>
+          <option value="nelze_pouzit">Nelze použít</option>
           <option value="rejected">Zamítnut</option>
         </select>
         <select id="cmp-role-filter" onchange="loadCompounderLeads()">
@@ -2844,7 +2848,7 @@
     // ============================================================
     // COMPOUNDER — přehled leadů z webu compounder.world
     // ============================================================
-    var CMP_STATUS = { new: 'Nový', nedovolano: 'Nedovoláno', contacted: 'Kontaktován', qualified: 'Kvalifikován', converted: 'Převeden', rejected: 'Zamítnut' };
+    var CMP_STATUS = { new: 'Nový', nedovolano: 'Nedovoláno', volat_pristi: 'Volat příště', contacted: 'Kontaktován', schuzka: 'Domluvena schůzka', schuzka_online: 'Domluvena schůzka online', qualified: 'Kvalifikován', converted: 'Převeden', nelze_pouzit: 'Nelze použít', rejected: 'Zamítnut' };
     var CMP_LANGS = { en:'English', bg:'Български', cs:'Čeština', da:'Dansk', de:'Deutsch', el:'Ελληνικά', es:'Español', et:'Eesti', fi:'Suomi', fr:'Français', ga:'Gaeilge', hr:'Hrvatski', hu:'Magyar', it:'Italiano', lt:'Lietuvių', lv:'Latviešu', mt:'Malti', nl:'Nederlands', pl:'Polski', pt:'Português', ro:'Română', sk:'Slovenčina', sl:'Slovenščina', sv:'Svenska' };
     var CMP_SELLERS = null; // seznam obchodníků (lazy z /api/sales/sellers); null = ještě nenačteno, [] = nedostupné
     var CMP_EXT_REPS = null; // externí obchodníci (lazy z /api/compounder/external-reps)
