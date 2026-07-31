@@ -3493,7 +3493,7 @@
           table+='<div style="overflow:auto;max-height:50vh;"><table style="width:100%;border-collapse:collapse;font-size:12.5px;">'
             +'<thead><tr style="text-align:left;color:var(--text2);border-bottom:1px solid var(--border);"><th style="padding:6px 8px;">Lead</th><th style="padding:6px 8px;">Posl. odesláno</th><th style="padding:6px 8px;">×</th><th style="padding:6px 8px;">Ušlá částka</th><th style="padding:6px 8px;">Otevřel</th><th style="padding:6px 8px;">Proklik</th></tr></thead><tbody>'
             +rows.map(function(l){
-              var op=l.openedAt?('<span style="color:#10b981;">✓ '+cmpFmtDt(l.openedAt)+'</span>'):'<span style="color:var(--text2);">—</span>';
+              var op=l.openedAt?('<span style="color:#10b981;">✓ '+cmpFmtDt(l.openedAt)+(l.openImplied?' <span style="color:var(--text2);font-size:10px;">(z prokliku)</span>':'')+'</span>'):'<span style="color:var(--text2);">—</span>';
               var cl=l.clickedAt?('<span style="color:#3b82f6;">✓ '+cmpFmtDt(l.clickedAt)+'</span>'):'<span style="color:var(--text2);">—</span>';
               return '<tr style="border-bottom:1px solid var(--border);"><td style="padding:6px 8px;">'+cmpEsc(l.name)+(l.email?('<br><span style="color:var(--text2);font-size:11px;">'+cmpEsc(l.email)+'</span>'):'')+'</td><td style="padding:6px 8px;white-space:nowrap;">'+cmpFmtDt(l.lastSentAt)+'</td><td style="padding:6px 8px;">'+l.sends+'</td><td style="padding:6px 8px;white-space:nowrap;">'+(l.missed!=null?(Number(l.missed).toLocaleString('cs-CZ')+' Kč'):'—')+'</td><td style="padding:6px 8px;white-space:nowrap;">'+op+'</td><td style="padding:6px 8px;white-space:nowrap;">'+cl+'</td></tr>';
             }).join('')

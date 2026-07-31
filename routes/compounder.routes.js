@@ -1687,10 +1687,14 @@ router.get('/leads', requireAuth, async (req, res, next) => {
         const t = e.created_at ? new Date(e.created_at).getTime() : 0;
         if (t && !SYSTEM_EVENTS.has(e.event) && (!last[lid] || t > last[lid])) last[lid] = t;
         if (e.event === 'admin_model_view' && t && (!mv[lid] || t > mv[lid])) mv[lid] = t;
+        // Čas v PORTÁLU dnes: visit_end nese ms (délku návštěvy) a má lead_id.
+        if (e.event === 'visit_end' && e.props && e.props.ms && e.created_at && tzDayKey(e.created_at) === todayKey) {
+          todayMs[lid] = (todayMs[lid] || 0) + (Number(e.props.ms) || 0);
+        }
       });
-      // Čas na webu DNES: page_leave nese ms (délku session), ale často bez lead_id.
-      // Spárujeme ho přes session sid (stejně jako výpis aktivity leada). Bereme dnešní
-      // page_leave eventy pro session sids, které patří některému leadovi.
+      // Čas na LANDINGU dnes: page_leave nese ms, ale bez lead_id. Spárujeme přes
+      // session sid (stejně jako výpis aktivity leada). Bereme dnešní page_leave eventy
+      // pro session sids, které patří některému leadovi.
       const sidList = Object.keys(sidToLead);
       if (sidList.length) {
         const since = new Date(Date.now() - 26 * 3600 * 1000); // over-fetch, přesně filtrujeme v JS
@@ -2116,6 +2120,12 @@ router.get('/loss-email/stats', requireAuth, async (req, res, next) => {
       if (t >= perLead[lid].lastSentMs && (!perLead[lid].clickedAt || t > new Date(perLead[lid].clickedAt).getTime())) perLead[lid].clickedAt = e.created_at;
     });
 
+    // Proklik do portálu jednoznačně znamená otevření e-mailu. Pixel otevření často
+    // neprojde (příjemci mají blokované obrázky), takže klik počítáme i jako otevření
+    // (k času prokliku), aby „otevřeno" nebylo nesmyslně nižší než „proklik".
+    Object.values(perLead).forEach((r) => {
+      if (!r.openedAt && r.clickedAt) { r.openedAt = r.clickedAt; r.openImplied = true; }
+    });
     const rows = Object.values(perLead);
     const ids = rows.map((r) => r.lead_id);
     const leadsInfo = ids.length ? await prisma.compounderLead.findMany({ where: { id: { in: ids } }, select: { id: true, name: true, email: true } }) : [];
@@ -2178,7 +2188,7 @@ router.get('/leads/:id/activity', requireAuth, async (req, res, next) => {
       const p = e.props || {};
       if (e.event === 'section_view' && p.section) sections[p.section] = (sections[p.section] || 0) + 1;
       if (e.event === 'portal_view') portalOpened = true;
-      if (e.event === 'page_leave' && p.ms) totalMs += Number(p.ms) || 0;
+      if ((e.event === 'page_leave' || e.event === 'visit_end') && p.ms) totalMs += Number(p.ms) || 0;
     });
     res.json({
       count: events.length,
@@ -2218,7 +2228,7 @@ router.get('/leads/:id/ai-eval', requireAuth, async (req, res, next) => {
       const p = e.props || {}; evCounts[e.event] = (evCounts[e.event] || 0) + 1;
       if (e.event === 'section_view' && p.section) sections[p.section] = (sections[p.section] || 0) + 1;
       if (e.event === 'portal_view') portalOpened = true;
-      if (e.event === 'page_leave' && p.ms) totalMs += Number(p.ms) || 0;
+      if ((e.event === 'page_leave' || e.event === 'visit_end') && p.ms) totalMs += Number(p.ms) || 0;
       if (e.event === 'location_assess') locChecks.push({ address: p.address, pop: p.pop, req_pct: p.req_pct, score: p.score });
     });
     const facts = {
@@ -3362,7 +3372,7 @@ router.get('/external-reps/me/leads/:id/activity', async (req, res, next) => {
     if (reg && reg.sid) or.push({ sid: reg.sid });
     const events = (await prisma.compounderEvent.findMany({ where: { OR: or }, orderBy: { created_at: 'desc' }, take: 500 })).reverse();
     const sections = {}; let portalOpened = false; let totalMs = 0;
-    events.forEach((e) => { const p = e.props || {}; if (e.event === 'section_view' && p.section) sections[p.section] = (sections[p.section] || 0) + 1; if (e.event === 'portal_view') portalOpened = true; if (e.event === 'page_leave' && p.ms) totalMs += Number(p.ms) || 0; });
+    events.forEach((e) => { const p = e.props || {}; if (e.event === 'section_view' && p.section) sections[p.section] = (sections[p.section] || 0) + 1; if (e.event === 'portal_view') portalOpened = true; if ((e.event === 'page_leave' || e.event === 'visit_end') && p.ms) totalMs += Number(p.ms) || 0; });
     res.json({ count: events.length, portalOpened, totalMs, sections, events: events.map((e) => ({ event: e.event, props: e.props, at: e.created_at })) });
   } catch (err) { next(err); }
 });
