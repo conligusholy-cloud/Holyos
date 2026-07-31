@@ -1669,6 +1669,9 @@ router.get('/leads', requireAuth, async (req, res, next) => {
       const c = {};
       const last = {}; // poslední aktivita (max created_at) na leada
       const mv = {};   // poslední „admin se podíval na model" (max created_at) na leada
+      const todayMs = {}; // čas na webu DNES (součet ms z page_leave) na leada
+      const tzDayKey = (d) => new Intl.DateTimeFormat('en-CA', { timeZone: process.env.VELIN_TZ || 'Europe/Prague', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(d));
+      const todayKey = tzDayKey(Date.now());
       evs.forEach((e) => {
         const lid = e.props && e.props.lead_id; if (lid == null) return;
         const x = c[lid] || (c[lid] = { portal: 0, doc: 0, loc: 0, contact: 0 });
@@ -1679,6 +1682,10 @@ router.get('/leads', requireAuth, async (req, res, next) => {
         const t = e.created_at ? new Date(e.created_at).getTime() : 0;
         if (t && (!last[lid] || t > last[lid])) last[lid] = t;
         if (e.event === 'admin_model_view' && t && (!mv[lid] || t > mv[lid])) mv[lid] = t;
+        // Čas strávený na webu dnes = součet ms z page_leave eventů z dnešního dne.
+        if (e.event === 'page_leave' && e.props && e.props.ms && e.created_at && tzDayKey(e.created_at) === todayKey) {
+          todayMs[lid] = (todayMs[lid] || 0) + (Number(e.props.ms) || 0);
+        }
       });
       leads.forEach((l) => {
         const x = c[l.id] || { portal: 0, doc: 0, loc: 0, contact: 0 };
@@ -1693,6 +1700,7 @@ router.get('/leads', requireAuth, async (req, res, next) => {
         l.warmthPct = Math.max(0, Math.min(100, s));
         l.requestedContact = requested;
         l.hasPhone = !!l.phone;
+        l.todayMs = todayMs[l.id] || 0; // čas na webu dnes (ms)
         // Viděl admin aktuální model? admin_model_view musí být novější než poslední
         // uložení modelu zákazníkem (u starých modelů bez savedAt stačí jakékoli zobrazení).
         if (l.hasModel) {
