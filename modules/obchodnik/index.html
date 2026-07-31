@@ -119,7 +119,7 @@
         <button class="logout" onclick="doLogout()">Odhlásit</button>
       </div>
     </div>
-    <input class="search" id="search" placeholder="Hledat jméno / e-mail…" oninput="onSearch()">
+    <input class="search" id="search" placeholder="Hledat jméno / e-mail / telefon…" oninput="onSearch()">
   </div>
 
   <div class="chips" id="chips"></div>
@@ -235,7 +235,7 @@
   <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/locales-all.global.min.js"></script>
 <script>
   var API = '/api/compounder';
-  var STATUS = { new:{l:'Nový',c:'var(--new)'}, contacted:{l:'Kontaktován',c:'var(--contacted)'}, qualified:{l:'Kvalifikován',c:'var(--qualified)'}, converted:{l:'Převeden',c:'var(--converted)'}, rejected:{l:'Zamítnut',c:'var(--rejected)'} };
+  var STATUS = { new:{l:'Nový',c:'var(--new)'}, nedovolano:{l:'Nedovoláno',c:'#f59e0b'}, contacted:{l:'Kontaktován',c:'var(--contacted)'}, qualified:{l:'Kvalifikován',c:'var(--qualified)'}, converted:{l:'Převeden',c:'var(--converted)'}, rejected:{l:'Zamítnut',c:'var(--rejected)'} };
   var LANGS = { '':'—', en:'English', bg:'Български', cs:'Čeština', da:'Dansk', de:'Deutsch', el:'Ελληνικά', es:'Español', et:'Eesti', fi:'Suomi', fr:'Français', ga:'Gaeilge', hr:'Hrvatski', hu:'Magyar', it:'Italiano', lt:'Lietuvių', lv:'Latviešu', mt:'Malti', nl:'Nederlands', pl:'Polski', pt:'Português', ro:'Română', sk:'Slovenčina', sl:'Slovenščina', sv:'Svenska' };
   var COUNTRIES = [
     {c:'CZ',f:'🇨🇿',d:'+420'},{c:'SK',f:'🇸🇰',d:'+421'},{c:'DE',f:'🇩🇪',d:'+49'},{c:'AT',f:'🇦🇹',d:'+43'},

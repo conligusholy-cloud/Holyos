@@ -1584,7 +1584,11 @@ router.get('/my-leads', requireAuth, async (req, res, next) => {
       where.OR = [
         { name: { contains: q, mode: 'insensitive' } },
         { email: { contains: q, mode: 'insensitive' } },
+        { phone: { contains: q } },
       ];
+      // Hledání podle telefonu i po odstranění mezer/prefixů (uloženo může být „+420 …").
+      const qDigits = q.replace(/\D/g, '');
+      if (qDigits.length >= 3) where.OR.push({ phone: { contains: qDigits } });
     }
     const leads = await prisma.compounderLead.findMany({
       where, orderBy: { created_at: 'desc' }, take: 500,
@@ -1765,7 +1769,7 @@ router.get('/leads', requireAuth, async (req, res, next) => {
 
 // PATCH /api/compounder/leads/:id — změna stavu / poznámky
 const patchSchema = z.object({
-  status: z.enum(['new', 'contacted', 'qualified', 'converted', 'rejected']).optional(),
+  status: z.enum(['new', 'nedovolano', 'contacted', 'qualified', 'converted', 'rejected']).optional(),
   notes: z.string().max(5000).optional().nullable(),
   lang: z.string().trim().max(10).optional().nullable(),
   owner_person_id: z.number().int().positive().optional().nullable(),
