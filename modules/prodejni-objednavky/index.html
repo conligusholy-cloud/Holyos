@@ -3153,14 +3153,14 @@
       var td = document.createElement('td'); td.colSpan = 12; td.style.background='rgba(234,179,8,0.04)'; td.style.padding='14px 18px';
       td.innerHTML = cmpAccessBlock(id, row.getAttribute('data-source')||'', row.getAttribute('data-approved')==='1')
         + cmpInviteBlock(id, parseInt(row.getAttribute('data-sent-count')||'0',10), row.getAttribute('data-sent-at')||'', row.getAttribute('data-phone')||'', row.getAttribute('data-la')||'')
-        + cmpSecBlock(id, row.getAttribute('data-sections')||'') + cmpRevStatsBlock(id, row.getAttribute('data-revstats')==='1') + cmpExampleBlock(id, row.getAttribute('data-example')==='1', row.getAttribute('data-hideloss')==='1') + cmpModelBlock(id) + cmpOfferBlock(id, row.getAttribute('data-extra')||'');
+        + cmpSecBlock(id, row.getAttribute('data-sections')||'') + cmpRevStatsBlock(id, row.getAttribute('data-revstats')==='1') + cmpExampleBlock(id, row.getAttribute('data-example')==='1', row.getAttribute('data-hideloss')==='1') + cmpModelBlock(id) + cmpOfferBlock(id, row.getAttribute('data-extra')||'') + cmpCommsBlock(id, row.getAttribute('data-phone')||'', row.getAttribute('data-name')||'');
       var resDiv = document.createElement('div'); resDiv.innerHTML = '<div style="color:var(--text2);font-size:13px;">Načítám rezervace…</div>';
       td.appendChild(resDiv);
       cmpLeadReservations(id, resDiv);
       var body = document.createElement('div'); body.innerHTML = '<div style="color:var(--text2);font-size:13px;">Načítám cestu…</div>';
       td.appendChild(body);
       tr.appendChild(td); row.parentNode.insertBefore(tr, row.nextSibling);
-      cmpRenderOfferChips(id); cmpFillOfferSelect(id); cmpLoadLossInfo(id);
+      cmpRenderOfferChips(id); cmpFillOfferSelect(id); cmpLoadLossInfo(id); cmpCommsLoadHist(id);
       try {
         var r = await fetch('/api/compounder/leads/'+id+'/activity', { credentials:'include' });
         var a = await r.json();
@@ -3858,6 +3858,115 @@
       } catch(e){ if(msg){ msg.style.color='#ef4444'; msg.textContent='Chyba uložení'; } }
     }
     window.cmpSetHideLoss = cmpSetHideLoss;
+    // ── Panel Komunikace: AI generátor oslovení + odeslání + historie ──────────
+    function cmpCommsBlock(id, phone, name){
+      return '<div style="margin-bottom:12px;padding:10px 12px;background:rgba(16,185,129,0.05);border:1px solid var(--border);border-radius:8px;">'
+        + '<div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--text2);margin-bottom:8px;">💬 Komunikace — oslovení + historie</div>'
+        + '<input type="hidden" id="cmp-comms-phone-'+id+'" value="'+cmpEsc(phone||'')+'"><input type="hidden" id="cmp-comms-name-'+id+'" value="'+cmpEsc(name||'')+'">'
+        + '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">'
+        +   '<select id="cmp-comms-ch-'+id+'" onchange="cmpCommsChannel('+id+')" style="background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 8px;font-size:12.5px;"><option value="email">✉️ E-mail</option><option value="linkedin">🔗 LinkedIn</option><option value="whatsapp">🟢 WhatsApp</option></select>'
+        +   '<input id="cmp-comms-goal-'+id+'" placeholder="Cíl zprávy (volitelné)…" style="flex:1;min-width:160px;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-size:12.5px;">'
+        +   '<button type="button" onclick="cmpCommsGen('+id+')" style="background:#6366f1;color:#fff;border:none;border-radius:8px;padding:6px 14px;font-size:12.5px;font-weight:700;cursor:pointer;">✨ Vygenerovat</button>'
+        + '</div>'
+        + '<input id="cmp-comms-subj-'+id+'" placeholder="Předmět…" style="width:100%;box-sizing:border-box;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-size:12.5px;margin-bottom:6px;">'
+        + '<textarea id="cmp-comms-body-'+id+'" rows="6" placeholder="Text zprávy — vygeneruj nebo napiš ručně…" style="width:100%;box-sizing:border-box;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:8px 10px;font-size:13px;resize:vertical;"></textarea>'
+        + '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px;">'
+        +   '<button type="button" id="cmp-comms-act-email-'+id+'" onclick="cmpCommsSendEmail('+id+')" style="background:#eab308;color:#1a1408;border:none;border-radius:8px;padding:6px 14px;font-size:12.5px;font-weight:700;cursor:pointer;">📧 Odeslat e-mail</button>'
+        +   '<button type="button" id="cmp-comms-act-whatsapp-'+id+'" onclick="cmpCommsWhatsApp('+id+')" style="display:none;background:#25D366;color:#0a2e17;border:none;border-radius:8px;padding:6px 14px;font-size:12.5px;font-weight:700;cursor:pointer;">🟢 Otevřít WhatsApp</button>'
+        +   '<button type="button" id="cmp-comms-act-linkedin-'+id+'" onclick="cmpCommsLinkedIn('+id+')" style="display:none;background:#0a66c2;color:#fff;border:none;border-radius:8px;padding:6px 14px;font-size:12.5px;font-weight:700;cursor:pointer;">🔗 Kopírovat + otevřít LinkedIn</button>'
+        +   '<span id="cmp-comms-msg-'+id+'" style="font-size:12px;color:var(--text2);"></span>'
+        + '</div>'
+        + '<div style="font-size:11px;color:var(--text2);margin-top:6px;">LinkedIn: text se zkopíruje do schránky a otevře se vyhledání osoby — vložíš ho ručně (bezpečné). Vše se ukládá do historie.</div>'
+        + '<div id="cmp-comms-hist-'+id+'" style="margin-top:12px;"><div style="color:var(--text2);font-size:12px;">Načítám historii…</div></div>'
+        + '</div>';
+    }
+    function cmpCommsChannel(id){
+      var ch=(document.getElementById('cmp-comms-ch-'+id)||{}).value||'email';
+      var subj=document.getElementById('cmp-comms-subj-'+id); if(subj) subj.style.display=(ch==='email')?'':'none';
+      var e=document.getElementById('cmp-comms-act-email-'+id); if(e) e.style.display=(ch==='email')?'':'none';
+      var w=document.getElementById('cmp-comms-act-whatsapp-'+id); if(w) w.style.display=(ch==='whatsapp')?'':'none';
+      var l=document.getElementById('cmp-comms-act-linkedin-'+id); if(l) l.style.display=(ch==='linkedin')?'':'none';
+    }
+    window.cmpCommsChannel=cmpCommsChannel;
+    async function cmpCommsGen(id){
+      var ch=(document.getElementById('cmp-comms-ch-'+id)||{}).value||'email';
+      var goal=(document.getElementById('cmp-comms-goal-'+id)||{}).value||'';
+      var msg=document.getElementById('cmp-comms-msg-'+id); if(msg){msg.style.color='var(--text2)';msg.textContent='Generuji…';}
+      try{
+        var r=await fetch('/api/compounder/leads/'+id+'/messages/generate',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({channel:ch,goal:goal||undefined})});
+        var j=await r.json();
+        if(!r.ok||!j.ok) throw new Error(j.error||('HTTP '+r.status));
+        var subj=document.getElementById('cmp-comms-subj-'+id); if(subj&&j.subject) subj.value=j.subject;
+        var body=document.getElementById('cmp-comms-body-'+id); if(body){ body.value=j.body||''; body.dataset.ai='1'; }
+        if(msg){msg.style.color='#10b981';msg.textContent='Návrh vygenerován ✓';setTimeout(function(){if(msg)msg.textContent='';},2000);}
+      }catch(e){ if(msg){msg.style.color='#ef4444';msg.textContent='Nepodařilo se: '+e.message;} }
+    }
+    window.cmpCommsGen=cmpCommsGen;
+    async function cmpCommsLog(id, channel, body, subject, status){
+      try{
+        var bEl=document.getElementById('cmp-comms-body-'+id);
+        var ai=!!(bEl&&bEl.dataset&&bEl.dataset.ai==='1');
+        await fetch('/api/compounder/leads/'+id+'/messages',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({channel:channel,body:body,subject:subject||undefined,status:status||'copied',generatedByAi:ai})});
+        cmpCommsLoadHist(id);
+      }catch(e){}
+    }
+    async function cmpCommsSendEmail(id){
+      var subj=(document.getElementById('cmp-comms-subj-'+id)||{}).value||'';
+      var body=(document.getElementById('cmp-comms-body-'+id)||{}).value||'';
+      if(!body.trim()){ alert('Prázdný text zprávy.'); return; }
+      var bEl=document.getElementById('cmp-comms-body-'+id); var ai=!!(bEl&&bEl.dataset&&bEl.dataset.ai==='1');
+      var msg=document.getElementById('cmp-comms-msg-'+id); if(msg){msg.style.color='var(--text2)';msg.textContent='Odesílám…';}
+      try{
+        var r=await fetch('/api/compounder/leads/'+id+'/messages/send-email',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({subject:subj,body:body,generatedByAi:ai})});
+        var j=await r.json();
+        if(!r.ok||!j.ok) throw new Error(j.error||('HTTP '+r.status));
+        if(msg){msg.style.color='#10b981';msg.textContent='Odesláno ✓';}
+        cmpCommsLoadHist(id);
+      }catch(e){ if(msg){msg.style.color='#ef4444';msg.textContent='Nepodařilo se: '+e.message;} }
+    }
+    window.cmpCommsSendEmail=cmpCommsSendEmail;
+    async function cmpCommsWhatsApp(id){
+      var phone=(document.getElementById('cmp-comms-phone-'+id)||{}).value||'';
+      var body=(document.getElementById('cmp-comms-body-'+id)||{}).value||'';
+      if(!body.trim()){ alert('Prázdný text zprávy.'); return; }
+      var digits=String(phone).replace(/\D/g,'');
+      if(!digits){ alert('Kontakt nemá telefon.'); return; }
+      window.open('https://wa.me/'+digits+'?text='+encodeURIComponent(body),'_blank');
+      var msg=document.getElementById('cmp-comms-msg-'+id); if(msg){msg.style.color='#10b981';msg.textContent='Otevřeno ve WhatsApp ✓';}
+      cmpCommsLog(id,'whatsapp',body,null,'copied');
+    }
+    window.cmpCommsWhatsApp=cmpCommsWhatsApp;
+    async function cmpCommsLinkedIn(id){
+      var body=(document.getElementById('cmp-comms-body-'+id)||{}).value||'';
+      if(!body.trim()){ alert('Prázdný text zprávy.'); return; }
+      try{ await navigator.clipboard.writeText(body); }catch(e){}
+      var name=(document.getElementById('cmp-comms-name-'+id)||{}).value||'';
+      window.open('https://www.linkedin.com/search/results/people/?keywords='+encodeURIComponent(name),'_blank');
+      var msg=document.getElementById('cmp-comms-msg-'+id); if(msg){msg.style.color='#10b981';msg.textContent='Zkopírováno do schránky ✓ — vlož do LinkedIn';}
+      cmpCommsLog(id,'linkedin',body,null,'copied');
+    }
+    window.cmpCommsLinkedIn=cmpCommsLinkedIn;
+    async function cmpCommsLoadHist(id){
+      var box=document.getElementById('cmp-comms-hist-'+id); if(!box) return;
+      try{
+        var r=await fetch('/api/compounder/leads/'+id+'/messages',{credentials:'include'});
+        var arr=await r.json(); if(!r.ok) throw new Error();
+        if(!Array.isArray(arr)||!arr.length){ box.innerHTML='<div style="color:var(--text2);font-size:12px;">Zatím žádná zaznamenaná komunikace.</div>'; return; }
+        var chIcon={email:'✉️',linkedin:'🔗',whatsapp:'🟢',sms:'💬',note:'📝'};
+        box.innerHTML='<div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--text2);margin-bottom:6px;">Historie komunikace ('+arr.length+')</div>'
+          +arr.map(function(m){
+            var when=cmpFmtDt(m.sent_at||m.created_at);
+            var dir=(m.direction==='in')?'⬅️ od leada':'➡️ my';
+            var st=(m.status==='sent')?'odesláno':(m.status==='copied'?'zkopírováno':(m.status==='failed'?'chyba':'návrh'));
+            return '<div style="border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-bottom:6px;background:var(--surface);">'
+              +'<div style="font-size:11.5px;color:var(--text2);margin-bottom:4px;">'+(chIcon[m.channel]||'')+' '+cmpEsc(m.channel)+' · '+dir+' · '+when+' · '+st+(m.generated_by_ai?' · 🤖 AI':'')+(m.author_name?(' · '+cmpEsc(m.author_name)):'')+'</div>'
+              +(m.subject?('<div style="font-weight:600;font-size:12.5px;">'+cmpEsc(m.subject)+'</div>'):'')
+              +'<div style="font-size:12.5px;white-space:pre-wrap;color:var(--text);">'+cmpEsc(m.body)+'</div>'
+              +'</div>';
+          }).join('');
+      }catch(e){ box.innerHTML='<div style="color:var(--text2);font-size:12px;">Historii se nepodařilo načíst.</div>'; }
+    }
+    window.cmpCommsLoadHist=cmpCommsLoadHist;
     async function cmpPushBroadcast(){
       var title = prompt('Titulek push notifikace (vsem odberatelum):'); if (!title) return;
       var body = prompt('Text (nepovinne):') || '';

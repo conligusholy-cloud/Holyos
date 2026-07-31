@@ -5646,6 +5646,9 @@ model CompounderLead {
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
 
+  // Historie komunikace s leadem (oslovení napříč kanály).
+  messages LeadMessage[]
+
   @@index([status])
   @@index([role])
   @@index([email])
@@ -5653,6 +5656,28 @@ model CompounderLead {
   @@index([external_rep_id])
   @@index([is_test])
   @@map("compounder_leads")
+}
+
+// Historie komunikace s leadem — každé oslovení / zpráva napříč kanály (LinkedIn,
+// e-mail, WhatsApp…), včetně AI návrhů. Slouží k timeline komunikace u obchodníka.
+model LeadMessage {
+  id      Int            @id @default(autoincrement())
+  lead_id Int
+  lead    CompounderLead @relation(fields: [lead_id], references: [id], onDelete: Cascade)
+
+  channel   String  @default("note") @db.VarChar(20) // linkedin | email | whatsapp | sms | note
+  direction String  @default("out") @db.VarChar(10)  // out (my leadovi) | in (od leada)
+  subject   String? @db.VarChar(300)
+  body      String  @db.Text
+  status    String  @default("draft") @db.VarChar(20) // draft | sent | copied | failed
+
+  generated_by_ai      Boolean   @default(false)
+  created_by_person_id Int?
+  sent_at              DateTime?
+  created_at           DateTime  @default(now())
+
+  @@index([lead_id, created_at])
+  @@map("lead_messages")
 }
 
 // Do-not-contact seznam pro Compounder — obchodník nesmí oslovit tyto kontakty.

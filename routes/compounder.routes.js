@@ -2172,6 +2172,105 @@ router.get('/leads/:id/loss-email-status', requireAuth, async (req, res, next) =
   } catch (err) { next(err); }
 });
 
+// ─── Komunikace s leadem (historie oslovení + AI generátor) ──────────────────
+function parseLeadFacts(lead) {
+  const notes = String(lead.notes || '');
+  const pick = (label) => { const m = notes.match(new RegExp('^' + label + ':\\s*(.+)$', 'mi')); return m ? m[1].trim() : null; };
+  return {
+    name: lead.name, lang: lead.lang, status: lead.status, notes: lead.notes,
+    firma: pick('Firma'), funkce: pick('Funkce'), city: pick('Kraj') || pick('Město'), web: pick('Web'),
+  };
+}
+
+// GET /leads/:id/messages — historie komunikace.
+router.get('/leads/:id/messages', requireAuth, async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'Neplatné ID' });
+    const rows = await prisma.leadMessage.findMany({ where: { lead_id: id }, orderBy: { created_at: 'desc' }, take: 200 });
+    const pids = Array.from(new Set(rows.map((r) => r.created_by_person_id).filter(Boolean)));
+    const people = pids.length ? await prisma.person.findMany({ where: { id: { in: pids } }, select: { id: true, first_name: true, last_name: true } }) : [];
+    const nameById = {}; people.forEach((p) => { nameById[p.id] = ((p.first_name || '') + ' ' + (p.last_name || '')).trim(); });
+    res.json(rows.map((r) => Object.assign({}, r, { author_name: r.created_by_person_id ? (nameById[r.created_by_person_id] || null) : null })));
+  } catch (err) { next(err); }
+});
+
+// POST /leads/:id/messages/generate — AI návrh oslovení (neukládá).
+router.post('/leads/:id/messages/generate', requireAuth, async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'Neplatné ID' });
+    const lead = await prisma.compounderLead.findUnique({ where: { id }, select: { id: true, name: true, lang: true, status: true, notes: true } });
+    if (!lead) return res.status(404).json({ error: 'Lead nenalezen' });
+    const b = req.body || {};
+    const channel = ['linkedin', 'email', 'whatsapp', 'sms'].includes(b.channel) ? b.channel : 'email';
+    const { generateOutreach } = require('../services/ai/outreach');
+    const out = await generateOutreach(parseLeadFacts(lead), { channel, goal: b.goal, tone: b.tone });
+    if (!out) return res.status(503).json({ error: 'AI generátor není dostupný nebo selhal.' });
+    res.json({ ok: true, channel, subject: out.subject, body: out.body });
+  } catch (err) { next(err); }
+});
+
+// POST /leads/:id/messages — uložit zprávu do historie (draft/copied/sent/in).
+const leadMessageSchema = z.object({
+  channel: z.enum(['linkedin', 'email', 'whatsapp', 'sms', 'note']),
+  direction: z.enum(['out', 'in']).optional(),
+  subject: z.string().max(300).optional().nullable(),
+  body: z.string().min(1).max(4000),
+  status: z.enum(['draft', 'sent', 'copied', 'failed']).optional(),
+  generatedByAi: z.boolean().optional(),
+});
+router.post('/leads/:id/messages', requireAuth, async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'Neplatné ID' });
+    const parsed = leadMessageSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'Neplatná data', detail: parsed.error.flatten() });
+    const d = parsed.data;
+    const pid = (req.user && req.user.person) ? req.user.person.id : null;
+    const status = d.status || (d.direction === 'in' ? 'sent' : 'draft');
+    const msg = await prisma.leadMessage.create({ data: {
+      lead_id: id, channel: d.channel, direction: d.direction || 'out',
+      subject: d.subject || null, body: d.body, status,
+      generated_by_ai: !!d.generatedByAi, created_by_person_id: pid,
+      sent_at: (status === 'sent' || status === 'copied') ? new Date() : null,
+    } });
+    res.status(201).json({ ok: true, message: msg });
+  } catch (err) {
+    if (err.code === 'P2003') return res.status(404).json({ error: 'Lead nenalezen' });
+    next(err);
+  }
+});
+
+// POST /leads/:id/messages/send-email — odešle e-mail leadovi (z COMPOUNDER_MAIL_FROM) a zaloguje.
+router.post('/leads/:id/messages/send-email', requireAuth, async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'Neplatné ID' });
+    const b = req.body || {};
+    const subject = String(b.subject || '').trim().slice(0, 300);
+    const body = String(b.body || '').trim();
+    if (!body) return res.status(400).json({ error: 'Prázdné tělo zprávy.' });
+    const lead = await prisma.compounderLead.findUnique({ where: { id }, select: { id: true, email: true } });
+    if (!lead) return res.status(404).json({ error: 'Lead nenalezen' });
+    if (!lead.email) return res.status(400).json({ error: 'Kontakt nemá e-mail.' });
+    const mailFrom = compounderMailFrom();
+    if (!mailFrom) return res.status(400).json({ error: 'Není nastaven COMPOUNDER_MAIL_FROM — e-mail se neodešle.' });
+    const pid = (req.user && req.user.person) ? req.user.person.id : null;
+    let status = 'sent', errText = null;
+    try {
+      await sendMail({ to: lead.email, subject: subject || 'Compounder', body, from: mailFrom, fromName: compounderMailFromName(), brand: 'compounder' });
+    } catch (e) { status = 'failed'; errText = e.message; }
+    const msg = await prisma.leadMessage.create({ data: {
+      lead_id: id, channel: 'email', direction: 'out', subject: subject || null, body,
+      status, generated_by_ai: !!b.generatedByAi, created_by_person_id: pid,
+      sent_at: status === 'sent' ? new Date() : null,
+    } });
+    if (status === 'failed') return res.status(502).json({ ok: false, error: 'Odeslání selhalo: ' + (errText || ''), message: msg });
+    res.status(201).json({ ok: true, message: msg });
+  } catch (err) { next(err); }
+});
+
 router.get('/leads/:id/activity', requireAuth, async (req, res, next) => {
   try {
     const id = Number(req.params.id);
