@@ -1060,6 +1060,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
       window._consultantExternal = !!res.j.consultantExternal;
       window._portalShowRevStats = !!res.j.showRevenueStats;
       window._portalShowExample = !!res.j.showExample;
+      window._portalHideLiveLoss = !!res.j.hideLiveLoss; // schovat časomíru + ztrátu z váhání
       window._acctCreatedAt = res.j.accountCreatedAt || null;
       pStartTopClock();
       window._portalToken = token;
@@ -1126,6 +1127,8 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
     var acct=window._acctCreatedAt; if(!acct) return;
     var box=document.getElementById('topClock'), val=document.getElementById('topClockVal');
     if(!box||!val) return;
+    // Schovat živou ztrátu: časomíra i „přišli jste o…" v liště se u tohoto leadu nezobrazí.
+    if(window._portalHideLiveLoss){ box.style.display='none'; if(window.__topClockIv) clearInterval(window.__topClockIv); return; }
     box.style.display='';
     var lbl=document.getElementById('topClockLbl');
     if(lbl) lbl.textContent='Víte o Compounder příležitosti od '+new Date(acct).toLocaleDateString('cs-CZ');
@@ -2245,7 +2248,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
         : '<div style="color:var(--muted,#9aa)">'+exT('Zatím nemáte vybranou žádnou lokalitu. Zaškrtněte lokality níže a poskládejte si své portfolio.','No location selected yet. Tick the locations below and build your portfolio.')+'</div>';
       var mb=document.getElementById('ex-missed');
       if(mb){
-        if(t.n && acct){
+        if(t.n && acct && !window._portalHideLiveLoss){
           mb.style.display='';
           if(!document.getElementById('ex-missed-val')){
             mb.innerHTML='<div style="font-size:13px;color:#f6e6ad;letter-spacing:.04em;text-transform:uppercase;margin-bottom:4px">'+exT('Cena vašeho váhání','The cost of your hesitation')+'</div>'+

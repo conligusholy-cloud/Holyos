@@ -366,7 +366,7 @@ router.get('/portal/session', async (req, res, next) => {
     if (!id) return res.status(401).json({ ok: false, error: 'Neplatný nebo chybějící přístupový odkaz.' });
     const lead = await prisma.compounderLead.findUnique({
       where: { id },
-      select: { id: true, name: true, email: true, phone: true, role: true, lang: true, visible_sections: true, visible_templates: true, show_revenue_stats: true, show_example: true, created_at: true, owner_person_id: true, external_rep_id: true, password_hash: true, source: true, access_approved_at: true },
+      select: { id: true, name: true, email: true, phone: true, role: true, lang: true, visible_sections: true, visible_templates: true, show_revenue_stats: true, show_example: true, hide_live_loss: true, created_at: true, owner_person_id: true, external_rep_id: true, password_hash: true, source: true, access_approved_at: true },
     });
     if (!lead) return res.status(404).json({ ok: false, error: 'Registrace nenalezena.' });
     if (!leadAccessAllowed(lead)) {
@@ -393,7 +393,7 @@ router.get('/portal/session', async (req, res, next) => {
         if (p) consultant = { name: ((p.first_name || '') + ' ' + (p.last_name || '')).trim(), phone: p.phone || '', email: p.email || '' };
       } catch (e) { /* fallback na majitele */ }
     }
-    return res.json({ ok: true, id: lead.id, name: lead.name, email: lead.email || '', phone: lead.phone || '', role: lead.role, lang: lead.lang, sections: resolveSections(lead.visible_sections), templates: templates, showRevenueStats: !!lead.show_revenue_stats, showExample: !!lead.show_example, accountCreatedAt: lead.created_at, consultant: consultant, consultantExternal: consultantExternal, has_password: !!lead.password_hash });
+    return res.json({ ok: true, id: lead.id, name: lead.name, email: lead.email || '', phone: lead.phone || '', role: lead.role, lang: lead.lang, sections: resolveSections(lead.visible_sections), templates: templates, showRevenueStats: !!lead.show_revenue_stats, showExample: !!lead.show_example, hideLiveLoss: !!lead.hide_live_loss, accountCreatedAt: lead.created_at, consultant: consultant, consultantExternal: consultantExternal, has_password: !!lead.password_hash });
   } catch (err) {
     next(err);
   }
@@ -1784,6 +1784,8 @@ const patchSchema = z.object({
   isTest: z.boolean().optional(),
   // Zpřístupnění sekce „Příklad" (skládačka portfolia) v portálu jen tomuto leadu.
   showExample: z.boolean().optional(),
+  // Schovat živou ztrátu v portálu (časomíra + „přišli jste o…" + karta Cena váhání).
+  hideLiveLoss: z.boolean().optional(),
 });
 
 router.patch('/leads/:id', requireAuth, async (req, res, next) => {
@@ -1843,6 +1845,7 @@ router.patch('/leads/:id', requireAuth, async (req, res, next) => {
       data.extra_offers = clean.length ? Array.from(new Set(clean)).join(',') : '';
     }
     if (parsed.data.showRevenueStats !== undefined) data.show_revenue_stats = !!parsed.data.showRevenueStats;
+    if (parsed.data.hideLiveLoss !== undefined) data.hide_live_loss = !!parsed.data.hideLiveLoss;
     if (parsed.data.isTest !== undefined) data.is_test = !!parsed.data.isTest;
     if (parsed.data.showExample !== undefined) data.show_example = !!parsed.data.showExample;
     const lead = await prisma.compounderLead.update({ where: { id }, data });

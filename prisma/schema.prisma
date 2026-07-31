@@ -5605,6 +5605,10 @@ model CompounderLead {
   // Výchozí false — zapíná obchodník z HolyOS pro konkrétní lead.
   show_revenue_stats Boolean @default(false)
 
+  // Schovat „živou ztrátu" v portálu tomuto leadovi: časomíru + „přišli jste o…" v horní
+  // liště a kartu „Cena vašeho váhání" v sekci Příklad. Výchozí false (ztráta se ukazuje).
+  hide_live_loss Boolean @default(false)
+
   // Testovací kontakt — slouží jen k testování systému. Nezapočítává se do
   // statistik obchodníka ani do konverzí/registrací a systém ho nebere jako
   // standardní kontakt. Výchozí false.
