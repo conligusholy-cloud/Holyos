@@ -310,6 +310,7 @@
         <button type="button" class="btn" data-kvc="CZ" onclick="kvSetCountry('CZ')" style="background:#eab308;color:#0e1a22;font-weight:700;">🇨🇿 Česko</button>
         <button type="button" class="btn" data-kvc="PL" onclick="kvSetCountry('PL')">🇵🇱 Polsko</button>
         <button type="button" class="btn" data-kvc="IE" onclick="kvSetCountry('IE')">🇮🇪 Irsko</button>
+        <span id="kv-operator-wrap" style="margin-left:auto; display:flex; align-items:center; gap:8px;"></span>
       </div>
       <div class="toolbar" style="margin-bottom:14px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
         <input type="text" id="kv-search" placeholder="Hledat kód / lokalitu / provozovatele…" onkeyup="renderKioskValues()" style="flex:1; min-width:220px;">
@@ -4546,6 +4547,9 @@
     var _kioskConfig = {}; // mapa { [code]: { version, rentMonthlyCzk } }
     var _kvSort = { key: null, dir: -1 };
     var _kvCountryTab = 'CZ';
+    var _kvOperator = ''; // '' = všichni provozovatelé; jinak přesný companyName
+    // Je lokalita provozovaná Best Series s.r.o.? (jen ty lze nabídnout přes Compounder)
+    function _kvIsBS(k){ return String(k && k.companyName || '').trim().toLowerCase().indexOf('best series') !== -1; }
     function _kvCountry(k){
       var cur=String(k.currency||'').toUpperCase();
       if(cur==='PLN') return 'PL';
@@ -4562,6 +4566,16 @@
       renderKioskValues();
     }
     window.kvSetCountry = kvSetCountry;
+    function kvSetOperator(v){ _kvOperator = v || ''; renderKioskValues(); }
+    window.kvSetOperator = kvSetOperator;
+    function kvClearFilters(){
+      _kvOperator = '';
+      var s = document.getElementById('kv-search'); if (s) s.value = '';
+      var i = document.getElementById('kv-incubator-only'); if (i) i.checked = false;
+      var f = document.getElementById('kv-forsale-only'); if (f) f.checked = false;
+      renderKioskValues();
+    }
+    window.kvClearFilters = kvClearFilters;
     function kvSort(key) {
       if (_kvSort.key === key) { _kvSort.dir = -_kvSort.dir; }
       else { _kvSort.key = key; _kvSort.dir = (key === 'code' || key === 'label' || key === 'company' || key === 'version' || key === 'stav') ? 1 : -1; }
@@ -4642,18 +4656,31 @@
       var kiosks = Array.isArray(_kioskData.kiosks) ? _kioskData.kiosks.slice() : [];
       var valCur = _kioskData.valueCurrency || 'CZK';
 
-      // Základní okruh: pouze prádlomaty provozované Best Series s.r.o.
-      var baseList = kiosks.filter(function(k) {
-        if (_kvCountry(k) !== _kvCountryTab) return false;
-        if (_kvCountryTab === 'CZ') return String(k.companyName || '').trim().toLowerCase().indexOf('best series') !== -1;
-        return true; // Polsko/Irsko: všechny stroje dané země (provozovatel nemusí mít v názvu "Best Series")
-      });
+      // Základní okruh: VŠECHNY lokality dané země bez ohledu na provozovatele.
+      // (Provozovatel je volitelný filtr níže, ne pevná podmínka — jinak by lokality
+      // jiné firmy tiše mizely a KPI by neseděly.)
+      var baseList = kiosks.filter(function(k) { return _kvCountry(k) === _kvCountryTab; });
+
+      // Selektor provozovatele — volby z dat (unikátní companyName v zemi) + počty.
+      var opCounts = {};
+      baseList.forEach(function(k){ var n = String(k.companyName || '').trim() || '(bez názvu)'; opCounts[n] = (opCounts[n] || 0) + 1; });
+      var opNames = Object.keys(opCounts).sort(function(a, b){ return opCounts[b] - opCounts[a] || a.localeCompare(b, 'cs'); });
+      if (_kvOperator && opCounts[_kvOperator] == null) _kvOperator = ''; // vybraný provozovatel není v této zemi → reset
+      var opWrap = document.getElementById('kv-operator-wrap');
+      if (opWrap) {
+        opWrap.innerHTML = '<span style="color:var(--text2);font-size:12px;">Provozovatel:</span>'
+          + '<select onchange="kvSetOperator(this.value)" style="background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:7px 10px;font-size:13px;max-width:280px;">'
+          + '<option value="">Všichni provozovatelé (' + baseList.length + ')</option>'
+          + opNames.map(function(n){ return '<option value="' + kvEsc(n).replace(/"/g,'&quot;') + '"' + (n === _kvOperator ? ' selected' : '') + '>' + kvEsc(n) + ' (' + opCounts[n] + ')</option>'; }).join('')
+          + '</select>';
+      }
 
       // Filtry (klientské) nad základním okruhem
       var q = ((document.getElementById('kv-search') || {}).value || '').trim().toLowerCase();
       var incOnly = !!((document.getElementById('kv-incubator-only') || {}).checked);
       var forSaleOnly = !!((document.getElementById('kv-forsale-only') || {}).checked);
       var filtered = baseList.filter(function(k) {
+        if (_kvOperator && (String(k.companyName || '').trim() || '(bez názvu)') !== _kvOperator) return false;
         if (incOnly && !k.inIncubator) return false;
         if (forSaleOnly && !((_kioskConfig[k.code] || {}).forSale)) return false;
         if (!q) return true;
@@ -4736,29 +4763,48 @@
         filtered.sort(function(a, b) { return locVal(b) - locVal(a); });
       }
 
-      // Souhrn — počítáme z okruhu Best Series (ať KPI sedí s tabulkou). Hodnota lokalit je v CZK.
+      // Souhrn — počítáme VŽDY z právě zobrazené (filtrované) množiny, ať KPI přesně
+      // sedí s počtem řádků v tabulce. Hodnota lokalit je v CZK.
       var s = {
-        kioskCount: baseList.length,
-        inIncubator: baseList.filter(function(k) { return k.inIncubator; }).length,
-        totalLocationValue: baseList.reduce(function(a, k) { var mm = _kvVerMachine(k.code).machine; return a + locVal(k) + (mm != null ? mm : 0); }, 0),
-        totalTransactions: baseList.reduce(function(a, k) { return a + num(k.transactions); }, 0),
+        kioskCount: filtered.length,
+        inIncubator: filtered.filter(function(k) { return k.inIncubator; }).length,
+        totalLocationValue: filtered.reduce(function(a, k) { var mm = _kvVerMachine(k.code).machine; return a + locVal(k) + (mm != null ? mm : 0); }, 0),
+        totalTransactions: filtered.reduce(function(a, k) { return a + num(k.transactions); }, 0),
       };
+      var _cLoc = ({ CZ: 'Česku', PL: 'Polsku', IE: 'Irsku' })[_kvCountryTab] || _kvCountryTab;
+      var _fActive = [];
+      if (_kvOperator) _fActive.push('provozovatel: ' + _kvOperator);
+      if (q) _fActive.push('hledání „' + q + '"');
+      if (incOnly) _fActive.push('jen v inkubátoru');
+      if (forSaleOnly) _fActive.push('jen nabízené');
+      var _countSub = (filtered.length !== baseList.length || _fActive.length)
+        ? ('z ' + baseList.length + ' v ' + _cLoc + (_fActive.length ? (' · filtr: ' + _fActive.join(', ')) : ''))
+        : ('celkem v ' + _cLoc + (s.inIncubator ? (' · ' + s.inIncubator + ' v inkubátoru') : ''));
       if (sumEl) {
         sumEl.innerHTML = '<div style="display:flex;gap:12px;flex-wrap:wrap;">' +
-          kvStat('Lokalit celkem', kvNum(s.kioskCount), (s.inIncubator + ' v inkubátoru')) +
-          kvStat('Hodnota portfolia', kvMoney(s.totalLocationValue, 'CZK'), 'součet celkové ceny (bez DPH)') +
-          kvStat('Transakce (měsíc)', kvNum(s.totalTransactions), 'napříč lokalitami') +
+          kvStat('Lokalit celkem', kvNum(s.kioskCount), _countSub) +
+          kvStat('Hodnota portfolia', kvMoney(s.totalLocationValue, 'CZK'), (_kvOperator ? ('za ' + _kvOperator) : 'součet celkové ceny (zobrazené)')) +
+          kvStat('Transakce (měsíc)', kvNum(s.totalTransactions), 'napříč zobrazenými lokalitami') +
           '</div>';
       }
 
       if (!filtered.length) {
+        var _cNom = ({ CZ: 'Česko', PL: 'Polsko', IE: 'Irsko' })[_kvCountryTab] || _kvCountryTab;
+        var _fList = ['země: ' + _cNom];
+        if (_kvOperator) _fList.push('provozovatel: ' + _kvOperator);
+        if (q) _fList.push('hledání „' + q + '"');
+        if (incOnly) _fList.push('jen v inkubátoru');
+        if (forSaleOnly) _fList.push('jen nabízené');
         var diag='';
         if (_kvCountryTab!=='CZ' && Array.isArray(kiosks) && kiosks.length) {
           var curs={}, comps={};
           kiosks.forEach(function(k){ var c=String(k.currency||'?').toUpperCase(); curs[c]=(curs[c]||0)+1; comps[String(k.companyName||'?')]=1; });
           diag='<div style="margin-top:10px;font-size:12px;color:var(--text2);line-height:1.6;">Data ze SIS obsahují měny: <b>'+Object.keys(curs).map(function(c){return c+' ('+curs[c]+')';}).join(', ')+'</b>.<br>Provozovatelé: '+Object.keys(comps).slice(0,10).map(kvEsc).join(' · ')+'.</div>';
         }
-        box.innerHTML = '<div style="color:var(--text2);padding:24px;">Žádné lokality pro tuto zemi neodpovídají filtru.'+diag+'</div>';
+        box.innerHTML = '<div style="color:var(--text2);padding:24px;">Žádná lokalita neodpovídá aktivním filtrům.'
+          + '<div style="margin-top:8px;font-size:12.5px;">Aktivní filtry: ' + _fList.map(kvEsc).join(' · ') + '</div>'
+          + '<button class="btn" style="margin-top:12px;" onclick="kvClearFilters()">Zrušit filtry</button>'
+          + diag + '</div>';
         return;
       }
 
@@ -4809,11 +4855,23 @@
         var _energie = _obratBez * (_enPct / 100);
         var _cistyZisk = _obratBez - _servis - _najemVal - _energie;
         var _mes = '<span style="color:var(--text2);font-size:11px;"> /měs</span>';
+        var _isBS = _kvIsBS(k);
+        // Neúplná data — řádek NESKRÝVÁME, jen označíme štítkem s tím, co chybí dovyplnit.
+        var _missing = [];
+        if (!(num(k.avgTop3) > 0)) _missing.push('průměrný obrat');
+        if (!cfg.version) _missing.push('verze (V2/V3)');
+        if (_vmRow.machine == null) _missing.push('cena kiosku');
+        var _incBadge = _missing.length
+          ? (' <span title="Chybí dovyplnit: ' + kvEsc(_missing.join(', ')) + '" style="background:rgba(239,68,68,0.15);color:#ef4444;border:1px solid rgba(239,68,68,0.4);border-radius:6px;padding:1px 7px;font-size:10.5px;white-space:nowrap;">Neúplná data</span>')
+          : '';
+        var _opCell = _isBS
+          ? ('<td style="color:var(--text2);">' + kvEsc(k.companyName) + '</td>')
+          : ('<td><span title="Jiný provozovatel než Best Series — lokalitu nelze nabídnout přes Compounder" style="background:rgba(234,179,8,0.15);color:#eab308;border:1px solid rgba(234,179,8,0.45);border-radius:6px;padding:2px 8px;font-size:11px;white-space:nowrap;">' + kvEsc(k.companyName || '—') + '</span></td>');
         h += '<tr style="cursor:pointer;" title="Kliknutím zobrazíš transakce stroje" onclick="openKioskTransactions(\'' + codeAttr + '\')">' +
           '<td style="text-align:right;color:var(--text2);">' + (_i + 1) + '</td>' +
           '<td style="font-weight:600;white-space:nowrap;">' + kvEsc(k.code) + '</td>' +
-          '<td>' + kvEsc(k.label) + '</td>' +
-          '<td style="color:var(--text2);">' + kvEsc(k.companyName) + '</td>' +
+          '<td>' + kvEsc(k.label) + _incBadge + '</td>' +
+          _opCell +
           '<td style="white-space:nowrap;">' + verLabel + '</td>' +
           '<td style="text-align:right;white-space:nowrap;color:var(--text2);">' + kvMoney(Math.round(_oCzk), 'CZK') + '</td>' +
           '<td style="text-align:right;white-space:nowrap;color:var(--text2);">' + kvMoney(Math.round(_obratBez), 'CZK') + '</td>' +
@@ -4827,9 +4885,9 @@
           '<td style="text-align:right;white-space:nowrap;font-weight:700;color:#10b981;">' + kvMoney(Math.round(_cistyZisk * 12), 'CZK') + '<span style="color:var(--text2);font-size:11px;"> /rok</span></td>' +
           '<td style="text-align:right;white-space:nowrap;font-weight:700;color:#10b981;">' + ((_vmRow.machine != null && (locVal(k) + _vmRow.machine) > 0) ? ((_cistyZisk * 12 / (locVal(k) + _vmRow.machine) * 100).toFixed(1).replace('.', ',') + ' %') : '<span style="color:var(--text2);">—</span>') + '</td>' +
           '<td style="text-align:right;white-space:nowrap;font-weight:700;color:' + (_cistyZisk >= 0 ? '#10b981' : '#ef4444') + ';">' + (_obratBez > 0 ? ((_cistyZisk / _obratBez * 100).toFixed(1).replace('.', ',') + ' %') : '<span style="color:var(--text2);">—</span>') + '</td>' +
-          '<td style="text-align:right;white-space:nowrap;color:#3b82f6;">' + (_vmRow.machine != null ? kvMoney(Math.round((locVal(k) + _vmRow.machine) * (buybackPct / 100)), 'CZK') : '<span style="color:var(--text2);">—</span>') + '</td>' +
+          '<td style="text-align:right;white-space:nowrap;color:#3b82f6;">' + (!_isBS ? '<span title="Best Series negarantuje odkup u lokality, kterou neprovozuje." style="color:var(--text2);">—</span>' : (_vmRow.machine != null ? kvMoney(Math.round((locVal(k) + _vmRow.machine) * (buybackPct / 100)), 'CZK') : '<span style="color:var(--text2);">—</span>')) + '</td>' +
           '<td style="text-align:right;white-space:nowrap;font-weight:700;color:#10b981;">' + (_vmRow.machine != null ? kvMoney(Math.round(buybackYears * (_cistyZisk * 12) + (locVal(k) + _vmRow.machine) * (buybackPct / 100) - (locVal(k) + _vmRow.machine)), 'CZK') : '<span style="color:var(--text2);">—</span>') + '</td>' +
-          '<td style="text-align:center;"><input type="checkbox" onclick="event.stopPropagation()" onchange="toggleForSale(\'' + codeAttr + '\', this.checked)"' + (cfg.forSale ? ' checked' : '') + '></td>' +
+          '<td style="text-align:center;"' + (!_isBS ? ' title="Lokalitu nelze nabídnout — provozovatelem není Best Series s.r.o."' : '') + '>' + (_isBS ? ('<input type="checkbox" onclick="event.stopPropagation()" onchange="toggleForSale(\'' + codeAttr + '\', this.checked)"' + (cfg.forSale ? ' checked' : '') + '>') : '<input type="checkbox" disabled onclick="event.stopPropagation()" style="opacity:.35;cursor:not-allowed;">') + '</td>' +
           '<td>' + badge + '</td>' +
           '<td style="text-align:right;white-space:nowrap;" onclick="event.stopPropagation()">' +
             ((cfg.photos && cfg.photos.length) ? '<span title="' + cfg.photos.length + ' fotek nahráno" style="color:#10b981;margin-right:6px;font-size:12px;">📷' + cfg.photos.length + '</span>' : '<span title="Bez fotek" style="opacity:.3;margin-right:6px;font-size:12px;">📷</span>') +
