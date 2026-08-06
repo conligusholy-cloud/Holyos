@@ -244,6 +244,21 @@ async function notifyLeadReply(prisma, { lead, preview }) {
   } catch (e) { console.error('[compounder-notify] lead reply', e.message); }
 }
 
+// Nový kontakt z FB reklamy (rychlý formulář) → push + zvonek majitelům
+// (Jan + Tomáš, resp. nastavení compounder.velin_notify_person_ids).
+async function notifyFbLead(prisma, { lead, campaign, ownerName }) {
+  try {
+    if (!lead) return;
+    const who = lead.name || lead.email || lead.phone || ('lead #' + lead.id);
+    const title = '📢 Nový kontakt z FB reklamy — ' + who;
+    const body = (campaign ? ('Kampaň: ' + campaign + '. ') : '')
+      + (lead.email ? ('E-mail: ' + lead.email + '. ') : '')
+      + (lead.phone ? ('Tel: ' + lead.phone + '. ') : '')
+      + (ownerName ? ('Přiřazeno: ' + ownerName + '.') : 'Zatím bez obchodníka.');
+    await dispatch(prisma, { title, body, data: { type: 'compounder_fb_lead', lead_id: lead.id, campaign: campaign || null } });
+  } catch (e) { console.error('[compounder-notify] fb lead', e.message); }
+}
+
 module.exports = {
   NOTIFY_SETTING_KEY,
   getEligibleVelinPeople,
@@ -258,4 +273,5 @@ module.exports = {
   notifyPurchaseInquiry,
   notifyOwnersMessage,
   notifyLeadReply,
+  notifyFbLead,
 };

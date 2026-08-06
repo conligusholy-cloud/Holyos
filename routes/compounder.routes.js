@@ -3088,25 +3088,36 @@ async function _fbCreateLead(fields, meta, formCfg) {
       meta_raw: meta.raw || null,
       activity_log: initLog,
     },
-    select: { id: true, name: true, owner_person_id: true, external_rep_id: true },
+    select: { id: true, name: true, email: true, phone: true, owner_person_id: true, external_rep_id: true },
   });
   console.log(`[fb-webhook] Založen Compounder lead #${created.id} (${srcLabel})`);
 
-  // Notifikace přiřazenému internímu obchodníkovi (neblokující).
-  if (ownerPersonId) {
-    try {
-      const owner = await prisma.person.findUnique({ where: { id: ownerPersonId }, select: { user: { select: { id: true } } } });
-      if (owner && owner.user) {
-        await createNotification({
-          userId: owner.user.id,
-          type: 'lead',
-          title: 'Nový lead z FB reklamy',
-          body: `${created.name}${campaign ? ' — ' + campaign : ''}`,
-          link: '/modules/prodejni-objednavky/index.html#compounder',
-        });
+  // Jméno přiřazeného obchodníka (pro text notifikace) — interní i externí.
+  let ownerName = null;
+  try {
+    if (ownerPersonId) {
+      const owner = await prisma.person.findUnique({ where: { id: ownerPersonId }, select: { first_name: true, last_name: true, user: { select: { id: true } } } });
+      if (owner) {
+        ownerName = ((owner.first_name || '') + ' ' + (owner.last_name || '')).trim() || null;
+        // Osobní zvonek přiřazenému obchodníkovi (má-li účet).
+        if (owner.user) {
+          await createNotification({
+            userId: owner.user.id, type: 'lead', title: 'Nový lead z FB reklamy',
+            body: `${created.name}${campaign ? ' — ' + campaign : ''}`,
+            link: '/modules/prodejni-objednavky/index.html#compounder',
+          }).catch(() => {});
+        }
       }
-    } catch (e) { /* notifikace neblokuje příjem */ }
-  }
+    } else if (externalRepId) {
+      const reps = await _loadExternalReps();
+      const rep = reps.find((r) => Number(r.id) === externalRepId);
+      if (rep) ownerName = rep.jmeno || null;
+    }
+  } catch (e) { /* dohledání jména neblokuje příjem */ }
+
+  // Velín push + zvonek majitelům (Jan + Tomáš, resp. compounder.velin_notify_person_ids).
+  try { await compounderNotify.notifyFbLead(prisma, { lead: created, campaign, ownerName }); } catch (e) { /* neblokuje příjem */ }
+
   return { created: true, id: created.id };
 }
 
