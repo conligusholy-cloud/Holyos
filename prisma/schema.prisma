@@ -5643,6 +5643,19 @@ model CompounderLead {
   access_sent_count   Int       @default(0)
   access_last_sent_at DateTime?
 
+  // ── Meta (Facebook/Instagram) Lead Ads ──────────────────────────────────
+  // Lead přišel z FB reklamy (rychlý formulář). meta_lead_id drží idempotenci
+  // (stejný lead se nezaloží 2×). meta_form_id se páruje s nastavením formulářů
+  // (AppSetting compounder.fb_lead_forms) → přiřazení obchodníka + kampaně.
+  meta_lead_id String? @unique @db.VarChar(64)
+  meta_form_id String? @db.VarChar(64)
+  meta_page_id String? @db.VarChar(64)
+  meta_ad_id   String? @db.VarChar(64)
+  // Štítek kampaně (volný text z nastavení formuláře) — pro rozlišení reklam.
+  campaign     String? @db.VarChar(160)
+  // Surová data leadu z FB (celý JSON) pro dohledání dalších polí.
+  meta_raw     Json?
+
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
 
@@ -5655,6 +5668,7 @@ model CompounderLead {
   @@index([owner_person_id])
   @@index([external_rep_id])
   @@index([is_test])
+  @@index([meta_form_id])
   @@map("compounder_leads")
 }
 

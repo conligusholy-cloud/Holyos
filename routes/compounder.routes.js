@@ -2985,6 +2985,265 @@ router.put('/kiosk-config/:code', requireAuth, async (req, res, next) => {
   }
 });
 
+// ═════════════════════════════════════════════════════════════════════════
+// META (Facebook / Instagram) LEAD ADS → CompounderLead
+// ─────────────────────────────────────────────────────────────────────────
+// Kontakty z FB „rychlých formulářů" chodí přes webhook a zakládají se jako
+// Compounder leady. Podle ID formuláře (nastavení compounder.fb_lead_forms)
+// se lead přiřadí konkrétnímu obchodníkovi (internímu nebo externímu) a označí
+// štítkem kampaně. Webhook přijímá dva tvary:
+//   1) přímý Meta leadgen (entry[].changes[].value + podpis app secretem),
+//   2) generický JSON (Make.com / Zapier / ruční) ověřený API klíčem.
+// ═════════════════════════════════════════════════════════════════════════
+const FB_FORMS_KEY = 'compounder.fb_lead_forms';
+
+async function _fbLoadForms() {
+  const arr = await getSetting(FB_FORMS_KEY, { type: 'json', defaultValue: [] });
+  return Array.isArray(arr) ? arr : [];
+}
+async function _fbSaveForms(arr, userId) {
+  await setSetting(FB_FORMS_KEY, arr, {
+    type: 'json', scope: 'compounder',
+    description: 'FB Lead Ads — mapování formulářů na obchodníka + štítek kampaně',
+    userId,
+  });
+}
+
+// Sjednocené vytažení polí z leadu (Meta field_data i generický JSON).
+function _fbExtractFields(src) {
+  const f = {};
+  if (Array.isArray(src.field_data)) {
+    // Meta tvar: [{ name, values:[...] }]
+    for (const fd of src.field_data) {
+      f[String(fd.name || '').toLowerCase()] = Array.isArray(fd.values) ? fd.values[0] : fd.values;
+    }
+  }
+  // Generické/ploché klíče přebijí (pokud přišly napřímo)
+  const flat = ['first_name','last_name','full_name','name','email','phone','phone_number','company','city','country','lang','locale'];
+  for (const k of flat) { if (src[k] != null && src[k] !== '') f[k] = src[k]; }
+  return f;
+}
+
+// Poskládá jméno/kontakt z polí a vytvoří CompounderLead podle konfigurace formuláře.
+// Vrací { created, id, skipped }.
+async function _fbCreateLead(fields, meta, formCfg) {
+  const leadId = meta.leadId ? String(meta.leadId) : null;
+  // Idempotence — stejný FB lead se nezaloží dvakrát.
+  if (leadId) {
+    const dup = await prisma.compounderLead.findUnique({ where: { meta_lead_id: leadId }, select: { id: true } });
+    if (dup) return { created: false, id: dup.id, skipped: 'duplicate_lead_id' };
+  }
+  let firstName = String(fields.first_name || '').trim();
+  let lastName = String(fields.last_name || '').trim();
+  const full = String(fields.full_name || fields.name || '').trim();
+  if (!firstName && full) { const p = full.split(/\s+/); firstName = p[0] || ''; lastName = p.slice(1).join(' '); }
+  const company = String(fields.company || '').trim();
+  const city = String(fields.city || '').trim();
+  const country = String(fields.country || '').trim();
+  const email = String(fields.email || '').trim().toLowerCase();
+  const phone = String(fields.phone || fields.phone_number || '').trim();
+  const composed = [firstName, lastName].filter(Boolean).join(' ').trim() || company || full;
+  const name = (composed || email || phone || 'FB lead').slice(0, 255);
+  // Jazyk: z leadu (locale cs_CZ → cs), jinak default z konfigurace formuláře.
+  let lang = String(fields.lang || fields.locale || '').trim().toLowerCase().slice(0, 5) || null;
+  if (lang && lang.indexOf('_') !== -1) lang = lang.split('_')[0];
+  if (!lang && formCfg && formCfg.lang) lang = String(formCfg.lang).toLowerCase().slice(0, 10);
+
+  // Soft-dedup: existující lead se stejným e-mailem/telefonem nepřepisujeme,
+  // jen mu doplníme řádek do aktivit (a nezakládáme duplikát).
+  const dupOr = [];
+  if (email) dupOr.push({ email: { equals: email, mode: 'insensitive' } });
+  if (phone) dupOr.push({ phone: phone });
+  const existing = dupOr.length ? await prisma.compounderLead.findFirst({ where: { OR: dupOr }, select: { id: true, activity_log: true } }) : null;
+
+  const role = (formCfg && formCfg.role === 'distributor') ? 'distributor' : 'compounder';
+  const campaign = formCfg && formCfg.campaign ? String(formCfg.campaign).slice(0, 160) : null;
+  const ownerPersonId = formCfg && formCfg.owner_kind === 'internal' && formCfg.owner_person_id ? Number(formCfg.owner_person_id) : null;
+  const externalRepId = formCfg && formCfg.owner_kind === 'external' && formCfg.external_rep_id ? Number(formCfg.external_rep_id) : null;
+  const now = new Date().toISOString().replace('T', ' ').slice(0, 16);
+  const srcLabel = 'FB reklama' + (formCfg && formCfg.form_name ? ' – ' + formCfg.form_name : '') + (campaign ? ' (' + campaign + ')' : '');
+
+  if (existing) {
+    const line = `${now} · Nová reakce z FB reklamy${formCfg && formCfg.form_name ? ' „' + formCfg.form_name + '"' : ''} — kontakt už v systému, nový lead nezaložen.`;
+    try { await prisma.compounderLead.update({ where: { id: existing.id }, data: { activity_log: line + (existing.activity_log ? '\n' + existing.activity_log : '') } }); } catch (e) {}
+    return { created: false, id: existing.id, skipped: 'duplicate_contact' };
+  }
+
+  const initLog = `${now} · Lead přijat z ${srcLabel}` +
+    (ownerPersonId ? ` · přiřazeno internímu obchodníkovi #${ownerPersonId}` : '') +
+    (externalRepId ? ` · přiřazeno externímu zástupci #${externalRepId}` : '') +
+    (!ownerPersonId && !externalRepId ? ' · zatím bez obchodníka' : '');
+
+  const created = await prisma.compounderLead.create({
+    data: {
+      name, first_name: firstName || null, last_name: lastName || null,
+      company: company || null, city: city || null, country: country || null,
+      email: email || null, phone: phone || null,
+      role, lang, status: 'new', source: 'facebook_ads',
+      campaign,
+      owner_person_id: ownerPersonId, external_rep_id: externalRepId,
+      meta_lead_id: leadId, meta_form_id: meta.formId ? String(meta.formId) : null,
+      meta_page_id: meta.pageId ? String(meta.pageId) : null,
+      meta_ad_id: meta.adId ? String(meta.adId) : null,
+      meta_raw: meta.raw || null,
+      activity_log: initLog,
+    },
+    select: { id: true, name: true, owner_person_id: true, external_rep_id: true },
+  });
+  console.log(`[fb-webhook] Založen Compounder lead #${created.id} (${srcLabel})`);
+
+  // Notifikace přiřazenému internímu obchodníkovi (neblokující).
+  if (ownerPersonId) {
+    try {
+      const owner = await prisma.person.findUnique({ where: { id: ownerPersonId }, select: { user: { select: { id: true } } } });
+      if (owner && owner.user) {
+        await createNotification({
+          userId: owner.user.id,
+          type: 'lead',
+          title: 'Nový lead z FB reklamy',
+          body: `${created.name}${campaign ? ' — ' + campaign : ''}`,
+          link: '/modules/prodejni-objednavky/index.html#compounder',
+        });
+      }
+    } catch (e) { /* notifikace neblokuje příjem */ }
+  }
+  return { created: true, id: created.id };
+}
+
+// GET /api/compounder/fb-webhook — ověření webhooku (Meta hub.challenge). VEŘEJNÉ.
+router.get('/fb-webhook', (req, res) => {
+  const VERIFY_TOKEN = process.env.META_LEAD_VERIFY_TOKEN || 'holyos-meta-verify';
+  if (req.query['hub.mode'] === 'subscribe' && req.query['hub.verify_token'] === VERIFY_TOKEN) {
+    return res.status(200).send(req.query['hub.challenge']);
+  }
+  res.status(403).send('Forbidden');
+});
+
+// POST /api/compounder/fb-webhook — příjem leadu. VEŘEJNÉ (ověření podpisem/API klíčem).
+router.post('/fb-webhook', async (req, res, next) => {
+  try {
+    const body = req.body || {};
+    const isMetaDirect = Array.isArray(body.entry);
+    const forms = await _fbLoadForms();
+    const formById = {}; forms.forEach((f) => { formById[String(f.form_id)] = f; });
+
+    if (isMetaDirect) {
+      // Ověření podpisu Meta (X-Hub-Signature-256) — pokud máme app secret.
+      const appSecret = process.env.META_APP_SECRET;
+      if (appSecret) {
+        const signature = req.headers['x-hub-signature-256'];
+        const expected = 'sha256=' + crypto.createHmac('sha256', appSecret).update(JSON.stringify(body)).digest('hex');
+        if (!signature || signature !== expected) {
+          console.warn('[fb-webhook] Neplatný podpis Meta — odmítnuto');
+          return res.status(401).send('bad signature');
+        }
+      }
+      const PAGE_TOKEN = process.env.META_PAGE_ACCESS_TOKEN;
+      for (const entry of body.entry) {
+        for (const change of (entry.changes || [])) {
+          if (change.field !== 'leadgen') continue;
+          const v = change.value || {};
+          if (!v.leadgen_id) continue;
+          const cfg = formById[String(v.form_id)] || null;
+          if (cfg && cfg.active === false) continue; // formulář vypnutý → ignoruj
+          let raw = null, fields = {};
+          if (PAGE_TOKEN) {
+            try {
+              const r = await fetch(`https://graph.facebook.com/v19.0/${v.leadgen_id}?access_token=${encodeURIComponent(PAGE_TOKEN)}`);
+              if (r.ok) { raw = await r.json(); fields = _fbExtractFields(raw); }
+            } catch (e) { console.error('[fb-webhook] Graph fetch:', e.message); }
+          }
+          await _fbCreateLead(fields, { leadId: v.leadgen_id, formId: v.form_id, pageId: v.page_id, adId: v.ad_id, raw }, cfg);
+        }
+      }
+      return res.status(200).send('OK'); // Meta očekává 200 vždy
+    }
+
+    // ── Generický JSON (Make.com / Zapier / ruční) — ověření API klíčem ──
+    const apiKey = process.env.FB_WEBHOOK_API_KEY || process.env.MAKE_WEBHOOK_API_KEY;
+    if (!apiKey) return res.status(503).json({ error: 'Webhook není nakonfigurován (chybí FB_WEBHOOK_API_KEY).' });
+    const auth = req.headers.authorization || '';
+    const provided = auth.startsWith('Bearer ') ? auth.slice(7) : (auth || req.query.api_key || req.headers['x-api-key'] || '');
+    if (provided !== apiKey) return res.status(401).json({ error: 'Neplatný API klíč' });
+
+    const formId = body.form_id || body.formId || null;
+    const cfg = formId ? (formById[String(formId)] || null) : null;
+    // Umožni přijmout štítek/obchodníka i napřímo z payloadu, pokud formulář není namapovaný.
+    const effCfg = cfg || (formId ? { form_id: String(formId), form_name: body.form_name || null, campaign: body.campaign || null, role: body.role || 'compounder', owner_kind: 'none' } : { form_name: body.form_name || null, campaign: body.campaign || null, role: 'compounder', owner_kind: 'none' });
+    if (cfg && cfg.active === false) return res.json({ ok: true, skipped: 'form_inactive' });
+    const fields = _fbExtractFields(body);
+    const out = await _fbCreateLead(fields, {
+      leadId: body.lead_id || body.leadgen_id || body.id || null,
+      formId, pageId: body.page_id || null, adId: body.ad_id || null, raw: body.raw || body,
+    }, effCfg);
+    return res.status(out.created ? 201 : 200).json({ ok: true, lead_id: out.id, created: out.created, skipped: out.skipped || null });
+  } catch (err) {
+    console.error('[fb-webhook] Chyba:', err);
+    // U Meta necháváme 200 (retry by nepomohl), u generického vrátíme 500.
+    if (Array.isArray((req.body || {}).entry)) return res.status(200).send('OK');
+    next(err);
+  }
+});
+
+// GET /api/compounder/fb-lead-forms — nastavení formulářů + webhook info (+ živý seznam z FB).
+router.get('/fb-lead-forms', requireAuth, async (req, res, next) => {
+  try {
+    const forms = await _fbLoadForms();
+    const webhookUrl = (getAppUrl() || '').replace(/\/$/, '') + '/api/compounder/fb-webhook';
+    const verifyToken = process.env.META_LEAD_VERIFY_TOKEN || 'holyos-meta-verify';
+    const apiKeyConfigured = !!(process.env.FB_WEBHOOK_API_KEY || process.env.MAKE_WEBHOOK_API_KEY);
+    const tokenConfigured = !!process.env.META_PAGE_ACCESS_TOKEN;
+    // Živý seznam formulářů ze stránky (jen pokud máme page token + page id).
+    let liveForms = null;
+    const PAGE_TOKEN = process.env.META_PAGE_ACCESS_TOKEN;
+    const PAGE_ID = process.env.META_PAGE_ID;
+    if (PAGE_TOKEN && PAGE_ID) {
+      try {
+        const r = await fetch(`https://graph.facebook.com/v19.0/${PAGE_ID}/leadgen_forms?fields=id,name,status&limit=200&access_token=${encodeURIComponent(PAGE_TOKEN)}`);
+        if (r.ok) { const j = await r.json(); liveForms = (j.data || []).map((f) => ({ id: String(f.id), name: f.name, status: f.status })); }
+      } catch (e) { /* živý seznam je volitelný */ }
+    }
+    res.json({ forms, webhookUrl, verifyToken, apiKeyConfigured, tokenConfigured, liveForms });
+  } catch (err) { next(err); }
+});
+
+// POST /api/compounder/fb-lead-forms — uložení mapování formulářů.
+const fbFormSchema = z.object({
+  form_id: z.string().trim().min(1).max(64),
+  form_name: z.string().trim().max(160).nullable().optional(),
+  owner_kind: z.enum(['internal', 'external', 'none']).optional(),
+  owner_person_id: z.number().int().positive().nullable().optional(),
+  external_rep_id: z.number().int().positive().nullable().optional(),
+  campaign: z.string().trim().max(160).nullable().optional(),
+  role: z.enum(['compounder', 'distributor']).optional(),
+  lang: z.string().trim().max(10).nullable().optional(),
+  active: z.boolean().optional(),
+});
+router.post('/fb-lead-forms', requireAuth, async (req, res, next) => {
+  try {
+    const parsed = z.object({ forms: z.array(fbFormSchema).max(200) }).safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'Neplatná data', detail: parsed.error.flatten() });
+    // Normalizace: doplň defaulty, deduplikuj podle form_id (poslední vyhrává).
+    const map = {};
+    for (const f of parsed.data.forms) {
+      map[f.form_id] = {
+        form_id: f.form_id,
+        form_name: f.form_name || null,
+        owner_kind: f.owner_kind || 'none',
+        owner_person_id: f.owner_kind === 'internal' ? (f.owner_person_id || null) : null,
+        external_rep_id: f.owner_kind === 'external' ? (f.external_rep_id || null) : null,
+        campaign: f.campaign || null,
+        role: f.role || 'compounder',
+        lang: f.lang || null,
+        active: f.active !== false,
+      };
+    }
+    const out = Object.values(map);
+    await _fbSaveForms(out, req.user && req.user.id);
+    res.json({ ok: true, forms: out });
+  } catch (err) { next(err); }
+});
+
 // ─────────────────────────────────────────────────────────────────────────
 // EXTERNÍ OBCHODNÍCI — ruční agenda. Ukládá se do AppSetting JSON (stejně jako
 // Ceník / compounding nastavení), klíč external.sales_reps = pole záznamů.

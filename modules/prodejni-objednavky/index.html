@@ -421,6 +421,7 @@
         <input type="text" id="cmp-search" placeholder="Hledat jméno/e-mail…" onkeyup="if(event.key==='Enter')loadCompounderLeads()" style="flex:1; min-width:160px;">
         <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text2);white-space:nowrap;cursor:pointer;"><input type="checkbox" id="cmp-reserved-only" onchange="loadCompounderLeads()"> Jen s rezervací</label>
         <button class="btn" onclick="loadCompounderLeads()">↻ Obnovit</button>
+        <button class="btn" onclick="openFbForms()" title="Napojení FB reklam — kontakty z formulářů se přiřadí obchodníkovi a označí kampaní">📢 FB reklamy</button>
         <button class="btn btn-primary" onclick="openAddLead()">➕ Přidat kontakt</button>
       </div>
       <div id="cmp-summary" style="margin-bottom:14px;"></div>
@@ -2893,6 +2894,142 @@
     }
     window.submitAddLead = submitAddLead;
 
+    // ── FB reklamy — nastavení formulářů (příjem kontaktů z FB Lead Ads) ──────
+    var FB_STATE = { forms: [], webhookUrl: '', verifyToken: '', apiKeyConfigured: false, tokenConfigured: false, liveForms: null };
+    async function fbEnsureSellers(){
+      if (CMP_SELLERS === null) { try { var sr = await fetch('/api/compounder/sellers', { credentials:'include' }); CMP_SELLERS = sr.ok ? await sr.json() : []; } catch(e){ CMP_SELLERS = []; } }
+      if (CMP_EXT_REPS === null) { try { var er = await fetch('/api/compounder/external-reps', { credentials:'include' }); CMP_EXT_REPS = er.ok ? await er.json() : []; } catch(e){ CMP_EXT_REPS = []; } }
+    }
+    function fbOwnerValue(f){
+      if (f.owner_kind === 'internal' && f.owner_person_id) return 'i:' + f.owner_person_id;
+      if (f.owner_kind === 'external' && f.external_rep_id) return 'e:' + f.external_rep_id;
+      return '';
+    }
+    function fbOwnerSelectHtml(f){
+      var cur = fbOwnerValue(f);
+      var s = 'width:100%;box-sizing:border-box;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 8px;font-size:12px;';
+      var h = '<select data-fb="owner" style="'+s+'"><option value=""'+(cur===''?' selected':'')+'>— nepřiřazeno —</option>';
+      var ints = (CMP_SELLERS||[]).map(function(p){ var nm=((p.first_name||'')+' '+(p.last_name||'')).trim()||('#'+p.id); var v='i:'+p.id; return '<option value="'+v+'"'+(cur===v?' selected':'')+'>'+cmpEsc(nm)+'</option>'; }).join('');
+      if (ints) h += '<optgroup label="Interní obchodníci">'+ints+'</optgroup>';
+      var exts = (CMP_EXT_REPS||[]).filter(function(r){ return (r.stav||'aktivni')!=='neaktivni'; }).map(function(r){ var v='e:'+r.id; return '<option value="'+v+'"'+(cur===v?' selected':'')+'>'+cmpEsc(r.jmeno||('#'+r.id))+'</option>'; }).join('');
+      if (exts) h += '<optgroup label="Externí zástupci">'+exts+'</optgroup>';
+      return h + '</select>';
+    }
+    function fbRowsHtml(){
+      if (!FB_STATE.forms.length) return '<tr><td colspan="5" style="color:var(--text2);padding:14px;text-align:center;">Zatím žádný formulář. Přidejte ho níže.</td></tr>';
+      var inp = 'width:100%;box-sizing:border-box;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 8px;font-size:12px;';
+      return FB_STATE.forms.map(function(f, i){
+        return '<tr data-fbrow="'+i+'" style="border-bottom:1px solid var(--border);">'
+          + '<td style="padding:8px 6px;"><input type="text" data-fb="form_name" value="'+cmpEsc(f.form_name||'')+'" placeholder="název reklamy" style="'+inp+'"><div style="color:var(--text2);font-size:11px;margin-top:3px;">ID: <code>'+cmpEsc(f.form_id)+'</code></div></td>'
+          + '<td style="padding:8px 6px;min-width:180px;">'+fbOwnerSelectHtml(f)+'</td>'
+          + '<td style="padding:8px 6px;"><input type="text" data-fb="campaign" value="'+cmpEsc(f.campaign||'')+'" placeholder="např. FB srpen – Kup si prádlomat" style="'+inp+'"></td>'
+          + '<td style="padding:8px 6px;text-align:center;"><label style="display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--text2);cursor:pointer;"><input type="checkbox" data-fb="active"'+(f.active!==false?' checked':'')+'> aktivní</label></td>'
+          + '<td style="padding:8px 6px;text-align:center;"><button class="btn btn-secondary" style="padding:4px 9px;" onclick="fbRemoveForm('+i+')" title="Odebrat">✕</button></td>'
+          + '</tr>';
+      }).join('');
+    }
+    function fbLiveOptionsHtml(){
+      if (!FB_STATE.liveForms || !FB_STATE.liveForms.length) return '';
+      var used = {}; FB_STATE.forms.forEach(function(f){ used[String(f.form_id)] = true; });
+      var opts = FB_STATE.liveForms.filter(function(lf){ return !used[String(lf.id)]; })
+        .map(function(lf){ return '<option value="'+cmpEsc(lf.id)+'">'+cmpEsc(lf.name||lf.id)+(lf.status&&lf.status!=='ACTIVE'?' ('+cmpEsc(lf.status)+')':'')+'</option>'; }).join('');
+      if (!opts) return '';
+      return '<div style="margin-top:6px;"><label style="font-size:12px;color:var(--text2);">Nebo vyberte z Facebooku: </label>'
+        + '<select id="fb-live-pick" style="background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 8px;font-size:12px;"><option value="">— vyberte formulář —</option>'+opts+'</select>'
+        + ' <button class="btn" style="padding:6px 12px;" onclick="fbAddFromLive()">Přidat</button></div>';
+    }
+    function fbSyncStateFromDom(){
+      document.querySelectorAll('#fb-forms-body tr[data-fbrow]').forEach(function(tr){
+        var i = Number(tr.getAttribute('data-fbrow')); var f = FB_STATE.forms[i]; if (!f) return;
+        var g = function(k){ return tr.querySelector('[data-fb="'+k+'"]'); };
+        f.form_name = (g('form_name')||{}).value || null;
+        f.campaign = (g('campaign')||{}).value || null;
+        f.active = !!(g('active')||{}).checked;
+        var ov = (g('owner')||{}).value || '';
+        if (ov.slice(0,2)==='i:'){ f.owner_kind='internal'; f.owner_person_id=Number(ov.slice(2)); f.external_rep_id=null; }
+        else if (ov.slice(0,2)==='e:'){ f.owner_kind='external'; f.external_rep_id=Number(ov.slice(2)); f.owner_person_id=null; }
+        else { f.owner_kind='none'; f.owner_person_id=null; f.external_rep_id=null; }
+      });
+    }
+    function fbRenderForms(){
+      var body = document.getElementById('fb-forms-body'); if (body) body.innerHTML = fbRowsHtml();
+      var live = document.getElementById('fb-live-wrap'); if (live) live.innerHTML = fbLiveOptionsHtml();
+    }
+    function fbRemoveForm(i){ fbSyncStateFromDom(); FB_STATE.forms.splice(i,1); fbRenderForms(); }
+    window.fbRemoveForm = fbRemoveForm;
+    function fbAddManual(){
+      var idEl = document.getElementById('fb-new-id'); var nmEl = document.getElementById('fb-new-name');
+      var id = (idEl.value||'').trim(); if (!id) { idEl.focus(); return; }
+      if (FB_STATE.forms.some(function(f){ return String(f.form_id)===id; })) { alert('Formulář s tímto ID už je v seznamu.'); return; }
+      fbSyncStateFromDom();
+      FB_STATE.forms.push({ form_id:id, form_name:(nmEl.value||'').trim()||null, owner_kind:'none', owner_person_id:null, external_rep_id:null, campaign:null, role:'compounder', active:true });
+      idEl.value=''; nmEl.value=''; fbRenderForms();
+    }
+    window.fbAddManual = fbAddManual;
+    function fbAddFromLive(){
+      var sel = document.getElementById('fb-live-pick'); if (!sel || !sel.value) return;
+      var lf = (FB_STATE.liveForms||[]).find(function(x){ return String(x.id)===String(sel.value); });
+      fbSyncStateFromDom();
+      FB_STATE.forms.push({ form_id:String(sel.value), form_name:(lf&&lf.name)||null, owner_kind:'none', owner_person_id:null, external_rep_id:null, campaign:null, role:'compounder', active:true });
+      fbRenderForms();
+    }
+    window.fbAddFromLive = fbAddFromLive;
+    function fbCopyWebhook(){ var el=document.getElementById('fb-webhook-url'); if(!el) return; el.select(); try{ document.execCommand('copy'); var b=document.getElementById('fb-copy-btn'); if(b){ var t=b.textContent; b.textContent='✓ Zkopírováno'; setTimeout(function(){ b.textContent=t; },1500); } }catch(e){} }
+    window.fbCopyWebhook = fbCopyWebhook;
+    async function fbSaveForms(){
+      fbSyncStateFromDom();
+      var msg = document.getElementById('fb-save-msg'); if (msg){ msg.style.color='var(--text2)'; msg.textContent='Ukládám…'; }
+      try {
+        var r = await fetch('/api/compounder/fb-lead-forms', { method:'POST', credentials:'include', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ forms: FB_STATE.forms }) });
+        var d = await r.json().catch(function(){return{};});
+        if (!r.ok){ if(msg){ msg.style.color='#ef4444'; msg.textContent=d.error||('Chyba '+r.status); } return; }
+        FB_STATE.forms = d.forms || FB_STATE.forms;
+        if (msg){ msg.style.color='#22c55e'; msg.textContent='Uloženo.'; }
+        setTimeout(closeModal, 500);
+      } catch(e){ if(msg){ msg.style.color='#ef4444'; msg.textContent='Uložení selhalo.'; } }
+    }
+    window.fbSaveForms = fbSaveForms;
+    async function openFbForms(){
+      document.getElementById('modal-root').innerHTML =
+        '<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal" style="width:780px;max-width:96vw;">'
+        + '<h2>📢 FB reklamy — příjem kontaktů</h2>'
+        + '<div style="color:var(--text2);font-size:13px;margin-bottom:12px;">Kontakty z FB rychlých formulářů se založí jako Compounder leady, přiřadí se vybranému obchodníkovi a označí štítkem kampaně.</div>'
+        + '<div id="fb-modal-body" style="color:var(--text2);padding:16px;">Načítám…</div>'
+        + '</div></div>';
+      await fbEnsureSellers();
+      try {
+        var r = await fetch('/api/compounder/fb-lead-forms', { credentials:'include' });
+        var d = await r.json();
+        FB_STATE.forms = (d.forms||[]).map(function(f){ return Object.assign({ owner_kind:'none', role:'compounder', active:true }, f); });
+        FB_STATE.webhookUrl = d.webhookUrl||''; FB_STATE.verifyToken = d.verifyToken||'';
+        FB_STATE.apiKeyConfigured = !!d.apiKeyConfigured; FB_STATE.tokenConfigured = !!d.tokenConfigured; FB_STATE.liveForms = d.liveForms||null;
+      } catch(e){ FB_STATE.forms = FB_STATE.forms||[]; }
+      var body = document.getElementById('fb-modal-body'); if (!body) return;
+      var wh = FB_STATE.webhookUrl || '(nastavte APP_URL)';
+      var inp = 'background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:8px 10px;font-size:12px;';
+      body.innerHTML =
+        '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:16px;">'
+          + '<div style="font-size:12px;color:var(--text2);margin-bottom:6px;">Adresa webhooku (zadejte ji ve Facebooku nebo v Make.com):</div>'
+          + '<div style="display:flex;gap:8px;align-items:center;"><input id="fb-webhook-url" readonly value="'+cmpEsc(wh)+'" style="flex:1;'+inp+'"><button id="fb-copy-btn" class="btn" style="padding:8px 12px;" onclick="fbCopyWebhook()">Kopírovat</button></div>'
+          + '<div style="font-size:12px;color:var(--text2);margin-top:8px;">Ověřovací token (verify token): <code>'+cmpEsc(FB_STATE.verifyToken)+'</code></div>'
+          + '<div style="font-size:11px;margin-top:8px;color:'+(FB_STATE.apiKeyConfigured?'#22c55e':'#f59e0b')+';">'+(FB_STATE.apiKeyConfigured?'✓ API klíč pro Make.com je nastavený':'⚠ Pro Make.com/Zapier chybí FB_WEBHOOK_API_KEY v prostředí')+'</div>'
+          + (FB_STATE.tokenConfigured?'<div style="font-size:11px;margin-top:3px;color:#22c55e;">✓ Přímé napojení Meta (page token) je nastavené</div>':'<div style="font-size:11px;margin-top:3px;color:var(--text2);">Přímé napojení Meta zatím bez page tokenu — funguje cesta přes Make.com.</div>')
+        + '</div>'
+        + '<table style="width:100%;border-collapse:collapse;"><thead><tr style="border-bottom:1px solid var(--border);text-align:left;">'
+          + '<th style="padding:6px;font-size:11px;color:var(--text2);text-transform:uppercase;">Formulář</th>'
+          + '<th style="padding:6px;font-size:11px;color:var(--text2);text-transform:uppercase;">Obchodník</th>'
+          + '<th style="padding:6px;font-size:11px;color:var(--text2);text-transform:uppercase;">Štítek kampaně</th>'
+          + '<th style="padding:6px;font-size:11px;color:var(--text2);text-transform:uppercase;text-align:center;">Stav</th>'
+          + '<th style="padding:6px;"></th></tr></thead><tbody id="fb-forms-body">'+fbRowsHtml()+'</tbody></table>'
+        + '<div style="margin-top:14px;padding-top:14px;border-top:1px dashed var(--border);">'
+          + '<div style="font-size:12px;color:var(--text2);margin-bottom:6px;">Přidat formulář ručně (ID najdete ve Facebooku u formuláře):</div>'
+          + '<div style="display:flex;gap:8px;flex-wrap:wrap;"><input id="fb-new-id" placeholder="ID formuláře" style="'+inp+'width:180px;"><input id="fb-new-name" placeholder="název (volitelně)" style="'+inp+'flex:1;min-width:160px;"><button class="btn" style="padding:8px 14px;" onclick="fbAddManual()">＋ Přidat</button></div>'
+          + '<div id="fb-live-wrap">'+fbLiveOptionsHtml()+'</div>'
+        + '</div>'
+        + '<div class="modal-actions" style="margin-top:16px;display:flex;align-items:center;gap:12px;"><span id="fb-save-msg" style="font-size:12px;flex:1;"></span><button class="btn btn-secondary" onclick="closeModal()">Zavřít</button><button class="btn btn-primary" onclick="fbSaveForms()">Uložit</button></div>';
+    }
+    window.openFbForms = openFbForms;
+
     // Filtrovací řádek pod hlavičkou + klientské filtrování (skrývání řádků).
     function cmpFilterRowHtml(){
       var st = 'width:100%;box-sizing:border-box;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:3px 6px;font-size:11px;';
@@ -3098,7 +3235,7 @@
                 ? '<span data-model="' + l.id + '" title="Zákazník má uložený model — už jsi ho viděl" style="margin-left:6px;color:var(--text2);cursor:default;vertical-align:middle;">🧩</span>'
                 : '<span data-model="' + l.id + '" title="Zákazník má uložený model — NEVIDĚNO (rozklikni „Model zákazníka")" style="margin-left:6px;color:#eab308;cursor:default;vertical-align:middle;font-weight:700;">🧩<span style="color:#ef4444;margin-left:1px;">•</span></span>')
             : '';
-          h += '<tr data-lead="' + l.id + '" data-sections="' + cmpEsc(l.visible_sections||'') + '" data-source="' + cmpEsc(l.source||'') + '" data-approved="' + (l.access_approved_at ? '1' : '') + '" data-sent-count="' + (l.access_sent_count||0) + '" data-sent-at="' + cmpEsc(l.access_last_sent_at||'') + '" data-phone="' + cmpEsc(l.phone||'') + '" data-la="' + cmpEsc(l.lastActivityAt||'') + '" data-extra="' + cmpEsc(l.extra_offers||'') + '" data-revstats="' + (l.show_revenue_stats?'1':'') + '" data-example="' + (l.show_example?'1':'') + '" data-hideloss="' + (l.hide_live_loss?'1':'') + '" data-role="' + cmpEsc(l.role||'') + '" data-lang="' + cmpEsc(langCode) + '" data-owner="' + (l.owner_person_id||'') + '" data-warm="' + (w==null?'':(w>=70?'hot':w>=45?'warm':w>=25?'luke':'cold')) + '" data-resv="' + (rv?'1':'') + '" data-stav="' + cmpEsc(l.status||'') + '" data-name="' + cmpEsc((l.name||'').toLowerCase()) + '" data-email="' + cmpEsc((l.email||'').toLowerCase()) + '" data-note="' + cmpEsc((l.notes||'').toLowerCase()) + '" onclick="cmpActivity(' + l.id + ', this)" title="' + (l.is_test?'Testovací kontakt — nepočítá se do statistik':'Klikni pro cestu zákazníka') + '" style="cursor:pointer;' + (l.is_test?'opacity:0.6;':'') + '"><td style="color:var(--text2);">▸</td><td style="white-space:nowrap;">' + dt + '</td><td style="white-space:nowrap;color:' + laColor + ';font-size:12px;font-weight:' + (laToday ? '700' : '400') + ';">' + la + todayStr + '</td><td>' + (l.is_test ? '<span title="Testovací kontakt — nepočítá se do statistik" style="color:#c084fc;font-size:12px;margin-right:4px;cursor:default;vertical-align:middle;">🧪</span>' : '') + (l.external_rep_id ? '<span title="Kontakt od externího obchodníka' + (l.external_rep_name ? ': ' + cmpEsc(l.external_rep_name) : '') + '" style="color:#eab308;font-size:12px;margin-right:4px;cursor:default;vertical-align:middle;">🤝</span>' : '') + cmpEsc(l.name) + (l.extra_offers ? ' <span title="Individuální nabídka lokalit" style="cursor:default">🎯</span>' : '') + modelBadge + '</td><td><a href="mailto:' + cmpEsc(l.email) + '" onclick="event.stopPropagation()" style="color:#eab308;">' + cmpEsc(l.email) + '</a></td><td>' + roleLabel + '</td><td style="white-space:nowrap;">' + langSel + '</td><td style="white-space:nowrap;">' + ownerCell + '</td>' + warmthCell + resvCell + '<td>' + sel + '</td><td><input type="text" value="' + noteVal + '" placeholder="—" onclick="event.stopPropagation()" onblur="cmpSetNote(' + l.id + ', this.value)" style="width:140px;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:12px;"></td><td style="white-space:nowrap;"><button onclick="event.stopPropagation();cmpToggleTest(' + l.id + ',' + (l.is_test?'false':'true') + ')" title="' + (l.is_test?'Testovací kontakt — klikni pro zrušení':'Označit jako testovací kontakt (nepočítá se do statistik)') + '" style="background:' + (l.is_test?'rgba(168,85,247,0.25)':'transparent') + ';color:' + (l.is_test?'#c084fc':'var(--text2)') + ';border:1px solid ' + (l.is_test?'rgba(168,85,247,0.6)':'var(--border)') + ';border-radius:6px;padding:4px 8px;font-size:12px;cursor:pointer;margin-right:6px;">🧪</button><button onclick="event.stopPropagation();cmpDeleteLead(' + l.id + ', ' + JSON.stringify(l.name).replace(/"/g,'&quot;') + ')" title="Smazat lead" style="background:transparent;color:#ef4444;border:1px solid rgba(239,68,68,0.4);border-radius:6px;padding:4px 9px;font-size:12px;cursor:pointer;">🗑</button></td></tr>';
+          h += '<tr data-lead="' + l.id + '" data-sections="' + cmpEsc(l.visible_sections||'') + '" data-source="' + cmpEsc(l.source||'') + '" data-approved="' + (l.access_approved_at ? '1' : '') + '" data-sent-count="' + (l.access_sent_count||0) + '" data-sent-at="' + cmpEsc(l.access_last_sent_at||'') + '" data-phone="' + cmpEsc(l.phone||'') + '" data-la="' + cmpEsc(l.lastActivityAt||'') + '" data-extra="' + cmpEsc(l.extra_offers||'') + '" data-revstats="' + (l.show_revenue_stats?'1':'') + '" data-example="' + (l.show_example?'1':'') + '" data-hideloss="' + (l.hide_live_loss?'1':'') + '" data-role="' + cmpEsc(l.role||'') + '" data-lang="' + cmpEsc(langCode) + '" data-owner="' + (l.owner_person_id||'') + '" data-warm="' + (w==null?'':(w>=70?'hot':w>=45?'warm':w>=25?'luke':'cold')) + '" data-resv="' + (rv?'1':'') + '" data-stav="' + cmpEsc(l.status||'') + '" data-name="' + cmpEsc((l.name||'').toLowerCase()) + '" data-email="' + cmpEsc((l.email||'').toLowerCase()) + '" data-note="' + cmpEsc((l.notes||'').toLowerCase()) + '" onclick="cmpActivity(' + l.id + ', this)" title="' + (l.is_test?'Testovací kontakt — nepočítá se do statistik':'Klikni pro cestu zákazníka') + '" style="cursor:pointer;' + (l.is_test?'opacity:0.6;':'') + '"><td style="color:var(--text2);">▸</td><td style="white-space:nowrap;">' + dt + '</td><td style="white-space:nowrap;color:' + laColor + ';font-size:12px;font-weight:' + (laToday ? '700' : '400') + ';">' + la + todayStr + '</td><td>' + (l.is_test ? '<span title="Testovací kontakt — nepočítá se do statistik" style="color:#c084fc;font-size:12px;margin-right:4px;cursor:default;vertical-align:middle;">🧪</span>' : '') + (l.external_rep_id ? '<span title="Kontakt od externího obchodníka' + (l.external_rep_name ? ': ' + cmpEsc(l.external_rep_name) : '') + '" style="color:#eab308;font-size:12px;margin-right:4px;cursor:default;vertical-align:middle;">🤝</span>' : '') + cmpEsc(l.name) + (l.campaign ? ' <span title="Kampaň z FB reklamy" style="display:inline-block;margin-left:6px;padding:1px 7px;border-radius:10px;background:rgba(59,130,246,0.18);color:#60a5fa;font-size:11px;vertical-align:middle;">📢 ' + cmpEsc(l.campaign) + '</span>' : (l.source === 'facebook_ads' ? ' <span title="Kontakt z FB reklamy" style="margin-left:6px;color:#60a5fa;font-size:12px;vertical-align:middle;">📢</span>' : '')) + (l.extra_offers ? ' <span title="Individuální nabídka lokalit" style="cursor:default">🎯</span>' : '') + modelBadge + '</td><td><a href="mailto:' + cmpEsc(l.email) + '" onclick="event.stopPropagation()" style="color:#eab308;">' + cmpEsc(l.email) + '</a></td><td>' + roleLabel + '</td><td style="white-space:nowrap;">' + langSel + '</td><td style="white-space:nowrap;">' + ownerCell + '</td>' + warmthCell + resvCell + '<td>' + sel + '</td><td><input type="text" value="' + noteVal + '" placeholder="—" onclick="event.stopPropagation()" onblur="cmpSetNote(' + l.id + ', this.value)" style="width:140px;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:12px;"></td><td style="white-space:nowrap;"><button onclick="event.stopPropagation();cmpToggleTest(' + l.id + ',' + (l.is_test?'false':'true') + ')" title="' + (l.is_test?'Testovací kontakt — klikni pro zrušení':'Označit jako testovací kontakt (nepočítá se do statistik)') + '" style="background:' + (l.is_test?'rgba(168,85,247,0.25)':'transparent') + ';color:' + (l.is_test?'#c084fc':'var(--text2)') + ';border:1px solid ' + (l.is_test?'rgba(168,85,247,0.6)':'var(--border)') + ';border-radius:6px;padding:4px 8px;font-size:12px;cursor:pointer;margin-right:6px;">🧪</button><button onclick="event.stopPropagation();cmpDeleteLead(' + l.id + ', ' + JSON.stringify(l.name).replace(/"/g,'&quot;') + ')" title="Smazat lead" style="background:transparent;color:#ef4444;border:1px solid rgba(239,68,68,0.4);border-radius:6px;padding:4px 9px;font-size:12px;cursor:pointer;">🗑</button></td></tr>';
         });
         h += '</tbody></table></div>';
       box.innerHTML = h;
