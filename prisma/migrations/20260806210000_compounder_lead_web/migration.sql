@@ -1,0 +1,1 @@
+﻿ALTER TABLE "compounder_leads" ADD COLUMN "web" VARCHAR(300);
