@@ -179,33 +179,31 @@ button:disabled{opacity:.4;cursor:not-allowed}
 
   <!-- KROK 4 -->
   <section class="card hidden" id="c4">
-    <h2>Původ kontaktů</h2>
+    <h2>Nastaven&#237; lead&#367;</h2>
     <div class="body">
       <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end">
         <label style="flex:1;min-width:220px">
-          <div style="font-size:12.5px;color:var(--ink-2);margin-bottom:5px">Zdroj <span class="req">*</span></div>
-          <select id="zdroj" style="max-width:none">
-            <option value="">— vyber zdroj —</option>
-            <option>Veletrh / výstava</option>
-            <option>Poptávka z webu</option>
-            <option>Doporučení stávajícího zákazníka</option>
-            <option>Veřejný rejstřík / oborový katalog</option>
-            <option>Osobní kontakt obchodníka</option>
-            <option>Zakoupená databáze</option>
+          <div style="font-size:12.5px;color:var(--ink-2);margin-bottom:5px">Role</div>
+          <select id="role" style="max-width:none">
+            <option value="compounder">Provozovatel / investor</option>
+            <option value="distributor">Distributor</option>
           </select>
         </label>
         <label style="flex:1;min-width:220px">
-          <div style="font-size:12.5px;color:var(--ink-2);margin-bottom:5px">Upřesnění <span class="req">*</span></div>
-          <input type="text" id="zdrojDetail" placeholder="např. MSV Brno 2026, stánek G14" style="max-width:none">
-        </label>
-        <label style="min-width:150px">
-          <div style="font-size:12.5px;color:var(--ink-2);margin-bottom:5px">Datum pořízení</div>
-          <input type="text" id="zdrojDatum" style="max-width:none">
+          <div style="font-size:12.5px;color:var(--ink-2);margin-bottom:5px">Jazyk komunikace</div>
+          <select id="lang" style="max-width:none">
+            <option value="cs">&#268;e&#353;tina</option>
+            <option value="sk">Sloven&#269;ina</option>
+            <option value="pl">Polski</option>
+            <option value="en">English</option>
+            <option value="de">Deutsch</option>
+            <option value="">nezad&#225;no</option>
+          </select>
         </label>
       </div>
       <div class="note">
         <span>&#128274;</span>
-        <span>Zdroj se ukládá ke každému kontaktu. Bez něj nelze doložit právní titul zpracování ani splnit informační povinnost vůči osobě, kterou jsi nekontaktoval jako první.</span>
+        <span>Role i jazyk plat&#237; pro celou d&#225;vku. Duplicity a seznam &bdquo;neoslovovat&ldquo; prov&#283;&#345;uje server u ka&#382;d&#233;ho kontaktu zvl&#225;&#353;&#357;.</span>
       </div>
     </div>
   </section>
@@ -314,8 +312,7 @@ async function navrhniAI(hlavicky, ukazky){
 }
 
 /* --- NAPOJIT 2: existující kontakty a blacklist ---------------------------- */
-const API = '/api/sales';
-let MOJE_ID = null;
+const API = '/api/compounder';
 let BLACKLIST_AKTIVNI = true;
 
 async function nactiMe(){
@@ -323,9 +320,6 @@ async function nactiMe(){
     const r = await fetch('/api/auth/me',{credentials:'include'});
     const d = r.ok ? await r.json() : null;
     if(!d || !d.user) throw 0;
-    const u = d.user;
-    const id = u.person_id || (u.person && u.person.id) || u.id || null;
-    MOJE_ID = Number.isInteger(id) ? id : null;
   }catch(e){
     location.href = '/login.html?redirect=' + encodeURIComponent(location.pathname);
   }
@@ -333,27 +327,20 @@ async function nactiMe(){
 
 async function nactiExistujici(){
   try{
-    const r = await fetch(API+'/contacts',{credentials:'include'});
+    const r = await fetch(API+'/my-leads?limit=1000',{credentials:'include'});
     if(!r.ok) return [];
     const d = await r.json();
-    const pole = Array.isArray(d) ? d : (d.contacts || d.items || []);
-    return pole.map(function(c){ return {
-      id: c.id,
-      jmeno: [c.first_name,c.last_name].filter(Boolean).join(' '),
-      email: c.email || '', telefon: c.phone || '', ico: '',
-      vlastnik: c.assigned_to ? [c.assigned_to.first_name,c.assigned_to.last_name].filter(Boolean).join(' ') : 'neprirazeno'
+    const pole = Array.isArray(d) ? d : (d.leads || d.items || d.rows || []);
+    return pole.map(function(l){ return {
+      id: l.id,
+      jmeno: l.name || [l.first_name,l.last_name].filter(Boolean).join(' '),
+      email: l.email || '', telefon: l.phone || '', ico: '',
+      vlastnik: 'tvuj kontakt'
     };});
   }catch(e){ return []; }
 }
 
-async function nactiBlacklist(){
-  try{
-    const r = await fetch('/api/blacklist',{credentials:'include'});
-    if(r.ok) return await r.json();
-  }catch(e){}
-  BLACKLIST_AKTIVNI = false;
-  return [];
-}
+async function nactiBlacklist(){ return []; }
 
 /* --- normalizace (deterministická, nikdy ne přes model) --- */
 function normTel(v){
@@ -568,15 +555,12 @@ function kUlozeni(){
 }
 function aktualizujListu(){
   const n=kUlozeni().length;
-  const zdrojOk=document.getElementById('zdroj').value && document.getElementById('zdrojDetail').value.trim();
-  document.getElementById('sum').textContent = n+' kontaktů k uložení'+(zdrojOk?'':' &middot; doplň zdroj').replace('&middot;','·');
+  document.getElementById('sum').textContent = n+' kontaktu k ulozeni';
   const b=document.getElementById('btnImport');
-  b.disabled = !(n>0 && zdrojOk);
+  b.disabled = !(n>0);
   b.textContent = n>0 ? 'Importovat '+n+' kontaktů' : 'Importovat';
 }
-document.getElementById('zdroj').onchange=aktualizujListu;
-document.getElementById('zdrojDetail').oninput=aktualizujListu;
-document.getElementById('zdrojDatum').value=new Date().toLocaleDateString('cs-CZ');
+document.getElementById('role').onchange=aktualizujListu;
 
 function krok(n){
   for(let i=1;i<=4;i++){
@@ -588,42 +572,41 @@ function krok(n){
 
 document.getElementById('btnImport').onclick=async()=>{
   const btn=document.getElementById('btnImport');
-  const zdrojTyp=document.getElementById('zdroj').value;
-  const zdrojDetail=document.getElementById('zdrojDetail').value.trim();
+  const role=document.getElementById('role').value;
+  const lang=document.getElementById('lang').value;
   const seznam=kUlozeni();
   btn.disabled=true;
-  let ok=0; const chyby=[];
+  let ok=0; const duplicity=[], blokovane=[], chyby=[];
 
   for(let i=0;i<seznam.length;i++){
     const k=seznam[i];
     btn.textContent='Ukladam '+(i+1)+'/'+seznam.length+'...';
     let fn=(k.jmeno||'').trim(), ln=(k.prijmeni||'').trim();
-    if(!fn && !ln) fn=(k.firma||'').trim();
-    else if(!fn){ fn=ln; ln=''; }
-    if(!fn){ chyby.push('radek '+k._radek+': chybi jmeno i firma'); continue; }
+    if(!fn && !ln){ fn=(k.firma||'').trim(); }
+    const popis='r.'+k._radek+' '+([fn,ln].filter(Boolean).join(' ') || k.email_n || k.telefon_n);
 
     const telo={
-      first_name: fn, last_name: ln || null,
-      email: k.email_n || null, phone: k.telefon_n || null,
-      company_name: k.firma || null, position: k.funkce || null,
-      city: k.mesto || null, address: k.adresa || null,
-      source: 'csv_import',
-      source_detail: [zdrojTyp, zdrojDetail].filter(Boolean).join(' - '),
-      status: 'new', potential: 'medium',
-      notes: k.poznamka || null
+      first_name: fn || '', last_name: ln || '',
+      company: k.firma || '', city: k.mesto || '',
+      country: '', role: role, lang: lang || null,
+      email: k.email_n || '', phone: k.telefon_n || ''
     };
-    if(MOJE_ID) telo.assigned_to_id = MOJE_ID;
 
     try{
-      const r=await fetch(API+'/contacts',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify(telo)});
-      if(r.ok) ok++;
-      else { const e=await r.json().catch(function(){return {};}); chyby.push('radek '+k._radek+': '+(e.error || ('HTTP '+r.status))); }
-    }catch(e){ chyby.push('radek '+k._radek+': spojeni selhalo'); }
+      const r=await fetch(API+'/leads',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify(telo)});
+      if(r.ok){ ok++; continue; }
+      const e=await r.json().catch(function(){return {};});
+      const zprava=e.error || ('HTTP '+r.status);
+      if(r.status===409){
+        if(/neoslovovat/i.test(zprava)) blokovane.push(popis);
+        else duplicity.push(popis+' - '+zprava);
+      } else chyby.push(popis+': '+zprava);
+    }catch(e){ chyby.push(popis+': spojeni selhalo'); }
 
     if(ok===0 && chyby.length>=5){ chyby.push('preruseno po 5 chybach'); break; }
   }
 
-  if(ok===0){
+  if(ok===0 && !duplicity.length && !blokovane.length){
     alert('NEULOZILO SE NIC.\n\n'+chyby.slice(0,8).join('\n'));
     btn.disabled=false; btn.textContent='Importovat '+seznam.length+' kontaktu';
     return;
@@ -632,8 +615,12 @@ document.getElementById('btnImport').onclick=async()=>{
   ['c1','c2','c3','c3b','c4'].forEach(function(x){document.getElementById(x).classList.add('hidden');});
   document.getElementById('bar').classList.add('hidden');
   document.getElementById('c5').classList.remove('hidden');
-  document.getElementById('doneTitle').textContent='Ulozeno '+ok+' z '+seznam.length+' kontaktu';
-  document.getElementById('doneText').textContent = chyby.length ? ('Neulozilo se '+chyby.length+': '+chyby.slice(0,5).join('; ')) : ('Najdes je v seznamu se zdrojem '+zdrojDetail);
+  document.getElementById('doneTitle').textContent='Zalozeno '+ok+' z '+seznam.length+' kontaktu';
+  const shrnuti=[];
+  if(duplicity.length) shrnuti.push('<b>'+duplicity.length+' uz v systemu bylo:</b><br>'+duplicity.slice(0,10).join('<br>'));
+  if(blokovane.length) shrnuti.push('<b>'+blokovane.length+' je na seznamu neoslovovat:</b><br>'+blokovane.slice(0,10).join('<br>'));
+  if(chyby.length)     shrnuti.push('<b>'+chyby.length+' selhalo:</b><br>'+chyby.slice(0,10).join('<br>'));
+  document.getElementById('doneText').innerHTML = shrnuti.length ? shrnuti.join('<br><br>') : 'Najdes je v seznamu Compounder kontakty.';
   krok(4);
 };
 
