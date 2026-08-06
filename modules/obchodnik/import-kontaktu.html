@@ -583,15 +583,15 @@ document.getElementById('btnImport').onclick=async()=>{
                  .map(k=>({email:k.email_n,telefon:k.telefon_n,duvod:k.duvod}))
   };
 
-  let id='—';
+  let id='-', ok=false, chyba='';
   try{
     const r=await fetch('/api/kontakty/import',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(davka)});
-    if(r.ok) id=(await r.json()).davka_id||'—';
+    if(r.ok){ ok=true; id=(await r.json()).davka_id||'-'; } else chyba='HTTP '+r.status;
   }catch(e){
-    console.warn('Endpoint zatím nenapojen, dávka:', davka);
+    chyba='server neodpovedel';
   }
 
-  ['c1','c2','c3','c3b','c4'].forEach(x=>document.getElementById(x).classList.add('hidden'));
+  if(!ok){ alert('IMPORT SE NEULOZIL: '+chyba+'. Endpoint na serveru zatim neexistuje.'); btn.disabled=false; btn.textContent='Importovat'; return; } ['c1','c2','c3','c3b','c4'].forEach(x=>document.getElementById(x).classList.add('hidden'));
   document.getElementById('bar').classList.add('hidden');
   document.getElementById('c5').classList.remove('hidden');
   document.getElementById('doneTitle').textContent='Importováno '+davka.kontakty.length+' kontaktů';
