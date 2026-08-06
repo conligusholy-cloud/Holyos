@@ -277,7 +277,7 @@ function navrhniLokalne(hlavicky){
     }
     for(const [pole,varianty] of Object.entries(KLICE)){
       if(pouzito.has(pole)) continue;
-      if(varianty.some(v=>n.includes(v)||v.includes(n))){ pouzito.add(pole); return {pole, jistota:'over'}; }
+      if(varianty.some(v=>n.split(' ').indexOf(v)>=0||(v.length>=5&&n.indexOf(v)>=0))){ pouzito.add(pole); return {pole, jistota:'over'}; }
     }
     return {pole:'', jistota:'ne'};
   });
