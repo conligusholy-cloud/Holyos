@@ -408,7 +408,7 @@ function vykresliMapovani(){
     const tag = m.jistota==='jiste' ? '<span class="tag ok">jisté</span>'
               : m.jistota==='over'  ? '<span class="tag hm">ověř</span>'
               :                       '<span class="tag no">ignorovat</span>';
-    const opts=POLE.map(([v,l])=>'<option value="'+v+'"'+(v===m.pole?' selected':'')+'>'+l+'</option>').join('');
+    const obs=new Set();S.mapovani.forEach((x,j)=>{if(j!==i&&x&&x.pole)obs.add(x.pole);});if(obs.has('cele_jmeno')){obs.add('jmeno');obs.add('prijmeni');}if(obs.has('jmeno')||obs.has('prijmeni'))obs.add('cele_jmeno');const opts=POLE.filter(([v])=>!v||!obs.has(v)||v===m.pole).map(([v,l])=>'<option value="'+v+'"'+(v===m.pole?' selected':'')+'>'+l+'</option>').join('');
     const tr=document.createElement('tr');
     tr.innerHTML='<td class="src">'+esc(h)+'</td><td class="arw">&#8594;</td>'+
                  '<td><select data-i="'+i+'">'+opts+'</select></td>'+
@@ -417,7 +417,7 @@ function vykresliMapovani(){
     tb.appendChild(tr);
   });
   tb.querySelectorAll('select').forEach(s=>{
-    s.onchange=e=>{ S.mapovani[+e.target.dataset.i]={pole:e.target.value,jistota:'rucne'}; prepocitej(); };
+    s.onchange=e=>{ S.mapovani[+e.target.dataset.i]={pole:e.target.value,jistota:'rucne'}; vykresliMapovani(); prepocitej(); };
   });
   document.getElementById('c2').classList.remove('hidden');
 }
