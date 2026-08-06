@@ -3024,6 +3024,43 @@ function _fbExtractFields(src) {
   return f;
 }
 
+// Standardní / systémová pole, která NEjsou „doplňující otázka z formuláře".
+const FB_STD_KEYS = new Set([
+  'form_id','formid','form_name','lead_id','leadgen_id','id','page_id','ad_id','adset_id','campaign_id',
+  'campaign','campaign_name','ad_name','adset_name','role','raw','field_data','position','is_organic',
+  'first_name','firstname','last_name','lastname','full_name','fullname','name',
+  'email','phone','phone_number','phonenumber','company','city','country','lang','locale','created_time','date_created',
+]);
+// Vytáhne doplňující odpovědi z formuláře (vše mimo standardní kontaktní/meta pole),
+// jak z Meta field_data, tak z plochých klíčů (Make). Vrací [{label,value}].
+function _fbIntake(src) {
+  const out = [];
+  const seen = new Set();
+  const push = (label, value) => {
+    const lab = String(label || '').trim();
+    if (!lab) return;
+    const norm = lab.toLowerCase().replace(/[\s?:_-]/g, '');
+    if (FB_STD_KEYS.has(norm) || seen.has(norm)) return;
+    let v = Array.isArray(value) ? value.filter((x) => x != null).join(', ') : value;
+    v = (v == null) ? '' : String(v).trim();
+    if (!v) return;
+    seen.add(norm);
+    out.push({ label: lab.replace(/_/g, ' '), value: v.slice(0, 500) });
+  };
+  if (src && Array.isArray(src.field_data)) {
+    for (const fd of src.field_data) push(fd && fd.name, fd && fd.values);
+  }
+  if (src) {
+    for (const k of Object.keys(src)) {
+      if (FB_STD_KEYS.has(String(k).toLowerCase())) continue;
+      const v = src[k];
+      if (v == null || typeof v === 'object') continue;
+      push(k, v);
+    }
+  }
+  return out;
+}
+
 // Poskládá jméno/kontakt z polí a vytvoří CompounderLead podle konfigurace formuláře.
 // Vrací { created, id, skipped }.
 async function _fbCreateLead(fields, meta, formCfg) {
@@ -3069,10 +3106,15 @@ async function _fbCreateLead(fields, meta, formCfg) {
     return { created: false, id: existing.id, skipped: 'duplicate_contact' };
   }
 
+  // Doplňující odpovědi z formuláře (např. „Jakou investici plánujete", „Způsob provozu").
+  const intake = _fbIntake(meta.raw || {});
+  const intakeText = intake.map((x) => `${x.label}: ${x.value}`).join('\n');
+
   const initLog = `${now} · Lead přijat z ${srcLabel}` +
     (ownerPersonId ? ` · přiřazeno internímu obchodníkovi #${ownerPersonId}` : '') +
     (externalRepId ? ` · přiřazeno externímu zástupci #${externalRepId}` : '') +
-    (!ownerPersonId && !externalRepId ? ' · zatím bez obchodníka' : '');
+    (!ownerPersonId && !externalRepId ? ' · zatím bez obchodníka' : '') +
+    (intakeText ? ('\n— Z formuláře —\n' + intakeText) : '');
 
   const created = await prisma.compounderLead.create({
     data: {
@@ -3081,6 +3123,7 @@ async function _fbCreateLead(fields, meta, formCfg) {
       email: email || null, phone: phone || null,
       role, lang, status: 'new', source: 'facebook_ads',
       campaign,
+      notes: intakeText || null,
       owner_person_id: ownerPersonId, external_rep_id: externalRepId,
       meta_lead_id: leadId, meta_form_id: meta.formId ? String(meta.formId) : null,
       meta_page_id: meta.pageId ? String(meta.pageId) : null,
