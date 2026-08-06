@@ -299,7 +299,7 @@ function navrhniLokalne(hlavicky){
 async function navrhniAI(hlavicky, ukazky){
   try{
     const r = await fetch('/api/ai/mapovani-kontaktu',{
-      method:'POST', headers:{'Content-Type':'application/json'},
+      method:'POST', credentials:'include', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({hlavicky, ukazky, pole: POLE.map(p=>p[0]).filter(Boolean)})
     });
     if(!r.ok) throw 0;
@@ -315,14 +315,14 @@ async function navrhniAI(hlavicky, ukazky){
 
 /* --- NAPOJIT 2: existující kontakty a blacklist ---------------------------- */
 async function nactiExistujici(){
-  try{ const r = await fetch('/api/kontakty/klice'); if(r.ok) return await r.json(); }catch(e){}
+  try{ const r = await fetch('/api/kontakty/klice',{credentials:'include'}); if(r.ok) return await r.json(); }catch(e){}
   return [ // ukázková data, než se napojí endpoint
     {id:101, jmeno:'Jan Novák',        email:'jan.novak@firma.cz', telefon:'+420602111222', ico:'', vlastnik:'Petr Svoboda'},
     {id:102, jmeno:'Marie Dvořáková',  email:'',                   telefon:'+420601234567', ico:'', vlastnik:'Tomáš Holý'}
   ];
 }
 async function nactiBlacklist(){
-  try{ const r = await fetch('/api/blacklist'); if(r.ok) return await r.json(); }catch(e){}
+  try{ const r = await fetch('/api/blacklist',{credentials:'include'}); if(r.ok) return await r.json(); }catch(e){}
   return [
     {typ:'domena', hodnota:'stavby-xy.cz', od:'2026-03-14', duvod:'žádost o nekontaktování'},
     {typ:'email',  hodnota:'info@nezajem.cz', od:'2026-01-08', duvod:'odhlášení'}
@@ -585,7 +585,7 @@ document.getElementById('btnImport').onclick=async()=>{
 
   let id='-', ok=false, chyba='';
   try{
-    const r=await fetch('/api/kontakty/import',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(davka)});
+    const r=await fetch('/api/kontakty/import',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify(davka)});
     if(r.ok){ ok=true; id=(await r.json()).davka_id||'-'; } else chyba='HTTP '+r.status;
   }catch(e){
     chyba='server neodpovedel';
@@ -598,6 +598,14 @@ document.getElementById('btnImport').onclick=async()=>{
   document.getElementById('doneText').textContent='Dávka '+id+'. Kontakty najdeš v seznamu se zdrojem „'+davka.zdroj_detail+'".';
   krok(4);
 };
+</script>
+<script>
+(async function(){
+  try{
+    var me = await (await fetch('/api/auth/me',{credentials:'include'})).json();
+    if(!me || !me.user) location.href='/login.html?redirect='+encodeURIComponent(location.pathname);
+  }catch(e){ location.href='/login.html?redirect='+encodeURIComponent(location.pathname); }
+})();
 </script>
 </body>
 </html>
