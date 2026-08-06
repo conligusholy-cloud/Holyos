@@ -314,19 +314,45 @@ async function navrhniAI(hlavicky, ukazky){
 }
 
 /* --- NAPOJIT 2: existující kontakty a blacklist ---------------------------- */
-async function nactiExistujici(){
-  try{ const r = await fetch('/api/kontakty/klice',{credentials:'include'}); if(r.ok) return await r.json(); }catch(e){}
-  return [ // ukázková data, než se napojí endpoint
-    {id:101, jmeno:'Jan Novák',        email:'jan.novak@firma.cz', telefon:'+420602111222', ico:'', vlastnik:'Petr Svoboda'},
-    {id:102, jmeno:'Marie Dvořáková',  email:'',                   telefon:'+420601234567', ico:'', vlastnik:'Tomáš Holý'}
-  ];
+const API = '/api/sales';
+let MOJE_ID = null;
+let BLACKLIST_AKTIVNI = true;
+
+async function nactiMe(){
+  try{
+    const r = await fetch('/api/auth/me',{credentials:'include'});
+    const d = r.ok ? await r.json() : null;
+    if(!d || !d.user) throw 0;
+    const u = d.user;
+    const id = u.person_id || (u.person && u.person.id) || u.id || null;
+    MOJE_ID = Number.isInteger(id) ? id : null;
+  }catch(e){
+    location.href = '/login.html?redirect=' + encodeURIComponent(location.pathname);
+  }
 }
+
+async function nactiExistujici(){
+  try{
+    const r = await fetch(API+'/contacts',{credentials:'include'});
+    if(!r.ok) return [];
+    const d = await r.json();
+    const pole = Array.isArray(d) ? d : (d.contacts || d.items || []);
+    return pole.map(function(c){ return {
+      id: c.id,
+      jmeno: [c.first_name,c.last_name].filter(Boolean).join(' '),
+      email: c.email || '', telefon: c.phone || '', ico: '',
+      vlastnik: c.assigned_to ? [c.assigned_to.first_name,c.assigned_to.last_name].filter(Boolean).join(' ') : 'neprirazeno'
+    };});
+  }catch(e){ return []; }
+}
+
 async function nactiBlacklist(){
-  try{ const r = await fetch('/api/blacklist',{credentials:'include'}); if(r.ok) return await r.json(); }catch(e){}
-  return [
-    {typ:'domena', hodnota:'stavby-xy.cz', od:'2026-03-14', duvod:'žádost o nekontaktování'},
-    {typ:'email',  hodnota:'info@nezajem.cz', od:'2026-01-08', duvod:'odhlášení'}
-  ];
+  try{
+    const r = await fetch('/api/blacklist',{credentials:'include'});
+    if(r.ok) return await r.json();
+  }catch(e){}
+  BLACKLIST_AKTIVNI = false;
+  return [];
 }
 
 /* --- normalizace (deterministická, nikdy ne přes model) --- */
@@ -560,44 +586,58 @@ function krok(n){
   }
 }
 
-/* --- NAPOJIT 3: uložení dávky ---------------------------------------------
-   Server ať vrací { davka_id }. To ID ulož ke každému kontaktu — pak jde
-   celý špatný import vrátit jedním DELETE /api/kontakty/davka/{id}.
-   Blokované záznamy neposílej k založení, ale zaloguj pokus.            */
 document.getElementById('btnImport').onclick=async()=>{
   const btn=document.getElementById('btnImport');
-  btn.disabled=true; btn.textContent='Ukládám…';
+  const zdrojTyp=document.getElementById('zdroj').value;
+  const zdrojDetail=document.getElementById('zdrojDetail').value.trim();
+  const seznam=kUlozeni();
+  btn.disabled=true;
+  let ok=0; const chyby=[];
 
-  const davka={
-    soubor: S.soubor?.name || '',
-    zdroj: document.getElementById('zdroj').value,
-    zdroj_detail: document.getElementById('zdrojDetail').value.trim(),
-    zdroj_datum: document.getElementById('zdrojDatum').value,
-    kontakty: kUlozeni().map(k=>({
-      jmeno:k.jmeno||'', prijmeni:k.prijmeni||'', email:k.email_n||'', telefon:k.telefon_n||'',
-      firma:k.firma||'', ico:k.ico_n||'', funkce:k.funkce||'', mesto:k.mesto||'',
-      adresa:k.adresa||'', poznamka:k.poznamka||'',
-      sloucit_s: k.existujici?.id || null, akce: k.akce || 'novy'
-    })),
-    blokovane: S.vysledky.filter(k=>k.stav==='blokovan')
-                 .map(k=>({email:k.email_n,telefon:k.telefon_n,duvod:k.duvod}))
-  };
+  for(let i=0;i<seznam.length;i++){
+    const k=seznam[i];
+    btn.textContent='Ukladam '+(i+1)+'/'+seznam.length+'...';
+    let fn=(k.jmeno||'').trim(), ln=(k.prijmeni||'').trim();
+    if(!fn && !ln) fn=(k.firma||'').trim();
+    else if(!fn){ fn=ln; ln=''; }
+    if(!fn){ chyby.push('radek '+k._radek+': chybi jmeno i firma'); continue; }
 
-  let id='-', ok=false, chyba='';
-  try{
-    const r=await fetch('/api/kontakty/import',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify(davka)});
-    if(r.ok){ ok=true; id=(await r.json()).davka_id||'-'; } else chyba='HTTP '+r.status;
-  }catch(e){
-    chyba='server neodpovedel';
+    const telo={
+      first_name: fn, last_name: ln || null,
+      email: k.email_n || null, phone: k.telefon_n || null,
+      company_name: k.firma || null, position: k.funkce || null,
+      city: k.mesto || null, address: k.adresa || null,
+      source: 'csv_import',
+      source_detail: [zdrojTyp, zdrojDetail].filter(Boolean).join(' - '),
+      status: 'new', potential: 'medium',
+      notes: k.poznamka || null
+    };
+    if(MOJE_ID) telo.assigned_to_id = MOJE_ID;
+
+    try{
+      const r=await fetch(API+'/contacts',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify(telo)});
+      if(r.ok) ok++;
+      else { const e=await r.json().catch(function(){return {};}); chyby.push('radek '+k._radek+': '+(e.error || ('HTTP '+r.status))); }
+    }catch(e){ chyby.push('radek '+k._radek+': spojeni selhalo'); }
+
+    if(ok===0 && chyby.length>=5){ chyby.push('preruseno po 5 chybach'); break; }
   }
 
-  if(!ok){ alert('IMPORT SE NEULOZIL: '+chyba+'. Endpoint na serveru zatim neexistuje.'); btn.disabled=false; btn.textContent='Importovat'; return; } ['c1','c2','c3','c3b','c4'].forEach(x=>document.getElementById(x).classList.add('hidden'));
+  if(ok===0){
+    alert('NEULOZILO SE NIC.\n\n'+chyby.slice(0,8).join('\n'));
+    btn.disabled=false; btn.textContent='Importovat '+seznam.length+' kontaktu';
+    return;
+  }
+
+  ['c1','c2','c3','c3b','c4'].forEach(function(x){document.getElementById(x).classList.add('hidden');});
   document.getElementById('bar').classList.add('hidden');
   document.getElementById('c5').classList.remove('hidden');
-  document.getElementById('doneTitle').textContent='Importováno '+davka.kontakty.length+' kontaktů';
-  document.getElementById('doneText').textContent='Dávka '+id+'. Kontakty najdeš v seznamu se zdrojem „'+davka.zdroj_detail+'".';
+  document.getElementById('doneTitle').textContent='Ulozeno '+ok+' z '+seznam.length+' kontaktu';
+  document.getElementById('doneText').textContent = chyby.length ? ('Neulozilo se '+chyby.length+': '+chyby.slice(0,5).join('; ')) : ('Najdes je v seznamu se zdrojem '+zdrojDetail);
   krok(4);
 };
+
+nactiMe();
 </script>
 <script>
 (async function(){
