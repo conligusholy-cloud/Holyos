@@ -117,7 +117,7 @@
         <div class="who" id="who">…</div>
       </div>
       <div style="display:flex;gap:8px;align-items:center">
-        <button class="logout" onclick="location.reload()" title="Obnovit stránku">&#128260; Obnovit</button>
+        <button class="logout" onclick="appRefresh()" title="Obnovit data">&#128260; Obnovit</button>
         <button class="logout" onclick="openSettings()" title="Nastavení notifikací">⚙️ Notifikace</button>
         <button class="logout" onclick="doLogout()">Odhlásit</button>
       </div>
@@ -653,6 +653,14 @@
   var searchTimer=null;
   function onSearch(){ clearTimeout(searchTimer); searchTimer=setTimeout(function(){ state.search=document.getElementById('search').value.trim(); load(); }, 300); }
 
+  // Tiché obnovení dat bez reloadu stránky — zůstane aktivní záložka (Kontakty/Kalendář/Dnes).
+  window.appRefresh = function(){
+    try { load(); } catch(e){}
+    try { if (typeof loadLokalitySec === 'function') loadLokalitySec(); } catch(e){}
+    try { if (typeof loadUpcomingMeetings === 'function') loadUpcomingMeetings(); } catch(e){}
+    try { window._todayLoaded = false; if (typeof loadToday === 'function') loadToday(); } catch(e){}
+    try { var tk = document.getElementById('tab-calendar'); if (tk && tk.classList.contains('active') && window._fcInst && window._fcInst.refetchEvents) window._fcInst.refetchEvents(); } catch(e){}
+  };
   async function load(){
     var box = document.getElementById('content');
     box.innerHTML = '<div class="loading">Načítám…</div>';
