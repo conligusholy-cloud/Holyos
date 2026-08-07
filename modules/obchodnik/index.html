@@ -773,6 +773,7 @@
           (l.email ? '<a href="mailto:'+esc(l.email)+'">✉️ E-mail</a>' : '') +
         '</div>' +
         '<div class="field" style="margin-top:8px"><button class="btn btn-g" style="width:100%" onclick="meetingFromLead('+l.id+')">📅 Naplánovat schůzku</button></div>' +
+        (l.phone ? '<div class="field" style="margin-top:6px"><button class="btn btn-g" style="width:100%" onclick="saveContact('+l.id+')">💾 Uložit kontakt do telefonu</button></div>' : '') +
         '<div style="font-size:12px;margin-top:8px;color:'+(laToday?'#22c55e':'var(--muted)')+'">Poslední aktivita: '+(laDate?fmtD(laDate):'—')+'</div>' +
         '<div class="field"><label>Stav</label>'+statusSel+'</div>' +
         '<div class="field"><label>Portál</label>' +
@@ -878,6 +879,34 @@
       _bumpAccess(id, j);
     } catch(e){ if(msg) msg.innerHTML = '<span style="color:#fca5a5">Nepodařilo se připravit odkaz.</span>'; }
   }
+
+  // Uloží kontakt do telefonu přes vizitku (.vcf) — po ťuknutí telefon nabídne „Přidat do kontaktů".
+  function saveContact(id){
+    var l = state.leads.find(function(x){ return x.id===id; }); if (!l || !l.phone) return;
+    function vesc(s){ return String(s==null?'':s).replace(/([,;\\])/g,'\\$1').replace(/\r?\n/g,'\\n'); }
+    var name = l.name || l.email || 'Compounder lead';
+    var first = l.first_name || '', last = l.last_name || '';
+    if (!first && !last){ var p = String(name).trim().split(/\s+/); first = p[0]||''; last = p.slice(1).join(' '); }
+    var noteParts = ['Compounder lead']; if (l.company) noteParts.push(l.company); if (l.email) noteParts.push(l.email);
+    var vcard = 'BEGIN:VCARD\r\nVERSION:3.0\r\n'
+      + 'N:'+vesc(last)+';'+vesc(first)+';;;\r\n'
+      + 'FN:'+vesc(name)+'\r\n'
+      + 'ORG:Compounder\r\n'
+      + 'TEL;TYPE=CELL:'+vesc(l.phone)+'\r\n'
+      + (l.email ? 'EMAIL;TYPE=INTERNET:'+vesc(l.email)+'\r\n' : '')
+      + 'NOTE:'+vesc(noteParts.join(' · '))+'\r\n'
+      + 'END:VCARD';
+    try {
+      var blob = new Blob([vcard], { type: 'text/vcard;charset=utf-8' });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = (String(name).replace(/[^a-zA-Z0-9]+/g,'_').replace(/^_+|_+$/g,'').slice(0,40) || 'kontakt') + '.vcf';
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      setTimeout(function(){ URL.revokeObjectURL(url); }, 1500);
+    } catch(e){ alert('Kontakt se nepodařilo připravit.'); }
+  }
+  window.saveContact = saveContact;
 
   async function toggleTemplate(id, key, on){
     var lead = state.leads.find(function(x){return x.id===id;}); if (!lead) return;
