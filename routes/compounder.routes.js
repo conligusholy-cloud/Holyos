@@ -1522,11 +1522,11 @@ router.post('/leads/:id/send-access', requireAuth, async (req, res, next) => {
 // POST /api/compounder/leads/:id/access-link — vrátí přihlašovací odkaz + text pro WhatsApp
 // (neposílá e-mail; obchodník odkaz odešle přes WhatsApp). Počítá se jako odeslání přístupu.
 const WA_MSG = {
-  cs: (n, u) => `Dobrý den${n ? ', ' + n : ''}, zde je Váš osobní přístup do Compounder Portalu (platí 24 h): ${u}`,
-  sk: (n, u) => `Dobrý deň${n ? ', ' + n : ''}, tu je Váš osobný prístup do Compounder Portálu (platí 24 h): ${u}`,
-  en: (n, u) => `Hello${n ? ' ' + n : ''}, here is your personal access to the Compounder Portal (valid 24 h): ${u}`,
-  de: (n, u) => `Hallo${n ? ' ' + n : ''}, hier ist Ihr persönlicher Zugang zum Compounder Portal (24 h gültig): ${u}`,
-  pl: (n, u) => `Dzień dobry${n ? ', ' + n : ''}, oto Twój osobisty dostęp do Compounder Portal (ważny 24 h): ${u}`,
+  cs: (n, u) => `Dobrý den, zde je Váš osobní přístup do Compounder Portalu: ${u}`,
+  sk: (n, u) => `Dobrý deň, tu je Váš osobný prístup do Compounder Portálu: ${u}`,
+  en: (n, u) => `Hello, here is your personal access to the Compounder Portal: ${u}`,
+  de: (n, u) => `Hallo, hier ist Ihr persönlicher Zugang zum Compounder Portal: ${u}`,
+  pl: (n, u) => `Dzień dobry, oto Twój osobisty dostęp do Compounder Portal: ${u}`,
 };
 router.post('/leads/:id/access-link', requireAuth, async (req, res, next) => {
   try {
@@ -4099,7 +4099,7 @@ function makePortalToken(leadId) {
 }
 // Časově omezený přihlašovací token — formát: id.exp.sig (exp = ms epoch). Default 24 h.
 function makeLoginToken(leadId, ttlMs) {
-  const exp = Date.now() + (ttlMs || 24 * 3600 * 1000);
+  const exp = Date.now() + (ttlMs || 10 * 24 * 3600 * 1000); // přístupový odkaz platí 10 dní
   return leadId + '.' + exp + '.' + hmacSig('compounder:' + leadId + ':' + exp);
 }
 // Dlouhá session ("zůstat přihlášen") — ~1 rok. Stejný formát id.exp.sig.
