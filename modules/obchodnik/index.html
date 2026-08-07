@@ -267,7 +267,9 @@
   function fmtDate(iso){ if(!iso) return '—'; var d=new Date(iso); return fmtD(d); }
   function fmtD(d){ if(!d) return '—'; return ('0'+d.getDate()).slice(-2)+'.'+('0'+(d.getMonth()+1)).slice(-2)+'.'+d.getFullYear()+' '+('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2); }
   function parseActLogDate(log){ if(!log) return null; var m=String(log).match(/\[(\d{2})\.(\d{2})\.(\d{4}) (\d{2}):(\d{2})\]/); return m ? new Date(+m[3], +m[2]-1, +m[1], +m[4], +m[5]) : null; }
-  function lastActivityDate(l){ var d1=l.lastActivityAt?new Date(l.lastActivityAt):null; var d2=parseActLogDate(l.activity_log); if(d1&&d2) return d1>d2?d1:d2; return d1||d2; }
+  // „Poslední aktivita" = jen reálná návštěva portálu (lastActivityAt z eventů, bez systémových).
+  // activity_log (odeslání pozvánky, poznámky) sem záměrně NEpočítáme — je vidět dole v sekci Aktivity.
+  function lastActivityDate(l){ return l.lastActivityAt ? new Date(l.lastActivityAt) : null; }
   function isTodayD(d){ if(!d) return false; var n=new Date(); return d.getFullYear()===n.getFullYear()&&d.getMonth()===n.getMonth()&&d.getDate()===n.getDate(); }
   var EVENT_LABEL = { portal_view:'Otevřel portál', page_view:'Otevřel web', section_view:'Prohlížel sekci', click:'Klik', cta_click:'Klik na CTA', doc_download:'Stáhl dokument', location_assess:'Zhodnotil lokalitu', contact_request:'Požádal o kontakt', purchase_inquiry:'Poptávka nákupu', register_success:'Registrace', page_leave:'Odešel ze stránky', card_flip:'Otočil kartu', page_switch:'Přepnul stránku', visit_end:'Konec návštěvy', eco_open:'Otevřel ekonomický model', eco_edit:'Upravil hodnotu', eco_pdf:'Stáhl PDF modelu', eco_save:'Uložil model', eco_visit_end:'Konec modelu' };
 
