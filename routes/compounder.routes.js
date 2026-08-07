@@ -1662,8 +1662,9 @@ router.get('/leads', requireAuth, async (req, res, next) => {
       l.modelSeen = false; // doplní se z eventů admin_model_view níže (když jsou k dispozici)
       l.example_model = undefined;
     });
-    // Levná míra zahřátí z eventů otagovaných lead_id (bez AI) — pro rozumný počet leadů.
-    if (leads.length && leads.length <= 200) {
+    // Levná míra zahřátí z eventů otagovaných lead_id (bez AI). Limit = strop načítaných leadů (500),
+    // ať dopočet aktivity nevypadne, když leadů přibude přes 200 (import/FB reklamy).
+    if (leads.length && leads.length <= 500) {
       const ids = leads.map((l) => l.id);
       const evs = await prisma.compounderEvent.findMany({
         where: { OR: ids.map((id) => ({ props: { path: ['lead_id'], equals: id } })) },
