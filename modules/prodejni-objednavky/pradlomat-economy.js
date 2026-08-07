@@ -121,6 +121,7 @@
   // Hodnoty jsou v EUR; applyVariant je přepočítá do aktuální měny.
   var VER = 'V3';
   var SHOW_VER = true; // zobrazit přepínač V2/V3? (u leada jen když má povolené obě varianty)
+  var PHOTOS = {}; // { V2: url, V3: url } — fotky verzí z HolyOS (načtou se z /portal/machines)
   var VARIANTS = {
     V3: { cena_pradlomatu: 52000, cena_pripojek: 2889, obrat_na_zakaznika: 11.33, najem: 165, truck: 47000, noSmall: false },
     V2: { cena_pradlomatu: 35000, cena_pripojek: 1926, obrat_na_zakaznika: 16.52, najem: 120, truck: 33000, noSmall: true }
@@ -398,6 +399,9 @@
       '.pe-toolbar .pe-legend { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text2); }' +
       '.pe-toolbar .pe-legend .pe-sw { width: 14px; height: 14px; border-radius: 3px; border: 1px solid #f59e0b; background: #fef3c7; }' +
       '.pe-toolbar .pe-legend .pe-sw.ro { background: var(--surface2); border-color: var(--border); }' +
+      '@keyframes peGlow { 0%,100% { box-shadow: 0 0 24px 3px rgba(201,162,75,0.45), 0 0 56px 10px rgba(201,162,75,0.18); } 50% { box-shadow: 0 0 48px 10px rgba(230,190,110,0.85), 0 0 100px 24px rgba(201,162,75,0.4); } }' +
+      '.pe-verphoto { float: right; width: 300px; max-width: 40%; aspect-ratio: 4/3; object-fit: cover; border-radius: 18px; border: 1px solid rgba(201,162,75,0.7); margin: 0 0 14px 20px; cursor: zoom-in; animation: peGlow 2.6s ease-in-out infinite; }' +
+      '@media (max-width: 640px) { .pe-verphoto { float: none; width: 100%; max-width: 100%; margin: 0 0 14px 0; } }' +
       '.pe-bar-wrap { padding: 16px; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; margin-top: 12px; }' +
       '.pe-bar-row { display: grid; grid-template-columns: 140px 1fr 120px; gap: 10px; align-items: center; font-size: 12px; margin-bottom: 8px; }' +
       '.pe-bar-row .pe-bar { height: 18px; border-radius: 4px; background: var(--surface2); position: relative; overflow: hidden; }' +
@@ -493,6 +497,12 @@
         '<button class="btn btn-secondary btn-sm" onclick="window.PradlomatTool.resetDefaults()">' + _t('↺ Tovární hodnoty') + '</button>' +
         '<button class="btn btn-secondary btn-sm pe-btn-json" onclick="window.PradlomatTool.exportJSON()">' + _t('⬇ Stáhnout model (JSON)') + '</button>' +
       '</div>';
+
+    // Fotka aktivní verze (V2/V3) — plovoucí vpravo, se zlatou září a klikem na zvětšení.
+    var _photo = PHOTOS[VER];
+    if (_photo) {
+      html += '<img class="pe-verphoto" src="' + _photo + '" alt="Compounder ' + VER + '" title="' + _t('Klikněte pro zvětšení') + '" onclick="window.PradlomatTool._zoomPhoto()">';
+    }
 
     // Výsledky nahoře (sticky-feel)
     html +=
@@ -1043,6 +1053,27 @@
     injectStyles();
     ROOT.innerHTML = buildHTML();
     bindInputs();
+
+    // Fotky verzí z HolyOS (jednou) → po načtení překreslí, ať se ukáže fotka aktivní verze.
+    if (!PHOTOS.__loaded) {
+      PHOTOS.__loaded = true;
+      try {
+        fetch('/api/compounder/portal/machines').then(function (r) { return r.json(); }).then(function (j) {
+          (j && j.machines || []).forEach(function (m) { if (m && m.ver && m.photo) PHOTOS[m.ver] = m.photo; });
+          if (ROOT) { ROOT.innerHTML = buildHTML(); bindInputs(); }
+        }).catch(function () {});
+      } catch (e) {}
+    }
+  }
+  // Zvětšení fotky verze do celoobrazovkového okna.
+  function _zoomPhoto() {
+    var url = PHOTOS[VER]; if (!url) return;
+    var ov = document.createElement('div');
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:14000;display:flex;align-items:center;justify-content:center;padding:24px;cursor:zoom-out';
+    ov.onclick = function () { ov.remove(); };
+    var big = document.createElement('img'); big.src = url;
+    big.style.cssText = 'max-width:96vw;max-height:92vh;border-radius:16px;border:1px solid rgba(201,162,75,0.5);box-shadow:0 0 50px rgba(201,162,75,0.25), 0 20px 60px rgba(0,0,0,.6)';
+    ov.appendChild(big); document.body.appendChild(ov);
   }
 
   function _saveAsDefaults() {
@@ -1157,6 +1188,7 @@
     _setVer: _setVer,
     setVersion: setVersion,
     getVersion: getVersion,
+    _zoomPhoto: _zoomPhoto,
     setRates: setRates,
     exportJSON: exportJSON,
     getState: getState,
