@@ -1600,13 +1600,17 @@ router.get('/my-leads', requireAuth, async (req, res, next) => {
 
 // Doplní leads o warmthPct, lastActivityAt, requestedContact, hasPhone (z eventů).
 async function enrichWarmth(leads) {
-  if (!leads.length || leads.length > 200) return;
+  if (!leads.length || leads.length > 500) return;
   const ids = leads.map((l) => l.id);
   const evs = await prisma.compounderEvent.findMany({
     where: { OR: ids.map((id) => ({ props: { path: ['lead_id'], equals: id } })) },
     select: { event: true, props: true, created_at: true },
     take: 20000,
   });
+  // Systémové/admin eventy se NEpočítají jako „poslední aktivita" zákazníka
+  // (odeslání pozvánky, push, loss e-mail, náhled modelu adminem) — jinak by to
+  // vypadalo, že lead byl na portálu, i když jsme mu jen něco poslali.
+  const SYSTEM_EVENTS = new Set(['admin_model_view', 'loss_email_sent', 'loss_email_open', 'push_open', 'push_dismiss', 'push_action', 'access_sent']);
   const c = {}; const last = {};
   evs.forEach((e) => {
     const lid = e.props && e.props.lead_id; if (lid == null) return;
@@ -1616,7 +1620,7 @@ async function enrichWarmth(leads) {
     else if (e.event === 'location_assess') x.loc++;
     else if (e.event === 'contact_request') x.contact++;
     const t = e.created_at ? new Date(e.created_at).getTime() : 0;
-    if (t && (!last[lid] || t > last[lid])) last[lid] = t;
+    if (t && !SYSTEM_EVENTS.has(e.event) && (!last[lid] || t > last[lid])) last[lid] = t;
   });
   leads.forEach((l) => {
     const x = c[l.id] || { portal: 0, doc: 0, loc: 0, contact: 0 };
