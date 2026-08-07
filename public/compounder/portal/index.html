@@ -295,8 +295,9 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
       </div>
     </section>
     <section class="blk" id="ekonomika">
+      <img id="eko-ver-photo" alt="Compounder" onclick="ekoPhotoZoom()" title="Klikněte pro zvětšení" style="display:none;float:right;width:300px;max-width:42%;aspect-ratio:4/3;object-fit:cover;object-position:center;background:rgba(255,255,255,0.04);border-radius:18px;border:1px solid rgba(201,162,75,0.55);box-shadow:0 0 30px rgba(201,162,75,0.22), 0 10px 40px rgba(0,0,0,0.42);margin:6px 6px 16px 22px;cursor:zoom-in">
       <div class="eyebrow" data-i18n="p.eko.eyebrow">Economics</div>
-      <h2 data-i18n="p.eko.title">Economics of one Compounder</h2>
+      <h2 data-i18n="p.eko.title" style="display:inline">Economics of one Compounder</h2> <span id="eko-ver-badge" style="font-size:0.9em;color:var(--gold,#c9a24b);font-weight:800;margin-left:6px"></span>
       <p class="lead" data-i18n="p.eko.lead">A live model. Yellow fields are inputs — adjust them to your location and instantly see revenue, profit and payback. Figures are indicative.</p>
       <div data-i18n="p.eko.vat" style="color:var(--muted);font-size:13px;margin:-18px 0 24px;">All prices are exclusive of VAT.</div>
       <div class="metrics">
@@ -306,22 +307,23 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
         <div class="metric"><div class="k" data-i18n="p.m.payback">Payback</div><div class="v gold" id="m-payback">—</div><div class="s" id="m-payback-m">—</div></div>
       </div>
       <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+        <span id="eko-ver-switch" style="display:none;align-items:center;gap:4px;flex-wrap:wrap"></span>
         <span id="eko-cur" style="display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap"><span style="font-size:12px;color:var(--muted);margin-right:4px">Měna:</span></span>
         <button type="button" id="eko-reset" class="btn-reset" data-i18n="p.eko.reset">↺ Reset to default values</button>
       </div>
       <div class="calc">
         <div class="panel">
           <h3 data-i18n="p.inv.title">Investment (one-off)</h3>
-          <div class="row"><label data-i18n="p.inv.machine">Compounder price</label><div class="unit"><input type="number" id="i-machine" value="52000"><span class="u u-cur">€</span></div></div>
-          <div class="row"><label data-i18n="p.inv.permit">Project + permits</label><div class="unit"><input type="number" id="i-permit" value="825"><span class="u u-cur">€</span></div></div>
-          <div class="row"><label data-i18n="p.inv.conn">Connections</label><div class="unit"><input type="number" id="i-conn" value="2889"><span class="u u-cur">€</span></div></div>
+          <div class="row"><label data-i18n="p.inv.machine">Compounder price</label><div class="unit"><input type="text" inputmode="numeric" id="i-machine" value="52000"><span class="u u-cur">€</span></div></div>
+          <div class="row"><label data-i18n="p.inv.permit">Project + permits</label><div class="unit"><input type="text" inputmode="numeric" id="i-permit" value="825"><span class="u u-cur">€</span></div></div>
+          <div class="row"><label data-i18n="p.inv.conn">Connections</label><div class="unit"><input type="text" inputmode="numeric" id="i-conn" value="2889"><span class="u u-cur">€</span></div></div>
           <div class="row calc-out"><label data-i18n="p.inv.total">Total investment</label><div class="unit"><input type="text" id="o-invest" readonly><span class="u u-cur">€</span></div></div>
         </div>
         <div class="panel">
           <h3 data-i18n="p.op.title">Operation (monthly)</h3>
           <div class="row"><label data-i18n="p.op.perday">Customers / day</label><div class="unit"><input type="number" id="i-perday" value="8"><span class="u">ks</span></div></div>
-          <div class="row calc-out"><label data-i18n="p.op.spend">Avg spend / customer</label><div class="unit"><input type="number" step="0.01" id="i-spend" value="11.33" readonly title="Počítá se v podrobném modelu"><span class="u u-cur">€</span></div></div>
-          <div class="row calc-out"><label data-i18n="p.op.cost">Operating costs / month</label><div class="unit"><input type="number" id="i-cost" value="767" readonly title="Počítá se v podrobném modelu"><span class="u u-cur">€</span></div></div>
+          <div class="row calc-out"><label data-i18n="p.op.spend">Avg spend / customer</label><div class="unit"><input type="text" inputmode="decimal" id="i-spend" value="11.33" readonly title="Počítá se v podrobném modelu"><span class="u u-cur">€</span></div></div>
+          <div class="row calc-out"><label data-i18n="p.op.cost">Operating costs / month</label><div class="unit"><input type="text" inputmode="numeric" id="i-cost" value="767" readonly title="Počítá se v podrobném modelu"><span class="u u-cur">€</span></div></div>
           <div class="row calc-out"><label data-i18n="p.op.profit">Monthly profit</label><div class="unit"><input type="text" id="o-profit" readonly><span class="u u-cur">€</span></div></div>
           <div class="note" data-i18n="p.op.note">Costs = rent + energy + service + other. We assume 30.5 days/month.</div>
         </div>
@@ -1061,6 +1063,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
       window._portalShowRevStats = !!res.j.showRevenueStats;
       window._portalShowExample = !!res.j.showExample;
       window._portalHideLiveLoss = !!res.j.hideLiveLoss; // schovat časomíru + ztrátu z váhání
+      window._portalVersion = (res.j.pradlomatVersion === 'V2' || res.j.pradlomatVersion === 'BOTH') ? res.j.pradlomatVersion : 'V3'; // V2 / V3 / BOTH (obojí → přepínač)
       window._acctCreatedAt = res.j.accountCreatedAt || null;
       pStartTopClock();
       window._portalToken = token;
@@ -1094,6 +1097,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
         applyConsultant();
         document.getElementById("hi").textContent = pT("p.hi") + (first ? (", " + first) : "");
         var gb = document.getElementById("gearBtn"); if (gb){ gb.setAttribute("aria-label", pT("p.nav.acc")); gb.title = pT("p.nav.acc"); }
+        try{ window._portalActiveVer = (window._portalVersion === 'V2') ? 'V2' : 'V3'; ekoApplyVersion(window._portalActiveVer); }catch(e){}
         initCalc(); initNav(); initGallery(); initMilestones(); initLocation(); initContact(); initBuy(); initDistModal();
       });
       pTrack("portal_view", { role: res.j.role });
@@ -1608,7 +1612,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
     reserve:'Rezervovat', buy:'Koupit rovnou', days:'Počet dní rezervace',
     fee:'Rezervační poplatek', after:'Kupní cena po odečtení poplatku', header:'Hlavička smlouvy',
     fname:'Jméno / firma', fphone:'Telefon', fico:'IČO (nepovinné)', fdic:'DIČ / VAT ID (jen plátci DPH)', faddr:'Adresa (nepovinné)', frep:'Zastoupen(a) / jednatel (nepovinné)', fbank:'Bankovní spojení – IBAN (nepovinné)',
-    ares:'🔎 Načíst z ARESu', submitReserve:'Závazně rezervovat', submitBuy:'Odeslat nezávaznou poptávku ke koupi',
+    ares:'🔎 Načíst z ARESu', submitReserve:'Rezervovat', submitBuy:'Odeslat nezávaznou poptávku ke koupi',
     sending:'Odesílám…', doneBtn:'Hotovo ✓', fillReq:'Vyplňte prosím jméno, e-mail a telefon.',
     buyDone:'Děkujeme! Poptávku ke koupi jsme přijali a brzy se vám ozveme.', sendFail:'Nepodařilo se odeslat.',
     resFail:'Rezervaci se nepodařilo vytvořit.', holdBusy:'Lokalitu teď nelze rezervovat.', holdFail:'Rezervaci se nepodařilo zahájit.',
@@ -1619,7 +1623,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
     reserve:'Reserve', buy:'Buy now', days:'Number of reservation days',
     fee:'Reservation fee', after:'Purchase price after deducting the fee', header:'Contract header',
     fname:'Name / company', fphone:'Phone', fico:'Company ID (optional)', fdic:'VAT ID (VAT payers only)', faddr:'Address (optional)', frep:'Represented by (optional)', fbank:'Bank account – IBAN (optional)',
-    ares:'🔎 Load from ARES (CZ registry)', submitReserve:'Reserve bindingly', submitBuy:'Send a non-binding purchase inquiry',
+    ares:'🔎 Load from ARES (CZ registry)', submitReserve:'Reserve', submitBuy:'Send a non-binding purchase inquiry',
     sending:'Sending…', doneBtn:'Done ✓', fillReq:'Please fill in your name, e-mail and phone.',
     buyDone:'Thank you! We have received your purchase inquiry and will contact you shortly.', sendFail:'Failed to send.',
     resFail:'The reservation could not be created.', holdBusy:'This location cannot be reserved right now.', holdFail:'The reservation could not be started.',
@@ -1629,13 +1633,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
   window.openReserveModal = async function(code){
     var o = (OFFERS.data||[]).find(function(x){ return x.code===code; });
     if(!o) return;
-    // Zahaj 1h blokaci (nebo převezmi vlastní). Obsazeno jiným → nepustí dál.
-    var _tok = offTok();
-    try {
-      var hr = await fetch("/api/compounder/portal/hold", { method:"POST", credentials:"include", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ t:_tok, code:code }) });
-      var hj = await hr.json().catch(function(){return {};});
-      if(!hr.ok){ alert(hj.error || resT('holdBusy')); loadOffers(_tok); return; }
-    } catch(e){ alert(resT('holdFail')); return; }
+    // Bez automatické 1h blokace — rezervace vzniká až potvrzením.
     window._resO = o; window._resMode = 'reserve';
     var cfg = OFFERS.cfg || {}; var fee = OFFERS.feePerDay || 20000;
     closeReserveModal();
@@ -1644,44 +1642,20 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
     ov.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.66);display:flex;align-items:flex-start;justify-content:center;padding:20px;overflow:auto;z-index:9999";
     ov.addEventListener("click", function(e){ if(e.target===ov) closeReserveModal(); });
     var _en = resIsEn();
-    var proc = '<ol style="margin:0;padding-left:18px;color:var(--muted);font-size:12.5px;line-height:1.65">'
+    var proc = '<div style="color:var(--muted);font-size:13px;line-height:1.7">'
       + (_en
-        ? ('<li>The reservation takes place online — you have <b style="color:var(--text)">'+(cfg.holdHours||1)+' h</b> to fill in the contract header.</li>'
-          + '<li>Choose the number of days. The fee of <b style="color:var(--text)">'+offMoney(fee)+' / day</b> is <b style="color:var(--text)">deducted from the purchase price</b>.</li>'
-          + '<li>Sign the reservation agreement within <b style="color:var(--text)">'+(cfg.signDays||1)+' day(s)</b>, fee credited by day <b style="color:var(--text)">'+((cfg.signDays||1)+(cfg.payDays||1))+'</b> — otherwise the reservation lapses and the location is released.</li>'
-          + '<li>Purchase agreement signed and paid <b style="color:var(--text)">by the end of the reservation period</b>.</li>'
-          + '<li>After cancellation, the same location can be reserved again only after <b style="color:var(--text)">'+(cfg.reblockDays||2)+' days</b>.</li>')
-        : ('<li>Rezervace probíhá online — na vyplnění hlavičky smlouvy máte <b style="color:var(--text)">'+(cfg.holdHours||1)+' h</b>.</li>'
-          + '<li>Vyberete počet dní. Poplatek <b style="color:var(--text)">'+offMoney(fee)+' / den</b> se <b style="color:var(--text)">odečte z kupní ceny</b>.</li>'
-          + '<li>Podpis rezervační smlouvy do <b style="color:var(--text)">'+(cfg.signDays||1)+' dne</b>, poplatek připsaný do <b style="color:var(--text)">'+((cfg.signDays||1)+(cfg.payDays||1))+'. dne</b> — jinak rezervace propadá a lokalita se uvolní.</li>'
-          + '<li>Kupní smlouva podepsaná a zaplacená <b style="color:var(--text)">do konce rezervační doby</b>.</li>'
-          + '<li>Po zrušení lze stejnou lokalitu znovu rezervovat až za <b style="color:var(--text)">'+(cfg.reblockDays||2)+' dny</b>.</li>'))
-      + '</ol>';
+        ? 'The reservation is <b style="color:var(--text)">free and non-binding</b>. Just choose the number of days (max&nbsp;10) — we will hold this location for you and a colleague will get in touch to sort out all the details with you.'
+        : 'Rezervace je <b style="color:var(--text)">zdarma a nezávazná</b>. Stačí vybrat počet dní (max&nbsp;10) — lokalitu vám podržíme a ozve se vám náš kolega, který s vámi vše dořeší.')
+      + '</div>';
     var card = ''
       + '<div style="width:100%;max-width:520px;background:var(--surface,#141417);border:1px solid var(--line);border-radius:18px;padding:22px 22px 24px;box-shadow:0 24px 60px rgba(0,0,0,.5)">'
       + '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:6px"><div><div style="font-size:12px;color:var(--gold-soft);text-transform:uppercase;letter-spacing:1px">'+resT('title')+'</div><h3 style="margin:4px 0 0;font-size:19px">'+offEsc(o.label||o.code)+'</h3><div style="font-size:12px;color:var(--muted)">'+resT('version')+' '+offEsc(o.version||'—')+' · '+resT('price')+' '+offMoney(o.totalPrice)+'</div></div>'
       + '<button type="button" onclick="closeReserveModal()" style="background:transparent;border:none;color:var(--muted);font-size:24px;cursor:pointer;line-height:1">×</button></div>'
       + '<div style="background:rgba(255,255,255,.03);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin:12px 0 16px">'+proc+'</div>'
-      + '<div style="display:flex;gap:8px;margin-bottom:6px">'
-      +   '<button type="button" id="res-tab-reserve" onclick="resSetMode(\'reserve\')" class="btn" style="flex:1;justify-content:center">'+resT('reserve')+'</button>'
-      +   '<button type="button" id="res-tab-buy" onclick="resSetMode(\'buy\')" style="flex:1;justify-content:center;border:1px solid var(--line);background:transparent;color:var(--text);border-radius:999px;padding:12px;font-weight:700;cursor:pointer">'+resT('buy')+'</button>'
-      + '</div>'
       + '<div id="res-daysblock" style="margin-top:12px">'
       +   '<label style="display:block;font-size:12px;color:var(--muted);margin:6px 0 4px">'+resT('days')+'</label>'
-      +   '<input id="res-days" type="number" min="1" max="365" value="7" style="width:100%;background:#0e0e10;border:1px solid var(--line);border-radius:10px;padding:11px 12px;color:var(--text);font-size:15px">'
-      +   '<div style="display:flex;justify-content:space-between;gap:10px;margin-top:10px;font-size:13px"><span style="color:var(--muted)">'+resT('fee')+'</span><b id="res-fee">—</b></div>'
-      +   '<div style="display:flex;justify-content:space-between;gap:10px;margin-top:4px;font-size:13px"><span style="color:var(--muted)">'+resT('after')+'</span><b id="res-after" style="color:var(--gold-soft)">—</b></div>'
-      + '</div>'
-      + '<div style="margin-top:8px;border-top:1px solid var(--line);padding-top:10px"><div style="font-size:12px;color:var(--gold-soft);text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px">'+resT('header')+'</div>'
-      +   resField('res-name',resT('fname'),'Jan Novák / Firma s.r.o.')
-      +   resField('res-email','E-mail','vas@email.cz','email')
-      +   resField('res-phone',resT('fphone'),'+420 …','tel')
-      +   resField('res-ico',resT('fico'),'')
-      +   '<button type="button" onclick="resAres()" style="margin:2px 0 6px;padding:8px 12px;background:var(--surface-2,#1b1b1f);border:1px solid var(--line);border-radius:8px;color:var(--gold-soft);font-size:12px;cursor:pointer">'+resT('ares')+'</button>'
-      +   resField('res-dic',resT('fdic'),'CZ12345678 / DE123456789')
-      +   resField('res-addr',resT('faddr'),'')
-      +   resField('res-rep',resT('frep'),'Jan Novák, jednatel')
-      +   resField('res-bank',resT('fbank'),'CZ00 0000 0000 0000 0000 0000')
+      +   '<input id="res-days" type="number" min="1" max="10" value="7" style="width:100%;background:#0e0e10;border:1px solid var(--line);border-radius:10px;padding:11px 12px;color:var(--text);font-size:15px">'
+      +   '<div style="font-size:12px;color:var(--muted);margin-top:6px">'+(_en?'Maximum 10 days. Free of charge, non-binding.':'Maximálně 10 dní. Zdarma a nezávazně.')+'</div>'
       + '</div>'
       + '<button type="button" id="res-confirm" class="btn" style="width:100%;justify-content:center;margin-top:16px" onclick="resSubmit()">'+resT('submitReserve')+'</button>'
       + '<div id="res-msg" style="min-height:18px;margin-top:10px;font-size:13px;text-align:center"></div>'
@@ -1734,18 +1708,10 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
     var o = window._resO; if(!o) return;
     var msg = document.getElementById("res-msg"); var cf = document.getElementById("res-confirm");
     var tok = offTok();
-    var buyer = {
-      name: (document.getElementById("res-name")||{}).value||"",
-      email: (document.getElementById("res-email")||{}).value||"",
-      phone: (document.getElementById("res-phone")||{}).value||"",
-      ico: (document.getElementById("res-ico")||{}).value||"",
-      dic: (document.getElementById("res-dic")||{}).value||"",
-      address: (document.getElementById("res-addr")||{}).value||"",
-      rep: (document.getElementById("res-rep")||{}).value||"",
-      bank: (document.getElementById("res-bank")||{}).value||""
-    };
+    // Kontakt z přihlášeného leada (jméno z pozdravu, e-mail/telefon z účtu) — nic se nevyplňuje.
+    var _nm=""; try { var hi=(document.getElementById("hi")||{}).textContent||""; _nm=hi.replace(/^[^,]*,\s*/,"").trim(); } catch(_){}
+    var buyer = { name: _nm || (window._leadName||""), email: window._leadEmail||"", phone: window._leadPhone||"" };
     if(msg){ msg.style.color=""; msg.textContent=""; }
-    if(!buyer.name || !buyer.email || !buyer.phone){ if(msg){ msg.style.color="#ef4444"; msg.textContent=resT('fillReq'); } return; }
     if(cf){ cf.disabled=true; cf.textContent=resT('sending'); }
     if(window._resMode==='buy'){
       fetch("/api/compounder/portal/reserve-interest",{ method:"POST", credentials:"include", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ t: tok, code: o.code }) })
@@ -1760,12 +1726,9 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
       .then(function(r){ return r.json().then(function(j){ return { s:r.status, j:j }; }); })
       .then(function(x){
         if(x.j && x.j.ok){
-          var _loc = resIsEn() ? "en-GB" : "cs-CZ";
-          var su = x.j.signUntil ? new Date(x.j.signUntil).toLocaleDateString(_loc) : "";
-          var fu = x.j.feeUntil ? new Date(x.j.feeUntil).toLocaleDateString(_loc) : "";
           var _doneTxt = resIsEn()
-            ? ("Reserved ✓ Fee "+offMoney(x.j.feeTotal)+". Please sign the reservation agreement by "+su+" and pay the fee by "+fu+". We will contact you with the documents.")
-            : ("Rezervováno ✓ Poplatek "+offMoney(x.j.feeTotal)+". Rezervační smlouvu podepište do "+su+", poplatek uhraďte do "+fu+". Ozveme se vám s podklady.");
+            ? ("Reserved ✓ We are holding this location for you for "+(x.j.days||'')+" day(s). A colleague will contact you shortly and sort out all the details with you.")
+            : ("Rezervováno ✓ Lokalitu vám držíme "+(x.j.days||'')+" dní. Brzy se vám ozve náš kolega a vše s vámi dořeší.");
           try{ closeReserveModal(); }catch(_){}
           showReserveConfirm(_doneTxt);
           var t = offTok(); setTimeout(function(){ loadOffers(t); if(typeof loadStatus==='function') loadStatus(t); }, 2200);
@@ -1802,18 +1765,40 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
       .catch(function(){});
   }
 
-  function val(id){ var v = parseFloat(document.getElementById(id).value); return isNaN(v) ? 0 : v; }
+  function val(id){ var el = document.getElementById(id); if(!el) return 0; var v = parseFloat(String(el.value).replace(/[\s ]/g,'').replace(',', '.')); return isNaN(v) ? 0 : v; }
+  // Oddělení tisíců (mezera) v peněžních polích ekonomiky. i-spend má 2 desetinná místa.
+  function ekoFmtMoney(){
+    ['i-machine','i-permit','i-conn','i-cost'].forEach(function(id){
+      var el = document.getElementById(id); if(!el || el === document.activeElement) return;
+      var v = parseFloat(String(el.value).replace(/[\s ]/g,'').replace(',', '.'));
+      if(!isNaN(v)) el.value = Math.round(v).toLocaleString('cs-CZ');
+    });
+    var sp = document.getElementById('i-spend');
+    if(sp && sp !== document.activeElement){
+      var v = parseFloat(String(sp.value).replace(/[\s ]/g,'').replace(',', '.'));
+      if(!isNaN(v)) sp.value = v.toLocaleString('cs-CZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+  }
   function initCalc(){
     var ids = ["i-machine","i-permit","i-conn","i-perday","i-spend","i-cost"];
+    var moneyEditable = ["i-machine","i-permit","i-conn"];
     ids.forEach(function(id){
-      document.getElementById(id).addEventListener("input", recalc);
+      var el = document.getElementById(id); if(!el) return;
+      el.addEventListener("input", function(){
+        if(moneyEditable.indexOf(id) !== -1){
+          // živé oddělování tisíců (mezera) při psaní
+          var digits = el.value.replace(/[^0-9]/g,'').slice(0,12);
+          el.value = digits ? Number(digits).toLocaleString('cs-CZ') : '';
+        }
+        recalc();
+      });
     });
     // Reset na výchozí (tovární) hodnoty — bere původní value z HTML (defaultValue).
     var rb = document.getElementById("eko-reset");
     if (rb) rb.addEventListener("click", function(){
       ids.forEach(function(id){ var el = document.getElementById(id); if (el) el.value = el.defaultValue; });
       EKO_CUR = 'EUR'; ekoSwapSymbols(); ekoRenderCur();
-      recalc();
+      recalc(); ekoFmtMoney();
       // Po resetu (tovární hodnoty jsou v EUR) přepočti na globálně zvolenou měnu.
       try{ if(typeof PCUR!=='undefined' && PCUR && PCUR!=='EUR') ekoSetCur(PCUR); }catch(e){}
     });
@@ -1823,13 +1808,73 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
       if (j && j.rates) EKO_RATES = Object.assign({ CZK: 1 }, j.rates);
       try{ if(typeof PCUR!=='undefined' && PCUR && PCUR!==EKO_CUR) ekoSetCur(PCUR); }catch(e){}
     }).catch(function(){ try{ if(typeof PCUR!=='undefined' && PCUR && PCUR!==EKO_CUR) ekoSetCur(PCUR); }catch(e){} });
-    recalc();
+    fetch('/api/compounder/portal/machines').then(function(r){ return r.json(); }).then(function(j){ (j&&j.machines||[]).forEach(function(m){ if(m&&m.ver&&m.photo) EKO_VER_PHOTOS[m.ver]=m.photo; }); ekoRenderVerPhoto(); }).catch(function(){});
+    recalc(); ekoFmtMoney(); ekoRenderVerSwitch(); ekoRenderVerBadge(); ekoRenderVerPhoto();
   }
   // ——— Měna modelu (přepočet celého modelu dle kurzu ČNB) ———
   var EKO_CUR = 'EUR';
   var EKO_RATES = { CZK: 1, EUR: 25, USD: 23, GBP: 29 }; // CZK za 1 jednotku
   var EKO_SYM = { CZK: 'Kč', EUR: '€', USD: '$', GBP: '£' };
   var EKO_CUR_FIELDS = ['i-machine', 'i-permit', 'i-conn', 'i-spend', 'i-cost'];
+  // Varianty prádlomatu — hodnoty v EUR (bez DPH; obrat je průměr na zákazníka s DPH v EUR).
+  // V3 = plný prádlomat (s malou pračkou), V2 = menší/levnější bez malé pračky.
+  // Aplikuje se PŘED přepočtem měny v initCalc, takže se pak převede na zvolenou měnu.
+  var EKO_VARIANTS = {
+    V3: { 'i-machine': 52000, 'i-conn': 2889, 'i-spend': 11.33, 'i-cost': 767, 'i-perday': 8 },
+    V2: { 'i-machine': 35000, 'i-conn': 1926, 'i-spend': 16.52, 'i-cost': 647, 'i-perday': 5 }
+  };
+  var EKO_VER_PHOTOS = {}; // { V2: url, V3: url } — fotky verzí z HolyOS (R2)
+  function ekoRenderVerPhoto(){
+    var img = document.getElementById('eko-ver-photo'); if(!img) return;
+    var url = EKO_VER_PHOTOS[(window._portalActiveVer === 'V2') ? 'V2' : 'V3'];
+    if(url){ img.src = url; img.style.display='block'; } else { img.style.display='none'; }
+  }
+  // Zvětšení fotky verze do celoobrazovkového okna (klik pro zavření).
+  window.ekoPhotoZoom = function(){
+    var img = document.getElementById('eko-ver-photo'); if(!img || !img.src) return;
+    var ov = document.createElement('div');
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:14000;display:flex;align-items:center;justify-content:center;padding:24px;cursor:zoom-out';
+    ov.onclick = function(){ ov.remove(); };
+    var big = document.createElement('img');
+    big.src = img.src;
+    big.style.cssText = 'max-width:96vw;max-height:92vh;border-radius:16px;border:1px solid rgba(201,162,75,0.5);box-shadow:0 0 50px rgba(201,162,75,0.25), 0 20px 60px rgba(0,0,0,.6)';
+    ov.appendChild(big);
+    document.body.appendChild(ov);
+  };
+  function ekoApplyVersion(v){
+    var cfg = EKO_VARIANTS[v] || EKO_VARIANTS.V3;
+    // Hodnoty variant jsou v EUR → převedeme do AKTUÁLNÍ měny (EKO_CUR), měnu neměníme.
+    var f = (EKO_RATES.EUR || 25) / (EKO_RATES[EKO_CUR] || 1); // EUR → aktuální měna
+    Object.keys(cfg).forEach(function(id){
+      var el = document.getElementById(id); if (!el) return;
+      var eur = cfg[id];
+      var isCur = (EKO_CUR_FIELDS.indexOf(id) !== -1); // peněžní pole se převádí, počty ne
+      var disp = isCur ? (eur * f) : eur;
+      el.value = isCur ? (id === 'i-spend' ? disp.toFixed(2) : String(Math.round(disp))) : String(eur);
+      try { el.defaultValue = String(eur); } catch(e){} // Reset drží EUR základ (reset pak převede)
+    });
+  }
+  // Odznak aktivní varianty u nadpisu (V2/V3).
+  function ekoRenderVerBadge(){
+    var b = document.getElementById('eko-ver-badge'); if(!b) return;
+    b.textContent = (window._portalActiveVer === 'V2') ? 'V2' : 'V3';
+  }
+  // Přepínač variant na portálu — jen když má lead povolené obě (BOTH).
+  function ekoRenderVerSwitch(){
+    var wrap = document.getElementById('eko-ver-switch'); if(!wrap) return;
+    if (window._portalVersion !== 'BOTH'){ wrap.style.display='none'; wrap.innerHTML=''; return; }
+    var active = window._portalActiveVer || 'V3';
+    wrap.style.display='inline-flex';
+    wrap.innerHTML = '<span style="font-size:12px;color:var(--muted);margin-right:4px">Varianta:</span>' +
+      ['V3','V2'].map(function(v){ var on=v===active; return '<button type="button" onclick="ekoPortalSetVer(\''+v+'\')" style="padding:5px 12px;border-radius:8px;cursor:pointer;border:1px solid '+(on?'var(--gold,#c9a24b)':'var(--line,#2a2a2e)')+';background:'+(on?'var(--gold,#c9a24b)':'transparent')+';color:'+(on?'#0e1a22':'var(--text,#fff)')+';font-weight:'+(on?'700':'400')+';margin-right:4px">'+v+'</button>'; }).join('');
+  }
+  window.ekoPortalSetVer = function(v){
+    if (v !== 'V2' && v !== 'V3') return;
+    ekoApplyVersion(v);                 // hodnoty rovnou v aktuální měně, EKO_CUR se nemění
+    window._portalActiveVer = v;
+    ekoFmtMoney(); recalc();
+    ekoRenderVerSwitch(); ekoRenderVerBadge(); ekoRenderVerPhoto();
+  };
   function ekoSym(){ return EKO_SYM[EKO_CUR] || '€'; }
   function ekoRenderCur(){
     // Měnu řídí centrální přepínač v horní liště → sekční lišta se skrývá.
@@ -1845,11 +1890,11 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
     var ratio = (EKO_RATES[EKO_CUR] || 1) / (EKO_RATES[c] || 1);
     EKO_CUR_FIELDS.forEach(function(id){
       var el = document.getElementById(id); if (!el) return;
-      var v = parseFloat(el.value); if (isNaN(v)) return;
+      var v = parseFloat(String(el.value).replace(/[\s ]/g,'').replace(',', '.')); if (isNaN(v)) return;
       el.value = (v * ratio).toFixed(id === 'i-spend' ? 2 : 0);
     });
     EKO_CUR = c;
-    ekoSwapSymbols(); ekoRenderCur(); recalc();
+    ekoSwapSymbols(); ekoRenderCur(); ekoFmtMoney(); recalc();
   };
   function recalc(){
     var invest = val("i-machine") + val("i-permit") + val("i-conn");

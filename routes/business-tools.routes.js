@@ -120,6 +120,18 @@ router.get('/share/:token', async (req, res, next) => {
 
     const meta = SUPPORTED_TOOLS[recipient.tool] || { title: recipient.tool, description: '' };
 
+    // Varianta prádlomatu (V2/V3) leada — detailní ekonomika se otevře v jeho variantě.
+    let pradlomatVersion = 'V3';
+    if (recipient.compounder_lead_id) {
+      try {
+        const lead = await prisma.compounderLead.findUnique({
+          where: { id: recipient.compounder_lead_id },
+          select: { pradlomat_version: true },
+        });
+        if (lead && lead.pradlomat_version) pradlomatVersion = lead.pradlomat_version;
+      } catch (e) { /* varianta je volitelná */ }
+    }
+
     // languages může být null pro staré záznamy před migrací — fallback na ['cs'].
     const languages = (Array.isArray(recipient.languages) && recipient.languages.length)
       ? recipient.languages
@@ -136,6 +148,7 @@ router.get('/share/:token', async (req, res, next) => {
       },
       tool: { slug: recipient.tool, ...meta },
       languages,
+      version: pradlomatVersion,
       defaults_json: defaultsRow ? defaultsRow.data_json : null,
       locks_json: defaultsRow ? (defaultsRow.locks_json || {}) : {},
       models: recipient.models.map((m) => ({

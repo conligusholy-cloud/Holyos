@@ -745,9 +745,12 @@
         }
         var locks = (data.locks_json && typeof data.locks_json === 'object') ? data.locks_json : {};
 
+        var _bothV = (data.version === 'BOTH');
         API.mount(document.getElementById('tool-root'), {
           initialState: initialState,
           defaults: (data.defaults_json && typeof data.defaults_json === 'object') ? data.defaults_json : null,
+          version: _bothV ? 'V3' : (data.version || 'V3'),
+          showVerSwitch: _bothV,
           locks: locks,
           enforceLocks: true,
           onChange: function (state, computed) {
@@ -767,9 +770,12 @@
         var locks = (SHARE_DATA.locks_json && typeof SHARE_DATA.locks_json === 'object') ? SHARE_DATA.locks_json : {};
         var API = toolApi();
         if (!API) return;
+        var _bothV2 = (SHARE_DATA && SHARE_DATA.version === 'BOTH');
         API.mount(document.getElementById('tool-root'), {
           initialState: m.data_json,
           defaults: (SHARE_DATA.defaults_json && typeof SHARE_DATA.defaults_json === 'object') ? SHARE_DATA.defaults_json : null,
+          version: _bothV2 ? 'V3' : ((SHARE_DATA && SHARE_DATA.version) || 'V3'),
+          showVerSwitch: _bothV2,
           locks: locks,
           enforceLocks: true,
           onChange: function (state, computed) {

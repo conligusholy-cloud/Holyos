@@ -76,6 +76,8 @@
     .data-table td { padding: 10px 14px; font-size: 13px; border-bottom: 1px solid rgba(255,255,255,0.04); vertical-align: middle; }
     .data-table tr:hover td { background: rgba(234,179,8,0.06); }
     .data-table tr { cursor: pointer; }
+    @keyframes cmpBlink { 0%,100% { opacity: 1; } 50% { opacity: 0.15; } }
+    .cmp-bl { display:inline-block; color:#ef4444; font-weight:800; margin-left:6px; cursor:help; animation: cmpBlink 0.9s infinite; vertical-align:middle; }
     .kv-compact th { padding: 4px 5px; font-size: 9px; letter-spacing: 0.1px; line-height: 1.15; }
     .kv-compact td { padding: 4px 5px; font-size: 10px; }
     .kv-compact td span { font-size: 9px !important; }
@@ -420,6 +422,7 @@
         </select>
         <input type="text" id="cmp-search" placeholder="Hledat jméno/e-mail…" onkeyup="if(event.key==='Enter')loadCompounderLeads()" style="flex:1; min-width:160px;">
         <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text2);white-space:nowrap;cursor:pointer;"><input type="checkbox" id="cmp-reserved-only" onchange="loadCompounderLeads()"> Jen s rezervací</label>
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text2);white-space:nowrap;cursor:pointer;" title="Zobrazit jen kontakty z FB reklamy"><input type="checkbox" id="cmp-ads-only" onchange="cmpApplyLeadFilters()"> 📢 Jen z reklamy</label>
         <button class="btn" onclick="loadCompounderLeads()">↻ Obnovit</button>
         <button class="btn" onclick="openFbForms()" title="Napojení FB reklam — kontakty z formulářů se přiřadí obchodníkovi a označí kampaní">📢 FB reklamy</button>
         <button class="btn btn-primary" onclick="openAddLead()">➕ Přidat kontakt</button>
@@ -2855,6 +2858,52 @@
     var CMP_SELLERS = null; // seznam obchodníků (lazy z /api/sales/sellers); null = ještě nenačteno, [] = nedostupné
     var CMP_EXT_REPS = null; // externí obchodníci (lazy z /api/compounder/external-reps)
     function cmpEsc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+    // Stylová bublina (tooltip) pro cokoli s atributem data-tip — např. celá poznámka.
+    (function(){
+      var tip=null;
+      function ensureTip(){
+        if(!tip){
+          tip=document.createElement('div');
+          tip.id='cmp-tip';
+          tip.style.cssText='position:fixed;z-index:99999;max-width:380px;background:#0f172a;color:#e5e7eb;border:1px solid #334155;border-radius:8px;padding:9px 11px;font-size:12.5px;line-height:1.55;white-space:pre-wrap;box-shadow:0 8px 24px rgba(0,0,0,.5);pointer-events:none;display:none;';
+          document.body.appendChild(tip);
+        }
+        return tip;
+      }
+      document.addEventListener('mouseover',function(e){
+        var el=e.target.closest?e.target.closest('[data-tip]'):null;
+        if(!el) return;
+        var t=el.getAttribute('data-tip');
+        if(!t||!t.trim()) return;
+        var b=ensureTip(); b.textContent=t; b.style.display='block';
+        var r=el.getBoundingClientRect();
+        var left=Math.max(8,Math.min(r.left, window.innerWidth-b.offsetWidth-12));
+        var top=r.bottom+6; if(top+b.offsetHeight>window.innerHeight-8) top=Math.max(8,r.top-b.offsetHeight-6);
+        b.style.left=left+'px'; b.style.top=top+'px';
+      });
+      document.addEventListener('mouseout',function(e){
+        var el=e.target.closest?e.target.closest('[data-tip]'):null;
+        if(el&&tip) tip.style.display='none';
+      });
+    })();
+    // Vytáhne plánovanou investici z poznámky (řádek obsahující „investic…: hodnota").
+    // Ukáže jen skutečnou částku (obsahuje číslici) a ořízne případně slepenou další otázku.
+    function cmpFbInvestment(l){
+      if(!l||!l.notes) return '';
+      var lines=String(l.notes).split(/\n+/);
+      for(var i=0;i<lines.length;i++){
+        var m=lines[i].match(/investic[^:]*:\s*(.+)$/i);
+        if(m&&m[1]){
+          var v=m[1].trim();
+          // kdyby se na řádek slepila další otázka „Něco: ", ořízni ji pryč
+          v=v.split(/\s*[A-Za-zÁ-Žá-ž][^:]{2,60}:\s/)[0].trim();
+          if(!v) continue;
+          if(/test lead|dummy data/i.test(v)||v.charAt(0)==='<') continue; // Meta testovací dummy přeskoč
+          return v;
+        }
+      }
+      return '';
+    }
     function openAddLead(){
       document.getElementById('modal-root').innerHTML =
         '<div class="modal-overlay" onclick="if(event.target===this)closeModal()">' +
@@ -3057,10 +3106,12 @@
     function cmpApplyLeadFilters(){
       var f = {};
       document.querySelectorAll('.cmp-filter-row [data-lf]').forEach(function(el){ f[el.getAttribute('data-lf')] = (el.value||'').trim().toLowerCase(); });
+      var adsOnly = !!(document.getElementById('cmp-ads-only')||{}).checked;
       var rows = document.querySelectorAll('#cmp-leads-table tr[data-lead]');
       rows.forEach(function(r){
         var ok = true; function a(n){ return (r.getAttribute(n)||''); }
-        if(f.name && a('data-name').indexOf(f.name)===-1) ok=false;
+        if(adsOnly && a('data-source')!=='facebook_ads') ok=false;
+        if(ok && f.name && a('data-name').indexOf(f.name)===-1) ok=false;
         if(ok && f.email && a('data-email').indexOf(f.email)===-1) ok=false;
         if(ok && f.note && a('data-note').indexOf(f.note)===-1) ok=false;
         if(ok && f.role && a('data-role')!==f.role) ok=false;
@@ -3235,7 +3286,11 @@
                 ? '<span data-model="' + l.id + '" title="Zákazník má uložený model — už jsi ho viděl" style="margin-left:6px;color:var(--text2);cursor:default;vertical-align:middle;">🧩</span>'
                 : '<span data-model="' + l.id + '" title="Zákazník má uložený model — NEVIDĚNO (rozklikni „Model zákazníka")" style="margin-left:6px;color:#eab308;cursor:default;vertical-align:middle;font-weight:700;">🧩<span style="color:#ef4444;margin-left:1px;">•</span></span>')
             : '';
-          h += '<tr data-lead="' + l.id + '" data-sections="' + cmpEsc(l.visible_sections||'') + '" data-source="' + cmpEsc(l.source||'') + '" data-approved="' + (l.access_approved_at ? '1' : '') + '" data-sent-count="' + (l.access_sent_count||0) + '" data-sent-at="' + cmpEsc(l.access_last_sent_at||'') + '" data-phone="' + cmpEsc(l.phone||'') + '" data-la="' + cmpEsc(l.lastActivityAt||'') + '" data-extra="' + cmpEsc(l.extra_offers||'') + '" data-revstats="' + (l.show_revenue_stats?'1':'') + '" data-example="' + (l.show_example?'1':'') + '" data-hideloss="' + (l.hide_live_loss?'1':'') + '" data-role="' + cmpEsc(l.role||'') + '" data-lang="' + cmpEsc(langCode) + '" data-owner="' + (l.owner_person_id||'') + '" data-warm="' + (w==null?'':(w>=70?'hot':w>=45?'warm':w>=25?'luke':'cold')) + '" data-resv="' + (rv?'1':'') + '" data-stav="' + cmpEsc(l.status||'') + '" data-name="' + cmpEsc((l.name||'').toLowerCase()) + '" data-email="' + cmpEsc((l.email||'').toLowerCase()) + '" data-note="' + cmpEsc((l.notes||'').toLowerCase()) + '" onclick="cmpActivity(' + l.id + ', this)" title="' + (l.is_test?'Testovací kontakt — nepočítá se do statistik':'Klikni pro cestu zákazníka') + '" style="cursor:pointer;' + (l.is_test?'opacity:0.6;':'') + '"><td style="color:var(--text2);">▸</td><td style="white-space:nowrap;">' + dt + '</td><td style="white-space:nowrap;color:' + laColor + ';font-size:12px;font-weight:' + (laToday ? '700' : '400') + ';">' + la + todayStr + '</td><td>' + (l.is_test ? '<span title="Testovací kontakt — nepočítá se do statistik" style="color:#c084fc;font-size:12px;margin-right:4px;cursor:default;vertical-align:middle;">🧪</span>' : '') + (l.external_rep_id ? '<span title="Kontakt od externího obchodníka' + (l.external_rep_name ? ': ' + cmpEsc(l.external_rep_name) : '') + '" style="color:#eab308;font-size:12px;margin-right:4px;cursor:default;vertical-align:middle;">🤝</span>' : '') + cmpEsc(l.name) + (l.campaign ? ' <span title="Kampaň z FB reklamy" style="display:inline-block;margin-left:6px;padding:1px 7px;border-radius:10px;background:rgba(59,130,246,0.18);color:#60a5fa;font-size:11px;vertical-align:middle;">📢 ' + cmpEsc(l.campaign) + '</span>' : (l.source === 'facebook_ads' ? ' <span title="Kontakt z FB reklamy" style="margin-left:6px;color:#60a5fa;font-size:12px;vertical-align:middle;">📢</span>' : '')) + (l.extra_offers ? ' <span title="Individuální nabídka lokalit" style="cursor:default">🎯</span>' : '') + modelBadge + '</td><td><a href="mailto:' + cmpEsc(l.email) + '" onclick="event.stopPropagation()" style="color:#eab308;">' + cmpEsc(l.email) + '</a></td><td>' + roleLabel + '</td><td style="white-space:nowrap;">' + langSel + '</td><td style="white-space:nowrap;">' + ownerCell + '</td>' + warmthCell + resvCell + '<td>' + sel + '</td><td><input type="text" value="' + noteVal + '" placeholder="—" onclick="event.stopPropagation()" onblur="cmpSetNote(' + l.id + ', this.value)" style="width:140px;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:12px;"></td><td style="white-space:nowrap;"><button onclick="event.stopPropagation();cmpToggleTest(' + l.id + ',' + (l.is_test?'false':'true') + ')" title="' + (l.is_test?'Testovací kontakt — klikni pro zrušení':'Označit jako testovací kontakt (nepočítá se do statistik)') + '" style="background:' + (l.is_test?'rgba(168,85,247,0.25)':'transparent') + ';color:' + (l.is_test?'#c084fc':'var(--text2)') + ';border:1px solid ' + (l.is_test?'rgba(168,85,247,0.6)':'var(--border)') + ';border-radius:6px;padding:4px 8px;font-size:12px;cursor:pointer;margin-right:6px;">🧪</button><button onclick="event.stopPropagation();cmpDeleteLead(' + l.id + ', ' + JSON.stringify(l.name).replace(/"/g,'&quot;') + ')" title="Smazat lead" style="background:transparent;color:#ef4444;border:1px solid rgba(239,68,68,0.4);border-radius:6px;padding:4px 9px;font-size:12px;cursor:pointer;">🗑</button></td></tr>';
+          var invBadge = '';
+          var _inv = cmpFbInvestment(l);
+          if (_inv) invBadge = '<div style="font-size:11px;color:#f59e0b;font-weight:700;margin-top:2px;" title="Plánovaná investice z formuláře">💰 ' + cmpEsc(_inv) + '</div>';
+          var blBadge = l.blacklisted ? '<span class="cmp-bl" data-tip="⚠ POZOR: tento kontakt je na BLACK LISTU (neoslovovat)!" title="POZOR: kontakt je na black listu — neoslovovat!">❗</span>' : '';
+          h += '<tr data-lead="' + l.id + '" data-sections="' + cmpEsc(l.visible_sections||'') + '" data-source="' + cmpEsc(l.source||'') + '" data-approved="' + (l.access_approved_at ? '1' : '') + '" data-sent-count="' + (l.access_sent_count||0) + '" data-sent-at="' + cmpEsc(l.access_last_sent_at||'') + '" data-phone="' + cmpEsc(l.phone||'') + '" data-la="' + cmpEsc(l.lastActivityAt||'') + '" data-extra="' + cmpEsc(l.extra_offers||'') + '" data-revstats="' + (l.show_revenue_stats?'1':'') + '" data-example="' + (l.show_example?'1':'') + '" data-hideloss="' + (l.hide_live_loss?'1':'') + '" data-version="' + cmpEsc(l.pradlomat_version||'V3') + '" data-role="' + cmpEsc(l.role||'') + '" data-lang="' + cmpEsc(langCode) + '" data-owner="' + (l.owner_person_id||'') + '" data-warm="' + (w==null?'':(w>=70?'hot':w>=45?'warm':w>=25?'luke':'cold')) + '" data-resv="' + (rv?'1':'') + '" data-stav="' + cmpEsc(l.status||'') + '" data-name="' + cmpEsc((l.name||'').toLowerCase()) + '" data-email="' + cmpEsc((l.email||'').toLowerCase()) + '" data-note="' + cmpEsc((l.notes||'').toLowerCase()) + '" onclick="cmpActivity(' + l.id + ', this)" title="' + (l.is_test?'Testovací kontakt — nepočítá se do statistik':'Klikni pro cestu zákazníka') + '" style="cursor:pointer;' + (l.is_test?'opacity:0.6;':'') + '"><td style="color:var(--text2);">▸</td><td style="white-space:nowrap;">' + dt + '</td><td style="white-space:nowrap;color:' + laColor + ';font-size:12px;font-weight:' + (laToday ? '700' : '400') + ';">' + la + todayStr + '</td><td>' + (l.is_test ? '<span title="Testovací kontakt — nepočítá se do statistik" style="color:#c084fc;font-size:12px;margin-right:4px;cursor:default;vertical-align:middle;">🧪</span>' : '') + (l.external_rep_id ? '<span title="Kontakt od externího obchodníka' + (l.external_rep_name ? ': ' + cmpEsc(l.external_rep_name) : '') + '" style="color:#eab308;font-size:12px;margin-right:4px;cursor:default;vertical-align:middle;">🤝</span>' : '') + cmpEsc(l.name) + blBadge + (l.campaign ? ' <span title="Kampaň z FB reklamy" style="display:inline-block;margin-left:6px;padding:1px 7px;border-radius:10px;background:rgba(59,130,246,0.18);color:#60a5fa;font-size:11px;vertical-align:middle;">📢 ' + cmpEsc(l.campaign) + '</span>' : (l.source === 'facebook_ads' ? ' <span title="Kontakt z FB reklamy" style="margin-left:6px;color:#60a5fa;font-size:12px;vertical-align:middle;">📢</span>' : '')) + (l.extra_offers ? ' <span title="Individuální nabídka lokalit" style="cursor:default">🎯</span>' : '') + modelBadge + invBadge + '</td><td><a href="mailto:' + cmpEsc(l.email) + '" onclick="event.stopPropagation()" style="color:#eab308;">' + cmpEsc(l.email) + '</a></td><td>' + roleLabel + '</td><td style="white-space:nowrap;">' + langSel + '</td><td style="white-space:nowrap;">' + ownerCell + '</td>' + warmthCell + resvCell + '<td>' + sel + '</td><td><input type="text" value="' + noteVal + '" data-tip="' + noteVal + '" placeholder="—" onclick="event.stopPropagation()" onblur="cmpSetNote(' + l.id + ', this.value)" style="width:140px;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:12px;"></td><td style="white-space:nowrap;"><button onclick="event.stopPropagation();cmpToggleTest(' + l.id + ',' + (l.is_test?'false':'true') + ')" title="' + (l.is_test?'Testovací kontakt — klikni pro zrušení':'Označit jako testovací kontakt (nepočítá se do statistik)') + '" style="background:' + (l.is_test?'rgba(168,85,247,0.25)':'transparent') + ';color:' + (l.is_test?'#c084fc':'var(--text2)') + ';border:1px solid ' + (l.is_test?'rgba(168,85,247,0.6)':'var(--border)') + ';border-radius:6px;padding:4px 8px;font-size:12px;cursor:pointer;margin-right:6px;">🧪</button><button onclick="event.stopPropagation();cmpDeleteLead(' + l.id + ', ' + JSON.stringify(l.name).replace(/"/g,'&quot;') + ')" title="Smazat lead" style="background:transparent;color:#ef4444;border:1px solid rgba(239,68,68,0.4);border-radius:6px;padding:4px 9px;font-size:12px;cursor:pointer;">🗑</button></td></tr>';
         });
         h += '</tbody></table></div>';
       box.innerHTML = h;
@@ -3296,7 +3351,7 @@
       var td = document.createElement('td'); td.colSpan = 12; td.style.background='rgba(234,179,8,0.04)'; td.style.padding='14px 18px';
       td.innerHTML = cmpAccessBlock(id, row.getAttribute('data-source')||'', row.getAttribute('data-approved')==='1')
         + cmpInviteBlock(id, parseInt(row.getAttribute('data-sent-count')||'0',10), row.getAttribute('data-sent-at')||'', row.getAttribute('data-phone')||'', row.getAttribute('data-la')||'')
-        + cmpSecBlock(id, row.getAttribute('data-sections')||'') + cmpRevStatsBlock(id, row.getAttribute('data-revstats')==='1') + cmpExampleBlock(id, row.getAttribute('data-example')==='1', row.getAttribute('data-hideloss')==='1') + cmpModelBlock(id) + cmpOfferBlock(id, row.getAttribute('data-extra')||'') + cmpCommsBlock(id, row.getAttribute('data-phone')||'', row.getAttribute('data-name')||'');
+        + cmpVersionBlock(id, row.getAttribute('data-version')||'V3') + cmpSecBlock(id, row.getAttribute('data-sections')||'') + cmpRevStatsBlock(id, row.getAttribute('data-revstats')==='1') + cmpExampleBlock(id, row.getAttribute('data-example')==='1', row.getAttribute('data-hideloss')==='1') + cmpModelBlock(id) + cmpOfferBlock(id, row.getAttribute('data-extra')||'') + cmpCommsBlock(id, row.getAttribute('data-phone')||'', row.getAttribute('data-name')||'');
       var resDiv = document.createElement('div'); resDiv.innerHTML = '<div style="color:var(--text2);font-size:13px;">Načítám rezervace…</div>';
       td.appendChild(resDiv);
       cmpLeadReservations(id, resDiv);
@@ -3932,6 +3987,38 @@
       }catch(e){ alert('Chyba načítání nabídky.'); }
     }
     window.cmpShowOffer = cmpShowOffer;
+    var CMP_VER_LABELS = { V3: 'V3 — plný', V2: 'V2 — menší', BOTH: 'Obojí' };
+    var CMP_VER_DESC = { V3: '52 000 € · s malou pračkou', V2: '35 000 € · bez malé pračky, levnější', BOTH: 'zákazník uvidí přepínač V2/V3' };
+    function cmpVersionBlock(id, ver){
+      var v = (ver === 'V2' || ver === 'BOTH') ? ver : 'V3';
+      function btn(code){
+        var on = v === code;
+        return '<button type="button" data-verbtn="'+code+'" onclick="cmpSetVersion('+id+',\''+code+'\')" style="flex:1;min-width:130px;text-align:left;padding:10px 12px;border-radius:8px;cursor:pointer;border:1px solid '+(on?'#eab308':'var(--border)')+';background:'+(on?'rgba(234,179,8,0.14)':'transparent')+';color:var(--text);">'
+          + '<div style="font-weight:700;font-size:13px;">'+(on?'✓ ':'')+CMP_VER_LABELS[code]+'</div>'
+          + '<div style="font-size:11px;color:var(--text2);margin-top:2px;">'+CMP_VER_DESC[code]+'</div></button>';
+      }
+      return '<div data-verctl="'+id+'" style="margin-bottom:12px;padding:10px 12px;background:rgba(234,179,8,0.05);border:1px solid var(--border);border-radius:8px;">'
+        + '<div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--text2);margin-bottom:8px;">🧺 Varianta prádlomatu (ekonomika Provozovatele)</div>'
+        + '<div style="display:flex;gap:10px;flex-wrap:wrap;">'
+        + btn('V3') + btn('V2') + btn('BOTH')
+        + '</div>'
+        + '<div style="display:flex;align-items:center;gap:12px;margin-top:8px;"><span data-vermsg="'+id+'" style="font-size:12px;"></span></div>'
+        + '<div style="font-size:11px;color:var(--text2);margin-top:6px;">Řídí ekonomiku na portálu. „Obojí" = zákazník má přepínač V2/V3. Výchozí V3.</div>'
+        + '</div>';
+    }
+    async function cmpSetVersion(id, v){
+      var wrap = document.querySelector('[data-verctl="'+id+'"]');
+      var msg = wrap ? wrap.querySelector('[data-vermsg]') : null;
+      if(msg){ msg.style.color='var(--text2)'; msg.textContent='Ukládám…'; }
+      try {
+        var r = await fetch('/api/compounder/leads/'+id, { method:'PATCH', credentials:'include', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ pradlomatVersion: v }) });
+        if(!r.ok) throw new Error();
+        var rowEl = document.querySelector('tr[data-lead="'+id+'"]'); if(rowEl) rowEl.setAttribute('data-version', v);
+        if(wrap){ Array.prototype.slice.call(wrap.querySelectorAll('[data-verbtn]')).forEach(function(b){ var code=b.getAttribute('data-verbtn'); var on=code===v; b.style.borderColor=on?'#eab308':'var(--border)'; b.style.background=on?'rgba(234,179,8,0.14)':'transparent'; b.querySelector('div').textContent=(on?'✓ ':'')+CMP_VER_LABELS[code]; }); }
+        if(msg){ msg.style.color='#10b981'; msg.textContent='Uloženo ✓ ('+(CMP_VER_LABELS[v]||v)+')'; setTimeout(function(){ if(msg) msg.textContent=''; }, 2200); }
+      } catch(e){ if(msg){ msg.style.color='#ef4444'; msg.textContent='Chyba uložení'; } }
+    }
+    window.cmpSetVersion = cmpSetVersion;
     function cmpSecBlock(id, csv){
       var have = String(csv||'').split(',').map(function(x){return x.trim();}).filter(Boolean);
       var defs = [['ekonomika','Provozovatel'],['nabidka','Investor'],['distributor','Distributor']];

@@ -5656,6 +5656,10 @@ model CompounderLead {
   // Surová data leadu z FB (celý JSON) pro dohledání dalších polí.
   meta_raw     Json?
 
+  // Varianta prádlomatu pro ekonomiku Provozovatele: 'V3' (plný, s malou pračkou)
+  // nebo 'V2' (menší/levnější, bez malé pračky). Řídí přepočet na portálu.
+  pradlomat_version String @default("V3") @db.VarChar(8)
+
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
 

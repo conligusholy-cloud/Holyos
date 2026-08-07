@@ -115,6 +115,38 @@
   // Kurzy (CZK za 1 jednotku) — přepíše host přes setRates(); symboly měn.
   var CUR_RATES = { CZK: 1, EUR: 25, USD: 23, GBP: 29 };
   var CUR_SYMS = { CZK: 'Kč', EUR: '€', USD: '$', GBP: '£' };
+
+  // ── Varianty prádlomatu (V2/V3) ──────────────────────────────────────────
+  // V3 = plný (s malou pračkou), V2 = menší/levnější (bez malé pračky).
+  // Hodnoty jsou v EUR; applyVariant je přepočítá do aktuální měny.
+  var VER = 'V3';
+  var SHOW_VER = true; // zobrazit přepínač V2/V3? (u leada jen když má povolené obě varianty)
+  var VARIANTS = {
+    V3: { cena_pradlomatu: 52000, cena_pripojek: 2889, obrat_na_zakaznika: 11.33, najem: 165, truck: 47000, noSmall: false },
+    V2: { cena_pradlomatu: 35000, cena_pripojek: 1926, obrat_na_zakaznika: 16.52, najem: 120, truck: 33000, noSmall: true }
+  };
+  // Přepínač varianty do lišty nástroje (vedle měny).
+  function verButtons() {
+    if (!SHOW_VER) return ''; // přepínač skrytý (lead má povolenou jen jednu variantu)
+    var html = '<span style="font-size:12px;color:var(--text2);margin:0 4px 0 2px">' + _t('Varianta') + ':</span>';
+    ['V3', 'V2'].forEach(function (v) {
+      var on = v === VER;
+      html += '<button type="button" class="btn btn-sm" onclick="window.PradlomatTool._setVer(\'' + v + '\')" style="padding:6px 10px;' + (on ? 'background:#c9a24b;border-color:#c9a24b;color:#241c05;font-weight:700;' : '') + '">' + v + '</button>';
+    });
+    return html;
+  }
+  // Nastaví variantu: přepíše cenu stroje, přípojky a obrat (EUR → aktuální měna).
+  function applyVariant(v) {
+    var cfg = VARIANTS[v]; if (!cfg) return;
+    VER = v;
+    var f = (CUR_RATES.EUR || 25) / (CUR_RATES[CUR.code] || 1); // EUR → aktuální měna
+    if (typeof STATE !== 'undefined' && STATE) {
+      STATE.cena_pradlomatu = cfg.cena_pradlomatu * f;
+      STATE.cena_pripojek = cfg.cena_pripojek * f;
+      STATE.obrat_na_zakaznika = cfg.obrat_na_zakaznika * f;
+      if (cfg.najem != null) STATE.najem = cfg.najem * f;
+    }
+  }
   // Přepínač měny do vlastní lišty nástroje (vedle „Tovární hodnoty").
   function curButtons() {
     var html = '<span style="font-size:12px;color:var(--text2);margin:0 4px 0 2px">' + _t('Měna') + ':</span>';
@@ -170,7 +202,9 @@
     r.naklad_susicka_45 = i.susicka_45 * r.e_elektriny;
 
     // Souhrny (E5, E6, E8) — průměrný náklad na zákazníka
-    r.prumer_prani = (r.naklad_velka_prumer + r.naklad_mala_prumer) / 2;
+    // V2 nemá malou pračku → náklad na praní jen z velké pračky.
+    var _noSmall = !!(VARIANTS[VER] && VARIANTS[VER].noSmall);
+    r.prumer_prani = _noSmall ? r.naklad_velka_prumer : (r.naklad_velka_prumer + r.naklad_mala_prumer) / 2;
     r.prumer_suseni = (r.naklad_susicka_30 + r.naklad_susicka_15) / 2;
     r.naklad_na_zakaznika = r.prumer_prani + r.prumer_suseni; // <- spočtená hodnota (nahrazuje C12)
 
@@ -200,6 +234,9 @@
     // Roční provozní zisk = aktuální stav strojů × 12 × r.zisk.
     var ziskPerStrojMesicne = r.zisk;
     var investicePerStroj = r.investice_celkem;
+    // Kamionová cena (4+ ks/rok) — poměr kamion/kus dané varianty aplikovaný na cenu stroje.
+    var _tr = (VARIANTS[VER] && VARIANTS[VER].cena_pradlomatu) ? (VARIANTS[VER].truck / VARIANTS[VER].cena_pradlomatu) : 1;
+    var investicePerStrojKamion = (i.cena_pradlomatu * _tr) + i.cena_projekt + i.cena_pripojek;
     var stock = 0;
     var cumulative = 0;
     var firstBreakevenYear = null;
@@ -207,7 +244,9 @@
     for (var yr = 1; yr <= 10; yr++) {
       var newMachines = Math.max(0, Math.floor(Number(i['new_machines_y' + yr]) || 0));
       stock += newMachines;
-      var annualInvestment = newMachines * investicePerStroj;
+      // 4+ ks v roce = kamionová cena.
+      var _unit = (newMachines >= 4) ? investicePerStrojKamion : investicePerStroj;
+      var annualInvestment = newMachines * _unit;
       var annualOperatingProfit = stock * 12 * ziskPerStrojMesicne;
       var netCashflow = annualOperatingProfit - annualInvestment;
       cumulative += netCashflow;
@@ -448,6 +487,7 @@
         '<span class="pe-legend"><span class="pe-sw"></span> ' + _t('Editovatelné') + '</span>' +
         '<span class="pe-legend"><span class="pe-sw ro"></span> ' + _t('Vypočítané') + '</span>' +
         '<div style="flex:1"></div>' +
+        '<span class="pe-ver" style="display:inline-flex;align-items:center;gap:4px;margin-right:10px">' + verButtons() + '</span>' +
         '<span class="pe-cur" style="display:inline-flex;align-items:center;gap:4px;margin-right:6px">' + curButtons() + '</span>' +
         saveDefaultsBtn +
         '<button class="btn btn-secondary btn-sm" onclick="window.PradlomatTool.resetDefaults()">' + _t('↺ Tovární hodnoty') + '</button>' +
@@ -506,10 +546,12 @@
       inputRow(_t('DPH (sazba)'), 'dph', '%', 0.01, 2) +
       '<div style="margin-top:6px;padding-top:10px;border-top:1px dashed var(--border);">' +
       '<div style="font-size:11px;color:var(--text2);margin-bottom:8px;">' + _t('Cena služeb (vstup s DPH, automaticky bez DPH):') + '</div>' +
-      inputRow(_t('Malá pračka'), 'cena_mala_pracka', _t('€ s DPH'), 0.01, 3) +
-      outRow(_t('… bez DPH'), 'bez_mala', '€') +
-      inputRow(_t('Malá pračka s aviváží'), 'cena_mala_pracka_aviv', _t('€ s DPH'), 0.01, 3) +
-      outRow(_t('… bez DPH'), 'bez_mala_aviv', '€') +
+      (VER !== 'V2' ? (
+        inputRow(_t('Malá pračka'), 'cena_mala_pracka', _t('€ s DPH'), 0.01, 3) +
+        outRow(_t('… bez DPH'), 'bez_mala', '€') +
+        inputRow(_t('Malá pračka s aviváží'), 'cena_mala_pracka_aviv', _t('€ s DPH'), 0.01, 3) +
+        outRow(_t('… bez DPH'), 'bez_mala_aviv', '€')
+      ) : '') +
       inputRow(_t('Velká pračka'), 'cena_velka_pracka', _t('€ s DPH'), 0.01, 3) +
       outRow(_t('… bez DPH'), 'bez_velka', '€') +
       inputRow(_t('Velká pračka s aviváží'), 'cena_velka_pracka_aviv', _t('€ s DPH'), 0.01, 3) +
@@ -557,7 +599,8 @@
       outRow(_t('Bez aviváže celkem'), 'naklad_mala_bez_aviv', '€') +
       outRow(_t('S aviváží celkem'), 'naklad_mala_s_aviv', '€') +
       outRow(_t('Průměr malé pračky'), 'naklad_mala_prumer', '€', true);
-    html += section('mala_pracka', '🧺', _t('Malá pračka — spotřeba a náklady'), _t('zdrojová data'), s8, true);
+    // V2 nemá malou pračku → sekci skryjeme.
+    if (VER !== 'V2') html += section('mala_pracka', '🧺', _t('Malá pračka — spotřeba a náklady'), _t('zdrojová data'), s8, true);
 
     // Sekce: Sušička
     var s9 =
@@ -990,6 +1033,12 @@
       ? Object.assign({}, DEFAULTS, options.defaults)
       : Object.assign({}, DEFAULTS);
 
+    // 2b) Varianta prádlomatu (V2/V3) — přepíše cenu stroje/přípojky/obrat.
+    // showVerSwitch: false = jen jedna varianta (přepínač skrytý), true/undefined = zobrazit.
+    SHOW_VER = (options.showVerSwitch === false) ? false : true;
+    if (options.version && VARIANTS[options.version]) applyVariant(options.version);
+    else applyVariant(VER); // normalizuj na aktuální variantu (výchozí V3 = ceníková cena)
+
     // 3) Render.
     injectStyles();
     ROOT.innerHTML = buildHTML();
@@ -1037,8 +1086,21 @@
   function resetDefaults() {
     STATE = Object.assign({}, BASE_DEFAULTS || DEFAULTS);
     CUR = { code: 'EUR', sym: '€' }; // výchozí model je v eurech
+    applyVariant(VER); // po resetu zachovej zvolenou variantu (ceny dle V2/V3)
     if (ROOT) { ROOT.innerHTML = buildHTML(); bindInputs(); } else { bindInputs(); }
   }
+  // Přepnutí varianty z lišty (V2/V3) — přepočítá a překreslí.
+  function _setVer(v) {
+    if (!VARIANTS[v] || v === VER) return;
+    applyVariant(v);
+    if (ROOT) { ROOT.innerHTML = buildHTML(); bindInputs(); }
+  }
+  function setVersion(v) {
+    if (!VARIANTS[v]) return;
+    applyVariant(v);
+    if (ROOT) { ROOT.innerHTML = buildHTML(); bindInputs(); }
+  }
+  function getVersion() { return VER; }
 
   // Přepnutí měny: nastaví symbol a přepočítá peněžní pole stavu poměrem kurzů
   // (ratio = kolik nové měny za 1 jednotku staré). Payback/ROI/% zůstávají (poměry).
@@ -1092,6 +1154,9 @@
     setCurrency: setCurrency,
     getCurrency: getCurrency,
     _setCur: _setCur,
+    _setVer: _setVer,
+    setVersion: setVersion,
+    getVersion: getVersion,
     setRates: setRates,
     exportJSON: exportJSON,
     getState: getState,

@@ -366,7 +366,7 @@ router.get('/portal/session', async (req, res, next) => {
     if (!id) return res.status(401).json({ ok: false, error: 'Neplatný nebo chybějící přístupový odkaz.' });
     const lead = await prisma.compounderLead.findUnique({
       where: { id },
-      select: { id: true, name: true, email: true, phone: true, role: true, lang: true, visible_sections: true, visible_templates: true, show_revenue_stats: true, show_example: true, hide_live_loss: true, created_at: true, owner_person_id: true, external_rep_id: true, password_hash: true, source: true, access_approved_at: true },
+      select: { id: true, name: true, email: true, phone: true, role: true, lang: true, visible_sections: true, visible_templates: true, show_revenue_stats: true, show_example: true, hide_live_loss: true, created_at: true, owner_person_id: true, external_rep_id: true, password_hash: true, source: true, access_approved_at: true, pradlomat_version: true },
     });
     if (!lead) return res.status(404).json({ ok: false, error: 'Registrace nenalezena.' });
     if (!leadAccessAllowed(lead)) {
@@ -393,7 +393,7 @@ router.get('/portal/session', async (req, res, next) => {
         if (p) consultant = { name: ((p.first_name || '') + ' ' + (p.last_name || '')).trim(), phone: p.phone || '', email: p.email || '' };
       } catch (e) { /* fallback na majitele */ }
     }
-    return res.json({ ok: true, id: lead.id, name: lead.name, email: lead.email || '', phone: lead.phone || '', role: lead.role, lang: lead.lang, sections: resolveSections(lead.visible_sections), templates: templates, showRevenueStats: !!lead.show_revenue_stats, showExample: !!lead.show_example, hideLiveLoss: !!lead.hide_live_loss, accountCreatedAt: lead.created_at, consultant: consultant, consultantExternal: consultantExternal, has_password: !!lead.password_hash });
+    return res.json({ ok: true, id: lead.id, name: lead.name, email: lead.email || '', phone: lead.phone || '', role: lead.role, lang: lead.lang, sections: resolveSections(lead.visible_sections), templates: templates, showRevenueStats: !!lead.show_revenue_stats, showExample: !!lead.show_example, hideLiveLoss: !!lead.hide_live_loss, pradlomatVersion: lead.pradlomat_version || 'V3', accountCreatedAt: lead.created_at, consultant: consultant, consultantExternal: consultantExternal, has_password: !!lead.password_hash });
   } catch (err) {
     next(err);
   }
@@ -1594,6 +1594,7 @@ router.get('/my-leads', requireAuth, async (req, res, next) => {
       where, orderBy: { created_at: 'desc' }, take: 500,
     });
     await enrichWarmth(leads);
+    await _annotateBlacklist(leads);
     res.json(leads);
   } catch (err) { next(err); }
 });
@@ -1761,6 +1762,7 @@ router.get('/leads', requireAuth, async (req, res, next) => {
         leads.forEach((l) => { l.external_rep_name = l.external_rep_id ? (repById[Number(l.external_rep_id)] || null) : null; });
       } catch (e) { /* AppSetting nemusí existovat */ }
     }
+    await _annotateBlacklist(leads);
     res.json(leads);
   } catch (err) {
     next(err);
@@ -1796,6 +1798,8 @@ const patchSchema = z.object({
   showExample: z.boolean().optional(),
   // Schovat živou ztrátu v portálu (časomíra + „přišli jste o…" + karta Cena váhání).
   hideLiveLoss: z.boolean().optional(),
+  // Varianta prádlomatu pro ekonomiku Provozovatele: V2, V3, nebo BOTH (obojí → přepínač).
+  pradlomatVersion: z.enum(['V2', 'V3', 'BOTH']).optional(),
 });
 
 router.patch('/leads/:id', requireAuth, async (req, res, next) => {
@@ -1858,6 +1862,7 @@ router.patch('/leads/:id', requireAuth, async (req, res, next) => {
     if (parsed.data.hideLiveLoss !== undefined) data.hide_live_loss = !!parsed.data.hideLiveLoss;
     if (parsed.data.isTest !== undefined) data.is_test = !!parsed.data.isTest;
     if (parsed.data.showExample !== undefined) data.show_example = !!parsed.data.showExample;
+    if (parsed.data.pradlomatVersion !== undefined) data.pradlomat_version = parsed.data.pradlomatVersion;
     const lead = await prisma.compounderLead.update({ where: { id }, data });
     // Notifikace: nový přidělený kontakt (jinému obchodníkovi než ten, kdo přiřazuje).
     if (parsed.data.owner_person_id) {
@@ -3116,18 +3121,20 @@ async function _fbCreateLead(fields, meta, formCfg) {
     (!ownerPersonId && !externalRepId ? ' · zatím bez obchodníka' : '') +
     (intakeText ? ('\n— Z formuláře —\n' + intakeText) : '');
 
+  // Ořez na max délky sloupců (VARCHAR) — FB může poslat cokoli, DB nesmí spadnout.
+  const cap = (s, n) => { const v = (s == null ? '' : String(s)).trim(); return v ? v.slice(0, n) : null; };
   const created = await prisma.compounderLead.create({
     data: {
-      name, first_name: firstName || null, last_name: lastName || null,
-      company: company || null, city: city || null, country: country || null,
-      email: email || null, phone: phone || null,
-      role, lang, status: 'new', source: 'facebook_ads',
-      campaign,
+      name: (name || '').slice(0, 255), first_name: cap(firstName, 120), last_name: cap(lastName, 120),
+      company: cap(company, 200), city: cap(city, 120), country: cap(country, 120),
+      email: cap(email, 255), phone: cap(phone, 40),
+      role, lang: cap(lang, 10), status: 'new', source: 'facebook_ads',
+      campaign: cap(campaign, 160),
       notes: intakeText || null,
       owner_person_id: ownerPersonId, external_rep_id: externalRepId,
-      meta_lead_id: leadId, meta_form_id: meta.formId ? String(meta.formId) : null,
-      meta_page_id: meta.pageId ? String(meta.pageId) : null,
-      meta_ad_id: meta.adId ? String(meta.adId) : null,
+      meta_lead_id: cap(leadId, 64), meta_form_id: cap(meta.formId, 64),
+      meta_page_id: cap(meta.pageId, 64),
+      meta_ad_id: cap(meta.adId, 64),
       meta_raw: meta.raw || null,
       activity_log: initLog,
     },
@@ -3654,6 +3661,25 @@ async function _isBlocked(email, phone) {
   if (!or.length) return false;
   const hit = await prisma.compounderBlocklist.findFirst({ where: { OR: or }, select: { id: true } }).catch(() => null);
   return !!hit;
+}
+
+// Označí leady příznakem blacklisted (shoda e-mailu/telefonu s black listem) — jedním dotazem.
+async function _annotateBlacklist(leads) {
+  if (!leads || !leads.length) return;
+  let rows = [];
+  try { rows = await prisma.compounderBlocklist.findMany({ select: { email: true, phone: true } }); } catch (e) { return; }
+  const emails = new Set();
+  const phones = new Set();
+  rows.forEach((r) => {
+    if (r.email) emails.add(String(r.email).trim().toLowerCase());
+    if (r.phone) { const p = String(r.phone).replace(/\D/g, '').slice(-9); if (p.length >= 6) phones.add(p); }
+  });
+  if (!emails.size && !phones.size) return;
+  leads.forEach((l) => {
+    const em = String(l.email || '').trim().toLowerCase();
+    const ph = String(l.phone || '').replace(/\D/g, '').slice(-9);
+    l.blacklisted = !!((em && emails.has(em)) || (ph && ph.length >= 6 && phones.has(ph)));
+  });
 }
 
 // GET /api/compounder/blocklist?search=&limit=&offset= — výpis do-not-contact seznamu
@@ -5624,7 +5650,8 @@ router.post('/portal/reserve', async (req, res, next) => {
   try {
     const parsed = reserveSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ ok: false, error: 'Neplatná data rezervace.' });
-    const { t, code, days } = parsed.data;
+    const { t, code } = parsed.data;
+    const days = Math.min(Math.max(1, parseInt(parsed.data.days, 10) || 1), 10); // rezervace max 10 dní
     const leadId = verifyPortalToken(t);
     if (!leadId) return res.status(401).json({ ok: false, error: 'Neplatný nebo chybějící přístupový odkaz.' });
 
@@ -5651,9 +5678,10 @@ router.post('/portal/reserve', async (req, res, next) => {
     }
 
     const now = new Date();
-    const feeTotal = days * feePerDay;
-    const signUntil = new Date(now.getTime() + signDays * 86400000);
-    const feeUntil = new Date(signUntil.getTime() + payDays * 86400000);
+    // Rezervace je ZDARMA a nezávazná — bez poplatku a bez lhůt na podpis/platbu.
+    const feeTotal = 0;
+    const signUntil = null;
+    const feeUntil = null;
     const reservedUntil = new Date(now.getTime() + days * 86400000);
     const b = parsed.data.buyer || {};
 
@@ -5661,10 +5689,10 @@ router.post('/portal/reserve', async (req, res, next) => {
       buyer_name: b.name || null, buyer_email: b.email || null, buyer_phone: b.phone || null,
       buyer_ico: b.ico || null, buyer_dic: b.dic || null, buyer_address: b.address || null,
       buyer_rep: b.rep || null, buyer_bank: b.bank || null,
-      days, fee_per_day: feePerDay, fee_total: feeTotal,
+      days, fee_per_day: 0, fee_total: feeTotal,
       purchase_price: (parsed.data.totalPrice != null) ? parsed.data.totalPrice : null,
       currency: 'CZK', status: 'reserved', hold_until: null,
-      sign_until: signUntil, fee_until: feeUntil, reserved_until: reservedUntil,
+      sign_until: null, fee_until: null, reserved_until: reservedUntil,
     };
     // Převezmi můj 1h hold (pokud existuje), jinak vytvoř novou rezervaci.
     const myHold = await prisma.locationReservation.findFirst({ where: { kiosk_code: code, lead_id: leadId, status: 'hold' }, orderBy: { created_at: 'desc' } });
@@ -5675,9 +5703,10 @@ router.post('/portal/reserve', async (req, res, next) => {
     // Velín push + zvonek nastaveným osobám (Jan/Tomáš) o nové rezervaci.
     compounderNotify.notifyReservationEvent(prisma, { reservation: rec, event: 'created' }).catch(() => {});
 
-    // Automaticky vytvoř rezervační smlouvu předvyplněnou z hlavičky a pošli ji do
-    // Velína k autorizaci (podpisu za Best Series). Zákazník ji podepíše až po nás.
-    try {
+    // Automatické smlouvy VYPNUTÉ — rezervace je nezávazná; kompetentní osoba
+    // vše dořeší ručně. (Blok ponechán pro případné budoucí zapnutí.)
+    var AUTO_RESERVATION_CONTRACTS = false;
+    if (AUTO_RESERVATION_CONTRACTS) try {
       const already = await prisma.compoundingContract.findFirst({
         where: { kiosk_code: code, type: 'rezervacni', status: { notIn: ['podepsano'] } }, select: { id: true },
       });

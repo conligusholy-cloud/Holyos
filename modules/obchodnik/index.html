@@ -37,6 +37,8 @@
   .dot{width:10px;height:10px;border-radius:50%;flex:0 0 auto}
   .card-body{flex:1;min-width:0}
   .card-name{font-weight:700;font-size:15.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  @keyframes obBlink { 0%,100% { opacity:1; } 50% { opacity:.15; } }
+  .ob-bl { color:#ef4444; font-weight:800; margin-left:6px; cursor:pointer; animation:obBlink 0.9s infinite; }
   .card-sub{font-size:12.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
   .badge{font-size:11px;font-weight:600;padding:3px 9px;border-radius:999px;white-space:nowrap}
   .chev{color:var(--muted2);font-size:13px;transition:transform .2s}
@@ -685,11 +687,50 @@
     if (state.openId){ loadActivity(state.openId); loadReservations(state.openId); }
   }
 
+  // Plánovaná investice z poznámky (řádek „…investic…: hodnota") — jen když je to částka.
+  function fbInvest(l){
+    if(!l||!l.notes) return '';
+    var lines=String(l.notes).split(/\n+/);
+    for(var i=0;i<lines.length;i++){
+      var m=lines[i].match(/investic[^:]*:\s*(.+)$/i);
+      if(m&&m[1]){
+        var v=m[1].trim();
+        v=v.split(/\s*[A-Za-zÁ-Žá-ž][^:]{2,60}:\s/)[0].trim();
+        if(!v) continue;
+        if(/test lead|dummy data/i.test(v)||v.charAt(0)==='<') continue; // Meta testovací dummy přeskoč
+        return v;
+      }
+    }
+    return '';
+  }
+  // Přepínač varianty prádlomatu (V2/V3) — řídí ekonomiku Provozovatele na portálu.
+  function obVersionField(l){
+    var cur = (l.pradlomat_version === 'V2' || l.pradlomat_version === 'BOTH') ? l.pradlomat_version : 'V3';
+    function b(code, label, desc){
+      var on = cur === code;
+      return '<button type="button" onclick="setVersion('+l.id+',\''+code+'\')" style="flex:1;text-align:left;padding:9px 10px;border-radius:8px;cursor:pointer;border:1px solid '+(on?'var(--primary)':'var(--line)')+';background:'+(on?'rgba(201,162,75,0.16)':'transparent')+';color:var(--text)">'
+        + '<div style="font-weight:700;font-size:13px">'+(on?'✓ ':'')+label+'</div>'
+        + '<div style="font-size:11px;color:var(--muted2)">'+desc+'</div></button>';
+    }
+    return '<div style="margin-top:10px;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted2)">Varianta prádlomatu (ekonomika)</div>'
+      + '<div style="display:flex;gap:8px;margin-top:6px">' + b('V3','V3','plný, s malou pračkou') + b('V2','V2','menší, levnější') + b('BOTH','Obojí','přepínač V2/V3') + '</div>';
+  }
+  async function setVersion(id, v){
+    try {
+      await api('/leads/'+id, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ pradlomatVersion: v }) });
+      var lead = state.leads.find(function(x){ return x.id===id; }); if (lead) lead.pradlomat_version = v;
+      render();
+    } catch(e){}
+  }
+  window.setVersion = setVersion;
   function cardHtml(l){
     var st = STATUS[l.status] || STATUS.new;
     var lc = langCode(l.lang);
     var open = state.openId === l.id;
     var wm = warmth(l);
+    var invHtml = ''; var _inv = fbInvest(l);
+    if (_inv) invHtml = '<div style="font-size:12px;color:#f59e0b;font-weight:700;margin-top:1px">💰 '+esc(_inv)+'</div>';
+    var blBadge = l.blacklisted ? '<span class="ob-bl" title="POZOR: kontakt je na black listu — neoslovovat!" onclick="event.stopPropagation();alert(\'⚠ POZOR: tento kontakt je na BLACK LISTU — neoslovovat!\')">❗</span>' : '';
     var subParts = [];
     if (l.email) subParts.push(esc(l.email));
     if (l.phone) subParts.push(esc(l.phone));
@@ -709,7 +750,7 @@
     return '<div class="card'+(open?' open':'')+(laToday?' today':'')+'" id="card-'+l.id+'">' +
       '<div class="card-main" onclick="toggle('+l.id+')">' +
         '<span class="dot" style="background:'+st.c+'"></span>' +
-        '<div class="card-body"><div class="card-name">'+esc(l.name||l.email)+(l.extra_offers?' <span title="Individuální nabídka lokalit">🎯</span>':'')+'</div><div class="card-sub">'+(subHtml||'—')+'</div>'+(laToday?'<div style="font-size:11px;color:#22c55e;margin-top:2px">Poslední aktivita: '+fmtD(laDate)+'</div>':'')+'</div>' +
+        '<div class="card-body"><div class="card-name">'+esc(l.name||l.email)+blBadge+(l.extra_offers?' <span title="Individuální nabídka lokalit">🎯</span>':'')+'</div>'+invHtml+'<div class="card-sub">'+(subHtml||'—')+'</div>'+(laToday?'<div style="font-size:11px;color:#22c55e;margin-top:2px">Poslední aktivita: '+fmtD(laDate)+'</div>':'')+'</div>' +
         '<span class="badge" style="background:'+st.c+'22;color:'+st.c+'">'+st.l+'</span>' +
         '<span class="gear" onclick="event.stopPropagation();openEdit('+l.id+')" title="Upravit údaje kontaktu">⚙️</span>' +
         '<span class="chev">▸</span>' +
@@ -730,6 +771,7 @@
           (l.email ? '' : '<div style="color:var(--muted2);font-size:12px;margin-top:4px">Kontakt nemá e-mail — e-mailem nelze odeslat.</div>') +
           '<div id="access-info-'+l.id+'" style="font-size:12px;color:var(--muted);margin-top:6px">'+accInfo+'</div>' +
           '<div id="access-msg-'+l.id+'" style="font-size:12px;margin-top:4px"></div>' +
+          obVersionField(l) +
           '<div style="margin-top:10px;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted2)">Viditelné sekce portálu</div>' + secBoxes +
           '<div style="margin-top:10px;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted2)">Vzory smluv ke čtení (mustr)</div>' + tplBoxes +
         '</div>' +
