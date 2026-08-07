@@ -24,6 +24,8 @@
   .top h1{font-size:18px;margin:0;font-weight:700}
   .who{font-size:12px;color:var(--muted)}
   .logout{background:transparent;border:1px solid var(--line);color:var(--muted);border-radius:999px;padding:7px 12px;font-size:12px;cursor:pointer}
+  .desktop-only{display:none}
+  @media(min-width:700px){ .desktop-only{display:inline-block} }
   .search{margin-top:10px;width:100%;background:var(--surface2);border:1px solid var(--line);border-radius:10px;padding:11px 12px;color:var(--text);font-size:15px}
   .chips{display:flex;gap:8px;overflow-x:auto;padding:12px 16px 4px;scrollbar-width:none}
   .chips::-webkit-scrollbar{display:none}
@@ -117,6 +119,7 @@
         <div class="who" id="who">…</div>
       </div>
       <div style="display:flex;gap:8px;align-items:center">
+        <a href="import-kontaktu.html" class="logout desktop-only" style="text-decoration:none" title="Import kontaktů (jen na PC)">&#128228; Import</a>
         <button class="logout" onclick="appRefresh()" title="Obnovit data">&#128260; Obnovit</button>
         <button class="logout" onclick="openSettings()" title="Nastavení notifikací">⚙️ Notifikace</button>
         <button class="logout" onclick="doLogout()">Odhlásit</button>
