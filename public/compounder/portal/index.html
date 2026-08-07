@@ -108,6 +108,8 @@ table.t td:first-child{color:var(--text)}
 .tile{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:20px}
 .tile h4{font-size:15px;font-weight:600;margin-bottom:8px}
 .tile p{font-size:13.5px;color:var(--muted)}
+@keyframes ekoGlow { 0%,100% { box-shadow: 0 0 26px 3px rgba(201,162,75,0.45), 0 0 60px 10px rgba(201,162,75,0.18), 0 12px 40px rgba(0,0,0,0.45); } 50% { box-shadow: 0 0 52px 10px rgba(230,190,110,0.85), 0 0 110px 26px rgba(201,162,75,0.4), 0 12px 40px rgba(0,0,0,0.45); } }
+#eko-ver-photo { animation: ekoGlow 2.6s ease-in-out infinite; }
 .tile .ic{color:var(--gold);font-size:13px;letter-spacing:.16em;text-transform:uppercase;margin-bottom:10px}
 .soon{display:inline-block;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--gold-soft);border:1px solid rgba(201,162,75,.35);border-radius:999px;padding:4px 10px;margin-left:8px}
 .ph{border:1px dashed var(--line);border-radius:14px;padding:36px;text-align:center;color:var(--muted-2);font-size:14px}
@@ -295,7 +297,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
       </div>
     </section>
     <section class="blk" id="ekonomika">
-      <img id="eko-ver-photo" alt="Compounder" onclick="ekoPhotoZoom()" title="Klikněte pro zvětšení" style="display:none;float:right;width:300px;max-width:42%;aspect-ratio:4/3;object-fit:cover;object-position:center;background:rgba(255,255,255,0.04);border-radius:18px;border:1px solid rgba(201,162,75,0.55);box-shadow:0 0 30px rgba(201,162,75,0.22), 0 10px 40px rgba(0,0,0,0.42);margin:6px 6px 16px 22px;cursor:zoom-in">
+      <img id="eko-ver-photo" alt="Compounder" onclick="ekoPhotoZoom()" title="Klikněte pro zvětšení" style="display:none;float:right;width:300px;max-width:42%;aspect-ratio:4/3;object-fit:cover;object-position:center;background:rgba(255,255,255,0.04);border-radius:18px;border:1px solid rgba(201,162,75,0.7);margin:10px 12px 18px 22px;cursor:zoom-in">
       <div class="eyebrow" data-i18n="p.eko.eyebrow">Economics</div>
       <h2 data-i18n="p.eko.title" style="display:inline">Economics of one Compounder</h2> <span id="eko-ver-badge" style="font-size:0.9em;color:var(--gold,#c9a24b);font-weight:800;margin-left:6px"></span>
       <p class="lead" data-i18n="p.eko.lead">A live model. Yellow fields are inputs — adjust them to your location and instantly see revenue, profit and payback. Figures are indicative.</p>
