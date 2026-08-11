@@ -811,7 +811,7 @@
         '<div class="field" style="margin-top:8px"><button class="btn btn-g" style="width:100%" onclick="meetingFromLead('+l.id+')">📅 Naplánovat schůzku</button></div>' +
         (l.phone ? '<div class="field" style="margin-top:6px"><button class="btn btn-g" style="width:100%" onclick="saveContact('+l.id+')">💾 Uložit kontakt do telefonu</button></div>' : '') +
         '<div style="font-size:12px;margin-top:8px;color:'+(laToday?'#22c55e':'var(--muted)')+'">Poslední aktivita: '+(laDate?fmtD(laDate):'—')+'</div>' +
-        '<div class="field"><label>Stav</label>'+statusSel+'</div>' +
+        '<div class="field" style="background:rgba(234,179,8,0.10);border:1px solid rgba(234,179,8,0.55);border-radius:12px;padding:12px;margin-top:8px"><label style="color:#eab308;font-weight:700">🏷️ Stav</label>'+statusSel+'</div>' +
         '<div class="field"><label>Portál</label>' +
           '<button class="btn btn-g" style="width:100%"'+(l.email?'':' disabled')+' onclick="sendAccess('+l.id+')">✉️ Odeslat přístup e-mailem</button>' +
           (l.phone ? '<button class="btn" style="width:100%;margin-top:6px;background:#25D366;color:#0a2e17;font-weight:700" onclick="sendAccessWA('+l.id+')">🟢 Poslat přístup na WhatsApp</button>' : '<div style="color:var(--muted2);font-size:12px;margin-top:4px">WhatsApp: kontakt nemá telefon.</div>') +
