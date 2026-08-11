@@ -120,7 +120,7 @@
       </div>
       <div style="display:flex;gap:8px;align-items:center">
         <a href="import-kontaktu.html" class="logout desktop-only" style="text-decoration:none" title="Import kontaktů (jen na PC)">&#128228; Import</a>
-        <button class="logout" onclick="appRefresh()" title="Obnovit data">&#128260; Obnovit</button>
+        <button class="logout" onclick="appRefresh(this)" title="Obnovit data">&#128260; Obnovit</button>
         <button class="logout" onclick="openSettings()" title="Nastavení" style="padding:7px 11px">⚙️</button>
         <button class="logout" onclick="doLogout()">Odhlásit</button>
       </div>
@@ -676,14 +676,18 @@
   function onSearch(){ clearTimeout(searchTimer); searchTimer=setTimeout(function(){ state.search=document.getElementById('search').value.trim(); load(); }, 300); }
 
   // Tiché obnovení dat bez reloadu stránky — zůstane aktivní záložka (Kontakty/Kalendář/Dnes).
-  window.appRefresh = function(){
+  window.appRefresh = async function(btn){
     // Tiché obnovení: zachová otevřený kontakt (state.openId) i pozici scrollu, ať jde porovnat hodnoty.
+    // Zpětná vazba na tlačítku, ať uživatel ví, že refresh proběhl.
     var sy = window.scrollY || document.documentElement.scrollTop || 0;
-    try { load({ silent: true, keepScrollY: sy }); } catch(e){}
+    var orig = btn ? btn.innerHTML : null;
+    if (btn){ btn.disabled = true; btn.innerHTML = '⏳ Obnovuji…'; }
+    try { await load({ silent: true, keepScrollY: sy }); } catch(e){}
     try { if (typeof loadLokalitySec === 'function') loadLokalitySec(); } catch(e){}
     try { if (typeof loadUpcomingMeetings === 'function') loadUpcomingMeetings(); } catch(e){}
     try { window._todayLoaded = false; if (typeof loadToday === 'function') loadToday(); } catch(e){}
     try { var tk = document.getElementById('tab-calendar'); if (tk && tk.classList.contains('active') && window._fcInst && window._fcInst.refetchEvents) window._fcInst.refetchEvents(); } catch(e){}
+    if (btn){ btn.innerHTML = '✓ Hotovo'; setTimeout(function(){ try{ btn.innerHTML = orig; btn.disabled = false; }catch(e){} }, 1000); }
   };
   async function load(opts){
     opts = opts || {};
