@@ -262,7 +262,7 @@
   var CONTRACT_TYPES = [['rezervacni','Rezervační'],['kupni','Kupní'],['servisni','Servisní']];
   var CONTRACT_STATUS = { koncept:'Koncept', odeslano:'Odesláno', vyplneno:'Vyplněno', k_podpisu:'Čeká na náš podpis', podepsano:'Podepsáno' };
   var SPEECH_OK = !!(window.SpeechRecognition || window.webkitSpeechRecognition);
-  var state = { leads:[], filter:'', search:'', openId:null, typeFilter:'all', leadStatusFilter:'' };
+  var state = { leads:[], filter:'', search:'', openId:null, typeFilter:'all', leadStatusFilter:'', calledTodayOnly:false };
 
   function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
   function langCode(l){ return (l||'').toLowerCase().split(/[-_]/)[0]; }
@@ -653,6 +653,19 @@
   window.setType = setType;
   function setLeadStatus(val){ state.leadStatusFilter = val; render(); }
   window.setLeadStatus = setLeadStatus;
+  function setCalledTodayOnly(v){ state.calledTodayOnly = !!v; render(); }
+  window.setCalledTodayOnly = setCalledTodayOnly;
+  // Zaznamená kliknutí na „Volat" (poslední pokus o hovor) — tel: odkaz proběhne normálně.
+  async function markCalled(id){
+    var lead = state.leads.find(function(x){ return x.id===id; });
+    try {
+      var r = await api('/leads/'+id+'/called', { method:'POST' });
+      var j = await r.json().catch(function(){return {};});
+      if (lead) lead.last_called_at = (j && j.last_called_at) || new Date().toISOString();
+    } catch(e){ if (lead) lead.last_called_at = new Date().toISOString(); }
+    render();
+  }
+  window.markCalled = markCalled;
   var searchTimer=null;
   function onSearch(){ clearTimeout(searchTimer); searchTimer=setTimeout(function(){ state.search=document.getElementById('search').value.trim(); load(); }, 300); }
 
@@ -683,6 +696,8 @@
     if (!leads.length){ box.innerHTML = '<div class="empty">Zatím žádné přiřazené kontakty.</div>'; return; }
     var f = state.leadStatusFilter || '';
     var filtered = f ? leads.filter(function(l){ return (l.status||'new') === f; }) : leads;
+    if (state.calledTodayOnly) filtered = filtered.filter(function(l){ return l.last_called_at && isTodayD(new Date(l.last_called_at)); });
+    var calledTodayCount = leads.filter(function(l){ return l.last_called_at && isTodayD(new Date(l.last_called_at)); }).length;
     var opts = '<option value="">Všechny stavy ('+leads.length+')</option>' +
       Object.keys(STATUS).map(function(k){
         var n = leads.filter(function(l){ return (l.status||'new') === k; }).length;
@@ -691,7 +706,8 @@
     var head = '<div style="display:flex;align-items:center;gap:8px;margin:14px 12px 8px;flex-wrap:wrap">' +
       '<span style="font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">🌐 Compounder kontakty</span>' +
       '<span style="background:var(--primary);color:#04121e;border-radius:10px;padding:1px 8px;font-size:12px">'+leads.length+'</span>' +
-      '<select onchange="setLeadStatus(this.value)" style="margin-left:auto">'+opts+'</select>' +
+      '<button onclick="setCalledTodayOnly('+(!state.calledTodayOnly)+')" title="Zobrazit jen dnes volané" style="margin-left:auto;font-size:12px;padding:5px 11px;border-radius:999px;cursor:pointer;border:1px solid '+(state.calledTodayOnly?'#a78bfa':'var(--line)')+';background:'+(state.calledTodayOnly?'rgba(167,139,250,0.18)':'transparent')+';color:'+(state.calledTodayOnly?'#a78bfa':'var(--muted)')+'">📞 Dnes volané'+(calledTodayCount?' ('+calledTodayCount+')':'')+'</button>' +
+      '<select onchange="setLeadStatus(this.value)">'+opts+'</select>' +
       '</div>';
     var listHtml = filtered.length
       ? ('<div class="list">' + filtered.map(cardHtml).join('') + '</div>')
@@ -744,6 +760,9 @@
     var invHtml = ''; var _inv = fbInvest(l);
     if (_inv) invHtml = '<div style="font-size:12px;color:#f59e0b;font-weight:700;margin-top:1px">💰 '+esc(_inv)+'</div>';
     var blBadge = l.blacklisted ? '<span class="ob-bl" title="POZOR: kontakt je na black listu — neoslovovat!" onclick="event.stopPropagation();alert(\'⚠ POZOR: tento kontakt je na BLACK LISTU — neoslovovat!\')">❗</span>' : '';
+    var calledDate = l.last_called_at ? new Date(l.last_called_at) : null;
+    var calledToday = isTodayD(calledDate);
+    var calledBadge = calledToday ? '<div style="font-size:11px;color:#a78bfa;font-weight:700;margin-top:2px">📞 Dnes voláno '+('0'+calledDate.getHours()).slice(-2)+':'+('0'+calledDate.getMinutes()).slice(-2)+'</div>' : '';
     var subParts = [];
     if (l.email) subParts.push(esc(l.email));
     if (l.phone) subParts.push(esc(l.phone));
@@ -763,14 +782,14 @@
     return '<div class="card'+(open?' open':'')+(laToday?' today':'')+'" id="card-'+l.id+'">' +
       '<div class="card-main" onclick="toggle('+l.id+')">' +
         '<span class="dot" style="background:'+st.c+'"></span>' +
-        '<div class="card-body"><div class="card-name">'+esc(l.name||l.email)+blBadge+(l.extra_offers?' <span title="Individuální nabídka lokalit">🎯</span>':'')+'</div>'+invHtml+'<div class="card-sub">'+(subHtml||'—')+'</div>'+(laToday?'<div style="font-size:11px;color:#22c55e;margin-top:2px">Poslední aktivita: '+fmtD(laDate)+'</div>':'')+'</div>' +
+        '<div class="card-body"><div class="card-name">'+esc(l.name||l.email)+blBadge+(l.extra_offers?' <span title="Individuální nabídka lokalit">🎯</span>':'')+'</div>'+invHtml+'<div class="card-sub">'+(subHtml||'—')+'</div>'+(laToday?'<div style="font-size:11px;color:#22c55e;margin-top:2px">Poslední aktivita: '+fmtD(laDate)+'</div>':'')+calledBadge+'</div>' +
         '<span class="badge" style="background:'+st.c+'22;color:'+st.c+'">'+st.l+'</span>' +
         '<span class="gear" onclick="event.stopPropagation();openEdit('+l.id+')" title="Upravit údaje kontaktu">⚙️</span>' +
         '<span class="chev">▸</span>' +
       '</div>' +
       '<div class="detail">' +
         '<div class="actions-row" style="margin-top:12px">' +
-          (l.phone ? '<a href="tel:'+esc(telClean)+'">📞 Volat</a>' : '') +
+          (l.phone ? '<a href="tel:'+esc(telClean)+'" onclick="markCalled('+l.id+')">📞 Volat</a>' : '') +
           (waNum ? '<a href="https://wa.me/'+waNum+'" target="_blank" rel="noopener">💬 WhatsApp</a>' : '') +
           (l.phone ? '<a href="sms:'+esc(telClean)+'">📩 SMS</a>' : '') +
           (l.email ? '<a href="mailto:'+esc(l.email)+'">✉️ E-mail</a>' : '') +

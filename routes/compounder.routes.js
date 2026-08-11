@@ -1552,6 +1552,16 @@ router.post('/leads/:id/access-link', requireAuth, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// POST /api/compounder/leads/:id/called — zaznamená kliknutí na „Volat" (poslední pokus o hovor).
+router.post('/leads/:id/called', requireAuth, async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'Neplatné ID' });
+    const upd = await prisma.compounderLead.update({ where: { id }, data: { last_called_at: new Date() }, select: { last_called_at: true } });
+    res.json({ ok: true, last_called_at: upd.last_called_at });
+  } catch (err) { next(err); }
+});
+
 // POST /api/compounder/leads/:id/activity-log — přidá řádek do append-only logu aktivit.
 router.post('/leads/:id/activity-log', requireAuth, async (req, res, next) => {
   try {
