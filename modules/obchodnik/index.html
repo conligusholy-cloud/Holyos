@@ -820,8 +820,7 @@
           '<div style="margin-top:10px;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted2)">Viditelné sekce portálu</div>' + secBoxes +
           '<div style="margin-top:10px;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted2)">Vzory smluv ke čtení (mustr)</div>' + tplBoxes +
         '</div>' +
-        '<div class="field"><label>Nabídka lokalit'+(l.extra_offers?' 🎯':'')+'</label><button class="btn btn-g" style="width:100%" onclick="showOffer('+l.id+')">👁️ Zobrazit nabídku, co lead vidí</button></div>' +
-        '<div class="field"><label>Zaznamenat aktivitu</label>' +
+        '<div class="field" style="background:rgba(59,130,246,0.12);border:1px solid rgba(59,130,246,0.55);border-radius:12px;padding:12px;margin-top:10px"><label style="color:#60a5fa;font-weight:700">📝 Zaznamenat aktivitu</label>' +
           '<div class="quick"><input class="qinput" id="act-'+l.id+'" placeholder="Zavolal jsem, má zájem…"><button class="btn btn-p" onclick="addActivity('+l.id+')">Přidat</button></div>' +
           '<div style="display:flex;gap:8px;margin-top:8px">' +
             (SPEECH_OK ? '<button class="btn btn-g" style="flex:1" id="mic-'+l.id+'" onclick="dictate('+l.id+')">🎤 Diktovat</button>' : '') +
@@ -829,6 +828,7 @@
           '</div>' +
           '<div style="font-size:11px;color:var(--muted2);margin-top:4px">🎙️ Diktovat můžeš i mikrofonem na klávesnici telefonu (funguje na iOS i Androidu).</div>' +
         '</div>' +
+        '<div class="field"><label>Nabídka lokalit'+(l.extra_offers?' 🎯':'')+'</label><button class="btn btn-g" style="width:100%" onclick="showOffer('+l.id+')">👁️ Zobrazit nabídku, co lead vidí</button></div>' +
         '<div class="field"><label>Aktivity</label><div id="actlog-'+l.id+'" class="note-log">'+(l.activity_log ? esc(l.activity_log) : 'Zatím žádná aktivita.')+'</div></div>' +
         '<div class="field"><label>Poznámky <span class="saved" id="saved-'+l.id+'"></span></label><textarea id="notes-'+l.id+'" placeholder="Sem si napiš cokoli…" onblur="setField('+l.id+',\'notes\',this.value)">'+esc(l.notes||'')+'</textarea></div>' +
         '<div class="field"><label>Cesta zákazníka / analytika</label><div id="journey-'+l.id+'" class="note-log">Načítám…</div></div>' +
