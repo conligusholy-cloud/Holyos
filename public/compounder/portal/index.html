@@ -63,8 +63,8 @@ header.top{padding-top:env(safe-area-inset-top)}
   #topClockVal{font-size:14px}
   #topClockMissed{font-size:13px}
   .lang-select{padding:5px 9px}
-  /* subnav sticky offset u 2řádkové hlavičky nespolehlivý → na mobilu neplovoucí */
-  .subnav{position:static;padding:9px 16px}
+  /* subnav zůstává přilepený nahoře i na mobilu; přesné odsazení pod hlavičkou dopočítá JS (syncSubnavTop). */
+  .subnav{position:sticky;padding:9px 16px}
   #statusPanel,#docsPanel{top:78px !important;right:8px !important;width:min(390px,94vw) !important}
   .wrap{padding:0 16px}
   section.blk{padding:36px 0}
@@ -1768,6 +1768,13 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
   }
 
   function val(id){ var el = document.getElementById(id); if(!el) return 0; var v = parseFloat(String(el.value).replace(/[\s ]/g,'').replace(',', '.')); return isNaN(v) ? 0 : v; }
+  // Přilepený subnav: odsazení pod (proměnlivě vysokou) hlavičkou dopočítáme dynamicky.
+  function syncSubnavTop(){ try{ var h=document.querySelector('header.top'); var s=document.querySelector('.subnav'); if(h&&s){ s.style.top = (h.offsetHeight||0) + 'px'; } }catch(e){} }
+  window.syncSubnavTop = syncSubnavTop;
+  window.addEventListener('resize', syncSubnavTop);
+  window.addEventListener('orientationchange', function(){ setTimeout(syncSubnavTop, 200); });
+  window.addEventListener('load', function(){ syncSubnavTop(); setTimeout(syncSubnavTop, 400); });
+
   // Oddělení tisíců (mezera) v peněžních polích ekonomiky. i-spend má 2 desetinná místa.
   function ekoFmtMoney(){
     ['i-machine','i-permit','i-conn','i-cost'].forEach(function(id){
@@ -1812,6 +1819,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
     }).catch(function(){ try{ if(typeof PCUR!=='undefined' && PCUR && PCUR!==EKO_CUR) ekoSetCur(PCUR); }catch(e){} });
     fetch('/api/compounder/portal/machines').then(function(r){ return r.json(); }).then(function(j){ (j&&j.machines||[]).forEach(function(m){ if(m&&m.ver&&m.photo) EKO_VER_PHOTOS[m.ver]=m.photo; }); ekoRenderVerPhoto(); }).catch(function(){});
     recalc(); ekoFmtMoney(); ekoRenderVerSwitch(); ekoRenderVerBadge(); ekoRenderVerPhoto();
+    try{ syncSubnavTop(); setTimeout(syncSubnavTop, 300); }catch(e){}
   }
   // ——— Měna modelu (přepočet celého modelu dle kurzu ČNB) ———
   var EKO_CUR = 'EUR';
