@@ -1399,6 +1399,7 @@ router.post('/sales/generate-day', requireAuth, async (req, res, next) => {
     if (personId !== salesMyPersonId(req) && !salesIsMgr(u)) return res.status(403).json({ error: 'Jen vedoucí/admin' });
     const dateStr = String(b.date || todayStr()).slice(0, 10);
     const r = await salesMgr.planDay(personId, dateStr, { force: !!b.force });
+    if (!r) return res.status(502).json({ ok: false, error: 'AI se teď nepodařilo vygenerovat plán. Zkus to prosím za chvíli znovu.' });
     res.json({ ok: true, created: r.created, skipped: r.skipped, plan: r.plan });
   } catch (err) { next(err); }
 });

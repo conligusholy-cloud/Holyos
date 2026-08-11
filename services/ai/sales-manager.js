@@ -16,6 +16,18 @@ const { prisma } = require('../../config/database');
 
 const TZ = process.env.VELIN_TZ || 'Europe/Prague';
 const MODEL = process.env.SALES_MANAGER_MODEL || process.env.COMPOUNDER_LOCATION_MODEL || 'claude-sonnet-4-6';
+// Záložní ověřený model — když primární selže (neplatný model / chyba), zkusíme tenhle.
+const FALLBACK_MODEL = process.env.SALES_MANAGER_FALLBACK_MODEL || 'claude-haiku-4-5-20251001';
+
+// Robustní vytažení JSONu z odpovědi (odstraní markdown ploty i případný text okolo).
+function extractJson(text) {
+  if (!text) return null;
+  var t = String(text).replace(/^```(json)?/i, '').replace(/```\s*$/, '').trim();
+  try { return JSON.parse(t); } catch (e) { /* zkusíme vyříznout {...} níže */ }
+  var s = t.indexOf('{'); var e = t.lastIndexOf('}');
+  if (s !== -1 && e > s) { try { return JSON.parse(t.slice(s, e + 1)); } catch (e2) { /* vzdáváme */ } }
+  return null;
+}
 const PAY_CURRENCY = process.env.SALES_PAY_CURRENCY || 'CZK';
 // Pracovní kapacita: Po–Pá, 8 h/den (nastavitelné přes env).
 const WORK_HOURS = Number(process.env.SALES_WORK_HOURS) || 8;
@@ -75,21 +87,27 @@ function periodBounds(kind, refStr) {
 
 // ─── Claude ──────────────────────────────────────────────────────────────────
 async function callClaudeJSON(sys, usr, maxTokens) {
-  if (!process.env.ANTHROPIC_API_KEY) return null;
-  try {
-    const Anthropic = require('@anthropic-ai/sdk');
-    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-    const msg = await client.messages.create({
-      model: MODEL, max_tokens: maxTokens || 1200, system: sys,
-      messages: [{ role: 'user', content: usr }],
-    });
-    let text = (msg && msg.content && msg.content[0] && msg.content[0].text) || '';
-    text = text.replace(/^```(json)?/i, '').replace(/```\s*$/, '').trim();
-    return JSON.parse(text);
-  } catch (e) {
-    console.error('[sales-manager] Claude JSON selhal:', e.message);
-    return null;
+  if (!process.env.ANTHROPIC_API_KEY) { console.error('[sales-manager] Chybí ANTHROPIC_API_KEY.'); return null; }
+  const Anthropic = require('@anthropic-ai/sdk');
+  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  // Zkus primární model; při chybě (např. neplatný model) fallback na ověřený.
+  const models = [MODEL];
+  if (models.indexOf(FALLBACK_MODEL) === -1) models.push(FALLBACK_MODEL);
+  for (var i = 0; i < models.length; i++) {
+    try {
+      const msg = await client.messages.create({
+        model: models[i], max_tokens: maxTokens || 1200, system: sys,
+        messages: [{ role: 'user', content: usr }],
+      });
+      const text = (msg && msg.content && msg.content[0] && msg.content[0].text) || '';
+      const parsed = extractJson(text);
+      if (parsed) return parsed;
+      console.error('[sales-manager] JSON se nepodařilo naparsovat (model ' + models[i] + ').');
+    } catch (e) {
+      console.error('[sales-manager] Claude selhal (model ' + models[i] + '):', e.message);
+    }
   }
+  return null;
 }
 
 // ─── Osoby ─────────────────────────────────────────────────────────────────
