@@ -121,7 +121,7 @@
       <div style="display:flex;gap:8px;align-items:center">
         <a href="import-kontaktu.html" class="logout desktop-only" style="text-decoration:none" title="Import kontaktů (jen na PC)">&#128228; Import</a>
         <button class="logout" onclick="appRefresh()" title="Obnovit data">&#128260; Obnovit</button>
-        <button class="logout" onclick="openSettings()" title="Nastavení notifikací">⚙️ Notifikace</button>
+        <button class="logout" onclick="openSettings()" title="Nastavení" style="padding:7px 11px">⚙️</button>
         <button class="logout" onclick="doLogout()">Odhlásit</button>
       </div>
     </div>
@@ -178,11 +178,16 @@
 
   <div class="modal" id="settings-modal">
     <div class="sheet">
-      <h2>Nastavení notifikací</h2>
-      <p style="font-size:12px;color:var(--muted);margin:0 0 14px">Push notifikace do aplikace Velín na tvůj telefon.</p>
+      <h2>Nastavení</h2>
+      <div style="font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin:2px 0 4px">Notifikace</div>
+      <p style="font-size:12px;color:var(--muted);margin:0 0 10px">Push notifikace do aplikace Velín na tvůj telefon.</p>
       <label style="display:flex;align-items:center;gap:12px;font-size:15px;margin:10px 0;cursor:pointer"><input type="checkbox" id="ns-new" style="width:20px;height:20px;accent-color:var(--primary)"> Nový přidělený kontakt</label>
       <label style="display:flex;align-items:center;gap:12px;font-size:15px;margin:10px 0;cursor:pointer"><input type="checkbox" id="ns-activity" style="width:20px;height:20px;accent-color:var(--primary)"> Aktivita na mém kontaktu (portál)</label>
       <label style="display:flex;align-items:center;gap:12px;font-size:15px;margin:10px 0;cursor:pointer"><input type="checkbox" id="ns-invite" style="width:20px;height:20px;accent-color:var(--primary)"> Neotevřená pozvánka po 12 h</label>
+      <div style="font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin:18px 0 4px;border-top:1px solid var(--line);padding-top:14px">Výchozí seznam po otevření</div>
+      <label style="display:flex;align-items:center;gap:12px;font-size:15px;margin:8px 0;cursor:pointer"><input type="radio" name="ns-deftype" value="all" style="width:20px;height:20px;accent-color:var(--primary)"> Vše</label>
+      <label style="display:flex;align-items:center;gap:12px;font-size:15px;margin:8px 0;cursor:pointer"><input type="radio" name="ns-deftype" value="lokality" style="width:20px;height:20px;accent-color:var(--primary)"> 📍 Lokality</label>
+      <label style="display:flex;align-items:center;gap:12px;font-size:15px;margin:8px 0;cursor:pointer"><input type="radio" name="ns-deftype" value="compounder" style="width:20px;height:20px;accent-color:var(--primary)"> 🌐 Compoundeři</label>
       <div class="actions-row">
         <button class="btn btn-g" style="flex:1" onclick="closeSettings()">Zavřít</button>
         <button class="btn btn-p" style="flex:2" id="ns-save" onclick="saveSettings()">Uložit</button>
@@ -289,6 +294,7 @@
       if (!me || !me.user){ window.location.href = '/login.html?redirect=' + encodeURIComponent(location.pathname); return; }
       var p = me.user.person;
       document.getElementById('who').textContent = p ? ((p.firstName||'')+' '+(p.lastName||'')).trim() : (me.user.displayName||'');
+      try { var _dt = localStorage.getItem('ob.defaultType'); if (_dt && ['all','lokality','compounder'].indexOf(_dt) !== -1) state.typeFilter = _dt; } catch(e){}
       renderChips();
       buildLangOptions();
       await load();
@@ -671,22 +677,26 @@
 
   // Tiché obnovení dat bez reloadu stránky — zůstane aktivní záložka (Kontakty/Kalendář/Dnes).
   window.appRefresh = function(){
-    try { load(); } catch(e){}
+    // Tiché obnovení: zachová otevřený kontakt (state.openId) i pozici scrollu, ať jde porovnat hodnoty.
+    var sy = window.scrollY || document.documentElement.scrollTop || 0;
+    try { load({ silent: true, keepScrollY: sy }); } catch(e){}
     try { if (typeof loadLokalitySec === 'function') loadLokalitySec(); } catch(e){}
     try { if (typeof loadUpcomingMeetings === 'function') loadUpcomingMeetings(); } catch(e){}
     try { window._todayLoaded = false; if (typeof loadToday === 'function') loadToday(); } catch(e){}
     try { var tk = document.getElementById('tab-calendar'); if (tk && tk.classList.contains('active') && window._fcInst && window._fcInst.refetchEvents) window._fcInst.refetchEvents(); } catch(e){}
   };
-  async function load(){
+  async function load(opts){
+    opts = opts || {};
     var box = document.getElementById('content');
-    box.innerHTML = '<div class="loading">Načítám…</div>';
+    if (!opts.silent) box.innerHTML = '<div class="loading">Načítám…</div>';
     try {
       var qs = new URLSearchParams({ status: '', search: state.search }).toString();
       var r = await api('/my-leads?' + qs);
       if (!r.ok) throw new Error('HTTP '+r.status);
       state.leads = await r.json();
-      render();
-    } catch(e){ box.innerHTML = '<div class="err">Nepodařilo se načíst kontakty: '+esc(e.message)+'</div>'; }
+      render(); // otevřená karta zůstane otevřená (řídí state.openId)
+      if (opts.keepScrollY != null) { try { window.scrollTo(0, opts.keepScrollY); setTimeout(function(){ window.scrollTo(0, opts.keepScrollY); }, 60); } catch(e){} }
+    } catch(e){ if (!opts.silent) box.innerHTML = '<div class="err">Nepodařilo se načíst kontakty: '+esc(e.message)+'</div>'; }
   }
 
   function render(){
@@ -1271,6 +1281,9 @@
       document.getElementById('ns-activity').checked = p.contact_activity !== false;
       document.getElementById('ns-invite').checked = p.invite_unopened !== false;
     } catch(e){}
+    // Výchozí seznam (uložený lokálně v telefonu).
+    var dt = 'all'; try { dt = localStorage.getItem('ob.defaultType') || 'all'; } catch(e){}
+    var rb = document.querySelector('input[name="ns-deftype"][value="'+dt+'"]'); if (rb) rb.checked = true;
   }
   function closeSettings(){ document.getElementById('settings-modal').classList.remove('open'); }
   async function saveSettings(){
@@ -1279,6 +1292,8 @@
       contact_activity: document.getElementById('ns-activity').checked,
       invite_unopened: document.getElementById('ns-invite').checked,
     };
+    // Výchozí seznam ulož lokálně a hned aplikuj.
+    try { var sel = document.querySelector('input[name="ns-deftype"]:checked'); if (sel){ localStorage.setItem('ob.defaultType', sel.value); if (typeof setType === 'function') setType(sel.value); } } catch(e){}
     var btn = document.getElementById('ns-save'); btn.disabled = true; btn.textContent = 'Ukládám…';
     try {
       var r = await api('/my-notify-settings', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
