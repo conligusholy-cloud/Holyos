@@ -423,6 +423,7 @@
         </select>
         <input type="text" id="cmp-search" placeholder="Hledat jméno/e-mail…" onkeyup="if(event.key==='Enter')loadCompounderLeads()" style="flex:1; min-width:160px;">
         <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text2);white-space:nowrap;cursor:pointer;"><input type="checkbox" id="cmp-reserved-only" onchange="loadCompounderLeads()"> Jen s rezervací</label>
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text2);white-space:nowrap;cursor:pointer;"><input type="checkbox" id="cmp-discount-only" onchange="loadCompounderLeads()"> 🏷️ Jen ve slevě</label>
         <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text2);white-space:nowrap;cursor:pointer;" title="Zobrazit jen kontakty z FB reklamy"><input type="checkbox" id="cmp-ads-only" onchange="cmpApplyLeadFilters()"> 📢 Jen z reklamy</label>
         <button class="btn" onclick="loadCompounderLeads()">↻ Obnovit</button>
         <button class="btn" onclick="openFbForms()" title="Napojení FB reklam — kontakty z formulářů se přiřadí obchodníkovi a označí kampaní">📢 FB reklamy</button>
@@ -3208,6 +3209,10 @@
         if ((document.getElementById('cmp-reserved-only')||{}).checked) {
           leads = leads.filter(function(l){ return resvMap[l.id]; });
           if (!leads.length) { box.innerHTML = '<div style="color:var(--text2);padding:24px;">Žádný lead s aktivní rezervací kiosku.</div>'; return; }
+        }
+        if ((document.getElementById('cmp-discount-only')||{}).checked) {
+          leads = leads.filter(function(l){ return l.discount && l.discount.active; });
+          if (!leads.length) { box.innerHTML = '<div style="color:var(--text2);padding:24px;">Žádný lead s aktivní slevou.</div>'; return; }
         }
         if (!leads.length) { box.innerHTML = '<div style="color:var(--text2);padding:24px;">Zatím žádné registrace.</div>'; return; }
         _cmpLeadsCache = leads;
