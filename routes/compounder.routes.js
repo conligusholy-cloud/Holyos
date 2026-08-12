@@ -1611,6 +1611,7 @@ router.post('/leads/:id/called', requireAuth, async (req, res, next) => {
     const upd = await prisma.compounderLead.update({ where: { id }, data: { last_called_at: new Date() }, select: { last_called_at: true } });
     // Zapiš do aktivit + strukturovaná událost (začátek hovoru pro měření času u telefonu).
     const pid = salesMyPersonId(req) || null;
+    await _closePrevCall(pid); // uzavři předchozí rozběhnutý hovor (další hovor ho ukončuje)
     try { await prisma.compounderLead.update({ where: { id }, data: { activity_log: _actionStamp('📞 Zavoláno') + (lead && lead.activity_log ? '\n' + lead.activity_log : '') } }); } catch (e) {}
     prisma.compounderEvent.create({ data: { sid: 'sales-action-' + id, event: 'sales_action', props: { lead_id: id, action: 'call', person_id: pid }, path: '/obchodnik' } }).catch(() => {});
     res.json({ ok: true, last_called_at: upd.last_called_at });
@@ -1621,6 +1622,28 @@ router.post('/leads/:id/called', requireAuth, async (req, res, next) => {
 function _actionStamp(text) {
   const d = new Date(); const p = (n) => ('0' + n).slice(-2);
   return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes()) + ' · ' + text;
+}
+
+// Uzavře poslední rozběhnutý hovor obchodníka: spočítá jeho délku (od kliknutí na Volat
+// po tuto akci, strop 15 min — žádný hovor netrvá déle), uloží ji k události a dopíše
+// „⏱ Délka hovoru: X min" do aktivit leada.
+const CALL_CAP_MS = 15 * 60 * 1000;
+async function _closePrevCall(personId) {
+  if (!personId) return;
+  try {
+    const prev = await prisma.compounderEvent.findFirst({
+      where: { event: 'sales_action', props: { path: ['person_id'], equals: personId } },
+      orderBy: { created_at: 'desc' }, select: { id: true, props: true, created_at: true },
+    });
+    if (!prev || !prev.props || prev.props.action !== 'call' || prev.props.dur_min != null) return;
+    const durMin = Math.max(1, Math.round(Math.min(Math.max(0, Date.now() - new Date(prev.created_at).getTime()), CALL_CAP_MS) / 60000));
+    await prisma.compounderEvent.update({ where: { id: prev.id }, data: { props: Object.assign({}, prev.props, { dur_min: durMin }) } }).catch(() => {});
+    const leadId = prev.props.lead_id;
+    if (leadId) {
+      const l = await prisma.compounderLead.findUnique({ where: { id: leadId }, select: { activity_log: true } });
+      if (l) await prisma.compounderLead.update({ where: { id: leadId }, data: { activity_log: _actionStamp('⏱ Délka hovoru: ' + durMin + ' min') + (l.activity_log ? '\n' + l.activity_log : '') } }).catch(() => {});
+    }
+  } catch (e) { /* best-effort */ }
 }
 
 // POST /api/compounder/leads/:id/action {action,label} — zaznamená kliknutí na akční tlačítko
@@ -1635,6 +1658,7 @@ router.post('/leads/:id/action', requireAuth, async (req, res, next) => {
     const pid = salesMyPersonId(req) || null;
     const lead = await prisma.compounderLead.findUnique({ where: { id }, select: { activity_log: true } });
     if (!lead) return res.status(404).json({ error: 'Lead nenalezen' });
+    await _closePrevCall(pid); // tato akce ukončuje případný rozběhnutý hovor → zapíše jeho délku
     try { await prisma.compounderLead.update({ where: { id }, data: { activity_log: _actionStamp(label) + (lead.activity_log ? '\n' + lead.activity_log : '') } }); } catch (e) {}
     prisma.compounderEvent.create({ data: { sid: 'sales-action-' + id, event: 'sales_action', props: { lead_id: id, action, person_id: pid }, path: '/obchodnik' } }).catch(() => {});
     res.json({ ok: true });
@@ -2925,7 +2949,7 @@ const COMPOUNDING_SETTINGS_DEFAULT = {
   externalMarkupPct: 20,
   // Sleva: zvlášť na vstupní cenu prádlomatu (V2/V3/V4) a na cenu lokality.
   // validDays = počet dní platnosti od vytvoření přístupu leada do portálu.
-  discount: { machinePct: { v2: 0, v3: 0, v4: 0 }, locationPct: 0, validDays: 7 },
+  discount: { enabledForAll: false, machinePct: { v2: 0, v3: 0, v4: 0 }, locationPct: 0, validDays: 7 },
 };
 
 const compoundingSettingsSchema = z.object({
@@ -2952,6 +2976,7 @@ const compoundingSettingsSchema = z.object({
   externalCommissionLocationPct: z.number().min(0).max(100).optional(),
   externalMarkupPct: z.number().min(0).max(1000).optional(),
   discount: z.object({
+    enabledForAll: z.boolean().optional(),
     machinePct: z.object({ v2: z.number().min(0).max(100), v3: z.number().min(0).max(100), v4: z.number().min(0).max(100) }).partial().optional(),
     locationPct: z.number().min(0).max(100).optional(),
     validDays: z.number().int().min(0).max(3650).optional(),
@@ -2994,6 +3019,7 @@ router.get('/compounding-settings', requireAuth, async (req, res, next) => {
         var d = (val && val.discount && typeof val.discount === 'object') ? val.discount : {};
         var m = (d.machinePct && typeof d.machinePct === 'object') ? d.machinePct : {};
         return {
+          enabledForAll: !!d.enabledForAll,
           machinePct: {
             v2: Number.isFinite(m.v2) ? m.v2 : 0,
             v3: Number.isFinite(m.v3) ? m.v3 : 0,
@@ -3047,15 +3073,23 @@ function effectiveDiscount(lead, cs) {
   const hasAny = machinePct.v2 > 0 || machinePct.v3 > 0 || machinePct.v4 > 0 || locationPct > 0;
   const now = Date.now();
   let active = false, endsAt = null, mode = 'auto';
+  const enabledForAll = !!disc.enabledForAll;
   if (lead && lead.discount_disabled) { mode = 'off'; active = false; endsAt = null; }
   else if (lead && lead.discount_permanent) { mode = 'permanent'; active = true; endsAt = null; }
-  else {
+  else if (lead && lead.discount_until) {
+    // Individuální prodloužení (má přednost i když globálně vypnuto).
+    const endMs = new Date(lead.discount_until).getTime();
+    endsAt = new Date(endMs); active = now <= endMs; mode = 'extended';
+  } else if (enabledForAll) {
+    // Automaticky pro všechny leady — od vytvoření přístupu do portálu + platnost dní.
     const start = leadDiscountStart(lead);
     const autoEnd = start ? (new Date(start).getTime() + validDays * 86400000) : null;
-    const endMs = (lead && lead.discount_until) ? new Date(lead.discount_until).getTime() : autoEnd;
-    endsAt = endMs ? new Date(endMs) : null;
-    active = endMs != null ? (now <= endMs) : false;
-    mode = (lead && lead.discount_until) ? 'extended' : 'auto';
+    endsAt = autoEnd ? new Date(autoEnd) : null;
+    active = autoEnd != null ? (now <= autoEnd) : false;
+    mode = 'auto';
+  } else {
+    // Globálně vypnuto a lead nemá individuální slevu → žádná sleva.
+    mode = 'off-default'; active = false; endsAt = null;
   }
   if (!hasAny) active = false; // žádná sleva nenastavena v Compounding
   return { active, mode, endsAt, machinePct, locationPct, validDays };

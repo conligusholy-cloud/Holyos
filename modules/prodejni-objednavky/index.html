@@ -5723,6 +5723,7 @@
       var dV2 = Number.isFinite(_dM.v2) ? _dM.v2 : 0, dV3 = Number.isFinite(_dM.v3) ? _dM.v3 : 0, dV4 = Number.isFinite(_dM.v4) ? _dM.v4 : 0;
       var dLoc = Number.isFinite(_disc.locationPct) ? _disc.locationPct : 0;
       var dDays = Number.isFinite(_disc.validDays) ? _disc.validDays : 7;
+      var dAll = !!_disc.enabledForAll;
       function discPct(id, val, label) {
         return '<div style="display:flex;align-items:center;gap:5px;">' +
           '<span style="font-size:12px;color:var(--text2);width:22px;">' + label + '</span>' +
@@ -5778,6 +5779,10 @@
         '<hr style="border:none;border-top:1px solid var(--border);margin:18px 0;">' +
         '<div style="margin-bottom:6px;font-weight:600;font-size:14px;">Sleva</div>' +
         '<div style="color:var(--text2);font-size:12px;margin-bottom:12px;">Zvlášť sleva na vstupní cenu prádlomatu (V2/V3/V4) a zvlášť na cenu lokality. Platí zadaný počet dní od vytvoření přístupu leada do portálu.</div>' +
+        '<label style="display:flex;align-items:center;gap:10px;margin-bottom:12px;cursor:pointer;font-size:14px;">' +
+          '<input type="checkbox" id="kvset-disc-all"' + (dAll ? ' checked' : '') + ' style="width:18px;height:18px;accent-color:#eab308;">' +
+          '<span>Aplikovat slevu automaticky u <b>všech leadů</b> <span style="color:var(--text2);font-size:12px;">(jinak jen u jednotlivě zapnutých z HolyOS / obchodníka)</span></span>' +
+        '</label>' +
         '<div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;flex-wrap:wrap;">' +
           '<div style="width:160px;">Sleva na prádlomat</div>' +
           discPct('kvset-disc-v2', dV2, 'V2') + discPct('kvset-disc-v3', dV3, 'V3') + discPct('kvset-disc-v4', dV4, 'V4') +
@@ -5952,6 +5957,7 @@
       var discDays = parseInt(String((document.getElementById('kvset-disc-days')||{}).value||'').trim(), 10);
       if (!(discDays >= 0 && discDays <= 3650)) { return showErr('Platnost slevy musí být 0 až 3650 dní.'); }
       payload.discount = {
+        enabledForAll: !!(document.getElementById('kvset-disc-all') || {}).checked,
         machinePct: { v2: discClamp('kvset-disc-v2'), v3: discClamp('kvset-disc-v3'), v4: discClamp('kvset-disc-v4') },
         locationPct: discClamp('kvset-disc-loc'),
         validDays: discDays,
