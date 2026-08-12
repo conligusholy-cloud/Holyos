@@ -1717,19 +1717,29 @@ router.get('/my-leads', requireAuth, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// Interní (server generované) session id — NIKDY nejsou návštěva zákazníka na webu.
+// Zákaznické portálové eventy chodí přes beacon s náhodným browser sid; interní
+// akce (hovor, admin, push, loss e-mail, nákup, kontakt) mají prefixovaný sid.
+// Díky tomu se „čas na webu" nepošpiní ani budoucími interními eventy.
+function isInternalSid(sid) {
+  if (!sid) return false;
+  return /^(admin|buy:|contact:|loc:|loss-open-|portal-lead-|push|sales-action-|sales-|access-)/.test(String(sid));
+}
+// Interní eventy, které se NEpočítají jako „poslední aktivita" zákazníka.
+const NON_CUSTOMER_EVENTS = new Set(['admin_model_view', 'loss_email_sent', 'loss_email_open', 'push_open', 'push_dismiss', 'push_action', 'push_sent', 'push_reaction', 'access_sent', 'sales_action']);
+
 // Doplní leads o warmthPct, lastActivityAt, requestedContact, hasPhone (z eventů).
 async function enrichWarmth(leads) {
   if (!leads.length || leads.length > 500) return;
   const ids = leads.map((l) => l.id);
   const evs = await prisma.compounderEvent.findMany({
     where: { OR: ids.map((id) => ({ props: { path: ['lead_id'], equals: id } })) },
-    select: { event: true, props: true, created_at: true },
+    select: { event: true, props: true, created_at: true, sid: true },
     take: 20000,
   });
   // Systémové/admin eventy se NEpočítají jako „poslední aktivita" zákazníka
   // (odeslání pozvánky, push, loss e-mail, náhled modelu adminem) — jinak by to
   // vypadalo, že lead byl na portálu, i když jsme mu jen něco poslali.
-  const SYSTEM_EVENTS = new Set(['admin_model_view', 'loss_email_sent', 'loss_email_open', 'push_open', 'push_dismiss', 'push_action', 'access_sent']);
   const c = {}; const last = {};
   evs.forEach((e) => {
     const lid = e.props && e.props.lead_id; if (lid == null) return;
@@ -1739,7 +1749,8 @@ async function enrichWarmth(leads) {
     else if (e.event === 'location_assess') x.loc++;
     else if (e.event === 'contact_request') x.contact++;
     const t = e.created_at ? new Date(e.created_at).getTime() : 0;
-    if (t && !SYSTEM_EVENTS.has(e.event) && (!last[lid] || t > last[lid])) last[lid] = t;
+    // Poslední aktivita = jen zákaznický event (ne interní akce jako hovor/admin/push).
+    if (t && !NON_CUSTOMER_EVENTS.has(e.event) && !isInternalSid(e.sid) && (!last[lid] || t > last[lid])) last[lid] = t;
   });
   leads.forEach((l) => {
     const x = c[l.id] || { portal: 0, doc: 0, loc: 0, contact: 0 };
@@ -1819,14 +1830,16 @@ router.get('/leads', requireAuth, async (req, res, next) => {
       const todayKey = tzDayKey(Date.now());
       evs.forEach((e) => {
         const lid = e.props && e.props.lead_id; if (lid == null) return;
-        if (e.sid && sidToLead[e.sid] == null) sidToLead[e.sid] = lid;
+        // Do „času na webu" mapujeme jen skutečné browser session (ne interní server sid jako hovor/admin).
+        if (e.sid && !isInternalSid(e.sid) && sidToLead[e.sid] == null) sidToLead[e.sid] = lid;
         const x = c[lid] || (c[lid] = { portal: 0, doc: 0, loc: 0, contact: 0 });
         if (e.event === 'portal_view') x.portal++;
         else if (e.event === 'doc_download') x.doc++;
         else if (e.event === 'location_assess') x.loc++;
         else if (e.event === 'contact_request') x.contact++;
         const t = e.created_at ? new Date(e.created_at).getTime() : 0;
-        if (t && !SYSTEM_EVENTS.has(e.event) && (!last[lid] || t > last[lid])) last[lid] = t;
+        // Poslední aktivita = jen zákaznický event (ne interní akce: hovor/admin/push/loss/access).
+        if (t && !NON_CUSTOMER_EVENTS.has(e.event) && !isInternalSid(e.sid) && (!last[lid] || t > last[lid])) last[lid] = t;
         if (e.event === 'admin_model_view' && t && (!mv[lid] || t > mv[lid])) mv[lid] = t;
       });
       // Čas na webu DNES: počítáme po SESSION (sid). Pro každou session vezmeme dnešní
