@@ -1082,8 +1082,8 @@ router.post('/leads', requireAuth, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// POST /api/compounder/discount/start-all — spustí akční cenu (slevu) VŠEM leadům od teď
-// na dobu validDays z Compounding nastavení. Neshazuje delší/trvalé/vypnuté slevy.
+// POST /api/compounder/discount/start-all — spustí akční cenu (slevu) od DNEŠKA na validDays dní
+// všem leadům, kteří UŽ BYLI NA PORTÁLU (portal_view / register_success). Neshazuje delší/trvalé/vypnuté.
 router.post('/discount/start-all', requireAuth, async (req, res, next) => {
   try {
     const u = req.user || {};
@@ -1092,8 +1092,12 @@ router.post('/discount/start-all', requireAuth, async (req, res, next) => {
     const cs = (await getSetting(COMPOUNDING_SETTINGS_KEY, { type: 'json', defaultValue: COMPOUNDING_SETTINGS_DEFAULT }).catch(() => null)) || {};
     const validDays = (cs.discount && Number.isFinite(cs.discount.validDays)) ? cs.discount.validDays : 7;
     const until = new Date(Date.now() + validDays * 86400000);
+    // Leady, které už byly na portálu.
+    const evs = await prisma.compounderEvent.findMany({ where: { event: { in: ['portal_view', 'register_success'] } }, select: { props: true }, take: 100000 });
+    const ids = Array.from(new Set(evs.map((e) => e.props && e.props.lead_id).filter((v) => Number.isInteger(v))));
+    if (!ids.length) return res.json({ ok: true, updated: 0, until, validDays });
     const r = await prisma.compounderLead.updateMany({
-      where: { is_test: false, discount_disabled: false, discount_permanent: false, OR: [{ discount_until: null }, { discount_until: { lt: until } }] },
+      where: { id: { in: ids }, is_test: false, discount_disabled: false, discount_permanent: false, OR: [{ discount_until: null }, { discount_until: { lt: until } }] },
       data: { discount_until: until },
     });
     res.json({ ok: true, updated: r.count, until, validDays });

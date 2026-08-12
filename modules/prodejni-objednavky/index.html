@@ -426,6 +426,7 @@
         <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text2);white-space:nowrap;cursor:pointer;" title="Zobrazit jen kontakty z FB reklamy"><input type="checkbox" id="cmp-ads-only" onchange="cmpApplyLeadFilters()"> 📢 Jen z reklamy</label>
         <button class="btn" onclick="loadCompounderLeads()">↻ Obnovit</button>
         <button class="btn" onclick="openFbForms()" title="Napojení FB reklam — kontakty z formulářů se přiřadí obchodníkovi a označí kampaní">📢 FB reklamy</button>
+        <button class="btn" onclick="cmpStartDiscountAll(this)" title="Spustí akční cenu (slevu) od dneška všem leadům, kteří už byli na portálu">🏷️ Akce všem</button>
         <button class="btn btn-primary" onclick="openAddLead()">➕ Přidat kontakt</button>
       </div>
       <div id="cmp-summary" style="margin-bottom:14px;"></div>
@@ -2904,6 +2905,17 @@
         }
       }
       return '';
+    }
+    async function cmpStartDiscountAll(btn){
+      if(!confirm('Spustit akční cenu (slevu) od dneška všem leadům, kteří už byli na portálu?\n\nDélka dle nastavení slevy v Compoundingu. Delší/trvalé slevy se nezkrátí.')) return;
+      var old = btn ? btn.textContent : ''; if(btn){ btn.disabled=true; btn.textContent='Spouštím…'; }
+      try{
+        var r = await fetch('/api/compounder/discount/start-all', { method:'POST', credentials:'include' });
+        var j = await r.json().catch(function(){return {};});
+        if(!r.ok){ alert(j.error || 'Nepodařilo se spustit akci.'); }
+        else { alert('Akční cena spuštěna u '+(j.updated||0)+' leadů, platí do '+(j.until? new Date(j.until).toLocaleDateString('cs-CZ') : '—')+' ('+(j.validDays||7)+' dní).'); loadCompounderLeads(); }
+      }catch(e){ alert('Chyba: '+e.message); }
+      finally{ if(btn){ btn.disabled=false; btn.textContent=old; } }
     }
     function openAddLead(){
       document.getElementById('modal-root').innerHTML =
