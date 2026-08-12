@@ -891,6 +891,7 @@
         (l.phone ? '<div class="field" style="margin-top:6px"><button class="btn btn-g" style="width:100%" onclick="saveContact('+l.id+')">💾 Uložit kontakt do telefonu</button></div>' : '') +
         '<div style="font-size:12px;margin-top:8px;color:'+(laToday?'#22c55e':'var(--muted)')+'">Poslední aktivita: '+(laDate?fmtD(laDate):'—')+'</div>' +
         '<div class="field" style="background:rgba(234,179,8,0.10);border:1px solid rgba(234,179,8,0.55);border-radius:12px;padding:12px;margin-top:8px"><label style="color:#eab308;font-weight:700">🏷️ Stav</label>'+statusSel+'</div>' +
+        obDiscHtml(l) +
         '<div class="field"><label>Portál</label>' +
           '<button class="btn btn-g" style="width:100%"'+(l.email?'':' disabled')+' onclick="sendAccess('+l.id+')">✉️ Odeslat přístup e-mailem</button>' +
           (l.phone ? '<button class="btn" style="width:100%;margin-top:6px;background:#25D366;color:#0a2e17;font-weight:700" onclick="sendAccessWA('+l.id+')">🟢 Poslat přístup na WhatsApp</button>' : '<div style="color:var(--muted2);font-size:12px;margin-top:4px">WhatsApp: kontakt nemá telefon.</div>') +
@@ -922,6 +923,43 @@
   }
 
   function toggle(id){ state.openId = (state.openId===id)?null:id; render(); }
+
+  // ── Sleva na leadovi: stav + tlačítka (+7 dní / Trvale / Auto / Vypnout) ──
+  function obDiscHtml(l){
+    var d = l.discount || {};
+    var color, statusTxt;
+    if (d.mode === 'permanent') { statusTxt = 'Trvale zapnuto'; color = '#22c55e'; }
+    else if (d.mode === 'off') { statusTxt = 'Vypnuto'; color = '#ef4444'; }
+    else if (d.active) { statusTxt = 'Platí do ' + (d.endsAt ? new Date(d.endsAt).toLocaleDateString('cs-CZ') : '—'); color = '#22c55e'; }
+    else if (d.mode === 'off-default') { statusTxt = 'Neaktivní (globálně vypnuto)'; color = 'var(--muted)'; }
+    else { statusTxt = 'Vypršela'; color = 'var(--muted)'; }
+    var pct = d.machinePct ? ('stroj '+(d.machinePct.v2||0)+'/'+(d.machinePct.v3||0)+'/'+(d.machinePct.v4||0)+' % · lokalita '+(d.locationPct||0)+' %') : '';
+    return '<div class="field" style="background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.4);border-radius:12px;padding:12px;margin-top:8px">' +
+      '<label style="color:#10b981;font-weight:700">🏷️ Sleva</label>' +
+      '<div style="font-size:13px;color:'+color+';font-weight:600">'+statusTxt+'</div>' +
+      (pct ? '<div style="font-size:11px;color:var(--muted2);margin-top:2px">'+pct+'</div>' : '') +
+      '<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">' +
+        '<button class="btn btn-g" style="flex:1;min-width:88px" onclick="setDiscount('+l.id+',\'extend\')">+7 dní</button>' +
+        '<button class="btn btn-g" style="flex:1;min-width:88px" onclick="setDiscount('+l.id+',\'permanent\')">Trvale</button>' +
+        '<button class="btn btn-g" style="flex:1;min-width:88px" onclick="setDiscount('+l.id+',\'auto\')">Auto</button>' +
+        '<button class="btn btn-g" style="flex:1;min-width:88px" onclick="setDiscount('+l.id+',\'off\')">Vypnout</button>' +
+      '</div></div>';
+  }
+  async function setDiscount(id, action){
+    try {
+      var body = { action: action };
+      if (action === 'extend') body.days = 7;
+      var r = await api('/leads/'+id+'/discount', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+      if (!r.ok) throw new Error('HTTP '+r.status);
+      var data = await r.json();
+      var l = (state.leads||[]).filter(function(x){return x.id===id;})[0];
+      if (l && data.discount) {
+        l.discount = { active:data.discount.active, mode:data.discount.mode, endsAt:data.discount.endsAt||null, machinePct:data.discount.machinePct, locationPct:data.discount.locationPct };
+      }
+      render();
+    } catch(e){ alert('Slevu se nepodařilo změnit.'); }
+  }
+  window.setDiscount = setDiscount;
 
   function accessInfoHtml(l){
     var sent = l.access_sent_count || 0;

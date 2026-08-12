@@ -490,8 +490,12 @@ async function planDay(personId, dateStr, opts) {
     // Regenerace: zahoď staré NESPLNĚNÉ úkoly (done/skipped historii nech), ať se nehromadí duplicity.
     await prisma.salesTask.deleteMany({ where: { day_plan_id: plan.id, status: 'open' } }).catch(() => {});
   }
+  // Nevytvářej znovu úkol, který už dnes byl HOTOVÝ/PŘESKOČENÝ (jinak by po přegenerování „ožil").
+  const doneToday = await prisma.salesTask.findMany({ where: { day_plan_id: plan.id, status: { in: ['done', 'skipped'] } }, select: { kind: true, lead_id: true, title: true } }).catch(() => []);
+  const doneKeys = new Set(doneToday.map((t) => t.kind + ':' + (t.lead_id || 0) + ':' + (t.title || '')));
   let created = 0;
   for (const t of out.tasks) {
+    if (doneKeys.has(t.kind + ':' + (t.lead_id || 0) + ':' + (t.title || ''))) continue; // už vyřízený dnes
     await prisma.salesTask.create({ data: { day_plan_id: plan.id, person_id: personId, lead_id: t.lead_id, kind: t.kind, title: t.title, detail: t.detail, reasoning: t.reasoning, priority: t.priority, est_min: t.est_min || null, status: 'open' } });
     created += 1;
   }

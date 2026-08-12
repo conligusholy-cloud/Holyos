@@ -1712,6 +1712,7 @@ router.get('/my-leads', requireAuth, async (req, res, next) => {
     });
     await enrichWarmth(leads);
     await _annotateBlacklist(leads);
+    await annotateDiscount(leads);
     res.json(leads);
   } catch (err) { next(err); }
 });
@@ -1754,6 +1755,19 @@ async function enrichWarmth(leads) {
     l.requestedContact = requested;
     l.hasPhone = !!l.phone;
     l.portalOpened = x.portal > 0;
+  });
+}
+
+// Doplní každému leadovi l.discount = efektivní sleva (podle nastavení + per-lead override).
+async function annotateDiscount(leads) {
+  if (!leads || !leads.length) return;
+  let cs = {};
+  try { cs = (await getSetting(COMPOUNDING_SETTINGS_KEY, { type: 'json', defaultValue: COMPOUNDING_SETTINGS_DEFAULT })) || {}; } catch (e) { /* fallback prázdné */ }
+  leads.forEach((l) => {
+    try {
+      var eff = effectiveDiscount(l, cs);
+      l.discount = { active: eff.active, mode: eff.mode, endsAt: eff.endsAt ? eff.endsAt.toISOString() : null, machinePct: eff.machinePct, locationPct: eff.locationPct };
+    } catch (e) { l.discount = null; }
   });
 }
 
@@ -1885,6 +1899,7 @@ router.get('/leads', requireAuth, async (req, res, next) => {
       } catch (e) { /* AppSetting nemusí existovat */ }
     }
     await _annotateBlacklist(leads);
+    await annotateDiscount(leads);
     res.json(leads);
   } catch (err) {
     next(err);
