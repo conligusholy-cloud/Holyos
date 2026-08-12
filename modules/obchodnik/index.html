@@ -322,7 +322,14 @@
       Object.keys(map.byLead).forEach(function(k){ map.byLead[k].sort(sortf); });
       MEET_UP=map;
       if(lokState.items&&lokState.items.length) renderLokalitySec();
+      try{ if(typeof render==='function' && (state.typeFilter||'all')!=='lokality') render(); }catch(e){} // překresli kontakty, ať se ukáže termín hovoru/schůzky
     }catch(e){}
+  }
+  // Badge nejbližšího naplánovaného hovoru/schůzky u kontaktu (z kalendáře).
+  function obNextEventBadge(leadId){
+    var arr=(MEET_UP&&MEET_UP.byLead&&MEET_UP.byLead[leadId])||[]; if(!arr.length) return '';
+    var e=arr[0]; var isCall=(e.event_type==='call'); var ic=isCall?'📞':'📅'; var lbl=isCall?'Hovor':'Schůzka';
+    return '<div style="font-size:11px;color:#eab308;font-weight:700;margin-top:2px">'+ic+' '+lbl+': '+_meetDT(e.start_at)+(arr.length>1?(' +'+(arr.length-1)+' další'):'')+'</div>';
   }
   function _meetDT(iso){ var dt=new Date(iso); var p=function(n){return(n<10?'0':'')+n;}; return p(dt.getDate())+'.'+p(dt.getMonth()+1)+'. '+p(dt.getHours())+':'+p(dt.getMinutes()); }
   function lokNextBadge(siteId){ var arr=(MEET_UP.bySite&&MEET_UP.bySite[siteId])||[]; if(!arr.length) return ''; var dt=new Date(arr[0].start_at); var p=function(n){return(n<10?'0':'')+n;}; return '<div style="margin-top:4px"><span style="display:inline-block;background:rgba(234,179,8,.18);color:#eab308;border-radius:6px;padding:1px 7px;font-size:11px;font-weight:700">📅 '+p(dt.getDate())+'.'+p(dt.getMonth()+1)+'.'+(arr.length>1?(' +'+(arr.length-1)):'')+'</span></div>'; }
@@ -803,7 +810,7 @@
     return '<div class="card'+(open?' open':'')+(laToday?' today':'')+'" id="card-'+l.id+'">' +
       '<div class="card-main" onclick="toggle('+l.id+')">' +
         '<span class="dot" style="background:'+st.c+'"></span>' +
-        '<div class="card-body"><div class="card-name">'+esc(l.name||l.email)+blBadge+(l.extra_offers?' <span title="Individuální nabídka lokalit">🎯</span>':'')+'</div>'+invHtml+'<div class="card-sub">'+(subHtml||'—')+'</div>'+(laToday?'<div style="font-size:11px;color:#22c55e;margin-top:2px">Poslední aktivita: '+fmtD(laDate)+'</div>':'')+calledBadge+'</div>' +
+        '<div class="card-body"><div class="card-name">'+esc(l.name||l.email)+blBadge+(l.extra_offers?' <span title="Individuální nabídka lokalit">🎯</span>':'')+'</div>'+invHtml+'<div class="card-sub">'+(subHtml||'—')+'</div>'+(laToday?'<div style="font-size:11px;color:#22c55e;margin-top:2px">Poslední aktivita: '+fmtD(laDate)+'</div>':'')+calledBadge+obNextEventBadge(l.id)+'</div>' +
         '<span class="badge" style="background:'+st.c+'22;color:'+st.c+'">'+st.l+'</span>' +
         '<span class="gear" onclick="event.stopPropagation();openEdit('+l.id+')" title="Upravit údaje kontaktu">⚙️</span>' +
         '<span class="chev">▸</span>' +
