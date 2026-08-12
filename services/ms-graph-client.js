@@ -208,6 +208,23 @@ function _toGraphDateTime(d) {
   return { dateTime: iso, timeZone: 'UTC' };
 }
 
+// Vrátí { start, end } ve tvaru Graph dateTimeTimeZone, tak aby konec byl VŽDY po začátku.
+// Bez tohoto Graph vrací 400 ErrorPropertyValidationFailure (konec == začátek u schůzek bez konce).
+function _normalizeRange(startIn, endIn, allDay) {
+  const s = new Date(startIn);
+  let e = endIn ? new Date(endIn) : new Date(s);
+  if (allDay) {
+    const day = (x) => new Date(Date.UTC(x.getUTCFullYear(), x.getUTCMonth(), x.getUTCDate()));
+    const sd = day(s);
+    let ed = day(e);
+    if (!(ed.getTime() > sd.getTime())) ed = new Date(sd.getTime() + 86400000); // konec = další den
+    const fmt = (x) => x.toISOString().slice(0, 10) + 'T00:00:00';
+    return { start: { dateTime: fmt(sd), timeZone: 'UTC' }, end: { dateTime: fmt(ed), timeZone: 'UTC' } };
+  }
+  if (!(e.getTime() > s.getTime())) e = new Date(s.getTime() + 60 * 60000); // bez konce → +60 min
+  return { start: _toGraphDateTime(s), end: _toGraphDateTime(e) };
+}
+
 // Události v rozsahu (calendarView) — vrací pole { id, subject, start, end, location, isAllDay, webLink, organizer }.
 async function listCalendarView(userPrincipalName, startIso, endIso, opts = {}) {
   const { top = 200 } = opts;
@@ -229,11 +246,12 @@ async function listCalendarView(userPrincipalName, startIso, endIso, opts = {}) 
 
 // Vytvoří událost v kalendáři uživatele. ev = { subject, body, start, end, location, allDay, attendees? }.
 async function createCalendarEvent(userPrincipalName, ev) {
+  const range = _normalizeRange(ev.start, ev.end, ev.allDay);
   const payload = {
     subject: ev.subject || '(bez názvu)',
     body: { contentType: 'HTML', content: ev.body || '' },
-    start: ev.allDay ? { dateTime: new Date(ev.start).toISOString().slice(0, 10), timeZone: 'UTC' } : _toGraphDateTime(ev.start),
-    end: ev.allDay ? { dateTime: new Date(ev.end || ev.start).toISOString().slice(0, 10), timeZone: 'UTC' } : _toGraphDateTime(ev.end || ev.start),
+    start: range.start,
+    end: range.end,
     isAllDay: !!ev.allDay,
   };
   if (ev.location) payload.location = { displayName: String(ev.location).slice(0, 500) };
@@ -255,8 +273,8 @@ async function updateCalendarEvent(userPrincipalName, eventId, ev) {
   if (ev.subject != null) payload.subject = ev.subject;
   if (ev.body != null) payload.body = { contentType: 'HTML', content: ev.body };
   if (ev.location != null) payload.location = { displayName: String(ev.location).slice(0, 500) };
-  if (ev.start != null) { payload.start = ev.allDay ? { dateTime: new Date(ev.start).toISOString().slice(0, 10), timeZone: 'UTC' } : _toGraphDateTime(ev.start); payload.isAllDay = !!ev.allDay; }
-  if (ev.end != null) { payload.end = ev.allDay ? { dateTime: new Date(ev.end).toISOString().slice(0, 10), timeZone: 'UTC' } : _toGraphDateTime(ev.end); }
+  if (ev.start != null) { const range = _normalizeRange(ev.start, ev.end, ev.allDay); payload.start = range.start; payload.end = range.end; payload.isAllDay = !!ev.allDay; }
+  else if (ev.end != null) { payload.end = ev.allDay ? { dateTime: new Date(ev.end).toISOString().slice(0, 10) + 'T00:00:00', timeZone: 'UTC' } : _toGraphDateTime(ev.end); }
   if (Array.isArray(ev.attendees)) payload.attendees = ev.attendees.filter(Boolean).map((a) => ({ emailAddress: { address: a }, type: 'required' }));
   const url = `${GRAPH_BASE}/users/${encodeURIComponent(userPrincipalName)}/events/${encodeURIComponent(eventId)}`;
   const r = await fetch(url, { method: 'PATCH', headers: { ...(await authHeaders()), 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
