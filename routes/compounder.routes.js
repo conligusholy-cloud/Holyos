@@ -1321,22 +1321,27 @@ router.get('/my-day', requireAuth, async (req, res, next) => {
       ]);
       stats = { calls, invites, meetings, new_contacts: newContacts };
     } catch (e) { /* statistiky best-effort */ }
-    // Čas u telefonu: součet úseků od kliknutí na „Volat" po další akci (nebo dalším hovorem), strop 15 min/úsek.
+    // Čas strávený u akcí: úsek od každé akce po další (nebo teď), strop 15 min/úsek,
+    // rozpočítaný do kategorií (volání / přístupy / schůzky / ostatní) + celkem.
     stats.time_spent_min = 0;
+    stats.time_by = { calls: 0, access: 0, meetings: 0, other: 0 };
     try {
       const CAP = 15 * 60 * 1000;
       const evs = await prisma.compounderEvent.findMany({
         where: { event: 'sales_action', created_at: { gte: dayStart, lte: dayEnd }, props: { path: ['person_id'], equals: personId } },
-        select: { props: true, created_at: true }, orderBy: { created_at: 'asc' }, take: 3000,
+        select: { props: true, created_at: true }, orderBy: { created_at: 'asc' }, take: 5000,
       });
-      let ms = 0; const nowMs = Date.now();
+      const catOf = (a) => (a === 'call') ? 'calls' : (a === 'send_access' || a === 'copy_link') ? 'access' : (a === 'plan_meeting' || a === 'plan_call') ? 'meetings' : 'other';
+      const byMs = { calls: 0, access: 0, meetings: 0, other: 0 };
+      const nowMs = Date.now();
       for (let i = 0; i < evs.length; i++) {
-        if (!evs[i].props || evs[i].props.action !== 'call') continue;
+        const a = evs[i].props && evs[i].props.action; if (!a) continue;
         const start = new Date(evs[i].created_at).getTime();
         const end = evs[i + 1] ? new Date(evs[i + 1].created_at).getTime() : nowMs;
-        ms += Math.min(Math.max(0, end - start), CAP);
+        byMs[catOf(a)] += Math.min(Math.max(0, end - start), CAP);
       }
-      stats.time_spent_min = Math.round(ms / 60000);
+      stats.time_by = { calls: Math.round(byMs.calls / 60000), access: Math.round(byMs.access / 60000), meetings: Math.round(byMs.meetings / 60000), other: Math.round(byMs.other / 60000) };
+      stats.time_spent_min = stats.time_by.calls + stats.time_by.access + stats.time_by.meetings + stats.time_by.other;
     } catch (e) { /* čas best-effort */ }
     res.json({ ok: true, person_id: personId, date: dateStr, plan: plan || null, review: dayReview || null, prevDayReview: prevDayReview || null, prevDayDate: prevStr, stats });
   } catch (err) { next(err); }
