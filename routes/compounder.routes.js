@@ -1970,7 +1970,9 @@ router.get('/leads', requireAuth, async (req, res, next) => {
         Object.keys(bySid).forEach((sid) => {
           const lid = sidToLead[sid]; if (lid == null) return;
           const rec = bySid[sid];
-          const ms = rec.visitMs > 0 ? rec.visitMs : Math.max(0, rec.max - rec.min);
+          // visit_end se pošle jen jednou (při prvním skrytí tabu), takže podhodnocuje.
+          // Bereme delší z: nahlášený čas relace vs. rozsah eventů relace (první–poslední).
+          const ms = Math.max(rec.visitMs || 0, Math.max(0, rec.max - rec.min));
           todayMs[lid] = (todayMs[lid] || 0) + ms;
         });
       }
