@@ -5591,7 +5591,9 @@ async function buildOfferedLocations(leadId, opts) {
     const payDays = Number.isFinite(cs.reservationPayDays) ? cs.reservationPayDays : 1;
     const reblockDays = Number.isFinite(cs.reservationReblockDays) ? cs.reservationReblockDays : 2;
     // Výchozí měna se řídí jazykem leada: čeština → CZK, jinak EUR (fallback = globální nastavení).
-    const _lead = await prisma.compounderLead.findUnique({ where: { id: leadId }, select: { lang: true, extra_offers: true } }).catch(() => null);
+    const _lead = await prisma.compounderLead.findUnique({ where: { id: leadId }, select: { lang: true, extra_offers: true, discount_until: true, discount_permanent: true, discount_disabled: true, access_last_sent_at: true, created_at: true } }).catch(() => null);
+    // Efektivní sleva leada (cena zadaná v nastavení je PO slevě → neaktivní sleva = cena PŘED slevou).
+    const _disc = effectiveDiscount(_lead || {}, cs);
     const _leadLang = (_lead && _lead.lang) ? _lead.lang.toLowerCase() : null;
     // Individuální nabídka lokalit navíc pro tohoto leada (union se společnou forSale nabídkou).
     const extraSet = new Set(String((_lead && _lead.extra_offers) || '').split(',').map((s) => s.trim().toUpperCase()).filter(Boolean));
@@ -5637,7 +5639,18 @@ async function buildOfferedLocations(leadId, opts) {
         } else {
           locality = Math.round(avg * months);
         }
-        const total = (machine != null && locality != null) ? (machine + locality) : null;
+        // Sleva per-lead: aktivní → promo (zadaná) cena; neaktivní → cena PŘED slevou.
+        //  stroj: zadaná cena je po slevě → neaktivní se dopočítá nahoru o machinePct.
+        //  lokalita: aktivní → −locationPct %, jinak plná (počítaná) cena.
+        let mDisp = machine, lDisp = locality;
+        if (machine != null) {
+          const _mp = (_disc.machinePct && _disc.machinePct[ver]) ? Number(_disc.machinePct[ver]) : 0;
+          mDisp = _disc.active ? machine : ((_mp > 0 && _mp < 100) ? Math.round(machine / (1 - _mp / 100)) : machine);
+        }
+        if (locality != null && _disc.active && _disc.locationPct > 0) {
+          lDisp = Math.round(locality * (1 - _disc.locationPct / 100));
+        }
+        const total = (mDisp != null && lDisp != null) ? (mDisp + lDisp) : null;
         const yearly = Math.round(cisty * 12);
         return {
           code: k.code,
