@@ -1321,6 +1321,23 @@ router.get('/my-day', requireAuth, async (req, res, next) => {
       ]);
       stats = { calls, invites, meetings, new_contacts: newContacts };
     } catch (e) { /* statistiky best-effort */ }
+    // Čas u telefonu: součet úseků od kliknutí na „Volat" po další akci (nebo dalším hovorem), strop 20 min/úsek.
+    stats.time_spent_min = 0;
+    try {
+      const CAP = 20 * 60 * 1000;
+      const evs = await prisma.compounderEvent.findMany({
+        where: { event: 'sales_action', created_at: { gte: dayStart, lte: dayEnd }, props: { path: ['person_id'], equals: personId } },
+        select: { props: true, created_at: true }, orderBy: { created_at: 'asc' }, take: 3000,
+      });
+      let ms = 0; const nowMs = Date.now();
+      for (let i = 0; i < evs.length; i++) {
+        if (!evs[i].props || evs[i].props.action !== 'call') continue;
+        const start = new Date(evs[i].created_at).getTime();
+        const end = evs[i + 1] ? new Date(evs[i + 1].created_at).getTime() : nowMs;
+        ms += Math.min(Math.max(0, end - start), CAP);
+      }
+      stats.time_spent_min = Math.round(ms / 60000);
+    } catch (e) { /* čas best-effort */ }
     res.json({ ok: true, person_id: personId, date: dateStr, plan: plan || null, review: dayReview || null, prevDayReview: prevDayReview || null, prevDayDate: prevStr, stats });
   } catch (err) { next(err); }
 });
@@ -1590,8 +1607,37 @@ router.post('/leads/:id/called', requireAuth, async (req, res, next) => {
   try {
     const id = Number(req.params.id);
     if (!Number.isInteger(id)) return res.status(400).json({ error: 'Neplatné ID' });
+    const lead = await prisma.compounderLead.findUnique({ where: { id }, select: { activity_log: true } });
     const upd = await prisma.compounderLead.update({ where: { id }, data: { last_called_at: new Date() }, select: { last_called_at: true } });
+    // Zapiš do aktivit + strukturovaná událost (začátek hovoru pro měření času u telefonu).
+    const pid = salesMyPersonId(req) || null;
+    try { await prisma.compounderLead.update({ where: { id }, data: { activity_log: _actionStamp('📞 Zavoláno') + (lead && lead.activity_log ? '\n' + lead.activity_log : '') } }); } catch (e) {}
+    prisma.compounderEvent.create({ data: { sid: 'sales-action-' + id, event: 'sales_action', props: { lead_id: id, action: 'call', person_id: pid }, path: '/obchodnik' } }).catch(() => {});
     res.json({ ok: true, last_called_at: upd.last_called_at });
+  } catch (err) { next(err); }
+});
+
+// Časové razítko akce v místním čase: "YYYY-MM-DD HH:MM · <text>".
+function _actionStamp(text) {
+  const d = new Date(); const p = (n) => ('0' + n).slice(-2);
+  return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes()) + ' · ' + text;
+}
+
+// POST /api/compounder/leads/:id/action {action,label} — zaznamená kliknutí na akční tlačítko
+// do aktivit leada + strukturovaně (kvůli měření času u telefonu; ukončuje běžící hovor).
+const ACTION_LABELS = { call: '📞 Zavoláno', plan_call: '📅 Naplánován hovor', send_access: '✉️ Odeslán přístup do portálu', copy_link: '🔗 Zkopírován odkaz do portálu', save_contact: '📇 Uložen kontakt do telefonu', status: '🏷️ Změna stavu', activity: '📝 Aktivita' };
+router.post('/leads/:id/action', requireAuth, async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'Neplatné ID' });
+    const action = String((req.body && req.body.action) || 'other').slice(0, 40);
+    const label = String((req.body && req.body.label) || ACTION_LABELS[action] || action).slice(0, 200);
+    const pid = salesMyPersonId(req) || null;
+    const lead = await prisma.compounderLead.findUnique({ where: { id }, select: { activity_log: true } });
+    if (!lead) return res.status(404).json({ error: 'Lead nenalezen' });
+    try { await prisma.compounderLead.update({ where: { id }, data: { activity_log: _actionStamp(label) + (lead.activity_log ? '\n' + lead.activity_log : '') } }); } catch (e) {}
+    prisma.compounderEvent.create({ data: { sid: 'sales-action-' + id, event: 'sales_action', props: { lead_id: id, action, person_id: pid }, path: '/obchodnik' } }).catch(() => {});
+    res.json({ ok: true });
   } catch (err) { next(err); }
 });
 

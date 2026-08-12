@@ -637,8 +637,11 @@
   window.deleteMeetingFromModal=deleteMeetingFromModal;
   function meetingFromSite(id){ var s=calFindSite(id)||{}; var addr=s.address||[s.zip,s.city].filter(Boolean).join(' ')||''; openMeeting({ title:'Schůzka – '+(s.owner_name||'lokalita'), location:addr, site_id:id, attendees:(s.owner_email||'') }); }
   function meetingFromLead(id){ var l=(state.leads||[]).filter(function(x){return x.id===id;})[0]||{}; openMeeting({ title:'Schůzka – '+(l.name||l.email||'lead'), compounder_lead_id:id, attendees:(l.email||'') }); }
-  function callFromLead(id){ var l=(state.leads||[]).filter(function(x){return x.id===id;})[0]||{}; openMeeting({ _kind:'call', title:'Hovor – '+(l.name||l.email||'lead'), compounder_lead_id:id, attendees:(l.email||'') }); }
+  function callFromLead(id){ obLogAction(id,'plan_call','📅 Naplánován hovor'); var l=(state.leads||[]).filter(function(x){return x.id===id;})[0]||{}; openMeeting({ _kind:'call', title:'Hovor – '+(l.name||l.email||'lead'), compounder_lead_id:id, attendees:(l.email||'') }); }
   window.callFromLead = callFromLead;
+  // Zaznamená kliknutí na akční tlačítko do aktivit leada (fire-and-forget); slouží i k měření času u telefonu.
+  function obLogAction(id, action, label){ try{ api('/leads/'+id+'/action', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:action, label:label }) }); }catch(e){} }
+  window.obLogAction = obLogAction;
   // Odškrtnutí nestihnuté schůzky — vyžaduje poznámku (co je potřeba udělat), pak nastaví stav done.
   async function resolveMeeting(){
     var id=document.getElementById('mt-id').value; if(!id) return;
@@ -917,6 +920,7 @@
       var j = await r.json().catch(function(){return {};});
       if (!r.ok){ if(msg) msg.innerHTML = '<span style="color:#fca5a5">'+esc(j.error||'Chyba')+'</span>'; return; }
       if (msg) msg.innerHTML = '<span style="color:var(--converted)">✓ Přístup odeslán e-mailem.</span>';
+      obLogAction(id,'send_access','✉️ Odeslán přístup do portálu (e-mail)');
       var lead = state.leads.find(function(x){return x.id===id;});
       if (lead){ lead.access_sent_count = (j.access_sent_count!=null? j.access_sent_count : (lead.access_sent_count||0)+1); lead.access_last_sent_at = j.access_last_sent_at || new Date().toISOString(); }
       var info = document.getElementById('access-info-'+id); if (info && lead) info.innerHTML = accessInfoHtml(lead);
@@ -931,6 +935,7 @@
       if (!r.ok){ if(msg) msg.innerHTML = '<span style="color:#fca5a5">'+esc(j.error||'Chyba')+'</span>'; return; }
       window.open('https://wa.me/'+j.phone+'?text='+encodeURIComponent(j.message||''), '_blank');
       if (msg) msg.innerHTML = '<span style="color:var(--converted)">✓ WhatsApp otevřen — odešli zprávu.</span>';
+      obLogAction(id,'send_access','✉️ Odeslán přístup do portálu (WhatsApp)');
       var lead = state.leads.find(function(x){return x.id===id;});
       if (lead){ lead.access_sent_count = (j.access_sent_count!=null? j.access_sent_count : (lead.access_sent_count||0)+1); lead.access_last_sent_at = j.access_last_sent_at || new Date().toISOString(); }
       var info = document.getElementById('access-info-'+id); if (info && lead) info.innerHTML = accessInfoHtml(lead);
@@ -959,6 +964,7 @@
       var iOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
       window.location.href = 'sms:'+num+(iOS?'&':'?')+'body='+body;
       if (msg) msg.innerHTML = '<span style="color:var(--converted)">✓ Otevírám SMS — odešli zprávu.</span>';
+      obLogAction(id,'send_access','✉️ Odeslán přístup do portálu (SMS)');
       _bumpAccess(id, j);
     } catch(e){ if(msg) msg.innerHTML = '<span style="color:#fca5a5">Nepodařilo se připravit SMS.</span>'; }
   }
@@ -971,6 +977,7 @@
       if (!r.ok || !j.url){ if(msg) msg.innerHTML = '<span style="color:#fca5a5">'+esc((j&&j.error)||'Chyba')+'</span>'; return; }
       var ok = await _copyText(j.url);
       if (msg) msg.innerHTML = ok ? '<span style="color:var(--converted)">✓ Odkaz zkopírován — vlož ho do jakékoli zprávy.</span>' : ('<span style="color:var(--muted);word-break:break-all">'+esc(j.url)+'</span>');
+      obLogAction(id,'copy_link','🔗 Zkopírován odkaz do portálu');
       _bumpAccess(id, j);
     } catch(e){ if(msg) msg.innerHTML = '<span style="color:#fca5a5">Nepodařilo se připravit odkaz.</span>'; }
   }
@@ -978,6 +985,7 @@
   // Uloží kontakt do telefonu přes vizitku (.vcf) — po ťuknutí telefon nabídne „Přidat do kontaktů".
   function saveContact(id){
     var l = state.leads.find(function(x){ return x.id===id; }); if (!l || !l.phone) return;
+    obLogAction(id,'save_contact','📇 Uložen kontakt do telefonu');
     function vesc(s){ return String(s==null?'':s).replace(/([,;\\])/g,'\\$1').replace(/\r?\n/g,'\\n'); }
     var name = l.name || l.email || 'Compounder lead';
     var first = l.first_name || '', last = l.last_name || '';
@@ -1163,6 +1171,7 @@
       var r = await api('/leads/'+id, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
       var lead = state.leads.find(function(x){return x.id===id;});
       if (lead) lead[field] = body[field];
+      if (field==='status') obLogAction(id,'status','🏷️ Stav → '+((STATUS[value]&&STATUS[value].l)||value));
       var sv = document.getElementById('saved-'+id); if (sv && field==='notes'){ sv.textContent='uloženo'; setTimeout(function(){sv.textContent='';},1500); }
       if (field==='status' || field==='lang') render();
     } catch(e){}
@@ -1409,6 +1418,9 @@
       var s = (j && j.stats) || {};
       var chip = function(ic,lbl,val,col){ return '<div style="flex:1;min-width:72px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.10);border-radius:10px;padding:8px 6px;text-align:center"><div style="font-size:20px;font-weight:800;color:'+col+'">'+(val||0)+'</div><div style="font-size:11px;color:var(--muted2);margin-top:1px">'+ic+' '+lbl+'</div></div>'; };
       sEl.innerHTML = chip('📞','Volání',s.calls,'#a78bfa') + chip('✉️','Přístupy',s.invites,'#22c55e') + chip('📅','Schůzky',s.meetings,'#eab308') + chip('✨','Nové',s.new_contacts,'#3b82f6');
+      var mins = Number(s.time_spent_min)||0; var hh=Math.floor(mins/60), mm=mins%60;
+      var tstr = hh ? (hh+' h '+mm+' min') : (mm+' min');
+      sEl.innerHTML += '<div style="flex-basis:100%;text-align:center;font-size:12.5px;color:var(--muted2);margin-top:2px">⏱ Čas u telefonu dnes: <span style="color:#a78bfa;font-weight:700">'+tstr+'</span></div>';
     }
     var tasks = (plan && plan.tasks) || [];
     if (!tasks.length){
