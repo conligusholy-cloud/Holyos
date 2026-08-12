@@ -5174,8 +5174,6 @@
           '<td style="text-align:right;white-space:nowrap;font-weight:700;">' + kvMoney(locVal(k), 'CZK') + '</td>' +
           '<td style="text-align:right;white-space:nowrap;color:var(--text2);">' + (_vmRow.machine != null ? kvMoney(_vmRow.machine, 'CZK') : '<span style="color:var(--text2);">—</span>') + '</td>' +
           '<td style="text-align:right;white-space:nowrap;font-weight:700;color:#eab308;">' + (_vmRow.machine != null ? kvMoney(locVal(k) + _vmRow.machine, 'CZK') : '<span style="color:var(--text2);">—</span>') + '</td>' +
-          '<td style="text-align:right;white-space:nowrap;color:var(--text2);">' + (function(){' +
-            '</td>' /* placeholder */ ,
           (function(){
             if (_vmRow.machine == null) return '<td style="text-align:right;color:var(--text2);">—</td>';
             var _dm = (_compoundingSettings.discount && _compoundingSettings.discount.machinePct) || {};
