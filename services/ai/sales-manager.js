@@ -421,6 +421,9 @@ function planDayFallback(ctx) {
 function buildLeadTasks(ctx) {
   const tasks = [];
   const covered = new Set();
+  // Leady s naplánovanou schůzkou/hovorem (dnes i v příštích dnech) — ty se dnes už nevolají.
+  const scheduled = new Set();
+  (ctx.meetings_today || []).concat(ctx.meetings_upcoming_7d || []).forEach((m) => { if (m && m.lead_id) scheduled.add(m.lead_id); });
   // (A) Dnešní schůzky z kalendáře — příprava, per kontakt.
   (ctx.meetings_today || []).forEach((m) => {
     const t = m.when ? new Date(m.when) : null;
@@ -443,6 +446,7 @@ function buildLeadTasks(ctx) {
       tasks.push({ kind: 'invite', title: 'Poslat přístup do portálu – ' + l.name, detail: 'Kontakt má po hovoru zájem — otevři kontakt a odešli přihlašovací odkaz do portálu.', reasoning: 'Kvalifikovaný zájemce zatím bez přístupu.', priority: 2, est_min: 10, lead_id: l.id }); covered.add(l.id); return;
     }
     if (l.called_today) { covered.add(l.id); return; } // dnes už volaný → dnešní hovor je hotový, neplánuj další
+    if (scheduled.has(l.id) || l.status === 'schuzka' || l.status === 'schuzka_online') { covered.add(l.id); return; } // má domluvenou schůzku → dnes se nevolá
     if ((l.days_since_update || 0) >= 7) {
       tasks.push({ kind: 'followup', title: 'Oživit kontakt – ' + l.name, detail: 'Otevři kontakt, přečti poznámky; zavolej, zjisti stav a posuň k schůzce/rezervaci.', reasoning: 'Přes týden beze změny.', priority: 3, est_min: 15, lead_id: l.id }); covered.add(l.id); return;
     }

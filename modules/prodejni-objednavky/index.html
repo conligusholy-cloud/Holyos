@@ -5116,6 +5116,7 @@
         kvTh('lokalita', 'Cena lokality', 'r') +
         kvTh('kiosek', 'Cena kiosku', 'r') +
         kvTh('celkova', 'Celková cena', 'r') +
+        '<th style="text-align:right;white-space:nowrap;color:var(--text2);">Celková cena před slevou</th>' +
         kvTh('servis', 'Servisní smlouva (' + (Number.isFinite(_compoundingSettings.servicePct) ? _compoundingSettings.servicePct : 15) + ' %)', 'r') +
         kvTh('najem', 'Nájem', 'r') +
         kvTh('energie', 'Odhad energií (' + (Number.isFinite(_compoundingSettings.energyPct) ? _compoundingSettings.energyPct : 9.5) + ' %)', 'r') +
@@ -5173,6 +5174,17 @@
           '<td style="text-align:right;white-space:nowrap;font-weight:700;">' + kvMoney(locVal(k), 'CZK') + '</td>' +
           '<td style="text-align:right;white-space:nowrap;color:var(--text2);">' + (_vmRow.machine != null ? kvMoney(_vmRow.machine, 'CZK') : '<span style="color:var(--text2);">—</span>') + '</td>' +
           '<td style="text-align:right;white-space:nowrap;font-weight:700;color:#eab308;">' + (_vmRow.machine != null ? kvMoney(locVal(k) + _vmRow.machine, 'CZK') : '<span style="color:var(--text2);">—</span>') + '</td>' +
+          '<td style="text-align:right;white-space:nowrap;color:var(--text2);">' + (function(){' +
+            '</td>' /* placeholder */ ,
+          (function(){
+            if (_vmRow.machine == null) return '<td style="text-align:right;color:var(--text2);">—</td>';
+            var _dm = (_compoundingSettings.discount && _compoundingSettings.discount.machinePct) || {};
+            var _mp = Number(_dm[(cfg.version||'').toLowerCase()]) || 0;
+            var _mBefore = (_mp > 0 && _mp < 100) ? Math.round(_vmRow.machine / (1 - _mp / 100)) : _vmRow.machine;
+            var _before = locVal(k) + _mBefore;
+            var _same = (_before === (locVal(k) + _vmRow.machine));
+            return '<td style="text-align:right;white-space:nowrap;color:' + (_same ? 'var(--text2)' : '#f59e0b') + ';">' + kvMoney(_before, 'CZK') + (_same ? ' <span style="font-size:10px;color:var(--text2);">(bez slevy)</span>' : '') + '</td>';
+          })() +
           '<td style="text-align:right;white-space:nowrap;color:#ef4444;">' + kvMoney(Math.round(_servis), 'CZK') + _mes + '</td>' +
           '<td style="text-align:right;white-space:nowrap;color:#ef4444;">' + (_najemVal ? (kvMoney(_najemVal, 'CZK') + _mes) : '<span style="color:var(--text2);">—</span>') + '</td>' +
           '<td style="text-align:right;white-space:nowrap;color:#ef4444;">' + kvMoney(Math.round(_energie), 'CZK') + _mes + '</td>' +
