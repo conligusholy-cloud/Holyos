@@ -1321,28 +1321,36 @@ router.get('/my-day', requireAuth, async (req, res, next) => {
       ]);
       stats = { calls, invites, meetings, new_contacts: newContacts };
     } catch (e) { /* statistiky best-effort */ }
-    // Čas strávený u akcí: úsek od každé akce po další (nebo teď), strop 15 min/úsek,
-    // rozpočítaný do kategorií (volání / přístupy / schůzky / ostatní) + celkem.
-    stats.time_spent_min = 0;
-    stats.time_by = { calls: 0, access: 0, meetings: 0, other: 0 };
+    // Odpracováno dnes: reálný/odhadovaný čas napříč aktivitami (volání měřené, přístupy ~2 min,
+    // proběhlé schůzky max 90 min, nové kontakty ~3 min). Nepřekročí realitu jako součet odhadů úkolů.
+    stats.time_by = { calls: 0, access: 0, meetings: 0, new: 0 };
+    stats.worked_min = 0;
     try {
+      // Volání — měřeno z akcí: úsek hovor → další akce, strop 15 min.
       const CAP = 15 * 60 * 1000;
       const evs = await prisma.compounderEvent.findMany({
         where: { event: 'sales_action', created_at: { gte: dayStart, lte: dayEnd }, props: { path: ['person_id'], equals: personId } },
         select: { props: true, created_at: true }, orderBy: { created_at: 'asc' }, take: 5000,
       });
-      const catOf = (a) => (a === 'call') ? 'calls' : (a === 'send_access' || a === 'copy_link') ? 'access' : (a === 'plan_meeting' || a === 'plan_call') ? 'meetings' : 'other';
-      const byMs = { calls: 0, access: 0, meetings: 0, other: 0 };
-      const nowMs = Date.now();
+      let callMs = 0; const nowMs = Date.now();
       for (let i = 0; i < evs.length; i++) {
-        const a = evs[i].props && evs[i].props.action; if (!a) continue;
+        if (!evs[i].props || evs[i].props.action !== 'call') continue;
         const start = new Date(evs[i].created_at).getTime();
         const end = evs[i + 1] ? new Date(evs[i + 1].created_at).getTime() : nowMs;
-        byMs[catOf(a)] += Math.min(Math.max(0, end - start), CAP);
+        callMs += Math.min(Math.max(0, end - start), CAP);
       }
-      stats.time_by = { calls: Math.round(byMs.calls / 60000), access: Math.round(byMs.access / 60000), meetings: Math.round(byMs.meetings / 60000), other: Math.round(byMs.other / 60000) };
-      stats.time_spent_min = stats.time_by.calls + stats.time_by.access + stats.time_by.meetings + stats.time_by.other;
+      const callsMin = Math.round(callMs / 60000);
+      const accessMin = (stats.invites || 0) * 2; // ~2 min na odeslání přístupu
+      let meetMin = 0; // proběhlé schůzky, každá max 90 min
+      try {
+        const held = await prisma.salesEvent.findMany({ where: { organizer_id: personId, event_type: 'meeting', start_at: { gte: dayStart, lte: new Date() } }, select: { start_at: true, end_at: true } });
+        held.forEach((m) => { const dur = m.end_at ? Math.round((new Date(m.end_at) - new Date(m.start_at)) / 60000) : 60; meetMin += Math.max(0, Math.min(dur, 90)); });
+      } catch (e) { /* meetings best-effort */ }
+      const newMin = (stats.new_contacts || 0) * 3; // ~3 min na nový kontakt
+      stats.time_by = { calls: callsMin, access: accessMin, meetings: meetMin, new: newMin };
+      stats.worked_min = callsMin + accessMin + meetMin + newMin;
     } catch (e) { /* čas best-effort */ }
+    stats.time_spent_min = stats.worked_min;
     res.json({ ok: true, person_id: personId, date: dateStr, plan: plan || null, review: dayReview || null, prevDayReview: prevDayReview || null, prevDayDate: prevStr, stats });
   } catch (err) { next(err); }
 });
