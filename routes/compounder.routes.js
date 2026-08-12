@@ -2657,7 +2657,7 @@ router.get('/analytics/summary', requireAuth, async (req, res, next) => {
     });
     // Čas studia = součet přes portálové sessions (přesné ms z visit_end/page_leave, jinak rozsah).
     let todayStudyMs = 0;
-    Object.keys(bySidS).forEach((sid) => { const rec = bySidS[sid]; if (!rec.portal) return; todayStudyMs += rec.visitMs > 0 ? rec.visitMs : Math.max(0, rec.max - rec.min); });
+    Object.keys(bySidS).forEach((sid) => { const rec = bySidS[sid]; if (!rec.portal) return; todayStudyMs += Math.max(rec.visitMs || 0, Math.max(0, rec.max - rec.min)); });
     res.json({
       days,
       sessions: sessionCount,
