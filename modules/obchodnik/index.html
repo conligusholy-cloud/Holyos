@@ -295,6 +295,7 @@
       var me = await (await fetch('/api/auth/me', { credentials:'include' })).json().catch(function(){return null;});
       if (!me || !me.user){ window.location.href = '/login.html?redirect=' + encodeURIComponent(location.pathname); return; }
       var p = me.user.person;
+      window.__perm = { canGiveDiscount: !!(p && p.canGiveDiscount), canAddIndividualOffers: !!(p && p.canAddIndividualOffers), admin: !!(me.user.isSuperAdmin || me.user.role === 'admin') };
       document.getElementById('who').textContent = p ? ((p.firstName||'')+' '+(p.lastName||'')).trim() : (me.user.displayName||'');
       try { var _dt = localStorage.getItem('ob.defaultType'); if (_dt && ['all','lokality','compounder'].indexOf(_dt) !== -1) state.typeFilter = _dt; } catch(e){}
       renderChips();
@@ -912,7 +913,9 @@
           '<div style="margin-top:10px;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted2)">Viditelné sekce portálu</div>' + secBoxes +
           '<div style="margin-top:10px;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted2)">Vzory smluv ke čtení (mustr)</div>' + tplBoxes +
         '</div>' +
-        '<div class="field"><label>Nabídka lokalit'+(l.extra_offers?' 🎯':'')+'</label><button class="btn btn-g" style="width:100%" onclick="showOffer('+l.id+')">👁️ Zobrazit nabídku, co lead vidí</button></div>' +
+        '<div class="field"><label>Nabídka lokalit'+(l.extra_offers?' 🎯':'')+'</label><button class="btn btn-g" style="width:100%" onclick="showOffer('+l.id+')">👁️ Zobrazit nabídku, co lead vidí</button>' +
+          ((window.__perm && (window.__perm.canAddIndividualOffers || window.__perm.admin)) ? '<button class="btn btn-g" style="width:100%;margin-top:6px" onclick="openAddOffer('+l.id+')">➕ Přidat individuální lokalitu</button>' : '') +
+        '</div>' +
         '<div class="field"><label>Aktivity</label><div id="actlog-'+l.id+'" class="note-log">'+(l.activity_log ? esc(l.activity_log) : 'Zatím žádná aktivita.')+'</div></div>' +
         '<div class="field"><label>Poznámky <span class="saved" id="saved-'+l.id+'"></span></label><textarea id="notes-'+l.id+'" placeholder="Sem si napiš cokoli…" onblur="setField('+l.id+',\'notes\',this.value)">'+esc(l.notes||'')+'</textarea></div>' +
         '<div class="field"><label>Cesta zákazníka / analytika</label><div id="journey-'+l.id+'" class="note-log">Načítám…</div></div>' +
@@ -926,6 +929,8 @@
 
   // ── Sleva na leadovi: stav + tlačítka (+7 dní / Trvale / Auto / Vypnout) ──
   function obDiscHtml(l){
+    // Slevu smí měnit jen obchodník s právem (nebo admin) — jinak jen stav bez tlačítek.
+    var _mayDisc = !!(window.__perm && (window.__perm.canGiveDiscount || window.__perm.admin));
     var d = l.discount || {};
     var color, statusTxt;
     if (d.mode === 'permanent') { statusTxt = 'Trvale zapnuto'; color = '#22c55e'; }
@@ -938,12 +943,13 @@
       '<label style="color:#10b981;font-weight:700">🏷️ Sleva</label>' +
       '<div style="font-size:13px;color:'+color+';font-weight:600">'+statusTxt+'</div>' +
       (pct ? '<div style="font-size:11px;color:var(--muted2);margin-top:2px">'+pct+'</div>' : '') +
-      '<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">' +
+      (_mayDisc ? ('<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">' +
         '<button class="btn btn-g" style="flex:1;min-width:88px" onclick="setDiscount('+l.id+',\'extend\')">+7 dní</button>' +
         '<button class="btn btn-g" style="flex:1;min-width:88px" onclick="setDiscount('+l.id+',\'permanent\')">Trvale</button>' +
         '<button class="btn btn-g" style="flex:1;min-width:88px" onclick="setDiscount('+l.id+',\'auto\')">Auto</button>' +
         '<button class="btn btn-g" style="flex:1;min-width:88px" onclick="setDiscount('+l.id+',\'off\')">Vypnout</button>' +
-      '</div></div>';
+      '</div>') : '<div style="font-size:11px;color:var(--muted2);margin-top:6px">Slevu může měnit jen obchodník s oprávněním.</div>') +
+      '</div>';
   }
   async function setDiscount(id, action){
     try {
@@ -1203,6 +1209,29 @@
     }catch(e){ alert('Chyba načítání nabídky.'); }
   }
   window.showOffer = showOffer;
+  // Přidání individuální lokality do nabídky leada (jen s právem can_add_individual_offers).
+  async function openAddOffer(id){
+    var opts;
+    try { opts = await (await api('/kiosk-options', {})).json(); } catch(e){ alert('Nepodařilo se načíst lokality.'); return; }
+    if (!Array.isArray(opts) || !opts.length){ alert('Žádné individuální lokality k dispozici.'); return; }
+    var rows = opts.map(function(o){ return '<div style="cursor:pointer;padding:11px 12px;border:1px solid var(--line);border-radius:10px;background:var(--surface)" onclick="doAddOffer('+id+',\''+esc(String(o.code)).replace(/'/g,'')+'\')"><b>'+esc(o.code)+'</b> · '+esc(o.label||'')+'</div>'; }).join('');
+    var ov = document.createElement('div'); ov.setAttribute('data-addoffer','1');
+    ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:10000;display:flex;align-items:center;justify-content:center;padding:16px';
+    ov.onclick=function(e){ if(e.target===ov) ov.remove(); };
+    ov.innerHTML='<div style="background:#15151a;border:1px solid var(--line);border-radius:12px;max-width:520px;width:100%;max-height:80vh;overflow:auto;padding:16px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><b>Přidat individuální lokalitu</b><button onclick="this.closest(\'[data-addoffer]\').remove()" style="background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer">✕</button></div><div style="display:flex;flex-direction:column;gap:8px">'+rows+'</div></div>';
+    document.body.appendChild(ov);
+  }
+  async function doAddOffer(id, code){
+    try {
+      var r = await api('/leads/'+id+'/offer', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ code: code, action: 'add' }) });
+      if(!r.ok) throw new Error('HTTP '+r.status);
+      var data = await r.json();
+      var l = (state.leads||[]).filter(function(x){return x.id===id;})[0]; if(l) l.extra_offers = data.extra_offers;
+      var ov = document.querySelector('[data-addoffer]'); if(ov) ov.remove();
+      render();
+    } catch(e){ alert('Lokalitu se nepodařilo přidat.'); }
+  }
+  window.openAddOffer = openAddOffer; window.doAddOffer = doAddOffer;
 
   async function aiEval(id){
     var out = document.getElementById('ai-'+id); if (!out) return;

@@ -1082,6 +1082,24 @@ router.post('/leads', requireAuth, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// POST /api/compounder/discount/start-all — spustí akční cenu (slevu) VŠEM leadům od teď
+// na dobu validDays z Compounding nastavení. Neshazuje delší/trvalé/vypnuté slevy.
+router.post('/discount/start-all', requireAuth, async (req, res, next) => {
+  try {
+    const u = req.user || {};
+    const isMgr = u.isSuperAdmin || u.role === 'admin' || (u.person && (u.person.is_sales_lead || u.person.is_salesperson));
+    if (!isMgr) return res.status(403).json({ error: 'Jen obchod nebo admin' });
+    const cs = (await getSetting(COMPOUNDING_SETTINGS_KEY, { type: 'json', defaultValue: COMPOUNDING_SETTINGS_DEFAULT }).catch(() => null)) || {};
+    const validDays = (cs.discount && Number.isFinite(cs.discount.validDays)) ? cs.discount.validDays : 7;
+    const until = new Date(Date.now() + validDays * 86400000);
+    const r = await prisma.compounderLead.updateMany({
+      where: { is_test: false, discount_disabled: false, discount_permanent: false, OR: [{ discount_until: null }, { discount_until: { lt: until } }] },
+      data: { discount_until: until },
+    });
+    res.json({ ok: true, updated: r.count, until, validDays });
+  } catch (err) { next(err); }
+});
+
 // GET /api/compounder/sellers — obchodníci pro přiřazení vlastníka leadu.
 //   Aktivní Person s rolí "Obchodník" nebo "Vedoucí obchodu". Dostupné přihlášenému
 //   internímu uživateli (na rozdíl od /api/sales/sellers, které je jen pro vedoucí/admin).
@@ -3214,6 +3232,10 @@ function effectiveDiscount(lead, cs) {
 // POST /api/compounder/leads/:id/discount { action: extend|permanent|off|auto, days? }
 router.post('/leads/:id(\\d+)/discount', requireAuth, async (req, res, next) => {
   try {
+    // Oprávnění: admin/super-admin vždy; obchodník jen s právem can_give_discount.
+    const _adm = req.user && (req.user.isSuperAdmin || req.user.role === 'admin');
+    const _canDisc = req.user && req.user.person && req.user.person.can_give_discount;
+    if (!_adm && !_canDisc) return res.status(403).json({ error: 'Nemáš oprávnění dávat slevu.' });
     const id = parseInt(req.params.id, 10);
     const action = String((req.body && req.body.action) || '');
     const sel = { id: true, discount_until: true, discount_permanent: true, discount_disabled: true, access_last_sent_at: true, created_at: true };
@@ -3236,6 +3258,29 @@ router.post('/leads/:id(\\d+)/discount', requireAuth, async (req, res, next) => 
     }
     const updated = await prisma.compounderLead.update({ where: { id }, data, select: sel });
     return res.json({ ok: true, discount: effectiveDiscount(updated, cs) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/compounder/leads/:id/offer  { code, action: 'add'|'remove' }
+// Obchodník s právem can_add_individual_offers (nebo admin) přidá/odebere individuální lokalitu.
+router.post('/leads/:id(\\d+)/offer', requireAuth, async (req, res, next) => {
+  try {
+    const _adm = req.user && (req.user.isSuperAdmin || req.user.role === 'admin');
+    const _can = req.user && req.user.person && req.user.person.can_add_individual_offers;
+    if (!_adm && !_can) return res.status(403).json({ error: 'Nemáš oprávnění přidávat individuální lokality.' });
+    const id = parseInt(req.params.id, 10);
+    const code = String((req.body && req.body.code) || '').trim().toUpperCase();
+    const remove = String((req.body && req.body.action) || 'add') === 'remove';
+    if (!code) return res.status(400).json({ error: 'Chybí kód lokality.' });
+    const lead = await prisma.compounderLead.findUnique({ where: { id }, select: { id: true, extra_offers: true } });
+    if (!lead) return res.status(404).json({ error: 'Lead nenalezen' });
+    const set = new Set(String(lead.extra_offers || '').split(',').map((s) => s.trim().toUpperCase()).filter(Boolean));
+    if (remove) set.delete(code); else set.add(code);
+    const extra = Array.from(set).join(',');
+    await prisma.compounderLead.update({ where: { id }, data: { extra_offers: extra } });
+    return res.json({ ok: true, extra_offers: extra });
   } catch (err) {
     next(err);
   }
