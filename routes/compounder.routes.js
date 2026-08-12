@@ -877,7 +877,17 @@ router.get('/portal/machines', async (req, res, next) => {
     let disc = null;
     const tok = String(req.query.t || '');
     if (tok) {
-      const leadId = verifyPortalToken(tok);
+      let leadId = verifyPortalToken(tok);
+      if (!leadId) {
+        // Share token nástroje (pradlomat-economy) → compounder_lead_id.
+        try {
+          const st = tok.toLowerCase().replace(/[^a-f0-9]/g, '');
+          if (st.length >= 16) {
+            const rcp = await prisma.businessToolRecipient.findUnique({ where: { share_token: st }, select: { compounder_lead_id: true } });
+            if (rcp && rcp.compounder_lead_id) leadId = rcp.compounder_lead_id;
+          }
+        } catch (e) { /* share token nemusí existovat */ }
+      }
       if (leadId) {
         const lead = await prisma.compounderLead.findUnique({
           where: { id: leadId },

@@ -589,7 +589,7 @@ document.getElementById('btnImport').onclick=async()=>{
       first_name: fn || '', last_name: ln || '',
       company: k.firma || '', city: k.mesto || '',
       country: '', role: role, lang: lang || null,
-      email: k.email_n || '', phone: k.telefon_n || ''
+      email: k.email_n || '', phone: k.telefon_n || '', source: 'import'
     };
 
     try{
@@ -615,6 +615,7 @@ document.getElementById('btnImport').onclick=async()=>{
   ['c1','c2','c3','c3b','c4'].forEach(function(x){document.getElementById(x).classList.add('hidden');});
   document.getElementById('bar').classList.add('hidden');
   document.getElementById('c5').classList.remove('hidden');
+  if(ok>0){ try{ fetch(API+'/import-done',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({count:ok})}); }catch(e){} }
   document.getElementById('doneTitle').textContent='Zalozeno '+ok+' z '+seznam.length+' kontaktu';
   const shrnuti=[];
   if(duplicity.length) shrnuti.push('<b>'+duplicity.length+' uz v systemu bylo:</b><br>'+duplicity.slice(0,10).join('<br>'));

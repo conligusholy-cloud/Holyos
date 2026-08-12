@@ -1054,13 +1054,23 @@
     ROOT.innerHTML = buildHTML();
     bindInputs();
 
-    // Fotky verzí z HolyOS (jednou) → po načtení překreslí, ať se ukáže fotka aktivní verze.
+    // Fotky verzí + cena stroje podle slevy leada z HolyOS (jednou). Token nástroje
+    // (share token v URL) → server dopočte cenu PŘED slevou / promo dle slevy leada.
     if (!PHOTOS.__loaded) {
       PHOTOS.__loaded = true;
+      var _shareTok = '';
+      try { _shareTok = (options && options.token) || (location.pathname.split('/').filter(Boolean).pop() || ''); } catch (e) {}
       try {
-        fetch('/api/compounder/portal/machines').then(function (r) { return r.json(); }).then(function (j) {
-          (j && j.machines || []).forEach(function (m) { if (m && m.ver && m.photo) PHOTOS[m.ver] = m.photo; });
+        fetch('/api/compounder/portal/machines' + (_shareTok ? ('?t=' + encodeURIComponent(_shareTok)) : '')).then(function (r) { return r.json(); }).then(function (j) {
+          (j && j.machines || []).forEach(function (m) {
+            if (!m || !m.ver) return;
+            if (m.photo) PHOTOS[m.ver] = m.photo;
+            // Cena stroje podle slevy leada (před slevou / promo) přepíše výchozí VARIANTS.
+            if (VARIANTS[m.ver] && m.priceEur != null && isFinite(m.priceEur)) VARIANTS[m.ver].cena_pradlomatu = Math.round(m.priceEur);
+          });
+          try { applyVariant(VER); } catch (e) {}
           if (ROOT) { ROOT.innerHTML = buildHTML(); bindInputs(); }
+          try { recalcAndRender(); } catch (e) {}
         }).catch(function () {});
       } catch (e) {}
     }
