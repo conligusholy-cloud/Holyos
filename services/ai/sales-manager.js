@@ -295,6 +295,21 @@ async function gatherPlanContext(personId) {
     } catch (e) { /* best-effort */ }
   }
 
+  // Nákupní signály za poslední 2 dny (opakované návštěvy portálu / prohlížení ceny a ekonomiky).
+  const hotSignal = new Set();
+  if (leadIds.length) {
+    try {
+      const since = new Date(Date.now() - 2 * 86400000);
+      const recent = await prisma.compounderEvent.findMany({
+        where: { created_at: { gte: since }, event: { in: ['portal_view', 'eco_open', 'eco_edit', 'section_view'] }, OR: leadIds.map((id) => ({ props: { path: ['lead_id'], equals: id } })) },
+        select: { event: true, props: true }, take: 20000,
+      });
+      const cnt = {};
+      recent.forEach((e) => { const lid = e.props && e.props.lead_id; if (lid == null) return; const c = (cnt[lid] = cnt[lid] || { views: 0, eco: false }); if (e.event === 'portal_view') c.views += 1; if (e.event === 'eco_open' || e.event === 'eco_edit') c.eco = true; });
+      Object.keys(cnt).forEach((lid) => { const c = cnt[lid]; if (c.eco || c.views >= 2) hotSignal.add(Number(lid)); });
+    } catch (e) { /* best-effort */ }
+  }
+
   const nowMs = Date.now();
   const dayStartMs = dayDate(tzTodayStr()).getTime();
   const leadFacts = leads.slice(0, 120).map((l) => {
@@ -314,6 +329,9 @@ async function gatherPlanContext(personId) {
       has_portal_access: hasPortalAccess,
       portal_opened: portalSeen.has(l.id),
       access_sent_days: l.access_last_sent_at ? Math.floor((nowMs - new Date(l.access_last_sent_at).getTime()) / 86400000) : null,
+      age_days: l.created_at ? Math.floor((nowMs - new Date(l.created_at).getTime()) / 86400000) : null,
+      never_called: !l.last_called_at,
+      hot_signal: hotSignal.has(l.id),
       recent_activity: lastAct,
       notes: (l.notes || '').slice(0, 300),
       reservations: (resvByLead[l.id] || []).map((r) => ({ kiosk: r.kiosk_code, status: r.status, reserved_until: r.reserved_until, sign_until: r.sign_until, fee_until: r.fee_until })),
@@ -468,8 +486,24 @@ function buildLeadTasks(ctx) {
         tasks.push({ kind: 'call', title: 'Zavolej – DNES KONČÍ akce/sleva – ' + l.name, detail: 'Otevři kontakt: dnes je poslední den slevy. Zavolej, připomeň konec akce a dotáhni k rezervaci/schůzce.', reasoning: 'Poslední den slevy — dosledování.', priority: 1, est_min: 12, lead_id: l.id });
       } else if (l.discount_ended) {
         tasks.push({ kind: 'followup', title: 'Zavolej – akce/sleva už skončila – ' + l.name, detail: 'Otevři kontakt: sleva skončila. Zavolej, zjisti rozhodnutí a nabídni další krok.', reasoning: 'Dosledování po konci slevy.', priority: 2, est_min: 12, lead_id: l.id });
+      } else if (l.hot_signal) {
+        tasks.push({ kind: 'call', title: '🔥 Silný zájem – zavolej a uzavři – ' + l.name, detail: 'Otevři kontakt: vrací se na portál / prohlíží cenu a ekonomiku. Zavolej ještě dnes, využij zájem a tlač k rezervaci nebo schůzce — nečekej na konec slevy.', reasoning: 'Nákupní signály během dosledování — uzavírej dřív.', priority: 2, est_min: 12, lead_id: l.id });
       }
-      covered.add(l.id); return; // během běžící slevy se nevolá
+      covered.add(l.id); return; // jinak během běžící slevy se nevolá
+    }
+    // Nedovoláno: opakuj pokus; po 5 dnech poslední pokus (SMS) a zvaž „Nelze použít".
+    if (l.status === 'nedovolano') {
+      if ((l.days_since_update || 0) >= 5) {
+        tasks.push({ kind: 'followup', title: 'Poslední pokus (SMS) + zvaž „Nelze použít" – ' + l.name, detail: 'Otevři kontakt: ' + (l.days_since_update || 0) + ' dní se nedaří dovolat. Zkus poslední kontakt jiným kanálem (SMS). Když ani teď nereaguje, přepni na „Nelze použít".', reasoning: '5+ dní nedovoláno — poslední pokus před vyřazením.', priority: 3, est_min: 8, lead_id: l.id });
+      } else {
+        tasks.push({ kind: 'call', title: 'Zkus znovu dovolat – ' + l.name, detail: 'Otevři kontakt: minule ses nedovolal. Zkus to znovu v jinou denní dobu.', reasoning: 'Nedovoláno — další pokus.', priority: 4, est_min: 8, lead_id: l.id });
+      }
+      covered.add(l.id); return;
+    }
+    // Nový lead bez prvního kontaktu → čím déle čeká, tím vyšší priorita (nové leady nesmí čekat).
+    if (l.status === 'new' && l.never_called && l.has_phone && (l.age_days || 0) >= 1) {
+      tasks.push({ kind: 'call', title: '⏰ Bezodkladně zavolej NOVÝ lead – ' + l.name, detail: 'Otevři kontakt: nový lead čeká ' + (l.age_days || 0) + ' dní na první kontakt. Zavolej hned a kvalifikuj — reakční doba rozhoduje.', reasoning: 'Nový lead ' + (l.age_days || 0) + ' dní bez prvního kontaktu.', priority: 1, est_min: 12, lead_id: l.id });
+      covered.add(l.id); return;
     }
     // Odeslán přístup do portálu, ale zákazník tam (druhý den+) nebyl → zavolat, ověřit odkaz a rozhýbat.
     if (l.has_phone && !l.portal_opened && (l.status === 'access_sent' || (l.invite_sent || 0) > 0) && (l.access_sent_days == null || l.access_sent_days >= 1)) {
@@ -480,7 +514,7 @@ function buildLeadTasks(ctx) {
     }
     // Obecný „zavolej a kvalifikuj" jen pro RANÉ fáze (první kontakt) — ne pro už posunuté leady
     // (Odeslán přístup / Kvalifikován / Dosledování apod. řeší vlastní větve výše).
-    if (l.has_phone && ['new', 'nedovolano', 'volat_pristi', 'contacted'].indexOf(l.status) >= 0) calls.push(l);
+    if (l.has_phone && ['new', 'volat_pristi', 'contacted'].indexOf(l.status) >= 0) calls.push(l);
     else covered.add(l.id);
   });
   // (C) Běžné hovory z pipeline — per kontakt, do rozumné denní kvóty (ať den nepřeteče stovkami úkolů).
