@@ -203,7 +203,7 @@
       <input type="hidden" id="mt-id"><input type="hidden" id="mt-site"><input type="hidden" id="mt-lead">
       <div class="field"><label>Název</label><input class="qinput" id="mt-title" placeholder="Schůzka"></div>
       <div class="field"><label>Začátek</label><input class="qinput" id="mt-start" type="datetime-local"></div>
-      <div class="field"><label>Konec</label><input class="qinput" id="mt-end" type="datetime-local"></div>
+      <div class="field" id="mt-end-field"><label>Konec</label><input class="qinput" id="mt-end" type="datetime-local"></div>
       <div class="field"><label>Místo</label><input class="qinput" id="mt-loc" placeholder="Adresa / online"></div>
       <div class="field"><label>Pozvat (e-maily, oddělené čárkou)</label><input class="qinput" id="mt-att" placeholder="kontakt@… , kolega@bestseries.cz" inputmode="email"><div style="font-size:11px;color:var(--muted2);margin-top:4px">Pozvánka se odešle e-mailem přes Outlook. Předvyplní se kontakt; kolegu přidej čárkou.</div></div>
       <div class="field"><label>Poznámka</label><textarea id="mt-note" placeholder="Detaily…"></textarea></div>
@@ -576,9 +576,11 @@
     document.getElementById('mt-site').value=pf.site_id||'';
     document.getElementById('mt-lead').value=pf.compounder_lead_id||'';
     var start = pf.start? new Date(pf.start) : (function(){ var n=new Date(); n.setMinutes(0,0,0); n.setHours(n.getHours()+1); return n; })();
-    var end = pf.end? new Date(pf.end) : new Date(start.getTime()+3600000);
+    // Hovor trvá defaultně 10 min a pole Konec se skryje — obchodník zadává jen začátek.
+    var end = pf.end? new Date(pf.end) : new Date(start.getTime()+(isCall?600000:3600000));
     document.getElementById('mt-start').value=_dtLocal(start);
     document.getElementById('mt-end').value=_dtLocal(end);
+    var endField=document.getElementById('mt-end-field'); if(endField) endField.style.display = isCall ? 'none' : '';
     document.getElementById('meeting-modal').classList.add('open');
   }
   function closeMeeting(){ document.getElementById('meeting-modal').classList.remove('open'); }
@@ -591,7 +593,9 @@
     var btn=document.getElementById('mt-save'); btn.disabled=true;
     var id=document.getElementById('mt-id').value;
     var kind = window._meetingKind || 'meeting';
-    var payload={ title:title, start_at:new Date(start).toISOString(), end_at: end? new Date(end).toISOString(): null, location:(document.getElementById('mt-loc').value||'').trim()||null, description:(document.getElementById('mt-note').value||'').trim()||null, attendees:(document.getElementById('mt-att').value||'').trim(), event_type:(kind==='call'?'call':'meeting') };
+    // Hovor: konec vždy začátek +10 min (pole Konec je skryté).
+    var endIso = (kind==='call') ? new Date(new Date(start).getTime()+600000).toISOString() : (end? new Date(end).toISOString() : null);
+    var payload={ title:title, start_at:new Date(start).toISOString(), end_at: endIso, location:(document.getElementById('mt-loc').value||'').trim()||null, description:(document.getElementById('mt-note').value||'').trim()||null, attendees:(document.getElementById('mt-att').value||'').trim(), event_type:(kind==='call'?'call':'meeting') };
     var sid=document.getElementById('mt-site').value; var lid=document.getElementById('mt-lead').value;
     if(sid) payload.site_id=parseInt(sid,10); if(lid) payload.compounder_lead_id=parseInt(lid,10);
     try{
