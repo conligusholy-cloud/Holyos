@@ -1321,10 +1321,10 @@ router.get('/my-day', requireAuth, async (req, res, next) => {
       ]);
       stats = { calls, invites, meetings, new_contacts: newContacts };
     } catch (e) { /* statistiky best-effort */ }
-    // Čas u telefonu: součet úseků od kliknutí na „Volat" po další akci (nebo dalším hovorem), strop 20 min/úsek.
+    // Čas u telefonu: součet úseků od kliknutí na „Volat" po další akci (nebo dalším hovorem), strop 15 min/úsek.
     stats.time_spent_min = 0;
     try {
-      const CAP = 20 * 60 * 1000;
+      const CAP = 15 * 60 * 1000;
       const evs = await prisma.compounderEvent.findMany({
         where: { event: 'sales_action', created_at: { gte: dayStart, lte: dayEnd }, props: { path: ['person_id'], equals: personId } },
         select: { props: true, created_at: true }, orderBy: { created_at: 'asc' }, take: 3000,

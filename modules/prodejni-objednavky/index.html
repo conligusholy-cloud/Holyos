@@ -5703,6 +5703,20 @@
       var eur = parseFloat(String(inp.value).replace(',', '.'));
       var czk = kvEurToCzk(eur);
       out.textContent = (czk == null) ? '—' : ('≈ ' + Math.round(czk).toLocaleString('cs-CZ') + ' Kč');
+      // Cena PŘED slevou = zadaná cena (po slevě) / (1 − sleva%). Sleva verze z pole kvset-disc-VER.
+      var before = document.getElementById('kvset-before-' + ver);
+      if (before) {
+        var dinp = document.getElementById('kvset-disc-' + ver);
+        var pct = dinp ? parseFloat(String(dinp.value).replace(',', '.')) : 0;
+        if (!isFinite(pct) || pct <= 0 || pct >= 100 || !isFinite(eur) || eur <= 0) {
+          before.innerHTML = '<span style="color:var(--text2);">bez slevy</span>';
+        } else {
+          var beur = eur / (1 - pct / 100);
+          var bczk = kvEurToCzk(beur);
+          before.innerHTML = 'před slevou: <b style="color:var(--text);">' + Math.round(beur).toLocaleString('cs-CZ') + ' €</b>' +
+            (bczk != null ? (' <span style="color:var(--text2);">≈ ' + Math.round(bczk).toLocaleString('cs-CZ') + ' Kč</span>') : '');
+        }
+      }
     }
 
     function openCompoundingSettings() {
@@ -5727,7 +5741,7 @@
       function discPct(id, val, label) {
         return '<div style="display:flex;align-items:center;gap:5px;">' +
           '<span style="font-size:12px;color:var(--text2);width:22px;">' + label + '</span>' +
-          '<div style="position:relative;"><input type="number" min="0" max="100" step="0.5" id="' + id + '" value="' + val + '" style="width:78px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 24px 8px 10px;color:var(--text);font-size:14px;"><span style="position:absolute;right:8px;top:50%;transform:translateY(-50%);color:var(--text2);font-size:12px;">%</span></div>' +
+          '<div style="position:relative;"><input type="number" min="0" max="100" step="0.5" id="' + id + '" value="' + val + '" oninput="kvSettingsPreview(\'' + String(label).toLowerCase() + '\')" style="width:78px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 24px 8px 10px;color:var(--text);font-size:14px;"><span style="position:absolute;right:8px;top:50%;transform:translateY(-50%);color:var(--text2);font-size:12px;">%</span></div>' +
           '</div>';
       }
       var rate = _kvFxRates.EUR || 25;
@@ -5740,7 +5754,8 @@
             '<input type="number" min="0" step="1" id="kvset-' + ver + '" value="' + eur + '" oninput="kvSettingsPreview(\'' + ver + '\')" placeholder="0" style="width:150px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 32px 8px 12px;color:var(--text);font-size:14px;">' +
             '<span style="position:absolute;right:12px;top:50%;transform:translateY(-50%);color:var(--text2);font-size:13px;">€</span>' +
           '</div>' +
-          '<div id="kvset-czk-' + ver + '" style="color:var(--text2);font-size:13px;min-width:120px;">' + (eur !== '' ? ('≈ ' + Math.round(eur * rate).toLocaleString('cs-CZ') + ' Kč') : '—') + '</div>' +
+          '<div id="kvset-czk-' + ver + '" style="color:var(--text2);font-size:13px;min-width:110px;">' + (eur !== '' ? ('≈ ' + Math.round(eur * rate).toLocaleString('cs-CZ') + ' Kč') : '—') + '</div>' +
+          '<div id="kvset-before-' + ver + '" style="color:var(--text2);font-size:12px;min-width:150px;"></div>' +
           '<div id="vphoto-' + ver + '" style="margin-left:auto;display:flex;align-items:center;gap:8px;">' +
             (vphoto ? ('<img src="' + vphoto + '" style="width:46px;height:34px;object-fit:cover;border-radius:6px;border:1px solid var(--border);">') : '<span style="color:var(--text2);font-size:12px;">bez obrázku</span>') +
             '<label style="cursor:pointer;"><input type="file" accept="image/*" style="display:none;" onchange="verUploadPhoto(\'' + ver + '\', this)"><span class="btn" style="padding:5px 10px;font-size:12px;">📷 ' + (vphoto ? 'Změnit' : 'Nahrát') + '</span></label>' +
@@ -5862,6 +5877,7 @@
         '</div>' +
         '</div></div>';
       document.getElementById('modal-root').innerHTML = html;
+      ['v2', 'v3', 'v4'].forEach(function(v){ kvSettingsPreview(v); });
       loadCompoundingNotify();
     }
 
