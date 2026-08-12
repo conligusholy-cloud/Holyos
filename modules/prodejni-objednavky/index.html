@@ -3449,6 +3449,7 @@
         '<div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:#10b981;font-weight:700;margin-bottom:6px;">🏷️ Sleva</div>' +
         '<div style="font-size:13px;color:'+color+';font-weight:600;">'+statusTxt+'</div>' +
         (pct?'<div style="font-size:11px;color:var(--text2);margin-top:2px;">'+pct+'</div>':'') +
+        ((l.status==='dosledovani' && d.endsAt)?'<div style="font-size:12px;color:#eab308;font-weight:600;margin-top:4px;">🗓️ Dosledování do '+new Date(d.endsAt).toLocaleDateString('cs-CZ')+'</div>':'') +
         '<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;">' +
           '<button class="btn btn-sm" onclick="cmpSetDiscount('+id+',\'extend\')">+7 dní</button>' +
           '<button class="btn btn-sm" onclick="cmpSetDiscount('+id+',\'permanent\')">Trvale</button>' +
@@ -3463,7 +3464,7 @@
         if(!r.ok) throw new Error('HTTP '+r.status);
         var data = await r.json();
         var l = (_cmpLeadsCache||[]).filter(function(x){return x.id===id;})[0];
-        if (l && data.discount) l.discount = data.discount;
+        if (l && data.discount) { l.discount = data.discount; if (data.status) l.status = data.status; }
         var box = document.getElementById('cmp-disc-'+id);
         if (box) box.outerHTML = cmpDiscountBlock(id);
       } catch(e){ alert('Slevu se nepodařilo změnit.'); }

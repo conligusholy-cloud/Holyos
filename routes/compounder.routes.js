@@ -3242,7 +3242,7 @@ router.post('/leads/:id(\\d+)/discount', requireAuth, async (req, res, next) => 
     if (!_adm && !_canDisc) return res.status(403).json({ error: 'Nemáš oprávnění dávat slevu.' });
     const id = parseInt(req.params.id, 10);
     const action = String((req.body && req.body.action) || '');
-    const sel = { id: true, discount_until: true, discount_permanent: true, discount_disabled: true, access_last_sent_at: true, created_at: true };
+    const sel = { id: true, discount_until: true, discount_permanent: true, discount_disabled: true, access_last_sent_at: true, created_at: true, status: true };
     const lead = await prisma.compounderLead.findUnique({ where: { id }, select: sel });
     if (!lead) return res.status(404).json({ error: 'Lead nenalezen' });
     const cs = (await getSetting(COMPOUNDING_SETTINGS_KEY, { type: 'json', defaultValue: COMPOUNDING_SETTINGS_DEFAULT })) || {};
@@ -3261,7 +3261,16 @@ router.post('/leads/:id(\\d+)/discount', requireAuth, async (req, res, next) => 
       return res.status(400).json({ error: 'Neznámá akce (extend|permanent|off|auto).' });
     }
     const updated = await prisma.compounderLead.update({ where: { id }, data, select: sel });
-    return res.json({ ok: true, discount: effectiveDiscount(updated, cs) });
+    const eff = effectiveDiscount(updated, cs);
+    // Aktivní sleva → přepni na „dosledování" (jen z rané fáze). Datum dosledování = konec slevy (eff.endsAt).
+    if (eff.active) {
+      const EARLY = ['new', 'nedovolano', 'volat_pristi', 'contacted', 'qualified'];
+      if (EARLY.indexOf(updated.status) >= 0) {
+        await prisma.compounderLead.update({ where: { id }, data: { status: 'dosledovani' } }).catch(() => {});
+        updated.status = 'dosledovani';
+      }
+    }
+    return res.json({ ok: true, discount: eff, status: updated.status });
   } catch (err) {
     next(err);
   }
