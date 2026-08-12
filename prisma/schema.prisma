@@ -5643,6 +5643,14 @@ model CompounderLead {
   access_sent_count   Int       @default(0)
   access_last_sent_at DateTime?
 
+  // ── Sleva per-lead (vstupní cena prádlomatu + cena lokality) ─────────────
+  // Efektivní sleva je aktivní když: discount_permanent, NEBO now <= discount_until
+  // (ruční prodloužení), NEBO auto (now <= start přístupu + settings.discount.validDays).
+  // discount_disabled slevu vypne bez ohledu na ostatní.
+  discount_until     DateTime?
+  discount_permanent Boolean   @default(false)
+  discount_disabled  Boolean   @default(false)
+
   // ── Meta (Facebook/Instagram) Lead Ads ──────────────────────────────────
   // Lead přišel z FB reklamy (rychlý formulář). meta_lead_id drží idempotenci
   // (stejný lead se nezaloží 2×). meta_form_id se páruje s nastavením formulářů

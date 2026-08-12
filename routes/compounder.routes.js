@@ -2986,6 +2986,65 @@ router.put('/compounding-settings', requireAuth, async (req, res, next) => {
   }
 });
 
+// ─── Sleva per-lead ─────────────────────────────────────────────────────────
+// "Vytvoření přístupu do portálu" = 1. odeslání přihlašovacího odkazu, jinak vznik leada.
+function leadDiscountStart(lead) {
+  return (lead && (lead.access_last_sent_at || lead.created_at)) || null;
+}
+// Vrátí efektivní slevu pro leada podle globálního nastavení + per-lead override.
+function effectiveDiscount(lead, cs) {
+  const disc = (cs && cs.discount) || {};
+  const validDays = Number.isFinite(disc.validDays) ? disc.validDays : 7;
+  const mp = disc.machinePct || {};
+  const machinePct = { v2: Number(mp.v2) || 0, v3: Number(mp.v3) || 0, v4: Number(mp.v4) || 0 };
+  const locationPct = Number(disc.locationPct) || 0;
+  const hasAny = machinePct.v2 > 0 || machinePct.v3 > 0 || machinePct.v4 > 0 || locationPct > 0;
+  const now = Date.now();
+  let active = false, endsAt = null, mode = 'auto';
+  if (lead && lead.discount_disabled) { mode = 'off'; active = false; endsAt = null; }
+  else if (lead && lead.discount_permanent) { mode = 'permanent'; active = true; endsAt = null; }
+  else {
+    const start = leadDiscountStart(lead);
+    const autoEnd = start ? (new Date(start).getTime() + validDays * 86400000) : null;
+    const endMs = (lead && lead.discount_until) ? new Date(lead.discount_until).getTime() : autoEnd;
+    endsAt = endMs ? new Date(endMs) : null;
+    active = endMs != null ? (now <= endMs) : false;
+    mode = (lead && lead.discount_until) ? 'extended' : 'auto';
+  }
+  if (!hasAny) active = false; // žádná sleva nenastavena v Compounding
+  return { active, mode, endsAt, machinePct, locationPct, validDays };
+}
+
+// POST /api/compounder/leads/:id/discount { action: extend|permanent|off|auto, days? }
+router.post('/leads/:id(\\d+)/discount', requireAuth, async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const action = String((req.body && req.body.action) || '');
+    const sel = { id: true, discount_until: true, discount_permanent: true, discount_disabled: true, access_last_sent_at: true, created_at: true };
+    const lead = await prisma.compounderLead.findUnique({ where: { id }, select: sel });
+    if (!lead) return res.status(404).json({ error: 'Lead nenalezen' });
+    const cs = (await getSetting(COMPOUNDING_SETTINGS_KEY, { type: 'json', defaultValue: COMPOUNDING_SETTINGS_DEFAULT })) || {};
+    const data = {};
+    if (action === 'permanent') { data.discount_permanent = true; data.discount_disabled = false; data.discount_until = null; }
+    else if (action === 'off') { data.discount_disabled = true; data.discount_permanent = false; }
+    else if (action === 'auto') { data.discount_disabled = false; data.discount_permanent = false; data.discount_until = null; }
+    else if (action === 'extend') {
+      const raw = Number(req.body && req.body.days);
+      const days = (Number.isFinite(raw) && raw > 0) ? Math.min(3650, Math.floor(raw)) : 7;
+      const eff = effectiveDiscount(lead, cs);
+      const baseMs = (eff.endsAt && eff.endsAt.getTime() > Date.now()) ? eff.endsAt.getTime() : Date.now();
+      data.discount_until = new Date(baseMs + days * 86400000);
+      data.discount_disabled = false; data.discount_permanent = false;
+    } else {
+      return res.status(400).json({ error: 'Neznámá akce (extend|permanent|off|auto).' });
+    }
+    const updated = await prisma.compounderLead.update({ where: { id }, data, select: sel });
+    return res.json({ ok: true, discount: effectiveDiscount(updated, cs) });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // ─── Per-lokalita konfigurace (verze kiosku + měsíční nájem) ───────────────
 // Uloženo jako jedna JSON mapa (klíč 'compounding.kiosks'), kde klíč = kód kiosku
 // a hodnota = { version: 'v2'|'v3'|'v4'|null, rentMonthlyCzk: number|null }.
