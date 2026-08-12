@@ -359,10 +359,9 @@ async function planDayAI(person, ctx) {
     + '(A) SCHŮZKY Z KALENDÁŘE: projdi meetings_today — ke každé dnešní schůzce dej úkol na přípravu a k nadcházejícím (meetings_upcoming_7d) případně potvrzení/příprava. Schůzky jsou svaté, plán se staví kolem nich. '
     + '(B) HORKÉ LEADY A LHŮTY: uzavři/posuň leady s blížící se lhůtou (podpis/poplatek/expirace rezervace) a evidentně horké kontakty. '
     + '(C) NÁBOR A DOMLOUVÁNÍ SCHŮZEK = VĚTŠINA DNE: veškerý zbývající čas (drtivá většina) musí jít do aktivního PRODEJE — oslovování a nábor NOVÝCH kontaktů (kind "prospecting") a domlouvání nových schůzek/obchodů (kind "meeting"/"call"). I když má obchodník málo leadů nebo málo schůzek, NIKDY nenech den poloprázdný: doplň konkrétní náborové úkoly s čísly (např. "Oslov 15 nových potenciálních provozoven/investorů", "Domluv aspoň 3 nové schůzky", "Zavolej 10 studeným kontaktům"). '
-    + 'Pravidla výstupu: 1) 5–9 konkrétních úkolů, žádná vata, každý s jasnou akcí a měřitelným cílem (počty oslovení, hovorů, domluvených schůzek). 2) NIKDY duplicitní ani skoro shodné úkoly; na jeden lead max JEDEN úkol (slučuj kroky). 3) Když se úkol týká konkrétního leadu, uveď lead_id; náborové úkoly mají lead_id null. 4) VŠE je jen pro tohoto obchodníka a jeho vlastní kontakty (v kontextu jsou jen jeho leady a jeho kalendář); nikdy neplánuj cizí kontakty ani práci jiných. 5) Priorita 1 = dnešní schůzky a dnešní lhůty, 2 = horké leady, 3 = nábor a domlouvání schůzek. '
-    + '6a) PŘÍSTUP DO PORTÁLU: úkol typu "invite" (poslat přístup / přihlašovací odkaz do portálu) navrhuj VÝHRADNĚ pro leady, které mají has_portal_access=false. Komu už has_portal_access=true (byl v portálu, registroval se nebo mu pozvánka byla odeslána), tomu NIKDY nedávej úkol na poslání přístupu — místo toho zavolej/posuň dál. '
-    + '6) ČASOVÁ KAPACITA: obchodník má dnes ' + ctx.capacity.work_minutes_per_day + ' minut (' + ctx.capacity.work_hours_per_day + ' h, Po–Pá). Každému úkolu přiřaď realistický odhad trvání est_min a součet est_min všech úkolů musí být zhruba roven denní kapacitě (nepřeplňuj ani nenech den poloprázdný). Aktivity dimenzuj tak, aby vedly k plnění DENNÍCH kvót z daily_quota (nové kontakty/konverze/rezervace/obrat na den) — pokud kvóty ještě nejsou splněné, věnuj jim odpovídající čas. '
-    + 'Odpověz POUZE platným JSON bez markdownu ve tvaru: {"focus":"<1-2 věty zaměření dne, ať obchodník ví, na co dnes zabrat>","tasks":[{"kind":"<call|followup|invite|close|reservation|meeting|prospecting|admin|other>","title":"<krátce, konkrétně, s číslem kde to dává smysl>","detail":"<co přesně udělat, 1-2 věty>","reasoning":"<proč, krátce>","priority":<1-5>,"est_min":<odhad minut>,"lead_id":<číslo nebo null>}]}. Piš česky.';
+    + 'DŮLEŽITÉ – DĚLBA PRÁCE: konkrétní existující kontakty (hovory, schůzky, pozvánky, oživení, dotažení rezervací) NEŘEŠÍŠ a NEVYPISUJEŠ — ty doplní systém automaticky jako samostatné úkoly, jeden úkol na jeden kontakt. Ty vracíš POUZE: (1) krátké zaměření dne (focus) a (2) 2–4 NÁBOROVÉ/kvótové úkoly BEZ konkrétního kontaktu (kind "prospecting" nebo "meeting", lead_id VŽDY null) — např. „Oslov 15 nových potenciálních provozoven/investorů", „Domluv aspoň 3 nové schůzky". '
+    + 'Pravidla: 1) NIKDY nevkládej lead_id ani konkrétní jména z kontextu — jen obecné náborové kvóty s čísly. 2) Odhad est_min uveď realisticky (dohromady cca 2–4 h na aktivní nábor); zbytek dne zaberou automatické úkoly na kontakty. 3) VŠE je jen pro tohoto obchodníka. '
+    + 'Odpověz POUZE platným JSON bez markdownu ve tvaru: {"focus":"<1-2 věty zaměření dne, ať obchodník ví, na co dnes zabrat>","tasks":[{"kind":"<prospecting|meeting>","title":"<krátce, konkrétně, s číslem>","detail":"<co přesně udělat, 1-2 věty>","reasoning":"<proč, krátce>","priority":<3-4>,"est_min":<odhad minut>,"lead_id":null}]}. Piš česky.';
   const usr = 'Obchodník: ' + person.name + '\nKontext (JSON):\n' + JSON.stringify(ctx);
   const j = await callClaudeJSON(sys, usr, 1600);
   if (!j || !Array.isArray(j.tasks)) return null;
@@ -414,6 +413,43 @@ function planDayFallback(ctx) {
   return { focus: 'Dnes (kapacita ' + Math.round(cap / 60) + ' h): nejdřív schůzky a lhůty, zbytek dne tvrdě do náboru a domlouvání schůzek dle denních kvót.', tasks: tasks.slice(0, 9) };
 }
 
+// Rozpad na jednotlivé kontakty: 1 lead = max 1 úkol (nejnaléhavější akce), vždy s lead_id
+// → na obrazovce dostane tlačítko „Otevřít kontakt" a odškrtává se samostatně.
+// Obchodník tak jede kontakt po kontaktu: otevře → přečte poznámky → zavolá → odškrtne.
+function buildLeadTasks(ctx) {
+  const tasks = [];
+  const covered = new Set();
+  // (A) Dnešní schůzky z kalendáře — příprava, per kontakt.
+  (ctx.meetings_today || []).forEach((m) => {
+    const t = m.when ? new Date(m.when) : null;
+    const hh = t ? (('0' + t.getHours()).slice(-2) + ':' + ('0' + t.getMinutes()).slice(-2)) : '';
+    tasks.push({ kind: 'meeting', title: 'Schůzka' + (hh ? ' ' + hh : '') + ' – ' + (m.title || 'schůzka'), detail: 'Otevři kontakt, projdi poznámky a cíl schůzky; ukonči konkrétním dalším krokem.' + (m.location ? ' Místo: ' + m.location + '.' : ''), reasoning: 'Dnešní schůzka z kalendáře.', priority: 1, est_min: 60, lead_id: m.lead_id || null });
+    if (m.lead_id) covered.add(m.lead_id);
+  });
+  // (B) Horké leady a lhůty + běžné kontakty — každý jako samostatný úkol.
+  const calls = [];
+  (ctx.leads || []).forEach((l) => {
+    if (covered.has(l.id)) return;
+    const r = (l.reservations || [])[0];
+    if (r && (r.status === 'reserved' || r.status === 'active')) {
+      tasks.push({ kind: 'close', title: 'Dotáhnout rezervaci ' + r.kiosk + ' – ' + l.name, detail: 'Otevři kontakt, přečti poznámky; hlídej podpis/poplatek a popožeň zákazníka k uzavření.', reasoning: 'Běžící rezervace se lhůtou.', priority: 1, est_min: 30, lead_id: l.id }); covered.add(l.id); return;
+    }
+    if (!l.has_portal_access && l.has_email) {
+      tasks.push({ kind: 'invite', title: 'Poslat přístup a zavolat – ' + l.name, detail: 'Otevři kontakt, přečti poznámky; odešli přihlašovací odkaz do portálu a hned zavolej.', reasoning: 'Ještě nemá přístup do portálu.', priority: 2, est_min: 15, lead_id: l.id }); covered.add(l.id); return;
+    }
+    if ((l.days_since_update || 0) >= 7) {
+      tasks.push({ kind: 'followup', title: 'Oživit kontakt – ' + l.name, detail: 'Otevři kontakt, přečti poznámky; zavolej, zjisti stav a posuň k schůzce/rezervaci.', reasoning: 'Přes týden beze změny.', priority: 3, est_min: 15, lead_id: l.id }); covered.add(l.id); return;
+    }
+    if (l.has_phone) calls.push(l);
+  });
+  // (C) Běžné hovory z pipeline — per kontakt, do rozumné denní kvóty (ať den nepřeteče stovkami úkolů).
+  const callQuota = Math.max(8, (ctx.daily_quota && ctx.daily_quota.new_contacts) || 10);
+  calls.slice(0, callQuota).forEach((l) => {
+    tasks.push({ kind: 'call', title: 'Zavolej – ' + l.name, detail: 'Otevři kontakt, přečti poznámky; zavolej a posuň k dalšímu kroku (schůzka/rezervace).', reasoning: 'Kontakt v pipeline k posunu.', priority: 4, est_min: 12, lead_id: l.id }); covered.add(l.id);
+  });
+  return tasks;
+}
+
 // Vytvoří/aktualizuje denní plán a úkoly. force=true přegeneruje (smaže staré open AI úkoly).
 async function planDay(personId, dateStr, opts) {
   const date = dayDate(dateStr);
@@ -425,8 +461,20 @@ async function planDay(personId, dateStr, opts) {
   if (existing && existing.tasks.length && !(opts && opts.force)) return { plan: existing, created: 0, skipped: true };
 
   const ctx = await gatherPlanContext(personId);
-  let out = await planDayAI(person, ctx);
-  if (!out) out = planDayFallback(ctx);
+  const ai = await planDayAI(person, ctx);
+  const fb = planDayFallback(ctx);
+  // Zaměření dne z AI (jinak fallback).
+  const focus = (ai && ai.focus) || fb.focus;
+  // Úkoly na jednotlivé kontakty — deterministicky a spolehlivě (1 lead = 1 úkol s „Otevřít kontakt").
+  let tasks = buildLeadTasks(ctx);
+  // Náborové/kvótové úkoly BEZ konkrétního kontaktu (oslov X nových, domluv X schůzek) — z AI, jinak fallback.
+  const AGG_KINDS = ['prospecting', 'meeting', 'admin', 'other'];
+  let aggregate = (ai && Array.isArray(ai.tasks) ? ai.tasks : []).filter((t) => !t.lead_id && AGG_KINDS.indexOf(t.kind) >= 0);
+  if (!aggregate.length) aggregate = fb.tasks.filter((t) => !t.lead_id && AGG_KINDS.indexOf(t.kind) >= 0);
+  tasks = tasks.concat(aggregate);
+  // Seřaď dle priority a ořízni na rozumný počet, ať den nepřeteče.
+  tasks.sort((a, b) => (a.priority || 3) - (b.priority || 3));
+  const out = { focus, tasks: tasks.slice(0, 40) };
 
   const plan = await prisma.salesDayPlan.upsert({
     where: { person_id_date: { person_id: personId, date } },
