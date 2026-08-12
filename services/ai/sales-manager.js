@@ -125,6 +125,23 @@ async function callClaudeJSON(sys, usr, maxTokens) {
   return null;
 }
 
+// Prostý text z Claude (pro chat vedoucího — odpověď není JSON, ať se nerozbije na newlinech).
+async function callClaudeText(sys, usr, maxTokens) {
+  if (!process.env.ANTHROPIC_API_KEY) { console.error('[sales-manager] Chybí ANTHROPIC_API_KEY.'); return null; }
+  const Anthropic = require('@anthropic-ai/sdk');
+  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  const models = [MODEL];
+  if (models.indexOf(FALLBACK_MODEL) === -1) models.push(FALLBACK_MODEL);
+  for (var i = 0; i < models.length; i++) {
+    try {
+      const msg = await client.messages.create({ model: models[i], max_tokens: maxTokens || 1200, system: sys, messages: [{ role: 'user', content: usr }] });
+      const text = (msg && msg.content && msg.content[0] && msg.content[0].text) || '';
+      if (text && text.trim()) return text;
+    } catch (e) { console.error('[sales-manager] Claude text selhal (model ' + models[i] + '):', e.message); }
+  }
+  return null;
+}
+
 // ─── Osoby ─────────────────────────────────────────────────────────────────
 async function getActiveSalespeople() {
   const people = await prisma.person.findMany({
@@ -486,10 +503,9 @@ function buildLeadTasks(ctx) {
         tasks.push({ kind: 'call', title: 'Zavolej – DNES KONČÍ akce/sleva – ' + l.name, detail: 'Otevři kontakt: dnes je poslední den slevy. Zavolej, připomeň konec akce a dotáhni k rezervaci/schůzce.', reasoning: 'Poslední den slevy — dosledování.', priority: 1, est_min: 12, lead_id: l.id });
       } else if (l.discount_ended) {
         tasks.push({ kind: 'followup', title: 'Zavolej – akce/sleva už skončila – ' + l.name, detail: 'Otevři kontakt: sleva skončila. Zavolej, zjisti rozhodnutí a nabídni další krok.', reasoning: 'Dosledování po konci slevy.', priority: 2, est_min: 12, lead_id: l.id });
-      } else if (l.hot_signal) {
-        tasks.push({ kind: 'call', title: '🔥 Silný zájem – zavolej a uzavři – ' + l.name, detail: 'Otevři kontakt: vrací se na portál / prohlíží cenu a ekonomiku. Zavolej ještě dnes, využij zájem a tlač k rezervaci nebo schůzce — nečekej na konec slevy.', reasoning: 'Nákupní signály během dosledování — uzavírej dřív.', priority: 2, est_min: 12, lead_id: l.id });
       }
-      covered.add(l.id); return; // jinak během běžící slevy se nevolá
+      // Během běžící slevy (dosledování až do termínu) se NEVOLÁ — čeká se na konec slevy/termín.
+      covered.add(l.id); return;
     }
     // Nedovoláno: opakuj pokus; po 5 dnech poslední pokus (SMS) a zvaž „Nelze použít".
     if (l.status === 'nedovolano') {
@@ -883,18 +899,24 @@ async function coachReply(personId, message, history) {
   try { const s = await getSetting(AI_PLAN_INSTRUCTIONS_KEY, { type: 'string', defaultValue: AI_PLAN_INSTRUCTIONS_DEFAULT }); if (s && String(s).trim()) instr = String(s); } catch (e) { /* default */ }
   const sys = instr + ' '
     + 'TEĎ jsi v roli MENTORA a KOUČE v chatu s obchodníkem. Odpovídej česky, konkrétně, stručně a prakticky — vysvětluj jak věci fungují a jak je má dělat, analyzuj jeho data (kontext níže), navrhuj konkrétní kroky a úpravy vedoucí k obratu. Buď náročný, ale podporující a motivující. Když se ptá „jak", dej návod. Když chce analýzu, vyjdi z dat a řekni priority. '
-    + 'Když navrhuješ konkrétní akci proveditelnou v systému, přidej ji do pole actions. Povolené akce: '
+    + 'FORMÁT ODPOVĚDI: normální text (rada/analýza), klidně na více odstavců. '
+    + 'Pokud navrhuješ konkrétní akce proveditelné v systému, přidej ÚPLNĚ NA KONEC na nový řádek značku <<<ACTIONS>>> a za ni JSON pole akcí. Povolené akce: '
     + '{"type":"set_status","lead_id":<id z kontextu>,"status":"<new|nedovolano|volat_pristi|contacted|schuzka|qualified|dosledovani|converted|nelze_pouzit|rejected>","label":"<lidsky co se stane>"} a '
-    + '{"type":"create_task","title":"<název úkolu>","lead_id":<id nebo null>,"label":"<lidsky co se stane>"}. Akce navrhuj jen když dávají jasný smysl a lead_id znáš z kontextu; jinak nech actions prázdné. '
-    + 'Odpověz POUZE platným JSON bez markdownu: {"reply":"<tvá odpověď/rada v textu>","actions":[...]}';
+    + '{"type":"create_task","title":"<název úkolu>","lead_id":<id nebo null>,"label":"<lidsky co se stane>"}. Akce navrhuj jen když dávají jasný smysl a lead_id znáš z kontextu. Když žádné nejsou, značku <<<ACTIONS>>> vůbec nepiš.';
   const hist = (history || []).map((h) => (h.role === 'user' ? 'Obchodník: ' : 'Vedoucí: ') + String(h.text || '')).join('\n');
   const usr = 'DATA OBCHODNÍKA (JSON):\n' + JSON.stringify(_coachCtx(ctx))
     + (hist ? ('\n\nHISTORIE CHATU:\n' + hist) : '')
     + '\n\nDOTAZ OBCHODNÍKA: ' + message;
-  const j = await callClaudeJSON(sys, usr, 1500);
-  if (!j || !j.reply) return { reply: 'Teď se mi nepodařilo odpovědět, zkus to prosím ještě jednou.', actions: [] };
-  const actions = Array.isArray(j.actions) ? j.actions.filter((a) => a && (a.type === 'set_status' || a.type === 'create_task')).slice(0, 6) : [];
-  return { reply: String(j.reply).slice(0, 4000), actions };
+  const raw = await callClaudeText(sys, usr, 1500);
+  if (!raw) return { reply: 'Teď se mi nepodařilo odpovědět, zkus to prosím ještě jednou.', actions: [] };
+  let reply = raw.trim(); let actions = [];
+  const idx = reply.indexOf('<<<ACTIONS>>>');
+  if (idx >= 0) {
+    let after = reply.slice(idx + 13).trim().replace(/^```(json)?/i, '').replace(/```$/,'').trim();
+    reply = reply.slice(0, idx).trim();
+    try { const arr = JSON.parse(after); if (Array.isArray(arr)) actions = arr.filter((a) => a && (a.type === 'set_status' || a.type === 'create_task')).slice(0, 6); } catch (e) { /* akce best-effort */ }
+  }
+  return { reply: (reply || 'Rozumím.').slice(0, 4000), actions };
 }
 
 module.exports = {
