@@ -858,8 +858,48 @@ async function replaceSkippedTask(skipped) {
   } catch (e) { return { replaced: false, error: String((e && e.message) || e) }; }
 }
 
+// ─── Vedoucí v chatu (mentor / kouč) ─────────────────────────────────────────
+// Odpovídá obchodníkovi na dotazy, analyzuje jeho data a navrhuje konkrétní akce.
+function _coachCtx(ctx) {
+  const leads = (ctx.leads || []).map((l) => ({
+    id: l.id, name: l.name, status: l.status,
+    days_since_update: l.days_since_update, age_days: l.age_days,
+    never_called: l.never_called, called_today: l.called_today,
+    hot_signal: l.hot_signal, portal_opened: l.portal_opened,
+    has_reservation: (l.reservations || []).length > 0,
+    discount_ends_today: l.discount_ends_today,
+  }));
+  const byStatus = {};
+  leads.forEach((l) => { byStatus[l.status] = (byStatus[l.status] || 0) + 1; });
+  return {
+    date: ctx.date, daily_quota: ctx.daily_quota, targets: ctx.targets, actuals: ctx.actuals,
+    meetings_today: (ctx.meetings_today || []).length, meetings_upcoming_7d: (ctx.meetings_upcoming_7d || []).length,
+    lead_count: leads.length, leads_by_status: byStatus, leads,
+  };
+}
+async function coachReply(personId, message, history) {
+  const ctx = await gatherPlanContext(personId);
+  let instr = AI_PLAN_INSTRUCTIONS_DEFAULT;
+  try { const s = await getSetting(AI_PLAN_INSTRUCTIONS_KEY, { type: 'string', defaultValue: AI_PLAN_INSTRUCTIONS_DEFAULT }); if (s && String(s).trim()) instr = String(s); } catch (e) { /* default */ }
+  const sys = instr + ' '
+    + 'TEĎ jsi v roli MENTORA a KOUČE v chatu s obchodníkem. Odpovídej česky, konkrétně, stručně a prakticky — vysvětluj jak věci fungují a jak je má dělat, analyzuj jeho data (kontext níže), navrhuj konkrétní kroky a úpravy vedoucí k obratu. Buď náročný, ale podporující a motivující. Když se ptá „jak", dej návod. Když chce analýzu, vyjdi z dat a řekni priority. '
+    + 'Když navrhuješ konkrétní akci proveditelnou v systému, přidej ji do pole actions. Povolené akce: '
+    + '{"type":"set_status","lead_id":<id z kontextu>,"status":"<new|nedovolano|volat_pristi|contacted|schuzka|qualified|dosledovani|converted|nelze_pouzit|rejected>","label":"<lidsky co se stane>"} a '
+    + '{"type":"create_task","title":"<název úkolu>","lead_id":<id nebo null>,"label":"<lidsky co se stane>"}. Akce navrhuj jen když dávají jasný smysl a lead_id znáš z kontextu; jinak nech actions prázdné. '
+    + 'Odpověz POUZE platným JSON bez markdownu: {"reply":"<tvá odpověď/rada v textu>","actions":[...]}';
+  const hist = (history || []).map((h) => (h.role === 'user' ? 'Obchodník: ' : 'Vedoucí: ') + String(h.text || '')).join('\n');
+  const usr = 'DATA OBCHODNÍKA (JSON):\n' + JSON.stringify(_coachCtx(ctx))
+    + (hist ? ('\n\nHISTORIE CHATU:\n' + hist) : '')
+    + '\n\nDOTAZ OBCHODNÍKA: ' + message;
+  const j = await callClaudeJSON(sys, usr, 1500);
+  if (!j || !j.reply) return { reply: 'Teď se mi nepodařilo odpovědět, zkus to prosím ještě jednou.', actions: [] };
+  const actions = Array.isArray(j.actions) ? j.actions.filter((a) => a && (a.type === 'set_status' || a.type === 'create_task')).slice(0, 6) : [];
+  return { reply: String(j.reply).slice(0, 4000), actions };
+}
+
 module.exports = {
   tzTodayStr, periodBounds, getActiveSalespeople,
+  coachReply,
   planDay, reviewDay, reviewPeriod, reportToOwners,
   buildOwnerReport, computeActuals, getTargets, ensureTargets,
   replaceSkippedTask,

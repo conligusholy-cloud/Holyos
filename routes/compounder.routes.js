@@ -1104,6 +1104,23 @@ router.post('/discount/start-all', requireAuth, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// POST /api/compounder/sales/coach {message, history[]} — chat s AI vedoucím (mentor/kouč).
+router.post('/sales/coach', requireAuth, async (req, res, next) => {
+  try {
+    const u = req.user || {};
+    let personId = salesMyPersonId(req);
+    if (req.body && req.body.person_id && salesIsMgr(u)) personId = Number(req.body.person_id);
+    if (!personId) return res.status(400).json({ error: 'Uživatel nemá přiřazenou osobu' });
+    const message = String((req.body && req.body.message) || '').trim().slice(0, 2000);
+    if (!message) return res.status(400).json({ error: 'Prázdná zpráva' });
+    const history = Array.isArray(req.body && req.body.history)
+      ? req.body.history.slice(-10).map((h) => ({ role: (h && h.role === 'user') ? 'user' : 'assistant', text: String((h && h.text) || '').slice(0, 2000) }))
+      : [];
+    const out = await salesMgr.coachReply(personId, message, history);
+    res.json({ ok: true, reply: out.reply, actions: out.actions || [] });
+  } catch (err) { next(err); }
+});
+
 // GET /api/compounder/sales/ai-instructions — editovatelné pokyny AI vedoucího (filozofie + priority).
 router.get('/sales/ai-instructions', requireAuth, async (req, res, next) => {
   try {

@@ -70,6 +70,7 @@
   .tabbar .tab .ic{font-size:20px;line-height:1}
   #screen-calendar{position:fixed;inset:0;background:var(--bg,#0b0b0d);z-index:35;overflow:auto;display:none;padding:10px 8px calc(72px + env(safe-area-inset-bottom,0))}
   #screen-today{position:fixed;inset:0;background:var(--bg,#0b0b0d);z-index:34;overflow:auto;display:none;padding:10px 10px calc(72px + env(safe-area-inset-bottom,0))}
+  #screen-coach{position:fixed;inset:0;background:var(--bg,#0b0b0d);z-index:34;display:none;flex-direction:column;padding:10px 10px calc(64px + env(safe-area-inset-bottom,0))}
   .tsk{background:var(--surface,#151518);border:1px solid var(--line,#2a2a2e);border-radius:14px;padding:11px 12px;margin:8px 0;display:flex;gap:10px;align-items:flex-start}
   .tsk.done{opacity:.55}
   .tsk .tk-ic{font-size:20px;line-height:1.2;flex:0 0 auto}
@@ -238,10 +239,24 @@
   </div>
   <button class="fab" id="fab-calendar" onclick="openMeeting({})" style="display:none">+ Schůzka</button>
 
+  <div id="screen-coach">
+    <div style="display:flex;align-items:center;gap:8px;padding:4px 6px 8px">
+      <h1 style="margin:0;font-size:20px">👔 Vedoucí</h1>
+      <span style="font-size:12px;color:var(--muted2)">mentor & kouč</span>
+      <button class="logout" style="margin-left:auto;padding:6px 10px" onclick="coachClear()" title="Nový chat">🗑️</button>
+    </div>
+    <div id="coach-msgs" style="flex:1;overflow-y:auto;padding:4px 2px;display:flex;flex-direction:column;gap:10px"></div>
+    <div style="display:flex;gap:8px;padding:8px 2px 0;border-top:1px solid var(--line)">
+      <input id="coach-input" class="qinput" style="flex:1" placeholder="Zeptej se vedoucího…" onkeydown="if(event.key==='Enter')coachSend()">
+      <button class="btn btn-p" id="coach-send" onclick="coachSend()">Odeslat</button>
+    </div>
+  </div>
+
   <nav class="tabbar">
     <button class="tab active" id="tab-today" onclick="showScreen('today')"><span class="ic">🧭</span>Dnes</button>
     <button class="tab" id="tab-contacts" onclick="showScreen('contacts')"><span class="ic">👥</span>Kontakty</button>
     <button class="tab" id="tab-calendar" onclick="showScreen('calendar')"><span class="ic">📅</span>Kalendář</button>
+    <button class="tab" id="tab-coach" onclick="showScreen('coach')"><span class="ic">👔</span>Vedoucí</button>
   </nav>
 
   <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.js"></script>
@@ -693,18 +708,71 @@
   function showScreen(name){
     var cal = name==='calendar';
     var tod = name==='today';
-    var contacts = !cal && !tod;
+    var coach = name==='coach';
+    var contacts = !cal && !tod && !coach;
     var sc=document.getElementById('screen-calendar'); if(sc) sc.style.display = cal?'block':'none';
     var st=document.getElementById('screen-today'); if(st) st.style.display = tod?'block':'none';
+    var sco=document.getElementById('screen-coach'); if(sco) sco.style.display = coach?'flex':'none';
     var fk=document.getElementById('fab-contacts'); if(fk) fk.style.display = contacts?'':'none';
     var fc=document.getElementById('fab-calendar'); if(fc) fc.style.display = cal?'':'none';
     var td=document.getElementById('tab-today'); if(td) td.classList.toggle('active',tod);
     var tc=document.getElementById('tab-contacts'); if(tc) tc.classList.toggle('active',contacts);
     var tk=document.getElementById('tab-calendar'); if(tk) tk.classList.toggle('active',cal);
+    var tco=document.getElementById('tab-coach'); if(tco) tco.classList.toggle('active',coach);
     if(cal){ initCalendarView(); setTimeout(function(){ if(window._fcInst){ try{ window._fcInst.updateSize(); }catch(e){} } },60); }
     if(tod && !window._todayLoaded){ loadToday(); }
+    if(coach){ var cb=document.getElementById('coach-msgs'); if(cb && !cb.children.length) coachGreet(); }
   }
   window.showScreen=showScreen; window.initCalendarView=initCalendarView;
+
+  // ─── Vedoucí (chat s AI mentorem/koučem) ─────────────────────────────────
+  var COACH_HIST = [];
+  function coachRenderMsg(role, text, actions){
+    var box=document.getElementById('coach-msgs'); if(!box) return;
+    var mine=role==='user';
+    var wrap=document.createElement('div');
+    wrap.style.cssText='max-width:88%;align-self:'+(mine?'flex-end':'flex-start')+';background:'+(mine?'rgba(234,179,8,.16)':'rgba(255,255,255,.05)')+';border:1px solid '+(mine?'rgba(234,179,8,.4)':'var(--line)')+';border-radius:14px;padding:9px 12px;font-size:14px;line-height:1.45;white-space:pre-wrap;word-break:break-word';
+    wrap.textContent=text; box.appendChild(wrap);
+    if(actions && actions.length){
+      var arow=document.createElement('div'); arow.style.cssText='align-self:flex-start;display:flex;flex-direction:column;gap:6px;max-width:88%';
+      actions.forEach(function(a){
+        var b=document.createElement('button'); b.className='btn';
+        b.style.cssText='text-align:left;background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.5);color:#86efac;font-weight:700;font-size:13px;padding:7px 11px;border-radius:10px';
+        b.textContent='✓ '+(a.label||(a.type==='set_status'?('Nastav stav '+a.status):'Založ úkol'));
+        b.onclick=function(){ coachDoAction(a,b); };
+        arow.appendChild(b);
+      });
+      box.appendChild(arow);
+    }
+    box.scrollTop=box.scrollHeight;
+  }
+  async function coachDoAction(a,btn){
+    var old=btn.textContent; btn.disabled=true;
+    try{
+      if(a.type==='set_status' && a.lead_id){ await setField(parseInt(a.lead_id,10),'status',a.status); btn.textContent='✓ Stav nastaven'; }
+      else if(a.type==='create_task'){ await api('/tasks',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title:a.title,lead_id:a.lead_id||null})}); btn.textContent='✓ Úkol založen'; }
+      else { btn.textContent='✓ Hotovo'; }
+      btn.style.opacity='.7';
+    }catch(e){ btn.disabled=false; btn.textContent=old; alert('Akci se nepodařilo provést.'); }
+  }
+  async function coachSend(){
+    var inp=document.getElementById('coach-input'); var t=(inp.value||'').trim(); if(!t) return;
+    inp.value=''; coachRenderMsg('user',t,null); COACH_HIST.push({role:'user',text:t});
+    var sb=document.getElementById('coach-send'); if(sb) sb.disabled=true;
+    var box=document.getElementById('coach-msgs');
+    var think=document.createElement('div'); think.style.cssText='align-self:flex-start;color:var(--muted);font-size:13px;padding:2px 6px'; think.textContent='Vedoucí přemýšlí…'; box.appendChild(think); box.scrollTop=box.scrollHeight;
+    try{
+      var r=await api('/sales/coach',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:t,history:COACH_HIST.slice(-10)})});
+      var j=await r.json().catch(function(){return{};});
+      think.remove();
+      if(!r.ok||!j.reply){ coachRenderMsg('assistant',(j&&j.error)||'Teď to nešlo, zkus to prosím znovu.',null); }
+      else { coachRenderMsg('assistant',j.reply,j.actions); COACH_HIST.push({role:'assistant',text:j.reply}); }
+    }catch(e){ think.remove(); coachRenderMsg('assistant','Chyba spojení, zkus to prosím znovu.',null); }
+    finally{ if(sb) sb.disabled=false; }
+  }
+  function coachGreet(){ coachRenderMsg('assistant','Ahoj, jsem tvůj vedoucí obchodu. Zeptej se mě na cokoli — jak posunout konkrétní leady, jak plnit kvótu, jak vést hovor. Nebo mi napiš „projdi můj den a poraď priority" a já se podívám na tvá data.',null); }
+  function coachClear(){ COACH_HIST=[]; var b=document.getElementById('coach-msgs'); if(b) b.innerHTML=''; coachGreet(); }
+  window.coachSend=coachSend; window.coachClear=coachClear; window.coachDoAction=coachDoAction; window.coachGreet=coachGreet;
   window.openMeeting=openMeeting; window.closeMeeting=closeMeeting; window.saveMeeting=saveMeeting; window.deleteMeeting=deleteMeeting; window.meetingFromSite=meetingFromSite; window.meetingFromLead=meetingFromLead;
   function lokToggle(id){ lokState.openId = (lokState.openId===id)?null:id; renderLokalitySec(); }
   window.lokToggle = lokToggle;
