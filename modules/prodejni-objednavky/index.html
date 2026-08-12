@@ -411,6 +411,7 @@
           <option value="schuzka">Domluvena schůzka</option>
           <option value="schuzka_online">Domluvena schůzka online</option>
           <option value="qualified">Kvalifikován</option>
+          <option value="dosledovani">Dosledování</option>
           <option value="converted">Převeden</option>
           <option value="nelze_pouzit">Nelze použít</option>
           <option value="rejected">Zamítnut</option>
@@ -2853,7 +2854,7 @@
     // ============================================================
     // COMPOUNDER — přehled leadů z webu compounder.world
     // ============================================================
-    var CMP_STATUS = { new: 'Nový', nedovolano: 'Nedovoláno', volat_pristi: 'Volat příště', contacted: 'Kontaktován', schuzka: 'Domluvena schůzka', schuzka_online: 'Domluvena schůzka online', qualified: 'Kvalifikován', converted: 'Převeden', nelze_pouzit: 'Nelze použít', rejected: 'Zamítnut' };
+    var CMP_STATUS = { new: 'Nový', nedovolano: 'Nedovoláno', volat_pristi: 'Volat příště', contacted: 'Kontaktován', schuzka: 'Domluvena schůzka', schuzka_online: 'Domluvena schůzka online', qualified: 'Kvalifikován', dosledovani: 'Dosledování', converted: 'Převeden', nelze_pouzit: 'Nelze použít', rejected: 'Zamítnut' };
     var CMP_LANGS = { en:'English', bg:'Български', cs:'Čeština', da:'Dansk', de:'Deutsch', el:'Ελληνικά', es:'Español', et:'Eesti', fi:'Suomi', fr:'Français', ga:'Gaeilge', hr:'Hrvatski', hu:'Magyar', it:'Italiano', lt:'Lietuvių', lv:'Latviešu', mt:'Malti', nl:'Nederlands', pl:'Polski', pt:'Português', ro:'Română', sk:'Slovenčina', sl:'Slovenščina', sv:'Svenska' };
     var CMP_SELLERS = null; // seznam obchodníků (lazy z /api/sales/sellers); null = ještě nenačteno, [] = nedostupné
     var CMP_EXT_REPS = null; // externí obchodníci (lazy z /api/compounder/external-reps)
@@ -4801,7 +4802,7 @@
     // Data tahá server-side proxy /api/compounder/kiosk-values (klíč drží server).
     // ============================================================
     var _kioskData = null; // celá odpověď { kiosks, summary, ... }
-    var _compoundingSettings = { pricelist: { v2: { eur: null }, v3: { eur: null }, v4: { eur: null } }, locationMonths: 12, servicePct: 15, energyPct: 9.5, locationPriceMode: 'months', locationRoiPct: 25, buybackPct: 65, buybackYears: 5 };
+    var _compoundingSettings = { pricelist: { v2: { eur: null }, v3: { eur: null }, v4: { eur: null } }, locationMonths: 12, servicePct: 15, energyPct: 9.5, locationPriceMode: 'months', locationRoiPct: 25, buybackPct: 65, buybackYears: 5, discount: { machinePct: { v2: 0, v3: 0, v4: 0 }, locationPct: 0, validDays: 7 } };
     var _kioskConfig = {}; // mapa { [code]: { version, rentMonthlyCzk } }
     var _kvSort = { key: null, dir: -1 };
     var _kvCountryTab = 'CZ';
@@ -5718,6 +5719,16 @@
       var resPay = Number.isFinite(st.reservationPayDays) ? st.reservationPayDays : 1;
       var resReblock = Number.isFinite(st.reservationReblockDays) ? st.reservationReblockDays : 2;
       var defCur = (st.defaultCurrency === 'EUR') ? 'EUR' : 'CZK';
+      var _disc = st.discount || {}; var _dM = _disc.machinePct || {};
+      var dV2 = Number.isFinite(_dM.v2) ? _dM.v2 : 0, dV3 = Number.isFinite(_dM.v3) ? _dM.v3 : 0, dV4 = Number.isFinite(_dM.v4) ? _dM.v4 : 0;
+      var dLoc = Number.isFinite(_disc.locationPct) ? _disc.locationPct : 0;
+      var dDays = Number.isFinite(_disc.validDays) ? _disc.validDays : 7;
+      function discPct(id, val, label) {
+        return '<div style="display:flex;align-items:center;gap:5px;">' +
+          '<span style="font-size:12px;color:var(--text2);width:22px;">' + label + '</span>' +
+          '<div style="position:relative;"><input type="number" min="0" max="100" step="0.5" id="' + id + '" value="' + val + '" style="width:78px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 24px 8px 10px;color:var(--text);font-size:14px;"><span style="position:absolute;right:8px;top:50%;transform:translateY(-50%);color:var(--text2);font-size:12px;">%</span></div>' +
+          '</div>';
+      }
       var rate = _kvFxRates.EUR || 25;
       function verRow(ver, label) {
         var eur = (pl[ver] && pl[ver].eur != null) ? pl[ver].eur : '';
@@ -5763,6 +5774,22 @@
             '<span style="position:absolute;right:12px;top:50%;transform:translateY(-50%);color:var(--text2);font-size:13px;">%</span>' +
           '</div>' +
           '<div style="color:var(--text2);font-size:12px;">pro variantu „dle ROI"</div>' +
+        '</div>' +
+        '<hr style="border:none;border-top:1px solid var(--border);margin:18px 0;">' +
+        '<div style="margin-bottom:6px;font-weight:600;font-size:14px;">Sleva</div>' +
+        '<div style="color:var(--text2);font-size:12px;margin-bottom:12px;">Zvlášť sleva na vstupní cenu prádlomatu (V2/V3/V4) a zvlášť na cenu lokality. Platí zadaný počet dní od vytvoření přístupu leada do portálu.</div>' +
+        '<div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;flex-wrap:wrap;">' +
+          '<div style="width:160px;">Sleva na prádlomat</div>' +
+          discPct('kvset-disc-v2', dV2, 'V2') + discPct('kvset-disc-v3', dV3, 'V3') + discPct('kvset-disc-v4', dV4, 'V4') +
+        '</div>' +
+        '<div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;">' +
+          '<div style="width:160px;">Sleva na cenu lokality</div>' +
+          '<div style="position:relative;"><input type="number" min="0" max="100" step="0.5" id="kvset-disc-loc" value="' + dLoc + '" style="width:120px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 32px 8px 12px;color:var(--text);font-size:14px;"><span style="position:absolute;right:12px;top:50%;transform:translateY(-50%);color:var(--text2);font-size:13px;">%</span></div>' +
+        '</div>' +
+        '<div style="display:flex;align-items:center;gap:12px;">' +
+          '<div style="width:160px;">Platnost slevy</div>' +
+          '<input type="number" min="0" max="3650" step="1" id="kvset-disc-days" value="' + dDays + '" style="width:120px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:14px;">' +
+          '<div style="color:var(--text2);font-size:12px;">dní od vytvoření přístupu do portálu</div>' +
         '</div>' +
         '<hr style="border:none;border-top:1px solid var(--border);margin:18px 0;">' +
         '<div style="margin-bottom:6px;font-weight:600;font-size:14px;">Servisní smlouva</div>' +
@@ -5919,6 +5946,15 @@
         reservationPayDays: resPayV,
         reservationReblockDays: resReblockV,
         defaultCurrency: defCurV,
+      };
+      // Sleva — % clamp 0–100, dny 0–3650.
+      function discClamp(id){ var n = parseFloat(String((document.getElementById(id)||{}).value||'').trim().replace(',','.')); if(!isFinite(n)) n = 0; return Math.max(0, Math.min(100, n)); }
+      var discDays = parseInt(String((document.getElementById('kvset-disc-days')||{}).value||'').trim(), 10);
+      if (!(discDays >= 0 && discDays <= 3650)) { return showErr('Platnost slevy musí být 0 až 3650 dní.'); }
+      payload.discount = {
+        machinePct: { v2: discClamp('kvset-disc-v2'), v3: discClamp('kvset-disc-v3'), v4: discClamp('kvset-disc-v4') },
+        locationPct: discClamp('kvset-disc-loc'),
+        validDays: discDays,
       };
       try {
         var r = await fetch('/api/compounder/compounding-settings', {

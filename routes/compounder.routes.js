@@ -1289,7 +1289,20 @@ router.get('/my-day', requireAuth, async (req, res, next) => {
     const prevStr = new Date(new Date(dateStr + 'T00:00:00Z').getTime() - 86400000).toISOString().slice(0, 10);
     const prevDayReview = await prisma.salesReview.findUnique({ where: { person_id_kind_period_start: { person_id: personId, kind: 'day', period_start: new Date(prevStr + 'T00:00:00Z') } } }).catch(() => null);
     if (plan) await attachTaskProgress(plan, personId, dateStr).catch(() => {});
-    res.json({ ok: true, person_id: personId, date: dateStr, plan: plan || null, review: dayReview || null, prevDayReview: prevDayReview || null, prevDayDate: prevStr });
+    // Dnešní statistiky aktivity obchodníka (volání / odeslané přístupy / domluvené schůzky / nové kontakty).
+    const dayStart = new Date(dateStr + 'T00:00:00');
+    const dayEnd = new Date(dateStr + 'T23:59:59.999');
+    let stats = { calls: 0, invites: 0, meetings: 0, new_contacts: 0 };
+    try {
+      const [calls, invites, meetings, newContacts] = await Promise.all([
+        prisma.compounderLead.count({ where: { owner_person_id: personId, last_called_at: { gte: dayStart, lte: dayEnd } } }),
+        prisma.compounderLead.count({ where: { owner_person_id: personId, access_last_sent_at: { gte: dayStart, lte: dayEnd } } }),
+        prisma.salesEvent.count({ where: { organizer_id: personId, event_type: 'meeting', created_at: { gte: dayStart, lte: dayEnd } } }),
+        prisma.compounderLead.count({ where: { owner_person_id: personId, created_at: { gte: dayStart, lte: dayEnd } } }),
+      ]);
+      stats = { calls, invites, meetings, new_contacts: newContacts };
+    } catch (e) { /* statistiky best-effort */ }
+    res.json({ ok: true, person_id: personId, date: dateStr, plan: plan || null, review: dayReview || null, prevDayReview: prevDayReview || null, prevDayDate: prevStr, stats });
   } catch (err) { next(err); }
 });
 
@@ -1786,7 +1799,7 @@ router.get('/leads', requireAuth, async (req, res, next) => {
 
 // PATCH /api/compounder/leads/:id — změna stavu / poznámky
 const patchSchema = z.object({
-  status: z.enum(['new', 'nedovolano', 'volat_pristi', 'contacted', 'schuzka', 'schuzka_online', 'qualified', 'converted', 'nelze_pouzit', 'rejected']).optional(),
+  status: z.enum(['new', 'nedovolano', 'volat_pristi', 'contacted', 'schuzka', 'schuzka_online', 'qualified', 'dosledovani', 'converted', 'nelze_pouzit', 'rejected']).optional(),
   notes: z.string().max(5000).optional().nullable(),
   lang: z.string().trim().max(10).optional().nullable(),
   owner_person_id: z.number().int().positive().optional().nullable(),
@@ -2845,6 +2858,9 @@ const COMPOUNDING_SETTINGS_DEFAULT = {
   externalCommissionMachinePct: 5,
   externalCommissionLocationPct: 12,
   externalMarkupPct: 20,
+  // Sleva: zvlášť na vstupní cenu prádlomatu (V2/V3/V4) a na cenu lokality.
+  // validDays = počet dní platnosti od vytvoření přístupu leada do portálu.
+  discount: { machinePct: { v2: 0, v3: 0, v4: 0 }, locationPct: 0, validDays: 7 },
 };
 
 const compoundingSettingsSchema = z.object({
@@ -2870,6 +2886,11 @@ const compoundingSettingsSchema = z.object({
   externalCommissionMachinePct: z.number().min(0).max(100).optional(),
   externalCommissionLocationPct: z.number().min(0).max(100).optional(),
   externalMarkupPct: z.number().min(0).max(1000).optional(),
+  discount: z.object({
+    machinePct: z.object({ v2: z.number().min(0).max(100), v3: z.number().min(0).max(100), v4: z.number().min(0).max(100) }).partial().optional(),
+    locationPct: z.number().min(0).max(100).optional(),
+    validDays: z.number().int().min(0).max(3650).optional(),
+  }).optional(),
   versionPhotos: z.object({ v2: z.string().max(600).nullable().optional(), v3: z.string().max(600).nullable().optional(), v4: z.string().max(600).nullable().optional() }).optional(),
 });
 
@@ -2904,6 +2925,19 @@ router.get('/compounding-settings', requireAuth, async (req, res, next) => {
       externalCommissionMachinePct: (val && Number.isFinite(val.externalCommissionMachinePct)) ? val.externalCommissionMachinePct : 5,
       externalCommissionLocationPct: (val && Number.isFinite(val.externalCommissionLocationPct)) ? val.externalCommissionLocationPct : 12,
       externalMarkupPct: (val && Number.isFinite(val.externalMarkupPct)) ? val.externalMarkupPct : 20,
+      discount: (function(){
+        var d = (val && val.discount && typeof val.discount === 'object') ? val.discount : {};
+        var m = (d.machinePct && typeof d.machinePct === 'object') ? d.machinePct : {};
+        return {
+          machinePct: {
+            v2: Number.isFinite(m.v2) ? m.v2 : 0,
+            v3: Number.isFinite(m.v3) ? m.v3 : 0,
+            v4: Number.isFinite(m.v4) ? m.v4 : 0,
+          },
+          locationPct: Number.isFinite(d.locationPct) ? d.locationPct : 0,
+          validDays: Number.isFinite(d.validDays) ? d.validDays : 7,
+        };
+      })(),
       versionPhotos: (val && val.versionPhotos && typeof val.versionPhotos === 'object') ? val.versionPhotos : {},
     };
     res.json(merged);

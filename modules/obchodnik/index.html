@@ -223,6 +223,7 @@
       <button class="logout" onclick="reloadToday()" title="Přegenerovat">↻</button>
     </div>
     <div id="today-focus" style="color:var(--muted);font-size:13.5px;line-height:1.5;margin:0 6px 6px"></div>
+    <div id="today-stats" style="display:flex;gap:8px;flex-wrap:wrap;margin:0 6px 12px"></div>
     <div id="today-tasks"><div class="loading">Načítám…</div></div>
     <div id="today-review"></div>
     <div id="today-prevreview"></div>
@@ -247,7 +248,7 @@
   <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/locales-all.global.min.js"></script>
 <script>
   var API = '/api/compounder';
-  var STATUS = { new:{l:'Nový',c:'var(--new)'}, nedovolano:{l:'Nedovoláno',c:'#f59e0b'}, volat_pristi:{l:'Volat příště',c:'#eab308'}, contacted:{l:'Kontaktován',c:'var(--contacted)'}, schuzka:{l:'Domluvena schůzka',c:'#22c55e'}, schuzka_online:{l:'Domluvena schůzka online',c:'#10b981'}, qualified:{l:'Kvalifikován',c:'var(--qualified)'}, converted:{l:'Převeden',c:'var(--converted)'}, nelze_pouzit:{l:'Nelze použít',c:'#6b7280'}, rejected:{l:'Zamítnut',c:'var(--rejected)'} };
+  var STATUS = { new:{l:'Nový',c:'var(--new)'}, nedovolano:{l:'Nedovoláno',c:'#f59e0b'}, volat_pristi:{l:'Volat příště',c:'#eab308'}, contacted:{l:'Kontaktován',c:'var(--contacted)'}, schuzka:{l:'Domluvena schůzka',c:'#22c55e'}, schuzka_online:{l:'Domluvena schůzka online',c:'#10b981'}, qualified:{l:'Kvalifikován',c:'var(--qualified)'}, dosledovani:{l:'Dosledování',c:'#06b6d4'}, converted:{l:'Převeden',c:'var(--converted)'}, nelze_pouzit:{l:'Nelze použít',c:'#6b7280'}, rejected:{l:'Zamítnut',c:'var(--rejected)'} };
   var LANGS = { '':'—', en:'English', bg:'Български', cs:'Čeština', da:'Dansk', de:'Deutsch', el:'Ελληνικά', es:'Español', et:'Eesti', fi:'Suomi', fr:'Français', ga:'Gaeilge', hr:'Hrvatski', hu:'Magyar', it:'Italiano', lt:'Lietuvių', lv:'Latviešu', mt:'Malti', nl:'Nederlands', pl:'Polski', pt:'Português', ro:'Română', sk:'Slovenčina', sl:'Slovenščina', sv:'Svenska' };
   var COUNTRIES = [
     {c:'CZ',f:'🇨🇿',d:'+420'},{c:'SK',f:'🇸🇰',d:'+421'},{c:'DE',f:'🇩🇪',d:'+49'},{c:'AT',f:'🇦🇹',d:'+43'},
@@ -1403,6 +1404,12 @@
     var focus = document.getElementById('today-focus');
     var plan = j && j.plan;
     if (focus) focus.textContent = (plan && plan.focus) ? plan.focus : '';
+    var sEl = document.getElementById('today-stats');
+    if (sEl) {
+      var s = (j && j.stats) || {};
+      var chip = function(ic,lbl,val,col){ return '<div style="flex:1;min-width:72px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.10);border-radius:10px;padding:8px 6px;text-align:center"><div style="font-size:20px;font-weight:800;color:'+col+'">'+(val||0)+'</div><div style="font-size:11px;color:var(--muted2);margin-top:1px">'+ic+' '+lbl+'</div></div>'; };
+      sEl.innerHTML = chip('📞','Volání',s.calls,'#a78bfa') + chip('✉️','Přístupy',s.invites,'#22c55e') + chip('📅','Schůzky',s.meetings,'#eab308') + chip('✨','Nové',s.new_contacts,'#3b82f6');
+    }
     var tasks = (plan && plan.tasks) || [];
     if (!tasks.length){
       box.innerHTML = '<div class="empty">Na dnešek zatím žádné úkoly.<br><button class="btn btn-p" style="margin-top:10px" onclick="reloadToday()">Vygenerovat plán</button></div>';
