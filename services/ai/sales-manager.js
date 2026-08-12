@@ -248,7 +248,7 @@ async function gatherPlanContext(personId) {
     select: {
       id: true, name: true, email: true, phone: true, role: true, lang: true, status: true,
       notes: true, activity_log: true, created_at: true, updated_at: true, source: true,
-      access_sent_count: true, access_last_sent_at: true, access_approved_at: true,
+      access_sent_count: true, access_last_sent_at: true, access_approved_at: true, last_called_at: true,
     },
     orderBy: { updated_at: 'desc' }, take: 300,
   });
@@ -281,6 +281,7 @@ async function gatherPlanContext(personId) {
   }
 
   const nowMs = Date.now();
+  const dayStartMs = dayDate(tzTodayStr()).getTime();
   const leadFacts = leads.slice(0, 120).map((l) => {
     const lastAct = l.activity_log ? lastActivityLines(l.activity_log, 4) : [];
     const daysSinceUpdate = l.updated_at ? Math.floor((nowMs - new Date(l.updated_at).getTime()) / 86400000) : null;
@@ -290,6 +291,7 @@ async function gatherPlanContext(personId) {
     return {
       id: l.id, name: l.name, status: l.status, role: l.role, lang: l.lang,
       has_phone: !!l.phone, has_email: !!l.email,
+      called_today: !!(l.last_called_at && new Date(l.last_called_at).getTime() >= dayStartMs),
       days_since_update: daysSinceUpdate,
       invite_sent: l.access_sent_count || 0,
       has_portal_access: hasPortalAccess,
@@ -439,6 +441,7 @@ function buildLeadTasks(ctx) {
     if (l.status === 'qualified' && !l.has_portal_access && l.has_email) {
       tasks.push({ kind: 'invite', title: 'Poslat přístup do portálu – ' + l.name, detail: 'Kontakt má po hovoru zájem — otevři kontakt a odešli přihlašovací odkaz do portálu.', reasoning: 'Kvalifikovaný zájemce zatím bez přístupu.', priority: 2, est_min: 10, lead_id: l.id }); covered.add(l.id); return;
     }
+    if (l.called_today) { covered.add(l.id); return; } // dnes už volaný → dnešní hovor je hotový, neplánuj další
     if ((l.days_since_update || 0) >= 7) {
       tasks.push({ kind: 'followup', title: 'Oživit kontakt – ' + l.name, detail: 'Otevři kontakt, přečti poznámky; zavolej, zjisti stav a posuň k schůzce/rezervaci.', reasoning: 'Přes týden beze změny.', priority: 3, est_min: 15, lead_id: l.id }); covered.add(l.id); return;
     }

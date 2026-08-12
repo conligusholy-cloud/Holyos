@@ -1289,9 +1289,28 @@ router.get('/my-day', requireAuth, async (req, res, next) => {
     const prevStr = new Date(new Date(dateStr + 'T00:00:00Z').getTime() - 86400000).toISOString().slice(0, 10);
     const prevDayReview = await prisma.salesReview.findUnique({ where: { person_id_kind_period_start: { person_id: personId, kind: 'day', period_start: new Date(prevStr + 'T00:00:00Z') } } }).catch(() => null);
     if (plan) await attachTaskProgress(plan, personId, dateStr).catch(() => {});
-    // Dnešní statistiky aktivity obchodníka (volání / odeslané přístupy / domluvené schůzky / nové kontakty).
     const dayStart = new Date(dateStr + 'T00:00:00');
     const dayEnd = new Date(dateStr + 'T23:59:59.999');
+    // Úkoly „zavolej a kvalifikuj / oživit" ber jako HOTOVÉ, když byl kontakt dnes volaný.
+    try {
+      if (plan && Array.isArray(plan.tasks)) {
+        const openCalls = plan.tasks.filter((t) => t.status === 'open' && t.lead_id && (t.kind === 'call' || t.kind === 'followup'));
+        if (openCalls.length) {
+          const ids = Array.from(new Set(openCalls.map((t) => t.lead_id)));
+          const called = await prisma.compounderLead.findMany({ where: { id: { in: ids }, last_called_at: { gte: dayStart, lte: dayEnd } }, select: { id: true, last_called_at: true } });
+          const calledMap = new Map(called.map((l) => [l.id, l.last_called_at]));
+          for (const t of openCalls) {
+            if (!calledMap.has(t.lead_id)) continue;
+            const at = calledMap.get(t.lead_id);
+            const hh = at ? (('0' + new Date(at).getHours()).slice(-2) + ':' + ('0' + new Date(at).getMinutes()).slice(-2)) : '';
+            const note = 'Automaticky: dnes voláno' + (hh ? ' ' + hh : '');
+            await prisma.salesTask.update({ where: { id: t.id }, data: { status: 'done', done_at: new Date(), done_note: note } }).catch(() => {});
+            t.status = 'done'; t.done_at = new Date(); t.done_note = note;
+          }
+        }
+      }
+    } catch (e) { /* auto-complete best-effort */ }
+    // Dnešní statistiky aktivity obchodníka (volání / odeslané přístupy / domluvené schůzky / nové kontakty).
     let stats = { calls: 0, invites: 0, meetings: 0, new_contacts: 0 };
     try {
       const [calls, invites, meetings, newContacts] = await Promise.all([
