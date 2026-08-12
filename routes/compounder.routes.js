@@ -5792,18 +5792,17 @@ async function buildOfferedLocations(leadId, opts) {
           const _mp = (_disc.machinePct && _disc.machinePct[ver]) ? Number(_disc.machinePct[ver]) : 0;
           mDisp = _disc.active ? machine : ((_mp > 0 && _mp < 100) ? Math.round(machine / (1 - _mp / 100)) : machine);
         }
+        // Cena po slevě = stroj (po slevě) + plná lokalita — SHODNĚ s adminem (Compounding).
+        // Sleva se počítá jen jednou (na stroji, machinePct); locationPct se už NEaplikuje,
+        // jinak by se sleva zdvojila a cena i % by se lišily od adminu.
         let total = (mDisp != null && lDisp != null) ? (mDisp + lDisp) : null;
-        // Sleva z CELKOVÉ ceny (kiosek + lokalita) — když je u leada aktivní (locationPct = sleva z celku).
-        if (total != null && _disc.active && _disc.locationPct > 0) {
-          total = Math.round(total * (1 - _disc.locationPct / 100));
-        }
-        // Cena PŘED slevou (pro vlaječku): stroj dopočet ↑ o machinePct + plná lokalita.
+        // Vlaječka ukazuje slevu NA STROJI (machinePct) → jednotné % napříč lokalitami.
         let priceBeforeCzk = total, discPct = 0;
         if (machine != null && locality != null) {
           const _mp2 = (_disc.machinePct && _disc.machinePct[ver]) ? Number(_disc.machinePct[ver]) : 0;
           const machineBefore = (_mp2 > 0 && _mp2 < 100) ? Math.round(machine / (1 - _mp2 / 100)) : machine;
           priceBeforeCzk = machineBefore + locality;
-          if (_disc.active && total != null && priceBeforeCzk > total) discPct = Math.round((priceBeforeCzk - total) / priceBeforeCzk * 100);
+          if (_disc.active && _mp2 > 0) discPct = Math.round(_mp2);
         }
         const yearly = Math.round(cisty * 12);
         return {
