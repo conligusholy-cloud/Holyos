@@ -3197,10 +3197,26 @@ async function _fbResolveOwner(cfg) {
   }
   const total = split.reduce((s, x) => s + (Number(x.percent) || 0), 0);
   if (total <= 0) return { owner_kind: cfg.owner_kind, owner_person_id: cfg.owner_person_id, external_rep_id: cfg.external_rep_id };
-  let count = 0;
-  try { count = await prisma.compounderLead.count({ where: { meta_form_id: String(cfg.form_id) } }); } catch (e) { /* fallback na 0 */ }
-  let pick = count % total, acc = 0, chosen = split[0];
-  for (const s of split) { acc += (Number(s.percent) || 0); if (pick < acc) { chosen = s; break; } }
+  // Přiřaď nový lead tomu ze splitu, kdo je nejvíc POD svým cílovým podílem — dle
+  // skutečného počtu už přiřazených leadů z tohoto formuláře. Střídá správně
+  // (75/25 → J,J,J,T,J,J,J,T…) místo bloků a zároveň dorovná stávající nepoměr.
+  const formId = String(cfg.form_id || '');
+  const counts = [];
+  let assigned = 0;
+  for (const s of split) {
+    const where = { meta_form_id: formId };
+    if (s.owner_person_id) where.owner_person_id = Number(s.owner_person_id);
+    else where.external_rep_id = Number(s.external_rep_id);
+    let c = 0; try { c = await prisma.compounderLead.count({ where }); } catch (e) { /* 0 */ }
+    counts.push(c); assigned += c;
+  }
+  const nextTotal = assigned + 1;
+  let chosen = split[0], bestDeficit = -Infinity;
+  for (let i = 0; i < split.length; i++) {
+    const target = nextTotal * (Number(split[i].percent) || 0) / total; // kolik by měl mít po přidání tohoto leadu
+    const deficit = target - counts[i];
+    if (deficit > bestDeficit) { bestDeficit = deficit; chosen = split[i]; }
+  }
   return { owner_kind: chosen.owner_person_id ? 'internal' : 'external', owner_person_id: chosen.owner_person_id || null, external_rep_id: chosen.external_rep_id || null };
 }
 
