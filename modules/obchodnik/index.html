@@ -70,7 +70,7 @@
   .tabbar .tab .ic{font-size:20px;line-height:1}
   #screen-calendar{position:fixed;inset:0;background:var(--bg,#0b0b0d);z-index:35;overflow:auto;display:none;padding:10px 8px calc(72px + env(safe-area-inset-bottom,0))}
   #screen-today{position:fixed;inset:0;background:var(--bg,#0b0b0d);z-index:34;overflow:auto;display:none;padding:10px 10px calc(72px + env(safe-area-inset-bottom,0))}
-  #screen-coach{position:fixed;inset:0;background:var(--bg,#0b0b0d);z-index:34;display:none;flex-direction:column;padding:10px 10px calc(64px + env(safe-area-inset-bottom,0))}
+  #screen-coach{position:fixed;inset:0;background:var(--bg,#0b0b0d);z-index:34;display:none;flex-direction:column;overflow:hidden;padding:10px 10px calc(64px + env(safe-area-inset-bottom,0))}
   .tsk{background:var(--surface,#151518);border:1px solid var(--line,#2a2a2e);border-radius:14px;padding:11px 12px;margin:8px 0;display:flex;gap:10px;align-items:flex-start}
   .tsk.done{opacity:.55}
   .tsk .tk-ic{font-size:20px;line-height:1.2;flex:0 0 auto}
@@ -713,6 +713,9 @@
     var sc=document.getElementById('screen-calendar'); if(sc) sc.style.display = cal?'block':'none';
     var st=document.getElementById('screen-today'); if(st) st.style.display = tod?'block':'none';
     var sco=document.getElementById('screen-coach'); if(sco) sco.style.display = coach?'flex':'none';
+    // Spodní vrstvu (Kontakty) úplně schovej, když je aktivní jiná obrazovka — jinak na iOS
+    // prosvítá kolem klávesnice a pod overlayem.
+    ['.top','#chips','#myplan','#lokality-sec','#content'].forEach(function(sel){ var el=document.querySelector(sel); if(el) el.style.display = contacts ? '' : 'none'; });
     var fk=document.getElementById('fab-contacts'); if(fk) fk.style.display = contacts?'':'none';
     var fc=document.getElementById('fab-calendar'); if(fc) fc.style.display = cal?'':'none';
     var td=document.getElementById('tab-today'); if(td) td.classList.toggle('active',tod);
