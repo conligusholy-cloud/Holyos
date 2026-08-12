@@ -2949,31 +2949,60 @@
       if (CMP_SELLERS === null) { try { var sr = await fetch('/api/compounder/sellers', { credentials:'include' }); CMP_SELLERS = sr.ok ? await sr.json() : []; } catch(e){ CMP_SELLERS = []; } }
       if (CMP_EXT_REPS === null) { try { var er = await fetch('/api/compounder/external-reps', { credentials:'include' }); CMP_EXT_REPS = er.ok ? await er.json() : []; } catch(e){ CMP_EXT_REPS = []; } }
     }
-    function fbOwnerValue(f){
-      if (f.owner_kind === 'internal' && f.owner_person_id) return 'i:' + f.owner_person_id;
-      if (f.owner_kind === 'external' && f.external_rep_id) return 'e:' + f.external_rep_id;
-      return '';
-    }
-    function fbOwnerSelectHtml(f){
-      var cur = fbOwnerValue(f);
-      var s = 'width:100%;box-sizing:border-box;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 8px;font-size:12px;';
-      var h = '<select data-fb="owner" style="'+s+'"><option value=""'+(cur===''?' selected':'')+'>— nepřiřazeno —</option>';
+    // Volby obchodníků (interní + externí) pro select v rozdělení.
+    function fbOwnerOptions(cur){
+      var h = '<option value=""'+(cur===''?' selected':'')+'>— vyberte —</option>';
       var ints = (CMP_SELLERS||[]).map(function(p){ var nm=((p.first_name||'')+' '+(p.last_name||'')).trim()||('#'+p.id); var v='i:'+p.id; return '<option value="'+v+'"'+(cur===v?' selected':'')+'>'+cmpEsc(nm)+'</option>'; }).join('');
       if (ints) h += '<optgroup label="Interní obchodníci">'+ints+'</optgroup>';
       var exts = (CMP_EXT_REPS||[]).filter(function(r){ return (r.stav||'aktivni')!=='neaktivni'; }).map(function(r){ var v='e:'+r.id; return '<option value="'+v+'"'+(cur===v?' selected':'')+'>'+cmpEsc(r.jmeno||('#'+r.id))+'</option>'; }).join('');
       if (exts) h += '<optgroup label="Externí zástupci">'+exts+'</optgroup>';
-      return h + '</select>';
+      return h;
     }
+    function fbSplitTotalText(f){
+      var t = (f.split||[]).reduce(function(s,x){ return s + (Number(x.percent)||0); }, 0);
+      var col = t===100 ? '#22c55e' : '#f59e0b';
+      return '<span style="color:'+col+'">Σ '+t+' %'+(t===100?' ✓':' (dopočítej do 100)')+'</span>';
+    }
+    function fbSplitCellHtml(f, i){
+      var sel = 'box-sizing:border-box;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 8px;font-size:12px;';
+      var rows = (f.split||[]).map(function(sp, j){
+        return '<div style="display:flex;gap:5px;align-items:center;margin-bottom:5px;">'
+          + '<select data-fbsplit-owner="'+i+'-'+j+'" style="'+sel+'flex:1;min-width:110px;">'+fbOwnerOptions(sp.key||'')+'</select>'
+          + '<input type="number" min="0" max="100" data-fbsplit-pct="'+i+'-'+j+'" value="'+(sp.percent!=null?sp.percent:'')+'" oninput="fbSplitTotal('+i+')" style="'+sel+'width:60px;text-align:right;">'
+          + '<span style="font-size:12px;color:var(--text2);">%</span>'
+          + '<button class="btn btn-secondary" style="padding:2px 8px;" onclick="fbSplitRemove('+i+','+j+')" title="Odebrat">✕</button>'
+          + '</div>';
+      }).join('');
+      return rows
+        + '<div style="display:flex;align-items:center;gap:10px;margin-top:2px;"><button class="btn" style="padding:4px 10px;font-size:11px;" onclick="fbSplitAdd('+i+')">＋ obchodník</button>'
+        + '<span data-fbsplit-total="'+i+'" style="font-size:11px;">'+fbSplitTotalText(f)+'</span></div>';
+    }
+    function fbSyncSplitFromDom(i){
+      var f = FB_STATE.forms[i]; if (!f) return;
+      var arr = [];
+      (f.split||[]).forEach(function(sp, j){
+        var ow = document.querySelector('[data-fbsplit-owner="'+i+'-'+j+'"]');
+        var pc = document.querySelector('[data-fbsplit-pct="'+i+'-'+j+'"]');
+        arr.push({ key: ow ? ow.value : (sp.key||''), percent: pc ? (Number(pc.value)||0) : (Number(sp.percent)||0) });
+      });
+      f.split = arr;
+    }
+    function fbSplitTotal(i){ fbSyncSplitFromDom(i); var el = document.querySelector('[data-fbsplit-total="'+i+'"]'); if (el) el.innerHTML = fbSplitTotalText(FB_STATE.forms[i]); }
+    window.fbSplitTotal = fbSplitTotal;
+    function fbSplitAdd(i){ fbSyncStateFromDom(); FB_STATE.forms[i].split = FB_STATE.forms[i].split || []; FB_STATE.forms[i].split.push({ key:'', percent: (FB_STATE.forms[i].split.length ? 0 : 100) }); fbRenderForms(); }
+    window.fbSplitAdd = fbSplitAdd;
+    function fbSplitRemove(i, j){ fbSyncStateFromDom(); if (FB_STATE.forms[i] && FB_STATE.forms[i].split) FB_STATE.forms[i].split.splice(j,1); fbRenderForms(); }
+    window.fbSplitRemove = fbSplitRemove;
     function fbRowsHtml(){
-      if (!FB_STATE.forms.length) return '<tr><td colspan="5" style="color:var(--text2);padding:14px;text-align:center;">Zatím žádný formulář. Přidejte ho níže.</td></tr>';
+      if (!FB_STATE.forms.length) return '<tr><td colspan="4" style="color:var(--text2);padding:14px;text-align:center;">Zatím žádný formulář. Přidejte ho níže.</td></tr>';
       var inp = 'width:100%;box-sizing:border-box;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 8px;font-size:12px;';
       return FB_STATE.forms.map(function(f, i){
-        return '<tr data-fbrow="'+i+'" style="border-bottom:1px solid var(--border);">'
-          + '<td style="padding:8px 6px;"><input type="text" data-fb="form_name" value="'+cmpEsc(f.form_name||'')+'" placeholder="název reklamy" style="'+inp+'"><div style="color:var(--text2);font-size:11px;margin-top:3px;">ID: <code>'+cmpEsc(f.form_id)+'</code></div></td>'
-          + '<td style="padding:8px 6px;min-width:180px;">'+fbOwnerSelectHtml(f)+'</td>'
-          + '<td style="padding:8px 6px;"><input type="text" data-fb="campaign" value="'+cmpEsc(f.campaign||'')+'" placeholder="např. FB srpen – Kup si prádlomat" style="'+inp+'"></td>'
-          + '<td style="padding:8px 6px;text-align:center;"><label style="display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--text2);cursor:pointer;"><input type="checkbox" data-fb="active"'+(f.active!==false?' checked':'')+'> aktivní</label></td>'
-          + '<td style="padding:8px 6px;text-align:center;"><button class="btn btn-secondary" style="padding:4px 9px;" onclick="fbRemoveForm('+i+')" title="Odebrat">✕</button></td>'
+        return '<tr data-fbrow="'+i+'" style="border-bottom:1px solid var(--border);vertical-align:top;">'
+          + '<td style="padding:8px 6px;min-width:150px;"><input type="text" data-fb="form_name" value="'+cmpEsc(f.form_name||'')+'" placeholder="název reklamy" style="'+inp+'"><div style="color:var(--text2);font-size:11px;margin-top:3px;">ID: <code>'+cmpEsc(f.form_id)+'</code></div>'
+          + '<div style="margin-top:6px;"><input type="text" data-fb="campaign" value="'+cmpEsc(f.campaign||'')+'" placeholder="štítek kampaně" style="'+inp+'"></div>'
+          + '<label style="display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--text2);cursor:pointer;margin-top:6px;"><input type="checkbox" data-fb="active"'+(f.active!==false?' checked':'')+'> aktivní</label></td>'
+          + '<td style="padding:8px 6px;min-width:230px;">'+fbSplitCellHtml(f, i)+'</td>'
+          + '<td style="padding:8px 6px;text-align:center;"><button class="btn btn-secondary" style="padding:4px 9px;" onclick="fbRemoveForm('+i+')" title="Odebrat formulář">✕</button></td>'
           + '</tr>';
       }).join('');
     }
@@ -2994,10 +3023,7 @@
         f.form_name = (g('form_name')||{}).value || null;
         f.campaign = (g('campaign')||{}).value || null;
         f.active = !!(g('active')||{}).checked;
-        var ov = (g('owner')||{}).value || '';
-        if (ov.slice(0,2)==='i:'){ f.owner_kind='internal'; f.owner_person_id=Number(ov.slice(2)); f.external_rep_id=null; }
-        else if (ov.slice(0,2)==='e:'){ f.owner_kind='external'; f.external_rep_id=Number(ov.slice(2)); f.owner_person_id=null; }
-        else { f.owner_kind='none'; f.owner_person_id=null; f.external_rep_id=null; }
+        fbSyncSplitFromDom(i);
       });
     }
     function fbRenderForms(){
@@ -3011,7 +3037,7 @@
       var id = (idEl.value||'').trim(); if (!id) { idEl.focus(); return; }
       if (FB_STATE.forms.some(function(f){ return String(f.form_id)===id; })) { alert('Formulář s tímto ID už je v seznamu.'); return; }
       fbSyncStateFromDom();
-      FB_STATE.forms.push({ form_id:id, form_name:(nmEl.value||'').trim()||null, owner_kind:'none', owner_person_id:null, external_rep_id:null, campaign:null, role:'compounder', active:true });
+      FB_STATE.forms.push({ form_id:id, form_name:(nmEl.value||'').trim()||null, split:[{ key:'', percent:100 }], campaign:null, role:'compounder', active:true });
       idEl.value=''; nmEl.value=''; fbRenderForms();
     }
     window.fbAddManual = fbAddManual;
@@ -3019,7 +3045,7 @@
       var sel = document.getElementById('fb-live-pick'); if (!sel || !sel.value) return;
       var lf = (FB_STATE.liveForms||[]).find(function(x){ return String(x.id)===String(sel.value); });
       fbSyncStateFromDom();
-      FB_STATE.forms.push({ form_id:String(sel.value), form_name:(lf&&lf.name)||null, owner_kind:'none', owner_person_id:null, external_rep_id:null, campaign:null, role:'compounder', active:true });
+      FB_STATE.forms.push({ form_id:String(sel.value), form_name:(lf&&lf.name)||null, split:[{ key:'', percent:100 }], campaign:null, role:'compounder', active:true });
       fbRenderForms();
     }
     window.fbAddFromLive = fbAddFromLive;
@@ -3049,7 +3075,16 @@
       try {
         var r = await fetch('/api/compounder/fb-lead-forms', { credentials:'include' });
         var d = await r.json();
-        FB_STATE.forms = (d.forms||[]).map(function(f){ return Object.assign({ owner_kind:'none', role:'compounder', active:true }, f); });
+        FB_STATE.forms = (d.forms||[]).map(function(f){
+          var o = Object.assign({ role:'compounder', active:true }, f);
+          if (Array.isArray(o.split) && o.split.length){
+            o.split = o.split.map(function(s){ var k = s.key || (s.owner_person_id?('i:'+s.owner_person_id):(s.external_rep_id?('e:'+s.external_rep_id):'')); return { key:k, percent: Number(s.percent)||0 }; });
+          } else {
+            var key = (o.owner_kind==='internal' && o.owner_person_id) ? ('i:'+o.owner_person_id) : ((o.owner_kind==='external' && o.external_rep_id) ? ('e:'+o.external_rep_id) : '');
+            o.split = [{ key:key, percent:100 }];
+          }
+          return o;
+        });
         FB_STATE.webhookUrl = d.webhookUrl||''; FB_STATE.verifyToken = d.verifyToken||'';
         FB_STATE.apiKeyConfigured = !!d.apiKeyConfigured; FB_STATE.tokenConfigured = !!d.tokenConfigured; FB_STATE.liveForms = d.liveForms||null;
       } catch(e){ FB_STATE.forms = FB_STATE.forms||[]; }
@@ -3064,11 +3099,10 @@
           + '<div style="font-size:11px;margin-top:8px;color:'+(FB_STATE.apiKeyConfigured?'#22c55e':'#f59e0b')+';">'+(FB_STATE.apiKeyConfigured?'✓ API klíč pro Make.com je nastavený':'⚠ Pro Make.com/Zapier chybí FB_WEBHOOK_API_KEY v prostředí')+'</div>'
           + (FB_STATE.tokenConfigured?'<div style="font-size:11px;margin-top:3px;color:#22c55e;">✓ Přímé napojení Meta (page token) je nastavené</div>':'<div style="font-size:11px;margin-top:3px;color:var(--text2);">Přímé napojení Meta zatím bez page tokenu — funguje cesta přes Make.com.</div>')
         + '</div>'
+        + '<div style="font-size:12px;color:var(--text2);margin-bottom:8px;">U každého formuláře rozdělíš příchozí kontakty mezi obchodníky v procentech (součet 100 %). Systém pak leady rozděluje v tomto poměru.</div>'
         + '<table style="width:100%;border-collapse:collapse;"><thead><tr style="border-bottom:1px solid var(--border);text-align:left;">'
-          + '<th style="padding:6px;font-size:11px;color:var(--text2);text-transform:uppercase;">Formulář</th>'
-          + '<th style="padding:6px;font-size:11px;color:var(--text2);text-transform:uppercase;">Obchodník</th>'
-          + '<th style="padding:6px;font-size:11px;color:var(--text2);text-transform:uppercase;">Štítek kampaně</th>'
-          + '<th style="padding:6px;font-size:11px;color:var(--text2);text-transform:uppercase;text-align:center;">Stav</th>'
+          + '<th style="padding:6px;font-size:11px;color:var(--text2);text-transform:uppercase;">Formulář / kampaň</th>'
+          + '<th style="padding:6px;font-size:11px;color:var(--text2);text-transform:uppercase;">Rozdělení mezi obchodníky</th>'
           + '<th style="padding:6px;"></th></tr></thead><tbody id="fb-forms-body">'+fbRowsHtml()+'</tbody></table>'
         + '<div style="margin-top:14px;padding-top:14px;border-top:1px dashed var(--border);">'
           + '<div style="font-size:12px;color:var(--text2);margin-bottom:6px;">Přidat formulář ručně (ID najdete ve Facebooku u formuláře):</div>'

@@ -3186,6 +3186,24 @@ async function _fbCreateLead(fields, meta, formCfg) {
   return { created: true, id: created.id };
 }
 
+// Vybere obchodníka pro nový lead podle rozdělení (split) v poměru procent.
+// Deterministicky: pozice = počet dosavadních leadů formuláře % součet procent → v poměru.
+async function _fbResolveOwner(cfg) {
+  const split = (cfg && Array.isArray(cfg.split))
+    ? cfg.split.filter((s) => s && (s.owner_person_id || s.external_rep_id) && Number(s.percent) > 0)
+    : [];
+  if (split.length <= 1) {
+    return { owner_kind: cfg && cfg.owner_kind, owner_person_id: cfg && cfg.owner_person_id, external_rep_id: cfg && cfg.external_rep_id };
+  }
+  const total = split.reduce((s, x) => s + (Number(x.percent) || 0), 0);
+  if (total <= 0) return { owner_kind: cfg.owner_kind, owner_person_id: cfg.owner_person_id, external_rep_id: cfg.external_rep_id };
+  let count = 0;
+  try { count = await prisma.compounderLead.count({ where: { meta_form_id: String(cfg.form_id) } }); } catch (e) { /* fallback na 0 */ }
+  let pick = count % total, acc = 0, chosen = split[0];
+  for (const s of split) { acc += (Number(s.percent) || 0); if (pick < acc) { chosen = s; break; } }
+  return { owner_kind: chosen.owner_person_id ? 'internal' : 'external', owner_person_id: chosen.owner_person_id || null, external_rep_id: chosen.external_rep_id || null };
+}
+
 // GET /api/compounder/fb-webhook — ověření webhooku (Meta hub.challenge). VEŘEJNÉ.
 router.get('/fb-webhook', (req, res) => {
   const VERIFY_TOKEN = process.env.META_LEAD_VERIFY_TOKEN || 'holyos-meta-verify';
@@ -3229,7 +3247,8 @@ router.post('/fb-webhook', async (req, res, next) => {
               if (r.ok) { raw = await r.json(); fields = _fbExtractFields(raw); }
             } catch (e) { console.error('[fb-webhook] Graph fetch:', e.message); }
           }
-          await _fbCreateLead(fields, { leadId: v.leadgen_id, formId: v.form_id, pageId: v.page_id, adId: v.ad_id, raw }, cfg);
+          const owner = await _fbResolveOwner(cfg || { form_id: v.form_id });
+          await _fbCreateLead(fields, { leadId: v.leadgen_id, formId: v.form_id, pageId: v.page_id, adId: v.ad_id, raw }, Object.assign({}, cfg || {}, owner));
         }
       }
       return res.status(200).send('OK'); // Meta očekává 200 vždy
@@ -3248,10 +3267,11 @@ router.post('/fb-webhook', async (req, res, next) => {
     const effCfg = cfg || (formId ? { form_id: String(formId), form_name: body.form_name || null, campaign: body.campaign || null, role: body.role || 'compounder', owner_kind: 'none' } : { form_name: body.form_name || null, campaign: body.campaign || null, role: 'compounder', owner_kind: 'none' });
     if (cfg && cfg.active === false) return res.json({ ok: true, skipped: 'form_inactive' });
     const fields = _fbExtractFields(body);
+    const owner = await _fbResolveOwner(cfg || { form_id: formId });
     const out = await _fbCreateLead(fields, {
       leadId: body.lead_id || body.leadgen_id || body.id || null,
       formId, pageId: body.page_id || null, adId: body.ad_id || null, raw: body.raw || body,
-    }, effCfg);
+    }, Object.assign({}, effCfg, owner));
     return res.status(out.created ? 201 : 200).json({ ok: true, lead_id: out.id, created: out.created, skipped: out.skipped || null });
   } catch (err) {
     console.error('[fb-webhook] Chyba:', err);
@@ -3290,6 +3310,13 @@ const fbFormSchema = z.object({
   owner_kind: z.enum(['internal', 'external', 'none']).optional(),
   owner_person_id: z.number().int().positive().nullable().optional(),
   external_rep_id: z.number().int().positive().nullable().optional(),
+  // Rozdělení příchozích leadů mezi víc obchodníků v procentech (součet ideálně 100).
+  split: z.array(z.object({
+    key: z.string().max(24).nullable().optional(),
+    owner_person_id: z.number().int().positive().nullable().optional(),
+    external_rep_id: z.number().int().positive().nullable().optional(),
+    percent: z.coerce.number().min(0).max(100),
+  })).max(20).optional(),
   campaign: z.string().trim().max(160).nullable().optional(),
   role: z.enum(['compounder', 'distributor']).optional(),
   lang: z.string().trim().max(10).nullable().optional(),
@@ -3302,12 +3329,29 @@ router.post('/fb-lead-forms', requireAuth, async (req, res, next) => {
     // Normalizace: doplň defaulty, deduplikuj podle form_id (poslední vyhrává).
     const map = {};
     for (const f of parsed.data.forms) {
+      // Rozparsuj split (key 'i:5'/'e:2' → owner_person_id/external_rep_id), zahoď prázdné.
+      const split = [];
+      (f.split || []).forEach((s) => {
+        let opId = s.owner_person_id || null, exId = s.external_rep_id || null;
+        if (!opId && !exId && s.key) {
+          if (String(s.key).slice(0, 2) === 'i:') opId = Number(String(s.key).slice(2)) || null;
+          else if (String(s.key).slice(0, 2) === 'e:') exId = Number(String(s.key).slice(2)) || null;
+        }
+        const pct = Math.max(0, Math.round(Number(s.percent) || 0));
+        if ((opId || exId) && pct > 0) split.push({ owner_person_id: opId, external_rep_id: exId, percent: pct });
+      });
+      // Primární vlastník (zpětná kompatibilita + fallback) = první ze split, jinak z owner_kind.
+      let owner_kind = 'none', owner_person_id = null, external_rep_id = null;
+      if (split.length) {
+        if (split[0].owner_person_id) { owner_kind = 'internal'; owner_person_id = split[0].owner_person_id; }
+        else if (split[0].external_rep_id) { owner_kind = 'external'; external_rep_id = split[0].external_rep_id; }
+      } else if (f.owner_kind === 'internal' && f.owner_person_id) { owner_kind = 'internal'; owner_person_id = f.owner_person_id; }
+      else if (f.owner_kind === 'external' && f.external_rep_id) { owner_kind = 'external'; external_rep_id = f.external_rep_id; }
       map[f.form_id] = {
         form_id: f.form_id,
         form_name: f.form_name || null,
-        owner_kind: f.owner_kind || 'none',
-        owner_person_id: f.owner_kind === 'internal' ? (f.owner_person_id || null) : null,
-        external_rep_id: f.owner_kind === 'external' ? (f.external_rep_id || null) : null,
+        owner_kind, owner_person_id, external_rep_id,
+        split,
         campaign: f.campaign || null,
         role: f.role || 'compounder',
         lang: f.lang || null,
