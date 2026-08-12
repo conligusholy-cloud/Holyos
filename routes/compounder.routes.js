@@ -1117,6 +1117,9 @@ router.post('/sales/coach', requireAuth, async (req, res, next) => {
       ? req.body.history.slice(-10).map((h) => ({ role: (h && h.role === 'user') ? 'user' : 'assistant', text: String((h && h.text) || '').slice(0, 2000) }))
       : [];
     const out = await salesMgr.coachReply(personId, message, history);
+    // Ulož konverzaci na server (pro pozdější analýzu přemýšlení obchodníka) — best-effort.
+    prisma.compounderEvent.create({ data: { sid: 'sales-coach-' + personId, event: 'sales_coach', props: { person_id: personId, role: 'user', text: message }, path: '/obchodnik' } }).catch(() => {});
+    prisma.compounderEvent.create({ data: { sid: 'sales-coach-' + personId, event: 'sales_coach', props: { person_id: personId, role: 'assistant', text: String(out.reply || '').slice(0, 6000), actions: out.actions || [] }, path: '/obchodnik' } }).catch(() => {});
     res.json({ ok: true, reply: out.reply, actions: out.actions || [] });
   } catch (err) { next(err); }
 });
