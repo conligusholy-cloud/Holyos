@@ -1387,6 +1387,17 @@ router.get('/my-day', requireAuth, async (req, res, next) => {
         }
       }
     } catch (e) { /* auto-complete best-effort */ }
+    // Doplň k úkolům aktuální stav kontaktu (pro zobrazení na kartě úkolu).
+    try {
+      if (plan && Array.isArray(plan.tasks)) {
+        const lids = Array.from(new Set(plan.tasks.map((t) => t.lead_id).filter(Boolean)));
+        if (lids.length) {
+          const ls = await prisma.compounderLead.findMany({ where: { id: { in: lids } }, select: { id: true, status: true } });
+          const smap = new Map(ls.map((l) => [l.id, l.status]));
+          plan.tasks.forEach((t) => { if (t.lead_id && smap.has(t.lead_id)) t.lead_status = smap.get(t.lead_id); });
+        }
+      }
+    } catch (e) { /* stav kontaktu best-effort */ }
     // Dnešní statistiky aktivity obchodníka (volání / odeslané přístupy / domluvené schůzky / nové kontakty).
     let stats = { calls: 0, invites: 0, meetings: 0, new_contacts: 0 };
     try {
@@ -2641,15 +2652,18 @@ router.get('/analytics/summary', requireAuth, async (req, res, next) => {
     // Dnes na portálu: kolik unikátních leadů + kolik času celkem strávili studiem (visit_end ms).
     const tzDayKeyS = (d) => new Intl.DateTimeFormat('en-CA', { timeZone: process.env.VELIN_TZ || 'Europe/Prague', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(d));
     const todayKeyS = tzDayKeyS(Date.now());
+    // Testovací kontakty se do statistik NEpočítají.
+    const testLeadIds = new Set((await prisma.compounderLead.findMany({ where: { is_test: true }, select: { id: true } }).catch(() => [])).map((l) => l.id));
     const todayPortalLeads = new Set();
-    const bySidS = {}; // sid → { min, max, visitMs, portal } — čas po sessions
+    const bySidS = {}; // sid → { min, max, visitMs, portal, leadId } — čas po sessions
     todayEvents.forEach((e) => {
       if (tzDayKeyS(e.created_at) !== todayKeyS) return;
       const lid = e.props && e.props.lead_id;
-      if (e.event === 'portal_view' && lid != null) todayPortalLeads.add(lid);
+      if (e.event === 'portal_view' && lid != null && !testLeadIds.has(lid)) todayPortalLeads.add(lid);
       if (!e.sid) return;
       const t3 = new Date(e.created_at).getTime();
-      const rec = bySidS[e.sid] || (bySidS[e.sid] = { min: t3, max: t3, visitMs: 0, portal: false });
+      const rec = bySidS[e.sid] || (bySidS[e.sid] = { min: t3, max: t3, visitMs: 0, portal: false, leadId: null });
+      if (lid != null && rec.leadId == null) rec.leadId = lid;
       if (t3 < rec.min) rec.min = t3;
       if (t3 > rec.max) rec.max = t3;
       if ((e.event === 'visit_end' || e.event === 'page_leave') && e.props && e.props.ms) rec.visitMs = Math.max(rec.visitMs, Number(e.props.ms) || 0);
@@ -2657,7 +2671,7 @@ router.get('/analytics/summary', requireAuth, async (req, res, next) => {
     });
     // Čas studia = součet přes portálové sessions (přesné ms z visit_end/page_leave, jinak rozsah).
     let todayStudyMs = 0;
-    Object.keys(bySidS).forEach((sid) => { const rec = bySidS[sid]; if (!rec.portal) return; todayStudyMs += Math.max(rec.visitMs || 0, Math.max(0, rec.max - rec.min)); });
+    Object.keys(bySidS).forEach((sid) => { const rec = bySidS[sid]; if (!rec.portal) return; if (rec.leadId != null && testLeadIds.has(rec.leadId)) return; todayStudyMs += Math.max(rec.visitMs || 0, Math.max(0, rec.max - rec.min)); });
     res.json({
       days,
       sessions: sessionCount,

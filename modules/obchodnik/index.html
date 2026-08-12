@@ -1543,6 +1543,7 @@
       '<span class="pdot" style="background:'+prioCol(t.priority)+'"></span>' +
       '<span class="tk-ic">'+(TK_ICON[t.kind]||'•')+'</span>' +
       '<div class="tk-body"><div class="tk-title">'+esc(t.title)+(t.est_min?' <span style="font-weight:600;font-size:12px;color:var(--muted2)">· ⏱ '+fmtMin(t.est_min)+'</span>':'')+'</div>' +
+        ((t.lead_status && STATUS[t.lead_status])?'<div style="margin-top:3px"><span style="display:inline-block;font-size:10.5px;font-weight:700;padding:1px 9px;border-radius:999px;background:'+STATUS[t.lead_status].c+'22;color:'+STATUS[t.lead_status].c+'">'+STATUS[t.lead_status].l+'</span></div>':'') +
         (t.detail ? '<div class="tk-det">'+esc(t.detail)+'</div>' : '') +
         (t.reasoning ? '<div class="tk-why">💡 '+esc(t.reasoning)+'</div>' : '') +
         (t.progress ? progHtml(t.progress) : '') + '<div class="tk-acts">'+acts+'</div>' +
