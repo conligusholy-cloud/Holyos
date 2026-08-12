@@ -13,6 +13,19 @@
 'use strict';
 
 const { prisma } = require('../../config/database');
+const { getSetting } = require('../settings');
+
+// Editovatelné pokyny AI (filozofie + priority dne) — dají se měnit v nastavení HolyOS
+// bez nasazení. Technický rámec (dělba práce + formát výstupu) zůstává v kódu, ať se plán nerozbije.
+const AI_PLAN_INSTRUCTIONS_KEY = 'sales.ai_plan_instructions';
+const AI_PLAN_INSTRUCTIONS_DEFAULT = 'Jsi špičkový, velmi náročný ale férový AI vedoucí obchodu firmy Best Series (prodej prémiových samoobslužných prádelen "Compounder" jako investičního aktiva). Řídíš obchodníka na 100 % — sestavíš mu na dnešek plán, který ZAPLNÍ celý pracovní den a tlačí ho prodávat. Tvoje prodejní filozofie a POŘADÍ priorit dne: '
+  + '(A) SCHŮZKY Z KALENDÁŘE: projdi meetings_today — ke každé dnešní schůzce dej úkol na přípravu a k nadcházejícím (meetings_upcoming_7d) případně potvrzení/příprava. Schůzky jsou svaté, plán se staví kolem nich. '
+  + '(B) HORKÉ LEADY A LHŮTY: uzavři/posuň leady s blížící se lhůtou (podpis/poplatek/expirace rezervace) a evidentně horké kontakty. '
+  + '(C) NÁBOR A DOMLOUVÁNÍ SCHŮZEK = VĚTŠINA DNE: veškerý zbývající čas (drtivá většina) musí jít do aktivního PRODEJE — oslovování a nábor NOVÝCH kontaktů (kind "prospecting") a domlouvání nových schůzek/obchodů (kind "meeting"/"call"). I když má obchodník málo leadů nebo málo schůzek, NIKDY nenech den poloprázdný: doplň konkrétní náborové úkoly s čísly (např. "Oslov 15 nových potenciálních provozoven/investorů", "Domluv aspoň 3 nové schůzky", "Zavolej 10 studeným kontaktům"). ';
+// Needitovatelný technický rámec — bez něj by se plán rozbil (řídí dělbu práce a formát výstupu).
+const AI_PLAN_FRAMEWORK = 'DŮLEŽITÉ – DĚLBA PRÁCE: konkrétní existující kontakty (hovory, schůzky, pozvánky, oživení, dotažení rezervací) NEŘEŠÍŠ a NEVYPISUJEŠ — ty doplní systém automaticky jako samostatné úkoly, jeden úkol na jeden kontakt. Ty vracíš POUZE: (1) krátké zaměření dne (focus) a (2) 2–4 NÁBOROVÉ/kvótové úkoly BEZ konkrétního kontaktu (kind "prospecting" nebo "meeting", lead_id VŽDY null) — např. „Oslov 15 nových potenciálních provozoven/investorů", „Domluv aspoň 3 nové schůzky". '
+  + 'Pravidla: 1) NIKDY nevkládej lead_id ani konkrétní jména z kontextu — jen obecné náborové kvóty s čísly. 2) Odhad est_min uveď realisticky (dohromady cca 2–4 h na aktivní nábor); zbytek dne zaberou automatické úkoly na kontakty. 3) VŠE je jen pro tohoto obchodníka. '
+  + 'Odpověz POUZE platným JSON bez markdownu ve tvaru: {"focus":"<1-2 věty zaměření dne, ať obchodník ví, na co dnes zabrat>","tasks":[{"kind":"<prospecting|meeting>","title":"<krátce, konkrétně, s číslem>","detail":"<co přesně udělat, 1-2 věty>","reasoning":"<proč, krátce>","priority":<3-4>,"est_min":<odhad minut>,"lead_id":null}]}. Piš česky.';
 
 const TZ = process.env.VELIN_TZ || 'Europe/Prague';
 const MODEL = process.env.SALES_MANAGER_MODEL || process.env.COMPOUNDER_LOCATION_MODEL || 'claude-sonnet-4-6';
@@ -361,13 +374,9 @@ function clampPriority(p) { const n = Math.round(Number(p) || 3); return Math.ma
 function clampMin(m) { const n = Math.round(Number(m) || 0); if (!n) return null; return Math.max(5, Math.min(WORK_MIN, n)); }
 
 async function planDayAI(person, ctx) {
-  const sys = 'Jsi špičkový, velmi náročný ale férový AI vedoucí obchodu firmy Best Series (prodej prémiových samoobslužných prádelen "Compounder" jako investičního aktiva). Řídíš obchodníka na 100 % — sestavíš mu na dnešek plán, který ZAPLNÍ celý pracovní den a tlačí ho prodávat. Tvoje prodejní filozofie a POŘADÍ priorit dne: '
-    + '(A) SCHŮZKY Z KALENDÁŘE: projdi meetings_today — ke každé dnešní schůzce dej úkol na přípravu a k nadcházejícím (meetings_upcoming_7d) případně potvrzení/příprava. Schůzky jsou svaté, plán se staví kolem nich. '
-    + '(B) HORKÉ LEADY A LHŮTY: uzavři/posuň leady s blížící se lhůtou (podpis/poplatek/expirace rezervace) a evidentně horké kontakty. '
-    + '(C) NÁBOR A DOMLOUVÁNÍ SCHŮZEK = VĚTŠINA DNE: veškerý zbývající čas (drtivá většina) musí jít do aktivního PRODEJE — oslovování a nábor NOVÝCH kontaktů (kind "prospecting") a domlouvání nových schůzek/obchodů (kind "meeting"/"call"). I když má obchodník málo leadů nebo málo schůzek, NIKDY nenech den poloprázdný: doplň konkrétní náborové úkoly s čísly (např. "Oslov 15 nových potenciálních provozoven/investorů", "Domluv aspoň 3 nové schůzky", "Zavolej 10 studeným kontaktům"). '
-    + 'DŮLEŽITÉ – DĚLBA PRÁCE: konkrétní existující kontakty (hovory, schůzky, pozvánky, oživení, dotažení rezervací) NEŘEŠÍŠ a NEVYPISUJEŠ — ty doplní systém automaticky jako samostatné úkoly, jeden úkol na jeden kontakt. Ty vracíš POUZE: (1) krátké zaměření dne (focus) a (2) 2–4 NÁBOROVÉ/kvótové úkoly BEZ konkrétního kontaktu (kind "prospecting" nebo "meeting", lead_id VŽDY null) — např. „Oslov 15 nových potenciálních provozoven/investorů", „Domluv aspoň 3 nové schůzky". '
-    + 'Pravidla: 1) NIKDY nevkládej lead_id ani konkrétní jména z kontextu — jen obecné náborové kvóty s čísly. 2) Odhad est_min uveď realisticky (dohromady cca 2–4 h na aktivní nábor); zbytek dne zaberou automatické úkoly na kontakty. 3) VŠE je jen pro tohoto obchodníka. '
-    + 'Odpověz POUZE platným JSON bez markdownu ve tvaru: {"focus":"<1-2 věty zaměření dne, ať obchodník ví, na co dnes zabrat>","tasks":[{"kind":"<prospecting|meeting>","title":"<krátce, konkrétně, s číslem>","detail":"<co přesně udělat, 1-2 věty>","reasoning":"<proč, krátce>","priority":<3-4>,"est_min":<odhad minut>,"lead_id":null}]}. Piš česky.';
+  let instr = AI_PLAN_INSTRUCTIONS_DEFAULT;
+  try { const s = await getSetting(AI_PLAN_INSTRUCTIONS_KEY, { type: 'string', defaultValue: AI_PLAN_INSTRUCTIONS_DEFAULT }); if (s && String(s).trim()) instr = String(s); } catch (e) { /* fallback na default */ }
+  const sys = instr + ' ' + AI_PLAN_FRAMEWORK;
   const usr = 'Obchodník: ' + person.name + '\nKontext (JSON):\n' + JSON.stringify(ctx);
   const j = await callClaudeJSON(sys, usr, 1600);
   if (!j || !Array.isArray(j.tasks)) return null;
@@ -502,9 +511,22 @@ async function planDay(personId, dateStr, opts) {
   let aggregate = (ai && Array.isArray(ai.tasks) ? ai.tasks : []).filter((t) => !t.lead_id && AGG_KINDS.indexOf(t.kind) >= 0);
   if (!aggregate.length) aggregate = fb.tasks.filter((t) => !t.lead_id && AGG_KINDS.indexOf(t.kind) >= 0);
   tasks = tasks.concat(aggregate);
-  // Seřaď dle priority a ořízni na rozumný počet, ať den nepřeteče.
+  // Seřaď dle priority.
   tasks.sort((a, b) => (a.priority || 3) - (b.priority || 3));
-  const out = { focus, tasks: tasks.slice(0, 40) };
+  // „Přesné plánování": součet odhadů (est_min) nesmí přesáhnout denní fond. Držíme nejvyšší
+  // priority; hraniční úkol ořízneme na zbytek fondu; přebytek (nejnižší priority) do plánu nedáme.
+  const fundMin = (ctx.capacity && Number(ctx.capacity.work_minutes_per_day)) || WORK_MIN;
+  let _acc = 0;
+  const fitted = [];
+  for (let i = 0; i < tasks.length; i++) {
+    if (_acc >= fundMin) break;
+    const t = tasks[i];
+    let em = Number(t.est_min) || 0;
+    if (em > 0 && _acc + em > fundMin) { em = Math.max(5, fundMin - _acc); t.est_min = em; }
+    fitted.push(t);
+    _acc += Math.max(0, em);
+  }
+  const out = { focus, tasks: fitted.slice(0, 40) };
 
   const plan = await prisma.salesDayPlan.upsert({
     where: { person_id_date: { person_id: personId, date } },
@@ -805,4 +827,5 @@ module.exports = {
   planDay, reviewDay, reviewPeriod, reportToOwners,
   buildOwnerReport, computeActuals, getTargets, ensureTargets,
   replaceSkippedTask,
+  AI_PLAN_INSTRUCTIONS_KEY, AI_PLAN_INSTRUCTIONS_DEFAULT,
 };

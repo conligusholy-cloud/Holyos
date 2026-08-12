@@ -1104,6 +1104,29 @@ router.post('/discount/start-all', requireAuth, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// GET /api/compounder/sales/ai-instructions — editovatelné pokyny AI vedoucího (filozofie + priority).
+router.get('/sales/ai-instructions', requireAuth, async (req, res, next) => {
+  try {
+    const u = req.user || {};
+    const isMgr = u.isSuperAdmin || u.role === 'admin' || (u.person && (u.person.is_sales_lead || u.person.is_salesperson));
+    if (!isMgr) return res.status(403).json({ error: 'Jen obchod nebo admin' });
+    const cur = await getSetting(salesMgr.AI_PLAN_INSTRUCTIONS_KEY, { type: 'string', defaultValue: salesMgr.AI_PLAN_INSTRUCTIONS_DEFAULT }).catch(() => null);
+    res.json({ ok: true, instructions: (cur && String(cur)) || salesMgr.AI_PLAN_INSTRUCTIONS_DEFAULT, default: salesMgr.AI_PLAN_INSTRUCTIONS_DEFAULT });
+  } catch (err) { next(err); }
+});
+
+// POST /api/compounder/sales/ai-instructions {instructions} — uloží pokyny (prázdné = obnoví výchozí).
+router.post('/sales/ai-instructions', requireAuth, async (req, res, next) => {
+  try {
+    const u = req.user || {};
+    const isMgr = u.isSuperAdmin || u.role === 'admin' || (u.person && (u.person.is_sales_lead || u.person.is_salesperson));
+    if (!isMgr) return res.status(403).json({ error: 'Jen obchod nebo admin' });
+    const txt = String((req.body && req.body.instructions) || '').trim().slice(0, 8000);
+    await setSetting(salesMgr.AI_PLAN_INSTRUCTIONS_KEY, txt || salesMgr.AI_PLAN_INSTRUCTIONS_DEFAULT, { type: 'string', userId: (u && u.id) || null });
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
 // GET /api/compounder/sellers — obchodníci pro přiřazení vlastníka leadu.
 //   Aktivní Person s rolí "Obchodník" nebo "Vedoucí obchodu". Dostupné přihlášenému
 //   internímu uživateli (na rozdíl od /api/sales/sellers, které je jen pro vedoucí/admin).

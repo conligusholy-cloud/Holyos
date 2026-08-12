@@ -429,6 +429,7 @@
         <button class="btn" onclick="openFbForms()" title="Napojení FB reklam — kontakty z formulářů se přiřadí obchodníkovi a označí kampaní">📢 FB reklamy</button>
         <button class="btn" onclick="cmpStartDiscountAll(this)" title="Spustí akční cenu (slevu) od dneška všem leadům, kteří už byli na portálu">🏷️ Akce všem</button>
         <button class="btn" onclick="cmpDiscountFollowup(this)" title="Hromadně přepnout všechny leady s aktivní slevou na stav Dosledování">🗓️ Ve slevě → Dosledování</button>
+        <button class="btn" onclick="openAiInstructions()" title="Upravit pokyny AI, která sestavuje denní plán obchodníkům">🧠 AI pokyny</button>
         <button class="btn btn-primary" onclick="openAddLead()">➕ Přidat kontakt</button>
       </div>
       <div id="cmp-summary" style="margin-bottom:14px;"></div>
@@ -2932,6 +2933,41 @@
       finally{ if(btn){ btn.disabled=false; btn.textContent=old; } }
     }
     window.cmpDiscountFollowup = cmpDiscountFollowup;
+    async function openAiInstructions(){
+      var root = document.getElementById('modal-root');
+      root.innerHTML = '<div class="modal-overlay" onclick="if(event.target===this)closeModal()">' +
+        '<div class="modal" style="width:780px;max-width:96vw;">' +
+        '<h2>🧠 Pokyny AI vedoucího obchodu</h2>' +
+        '<p style="color:var(--text2);font-size:13px;margin:4px 0 10px">Zde laď filozofii a priority, podle kterých AI sestavuje denní plán obchodníkům. Technický rámec (rozdělení práce mezi AI a systém, formát výstupu) je pevný a needituje se. Prázdné pole = obnoví se výchozí pokyny. Změna se projeví při dalším generování plánu (tlačítko ↻ Dnes).</p>' +
+        '<div id="ai-instr-msg" style="font-size:13px;margin-bottom:8px;color:var(--text2)">Načítám…</div>' +
+        '<textarea id="ai-instr-text" style="width:100%;min-height:300px;box-sizing:border-box;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text);font-size:13px;line-height:1.5" disabled></textarea>' +
+        '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">' +
+          '<button class="btn" onclick="aiInstrReset()">↩ Obnovit výchozí</button>' +
+          '<button class="btn" onclick="closeModal()">Zavřít</button>' +
+          '<button class="btn btn-primary" id="ai-instr-save" onclick="saveAiInstructions(this)" disabled>Uložit</button>' +
+        '</div></div></div>';
+      try{
+        var r = await fetch('/api/compounder/sales/ai-instructions', { credentials:'include' });
+        var j = await r.json().catch(function(){return {};});
+        if(!r.ok) throw new Error(j.error||'Chyba');
+        var t = document.getElementById('ai-instr-text');
+        t.value = j.instructions || ''; t._default = j.default || '';
+        t.disabled = false; document.getElementById('ai-instr-save').disabled = false;
+        document.getElementById('ai-instr-msg').textContent = '';
+      }catch(e){ var m=document.getElementById('ai-instr-msg'); if(m) m.innerHTML='<span style="color:#f87171">Nepodařilo se načíst: '+(e.message||'')+'</span>'; }
+    }
+    function aiInstrReset(){ var t=document.getElementById('ai-instr-text'); if(t && t._default!=null){ t.value=t._default; } }
+    async function saveAiInstructions(btn){
+      var t=document.getElementById('ai-instr-text'); if(!t) return;
+      var old=btn.textContent; btn.disabled=true; btn.textContent='Ukládám…';
+      try{
+        var r = await fetch('/api/compounder/sales/ai-instructions', { method:'POST', credentials:'include', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ instructions: t.value }) });
+        var j = await r.json().catch(function(){return {};});
+        if(!r.ok) throw new Error(j.error||'Chyba');
+        document.getElementById('ai-instr-msg').innerHTML='<span style="color:#22c55e">✓ Uloženo. Projeví se při dalším generování plánu.</span>';
+      }catch(e){ document.getElementById('ai-instr-msg').innerHTML='<span style="color:#f87171">Uložení selhalo: '+(e.message||'')+'</span>'; }
+      finally{ btn.disabled=false; btn.textContent=old; }
+    }
     function openAddLead(){
       document.getElementById('modal-root').innerHTML =
         '<div class="modal-overlay" onclick="if(event.target===this)closeModal()">' +
