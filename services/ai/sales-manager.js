@@ -297,6 +297,8 @@ async function gatherPlanContext(personId) {
       days_since_update: daysSinceUpdate,
       invite_sent: l.access_sent_count || 0,
       has_portal_access: hasPortalAccess,
+      portal_opened: portalSeen.has(l.id),
+      access_sent_days: l.access_last_sent_at ? Math.floor((nowMs - new Date(l.access_last_sent_at).getTime()) / 86400000) : null,
       recent_activity: lastAct,
       notes: (l.notes || '').slice(0, 300),
       reservations: (resvByLead[l.id] || []).map((r) => ({ kiosk: r.kiosk_code, status: r.status, reserved_until: r.reserved_until, sign_until: r.sign_until, fee_until: r.fee_until })),
@@ -458,10 +460,17 @@ function buildLeadTasks(ctx) {
       }
       covered.add(l.id); return; // během běžící slevy se nevolá
     }
+    // Odeslán přístup do portálu, ale zákazník tam (druhý den+) nebyl → zavolat, ověřit odkaz a rozhýbat.
+    if (l.has_phone && !l.portal_opened && (l.status === 'access_sent' || (l.invite_sent || 0) > 0) && (l.access_sent_days == null || l.access_sent_days >= 1)) {
+      tasks.push({ kind: 'call', title: 'Zavolej – ověř odkaz a rozhýbej – ' + l.name, detail: 'Otevři kontakt: poslali jsme přístup do portálu, ale zákazník tam ještě nebyl. Zavolej, ověř, že odkaz přišel, a pomoz mu se do portálu dostat / vzbudit zájem.', reasoning: 'Odeslán přístup, ale žádný pohyb na portálu.', priority: 2, est_min: 12, lead_id: l.id }); covered.add(l.id); return;
+    }
     if ((l.days_since_update || 0) >= 7) {
       tasks.push({ kind: 'followup', title: 'Oživit kontakt – ' + l.name, detail: 'Otevři kontakt, přečti poznámky; zavolej, zjisti stav a posuň k schůzce/rezervaci.', reasoning: 'Přes týden beze změny.', priority: 3, est_min: 15, lead_id: l.id }); covered.add(l.id); return;
     }
-    if (l.has_phone) calls.push(l);
+    // Obecný „zavolej a kvalifikuj" jen pro RANÉ fáze (první kontakt) — ne pro už posunuté leady
+    // (Odeslán přístup / Kvalifikován / Dosledování apod. řeší vlastní větve výše).
+    if (l.has_phone && ['new', 'nedovolano', 'volat_pristi', 'contacted'].indexOf(l.status) >= 0) calls.push(l);
+    else covered.add(l.id);
   });
   // (C) Běžné hovory z pipeline — per kontakt, do rozumné denní kvóty (ať den nepřeteče stovkami úkolů).
   const callQuota = Math.max(8, (ctx.daily_quota && ctx.daily_quota.new_contacts) || 10);

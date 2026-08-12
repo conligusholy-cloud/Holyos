@@ -138,7 +138,7 @@ async function _startFollowUp(leadId) {
     const validDays = (cs.discount && Number.isFinite(cs.discount.validDays)) ? cs.discount.validDays : 7;
     data.discount_until = new Date(Date.now() + validDays * 86400000);
   }
-  const EARLY = ['new', 'nedovolano', 'volat_pristi', 'contacted', 'qualified'];
+  const EARLY = ['new', 'nedovolano', 'volat_pristi', 'contacted', 'access_sent', 'qualified'];
   if (EARLY.indexOf(lead.status) >= 0) data.status = 'dosledovani';
   if (Object.keys(data).length) {
     await prisma.compounderLead.update({ where: { id: leadId }, data }).catch(() => {});
@@ -1664,16 +1664,17 @@ router.post('/leads/:id/send-access', requireAuth, async (req, res, next) => {
     const id = Number(req.params.id);
     if (!Number.isInteger(id)) return res.status(400).json({ error: 'Neplatné ID' });
     const lead = await prisma.compounderLead.findUnique({
-      where: { id }, select: { id: true, name: true, email: true, lang: true },
+      where: { id }, select: { id: true, name: true, email: true, lang: true, status: true },
     });
     if (!lead) return res.status(404).json({ error: 'Lead nenalezen' });
     if (!lead.email) return res.status(400).json({ error: 'Kontakt nemá e-mail — přístup nelze odeslat.' });
     const url = `${portalBase()}/portal?t=${makeLoginToken(lead.id)}`;
     await sendPortalLogin({ name: lead.name, email: lead.email, lang: lead.lang }, url);
+    const _setSent = ['new', 'nedovolano', 'volat_pristi', 'contacted'].indexOf(lead.status) >= 0;
     const updated = await prisma.compounderLead.update({
       where: { id },
-      data: { access_sent_count: { increment: 1 }, access_last_sent_at: new Date() },
-      select: { access_sent_count: true, access_last_sent_at: true },
+      data: Object.assign({ access_sent_count: { increment: 1 }, access_last_sent_at: new Date() }, _setSent ? { status: 'access_sent' } : {}),
+      select: { access_sent_count: true, access_last_sent_at: true, status: true },
     });
     console.log(`[compounder] Přístup (odkaz) odeslán: lead #${id} (${updated.access_sent_count}×)`);
     res.json({ ok: true, access_sent_count: updated.access_sent_count, access_last_sent_at: updated.access_last_sent_at });
@@ -1694,7 +1695,7 @@ router.post('/leads/:id/access-link', requireAuth, async (req, res, next) => {
     const id = Number(req.params.id);
     if (!Number.isInteger(id)) return res.status(400).json({ error: 'Neplatné ID' });
     const lead = await prisma.compounderLead.findUnique({
-      where: { id }, select: { id: true, name: true, phone: true, lang: true },
+      where: { id }, select: { id: true, name: true, phone: true, lang: true, status: true },
     });
     if (!lead) return res.status(404).json({ error: 'Lead nenalezen' });
     const url = `${portalBase()}/portal?t=${makeLoginToken(lead.id)}`;
@@ -1704,10 +1705,11 @@ router.post('/leads/:id/access-link', requireAuth, async (req, res, next) => {
     // Telefon → jen číslice (wa.me/SMS formát), odstraň +, mezery, 00 prefix. Bez telefonu = jen odkaz ke kopírování.
     let wa = lead.phone ? String(lead.phone).replace(/[^\d]/g, '') : '';
     if (wa.startsWith('00')) wa = wa.slice(2);
+    const _setSent = ['new', 'nedovolano', 'volat_pristi', 'contacted'].indexOf(lead.status) >= 0;
     const updated = await prisma.compounderLead.update({
       where: { id },
-      data: { access_sent_count: { increment: 1 }, access_last_sent_at: new Date() },
-      select: { access_sent_count: true, access_last_sent_at: true },
+      data: Object.assign({ access_sent_count: { increment: 1 }, access_last_sent_at: new Date() }, _setSent ? { status: 'access_sent' } : {}),
+      select: { access_sent_count: true, access_last_sent_at: true, status: true },
     });
     res.json({ ok: true, url, phone: wa || null, message, access_sent_count: updated.access_sent_count, access_last_sent_at: updated.access_last_sent_at });
   } catch (err) { next(err); }
@@ -2039,7 +2041,7 @@ router.get('/leads', requireAuth, async (req, res, next) => {
 
 // PATCH /api/compounder/leads/:id — změna stavu / poznámky
 const patchSchema = z.object({
-  status: z.enum(['new', 'nedovolano', 'volat_pristi', 'contacted', 'schuzka', 'schuzka_online', 'qualified', 'dosledovani', 'converted', 'nelze_pouzit', 'rejected']).optional(),
+  status: z.enum(['new', 'nedovolano', 'volat_pristi', 'contacted', 'access_sent', 'schuzka', 'schuzka_online', 'qualified', 'dosledovani', 'converted', 'nelze_pouzit', 'rejected']).optional(),
   notes: z.string().max(5000).optional().nullable(),
   lang: z.string().trim().max(10).optional().nullable(),
   owner_person_id: z.number().int().positive().optional().nullable(),
@@ -3326,7 +3328,7 @@ router.post('/leads/:id(\\d+)/discount', requireAuth, async (req, res, next) => 
     const eff = effectiveDiscount(updated, cs);
     // Aktivní sleva → přepni na „dosledování" (jen z rané fáze). Datum dosledování = konec slevy (eff.endsAt).
     if (eff.active) {
-      const EARLY = ['new', 'nedovolano', 'volat_pristi', 'contacted', 'qualified'];
+      const EARLY = ['new', 'nedovolano', 'volat_pristi', 'contacted', 'access_sent', 'qualified'];
       if (EARLY.indexOf(updated.status) >= 0) {
         await prisma.compounderLead.update({ where: { id }, data: { status: 'dosledovani' } }).catch(() => {});
         updated.status = 'dosledovani';
