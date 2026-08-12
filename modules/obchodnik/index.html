@@ -348,7 +348,7 @@
     var html='';
     arr.forEach(function(e){
       var isCall=(e.event_type==='call');
-      if(isCall && lastCall && lastCall>=new Date(e.start_at)) return; // hovor už vytočen po termínu → odklikuto
+      if(isCall && lastCall){ var ev=new Date(e.start_at); var evDay=new Date(ev.getFullYear(),ev.getMonth(),ev.getDate()); if(lastCall>=evDay) return; } // volal jsi v den hovoru nebo později → vyřízeno
       var ic=isCall?'📞':'📅';
       var txt=isCall?('Nestihnutý hovor '+_meetDT(e.start_at)+' — vytoč kontakt'):('Nestihnutá schůzka '+_meetDT(e.start_at)+' — zapiš a odškrtni');
       var click=isCall?'':(' onclick="event.stopPropagation();openMeetingById('+e.id+')"');
