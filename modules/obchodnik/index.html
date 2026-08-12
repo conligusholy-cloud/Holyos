@@ -933,7 +933,7 @@
     else if (d.active) { statusTxt = 'Platí do ' + (d.endsAt ? new Date(d.endsAt).toLocaleDateString('cs-CZ') : '—'); color = '#22c55e'; }
     else if (d.mode === 'off-default') { statusTxt = 'Neaktivní (globálně vypnuto)'; color = 'var(--muted)'; }
     else { statusTxt = 'Vypršela'; color = 'var(--muted)'; }
-    var pct = d.machinePct ? ('stroj '+(d.machinePct.v2||0)+'/'+(d.machinePct.v3||0)+'/'+(d.machinePct.v4||0)+' % · lokalita '+(d.locationPct||0)+' %') : '';
+    var pct = d.machinePct ? ('stroj '+(d.machinePct.v2||0)+'/'+(d.machinePct.v3||0)+'/'+(d.machinePct.v4||0)+' % · celková cena '+(d.locationPct||0)+' %') : '';
     return '<div class="field" style="background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.4);border-radius:12px;padding:12px;margin-top:8px">' +
       '<label style="color:#10b981;font-weight:700">🏷️ Sleva</label>' +
       '<div style="font-size:13px;color:'+color+';font-weight:600">'+statusTxt+'</div>' +

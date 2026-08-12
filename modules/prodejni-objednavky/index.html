@@ -3432,7 +3432,7 @@
       else if (d.active){ statusTxt='Platí do '+(d.endsAt?new Date(d.endsAt).toLocaleDateString('cs-CZ'):'—'); color='#22c55e'; }
       else if (d.mode==='off-default'){ statusTxt='Neaktivní (globálně vypnuto)'; color='var(--text2)'; }
       else { statusTxt='Vypršela'; color='var(--text2)'; }
-      var pct = d.machinePct ? ('stroj '+(d.machinePct.v2||0)+'/'+(d.machinePct.v3||0)+'/'+(d.machinePct.v4||0)+' % · lokalita '+(d.locationPct||0)+' %') : '';
+      var pct = d.machinePct ? ('stroj '+(d.machinePct.v2||0)+'/'+(d.machinePct.v3||0)+'/'+(d.machinePct.v4||0)+' % · celková cena '+(d.locationPct||0)+' %') : '';
       return '<div id="cmp-disc-'+id+'" style="margin:10px 0;padding:12px;border:1px solid rgba(16,185,129,0.4);border-radius:10px;background:rgba(16,185,129,0.06);">' +
         '<div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:#10b981;font-weight:700;margin-bottom:6px;">🏷️ Sleva</div>' +
         '<div style="font-size:13px;color:'+color+';font-weight:600;">'+statusTxt+'</div>' +
@@ -5839,7 +5839,7 @@
           discPct('kvset-disc-v2', dV2, 'V2') + discPct('kvset-disc-v3', dV3, 'V3') + discPct('kvset-disc-v4', dV4, 'V4') +
         '</div>' +
         '<div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;">' +
-          '<div style="width:160px;">Sleva na cenu lokality</div>' +
+          '<div style="width:160px;">Sleva z celkové ceny<br><span style="font-size:11px;color:var(--text2);">(lokalita + kiosek)</span></div>' +
           '<div style="position:relative;"><input type="number" min="0" max="100" step="0.5" id="kvset-disc-loc" value="' + dLoc + '" style="width:120px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 32px 8px 12px;color:var(--text);font-size:14px;"><span style="position:absolute;right:12px;top:50%;transform:translateY(-50%);color:var(--text2);font-size:13px;">%</span></div>' +
         '</div>' +
         '<div style="display:flex;align-items:center;gap:12px;">' +

@@ -5660,10 +5660,11 @@ async function buildOfferedLocations(leadId, opts) {
           const _mp = (_disc.machinePct && _disc.machinePct[ver]) ? Number(_disc.machinePct[ver]) : 0;
           mDisp = _disc.active ? machine : ((_mp > 0 && _mp < 100) ? Math.round(machine / (1 - _mp / 100)) : machine);
         }
-        if (locality != null && _disc.active && _disc.locationPct > 0) {
-          lDisp = Math.round(locality * (1 - _disc.locationPct / 100));
+        let total = (mDisp != null && lDisp != null) ? (mDisp + lDisp) : null;
+        // Sleva z CELKOVÉ ceny (kiosek + lokalita) — když je u leada aktivní (locationPct = sleva z celku).
+        if (total != null && _disc.active && _disc.locationPct > 0) {
+          total = Math.round(total * (1 - _disc.locationPct / 100));
         }
-        const total = (mDisp != null && lDisp != null) ? (mDisp + lDisp) : null;
         const yearly = Math.round(cisty * 12);
         return {
           code: k.code,
