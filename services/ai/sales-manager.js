@@ -434,8 +434,10 @@ function buildLeadTasks(ctx) {
     if (r && (r.status === 'reserved' || r.status === 'active')) {
       tasks.push({ kind: 'close', title: 'Dotáhnout rezervaci ' + r.kiosk + ' – ' + l.name, detail: 'Otevři kontakt, přečti poznámky; hlídej podpis/poplatek a popožeň zákazníka k uzavření.', reasoning: 'Běžící rezervace se lhůtou.', priority: 1, est_min: 30, lead_id: l.id }); covered.add(l.id); return;
     }
-    if (!l.has_portal_access && l.has_email) {
-      tasks.push({ kind: 'invite', title: 'Poslat přístup a zavolat – ' + l.name, detail: 'Otevři kontakt, přečti poznámky; odešli přihlašovací odkaz do portálu a hned zavolej.', reasoning: 'Ještě nemá přístup do portálu.', priority: 2, est_min: 15, lead_id: l.id }); covered.add(l.id); return;
+    // Přístup do portálu posílej JEN kontaktu, který už byl volaný a má zájem (stav „Kvalifikován").
+    // Nikomu jinému se přístup automaticky nenabízí — cold/nové leady se nejdřív volají a kvalifikují.
+    if (l.status === 'qualified' && !l.has_portal_access && l.has_email) {
+      tasks.push({ kind: 'invite', title: 'Poslat přístup do portálu – ' + l.name, detail: 'Kontakt má po hovoru zájem — otevři kontakt a odešli přihlašovací odkaz do portálu.', reasoning: 'Kvalifikovaný zájemce zatím bez přístupu.', priority: 2, est_min: 10, lead_id: l.id }); covered.add(l.id); return;
     }
     if ((l.days_since_update || 0) >= 7) {
       tasks.push({ kind: 'followup', title: 'Oživit kontakt – ' + l.name, detail: 'Otevři kontakt, přečti poznámky; zavolej, zjisti stav a posuň k schůzce/rezervaci.', reasoning: 'Přes týden beze změny.', priority: 3, est_min: 15, lead_id: l.id }); covered.add(l.id); return;
@@ -445,7 +447,7 @@ function buildLeadTasks(ctx) {
   // (C) Běžné hovory z pipeline — per kontakt, do rozumné denní kvóty (ať den nepřeteče stovkami úkolů).
   const callQuota = Math.max(8, (ctx.daily_quota && ctx.daily_quota.new_contacts) || 10);
   calls.slice(0, callQuota).forEach((l) => {
-    tasks.push({ kind: 'call', title: 'Zavolej – ' + l.name, detail: 'Otevři kontakt, přečti poznámky; zavolej a posuň k dalšímu kroku (schůzka/rezervace).', reasoning: 'Kontakt v pipeline k posunu.', priority: 4, est_min: 12, lead_id: l.id }); covered.add(l.id);
+    tasks.push({ kind: 'call', title: 'Zavolej a kvalifikuj – ' + l.name, detail: 'Otevři kontakt, přečti poznámky; zavolej a zjisti zájem. Při zájmu pošli přístup do portálu a domluv schůzku.', reasoning: 'Kontakt v pipeline k prvnímu kontaktu / posunu.', priority: 4, est_min: 12, lead_id: l.id }); covered.add(l.id);
   });
   return tasks;
 }
