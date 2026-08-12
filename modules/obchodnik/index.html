@@ -733,6 +733,23 @@
     render();
   }
   window.markCalled = markCalled;
+  // Klik na „Volat": u nového kontaktu se nejdřív zeptá, jestli ho máš uložený v telefonu.
+  // OK = volat teď; Zrušit = nabídne uložení kontaktu do telefonu (vCard) a nevolá.
+  function obCallClick(ev, id){
+    var l = (state.leads||[]).find(function(x){ return x.id===id; }) || {};
+    if (l.status === 'new'){
+      if (ev && ev.preventDefault) ev.preventDefault();
+      var ok = confirm('Máš „'+(l.name||'tento kontakt')+'" uložený v telefonu?\n\nOK = volat teď\nZrušit = nejdřív uložit kontakt do telefonu');
+      if (!ok){ saveContact(id); return false; }
+      markCalled(id);
+      var href = (ev && ev.currentTarget && ev.currentTarget.getAttribute('href')) || ('tel:'+String(l.phone||'').replace(/[^\d+]/g,''));
+      window.location.href = href;
+      return false;
+    }
+    markCalled(id);
+    return true; // ostatní stavy: tel: odkaz proběhne normálně
+  }
+  window.obCallClick = obCallClick;
   var searchTimer=null;
   function onSearch(){ clearTimeout(searchTimer); searchTimer=setTimeout(function(){ state.search=document.getElementById('search').value.trim(); load(); }, 300); }
 
@@ -864,7 +881,7 @@
       '</div>' +
       '<div class="detail">' +
         '<div class="actions-row" style="margin-top:12px">' +
-          (l.phone ? '<a href="tel:'+esc(telClean)+'" onclick="markCalled('+l.id+')">📞 Volat</a>' : '') +
+          (l.phone ? '<a href="tel:'+esc(telClean)+'" onclick="return obCallClick(event,'+l.id+')">📞 Volat</a>' : '') +
           (waNum ? '<a href="https://wa.me/'+waNum+'" target="_blank" rel="noopener">💬 WhatsApp</a>' : '') +
           (l.phone ? '<a href="sms:'+esc(telClean)+'">📩 SMS</a>' : '') +
           (l.email ? '<a href="mailto:'+esc(l.email)+'">✉️ E-mail</a>' : '') +
