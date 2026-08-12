@@ -248,7 +248,7 @@ async function gatherPlanContext(personId) {
     select: {
       id: true, name: true, email: true, phone: true, role: true, lang: true, status: true,
       notes: true, activity_log: true, created_at: true, updated_at: true, source: true,
-      access_sent_count: true, access_last_sent_at: true, access_approved_at: true, last_called_at: true,
+      access_sent_count: true, access_last_sent_at: true, access_approved_at: true, last_called_at: true, discount_until: true,
     },
     orderBy: { updated_at: 'desc' }, take: 300,
   });
@@ -292,6 +292,8 @@ async function gatherPlanContext(personId) {
       id: l.id, name: l.name, status: l.status, role: l.role, lang: l.lang,
       has_phone: !!l.phone, has_email: !!l.email,
       called_today: !!(l.last_called_at && new Date(l.last_called_at).getTime() >= dayStartMs),
+      discount_ends_today: !!(l.discount_until && new Date(l.discount_until).getTime() >= dayStartMs && new Date(l.discount_until).getTime() < dayStartMs + 86400000),
+      discount_ended: !!(l.discount_until && new Date(l.discount_until).getTime() < dayStartMs),
       days_since_update: daysSinceUpdate,
       invite_sent: l.access_sent_count || 0,
       has_portal_access: hasPortalAccess,
@@ -447,6 +449,15 @@ function buildLeadTasks(ctx) {
     }
     if (l.called_today) { covered.add(l.id); return; } // dnes už volaný → dnešní hovor je hotový, neplánuj další
     if (scheduled.has(l.id) || l.status === 'schuzka' || l.status === 'schuzka_online') { covered.add(l.id); return; } // má domluvenou schůzku → dnes se nevolá
+    // Dosledování: běží sleva. Volat až POSLEDNÍ den (končí akce), jinak během slevy nevoláme.
+    if (l.status === 'dosledovani') {
+      if (l.discount_ends_today) {
+        tasks.push({ kind: 'call', title: 'Zavolej – DNES KONČÍ akce/sleva – ' + l.name, detail: 'Otevři kontakt: dnes je poslední den slevy. Zavolej, připomeň konec akce a dotáhni k rezervaci/schůzce.', reasoning: 'Poslední den slevy — dosledování.', priority: 1, est_min: 12, lead_id: l.id });
+      } else if (l.discount_ended) {
+        tasks.push({ kind: 'followup', title: 'Zavolej – akce/sleva už skončila – ' + l.name, detail: 'Otevři kontakt: sleva skončila. Zavolej, zjisti rozhodnutí a nabídni další krok.', reasoning: 'Dosledování po konci slevy.', priority: 2, est_min: 12, lead_id: l.id });
+      }
+      covered.add(l.id); return; // během běžící slevy se nevolá
+    }
     if ((l.days_since_update || 0) >= 7) {
       tasks.push({ kind: 'followup', title: 'Oživit kontakt – ' + l.name, detail: 'Otevři kontakt, přečti poznámky; zavolej, zjisti stav a posuň k schůzce/rezervaci.', reasoning: 'Přes týden beze změny.', priority: 3, est_min: 15, lead_id: l.id }); covered.add(l.id); return;
     }

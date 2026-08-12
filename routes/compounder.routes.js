@@ -115,12 +115,35 @@ router.post('/track', async (req, res) => {
           ip: clientIp(req),
         },
       });
+      // Vstup na portál → spusť dosledování (stav) a slevu (discount_until), jednorázově.
+      if (b.event === 'portal_view' && b.props && b.props.lead_id) {
+        _startFollowUp(Number(b.props.lead_id)).catch(() => {});
+      }
     }
   } catch (e) {
     // analytika je best-effort
   }
   res.status(204).end();
 });
+
+// Vstup leada na portál spustí „dosledování": přepne stav (jen z rané fáze) a nastaví konec
+// slevy (discount_until = teď + validDays z Compounding nastavení), pokud ještě není nastaven.
+async function _startFollowUp(leadId) {
+  if (!Number.isInteger(leadId)) return;
+  const lead = await prisma.compounderLead.findUnique({ where: { id: leadId }, select: { id: true, status: true, discount_until: true } }).catch(() => null);
+  if (!lead) return;
+  const data = {};
+  if (!lead.discount_until) {
+    const cs = (await getSetting(COMPOUNDING_SETTINGS_KEY, { type: 'json', defaultValue: COMPOUNDING_SETTINGS_DEFAULT }).catch(() => null)) || {};
+    const validDays = (cs.discount && Number.isFinite(cs.discount.validDays)) ? cs.discount.validDays : 7;
+    data.discount_until = new Date(Date.now() + validDays * 86400000);
+  }
+  const EARLY = ['new', 'nedovolano', 'volat_pristi', 'contacted', 'qualified'];
+  if (EARLY.indexOf(lead.status) >= 0) data.status = 'dosledovani';
+  if (Object.keys(data).length) {
+    await prisma.compounderLead.update({ where: { id: leadId }, data }).catch(() => {});
+  }
+}
 
 // GET /api/compounder/lokality-analytics?days=30 — návštěvnost webu Lokality (events lok_*).
 router.get('/lokality-analytics', requireAuth, async (req, res, next) => {
