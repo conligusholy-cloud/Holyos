@@ -3276,6 +3276,31 @@ router.post('/leads/:id(\\d+)/discount', requireAuth, async (req, res, next) => 
   }
 });
 
+// POST /api/compounder/leads/discount-followup — hromadně: všechny leady s AKTIVNÍ slevou
+// přepne na stav „dosledování" (kromě těch, co už jsou dosledování/converted/rejected/nelze_pouzit).
+router.post('/leads/discount-followup', requireAuth, async (req, res, next) => {
+  try {
+    if (!(req.user && (req.user.isSuperAdmin || req.user.role === 'admin'))) {
+      return res.status(403).json({ error: 'Hromadnou akci smí spustit jen admin.' });
+    }
+    const cs = (await getSetting(COMPOUNDING_SETTINGS_KEY, { type: 'json', defaultValue: COMPOUNDING_SETTINGS_DEFAULT })) || {};
+    const leads = await prisma.compounderLead.findMany({
+      where: { is_test: false },
+      select: { id: true, status: true, discount_until: true, discount_permanent: true, discount_disabled: true, access_last_sent_at: true, created_at: true },
+    });
+    const SKIP = ['dosledovani', 'converted', 'rejected', 'nelze_pouzit'];
+    const ids = [];
+    for (const l of leads) {
+      const eff = effectiveDiscount(l, cs);
+      if (eff.active && SKIP.indexOf(l.status) === -1) ids.push(l.id);
+    }
+    if (ids.length) await prisma.compounderLead.updateMany({ where: { id: { in: ids } }, data: { status: 'dosledovani' } });
+    return res.json({ ok: true, updated: ids.length });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // POST /api/compounder/leads/:id/offer  { code, action: 'add'|'remove' }
 // Obchodník s právem can_add_individual_offers (nebo admin) přidá/odebere individuální lokalitu.
 router.post('/leads/:id(\\d+)/offer', requireAuth, async (req, res, next) => {

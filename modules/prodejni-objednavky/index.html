@@ -428,6 +428,7 @@
         <button class="btn" onclick="loadCompounderLeads()">↻ Obnovit</button>
         <button class="btn" onclick="openFbForms()" title="Napojení FB reklam — kontakty z formulářů se přiřadí obchodníkovi a označí kampaní">📢 FB reklamy</button>
         <button class="btn" onclick="cmpStartDiscountAll(this)" title="Spustí akční cenu (slevu) od dneška všem leadům, kteří už byli na portálu">🏷️ Akce všem</button>
+        <button class="btn" onclick="cmpDiscountFollowup(this)" title="Hromadně přepnout všechny leady s aktivní slevou na stav Dosledování">🗓️ Ve slevě → Dosledování</button>
         <button class="btn btn-primary" onclick="openAddLead()">➕ Přidat kontakt</button>
       </div>
       <div id="cmp-summary" style="margin-bottom:14px;"></div>
@@ -2918,6 +2919,19 @@
       }catch(e){ alert('Chyba: '+e.message); }
       finally{ if(btn){ btn.disabled=false; btn.textContent=old; } }
     }
+    // Hromadně: všechny leady s AKTIVNÍ slevou → stav Dosledování.
+    async function cmpDiscountFollowup(btn){
+      if(!confirm('Přepnout všechny leady s aktivní slevou na stav „Dosledování"?')) return;
+      var old = btn ? btn.textContent : ''; if(btn){ btn.disabled=true; btn.textContent='Přepínám…'; }
+      try{
+        var r = await fetch('/api/compounder/leads/discount-followup', { method:'POST', credentials:'include' });
+        var j = await r.json().catch(function(){return {};});
+        if(!r.ok){ alert(j.error || 'Nepodařilo se.'); }
+        else { alert('Hotovo — přepnuto '+(j.updated||0)+' leadů na Dosledování.'); loadCompounderLeads(); }
+      }catch(e){ alert('Chyba: '+e.message); }
+      finally{ if(btn){ btn.disabled=false; btn.textContent=old; } }
+    }
+    window.cmpDiscountFollowup = cmpDiscountFollowup;
     function openAddLead(){
       document.getElementById('modal-root').innerHTML =
         '<div class="modal-overlay" onclick="if(event.target===this)closeModal()">' +
