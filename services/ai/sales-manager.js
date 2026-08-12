@@ -901,7 +901,8 @@ async function coachReply(personId, message, history) {
     + 'TEĎ jsi v roli MENTORA a KOUČE v chatu s obchodníkem. Odpovídej česky, konkrétně, stručně a prakticky — vysvětluj jak věci fungují a jak je má dělat, analyzuj jeho data (kontext níže), navrhuj konkrétní kroky a úpravy vedoucí k obratu. Buď náročný, ale podporující a motivující. Když se ptá „jak", dej návod. Když chce analýzu, vyjdi z dat a řekni priority. '
     + 'FORMÁT ODPOVĚDI: normální text (rada/analýza), klidně na více odstavců. '
     + 'Pokud navrhuješ konkrétní akce proveditelné v systému, přidej ÚPLNĚ NA KONEC na nový řádek značku <<<ACTIONS>>> a za ni JSON pole akcí. Povolené akce: '
-    + '{"type":"set_status","lead_id":<id z kontextu>,"status":"<new|nedovolano|volat_pristi|contacted|schuzka|qualified|dosledovani|converted|nelze_pouzit|rejected>","label":"<lidsky co se stane>"} a '
+    + '{"type":"open_contact","lead_id":<id z kontextu>,"label":"Otevřít a zavolat – <jméno>"} — POUŽIJ VŽDY, když radíš někomu zavolat / jít na konkrétní kontakt (aplikace neumí volat sama; tlačítko kontakt otevře v Kontaktech, kde ho obchodník vytočí); '
+    + '{"type":"set_status","lead_id":<id z kontextu>,"status":"<new|nedovolano|volat_pristi|contacted|schuzka|qualified|dosledovani|converted|nelze_pouzit|rejected>","label":"<lidsky co se stane>"}; '
     + '{"type":"create_task","title":"<název úkolu>","lead_id":<id nebo null>,"label":"<lidsky co se stane>"}. Akce navrhuj jen když dávají jasný smysl a lead_id znáš z kontextu. Když žádné nejsou, značku <<<ACTIONS>>> vůbec nepiš.';
   const hist = (history || []).map((h) => (h.role === 'user' ? 'Obchodník: ' : 'Vedoucí: ') + String(h.text || '')).join('\n');
   const usr = 'DATA OBCHODNÍKA (JSON):\n' + JSON.stringify(_coachCtx(ctx))
@@ -914,7 +915,7 @@ async function coachReply(personId, message, history) {
   if (idx >= 0) {
     let after = reply.slice(idx + 13).trim().replace(/^```(json)?/i, '').replace(/```$/,'').trim();
     reply = reply.slice(0, idx).trim();
-    try { const arr = JSON.parse(after); if (Array.isArray(arr)) actions = arr.filter((a) => a && (a.type === 'set_status' || a.type === 'create_task')).slice(0, 6); } catch (e) { /* akce best-effort */ }
+    try { const arr = JSON.parse(after); if (Array.isArray(arr)) actions = arr.filter((a) => a && ['open_contact', 'call', 'set_status', 'create_task'].indexOf(a.type) >= 0).slice(0, 6); } catch (e) { /* akce best-effort */ }
   }
   return { reply: (reply || 'Rozumím.').slice(0, 4000), actions };
 }
