@@ -432,6 +432,7 @@ function buildLeadTasks(ctx) {
   const calls = [];
   (ctx.leads || []).forEach((l) => {
     if (covered.has(l.id)) return;
+    if (l.status === 'nelze_pouzit' || l.status === 'rejected') { covered.add(l.id); return; } // mrtvé leady do plánu nepatří
     const r = (l.reservations || [])[0];
     if (r && (r.status === 'reserved' || r.status === 'active')) {
       tasks.push({ kind: 'close', title: 'Dotáhnout rezervaci ' + r.kiosk + ' – ' + l.name, detail: 'Otevři kontakt, přečti poznámky; hlídej podpis/poplatek a popožeň zákazníka k uzavření.', reasoning: 'Běžící rezervace se lhůtou.', priority: 1, est_min: 30, lead_id: l.id }); covered.add(l.id); return;
