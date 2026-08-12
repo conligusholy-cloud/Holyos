@@ -724,13 +724,17 @@
     var tco=document.getElementById('tab-coach'); if(tco) tco.classList.toggle('active',coach);
     if(cal){ initCalendarView(); setTimeout(function(){ if(window._fcInst){ try{ window._fcInst.updateSize(); }catch(e){} } },60); }
     if(tod && !window._todayLoaded){ loadToday(); }
-    if(coach){ var cb=document.getElementById('coach-msgs'); if(cb && !cb.children.length) coachGreet(); }
+    if(coach){ coachRestore(); }
   }
   window.showScreen=showScreen; window.initCalendarView=initCalendarView;
 
   // ─── Vedoucí (chat s AI mentorem/koučem) ─────────────────────────────────
-  var COACH_HIST = [];
-  function coachRenderMsg(role, text, actions){
+  // Historie se uchovává v localStorage — přežije refresh i restart, maže ji jen popelnice.
+  var COACH_KEY='ob.coachChat';
+  var COACH_MSGS=(function(){ try{ return JSON.parse(localStorage.getItem(COACH_KEY)||'[]')||[]; }catch(e){ return []; } })();
+  function coachSave(){ try{ localStorage.setItem(COACH_KEY, JSON.stringify(COACH_MSGS.slice(-40))); }catch(e){} }
+  function coachRestore(){ var b=document.getElementById('coach-msgs'); if(!b || b.children.length) return; if(COACH_MSGS.length){ COACH_MSGS.forEach(function(m){ coachRenderMsg(m.role,m.text,m.actions,false); }); } else { coachGreet(); } }
+  function coachRenderMsg(role, text, actions, persist){
     var box=document.getElementById('coach-msgs'); if(!box) return;
     var mine=role==='user';
     var wrap=document.createElement('div');
@@ -747,6 +751,7 @@
       });
       box.appendChild(arow);
     }
+    if(persist!==false){ COACH_MSGS.push({role:role,text:text,actions:actions||null}); coachSave(); }
     box.scrollTop=box.scrollHeight;
   }
   async function coachDoAction(a,btn){
@@ -775,21 +780,22 @@
   }
   async function coachSend(){
     var inp=document.getElementById('coach-input'); var t=(inp.value||'').trim(); if(!t) return;
-    inp.value=''; coachRenderMsg('user',t,null); COACH_HIST.push({role:'user',text:t});
+    inp.value=''; coachRenderMsg('user',t,null);
     var sb=document.getElementById('coach-send'); if(sb) sb.disabled=true;
     var box=document.getElementById('coach-msgs');
     var think=document.createElement('div'); think.style.cssText='align-self:flex-start;color:var(--muted);font-size:13px;padding:2px 6px'; think.textContent='Vedoucí přemýšlí…'; box.appendChild(think); box.scrollTop=box.scrollHeight;
     try{
-      var r=await api('/sales/coach',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:t,history:COACH_HIST.slice(-10)})});
+      var hist=COACH_MSGS.slice(-10).map(function(m){ return {role:m.role,text:m.text}; });
+      var r=await api('/sales/coach',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:t,history:hist})});
       var j=await r.json().catch(function(){return{};});
       think.remove();
-      if(!r.ok||!j.reply){ coachRenderMsg('assistant',(j&&j.error)||'Teď to nešlo, zkus to prosím znovu.',null); }
-      else { coachRenderMsg('assistant',j.reply,j.actions); COACH_HIST.push({role:'assistant',text:j.reply}); }
-    }catch(e){ think.remove(); coachRenderMsg('assistant','Chyba spojení, zkus to prosím znovu.',null); }
+      if(!r.ok||!j.reply){ coachRenderMsg('assistant',(j&&j.error)||'Teď to nešlo, zkus to prosím znovu.',null,false); }
+      else { coachRenderMsg('assistant',j.reply,j.actions); }
+    }catch(e){ think.remove(); coachRenderMsg('assistant','Chyba spojení, zkus to prosím znovu.',null,false); }
     finally{ if(sb) sb.disabled=false; }
   }
-  function coachGreet(){ coachRenderMsg('assistant','Ahoj, jsem tvůj vedoucí obchodu. Zeptej se mě na cokoli — jak posunout konkrétní leady, jak plnit kvótu, jak vést hovor. Nebo mi napiš „projdi můj den a poraď priority" a já se podívám na tvá data.',null); }
-  function coachClear(){ COACH_HIST=[]; var b=document.getElementById('coach-msgs'); if(b) b.innerHTML=''; coachGreet(); }
+  function coachGreet(){ coachRenderMsg('assistant','Ahoj, jsem tvůj vedoucí obchodu. Zeptej se mě na cokoli — jak posunout konkrétní leady, jak plnit kvótu, jak vést hovor. Nebo mi napiš „projdi můj den a poraď priority" a já se podívám na tvá data.',null,false); }
+  function coachClear(){ COACH_MSGS=[]; try{ localStorage.removeItem(COACH_KEY); }catch(e){} var b=document.getElementById('coach-msgs'); if(b) b.innerHTML=''; coachGreet(); }
   // Při psaní schovej spodní lištu (na iOS jinak visí mezi polem a klávesnicí a prosvítá pozadí).
   function coachFocus(on){ var tb=document.querySelector('.tabbar'); if(tb) tb.style.display = on ? 'none' : ''; var sc=document.getElementById('screen-coach'); if(sc) sc.style.paddingBottom = on ? '8px' : ''; }
   window.coachSend=coachSend; window.coachClear=coachClear; window.coachDoAction=coachDoAction; window.coachGreet=coachGreet; window.coachFocus=coachFocus;
