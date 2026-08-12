@@ -872,12 +872,34 @@ router.get('/portal/machines', async (req, res, next) => {
     const eur = fx.EUR || 25;
     const pl = cs.pricelist || {};
     const vp = (cs.versionPhotos && typeof cs.versionPhotos === 'object') ? cs.versionPhotos : {};
+    // Volitelný token leada → efektivní sleva. Zadaná cena je PO slevě:
+    //  sleva NEAKTIVNÍ → ukážeme cenu PŘED slevou (dopočet ↑), AKTIVNÍ → promo (zadaná).
+    let disc = null;
+    const tok = String(req.query.t || '');
+    if (tok) {
+      const leadId = verifyPortalToken(tok);
+      if (leadId) {
+        const lead = await prisma.compounderLead.findUnique({
+          where: { id: leadId },
+          select: { discount_until: true, discount_permanent: true, discount_disabled: true, access_last_sent_at: true, created_at: true },
+        }).catch(() => null);
+        if (lead) disc = effectiveDiscount(lead, cs);
+      }
+    }
+    const dPct = (disc && disc.machinePct) || {};
+    const active = !!(disc && disc.active);
     const machines = ['v2', 'v3', 'v4'].map((v) => {
       const eurP = (pl[v] && pl[v].eur != null && isFinite(Number(pl[v].eur))) ? Number(pl[v].eur) : null;
       if (eurP == null) return null;
-      return { ver: v.toUpperCase(), priceCzk: Math.round(eurP * eur), photo: vp[v] || null };
+      const entered = Math.round(eurP * eur);       // cena PO slevě (zadaná v nastavení)
+      const mp = Number(dPct[v]) || 0;
+      const before = (mp > 0 && mp < 100) ? Math.round(entered / (1 - mp / 100)) : entered; // cena PŘED slevou
+      const beforeEur = (mp > 0 && mp < 100) ? Math.round(eurP / (1 - mp / 100)) : Math.round(eurP);
+      const priceCzk = active ? entered : before;   // aktivní sleva → promo, jinak před slevou
+      const priceEur = active ? Math.round(eurP) : beforeEur;
+      return { ver: v.toUpperCase(), priceCzk, priceEur, priceBeforeCzk: before, pricePromoCzk: entered, discountActive: active, photo: vp[v] || null };
     }).filter(Boolean);
-    res.json({ machines });
+    res.json({ machines, discount: disc ? { active: disc.active, endsAt: disc.endsAt ? disc.endsAt.toISOString() : null } : null });
   } catch (err) { next(err); }
 });
 
@@ -1009,7 +1031,7 @@ router.post('/leads', requireAuth, async (req, res, next) => {
     const myPersonId = (req.user && req.user.person) ? req.user.person.id : null;
     const lead = await prisma.compounderLead.create({
       data: {
-        name: name || email || phone, email: email || null, role, lang, phone, source: 'admin', status: 'new',
+        name: name || email || phone, email: email || null, role, lang, phone, source: (['import', 'prospecting'].indexOf(String((req.body || {}).source)) >= 0 ? String((req.body || {}).source) : 'admin'), status: 'new',
         first_name: firstName || null, last_name: lastName || null, company: company || null,
         city: city || null, country: country || null,
         created_by_person_id: myPersonId,
@@ -1346,9 +1368,19 @@ router.get('/my-day', requireAuth, async (req, res, next) => {
         const held = await prisma.salesEvent.findMany({ where: { organizer_id: personId, event_type: 'meeting', start_at: { gte: dayStart, lte: new Date() } }, select: { start_at: true, end_at: true } });
         held.forEach((m) => { const dur = m.end_at ? Math.round((new Date(m.end_at) - new Date(m.start_at)) / 60000) : 60; meetMin += Math.max(0, Math.min(dur, 90)); });
       } catch (e) { /* meetings best-effort */ }
-      const newMin = (stats.new_contacts || 0) * 3; // ~3 min na nový kontakt
-      stats.time_by = { calls: callsMin, access: accessMin, meetings: meetMin, new: newMin };
-      stats.worked_min = callsMin + accessMin + meetMin + newMin;
+      // Nové kontakty — čas počítej JEN u ručně získaných; příchozí (FB reklama, web) i importované
+      // leady sem nepatří (přijdou samy / řeší se hromadně v importu).
+      let newManual = 0;
+      try { newManual = await prisma.compounderLead.count({ where: { owner_person_id: personId, created_at: { gte: dayStart, lte: dayEnd }, NOT: { source: { in: ['facebook_ads', 'web', 'import'] } } } }); } catch (e) { /* 0 */ }
+      const newMin = newManual * 3; // ~3 min na ručně získaný kontakt
+      // Importy — cca 15 min na jednu importní dávku (počet dávek = počet import událostí dnes).
+      let importMin = 0;
+      try {
+        const imp = evs.filter((e) => e.props && e.props.action === 'import').length;
+        importMin = imp * 15;
+      } catch (e) { /* 0 */ }
+      stats.time_by = { calls: callsMin, access: accessMin, meetings: meetMin, new: newMin + importMin };
+      stats.worked_min = callsMin + accessMin + meetMin + newMin + importMin;
     } catch (e) { /* čas best-effort */ }
     stats.time_spent_min = stats.worked_min;
     res.json({ ok: true, person_id: personId, date: dateStr, plan: plan || null, review: dayReview || null, prevDayReview: prevDayReview || null, prevDayDate: prevStr, stats });
@@ -1674,6 +1706,16 @@ router.post('/leads/:id/action', requireAuth, async (req, res, next) => {
     await _closePrevCall(pid); // tato akce ukončuje případný rozběhnutý hovor → zapíše jeho délku
     try { await prisma.compounderLead.update({ where: { id }, data: { activity_log: _actionStamp(label) + (lead.activity_log ? '\n' + lead.activity_log : '') } }); } catch (e) {}
     prisma.compounderEvent.create({ data: { sid: 'sales-action-' + id, event: 'sales_action', props: { lead_id: id, action, person_id: pid }, path: '/obchodnik' } }).catch(() => {});
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
+// POST /api/compounder/import-done {count} — zaznamená dokončení importní dávky (kvůli času „odpracováno").
+router.post('/import-done', requireAuth, async (req, res, next) => {
+  try {
+    const pid = salesMyPersonId(req) || null;
+    const count = Math.max(0, Math.round(Number(req.body && req.body.count) || 0));
+    prisma.compounderEvent.create({ data: { sid: 'sales-import', event: 'sales_action', props: { action: 'import', person_id: pid, count }, path: '/obchodnik' } }).catch(() => {});
     res.json({ ok: true });
   } catch (err) { next(err); }
 });

@@ -1817,7 +1817,19 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
       if (j && j.rates) EKO_RATES = Object.assign({ CZK: 1 }, j.rates);
       try{ if(typeof PCUR!=='undefined' && PCUR && PCUR!==EKO_CUR) ekoSetCur(PCUR); }catch(e){}
     }).catch(function(){ try{ if(typeof PCUR!=='undefined' && PCUR && PCUR!==EKO_CUR) ekoSetCur(PCUR); }catch(e){} });
-    fetch('/api/compounder/portal/machines').then(function(r){ return r.json(); }).then(function(j){ (j&&j.machines||[]).forEach(function(m){ if(m&&m.ver&&m.photo) EKO_VER_PHOTOS[m.ver]=m.photo; }); ekoRenderVerPhoto(); }).catch(function(){});
+    (function(){
+      var _t=''; try{ _t = window._portalToken || localStorage.getItem('compounder.portal.token') || ''; }catch(_){}
+      fetch('/api/compounder/portal/machines' + (_t ? ('?t=' + encodeURIComponent(_t)) : '')).then(function(r){ return r.json(); }).then(function(j){
+        (j&&j.machines||[]).forEach(function(m){
+          if(!m||!m.ver) return;
+          if(m.photo) EKO_VER_PHOTOS[m.ver]=m.photo;
+          // Cena stroje z HolyOS podle slevy leada (před slevou / promo) — přepíše výchozí EKO_VARIANTS.
+          if(EKO_VARIANTS[m.ver] && m.priceEur!=null && isFinite(m.priceEur)) EKO_VARIANTS[m.ver]['i-machine']=Math.round(m.priceEur);
+        });
+        ekoRenderVerPhoto();
+        try{ ekoApplyVersion(window._portalActiveVer==='V2'?'V2':'V3'); recalc(); }catch(e){}
+      }).catch(function(){});
+    })();
     recalc(); ekoFmtMoney(); ekoRenderVerSwitch(); ekoRenderVerBadge(); ekoRenderVerPhoto();
     try{ syncSubnavTop(); setTimeout(syncSubnavTop, 300); }catch(e){}
   }
