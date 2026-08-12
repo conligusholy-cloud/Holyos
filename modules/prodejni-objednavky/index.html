@@ -3386,7 +3386,7 @@
       var td = document.createElement('td'); td.colSpan = 12; td.style.background='rgba(234,179,8,0.04)'; td.style.padding='14px 18px';
       td.innerHTML = cmpAccessBlock(id, row.getAttribute('data-source')||'', row.getAttribute('data-approved')==='1')
         + cmpInviteBlock(id, parseInt(row.getAttribute('data-sent-count')||'0',10), row.getAttribute('data-sent-at')||'', row.getAttribute('data-phone')||'', row.getAttribute('data-la')||'')
-        + cmpVersionBlock(id, row.getAttribute('data-version')||'V3') + cmpSecBlock(id, row.getAttribute('data-sections')||'') + cmpRevStatsBlock(id, row.getAttribute('data-revstats')==='1') + cmpExampleBlock(id, row.getAttribute('data-example')==='1', row.getAttribute('data-hideloss')==='1') + cmpModelBlock(id) + cmpOfferBlock(id, row.getAttribute('data-extra')||'') + cmpCommsBlock(id, row.getAttribute('data-phone')||'', row.getAttribute('data-name')||'');
+        + cmpDiscountBlock(id) + cmpVersionBlock(id, row.getAttribute('data-version')||'V3') + cmpSecBlock(id, row.getAttribute('data-sections')||'') + cmpRevStatsBlock(id, row.getAttribute('data-revstats')==='1') + cmpExampleBlock(id, row.getAttribute('data-example')==='1', row.getAttribute('data-hideloss')==='1') + cmpModelBlock(id) + cmpOfferBlock(id, row.getAttribute('data-extra')||'') + cmpCommsBlock(id, row.getAttribute('data-phone')||'', row.getAttribute('data-name')||'');
       var resDiv = document.createElement('div'); resDiv.innerHTML = '<div style="color:var(--text2);font-size:13px;">Načítám rezervace…</div>';
       td.appendChild(resDiv);
       cmpLeadReservations(id, resDiv);
@@ -3421,6 +3421,42 @@
           '<div id="cmp-raw-' + id + '" style="display:none;margin-top:8px;">' + rows + '</div>';
       } catch(e) { body.innerHTML = '<div style="color:#ef4444;font-size:13px;">Chyba načítání aktivity.</div>'; }
     }
+
+    // ── Sleva na leadovi (stav + tlačítka) v detailu Compounder tabu ──
+    function cmpDiscountBlock(id){
+      var l = (_cmpLeadsCache||[]).filter(function(x){return x.id===id;})[0] || {};
+      var d = l.discount || {};
+      var color, statusTxt;
+      if (d.mode==='permanent'){ statusTxt='Trvale zapnuto'; color='#22c55e'; }
+      else if (d.mode==='off'){ statusTxt='Vypnuto'; color='#ef4444'; }
+      else if (d.active){ statusTxt='Platí do '+(d.endsAt?new Date(d.endsAt).toLocaleDateString('cs-CZ'):'—'); color='#22c55e'; }
+      else if (d.mode==='off-default'){ statusTxt='Neaktivní (globálně vypnuto)'; color='var(--text2)'; }
+      else { statusTxt='Vypršela'; color='var(--text2)'; }
+      var pct = d.machinePct ? ('stroj '+(d.machinePct.v2||0)+'/'+(d.machinePct.v3||0)+'/'+(d.machinePct.v4||0)+' % · lokalita '+(d.locationPct||0)+' %') : '';
+      return '<div id="cmp-disc-'+id+'" style="margin:10px 0;padding:12px;border:1px solid rgba(16,185,129,0.4);border-radius:10px;background:rgba(16,185,129,0.06);">' +
+        '<div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:#10b981;font-weight:700;margin-bottom:6px;">🏷️ Sleva</div>' +
+        '<div style="font-size:13px;color:'+color+';font-weight:600;">'+statusTxt+'</div>' +
+        (pct?'<div style="font-size:11px;color:var(--text2);margin-top:2px;">'+pct+'</div>':'') +
+        '<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;">' +
+          '<button class="btn btn-sm" onclick="cmpSetDiscount('+id+',\'extend\')">+7 dní</button>' +
+          '<button class="btn btn-sm" onclick="cmpSetDiscount('+id+',\'permanent\')">Trvale</button>' +
+          '<button class="btn btn-sm" onclick="cmpSetDiscount('+id+',\'auto\')">Auto</button>' +
+          '<button class="btn btn-sm" onclick="cmpSetDiscount('+id+',\'off\')">Vypnout</button>' +
+        '</div></div>';
+    }
+    async function cmpSetDiscount(id, action){
+      try {
+        var body = { action: action }; if (action==='extend') body.days = 7;
+        var r = await fetch('/api/compounder/leads/'+id+'/discount', { method:'POST', credentials:'include', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+        if(!r.ok) throw new Error('HTTP '+r.status);
+        var data = await r.json();
+        var l = (_cmpLeadsCache||[]).filter(function(x){return x.id===id;})[0];
+        if (l && data.discount) l.discount = data.discount;
+        var box = document.getElementById('cmp-disc-'+id);
+        if (box) box.outerHTML = cmpDiscountBlock(id);
+      } catch(e){ alert('Slevu se nepodařilo změnit.'); }
+    }
+    window.cmpSetDiscount = cmpSetDiscount;
 
     // Přepnutí mezi „cestou uživatele" a syrovým seznamem eventů.
     function cmpToggleJourney(id, btn){
