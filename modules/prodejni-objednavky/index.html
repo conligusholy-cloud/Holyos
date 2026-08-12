@@ -3366,6 +3366,72 @@
     }
     window.renderCompounderLeads = renderCompounderLeads;
     function cmpStat(k, v){ return '<div><div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--text2);">'+k+'</div><div style="font-size:18px;font-weight:700;color:#eab308;">'+v+'</div></div>'; }
+
+    // ─── Graf vývoje času studia (klik na „Čas studia dnes") ───
+    var _studyChart = null, _studySeries = null, _studyPeriod = 'day';
+    function ensureChartJs(cb){
+      if (window.Chart) { cb(); return; }
+      var s = document.createElement('script'); s.src = 'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js';
+      s.onload = cb; s.onerror = function(){ alert('Nepodařilo se načíst graf (Chart.js).'); };
+      document.head.appendChild(s);
+    }
+    function openStudyChart(){
+      _studyPeriod = 'day';
+      document.getElementById('modal-root').innerHTML =
+        '<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal" style="width:880px;max-width:96vw;">' +
+        '<h2>📈 Čas studia na portálu <span style="font-size:13px;color:var(--text2);font-weight:400;">(bez testovacích kontaktů)</span></h2>' +
+        '<div style="display:flex;gap:6px;margin-bottom:12px;" id="study-period-btns">' +
+          '<button class="btn btn-sm" data-p="day" onclick="setStudyPeriod(\'day\')">Den</button>' +
+          '<button class="btn btn-sm" data-p="week" onclick="setStudyPeriod(\'week\')">Týden</button>' +
+          '<button class="btn btn-sm" data-p="month" onclick="setStudyPeriod(\'month\')">Měsíc</button>' +
+          '<button class="btn btn-sm" data-p="year" onclick="setStudyPeriod(\'year\')">Rok</button>' +
+        '</div>' +
+        '<div style="height:380px;"><canvas id="study-canvas"></canvas></div>' +
+        '<div id="study-loading" style="color:var(--text2);font-size:13px;margin-top:8px;">Načítám data…</div>' +
+        '<div class="modal-actions"><button class="btn btn-secondary" onclick="closeModal()">Zavřít</button></div>' +
+        '</div></div>';
+      ensureChartJs(function(){ loadStudySeries(); });
+    }
+    async function loadStudySeries(){
+      try {
+        var r = await fetch('/api/compounder/study-time-series?days=1100', { credentials:'include' });
+        var d = await r.json();
+        _studySeries = (d && d.series) || [];
+        var ld = document.getElementById('study-loading'); if (ld) ld.style.display = 'none';
+        renderStudyChart();
+      } catch(e){ var ld = document.getElementById('study-loading'); if (ld) ld.textContent = 'Nepodařilo se načíst data grafu.'; }
+    }
+    function setStudyPeriod(p){ _studyPeriod = p; renderStudyChart(); }
+    window.setStudyPeriod = setStudyPeriod;
+    function bucketStudy(series, period){
+      if (period === 'day') return series.slice(-30).map(function(x){ return { label: x.date.slice(5), value: x.minutes }; });
+      var map = {};
+      series.forEach(function(x){
+        var dt = new Date(x.date + 'T00:00:00'); var key;
+        if (period === 'week'){ var oj = new Date(dt.getFullYear(),0,1); var wk = Math.ceil((((dt - oj)/86400000)+oj.getDay()+1)/7); key = dt.getFullYear()+'-t'+('0'+wk).slice(-2); }
+        else if (period === 'month') key = x.date.slice(0,7);
+        else key = x.date.slice(0,4);
+        map[key] = (map[key]||0) + x.minutes;
+      });
+      var keys = Object.keys(map).sort();
+      if (period === 'week') keys = keys.slice(-16);
+      if (period === 'month') keys = keys.slice(-12);
+      return keys.map(function(k){ return { label: k, value: map[k] }; });
+    }
+    function renderStudyChart(){
+      if (!_studySeries || !window.Chart) return;
+      var btns = document.querySelectorAll('#study-period-btns button');
+      Array.prototype.forEach.call(btns, function(b){ b.style.background = (b.getAttribute('data-p')===_studyPeriod) ? '#eab308' : ''; b.style.color = (b.getAttribute('data-p')===_studyPeriod) ? '#1a1408' : ''; });
+      var data = bucketStudy(_studySeries, _studyPeriod);
+      var ctx = document.getElementById('study-canvas'); if (!ctx) return;
+      if (_studyChart){ try{ _studyChart.destroy(); }catch(e){} _studyChart = null; }
+      _studyChart = new Chart(ctx, {
+        type: 'bar',
+        data: { labels: data.map(function(x){return x.label;}), datasets: [{ label: 'Čas studia (min)', data: data.map(function(x){return x.value;}), backgroundColor: 'rgba(234,179,8,0.55)', borderColor:'#eab308', borderWidth:1 }] },
+        options: { responsive:true, maintainAspectRatio:false, plugins:{ legend:{ display:false }, tooltip:{ callbacks:{ label:function(c){ return c.parsed.y+' min'; } } } }, scales:{ y:{ beginAtZero:true, ticks:{ color:'#9fb0c3', callback:function(v){ return v+' min'; } }, grid:{ color:'rgba(255,255,255,0.06)' } }, x:{ ticks:{ color:'#9fb0c3' }, grid:{ display:false } } } }
+      });
+    }
+    window.openStudyChart = openStudyChart;
     async function cmpSummary() {
       var el = document.getElementById('cmp-summary');
       if (!el) return;
@@ -3376,7 +3442,7 @@
         var top = (s.topSections||[]).slice(0,4).map(function(x){ return cmpEsc(x.section)+' ('+x.count+')'; }).join(' · ') || '—';
         el.innerHTML = '<div style="display:flex;gap:22px;flex-wrap:wrap;align-items:center;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 18px;">' +
           cmpStat('Návštěvy 30d', s.sessions) + cmpStat('Eventy', s.events) + cmpStat('Registrace', s.registrations) + cmpStat('Konverze', s.conversionPct + ' %') +
-          cmpStat('Dnes na portálu', (s.todayPortalVisitors!=null?s.todayPortalVisitors:0)) + cmpStat('Čas studia dnes', ((s.todayStudyMs>0)?cmpFmtDur(s.todayStudyMs):'0 s')) +
+          cmpStat('Dnes na portálu', (s.todayPortalVisitors!=null?s.todayPortalVisitors:0)) + '<span onclick="openStudyChart()" title="Zobrazit graf vývoje studia v čase" style="cursor:pointer;">' + cmpStat('Čas studia dnes ▸', ((s.todayStudyMs>0)?cmpFmtDur(s.todayStudyMs):'0 s')) + '</span>' +
           '<div style="color:var(--text2);font-size:12px;max-width:340px;">Top sekce: ' + top + '</div>' + '<button onclick="cmpPushBroadcast()" style="margin-left:auto;background:#eab308;color:#1a1408;border:none;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:600;cursor:pointer;">\ud83d\udce3 Push vsem</button>' + '</div>';
       } catch(e){}
     }

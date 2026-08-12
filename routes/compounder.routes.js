@@ -2687,6 +2687,52 @@ router.get('/analytics/summary', requireAuth, async (req, res, next) => {
   }
 });
 
+// GET /api/compounder/study-time-series?days=120 — čas studia (min) po dnech, bez testovacích kontaktů.
+router.get('/study-time-series', requireAuth, async (req, res, next) => {
+  try {
+    const days = Math.min(1100, Math.max(7, Number(req.query.days) || 120));
+    const since = new Date(Date.now() - days * 86400000);
+    const testLeadIds = new Set((await prisma.compounderLead.findMany({ where: { is_test: true }, select: { id: true } }).catch(() => [])).map((l) => l.id));
+    const evs = await prisma.compounderEvent.findMany({
+      where: { created_at: { gte: since } },
+      select: { sid: true, event: true, props: true, created_at: true },
+      orderBy: { created_at: 'asc' },
+      take: 400000,
+    });
+    const tzKey = (d) => new Intl.DateTimeFormat('en-CA', { timeZone: process.env.VELIN_TZ || 'Europe/Prague', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(d));
+    const bySid = {}; // sid|den → { day, min, max, visitMs, portal, leadId }
+    evs.forEach((e) => {
+      if (!e.sid) return;
+      const day = tzKey(e.created_at);
+      const key = e.sid + '|' + day;
+      const t = new Date(e.created_at).getTime();
+      const lid = e.props && e.props.lead_id;
+      const rec = bySid[key] || (bySid[key] = { day, min: t, max: t, visitMs: 0, portal: false, leadId: null });
+      if (lid != null && rec.leadId == null) rec.leadId = lid;
+      if (t < rec.min) rec.min = t;
+      if (t > rec.max) rec.max = t;
+      if ((e.event === 'visit_end' || e.event === 'page_leave') && e.props && e.props.ms) rec.visitMs = Math.max(rec.visitMs, Number(e.props.ms) || 0);
+      if (e.event === 'portal_view') rec.portal = true;
+    });
+    const byDay = {};
+    Object.keys(bySid).forEach((k) => {
+      const rec = bySid[k];
+      if (!rec.portal) return;
+      if (rec.leadId != null && testLeadIds.has(rec.leadId)) return;
+      const ms = Math.max(rec.visitMs || 0, Math.max(0, rec.max - rec.min));
+      byDay[rec.day] = (byDay[rec.day] || 0) + ms;
+    });
+    const series = [];
+    for (let i = days - 1; i >= 0; i--) {
+      const key = tzKey(new Date(Date.now() - i * 86400000));
+      series.push({ date: key, minutes: Math.round((byDay[key] || 0) / 60000) });
+    }
+    res.json({ ok: true, days, series });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // ─── SIS API proxy: hodnota lokalit prádlomatů (kiosk-values) ──────────────
 // Modul Compounding (tab v Prodejních objednávkách) potřebuje obraty a hodnoty
 // lokalit z externího SIS API. Klíč DRŽÍME NA SERVERU (X-API-Key) — do frontendu
