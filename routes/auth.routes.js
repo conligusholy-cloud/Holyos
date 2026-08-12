@@ -136,6 +136,9 @@ router.post('/login', async (req, res, next) => {
           firstName: user.person.first_name,
           lastName: user.person.last_name,
           photoUrl: user.person.photo_url,
+          isSalesperson: !!user.person.is_salesperson,
+          canGiveDiscount: !!user.person.can_give_discount,
+          canAddIndividualOffers: !!user.person.can_add_individual_offers,
         } : null,
       },
     });

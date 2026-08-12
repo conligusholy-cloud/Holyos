@@ -129,6 +129,8 @@ model Person {
   // Obchod — přístup na kioskové obrazovky (nezávislé na hlavní roli osoby)
   is_salesperson Boolean @default(false) // obrazovka obchodníka + kandidát na vlastníka kontaktu
   is_sales_lead  Boolean @default(false) // obrazovka vedoucího obchodu (přehled týmu)
+  can_give_discount         Boolean @default(false) // obchodník smí dávat slevu z obrazovky obchodníka
+  can_add_individual_offers Boolean @default(false) // obchodník smí přidávat individuální lokality k prodeji
 
   // ─── Velín (mobilní aplikace) ───────────────────────────────────────────
   // Aktivační kód = jednorázový string vygenerovaný adminem v HolyOS, který

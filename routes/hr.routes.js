@@ -727,6 +727,8 @@ function sanitizePersonData(body, currentUser, opts = {}) {
   if ('can_upload_cad' in body) data.can_upload_cad = toBool(body.can_upload_cad);
   if ('is_salesperson' in body) data.is_salesperson = toBool(body.is_salesperson);
   if ('is_sales_lead' in body) data.is_sales_lead = toBool(body.is_sales_lead);
+  if ('can_give_discount' in body) data.can_give_discount = toBool(body.can_give_discount);
+  if ('can_add_individual_offers' in body) data.can_add_individual_offers = toBool(body.can_add_individual_offers);
   // is_super_admin může měnit jen admin nebo super admin
   const isAdmin = currentUser && (currentUser.role === 'admin' || currentUser.isSuperAdmin);
   if ('is_super_admin' in body && isAdmin) {

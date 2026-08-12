@@ -1123,6 +1123,14 @@
                   <input type="checkbox" name="is_sales_lead" id="chk-is-sales-lead" value="1" ${p.is_sales_lead ? 'checked' : ''} style="width:18px;height:18px;accent-color:var(--primary);cursor:pointer;">
                   <label for="chk-is-sales-lead" style="cursor:pointer;margin:0;" title="Přístup na přehledovou obrazovku vedoucího obchodu">Vedoucí obchodu</label>
                 </div>
+                <div class="form-group" style="display:flex;align-items:center;gap:10px;padding-top:8px;">
+                  <input type="checkbox" name="can_give_discount" id="chk-can-give-discount" value="1" ${p.can_give_discount ? 'checked' : ''} style="width:18px;height:18px;accent-color:var(--primary);cursor:pointer;">
+                  <label for="chk-can-give-discount" style="cursor:pointer;margin:0;" title="Obchodník smí u kontaktu zapínat/prodlužovat slevu z obrazovky obchodníka">Smí dávat slevu</label>
+                </div>
+                <div class="form-group" style="display:flex;align-items:center;gap:10px;padding-top:8px;">
+                  <input type="checkbox" name="can_add_individual_offers" id="chk-can-add-offers" value="1" ${p.can_add_individual_offers ? 'checked' : ''} style="width:18px;height:18px;accent-color:var(--primary);cursor:pointer;">
+                  <label for="chk-can-add-offers" style="cursor:pointer;margin:0;" title="Obchodník smí přidávat individuální lokality do nabídky kontaktu">Smí přidávat individuální lokality</label>
+                </div>
               </div>
             </div>` : ''}
 
@@ -1362,6 +1370,8 @@
       data.can_upload_cad = document.getElementById('chk-can-upload-cad') && document.getElementById('chk-can-upload-cad').checked ? 1 : 0;
       if (document.getElementById('chk-is-salesperson')) data.is_salesperson = document.getElementById('chk-is-salesperson').checked ? 1 : 0;
       if (document.getElementById('chk-is-sales-lead')) data.is_sales_lead = document.getElementById('chk-is-sales-lead').checked ? 1 : 0;
+      if (document.getElementById('chk-can-give-discount')) data.can_give_discount = document.getElementById('chk-can-give-discount').checked ? 1 : 0;
+      if (document.getElementById('chk-can-add-offers')) data.can_add_individual_offers = document.getElementById('chk-can-add-offers').checked ? 1 : 0;
       // Convert numeric fields
       if (data.hourly_rate) data.hourly_rate = parseFloat(data.hourly_rate);
       if (data.monthly_salary) data.monthly_salary = parseFloat(data.monthly_salary);

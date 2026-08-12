@@ -302,9 +302,8 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
       <h2 data-i18n="p.eko.title" style="display:inline">Economics of one Compounder</h2> <span id="eko-ver-badge" style="font-size:0.9em;color:var(--gold,#c9a24b);font-weight:800;margin-left:6px"></span>
       <p class="lead" data-i18n="p.eko.lead">A live model. Yellow fields are inputs — adjust them to your location and instantly see revenue, profit and payback. Figures are indicative.</p>
       <div data-i18n="p.eko.vat" style="color:var(--muted);font-size:13px;margin:-18px 0 16px;">All prices are exclusive of VAT.</div>
-      <div id="eko-disc-badge" style="display:none;margin:0 0 22px;"></div>
       <div class="metrics" style="clear:both">
-        <div class="metric"><div class="k" data-i18n="p.m.invest">Total investment</div><div class="v gold" id="m-invest">—</div><div class="s" data-i18n="p.m.invests">per location</div></div>
+        <div class="metric"><div class="k" data-i18n="p.m.invest">Total investment</div><div class="v gold" id="m-invest">—</div><div id="m-invest-before" style="display:none;font-size:13px;color:var(--muted);text-decoration:line-through;margin-top:3px"></div><div id="eko-disc-badge" style="display:none;margin-top:6px"></div><div class="s" data-i18n="p.m.invests">per location</div></div>
         <div class="metric"><div class="k" data-i18n="p.m.rev">Revenue / month</div><div class="v" id="m-revenue">—</div><div class="s" id="m-cust">—</div></div>
         <div class="metric"><div class="k" data-i18n="p.m.profit">Profit / month</div><div class="v" id="m-profit">—</div><div class="s" data-i18n="p.m.profits">after all costs</div></div>
         <div class="metric"><div class="k" data-i18n="p.m.payback">Payback</div><div class="v gold" id="m-payback">—</div><div class="s" id="m-payback-m">—</div></div>
@@ -1897,7 +1896,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
     var m = EKO_MACHINES[ver];
     if (!(EKO_DISCOUNT && EKO_DISCOUNT.active && m && m.discountActive && (m.discountPct||0) > 0)) { el.style.display='none'; el.innerHTML=''; return; }
     var until = EKO_DISCOUNT.endsAt ? (' · platí do ' + new Date(EKO_DISCOUNT.endsAt).toLocaleDateString('cs-CZ')) : ' · platí trvale';
-    el.innerHTML = '<span style="display:inline-flex;align-items:center;gap:7px;background:rgba(201,162,75,0.16);border:1px solid rgba(201,162,75,0.55);color:var(--gold,#c9a24b);border-radius:999px;padding:6px 14px;font-size:13px;font-weight:800">🏷️ Ve slevě ' + m.discountPct + ' %' + until + '</span>';
+    el.innerHTML = '<span style="display:inline-block;background:rgba(201,162,75,0.16);border:1px solid rgba(201,162,75,0.55);color:var(--gold,#c9a24b);border-radius:12px;padding:4px 11px;font-size:12px;font-weight:800;white-space:normal;max-width:100%;line-height:1.35;box-sizing:border-box">🏷️ Ve slevě ' + m.discountPct + ' %' + until + '</span>';
     el.style.display = 'block';
   }
   // Přepínač variant na portálu — jen když má lead povolené obě (BOTH).
@@ -1948,6 +1947,18 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
     document.getElementById("o-invest").value = fmt(invest);
     document.getElementById("o-profit").value = fmt(profit);
     document.getElementById("m-invest").textContent = fmt(invest) + S;
+    // Sleva u investice: přeškrtnutá cena před slevou + pilulka se slevou a platností.
+    (function(){
+      var ver = (window._portalActiveVer === 'V2') ? 'V2' : 'V3';
+      var m = EKO_MACHINES[ver];
+      var pct = (EKO_DISCOUNT && EKO_DISCOUNT.active && m && m.discountActive) ? (m.discountPct || 0) : 0;
+      var bEl = document.getElementById('m-invest-before');
+      if (bEl){
+        if (pct > 0 && pct < 100){ bEl.textContent = fmt(invest + val("i-machine") * pct / (100 - pct)) + S; bEl.style.display = 'block'; }
+        else { bEl.style.display = 'none'; bEl.textContent = ''; }
+      }
+      try{ ekoRenderDiscBadge(); }catch(e){}
+    })();
     document.getElementById("m-revenue").textContent = fmt(revenue) + S;
     document.getElementById("m-cust").textContent = fmt(custMonth) + " " + pT("p.m.custmo");
     document.getElementById("m-profit").textContent = fmt(profit) + S;
