@@ -907,7 +907,7 @@ router.get('/portal/machines', async (req, res, next) => {
       const beforeEur = (mp > 0 && mp < 100) ? Math.round(eurP / (1 - mp / 100)) : Math.round(eurP);
       const priceCzk = active ? entered : before;   // aktivní sleva → promo, jinak před slevou
       const priceEur = active ? Math.round(eurP) : beforeEur;
-      return { ver: v.toUpperCase(), priceCzk, priceEur, priceBeforeCzk: before, pricePromoCzk: entered, discountActive: active, photo: vp[v] || null };
+      return { ver: v.toUpperCase(), priceCzk, priceEur, priceBeforeCzk: before, pricePromoCzk: entered, discountActive: active, discountPct: (mp > 0 ? Math.round(mp) : 0), photo: vp[v] || null };
     }).filter(Boolean);
     res.json({ machines, discount: disc ? { active: disc.active, endsAt: disc.endsAt ? disc.endsAt.toISOString() : null } : null });
   } catch (err) { next(err); }
@@ -5725,12 +5725,24 @@ async function buildOfferedLocations(leadId, opts) {
         if (total != null && _disc.active && _disc.locationPct > 0) {
           total = Math.round(total * (1 - _disc.locationPct / 100));
         }
+        // Cena PŘED slevou (pro vlaječku): stroj dopočet ↑ o machinePct + plná lokalita.
+        let priceBeforeCzk = total, discPct = 0;
+        if (machine != null && locality != null) {
+          const _mp2 = (_disc.machinePct && _disc.machinePct[ver]) ? Number(_disc.machinePct[ver]) : 0;
+          const machineBefore = (_mp2 > 0 && _mp2 < 100) ? Math.round(machine / (1 - _mp2 / 100)) : machine;
+          priceBeforeCzk = machineBefore + locality;
+          if (_disc.active && total != null && priceBeforeCzk > total) discPct = Math.round((priceBeforeCzk - total) / priceBeforeCzk * 100);
+        }
         const yearly = Math.round(cisty * 12);
         return {
           code: k.code,
           label: k.label,
           version: ver ? ver.toUpperCase() : null,
           totalPrice: total,
+          discountActive: !!(_disc.active && discPct > 0),
+          discountEndsAt: (_disc.active && _disc.endsAt) ? _disc.endsAt.toISOString() : null,
+          discountPct: discPct,
+          priceBeforeCzk: priceBeforeCzk,
           yearlyYield: yearly,
           roiPct: (total > 0) ? Math.round(cisty * 12 / total * 1000) / 10 : null,
           guaranteePct: buybackPct,
@@ -5756,7 +5768,7 @@ async function buildOfferedLocations(leadId, opts) {
       });
 
     try { _ensurePhotoFocusBg(); } catch (e) {}
-    return { ok: true, currency: 'CZK', defaultCurrency: defCur, eurRate: eur, rates: fx, feePerDayCzk: feePerDay, reservation: { feePerDayCzk: feePerDay, holdHours, signDays, payDays, reblockDays }, count: list.length, locations: list };
+    return { ok: true, currency: 'CZK', defaultCurrency: defCur, eurRate: eur, rates: fx, feePerDayCzk: feePerDay, reservation: { feePerDayCzk: feePerDay, holdHours, signDays, payDays, reblockDays }, discount: { active: !!_disc.active, endsAt: _disc.endsAt ? _disc.endsAt.toISOString() : null }, count: list.length, locations: list };
 }
 
 router.get('/portal/offered-locations', async (req, res, next) => {

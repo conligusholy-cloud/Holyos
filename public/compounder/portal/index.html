@@ -301,7 +301,8 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
       <div class="eyebrow" data-i18n="p.eko.eyebrow">Economics</div>
       <h2 data-i18n="p.eko.title" style="display:inline">Economics of one Compounder</h2> <span id="eko-ver-badge" style="font-size:0.9em;color:var(--gold,#c9a24b);font-weight:800;margin-left:6px"></span>
       <p class="lead" data-i18n="p.eko.lead">A live model. Yellow fields are inputs — adjust them to your location and instantly see revenue, profit and payback. Figures are indicative.</p>
-      <div data-i18n="p.eko.vat" style="color:var(--muted);font-size:13px;margin:-18px 0 24px;">All prices are exclusive of VAT.</div>
+      <div data-i18n="p.eko.vat" style="color:var(--muted);font-size:13px;margin:-18px 0 16px;">All prices are exclusive of VAT.</div>
+      <div id="eko-disc-badge" style="display:none;margin:0 0 22px;"></div>
       <div class="metrics" style="clear:both">
         <div class="metric"><div class="k" data-i18n="p.m.invest">Total investment</div><div class="v gold" id="m-invest">—</div><div class="s" data-i18n="p.m.invests">per location</div></div>
         <div class="metric"><div class="k" data-i18n="p.m.rev">Revenue / month</div><div class="v" id="m-revenue">—</div><div class="s" id="m-cust">—</div></div>
@@ -1496,6 +1497,10 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
         '</div>' +
         '<div style="flex:1.2;min-width:140px;display:flex;flex-direction:column;gap:10px;align-items:flex-start">' +
           offMetric(pT("p.off.price"), offMoney(o.totalPrice)) +
+          (o.discountActive ? (
+            '<div style="margin-top:-6px;font-size:12px;color:var(--muted);text-decoration:line-through">' + offMoney(o.priceBeforeCzk) + '</div>' +
+            '<div style="display:inline-flex;align-items:center;gap:5px;background:rgba(201,162,75,0.16);border:1px solid rgba(201,162,75,0.55);color:var(--gold-soft,#e6cf92);border-radius:999px;padding:3px 10px;font-size:11px;font-weight:800;white-space:nowrap">🏷️ sleva ' + (o.discountPct||0) + ' %' + (o.discountEndsAt ? (' · do ' + new Date(o.discountEndsAt).toLocaleDateString('cs-CZ')) : ' · trvale') + '</div>'
+          ) : '') +
           btn +
         '</div>' +
       '</div>' +
@@ -1820,14 +1825,17 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
     (function(){
       var _t=''; try{ _t = window._portalToken || localStorage.getItem('compounder.portal.token') || ''; }catch(_){}
       fetch('/api/compounder/portal/machines' + (_t ? ('?t=' + encodeURIComponent(_t)) : '')).then(function(r){ return r.json(); }).then(function(j){
+        EKO_DISCOUNT = (j && j.discount) || null;
         (j&&j.machines||[]).forEach(function(m){
           if(!m||!m.ver) return;
+          EKO_MACHINES[m.ver] = m;
           if(m.photo) EKO_VER_PHOTOS[m.ver]=m.photo;
           // Cena stroje z HolyOS podle slevy leada (před slevou / promo) — přepíše výchozí EKO_VARIANTS.
           if(EKO_VARIANTS[m.ver] && m.priceEur!=null && isFinite(m.priceEur)) EKO_VARIANTS[m.ver]['i-machine']=Math.round(m.priceEur);
         });
         ekoRenderVerPhoto();
         try{ ekoApplyVersion(window._portalActiveVer==='V2'?'V2':'V3'); recalc(); }catch(e){}
+        try{ ekoRenderDiscBadge(); }catch(e){}
       }).catch(function(){});
     })();
     recalc(); ekoFmtMoney(); ekoRenderVerSwitch(); ekoRenderVerBadge(); ekoRenderVerPhoto();
@@ -1878,8 +1886,19 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
   }
   // Odznak aktivní varianty u nadpisu (V2/V3).
   function ekoRenderVerBadge(){
-    var b = document.getElementById('eko-ver-badge'); if(!b) return;
-    b.textContent = (window._portalActiveVer === 'V2') ? 'V2' : 'V3';
+    var b = document.getElementById('eko-ver-badge'); if(b) b.textContent = (window._portalActiveVer === 'V2') ? 'V2' : 'V3';
+    ekoRenderDiscBadge();
+  }
+  // Vlaječka slevy u ekonomiky (aktivní sleva u leada): kolik % a do kdy platí.
+  var EKO_MACHINES = {}, EKO_DISCOUNT = null;
+  function ekoRenderDiscBadge(){
+    var el = document.getElementById('eko-disc-badge'); if(!el) return;
+    var ver = (window._portalActiveVer === 'V2') ? 'V2' : 'V3';
+    var m = EKO_MACHINES[ver];
+    if (!(EKO_DISCOUNT && EKO_DISCOUNT.active && m && m.discountActive && (m.discountPct||0) > 0)) { el.style.display='none'; el.innerHTML=''; return; }
+    var until = EKO_DISCOUNT.endsAt ? (' · platí do ' + new Date(EKO_DISCOUNT.endsAt).toLocaleDateString('cs-CZ')) : ' · platí trvale';
+    el.innerHTML = '<span style="display:inline-flex;align-items:center;gap:7px;background:rgba(201,162,75,0.16);border:1px solid rgba(201,162,75,0.55);color:var(--gold,#c9a24b);border-radius:999px;padding:6px 14px;font-size:13px;font-weight:800">🏷️ Ve slevě ' + m.discountPct + ' %' + until + '</span>';
+    el.style.display = 'block';
   }
   // Přepínač variant na portálu — jen když má lead povolené obě (BOTH).
   function ekoRenderVerSwitch(){

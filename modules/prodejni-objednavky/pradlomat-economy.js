@@ -122,6 +122,7 @@
   var VER = 'V3';
   var SHOW_VER = true; // zobrazit přepínač V2/V3? (u leada jen když má povolené obě varianty)
   var PHOTOS = {}; // { V2: url, V3: url } — fotky verzí z HolyOS (načtou se z /portal/machines)
+  var DISC_INFO = { active: false, endsAt: null, pctByVer: {} }; // sleva leada (pro vlaječku)
   var VARIANTS = {
     V3: { cena_pradlomatu: 52000, cena_pripojek: 2889, obrat_na_zakaznika: 11.33, najem: 165, truck: 47000, noSmall: false },
     V2: { cena_pradlomatu: 35000, cena_pripojek: 1926, obrat_na_zakaznika: 16.52, najem: 120, truck: 33000, noSmall: true }
@@ -497,6 +498,13 @@
         '<button class="btn btn-secondary btn-sm" onclick="window.PradlomatTool.resetDefaults()">' + _t('↺ Tovární hodnoty') + '</button>' +
         '<button class="btn btn-secondary btn-sm pe-btn-json" onclick="window.PradlomatTool.exportJSON()">' + _t('⬇ Stáhnout model (JSON)') + '</button>' +
       '</div>';
+
+    // Vlaječka slevy (když je u leada aktivní) — kolik % a do kdy platí.
+    var _dpct = DISC_INFO.pctByVer[VER] || 0;
+    if (DISC_INFO.active && _dpct > 0) {
+      var _until = DISC_INFO.endsAt ? (' · ' + _t('platí do') + ' ' + new Date(DISC_INFO.endsAt).toLocaleDateString('cs-CZ')) : (' · ' + _t('platí trvale'));
+      html += '<div style="margin:0 0 14px"><span style="display:inline-flex;align-items:center;gap:7px;background:rgba(201,162,75,0.16);border:1px solid rgba(201,162,75,0.55);color:#c9a24b;border-radius:999px;padding:6px 14px;font-size:13px;font-weight:800">🏷️ ' + _t('Ve slevě') + ' ' + _dpct + ' %' + _until + '</span></div>';
+    }
 
     // Fotka aktivní verze (V2/V3) — plovoucí vpravo, se zlatou září a klikem na zvětšení.
     var _photo = PHOTOS[VER];
@@ -1062,9 +1070,12 @@
       try { _shareTok = (options && options.token) || (location.pathname.split('/').filter(Boolean).pop() || ''); } catch (e) {}
       try {
         fetch('/api/compounder/portal/machines' + (_shareTok ? ('?t=' + encodeURIComponent(_shareTok)) : '')).then(function (r) { return r.json(); }).then(function (j) {
+          DISC_INFO.active = !!(j && j.discount && j.discount.active);
+          DISC_INFO.endsAt = (j && j.discount) ? j.discount.endsAt : null;
           (j && j.machines || []).forEach(function (m) {
             if (!m || !m.ver) return;
             if (m.photo) PHOTOS[m.ver] = m.photo;
+            DISC_INFO.pctByVer[m.ver] = m.discountPct || 0;
             // Cena stroje podle slevy leada (před slevou / promo) přepíše výchozí VARIANTS.
             if (VARIANTS[m.ver] && m.priceEur != null && isFinite(m.priceEur)) VARIANTS[m.ver].cena_pradlomatu = Math.round(m.priceEur);
           });
