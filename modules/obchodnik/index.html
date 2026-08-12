@@ -553,10 +553,12 @@
   }
   function openMeeting(pf){
     pf=pf||{};
+    window._meetingKind = pf._kind || 'meeting'; // 'meeting' | 'call' — řídí typ události a auto-stav leadu
+    var isCall = window._meetingKind === 'call';
     document.getElementById('mt-err').textContent='';
     document.getElementById('mt-id').value=pf.id||'';
-    document.getElementById('mt-title-h').textContent = pf.id?'Upravit schůzku':'Nová schůzka';
-    document.getElementById('mt-save').textContent = pf.id?'Uložit změny':'Uložit schůzku';
+    document.getElementById('mt-title-h').textContent = pf.id ? (isCall?'Upravit hovor':'Upravit schůzku') : (isCall?'Naplánovat hovor':'Nová schůzka');
+    document.getElementById('mt-save').textContent = pf.id?'Uložit změny':(isCall?'Uložit hovor':'Uložit schůzku');
     var del=document.getElementById('mt-del'); if(del) del.style.display = pf.id?'':'none';
     var st=document.getElementById('mt-status');
     if(st){ if(pf.id && pf.graph_event_id){ st.innerHTML='✅ Synchronizováno do Outlooku'; st.style.color='#22c55e'; } else if(pf.id && pf.sync_error){ st.innerHTML='⚠ '+esc(pf.sync_error); st.style.color='#eab308'; } else { st.innerHTML=''; } }
@@ -581,7 +583,8 @@
     if(!start){ err.textContent='Zadej začátek.'; return; }
     var btn=document.getElementById('mt-save'); btn.disabled=true;
     var id=document.getElementById('mt-id').value;
-    var payload={ title:title, start_at:new Date(start).toISOString(), end_at: end? new Date(end).toISOString(): null, location:(document.getElementById('mt-loc').value||'').trim()||null, description:(document.getElementById('mt-note').value||'').trim()||null, attendees:(document.getElementById('mt-att').value||'').trim(), event_type:'meeting' };
+    var kind = window._meetingKind || 'meeting';
+    var payload={ title:title, start_at:new Date(start).toISOString(), end_at: end? new Date(end).toISOString(): null, location:(document.getElementById('mt-loc').value||'').trim()||null, description:(document.getElementById('mt-note').value||'').trim()||null, attendees:(document.getElementById('mt-att').value||'').trim(), event_type:(kind==='call'?'call':'meeting') };
     var sid=document.getElementById('mt-site').value; var lid=document.getElementById('mt-lead').value;
     if(sid) payload.site_id=parseInt(sid,10); if(lid) payload.compounder_lead_id=parseInt(lid,10);
     try{
@@ -589,6 +592,8 @@
       var j=await r.json().catch(function(){return{};});
       if(!r.ok) throw new Error(j.error||'Chyba');
       closeMeeting(); _refetchCal(); loadUpcomingMeetings();
+      // Nová událost u leada → automaticky přepni stav (hovor → Volat příště, schůzka → Domluvena schůzka).
+      if(!id && lid){ var ns = (kind==='call') ? 'volat_pristi' : 'schuzka'; try{ await setField(parseInt(lid,10), 'status', ns); }catch(e){} }
     }catch(e){ err.textContent='Uložení selhalo: '+e.message; } finally{ btn.disabled=false; }
   }
   async function deleteMeeting(id){ try{ await fetch('/api/sales/events/'+id,{method:'DELETE',credentials:'include'}); _refetchCal(); loadUpcomingMeetings(); }catch(e){} }
@@ -596,6 +601,8 @@
   window.deleteMeetingFromModal=deleteMeetingFromModal;
   function meetingFromSite(id){ var s=calFindSite(id)||{}; var addr=s.address||[s.zip,s.city].filter(Boolean).join(' ')||''; openMeeting({ title:'Schůzka – '+(s.owner_name||'lokalita'), location:addr, site_id:id, attendees:(s.owner_email||'') }); }
   function meetingFromLead(id){ var l=(state.leads||[]).filter(function(x){return x.id===id;})[0]||{}; openMeeting({ title:'Schůzka – '+(l.name||l.email||'lead'), compounder_lead_id:id, attendees:(l.email||'') }); }
+  function callFromLead(id){ var l=(state.leads||[]).filter(function(x){return x.id===id;})[0]||{}; openMeeting({ _kind:'call', title:'Hovor – '+(l.name||l.email||'lead'), compounder_lead_id:id, attendees:(l.email||'') }); }
+  window.callFromLead = callFromLead;
   function calFindSite(id){ return (typeof lokState!=='undefined' && lokState.items ? lokState.items.filter(function(x){return x.id===id;})[0] : null); }
   function _refetchCal(){ if(window._fcInst){ try{ window._fcInst.refetchEvents(); }catch(e){} } }
   function initCalendarView(){
@@ -809,6 +816,7 @@
           (l.email ? '<a href="mailto:'+esc(l.email)+'">✉️ E-mail</a>' : '') +
         '</div>' +
         '<div class="field" style="margin-top:8px"><button class="btn btn-g" style="width:100%" onclick="meetingFromLead('+l.id+')">📅 Naplánovat schůzku</button></div>' +
+        '<div class="field" style="margin-top:6px"><button class="btn btn-g" style="width:100%" onclick="callFromLead('+l.id+')">📞 Naplánovat hovor</button></div>' +
         (l.phone ? '<div class="field" style="margin-top:6px"><button class="btn btn-g" style="width:100%" onclick="saveContact('+l.id+')">💾 Uložit kontakt do telefonu</button></div>' : '') +
         '<div style="font-size:12px;margin-top:8px;color:'+(laToday?'#22c55e':'var(--muted)')+'">Poslední aktivita: '+(laDate?fmtD(laDate):'—')+'</div>' +
         '<div class="field" style="background:rgba(234,179,8,0.10);border:1px solid rgba(234,179,8,0.55);border-radius:12px;padding:12px;margin-top:8px"><label style="color:#eab308;font-weight:700">🏷️ Stav</label>'+statusSel+'</div>' +
