@@ -383,7 +383,7 @@
           (c.phone?'<div class="ct-actions" style="margin-top:8px"><button class="btn btn-g" onclick="extSaveContact('+c.id+')">📇 Uložit kontakt do telefonu</button></div>':'')+
           '<div class="lbl">Stav</div><select onchange="setContactStatus('+c.id+',this.value)">'+opts+'</select>'+
           '<div class="lbl">Varianta prádlomatu (ekonomika)</div>'+
-          '<div style="display:flex;gap:8px;flex-wrap:wrap">'+['V3','V2','BOTH'].map(function(v){ var on=(c.pradlomat_version||'V3')===v; return '<button class="btn '+(on?'btn-p':'btn-g')+'" style="flex:1;min-width:80px" onclick="setContactVersion('+c.id+',&#39;'+v+'&#39;)">'+(v==='BOTH'?'Obojí':v)+'</button>'; }).join('')+'</div>'+
+          '<div style="display:flex;gap:8px;flex-wrap:wrap">'+['V3','V2','BOTH','PROVOZ'].map(function(v){ var on=(c.pradlomat_version||'V3')===v; var lbl=v==='BOTH'?'Obojí':(v==='PROVOZ'?'Jen provoz':v); return '<button class="btn '+(on?'btn-p':'btn-g')+'" style="flex:1;min-width:80px" onclick="setContactVersion('+c.id+',&#39;'+v+'&#39;)">'+lbl+'</button>'; }).join('')+'</div>'+
           '<div class="lbl">Přístup do portálu</div>'+
           (c.email?'<button class="btn btn-g" style="width:100%" onclick="sendAccessEmail('+c.id+')">✉️ Odeslat přístup e-mailem</button>':'')+
           (c.phone?'<button class="btn" style="width:100%;margin-top:8px;background:#25D366;color:#0a2e17;font-weight:800" onclick="sendAccessWA('+c.id+')">🟢 Poslat přístup na WhatsApp</button>':'<div class="ct-sub">Kontakt nemá telefon — WhatsApp/SMS nelze použít.</div>')+

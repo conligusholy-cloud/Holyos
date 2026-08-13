@@ -303,10 +303,10 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
       <p class="lead" data-i18n="p.eko.lead">A live model. Yellow fields are inputs — adjust them to your location and instantly see revenue, profit and payback. Figures are indicative.</p>
       <div data-i18n="p.eko.vat" style="color:var(--muted);font-size:13px;margin:-18px 0 16px;">All prices are exclusive of VAT.</div>
       <div class="metrics" style="clear:both">
-        <div class="metric"><div class="k" data-i18n="p.m.invest">Total investment</div><div class="v gold" id="m-invest">—</div><div id="m-invest-before" style="display:none;font-size:13px;color:var(--muted);text-decoration:line-through;margin-top:3px"></div><div id="eko-disc-badge" style="display:none;margin-top:6px"></div><div class="s" data-i18n="p.m.invests">per location</div></div>
+        <div class="metric" id="eko-tile-invest"><div class="k" data-i18n="p.m.invest">Total investment</div><div class="v gold" id="m-invest">—</div><div id="m-invest-before" style="display:none;font-size:13px;color:var(--muted);text-decoration:line-through;margin-top:3px"></div><div id="eko-disc-badge" style="display:none;margin-top:6px"></div><div class="s" data-i18n="p.m.invests">per location</div></div>
         <div class="metric"><div class="k" data-i18n="p.m.rev">Revenue / month</div><div class="v" id="m-revenue">—</div><div class="s" id="m-cust">—</div></div>
         <div class="metric"><div class="k" data-i18n="p.m.profit">Profit / month</div><div class="v" id="m-profit">—</div><div class="s" data-i18n="p.m.profits">after all costs</div></div>
-        <div class="metric"><div class="k" data-i18n="p.m.payback">Payback</div><div class="v gold" id="m-payback">—</div><div class="s" id="m-payback-m">—</div></div>
+        <div class="metric" id="eko-tile-payback"><div class="k" data-i18n="p.m.payback">Payback</div><div class="v gold" id="m-payback">—</div><div class="s" id="m-payback-m">—</div></div>
       </div>
       <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
         <span id="eko-ver-switch" style="display:none;align-items:center;gap:4px;flex-wrap:wrap"></span>
@@ -314,7 +314,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
         <button type="button" id="eko-reset" class="btn-reset" data-i18n="p.eko.reset">↺ Reset to default values</button>
       </div>
       <div class="calc">
-        <div class="panel">
+        <div class="panel" id="eko-invest-panel">
           <h3 data-i18n="p.inv.title">Investment (one-off)</h3>
           <div class="row"><label data-i18n="p.inv.machine">Compounder price</label><div class="unit"><input type="text" inputmode="numeric" id="i-machine" value="52000"><span class="u u-cur">€</span></div></div>
           <div class="row"><label data-i18n="p.inv.permit">Project + permits</label><div class="unit"><input type="text" inputmode="numeric" id="i-permit" value="825"><span class="u u-cur">€</span></div></div>
@@ -1066,6 +1066,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
       window._portalShowExample = !!res.j.showExample;
       window._portalHideLiveLoss = !!res.j.hideLiveLoss; // schovat časomíru + ztrátu z váhání
       window._portalVersion = (res.j.pradlomatVersion === 'V2' || res.j.pradlomatVersion === 'BOTH') ? res.j.pradlomatVersion : 'V3'; // V2 / V3 / BOTH (obojí → přepínač)
+      window._portalNoPrice = (res.j.pradlomatVersion === 'PROVOZ'); // „jen provoz" — schová cenu, investice i návratnost
       window._acctCreatedAt = res.j.accountCreatedAt || null;
       pStartTopClock();
       window._portalToken = token;
@@ -1839,7 +1840,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
         try{ ekoRenderDiscBadge(); }catch(e){}
       }).catch(function(){});
     })();
-    recalc(); ekoFmtMoney(); ekoRenderVerSwitch(); ekoRenderVerBadge(); ekoRenderVerPhoto();
+    recalc(); ekoFmtMoney(); ekoRenderVerSwitch(); ekoRenderVerBadge(); ekoRenderVerPhoto(); try{ ekoApplyNoPrice(!!window._portalNoPrice); }catch(e){}
     try{ syncSubnavTop(); setTimeout(syncSubnavTop, 300); }catch(e){}
   }
   // ——— Měna modelu (přepočet celého modelu dle kurzu ČNB) ———
@@ -1872,6 +1873,12 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
     ov.appendChild(big);
     document.body.appendChild(ov);
   };
+  // „Jen provoz" (PROVOZ): skryj cenu stroje/přípojek/povolení (investiční náklady), celkovou investici
+  // a návratnost — zákazník vidí jen výdělek/provoz. Řídí se window._portalNoPrice.
+  function ekoApplyNoPrice(on){
+    ['eko-tile-invest','eko-tile-payback','eko-invest-panel'].forEach(function(id){ var el=document.getElementById(id); if(el) el.style.display = on ? 'none' : ''; });
+  }
+  window.ekoApplyNoPrice = ekoApplyNoPrice;
   function ekoApplyVersion(v){
     var cfg = EKO_VARIANTS[v] || EKO_VARIANTS.V3;
     // Hodnoty variant jsou v EUR → převedeme do AKTUÁLNÍ měny (EKO_CUR), měnu neměníme.
