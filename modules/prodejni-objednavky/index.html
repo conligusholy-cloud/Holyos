@@ -3493,7 +3493,7 @@
         '<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal" style="width:720px;max-width:96vw;">' +
         '<h2>📊 Reklamní trychtýř <span style="font-size:13px;color:var(--text2);font-weight:400;">(FB + Google, bez testovacích)</span></h2>' +
         '<div id="ads-funnel-body" style="color:var(--text2);padding:12px 4px;">Načítám…</div>' +
-        '<div class="modal-actions" style="margin-top:8px;display:flex;justify-content:flex-end;"><button class="btn btn-secondary" onclick="closeModal()">Zavřít</button></div>' +
+        '<div class="modal-actions" style="margin-top:8px;display:flex;justify-content:flex-end;gap:8px;"><button class="btn" onclick="openAdsAnalysis()" style="background:#7c5cff;color:#fff;border:none;">🧠 AI analýza &amp; predikce</button><button class="btn btn-secondary" onclick="closeModal()">Zavřít</button></div>' +
         '</div></div>';
       try {
         var r = await fetch('/api/compounder/ads-stats', { credentials:'include' });
@@ -3535,6 +3535,47 @@
       b.innerHTML = bars + estBlock;
     }
     window.renderAdsFunnel = renderAdsFunnel;
+
+    // ─── AI analýza + predikce (klik na „🧠 AI analýza") ───
+    async function openAdsAnalysis(){
+      document.getElementById('modal-root').innerHTML =
+        '<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal" style="width:860px;max-width:97vw;max-height:92vh;overflow:auto;">' +
+        '<h2>🧠 AI analýza reklamního trychtýře <span style="font-size:12px;color:var(--text2);font-weight:400;">predikce &amp; tempo</span></h2>' +
+        '<div id="ads-ai-body" style="color:var(--text2);padding:8px 2px;"><div style="padding:24px;text-align:center;">Analyzuji data a počítám predikci… (chvíli to trvá)</div></div>' +
+        '<div class="modal-actions" style="margin-top:8px;display:flex;justify-content:flex-end;gap:8px;"><button class="btn" onclick="openAdsFunnel()" style="background:var(--surface2);color:var(--text);border:1px solid var(--border);">← Zpět na trychtýř</button><button class="btn btn-secondary" onclick="closeModal()">Zavřít</button></div>' +
+        '</div></div>';
+      var ps = (typeof _compoundingSettings !== 'undefined' && _compoundingSettings) ? _compoundingSettings : null;
+      var pricing = ps ? { pricelist: ps.pricelist, discount: ps.discount, locationMonths: ps.locationMonths, locationPriceMode: ps.locationPriceMode, locationRoiPct: ps.locationRoiPct } : null;
+      try {
+        var r = await fetch('/api/compounder/ads-analysis', { method:'POST', credentials:'include', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ pricing: pricing }) });
+        var d = await r.json().catch(function(){return{};});
+        if (!r.ok){ var e1=document.getElementById('ads-ai-body'); if(e1) e1.innerHTML='<div style="color:#ef4444;padding:12px;">'+cmpEsc(d.error||('Analýza selhala ('+r.status+').'))+'</div>'; return; }
+        renderAdsAnalysis(d);
+      } catch(e){ var b=document.getElementById('ads-ai-body'); if(b) b.innerHTML='<div style="color:#ef4444;padding:12px;">Analýza selhala (timeout nebo výpadek).</div>'; }
+    }
+    window.openAdsAnalysis = openAdsAnalysis;
+    function renderAdsAnalysis(d){
+      var b=document.getElementById('ads-ai-body'); if(!b) return;
+      var a=d.analysis||{}; var f=d.funnel||{};
+      var sec=function(icon,title,txt){ if(!txt) return ''; return '<div style="margin-bottom:13px;"><div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:3px;">'+icon+' '+title+'</div><div style="font-size:13px;color:var(--text2);line-height:1.55;">'+cmpEsc(txt).replace(/\n/g,'<br>')+'</div></div>'; };
+      var risks = (a.risks&&a.risks.length)? '<div style="margin-bottom:13px;"><div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:4px;">⚠ Rizika</div>'+a.risks.map(function(x){ return '<div style="font-size:12.5px;color:var(--text2);margin-bottom:3px;"><b style="color:#f59e0b;">'+cmpEsc(x.label)+':</b> '+cmpEsc(x.detail)+'</div>'; }).join('')+'</div>' : '';
+      var actions = (a.actions&&a.actions.length)? '<div style="margin-bottom:4px;"><div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:4px;">✅ Doporučené kroky</div><ol style="margin:0;padding-left:20px;color:var(--text2);font-size:13px;line-height:1.6;">'+a.actions.map(function(x){ return '<li>'+cmpEsc(x)+'</li>'; }).join('')+'</ol></div>' : '';
+      var meta = '<div style="font-size:11.5px;color:var(--text2);margin-bottom:10px;">Kampaň běží <b style="color:var(--text);">'+(f.durationDays||0)+' dní</b>'+(f.startDate?(' (od '+f.startDate+')'):'')+' · tempo ~'+(f.avgWeeklyLeads||0)+' kontaktů/týden · '+f.total+' kontaktů, '+f.onPortal+' na portále, '+f.converted+' obchodů.</div>';
+      b.innerHTML = meta + '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px;margin-bottom:14px;"><canvas id="ads-ai-chart" height="150"></canvas></div>' +
+        sec('📋','Shrnutí',a.summary) + sec('🎯','Kdy první obchod',a.first_deal) + sec('⚡','Jaké tempo držet',a.required_pace) + sec('🔮','Predikce (3–6 měsíců)',a.prediction) + risks + actions;
+      ensureChartJs(function(){
+        try {
+          var s=d.series||[]; var labels=s.map(function(x){ var p=String(x.week).split('-'); return p[2]+'.'+p[1]+'.'; });
+          var ctx=document.getElementById('ads-ai-chart'); if(!ctx) return;
+          new Chart(ctx, { type:'line', data:{ labels:labels, datasets:[
+            { label:'Nové kontakty', data:s.map(function(x){return x.leads;}), borderColor:'#60a5fa', backgroundColor:'rgba(96,165,250,.15)', tension:.3, fill:true },
+            { label:'Odeslané přístupy', data:s.map(function(x){return x.access;}), borderColor:'#22c55e', tension:.3 },
+            { label:'Návštěvy portálu', data:s.map(function(x){return x.portal;}), borderColor:'#eab308', tension:.3 }
+          ]}, options:{ responsive:true, plugins:{ legend:{ labels:{ color:'#9aa', font:{size:11} } } }, scales:{ x:{ ticks:{ color:'#9aa', font:{size:9} } }, y:{ ticks:{ color:'#9aa' }, beginAtZero:true } } } });
+        } catch(e){}
+      });
+    }
+    window.renderAdsAnalysis = renderAdsAnalysis;
 
     async function cmpSummary() {
       var el = document.getElementById('cmp-summary');
