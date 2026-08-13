@@ -3750,6 +3750,30 @@ async function _blacklistOwnerId() {
 // Vybere obchodníka pro nový lead podle rozdělení (split) v poměru procent.
 // Deterministicky: pozice = počet dosavadních leadů formuláře % součet procent → v poměru.
 async function _fbResolveOwner(cfg) {
+  // ── Rozdělení podle POČTU kontaktů za sebou (cyklus) ──
+  // Když má aspoň jedna položka splitu `count`, jedeme dokola v zadaném pořadí:
+  // např. 2 kontakty 1. obchodníkovi, 1 druhému → A,A,B, A,A,B, …
+  // Pozice = počet leadů formuláře od uložení splitu (split_since) = jen od nově příchozích.
+  const cyc = (cfg && Array.isArray(cfg.split))
+    ? cfg.split.filter((s) => s && (s.owner_person_id || s.external_rep_id) && Number(s.count) > 0)
+    : [];
+  if (cyc.length) {
+    if (cyc.length === 1) {
+      const s = cyc[0];
+      return { owner_kind: s.owner_person_id ? 'internal' : 'external', owner_person_id: s.owner_person_id || null, external_rep_id: s.external_rep_id || null };
+    }
+    const seq = [];
+    for (const s of cyc) { const n = Math.min(999, Math.max(0, Math.round(Number(s.count) || 0))); for (let i = 0; i < n; i++) seq.push(s); }
+    if (seq.length) {
+      const where = { meta_form_id: String(cfg.form_id || '') };
+      if (cfg.split_since) where.created_at = { gte: new Date(cfg.split_since) };
+      let pos = 0; try { pos = await prisma.compounderLead.count({ where }); } catch (e) { /* 0 */ }
+      const ch = seq[pos % seq.length];
+      return { owner_kind: ch.owner_person_id ? 'internal' : 'external', owner_person_id: ch.owner_person_id || null, external_rep_id: ch.external_rep_id || null };
+    }
+  }
+
+  // ── Zpětná kompatibilita: staré rozdělení v procentech ──
   const split = (cfg && Array.isArray(cfg.split))
     ? cfg.split.filter((s) => s && (s.owner_person_id || s.external_rep_id) && Number(s.percent) > 0)
     : [];
@@ -3979,7 +4003,8 @@ const fbFormSchema = z.object({
     key: z.string().max(24).nullable().optional(),
     owner_person_id: z.number().int().positive().nullable().optional(),
     external_rep_id: z.number().int().positive().nullable().optional(),
-    percent: z.coerce.number().min(0).max(100),
+    percent: z.coerce.number().min(0).max(100).optional(),
+    count: z.coerce.number().int().min(0).max(999).optional(),
   })).max(20).optional(),
   campaign: z.string().trim().max(160).nullable().optional(),
   role: z.enum(['compounder', 'distributor']).optional(),
@@ -3995,7 +4020,7 @@ router.post('/fb-lead-forms', requireAuth, async (req, res, next) => {
     // ne z celé historie — jinak by dorovnávání odklánělo dlouhou dobu vše na jednoho.
     const existingForms = await _fbLoadForms();
     const existMap = {}; existingForms.forEach((ef) => { if (ef && ef.form_id) existMap[String(ef.form_id)] = ef; });
-    const _splitSig = (sp) => JSON.stringify((sp || []).map((s) => ({ o: s.owner_person_id ? ('i' + s.owner_person_id) : ('e' + (s.external_rep_id || 0)), p: Number(s.percent) || 0 })).sort((a, b) => (a.o < b.o ? -1 : 1)));
+    const _splitSig = (sp) => JSON.stringify((sp || []).map((s) => ({ o: s.owner_person_id ? ('i' + s.owner_person_id) : ('e' + (s.external_rep_id || 0)), p: Number(s.percent) || 0, c: Number(s.count) || 0 })).sort((a, b) => (a.o < b.o ? -1 : 1)));
     const map = {};
     for (const f of parsed.data.forms) {
       // Rozparsuj split (key 'i:5'/'e:2' → owner_person_id/external_rep_id), zahoď prázdné.
@@ -4007,7 +4032,8 @@ router.post('/fb-lead-forms', requireAuth, async (req, res, next) => {
           else if (String(s.key).slice(0, 2) === 'e:') exId = Number(String(s.key).slice(2)) || null;
         }
         const pct = Math.max(0, Math.round(Number(s.percent) || 0));
-        if ((opId || exId) && pct > 0) split.push({ owner_person_id: opId, external_rep_id: exId, percent: pct });
+        const cnt = Math.max(0, Math.round(Number(s.count) || 0));
+        if ((opId || exId) && (pct > 0 || cnt > 0)) split.push({ owner_person_id: opId, external_rep_id: exId, percent: pct, count: cnt });
       });
       // Primární vlastník (zpětná kompatibilita + fallback) = první ze split, jinak z owner_kind.
       let owner_kind = 'none', owner_person_id = null, external_rep_id = null;

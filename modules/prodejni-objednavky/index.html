@@ -3022,18 +3022,29 @@
       if (exts) h += '<optgroup label="Externí zástupci">'+exts+'</optgroup>';
       return h;
     }
+    function fbKeyName(key){
+      if(!key) return '—';
+      var pre=String(key).slice(0,2), id=String(key).slice(2);
+      if(pre==='i:'){ var p=(CMP_SELLERS||[]).find(function(x){return String(x.id)===id;}); return p?((((p.first_name||'')+' '+(p.last_name||'')).trim())||('#'+id)):('#'+id); }
+      if(pre==='e:'){ var r=(CMP_EXT_REPS||[]).find(function(x){return String(x.id)===id;}); return r?(r.jmeno||('#'+id)):('#'+id); }
+      return '—';
+    }
     function fbSplitTotalText(f){
-      var t = (f.split||[]).reduce(function(s,x){ return s + (Number(x.percent)||0); }, 0);
-      var col = t===100 ? '#22c55e' : '#f59e0b';
-      return '<span style="color:'+col+'">Σ '+t+' %'+(t===100?' ✓':' (dopočítej do 100)')+'</span>';
+      var parts = (f.split||[]).filter(function(x){ return x.key && Number(x.count)>0; });
+      if(!parts.length) return '<span style="color:var(--text2)">zadej počty kontaktů</span>';
+      var seq = [];
+      parts.forEach(function(x){ var n=Math.min(999,Math.max(0,Math.round(Number(x.count)||0))); for(var k=0;k<n;k++) seq.push(fbKeyName(x.key)); });
+      if(!seq.length) return '<span style="color:var(--text2)">zadej počty kontaktů</span>';
+      var preview = seq.join(', '); if(preview.length>64) preview = preview.slice(0,64)+'…';
+      return '<span style="color:#22c55e">🔁 dokola ('+seq.length+'): '+cmpEsc(preview)+'</span>';
     }
     function fbSplitCellHtml(f, i){
       var sel = 'box-sizing:border-box;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 8px;font-size:12px;';
       var rows = (f.split||[]).map(function(sp, j){
         return '<div style="display:flex;gap:5px;align-items:center;margin-bottom:5px;">'
           + '<select data-fbsplit-owner="'+i+'-'+j+'" style="'+sel+'flex:1;min-width:110px;">'+fbOwnerOptions(sp.key||'')+'</select>'
-          + '<input type="number" min="0" max="100" data-fbsplit-pct="'+i+'-'+j+'" value="'+(sp.percent!=null?sp.percent:'')+'" oninput="fbSplitTotal('+i+')" style="'+sel+'width:60px;text-align:right;">'
-          + '<span style="font-size:12px;color:var(--text2);">%</span>'
+          + '<input type="number" min="1" max="999" data-fbsplit-count="'+i+'-'+j+'" value="'+(sp.count!=null?sp.count:'')+'" oninput="fbSplitTotal('+i+')" title="Kolik kontaktů po sobě dostane tento obchodník, než se přepne na dalšího" style="'+sel+'width:60px;text-align:right;">'
+          + '<span style="font-size:12px;color:var(--text2);">×</span>'
           + '<button class="btn btn-secondary" style="padding:2px 8px;" onclick="fbSplitRemove('+i+','+j+')" title="Odebrat">✕</button>'
           + '</div>';
       }).join('');
@@ -3046,14 +3057,14 @@
       var arr = [];
       (f.split||[]).forEach(function(sp, j){
         var ow = document.querySelector('[data-fbsplit-owner="'+i+'-'+j+'"]');
-        var pc = document.querySelector('[data-fbsplit-pct="'+i+'-'+j+'"]');
-        arr.push({ key: ow ? ow.value : (sp.key||''), percent: pc ? (Number(pc.value)||0) : (Number(sp.percent)||0) });
+        var pc = document.querySelector('[data-fbsplit-count="'+i+'-'+j+'"]');
+        arr.push({ key: ow ? ow.value : (sp.key||''), count: pc ? (Number(pc.value)||0) : (Number(sp.count)||0) });
       });
       f.split = arr;
     }
     function fbSplitTotal(i){ fbSyncSplitFromDom(i); var el = document.querySelector('[data-fbsplit-total="'+i+'"]'); if (el) el.innerHTML = fbSplitTotalText(FB_STATE.forms[i]); }
     window.fbSplitTotal = fbSplitTotal;
-    function fbSplitAdd(i){ fbSyncStateFromDom(); FB_STATE.forms[i].split = FB_STATE.forms[i].split || []; FB_STATE.forms[i].split.push({ key:'', percent: (FB_STATE.forms[i].split.length ? 0 : 100) }); fbRenderForms(); }
+    function fbSplitAdd(i){ fbSyncStateFromDom(); FB_STATE.forms[i].split = FB_STATE.forms[i].split || []; FB_STATE.forms[i].split.push({ key:'', count: 1 }); fbRenderForms(); }
     window.fbSplitAdd = fbSplitAdd;
     function fbSplitRemove(i, j){ fbSyncStateFromDom(); if (FB_STATE.forms[i] && FB_STATE.forms[i].split) FB_STATE.forms[i].split.splice(j,1); fbRenderForms(); }
     window.fbSplitRemove = fbSplitRemove;
@@ -3101,7 +3112,7 @@
       var id = (idEl.value||'').trim(); if (!id) { idEl.focus(); return; }
       if (FB_STATE.forms.some(function(f){ return String(f.form_id)===id; })) { alert('Formulář s tímto ID už je v seznamu.'); return; }
       fbSyncStateFromDom();
-      FB_STATE.forms.push({ form_id:id, form_name:(nmEl.value||'').trim()||null, split:[{ key:'', percent:100 }], campaign:null, role:'compounder', active:true });
+      FB_STATE.forms.push({ form_id:id, form_name:(nmEl.value||'').trim()||null, split:[{ key:'', count:1 }], campaign:null, role:'compounder', active:true });
       idEl.value=''; nmEl.value=''; fbRenderForms();
     }
     window.fbAddManual = fbAddManual;
@@ -3109,7 +3120,7 @@
       var sel = document.getElementById('fb-live-pick'); if (!sel || !sel.value) return;
       var lf = (FB_STATE.liveForms||[]).find(function(x){ return String(x.id)===String(sel.value); });
       fbSyncStateFromDom();
-      FB_STATE.forms.push({ form_id:String(sel.value), form_name:(lf&&lf.name)||null, split:[{ key:'', percent:100 }], campaign:null, role:'compounder', active:true });
+      FB_STATE.forms.push({ form_id:String(sel.value), form_name:(lf&&lf.name)||null, split:[{ key:'', count:1 }], campaign:null, role:'compounder', active:true });
       fbRenderForms();
     }
     window.fbAddFromLive = fbAddFromLive;
@@ -3142,10 +3153,10 @@
         FB_STATE.forms = (d.forms||[]).map(function(f){
           var o = Object.assign({ role:'compounder', active:true }, f);
           if (Array.isArray(o.split) && o.split.length){
-            o.split = o.split.map(function(s){ var k = s.key || (s.owner_person_id?('i:'+s.owner_person_id):(s.external_rep_id?('e:'+s.external_rep_id):'')); return { key:k, percent: Number(s.percent)||0 }; });
+            o.split = o.split.map(function(s){ var k = s.key || (s.owner_person_id?('i:'+s.owner_person_id):(s.external_rep_id?('e:'+s.external_rep_id):'')); return { key:k, count: (Number(s.count)>0?Number(s.count):1) }; });
           } else {
             var key = (o.owner_kind==='internal' && o.owner_person_id) ? ('i:'+o.owner_person_id) : ((o.owner_kind==='external' && o.external_rep_id) ? ('e:'+o.external_rep_id) : '');
-            o.split = [{ key:key, percent:100 }];
+            o.split = [{ key:key, count:1 }];
           }
           return o;
         });
@@ -3163,7 +3174,7 @@
           + '<div style="font-size:11px;margin-top:8px;color:'+(FB_STATE.apiKeyConfigured?'#22c55e':'#f59e0b')+';">'+(FB_STATE.apiKeyConfigured?'✓ API klíč pro Make.com je nastavený':'⚠ Pro Make.com/Zapier chybí FB_WEBHOOK_API_KEY v prostředí')+'</div>'
           + (FB_STATE.tokenConfigured?'<div style="font-size:11px;margin-top:3px;color:#22c55e;">✓ Přímé napojení Meta (page token) je nastavené</div>':'<div style="font-size:11px;margin-top:3px;color:var(--text2);">Přímé napojení Meta zatím bez page tokenu — funguje cesta přes Make.com.</div>')
         + '</div>'
-        + '<div style="font-size:12px;color:var(--text2);margin-bottom:8px;">U každého formuláře rozdělíš příchozí kontakty mezi obchodníky v procentech (součet 100 %). Systém rozděluje leady <b>rovnoměrně a průběžně</b> podle zadaného poměru — ne po blocích. Každý nový lead dostane ten obchodník, který je zrovna nejvíc pod svým podílem, takže se to hezky střídá:<br>• <b>50/50</b> → Jan, Tomáš, Jan, Tomáš, …<br>• <b>60/40</b> → Jan, Tomáš, Jan, Jan, Tomáš, … (na 5 leadů 3 : 2)<br>• <b>2 : 1 (67/33)</b> → Jan, Tomáš, Jan, Jan, Tomáš, Jan, … (dva Janovi, jeden Tomášovi)<br>Poměr se počítá <b>od okamžiku, kdy split uložíš</b> (starší nepoměr se neřeší). Součet procent musí být 100 %.</div>'
+        + '<div style="font-size:12px;color:var(--text2);margin-bottom:8px;">U každého formuláře zadáš, <b>kolik kontaktů po sobě</b> dostane každý obchodník (číslo ×). Systém pak jede <b>dokola</b> přesně v tomhle pořadí:<br>• <b>1× Jan, 1× Tomáš</b> → Jan, Tomáš, Jan, Tomáš, …<br>• <b>2× Jan, 1× Tomáš</b> → Jan, Jan, Tomáš, Jan, Jan, Tomáš, …<br>• <b>3× Jan, 1× Tomáš</b> → Jan, Jan, Jan, Tomáš, …<br>Počítá se <b>jen od nově příchozích</b> — od chvíle, kdy split uložíš. Starší nepoměr se ignoruje. Pořadí obchodníků = pořadí řádků.</div>'
         + '<table style="width:100%;border-collapse:collapse;"><thead><tr style="border-bottom:1px solid var(--border);text-align:left;">'
           + '<th style="padding:6px;font-size:11px;color:var(--text2);text-transform:uppercase;">Formulář / kampaň</th>'
           + '<th style="padding:6px;font-size:11px;color:var(--text2);text-transform:uppercase;">Rozdělení mezi obchodníky</th>'
