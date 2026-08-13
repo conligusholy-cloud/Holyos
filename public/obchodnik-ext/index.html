@@ -382,8 +382,12 @@
           '</div>'+
           (c.phone?'<div class="ct-actions" style="margin-top:8px"><button class="btn btn-g" onclick="extSaveContact('+c.id+')">📇 Uložit kontakt do telefonu</button></div>':'')+
           '<div class="lbl">Stav</div><select onchange="setContactStatus('+c.id+',this.value)">'+opts+'</select>'+
+          '<div class="lbl">Varianta prádlomatu (ekonomika)</div>'+
+          '<div style="display:flex;gap:8px;flex-wrap:wrap">'+['V3','V2','BOTH'].map(function(v){ var on=(c.pradlomat_version||'V3')===v; return '<button class="btn '+(on?'btn-p':'btn-g')+'" style="flex:1;min-width:80px" onclick="setContactVersion('+c.id+',&#39;'+v+'&#39;)">'+(v==='BOTH'?'Obojí':v)+'</button>'; }).join('')+'</div>'+
           '<div class="lbl">Přístup do portálu</div>'+
-          (c.phone?'<button class="btn" style="width:100%;background:#25D366;color:#0a2e17;font-weight:800" onclick="sendAccessWA('+c.id+')">🟢 Poslat přístup na WhatsApp</button>':'<div class="ct-sub">Kontakt nemá telefon — WhatsApp nelze použít.</div>')+
+          (c.email?'<button class="btn btn-g" style="width:100%" onclick="sendAccessEmail('+c.id+')">✉️ Odeslat přístup e-mailem</button>':'')+
+          (c.phone?'<button class="btn" style="width:100%;margin-top:8px;background:#25D366;color:#0a2e17;font-weight:800" onclick="sendAccessWA('+c.id+')">🟢 Poslat přístup na WhatsApp</button>':'<div class="ct-sub">Kontakt nemá telefon — WhatsApp/SMS nelze použít.</div>')+
+          (c.phone?'<button class="btn btn-g" style="width:100%;margin-top:8px" onclick="sendAccessSMS('+c.id+')">📩 Poslat přístup SMS</button>':'')+
           '<div class="ct-actions" style="margin-top:8px"><button class="btn btn-g" onclick="copyContactLink('+c.id+')">🔗 Kopírovat odkaz</button></div>'+
           '<div class="ct-sub" style="margin-top:6px;color:'+(accGreen?'var(--green)':'var(--muted2)')+'">'+esc(accInfo)+'</div>'+
           '<div class="lbl">Viditelné sekce portálu</div>'+secBoxes+
@@ -411,6 +415,8 @@
     return j.lead;
   }
   async function setContactStatus(id,status){ try{ var l=await _patchContact(id,{status:status}); var c=_ctById(id); if(c)c.status=l.status; renderContacts(); var el=document.getElementById('ct-'+id); if(el)el.classList.add('open'); }catch(e){ alert('Změna selhala: '+(e.message||'')); } }
+  async function setContactVersion(id,v){ try{ var l=await _patchContact(id,{pradlomat_version:v}); var c=_ctById(id); if(c)c.pradlomat_version=(l&&l.pradlomat_version)||v; renderContacts(); var el=document.getElementById('ct-'+id); if(el)el.classList.add('open'); }catch(e){ alert('Změna varianty selhala: '+(e.message||'')); } }
+  window.setContactVersion=setContactVersion;
   async function saveContactNotes(id){ var v=(document.getElementById('ct-notes-'+id)||{}).value||''; try{ var l=await _patchContact(id,{notes:v}); var c=_ctById(id); if(c)c.notes=l.notes; alert('Uloženo.'); }catch(e){ alert('Uložení selhalo: '+(e.message||'')); } }
   async function addContactActivity(id){ var inp=document.getElementById('act-'+id); var t=(inp&&inp.value||'').trim(); if(!t) return; try{ var l=await _patchContact(id,{activity:t}); var c=_ctById(id); if(c){c.activity_log=l.activity_log;c.lastActivityAt=new Date().toISOString();} renderContacts(); var el=document.getElementById('ct-'+id); if(el)el.classList.add('open'); }catch(e){ alert('Selhalo: '+(e.message||'')); } }
   async function toggleSection(id,key,on){ var c=_ctById(id); if(!c) return; var arr=(c.visible_sections||'').split(',').map(function(s){return s.trim();}).filter(Boolean); var i=arr.indexOf(key); if(on&&i<0)arr.push(key); if(!on&&i>=0)arr.splice(i,1); c.visible_sections=arr.join(','); try{ await _patchContact(id,{sections:arr}); }catch(e){ alert('Uložení sekce selhalo.'); } }
@@ -431,6 +437,7 @@
   window.showOffer=showOffer;
   async function sendAccessEmail(id){ if(!confirm('Odeslat přístupový odkaz e-mailem zákazníkovi?')) return; try{ var r=await fetch(API+'/external-reps/me/leads/'+id+'/send-access',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({t:getToken()})}); var j=await r.json().catch(function(){return{};}); if(!r.ok||!j.ok) throw new Error(j.error||('HTTP '+r.status)); var c=_ctById(id); if(c){c.access_sent_count=j.access_sent_count;c.access_last_sent_at=j.access_last_sent_at;} alert('Přístup odeslán e-mailem.'); renderContacts(); var el=document.getElementById('ct-'+id); if(el)el.classList.add('open'); }catch(e){ alert('Odeslání selhalo: '+(e.message||'')); } }
   async function sendAccessWA(id){ try{ var r=await fetch(API+'/external-reps/me/leads/'+id+'/access-link',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({t:getToken()})}); var j=await r.json().catch(function(){return{};}); if(!r.ok||!j.ok) throw new Error(j.error||('HTTP '+r.status)); var c=_ctById(id); if(c){c.access_sent_count=j.access_sent_count;c.access_last_sent_at=j.access_last_sent_at;} window.open('https://wa.me/'+j.phone+'?text='+encodeURIComponent(j.message||''),'_blank'); renderContacts(); var el=document.getElementById('ct-'+id); if(el)el.classList.add('open'); }catch(e){ alert('Selhalo: '+(e.message||'')); } }
+  async function sendAccessSMS(id){ try{ var r=await fetch(API+'/external-reps/me/leads/'+id+'/access-link',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({t:getToken()})}); var j=await r.json().catch(function(){return{};}); if(!r.ok||!j.ok) throw new Error(j.error||('HTTP '+r.status)); var c=_ctById(id); if(c){c.access_sent_count=j.access_sent_count;c.access_last_sent_at=j.access_last_sent_at;} var body=encodeURIComponent(j.message||j.url||''); var num=j.phone||''; var iOS=/iPad|iPhone|iPod/.test(navigator.userAgent); window.location.href='sms:'+num+(iOS?'&':'?')+'body='+body; renderContacts(); var el=document.getElementById('ct-'+id); if(el)el.classList.add('open'); }catch(e){ alert('Nepodařilo se připravit SMS: '+(e.message||'')); } }
   function copyContactLink(id){ var c=_ctById(id); if(!c||!c.portal_url){ alert('Odkaz není k dispozici.'); return; } navigator.clipboard.writeText(c.portal_url).then(function(){ alert('Odkaz pro zákazníka zkopírován.'); }, function(){ prompt('Odkaz pro zákazníka:', c.portal_url); }); }
   function openNewContact(){
     var ov=document.createElement('div'); ov.className='modal-ovl'; ov.id='ct-modal';
@@ -490,7 +497,7 @@
     try{ _recog.start(); }catch(e){}
   }
   window.loadJourney=loadJourney; window.dictate=dictate;
-  window.toggleSection=toggleSection; window.toggleTemplate=toggleTemplate; window.sendAccessEmail=sendAccessEmail; window.sendAccessWA=sendAccessWA;
+  window.toggleSection=toggleSection; window.toggleTemplate=toggleTemplate; window.sendAccessEmail=sendAccessEmail; window.sendAccessWA=sendAccessWA; window.sendAccessSMS=sendAccessSMS;
   window.toggleRevStats=toggleRevStats;
 
   // ─── Tržby lokality (modal) ───
