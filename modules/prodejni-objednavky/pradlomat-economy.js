@@ -125,8 +125,8 @@
   var PHOTOS = {}; // { V2: url, V3: url } — fotky verzí z HolyOS (načtou se z /portal/machines)
   var DISC_INFO = { active: false, endsAt: null, pctByVer: {} }; // sleva leada (pro vlaječku)
   var VARIANTS = {
-    V3: { cena_pradlomatu: 52000, cena_pripojek: 2889, obrat_na_zakaznika: 11.33, najem: 165, truck: 47000, noSmall: false },
-    V2: { cena_pradlomatu: 35000, cena_pripojek: 1926, obrat_na_zakaznika: 16.52, najem: 120, truck: 33000, noSmall: true }
+    V3: { cena_pradlomatu: 52000, cena_pripojek: 2889, obrat_na_zakaznika: 11.33, najem: 165, truck: 47000, noSmall: false, zakazniku_za_den: 8 },
+    V2: { cena_pradlomatu: 35000, cena_pripojek: 1926, obrat_na_zakaznika: 16.52, najem: 120, truck: 33000, noSmall: true, zakazniku_za_den: 5 }
   };
   // Přepínač varianty do lišty nástroje (vedle měny).
   function verButtons() {
@@ -148,6 +148,7 @@
       STATE.cena_pripojek = cfg.cena_pripojek * f;
       STATE.obrat_na_zakaznika = cfg.obrat_na_zakaznika * f;
       if (cfg.najem != null) STATE.najem = cfg.najem * f;
+      if (cfg.zakazniku_za_den != null) STATE.zakazniku_za_den = cfg.zakazniku_za_den; // počet (bez převodu měny)
     }
   }
   // Přepínač měny do vlastní lišty nástroje (vedle „Tovární hodnoty").
