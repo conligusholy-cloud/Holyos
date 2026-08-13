@@ -2827,6 +2827,56 @@ router.get('/study-time-series', requireAuth, async (req, res, next) => {
   }
 });
 
+// GET /api/compounder/ads-stats — trychtýř kontaktů z reklamy (FB + Google).
+// Celkem → odeslán přístup → byli na portále → aktivní zájem → obchod, + časové odhady.
+router.get('/ads-stats', requireAuth, async (req, res, next) => {
+  try {
+    const AD = ['facebook_ads', 'google_ads'];
+    const leadsAll = await prisma.compounderLead.findMany({
+      where: { source: { in: AD } },
+      select: { id: true, source: true, status: true, created_at: true, access_last_sent_at: true, access_sent_count: true, is_test: true },
+    });
+    const leads = leadsAll.filter((l) => !l.is_test);
+    const ids = new Set(leads.map((l) => l.id));
+    // První návštěva portálu na leada (z portal_view eventů).
+    const firstPortal = {};
+    if (ids.size) {
+      const pv = await prisma.compounderEvent.findMany({ where: { event: 'portal_view' }, select: { props: true, created_at: true }, take: 300000 }).catch(() => []);
+      pv.forEach((e) => {
+        const lid = (e.props && e.props.lead_id != null) ? Number(e.props.lead_id) : null;
+        if (lid == null || !ids.has(lid)) return;
+        const t = new Date(e.created_at).getTime();
+        if (!firstPortal[lid] || t < firstPortal[lid]) firstPortal[lid] = t;
+      });
+    }
+    const SENT_STATUSES = ['access_sent', 'schuzka', 'schuzka_online', 'qualified', 'dosledovani', 'converted'];
+    const ENGAGED = ['dosledovani', 'qualified', 'schuzka', 'schuzka_online'];
+    const LOST = ['nelze_pouzit', 'rejected'];
+    const total = leads.length;
+    const bySource = { facebook_ads: 0, google_ads: 0 };
+    leads.forEach((l) => { if (bySource[l.source] != null) bySource[l.source]++; });
+    const accessSent = leads.filter((l) => l.access_last_sent_at != null || (l.access_sent_count || 0) > 0 || SENT_STATUSES.includes(l.status)).length;
+    const onPortal = leads.filter((l) => firstPortal[l.id] != null).length;
+    const engaged = leads.filter((l) => ENGAGED.includes(l.status)).length;
+    const converted = leads.filter((l) => l.status === 'converted').length;
+    const lost = leads.filter((l) => LOST.includes(l.status)).length;
+    // Časové odhady: latence vytvoření → první návštěva portálu; konverze portál → obchod.
+    const lat = leads.filter((l) => firstPortal[l.id] != null).map((l) => (firstPortal[l.id] - new Date(l.created_at).getTime()) / 86400000).filter((d) => d >= 0).sort((a, b) => a - b);
+    const avgDaysToPortal = lat.length ? Math.round((lat.reduce((a, b) => a + b, 0) / lat.length) * 10) / 10 : null;
+    const medDaysToPortal = lat.length ? Math.round(lat[Math.floor(lat.length / 2)] * 10) / 10 : null;
+    const convRatePortal = onPortal ? converted / onPortal : 0;
+    const openOnPortal = leads.filter((l) => firstPortal[l.id] != null && l.status !== 'converted' && !LOST.includes(l.status)).length;
+    const estDeals = Math.round(openOnPortal * convRatePortal);
+    res.json({
+      total, bySource, accessSent, onPortal, engaged, converted, lost,
+      openOnPortal, estDeals,
+      avgDaysToPortal, medDaysToPortal,
+      convRatePortalPct: Math.round(convRatePortal * 1000) / 10,
+      sentToPortalPct: accessSent ? Math.round(onPortal / accessSent * 1000) / 10 : 0,
+    });
+  } catch (err) { next(err); }
+});
+
 // ─── SIS API proxy: hodnota lokalit prádlomatů (kiosk-values) ──────────────
 // Modul Compounding (tab v Prodejních objednávkách) potřebuje obraty a hodnoty
 // lokalit z externího SIS API. Klíč DRŽÍME NA SERVERU (X-API-Key) — do frontendu

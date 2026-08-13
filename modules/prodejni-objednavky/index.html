@@ -3486,6 +3486,56 @@
       });
     }
     window.openStudyChart = openStudyChart;
+
+    // ─── Reklamní trychtýř (klik na 📊 v hlavičce) ───
+    async function openAdsFunnel(){
+      document.getElementById('modal-root').innerHTML =
+        '<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal" style="width:720px;max-width:96vw;">' +
+        '<h2>📊 Reklamní trychtýř <span style="font-size:13px;color:var(--text2);font-weight:400;">(FB + Google, bez testovacích)</span></h2>' +
+        '<div id="ads-funnel-body" style="color:var(--text2);padding:12px 4px;">Načítám…</div>' +
+        '<div class="modal-actions" style="margin-top:8px;display:flex;justify-content:flex-end;"><button class="btn btn-secondary" onclick="closeModal()">Zavřít</button></div>' +
+        '</div></div>';
+      try {
+        var r = await fetch('/api/compounder/ads-stats', { credentials:'include' });
+        if (!r.ok) throw new Error('http');
+        var d = await r.json();
+        renderAdsFunnel(d);
+      } catch(e){ var b=document.getElementById('ads-funnel-body'); if(b) b.innerHTML='<div style="color:#ef4444;">Nepodařilo se načíst statistiku.</div>'; }
+    }
+    window.openAdsFunnel = openAdsFunnel;
+    function renderAdsFunnel(d){
+      var b = document.getElementById('ads-funnel-body'); if(!b) return;
+      var total = d.total||0;
+      var pctOf = function(n){ return total>0 ? Math.round(n/total*1000)/10 : 0; };
+      var steps = [
+        { label:'Celkem z reklamy', n:d.total, col:'#60a5fa', sub:'📘 FB '+((d.bySource&&d.bySource.facebook_ads)||0)+' · 🔎 Google '+((d.bySource&&d.bySource.google_ads)||0) },
+        { label:'Odeslán přístup do portálu', n:d.accessSent, col:'#22c55e', sub:'' },
+        { label:'Byli na portále', n:d.onPortal, col:'#eab308', sub:'' },
+        { label:'Aktivní zájem', n:d.engaged, col:'#f59e0b', sub:'dosledování / schůzka / kvalifikován' },
+        { label:'Obchod (převeden)', n:d.converted, col:'#10b981', sub:'' }
+      ];
+      var bars = steps.map(function(s,i){
+        var w = total>0 ? Math.max(2, Math.round((s.n||0)/total*100)) : 0;
+        var conv = (i>0 && steps[i-1].n>0) ? ('<div style="margin-top:1px;color:var(--text2);font-size:11px;">→ '+(Math.round((s.n||0)/steps[i-1].n*1000)/10)+' % z předchozího kroku</div>') : '';
+        return '<div style="margin-bottom:12px;">' +
+          '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:3px;"><span style="font-size:13px;color:var(--text);font-weight:600;">'+s.label+'</span><span style="font-size:14px;color:'+s.col+';font-weight:700;">'+(s.n||0)+' <span style="color:var(--text2);font-weight:400;font-size:11px;">('+pctOf(s.n)+' %)</span></span></div>' +
+          '<div style="background:var(--surface2);border-radius:8px;overflow:hidden;height:26px;"><div style="width:'+w+'%;height:100%;background:'+s.col+';border-radius:8px;min-width:2px;transition:width .3s;"></div></div>' +
+          (s.sub?('<div style="font-size:11px;color:var(--text2);margin-top:2px;">'+s.sub+'</div>'):'') + conv +
+          '</div>';
+      }).join('');
+      var st = 'background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px 12px;';
+      var box = function(k,v,c){ return '<div style="'+st+'"><div style="font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--text2);">'+k+'</div><div style="font-size:18px;font-weight:800;color:'+(c||'#eab308')+';margin-top:2px;">'+v+'</div></div>'; };
+      var estBlock = '<div style="border-top:1px dashed var(--border);margin-top:6px;padding-top:12px;"><div style="font-size:12px;color:var(--text2);margin-bottom:8px;font-weight:600;">⏱ Časový odhad obchodu</div>' +
+        '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">' +
+        box('Ø dní: kontakt → portál', (d.avgDaysToPortal!=null? String(d.avgDaysToPortal).replace('.',',')+' dní':'—')) +
+        box('Konverze portál → obchod', String(d.convRatePortalPct).replace('.',',')+' %', '#10b981') +
+        box('Odhad rozjednaných obchodů', d.estDeals, '#10b981') +
+        '</div>' +
+        '<div style="font-size:11px;color:var(--text2);margin-top:8px;line-height:1.5;">Odhad = kontakty aktuálně na portále bez uzavření ('+d.openOnPortal+') × historická konverze portál→obchod ('+String(d.convRatePortalPct).replace('.',',')+' %). Medián doby na portál: '+(d.medDaysToPortal!=null?(String(d.medDaysToPortal).replace('.',',')+' dní'):'—')+'. Ztraceno (nelze použít / zamítnut): '+d.lost+'.</div></div>';
+      b.innerHTML = bars + estBlock;
+    }
+    window.renderAdsFunnel = renderAdsFunnel;
+
     async function cmpSummary() {
       var el = document.getElementById('cmp-summary');
       if (!el) return;
@@ -3497,7 +3547,7 @@
         el.innerHTML = '<div style="display:flex;gap:22px;flex-wrap:wrap;align-items:center;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 18px;">' +
           cmpStat('Návštěvy 30d', s.sessions) + cmpStat('Eventy', s.events) + cmpStat('Registrace', s.registrations) + cmpStat('Konverze', s.conversionPct + ' %') +
           cmpStat('Dnes na portálu', (s.todayPortalVisitors!=null?s.todayPortalVisitors:0)) + '<span onclick="openStudyChart()" title="Zobrazit graf vývoje studia v čase" style="cursor:pointer;">' + cmpStat('Čas studia dnes ▸', ((s.todayStudyMs>0)?cmpFmtDur(s.todayStudyMs):'0 s')) + '</span>' +
-          '<div style="color:var(--text2);font-size:12px;max-width:340px;">Top sekce: ' + top + '</div>' + '<button onclick="cmpPushBroadcast()" style="margin-left:auto;background:#eab308;color:#1a1408;border:none;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:600;cursor:pointer;">\ud83d\udce3 Push vsem</button>' + '</div>';
+          '<div style="color:var(--text2);font-size:12px;max-width:340px;">Top sekce: ' + top + '</div>' + '<button onclick="openAdsFunnel()" title="Statistika kontakt\u016f z reklamy \u2014 trycht\u00fd\u0159 a odhad obchod\u016f" style="background:rgba(59,130,246,.15);border:1px solid rgba(59,130,246,.4);color:#60a5fa;border-radius:8px;padding:8px 12px;font-size:13px;font-weight:600;cursor:pointer;">\ud83d\udcca Reklamn\u00ed trycht\u00fd\u0159</button>' + '<button onclick="cmpPushBroadcast()" style="margin-left:auto;background:#eab308;color:#1a1408;border:none;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:600;cursor:pointer;">\ud83d\udce3 Push vsem</button>' + '</div>';
       } catch(e){}
     }
     var CMP_PAGE_NAMES = { filozofie:'Filozofie', ekonomika:'Provozovatel', nabidka:'Investor', navratnost:'Distributor', milniky:'Milníky', parametry:'Parametry', galerie:'Galerie', pripojky:'Přípojky', pudorysy:'Půdorysy', distribuce:'Distribuce', lokalita:'Lokalita', kontakt:'Kontakt' };
