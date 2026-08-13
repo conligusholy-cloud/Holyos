@@ -121,6 +121,7 @@
   // Hodnoty jsou v EUR; applyVariant je přepočítá do aktuální měny.
   var VER = 'V3';
   var SHOW_VER = true; // zobrazit přepínač V2/V3? (u leada jen když má povolené obě varianty)
+  var NO_PRICE = false; // „jen provoz" — skrýt cenu/investici/návratnost, ukázat jen provoz
   var PHOTOS = {}; // { V2: url, V3: url } — fotky verzí z HolyOS (načtou se z /portal/machines)
   var DISC_INFO = { active: false, endsAt: null, pctByVer: {} }; // sleva leada (pro vlaječku)
   var VARIANTS = {
@@ -515,10 +516,10 @@
     // Výsledky nahoře (sticky-feel)
     html +=
       '<div class="pe-results" id="pe-results-block">' +
-        '<div class="pe-result-card" id="pe-rc-investice"><div class="pe-rc-label">' + _t('Investice celkem') + '</div><div class="pe-rc-value">—</div><div class="pe-rc-sub">' + _t('na jedno místo') + '</div></div>' +
+        '<div class="pe-result-card" id="pe-rc-investice"' + (NO_PRICE ? ' style="display:none"' : '') + '><div class="pe-rc-label">' + _t('Investice celkem') + '</div><div class="pe-rc-value">—</div><div class="pe-rc-sub">' + _t('na jedno místo') + '</div></div>' +
         '<div class="pe-result-card" id="pe-rc-obrat"><div class="pe-rc-label">' + _t('Obrat / měsíc') + '</div><div class="pe-rc-value">—</div><div class="pe-rc-sub" id="pe-rc-obrat-sub">—' + _t(' zákazníků / měs') + '</div></div>' +
         '<div class="pe-result-card" id="pe-rc-zisk"><div class="pe-rc-label">' + _t('Zisk / měsíc') + '</div><div class="pe-rc-value">—</div><div class="pe-rc-sub">' + _t('po všech nákladech vč. servisu') + '</div></div>' +
-        '<div class="pe-result-card" id="pe-rc-navratnost"><div class="pe-rc-label">' + _t('Návratnost') + '</div><div class="pe-rc-value">—</div><div class="pe-rc-sub" id="pe-rc-navratnost-sub">—' + _t(' měsíců') + '</div></div>' +
+        '<div class="pe-result-card" id="pe-rc-navratnost"' + (NO_PRICE ? ' style="display:none"' : '') + '><div class="pe-rc-label">' + _t('Návratnost') + '</div><div class="pe-rc-value">—</div><div class="pe-rc-sub" id="pe-rc-navratnost-sub">—' + _t(' měsíců') + '</div></div>' +
       '</div>';
 
     // Sekce: Investiční náklady
@@ -527,7 +528,7 @@
       inputRow(_t('Ø cena projekt + povolení'), 'cena_projekt', '€', 10, 0) +
       inputRow(_t('Ø cena přípojek'), 'cena_pripojek', '€', 10, 0) +
       outRow(_t('Investice celkem'), 'investice_celkem', '€', true);
-    html += section('investice', '🏗️', _t('Investiční náklady'), _t('jednorázové'), s1);
+    html += (NO_PRICE ? '<div style="display:none">' : '') + section('investice', '🏗️', _t('Investiční náklady'), _t('jednorázové'), s1) + (NO_PRICE ? '</div>' : '');
 
     // Sekce: Modelace
     var s2 =
@@ -1054,6 +1055,7 @@
     // 2b) Varianta prádlomatu (V2/V3) — přepíše cenu stroje/přípojky/obrat.
     // showVerSwitch: false = jen jedna varianta (přepínač skrytý), true/undefined = zobrazit.
     SHOW_VER = (options.showVerSwitch === false) ? false : true;
+    NO_PRICE = !!options.noPrice;
     if (options.version && VARIANTS[options.version]) applyVariant(options.version);
     else applyVariant(VER); // normalizuj na aktuální variantu (výchozí V3 = ceníková cena)
 
