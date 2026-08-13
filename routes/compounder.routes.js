@@ -3613,8 +3613,15 @@ async function _fbCreateLead(fields, meta, formCfg) {
 
   const role = (formCfg && formCfg.role === 'distributor') ? 'distributor' : 'compounder';
   const campaign = formCfg && formCfg.campaign ? String(formCfg.campaign).slice(0, 160) : null;
-  const ownerPersonId = formCfg && formCfg.owner_kind === 'internal' && formCfg.owner_person_id ? Number(formCfg.owner_person_id) : null;
-  const externalRepId = formCfg && formCfg.owner_kind === 'external' && formCfg.external_rep_id ? Number(formCfg.external_rep_id) : null;
+  let ownerPersonId = formCfg && formCfg.owner_kind === 'internal' && formCfg.owner_person_id ? Number(formCfg.owner_person_id) : null;
+  let externalRepId = formCfg && formCfg.owner_kind === 'external' && formCfg.external_rep_id ? Number(formCfg.external_rep_id) : null;
+  // Black list: kontakt s červeným ❗ (na seznamu „neoslovovat") přiřaď POUZE Janu Holému — přebije split i mapování.
+  try {
+    if ((email || phone) && await _isBlocked(email, phone)) {
+      const jid = await _blacklistOwnerId();
+      if (jid) { ownerPersonId = jid; externalRepId = null; }
+    }
+  } catch (e) { /* black list check best-effort */ }
   const now = new Date().toISOString().replace('T', ' ').slice(0, 16);
   const srcLabel = 'FB reklama' + (formCfg && formCfg.form_name ? ' – ' + formCfg.form_name : '') + (campaign ? ' (' + campaign + ')' : '');
 
@@ -3682,6 +3689,14 @@ async function _fbCreateLead(fields, meta, formCfg) {
   try { await compounderNotify.notifyFbLead(prisma, { lead: created, campaign, ownerName }); } catch (e) { /* neblokuje příjem */ }
 
   return { created: true, id: created.id };
+}
+
+// Vlastník pro black-list kontakty = Jan Holý. Lze přepsat AppSetting compounder.blacklist_owner_person_id,
+// jinak se dohledá osoba jménem „Jan Holý".
+async function _blacklistOwnerId() {
+  try { const s = await getSetting('compounder.blacklist_owner_person_id', { type: 'number', defaultValue: null }); if (s) return Number(s); } catch (e) { /* fallback */ }
+  try { const p = await prisma.person.findFirst({ where: { first_name: { equals: 'Jan', mode: 'insensitive' }, last_name: { equals: 'Holý', mode: 'insensitive' } }, select: { id: true } }); if (p) return p.id; } catch (e) { /* fallback */ }
+  return null;
 }
 
 // Vybere obchodníka pro nový lead podle rozdělení (split) v poměru procent.
