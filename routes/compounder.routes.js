@@ -5997,7 +5997,16 @@ async function buildOfferedLocations(leadId, opts) {
     const payDays = Number.isFinite(cs.reservationPayDays) ? cs.reservationPayDays : 1;
     const reblockDays = Number.isFinite(cs.reservationReblockDays) ? cs.reservationReblockDays : 2;
     // Výchozí měna se řídí jazykem leada: čeština → CZK, jinak EUR (fallback = globální nastavení).
-    const _lead = await prisma.compounderLead.findUnique({ where: { id: leadId }, select: { lang: true, extra_offers: true, discount_until: true, discount_permanent: true, discount_disabled: true, access_last_sent_at: true, created_at: true } }).catch(() => null);
+    const _lead = await prisma.compounderLead.findUnique({ where: { id: leadId }, select: { lang: true, extra_offers: true, discount_until: true, discount_permanent: true, discount_disabled: true, access_last_sent_at: true, created_at: true, external_rep_id: true } }).catch(() => null);
+    // Když lead patří pod HLAVNÍHO externího obchodníka, nabídka lokalit = jeho portfolio (nahrazuje společnou forSale nabídku).
+    let repPortfolioSet = null;
+    if (_lead && _lead.external_rep_id) {
+      try {
+        const _reps = (await getSetting(EXTERNAL_REPS_KEY, { type: 'json', defaultValue: [] })) || [];
+        const _rep = _reps.find((r) => Number(r.id) === Number(_lead.external_rep_id));
+        if (_rep && _rep.is_main) repPortfolioSet = new Set((Array.isArray(_rep.lokality) ? _rep.lokality : []).map((c) => String(c).toUpperCase()));
+      } catch (e) { /* fallback na společnou nabídku */ }
+    }
     // Efektivní sleva leada (cena zadaná v nastavení je PO slevě → neaktivní sleva = cena PŘED slevou).
     const _disc = effectiveDiscount(_lead || {}, cs);
     const _leadLang = (_lead && _lead.lang) ? _lead.lang.toLowerCase() : null;
@@ -6025,6 +6034,7 @@ async function buildOfferedLocations(leadId, opts) {
         const code = String(k.code || '').toUpperCase();
         if (extraSet.has(code)) return true; // individuální nabídka — vždy zobrazit (i mimo Best Series / ne-forSale)
         if (!String(k.companyName || '').toLowerCase().includes('best series')) return false;
+        if (repPortfolioSet) return repPortfolioSet.has(code); // hlavní obchodník → jen jeho portfolio
         return (cfgMap[k.code] || {}).forSale;
       })
       .map((k) => {
