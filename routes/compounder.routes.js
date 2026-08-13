@@ -4494,7 +4494,17 @@ router.post('/external-reps/me/leads', async (req, res, next) => {
     if (name) dupOr.push({ name: { equals: name, mode: 'insensitive' } });
     const existing = dupOr.length ? await prisma.compounderLead.findFirst({ where: { OR: dupOr }, select: { id: true } }) : null;
     if (existing) return res.status(409).json({ error: 'Tento kontakt už je v systému.' });
-    if (await _isBlocked(email, phone)) return res.status(409).json({ error: 'Tento kontakt je na seznamu „neoslovovat" — nelze ho přidat.' });
+    // Black list: kontakt se ULOŽÍ interně (přiřadí se Janovi, mimo pipeline obchodníka, stav „Nelze použít"),
+    // ale obchodníkovi řekneme, že ho nelze použít. My ho v databázi uvidíme.
+    if (await _isBlocked(email, phone)) {
+      const jid = await _blacklistOwnerId();
+      await prisma.compounderLead.create({
+        data: { name: name || email || phone, email: email || null, role: 'compounder', lang, phone, source: 'obchodnik_ext', status: 'nelze_pouzit', owner_person_id: jid || null, external_rep_id: null, notes: 'Zadal externí obchodník #' + repId + ' — kontakt je na BLACK LISTU (neoslovovat).' },
+        select: { id: true },
+      }).catch(() => {});
+      _repActivity(repId, 'Pokus o kontakt z black listu (nelze použít): ' + (name || email || phone || ''), 'contacts_created').catch(() => {});
+      return res.status(200).json({ ok: true, blacklisted: true, message: 'Tento kontakt je na black listu — nelze ho použít.' });
+    }
     const lead = await prisma.compounderLead.create({
       data: { name: name || email || phone, email: email || null, role: 'compounder', lang, phone, source: 'obchodnik_ext', status: 'new', external_rep_id: repId },
       select: { id: true, name: true, email: true, phone: true, status: true },

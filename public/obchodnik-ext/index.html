@@ -458,7 +458,9 @@
       var r=await fetch(API+'/external-reps/me/leads',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({t:getToken(),name:name,email:email,phone:phone})});
       var j=await r.json().catch(function(){return{};});
       if(!r.ok||!j.ok) throw new Error(j.error||('HTTP '+r.status));
-      closeNewContact(); await loadContacts();
+      closeNewContact();
+      if(j.blacklisted){ alert('⚠ '+(j.message||'Tento kontakt je na black listu — nelze ho použít.')); return; }
+      await loadContacts();
     } catch(e){ alert('Vytvoření selhalo: '+(e.message||'')); }
   }
   window.renderContacts=renderContacts; window.toggleContact=toggleContact; window.setContactStatus=setContactStatus;
