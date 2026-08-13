@@ -1444,13 +1444,12 @@ router.get('/my-day', requireAuth, async (req, res, next) => {
     // Dnešní statistiky aktivity obchodníka (volání / odeslané přístupy / domluvené schůzky / nové kontakty).
     let stats = { calls: 0, invites: 0, meetings: 0, new_contacts: 0 };
     try {
-      const [calls, invites, meetings, newContacts] = await Promise.all([
-        prisma.compounderLead.count({ where: { owner_person_id: personId, last_called_at: { gte: dayStart, lte: dayEnd } } }),
-        prisma.compounderLead.count({ where: { owner_person_id: personId, access_last_sent_at: { gte: dayStart, lte: dayEnd } } }),
+      // Volání a Přístupy se dopočítají níže z akcí (aby seděly s grafem historie). Tady jen schůzky + nové.
+      const [meetings, newContacts] = await Promise.all([
         prisma.salesEvent.count({ where: { organizer_id: personId, event_type: 'meeting', created_at: { gte: dayStart, lte: dayEnd } } }),
         prisma.compounderLead.count({ where: { owner_person_id: personId, created_at: { gte: dayStart, lte: dayEnd } } }),
       ]);
-      stats = { calls, invites, meetings, new_contacts: newContacts };
+      stats = { calls: 0, invites: 0, meetings, new_contacts: newContacts };
     } catch (e) { /* statistiky best-effort */ }
     // Odpracováno dnes: reálný/odhadovaný čas napříč aktivitami (volání měřené, přístupy ~2 min,
     // proběhlé schůzky max 90 min, nové kontakty ~3 min). Nepřekročí realitu jako součet odhadů úkolů.
@@ -1471,7 +1470,10 @@ router.get('/my-day', requireAuth, async (req, res, next) => {
         callMs += Math.min(Math.max(0, end - start), CAP);
       }
       const callsMin = Math.round(callMs / 60000);
-      const accessMin = (stats.invites || 0) * 2; // ~2 min na odeslání přístupu
+      // Počty pro dlaždice = počet AKCÍ dnes (shodné s grafem historie): volání a odeslané přístupy.
+      stats.calls = evs.filter((e) => e.props && e.props.action === 'call').length;
+      stats.invites = evs.filter((e) => e.props && (e.props.action === 'send_access' || e.props.action === 'copy_link')).length;
+      const accessMin = stats.invites * 2; // ~2 min na odeslání přístupu
       let meetMin = 0; // proběhlé schůzky, každá max 90 min
       try {
         const held = await prisma.salesEvent.findMany({ where: { organizer_id: personId, event_type: 'meeting', start_at: { gte: dayStart, lte: new Date() } }, select: { start_at: true, end_at: true } });
@@ -1528,9 +1530,9 @@ router.get('/sales/stats-history', requireAuth, async (req, res, next) => {
         const rows = await prisma.salesEvent.findMany({ where: { organizer_id: personId, event_type: 'meeting', created_at: { gte: rangeStart } }, select: { created_at: true }, take: 50000 });
         times = rows.map((r) => r.created_at);
       } else {
-        const action = metric === 'calls' ? 'call' : 'send_access';
+        const actions = metric === 'calls' ? ['call'] : ['send_access', 'copy_link'];
         const rows = await prisma.compounderEvent.findMany({ where: { event: 'sales_action', created_at: { gte: rangeStart }, props: { path: ['person_id'], equals: personId } }, select: { props: true, created_at: true }, take: 100000 });
-        times = rows.filter((r) => r.props && r.props.action === action).map((r) => r.created_at);
+        times = rows.filter((r) => r.props && actions.indexOf(r.props.action) >= 0).map((r) => r.created_at);
       }
     } catch (e) { times = []; }
     const series = buckets.map((b) => ({ label: b.label, value: 0 }));
