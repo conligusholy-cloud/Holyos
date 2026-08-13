@@ -3699,10 +3699,13 @@ async function _fbResolveOwner(cfg) {
   // skutečného počtu už přiřazených leadů z tohoto formuláře. Střídá správně
   // (75/25 → J,J,J,T,J,J,J,T…) místo bloků a zároveň dorovná stávající nepoměr.
   const formId = String(cfg.form_id || '');
+  // Poměr počítej jen od nastavení splitu (split_since) — ne z celé historie, ať se to nedorovnává donekonečna.
+  const sinceFilter = cfg.split_since ? { gte: new Date(cfg.split_since) } : null;
   const counts = [];
   let assigned = 0;
   for (const s of split) {
     const where = { meta_form_id: formId };
+    if (sinceFilter) where.created_at = sinceFilter;
     if (s.owner_person_id) where.owner_person_id = Number(s.owner_person_id);
     else where.external_rep_id = Number(s.external_rep_id);
     let c = 0; try { c = await prisma.compounderLead.count({ where }); } catch (e) { /* 0 */ }
@@ -3841,6 +3844,11 @@ router.post('/fb-lead-forms', requireAuth, async (req, res, next) => {
     const parsed = z.object({ forms: z.array(fbFormSchema).max(200) }).safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: 'Neplatná data', detail: parsed.error.flatten() });
     // Normalizace: doplň defaulty, deduplikuj podle form_id (poslední vyhrává).
+    // Pro spravedlivé rozdělení se poměr počítá až OD nastavení splitu (split_since),
+    // ne z celé historie — jinak by dorovnávání odklánělo dlouhou dobu vše na jednoho.
+    const existingForms = await _fbLoadForms();
+    const existMap = {}; existingForms.forEach((ef) => { if (ef && ef.form_id) existMap[String(ef.form_id)] = ef; });
+    const _splitSig = (sp) => JSON.stringify((sp || []).map((s) => ({ o: s.owner_person_id ? ('i' + s.owner_person_id) : ('e' + (s.external_rep_id || 0)), p: Number(s.percent) || 0 })).sort((a, b) => (a.o < b.o ? -1 : 1)));
     const map = {};
     for (const f of parsed.data.forms) {
       // Rozparsuj split (key 'i:5'/'e:2' → owner_person_id/external_rep_id), zahoď prázdné.
@@ -3861,11 +3869,19 @@ router.post('/fb-lead-forms', requireAuth, async (req, res, next) => {
         else if (split[0].external_rep_id) { owner_kind = 'external'; external_rep_id = split[0].external_rep_id; }
       } else if (f.owner_kind === 'internal' && f.owner_person_id) { owner_kind = 'internal'; owner_person_id = f.owner_person_id; }
       else if (f.owner_kind === 'external' && f.external_rep_id) { owner_kind = 'external'; external_rep_id = f.external_rep_id; }
+      // split_since: reset baseline jen když se split (obchodníci/procenta) změnil; jinak zachovej.
+      const prev = existMap[String(f.form_id)];
+      let split_since = (prev && prev.split_since) ? prev.split_since : null;
+      if (split.length >= 2) {
+        if (!prev || _splitSig(prev.split) !== _splitSig(split)) split_since = new Date().toISOString();
+      } else {
+        split_since = null;
+      }
       map[f.form_id] = {
         form_id: f.form_id,
         form_name: f.form_name || null,
         owner_kind, owner_person_id, external_rep_id,
-        split,
+        split, split_since,
         campaign: f.campaign || null,
         role: f.role || 'compounder',
         lang: f.lang || null,
