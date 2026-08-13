@@ -389,7 +389,7 @@ router.get('/portal/session', async (req, res, next) => {
     if (!id) return res.status(401).json({ ok: false, error: 'Neplatný nebo chybějící přístupový odkaz.' });
     const lead = await prisma.compounderLead.findUnique({
       where: { id },
-      select: { id: true, name: true, email: true, phone: true, role: true, lang: true, visible_sections: true, visible_templates: true, show_revenue_stats: true, show_example: true, hide_live_loss: true, created_at: true, owner_person_id: true, external_rep_id: true, password_hash: true, source: true, access_approved_at: true, pradlomat_version: true },
+      select: { id: true, name: true, email: true, phone: true, role: true, lang: true, visible_sections: true, visible_templates: true, show_revenue_stats: true, show_example: true, hide_live_loss: true, created_at: true, owner_person_id: true, external_rep_id: true, password_hash: true, source: true, access_approved_at: true, pradlomat_version: true, eco_no_price: true },
     });
     if (!lead) return res.status(404).json({ ok: false, error: 'Registrace nenalezena.' });
     if (!leadAccessAllowed(lead)) {
@@ -416,7 +416,7 @@ router.get('/portal/session', async (req, res, next) => {
         if (p) consultant = { name: ((p.first_name || '') + ' ' + (p.last_name || '')).trim(), phone: p.phone || '', email: p.email || '' };
       } catch (e) { /* fallback na majitele */ }
     }
-    return res.json({ ok: true, id: lead.id, name: lead.name, email: lead.email || '', phone: lead.phone || '', role: lead.role, lang: lead.lang, sections: resolveSections(lead.visible_sections), templates: templates, showRevenueStats: !!lead.show_revenue_stats, showExample: !!lead.show_example, hideLiveLoss: !!lead.hide_live_loss, pradlomatVersion: lead.pradlomat_version || 'V3', accountCreatedAt: lead.created_at, consultant: consultant, consultantExternal: consultantExternal, has_password: !!lead.password_hash });
+    return res.json({ ok: true, id: lead.id, name: lead.name, email: lead.email || '', phone: lead.phone || '', role: lead.role, lang: lead.lang, sections: resolveSections(lead.visible_sections), templates: templates, showRevenueStats: !!lead.show_revenue_stats, showExample: !!lead.show_example, hideLiveLoss: !!lead.hide_live_loss, pradlomatVersion: lead.pradlomat_version || 'V3', ecoNoPrice: !!lead.eco_no_price, accountCreatedAt: lead.created_at, consultant: consultant, consultantExternal: consultantExternal, has_password: !!lead.password_hash });
   } catch (err) {
     next(err);
   }
@@ -2159,6 +2159,7 @@ const patchSchema = z.object({
   hideLiveLoss: z.boolean().optional(),
   // Varianta prádlomatu pro ekonomiku Provozovatele: V2, V3, nebo BOTH (obojí → přepínač).
   pradlomatVersion: z.enum(['V2', 'V3', 'BOTH', 'PROVOZ']).optional(),
+  ecoNoPrice: z.boolean().optional(),
 });
 
 router.patch('/leads/:id', requireAuth, async (req, res, next) => {
@@ -2222,6 +2223,7 @@ router.patch('/leads/:id', requireAuth, async (req, res, next) => {
     if (parsed.data.isTest !== undefined) data.is_test = !!parsed.data.isTest;
     if (parsed.data.showExample !== undefined) data.show_example = !!parsed.data.showExample;
     if (parsed.data.pradlomatVersion !== undefined) data.pradlomat_version = parsed.data.pradlomatVersion;
+    if (parsed.data.ecoNoPrice !== undefined) data.eco_no_price = !!parsed.data.ecoNoPrice;
     const lead = await prisma.compounderLead.update({ where: { id }, data });
     // Notifikace: nový přidělený kontakt (jinému obchodníkovi než ten, kdo přiřazuje).
     if (parsed.data.owner_person_id) {
@@ -4588,6 +4590,7 @@ router.patch('/external-reps/me/leads/:id', async (req, res, next) => {
     if (b.templates !== undefined) { const a = Array.isArray(b.templates) ? b.templates : String(b.templates || '').split(','); data.visible_templates = a.map((x) => String(x).trim()).filter(Boolean).join(','); }
     if (b.show_revenue_stats !== undefined) data.show_revenue_stats = !!b.show_revenue_stats;
     if (b.pradlomat_version && ['V2', 'V3', 'BOTH', 'PROVOZ'].indexOf(b.pradlomat_version) !== -1) data.pradlomat_version = b.pradlomat_version;
+    if (typeof b.eco_no_price !== 'undefined') data.eco_no_price = !!b.eco_no_price;
     const upd = await prisma.compounderLead.update({ where: { id }, data });
     _repActivity(repId, 'Upravil kontakt #' + id, null).catch(() => {});
     res.json({ ok: true, lead: upd });

@@ -752,7 +752,7 @@
           defaults: (data.defaults_json && typeof data.defaults_json === 'object') ? data.defaults_json : null,
           version: (_bothV || _prov) ? 'V3' : (data.version || 'V3'),
           showVerSwitch: _bothV,
-          noPrice: _prov,
+          noPrice: _prov || !!data.ecoNoPrice,
           locks: locks,
           enforceLocks: true,
           onChange: function (state, computed) {
@@ -779,7 +779,7 @@
           defaults: (SHARE_DATA.defaults_json && typeof SHARE_DATA.defaults_json === 'object') ? SHARE_DATA.defaults_json : null,
           version: (_bothV2 || _prov2) ? 'V3' : ((SHARE_DATA && SHARE_DATA.version) || 'V3'),
           showVerSwitch: _bothV2,
-          noPrice: _prov2,
+          noPrice: _prov2 || !!(SHARE_DATA && SHARE_DATA.ecoNoPrice),
           locks: locks,
           enforceLocks: true,
           onChange: function (state, computed) {

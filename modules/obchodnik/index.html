@@ -921,15 +921,17 @@
   }
   // Přepínač varianty prádlomatu (V2/V3) — řídí ekonomiku Provozovatele na portálu.
   function obVersionField(l){
-    var cur = ['V2', 'BOTH', 'PROVOZ'].indexOf(l.pradlomat_version) >= 0 ? l.pradlomat_version : 'V3';
+    var cur = (l.pradlomat_version === 'V2' || l.pradlomat_version === 'BOTH') ? l.pradlomat_version : 'V3';
+    var noPrice = !!l.eco_no_price || l.pradlomat_version === 'PROVOZ';
     function b(code, label, desc){
       var on = cur === code;
-      return '<button type="button" onclick="setVersion('+l.id+',\''+code+'\')" style="flex:1;min-width:130px;text-align:left;padding:9px 10px;border-radius:8px;cursor:pointer;border:1px solid '+(on?'var(--primary)':'var(--line)')+';background:'+(on?'rgba(201,162,75,0.16)':'transparent')+';color:var(--text)">'
+      return '<button type="button" onclick="setVersion('+l.id+',\''+code+'\')" style="flex:1;min-width:120px;text-align:left;padding:9px 10px;border-radius:8px;cursor:pointer;border:1px solid '+(on?'var(--primary)':'var(--line)')+';background:'+(on?'rgba(201,162,75,0.16)':'transparent')+';color:var(--text)">'
         + '<div style="font-weight:700;font-size:13px">'+(on?'✓ ':'')+label+'</div>'
         + '<div style="font-size:11px;color:var(--muted2)">'+desc+'</div></button>';
     }
     return '<div style="margin-top:10px;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted2)">Varianta prádlomatu (ekonomika)</div>'
-      + '<div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap">' + b('V3','V3','plný, s malou pračkou') + b('V2','V2','menší, levnější') + b('BOTH','Obojí','přepínač V2/V3') + b('PROVOZ','Jen provoz','bez ceny a návratnosti') + '</div>';
+      + '<div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap">' + b('V3','V3','plný, s malou pračkou') + b('V2','V2','menší, levnější') + b('BOTH','Obojí','přepínač V2/V3') + '</div>'
+      + '<label style="display:flex;align-items:center;gap:8px;margin-top:8px;cursor:pointer;font-size:13px"><input type="checkbox" '+(noPrice?'checked':'')+' onchange="setEcoNoPrice('+l.id+',this.checked)" style="width:16px;height:16px;accent-color:#eab308"><span>🔒 Jen provoz — skrýt cenu a návratnost (platí na zvolenou variantu)</span></label>';
   }
   async function setVersion(id, v){
     try {
@@ -939,6 +941,13 @@
     } catch(e){}
   }
   window.setVersion = setVersion;
+  async function setEcoNoPrice(id, on){
+    try{
+      await api('/leads/'+id, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ ecoNoPrice: !!on }) });
+      var lead = state.leads.find(function(x){ return x.id===id; }); if (lead){ lead.eco_no_price = !!on; if(lead.pradlomat_version==='PROVOZ') lead.pradlomat_version='V3'; }
+    }catch(e){}
+  }
+  window.setEcoNoPrice = setEcoNoPrice;
   function cardHtml(l){
     var st = STATUS[l.status] || STATUS.new;
     var lc = langCode(l.lang);

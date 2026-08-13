@@ -5669,6 +5669,7 @@ model CompounderLead {
   // Varianta prádlomatu pro ekonomiku Provozovatele: 'V3' (plný, s malou pračkou)
   // nebo 'V2' (menší/levnější, bez malé pračky). Řídí přepočet na portálu.
   pradlomat_version String @default("V3") @db.VarChar(8)
+  eco_no_price Boolean @default(false)
 
   // Kdy obchodník naposledy klikl na „Volat" (evidence pokusů o hovor).
   last_called_at DateTime?

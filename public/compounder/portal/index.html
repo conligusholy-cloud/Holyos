@@ -1066,7 +1066,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
       window._portalShowExample = !!res.j.showExample;
       window._portalHideLiveLoss = !!res.j.hideLiveLoss; // schovat časomíru + ztrátu z váhání
       window._portalVersion = (res.j.pradlomatVersion === 'V2' || res.j.pradlomatVersion === 'BOTH') ? res.j.pradlomatVersion : 'V3'; // V2 / V3 / BOTH (obojí → přepínač)
-      window._portalNoPrice = (res.j.pradlomatVersion === 'PROVOZ'); // „jen provoz" — schová cenu, investice i návratnost
+      window._portalNoPrice = !!res.j.ecoNoPrice || (res.j.pradlomatVersion === 'PROVOZ'); // „jen provoz" — schová cenu, investice i návratnost
       window._acctCreatedAt = res.j.accountCreatedAt || null;
       pStartTopClock();
       window._portalToken = token;

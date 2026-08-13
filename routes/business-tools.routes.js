@@ -122,13 +122,15 @@ router.get('/share/:token', async (req, res, next) => {
 
     // Varianta prádlomatu (V2/V3) leada — detailní ekonomika se otevře v jeho variantě.
     let pradlomatVersion = 'V3';
+    let ecoNoPrice = false;
     if (recipient.compounder_lead_id) {
       try {
         const lead = await prisma.compounderLead.findUnique({
           where: { id: recipient.compounder_lead_id },
-          select: { pradlomat_version: true },
+          select: { pradlomat_version: true, eco_no_price: true },
         });
         if (lead && lead.pradlomat_version) pradlomatVersion = lead.pradlomat_version;
+        if (lead && lead.eco_no_price) ecoNoPrice = true;
       } catch (e) { /* varianta je volitelná */ }
     }
 
@@ -149,6 +151,7 @@ router.get('/share/:token', async (req, res, next) => {
       tool: { slug: recipient.tool, ...meta },
       languages,
       version: pradlomatVersion,
+      ecoNoPrice: ecoNoPrice,
       defaults_json: defaultsRow ? defaultsRow.data_json : null,
       locks_json: defaultsRow ? (defaultsRow.locks_json || {}) : {},
       models: recipient.models.map((m) => ({
