@@ -222,6 +222,7 @@
     <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 6px 6px;gap:8px">
       <div><h1 style="margin:0;font-size:20px">🧭 Dnešní plán</h1><div id="today-date" style="font-size:12px;color:var(--muted2);margin-top:2px"></div></div>
       <div style="display:flex;gap:6px;align-items:center">
+        <button class="logout" onclick="openMyFunnel()" title="Trychtýř mých kontaktů — statistika a odhad obchodů">📊</button>
         <button class="logout" onclick="appRefresh(this)" title="Rychle obnovit data a počty (bez přegenerování plánu)">🔄 Obnovit</button>
         <button class="logout" onclick="reloadToday()" title="Přegenerovat celý plán přes AI (trvá déle)">↻</button>
       </div>
@@ -1609,6 +1610,58 @@
     }catch(e){ body.innerHTML='<div class="empty">Chyba načítání.</div>'; }
   }
   window.openStatHistory=openStatHistory; window.statHistoryLoad=statHistoryLoad;
+
+  // Trychtýř mých kontaktů (klik na 📊 v hlavičce) — všechny přiřazené, bez testovacích.
+  async function openMyFunnel(){
+    var ex=document.getElementById('funnel-ov'); if(ex) ex.remove();
+    var ov=document.createElement('div'); ov.id='funnel-ov';
+    ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:60;display:flex;align-items:flex-end;justify-content:center';
+    ov.onclick=function(e){ if(e.target===ov) ov.remove(); };
+    ov.innerHTML='<div style="background:var(--bg,#0b0b0d);border:1px solid var(--line);border-radius:16px 16px 0 0;width:100%;max-width:640px;max-height:88vh;overflow:auto;padding:16px 16px calc(20px + env(safe-area-inset-bottom,0))">'+
+      '<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px"><h2 style="margin:0;font-size:18px">📊 Trychtýř mých kontaktů</h2><button onclick="var o=document.getElementById(&#39;funnel-ov&#39;);if(o)o.remove();" style="margin-left:auto;background:none;border:none;color:var(--muted);font-size:22px;cursor:pointer">✕</button></div>'+
+      '<div id="funnel-body"><div class="loading">Načítám…</div></div>'+
+    '</div>';
+    document.body.appendChild(ov);
+    try{
+      var r=await api('/my-funnel'); var d=await r.json().catch(function(){return{};});
+      if(!r.ok){ document.getElementById('funnel-body').innerHTML='<div class="empty">Nepodařilo se načíst.</div>'; return; }
+      renderMyFunnel(d);
+    }catch(e){ var b=document.getElementById('funnel-body'); if(b) b.innerHTML='<div class="empty">Chyba načítání.</div>'; }
+  }
+  function renderMyFunnel(d){
+    var b=document.getElementById('funnel-body'); if(!b) return;
+    var total=d.total||0;
+    var pctOf=function(n){ return total>0?Math.round(n/total*1000)/10:0; };
+    var bs=d.bySource||{};
+    var steps=[
+      {label:'Celkem kontaktů', n:d.total, col:'#a78bfa', sub:'📘 FB '+(bs.facebook_ads||0)+' · 🔎 Google '+(bs.google_ads||0)+' · ostatní '+(bs.other||0)},
+      {label:'Odeslán přístup do portálu', n:d.accessSent, col:'#22c55e', sub:''},
+      {label:'Byli na portále', n:d.onPortal, col:'#eab308', sub:''},
+      {label:'Aktivní zájem', n:d.engaged, col:'#f59e0b', sub:'dosledování / schůzka / kvalifikován'},
+      {label:'Obchod (převeden)', n:d.converted, col:'#10b981', sub:''}
+    ];
+    var bars=steps.map(function(s,i){
+      var w=total>0?Math.max(2,Math.round((s.n||0)/total*100)):0;
+      var conv=(i>0&&steps[i-1].n>0)?('<div style="margin-top:1px;color:var(--muted2);font-size:11px">→ '+(Math.round((s.n||0)/steps[i-1].n*1000)/10)+' % z předchozího kroku</div>'):'';
+      return '<div style="margin-bottom:12px">'+
+        '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:3px"><span style="font-size:13px;color:var(--text);font-weight:600">'+s.label+'</span><span style="font-size:14px;color:'+s.col+';font-weight:700">'+(s.n||0)+' <span style="color:var(--muted2);font-weight:400;font-size:11px">('+pctOf(s.n)+' %)</span></span></div>'+
+        '<div style="background:rgba(255,255,255,.06);border-radius:8px;overflow:hidden;height:24px"><div style="width:'+w+'%;height:100%;background:'+s.col+';border-radius:8px;min-width:2px"></div></div>'+
+        (s.sub?('<div style="font-size:11px;color:var(--muted2);margin-top:2px">'+s.sub+'</div>'):'')+conv+
+      '</div>';
+    }).join('');
+    var cw='background:rgba(255,255,255,.05);border:1px solid var(--line);border-radius:10px;padding:10px 12px';
+    var box=function(k,v,c){ return '<div style="'+cw+'"><div style="font-size:10.5px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted2)">'+k+'</div><div style="font-size:17px;font-weight:800;color:'+(c||'#eab308')+';margin-top:2px">'+v+'</div></div>'; };
+    var est='<div style="border-top:1px dashed var(--line);margin-top:6px;padding-top:12px"><div style="font-size:12px;color:var(--muted);margin-bottom:8px;font-weight:600">⏱ Časový odhad obchodu</div>'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'+
+      box('Ø dní: kontakt → portál',(d.avgDaysToPortal!=null?String(d.avgDaysToPortal).replace('.',',')+' dní':'—'))+
+      box('Konverze portál → obchod',String(d.convRatePortalPct).replace('.',',')+' %','#10b981')+
+      box('Odhad rozjednaných obchodů',d.estDeals,'#10b981')+
+      box('Ztraceno (nelze/zamítnut)',d.lost,'#ef4444')+
+      '</div>'+
+      '<div style="font-size:11px;color:var(--muted2);margin-top:8px;line-height:1.5">Odhad = kontakty na portále bez uzavření ('+(d.openOnPortal||0)+') × konverze portál→obchod ('+String(d.convRatePortalPct).replace('.',',')+' %). Medián doby na portál: '+(d.medDaysToPortal!=null?(String(d.medDaysToPortal).replace('.',',')+' dní'):'—')+'.</div></div>';
+    b.innerHTML=bars+est;
+  }
+  window.openMyFunnel=openMyFunnel; window.renderMyFunnel=renderMyFunnel;
 
   async function loadToday(gen){
     window._todayLoaded = true;
