@@ -502,7 +502,7 @@
 
     // Vlaječka slevy (když je u leada aktivní) — kolik % a do kdy platí.
     var _dpct = DISC_INFO.pctByVer[VER] || 0;
-    if (DISC_INFO.active && _dpct > 0) {
+    if (DISC_INFO.active && _dpct > 0 && !NO_PRICE) { // „jen provoz" = bez ceny → sleva nedává smysl
       var _until = DISC_INFO.endsAt ? (' · ' + _t('platí do') + ' ' + new Date(DISC_INFO.endsAt).toLocaleDateString('cs-CZ')) : (' · ' + _t('platí trvale'));
       html += '<div style="margin:0 0 14px"><span style="display:inline-flex;align-items:center;gap:7px;background:rgba(201,162,75,0.16);border:1px solid rgba(201,162,75,0.55);color:#c9a24b;border-radius:999px;padding:6px 14px;font-size:13px;font-weight:800">🏷️ ' + _t('Ve slevě') + ' ' + _dpct + ' %' + _until + '</span></div>';
     }
