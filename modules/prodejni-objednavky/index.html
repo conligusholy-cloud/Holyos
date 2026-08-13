@@ -5592,9 +5592,10 @@
       } catch(e) { alert('Odeslání selhalo: ' + (e.message || '')); }
     }
     window.exrSendLogin = exrSendLogin;
-    function _exrKioskOptions(selected) {
+    function _exrKioskOptions(selected, includeAll) {
       var sel = {}; (selected||[]).forEach(function(c){ sel[String(c)] = true; });
-      var list = (_kioskData && Array.isArray(_kioskData.kiosks)) ? _kioskData.kiosks.filter(function(k){ if (String(k.companyName||'').toLowerCase().indexOf('best series') === -1) return false; return !((_kioskConfig[k.code]||{}).forSale) || sel[String(k.code)]; }) : [];
+      // includeAll = hlavní obchodník si skládá vlastní portfolio ze VŠECH lokalit; jinak jen VIP (mimo společnou nabídku).
+      var list = (_kioskData && Array.isArray(_kioskData.kiosks)) ? _kioskData.kiosks.filter(function(k){ if (String(k.companyName||'').toLowerCase().indexOf('best series') === -1) return false; return includeAll ? true : (!((_kioskConfig[k.code]||{}).forSale) || sel[String(k.code)]); }) : [];
       list.sort(function(a,b){ return String(a.label||a.code).localeCompare(String(b.label||b.code),'cs'); });
       return list.map(function(k){
         return '<label style="display:flex;align-items:center;gap:8px;padding:4px 2px;font-size:13px;cursor:pointer;">' +
@@ -5628,7 +5629,7 @@
           fld('Přihlašovací jméno', inp('exr-login', rec.login)) +
           fld('Heslo' + (rec.has_password ? ' (nastaveno)' : ''), '<input id="exr-heslo" type="password" value="" autocomplete="new-password" placeholder="' + (rec.has_password ? 'ponech prázdné = beze změny' : 'zadej heslo') + '" style="' + st + '">') +
         '</div>' +
-        '<div id="exr-lok-wrap" style="' + (rec.is_main ? '' : 'display:none;') + '">' + fld('📍 Individuální portfolio lokalit na prodej (jen pro hlavního obchodníka)', '<input type="text" id="exr-lok-filter" placeholder="Filtrovat…" onkeyup="exrFilterLok()" style="' + st + 'margin-bottom:6px;"><div id="exr-lok-box" style="max-height:200px;overflow:auto;border:1px solid var(--border,#333);border-radius:8px;padding:6px 10px;">' + _exrKioskOptions(rec.lokality) + '</div>') + '</div>' +
+        '<div id="exr-lok-wrap" style="' + (rec.is_main ? '' : 'display:none;') + '">' + fld('📍 Individuální portfolio lokalit na prodej (jen pro hlavního obchodníka)', '<input type="text" id="exr-lok-filter" placeholder="Filtrovat…" onkeyup="exrFilterLok()" style="' + st + 'margin-bottom:6px;"><div id="exr-lok-box" style="max-height:200px;overflow:auto;border:1px solid var(--border,#333);border-radius:8px;padding:6px 10px;">' + _exrKioskOptions(rec.lokality, rec.is_main) + '</div>') + '</div>' +
         fld('Poznámky', '<textarea id="exr-pozn" rows="3" style="' + st + 'resize:vertical;">' + _exrEsc(rec.poznamky) + '</textarea>') +
         '<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:8px;">' +
           '<button class="btn" onclick="closeExrForm()">Zrušit</button>' +
@@ -5639,7 +5640,12 @@
     }
     function closeExrForm(){ var ov = document.getElementById('exr-form-overlay'); if (ov) ov.remove(); }
     // Výběr vlastního portfolia lokalit je dostupný jen pro hlavního externího obchodníka.
-    function exrToggleMainLok(on){ var w = document.getElementById('exr-lok-wrap'); if (w) w.style.display = on ? '' : 'none'; }
+    function exrToggleMainLok(on){
+      var w = document.getElementById('exr-lok-wrap'); if (w) w.style.display = on ? '' : 'none';
+      // Překresli výběr: hlavní vybírá ze VŠECH lokalit, jinak jen VIP. Zachovej zaškrtnuté.
+      var box = document.getElementById('exr-lok-box');
+      if (box) { var cur = Array.prototype.map.call(box.querySelectorAll('.exr-lok:checked'), function(c){ return c.value; }); box.innerHTML = _exrKioskOptions(cur, on); }
+    }
     window.exrToggleMainLok = exrToggleMainLok;
     function exrFilterLok(){
       var q = ((document.getElementById('exr-lok-filter')||{}).value||'').trim().toLowerCase();
@@ -5685,8 +5691,11 @@
       var _vip = Array.isArray(rec.lokality) ? rec.lokality.map(String) : [];
       var _vipSet = {}; _vip.forEach(function(c){ _vipSet[c] = true; });
       var _fsSet = {}; _forSale.forEach(function(c){ _fsSet[String(c)] = true; });
-      var codes = []; var _seen = {}; _forSale.concat(_vip).forEach(function(c){ c = String(c); if(!_seen[c]){ _seen[c]=true; codes.push(c); } });
-      var rows = codes.map(function(c){ var vip = !!(_vipSet[String(c)] && !_fsSet[String(c)]); var k = _exrKioskByCode(c); if (!k) return { code:c, label:'(mimo seznam)', metrics:null, vip:vip }; return { code:c, label:k.label||c, metrics:_exrKioskMetrics(k), vip:vip }; });
+      // Hlavní obchodník: portfolio NAHRAZUJE společnou nabídku — berou se jen jím vybrané lokality.
+      var _isMainRep = !!rec.is_main;
+      var _src = _isMainRep ? _vip : _forSale.concat(_vip);
+      var codes = []; var _seen = {}; _src.forEach(function(c){ c = String(c); if(!_seen[c]){ _seen[c]=true; codes.push(c); } });
+      var rows = codes.map(function(c){ var vip = _isMainRep ? false : !!(_vipSet[String(c)] && !_fsSet[String(c)]); var k = _exrKioskByCode(c); if (!k) return { code:c, label:'(mimo seznam)', metrics:null, vip:vip }; return { code:c, label:k.label||c, metrics:_exrKioskMetrics(k), vip:vip }; });
       var objem = rows.reduce(function(a,r){ return a + ((r.metrics && r.metrics.total) || 0); }, 0);
       var provize = rows.reduce(function(a,r){ return a + (r.metrics ? _exrCommissionFor(rec, r.metrics) : 0); }, 0);
       var initials = (rec.jmeno||'?').trim().split(/\s+/).slice(0,2).map(function(w){ return w.charAt(0).toUpperCase(); }).join('');
@@ -5701,7 +5710,7 @@
         '<button class="btn" onclick="exrSendLogin(' + rec.id + ')" style="margin-right:8px;">✉️ Odeslat přihlašovací údaje</button>' +
         '<button class="btn btn-primary" onclick="openExrForm(' + rec.id + ')">✏️ Upravit</button></div>';
       h += '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:18px;">' +
-        kpi('Přiřazené lokality', String(codes.length), 'společná nabídka + VIP') +
+        kpi('Přiřazené lokality', String(codes.length), _isMainRep ? 'individuální portfolio' : 'společná nabídka + VIP') +
         kpi('Sazba provize', sazbaLabel, EXR_CALC[rec.zpusob_vypoctu]||'') +
         kpi('Odhad objemu', kvMoney(objem,'CZK'), '∑ celkových cen') +
         kpi('Provize celkem', kvMoney(provize,'CZK'), EXR_PAY[rec.splatnost]||'') + '</div>';
