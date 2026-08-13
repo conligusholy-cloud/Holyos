@@ -4375,12 +4375,16 @@ function _extPortalBase() {
 async function _isBlocked(email, phone) {
   const em = String(email || '').trim().toLowerCase();
   const ph = String(phone || '').replace(/\D/g, '').slice(-9);
-  const or = [];
-  if (em && /.+@.+\..+/.test(em)) or.push({ email: em });
-  if (ph && ph.length >= 6) or.push({ phone: ph });
-  if (!or.length) return false;
-  const hit = await prisma.compounderBlocklist.findFirst({ where: { OR: or }, select: { id: true } }).catch(() => null);
-  return !!hit;
+  if (!em && !(ph && ph.length >= 6)) return false;
+  // Porovnávej NORMALIZOVANĚ (e-mail lowercase, telefon posledních 9 číslic) — shodně s odznakem ❗
+  // (_annotateBlacklist). Jinak by se ❗ ukazoval, ale blokace/hláška by se nespustila.
+  let rows = [];
+  try { rows = await prisma.compounderBlocklist.findMany({ select: { email: true, phone: true } }); } catch (e) { return false; }
+  for (const r of rows) {
+    if (em && r.email && String(r.email).trim().toLowerCase() === em) return true;
+    if (ph && ph.length >= 6 && r.phone) { const rp = String(r.phone).replace(/\D/g, '').slice(-9); if (rp.length >= 6 && rp === ph) return true; }
+  }
+  return false;
 }
 
 // Označí leady příznakem blacklisted (shoda e-mailu/telefonu s black listem) — jedním dotazem.
