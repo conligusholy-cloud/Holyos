@@ -221,7 +221,10 @@
   <div id="screen-today">
     <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 6px 6px;gap:8px">
       <div><h1 style="margin:0;font-size:20px">🧭 Dnešní plán</h1><div id="today-date" style="font-size:12px;color:var(--muted2);margin-top:2px"></div></div>
-      <button class="logout" onclick="reloadToday()" title="Přegenerovat">↻</button>
+      <div style="display:flex;gap:6px;align-items:center">
+        <button class="logout" onclick="appRefresh(this)" title="Rychle obnovit data a počty (bez přegenerování plánu)">🔄 Obnovit</button>
+        <button class="logout" onclick="reloadToday()" title="Přegenerovat celý plán přes AI (trvá déle)">↻</button>
+      </div>
     </div>
     <div id="today-focus" style="color:var(--muted);font-size:13.5px;line-height:1.5;margin:0 6px 6px"></div>
     <div id="today-stats" style="display:flex;gap:8px;flex-wrap:wrap;margin:0 6px 12px"></div>
