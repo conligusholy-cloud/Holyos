@@ -299,7 +299,7 @@
               '<span>Návratnost <b class="blue">' + nav + '</b></span>' +
               '<span style="color:var(--primary)">Provize <b style="color:var(--primary)">' + money(x.commission) + '</b></span>' +
               '<span><button type="button" class="rev-btn" onclick="openRevenue(&#39;' + esc(x.code) + '&#39;)">📊 Tržby</button></span>' +
-              ((DATA && DATA.is_main) ? ('<span><button type="button" class="rev-btn" onclick="toggleLoc(&#39;' + esc(x.code) + '&#39;)">' + (x.hidden ? '👁 Zobrazit' : '🚫 Skrýt z nabídky') + '</button></span>') : '') +
+              ((DATA && DATA.is_main) ? ('<span><button type="button" class="rev-btn" style="font-size:11px;padding:3px 9px;white-space:nowrap;opacity:.85" title="' + (x.hidden ? 'Zobrazit v nabídce' : 'Skrýt z nabídky') + '" onclick="toggleLoc(&#39;' + esc(x.code) + '&#39;)">' + (x.hidden ? '👁 Zobrazit' : '🚫 Skrýt') + '</button></span>') : '') +
             '</div>' +
           '</div></div>';
       }).join('');
