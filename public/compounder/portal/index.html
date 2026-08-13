@@ -2152,7 +2152,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
       box.innerHTML=m.map(function(x){
         var priceHtml = noPrice ? '' : ('<div style="color:var(--gold-soft);font-weight:800;font-size:17px;margin-top:4px">'+(Math.round(x.priceCzk||0)).toLocaleString('cs-CZ')+' Kč</div><div class="note" style="font-size:11px;margin-top:2px">bez DPH</div>');
         var img=x.photo?('<div onclick="event.stopPropagation();buyZoom(&#39;'+x.photo+'&#39;)" style="height:130px;background:#0c0e12;cursor:zoom-in"><img src="'+x.photo+'" alt="" style="width:100%;height:100%;object-fit:cover"></div>'):'<div style="height:130px;background:#0c0e12;display:flex;align-items:center;justify-content:center;color:var(--muted,#777);font-size:12px">bez obrázku</div>';
-        return '<div class="buyver" data-ver="'+x.ver+'" onclick="selectBuyVer(&#39;'+x.ver+'&#39;)" style="cursor:pointer;flex:1;min-width:210px;max-width:260px;border:1px solid var(--line);border-radius:16px;overflow:hidden;background:var(--surface);transition:border-color .15s,box-shadow .15s">'+img+'<div style="padding:12px 14px;text-align:center"><div style="font-weight:800;font-size:16px">Compounder '+x.ver+'</div>'+priceHtml+'</div></div>';
+        return '<div class="buyver" data-ver="'+x.ver+'" onclick="selectBuyVer(&#39;'+x.ver+'&#39;)" style="cursor:pointer;flex:1;min-width:210px;max-width:260px;border:1px solid var(--line);border-radius:16px;overflow:hidden;background:var(--surface);transition:border-color .15s,box-shadow .15s">'+img+'<div style="padding:12px 14px;text-align:center"><div style="font-weight:800;font-size:16px">Prádlomat '+x.ver+'</div>'+priceHtml+'</div></div>';
       }).join('');
     }).catch(function(){ box.style.display='none'; });
   }
