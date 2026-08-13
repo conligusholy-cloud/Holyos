@@ -3929,6 +3929,7 @@ const externalRepSchema = z.object({
   poznamky: z.string().max(5000).nullable().optional(),
   login: z.string().trim().max(80).nullable().optional(),
   password: z.string().max(200).optional(),
+  is_main: z.boolean().optional(), // hlavní externí obchodník (kurátoruje nabídku ostatním)
 });
 
 async function _loadExternalReps() {
@@ -4063,6 +4064,8 @@ router.put('/external-reps/:id', requireAuth, async (req, res, next) => {
     const cerr = await _prepRepCredentials(data, arr, id);
     if (cerr) return res.status(cerr.status).json({ error: cerr.error });
     arr[i] = Object.assign({}, arr[i], data, { id });
+    // Hlavní externí obchodník smí být jen jeden — u ostatních příznak shodíme.
+    if (arr[i].is_main) { arr.forEach((r, j) => { if (j !== i) r.is_main = false; }); }
     await _saveExternalReps(arr, req.user && req.user.id);
     // Doplň chybějící ukázkový self-lead i u dříve založených obchodníků
     try { if (!arr[i].self_lead_id) arr[i].self_lead_id = await _ensureRepSelfLead(arr[i]); } catch (e) { /* neblokovat uložení */ }
