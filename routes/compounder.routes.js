@@ -6208,9 +6208,14 @@ async function buildOfferedLocations(leadId, opts) {
         let priceBeforeCzk = total, discPct = 0;
         if (machine != null && locality != null) {
           const _mp2 = (_disc.machinePct && _disc.machinePct[ver]) ? Number(_disc.machinePct[ver]) : 0;
-          const machineBefore = (_mp2 > 0 && _mp2 < 100) ? Math.round(machine / (1 - _mp2 / 100)) : machine;
-          priceBeforeCzk = machineBefore + locality;
-          if (_disc.active && _mp2 > 0) discPct = Math.round(_mp2);
+          // Sleva z CELKOVÉ ceny: když je aktivní, `total` je cena PO slevě → před slevou = total ÷ (1 − pct).
+          // Když sleva neaktivní, `total` už je cena před slevou (stroj se dopočítal nahoru výše) → neděl znovu.
+          if (_disc.active && _mp2 > 0 && _mp2 < 100) {
+            priceBeforeCzk = Math.round(total / (1 - _mp2 / 100));
+            discPct = Math.round(_mp2);
+          } else {
+            priceBeforeCzk = total;
+          }
         }
         const yearly = Math.round(cisty * 12);
         return {

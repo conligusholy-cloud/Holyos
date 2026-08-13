@@ -1963,7 +1963,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
       var pct = (EKO_DISCOUNT && EKO_DISCOUNT.active && m && m.discountActive) ? (m.discountPct || 0) : 0;
       var bEl = document.getElementById('m-invest-before');
       if (bEl){
-        if (pct > 0 && pct < 100){ bEl.textContent = fmt(invest + val("i-machine") * pct / (100 - pct)) + S; bEl.style.display = 'block'; }
+        if (pct > 0 && pct < 100){ bEl.textContent = fmt(Math.round(invest / (1 - pct / 100))) + S; bEl.style.display = 'block'; }
         else { bEl.style.display = 'none'; bEl.textContent = ''; }
       }
       try{ ekoRenderDiscBadge(); }catch(e){}
