@@ -4202,11 +4202,13 @@ async function _extRepPortalData(rep) {
   const kiosks = await _sisKiosks().catch(() => []);
   const cs = (await getSetting(COMPOUNDING_SETTINGS_KEY, { type: 'json', defaultValue: COMPOUNDING_SETTINGS_DEFAULT })) || {};
   const cfgMap = (await getSetting(COMPOUNDING_KIOSKS_KEY, { type: 'json', defaultValue: {} })) || {};
-  // Společná nabídka (forSale) = základ pro KAŽDÉHO obchodníka; rep.lokality = VIP navíc.
+  // Společná nabídka (forSale) = základ pro běžného obchodníka; rep.lokality = VIP navíc.
+  // HLAVNÍ obchodník má vlastní portfolio, které společnou nabídku NAHRAZUJE (jen jeho lokality).
+  const isMainRep = !!rep.is_main;
   const forSaleSet = {}; Object.keys(cfgMap).forEach((c) => { if (cfgMap[c] && cfgMap[c].forSale) forSaleSet[String(c)] = true; });
   const vipList = (Array.isArray(rep.lokality) ? rep.lokality : []).map(String);
   const vipSet = {}; vipList.forEach((c) => { vipSet[c] = true; });
-  const codes = Array.from(new Set(Object.keys(forSaleSet).concat(vipList)));
+  const codes = isMainRep ? Array.from(new Set(vipList)) : Array.from(new Set(Object.keys(forSaleSet).concat(vipList)));
   const fx = await fxRatesCzk().catch(() => ({ CZK: 1, EUR: 25 }));
   const eur = fx.EUR || 25;
   const months = Number.isFinite(cs.locationMonths) ? cs.locationMonths : 12;
@@ -4225,7 +4227,7 @@ async function _extRepPortalData(rep) {
     resvs.forEach((r) => { if (!resMap[r.kiosk_code]) resMap[r.kiosk_code] = r; });
   } catch (e) { /* tabulka nemusí existovat */ }
   const rows = codes.map((code) => {
-    const isVip = !!(vipSet[code] && !forSaleSet[code]);
+    const isVip = isMainRep ? false : !!(vipSet[code] && !forSaleSet[code]);
     const rv = resMap[String(code)];
     const resObj = rv ? { reserved: true, res_until: (rv.reserved_until || rv.fee_until || rv.sign_until || null), res_status: rv.status } : { reserved: false, res_until: null, res_status: null };
     const k = kiosks.find((x) => String(x.code) === String(code));
