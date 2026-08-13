@@ -3623,7 +3623,7 @@ async function _fbCreateLead(fields, meta, formCfg) {
     }
   } catch (e) { /* black list check best-effort */ }
   const now = new Date().toISOString().replace('T', ' ').slice(0, 16);
-  const srcLabel = 'FB reklama' + (formCfg && formCfg.form_name ? ' – ' + formCfg.form_name : '') + (campaign ? ' (' + campaign + ')' : '');
+  const srcLabel = (meta.srcLabel || 'FB reklama') + (formCfg && formCfg.form_name ? ' – ' + formCfg.form_name : '') + (campaign ? ' (' + campaign + ')' : '');
 
   if (existing) {
     const line = `${now} · Nová reakce z FB reklamy${formCfg && formCfg.form_name ? ' „' + formCfg.form_name + '"' : ''} — kontakt už v systému, nový lead nezaložen.`;
@@ -3648,7 +3648,7 @@ async function _fbCreateLead(fields, meta, formCfg) {
       name: (name || '').slice(0, 255), first_name: cap(firstName, 120), last_name: cap(lastName, 120),
       company: cap(company, 200), city: cap(city, 120), country: cap(country, 120),
       email: cap(email, 255), phone: cap(phone, 40),
-      role, lang: cap(lang, 10), status: 'new', source: 'facebook_ads',
+      role, lang: cap(lang, 10), status: 'new', source: meta.source || 'facebook_ads',
       campaign: cap(campaign, 160),
       notes: intakeText || null,
       owner_person_id: ownerPersonId, external_rep_id: externalRepId,
@@ -3672,7 +3672,7 @@ async function _fbCreateLead(fields, meta, formCfg) {
         // Osobní zvonek přiřazenému obchodníkovi (má-li účet).
         if (owner.user) {
           await createNotification({
-            userId: owner.user.id, type: 'lead', title: 'Nový lead z FB reklamy',
+            userId: owner.user.id, type: 'lead', title: 'Nový lead z ' + (meta.channelName || 'FB reklamy'),
             body: `${created.name}${campaign ? ' — ' + campaign : ''}`,
             link: '/modules/prodejni-objednavky/index.html#compounder',
           }).catch(() => {});
@@ -3809,6 +3809,90 @@ router.post('/fb-webhook', async (req, res, next) => {
     console.error('[fb-webhook] Chyba:', err);
     // U Meta necháváme 200 (retry by nepomohl), u generického vrátíme 500.
     if (Array.isArray((req.body || {}).entry)) return res.status(200).send('OK');
+    next(err);
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// Google Ads — Lead Form Extensions webhook
+// Google posílá u každého leadu JSON s `google_key` (sdílené tajemství, které
+// nastavíš v inzerátu / lead formuláři) a polem `user_column_data` s odpověďmi.
+// Mapování formuláře na obchodníka (split) sdílíme se stejnou konfigurací jako
+// FB (compounder.fb_lead_forms) — stačí přidat Google `form_id`.
+// ─────────────────────────────────────────────────────────────────────────
+
+// Mapa Google column_id → naše ploché pole.
+const GOOGLE_COL_MAP = {
+  FULL_NAME: 'full_name', FIRST_NAME: 'first_name', LAST_NAME: 'last_name',
+  EMAIL: 'email', WORK_EMAIL: 'email', USER_EMAIL: 'email',
+  PHONE_NUMBER: 'phone', WORK_PHONE: 'phone', USER_PHONE: 'phone',
+  CITY: 'city', COUNTRY: 'country', REGION: 'country',
+  COMPANY_NAME: 'company', COMPANY: 'company',
+};
+
+// Z Google payloadu poskládá ploché pole (fields) + „raw" pro doplňující otázky.
+function _googleExtractFields(body) {
+  const fields = {};
+  const raw = {};
+  const cols = Array.isArray(body.user_column_data) ? body.user_column_data
+    : (Array.isArray(body.column_data) ? body.column_data : []);
+  for (const c of cols) {
+    if (!c) continue;
+    const id = String(c.column_id || c.columnId || '').trim().toUpperCase();
+    const label = String(c.column_name || c.columnName || c.column_id || '').trim();
+    const val = (c.string_value != null ? c.string_value : c.stringValue);
+    if (val == null || String(val).trim() === '') continue;
+    const key = GOOGLE_COL_MAP[id];
+    if (key) { if (fields[key] == null) fields[key] = String(val).trim(); }
+    else if (label) { raw[label] = String(val).trim(); } // doplňující otázka → intake
+  }
+  return { fields, raw };
+}
+
+// GET /api/compounder/google-webhook — health/ověření dostupnosti (Google GET nepoužívá). VEŘEJNÉ.
+router.get('/google-webhook', (req, res) => {
+  res.status(200).json({ ok: true, service: 'holyos-google-lead-webhook' });
+});
+
+// POST /api/compounder/google-webhook — příjem leadu z Google Ads lead formuláře. VEŘEJNÉ (ověření google_key).
+router.post('/google-webhook', async (req, res, next) => {
+  try {
+    const body = req.body || {};
+    const KEY = process.env.GOOGLE_LEAD_WEBHOOK_KEY || process.env.GOOGLE_LEAD_VERIFY_TOKEN;
+    if (!KEY) return res.status(503).json({ error: 'Webhook není nakonfigurován (chybí GOOGLE_LEAD_WEBHOOK_KEY).' });
+    const provided = body.google_key || body.googleKey || req.headers['x-google-key'] || req.query.key || '';
+    if (provided !== KEY) {
+      console.warn('[google-webhook] Neplatný google_key — odmítnuto');
+      return res.status(401).json({ error: 'Neplatný klíč' });
+    }
+    // Testovací ping z Google („Send test data") — nezakládej lead.
+    if (body.is_test === true || body.isTest === true) {
+      return res.status(200).json({ ok: true, test: true });
+    }
+
+    const forms = await _fbLoadForms();
+    const formById = {}; forms.forEach((f) => { formById[String(f.form_id)] = f; });
+    const formId = body.form_id != null ? String(body.form_id) : (body.formId != null ? String(body.formId) : null);
+    const cfg = formId ? (formById[formId] || null) : null;
+    if (cfg && cfg.active === false) return res.json({ ok: true, skipped: 'form_inactive' });
+
+    const campaignLabel = (cfg && cfg.campaign) || body.campaign_id != null ? (cfg && cfg.campaign ? cfg.campaign : ('Kampaň ' + body.campaign_id)) : null;
+    const effCfg = cfg || {
+      form_id: formId || null,
+      form_name: body.form_name || null,
+      campaign: campaignLabel,
+      role: 'compounder', owner_kind: 'none',
+    };
+    const { fields, raw } = _googleExtractFields(body);
+    const owner = await _fbResolveOwner(cfg || { form_id: formId });
+    const out = await _fbCreateLead(fields, {
+      leadId: body.lead_id || body.leadId || body.id || null,
+      formId, pageId: null, adId: body.creative_id != null ? String(body.creative_id) : null,
+      raw, source: 'google_ads', srcLabel: 'Google reklama', channelName: 'Google reklamy',
+    }, Object.assign({}, effCfg, owner));
+    return res.status(out.created ? 201 : 200).json({ ok: true, lead_id: out.id, created: out.created, skipped: out.skipped || null });
+  } catch (err) {
+    console.error('[google-webhook] Chyba:', err);
     next(err);
   }
 });
