@@ -5623,12 +5623,12 @@
           fld('Způsob výpočtu', '<select id="exr-calc" style="' + st + '">' + opt(EXR_CALC, rec.zpusob_vypoctu) + '</select>') +
           fld('Splatnost provize', '<select id="exr-pay" style="' + st + '">' + opt(EXR_PAY, rec.splatnost) + '</select>') +
           fld('Stav', '<select id="exr-stav" style="' + st + '">' + opt(EXR_STAV, rec.stav) + '</select>') +
-          '<label style="grid-column:1 / -1;display:flex;align-items:center;gap:10px;margin-bottom:12px;cursor:pointer;font-size:14px;"><input type="checkbox" id="exr-ismain"' + (rec.is_main ? ' checked' : '') + ' style="width:18px;height:18px;accent-color:#eab308;"><span>⭐ Hlavní externí obchodník <span style="color:var(--text2);font-size:12px;">(kurátoruje nabídku lokalit pro ostatní externí obchodníky)</span></span></label>' +
+          '<label style="grid-column:1 / -1;display:flex;align-items:center;gap:10px;margin-bottom:12px;cursor:pointer;font-size:14px;"><input type="checkbox" id="exr-ismain"' + (rec.is_main ? ' checked' : '') + ' onchange="exrToggleMainLok(this.checked)" style="width:18px;height:18px;accent-color:#eab308;"><span>⭐ Hlavní externí obchodník <span style="color:var(--text2);font-size:12px;">(odemkne výběr vlastního portfolia lokalit na prodej)</span></span></label>' +
           '<div style="grid-column:1 / -1;font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--text2);margin:6px 0 8px;">🔑 Přihlášení do portálu obchodníka</div>' +
           fld('Přihlašovací jméno', inp('exr-login', rec.login)) +
           fld('Heslo' + (rec.has_password ? ' (nastaveno)' : ''), '<input id="exr-heslo" type="password" value="" autocomplete="new-password" placeholder="' + (rec.has_password ? 'ponech prázdné = beze změny' : 'zadej heslo') + '" style="' + st + '">') +
         '</div>' +
-        fld('VIP lokality navíc (nad společnou nabídkou)', '<input type="text" id="exr-lok-filter" placeholder="Filtrovat…" onkeyup="exrFilterLok()" style="' + st + 'margin-bottom:6px;"><div id="exr-lok-box" style="max-height:200px;overflow:auto;border:1px solid var(--border,#333);border-radius:8px;padding:6px 10px;">' + _exrKioskOptions(rec.lokality) + '</div>') +
+        '<div id="exr-lok-wrap" style="' + (rec.is_main ? '' : 'display:none;') + '">' + fld('📍 Individuální portfolio lokalit na prodej (jen pro hlavního obchodníka)', '<input type="text" id="exr-lok-filter" placeholder="Filtrovat…" onkeyup="exrFilterLok()" style="' + st + 'margin-bottom:6px;"><div id="exr-lok-box" style="max-height:200px;overflow:auto;border:1px solid var(--border,#333);border-radius:8px;padding:6px 10px;">' + _exrKioskOptions(rec.lokality) + '</div>') + '</div>' +
         fld('Poznámky', '<textarea id="exr-pozn" rows="3" style="' + st + 'resize:vertical;">' + _exrEsc(rec.poznamky) + '</textarea>') +
         '<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:8px;">' +
           '<button class="btn" onclick="closeExrForm()">Zrušit</button>' +
@@ -5638,6 +5638,9 @@
       document.body.appendChild(ov);
     }
     function closeExrForm(){ var ov = document.getElementById('exr-form-overlay'); if (ov) ov.remove(); }
+    // Výběr vlastního portfolia lokalit je dostupný jen pro hlavního externího obchodníka.
+    function exrToggleMainLok(on){ var w = document.getElementById('exr-lok-wrap'); if (w) w.style.display = on ? '' : 'none'; }
+    window.exrToggleMainLok = exrToggleMainLok;
     function exrFilterLok(){
       var q = ((document.getElementById('exr-lok-filter')||{}).value||'').trim().toLowerCase();
       document.querySelectorAll('#exr-lok-box label').forEach(function(l){ l.style.display = (!q || l.textContent.toLowerCase().indexOf(q) !== -1) ? '' : 'none'; });
@@ -5645,7 +5648,9 @@
     async function saveExr(id) {
       var jmeno = (document.getElementById('exr-jmeno')||{}).value || '';
       if (!jmeno.trim()) { alert('Jméno / název firmy je povinné.'); return; }
-      var lok = Array.prototype.map.call(document.querySelectorAll('#exr-lok-box .exr-lok:checked'), function(c){ return c.value; });
+      var isMain = !!((document.getElementById('exr-ismain')||{}).checked);
+      // Vlastní portfolio lokalit se ukládá jen u hlavního obchodníka; jinak jede společná nabídka.
+      var lok = isMain ? Array.prototype.map.call(document.querySelectorAll('#exr-lok-box .exr-lok:checked'), function(c){ return c.value; }) : [];
       var sazbaRaw = (document.getElementById('exr-sazba')||{}).value;
       var body = {
         jmeno: jmeno.trim(),
@@ -5660,7 +5665,7 @@
         lokality: lok,
         poznamky: (document.getElementById('exr-pozn')||{}).value || null,
         login: ((document.getElementById('exr-login')||{}).value || '').trim(),
-        is_main: !!((document.getElementById('exr-ismain')||{}).checked),
+        is_main: isMain,
       };
       var _heslo = (document.getElementById('exr-heslo')||{}).value || '';
       if (_heslo) body.password = _heslo;
