@@ -427,8 +427,8 @@
         <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text2);white-space:nowrap;cursor:pointer;" title="Zobrazit jen kontakty z FB reklamy"><input type="checkbox" id="cmp-ads-only" onchange="cmpApplyLeadFilters()"> 📢 Jen z reklamy</label>
         <button class="btn" onclick="loadCompounderLeads()">↻ Obnovit</button>
         <button class="btn" onclick="openFbForms()" title="Napojení FB reklam — kontakty z formulářů se přiřadí obchodníkovi a označí kampaní">📢 FB reklamy</button>
-        <button class="btn" onclick="cmpStartDiscountAll(this)" title="Spustí akční cenu (slevu) od dneška všem leadům, kteří už byli na portálu">🏷️ Akce všem</button>
-        <button class="btn" onclick="cmpDiscountFollowup(this)" title="Hromadně přepnout všechny leady s aktivní slevou na stav Dosledování">🗓️ Ve slevě → Dosledování</button>
+        <button class="btn" style="display:none" onclick="cmpStartDiscountAll(this)" title="Spustí akční cenu (slevu) od dneška všem leadům, kteří už byli na portálu">🏷️ Akce všem</button>
+        <button class="btn" style="display:none" onclick="cmpDiscountFollowup(this)" title="Hromadně přepnout všechny leady s aktivní slevou na stav Dosledování">🗓️ Ve slevě → Dosledování</button>
         <button class="btn" onclick="openAiInstructions()" title="Upravit pokyny AI, která sestavuje denní plán obchodníkům">🧠 AI pokyny</button>
         <button class="btn btn-primary" onclick="openAddLead()">➕ Přidat kontakt</button>
       </div>
