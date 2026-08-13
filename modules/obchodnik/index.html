@@ -1666,7 +1666,8 @@
       if(!confirm('Máš „'+(l.name||'tento kontakt')+'" uložený v telefonu?\n\nOK = volat teď\nZrušit = nejdřív uložit kontakt do telefonu')){ saveContact(id); return; }
     }
     if(typeof markCalled==='function') markCalled(id);
-    window.location.href=tel;
+    if(typeof openLeadFromTask==='function') openLeadFromTask(id); // přepni na kontakt a otevři ho (pro doplnění po hovoru)
+    window.location.href=tel; // spusť hovor
   }
   window.callLeadFromTask=callLeadFromTask;
   function openLeadFromTask(id){
