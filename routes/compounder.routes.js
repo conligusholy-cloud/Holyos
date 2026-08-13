@@ -1496,6 +1496,50 @@ router.get('/my-day', requireAuth, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// GET /api/compounder/sales/stats-history?metric=calls|access|meetings|new&period=day|week|month|year
+// Historický vývoj metriky obchodníka (pro proklik z dlaždice statistik).
+router.get('/sales/stats-history', requireAuth, async (req, res, next) => {
+  try {
+    const u = req.user || {};
+    let personId = salesMyPersonId(req);
+    if (req.query.person_id && salesIsMgr(u)) personId = Number(req.query.person_id);
+    if (!personId) return res.status(400).json({ error: 'Uživatel nemá přiřazenou osobu' });
+    const metric = ['calls', 'access', 'meetings', 'new'].indexOf(String(req.query.metric)) >= 0 ? String(req.query.metric) : 'new';
+    const period = ['day', 'week', 'month', 'year'].indexOf(String(req.query.period)) >= 0 ? String(req.query.period) : 'day';
+    const CZM = ['led', 'úno', 'bře', 'dub', 'kvě', 'čvn', 'čvc', 'srp', 'zář', 'říj', 'lis', 'pro'];
+    const now = new Date();
+    const buckets = [];
+    if (period === 'day') {
+      for (let i = 13; i >= 0; i--) { const s = new Date(now); s.setHours(0, 0, 0, 0); s.setDate(s.getDate() - i); const e = new Date(s); e.setDate(e.getDate() + 1); buckets.push({ start: s, end: e, label: s.getDate() + '.' + (s.getMonth() + 1) + '.' }); }
+    } else if (period === 'week') {
+      for (let i = 11; i >= 0; i--) { const e = new Date(now); e.setHours(0, 0, 0, 0); e.setDate(e.getDate() - i * 7 + 1); const s = new Date(e); s.setDate(s.getDate() - 7); buckets.push({ start: s, end: e, label: s.getDate() + '.' + (s.getMonth() + 1) + '.' }); }
+    } else if (period === 'month') {
+      for (let i = 11; i >= 0; i--) { const s = new Date(now.getFullYear(), now.getMonth() - i, 1); const e = new Date(now.getFullYear(), now.getMonth() - i + 1, 1); buckets.push({ start: s, end: e, label: CZM[s.getMonth()] + ' ' + String(s.getFullYear()).slice(2) }); }
+    } else {
+      for (let i = 4; i >= 0; i--) { const s = new Date(now.getFullYear() - i, 0, 1); const e = new Date(now.getFullYear() - i + 1, 0, 1); buckets.push({ start: s, end: e, label: String(s.getFullYear()) }); }
+    }
+    const rangeStart = buckets[0].start;
+    let times = [];
+    try {
+      if (metric === 'new') {
+        const rows = await prisma.compounderLead.findMany({ where: { owner_person_id: personId, is_test: false, created_at: { gte: rangeStart } }, select: { created_at: true }, take: 50000 });
+        times = rows.map((r) => r.created_at);
+      } else if (metric === 'meetings') {
+        const rows = await prisma.salesEvent.findMany({ where: { organizer_id: personId, event_type: 'meeting', created_at: { gte: rangeStart } }, select: { created_at: true }, take: 50000 });
+        times = rows.map((r) => r.created_at);
+      } else {
+        const action = metric === 'calls' ? 'call' : 'send_access';
+        const rows = await prisma.compounderEvent.findMany({ where: { event: 'sales_action', created_at: { gte: rangeStart }, props: { path: ['person_id'], equals: personId } }, select: { props: true, created_at: true }, take: 100000 });
+        times = rows.filter((r) => r.props && r.props.action === action).map((r) => r.created_at);
+      }
+    } catch (e) { times = []; }
+    const series = buckets.map((b) => ({ label: b.label, value: 0 }));
+    times.forEach((t) => { const ms = new Date(t).getTime(); for (let i = 0; i < buckets.length; i++) { if (ms >= buckets[i].start.getTime() && ms < buckets[i].end.getTime()) { series[i].value += 1; break; } } });
+    const total = series.reduce((a, s) => a + s.value, 0);
+    res.json({ ok: true, metric, period, series, total });
+  } catch (err) { next(err); }
+});
+
 // POST /api/compounder/tasks/:id/done {note}
 router.post('/tasks/:id/done', requireAuth, async (req, res, next) => {
   try {

@@ -1564,6 +1564,40 @@
   function fmtMin(m){ m=Number(m)||0; if(m<60) return m+' min'; var h=Math.floor(m/60), r=m%60; return h+' h'+(r?(' '+r+' min'):''); }
   var WORK_MIN_DAY = 480;
 
+  // ─── Historie statistik (proklik z dlaždice) ─────────────────────────────
+  function openStatHistory(metric){
+    var titles={calls:'📞 Volání',access:'✉️ Přístupy',meetings:'📅 Schůzky',new:'✨ Nové kontakty'};
+    var ex=document.getElementById('stat-hist-ov'); if(ex) ex.remove();
+    var ov=document.createElement('div'); ov.id='stat-hist-ov';
+    ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:60;display:flex;align-items:flex-end;justify-content:center';
+    ov.onclick=function(e){ if(e.target===ov) ov.remove(); };
+    ov.innerHTML='<div style="background:var(--bg,#0b0b0d);border:1px solid var(--line);border-radius:16px 16px 0 0;width:100%;max-width:640px;max-height:85vh;overflow:auto;padding:16px 16px calc(20px + env(safe-area-inset-bottom,0))">'+
+      '<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px"><h2 style="margin:0;font-size:18px">'+(titles[metric]||'')+' — vývoj</h2><button onclick="var o=document.getElementById(&#39;stat-hist-ov&#39;);if(o)o.remove();" style="margin-left:auto;background:none;border:none;color:var(--muted);font-size:22px;cursor:pointer">✕</button></div>'+
+      '<div id="sh-tabs" style="display:flex;gap:6px;margin-bottom:12px"></div>'+
+      '<div id="sh-body"><div class="loading">Načítám…</div></div>'+
+    '</div>';
+    document.body.appendChild(ov);
+    window._shMetric=metric;
+    var tabs=[['day','Den'],['week','Týden'],['month','Měsíc'],['year','Rok']];
+    document.getElementById('sh-tabs').innerHTML=tabs.map(function(t){ return '<button class="btn btn-g" data-p="'+t[0]+'" style="flex:1;padding:7px 6px" onclick="statHistoryLoad(\''+t[0]+'\')">'+t[1]+'</button>'; }).join('');
+    statHistoryLoad('day');
+  }
+  async function statHistoryLoad(period){
+    var metric=window._shMetric; var body=document.getElementById('sh-body'); if(!body) return;
+    try{ document.querySelectorAll('#sh-tabs button').forEach(function(b){ b.className='btn '+(b.getAttribute('data-p')===period?'btn-p':'btn-g'); }); }catch(e){}
+    body.innerHTML='<div class="loading">Načítám…</div>';
+    try{
+      var r=await api('/sales/stats-history?metric='+encodeURIComponent(metric)+'&period='+encodeURIComponent(period));
+      var j=await r.json().catch(function(){return{};});
+      if(!r.ok||!j.series){ body.innerHTML='<div class="empty">Data se nepodařila načíst.</div>'; return; }
+      var max=1; j.series.forEach(function(s){ if(s.value>max) max=s.value; });
+      var bars=j.series.map(function(s){ var h=Math.max(2,Math.round(s.value/max*110)); return '<div style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:3px;min-width:0"><div style="font-size:11px;color:var(--muted2);font-weight:700">'+s.value+'</div><div style="width:66%;background:linear-gradient(180deg,#a78bfa,#7c5cff);border-radius:4px 4px 0 0;height:'+h+'px"></div><div style="font-size:9px;color:var(--muted2);white-space:nowrap;margin-top:4px">'+esc(s.label)+'</div></div>'; }).join('');
+      body.innerHTML='<div style="font-size:13px;color:var(--muted);margin-bottom:10px">Celkem za období: <b style="color:var(--text)">'+j.total+'</b></div>'+
+        '<div style="display:flex;align-items:flex-end;gap:4px;min-height:150px">'+bars+'</div>';
+    }catch(e){ body.innerHTML='<div class="empty">Chyba načítání.</div>'; }
+  }
+  window.openStatHistory=openStatHistory; window.statHistoryLoad=statHistoryLoad;
+
   async function loadToday(gen){
     window._todayLoaded = true;
     var box = document.getElementById('today-tasks');
@@ -1597,8 +1631,8 @@
     if (sEl) {
       var s = (j && j.stats) || {}; var tb = s.time_by || {};
       var fmtm = function(m){ m=Number(m)||0; var h=Math.floor(m/60), mm=m%60; return h?(h+' h '+mm+' min'):(mm+' min'); };
-      var chip = function(ic,lbl,val,col,tmin){ var tt=(tmin!=null)?('<div style="font-size:10.5px;color:'+col+';margin-top:2px;opacity:.85">⏱ '+fmtm(tmin)+'</div>'):''; return '<div style="flex:1;min-width:72px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.10);border-radius:10px;padding:8px 6px;text-align:center"><div style="font-size:20px;font-weight:800;color:'+col+'">'+(val||0)+'</div><div style="font-size:11px;color:var(--muted2);margin-top:1px">'+ic+' '+lbl+'</div>'+tt+'</div>'; };
-      sEl.innerHTML = chip('📞','Volání',s.calls,'#a78bfa',tb.calls) + chip('✉️','Přístupy',s.invites,'#22c55e',tb.access) + chip('📅','Schůzky',s.meetings,'#eab308',tb.meetings) + chip('✨','Nové',s.new_contacts,'#3b82f6',tb.new);
+      var chip = function(ic,lbl,val,col,tmin,metric){ var tt=(tmin!=null)?('<div style="font-size:10.5px;color:'+col+';margin-top:2px;opacity:.85">⏱ '+fmtm(tmin)+'</div>'):''; return '<div onclick="openStatHistory(\''+metric+'\')" title="Zobrazit vývoj (den/týden/měsíc/rok)" style="flex:1;min-width:72px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.10);border-radius:10px;padding:8px 6px;text-align:center;cursor:pointer"><div style="font-size:20px;font-weight:800;color:'+col+'">'+(val||0)+'</div><div style="font-size:11px;color:var(--muted2);margin-top:1px">'+ic+' '+lbl+' 📈</div>'+tt+'</div>'; };
+      sEl.innerHTML = chip('📞','Volání',s.calls,'#a78bfa',tb.calls,'calls') + chip('✉️','Přístupy',s.invites,'#22c55e',tb.access,'access') + chip('📅','Schůzky',s.meetings,'#eab308',tb.meetings,'meetings') + chip('✨','Nové',s.new_contacts,'#3b82f6',tb.new,'new');
       sEl.innerHTML += '<div style="flex-basis:100%;text-align:center;font-size:12.5px;color:var(--muted2);margin-top:4px">⏱ Odpracováno dnes: <span style="color:#a78bfa;font-weight:700">'+fmtm(s.worked_min!=null?s.worked_min:s.time_spent_min)+'</span> / fond '+fmtm(WORK_MIN_DAY)+'</div>';
     }
     var tasks = (plan && plan.tasks) || [];
