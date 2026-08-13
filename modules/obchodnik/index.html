@@ -1659,9 +1659,44 @@
       box('Ztraceno (nelze/zamítnut)',d.lost,'#ef4444')+
       '</div>'+
       '<div style="font-size:11px;color:var(--muted2);margin-top:8px;line-height:1.5">Odhad = kontakty na portále bez uzavření ('+(d.openOnPortal||0)+') × konverze portál→obchod ('+String(d.convRatePortalPct).replace('.',',')+' %). Medián doby na portál: '+(d.medDaysToPortal!=null?(String(d.medDaysToPortal).replace('.',',')+' dní'):'—')+'.</div></div>';
-    b.innerHTML=bars+est;
+    var aiBtn='<button onclick="openMyFunnelAnalysis()" style="width:100%;margin-top:14px;background:linear-gradient(180deg,#a78bfa,#7c5cff);color:#fff;border:none;border-radius:10px;padding:12px;font-size:14px;font-weight:700;cursor:pointer">🧠 AI analýza &amp; predikce</button>';
+    b.innerHTML=bars+est+aiBtn;
   }
   window.openMyFunnel=openMyFunnel; window.renderMyFunnel=renderMyFunnel;
+
+  // Zajistí načtení Chart.js (lazy z CDN).
+  function ensureChartJsOb(cb){ if(window.Chart){ cb(); return; } var s=document.createElement('script'); s.src='https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js'; s.onload=cb; s.onerror=function(){ cb(); }; document.head.appendChild(s); }
+  async function openMyFunnelAnalysis(){
+    var body=document.getElementById('funnel-body'); if(!body) return;
+    body.innerHTML='<div style="padding:22px;text-align:center;color:var(--muted)">🧠 Analyzuji tvoje čísla a počítám predikci…<br><span style="font-size:12px">(chvíli to trvá)</span></div>';
+    try{
+      var r=await api('/my-funnel-analysis',{ method:'POST', headers:{'Content-Type':'application/json'}, body:'{}' });
+      var d=await r.json().catch(function(){return{};});
+      if(!r.ok){ body.innerHTML='<div class="empty">'+esc(d.error||'Analýza selhala.')+'<br><button class="btn btn-p" style="margin-top:10px" onclick="openMyFunnel()">Zpět</button></div>'; return; }
+      renderMyFunnelAnalysis(d);
+    }catch(e){ body.innerHTML='<div class="empty">Analýza selhala (timeout?).<br><button class="btn btn-p" style="margin-top:10px" onclick="openMyFunnel()">Zpět</button></div>'; }
+  }
+  function renderMyFunnelAnalysis(d){
+    var body=document.getElementById('funnel-body'); if(!body) return;
+    var a=d.analysis||{}; var f=d.funnel||{};
+    var sec=function(icon,title,txt){ if(!txt) return ''; return '<div style="margin-bottom:12px"><div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:3px">'+icon+' '+title+'</div><div style="font-size:13px;color:var(--muted);line-height:1.55">'+esc(txt).replace(/\n/g,'<br>')+'</div></div>'; };
+    var actions=(a.actions&&a.actions.length)?'<div style="margin-bottom:6px"><div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:4px">✅ Co udělat</div><ol style="margin:0;padding-left:20px;color:var(--muted);font-size:13px;line-height:1.6">'+a.actions.map(function(x){return '<li>'+esc(x)+'</li>';}).join('')+'</ol></div>':'';
+    var meta='<div style="font-size:11.5px;color:var(--muted2);margin-bottom:10px">Kontakty '+(f.durationDays||0)+' dní'+(f.startDate?(' (od '+f.startDate+')'):'')+' · tempo ~'+(f.avgWeeklyLeads||0)+'/týden · '+f.total+' celkem, '+f.onPortal+' na portále, '+f.converted+' obchodů.</div>';
+    body.innerHTML='<button class="btn btn-g" style="margin-bottom:10px;padding:6px 12px" onclick="openMyFunnel()">← Zpět na trychtýř</button>'+meta+
+      '<div style="background:rgba(255,255,255,.05);border:1px solid var(--line);border-radius:10px;padding:8px;margin-bottom:14px"><canvas id="myf-chart" height="150"></canvas></div>'+
+      sec('📋','Shrnutí',a.summary)+sec('🎯','Kdy první obchod',a.first_deal)+sec('⚡','Jaké tempo držet',a.required_pace)+sec('🔮','Predikce',a.prediction)+actions;
+    ensureChartJsOb(function(){
+      try{ if(!window.Chart) return; var s=d.series||[]; var labels=s.map(function(x){ var p=String(x.week).split('-'); return p[2]+'.'+p[1]+'.'; });
+        var ctx=document.getElementById('myf-chart'); if(!ctx) return;
+        new Chart(ctx,{ type:'line', data:{ labels:labels, datasets:[
+          {label:'Nové',data:s.map(function(x){return x.leads;}),borderColor:'#a78bfa',backgroundColor:'rgba(167,139,250,.15)',tension:.3,fill:true},
+          {label:'Přístupy',data:s.map(function(x){return x.access;}),borderColor:'#22c55e',tension:.3},
+          {label:'Portál',data:s.map(function(x){return x.portal;}),borderColor:'#eab308',tension:.3}
+        ]}, options:{responsive:true,plugins:{legend:{labels:{color:'#9aa',font:{size:10}}}},scales:{x:{ticks:{color:'#9aa',font:{size:9}}},y:{ticks:{color:'#9aa'},beginAtZero:true}}} });
+      }catch(e){}
+    });
+  }
+  window.openMyFunnelAnalysis=openMyFunnelAnalysis; window.renderMyFunnelAnalysis=renderMyFunnelAnalysis;
 
   async function loadToday(gen){
     window._todayLoaded = true;

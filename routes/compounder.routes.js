@@ -3002,6 +3002,78 @@ router.post('/ads-analysis', requireAuth, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// POST /api/compounder/my-funnel-analysis — AI analýza trychtýře přihlášeného obchodníka.
+router.post('/my-funnel-analysis', requireAuth, async (req, res, next) => {
+  try {
+    if (!process.env.ANTHROPIC_API_KEY) return res.status(503).json({ error: 'AI není nakonfigurováno (chybí ANTHROPIC_API_KEY).' });
+    const meId = (req.user && req.user.person) ? req.user.person.id : null;
+    if (!meId) return res.status(400).json({ error: 'Chybí obchodník.' });
+    const leads = await prisma.compounderLead.findMany({
+      where: { owner_person_id: meId, is_test: false },
+      select: { id: true, source: true, status: true, created_at: true, access_last_sent_at: true, access_sent_count: true },
+    });
+    const ids = new Set(leads.map((l) => l.id));
+    const firstPortal = {};
+    if (ids.size) {
+      const pv = await prisma.compounderEvent.findMany({ where: { event: 'portal_view' }, select: { props: true, created_at: true }, take: 300000 }).catch(() => []);
+      pv.forEach((e) => { const lid = (e.props && e.props.lead_id != null) ? Number(e.props.lead_id) : null; if (lid == null || !ids.has(lid)) return; const t = new Date(e.created_at).getTime(); if (!firstPortal[lid] || t < firstPortal[lid]) firstPortal[lid] = t; });
+    }
+    const SENT = ['access_sent', 'schuzka', 'schuzka_online', 'qualified', 'dosledovani', 'converted'];
+    const ENG = ['dosledovani', 'qualified', 'schuzka', 'schuzka_online']; const LOST = ['nelze_pouzit', 'rejected'];
+    const total = leads.length;
+    const accessSent = leads.filter((l) => l.access_last_sent_at != null || (l.access_sent_count || 0) > 0 || SENT.includes(l.status)).length;
+    const onPortal = leads.filter((l) => firstPortal[l.id] != null).length;
+    const engaged = leads.filter((l) => ENG.includes(l.status)).length;
+    const converted = leads.filter((l) => l.status === 'converted').length;
+    const lost = leads.filter((l) => LOST.includes(l.status)).length;
+    const lat = leads.filter((l) => firstPortal[l.id] != null).map((l) => (firstPortal[l.id] - new Date(l.created_at).getTime()) / 86400000).filter((d) => d >= 0);
+    const avgDaysToPortal = lat.length ? Math.round(lat.reduce((a, b) => a + b, 0) / lat.length * 10) / 10 : null;
+    const startTs = leads.reduce((m, l) => Math.min(m, new Date(l.created_at).getTime()), Infinity);
+    const hasStart = isFinite(startTs);
+    const durationDays = hasStart ? Math.round((Date.now() - startTs) / 86400000) : 0;
+    const WEEKS = 16; const now = Date.now();
+    const weekKey = (ts) => { const d = new Date(ts); const day = (d.getUTCDay() + 6) % 7; const mon = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() - day)); return mon.toISOString().slice(0, 10); };
+    const wk = []; const buckets = {};
+    for (let i = WEEKS - 1; i >= 0; i--) { const k = weekKey(now - i * 7 * 86400000); buckets[k] = { week: k, leads: 0, access: 0, portal: 0 }; wk.push(k); }
+    leads.forEach((l) => {
+      const k = weekKey(new Date(l.created_at).getTime()); if (buckets[k]) buckets[k].leads++;
+      if (l.access_last_sent_at) { const ka = weekKey(new Date(l.access_last_sent_at).getTime()); if (buckets[ka]) buckets[ka].access++; }
+      if (firstPortal[l.id]) { const kp = weekKey(firstPortal[l.id]); if (buckets[kp]) buckets[kp].portal++; }
+    });
+    const series = wk.map((k) => buckets[k]);
+    const recent = series.slice(-4);
+    const avgWeeklyLeads = recent.length ? Math.round(recent.reduce((a, b) => a + b.leads, 0) / recent.length * 10) / 10 : 0;
+    const funnel = {
+      total, accessSent, onPortal, engaged, converted, lost, avgDaysToPortal,
+      startDate: hasStart ? new Date(startTs).toISOString().slice(0, 10) : null, durationDays, avgWeeklyLeads,
+      convSentToPortalPct: accessSent ? Math.round(onPortal / accessSent * 1000) / 10 : 0,
+      convPortalToDealPct: onPortal ? Math.round(converted / onPortal * 1000) / 10 : 0,
+    };
+    let pricing = null;
+    try { const cs = (await getSetting(COMPOUNDING_SETTINGS_KEY, { type: 'json', defaultValue: COMPOUNDING_SETTINGS_DEFAULT })) || {}; pricing = { pricelist_eur: cs.pricelist || null, discount: cs.discount || null }; } catch (e) { /* volitelné */ }
+
+    const Anthropic = require('@anthropic-ai/sdk');
+    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    const model = process.env.COMPOUNDER_LOCATION_MODEL || 'claude-sonnet-4-6';
+    const sys = 'Jsi obchodní kouč jednoho obchodníka, který prodává samoobslužné prádlomaty (Compounder) z přiřazených kontaktů. Dostaneš JEHO trychtýř (celkem kontaktů → odeslán přístup do portálu → byli na portále → aktivní zájem → obchod), časové metriky (od kdy má kontakty, tempo za týden), týdenní řadu a ceník strojů. Vyhodnoť konkrétně a povzbudivě, ale realisticky: jak si vede, kde ztrácí nejvíc kontaktů, KDY se dá čekat jeho první obchod (i při 0 obchodech odhadni z počtu na portále a běžné konverze), jaké tempo má držet (kolik kontaktovat, kolik přístupů poslat týdně) a krátkou predikci na 1–3 měsíce. Odpověz POUZE platným JSON bez markdownu: {"summary":"<2-4 věty>","first_deal":"<kdy a proč>","required_pace":"<konkrétní tempo>","prediction":"<1-3 měs výhled>","actions":["<konkrétní krok>","..."]}. Piš česky, přímo obchodníkovi (tykej), konkrétně.';
+    const usr = 'Můj trychtýř + časová osa (JSON):\n' + JSON.stringify(funnel) + '\n\nTýdenní řada (leads/access/portal):\n' + JSON.stringify(series) + (pricing ? ('\n\nCeník strojů (EUR):\n' + JSON.stringify(pricing)) : '');
+    const msg = await client.messages.create({ model, max_tokens: 1200, system: sys, messages: [{ role: 'user', content: usr }] });
+    let text = (msg && msg.content && msg.content[0] && msg.content[0].text) || '';
+    text = text.replace(/^```(json)?/i, '').replace(/```\s*$/, '').trim();
+    let j; try { j = JSON.parse(text); } catch (e) { j = { summary: text.slice(0, 1200), first_deal: '', required_pace: '', prediction: '', actions: [] }; }
+    res.json({
+      ok: true, funnel, series,
+      analysis: {
+        summary: String(j.summary || '').slice(0, 1200),
+        first_deal: String(j.first_deal || '').slice(0, 600),
+        required_pace: String(j.required_pace || '').slice(0, 600),
+        prediction: String(j.prediction || '').slice(0, 800),
+        actions: Array.isArray(j.actions) ? j.actions.slice(0, 8).map((a) => String(a).slice(0, 300)) : [],
+      },
+    });
+  } catch (err) { next(err); }
+});
+
 // ─── SIS API proxy: hodnota lokalit prádlomatů (kiosk-values) ──────────────
 // Modul Compounding (tab v Prodejních objednávkách) potřebuje obraty a hodnoty
 // lokalit z externího SIS API. Klíč DRŽÍME NA SERVERU (X-API-Key) — do frontendu
