@@ -1217,6 +1217,8 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
     var wrap = document.getElementById("templates-wrap");
     var box = document.getElementById("templates-list");
     if(!wrap || !box) return;
+    // Sekce „Vzory smluv" je z portálu odebrána — nikdy nezobrazovat.
+    wrap.style.display = "none"; return;
     var tpls = Array.isArray(window._leadTemplates) ? window._leadTemplates : [];
     if(!tpls.length){ wrap.style.display = "none"; return; }
     wrap.style.display = "";
