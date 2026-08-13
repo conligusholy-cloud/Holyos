@@ -1630,6 +1630,7 @@
     var acts = t.status==='open'
       ? ('<button class="tk-btn tk-done" onclick="markTaskDone('+t.id+')">✓ Hotovo</button>' +
          '<button class="tk-btn tk-skip" onclick="markTaskSkip('+t.id+')">Přeskočit</button>' +
+         (t.lead_id ? '<button class="tk-btn" style="background:rgba(34,197,94,.15);border:1px solid rgba(34,197,94,.5);color:#86efac" onclick="callLeadFromTask('+t.lead_id+')">📞 Volat</button>' : '') +
          (t.lead_id ? '<button class="tk-btn tk-lead" onclick="openLeadFromTask('+t.lead_id+')">Otevřít kontakt</button>' : ''))
       : ('<span style="font-size:12px;color:var(--muted2)">'+(t.status==='done'?'✓ Splněno':'Přeskočeno')+'</span> ' +
          '<button class="tk-btn tk-skip" onclick="reopenTask('+t.id+')">Vrátit</button>');
@@ -1656,6 +1657,18 @@
     loadToday(false);
   }
   async function reopenTask(id){ try{ await api('/tasks/'+id+'/reopen', { method:'POST' }); }catch(e){} loadToday(false); }
+  // Volat přímo z úkolu; u nového kontaktu se nejdřív zeptá na uložení do telefonu.
+  function callLeadFromTask(id){
+    var l=(state.leads||[]).find(function(x){ return x.id===id; });
+    if(!l || !l.phone){ openLeadFromTask(id); return; } // není v paměti / bez telefonu → otevři kontakt
+    var tel='tel:'+String(l.phone).replace(/[^\d+]/g,'');
+    if(l.status==='new'){
+      if(!confirm('Máš „'+(l.name||'tento kontakt')+'" uložený v telefonu?\n\nOK = volat teď\nZrušit = nejdřív uložit kontakt do telefonu')){ saveContact(id); return; }
+    }
+    if(typeof markCalled==='function') markCalled(id);
+    window.location.href=tel;
+  }
+  window.callLeadFromTask=callLeadFromTask;
   function openLeadFromTask(id){
     showScreen('contacts');
     try { state.typeFilter='all'; state.leadStatusFilter=''; state.openId=id; renderChips(); render(); } catch(e){}
