@@ -217,6 +217,34 @@
     } catch(e){ doLogout(); }
   }
 
+  // Volat kontakt; u nového se nejdřív zeptá na uložení do telefonu. Zaznamená vytočení.
+  function extCall(id, ev){
+    var c=_ctById(id); if(!c||!c.phone) return true;
+    if(c.status==='new'){
+      if(ev&&ev.preventDefault) ev.preventDefault();
+      if(!confirm('Máš „'+(c.name||'tento kontakt')+'" uložený v telefonu?\n\nOK = volat teď\nZrušit = nejdřív uložit kontakt do telefonu')){ extSaveContact(id); return false; }
+      extMarkCalled(id);
+      window.location.href='tel:'+(c.phone||'').replace(/[^\d+]/g,'');
+      return false;
+    }
+    extMarkCalled(id);
+    return true;
+  }
+  async function extMarkCalled(id){
+    var c=_ctById(id);
+    try{ var r=await fetch(API+'/external-reps/me/leads/'+id+'/called',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({t:getToken()})}); var j=await r.json().catch(function(){return{};}); if(c) c.last_called_at=(j&&j.last_called_at)||new Date().toISOString(); }
+    catch(e){ if(c) c.last_called_at=new Date().toISOString(); }
+    renderContacts(); var el=document.getElementById('ct-'+id); if(el) el.classList.add('open');
+  }
+  function extSaveContact(id){
+    var c=_ctById(id); if(!c||!c.phone) return;
+    function vesc(s){ return String(s==null?'':s).replace(/([,;\\])/g,'\\$1').replace(/\r?\n/g,'\\n'); }
+    var name=c.name||c.email||'Compounder lead'; var p=String(name).trim().split(/\s+/); var first=p[0]||'', last=p.slice(1).join(' ');
+    var v='BEGIN:VCARD\r\nVERSION:3.0\r\nN:'+vesc(last)+';'+vesc(first)+';;;\r\nFN:'+vesc(name)+'\r\nORG:Compounder\r\nTEL;TYPE=CELL:'+vesc(c.phone)+'\r\n'+(c.email?'EMAIL;TYPE=INTERNET:'+vesc(c.email)+'\r\n':'')+'END:VCARD\r\n';
+    try{ var blob=new Blob([v],{type:'text/vcard;charset=utf-8'}); var a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=(String(name).replace(/[^\w\s-]/g,'').trim()||'kontakt')+'.vcf'; document.body.appendChild(a); a.click(); setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); },1500); }catch(e){ alert('Uložení kontaktu selhalo.'); }
+  }
+  window.extCall=extCall; window.extMarkCalled=extMarkCalled; window.extSaveContact=extSaveContact;
+
   // Hlavní obchodník si skryje/zobrazí lokalitu z nabídky (projeví se i jeho kontaktům).
   async function toggleLoc(code){
     try{
@@ -326,6 +354,9 @@
       var opts=Object.keys(CT_STAT).map(function(k){return '<option value="'+k+'"'+(c.status===k?' selected':'')+'>'+CT_STAT[k]+'</option>';}).join('');
       var telClean=(c.phone||'').replace(/\s/g,'');
       var waNum=(c.phone||'').replace(/[^\d]/g,''); if(waNum.indexOf('00')===0) waNum=waNum.slice(2);
+      var calledToday = c.last_called_at && (new Date(c.last_called_at).toDateString()===new Date().toDateString());
+      var blBadge = c.blacklisted ? ' <span title="POZOR: kontakt je na BLACK LISTU — neoslovovat!" style="color:#ef4444;font-weight:900;cursor:pointer" onclick="event.stopPropagation();alert(&#39;⚠ POZOR: tento kontakt je na BLACK LISTU — neoslovovat!&#39;)">❗</span>' : '';
+      var callBadge = calledToday ? ('<div class="ct-sub" style="color:#a78bfa;font-weight:700">📞 Dnes voláno '+new Date(c.last_called_at).toLocaleTimeString('cs-CZ',{hour:'2-digit',minute:'2-digit'})+'</div>') : '';
       var secs=(c.visible_sections||'').split(',').map(function(x){return x.trim();}).filter(Boolean);
       var tpls=(c.visible_templates||'').split(',').map(function(x){return x.trim();}).filter(Boolean);
       var secBoxes=SECDEFS.map(function(d){ var on=secs.indexOf(d[0])>=0; return '<label class="ck"><input type="checkbox" '+(on?'checked':'')+' onchange="toggleSection('+c.id+',&#39;'+d[0]+'&#39;,this.checked)">'+d[1]+'</label>'; }).join('');
@@ -336,24 +367,26 @@
       var accInfo = accSent ? ('✓ Odesláno '+c.access_sent_count+'× · naposledy '+(c.access_last_sent_at?new Date(c.access_last_sent_at).toLocaleString('cs-CZ'):'')+(opened?' · ✓ zákazník portál otevřel':'')) : (opened ? '✓ Zákazník už portál otevřel' : 'Odkaz zatím neodeslán');
       return '<div class="ct" id="ct-'+c.id+'">'+
         '<div class="ct-top" onclick="toggleContact('+c.id+')">'+
-          '<div style="min-width:0"><div class="ct-name">'+esc(c.name)+'</div>'+
+          '<div style="min-width:0"><div class="ct-name">'+esc(c.name)+blBadge+'</div>'+
             (sub?('<div class="ct-sub">'+esc(sub)+'</div>'):'')+
-            (last?('<div class="ct-sub" style="color:'+(lastGreen?'var(--green)':'var(--muted2)')+'">'+esc(last)+'</div>'):'')+'</div>'+
+            (last?('<div class="ct-sub" style="color:'+(lastGreen?'var(--green)':'var(--muted2)')+'">'+esc(last)+'</div>'):'')+
+            callBadge+'</div>'+
           '<span class="ct-badge" style="color:'+col+';border:1px solid '+col+'55;background:'+col+'22">'+(CT_STAT[c.status]||c.status)+'</span>'+
         '</div>'+
         '<div class="ct-detail">'+
           '<div class="ct-quick">'+
-            (c.phone?'<a href="tel:'+esc(telClean)+'">📞 Volat</a>':'')+
+            (c.phone?'<a href="tel:'+esc(telClean)+'" onclick="return extCall('+c.id+',event)">📞 Volat</a>':'')+
             (waNum?'<a href="https://wa.me/'+waNum+'" target="_blank" rel="noopener">💬 WhatsApp</a>':'')+
             (c.phone?'<a href="sms:'+esc(telClean)+'">📩 SMS</a>':'')+
+            (c.email?'<a href="mailto:'+esc(c.email)+'">✉️ E-mail</a>':'')+
           '</div>'+
+          (c.phone?'<div class="ct-actions" style="margin-top:8px"><button class="btn btn-g" onclick="extSaveContact('+c.id+')">📇 Uložit kontakt do telefonu</button></div>':'')+
           '<div class="lbl">Stav</div><select onchange="setContactStatus('+c.id+',this.value)">'+opts+'</select>'+
           '<div class="lbl">Přístup do portálu</div>'+
           (c.phone?'<button class="btn" style="width:100%;background:#25D366;color:#0a2e17;font-weight:800" onclick="sendAccessWA('+c.id+')">🟢 Poslat přístup na WhatsApp</button>':'<div class="ct-sub">Kontakt nemá telefon — WhatsApp nelze použít.</div>')+
           '<div class="ct-actions" style="margin-top:8px"><button class="btn btn-g" onclick="copyContactLink('+c.id+')">🔗 Kopírovat odkaz</button></div>'+
           '<div class="ct-sub" style="margin-top:6px;color:'+(accGreen?'var(--green)':'var(--muted2)')+'">'+esc(accInfo)+'</div>'+
           '<div class="lbl">Viditelné sekce portálu</div>'+secBoxes+
-          '<div class="lbl">Vzory smluv ke čtení</div>'+tplBoxes+
           '<div class="lbl">Statistiky tržeb pro zákazníka</div>'+
           '<label class="ck"><input type="checkbox" '+(c.show_revenue_stats?'checked':'')+' onchange="toggleRevStats('+c.id+',this.checked)">Zobrazit zákazníkovi statistiky tržeb (sekce Investor)</label>'+
           '<div class="lbl">Nabídka lokalit</div>'+

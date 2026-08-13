@@ -4455,9 +4455,24 @@ router.get('/external-reps/me/leads', async (req, res, next) => {
     if (req.query.search) { const q = String(req.query.search); where.OR = [{ name: { contains: q, mode: 'insensitive' } }, { email: { contains: q, mode: 'insensitive' } }]; }
     const leads = await prisma.compounderLead.findMany({ where, orderBy: { created_at: 'desc' }, take: 500 });
     await enrichWarmth(leads);
+    await _annotateBlacklist(leads).catch(() => {});
     const base = _extPortalBase();
     leads.forEach((l) => { l.portal_url = base + '/portal?t=' + makeLoginToken(l.id); });
     res.json(leads);
+  } catch (err) { next(err); }
+});
+
+// POST /api/compounder/external-reps/me/leads/:id/called — zaznamená vytočení kontaktu.
+router.post('/external-reps/me/leads/:id/called', async (req, res, next) => {
+  try {
+    const repId = verifyExtRepToken(_extRepTokenFrom(req));
+    if (!repId) return res.status(401).json({ error: 'Neplatné přihlášení.' });
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'Neplatné ID' });
+    const lead = await prisma.compounderLead.findFirst({ where: { id, external_rep_id: repId }, select: { id: true } });
+    if (!lead) return res.status(404).json({ error: 'Kontakt nenalezen.' });
+    const upd = await prisma.compounderLead.update({ where: { id }, data: { last_called_at: new Date() }, select: { last_called_at: true } });
+    res.json({ ok: true, last_called_at: upd.last_called_at });
   } catch (err) { next(err); }
 });
 
