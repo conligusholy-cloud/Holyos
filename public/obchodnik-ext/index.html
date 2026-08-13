@@ -217,6 +217,17 @@
     } catch(e){ doLogout(); }
   }
 
+  // Hlavní obchodník si skryje/zobrazí lokalitu z nabídky (projeví se i jeho kontaktům).
+  async function toggleLoc(code){
+    try{
+      var r = await fetch(API + '/external-reps/me/toggle-location', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ t:getToken(), code:code }) });
+      var j = await r.json().catch(function(){ return {}; });
+      if(!r.ok || !j.ok){ alert((j && j.error) || 'Nepodařilo se změnit viditelnost.'); return; }
+      loadPortal();
+    }catch(e){ alert('Chyba: ' + (e.message||'')); }
+  }
+  window.toggleLoc = toggleLoc;
+
   function initials(name){ return (name||'?').trim().split(/\s+/).slice(0,2).map(function(w){ return w.charAt(0).toUpperCase(); }).join('') || '?'; }
 
   function renderPortal(){
@@ -242,10 +253,11 @@
         var resTag = x.reserved ? ' <span style="font-size:10px;color:#ef4444;border:1px solid rgba(239,68,68,.5);border-radius:6px;padding:1px 6px;white-space:nowrap">🔒 Rezervováno' + (x.res_until ? (' do ' + new Date(x.res_until).toLocaleDateString('cs-CZ')) : '') + '</span>' : '';
         var photo = x.photo ? ('<div class="offer-photo" style="cursor:zoom-in" onclick="openPhoto(&#39;' + esc(x.photo) + '&#39;)"><img src="' + esc(x.photo) + '" alt="" onerror="this.parentNode.style.display=&#39;none&#39;"></div>') : '';
         var sub = esc(x.code) + (x.verze ? (' · ' + esc(x.verze)) : '');
-        return '<div class="offer">' + photo +
+        var hidTag = x.hidden ? ' <span style="font-size:10px;color:#eab308;border:1px solid rgba(234,179,8,.5);border-radius:6px;padding:1px 6px;white-space:nowrap">skryto z nabídky</span>' : '';
+        return '<div class="offer" style="' + (x.hidden ? 'opacity:.5;' : '') + '">' + photo +
           '<div class="offer-body">' +
             '<div class="offer-top">' +
-              '<div class="offer-name">' + esc(x.label) + vipTag + resTag + ' <span class="sub">· ' + sub + '</span></div>' +
+              '<div class="offer-name">' + esc(x.label) + vipTag + resTag + hidTag + ' <span class="sub">· ' + sub + '</span></div>' +
               '<div class="offer-price">' + money(x.total) + ' <span class="pd">bez DPH</span></div>' +
             '</div>' +
             '<div class="offer-metrics">' +
@@ -259,6 +271,7 @@
               '<span>Návratnost <b class="blue">' + nav + '</b></span>' +
               '<span style="color:var(--primary)">Provize <b style="color:var(--primary)">' + money(x.commission) + '</b></span>' +
               '<span><button type="button" class="rev-btn" onclick="openRevenue(&#39;' + esc(x.code) + '&#39;)">📊 Tržby</button></span>' +
+              ((DATA && DATA.is_main) ? ('<span><button type="button" class="rev-btn" onclick="toggleLoc(&#39;' + esc(x.code) + '&#39;)">' + (x.hidden ? '👁 Zobrazit' : '🚫 Skrýt z nabídky') + '</button></span>') : '') +
             '</div>' +
           '</div></div>';
       }).join('');

@@ -4209,6 +4209,8 @@ async function _extRepPortalData(rep) {
   const vipList = (Array.isArray(rep.lokality) ? rep.lokality : []).map(String);
   const vipSet = {}; vipList.forEach((c) => { vipSet[c] = true; });
   const codes = isMainRep ? Array.from(new Set(vipList)) : Array.from(new Set(Object.keys(forSaleSet).concat(vipList)));
+  // Lokality, které si obchodník sám skryl z nabídky (klikem na svém portálu).
+  const hiddenSet = new Set((Array.isArray(rep.hidden_locations) ? rep.hidden_locations : []).map((c) => String(c).toUpperCase()));
   const fx = await fxRatesCzk().catch(() => ({ CZK: 1, EUR: 25 }));
   const eur = fx.EUR || 25;
   const months = Number.isFinite(cs.locationMonths) ? cs.locationMonths : 12;
@@ -4257,9 +4259,11 @@ async function _extRepPortalData(rep) {
     const photo = (cfg.photos && cfg.photos.length) ? cfg.photos[0] : null;
     return Object.assign({ code, label: k.label || code, verze: ver ? ver.toUpperCase() : null, total: total != null ? Math.round(total) : null, loc: Math.round(loc || 0), machine, obrat_bez: Math.round(obratBez), servis: Math.round(servis), servis_pct: svc, najem: Math.round(najem), energie: Math.round(energie), energie_pct: en, yearNet: Math.round(yearNet), profit5, buyback, buyback_pct: buybackPct, buyback_years: buybackYears, commission, navratnost, photo, vip: isVip }, resObj);
   });
-  const objem = rows.reduce((a, r) => a + (r.total || 0), 0);
-  const provize = rows.reduce((a, r) => a + (r.commission || 0), 0);
-  const obratSum = rows.reduce((a, r) => a + (r.obrat_bez || 0), 0);
+  rows.forEach((r) => { r.hidden = hiddenSet.has(String(r.code || '').toUpperCase()); });
+  // Skryté lokality se nepočítají do souhrnů (nabídky) — obchodník je z nabídky vyřadil.
+  const objem = rows.reduce((a, r) => a + (r.hidden ? 0 : (r.total || 0)), 0);
+  const provize = rows.reduce((a, r) => a + (r.hidden ? 0 : (r.commission || 0)), 0);
+  const obratSum = rows.reduce((a, r) => a + (r.hidden ? 0 : (r.obrat_bez || 0)), 0);
   // Ceník strojů (bez lokality) — z pricelistu + fotek verzí.
   const _rateM = Number(rep.sazba) || 0;
   const vpMap = (cs.versionPhotos && typeof cs.versionPhotos === 'object') ? cs.versionPhotos : {};
@@ -4272,10 +4276,11 @@ async function _extRepPortalData(rep) {
   }).filter(Boolean);
   return {
     rep: _sanitizeRep(rep),
+    is_main: !!rep.is_main,
     lokality: rows,
     machines: machines,
     currency: 'CZK',
-    kpi: { pocet: codes.length, objem: Math.round(objem), provize: Math.round(provize), obrat: Math.round(obratSum), sazba: rep.sazba, zpusob_vypoctu: rep.zpusob_vypoctu, splatnost: rep.splatnost },
+    kpi: { pocet: rows.filter((r) => !r.hidden).length, objem: Math.round(objem), provize: Math.round(provize), obrat: Math.round(obratSum), sazba: rep.sazba, zpusob_vypoctu: rep.zpusob_vypoctu, splatnost: rep.splatnost },
   };
 }
 
@@ -4296,6 +4301,28 @@ router.get('/external-reps/me', async (req, res, next) => {
       if (selfLeadId) data.self_portal_url = _extPortalBase() + '/portal?t=' + makeLoginToken(selfLeadId, 365 * 24 * 3600 * 1000);
     } catch (e) { /* ukázkový lead je best-effort */ }
     res.json(data);
+  } catch (err) { next(err); }
+});
+
+// POST /api/compounder/external-reps/me/toggle-location {code} — hlavní obchodník si skryje/zobrazí
+// lokalitu ve své nabídce (projeví se jemu i na portálech jeho kontaktů).
+router.post('/external-reps/me/toggle-location', async (req, res, next) => {
+  try {
+    const token = String((req.body && req.body.t) || req.query.t || (req.headers.authorization || '').replace(/^Bearer\s+/i, '') || '');
+    const repId = verifyExtRepToken(token);
+    if (!repId) return res.status(401).json({ error: 'Neplatné nebo vypršelé přihlášení.' });
+    const code = String((req.body && req.body.code) || '').trim().toUpperCase();
+    if (!code) return res.status(400).json({ error: 'Chybí kód lokality' });
+    const arr = await _loadExternalReps();
+    const i = arr.findIndex((r) => Number(r.id) === repId);
+    if (i === -1) return res.status(404).json({ error: 'Obchodník nenalezen.' });
+    if (!arr[i].is_main) return res.status(403).json({ error: 'Skrývat lokality může jen hlavní obchodník.' });
+    let hid = (Array.isArray(arr[i].hidden_locations) ? arr[i].hidden_locations : []).map((c) => String(c).toUpperCase());
+    const idx = hid.indexOf(code);
+    if (idx >= 0) hid.splice(idx, 1); else hid.push(code);
+    arr[i].hidden_locations = hid;
+    await _saveExternalReps(arr, null);
+    res.json({ ok: true, hidden_locations: hid, hidden: idx < 0 });
   } catch (err) { next(err); }
 });
 
@@ -6004,7 +6031,11 @@ async function buildOfferedLocations(leadId, opts) {
       try {
         const _reps = (await getSetting(EXTERNAL_REPS_KEY, { type: 'json', defaultValue: [] })) || [];
         const _rep = _reps.find((r) => Number(r.id) === Number(_lead.external_rep_id));
-        if (_rep && _rep.is_main) repPortfolioSet = new Set((Array.isArray(_rep.lokality) ? _rep.lokality : []).map((c) => String(c).toUpperCase()));
+        if (_rep && _rep.is_main) {
+          repPortfolioSet = new Set((Array.isArray(_rep.lokality) ? _rep.lokality : []).map((c) => String(c).toUpperCase()));
+          // Lokality, které si obchodník skryl, do nabídky kontaktů nepatří.
+          (Array.isArray(_rep.hidden_locations) ? _rep.hidden_locations : []).forEach((c) => repPortfolioSet.delete(String(c).toUpperCase()));
+        }
       } catch (e) { /* fallback na společnou nabídku */ }
     }
     // Efektivní sleva leada (cena zadaná v nastavení je PO slevě → neaktivní sleva = cena PŘED slevou).
