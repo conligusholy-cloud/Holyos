@@ -2074,7 +2074,7 @@ router.get('/leads', requireAuth, async (req, res, next) => {
           const rec = bySid[sid];
           // visit_end se pošle jen jednou (při prvním skrytí tabu), takže podhodnocuje.
           // Bereme delší z: nahlášený čas relace vs. rozsah eventů relace (první–poslední).
-          const ms = Math.max(rec.visitMs || 0, Math.max(0, rec.max - rec.min));
+          const ms = Math.min(90 * 60000, Math.max(rec.visitMs || 0, Math.max(0, rec.max - rec.min)));
           todayMs[lid] = (todayMs[lid] || 0) + ms;
         });
       }
@@ -2751,7 +2751,7 @@ router.get('/analytics/summary', requireAuth, async (req, res, next) => {
     const bySidS = {}; // sid → { min, max, visitMs, portal, leadId } — čas po sessions
     todayEvents.forEach((e) => {
       if (tzDayKeyS(e.created_at) !== todayKeyS) return;
-      const lid = e.props && e.props.lead_id;
+      const lid = (e.props && e.props.lead_id != null) ? Number(e.props.lead_id) : null;
       if (e.event === 'portal_view' && lid != null && !testLeadIds.has(lid)) todayPortalLeads.add(lid);
       if (!e.sid) return;
       const t3 = new Date(e.created_at).getTime();
@@ -2764,7 +2764,8 @@ router.get('/analytics/summary', requireAuth, async (req, res, next) => {
     });
     // Čas studia = součet přes portálové sessions (přesné ms z visit_end/page_leave, jinak rozsah).
     let todayStudyMs = 0;
-    Object.keys(bySidS).forEach((sid) => { const rec = bySidS[sid]; if (!rec.portal) return; if (rec.leadId != null && testLeadIds.has(rec.leadId)) return; todayStudyMs += Math.max(rec.visitMs || 0, Math.max(0, rec.max - rec.min)); });
+    const SESS_CAP_MS = 90 * 60000; // strop na jednu session — nechaná otevřená karta jinak nafoukne rozsah (max−min) na hodiny
+    Object.keys(bySidS).forEach((sid) => { const rec = bySidS[sid]; if (!rec.portal) return; if (rec.leadId != null && testLeadIds.has(rec.leadId)) return; const val = Math.max(rec.visitMs || 0, Math.max(0, rec.max - rec.min)); todayStudyMs += Math.min(SESS_CAP_MS, val); });
     res.json({
       days,
       sessions: sessionCount,
@@ -2801,7 +2802,7 @@ router.get('/study-time-series', requireAuth, async (req, res, next) => {
       const t = new Date(e.created_at).getTime();
       const lid = e.props && e.props.lead_id;
       const rec = bySid[key] || (bySid[key] = { day, min: t, max: t, visitMs: 0, portal: false, leadId: null });
-      if (lid != null && rec.leadId == null) rec.leadId = lid;
+      if (lid != null && rec.leadId == null) rec.leadId = Number(lid);
       if (t < rec.min) rec.min = t;
       if (t > rec.max) rec.max = t;
       if ((e.event === 'visit_end' || e.event === 'page_leave') && e.props && e.props.ms) rec.visitMs = Math.max(rec.visitMs, Number(e.props.ms) || 0);
@@ -2812,7 +2813,7 @@ router.get('/study-time-series', requireAuth, async (req, res, next) => {
       const rec = bySid[k];
       if (!rec.portal) return;
       if (rec.leadId != null && testLeadIds.has(rec.leadId)) return;
-      const ms = Math.max(rec.visitMs || 0, Math.max(0, rec.max - rec.min));
+      const ms = Math.min(90 * 60000, Math.max(rec.visitMs || 0, Math.max(0, rec.max - rec.min)));
       byDay[rec.day] = (byDay[rec.day] || 0) + ms;
     });
     const series = [];
