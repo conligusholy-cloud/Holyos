@@ -86,25 +86,31 @@ router.post('/request-access', async (req, res, next) => {
     // Oprávněn → pošli odkaz do účtu.
     const token = makeCustomerToken(email);
     const link = baseUrl() + '/vybery?t=' + encodeURIComponent(token);
-    const from = process.env.VYBERY_MAIL_FROM || process.env.COMPOUNDER_MAIL_FROM || null;
-    let sent = false;
-    if (from) {
+    const primaryFrom = process.env.VYBERY_MAIL_FROM || process.env.COMPOUNDER_MAIL_FROM || null;
+    const fallbackFrom = process.env.COMPOUNDER_MAIL_FROM || null; // záloha, kdyby vybery@ ještě neprošla policy
+    // Skutečně ověř výsledek odeslání (sendMail nevyhazuje, vrací {sent}).
+    async function trySend(fromAddr) {
+      if (!fromAddr) return false;
       try {
-        await sendMail({
-          to: email, from,
+        const res = await sendMail({
+          to: email, from: fromAddr,
           fromName: process.env.VYBERY_MAIL_FROM_NAME || 'Best Series Výběry',
-          replyTo: from,
+          replyTo: process.env.VYBERY_MAIL_FROM || fromAddr,
           brand: 'vybery',
           subject: 'Přístup k výběrům — Best Series',
           preheader: 'Odkaz k zadání a přehledu vašich výběrů.',
           body: 'Dobrý den,\n\nk zadání a přehledu vašich požadavků na výběr použijte tlačítko níže. Odkaz je platný 30 dní a je určen jen pro vás.\n\nPokud jste o přístup nežádali, e-mail ignorujte.',
           link, linkLabel: 'Otevřít mé výběry',
         });
-        sent = true;
-      } catch (e) { console.error('[vybery] Odeslání e-mailu selhalo:', e.message); }
-    } else {
-      console.warn('[vybery] Chybí VYBERY_MAIL_FROM/COMPOUNDER_MAIL_FROM — e-mail neodeslán. Odkaz:', link);
+        return !!(res && res.sent);
+      } catch (e) { console.error('[vybery] Odeslání selhalo (' + fromAddr + '):', e.message); return false; }
     }
+    let sent = await trySend(primaryFrom);
+    if (!sent && fallbackFrom && fallbackFrom !== primaryFrom) {
+      console.warn('[vybery] Primární odesílatel (' + primaryFrom + ') selhal — zkouším zálohu ' + fallbackFrom);
+      sent = await trySend(fallbackFrom);
+    }
+    if (!sent) console.warn('[vybery] E-mail se nepodařilo odeslat. Odkaz:', link);
     res.json({ ok: true, authorized: true, sent });
   } catch (err) { next(err); }
 });
