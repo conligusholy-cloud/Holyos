@@ -5855,8 +5855,17 @@
     }
     // Náhled portálů obchodníka (bez zakládání účtu) — iframe ve vyskakovacím okně.
     async function _exrPreviewLinks(id){ var r = await fetch('/api/compounder/external-reps/' + id + '/preview-links', { credentials:'include' }); if (!r.ok) throw new Error('links'); return await r.json(); }
-    async function exrPreviewRep(id){ try { var d = await _exrPreviewLinks(id); if (!d.repPortalUrl){ alert('Odkaz se nepodařilo vytvořit.'); return; } exrPreviewShow(d.repPortalUrl, '📱 Portál obchodníka — náhled'); } catch(e){ alert('Náhled se nepodařilo načíst.'); } }
-    async function exrPreviewCompounder(id){ try { var d = await _exrPreviewLinks(id); if (!d.compounderPortalUrl){ alert('Compounder náhled není k dispozici (chybí ukázkový lead obchodníka).'); return; } exrPreviewShow(d.compounderPortalUrl, '🌐 Compounder portál — náhled'); } catch(e){ alert('Náhled se nepodařilo načíst.'); } }
+    // Přepiš doménu odkazu na aktuální origin (iframe kvůli X-Frame-Options musí být same-origin).
+    function _exrSameOrigin(u){ try { var a = new URL(u, location.href); return location.origin + a.pathname + a.search + a.hash; } catch(e){ return u; } }
+    async function exrPreviewRep(id){ try { var d = await _exrPreviewLinks(id); if (!d.repPortalUrl){ alert('Odkaz se nepodařilo vytvořit.'); return; } exrPreviewShow(_exrSameOrigin(d.repPortalUrl), '📱 Portál obchodníka — náhled'); } catch(e){ alert('Náhled se nepodařilo načíst.'); } }
+    async function exrPreviewCompounder(id){
+      var w = window.open('', '_blank'); // otevři okno hned (user gesture), ať to neblokne popup blocker
+      try {
+        var d = await _exrPreviewLinks(id);
+        if (!d.compounderPortalUrl){ if (w) w.close(); alert('Compounder náhled není k dispozici (chybí ukázkový lead obchodníka).'); return; }
+        if (w) w.location = d.compounderPortalUrl; else window.open(d.compounderPortalUrl, '_blank');
+      } catch(e){ if (w) w.close(); alert('Náhled se nepodařilo načíst.'); }
+    }
     function exrPreviewShow(url, title){
       var ov = document.getElementById('exr-preview-ov'); if (ov) ov.remove();
       ov = document.createElement('div'); ov.id = 'exr-preview-ov';
