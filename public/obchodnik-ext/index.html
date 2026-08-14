@@ -185,7 +185,7 @@
 
   function esc(s){ return (s==null?'':String(s)).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
   function money(n){ return (typeof n==='number' && isFinite(n)) ? (Math.round(n).toLocaleString('cs-CZ') + ' Kč') : '—'; }
-  function getToken(){ try { return localStorage.getItem(TKEY) || ''; } catch(e){ return ''; } }
+  function getToken(){ try { var u=new URLSearchParams(location.search).get('t'); if(u) return u; return localStorage.getItem(TKEY) || ''; } catch(e){ return ''; } }
   function setToken(t){ try { if(t) localStorage.setItem(TKEY, t); else localStorage.removeItem(TKEY); } catch(e){} }
 
   async function doLogin(){

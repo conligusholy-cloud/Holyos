@@ -4480,6 +4480,26 @@ router.put('/external-reps/:id', requireAuth, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// GET /api/compounder/external-reps/:id/preview-links — náhledové odkazy (admin):
+// portál obchodníka + jeho Compounder portál (přes ukázkový self-lead). Bez zakládání účtu.
+router.get('/external-reps/:id/preview-links', requireAuth, async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id)) return res.status(400).json({ error: 'Neplatné ID' });
+    const arr = await _loadExternalReps();
+    const i = arr.findIndex((r) => Number(r.id) === id);
+    if (i === -1) return res.status(404).json({ error: 'Obchodník nenalezen' });
+    const rep = arr[i];
+    let selfLeadId = rep.self_lead_id;
+    if (!selfLeadId) { try { selfLeadId = await _ensureRepSelfLead(rep); if (selfLeadId) { arr[i].self_lead_id = selfLeadId; await _saveExternalReps(arr, null); } } catch (e) { /* self-lead volitelný */ } }
+    const appBase = (getAppUrl() || '').replace(/\/$/, '');
+    const repToken = makeExtRepToken(id, 2 * 3600 * 1000);
+    const repPortalUrl = appBase + '/obchodnik-ext/?t=' + encodeURIComponent(repToken);
+    const compounderPortalUrl = selfLeadId ? (`${portalBase()}/portal?t=${makePortalToken(Number(selfLeadId))}`) : null;
+    res.json({ repPortalUrl, compounderPortalUrl });
+  } catch (err) { next(err); }
+});
+
 // DELETE /api/compounder/external-reps/:id — smaž
 router.delete('/external-reps/:id', requireAuth, async (req, res, next) => {
   try {
