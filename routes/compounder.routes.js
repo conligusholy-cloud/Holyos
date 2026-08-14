@@ -4472,8 +4472,7 @@ router.put('/external-reps/:id', requireAuth, async (req, res, next) => {
     const cerr = await _prepRepCredentials(data, arr, id);
     if (cerr) return res.status(cerr.status).json({ error: cerr.error });
     arr[i] = Object.assign({}, arr[i], data, { id });
-    // Hlavní externí obchodník smí být jen jeden — u ostatních příznak shodíme.
-    if (arr[i].is_main) { arr.forEach((r, j) => { if (j !== i) r.is_main = false; }); }
+    // Hlavních externích obchodníků může být víc — každý má vlastní portfolio (samostatná obchodní větev).
     await _saveExternalReps(arr, req.user && req.user.id);
     // Doplň chybějící ukázkový self-lead i u dříve založených obchodníků
     try { if (!arr[i].self_lead_id) arr[i].self_lead_id = await _ensureRepSelfLead(arr[i]); } catch (e) { /* neblokovat uložení */ }
