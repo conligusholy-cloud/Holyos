@@ -256,6 +256,32 @@
     }catch(e){ alert('Chyba: ' + (e.message||'')); }
   }
   window.toggleLoc = toggleLoc;
+  // Detail ekonomiky lokality ve vyskakovacím okně (jinak je karta přehlednější).
+  function showLocDetail(code){
+    var x=(DATA&&DATA.lokality||[]).find(function(l){ return String(l.code)===String(code); }); if(!x) return;
+    var nav=(x.navratnost!=null)?(String(x.navratnost).replace('.',',')+' let'):'—';
+    var rows=[
+      ['Obrat bez DPH', money(x.obrat_bez)+' /měs'],
+      ['Servis', money(x.servis)+' /měs · '+String(x.servis_pct!=null?x.servis_pct:13).replace('.',',')+' % z obratu'],
+      ['Nájem', money(x.najem)+' /měs'],
+      ['Energie', money(x.energie)+' /měs · odhad '+String(x.energie_pct!=null?x.energie_pct:9.5).replace('.',',')+' % z obratu'],
+      ['Celkem 5 let', money(x.profit5)],
+      ['Čistý roční výnos', money(x.yearNet)],
+      ['Garance odkupu', money(x.buyback)+' · '+(x.buyback_pct||50)+' %, '+(x.buyback_years||5)+'. rok'],
+      ['Návratnost', nav],
+      ['Provize', money(x.commission)]
+    ];
+    var ov=document.createElement('div'); ov.id='loc-detail-ov';
+    ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:100;display:flex;align-items:center;justify-content:center;padding:16px';
+    ov.onclick=function(e){ if(e.target===ov) ov.remove(); };
+    ov.innerHTML='<div style="background:var(--surface2,#15171c);border:1px solid var(--line);border-radius:14px;max-width:520px;width:100%;max-height:85vh;overflow:auto;padding:18px">'+
+      '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><h3 style="margin:0;font-size:16px">'+esc(x.label||x.code)+'</h3><button onclick="var o=document.getElementById(&#39;loc-detail-ov&#39;);if(o)o.remove();" style="margin-left:auto;background:none;border:none;color:var(--muted);font-size:22px;cursor:pointer">✕</button></div>'+
+      '<div style="font-size:18px;font-weight:800;color:var(--primary);margin-bottom:10px">'+money(x.total)+' <span style="font-size:11px;color:var(--muted2)">bez DPH</span></div>'+
+      rows.map(function(r){ return '<div style="display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-top:1px solid var(--line)"><span style="color:var(--muted2);font-size:13px">'+r[0]+'</span><span style="font-weight:700;text-align:right;font-size:13px">'+r[1]+'</span></div>'; }).join('')+
+    '</div>';
+    document.body.appendChild(ov);
+  }
+  window.showLocDetail = showLocDetail;
 
   function initials(name){ return (name||'?').trim().split(/\s+/).slice(0,2).map(function(w){ return w.charAt(0).toUpperCase(); }).join('') || '?'; }
 
@@ -304,17 +330,9 @@
               '<div class="offer-name">' + esc(x.label) + vipTag + resTag + hidTag + ' <span class="sub">· ' + sub + '</span></div>' +
               '<div class="offer-price">' + money(x.total) + ' <span class="pd">bez DPH</span></div>' +
             '</div>' +
-            '<div class="offer-metrics">' +
-              '<span>Obrat bez DPH <b class="def">' + money(x.obrat_bez) + '</b>/měs</span>' +
-              '<span>Servis <b style="color:#ef4444">' + money(x.servis) + '</b>/měs <span class="ecs">(' + String(x.servis_pct != null ? x.servis_pct : 13).replace('.', ',') + ' % z obratu)</span></span>' +
-              '<span>Nájem <b style="color:#ef4444">' + money(x.najem) + '</b>/měs</span>' +
-              '<span>Energie <b style="color:#ef4444">' + money(x.energie) + '</b>/měs <span class="ecs">(voda, elektřina, stočné · odhad ' + String(x.energie_pct != null ? x.energie_pct : 9.5).replace('.', ',') + ' % z obratu)</span></span>' +
-              '<span>Celkem 5 let <b class="gold">' + money(x.profit5) + '</b></span>' +
-              '<span>Čistý roční <b class="green">' + money(x.yearNet) + '</b></span>' +
-              '<span>Garance odkupu <b class="def">' + money(x.buyback) + '</b> <span class="ecs">' + (x.buyback_pct || 50) + ' %, ' + (x.buyback_years || 5) + '. rok</span></span>' +
-              '<span>Návratnost <b class="blue">' + nav + '</b></span>' +
-              '<span style="color:var(--primary)">Provize <b style="color:var(--primary)">' + money(x.commission) + '</b></span>' +
-              '<span><button type="button" class="rev-btn" onclick="openRevenue(&#39;' + esc(x.code) + '&#39;)">📊 Tržby</button></span>' +
+            '<div class="offer-metrics" style="margin-top:8px">' +
+              '<span><button type="button" class="rev-btn" onclick="showLocDetail(&#39;' + esc(x.code) + '&#39;)">📊 Detail ekonomiky</button></span>' +
+              '<span><button type="button" class="rev-btn" onclick="openRevenue(&#39;' + esc(x.code) + '&#39;)">📈 Tržby</button></span>' +
               ((DATA && DATA.is_main) ? ('<span><button type="button" class="rev-btn" style="font-size:11px;padding:3px 9px;white-space:nowrap;opacity:.85" title="' + (x.hidden ? 'Zobrazit v nabídce' : 'Skrýt z nabídky') + '" onclick="toggleLoc(&#39;' + esc(x.code) + '&#39;)">' + (x.hidden ? '👁 Zobrazit' : '🚫 Skrýt') + '</button></span>') : '') +
             '</div>' +
           '</div></div>';
