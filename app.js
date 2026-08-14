@@ -741,6 +741,17 @@ app.get('/lokality', (req, res, next) => {
 app.get('/lokality/', serveLokalityHtml);
 app.use('/lokality', lokalityStatic);
 
+// ─── bestseries.cash — root domény přesměruj na /vybery ─────────────────────
+// Na doméně bestseries.cash nemá kořen samostatný obsah; posíláme návštěvníka
+// rovnou na veřejnou stránku Výběry. Ostatní cesty (/hugo, /spare-parts, /share…)
+// běží beze změny. Podmíněno hostem, aby to netrefilo app.holyos.cz.
+const CASH_HOSTS = (process.env.CASH_HOSTS || 'bestseries.cash,www.bestseries.cash')
+  .split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+app.get('/', (req, res, next) => {
+  if (CASH_HOSTS.includes(reqHostname(req))) return res.redirect(302, '/vybery');
+  next();
+});
+
 app.use(express.static(path.join(__dirname, 'public'), staticOpts));
 app.use('/modules', express.static(path.join(__dirname, 'modules'), staticOpts));
 app.use('/css', express.static(path.join(__dirname, 'css'), staticOpts));
