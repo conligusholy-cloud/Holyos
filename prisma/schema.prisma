@@ -6014,3 +6014,20 @@ model CrmLead {
   @@index([owner_name])
   @@map("crm_leads")
 }
+
+// Výběry — požadavky zákazníků na výběr (kontrola/evidence). Veřejná stránka bestseries.cash/vybery.
+model WithdrawalRequest {
+  id                Int      @id @default(autoincrement())
+  email             String
+  amount            Float?
+  withdrawal_number String?
+  note              String?
+  status            String   @default("novy")
+  status_log        Json?
+  created_at        DateTime @default(now())
+  updated_at        DateTime @updatedAt
+
+  @@index([email])
+  @@index([status])
+  @@map("withdrawal_request")
+}

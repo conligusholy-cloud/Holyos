@@ -527,6 +527,20 @@ function serveObchodnikExt(req, res) {
 app.get('/obchodnik-ext', serveObchodnikExt);
 app.get('/obchodnik-ext/', serveObchodnikExt);
 
+// Výběry — veřejná stránka zákazníka (bestseries.cash/vybery) + admin správa.
+function serveVybery(req, res) {
+  res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.sendFile(path.join(__dirname, 'public', 'vybery', 'index.html'));
+}
+app.get('/vybery', serveVybery);
+app.get('/vybery/', serveVybery);
+function serveVyberyAdmin(req, res) {
+  res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.sendFile(path.join(__dirname, 'public', 'vybery-admin', 'index.html'));
+}
+app.get('/vybery-admin', serveVyberyAdmin);
+app.get('/vybery-admin/', serveVyberyAdmin);
+
 // ─── API Routes ────────────────────────────────────────────────────────────
 
 app.use('/api/auth', authRoutes);
@@ -569,6 +583,7 @@ app.use('/api/shop', shopRoutes); // Spare Parts Shop — partner-facing API (be
 app.use('/api/shipping', shippingRoutes); // Doprava — agenda požadavků na dopravu (interní login)
 app.use('/api/compounder', compounderRoutes); // Compounder — veřejný web compounder.world (registrace leadů, analytika, push)
 app.use('/api/lokality', require('./routes/lokality-public.routes')); // Lokality — veřejný web bestseries.global (nabídka místa pro prádlomat)
+app.use('/api/vybery', require('./routes/vybery.routes')); // Výběry — veřejná stránka bestseries.cash/vybery (ověření black list + magic link + admin)
 
 // ─── Legacy storage proxy (kompatibilita s persistent-storage.js) ──────────
 
