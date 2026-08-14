@@ -103,6 +103,43 @@ function renderEmailHtml({ title, body, link, linkLabel = 'Otevřít v HolyOS', 
 </body></html>`;
   }
 
+  // ── Best Series / Výběry brand (bez HolyOS) ───────────────────────────────
+  if (brand === 'vybery' || brand === 'bestseries') {
+    const bodyHtml = body ? escapeHtml(body).replace(/\n/g, '<br>') : '';
+    const bLink = link && link.startsWith('http') ? link : (appUrl ? appUrl.replace(/\/$/, '') + (link || '') : link);
+    return `<!DOCTYPE html>
+<html lang="cs"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width"><meta name="color-scheme" content="dark"><meta name="supported-color-schemes" content="dark"></head>
+<body style="margin:0;padding:0;background:#08080a;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#e9e9ec;">
+  ${preheader ? `<div style="display:none;max-height:0;overflow:hidden;opacity:0;">${escapeHtml(preheader)}</div>` : ''}
+  <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#08080a;padding:32px 0;">
+    <tr><td align="center">
+      <table width="560" cellpadding="0" cellspacing="0" border="0" style="max-width:560px;background:#141418;border:1px solid #26262c;border-radius:18px;overflow:hidden;">
+        <tr><td style="padding:28px 34px 20px;border-bottom:1px solid #222228;">
+          <div style="display:inline-block;width:34px;height:34px;border-radius:9px;background:linear-gradient(135deg,#e6cf92,#c9a24b);color:#241c05;text-align:center;line-height:34px;font-weight:900;font-size:17px;vertical-align:middle;">B</div>
+          <span style="font-size:18px;font-weight:800;letter-spacing:.04em;color:#f4f4f6;margin-left:10px;vertical-align:middle;">BEST SERIES</span>
+          <span style="font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:#c9a24b;margin-left:8px;vertical-align:middle;">Výběry</span>
+        </td></tr>
+        <tr><td style="padding:28px 34px 8px;">
+          <div style="font-size:22px;font-weight:600;color:#f4f4f6;line-height:1.3;">${escapeHtml(title || '')}</div>
+        </td></tr>
+        <tr><td style="padding:14px 34px 4px;">
+          ${bodyHtml ? `<div style="font-size:15px;line-height:1.7;color:#b9b9c0;">${bodyHtml}</div>` : ''}
+          ${bLink ? `
+            <div style="margin:26px 0 8px;">
+              <a href="${escapeHtml(bLink)}" style="display:inline-block;padding:14px 26px;background:#c9a24b;color:#0a0a0c;text-decoration:none;border-radius:10px;font-size:14px;font-weight:700;">${escapeHtml(linkLabel || 'Otevřít')}</a>
+            </div>
+            <div style="font-size:12px;color:#6f6f78;margin-top:14px;word-break:break-all;">${escapeHtml(bLink)}</div>` : ''}
+        </td></tr>
+        <tr><td style="padding:24px 34px 30px;border-top:1px solid #222228;font-size:11.5px;color:#6f6f78;text-align:center;line-height:1.7;">
+          Tento e-mail vám zaslala společnost <b style="color:#8a8a92;">Best Series s.r.o.</b> · IČO 05643724 · Česká republika
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+  ${pixelImg}
+</body></html>`;
+  }
+
   return `<!DOCTYPE html>
 <html lang="cs"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width"></head>
 <body style="margin:0;padding:0;background:#f4f4f7;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;color:#333;">

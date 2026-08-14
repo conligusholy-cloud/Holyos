@@ -92,8 +92,9 @@ router.post('/request-access', async (req, res, next) => {
       try {
         await sendMail({
           to: email, from,
-          fromName: process.env.VYBERY_MAIL_FROM_NAME || 'Best Series — Výběry',
+          fromName: process.env.VYBERY_MAIL_FROM_NAME || 'Best Series Výběry',
           replyTo: from,
+          brand: 'vybery',
           subject: 'Přístup k výběrům — Best Series',
           preheader: 'Odkaz k zadání a přehledu vašich výběrů.',
           body: 'Dobrý den,\n\nk zadání a přehledu vašich požadavků na výběr použijte tlačítko níže. Odkaz je platný 30 dní a je určen jen pro vás.\n\nPokud jste o přístup nežádali, e-mail ignorujte.',
@@ -144,7 +145,7 @@ router.post('/me/request', async (req, res, next) => {
     try {
       const admTo = process.env.VYBERY_NOTIFY_TO; const from = process.env.VYBERY_MAIL_FROM || process.env.COMPOUNDER_MAIL_FROM || null;
       if (admTo && from) {
-        await sendMail({ to: admTo, from, fromName: 'HolyOS — Výběry', subject: 'Nový požadavek na výběr', body: `Nový výběr od ${email}\nČástka: ${amount != null ? amount : '—'}\nČíslo výběru: ${withdrawal_number || '—'}\nPoznámka: ${note || '—'}` });
+        await sendMail({ to: admTo, from, fromName: process.env.VYBERY_MAIL_FROM_NAME || 'Best Series Výběry', brand: 'vybery', subject: 'Nový požadavek na výběr', body: `Nový výběr od ${email}\nČástka: ${amount != null ? amount : '—'}\nČíslo výběru: ${withdrawal_number || '—'}\nPoznámka: ${note || '—'}` });
       }
     } catch (e) { /* notifikace neblokuje */ }
     res.status(201).json({ ok: true, request: created });
