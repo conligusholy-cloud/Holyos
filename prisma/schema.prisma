@@ -5720,6 +5720,7 @@ model LeadMessage {
 // Ukládá se jen e-mail + telefon (normalizované), ne celý osobní záznam.
 model CompounderBlocklist {
   id         Int      @id @default(autoincrement())
+  name       String?  @db.VarChar(160)
   email      String?  @db.VarChar(255)
   phone      String?  @db.VarChar(40)
   note       String?  @db.VarChar(255)

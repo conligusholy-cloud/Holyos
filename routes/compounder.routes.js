@@ -4759,14 +4759,14 @@ router.get('/blocklist', requireAuth, async (req, res, next) => {
     const offset = Math.max(0, Number(req.query.offset) || 0);
     let where = {};
     if (q) {
-      const or = [{ email: { contains: q.toLowerCase() } }];
+      const or = [{ email: { contains: q.toLowerCase() } }, { name: { contains: q, mode: 'insensitive' } }];
       const ph = q.replace(/\D/g, '');
       if (ph) or.push({ phone: { contains: ph } });
       where = { OR: or };
     }
     const [total, items] = await Promise.all([
       prisma.compounderBlocklist.count({ where }),
-      prisma.compounderBlocklist.findMany({ where, orderBy: { id: 'asc' }, skip: offset, take: limit, select: { id: true, email: true, phone: true, note: true } }),
+      prisma.compounderBlocklist.findMany({ where, orderBy: { id: 'asc' }, skip: offset, take: limit, select: { id: true, name: true, email: true, phone: true, note: true } }),
     ]);
     res.json({ total, items });
   } catch (err) { next(err); }
@@ -4776,10 +4776,11 @@ router.get('/blocklist', requireAuth, async (req, res, next) => {
 router.post('/blocklist', requireAuth, async (req, res, next) => {
   try {
     const b = req.body || {};
+    const name = String(b.name || '').trim().slice(0, 160) || null;
     const email = String(b.email || '').trim().toLowerCase() || null;
     const phone = String(b.phone || '').replace(/\D/g, '').slice(-9) || null;
     if (!email && !phone) return res.status(400).json({ error: 'Zadej e-mail nebo telefon.' });
-    const rec = await prisma.compounderBlocklist.create({ data: { email, phone, note: 'ručně' } });
+    const rec = await prisma.compounderBlocklist.create({ data: { name, email, phone, note: 'ručně' } });
     res.status(201).json(rec);
   } catch (err) { next(err); }
 });

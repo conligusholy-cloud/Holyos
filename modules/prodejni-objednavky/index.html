@@ -379,7 +379,7 @@
     <!-- TAB: Black list — do-not-contact seznam -->
     <div id="tab-blacklist" style="display:none; padding:20px 24px 24px;">
       <div class="toolbar" style="margin-bottom:10px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
-        <input type="text" id="bl-search" placeholder="Hledat e-mail / telefon…" onkeyup="if(event.key===&#39;Enter&#39;)blSearch(this.value)" style="flex:1; min-width:220px;">
+        <input type="text" id="bl-search" placeholder="Hledat jméno / e-mail / telefon…" onkeyup="if(event.key===&#39;Enter&#39;)blSearch(this.value)" style="flex:1; min-width:220px;">
         <button class="btn" onclick="blSearch(document.getElementById('bl-search').value)">🔍 Hledat</button>
         <span id="bl-count" style="color:var(--text2);font-size:13px;"></span>
         <button class="btn btn-primary" onclick="addBlacklist()">➕ Přidat</button>
@@ -5900,9 +5900,9 @@
       var it=_blData.items||[]; var total=_blData.total||0;
       var cnt=document.getElementById('bl-count'); if(cnt) cnt.textContent=total.toLocaleString('cs-CZ')+' záznamů';
       if(!it.length){ box.innerHTML='<div style="color:var(--text2);padding:24px;">Žádné záznamy.</div>'; renderBlPager(); return; }
-      var h='<div style="overflow-x:auto;"><table class="data-table kv-compact"><thead><tr><th>#</th><th>E-mail</th><th>Telefon</th><th>Zdroj</th><th></th></tr></thead><tbody>';
+      var h='<div style="overflow-x:auto;"><table class="data-table kv-compact"><thead><tr><th>#</th><th>Jméno</th><th>E-mail</th><th>Telefon</th><th>Zdroj</th><th></th></tr></thead><tbody>';
       it.forEach(function(x,i){
-        h+='<tr><td style="color:var(--text2);">'+(_blOffset+i+1)+'</td><td>'+(x.email?kvEsc(x.email):'—')+'</td><td>'+(x.phone?kvEsc(x.phone):'—')+'</td><td style="color:var(--text2);font-size:12px;">'+kvEsc(x.note||'')+'</td>'+
+        h+='<tr><td style="color:var(--text2);">'+(_blOffset+i+1)+'</td><td>'+(x.name?kvEsc(x.name):'—')+'</td><td>'+(x.email?kvEsc(x.email):'—')+'</td><td>'+(x.phone?kvEsc(x.phone):'—')+'</td><td style="color:var(--text2);font-size:12px;">'+kvEsc(x.note||'')+'</td>'+
           '<td style="text-align:right;"><button class="btn" onclick="delBlacklist('+x.id+')" title="Odebrat" style="padding:3px 9px;font-size:12px;color:#ef4444;">🗑</button></td></tr>';
       });
       h+='</tbody></table></div>'; box.innerHTML=h; renderBlPager();
@@ -5917,10 +5917,11 @@
     function blPage(d){ _blOffset=Math.max(0,_blOffset+d*_blLimit); loadBlacklist(); }
     function blSearch(v){ _blSearch=v||''; _blOffset=0; loadBlacklist(); }
     async function addBlacklist(){
+      var name=prompt('Jméno a příjmení (nepovinné):')||'';
       var email=prompt('E-mail (nech prázdné, když jen telefon):')||'';
       var phone=prompt('Telefon (nech prázdné, když jen e-mail):')||'';
       if(!email && !phone) return;
-      try { var r=await fetch('/api/compounder/blocklist',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:email,phone:phone})}); if(!r.ok){var j=await r.json().catch(function(){return{};});throw new Error(j.error||('HTTP '+r.status));} loadBlacklist(); } catch(e){ alert('Přidání selhalo: '+(e.message||'')); }
+      try { var r=await fetch('/api/compounder/blocklist',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:name,email:email,phone:phone})}); if(!r.ok){var j=await r.json().catch(function(){return{};});throw new Error(j.error||('HTTP '+r.status));} loadBlacklist(); } catch(e){ alert('Přidání selhalo: '+(e.message||'')); }
     }
     async function delBlacklist(id){
       if(!confirm('Odebrat tento kontakt z blocklistu?')) return;
