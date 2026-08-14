@@ -4336,6 +4336,8 @@ const externalRepSchema = z.object({
   login: z.string().trim().max(80).nullable().optional(),
   password: z.string().max(200).optional(),
   is_main: z.boolean().optional(), // hlavní externí obchodník (kurátoruje nabídku ostatním)
+  min_deals: z.number().int().min(0).max(100000).nullable().optional(), // cílové minimum obchodů
+  max_deals: z.number().int().min(0).max(100000).nullable().optional(), // cílové maximum obchodů
 });
 
 async function _loadExternalReps() {
@@ -4596,12 +4598,14 @@ async function _extRepPortalData(rep) {
     const commission = (rep.zpusob_vypoctu === 'fix') ? _rateM : Math.round(priceCzk * _rateM / 100);
     return { ver: v.toUpperCase(), priceCzk, photo: vpMap[v] || null, commission };
   }).filter(Boolean);
+  const dealsCurrent = rows.filter((r) => r.reserved).length; // rozjednané/rezervované = obchody
   return {
     rep: _sanitizeRep(rep),
     is_main: !!rep.is_main,
     lokality: rows,
     machines: machines,
     currency: 'CZK',
+    deals: { min: (rep.min_deals != null ? Number(rep.min_deals) : null), max: (rep.max_deals != null ? Number(rep.max_deals) : null), current: dealsCurrent },
     kpi: { pocet: rows.filter((r) => !r.hidden).length, objem: Math.round(objem), provize: Math.round(provize), obrat: Math.round(obratSum), sazba: rep.sazba, zpusob_vypoctu: rep.zpusob_vypoctu, splatnost: rep.splatnost },
   };
 }

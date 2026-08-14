@@ -5728,6 +5728,8 @@
           fld('Způsob výpočtu', '<select id="exr-calc" style="' + st + '">' + opt(EXR_CALC, rec.zpusob_vypoctu) + '</select>') +
           fld('Splatnost provize', '<select id="exr-pay" style="' + st + '">' + opt(EXR_PAY, rec.splatnost) + '</select>') +
           fld('Stav', '<select id="exr-stav" style="' + st + '">' + opt(EXR_STAV, rec.stav) + '</select>') +
+          fld('Min. počet obchodů (cíl)', inp('exr-mindeals', rec.min_deals, 'number')) +
+          fld('Max. počet obchodů (cíl)', inp('exr-maxdeals', rec.max_deals, 'number')) +
           '<label style="grid-column:1 / -1;display:flex;align-items:center;gap:10px;margin-bottom:12px;cursor:pointer;font-size:14px;"><input type="checkbox" id="exr-ismain"' + (rec.is_main ? ' checked' : '') + ' onchange="exrToggleMainLok(this.checked)" style="width:18px;height:18px;accent-color:#eab308;"><span>⭐ Hlavní externí obchodník <span style="color:var(--text2);font-size:12px;">(odemkne výběr vlastního portfolia lokalit na prodej)</span></span></label>' +
           '<div style="grid-column:1 / -1;font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--text2);margin:6px 0 8px;">🔑 Přihlášení do portálu obchodníka</div>' +
           fld('Přihlašovací jméno', inp('exr-login', rec.login)) +
@@ -5776,6 +5778,8 @@
         poznamky: (document.getElementById('exr-pozn')||{}).value || null,
         login: ((document.getElementById('exr-login')||{}).value || '').trim(),
         is_main: isMain,
+        min_deals: (function(){ var v=(document.getElementById('exr-mindeals')||{}).value; return (v===''||v==null)?null:Math.round(Number(v)); })(),
+        max_deals: (function(){ var v=(document.getElementById('exr-maxdeals')||{}).value; return (v===''||v==null)?null:Math.round(Number(v)); })(),
       };
       var _heslo = (document.getElementById('exr-heslo')||{}).value || '';
       if (_heslo) body.password = _heslo;

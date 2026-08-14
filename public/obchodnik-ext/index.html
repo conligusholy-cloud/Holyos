@@ -145,6 +145,7 @@
         <div class="kpi"><div class="l">Odhad objemu</div><div class="v" id="k-objem">0</div><div class="s">∑ celkových cen · bez DPH</div></div>
         <div class="kpi"><div class="l">Obrat lokalit</div><div class="v" id="k-obrat">0</div><div class="s">∑ měsíční obrat · bez DPH</div></div>
         <div class="kpi gold"><div class="l">Provize celkem</div><div class="v" id="k-provize2">0</div><div class="s">možná z lokalit</div></div>
+        <div class="kpi" id="k-deals-card" style="display:none;grid-column:1 / -1"><div class="l">Obchody</div><div class="v" id="k-deals">0</div><div class="s" id="k-deals-sub">cíl —</div><div id="k-deals-bar" style="height:6px;border-radius:4px;background:rgba(255,255,255,.08);margin-top:8px;overflow:hidden"><div id="k-deals-fill" style="height:100%;width:0;border-radius:4px;background:#eab308;transition:width .3s"></div></div></div>
       </div>
       <div class="sec-title">Přiřazené lokality</div>
       <div id="lok-list"><div class="loading">Načítám…</div></div>
@@ -271,6 +272,21 @@
     document.getElementById('k-objem').textContent = money(kpi.objem);
     var _ko=document.getElementById('k-obrat'); if(_ko) _ko.textContent = money(kpi.obrat)+' /měs';
     var _kp=document.getElementById('k-provize2'); if(_kp) _kp.textContent = money(kpi.provize);
+    (function(){
+      var dl=DATA.deals||{}; var card=document.getElementById('k-deals-card'); if(!card) return;
+      if(dl.min==null && dl.max==null){ card.style.display='none'; return; }
+      card.style.display='';
+      var cur=dl.current||0;
+      var vEl=document.getElementById('k-deals'); if(vEl) vEl.textContent=cur;
+      var range=(dl.min!=null?dl.min:0)+'–'+(dl.max!=null?dl.max:'∞');
+      var sub=document.getElementById('k-deals-sub');
+      if(sub){ var stav=''; if(dl.min!=null && cur<dl.min) stav=' · pod minimem'; else if(dl.max!=null && cur>=dl.max) stav=' · cíl splněn'; sub.textContent='cíl '+range+' obchodů'+stav; }
+      // Barva čísla + progress bar (vůči maximu, jinak vůči minimu).
+      var target=(dl.max!=null?dl.max:(dl.min!=null?dl.min:0));
+      var pct=target>0?Math.min(100,Math.round(cur/target*100)):0;
+      var fill=document.getElementById('k-deals-fill'); if(fill){ fill.style.width=pct+'%'; fill.style.background=(dl.min!=null&&cur<dl.min)?'#f59e0b':((dl.max!=null&&cur>=dl.max)?'#10b981':'#eab308'); }
+      if(vEl){ vEl.style.color=(dl.min!=null&&cur<dl.min)?'#f59e0b':((dl.max!=null&&cur>=dl.max)?'#10b981':''); }
+    })();
     // Seznam lokalit
     var ll = document.getElementById('lok-list');
     if(!lok.length){ ll.innerHTML = '<div class="empty">Zatím nemáte přiřazené žádné lokality.</div>'; }
