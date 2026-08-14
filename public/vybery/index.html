@@ -39,6 +39,10 @@
   .step{font-size:10px;padding:3px 8px;border-radius:6px;background:rgba(255,255,255,.05);color:var(--muted2);border:1px solid transparent}
   .step.done{background:rgba(201,162,75,.14);color:var(--gold2);border-color:rgba(201,162,75,.3)}
   .step.cur{background:var(--gold);color:#241c05;font-weight:800}
+  .spin{display:inline-block;width:15px;height:15px;border:2px solid rgba(201,162,75,.28);border-top-color:var(--gold);border-radius:50%;animation:spin .8s linear infinite;margin-right:9px;flex:none}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .doneic{display:inline-flex;align-items:center;justify-content:center;width:17px;height:17px;border-radius:50%;background:rgba(34,197,94,.2);color:#8ff0b5;font-size:11px;font-weight:900;margin-right:9px;flex:none}
+  .xic{display:inline-flex;align-items:center;justify-content:center;width:17px;height:17px;border-radius:50%;background:rgba(239,68,68,.2);color:#fca5a5;font-size:11px;font-weight:900;margin-right:9px;flex:none}
   .empty{color:var(--muted2);text-align:center;padding:22px;font-size:14px}
   .foot{color:var(--muted2);font-size:11px;text-align:center;margin-top:26px;line-height:1.6}
   a{color:var(--gold2)}
@@ -110,17 +114,14 @@
     var box = document.getElementById('list');
     if(!reqs || !reqs.length){ box.innerHTML='<div class="empty">Zatím žádné požadavky. Zadejte první výše.</div>'; return; }
     box.innerHTML = reqs.map(function(x){
-      var idx = STATUS_ORDER.indexOf(x.status);
-      var steps = STATUS_ORDER.filter(function(s){return s!=='zamitnuto';}).map(function(s,i){
-        var cls = (x.status===s)?'step cur':((idx>=0 && i<idx)?'step done':'step');
-        return '<span class="'+cls+'">'+esc(STATUS_LABELS[s]||s)+'</span>';
-      }).join('');
-      if(x.status==='zamitnuto') steps = '<span class="step cur" style="background:#ef4444;color:#fff">'+esc(STATUS_LABELS['zamitnuto']||'Zamítnuto')+'</span>';
+      var icon = (x.status==='vyplaceno') ? '<span class="doneic">✓</span>'
+               : (x.status==='zamitnuto' ? '<span class="xic">✕</span>'
+               : '<span class="spin" title="Požadavek se zpracovává"></span>');
       return '<div class="req"><div class="top"><div class="amt">'+money(x.amount)+(x.withdrawal_number?(' <span style="color:var(--muted2);font-size:13px;font-weight:600">· '+esc(x.withdrawal_number)+'</span>'):'')+'</div>'+
-        '<span class="pill" style="'+pillColor(x.status)+'">'+esc(STATUS_LABELS[x.status]||x.status)+'</span></div>'+
+        '<span style="display:inline-flex;align-items:center">'+icon+'<span class="pill" style="'+pillColor(x.status)+'">'+esc(STATUS_LABELS[x.status]||x.status)+'</span></span></div>'+
         '<div class="meta">Zadáno '+fmtDate(x.created_at)+' · aktualizováno '+fmtDate(x.updated_at)+'</div>'+
         (x.note?('<div class="note">'+esc(x.note)+'</div>'):'')+
-        '<div class="steps">'+steps+'</div></div>';
+        '</div>';
     }).join('');
   }
 
