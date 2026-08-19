@@ -3488,15 +3488,48 @@
     window.openStudyChart = openStudyChart;
 
     // ─── Reklamní trychtýř (klik na 📊 v hlavičce) ───
+    var _adsPeriod = { from:'', to:'' }; // aktuální filtr období (YYYY-MM-DD)
+    function _fmtDate(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+    function _lastFriday(){ var d=new Date(); var diff=(d.getDay()-5+7)%7; if(diff===0) diff=0; d.setDate(d.getDate()-diff); return d; } // poslední pátek (dnes, když je pátek)
+    function adsQuick(kind){
+      var today=new Date();
+      if(kind==='fri'){ _adsPeriod.from=_fmtDate(_lastFriday()); _adsPeriod.to=_fmtDate(today); }
+      else if(kind==='7'){ var d=new Date(); d.setDate(d.getDate()-6); _adsPeriod.from=_fmtDate(d); _adsPeriod.to=_fmtDate(today); }
+      else if(kind==='30'){ var d=new Date(); d.setDate(d.getDate()-29); _adsPeriod.from=_fmtDate(d); _adsPeriod.to=_fmtDate(today); }
+      else if(kind==='all'){ _adsPeriod.from=''; _adsPeriod.to=''; }
+      openAdsFunnel();
+    }
+    window.adsQuick = adsQuick;
+    function adsSetFrom(v){ _adsPeriod.from=v||''; }
+    function adsSetTo(v){ _adsPeriod.to=v||''; }
+    window.adsSetFrom=adsSetFrom; window.adsSetTo=adsSetTo;
     async function openAdsFunnel(){
+      var qs=''; if(_adsPeriod.from) qs+=(qs?'&':'?')+'from='+_adsPeriod.from; if(_adsPeriod.to) qs+=(qs?'&':'?')+'to='+_adsPeriod.to;
+      var isAll = !_adsPeriod.from && !_adsPeriod.to;
+      var chip = 'background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:5px 10px;font-size:12px;cursor:pointer;';
+      var chipOn = 'background:rgba(59,130,246,.18);border:1px solid rgba(59,130,246,.5);color:#60a5fa;border-radius:7px;padding:5px 10px;font-size:12px;cursor:pointer;font-weight:600;';
+      var inp = 'background:var(--bg);border:1px solid var(--border);border-radius:7px;padding:5px 8px;color:var(--text);font-size:12px;';
+      var filterBar =
+        '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px;padding-bottom:12px;border-bottom:1px dashed var(--border);">' +
+          '<button style="'+(isAll?chip:chipOn)+'" onclick="adsQuick(&#39;fri&#39;)">Od minulého pátku</button>' +
+          '<button style="'+chip+'" onclick="adsQuick(&#39;7&#39;)">7 dní</button>' +
+          '<button style="'+chip+'" onclick="adsQuick(&#39;30&#39;)">30 dní</button>' +
+          '<button style="'+(isAll?chipOn:chip)+'" onclick="adsQuick(&#39;all&#39;)">Vše</button>' +
+          '<span style="color:var(--text2);font-size:12px;margin-left:6px;">Od</span>' +
+          '<input type="date" style="'+inp+'" value="'+_adsPeriod.from+'" onchange="adsSetFrom(this.value)">' +
+          '<span style="color:var(--text2);font-size:12px;">do</span>' +
+          '<input type="date" style="'+inp+'" value="'+_adsPeriod.to+'" onchange="adsSetTo(this.value)">' +
+          '<button class="btn" style="padding:5px 12px;font-size:12px;" onclick="openAdsFunnel()">↻ Použít</button>' +
+        '</div>';
       document.getElementById('modal-root').innerHTML =
         '<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal" style="width:720px;max-width:96vw;">' +
         '<h2>📊 Reklamní trychtýř <span style="font-size:13px;color:var(--text2);font-weight:400;">(FB + Google, bez testovacích)</span></h2>' +
+        filterBar +
         '<div id="ads-funnel-body" style="color:var(--text2);padding:12px 4px;">Načítám…</div>' +
         '<div class="modal-actions" style="margin-top:8px;display:flex;justify-content:flex-end;gap:8px;"><button class="btn" onclick="openAdsAnalysis()" style="background:#7c5cff;color:#fff;border:none;">🧠 AI analýza &amp; predikce</button><button class="btn btn-secondary" onclick="closeModal()">Zavřít</button></div>' +
         '</div></div>';
       try {
-        var r = await fetch('/api/compounder/ads-stats', { credentials:'include' });
+        var r = await fetch('/api/compounder/ads-stats'+qs, { credentials:'include' });
         if (!r.ok) throw new Error('http');
         var d = await r.json();
         renderAdsFunnel(d);

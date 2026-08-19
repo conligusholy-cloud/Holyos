@@ -2832,8 +2832,17 @@ router.get('/study-time-series', requireAuth, async (req, res, next) => {
 router.get('/ads-stats', requireAuth, async (req, res, next) => {
   try {
     const AD = ['facebook_ads', 'google_ads'];
+    // Volitelný filtr období dle data příchodu leada (created_at). from/to = YYYY-MM-DD (včetně).
+    const from = req.query.from ? new Date(String(req.query.from) + 'T00:00:00') : null;
+    const to = req.query.to ? new Date(String(req.query.to) + 'T23:59:59.999') : null;
+    const where = { source: { in: AD } };
+    if ((from && !isNaN(from)) || (to && !isNaN(to))) {
+      where.created_at = {};
+      if (from && !isNaN(from)) where.created_at.gte = from;
+      if (to && !isNaN(to)) where.created_at.lte = to;
+    }
     const leadsAll = await prisma.compounderLead.findMany({
-      where: { source: { in: AD } },
+      where,
       select: { id: true, source: true, status: true, created_at: true, access_last_sent_at: true, access_sent_count: true, is_test: true },
     });
     const leads = leadsAll.filter((l) => !l.is_test);
@@ -2873,6 +2882,7 @@ router.get('/ads-stats', requireAuth, async (req, res, next) => {
       avgDaysToPortal, medDaysToPortal,
       convRatePortalPct: Math.round(convRatePortal * 1000) / 10,
       sentToPortalPct: accessSent ? Math.round(onPortal / accessSent * 1000) / 10 : 0,
+      period: { from: req.query.from || null, to: req.query.to || null },
     });
   } catch (err) { next(err); }
 });
