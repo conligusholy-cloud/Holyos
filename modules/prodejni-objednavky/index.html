@@ -3195,6 +3195,8 @@
       // Jméno/E-mail hledáme na serveru (napříč VŠEMI kontakty, ne jen načtenými).
       function txtSrv(lf,ph){ return '<input type="text" data-lf="'+lf+'" oninput="cmpServerSearch()" placeholder="'+ph+'" style="'+st+'">'; }
       function sel(lf,opts){ return '<select data-lf="'+lf+'" onchange="cmpApplyLeadFilters()" style="'+st+'"><option value="">Vše</option>'+opts+'</select>'; }
+      // Role/Jazyk/Obchodník/Stav filtrujeme na serveru (napříč VŠEMI kontakty).
+      function selSrv(lf,opts){ return '<select data-lf="'+lf+'" onchange="cmpServerSearch()" style="'+st+'"><option value="">Vše</option>'+opts+'</select>'; }
       var roleOpts = '<option value="compounder">Compounder</option><option value="distributor">Distributor</option>';
       var langOpts = Object.keys(CMP_LANGS||{}).map(function(k){ return '<option value="'+k+'">'+k.toUpperCase()+'</option>'; }).join('');
       var ownerOpts = '<option value="none">— nepřiřazeno —</option>' + (CMP_SELLERS||[]).map(function(s){ var nm=((s.first_name||'')+' '+(s.last_name||'')).trim()||('#'+s.id); return '<option value="'+s.id+'">'+cmpEsc(nm)+'</option>'; }).join('');
@@ -3205,12 +3207,12 @@
         + '<th></th><th></th><th></th>'
         + '<th>'+txtSrv('name','jméno…')+'</th>'
         + '<th>'+txtSrv('email','e-mail…')+'</th>'
-        + '<th>'+sel('role',roleOpts)+'</th>'
-        + '<th>'+sel('lang',langOpts)+'</th>'
-        + '<th>'+sel('owner',ownerOpts)+'</th>'
+        + '<th>'+selSrv('role',roleOpts)+'</th>'
+        + '<th>'+selSrv('lang',langOpts)+'</th>'
+        + '<th>'+selSrv('owner',ownerOpts)+'</th>'
         + '<th>'+sel('warm',warmOpts)+'</th>'
         + '<th>'+sel('resv',resvOpts)+'</th>'
-        + '<th>'+sel('stav',stavOpts)+'</th>'
+        + '<th>'+selSrv('stav',stavOpts)+'</th>'
         + '<th>'+txt('note','pozn…')+'</th>'
         + '<th></th></tr>';
     }
@@ -3261,11 +3263,16 @@
       var box = document.getElementById('cmp-leads-table');
       if (!box) return;
       cmpSummary();
-      var st = (document.getElementById('cmp-status-filter')||{}).value || '';
-      var rl = (document.getElementById('cmp-role-filter')||{}).value || '';
+      // Inline filtry ze sloupců (mají přednost před horními výběry).
+      var inl = {};
+      document.querySelectorAll('.cmp-filter-row [data-lf]').forEach(function(el){ inl[el.getAttribute('data-lf')] = (el.value||'').trim(); });
+      var st = inl.stav || (document.getElementById('cmp-status-filter')||{}).value || '';
+      var rl = inl.role || (document.getElementById('cmp-role-filter')||{}).value || '';
+      var lang = inl.lang || '';
+      var owner = inl.owner || '';
       var q = _cmpEffectiveSearch();
       _cmpServerQ = q; // aby klientský filtr nepřekryl serverové shody (email/telefon)
-      var url = '/api/compounder/leads?' + new URLSearchParams({ status: st, role: rl, search: q }).toString();
+      var url = '/api/compounder/leads?' + new URLSearchParams({ status: st, role: rl, lang: lang, owner: owner, search: q }).toString();
       box.innerHTML = '<div style="color:var(--text2);padding:20px;">Načítám…</div>';
       try {
         var r = await fetch(url, { credentials: 'include' });

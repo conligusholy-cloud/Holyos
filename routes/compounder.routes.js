@@ -1991,10 +1991,15 @@ async function annotateDiscount(leads) {
 
 router.get('/leads', requireAuth, async (req, res, next) => {
   try {
-    const { status, role, search } = req.query;
+    const { status, role, search, lang, owner } = req.query;
     const where = {};
     if (status) where.status = String(status);
     if (role) where.role = String(role);
+    if (lang) where.lang = { startsWith: String(lang), mode: 'insensitive' };
+    if (owner) {
+      if (String(owner) === 'none') { where.owner_person_id = null; where.external_rep_id = null; }
+      else if (!isNaN(Number(owner))) where.owner_person_id = Number(owner);
+    }
     if (search) {
       const q = String(search).trim();
       where.OR = [
@@ -2008,9 +2013,9 @@ router.get('/leads', requireAuth, async (req, res, next) => {
     const leads = await prisma.compounderLead.findMany({
       where,
       orderBy: { created_at: 'desc' },
-      // Bez hledání ukazujeme 500 nejnovějších (kvůli dopočtu aktivity). Při hledání
-      // prohledáváme VŠECHNY kontakty a vrátíme až 1000 shod.
-      take: search ? 1000 : 500,
+      // Bez filtru ukazujeme 500 nejnovějších (kvůli dopočtu aktivity). Při hledání
+      // nebo filtru prohledáváme VŠECHNY kontakty a vrátíme až 1000 shod.
+      take: (search || status || role || lang || owner) ? 1000 : 500,
     });
     // Model zákazníka (skládačka portfolia): odvodíme „má model" + čas posledního uložení.
     // Samotný example_model do seznamu neposíláme (detail si ho načítá zvlášť) — šetří payload.
