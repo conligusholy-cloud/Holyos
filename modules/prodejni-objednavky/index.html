@@ -5893,6 +5893,8 @@
         kpi('Sazba provize', sazbaLabel, EXR_CALC[rec.zpusob_vypoctu]||'') +
         kpi('Odhad objemu', kvMoney(objem,'CZK'), '∑ celkových cen') +
         kpi('Provize celkem', kvMoney(provize,'CZK'), EXR_PAY[rec.splatnost]||'') + '</div>';
+      h += '<div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--text2);margin:4px 0 8px;">📊 Výkon obchodníka (z jeho kontaktů)</div>';
+      h += '<div id="exr-lead-stats" style="margin-bottom:20px;"><div style="color:var(--text2);font-size:13px;">Načítám statistiku…</div></div>';
       h += '<div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--text2);margin-bottom:8px;">Přiřazené lokality</div>';
       if (!codes.length) { h += '<div style="color:var(--text2);font-size:13px;margin-bottom:18px;">Žádné lokality. Přiřaď je přes „Upravit".</div>'; }
       else {
@@ -5921,7 +5923,56 @@
       }
       h += '<div style="border:1px dashed rgba(201,162,75,.4);border-radius:10px;padding:14px 16px;color:var(--text2);font-size:13px;">🤖 <b style="color:var(--text);">AI nástroje</b> (cenové tipy, skórování leadů, automatické oslovení) — připraveno pro další iteraci, zatím neaktivní.</div>';
       dv.innerHTML = h;
+      exrLoadLeadStats(rec.id);
     }
+    // Komplexní výkonnostní statistika obchodníka z jeho kontaktů (trychtýř, stavy, volání, konverze).
+    async function exrLoadLeadStats(id){
+      var box = document.getElementById('exr-lead-stats'); if(!box) return;
+      var s;
+      try { var r = await fetch('/api/compounder/external-reps/'+id+'/lead-stats', { credentials:'include' }); if(!r.ok) throw new Error('http'); s = await r.json(); }
+      catch(e){ box.innerHTML = '<div style="color:#ef4444;font-size:13px;">Statistiku se nepodařilo načíst.</div>'; return; }
+      function card(label, val, col, sub){ return '<div style="flex:1;min-width:120px;background:var(--surface,#15171c);border:1px solid var(--border);border-radius:10px;padding:10px 13px;"><div style="font-size:10.5px;text-transform:uppercase;letter-spacing:.4px;color:var(--text2);">'+label+'</div><div style="font-size:20px;font-weight:800;margin-top:3px;color:'+(col||'var(--text)')+';">'+val+'</div>'+(sub?('<div style="font-size:11px;color:var(--text2);margin-top:2px;">'+sub+'</div>'):'')+'</div>'; }
+      // Trychtýř
+      var steps = [
+        { label:'Kontakty', n:s.funnel.total, col:'#60a5fa' },
+        { label:'Odeslán přístup', n:s.funnel.accessSent, col:'#22c55e' },
+        { label:'Byli na portále', n:s.funnel.onPortal, col:'#eab308' },
+        { label:'Aktivní zájem', n:s.funnel.engaged, col:'#f59e0b' },
+        { label:'Rezervace', n:s.funnel.reserved, col:'#a78bfa' },
+        { label:'Obchod', n:s.funnel.converted, col:'#10b981' }
+      ];
+      var tot = s.funnel.total || 0;
+      var funnelHtml = steps.map(function(st,i){
+        var w = tot>0 ? Math.max(2, Math.round((st.n||0)/tot*100)) : 0;
+        var conv = (i>0 && steps[i-1].n>0) ? (' <span style="color:var(--text2);font-size:11px;">→ '+(Math.round((st.n||0)/steps[i-1].n*1000)/10)+' %</span>') : '';
+        return '<div style="margin-bottom:9px;"><div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:2px;"><span style="font-size:12.5px;font-weight:600;">'+st.label+conv+'</span><span style="font-size:13px;font-weight:700;color:'+st.col+';">'+(st.n||0)+'</span></div>'+
+          '<div style="background:var(--surface2);border-radius:7px;overflow:hidden;height:18px;"><div style="width:'+w+'%;height:100%;background:'+st.col+';border-radius:7px;min-width:2px;"></div></div></div>';
+      }).join('');
+      // Stavy — labely z CMP_STATUS (fallback klíč)
+      var statOrder = Object.keys(s.byStatus||{}).sort(function(a,b){ return (s.byStatus[b]||0)-(s.byStatus[a]||0); });
+      var statLabel = function(k){ return (typeof CMP_STATUS!=='undefined' && CMP_STATUS[k]) ? CMP_STATUS[k] : k; };
+      var statChips = statOrder.map(function(k){ return '<span style="display:inline-block;background:var(--surface2);border:1px solid var(--border);border-radius:20px;padding:4px 11px;font-size:12px;margin:0 6px 6px 0;">'+_exrEsc(statLabel(k))+' <b style="color:var(--text);">'+s.byStatus[k]+'</b></span>'; }).join('');
+      box.innerHTML =
+        '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;">'+
+          card('Kontakty', s.total, '#60a5fa', 'celkem přiřazeno')+
+          card('Volané', s.called, '#a78bfa', 'dnes '+s.calledToday)+
+          card('Na portále', s.onPortal, '#eab308', 'z '+s.accessSent+' odeslaných')+
+          card('Rezervace', s.reserved, '#a78bfa')+
+          card('Obchody', s.converted, '#10b981', 'konverze '+String(s.convRatePct).replace('.',',')+' %')+
+          card('Ztraceno', s.lost, '#ef4444', 'nelze/zamítnuto')+
+        '</div>'+
+        '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;">'+
+          card('Nové dnes', s.newToday, '#60a5fa')+
+          card('Nové 7 dní', s.new7, '#60a5fa')+
+          card('Nové 30 dní', s.new30, '#60a5fa')+
+          card('Volané 7 dní', s.calledToday7, '#a78bfa')+
+          card('Volané 30 dní', s.calledToday30, '#a78bfa')+
+          card('Ø kontakt→portál', (s.avgDaysToPortal!=null?String(s.avgDaysToPortal).replace('.',',')+' dní':'—'), '#eab308')+
+        '</div>'+
+        '<div style="background:var(--surface,#15171c);border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:14px;"><div style="font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--text2);margin-bottom:10px;">Obchodní trychtýř</div>'+funnelHtml+'</div>'+
+        (statChips ? ('<div><div style="font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--text2);margin-bottom:8px;">Kontakty podle stavu</div>'+statChips+'</div>') : '');
+    }
+    window.exrLoadLeadStats = exrLoadLeadStats;
     // Náhled portálů obchodníka (bez zakládání účtu) — iframe ve vyskakovacím okně.
     async function _exrPreviewLinks(id){ var r = await fetch('/api/compounder/external-reps/' + id + '/preview-links', { credentials:'include' }); if (!r.ok) throw new Error('links'); return await r.json(); }
     // Přepiš doménu odkazu na aktuální origin (iframe kvůli X-Frame-Options musí být same-origin).

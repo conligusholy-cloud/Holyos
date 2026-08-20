@@ -4520,6 +4520,81 @@ router.get('/external-reps/:id/preview-links', requireAuth, async (req, res, nex
   } catch (err) { next(err); }
 });
 
+// GET /api/compounder/external-reps/:id/lead-stats — komplexní výkonnostní statistika
+// obchodníka z jeho leadů (admin). Trychtýř, stavy, volání, přístupy, portál, rezervace, konverze.
+router.get('/external-reps/:id/lead-stats', requireAuth, async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id)) return res.status(400).json({ error: 'Neplatné ID' });
+    const arr = await _loadExternalReps();
+    const rep = arr.find((r) => Number(r.id) === id);
+    const selfLeadId = rep && rep.self_lead_id ? Number(rep.self_lead_id) : null;
+    let leads = await prisma.compounderLead.findMany({
+      where: { external_rep_id: id },
+      select: { id: true, status: true, created_at: true, last_called_at: true, access_last_sent_at: true, access_sent_count: true, is_test: true },
+    });
+    // Vynecháme ukázkový self-lead a testovací kontakty.
+    leads = leads.filter((l) => !l.is_test && (selfLeadId == null || l.id !== selfLeadId));
+    const ids = new Set(leads.map((l) => l.id));
+    // První návštěva portálu na leada (portal_view eventy).
+    const firstPortal = {};
+    if (ids.size) {
+      const pv = await prisma.compounderEvent.findMany({ where: { event: 'portal_view' }, select: { props: true, created_at: true }, take: 300000 }).catch(() => []);
+      pv.forEach((e) => {
+        const lid = (e.props && e.props.lead_id != null) ? Number(e.props.lead_id) : null;
+        if (lid == null || !ids.has(lid)) return;
+        const t = new Date(e.created_at).getTime();
+        if (!firstPortal[lid] || t < firstPortal[lid]) firstPortal[lid] = t;
+      });
+    }
+    // Rezervace jeho leadů.
+    let reservedIds = new Set();
+    try {
+      const resvs = await prisma.locationReservation.findMany({ where: { lead_id: { in: Array.from(ids) }, status: { in: ['reserved', 'active'] } }, select: { lead_id: true } });
+      resvs.forEach((r) => reservedIds.add(Number(r.lead_id)));
+    } catch (e) { /* rezervace volitelné */ }
+
+    const SENT_STATUSES = ['access_sent', 'schuzka', 'schuzka_online', 'qualified', 'dosledovani', 'converted'];
+    const ENGAGED = ['dosledovani', 'qualified', 'schuzka', 'schuzka_online'];
+    const LOST = ['nelze_pouzit', 'rejected'];
+    const isToday = (d) => d && new Date(d).toDateString() === new Date().toDateString();
+    const startOf = (days) => { const t = new Date(); t.setHours(0, 0, 0, 0); t.setDate(t.getDate() - days); return t.getTime(); };
+    const day0 = startOf(0), day7 = startOf(6), day30 = startOf(29);
+
+    const byStatus = {};
+    leads.forEach((l) => { const s = l.status || 'new'; byStatus[s] = (byStatus[s] || 0) + 1; });
+
+    const total = leads.length;
+    const called = leads.filter((l) => l.last_called_at).length;
+    const calledToday = leads.filter((l) => isToday(l.last_called_at)).length;
+    const accessSent = leads.filter((l) => l.access_last_sent_at != null || (l.access_sent_count || 0) > 0 || SENT_STATUSES.includes(l.status)).length;
+    const onPortal = leads.filter((l) => firstPortal[l.id] != null).length;
+    const engaged = leads.filter((l) => ENGAGED.includes(l.status)).length;
+    const reserved = leads.filter((l) => reservedIds.has(l.id)).length;
+    const converted = leads.filter((l) => l.status === 'converted').length;
+    const lost = leads.filter((l) => LOST.includes(l.status)).length;
+
+    // Přírůstky za období (dle data vytvoření leada).
+    const createdInRange = (from) => leads.filter((l) => new Date(l.created_at).getTime() >= from).length;
+    const calledInRange = (from) => leads.filter((l) => l.last_called_at && new Date(l.last_called_at).getTime() >= from).length;
+
+    // Latence vytvoření → první návštěva portálu.
+    const lat = leads.filter((l) => firstPortal[l.id] != null).map((l) => (firstPortal[l.id] - new Date(l.created_at).getTime()) / 86400000).filter((d) => d >= 0).sort((a, b) => a - b);
+    const avgDaysToPortal = lat.length ? Math.round((lat.reduce((a, b) => a + b, 0) / lat.length) * 10) / 10 : null;
+
+    res.json({
+      total, byStatus,
+      called, calledToday, accessSent, onPortal, engaged, reserved, converted, lost,
+      convRatePct: total ? Math.round(converted / total * 1000) / 10 : 0,
+      portalRatePct: accessSent ? Math.round(onPortal / accessSent * 1000) / 10 : 0,
+      avgDaysToPortal,
+      funnel: { total, accessSent, onPortal, engaged, reserved, converted },
+      newToday: createdInRange(day0), new7: createdInRange(day7), new30: createdInRange(day30),
+      calledToday7: calledInRange(day7), calledToday30: calledInRange(day30),
+    });
+  } catch (err) { next(err); }
+});
+
 // DELETE /api/compounder/external-reps/:id — smaž
 router.delete('/external-reps/:id', requireAuth, async (req, res, next) => {
   try {
