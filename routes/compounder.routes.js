@@ -1996,16 +1996,21 @@ router.get('/leads', requireAuth, async (req, res, next) => {
     if (status) where.status = String(status);
     if (role) where.role = String(role);
     if (search) {
-      const q = String(search);
+      const q = String(search).trim();
       where.OR = [
         { name: { contains: q, mode: 'insensitive' } },
         { email: { contains: q, mode: 'insensitive' } },
       ];
+      // Telefon hledáme podle číslic (ignorujeme mezery/+/závorky), aby šel najít i podle čísla.
+      const digits = q.replace(/\D/g, '');
+      if (digits.length >= 3) where.OR.push({ phone: { contains: digits } });
     }
     const leads = await prisma.compounderLead.findMany({
       where,
       orderBy: { created_at: 'desc' },
-      take: 500,
+      // Bez hledání ukazujeme 500 nejnovějších (kvůli dopočtu aktivity). Při hledání
+      // prohledáváme VŠECHNY kontakty a vrátíme až 1000 shod.
+      take: search ? 1000 : 500,
     });
     // Model zákazníka (skládačka portfolia): odvodíme „má model" + čas posledního uložení.
     // Samotný example_model do seznamu neposíláme (detail si ho načítá zvlášť) — šetří payload.

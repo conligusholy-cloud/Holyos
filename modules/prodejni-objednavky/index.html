@@ -3192,6 +3192,8 @@
     function cmpFilterRowHtml(){
       var st = 'width:100%;box-sizing:border-box;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:3px 6px;font-size:11px;';
       function txt(lf,ph){ return '<input type="text" data-lf="'+lf+'" oninput="cmpApplyLeadFilters()" placeholder="'+ph+'" style="'+st+'">'; }
+      // Jméno/E-mail hledáme na serveru (napříč VŠEMI kontakty, ne jen načtenými).
+      function txtSrv(lf,ph){ return '<input type="text" data-lf="'+lf+'" oninput="cmpServerSearch()" placeholder="'+ph+'" style="'+st+'">'; }
       function sel(lf,opts){ return '<select data-lf="'+lf+'" onchange="cmpApplyLeadFilters()" style="'+st+'"><option value="">Vše</option>'+opts+'</select>'; }
       var roleOpts = '<option value="compounder">Compounder</option><option value="distributor">Distributor</option>';
       var langOpts = Object.keys(CMP_LANGS||{}).map(function(k){ return '<option value="'+k+'">'+k.toUpperCase()+'</option>'; }).join('');
@@ -3201,8 +3203,8 @@
       var stavOpts = Object.keys(CMP_STATUS||{}).map(function(k){ return '<option value="'+k+'">'+CMP_STATUS[k]+'</option>'; }).join('');
       return '<tr class="cmp-filter-row">'
         + '<th></th><th></th><th></th>'
-        + '<th>'+txt('name','jméno…')+'</th>'
-        + '<th>'+txt('email','e-mail…')+'</th>'
+        + '<th>'+txtSrv('name','jméno…')+'</th>'
+        + '<th>'+txtSrv('email','e-mail…')+'</th>'
         + '<th>'+sel('role',roleOpts)+'</th>'
         + '<th>'+sel('lang',langOpts)+'</th>'
         + '<th>'+sel('owner',ownerOpts)+'</th>'
@@ -3212,16 +3214,20 @@
         + '<th>'+txt('note','pozn…')+'</th>'
         + '<th></th></tr>';
     }
+    var _cmpServerQ = ''; // aktuální serverový dotaz (jméno/e-mail/telefon)
     function cmpApplyLeadFilters(){
       var f = {};
       document.querySelectorAll('.cmp-filter-row [data-lf]').forEach(function(el){ f[el.getAttribute('data-lf')] = (el.value||'').trim().toLowerCase(); });
+      // Když běží serverové hledání podle jména/e-mailu, klientsky už podle nich nefiltrujeme
+      // (jinak by se skryly shody jen podle e-mailu/telefonu vrácené serverem).
+      var srv = !!_cmpServerQ;
       var adsOnly = !!(document.getElementById('cmp-ads-only')||{}).checked;
       var rows = document.querySelectorAll('#cmp-leads-table tr[data-lead]');
       rows.forEach(function(r){
         var ok = true; function a(n){ return (r.getAttribute(n)||''); }
         if(adsOnly && a('data-source')!=='facebook_ads' && a('data-source')!=='google_ads') ok=false;
-        if(ok && f.name && a('data-name').indexOf(f.name)===-1) ok=false;
-        if(ok && f.email && a('data-email').indexOf(f.email)===-1) ok=false;
+        if(ok && !srv && f.name && a('data-name').indexOf(f.name)===-1) ok=false;
+        if(ok && !srv && f.email && a('data-email').indexOf(f.email)===-1) ok=false;
         if(ok && f.note && a('data-note').indexOf(f.note)===-1) ok=false;
         if(ok && f.role && a('data-role')!==f.role) ok=false;
         if(ok && f.lang && a('data-lang')!==f.lang) ok=false;
@@ -3234,13 +3240,31 @@
       });
     }
     window.cmpApplyLeadFilters = cmpApplyLeadFilters;
+    // Debouncovaná změna hledání z inline polí Jméno/E-mail → server (přes všechny kontakty).
+    var _cmpSrvTimer = null;
+    function cmpServerSearch(){
+      if (_cmpSrvTimer) clearTimeout(_cmpSrvTimer);
+      _cmpSrvTimer = setTimeout(function(){ loadCompounderLeads(); }, 350);
+    }
+    window.cmpServerSearch = cmpServerSearch;
+    // Efektivní serverový dotaz = horní pole „Hledat" nebo inline Jméno/E-mail (první neprázdné).
+    function _cmpEffectiveSearch(){
+      var top = ((document.getElementById('cmp-search')||{}).value || '').trim();
+      var nm = '', em = '';
+      document.querySelectorAll('.cmp-filter-row [data-lf]').forEach(function(el){
+        var lf = el.getAttribute('data-lf'); var v = (el.value||'').trim();
+        if (lf==='name') nm = v; else if (lf==='email') em = v;
+      });
+      return top || nm || em;
+    }
     async function loadCompounderLeads() {
       var box = document.getElementById('cmp-leads-table');
       if (!box) return;
       cmpSummary();
       var st = (document.getElementById('cmp-status-filter')||{}).value || '';
       var rl = (document.getElementById('cmp-role-filter')||{}).value || '';
-      var q = (document.getElementById('cmp-search')||{}).value || '';
+      var q = _cmpEffectiveSearch();
+      _cmpServerQ = q; // aby klientský filtr nepřekryl serverové shody (email/telefon)
       var url = '/api/compounder/leads?' + new URLSearchParams({ status: st, role: rl, search: q }).toString();
       box.innerHTML = '<div style="color:var(--text2);padding:20px;">Načítám…</div>';
       try {
@@ -3334,6 +3358,9 @@
       // Hodnoty filtrů si zapamatujeme, ať je překreslení tabulky nesmaže.
       var fvals = {};
       document.querySelectorAll('.cmp-filter-row [data-lf]').forEach(function(el) { fvals[el.getAttribute('data-lf')] = el.value || ''; });
+      // Zapamatujeme si i to, které pole má fokus (ať se dá plynule psát i přes reload).
+      var _focusLf = null; var _ae = document.activeElement;
+      if (_ae && _ae.getAttribute && _ae.closest && _ae.closest('.cmp-filter-row')) _focusLf = _ae.getAttribute('data-lf');
       function cmpTh(key, label) {
         var arrow = _cmpSort.key === key ? (_cmpSort.dir < 0 ? ' ▼' : ' ▲') : '';
         return '<th style="cursor:pointer;white-space:nowrap;" title="Kliknutím seřadíš" onclick="cmpSortBy(\'' + key + '\')">' + label + arrow + '</th>';
@@ -3416,6 +3443,8 @@
       box.innerHTML = h;
       // Obnovíme hodnoty filtrů a znovu je aplikujeme.
       document.querySelectorAll('.cmp-filter-row [data-lf]').forEach(function(el) { var k = el.getAttribute('data-lf'); if (fvals[k]) el.value = fvals[k]; });
+      // Vrátíme fokus do pole, kde uživatel psal (kurzor na konec).
+      if (_focusLf) { var fe = document.querySelector('.cmp-filter-row [data-lf="' + _focusLf + '"]'); if (fe) { fe.focus(); try { var n = fe.value.length; fe.setSelectionRange(n, n); } catch(e){} } }
       cmpApplyLeadFilters();
     }
     window.renderCompounderLeads = renderCompounderLeads;
