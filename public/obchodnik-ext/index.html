@@ -457,17 +457,23 @@
   window.setContactNoPrice=setContactNoPrice;
   // VIP nabídka lokalit — jen pro hlavního obchodníka; vybírá z jeho portfolia (DATA.lokality).
   function vipOfferHtml(c){
-    var lok = (DATA && DATA.lokality) || [];
-    if (!lok.length) return '';
+    // VIP nabídka jen DOPLŇUJE defaultní nabídku (kterou vidí všichni zákazníci).
+    // Nabízíme proto jen lokality, které hlavní obchodník SKRYL z běžné nabídky (x.hidden) —
+    // ty ostatní jsou už zobrazené každému a nemá smysl je zaškrtávat.
+    var lok = ((DATA && DATA.lokality) || []).filter(function(x){ return x.hidden; });
     var sel = String(c.extra_offers||'').split(',').map(function(s){return s.trim().toUpperCase();}).filter(Boolean);
     var selSet = {}; sel.forEach(function(x){ selSet[x]=true; });
+    if (!lok.length) {
+      return '<div class="lbl">🎯 VIP nabídka lokalit</div>'+
+        '<div class="ct-sub">Nemáš žádné skryté lokality. VIP nabídka doplňuje defaultní nabídku o lokality, které máš skryté — skryj lokalitu v záložce „Na prodej" a pak ji tu můžeš nabídnout individuálně.</div>';
+    }
     var boxes = lok.map(function(x){
       var on = !!selSet[String(x.code).toUpperCase()];
       return '<label class="ck"><input type="checkbox" data-vip="'+c.id+'" value="'+esc(x.code)+'" '+(on?'checked':'')+'>'+esc(x.label||x.code)+(x.total!=null?(' <span style="color:var(--muted2);font-size:11px">· '+money(x.total)+'</span>'):'')+'</label>';
     }).join('');
     var cnt = sel.length;
     return '<div class="lbl">🎯 VIP nabídka lokalit '+(cnt?('<span style="color:var(--primary)">('+cnt+' vybráno)</span>'):'')+'</div>'+
-      '<div class="ct-sub" style="margin-bottom:6px">Vyber lokality ze svého portfolia, které chceš tomuto kontaktu nabídnout individuálně.</div>'+
+      '<div class="ct-sub" style="margin-bottom:6px">Vyber ze svých skrytých lokalit ty, které chceš tomuto kontaktu nabídnout individuálně (nad rámec defaultní nabídky).</div>'+
       boxes+
       '<div class="ct-actions" style="margin-top:8px"><button class="btn btn-p" style="width:100%" onclick="saveVipOffer('+c.id+')">💾 Uložit VIP nabídku</button></div>';
   }
