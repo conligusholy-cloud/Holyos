@@ -430,6 +430,7 @@
           '<label class="ck"><input type="checkbox" '+(c.show_revenue_stats?'checked':'')+' onchange="toggleRevStats('+c.id+',this.checked)">Zobrazit zákazníkovi statistiky tržeb (sekce Investor)</label>'+
           '<div class="lbl">Nabídka lokalit</div>'+
           '<button class="btn btn-g" style="width:100%" onclick="showOffer('+c.id+')">👁️ Zobrazit nabídku, co lead vidí</button>'+
+          ((DATA && DATA.is_main) ? vipOfferHtml(c) : '')+
           '<div class="lbl">Zaznamenat aktivitu</div>'+
           '<div style="display:flex;gap:8px"><input id="act-'+c.id+'" placeholder="Zavolal jsem, má zájem…" style="flex:1"><button class="btn btn-p" style="width:auto" onclick="addContactActivity('+c.id+')">Přidat</button></div>'+
           (SPEECH_OK?'<button class="btn btn-g" id="mic-'+c.id+'" style="width:100%;margin-top:6px" onclick="dictate('+c.id+')">🎤 Diktovat</button>':'')+
@@ -454,6 +455,35 @@
   window.setContactVersion=setContactVersion;
   async function setContactNoPrice(id,on){ try{ var l=await _patchContact(id,{eco_no_price:!!on}); var c=_ctById(id); if(c){ c.eco_no_price=!!on; if(c.pradlomat_version==='PROVOZ') c.pradlomat_version='V3'; } renderContacts(); var el=document.getElementById('ct-'+id); if(el)el.classList.add('open'); }catch(e){ alert('Změna selhala: '+(e.message||'')); } }
   window.setContactNoPrice=setContactNoPrice;
+  // VIP nabídka lokalit — jen pro hlavního obchodníka; vybírá z jeho portfolia (DATA.lokality).
+  function vipOfferHtml(c){
+    var lok = (DATA && DATA.lokality) || [];
+    if (!lok.length) return '';
+    var sel = String(c.extra_offers||'').split(',').map(function(s){return s.trim().toUpperCase();}).filter(Boolean);
+    var selSet = {}; sel.forEach(function(x){ selSet[x]=true; });
+    var boxes = lok.map(function(x){
+      var on = !!selSet[String(x.code).toUpperCase()];
+      return '<label class="ck"><input type="checkbox" data-vip="'+c.id+'" value="'+esc(x.code)+'" '+(on?'checked':'')+'>'+esc(x.label||x.code)+(x.total!=null?(' <span style="color:var(--muted2);font-size:11px">· '+money(x.total)+'</span>'):'')+'</label>';
+    }).join('');
+    var cnt = sel.length;
+    return '<div class="lbl">🎯 VIP nabídka lokalit '+(cnt?('<span style="color:var(--primary)">('+cnt+' vybráno)</span>'):'')+'</div>'+
+      '<div class="ct-sub" style="margin-bottom:6px">Vyber lokality ze svého portfolia, které chceš tomuto kontaktu nabídnout individuálně.</div>'+
+      boxes+
+      '<div class="ct-actions" style="margin-top:8px"><button class="btn btn-p" style="width:100%" onclick="saveVipOffer('+c.id+')">💾 Uložit VIP nabídku</button></div>';
+  }
+  async function saveVipOffer(id){
+    var codes = [];
+    document.querySelectorAll('input[data-vip="'+id+'"]:checked').forEach(function(el){ codes.push(el.value); });
+    try {
+      var r = await fetch(API+'/external-reps/me/leads/'+id+'/offer',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({t:getToken(),codes:codes})});
+      var j = await r.json().catch(function(){return{};});
+      if(!r.ok||!j.ok) throw new Error(j.error||('HTTP '+r.status));
+      var c=_ctById(id); if(c)c.extra_offers=j.extra_offers||'';
+      renderContacts(); var el=document.getElementById('ct-'+id); if(el)el.classList.add('open');
+      alert('VIP nabídka uložena ('+codes.length+' lokalit).');
+    } catch(e){ alert('Uložení VIP nabídky selhalo: '+(e.message||'')); }
+  }
+  window.saveVipOffer=saveVipOffer;
   async function saveContactNotes(id){ var v=(document.getElementById('ct-notes-'+id)||{}).value||''; try{ var l=await _patchContact(id,{notes:v}); var c=_ctById(id); if(c)c.notes=l.notes; alert('Uloženo.'); }catch(e){ alert('Uložení selhalo: '+(e.message||'')); } }
   async function addContactActivity(id){ var inp=document.getElementById('act-'+id); var t=(inp&&inp.value||'').trim(); if(!t) return; try{ var l=await _patchContact(id,{activity:t}); var c=_ctById(id); if(c){c.activity_log=l.activity_log;c.lastActivityAt=new Date().toISOString();} renderContacts(); var el=document.getElementById('ct-'+id); if(el)el.classList.add('open'); }catch(e){ alert('Selhalo: '+(e.message||'')); } }
   async function toggleSection(id,key,on){ var c=_ctById(id); if(!c) return; var arr=(c.visible_sections||'').split(',').map(function(s){return s.trim();}).filter(Boolean); var i=arr.indexOf(key); if(on&&i<0)arr.push(key); if(!on&&i>=0)arr.splice(i,1); c.visible_sections=arr.join(','); try{ await _patchContact(id,{sections:arr}); }catch(e){ alert('Uložení sekce selhalo.'); } }

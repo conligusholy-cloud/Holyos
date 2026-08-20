@@ -4915,6 +4915,32 @@ router.patch('/external-reps/me/leads/:id', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// POST /api/compounder/external-reps/me/leads/:id/offer — HLAVNÍ externí obchodník
+// nastaví individuální (VIP) nabídku lokalit jednomu svému kontaktu. Vybírat lze POUZE
+// z lokalit přiřazených tomuto hlavnímu obchodníkovi (jeho portfolio rep.lokality).
+// Body: { codes: ['00015CZ', ...] } — kompletní množina (nahradí extra_offers).
+router.post('/external-reps/me/leads/:id/offer', async (req, res, next) => {
+  try {
+    const repId = verifyExtRepToken(_extRepTokenFrom(req));
+    if (!repId) return res.status(401).json({ error: 'Neplatné přihlášení.' });
+    const arr = await _loadExternalReps();
+    const rep = arr.find((r) => Number(r.id) === repId);
+    if (!rep) return res.status(404).json({ error: 'Obchodník nenalezen.' });
+    if (!rep.is_main) return res.status(403).json({ error: 'Individuální nabídku může vytvořit jen hlavní obchodník.' });
+    const id = Number(req.params.id);
+    const lead = await prisma.compounderLead.findUnique({ where: { id }, select: { id: true, external_rep_id: true } });
+    if (!lead || lead.external_rep_id !== repId) return res.status(404).json({ error: 'Kontakt nenalezen.' });
+    // Portfolio hlavního obchodníka = povolené kódy.
+    const allowed = new Set((Array.isArray(rep.lokality) ? rep.lokality : []).map((c) => String(c).trim().toUpperCase()).filter(Boolean));
+    const req_codes = Array.isArray(req.body && req.body.codes) ? req.body.codes : [];
+    const clean = Array.from(new Set(req_codes.map((c) => String(c).trim().toUpperCase()).filter(Boolean))).filter((c) => allowed.has(c));
+    const extra = clean.join(',');
+    const upd = await prisma.compounderLead.update({ where: { id }, data: { extra_offers: extra }, select: { id: true, extra_offers: true } });
+    _repActivity(repId, 'Nastavil VIP nabídku lokalit (' + (clean.length || 0) + ') kontaktu #' + id, null).catch(() => {});
+    res.json({ ok: true, extra_offers: upd.extra_offers });
+  } catch (err) { next(err); }
+});
+
 // POST /api/compounder/external-reps/me/leads/:id/send-access — pošle zákazníkovi přístup e-mailem (jen vlastní)
 router.post('/external-reps/me/leads/:id/send-access', async (req, res, next) => {
   try {
