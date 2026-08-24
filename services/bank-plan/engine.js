@@ -27,10 +27,15 @@ function sourceCurrencyForCode(code, overrides) {
   const c = String(code || '').trim().toUpperCase();
   const ov = Object.assign({}, DEFAULT_CURRENCY_OVERRIDES, overrides || {});
   if (ov[c]) return ov[c];
-  if (/PL$/.test(c)) return 'PLN';
-  if (/IE$/.test(c)) return 'EUR';
-  if (/FR$/.test(c)) return 'EUR';
-  return 'CZK'; // CZ i legacy kódy (2XXX, 0YZN, …)
+  // Zemi bereme JEN u číselných kódů (nové: 00003PL, 00001IE). Legacy kódy (2SPL, 2TAP,
+  // 0YZN, 68HC…) končí písmeny náhodou → vždy CZK.
+  const m = c.match(/^\d{3,}(PL|IE|FR|CZ)$/);
+  if (m) {
+    if (m[1] === 'PL') return 'PLN';
+    if (m[1] === 'IE' || m[1] === 'FR') return 'EUR';
+    return 'CZK';
+  }
+  return 'CZK'; // legacy + vše ostatní
 }
 
 // Převod částky z měny `from` do `base` přes tabulku kurzů vyjádřených jako

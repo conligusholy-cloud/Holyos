@@ -17,6 +17,8 @@ ok('sourceCurrency 00021FR override → CZK (fyzicky ČR)', E.sourceCurrencyForC
 ok('sourceCurrency override param', E.sourceCurrencyForCode('2TAP', { '2TAP': 'EUR' }) === 'EUR');
 ok('sourceCurrency CZ → CZK', E.sourceCurrencyForCode('00015CZ') === 'CZK');
 ok('sourceCurrency legacy → CZK', E.sourceCurrencyForCode('2TAP') === 'CZK');
+ok('sourceCurrency 2SPL (legacy končící PL) → CZK', E.sourceCurrencyForCode('2SPL') === 'CZK');
+ok('sourceCurrency 00007PL (číselný) → PLN', E.sourceCurrencyForCode('00007PL') === 'PLN');
 const fx = { CZK: 1, EUR: 25, PLN: 5.8 };
 approx('convert 100 EUR → CZK = 2500', E.convert(100, 'EUR', 'CZK', fx), 2500);
 approx('convert 2500 CZK → EUR = 100', E.convert(2500, 'CZK', 'EUR', fx), 100);
