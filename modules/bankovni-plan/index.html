@@ -202,18 +202,18 @@
       var a = DATA.assumptions||{};
       function f(key, label, val){ return '<div><label>'+label+'</label><input id="as-'+key+'" value="'+(val!=null?val:'')+'"></div>'; }
       var fx = a.fx||{};
-      var h = '<div class="sec"><h2>Předpoklady <span class="tag tag-assume">ASSUMPTION</span></h2><div class="note">Vstupují do výpočtu EBITDA a Base Case. Uložení přepočítá čísla.</div><div class="asum">';
-      h += f('servicePct','Servis (% z obratu)', a.servicePct);
-      h += f('energyPct','Energie (% z obratu)', a.energyPct);
-      h += f('paymentFeePct','Platební poplatky (%)', a.paymentFeePct);
+      var h = '<div class="sec"><h2>Předpoklady <span class="tag tag-assume">ASSUMPTION</span></h2><div class="note">Vstupují do výpočtu EBITDA a Base Case. <b>Celý model počítá bez DPH</b> (net tržby − net náklady = net EBITDA). Uložení přepočítá čísla.</div><div class="asum">';
+      h += f('servicePct','Servis (% z obratu bez DPH)', a.servicePct);
+      h += f('energyPct','Energie (% z obratu bez DPH)', a.energyPct);
+      h += f('paymentFeePct','Platební poplatky (% z obratu bez DPH)', a.paymentFeePct);
       var rs = DATA.rentStats || {};
       var rentHint = (rs.avgKnownRentCzk != null)
         ? '<div style="font-size:11px;color:var(--text2);margin-top:4px;">Průměr známých nájmů: <b style="color:var(--text)">' + rs.avgKnownRentCzk.toLocaleString('cs-CZ') + ' Kč</b> (z ' + rs.count + ' z ' + rs.totalPlan + ' lokalit)</div>'
         : '<div style="font-size:11px;color:var(--text2);margin-top:4px;">Nájmy zatím nejsou v Compoundingu vyplněné.</div>';
       var rentVat = '<label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text2);margin-top:6px;cursor:pointer"><input type="checkbox" id="as-rentVatIncluded" '+(a.rentVatIncluded?'checked':'')+' style="width:15px;height:15px;accent-color:#0ea5e9"> Nájmy jsou zadané s DPH (převést na bez DPH)</label>';
       h += '<div><label>Nájem default (CZK/měs)</label><input id="as-rentMonthlyDefault" value="'+(a.rentMonthlyDefault!=null?a.rentMonthlyDefault:'')+'">'+rentHint+rentVat+'</div>';
-      h += f('maintenanceReservePct','Rezerva na údržbu (%)', a.maintenanceReservePct);
-      h += f('bankingHaircutPct','Bankovní haircut (%)', a.bankingHaircutPct);
+      h += f('maintenanceReservePct','Rezerva na údržbu (% z obratu bez DPH)', a.maintenanceReservePct);
+      h += f('bankingHaircutPct','Bankovní haircut (% z EBITDA)', a.bankingHaircutPct);
       h += f('unitCostEur','Cena prádlomatu (EUR)', a.unitCostEur);
       h += f('targetUnitsPerMonth','Cíl nových jednotek/měs', a.targetUnitsPerMonth);
       h += f('fxEUR','Kurz EUR→CZK', fx.EUR);
