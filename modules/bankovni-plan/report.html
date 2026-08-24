@@ -68,7 +68,7 @@
 
   async function jget(u){ var r=await fetch(u,{credentials:'include'}); if(!r.ok) throw new Error('HTTP '+r.status+' ('+u+')'); return r.json(); }
 
-  function yearly(rows){ var out=[]; var y0=new Date().getFullYear(); for(var y=0;y*12<rows.length;y++){ var seg=rows.slice(y*12,y*12+12); if(!seg.length)break; var last=seg[seg.length-1]; var newU=seg.reduce(function(a,r){return a+(r.newUnits||0);},0); var rev=seg.reduce(function(a,r){return a+r.revenue;},0); var eb=seg.reduce(function(a,r){return a+r.portfolioEbitda;},0); var ds=seg.reduce(function(a,r){return a+r.debtService;},0); var dscrs=seg.map(function(r){return r.dscr;}).filter(function(x){return x!=null;}); out.push({year:y0+y,units:last.closingUnits,newU:newU,rev:rev,eb:eb,ds:ds,dscr:dscrs.length?Math.min.apply(null,dscrs):null,debt:last.outstanding}); } return out; }
+  function yearly(rows){ var out=[]; var y0=new Date().getFullYear(); for(var y=0;y*12<rows.length;y++){ var seg=rows.slice(y*12,y*12+12); if(!seg.length)break; var last=seg[seg.length-1]; var newU=seg.reduce(function(a,r){return a+(r.newUnits||0);},0); var rev=seg.reduce(function(a,r){return a+r.revenue;},0); var eb=seg.reduce(function(a,r){return a+r.portfolioEbitda;},0); var ds=seg.reduce(function(a,r){return a+r.debtService;},0); var cfY=seg.reduce(function(a,r){return a+(r.cfads||0);},0); out.push({year:y0+y,units:last.closingUnits,newU:newU,rev:rev,eb:eb,ds:ds,dscr:ds>0?cfY/ds:null,debt:last.outstanding}); } return out; }
 
   (async function(){
     var st=document.getElementById('tb-status');
@@ -102,7 +102,7 @@
       '<p>Předmětem je financování dalšího škálování <b>'+String(t.yearsData).replace('.',',')+' let provozně ověřeného</b> podnikatelského modelu samoobslužných prádelen (prádlomatů). Model je doložen <b>'+t.realCount+' provozovnami</b> a <b>'+num(t.locationMonths)+' location-months</b> reálného provozu s <b>'+num(t.totalTx)+' transakcemi</b> a kumulativními tržbami <b>'+money(t.cumulativeRevenue)+'</b> (bez DPH) za období '+t.firstData+' – '+t.lastData+'.</p>'+
       '<p>Jedna provozovna generuje medián měsíční tržby <b>'+money(u.revenueDist&&u.revenueDist.p50)+'</b> a medián měsíční EBITDA <b>'+money(u.ebitdaDist&&u.ebitdaDist.p50)+'</b> (marže '+pctv(u.marginDist&&u.marginDist.p50)+'). Model pracuje se scénáři: Base = historický medián (<b>'+money(u.baseCaseEbitda)+'</b> EBITDA/lokalita), Downside = medián −10 %, Stress = medián −20 %, a nejtvrdší Combined Bank Stress.</p>'+
       '<p>Žádáme úvěrový rámec <b>'+money(facilityCzk)+'</b> s '+fin.bankFinancingPct+' % financováním pořizovací ceny jednotek, úrok '+String(fin.interestRatePct).replace('.',',')+' % p.a., splatnost '+fin.maturityMonths+' měsíců (grace '+fin.graceMonths+'). Čerpání probíhá <b>postupně po jednotlivých pořízených a instalovaných prádlomatech</b>, nikoli jednorázově — banka tak financuje konkrétní produktivní aktiva podle předem daných pravidel.</p>'+
-      '<p>Minimální DSCR v Base Case je <b>'+(s.minDscr!=null?(Math.round(s.minDscr*100)/100)+'×':'—')+'</b>, ve Stress scénáři <b>'+(fcS.summary.minDscr!=null?(Math.round(fcS.summary.minDscr*100)/100)+'×':'—')+'</b>. '+(cx.month!=null?('Síť dosáhne samofinancování dalšího růstu (Self-Financing Crossover) při '+cx.units+' jednotkách.'):'Pro dosažení plného samofinancování dalšího růstu je vhodné rámec navyšovat po etapách dle výkonu portfolia.')+'</p>');
+      '<p>Průměrné DSCR v Base Case je <b>'+(s.avgDscr!=null?(Math.round(s.avgDscr*100)/100)+'×':'—')+'</b>, ve Stress scénáři <b>'+(fcS.summary.avgDscr!=null?(Math.round(fcS.summary.avgDscr*100)/100)+'×':'—')+'</b>. '+(cx.month!=null?('Síť dosáhne samofinancování dalšího růstu (Self-Financing Crossover) při '+cx.units+' jednotkách.'):'Pro dosažení plného samofinancování dalšího růstu je vhodné rámec navyšovat po etapách dle výkonu portfolia.')+'</p>');
 
     // 3) INVESTMENT HIGHLIGHTS
     function kpi(l,v,hl){ return '<div class="kpi'+(hl?' hl':'')+'"><div class="l">'+l+'</div><div class="v">'+v+'</div></div>'; }
@@ -115,7 +115,7 @@
       kpi('Kumulativní tržby', money(t.cumulativeRevenue))+
       kpi('Medián EBITDA/měs', money(u.ebitdaDist&&u.ebitdaDist.p50),1)+
       kpi('Marže (medián)', pctv(u.marginDist&&u.marginDist.p50))+
-      kpi('Min. DSCR (Base)', (s.minDscr!=null?(Math.round(s.minDscr*100)/100)+'×':'—'),1)+
+      kpi('Ø DSCR (Base)', (s.avgDscr!=null?(Math.round(s.avgDscr*100)/100)+'×':'—'),1)+
       '</div>'+
       '<h3>Vývoj tržeb portfolia (měsíčně, bez DPH)</h3><canvas id="c-rev" height="120"></canvas>'+
       '<p class="note">Zdroj: provozní data SIS, '+t.firstData+' – '+t.lastData+'. Bez DPH.</p>');
@@ -153,11 +153,11 @@
       '</tbody></table>'+
       '<h3>Roční projekce (Base Case, bez DPH)</h3>'+
       '<table><thead><tr><th>Rok</th><th class="r">Jednotek</th><th class="r">Nové</th><th class="r">Tržby</th><th class="r">EBITDA</th><th class="r">Splátky</th><th class="r">DSCR</th><th class="r">Dluh</th></tr></thead><tbody>'+frows+'</tbody></table>'+
-      '<div class="kpis" style="margin-top:12px">'+kpi('Min. DSCR (Base)', (s.minDscr!=null?(Math.round(s.minDscr*100)/100)+'×':'—'),1)+kpi('Min. DSCR (Stress)', (fcS.summary.minDscr!=null?(Math.round(fcS.summary.minDscr*100)/100)+'×':'—'),1)+kpi('Max. dluh', money(s.peakDebt))+'</div>');
+      '<div class="kpis" style="margin-top:12px">'+kpi('Ø DSCR (Base)', (s.avgDscr!=null?(Math.round(s.avgDscr*100)/100)+'×':'—'),1)+kpi('Ø DSCR (Stress)', (fcS.summary.avgDscr!=null?(Math.round(fcS.summary.avgDscr*100)/100)+'×':'—'),1)+kpi('Max. dluh', money(s.peakDebt))+'</div>');
 
     // 6) DSCR + CROSSOVER charts
     H += P('<h2>5. DSCR a Self-Financing Crossover</h2>'+
-      '<h3>DSCR v čase (Base Case, nejnižší v roce)</h3><canvas id="c-dscr" height="120"></canvas>'+
+      '<h3>DSCR v čase (Base Case, průměr v roce)</h3><canvas id="c-dscr" height="120"></canvas>'+
       '<p>DSCR (Debt Service Coverage Ratio) vyjadřuje, kolikrát provozní cash flow pokrývá splátku dluhu. Za bezpečné se považuje ≥ 1,2×. '+
       (cx.month!=null?('Self-Financing Crossover — okamžik, kdy portfolio z vlastního cash flow (jako by byly stroje splacené) uživí cíl '+(inp.targetUnitsPerMonth||4)+' nových strojů měsíčně — nastává při <b>'+cx.units+' jednotkách</b>.'):'V rámci zvoleného rámce a horizontu není plné samofinancování dalšího růstu dosaženo; doporučujeme rámec navyšovat po etapách dle výkonu portfolia (Stage 1 → Stage 2).')+'</p>'+
       '<h3>Počet jednotek v čase</h3><canvas id="c-units" height="110"></canvas>'+
@@ -175,14 +175,14 @@
       var dscr=function(x){ return x!=null ? (Math.round(x*100)/100).toLocaleString('cs-CZ')+'×' : '—'; };
       var pf=function(p){ return p==null?'—':(p?'PASS':'FAIL'); };
       var srows = (scen&&scen.scenarios) ? scen.scenarios.map(function(x){
-        return '<tr><td>'+esc(x.label)+'</td><td class="r">'+money(x.perUnitRevenue)+'</td><td class="r">'+money(x.perUnitEbitda)+'</td><td class="r">'+money(x.perUnitCfads)+'</td><td class="r">'+dscr(x.minDscr)+'</td><td class="r">'+dscr(x.dscrTarget)+'</td><td class="r"><b>'+pf(x.pass)+'</b></td></tr>';
+        return '<tr><td>'+esc(x.label)+'</td><td class="r">'+money(x.perUnitRevenue)+'</td><td class="r">'+money(x.perUnitEbitda)+'</td><td class="r">'+money(x.perUnitCfads)+'</td><td class="r">'+dscr(x.avgDscr)+'</td><td class="r">'+dscr(x.dscrTarget)+'</td><td class="r"><b>'+pf(x.pass)+'</b></td></tr>';
       }).join('') : '<tr><td colspan="7" class="muted">—</td></tr>';
       var m12=wr.m12;
       H += P('<h2>Conservative Forecast Methodology</h2>'+
         '<p>Forecast není založen na managementem stanoveném růstu výnosů. <b>Base Case</b> používá historický medián výkonu portfolia (P50, '+money(u.ebitdaDist&&u.ebitdaDist.p50)+' EBITDA/lokalita). <b>Downside</b> aplikuje konzervativní snížení tržeb o 10 %, <b>Stress</b> o 20 %. <b>Combined Bank Stress</b> navíc zohledňuje vyšší náklady (energie +20 %, servis +10 %), vyšší úrok (+2 p.b.) a pomalejší náběh nových lokalit.</p>'+
         '<p>EBITDA se nepočítá lineárně s tržbou — fixní náklady (nájem) zůstávají, takže při nižší tržbě marže klesá. Scénáře i percentily vycházejí ze skutečného provozního datasetu ('+t.realCount+' lokalit, '+num(t.locationMonths)+' location-months).</p>'+
         '<h3>Scénáře — na jednu lokalitu (měsíčně)</h3>'+
-        '<table><thead><tr><th>Scénář</th><th class="r">Revenue</th><th class="r">EBITDA</th><th class="r">CFADS</th><th class="r">Min. DSCR</th><th class="r">Target</th><th class="r">Stav</th></tr></thead><tbody>'+srows+'</tbody></table>'+
+        '<table><thead><tr><th>Scénář</th><th class="r">Revenue</th><th class="r">EBITDA</th><th class="r">CFADS</th><th class="r">Ø DSCR</th><th class="r">Target</th><th class="r">Stav</th></tr></thead><tbody>'+srows+'</tbody></table>'+
         (dsz ? ('<h3>Debt Sizing — dluh se přizpůsobuje výkonu</h3><div class="kpis">'+
            kpi('Max. bezpečný dluh / jednotku', money(dsz.maxSafeDebtPerUnit),1)+
            kpi('Max. LTC', (dsz.maxLtcPct!=null?String(dsz.maxLtcPct).replace('.',',')+' %':'—'))+
@@ -201,7 +201,7 @@
       cc('Track record', String(t.yearsData).replace('.',',')+' let · '+t.realCount+' lokalit · '+num(t.locationMonths)+' location-months')+
       cc('Kumulativní tržby', money(t.cumulativeRevenue))+
       cc('Medián EBITDA / lokalita', money(u.ebitdaDist.p50)+' /měs (Base '+money(u.baseCaseEbitda)+')')+
-      cc('DSCR Base / Stress (min)', (s.minDscr!=null?(Math.round(s.minDscr*100)/100)+'×':'—')+' / '+(fcS.summary.minDscr!=null?(Math.round(fcS.summary.minDscr*100)/100)+'×':'—'))+
+      cc('DSCR Base / Stress (Ø)', (s.avgDscr!=null?(Math.round(s.avgDscr*100)/100)+'×':'—')+' / '+(fcS.summary.avgDscr!=null?(Math.round(fcS.summary.avgDscr*100)/100)+'×':'—'))+
       cc('Max. dluh', money(s.peakDebt))+
       cc('Zdroj splácení', 'provozní cash flow portfolia')+
       cc('Zajištění', 'zástava financovaného zařízení, pojištění, účet projektu (dle dohody)')+

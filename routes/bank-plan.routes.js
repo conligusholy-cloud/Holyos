@@ -478,7 +478,7 @@ router.get('/forecast', requireAuth, async (req, res, next) => {
         perUnitRevenue: Math.round(se.perUnitRevenue), perUnitEbitda: Math.round(se.perUnitEbitda),
         interestRatePct: Math.round(se.interestRatePct * 100) / 100,
         dscrTarget: Number(sc.dscrTarget) || null,
-        pass: (fc.summary && fc.summary.minDscr != null && sc.dscrTarget) ? (fc.summary.minDscr >= sc.dscrTarget) : null,
+        pass: (fc.summary && fc.summary.avgDscr != null && sc.dscrTarget) ? (fc.summary.avgDscr >= sc.dscrTarget) : null,
       },
       summary: fc.summary, rows: fc.rows,
     });
@@ -529,7 +529,7 @@ router.get('/scenarios', requireAuth, async (req, res, next) => {
         perUnitCfads: Math.round(se.perUnitEbitda - maint),
         interestRatePct: Math.round(se.interestRatePct * 100) / 100,
         minDscr: s.minDscr, avgDscr: s.avgDscr, dscrTarget: target,
-        pass: (s.minDscr != null && target) ? (s.minDscr >= target) : null,
+        pass: (s.avgDscr != null && target) ? (s.avgDscr >= target) : null,
       };
     });
     res.json({ base, mode, scenarios: out, percentiles: inp.revDist });

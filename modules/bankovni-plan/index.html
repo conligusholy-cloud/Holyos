@@ -323,7 +323,6 @@
       var s = FC.summary, cx = s.crossover||{}, inp = FC.inputs||{}, fin = FC.financing||{};
       var seg = function(id,lbl){ return '<button class="seg-b'+(FC_SCEN===id?' on':'')+'" onclick="fcScen(&#39;'+id+'&#39;)">'+lbl+'</button>'; };
       var kpi = function(l,v,sub,col){ return '<div class="kpi'+(col?' hl':'')+'"><div class="l">'+l+'</div><div class="v">'+v+'</div>'+(sub?'<div class="s">'+sub+'</div>':'')+'</div>'; };
-      var dscrTxt = s.minDscr!=null ? (Math.round(s.minDscr*100)/100).toLocaleString('cs-CZ')+'×' : '—';
       var crossTxt = cx.month!=null ? ('za '+cx.month+' měs. ('+monthLabel(cx.month)+')') : 'nedosaženo v horizontu';
       var h = '';
       h += '<div class="note" style="margin-bottom:10px"><b>Reinvestiční režim ♻️</b>: financovaná výstavba z úvěru + navíc se z nakumulovaného volného cash flow průběžně kupují další stroje (samofinancovaný růst). Scénáře: <b>Base = P50</b> (historický medián), <b>Downside = −10 %</b>, <b>Stress = −20 %</b> z mediánu. <b>Combined Bank Stress</b> = −20 % + vyšší náklady (energie +20 %, servis +10 %), úrok +2 p.b. a pomalejší náběh. EBITDA se dopočítá nelineárně (fixní nájem zůstává). Crossover <b>bez splátek úvěru</b>. Scénář:</div>';
@@ -336,7 +335,8 @@
       var tgt = (inp.targetUnitsPerMonth!=null?inp.targetUnitsPerMonth:4);
       h += kpi('Self-Financing Crossover', cx.month!=null?monthLabel(cx.month):'—', crossTxt, true);
       h += kpi('Jednotek při crossoveru', cx.units!=null?cx.units:'—', 'cíl '+tgt+' strojů/měs bez splátek úvěru (stroje splacené) → '+(cx.requiredMonthly?('nutno '+money(cx.requiredMonthly)+'/měs volných'):''));
-      h += kpi('Min. DSCR', dscrTxt, s.avgDscr!=null?('průměr '+(Math.round(s.avgDscr*100)/100)+'×'):'', true);
+      var avgTxt = s.avgDscr!=null ? (Math.round(s.avgDscr*100)/100).toLocaleString('cs-CZ')+'×' : '—';
+      h += kpi('Ø DSCR', avgTxt, 'průměr přes horizont (CFADS ÷ splátky)', true);
       h += kpi('Max. dluh', money(s.peakDebt), 'čerpáno '+money(s.drawnTotal));
       h += kpi('Vlastní kapitál', money(s.totalEquity), (s.reinvestCapex?('+ reinvestice '+money(s.reinvestCapex)):'kumulativně'));
       h += kpi('Jednotek na konci', s.unitsEnd, 'z '+s.startUnits+' dnes · +'+s.newTotal+(s.reinvestCapex?' (vč. reinvestic)':''));
@@ -345,7 +345,7 @@
       h += '<div class="note" style="margin:2px 0 10px">Grafy jsou po <b>letech</b> (přehlednější než měsíce). Tržby a EBITDA jsou roční součty, DSCR = nejnižší v daném roce, jednotky a dluh ke konci roku.</div>';
       h += '<div class="grid2">';
       h += '<div class="sec" style="background:var(--surface2)"><h2>Počet jednotek (konec roku)</h2><canvas id="fc-units" height="150"></canvas></div>';
-      h += '<div class="sec" style="background:var(--surface2)"><h2>DSCR — nejnižší v roce</h2><div class="note">Poměr provozního cash flow ke splátce dluhu. Bezpečné ≥ 1,2×.</div><canvas id="fc-dscr" height="150"></canvas></div>';
+      h += '<div class="sec" style="background:var(--surface2)"><h2>DSCR — průměr v roce</h2><div class="note">Poměr provozního cash flow ke splátce dluhu (CFADS ÷ splátky za rok). Bezpečné ≥ 1,2×.</div><canvas id="fc-dscr" height="150"></canvas></div>';
       h += '</div><div class="grid2">';
       h += '<div class="sec" style="background:var(--surface2)"><h2>Tržby & EBITDA (ročně, '+BASE+')</h2><canvas id="fc-rev" height="150"></canvas></div>';
       h += '<div class="sec" style="background:var(--surface2)"><h2>Zůstatek dluhu (konec roku)</h2><canvas id="fc-debt" height="150"></canvas></div>';
@@ -412,16 +412,15 @@
           : '<span style="background:rgba(239,68,68,.16);color:#ef4444;border:1px solid rgba(239,68,68,.4);border-radius:6px;padding:2px 9px;font-weight:800;font-size:11px">FAIL</span>'; };
         var dsc = function(x){ return x!=null ? (Math.round(x*100)/100).toLocaleString('cs-CZ')+'×' : '—'; };
         var h = '<div class="sec" style="background:var(--surface2)"><h2>Scénáře z historické distribuce <span class="tag tag-actual">ACTUAL</span></h2>'+
-          '<div class="note">Base/Downside/Stress = P50/P25/P10 skutečného výkonu lokalit. Combined = P10 + zhoršené náklady/úrok/ramp. PASS/FAIL vůči internímu DSCR covenant targetu.</div>'+
+          '<div class="note">Base = P50 (medián), Downside = −10 %, Stress = −20 %, Combined = −20 % + zhoršené náklady/úrok/ramp. PASS/FAIL se počítá z <b>průměrného DSCR</b> (celková CFADS ÷ splátky za horizont) vůči covenant targetu — minimální měsíc se neřeší (závisí na časování instalací).</div>'+
           '<div style="overflow-x:auto"><table class="dt"><thead><tr>'+
-          '<th>Scénář</th><th>Základ</th><th style="text-align:right">Revenue / lok.</th><th style="text-align:right">EBITDA / lok.</th><th style="text-align:right">CFADS / lok.</th><th style="text-align:right">Min. DSCR</th><th style="text-align:right">Ø DSCR</th><th style="text-align:right">Target</th><th style="text-align:center">Stav</th></tr></thead><tbody>';
+          '<th>Scénář</th><th>Základ</th><th style="text-align:right">Revenue / lok.</th><th style="text-align:right">EBITDA / lok.</th><th style="text-align:right">CFADS / lok.</th><th style="text-align:right">Ø DSCR</th><th style="text-align:right">Target</th><th style="text-align:center">Stav</th></tr></thead><tbody>';
         d.scenarios.forEach(function(s){
           h += '<tr><td style="font-weight:700">'+esc(s.label)+'</td><td class="muted">'+(s.basis||'').toUpperCase()+' · faktor '+(s.revenueFactor!=null?String(s.revenueFactor).replace('.',','):'—')+'</td>'+
             '<td style="text-align:right">'+money(s.perUnitRevenue)+'</td>'+
             '<td style="text-align:right">'+money(s.perUnitEbitda)+'</td>'+
             '<td style="text-align:right">'+money(s.perUnitCfads)+'</td>'+
-            '<td style="text-align:right;font-weight:700">'+dsc(s.minDscr)+'</td>'+
-            '<td style="text-align:right">'+dsc(s.avgDscr)+'</td>'+
+            '<td style="text-align:right;font-weight:700">'+dsc(s.avgDscr)+'</td>'+
             '<td style="text-align:right">'+dsc(s.dscrTarget)+'</td>'+
             '<td style="text-align:center">'+badge(s.pass)+'</td></tr>';
         });
@@ -472,16 +471,16 @@
         var rev=seg.reduce(function(a,r){return a+r.revenue;},0);
         var eb=seg.reduce(function(a,r){return a+r.portfolioEbitda;},0);
         var ds=seg.reduce(function(a,r){return a+r.debtService;},0);
-        var dscrs=seg.map(function(r){return r.dscr;}).filter(function(x){return x!=null;});
-        var dscrMin=dscrs.length?Math.min.apply(null,dscrs):null;
+        var cfY=seg.reduce(function(a,r){return a+(r.cfads||0);},0);
+        var dscrAvg=ds>0?cfY/ds:null;
         var eq=seg.reduce(function(a,r){return a+(r.equityCapex||0);},0);
-        out.push({ year:startY+y, units:last.closingUnits, newU:newU, rev:rev, eb:eb, ds:ds, dscrMin:dscrMin, debt:last.outstanding, equity:eq });
+        out.push({ year:startY+y, units:last.closingUnits, newU:newU, rev:rev, eb:eb, ds:ds, dscrMin:dscrAvg, debt:last.outstanding, equity:eq });
       }
       return out;
     }
     function yearlyTableHtml(){
       var Y=yearlyTableRows();
-      var h='<div class="sec" style="background:var(--surface2)"><h2>Roční přehled (Rok 1–'+Y.length+')</h2><div class="note">Vše bez DPH, scénář '+esc(FC_SCEN)+'. Nové = postavené za rok, DSCR = nejnižší v roce.</div><div style="overflow-x:auto"><table class="dt"><thead><tr>'+
+      var h='<div class="sec" style="background:var(--surface2)"><h2>Roční přehled (Rok 1–'+Y.length+')</h2><div class="note">Vše bez DPH, scénář '+esc(FC_SCEN)+'. Nové = postavené za rok, DSCR = průměr v roce (CFADS ÷ splátky).</div><div style="overflow-x:auto"><table class="dt"><thead><tr>'+
         '<th>Rok</th><th style="text-align:right">Jednotek</th><th style="text-align:right">Nové</th><th style="text-align:right">Tržby</th><th style="text-align:right">EBITDA</th><th style="text-align:right">Splátky</th><th style="text-align:right">DSCR</th><th style="text-align:right">Zůstatek dluhu</th><th style="text-align:right">Vlastní kapitál</th></tr></thead><tbody>';
       Y.forEach(function(r){
         var dscrCol=r.dscrMin==null?'var(--muted2)':(r.dscrMin<1?'#ef4444':(r.dscrMin<1.2?'#f59e0b':'#22c55e'));
@@ -522,8 +521,8 @@
       h+=r('Transakce / kumul. tržby', num(t.totalTx)+' · '+money(t.cumulativeRevenue));
       h+=r('Medián EBITDA / lokalita', money((DATA.unitEconomics||{}).medianEbitda)+' /měs (Base Case '+money((DATA.unitEconomics||{}).baseCaseEbitda)+')');
       h+=r('Požadovaný rámec', money(E_convertCzk((FC.financing||{}).facilityLimitCzk))+' · vlastní '+money(s.totalEquity));
-      h+=r('DSCR (aktuální scénář)', 'min '+(s.minDscr!=null?(Math.round(s.minDscr*100)/100)+'×':'—')+' · průměr '+(s.avgDscr!=null?(Math.round(s.avgDscr*100)/100)+'×':'—'));
-      h+=r('DSCR (Stress)', '<span id="cc-stress-dscr">počítám…</span>');
+      h+=r('Ø DSCR (aktuální scénář)', (s.avgDscr!=null?(Math.round(s.avgDscr*100)/100)+'×':'—')+' (průměr přes horizont)');
+      h+=r('Ø DSCR (Stress)', '<span id="cc-stress-dscr">počítám…</span>');
       h+=r('Max. dluh / jednotek na konci', money(s.peakDebt)+' · '+s.unitsEnd+' jednotek');
       h+=r('Self-Financing Crossover', cx.month!=null?('měsíc '+cx.month+' při '+cx.units+' jednotkách'):'nedosaženo v horizontu (potřeba větší rámec)');
       h+='</div></div>';
@@ -534,8 +533,8 @@
       for(var y=0;y*12<rows.length;y++){ var seg=rows.slice(y*12,y*12+12); if(!seg.length)break; var last=seg[seg.length-1];
         var newU=seg.reduce(function(a,r){return a+(r.newUnits||0);},0); var rev=seg.reduce(function(a,r){return a+r.revenue;},0);
         var eb=seg.reduce(function(a,r){return a+r.portfolioEbitda;},0); var ds=seg.reduce(function(a,r){return a+r.debtService;},0);
-        var dscrs=seg.map(function(r){return r.dscr;}).filter(function(x){return x!=null;});
-        out.push({year:y0+y,units:last.closingUnits,newU:newU,rev:rev,eb:eb,ds:ds,dscr:dscrs.length?Math.min.apply(null,dscrs):null,debt:last.outstanding}); }
+        var cfY=seg.reduce(function(a,r){return a+(r.cfads||0);},0);
+        out.push({year:y0+y,units:last.closingUnits,newU:newU,rev:rev,eb:eb,ds:ds,dscr:ds>0?cfY/ds:null,debt:last.outstanding}); }
       return out;
     }
     async function loadReinvestTable(){
@@ -556,8 +555,8 @@
       var el=document.getElementById('cc-stress-dscr'); if(!el) return;
       try {
         var r=await fetch('/api/bank-plan/forecast?base='+BASE+'&scenario=stress',{credentials:'include'});
-        var d=await r.json(); var m=d.summary&&d.summary.minDscr;
-        el.textContent = (m!=null?(Math.round(m*100)/100)+'×':'—') + ' (min ve Stress scénáři)';
+        var d=await r.json(); var m=d.summary&&d.summary.avgDscr;
+        el.textContent = (m!=null?(Math.round(m*100)/100)+'×':'—') + ' (průměr ve Stress scénáři)';
         el.style.color = (m!=null && m<1) ? '#ef4444' : (m!=null && m<1.2 ? '#f59e0b' : '#22c55e');
       } catch(e){ el.textContent='—'; }
     }
@@ -606,9 +605,10 @@
         var last=seg[seg.length-1];
         var revSum=seg.reduce(function(a,r){return a+r.revenue;},0);
         var ebSum=seg.reduce(function(a,r){return a+r.portfolioEbitda;},0);
-        var dscrs=seg.map(function(r){return r.dscr;}).filter(function(x){return x!=null;});
-        var dscrMin=dscrs.length?Math.min.apply(null,dscrs):null;
-        years.push({ label:String(startY+y), units:last.closingUnits, revenueYear:revSum, ebitdaYear:ebSum, dscrMin:dscrMin, outstanding:last.outstanding });
+        var dsY=seg.reduce(function(a,r){return a+(r.debtService||0);},0);
+        var cfY=seg.reduce(function(a,r){return a+(r.cfads||0);},0);
+        var dscrAvg=dsY>0?cfY/dsY:null;
+        years.push({ label:String(startY+y), units:last.closingUnits, revenueYear:revSum, ebitdaYear:ebSum, dscrMin:dscrAvg, outstanding:last.outstanding });
       }
       return years;
     }
