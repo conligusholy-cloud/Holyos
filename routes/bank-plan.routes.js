@@ -7,8 +7,20 @@ const express = require('express');
 const router = express.Router();
 const { requireAuth } = require('../middleware/auth');
 const { getSetting, setSetting } = require('../services/settings');
+const { prisma } = require('../config/database');
 const E = require('../services/bank-plan/engine');
 const SIS = require('../services/bank-plan/sis-history');
+
+// Derivace servis/energie % z ŽIVÉ ekonomiky jednoho prádlomatu (businessToolDefaults).
+// Když upravíš hodnoty v pomůcce „Ekonomika prádlomatu" a uložíš, tady se přepočítají.
+async function _unitModelPct() {
+  let cfg = {};
+  try {
+    const row = await prisma.businessToolDefaults.findUnique({ where: { tool: 'pradlomat-economy' }, select: { data_json: true } });
+    if (row && row.data_json && typeof row.data_json === 'object') cfg = row.data_json;
+  } catch (e) { /* fallback na konstanty V3 */ }
+  return E.deriveUnitModelPct(cfg);
+}
 
 const HISTORY_KEY = 'bank_plan.sis_history';
 const ASSUMPTIONS_KEY = 'bank_plan.assumptions';
@@ -250,7 +262,7 @@ router.get('/overview', requireAuth, async (req, res, next) => {
       cohort,
       portfolioMonthly,
       rentStats,
-      unitModel: E.deriveUnitModelPct(), // referenční % z ekonomiky jednoho prádlomatu (V3)
+      unitModel: await _unitModelPct(), // referenční % z ŽIVÉ ekonomiky jednoho prádlomatu
       assumptions: A,
       locations: perLoc,
     });

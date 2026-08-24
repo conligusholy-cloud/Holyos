@@ -212,7 +212,7 @@
       var um = DATA.unitModel || {};
       function fPctRev(key, label, val, desc, ref){
         var kc = (parseFloat(val)||0)/100*medRev;
-        var refLine = (ref!=null) ? ' · <span style="color:#0ea5e9;cursor:pointer" onclick="setPct(&#39;'+key+'&#39;,'+ref+')">dle prádlomatu V3: '+String(ref).replace('.',',')+' % → použít</span>' : '';
+        var refLine = (ref!=null) ? ' · <span style="color:#0ea5e9;cursor:pointer" onclick="setPct(&#39;'+key+'&#39;,'+ref+')">dle ekonomiky prádlomatu: '+String(ref).replace('.',',')+' % → použít</span>' : '';
         return '<div><label>'+label+'</label><input id="as-'+key+'" value="'+(val!=null?val:'')+'" oninput="pctHint(&#39;'+key+'&#39;)">'+
           '<div style="font-size:11px;color:var(--text2);margin-top:4px;">'+(desc?(desc+' · '):'')+'≈ <b id="hint-'+key+'" style="color:var(--text)">'+money(kc)+'</b> /měs z mediánu '+money(medRev)+refLine+'</div></div>';
       }
