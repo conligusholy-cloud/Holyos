@@ -102,7 +102,7 @@
     // 2) EXECUTIVE SUMMARY
     H += P('<h2>1. Executive Summary</h2>'+
       '<p>Předmětem je financování dalšího škálování <b>'+String(t.yearsData).replace('.',',')+' let provozně ověřeného</b> podnikatelského modelu samoobslužných prádelen (prádlomatů). Model je doložen <b>'+t.realCount+' provozovnami</b> a <b>'+num(t.locationMonths)+' location-months</b> reálného provozu s <b>'+num(t.totalTx)+' transakcemi</b> a kumulativními tržbami <b>'+money(t.cumulativeRevenue)+'</b> (bez DPH) za období '+t.firstData+' – '+t.lastData+'.</p>'+
-      '<p>Jedna provozovna generuje medián měsíční tržby <b>'+money(u.revenueDist&&u.revenueDist.p50)+'</b> a medián měsíční EBITDA <b>'+money(u.ebitdaDist&&u.ebitdaDist.p50)+'</b> (marže '+pctv(u.marginDist&&u.marginDist.p50)+'). Model pracuje se scénáři: Base = historický medián (<b>'+money(u.baseCaseEbitda)+'</b> EBITDA/lokalita), Downside = medián −10 %, Stress = medián −20 %, a nejtvrdší Combined Bank Stress.</p>'+
+      '<p>Jedna provozovna generuje medián měsíční tržby <b>'+money(u.revenueDist&&u.revenueDist.p50)+'</b> a EBITDA <b>'+money(u.medianEbitda)+'</b> (při mediánové tržbě, stabilizováno). Model pracuje se scénáři: Base = historický medián (<b>'+money(u.baseCaseEbitda)+'</b> EBITDA/lokalita), Downside = medián −10 %, Stress = medián −20 %, plus hranice Breakeven (tržba, při které DSCR = 1,0).</p>'+
       '<p>Žádáme úvěrový rámec <b>'+money(facilityCzk)+'</b> s '+fin.bankFinancingPct+' % financováním pořizovací ceny jednotek, úrok '+String(fin.interestRatePct).replace('.',',')+' % p.a., splatnost '+fin.maturityMonths+' měsíců (grace '+fin.graceMonths+'). Čerpání probíhá <b>postupně po jednotlivých pořízených a instalovaných prádlomatech</b>, nikoli jednorázově — banka tak financuje konkrétní produktivní aktiva podle předem daných pravidel.</p>'+
       '<p>DSCR jedné lokality (NOI ÷ splátka) je v Base Case <b>'+dv(dscrB)+'</b>, ve Stress scénáři <b>'+dv(dscrSt)+'</b>. '+(cx.month!=null?('Síť dosáhne samofinancování dalšího růstu (Self-Financing Crossover) při '+cx.units+' jednotkách.'):'Pro dosažení plného samofinancování dalšího růstu je vhodné rámec navyšovat po etapách dle výkonu portfolia.')+'</p>');
 
@@ -115,7 +115,7 @@
       kpi('Transakcí', num(t.totalTx))+
       '</div><div class="kpis">'+
       kpi('Kumulativní tržby', money(t.cumulativeRevenue))+
-      kpi('Medián EBITDA/měs', money(u.ebitdaDist&&u.ebitdaDist.p50),1)+
+      kpi('EBITDA/měs (Base)', money(u.medianEbitda),1)+
       kpi('Marže (medián)', pctv(u.marginDist&&u.marginDist.p50))+
       kpi('DSCR (Base)', dv(dscrB),1)+
       '</div>'+
@@ -183,7 +183,7 @@
       var _be=(scen&&scen.scenarios)?scen.scenarios.find(function(x){return x.key==='breakeven';}):null;
       var _cushion=_be&&_be.cushionPct, _sigma=(_cushion!=null&&vol.cvPct)?(_cushion/vol.cvPct):null;
       H += P('<h2>Conservative Forecast Methodology</h2>'+
-        '<p>Forecast není založen na managementem stanoveném růstu výnosů. <b>Base Case</b> používá historický medián výkonu portfolia (P50, '+money(u.ebitdaDist&&u.ebitdaDist.p50)+' EBITDA/lokalita). <b>Downside</b> aplikuje konzervativní snížení tržeb o 10 %, <b>Stress</b> o 20 %. <b>Combined Bank Stress</b> navíc zohledňuje vyšší náklady (energie +20 %, servis +10 %), vyšší úrok (+2 p.b.) a pomalejší náběh nových lokalit.</p>'+
+        '<p>Forecast není založen na managementem stanoveném růstu výnosů. <b>Base Case</b> používá historický medián výkonu portfolia (EBITDA/lokalita '+money(u.medianEbitda)+', stabilizováno). <b>Downside</b> aplikuje konzervativní snížení tržeb o 10 %, <b>Stress</b> o 20 %. <b>Breakeven</b> ukazuje hranici — tržbu, při které DSCR klesne přesně na 1,0, tedy o kolik smí tržby klesnout, než přestanou pokrývat splátku.</p>'+
         '<p>EBITDA se nepočítá lineárně s tržbou — fixní náklady (nájem) zůstávají, takže při nižší tržbě marže klesá. Scénáře i percentily vycházejí ze skutečného provozního datasetu ('+t.realCount+' lokalit, '+num(t.locationMonths)+' location-months).</p>'+
         '<h3>Scénáře — na jednu lokalitu (měsíčně)</h3>'+
         '<table><thead><tr><th>Scénář</th><th class="r">Revenue</th><th class="r">EBITDA</th><th class="r">Splátka</th><th class="r">DSCR</th><th class="r">Target</th><th class="r">Stav</th></tr></thead><tbody>'+srows+'</tbody></table>'+
@@ -205,7 +205,7 @@
       cc('Vlastní spoluúčast', money(s.totalEquity)+' ('+(100-fin.bankFinancingPct)+' %)')+
       cc('Track record', String(t.yearsData).replace('.',',')+' let · '+t.realCount+' lokalit · '+num(t.locationMonths)+' location-months')+
       cc('Kumulativní tržby', money(t.cumulativeRevenue))+
-      cc('Medián EBITDA / lokalita', money(u.ebitdaDist.p50)+' /měs (Base '+money(u.baseCaseEbitda)+')')+
+      cc('EBITDA / lokalita (Base)', money(u.medianEbitda)+' /měs')+
       cc('DSCR Base / Stress', dv(dscrB)+' / '+dv(dscrSt))+
       cc('Max. dluh', money(s.peakDebt))+
       cc('Zdroj splácení', 'provozní cash flow portfolia')+

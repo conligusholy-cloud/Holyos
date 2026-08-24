@@ -139,7 +139,7 @@
       h += kpi('Transakce', num(t.totalTx), 'celkem v SIS');
       h += kpi('Kumulativní tržby', money(t.cumulativeRevenue), 'bez DPH · za celé období');
       h += kpi('Medián tržby / měs', money(u.revenueDist.p50), 'bez DPH · na lokalitu');
-      h += kpi('Medián EBITDA / měs', money(u.ebitdaDist.p50), 'marže ' + pct(u.marginDist.p50), true);
+      h += kpi('Medián EBITDA / měs', money(u.medianEbitda), 'marže ' + pct(u.revenueDist.p50 ? u.medianEbitda/u.revenueDist.p50 : 0), true);
       h += kpi('Base scénář EBITDA', money(u.baseCaseEbitda), (u.baseFactorPct?('medián '+(u.baseFactorPct>=0?'+':'')+String(u.baseFactorPct).replace('.',',')+' %'):'= historický medián'), true);
       h += '</div>';
 
@@ -574,7 +574,7 @@
       var h='<div class="sec" style="border:1px solid rgba(14,165,233,.45)"><h2>📄 Credit Committee — souhrn (1 strana)</h2><div class="note">Rychlý přehled pro úvěrový výbor. Scénář '+esc(FC_SCEN)+'.</div><div style="max-width:640px">';
       h+=r('Track record', t.yearsData+' let dat · '+t.realCount+' lokalit · '+num(t.locationMonths)+' location-months');
       h+=r('Transakce / kumul. tržby', num(t.totalTx)+' · '+money(t.cumulativeRevenue));
-      h+=r('Medián EBITDA / lokalita', money((DATA.unitEconomics||{}).medianEbitda)+' /měs (Base Case '+money((DATA.unitEconomics||{}).baseCaseEbitda)+')');
+      h+=r('EBITDA / lokalita (Base)', money((FC.unitBreakdown||{}).ebitda)+' /měs (medián tržby, stabilizováno)');
       h+=r('Požadovaný rámec', money(E_convertCzk((FC.financing||{}).facilityLimitCzk))+' · vlastní '+money(s.totalEquity));
       h+=r('DSCR (aktuální scénář)', ((FC&&FC.scenarioMeta&&FC.scenarioMeta.dscrUnit!=null)?(Math.round(FC.scenarioMeta.dscrUnit*100)/100)+'×':'—')+' (NOI jednotky ÷ splátka)');
       h+=r('DSCR (Stress)', '<span id="cc-stress-dscr">počítám…</span>');

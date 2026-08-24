@@ -294,11 +294,16 @@ router.get('/overview', requireAuth, async (req, res, next) => {
 
     const cohort = E.cohortCurve(nonTest.filter((l) => !isExcluded(l) && l.classification === 'active' && l.openDate).map((l) => ({ openDate: l.openDate, monthly: netMonthly(l) })), 36);
 
-    // Base scénář EBITDA = medián × faktor Base scénáře (Base = medián +15 %).
-    const medianEbitda = ebitdaDist.p50 || 0;
-    const baseFactor = (A.scenarios && A.scenarios.base && A.scenarios.base.revenueFactor) || 1;
-    const baseCaseEbitda = medianEbitda * baseFactor;
-    const baseFactorPct = Math.round((baseFactor - 1) * 1000) / 10;
+    // Karty (medián tržby/EBITDA, Base) = STABILIZOVANÝ základ shodný s dlaždicí a scénáři.
+    const pin = await _portfolioInputs(hist, A, base);
+    const _varPct = (Number(A.servicePct) || 0) + (Number(A.energyPct) || 0) + (Number(A.paymentFeePct) || 0);
+    const _rentDef = Number(pin.rentBaseAvg) || 0;
+    const _medRevStab = pin.medRevenue || 0;
+    // EBITDA při mediánové (stabilizované) tržbě s fixním nájmem — stejná definice jako dlaždice i Base scénář.
+    const baseCaseEbitda = Math.max(0, _medRevStab - _rentDef - _medRevStab * _varPct / 100);
+    const medianEbitda = baseCaseEbitda;
+    const baseFactorPct = 0;
+    const revDistStab = pin.revDist || revDist;
 
     res.json({
       base, generatedAt: hist.generatedAt, sisHeader: hist.sisHeader || null,
@@ -312,7 +317,7 @@ router.get('/overview', requireAuth, async (req, res, next) => {
         cumulativeRevenue: Math.round(cumulativeRevenue),
       },
       unitEconomics: {
-        revenueDist: revDist, ebitdaDist, marginDist,
+        revenueDist: revDistStab, ebitdaDist, marginDist,
         medianEbitda: Math.round(medianEbitda), baseCaseEbitda: Math.round(baseCaseEbitda), baseFactorPct: baseFactorPct,
       },
       seasonality,
