@@ -281,12 +281,12 @@
       var dscrTxt = s.minDscr!=null ? (Math.round(s.minDscr*100)/100).toLocaleString('cs-CZ')+'×' : '—';
       var crossTxt = cx.month!=null ? ('za '+cx.month+' měs. ('+monthLabel(cx.month)+')') : 'nedosaženo v horizontu';
       var h = '';
-      h += '<div class="note" style="margin-bottom:10px">Postupné čerpání úvěru po jednotlivých pořízených jednotkách; každá nová lokalita najíždí dle historické ramp-up křivky. Base Case = medián − haircut. Scénář:</div>';
+      h += '<div class="note" style="margin-bottom:10px">Postupné čerpání úvěru po jednotlivých pořízených jednotkách; každá nová lokalita najíždí dle historické ramp-up křivky. Base Case = medián − haircut. Crossover se počítá <b>bez splátek úvěru</b> (jako by byly stroje splacené). Scénář:</div>';
       h += '<div style="display:inline-flex;border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:14px">'+seg('base','Base')+seg('downside','Downside')+seg('stress','Stress')+'</div>';
       h += '<div class="kpis">';
       var tgt = (inp.targetUnitsPerMonth!=null?inp.targetUnitsPerMonth:4);
       h += kpi('Self-Financing Crossover', cx.month!=null?monthLabel(cx.month):'—', crossTxt, true);
-      h += kpi('Jednotek při crossoveru', cx.units!=null?cx.units:'—', 'cíl '+tgt+' strojů/měs z vlastního cash flow → '+(cx.requiredMonthly?('nutno '+money(cx.requiredMonthly)+'/měs volných'):''));
+      h += kpi('Jednotek při crossoveru', cx.units!=null?cx.units:'—', 'cíl '+tgt+' strojů/měs bez splátek úvěru (stroje splacené) → '+(cx.requiredMonthly?('nutno '+money(cx.requiredMonthly)+'/měs volných'):''));
       h += kpi('Min. DSCR', dscrTxt, s.avgDscr!=null?('průměr '+(Math.round(s.avgDscr*100)/100)+'×'):'', true);
       h += kpi('Max. dluh', money(s.peakDebt), 'čerpáno '+money(s.drawnTotal));
       h += kpi('Vlastní kapitál', money(s.totalEquity), 'kumulativně');

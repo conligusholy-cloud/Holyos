@@ -76,7 +76,7 @@ function buildForecast(p) {
 
   // 4) Měsíční řádky + waterfall.
   const rows = [];
-  const cfadsArr = [], dsArr = [], cashForExpArr = [];
+  const cfadsArr = [], dsArr = [], cashForExpArr = [], crossArr = [];
   let closingCash = 0;
   for (let m = 0; m < months; m++) {
     const revenue = existingRev + newRev[m];
@@ -93,7 +93,10 @@ function buildForecast(p) {
     const cashForExpansion = fcfBeforeGrowth - minLiquidity;
     const equityCapex = equityByMonth[m];
     closingCash += (fcfBeforeGrowth - equityCapex);
-    cfadsArr.push(cfads); dsArr.push(debtService); cashForExpArr.push(cashForExpansion);
+    // Crossover počítáme BEZ splátky úvěru (jako by byly stroje splacené) — i daň bez úrokového štítu.
+    const taxNoDebt = Math.max(0, portfolioEbitda) * taxPct / 100;
+    const crossCash = portfolioEbitda - taxNoDebt - maintenance - minLiquidity;
+    cfadsArr.push(cfads); dsArr.push(debtService); cashForExpArr.push(cashForExpansion); crossArr.push(crossCash);
     rows.push({
       month: m, openUnits: unitsSeries[m].opening, newUnits: unitsSeries[m].added, closingUnits: unitsSeries[m].closing,
       revenue, ebitda, portfolioEbitda, interest, principal: debt.perMonth[m].principal, debtService,
@@ -104,7 +107,8 @@ function buildForecast(p) {
 
   // 5) DSCR souhrn + crossover.
   const dscrSum = E.dscrSeries(cfadsArr, dsArr);
-  const crossover = E.selfFinancingCrossover(cashForExpArr, unitCostBase, targetUnits);
+  // Crossover = kdy volné cash flow BEZ splátek úvěru (stroje jako splacené) utáhne cíl.
+  const crossover = E.selfFinancingCrossover(crossArr, unitCostBase, targetUnits);
   const crossRow = crossover.reached ? rows[crossover.month] : null;
 
   const peakDebt = rows.reduce((a, r) => Math.max(a, r.outstanding), 0);
@@ -120,7 +124,7 @@ function buildForecast(p) {
       crossover: crossover.reached ? {
         month: crossover.month, requiredMonthly: Math.round(crossover.requiredMonthly),
         units: crossRow.closingUnits, revenue: Math.round(crossRow.revenue), portfolioEbitda: Math.round(crossRow.portfolioEbitda),
-        outstanding: Math.round(crossRow.outstanding), cashForExpansion: Math.round(crossRow.cashForExpansion),
+        outstanding: Math.round(crossRow.outstanding), cashForExpansion: Math.round(crossArr[crossover.month]),
       } : { reached: false, requiredMonthly: Math.round(crossover.requiredMonthly) },
     },
   };
