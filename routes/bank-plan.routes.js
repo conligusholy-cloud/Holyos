@@ -136,8 +136,10 @@ const DEFAULT_ASSUMPTIONS = {
                 energyUpliftPct: 20, serviceUpliftPct: 10, interestAddPct: 2.0, rampExtraMonths: 3, fxStressPct: 0 },
   },
   // Stabilizovaný výkon lokality pro percentily (§17/§18): vyloučit ramp-up, min. historie.
+  // POZOR: platí jen pro základní medián/scénáře. Vyloučení prvních 6 měsíců pro VOLATILITU
+  // /nejhorší období běží zvlášť v /overview (nezávisle). Default vypnuto → základní medián = raw 12M.
   stabilization: {
-    enabled: true,          // false = zpět na prostý 12M průměr
+    enabled: false,         // false = základní medián = prostý 12M průměr (33 386), bez vyloučení ramp-up
     minHistoryMonths: 6,    // min. počet kvalifikovaných měsíců, jinak lokalita mimo percentily
     includeRampUp: false,   // false = vyloučit ramp-up měsíce (dle kohorty)
     stabilizeFromMonth: null, // null = auto z kohortní křivky (95 % plateau)
