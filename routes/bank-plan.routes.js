@@ -123,11 +123,12 @@ const DEFAULT_ASSUMPTIONS = {
     startUnitsOverride: null,  // null = skutečná aktivní síť; 0 = greenfield (partner staví od nuly)
     depreciationYears: 5,      // doba odpisu prádlomatu (daňový štít)
   },
-  // Scénáře — násobky proti Base Case.
+  // Scénáře — přímá úprava mediánu tržeb (haircut se už neaplikuje zvlášť).
+  // Base = medián +15 %, Downside = medián (0 %), Stress = medián −10 %.
   scenarios: {
-    base: { revenueFactor: 1.0, interestAddPct: 0 },
-    downside: { revenueFactor: 0.85, interestAddPct: 1.5 },
-    stress: { revenueFactor: 0.70, interestAddPct: 3.0 },
+    base: { revenueFactor: 1.15, interestAddPct: 0 },
+    downside: { revenueFactor: 1.0, interestAddPct: 0 },
+    stress: { revenueFactor: 0.90, interestAddPct: 0 },
   },
 };
 
@@ -139,6 +140,7 @@ async function loadAssumptions() {
   const a = await getSetting(ASSUMPTIONS_KEY, { type: 'json', defaultValue: null });
   const merged = Object.assign({}, DEFAULT_ASSUMPTIONS, a || {});
   merged.maintenanceReservePct = 0; // údržba je zahrnutá v servisu → žádná samostatná rezerva (bez dvojího počítání)
+  merged.bankingHaircutPct = 0;     // haircut nahrazen scénáři (Base +15 %, Downside 0, Stress −10 %)
   return merged;
 }
 
@@ -256,9 +258,11 @@ router.get('/overview', requireAuth, async (req, res, next) => {
 
     const cohort = E.cohortCurve(nonTest.filter((l) => !isExcluded(l) && l.classification === 'active' && l.openDate).map((l) => ({ openDate: l.openDate, monthly: netMonthly(l) })), 36);
 
-    // Base Case EBITDA = medián − banking haircut (§49/§50)
+    // Base scénář EBITDA = medián × faktor Base scénáře (Base = medián +15 %).
     const medianEbitda = ebitdaDist.p50 || 0;
-    const baseCaseEbitda = medianEbitda * (1 - (A.bankingHaircutPct || 0) / 100);
+    const baseFactor = (A.scenarios && A.scenarios.base && A.scenarios.base.revenueFactor) || 1;
+    const baseCaseEbitda = medianEbitda * baseFactor;
+    const baseFactorPct = Math.round((baseFactor - 1) * 1000) / 10;
 
     res.json({
       base, generatedAt: hist.generatedAt, sisHeader: hist.sisHeader || null,
@@ -273,7 +277,7 @@ router.get('/overview', requireAuth, async (req, res, next) => {
       },
       unitEconomics: {
         revenueDist: revDist, ebitdaDist, marginDist,
-        medianEbitda: Math.round(medianEbitda), baseCaseEbitda: Math.round(baseCaseEbitda), bankingHaircutPct: A.bankingHaircutPct,
+        medianEbitda: Math.round(medianEbitda), baseCaseEbitda: Math.round(baseCaseEbitda), baseFactorPct: baseFactorPct,
       },
       seasonality,
       cohort,
