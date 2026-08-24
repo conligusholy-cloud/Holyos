@@ -394,6 +394,47 @@ router.get('/forecast', requireAuth, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// POST /api/bank-plan/risks/ai-assess — AI zhodnotí rizika v kontextu reálných čísel plánu.
+router.post('/risks/ai-assess', requireAuth, async (req, res, next) => {
+  try {
+    const hist = await getSetting(HISTORY_KEY, { type: 'json', defaultValue: null });
+    if (!hist) return res.status(404).json({ error: 'Snapshot historie zatím není.' });
+    const A = await loadAssumptions();
+    const risks = A.risks || DEFAULT_ASSUMPTIONS.risks;
+    // Kontext = reálné výstupy modelu (Base + Stress), ať AI nehádá.
+    const base = 'CZK';
+    const inp = await _portfolioInputs(hist, A, base);
+    const fin = Object.assign({}, DEFAULT_ASSUMPTIONS.financing, A.financing || {});
+    const mkFc = (scName) => {
+      const scenarios = Object.assign({}, DEFAULT_ASSUMPTIONS.scenarios, A.scenarios || {});
+      const sc = scenarios[scName] || scenarios.base;
+      const haircut = 1 - ((A.bankingHaircutPct || 0) / 100);
+      const perUnitRevenue = inp.medRevenue * haircut * (sc.revenueFactor != null ? sc.revenueFactor : 1);
+      const toBase = (czk) => E.convert(czk, 'CZK', base, A.fx || DEFAULT_ASSUMPTIONS.fx);
+      const unitCostBase = E.convert((A.unitCostEur || 52000), 'EUR', base, A.fx || DEFAULT_ASSUMPTIONS.fx);
+      const unitAllIn = E.convert((A.unitCostEur || 52000) + (fin.allInExtraEur || 0), 'EUR', base, A.fx || DEFAULT_ASSUMPTIONS.fx);
+      const start = (fin.startUnitsOverride != null && fin.startUnitsOverride !== '') ? Math.max(0, Math.floor(Number(fin.startUnitsOverride))) : inp.activeCount;
+      return F.buildForecast({ months: fin.horizonMonths, startUnits: start, perUnitRevenue, ebitdaMargin: inp.medMargin, centralCostMonthly: toBase(fin.centralCostMonthlyCzk), taxRatePct: fin.taxRatePct, maintenanceReservePct: A.maintenanceReservePct, minLiquidity: toBase(fin.minLiquidityCzk), rampCurve: F.rampFromCohort(inp.cohort, inp.medRevenue || 1), newUnitsPerMonth: fin.newUnitsPerMonth, unitAllInCapex: unitAllIn, unitCostBase, bankFinancingPct: fin.bankFinancingPct, interestRatePct: (fin.interestRatePct || 0) + (sc.interestAddPct || 0), maturityMonths: fin.maturityMonths, graceMonths: fin.graceMonths, facilityLimit: toBase(fin.facilityLimitCzk), targetUnitsPerMonth: A.targetUnitsPerMonth || 4 });
+    };
+    const fcBase = mkFc('base'); const fcStress = mkFc('stress');
+
+    const ctx = {
+      trackRecord: { years: null, activeCount: inp.activeCount },
+      yearsData: (() => { const f = hist.globalFirst ? new Date(hist.globalFirst) : null; return f ? Math.round((Date.now() - f) / (365 * 86400000) * 10) / 10 : null; })(),
+      locations: inp.activeCount, medianRevenueCzk: Math.round(inp.medRevenue), medianMarginPct: Math.round(inp.medMargin * 1000) / 10,
+      baseMinDscr: fcBase.summary.minDscr, baseAvgDscr: fcBase.summary.avgDscr, stressMinDscr: fcStress.summary.minDscr,
+      crossover: fcBase.summary.crossover, peakDebt: fcBase.summary.peakDebt, facilityCzk: fin.facilityLimitCzk, interestPct: fin.interestRatePct,
+    };
+
+    const sm = require('../services/ai/sales-manager');
+    const sys = 'Jsi zkušený úvěrový analytik banky. Dostaneš seznam rizik projektu financování sítě samoobslužných prádelen (prádlomatů) a REÁLNÉ výstupy finančního modelu. Ke KAŽDÉMU riziku napiš stručné, konkrétní zhodnocení a doporučení OPŘENÉ O DODANÁ ČÍSLA (DSCR, crossover, počet lokalit, historie). NEVYMÝŠLEJ hodnoty, které nemáš. Buď věcný, konzervativní, bez marketingu. Odpověz POUZE platným JSON: {"items":[{"label":"<přesně název rizika>","assessment":"<1-2 věty zhodnocení>","recommendation":"<1 věta doporučení>"}]}. Piš česky.';
+    const usr = 'Rizika (JSON):\n' + JSON.stringify(risks.map((r) => ({ label: r.label, probability: r.probability, impact: r.impact, mitigation: r.mitigation }))) + '\n\nReálné výstupy modelu (JSON):\n' + JSON.stringify(ctx);
+    const out = await sm.callClaudeJSON(sys, usr, 1600);
+    if (!out || !Array.isArray(out.items)) return res.status(502).json({ error: 'AI nevrátila použitelný výstup.' });
+    res.json({ ok: true, items: out.items, context: ctx });
+  } catch (err) { next(err); }
+});
+
 // POST /api/bank-plan/exclude { code, excluded } — ručně vyřaď/vrať lokalitu do plánu.
 router.post('/exclude', requireAuth, async (req, res, next) => {
   try {

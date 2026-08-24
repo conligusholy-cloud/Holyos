@@ -213,13 +213,16 @@
       var lvlCol = { 'nízká':'#22c55e', 'střední':'#f59e0b', 'vysoká':'#ef4444' };
       function sel(idx,field,val){ return '<select data-ri="'+idx+'" data-rf="'+field+'" style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:4px 6px;color:'+(lvlCol[val]||'var(--text)')+';font-size:12px;font-weight:600">'+lvl.map(function(o){return '<option'+(o===val?' selected':'')+'>'+o+'</option>';}).join('')+'</select>'; }
       var h='<div class="sec"><h2>Analýza rizik <span class="tag tag-assume">ASSUMPTION</span></h2><div class="note">Editovatelné. Pravděpodobnost a dopad: nízká / střední / vysoká. Půjde i do PDF.</div>'+
-        '<div style="overflow-x:auto"><table class="dt"><thead><tr><th>Riziko</th><th>Pravděpodobnost</th><th>Dopad</th><th>Mitigace</th></tr></thead><tbody>';
+        '<div style="overflow-x:auto"><table class="dt"><thead><tr><th>Riziko</th><th>Pravděpodobnost</th><th>Dopad</th><th>Mitigace</th><th>🤖 AI hodnocení &amp; doporučení</th></tr></thead><tbody>';
       risks.forEach(function(r,i){
+        var ai = (RISK_AI && RISK_AI[r.label]) ? RISK_AI[r.label] : null;
+        var aiCell = ai ? ('<div style="font-size:12px"><div>'+esc(ai.assessment||'')+'</div><div style="color:#60a5fa;margin-top:3px">➤ '+esc(ai.recommendation||'')+'</div></div>') : '<span style="color:var(--muted2);font-size:11px">—</span>';
         h+='<tr><td style="font-weight:600;white-space:nowrap">'+esc(r.label)+'</td>'+
           '<td>'+sel(i,'probability',r.probability)+'</td><td>'+sel(i,'impact',r.impact)+'</td>'+
-          '<td><input data-ri="'+i+'" data-rf="mitigation" value="'+esc(r.mitigation||'')+'" style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:5px 8px;color:var(--text);font-size:12px"></td></tr>';
+          '<td><input data-ri="'+i+'" data-rf="mitigation" value="'+esc(r.mitigation||'')+'" style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:5px 8px;color:var(--text);font-size:12px"></td>'+
+          '<td style="min-width:260px">'+aiCell+'</td></tr>';
       });
-      h+='</tbody></table></div><div style="margin-top:12px"><button class="btn btn-primary" onclick="saveRisks()">💾 Uložit rizika</button></div></div>';
+      h+='</tbody></table></div><div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap"><button class="btn btn-primary" onclick="saveRisks()">💾 Uložit rizika</button><button class="btn" id="ai-risk-btn" onclick="aiAssessRisks()" style="background:#7c5cff;color:#fff;border:none">🤖 AI zhodnocení rizik</button></div></div>';
       return h;
     }
     async function saveRisks(){
@@ -231,6 +234,18 @@
       } catch(e){ alert('Uložení selhalo: '+(e.message||'')); }
     }
     window.saveRisks=saveRisks;
+    var RISK_AI = null; // { label: {assessment, recommendation} }
+    async function aiAssessRisks(){
+      var btn=document.getElementById('ai-risk-btn'); if(btn){ btn.disabled=true; btn.textContent='🤖 Analyzuji…'; }
+      try {
+        var r=await fetch('/api/bank-plan/risks/ai-assess',{method:'POST',credentials:'include'});
+        var d=await r.json();
+        if(!r.ok||!d.items) throw new Error(d.error||('HTTP '+r.status));
+        RISK_AI={}; d.items.forEach(function(it){ RISK_AI[it.label]=it; });
+        render(); // překreslí tabulku s AI sloupcem
+      } catch(e){ alert('AI zhodnocení selhalo: '+(e.message||'')); if(btn){ btn.disabled=false; btn.textContent='🤖 AI zhodnocení rizik'; } }
+    }
+    window.aiAssessRisks=aiAssessRisks;
     function assumptionsForm(){
       var a = DATA.assumptions||{};
       function f(key, label, val){ return '<div><label>'+label+'</label><input id="as-'+key+'" value="'+(val!=null?val:'')+'"></div>'; }
