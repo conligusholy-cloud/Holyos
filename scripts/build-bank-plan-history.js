@@ -22,6 +22,12 @@ const path = require('path');
   } catch (e) { /* .env nemusí existovat */ }
 })();
 
+// Při běhu z lokálu (railway run) je DATABASE_URL interní (postgres.railway.internal) a
+// není z PC dostupná. Když existuje DATABASE_PUBLIC_URL, použij ji (pokud nechceš, --internal-db).
+if (process.env.DATABASE_PUBLIC_URL && !process.argv.includes('--internal-db')) {
+  process.env.DATABASE_URL = process.env.DATABASE_PUBLIC_URL;
+}
+
 const H = require('../services/bank-plan/sis-history');
 const { setSetting } = require('../services/settings');
 
@@ -38,25 +44,34 @@ async function fetchKioskList() {
 }
 
 (async () => {
-  if (!process.env.SIS_KIOSK_API_KEY) { console.error('❌ Chybí SIS_KIOSK_API_KEY.'); process.exit(1); }
-  console.log('Base měna:', BASE);
-  console.log('Načítám seznam lokalit ze SIS…');
-  const { kiosks, header } = await fetchKioskList();
-  console.log('  lokalit:', kiosks.length);
-
-  const fetchTx = H.makeSisFetchTx(process.env);
-  console.log('Stahuji plnou historii transakcí (může chvíli trvat)…');
-  const t0 = Date.now();
-  const hist = await H.buildHistory({ kiosks, fetchTx, base: BASE, fx: H.DEFAULT_FX, limit: 500 });
-  hist.sisHeader = header;
-  console.log('  hotovo za', Math.round((Date.now() - t0) / 1000), 's');
-  console.log('  reálných lokalit:', hist.portfolio.realCount, '| aktivních:', hist.portfolio.activeCount, '| uzavřených:', hist.portfolio.closedCount, '| test:', hist.portfolio.testCount);
-  console.log('  location-months:', hist.portfolio.locationMonths, '| historie od', hist.globalFirst, 'do', hist.globalLast);
-
-  // JSON pro kontrolu
   const outDir = path.join(__dirname, 'out'); try { fs.mkdirSync(outDir, { recursive: true }); } catch (e) {}
-  fs.writeFileSync(path.join(outDir, 'bank-plan-history.json'), JSON.stringify(hist, null, 2));
-  console.log('  JSON:', path.join(outDir, 'bank-plan-history.json'));
+  const jsonPath = path.join(outDir, 'bank-plan-history.json');
+  let hist;
+
+  if (args['save-only']) {
+    // Přeskoč stahování SIS — načti už uložený JSON a jen ho zapiš do DB.
+    console.log('Režim --save-only: čtu', jsonPath);
+    hist = JSON.parse(fs.readFileSync(jsonPath, 'utf8'));
+    console.log('  reálných lokalit:', hist.portfolio.realCount, '| location-months:', hist.portfolio.locationMonths);
+  } else {
+    if (!process.env.SIS_KIOSK_API_KEY) { console.error('❌ Chybí SIS_KIOSK_API_KEY.'); process.exit(1); }
+    console.log('Base měna:', BASE);
+    console.log('Načítám seznam lokalit ze SIS…');
+    const { kiosks, header } = await fetchKioskList();
+    console.log('  lokalit:', kiosks.length);
+
+    const fetchTx = H.makeSisFetchTx(process.env);
+    console.log('Stahuji plnou historii transakcí (může chvíli trvat)…');
+    const t0 = Date.now();
+    hist = await H.buildHistory({ kiosks, fetchTx, base: BASE, fx: H.DEFAULT_FX, limit: 500 });
+    hist.sisHeader = header;
+    console.log('  hotovo za', Math.round((Date.now() - t0) / 1000), 's');
+    console.log('  reálných lokalit:', hist.portfolio.realCount, '| aktivních:', hist.portfolio.activeCount, '| uzavřených:', hist.portfolio.closedCount, '| test:', hist.portfolio.testCount);
+    console.log('  location-months:', hist.portfolio.locationMonths, '| historie od', hist.globalFirst, 'do', hist.globalLast);
+
+    fs.writeFileSync(jsonPath, JSON.stringify(hist, null, 2));
+    console.log('  JSON:', jsonPath);
+  }
 
   // Uložit do AppSetting (čte ho route /api/bank-plan/history)
   try {
