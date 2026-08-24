@@ -351,7 +351,9 @@ router.get('/forecast', requireAuth, async (req, res, next) => {
       : inp.activeCount;
     const greenfield = startUnits === 0;
 
-    const fc = F.buildForecast({
+    const mode = String(req.query.mode || '') === 'reinvest' ? 'reinvest' : 'facility';
+    const builder = mode === 'reinvest' ? F.buildReinvestForecast : F.buildForecast;
+    const fc = builder({
       months: fin.horizonMonths, startUnits: startUnits,
       perUnitRevenue, ebitdaMargin: inp.medMargin,
       centralCostMonthly: toBase(fin.centralCostMonthlyCzk), taxRatePct: fin.taxRatePct,
@@ -398,7 +400,7 @@ router.get('/forecast', requireAuth, async (req, res, next) => {
     };
 
     res.json({
-      base, scenario: scName, unitBreakdown, greenfield, startUnits,
+      base, scenario: scName, mode, unitBreakdown, greenfield, startUnits,
       inputs: { activeCount: inp.activeCount, startUnits: startUnits, greenfield: greenfield, medRevenue: Math.round(inp.medRevenue), medMargin: inp.medMargin, perUnitRevenue: Math.round(perUnitRevenue), unitCostBase: Math.round(unitCostBase), unitAllIn: Math.round(unitAllIn), rampCurve, targetUnitsPerMonth: (A.targetUnitsPerMonth || 4), buildPace: fin.newUnitsPerMonth },
       financing: fin, scenarios, activeScenario: sc,
       summary: fc.summary, rows: fc.rows,

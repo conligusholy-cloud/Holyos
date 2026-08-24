@@ -345,12 +345,14 @@
       h += '</div>';
       h += '<div class="sec" style="background:var(--surface2)"><h2>Kumulativní volný cash flow (rezerva / reinvestice)</h2><div class="note">Narůstající součet volného cash flow po provozu, daních a splátkách úvěru (před výdaji na růst). Z toho se tvoří hotovostní rezerva nebo prostředky na reinvestici do dalších strojů.</div><canvas id="fc-cum" height="110"></canvas></div>';
       h += yearlyTableHtml();
+      h += '<div class="sec" style="background:var(--surface2)"><h2>Roční přehled — reinvestiční režim ♻️</h2><div class="note">Navíc k financované výstavbě: kdykoliv se z volného cash flow nastřádá na nový stroj, koupí se (samofinancovaný růst). Scénář '+esc(FC_SCEN)+'.</div><div id="fc-reinvest"><div class="note">Načítám…</div></div></div>';
       h += requestedFinancingHtml();
       h += creditCommitteeHtml();
       h += fcFinancingForm();
       body.innerHTML = h;
       drawForecastCharts();
       fillStressDscr();
+      loadReinvestTable();
     }
     function unitBreakdownHtml(){
       var u = FC.unitBreakdown; if(!u) return '';
@@ -448,6 +450,29 @@
       h+=r('Self-Financing Crossover', cx.month!=null?('měsíc '+cx.month+' při '+cx.units+' jednotkách'):'nedosaženo v horizontu (potřeba větší rámec)');
       h+='</div></div>';
       return h;
+    }
+    function yearlyTableFrom(rows){
+      var out=[]; var y0=new Date().getFullYear();
+      for(var y=0;y*12<rows.length;y++){ var seg=rows.slice(y*12,y*12+12); if(!seg.length)break; var last=seg[seg.length-1];
+        var newU=seg.reduce(function(a,r){return a+(r.newUnits||0);},0); var rev=seg.reduce(function(a,r){return a+r.revenue;},0);
+        var eb=seg.reduce(function(a,r){return a+r.portfolioEbitda;},0); var ds=seg.reduce(function(a,r){return a+r.debtService;},0);
+        var dscrs=seg.map(function(r){return r.dscr;}).filter(function(x){return x!=null;});
+        out.push({year:y0+y,units:last.closingUnits,newU:newU,rev:rev,eb:eb,ds:ds,dscr:dscrs.length?Math.min.apply(null,dscrs):null,debt:last.outstanding}); }
+      return out;
+    }
+    async function loadReinvestTable(){
+      var box=document.getElementById('fc-reinvest'); if(!box) return;
+      try {
+        var d=await (await fetch('/api/bank-plan/forecast?base='+BASE+'&scenario='+FC_SCEN+'&mode=reinvest',{credentials:'include'})).json();
+        var Y=yearlyTableFrom(d.rows||[]); var s=d.summary||{};
+        var h='<div style="overflow-x:auto"><table class="dt"><thead><tr><th>Rok</th><th style="text-align:right">Jednotek</th><th style="text-align:right">Nové</th><th style="text-align:right">Tržby</th><th style="text-align:right">EBITDA</th><th style="text-align:right">Splátky</th><th style="text-align:right">DSCR</th><th style="text-align:right">Zůstatek dluhu</th></tr></thead><tbody>';
+        Y.forEach(function(r){ var dc=r.dscr==null?'var(--muted2)':(r.dscr<1?'#ef4444':(r.dscr<1.2?'#f59e0b':'#22c55e'));
+          h+='<tr><td style="font-weight:600">'+r.year+'</td><td style="text-align:right">'+r.units+'</td><td style="text-align:right">'+(r.newU||'—')+'</td><td style="text-align:right">'+money(r.rev)+'</td><td style="text-align:right;color:#22c55e">'+money(r.eb)+'</td><td style="text-align:right;color:#f59e0b">'+money(r.ds)+'</td><td style="text-align:right;color:'+dc+';font-weight:600">'+(r.dscr!=null?(Math.round(r.dscr*100)/100).toLocaleString('cs-CZ')+'×':'—')+'</td><td style="text-align:right;color:#a855f7">'+money(r.debt)+'</td></tr>';
+        });
+        h+='</tbody></table></div>';
+        h+='<div class="note" style="margin-top:8px">Jednotek na konci: <b>'+s.unitsEnd+'</b> (z '+s.startUnits+' · +'+s.newTotal+'). Financováno z úvěru '+money(s.drawnTotal)+' + externí vlastní '+money(s.totalEquity)+' + <b>reinvestováno z cash flow '+money(s.reinvestCapex)+'</b>.</div>';
+        box.innerHTML=h;
+      } catch(e){ box.innerHTML='<div class="note" style="color:#ef4444">Nepodařilo se načíst.</div>'; }
     }
     async function fillStressDscr(){
       var el=document.getElementById('cc-stress-dscr'); if(!el) return;
