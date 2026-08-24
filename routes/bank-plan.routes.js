@@ -395,6 +395,7 @@ router.get('/forecast', requireAuth, async (req, res, next) => {
     const unitBreakdown = {
       revenue: rnd(revenueU), rent: rnd(rentU), service: rnd(serviceU), energy: rnd(energyU), fee: rnd(feeU),
       directOpex: rnd(directOpexU), ebitda: rnd(ebitdaU), ebitdaMargin: revenueU ? ebitdaU / revenueU : 0,
+      noi: rnd(ebitdaU - maintU), // NOI = provozní zisk před daní i splátkou (= EBITDA − údržba; údržba je defaultně v servisu)
       maintenance: rnd(maintU), payment: rnd(paymentU), tax: rnd(taxU), depreciation: rnd(deprU), depreciationYears: (fin.depreciationYears || 0),
       netWithDebt: rnd(netWithDebtU), netPaidOff: rnd(netPaidOffU),
       allIn: rnd(unitAllIn), debtPerUnit: rnd(debtPerUnit), equityPerUnit: rnd(unitAllIn - debtPerUnit),

@@ -98,7 +98,8 @@ function buildForecast(p) {
     const depreciation = depArr[m];
     const taxable = Math.max(0, portfolioEbitda - interest - depreciation); // odpisy = daňový štít
     const tax = taxable * taxPct / 100;
-    const cfads = portfolioEbitda - tax - maintenance;
+    const noi = portfolioEbitda - maintenance;            // NOI = provozní zisk před splátkou i daní
+    const cfads = noi - tax;                               // CFADS = NOI − daň
     const dscr = debtService > 0 ? cfads / debtService : null;
     const fcfBeforeGrowth = cfads - debtService;
     const cashForExpansion = fcfBeforeGrowth - minLiquidity;
@@ -110,7 +111,7 @@ function buildForecast(p) {
     cfadsArr.push(cfads); dsArr.push(debtService); cashForExpArr.push(cashForExpansion); crossArr.push(crossCash);
     rows.push({
       month: m, openUnits: unitsSeries[m].opening, newUnits: unitsSeries[m].added, closingUnits: unitsSeries[m].closing,
-      revenue, ebitda, portfolioEbitda, interest, principal: debt.perMonth[m].principal, debtService,
+      revenue, ebitda, portfolioEbitda, noi, interest, principal: debt.perMonth[m].principal, debtService,
       outstanding: debt.perMonth[m].closingPrincipal, tax, maintenance, cfads, dscr,
       fcfBeforeGrowth, cashForExpansion, equityCapex, closingCash,
     });
@@ -152,6 +153,7 @@ function buildReinvestForecast(p) {
   const centralMonthly = Number(p.centralCostMonthly) || 0;
   const taxPct = Number(p.taxRatePct) || 0;
   const minLiquidity = Number(p.minLiquidity) || 0;
+  const maintPct = Number(p.maintenanceReservePct) || 0;   // % z tržby (sjednoceno s financed režimem)
   const rampCurve = (Array.isArray(p.rampCurve) && p.rampCurve.length) ? p.rampCurve : [1];
   const lastRamp = rampCurve[rampCurve.length - 1];
   const ramp = (age) => (age < rampCurve.length ? rampCurve[age] : lastRamp);
@@ -196,7 +198,9 @@ function buildReinvestForecast(p) {
     for (const c of cohorts) { const age = m - c.start; if (age >= 0 && age < depMonths) depreciation += c.count * monthlyDepPerUnit; }
     const taxable = Math.max(0, ebitda - interest - depreciation);
     const tax = taxable * taxPct / 100;
-    const fcf = ebitda - tax - debtService; // volné cash flow před růstem
+    const maintenance = rev * maintPct / 100;
+    const noi = ebitda - maintenance;                    // NOI = portfolio EBITDA − údržba
+    const fcf = noi - tax - debtService; // volné cash flow před růstem (po údržbě)
     cashPool += fcf;
 
     let built = 0, equityThisMonth = 0;
@@ -217,11 +221,11 @@ function buildReinvestForecast(p) {
       cohorts.push({ start: m, count: 1 }); unitsTotal++; built++; guard++;
     }
 
-    const cfads = ebitda - tax;
+    const cfads = noi - tax;                              // CFADS = NOI − daň (sjednoceno s financed režimem)
     const dscr = debtService > 0 ? cfads / debtService : null;
-    const crossCash = ebitda - Math.max(0, ebitda) * taxPct / 100 - minLiquidity; // bez splátek (jako splacené)
+    const crossCash = noi - Math.max(0, ebitda) * taxPct / 100 - minLiquidity; // bez splátek (jako splacené), po údržbě
     cfadsArr.push(cfads); dsArr.push(debtService); crossArr.push(crossCash);
-    rows.push({ month: m, closingUnits: unitsTotal, financedUnits: financedTotal, reinvestUnits: (unitsTotal - startUnits - financedTotal), newUnits: built, revenue: rev, ebitda, portfolioEbitda: ebitda, interest, principal, debtService, outstanding, tax, cfads, dscr, fcfBeforeGrowth: fcf, cashPool: Math.round(cashPool), equityCapex: equityThisMonth });
+    rows.push({ month: m, closingUnits: unitsTotal, financedUnits: financedTotal, reinvestUnits: (unitsTotal - startUnits - financedTotal), newUnits: built, revenue: rev, ebitda, portfolioEbitda: ebitda, noi, maintenance, interest, principal, debtService, outstanding, tax, cfads, dscr, fcfBeforeGrowth: fcf, cashPool: Math.round(cashPool), equityCapex: equityThisMonth });
   }
 
   const dscrSum = E.dscrSeries(cfadsArr, dsArr);

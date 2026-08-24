@@ -225,20 +225,32 @@ function buildDebtSchedule(drawdowns, months) {
 // BANKOVNÍ METRIKY
 // ─────────────────────────────────────────────────────────────────────────────
 
-// DSCR = Cash Flow Available for Debt Service / Debt Service (po měsících).
+// DSCR = Cash Flow Available for Debt Service / Debt Service.
+// Měsíčně kvůli grafu, ale MIN se bere z ROČNÍCH agregátů (bankovní konvence,
+// „nejnižší DSCR v daném roce") — jeden lumpy měsíc náběhu by min nespravedlivě
+// stáhl dolů. Průměr = celkové CFADS / celkové splátky za horizont (lifetime coverage).
 function dscrSeries(cfads, debtService) {
   const H = Math.max(cfads.length, debtService.length);
   const perMonth = [];
-  let min = null, sumCfads = 0, sumDs = 0;
+  let sumCfads = 0, sumDs = 0;
+  const yearCf = {}, yearDs = {};
   for (let i = 0; i < H; i++) {
     const cf = Number(cfads[i]) || 0;
     const ds = Number(debtService[i]) || 0;
     sumCfads += cf; sumDs += ds;
-    const dscr = ds > 0 ? cf / ds : null;
-    if (dscr != null && (min == null || dscr < min)) min = dscr;
-    perMonth.push({ month: i, cfads: cf, debtService: ds, dscr });
+    perMonth.push({ month: i, cfads: cf, debtService: ds, dscr: ds > 0 ? cf / ds : null });
+    const y = Math.floor(i / 12);
+    yearCf[y] = (yearCf[y] || 0) + cf; yearDs[y] = (yearDs[y] || 0) + ds;
   }
-  return { perMonth, min, avg: sumDs > 0 ? sumCfads / sumDs : null };
+  const perYear = [];
+  let min = null;
+  Object.keys(yearCf).map(Number).sort((a, b) => a - b).forEach((y) => {
+    const ds = yearDs[y] || 0, cf = yearCf[y] || 0;
+    const dscr = ds > 0 ? cf / ds : null;
+    perYear.push({ year: y, cfads: cf, debtService: ds, dscr });
+    if (dscr != null && (min == null || dscr < min)) min = dscr;
+  });
+  return { perMonth, perYear, min, avg: sumDs > 0 ? sumCfads / sumDs : null };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

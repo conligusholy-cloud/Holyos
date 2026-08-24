@@ -377,7 +377,10 @@
       h += row('Energie', u.energy, {minus:true, col:'#ef4444', pct:u.energy/rev});
       h += row('Platební poplatky', u.fee, {minus:true, col:'#ef4444', pct:u.fee/rev});
       h += row('EBITDA', u.ebitda, {bold:true, col:'#22c55e', top:true, pct:u.ebitdaMargin});
+      if (u.maintenance) h += row('Údržba (rezerva)', u.maintenance, {minus:true, col:'#ef4444', pct:u.maintenance/rev});
+      h += row('NOI (provozní zisk před daní i splátkou)', (u.noi!=null?u.noi:u.ebitda), {bold:true, col:'#22c55e', pct:(rev?((u.noi!=null?u.noi:u.ebitda)/rev):null)});
       h += row('Splátka úvěru (anuita)', u.payment, {minus:true, col:'#f59e0b'});
+      if (u.payment) h += '<div class="note" style="margin:2px 0 8px">DSCR jedné lokality (NOI ÷ splátka) = <b>'+ (Math.round((u.noi!=null?u.noi:u.ebitda)/u.payment*100)/100).toString().replace('.',',') +'×</b></div>';
       h += row('Daň (po odpisech '+(u.depreciationYears||5)+' let)', u.tax, {minus:true, col:'#ef4444'});
       h += row('Čistý cash po VŠEM (i splátce)', u.netWithDebt, {bold:true, col:(u.netWithDebt>=0?'#22c55e':'#ef4444'), top:true});
       h += '<div style="margin-top:10px;padding-top:10px;border-top:1px dashed var(--border)">'+
