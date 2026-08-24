@@ -179,6 +179,15 @@ router.get('/overview', requireAuth, async (req, res, next) => {
     const ebitdaDist = E.percentiles(distSrc.map((x) => x.ebitda));
     const marginDist = E.percentiles(distSrc.map((x) => x.margin));
 
+    // Průměrný známý nájem (z Compoundingu) přes zahrnuté lokality — jako nápověda pro default.
+    let rentSum = 0, rentN = 0;
+    nonTest.forEach((l) => {
+      if (isExcluded(l)) return;
+      const cfg = cfgMap[l.code] || {};
+      if (typeof cfg.rentMonthlyCzk === 'number' && isFinite(cfg.rentMonthlyCzk) && cfg.rentMonthlyCzk > 0) { rentSum += cfg.rentMonthlyCzk; rentN++; }
+    });
+    const rentStats = { avgKnownRentCzk: rentN ? Math.round(rentSum / rentN) : null, count: rentN, totalPlan: realCount };
+
     const seasonality = E.seasonalityIndex(portfolioMonthly);
 
     const cohort = E.cohortCurve(nonTest.filter((l) => !isExcluded(l) && l.classification === 'active' && l.openDate).map((l) => ({ openDate: l.openDate, monthly: netMonthly(l) })), 36);
@@ -205,6 +214,7 @@ router.get('/overview', requireAuth, async (req, res, next) => {
       seasonality,
       cohort,
       portfolioMonthly,
+      rentStats,
       assumptions: A,
       locations: perLoc,
     });

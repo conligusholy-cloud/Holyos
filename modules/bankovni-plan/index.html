@@ -206,7 +206,11 @@
       h += f('servicePct','Servis (% z obratu)', a.servicePct);
       h += f('energyPct','Energie (% z obratu)', a.energyPct);
       h += f('paymentFeePct','Platební poplatky (%)', a.paymentFeePct);
-      h += f('rentMonthlyDefault','Nájem default ('+BASE+'/měs)', a.rentMonthlyDefault);
+      var rs = DATA.rentStats || {};
+      var rentHint = (rs.avgKnownRentCzk != null)
+        ? '<div style="font-size:11px;color:var(--text2);margin-top:4px;">Průměr známých nájmů: <b style="color:var(--text)">' + rs.avgKnownRentCzk.toLocaleString('cs-CZ') + ' Kč</b> (z ' + rs.count + ' z ' + rs.totalPlan + ' lokalit)</div>'
+        : '<div style="font-size:11px;color:var(--text2);margin-top:4px;">Nájmy zatím nejsou v Compoundingu vyplněné.</div>';
+      h += '<div><label>Nájem default (CZK/měs)</label><input id="as-rentMonthlyDefault" value="'+(a.rentMonthlyDefault!=null?a.rentMonthlyDefault:'')+'">'+rentHint+'</div>';
       h += f('maintenanceReservePct','Rezerva na údržbu (%)', a.maintenanceReservePct);
       h += f('bankingHaircutPct','Bankovní haircut (%)', a.bankingHaircutPct);
       h += f('unitCostEur','Cena prádlomatu (EUR)', a.unitCostEur);
