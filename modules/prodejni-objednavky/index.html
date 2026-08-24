@@ -304,6 +304,7 @@
       <button type="button" class="tab-btn" data-tab="externi" onclick="switchTab('externi')">🤝 Externí obchod</button>
       <button type="button" class="tab-btn" data-tab="externisti" onclick="switchTab('externisti')">🧑‍💼 Externí obchodníci</button>
       <button type="button" class="tab-btn" data-tab="blacklist" onclick="switchTab('blacklist')">🚫 Black list</button>
+      <button type="button" class="tab-btn" data-tab="bankovni-plan" onclick="switchTab('bankovni-plan')">🏦 Bankovní plán</button>
     </div>
 
     <!-- TAB: Compounding — hodnota lokalit prádlomatů ze SIS API -->
@@ -387,6 +388,11 @@
       <div style="color:var(--text2);font-size:12px;margin-bottom:10px;">Kontakty na tomto seznamu nelze oslovit — obchodník je nemůže založit jako lead.</div>
       <div id="bl-table"><div style="color:var(--text2);padding:20px;">Načítám…</div></div>
       <div id="bl-pager" style="margin-top:14px;display:flex;align-items:center;"></div>
+    </div>
+
+    <!-- TAB: Bankovní Business Plan (vložený modul přes iframe) -->
+    <div id="tab-bankovni-plan" style="display:none;">
+      <iframe id="bp-frame" title="Bankovní Business Plan" style="width:100%; border:0; min-height:calc(100vh - 220px); display:block;"></iframe>
     </div>
 
     <!-- TAB: Rezervace lokalit -->
@@ -4697,7 +4703,7 @@
     }
 
     function switchTab(name) {
-      ['orders', 'pricelist', 'cashflow', 'tools', 'compounder', 'compounding', 'rezervace', 'databaze', 'lokality', 'externi', 'externisti', 'blacklist'].forEach(function(t) {
+      ['orders', 'pricelist', 'cashflow', 'tools', 'compounder', 'compounding', 'rezervace', 'databaze', 'lokality', 'externi', 'externisti', 'blacklist', 'bankovni-plan'].forEach(function(t) {
         var el = document.getElementById('tab-' + t);
         if (el) el.style.display = (t === name) ? '' : 'none';
         var btn = document.querySelector('.tab-btn[data-tab="' + t + '"]');
@@ -4714,6 +4720,10 @@
       if (name === 'externi') renderExternalTrade();
       if (name === 'externisti') loadExternalReps();
       if (name === 'blacklist') loadBlacklist();
+      if (name === 'bankovni-plan') {
+        var fr = document.getElementById('bp-frame');
+        if (fr && !fr.getAttribute('data-loaded')) { fr.src = '/modules/bankovni-plan/index.html?embed=1'; fr.setAttribute('data-loaded', '1'); }
+      }
     }
 
     // ============================================================

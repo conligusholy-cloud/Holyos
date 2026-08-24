@@ -9,6 +9,9 @@
   <link rel="stylesheet" href="css/dashboard.css">
   <style>
     .main-wrapper { margin-left: var(--sidebar-w); flex: 1; min-height: 100vh; display: flex; flex-direction: column; }
+    body.embed .main-wrapper { margin-left: 0; }
+    body.embed #sidebar { display: none; }
+    body.embed .page-header { padding-top: 12px; }
     .page-header { display:flex; align-items:center; gap:12px; padding:20px 24px; border-bottom:1px solid var(--border); flex-wrap:wrap; }
     .page-header h1 { font-size:18px; font-weight:700; margin:0; }
     .page-header .sub { font-size:12px; color:var(--text2); }
@@ -66,10 +69,15 @@
   </div>
 
   <script>
-    var s = document.createElement('script');
-    s.src = 'js/sidebar.js?v=' + Date.now();
-    s.onload = function() { renderSidebar('bankovni-plan'); };
-    document.head.appendChild(s);
+    // Embed režim (?embed=1) = vloženo jako záložka v Prodejních objednávkách → bez vlastního sidebaru.
+    var _embed = /[?&]embed=1/.test(location.search);
+    if (_embed) { document.body.classList.add('embed'); }
+    else {
+      var s = document.createElement('script');
+      s.src = 'js/sidebar.js?v=' + Date.now();
+      s.onload = function() { renderSidebar('bankovni-plan'); };
+      document.head.appendChild(s);
+    }
   </script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
   <script>

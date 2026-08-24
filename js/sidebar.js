@@ -19,7 +19,6 @@ function renderSidebar(activeModule) {
     { id: 'tiskarny',              name: 'Tiskárny',            icon: '&#128424;', color: '#10b981', active: true },
     { id: 'doklady',               name: 'Skladové doklady',    icon: '&#128209;', color: '#8b5cf6', active: true },
     { id: 'ucetni-doklady',       name: 'Účetní doklady',      icon: '&#128178;', color: '#0891b2', active: true },
-    { id: 'bankovni-plan',        name: 'Bankovní plán',       icon: '&#127974;', color: '#0ea5e9', active: true },
     { id: 'banky',                name: 'Banky',               icon: '&#127974;', color: '#0ea5e9', active: true },
     { id: 'banka-pravidla',       name: 'Pravidla párování',   icon: '&#9878;',   color: '#a855f7', active: true },
     { id: 'pokladna',             name: 'Pokladna',            icon: '&#128181;', color: '#10b981', active: true },
