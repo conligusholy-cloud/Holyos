@@ -172,7 +172,7 @@ function buildReinvestForecast(p) {
 
   const cohorts = [];          // nové jednotky { start, count }
   const tranches = [];         // dluhové tranše { start, balance, pay }
-  let drawn = 0, cashPool = 0, totalEquity = 0, reinvestCapex = 0, unitsTotal = startUnits;
+  let drawn = 0, cashPool = 0, totalEquity = 0, reinvestCapex = 0, unitsTotal = startUnits, financedTotal = 0;
   const rows = [], cfadsArr = [], dsArr = [], crossArr = [];
 
   for (let m = 0; m < months; m++) {
@@ -206,7 +206,7 @@ function buildReinvestForecast(p) {
       const room = isFinite(facilityLimit) ? (facilityLimit - drawn) : Infinity;
       if (room >= debtPerUnit) {
         tranches.push({ start: m, balance: debtPerUnit, pay: E.annuityPayment(debtPerUnit, monthlyRate, Math.max(1, maturity - grace)) });
-        drawn += debtPerUnit; totalEquity += equityPerUnit;
+        drawn += debtPerUnit; totalEquity += equityPerUnit; financedTotal++;
         cohorts.push({ start: m, count: 1 }); unitsTotal++; built++; paceLeft--;
       } else break;
     }
@@ -221,7 +221,7 @@ function buildReinvestForecast(p) {
     const dscr = debtService > 0 ? cfads / debtService : null;
     const crossCash = ebitda - Math.max(0, ebitda) * taxPct / 100 - minLiquidity; // bez splátek (jako splacené)
     cfadsArr.push(cfads); dsArr.push(debtService); crossArr.push(crossCash);
-    rows.push({ month: m, closingUnits: unitsTotal, newUnits: built, revenue: rev, ebitda, portfolioEbitda: ebitda, interest, principal, debtService, outstanding, tax, cfads, dscr, fcfBeforeGrowth: fcf, cashPool: Math.round(cashPool), equityCapex: 0 });
+    rows.push({ month: m, closingUnits: unitsTotal, financedUnits: financedTotal, reinvestUnits: (unitsTotal - startUnits - financedTotal), newUnits: built, revenue: rev, ebitda, portfolioEbitda: ebitda, interest, principal, debtService, outstanding, tax, cfads, dscr, fcfBeforeGrowth: fcf, cashPool: Math.round(cashPool), equityCapex: 0 });
   }
 
   const dscrSum = E.dscrSeries(cfadsArr, dsArr);
