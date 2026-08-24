@@ -171,7 +171,7 @@
       var p90 = DATA.unitEconomics.revenueDist.p90;
       var exCount = locs.filter(function(l){return l.excluded;}).length;
       var h = '<div class="note" style="margin-bottom:8px">Zaškrtnuté = v plánu. Odškrtnutím lokalitu vyřadíš (nesmysly/testy) — nezapočítá se do žádných čísel.'+(exCount?(' Vyřazeno: '+exCount+'.'):'')+'</div>';
-      h += '<div style="overflow-x:auto;"><table class="dt"><thead><tr><th>V plánu</th><th>Kód</th><th>Lokalita</th><th>Otevřeno</th><th style="text-align:right">Tržba/měs<br><span style="font-weight:400;text-transform:none">bez DPH</span></th><th style="text-align:right">EBITDA/měs</th><th style="text-align:right">Marže</th><th></th></tr></thead><tbody>';
+      h += '<div style="overflow-x:auto;"><table class="dt"><thead><tr><th>V plánu</th><th>Kód</th><th>Verze</th><th>Lokalita</th><th>Otevřeno</th><th style="text-align:right">Tržba/měs<br><span style="font-weight:400;text-transform:none">bez DPH</span></th><th style="text-align:right">EBITDA/měs</th><th style="text-align:right">Marže</th><th></th></tr></thead><tbody>';
       locs.forEach(function(l){
         var flags = '';
         if (l.classification === 'closed') flags += ' <span class="flag" style="background:rgba(148,163,184,.16);color:#94a3b8">uzavřená</span>';
@@ -179,7 +179,9 @@
         if (!l.excluded && (l.ebitda||0) < 0) flags += ' <span class="flag flag-loss">🔴 ztráta</span>';
         var dim = l.excluded ? 'opacity:.42;' : '';
         var chk = '<input type="checkbox" '+(l.excluded?'':'checked')+' onchange="toggleExclude(&#39;'+esc(l.code)+'&#39;, !this.checked)" title="'+(l.excluded?'Vrátit do plánu':'Vyřadit z plánu')+'" style="width:17px;height:17px;cursor:pointer;accent-color:#0ea5e9">';
-        h += '<tr style="'+dim+'"><td style="text-align:center">'+chk+'</td><td style="font-weight:600">'+esc(l.code)+'</td><td>'+esc(l.label||'')+'</td><td>'+(l.openDate||'—')+'</td>'+
+        var vcol = { V2:'#f59e0b', V3:'#0ea5e9', V4:'#a855f7' }[l.version] || '#94a3b8';
+        var vbadge = l.version ? '<span class="flag" style="background:'+vcol+'22;color:'+vcol+';font-weight:700">'+esc(l.version)+'</span>' : '<span style="color:var(--text2)">—</span>';
+        h += '<tr style="'+dim+'"><td style="text-align:center">'+chk+'</td><td style="font-weight:600">'+esc(l.code)+'</td><td>'+vbadge+'</td><td>'+esc(l.label||'')+'</td><td>'+(l.openDate||'—')+'</td>'+
           '<td style="text-align:right">'+money(l.avgRev)+'</td>'+
           '<td style="text-align:right;color:'+((l.ebitda||0)<0?'#ef4444':'#22c55e')+';font-weight:600">'+money(l.ebitda)+'</td>'+
           '<td style="text-align:right">'+pct(l.margin)+'</td><td>'+flags+'</td></tr>';

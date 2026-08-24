@@ -121,6 +121,8 @@ router.get('/overview', requireAuth, async (req, res, next) => {
     const fx = A.fx || DEFAULT_ASSUMPTIONS.fx;
     const base = (req.query.base || hist.base || 'CZK').toUpperCase();
     const storedBase = hist.base || 'CZK';
+    // Verze prádlomatu (V2/V3/V4) + nájem per lokalita z nastavení Compoundingu.
+    const cfgMap = (await getSetting('compounding.kiosks', { type: 'json', defaultValue: {} })) || {};
 
     const excluded = new Set((A.excludedCodes || []).map((c) => String(c).trim().toUpperCase()));
     const nonTest = (hist.locations || []).filter((l) => l.classification !== 'test');
@@ -164,9 +166,11 @@ router.get('/overview', requireAuth, async (req, res, next) => {
     const perLoc = nonTest.map((l) => {
       const m = netMonthly(l); // BEZ DPH
       const avgRev = avgRecentMonthly(m, 12) || 0;
-      const rent = (typeof l.rentMonthly === 'number') ? E.convert(l.rentMonthly, storedBase, base, fx) : A.rentMonthlyDefault;
+      const cfg = cfgMap[l.code] || {};
+      const version = cfg.version ? String(cfg.version).toUpperCase() : null;
+      const rent = (typeof cfg.rentMonthlyCzk === 'number') ? E.convert(cfg.rentMonthlyCzk, 'CZK', base, fx) : A.rentMonthlyDefault;
       const se = E.siteEconomics({ revenue: avgRev, rentMonthly: rent, servicePct: A.servicePct, energyPct: A.energyPct, paymentFeePct: A.paymentFeePct, maintenanceReservePct: A.maintenanceReservePct });
-      return { code: l.code, label: l.label, avgRev, ebitda: se.siteEbitda, margin: se.ebitdaMargin, opCashFlow: se.operatingCashFlow, openDate: l.openDate, classification: l.classification, excluded: isExcluded(l) };
+      return { code: l.code, label: l.label, version, avgRev, ebitda: se.siteEbitda, margin: se.ebitdaMargin, opCashFlow: se.operatingCashFlow, openDate: l.openDate, classification: l.classification, excluded: isExcluded(l) };
     });
 
     // Distribuce/kohorty jen z ZAHRNUTÝCH aktivních lokalit.
