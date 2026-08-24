@@ -689,8 +689,8 @@ router.post('/risks/ai-assess', requireAuth, async (req, res, next) => {
     const sm = require('../services/ai/sales-manager');
     const sys = 'Jsi zkušený úvěrový analytik banky. Dostaneš seznam rizik projektu financování sítě samoobslužných prádelen (prádlomatů) a REÁLNÉ výstupy finančního modelu. Ke KAŽDÉMU riziku: (a) navrhni pravděpodobnost a dopad — POUZE jednu z hodnot "nízká", "střední", "vysoká" — na základě dodaných čísel a povahy rizika; (b) napiš stručné konkrétní zhodnocení a doporučení OPŘENÉ O DODANÁ ČÍSLA (DSCR, crossover, počet lokalit, historie). NEVYMÝŠLEJ hodnoty, které nemáš. Buď věcný, konzervativní, bez marketingu. Odpověz POUZE platným JSON: {"items":[{"label":"<přesně název rizika>","probability":"nízká|střední|vysoká","impact":"nízká|střední|vysoká","assessment":"<1-2 věty>","recommendation":"<1 věta>"}]}. Piš česky.';
     const usr = 'Rizika (JSON):\n' + JSON.stringify(risks.map((r) => ({ label: r.label, probability: r.probability, impact: r.impact, mitigation: r.mitigation }))) + '\n\nReálné výstupy modelu (JSON):\n' + JSON.stringify(ctx);
-    const out = await sm.callClaudeJSON(sys, usr, 1600);
-    if (!out || !Array.isArray(out.items)) return res.status(502).json({ error: 'AI nevrátila použitelný výstup.' });
+    const out = await sm.callClaudeJSON(sys, usr, 4000);
+    if (!out || !Array.isArray(out.items)) return res.status(502).json({ error: 'AI nevrátila použitelný výstup (zkuste to prosím znovu).' });
     res.json({ ok: true, items: out.items, context: ctx });
   } catch (err) { next(err); }
 });
