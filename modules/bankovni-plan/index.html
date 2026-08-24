@@ -243,7 +243,11 @@
         var d=await r.json();
         if(!r.ok||!d.items) throw new Error(d.error||('HTTP '+r.status));
         RISK_AI={}; d.items.forEach(function(it){ RISK_AI[it.label]=it; });
-        render(); // překreslí tabulku s AI sloupcem
+        // AI navrhla i pravděpodobnost/dopad → dosadíme do rizik (rozbalovačky).
+        var LV={'nízká':1,'střední':1,'vysoká':1};
+        var risks=(DATA.assumptions&&DATA.assumptions.risks)||[];
+        risks.forEach(function(r){ var it=RISK_AI[r.label]; if(it){ if(it.probability&&LV[it.probability]) r.probability=it.probability; if(it.impact&&LV[it.impact]) r.impact=it.impact; } });
+        render(); // překreslí tabulku s AI sloupcem i novými hodnotami
       } catch(e){ alert('AI zhodnocení selhalo: '+(e.message||'')); if(btn){ btn.disabled=false; btn.textContent='🤖 AI zhodnocení rizik'; } }
     }
     window.aiAssessRisks=aiAssessRisks;
