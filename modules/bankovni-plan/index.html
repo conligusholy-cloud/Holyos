@@ -181,7 +181,8 @@
         var chk = '<input type="checkbox" '+(l.excluded?'':'checked')+' onchange="toggleExclude(&#39;'+esc(l.code)+'&#39;, !this.checked)" title="'+(l.excluded?'Vrátit do plánu':'Vyřadit z plánu')+'" style="width:17px;height:17px;cursor:pointer;accent-color:#0ea5e9">';
         var vcol = { V2:'#f59e0b', V3:'#0ea5e9', V4:'#a855f7' }[l.version] || '#94a3b8';
         var vbadge = l.version ? '<span class="flag" style="background:'+vcol+'22;color:'+vcol+';font-weight:700">'+esc(l.version)+'</span>' : '<span style="color:var(--text2)">—</span>';
-        h += '<tr style="'+dim+'"><td style="text-align:center">'+chk+'</td><td style="font-weight:600">'+esc(l.code)+'</td><td>'+vbadge+'</td><td>'+esc(l.label||'')+'</td><td>'+(l.openDate||'—')+'</td>'+
+        var curLbl = l.currency && l.currency !== 'CZK' ? ' <span style="font-size:10px;color:#f59e0b">'+esc(l.currency)+'</span>' : '';
+        h += '<tr style="'+dim+'"><td style="text-align:center">'+chk+'</td><td style="font-weight:600">'+esc(l.code)+curLbl+'</td><td>'+vbadge+'</td><td>'+esc(l.label||'')+'</td><td>'+(l.openDate||'—')+'</td>'+
           '<td style="text-align:right">'+money(l.avgRev)+'</td>'+
           '<td style="text-align:right;color:'+((l.ebitda||0)<0?'#ef4444':'#22c55e')+';font-weight:600">'+money(l.ebitda)+'</td>'+
           '<td style="text-align:right">'+pct(l.margin)+'</td><td>'+flags+'</td></tr>';

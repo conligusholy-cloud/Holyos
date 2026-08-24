@@ -78,6 +78,8 @@ const DEFAULT_ASSUMPTIONS = {
   vatByCurrency: { CZK: 21, EUR: 23, PLN: 23 },
   // Jsou nájmy (v Compoundingu i default) zadané S DPH? Když ano, model je převede na bez DPH.
   rentVatIncluded: false,
+  // Ruční přepis měny lokality (mylné kódy). Např. 00021FR je fyzicky v ČR → CZK (řeší i engine default).
+  currencyByCode: {},
 };
 
 function monthsBetween(a, b) { return (b.getFullYear() - a.getFullYear()) * 12 + (b.getMonth() - a.getMonth()); }
@@ -131,12 +133,17 @@ router.get('/overview', requireAuth, async (req, res, next) => {
     const isExcluded = (l) => excluded.has(String(l.code).trim().toUpperCase());
 
     // DPH: SIS částky jsou S DPH → převedeme na BEZ DPH dle sazby země (měny) lokality.
+    // Měna se bere z původní (raw) řady v měně lokality; přepis mylných kódů přes currencyByCode.
     const vatMap = A.vatByCurrency || DEFAULT_ASSUMPTIONS.vatByCurrency;
+    const curOverrides = A.currencyByCode || {};
     const netMonthly = (l) => {
-      const gross = convertMonthly(l.monthly || {}, storedBase, base, fx);
-      const cur = E.sourceCurrencyForCode(l.code);
+      const cur = E.sourceCurrencyForCode(l.code, curOverrides);
+      const useSource = !!l.monthlySource;              // nový snapshot = raw v původní měně
+      const raw = useSource ? l.monthlySource : (l.monthly || {});
+      const fromCur = useSource ? cur : storedBase;     // starý snapshot = už v base měně
       const div = 1 + ((vatMap[cur] != null ? vatMap[cur] : 21) / 100);
-      const out = {}; Object.keys(gross).forEach((ym) => { out[ym] = gross[ym] / div; });
+      const out = {};
+      Object.keys(raw).forEach((ym) => { out[ym] = E.convert(raw[ym], fromCur, base, fx) / div; });
       return out;
     };
 
@@ -174,7 +181,7 @@ router.get('/overview', requireAuth, async (req, res, next) => {
       const rentCzk = (typeof cfg.rentMonthlyCzk === 'number') ? cfg.rentMonthlyCzk : A.rentMonthlyDefault;
       const rent = E.convert(rentCzk / rentDiv, 'CZK', base, fx);
       const se = E.siteEconomics({ revenue: avgRev, rentMonthly: rent, servicePct: A.servicePct, energyPct: A.energyPct, paymentFeePct: A.paymentFeePct, maintenanceReservePct: A.maintenanceReservePct });
-      return { code: l.code, label: l.label, version, avgRev, ebitda: se.siteEbitda, margin: se.ebitdaMargin, opCashFlow: se.operatingCashFlow, openDate: l.openDate, classification: l.classification, excluded: isExcluded(l) };
+      return { code: l.code, label: l.label, version, currency: E.sourceCurrencyForCode(l.code, curOverrides), avgRev, ebitda: se.siteEbitda, margin: se.ebitdaMargin, opCashFlow: se.operatingCashFlow, openDate: l.openDate, classification: l.classification, excluded: isExcluded(l) };
     });
 
     // Distribuce/kohorty jen z ZAHRNUTÝCH aktivních lokalit.

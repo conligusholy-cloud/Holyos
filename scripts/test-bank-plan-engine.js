@@ -12,7 +12,9 @@ function approx(name, got, exp, tol) { const t = tol == null ? 1e-6 : tol; asser
 console.log('MĚNA / FX');
 ok('sourceCurrency PL → PLN', E.sourceCurrencyForCode('00003PL') === 'PLN');
 ok('sourceCurrency IE → EUR', E.sourceCurrencyForCode('00001IE') === 'EUR');
-ok('sourceCurrency FR → EUR', E.sourceCurrencyForCode('00021FR') === 'EUR');
+ok('sourceCurrency generic FR → EUR', E.sourceCurrencyForCode('00099FR') === 'EUR');
+ok('sourceCurrency 00021FR override → CZK (fyzicky ČR)', E.sourceCurrencyForCode('00021FR') === 'CZK');
+ok('sourceCurrency override param', E.sourceCurrencyForCode('2TAP', { '2TAP': 'EUR' }) === 'EUR');
 ok('sourceCurrency CZ → CZK', E.sourceCurrencyForCode('00015CZ') === 'CZK');
 ok('sourceCurrency legacy → CZK', E.sourceCurrencyForCode('2TAP') === 'CZK');
 const fx = { CZK: 1, EUR: 25, PLN: 5.8 };

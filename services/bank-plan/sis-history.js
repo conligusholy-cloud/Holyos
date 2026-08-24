@@ -74,7 +74,8 @@ async function buildHistory(params) {
     const code = String(k.code);
     const agg = await aggregateKiosk(code, fetchTx, params);
     const cur = E.sourceCurrencyForCode(code);
-    // převod měsíční řady do base měny
+    // Měsíční řadu ukládáme v PŮVODNÍ měně (raw). Přepočet do CZK/EUR se dělá až při
+    // zobrazení (overview) — díky tomu jdou opravit mylně určené měny bez zkreslení.
     const monthlyBase = {};
     Object.keys(agg.monthly).forEach((ym) => { monthlyBase[ym] = E.convert(agg.monthly[ym], cur, base, fx); });
     const cls = classify(agg, nowMs);
@@ -97,7 +98,8 @@ async function buildHistory(params) {
       txCount: agg.count, successCount: agg.successCount, badDates: agg.badDates,
       complete: agg.complete,
       classification: cls.isTest ? 'test' : (cls.isClosed ? 'closed' : 'active'),
-      monthly: monthlyBase,
+      monthlySource: agg.monthly, // RAW v původní měně (cur) — zdroj pravdy pro overview
+      monthly: monthlyBase,       // pomocná verze v base (jen pro rychlý souhrn/kompatibilitu)
     });
   }
 

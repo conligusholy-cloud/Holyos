@@ -19,11 +19,17 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 // Zdrojová měna lokality dle kódu (SIS pole `currency` je nespolehlivé).
-// PL → PLN, IE/FR → EUR, CZ + legacy (alfanumerické) → CZK.
-function sourceCurrencyForCode(code) {
+// PL → PLN, IE → EUR, CZ + legacy (alfanumerické) → CZK.
+// overrides = { KÓD: 'CZK'|'EUR'|'PLN' } — ruční přepis pro mylně označené kódy.
+// POZOR: 00021FR je fyzicky v ČR (Ústí nad Orlicí) → default override na CZK.
+const DEFAULT_CURRENCY_OVERRIDES = { '00021FR': 'CZK' };
+function sourceCurrencyForCode(code, overrides) {
   const c = String(code || '').trim().toUpperCase();
+  const ov = Object.assign({}, DEFAULT_CURRENCY_OVERRIDES, overrides || {});
+  if (ov[c]) return ov[c];
   if (/PL$/.test(c)) return 'PLN';
-  if (/(IE|FR)$/.test(c)) return 'EUR';
+  if (/IE$/.test(c)) return 'EUR';
+  if (/FR$/.test(c)) return 'EUR';
   return 'CZK'; // CZ i legacy kódy (2XXX, 0YZN, …)
 }
 
