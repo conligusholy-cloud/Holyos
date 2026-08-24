@@ -927,4 +927,5 @@ module.exports = {
   buildOwnerReport, computeActuals, getTargets, ensureTargets,
   replaceSkippedTask,
   AI_PLAN_INSTRUCTIONS_KEY, AI_PLAN_INSTRUCTIONS_DEFAULT,
+  callClaudeJSON, callClaudeText,
 };

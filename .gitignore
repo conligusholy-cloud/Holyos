@@ -62,3 +62,6 @@ podklady/
 !docs/ai-vyvojar/**
 
 .puppeteer-cache/
+
+# Bankovní plán — vygenerované JSON výstupy (probe/snapshot)
+scripts/out/
