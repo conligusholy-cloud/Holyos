@@ -351,9 +351,14 @@ async function _portfolioInputs(hist, A, base) {
   });
   const revDist = E.percentiles(revs);
   const marginDist = E.percentiles(marginArr);
+  // Nájem pro scénáře = STEJNÝ jako v „Ukázce jedné lokality" (default, VAT-adjust),
+  // ať EBITDA scénářů sedí s dlaždicí (ne průměr skutečných nájmů).
+  const vatCZK = (A.vatByCurrency && A.vatByCurrency.CZK != null) ? A.vatByCurrency.CZK : 21;
+  const rentDiv = A.rentVatIncluded ? (1 + vatCZK / 100) : 1;
+  const rentDefaultBase = E.convert((A.rentMonthlyDefault || 0) / rentDiv, 'CZK', base, fx);
   return {
     activeCount: active.length, medRevenue: revDist.p50 || 0, medMargin: marginDist.p50 || 0,
-    revDist, rentBaseAvg: rentN ? rentSum / rentN : 0, cohort,
+    revDist, rentBaseAvg: rentDefaultBase, rentActualAvg: rentN ? rentSum / rentN : 0, cohort,
     stabilization: { enabled: !!stab.enabled, fromMonth, includedSites: revs.length, excludedShortHistory: stabExcluded, minHistoryMonths: stab.minHistoryMonths },
   };
 }
