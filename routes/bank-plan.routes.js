@@ -120,6 +120,7 @@ const DEFAULT_ASSUMPTIONS = {
     taxRatePct: 19,
     centralCostMonthlyCzk: 0, // centrální náklady portfolia/měs
     minLiquidityCzk: 500000,  // minimální hotovostní rezerva
+    startUnitsOverride: null,  // null = skutečná aktivní síť; 0 = greenfield (partner staví od nuly)
   },
   // Scénáře — násobky proti Base Case.
   scenarios: {
@@ -336,9 +337,14 @@ router.get('/forecast', requireAuth, async (req, res, next) => {
     const unitCostBase = E.convert((A.unitCostEur || 52000), 'EUR', base, fx);
     const unitAllIn = E.convert((A.unitCostEur || 52000) + (fin.allInExtraEur || 0), 'EUR', base, fx);
     const rampCurve = F.rampFromCohort(inp.cohort, inp.medRevenue || 1);
+    // Počáteční síť: skutečná aktivní, nebo ruční přepis (0 = greenfield pro partnery v jiných zemích).
+    const startUnits = (fin.startUnitsOverride != null && fin.startUnitsOverride !== '')
+      ? Math.max(0, Math.floor(Number(fin.startUnitsOverride)))
+      : inp.activeCount;
+    const greenfield = startUnits === 0;
 
     const fc = F.buildForecast({
-      months: fin.horizonMonths, startUnits: inp.activeCount,
+      months: fin.horizonMonths, startUnits: startUnits,
       perUnitRevenue, ebitdaMargin: inp.medMargin,
       centralCostMonthly: toBase(fin.centralCostMonthlyCzk), taxRatePct: fin.taxRatePct,
       maintenanceReservePct: A.maintenanceReservePct, minLiquidity: toBase(fin.minLiquidityCzk),
@@ -380,8 +386,8 @@ router.get('/forecast', requireAuth, async (req, res, next) => {
     };
 
     res.json({
-      base, scenario: scName, unitBreakdown,
-      inputs: { activeCount: inp.activeCount, medRevenue: Math.round(inp.medRevenue), medMargin: inp.medMargin, perUnitRevenue: Math.round(perUnitRevenue), unitCostBase: Math.round(unitCostBase), unitAllIn: Math.round(unitAllIn), rampCurve, targetUnitsPerMonth: (A.targetUnitsPerMonth || 4), buildPace: fin.newUnitsPerMonth },
+      base, scenario: scName, unitBreakdown, greenfield, startUnits,
+      inputs: { activeCount: inp.activeCount, startUnits: startUnits, greenfield: greenfield, medRevenue: Math.round(inp.medRevenue), medMargin: inp.medMargin, perUnitRevenue: Math.round(perUnitRevenue), unitCostBase: Math.round(unitCostBase), unitAllIn: Math.round(unitAllIn), rampCurve, targetUnitsPerMonth: (A.targetUnitsPerMonth || 4), buildPace: fin.newUnitsPerMonth },
       financing: fin, scenarios, activeScenario: sc,
       summary: fc.summary, rows: fc.rows,
     });

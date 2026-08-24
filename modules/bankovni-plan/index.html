@@ -310,6 +310,7 @@
       var h = '';
       h += '<div class="note" style="margin-bottom:10px">Postupné čerpání úvěru po jednotlivých pořízených jednotkách; každá nová lokalita najíždí dle historické ramp-up křivky. Base Case = medián − haircut. Crossover se počítá <b>bez splátek úvěru</b> (jako by byly stroje splacené). Scénář:</div>';
       h += '<div style="display:inline-flex;border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:14px">'+seg('base','Base')+seg('downside','Downside')+seg('stress','Stress')+'</div>';
+      if (FC.greenfield) h += '<div class="banner" style="background:rgba(59,130,246,.1);border-color:rgba(59,130,246,.35);color:#60a5fa">🌱 Režim „od nuly" (greenfield): síť začíná na 0 provozovnách — model pro partnery v jiných zemích. Ekonomika jednotky se bere z prověřených historických dat, síť se staví od začátku.</div>';
       h += '<div class="kpis">';
       var tgt = (inp.targetUnitsPerMonth!=null?inp.targetUnitsPerMonth:4);
       h += kpi('Self-Financing Crossover', cx.month!=null?monthLabel(cx.month):'—', crossTxt, true);
@@ -464,12 +465,14 @@
       h += f('centralCostMonthlyCzk','Centrální náklady / měs (Kč)', fin.centralCostMonthlyCzk, 'Náklady centrály celé sítě za měsíc (správa, účetnictví, dispečink) — odečítají se od portfolio EBITDA.');
       h += f('minLiquidityCzk','Min. rezerva (Kč)', fin.minLiquidityCzk, 'Minimální hotovost, kterou si síť drží. Až přebytek nad ní jde na expanzi.');
       h += f('horizonMonths','Horizont (měs)', fin.horizonMonths, 'Na kolik měsíců dopředu se model počítá (120 = 10 let).');
+      h += f('startUnitsOverride','Počáteční síť (jednotek)', (fin.startUnitsOverride!=null?fin.startUnitsOverride:''), 'Kolik provozoven síť má na začátku. Prázdné = skutečná aktivní síť ('+(FC.inputs&&FC.inputs.activeCount||0)+'). Zadej 0 pro model „od nuly" — pro partnery v jiných zemích, kteří zatím nic nemají (ekonomika jednotky se bere z prověřených dat).');
       h += '</div><div style="margin-top:12px"><button class="btn btn-primary" onclick="saveFinancing()">💾 Uložit financování</button></div></div>';
       return h;
     }
     async function saveFinancing(){
       function v(id){ var el=document.getElementById('fin-'+id); return el?parseFloat(String(el.value).replace(/[\s ]/g,'').replace(',','.')):null; }
-      var fin = { newUnitsPerMonth:v('newUnitsPerMonth'), bankFinancingPct:v('bankFinancingPct'), interestRatePct:v('interestRatePct'), maturityMonths:v('maturityMonths'), graceMonths:v('graceMonths'), facilityLimitCzk:v('facilityLimitCzk'), allInExtraEur:v('allInExtraEur'), taxRatePct:v('taxRatePct'), centralCostMonthlyCzk:v('centralCostMonthlyCzk'), minLiquidityCzk:v('minLiquidityCzk'), horizonMonths:v('horizonMonths') };
+      var suEl=document.getElementById('fin-startUnitsOverride'); var suRaw=suEl?String(suEl.value).replace(/[\s ]/g,'').replace(',','.'):''; var su=(suRaw==='')?null:parseFloat(suRaw);
+      var fin = { newUnitsPerMonth:v('newUnitsPerMonth'), bankFinancingPct:v('bankFinancingPct'), interestRatePct:v('interestRatePct'), maturityMonths:v('maturityMonths'), graceMonths:v('graceMonths'), facilityLimitCzk:v('facilityLimitCzk'), allInExtraEur:v('allInExtraEur'), taxRatePct:v('taxRatePct'), centralCostMonthlyCzk:v('centralCostMonthlyCzk'), minLiquidityCzk:v('minLiquidityCzk'), horizonMonths:v('horizonMonths'), startUnitsOverride:su };
       try {
         var cur = (DATA.assumptions&&DATA.assumptions.financing)||{};
         await fetch('/api/bank-plan/assumptions', { method:'PUT', credentials:'include', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ financing: Object.assign({}, cur, fin) }) });
