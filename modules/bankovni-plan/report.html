@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bankovní Business Plan — report</title>
+<base href="../../">
+<style>
+  :root { --ink:#1a2230; --muted:#5b6676; --line:#d7dee8; --accent:#0e5aa7; --gold:#b8892b; --green:#1a7f4b; --red:#b23b3b; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:#4b5563; color:var(--ink); font-family:'Segoe UI',Arial,sans-serif; font-size:13px; line-height:1.5; }
+  .toolbar { position:sticky; top:0; background:#1f2733; color:#fff; padding:10px 16px; display:flex; gap:10px; align-items:center; z-index:10; }
+  .toolbar button { background:#0e5aa7; color:#fff; border:none; border-radius:7px; padding:8px 16px; font-size:13px; font-weight:600; cursor:pointer; }
+  .toolbar button.sec { background:#374151; }
+  .toolbar .sp { flex:1; }
+  .wrap { max-width:820px; margin:16px auto; }
+  .page { background:#fff; width:210mm; min-height:296mm; margin:0 auto 14px; padding:22mm 20mm; box-shadow:0 2px 12px rgba(0,0,0,.3); position:relative; }
+  h1 { font-size:26px; margin:0 0 6px; color:var(--ink); }
+  h2 { font-size:17px; margin:0 0 10px; padding-bottom:6px; border-bottom:2px solid var(--accent); color:var(--accent); }
+  h3 { font-size:14px; margin:16px 0 6px; color:var(--ink); }
+  p { margin:0 0 9px; }
+  .muted { color:var(--muted); }
+  .foot { position:absolute; bottom:12mm; left:20mm; right:20mm; display:flex; justify-content:space-between; font-size:10px; color:var(--muted); border-top:1px solid var(--line); padding-top:5px; }
+  table { width:100%; border-collapse:collapse; font-size:12px; margin:8px 0; }
+  th,td { border:1px solid var(--line); padding:6px 8px; text-align:left; }
+  th { background:#eef3f9; color:var(--ink); font-size:11px; text-transform:uppercase; letter-spacing:.3px; }
+  td.r,th.r { text-align:right; }
+  .kpis { display:flex; flex-wrap:wrap; gap:10px; margin:10px 0; }
+  .kpi { flex:1; min-width:150px; border:1px solid var(--line); border-radius:8px; padding:10px 12px; }
+  .kpi .l { font-size:10px; text-transform:uppercase; letter-spacing:.4px; color:var(--muted); }
+  .kpi .v { font-size:20px; font-weight:800; margin-top:2px; }
+  .hl { border-left:4px solid var(--gold); }
+  .cover { display:flex; flex-direction:column; justify-content:center; min-height:250mm; }
+  .cover .brand { font-size:13px; letter-spacing:2px; color:var(--gold); text-transform:uppercase; }
+  .cover .sub { font-size:15px; color:var(--muted); margin-top:8px; }
+  .conf { display:inline-block; margin-top:24px; border:1px solid var(--red); color:var(--red); padding:3px 10px; border-radius:5px; font-size:11px; text-transform:uppercase; letter-spacing:1px; }
+  .pos { color:var(--green); font-weight:700; } .neg { color:var(--red); font-weight:700; }
+  canvas { max-width:100%; }
+  .note { font-size:10.5px; color:var(--muted); }
+  @media print {
+    body { background:#fff; }
+    .toolbar { display:none; }
+    .wrap { margin:0; max-width:none; }
+    .page { box-shadow:none; margin:0; width:auto; min-height:auto; page-break-after:always; padding:14mm 14mm 20mm; }
+    @page { size:A4; margin:0; }
+  }
+</style>
+</head>
+<body>
+<div class="toolbar">
+  <button onclick="window.print()">🖨 Tisk / Uložit jako PDF</button>
+  <span style="font-size:12px;opacity:.8">Tip: v dialogu tisku zvol „Uložit jako PDF", okraje Výchozí, měřítko 100 %.</span>
+  <span class="sp"></span>
+  <span id="tb-status" style="font-size:12px;opacity:.7">Načítám data…</span>
+</div>
+<div class="wrap" id="doc"><div class="page"><p class="muted">Načítám report…</p></div></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script>
+  var COMPANY = 'Best Series s.r.o.';
+  var PROJECT = 'Síť samoobslužných prádlomatů';
+  function money(n){ if(n==null||!isFinite(n)) return '—'; return Math.round(n).toLocaleString('cs-CZ')+' Kč'; }
+  function num(n){ return (n==null||!isFinite(n))?'—':Math.round(n).toLocaleString('cs-CZ'); }
+  function pctv(n){ return (n==null||!isFinite(n))?'—':(Math.round(n*1000)/10).toLocaleString('cs-CZ')+' %'; }
+  function dt(){ return new Date().toLocaleDateString('cs-CZ',{day:'numeric',month:'long',year:'numeric'}); }
+  function esc(s){ return String(s==null?'':s).replace(/[&<>]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;'}[c];}); }
+  function foot(n){ return '<div class="foot"><span>'+COMPANY+' — '+PROJECT+'</span><span>Business Plan &amp; Financing Proposal · '+dt()+'</span><span>Confidential · str. '+n+'</span></div>'; }
+
+  async function jget(u){ var r=await fetch(u,{credentials:'include'}); if(!r.ok) throw new Error('HTTP '+r.status+' ('+u+')'); return r.json(); }
+
+  function yearly(rows){ var out=[]; var y0=new Date().getFullYear(); for(var y=0;y*12<rows.length;y++){ var seg=rows.slice(y*12,y*12+12); if(!seg.length)break; var last=seg[seg.length-1]; var newU=seg.reduce(function(a,r){return a+(r.newUnits||0);},0); var rev=seg.reduce(function(a,r){return a+r.revenue;},0); var eb=seg.reduce(function(a,r){return a+r.portfolioEbitda;},0); var ds=seg.reduce(function(a,r){return a+r.debtService;},0); var dscrs=seg.map(function(r){return r.dscr;}).filter(function(x){return x!=null;}); out.push({year:y0+y,units:last.closingUnits,newU:newU,rev:rev,eb:eb,ds:ds,dscr:dscrs.length?Math.min.apply(null,dscrs):null,debt:last.outstanding}); } return out; }
+
+  (async function(){
+    var st=document.getElementById('tb-status');
+    var ov, fcB, fcS;
+    try {
+      ov = await jget('/api/bank-plan/overview?base=CZK');
+      fcB = await jget('/api/bank-plan/forecast?base=CZK&scenario=base');
+      fcS = await jget('/api/bank-plan/forecast?base=CZK&scenario=stress');
+    } catch(e){ document.getElementById('doc').innerHTML='<div class="page"><h2>Data nejsou k dispozici</h2><p>'+esc(e.message)+'</p><p class="muted">Nejdřív vytvoř snapshot (Přebudovat data) v modulu Bankovní plán.</p></div>'; st.textContent='Chyba'; return; }
+    st.textContent='Hotovo — připraveno k tisku';
+
+    var t=ov.trackRecord, u=ov.unitEconomics, ub=fcB.unitBreakdown, s=fcB.summary, fin=fcB.financing, inp=fcB.inputs, cx=s.crossover||{};
+    var Y=yearly(fcB.rows||[]);
+    var facilityCzk = fin.facilityLimitCzk;
+    var page=0; var H='';
+    function P(inner){ page++; return '<div class="page">'+inner+foot(page)+'</div>'; }
+
+    // 1) COVER
+    H += P('<div class="cover"><div class="brand">'+esc(COMPANY)+'</div>'+
+      '<h1 style="font-size:34px;margin-top:10px">Bankovní Business Plan</h1>'+
+      '<div style="font-size:20px;color:var(--gold);font-weight:700">'+esc(PROJECT)+'</div>'+
+      '<div class="sub">Business Plan &amp; Financing Proposal</div>'+
+      '<div class="sub">'+dt()+'</div>'+
+      '<div class="conf">Confidential</div>'+
+      '<div style="margin-top:40px;font-size:11px;color:var(--muted)">Podklad pro bankovní financování rozvoje sítě. Postaveno na '+String(t.yearsData).replace('.',',')+' letech reálných provozních dat ('+t.realCount+' provozoven, '+num(t.locationMonths)+' location-months).</div>');
+
+    // 2) EXECUTIVE SUMMARY
+    H += P('<h2>1. Executive Summary</h2>'+
+      '<p>Předmětem je financování dalšího škálování <b>'+String(t.yearsData).replace('.',',')+' let provozně ověřeného</b> podnikatelského modelu samoobslužných prádelen (prádlomatů). Model je doložen <b>'+t.realCount+' provozovnami</b> a <b>'+num(t.locationMonths)+' location-months</b> reálného provozu s <b>'+num(t.totalTx)+' transakcemi</b> a kumulativními tržbami <b>'+money(t.cumulativeRevenue)+'</b> (bez DPH) za období '+t.firstData+' – '+t.lastData+'.</p>'+
+      '<p>Jedna provozovna generuje medián měsíční tržby <b>'+money(u.revenueDist&&u.revenueDist.p50)+'</b> a medián měsíční EBITDA <b>'+money(u.ebitdaDist&&u.ebitdaDist.p50)+'</b> (marže '+pctv(u.marginDist&&u.marginDist.p50)+'). Pro konzervativní bankovní model používáme Base Case <b>'+money(u.baseCaseEbitda)+'</b> (medián − '+u.bankingHaircutPct+' % haircut).</p>'+
+      '<p>Žádáme úvěrový rámec <b>'+money(facilityCzk)+'</b> s '+fin.bankFinancingPct+' % financováním pořizovací ceny jednotek, úrok '+String(fin.interestRatePct).replace('.',',')+' % p.a., splatnost '+fin.maturityMonths+' měsíců (grace '+fin.graceMonths+'). Čerpání probíhá <b>postupně po jednotlivých pořízených a instalovaných prádlomatech</b>, nikoli jednorázově — banka tak financuje konkrétní produktivní aktiva podle předem daných pravidel.</p>'+
+      '<p>Minimální DSCR v Base Case je <b>'+(s.minDscr!=null?(Math.round(s.minDscr*100)/100)+'×':'—')+'</b>, ve Stress scénáři <b>'+(fcS.summary.minDscr!=null?(Math.round(fcS.summary.minDscr*100)/100)+'×':'—')+'</b>. '+(cx.month!=null?('Síť dosáhne samofinancování dalšího růstu (Self-Financing Crossover) při '+cx.units+' jednotkách.'):'Pro dosažení plného samofinancování dalšího růstu je vhodné rámec navyšovat po etapách dle výkonu portfolia.')+'</p>');
+
+    // 3) INVESTMENT HIGHLIGHTS
+    function kpi(l,v,hl){ return '<div class="kpi'+(hl?' hl':'')+'"><div class="l">'+l+'</div><div class="v">'+v+'</div></div>'; }
+    H += P('<h2>2. Investment Highlights</h2><div class="kpis">'+
+      kpi('Roky dat', String(t.yearsData).replace('.',','))+
+      kpi('Provozoven', num(t.realCount))+
+      kpi('Location-months', num(t.locationMonths),1)+
+      kpi('Transakcí', num(t.totalTx))+
+      '</div><div class="kpis">'+
+      kpi('Kumulativní tržby', money(t.cumulativeRevenue))+
+      kpi('Medián EBITDA/měs', money(u.ebitdaDist&&u.ebitdaDist.p50),1)+
+      kpi('Marže (medián)', pctv(u.marginDist&&u.marginDist.p50))+
+      kpi('Min. DSCR (Base)', (s.minDscr!=null?(Math.round(s.minDscr*100)/100)+'×':'—'),1)+
+      '</div>'+
+      '<h3>Vývoj tržeb portfolia (měsíčně, bez DPH)</h3><canvas id="c-rev" height="120"></canvas>'+
+      '<p class="note">Zdroj: provozní data SIS, '+t.firstData+' – '+t.lastData+'. Bez DPH.</p>');
+
+    // 4) UNIT ECONOMICS
+    function urow(l,v,cls){ return '<tr><td>'+l+'</td><td class="r '+(cls||'')+'">'+money(v)+'</td></tr>'; }
+    H += P('<h2>3. Unit Economics — jedna provozovna (medián, měsíčně)</h2>'+
+      '<table><tbody>'+
+      urow('Obrat (bez DPH)', ub.revenue)+
+      urow('− Nájem', -ub.rent)+ urow('− Servis', -ub.service)+ urow('− Energie', -ub.energy)+ urow('− Platební poplatky', -ub.fee)+
+      '<tr><td><b>EBITDA</b></td><td class="r pos"><b>'+money(ub.ebitda)+'</b> ('+pctv(ub.ebitdaMargin)+')</td></tr>'+
+      urow('− Rezerva na údržbu', -ub.maintenance)+ urow('− Splátka úvěru (anuita)', -ub.payment)+ urow('− Daň', -ub.tax)+
+      '<tr><td><b>Čistý cash po všem (vč. splátky)</b></td><td class="r '+(ub.netWithDebt>=0?'pos':'neg')+'"><b>'+money(ub.netWithDebt)+'</b></td></tr>'+
+      '<tr><td><b>Čistý cash po splacení stroje</b></td><td class="r pos"><b>'+money(ub.netPaidOff)+'</b></td></tr>'+
+      '</tbody></table>'+
+      '<p class="note">Investice na jednotku (all-in): '+money(ub.allIn)+' — z toho úvěr '+money(ub.debtPerUnit)+' + vlastní '+money(ub.equityPerUnit)+'. Vše bez DPH.</p>'+
+      '<h3>Distribuce výkonu portfolia (měsíční EBITDA/lokalita)</h3>'+
+      '<table><thead><tr><th>Ukazatel</th><th class="r">P10</th><th class="r">P25</th><th class="r">Medián</th><th class="r">P75</th><th class="r">P90</th></tr></thead><tbody>'+
+      '<tr><td>Tržba/měs</td><td class="r">'+money(u.revenueDist.p10)+'</td><td class="r">'+money(u.revenueDist.p25)+'</td><td class="r">'+money(u.revenueDist.p50)+'</td><td class="r">'+money(u.revenueDist.p75)+'</td><td class="r">'+money(u.revenueDist.p90)+'</td></tr>'+
+      '<tr><td>EBITDA/měs</td><td class="r">'+money(u.ebitdaDist.p10)+'</td><td class="r">'+money(u.ebitdaDist.p25)+'</td><td class="r">'+money(u.ebitdaDist.p50)+'</td><td class="r">'+money(u.ebitdaDist.p75)+'</td><td class="r">'+money(u.ebitdaDist.p90)+'</td></tr>'+
+      '</tbody></table><p class="note">Medián je pro posouzení směrodatnější než průměr (portfolio má několik nadprůměrných lokalit).</p>');
+
+    // 5) FINANCING + FORECAST TABLE
+    var frows = Y.map(function(r){ var dc=r.dscr==null?'':(r.dscr<1?'neg':(r.dscr<1.2?'':'pos')); return '<tr><td>'+r.year+'</td><td class="r">'+r.units+'</td><td class="r">'+(r.newU||'—')+'</td><td class="r">'+money(r.rev)+'</td><td class="r">'+money(r.eb)+'</td><td class="r">'+money(r.ds)+'</td><td class="r '+dc+'">'+(r.dscr!=null?(Math.round(r.dscr*100)/100)+'×':'—')+'</td><td class="r">'+money(r.debt)+'</td></tr>'; }).join('');
+    H += P('<h2>4. Struktura financování &amp; finanční model</h2>'+
+      '<table><tbody>'+
+      '<tr><td>Úvěrový rámec (facility)</td><td class="r"><b>'+money(facilityCzk)+'</b></td></tr>'+
+      '<tr><td>Financování bankou</td><td class="r">'+fin.bankFinancingPct+' % z ceny jednotky</td></tr>'+
+      '<tr><td>Vlastní spoluúčast (celkem)</td><td class="r">'+money(s.totalEquity)+'</td></tr>'+
+      '<tr><td>Úrok</td><td class="r">'+String(fin.interestRatePct).replace('.',',')+' % p.a.</td></tr>'+
+      '<tr><td>Splatnost / grace</td><td class="r">'+fin.maturityMonths+' / '+fin.graceMonths+' měs</td></tr>'+
+      '<tr><td>Čerpání</td><td class="r">postupně po pořízených jednotkách</td></tr>'+
+      '<tr><td>Zdroj splácení</td><td class="r">provozní cash flow portfolia</td></tr>'+
+      '</tbody></table>'+
+      '<h3>Roční projekce (Base Case, bez DPH)</h3>'+
+      '<table><thead><tr><th>Rok</th><th class="r">Jednotek</th><th class="r">Nové</th><th class="r">Tržby</th><th class="r">EBITDA</th><th class="r">Splátky</th><th class="r">DSCR</th><th class="r">Dluh</th></tr></thead><tbody>'+frows+'</tbody></table>'+
+      '<div class="kpis" style="margin-top:12px">'+kpi('Min. DSCR (Base)', (s.minDscr!=null?(Math.round(s.minDscr*100)/100)+'×':'—'),1)+kpi('Min. DSCR (Stress)', (fcS.summary.minDscr!=null?(Math.round(fcS.summary.minDscr*100)/100)+'×':'—'),1)+kpi('Max. dluh', money(s.peakDebt))+'</div>');
+
+    // 6) DSCR + CROSSOVER charts
+    H += P('<h2>5. DSCR a Self-Financing Crossover</h2>'+
+      '<h3>DSCR v čase (Base Case, nejnižší v roce)</h3><canvas id="c-dscr" height="120"></canvas>'+
+      '<p>DSCR (Debt Service Coverage Ratio) vyjadřuje, kolikrát provozní cash flow pokrývá splátku dluhu. Za bezpečné se považuje ≥ 1,2×. '+
+      (cx.month!=null?('Self-Financing Crossover — okamžik, kdy portfolio z vlastního cash flow (jako by byly stroje splacené) uživí cíl '+(inp.targetUnitsPerMonth||4)+' nových strojů měsíčně — nastává při <b>'+cx.units+' jednotkách</b>.'):'V rámci zvoleného rámce a horizontu není plné samofinancování dalšího růstu dosaženo; doporučujeme rámec navyšovat po etapách dle výkonu portfolia (Stage 1 → Stage 2).')+'</p>'+
+      '<h3>Počet jednotek v čase</h3><canvas id="c-units" height="120"></canvas>');
+
+    // 7) RISK ANALYSIS
+    var risks = (ov.assumptions && ov.assumptions.risks) || [];
+    var rrows = risks.map(function(r){ return '<tr><td><b>'+esc(r.label)+'</b></td><td>'+esc(r.probability)+'</td><td>'+esc(r.impact)+'</td><td>'+esc(r.mitigation)+'</td></tr>'; }).join('');
+    H += P('<h2>6. Analýza rizik</h2><table><thead><tr><th>Riziko</th><th>Pravděpodobnost</th><th>Dopad</th><th>Mitigace</th></tr></thead><tbody>'+rrows+'</tbody></table>');
+
+    // 8) CREDIT COMMITTEE 1-PAGER
+    function cc(l,v){ return '<tr><td style="width:40%">'+l+'</td><td><b>'+v+'</b></td></tr>'; }
+    H += P('<h2>7. Credit Committee — souhrn</h2><table><tbody>'+
+      cc('Dlužník', COMPANY+' (resp. účelová SPV)')+
+      cc('Účel', 'pořízení a instalace nových provozoven')+
+      cc('Požadovaný rámec', money(facilityCzk))+
+      cc('Vlastní spoluúčast', money(s.totalEquity)+' ('+(100-fin.bankFinancingPct)+' %)')+
+      cc('Track record', String(t.yearsData).replace('.',',')+' let · '+t.realCount+' lokalit · '+num(t.locationMonths)+' location-months')+
+      cc('Kumulativní tržby', money(t.cumulativeRevenue))+
+      cc('Medián EBITDA / lokalita', money(u.ebitdaDist.p50)+' /měs (Base '+money(u.baseCaseEbitda)+')')+
+      cc('DSCR Base / Stress (min)', (s.minDscr!=null?(Math.round(s.minDscr*100)/100)+'×':'—')+' / '+(fcS.summary.minDscr!=null?(Math.round(fcS.summary.minDscr*100)/100)+'×':'—'))+
+      cc('Max. dluh', money(s.peakDebt))+
+      cc('Zdroj splácení', 'provozní cash flow portfolia')+
+      cc('Zajištění', 'zástava financovaného zařízení, pojištění, účet projektu (dle dohody)')+
+      cc('Self-Financing Crossover', (cx.month!=null?('při '+cx.units+' jednotkách'):'dle navýšení rámce po etapách'))+
+      '</tbody></table>'+
+      '<p class="note" style="margin-top:16px">Zdroj čísel: provozní data SIS ('+t.firstData+'–'+t.lastData+') a finanční model HolyOS. Historická data jsou skutečná (ACTUAL); provozní náklady, financování a prognóza jsou předpoklady (ASSUMPTION/FORECAST) uvedené v modelu. Vše bez DPH. Dokument je důvěrný.</p>');
+
+    document.getElementById('doc').innerHTML = H;
+
+    // Grafy
+    Chart.defaults.animation=false; Chart.defaults.plugins.legend.display=false;
+    var pm=ov.portfolioMonthly||{}; var yms=Object.keys(pm).sort();
+    new Chart(document.getElementById('c-rev'),{type:'line',data:{labels:yms,datasets:[{data:yms.map(function(y){return Math.round(pm[y]);}),borderColor:'#0e5aa7',backgroundColor:'rgba(14,90,167,.12)',fill:true,pointRadius:0,tension:.25}]},options:{scales:{x:{ticks:{maxTicksLimit:8,color:'#5b6676'}},y:{ticks:{color:'#5b6676'}}}}});
+    var Yr=Y;
+    new Chart(document.getElementById('c-dscr'),{type:'line',data:{labels:Yr.map(function(r){return r.year;}),datasets:[{data:Yr.map(function(r){return r.dscr;}),borderColor:'#1a7f4b',pointRadius:2,tension:.2}]},options:{scales:{x:{ticks:{color:'#5b6676'}},y:{beginAtZero:true,ticks:{color:'#5b6676'}}}}});
+    new Chart(document.getElementById('c-units'),{type:'line',data:{labels:Yr.map(function(r){return r.year;}),datasets:[{data:Yr.map(function(r){return r.units;}),borderColor:'#0e5aa7',backgroundColor:'rgba(14,90,167,.12)',fill:true,pointRadius:2,tension:.2}]},options:{scales:{x:{ticks:{color:'#5b6676'}},y:{beginAtZero:true,ticks:{color:'#5b6676'}}}}});
+  })();
+</script>
+</body>
+</html>
