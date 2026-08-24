@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Bankovní plán | HOLYOS</title>
+  <link rel="icon" type="image/svg+xml" href="../../logo-holyos-icon.svg">
+  <base href="../../">
+  <link rel="stylesheet" href="css/dashboard.css">
+  <style>
+    .main-wrapper { margin-left: var(--sidebar-w); flex: 1; min-height: 100vh; display: flex; flex-direction: column; }
+    .page-header { display:flex; align-items:center; gap:12px; padding:20px 24px; border-bottom:1px solid var(--border); flex-wrap:wrap; }
+    .page-header h1 { font-size:18px; font-weight:700; margin:0; }
+    .page-header .sub { font-size:12px; color:var(--text2); }
+    .content { padding:20px 24px 40px; }
+    .btn { padding:8px 16px; border-radius:8px; border:1px solid var(--border); font-size:13px; font-weight:500; cursor:pointer; background:transparent; color:var(--text); }
+    .btn-primary { background:#0ea5e9; color:#fff; border-color:#0ea5e9; }
+    .btn-primary:hover { background:#0284c7; }
+    .seg { display:inline-flex; border:1px solid var(--border); border-radius:8px; overflow:hidden; }
+    .seg button { padding:7px 14px; background:transparent; color:var(--text2); border:none; cursor:pointer; font-size:13px; font-weight:600; }
+    .seg button.on { background:#0ea5e9; color:#fff; }
+    .kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin-bottom:22px; }
+    .kpi { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:14px 16px; }
+    .kpi .l { font-size:11px; text-transform:uppercase; letter-spacing:.5px; color:var(--text2); }
+    .kpi .v { font-size:23px; font-weight:800; margin-top:4px; }
+    .kpi .s { font-size:11px; color:var(--text2); margin-top:3px; }
+    .kpi.hl { border-color:rgba(14,165,233,.45); background:rgba(14,165,233,.07); }
+    .sec { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:16px 18px; margin-bottom:20px; }
+    .sec h2 { font-size:14px; font-weight:700; margin:0 0 4px; }
+    .sec .note { font-size:11px; color:var(--text2); margin-bottom:12px; }
+    .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+    @media(max-width:900px){ .grid2 { grid-template-columns:1fr; } }
+    canvas { max-width:100%; }
+    .tag { display:inline-block; font-size:10px; font-weight:700; padding:1px 7px; border-radius:6px; vertical-align:middle; }
+    .tag-actual { background:rgba(34,197,94,.16); color:#22c55e; }
+    .tag-assume { background:rgba(245,158,11,.16); color:#f59e0b; }
+    table.dt { width:100%; border-collapse:collapse; font-size:12.5px; }
+    table.dt th { text-align:left; padding:7px 10px; color:var(--text2); text-transform:uppercase; font-size:10.5px; letter-spacing:.4px; border-bottom:1px solid var(--border); }
+    table.dt td { padding:7px 10px; border-bottom:1px solid rgba(255,255,255,.04); }
+    .flag { font-size:11px; padding:1px 6px; border-radius:5px; }
+    .flag-out { background:rgba(168,85,247,.16); color:#c084fc; }
+    .flag-loss { background:rgba(239,68,68,.16); color:#ef4444; }
+    .asum { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:12px; }
+    .asum label { font-size:11px; color:var(--text2); display:block; margin-bottom:3px; }
+    .asum input { width:100%; box-sizing:border-box; background:var(--bg); border:1px solid var(--border); border-radius:7px; padding:7px 9px; color:var(--text); font-size:13px; }
+    .banner { background:rgba(245,158,11,.1); border:1px solid rgba(245,158,11,.35); color:#f59e0b; border-radius:10px; padding:12px 14px; font-size:13px; margin-bottom:18px; }
+  </style>
+</head>
+<body>
+  <div id="sidebar"></div>
+  <div class="main-wrapper">
+    <div class="page-header">
+      <span style="font-size:26px;">🏦</span>
+      <div>
+        <h1>Bankovní Business Plan</h1>
+        <div class="sub" id="bp-sub">Datově podložený finanční model sítě prádlomatů</div>
+      </div>
+      <div style="margin-left:auto; display:flex; gap:10px; align-items:center;">
+        <span class="seg"><button id="cur-CZK" class="on" onclick="setBase('CZK')">CZK</button><button id="cur-EUR" onclick="setBase('EUR')">EUR</button></span>
+        <button class="btn" onclick="rebuild()" id="bp-rebuild" title="Znovu stáhnout data ze SIS">↻ Přebudovat data</button>
+      </div>
+    </div>
+    <div class="content" id="bp-content">
+      <div style="color:var(--text2); padding:40px; text-align:center;">Načítám…</div>
+    </div>
+  </div>
+
+  <script>
+    var s = document.createElement('script');
+    s.src = 'js/sidebar.js?v=' + Date.now();
+    s.onload = function() { renderSidebar('bankovni-plan'); };
+    document.head.appendChild(s);
+  </script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <script>
+    var BASE = 'CZK';
+    var DATA = null;
+    var _charts = {};
+
+    function money(n){
+      if (n == null || !isFinite(n)) return '—';
+      var sym = BASE === 'EUR' ? '€' : 'Kč';
+      return Math.round(n).toLocaleString('cs-CZ') + ' ' + sym;
+    }
+    function num(n){ return (n==null||!isFinite(n)) ? '—' : Math.round(n).toLocaleString('cs-CZ'); }
+    function pct(n){ return (n==null||!isFinite(n)) ? '—' : (Math.round(n*1000)/10).toLocaleString('cs-CZ') + ' %'; }
+
+    function setBase(b){
+      BASE = b;
+      document.getElementById('cur-CZK').className = b==='CZK'?'on':'';
+      document.getElementById('cur-EUR').className = b==='EUR'?'on':'';
+      load();
+    }
+
+    async function load(){
+      var box = document.getElementById('bp-content');
+      try {
+        var r = await fetch('/api/bank-plan/overview?base=' + BASE, { credentials:'include' });
+        if (r.status === 404){ box.innerHTML = emptyState(); return; }
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        DATA = await r.json();
+        render();
+      } catch(e){ box.innerHTML = '<div class="banner">Nepodařilo se načíst data: ' + (e.message||'') + '</div>'; }
+    }
+
+    function emptyState(){
+      return '<div class="banner">Snapshot dat ze SIS zatím není vytvořený. Klikni na <b>↻ Přebudovat data</b> nahoře — stáhne se historie ze SIS (~1–2 min).</div>';
+    }
+
+    function kpi(l, v, s, hl){ return '<div class="kpi'+(hl?' hl':'')+'"><div class="l">'+l+'</div><div class="v">'+v+'</div>'+(s?'<div class="s">'+s+'</div>':'')+'</div>'; }
+
+    function render(){
+      var d = DATA; var t = d.trackRecord; var u = d.unitEconomics;
+      var gen = d.generatedAt ? new Date(d.generatedAt).toLocaleString('cs-CZ') : '—';
+      document.getElementById('bp-sub').textContent = 'Data ze SIS · ' + t.firstData + ' → ' + t.lastData + ' · snapshot ' + gen;
+
+      var h = '';
+      // Banner rozlišení ACTUAL/ASSUMPTION
+      h += '<div class="banner">Track record a tržby jsou <b>skutečná data ze SIS</b> <span class="tag tag-actual">ACTUAL</span>. EBITDA a marže používají provozní <b>předpoklady</b> <span class="tag tag-assume">ASSUMPTION</span> (nájem, servis %, energie %) — uprav je dole v sekci Předpoklady.</div>';
+
+      // Executive KPI
+      h += '<div class="kpis">';
+      h += kpi('Roky dat', String(t.yearsData).replace('.',','), 'od ' + t.firstData);
+      h += kpi('Aktivní lokality', num(t.activeCount), t.closedCount + ' uzavřených · ' + t.realCount + ' celkem');
+      h += kpi('Location-months', num(t.locationMonths), 'reálný provoz');
+      h += kpi('Transakce', num(t.totalTx), 'celkem v SIS');
+      h += kpi('Kumulativní tržby', money(t.cumulativeRevenue), 'za celé období');
+      h += kpi('Medián tržby / měs', money(u.revenueDist.p50), 'na lokalitu');
+      h += kpi('Medián EBITDA / měs', money(u.ebitdaDist.p50), 'marže ' + pct(u.marginDist.p50), true);
+      h += kpi('Base Case EBITDA', money(u.baseCaseEbitda), 'medián − ' + u.bankingHaircutPct + ' % haircut', true);
+      h += '</div>';
+
+      // Track record graf (portfolio tržby v čase)
+      h += '<div class="sec"><h2>Vývoj tržeb portfolia <span class="tag tag-actual">ACTUAL</span></h2><div class="note">Měsíční tržby všech reálných lokalit dohromady ('+BASE+').</div><canvas id="ch-rev" height="90"></canvas></div>';
+
+      // Distribuce
+      h += '<div class="grid2">';
+      h += '<div class="sec"><h2>Distribuce tržeb / lokalitu <span class="tag tag-actual">ACTUAL</span></h2><div class="note">Průměrná měsíční tržba (posl. 12 měs.) — percentily. Medián je pro banku směrodatnější než průměr.</div><canvas id="ch-revdist" height="150"></canvas></div>';
+      h += '<div class="sec"><h2>Distribuce EBITDA / lokalitu <span class="tag tag-assume">ASSUMPTION</span></h2><div class="note">Site EBITDA/měs dle předpokladů. Zvýrazněn Base Case (medián − haircut).</div><canvas id="ch-ebitdist" height="150"></canvas></div>';
+      h += '</div>';
+
+      // Sezónnost + kohorty
+      h += '<div class="grid2">';
+      h += '<div class="sec"><h2>Sezónnost <span class="tag tag-actual">ACTUAL</span></h2><div class="note">Index měsíců, 100 = průměr. Léto vs zima.</div><canvas id="ch-seas" height="150"></canvas></div>';
+      h += '<div class="sec"><h2>Náběh nové lokality (kohorty) <span class="tag tag-actual">ACTUAL</span></h2><div class="note">Medián tržby podle počtu měsíců od otevření.</div><canvas id="ch-cohort" height="150"></canvas></div>';
+      h += '</div>';
+
+      // Lokality — top + flagy
+      h += '<div class="sec"><h2>Lokality <span class="tag tag-actual">ACTUAL</span> + <span class="tag tag-assume">ASSUMPTION</span></h2><div class="note">Aktivní lokality, řazeno dle EBITDA. 🟣 outlier (nad P90), 🔴 ztrátová.</div>' + locTable() + '</div>';
+
+      // Předpoklady
+      h += assumptionsForm();
+
+      document.getElementById('bp-content').innerHTML = h;
+      drawCharts();
+    }
+
+    function locTable(){
+      var locs = (DATA.locations||[]).slice().sort(function(a,b){ return (b.ebitda||0)-(a.ebitda||0); });
+      var p90 = DATA.unitEconomics.revenueDist.p90;
+      var h = '<div style="overflow-x:auto;"><table class="dt"><thead><tr><th>Kód</th><th>Lokalita</th><th>Otevřeno</th><th style="text-align:right">Tržba/měs</th><th style="text-align:right">EBITDA/měs</th><th style="text-align:right">Marže</th><th></th></tr></thead><tbody>';
+      locs.forEach(function(l){
+        var flags = '';
+        if (l.avgRev != null && p90 != null && l.avgRev >= p90) flags += ' <span class="flag flag-out">🟣 outlier</span>';
+        if ((l.ebitda||0) < 0) flags += ' <span class="flag flag-loss">🔴 ztráta</span>';
+        h += '<tr><td style="font-weight:600">'+esc(l.code)+'</td><td>'+esc(l.label||'')+'</td><td>'+(l.openDate||'—')+'</td>'+
+          '<td style="text-align:right">'+money(l.avgRev)+'</td>'+
+          '<td style="text-align:right;color:'+((l.ebitda||0)<0?'#ef4444':'#22c55e')+';font-weight:600">'+money(l.ebitda)+'</td>'+
+          '<td style="text-align:right">'+pct(l.margin)+'</td><td>'+flags+'</td></tr>';
+      });
+      h += '</tbody></table></div>';
+      return h;
+    }
+
+    function assumptionsForm(){
+      var a = DATA.assumptions||{};
+      function f(key, label, val){ return '<div><label>'+label+'</label><input id="as-'+key+'" value="'+(val!=null?val:'')+'"></div>'; }
+      var fx = a.fx||{};
+      var h = '<div class="sec"><h2>Předpoklady <span class="tag tag-assume">ASSUMPTION</span></h2><div class="note">Vstupují do výpočtu EBITDA a Base Case. Uložení přepočítá čísla.</div><div class="asum">';
+      h += f('servicePct','Servis (% z obratu)', a.servicePct);
+      h += f('energyPct','Energie (% z obratu)', a.energyPct);
+      h += f('paymentFeePct','Platební poplatky (%)', a.paymentFeePct);
+      h += f('rentMonthlyDefault','Nájem default ('+BASE+'/měs)', a.rentMonthlyDefault);
+      h += f('maintenanceReservePct','Rezerva na údržbu (%)', a.maintenanceReservePct);
+      h += f('bankingHaircutPct','Bankovní haircut (%)', a.bankingHaircutPct);
+      h += f('unitCostEur','Cena prádlomatu (EUR)', a.unitCostEur);
+      h += f('targetUnitsPerMonth','Cíl nových jednotek/měs', a.targetUnitsPerMonth);
+      h += f('fxEUR','Kurz EUR→CZK', fx.EUR);
+      h += f('fxPLN','Kurz PLN→CZK', fx.PLN);
+      h += '</div><div style="margin-top:14px"><button class="btn btn-primary" onclick="saveAssumptions()">💾 Uložit předpoklady</button></div></div>';
+      return h;
+    }
+
+    async function saveAssumptions(){
+      function v(id){ var el=document.getElementById('as-'+id); return el? parseFloat(String(el.value).replace(',','.')) : null; }
+      var body = {
+        servicePct:v('servicePct'), energyPct:v('energyPct'), paymentFeePct:v('paymentFeePct'),
+        rentMonthlyDefault:v('rentMonthlyDefault'), maintenanceReservePct:v('maintenanceReservePct'),
+        bankingHaircutPct:v('bankingHaircutPct'), unitCostEur:v('unitCostEur'), targetUnitsPerMonth:v('targetUnitsPerMonth'),
+        fx: Object.assign({}, (DATA.assumptions&&DATA.assumptions.fx)||{}, { EUR:v('fxEUR'), PLN:v('fxPLN'), CZK:1 })
+      };
+      try {
+        var r = await fetch('/api/bank-plan/assumptions', { method:'PUT', credentials:'include', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
+        if(!r.ok) throw new Error('HTTP '+r.status);
+        await load();
+      } catch(e){ alert('Uložení selhalo: '+(e.message||'')); }
+    }
+
+    function destroyCharts(){ Object.keys(_charts).forEach(function(k){ try{ _charts[k].destroy(); }catch(e){} }); _charts={}; }
+    function drawCharts(){
+      if (!window.Chart) return;
+      destroyCharts();
+      var grid = 'rgba(255,255,255,.07)'; var tick = '#94a3b8';
+      var common = { plugins:{ legend:{ display:false } }, scales:{ x:{ grid:{color:grid}, ticks:{color:tick} }, y:{ grid:{color:grid}, ticks:{color:tick} } }, maintainAspectRatio:true };
+
+      // tržby v čase
+      var pm = DATA.portfolioMonthly||{}; var yms = Object.keys(pm).sort();
+      _charts.rev = new Chart(document.getElementById('ch-rev'), { type:'line',
+        data:{ labels:yms, datasets:[{ data:yms.map(function(y){return Math.round(pm[y]);}), borderColor:'#0ea5e9', backgroundColor:'rgba(14,165,233,.15)', fill:true, tension:.25, pointRadius:0 }] },
+        options: common });
+
+      // distribuce tržeb
+      var rd = DATA.unitEconomics.revenueDist;
+      _charts.revdist = new Chart(document.getElementById('ch-revdist'), { type:'bar',
+        data:{ labels:['P10','P25','Medián','P75','P90'], datasets:[{ data:[rd.p10,rd.p25,rd.p50,rd.p75,rd.p90].map(Math.round), backgroundColor:'#0ea5e9' }] }, options: common });
+
+      // distribuce EBITDA (Base Case zvýrazněn jako čára)
+      var ed = DATA.unitEconomics.ebitdaDist; var bc = DATA.unitEconomics.baseCaseEbitda;
+      _charts.ebitdist = new Chart(document.getElementById('ch-ebitdist'), { type:'bar',
+        data:{ labels:['P10','P25','Medián','P75','P90'], datasets:[{ data:[ed.p10,ed.p25,ed.p50,ed.p75,ed.p90].map(Math.round), backgroundColor:['#94a3b8','#94a3b8','#22c55e','#94a3b8','#94a3b8'] }] },
+        options: Object.assign({}, common, { plugins:{ legend:{display:false}, tooltip:{ callbacks:{ afterBody:function(){ return 'Base Case (haircut): '+money(bc); } } } } }) });
+
+      // sezónnost
+      var mon = ['Led','Úno','Bře','Dub','Kvě','Čer','Čvc','Srp','Zář','Říj','Lis','Pro'];
+      var seas = DATA.seasonality||[];
+      _charts.seas = new Chart(document.getElementById('ch-seas'), { type:'bar',
+        data:{ labels:mon, datasets:[{ data:seas.map(function(x){return x==null?null:x;}), backgroundColor: seas.map(function(x){ return (x!=null&&x>=100)?'#22c55e':'#f59e0b'; }) }] },
+        options: common });
+
+      // kohorty (medián dle měsíců od otevření)
+      var co = (DATA.cohort||[]).filter(function(c){ return c.count>0; });
+      _charts.cohort = new Chart(document.getElementById('ch-cohort'), { type:'line',
+        data:{ labels:co.map(function(c){return 'M'+c.month;}), datasets:[{ data:co.map(function(c){return Math.round(c.median||0);}), borderColor:'#22c55e', backgroundColor:'rgba(34,197,94,.12)', fill:true, tension:.25, pointRadius:2 }] },
+        options: common });
+    }
+
+    var _polling = null;
+    async function rebuild(){
+      var btn = document.getElementById('bp-rebuild');
+      btn.disabled = true; btn.textContent = '⏳ Stahuji ze SIS…';
+      try {
+        var r = await fetch('/api/bank-plan/history/rebuild', { method:'POST', credentials:'include' });
+        var j = await r.json();
+        if (!r.ok && r.status!==409) throw new Error(j.error||('HTTP '+r.status));
+      } catch(e){ btn.disabled=false; btn.textContent='↻ Přebudovat data'; alert('Nepodařilo se spustit: '+(e.message||'')); return; }
+      if (_polling) clearInterval(_polling);
+      _polling = setInterval(async function(){
+        try {
+          var s = await (await fetch('/api/bank-plan/history/status', { credentials:'include' })).json();
+          if (s.state && !s.state.building) {
+            clearInterval(_polling); _polling=null;
+            btn.disabled=false; btn.textContent='↻ Přebudovat data';
+            if (s.state.error) alert('Přebudování selhalo: '+s.state.error);
+            load();
+          }
+        } catch(e){}
+      }, 4000);
+    }
+
+    function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+
+    load();
+  </script>
+</body>
+</html>
