@@ -123,12 +123,15 @@ const DEFAULT_ASSUMPTIONS = {
     startUnitsOverride: null,  // null = skutečná aktivní síť; 0 = greenfield (partner staví od nuly)
     depreciationYears: 5,      // doba odpisu prádlomatu (daňový štít)
   },
-  // Scénáře — přímá úprava mediánu tržeb.
-  // Base = historický medián, Downside = medián −10 %, Stress = medián −15 %.
+  // Scénáře — ODVOZENÉ Z HISTORICKÉ DISTRIBUCE per-lokalitního výkonu (ne arbitrární haircut).
+  // Base = P50 (medián), Downside = P25, Historical Stress = P10. Combined = P10 + zhoršené
+  // náklady/úrok/ramp. Revenue factor se počítá dynamicky (Pxx / P50) z aktuálních dat.
   scenarios: {
-    base: { revenueFactor: 1.0, interestAddPct: 0 },
-    downside: { revenueFactor: 0.90, interestAddPct: 0 },
-    stress: { revenueFactor: 0.85, interestAddPct: 0 },
+    base:     { label: 'Base', basis: 'p50', dscrTarget: 1.30 },
+    downside: { label: 'Downside', basis: 'p25', dscrTarget: 1.20 },
+    stress:   { label: 'Historical Stress', basis: 'p10', dscrTarget: 1.00 },
+    combined: { label: 'Combined Bank Stress', basis: 'p10', dscrTarget: 1.00,
+                energyUpliftPct: 20, serviceUpliftPct: 10, interestAddPct: 2.0, rampExtraMonths: 3, fxStressPct: 0 },
   },
 };
 
@@ -140,8 +143,8 @@ async function loadAssumptions() {
   const a = await getSetting(ASSUMPTIONS_KEY, { type: 'json', defaultValue: null });
   const merged = Object.assign({}, DEFAULT_ASSUMPTIONS, a || {});
   merged.maintenanceReservePct = 0; // údržba je zahrnutá v servisu → žádná samostatná rezerva (bez dvojího počítání)
-  merged.bankingHaircutPct = 0;     // haircut nahrazen scénáři (Base +15 %, Downside 0, Stress −10 %)
-  merged.scenarios = DEFAULT_ASSUMPTIONS.scenarios; // scénáře čistě přes tržby (bez změny úroku) — ignoruj staré uložené
+  merged.bankingHaircutPct = 0;     // haircut nahrazen scénáři odvozenými z percentilů
+  merged.scenarios = DEFAULT_ASSUMPTIONS.scenarios; // percentilové scénáře — ignoruj staré uložené (revenueFactor)
   return merged;
 }
 
@@ -313,18 +316,44 @@ async function _portfolioInputs(hist, A, base) {
   const revs = active.map((l) => avgRecent(netMonthly(l), 12));
   const revDist = E.percentiles(revs);
   const cfgMap = (await getSetting('compounding.kiosks', { type: 'json', defaultValue: {} })) || {};
+  let rentSum = 0, rentN = 0;
   const marginArr = active.map((l) => {
     const cfg = cfgMap[l.code] || {};
     const rent = (typeof cfg.rentMonthlyCzk === 'number') ? E.convert(cfg.rentMonthlyCzk, 'CZK', base, fx) : A.rentMonthlyDefault;
+    rentSum += rent; rentN++;
     const se = E.siteEconomics({ revenue: avgRecent(netMonthly(l), 12), rentMonthly: rent, servicePct: A.servicePct, energyPct: A.energyPct, paymentFeePct: A.paymentFeePct, maintenanceReservePct: A.maintenanceReservePct });
     return se.ebitdaMargin;
   });
   const marginDist = E.percentiles(marginArr);
   const cohort = E.cohortCurve(active.filter((l) => l.openDate).map((l) => ({ openDate: l.openDate, monthly: netMonthly(l) })), 36);
-  return { activeCount: active.length, medRevenue: revDist.p50 || 0, medMargin: marginDist.p50 || 0, cohort };
+  return { activeCount: active.length, medRevenue: revDist.p50 || 0, medMargin: marginDist.p50 || 0, revDist, rentBaseAvg: rentN ? rentSum / rentN : 0, cohort };
 }
 
-// GET /api/bank-plan/forecast?base=&scenario=base|downside|stress — model financování a růstu.
+// Ekonomika scénáře odvozená z PERCENTILU historické distribuce (Base=P50, Downside=P25,
+// Stress=P10) + zhoršené náklady/úrok/ramp u Combined. EBITDA se dopočítá NELINEÁRNĚ:
+// fixní nájem zůstává, variabilní % (servis/energie/poplatky) škáluje s tržbou → při nižší
+// tržbě marže klesá (fixní náklady deleverage). Vrací i revenueFactor = Pxx/P50.
+function scenarioEconomics(inp, A, fin, sc) {
+  const rd = inp.revDist || {};
+  const basis = sc.basis || 'p50';
+  const p50 = rd.p50 || inp.medRevenue || 0;
+  const rev = (rd[basis] != null ? rd[basis] : p50);
+  const svc = (Number(A.servicePct) || 0) * (1 + (Number(sc.serviceUpliftPct) || 0) / 100);
+  const en = (Number(A.energyPct) || 0) * (1 + (Number(sc.energyUpliftPct) || 0) / 100);
+  const fee = Number(A.paymentFeePct) || 0;
+  const varPct = svc + en + fee;
+  const rent = Number(inp.rentBaseAvg) || 0;
+  const ebitda = rev - rent - rev * varPct / 100;
+  const margin = rev ? ebitda / rev : 0;
+  return {
+    basis, perUnitRevenue: rev, perUnitEbitda: ebitda, margin,
+    revenueFactor: p50 ? rev / p50 : 1,
+    interestRatePct: (Number(fin.interestRatePct) || 0) + (Number(sc.interestAddPct) || 0),
+    rampExtraMonths: Math.max(0, Math.floor(Number(sc.rampExtraMonths) || 0)),
+  };
+}
+
+// GET /api/bank-plan/forecast?base=&scenario=base|downside|stress|combined — model financování a růstu.
 router.get('/forecast', requireAuth, async (req, res, next) => {
   try {
     const hist = await getSetting(HISTORY_KEY, { type: 'json', defaultValue: null });
@@ -333,18 +362,20 @@ router.get('/forecast', requireAuth, async (req, res, next) => {
     const fx = A.fx || DEFAULT_ASSUMPTIONS.fx;
     const base = (req.query.base || hist.base || 'CZK').toUpperCase();
     const fin = Object.assign({}, DEFAULT_ASSUMPTIONS.financing, A.financing || {});
-    const scName = ['base', 'downside', 'stress'].includes(String(req.query.scenario)) ? String(req.query.scenario) : 'base';
+    const scName = ['base', 'downside', 'stress', 'combined'].includes(String(req.query.scenario)) ? String(req.query.scenario) : 'base';
     const scenarios = Object.assign({}, DEFAULT_ASSUMPTIONS.scenarios, A.scenarios || {});
     const sc = scenarios[scName] || scenarios.base;
 
     const inp = await _portfolioInputs(hist, A, base);
-    // Base Case = median − bankovní haircut; scénář dále násobí revenueFactor.
-    const haircut = 1 - ((A.bankingHaircutPct || 0) / 100);
-    const perUnitRevenue = inp.medRevenue * haircut * (sc.revenueFactor != null ? sc.revenueFactor : 1);
+    // Scénář = percentil historické distribuce (Base P50 / Downside P25 / Stress P10) + nelineární EBITDA.
+    const se = scenarioEconomics(inp, A, fin, sc);
+    const perUnitRevenue = se.perUnitRevenue;
     const toBase = (czk) => E.convert(czk, 'CZK', base, fx);
     const unitCostBase = E.convert((A.unitCostEur || 52000), 'EUR', base, fx);
     const unitAllIn = E.convert((A.unitCostEur || 52000) + (fin.allInExtraEur || 0), 'EUR', base, fx);
-    const rampCurve = F.rampFromCohort(inp.cohort, inp.medRevenue || 1);
+    let rampCurve = F.rampFromCohort(inp.cohort, inp.medRevenue || 1);
+    // Combined stress: nové lokality najíždějí pomaleji (+X měsíců nízkého výkonu na začátku rampy).
+    if (se.rampExtraMonths > 0 && rampCurve.length) rampCurve = Array(se.rampExtraMonths).fill(rampCurve[0]).concat(rampCurve);
     // Počáteční síť: skutečná aktivní, nebo ruční přepis (0 = greenfield pro partnery v jiných zemích).
     const startUnits = (fin.startUnitsOverride != null && fin.startUnitsOverride !== '')
       ? Math.max(0, Math.floor(Number(fin.startUnitsOverride)))
@@ -356,12 +387,12 @@ router.get('/forecast', requireAuth, async (req, res, next) => {
     const builder = mode === 'reinvest' ? F.buildReinvestForecast : F.buildForecast;
     const fc = builder({
       months: fin.horizonMonths, startUnits: startUnits,
-      perUnitRevenue, ebitdaMargin: inp.medMargin,
+      perUnitRevenue, ebitdaMargin: se.margin,
       centralCostMonthly: toBase(fin.centralCostMonthlyCzk), taxRatePct: fin.taxRatePct,
       maintenanceReservePct: A.maintenanceReservePct, minLiquidity: toBase(fin.minLiquidityCzk),
       rampCurve, newUnitsPerMonth: fin.newUnitsPerMonth,
       unitAllInCapex: unitAllIn, unitCostBase, bankFinancingPct: fin.bankFinancingPct,
-      interestRatePct: (fin.interestRatePct || 0) + (sc.interestAddPct || 0),
+      interestRatePct: se.interestRatePct,
       maturityMonths: fin.maturityMonths, graceMonths: fin.graceMonths,
       facilityLimit: toBase(fin.facilityLimitCzk), targetUnitsPerMonth: A.targetUnitsPerMonth || 4,
       depreciationMonths: (fin.depreciationYears || 0) * 12, unitDepBase: unitAllIn,
@@ -405,8 +436,67 @@ router.get('/forecast', requireAuth, async (req, res, next) => {
       base, scenario: scName, mode, unitBreakdown, greenfield, startUnits,
       inputs: { activeCount: inp.activeCount, startUnits: startUnits, greenfield: greenfield, medRevenue: Math.round(inp.medRevenue), medMargin: inp.medMargin, perUnitRevenue: Math.round(perUnitRevenue), unitCostBase: Math.round(unitCostBase), unitAllIn: Math.round(unitAllIn), rampCurve, targetUnitsPerMonth: (A.targetUnitsPerMonth || 4), buildPace: fin.newUnitsPerMonth },
       financing: fin, scenarios, activeScenario: sc,
+      scenarioMeta: {
+        key: scName, label: sc.label || scName, basis: se.basis,
+        revenueFactor: Math.round(se.revenueFactor * 1000) / 1000,
+        perUnitRevenue: Math.round(se.perUnitRevenue), perUnitEbitda: Math.round(se.perUnitEbitda),
+        interestRatePct: Math.round(se.interestRatePct * 100) / 100,
+        dscrTarget: Number(sc.dscrTarget) || null,
+        pass: (fc.summary && fc.summary.minDscr != null && sc.dscrTarget) ? (fc.summary.minDscr >= sc.dscrTarget) : null,
+      },
       summary: fc.summary, rows: fc.rows,
     });
+  } catch (err) { next(err); }
+});
+
+// GET /api/bank-plan/scenarios — srovnání všech scénářů (Base/Downside/HistStress/Combined)
+// s covenant PASS/FAIL. Datově dynamické z percentilů historické distribuce.
+router.get('/scenarios', requireAuth, async (req, res, next) => {
+  try {
+    const hist = await getSetting(HISTORY_KEY, { type: 'json', defaultValue: null });
+    if (!hist) return res.status(404).json({ error: 'Snapshot historie zatím není.' });
+    const A = await loadAssumptions();
+    const fx = A.fx || DEFAULT_ASSUMPTIONS.fx;
+    const base = (req.query.base || hist.base || 'CZK').toUpperCase();
+    const fin = Object.assign({}, DEFAULT_ASSUMPTIONS.financing, A.financing || {});
+    const mode = String(req.query.mode || '') === 'facility' ? 'facility' : 'reinvest';
+    const builder = mode === 'reinvest' ? F.buildReinvestForecast : F.buildForecast;
+    const inp = await _portfolioInputs(hist, A, base);
+    const toBase = (czk) => E.convert(czk, 'CZK', base, fx);
+    const unitCostBase = E.convert((A.unitCostEur || 52000), 'EUR', base, fx);
+    const unitAllIn = E.convert((A.unitCostEur || 52000) + (fin.allInExtraEur || 0), 'EUR', base, fx);
+    const startUnits = (fin.startUnitsOverride != null && fin.startUnitsOverride !== '') ? Math.max(0, Math.floor(Number(fin.startUnitsOverride))) : inp.activeCount;
+    const scenarios = Object.assign({}, DEFAULT_ASSUMPTIONS.scenarios, A.scenarios || {});
+    const order = ['base', 'downside', 'stress', 'combined'];
+    const out = order.filter((k) => scenarios[k]).map((k) => {
+      const sc = scenarios[k];
+      const se = scenarioEconomics(inp, A, fin, sc);
+      let rampCurve = F.rampFromCohort(inp.cohort, inp.medRevenue || 1);
+      if (se.rampExtraMonths > 0 && rampCurve.length) rampCurve = Array(se.rampExtraMonths).fill(rampCurve[0]).concat(rampCurve);
+      const fc = builder({
+        months: fin.horizonMonths, startUnits, perUnitRevenue: se.perUnitRevenue, ebitdaMargin: se.margin,
+        centralCostMonthly: toBase(fin.centralCostMonthlyCzk), taxRatePct: fin.taxRatePct,
+        maintenanceReservePct: A.maintenanceReservePct, minLiquidity: toBase(fin.minLiquidityCzk),
+        rampCurve, newUnitsPerMonth: fin.newUnitsPerMonth, unitAllInCapex: unitAllIn, unitCostBase,
+        bankFinancingPct: fin.bankFinancingPct, interestRatePct: se.interestRatePct,
+        maturityMonths: fin.maturityMonths, graceMonths: fin.graceMonths,
+        facilityLimit: toBase(fin.facilityLimitCzk), targetUnitsPerMonth: A.targetUnitsPerMonth || 4,
+        depreciationMonths: (fin.depreciationYears || 0) * 12, unitDepBase: unitAllIn,
+      });
+      const s = fc.summary || {};
+      const target = Number(sc.dscrTarget) || null;
+      const maint = se.perUnitRevenue * (Number(A.maintenanceReservePct) || 0) / 100;
+      return {
+        key: k, label: sc.label || k, basis: se.basis,
+        revenueFactor: Math.round(se.revenueFactor * 1000) / 1000,
+        perUnitRevenue: Math.round(se.perUnitRevenue), perUnitEbitda: Math.round(se.perUnitEbitda),
+        perUnitCfads: Math.round(se.perUnitEbitda - maint),
+        interestRatePct: Math.round(se.interestRatePct * 100) / 100,
+        minDscr: s.minDscr, avgDscr: s.avgDscr, dscrTarget: target,
+        pass: (s.minDscr != null && target) ? (s.minDscr >= target) : null,
+      };
+    });
+    res.json({ base, mode, scenarios: out, percentiles: inp.revDist });
   } catch (err) { next(err); }
 });
 
@@ -424,13 +514,14 @@ router.post('/risks/ai-assess', requireAuth, async (req, res, next) => {
     const mkFc = (scName) => {
       const scenarios = Object.assign({}, DEFAULT_ASSUMPTIONS.scenarios, A.scenarios || {});
       const sc = scenarios[scName] || scenarios.base;
-      const haircut = 1 - ((A.bankingHaircutPct || 0) / 100);
-      const perUnitRevenue = inp.medRevenue * haircut * (sc.revenueFactor != null ? sc.revenueFactor : 1);
+      const se = scenarioEconomics(inp, A, fin, sc);
       const toBase = (czk) => E.convert(czk, 'CZK', base, A.fx || DEFAULT_ASSUMPTIONS.fx);
       const unitCostBase = E.convert((A.unitCostEur || 52000), 'EUR', base, A.fx || DEFAULT_ASSUMPTIONS.fx);
       const unitAllIn = E.convert((A.unitCostEur || 52000) + (fin.allInExtraEur || 0), 'EUR', base, A.fx || DEFAULT_ASSUMPTIONS.fx);
       const start = (fin.startUnitsOverride != null && fin.startUnitsOverride !== '') ? Math.max(0, Math.floor(Number(fin.startUnitsOverride))) : inp.activeCount;
-      return F.buildReinvestForecast({ months: fin.horizonMonths, startUnits: start, perUnitRevenue, ebitdaMargin: inp.medMargin, centralCostMonthly: toBase(fin.centralCostMonthlyCzk), taxRatePct: fin.taxRatePct, maintenanceReservePct: A.maintenanceReservePct, minLiquidity: toBase(fin.minLiquidityCzk), rampCurve: F.rampFromCohort(inp.cohort, inp.medRevenue || 1), newUnitsPerMonth: fin.newUnitsPerMonth, unitAllInCapex: unitAllIn, unitCostBase, bankFinancingPct: fin.bankFinancingPct, interestRatePct: (fin.interestRatePct || 0) + (sc.interestAddPct || 0), maturityMonths: fin.maturityMonths, graceMonths: fin.graceMonths, facilityLimit: toBase(fin.facilityLimitCzk), targetUnitsPerMonth: A.targetUnitsPerMonth || 4, depreciationMonths: (fin.depreciationYears || 0) * 12, unitDepBase: unitAllIn });
+      let rampCurve = F.rampFromCohort(inp.cohort, inp.medRevenue || 1);
+      if (se.rampExtraMonths > 0 && rampCurve.length) rampCurve = Array(se.rampExtraMonths).fill(rampCurve[0]).concat(rampCurve);
+      return F.buildReinvestForecast({ months: fin.horizonMonths, startUnits: start, perUnitRevenue: se.perUnitRevenue, ebitdaMargin: se.margin, centralCostMonthly: toBase(fin.centralCostMonthlyCzk), taxRatePct: fin.taxRatePct, maintenanceReservePct: A.maintenanceReservePct, minLiquidity: toBase(fin.minLiquidityCzk), rampCurve, newUnitsPerMonth: fin.newUnitsPerMonth, unitAllInCapex: unitAllIn, unitCostBase, bankFinancingPct: fin.bankFinancingPct, interestRatePct: se.interestRatePct, maturityMonths: fin.maturityMonths, graceMonths: fin.graceMonths, facilityLimit: toBase(fin.facilityLimitCzk), targetUnitsPerMonth: A.targetUnitsPerMonth || 4, depreciationMonths: (fin.depreciationYears || 0) * 12, unitDepBase: unitAllIn });
     };
     const fcBase = mkFc('base'); const fcStress = mkFc('stress');
 
