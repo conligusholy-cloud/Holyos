@@ -472,14 +472,22 @@ router.get('/forecast', requireAuth, async (req, res, next) => {
       base, scenario: scName, mode, unitBreakdown, greenfield, startUnits,
       inputs: { activeCount: inp.activeCount, startUnits: startUnits, greenfield: greenfield, medRevenue: Math.round(inp.medRevenue), medMargin: inp.medMargin, perUnitRevenue: Math.round(perUnitRevenue), unitCostBase: Math.round(unitCostBase), unitAllIn: Math.round(unitAllIn), rampCurve, targetUnitsPerMonth: (A.targetUnitsPerMonth || 4), buildPace: fin.newUnitsPerMonth },
       financing: fin, scenarios, activeScenario: sc,
-      scenarioMeta: {
-        key: scName, label: sc.label || scName, basis: se.basis,
-        revenueFactor: Math.round(se.revenueFactor * 1000) / 1000,
-        perUnitRevenue: Math.round(se.perUnitRevenue), perUnitEbitda: Math.round(se.perUnitEbitda),
-        interestRatePct: Math.round(se.interestRatePct * 100) / 100,
-        dscrTarget: Number(sc.dscrTarget) || null,
-        pass: (fc.summary && fc.summary.avgDscr != null && sc.dscrTarget) ? (fc.summary.avgDscr >= sc.dscrTarget) : null,
-      },
+      scenarioMeta: (function(){
+        const maintM = se.perUnitRevenue * (Number(A.maintenanceReservePct) || 0) / 100;
+        const cfadsUnit = se.perUnitEbitda - maintM;
+        const debtPerUnit = unitAllIn * (fin.bankFinancingPct || 0) / 100;
+        const amortN = Math.max(1, (fin.maturityMonths || 84) - (fin.graceMonths || 0));
+        const annuity = E.annuityPayment(debtPerUnit, se.interestRatePct / 100 / 12, amortN);
+        const dscrUnit = annuity > 0 ? cfadsUnit / annuity : null;
+        return {
+          key: scName, label: sc.label || scName, basis: se.basis,
+          revenueFactor: Math.round(se.revenueFactor * 1000) / 1000,
+          perUnitRevenue: Math.round(se.perUnitRevenue), perUnitEbitda: Math.round(se.perUnitEbitda),
+          perUnitAnnuity: Math.round(annuity), interestRatePct: Math.round(se.interestRatePct * 100) / 100,
+          dscrUnit: dscrUnit, dscrTarget: Number(sc.dscrTarget) || null,
+          pass: (dscrUnit != null && sc.dscrTarget) ? (dscrUnit >= sc.dscrTarget) : null,
+        };
+      })(),
       summary: fc.summary, rows: fc.rows,
     });
   } catch (err) { next(err); }
@@ -522,14 +530,21 @@ router.get('/scenarios', requireAuth, async (req, res, next) => {
       const s = fc.summary || {};
       const target = Number(sc.dscrTarget) || null;
       const maint = se.perUnitRevenue * (Number(A.maintenanceReservePct) || 0) / 100;
+      const cfadsUnit = se.perUnitEbitda - maint;
+      // Ustálený DSCR na jednotku = NOI/CFADS jednotky ÷ její anuita (na financovanou část).
+      // Nezávislý na časování instalací (ne portfolio-lifetime průměr, který nafoukne růst).
+      const debtPerUnit = unitAllIn * (fin.bankFinancingPct || 0) / 100;
+      const amortN = Math.max(1, (fin.maturityMonths || 84) - (fin.graceMonths || 0));
+      const annuity = E.annuityPayment(debtPerUnit, se.interestRatePct / 100 / 12, amortN);
+      const dscrUnit = annuity > 0 ? cfadsUnit / annuity : null;
       return {
         key: k, label: sc.label || k, basis: se.basis,
         revenueFactor: Math.round(se.revenueFactor * 1000) / 1000,
         perUnitRevenue: Math.round(se.perUnitRevenue), perUnitEbitda: Math.round(se.perUnitEbitda),
-        perUnitCfads: Math.round(se.perUnitEbitda - maint),
+        perUnitCfads: Math.round(cfadsUnit), perUnitAnnuity: Math.round(annuity),
         interestRatePct: Math.round(se.interestRatePct * 100) / 100,
-        minDscr: s.minDscr, avgDscr: s.avgDscr, dscrTarget: target,
-        pass: (s.avgDscr != null && target) ? (s.avgDscr >= target) : null,
+        dscrUnit: dscrUnit, avgDscrPortfolio: s.avgDscr, minDscrPortfolio: s.minDscr, dscrTarget: target,
+        pass: (dscrUnit != null && target) ? (dscrUnit >= target) : null,
       };
     });
     res.json({ base, mode, scenarios: out, percentiles: inp.revDist });
