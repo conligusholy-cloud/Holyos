@@ -226,29 +226,27 @@ function buildDebtSchedule(drawdowns, months) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 // DSCR = Cash Flow Available for Debt Service / Debt Service.
-// Měsíčně kvůli grafu, ale MIN se bere z ROČNÍCH agregátů (bankovní konvence,
-// „nejnižší DSCR v daném roce") — jeden lumpy měsíc náběhu by min nespravedlivě
-// stáhl dolů. Průměr = celkové CFADS / celkové splátky za horizont (lifetime coverage).
+// MIN se bere z MĚSÍČNÍCH hodnot (konzervativní — nejhorší měsíc náběhu).
+// Průměr = celkové CFADS / celkové splátky za horizont (lifetime coverage).
+// perYear je k dispozici jen pro referenci (roční agregáty).
 function dscrSeries(cfads, debtService) {
   const H = Math.max(cfads.length, debtService.length);
   const perMonth = [];
-  let sumCfads = 0, sumDs = 0;
+  let min = null, sumCfads = 0, sumDs = 0;
   const yearCf = {}, yearDs = {};
   for (let i = 0; i < H; i++) {
     const cf = Number(cfads[i]) || 0;
     const ds = Number(debtService[i]) || 0;
     sumCfads += cf; sumDs += ds;
-    perMonth.push({ month: i, cfads: cf, debtService: ds, dscr: ds > 0 ? cf / ds : null });
+    const dscr = ds > 0 ? cf / ds : null;
+    if (dscr != null && (min == null || dscr < min)) min = dscr;
+    perMonth.push({ month: i, cfads: cf, debtService: ds, dscr });
     const y = Math.floor(i / 12);
     yearCf[y] = (yearCf[y] || 0) + cf; yearDs[y] = (yearDs[y] || 0) + ds;
   }
-  const perYear = [];
-  let min = null;
-  Object.keys(yearCf).map(Number).sort((a, b) => a - b).forEach((y) => {
+  const perYear = Object.keys(yearCf).map(Number).sort((a, b) => a - b).map((y) => {
     const ds = yearDs[y] || 0, cf = yearCf[y] || 0;
-    const dscr = ds > 0 ? cf / ds : null;
-    perYear.push({ year: y, cfads: cf, debtService: ds, dscr });
-    if (dscr != null && (min == null || dscr < min)) min = dscr;
+    return { year: y, cfads: cf, debtService: ds, dscr: ds > 0 ? cf / ds : null };
   });
   return { perMonth, perYear, min, avg: sumDs > 0 ? sumCfads / sumDs : null };
 }
