@@ -326,7 +326,7 @@
       var crossTxt = cx.month!=null ? ('za '+cx.month+' měs. ('+monthLabel(cx.month)+')') : 'nedosaženo v horizontu';
       var h = '';
       h += '<div class="note" style="margin-bottom:10px"><b>Reinvestiční režim ♻️</b>: financovaná výstavba z úvěru + navíc se z nakumulovaného volného cash flow průběžně kupují další stroje (samofinancovaný růst). Scénáře: <b>Base = P50</b> (historický medián), <b>Downside = −10 %</b>, <b>Stress = −20 %</b> z mediánu. EBITDA se dopočítá nelineárně (fixní nájem zůstává). Crossover <b>bez splátek úvěru</b>. Scénář:</div>';
-      h += '<div style="display:inline-flex;flex-wrap:wrap;border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:14px">'+seg('base','Base · P50')+seg('downside','Downside · −10 %')+seg('stress','Stress · −20 %')+'</div>';
+      h += '<div style="display:inline-flex;flex-wrap:wrap;border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:14px">'+seg('base','Base')+seg('downside','Downside · −10 %')+seg('stress','Stress · −20 %')+'</div>';
       h += '<div id="fc-scentable" style="margin-bottom:14px"></div>';
       h += '<div id="fc-debtsizing" style="margin-bottom:14px"></div>';
       h += '<div id="fc-volatility" style="margin-bottom:14px"></div>';
@@ -420,7 +420,10 @@
           var isBE = s.key==='breakeven';
           var targetCell = isBE ? '<span class="muted">hranice</span>' : dsc(s.dscrTarget);
           var stavCell = isBE ? ('<span style="color:#eab308;font-weight:700;font-size:11px">rezerva '+(s.cushionPct!=null?('−'+String(s.cushionPct).replace('.',',')+' %'):'—')+'</span>') : badge(s.pass);
-          var basisCell = isBE ? 'tržba pro DSCR 1,0 · faktor '+(s.revenueFactor!=null?String(s.revenueFactor).replace('.',','):'—') : ((s.basis||'').toUpperCase()+' · faktor '+(s.revenueFactor!=null?String(s.revenueFactor).replace('.',','):'—'));
+          var _pct = s.revenueFactor!=null ? Math.round((s.revenueFactor-1)*100) : null;
+          var basisCell = isBE ? 'tržba pro DSCR 1,0'
+            : (s.key==='base' ? '100 % mediánu'
+            : (_pct!=null ? ((_pct>=0?'+':'−')+Math.abs(_pct)+' % z mediánu') : '—'));
           h += '<tr'+(isBE?' style="border-top:2px solid var(--border)"':'')+'><td style="font-weight:700">'+esc(s.label)+'</td><td class="muted">'+basisCell+'</td>'+
             '<td style="text-align:right">'+money(s.perUnitRevenue)+'</td>'+
             '<td style="text-align:right">'+money(s.perUnitEbitda)+'</td>'+
