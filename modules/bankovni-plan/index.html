@@ -63,6 +63,7 @@
       <div style="margin-left:auto; display:flex; gap:10px; align-items:center;">
         <span class="seg"><button id="cur-CZK" class="on" onclick="setBase('CZK')">CZK</button><button id="cur-EUR" onclick="setBase('EUR')">EUR</button></span>
         <button class="btn" onclick="openAiAnalysis()" title="AI analýza plánu — pracuje jen s daty na této stránce" style="background:#7c5cff;color:#fff;border:none">🤖 AI analýza</button>
+        <button class="btn" onclick="openAiBrief()" title="Vygeneruj kompletní zadání s reálnými daty pro AI chat (prezentace / dokument)" style="background:#0ea5e9;color:#fff;border:none">📝 Zadání pro AI</button>
         <button class="btn" onclick="openAiInstr()" title="Nastavení pokynů pro AI agenta">⚙️</button>
         <a class="btn" href="/modules/bankovni-plan/report.html" target="_blank" title="Bankovní report připravený k tisku / uložení do PDF" style="text-decoration:none">📄 Report (PDF)</a>
         <button class="btn" onclick="rebuild()" id="bp-rebuild" title="Znovu stáhnout data ze SIS">↻ Přebudovat data</button>
@@ -814,6 +815,123 @@
           '<div class="note" style="margin-top:8px">Vygenerováno výhradně z dat na této stránce. <a href="#" onclick="openAiInstr();return false" style="color:#a78bfa">Upravit pokyny ⚙️</a></div>';
       }catch(e){ document.getElementById('bp-ai-body').innerHTML='<div style="color:#ef4444">Analýza selhala (timeout nebo výpadek).</div>'; }
     }
+    // ─── Vygeneruj zadání pro AI (kompletní brief s reálnými daty pro chat) ───
+    function buildAiBrief(scen, dsz){
+      var d=DATA||{}, t=d.trackRecord||{}, u=d.unitEconomics||{}, a=d.assumptions||{}, vol=d.volatility||{}, wr=d.worstRolling||{};
+      var ub=(FC&&FC.unitBreakdown)||{}, s=(FC&&FC.summary)||{}, fin=(FC&&FC.financing)||{}, sm=(FC&&FC.scenarioMeta)||{}, cx=s.crossover||{};
+      var fx=a.fx||{}, vat=a.vatByCurrency||{}, nt=a.notes||{};
+      var m=function(x){ return (x!=null? money(x):'—'); };
+      var pctv=function(x){ return (x!=null? (Math.round(x*1000)/10).toLocaleString('cs-CZ')+' %':'—'); };
+      var dv=function(x){ return (x!=null? (Math.round(x*100)/100).toLocaleString('cs-CZ')+'×':'—'); };
+      var rd=u.revenueDist||{}, ed=u.ebitdaDist||{};
+      var L=[];
+      L.push('# ZADÁNÍ PRO AI — Bankovní business plán: síť samoobslužných prádlomatů (Best Series s.r.o.)');
+      L.push('');
+      L.push('Jsi zkušený finanční analytik a designér prezentací. Na základě NÍŽE UVEDENÝCH REÁLNÝCH DAT vytvoř:');
+      L.push('1) Přesvědčivou, vizuálně líbivou prezentaci pro banku / investora (cca 10–14 slidů, s grafy a přehlednými tabulkami).');
+      L.push('2) Doprovodný souvislý textový dokument (business plán) shrnující totéž.');
+      L.push('');
+      L.push('DŮLEŽITÉ: Pracuj VÝHRADNĚ s těmito čísly, nic si nevymýšlej. Všechny částky jsou BEZ DPH, měna '+BASE+'. Zdroj = reálná provozní data ze systému SIS.');
+      L.push('');
+      L.push('## Kontext');
+      L.push('- Společnost: Best Series s.r.o.');
+      L.push('- Produkt: síť samoobslužných prádelen (prádlomatů), varianta V3');
+      L.push('- Účel: financování dalšího škálování sítě');
+      L.push('');
+      L.push('## Track record (skutečná data)');
+      L.push('- Období dat: '+(t.firstData||'—')+' – '+(t.lastData||'—')+' ('+String(t.yearsData).replace('.',',')+' let)');
+      L.push('- Provozoven celkem: '+(t.realCount!=null?t.realCount:'—')+' (aktivních '+(t.activeCount!=null?t.activeCount:'—')+', uzavřených '+(t.closedCount!=null?t.closedCount:'—')+')');
+      L.push('- Location-months reálného provozu: '+(t.locationMonths!=null?t.locationMonths:'—'));
+      L.push('- Transakcí celkem: '+(t.totalTx!=null?t.totalTx:'—'));
+      L.push('- Kumulativní tržby (bez DPH): '+m(t.cumulativeRevenue));
+      L.push('');
+      L.push('## Unit economics — jedna provozovna (medián, měsíčně)');
+      L.push('- Obrat: '+m(ub.revenue));
+      L.push('- − Nájem: '+m(ub.rent)+' | − Servis: '+m(ub.service)+' | − Energie: '+m(ub.energy)+' | − Platební poplatky: '+m(ub.fee));
+      L.push('- = EBITDA: '+m(ub.ebitda)+' (marže '+pctv(ub.ebitdaMargin)+')');
+      L.push('- − Splátka úvěru (anuita): '+m(ub.payment)+' | − Daň (po odpisech): '+m(ub.tax));
+      L.push('- = Čistý cash po všem (vč. splátky): '+m(ub.netWithDebt));
+      L.push('- Čistý cash po splacení stroje: '+m(ub.netPaidOff));
+      L.push('- Investice/jednotku (all-in): '+m(ub.allIn)+' — z toho úvěr '+m(ub.debtPerUnit)+' + vlastní '+m(ub.equityPerUnit));
+      L.push('');
+      L.push('## Distribuce výkonu portfolia (per lokalita, měsíčně)');
+      L.push('- Tržba: P10 '+m(rd.p10)+' · P25 '+m(rd.p25)+' · medián '+m(rd.p50)+' · P75 '+m(rd.p75)+' · P90 '+m(rd.p90));
+      L.push('- EBITDA: P10 '+m(ed.p10)+' · P25 '+m(ed.p25)+' · medián '+m(ed.p50)+' · P75 '+m(ed.p75)+' · P90 '+m(ed.p90));
+      L.push('');
+      L.push('## Scénáře (na jednu lokalitu, měsíčně)');
+      if(scen&&scen.scenarios&&scen.scenarios.length){
+        scen.scenarios.forEach(function(x){
+          L.push('- '+x.label+': tržba '+m(x.perUnitRevenue)+', EBITDA '+m(x.perUnitEbitda)+', splátka '+m(x.perUnitAnnuity)+', DSCR '+dv(x.dscrUnit)+(x.dscrTarget?(' (cíl '+dv(x.dscrTarget)+')'):'')+(x.pass!=null?(' → '+(x.pass?'PASS':'FAIL')):'')+(x.cushionPct!=null?(' — rezerva: tržba smí klesnout o '+String(x.cushionPct).replace('.',',')+' %'):''));
+        });
+      } else { L.push('- (scénáře se nepodařilo načíst)'); }
+      L.push('');
+      L.push('## DSCR & krytí dluhu');
+      L.push('- DSCR jedné lokality (NOI ÷ splátka), Base: '+dv(sm.dscrUnit)+(sm.dscrTarget?(' · covenant cíl '+dv(sm.dscrTarget)):''));
+      L.push('');
+      if(dsz){
+        L.push('## Debt sizing (dluh se přizpůsobuje výkonu)');
+        L.push('- Max. bezpečný dluh / jednotku: '+m(dsz.maxSafeDebtPerUnit));
+        L.push('- Max. LTC: '+(dsz.maxLtcPct!=null?String(dsz.maxLtcPct).replace('.',',')+' %':'—'));
+        L.push('');
+      }
+      L.push('## Struktura financování & růst (model)');
+      L.push('- Úvěrový rámec (facility): '+m(fin.facilityLimitCzk));
+      L.push('- Financování bankou: '+(fin.bankFinancingPct!=null?fin.bankFinancingPct+' %':'—')+' z ceny jednotky');
+      L.push('- Úrok: '+String(fin.interestRatePct).replace('.',',')+' % p.a. · splatnost '+fin.maturityMonths+' měs · grace '+fin.graceMonths+' měs');
+      L.push('- Max. dluh (špička expozice): '+m(s.peakDebt)+' · čerpáno kumulativně: '+m(s.drawnTotal));
+      L.push('- Vlastní kapitál: '+m(s.totalEquity)+(s.reinvestCapex?(' + reinvestice z cash flow '+m(s.reinvestCapex)):''));
+      L.push('- Jednotek na konci horizontu: '+(s.unitsEnd!=null?s.unitsEnd:'—')+' (z '+(s.startUnits!=null?s.startUnits:'—')+' dnes, +'+(s.newTotal!=null?s.newTotal:'—')+' nových)');
+      L.push('- Self-Financing Crossover: '+(cx.month!=null?('při '+cx.units+' jednotkách (za '+cx.month+' měs.)'):'v horizontu nedosaženo')+(cx.requiredMonthly?(', potřeba '+m(cx.requiredMonthly)+'/měs volných na cíl '+(a.targetUnitsPerMonth||4)+' strojů/měs'):''));
+      L.push('');
+      L.push('## Volatilita / odolnost');
+      L.push('- Variabilita (CV) stabilizovaného výkonu: '+(vol.cvPct!=null?String(vol.cvPct).replace('.',',')+' %':'—')+' (vyloučeno prvních 6 měsíců každé lokality)');
+      if(wr.m12&&wr.m12.avg!=null) L.push('- Nejhorší klouzavé 12M období (průměr tržby/lokalitu/měs): '+m(wr.m12.avg));
+      L.push('');
+      L.push('## Doplňující body pro banku');
+      if(nt.creditFramework) L.push('- Úvěrový rámec a čerpání: '+nt.creditFramework);
+      if(nt.crossover) L.push('- Self-Financing Crossover: '+nt.crossover);
+      if(nt.dscrGrace) L.push('- DSCR, grace period a náběh lokalit: '+nt.dscrGrace);
+      L.push('');
+      L.push('## Provozní předpoklady');
+      L.push('- Servis '+String(a.servicePct).replace('.',',')+' %, Energie '+String(a.energyPct).replace('.',',')+' %, Platební poplatky '+String(a.paymentFeePct).replace('.',',')+' % z obratu (bez DPH)');
+      L.push('- Nájem default: '+m(a.rentMonthlyDefault)+'/měs · Cena prádlomatu: '+(a.unitCostEur!=null?a.unitCostEur+' EUR':'—'));
+      L.push('- Kurzy: EUR '+(fx.EUR||'—')+', PLN '+(fx.PLN||'—')+' · DPH: CZ '+(vat.CZK||'—')+' %, EUR/IE '+(vat.EUR||'—')+' %, PL '+(vat.PLN||'—')+' %');
+      L.push('');
+      L.push('## Jak to zpracovat');
+      L.push('- Tón: důvěryhodný, střízlivý, bankovní. Hlavní argumenty: '+String(t.yearsData).replace('.',',')+' let reálných dat, nízká volatilita poptávky (samoobslužné praní), diverzifikace přes desítky provozoven, čerpání vázané na konkrétní produktivní aktivum.');
+      L.push('- Doporučená struktura prezentace: (1) titul, (2) executive summary, (3) track record + graf růstu tržeb, (4) unit economics, (5) distribuce/robustnost, (6) scénáře + DSCR, (7) struktura financování, (8) crossover / samofinancování, (9) rizika + mitigace, (10) závěr a žádost o financování.');
+      L.push('- Používej grafy a přehledné tabulky, zvýrazni klíčová čísla. Nevymýšlej data; kde údaj chybí, napiš „nedodáno".');
+      return L.join('\n');
+    }
+    async function openAiBrief(){
+      if(!DATA||!FC){ alert('Data ještě nejsou načtená — chvíli počkej a zkus znovu.'); return; }
+      _bpOverlay('📝 Zadání pro AI','<div class="note" style="padding:20px;text-align:center">Sestavuji zadání z reálných dat…</div>', true);
+      var scen=null, dsz=null;
+      try{ scen=await (await fetch('/api/bank-plan/scenarios?base='+BASE,{credentials:'include'})).json(); }catch(e){}
+      try{ dsz=await (await fetch('/api/bank-plan/debt-sizing?base='+BASE,{credentials:'include'})).json(); }catch(e){}
+      var txt=buildAiBrief(scen,dsz);
+      var body=document.getElementById('bp-ai-body'); if(!body) return;
+      body.innerHTML=
+        '<div class="note" style="margin-bottom:8px">Kompletní zadání s tvými aktuálními daty. Zkopíruj a vlož do chatu (ChatGPT / Claude) — vytvoří prezentaci i dokument.</div>'+
+        '<textarea id="bp-brief-txt" style="width:100%;box-sizing:border-box;min-height:320px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:10px;font-size:12px;line-height:1.5;font-family:monospace"></textarea>'+
+        '<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:12px">'+
+        '<button class="btn" onclick="bpBriefDownload()">⬇ Stáhnout .md</button>'+
+        '<button class="btn btn-primary" onclick="bpBriefCopy(this)">📋 Kopírovat</button></div>';
+      var ta=document.getElementById('bp-brief-txt'); if(ta) ta.value=txt;
+    }
+    function bpBriefCopy(btn){
+      var ta=document.getElementById('bp-brief-txt'); if(!ta) return;
+      ta.select();
+      try{ navigator.clipboard.writeText(ta.value); }catch(e){ try{ document.execCommand('copy'); }catch(_){} }
+      if(btn){ var o=btn.textContent; btn.textContent='✓ Zkopírováno'; setTimeout(function(){ btn.textContent=o; },1600); }
+    }
+    function bpBriefDownload(){
+      var ta=document.getElementById('bp-brief-txt'); if(!ta) return;
+      var blob=new Blob([ta.value],{type:'text/markdown;charset=utf-8'});
+      var a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='zadani-bankovni-plan.md';
+      document.body.appendChild(a); a.click(); setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); },500);
+    }
+    window.openAiBrief=openAiBrief; window.bpBriefCopy=bpBriefCopy; window.bpBriefDownload=bpBriefDownload;
     window.openAiInstr=openAiInstr; window.saveAiInstr=saveAiInstr; window.openAiAnalysis=openAiAnalysis;
     async function rebuild(){
       var btn = document.getElementById('bp-rebuild');
