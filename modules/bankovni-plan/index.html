@@ -47,6 +47,8 @@
     .asum label { font-size:11px; color:var(--text2); display:block; margin-bottom:3px; }
     .asum input { width:100%; box-sizing:border-box; background:var(--bg); border:1px solid var(--border); border-radius:7px; padding:7px 9px; color:var(--text); font-size:13px; }
     .banner { background:rgba(245,158,11,.1); border:1px solid rgba(245,158,11,.35); color:#f59e0b; border-radius:10px; padding:12px 14px; font-size:13px; margin-bottom:18px; }
+    .seg-b { padding:7px 16px; background:transparent; color:var(--text2); border:none; cursor:pointer; font-size:13px; font-weight:600; }
+    .seg-b.on { background:#3b82f6; color:#fff; }
   </style>
 </head>
 <body>
@@ -154,6 +156,8 @@
       h += '</div>';
 
       // Lokality — top + flagy
+      h += '<div class="sec" id="fc-section"><h2>Model financování &amp; růst <span class="tag" style="background:rgba(59,130,246,.16);color:#60a5fa">FORECAST</span></h2><div id="fc-body" class="note">Načítám model…</div></div>';
+
       h += '<div class="sec"><h2>Lokality <span class="tag tag-actual">ACTUAL</span> + <span class="tag tag-assume">ASSUMPTION</span></h2><div class="note">Aktivní lokality, řazeno dle EBITDA. 🟣 outlier (nad P90), 🔴 ztrátová.</div>' + locTable() + '</div>';
 
       // Předpoklady
@@ -161,6 +165,7 @@
 
       document.getElementById('bp-content').innerHTML = h;
       drawCharts();
+      loadForecast();
     }
 
     function locTable(){
@@ -250,6 +255,93 @@
         if(!r.ok) throw new Error('HTTP '+r.status);
         await load();
       } catch(e){ alert('Uložení selhalo: '+(e.message||'')); }
+    }
+
+    // ─── Model financování & růst (Fáze 5) ───
+    var FC_SCEN = 'base';
+    var FC = null;
+    function monthLabel(m){ var d=new Date(); d.setDate(1); d.setMonth(d.getMonth()+m); return (d.getMonth()+1)+'/'+d.getFullYear(); }
+    async function loadForecast(){
+      var body = document.getElementById('fc-body'); if(!body) return;
+      try {
+        var r = await fetch('/api/bank-plan/forecast?base='+BASE+'&scenario='+FC_SCEN, { credentials:'include' });
+        if(!r.ok){ body.innerHTML = '<div style="color:#ef4444">Model nelze načíst.</div>'; return; }
+        FC = await r.json();
+        renderForecast();
+      } catch(e){ body.innerHTML = '<div style="color:#ef4444">Chyba: '+(e.message||'')+'</div>'; }
+    }
+    window.loadForecast = loadForecast;
+    function fcScen(s){ FC_SCEN = s; loadForecast(); }
+    window.fcScen = fcScen;
+    function renderForecast(){
+      var body = document.getElementById('fc-body'); if(!body||!FC) return;
+      var s = FC.summary, cx = s.crossover||{}, inp = FC.inputs||{}, fin = FC.financing||{};
+      var seg = function(id,lbl){ return '<button class="seg-b'+(FC_SCEN===id?' on':'')+'" onclick="fcScen(&#39;'+id+'&#39;)">'+lbl+'</button>'; };
+      var kpi = function(l,v,sub,col){ return '<div class="kpi'+(col?' hl':'')+'"><div class="l">'+l+'</div><div class="v">'+v+'</div>'+(sub?'<div class="s">'+sub+'</div>':'')+'</div>'; };
+      var dscrTxt = s.minDscr!=null ? (Math.round(s.minDscr*100)/100).toLocaleString('cs-CZ')+'×' : '—';
+      var crossTxt = cx.month!=null ? ('za '+cx.month+' měs. ('+monthLabel(cx.month)+')') : 'nedosaženo v horizontu';
+      var h = '';
+      h += '<div class="note" style="margin-bottom:10px">Postupné čerpání úvěru po jednotlivých pořízených jednotkách; každá nová lokalita najíždí dle historické ramp-up křivky. Base Case = medián − haircut. Scénář:</div>';
+      h += '<div style="display:inline-flex;border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:14px">'+seg('base','Base')+seg('downside','Downside')+seg('stress','Stress')+'</div>';
+      h += '<div class="kpis">';
+      h += kpi('Self-Financing Crossover', cx.month!=null?monthLabel(cx.month):'—', crossTxt, true);
+      h += kpi('Jednotek při crossoveru', cx.units!=null?cx.units:'—', 'cíl '+ (fin.newUnitsPerMonth)+' nových/měs → '+(FC.activeScenario&&'')+ (cx.requiredMonthly?('nutno '+money(cx.requiredMonthly)+'/měs'):''));
+      h += kpi('Min. DSCR', dscrTxt, s.avgDscr!=null?('průměr '+(Math.round(s.avgDscr*100)/100)+'×'):'', true);
+      h += kpi('Max. dluh', money(s.peakDebt), 'čerpáno '+money(s.drawnTotal));
+      h += kpi('Vlastní kapitál', money(s.totalEquity), 'kumulativně');
+      h += kpi('Jednotek na konci', s.unitsEnd, 'z '+s.startUnits+' dnes · +'+s.newTotal);
+      h += '</div>';
+      h += '<div class="grid2">';
+      h += '<div class="sec" style="background:var(--surface2)"><h2>Počet jednotek</h2><canvas id="fc-units" height="150"></canvas></div>';
+      h += '<div class="sec" style="background:var(--surface2)"><h2>DSCR v čase</h2><div class="note">Poměr provozního cash flow ke splátce dluhu. Zelená ≥ 1,2×.</div><canvas id="fc-dscr" height="150"></canvas></div>';
+      h += '</div><div class="grid2">';
+      h += '<div class="sec" style="background:var(--surface2)"><h2>Tržby & EBITDA (portfolio)</h2><canvas id="fc-rev" height="150"></canvas></div>';
+      h += '<div class="sec" style="background:var(--surface2)"><h2>Zůstatek dluhu</h2><canvas id="fc-debt" height="150"></canvas></div>';
+      h += '</div>';
+      h += fcFinancingForm();
+      body.innerHTML = h;
+      drawForecastCharts();
+    }
+    function fcFinancingForm(){
+      var fin = FC.financing||{};
+      function f(key,label,val){ return '<div><label>'+label+'</label><input id="fin-'+key+'" value="'+(val!=null?val:'')+'"></div>'; }
+      var h = '<div style="margin-top:6px"><div style="font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--text2);margin-bottom:8px">Parametry financování <span class="tag tag-assume">ASSUMPTION</span></div><div class="asum">';
+      h += f('newUnitsPerMonth','Nové jednotky / měs', fin.newUnitsPerMonth);
+      h += f('bankFinancingPct','Financování bankou (%)', fin.bankFinancingPct);
+      h += f('interestRatePct','Úrok p.a. (%)', fin.interestRatePct);
+      h += f('maturityMonths','Splatnost (měs)', fin.maturityMonths);
+      h += f('graceMonths','Grace (měs)', fin.graceMonths);
+      h += f('facilityLimitCzk','Úvěrový rámec (Kč)', fin.facilityLimitCzk);
+      h += f('allInExtraEur','All-in navíc / jednotku (EUR)', fin.allInExtraEur);
+      h += f('taxRatePct','Daň (%)', fin.taxRatePct);
+      h += f('centralCostMonthlyCzk','Centrální náklady / měs (Kč)', fin.centralCostMonthlyCzk);
+      h += f('minLiquidityCzk','Min. rezerva (Kč)', fin.minLiquidityCzk);
+      h += f('horizonMonths','Horizont (měs)', fin.horizonMonths);
+      h += '</div><div style="margin-top:12px"><button class="btn btn-primary" onclick="saveFinancing()">💾 Uložit financování</button></div></div>';
+      return h;
+    }
+    async function saveFinancing(){
+      function v(id){ var el=document.getElementById('fin-'+id); return el?parseFloat(String(el.value).replace(',','.')):null; }
+      var fin = { newUnitsPerMonth:v('newUnitsPerMonth'), bankFinancingPct:v('bankFinancingPct'), interestRatePct:v('interestRatePct'), maturityMonths:v('maturityMonths'), graceMonths:v('graceMonths'), facilityLimitCzk:v('facilityLimitCzk'), allInExtraEur:v('allInExtraEur'), taxRatePct:v('taxRatePct'), centralCostMonthlyCzk:v('centralCostMonthlyCzk'), minLiquidityCzk:v('minLiquidityCzk'), horizonMonths:v('horizonMonths') };
+      try {
+        var cur = (DATA.assumptions&&DATA.assumptions.financing)||{};
+        await fetch('/api/bank-plan/assumptions', { method:'PUT', credentials:'include', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ financing: Object.assign({}, cur, fin) }) });
+        loadForecast();
+      } catch(e){ alert('Uložení selhalo: '+(e.message||'')); }
+    }
+    window.saveFinancing = saveFinancing;
+    var _fcCharts = {};
+    function drawForecastCharts(){
+      if(!window.Chart||!FC) return;
+      Object.keys(_fcCharts).forEach(function(k){ try{_fcCharts[k].destroy();}catch(e){} }); _fcCharts={};
+      var grid='rgba(255,255,255,.07)', tick='#94a3b8';
+      var rows = FC.rows||[];
+      var labels = rows.map(function(r){ return r.month%6===0?monthLabel(r.month):''; });
+      var common = { plugins:{legend:{display:false}}, scales:{ x:{grid:{color:grid},ticks:{color:tick,maxRotation:0,autoSkip:false}}, y:{grid:{color:grid},ticks:{color:tick}} }, elements:{point:{radius:0}} };
+      _fcCharts.units = new Chart(document.getElementById('fc-units'), { type:'line', data:{ labels:labels, datasets:[{ data:rows.map(function(r){return r.closingUnits;}), borderColor:'#0ea5e9', backgroundColor:'rgba(14,165,233,.12)', fill:true, tension:.2 }] }, options:common });
+      _fcCharts.dscr = new Chart(document.getElementById('fc-dscr'), { type:'line', data:{ labels:labels, datasets:[{ data:rows.map(function(r){return r.dscr;}), borderColor:'#22c55e', tension:.2 }] }, options: Object.assign({}, common, { scales: Object.assign({}, common.scales, { y: Object.assign({}, common.scales.y, { suggestedMin:0 }) }) }) });
+      _fcCharts.rev = new Chart(document.getElementById('fc-rev'), { type:'line', data:{ labels:labels, datasets:[{ label:'Tržby', data:rows.map(function(r){return Math.round(r.revenue);}), borderColor:'#eab308', tension:.2 },{ label:'EBITDA', data:rows.map(function(r){return Math.round(r.portfolioEbitda);}), borderColor:'#22c55e', tension:.2 }] }, options: Object.assign({}, common, { plugins:{legend:{display:true,labels:{color:tick}}} }) });
+      _fcCharts.debt = new Chart(document.getElementById('fc-debt'), { type:'line', data:{ labels:labels, datasets:[{ data:rows.map(function(r){return Math.round(r.outstanding);}), borderColor:'#a855f7', backgroundColor:'rgba(168,85,247,.12)', fill:true, tension:.2 }] }, options:common });
     }
 
     function destroyCharts(){ Object.keys(_charts).forEach(function(k){ try{ _charts[k].destroy(); }catch(e){} }); _charts={}; }
