@@ -364,9 +364,10 @@ async function _portfolioInputs(hist, A, base) {
   const revs = [], marginArr = [];
   pool.forEach((l) => {
     const m = netMonthly(l);
-    const stabVal = stab.enabled
-      ? E.stabilizedSiteValue(m, l.openDate, fromMonth, { minHistoryMonths: stab.minHistoryMonths, includeRampUp: stab.includeRampUp })
-      : avgRecent(m, 12);
+    // ZÁKLADNÍ medián/scénáře = VŽDY prostý 12M průměr (raw), aby dlaždice/karty/scénáře
+    // seděly s horní kartou „Medián tržby" (33 386). Vyloučení prvních 6 měsíců (stabilizace)
+    // platí JEN pro volatilitu/nejhorší období — to se počítá zvlášť v /overview, nezávisle.
+    const stabVal = avgRecent(m, 12);
     if (stabVal == null) { stabExcluded++; return; } // nesplňuje min. historii
     revs.push(stabVal);
     const cfg = cfgMap[l.code] || {};
