@@ -125,7 +125,7 @@
       urow('Obrat (bez DPH)', ub.revenue)+
       urow('− Nájem', -ub.rent)+ urow('− Servis', -ub.service)+ urow('− Energie', -ub.energy)+ urow('− Platební poplatky', -ub.fee)+
       '<tr><td><b>EBITDA</b></td><td class="r pos"><b>'+money(ub.ebitda)+'</b> ('+pctv(ub.ebitdaMargin)+')</td></tr>'+
-      urow('− Rezerva na údržbu', -ub.maintenance)+ urow('− Splátka úvěru (anuita)', -ub.payment)+ urow('− Daň', -ub.tax)+
+      urow('− Splátka úvěru (anuita)', -ub.payment)+ urow('− Daň (po odpisech)', -ub.tax)+
       '<tr><td><b>Čistý cash po všem (vč. splátky)</b></td><td class="r '+(ub.netWithDebt>=0?'pos':'neg')+'"><b>'+money(ub.netWithDebt)+'</b></td></tr>'+
       '<tr><td><b>Čistý cash po splacení stroje</b></td><td class="r pos"><b>'+money(ub.netPaidOff)+'</b></td></tr>'+
       '</tbody></table>'+

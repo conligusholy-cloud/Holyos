@@ -137,7 +137,9 @@ function monthsBetween(a, b) { return (b.getFullYear() - a.getFullYear()) * 12 +
 
 async function loadAssumptions() {
   const a = await getSetting(ASSUMPTIONS_KEY, { type: 'json', defaultValue: null });
-  return Object.assign({}, DEFAULT_ASSUMPTIONS, a || {});
+  const merged = Object.assign({}, DEFAULT_ASSUMPTIONS, a || {});
+  merged.maintenanceReservePct = 0; // údržba je zahrnutá v servisu → žádná samostatná rezerva (bez dvojího počítání)
+  return merged;
 }
 
 // Průměr z posledních N kompletních měsíců (poslední = často částečný → vynech).
