@@ -41,9 +41,9 @@ function buildForecast(p) {
   const facilityLimit = (p.facilityLimit != null) ? Number(p.facilityLimit) : Infinity;
 
   // 1) Plán nových jednotek (deterministický) + čerpání dluhu po jednotkách (do limitu facility).
-  // Stavíme STÁLE svým tempem (newPerMonth). Úvěr financuje část každé jednotky až do
-  // vyčerpání rámce; jednotky nad rámec (nebo jejich část) se hradí z vlastního kapitálu/cash.
-  // Růst se tedy nezastaví, jen se po vyčerpání rámce přesune na vlastní zdroje.
+  // Stavíme svým tempem (newPerMonth), ale JEN dokud vydrží úvěrový rámec. Každá jednotka
+  // = úvěr (bankPct %) + povinné spolufinancování z vlastních zdrojů. Po vyčerpání rámce
+  // se výstavba zastaví (prostaví se pouze objem financovaný bankou + příslušná equity).
   const newCohorts = new Array(months).fill(0);
   const drawdowns = [];
   const equityPerUnit = unitAllIn * (1 - bankPct / 100);
@@ -51,19 +51,16 @@ function buildForecast(p) {
   let drawnCumulative = 0;
   const equityByMonth = new Array(months).fill(0);
   for (let m = 0; m < months; m++) {
-    const add = newPerMonth;
-    newCohorts[m] = add;
-    if (add <= 0) continue;
-    let debtDraw = 0;
+    let add = newPerMonth;
     if (debtPerUnit > 0 && isFinite(facilityLimit)) {
       const remaining = Math.max(0, facilityLimit - drawnCumulative);
-      debtDraw = Math.min(add * debtPerUnit, remaining); // částečné čerpání ok — rámec je v penězích
-    } else if (debtPerUnit > 0) {
-      debtDraw = add * debtPerUnit; // bez limitu
+      const maxByFacility = Math.floor(remaining / debtPerUnit + 1e-9); // kolik jednotek ještě rámec unese
+      add = Math.min(add, maxByFacility);
     }
-    if (debtDraw > 0) { drawdowns.push({ month: m, principal: debtDraw, annualRatePct: ratePct, maturityMonths: maturity, graceMonths: grace }); drawnCumulative += debtDraw; }
-    // Vlastní zdroje = celý all-in těchto jednotek minus to, co pokryl úvěr.
-    equityByMonth[m] = (add * unitAllIn) - debtDraw;
+    newCohorts[m] = add;
+    if (add <= 0) continue;
+    if (debtPerUnit > 0) { drawdowns.push({ month: m, principal: debtPerUnit * add, annualRatePct: ratePct, maturityMonths: maturity, graceMonths: grace }); drawnCumulative += debtPerUnit * add; }
+    equityByMonth[m] = equityPerUnit * add; // jen povinné spolufinancování
   }
 
   // 2) Tržby: stávající jednotky stabilně + nové kohorty přes ramp.
