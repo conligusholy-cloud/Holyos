@@ -123,12 +123,12 @@ const DEFAULT_ASSUMPTIONS = {
     startUnitsOverride: null,  // null = skutečná aktivní síť; 0 = greenfield (partner staví od nuly)
     depreciationYears: 5,      // doba odpisu prádlomatu (daňový štít)
   },
-  // Scénáře — přímá úprava mediánu tržeb (haircut se už neaplikuje zvlášť).
-  // Base = medián +15 %, Downside = medián (0 %), Stress = medián −10 %.
+  // Scénáře — přímá úprava mediánu tržeb.
+  // Base = historický medián, Downside = medián −10 %, Stress = medián −15 %.
   scenarios: {
-    base: { revenueFactor: 1.15, interestAddPct: 0 },
-    downside: { revenueFactor: 1.0, interestAddPct: 0 },
-    stress: { revenueFactor: 0.90, interestAddPct: 0 },
+    base: { revenueFactor: 1.0, interestAddPct: 0 },
+    downside: { revenueFactor: 0.90, interestAddPct: 0 },
+    stress: { revenueFactor: 0.85, interestAddPct: 0 },
   },
 };
 

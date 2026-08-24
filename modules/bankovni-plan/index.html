@@ -138,7 +138,7 @@
       h += kpi('Kumulativní tržby', money(t.cumulativeRevenue), 'bez DPH · za celé období');
       h += kpi('Medián tržby / měs', money(u.revenueDist.p50), 'bez DPH · na lokalitu');
       h += kpi('Medián EBITDA / měs', money(u.ebitdaDist.p50), 'marže ' + pct(u.marginDist.p50), true);
-      h += kpi('Base scénář EBITDA', money(u.baseCaseEbitda), 'medián ' + (u.baseFactorPct>=0?'+':'') + String(u.baseFactorPct).replace('.',',') + ' %', true);
+      h += kpi('Base scénář EBITDA', money(u.baseCaseEbitda), (u.baseFactorPct?('medián '+(u.baseFactorPct>=0?'+':'')+String(u.baseFactorPct).replace('.',',')+' %'):'= historický medián'), true);
       h += '</div>';
 
       // Track record graf (portfolio tržby v čase)
@@ -326,7 +326,7 @@
       var dscrTxt = s.minDscr!=null ? (Math.round(s.minDscr*100)/100).toLocaleString('cs-CZ')+'×' : '—';
       var crossTxt = cx.month!=null ? ('za '+cx.month+' měs. ('+monthLabel(cx.month)+')') : 'nedosaženo v horizontu';
       var h = '';
-      h += '<div class="note" style="margin-bottom:10px"><b>Reinvestiční režim ♻️</b>: financovaná výstavba z úvěru + navíc se z nakumulovaného volného cash flow průběžně kupují další stroje (samofinancovaný růst). Každá nová lokalita najíždí dle historické ramp-up křivky. Scénáře: Base = medián +15 %, Downside = medián, Stress = medián −10 %. Crossover se počítá <b>bez splátek úvěru</b>. Scénář:</div>';
+      h += '<div class="note" style="margin-bottom:10px"><b>Reinvestiční režim ♻️</b>: financovaná výstavba z úvěru + navíc se z nakumulovaného volného cash flow průběžně kupují další stroje (samofinancovaný růst). Každá nová lokalita najíždí dle historické ramp-up křivky. Scénáře: Base = historický medián, Downside = medián −10 %, Stress = medián −15 %. Crossover se počítá <b>bez splátek úvěru</b>. Scénář:</div>';
       h += '<div style="display:inline-flex;border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:14px">'+seg('base','Base')+seg('downside','Downside')+seg('stress','Stress')+'</div>';
       if (FC.greenfield) h += '<div class="banner" style="background:rgba(59,130,246,.1);border-color:rgba(59,130,246,.35);color:#60a5fa">🌱 Režim „od nuly" (greenfield): síť začíná na 0 provozovnách — model pro partnery v jiných zemích. Ekonomika jednotky se bere z prověřených historických dat, síť se staví od začátku.</div>';
       h += '<div class="kpis">';
@@ -369,7 +369,7 @@
       }
       var rev = u.revenue||1;
       var h = '<div class="sec" style="background:var(--surface2)"><h2>🧺 Ukázka jedné lokality (mediánová, měsíčně) <span class="tag tag-actual">ACTUAL</span> + <span class="tag tag-assume">ASSUMPTION</span></h2>'+
-        '<div class="note">Reprezentativní prádlomat (skutečný medián, bez DPH): co vydělá a co zbyde po odečtení všeho včetně splátky úvěru. Agregátní model níže používá scénáře: Base = medián +15 %, Downside = medián, Stress = medián −10 %.</div>'+
+        '<div class="note">Reprezentativní prádlomat (skutečný medián, bez DPH): co vydělá a co zbyde po odečtení všeho včetně splátky úvěru. Agregátní model níže používá scénáře: Base = historický medián, Downside = medián −10 %, Stress = medián −15 %.</div>'+
         '<div style="max-width:520px">';
       h += row('Obrat (bez DPH)', u.revenue, {bold:true});
       h += row('Nájem', u.rent, {minus:true, col:'#ef4444', pct:u.rent/rev});
