@@ -82,7 +82,7 @@ const DEFAULT_ASSUMPTIONS = {
   energyPct: 13.4,
   paymentFeePct: 1.5,
   rentMonthlyDefault: 8000, // base měna (CZK) — když lokalita nemá vlastní nájem
-  maintenanceReservePct: 3,
+  maintenanceReservePct: 0, // údržba je už zahrnutá v servisu → default 0 (žádné dvojí počítání)
   bankingHaircutPct: 15, // srážka Base Case proti historickému mediánu
   unitCostEur: 52000,    // cena prádlomatu
   targetUnitsPerMonth: 4,

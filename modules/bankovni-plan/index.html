@@ -269,7 +269,7 @@
         : '<div style="font-size:11px;color:var(--text2);margin-top:4px;">Nájmy zatím nejsou v Compoundingu vyplněné.</div>';
       var rentVat = '<label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text2);margin-top:6px;cursor:pointer"><input type="checkbox" id="as-rentVatIncluded" '+(a.rentVatIncluded?'checked':'')+' style="width:15px;height:15px;accent-color:#0ea5e9"> Nájmy jsou zadané s DPH (převést na bez DPH)</label>';
       h += '<div><label>Nájem default (CZK/měs)</label><input id="as-rentMonthlyDefault" value="'+(a.rentMonthlyDefault!=null?a.rentMonthlyDefault:'')+'">'+rentHint+rentVat+'</div>';
-      h += f('maintenanceReservePct','Rezerva na údržbu (% z obratu bez DPH)', a.maintenanceReservePct);
+      h += fPctRev('maintenanceReservePct','Rezerva na údržbu navíc (% z obratu bez DPH)', a.maintenanceReservePct, 'údržba je už v servisu → nech 0, jen pokud chceš extra CAPEX rezervu');
       h += f('bankingHaircutPct','Bankovní haircut (% z EBITDA)', a.bankingHaircutPct);
       h += f('unitCostEur','Cena prádlomatu (EUR)', a.unitCostEur);
       h += f('targetUnitsPerMonth','Cíl pro crossover (strojů/měs)', a.targetUnitsPerMonth);
