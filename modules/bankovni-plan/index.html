@@ -343,6 +343,7 @@
       h += '<div class="sec" style="background:var(--surface2)"><h2>Tržby & EBITDA (ročně, '+BASE+')</h2><canvas id="fc-rev" height="150"></canvas></div>';
       h += '<div class="sec" style="background:var(--surface2)"><h2>Zůstatek dluhu (konec roku)</h2><canvas id="fc-debt" height="150"></canvas></div>';
       h += '</div>';
+      h += '<div class="sec" style="background:var(--surface2)"><h2>Kumulativní volný cash flow (rezerva / reinvestice)</h2><div class="note">Narůstající součet volného cash flow po provozu, daních a splátkách úvěru (před výdaji na růst). Z toho se tvoří hotovostní rezerva nebo prostředky na reinvestici do dalších strojů.</div><canvas id="fc-cum" height="110"></canvas></div>';
       h += yearlyTableHtml();
       h += requestedFinancingHtml();
       h += creditCommitteeHtml();
@@ -520,6 +521,10 @@
       _fcCharts.dscr = new Chart(document.getElementById('fc-dscr'), { type:'line', data:{ labels:labels, datasets:[{ data:Y.map(function(y){return y.dscrMin;}), borderColor:'#22c55e', tension:.2 }] }, options: common });
       _fcCharts.rev = new Chart(document.getElementById('fc-rev'), { type:'bar', data:{ labels:labels, datasets:[{ label:'Tržby/rok', data:Y.map(function(y){return Math.round(y.revenueYear);}), backgroundColor:'#eab308' },{ label:'EBITDA/rok', data:Y.map(function(y){return Math.round(y.ebitdaYear);}), backgroundColor:'#22c55e' }] }, options: Object.assign({}, common, { plugins:{legend:{display:true,labels:{color:tick}}} }) });
       _fcCharts.debt = new Chart(document.getElementById('fc-debt'), { type:'line', data:{ labels:labels, datasets:[{ data:Y.map(function(y){return Math.round(y.outstanding);}), borderColor:'#a855f7', backgroundColor:'rgba(168,85,247,.12)', fill:true, tension:.2 }] }, options:common });
+      // Kumulativní volný cash flow (year-end) — narůstající součet fcfBeforeGrowth.
+      var rows=FC.rows||[]; var run=0; var cumEnd=[]; for(var yy=0; yy*12<rows.length; yy++){ var seg=rows.slice(yy*12,yy*12+12); if(!seg.length)break; seg.forEach(function(r){ run+=r.fcfBeforeGrowth; }); cumEnd.push(Math.round(run)); }
+      var cumEl=document.getElementById('fc-cum');
+      if(cumEl) _fcCharts.cum = new Chart(cumEl, { type:'line', data:{ labels:labels, datasets:[{ data:cumEnd, borderColor:'#eab308', backgroundColor:'rgba(234,179,8,.14)', fill:true, tension:.2 }] }, options:common });
     }
 
     function destroyCharts(){ Object.keys(_charts).forEach(function(k){ try{ _charts[k].destroy(); }catch(e){} }); _charts={}; }
