@@ -414,17 +414,30 @@ router.get('/forecast', requireAuth, async (req, res, next) => {
     const fx = A.fx || DEFAULT_ASSUMPTIONS.fx;
     const base = (req.query.base || hist.base || 'CZK').toUpperCase();
     const fin = Object.assign({}, DEFAULT_ASSUMPTIONS.financing, A.financing || {});
-    const scName = ['base', 'downside', 'stress', 'combined'].includes(String(req.query.scenario)) ? String(req.query.scenario) : 'base';
+    const scName = ['base', 'downside', 'stress', 'combined', 'breakeven'].includes(String(req.query.scenario)) ? String(req.query.scenario) : 'base';
     const scenarios = Object.assign({}, DEFAULT_ASSUMPTIONS.scenarios, A.scenarios || {});
-    const sc = scenarios[scName] || scenarios.base;
-
     const inp = await _portfolioInputs(hist, A, base);
-    // Scénář = percentil historické distribuce (Base P50 / Downside P25 / Stress P10) + nelineární EBITDA.
-    const se = scenarioEconomics(inp, A, fin, sc);
-    const perUnitRevenue = se.perUnitRevenue;
     const toBase = (czk) => E.convert(czk, 'CZK', base, fx);
     const unitCostBase = E.convert((A.unitCostEur || 52000), 'EUR', base, fx);
     const unitAllIn = E.convert((A.unitCostEur || 52000) + (fin.allInExtraEur || 0), 'EUR', base, fx);
+    // Sestav efektivní scénář: Breakeven = dopočtený faktor (tržba pro DSCR 1,0); volitelný override faktoru z UI.
+    let sc;
+    if (scName === 'breakeven') {
+      const svc = Number(A.servicePct) || 0, en = Number(A.energyPct) || 0, fee = Number(A.paymentFeePct) || 0, maintP = Number(A.maintenanceReservePct) || 0;
+      const varAndMaint = (svc + en + fee + maintP) / 100; const rentB = Number(inp.rentBaseAvg) || 0;
+      const debtPerUnit = unitAllIn * (fin.bankFinancingPct || 0) / 100; const amortN = Math.max(1, (fin.maturityMonths || 84) - (fin.graceMonths || 0));
+      const annuityBase = E.annuityPayment(debtPerUnit, (fin.interestRatePct || 0) / 100 / 12, amortN);
+      const p50 = inp.revDist.p50 || 0; const revBE = (1 - varAndMaint) > 0 ? (annuityBase + rentB) / (1 - varAndMaint) : p50;
+      sc = { label: 'Breakeven (DSCR 1,0)', revenueFactor: p50 ? revBE / p50 : 1, dscrTarget: null };
+    } else {
+      sc = scenarios[scName] || scenarios.base;
+    }
+    // Override faktoru z UI (editace v tabulce) — jen když je platný.
+    const _fq = Number(req.query.factor);
+    if (isFinite(_fq) && _fq > 0 && _fq <= 3) sc = Object.assign({}, sc, { revenueFactor: _fq });
+    // Scénář → nelineární EBITDA (fixní nájem, variabilní % škáluje).
+    const se = scenarioEconomics(inp, A, fin, sc);
+    const perUnitRevenue = se.perUnitRevenue;
     let rampCurve = F.rampFromCohort(inp.cohort, inp.medRevenue || 1);
     // Combined stress: nové lokality najíždějí pomaleji (+X měsíců nízkého výkonu na začátku rampy).
     if (se.rampExtraMonths > 0 && rampCurve.length) rampCurve = Array(se.rampExtraMonths).fill(rampCurve[0]).concat(rampCurve);
@@ -588,7 +601,15 @@ router.get('/scenarios', requireAuth, async (req, res, next) => {
         });
       }
     })();
-    res.json({ base, mode, scenarios: out, percentiles: inp.revDist });
+    // Parametry pro klientský přepočet tabulky při editaci faktoru (bez volání serveru).
+    const params = {
+      p50: Math.round(inp.revDist.p50 || 0),
+      rentBase: Math.round(Number(inp.rentBaseAvg) || 0),
+      varPct: (Number(A.servicePct) || 0) + (Number(A.energyPct) || 0) + (Number(A.paymentFeePct) || 0),
+      maintPct: Number(A.maintenanceReservePct) || 0,
+      annuityBase: Math.round(E.annuityPayment(unitAllIn * (fin.bankFinancingPct || 0) / 100, (fin.interestRatePct || 0) / 100 / 12, Math.max(1, (fin.maturityMonths || 84) - (fin.graceMonths || 0)))),
+    };
+    res.json({ base, mode, scenarios: out, percentiles: inp.revDist, params });
   } catch (err) { next(err); }
 });
 

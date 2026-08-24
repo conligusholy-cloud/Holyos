@@ -304,12 +304,15 @@
 
     // ─── Model financování & růst (Fáze 5) ───
     var FC_SCEN = 'base';
+    var FC_FACTORS = { downside:0.9, stress:0.8 }; // editovatelné faktory (Base=1 fix, Breakeven=dopočet)
     var FC = null;
     function monthLabel(m){ var d=new Date(); d.setDate(1); d.setMonth(d.getMonth()+m); return (d.getMonth()+1)+'/'+d.getFullYear(); }
     async function loadForecast(){
       var body = document.getElementById('fc-body'); if(!body) return;
       try {
-        var r = await fetch('/api/bank-plan/forecast?base='+BASE+'&scenario='+FC_SCEN, { credentials:'include' });
+        var q = '/api/bank-plan/forecast?base='+BASE+'&scenario='+FC_SCEN;
+        if (FC_FACTORS[FC_SCEN] != null) q += '&factor='+FC_FACTORS[FC_SCEN];
+        var r = await fetch(q, { credentials:'include' });
         if(!r.ok){ body.innerHTML = '<div style="color:#ef4444">Model nelze načíst.</div>'; return; }
         FC = await r.json();
         renderForecast();
@@ -318,6 +321,14 @@
     window.loadForecast = loadForecast;
     function fcScen(s){ FC_SCEN = s; loadForecast(); }
     window.fcScen = fcScen;
+    // Editace faktoru v tabulce → ulož + pokud je scénář aktivní, přepočítej grafy.
+    function fcSetFactor(key, val){
+      var f = Number(String(val).replace(',','.'));
+      if (!isFinite(f) || f<=0 || f>3) { loadScenarioTable(); return; }
+      FC_FACTORS[key] = Math.round(f*1000)/1000;
+      if (FC_SCEN===key) loadForecast(); else loadScenarioTable();
+    }
+    window.fcSetFactor = fcSetFactor;
     function renderForecast(){
       var body = document.getElementById('fc-body'); if(!body||!FC) return;
       var s = FC.summary, cx = s.crossover||{}, inp = FC.inputs||{}, fin = FC.financing||{};
@@ -325,8 +336,7 @@
       var kpi = function(l,v,sub,col){ return '<div class="kpi'+(col?' hl':'')+'"><div class="l">'+l+'</div><div class="v">'+v+'</div>'+(sub?'<div class="s">'+sub+'</div>':'')+'</div>'; };
       var crossTxt = cx.month!=null ? ('za '+cx.month+' měs. ('+monthLabel(cx.month)+')') : 'nedosaženo v horizontu';
       var h = '';
-      h += '<div class="note" style="margin-bottom:10px"><b>Reinvestiční režim ♻️</b>: financovaná výstavba z úvěru + navíc se z nakumulovaného volného cash flow průběžně kupují další stroje (samofinancovaný růst). Scénáře: <b>Base = P50</b> (historický medián), <b>Downside = −10 %</b>, <b>Stress = −20 %</b> z mediánu. EBITDA se dopočítá nelineárně (fixní nájem zůstává). Crossover <b>bez splátek úvěru</b>. Scénář:</div>';
-      h += '<div style="display:inline-flex;flex-wrap:wrap;border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:14px">'+seg('base','Base')+seg('downside','Downside · −10 %')+seg('stress','Stress · −20 %')+'</div>';
+      h += '<div class="note" style="margin-bottom:10px"><b>Reinvestiční režim ♻️</b>: financovaná výstavba z úvěru + navíc se z nakumulovaného volného cash flow průběžně kupují další stroje (samofinancovaný růst). Scénáře: <b>Base = P50</b> (historický medián), <b>Downside/Stress</b> = úprava tržby (faktor jde editovat), <b>Breakeven</b> = tržba pro DSCR 1,0. EBITDA se dopočítá nelineárně (fixní nájem zůstává). Crossover <b>bez splátek úvěru</b>. <b>Vyber scénář kliknutím v tabulce níže</b> — grafy a čísla dole se přepočítají.</div>';
       h += '<div id="fc-scentable" style="margin-bottom:14px"></div>';
       h += '<div id="fc-debtsizing" style="margin-bottom:14px"></div>';
       h += '<div id="fc-volatility" style="margin-bottom:14px"></div>';
@@ -412,37 +422,52 @@
           '</div>';
       }catch(e){}
     }
-    // Srovnávací tabulka scénářů (percentily historie) + covenant PASS/FAIL.
+    // Ovládací tabulka scénářů: klik na řádek = aktivní scénář (přepočítá grafy dole),
+    // faktor u Downside/Stress je editovatelný (živý přepočet), Breakeven je dopočtený řádek.
     async function loadScenarioTable(){
       var box = document.getElementById('fc-scentable'); if(!box) return;
-      box.innerHTML = '<div class="note">Načítám srovnání scénářů…</div>';
+      if(!box.innerHTML) box.innerHTML = '<div class="note">Načítám…</div>';
       try {
         var r = await fetch('/api/bank-plan/scenarios?base='+BASE+'&mode=reinvest', { credentials:'include' });
         var d = await r.json(); if(!r.ok || !d.scenarios) { box.innerHTML=''; return; }
+        var P = d.params || {};
+        var beRow = (d.scenarios||[]).find(function(x){return x.key==='breakeven';});
+        var dsc = function(x){ return x!=null ? (Math.round(x*100)/100).toLocaleString('cs-CZ')+'×' : '—'; };
         var badge = function(p){ if(p==null) return '<span style="color:var(--muted2)">—</span>'; return p
           ? '<span style="background:rgba(34,197,94,.16);color:#22c55e;border:1px solid rgba(34,197,94,.4);border-radius:6px;padding:2px 9px;font-weight:800;font-size:11px">PASS</span>'
           : '<span style="background:rgba(239,68,68,.16);color:#ef4444;border:1px solid rgba(239,68,68,.4);border-radius:6px;padding:2px 9px;font-weight:800;font-size:11px">FAIL</span>'; };
-        var dsc = function(x){ return x!=null ? (Math.round(x*100)/100).toLocaleString('cs-CZ')+'×' : '—'; };
-        var h = '<div class="sec" style="background:var(--surface2)"><h2>Scénáře z historické distribuce <span class="tag tag-actual">ACTUAL</span></h2>'+
-          '<div class="note">Base = P50 (medián), Downside = −10 %, Stress = −20 %. <b>DSCR = NOI jednotky ÷ její splátka</b> (ustálený stav, nezávislý na časování instalací), PASS/FAIL vůči covenant targetu. Poslední řádek <b>Breakeven</b> = tržba, při které DSCR spadne přesně na 1,0 — „rezerva" říká, o kolik můžou tržby klesnout od mediánu, než přestanou pokrývat splátku.</div>'+
+        // klientský přepočet řádku z faktoru
+        var calc = function(f){ var rev=P.p50*f; var eb=rev-P.rentBase-rev*P.varPct/100; var cf=eb-rev*P.maintPct/100; var dscr=P.annuityBase>0?cf/P.annuityBase:null; return {rev:Math.round(rev),eb:Math.round(eb),ann:Math.round(P.annuityBase),dscr:dscr}; };
+        var rows = [
+          {key:'base',label:'Base',factor:1,editable:false,target:1.3,basis:'100 % mediánu'},
+          {key:'downside',label:'Downside',factor:FC_FACTORS.downside,editable:true,target:1.2},
+          {key:'stress',label:'Stress',factor:FC_FACTORS.stress,editable:true,target:1.0},
+        ];
+        var h = '<div class="sec" style="background:var(--surface2)"><h2>Scénáře &amp; ovládání <span class="tag tag-actual">ACTUAL</span></h2>'+
+          '<div class="note"><b>Klikni na řádek</b> = zvol scénář (grafy a čísla dole se přepočítají). Faktor u Downside/Stress můžeš <b>přepsat</b>. <b>DSCR = NOI jednotky ÷ splátka</b>, PASS/FAIL vůči targetu. <b>Breakeven</b> = tržba pro DSCR 1,0 (rezerva = o kolik smí tržby klesnout).</div>'+
           '<div style="overflow-x:auto"><table class="dt"><thead><tr>'+
-          '<th>Scénář</th><th>Základ</th><th style="text-align:right">Revenue / lok.</th><th style="text-align:right">EBITDA / lok.</th><th style="text-align:right">Splátka / lok.</th><th style="text-align:right">DSCR</th><th style="text-align:right">Target</th><th style="text-align:center">Stav</th></tr></thead><tbody>';
-        d.scenarios.forEach(function(s){
-          var isBE = s.key==='breakeven';
-          var targetCell = isBE ? '<span class="muted">hranice</span>' : dsc(s.dscrTarget);
-          var stavCell = isBE ? ('<span style="color:#eab308;font-weight:700;font-size:11px">rezerva '+(s.cushionPct!=null?('−'+String(s.cushionPct).replace('.',',')+' %'):'—')+'</span>') : badge(s.pass);
-          var _pct = s.revenueFactor!=null ? Math.round((s.revenueFactor-1)*100) : null;
-          var basisCell = isBE ? 'tržba pro DSCR 1,0'
-            : (s.key==='base' ? '100 % mediánu'
-            : (_pct!=null ? ((_pct>=0?'+':'−')+Math.abs(_pct)+' % z mediánu') : '—'));
-          h += '<tr'+(isBE?' style="border-top:2px solid var(--border)"':'')+'><td style="font-weight:700">'+esc(s.label)+'</td><td class="muted">'+basisCell+'</td>'+
-            '<td style="text-align:right">'+money(s.perUnitRevenue)+'</td>'+
-            '<td style="text-align:right">'+money(s.perUnitEbitda)+'</td>'+
-            '<td style="text-align:right">'+money(s.perUnitAnnuity)+'</td>'+
-            '<td style="text-align:right;font-weight:700">'+dsc(s.dscrUnit)+'</td>'+
-            '<td style="text-align:right">'+targetCell+'</td>'+
-            '<td style="text-align:center">'+stavCell+'</td></tr>';
+          '<th>Scénář</th><th>Základ (faktor)</th><th style="text-align:right">Revenue / lok.</th><th style="text-align:right">EBITDA / lok.</th><th style="text-align:right">Splátka / lok.</th><th style="text-align:right">DSCR</th><th style="text-align:right">Target</th><th style="text-align:center">Stav</th></tr></thead><tbody>';
+        rows.forEach(function(rw){
+          var c = calc(rw.factor);
+          var pass = (c.dscr!=null && rw.target) ? (c.dscr>=rw.target) : null;
+          var active = FC_SCEN===rw.key;
+          var inp = 'background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);width:64px;padding:3px 6px;font-size:12px;text-align:right';
+          var basisCell = rw.key==='base' ? '100 % mediánu'
+            : (rw.editable ? ('× <input type="number" step="0.05" min="0.1" max="3" value="'+rw.factor+'" onclick="event.stopPropagation()" onchange="fcSetFactor(&#39;'+rw.key+'&#39;,this.value)" style="'+inp+'"> ('+(rw.factor<1?'−':'+')+Math.round(Math.abs(rw.factor-1)*100)+' %)') : '—');
+          h += '<tr onclick="fcScen(&#39;'+rw.key+'&#39;)" style="cursor:pointer;'+(active?'background:rgba(234,179,8,.10)':'')+'">'+
+            '<td style="font-weight:700">'+(active?'▸ ':'')+rw.label+'</td><td class="muted">'+basisCell+'</td>'+
+            '<td style="text-align:right">'+money(c.rev)+'</td><td style="text-align:right">'+money(c.eb)+'</td><td style="text-align:right">'+money(c.ann)+'</td>'+
+            '<td style="text-align:right;font-weight:700">'+dsc(c.dscr)+'</td><td style="text-align:right">'+dsc(rw.target)+'</td>'+
+            '<td style="text-align:center">'+badge(pass)+'</td></tr>';
         });
+        if (beRow) {
+          var activeBE = FC_SCEN==='breakeven';
+          h += '<tr onclick="fcScen(&#39;breakeven&#39;)" style="cursor:pointer;border-top:2px solid var(--border);'+(activeBE?'background:rgba(234,179,8,.10)':'')+'">'+
+            '<td style="font-weight:700">'+(activeBE?'▸ ':'')+'Breakeven (DSCR 1,0)</td><td class="muted">tržba pro DSCR 1,0</td>'+
+            '<td style="text-align:right">'+money(beRow.perUnitRevenue)+'</td><td style="text-align:right">'+money(beRow.perUnitEbitda)+'</td><td style="text-align:right">'+money(beRow.perUnitAnnuity)+'</td>'+
+            '<td style="text-align:right;font-weight:700">1×</td><td style="text-align:right"><span class="muted">hranice</span></td>'+
+            '<td style="text-align:center"><span style="color:#eab308;font-weight:700;font-size:11px">rezerva '+(beRow.cushionPct!=null?('−'+String(beRow.cushionPct).replace('.',',')+' %'):'—')+'</span></td></tr>';
+        }
         h += '</tbody></table></div></div>';
         box.innerHTML = h;
       } catch(e){ box.innerHTML=''; }
