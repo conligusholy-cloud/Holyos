@@ -73,6 +73,9 @@ const DEFAULT_ASSUMPTIONS = {
   unitCostEur: 52000,    // cena prádlomatu
   targetUnitsPerMonth: 4,
   excludedCodes: [],     // ručně vyřazené lokality (nesmysly/testy) — nepočítají se do plánu
+  // SIS částky jsou S DPH (hrubé, co zákazník platí). Model počítá BEZ DPH → dělíme (1+sazba/100).
+  // Sazba dle země/měny lokality: CZ 21 %, PL 23 %, IE/EUR 23 %.
+  vatByCurrency: { CZK: 21, EUR: 23, PLN: 23 },
 };
 
 function monthsBetween(a, b) { return (b.getFullYear() - a.getFullYear()) * 12 + (b.getMonth() - a.getMonth()); }
@@ -123,6 +126,16 @@ router.get('/overview', requireAuth, async (req, res, next) => {
     const nonTest = (hist.locations || []).filter((l) => l.classification !== 'test');
     const isExcluded = (l) => excluded.has(String(l.code).trim().toUpperCase());
 
+    // DPH: SIS částky jsou S DPH → převedeme na BEZ DPH dle sazby země (měny) lokality.
+    const vatMap = A.vatByCurrency || DEFAULT_ASSUMPTIONS.vatByCurrency;
+    const netMonthly = (l) => {
+      const gross = convertMonthly(l.monthly || {}, storedBase, base, fx);
+      const cur = E.sourceCurrencyForCode(l.code);
+      const div = 1 + ((vatMap[cur] != null ? vatMap[cur] : 21) / 100);
+      const out = {}; Object.keys(gross).forEach((ym) => { out[ym] = gross[ym] / div; });
+      return out;
+    };
+
     const now = new Date();
 
     // Track record + portfolio: počítáme JEN z ne-vyřazených reálných lokalit (aktivní + uzavřené).
@@ -133,7 +146,7 @@ router.get('/overview', requireAuth, async (req, res, next) => {
       realCount++;
       if (l.classification === 'active') activeCount++; else if (l.classification === 'closed') closedCount++;
       totalTx += l.txCount || 0;
-      const m = convertMonthly(l.monthly || {}, storedBase, base, fx);
+      const m = netMonthly(l); // tržby BEZ DPH
       Object.keys(m).forEach((ym) => { portfolioMonthly[ym] = (portfolioMonthly[ym] || 0) + m[ym]; });
       const od = l.openDate ? new Date(l.openDate) : null;
       const ld = l.lastTx ? new Date(l.lastTx) : null;
@@ -149,7 +162,7 @@ router.get('/overview', requireAuth, async (req, res, next) => {
 
     // Per-lokalita pro tabulku = všechny reálné (aktivní i uzavřené), s příznakem excluded.
     const perLoc = nonTest.map((l) => {
-      const m = convertMonthly(l.monthly || {}, storedBase, base, fx);
+      const m = netMonthly(l); // BEZ DPH
       const avgRev = avgRecentMonthly(m, 12) || 0;
       const rent = (typeof l.rentMonthly === 'number') ? E.convert(l.rentMonthly, storedBase, base, fx) : A.rentMonthlyDefault;
       const se = E.siteEconomics({ revenue: avgRev, rentMonthly: rent, servicePct: A.servicePct, energyPct: A.energyPct, paymentFeePct: A.paymentFeePct, maintenanceReservePct: A.maintenanceReservePct });
@@ -164,7 +177,7 @@ router.get('/overview', requireAuth, async (req, res, next) => {
 
     const seasonality = E.seasonalityIndex(portfolioMonthly);
 
-    const cohort = E.cohortCurve(nonTest.filter((l) => !isExcluded(l) && l.classification === 'active' && l.openDate).map((l) => ({ openDate: l.openDate, monthly: convertMonthly(l.monthly || {}, storedBase, base, fx) })), 36);
+    const cohort = E.cohortCurve(nonTest.filter((l) => !isExcluded(l) && l.classification === 'active' && l.openDate).map((l) => ({ openDate: l.openDate, monthly: netMonthly(l) })), 36);
 
     // Base Case EBITDA = medián − banking haircut (§49/§50)
     const medianEbitda = ebitdaDist.p50 || 0;

@@ -124,7 +124,7 @@
 
       var h = '';
       // Banner rozlišení ACTUAL/ASSUMPTION
-      h += '<div class="banner">Track record a tržby jsou <b>skutečná data ze SIS</b> <span class="tag tag-actual">ACTUAL</span>. EBITDA a marže používají provozní <b>předpoklady</b> <span class="tag tag-assume">ASSUMPTION</span> (nájem, servis %, energie %) — uprav je dole v sekci Předpoklady.</div>';
+      h += '<div class="banner">Track record a tržby jsou <b>skutečná data ze SIS</b> <span class="tag tag-actual">ACTUAL</span>. Pozor na DPH: SIS eviduje částky <b>s DPH</b> (co platí zákazník), ale model počítá se všemi tržbami i EBITDA <b>bez DPH</b> (DPH se odvádí státu, není příjem). Sazby DPH (CZ 21 %, PL/IE 23 %) upravíš dole v Předpokladech. EBITDA a marže navíc používají provozní předpoklady <span class="tag tag-assume">ASSUMPTION</span> (nájem, servis %, energie %).</div>';
 
       // Executive KPI
       h += '<div class="kpis">';
@@ -132,18 +132,18 @@
       h += kpi('Aktivní lokality', num(t.activeCount), t.closedCount + ' uzavřených · ' + t.realCount + ' celkem');
       h += kpi('Location-months', num(t.locationMonths), 'reálný provoz');
       h += kpi('Transakce', num(t.totalTx), 'celkem v SIS');
-      h += kpi('Kumulativní tržby', money(t.cumulativeRevenue), 'za celé období');
-      h += kpi('Medián tržby / měs', money(u.revenueDist.p50), 'na lokalitu');
+      h += kpi('Kumulativní tržby', money(t.cumulativeRevenue), 'bez DPH · za celé období');
+      h += kpi('Medián tržby / měs', money(u.revenueDist.p50), 'bez DPH · na lokalitu');
       h += kpi('Medián EBITDA / měs', money(u.ebitdaDist.p50), 'marže ' + pct(u.marginDist.p50), true);
       h += kpi('Base Case EBITDA', money(u.baseCaseEbitda), 'medián − ' + u.bankingHaircutPct + ' % haircut', true);
       h += '</div>';
 
       // Track record graf (portfolio tržby v čase)
-      h += '<div class="sec"><h2>Vývoj tržeb portfolia <span class="tag tag-actual">ACTUAL</span></h2><div class="note">Měsíční tržby všech reálných lokalit dohromady ('+BASE+').</div><canvas id="ch-rev" height="90"></canvas></div>';
+      h += '<div class="sec"><h2>Vývoj tržeb portfolia (bez DPH) <span class="tag tag-actual">ACTUAL</span></h2><div class="note">Měsíční tržby všech zahrnutých lokalit dohromady, bez DPH ('+BASE+').</div><canvas id="ch-rev" height="90"></canvas></div>';
 
       // Distribuce
       h += '<div class="grid2">';
-      h += '<div class="sec"><h2>Distribuce tržeb / lokalitu <span class="tag tag-actual">ACTUAL</span></h2><div class="note">Průměrná měsíční tržba (posl. 12 měs.) — percentily. Medián je pro banku směrodatnější než průměr.</div><canvas id="ch-revdist" height="150"></canvas></div>';
+      h += '<div class="sec"><h2>Distribuce tržeb / lokalitu (bez DPH) <span class="tag tag-actual">ACTUAL</span></h2><div class="note">Průměrná měsíční tržba bez DPH (posl. 12 měs.) — percentily. Medián je pro banku směrodatnější než průměr.</div><canvas id="ch-revdist" height="150"></canvas></div>';
       h += '<div class="sec"><h2>Distribuce EBITDA / lokalitu <span class="tag tag-assume">ASSUMPTION</span></h2><div class="note">Site EBITDA/měs dle předpokladů. Zvýrazněn Base Case (medián − haircut).</div><canvas id="ch-ebitdist" height="150"></canvas></div>';
       h += '</div>';
 
@@ -171,7 +171,7 @@
       var p90 = DATA.unitEconomics.revenueDist.p90;
       var exCount = locs.filter(function(l){return l.excluded;}).length;
       var h = '<div class="note" style="margin-bottom:8px">Zaškrtnuté = v plánu. Odškrtnutím lokalitu vyřadíš (nesmysly/testy) — nezapočítá se do žádných čísel.'+(exCount?(' Vyřazeno: '+exCount+'.'):'')+'</div>';
-      h += '<div style="overflow-x:auto;"><table class="dt"><thead><tr><th>V plánu</th><th>Kód</th><th>Lokalita</th><th>Otevřeno</th><th style="text-align:right">Tržba/měs</th><th style="text-align:right">EBITDA/měs</th><th style="text-align:right">Marže</th><th></th></tr></thead><tbody>';
+      h += '<div style="overflow-x:auto;"><table class="dt"><thead><tr><th>V plánu</th><th>Kód</th><th>Lokalita</th><th>Otevřeno</th><th style="text-align:right">Tržba/měs<br><span style="font-weight:400;text-transform:none">bez DPH</span></th><th style="text-align:right">EBITDA/měs</th><th style="text-align:right">Marže</th><th></th></tr></thead><tbody>';
       locs.forEach(function(l){
         var flags = '';
         if (l.classification === 'closed') flags += ' <span class="flag" style="background:rgba(148,163,184,.16);color:#94a3b8">uzavřená</span>';
@@ -211,6 +211,10 @@
       h += f('targetUnitsPerMonth','Cíl nových jednotek/měs', a.targetUnitsPerMonth);
       h += f('fxEUR','Kurz EUR→CZK', fx.EUR);
       h += f('fxPLN','Kurz PLN→CZK', fx.PLN);
+      var vat = a.vatByCurrency||{};
+      h += f('vatCZK','DPH CZ (%)', vat.CZK);
+      h += f('vatEUR','DPH EUR/IE (%)', vat.EUR);
+      h += f('vatPLN','DPH PL (%)', vat.PLN);
       h += '</div><div style="margin-top:14px"><button class="btn btn-primary" onclick="saveAssumptions()">💾 Uložit předpoklady</button></div></div>';
       return h;
     }
@@ -221,7 +225,8 @@
         servicePct:v('servicePct'), energyPct:v('energyPct'), paymentFeePct:v('paymentFeePct'),
         rentMonthlyDefault:v('rentMonthlyDefault'), maintenanceReservePct:v('maintenanceReservePct'),
         bankingHaircutPct:v('bankingHaircutPct'), unitCostEur:v('unitCostEur'), targetUnitsPerMonth:v('targetUnitsPerMonth'),
-        fx: Object.assign({}, (DATA.assumptions&&DATA.assumptions.fx)||{}, { EUR:v('fxEUR'), PLN:v('fxPLN'), CZK:1 })
+        fx: Object.assign({}, (DATA.assumptions&&DATA.assumptions.fx)||{}, { EUR:v('fxEUR'), PLN:v('fxPLN'), CZK:1 }),
+        vatByCurrency: Object.assign({}, (DATA.assumptions&&DATA.assumptions.vatByCurrency)||{}, { CZK:v('vatCZK'), EUR:v('vatEUR'), PLN:v('vatPLN') })
       };
       try {
         var r = await fetch('/api/bank-plan/assumptions', { method:'PUT', credentials:'include', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
