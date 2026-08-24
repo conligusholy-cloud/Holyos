@@ -43,11 +43,13 @@ var f2 = F.buildForecast({
   facilityLimit: 2100000, // unese jen 3 jednotky (3×700k = 2.1M)
   targetUnitsPerMonth: 4,
 });
-// dluh/jednotku = 700k; limit 2.1M → celkem 3 jednotky čerpáno, pak stop
-approx('drawnTotal = 2 100 000', f2.summary.drawnTotal, 2100000, 1);
-ok('m0 přidá jen 3 jednotky (facility strop)', f2.rows[0].newUnits === 3);
-ok('m1 už nepřidá (facility vyčerpána)', f2.rows[1].newUnits === 0);
-ok('equity total = 900k (3×300k)', Math.abs(f2.summary.totalEquity - 900000) < 1);
+// dluh/jednotku = 700k; rámec 2.1M se prostaví, pak se staví dál z vlastních zdrojů
+approx('drawnTotal = 2 100 000 (rámec vyčerpán)', f2.summary.drawnTotal, 2100000, 1);
+ok('m0 staví pořád 5 jednotek', f2.rows[0].newUnits === 5);
+ok('m1 staví dál 5 (z vlastních)', f2.rows[1].newUnits === 5);
+ok('units rostou (m5 closing = 30)', f2.rows[5].closingUnits === 30);
+// equity = celkový all-in (12×5×1M=60M) − načerpáno 2.1M = 57.9M
+approx('equity total = 57.9M', f2.summary.totalEquity, 57900000, 1);
 
 console.log('FORECAST DSCR + crossover');
 var f3 = F.buildForecast({
