@@ -391,13 +391,14 @@
         var v=d.volatility||{}, wr=d.worstRolling||{};
         if(!v.count) return;
         var m12=wr.m12, m3=wr.m3;
+        var gm=(wr.graceMonthsExcluded!=null?wr.graceMonthsExcluded:6);
         box.innerHTML='<div class="sec" style="background:var(--surface2)"><h2>Volatilita &amp; nejhorší období <span class="tag tag-actual">ACTUAL</span></h2>'+
-          '<div class="note">Odolnost vůči skutečně pozorovanému horšímu období portfolia (§19/§20).</div>'+
+          '<div class="note">Průměrná tržba <b>na jednu lokalitu</b>, <b>bez prvních '+gm+' měsíců</b> každého prádlomatu (náběh + odklad splátek) — ať to neměří růst sítě ani startovací období. Odolnost vůči skutečně pozorovanému horšímu období (§19/§20).</div>'+
           '<div class="kpis">'+
-          kpi('Variační koeficient (CV)', (v.cvPct!=null?String(v.cvPct).replace('.',',')+' %':'—'), 'měsíční kolísání tržeb portfolia')+
-          kpi('Nejhorší měsíc', money(v.worst), (v.worstYm||''))+
-          kpi('Nejhorší 3M (Ø/měs)', (m3?money(Math.round(m3.avg)):'—'), (m3?(m3.startYm+' – '+m3.endYm):''))+
-          kpi('Nejhorší 12M (Ø/měs)', (m12?money(Math.round(m12.avg)):'—'), (m12?(m12.startYm+' – '+m12.endYm):''))+
+          kpi('Variační koeficient (CV)', (v.cvPct!=null?String(v.cvPct).replace('.',',')+' %':'—'), 'kolísání tržby na lokalitu')+
+          kpi('Nejhorší měsíc / lok.', money(v.worst), (v.worstYm||''))+
+          kpi('Nejhorší 3M (Ø/měs·lok.)', (m3?money(Math.round(m3.avg)):'—'), (m3?(m3.startYm+' – '+m3.endYm):''))+
+          kpi('Nejhorší 12M (Ø/měs·lok.)', (m12?money(Math.round(m12.avg)):'—'), (m12?(m12.startYm+' – '+m12.endYm):''))+
           '</div></div>';
       }catch(e){}
     }

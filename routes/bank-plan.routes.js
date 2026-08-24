@@ -218,6 +218,10 @@ router.get('/overview', requireAuth, async (req, res, next) => {
 
     // Track record + portfolio: počítáme JEN z ne-vyřazených reálných lokalit (aktivní + uzavřené).
     const portfolioMonthly = {};
+    // Stabilizovaná řada pro volatilitu/nejhorší období: vynech prvních `graceN` měsíců
+    // KAŽDÉ lokality (náběh + odklad splátek) a normalizuj NA JEDNU lokalitu (jinak táhne růst sítě).
+    const graceN = Number((A.financing && A.financing.graceMonths) != null ? A.financing.graceMonths : DEFAULT_ASSUMPTIONS.financing.graceMonths) || 6;
+    const stabSum = {}, stabCount = {};
     let firstMs = null, lastMs = null, locationMonths = 0, totalTx = 0, realCount = 0, activeCount = 0, closedCount = 0;
     nonTest.forEach((l) => {
       if (isExcluded(l)) return;
@@ -225,7 +229,15 @@ router.get('/overview', requireAuth, async (req, res, next) => {
       if (l.classification === 'active') activeCount++; else if (l.classification === 'closed') closedCount++;
       totalTx += l.txCount || 0;
       const m = netMonthly(l); // tržby BEZ DPH
-      Object.keys(m).forEach((ym) => { portfolioMonthly[ym] = (portfolioMonthly[ym] || 0) + m[ym]; });
+      const od0 = l.openDate ? new Date(l.openDate) : null;
+      Object.keys(m).forEach((ym) => {
+        portfolioMonthly[ym] = (portfolioMonthly[ym] || 0) + m[ym];
+        if (od0 && !isNaN(od0)) {
+          const p = String(ym).split('-');
+          const age = (Number(p[0]) - od0.getFullYear()) * 12 + (Number(p[1]) - 1 - od0.getMonth());
+          if (age >= graceN) { stabSum[ym] = (stabSum[ym] || 0) + m[ym]; stabCount[ym] = (stabCount[ym] || 0) + 1; }
+        }
+      });
       const od = l.openDate ? new Date(l.openDate) : null;
       const ld = l.lastTx ? new Date(l.lastTx) : null;
       if (od && !isNaN(od)) {
@@ -268,10 +280,14 @@ router.get('/overview', requireAuth, async (req, res, next) => {
 
     const seasonality = E.seasonalityIndex(portfolioMonthly);
     // Volatilita + nejhorší klouzavá období (§19/§20) — z měsíční řady portfolia.
-    const volatility = E.volatilityStats(portfolioMonthly);
+    // Řada = průměrná tržba NA STABILIZOVANOU lokalitu za měsíc (bez prvních graceN měsíců).
+    const stabPerLoc = {};
+    Object.keys(stabSum).forEach((ym) => { if (stabCount[ym] > 0) stabPerLoc[ym] = stabSum[ym] / stabCount[ym]; });
+    const volatility = E.volatilityStats(stabPerLoc);
     const worstRolling = {
-      m3: E.worstRolling(portfolioMonthly, 3),
-      m12: E.worstRolling(portfolioMonthly, 12),
+      m3: E.worstRolling(stabPerLoc, 3),
+      m12: E.worstRolling(stabPerLoc, 12),
+      perLocation: true, graceMonthsExcluded: graceN,
     };
 
     const cohort = E.cohortCurve(nonTest.filter((l) => !isExcluded(l) && l.classification === 'active' && l.openDate).map((l) => ({ openDate: l.openDate, monthly: netMonthly(l) })), 36);
