@@ -159,8 +159,8 @@
       '<p>DSCR (Debt Service Coverage Ratio) vyjadřuje, kolikrát provozní cash flow pokrývá splátku dluhu. Za bezpečné se považuje ≥ 1,2×. '+
       (cx.month!=null?('Self-Financing Crossover — okamžik, kdy portfolio z vlastního cash flow (jako by byly stroje splacené) uživí cíl '+(inp.targetUnitsPerMonth||4)+' nových strojů měsíčně — nastává při <b>'+cx.units+' jednotkách</b>.'):'V rámci zvoleného rámce a horizontu není plné samofinancování dalšího růstu dosaženo; doporučujeme rámec navyšovat po etapách dle výkonu portfolia (Stage 1 → Stage 2).')+'</p>'+
       '<h3>Počet jednotek v čase</h3><canvas id="c-units" height="110"></canvas>'+
-      '<h3>Kumulativní volný cash flow (rezerva / reinvestice)</h3><canvas id="c-cum" height="110"></canvas>'+
-      '<p class="note">Narůstající volné cash flow po provozu, daních a splátkách — zdroj rezervy a reinvestic.</p>');
+      '<h3>Roční čistý zisk sítě (po splátkách úvěru)</h3><canvas id="c-cum" height="110"></canvas>'+
+      '<p class="note">Čistý zisk za rok = EBITDA − daň − splátky úvěru. Jak se úvěry doplácí, splátky mizí a čistý zisk roste.</p>');
 
     // 7) RISK ANALYSIS
     var risks = (ov.assumptions && ov.assumptions.risks) || [];
@@ -194,8 +194,8 @@
     var Yr=Y;
     new Chart(document.getElementById('c-dscr'),{type:'line',data:{labels:Yr.map(function(r){return r.year;}),datasets:[{data:Yr.map(function(r){return r.dscr;}),borderColor:'#1a7f4b',pointRadius:2,tension:.2}]},options:{scales:{x:{ticks:{color:'#5b6676'}},y:{beginAtZero:true,ticks:{color:'#5b6676'}}}}});
     new Chart(document.getElementById('c-units'),{type:'line',data:{labels:Yr.map(function(r){return r.year;}),datasets:[{data:Yr.map(function(r){return r.units;}),borderColor:'#0e5aa7',backgroundColor:'rgba(14,90,167,.12)',fill:true,pointRadius:2,tension:.2}]},options:{scales:{x:{ticks:{color:'#5b6676'}},y:{beginAtZero:true,ticks:{color:'#5b6676'}}}}});
-    var rws=fcB.rows||[]; var run=0; var cum=[]; for(var yy=0;yy*12<rws.length;yy++){ var seg=rws.slice(yy*12,yy*12+12); if(!seg.length)break; seg.forEach(function(r){run+=r.fcfBeforeGrowth;}); cum.push(Math.round(run)); }
-    new Chart(document.getElementById('c-cum'),{type:'line',data:{labels:Yr.map(function(r){return r.year;}),datasets:[{data:cum,borderColor:'#b8892b',backgroundColor:'rgba(184,137,43,.14)',fill:true,pointRadius:2,tension:.2}]},options:{scales:{x:{ticks:{color:'#5b6676'}},y:{ticks:{color:'#5b6676'}}}}});
+    var rws=fcB.rows||[]; var netY=[]; var unitsY=[]; for(var yy=0;yy*12<rws.length;yy++){ var seg=rws.slice(yy*12,yy*12+12); if(!seg.length)break; netY.push(Math.round(seg.reduce(function(a,r){return a+r.fcfBeforeGrowth;},0))); unitsY.push(seg[seg.length-1].closingUnits); }
+    new Chart(document.getElementById('c-cum'),{data:{labels:Yr.map(function(r){return r.year;}),datasets:[{type:'bar',label:'Čistý zisk/rok',data:netY,backgroundColor:'#b8892b',yAxisID:'y'},{type:'line',label:'Jednotek',data:unitsY,borderColor:'#0e5aa7',yAxisID:'y1',pointRadius:2,tension:.2}]},options:{plugins:{legend:{display:true}},scales:{x:{ticks:{color:'#5b6676'}},y:{position:'left',beginAtZero:true,ticks:{color:'#5b6676'}},y1:{position:'right',beginAtZero:true,grid:{display:false},ticks:{color:'#5b6676'}}}}});
   })();
 </script>
 </body>
