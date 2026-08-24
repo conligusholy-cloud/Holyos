@@ -511,7 +511,7 @@ router.get('/scenarios', requireAuth, async (req, res, next) => {
     const unitAllIn = E.convert((A.unitCostEur || 52000) + (fin.allInExtraEur || 0), 'EUR', base, fx);
     const startUnits = (fin.startUnitsOverride != null && fin.startUnitsOverride !== '') ? Math.max(0, Math.floor(Number(fin.startUnitsOverride))) : inp.activeCount;
     const scenarios = Object.assign({}, DEFAULT_ASSUMPTIONS.scenarios, A.scenarios || {});
-    const order = ['base', 'downside', 'stress', 'combined'];
+    const order = ['base', 'downside', 'stress'];
     const out = order.filter((k) => scenarios[k]).map((k) => {
       const sc = scenarios[k];
       const se = scenarioEconomics(inp, A, fin, sc);
@@ -547,6 +547,31 @@ router.get('/scenarios', requireAuth, async (req, res, next) => {
         pass: (dscrUnit != null && target) ? (dscrUnit >= target) : null,
       };
     });
+    // 4. řádek = BREAKEVEN: tržba, při které DSCR = přesně 1,0 (hranice pokrytí splátky)
+    // při základních nákladech i úroku. Ukazuje, o kolik % smí tržby klesnout od mediánu.
+    (function(){
+      const svc = Number(A.servicePct) || 0, en = Number(A.energyPct) || 0, fee = Number(A.paymentFeePct) || 0, maintP = Number(A.maintenanceReservePct) || 0;
+      const varAndMaint = (svc + en + fee + maintP) / 100;
+      const rentB = Number(inp.rentBaseAvg) || 0;
+      const debtPerUnit = unitAllIn * (fin.bankFinancingPct || 0) / 100;
+      const amortN = Math.max(1, (fin.maturityMonths || 84) - (fin.graceMonths || 0));
+      const annuityBase = E.annuityPayment(debtPerUnit, (fin.interestRatePct || 0) / 100 / 12, amortN);
+      // CFADS = rev*(1 − var − maint) − rent; DSCR=1 → CFADS = annuity → rev = (annuity+rent)/(1−var−maint)
+      const revBE = (1 - varAndMaint) > 0 ? (annuityBase + rentB) / (1 - varAndMaint) : null;
+      const p50 = inp.revDist.p50 || 0;
+      if (revBE != null) {
+        const ebitdaBE = revBE - rentB - revBE * (svc + en + fee) / 100;
+        out.push({
+          key: 'breakeven', label: 'Breakeven (DSCR = 1,0)', basis: 'hranice',
+          revenueFactor: p50 ? Math.round(revBE / p50 * 1000) / 1000 : null,
+          perUnitRevenue: Math.round(revBE), perUnitEbitda: Math.round(ebitdaBE),
+          perUnitCfads: Math.round(annuityBase), perUnitAnnuity: Math.round(annuityBase),
+          interestRatePct: Math.round((fin.interestRatePct || 0) * 100) / 100,
+          dscrUnit: 1.0, dscrTarget: null, pass: null,
+          cushionPct: (p50 > 0) ? Math.round((1 - revBE / p50) * 1000) / 10 : null,
+        });
+      }
+    })();
     res.json({ base, mode, scenarios: out, percentiles: inp.revDist });
   } catch (err) { next(err); }
 });
