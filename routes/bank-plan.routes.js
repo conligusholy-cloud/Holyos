@@ -8,9 +8,58 @@ const router = express.Router();
 const { requireAuth } = require('../middleware/auth');
 const { getSetting, setSetting } = require('../services/settings');
 const E = require('../services/bank-plan/engine');
+const SIS = require('../services/bank-plan/sis-history');
 
 const HISTORY_KEY = 'bank_plan.sis_history';
 const ASSUMPTIONS_KEY = 'bank_plan.assumptions';
+
+// ─── Přebudování snapshotu na pozadí (server má SIS klíč i přístup k DB) ─────
+let _buildState = { building: false, startedAt: null, finishedAt: null, error: null, summary: null };
+
+async function _fetchKioskList() {
+  const apiKey = process.env.SIS_KIOSK_API_KEY;
+  const url = (process.env.SIS_KIOSK_API_URL || 'https://sis-test.infinitygrid.cloud/api/public/kiosk-values').replace(/\/$/, '');
+  const r = await fetch(url, { headers: { 'X-API-Key': apiKey, 'Accept': 'application/json' } });
+  if (!r.ok) throw new Error('kiosk-values HTTP ' + r.status);
+  const j = await r.json();
+  return { kiosks: Array.isArray(j.kiosks) ? j.kiosks.map((k) => ({ code: k.code, label: k.label || k.code })) : [], header: { generatedAt: j.generatedAt, period: j.period, valueCurrency: j.valueCurrency } };
+}
+
+async function _runBuild(base) {
+  _buildState = { building: true, startedAt: new Date().toISOString(), finishedAt: null, error: null, summary: null };
+  try {
+    if (!process.env.SIS_KIOSK_API_KEY) throw new Error('Chybí SIS_KIOSK_API_KEY na serveru.');
+    const { kiosks, header } = await _fetchKioskList();
+    const fetchTx = SIS.makeSisFetchTx(process.env);
+    const hist = await SIS.buildHistory({ kiosks, fetchTx, base: base || 'CZK', fx: SIS.DEFAULT_FX, limit: 500 });
+    hist.sisHeader = header;
+    await setSetting(HISTORY_KEY, hist, { type: 'json', description: 'Snapshot historie ze SIS pro Bankovní Business Plan' });
+    _buildState.summary = { realCount: hist.portfolio.realCount, activeCount: hist.portfolio.activeCount, closedCount: hist.portfolio.closedCount, testCount: hist.portfolio.testCount, locationMonths: hist.portfolio.locationMonths, globalFirst: hist.globalFirst, globalLast: hist.globalLast };
+  } catch (e) {
+    _buildState.error = String(e.message || e);
+  } finally {
+    _buildState.building = false;
+    _buildState.finishedAt = new Date().toISOString();
+  }
+}
+
+// POST /api/bank-plan/history/rebuild — spustí přebudování snapshotu na pozadí.
+router.post('/history/rebuild', requireAuth, async (req, res, next) => {
+  try {
+    if (_buildState.building) return res.status(409).json({ error: 'Přebudování už běží.', state: _buildState });
+    const base = (req.query.base || req.body && req.body.base || 'CZK').toUpperCase();
+    _runBuild(base); // fire-and-forget (běží na pozadí, netrap request)
+    res.json({ started: true, base });
+  } catch (err) { next(err); }
+});
+
+// GET /api/bank-plan/history/status — stav přebudování + zda snapshot existuje.
+router.get('/history/status', requireAuth, async (req, res, next) => {
+  try {
+    const hist = await getSetting(HISTORY_KEY, { type: 'json', defaultValue: null });
+    res.json({ state: _buildState, hasSnapshot: !!hist, generatedAt: hist && hist.generatedAt || null });
+  } catch (err) { next(err); }
+});
 
 // Výchozí předpoklady (ASSUMPTION) — editovatelné přes /assumptions.
 const DEFAULT_ASSUMPTIONS = {
