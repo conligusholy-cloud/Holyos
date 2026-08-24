@@ -322,7 +322,7 @@
       var dscrTxt = s.minDscr!=null ? (Math.round(s.minDscr*100)/100).toLocaleString('cs-CZ')+'×' : '—';
       var crossTxt = cx.month!=null ? ('za '+cx.month+' měs. ('+monthLabel(cx.month)+')') : 'nedosaženo v horizontu';
       var h = '';
-      h += '<div class="note" style="margin-bottom:10px">Postupné čerpání úvěru po jednotlivých pořízených jednotkách; každá nová lokalita najíždí dle historické ramp-up křivky. Scénáře: Base = medián +15 %, Downside = medián, Stress = medián −10 %. Crossover se počítá <b>bez splátek úvěru</b> (jako by byly stroje splacené). Scénář:</div>';
+      h += '<div class="note" style="margin-bottom:10px"><b>Reinvestiční režim ♻️</b>: financovaná výstavba z úvěru + navíc se z nakumulovaného volného cash flow průběžně kupují další stroje (samofinancovaný růst). Každá nová lokalita najíždí dle historické ramp-up křivky. Scénáře: Base = medián +15 %, Downside = medián, Stress = medián −10 %. Crossover se počítá <b>bez splátek úvěru</b>. Scénář:</div>';
       h += '<div style="display:inline-flex;border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:14px">'+seg('base','Base')+seg('downside','Downside')+seg('stress','Stress')+'</div>';
       if (FC.greenfield) h += '<div class="banner" style="background:rgba(59,130,246,.1);border-color:rgba(59,130,246,.35);color:#60a5fa">🌱 Režim „od nuly" (greenfield): síť začíná na 0 provozovnách — model pro partnery v jiných zemích. Ekonomika jednotky se bere z prověřených historických dat, síť se staví od začátku.</div>';
       h += '<div class="kpis">';
@@ -331,8 +331,8 @@
       h += kpi('Jednotek při crossoveru', cx.units!=null?cx.units:'—', 'cíl '+tgt+' strojů/měs bez splátek úvěru (stroje splacené) → '+(cx.requiredMonthly?('nutno '+money(cx.requiredMonthly)+'/měs volných'):''));
       h += kpi('Min. DSCR', dscrTxt, s.avgDscr!=null?('průměr '+(Math.round(s.avgDscr*100)/100)+'×'):'', true);
       h += kpi('Max. dluh', money(s.peakDebt), 'čerpáno '+money(s.drawnTotal));
-      h += kpi('Vlastní kapitál', money(s.totalEquity), 'kumulativně');
-      h += kpi('Jednotek na konci', s.unitsEnd, 'z '+s.startUnits+' dnes · +'+s.newTotal);
+      h += kpi('Vlastní kapitál', money(s.totalEquity), (s.reinvestCapex?('+ reinvestice '+money(s.reinvestCapex)):'kumulativně'));
+      h += kpi('Jednotek na konci', s.unitsEnd, 'z '+s.startUnits+' dnes · +'+s.newTotal+(s.reinvestCapex?' (vč. reinvestic)':''));
       h += '</div>';
       h += unitBreakdownHtml();
       h += '<div class="note" style="margin:2px 0 10px">Grafy jsou po <b>letech</b> (přehlednější než měsíce). Tržby a EBITDA jsou roční součty, DSCR = nejnižší v daném roce, jednotky a dluh ke konci roku.</div>';
@@ -345,14 +345,12 @@
       h += '</div>';
       h += '<div class="sec" style="background:var(--surface2)"><h2>Kumulativní volný cash flow (rezerva / reinvestice)</h2><div class="note">Narůstající součet volného cash flow po provozu, daních a splátkách úvěru (před výdaji na růst). Z toho se tvoří hotovostní rezerva nebo prostředky na reinvestici do dalších strojů.</div><canvas id="fc-cum" height="110"></canvas></div>';
       h += yearlyTableHtml();
-      h += '<div class="sec" style="background:var(--surface2)"><h2>Roční přehled — reinvestiční režim ♻️</h2><div class="note">Navíc k financované výstavbě: kdykoliv se z volného cash flow nastřádá na nový stroj, koupí se (samofinancovaný růst). Scénář '+esc(FC_SCEN)+'.</div><div id="fc-reinvest"><div class="note">Načítám…</div></div></div>';
       h += requestedFinancingHtml();
       h += creditCommitteeHtml();
       h += fcFinancingForm();
       body.innerHTML = h;
       drawForecastCharts();
       fillStressDscr();
-      loadReinvestTable();
     }
     function unitBreakdownHtml(){
       var u = FC.unitBreakdown; if(!u) return '';

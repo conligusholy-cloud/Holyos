@@ -143,6 +143,7 @@
       '<tr><td>Úvěrový rámec (facility)</td><td class="r"><b>'+money(facilityCzk)+'</b></td></tr>'+
       '<tr><td>Financování bankou</td><td class="r">'+fin.bankFinancingPct+' % z ceny jednotky</td></tr>'+
       '<tr><td>Vlastní spoluúčast (celkem)</td><td class="r">'+money(s.totalEquity)+'</td></tr>'+
+      (s.reinvestCapex?('<tr><td>Reinvestováno z cash flow</td><td class="r">'+money(s.reinvestCapex)+'</td></tr>'):'')+
       '<tr><td>Úrok</td><td class="r">'+String(fin.interestRatePct).replace('.',',')+' % p.a.</td></tr>'+
       '<tr><td>Splatnost / grace</td><td class="r">'+fin.maturityMonths+' / '+fin.graceMonths+' měs</td></tr>'+
       '<tr><td>Čerpání</td><td class="r">postupně po pořízených jednotkách</td></tr>'+

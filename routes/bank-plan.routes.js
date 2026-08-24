@@ -351,7 +351,8 @@ router.get('/forecast', requireAuth, async (req, res, next) => {
       : inp.activeCount;
     const greenfield = startUnits === 0;
 
-    const mode = String(req.query.mode || '') === 'reinvest' ? 'reinvest' : 'facility';
+    // Výchozí je reinvestiční režim (samofinancovaný růst z cash flow); ?mode=facility vypne.
+    const mode = String(req.query.mode || '') === 'facility' ? 'facility' : 'reinvest';
     const builder = mode === 'reinvest' ? F.buildReinvestForecast : F.buildForecast;
     const fc = builder({
       months: fin.horizonMonths, startUnits: startUnits,
