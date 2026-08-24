@@ -160,6 +160,9 @@
 
       h += '<div class="sec"><h2>Lokality <span class="tag tag-actual">ACTUAL</span> + <span class="tag tag-assume">ASSUMPTION</span></h2><div class="note">Aktivní lokality, řazeno dle EBITDA. 🟣 outlier (nad P90), 🔴 ztrátová.</div>' + locTable() + '</div>';
 
+      // Analýza rizik
+      h += riskAnalysisHtml();
+
       // Předpoklady
       h += assumptionsForm();
 
@@ -204,6 +207,30 @@
     }
     window.toggleExclude = toggleExclude;
 
+    function riskAnalysisHtml(){
+      var risks = (DATA.assumptions && DATA.assumptions.risks) || [];
+      var lvl = ['nízká','střední','vysoká'];
+      var lvlCol = { 'nízká':'#22c55e', 'střední':'#f59e0b', 'vysoká':'#ef4444' };
+      function sel(idx,field,val){ return '<select data-ri="'+idx+'" data-rf="'+field+'" style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:4px 6px;color:'+(lvlCol[val]||'var(--text)')+';font-size:12px;font-weight:600">'+lvl.map(function(o){return '<option'+(o===val?' selected':'')+'>'+o+'</option>';}).join('')+'</select>'; }
+      var h='<div class="sec"><h2>Analýza rizik <span class="tag tag-assume">ASSUMPTION</span></h2><div class="note">Editovatelné. Pravděpodobnost a dopad: nízká / střední / vysoká. Půjde i do PDF.</div>'+
+        '<div style="overflow-x:auto"><table class="dt"><thead><tr><th>Riziko</th><th>Pravděpodobnost</th><th>Dopad</th><th>Mitigace</th></tr></thead><tbody>';
+      risks.forEach(function(r,i){
+        h+='<tr><td style="font-weight:600;white-space:nowrap">'+esc(r.label)+'</td>'+
+          '<td>'+sel(i,'probability',r.probability)+'</td><td>'+sel(i,'impact',r.impact)+'</td>'+
+          '<td><input data-ri="'+i+'" data-rf="mitigation" value="'+esc(r.mitigation||'')+'" style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:5px 8px;color:var(--text);font-size:12px"></td></tr>';
+      });
+      h+='</tbody></table></div><div style="margin-top:12px"><button class="btn btn-primary" onclick="saveRisks()">💾 Uložit rizika</button></div></div>';
+      return h;
+    }
+    async function saveRisks(){
+      var risks=((DATA.assumptions&&DATA.assumptions.risks)||[]).map(function(r){return Object.assign({},r);});
+      document.querySelectorAll('[data-ri]').forEach(function(el){ var i=+el.getAttribute('data-ri'); var f=el.getAttribute('data-rf'); if(risks[i]) risks[i][f]=el.value; });
+      try {
+        await fetch('/api/bank-plan/assumptions',{method:'PUT',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({risks:risks})});
+        await load();
+      } catch(e){ alert('Uložení selhalo: '+(e.message||'')); }
+    }
+    window.saveRisks=saveRisks;
     function assumptionsForm(){
       var a = DATA.assumptions||{};
       function f(key, label, val){ return '<div><label>'+label+'</label><input id="as-'+key+'" value="'+(val!=null?val:'')+'"></div>'; }

@@ -94,6 +94,19 @@ const DEFAULT_ASSUMPTIONS = {
   rentVatIncluded: false,
   // Ruční přepis měny lokality (mylné kódy). Např. 00021FR je fyzicky v ČR → CZK (řeší i engine default).
   currencyByCode: {},
+  // Analýza rizik (§19 zadání) — editovatelné; probability/impact: nízká|střední|vysoká.
+  risks: [
+    { label: 'Riziko lokality', probability: 'střední', impact: 'střední', mitigation: 'Diverzifikace přes 80+ provozoven; výběr míst dle historických dat o výkonu; možnost přesunu stroje.' },
+    { label: 'Riziko poptávky', probability: 'nízká', impact: 'střední', mitigation: 'Samoobslužné praní má stabilní, neelastickou poptávku; 5 let historie napříč lokalitami a sezónami.' },
+    { label: 'Technologické riziko', probability: 'nízká', impact: 'střední', mitigation: 'Standardizovaná osvědčená technologie, záruka a garance odkupu; monitoring přes SIS.' },
+    { label: 'Servisní riziko', probability: 'nízká', impact: 'nízká', mitigation: 'Vlastní servisní síť, vzdálený monitoring, rezerva na údržbu v modelu.' },
+    { label: 'Energetické riziko', probability: 'střední', impact: 'střední', mitigation: 'Ceny energií promítnuty do modelu; možnost úpravy cen služeb; stress test na inflaci energií.' },
+    { label: 'Úrokové riziko', probability: 'střední', impact: 'střední', mitigation: 'Stress scénář s vyšší sazbou; DSCR drží rezervu; možnost fixace.' },
+    { label: 'Kurzové riziko (EUR/CZK)', probability: 'střední', impact: 'nízká', mitigation: 'Technologie v EUR, tržby v CZK/EUR/PLN; stress na kurz; možnost zajištění.' },
+    { label: 'Riziko likvidity', probability: 'nízká', impact: 'vysoká', mitigation: 'Minimální hotovostní rezerva v modelu; postupné čerpání jen při pořízení jednotky.' },
+    { label: 'Riziko expanze', probability: 'střední', impact: 'střední', mitigation: 'Růst vázán na dostupný rámec; každé čerpání = konkrétní produktivní aktivum, ne růst naslepo.' },
+    { label: 'Riziko protistran', probability: 'nízká', impact: 'nízká', mitigation: 'Vysoký počet drobných koncových zákazníků (žádná koncentrace); platby předem u stroje.' },
+  ],
   // Financování a růst (Fáze 5). Částky v CZK, převedou se do base měny.
   financing: {
     horizonMonths: 120,
