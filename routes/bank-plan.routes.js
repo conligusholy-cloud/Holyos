@@ -340,7 +340,9 @@ router.get('/forecast', requireAuth, async (req, res, next) => {
     const vatCZK = (A.vatByCurrency && A.vatByCurrency.CZK != null) ? A.vatByCurrency.CZK : 21;
     const rentDiv = A.rentVatIncluded ? (1 + vatCZK / 100) : 1;
     const rentU = E.convert((A.rentMonthlyDefault || 0) / rentDiv, 'CZK', base, fx);
-    const revenueU = perUnitRevenue;
+    // Ukázka jedné lokality = SKUTEČNÝ medián (bez haircutu/scénáře), ať sedí s horními KPI.
+    // Haircut/scénář se používá jen v agregátním forecastu (DSCR, crossover).
+    const revenueU = inp.medRevenue;
     const serviceU = revenueU * A.servicePct / 100;
     const energyU = revenueU * A.energyPct / 100;
     const feeU = revenueU * A.paymentFeePct / 100;
