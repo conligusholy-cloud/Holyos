@@ -141,6 +141,7 @@ async function loadAssumptions() {
   const merged = Object.assign({}, DEFAULT_ASSUMPTIONS, a || {});
   merged.maintenanceReservePct = 0; // údržba je zahrnutá v servisu → žádná samostatná rezerva (bez dvojího počítání)
   merged.bankingHaircutPct = 0;     // haircut nahrazen scénáři (Base +15 %, Downside 0, Stress −10 %)
+  merged.scenarios = DEFAULT_ASSUMPTIONS.scenarios; // scénáře čistě přes tržby (bez změny úroku) — ignoruj staré uložené
   return merged;
 }
 
