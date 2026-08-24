@@ -336,8 +336,36 @@ router.get('/forecast', requireAuth, async (req, res, next) => {
       facilityLimit: toBase(fin.facilityLimitCzk), targetUnitsPerMonth: A.targetUnitsPerMonth || 4,
     });
 
+    // ── Ukázka jedné lokality (reprezentativní, mediánová) — celý rozpad měsíčně ──
+    const vatCZK = (A.vatByCurrency && A.vatByCurrency.CZK != null) ? A.vatByCurrency.CZK : 21;
+    const rentDiv = A.rentVatIncluded ? (1 + vatCZK / 100) : 1;
+    const rentU = E.convert((A.rentMonthlyDefault || 0) / rentDiv, 'CZK', base, fx);
+    const revenueU = perUnitRevenue;
+    const serviceU = revenueU * A.servicePct / 100;
+    const energyU = revenueU * A.energyPct / 100;
+    const feeU = revenueU * A.paymentFeePct / 100;
+    const directOpexU = rentU + serviceU + energyU + feeU;
+    const ebitdaU = revenueU - directOpexU;
+    const maintU = revenueU * A.maintenanceReservePct / 100;
+    const mRate = ((fin.interestRatePct || 0) + (sc.interestAddPct || 0)) / 100 / 12;
+    const debtPerUnit = unitAllIn * (fin.bankFinancingPct / 100);
+    const paymentU = E.annuityPayment(debtPerUnit, mRate, Math.max(1, fin.maturityMonths - fin.graceMonths));
+    const interestU = debtPerUnit * mRate;
+    const taxU = Math.max(0, ebitdaU - interestU) * (fin.taxRatePct || 0) / 100;
+    const netWithDebtU = ebitdaU - maintU - paymentU - taxU;
+    const taxNoDebtU = Math.max(0, ebitdaU) * (fin.taxRatePct || 0) / 100;
+    const netPaidOffU = ebitdaU - maintU - taxNoDebtU;
+    const rnd = (x) => Math.round(x);
+    const unitBreakdown = {
+      revenue: rnd(revenueU), rent: rnd(rentU), service: rnd(serviceU), energy: rnd(energyU), fee: rnd(feeU),
+      directOpex: rnd(directOpexU), ebitda: rnd(ebitdaU), ebitdaMargin: revenueU ? ebitdaU / revenueU : 0,
+      maintenance: rnd(maintU), payment: rnd(paymentU), tax: rnd(taxU),
+      netWithDebt: rnd(netWithDebtU), netPaidOff: rnd(netPaidOffU),
+      allIn: rnd(unitAllIn), debtPerUnit: rnd(debtPerUnit), equityPerUnit: rnd(unitAllIn - debtPerUnit),
+    };
+
     res.json({
-      base, scenario: scName,
+      base, scenario: scName, unitBreakdown,
       inputs: { activeCount: inp.activeCount, medRevenue: Math.round(inp.medRevenue), medMargin: inp.medMargin, perUnitRevenue: Math.round(perUnitRevenue), unitCostBase: Math.round(unitCostBase), unitAllIn: Math.round(unitAllIn), rampCurve, targetUnitsPerMonth: (A.targetUnitsPerMonth || 4), buildPace: fin.newUnitsPerMonth },
       financing: fin, scenarios, activeScenario: sc,
       summary: fc.summary, rows: fc.rows,

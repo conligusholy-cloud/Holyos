@@ -292,6 +292,7 @@
       h += kpi('Vlastní kapitál', money(s.totalEquity), 'kumulativně');
       h += kpi('Jednotek na konci', s.unitsEnd, 'z '+s.startUnits+' dnes · +'+s.newTotal);
       h += '</div>';
+      h += unitBreakdownHtml();
       h += '<div class="note" style="margin:2px 0 10px">Grafy jsou po <b>letech</b> (přehlednější než měsíce). Tržby a EBITDA jsou roční součty, DSCR = nejnižší v daném roce, jednotky a dluh ke konci roku.</div>';
       h += '<div class="grid2">';
       h += '<div class="sec" style="background:var(--surface2)"><h2>Počet jednotek (konec roku)</h2><canvas id="fc-units" height="150"></canvas></div>';
@@ -303,6 +304,37 @@
       h += fcFinancingForm();
       body.innerHTML = h;
       drawForecastCharts();
+    }
+    function unitBreakdownHtml(){
+      var u = FC.unitBreakdown; if(!u) return '';
+      function row(lbl, val, opts){
+        opts = opts||{};
+        var col = opts.col||'var(--text)';
+        var sign = opts.minus ? '− ' : (opts.plus?'':'');
+        var bold = opts.bold ? 'font-weight:800;' : '';
+        var bt = opts.top ? 'border-top:1px solid var(--border);' : '';
+        var pctTxt = (opts.pct!=null) ? ' <span style="color:var(--muted2);font-size:11px">('+(Math.round(opts.pct*1000)/10).toLocaleString('cs-CZ')+' %)</span>' : '';
+        return '<div style="display:flex;justify-content:space-between;gap:12px;padding:6px 0;'+bt+bold+'"><span style="color:var(--text2)">'+sign+lbl+'</span><span style="text-align:right;color:'+col+';'+bold+'">'+money(val)+pctTxt+'</span></div>';
+      }
+      var rev = u.revenue||1;
+      var h = '<div class="sec" style="background:var(--surface2)"><h2>🧺 Ukázka jedné lokality (mediánová, měsíčně) <span class="tag tag-actual">ACTUAL</span> + <span class="tag tag-assume">ASSUMPTION</span></h2>'+
+        '<div class="note">Reprezentativní prádlomat: co vydělá a co zbyde po odečtení všeho včetně splátky úvěru. Vše bez DPH, scénář '+esc(FC_SCEN)+'.</div>'+
+        '<div style="max-width:520px">';
+      h += row('Obrat (bez DPH)', u.revenue, {bold:true});
+      h += row('Nájem', u.rent, {minus:true, col:'#ef4444', pct:u.rent/rev});
+      h += row('Servis', u.service, {minus:true, col:'#ef4444', pct:u.service/rev});
+      h += row('Energie', u.energy, {minus:true, col:'#ef4444', pct:u.energy/rev});
+      h += row('Platební poplatky', u.fee, {minus:true, col:'#ef4444', pct:u.fee/rev});
+      h += row('EBITDA', u.ebitda, {bold:true, col:'#22c55e', top:true, pct:u.ebitdaMargin});
+      h += row('Rezerva na údržbu', u.maintenance, {minus:true, col:'#ef4444'});
+      h += row('Splátka úvěru (anuita)', u.payment, {minus:true, col:'#f59e0b'});
+      h += row('Daň', u.tax, {minus:true, col:'#ef4444'});
+      h += row('Čistý cash po VŠEM (i splátce)', u.netWithDebt, {bold:true, col:(u.netWithDebt>=0?'#22c55e':'#ef4444'), top:true});
+      h += '<div style="margin-top:10px;padding-top:10px;border-top:1px dashed var(--border)">'+
+           row('Čistý cash po splacení stroje (bez splátky)', u.netPaidOff, {bold:true, col:'#22c55e'})+
+           '<div class="note" style="margin-top:4px">Investice/jednotku (all-in): '+money(u.allIn)+' · z toho úvěr '+money(u.debtPerUnit)+' + vlastní '+money(u.equityPerUnit)+'</div></div>';
+      h += '</div></div>';
+      return h;
     }
     function fcFinancingForm(){
       var fin = FC.financing||{};
