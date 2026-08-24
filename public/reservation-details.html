@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>Doplnění údajů ke smlouvě</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: 'Segoe UI', Arial, sans-serif; background: #0f1115; color: #e8e8ea; }
+  .wrap { max-width: 560px; margin: 0 auto; padding: 28px 18px 60px; }
+  .card { background: #171a21; border: 1px solid #262a33; border-radius: 14px; padding: 22px; }
+  h1 { font-size: 19px; margin: 0 0 4px; }
+  .sub { color: #9aa0aa; font-size: 13px; margin: 0 0 18px; }
+  label { display: block; font-size: 12px; color: #9aa0aa; margin: 12px 0 4px; }
+  input, textarea { width: 100%; background: #0f1115; border: 1px solid #2c313b; border-radius: 8px; padding: 10px 12px; color: #e8e8ea; font-size: 14px; font-family: inherit; }
+  textarea { min-height: 84px; resize: vertical; }
+  input:focus, textarea:focus { outline: none; border-color: #eab308; }
+  .row-ico { display: flex; gap: 8px; align-items: stretch; }
+  .row-ico input { flex: 1; }
+  .btn-ares { width: auto; margin: 0; white-space: nowrap; background: #f4f4f6; color: #0f1115; border: 1px solid #ccc; border-radius: 8px; padding: 0 14px; font-size: 13px; font-weight: 600; cursor: pointer; }
+  .btn-ares:disabled { opacity: .6; cursor: default; }
+  .hint { font-size: 11px; color: #6b7280; margin-top: 4px; }
+  button.submit { width: 100%; margin-top: 22px; background: #eab308; color: #1a1a1a; border: none; border-radius: 9px; padding: 13px; font-size: 15px; font-weight: 700; cursor: pointer; }
+  button.submit:disabled { opacity: .6; cursor: default; }
+  .msg { margin-top: 16px; font-size: 14px; }
+  .err { color: #ef4444; }
+  .ok { color: #10b981; }
+  .done { text-align: center; padding: 20px 0; }
+  .done .big { font-size: 40px; }
+  .foot { text-align: center; color: #6b7280; font-size: 11px; margin-top: 22px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card" id="card">
+    <div id="loading" class="sub">Načítám…</div>
+    <div id="content" style="display:none;">
+      <h1 id="title">Doplnění údajů ke smlouvě</h1>
+      <p class="sub" id="subtitle"></p>
+
+      <label id="l-name">Jméno / název firmy</label>
+      <input id="buyer_name" type="text" autocomplete="organization">
+
+      <label id="l-ico">IČO <span style="color:#6b7280" id="l-ico-note">(u firmy — zbytek dohledáme)</span></label>
+      <div class="row-ico">
+        <input id="buyer_ico" type="text" inputmode="numeric" autocomplete="off" maxlength="8">
+        <button type="button" class="btn-ares" id="ares-btn" onclick="aresLookup()">🔍 Načíst z ARES</button>
+      </div>
+      <div class="hint" id="ares-hint"></div>
+
+      <label id="l-dic">DIČ</label>
+      <input id="buyer_dic" type="text" autocomplete="off">
+
+      <label id="l-address">Sídlo / adresa <span style="color:#eab308">*</span></label>
+      <textarea id="buyer_address"></textarea>
+
+      <label id="l-rep">Zastoupení / jednatel</label>
+      <input id="buyer_rep" type="text">
+
+      <label id="l-bank">Bankovní spojení (IBAN / číslo účtu)</label>
+      <input id="buyer_bank" type="text" autocomplete="off">
+
+      <label id="l-note">Poznámka</label>
+      <textarea id="note"></textarea>
+
+      <button class="submit" type="button" onclick="submitForm()" id="submit">Odeslat údaje</button>
+      <div class="msg" id="msg"></div>
+    </div>
+    <div id="done" class="done" style="display:none;">
+      <div class="big">✅</div>
+      <h1 id="done-title">Děkujeme!</h1>
+      <p class="sub" id="done-sub">Vaše údaje jsme přijali. Připravíme smlouvu a ozveme se vám.</p>
+    </div>
+  </div>
+  <div class="foot" id="foot">Best Series s.r.o. • zabezpečený formulář</div>
+</div>
+
+<script>
+(function () {
+  var parts = location.pathname.split('/').filter(Boolean);
+  var token = parts[parts.length - 1] || '';
+  var API = '/api/compounder/reservations/details/' + encodeURIComponent(token);
+  var IS_EN = false;
+  function tt(cs, en) { return IS_EN ? en : cs; }
+  function $(id) { return document.getElementById(id); }
+  function show(id) { $(id).style.display = ''; }
+  function hide(id) { $(id).style.display = 'none'; }
+
+  var EN = {
+    title: 'Contract details', subtitle: 'Please fill in the details for the contract.',
+    name: 'Name / company', ico: 'Company ID', icoNote: '(for a company — we look up the rest)',
+    dic: 'VAT ID', address: 'Registered office / address', rep: 'Represented by',
+    bank: 'Bank account (IBAN)', note: 'Note', submit: 'Send details', ares: '🔍 Load from ARES',
+    foot: 'Best Series s.r.o. • secure form', doneTitle: 'Thank you!',
+    doneSub: 'We have received your details. We will prepare the contract and get back to you.',
+  };
+  function applyEn() {
+    if (!IS_EN) return;
+    $('title').textContent = EN.title; $('subtitle').textContent = EN.subtitle;
+    $('l-name').textContent = EN.name; $('l-ico').innerHTML = EN.ico + ' <span style="color:#6b7280">' + EN.icoNote + '</span>';
+    $('l-dic').textContent = EN.dic; $('l-address').innerHTML = EN.address + ' <span style="color:#eab308">*</span>';
+    $('l-rep').textContent = EN.rep; $('l-bank').textContent = EN.bank; $('l-note').textContent = EN.note;
+    $('submit').textContent = EN.submit; $('ares-btn').textContent = EN.ares;
+    $('foot').textContent = EN.foot; $('done-title').textContent = EN.doneTitle; $('done-sub').textContent = EN.doneSub;
+  }
+
+  function esc(s) { return String(s == null ? '' : s); }
+
+  async function load() {
+    try {
+      var r = await fetch(API, { credentials: 'omit' });
+      if (r.status === 410) { fail('Platnost odkazu vypršela. Požádejte o nový. / The link has expired.'); return; }
+      if (!r.ok) { fail('Odkaz je neplatný nebo byl zrušen. / The link is invalid.'); return; }
+      var d = await r.json();
+      IS_EN = !!(d.lang && String(d.lang).toLowerCase().indexOf('cs') !== 0);
+      applyEn();
+      $('subtitle').textContent = (d.kiosk_code ? (d.kiosk_code + ' — ') : '') + (IS_EN ? EN.subtitle : 'Vyplňte prosím údaje, které mají být ve smlouvě.');
+      var b = d.buyer || {};
+      $('buyer_name').value = esc(b.name); $('buyer_ico').value = esc(b.ico); $('buyer_dic').value = esc(b.dic);
+      $('buyer_address').value = esc(b.address); $('buyer_rep').value = esc(b.rep); $('buyer_bank').value = esc(b.bank);
+      $('note').value = esc(d.note);
+      hide('loading'); show('content');
+      // Autofill z ARES při opuštění pole IČO (jen když je název prázdný)
+      $('buyer_ico').addEventListener('blur', function () {
+        var ico = ($('buyer_ico').value || '').replace(/\D/g, '');
+        if (ico.length >= 6 && !($('buyer_name').value || '').trim()) aresLookup();
+      });
+    } catch (e) { fail('Nepodařilo se načíst formulář.'); }
+  }
+
+  function fail(text) {
+    hide('loading');
+    $('card').innerHTML = '<h1>Něco se nepovedlo</h1><p class="sub err">' + esc(text) + '</p>';
+  }
+
+  window.aresLookup = async function () {
+    var ico = ($('buyer_ico').value || '').replace(/\D/g, '');
+    var hint = $('ares-hint'); var btn = $('ares-btn');
+    if (ico.length < 6) { hint.className = 'hint err'; hint.textContent = tt('Zadejte platné IČO (8 číslic).', 'Enter a valid ID number (8 digits).'); return; }
+    btn.disabled = true; hint.className = 'hint'; hint.textContent = tt('Hledám v ARES…', 'Searching ARES…');
+    try {
+      var r = await fetch('/api/compounder/ares/' + ico, { credentials: 'omit' });
+      if (!r.ok) { hint.className = 'hint err'; hint.textContent = tt('Firma nenalezena — vyplňte prosím ručně.', 'Company not found — please fill in manually.'); btn.disabled = false; return; }
+      var d = await r.json();
+      if (d.name) $('buyer_name').value = d.name;
+      if (d.address) $('buyer_address').value = d.address;
+      if (d.dic) $('buyer_dic').value = d.dic;
+      hint.className = 'hint ok'; hint.textContent = tt('✓ Načteno z ARES', '✓ Loaded from ARES');
+    } catch (e) { hint.className = 'hint err'; hint.textContent = tt('ARES je nedostupný — vyplňte ručně.', 'ARES unavailable — fill in manually.'); }
+    btn.disabled = false;
+  };
+
+  window.submitForm = async function () {
+    var btn = $('submit'); var msg = $('msg'); msg.textContent = '';
+    var address = ($('buyer_address').value || '').trim();
+    if (!address) { msg.className = 'msg err'; msg.textContent = tt('Vyplňte prosím adresu / sídlo.', 'Please fill in the address.'); $('buyer_address').focus(); return; }
+    var payload = {
+      buyer_name: $('buyer_name').value, buyer_ico: $('buyer_ico').value, buyer_dic: $('buyer_dic').value,
+      buyer_address: address, buyer_rep: $('buyer_rep').value, buyer_bank: $('buyer_bank').value, note: $('note').value,
+    };
+    btn.disabled = true; btn.textContent = tt('Odesílám…', 'Sending…');
+    try {
+      var r = await fetch(API, { method: 'POST', credentials: 'omit', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      if (!r.ok) { var d = await r.json().catch(function(){return{};}); throw new Error(d.error || 'http'); }
+      hide('content'); show('done');
+    } catch (e) {
+      btn.disabled = false; btn.textContent = tt('Odeslat údaje', 'Send details');
+      msg.className = 'msg err'; msg.textContent = tt('Odeslání se nezdařilo: ', 'Sending failed: ') + (e.message || tt('zkuste to prosím znovu.', 'please try again.'));
+    }
+  };
+
+  if (!token) { fail('Chybí identifikátor odkazu.'); } else { load(); }
+})();
+</script>
+</body>
+</html>

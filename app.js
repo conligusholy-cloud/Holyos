@@ -488,6 +488,11 @@ app.get('/smlouva/:token', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'contract-fill.html'));
 });
 
+// Veřejná stránka pro doplnění identifikačních údajů k rezervaci (token-based, bez auth)
+app.get('/rezervace-udaje/:token', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'reservation-details.html'));
+});
+
 // Veřejná zásady ochrany osobních údajů (vyžaduje Apple App Store / TestFlight review)
 app.get('/privacy', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'privacy.html'));
@@ -585,6 +590,7 @@ app.use('/api/compounder', compounderRoutes); // Compounder — veřejný web co
 app.use('/api/lokality', require('./routes/lokality-public.routes')); // Lokality — veřejný web bestseries.global (nabídka místa pro prádlomat)
 app.use('/api/vybery', require('./routes/vybery.routes')); // Výběry — veřejná stránka bestseries.cash/vybery (ověření black list + magic link + admin)
 app.use('/api/bank-plan', require('./routes/bank-plan.routes')); // Bankovní Business Plan — track record, unit economics, DSCR, crossover (data ze SIS snapshotu)
+app.use('/api/voice', require('./routes/voice-agent.routes')); // Hlasový AI agent — Twilio ConversationRelay webhooky (příchozí hovory)
 
 // ─── Legacy storage proxy (kompatibilita s persistent-storage.js) ──────────
 
@@ -881,7 +887,18 @@ async function runExpiredLotsSweep() {
   }
 }
 
-app.listen(PORT, async () => {
+// HTTP server + WebSocket pro hlasového agenta (Twilio ConversationRelay).
+// Dřív app.listen(); teď potřebujeme sdílený http.Server, aby na něj šel
+// navěsit WebSocketServer (path /api/voice/relay).
+const http = require('http');
+const server = http.createServer(app);
+try {
+  require('./services/voice/relay-ws').attach(server);
+} catch (err) {
+  console.error('[app] voice relay WS nelze navěsit:', err.message);
+}
+
+server.listen(PORT, async () => {
   await ensureAdminUser();
   runExpiredLotsSweep();
   setInterval(runExpiredLotsSweep, SWEEP_INTERVAL_MS);

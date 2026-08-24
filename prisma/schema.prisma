@@ -145,6 +145,12 @@ model Person {
   velin_quiet_from            String?   @db.VarChar(5)
   velin_quiet_to              String?   @db.VarChar(5)
 
+  // Hlasový AI agent — recepční na zmeškané hovory (Twilio ConversationRelay)
+  voice_agent_enabled         Boolean   @default(false)
+  voice_twilio_number         String?   @db.VarChar(32)
+  voice_quiet_from            String?   @db.VarChar(5)
+  voice_quiet_to              String?   @db.VarChar(5)
+
   // Dovolená
   leave_entitlement_days Int?
   leave_carryover        Int?
@@ -247,6 +253,7 @@ model Person {
   velin_skill_profile        PersonSkillProfile?  @relation("PersonSkillProfilePerson")
   velin_devices              DeviceRegistration[] @relation("DeviceRegistrationPerson")
   velin_attendance           AttendancePunch[]    @relation("AttendancePunchPerson")
+  voice_calls                VoiceCall[]          @relation("VoiceCallOwner")
 
   // Spare Parts Shop — odpovědná osoba pro Velín push notifikaci o nové eshop objednávce
   eshop_settings_notified    EshopSettings[]      @relation("EshopSettingsNotifyPerson")
@@ -5783,6 +5790,12 @@ model LocationReservation {
   pay_instr_sent_count   Int       @default(0)
   pay_instr_last_sent_at DateTime?
 
+  // Sběr identifikačních údajů kupujícího přes veřejný odkaz (compounder.world) — token + poznámka.
+  details_token       String?   @unique @db.VarChar(64) // magic-link pro veřejný formulář údajů
+  details_expires_at  DateTime? // platnost odkazu
+  details_filled_at   DateTime? // kdy zákazník vyplnil
+  note                String?   @db.Text // poznámka od zákazníka
+
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
 
@@ -6031,4 +6044,37 @@ model WithdrawalRequest {
   @@index([email])
   @@index([status])
   @@map("withdrawal_request")
+}
+
+// =============================================================================
+// HLASOVÝ AI AGENT — příchozí hovory (Twilio ConversationRelay)
+// =============================================================================
+model VoiceCall {
+  id              String    @id @default(uuid())
+  direction       String    @default("inbound")
+  agent_kind      String    @default("personal") // personal | infoline
+  owner_person_id Int?
+  from_number     String    @db.VarChar(32)
+  to_number       String    @db.VarChar(32)
+  twilio_call_sid String    @unique @db.VarChar(64)
+  started_at      DateTime
+  ended_at        DateTime?
+  duration_sec    Int?
+  transcript      Json?     // [{ role: 'caller'|'agent', text, ts }]
+  summary         String?   @db.Text
+  caller_name     String?   @db.VarChar(255)
+  caller_intent   String?   @db.Text
+  audio_url       String?   @db.Text // R2
+  lead_id         String?   // CompounderLead (infolinka)
+  sales_event_id  Int?      // zapsaná schůzka
+  handoff         Boolean   @default(false)
+  cost_usd        Decimal?  @db.Decimal(10, 4)
+  created_at      DateTime  @default(now())
+
+  owner_person    Person?   @relation("VoiceCallOwner", fields: [owner_person_id], references: [id])
+
+  @@index([owner_person_id])
+  @@index([from_number])
+  @@index([started_at])
+  @@map("voice_calls")
 }

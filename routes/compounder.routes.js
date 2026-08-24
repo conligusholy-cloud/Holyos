@@ -7663,4 +7663,133 @@ router.post('/reservations/:id(\\d+)/payment-instructions/whatsapp', requireAuth
   } catch (err) { next(err); }
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Sběr identifikačních údajů kupujícího přes veřejný odkaz (compounder.world)
+// Tlačítko u rezervace → e-mail s odkazem → zákazník vyplní údaje do smlouvy + poznámku
+// → uloží se k rezervaci i ke kontaktu (CompounderLead). IČO se dohledá přes ARES.
+// ─────────────────────────────────────────────────────────────────────────────
+const DETAILS_L = {
+  cs: { subj: 'Doplnění údajů ke smlouvě — Compounder', pre: 'Vyplňte prosím údaje, které mají být ve smlouvě.', btn: 'Vyplnit údaje', body: (n) => 'Dobrý den' + (n ? ', ' + n : '') + ',\n\npro přípravu smlouvy nás prosím doplňte své identifikační údaje (u firmy stačí IČO — zbytek dohledáme) a případnou poznámku. Zabere to minutu.' },
+  en: { subj: 'Contract details — Compounder', pre: 'Please fill in the details for the contract.', btn: 'Fill in details', body: (n) => 'Hello' + (n ? ' ' + n : '') + ',\n\nto prepare the contract, please provide your identification details (for a company the ID number is enough — we will look up the rest) and any note. It takes a minute.' },
+  sk: { subj: 'Doplnenie údajov k zmluve — Compounder', pre: 'Vyplňte prosím údaje do zmluvy.', btn: 'Vyplniť údaje', body: (n) => 'Dobrý deň' + (n ? ', ' + n : '') + ',\n\npre prípravu zmluvy nás prosím doplňte svoje identifikačné údaje a prípadnú poznámku.' },
+  de: { subj: 'Vertragsdaten — Compounder', pre: 'Bitte füllen Sie die Vertragsdaten aus.', btn: 'Daten ausfüllen', body: (n) => 'Hallo' + (n ? ' ' + n : '') + ',\n\nzur Vorbereitung des Vertrags geben Sie bitte Ihre Identifikationsdaten und ggf. eine Notiz an.' },
+  pl: { subj: 'Dane do umowy — Compounder', pre: 'Proszę uzupełnić dane do umowy.', btn: 'Uzupełnij dane', body: (n) => 'Dzień dobry' + (n ? ' ' + n : '') + ',\n\nw celu przygotowania umowy prosimy o podanie danych identyfikacyjnych oraz ewentualnej uwagi.' },
+};
+function detailsL(l) { const c = String(l || 'cs').toLowerCase().split(/[-_]/)[0]; return DETAILS_L[c] || DETAILS_L.en; }
+async function _resLang(resv) {
+  let lang = 'cs';
+  if (resv && resv.lead_id) { try { const l = await prisma.compounderLead.findUnique({ where: { id: resv.lead_id }, select: { lang: true } }); if (l && l.lang) lang = l.lang; } catch (e) {} }
+  return lang;
+}
+// Odeslat e-mail s odkazem na veřejný formulář údajů
+router.post('/reservations/:id(\\d+)/details/email', requireAuth, async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    const resv = await prisma.locationReservation.findUnique({ where: { id } });
+    if (!resv) return res.status(404).json({ error: 'Rezervace nenalezena' });
+    let email = resv.buyer_email;
+    if (!email && resv.lead_id) { try { const l = await prisma.compounderLead.findUnique({ where: { id: resv.lead_id }, select: { email: true } }); if (l) email = l.email; } catch (e) {} }
+    if (!email) return res.status(400).json({ error: 'Rezervace ani kontakt nemají e-mail. Doplň e-mail kupujícího.' });
+    const from = compounderMailFrom();
+    if (!from) return res.status(500).json({ error: 'Není nastavený odesílatel (COMPOUNDER_MAIL_FROM).' });
+    const token = crypto.randomBytes(24).toString('hex');
+    await prisma.locationReservation.update({ where: { id }, data: { details_token: token, details_expires_at: new Date(Date.now() + 30 * 24 * 3600 * 1000) } });
+    const lang = await _resLang(resv);
+    const tr = detailsL(lang);
+    const link = portalBase() + '/rezervace-udaje/' + token; // doména compounder.world
+    const r = await sendMail({
+      to: email, from, fromName: compounderMailFromName(),
+      replyTo: process.env.COMPOUNDER_MAIL_REPLYTO || from, brand: 'compounder',
+      subject: tr.subj, preheader: tr.pre, body: tr.body(resv.buyer_name || ''),
+      link, linkLabel: tr.btn,
+    });
+    if (r && r.sent === false) return res.status(502).json({ error: 'E-mail se nepodařilo odeslat.' });
+    res.json({ ok: true, email, link });
+  } catch (err) { next(err); }
+});
+// Veřejné: načtení formuláře podle tokenu
+router.get('/reservations/details/:token', async (req, res, next) => {
+  try {
+    const token = String(req.params.token || '');
+    const resv = await prisma.locationReservation.findUnique({ where: { details_token: token } });
+    if (!resv) return res.status(404).json({ error: 'Neplatný odkaz' });
+    if (resv.details_expires_at && Date.now() > new Date(resv.details_expires_at).getTime()) return res.status(410).json({ error: 'Odkaz vypršel' });
+    const lang = await _resLang(resv);
+    res.json({
+      ok: true, lang, kiosk_code: resv.kiosk_code, filled: !!resv.details_filled_at,
+      buyer: {
+        name: resv.buyer_name || '', email: resv.buyer_email || '', phone: resv.buyer_phone || '',
+        ico: resv.buyer_ico || '', dic: resv.buyer_dic || '', address: resv.buyer_address || '',
+        rep: resv.buyer_rep || '', bank: resv.buyer_bank || '',
+      },
+      note: resv.note || '',
+    });
+  } catch (err) { next(err); }
+});
+// Veřejné: uložení vyplněných údajů → k rezervaci i ke kontaktu
+router.post('/reservations/details/:token', async (req, res, next) => {
+  try {
+    const token = String(req.params.token || '');
+    const resv = await prisma.locationReservation.findUnique({ where: { details_token: token } });
+    if (!resv) return res.status(404).json({ error: 'Neplatný odkaz' });
+    if (resv.details_expires_at && Date.now() > new Date(resv.details_expires_at).getTime()) return res.status(410).json({ error: 'Odkaz vypršel' });
+    const b = req.body || {};
+    const clip = (v, n) => (v == null ? null : String(v).trim().slice(0, n) || null);
+    const data = {
+      buyer_name: clip(b.buyer_name, 255), buyer_ico: clip(b.buyer_ico, 20), buyer_dic: clip(b.buyer_dic, 20),
+      buyer_address: clip(b.buyer_address, 2000), buyer_rep: clip(b.buyer_rep, 255), buyer_bank: clip(b.buyer_bank, 120),
+      note: clip(b.note, 4000), details_filled_at: new Date(),
+    };
+    // e-mail/telefon nepřepisujeme, pokud je zákazník nevyplní (drží se původní z rezervace)
+    if (clip(b.buyer_email, 255)) data.buyer_email = clip(b.buyer_email, 255);
+    if (clip(b.buyer_phone, 40)) data.buyer_phone = clip(b.buyer_phone, 40);
+    const updated = await prisma.locationReservation.update({ where: { id: resv.id }, data });
+    // Propis ke kontaktu (CompounderLead): doplň firmu a poznámku s identifikací.
+    if (resv.lead_id) {
+      try {
+        const lead = await prisma.compounderLead.findUnique({ where: { id: resv.lead_id } });
+        if (lead) {
+          const patch = {};
+          if (data.buyer_name && !lead.company) patch.company = data.buyer_name.slice(0, 255);
+          if (data.buyer_name && !lead.name) patch.name = data.buyer_name.slice(0, 255);
+          const idBlock = [
+            '— Údaje do smlouvy (' + new Date().toLocaleDateString('cs-CZ') + ') —',
+            data.buyer_name ? ('Název/jméno: ' + data.buyer_name) : null,
+            data.buyer_ico ? ('IČO: ' + data.buyer_ico) : null,
+            data.buyer_dic ? ('DIČ: ' + data.buyer_dic) : null,
+            data.buyer_address ? ('Adresa: ' + data.buyer_address) : null,
+            data.buyer_rep ? ('Zastoupení: ' + data.buyer_rep) : null,
+            data.buyer_bank ? ('IBAN: ' + data.buyer_bank) : null,
+            data.note ? ('Poznámka: ' + data.note) : null,
+          ].filter(Boolean).join('\n');
+          patch.notes = (lead.notes ? (lead.notes + '\n\n') : '') + idBlock;
+          if (Object.keys(patch).length) await prisma.compounderLead.update({ where: { id: lead.id }, data: patch });
+        }
+      } catch (e) { console.error('[res-details] lead update:', e && e.message); }
+    }
+    // Velín notifikace (best-effort)
+    try { await compounderNotify.notifyOwnersMessage(prisma, { title: 'Vyplněny údaje ke smlouvě', body: (updated.buyer_name || 'Zákazník') + ' · ' + updated.kiosk_code, data: { type: 'reservation_details', reservationId: updated.id } }); } catch (e) {}
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+// Veřejné: ARES lookup podle IČO (pro autofill firmy ve formuláři)
+router.get('/ares/:ico(\\d{6,8})', async (req, res, next) => {
+  try {
+    const ico = String(req.params.ico).padStart(8, '0');
+    const ctrl = new AbortController();
+    const to = setTimeout(() => ctrl.abort(), 8000);
+    let r;
+    try { r = await fetch('https://ares.gov.cz/ekonomicke-subjekty-v-be/rest/ekonomicke-subjekty/' + ico, { signal: ctrl.signal, headers: { 'accept': 'application/json' } }); }
+    finally { clearTimeout(to); }
+    if (!r || !r.ok) return res.status(404).json({ error: 'Firma nenalezena v ARES' });
+    const d = await r.json();
+    res.json({
+      ok: true, ico,
+      name: d.obchodniJmeno || '',
+      address: (d.sidlo && d.sidlo.textovaAdresa) || '',
+      dic: d.dic || '',
+    });
+  } catch (err) { return res.status(502).json({ error: 'ARES je nedostupný, zkuste to prosím ručně.' }); }
+});
+
 module.exports = router;

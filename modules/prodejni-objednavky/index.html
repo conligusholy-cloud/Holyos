@@ -6539,6 +6539,7 @@
             ? paySent + '<button class="btn btn-secondary" style="padding:4px 8px;font-size:12px;" onclick="window.open(\'/api/compounder/reservations/'+x.id+'/payment-instructions.pdf\',\'_blank\')">💳 Pokyny</button> '
               + '<button class="btn btn-secondary" style="padding:4px 8px;font-size:12px;" title="Poslat pokyny e-mailem" onclick="resPayEmail('+x.id+',this)">✉️</button> '
               + '<button class="btn" style="padding:4px 8px;font-size:12px;background:#25D366;color:#0a2e17;font-weight:700;" title="Poslat pokyny na WhatsApp" onclick="resPayWhatsApp('+x.id+',this)">🟢</button> '
+              + '<button class="btn btn-secondary" style="padding:4px 8px;font-size:12px;" title="Odeslat e-mailem odkaz na formulář s údaji do smlouvy (dohledá firmu v ARES)" onclick="resDetailsEmail('+x.id+',this)">📝 Vyžádat údaje</button> '
             : '';
           h += '<tr><td style="white-space:nowrap;">'+resDate(x.created_at)+'</td><td>'+kvEsc(x.kiosk_code)+'</td><td>'+buyer+'</td><td>'+x.days+'</td><td style="white-space:nowrap;">'+feeCell+'</td><td style="white-space:nowrap;">'+buyCell+'</td><td><span style="color:'+scol+';font-size:12px;font-weight:600;">'+(RES_STATUS[x.status]||x.status)+'</span></td><td style="font-size:11px;white-space:nowrap;">'+lhuty+'</td><td style="white-space:nowrap;">'+docsBtn+payBtns+act+'</td></tr>';
         });
@@ -6580,6 +6581,18 @@
       } catch(e){ alert('Odeslání selhalo: '+(e.message||'')); }
       finally { if(btn) btn.disabled=false; }
     }
+    async function resDetailsEmail(id, btn){
+      if(!confirm('Odeslat kupujícímu e-mailem odkaz na formulář, kde vyplní údaje do smlouvy (IČO se dohledá v ARES)?')) return;
+      if(btn) btn.disabled=true;
+      try {
+        var r = await fetch('/api/compounder/reservations/'+id+'/details/email', { method:'POST', credentials:'include' });
+        var j = await r.json().catch(function(){return{};});
+        if(!r.ok) throw new Error(j.error||('HTTP '+r.status));
+        alert('Odkaz na vyplnění údajů odeslán na: '+(j.email||''));
+      } catch(e){ alert('Odeslání selhalo: '+(e.message||'')); }
+      finally { if(btn) btn.disabled=false; }
+    }
+    window.resDetailsEmail = resDetailsEmail;
     async function resPayWhatsApp(id, btn){
       if(btn) btn.disabled=true;
       try {
