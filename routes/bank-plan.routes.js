@@ -128,10 +128,18 @@ const DEFAULT_ASSUMPTIONS = {
   // náklady/úrok/ramp. Revenue factor se počítá dynamicky (Pxx / P50) z aktuálních dat.
   scenarios: {
     base:     { label: 'Base', basis: 'p50', dscrTarget: 1.30 },
-    downside: { label: 'Downside', basis: 'p25', dscrTarget: 1.20 },
-    stress:   { label: 'Historical Stress', basis: 'p10', dscrTarget: 1.00 },
-    combined: { label: 'Combined Bank Stress', basis: 'p10', dscrTarget: 1.00,
+    downside: { label: 'Downside', revenueFactor: 0.90, dscrTarget: 1.20 },
+    stress:   { label: 'Stress', revenueFactor: 0.80, dscrTarget: 1.00 },
+    combined: { label: 'Combined Bank Stress', revenueFactor: 0.80, dscrTarget: 1.00,
                 energyUpliftPct: 20, serviceUpliftPct: 10, interestAddPct: 2.0, rampExtraMonths: 3, fxStressPct: 0 },
+  },
+  // Stabilizovaný výkon lokality pro percentily (§17/§18): vyloučit ramp-up, min. historie.
+  stabilization: {
+    enabled: true,          // false = zpět na prostý 12M průměr
+    minHistoryMonths: 6,    // min. počet kvalifikovaných měsíců, jinak lokalita mimo percentily
+    includeRampUp: false,   // false = vyloučit ramp-up měsíce (dle kohorty)
+    stabilizeFromMonth: null, // null = auto z kohortní křivky (95 % plateau)
+    includeClosed: false,   // zahrnout uzavřené lokality do percentilů
   },
 };
 
@@ -259,6 +267,12 @@ router.get('/overview', requireAuth, async (req, res, next) => {
     const rentStats = { avgKnownRentCzk: rentN ? Math.round(rentSum / rentN) : null, count: rentN, totalPlan: realCount };
 
     const seasonality = E.seasonalityIndex(portfolioMonthly);
+    // Volatilita + nejhorší klouzavá období (§19/§20) — z měsíční řady portfolia.
+    const volatility = E.volatilityStats(portfolioMonthly);
+    const worstRolling = {
+      m3: E.worstRolling(portfolioMonthly, 3),
+      m12: E.worstRolling(portfolioMonthly, 12),
+    };
 
     const cohort = E.cohortCurve(nonTest.filter((l) => !isExcluded(l) && l.classification === 'active' && l.openDate).map((l) => ({ openDate: l.openDate, monthly: netMonthly(l) })), 36);
 
@@ -284,6 +298,7 @@ router.get('/overview', requireAuth, async (req, res, next) => {
         medianEbitda: Math.round(medianEbitda), baseCaseEbitda: Math.round(baseCaseEbitda), baseFactorPct: baseFactorPct,
       },
       seasonality,
+      volatility, worstRolling,
       cohort,
       portfolioMonthly,
       rentStats,
@@ -312,21 +327,35 @@ async function _portfolioInputs(hist, A, base) {
     return out;
   };
   const avgRecent = (m, n) => { const yms = Object.keys(m).sort(); const use = yms.slice(0, -1).slice(-(n || 12)); return use.length ? use.reduce((a, ym) => a + (m[ym] || 0), 0) / use.length : 0; };
+  const stab = Object.assign({}, DEFAULT_ASSUMPTIONS.stabilization, A.stabilization || {});
   const active = (hist.locations || []).filter((l) => l.classification === 'active' && !isExcluded(l));
-  const revs = active.map((l) => avgRecent(netMonthly(l), 12));
-  const revDist = E.percentiles(revs);
+  // Populace pro percentily: aktivní (+ volitelně uzavřené), bez vyloučených.
+  const pool = (hist.locations || []).filter((l) => !isExcluded(l) && (l.classification === 'active' || (stab.includeClosed && l.classification === 'closed')));
+  const cohort = E.cohortCurve(pool.filter((l) => l.openDate).map((l) => ({ openDate: l.openDate, monthly: netMonthly(l) })), 36);
+  const fromMonth = (stab.stabilizeFromMonth != null && stab.stabilizeFromMonth !== '') ? Number(stab.stabilizeFromMonth) : E.stabilizationMonth(cohort);
   const cfgMap = (await getSetting('compounding.kiosks', { type: 'json', defaultValue: {} })) || {};
-  let rentSum = 0, rentN = 0;
-  const marginArr = active.map((l) => {
+  // Stabilizovaná tržba/lokalita (nebo 12M průměr, když stabilizace vypnutá). Krátká historie → mimo percentily.
+  let rentSum = 0, rentN = 0, stabExcluded = 0;
+  const revs = [], marginArr = [];
+  pool.forEach((l) => {
+    const m = netMonthly(l);
+    const stabVal = stab.enabled
+      ? E.stabilizedSiteValue(m, l.openDate, fromMonth, { minHistoryMonths: stab.minHistoryMonths, includeRampUp: stab.includeRampUp })
+      : avgRecent(m, 12);
+    if (stabVal == null) { stabExcluded++; return; } // nesplňuje min. historii
+    revs.push(stabVal);
     const cfg = cfgMap[l.code] || {};
     const rent = (typeof cfg.rentMonthlyCzk === 'number') ? E.convert(cfg.rentMonthlyCzk, 'CZK', base, fx) : A.rentMonthlyDefault;
     rentSum += rent; rentN++;
-    const se = E.siteEconomics({ revenue: avgRecent(netMonthly(l), 12), rentMonthly: rent, servicePct: A.servicePct, energyPct: A.energyPct, paymentFeePct: A.paymentFeePct, maintenanceReservePct: A.maintenanceReservePct });
-    return se.ebitdaMargin;
+    marginArr.push(E.siteEconomics({ revenue: stabVal, rentMonthly: rent, servicePct: A.servicePct, energyPct: A.energyPct, paymentFeePct: A.paymentFeePct, maintenanceReservePct: A.maintenanceReservePct }).ebitdaMargin);
   });
+  const revDist = E.percentiles(revs);
   const marginDist = E.percentiles(marginArr);
-  const cohort = E.cohortCurve(active.filter((l) => l.openDate).map((l) => ({ openDate: l.openDate, monthly: netMonthly(l) })), 36);
-  return { activeCount: active.length, medRevenue: revDist.p50 || 0, medMargin: marginDist.p50 || 0, revDist, rentBaseAvg: rentN ? rentSum / rentN : 0, cohort };
+  return {
+    activeCount: active.length, medRevenue: revDist.p50 || 0, medMargin: marginDist.p50 || 0,
+    revDist, rentBaseAvg: rentN ? rentSum / rentN : 0, cohort,
+    stabilization: { enabled: !!stab.enabled, fromMonth, includedSites: revs.length, excludedShortHistory: stabExcluded, minHistoryMonths: stab.minHistoryMonths },
+  };
 }
 
 // Ekonomika scénáře odvozená z PERCENTILU historické distribuce (Base=P50, Downside=P25,
@@ -335,9 +364,11 @@ async function _portfolioInputs(hist, A, base) {
 // tržbě marže klesá (fixní náklady deleverage). Vrací i revenueFactor = Pxx/P50.
 function scenarioEconomics(inp, A, fin, sc) {
   const rd = inp.revDist || {};
-  const basis = sc.basis || 'p50';
+  const basis = sc.basis || (sc.revenueFactor != null ? 'faktor' : 'p50');
   const p50 = rd.p50 || inp.medRevenue || 0;
-  const rev = (rd[basis] != null ? rd[basis] : p50);
+  // Pevný revenueFactor (např. Downside 0,90, Stress 0,80) přebije percentilový základ.
+  const rev = (sc.revenueFactor != null) ? p50 * Number(sc.revenueFactor)
+            : (rd[basis] != null ? rd[basis] : p50);
   const svc = (Number(A.servicePct) || 0) * (1 + (Number(sc.serviceUpliftPct) || 0) / 100);
   const en = (Number(A.energyPct) || 0) * (1 + (Number(sc.energyUpliftPct) || 0) / 100);
   const fee = Number(A.paymentFeePct) || 0;
@@ -497,6 +528,46 @@ router.get('/scenarios', requireAuth, async (req, res, next) => {
       };
     });
     res.json({ base, mode, scenarios: out, percentiles: inp.revDist });
+  } catch (err) { next(err); }
+});
+
+// GET /api/bank-plan/debt-sizing — max. bezpečný dluh/jednotku (§12).
+// Dluh se přizpůsobí výkonu (§22): najde max jistinu, aby Base DSCR ≥ target a Downside DSCR ≥ target.
+router.get('/debt-sizing', requireAuth, async (req, res, next) => {
+  try {
+    const hist = await getSetting(HISTORY_KEY, { type: 'json', defaultValue: null });
+    if (!hist) return res.status(404).json({ error: 'Snapshot historie zatím není.' });
+    const A = await loadAssumptions();
+    const fx = A.fx || DEFAULT_ASSUMPTIONS.fx;
+    const base = (req.query.base || hist.base || 'CZK').toUpperCase();
+    const fin = Object.assign({}, DEFAULT_ASSUMPTIONS.financing, A.financing || {});
+    const inp = await _portfolioInputs(hist, A, base);
+    const scenarios = Object.assign({}, DEFAULT_ASSUMPTIONS.scenarios, A.scenarios || {});
+    const unitAllIn = E.convert((A.unitCostEur || 52000) + (fin.allInExtraEur || 0), 'EUR', base, fx);
+    const maintPct = Number(A.maintenanceReservePct) || 0;
+    const tenor = Math.max(1, (fin.maturityMonths || 84) - (fin.graceMonths || 0));
+    // Vyhodnoť vazbu pro Base (target ~1.30) a Downside (target ~1.20) — bere se přísnější.
+    const legs = ['base', 'downside'].filter((k) => scenarios[k]).map((k) => {
+      const sc = scenarios[k];
+      const se = scenarioEconomics(inp, A, fin, sc);
+      const cfads = se.perUnitEbitda - se.perUnitRevenue * maintPct / 100;
+      const r = se.interestRatePct / 100 / 12;
+      const target = Number(sc.dscrTarget) || 0;
+      const maxDebt = E.maxDebtForDscr(cfads, target, r, tenor);
+      return { key: k, label: sc.label || k, cfadsPerUnit: Math.round(cfads), dscrTarget: target, maxDebtPerUnit: Math.round(maxDebt) };
+    });
+    const bindable = legs.filter((l) => l.maxDebtPerUnit > 0);
+    const binding = bindable.length ? bindable.reduce((a, b) => (b.maxDebtPerUnit < a.maxDebtPerUnit ? b : a)) : null;
+    const maxSafeDebt = binding ? Math.min(binding.maxDebtPerUnit, unitAllIn) : 0;
+    const maxLtcPct = unitAllIn > 0 ? Math.round(maxSafeDebt / unitAllIn * 1000) / 10 : 0;
+    res.json({
+      base, unitAllIn: Math.round(unitAllIn), tenorMonths: tenor, graceMonths: fin.graceMonths || 0,
+      interestRatePct: fin.interestRatePct || 0,
+      legs, bindingScenario: binding ? binding.key : null,
+      maxSafeDebtPerUnit: Math.round(maxSafeDebt), maxLtcPct,
+      requiredEquityPerUnit: Math.round(unitAllIn - maxSafeDebt),
+      currentBankPct: fin.bankFinancingPct, currentDebtPerUnit: Math.round(unitAllIn * (fin.bankFinancingPct || 0) / 100),
+    });
   } catch (err) { next(err); }
 });
 

@@ -326,9 +326,11 @@
       var dscrTxt = s.minDscr!=null ? (Math.round(s.minDscr*100)/100).toLocaleString('cs-CZ')+'×' : '—';
       var crossTxt = cx.month!=null ? ('za '+cx.month+' měs. ('+monthLabel(cx.month)+')') : 'nedosaženo v horizontu';
       var h = '';
-      h += '<div class="note" style="margin-bottom:10px"><b>Reinvestiční režim ♻️</b>: financovaná výstavba z úvěru + navíc se z nakumulovaného volného cash flow průběžně kupují další stroje (samofinancovaný růst). Scénáře jsou <b>odvozené z historické distribuce</b> reálně provozovaných lokalit (ne arbitrární haircut): <b>Base = P50</b> (medián), <b>Downside = P25</b>, <b>Historical Stress = P10</b>. <b>Combined Bank Stress</b> = P10 + vyšší náklady (energie +20 %, servis +10 %), úrok +2 p.b. a pomalejší náběh. EBITDA se dopočítá nelineárně (fixní nájem zůstává). Crossover <b>bez splátek úvěru</b>. Scénář:</div>';
-      h += '<div style="display:inline-flex;flex-wrap:wrap;border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:14px">'+seg('base','Base · P50')+seg('downside','Downside · P25')+seg('stress','Hist. Stress · P10')+seg('combined','Combined Bank Stress')+'</div>';
+      h += '<div class="note" style="margin-bottom:10px"><b>Reinvestiční režim ♻️</b>: financovaná výstavba z úvěru + navíc se z nakumulovaného volného cash flow průběžně kupují další stroje (samofinancovaný růst). Scénáře: <b>Base = P50</b> (historický medián), <b>Downside = −10 %</b>, <b>Stress = −20 %</b> z mediánu. <b>Combined Bank Stress</b> = −20 % + vyšší náklady (energie +20 %, servis +10 %), úrok +2 p.b. a pomalejší náběh. EBITDA se dopočítá nelineárně (fixní nájem zůstává). Crossover <b>bez splátek úvěru</b>. Scénář:</div>';
+      h += '<div style="display:inline-flex;flex-wrap:wrap;border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:14px">'+seg('base','Base · P50')+seg('downside','Downside · −10 %')+seg('stress','Stress · −20 %')+seg('combined','Combined Bank Stress')+'</div>';
       h += '<div id="fc-scentable" style="margin-bottom:14px"></div>';
+      h += '<div id="fc-debtsizing" style="margin-bottom:14px"></div>';
+      h += '<div id="fc-volatility" style="margin-bottom:14px"></div>';
       if (FC.greenfield) h += '<div class="banner" style="background:rgba(59,130,246,.1);border-color:rgba(59,130,246,.35);color:#60a5fa">🌱 Režim „od nuly" (greenfield): síť začíná na 0 provozovnách — model pro partnery v jiných zemích. Ekonomika jednotky se bere z prověřených historických dat, síť se staví od začátku.</div>';
       h += '<div class="kpis">';
       var tgt = (inp.targetUnitsPerMonth!=null?inp.targetUnitsPerMonth:4);
@@ -357,6 +359,46 @@
       drawForecastCharts();
       fillStressDscr();
       loadScenarioTable();
+      loadDebtSizing();
+      loadVolatility();
+    }
+    // Debt Sizing Optimizer — max. bezpečný dluh/jednotku pro cílové DSCR (Base/Downside).
+    async function loadDebtSizing(){
+      var box=document.getElementById('fc-debtsizing'); if(!box) return; box.innerHTML='';
+      try{
+        var d=await (await fetch('/api/bank-plan/debt-sizing?base='+BASE,{credentials:'include'})).json();
+        if(!d || d.maxSafeDebtPerUnit==null) return;
+        var legs=(d.legs||[]).map(function(l){ return '<tr><td>'+esc(l.label)+'</td><td style="text-align:right">'+money(l.cfadsPerUnit)+'</td><td style="text-align:right">'+(l.dscrTarget?l.dscrTarget+'×':'—')+'</td><td style="text-align:right">'+money(l.maxDebtPerUnit)+'</td></tr>'; }).join('');
+        box.innerHTML='<div class="sec" style="background:var(--surface2)"><h2>Debt Sizing Optimizer <span class="tag tag-actual">DEBT ADAPTS TO PERFORMANCE</span></h2>'+
+          '<div class="note">Maximální bezpečný dluh na jednotku, aby Base i Downside DSCR splnily interní covenant. Vazba = přísnější scénář. Dluh se přizpůsobuje výkonu, ne naopak.</div>'+
+          '<div class="kpis">'+
+          kpi('Max. bezpečný dluh / jednotku', money(d.maxSafeDebtPerUnit), 'vazba: '+esc(d.bindingScenario||'—'), true)+
+          kpi('Max. LTC', (d.maxLtcPct!=null?String(d.maxLtcPct).replace('.',',')+' %':'—'), 'z all-in '+money(d.unitAllIn))+
+          kpi('Nutný vlastní vklad / jednotku', money(d.requiredEquityPerUnit), 'zbytek nad dluhem')+
+          kpi('Aktuálně čerpáno / jednotku', money(d.currentDebtPerUnit), 'při '+d.currentBankPct+' % financování')+
+          '</div>'+
+          '<div style="overflow-x:auto"><table class="dt"><thead><tr><th>Scénář</th><th style="text-align:right">CFADS / jed.</th><th style="text-align:right">Target DSCR</th><th style="text-align:right">Max. dluh / jed.</th></tr></thead><tbody>'+legs+'</tbody></table></div>'+
+          '<div class="note" style="margin-top:6px">Tenor '+d.tenorMonths+' měs (grace '+d.graceMonths+'), úrok '+String(d.interestRatePct).replace('.',',')+' %. Pokud je aktuální dluh nad max. bezpečným, sniž LTC / prodluž tenor / zvyš equity.</div>'+
+          '</div>';
+      }catch(e){}
+    }
+    // Volatilita + nejhorší klouzavé období (z analytiky portfolia).
+    async function loadVolatility(){
+      var box=document.getElementById('fc-volatility'); if(!box) return; box.innerHTML='';
+      try{
+        var d=await (await fetch('/api/bank-plan/overview?base='+BASE,{credentials:'include'})).json();
+        var v=d.volatility||{}, wr=d.worstRolling||{};
+        if(!v.count) return;
+        var m12=wr.m12, m3=wr.m3;
+        box.innerHTML='<div class="sec" style="background:var(--surface2)"><h2>Volatilita &amp; nejhorší období <span class="tag tag-actual">ACTUAL</span></h2>'+
+          '<div class="note">Odolnost vůči skutečně pozorovanému horšímu období portfolia (§19/§20).</div>'+
+          '<div class="kpis">'+
+          kpi('Variační koeficient (CV)', (v.cvPct!=null?String(v.cvPct).replace('.',',')+' %':'—'), 'měsíční kolísání tržeb portfolia')+
+          kpi('Nejhorší měsíc', money(v.worst), (v.worstYm||''))+
+          kpi('Nejhorší 3M (Ø/měs)', (m3?money(Math.round(m3.avg)):'—'), (m3?(m3.startYm+' – '+m3.endYm):''))+
+          kpi('Nejhorší 12M (Ø/měs)', (m12?money(Math.round(m12.avg)):'—'), (m12?(m12.startYm+' – '+m12.endYm):''))+
+          '</div></div>';
+      }catch(e){}
     }
     // Srovnávací tabulka scénářů (percentily historie) + covenant PASS/FAIL.
     async function loadScenarioTable(){

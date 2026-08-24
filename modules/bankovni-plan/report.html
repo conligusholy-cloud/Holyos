@@ -77,6 +77,8 @@
       ov = await jget('/api/bank-plan/overview?base=CZK');
       fcB = await jget('/api/bank-plan/forecast?base=CZK&scenario=base');
       fcS = await jget('/api/bank-plan/forecast?base=CZK&scenario=stress');
+      try { window._scen = await jget('/api/bank-plan/scenarios?base=CZK'); } catch(e){ window._scen=null; }
+      try { window._dsz = await jget('/api/bank-plan/debt-sizing?base=CZK'); } catch(e){ window._dsz=null; }
     } catch(e){ document.getElementById('doc').innerHTML='<div class="page"><h2>Data nejsou k dispozici</h2><p>'+esc(e.message)+'</p><p class="muted">Nejdřív vytvoř snapshot (Přebudovat data) v modulu Bankovní plán.</p></div>'; st.textContent='Chyba'; return; }
     st.textContent='Hotovo — připraveno k tisku';
 
@@ -98,7 +100,7 @@
     // 2) EXECUTIVE SUMMARY
     H += P('<h2>1. Executive Summary</h2>'+
       '<p>Předmětem je financování dalšího škálování <b>'+String(t.yearsData).replace('.',',')+' let provozně ověřeného</b> podnikatelského modelu samoobslužných prádelen (prádlomatů). Model je doložen <b>'+t.realCount+' provozovnami</b> a <b>'+num(t.locationMonths)+' location-months</b> reálného provozu s <b>'+num(t.totalTx)+' transakcemi</b> a kumulativními tržbami <b>'+money(t.cumulativeRevenue)+'</b> (bez DPH) za období '+t.firstData+' – '+t.lastData+'.</p>'+
-      '<p>Jedna provozovna generuje medián měsíční tržby <b>'+money(u.revenueDist&&u.revenueDist.p50)+'</b> a medián měsíční EBITDA <b>'+money(u.ebitdaDist&&u.ebitdaDist.p50)+'</b> (marže '+pctv(u.marginDist&&u.marginDist.p50)+'). Model pracuje se scénáři: Base = historický medián (<b>'+money(u.baseCaseEbitda)+'</b> EBITDA/lokalita), Downside = medián −10 %, Stress = medián −15 %.</p>'+
+      '<p>Jedna provozovna generuje medián měsíční tržby <b>'+money(u.revenueDist&&u.revenueDist.p50)+'</b> a medián měsíční EBITDA <b>'+money(u.ebitdaDist&&u.ebitdaDist.p50)+'</b> (marže '+pctv(u.marginDist&&u.marginDist.p50)+'). Model pracuje se scénáři: Base = historický medián (<b>'+money(u.baseCaseEbitda)+'</b> EBITDA/lokalita), Downside = medián −10 %, Stress = medián −20 %, a nejtvrdší Combined Bank Stress.</p>'+
       '<p>Žádáme úvěrový rámec <b>'+money(facilityCzk)+'</b> s '+fin.bankFinancingPct+' % financováním pořizovací ceny jednotek, úrok '+String(fin.interestRatePct).replace('.',',')+' % p.a., splatnost '+fin.maturityMonths+' měsíců (grace '+fin.graceMonths+'). Čerpání probíhá <b>postupně po jednotlivých pořízených a instalovaných prádlomatech</b>, nikoli jednorázově — banka tak financuje konkrétní produktivní aktiva podle předem daných pravidel.</p>'+
       '<p>Minimální DSCR v Base Case je <b>'+(s.minDscr!=null?(Math.round(s.minDscr*100)/100)+'×':'—')+'</b>, ve Stress scénáři <b>'+(fcS.summary.minDscr!=null?(Math.round(fcS.summary.minDscr*100)/100)+'×':'—')+'</b>. '+(cx.month!=null?('Síť dosáhne samofinancování dalšího růstu (Self-Financing Crossover) při '+cx.units+' jednotkách.'):'Pro dosažení plného samofinancování dalšího růstu je vhodné rámec navyšovat po etapách dle výkonu portfolia.')+'</p>');
 
@@ -166,6 +168,28 @@
     var risks = (ov.assumptions && ov.assumptions.risks) || [];
     var rrows = risks.map(function(r){ return '<tr><td><b>'+esc(r.label)+'</b></td><td>'+esc(r.probability)+'</td><td>'+esc(r.impact)+'</td><td>'+esc(r.mitigation)+'</td></tr>'; }).join('');
     H += P('<h2>6. Analýza rizik</h2><table><thead><tr><th>Riziko</th><th>Pravděpodobnost</th><th>Dopad</th><th>Mitigace</th></tr></thead><tbody>'+rrows+'</tbody></table>');
+
+    // 7b) CONSERVATIVE FORECAST METHODOLOGY + SCÉNÁŘE + DEBT SIZING + ODOLNOST
+    (function(){
+      var scen=window._scen, dsz=window._dsz, vol=ov.volatility||{}, wr=ov.worstRolling||{};
+      var dscr=function(x){ return x!=null ? (Math.round(x*100)/100).toLocaleString('cs-CZ')+'×' : '—'; };
+      var pf=function(p){ return p==null?'—':(p?'PASS':'FAIL'); };
+      var srows = (scen&&scen.scenarios) ? scen.scenarios.map(function(x){
+        return '<tr><td>'+esc(x.label)+'</td><td class="r">'+money(x.perUnitRevenue)+'</td><td class="r">'+money(x.perUnitEbitda)+'</td><td class="r">'+money(x.perUnitCfads)+'</td><td class="r">'+dscr(x.minDscr)+'</td><td class="r">'+dscr(x.dscrTarget)+'</td><td class="r"><b>'+pf(x.pass)+'</b></td></tr>';
+      }).join('') : '<tr><td colspan="7" class="muted">—</td></tr>';
+      var m12=wr.m12;
+      H += P('<h2>Conservative Forecast Methodology</h2>'+
+        '<p>Forecast není založen na managementem stanoveném růstu výnosů. <b>Base Case</b> používá historický medián výkonu portfolia (P50, '+money(u.ebitdaDist&&u.ebitdaDist.p50)+' EBITDA/lokalita). <b>Downside</b> aplikuje konzervativní snížení tržeb o 10 %, <b>Stress</b> o 20 %. <b>Combined Bank Stress</b> navíc zohledňuje vyšší náklady (energie +20 %, servis +10 %), vyšší úrok (+2 p.b.) a pomalejší náběh nových lokalit.</p>'+
+        '<p>EBITDA se nepočítá lineárně s tržbou — fixní náklady (nájem) zůstávají, takže při nižší tržbě marže klesá. Scénáře i percentily vycházejí ze skutečného provozního datasetu ('+t.realCount+' lokalit, '+num(t.locationMonths)+' location-months).</p>'+
+        '<h3>Scénáře — na jednu lokalitu (měsíčně)</h3>'+
+        '<table><thead><tr><th>Scénář</th><th class="r">Revenue</th><th class="r">EBITDA</th><th class="r">CFADS</th><th class="r">Min. DSCR</th><th class="r">Target</th><th class="r">Stav</th></tr></thead><tbody>'+srows+'</tbody></table>'+
+        (dsz ? ('<h3>Debt Sizing — dluh se přizpůsobuje výkonu</h3><div class="kpis">'+
+           kpi('Max. bezpečný dluh / jednotku', money(dsz.maxSafeDebtPerUnit),1)+
+           kpi('Max. LTC', (dsz.maxLtcPct!=null?String(dsz.maxLtcPct).replace('.',',')+' %':'—'))+
+           kpi('Nutný vlastní vklad / jed.', money(dsz.requiredEquityPerUnit))+
+         '</div><p class="muted">Vazba: '+esc(dsz.bindingScenario||'—')+' · tenor '+dsz.tenorMonths+' měs · úrok '+String(dsz.interestRatePct).replace('.',',')+' %. Dluh se přizpůsobuje historicky doloženému výkonu, ne naopak.</p>') : '')+
+        (m12 ? ('<h3>Odolnost — nejhorší historické 12M období</h3><p>Nejhorší klouzavé 12měsíční období portfolia ('+m12.startYm+' – '+m12.endYm+') mělo průměrnou měsíční tržbu <b>'+money(Math.round(m12.avg))+'</b>. Měsíční variační koeficient tržeb portfolia je '+(vol.cvPct!=null?String(vol.cvPct).replace('.',',')+' %':'—')+'.</p>') : ''));
+    })();
 
     // 8) CREDIT COMMITTEE 1-PAGER
     function cc(l,v){ return '<tr><td style="width:40%">'+l+'</td><td><b>'+v+'</b></td></tr>'; }

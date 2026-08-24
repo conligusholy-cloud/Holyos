@@ -122,6 +122,88 @@ function cohortCurve(locations, maxMonths) {
   });
 }
 
+// Měsíc stabilizace z kohortní křivky: první měsíc od otevření, kdy medián dosáhne
+// `threshold` × plateau (max mediánu). Vrací index měsíce (0 = měsíc otevření).
+// Fallback 4, když data nestačí. Používá se k vyloučení ramp-up období z percentilů.
+function stabilizationMonth(cohort, threshold, fallback) {
+  const th = (threshold != null) ? threshold : 0.95;
+  const fb = (fallback != null) ? fallback : 4;
+  const pts = (cohort || []).filter((c) => c && c.median != null && (c.count || 0) >= 3);
+  if (pts.length < 3) return fb;
+  const plateau = pts.reduce((m, c) => Math.max(m, c.median), 0);
+  if (plateau <= 0) return fb;
+  for (const c of pts) { if (c.median >= th * plateau) return c.month; }
+  return fb;
+}
+
+// Stabilizovaný výkon lokality = průměr měsíčních tržeb pro věk ≥ fromMonth,
+// s vyloučením posledního (možná neúplného) měsíce. Vrací null, když nesplní
+// minimální počet kvalifikovaných měsíců (minHistory) → lokalita se do percentilů nezahrne.
+function stabilizedSiteValue(monthly, openDate, fromMonth, opts) {
+  const o = opts || {};
+  const minHist = (o.minHistoryMonths != null) ? o.minHistoryMonths : 6;
+  const includeRamp = !!o.includeRampUp;
+  const od = new Date(openDate);
+  const yms = Object.keys(monthly || {}).sort();
+  if (!yms.length) return null;
+  const dropLast = o.dropLastMonth !== false; // default true (neúplný měsíc)
+  const useYms = dropLast ? yms.slice(0, -1) : yms;
+  const vals = [];
+  for (const ym of useYms) {
+    const v = Number(monthly[ym]); if (!isFinite(v)) continue;
+    if (!includeRamp && !isNaN(od)) {
+      const parts = String(ym).split('-');
+      const y = parseInt(parts[0], 10), mo = parseInt(parts[1], 10) - 1;
+      const age = (y - od.getFullYear()) * 12 + (mo - od.getMonth());
+      if (age < fromMonth) continue; // ramp-up měsíc → vynech
+    }
+    vals.push(v);
+  }
+  if (vals.length < minHist) return null;
+  return vals.reduce((a, b) => a + b, 0) / vals.length;
+}
+
+// Volatilita měsíční řady portfolia { 'YYYY-MM': amount }: průměr, směrodatná odchylka,
+// variační koeficient (CV %), nejhorší měsíc, průměrná meziměsíční změna.
+function volatilityStats(monthly) {
+  const yms = Object.keys(monthly || {}).sort();
+  const vals = yms.map((k) => Number(monthly[k])).filter((x) => isFinite(x));
+  const n = vals.length;
+  if (!n) return { count: 0, mean: null, std: null, cvPct: null, worst: null, worstYm: null };
+  const mean = vals.reduce((a, b) => a + b, 0) / n;
+  const variance = vals.reduce((a, b) => a + (b - mean) * (b - mean), 0) / n;
+  const std = Math.sqrt(variance);
+  let worst = Infinity, worstYm = null;
+  yms.forEach((k) => { const v = Number(monthly[k]); if (isFinite(v) && v < worst) { worst = v; worstYm = k; } });
+  return { count: n, mean, std, cvPct: mean ? Math.round(std / mean * 1000) / 10 : null, worst: isFinite(worst) ? worst : null, worstYm };
+}
+
+// Nejhorší klouzavé okno délky `window` měsíců (nejnižší součet). Vrací {startYm,endYm,total,avg}.
+function worstRolling(monthly, window) {
+  const w = Math.max(1, Math.floor(window || 12));
+  const yms = Object.keys(monthly || {}).sort();
+  if (yms.length < w) return null;
+  let best = null;
+  for (let i = 0; i + w <= yms.length; i++) {
+    let sum = 0; for (let k = 0; k < w; k++) sum += Number(monthly[yms[i + k]]) || 0;
+    if (best == null || sum < best.total) best = { startYm: yms[i], endYm: yms[i + w - 1], total: sum, avg: sum / w };
+  }
+  return best;
+}
+
+// Maximální bezpečná jistina úvěru, aby DSCR (CFADS ÷ anuita) ≥ target.
+// maxAnnuity = cfads/target; jistina = maxAnnuity × (1−(1+r)^-n)/r.
+function maxDebtForDscr(cfadsPerPeriod, targetDscr, monthlyRate, nper) {
+  const cf = Number(cfadsPerPeriod) || 0;
+  const t = Number(targetDscr) || 0;
+  const r = Number(monthlyRate) || 0;
+  const n = Number(nper) || 0;
+  if (cf <= 0 || t <= 0 || n <= 0) return 0;
+  const maxAnnuity = cf / t;
+  if (r === 0) return maxAnnuity * n;
+  return maxAnnuity * (1 - Math.pow(1 + r, -n)) / r;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // UNIT ECONOMICS (ekonomika jedné lokality)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -366,6 +448,7 @@ function deriveUnitModelPct(cfg) {
 module.exports = {
   sourceCurrencyForCode, convert, toBase, deriveUnitModelPct,
   percentile, percentiles, seasonalityIndex, cohortCurve,
+  stabilizationMonth, stabilizedSiteValue, volatilityStats, worstRolling, maxDebtForDscr,
   siteEconomics,
   annuityPayment, buildDebtSchedule,
   dscrSeries,
