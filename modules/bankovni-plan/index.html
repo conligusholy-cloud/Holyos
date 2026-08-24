@@ -203,10 +203,18 @@
       var a = DATA.assumptions||{};
       function f(key, label, val){ return '<div><label>'+label+'</label><input id="as-'+key+'" value="'+(val!=null?val:'')+'"></div>'; }
       var fx = a.fx||{};
-      var h = '<div class="sec"><h2>Předpoklady <span class="tag tag-assume">ASSUMPTION</span></h2><div class="note">Vstupují do výpočtu EBITDA a Base Case. <b>Celý model počítá bez DPH</b> (net tržby − net náklady = net EBITDA). Uložení přepočítá čísla.</div><div class="asum">';
-      h += f('servicePct','Servis (% z obratu bez DPH)', a.servicePct);
-      h += f('energyPct','Energie (% z obratu bez DPH)', a.energyPct);
-      h += f('paymentFeePct','Platební poplatky (% z obratu bez DPH)', a.paymentFeePct);
+      var medRev = (DATA.unitEconomics && DATA.unitEconomics.revenueDist && DATA.unitEconomics.revenueDist.p50) || 0;
+      var um = DATA.unitModel || {};
+      function fPctRev(key, label, val, desc, ref){
+        var kc = (parseFloat(val)||0)/100*medRev;
+        var refLine = (ref!=null) ? ' · <span style="color:#0ea5e9;cursor:pointer" onclick="setPct(&#39;'+key+'&#39;,'+ref+')">dle prádlomatu V3: '+String(ref).replace('.',',')+' % → použít</span>' : '';
+        return '<div><label>'+label+'</label><input id="as-'+key+'" value="'+(val!=null?val:'')+'" oninput="pctHint(&#39;'+key+'&#39;)">'+
+          '<div style="font-size:11px;color:var(--text2);margin-top:4px;">'+(desc?(desc+' · '):'')+'≈ <b id="hint-'+key+'" style="color:var(--text)">'+money(kc)+'</b> /měs z mediánu '+money(medRev)+refLine+'</div></div>';
+      }
+      var h = '<div class="sec"><h2>Předpoklady <span class="tag tag-assume">ASSUMPTION</span></h2><div class="note">Vstupují do výpočtu EBITDA a Base Case. <b>Celý model počítá bez DPH</b> (net tržby − net náklady = net EBITDA). Servis a energie jsou odvozené z ekonomiky jednoho prádlomatu (V3). Uložení přepočítá čísla.</div><div class="asum">';
+      h += fPctRev('servicePct','Servis (% z obratu bez DPH)', a.servicePct, 'vše vč. spotřeby detergentů', um.servicePct);
+      h += fPctRev('energyPct','Energie (% z obratu bez DPH)', a.energyPct, 'voda, elektřina, odpad', um.energyPct);
+      h += fPctRev('paymentFeePct','Platební poplatky (% z obratu bez DPH)', a.paymentFeePct);
       var rs = DATA.rentStats || {};
       var rentHint = (rs.avgKnownRentCzk != null)
         ? '<div style="font-size:11px;color:var(--text2);margin-top:4px;">Průměr známých nájmů: <b style="color:var(--text)">' + rs.avgKnownRentCzk.toLocaleString('cs-CZ') + ' Kč</b> (z ' + rs.count + ' z ' + rs.totalPlan + ' lokalit)</div>'
@@ -304,6 +312,10 @@
         } catch(e){}
       }, 4000);
     }
+
+    function pctHint(key){ var el=document.getElementById('as-'+key); if(!el) return; var med=(DATA&&DATA.unitEconomics&&DATA.unitEconomics.revenueDist&&DATA.unitEconomics.revenueDist.p50)||0; var kc=(parseFloat(String(el.value).replace(',','.'))||0)/100*med; var s=document.getElementById('hint-'+key); if(s) s.textContent=money(kc); }
+    function setPct(key,val){ var el=document.getElementById('as-'+key); if(el){ el.value=val; pctHint(key); } }
+    window.pctHint=pctHint; window.setPct=setPct;
 
     function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
 

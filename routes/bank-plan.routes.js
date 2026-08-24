@@ -64,8 +64,10 @@ router.get('/history/status', requireAuth, async (req, res, next) => {
 // Výchozí předpoklady (ASSUMPTION) — editovatelné přes /assumptions.
 const DEFAULT_ASSUMPTIONS = {
   fx: { CZK: 1, EUR: 25, PLN: 5.8 },
-  servicePct: 15,        // % z obratu
-  energyPct: 9.5,
+  // Odvozeno z ekonomiky jednoho prádlomatu (V3): servis (fixní bez nájmu + detergenty) ~12,9 %,
+  // energie (voda+stočné+elektřina) ~13,4 % z obratu bez DPH.
+  servicePct: 12.9,      // % z obratu
+  energyPct: 13.4,
   paymentFeePct: 1.5,
   rentMonthlyDefault: 8000, // base měna (CZK) — když lokalita nemá vlastní nájem
   maintenanceReservePct: 3,
@@ -226,6 +228,7 @@ router.get('/overview', requireAuth, async (req, res, next) => {
       cohort,
       portfolioMonthly,
       rentStats,
+      unitModel: E.deriveUnitModelPct(), // referenční % z ekonomiky jednoho prádlomatu (V3)
       assumptions: A,
       locations: perLoc,
     });

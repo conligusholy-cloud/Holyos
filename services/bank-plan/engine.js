@@ -308,8 +308,48 @@ function cashWaterfall(m) {
   return { revenue, directOpex, ebitda, centralOpex, portfolioEbitda, taxes, maintenance, debtService, fcfBeforeGrowth, minLiquidity, cashForExpansion, equityCapex, closingCash };
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// DERIVACE PROVOZNÍCH % Z EKONOMIKY JEDNOHO PRÁDLOMATU (V3)
+// ─────────────────────────────────────────────────────────────────────────────
+// Zrcadlí konstanty z modules/prodejni-objednavky/pradlomat-economy.js (varianta V3).
+// Energie = voda + stočné + elektřina napříč cykly (praní + sušení).
+// Servis (pro bankovní model) = fixní provoz bez nájmu (údržba, SW, internet, infolinka,
+//   pojištění, servis) + spotřeba detergentů. Nájem a platební poplatky se řeší zvlášť.
+// Vrací % z obratu BEZ DPH.
+const UNIT_V3 = {
+  cena_elektriny: 0.198, cena_vodne: 2.629, cena_stocne: 2.526,
+  cena_prasku: 2.348, cena_avivaze: 1.662,
+  voda_velka: 160, el_velka: 1.05, prasek_velka: 0.09, aviv_velka: 0.03,
+  voda_mala: 60, el_mala: 0.53, prasek_mala: 0.04, aviv_mala: 0.02,
+  susicka_15: 1.8, dph: 0.21, obrat_na_zakaznika: 11.33, zakazniku_za_den: 8,
+  udrzba: 83, software: 62, internet: 12, infolinka: 21, pojisteni: 12, servis: 62,
+};
+function deriveUnitModelPct(cfg) {
+  const d = Object.assign({}, UNIT_V3, cfg || {});
+  const vodne = d.cena_vodne + d.cena_stocne;
+  const vv = { voda: (d.voda_velka / 1000) * vodne, el: d.el_velka * d.cena_elektriny, pr: d.prasek_velka * d.cena_prasku, av: d.aviv_velka * d.cena_avivaze };
+  const vm = { voda: (d.voda_mala / 1000) * vodne, el: d.el_mala * d.cena_elektriny, pr: d.prasek_mala * d.cena_prasku, av: d.aviv_mala * d.cena_avivaze };
+  const washEng = ((vv.voda + vv.el) + (vm.voda + vm.el)) / 2;
+  const washDet = ((vv.pr + vv.av / 2) + (vm.pr + vm.av / 2)) / 2;
+  const dryEng = ((d.susicka_15 * 2 * d.cena_elektriny) + (d.susicka_15 * d.cena_elektriny)) / 2;
+  const energyPerCust = washEng + dryEng;
+  const detPerCust = washDet;
+  const zm = d.zakazniku_za_den * 30.5;
+  const obratNet = (zm * d.obrat_na_zakaznika) / (1 + d.dph);
+  const energyM = zm * energyPerCust;
+  const detM = zm * detPerCust;
+  const fixedM = d.udrzba + d.software + d.internet + d.infolinka + d.pojisteni + d.servis;
+  const servisM = fixedM + detM;
+  return {
+    energyPct: Math.round(energyM / obratNet * 1000) / 10,
+    servicePct: Math.round(servisM / obratNet * 1000) / 10,
+    detergentPct: Math.round(detM / obratNet * 1000) / 10,
+    obratNetEur: Math.round(obratNet),
+  };
+}
+
 module.exports = {
-  sourceCurrencyForCode, convert, toBase,
+  sourceCurrencyForCode, convert, toBase, deriveUnitModelPct,
   percentile, percentiles, seasonalityIndex, cohortCurve,
   siteEconomics,
   annuityPayment, buildDebtSchedule,
