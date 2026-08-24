@@ -76,6 +76,8 @@ const DEFAULT_ASSUMPTIONS = {
   // SIS částky jsou S DPH (hrubé, co zákazník platí). Model počítá BEZ DPH → dělíme (1+sazba/100).
   // Sazba dle země/měny lokality: CZ 21 %, PL 23 %, IE/EUR 23 %.
   vatByCurrency: { CZK: 21, EUR: 23, PLN: 23 },
+  // Jsou nájmy (v Compoundingu i default) zadané S DPH? Když ano, model je převede na bez DPH.
+  rentVatIncluded: false,
 };
 
 function monthsBetween(a, b) { return (b.getFullYear() - a.getFullYear()) * 12 + (b.getMonth() - a.getMonth()); }
@@ -168,7 +170,9 @@ router.get('/overview', requireAuth, async (req, res, next) => {
       const avgRev = avgRecentMonthly(m, 12) || 0;
       const cfg = cfgMap[l.code] || {};
       const version = cfg.version ? String(cfg.version).toUpperCase() : null;
-      const rent = (typeof cfg.rentMonthlyCzk === 'number') ? E.convert(cfg.rentMonthlyCzk, 'CZK', base, fx) : A.rentMonthlyDefault;
+      const rentDiv = A.rentVatIncluded ? (1 + ((vatMap.CZK != null ? vatMap.CZK : 21) / 100)) : 1; // nájem s DPH → na bez DPH
+      const rentCzk = (typeof cfg.rentMonthlyCzk === 'number') ? cfg.rentMonthlyCzk : A.rentMonthlyDefault;
+      const rent = E.convert(rentCzk / rentDiv, 'CZK', base, fx);
       const se = E.siteEconomics({ revenue: avgRev, rentMonthly: rent, servicePct: A.servicePct, energyPct: A.energyPct, paymentFeePct: A.paymentFeePct, maintenanceReservePct: A.maintenanceReservePct });
       return { code: l.code, label: l.label, version, avgRev, ebitda: se.siteEbitda, margin: se.ebitdaMargin, opCashFlow: se.operatingCashFlow, openDate: l.openDate, classification: l.classification, excluded: isExcluded(l) };
     });

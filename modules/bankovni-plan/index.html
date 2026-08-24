@@ -210,7 +210,8 @@
       var rentHint = (rs.avgKnownRentCzk != null)
         ? '<div style="font-size:11px;color:var(--text2);margin-top:4px;">Průměr známých nájmů: <b style="color:var(--text)">' + rs.avgKnownRentCzk.toLocaleString('cs-CZ') + ' Kč</b> (z ' + rs.count + ' z ' + rs.totalPlan + ' lokalit)</div>'
         : '<div style="font-size:11px;color:var(--text2);margin-top:4px;">Nájmy zatím nejsou v Compoundingu vyplněné.</div>';
-      h += '<div><label>Nájem default (CZK/měs)</label><input id="as-rentMonthlyDefault" value="'+(a.rentMonthlyDefault!=null?a.rentMonthlyDefault:'')+'">'+rentHint+'</div>';
+      var rentVat = '<label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text2);margin-top:6px;cursor:pointer"><input type="checkbox" id="as-rentVatIncluded" '+(a.rentVatIncluded?'checked':'')+' style="width:15px;height:15px;accent-color:#0ea5e9"> Nájmy jsou zadané s DPH (převést na bez DPH)</label>';
+      h += '<div><label>Nájem default (CZK/měs)</label><input id="as-rentMonthlyDefault" value="'+(a.rentMonthlyDefault!=null?a.rentMonthlyDefault:'')+'">'+rentHint+rentVat+'</div>';
       h += f('maintenanceReservePct','Rezerva na údržbu (%)', a.maintenanceReservePct);
       h += f('bankingHaircutPct','Bankovní haircut (%)', a.bankingHaircutPct);
       h += f('unitCostEur','Cena prádlomatu (EUR)', a.unitCostEur);
@@ -232,7 +233,8 @@
         rentMonthlyDefault:v('rentMonthlyDefault'), maintenanceReservePct:v('maintenanceReservePct'),
         bankingHaircutPct:v('bankingHaircutPct'), unitCostEur:v('unitCostEur'), targetUnitsPerMonth:v('targetUnitsPerMonth'),
         fx: Object.assign({}, (DATA.assumptions&&DATA.assumptions.fx)||{}, { EUR:v('fxEUR'), PLN:v('fxPLN'), CZK:1 }),
-        vatByCurrency: Object.assign({}, (DATA.assumptions&&DATA.assumptions.vatByCurrency)||{}, { CZK:v('vatCZK'), EUR:v('vatEUR'), PLN:v('vatPLN') })
+        vatByCurrency: Object.assign({}, (DATA.assumptions&&DATA.assumptions.vatByCurrency)||{}, { CZK:v('vatCZK'), EUR:v('vatEUR'), PLN:v('vatPLN') }),
+        rentVatIncluded: !!(document.getElementById('as-rentVatIncluded')||{}).checked
       };
       try {
         var r = await fetch('/api/bank-plan/assumptions', { method:'PUT', credentials:'include', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
