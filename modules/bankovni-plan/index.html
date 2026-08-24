@@ -669,7 +669,7 @@
       var seas = DATA.seasonality||[];
       _charts.seas = new Chart(document.getElementById('ch-seas'), { type:'bar',
         data:{ labels:mon, datasets:[{ data:seas.map(function(x){return x==null?null:x;}), backgroundColor: seas.map(function(x){ return (x!=null&&x>=100)?'#22c55e':'#f59e0b'; }) }] },
-        options: common });
+        options: Object.assign({}, common, { scales:{ x:{ grid:{color:grid}, ticks:{color:tick} }, y:{ grid:{color:grid}, ticks:{color:tick}, beginAtZero:true, suggestedMax:140 } } }) });
 
       // kohorty (medián dle měsíců od otevření)
       var co = (DATA.cohort||[]).filter(function(c){ return c.count>0; });
