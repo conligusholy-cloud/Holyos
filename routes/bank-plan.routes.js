@@ -72,7 +72,10 @@ const DEFAULT_ASSUMPTIONS = {
   bankingHaircutPct: 15, // srážka Base Case proti historickému mediánu
   unitCostEur: 52000,    // cena prádlomatu
   targetUnitsPerMonth: 4,
+  excludedCodes: [],     // ručně vyřazené lokality (nesmysly/testy) — nepočítají se do plánu
 };
+
+function monthsBetween(a, b) { return (b.getFullYear() - a.getFullYear()) * 12 + (b.getMonth() - a.getMonth()); }
 
 async function loadAssumptions() {
   const a = await getSetting(ASSUMPTIONS_KEY, { type: 'json', defaultValue: null });
@@ -116,34 +119,52 @@ router.get('/overview', requireAuth, async (req, res, next) => {
     const base = (req.query.base || hist.base || 'CZK').toUpperCase();
     const storedBase = hist.base || 'CZK';
 
-    const locations = (hist.locations || []).filter((l) => l.classification !== 'test');
-    const active = locations.filter((l) => l.classification === 'active');
+    const excluded = new Set((A.excludedCodes || []).map((c) => String(c).trim().toUpperCase()));
+    const nonTest = (hist.locations || []).filter((l) => l.classification !== 'test');
+    const isExcluded = (l) => excluded.has(String(l.code).trim().toUpperCase());
 
-    // Track record
     const now = new Date();
-    const first = hist.globalFirst ? new Date(hist.globalFirst) : null;
-    const years = first ? Math.round(((now - first) / (365 * 86400000)) * 10) / 10 : null;
-    const portfolioMonthly = convertMonthly(hist.portfolio.monthly || {}, storedBase, base, fx);
+
+    // Track record + portfolio: počítáme JEN z ne-vyřazených reálných lokalit (aktivní + uzavřené).
+    const portfolioMonthly = {};
+    let firstMs = null, lastMs = null, locationMonths = 0, totalTx = 0, realCount = 0, activeCount = 0, closedCount = 0;
+    nonTest.forEach((l) => {
+      if (isExcluded(l)) return;
+      realCount++;
+      if (l.classification === 'active') activeCount++; else if (l.classification === 'closed') closedCount++;
+      totalTx += l.txCount || 0;
+      const m = convertMonthly(l.monthly || {}, storedBase, base, fx);
+      Object.keys(m).forEach((ym) => { portfolioMonthly[ym] = (portfolioMonthly[ym] || 0) + m[ym]; });
+      const od = l.openDate ? new Date(l.openDate) : null;
+      const ld = l.lastTx ? new Date(l.lastTx) : null;
+      if (od && !isNaN(od)) {
+        if (firstMs == null || od < firstMs) firstMs = od;
+        const end = (l.classification === 'closed' && ld && !isNaN(ld)) ? ld : now;
+        locationMonths += Math.max(1, monthsBetween(od, end) + 1);
+      }
+      if (ld && !isNaN(ld) && (lastMs == null || ld > lastMs)) lastMs = ld;
+    });
+    const years = firstMs ? Math.round(((now - firstMs) / (365 * 86400000)) * 10) / 10 : null;
     const cumulativeRevenue = Object.keys(portfolioMonthly).reduce((a, ym) => a + portfolioMonthly[ym], 0);
 
-    // Per-lokalita: průměrná měsíční tržba (posl. 12 kompletních měsíců) v base
-    const perLoc = active.map((l) => {
+    // Per-lokalita pro tabulku = všechny reálné (aktivní i uzavřené), s příznakem excluded.
+    const perLoc = nonTest.map((l) => {
       const m = convertMonthly(l.monthly || {}, storedBase, base, fx);
       const avgRev = avgRecentMonthly(m, 12) || 0;
       const rent = (typeof l.rentMonthly === 'number') ? E.convert(l.rentMonthly, storedBase, base, fx) : A.rentMonthlyDefault;
       const se = E.siteEconomics({ revenue: avgRev, rentMonthly: rent, servicePct: A.servicePct, energyPct: A.energyPct, paymentFeePct: A.paymentFeePct, maintenanceReservePct: A.maintenanceReservePct });
-      return { code: l.code, label: l.label, avgRev, ebitda: se.siteEbitda, margin: se.ebitdaMargin, opCashFlow: se.operatingCashFlow, openDate: l.openDate };
+      return { code: l.code, label: l.label, avgRev, ebitda: se.siteEbitda, margin: se.ebitdaMargin, opCashFlow: se.operatingCashFlow, openDate: l.openDate, classification: l.classification, excluded: isExcluded(l) };
     });
 
-    const revDist = E.percentiles(perLoc.map((x) => x.avgRev));
-    const ebitdaDist = E.percentiles(perLoc.map((x) => x.ebitda));
-    const marginDist = E.percentiles(perLoc.map((x) => x.margin));
+    // Distribuce/kohorty jen z ZAHRNUTÝCH aktivních lokalit.
+    const distSrc = perLoc.filter((x) => !x.excluded && x.classification === 'active');
+    const revDist = E.percentiles(distSrc.map((x) => x.avgRev));
+    const ebitdaDist = E.percentiles(distSrc.map((x) => x.ebitda));
+    const marginDist = E.percentiles(distSrc.map((x) => x.margin));
 
-    // Sezónnost z portfolia
     const seasonality = E.seasonalityIndex(portfolioMonthly);
 
-    // Kohortní křivka (tržby dle měsíců od otevření) — jen aktivní s datem otevření
-    const cohort = E.cohortCurve(active.filter((l) => l.openDate).map((l) => ({ openDate: l.openDate, monthly: convertMonthly(l.monthly || {}, storedBase, base, fx) })), 36);
+    const cohort = E.cohortCurve(nonTest.filter((l) => !isExcluded(l) && l.classification === 'active' && l.openDate).map((l) => ({ openDate: l.openDate, monthly: convertMonthly(l.monthly || {}, storedBase, base, fx) })), 36);
 
     // Base Case EBITDA = medián − banking haircut (§49/§50)
     const medianEbitda = ebitdaDist.p50 || 0;
@@ -153,9 +174,11 @@ router.get('/overview', requireAuth, async (req, res, next) => {
       base, generatedAt: hist.generatedAt, sisHeader: hist.sisHeader || null,
       trackRecord: {
         yearsData: years,
-        realCount: hist.portfolio.realCount, activeCount: hist.portfolio.activeCount, closedCount: hist.portfolio.closedCount,
-        locationMonths: hist.portfolio.locationMonths, totalTx: hist.portfolio.totalTx,
-        firstData: hist.globalFirst, lastData: hist.globalLast,
+        realCount, activeCount, closedCount,
+        excludedCount: excluded.size,
+        locationMonths, totalTx,
+        firstData: firstMs ? firstMs.toISOString().slice(0, 10) : hist.globalFirst,
+        lastData: lastMs ? lastMs.toISOString().slice(0, 10) : hist.globalLast,
         cumulativeRevenue: Math.round(cumulativeRevenue),
       },
       unitEconomics: {
@@ -168,6 +191,21 @@ router.get('/overview', requireAuth, async (req, res, next) => {
       assumptions: A,
       locations: perLoc,
     });
+  } catch (err) { next(err); }
+});
+
+// POST /api/bank-plan/exclude { code, excluded } — ručně vyřaď/vrať lokalitu do plánu.
+router.post('/exclude', requireAuth, async (req, res, next) => {
+  try {
+    const code = String((req.body && req.body.code) || '').trim().toUpperCase();
+    if (!code) return res.status(400).json({ error: 'Chybí kód lokality.' });
+    const excluded = req.body && req.body.excluded !== false; // default true
+    const A = await loadAssumptions();
+    const set = new Set((A.excludedCodes || []).map((c) => String(c).trim().toUpperCase()));
+    if (excluded) set.add(code); else set.delete(code);
+    const next_ = Object.assign({}, A, { excludedCodes: Array.from(set) });
+    await setSetting(ASSUMPTIONS_KEY, next_, { type: 'json', userId: req.user && req.user.id });
+    res.json({ ok: true, excludedCodes: next_.excludedCodes });
   } catch (err) { next(err); }
 });
 
