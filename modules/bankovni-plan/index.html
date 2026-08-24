@@ -292,13 +292,35 @@
       h += f('vatCZK','DPH CZ (%)', vat.CZK);
       h += f('vatEUR','DPH EUR/IE (%)', vat.EUR);
       h += f('vatPLN','DPH PL (%)', vat.PLN);
-      h += '</div><div style="margin-top:14px"><button class="btn btn-primary" onclick="saveAssumptions()">💾 Uložit předpoklady</button></div></div>';
+      h += '</div>';
+      // ─── Doplňující poznámky pro banku (vkládají se do PDF reportu) ───
+      var nt = a.notes || {};
+      function ta(id,label,hint,val){
+        return '<div style="margin-top:12px"><label style="display:block;font-size:12px;color:var(--text);font-weight:600;margin-bottom:2px">'+label+'</label>'
+          + '<div style="font-size:11px;color:var(--text2);margin-bottom:4px">'+hint+'</div>'
+          + '<textarea id="as-'+id+'" rows="3" style="width:100%;box-sizing:border-box;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:8px;font-size:12px;line-height:1.5;resize:vertical">'
+          + (val||'').replace(/</g,'&lt;') + '</textarea></div>';
+      }
+      h += '<div style="margin-top:18px;padding-top:14px;border-top:1px solid var(--border)">'
+        + '<div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:2px">📝 Doplňující informace pro banku</div>'
+        + '<div style="font-size:11px;color:var(--text2);margin-bottom:8px">Vloží se do PDF reportu k příslušným sekcím (rámec → Debt Sizing, crossover → cash flow, DSCR → DSCR). Předvyplněno, můžeš upravit.</div>';
+      h += ta('note_creditFramework','Úvěrový rámec a čerpání','K sekci Debt Sizing / financování', nt.creditFramework);
+      h += ta('note_crossover','Self-Financing Crossover','K sekci cash flow / crossover', nt.crossover);
+      h += ta('note_dscrGrace','DSCR, grace period a náběh lokalit','K sekci DSCR', nt.dscrGrace);
+      h += '</div>';
+      h += '<div style="margin-top:14px"><button class="btn btn-primary" onclick="saveAssumptions()">💾 Uložit předpoklady</button></div></div>';
       return h;
     }
 
     async function saveAssumptions(){
       function v(id){ var el=document.getElementById('as-'+id); return el? parseFloat(String(el.value).replace(',','.')) : null; }
+      function t(id){ var el=document.getElementById('as-'+id); return el? String(el.value).trim() : ''; }
       var body = {
+        notes: {
+          creditFramework: t('note_creditFramework'),
+          crossover: t('note_crossover'),
+          dscrGrace: t('note_dscrGrace'),
+        },
         servicePct:v('servicePct'), energyPct:v('energyPct'), paymentFeePct:v('paymentFeePct'),
         rentMonthlyDefault:v('rentMonthlyDefault'),
         unitCostEur:v('unitCostEur'), targetUnitsPerMonth:v('targetUnitsPerMonth'),

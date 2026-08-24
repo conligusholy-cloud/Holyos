@@ -145,6 +145,13 @@ const DEFAULT_ASSUMPTIONS = {
     stabilizeFromMonth: null, // null = auto z kohortní křivky (95 % plateau)
     includeClosed: false,   // zahrnout uzavřené lokality do percentilů
   },
+  // Doplňující narativní poznámky pro banku — editovatelné, vkládají se do PDF reportu
+  // k relevantním sekcím (rámec → Debt Sizing, crossover → cash flow, DSCR/grace → DSCR).
+  notes: {
+    creditFramework: 'Úvěrový rámec je maximální limit pro postupné čerpání podle skutečně pořizovaných a instalovaných prádlomatů, nikoli částka, která se má vyčerpat celá. Každé čerpání odpovídá konkrétnímu produktivnímu aktivu. Cílem financování je dostat portfolio do bodu, kdy další růst zvládne z vlastního cash flow.',
+    crossover: 'Self-Financing Crossover nastává ve chvíli, kdy po úhradě všech provozních nákladů, daní a skutečných splátek úvěrů zůstává dost volného cash flow na nákup 4 nových prádlomatů každý měsíc bez dalšího externího financování.',
+    dscrGrace: 'Výpočet portfolio DSCR již zohledňuje 6měsíční odklad splácení jistiny (grace period) a reálnou náběhovou křivku nových lokalit. Model tedy nepočítá s okamžitě stabilizovaným výkonem nového prádlomatu, ale s jeho postupným náběhem.',
+  },
 };
 
 const F = require('../services/bank-plan/forecast');
@@ -157,6 +164,7 @@ async function loadAssumptions() {
   merged.maintenanceReservePct = 0; // údržba je zahrnutá v servisu → žádná samostatná rezerva (bez dvojího počítání)
   merged.bankingHaircutPct = 0;     // haircut nahrazen scénáři odvozenými z percentilů
   merged.scenarios = DEFAULT_ASSUMPTIONS.scenarios; // percentilové scénáře — ignoruj staré uložené (revenueFactor)
+  merged.notes = Object.assign({}, DEFAULT_ASSUMPTIONS.notes, merged.notes || {}); // doplň chybějící poznámky defaultem
   return merged;
 }
 
