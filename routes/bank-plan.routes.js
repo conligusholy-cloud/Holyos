@@ -24,6 +24,8 @@ async function _unitModelPct() {
 
 const HISTORY_KEY = 'bank_plan.sis_history';
 const ASSUMPTIONS_KEY = 'bank_plan.assumptions';
+const AI_INSTR_KEY = 'bank_plan.ai_instructions';
+const AI_INSTR_DEFAULT = 'Zaměř se na obhajitelnost financování pro banku: DSCR a jeho rezervy, konzervativnost scénářů, odolnost (breakeven, σ rezerva), strukturu dluhu (LTC, tenor, grace) a doporučené covenanty. Buď věcný a konzervativní, bez marketingu. Piš pro úvěrový výbor.';
 
 // ─── Přebudování snapshotu na pozadí (server má SIS klíč i přístup k DB) ─────
 let _buildState = { building: false, startedAt: null, finishedAt: null, error: null, summary: null };
@@ -692,6 +694,82 @@ router.post('/risks/ai-assess', requireAuth, async (req, res, next) => {
     const out = await sm.callClaudeJSON(sys, usr, 4000);
     if (!out || !Array.isArray(out.items)) return res.status(502).json({ error: 'AI nevrátila použitelný výstup (zkuste to prosím znovu).' });
     res.json({ ok: true, items: out.items, context: ctx });
+  } catch (err) { next(err); }
+});
+
+// GET/POST /api/bank-plan/ai-instructions — pokyny pro AI agenta (administrativa).
+router.get('/ai-instructions', requireAuth, async (req, res, next) => {
+  try { const v = await getSetting(AI_INSTR_KEY, { type: 'json', defaultValue: null }); res.json({ instructions: (v && v.text) || AI_INSTR_DEFAULT, isDefault: !(v && v.text) }); } catch (err) { next(err); }
+});
+router.post('/ai-instructions', requireAuth, async (req, res, next) => {
+  try {
+    const text = String((req.body && req.body.instructions) || '').slice(0, 4000);
+    await setSetting(AI_INSTR_KEY, { text }, { type: 'json', userId: req.user && req.user.id });
+    res.json({ ok: true, instructions: text || AI_INSTR_DEFAULT });
+  } catch (err) { next(err); }
+});
+
+// POST /api/bank-plan/ai-analysis — AI agent: analýza VÝHRADNĚ z reálných dat modelu na stránce.
+router.post('/ai-analysis', requireAuth, async (req, res, next) => {
+  try {
+    if (!process.env.ANTHROPIC_API_KEY) return res.status(503).json({ error: 'AI není nakonfigurováno (chybí ANTHROPIC_API_KEY).' });
+    const hist = await getSetting(HISTORY_KEY, { type: 'json', defaultValue: null });
+    if (!hist) return res.status(404).json({ error: 'Snapshot historie zatím není.' });
+    const A = await loadAssumptions();
+    const fx = A.fx || DEFAULT_ASSUMPTIONS.fx;
+    const base = 'CZK';
+    const fin = Object.assign({}, DEFAULT_ASSUMPTIONS.financing, A.financing || {});
+    const inp = await _portfolioInputs(hist, A, base);
+    const unitAllIn = E.convert((A.unitCostEur || 52000) + (fin.allInExtraEur || 0), 'EUR', base, fx);
+    const debtPerUnit = unitAllIn * (fin.bankFinancingPct || 0) / 100;
+    const amortN = Math.max(1, (fin.maturityMonths || 84) - (fin.graceMonths || 0));
+    const scn = Object.assign({}, DEFAULT_ASSUMPTIONS.scenarios, A.scenarios || {});
+    const rnd = (x) => Math.round(x);
+    const scenOut = ['base', 'downside', 'stress'].filter((k) => scn[k]).map((k) => {
+      const se = scenarioEconomics(inp, A, fin, scn[k]);
+      const maint = se.perUnitRevenue * (Number(A.maintenanceReservePct) || 0) / 100;
+      const cf = se.perUnitEbitda - maint;
+      const ann = E.annuityPayment(debtPerUnit, se.interestRatePct / 100 / 12, amortN);
+      return { scenario: scn[k].label || k, revenuePerUnit: rnd(se.perUnitRevenue), ebitdaPerUnit: rnd(se.perUnitEbitda), annuityPerUnit: rnd(ann), dscr: ann > 0 ? Math.round(cf / ann * 100) / 100 : null, dscrTarget: Number(scn[k].dscrTarget) || null };
+    });
+    // Breakeven
+    const svc = Number(A.servicePct) || 0, en = Number(A.energyPct) || 0, fee = Number(A.paymentFeePct) || 0, maintP = Number(A.maintenanceReservePct) || 0;
+    const varAndMaint = (svc + en + fee + maintP) / 100; const rentB = Number(inp.rentBaseAvg) || 0;
+    const annuityBase = E.annuityPayment(debtPerUnit, (fin.interestRatePct || 0) / 100 / 12, amortN);
+    const p50 = inp.revDist.p50 || 0; const revBE = (1 - varAndMaint) > 0 ? (annuityBase + rentB) / (1 - varAndMaint) : null;
+    const cushionPct = (revBE != null && p50 > 0) ? Math.round((1 - revBE / p50) * 1000) / 10 : null;
+    // Debt sizing (přísnější z Base/Downside)
+    const legs = ['base', 'downside'].filter((k) => scn[k]).map((k) => {
+      const se = scenarioEconomics(inp, A, fin, scn[k]);
+      const cf = se.perUnitEbitda - se.perUnitRevenue * maintP / 100;
+      return E.maxDebtForDscr(cf, Number(scn[k].dscrTarget) || 0, se.interestRatePct / 100 / 12, amortN);
+    }).filter((x) => x > 0);
+    const maxSafeDebt = legs.length ? Math.min(Math.min.apply(null, legs), unitAllIn) : 0;
+    const ctx = {
+      trackRecord: { yearsData: hist.globalFirst ? Math.round((Date.now() - new Date(hist.globalFirst)) / (365 * 86400000) * 10) / 10 : null, activeLocations: inp.activeCount },
+      unitEconomics: { medianRevenueCzk: rnd(inp.medRevenue), medianMarginPct: Math.round(inp.medMargin * 1000) / 10, rentPerUnitCzk: rnd(rentB) },
+      scenarios: scenOut,
+      breakeven: { revenuePerUnitCzk: revBE != null ? rnd(revBE) : null, cushionPct },
+      financing: { facilityCzk: fin.facilityLimitCzk, bankFinancingPct: fin.bankFinancingPct, interestRatePct: fin.interestRatePct, tenorMonths: fin.maturityMonths, graceMonths: fin.graceMonths, unitAllInCzk: rnd(unitAllIn) },
+      debtSizing: { maxSafeDebtPerUnitCzk: rnd(maxSafeDebt), maxLtcPct: unitAllIn > 0 ? Math.round(maxSafeDebt / unitAllIn * 1000) / 10 : 0, currentDebtPerUnitCzk: rnd(debtPerUnit) },
+    };
+    const instrRec = await getSetting(AI_INSTR_KEY, { type: 'json', defaultValue: null });
+    const instructions = (instrRec && instrRec.text) || AI_INSTR_DEFAULT;
+    const sm = require('../services/ai/sales-manager');
+    const sys = 'Jsi zkušený úvěrový analytik banky. Dostaneš POUZE reálná čísla z finančního modelu (žádná jiná data neexistují). Napiš analýzu financování sítě samoobslužných prádelen VÝHRADNĚ na základě dodaných čísel — nic si nevymýšlej, neuváděj údaje, které nemáš. Zohledni pokyny uživatele. Odpověz POUZE platným JSON: {"summary":"<3-5 vět>","strengths":["<bod>","..."],"concerns":["<bod>","..."],"recommendation":"<2-3 věty doporučení pro úvěrový výbor>","suggestedCovenants":["<covenant>","..."]}. Piš česky, věcně, konzervativně.';
+    const usr = 'Pokyny uživatele:\n' + instructions + '\n\nReálná data modelu (JSON, jiná data nejsou):\n' + JSON.stringify(ctx);
+    const out = await sm.callClaudeJSON(sys, usr, 3000);
+    if (!out || !out.summary) return res.status(502).json({ error: 'AI nevrátila použitelný výstup (zkuste to prosím znovu).' });
+    res.json({
+      ok: true, context: ctx,
+      analysis: {
+        summary: String(out.summary || '').slice(0, 2000),
+        strengths: Array.isArray(out.strengths) ? out.strengths.slice(0, 10).map((x) => String(x).slice(0, 300)) : [],
+        concerns: Array.isArray(out.concerns) ? out.concerns.slice(0, 10).map((x) => String(x).slice(0, 300)) : [],
+        recommendation: String(out.recommendation || '').slice(0, 1000),
+        suggestedCovenants: Array.isArray(out.suggestedCovenants) ? out.suggestedCovenants.slice(0, 10).map((x) => String(x).slice(0, 300)) : [],
+      },
+    });
   } catch (err) { next(err); }
 });
 
