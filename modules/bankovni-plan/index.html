@@ -229,7 +229,7 @@
       h += f('maintenanceReservePct','Rezerva na údržbu (% z obratu bez DPH)', a.maintenanceReservePct);
       h += f('bankingHaircutPct','Bankovní haircut (% z EBITDA)', a.bankingHaircutPct);
       h += f('unitCostEur','Cena prádlomatu (EUR)', a.unitCostEur);
-      h += f('targetUnitsPerMonth','Cíl nových jednotek/měs', a.targetUnitsPerMonth);
+      h += f('targetUnitsPerMonth','Cíl pro crossover (strojů/měs)', a.targetUnitsPerMonth);
       h += f('fxEUR','Kurz EUR→CZK', fx.EUR);
       h += f('fxPLN','Kurz PLN→CZK', fx.PLN);
       var vat = a.vatByCurrency||{};
@@ -284,8 +284,9 @@
       h += '<div class="note" style="margin-bottom:10px">Postupné čerpání úvěru po jednotlivých pořízených jednotkách; každá nová lokalita najíždí dle historické ramp-up křivky. Base Case = medián − haircut. Scénář:</div>';
       h += '<div style="display:inline-flex;border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:14px">'+seg('base','Base')+seg('downside','Downside')+seg('stress','Stress')+'</div>';
       h += '<div class="kpis">';
+      var tgt = (inp.targetUnitsPerMonth!=null?inp.targetUnitsPerMonth:4);
       h += kpi('Self-Financing Crossover', cx.month!=null?monthLabel(cx.month):'—', crossTxt, true);
-      h += kpi('Jednotek při crossoveru', cx.units!=null?cx.units:'—', 'cíl '+ (fin.newUnitsPerMonth)+' nových/měs → '+(FC.activeScenario&&'')+ (cx.requiredMonthly?('nutno '+money(cx.requiredMonthly)+'/měs'):''));
+      h += kpi('Jednotek při crossoveru', cx.units!=null?cx.units:'—', 'cíl '+tgt+' strojů/měs z vlastního cash flow → '+(cx.requiredMonthly?('nutno '+money(cx.requiredMonthly)+'/měs volných'):''));
       h += kpi('Min. DSCR', dscrTxt, s.avgDscr!=null?('průměr '+(Math.round(s.avgDscr*100)/100)+'×'):'', true);
       h += kpi('Max. dluh', money(s.peakDebt), 'čerpáno '+money(s.drawnTotal));
       h += kpi('Vlastní kapitál', money(s.totalEquity), 'kumulativně');
@@ -313,7 +314,7 @@
         return '<div>'+lab+'<input id="fin-'+key+'" value="'+fmtNum(val)+'" onblur="this.value=fmtNum(this.value)"></div>';
       }
       var h = '<div style="margin-top:6px"><div style="font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--text2);margin-bottom:8px">Parametry financování <span class="tag tag-assume">ASSUMPTION</span></div><div class="asum">';
-      h += f('newUnitsPerMonth','Nové jednotky / měs', fin.newUnitsPerMonth, 'Kolik nových prádlomatů se pořídí každý měsíc (pro tento scénář růstu).');
+      h += f('newUnitsPerMonth','Tempo výstavby (jednotek / měs)', fin.newUnitsPerMonth, 'Kolik nových prádlomatů reálně stavíš každý měsíc. POZOR: liší se od „Cíl pro crossover" v Předpokladech — to je až cílový stav samofinancování (kolik má síť utáhnout z vlastního cash flow).');
       h += f('bankFinancingPct','Financování bankou (%)', fin.bankFinancingPct, 'Jakou část ceny nové jednotky (all-in) hradí úvěr. Zbytek = vlastní kapitál.');
       h += f('interestRatePct','Úrok p.a. (%)', fin.interestRatePct, 'Roční úroková sazba úvěru. Scénáře Downside/Stress k ní přičítají přirážku.');
       h += f('maturityMonths','Splatnost (měs)', fin.maturityMonths, 'Doba splácení každé čerpané tranše v měsících (např. 84 = 7 let).');

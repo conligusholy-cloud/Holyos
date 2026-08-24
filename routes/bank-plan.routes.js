@@ -338,7 +338,7 @@ router.get('/forecast', requireAuth, async (req, res, next) => {
 
     res.json({
       base, scenario: scName,
-      inputs: { activeCount: inp.activeCount, medRevenue: Math.round(inp.medRevenue), medMargin: inp.medMargin, perUnitRevenue: Math.round(perUnitRevenue), unitCostBase: Math.round(unitCostBase), unitAllIn: Math.round(unitAllIn), rampCurve },
+      inputs: { activeCount: inp.activeCount, medRevenue: Math.round(inp.medRevenue), medMargin: inp.medMargin, perUnitRevenue: Math.round(perUnitRevenue), unitCostBase: Math.round(unitCostBase), unitAllIn: Math.round(unitAllIn), rampCurve, targetUnitsPerMonth: (A.targetUnitsPerMonth || 4), buildPace: fin.newUnitsPerMonth },
       financing: fin, scenarios, activeScenario: sc,
       summary: fc.summary, rows: fc.rows,
     });
