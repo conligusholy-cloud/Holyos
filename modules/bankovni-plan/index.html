@@ -291,12 +291,13 @@
       h += kpi('Vlastní kapitál', money(s.totalEquity), 'kumulativně');
       h += kpi('Jednotek na konci', s.unitsEnd, 'z '+s.startUnits+' dnes · +'+s.newTotal);
       h += '</div>';
+      h += '<div class="note" style="margin:2px 0 10px">Grafy jsou po <b>letech</b> (přehlednější než měsíce). Tržby a EBITDA jsou roční součty, DSCR = nejnižší v daném roce, jednotky a dluh ke konci roku.</div>';
       h += '<div class="grid2">';
-      h += '<div class="sec" style="background:var(--surface2)"><h2>Počet jednotek</h2><canvas id="fc-units" height="150"></canvas></div>';
-      h += '<div class="sec" style="background:var(--surface2)"><h2>DSCR v čase</h2><div class="note">Poměr provozního cash flow ke splátce dluhu. Zelená ≥ 1,2×.</div><canvas id="fc-dscr" height="150"></canvas></div>';
+      h += '<div class="sec" style="background:var(--surface2)"><h2>Počet jednotek (konec roku)</h2><canvas id="fc-units" height="150"></canvas></div>';
+      h += '<div class="sec" style="background:var(--surface2)"><h2>DSCR — nejnižší v roce</h2><div class="note">Poměr provozního cash flow ke splátce dluhu. Bezpečné ≥ 1,2×.</div><canvas id="fc-dscr" height="150"></canvas></div>';
       h += '</div><div class="grid2">';
-      h += '<div class="sec" style="background:var(--surface2)"><h2>Tržby & EBITDA (portfolio)</h2><canvas id="fc-rev" height="150"></canvas></div>';
-      h += '<div class="sec" style="background:var(--surface2)"><h2>Zůstatek dluhu</h2><canvas id="fc-debt" height="150"></canvas></div>';
+      h += '<div class="sec" style="background:var(--surface2)"><h2>Tržby & EBITDA (ročně, '+BASE+')</h2><canvas id="fc-rev" height="150"></canvas></div>';
+      h += '<div class="sec" style="background:var(--surface2)"><h2>Zůstatek dluhu (konec roku)</h2><canvas id="fc-debt" height="150"></canvas></div>';
       h += '</div>';
       h += fcFinancingForm();
       body.innerHTML = h;
@@ -336,18 +337,32 @@
       } catch(e){ alert('Uložení selhalo: '+(e.message||'')); }
     }
     window.saveFinancing = saveFinancing;
+    // Agregace měsíčních řádků do ROČNÍCH bodů (přehlednější než 120 měsíců).
+    function yearlyFromRows(rows){
+      var years=[]; var startY=new Date().getFullYear();
+      for(var y=0; y*12<rows.length; y++){
+        var seg=rows.slice(y*12, y*12+12); if(!seg.length) break;
+        var last=seg[seg.length-1];
+        var revSum=seg.reduce(function(a,r){return a+r.revenue;},0);
+        var ebSum=seg.reduce(function(a,r){return a+r.portfolioEbitda;},0);
+        var dscrs=seg.map(function(r){return r.dscr;}).filter(function(x){return x!=null;});
+        var dscrMin=dscrs.length?Math.min.apply(null,dscrs):null;
+        years.push({ label:String(startY+y), units:last.closingUnits, revenueYear:revSum, ebitdaYear:ebSum, dscrMin:dscrMin, outstanding:last.outstanding });
+      }
+      return years;
+    }
     var _fcCharts = {};
     function drawForecastCharts(){
       if(!window.Chart||!FC) return;
       Object.keys(_fcCharts).forEach(function(k){ try{_fcCharts[k].destroy();}catch(e){} }); _fcCharts={};
       var grid='rgba(255,255,255,.07)', tick='#94a3b8';
-      var rows = FC.rows||[];
-      var labels = rows.map(function(r){ return r.month%6===0?monthLabel(r.month):''; });
-      var common = { plugins:{legend:{display:false}}, scales:{ x:{grid:{color:grid},ticks:{color:tick,maxRotation:0,autoSkip:false}}, y:{grid:{color:grid},ticks:{color:tick}} }, elements:{point:{radius:0}} };
-      _fcCharts.units = new Chart(document.getElementById('fc-units'), { type:'line', data:{ labels:labels, datasets:[{ data:rows.map(function(r){return r.closingUnits;}), borderColor:'#0ea5e9', backgroundColor:'rgba(14,165,233,.12)', fill:true, tension:.2 }] }, options:common });
-      _fcCharts.dscr = new Chart(document.getElementById('fc-dscr'), { type:'line', data:{ labels:labels, datasets:[{ data:rows.map(function(r){return r.dscr;}), borderColor:'#22c55e', tension:.2 }] }, options: Object.assign({}, common, { scales: Object.assign({}, common.scales, { y: Object.assign({}, common.scales.y, { suggestedMin:0 }) }) }) });
-      _fcCharts.rev = new Chart(document.getElementById('fc-rev'), { type:'line', data:{ labels:labels, datasets:[{ label:'Tržby', data:rows.map(function(r){return Math.round(r.revenue);}), borderColor:'#eab308', tension:.2 },{ label:'EBITDA', data:rows.map(function(r){return Math.round(r.portfolioEbitda);}), borderColor:'#22c55e', tension:.2 }] }, options: Object.assign({}, common, { plugins:{legend:{display:true,labels:{color:tick}}} }) });
-      _fcCharts.debt = new Chart(document.getElementById('fc-debt'), { type:'line', data:{ labels:labels, datasets:[{ data:rows.map(function(r){return Math.round(r.outstanding);}), borderColor:'#a855f7', backgroundColor:'rgba(168,85,247,.12)', fill:true, tension:.2 }] }, options:common });
+      var Y = yearlyFromRows(FC.rows||[]);
+      var labels = Y.map(function(y){return y.label;});
+      var common = { plugins:{legend:{display:false}}, scales:{ x:{grid:{color:grid},ticks:{color:tick,maxRotation:0}}, y:{grid:{color:grid},ticks:{color:tick},beginAtZero:true} }, elements:{point:{radius:3}} };
+      _fcCharts.units = new Chart(document.getElementById('fc-units'), { type:'line', data:{ labels:labels, datasets:[{ data:Y.map(function(y){return y.units;}), borderColor:'#0ea5e9', backgroundColor:'rgba(14,165,233,.12)', fill:true, tension:.2 }] }, options:common });
+      _fcCharts.dscr = new Chart(document.getElementById('fc-dscr'), { type:'line', data:{ labels:labels, datasets:[{ data:Y.map(function(y){return y.dscrMin;}), borderColor:'#22c55e', tension:.2 }] }, options: common });
+      _fcCharts.rev = new Chart(document.getElementById('fc-rev'), { type:'bar', data:{ labels:labels, datasets:[{ label:'Tržby/rok', data:Y.map(function(y){return Math.round(y.revenueYear);}), backgroundColor:'#eab308' },{ label:'EBITDA/rok', data:Y.map(function(y){return Math.round(y.ebitdaYear);}), backgroundColor:'#22c55e' }] }, options: Object.assign({}, common, { plugins:{legend:{display:true,labels:{color:tick}}} }) });
+      _fcCharts.debt = new Chart(document.getElementById('fc-debt'), { type:'line', data:{ labels:labels, datasets:[{ data:Y.map(function(y){return Math.round(y.outstanding);}), borderColor:'#a855f7', backgroundColor:'rgba(168,85,247,.12)', fill:true, tension:.2 }] }, options:common });
     }
 
     function destroyCharts(){ Object.keys(_charts).forEach(function(k){ try{ _charts[k].destroy(); }catch(e){} }); _charts={}; }
