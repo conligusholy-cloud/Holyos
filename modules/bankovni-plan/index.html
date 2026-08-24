@@ -376,7 +376,7 @@
       h += row('EBITDA', u.ebitda, {bold:true, col:'#22c55e', top:true, pct:u.ebitdaMargin});
       h += row('Rezerva na údržbu', u.maintenance, {minus:true, col:'#ef4444'});
       h += row('Splátka úvěru (anuita)', u.payment, {minus:true, col:'#f59e0b'});
-      h += row('Daň', u.tax, {minus:true, col:'#ef4444'});
+      h += row('Daň (po odpisech '+(u.depreciationYears||5)+' let)', u.tax, {minus:true, col:'#ef4444'});
       h += row('Čistý cash po VŠEM (i splátce)', u.netWithDebt, {bold:true, col:(u.netWithDebt>=0?'#22c55e':'#ef4444'), top:true});
       h += '<div style="margin-top:10px;padding-top:10px;border-top:1px dashed var(--border)">'+
            row('Čistý cash po splacení stroje (bez splátky)', u.netPaidOff, {bold:true, col:'#22c55e'})+
@@ -477,7 +477,8 @@
       h += f('graceMonths','Grace (měs)', fin.graceMonths, 'Odklad splátek jistiny po čerpání — po tuto dobu se platí jen úrok.');
       h += f('facilityLimitCzk','Úvěrový rámec (Kč)', fin.facilityLimitCzk, 'Maximální celková výše úvěru. Když se vyčerpá, další jednotky se už z úvěru nefinancují.');
       h += f('allInExtraEur','All-in navíc / jednotku (EUR)', fin.allInExtraEur, 'Náklady na jednu novou lokalitu NAVÍC k ceně stroje: doprava, instalace, přípojky (voda/elektřina/odpad), povolení, značení. Přičítá se ke každé nové jednotce. Cena stroje se bere zvlášť z Předpokladů (Cena prádlomatu).');
-      h += f('taxRatePct','Daň (%)', fin.taxRatePct, 'Sazba daně z příjmu použitá na zisk (zjednodušeně na EBITDA po úrocích).');
+      h += f('taxRatePct','Daň (%)', fin.taxRatePct, 'Sazba daně z příjmu. Daňový základ = EBITDA − úroky − odpisy.');
+      h += f('depreciationYears','Odpis stroje (let)', fin.depreciationYears, 'Doba rovnoměrného odpisu prádlomatu. Odpis snižuje daňový základ (daňový štít) po tuto dobu.');
       h += f('centralCostMonthlyCzk','Centrální náklady / měs (Kč)', fin.centralCostMonthlyCzk, 'Náklady centrály celé sítě za měsíc (správa, účetnictví, dispečink) — odečítají se od portfolio EBITDA.');
       h += f('minLiquidityCzk','Min. rezerva (Kč)', fin.minLiquidityCzk, 'Minimální hotovost, kterou si síť drží. Až přebytek nad ní jde na expanzi.');
       h += f('horizonMonths','Horizont (měs)', fin.horizonMonths, 'Na kolik měsíců dopředu se model počítá (120 = 10 let).');
@@ -488,7 +489,7 @@
     async function saveFinancing(){
       function v(id){ var el=document.getElementById('fin-'+id); return el?parseFloat(String(el.value).replace(/[\s ]/g,'').replace(',','.')):null; }
       var suEl=document.getElementById('fin-startUnitsOverride'); var suRaw=suEl?String(suEl.value).replace(/[\s ]/g,'').replace(',','.'):''; var su=(suRaw==='')?null:parseFloat(suRaw);
-      var fin = { newUnitsPerMonth:v('newUnitsPerMonth'), bankFinancingPct:v('bankFinancingPct'), interestRatePct:v('interestRatePct'), maturityMonths:v('maturityMonths'), graceMonths:v('graceMonths'), facilityLimitCzk:v('facilityLimitCzk'), allInExtraEur:v('allInExtraEur'), taxRatePct:v('taxRatePct'), centralCostMonthlyCzk:v('centralCostMonthlyCzk'), minLiquidityCzk:v('minLiquidityCzk'), horizonMonths:v('horizonMonths'), startUnitsOverride:su };
+      var fin = { newUnitsPerMonth:v('newUnitsPerMonth'), bankFinancingPct:v('bankFinancingPct'), interestRatePct:v('interestRatePct'), maturityMonths:v('maturityMonths'), graceMonths:v('graceMonths'), facilityLimitCzk:v('facilityLimitCzk'), allInExtraEur:v('allInExtraEur'), taxRatePct:v('taxRatePct'), centralCostMonthlyCzk:v('centralCostMonthlyCzk'), minLiquidityCzk:v('minLiquidityCzk'), horizonMonths:v('horizonMonths'), startUnitsOverride:su, depreciationYears:v('depreciationYears') };
       try {
         var cur = (DATA.assumptions&&DATA.assumptions.financing)||{};
         await fetch('/api/bank-plan/assumptions', { method:'PUT', credentials:'include', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ financing: Object.assign({}, cur, fin) }) });

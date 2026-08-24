@@ -121,6 +121,7 @@ const DEFAULT_ASSUMPTIONS = {
     centralCostMonthlyCzk: 0, // centrální náklady portfolia/měs
     minLiquidityCzk: 500000,  // minimální hotovostní rezerva
     startUnitsOverride: null,  // null = skutečná aktivní síť; 0 = greenfield (partner staví od nuly)
+    depreciationYears: 5,      // doba odpisu prádlomatu (daňový štít)
   },
   // Scénáře — násobky proti Base Case.
   scenarios: {
@@ -353,6 +354,7 @@ router.get('/forecast', requireAuth, async (req, res, next) => {
       interestRatePct: (fin.interestRatePct || 0) + (sc.interestAddPct || 0),
       maturityMonths: fin.maturityMonths, graceMonths: fin.graceMonths,
       facilityLimit: toBase(fin.facilityLimitCzk), targetUnitsPerMonth: A.targetUnitsPerMonth || 4,
+      depreciationMonths: (fin.depreciationYears || 0) * 12, unitDepBase: unitAllIn,
     });
 
     // ── Ukázka jedné lokality (reprezentativní, mediánová) — celý rozpad měsíčně ──
@@ -372,15 +374,18 @@ router.get('/forecast', requireAuth, async (req, res, next) => {
     const debtPerUnit = unitAllIn * (fin.bankFinancingPct / 100);
     const paymentU = E.annuityPayment(debtPerUnit, mRate, Math.max(1, fin.maturityMonths - fin.graceMonths));
     const interestU = debtPerUnit * mRate;
-    const taxU = Math.max(0, ebitdaU - interestU) * (fin.taxRatePct || 0) / 100;
+    const depMonthsU = (fin.depreciationYears || 0) * 12;
+    const deprU = depMonthsU > 0 ? unitAllIn / depMonthsU : 0; // měsíční odpis (daňový štít během odpisu)
+    const taxU = Math.max(0, ebitdaU - interestU - deprU) * (fin.taxRatePct || 0) / 100;
     const netWithDebtU = ebitdaU - maintU - paymentU - taxU;
+    // Po splacení stroje je i odepsaný → daň z plné EBITDA (bez štítu).
     const taxNoDebtU = Math.max(0, ebitdaU) * (fin.taxRatePct || 0) / 100;
     const netPaidOffU = ebitdaU - maintU - taxNoDebtU;
     const rnd = (x) => Math.round(x);
     const unitBreakdown = {
       revenue: rnd(revenueU), rent: rnd(rentU), service: rnd(serviceU), energy: rnd(energyU), fee: rnd(feeU),
       directOpex: rnd(directOpexU), ebitda: rnd(ebitdaU), ebitdaMargin: revenueU ? ebitdaU / revenueU : 0,
-      maintenance: rnd(maintU), payment: rnd(paymentU), tax: rnd(taxU),
+      maintenance: rnd(maintU), payment: rnd(paymentU), tax: rnd(taxU), depreciation: rnd(deprU), depreciationYears: (fin.depreciationYears || 0),
       netWithDebt: rnd(netWithDebtU), netPaidOff: rnd(netPaidOffU),
       allIn: rnd(unitAllIn), debtPerUnit: rnd(debtPerUnit), equityPerUnit: rnd(unitAllIn - debtPerUnit),
     };

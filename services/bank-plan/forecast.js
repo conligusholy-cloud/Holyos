@@ -39,6 +39,10 @@ function buildForecast(p) {
   const maturity = Math.max(1, Math.floor(p.maturityMonths || 84));
   const grace = Math.max(0, Math.floor(p.graceMonths || 0));
   const facilityLimit = (p.facilityLimit != null) ? Number(p.facilityLimit) : Infinity;
+  // Odpisy: každá NOVÁ jednotka se rovnoměrně odepisuje po depMonths (daňový štít).
+  const depMonths = Math.max(0, Math.floor(p.depreciationMonths || 0));
+  const unitDep = Number(p.unitDepBase) || 0;
+  const monthlyDepPerUnit = (depMonths > 0 && unitDep > 0) ? unitDep / depMonths : 0;
 
   // 1) Plán nových jednotek (deterministický) + čerpání dluhu po jednotkách (do limitu facility).
   // Stavíme svým tempem (newPerMonth), ale JEN dokud vydrží úvěrový rámec. Každá jednotka
@@ -71,6 +75,15 @@ function buildForecast(p) {
   // 3) Dluh — splátkový kalendář ze všech tranší.
   const debt = E.buildDebtSchedule(drawdowns, months);
 
+  // Odpisy po měsících (z nových kohort, každá jednotka po depMonths).
+  const depArr = new Array(months).fill(0);
+  if (monthlyDepPerUnit > 0) {
+    for (let k = 0; k < months; k++) {
+      const cnt = newCohorts[k]; if (!cnt) continue;
+      for (let m = k; m < Math.min(months, k + depMonths); m++) depArr[m] += cnt * monthlyDepPerUnit;
+    }
+  }
+
   // 4) Měsíční řádky + waterfall.
   const rows = [];
   const cfadsArr = [], dsArr = [], cashForExpArr = [], crossArr = [];
@@ -82,7 +95,8 @@ function buildForecast(p) {
     const interest = debt.perMonth[m].interest;
     const debtService = debt.perMonth[m].payment;
     const maintenance = revenue * maintPct / 100;
-    const taxable = Math.max(0, portfolioEbitda - interest);
+    const depreciation = depArr[m];
+    const taxable = Math.max(0, portfolioEbitda - interest - depreciation); // odpisy = daňový štít
     const tax = taxable * taxPct / 100;
     const cfads = portfolioEbitda - tax - maintenance;
     const dscr = debtService > 0 ? cfads / debtService : null;
