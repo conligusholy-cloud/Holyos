@@ -285,7 +285,8 @@
       var rentVat = '<label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text2);margin-top:6px;cursor:pointer"><input type="checkbox" id="as-rentVatIncluded" '+(a.rentVatIncluded?'checked':'')+' style="width:15px;height:15px;accent-color:#0ea5e9"> Nájmy jsou zadané s DPH (převést na bez DPH)</label>';
       h += '<div><label>Nájem default (CZK/měs)</label><input id="as-rentMonthlyDefault" value="'+(a.rentMonthlyDefault!=null?a.rentMonthlyDefault:'')+'">'+rentHint+rentVat+'</div>';
       h += f('unitCostEur','Cena prádlomatu (EUR)', a.unitCostEur);
-      h += f('targetUnitsPerMonth','Cíl pro crossover (strojů/měs)', a.targetUnitsPerMonth);
+      h += '<div><label>Cíl pro crossover (strojů/měs)</label><input id="as-targetUnitsPerMonth" value="'+(a.targetUnitsPerMonth!=null?a.targetUnitsPerMonth:'')+'" oninput="crossHint()">'
+        + '<div id="hint-cross" style="font-size:11px;color:var(--text2);margin-top:6px;line-height:1.55">'+crossCalcHtml(a.targetUnitsPerMonth)+'</div></div>';
       h += f('fxEUR','Kurz EUR→CZK', fx.EUR);
       h += f('fxPLN','Kurz PLN→CZK', fx.PLN);
       var vat = a.vatByCurrency||{};
@@ -311,6 +312,24 @@
       h += '<div style="margin-top:14px"><button class="btn btn-primary" onclick="saveAssumptions()">💾 Uložit předpoklady</button></div></div>';
       return h;
     }
+
+    // Výpočet: kolik prádlomatů uživí cíl X nových strojů/měs (cena cílových strojů ÷ EBITDA bez splátky)
+    // + objem úvěru na jejich vybudování. Živě reaguje na pole „Cíl pro crossover".
+    function crossCalcHtml(target){
+      var _fc = window.FC;
+      if(!_fc || !_fc.unitBreakdown) return '<span style="color:var(--text2)">přebuduj data pro výpočet…</span>';
+      var ub = _fc.unitBreakdown;
+      var eb = ub.ebitda||0, allIn = ub.allIn||0, debtU = ub.debtPerUnit||0;
+      target = Number(String(target).replace(',','.'))||0;
+      if(!eb || !allIn || !target) return '<span style="color:var(--text2)">zadej cíl (strojů/měs)</span>';
+      var need = target*allIn;              // cena cílových strojů / měs
+      var units = Math.ceil(need/eb);       // počet prádlomatů, jejichž EBITDA (bez splátky) pokryje reinvestici
+      var loan = units*debtU;               // objem úvěru na vybudování té flotily
+      return '⚙️ Pro <b>'+target+'</b> nové stroje/měs ('+money(need)+') je potřeba <b style="color:var(--text)">'+units+' prádlomatů</b> '
+        + '<span style="color:var(--text2)">(= '+money(need)+' ÷ EBITDA '+money(eb)+'/měs bez splátky)</span><br>'
+        + '💰 Objem úvěru na vybudování: <b style="color:var(--text)">'+money(loan)+'</b> <span style="color:var(--text2)">('+units+' × '+money(debtU)+' úvěr/stroj)</span>';
+    }
+    window.crossHint = function(){ var el=document.getElementById('hint-cross'); if(!el) return; var t=(document.getElementById('as-targetUnitsPerMonth')||{}).value; el.innerHTML = crossCalcHtml(t); };
 
     async function saveAssumptions(){
       function v(id){ var el=document.getElementById('as-'+id); return el? parseFloat(String(el.value).replace(',','.')) : null; }
@@ -349,6 +368,7 @@
         if(!r.ok){ body.innerHTML = '<div style="color:#ef4444">Model nelze načíst.</div>'; return; }
         FC = await r.json();
         renderForecast();
+        if (window.crossHint) crossHint(); // dopočítej hint u „Cíl pro crossover" (potřebuje FC.unitBreakdown)
       } catch(e){ body.innerHTML = '<div style="color:#ef4444">Chyba: '+(e.message||'')+'</div>'; }
     }
     window.loadForecast = loadForecast;
