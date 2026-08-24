@@ -304,24 +304,30 @@
     }
     function fcFinancingForm(){
       var fin = FC.financing||{};
-      function f(key,label,val){ return '<div><label>'+label+'</label><input id="fin-'+key+'" value="'+(val!=null?val:'')+'"></div>'; }
+      // tip = text vysvětlivky (najetím myší); label dostane tečkovaný podtržítko + title.
+      function f(key,label,val,tip){
+        var lab = tip
+          ? '<label title="'+esc(tip)+'" style="cursor:help;border-bottom:1px dotted var(--text2)">'+label+' ⓘ</label>'
+          : '<label>'+label+'</label>';
+        return '<div>'+lab+'<input id="fin-'+key+'" value="'+fmtNum(val)+'" onblur="this.value=fmtNum(this.value)"></div>';
+      }
       var h = '<div style="margin-top:6px"><div style="font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--text2);margin-bottom:8px">Parametry financování <span class="tag tag-assume">ASSUMPTION</span></div><div class="asum">';
-      h += f('newUnitsPerMonth','Nové jednotky / měs', fin.newUnitsPerMonth);
-      h += f('bankFinancingPct','Financování bankou (%)', fin.bankFinancingPct);
-      h += f('interestRatePct','Úrok p.a. (%)', fin.interestRatePct);
-      h += f('maturityMonths','Splatnost (měs)', fin.maturityMonths);
-      h += f('graceMonths','Grace (měs)', fin.graceMonths);
-      h += f('facilityLimitCzk','Úvěrový rámec (Kč)', fin.facilityLimitCzk);
-      h += f('allInExtraEur','All-in navíc / jednotku (EUR)', fin.allInExtraEur);
-      h += f('taxRatePct','Daň (%)', fin.taxRatePct);
-      h += f('centralCostMonthlyCzk','Centrální náklady / měs (Kč)', fin.centralCostMonthlyCzk);
-      h += f('minLiquidityCzk','Min. rezerva (Kč)', fin.minLiquidityCzk);
-      h += f('horizonMonths','Horizont (měs)', fin.horizonMonths);
+      h += f('newUnitsPerMonth','Nové jednotky / měs', fin.newUnitsPerMonth, 'Kolik nových prádlomatů se pořídí každý měsíc (pro tento scénář růstu).');
+      h += f('bankFinancingPct','Financování bankou (%)', fin.bankFinancingPct, 'Jakou část ceny nové jednotky (all-in) hradí úvěr. Zbytek = vlastní kapitál.');
+      h += f('interestRatePct','Úrok p.a. (%)', fin.interestRatePct, 'Roční úroková sazba úvěru. Scénáře Downside/Stress k ní přičítají přirážku.');
+      h += f('maturityMonths','Splatnost (měs)', fin.maturityMonths, 'Doba splácení každé čerpané tranše v měsících (např. 84 = 7 let).');
+      h += f('graceMonths','Grace (měs)', fin.graceMonths, 'Odklad splátek jistiny po čerpání — po tuto dobu se platí jen úrok.');
+      h += f('facilityLimitCzk','Úvěrový rámec (Kč)', fin.facilityLimitCzk, 'Maximální celková výše úvěru. Když se vyčerpá, další jednotky se už z úvěru nefinancují.');
+      h += f('allInExtraEur','All-in navíc / jednotku (EUR)', fin.allInExtraEur, 'Náklady na jednu novou lokalitu NAVÍC k ceně stroje: doprava, instalace, přípojky (voda/elektřina/odpad), povolení, značení. Přičítá se ke každé nové jednotce. Cena stroje se bere zvlášť z Předpokladů (Cena prádlomatu).');
+      h += f('taxRatePct','Daň (%)', fin.taxRatePct, 'Sazba daně z příjmu použitá na zisk (zjednodušeně na EBITDA po úrocích).');
+      h += f('centralCostMonthlyCzk','Centrální náklady / měs (Kč)', fin.centralCostMonthlyCzk, 'Náklady centrály celé sítě za měsíc (správa, účetnictví, dispečink) — odečítají se od portfolio EBITDA.');
+      h += f('minLiquidityCzk','Min. rezerva (Kč)', fin.minLiquidityCzk, 'Minimální hotovost, kterou si síť drží. Až přebytek nad ní jde na expanzi.');
+      h += f('horizonMonths','Horizont (měs)', fin.horizonMonths, 'Na kolik měsíců dopředu se model počítá (120 = 10 let).');
       h += '</div><div style="margin-top:12px"><button class="btn btn-primary" onclick="saveFinancing()">💾 Uložit financování</button></div></div>';
       return h;
     }
     async function saveFinancing(){
-      function v(id){ var el=document.getElementById('fin-'+id); return el?parseFloat(String(el.value).replace(',','.')):null; }
+      function v(id){ var el=document.getElementById('fin-'+id); return el?parseFloat(String(el.value).replace(/[\s ]/g,'').replace(',','.')):null; }
       var fin = { newUnitsPerMonth:v('newUnitsPerMonth'), bankFinancingPct:v('bankFinancingPct'), interestRatePct:v('interestRatePct'), maturityMonths:v('maturityMonths'), graceMonths:v('graceMonths'), facilityLimitCzk:v('facilityLimitCzk'), allInExtraEur:v('allInExtraEur'), taxRatePct:v('taxRatePct'), centralCostMonthlyCzk:v('centralCostMonthlyCzk'), minLiquidityCzk:v('minLiquidityCzk'), horizonMonths:v('horizonMonths') };
       try {
         var cur = (DATA.assumptions&&DATA.assumptions.financing)||{};
@@ -405,6 +411,9 @@
       }, 4000);
     }
 
+    // Oddělování tisíců (mezera). Prázdné → ''. Zachová desetinnou čárku.
+    function fmtNum(v){ if(v==null||v==='') return ''; var n=parseFloat(String(v).replace(/[\s ]/g,'').replace(',','.')); if(!isFinite(n)) return String(v); return n.toLocaleString('cs-CZ'); }
+    window.fmtNum = fmtNum;
     function pctHint(key){ var el=document.getElementById('as-'+key); if(!el) return; var med=(DATA&&DATA.unitEconomics&&DATA.unitEconomics.revenueDist&&DATA.unitEconomics.revenueDist.p50)||0; var kc=(parseFloat(String(el.value).replace(',','.'))||0)/100*med; var s=document.getElementById('hint-'+key); if(s) s.textContent=money(kc); }
     function setPct(key,val){ var el=document.getElementById('as-'+key); if(el){ el.value=val; pctHint(key); } }
     window.pctHint=pctHint; window.setPct=setPct;
