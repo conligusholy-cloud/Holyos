@@ -315,6 +315,18 @@ router.get('/overview', requireAuth, async (req, res, next) => {
     const baseFactorPct = 0;
     const revDistStab = pin.revDist || revDist;
 
+    // EBITDA distribuce ODVOZENÁ z distribuce tržeb stejným nákladovým modelem (fixní nájem + variabilní %),
+    // aby medián EBITDA přesně odpovídal EBITDA při mediánové tržbě (baseCaseEbitda) a headline i distribuce seděly.
+    const _ebFromRev = (rev) => Math.max(0, (Number(rev) || 0) - _rentDef - (Number(rev) || 0) * _varPct / 100);
+    const ebitdaDistStab = {}, marginDistStab = {};
+    Object.keys(revDistStab || {}).forEach((k) => {
+      const r = revDistStab[k];
+      if (typeof r !== 'number') { ebitdaDistStab[k] = r; marginDistStab[k] = r; return; }
+      const e = _ebFromRev(r);
+      ebitdaDistStab[k] = Math.round(e);
+      marginDistStab[k] = r ? e / r : 0;
+    });
+
     res.json({
       base, generatedAt: hist.generatedAt, sisHeader: hist.sisHeader || null,
       trackRecord: {
@@ -327,7 +339,7 @@ router.get('/overview', requireAuth, async (req, res, next) => {
         cumulativeRevenue: Math.round(cumulativeRevenue),
       },
       unitEconomics: {
-        revenueDist: revDistStab, ebitdaDist, marginDist,
+        revenueDist: revDistStab, ebitdaDist: ebitdaDistStab, marginDist: marginDistStab,
         medianEbitda: Math.round(medianEbitda), baseCaseEbitda: Math.round(baseCaseEbitda), baseFactorPct: baseFactorPct,
       },
       seasonality,
