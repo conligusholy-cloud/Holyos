@@ -180,6 +180,8 @@
         return '<tr><td>'+esc(x.label)+'</td><td class="r">'+money(x.perUnitRevenue)+'</td><td class="r">'+money(x.perUnitEbitda)+'</td><td class="r">'+money(x.perUnitAnnuity)+'</td><td class="r">'+dscr(x.dscrUnit)+'</td><td class="r">'+dscr(x.dscrTarget)+'</td><td class="r"><b>'+pf(x.pass)+'</b></td></tr>';
       }).join('') : '<tr><td colspan="7" class="muted">—</td></tr>';
       var m12=wr.m12;
+      var _be=(scen&&scen.scenarios)?scen.scenarios.find(function(x){return x.key==='breakeven';}):null;
+      var _cushion=_be&&_be.cushionPct, _sigma=(_cushion!=null&&vol.cvPct)?(_cushion/vol.cvPct):null;
       H += P('<h2>Conservative Forecast Methodology</h2>'+
         '<p>Forecast není založen na managementem stanoveném růstu výnosů. <b>Base Case</b> používá historický medián výkonu portfolia (P50, '+money(u.ebitdaDist&&u.ebitdaDist.p50)+' EBITDA/lokalita). <b>Downside</b> aplikuje konzervativní snížení tržeb o 10 %, <b>Stress</b> o 20 %. <b>Combined Bank Stress</b> navíc zohledňuje vyšší náklady (energie +20 %, servis +10 %), vyšší úrok (+2 p.b.) a pomalejší náběh nových lokalit.</p>'+
         '<p>EBITDA se nepočítá lineárně s tržbou — fixní náklady (nájem) zůstávají, takže při nižší tržbě marže klesá. Scénáře i percentily vycházejí ze skutečného provozního datasetu ('+t.realCount+' lokalit, '+num(t.locationMonths)+' location-months).</p>'+
@@ -190,7 +192,8 @@
            kpi('Max. LTC', (dsz.maxLtcPct!=null?String(dsz.maxLtcPct).replace('.',',')+' %':'—'))+
            kpi('Nutný vlastní vklad / jed.', money(dsz.requiredEquityPerUnit))+
          '</div><p class="muted">Vazba: '+esc(dsz.bindingScenario||'—')+' · tenor '+dsz.tenorMonths+' měs · úrok '+String(dsz.interestRatePct).replace('.',',')+' %. Dluh se přizpůsobuje historicky doloženému výkonu, ne naopak.</p>') : '')+
-        (m12 ? ('<h3>Odolnost — nejhorší historické 12M období</h3><p>Nejhorší klouzavé 12měsíční období portfolia ('+m12.startYm+' – '+m12.endYm+') mělo průměrnou měsíční tržbu <b>'+money(Math.round(m12.avg))+'</b>. Měsíční variační koeficient tržeb portfolia je '+(vol.cvPct!=null?String(vol.cvPct).replace('.',',')+' %':'—')+'.</p>') : ''));
+        (m12 ? ('<h3>Odolnost — nejhorší historické 12M období</h3><p>Nejhorší klouzavé 12měsíční období (na stabilizovanou lokalitu, bez prvních 6 měsíců) mělo průměrnou měsíční tržbu <b>'+money(Math.round(m12.avg))+'</b>. Variační koeficient tržeb stabilizované lokality je jen <b>'+(vol.cvPct!=null?String(vol.cvPct).replace('.',',')+' %':'—')+'</b>.</p>') : '')+
+        (_sigma!=null ? ('<p><b>Bezpečnostní rezerva:</b> k dosažení breakevenu (DSCR = 1,0) by tržba stabilizované lokality musela klesnout o '+String(_cushion).replace('.',',')+' % pod medián, tj. o <b>~'+String(Math.round(_sigma*10)/10).replace('.',',')+' směrodatné odchylky</b>. Vzhledem k nízké volatilitě jde o statisticky velmi nepravděpodobnou událost — dluh je nastaven tak, aby byl bezpečně obsluhovatelný i v historicky doloženém horším období.</p>') : ''));
     })();
 
     // 8) CREDIT COMMITTEE 1-PAGER
