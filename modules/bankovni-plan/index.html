@@ -285,7 +285,7 @@
       function v(id){ var el=document.getElementById('as-'+id); return el? parseFloat(String(el.value).replace(',','.')) : null; }
       var body = {
         servicePct:v('servicePct'), energyPct:v('energyPct'), paymentFeePct:v('paymentFeePct'),
-        rentMonthlyDefault:v('rentMonthlyDefault'), maintenanceReservePct:v('maintenanceReservePct'),
+        rentMonthlyDefault:v('rentMonthlyDefault'),
         unitCostEur:v('unitCostEur'), targetUnitsPerMonth:v('targetUnitsPerMonth'),
         fx: Object.assign({}, (DATA.assumptions&&DATA.assumptions.fx)||{}, { EUR:v('fxEUR'), PLN:v('fxPLN'), CZK:1 }),
         vatByCurrency: Object.assign({}, (DATA.assumptions&&DATA.assumptions.vatByCurrency)||{}, { CZK:v('vatCZK'), EUR:v('vatEUR'), PLN:v('vatPLN') }),
