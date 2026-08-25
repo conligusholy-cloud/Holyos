@@ -218,14 +218,31 @@
     } catch(e){ doLogout(); }
   }
 
-  // Volat kontakt; u nového se nejdřív zeptá na uložení do telefonu. Zaznamená vytočení.
+  // Vlastní dialog místo confirm(): dvě barevně odlišená tlačítka (Uložit kontakt / Volat teď).
+  function extAskCall(name, onCall, onSave){
+    var ex=document.getElementById('ext-callask'); if(ex) ex.remove();
+    var ov=document.createElement('div'); ov.id='ext-callask';
+    ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:120;display:flex;align-items:flex-end;justify-content:center';
+    ov.onclick=function(e){ if(e.target===ov) ov.remove(); };
+    ov.innerHTML=
+      '<div style="background:var(--surface);width:100%;max-width:520px;border-radius:18px 18px 0 0;border-top:1px solid var(--line);padding:20px 16px calc(20px + env(safe-area-inset-bottom,0))">'
+      + '<div style="font-size:17px;font-weight:700;margin-bottom:6px">📞 Zavolat '+esc(name||'tento kontakt')+'?</div>'
+      + '<div style="font-size:13.5px;color:var(--muted);line-height:1.5;margin-bottom:16px">Máš tento kontakt uložený v telefonu? Bez uložení nemusí hovor ukázat jméno. Ulož si ho, nebo rovnou volej.</div>'
+      + '<div style="display:flex;gap:10px">'
+      + '<button id="ext-ca-save" style="flex:1;background:var(--surface2);border:1px solid var(--primary);color:var(--primary);border-radius:12px;padding:14px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit">💾 Uložit kontakt</button>'
+      + '<button id="ext-ca-call" style="flex:1;background:#22c55e;border:none;color:#052e13;border-radius:12px;padding:14px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit">📞 Volat teď</button>'
+      + '</div></div>';
+    document.body.appendChild(ov);
+    document.getElementById('ext-ca-save').onclick=function(){ ov.remove(); if(onSave) onSave(); };
+    document.getElementById('ext-ca-call').onclick=function(){ ov.remove(); if(onCall) onCall(); };
+  }
+  // Volat kontakt; u nového se nejdřív zeptá (vlastní dialog) na uložení do telefonu. Zaznamená vytočení.
   function extCall(id, ev){
     var c=_ctById(id); if(!c||!c.phone) return true;
     if(c.status==='new'){
       if(ev&&ev.preventDefault) ev.preventDefault();
-      if(!confirm('Máš „'+(c.name||'tento kontakt')+'" uložený v telefonu?\n\nOK = volat teď\nZrušit = nejdřív uložit kontakt do telefonu')){ extSaveContact(id); return false; }
-      extMarkCalled(id);
-      window.location.href='tel:'+(c.phone||'').replace(/[^\d+]/g,'');
+      var tel='tel:'+(c.phone||'').replace(/[^\d+]/g,'');
+      extAskCall(c.name, function(){ extMarkCalled(id); window.location.href=tel; }, function(){ extSaveContact(id); });
       return false;
     }
     extMarkCalled(id);

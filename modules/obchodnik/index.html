@@ -832,17 +832,32 @@
     render();
   }
   window.markCalled = markCalled;
-  // Klik na „Volat": u nového kontaktu se nejdřív zeptá, jestli ho máš uložený v telefonu.
-  // OK = volat teď; Zrušit = nabídne uložení kontaktu do telefonu (vCard) a nevolá.
+  // Vlastní dialog místo confirm(): dvě barevně odlišená tlačítka (Uložit kontakt / Volat teď).
+  function obAskCall(name, onCall, onSave){
+    var ex = document.getElementById('ob-callask'); if (ex) ex.remove();
+    var ov = document.createElement('div'); ov.id = 'ob-callask';
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:120;display:flex;align-items:flex-end;justify-content:center';
+    ov.onclick = function(e){ if (e.target === ov) ov.remove(); };
+    ov.innerHTML =
+      '<div style="background:var(--surface);width:100%;max-width:520px;border-radius:18px 18px 0 0;border-top:1px solid var(--line);padding:20px 16px calc(20px + env(safe-area-inset-bottom,0))">'
+      + '<div style="font-size:17px;font-weight:700;margin-bottom:6px">📞 Zavolat ' + esc(name || 'tento kontakt') + '?</div>'
+      + '<div style="font-size:13.5px;color:var(--muted);line-height:1.5;margin-bottom:16px">Máš tento kontakt uložený v telefonu? Bez uložení nemusí hovor ukázat jméno. Ulož si ho, nebo rovnou volej.</div>'
+      + '<div style="display:flex;gap:10px">'
+      + '<button id="ob-ca-save" style="flex:1;background:var(--surface2);border:1px solid var(--primary);color:var(--primary);border-radius:12px;padding:14px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit">💾 Uložit kontakt</button>'
+      + '<button id="ob-ca-call" style="flex:1;background:#22c55e;border:none;color:#052e13;border-radius:12px;padding:14px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit">📞 Volat teď</button>'
+      + '</div></div>';
+    document.body.appendChild(ov);
+    document.getElementById('ob-ca-save').onclick = function(){ ov.remove(); if (onSave) onSave(); };
+    document.getElementById('ob-ca-call').onclick = function(){ ov.remove(); if (onCall) onCall(); };
+  }
+  window.obAskCall = obAskCall;
+  // Klik na „Volat": u nového kontaktu se nejdřív zeptá (vlastní dialog), jestli ho máš uložený v telefonu.
   function obCallClick(ev, id){
     var l = (state.leads||[]).find(function(x){ return x.id===id; }) || {};
     if (l.status === 'new'){
       if (ev && ev.preventDefault) ev.preventDefault();
-      var ok = confirm('Máš „'+(l.name||'tento kontakt')+'" uložený v telefonu?\n\nOK = volat teď\nZrušit = nejdřív uložit kontakt do telefonu');
-      if (!ok){ saveContact(id); return false; }
-      markCalled(id);
       var href = (ev && ev.currentTarget && ev.currentTarget.getAttribute('href')) || ('tel:'+String(l.phone||'').replace(/[^\d+]/g,''));
-      window.location.href = href;
+      obAskCall(l.name, function(){ markCalled(id); window.location.href = href; }, function(){ saveContact(id); });
       return false;
     }
     markCalled(id);
@@ -1796,12 +1811,16 @@
     var l=(state.leads||[]).find(function(x){ return x.id===id; });
     if(!l || !l.phone){ openLeadFromTask(id); return; } // není v paměti / bez telefonu → otevři kontakt
     var tel='tel:'+String(l.phone).replace(/[^\d+]/g,'');
+    var doCall=function(){
+      if(typeof markCalled==='function') markCalled(id);
+      if(typeof openLeadFromTask==='function') openLeadFromTask(id); // přepni na kontakt a otevři ho (pro doplnění po hovoru)
+      window.location.href=tel; // spusť hovor
+    };
     if(l.status==='new'){
-      if(!confirm('Máš „'+(l.name||'tento kontakt')+'" uložený v telefonu?\n\nOK = volat teď\nZrušit = nejdřív uložit kontakt do telefonu')){ saveContact(id); return; }
+      obAskCall(l.name, doCall, function(){ saveContact(id); });
+      return;
     }
-    if(typeof markCalled==='function') markCalled(id);
-    if(typeof openLeadFromTask==='function') openLeadFromTask(id); // přepni na kontakt a otevři ho (pro doplnění po hovoru)
-    window.location.href=tel; // spusť hovor
+    doCall();
   }
   window.callLeadFromTask=callLeadFromTask;
   function openLeadFromTask(id){
