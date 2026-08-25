@@ -2045,6 +2045,8 @@ router.get('/leads', requireAuth, async (req, res, next) => {
       const SYSTEM_EVENTS = new Set(['admin_model_view', 'loss_email_sent', 'loss_email_open', 'push_open', 'push_dismiss', 'push_action']);
       const tzDayKey = (d) => new Intl.DateTimeFormat('en-CA', { timeZone: process.env.VELIN_TZ || 'Europe/Prague', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(d));
       const todayKey = tzDayKey(Date.now());
+      // Testovací kontakty se do „času studia dnes" NEpočítají — shodně s hlavičkou /analytics/summary.
+      const testIds = new Set(leads.filter((l) => l.is_test).map((l) => l.id));
       evs.forEach((e) => {
         const lid = e.props && e.props.lead_id; if (lid == null) return;
         // Do „času na webu" mapujeme jen skutečné browser session (ne interní server sid jako hovor/admin).
@@ -2074,14 +2076,17 @@ router.get('/leads', requireAuth, async (req, res, next) => {
         sessEvents.forEach((e) => {
           if (!e.created_at || tzDayKey(e.created_at) !== todayKey) return;
           const t2 = new Date(e.created_at).getTime();
-          const rec = bySid[e.sid] || (bySid[e.sid] = { min: t2, max: t2, visitMs: 0 });
+          const rec = bySid[e.sid] || (bySid[e.sid] = { min: t2, max: t2, visitMs: 0, portal: false });
           if (t2 < rec.min) rec.min = t2;
           if (t2 > rec.max) rec.max = t2;
+          if (e.event === 'portal_view') rec.portal = true;
           if ((e.event === 'visit_end' || e.event === 'page_leave') && e.props && e.props.ms) rec.visitMs = Math.max(rec.visitMs, Number(e.props.ms) || 0);
         });
         Object.keys(bySid).forEach((sid) => {
           const lid = sidToLead[sid]; if (lid == null) return;
           const rec = bySid[sid];
+          if (!rec.portal) return;         // jen portálové session — shodně s „ČAS STUDIA DNES" v hlavičce
+          if (testIds.has(lid)) return;    // testovací kontakty se nepočítají — shodně s hlavičkou
           // visit_end se pošle jen jednou (při prvním skrytí tabu), takže podhodnocuje.
           // Bereme delší z: nahlášený čas relace vs. rozsah eventů relace (první–poslední).
           const ms = Math.min(90 * 60000, Math.max(rec.visitMs || 0, Math.max(0, rec.max - rec.min)));
