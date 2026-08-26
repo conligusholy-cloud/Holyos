@@ -728,7 +728,11 @@
       try{
         var r=await fetch('/api/sales/events',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
         if(!r.ok){ var j=await r.json().catch(function(){return{};}); throw new Error(j.error||'Chyba'); }
+        // Přidej rovnou i úkol do plánu daného dne, ať se objeví v „Dnes" hned (bez čekání na přegenerování).
+        var dateStr=(when||'').slice(0,10);
+        try{ await api('/tasks',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ title:'✅ Slíbený krok – '+(l.name||l.email||'lead')+': '+text, detail:text, kind:'followup', priority:1, lead_id:id, date:dateStr })}); }catch(e){}
         ov.remove(); _refetchCal(); loadUpcomingMeetings();
+        if(typeof loadToday==='function') loadToday(false); // obnov Dnes, ať je úkol vidět
       }catch(e){ btn.disabled=false; err.textContent='Uložení selhalo: '+(e.message||''); }
     };
   }
