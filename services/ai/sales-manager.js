@@ -688,9 +688,12 @@ async function gatherDayResult(personId, dateStr) {
   const skipped = tasks.filter((t) => t.status === 'skipped');
   const open = tasks.filter((t) => t.status !== 'skipped' && !isEffDone(t));
 
+  // Kontakty, se kterými dnes obchodník REÁLNĚ pracoval (volal / změnil / založil).
+  const workedToday = new Set(calledToday);
   let newToday = 0; let convToday = 0; const activityLines = [];
   leads.forEach((l) => {
-    if (l.created_at && new Date(l.created_at).getTime() >= startMs && new Date(l.created_at).getTime() < endMs) newToday += 1;
+    if (l.updated_at && new Date(l.updated_at).getTime() >= startMs && new Date(l.updated_at).getTime() < endMs) workedToday.add(l.id);
+    if (l.created_at && new Date(l.created_at).getTime() >= startMs && new Date(l.created_at).getTime() < endMs) { newToday += 1; workedToday.add(l.id); }
     if (l.status === 'converted' && l.updated_at && new Date(l.updated_at).getTime() >= startMs && new Date(l.updated_at).getTime() < endMs) convToday += 1;
     lastActivityLines(l.activity_log, 30).forEach((line) => {
       // Řádky mají obvykle prefix s datem; hrubě filtrovat na dnešek podle YYYY-MM-DD nebo DD.MM.
@@ -701,6 +704,7 @@ async function gatherDayResult(personId, dateStr) {
     date: dateStr,
     tasks_total: tasks.length, tasks_done: done.length, tasks_skipped: skipped.length, tasks_open: open.length,
     calls_today: calledToday.size, // reálně vytočené kontakty dnes (nezávisle na odkliku „Hotovo")
+    contacts_worked_today: workedToday.size, // unikátní kontakty, se kterými dnes pracoval (volal/změnil/založil)
     done_titles: done.map((t) => t.title), skipped_titles: skipped.map((t) => ({ title: t.title, reason: t.skipped_reason })), open_titles: open.map((t) => t.title),
     done_notes: done.map((t) => t.done_note).filter(Boolean).slice(0, 20),
     new_contacts_today: newToday, conversions_today: convToday,
@@ -848,6 +852,7 @@ async function buildOwnerReport(dateStr) {
       tasks_skipped: dr ? dr.tasks_skipped : tasks.filter((t) => t.status === 'skipped').length,
       tasks_open: dr ? dr.tasks_open : tasks.filter((t) => t.status === 'open').length,
       calls_today: dr ? dr.calls_today : 0, // reálně vytočené kontakty dnes
+      contacts_worked_today: dr ? dr.contacts_worked_today : 0, // s kolika kontakty dnes pracoval
       new_contacts_today: dr ? dr.new_contacts_today : 0,
       avg_call_sec: acd.avgSec || null, avg_call_min: acd.avgSec ? Math.round(acd.avgSec / 60 * 10) / 10 : null, avg_call_sample: acd.count || 0,
       day_score: review ? review.score : null,

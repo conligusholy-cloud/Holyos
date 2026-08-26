@@ -171,6 +171,32 @@
     } catch(e){ box.innerHTML = ''; }
   }
   function scoreCol(s){ return s==null?'var(--muted)':(s>=80?'#22c55e':s>=55?'#eab308':s>=30?'#f59e0b':'#ef4444'); }
+  // Koláč stavů úkolů (splněno/otevřeno/přeskočeno) se středovým % splnění = „speed metr" dne.
+  function vDonut(done, open, skipped){
+    done=Number(done)||0; open=Number(open)||0; skipped=Number(skipped)||0;
+    var tot=done+open+skipped; var C=2*Math.PI*26;
+    if(!tot) return '<svg width="64" height="64" viewBox="0 0 64 64"><circle cx="32" cy="32" r="26" fill="none" stroke="var(--line)" stroke-width="10"/><text x="32" y="37" text-anchor="middle" font-size="12" fill="var(--muted2)">—</text></svg>';
+    function seg(val,color,cumBefore){ if(!val) return ''; var len=C*(val/tot); return '<circle cx="32" cy="32" r="26" fill="none" stroke="'+color+'" stroke-width="10" stroke-dasharray="'+len.toFixed(2)+' '+(C-len).toFixed(2)+'" stroke-dashoffset="'+(-C*(cumBefore/tot)).toFixed(2)+'" transform="rotate(-90 32 32)"/>'; }
+    var pct=Math.round(done/tot*100);
+    return '<svg width="64" height="64" viewBox="0 0 64 64">'+
+      seg(done,'#22c55e',0)+seg(open,'#eab308',done)+seg(skipped,'#6b7280',done+open)+
+      '<text x="32" y="37" text-anchor="middle" font-size="15" font-weight="800" fill="var(--text)">'+pct+'%</text></svg>';
+  }
+  function vSpeedBlock(p){
+    var done=p.tasks_done||0, open=p.tasks_open||0, skipped=p.tasks_skipped||0;
+    return '<div style="display:flex;align-items:center;gap:14px;margin-top:8px;padding:10px;background:var(--surface2);border-radius:10px">'
+      + vDonut(done,open,skipped)
+      + '<div style="flex:1;min-width:0">'
+        + '<div style="display:flex;gap:12px;flex-wrap:wrap;font-size:12px">'
+          + '<span style="color:#22c55e;font-weight:700">✓ '+done+' splněno</span>'
+          + '<span style="color:#eab308;font-weight:700">● '+open+' otevřeno</span>'
+          + (skipped?('<span style="color:#9aa0ad;font-weight:700">— '+skipped+' přeskočeno</span>'):'')
+        + '</div>'
+        + '<div style="margin-top:6px;font-size:13px"><b style="font-size:22px;color:var(--primary)">'+(p.contacts_worked_today||0)+'</b> <span style="color:var(--muted2)">kontaktů dnes</span>'
+          + (p.calls_today?(' · <b>'+p.calls_today+'</b> hovorů'):'')
+          + (p.new_contacts_today?(' · <b>'+p.new_contacts_today+'</b> nových'):'') + '</div>'
+      + '</div></div>';
+  }
   function renderAiManager(box, d){
     var per = d.per || [];
     var totA = 0, totD = 0;
@@ -184,6 +210,7 @@
         return '<details class="row" ontoggle="if(this.open) loadPersonTasks('+p.person_id+')"><summary style="cursor:pointer;list-style:none">' +
           '<div class="row-h"><div class="name">'+esc(p.name)+' <span style="font-weight:400;color:var(--muted2);font-size:12px">▾ úkoly</span></div>'+(p.day_score!=null?'<div class="pct" style="color:'+scoreCol(p.day_score)+'">'+p.day_score+'</div>':'')+'</div>' +
           '<div class="sub">Úkoly: '+(p.tasks_done||0)+'/'+(p.tasks_assigned||0)+' splněno'+(p.tasks_skipped?(' · '+p.tasks_skipped+' přeskočeno'):'')+(p.tasks_open?(' · '+p.tasks_open+' otevřeno'):'')+'</div>' +
+          vSpeedBlock(p) +
           (p.focus?'<div class="muted" style="margin-top:4px;font-size:12.5px">🎯 '+esc(p.focus)+'</div>':'') +
           (p.day_summary?'<div class="muted" style="margin-top:4px;font-size:12.5px">'+esc(p.day_summary)+'</div>':'') +
           '<div style="margin-top:8px;padding:8px 10px;background:var(--surface2);border-radius:10px">' +
