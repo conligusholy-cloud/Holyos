@@ -419,6 +419,7 @@
           <option value="qualified">Kvalifikován</option>
           <option value="dosledovani">Dosledování</option>
           <option value="converted">Převeden</option>
+          <option value="nezajem">Nemá zájem</option>
           <option value="nelze_pouzit">Nelze použít</option>
           <option value="rejected">Zamítnut</option>
         </select>
@@ -2864,7 +2865,7 @@
     // ============================================================
     // COMPOUNDER — přehled leadů z webu compounder.world
     // ============================================================
-    var CMP_STATUS = { new: 'Nový', nedovolano: 'Nedovoláno', volat_pristi: 'Volat příště', contacted: 'Kontaktován', access_sent: 'Odeslán přístup', schuzka: 'Domluvena schůzka', schuzka_online: 'Domluvena schůzka online', qualified: 'Kvalifikován', dosledovani: 'Dosledování', converted: 'Převeden', nelze_pouzit: 'Nelze použít', rejected: 'Zamítnut' };
+    var CMP_STATUS = { new: 'Nový', nedovolano: 'Nedovoláno', volat_pristi: 'Volat příště', contacted: 'Kontaktován', access_sent: 'Odeslán přístup', schuzka: 'Domluvena schůzka', schuzka_online: 'Domluvena schůzka online', qualified: 'Kvalifikován', dosledovani: 'Dosledování', converted: 'Převeden', nezajem: 'Nemá zájem', nelze_pouzit: 'Nelze použít', rejected: 'Zamítnut' };
     var CMP_LANGS = { en:'English', bg:'Български', cs:'Čeština', da:'Dansk', de:'Deutsch', el:'Ελληνικά', es:'Español', et:'Eesti', fi:'Suomi', fr:'Français', ga:'Gaeilge', hr:'Hrvatski', hu:'Magyar', it:'Italiano', lt:'Lietuvių', lv:'Latviešu', mt:'Malti', nl:'Nederlands', pl:'Polski', pt:'Português', ro:'Română', sk:'Slovenčina', sl:'Slovenščina', sv:'Svenska' };
     var CMP_SELLERS = null; // seznam obchodníků (lazy z /api/sales/sellers); null = ještě nenačteno, [] = nedostupné
     var CMP_EXT_REPS = null; // externí obchodníci (lazy z /api/compounder/external-reps)
@@ -3223,7 +3224,13 @@
         + '<th></th></tr>';
     }
     var _cmpServerQ = ''; // aktuální serverový dotaz (jméno/e-mail/telefon)
+    // Stav filtrů držíme v paměti (ne jen v DOM), aby se při „Načítám…"/přiřazení obchodníka
+    // ani při přegenerování tabulky NEVYNULOVAL a byl pořád vidět (složené filtry).
+    var _cmpFilters = {};
+    function cmpSyncFilters(){ document.querySelectorAll('.cmp-filter-row [data-lf]').forEach(function(el){ var v=(el.value||''); if(v) _cmpFilters[el.getAttribute('data-lf')]=v; else delete _cmpFilters[el.getAttribute('data-lf')]; }); }
+    window.cmpSyncFilters = cmpSyncFilters;
     function cmpApplyLeadFilters(){
+      cmpSyncFilters();
       var f = {};
       document.querySelectorAll('.cmp-filter-row [data-lf]').forEach(function(el){ f[el.getAttribute('data-lf')] = (el.value||'').trim().toLowerCase(); });
       // Když běží serverové hledání podle jména/e-mailu, klientsky už podle nich nefiltrujeme
@@ -3251,6 +3258,7 @@
     // Debouncovaná změna hledání z inline polí Jméno/E-mail → server (přes všechny kontakty).
     var _cmpSrvTimer = null;
     function cmpServerSearch(){
+      cmpSyncFilters();
       if (_cmpSrvTimer) clearTimeout(_cmpSrvTimer);
       _cmpSrvTimer = setTimeout(function(){ loadCompounderLeads(); }, 350);
     }
@@ -3258,20 +3266,17 @@
     // Efektivní serverový dotaz = horní pole „Hledat" nebo inline Jméno/E-mail (první neprázdné).
     function _cmpEffectiveSearch(){
       var top = ((document.getElementById('cmp-search')||{}).value || '').trim();
-      var nm = '', em = '';
-      document.querySelectorAll('.cmp-filter-row [data-lf]').forEach(function(el){
-        var lf = el.getAttribute('data-lf'); var v = (el.value||'').trim();
-        if (lf==='name') nm = v; else if (lf==='email') em = v;
-      });
-      return top || nm || em;
+      if (document.querySelector('.cmp-filter-row')) cmpSyncFilters();
+      return top || (_cmpFilters.name||'').trim() || (_cmpFilters.email||'').trim();
     }
     async function loadCompounderLeads() {
       var box = document.getElementById('cmp-leads-table');
       if (!box) return;
       cmpSummary();
-      // Inline filtry ze sloupců (mají přednost před horními výběry).
-      var inl = {};
-      document.querySelectorAll('.cmp-filter-row [data-lf]').forEach(function(el){ inl[el.getAttribute('data-lf')] = (el.value||'').trim(); });
+      // Inline filtry ze sloupců (mají přednost před horními výběry). Bereme ze zapamatovaného
+      // stavu _cmpFilters, aby přežily „Načítám…" i přiřazení obchodníka (složené filtry).
+      if (document.querySelector('.cmp-filter-row')) cmpSyncFilters();
+      var inl = _cmpFilters;
       var st = inl.stav || (document.getElementById('cmp-status-filter')||{}).value || '';
       var rl = inl.role || (document.getElementById('cmp-role-filter')||{}).value || '';
       var lang = inl.lang || '';
@@ -3368,9 +3373,9 @@
           return (va - vb) * _cmpSort.dir;
         });
       }
-      // Hodnoty filtrů si zapamatujeme, ať je překreslení tabulky nesmaže.
-      var fvals = {};
-      document.querySelectorAll('.cmp-filter-row [data-lf]').forEach(function(el) { fvals[el.getAttribute('data-lf')] = el.value || ''; });
+      // Hodnoty filtrů bereme ze zapamatovaného stavu (_cmpFilters), ať je „Načítám…"/reload nesmaže.
+      if (document.querySelector('.cmp-filter-row')) cmpSyncFilters();
+      var fvals = _cmpFilters;
       // Zapamatujeme si i to, které pole má fokus (ať se dá plynule psát i přes reload).
       var _focusLf = null; var _ae = document.activeElement;
       if (_ae && _ae.getAttribute && _ae.closest && _ae.closest('.cmp-filter-row')) _focusLf = _ae.getAttribute('data-lf');
