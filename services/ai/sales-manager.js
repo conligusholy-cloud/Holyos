@@ -371,23 +371,28 @@ async function gatherPlanContext(personId) {
   const accessibleIds = new Set(leadFacts.filter((l) => l.has_portal_access).map((l) => l.id));
   carryOver = carryOver.filter((t) => !(t.kind === 'invite' && t.lead_id && accessibleIds.has(t.lead_id)));
 
-  // Kalendář — schůzky obchodníka (dnes + příštích 7 dní). Řídí strukturu dne.
+  // Kalendář — naplánované kroky obchodníka: prošvihnuté (posledních 60 dní) + dnes + příštích 7 dní.
+  // Řídí strukturu dne: prošvihnuté slíbené kroky patří NAVRCH, dnešní jsou priorita 1.
   const todayStart = dayDate(tzTodayStr());
   const in7 = new Date(Date.now() + 7 * 86400000);
+  const since60 = new Date(todayStart.getTime() - 60 * 86400000);
   let events = [];
   try {
     events = await prisma.salesEvent.findMany({
-      where: { organizer_id: personId, start_at: { gte: todayStart, lte: in7 } },
-      orderBy: { start_at: 'asc' }, take: 60,
-      select: { title: true, start_at: true, end_at: true, location: true, event_type: true, compounder_lead_id: true },
+      where: { organizer_id: personId, start_at: { gte: since60, lte: in7 } },
+      orderBy: { start_at: 'asc' }, take: 120,
+      select: { title: true, start_at: true, end_at: true, location: true, event_type: true, status: true, compounder_lead_id: true },
     });
   } catch (e) { events = []; }
   const todayEndMs = todayStart.getTime() + 86400000;
   const fmtEv = (e) => ({
     title: e.title, when: e.start_at ? new Date(e.start_at).toISOString() : null,
-    location: e.location || null, type: e.event_type || 'meeting', lead_id: e.compounder_lead_id || null,
+    location: e.location || null, type: e.event_type || 'meeting', status: e.status || 'planned', lead_id: e.compounder_lead_id || null,
   });
-  const meetingsToday = events.filter((e) => e.start_at && new Date(e.start_at).getTime() < todayEndMs).map(fmtEv);
+  // Otevřené = ještě nesplněné/nezrušené (drží se, dokud je obchodník neodklikne).
+  const isOpenEv = (e) => { const s = String(e.status || 'planned').toLowerCase(); return s !== 'done' && s !== 'cancelled' && s !== 'canceled'; };
+  const meetingsOverdue = events.filter((e) => e.start_at && new Date(e.start_at).getTime() < todayStart.getTime() && isOpenEv(e)).map(fmtEv);
+  const meetingsToday = events.filter((e) => e.start_at && new Date(e.start_at).getTime() >= todayStart.getTime() && new Date(e.start_at).getTime() < todayEndMs).map(fmtEv);
   const meetingsUpcoming = events.filter((e) => e.start_at && new Date(e.start_at).getTime() >= todayEndMs).slice(0, 20).map(fmtEv);
 
   const targets = await getTargets(personId);
@@ -398,7 +403,7 @@ async function gatherPlanContext(personId) {
     date: tzTodayStr(), leadCount: leads.length,
     capacity: { work_hours_per_day: WORK_HOURS, work_minutes_per_day: WORK_MIN, workdays: 'Po–Pá', working_days_left_this_month: workingDaysRemainingInMonth() },
     daily_quota: { new_contacts: q('new_contacts'), conversions: q('conversions'), reservations: q('reservations'), revenue: q('revenue') },
-    meetings_today: meetingsToday, meetings_upcoming_7d: meetingsUpcoming,
+    meetings_overdue: meetingsOverdue, meetings_today: meetingsToday, meetings_upcoming_7d: meetingsUpcoming,
     meetings_this_week_count: meetingsToday.length + meetingsUpcoming.filter((m) => { const d = new Date(m.when); return periodBounds('week').end.getTime() >= d.getTime(); }).length,
     leads: leadFacts, carry_over: carryOver, targets, actuals,
   };
@@ -471,14 +476,30 @@ function planDayFallback(ctx) {
 function buildLeadTasks(ctx) {
   const tasks = [];
   const covered = new Set();
+  // Popisky/ikony naplánovaných kroků dle typu události v kalendáři.
+  const EV_META = {
+    call:     { kind: 'call',     verb: '📞 Zavolej (slíbeno)', est: 12, do: 'Otevři kontakt, přečti poznámky a zavolej podle domluvy.' },
+    meeting:  { kind: 'meeting',  verb: '📅 Schůzka',            est: 60, do: 'Otevři kontakt, projdi cíl schůzky; ukonči konkrétním dalším krokem.' },
+    demo:     { kind: 'meeting',  verb: '📅 Demo',               est: 60, do: 'Připrav a odveď demo; ukonči dalším krokem.' },
+    followup: { kind: 'followup', verb: '🔁 Dosleduj (slíbeno)', est: 12, do: 'Otevři kontakt a dosleduj podle slibu — zjisti rozhodnutí, posuň dál.' },
+    task:     { kind: 'followup', verb: '✅ Slíbený krok',        est: 15, do: 'Splň, co jsi zákazníkovi slíbil, a zapiš výsledek.' },
+  };
+  const evMeta = (m) => EV_META[m && m.type] || EV_META.meeting;
+  const evHH = (m) => { const t = m && m.when ? new Date(m.when) : null; return t ? (('0' + t.getHours()).slice(-2) + ':' + ('0' + t.getMinutes()).slice(-2)) : ''; };
+  const evDM = (m) => { const t = m && m.when ? new Date(m.when) : null; return t ? (t.getDate() + '.' + (t.getMonth() + 1) + '.') : ''; };
   // Leady s naplánovanou schůzkou/hovorem (dnes i v příštích dnech) — ty se dnes už nevolají.
   const scheduled = new Set();
   (ctx.meetings_today || []).concat(ctx.meetings_upcoming_7d || []).forEach((m) => { if (m && m.lead_id) scheduled.add(m.lead_id); });
-  // (A) Dnešní schůzky z kalendáře — příprava, per kontakt.
+  // (A0) PROŠVIHNUTÉ slíbené kroky — úplně navrch, priorita 1. Dokud je obchodník neodklikne, drží se.
+  (ctx.meetings_overdue || []).forEach((m) => {
+    const meta = evMeta(m);
+    tasks.push({ kind: meta.kind, title: '⏰ PROŠVIHNUTO (' + evDM(m) + ') — ' + meta.verb.replace(/^[^ ]+ /, '') + ': ' + (m.title || '') , detail: 'Termín už uplynul. ' + meta.do + ' Domluv nový termín, ať nedržíš zákazníka v nejistotě.', reasoning: 'Prošvihnutý slíbený krok z ' + evDM(m) + ' — drží se, dokud ho nesplníš.', priority: 1, est_min: meta.est, lead_id: m.lead_id || null });
+    if (m.lead_id) covered.add(m.lead_id);
+  });
+  // (A) DNEŠNÍ naplánované kroky z kalendáře — pojmenované dle typu (hovor/schůzka/dosledování/slíbený krok).
   (ctx.meetings_today || []).forEach((m) => {
-    const t = m.when ? new Date(m.when) : null;
-    const hh = t ? (('0' + t.getHours()).slice(-2) + ':' + ('0' + t.getMinutes()).slice(-2)) : '';
-    tasks.push({ kind: 'meeting', title: 'Schůzka' + (hh ? ' ' + hh : '') + ' – ' + (m.title || 'schůzka'), detail: 'Otevři kontakt, projdi poznámky a cíl schůzky; ukonči konkrétním dalším krokem.' + (m.location ? ' Místo: ' + m.location + '.' : ''), reasoning: 'Dnešní schůzka z kalendáře.', priority: 1, est_min: 60, lead_id: m.lead_id || null });
+    const meta = evMeta(m); const hh = evHH(m);
+    tasks.push({ kind: meta.kind, title: meta.verb + (hh ? ' ' + hh : '') + ' – ' + (m.title || ''), detail: meta.do + (m.location ? ' Místo: ' + m.location + '.' : ''), reasoning: 'Dnešní naplánovaný krok z kalendáře.', priority: 1, est_min: meta.est, lead_id: m.lead_id || null });
     if (m.lead_id) covered.add(m.lead_id);
   });
   // (B) Horké leady a lhůty + běžné kontakty — každý jako samostatný úkol.

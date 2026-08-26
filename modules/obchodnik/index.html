@@ -206,7 +206,7 @@
       <div class="field"><label>Začátek</label><input class="qinput" id="mt-start" type="datetime-local"></div>
       <div class="field" id="mt-end-field"><label>Konec</label><input class="qinput" id="mt-end" type="datetime-local"></div>
       <div class="field"><label>Místo</label><input class="qinput" id="mt-loc" placeholder="Adresa / online"></div>
-      <div class="field"><label>Pozvat (e-maily, oddělené čárkou)</label><input class="qinput" id="mt-att" placeholder="kontakt@… , kolega@bestseries.cz" inputmode="email"><div style="font-size:11px;color:var(--muted2);margin-top:4px">Pozvánka se odešle e-mailem přes Outlook. Předvyplní se kontakt; kolegu přidej čárkou.</div></div>
+      <div class="field" id="mt-att-field"><label>Pozvat (e-maily, oddělené čárkou)</label><input class="qinput" id="mt-att" placeholder="kontakt@… , kolega@bestseries.cz" inputmode="email"><div style="font-size:11px;color:var(--muted2);margin-top:4px">Pozvánka se odešle e-mailem přes Outlook. Předvyplní se kontakt; kolegu přidej čárkou.</div></div>
       <div class="field"><label>Poznámka</label><textarea id="mt-note" placeholder="Detaily…"></textarea></div>
       <div class="actions-row">
         <button class="btn btn-g" style="flex:1" onclick="closeMeeting()">Zrušit</button>
@@ -604,14 +604,20 @@
   }
   function openMeeting(pf){
     pf=pf||{};
-    window._meetingKind = pf._kind || 'meeting'; // 'meeting' | 'call' — řídí typ události a auto-stav leadu
-    var isCall = window._meetingKind === 'call';
+    window._meetingKind = pf._kind || 'meeting'; // 'meeting' | 'call' | 'followup' | 'task'
+    var kind = window._meetingKind;
+    var isCall = kind === 'call';
+    var isInternal = (kind === 'followup' || kind === 'task'); // jen můj kalendář, bez pozvánky zákazníkovi
+    var shortEv = isCall || isInternal; // krátká událost — pole Konec skryté
+    var HEAD = { meeting:['Nová schůzka','Upravit schůzku','Uložit schůzku'], call:['Naplánovat hovor','Upravit hovor','Uložit hovor'], followup:['Naplánovat dosledování','Upravit dosledování','Uložit dosledování'], task:['Slíbený krok','Upravit slíbený krok','Uložit'] };
+    var hd = HEAD[kind] || HEAD.meeting;
     document.getElementById('mt-err').textContent='';
     document.getElementById('mt-id').value=pf.id||'';
-    document.getElementById('mt-title-h').textContent = pf.id ? (isCall?'Upravit hovor':'Upravit schůzku') : (isCall?'Naplánovat hovor':'Nová schůzka');
-    document.getElementById('mt-save').textContent = pf.id?'Uložit změny':(isCall?'Uložit hovor':'Uložit schůzku');
+    document.getElementById('mt-title-h').textContent = pf.id ? hd[1] : hd[0];
+    document.getElementById('mt-save').textContent = pf.id?'Uložit změny':hd[2];
     var del=document.getElementById('mt-del'); if(del) del.style.display = pf.id?'':'none';
     var done=document.getElementById('mt-done'); if(done) done.style.display = (pf.id && !isCall)?'':'none';
+    var attField=document.getElementById('mt-att-field'); if(attField) attField.style.display = isInternal ? 'none' : ''; // interní krok = bez pozvánky zákazníkovi
     var st=document.getElementById('mt-status');
     if(st){ if(pf.id && pf.graph_event_id){ st.innerHTML='✅ Synchronizováno do Outlooku'; st.style.color='#22c55e'; } else if(pf.id && pf.sync_error){ st.innerHTML='⚠ '+esc(pf.sync_error); st.style.color='#eab308'; } else { st.innerHTML=''; } }
     document.getElementById('mt-title').value=pf.title||'';
@@ -621,11 +627,11 @@
     document.getElementById('mt-site').value=pf.site_id||'';
     document.getElementById('mt-lead').value=pf.compounder_lead_id||'';
     var start = pf.start? new Date(pf.start) : (function(){ var n=new Date(); n.setMinutes(0,0,0); n.setHours(n.getHours()+1); return n; })();
-    // Hovor trvá defaultně 10 min a pole Konec se skryje — obchodník zadává jen začátek.
-    var end = pf.end? new Date(pf.end) : new Date(start.getTime()+(isCall?600000:3600000));
+    // Hovor / dosledování / slíbený krok trvají defaultně krátce a pole Konec se skryje — zadáváš jen začátek.
+    var end = pf.end? new Date(pf.end) : new Date(start.getTime()+(shortEv?600000:3600000));
     document.getElementById('mt-start').value=_dtLocal(start);
     document.getElementById('mt-end').value=_dtLocal(end);
-    var endField=document.getElementById('mt-end-field'); if(endField) endField.style.display = isCall ? 'none' : '';
+    var endField=document.getElementById('mt-end-field'); if(endField) endField.style.display = shortEv ? 'none' : '';
     document.getElementById('meeting-modal').classList.add('open');
   }
   function closeMeeting(){ document.getElementById('meeting-modal').classList.remove('open'); }
@@ -638,9 +644,12 @@
     var btn=document.getElementById('mt-save'); btn.disabled=true;
     var id=document.getElementById('mt-id').value;
     var kind = window._meetingKind || 'meeting';
-    // Hovor: konec vždy začátek +10 min (pole Konec je skryté).
-    var endIso = (kind==='call') ? new Date(new Date(start).getTime()+600000).toISOString() : (end? new Date(end).toISOString() : null);
-    var payload={ title:title, start_at:new Date(start).toISOString(), end_at: endIso, location:(document.getElementById('mt-loc').value||'').trim()||null, description:(document.getElementById('mt-note').value||'').trim()||null, attendees:(document.getElementById('mt-att').value||'').trim(), event_type:(kind==='call'?'call':'meeting') };
+    var isInternal = (kind==='followup' || kind==='task'); // jen můj kalendář, bez pozvánky zákazníkovi
+    var shortEv = (kind==='call' || isInternal);
+    // Krátké kroky (hovor/dosledování/slíbený krok): konec = začátek +10 min (pole Konec skryté).
+    var endIso = shortEv ? new Date(new Date(start).getTime()+600000).toISOString() : (end? new Date(end).toISOString() : null);
+    var EV_TYPE = { meeting:'meeting', call:'call', followup:'followup', task:'task' };
+    var payload={ title:title, start_at:new Date(start).toISOString(), end_at: endIso, location:(document.getElementById('mt-loc').value||'').trim()||null, description:(document.getElementById('mt-note').value||'').trim()||null, attendees: isInternal ? '' : (document.getElementById('mt-att').value||'').trim(), event_type:(EV_TYPE[kind]||'meeting') };
     var sid=document.getElementById('mt-site').value; var lid=document.getElementById('mt-lead').value;
     if(sid) payload.site_id=parseInt(sid,10); if(lid) payload.compounder_lead_id=parseInt(lid,10);
     try{
@@ -648,8 +657,8 @@
       var j=await r.json().catch(function(){return{};});
       if(!r.ok) throw new Error(j.error||'Chyba');
       closeMeeting(); _refetchCal(); loadUpcomingMeetings();
-      // Nová událost u leada → automaticky přepni stav (hovor → Volat příště, schůzka → Domluvena schůzka).
-      if(!id && lid){ var ns = (kind==='call') ? 'volat_pristi' : 'schuzka'; try{ await setField(parseInt(lid,10), 'status', ns); }catch(e){} if(kind!=='call') obLogAction(parseInt(lid,10),'plan_meeting','📅 Naplánována schůzka'); }
+      // Nová událost u leada → automaticky přepni stav (hovor → Volat příště, schůzka → Domluvena schůzka, dosledování/slíbený krok → Dosledování).
+      if(!id && lid){ var ns = (kind==='call') ? 'volat_pristi' : (kind==='meeting' ? 'schuzka' : 'dosledovani'); try{ await setField(parseInt(lid,10), 'status', ns); }catch(e){} if(kind==='meeting') obLogAction(parseInt(lid,10),'plan_meeting','📅 Naplánována schůzka'); else if(isInternal) obLogAction(parseInt(lid,10),'plan_followup','🔁 Naplánován další krok'); }
     }catch(e){ err.textContent='Uložení selhalo: '+e.message; } finally{ btn.disabled=false; }
   }
   async function deleteMeeting(id){ try{ await fetch('/api/sales/events/'+id,{method:'DELETE',credentials:'include'}); _refetchCal(); loadUpcomingMeetings(); }catch(e){} }
@@ -658,6 +667,34 @@
   function meetingFromSite(id){ var s=calFindSite(id)||{}; var addr=s.address||[s.zip,s.city].filter(Boolean).join(' ')||''; openMeeting({ title:'Schůzka – '+(s.owner_name||'lokalita'), location:addr, site_id:id, attendees:(s.owner_email||'') }); }
   function meetingFromLead(id){ var l=(state.leads||[]).filter(function(x){return x.id===id;})[0]||{}; openMeeting({ title:'Schůzka – '+(l.name||l.email||'lead'), compounder_lead_id:id, attendees:(l.email||'') }); }
   function callFromLead(id){ obLogAction(id,'plan_call','📅 Naplánován hovor'); var l=(state.leads||[]).filter(function(x){return x.id===id;})[0]||{}; openMeeting({ _kind:'call', title:'Hovor – '+(l.name||l.email||'lead'), compounder_lead_id:id, attendees:(l.email||'') }); }
+  // Dosledování + slíbený krok = jen do MÉHO kalendáře (bez pozvánky zákazníkovi).
+  function followupFromLead(id){ var l=(state.leads||[]).filter(function(x){return x.id===id;})[0]||{}; openMeeting({ _kind:'followup', title:'Dosledovat – '+(l.name||l.email||'lead'), compounder_lead_id:id }); }
+  function promiseFromLead(id){ var l=(state.leads||[]).filter(function(x){return x.id===id;})[0]||{}; openMeeting({ _kind:'task', title:'Slíbený krok – '+(l.name||l.email||'lead'), compounder_lead_id:id }); }
+  window.followupFromLead=followupFromLead; window.promiseFromLead=promiseFromLead;
+  // Rychlý výběr dalšího kroku (po hovoru / kdykoli u kontaktu) — vše se propíše do kalendáře a do plánu.
+  function obNextStep(id){
+    var l=(state.leads||[]).filter(function(x){return x.id===id;})[0]||{};
+    var ex=document.getElementById('ob-nextstep'); if(ex) ex.remove();
+    var ov=document.createElement('div'); ov.id='ob-nextstep';
+    ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:120;display:flex;align-items:flex-end;justify-content:center';
+    ov.onclick=function(e){ if(e.target===ov) ov.remove(); };
+    var b=function(ic,lbl,sub,fn,col){ return '<button data-fn="'+fn+'" style="display:flex;gap:12px;align-items:center;width:100%;text-align:left;background:var(--surface2);border:1px solid var(--line);border-left:3px solid '+col+';border-radius:12px;padding:13px 14px;margin-top:10px;color:var(--text);font-size:15px;font-weight:600;cursor:pointer;font-family:inherit"><span style="font-size:20px">'+ic+'</span><span>'+lbl+'<div style="font-size:11.5px;color:var(--muted2);font-weight:400;margin-top:1px">'+sub+'</div></span></button>'; };
+    ov.innerHTML='<div style="background:var(--surface);width:100%;max-width:520px;border-radius:18px 18px 0 0;border-top:1px solid var(--line);padding:18px 16px calc(18px + env(safe-area-inset-bottom,0))">'
+      +'<div style="font-size:16px;font-weight:700;margin-bottom:2px">Co dál s '+esc(l.name||l.email||'kontaktem')+'?</div>'
+      +'<div style="font-size:12.5px;color:var(--muted);margin-bottom:6px">Nastav termín — objeví se ti v plánu a nezapomeneš. Když ho prošvihneš, vyskočí navrch.</div>'
+      +b('📞','Naplánovat hovor','Do tvého i zákazníkova kalendáře','call','#a78bfa')
+      +b('📅','Naplánovat schůzku','Do tvého i zákazníkova kalendáře','meeting','#22c55e')
+      +b('🔁','Dosledování','Jen do tvého kalendáře','followup','#06b6d4')
+      +b('✅','Slíbený krok','Co jsi slíbil (jen tvůj kalendář)','task','#eab308')
+      +'<button id="obns-close" style="width:100%;margin-top:12px;background:none;border:none;color:var(--muted2);font-size:14px;padding:8px;cursor:pointer;font-family:inherit">Teď ne</button>'
+      +'</div>';
+    document.body.appendChild(ov);
+    ov.querySelectorAll('button[data-fn]').forEach(function(btn){ btn.onclick=function(){ var fn=btn.getAttribute('data-fn'); ov.remove();
+      if(fn==='call') callFromLead(id); else if(fn==='meeting') meetingFromLead(id); else if(fn==='followup') followupFromLead(id); else if(fn==='task') promiseFromLead(id);
+    }; });
+    document.getElementById('obns-close').onclick=function(){ ov.remove(); };
+  }
+  window.obNextStep=obNextStep;
   window.callFromLead = callFromLead;
   // Zaznamená kliknutí na akční tlačítko do aktivit leada (fire-and-forget); slouží i k měření času u telefonu.
   function obLogAction(id, action, label){ try{ api('/leads/'+id+'/action', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:action, label:label }) }); }catch(e){} }
@@ -857,7 +894,7 @@
     if (l.status === 'new'){
       if (ev && ev.preventDefault) ev.preventDefault();
       var href = (ev && ev.currentTarget && ev.currentTarget.getAttribute('href')) || ('tel:'+String(l.phone||'').replace(/[^\d+]/g,''));
-      obAskCall(l.name, function(){ markCalled(id); window.location.href = href; }, function(){ saveContact(id); });
+      obAskCall(l.name, function(){ markCalled(id); window.location.href = href; setTimeout(function(){ if(typeof obNextStep==='function') obNextStep(id); }, 400); }, function(){ saveContact(id); });
       return false;
     }
     markCalled(id);
@@ -1009,6 +1046,7 @@
           (l.phone ? '<a href="sms:'+esc(telClean)+'">📩 SMS</a>' : '') +
           (l.email ? '<a href="mailto:'+esc(l.email)+'">✉️ E-mail</a>' : '') +
         '</div>' +
+        '<div class="field" style="margin-top:8px"><button class="btn btn-p" style="width:100%" onclick="obNextStep('+l.id+')">➕ Další krok (hovor / schůzka / dosledování / slíbený krok)</button></div>' +
         '<div class="field" style="margin-top:8px"><button class="btn btn-g" style="width:100%" onclick="meetingFromLead('+l.id+')">📅 Naplánovat schůzku</button></div>' +
         '<div class="field" style="margin-top:6px"><button class="btn btn-g" style="width:100%" onclick="callFromLead('+l.id+')">📞 Naplánovat hovor</button></div>' +
         (l.phone ? '<div class="field" style="margin-top:6px"><button class="btn btn-g" style="width:100%" onclick="saveContact('+l.id+')">💾 Uložit kontakt do telefonu</button></div>' : '') +
@@ -1815,6 +1853,7 @@
       if(typeof markCalled==='function') markCalled(id);
       if(typeof openLeadFromTask==='function') openLeadFromTask(id); // přepni na kontakt a otevři ho (pro doplnění po hovoru)
       window.location.href=tel; // spusť hovor
+      setTimeout(function(){ if(typeof obNextStep==='function') obNextStep(id); }, 400); // po návratu z hovoru: nabídni další krok s termínem
     };
     if(l.status==='new'){
       obAskCall(l.name, doCall, function(){ saveContact(id); });
