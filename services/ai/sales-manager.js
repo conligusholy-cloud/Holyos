@@ -519,16 +519,18 @@ function buildLeadTasks(ctx) {
   // Leady s naplánovanou schůzkou/hovorem (dnes i v příštích dnech) — ty se dnes už nevolají.
   const scheduled = new Set();
   (ctx.meetings_today || []).concat(ctx.meetings_upcoming_7d || []).forEach((m) => { if (m && m.lead_id) scheduled.add(m.lead_id); });
-  // (A0) PROŠVIHNUTÉ slíbené kroky — úplně navrch, priorita 1. Dokud je obchodník neodklikne, drží se.
-  (ctx.meetings_overdue || []).forEach((m) => {
-    const meta = evMeta(m);
-    tasks.push({ kind: meta.kind, title: '⏰ PROŠVIHNUTO (' + evDM(m) + ') — ' + meta.verb.replace(/^[^ ]+ /, '') + ': ' + (m.title || '') , detail: 'Termín už uplynul. ' + meta.do + ' Domluv nový termín, ať nedržíš zákazníka v nejistotě.', reasoning: 'Prošvihnutý slíbený krok z ' + evDM(m) + ' — drží se, dokud ho nesplníš.', priority: 1, est_min: meta.est, lead_id: m.lead_id || null });
-    if (m.lead_id) covered.add(m.lead_id);
-  });
-  // (A) DNEŠNÍ naplánované kroky z kalendáře — pojmenované dle typu (hovor/schůzka/dosledování/slíbený krok).
+  // (A) DNEŠNÍ naplánované kroky z kalendáře — ÚPLNĚ NAVRCH (co mám dnes v kalendáři), priorita 1,
+  // pojmenované dle typu (hovor/schůzka/dosledování/slíbený krok).
   (ctx.meetings_today || []).forEach((m) => {
     const meta = evMeta(m); const hh = evHH(m);
     tasks.push({ kind: meta.kind, title: meta.verb + (hh ? ' ' + hh : '') + ' – ' + (m.title || ''), detail: meta.do + (m.location ? ' Místo: ' + m.location + '.' : ''), reasoning: 'Dnešní naplánovaný krok z kalendáře.', priority: 1, est_min: meta.est, lead_id: m.lead_id || null });
+    if (m.lead_id) covered.add(m.lead_id);
+  });
+  // (A0) PROŠVIHNUTÉ slíbené kroky — hned za dnešními, priorita 1. Dokud je obchodník neodklikne, drží se.
+  (ctx.meetings_overdue || []).forEach((m) => {
+    if (m.lead_id && covered.has(m.lead_id)) return;
+    const meta = evMeta(m);
+    tasks.push({ kind: meta.kind, title: '⏰ PROŠVIHNUTO (' + evDM(m) + ') — ' + meta.verb.replace(/^[^ ]+ /, '') + ': ' + (m.title || '') , detail: 'Termín už uplynul. ' + meta.do + ' Domluv nový termín, ať nedržíš zákazníka v nejistotě.', reasoning: 'Prošvihnutý slíbený krok z ' + evDM(m) + ' — drží se, dokud ho nesplníš.', priority: 1, est_min: meta.est, lead_id: m.lead_id || null });
     if (m.lead_id) covered.add(m.lead_id);
   });
   // (B) Horké leady a lhůty + běžné kontakty — každý jako samostatný úkol.
