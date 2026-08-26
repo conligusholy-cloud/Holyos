@@ -685,17 +685,54 @@
       +'<div style="font-size:12.5px;color:var(--muted);margin-bottom:6px">Nastav termín — objeví se ti v plánu a nezapomeneš. Když ho prošvihneš, vyskočí navrch.</div>'
       +b('📞','Naplánovat hovor','Do tvého i zákazníkova kalendáře','call','#a78bfa')
       +b('📅','Naplánovat schůzku','Do tvého i zákazníkova kalendáře','meeting','#22c55e')
-      +b('🔁','Dosledování','Jen do tvého kalendáře','followup','#06b6d4')
-      +b('✅','Slíbený krok','Co jsi slíbil (jen tvůj kalendář)','task','#eab308')
+      +b('✅','Slíbený krok','Co jsi slíbil + termín (tvůj kalendář i úkol)','task','#eab308')
       +'<button id="obns-close" style="width:100%;margin-top:12px;background:none;border:none;color:var(--muted2);font-size:14px;padding:8px;cursor:pointer;font-family:inherit">Teď ne</button>'
       +'</div>';
     document.body.appendChild(ov);
     ov.querySelectorAll('button[data-fn]').forEach(function(btn){ btn.onclick=function(){ var fn=btn.getAttribute('data-fn'); ov.remove();
-      if(fn==='call') callFromLead(id); else if(fn==='meeting') meetingFromLead(id); else if(fn==='followup') followupFromLead(id); else if(fn==='task') promiseFromLead(id);
+      if(fn==='call') callFromLead(id); else if(fn==='meeting') meetingFromLead(id); else if(fn==='task') obPromisePrompt(id);
     }; });
     document.getElementById('obns-close').onclick=function(){ ov.remove(); };
   }
   window.obNextStep=obNextStep;
+  // Slíbený krok — přímý dotaz „co jsi slíbil + na kdy" → uloží do kalendáře (SalesEvent task) i do plánu (úkol).
+  function obPromisePrompt(id){
+    var l=(state.leads||[]).filter(function(x){return x.id===id;})[0]||{};
+    var ex=document.getElementById('ob-promise'); if(ex) ex.remove();
+    var def=new Date(); def.setDate(def.getDate()+1); def.setHours(9,0,0,0);
+    var ov=document.createElement('div'); ov.id='ob-promise';
+    ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:130;display:flex;align-items:flex-end;justify-content:center';
+    ov.onclick=function(e){ if(e.target===ov) ov.remove(); };
+    ov.innerHTML='<div style="background:var(--surface);width:100%;max-width:520px;border-radius:18px 18px 0 0;border-top:1px solid var(--line);padding:20px 16px calc(20px + env(safe-area-inset-bottom,0))">'
+      +'<div style="font-size:17px;font-weight:700;margin-bottom:2px">✅ Slíbený krok — '+esc(l.name||l.email||'kontakt')+'</div>'
+      +'<div style="font-size:12.5px;color:var(--muted);margin-bottom:14px">Uloží se ti do kalendáře i do úkolů na daný den. Když termín prošvihneš, vyskočí navrch plánu.</div>'
+      +'<label style="display:block;font-size:12px;color:var(--muted2);margin-bottom:4px">Co jsi slíbil?</label>'
+      +'<textarea id="op-text" placeholder="např. Poslat nabídku na 3 stroje, ozvat se s termínem instalace…" style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--line);border-radius:10px;padding:11px;color:var(--text);font-size:15px;font-family:inherit;min-height:70px;resize:vertical"></textarea>'
+      +'<label style="display:block;font-size:12px;color:var(--muted2);margin:12px 0 4px">Na kdy?</label>'
+      +'<input id="op-when" type="datetime-local" value="'+_dtLocal(def)+'" style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--line);border-radius:10px;padding:11px;color:var(--text);font-size:15px;font-family:inherit">'
+      +'<div style="display:flex;gap:10px;margin-top:16px"><button id="op-cancel" class="btn btn-g" style="flex:1">Zrušit</button><button id="op-save" class="btn btn-p" style="flex:2">Uložit slíbený krok</button></div>'
+      +'<p id="op-err" style="color:#fca5a5;font-size:13px;margin:8px 0 0;min-height:14px"></p>'
+      +'</div>';
+    document.body.appendChild(ov);
+    document.getElementById('op-cancel').onclick=function(){ ov.remove(); };
+    setTimeout(function(){ var t=document.getElementById('op-text'); if(t) t.focus(); }, 50);
+    document.getElementById('op-save').onclick=async function(){
+      var text=(document.getElementById('op-text').value||'').trim();
+      var when=document.getElementById('op-when').value;
+      var err=document.getElementById('op-err');
+      if(!text){ err.textContent='Napiš, co jsi slíbil.'; return; }
+      if(!when){ err.textContent='Vyber termín.'; return; }
+      var btn=document.getElementById('op-save'); btn.disabled=true;
+      var start=new Date(when); var end=new Date(start.getTime()+5*60000);
+      var payload={ title:'Slíbený krok – '+(l.name||l.email||'lead'), description:text, event_type:'task', start_at:start.toISOString(), end_at:end.toISOString(), attendees:'', compounder_lead_id:id };
+      try{
+        var r=await fetch('/api/sales/events',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+        if(!r.ok){ var j=await r.json().catch(function(){return{};}); throw new Error(j.error||'Chyba'); }
+        ov.remove(); _refetchCal(); loadUpcomingMeetings();
+      }catch(e){ btn.disabled=false; err.textContent='Uložení selhalo: '+(e.message||''); }
+    };
+  }
+  window.obPromisePrompt=obPromisePrompt;
   window.callFromLead = callFromLead;
   // Zaznamená kliknutí na akční tlačítko do aktivit leada (fire-and-forget); slouží i k měření času u telefonu.
   function obLogAction(id, action, label){ try{ api('/leads/'+id+'/action', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:action, label:label }) }); }catch(e){} }
@@ -1063,9 +1100,9 @@
           (l.phone ? '<a href="sms:'+esc(telClean)+'">📩 SMS</a>' : '') +
           (l.email ? '<a href="mailto:'+esc(l.email)+'">✉️ E-mail</a>' : '') +
         '</div>' +
-        '<div class="field" style="margin-top:8px"><button class="btn btn-p" style="width:100%" onclick="obNextStep('+l.id+')">➕ Další krok (hovor / schůzka / dosledování / slíbený krok)</button></div>' +
         '<div class="field" style="margin-top:8px"><button class="btn btn-g" style="width:100%" onclick="meetingFromLead('+l.id+')">📅 Naplánovat schůzku</button></div>' +
         '<div class="field" style="margin-top:6px"><button class="btn btn-g" style="width:100%" onclick="callFromLead('+l.id+')">📞 Naplánovat hovor</button></div>' +
+        '<div class="field" style="margin-top:6px"><button class="btn btn-p" style="width:100%" onclick="obPromisePrompt('+l.id+')">✅ Slíbený krok (co jsi slíbil + termín)</button></div>' +
         (l.phone ? '<div class="field" style="margin-top:6px"><button class="btn btn-g" style="width:100%" onclick="saveContact('+l.id+')">💾 Uložit kontakt do telefonu</button></div>' : '') +
         '<div style="font-size:12px;margin-top:8px;color:'+(laToday?'#22c55e':'var(--muted)')+'">Poslední aktivita: '+(laDate?fmtD(laDate):'—')+'</div>' +
         '<div class="field" style="background:rgba(234,179,8,0.10);border:1px solid rgba(234,179,8,0.55);border-radius:12px;padding:12px;margin-top:8px"><label style="color:#eab308;font-weight:700">🏷️ Stav</label>'+statusSel+'</div>' +
