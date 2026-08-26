@@ -267,7 +267,7 @@
   <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/locales-all.global.min.js"></script>
 <script>
   var API = '/api/compounder';
-  var STATUS = { new:{l:'Nový',c:'var(--new)'}, nedovolano:{l:'Nedovoláno',c:'#f59e0b'}, volat_pristi:{l:'Volat příště',c:'#eab308'}, contacted:{l:'Kontaktován',c:'var(--contacted)'}, access_sent:{l:'Odeslán přístup',c:'#3b82f6'}, schuzka:{l:'Domluvena schůzka',c:'#22c55e'}, schuzka_online:{l:'Domluvena schůzka online',c:'#10b981'}, qualified:{l:'Kvalifikován',c:'var(--qualified)'}, dosledovani:{l:'Dosledování',c:'#06b6d4'}, converted:{l:'Převeden',c:'var(--converted)'}, nelze_pouzit:{l:'Nelze použít',c:'#6b7280'}, rejected:{l:'Zamítnut',c:'var(--rejected)'} };
+  var STATUS = { new:{l:'Nový',c:'var(--new)'}, nedovolano:{l:'Nedovoláno',c:'#f59e0b'}, volat_pristi:{l:'Volat příště',c:'#eab308'}, contacted:{l:'Kontaktován',c:'var(--contacted)'}, access_sent:{l:'Odeslán přístup',c:'#3b82f6'}, schuzka:{l:'Domluvena schůzka',c:'#22c55e'}, schuzka_online:{l:'Domluvena schůzka online',c:'#10b981'}, qualified:{l:'Kvalifikován',c:'var(--qualified)'}, dosledovani:{l:'Dosledování',c:'#06b6d4'}, converted:{l:'Převeden',c:'var(--converted)'}, nezajem:{l:'Nemá zájem',c:'#ef4444'}, nelze_pouzit:{l:'Nelze použít',c:'#6b7280'}, rejected:{l:'Zamítnut',c:'var(--rejected)'} };
   var LANGS = { '':'—', en:'English', bg:'Български', cs:'Čeština', da:'Dansk', de:'Deutsch', el:'Ελληνικά', es:'Español', et:'Eesti', fi:'Suomi', fr:'Français', ga:'Gaeilge', hr:'Hrvatski', hu:'Magyar', it:'Italiano', lt:'Lietuvių', lv:'Latviešu', mt:'Malti', nl:'Nederlands', pl:'Polski', pt:'Português', ro:'Română', sk:'Slovenčina', sl:'Slovenščina', sv:'Svenska' };
   var COUNTRIES = [
     {c:'CZ',f:'🇨🇿',d:'+420'},{c:'SK',f:'🇸🇰',d:'+421'},{c:'DE',f:'🇩🇪',d:'+49'},{c:'AT',f:'🇦🇹',d:'+43'},
@@ -418,6 +418,7 @@
   function renderLokalitySec(){
     var box = document.getElementById('lokality-sec');
     if (!box) return;
+    if (state.search && state.search.length){ box.innerHTML=''; return; } // při hledání jen kontakty
     if ((state.typeFilter || 'all') === 'compounder'){ box.innerHTML=''; return; }
     if (!lokState.items.length){ box.innerHTML=''; return; }
     var f = lokState.filter || 'all';
@@ -902,7 +903,7 @@
   }
   window.obCallClick = obCallClick;
   var searchTimer=null;
-  function onSearch(){ clearTimeout(searchTimer); searchTimer=setTimeout(function(){ state.search=document.getElementById('search').value.trim(); load(); }, 300); }
+  function onSearch(){ clearTimeout(searchTimer); searchTimer=setTimeout(function(){ state.search=document.getElementById('search').value.trim(); load(); try{ renderLokalitySec(); }catch(e){} }, 300); }
 
   // Tiché obnovení dat bez reloadu stránky — zůstane aktivní záložka (Kontakty/Kalendář/Dnes).
   window.appRefresh = async function(btn){
@@ -934,30 +935,46 @@
 
   function render(){
     var box = document.getElementById('content');
-    if ((state.typeFilter || 'all') === 'lokality'){ box.innerHTML = ''; return; }
+    var searching = !!(state.search && state.search.length);
+    // Při hledání ignorujeme záložku i filtry (chytré vyhledávání napříč vším).
+    if (!searching && (state.typeFilter || 'all') === 'lokality'){ box.innerHTML = ''; return; }
     var leads = state.leads || [];
-    if (!leads.length){ box.innerHTML = '<div class="empty">Zatím žádné přiřazené kontakty.</div>'; return; }
-    var f = state.leadStatusFilter || '';
-    var filtered = f ? leads.filter(function(l){ return (l.status||'new') === f; }) : leads;
-    if (state.calledTodayOnly) filtered = filtered.filter(function(l){ return l.last_called_at && isTodayD(new Date(l.last_called_at)); });
-    var calledTodayCount = leads.filter(function(l){ return l.last_called_at && isTodayD(new Date(l.last_called_at)); }).length;
-    var opts = '<option value="">Všechny stavy ('+leads.length+')</option>' +
-      Object.keys(STATUS).map(function(k){
-        var n = leads.filter(function(l){ return (l.status||'new') === k; }).length;
-        return '<option value="'+k+'"'+(f===k?' selected':'')+'>'+STATUS[k].l+' ('+n+')</option>';
-      }).join('');
-    var head = '<div style="display:flex;align-items:center;gap:8px;margin:14px 12px 8px;flex-wrap:wrap">' +
-      '<span style="font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">🌐 Compounder kontakty</span>' +
-      '<span style="background:var(--primary);color:#04121e;border-radius:10px;padding:1px 8px;font-size:12px">'+leads.length+'</span>' +
-      '<button onclick="setCalledTodayOnly('+(!state.calledTodayOnly)+')" title="Zobrazit jen dnes volané" style="margin-left:auto;font-size:12px;padding:5px 11px;border-radius:999px;cursor:pointer;border:1px solid '+(state.calledTodayOnly?'#a78bfa':'var(--line)')+';background:'+(state.calledTodayOnly?'rgba(167,139,250,0.18)':'transparent')+';color:'+(state.calledTodayOnly?'#a78bfa':'var(--muted)')+'">📞 Dnes volané'+(calledTodayCount?' ('+calledTodayCount+')':'')+'</button>' +
-      '<select onchange="setLeadStatus(this.value)">'+opts+'</select>' +
-      '</div>';
+    if (!leads.length){ box.innerHTML = '<div class="empty">'+(searching?'Nic nenalezeno.':'Zatím žádné přiřazené kontakty.')+'</div>'; return; }
+    var head, filtered;
+    if (searching){
+      // Server už vrátil shody (bez diakritiky, napříč jméno/e-mail/telefon/firma). Filtry neaplikujeme.
+      filtered = leads;
+      head = '<div style="display:flex;align-items:center;gap:8px;margin:14px 12px 8px;flex-wrap:wrap">' +
+        '<span style="font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">🔎 Výsledky hledání</span>' +
+        '<span style="background:var(--primary);color:#04121e;border-radius:10px;padding:1px 8px;font-size:12px">'+leads.length+'</span>' +
+        '<span style="font-size:11px;color:var(--muted2)">„'+esc(state.search)+'" · filtry ignorovány</span>' +
+        '<button onclick="obClearSearch()" style="margin-left:auto;font-size:12px;padding:5px 11px;border-radius:999px;cursor:pointer;border:1px solid var(--line);background:transparent;color:var(--muted)">✕ Zrušit hledání</button>' +
+        '</div>';
+    } else {
+      var f = state.leadStatusFilter || '';
+      filtered = f ? leads.filter(function(l){ return (l.status||'new') === f; }) : leads;
+      if (state.calledTodayOnly) filtered = filtered.filter(function(l){ return l.last_called_at && isTodayD(new Date(l.last_called_at)); });
+      var calledTodayCount = leads.filter(function(l){ return l.last_called_at && isTodayD(new Date(l.last_called_at)); }).length;
+      var opts = '<option value="">Všechny stavy ('+leads.length+')</option>' +
+        Object.keys(STATUS).map(function(k){
+          var n = leads.filter(function(l){ return (l.status||'new') === k; }).length;
+          return '<option value="'+k+'"'+(f===k?' selected':'')+'>'+STATUS[k].l+' ('+n+')</option>';
+        }).join('');
+      head = '<div style="display:flex;align-items:center;gap:8px;margin:14px 12px 8px;flex-wrap:wrap">' +
+        '<span style="font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">🌐 Compounder kontakty</span>' +
+        '<span style="background:var(--primary);color:#04121e;border-radius:10px;padding:1px 8px;font-size:12px">'+leads.length+'</span>' +
+        '<button onclick="setCalledTodayOnly('+(!state.calledTodayOnly)+')" title="Zobrazit jen dnes volané" style="margin-left:auto;font-size:12px;padding:5px 11px;border-radius:999px;cursor:pointer;border:1px solid '+(state.calledTodayOnly?'#a78bfa':'var(--line)')+';background:'+(state.calledTodayOnly?'rgba(167,139,250,0.18)':'transparent')+';color:'+(state.calledTodayOnly?'#a78bfa':'var(--muted)')+'">📞 Dnes volané'+(calledTodayCount?' ('+calledTodayCount+')':'')+'</button>' +
+        '<select onchange="setLeadStatus(this.value)">'+opts+'</select>' +
+        '</div>';
+    }
     var listHtml = filtered.length
       ? ('<div class="list">' + filtered.map(cardHtml).join('') + '</div>')
-      : '<div class="empty">Žádný kontakt v tomto stavu.</div>';
+      : '<div class="empty">'+(searching?'Nic nenalezeno.':'Žádný kontakt v tomto stavu.')+'</div>';
     box.innerHTML = head + listHtml;
     if (state.openId){ loadActivity(state.openId); loadReservations(state.openId); }
   }
+  function obClearSearch(){ var s=document.getElementById('search'); if(s) s.value=''; state.search=''; load(); try{ renderLokalitySec(); }catch(e){} }
+  window.obClearSearch = obClearSearch;
 
   // Plánovaná investice z poznámky (řádek „…investic…: hodnota") — jen když je to částka.
   function fbInvest(l){

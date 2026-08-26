@@ -1912,20 +1912,22 @@ router.get('/my-leads', requireAuth, async (req, res, next) => {
     if (!meId) return res.json([]);
     const where = { owner_person_id: meId, is_test: false };
     if (req.query.status) where.status = String(req.query.status);
-    if (req.query.search) {
-      const q = String(req.query.search);
-      where.OR = [
-        { name: { contains: q, mode: 'insensitive' } },
-        { email: { contains: q, mode: 'insensitive' } },
-        { phone: { contains: q } },
-      ];
-      // Hledání podle telefonu i po odstranění mezer/prefixů (uloženo může být „+420 …").
-      const qDigits = q.replace(/\D/g, '');
-      if (qDigits.length >= 3) where.OR.push({ phone: { contains: qDigits } });
+    const q = req.query.search ? String(req.query.search).trim() : '';
+    let leads;
+    if (q && q.length >= 2) {
+      // Chytré hledání: BEZ DIAKRITIKY, napříč jméno/e-mail/telefon/firma; ignoruje ostatní filtry.
+      const all = await prisma.compounderLead.findMany({ where: { owner_person_id: meId, is_test: false }, orderBy: { created_at: 'desc' }, take: 5000 });
+      const norm = (s) => (s == null ? '' : String(s)).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+      const nq = norm(q); const qd = q.replace(/\D/g, '');
+      leads = all.filter((l) => {
+        const hay = norm((l.name || '') + ' ' + (l.email || '') + ' ' + (l.company || '') + ' ' + (l.phone || ''));
+        if (hay.indexOf(nq) !== -1) return true;
+        if (qd.length >= 3 && String(l.phone || '').replace(/\D/g, '').indexOf(qd) !== -1) return true;
+        return false;
+      }).slice(0, 500);
+    } else {
+      leads = await prisma.compounderLead.findMany({ where, orderBy: { created_at: 'desc' }, take: 500 });
     }
-    const leads = await prisma.compounderLead.findMany({
-      where, orderBy: { created_at: 'desc' }, take: 500,
-    });
     await enrichWarmth(leads);
     await _annotateBlacklist(leads);
     await annotateDiscount(leads);
@@ -2154,7 +2156,7 @@ router.get('/leads', requireAuth, async (req, res, next) => {
 
 // PATCH /api/compounder/leads/:id — změna stavu / poznámky
 const patchSchema = z.object({
-  status: z.enum(['new', 'nedovolano', 'volat_pristi', 'contacted', 'access_sent', 'schuzka', 'schuzka_online', 'qualified', 'dosledovani', 'converted', 'nelze_pouzit', 'rejected']).optional(),
+  status: z.enum(['new', 'nedovolano', 'volat_pristi', 'contacted', 'access_sent', 'schuzka', 'schuzka_online', 'qualified', 'dosledovani', 'converted', 'nezajem', 'nelze_pouzit', 'rejected']).optional(),
   notes: z.string().max(5000).optional().nullable(),
   lang: z.string().trim().max(10).optional().nullable(),
   owner_person_id: z.number().int().positive().optional().nullable(),
@@ -2884,7 +2886,7 @@ router.get('/ads-stats', requireAuth, async (req, res, next) => {
     }
     const SENT_STATUSES = ['access_sent', 'schuzka', 'schuzka_online', 'qualified', 'dosledovani', 'converted'];
     const ENGAGED = ['dosledovani', 'qualified', 'schuzka', 'schuzka_online'];
-    const LOST = ['nelze_pouzit', 'rejected'];
+    const LOST = ['nelze_pouzit', 'rejected', 'nezajem'];
     const total = leads.length;
     const bySource = { facebook_ads: 0, google_ads: 0 };
     leads.forEach((l) => { if (bySource[l.source] != null) bySource[l.source]++; });
@@ -2934,7 +2936,7 @@ router.get('/my-funnel', requireAuth, async (req, res, next) => {
     }
     const SENT_STATUSES = ['access_sent', 'schuzka', 'schuzka_online', 'qualified', 'dosledovani', 'converted'];
     const ENGAGED = ['dosledovani', 'qualified', 'schuzka', 'schuzka_online'];
-    const LOST = ['nelze_pouzit', 'rejected'];
+    const LOST = ['nelze_pouzit', 'rejected', 'nezajem'];
     const total = leads.length;
     const bySource = { facebook_ads: 0, google_ads: 0, other: 0 };
     leads.forEach((l) => { if (l.source === 'facebook_ads') bySource.facebook_ads++; else if (l.source === 'google_ads') bySource.google_ads++; else bySource.other++; });
@@ -2975,7 +2977,7 @@ router.post('/ads-analysis', requireAuth, async (req, res, next) => {
       pv.forEach((e) => { const lid = (e.props && e.props.lead_id != null) ? Number(e.props.lead_id) : null; if (lid == null || !ids.has(lid)) return; const t = new Date(e.created_at).getTime(); if (!firstPortal[lid] || t < firstPortal[lid]) firstPortal[lid] = t; });
     }
     const SENT = ['access_sent', 'schuzka', 'schuzka_online', 'qualified', 'dosledovani', 'converted'];
-    const ENG = ['dosledovani', 'qualified', 'schuzka', 'schuzka_online']; const LOST = ['nelze_pouzit', 'rejected'];
+    const ENG = ['dosledovani', 'qualified', 'schuzka', 'schuzka_online']; const LOST = ['nelze_pouzit', 'rejected', 'nezajem'];
     const total = leads.length;
     const accessSent = leads.filter((l) => l.access_last_sent_at != null || (l.access_sent_count || 0) > 0 || SENT.includes(l.status)).length;
     const onPortal = leads.filter((l) => firstPortal[l.id] != null).length;
@@ -3053,7 +3055,7 @@ router.post('/my-funnel-analysis', requireAuth, async (req, res, next) => {
       pv.forEach((e) => { const lid = (e.props && e.props.lead_id != null) ? Number(e.props.lead_id) : null; if (lid == null || !ids.has(lid)) return; const t = new Date(e.created_at).getTime(); if (!firstPortal[lid] || t < firstPortal[lid]) firstPortal[lid] = t; });
     }
     const SENT = ['access_sent', 'schuzka', 'schuzka_online', 'qualified', 'dosledovani', 'converted'];
-    const ENG = ['dosledovani', 'qualified', 'schuzka', 'schuzka_online']; const LOST = ['nelze_pouzit', 'rejected'];
+    const ENG = ['dosledovani', 'qualified', 'schuzka', 'schuzka_online']; const LOST = ['nelze_pouzit', 'rejected', 'nezajem'];
     const total = leads.length;
     const accessSent = leads.filter((l) => l.access_last_sent_at != null || (l.access_sent_count || 0) > 0 || SENT.includes(l.status)).length;
     const onPortal = leads.filter((l) => firstPortal[l.id] != null).length;
@@ -3725,7 +3727,7 @@ router.post('/leads/discount-followup', requireAuth, async (req, res, next) => {
       where: { is_test: false },
       select: { id: true, status: true, discount_until: true, discount_permanent: true, discount_disabled: true, access_last_sent_at: true, created_at: true },
     });
-    const SKIP = ['dosledovani', 'converted', 'rejected', 'nelze_pouzit'];
+    const SKIP = ['dosledovani', 'converted', 'rejected', 'nelze_pouzit', 'nezajem'];
     const ids = [];
     for (const l of leads) {
       const eff = effectiveDiscount(l, cs);
@@ -4570,7 +4572,7 @@ router.get('/external-reps/:id/lead-stats', requireAuth, async (req, res, next) 
 
     const SENT_STATUSES = ['access_sent', 'schuzka', 'schuzka_online', 'qualified', 'dosledovani', 'converted'];
     const ENGAGED = ['dosledovani', 'qualified', 'schuzka', 'schuzka_online'];
-    const LOST = ['nelze_pouzit', 'rejected'];
+    const LOST = ['nelze_pouzit', 'rejected', 'nezajem'];
     const isToday = (d) => d && new Date(d).toDateString() === new Date().toDateString();
     const startOf = (days) => { const t = new Date(); t.setHours(0, 0, 0, 0); t.setDate(t.getDate() - days); return t.getTime(); };
     const day0 = startOf(0), day7 = startOf(6), day30 = startOf(29);
