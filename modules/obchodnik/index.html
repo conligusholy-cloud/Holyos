@@ -267,7 +267,7 @@
   <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/locales-all.global.min.js"></script>
 <script>
   var API = '/api/compounder';
-  var STATUS = { new:{l:'Nový',c:'var(--new)'}, nedovolano:{l:'Nedovoláno',c:'#f59e0b'}, volat_pristi:{l:'Volat příště',c:'#eab308'}, contacted:{l:'Kontaktován',c:'var(--contacted)'}, access_sent:{l:'Odeslán přístup',c:'#3b82f6'}, schuzka:{l:'Domluvena schůzka',c:'#22c55e'}, schuzka_online:{l:'Domluvena schůzka online',c:'#10b981'}, qualified:{l:'Kvalifikován',c:'var(--qualified)'}, dosledovani:{l:'Dosledování',c:'#06b6d4'}, converted:{l:'Převeden',c:'var(--converted)'}, nezajem:{l:'Nemá zájem',c:'#ef4444'}, nelze_pouzit:{l:'Nelze použít',c:'#6b7280'}, rejected:{l:'Zamítnut',c:'var(--rejected)'} };
+  var STATUS = { new:{l:'Nový',c:'var(--new)'}, nedovolano:{l:'Nedovoláno',c:'#f59e0b'}, volat_pristi:{l:'Volat příště',c:'#eab308'}, contacted:{l:'Kontaktován',c:'var(--contacted)'}, access_sent:{l:'Odeslán přístup',c:'#3b82f6'}, schuzka:{l:'Domluvena schůzka',c:'#22c55e'}, schuzka_online:{l:'Domluvena schůzka online',c:'#10b981'}, qualified:{l:'Kvalifikován',c:'var(--qualified)'}, dosledovani:{l:'Dosledování',c:'#06b6d4'}, smlouva_odeslat:{l:'Odeslat dokumentaci',c:'#f97316'}, smlouva_odeslana:{l:'Dokumentace odeslána',c:'#8b5cf6'}, converted:{l:'Převeden',c:'var(--converted)'}, nezajem:{l:'Nemá zájem',c:'#ef4444'}, nelze_pouzit:{l:'Nelze použít',c:'#6b7280'}, rejected:{l:'Zamítnut',c:'var(--rejected)'} };
   var LANGS = { '':'—', en:'English', bg:'Български', cs:'Čeština', da:'Dansk', de:'Deutsch', el:'Ελληνικά', es:'Español', et:'Eesti', fi:'Suomi', fr:'Français', ga:'Gaeilge', hr:'Hrvatski', hu:'Magyar', it:'Italiano', lt:'Lietuvių', lv:'Latviešu', mt:'Malti', nl:'Nederlands', pl:'Polski', pt:'Português', ro:'Română', sk:'Slovenčina', sl:'Slovenščina', sv:'Svenska' };
   var COUNTRIES = [
     {c:'CZ',f:'🇨🇿',d:'+420'},{c:'SK',f:'🇸🇰',d:'+421'},{c:'DE',f:'🇩🇪',d:'+49'},{c:'AT',f:'🇦🇹',d:'+43'},
@@ -686,15 +686,66 @@
       +b('📞','Naplánovat hovor','Do tvého i zákazníkova kalendáře','call','#a78bfa')
       +b('📅','Naplánovat schůzku','Do tvého i zákazníkova kalendáře','meeting','#22c55e')
       +b('✅','Slíbený krok','Co jsi slíbil + termín (tvůj kalendář i úkol)','task','#eab308')
+      +'<div style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted2);margin:14px 2px 2px">Výsledek hovoru</div>'
+      +b('📵','Nedovoláno – dosledovat zítra','Stav Nedovoláno + hovor zítra do kalendáře i úkolu','nedov','#f59e0b')
+      +b('🚫','Nemá zájem','Nastaví stav a kontakt se přestane volat','nezajem','#ef4444')
+      +b('📄','Odeslat smluvní dokumentaci','Stav + deadline do kdy odeslat (kalendář i úkol)','docs','#f97316')
       +'<button id="obns-close" style="width:100%;margin-top:12px;background:none;border:none;color:var(--muted2);font-size:14px;padding:8px;cursor:pointer;font-family:inherit">Teď ne</button>'
       +'</div>';
     document.body.appendChild(ov);
     ov.querySelectorAll('button[data-fn]').forEach(function(btn){ btn.onclick=function(){ var fn=btn.getAttribute('data-fn'); ov.remove();
       if(fn==='call') callFromLead(id); else if(fn==='meeting') meetingFromLead(id); else if(fn==='task') obPromisePrompt(id);
+      else if(fn==='nedov') obNedovolano(id); else if(fn==='nezajem') obSetNezajem(id); else if(fn==='docs') obSendDocs(id);
     }; });
     document.getElementById('obns-close').onclick=function(){ ov.remove(); };
   }
   window.obNextStep=obNextStep;
+  // Pomocník: vytvoř SalesEvent + úkol v plánu na daný den (5–12 min interní krok).
+  async function _obStepEvent(id, name, kind, evType, title, detail, startDate){
+    var start=new Date(startDate); var end=new Date(start.getTime()+(kind==='meeting'?3600000:600000));
+    var y=start.getFullYear(), mo=('0'+(start.getMonth()+1)).slice(-2), d=('0'+start.getDate()).slice(-2);
+    var dateStr=y+'-'+mo+'-'+d;
+    try{ await fetch('/api/sales/events',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({ title:title, description:detail||'', event_type:evType, start_at:start.toISOString(), end_at:end.toISOString(), attendees:'', compounder_lead_id:id })}); }catch(e){}
+    try{ await api('/tasks',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ title:title, detail:detail||'', kind:kind, priority:1, lead_id:id, date:dateStr })}); }catch(e){}
+  }
+  // 1) Nedovoláno → stav + dosledování (hovor) zítra 9:00 do kalendáře i úkolu.
+  async function obNedovolano(id){
+    var l=(state.leads||[]).filter(function(x){return x.id===id;})[0]||{};
+    try{ await setField(id,'status','nedovolano'); }catch(e){}
+    var t=new Date(); t.setDate(t.getDate()+1); t.setHours(9,0,0,0);
+    await _obStepEvent(id, l.name, 'followup', 'followup', 'Dosledovat (nedovoláno) – '+(l.name||l.email||'lead'), 'Minule ses nedovolal — zkus to znovu.', t);
+    if(typeof loadToday==='function') loadToday(false);
+  }
+  window.obNedovolano=obNedovolano;
+  // 2) Nemá zájem → jen nastaví stav.
+  async function obSetNezajem(id){ try{ await setField(id,'status','nezajem'); }catch(e){} }
+  window.obSetNezajem=obSetNezajem;
+  // 3) Odeslat smluvní dokumentaci → stav + deadline (do kdy odeslat), vysoká priorita.
+  function obSendDocs(id){
+    var l=(state.leads||[]).filter(function(x){return x.id===id;})[0]||{};
+    var def=new Date(); def.setDate(def.getDate()+2); def.setHours(12,0,0,0);
+    var ex=document.getElementById('ob-docs'); if(ex) ex.remove();
+    var ov=document.createElement('div'); ov.id='ob-docs';
+    ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:130;display:flex;align-items:flex-end;justify-content:center';
+    ov.onclick=function(e){ if(e.target===ov) ov.remove(); };
+    ov.innerHTML='<div style="background:var(--surface);width:100%;max-width:520px;border-radius:18px 18px 0 0;border-top:1px solid var(--line);padding:20px 16px calc(20px + env(safe-area-inset-bottom,0))">'
+      +'<div style="font-size:17px;font-weight:700;margin-bottom:2px">📄 Odeslat smluvní dokumentaci — '+esc(l.name||l.email||'kontakt')+'</div>'
+      +'<div style="font-size:12.5px;color:var(--muted);margin-bottom:14px">Nastaví stav „Odeslat dokumentaci" a založí úkol s deadline do kalendáře i do plánu (vysoká priorita).</div>'
+      +'<label style="display:block;font-size:12px;color:var(--muted2);margin-bottom:4px">Do kdy odeslat (deadline)</label>'
+      +'<input id="od-when" type="datetime-local" value="'+_dtLocal(def)+'" style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--line);border-radius:10px;padding:11px;color:var(--text);font-size:15px;font-family:inherit">'
+      +'<div style="display:flex;gap:10px;margin-top:16px"><button id="od-cancel" class="btn btn-g" style="flex:1">Zrušit</button><button id="od-save" class="btn btn-p" style="flex:2">Uložit</button></div>'
+      +'</div>';
+    document.body.appendChild(ov);
+    document.getElementById('od-cancel').onclick=function(){ ov.remove(); };
+    document.getElementById('od-save').onclick=async function(){
+      var when=document.getElementById('od-when').value; if(!when) return;
+      var btn=document.getElementById('od-save'); btn.disabled=true;
+      try{ await setField(id,'status','smlouva_odeslat'); }catch(e){}
+      await _obStepEvent(id, l.name, 'task', 'task', '📄 Odeslat smluvní dokumentaci – '+(l.name||l.email||'lead'), 'Deadline na odeslání smluvní dokumentace.', new Date(when));
+      ov.remove(); _refetchCal(); loadUpcomingMeetings(); if(typeof loadToday==='function') loadToday(false);
+    };
+  }
+  window.obSendDocs=obSendDocs;
   // Slíbený krok — přímý dotaz „co jsi slíbil + na kdy" → uloží do kalendáře (SalesEvent task) i do plánu (úkol).
   function obPromisePrompt(id){
     var l=(state.leads||[]).filter(function(x){return x.id===id;})[0]||{};

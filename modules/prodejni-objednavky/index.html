@@ -418,6 +418,8 @@
           <option value="schuzka_online">Domluvena schůzka online</option>
           <option value="qualified">Kvalifikován</option>
           <option value="dosledovani">Dosledování</option>
+          <option value="smlouva_odeslat">Odeslat dokumentaci</option>
+          <option value="smlouva_odeslana">Dokumentace odeslána</option>
           <option value="converted">Převeden</option>
           <option value="nezajem">Nemá zájem</option>
           <option value="nelze_pouzit">Nelze použít</option>
@@ -2865,7 +2867,7 @@
     // ============================================================
     // COMPOUNDER — přehled leadů z webu compounder.world
     // ============================================================
-    var CMP_STATUS = { new: 'Nový', nedovolano: 'Nedovoláno', volat_pristi: 'Volat příště', contacted: 'Kontaktován', access_sent: 'Odeslán přístup', schuzka: 'Domluvena schůzka', schuzka_online: 'Domluvena schůzka online', qualified: 'Kvalifikován', dosledovani: 'Dosledování', converted: 'Převeden', nezajem: 'Nemá zájem', nelze_pouzit: 'Nelze použít', rejected: 'Zamítnut' };
+    var CMP_STATUS = { new: 'Nový', nedovolano: 'Nedovoláno', volat_pristi: 'Volat příště', contacted: 'Kontaktován', access_sent: 'Odeslán přístup', schuzka: 'Domluvena schůzka', schuzka_online: 'Domluvena schůzka online', qualified: 'Kvalifikován', dosledovani: 'Dosledování', smlouva_odeslat: 'Odeslat dokumentaci', smlouva_odeslana: 'Dokumentace odeslána', converted: 'Převeden', nezajem: 'Nemá zájem', nelze_pouzit: 'Nelze použít', rejected: 'Zamítnut' };
     var CMP_LANGS = { en:'English', bg:'Български', cs:'Čeština', da:'Dansk', de:'Deutsch', el:'Ελληνικά', es:'Español', et:'Eesti', fi:'Suomi', fr:'Français', ga:'Gaeilge', hr:'Hrvatski', hu:'Magyar', it:'Italiano', lt:'Lietuvių', lv:'Latviešu', mt:'Malti', nl:'Nederlands', pl:'Polski', pt:'Português', ro:'Română', sk:'Slovenčina', sl:'Slovenščina', sv:'Svenska' };
     var CMP_SELLERS = null; // seznam obchodníků (lazy z /api/sales/sellers); null = ještě nenačteno, [] = nedostupné
     var CMP_EXT_REPS = null; // externí obchodníci (lazy z /api/compounder/external-reps)

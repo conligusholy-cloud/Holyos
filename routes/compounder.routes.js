@@ -2156,7 +2156,7 @@ router.get('/leads', requireAuth, async (req, res, next) => {
 
 // PATCH /api/compounder/leads/:id — změna stavu / poznámky
 const patchSchema = z.object({
-  status: z.enum(['new', 'nedovolano', 'volat_pristi', 'contacted', 'access_sent', 'schuzka', 'schuzka_online', 'qualified', 'dosledovani', 'converted', 'nezajem', 'nelze_pouzit', 'rejected']).optional(),
+  status: z.enum(['new', 'nedovolano', 'volat_pristi', 'contacted', 'access_sent', 'schuzka', 'schuzka_online', 'qualified', 'dosledovani', 'smlouva_odeslat', 'smlouva_odeslana', 'converted', 'nezajem', 'nelze_pouzit', 'rejected']).optional(),
   notes: z.string().max(5000).optional().nullable(),
   lang: z.string().trim().max(10).optional().nullable(),
   owner_person_id: z.number().int().positive().optional().nullable(),
@@ -2250,7 +2250,25 @@ router.patch('/leads/:id', requireAuth, async (req, res, next) => {
     if (parsed.data.showExample !== undefined) data.show_example = !!parsed.data.showExample;
     if (parsed.data.pradlomatVersion !== undefined) data.pradlomat_version = parsed.data.pradlomatVersion;
     if (parsed.data.ecoNoPrice !== undefined) data.eco_no_price = !!parsed.data.ecoNoPrice;
+    // Předchozí stav (kvůli automatice při přechodu na „Dokumentace odeslána").
+    let _prevStatus = null;
+    if (data.status !== undefined) { try { const pv = await prisma.compounderLead.findUnique({ where: { id }, select: { status: true } }); _prevStatus = pv && pv.status; } catch (e) {} }
     const lead = await prisma.compounderLead.update({ where: { id }, data });
+    // AUTOMATIKA: stav → „Dokumentace odeslána" ⇒ druhý den zavolat na zpětnou vazbu (kalendář + úkol, vysoká priorita).
+    if (data.status === 'smlouva_odeslana' && _prevStatus !== 'smlouva_odeslana' && lead.owner_person_id) {
+      try {
+        const tzDay = (d) => new Intl.DateTimeFormat('en-CA', { timeZone: process.env.VELIN_TZ || 'Europe/Prague', year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
+        const dateStr = tzDay(new Date(Date.now() + 24 * 3600 * 1000)); // zítřek (Praha)
+        const start = new Date(dateStr + 'T07:00:00.000Z'); // ~ráno Prahy
+        const end = new Date(start.getTime() + 10 * 60000);
+        const title = 'Zavolat – zpětná vazba k dokumentaci – ' + (lead.name || ('lead #' + id));
+        const detail = 'Ověř, že zákazník smluvní dokumentaci obdržel, zodpověz dotazy a dotáhni k podpisu.';
+        await prisma.salesEvent.create({ data: { organizer_id: lead.owner_person_id, compounder_lead_id: id, event_type: 'call', title, description: detail, start_at: start, end_at: end, status: 'planned' } }).catch(() => {});
+        const planDate = new Date(dateStr + 'T00:00:00Z');
+        const dplan = await prisma.salesDayPlan.upsert({ where: { person_id_date: { person_id: lead.owner_person_id, date: planDate } }, create: { person_id: lead.owner_person_id, date: planDate, generated_by: 'auto', status: 'published' }, update: {} });
+        await prisma.salesTask.create({ data: { day_plan_id: dplan.id, person_id: lead.owner_person_id, lead_id: id, kind: 'call', title, detail, priority: 1, status: 'open' } }).catch(() => {});
+      } catch (e) { console.error('[docs-followup]', e && e.message); }
+    }
     // Notifikace: nový přidělený kontakt (jinému obchodníkovi než ten, kdo přiřazuje).
     if (parsed.data.owner_person_id) {
       const actorPid = (req.user && req.user.person) ? req.user.person.id : null;
