@@ -399,14 +399,41 @@ async function gatherPlanContext(personId) {
   const actuals = await computeActuals(personId);
   const q = (m) => (targets[m] && targets[m].day) || 0;
 
+  // Reálná průměrná délka hovoru tohoto obchodníka (posl. 30 dní) → realistický est_min pro plánování na 8 h.
+  const acd = await computeAvgCallSec(personId, 30).catch(() => ({ avgSec: null, count: 0 }));
+  const avgCallMin = acd.avgSec ? Math.max(3, Math.min(15, Math.round(acd.avgSec / 60))) : 5; // fallback 5 min
+
   return {
     date: tzTodayStr(), leadCount: leads.length,
     capacity: { work_hours_per_day: WORK_HOURS, work_minutes_per_day: WORK_MIN, workdays: 'Po–Pá', working_days_left_this_month: workingDaysRemainingInMonth() },
     daily_quota: { new_contacts: q('new_contacts'), conversions: q('conversions'), reservations: q('reservations'), revenue: q('revenue') },
+    avg_call_min: avgCallMin, avg_call_sec: acd.avgSec || null, avg_call_count: acd.count || 0,
     meetings_overdue: meetingsOverdue, meetings_today: meetingsToday, meetings_upcoming_7d: meetingsUpcoming,
     meetings_this_week_count: meetingsToday.length + meetingsUpcoming.filter((m) => { const d = new Date(m.when); return periodBounds('week').end.getTime() >= d.getTime(); }).length,
     leads: leadFacts, carry_over: carryOver, targets, actuals,
   };
+}
+// Průměrná délka hovoru (s) obchodníka z reálných akcí: úsek call → další akce, strop 15 min.
+// Poslední (otevřený) hovor bez následující akce se do průměru nepočítá (neznáme konec).
+async function computeAvgCallSec(personId, sinceDays) {
+  const CAP = 15 * 60 * 1000;
+  const since = new Date(Date.now() - (sinceDays || 30) * 86400000);
+  let evs = [];
+  try {
+    evs = await prisma.compounderEvent.findMany({
+      where: { event: 'sales_action', created_at: { gte: since }, props: { path: ['person_id'], equals: personId } },
+      select: { props: true, created_at: true }, orderBy: { created_at: 'asc' }, take: 100000,
+    });
+  } catch (e) { return { avgSec: null, count: 0, totalSec: 0 }; }
+  let totalMs = 0; let n = 0;
+  for (let i = 0; i < evs.length; i++) {
+    if (!evs[i].props || evs[i].props.action !== 'call') continue;
+    const next = evs[i + 1]; if (!next) continue;
+    const dur = new Date(next.created_at).getTime() - new Date(evs[i].created_at).getTime();
+    if (dur <= 0) continue;
+    totalMs += Math.min(dur, CAP); n += 1;
+  }
+  return { avgSec: n ? Math.round(totalMs / n / 1000) : null, count: n, totalSec: Math.round(totalMs / 1000) };
 }
 
 // ─── planDay ───────────────────────────────────────────────────────────────
@@ -476,6 +503,8 @@ function planDayFallback(ctx) {
 function buildLeadTasks(ctx) {
   const tasks = [];
   const covered = new Set();
+  // Realistický čas hovoru = skutečná průměrná délka obchodníka (fallback 5 min) → plán sedne na 8 h.
+  const CALL_MIN = Math.max(3, Math.min(15, Number(ctx.avg_call_min) || 5));
   // Popisky/ikony naplánovaných kroků dle typu události v kalendáři.
   const EV_META = {
     call:     { kind: 'call',     verb: '📞 Zavolej (slíbeno)', est: 12, do: 'Otevři kontakt, přečti poznámky a zavolej podle domluvy.' },
@@ -554,11 +583,15 @@ function buildLeadTasks(ctx) {
     if (l.has_phone && ['new', 'volat_pristi', 'contacted'].indexOf(l.status) >= 0) calls.push(l);
     else covered.add(l.id);
   });
-  // (C) Běžné hovory z pipeline — per kontakt, do rozumné denní kvóty (ať den nepřeteče stovkami úkolů).
-  const callQuota = Math.max(8, (ctx.daily_quota && ctx.daily_quota.new_contacts) || 10);
+  // (C) Běžné hovory z pipeline — per kontakt. Kvóta tak, aby hovory NAPLNILY zbytek 8h fondu
+  // (dle reálné průměrné délky hovoru); přebytek ořízne fund-fitting v planDay.
+  const fundMin = (ctx.capacity && Number(ctx.capacity.work_minutes_per_day)) || 480;
+  const callQuota = Math.min(calls.length, Math.max(10, Math.ceil(fundMin / CALL_MIN)));
   calls.slice(0, callQuota).forEach((l) => {
-    tasks.push({ kind: 'call', title: 'Zavolej a kvalifikuj – ' + l.name, detail: 'Otevři kontakt, přečti poznámky; zavolej a zjisti zájem. Při zájmu pošli přístup do portálu a domluv schůzku.', reasoning: 'Kontakt v pipeline k prvnímu kontaktu / posunu.', priority: 4, est_min: 12, lead_id: l.id }); covered.add(l.id);
+    tasks.push({ kind: 'call', title: 'Zavolej a kvalifikuj – ' + l.name, detail: 'Otevři kontakt, přečti poznámky; zavolej a zjisti zájem. Při zájmu pošli přístup do portálu a domluv schůzku.', reasoning: 'Kontakt v pipeline k prvnímu kontaktu / posunu.', priority: 4, est_min: CALL_MIN, lead_id: l.id }); covered.add(l.id);
   });
+  // Realistický čas hovoru u VŠECH hovorových/dosledovacích úkolů (dle skutečné průměrné délky).
+  tasks.forEach((t) => { if ((t.kind === 'call' || t.kind === 'followup') && t.est_min) t.est_min = CALL_MIN; });
   return tasks;
 }
 
@@ -797,6 +830,7 @@ async function buildOwnerReport(dateStr) {
     const actuals = await computeActuals(p.id);
     // Splnění bereme z gatherDayResult (efektivní = i reálně vytočené hovory bez ručního „Hotovo").
     const dr = await gatherDayResult(p.id, dateStr).catch(() => null);
+    const acd = await computeAvgCallSec(p.id, 30).catch(() => ({ avgSec: null, count: 0 })); // reálná prům. délka hovoru
     per.push({
       person_id: p.id, name: p.name,
       focus: plan ? plan.focus : null,
@@ -806,6 +840,7 @@ async function buildOwnerReport(dateStr) {
       tasks_open: dr ? dr.tasks_open : tasks.filter((t) => t.status === 'open').length,
       calls_today: dr ? dr.calls_today : 0, // reálně vytočené kontakty dnes
       new_contacts_today: dr ? dr.new_contacts_today : 0,
+      avg_call_sec: acd.avgSec || null, avg_call_min: acd.avgSec ? Math.round(acd.avgSec / 60 * 10) / 10 : null, avg_call_sample: acd.count || 0,
       day_score: review ? review.score : null,
       day_summary: review ? (review.summary || '') : null,
       month_target_revenue: (targets.revenue && targets.revenue.month) || 0,
@@ -818,10 +853,14 @@ async function buildOwnerReport(dateStr) {
       month_actual_conversions: (actuals.conversions && actuals.conversions.month) || 0,
     });
   }
-  return { date: dateStr, team_size: people.length, per };
+  // Týmový průměr délky hovoru (vážený počtem hovorů).
+  let _tSec = 0; let _tN = 0;
+  per.forEach((p) => { if (p.avg_call_sec && p.avg_call_sample) { _tSec += p.avg_call_sec * p.avg_call_sample; _tN += p.avg_call_sample; } });
+  const team_avg_call_sec = _tN ? Math.round(_tSec / _tN) : null;
+  return { date: dateStr, team_size: people.length, per, team_avg_call_sec, team_avg_call_min: team_avg_call_sec ? Math.round(team_avg_call_sec / 60 * 10) / 10 : null };
 }
 async function ownerReportTextAI(report) {
-  const sys = 'Jsi AI vedoucí obchodu Best Series a podáváš KRÁTKÝ denní report majitelům firmy (Jan a Tomáš Holý). Shrň za celý obchodní tým: jaké úkoly a cíle jsi dnes zadal, co se z toho splnilo, a férově zhodnoť spolupráci a výkon jednotlivých obchodníků (kdo táhne, kdo zaostává). Buď věcný, konkrétní, bez vaty. DŮLEŽITÉ: pole "calls_today" = reálně vytočené kontakty; hovor se počítá jako odvedená práce a splněný hovorový úkol, i když obchodník neťukl ručně „Hotovo" — nikdy netvrď, že kontakt zůstal „bez kontaktu", pokud byl vytočený. Neposuzuj jen podle poměru tasks_done/tasks_assigned, ale i podle calls_today a new_contacts_today. Odpověz POUZE platným JSON bez markdownu: {"headline":"<1 věta souhrn dne>","body":"<report v čistém textu, klidně s odrážkami přes • a novými řádky, česky>"}. Piš česky.';
+  const sys = 'Jsi AI vedoucí obchodu Best Series a podáváš KRÁTKÝ denní report majitelům firmy (Jan a Tomáš Holý). Shrň za celý obchodní tým: jaké úkoly a cíle jsi dnes zadal, co se z toho splnilo, a férově zhodnoť spolupráci a výkon jednotlivých obchodníků (kdo táhne, kdo zaostává). Buď věcný, konkrétní, bez vaty. DŮLEŽITÉ: pole "calls_today" = reálně vytočené kontakty; hovor se počítá jako odvedená práce a splněný hovorový úkol, i když obchodník neťukl ručně „Hotovo" — nikdy netvrď, že kontakt zůstal „bez kontaktu", pokud byl vytočený. Neposuzuj jen podle poměru tasks_done/tasks_assigned, ale i podle calls_today a new_contacts_today. Pole "avg_call_min" = reálná průměrná délka jednoho hovoru obchodníka, "team_avg_call_min" = týmový průměr — v reportu je uveď a použij pro reálnou kapacitu dne (kolik hovorů se za 8 h reálně stihne). Odpověz POUZE platným JSON bez markdownu: {"headline":"<1 věta souhrn dne>","body":"<report v čistém textu, klidně s odrážkami přes • a novými řádky, česky>"}. Piš česky.';
   const usr = 'Denní data týmu (JSON):\n' + JSON.stringify(report);
   const j = await callClaudeJSON(sys, usr, 1200);
   if (!j) return null;
@@ -832,9 +871,10 @@ function ownerReportTextFallback(report) {
   let totA = 0; let totD = 0;
   report.per.forEach((p) => {
     totA += p.tasks_assigned; totD += p.tasks_done;
-    lines.push(`• ${p.name}: zadáno ${p.tasks_assigned} úkolů, splněno ${p.tasks_done}` + (p.calls_today ? `, hovorů ${p.calls_today}` : '') + (p.new_contacts_today ? `, nových ${p.new_contacts_today}` : '') + (p.day_score != null ? `, skóre ${p.day_score}` : '') + (p.month_target_revenue ? ` | obrat měsíc ${p.month_actual_revenue}/${p.month_target_revenue}` : ''));
+    lines.push(`• ${p.name}: zadáno ${p.tasks_assigned} úkolů, splněno ${p.tasks_done}` + (p.calls_today ? `, hovorů ${p.calls_today}` : '') + (p.avg_call_min ? ` (⌀ ${String(p.avg_call_min).replace('.', ',')} min/hovor)` : '') + (p.new_contacts_today ? `, nových ${p.new_contacts_today}` : '') + (p.day_score != null ? `, skóre ${p.day_score}` : '') + (p.month_target_revenue ? ` | obrat měsíc ${p.month_actual_revenue}/${p.month_target_revenue}` : ''));
   });
-  return { headline: `Tým ${report.team_size} obch.: zadáno ${totA} úkolů, splněno ${totD}.`, body: lines.join('\n') || 'Dnes bez aktivních obchodníků.' };
+  const teamAvg = report.team_avg_call_min ? ` Průměrná délka hovoru týmu: ${String(report.team_avg_call_min).replace('.', ',')} min.` : '';
+  return { headline: `Tým ${report.team_size} obch.: zadáno ${totA} úkolů, splněno ${totD}.` + teamAvg, body: (lines.join('\n') || 'Dnes bez aktivních obchodníků.') + (teamAvg ? ('\n\n⌀ ' + teamAvg.trim()) : '') };
 }
 async function reportToOwners(dateStr) {
   const ds = dateStr || tzTodayStr();
