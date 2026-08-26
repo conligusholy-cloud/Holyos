@@ -537,10 +537,17 @@ function buildLeadTasks(ctx) {
   const calls = [];
   (ctx.leads || []).forEach((l) => {
     if (covered.has(l.id)) return;
-    if (l.status === 'nelze_pouzit' || l.status === 'rejected') { covered.add(l.id); return; } // mrtvé leady do plánu nepatří
+    if (l.status === 'nelze_pouzit' || l.status === 'rejected' || l.status === 'nezajem') { covered.add(l.id); return; } // mrtvé leady do plánu nepatří
     const r = (l.reservations || [])[0];
     if (r && (r.status === 'reserved' || r.status === 'active')) {
       tasks.push({ kind: 'close', title: 'Dotáhnout rezervaci ' + r.kiosk + ' – ' + l.name, detail: 'Otevři kontakt, přečti poznámky; hlídej podpis/poplatek a popožeň zákazníka k uzavření.', reasoning: 'Běžící rezervace se lhůtou.', priority: 1, est_min: 30, lead_id: l.id }); covered.add(l.id); return;
+    }
+    // Smluvní dokumentace — VYSOKÁ priorita na dotažení do konce (i bez naplánované události).
+    if (l.status === 'smlouva_odeslat') {
+      tasks.push({ kind: 'close', title: '📄 Odeslat smluvní dokumentaci – ' + l.name, detail: 'Vysoká priorita: připrav a odešli smluvní dokumentaci, pak dotáhni k podpisu.', reasoning: 'Stav „Odeslat dokumentaci" — dotáhnout do konce.', priority: 1, est_min: 15, lead_id: l.id }); covered.add(l.id); return;
+    }
+    if (l.status === 'smlouva_odeslana') {
+      tasks.push({ kind: 'call', title: '📞 Zpětná vazba k dokumentaci – ' + l.name, detail: 'Vysoká priorita: ověř, že zákazník dokumentaci obdržel, zodpověz dotazy a dotáhni k podpisu.', reasoning: 'Stav „Dokumentace odeslána" — dotáhnout do konce.', priority: 1, est_min: 12, lead_id: l.id }); covered.add(l.id); return;
     }
     // Přístup do portálu posílej JEN kontaktu, který už byl volaný a má zájem (stav „Kvalifikován").
     // Nikomu jinému se přístup automaticky nenabízí — cold/nové leady se nejdřív volají a kvalifikují.
@@ -977,7 +984,7 @@ async function coachReply(personId, message, history) {
     + 'FORMÁT ODPOVĚDI: normální text (rada/analýza), klidně na více odstavců. '
     + 'Pokud navrhuješ konkrétní akce proveditelné v systému, přidej ÚPLNĚ NA KONEC na nový řádek značku <<<ACTIONS>>> a za ni JSON pole akcí. Povolené akce: '
     + '{"type":"open_contact","lead_id":<id z kontextu>,"label":"Otevřít a zavolat – <jméno>"} — POUŽIJ VŽDY, když radíš někomu zavolat / jít na konkrétní kontakt (aplikace neumí volat sama; tlačítko kontakt otevře v Kontaktech, kde ho obchodník vytočí); '
-    + '{"type":"set_status","lead_id":<id z kontextu>,"status":"<new|nedovolano|volat_pristi|contacted|schuzka|qualified|dosledovani|converted|nelze_pouzit|rejected>","label":"<lidsky co se stane>"}; '
+    + '{"type":"set_status","lead_id":<id z kontextu>,"status":"<new|nedovolano|volat_pristi|contacted|schuzka|qualified|dosledovani|converted|nezajem|nelze_pouzit|rejected>","label":"<lidsky co se stane>"}; '
     + '{"type":"create_task","title":"<název úkolu>","lead_id":<id nebo null>,"label":"<lidsky co se stane>"}. Akce navrhuj jen když dávají jasný smysl a lead_id znáš z kontextu. Když žádné nejsou, značku <<<ACTIONS>>> vůbec nepiš.';
   const hist = (history || []).map((h) => (h.role === 'user' ? 'Obchodník: ' : 'Vedoucí: ') + String(h.text || '')).join('\n');
   const usr = 'DATA OBCHODNÍKA (JSON):\n' + JSON.stringify(_coachCtx(ctx))
