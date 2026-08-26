@@ -628,17 +628,24 @@ async function gatherDayResult(personId, dateStr) {
   const date = dayDate(dateStr);
   const plan = await prisma.salesDayPlan.findUnique({ where: { person_id_date: { person_id: personId, date } }, include: { tasks: true } });
   const tasks = plan ? plan.tasks : [];
-  const done = tasks.filter((t) => t.status === 'done');
-  const skipped = tasks.filter((t) => t.status === 'skipped');
-  const open = tasks.filter((t) => t.status === 'open');
 
-  // Dnešní skutečná aktivita napříč leady (z activity_log + stavy).
+  // Dnešní skutečná aktivita napříč leady (z activity_log + stavy + reálné hovory).
   const startMs = date.getTime();
   const endMs = startMs + 86400000;
   const leads = await prisma.compounderLead.findMany({
     where: { owner_person_id: personId, is_test: false },
-    select: { id: true, name: true, status: true, activity_log: true, created_at: true, updated_at: true }, take: 5000,
+    select: { id: true, name: true, status: true, activity_log: true, created_at: true, updated_at: true, last_called_at: true }, take: 5000,
   });
+  // Kontakty reálně vytočené DNES — hovor se počítá do „splněno", i když obchodník neťukl „Hotovo".
+  const calledToday = new Set();
+  leads.forEach((l) => { if (l.last_called_at && new Date(l.last_called_at).getTime() >= startMs && new Date(l.last_called_at).getTime() < endMs) calledToday.add(l.id); });
+  // Efektivní splnění: úkol je splněný, když má status 'done', NEBO jde o hovor/dosledování
+  // a kontakt byl dnes reálně vytočený (odklik „Volat" bez „Hotovo").
+  const isEffDone = (t) => t.status === 'done' || (['call', 'followup'].indexOf(t.kind) >= 0 && t.lead_id && calledToday.has(t.lead_id));
+  const done = tasks.filter(isEffDone);
+  const skipped = tasks.filter((t) => t.status === 'skipped');
+  const open = tasks.filter((t) => t.status !== 'skipped' && !isEffDone(t));
+
   let newToday = 0; let convToday = 0; const activityLines = [];
   leads.forEach((l) => {
     if (l.created_at && new Date(l.created_at).getTime() >= startMs && new Date(l.created_at).getTime() < endMs) newToday += 1;
@@ -651,6 +658,7 @@ async function gatherDayResult(personId, dateStr) {
   return {
     date: dateStr,
     tasks_total: tasks.length, tasks_done: done.length, tasks_skipped: skipped.length, tasks_open: open.length,
+    calls_today: calledToday.size, // reálně vytočené kontakty dnes (nezávisle na odkliku „Hotovo")
     done_titles: done.map((t) => t.title), skipped_titles: skipped.map((t) => ({ title: t.title, reason: t.skipped_reason })), open_titles: open.map((t) => t.title),
     done_notes: done.map((t) => t.done_note).filter(Boolean).slice(0, 20),
     new_contacts_today: newToday, conversions_today: convToday,
@@ -658,7 +666,7 @@ async function gatherDayResult(personId, dateStr) {
   };
 }
 async function reviewDayAI(person, result) {
-  const sys = 'Jsi náročný AI vedoucí obchodu Best Series. Zhodnoť DNEŠNÍ výkon obchodníka podle zadaných úkolů a toho, co reálně splnil (splněné/přeskočené/nesplněné úkoly, poznámky, nové kontakty, konverze, aktivita). Klíčové pro skóre: kolik toho udělal pro PRODEJ — dodržel schůzky, aktivně naboroval nové kontakty a domlouval nové schůzky, posouval leady. Samotné "být zaneprázdněný" nestačí; oceňuj konkrétní prodejní akce a výsledky. Buď konkrétní a férový, pochval co se povedlo, ale jasně pojmenuj, co nedotáhl a co musí zítra přidat. Odpověz POUZE platným JSON bez markdownu: {"score":<0-100>,"grade":"<1 slovo: Výborný|Dobrý|Průměrný|Slabý>","summary":"<2-4 věty česky>","highlights":"<co se povedlo, 1-2 věty nebo prázdné>","improvements":"<co zítra zlepšit, 1-2 věty>"}. Piš česky.';
+  const sys = 'Jsi náročný AI vedoucí obchodu Best Series. Zhodnoť DNEŠNÍ výkon obchodníka podle zadaných úkolů a toho, co reálně splnil (splněné/přeskočené/nesplněné úkoly, poznámky, nové kontakty, konverze, aktivita). POZOR: pole "calls_today" = reálně vytočené kontakty; hovor je odvedená práce i bez ručního odškrtnutí „Hotovo" — počítej ho jako splněný hovorový úkol a netvrď, že kontakt zůstal bez kontaktu, když byl vytočený. Klíčové pro skóre: kolik toho udělal pro PRODEJ — dodržel schůzky, aktivně naboroval nové kontakty a domlouval nové schůzky, posouval leady. Samotné "být zaneprázdněný" nestačí; oceňuj konkrétní prodejní akce a výsledky. Buď konkrétní a férový, pochval co se povedlo, ale jasně pojmenuj, co nedotáhl a co musí zítra přidat. Odpověz POUZE platným JSON bez markdownu: {"score":<0-100>,"grade":"<1 slovo: Výborný|Dobrý|Průměrný|Slabý>","summary":"<2-4 věty česky>","highlights":"<co se povedlo, 1-2 věty nebo prázdné>","improvements":"<co zítra zlepšit, 1-2 věty>"}. Piš česky.';
   const usr = 'Obchodník: ' + person.name + '\nVýsledek dne (JSON):\n' + JSON.stringify(result);
   const j = await callClaudeJSON(sys, usr, 700);
   if (!j) return null;
@@ -787,13 +795,17 @@ async function buildOwnerReport(dateStr) {
     const tasks = plan ? plan.tasks : [];
     const targets = await getTargets(p.id);
     const actuals = await computeActuals(p.id);
+    // Splnění bereme z gatherDayResult (efektivní = i reálně vytočené hovory bez ručního „Hotovo").
+    const dr = await gatherDayResult(p.id, dateStr).catch(() => null);
     per.push({
       person_id: p.id, name: p.name,
       focus: plan ? plan.focus : null,
-      tasks_assigned: tasks.length,
-      tasks_done: tasks.filter((t) => t.status === 'done').length,
-      tasks_skipped: tasks.filter((t) => t.status === 'skipped').length,
-      tasks_open: tasks.filter((t) => t.status === 'open').length,
+      tasks_assigned: dr ? dr.tasks_total : tasks.length,
+      tasks_done: dr ? dr.tasks_done : tasks.filter((t) => t.status === 'done').length,
+      tasks_skipped: dr ? dr.tasks_skipped : tasks.filter((t) => t.status === 'skipped').length,
+      tasks_open: dr ? dr.tasks_open : tasks.filter((t) => t.status === 'open').length,
+      calls_today: dr ? dr.calls_today : 0, // reálně vytočené kontakty dnes
+      new_contacts_today: dr ? dr.new_contacts_today : 0,
       day_score: review ? review.score : null,
       day_summary: review ? (review.summary || '') : null,
       month_target_revenue: (targets.revenue && targets.revenue.month) || 0,
@@ -809,7 +821,7 @@ async function buildOwnerReport(dateStr) {
   return { date: dateStr, team_size: people.length, per };
 }
 async function ownerReportTextAI(report) {
-  const sys = 'Jsi AI vedoucí obchodu Best Series a podáváš KRÁTKÝ denní report majitelům firmy (Jan a Tomáš Holý). Shrň za celý obchodní tým: jaké úkoly a cíle jsi dnes zadal, co se z toho splnilo, a férově zhodnoť spolupráci a výkon jednotlivých obchodníků (kdo táhne, kdo zaostává). Buď věcný, konkrétní, bez vaty. Odpověz POUZE platným JSON bez markdownu: {"headline":"<1 věta souhrn dne>","body":"<report v čistém textu, klidně s odrážkami přes • a novými řádky, česky>"}. Piš česky.';
+  const sys = 'Jsi AI vedoucí obchodu Best Series a podáváš KRÁTKÝ denní report majitelům firmy (Jan a Tomáš Holý). Shrň za celý obchodní tým: jaké úkoly a cíle jsi dnes zadal, co se z toho splnilo, a férově zhodnoť spolupráci a výkon jednotlivých obchodníků (kdo táhne, kdo zaostává). Buď věcný, konkrétní, bez vaty. DŮLEŽITÉ: pole "calls_today" = reálně vytočené kontakty; hovor se počítá jako odvedená práce a splněný hovorový úkol, i když obchodník neťukl ručně „Hotovo" — nikdy netvrď, že kontakt zůstal „bez kontaktu", pokud byl vytočený. Neposuzuj jen podle poměru tasks_done/tasks_assigned, ale i podle calls_today a new_contacts_today. Odpověz POUZE platným JSON bez markdownu: {"headline":"<1 věta souhrn dne>","body":"<report v čistém textu, klidně s odrážkami přes • a novými řádky, česky>"}. Piš česky.';
   const usr = 'Denní data týmu (JSON):\n' + JSON.stringify(report);
   const j = await callClaudeJSON(sys, usr, 1200);
   if (!j) return null;
@@ -820,7 +832,7 @@ function ownerReportTextFallback(report) {
   let totA = 0; let totD = 0;
   report.per.forEach((p) => {
     totA += p.tasks_assigned; totD += p.tasks_done;
-    lines.push(`• ${p.name}: zadáno ${p.tasks_assigned} úkolů, splněno ${p.tasks_done}` + (p.day_score != null ? `, skóre ${p.day_score}` : '') + (p.month_target_revenue ? ` | obrat měsíc ${p.month_actual_revenue}/${p.month_target_revenue}` : ''));
+    lines.push(`• ${p.name}: zadáno ${p.tasks_assigned} úkolů, splněno ${p.tasks_done}` + (p.calls_today ? `, hovorů ${p.calls_today}` : '') + (p.new_contacts_today ? `, nových ${p.new_contacts_today}` : '') + (p.day_score != null ? `, skóre ${p.day_score}` : '') + (p.month_target_revenue ? ` | obrat měsíc ${p.month_actual_revenue}/${p.month_target_revenue}` : ''));
   });
   return { headline: `Tým ${report.team_size} obch.: zadáno ${totA} úkolů, splněno ${totD}.`, body: lines.join('\n') || 'Dnes bez aktivních obchodníků.' };
 }

@@ -1816,6 +1816,15 @@ router.post('/leads/:id/called', requireAuth, async (req, res, next) => {
     await _closePrevCall(pid); // uzavři předchozí rozběhnutý hovor (další hovor ho ukončuje)
     try { await prisma.compounderLead.update({ where: { id }, data: { activity_log: _actionStamp('📞 Zavoláno') + (lead && lead.activity_log ? '\n' + lead.activity_log : '') } }); } catch (e) {}
     prisma.compounderEvent.create({ data: { sid: 'sales-action-' + id, event: 'sales_action', props: { lead_id: id, action: 'call', person_id: pid }, path: '/obchodnik' } }).catch(() => {});
+    // Vytočení = splnění dnešního hovorového úkolu → auto-dokonči otevřený úkol (hovor/dosledování)
+    // toho kontaktu, ať se to počítá do hodnocení i bez ručního „Hotovo".
+    if (pid) {
+      const since = new Date(Date.now() - 20 * 3600 * 1000);
+      prisma.salesTask.updateMany({
+        where: { person_id: pid, lead_id: id, status: 'open', kind: { in: ['call', 'followup'] }, created_at: { gte: since } },
+        data: { status: 'done', done_at: new Date(), done_note: '📞 Zavoláno (automaticky po vytočení)' },
+      }).catch(() => {});
+    }
     res.json({ ok: true, last_called_at: upd.last_called_at });
   } catch (err) { next(err); }
 });
