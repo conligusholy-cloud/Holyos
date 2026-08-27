@@ -688,6 +688,7 @@
       +b('✅','Slíbený krok','Co jsi slíbil + termín (tvůj kalendář i úkol)','task','#eab308')
       +'<div style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted2);margin:14px 2px 2px">Výsledek hovoru</div>'
       +b('📵','Nedovoláno – dosledovat zítra','Stav Nedovoláno + hovor zítra do kalendáře i úkolu','nedov','#f59e0b')
+      +b('📵','Nedovoláno','Jen nastaví stav Nedovoláno (bez plánování)','nedovonly','#eab308')
       +b('🚫','Nemá zájem','Nastaví stav a kontakt se přestane volat','nezajem','#ef4444')
       +b('📄','Odeslat smluvní dokumentaci','Stav + deadline do kdy odeslat (kalendář i úkol)','docs','#f97316')
       +'<button id="obns-close" style="width:100%;margin-top:12px;background:none;border:none;color:var(--muted2);font-size:14px;padding:8px;cursor:pointer;font-family:inherit">Teď ne</button>'
@@ -695,7 +696,7 @@
     document.body.appendChild(ov);
     ov.querySelectorAll('button[data-fn]').forEach(function(btn){ btn.onclick=function(){ var fn=btn.getAttribute('data-fn'); ov.remove();
       if(fn==='call') callFromLead(id); else if(fn==='meeting') meetingFromLead(id); else if(fn==='task') obPromisePrompt(id);
-      else if(fn==='nedov') obNedovolano(id); else if(fn==='nezajem') obSetNezajem(id); else if(fn==='docs') obSendDocs(id);
+      else if(fn==='nedov') obNedovolano(id); else if(fn==='nedovonly'){ setField(id,'status','nedovolano'); } else if(fn==='nezajem') obSetNezajem(id); else if(fn==='docs') obSendDocs(id);
     }; });
     document.getElementById('obns-close').onclick=function(){ ov.remove(); };
   }
