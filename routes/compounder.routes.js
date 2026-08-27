@@ -1438,6 +1438,13 @@ router.get('/my-day', requireAuth, async (req, res, next) => {
           const ls = await prisma.compounderLead.findMany({ where: { id: { in: lids } }, select: { id: true, status: true } });
           const smap = new Map(ls.map((l) => [l.id, l.status]));
           plan.tasks.forEach((t) => { if (t.lead_id && smap.has(t.lead_id)) t.lead_status = smap.get(t.lead_id); });
+          // Byl kontakt někdy na portálu? (portal_view event) — ať je to vidět rovnou u úkolu.
+          const portalIds = new Set();
+          try {
+            const pv = await prisma.compounderEvent.findMany({ where: { event: 'portal_view', OR: lids.map((id) => ({ props: { path: ['lead_id'], equals: id } })) }, select: { props: true }, take: 20000 });
+            pv.forEach((e) => { const lid = e.props && e.props.lead_id; if (lid != null) portalIds.add(Number(lid)); });
+          } catch (e) { /* portál best-effort */ }
+          plan.tasks.forEach((t) => { if (t.lead_id) t.lead_on_portal = portalIds.has(Number(t.lead_id)); });
         }
       }
     } catch (e) { /* stav kontaktu best-effort */ }

@@ -1934,7 +1934,10 @@
       '<span class="pdot" style="background:'+prioCol(t.priority)+'"></span>' +
       '<span class="tk-ic">'+(TK_ICON[t.kind]||'•')+'</span>' +
       '<div class="tk-body"><div class="tk-title">'+esc(t.title)+(t.est_min?' <span style="font-weight:600;font-size:12px;color:var(--muted2)">· ⏱ '+fmtMin(t.est_min)+'</span>':'')+'</div>' +
-        (t.lead_status?(function(){ var _st=STATUS[t.lead_status]||{l:t.lead_status,c:'#94a3b8'}; return '<div style="margin-top:3px"><span style="display:inline-block;font-size:10.5px;font-weight:700;padding:1px 9px;border-radius:999px;background:'+_st.c+'22;color:'+_st.c+'">'+esc(_st.l)+'</span></div>'; })():'') +
+        ((t.lead_status || t.lead_id!=null)?(function(){ var out='';
+          if(t.lead_status){ var _st=STATUS[t.lead_status]||{l:t.lead_status,c:'#94a3b8'}; out+='<span style="display:inline-block;font-size:10.5px;font-weight:700;padding:1px 9px;border-radius:999px;background:'+_st.c+'22;color:'+_st.c+'">'+esc(_st.l)+'</span>'; }
+          if(t.lead_id!=null){ var on=!!t.lead_on_portal; out+='<span title="'+(on?'Kontakt už byl na portálu':'Kontakt zatím nebyl na portálu')+'" style="display:inline-block;font-size:10.5px;font-weight:700;padding:1px 9px;border-radius:999px;background:'+(on?'rgba(34,197,94,.16)':'rgba(148,160,173,.16)')+';color:'+(on?'#22c55e':'#9aa0ad')+'">'+(on?'🌐 byl na portálu':'🚫 nebyl na portálu')+'</span>'; }
+          return out?('<div style="margin-top:3px;display:flex;gap:6px;flex-wrap:wrap">'+out+'</div>'):''; })():'') +
         (t.detail ? '<div class="tk-det">'+esc(t.detail)+'</div>' : '') +
         (t.reasoning ? '<div class="tk-why">💡 '+esc(t.reasoning)+'</div>' : '') +
         (t.progress ? progHtml(t.progress) : '') + '<div class="tk-acts">'+acts+'</div>' +
