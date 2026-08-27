@@ -1435,10 +1435,11 @@ router.get('/my-day', requireAuth, async (req, res, next) => {
       if (plan && Array.isArray(plan.tasks)) {
         const lids = Array.from(new Set(plan.tasks.map((t) => t.lead_id).filter(Boolean)));
         if (lids.length) {
-          const ls = await prisma.compounderLead.findMany({ where: { id: { in: lids } }, select: { id: true, status: true, notes: true } });
+          const ls = await prisma.compounderLead.findMany({ where: { id: { in: lids } }, select: { id: true, status: true, notes: true, activity_log: true } });
           const smap = new Map(ls.map((l) => [l.id, l.status]));
           const nmap = new Map(ls.map((l) => [l.id, l.notes]));
-          plan.tasks.forEach((t) => { if (t.lead_id && smap.has(t.lead_id)) t.lead_status = smap.get(t.lead_id); if (t.lead_id && nmap.has(t.lead_id)) t.lead_notes = nmap.get(t.lead_id) || null; });
+          const amap = new Map(ls.map((l) => [l.id, l.activity_log]));
+          plan.tasks.forEach((t) => { if (t.lead_id && smap.has(t.lead_id)) t.lead_status = smap.get(t.lead_id); if (t.lead_id && nmap.has(t.lead_id)) t.lead_notes = nmap.get(t.lead_id) || null; if (t.lead_id && amap.has(t.lead_id)) t.lead_activity = amap.get(t.lead_id) || null; });
           // Byl kontakt někdy na portálu? (portal_view event) — ať je to vidět rovnou u úkolu.
           const portalIds = new Set();
           try {
