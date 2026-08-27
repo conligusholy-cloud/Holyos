@@ -2164,7 +2164,7 @@ router.get('/leads', requireAuth, async (req, res, next) => {
 
 // PATCH /api/compounder/leads/:id — změna stavu / poznámky
 const patchSchema = z.object({
-  status: z.enum(['new', 'nedovolano', 'volat_pristi', 'contacted', 'access_sent', 'schuzka', 'schuzka_online', 'qualified', 'dosledovani', 'smlouva_odeslat', 'smlouva_odeslana', 'converted', 'nezajem', 'nelze_pouzit', 'rejected']).optional(),
+  status: z.enum(['new', 'nedovolano', 'volat_pristi', 'contacted', 'access_sent', 'schuzka', 'schuzka_online', 'qualified', 'dosledovani', 'slibeny_krok', 'smlouva_odeslat', 'smlouva_odeslana', 'converted', 'nezajem', 'nelze_pouzit', 'rejected']).optional(),
   notes: z.string().max(5000).optional().nullable(),
   lang: z.string().trim().max(10).optional().nullable(),
   owner_person_id: z.number().int().positive().optional().nullable(),

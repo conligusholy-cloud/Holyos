@@ -542,6 +542,10 @@ function buildLeadTasks(ctx) {
     if (r && (r.status === 'reserved' || r.status === 'active')) {
       tasks.push({ kind: 'close', title: 'Dotáhnout rezervaci ' + r.kiosk + ' – ' + l.name, detail: 'Otevři kontakt, přečti poznámky; hlídej podpis/poplatek a popožeň zákazníka k uzavření.', reasoning: 'Běžící rezervace se lhůtou.', priority: 1, est_min: 30, lead_id: l.id }); covered.add(l.id); return;
     }
+    // Slíbený krok — dotáhni, co jsi slíbil (i bez naplánované události).
+    if (l.status === 'slibeny_krok') {
+      tasks.push({ kind: 'followup', title: '✅ Dotáhni slíbený krok – ' + l.name, detail: 'Otevři kontakt a splň, co jsi zákazníkovi slíbil; pak posuň dál.', reasoning: 'Stav „Slíbený krok" — nezapomeň dotáhnout.', priority: 1, est_min: 10, lead_id: l.id }); covered.add(l.id); return;
+    }
     // Smluvní dokumentace — VYSOKÁ priorita na dotažení do konce (i bez naplánované události).
     if (l.status === 'smlouva_odeslat') {
       tasks.push({ kind: 'close', title: '📄 Odeslat smluvní dokumentaci – ' + l.name, detail: 'Vysoká priorita: připrav a odešli smluvní dokumentaci, pak dotáhni k podpisu.', reasoning: 'Stav „Odeslat dokumentaci" — dotáhnout do konce.', priority: 1, est_min: 15, lead_id: l.id }); covered.add(l.id); return;
