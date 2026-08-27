@@ -1940,6 +1940,7 @@
           return out?('<div style="margin-top:3px;display:flex;gap:6px;flex-wrap:wrap">'+out+'</div>'):''; })():'') +
         (t.detail ? '<div class="tk-det">'+esc(t.detail)+'</div>' : '') +
         (t.reasoning ? '<div class="tk-why">💡 '+esc(t.reasoning)+'</div>' : '') +
+        (t.lead_notes ? (function(){ var lines=String(t.lead_notes).split(/\n+/).map(function(s){return s.trim();}).filter(Boolean).slice(0,8); if(!lines.length) return ''; return '<div style="margin-top:6px;background:rgba(255,255,255,.04);border:1px solid var(--line);border-radius:8px;padding:8px 10px"><div style="font-size:11px;color:var(--muted2);text-transform:uppercase;letter-spacing:.04em;margin-bottom:3px">📝 Poznámky ke kontaktu</div><ul style="margin:0;padding-left:18px;font-size:12.5px;color:var(--text);line-height:1.5">'+lines.map(function(x){return '<li>'+esc(x)+'</li>';}).join('')+'</ul></div>'; })() : '') +
         (t.progress ? progHtml(t.progress) : '') + '<div class="tk-acts">'+acts+'</div>' +
       '</div></div>';
   }
