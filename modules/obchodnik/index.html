@@ -672,13 +672,17 @@
   function followupFromLead(id){ var l=(state.leads||[]).filter(function(x){return x.id===id;})[0]||{}; openMeeting({ _kind:'followup', title:'Dosledovat – '+(l.name||l.email||'lead'), compounder_lead_id:id }); }
   function promiseFromLead(id){ var l=(state.leads||[]).filter(function(x){return x.id===id;})[0]||{}; openMeeting({ _kind:'task', title:'Slíbený krok – '+(l.name||l.email||'lead'), compounder_lead_id:id }); }
   window.followupFromLead=followupFromLead; window.promiseFromLead=promiseFromLead;
+  // Z jakého úkolu byl výběr „Co dál?" otevřen — po zvolené akci ho označíme jako HOTOVÝ.
+  var _obActiveTaskId = null;
+  function obCompleteActiveTask(){ var tid=_obActiveTaskId; _obActiveTaskId=null; if(tid){ try{ api('/tasks/'+tid+'/done',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'}); }catch(e){} if(typeof loadToday==='function') loadToday(false); } }
+  window.obCompleteActiveTask=obCompleteActiveTask;
   // Rychlý výběr dalšího kroku (po hovoru / kdykoli u kontaktu) — vše se propíše do kalendáře a do plánu.
   function obNextStep(id){
     var l=(state.leads||[]).filter(function(x){return x.id===id;})[0]||{};
     var ex=document.getElementById('ob-nextstep'); if(ex) ex.remove();
     var ov=document.createElement('div'); ov.id='ob-nextstep';
     ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:120;display:flex;align-items:flex-end;justify-content:center';
-    ov.onclick=function(e){ if(e.target===ov) ov.remove(); };
+    ov.onclick=function(e){ if(e.target===ov){ _obActiveTaskId=null; ov.remove(); } };
     var b=function(ic,lbl,sub,fn,col){ return '<button data-fn="'+fn+'" style="display:flex;gap:12px;align-items:center;width:100%;text-align:left;background:var(--surface2);border:1px solid var(--line);border-left:3px solid '+col+';border-radius:12px;padding:13px 14px;margin-top:10px;color:var(--text);font-size:15px;font-weight:600;cursor:pointer;font-family:inherit"><span style="font-size:20px">'+ic+'</span><span>'+lbl+'<div style="font-size:11.5px;color:var(--muted2);font-weight:400;margin-top:1px">'+sub+'</div></span></button>'; };
     ov.innerHTML='<div style="background:var(--surface);width:100%;max-width:520px;border-radius:18px 18px 0 0;border-top:1px solid var(--line);padding:18px 16px calc(18px + env(safe-area-inset-bottom,0))">'
       +'<div style="font-size:16px;font-weight:700;margin-bottom:2px">Co dál s '+esc(l.name||l.email||'kontaktem')+'?</div>'
@@ -697,8 +701,9 @@
     ov.querySelectorAll('button[data-fn]').forEach(function(btn){ btn.onclick=function(){ var fn=btn.getAttribute('data-fn'); ov.remove();
       if(fn==='call') callFromLead(id); else if(fn==='meeting') meetingFromLead(id); else if(fn==='task') obPromisePrompt(id);
       else if(fn==='nedov') obNedovolano(id); else if(fn==='nedovonly'){ setField(id,'status','nedovolano'); } else if(fn==='nezajem') obSetNezajem(id); else if(fn==='docs') obSendDocs(id);
+      obCompleteActiveTask(); // po jakékoli zvolené akci označ původní úkol jako hotový a vrať se do plánu
     }; });
-    document.getElementById('obns-close').onclick=function(){ ov.remove(); };
+    document.getElementById('obns-close').onclick=function(){ _obActiveTaskId=null; ov.remove(); };
   }
   window.obNextStep=obNextStep;
   // Pomocník: vytvoř SalesEvent + úkol v plánu na daný den (5–12 min interní krok).
@@ -989,7 +994,7 @@
     if (l.status === 'new'){
       if (ev && ev.preventDefault) ev.preventDefault();
       var href = (ev && ev.currentTarget && ev.currentTarget.getAttribute('href')) || ('tel:'+String(l.phone||'').replace(/[^\d+]/g,''));
-      obAskCall(l.name, function(){ markCalled(id); window.location.href = href; setTimeout(function(){ if(typeof obNextStep==='function') obNextStep(id); }, 400); }, function(){ saveContact(id); });
+      obAskCall(l.name, function(){ _obActiveTaskId=null; markCalled(id); window.location.href = href; setTimeout(function(){ if(typeof obNextStep==='function') obNextStep(id); }, 400); }, function(){ saveContact(id); });
       return false;
     }
     markCalled(id);
@@ -1928,7 +1933,7 @@
     var acts = t.status==='open'
       ? ('<button class="tk-btn tk-done" onclick="markTaskDone('+t.id+')">✓ Hotovo</button>' +
          '<button class="tk-btn tk-skip" onclick="markTaskSkip('+t.id+')">Přeskočit</button>' +
-         (t.lead_id ? '<button class="tk-btn" style="background:rgba(34,197,94,.15);border:1px solid rgba(34,197,94,.5);color:#86efac" onclick="callLeadFromTask('+t.lead_id+')">📞 Volat</button>' : '') +
+         (t.lead_id ? '<button class="tk-btn" style="background:rgba(34,197,94,.15);border:1px solid rgba(34,197,94,.5);color:#86efac" onclick="callLeadFromTask('+t.lead_id+','+t.id+')">📞 Volat</button>' : '') +
          (t.lead_id ? '<button class="tk-btn tk-lead" onclick="openLeadFromTask('+t.lead_id+')">Otevřít kontakt</button>' : ''))
       : ('<span style="font-size:12px;color:var(--muted2)">'+(t.status==='done'?'✓ Splněno':'Přeskočeno')+'</span> ' +
          '<button class="tk-btn tk-skip" onclick="reopenTask('+t.id+')">Vrátit</button>');
@@ -1961,7 +1966,8 @@
   }
   async function reopenTask(id){ try{ await api('/tasks/'+id+'/reopen', { method:'POST' }); }catch(e){} loadToday(false); }
   // Volat přímo z úkolu; u nového kontaktu se nejdřív zeptá na uložení do telefonu.
-  function callLeadFromTask(id){
+  function callLeadFromTask(id, taskId){
+    _obActiveTaskId = taskId || null; // z jakého úkolu jsme přišli → po akci ho označíme hotový
     var l=(state.leads||[]).find(function(x){ return x.id===id; });
     if(!l || !l.phone){ openLeadFromTask(id); return; } // není v paměti / bez telefonu → otevři kontakt
     var tel='tel:'+String(l.phone).replace(/[^\d+]/g,'');
