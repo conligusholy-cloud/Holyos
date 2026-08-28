@@ -6,6 +6,7 @@ dist/server/
 *.xlsx
 ~$*
 *.docx
+!templates/contracts/*.docx
 
 # DB backupy
 backup-cad-*.sql
