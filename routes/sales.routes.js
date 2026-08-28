@@ -731,15 +731,27 @@ router.get('/my-calendar', async (req, res, next) => {
     if (!meId) return res.json({ events: [], outlook: [] });
     const from = req.query.from ? new Date(req.query.from) : new Date(Date.now() - 7 * 86400000);
     const to   = req.query.to   ? new Date(req.query.to)   : new Date(Date.now() + 31 * 86400000);
-    const events = await prisma.salesEvent.findMany({
-      where: { organizer_id: meId, start_at: { gte: from, lte: to } },
+    // Můj e-mail → uvidím i schůzky, kam mě někdo POZVAL (jsem v poli Pozvat), nejen ty moje.
+    const me = await prisma.person.findUnique({ where: { id: meId }, select: { email: true } }).catch(() => null);
+    const myEmail = me && me.email ? me.email : null;
+    const orClauses = [{ organizer_id: meId }];
+    if (myEmail) orClauses.push({ attendees: { contains: myEmail, mode: 'insensitive' } });
+    const rawEvents = await prisma.salesEvent.findMany({
+      where: { start_at: { gte: from, lte: to }, OR: orClauses },
       orderBy: { start_at: 'asc' },
+      include: { organizer: { select: { first_name: true, last_name: true } } },
+    });
+    // Označ pozvané (nejsem organizátor) + jméno pozvatele.
+    const events = rawEvents.map((e) => {
+      const invited = e.organizer_id !== meId;
+      const inviter = e.organizer ? ((e.organizer.first_name || '') + ' ' + (e.organizer.last_name || '')).trim() : '';
+      const { organizer, ...rest } = e;
+      return Object.assign(rest, { invited, inviter });
     });
     // Lehký režim (?light=1): jen HolyOS schůzky, bez resyncu a Outlooku (pro odznaky u kontaktů).
     if (req.query.light === '1') return res.json({ events, outlook: [] });
-    // Auto-resync: schůzky bez graph_event_id (dřív selhaly / vznikly před povolením) zkus doposlat
-    // do M365 — NEBLOKUJÍCÍ (na pozadí), ať se kalendář načte rychle i na mobilu.
-    const pending = events.filter((e) => !e.graph_event_id).slice(0, 5);
+    // Auto-resync: JEN moje schůzky bez graph_event_id — NEBLOKUJÍCÍ (na pozadí).
+    const pending = events.filter((e) => !e.invited && !e.graph_event_id).slice(0, 5);
     if (pending.length) {
       Promise.all(pending.map(async (e) => {
         try { const g = await _pushEventToGraph(e); await prisma.salesEvent.update({ where: { id: e.id }, data: g }); } catch (err) {}

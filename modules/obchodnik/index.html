@@ -389,11 +389,12 @@
     ov.onclick=function(e){ if(e.target===ov) closeEventInfo(); };
     var when=_evtWhen(info.start,info.end,info.allDay);
     ov.innerHTML='<div class="sheet" style="max-width:520px;width:100%">'+
-      '<div style="display:inline-flex;align-items:center;gap:8px;font-size:11px;color:#4aa3e0;background:rgba(0,120,212,.15);border-radius:6px;padding:2px 8px;margin-bottom:10px">Outlook</div>'+
+      (function(){ var isCol=(info.source==='colleague'||info.badge==='colleague'); var lbl=isCol?'Pozvánka od kolegy':'Outlook'; var cl=isCol?'#14b8a6':'#4aa3e0'; var bgc=isCol?'rgba(20,184,166,.15)':'rgba(0,120,212,.15)'; return '<div style="display:inline-flex;align-items:center;gap:8px;font-size:11px;color:'+cl+';background:'+bgc+';border-radius:6px;padding:2px 8px;margin-bottom:10px">'+lbl+'</div>'; })()+
       '<h2 style="margin:0 0 8px;font-size:18px">'+esc(info.title||'Událost')+'</h2>'+
       ((info.organizer&&(info.organizer.name||info.organizer.address))?('<div style="color:var(--muted);font-size:14px;margin-bottom:6px">👤 Pořadatel: '+esc(info.organizer.name||info.organizer.address)+(info.mine?' (vy)':'')+'</div>'):'')+
-      '<div style="color:var(--muted);font-size:14px;margin-bottom:'+(info.location?'6px':'14px')+'">🕒 '+esc(when)+'</div>'+
-      (info.location?('<div style="color:var(--muted);font-size:14px;margin-bottom:14px">📍 '+esc(info.location)+'</div>'):'')+
+      '<div style="color:var(--muted);font-size:14px;margin-bottom:'+((info.location||info.note)?'6px':'14px')+'">🕒 '+esc(when)+'</div>'+
+      (info.location?('<div style="color:var(--muted);font-size:14px;margin-bottom:'+(info.note?'6px':'14px')+'">📍 '+esc(info.location)+'</div>'):'')+
+      (info.note?('<div style="color:var(--muted);font-size:14px;margin-bottom:14px;white-space:pre-wrap">📝 '+esc(info.note)+'</div>'):'')+
       '<div class="actions-row">'+
         '<button class="btn btn-g" style="flex:1" onclick="closeEventInfo()">Zavřít</button>'+
         (info.web_link?('<a class="btn btn-p" style="flex:2;display:flex;align-items:center;justify-content:center;text-decoration:none" href="'+esc(info.web_link)+'" target="_blank" rel="noopener">Otevřít v Outlooku</a>'):'')+
@@ -858,7 +859,7 @@
         fetch('/api/sales/my-calendar?from='+encodeURIComponent(info.startStr)+'&to='+encodeURIComponent(info.endStr),{credentials:'include'})
           .then(function(r){ return r.json(); })
           .then(function(d){ var evs=[]; window._myMbx=(d.outlookMailbox||'').toLowerCase();
-            (d.events||[]).forEach(function(e){ evs.push({ id:'h'+e.id, title:e.title||'(schůzka)', start:e.start_at, end:e.end_at||undefined, backgroundColor:'#eab308', borderColor:'#eab308', textColor:'#1a1a1a', extendedProps:{ source:'holyos', dbId:e.id, sync_error:e.graph_sync_error, graph_event_id:e.graph_event_id, location:e.location, note:e.description, attendees:e.attendees, site_id:e.site_id, compounder_lead_id:e.compounder_lead_id } }); });
+            (d.events||[]).forEach(function(e){ var inv=!!e.invited; var col=inv?'#14b8a6':'#eab308'; var ttl=(e.title||'(schůzka)')+(inv&&e.inviter?(' — pozval '+e.inviter):''); evs.push({ id:'h'+e.id, title:ttl, start:e.start_at, end:e.end_at||undefined, backgroundColor:col, borderColor:col, textColor:inv?'#fff':'#1a1a1a', extendedProps:{ source:'holyos', invited:inv, inviter:e.inviter, dbId:e.id, sync_error:e.graph_sync_error, graph_event_id:e.graph_event_id, location:e.location, note:e.description, attendees:e.attendees, site_id:e.site_id, compounder_lead_id:e.compounder_lead_id } }); });
             (d.outlook||[]).forEach(function(o){ var org=o.organizer||null; var oa=((org&&org.address)||'').toLowerCase(); var mine=!!(window._myMbx&&oa&&oa===window._myMbx); var col=mine?'#2b6cb0':'#14b8a6'; evs.push({ id:'o'+o.id, title:o.title||'(bez názvu)', start:o.start_at, end:o.end_at||undefined, allDay:!!o.all_day, backgroundColor:col, borderColor:col, extendedProps:{ source:'outlook', web_link:o.web_link, location:o.location, organizer:org, mine:mine } }); });
             // Detekce časových překryvů → červený rámeček (konflikt) na obě události.
             for(var _i=0;_i<evs.length;_i++){ for(var _j=_i+1;_j<evs.length;_j++){ var _a=evs[_i],_b=evs[_j]; if(_a.allDay||_b.allDay) continue; var as=+new Date(_a.start),ae=+new Date(_a.end||_a.start),bs=+new Date(_b.start),be=+new Date(_b.end||_b.start); if(isFinite(as)&&isFinite(bs)&&as<be&&bs<ae){ _a._conflict=true; _b._conflict=true; } } }
@@ -869,6 +870,7 @@
       },
       eventClick:function(arg){ var p=arg.event.extendedProps||{};
         if(p.source==='outlook'){ openEventInfo({ title:arg.event.title, start:arg.event.start, end:arg.event.end, allDay:arg.event.allDay, location:p.location, web_link:p.web_link, organizer:p.organizer, mine:p.mine }); return; }
+        if(p.invited){ openEventInfo({ source:'colleague', title:arg.event.title, start:arg.event.start, end:arg.event.end, location:p.location, note:p.note, organizer:(p.inviter?{name:p.inviter}:null), mine:false }); return; }
         openMeeting({ id:p.dbId, title:arg.event.title, start:arg.event.start, end:arg.event.end, location:p.location, note:p.note, attendees:p.attendees, site_id:p.site_id, compounder_lead_id:p.compounder_lead_id, graph_event_id:p.graph_event_id, sync_error:p.sync_error });
       },
       dateClick:function(arg){ openMeeting({ start: arg.date }); },
