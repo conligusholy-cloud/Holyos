@@ -7367,6 +7367,82 @@ router.post('/reservations', requireAuth, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// POST /reservations/:id/generate-contracts — hromadně vygeneruje smlouvy k rezervaci
+// PŘEDVYPLNĚNÉ daty lokality (Compounding) + iniciály kupujícího. Nepřepisuje už podepsané.
+router.post('/reservations/:id(\\d+)/generate-contracts', requireAuth, async (req, res, next) => {
+  try {
+    const rec = await prisma.locationReservation.findUnique({ where: { id: Number(req.params.id) } });
+    if (!rec) return res.status(404).json({ error: 'Rezervace nenalezena' });
+    const code = rec.kiosk_code;
+    if (!code) return res.status(400).json({ error: 'Rezervace nemá lokalitu.' });
+    const wantTypes = Array.isArray(req.body && req.body.types) && req.body.types.length
+      ? req.body.types.filter((t) => ['rezervacni', 'kupni', 'servisni'].indexOf(t) >= 0)
+      : ['rezervacni', 'kupni', 'servisni'];
+    const force = !!(req.body && req.body.force);
+    // Společný kontext (lokalita + ceny) — spočítá se jednou.
+    const our = await getOurCompany().catch(() => null);
+    let lang = 'cs';
+    try { const l = rec.lead_id ? await prisma.compounderLead.findUnique({ where: { id: rec.lead_id }, select: { lang: true } }) : null; if (l && l.lang) lang = String(l.lang).toLowerCase().slice(0, 2); } catch (e) {}
+    const isCs = lang === 'cs' || !lang;
+    const ki = await _sisKioskInfo(code);
+    const cs = await getSetting(COMPOUNDING_SETTINGS_KEY, { type: 'json', defaultValue: COMPOUNDING_SETTINGS_DEFAULT });
+    const cfgMap = (await getSetting(COMPOUNDING_KIOSKS_KEY, { type: 'json', defaultValue: {} })) || {};
+    const cfg = cfgMap[code] || {};
+    const ks = await _sisKiosks();
+    const kk = ks.find((k) => k.code === code) || {};
+    const fx = await fxRatesCzk();
+    const eur = fx.EUR || 25;
+    const ver = String(cfg.version || '').toLowerCase();
+    const pl = cs.pricelist || {};
+    const machineCzk = (pl[ver] && pl[ver].eur != null && isFinite(Number(pl[ver].eur))) ? Math.round(Number(pl[ver].eur) * eur) : null;
+    const totalCzk = (rec.purchase_price != null) ? Number(rec.purchase_price) : null;
+    const localityCzk = (totalCzk != null && machineCzk != null) ? Math.max(0, totalCzk - machineCzk) : null;
+    const pseudo = {
+      name: (isCs ? 'Lokalita ' : 'Location ') + code, address: ki.label, city: '', zip: '', country: 'CZ',
+      purchase_price: localityCzk, pradlomat_ref: code, contacts: [],
+      _avgTurnover: (typeof kk.avgTop3 === 'number' && isFinite(kk.avgTop3)) ? kk.avgTop3 : null,
+      _locationMonths: Number.isFinite(cs.locationMonths) ? cs.locationMonths : 12,
+      _version: ver || null, _machinePrice: machineCzk,
+      _servicePct: Number.isFinite(cs.servicePct) ? cs.servicePct : 15,
+      _buybackPct: Number.isFinite(cs.buybackPct) ? cs.buybackPct : 65,
+      _buybackYears: Number.isFinite(cs.buybackYears) ? cs.buybackYears : 5,
+    };
+    const cur = (String(rec.currency || 'CZK').toUpperCase() !== 'CZK') ? String(rec.currency).toUpperCase() : 'CZK';
+    const rate = (cur !== 'CZK') ? ((fx && fx[cur]) || 0) : 1;
+    const priceInCur = (czk) => { if (czk == null || !isFinite(czk)) return ''; if (cur !== 'CZK' && rate > 0) return (Math.round((czk / rate) * 100) / 100).toLocaleString('cs-CZ'); return Math.round(czk).toLocaleString('cs-CZ'); };
+    const created = []; const skipped = [];
+    for (const type of wantTypes) {
+      if (!force) {
+        const exists = await prisma.compoundingContract.findFirst({ where: { kiosk_code: code, type, status: { notIn: ['podepsano'] } }, select: { id: true } });
+        if (exists) { skipped.push({ type, id: exists.id, reason: 'existuje' }); continue; }
+      }
+      let f = {};
+      try { const pf = contracts.getPrefill(type, pseudo, our, lang); f = Object.assign({}, (pf && pf.values) || {}); } catch (e) { f = {}; }
+      if (!isCs) f._lang = lang;
+      // Iniciály kupujícího z rezervace (doplněné přes „Vyžádat údaje" nebo ručně).
+      f.buyer_name = rec.buyer_name || f.buyer_name || '';
+      f.buyer_address = rec.buyer_address || f.buyer_address || '';
+      f.buyer_ico = rec.buyer_ico || f.buyer_ico || '';
+      f.buyer_dic = rec.buyer_dic || f.buyer_dic || '';
+      f.buyer_rep = rec.buyer_rep || f.buyer_rep || '';
+      f.buyer_bank = rec.buyer_bank || f.buyer_bank || '';
+      f._reverse_charge = _isEuReverseCharge(f.buyer_dic);
+      f.location_desc = ki.label ? (code + ' — ' + ki.label) : code;
+      f.price_currency = (cur !== 'CZK' && rate > 0) ? cur : (isCs ? 'Kč' : 'CZK');
+      if (machineCzk != null) f.price_machine = priceInCur(machineCzk);
+      if (localityCzk != null) f.price_location = priceInCur(localityCzk);
+      if (totalCzk != null) f.price_total = priceInCur(totalCzk);
+      if (rec.fee_total != null) f.reservation_credit = priceInCur(rec.fee_total);
+      const token = crypto.randomBytes(24).toString('hex');
+      const row = await prisma.compoundingContract.create({
+        data: { kiosk_code: code, kiosk_label: ki.label || null, type, status: 'koncept', fields: f, share_token: token, share_expires_at: new Date(Date.now() + 30 * 24 * 3600 * 1000) },
+      });
+      created.push({ type, id: row.id });
+    }
+    res.json({ ok: true, created, skipped });
+  } catch (err) { next(err); }
+});
+
 // Pojistka: když k rezervaci chybí kupní smlouva (starý deploy, dřívější přeskočení…),
 // dovytvoří se při akci „Poplatek přišel" a Velín dostane výzvu k podpisu za Best Series.
 async function _ensureKupniContract(rec) {

@@ -6540,8 +6540,8 @@
           var lhuty = (x.signed_at ? ('Podepsáno: '+resDate(x.signed_at)) : ('Podpis do: '+resDate(x.sign_until)))+'<br>Poplatek: '+resDate(x.fee_until)+'<br>Konec: '+resDate(x.reserved_until);
           var scol = x.status==='completed'?'#10b981':((x.status==='cancelled'||x.status==='expired')?'#ef4444':'#eab308');
           var _cEsc = kvEsc(x.kiosk_code||'').replace(/'/g,'&#39;');
-          // Tlačítka „Smlouvy" a „Pokyny" (vč. e-mail/WhatsApp) dočasně skryta — nechává se jen „Vyžádat údaje".
-          var docsBtn = '';
+          // „Pokyny" (vč. e-mail/WhatsApp) dočasně skryty. „Vygenerovat smlouvy" předvyplní z lokality + kontaktu.
+          var docsBtn = '<button class="btn btn-secondary" style="padding:4px 8px;font-size:12px;" title="Vygenerovat smlouvy předvyplněné daty lokality a kontaktu" onclick="resGenContracts('+x.id+',\''+_cEsc+'\',this)">📄 Vygenerovat smlouvy</button> ';
           var payBtns = (x.status==='reserved'||x.status==='active')
             ? '<button class="btn btn-secondary" style="padding:4px 8px;font-size:12px;" title="Odeslat e-mailem odkaz na formulář s údaji do smlouvy (dohledá firmu v ARES)" onclick="resDetailsEmail('+x.id+',this)">📝 Vyžádat údaje</button> '
             : '';
@@ -6685,6 +6685,20 @@
       } catch(e){ alert('Odeslání selhalo: '+(e.message||'')); }
       finally { if(btn) btn.disabled=false; }
     }
+    async function resGenContracts(id, code, btn){
+      if(!confirm('Vygenerovat smlouvy (rezervační, kupní, servisní) předvyplněné daty lokality a kupujícího?')) return;
+      if(btn) btn.disabled=true;
+      try {
+        var r = await fetch('/api/compounder/reservations/'+id+'/generate-contracts', { method:'POST', credentials:'include', headers:{'Content-Type':'application/json'}, body:'{}' });
+        var j = await r.json().catch(function(){return{};});
+        if(!r.ok) throw new Error(j.error||('HTTP '+r.status));
+        var nc=(j.created||[]).length, ns=(j.skipped||[]).length;
+        alert('Vygenerováno '+nc+' smluv'+(ns?(' · '+ns+' už existovalo'):'')+'.');
+        if(typeof openContractPicker==='function' && code) openContractPicker(code); // ukaž smlouvy
+      } catch(e){ alert('Generování selhalo: '+(e.message||'')); }
+      finally { if(btn) btn.disabled=false; }
+    }
+    window.resGenContracts = resGenContracts;
     async function resDetailsEmail(id, btn){
       if(!confirm('Odeslat kupujícímu e-mailem odkaz na formulář, kde vyplní údaje do smlouvy (IČO se dohledá v ARES)?')) return;
       if(btn) btn.disabled=true;
