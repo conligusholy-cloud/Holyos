@@ -853,6 +853,12 @@ async function buildOwnerReport(dateStr) {
     // Splnění bereme z gatherDayResult (efektivní = i reálně vytočené hovory bez ručního „Hotovo").
     const dr = await gatherDayResult(p.id, dateStr).catch(() => null);
     const acd = await computeAvgCallSec(p.id, 30).catch(() => ({ avgSec: null, count: 0 })); // reálná prům. délka hovoru
+    // Struktura kontaktů podle stavu (pro koláč u obchodníka).
+    let statusCounts = {};
+    try {
+      const grp = await prisma.compounderLead.groupBy({ by: ['status'], where: { owner_person_id: p.id, is_test: false }, _count: { _all: true } });
+      grp.forEach((g) => { statusCounts[g.status || 'new'] = g._count._all; });
+    } catch (e) { statusCounts = {}; }
     per.push({
       person_id: p.id, name: p.name,
       focus: plan ? plan.focus : null,
@@ -864,6 +870,7 @@ async function buildOwnerReport(dateStr) {
       contacts_worked_today: dr ? dr.contacts_worked_today : 0, // s kolika kontakty dnes pracoval
       new_contacts_today: dr ? dr.new_contacts_today : 0,
       avg_call_sec: acd.avgSec || null, avg_call_min: acd.avgSec ? Math.round(acd.avgSec / 60 * 10) / 10 : null, avg_call_sample: acd.count || 0,
+      status_counts: statusCounts,
       day_score: review ? review.score : null,
       day_summary: review ? (review.summary || '') : null,
       month_target_revenue: (targets.revenue && targets.revenue.month) || 0,

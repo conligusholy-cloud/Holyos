@@ -182,6 +182,30 @@
       seg(done,'#22c55e',0)+seg(open,'#eab308',done)+seg(skipped,'#6b7280',done+open)+
       '<text x="32" y="37" text-anchor="middle" font-size="15" font-weight="800" fill="var(--text)">'+pct+'%</text></svg>';
   }
+  // Plná mapa stavů (barva + popisek) pro koláč struktury kontaktů.
+  var STATUS_FULL = { new:{l:'Nový',c:'#3b82f6'}, nedovolano:{l:'Nedovoláno',c:'#f59e0b'}, volat_pristi:{l:'Volat příště',c:'#eab308'}, contacted:{l:'Kontaktován',c:'#22d3ee'}, access_sent:{l:'Odeslán přístup',c:'#60a5fa'}, schuzka:{l:'Schůzka',c:'#22c55e'}, schuzka_online:{l:'Schůzka online',c:'#10b981'}, qualified:{l:'Kvalifikován',c:'#a78bfa'}, dosledovani:{l:'Dosledování',c:'#06b6d4'}, slibeny_krok:{l:'Slíbený krok',c:'#eab308'}, smlouva_odeslat:{l:'Odeslat dokumentaci',c:'#f97316'}, smlouva_odeslana:{l:'Dokumentace odeslána',c:'#8b5cf6'}, converted:{l:'Převeden',c:'#16a34a'}, nezajem:{l:'Nemá zájem',c:'#ef4444'}, nelze_pouzit:{l:'Nelze použít',c:'#6b7280'}, rejected:{l:'Zamítnut',c:'#9f1239'} };
+  // Vícesegmentový donut ze seznamu {value,color}.
+  function vDonutMulti(segs, centerLabel){
+    var tot=segs.reduce(function(s,x){return s+(x.value||0);},0); var C=2*Math.PI*26;
+    if(!tot) return '<svg width="64" height="64" viewBox="0 0 64 64"><circle cx="32" cy="32" r="26" fill="none" stroke="var(--line)" stroke-width="10"/><text x="32" y="37" text-anchor="middle" font-size="12" fill="var(--muted2)">0</text></svg>';
+    var cum=0; var arcs='';
+    segs.forEach(function(x){ var v=x.value||0; if(!v) return; var len=C*(v/tot); arcs+='<circle cx="32" cy="32" r="26" fill="none" stroke="'+x.color+'" stroke-width="10" stroke-dasharray="'+len.toFixed(2)+' '+(C-len).toFixed(2)+'" stroke-dashoffset="'+(-C*(cum/tot)).toFixed(2)+'" transform="rotate(-90 32 32)"/>'; cum+=v; });
+    return '<svg width="64" height="64" viewBox="0 0 64 64">'+arcs+'<text x="32" y="37" text-anchor="middle" font-size="15" font-weight="800" fill="var(--text)">'+(centerLabel!=null?centerLabel:tot)+'</text></svg>';
+  }
+  function vStatusBlock(p){
+    var sc=p.status_counts||{}; var keys=Object.keys(sc).filter(function(k){return sc[k]>0;});
+    if(!keys.length) return '';
+    // seřaď dle definovaného pořadí, neznámé na konec
+    var order=Object.keys(STATUS_FULL);
+    keys.sort(function(a,b){ var ia=order.indexOf(a), ib=order.indexOf(b); return (ia<0?99:ia)-(ib<0?99:ib); });
+    var segs=keys.map(function(k){ return { value:sc[k], color:(STATUS_FULL[k]||{}).c||'#94a3b8' }; });
+    var tot=keys.reduce(function(s,k){return s+sc[k];},0);
+    var legend=keys.map(function(k){ var st=STATUS_FULL[k]||{l:k,c:'#94a3b8'}; return '<span style="display:inline-flex;align-items:center;gap:5px;font-size:11.5px;margin:2px 8px 2px 0"><span style="width:9px;height:9px;border-radius:2px;background:'+st.c+';display:inline-block"></span>'+esc(st.l)+' <b style="color:var(--text)">'+sc[k]+'</b></span>'; }).join('');
+    return '<div style="display:flex;align-items:center;gap:14px;margin-top:8px;padding:10px;background:var(--surface2);border-radius:10px">'
+      + vDonutMulti(segs, tot)
+      + '<div style="flex:1;min-width:0"><div style="font-size:11px;color:var(--muted2);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Struktura kontaktů ('+tot+')</div><div style="display:flex;flex-wrap:wrap">'+legend+'</div></div>'
+      + '</div>';
+  }
   function vSpeedBlock(p){
     var done=p.tasks_done||0, open=p.tasks_open||0, skipped=p.tasks_skipped||0;
     return '<div style="display:flex;align-items:center;gap:14px;margin-top:8px;padding:10px;background:var(--surface2);border-radius:10px">'
@@ -211,6 +235,7 @@
           '<div class="row-h"><div class="name">'+esc(p.name)+' <span style="font-weight:400;color:var(--muted2);font-size:12px">▾ úkoly</span></div>'+(p.day_score!=null?'<div class="pct" style="color:'+scoreCol(p.day_score)+'">'+p.day_score+'</div>':'')+'</div>' +
           '<div class="sub">Úkoly: '+(p.tasks_done||0)+'/'+(p.tasks_assigned||0)+' splněno'+(p.tasks_skipped?(' · '+p.tasks_skipped+' přeskočeno'):'')+(p.tasks_open?(' · '+p.tasks_open+' otevřeno'):'')+'</div>' +
           vSpeedBlock(p) +
+          vStatusBlock(p) +
           (p.focus?'<div class="muted" style="margin-top:4px;font-size:12.5px">🎯 '+esc(p.focus)+'</div>':'') +
           (p.day_summary?'<div class="muted" style="margin-top:4px;font-size:12.5px">'+esc(p.day_summary)+'</div>':'') +
           '<div style="margin-top:8px;padding:8px 10px;background:var(--surface2);border-radius:10px">' +
