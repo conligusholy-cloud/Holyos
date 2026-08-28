@@ -400,6 +400,7 @@
       <div class="toolbar" style="margin-bottom:14px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
         <select id="resf-status-page" onchange="loadReservationsPage()" style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:13px;"></select>
         <button class="btn" onclick="loadReservationsPage()">↻ Obnovit</button>
+        <button class="btn" onclick="openNewReservation()" style="margin-left:auto;background:var(--primary,#eab308);color:#1a1408;font-weight:700;">➕ Nová rezervace</button>
       </div>
       <div id="res-summary-page" style="margin-bottom:14px;"></div>
       <div id="res-rows-page"><div style="color:var(--text2);padding:16px;">Načítám…</div></div>
@@ -6562,6 +6563,48 @@
       return loadReservationsInto('res-rows-page', 'resf-status-page', 'res-summary-page');
     }
     window.loadReservationsPage = loadReservationsPage;
+    // ─── Ruční založení rezervace ───────────────────────────────────────────────
+    function openNewReservation(){
+      var ex=document.getElementById('newres-ov'); if(ex) ex.remove();
+      var ov=document.createElement('div'); ov.id='newres-ov';
+      ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:200;display:flex;align-items:center;justify-content:center;padding:20px';
+      ov.onclick=function(e){ if(e.target===ov) ov.remove(); };
+      var inp='width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:9px 11px;color:var(--text);font-size:14px;font-family:inherit';
+      var lbl='display:block;font-size:12px;color:var(--text2);margin:10px 0 3px';
+      var d14=new Date(Date.now()+14*86400000); var d14s=d14.toISOString().slice(0,10);
+      ov.innerHTML='<div style="background:var(--surface,#15171c);border:1px solid var(--border);border-radius:14px;width:520px;max-width:96vw;max-height:92vh;overflow:auto;padding:22px">'
+        +'<div style="display:flex;align-items:center;margin-bottom:6px"><h2 style="margin:0;font-size:18px">➕ Nová rezervace</h2><button onclick="var o=document.getElementById(&#39;newres-ov&#39;);if(o)o.remove();" style="margin-left:auto;background:none;border:none;color:var(--text2);font-size:22px;cursor:pointer">✕</button></div>'
+        +'<label style="'+lbl+'">Kód lokality *</label><input id="nr-code" style="'+inp+'" placeholder="např. 00011CZ" autocomplete="off">'
+        +'<div style="display:flex;gap:10px"><div style="flex:1"><label style="'+lbl+'">Kupující — jméno</label><input id="nr-name" style="'+inp+'"></div><div style="flex:1"><label style="'+lbl+'">Telefon</label><input id="nr-phone" style="'+inp+'" inputmode="tel"></div></div>'
+        +'<label style="'+lbl+'">E-mail</label><input id="nr-email" style="'+inp+'" inputmode="email">'
+        +'<div style="display:flex;gap:10px"><div style="flex:1"><label style="'+lbl+'">Kupní cena (Kč)</label><input id="nr-price" style="'+inp+'" inputmode="numeric"></div><div style="flex:1"><label style="'+lbl+'">Poplatek celkem (Kč)</label><input id="nr-fee" style="'+inp+'" inputmode="numeric" value="0"></div></div>'
+        +'<div style="display:flex;gap:10px"><div style="flex:1"><label style="'+lbl+'">Rezervováno do</label><input id="nr-until" type="date" style="'+inp+'" value="'+d14s+'"></div><div style="flex:1"><label style="'+lbl+'">Měna</label><select id="nr-cur" style="'+inp+'"><option>CZK</option><option>EUR</option><option>PLN</option></select></div></div>'
+        +'<label style="'+lbl+'">Stav</label><select id="nr-status" style="'+inp+'"><option value="reserved">Rezervováno (čeká poplatek)</option><option value="active">Rezervováno — poplatek přijat</option><option value="hold">Blokace</option></select>'
+        +'<label style="display:flex;align-items:center;gap:8px;margin-top:12px;font-size:13px;color:var(--text);cursor:pointer"><input type="checkbox" id="nr-trust" style="width:16px;height:16px;accent-color:var(--primary)"> Na důvěru (bez poplatku)</label>'
+        +'<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:18px"><button class="btn" onclick="var o=document.getElementById(&#39;newres-ov&#39;);if(o)o.remove();">Zrušit</button><button class="btn" id="nr-save" onclick="saveNewReservation(this)" style="background:var(--primary,#eab308);color:#1a1408;font-weight:700">Vytvořit rezervaci</button></div>'
+        +'<p id="nr-err" style="color:#fca5a5;font-size:13px;margin:10px 0 0;min-height:14px"></p></div>';
+      document.body.appendChild(ov);
+      setTimeout(function(){ var c=document.getElementById('nr-code'); if(c) c.focus(); },50);
+    }
+    window.openNewReservation=openNewReservation;
+    async function saveNewReservation(btn){
+      var v=function(id){ return (document.getElementById(id)||{}).value; };
+      var err=document.getElementById('nr-err'); err.textContent='';
+      var code=(v('nr-code')||'').trim();
+      if(!code){ err.textContent='Zadej kód lokality.'; return; }
+      var payload={ kiosk_code:code, buyer_name:(v('nr-name')||'').trim(), buyer_phone:(v('nr-phone')||'').trim(), buyer_email:(v('nr-email')||'').trim(),
+        purchase_price:(v('nr-price')||'').replace(/\s/g,''), fee_total:(v('nr-fee')||'').replace(/\s/g,''), currency:v('nr-cur')||'CZK',
+        reserved_until:v('nr-until')||null, status:v('nr-status')||'reserved', on_trust:!!(document.getElementById('nr-trust')||{}).checked };
+      if(btn) btn.disabled=true;
+      try{
+        var r=await fetch('/api/compounder/reservations',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+        var j=await r.json().catch(function(){return{};});
+        if(!r.ok) throw new Error(j.error||('HTTP '+r.status));
+        var o=document.getElementById('newres-ov'); if(o)o.remove();
+        try{ loadReservationsPage(); }catch(_){}
+      }catch(e){ if(btn) btn.disabled=false; err.textContent='Nepodařilo se vytvořit: '+(e.message||''); }
+    }
+    window.saveNewReservation=saveNewReservation;
     async function resAction(id, action){
       if((action==='cancel') && !confirm('Opravdu zrušit rezervaci? Lokalita se uvolní ostatním.')) return;
       if((action==='fee_unpaid'||action==='purchase_unpaid') && !confirm('Opravdu zrušit tuto platbu? Vrátí se do stavu „nezaplaceno".')) return;

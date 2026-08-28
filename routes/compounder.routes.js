@@ -7319,6 +7319,40 @@ router.get('/reservations', requireAuth, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// POST /reservations — ruční založení rezervace z modulu (admin). Bez vazby na lead/nabídku.
+router.post('/reservations', requireAuth, async (req, res, next) => {
+  try {
+    const b = req.body || {};
+    const code = String(b.kiosk_code || '').trim().toUpperCase().slice(0, 40);
+    if (!code) return res.status(400).json({ error: 'Zadej kód lokality.' });
+    const STATUSES = ['hold', 'reserved', 'active', 'completed', 'cancelled', 'expired'];
+    const status = STATUSES.indexOf(String(b.status)) >= 0 ? String(b.status) : 'reserved';
+    const days = Math.max(0, Math.round(Number(b.days) || 0));
+    let reserved_until = null;
+    if (b.reserved_until) { const d = new Date(String(b.reserved_until)); if (!isNaN(d.getTime())) { d.setHours(23, 59, 59, 0); reserved_until = d; } }
+    if (!reserved_until && days > 0) reserved_until = new Date(Date.now() + days * 86400000);
+    const num = (v) => (v != null && v !== '' && isFinite(Number(v))) ? Math.round(Number(v)) : null;
+    const rec = await prisma.locationReservation.create({
+      data: {
+        kiosk_code: code,
+        lead_id: (b.lead_id && Number.isInteger(Number(b.lead_id))) ? Number(b.lead_id) : null,
+        status, on_trust: !!b.on_trust,
+        days, fee_per_day: num(b.fee_per_day) || 0, fee_total: num(b.fee_total) || 0,
+        purchase_price: num(b.purchase_price),
+        currency: String(b.currency || 'CZK').toUpperCase().slice(0, 3),
+        reserved_until,
+        sign_until: b.sign_until ? new Date(b.sign_until) : null,
+        fee_until: b.fee_until ? new Date(b.fee_until) : null,
+        fee_paid_at: (status === 'active' || b.on_trust) ? new Date() : null,
+        buyer_name: b.buyer_name ? String(b.buyer_name).trim().slice(0, 255) : null,
+        buyer_email: b.buyer_email ? String(b.buyer_email).trim().slice(0, 255) : null,
+        buyer_phone: b.buyer_phone ? String(b.buyer_phone).trim().slice(0, 40) : null,
+      },
+    });
+    res.status(201).json({ ok: true, reservation: rec });
+  } catch (err) { next(err); }
+});
+
 // Pojistka: když k rezervaci chybí kupní smlouva (starý deploy, dřívější přeskočení…),
 // dovytvoří se při akci „Poplatek přišel" a Velín dostane výzvu k podpisu za Best Series.
 async function _ensureKupniContract(rec) {
