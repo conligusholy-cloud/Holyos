@@ -40,11 +40,14 @@
     "multer": "^1.4.5-lts.1",
     "nodemailer": "^8.0.5",
     "pdf-parse": "^1.1.1",
+    "pizzip": "^3.2.0",
     "prisma": "^6.19.3",
     "puppeteer": "^24.42.0",
     "qrcode": "^1.5.4",
+    "twilio": "^5.3.0",
     "uuid": "^13.0.0",
     "web-push": "^3.6.7",
+    "ws": "^8.18.0",
     "zod": "^4.3.6"
   },
   "devDependencies": {

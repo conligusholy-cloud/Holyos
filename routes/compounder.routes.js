@@ -7443,6 +7443,99 @@ router.post('/reservations/:id(\\d+)/generate-contracts', requireAuth, async (re
   } catch (err) { next(err); }
 });
 
+// POST /reservations/:id/contracts-docx — vygeneruje SADU DOCX smluv (kupní, nájemní, přílohy 1–3)
+// předvyplněných daty rezervace/kontaktu, lokality (Compounding) a SIS (příloha 3). Vrací ZIP.
+const contractDocx = require('../services/docx/contract-docx');
+async function _sisTxBase() {
+  return (process.env.SIS_KIOSK_TX_API_URL || (process.env.SIS_KIOSK_API_URL ? process.env.SIS_KIOSK_API_URL.replace(/kiosk-values\/?$/, 'kiosk-transactions') : 'https://sis-test.infinitygrid.cloud/api/public/kiosk-transactions')).replace(/\/$/, '');
+}
+async function _sisRevenueForContract(code) {
+  const apiKey = process.env.SIS_KIOSK_API_KEY;
+  const CZ = ['Leden', 'Únor', 'Březen', 'Duben', 'Květen', 'Červen', 'Červenec', 'Srpen', 'Září', 'Říjen', 'Listopad', 'Prosinec'];
+  const now = new Date();
+  const keys = []; for (let i = 12; i >= 1; i--) { const d = new Date(now.getFullYear(), now.getMonth() - i, 1); keys.push(d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0')); }
+  const sums = {}; keys.forEach((k) => sums[k] = 0);
+  let firstTs = null; const base = await _sisTxBase();
+  if (!apiKey) return { firstTs: null, months12: [], total12: null, avg: null, periodLabel: null };
+  let offset = 0, pages = 0, total = null; const started = Date.now();
+  while (pages < 200) {
+    if (Date.now() - started > 20000) break;
+    let r; try { r = await fetch(base + '/' + encodeURIComponent(code) + '?limit=500&offset=' + offset, { headers: { 'X-API-Key': apiKey, 'Accept': 'application/json' } }); } catch (e) { break; }
+    if (!r || !r.ok) break;
+    const d = await r.json().catch(() => ({}));
+    const txs = Array.isArray(d.transactions) ? d.transactions : [];
+    if (typeof d.total === 'number') total = d.total;
+    if (!txs.length) break;
+    for (const t of txs) {
+      const ts = t.datetime ? new Date(t.datetime).getTime() : 0;
+      if (ts && (firstTs == null || ts < firstTs)) firstTs = ts;
+      if (String(t.status) !== 'Successful' || !ts) continue;
+      const dt = new Date(ts); const ym = dt.getFullYear() + '-' + String(dt.getMonth() + 1).padStart(2, '0');
+      if (ym in sums) sums[ym] += (Number(t.amount) || 0);
+    }
+    offset += txs.length; pages++;
+    if (total && offset >= total) break;
+  }
+  const monthsNewestFirst = keys.slice().reverse().map((k) => { const p = k.split('-'); return { label: CZ[Number(p[1]) - 1] + ' ' + p[0], value: Math.round(sums[k]) }; });
+  let sum = 0; keys.forEach((k) => sum += sums[k]);
+  const fk = keys[0].split('-'); const lk = keys[keys.length - 1].split('-');
+  return { firstTs, months12: monthsNewestFirst, total12: Math.round(sum), avg: Math.round(sum / 12), periodLabel: CZ[Number(fk[1]) - 1] + ' ' + fk[0] + ' – ' + CZ[Number(lk[1]) - 1].toLowerCase() + ' ' + lk[0] };
+}
+async function _reservationContractNumbers(recId) {
+  const KEY = 'contracts.res_numbers';
+  const map = (await getSetting(KEY, { type: 'json', defaultValue: {} })) || {};
+  const year = new Date().getFullYear();
+  if (map[recId] && map[recId].year === year) return map[recId];
+  let seq = Number(await getSetting('contracts.seq', { type: 'number', defaultValue: 1 })) || 1;
+  const out = { year, n: seq, kupni: year + 'K' + String(seq).padStart(4, '0'), najemni: year + 'N' + String(seq).padStart(4, '0') };
+  map[recId] = out;
+  await setSetting('contracts.seq', seq + 1, { type: 'number' });
+  await setSetting(KEY, map, { type: 'json' });
+  return out;
+}
+router.post('/reservations/:id(\\d+)/contracts-docx', requireAuth, async (req, res, next) => {
+  try {
+    const rec = await prisma.locationReservation.findUnique({ where: { id: Number(req.params.id) } });
+    if (!rec) return res.status(404).json({ error: 'Rezervace nenalezena' });
+    const code = rec.kiosk_code;
+    if (!code) return res.status(400).json({ error: 'Rezervace nemá lokalitu.' });
+    const our = await getOurCompany().catch(() => null);
+    const ki = await _sisKioskInfo(code);
+    const cs = await getSetting(COMPOUNDING_SETTINGS_KEY, { type: 'json', defaultValue: COMPOUNDING_SETTINGS_DEFAULT });
+    const cfgMap = (await getSetting(COMPOUNDING_KIOSKS_KEY, { type: 'json', defaultValue: {} })) || {};
+    const cfg = cfgMap[code] || {};
+    const fx = await fxRatesCzk(); const eur = fx.EUR || 25;
+    const ver = String(cfg.version || '').toLowerCase(); const pl = cs.pricelist || {};
+    const machineCzk = (pl[ver] && pl[ver].eur != null && isFinite(Number(pl[ver].eur))) ? Math.round(Number(pl[ver].eur) * eur) : null;
+    const totalCzk = (rec.purchase_price != null) ? Number(rec.purchase_price) : null;
+    const localityCzk = (totalCzk != null && machineCzk != null) ? Math.max(0, totalCzk - machineCzk) : null;
+    const label = ki.label || code; const ci = label.indexOf(',');
+    const locationName = ci > 0 ? label.slice(0, ci).trim() : label;
+    const locationStreet = ci > 0 ? label.slice(ci + 1).trim() : '';
+    let sis = { firstTs: null, months12: [], total12: null, avg: null, periodLabel: null };
+    try { sis = await _sisRevenueForContract(code); } catch (e) {}
+    const provozStart = sis.firstTs ? new Date(sis.firstTs).toLocaleDateString('cs-CZ').replace(/\s/g, '') : null;
+    const provozDays = sis.firstTs ? Math.floor((Date.now() - sis.firstTs) / 86400000) : null;
+    const nums = await _reservationContractNumbers(rec.id);
+    const sidloOur = our ? [our.address, [our.zip, our.city].filter(Boolean).join(' ')].filter(Boolean).join(', ') : '';
+    const fields = {
+      kupniNo: nums.kupni, najemniNo: nums.najemni,
+      buyerSlug: String(rec.buyer_name || '').replace(/[^A-Za-z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 30) || 'kontakt',
+      seller: our ? { name: our.name, sidlo: sidloOur, ico: our.ico, dic: our.dic, rep: '', bank: our.bank_account, email: our.email } : {},
+      buyer: { name: rec.buyer_name || '', sidlo: rec.buyer_address || '', ico: rec.buyer_ico || '', dic: rec.buyer_dic || '', rep: rec.buyer_rep || '', bank: rec.buyer_bank || '', email: rec.buyer_email || '' },
+      locationName, locationStreet, locationAddr: label,
+      priceMachine: machineCzk, priceLocation: localityCzk, priceTotal: totalCzk, fee: rec.fee_total || null,
+      provozStart, provozDays, periodLabel: sis.periodLabel,
+      rev: { total12: sis.total12, avg: sis.avg, rentMonthly: (typeof cfg.rentMonthlyCzk === 'number' ? cfg.rentMonthlyCzk : null), months: sis.months12 },
+    };
+    const files = contractDocx.fillContracts(fields);
+    const zipBuf = contractDocx.zipFiles(files);
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', 'attachment; filename="Smlouvy_' + code + '_' + nums.kupni + '.zip"');
+    res.send(zipBuf);
+  } catch (err) { next(err); }
+});
+
 // Pojistka: když k rezervaci chybí kupní smlouva (starý deploy, dřívější přeskočení…),
 // dovytvoří se při akci „Poplatek přišel" a Velín dostane výzvu k podpisu za Best Series.
 async function _ensureKupniContract(rec) {

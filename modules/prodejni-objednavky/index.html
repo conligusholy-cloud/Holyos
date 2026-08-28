@@ -6686,17 +6686,17 @@
       finally { if(btn) btn.disabled=false; }
     }
     async function resGenContracts(id, code, btn){
-      if(!confirm('Vygenerovat smlouvy (rezervační, kupní, servisní) předvyplněné daty lokality a kupujícího?')) return;
-      if(btn) btn.disabled=true;
+      if(!confirm('Vygenerovat sadu smluv (kupní, nájemní, přílohy 1–3) předvyplněnou daty lokality a kontaktu? Stáhne se ZIP s DOCX.')) return;
+      var orig; if(btn){ orig=btn.textContent; btn.disabled=true; btn.textContent='Generuji…'; }
       try {
-        var r = await fetch('/api/compounder/reservations/'+id+'/generate-contracts', { method:'POST', credentials:'include', headers:{'Content-Type':'application/json'}, body:'{}' });
-        var j = await r.json().catch(function(){return{};});
-        if(!r.ok) throw new Error(j.error||('HTTP '+r.status));
-        var nc=(j.created||[]).length, ns=(j.skipped||[]).length;
-        alert('Vygenerováno '+nc+' smluv'+(ns?(' · '+ns+' už existovalo'):'')+'.');
-        if(typeof openContractPicker==='function' && code) openContractPicker(code); // ukaž smlouvy
+        var r = await fetch('/api/compounder/reservations/'+id+'/contracts-docx', { method:'POST', credentials:'include', headers:{'Content-Type':'application/json'}, body:'{}' });
+        if(!r.ok){ var j=await r.json().catch(function(){return{};}); throw new Error(j.error||('HTTP '+r.status)); }
+        var blob = await r.blob();
+        var cd = r.headers.get('Content-Disposition')||''; var m=cd.match(/filename="?([^"]+)"?/); var fn=(m&&m[1])||('Smlouvy_'+(code||id)+'.zip');
+        var a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=fn; document.body.appendChild(a); a.click();
+        setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); }, 800);
       } catch(e){ alert('Generování selhalo: '+(e.message||'')); }
-      finally { if(btn) btn.disabled=false; }
+      finally { if(btn){ btn.disabled=false; btn.textContent=orig||'📄 Vygenerovat smlouvy'; } }
     }
     window.resGenContracts = resGenContracts;
     async function resDetailsEmail(id, btn){
