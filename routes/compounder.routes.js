@@ -1447,6 +1447,17 @@ router.get('/my-day', requireAuth, async (req, res, next) => {
             pv.forEach((e) => { const lid = e.props && e.props.lead_id; if (lid != null) portalIds.add(Number(lid)); });
           } catch (e) { /* portál best-effort */ }
           plan.tasks.forEach((t) => { if (t.lead_id) t.lead_on_portal = portalIds.has(Number(t.lead_id)); });
+          // Všechny kalendářní události s kontaktem (kontext přímo u úkolu).
+          try {
+            const evs = await prisma.salesEvent.findMany({
+              where: { compounder_lead_id: { in: lids } },
+              select: { compounder_lead_id: true, title: true, start_at: true, event_type: true, status: true },
+              orderBy: { start_at: 'asc' },
+            });
+            const emap = new Map();
+            evs.forEach((e) => { const a = emap.get(e.compounder_lead_id) || []; a.push({ when: e.start_at, type: e.event_type, title: e.title, status: e.status }); emap.set(e.compounder_lead_id, a); });
+            plan.tasks.forEach((t) => { if (t.lead_id && emap.has(t.lead_id)) t.lead_events = emap.get(t.lead_id); });
+          } catch (e) { /* události best-effort */ }
         }
       }
     } catch (e) { /* stav kontaktu best-effort */ }
