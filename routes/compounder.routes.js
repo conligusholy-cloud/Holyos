@@ -7373,6 +7373,35 @@ router.post('/reservations', requireAuth, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// PATCH /reservations/:id/buyer — ruční doplnění/úprava fakturačních údajů kupujícího (admin).
+router.patch('/reservations/:id(\\d+)/buyer', requireAuth, async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    const rec = await prisma.locationReservation.findUnique({ where: { id } });
+    if (!rec) return res.status(404).json({ error: 'Rezervace nenalezena' });
+    const b = req.body || {};
+    const clip = (v, n) => (v == null ? undefined : (String(v).trim().slice(0, n) || null));
+    const data = {};
+    if (b.buyer_name !== undefined) data.buyer_name = clip(b.buyer_name, 255);
+    if (b.buyer_ico !== undefined) data.buyer_ico = clip(b.buyer_ico, 20);
+    if (b.buyer_dic !== undefined) data.buyer_dic = clip(b.buyer_dic, 20);
+    if (b.buyer_address !== undefined) data.buyer_address = clip(b.buyer_address, 2000);
+    if (b.buyer_rep !== undefined) data.buyer_rep = clip(b.buyer_rep, 255);
+    if (b.buyer_bank !== undefined) data.buyer_bank = clip(b.buyer_bank, 120);
+    if (b.buyer_email !== undefined) data.buyer_email = clip(b.buyer_email, 255);
+    if (b.buyer_phone !== undefined) data.buyer_phone = clip(b.buyer_phone, 40);
+    const upd = await prisma.locationReservation.update({ where: { id }, data });
+    // Propis ke kontaktu (firma + doplnění).
+    if (rec.lead_id) {
+      try {
+        const lead = await prisma.compounderLead.findUnique({ where: { id: rec.lead_id } });
+        if (lead) { const patch = {}; if (data.buyer_name && !lead.company) patch.company = String(data.buyer_name).slice(0, 255); if (Object.keys(patch).length) await prisma.compounderLead.update({ where: { id: lead.id }, data: patch }); }
+      } catch (e) {}
+    }
+    res.json({ ok: true, reservation: upd });
+  } catch (err) { next(err); }
+});
+
 // POST /reservations/:id/generate-contracts — hromadně vygeneruje smlouvy k rezervaci
 // PŘEDVYPLNĚNÉ daty lokality (Compounding) + iniciály kupujícího. Nepřepisuje už podepsané.
 router.post('/reservations/:id(\\d+)/generate-contracts', requireAuth, async (req, res, next) => {

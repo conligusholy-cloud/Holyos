@@ -6529,6 +6529,7 @@
         if(!rows.length){ box.innerHTML = '<div style="color:var(--text2);padding:16px;">Žádné rezervace.</div>'; return; }
         var h = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr><th>Vytvořeno</th><th>Lokalita</th><th>Kupující</th><th>Dny</th><th>Rezervace</th><th>Kupní cena</th><th>Stav</th><th>Lhůty</th><th>Akce</th></tr></thead><tbody>';
         rows.forEach(function(x){
+          (window._resRowsById = window._resRowsById || {})[x.id] = x;
           var act='';
           if(x.status==='reserved'){ act = '<button class="btn" style="padding:4px 8px;font-size:12px;" onclick="resAction('+x.id+',\'fee_paid\')">Přišla rezervace</button> <button class="btn btn-secondary" style="padding:4px 8px;font-size:12px;" onclick="resAction('+x.id+',\'cancel\')">Zrušit</button>'; }
           else if(x.status==='active'){ act = '<button class="btn" style="padding:4px 8px;font-size:12px;" onclick="resAction('+x.id+',\'purchase_paid\')">Kupní cena přišla</button> <button class="btn btn-secondary" style="padding:4px 8px;font-size:12px;color:#f59e0b;" title="Zrušit platbu poplatku (omyl)" onclick="resAction('+x.id+',\'fee_unpaid\')">↩︎ Zrušit platbu</button> <button class="btn btn-secondary" style="padding:4px 8px;font-size:12px;" onclick="resAction('+x.id+',\'cancel\')">Zrušit</button>'; }
@@ -6541,11 +6542,12 @@
           var scol = x.status==='completed'?'#10b981':((x.status==='cancelled'||x.status==='expired')?'#ef4444':'#eab308');
           var _cEsc = kvEsc(x.kiosk_code||'').replace(/'/g,'&#39;');
           // „Pokyny" (vč. e-mail/WhatsApp) dočasně skryty. „Vygenerovat smlouvy" předvyplní z lokality + kontaktu.
+          var editBtn = '<button class="btn btn-secondary" style="padding:4px 8px;font-size:12px;" title="Ručně doplnit/upravit fakturační údaje kupujícího (ARES autofill)" onclick="openResBuyer('+x.id+')">✏️ Údaje</button> ';
           var docsBtn = '<button class="btn btn-secondary" style="padding:4px 8px;font-size:12px;" title="Vygenerovat smlouvy předvyplněné daty lokality a kontaktu" onclick="resGenContracts('+x.id+',\''+_cEsc+'\',this)">📄 Vygenerovat smlouvy</button> ';
           var payBtns = (x.status==='reserved'||x.status==='active')
             ? '<button class="btn btn-secondary" style="padding:4px 8px;font-size:12px;" title="Odeslat e-mailem odkaz na formulář s údaji do smlouvy (dohledá firmu v ARES)" onclick="resDetailsEmail('+x.id+',this)">📝 Vyžádat údaje</button> '
             : '';
-          h += '<tr><td style="white-space:nowrap;">'+resDate(x.created_at)+'</td><td>'+(x.location_name?(kvEsc(x.location_name)+'<br><span style="color:var(--text2);font-size:11px;">'+kvEsc(x.kiosk_code)+'</span>'):kvEsc(x.kiosk_code))+'</td><td>'+buyer+'</td><td>'+x.days+'</td><td style="white-space:nowrap;">'+feeCell+'</td><td style="white-space:nowrap;">'+buyCell+'</td><td><span style="color:'+scol+';font-size:12px;font-weight:600;">'+(RES_STATUS[x.status]||x.status)+'</span></td><td style="font-size:11px;white-space:nowrap;">'+lhuty+'</td><td style="white-space:nowrap;">'+docsBtn+payBtns+act+'</td></tr>';
+          h += '<tr><td style="white-space:nowrap;">'+resDate(x.created_at)+'</td><td>'+(x.location_name?(kvEsc(x.location_name)+'<br><span style="color:var(--text2);font-size:11px;">'+kvEsc(x.kiosk_code)+'</span>'):kvEsc(x.kiosk_code))+'</td><td>'+buyer+'</td><td>'+x.days+'</td><td style="white-space:nowrap;">'+feeCell+'</td><td style="white-space:nowrap;">'+buyCell+'</td><td><span style="color:'+scol+';font-size:12px;font-weight:600;">'+(RES_STATUS[x.status]||x.status)+'</span></td><td style="font-size:11px;white-space:nowrap;">'+lhuty+'</td><td style="white-space:nowrap;">'+editBtn+docsBtn+payBtns+act+'</td></tr>';
         });
         h += '</tbody></table></div>';
         box.innerHTML = h;
@@ -6699,6 +6701,79 @@
       finally { if(btn){ btn.disabled=false; btn.textContent=orig||'📄 Vygenerovat smlouvy'; } }
     }
     window.resGenContracts = resGenContracts;
+    // ✏️ Ruční doplnění/úprava fakturačních údajů kupujícího u rezervace (ARES autofill).
+    function openResBuyer(id){
+      var x = (window._resRowsById||{})[id] || {};
+      var ov = document.getElementById('resBuyerOv');
+      if(!ov){
+        ov = document.createElement('div');
+        ov.id = 'resBuyerOv';
+        ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;';
+        ov.innerHTML = '<div style="background:var(--bg,#fff);color:var(--text,#111);max-width:560px;width:100%;border-radius:12px;padding:20px;max-height:90vh;overflow:auto;box-shadow:0 10px 40px rgba(0,0,0,.3);">'
+          + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;"><h3 style="margin:0;font-size:18px;">Fakturační údaje kupujícího</h3><button onclick="document.getElementById(\'resBuyerOv\').remove()" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--text2,#888);">×</button></div>'
+          + '<input type="hidden" id="rb-id">'
+          + '<div style="display:flex;gap:8px;align-items:end;margin-bottom:10px;"><div style="flex:1;"><label style="display:block;font-size:12px;color:var(--text2);margin-bottom:2px;">IČO</label><input id="rb-ico" style="width:100%;padding:8px;border:1px solid var(--border,#ddd);border-radius:8px;box-sizing:border-box;"></div><button class="btn" style="padding:8px 12px;" onclick="rbAres()">🔎 ARES</button></div>'
+          + '<div id="rb-aresmsg" style="font-size:12px;color:var(--text2);margin-bottom:8px;"></div>'
+          + '<label style="display:block;font-size:12px;color:var(--text2);margin-bottom:2px;">Název / obchodní firma</label><input id="rb-name" style="width:100%;padding:8px;border:1px solid var(--border,#ddd);border-radius:8px;box-sizing:border-box;margin-bottom:10px;">'
+          + '<label style="display:block;font-size:12px;color:var(--text2);margin-bottom:2px;">DIČ</label><input id="rb-dic" style="width:100%;padding:8px;border:1px solid var(--border,#ddd);border-radius:8px;box-sizing:border-box;margin-bottom:10px;">'
+          + '<label style="display:block;font-size:12px;color:var(--text2);margin-bottom:2px;">Sídlo / adresa</label><input id="rb-address" style="width:100%;padding:8px;border:1px solid var(--border,#ddd);border-radius:8px;box-sizing:border-box;margin-bottom:10px;">'
+          + '<label style="display:block;font-size:12px;color:var(--text2);margin-bottom:2px;">Zastoupený (jednatel)</label><input id="rb-rep" style="width:100%;padding:8px;border:1px solid var(--border,#ddd);border-radius:8px;box-sizing:border-box;margin-bottom:10px;">'
+          + '<div style="display:flex;gap:10px;"><div style="flex:1;"><label style="display:block;font-size:12px;color:var(--text2);margin-bottom:2px;">Bankovní účet (IBAN)</label><input id="rb-bank" style="width:100%;padding:8px;border:1px solid var(--border,#ddd);border-radius:8px;box-sizing:border-box;margin-bottom:10px;"></div><div style="flex:1;"><label style="display:block;font-size:12px;color:var(--text2);margin-bottom:2px;">E-mail</label><input id="rb-email" style="width:100%;padding:8px;border:1px solid var(--border,#ddd);border-radius:8px;box-sizing:border-box;margin-bottom:10px;"></div></div>'
+          + '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:8px;"><button class="btn btn-secondary" onclick="document.getElementById(\'resBuyerOv\').remove()">Zrušit</button><button class="btn" id="rb-save" onclick="rbSave()">Uložit</button></div>'
+          + '</div>';
+        document.body.appendChild(ov);
+      }
+      document.getElementById('rb-id').value = id;
+      document.getElementById('rb-ico').value = x.buyer_ico||'';
+      document.getElementById('rb-name').value = x.buyer_name||'';
+      document.getElementById('rb-dic').value = x.buyer_dic||'';
+      document.getElementById('rb-address').value = x.buyer_address||'';
+      document.getElementById('rb-rep').value = x.buyer_rep||'';
+      document.getElementById('rb-bank').value = x.buyer_bank||'';
+      document.getElementById('rb-email').value = x.buyer_email||x.buyer_email_addr||'';
+      document.getElementById('rb-aresmsg').textContent = '';
+    }
+    window.openResBuyer = openResBuyer;
+    async function rbAres(){
+      var ico = (document.getElementById('rb-ico').value||'').replace(/\s/g,'');
+      var msg = document.getElementById('rb-aresmsg');
+      if(!/^\d{6,8}$/.test(ico)){ msg.textContent = 'Zadej platné IČO (6–8 číslic).'; return; }
+      msg.textContent = 'Hledám v ARES…';
+      try {
+        var r = await fetch('/api/compounder/ares/'+ico, { credentials:'include' });
+        if(!r.ok) throw new Error();
+        var d = await r.json();
+        if(d.name) document.getElementById('rb-name').value = d.name;
+        if(d.dic) document.getElementById('rb-dic').value = d.dic;
+        if(d.address) document.getElementById('rb-address').value = d.address;
+        msg.textContent = 'Doplněno z ARES ✓';
+      } catch(e){ msg.textContent = 'ARES: nenalezeno nebo chyba.'; }
+    }
+    window.rbAres = rbAres;
+    async function rbSave(){
+      var id = document.getElementById('rb-id').value;
+      var btn = document.getElementById('rb-save'); if(btn) btn.disabled = true;
+      var body = {
+        buyer_ico: document.getElementById('rb-ico').value,
+        buyer_name: document.getElementById('rb-name').value,
+        buyer_dic: document.getElementById('rb-dic').value,
+        buyer_address: document.getElementById('rb-address').value,
+        buyer_rep: document.getElementById('rb-rep').value,
+        buyer_bank: document.getElementById('rb-bank').value,
+        buyer_email: document.getElementById('rb-email').value
+      };
+      try {
+        var r = await fetch('/api/compounder/reservations/'+id+'/buyer', { method:'PATCH', credentials:'include', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+        if(!r.ok) throw new Error();
+        var d = await r.json();
+        if(window._resRowsById && d.reservation) window._resRowsById[id] = Object.assign(window._resRowsById[id]||{}, d.reservation);
+        document.getElementById('resBuyerOv').remove();
+        if(typeof loadReservationsRows==='function') loadReservationsRows();
+        if(typeof loadReservationsPage==='function') loadReservationsPage();
+      } catch(e){ alert('Uložení selhalo.'); }
+      finally { if(btn) btn.disabled = false; }
+    }
+    window.rbSave = rbSave;
     async function resDetailsEmail(id, btn){
       if(!confirm('Odeslat kupujícímu e-mailem odkaz na formulář, kde vyplní údaje do smlouvy (IČO se dohledá v ARES)?')) return;
       if(btn) btn.disabled=true;
