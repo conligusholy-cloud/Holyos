@@ -655,7 +655,7 @@
       box.innerHTML=(_colleagues||[]).map(function(c){
         var on=_attHas(c.email);
         var bg=on?'rgba(34,197,94,.22)':'rgba(255,255,255,.05)'; var bd=on?'#22c55e':'var(--line)';
-        var nm=c.first_name||c.name;
+        var nm=c.name||c.first_name;
         return '<button type="button" onclick="toggleColleague(\''+String(c.email).replace(/'/g,"\\'")+'\')" style="background:'+bg+';border:1px solid '+bd+';color:var(--text);border-radius:14px;padding:4px 10px;font-size:12px;cursor:pointer">'+(on?'✓ ':'+ ')+esc(nm)+'</button>';
       }).join('');
     };

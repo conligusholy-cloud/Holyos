@@ -563,22 +563,26 @@ async function _pushEventToGraph(ev) {
   }
 }
 
-// GET /api/sales/colleagues — kolegové pro rychlé pozvání na schůzku (jméno + e-mail).
+// GET /api/sales/colleagues — pevný seznam kolegů pro rychlé pozvání (celé jméno + e-mail).
 router.get('/colleagues', async (req, res, next) => {
   try {
+    const norm = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+    // Jen tito čtyři, v tomto pořadí.
+    const WANT = [
+      { key: 'jan holy', label: 'Jan Holý' },
+      { key: 'tomas holy', label: 'Tomáš Holý' },
+      { key: 'boris kozuljevic', label: 'Boris Kožuljević' },
+      { key: 'alena sidlova', label: 'Alena Šídlová' },
+    ];
     const people = await prisma.person.findMany({
-      where: { active: true, email: { not: null } },
-      select: { id: true, first_name: true, last_name: true, email: true, role: true },
-      orderBy: [{ first_name: 'asc' }],
+      where: { email: { not: null } },
+      select: { id: true, first_name: true, last_name: true, email: true },
     });
-    // Obchodní role napřed (nejčastěji zvané), pak ostatní.
-    const salesRoles = ['Vedoucí obchodu', 'Obchodník'];
-    const list = people
-      .filter((p) => p.email && p.email.indexOf('@') > 0)
-      .map((p) => ({ id: p.id, name: ((p.first_name || '') + ' ' + (p.last_name || '')).trim() || p.email, first_name: p.first_name || '', email: p.email, _sales: salesRoles.indexOf(p.role) >= 0 ? 0 : 1 }))
-      .sort((a, b) => (a._sales - b._sales) || a.name.localeCompare(b.name, 'cs'))
-      .slice(0, 40)
-      .map(({ _sales, ...rest }) => rest);
+    const list = [];
+    for (const w of WANT) {
+      const p = people.find((x) => x.email && x.email.indexOf('@') > 0 && norm((x.first_name || '') + ' ' + (x.last_name || '')) === w.key);
+      if (p) list.push({ id: p.id, name: ((p.first_name || '') + ' ' + (p.last_name || '')).trim(), email: p.email });
+    }
     res.json(list);
   } catch (err) { next(err); }
 });
