@@ -6527,7 +6527,7 @@
         // „Aktivní" = vše mimo zrušených a propadlých.
         if (activeOnly) rows = rows.filter(function(x){ return x.status !== 'cancelled' && x.status !== 'expired'; });
         if(!rows.length){ box.innerHTML = '<div style="color:var(--text2);padding:16px;">Žádné rezervace.</div>'; return; }
-        var h = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr><th>Vytvořeno</th><th>Lokalita</th><th>Kupující</th><th>Dny</th><th>Rezervace</th><th>Kupní cena</th><th>Stav</th><th>Lhůty</th><th>Akce</th></tr></thead><tbody>';
+        var h = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr><th>Vytvořeno</th><th>Lokalita</th><th>Kupující</th><th>Dny</th><th>Rezervace</th><th>Kupní cena</th><th>Sleva</th><th>Cena po slevě</th><th>Stav</th><th>Lhůty</th><th>Akce</th></tr></thead><tbody>';
         rows.forEach(function(x){
           (window._resRowsById = window._resRowsById || {})[x.id] = x;
           var act='';
@@ -6537,6 +6537,9 @@
           else { act = '<span style="color:var(--text2);font-size:12px;">'+(x.cancel_reason?kvEsc(x.cancel_reason):'—')+'</span>'; }
           var feeCell = x.fee_paid_at ? '<span style="color:#10b981;font-weight:600;">'+resFmtCzk(x.fee_total)+' ✓</span>' : resFmtCzk(x.fee_total);
           var buyCell = x.purchase_paid_at ? '<span style="color:#10b981;font-weight:600;">'+resFmtCzk(x.purchase_price)+' ✓</span>' : resFmtCzk(x.purchase_price);
+          var _disc = (x.extra_discount_pct!=null && Number(x.extra_discount_pct)>0) ? Number(x.extra_discount_pct) : 0;
+          var discCell = _disc ? ('<span style="color:#f59e0b;font-weight:600;">'+String(_disc).replace('.',',')+' %</span>') : '<span style="color:var(--text2);">—</span>';
+          var afterCell = (_disc && x.purchase_price!=null) ? ('<span style="font-weight:600;">'+resFmtCzk(Math.round(Number(x.purchase_price)*(1-_disc/100)))+'</span>') : '<span style="color:var(--text2);">—</span>';
           var buyer = kvEsc(x.buyer_name_full||x.buyer_name||'') + (x.buyer_phone?('<br><span style="color:var(--text2);font-size:11px;">'+kvEsc(x.buyer_phone)+'</span>'):'');
           var lhuty = (x.signed_at ? ('Podepsáno: '+resDate(x.signed_at)) : ('Podpis do: '+resDate(x.sign_until)))+'<br>Poplatek: '+resDate(x.fee_until)+'<br>Konec: '+resDate(x.reserved_until);
           var scol = x.status==='completed'?'#10b981':((x.status==='cancelled'||x.status==='expired')?'#ef4444':'#eab308');
@@ -6547,7 +6550,7 @@
           var payBtns = (x.status==='reserved'||x.status==='active')
             ? '<button class="btn btn-secondary" style="padding:4px 8px;font-size:12px;" title="Odeslat e-mailem odkaz na formulář s údaji do smlouvy (dohledá firmu v ARES)" onclick="resDetailsEmail('+x.id+',this)">📝 Vyžádat údaje</button> '
             : '';
-          h += '<tr><td style="white-space:nowrap;">'+resDate(x.created_at)+'</td><td>'+(x.location_name?(kvEsc(x.location_name)+'<br><span style="color:var(--text2);font-size:11px;">'+kvEsc(x.kiosk_code)+'</span>'):kvEsc(x.kiosk_code))+'</td><td>'+buyer+'</td><td>'+x.days+'</td><td style="white-space:nowrap;">'+feeCell+'</td><td style="white-space:nowrap;">'+buyCell+'</td><td><span style="color:'+scol+';font-size:12px;font-weight:600;">'+(RES_STATUS[x.status]||x.status)+'</span></td><td style="font-size:11px;white-space:nowrap;">'+lhuty+'</td><td style="white-space:nowrap;">'+editBtn+docsBtn+payBtns+act+'</td></tr>';
+          h += '<tr><td style="white-space:nowrap;">'+resDate(x.created_at)+'</td><td>'+(x.location_name?(kvEsc(x.location_name)+'<br><span style="color:var(--text2);font-size:11px;">'+kvEsc(x.kiosk_code)+'</span>'):kvEsc(x.kiosk_code))+'</td><td>'+buyer+'</td><td>'+x.days+'</td><td style="white-space:nowrap;">'+feeCell+'</td><td style="white-space:nowrap;">'+buyCell+'</td><td style="white-space:nowrap;">'+discCell+'</td><td style="white-space:nowrap;">'+afterCell+'</td><td><span style="color:'+scol+';font-size:12px;font-weight:600;">'+(RES_STATUS[x.status]||x.status)+'</span></td><td style="font-size:11px;white-space:nowrap;">'+lhuty+'</td><td style="white-space:nowrap;">'+editBtn+docsBtn+payBtns+act+'</td></tr>';
         });
         h += '</tbody></table></div>';
         box.innerHTML = h;
