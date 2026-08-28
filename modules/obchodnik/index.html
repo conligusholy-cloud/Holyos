@@ -658,6 +658,7 @@
       var j=await r.json().catch(function(){return{};});
       if(!r.ok) throw new Error(j.error||'Chyba');
       closeMeeting(); _refetchCal(); loadUpcomingMeetings();
+      if(typeof loadToday==='function') loadToday(false); // obnov Dnes — nová domluva zruší starší dosledování
       // Nová událost u leada → automaticky přepni stav (hovor → Volat příště, schůzka → Domluvena schůzka, dosledování/slíbený krok → Dosledování).
       if(!id && lid){ var ns = (kind==='call') ? 'volat_pristi' : (kind==='meeting' ? 'schuzka' : 'dosledovani'); try{ await setField(parseInt(lid,10), 'status', ns); }catch(e){} if(kind==='meeting') obLogAction(parseInt(lid,10),'plan_meeting','📅 Naplánována schůzka'); else if(isInternal) obLogAction(parseInt(lid,10),'plan_followup','🔁 Naplánován další krok'); }
     }catch(e){ err.textContent='Uložení selhalo: '+e.message; } finally{ btn.disabled=false; }

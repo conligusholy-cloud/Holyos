@@ -616,6 +616,20 @@ router.post('/events', async (req, res, next) => {
         organizer: { select: { id: true, first_name: true, last_name: true } },
       },
     });
+    // POSLEDNÍ DOMLUVA VYHRÁVÁ: nová naplánovaná akce u kontaktu nahrazuje starší otevřené
+    // kroky (dosledování/hovor) — aby systém neotravoval jindy, než jsme se domluvili.
+    if (created.compounder_lead_id) {
+      try {
+        await prisma.salesEvent.updateMany({
+          where: { compounder_lead_id: created.compounder_lead_id, status: 'planned', id: { not: created.id } },
+          data: { status: 'cancelled' },
+        });
+        await prisma.salesTask.updateMany({
+          where: { lead_id: created.compounder_lead_id, status: 'open', kind: { in: ['call', 'followup'] } },
+          data: { status: 'skipped', skipped_reason: 'Nahrazeno novou domluvou' },
+        });
+      } catch (e) { /* supersede best-effort */ }
+    }
     res.status(201).json(synced);
   } catch (err) { next(err); }
 });
