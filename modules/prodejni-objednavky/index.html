@@ -6585,7 +6585,7 @@
         +'<select id="nr-lead" size="6" style="'+lst+'" onchange="_nrPickLead(this.value)"><option value="">— načítám kontakty… —</option></select>'
         +'<label style="'+lbl+'">Lokalita (Compounding) *</label>'
         +'<input id="nr-kioskq" placeholder="Hledat lokalitu…" style="'+inp+';margin-bottom:6px" oninput="document.getElementById(&#39;nr-code&#39;).innerHTML=_nrKioskOpts(this.value)">'
-        +'<select id="nr-code" size="6" style="'+lst+'"><option value="">— načítám lokality… —</option></select>'
+        +'<select id="nr-code" size="6" style="'+lst+'" onchange="_nrPickKiosk(this.value)"><option value="">— načítám lokality… —</option></select>'
         +'<div style="display:flex;gap:10px"><div style="flex:1"><label style="'+lbl+'">Kupující — jméno</label><input id="nr-name" style="'+inp+'"></div><div style="flex:1"><label style="'+lbl+'">Telefon</label><input id="nr-phone" style="'+inp+'" inputmode="tel"></div></div>'
         +'<label style="'+lbl+'">E-mail</label><input id="nr-email" style="'+inp+'" inputmode="email">'
         +'<input type="hidden" id="nr-leadid">'
@@ -6600,6 +6600,10 @@
       (async function(){
         try{ if(!_nrLeads.length){ var lr=await fetch('/api/compounder/leads',{credentials:'include'}); _nrLeads=(lr.ok?await lr.json():[])||[]; } }catch(e){ _nrLeads=[]; }
         try{ if(!_nrKiosks.length){ var kr=await fetch('/api/compounder/kiosk-values',{credentials:'include'}); var kd=kr.ok?await kr.json():{}; _nrKiosks=(kd&&kd.kiosks)||[]; } }catch(e){ _nrKiosks=[]; }
+        // Nastavení pro výpočet ceny lokality (ceník, počet měsíců/ROI, kurzy, per-kiosk config).
+        try{ var sr=await fetch('/api/compounder/compounding-settings',{credentials:'include'}); if(sr.ok) _compoundingSettings=await sr.json(); }catch(e){}
+        try{ var cr=await fetch('/api/compounder/kiosk-config',{credentials:'include'}); if(cr.ok){ var cm=await cr.json(); if(cm&&typeof cm==='object') _kioskConfig=cm; } }catch(e){}
+        try{ var fr=await fetch('/api/wh/exchange-rates'); if(fr.ok){ var fx=await fr.json(); if(fx&&fx.rates) _kvFxRates=fx.rates; } }catch(e){}
         var ls=document.getElementById('nr-lead'); if(ls) ls.innerHTML=_nrLeadOpts((document.getElementById('nr-leadq')||{}).value||'');
         var ks=document.getElementById('nr-code'); if(ks) ks.innerHTML=_nrKioskOpts((document.getElementById('nr-kioskq')||{}).value||'');
       })();
@@ -6612,6 +6616,35 @@
       setV('nr-name',nm); setV('nr-phone',l.phone||''); setV('nr-email',l.email||''); setV('nr-leadid',l.id);
     }
     window._nrPickLead=_nrPickLead; window._nrLeadOpts=_nrLeadOpts; window._nrKioskOpts=_nrKioskOpts;
+    // Celková cena lokality (machine + lokalita) — stejný výpočet jako v Compounding tabu.
+    function _nrTotalPrice(k){
+      if(!k) return null;
+      var num=function(v){return (typeof v==='number'&&isFinite(v))?v:0;};
+      var cs=_compoundingSettings||{};
+      var months=Number.isFinite(cs.locationMonths)?cs.locationMonths:12;
+      var svcPct=Number.isFinite(cs.servicePct)?cs.servicePct:15;
+      var enPct=Number.isFinite(cs.energyPct)?cs.energyPct:9.5;
+      var roiMode=(cs.locationPriceMode==='roi');
+      var roiPct=Number.isFinite(cs.locationRoiPct)?cs.locationRoiPct:25;
+      var m=_kvVerMachine(k.code).machine;
+      if(m==null) return null;
+      var rate=(_kvFxRates[k.currency||'CZK']||1);
+      var loc;
+      if(roiMode){
+        var cfg=_kioskConfig[k.code]||{}; var o=num(k.avgTop3)*rate; var ob=o/1.21;
+        var servis=o*(svcPct/100); var najem=(typeof cfg.rentMonthlyCzk==='number'&&isFinite(cfg.rentMonthlyCzk))?cfg.rentMonthlyCzk:0;
+        var en=ob*(enPct/100); var cisty=ob-servis-najem-en; var target=cisty*(1200/(roiPct>0?roiPct:25)); var v=target-m; loc=v>0?v:0;
+      } else { loc=num(k.avgTop3)*rate*months; }
+      return Math.round(loc+m);
+    }
+    function _nrPickKiosk(code){
+      var k=_nrKiosks.find(function(x){return String(x.code)===String(code);}); if(!k) return;
+      var p=_nrTotalPrice(k);
+      var pel=document.getElementById('nr-price'); if(pel && p!=null && !pel.value) pel.value=p; // nepřepiš ručně zadané
+      else if(pel && p!=null) pel.value=p;
+      var cur=document.getElementById('nr-cur'); if(cur && k.currency) cur.value=(String(k.currency).toUpperCase());
+    }
+    window._nrTotalPrice=_nrTotalPrice; window._nrPickKiosk=_nrPickKiosk;
     async function saveNewReservation(btn){
       var v=function(id){ return (document.getElementById(id)||{}).value; };
       var err=document.getElementById('nr-err'); err.textContent='';
