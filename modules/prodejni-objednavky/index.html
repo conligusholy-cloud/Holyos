@@ -6564,6 +6564,11 @@
     }
     window.loadReservationsPage = loadReservationsPage;
     // ─── Ruční založení rezervace ───────────────────────────────────────────────
+    var _nrLeads = [], _nrKiosks = [];
+    function _nrLeadOpts(q){ q=(q||'').toLowerCase(); var arr=_nrLeads.filter(function(l){ if(!q) return true; return ((l.name||'')+' '+(l.email||'')+' '+(l.phone||'')+' '+(l.company||'')).toLowerCase().indexOf(q)!==-1; }).slice(0,300);
+      return '<option value="">— vyber kontakt —</option>'+arr.map(function(l){ var nm=((l.first_name||'')+' '+(l.last_name||'')).trim()||l.name||l.email||('#'+l.id); var sub=[l.email,l.phone].filter(Boolean).join(' · '); return '<option value="'+l.id+'">'+kvEsc(nm)+(sub?(' · '+kvEsc(sub)):'')+'</option>'; }).join(''); }
+    function _nrKioskOpts(q){ q=(q||'').toLowerCase(); var arr=_nrKiosks.filter(function(k){ if(!q) return true; return ((k.code||'')+' '+(k.label||'')+' '+(k.companyName||'')).toLowerCase().indexOf(q)!==-1; }).slice(0,300);
+      return '<option value="">— vyber lokalitu —</option>'+arr.map(function(k){ return '<option value="'+kvEsc(k.code)+'">'+kvEsc(k.code)+' — '+kvEsc(k.label||'')+'</option>'; }).join(''); }
     function openNewReservation(){
       var ex=document.getElementById('newres-ov'); if(ex) ex.remove();
       var ov=document.createElement('div'); ov.id='newres-ov';
@@ -6572,11 +6577,17 @@
       var inp='width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:9px 11px;color:var(--text);font-size:14px;font-family:inherit';
       var lbl='display:block;font-size:12px;color:var(--text2);margin:10px 0 3px';
       var d14=new Date(Date.now()+14*86400000); var d14s=d14.toISOString().slice(0,10);
-      ov.innerHTML='<div style="background:var(--surface,#15171c);border:1px solid var(--border);border-radius:14px;width:520px;max-width:96vw;max-height:92vh;overflow:auto;padding:22px">'
+      ov.innerHTML='<div style="background:var(--surface,#15171c);border:1px solid var(--border);border-radius:14px;width:540px;max-width:96vw;max-height:92vh;overflow:auto;padding:22px">'
         +'<div style="display:flex;align-items:center;margin-bottom:6px"><h2 style="margin:0;font-size:18px">➕ Nová rezervace</h2><button onclick="var o=document.getElementById(&#39;newres-ov&#39;);if(o)o.remove();" style="margin-left:auto;background:none;border:none;color:var(--text2);font-size:22px;cursor:pointer">✕</button></div>'
-        +'<label style="'+lbl+'">Kód lokality *</label><input id="nr-code" style="'+inp+'" placeholder="např. 00011CZ" autocomplete="off">'
+        +'<label style="'+lbl+'">Kontakt (Compounder)</label>'
+        +'<input id="nr-leadq" placeholder="Hledat kontakt…" style="'+inp+';margin-bottom:6px" oninput="document.getElementById(&#39;nr-lead&#39;).innerHTML=_nrLeadOpts(this.value)">'
+        +'<select id="nr-lead" style="'+inp+'" onchange="_nrPickLead(this.value)"><option value="">— vyber kontakt —</option></select>'
+        +'<label style="'+lbl+'">Lokalita (Compounding) *</label>'
+        +'<input id="nr-kioskq" placeholder="Hledat lokalitu…" style="'+inp+';margin-bottom:6px" oninput="document.getElementById(&#39;nr-code&#39;).innerHTML=_nrKioskOpts(this.value)">'
+        +'<select id="nr-code" style="'+inp+'"><option value="">— vyber lokalitu —</option></select>'
         +'<div style="display:flex;gap:10px"><div style="flex:1"><label style="'+lbl+'">Kupující — jméno</label><input id="nr-name" style="'+inp+'"></div><div style="flex:1"><label style="'+lbl+'">Telefon</label><input id="nr-phone" style="'+inp+'" inputmode="tel"></div></div>'
         +'<label style="'+lbl+'">E-mail</label><input id="nr-email" style="'+inp+'" inputmode="email">'
+        +'<input type="hidden" id="nr-leadid">'
         +'<div style="display:flex;gap:10px"><div style="flex:1"><label style="'+lbl+'">Kupní cena (Kč)</label><input id="nr-price" style="'+inp+'" inputmode="numeric"></div><div style="flex:1"><label style="'+lbl+'">Poplatek celkem (Kč)</label><input id="nr-fee" style="'+inp+'" inputmode="numeric" value="0"></div></div>'
         +'<div style="display:flex;gap:10px"><div style="flex:1"><label style="'+lbl+'">Rezervováno do</label><input id="nr-until" type="date" style="'+inp+'" value="'+d14s+'"></div><div style="flex:1"><label style="'+lbl+'">Měna</label><select id="nr-cur" style="'+inp+'"><option>CZK</option><option>EUR</option><option>PLN</option></select></div></div>'
         +'<label style="'+lbl+'">Stav</label><select id="nr-status" style="'+inp+'"><option value="reserved">Rezervováno (čeká poplatek)</option><option value="active">Rezervováno — poplatek přijat</option><option value="hold">Blokace</option></select>'
@@ -6584,15 +6595,28 @@
         +'<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:18px"><button class="btn" onclick="var o=document.getElementById(&#39;newres-ov&#39;);if(o)o.remove();">Zrušit</button><button class="btn" id="nr-save" onclick="saveNewReservation(this)" style="background:var(--primary,#eab308);color:#1a1408;font-weight:700">Vytvořit rezervaci</button></div>'
         +'<p id="nr-err" style="color:#fca5a5;font-size:13px;margin:10px 0 0;min-height:14px"></p></div>';
       document.body.appendChild(ov);
-      setTimeout(function(){ var c=document.getElementById('nr-code'); if(c) c.focus(); },50);
+      // Načti kontakty a lokality do výběru.
+      (async function(){
+        try{ if(!_nrLeads.length){ var lr=await fetch('/api/compounder/leads',{credentials:'include'}); _nrLeads=(lr.ok?await lr.json():[])||[]; } }catch(e){ _nrLeads=[]; }
+        try{ if(!_nrKiosks.length){ var kr=await fetch('/api/compounder/kiosk-values',{credentials:'include'}); var kd=kr.ok?await kr.json():{}; _nrKiosks=(kd&&kd.kiosks)||[]; } }catch(e){ _nrKiosks=[]; }
+        var ls=document.getElementById('nr-lead'); if(ls) ls.innerHTML=_nrLeadOpts('');
+        var ks=document.getElementById('nr-code'); if(ks) ks.innerHTML=_nrKioskOpts('');
+      })();
+      setTimeout(function(){ var c=document.getElementById('nr-leadq'); if(c) c.focus(); },50);
     }
     window.openNewReservation=openNewReservation;
+    function _nrPickLead(id){ var l=_nrLeads.find(function(x){return String(x.id)===String(id);}); if(!l) return;
+      var nm=((l.first_name||'')+' '+(l.last_name||'')).trim()||l.name||'';
+      var setV=function(id,v){ var el=document.getElementById(id); if(el&&v!=null) el.value=v; };
+      setV('nr-name',nm); setV('nr-phone',l.phone||''); setV('nr-email',l.email||''); setV('nr-leadid',l.id);
+    }
+    window._nrPickLead=_nrPickLead; window._nrLeadOpts=_nrLeadOpts; window._nrKioskOpts=_nrKioskOpts;
     async function saveNewReservation(btn){
       var v=function(id){ return (document.getElementById(id)||{}).value; };
       var err=document.getElementById('nr-err'); err.textContent='';
       var code=(v('nr-code')||'').trim();
-      if(!code){ err.textContent='Zadej kód lokality.'; return; }
-      var payload={ kiosk_code:code, buyer_name:(v('nr-name')||'').trim(), buyer_phone:(v('nr-phone')||'').trim(), buyer_email:(v('nr-email')||'').trim(),
+      if(!code){ err.textContent='Vyber lokalitu.'; return; }
+      var payload={ kiosk_code:code, lead_id:(v('nr-leadid')||'')||null, buyer_name:(v('nr-name')||'').trim(), buyer_phone:(v('nr-phone')||'').trim(), buyer_email:(v('nr-email')||'').trim(),
         purchase_price:(v('nr-price')||'').replace(/\s/g,''), fee_total:(v('nr-fee')||'').replace(/\s/g,''), currency:v('nr-cur')||'CZK',
         reserved_until:v('nr-until')||null, status:v('nr-status')||'reserved', on_trust:!!(document.getElementById('nr-trust')||{}).checked };
       if(btn) btn.disabled=true;
