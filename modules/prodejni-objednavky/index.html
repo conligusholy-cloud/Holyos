@@ -6573,18 +6573,19 @@
       var ex=document.getElementById('newres-ov'); if(ex) ex.remove();
       var ov=document.createElement('div'); ov.id='newres-ov';
       ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:200;display:flex;align-items:center;justify-content:center;padding:20px';
-      ov.onclick=function(e){ if(e.target===ov) ov.remove(); };
+      // Zavírá se jen křížkem / tlačítkem Zrušit (klik mimo NEzavírá).
       var inp='width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:9px 11px;color:var(--text);font-size:14px;font-family:inherit';
+      var lst=inp+';height:130px;padding:4px';
       var lbl='display:block;font-size:12px;color:var(--text2);margin:10px 0 3px';
       var d14=new Date(Date.now()+14*86400000); var d14s=d14.toISOString().slice(0,10);
       ov.innerHTML='<div style="background:var(--surface,#15171c);border:1px solid var(--border);border-radius:14px;width:540px;max-width:96vw;max-height:92vh;overflow:auto;padding:22px">'
         +'<div style="display:flex;align-items:center;margin-bottom:6px"><h2 style="margin:0;font-size:18px">➕ Nová rezervace</h2><button onclick="var o=document.getElementById(&#39;newres-ov&#39;);if(o)o.remove();" style="margin-left:auto;background:none;border:none;color:var(--text2);font-size:22px;cursor:pointer">✕</button></div>'
         +'<label style="'+lbl+'">Kontakt (Compounder)</label>'
         +'<input id="nr-leadq" placeholder="Hledat kontakt…" style="'+inp+';margin-bottom:6px" oninput="document.getElementById(&#39;nr-lead&#39;).innerHTML=_nrLeadOpts(this.value)">'
-        +'<select id="nr-lead" style="'+inp+'" onchange="_nrPickLead(this.value)"><option value="">— vyber kontakt —</option></select>'
+        +'<select id="nr-lead" size="6" style="'+lst+'" onchange="_nrPickLead(this.value)"><option value="">— načítám kontakty… —</option></select>'
         +'<label style="'+lbl+'">Lokalita (Compounding) *</label>'
         +'<input id="nr-kioskq" placeholder="Hledat lokalitu…" style="'+inp+';margin-bottom:6px" oninput="document.getElementById(&#39;nr-code&#39;).innerHTML=_nrKioskOpts(this.value)">'
-        +'<select id="nr-code" style="'+inp+'"><option value="">— vyber lokalitu —</option></select>'
+        +'<select id="nr-code" size="6" style="'+lst+'"><option value="">— načítám lokality… —</option></select>'
         +'<div style="display:flex;gap:10px"><div style="flex:1"><label style="'+lbl+'">Kupující — jméno</label><input id="nr-name" style="'+inp+'"></div><div style="flex:1"><label style="'+lbl+'">Telefon</label><input id="nr-phone" style="'+inp+'" inputmode="tel"></div></div>'
         +'<label style="'+lbl+'">E-mail</label><input id="nr-email" style="'+inp+'" inputmode="email">'
         +'<input type="hidden" id="nr-leadid">'
@@ -6599,8 +6600,8 @@
       (async function(){
         try{ if(!_nrLeads.length){ var lr=await fetch('/api/compounder/leads',{credentials:'include'}); _nrLeads=(lr.ok?await lr.json():[])||[]; } }catch(e){ _nrLeads=[]; }
         try{ if(!_nrKiosks.length){ var kr=await fetch('/api/compounder/kiosk-values',{credentials:'include'}); var kd=kr.ok?await kr.json():{}; _nrKiosks=(kd&&kd.kiosks)||[]; } }catch(e){ _nrKiosks=[]; }
-        var ls=document.getElementById('nr-lead'); if(ls) ls.innerHTML=_nrLeadOpts('');
-        var ks=document.getElementById('nr-code'); if(ks) ks.innerHTML=_nrKioskOpts('');
+        var ls=document.getElementById('nr-lead'); if(ls) ls.innerHTML=_nrLeadOpts((document.getElementById('nr-leadq')||{}).value||'');
+        var ks=document.getElementById('nr-code'); if(ks) ks.innerHTML=_nrKioskOpts((document.getElementById('nr-kioskq')||{}).value||'');
       })();
       setTimeout(function(){ var c=document.getElementById('nr-leadq'); if(c) c.focus(); },50);
     }
