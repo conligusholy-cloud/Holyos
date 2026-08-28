@@ -6545,7 +6545,7 @@
           var payBtns = (x.status==='reserved'||x.status==='active')
             ? '<button class="btn btn-secondary" style="padding:4px 8px;font-size:12px;" title="Odeslat e-mailem odkaz na formulář s údaji do smlouvy (dohledá firmu v ARES)" onclick="resDetailsEmail('+x.id+',this)">📝 Vyžádat údaje</button> '
             : '';
-          h += '<tr><td style="white-space:nowrap;">'+resDate(x.created_at)+'</td><td>'+kvEsc(x.kiosk_code)+'</td><td>'+buyer+'</td><td>'+x.days+'</td><td style="white-space:nowrap;">'+feeCell+'</td><td style="white-space:nowrap;">'+buyCell+'</td><td><span style="color:'+scol+';font-size:12px;font-weight:600;">'+(RES_STATUS[x.status]||x.status)+'</span></td><td style="font-size:11px;white-space:nowrap;">'+lhuty+'</td><td style="white-space:nowrap;">'+docsBtn+payBtns+act+'</td></tr>';
+          h += '<tr><td style="white-space:nowrap;">'+resDate(x.created_at)+'</td><td>'+(x.location_name?(kvEsc(x.location_name)+'<br><span style="color:var(--text2);font-size:11px;">'+kvEsc(x.kiosk_code)+'</span>'):kvEsc(x.kiosk_code))+'</td><td>'+buyer+'</td><td>'+x.days+'</td><td style="white-space:nowrap;">'+feeCell+'</td><td style="white-space:nowrap;">'+buyCell+'</td><td><span style="color:'+scol+';font-size:12px;font-weight:600;">'+(RES_STATUS[x.status]||x.status)+'</span></td><td style="font-size:11px;white-space:nowrap;">'+lhuty+'</td><td style="white-space:nowrap;">'+docsBtn+payBtns+act+'</td></tr>';
         });
         h += '</tbody></table></div>';
         box.innerHTML = h;

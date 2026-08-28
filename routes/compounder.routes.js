@@ -7329,6 +7329,12 @@ router.get('/reservations', requireAuth, async (req, res, next) => {
         });
       }
     } catch (e) { /* doplnění jména best-effort */ }
+    // Název lokality (místo/město) z kiosk-values místo holého kódu.
+    try {
+      const ks = await _sisKiosks();
+      const kmap = new Map((ks || []).map((k) => [String(k.code), k.label || '']));
+      rows.forEach((r) => { const lbl = kmap.get(String(r.kiosk_code)); if (lbl) { const ci = lbl.indexOf(','); r.location_name = (ci > 0 ? lbl.slice(0, ci) : lbl).trim(); } });
+    } catch (e) { /* název lokality best-effort */ }
     res.json(rows);
   } catch (err) { next(err); }
 });
