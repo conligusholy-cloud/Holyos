@@ -2095,11 +2095,16 @@ router.get('/leads', requireAuth, async (req, res, next) => {
     // ať dopočet aktivity nevypadne, když leadů přibude přes 200 (import/FB reklamy).
     if (leads.length && leads.length <= 500) {
       const ids = leads.map((l) => l.id);
-      const evs = await prisma.compounderEvent.findMany({
-        where: { OR: ids.map((id) => ({ props: { path: ['lead_id'], equals: id } })) },
+      const idsSet = new Set(ids);
+      // Výkon: místo ~500 OR podmínek přes JSON props.lead_id (pomalé, s růstem dat se to zasekne)
+      // načteme eventy z posledních 180 dní jedním rozsahovým dotazem a odfiltrujeme v JS.
+      const evsSince = new Date(Date.now() - 180 * 86400000);
+      const evs = (await prisma.compounderEvent.findMany({
+        where: { created_at: { gte: evsSince } },
         select: { event: true, props: true, created_at: true, sid: true },
-        take: 20000,
-      });
+        orderBy: { created_at: 'desc' },
+        take: 40000,
+      }).catch(() => [])).filter((e) => e.props && idsSet.has(Number(e.props.lead_id)));
       const c = {};
       const last = {}; // poslední aktivita (max created_at) na leada
       const mv = {};   // poslední „admin se podíval na model" (max created_at) na leada
