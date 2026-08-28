@@ -6536,7 +6536,7 @@
           else { act = '<span style="color:var(--text2);font-size:12px;">'+(x.cancel_reason?kvEsc(x.cancel_reason):'—')+'</span>'; }
           var feeCell = x.fee_paid_at ? '<span style="color:#10b981;font-weight:600;">'+resFmtCzk(x.fee_total)+' ✓</span>' : resFmtCzk(x.fee_total);
           var buyCell = x.purchase_paid_at ? '<span style="color:#10b981;font-weight:600;">'+resFmtCzk(x.purchase_price)+' ✓</span>' : resFmtCzk(x.purchase_price);
-          var buyer = kvEsc(x.buyer_name||'') + (x.buyer_phone?('<br><span style="color:var(--text2);font-size:11px;">'+kvEsc(x.buyer_phone)+'</span>'):'');
+          var buyer = kvEsc(x.buyer_name_full||x.buyer_name||'') + (x.buyer_phone?('<br><span style="color:var(--text2);font-size:11px;">'+kvEsc(x.buyer_phone)+'</span>'):'');
           var lhuty = (x.signed_at ? ('Podepsáno: '+resDate(x.signed_at)) : ('Podpis do: '+resDate(x.sign_until)))+'<br>Poplatek: '+resDate(x.fee_until)+'<br>Konec: '+resDate(x.reserved_until);
           var scol = x.status==='completed'?'#10b981':((x.status==='cancelled'||x.status==='expired')?'#ef4444':'#eab308');
           var _cEsc = kvEsc(x.kiosk_code||'').replace(/'/g,'&#39;');

@@ -7315,6 +7315,20 @@ router.get('/reservations', requireAuth, async (req, res, next) => {
     const where = {};
     if (status) where.status = status;
     const rows = await prisma.locationReservation.findMany({ where, orderBy: { created_at: 'desc' }, take: 500 });
+    // Doplň celé jméno kupujícího z propojeného kontaktu (jméno + příjmení), když je uloženo jen křestní.
+    try {
+      const lids = Array.from(new Set(rows.map((r) => r.lead_id).filter(Boolean)));
+      if (lids.length) {
+        const leads = await prisma.compounderLead.findMany({ where: { id: { in: lids } }, select: { id: true, name: true, first_name: true, last_name: true } });
+        const lmap = new Map(leads.map((l) => [l.id, l]));
+        rows.forEach((r) => {
+          const l = r.lead_id ? lmap.get(r.lead_id) : null;
+          const full = l ? ([l.first_name, l.last_name].filter(Boolean).join(' ').trim() || (l.name || '')) : '';
+          // Použij plné jméno z kontaktu, pokud je delší/úplnější než uložené buyer_name.
+          if (full && (!r.buyer_name || full.length > String(r.buyer_name).length)) r.buyer_name_full = full;
+        });
+      }
+    } catch (e) { /* doplnění jména best-effort */ }
     res.json(rows);
   } catch (err) { next(err); }
 });
