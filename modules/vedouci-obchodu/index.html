@@ -206,6 +206,21 @@
       + '<div style="flex:1;min-width:0"><div style="font-size:11px;color:var(--muted2);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Struktura kontaktů ('+tot+')</div><div style="display:flex;flex-wrap:wrap">'+legend+'</div></div>'
       + '</div>';
   }
+  // Stejný koláč, ale v PROCENTECH (podíl jednotlivých stavů).
+  function vStatusBlockPct(p){
+    var sc=p.status_counts||{}; var keys=Object.keys(sc).filter(function(k){return sc[k]>0;});
+    if(!keys.length) return '';
+    var order=Object.keys(STATUS_FULL);
+    keys.sort(function(a,b){ var ia=order.indexOf(a), ib=order.indexOf(b); return (ia<0?99:ia)-(ib<0?99:ib); });
+    var segs=keys.map(function(k){ return { value:sc[k], color:(STATUS_FULL[k]||{}).c||'#94a3b8' }; });
+    var tot=keys.reduce(function(s,k){return s+sc[k];},0);
+    var pct=function(v){ return tot? Math.round(v/tot*100):0; };
+    var legend=keys.map(function(k){ var st=STATUS_FULL[k]||{l:k,c:'#94a3b8'}; return '<span style="display:inline-flex;align-items:center;gap:5px;font-size:11.5px;margin:2px 8px 2px 0"><span style="width:9px;height:9px;border-radius:2px;background:'+st.c+';display:inline-block"></span>'+esc(st.l)+' <b style="color:var(--text)">'+pct(sc[k])+' %</b></span>'; }).join('');
+    return '<div style="display:flex;align-items:center;gap:14px;margin-top:8px;padding:10px;background:var(--surface2);border-radius:10px">'
+      + vDonutMulti(segs, '100 %')
+      + '<div style="flex:1;min-width:0"><div style="font-size:11px;color:var(--muted2);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Struktura kontaktů (%)</div><div style="display:flex;flex-wrap:wrap">'+legend+'</div></div>'
+      + '</div>';
+  }
   function vSpeedBlock(p){
     var done=p.tasks_done||0, open=p.tasks_open||0, skipped=p.tasks_skipped||0;
     return '<div style="display:flex;align-items:center;gap:14px;margin-top:8px;padding:10px;background:var(--surface2);border-radius:10px">'
@@ -236,6 +251,7 @@
           '<div class="sub">Úkoly: '+(p.tasks_done||0)+'/'+(p.tasks_assigned||0)+' splněno'+(p.tasks_skipped?(' · '+p.tasks_skipped+' přeskočeno'):'')+(p.tasks_open?(' · '+p.tasks_open+' otevřeno'):'')+'</div>' +
           vSpeedBlock(p) +
           vStatusBlock(p) +
+          vStatusBlockPct(p) +
           (p.focus?'<div class="muted" style="margin-top:4px;font-size:12.5px">🎯 '+esc(p.focus)+'</div>':'') +
           (p.day_summary?'<div class="muted" style="margin-top:4px;font-size:12.5px">'+esc(p.day_summary)+'</div>':'') +
           '<div style="margin-top:8px;padding:8px 10px;background:var(--surface2);border-radius:10px">' +

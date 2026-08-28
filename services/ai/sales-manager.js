@@ -381,13 +381,14 @@ async function gatherPlanContext(personId) {
     events = await prisma.salesEvent.findMany({
       where: { organizer_id: personId, start_at: { gte: since60, lte: in7 } },
       orderBy: { start_at: 'asc' }, take: 400,
-      select: { title: true, start_at: true, end_at: true, location: true, event_type: true, status: true, compounder_lead_id: true },
+      select: { id: true, title: true, start_at: true, end_at: true, location: true, event_type: true, status: true, compounder_lead_id: true, created_at: true },
     });
   } catch (e) { events = []; }
   const todayEndMs = todayStart.getTime() + 86400000;
   const fmtEv = (e) => ({
-    title: e.title, when: e.start_at ? new Date(e.start_at).toISOString() : null,
+    id: e.id, title: e.title, when: e.start_at ? new Date(e.start_at).toISOString() : null,
     location: e.location || null, type: e.event_type || 'meeting', status: e.status || 'planned', lead_id: e.compounder_lead_id || null,
+    ts: e.created_at ? new Date(e.created_at).getTime() : (e.start_at ? new Date(e.start_at).getTime() : 0),
   });
   // Otevřené = ještě nesplněné/nezrušené (drží se, dokud je obchodník neodklikne).
   const isOpenEv = (e) => { const s = String(e.status || 'planned').toLowerCase(); return s !== 'done' && s !== 'cancelled' && s !== 'canceled'; };
@@ -521,18 +522,34 @@ function buildLeadTasks(ctx) {
   // Leady s JAKOUKOLI budoucí otevřenou domluvou (i za >7 dní) — ty se dnes nevolají jinak, než jsme se domluvili.
   const scheduled = new Set(ctx.scheduled_lead_ids || []);
   (ctx.meetings_today || []).concat(ctx.meetings_upcoming_7d || []).forEach((m) => { if (m && m.lead_id) scheduled.add(m.lead_id); });
+  // Mrtvé leady (nemá zájem / nelze použít / zamítnuto) — do úkolů NEPATŘÍ ani přes kalendář.
+  const DEAD = ['nezajem', 'nelze_pouzit', 'rejected'];
+  const deadLeads = new Set((ctx.leads || []).filter((l) => DEAD.indexOf(l.status) >= 0).map((l) => l.id));
+  // Otevřené kalendářní kroky (přeskoč hotové/zrušené) + deduplikace na JEDEN krok na kontakt:
+  // „poslední domluva vyhrává" — když má kontakt víc událostí, ponech tu nejnovější (dle ts=created_at).
+  const dedupeByLead = (list) => {
+    const open = (list || []).filter((m) => { const s = String(m.status || 'planned').toLowerCase(); return s !== 'done' && s !== 'cancelled' && s !== 'canceled'; });
+    const byLead = new Map(); const noLead = [];
+    open.forEach((m) => {
+      if (!m.lead_id) { noLead.push(m); return; }
+      const cur = byLead.get(m.lead_id);
+      if (!cur || (Number(m.ts) || 0) >= (Number(cur.ts) || 0)) byLead.set(m.lead_id, m);
+    });
+    return noLead.concat(Array.from(byLead.values())).sort((a, b) => (a.when ? new Date(a.when).getTime() : 0) - (b.when ? new Date(b.when).getTime() : 0));
+  };
   // (A) DNEŠNÍ naplánované kroky z kalendáře — ÚPLNĚ NAVRCH (co mám dnes v kalendáři), priorita 1,
   // pojmenované dle typu (hovor/schůzka/dosledování/slíbený krok).
-  (ctx.meetings_today || []).forEach((m) => {
+  dedupeByLead(ctx.meetings_today).forEach((m) => {
+    if (m.lead_id && (covered.has(m.lead_id) || deadLeads.has(m.lead_id))) return;
     const meta = evMeta(m); const hh = evHH(m);
-    tasks.push({ kind: meta.kind, title: meta.verb + (hh ? ' ' + hh : '') + ' – ' + (m.title || ''), detail: meta.do + (m.location ? ' Místo: ' + m.location + '.' : ''), reasoning: 'Dnešní naplánovaný krok z kalendáře.', priority: 1, est_min: meta.est, lead_id: m.lead_id || null });
+    tasks.push({ kind: meta.kind, title: meta.verb + (hh ? ' ' + hh : '') + ' – ' + (m.title || ''), detail: meta.do + (m.location ? ' Místo: ' + m.location + '.' : ''), reasoning: 'Dnešní naplánovaný krok z kalendáře.', priority: 1, est_min: meta.est, lead_id: m.lead_id || null, source_event_id: m.id || null });
     if (m.lead_id) covered.add(m.lead_id);
   });
   // (A0) PROŠVIHNUTÉ slíbené kroky — hned za dnešními, priorita 1. Dokud je obchodník neodklikne, drží se.
-  (ctx.meetings_overdue || []).forEach((m) => {
-    if (m.lead_id && covered.has(m.lead_id)) return;
+  dedupeByLead(ctx.meetings_overdue).forEach((m) => {
+    if (m.lead_id && (covered.has(m.lead_id) || deadLeads.has(m.lead_id))) return;
     const meta = evMeta(m);
-    tasks.push({ kind: meta.kind, title: '⏰ PROŠVIHNUTO (' + evDM(m) + ') — ' + meta.verb.replace(/^[^ ]+ /, '') + ': ' + (m.title || '') , detail: 'Termín už uplynul. ' + meta.do + ' Domluv nový termín, ať nedržíš zákazníka v nejistotě.', reasoning: 'Prošvihnutý slíbený krok z ' + evDM(m) + ' — drží se, dokud ho nesplníš.', priority: 1, est_min: meta.est, lead_id: m.lead_id || null });
+    tasks.push({ kind: meta.kind, title: '⏰ PROŠVIHNUTO (' + evDM(m) + ') — ' + meta.verb.replace(/^[^ ]+ /, '') + ': ' + (m.title || '') , detail: 'Termín už uplynul. ' + meta.do + ' Domluv nový termín, ať nedržíš zákazníka v nejistotě.', reasoning: 'Prošvihnutý slíbený krok z ' + evDM(m) + ' — drží se, dokud ho nesplníš.', priority: 1, est_min: meta.est, lead_id: m.lead_id || null, source_event_id: m.id || null });
     if (m.lead_id) covered.add(m.lead_id);
   });
   // (B) Horké leady a lhůty + běžné kontakty — každý jako samostatný úkol.
@@ -667,7 +684,7 @@ async function planDay(personId, dateStr, opts) {
   let created = 0;
   for (const t of out.tasks) {
     if (doneKeys.has(t.kind + ':' + (t.lead_id || 0) + ':' + (t.title || ''))) continue; // už vyřízený dnes
-    await prisma.salesTask.create({ data: { day_plan_id: plan.id, person_id: personId, lead_id: t.lead_id, kind: t.kind, title: t.title, detail: t.detail, reasoning: t.reasoning, priority: t.priority, est_min: t.est_min || null, status: 'open' } });
+    await prisma.salesTask.create({ data: { day_plan_id: plan.id, person_id: personId, lead_id: t.lead_id, source_event_id: t.source_event_id || null, kind: t.kind, title: t.title, detail: t.detail, reasoning: t.reasoning, priority: t.priority, est_min: t.est_min || null, status: 'open' } });
     created += 1;
   }
   const full = await prisma.salesDayPlan.findUnique({ where: { id: plan.id }, include: { tasks: true } });

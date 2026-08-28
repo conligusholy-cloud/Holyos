@@ -1551,6 +1551,26 @@ router.get('/sales/stats-history', requireAuth, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// Po splnění/přeskočení úkolu ZAVŘI podkladovou kalendářní událost, aby se prošvihnutý krok
+// příští den znovu neobjevil. Zavře jak zdrojovou událost (source_event_id), tak všechny
+// otevřené minulé/dnešní události daného kontaktu (staré sliby už jsou vyřízené).
+async function _closeTaskEvents(task, mode) {
+  try {
+    const evStatus = mode === 'skip' ? 'cancelled' : 'done';
+    const OPEN = { notIn: ['done', 'cancelled', 'canceled'] };
+    const todayEnd = new Date(); todayEnd.setHours(23, 59, 59, 999);
+    if (task.source_event_id) {
+      await prisma.salesEvent.updateMany({ where: { id: task.source_event_id, status: OPEN }, data: { status: evStatus } }).catch(() => {});
+    }
+    if (task.lead_id) {
+      await prisma.salesEvent.updateMany({
+        where: { compounder_lead_id: task.lead_id, status: OPEN, start_at: { lte: todayEnd } },
+        data: { status: evStatus },
+      }).catch(() => {});
+    }
+  } catch (e) { /* best-effort */ }
+}
+
 // POST /api/compounder/tasks/:id/done {note}
 router.post('/tasks/:id/done', requireAuth, async (req, res, next) => {
   try {
@@ -1561,6 +1581,7 @@ router.post('/tasks/:id/done', requireAuth, async (req, res, next) => {
     if (task.person_id !== salesMyPersonId(req) && !salesIsMgr(req.user)) return res.status(403).json({ error: 'Není váš úkol' });
     const note = req.body && req.body.note ? String(req.body.note).slice(0, 1000) : null;
     const upd = await prisma.salesTask.update({ where: { id }, data: { status: 'done', done_at: new Date(), done_note: note } });
+    await _closeTaskEvents(task, 'done');
     res.json({ ok: true, task: upd });
   } catch (err) { next(err); }
 });
@@ -1576,6 +1597,7 @@ router.post('/tasks/:id/skip', requireAuth, async (req, res, next) => {
     const reason = req.body && req.body.reason ? String(req.body.reason).slice(0, 1000).trim() : '';
     if (!reason) return res.status(400).json({ error: 'Uveď důvod přeskočení.' });
     const upd = await prisma.salesTask.update({ where: { id }, data: { status: 'skipped', skipped_reason: reason } });
+    await _closeTaskEvents(task, 'skip');
     // Uvolněný čas nesmí propadnout: AI dogeneruje náhradní úkol(y) na stejný čas
     // (zohlední důvod). Fond dne zkrátí jen dovolená/lékař → tehdy se nedoplňuje.
     let replacement = null;
@@ -1834,6 +1856,15 @@ router.post('/leads/:id/called', requireAuth, async (req, res, next) => {
         data: { status: 'done', done_at: new Date(), done_note: '📞 Zavoláno (automaticky po vytočení)' },
       }).catch(() => {});
     }
+    // Zavři podkladové minulé/dnešní kalendářní hovory/dosledování tohoto kontaktu, ať se prošvihnutý
+    // krok příště nevrací (budoucí domluvy zůstávají).
+    try {
+      const todayEnd = new Date(); todayEnd.setHours(23, 59, 59, 999);
+      await prisma.salesEvent.updateMany({
+        where: { compounder_lead_id: id, status: { notIn: ['done', 'cancelled', 'canceled'] }, event_type: { in: ['call', 'followup', 'task'] }, start_at: { lte: todayEnd } },
+        data: { status: 'done' },
+      }).catch(() => {});
+    } catch (e) {}
     res.json({ ok: true, last_called_at: upd.last_called_at });
   } catch (err) { next(err); }
 });
@@ -1932,6 +1963,9 @@ router.get('/my-leads', requireAuth, async (req, res, next) => {
         const hay = norm((l.name || '') + ' ' + (l.email || '') + ' ' + (l.company || '') + ' ' + (l.phone || ''));
         if (hay.indexOf(nq) !== -1) return true;
         if (qd.length >= 3 && String(l.phone || '').replace(/\D/g, '').indexOf(qd) !== -1) return true;
+        // Poznámky + aktivity (dohledá kontakt i podle toho, co jsem si k němu zapsal/nadiktoval).
+        const hayNotes = norm((l.notes || '') + ' ' + (l.activity_log || ''));
+        if (hayNotes.indexOf(nq) !== -1) return true;
         return false;
       }).slice(0, 500);
     } else {
@@ -7402,6 +7436,48 @@ router.patch('/reservations/:id(\\d+)/buyer', requireAuth, async (req, res, next
   } catch (err) { next(err); }
 });
 
+// PATCH /reservations/:id/schedule — ruční úprava termínu rezervace (datum + počet dní).
+router.patch('/reservations/:id(\\d+)/schedule', requireAuth, async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    const rec = await prisma.locationReservation.findUnique({ where: { id } });
+    if (!rec) return res.status(404).json({ error: 'Rezervace nenalezena' });
+    const b = req.body || {};
+    const data = {};
+    // Datum rezervace (Vytvořeno) — bereme jako počátek běhu lhůty.
+    let startDate = rec.created_at ? new Date(rec.created_at) : new Date();
+    if (b.created_at !== undefined && b.created_at) {
+      const d = new Date(String(b.created_at));
+      if (!isNaN(d.getTime())) { data.created_at = d; startDate = d; }
+    }
+    // Počet dní.
+    let days = rec.days;
+    if (b.days !== undefined && b.days !== '') {
+      days = Math.max(0, Math.round(Number(b.days) || 0));
+      data.days = days;
+    }
+    // Konec rezervace: explicitně zadaný má přednost, jinak přepočti z datumu + dní.
+    if (b.reserved_until !== undefined && b.reserved_until) {
+      const d = new Date(String(b.reserved_until));
+      if (!isNaN(d.getTime())) { d.setHours(23, 59, 59, 0); data.reserved_until = d; }
+    } else if ((b.days !== undefined || b.created_at !== undefined) && days > 0) {
+      const d = new Date(startDate.getTime() + days * 86400000);
+      d.setHours(23, 59, 59, 0);
+      data.reserved_until = d;
+    }
+    if (b.sign_until !== undefined) data.sign_until = b.sign_until ? new Date(String(b.sign_until)) : null;
+    if (b.fee_until !== undefined) data.fee_until = b.fee_until ? new Date(String(b.fee_until)) : null;
+    // Dodatečná sleva (%) — promítne se do vygenerovaných smluv.
+    if (b.extra_discount_pct !== undefined) {
+      const v = (b.extra_discount_pct === '' || b.extra_discount_pct === null) ? null : Number(b.extra_discount_pct);
+      data.extra_discount_pct = (v != null && isFinite(v)) ? Math.max(0, Math.min(100, v)) : null;
+    }
+    if (!Object.keys(data).length) return res.json({ ok: true, reservation: rec });
+    const upd = await prisma.locationReservation.update({ where: { id }, data });
+    res.json({ ok: true, reservation: upd });
+  } catch (err) { next(err); }
+});
+
 // POST /reservations/:id/generate-contracts — hromadně vygeneruje smlouvy k rezervaci
 // PŘEDVYPLNĚNÉ daty lokality (Compounding) + iniciály kupujícího. Nepřepisuje už podepsané.
 router.post('/reservations/:id(\\d+)/generate-contracts', requireAuth, async (req, res, next) => {
@@ -7516,16 +7592,39 @@ async function _sisRevenueForContract(code) {
   const fk = keys[0].split('-'); const lk = keys[keys.length - 1].split('-');
   return { firstTs, months12: monthsNewestFirst, total12: Math.round(sum), avg: Math.round(sum / 12), periodLabel: CZ[Number(fk[1]) - 1] + ' ' + fk[0] + ' – ' + CZ[Number(lk[1]) - 1].toLowerCase() + ' ' + lk[0] };
 }
+// Přidělí (nebo vrátí už přidělené) číslo smlouvy k rezervaci. Číslo se přidělí JEDNOU
+// a natrvalo uloží k rezervaci (contract_no_kupni/najemni), takže se při dalších generacích
+// nemění a nikdy nekoliduje. Sekvence (contracts.seq) je globální a čte se ČERSTVĚ z DB
+// v transakci (bez 30s cache getSetting), aby dvě rezervace nedostaly stejné číslo.
 async function _reservationContractNumbers(recId) {
-  const KEY = 'contracts.res_numbers';
-  const map = (await getSetting(KEY, { type: 'json', defaultValue: {} })) || {};
   const year = new Date().getFullYear();
-  if (map[recId] && map[recId].year === year) return map[recId];
-  let seq = Number(await getSetting('contracts.seq', { type: 'number', defaultValue: 1 })) || 1;
+  const rec = await prisma.locationReservation.findUnique({ where: { id: recId }, select: { contract_seq: true, contract_no_kupni: true, contract_no_najemni: true, contract_year: true } });
+  // Už přidělené pro letošní rok → vrať beze změny (trvalé, neměnné).
+  if (rec && rec.contract_no_kupni && rec.contract_year === year) {
+    return { year, n: rec.contract_seq, kupni: rec.contract_no_kupni, najemni: rec.contract_no_najemni };
+  }
+  // Migrace ze staré mapy (contracts.res_numbers) — zachovej dřív přidělené číslo (např. 2026K0002).
+  try {
+    const oldMap = (await getSetting('contracts.res_numbers', { type: 'json', defaultValue: {} })) || {};
+    const prev = oldMap[recId] || oldMap[String(recId)];
+    if (prev && prev.year === year && prev.kupni) {
+      await prisma.locationReservation.update({ where: { id: recId }, data: { contract_seq: prev.n || null, contract_no_kupni: prev.kupni, contract_no_najemni: prev.najemni || (year + 'N' + String(prev.n || 0).padStart(4, '0')), contract_year: year } }).catch(() => {});
+      return { year, n: prev.n, kupni: prev.kupni, najemni: prev.najemni || (year + 'N' + String(prev.n || 0).padStart(4, '0')) };
+    }
+  } catch (e) {}
+  // Atomicky rezervuj další pořadové číslo v globální sekvenci.
+  const seq = await prisma.$transaction(async (tx) => {
+    const row = await tx.appSetting.findUnique({ where: { key: 'contracts.seq' } });
+    const cur = row ? (parseInt(row.value, 10) || 0) : 0;
+    const next = cur < 1 ? 1 : cur; // první číslo = 1
+    const stored = String(next + 1);
+    if (row) await tx.appSetting.update({ where: { key: 'contracts.seq' }, data: { value: stored, value_type: 'number' } });
+    else await tx.appSetting.create({ data: { key: 'contracts.seq', value: stored, value_type: 'number' } });
+    return next;
+  });
   const out = { year, n: seq, kupni: year + 'K' + String(seq).padStart(4, '0'), najemni: year + 'N' + String(seq).padStart(4, '0') };
-  map[recId] = out;
-  await setSetting('contracts.seq', seq + 1, { type: 'number' });
-  await setSetting(KEY, map, { type: 'json' });
+  // Ulož natrvalo k rezervaci.
+  await prisma.locationReservation.update({ where: { id: recId }, data: { contract_seq: seq, contract_no_kupni: out.kupni, contract_no_najemni: out.najemni, contract_year: year } }).catch(() => {});
   return out;
 }
 router.post('/reservations/:id(\\d+)/contracts-docx', requireAuth, async (req, res, next) => {
@@ -7542,8 +7641,12 @@ router.post('/reservations/:id(\\d+)/contracts-docx', requireAuth, async (req, r
     const fx = await fxRatesCzk(); const eur = fx.EUR || 25;
     const ver = String(cfg.version || '').toLowerCase(); const pl = cs.pricelist || {};
     const machineCzk = (pl[ver] && pl[ver].eur != null && isFinite(Number(pl[ver].eur))) ? Math.round(Number(pl[ver].eur) * eur) : null;
-    const totalCzk = (rec.purchase_price != null) ? Number(rec.purchase_price) : null;
+    const totalCzk = (rec.purchase_price != null) ? Number(rec.purchase_price) : null; // původní kupní cena (v tabulce zůstává)
     const localityCzk = (totalCzk != null && machineCzk != null) ? Math.max(0, totalCzk - machineCzk) : null;
+    // Dodatečná sleva (%) — ceny zůstávají původní, přidá se řádek „Cena po slevě".
+    const discPct = (rec.extra_discount_pct != null && isFinite(Number(rec.extra_discount_pct))) ? Math.max(0, Math.min(100, Number(rec.extra_discount_pct))) : 0;
+    const priceAfterDiscount = (discPct && totalCzk != null) ? Math.round(totalCzk * (1 - discPct / 100)) : null;
+    const discountCzk = (priceAfterDiscount != null) ? (totalCzk - priceAfterDiscount) : null;
     const label = ki.label || code; const ci = label.indexOf(',');
     const locationName = ci > 0 ? label.slice(0, ci).trim() : label;
     const locationStreet = ci > 0 ? label.slice(ci + 1).trim() : '';
@@ -7560,6 +7663,7 @@ router.post('/reservations/:id(\\d+)/contracts-docx', requireAuth, async (req, r
       buyer: { name: rec.buyer_name || '', sidlo: rec.buyer_address || '', ico: rec.buyer_ico || '', dic: rec.buyer_dic || '', rep: rec.buyer_rep || '', bank: rec.buyer_bank || '', email: rec.buyer_email || '' },
       locationName, locationStreet, locationAddr: label,
       priceMachine: machineCzk, priceLocation: localityCzk, priceTotal: totalCzk, fee: rec.fee_total || null,
+      discountPct: discPct || null, discountCzk: discountCzk || null, priceAfterDiscount: priceAfterDiscount,
       provozStart, provozDays, periodLabel: sis.periodLabel,
       rev: { total12: sis.total12, avg: sis.avg, rentMonthly: (typeof cfg.rentMonthlyCzk === 'number' ? cfg.rentMonthlyCzk : null), months: sis.months12 },
     };

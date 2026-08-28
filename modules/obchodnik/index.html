@@ -206,7 +206,7 @@
       <div class="field"><label>Začátek</label><input class="qinput" id="mt-start" type="datetime-local"></div>
       <div class="field" id="mt-end-field"><label>Konec</label><input class="qinput" id="mt-end" type="datetime-local"></div>
       <div class="field"><label>Místo</label><input class="qinput" id="mt-loc" placeholder="Adresa / online"></div>
-      <div class="field" id="mt-att-field"><label>Pozvat (e-maily, oddělené čárkou)</label><input class="qinput" id="mt-att" placeholder="kontakt@… , kolega@bestseries.cz" inputmode="email"><div style="font-size:11px;color:var(--muted2);margin-top:4px">Pozvánka se odešle e-mailem přes Outlook. Předvyplní se kontakt; kolegu přidej čárkou.</div></div>
+      <div class="field" id="mt-att-field"><label>Pozvat (e-maily, oddělené čárkou)</label><input class="qinput" id="mt-att" placeholder="kontakt@… , kolega@bestseries.cz" inputmode="email"><div id="mt-att-chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px"></div><div style="font-size:11px;color:var(--muted2);margin-top:4px">Pozvánka se odešle e-mailem přes Outlook. Předvyplní se kontakt; klikni na kolegu nebo přidej e-mail čárkou.</div></div>
       <div class="field"><label>Poznámka</label><textarea id="mt-note" placeholder="Detaily…"></textarea></div>
       <div class="actions-row">
         <button class="btn btn-g" style="flex:1" onclick="closeMeeting()">Zrušit</button>
@@ -625,6 +625,7 @@
     document.getElementById('mt-loc').value=pf.location||'';
     document.getElementById('mt-note').value=pf.note||'';
     document.getElementById('mt-att').value=pf.attendees||'';
+    renderColleagueChips();
     document.getElementById('mt-site').value=pf.site_id||'';
     document.getElementById('mt-lead').value=pf.compounder_lead_id||'';
     var start = pf.start? new Date(pf.start) : (function(){ var n=new Date(); n.setMinutes(0,0,0); n.setHours(n.getHours()+1); return n; })();
@@ -634,6 +635,32 @@
     document.getElementById('mt-end').value=_dtLocal(end);
     var endField=document.getElementById('mt-end-field'); if(endField) endField.style.display = shortEv ? 'none' : '';
     document.getElementById('meeting-modal').classList.add('open');
+  }
+  // Rychlé pozvání kolegů — odznaky s jménem, klik přidá e-mail do pole Pozvat.
+  var _colleagues=null;
+  function _attHas(email){ var cur=(document.getElementById('mt-att').value||'').toLowerCase(); return cur.split(/[,;\s]+/).filter(Boolean).indexOf(String(email).toLowerCase())>=0; }
+  function toggleColleague(email){
+    var inp=document.getElementById('mt-att'); if(!inp) return;
+    var parts=(inp.value||'').split(',').map(function(s){return s.trim();}).filter(Boolean);
+    var low=parts.map(function(s){return s.toLowerCase();}); var e=String(email);
+    var i=low.indexOf(e.toLowerCase());
+    if(i>=0){ parts.splice(i,1); } else { parts.push(e); }
+    inp.value=parts.join(', ');
+    renderColleagueChips();
+  }
+  window.toggleColleague=toggleColleague;
+  function renderColleagueChips(){
+    var box=document.getElementById('mt-att-chips'); if(!box) return;
+    var draw=function(){
+      box.innerHTML=(_colleagues||[]).map(function(c){
+        var on=_attHas(c.email);
+        var bg=on?'rgba(34,197,94,.22)':'rgba(255,255,255,.05)'; var bd=on?'#22c55e':'var(--line)';
+        var nm=c.first_name||c.name;
+        return '<button type="button" onclick="toggleColleague(\''+String(c.email).replace(/'/g,"\\'")+'\')" style="background:'+bg+';border:1px solid '+bd+';color:var(--text);border-radius:14px;padding:4px 10px;font-size:12px;cursor:pointer">'+(on?'✓ ':'+ ')+esc(nm)+'</button>';
+      }).join('');
+    };
+    if(_colleagues){ draw(); return; }
+    fetch('/api/sales/colleagues',{credentials:'include'}).then(function(r){return r.json();}).then(function(d){ _colleagues=Array.isArray(d)?d:[]; draw(); }).catch(function(){ _colleagues=[]; });
   }
   function closeMeeting(){ document.getElementById('meeting-modal').classList.remove('open'); }
   async function saveMeeting(){
@@ -824,7 +851,8 @@
     window._fcInst=new FullCalendar.Calendar(el,{
       initialView:'timeGridWeek', locale:'cs', firstDay:1, height:'auto', nowIndicator:true,
       headerToolbar:{ left:'prev,next today', center:'title', right:'dayGridMonth,timeGridWeek,timeGridDay' },
-      buttonText:{ today:'Dnes', month:'Měsíc', week:'Týden', day:'Den' },
+      buttonIcons:false, // ikonový font FullCalendaru se na některých mobilech nenačte (šipky = prázdné boxy) → text
+      buttonText:{ today:'Dnes', month:'Měsíc', week:'Týden', day:'Den', prev:'Zpět', next:'Vpřed' },
       allDayText:'Celý den', slotMinTime:'06:00:00', slotMaxTime:'23:00:00', expandRows:true, stickyHeaderDates:true,
       events:function(info,ok,fail){
         fetch('/api/sales/my-calendar?from='+encodeURIComponent(info.startStr)+'&to='+encodeURIComponent(info.endStr),{credentials:'include'})
@@ -837,7 +865,7 @@
             evs.forEach(function(e){ if(e._conflict){ e.borderColor='#ef4444'; e.classNames=(e.classNames||[]).concat('fc-conflict'); } });
             var _n=document.getElementById('fc-note'); if(_n){ _n.innerHTML = d.outlookError ? ('\u26a0 Outlook události se nenačetly'+(d.outlookMailbox?(' ('+esc(d.outlookMailbox)+')'):'')+': '+esc(d.outlookError)) : ''; }
             ok(evs);
-          }).catch(function(){ fail(); });
+          }).catch(function(){ var _n=document.getElementById('fc-note'); if(_n){ _n.innerHTML='⚠ Kalendář se nepodařilo načíst — zkontroluj připojení a dej Obnovit.'; } fail(); });
       },
       eventClick:function(arg){ var p=arg.event.extendedProps||{};
         if(p.source==='outlook'){ openEventInfo({ title:arg.event.title, start:arg.event.start, end:arg.event.end, allDay:arg.event.allDay, location:p.location, web_link:p.web_link, organizer:p.organizer, mine:p.mine }); return; }

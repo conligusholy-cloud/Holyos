@@ -37,7 +37,15 @@ function fillContracts(f) {
   ];
   if (f.priceMachine != null) kupniRules.push(eq('1 252 850 Kč bez DPH', kc(f.priceMachine) + ' bez DPH'));
   if (f.priceLocation != null) kupniRules.push(eq('328 850 Kč bez DPH', kc(f.priceLocation) + ' bez DPH'));
-  if (f.priceTotal != null) kupniRules.push(eq('1 584 130 Kč bez DPH', kc(f.priceTotal) + ' bez DPH'));
+  if (f.priceTotal != null) {
+    let totalText = kc(f.priceTotal) + ' bez DPH';
+    if (f.discountPct && f.priceAfterDiscount != null) {
+      const pctTxt = String(Math.round(Number(f.discountPct) * 100) / 100).replace('.', ',');
+      totalText += '\nSleva ' + pctTxt + ' %: −' + kc(f.discountCzk)
+                + '\nCena po slevě: ' + kc(f.priceAfterDiscount) + ' bez DPH';
+    }
+    kupniRules.push(eq('1 584 130 Kč bez DPH', totalText));
+  }
   if (f.fee != null) kupniRules.push(has('rezervační poplatek ve výši', () => '6. Byla-li k této obchodní transakci uzavřena rezervační smlouva, započítává se uhrazený rezervační poplatek ve výši ' + kc(f.fee) + ' na celkovou cenu podle tohoto článku'));
   files.push({ name: 'Kupni_smlouva_' + (f.buyerSlug || '') + '_' + (f.kupniNo || '') + '.docx', buffer: fillDocxFile(path.join(TPL_DIR, 'kupni.docx'), kupniRules) });
 

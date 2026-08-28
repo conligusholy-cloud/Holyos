@@ -5796,6 +5796,15 @@ model LocationReservation {
   details_filled_at   DateTime? // kdy zákazník vyplnil
   note                String?   @db.Text // poznámka od zákazníka
 
+  // Dodatečná sleva (%) na kupní cenu — promítne se do vygenerovaných smluv.
+  extra_discount_pct  Float?    // např. 5 = sleva 5 % z kupní ceny
+
+  // Čísla smluv — přidělí se JEDNOU při první generaci a už se nemění (trvalá posloupnost).
+  contract_seq        Int?      // pořadové číslo v globální sekvenci (contracts.seq)
+  contract_no_kupni   String?   @db.VarChar(20) // např. 2026K0002
+  contract_no_najemni String?   @db.VarChar(20) // např. 2026N0002
+  contract_year       Int?      // rok přidělení (kvůli restartu číslování po roce)
+
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
 
@@ -5926,6 +5935,7 @@ model SalesTask {
   person_id   Int
   lead_id     Int? // CompounderLead (volná vazba)
   site_id     Int? // Site / lokalita (volná vazba)
+  source_event_id Int? // SalesEvent, ze kterého úkol vznikl (kalendářní krok) — po splnění/přeskočení událost zavřeme
 
   // call | followup | invite | close | reservation | meeting | admin | other
   kind      String @default("other") @db.VarChar(20)
@@ -5948,6 +5958,7 @@ model SalesTask {
   @@index([person_id, status])
   @@index([day_plan_id])
   @@index([lead_id])
+  @@index([source_event_id])
   @@map("sales_tasks")
 }
 

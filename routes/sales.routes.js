@@ -523,6 +523,18 @@ router.delete('/contacts/:contactId(\\d+)/notes/:noteId(\\d+)', async (req, res,
   } catch (err) { next(err); }
 });
 
+// Má daný e-mail firemní M365 schránku? Osobní schránky (icloud, seznam, gmail…) nemají
+// kalendář v našem tenantu → Graph by vracel ErrorInvalidUser. Volitelný allowlist přes
+// env M365_MAIL_DOMAINS (CSV firemních domén); jinak se vyloučí známí spotřebitelští poskytovatelé.
+const CONSUMER_MAIL_DOMAINS = new Set(['icloud.com', 'me.com', 'seznam.cz', 'gmail.com', 'email.cz', 'centrum.cz', 'post.cz', 'volny.cz', 'atlas.cz', 'outlook.com', 'hotmail.com', 'live.com', 'yahoo.com', 'yahoo.cz', 'proton.me', 'protonmail.com']);
+function _isOrgMailbox(email) {
+  const domain = (String(email || '').split('@')[1] || '').toLowerCase();
+  if (!domain) return false;
+  const allow = String(process.env.M365_MAIL_DOMAINS || '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+  if (allow.length) return allow.indexOf(domain) >= 0;
+  return !CONSUMER_MAIL_DOMAINS.has(domain);
+}
+
 // Best-effort push SalesEvent do M365/Outlook kalendáře obchodníka (organizer).
 // Vrací pole ke uložení: { graph_event_id, graph_calendar_user, graph_sync_error }.
 async function _pushEventToGraph(ev) {
@@ -532,6 +544,8 @@ async function _pushEventToGraph(ev) {
     const person = await prisma.person.findUnique({ where: { id: ev.organizer_id }, select: { email: true } });
     const upn = person && person.email;
     if (!upn) return { graph_sync_error: 'Obchodník nemá e-mail (M365 schránku)' };
+    // Nefiremní schránka (osobní e-mail) → do M365 nesynchronizujeme; schůzka je jen v HolyOS, bez chyby.
+    if (!_isOrgMailbox(upn)) return { graph_sync_error: null, graph_calendar_user: null };
     const payload = { subject: ev.title, body: ev.description || '', start: ev.start_at, end: ev.end_at || ev.start_at, location: ev.location, allDay: ev.all_day, attendees: (ev.attendees ? String(ev.attendees).split(/[,;\s]+/).filter(Boolean) : []) };
     if (ev.graph_event_id) {
       await graph.updateCalendarEvent(upn, ev.graph_event_id, payload);
@@ -540,9 +554,34 @@ async function _pushEventToGraph(ev) {
     const created = await graph.createCalendarEvent(upn, payload);
     return { graph_event_id: (created && created.id) || null, graph_calendar_user: upn, graph_sync_error: null };
   } catch (e) {
-    return { graph_sync_error: String((e && e.message) || e).slice(0, 500) };
+    const msg = String((e && e.message) || e);
+    // Uživatel není v M365 tenantu (osobní/neexistující schránka) → benigní, jen HolyOS.
+    if (/ErrorInvalidUser|MailboxNotEnabledForRESTAPI|does not exist|is invalid/i.test(msg)) {
+      return { graph_sync_error: null, graph_calendar_user: null };
+    }
+    return { graph_sync_error: msg.slice(0, 500) };
   }
 }
+
+// GET /api/sales/colleagues — kolegové pro rychlé pozvání na schůzku (jméno + e-mail).
+router.get('/colleagues', async (req, res, next) => {
+  try {
+    const people = await prisma.person.findMany({
+      where: { active: true, email: { not: null } },
+      select: { id: true, first_name: true, last_name: true, email: true, role: true },
+      orderBy: [{ first_name: 'asc' }],
+    });
+    // Obchodní role napřed (nejčastěji zvané), pak ostatní.
+    const salesRoles = ['Vedoucí obchodu', 'Obchodník'];
+    const list = people
+      .filter((p) => p.email && p.email.indexOf('@') > 0)
+      .map((p) => ({ id: p.id, name: ((p.first_name || '') + ' ' + (p.last_name || '')).trim() || p.email, first_name: p.first_name || '', email: p.email, _sales: salesRoles.indexOf(p.role) >= 0 ? 0 : 1 }))
+      .sort((a, b) => (a._sales - b._sales) || a.name.localeCompare(b.name, 'cs'))
+      .slice(0, 40)
+      .map(({ _sales, ...rest }) => rest);
+    res.json(list);
+  } catch (err) { next(err); }
+});
 
 // ─── Kalendář (events) ────────────────────────────────────────────────────
 
@@ -694,12 +733,13 @@ router.get('/my-calendar', async (req, res, next) => {
     });
     // Lehký režim (?light=1): jen HolyOS schůzky, bez resyncu a Outlooku (pro odznaky u kontaktů).
     if (req.query.light === '1') return res.json({ events, outlook: [] });
-    // Auto-resync: schůzky bez graph_event_id (dřív selhaly / vznikly před povolením) zkus doposlat do M365.
+    // Auto-resync: schůzky bez graph_event_id (dřív selhaly / vznikly před povolením) zkus doposlat
+    // do M365 — NEBLOKUJÍCÍ (na pozadí), ať se kalendář načte rychle i na mobilu.
     const pending = events.filter((e) => !e.graph_event_id).slice(0, 5);
-    for (const e of pending) {
-      const g = await _pushEventToGraph(e);
-      try { await prisma.salesEvent.update({ where: { id: e.id }, data: g }); } catch (err) {}
-      Object.assign(e, g);
+    if (pending.length) {
+      Promise.all(pending.map(async (e) => {
+        try { const g = await _pushEventToGraph(e); await prisma.salesEvent.update({ where: { id: e.id }, data: g }); } catch (err) {}
+      })).catch(() => {});
     }
     let outlook = []; let outlookError = null; let outlookMailbox = null;
     try {
@@ -707,8 +747,13 @@ router.get('/my-calendar', async (req, res, next) => {
       outlookMailbox = person && person.email ? person.email : null;
       if (!person || !person.email) { outlookError = 'Uživatel nemá v HolyOS e-mail (M365 schránku).'; }
       else if (!(graph.isConfigured && graph.isConfigured())) { outlookError = 'M365 (Graph) není nakonfigurováno.'; }
+      else if (!_isOrgMailbox(person.email)) { /* osobní schránka → žádný Outlook, bez chyby */ }
       else {
-        const raw = await graph.listCalendarView(person.email, from.toISOString(), to.toISOString());
+        // Timeout na M365 — pomalá/nedostupná schránka nesmí zdržet (a shodit) načtení HolyOS událostí.
+        const raw = await Promise.race([
+          graph.listCalendarView(person.email, from.toISOString(), to.toISOString()),
+          new Promise((_, rej) => setTimeout(() => rej(new Error('M365 časový limit (8 s)')), 8000)),
+        ]);
         const holyIds = new Set(events.map((e) => e.graph_event_id).filter(Boolean));
         outlook = raw.filter((o) => !holyIds.has(o.id)).map((o) => ({
           id: o.id, source: 'outlook', title: o.subject || '(bez názvu)',

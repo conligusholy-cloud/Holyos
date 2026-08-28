@@ -6542,7 +6542,7 @@
           var scol = x.status==='completed'?'#10b981':((x.status==='cancelled'||x.status==='expired')?'#ef4444':'#eab308');
           var _cEsc = kvEsc(x.kiosk_code||'').replace(/'/g,'&#39;');
           // „Pokyny" (vč. e-mail/WhatsApp) dočasně skryty. „Vygenerovat smlouvy" předvyplní z lokality + kontaktu.
-          var editBtn = '<button class="btn btn-secondary" style="padding:4px 8px;font-size:12px;" title="Ručně doplnit/upravit fakturační údaje kupujícího (ARES autofill)" onclick="openResBuyer('+x.id+')">✏️ Údaje</button> ';
+          var editBtn = '<button class="btn btn-secondary" style="padding:4px 8px;font-size:12px;" title="Upravit termín rezervace (datum, počet dní) a fakturační údaje kupujícího" onclick="openResBuyer('+x.id+')">✏️ Upravit</button> ';
           var docsBtn = '<button class="btn btn-secondary" style="padding:4px 8px;font-size:12px;" title="Vygenerovat smlouvy předvyplněné daty lokality a kontaktu" onclick="resGenContracts('+x.id+',\''+_cEsc+'\',this)">📄 Vygenerovat smlouvy</button> ';
           var payBtns = (x.status==='reserved'||x.status==='active')
             ? '<button class="btn btn-secondary" style="padding:4px 8px;font-size:12px;" title="Odeslat e-mailem odkaz na formulář s údaji do smlouvy (dohledá firmu v ARES)" onclick="resDetailsEmail('+x.id+',this)">📝 Vyžádat údaje</button> '
@@ -6710,8 +6710,13 @@
         ov.id = 'resBuyerOv';
         ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;';
         ov.innerHTML = '<div style="background:var(--bg,#fff);color:var(--text,#111);max-width:560px;width:100%;border-radius:12px;padding:20px;max-height:90vh;overflow:auto;box-shadow:0 10px 40px rgba(0,0,0,.3);">'
-          + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;"><h3 style="margin:0;font-size:18px;">Fakturační údaje kupujícího</h3><button onclick="document.getElementById(\'resBuyerOv\').remove()" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--text2,#888);">×</button></div>'
+          + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;"><h3 style="margin:0;font-size:18px;">Úprava rezervace</h3><button onclick="document.getElementById(\'resBuyerOv\').remove()" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--text2,#888);">×</button></div>'
           + '<input type="hidden" id="rb-id">'
+          + '<div style="font-size:13px;font-weight:600;color:var(--text2);margin:2px 0 8px;">Termín rezervace</div>'
+          + '<div style="display:flex;gap:10px;"><div style="flex:1;"><label style="display:block;font-size:12px;color:var(--text2);margin-bottom:2px;">Datum rezervace</label><input type="date" id="rb-created" style="width:100%;padding:8px;border:1px solid var(--border,#ddd);border-radius:8px;box-sizing:border-box;margin-bottom:10px;"></div><div style="width:110px;"><label style="display:block;font-size:12px;color:var(--text2);margin-bottom:2px;">Počet dní</label><input type="number" min="0" id="rb-days" style="width:100%;padding:8px;border:1px solid var(--border,#ddd);border-radius:8px;box-sizing:border-box;margin-bottom:10px;"></div></div>'
+          + '<label style="display:block;font-size:12px;color:var(--text2);margin-bottom:2px;">Konec rezervace <span style="font-weight:400;">(nech prázdné = spočítá se z data + dní)</span></label><input type="date" id="rb-until" style="width:100%;padding:8px;border:1px solid var(--border,#ddd);border-radius:8px;box-sizing:border-box;margin-bottom:10px;">'
+          + '<label style="display:block;font-size:12px;color:var(--text2);margin-bottom:2px;">Dodatečná sleva na kupní cenu (%) <span style="font-weight:400;">— promítne se do smluv</span></label><input type="number" min="0" max="100" step="0.1" id="rb-disc" placeholder="0" style="width:120px;padding:8px;border:1px solid var(--border,#ddd);border-radius:8px;box-sizing:border-box;margin-bottom:14px;">'
+          + '<div style="font-size:13px;font-weight:600;color:var(--text2);margin:2px 0 8px;">Fakturační údaje kupujícího</div>'
           + '<div style="display:flex;gap:8px;align-items:end;margin-bottom:10px;"><div style="flex:1;"><label style="display:block;font-size:12px;color:var(--text2);margin-bottom:2px;">IČO</label><input id="rb-ico" style="width:100%;padding:8px;border:1px solid var(--border,#ddd);border-radius:8px;box-sizing:border-box;"></div><button class="btn" style="padding:8px 12px;" onclick="rbAres()">🔎 ARES</button></div>'
           + '<div id="rb-aresmsg" style="font-size:12px;color:var(--text2);margin-bottom:8px;"></div>'
           + '<label style="display:block;font-size:12px;color:var(--text2);margin-bottom:2px;">Název / obchodní firma</label><input id="rb-name" style="width:100%;padding:8px;border:1px solid var(--border,#ddd);border-radius:8px;box-sizing:border-box;margin-bottom:10px;">'
@@ -6723,7 +6728,12 @@
           + '</div>';
         document.body.appendChild(ov);
       }
+      var toDateVal = function(v){ if(!v) return ''; var d=new Date(v); if(isNaN(d.getTime())) return ''; return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); };
       document.getElementById('rb-id').value = id;
+      document.getElementById('rb-created').value = toDateVal(x.created_at);
+      document.getElementById('rb-days').value = (x.days!=null?x.days:'');
+      document.getElementById('rb-until').value = toDateVal(x.reserved_until);
+      document.getElementById('rb-disc').value = (x.extra_discount_pct!=null?x.extra_discount_pct:'');
       document.getElementById('rb-ico').value = x.buyer_ico||'';
       document.getElementById('rb-name').value = x.buyer_name||'';
       document.getElementById('rb-dic').value = x.buyer_dic||'';
@@ -6762,7 +6772,15 @@
         buyer_bank: document.getElementById('rb-bank').value,
         buyer_email: document.getElementById('rb-email').value
       };
+      var sched = {
+        created_at: document.getElementById('rb-created').value || null,
+        days: document.getElementById('rb-days').value,
+        reserved_until: document.getElementById('rb-until').value || null,
+        extra_discount_pct: document.getElementById('rb-disc').value
+      };
       try {
+        var rs = await fetch('/api/compounder/reservations/'+id+'/schedule', { method:'PATCH', credentials:'include', headers:{'Content-Type':'application/json'}, body: JSON.stringify(sched) });
+        if(!rs.ok) throw new Error('termín');
         var r = await fetch('/api/compounder/reservations/'+id+'/buyer', { method:'PATCH', credentials:'include', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
         if(!r.ok) throw new Error();
         var d = await r.json();
