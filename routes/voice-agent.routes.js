@@ -8,6 +8,8 @@
 
 const express = require('express');
 const router = express.Router();
+const { prisma } = require('../config/database');
+const { requireAuth } = require('../middleware/auth');
 
 const WS_URL = process.env.VOICE_RELAY_WS_URL || 'wss://app.holyos.cz/api/voice/relay';
 const TTS_PROVIDER = process.env.VOICE_TTS_PROVIDER || 'ElevenLabs';
@@ -39,11 +41,38 @@ router.post('/incoming', form, (req, res) => {
 });
 
 // POST /api/voice/status — status callback po skončení hovoru.
-// Fáze 2: dohledat VoiceCall dle CallSid, doplnit délku + shrnutí (agent.summarize)
-// a poslat push do Velína (services/push/expo-push.notifyPerson).
+// Shrnutí + uložení + push řeší WS close v services/voice/relay-ws.js
+// (tam máme kompletní přepis). Tady jen potvrdíme příjem.
 router.post('/status', form, (req, res) => {
-  // TODO Fáze 2: shrnutí + push + (infolinka) založení leadu
   res.sendStatus(204);
+});
+
+// GET /api/voice/calls — seznam odbavených hovorů (pro obrazovku Hovory ve Velíně).
+// Chráněno HolyOS JWT (requireAuth). Volá se s Bearer/cookie tokenem.
+router.get('/calls', requireAuth, async (req, res, next) => {
+  try {
+    if (!prisma.voiceCall) return res.json([]);
+    const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
+    const calls = await prisma.voiceCall.findMany({
+      orderBy: { started_at: 'desc' },
+      take: limit,
+      select: {
+        id: true,
+        from_number: true,
+        to_number: true,
+        started_at: true,
+        ended_at: true,
+        duration_sec: true,
+        caller_name: true,
+        caller_intent: true,
+        summary: true,
+        transcript: true,
+      },
+    });
+    res.json(calls);
+  } catch (err) {
+    next(err);
+  }
 });
 
 module.exports = router;

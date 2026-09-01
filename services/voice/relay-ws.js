@@ -133,9 +133,29 @@ function attach(server) {
 
     ws.on('close', async () => {
       if (!state.callSid) return;
+      const endedAt = new Date();
+      const durationSec = Math.max(0, Math.round((endedAt - state.startedAt) / 1000));
+
+      // Shrnutí (jen když volající aspoň něco řekl)
+      let summary = null;
+      let callerName = null;
+      let callerIntent = null;
+      try {
+        if (state.transcript.some((t) => t.role === 'caller')) {
+          const s = await agent.summarizeStructured(state.transcript);
+          summary = s.summary || null;
+          callerName = s.caller_name || null;
+          callerIntent = s.caller_intent || null;
+        }
+      } catch (e) {
+        console.warn('[voice] shrnutí selhalo:', e.message);
+      }
+
+      // Uložit záznam hovoru
+      let saved = null;
       try {
         if (prisma.voiceCall) {
-          await prisma.voiceCall.create({
+          saved = await prisma.voiceCall.create({
             data: {
               direction: 'inbound',
               agent_kind: 'personal',
@@ -143,8 +163,12 @@ function attach(server) {
               to_number: state.to || '',
               twilio_call_sid: state.callSid,
               started_at: state.startedAt,
-              ended_at: new Date(),
+              ended_at: endedAt,
+              duration_sec: durationSec,
               transcript: state.transcript,
+              summary,
+              caller_name: callerName,
+              caller_intent: callerIntent,
             },
           });
         } else {
@@ -153,6 +177,22 @@ function attach(server) {
       } catch (e) {
         console.warn('[voice] uložení hovoru selhalo:', e.message);
       }
+
+      // Push do Velína (kdo volal + co chtěl)
+      try {
+        const notify = require('./notify');
+        await notify.notifyCall({
+          toNumber: state.to,
+          fromNumber: state.from,
+          callerName,
+          callerIntent,
+          summary,
+          callId: saved && saved.id,
+        });
+      } catch (e) {
+        console.warn('[voice] notifikace selhala:', e.message);
+      }
+
       calls.delete(state.callSid);
     });
   });

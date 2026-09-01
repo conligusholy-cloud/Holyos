@@ -104,4 +104,47 @@ async function summarize(transcript = []) {
     .trim();
 }
 
-module.exports = { runTurn, summarize, VOICE_MODEL };
+// Strukturované shrnutí pro notifikaci: { summary, caller_name, caller_intent }.
+async function summarizeStructured(transcript = []) {
+  const text = transcript
+    .map((t) => `${t.role === 'caller' ? 'Volající' : 'Asistent'}: ${t.text}`)
+    .join('\n');
+  if (!text.trim()) return { summary: '', caller_name: null, caller_intent: null };
+
+  const client = getClient();
+  const resp = await messagesCreate(
+    client,
+    {
+      model: VOICE_MODEL,
+      max_tokens: 350,
+      temperature: 0.2,
+      system:
+        'Shrň telefonní hovor. Odpověz POUZE validním JSON bez markdownu, přesně ve tvaru ' +
+        '{"caller_name": string|null, "caller_intent": string, "summary": string}. ' +
+        'caller_name = jméno volajícího pokud zaznělo, jinak null. ' +
+        'caller_intent = krátce co volající potřeboval. summary = 1–3 věty. Vše česky.',
+      messages: [{ role: 'user', content: text }],
+    },
+    { label: 'voice-summary' }
+  );
+
+  const raw = (resp.content || [])
+    .filter((b) => b.type === 'text')
+    .map((b) => b.text)
+    .join(' ')
+    .trim();
+
+  try {
+    const jsonStr = raw.slice(raw.indexOf('{'), raw.lastIndexOf('}') + 1);
+    const o = JSON.parse(jsonStr);
+    return {
+      summary: o.summary || raw,
+      caller_name: o.caller_name || null,
+      caller_intent: o.caller_intent || null,
+    };
+  } catch (_) {
+    return { summary: raw, caller_name: null, caller_intent: null };
+  }
+}
+
+module.exports = { runTurn, summarize, summarizeStructured, VOICE_MODEL };
