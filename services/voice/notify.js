@@ -1,13 +1,23 @@
 // =============================================================================
 // HolyOS — Voice: notifikace do Velína po hovoru (Fáze 2)
 // =============================================================================
-// Po zavěšení pošle push kolegovi, kterému hovor patřil:
-//   1) Person.voice_twilio_number == volané číslo (owner), nebo
-//   2) fallback AppSetting "voice.notify_person_ids" (JSON pole Person.id).
-// Push jde přes services/push/expo-push.notifyPerson (Velín zařízení).
+// Po zavěšení založí NOTIFIKAČNÍ ZÁZNAM (zvoneček ve Velíně) + pošle push.
+// Používá createNotification z routes/notifications.routes.js, které zapíše
+// Notification (user_id) a zároveň pošle Expo push na Velín zařízení uživatele.
+// Když osoba nemá User účet, spadne na čistý push (notifyPerson).
+//
+// Příjemce: 1) Person.voice_twilio_number == volané číslo, jinak
+//           2) AppSetting "voice.notify_person_ids" (JSON pole Person.id).
 
 const { prisma } = require('../../config/database');
 const { notifyPerson } = require('../push/expo-push');
+
+let createNotification = null;
+try {
+  ({ createNotification } = require('../../routes/notifications.routes'));
+} catch (_) {
+  createNotification = null;
+}
 
 let getSetting = null;
 try {
@@ -23,7 +33,6 @@ function normNumber(n) {
 async function resolveRecipients(toNumber) {
   const ids = new Set();
 
-  // 1) Owner podle volaného čísla
   try {
     const norm = normNumber(toNumber);
     if (norm) {
@@ -37,7 +46,6 @@ async function resolveRecipients(toNumber) {
     /* ignore */
   }
 
-  // 2) Fallback: AppSetting voice.notify_person_ids
   if (!ids.size && getSetting) {
     try {
       const raw = await getSetting('voice.notify_person_ids');
@@ -70,19 +78,35 @@ async function notifyCall({ toNumber, fromNumber, callerName, callerIntent, summ
     return;
   }
 
-  const who = callerName || fromNumber || 'Neznámé číslo';
-  const title = `📞 Zmeškaný hovor — ${who}`;
-  const body = (callerIntent || summary || 'AI odbavila hovor.').slice(0, 180);
+  const from = fromNumber || 'neznámé číslo';
+  const namePart = callerName ? ` (${callerName})` : '';
+  const reason = callerIntent || summary || 'AI odbavila hovor.';
+  const title = '📞 Zmeškaný hovor';
+  const body = `Od ${from}${namePart}: ${reason}`.slice(0, 250);
+  const meta = { kind: 'voice_call', callId: callId || null, from, callerName: callerName || null };
+
+  // Načti user_id pro každou osobu (kvůli zvonečku)
+  const people = await prisma.person.findMany({
+    where: { id: { in: recipients } },
+    select: { id: true, user_id: true },
+  });
+  const userByPerson = new Map(people.map((p) => [p.id, p.user_id]));
 
   await Promise.all(
-    recipients.map((pid) =>
-      notifyPerson(prisma, pid, {
-        title,
-        body,
-        data: { type: 'voice_call', callId: callId || null },
-        sound: 'default',
-      }).catch((e) => console.warn('[voice] push selhal pro person', pid, e.message))
-    )
+    recipients.map(async (pid) => {
+      const userId = userByPerson.get(pid);
+      try {
+        if (userId && createNotification) {
+          // Zapíše Notification (zvoneček) i pošle push
+          await createNotification({ userId, type: 'system', title, body, meta });
+        } else {
+          // Fallback: osoba bez účtu → jen push
+          await notifyPerson(prisma, pid, { title, body, data: meta, sound: 'default' });
+        }
+      } catch (e) {
+        console.warn('[voice] notifikace selhala pro person', pid, e.message);
+      }
+    })
   );
 }
 

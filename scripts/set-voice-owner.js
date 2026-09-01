@@ -27,9 +27,14 @@ async function main() {
   }
   const norm = normNumber(number);
 
-  const person = await prisma.person.findFirst({ where: { username } });
+  // Person hledáme primárně přes navázaný User (username je na účtu),
+  // fallback na Person.username.
+  const user = await prisma.user.findUnique({ where: { username }, include: { person: true } });
+  const person = (user && user.person) || (await prisma.person.findFirst({ where: { username } }));
   if (!person) {
-    console.error(`❌ Nenašel jsem Person s username="${username}".`);
+    console.error(
+      `❌ Nenašel jsem Person pro username="${username}" (ani přes účet, ani přes Person.username).`
+    );
     process.exit(1);
   }
 
