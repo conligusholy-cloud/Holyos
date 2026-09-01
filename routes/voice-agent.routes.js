@@ -33,12 +33,22 @@ function relayUrl(extra) {
   return url;
 }
 
+// XML-escape hodnoty do atributu (hlavně & → &amp;, jinak „Document parse failure").
+function xmlAttr(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
 function twimlConnect(wsUrl) {
+  const u = xmlAttr(wsUrl);
   return (
     '<?xml version="1.0" encoding="UTF-8"?>\n' +
     '<Response>\n' +
     '  <Connect>\n' +
-    `    <ConversationRelay url="${wsUrl}" language="cs-CZ" ` +
+    `    <ConversationRelay url="${u}" language="cs-CZ" ` +
     `ttsProvider="${TTS_PROVIDER}" transcriptionProvider="${STT_PROVIDER}" />\n` +
     '  </Connect>\n' +
     '</Response>'
