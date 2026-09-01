@@ -2247,6 +2247,18 @@ const patchSchema = z.object({
   ecoNoPrice: z.boolean().optional(),
 });
 
+// POST /leads/:id/hot — přepnout příznak „Zajímavý kontakt" (horký kontakt, není stav).
+router.post('/leads/:id(\\d+)/hot', requireAuth, async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    const lead = await prisma.compounderLead.findUnique({ where: { id }, select: { id: true, is_hot: true } });
+    if (!lead) return res.status(404).json({ error: 'Lead nenalezen' });
+    const hot = (req.body && req.body.hot !== undefined) ? !!req.body.hot : !lead.is_hot;
+    const upd = await prisma.compounderLead.update({ where: { id }, data: { is_hot: hot }, select: { id: true, is_hot: true } });
+    res.json({ ok: true, is_hot: upd.is_hot });
+  } catch (err) { next(err); }
+});
+
 router.patch('/leads/:id', requireAuth, async (req, res, next) => {
   try {
     const id = Number(req.params.id);

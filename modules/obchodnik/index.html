@@ -288,7 +288,7 @@
   var CONTRACT_TYPES = [['rezervacni','Rezervační'],['kupni','Kupní'],['servisni','Servisní']];
   var CONTRACT_STATUS = { koncept:'Koncept', odeslano:'Odesláno', vyplneno:'Vyplněno', k_podpisu:'Čeká na náš podpis', podepsano:'Podepsáno' };
   var SPEECH_OK = !!(window.SpeechRecognition || window.webkitSpeechRecognition);
-  var state = { leads:[], filter:'', search:'', openId:null, typeFilter:'all', leadStatusFilter:'', calledTodayOnly:false };
+  var state = { leads:[], filter:'', search:'', openId:null, typeFilter:'all', leadStatusFilter:'', calledTodayOnly:false, hotOnly:false };
 
   function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
   function langCode(l){ return (l||'').toLowerCase().split(/[-_]/)[0]; }
@@ -989,6 +989,22 @@
   window.setLeadStatus = setLeadStatus;
   function setCalledTodayOnly(v){ state.calledTodayOnly = !!v; render(); }
   window.setCalledTodayOnly = setCalledTodayOnly;
+  function setHotOnly(v){ state.hotOnly = !!v; render(); }
+  window.setHotOnly = setHotOnly;
+  // Přepnout „Zajímavý kontakt" (horký kontakt) — okamžitě aktualizuje UI.
+  async function obToggleHot(id, btn){
+    var l = (state.leads||[]).find(function(x){ return x.id===id; });
+    var next = l ? !l.is_hot : true;
+    if (btn) btn.disabled = true;
+    try {
+      var r = await api('/leads/'+id+'/hot', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ hot: next }) });
+      var j = await r.json().catch(function(){return {};});
+      if (l) l.is_hot = (j && typeof j.is_hot==='boolean') ? j.is_hot : next;
+    } catch(e){ if (l) l.is_hot = next; }
+    if (btn) btn.disabled = false;
+    render();
+  }
+  window.obToggleHot = obToggleHot;
   // Zaznamená kliknutí na „Volat" (poslední pokus o hovor) — tel: odkaz proběhne normálně.
   async function markCalled(id){
     var lead = state.leads.find(function(x){ return x.id===id; });
@@ -1084,7 +1100,9 @@
       var f = state.leadStatusFilter || '';
       filtered = f ? leads.filter(function(l){ return (l.status||'new') === f; }) : leads;
       if (state.calledTodayOnly) filtered = filtered.filter(function(l){ return l.last_called_at && isTodayD(new Date(l.last_called_at)); });
+      if (state.hotOnly) filtered = filtered.filter(function(l){ return !!l.is_hot; });
       var calledTodayCount = leads.filter(function(l){ return l.last_called_at && isTodayD(new Date(l.last_called_at)); }).length;
+      var hotCount = leads.filter(function(l){ return !!l.is_hot; }).length;
       var opts = '<option value="">Všechny stavy ('+leads.length+')</option>' +
         Object.keys(STATUS).map(function(k){
           var n = leads.filter(function(l){ return (l.status||'new') === k; }).length;
@@ -1093,7 +1111,8 @@
       head = '<div style="display:flex;align-items:center;gap:8px;margin:14px 12px 8px;flex-wrap:wrap">' +
         '<span style="font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">🌐 Compounder kontakty</span>' +
         '<span style="background:var(--primary);color:#04121e;border-radius:10px;padding:1px 8px;font-size:12px">'+leads.length+'</span>' +
-        '<button onclick="setCalledTodayOnly('+(!state.calledTodayOnly)+')" title="Zobrazit jen dnes volané" style="margin-left:auto;font-size:12px;padding:5px 11px;border-radius:999px;cursor:pointer;border:1px solid '+(state.calledTodayOnly?'#a78bfa':'var(--line)')+';background:'+(state.calledTodayOnly?'rgba(167,139,250,0.18)':'transparent')+';color:'+(state.calledTodayOnly?'#a78bfa':'var(--muted)')+'">📞 Dnes volané'+(calledTodayCount?' ('+calledTodayCount+')':'')+'</button>' +
+        '<button onclick="setHotOnly('+(!state.hotOnly)+')" title="Zobrazit jen zajímavé kontakty" style="margin-left:auto;font-size:12px;padding:5px 11px;border-radius:999px;cursor:pointer;border:1px solid '+(state.hotOnly?'#eab308':'var(--line)')+';background:'+(state.hotOnly?'rgba(234,179,8,0.18)':'transparent')+';color:'+(state.hotOnly?'#eab308':'var(--muted)')+'">⭐ Zajímavé'+(hotCount?' ('+hotCount+')':'')+'</button>' +
+        '<button onclick="setCalledTodayOnly('+(!state.calledTodayOnly)+')" title="Zobrazit jen dnes volané" style="font-size:12px;padding:5px 11px;border-radius:999px;cursor:pointer;border:1px solid '+(state.calledTodayOnly?'#a78bfa':'var(--line)')+';background:'+(state.calledTodayOnly?'rgba(167,139,250,0.18)':'transparent')+';color:'+(state.calledTodayOnly?'#a78bfa':'var(--muted)')+'">📞 Dnes volané'+(calledTodayCount?' ('+calledTodayCount+')':'')+'</button>' +
         '<select onchange="setLeadStatus(this.value)">'+opts+'</select>' +
         '</div>';
     }
@@ -1181,7 +1200,7 @@
     return '<div class="card'+(open?' open':'')+(laToday?' today':'')+'" id="card-'+l.id+'">' +
       '<div class="card-main" onclick="toggle('+l.id+')">' +
         '<span class="dot" style="background:'+st.c+'"></span>' +
-        '<div class="card-body"><div class="card-name">'+esc(l.name||l.email)+blBadge+(l.extra_offers?' <span title="Individuální nabídka lokalit">🎯</span>':'')+'</div>'+invHtml+'<div class="card-sub">'+(subHtml||'—')+'</div>'+(laToday?'<div style="font-size:11px;color:#22c55e;margin-top:2px">Poslední aktivita: '+fmtD(laDate)+'</div>':'')+obOverdueBadge(l)+calledBadge+obNextEventBadge(l.id)+'</div>' +
+        '<div class="card-body"><div class="card-name">'+(l.is_hot?'⭐ ':'')+esc(l.name||l.email)+blBadge+(l.extra_offers?' <span title="Individuální nabídka lokalit">🎯</span>':'')+'</div>'+invHtml+'<div class="card-sub">'+(subHtml||'—')+'</div>'+(laToday?'<div style="font-size:11px;color:#22c55e;margin-top:2px">Poslední aktivita: '+fmtD(laDate)+'</div>':'')+obOverdueBadge(l)+calledBadge+obNextEventBadge(l.id)+'</div>' +
         '<span class="badge" style="background:'+st.c+'22;color:'+st.c+';white-space:normal;text-align:center;line-height:1.2">'+st.l+((l.status==='dosledovani' && l.discount && l.discount.endsAt)?('<br><span style="font-weight:400;font-size:.85em;opacity:.85">do '+new Date(l.discount.endsAt).toLocaleDateString('cs-CZ')+'</span>'):'')+'</span>' +
         '<span class="gear" onclick="event.stopPropagation();openEdit('+l.id+')" title="Upravit údaje kontaktu">⚙️</span>' +
         '<span class="chev">▸</span>' +
@@ -1193,6 +1212,7 @@
           (l.phone ? '<a href="sms:'+esc(telClean)+'">📩 SMS</a>' : '') +
           (l.email ? '<a href="mailto:'+esc(l.email)+'">✉️ E-mail</a>' : '') +
         '</div>' +
+        '<div class="field" style="margin-top:8px"><button class="btn" id="hot-'+l.id+'" style="width:100%;font-size:15px;'+(l.is_hot?'background:#eab308;color:#1a1a1a;font-weight:800':'background:transparent;border:1px solid #eab308;color:#eab308;font-weight:700')+'" onclick="obToggleHot('+l.id+',this)">'+(l.is_hot?'⭐ Zajímavý kontakt ✓':'⭐ Označit jako zajímavý kontakt')+'</button></div>' +
         '<div class="field" style="margin-top:8px"><button class="btn btn-g" style="width:100%" onclick="meetingFromLead('+l.id+')">📅 Naplánovat schůzku</button></div>' +
         '<div class="field" style="margin-top:6px"><button class="btn btn-g" style="width:100%" onclick="callFromLead('+l.id+')">📞 Naplánovat hovor</button></div>' +
         '<div class="field" style="margin-top:6px"><button class="btn btn-p" style="width:100%" onclick="obPromisePrompt('+l.id+')">✅ Slíbený krok (co jsi slíbil + termín)</button></div>' +
