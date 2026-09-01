@@ -1,23 +1,15 @@
 // =============================================================================
 // HolyOS — Voice: notifikace do Velína po hovoru (Fáze 2)
 // =============================================================================
-// Po zavěšení založí NOTIFIKAČNÍ ZÁZNAM (zvoneček ve Velíně) + pošle push.
-// Používá createNotification z routes/notifications.routes.js, které zapíše
-// Notification (user_id) a zároveň pošle Expo push na Velín zařízení uživatele.
-// Když osoba nemá User účet, spadne na čistý push (notifyPerson).
+// Po zavěšení: 1) pošle Expo push na Velín (notifyPerson), 2) zapíše záznam
+// do zvonečku (prisma.notification.create) pro uživatele, aby šel hovor najít
+// zpětně v tabu Notifikace. Obě věci nezávisle (push nezávisí na zápisu).
 //
 // Příjemce: 1) Person.voice_twilio_number == volané číslo, jinak
 //           2) AppSetting "voice.notify_person_ids" (JSON pole Person.id).
 
 const { prisma } = require('../../config/database');
 const { notifyPerson } = require('../push/expo-push');
-
-let createNotification = null;
-try {
-  ({ createNotification } = require('../../routes/notifications.routes'));
-} catch (_) {
-  createNotification = null;
-}
 
 let getSetting = null;
 try {
@@ -95,16 +87,23 @@ async function notifyCall({ toNumber, fromNumber, callerName, callerIntent, summ
   await Promise.all(
     recipients.map(async (pid) => {
       const userId = userByPerson.get(pid);
+
+      // 1) Push na Velín zařízení (ověřeně funguje)
       try {
-        if (userId && createNotification) {
-          // Zapíše Notification (zvoneček) i pošle push
-          await createNotification({ userId, type: 'system', title, body, meta });
-        } else {
-          // Fallback: osoba bez účtu → jen push
-          await notifyPerson(prisma, pid, { title, body, data: meta, sound: 'default' });
-        }
+        await notifyPerson(prisma, pid, { title, body, data: meta, sound: 'default' });
       } catch (e) {
-        console.warn('[voice] notifikace selhala pro person', pid, e.message);
+        console.warn('[voice] push selhal pro person', pid, e.message);
+      }
+
+      // 2) Záznam do zvonečku (Notification) — aby šel hovor najít zpětně
+      if (userId) {
+        try {
+          await prisma.notification.create({
+            data: { user_id: userId, type: 'system', title, body, meta },
+          });
+        } catch (e) {
+          console.warn('[voice] zápis notifikace selhal pro user', userId, e.message);
+        }
       }
     })
   );
