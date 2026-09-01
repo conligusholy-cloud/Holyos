@@ -1,42 +1,48 @@
 // =============================================================================
 // HolyOS — Voice: WebSocket handler pro Twilio ConversationRelay
 // =============================================================================
-// Navěsí se na existující HTTP server v app.js:
+// Navěsí se na HTTP server v app.js:
 //   const server = http.createServer(app);
 //   require('./services/voice/relay-ws').attach(server);
 //
-// ConversationRelay posílá přes WS zprávy typu:
-//   setup     — metadata hovoru (callSid, from, to)
-//   prompt    — přepsaná řeč volajícího (voicePrompt)
-//   interrupt — volající skočil do řeči
-//   dtmf/error
-// Zpět posíláme:
-//   { type: 'text', token: '<co říct>', last: true }
+// Podporuje dva režimy (podle query ?target=... v WS url):
+//   - inbound  (recepční): volající se dovolá, AI se ptá kdo volá a co chce
+//   - outbound (kampaň):   AI volá leadovi a vede rozhovor podle scénáře kampaně
 //
-// POZOR: perzistence do prisma.voiceCall je best-effort — model existuje až
-// po migraci (Fáze 1, úkol „Prisma model VoiceCall + migrace"). Do té doby se
-// hovor jen zaloguje. Tento soubor se NIKDE neimportuje, dokud se nenapojí v app.js.
+// ConversationRelay zprávy: setup / prompt / interrupt. Zpět: { type:'text', token, last }.
 
 const { WebSocketServer } = require('ws');
 const { prisma } = require('../../config/database');
 const agent = require('./agent');
 
+let getSetting = null;
+try {
+  ({ getSetting } = require('../settings'));
+} catch (_) {
+  getSetting = null;
+}
+
 const WS_PATH = process.env.VOICE_RELAY_WS_PATH || '/api/voice/relay';
-// Sdílené tajemství proti zneužití otevřeného WS (jinak by kdokoli mohl pálit
-// Claude tokeny). TwiML v routeru přidává ?key=<secret> do WS url.
 const RELAY_SECRET = process.env.VOICE_RELAY_SECRET || '';
 
-// Aktivní hovory v paměti (callSid → stav). Pro produkci s více instancemi
-// by stav patřil do sdíleného úložiště; pro 1 instanci na Railway stačí Map.
 const calls = new Map();
 
-function personalSystem(ownerName) {
+function personalSystem() {
   return (
-    'Jsi telefonní asistentka. ' +
-    (ownerName ? `Zastupuješ: ${ownerName}. ` : '') +
-    'Mluvíš česky, stručně a mile. Tvým úkolem je zjistit, KDO volá a CO potřebuje. ' +
-    'Kladeš jednu krátkou otázku po druhé. Až máš jméno i důvod hovoru, poděkuj, ' +
-    'potvrď že předáš vzkaz, a rozluč se. Nevymýšlej si informace.'
+    'Jsi telefonní asistentka firmy Best Series. Mluvíš česky, stručně a mile. ' +
+    'Tvým úkolem je zjistit, KDO volá a CO potřebuje. Kladeš jednu krátkou otázku po druhé. ' +
+    'Až máš jméno i důvod hovoru, poděkuj, potvrď že předáš vzkaz, a rozluč se. Nevymýšlej si informace.'
+  );
+}
+
+function outboundSystem(script) {
+  return (
+    'Jsi telefonní obchodní asistent/ka firmy Best Series. VOLÁŠ zákazníkovi. ' +
+    'Mluvíš česky, mile a stručně, kladeš jednu otázku po druhé a nasloucháš. ' +
+    (script
+      ? 'Scénář hovoru, kterým se řiď: ' + script
+      : 'Představ se za Best Series, zjisti zájem o prádlomaty a pokus se domluvit další krok (schůzku nebo zaslání informací).') +
+    ' Buď přirozený/á, respektuj když člověk nemá zájem, na konci poděkuj a rozluč se.'
   );
 }
 
@@ -44,32 +50,31 @@ function send(ws, obj) {
   try {
     ws.send(JSON.stringify(obj));
   } catch (_) {
-    /* socket už zavřený */
+    /* socket zavřený */
   }
 }
 
 function attach(server) {
   const wss = new WebSocketServer({ server, path: WS_PATH });
 
-  wss.on('connection', (ws, req) => {
-    // Ověření sdíleného tajemství z query (?key=...). Když je secret nastavený
-    // a nesedí, spojení hned zavřeme.
-    if (RELAY_SECRET) {
-      let key = null;
-      try {
-        key = new URL(req.url, 'http://localhost').searchParams.get('key');
-      } catch (_) {
-        key = null;
-      }
-      if (key !== RELAY_SECRET) {
-        try {
-          ws.close(1008, 'unauthorized');
-        } catch (_) {
-          /* noop */
-        }
-        return;
-      }
+  wss.on('connection', async (ws, req) => {
+    let q = {};
+    try {
+      q = Object.fromEntries(new URL(req.url, 'http://localhost').searchParams);
+    } catch (_) {
+      q = {};
     }
+    if (RELAY_SECRET && q.key !== RELAY_SECRET) {
+      try {
+        ws.close(1008, 'unauthorized');
+      } catch (_) {
+        /* noop */
+      }
+      return;
+    }
+
+    const targetId = q.target || null;
+    const mode = targetId ? 'outbound' : 'inbound';
 
     const state = {
       callSid: null,
@@ -78,7 +83,39 @@ function attach(server) {
       transcript: [],
       history: [],
       startedAt: new Date(),
+      mode,
+      targetId,
+      target: null,
+      campaign: null,
+      system: mode === 'outbound' ? outboundSystem(null) : personalSystem(),
     };
+
+    // Outbound: načti cíl + kampaň a nastav scénář
+    if (mode === 'outbound' && targetId) {
+      try {
+        const t = await prisma.voiceCampaignTarget.findUnique({
+          where: { id: targetId },
+          include: { campaign: true },
+        });
+        if (t) {
+          state.target = t;
+          state.campaign = t.campaign;
+          state.system = outboundSystem(t.campaign && t.campaign.script);
+        }
+      } catch (e) {
+        console.warn('[voice] outbound target load selhal:', e.message);
+      }
+    }
+
+    // Inbound: scénář recepční z nastavení (voice.inbound_prompt), jinak default
+    if (mode === 'inbound' && getSetting) {
+      try {
+        const p = await getSetting('voice.inbound_prompt');
+        if (p && String(p).trim()) state.system = String(p);
+      } catch (_) {
+        /* default */
+      }
+    }
 
     ws.on('message', async (raw) => {
       let msg;
@@ -93,12 +130,34 @@ function attach(server) {
         state.from = msg.from || null;
         state.to = msg.to || null;
         if (state.callSid) calls.set(state.callSid, state);
-        send(ws, {
-          type: 'text',
-          token:
-            'Dobrý den, dovolali jste se na asistenta. Hovor obsluhuje AI a je nahráván. Jak vám můžu pomoct?',
-          last: true,
-        });
+
+        if (mode === 'outbound') {
+          // AI zahájí hovor sama (volaný právě zvedl)
+          try {
+            const { text, messages } = await agent.runTurn({
+              system: state.system,
+              history: [],
+              userText: '(Hovor byl spojen, druhá strana zvedla. Zahaj rozhovor krátkým pozdravem a představením podle scénáře.)',
+              maxTokens: 200,
+            });
+            state.history = messages;
+            state.transcript.push({ role: 'agent', text, ts: Date.now() });
+            send(ws, { type: 'text', token: text, last: true });
+          } catch (e) {
+            send(ws, {
+              type: 'text',
+              token: 'Dobrý den, volám z firmy Best Series. Máte chviličku?',
+              last: true,
+            });
+          }
+        } else {
+          send(ws, {
+            type: 'text',
+            token:
+              'Dobrý den, dovolali jste se na asistenta. Hovor obsluhuje AI a je nahráván. Jak vám můžu pomoct?',
+            last: true,
+          });
+        }
         return;
       }
 
@@ -108,10 +167,10 @@ function attach(server) {
         state.transcript.push({ role: 'caller', text: userText, ts: Date.now() });
         try {
           const { text, messages } = await agent.runTurn({
-            system: personalSystem(null),
+            system: state.system,
             history: state.history,
             userText,
-            toolset: null, // MVP osobní recepční — bez firemních dat
+            toolset: null,
             maxTokens: 300,
           });
           state.history = messages;
@@ -121,22 +180,19 @@ function attach(server) {
           console.warn('[voice] runTurn selhal:', e.message);
           send(ws, {
             type: 'text',
-            token: 'Omlouvám se, teď se mi to nepodařilo. Zkuste to prosím ještě jednou.',
+            token: 'Omlouvám se, můžete to prosím zopakovat?',
             last: true,
           });
         }
         return;
       }
-
-      // interrupt / dtmf / error — pro MVP neřešíme
     });
 
     ws.on('close', async () => {
-      if (!state.callSid) return;
+      if (!state.callSid && mode !== 'outbound') return;
       const endedAt = new Date();
       const durationSec = Math.max(0, Math.round((endedAt - state.startedAt) / 1000));
 
-      // Shrnutí (jen když volající aspoň něco řekl)
       let summary = null;
       let callerName = null;
       let callerIntent = null;
@@ -151,17 +207,16 @@ function attach(server) {
         console.warn('[voice] shrnutí selhalo:', e.message);
       }
 
-      // Uložit záznam hovoru
       let saved = null;
       try {
         if (prisma.voiceCall) {
           saved = await prisma.voiceCall.create({
             data: {
-              direction: 'inbound',
-              agent_kind: 'personal',
+              direction: mode,
+              agent_kind: mode === 'outbound' ? 'campaign' : 'personal',
               from_number: state.from || '',
               to_number: state.to || '',
-              twilio_call_sid: state.callSid,
+              twilio_call_sid: state.callSid || 'local-' + Date.now(),
               started_at: state.startedAt,
               ended_at: endedAt,
               duration_sec: durationSec,
@@ -169,31 +224,46 @@ function attach(server) {
               summary,
               caller_name: callerName,
               caller_intent: callerIntent,
+              campaign_target_id: state.targetId || null,
             },
           });
-        } else {
-          console.log('[voice] hovor', state.callSid, '— model VoiceCall zatím není (čeká migrace)');
         }
       } catch (e) {
         console.warn('[voice] uložení hovoru selhalo:', e.message);
       }
 
-      // Push do Velína (kdo volal + co chtěl)
-      try {
-        const notify = require('./notify');
-        await notify.notifyCall({
-          toNumber: state.to,
-          fromNumber: state.from,
-          callerName,
-          callerIntent,
-          summary,
-          callId: saved && saved.id,
-        });
-      } catch (e) {
-        console.warn('[voice] notifikace selhala:', e.message);
+      if (mode === 'outbound' && state.target) {
+        // Aktualizuj cíl kampaně
+        try {
+          await prisma.voiceCampaignTarget.update({
+            where: { id: state.target.id },
+            data: {
+              status: 'done',
+              result_summary: summary || callerIntent || null,
+              voice_call_id: saved && saved.id,
+            },
+          });
+        } catch (e) {
+          console.warn('[voice] update cíle kampaně selhal:', e.message);
+        }
+      } else {
+        // Inbound: push do Velína
+        try {
+          const notify = require('./notify');
+          await notify.notifyCall({
+            toNumber: state.to,
+            fromNumber: state.from,
+            callerName,
+            callerIntent,
+            summary,
+            callId: saved && saved.id,
+          });
+        } catch (e) {
+          console.warn('[voice] notifikace selhala:', e.message);
+        }
       }
 
-      calls.delete(state.callSid);
+      if (state.callSid) calls.delete(state.callSid);
     });
   });
 

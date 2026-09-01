@@ -305,6 +305,7 @@
       <button type="button" class="tab-btn" data-tab="externisti" onclick="switchTab('externisti')">🧑‍💼 Externí obchodníci</button>
       <button type="button" class="tab-btn" data-tab="blacklist" onclick="switchTab('blacklist')">🚫 Black list</button>
       <button type="button" class="tab-btn" data-tab="bankovni-plan" onclick="switchTab('bankovni-plan')">🏦 Bankovní plán</button>
+      <button type="button" class="tab-btn" data-tab="ai-asistent" onclick="switchTab('ai-asistent')">📞 AI telefonní asistent</button>
     </div>
 
     <!-- TAB: Compounding — hodnota lokalit prádlomatů ze SIS API -->
@@ -393,6 +394,42 @@
     <!-- TAB: Bankovní Business Plan (vložený modul přes iframe) -->
     <div id="tab-bankovni-plan" style="display:none;">
       <iframe id="bp-frame" title="Bankovní Business Plan" style="width:100%; border:0; min-height:calc(100vh - 220px); display:block;"></iframe>
+    </div>
+
+    <!-- TAB: AI telefonní asistent -->
+    <div id="tab-ai-asistent" style="display:none; padding:20px 24px 24px;">
+      <div style="display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap;">
+        <button type="button" class="btn" data-aisub="calls" onclick="aiSub('calls')" style="background:#eab308;color:#0e1a22;font-weight:700;">📞 Záznamy hovorů</button>
+        <button type="button" class="btn" data-aisub="inbound" onclick="aiSub('inbound')">⚙️ Příchozí recepční</button>
+        <button type="button" class="btn" data-aisub="outbound" onclick="aiSub('outbound')">📢 Odchozí obvolávání</button>
+      </div>
+
+      <!-- Sub: Záznamy hovorů -->
+      <div id="ai-calls">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+          <h3 style="margin:0;font-size:16px;">Záznamy hovorů</h3>
+          <button class="btn" onclick="aiLoadCalls()">↻ Obnovit</button>
+        </div>
+        <div id="ai-calls-body" style="color:var(--text2);">Načítám…</div>
+      </div>
+
+      <!-- Sub: Příchozí recepční -->
+      <div id="ai-inbound" style="display:none;max-width:760px;">
+        <h3 style="margin:0 0 12px;font-size:16px;">Nastavení příchozí recepční</h3>
+        <label style="display:block;font-size:12px;color:var(--text2);margin-bottom:4px;">Scénář / instrukce pro AI (co má zjistit, jak se chovat)</label>
+        <textarea id="ai-inbound-prompt" rows="6" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text);font-size:13px;" placeholder="Např. Jsi asistentka Best Series, zjisti kdo volá a co potřebuje…"></textarea>
+        <label style="display:block;font-size:12px;color:var(--text2);margin:12px 0 4px;">Komu chodí notifikace do Velína (Person ID, oddělené čárkou)</label>
+        <input id="ai-inbound-notify" type="text" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text);font-size:13px;" placeholder="např. 1">
+        <label style="display:block;font-size:12px;color:var(--text2);margin:12px 0 4px;">Výchozí odchozí číslo (Twilio, pro kampaně)</label>
+        <input id="ai-inbound-from" type="text" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text);font-size:13px;" placeholder="+420910926010">
+        <div style="margin-top:14px;"><button class="btn" onclick="aiSaveConfig()" style="background:#eab308;color:#0e1a22;font-weight:700;">💾 Uložit nastavení</button> <span id="ai-inbound-msg" style="margin-left:10px;font-size:13px;color:var(--text2);"></span></div>
+      </div>
+
+      <!-- Sub: Odchozí obvolávání -->
+      <div id="ai-outbound" style="display:none;">
+        <div id="ai-outbound-list"></div>
+        <div id="ai-outbound-detail" style="display:none;margin-top:16px;"></div>
+      </div>
     </div>
 
     <!-- TAB: Rezervace lokalit -->
@@ -4723,8 +4760,175 @@
       } catch(e) { alert('Chyba mazání leadu.'); }
     }
 
+    // ============================================================
+    // AI TELEFONNÍ ASISTENT — tab "ai-asistent"
+    // ============================================================
+    var aiState = { sub: 'calls', loadedCampaigns: false };
+    function aiEsc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+    async function aiApi(path, opts){
+      opts = opts || {};
+      var r = await fetch('/api/voice'+path, Object.assign({ credentials:'include' }, opts));
+      if(!r.ok){ var t=''; try{ t=(await r.json()).error||''; }catch(e){} throw new Error(t||('HTTP '+r.status)); }
+      if(r.status===204) return null;
+      return r.json();
+    }
+    function aiFmtDur(s){ s=Number(s)||0; var m=Math.floor(s/60), ss=s%60; return m+':'+(ss<10?'0':'')+ss; }
+    function aiFmtDate(iso){ if(!iso) return ''; var d=new Date(iso); return d.toLocaleString('cs-CZ',{day:'numeric',month:'numeric',hour:'2-digit',minute:'2-digit'}); }
+    var AI_STATUS = { draft:'Koncept', running:'Běží', paused:'Pozastaveno', done:'Hotovo', pending:'Čeká', calling:'Volá se', failed:'Chyba', no_answer:'Bez odpovědi' };
+
+    function loadAiAssistant(){ aiSub(aiState.sub || 'calls'); }
+    function aiSub(name){
+      aiState.sub = name;
+      ['calls','inbound','outbound'].forEach(function(s){
+        var el=document.getElementById('ai-'+s); if(el) el.style.display=(s===name)?'':'none';
+        var b=document.querySelector('.btn[data-aisub="'+s+'"]');
+        if(b){ b.style.background=(s===name)?'#eab308':''; b.style.color=(s===name)?'#0e1a22':''; b.style.fontWeight=(s===name)?'700':''; }
+      });
+      if(name==='calls') aiLoadCalls();
+      if(name==='inbound') aiLoadConfig();
+      if(name==='outbound') aiLoadCampaigns();
+    }
+
+    // ── Záznamy hovorů ──
+    async function aiLoadCalls(){
+      var body=document.getElementById('ai-calls-body');
+      body.innerHTML='<div style="color:var(--text2);">Načítám…</div>';
+      try{
+        var rows=await aiApi('/calls?limit=100');
+        if(!rows.length){ body.innerHTML='<div style="color:var(--text2);padding:10px;">Zatím žádné hovory.</div>'; return; }
+        var html='<table class="data-table"><thead><tr><th>Kdy</th><th>Směr</th><th>Číslo</th><th>Kdo</th><th>Co chtěl</th><th>Délka</th></tr></thead><tbody>';
+        rows.forEach(function(c){
+          var dir = c.direction==='outbound' ? '📢 odchozí' : '📞 příchozí';
+          var num = c.direction==='outbound' ? c.to_number : c.from_number;
+          html+='<tr onclick="aiToggleCall(\''+c.id+'\')" style="cursor:pointer;"><td>'+aiEsc(aiFmtDate(c.started_at))+'</td><td>'+dir+'</td><td>'+aiEsc(num||'')+'</td><td>'+aiEsc(c.caller_name||'—')+'</td><td>'+aiEsc(c.caller_intent||c.summary||'—')+'</td><td>'+aiFmtDur(c.duration_sec)+'</td></tr>';
+          html+='<tr id="ai-call-'+c.id+'" style="display:none;"><td colspan="6" style="background:var(--surface2);padding:14px;">'+aiCallDetail(c)+'</td></tr>';
+        });
+        html+='</tbody></table>';
+        body.innerHTML=html;
+      }catch(e){ body.innerHTML='<div style="color:#ef4444;padding:10px;">Chyba: '+aiEsc(e.message)+'</div>'; }
+    }
+    function aiCallDetail(c){
+      var t=(c.transcript||[]).map(function(x){ var who=x.role==='agent'?'🤖 AI':'🧑 Volající'; return '<div style="margin:3px 0;"><b>'+who+':</b> '+aiEsc(x.text)+'</div>'; }).join('');
+      var s = c.summary ? '<div style="margin-bottom:10px;"><b>Shrnutí:</b> '+aiEsc(c.summary)+'</div>' : '';
+      return s + '<div style="font-size:13px;">'+(t||'<span style="color:var(--text2);">Bez přepisu.</span>')+'</div>';
+    }
+    function aiToggleCall(id){ var r=document.getElementById('ai-call-'+id); if(r) r.style.display=(r.style.display==='none')?'':'none'; }
+
+    // ── Příchozí recepční (config) ──
+    async function aiLoadConfig(){
+      try{
+        var c=await aiApi('/config');
+        document.getElementById('ai-inbound-prompt').value=c.inbound_prompt||'';
+        document.getElementById('ai-inbound-notify').value=(c.notify_person_ids||[]).join(',');
+        document.getElementById('ai-inbound-from').value=c.default_from||'';
+      }catch(e){ document.getElementById('ai-inbound-msg').textContent='Chyba načtení: '+e.message; }
+    }
+    async function aiSaveConfig(){
+      var msg=document.getElementById('ai-inbound-msg'); msg.textContent='Ukládám…';
+      var notify=(document.getElementById('ai-inbound-notify').value||'').split(',').map(function(x){return parseInt(x,10);}).filter(Boolean);
+      try{
+        await aiApi('/config',{ method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({
+          inbound_prompt: document.getElementById('ai-inbound-prompt').value,
+          notify_person_ids: notify,
+          default_from: document.getElementById('ai-inbound-from').value.trim()
+        })});
+        msg.textContent='✅ Uloženo';
+      }catch(e){ msg.textContent='Chyba: '+e.message; }
+    }
+
+    // ── Odchozí kampaně ──
+    async function aiLoadCampaigns(){
+      var wrap=document.getElementById('ai-outbound-list');
+      document.getElementById('ai-outbound-detail').style.display='none';
+      wrap.style.display='';
+      wrap.innerHTML='<div style="color:var(--text2);">Načítám…</div>';
+      try{
+        var camps=await aiApi('/campaigns');
+        var html='<div style="background:#3a2a0a;border:1px solid #eab30855;border-radius:8px;padding:10px 12px;margin-bottom:14px;font-size:12px;color:#eab308;">⚠️ Automatické obvolávání smí probíhat jen u kontaktů se souhlasem (GDPR / ePrivacy). AI se představí a respektuje odmítnutí.</div>';
+        html+='<div style="border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:16px;">';
+        html+='<h3 style="margin:0 0 10px;font-size:15px;">Nová kampaň</h3>';
+        html+='<input id="ai-c-name" placeholder="Název kampaně" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:9px;color:var(--text);font-size:13px;margin-bottom:8px;">';
+        html+='<textarea id="ai-c-script" rows="4" placeholder="Scénář hovoru — co má AI říct a zjistit" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:9px;color:var(--text);font-size:13px;margin-bottom:8px;"></textarea>';
+        html+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">';
+        html+='<input id="ai-c-from" placeholder="Odchozí číslo (+420…)" style="flex:1;min-width:160px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:9px;color:var(--text);font-size:13px;">';
+        html+='<input id="ai-c-from-h" placeholder="Volat od (HH:MM)" style="width:130px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:9px;color:var(--text);font-size:13px;">';
+        html+='<input id="ai-c-to-h" placeholder="Volat do (HH:MM)" style="width:130px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:9px;color:var(--text);font-size:13px;">';
+        html+='</div>';
+        html+='<button class="btn" onclick="aiCreateCampaign()" style="background:#eab308;color:#0e1a22;font-weight:700;">➕ Vytvořit kampaň</button> <span id="ai-c-msg" style="margin-left:8px;font-size:13px;color:var(--text2);"></span>';
+        html+='</div>';
+        if(!camps.length){ html+='<div style="color:var(--text2);">Zatím žádné kampaně.</div>'; }
+        else {
+          html+='<table class="data-table"><thead><tr><th>Kampaň</th><th>Stav</th><th>Čeká</th><th>Volá</th><th>Hotovo</th><th>Bez odp.</th><th></th></tr></thead><tbody>';
+          camps.forEach(function(c){
+            var k=c.counts||{};
+            html+='<tr onclick="aiOpenCampaign(\''+c.id+'\')"><td><b>'+aiEsc(c.name)+'</b></td><td>'+(AI_STATUS[c.status]||c.status)+'</td><td>'+(k.pending||0)+'</td><td>'+(k.calling||0)+'</td><td>'+(k.done||0)+'</td><td>'+(k.no_answer||0)+'</td><td style="color:var(--text2);">otevřít ›</td></tr>';
+          });
+          html+='</tbody></table>';
+        }
+        wrap.innerHTML=html;
+      }catch(e){ wrap.innerHTML='<div style="color:#ef4444;padding:10px;">Chyba: '+aiEsc(e.message)+'</div>'; }
+    }
+    async function aiCreateCampaign(){
+      var msg=document.getElementById('ai-c-msg'); msg.textContent='Vytvářím…';
+      try{
+        await aiApi('/campaigns',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({
+          name: document.getElementById('ai-c-name').value,
+          script: document.getElementById('ai-c-script').value,
+          from_number: document.getElementById('ai-c-from').value.trim(),
+          call_from: document.getElementById('ai-c-from-h').value.trim()||null,
+          call_to: document.getElementById('ai-c-to-h').value.trim()||null
+        })});
+        aiLoadCampaigns();
+      }catch(e){ msg.textContent='Chyba: '+e.message; }
+    }
+    async function aiOpenCampaign(id){
+      var det=document.getElementById('ai-outbound-detail');
+      document.getElementById('ai-outbound-list').style.display='none';
+      det.style.display=''; det.innerHTML='<div style="color:var(--text2);">Načítám…</div>';
+      try{
+        var c=await aiApi('/campaigns/'+id);
+        var html='<button class="btn" onclick="aiLoadCampaigns()">‹ Zpět na kampaně</button>';
+        html+='<h3 style="margin:12px 0 6px;font-size:16px;">'+aiEsc(c.name)+' <span style="font-size:13px;color:var(--text2);">('+(AI_STATUS[c.status]||c.status)+')</span></h3>';
+        html+='<div style="margin-bottom:10px;">';
+        if(c.status!=='running') html+='<button class="btn" onclick="aiCampAction(\''+c.id+'\',\'start\')" style="background:#10b981;color:#062;font-weight:700;">▶ Spustit obvolávání</button> ';
+        if(c.status==='running') html+='<button class="btn" onclick="aiCampAction(\''+c.id+'\',\'pause\')" style="background:#f59e0b;color:#3a2a0a;font-weight:700;">⏸ Pozastavit</button> ';
+        html+='<button class="btn" onclick="aiDeleteCampaign(\''+c.id+'\')" style="background:#ef444422;color:#ef4444;">🗑 Smazat</button>';
+        html+='</div>';
+        if(c.script) html+='<div style="font-size:13px;color:var(--text2);margin-bottom:12px;"><b>Scénář:</b> '+aiEsc(c.script)+'</div>';
+        html+='<div style="border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:14px;">';
+        html+='<div style="font-size:13px;margin-bottom:6px;">Přidat leady (každý na řádek, formát <code>Jméno; +420…</code> nebo jen číslo):</div>';
+        html+='<textarea id="ai-t-raw" rows="4" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:9px;color:var(--text);font-size:13px;" placeholder="Jan Novák; +420777123456"></textarea>';
+        html+='<button class="btn" onclick="aiAddTargets(\''+c.id+'\')" style="margin-top:8px;">➕ Přidat leady</button> <span id="ai-t-msg" style="margin-left:8px;font-size:13px;color:var(--text2);"></span>';
+        html+='</div>';
+        var tg=c.targets||[];
+        if(!tg.length){ html+='<div style="color:var(--text2);">Zatím žádné leady.</div>'; }
+        else{
+          html+='<table class="data-table"><thead><tr><th>Jméno</th><th>Telefon</th><th>Stav</th><th>Výsledek</th></tr></thead><tbody>';
+          tg.forEach(function(t){ html+='<tr><td>'+aiEsc(t.name||'—')+'</td><td>'+aiEsc(t.phone)+'</td><td>'+(AI_STATUS[t.status]||t.status)+'</td><td>'+aiEsc(t.result_summary||'—')+'</td></tr>'; });
+          html+='</tbody></table>';
+        }
+        det.innerHTML=html;
+      }catch(e){ det.innerHTML='<div style="color:#ef4444;padding:10px;">Chyba: '+aiEsc(e.message)+'</div>'; }
+    }
+    async function aiAddTargets(id){
+      var msg=document.getElementById('ai-t-msg'); msg.textContent='Přidávám…';
+      try{
+        var r=await aiApi('/campaigns/'+id+'/targets',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ raw: document.getElementById('ai-t-raw').value })});
+        msg.textContent='✅ Přidáno '+r.added; aiOpenCampaign(id);
+      }catch(e){ msg.textContent='Chyba: '+e.message; }
+    }
+    async function aiCampAction(id, action){
+      try{ await aiApi('/campaigns/'+id+'/'+action,{ method:'POST' }); aiOpenCampaign(id); }
+      catch(e){ alert('Chyba: '+e.message); }
+    }
+    async function aiDeleteCampaign(id){
+      if(!confirm('Opravdu smazat kampaň i s leady?')) return;
+      try{ await aiApi('/campaigns/'+id,{ method:'DELETE' }); aiLoadCampaigns(); }
+      catch(e){ alert('Chyba: '+e.message); }
+    }
+
     function switchTab(name) {
-      ['orders', 'pricelist', 'cashflow', 'tools', 'compounder', 'compounding', 'rezervace', 'databaze', 'lokality', 'externi', 'externisti', 'blacklist', 'bankovni-plan'].forEach(function(t) {
+      ['orders', 'pricelist', 'cashflow', 'tools', 'compounder', 'compounding', 'rezervace', 'databaze', 'lokality', 'externi', 'externisti', 'blacklist', 'bankovni-plan', 'ai-asistent'].forEach(function(t) {
         var el = document.getElementById('tab-' + t);
         if (el) el.style.display = (t === name) ? '' : 'none';
         var btn = document.querySelector('.tab-btn[data-tab="' + t + '"]');
@@ -4745,6 +4949,7 @@
         var fr = document.getElementById('bp-frame');
         if (fr && !fr.getAttribute('data-loaded')) { fr.src = '/modules/bankovni-plan/index.html?embed=1'; fr.setAttribute('data-loaded', '1'); }
       }
+      if (name === 'ai-asistent') loadAiAssistant();
     }
 
     // ============================================================

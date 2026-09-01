@@ -6081,6 +6081,7 @@ model VoiceCall {
   audio_url       String?   @db.Text // R2
   lead_id         String?   // CompounderLead (infolinka)
   sales_event_id  Int?      // zapsaná schůzka
+  campaign_target_id String? // odchozí obvolávání — VoiceCampaignTarget
   handoff         Boolean   @default(false)
   cost_usd        Decimal?  @db.Decimal(10, 4)
   created_at      DateTime  @default(now())
@@ -6091,4 +6092,44 @@ model VoiceCall {
   @@index([from_number])
   @@index([started_at])
   @@map("voice_calls")
+}
+
+// Odchozí obvolávání leadů — kampaň + cíle
+model VoiceCampaign {
+  id                 String   @id @default(uuid())
+  name               String   @db.VarChar(255)
+  status             String   @default("draft") // draft | running | paused | done
+  script             String?  @db.Text          // systémový scénář pro AI
+  from_number        String?  @db.VarChar(32)    // odchozí caller ID (Twilio číslo)
+  max_attempts       Int      @default(1)
+  call_from          String?  @db.VarChar(5)     // pracovní okno HH:MM
+  call_to            String?  @db.VarChar(5)
+  created_by_user_id Int?
+  created_at         DateTime @default(now())
+  updated_at         DateTime @updatedAt
+
+  targets            VoiceCampaignTarget[]
+
+  @@index([status])
+  @@map("voice_campaigns")
+}
+
+model VoiceCampaignTarget {
+  id             String   @id @default(uuid())
+  campaign_id    String
+  name           String?  @db.VarChar(255)
+  phone          String   @db.VarChar(32)
+  status         String   @default("pending") // pending | calling | done | failed | no_answer
+  attempts       Int      @default(0)
+  last_call_sid  String?  @db.VarChar(64)
+  result_summary String?  @db.Text
+  voice_call_id  String?
+  created_at     DateTime @default(now())
+  updated_at     DateTime @updatedAt
+
+  campaign       VoiceCampaign @relation(fields: [campaign_id], references: [id], onDelete: Cascade)
+
+  @@index([campaign_id])
+  @@index([status])
+  @@map("voice_campaign_targets")
 }
