@@ -262,6 +262,22 @@ router.post('/campaigns/:id/pause', requireAuth, async (req, res, next) => {
   }
 });
 
+// Volat znovu konkrétní cíl — vrátí ho na pending a rozjede kampaň
+router.post('/campaigns/:id/targets/:tid/retry', requireAuth, async (req, res, next) => {
+  try {
+    const t = await prisma.voiceCampaignTarget.update({
+      where: { id: req.params.tid },
+      data: { status: 'pending', result_summary: null },
+    });
+    await prisma.voiceCampaign
+      .update({ where: { id: req.params.id }, data: { status: 'running' } })
+      .catch(() => {});
+    res.json({ ok: true, target: t });
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.delete('/campaigns/:id', requireAuth, async (req, res, next) => {
   try {
     await prisma.voiceCampaign.delete({ where: { id: req.params.id } });

@@ -4903,8 +4903,8 @@
         var tg=c.targets||[];
         if(!tg.length){ html+='<div style="color:var(--text2);">Zatím žádné leady.</div>'; }
         else{
-          html+='<table class="data-table"><thead><tr><th>Jméno</th><th>Telefon</th><th>Stav</th><th>Výsledek</th></tr></thead><tbody>';
-          tg.forEach(function(t){ html+='<tr><td>'+aiEsc(t.name||'—')+'</td><td>'+aiEsc(t.phone)+'</td><td>'+(AI_STATUS[t.status]||t.status)+'</td><td>'+aiEsc(t.result_summary||'—')+'</td></tr>'; });
+          html+='<table class="data-table"><thead><tr><th>Jméno</th><th>Telefon</th><th>Stav</th><th>Výsledek</th><th></th></tr></thead><tbody>';
+          tg.forEach(function(t){ html+='<tr><td>'+aiEsc(t.name||'—')+'</td><td>'+aiEsc(t.phone)+'</td><td>'+(AI_STATUS[t.status]||t.status)+'</td><td>'+aiEsc(t.result_summary||'—')+'</td><td style="text-align:right;"><button class="btn" onclick="aiRetryTarget(\''+c.id+'\',\''+t.id+'\')" style="padding:4px 10px;font-size:12px;">📞 Volat znovu</button></td></tr>'; });
           html+='</tbody></table>';
         }
         det.innerHTML=html;
@@ -4919,6 +4919,10 @@
     }
     async function aiCampAction(id, action){
       try{ await aiApi('/campaigns/'+id+'/'+action,{ method:'POST' }); aiOpenCampaign(id); }
+      catch(e){ alert('Chyba: '+e.message); }
+    }
+    async function aiRetryTarget(campId, tid){
+      try{ await aiApi('/campaigns/'+campId+'/targets/'+tid+'/retry',{ method:'POST' }); aiOpenCampaign(campId); }
       catch(e){ alert('Chyba: '+e.message); }
     }
     async function aiDeleteCampaign(id){
