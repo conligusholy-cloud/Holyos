@@ -52,6 +52,10 @@ async function placeCall(target, campaign) {
     method: 'POST',
     statusCallback: `${PUBLIC_BASE}/api/voice/status`,
     statusCallbackEvent: ['completed'],
+    // Nahrávání hovoru → po skončení Twilio pošle URL na /api/voice/recording
+    record: true,
+    recordingStatusCallback: `${PUBLIC_BASE}/api/voice/recording`,
+    recordingStatusCallbackEvent: ['completed'],
     timeout: 30,
   });
   return call.sid;

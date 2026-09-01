@@ -79,6 +79,47 @@ router.post('/status', form, (req, res) => {
   res.sendStatus(204);
 });
 
+// POST /api/voice/recording — Twilio pošle URL nahrávky po skončení hovoru.
+router.post('/recording', form, async (req, res) => {
+  try {
+    const b = req.body || {};
+    const sid = b.CallSid;
+    const url = b.RecordingUrl;
+    if (sid && url && prisma.voiceCall) {
+      await prisma.voiceCall.updateMany({ where: { twilio_call_sid: sid }, data: { audio_url: url } });
+    }
+  } catch (e) {
+    console.warn('[voice] recording callback:', e.message);
+  }
+  res.sendStatus(204);
+});
+
+// GET /api/voice/recording/:callId — proxy: stáhne nahrávku z Twilia (Basic auth)
+// a streamne ji do prohlížeče (Twilio media je jinak za autentizací).
+router.get('/recording/:callId', requireAuth, async (req, res, next) => {
+  try {
+    if (!prisma.voiceCall) return res.status(404).send('Bez nahrávky');
+    const call = await prisma.voiceCall.findUnique({
+      where: { id: req.params.callId },
+      select: { audio_url: true },
+    });
+    if (!call || !call.audio_url) return res.status(404).send('Bez nahrávky');
+    const SID = process.env.TWILIO_ACCOUNT_SID;
+    const TOKEN = process.env.TWILIO_AUTH_TOKEN;
+    if (!SID || !TOKEN) return res.status(500).send('Twilio není nakonfigurováno');
+    const mediaUrl = call.audio_url.endsWith('.mp3') ? call.audio_url : call.audio_url + '.mp3';
+    const auth = 'Basic ' + Buffer.from(SID + ':' + TOKEN).toString('base64');
+    const r = await fetch(mediaUrl, { headers: { Authorization: auth } });
+    if (!r.ok) return res.status(502).send('Nahrávku nelze načíst');
+    res.set('Content-Type', 'audio/mpeg');
+    res.set('Cache-Control', 'private, max-age=3600');
+    const buf = Buffer.from(await r.arrayBuffer());
+    res.send(buf);
+  } catch (err) {
+    next(err);
+  }
+});
+
 // GET /api/voice/calls — seznam odbavených hovorů (pro obrazovku Hovory ve Velíně).
 // Chráněno HolyOS JWT (requireAuth). Volá se s Bearer/cookie tokenem.
 router.get('/calls', requireAuth, async (req, res, next) => {
@@ -102,6 +143,7 @@ router.get('/calls', requireAuth, async (req, res, next) => {
         summary: true,
         transcript: true,
         campaign_target_id: true,
+        audio_url: true,
       },
     });
     res.json(calls);
@@ -203,6 +245,28 @@ router.get('/campaigns/:id', requireAuth, async (req, res, next) => {
       include: { targets: { orderBy: { created_at: 'asc' } } },
     });
     if (!camp) return res.status(404).json({ error: 'Kampaň nenalezena' });
+
+    // Doplň k cílům info o hovoru (kdy voláno, délka, nahrávka)
+    const callIds = camp.targets.map((t) => t.voice_call_id).filter(Boolean);
+    const callMap = {};
+    if (callIds.length && prisma.voiceCall) {
+      const cs = await prisma.voiceCall.findMany({
+        where: { id: { in: callIds } },
+        select: { id: true, started_at: true, duration_sec: true, audio_url: true },
+      });
+      cs.forEach((c) => (callMap[c.id] = c));
+    }
+    camp.targets = camp.targets.map((t) => ({
+      ...t,
+      call: t.voice_call_id && callMap[t.voice_call_id]
+        ? {
+            id: t.voice_call_id,
+            started_at: callMap[t.voice_call_id].started_at,
+            duration_sec: callMap[t.voice_call_id].duration_sec,
+            has_audio: !!callMap[t.voice_call_id].audio_url,
+          }
+        : null,
+    }));
     res.json(camp);
   } catch (err) {
     next(err);

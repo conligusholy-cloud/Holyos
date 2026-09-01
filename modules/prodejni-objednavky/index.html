@@ -4811,7 +4811,8 @@
     function aiCallDetail(c){
       var t=(c.transcript||[]).map(function(x){ var who=x.role==='agent'?'🤖 AI':'🧑 Volající'; return '<div style="margin:3px 0;"><b>'+who+':</b> '+aiEsc(x.text)+'</div>'; }).join('');
       var s = c.summary ? '<div style="margin-bottom:10px;"><b>Shrnutí:</b> '+aiEsc(c.summary)+'</div>' : '';
-      return s + '<div style="font-size:13px;">'+(t||'<span style="color:var(--text2);">Bez přepisu.</span>')+'</div>';
+      var audio = c.audio_url ? '<div style="margin-bottom:10px;"><b>Nahrávka:</b><br><audio controls preload="none" src="/api/voice/recording/'+c.id+'" style="height:34px;margin-top:4px;"></audio></div>' : '';
+      return s + audio + '<div style="font-size:13px;">'+(t||'<span style="color:var(--text2);">Bez přepisu.</span>')+'</div>';
     }
     function aiToggleCall(id){ var r=document.getElementById('ai-call-'+id); if(r) r.style.display=(r.style.display==='none')?'':'none'; }
 
@@ -4895,11 +4896,13 @@
     function aiRenderTargets(c){
       var tg=c.targets||[];
       if(!tg.length) return '<div style="color:var(--text2);">Zatím žádné leady.</div>';
-      var h='<table class="data-table"><thead><tr><th>Jméno</th><th>Telefon</th><th>Stav</th><th>Výsledek</th><th></th></tr></thead><tbody>';
+      var h='<table class="data-table"><thead><tr><th>Jméno</th><th>Telefon</th><th>Stav</th><th>Voláno</th><th>Výsledek</th><th></th></tr></thead><tbody>';
       tg.forEach(function(t){
         var col=AI_TSTATUS_COLOR[t.status]||'var(--text)';
         var badge='<span style="color:'+col+';font-weight:600;">'+(t.status==='calling'?'📞 ':'')+(AI_STATUS[t.status]||t.status)+'</span>';
-        h+='<tr><td>'+aiEsc(t.name||'—')+'</td><td>'+aiEsc(t.phone)+'</td><td>'+badge+'</td><td>'+aiEsc(t.result_summary||'—')+'</td><td style="text-align:right;"><button class="btn" onclick="aiRetryTarget(\''+c.id+'\',\''+t.id+'\')" style="padding:4px 10px;font-size:12px;">📞 Volat znovu</button></td></tr>';
+        var voled = (t.call && t.call.started_at) ? (aiFmtDate(t.call.started_at) + (t.call.duration_sec!=null ? ' · '+aiFmtDur(t.call.duration_sec) : '')) : '—';
+        var audio = (t.call && t.call.has_audio) ? '<div><audio controls preload="none" src="/api/voice/recording/'+t.call.id+'" style="height:30px;max-width:200px;margin-top:4px;"></audio></div>' : '';
+        h+='<tr><td>'+aiEsc(t.name||'—')+'</td><td>'+aiEsc(t.phone)+'</td><td>'+badge+'</td><td style="white-space:nowrap;font-size:12px;">'+voled+audio+'</td><td>'+aiEsc(t.result_summary||'—')+'</td><td style="text-align:right;"><button class="btn" onclick="aiRetryTarget(\''+c.id+'\',\''+t.id+'\')" style="padding:4px 10px;font-size:12px;">📞 Volat znovu</button></td></tr>';
       });
       h+='</tbody></table>';
       return h;
