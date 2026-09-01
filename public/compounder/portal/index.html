@@ -312,6 +312,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
         <span id="eko-ver-switch" style="display:none;align-items:center;gap:4px;flex-wrap:wrap"></span>
         <span id="eko-cur" style="display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap"><span style="font-size:12px;color:var(--muted);margin-right:4px">Měna:</span></span>
         <button type="button" id="eko-reset" class="btn-reset" data-i18n="p.eko.reset">↺ Reset to default values</button>
+        <button type="button" id="eko-email" class="btn-reset" title="Vytvořit text e-mailu s ekonomikou V2 i V3 ke zkopírování">📧 Do e-mailu</button>
       </div>
       <div class="calc">
         <div class="panel" id="eko-invest-panel">
@@ -1818,6 +1819,8 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
       // Po resetu (tovární hodnoty jsou v EUR) přepočti na globálně zvolenou měnu.
       try{ if(typeof PCUR!=='undefined' && PCUR && PCUR!=='EUR') ekoSetCur(PCUR); }catch(e){}
     });
+    var eb = document.getElementById("eko-email");
+    if (eb) eb.addEventListener("click", ekoBuildEmail);
     ekoRenderCur();
     // Kurzy z ČNB (přepočet měny); při chybě zůstanou fallback hodnoty.
     fetch('/api/compounder/fx-rates').then(function(r){ return r.json(); }).then(function(j){
@@ -1988,6 +1991,91 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
       : pT("p.ret.loss");
     renderMilestones(invest, profit);
   }
+
+  // Sestaví text e-mailu s ekonomikou obou variant (V2 i V3) ke zkopírování.
+  function ekoBuildEmail(){
+    var MODEL_IDS = ['i-machine','i-permit','i-conn','i-perday','i-spend','i-cost'];
+    var origVer = (window._portalActiveVer === 'V2') ? 'V2' : 'V3';
+    var snap = {}; MODEL_IDS.forEach(function(id){ var el=document.getElementById(id); if(el) snap[id]=el.value; });
+    var txt = function(id){ var el=document.getElementById(id); return el ? (el.textContent||'').trim() : ''; };
+    function readVer(v){
+      try{ ekoApplyVersion(v); }catch(e){}
+      recalc();
+      return {
+        ver: v,
+        perday: txt('i-perday') || (document.getElementById('i-perday')||{}).value || '',
+        spend: (document.getElementById('i-spend')||{}).value || '',
+        cost: (document.getElementById('i-cost')||{}).value || '',
+        invest: txt('m-invest'),
+        cust: txt('m-cust'),
+        revenue: txt('m-revenue'),
+        profit: txt('m-profit'),
+        yearprofit: txt('r-yearprofit'),
+        roi: txt('r-roi'),
+        payback: txt('m-payback'),
+        fiveY: txt('r-5y'),
+      };
+    }
+    var v3 = readVer('V3'), v2 = readVer('V2');
+    // Obnov původní stav.
+    MODEL_IDS.forEach(function(id){ var el=document.getElementById(id); if(el && snap[id]!=null) el.value=snap[id]; });
+    try{ ekoApplyVersion(origVer); }catch(e){}
+    // Pozn.: pokud si uživatel hodnoty ručně upravil, ekoApplyVersion je vrátí na varianty —
+    // proto po obnovení přepíšeme zpět snapshotem a přepočteme.
+    MODEL_IDS.forEach(function(id){ var el=document.getElementById(id); if(el && snap[id]!=null) el.value=snap[id]; });
+    recalc();
+
+    var cur = (typeof ekoSym==='function') ? ekoSym() : 'Kč';
+    function block(d, label){
+      return 'VARIANTA ' + d.ver + (label?(' — '+label):'') + '\n'
+        + '  Investice celkem:   ' + d.invest + '\n'
+        + '  Zákazníků / den:    ' + d.perday + '\n'
+        + '  Obrat / měsíc:      ' + d.revenue + '   (' + d.cust + ')\n'
+        + '  Zisk / měsíc:       ' + d.profit + '\n'
+        + '  Zisk / rok:         ' + d.yearprofit + '\n'
+        + '  ROI (ročně):        ' + d.roi + '\n'
+        + '  Návratnost:         ' + d.payback + '\n'
+        + '  Zůstatek po 5 letech: ' + d.fiveY + '\n';
+    }
+    var body =
+      'Dobrý den,\n\n'
+      + 'posílám orientační ekonomiku provozu jednoho Compounderu ve dvou variantách stroje (V3 a V2). '
+      + 'Hodnoty jsou bez DPH a orientační — počítají se z uvedených předpokladů provozu.\n\n'
+      + block(v3, 'vyšší kapacita') + '\n'
+      + block(v2, 'nižší investice') + '\n'
+      + 'Rád vám model upravím přímo na parametry vaší lokality (počet zákazníků, útrata, provozní náklady).\n\n'
+      + 'S pozdravem\n';
+    var subject = 'Ekonomika Compounderu — varianty V3 a V2';
+
+    // Okno s textem + kopírování + otevřít v e-mailu.
+    var ov = document.getElementById('ekoMailOv');
+    if (ov) ov.remove();
+    ov = document.createElement('div');
+    ov.id = 'ekoMailOv';
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
+    ov.onclick = function(e){ if(e.target===ov) ov.remove(); };
+    var box = document.createElement('div');
+    box.style.cssText = 'background:#12141a;color:#fff;max-width:680px;width:100%;border-radius:14px;padding:18px;box-shadow:0 10px 40px rgba(0,0,0,.5);max-height:90vh;overflow:auto';
+    box.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><h3 style="margin:0;font-size:17px">📧 E-mail s ekonomikou (V3 + V2)</h3><button id="ekoMailX" style="background:none;border:none;color:#aaa;font-size:22px;cursor:pointer">×</button></div>'
+      + '<textarea id="ekoMailText" readonly style="width:100%;height:340px;box-sizing:border-box;background:#0c0e13;color:#e5e7eb;border:1px solid #2a2e37;border-radius:10px;padding:12px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px;line-height:1.5;white-space:pre"></textarea>'
+      + '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;flex-wrap:wrap">'
+      + '<button id="ekoMailCopy" class="btn-reset" style="background:#eab308;color:#1a1a1a;font-weight:700">📋 Kopírovat</button>'
+      + '<a id="ekoMailOpen" class="btn-reset" style="text-decoration:none" href="#">✉️ Otevřít v e-mailu</a>'
+      + '<button id="ekoMailClose" class="btn-reset">Zavřít</button>'
+      + '</div>';
+    ov.appendChild(box); document.body.appendChild(ov);
+    var ta = document.getElementById('ekoMailText'); ta.value = body;
+    document.getElementById('ekoMailOpen').href = 'mailto:?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body);
+    document.getElementById('ekoMailX').onclick = function(){ ov.remove(); };
+    document.getElementById('ekoMailClose').onclick = function(){ ov.remove(); };
+    document.getElementById('ekoMailCopy').onclick = function(){
+      ta.select(); var ok=false;
+      try{ ok = document.execCommand('copy'); }catch(e){}
+      if(navigator.clipboard){ navigator.clipboard.writeText(body).then(function(){},function(){}); ok=true; }
+      var b=document.getElementById('ekoMailCopy'); if(b){ var o=b.textContent; b.textContent='✓ Zkopírováno'; setTimeout(function(){ b.textContent=o; },1500); }
+    };
+  }
+  window.ekoBuildEmail = ekoBuildEmail;
 
   // ——— Gold & Diamond (napojeno na živý model výše) ———
   function mlLang(){ return document.documentElement.lang || "en"; }
