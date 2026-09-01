@@ -31,11 +31,15 @@ async function tick() {
 
     const running = await prisma.voiceCampaign.findMany({ where: { status: 'running' } });
     for (const camp of running) {
-      // Uvolni zaseknuté hovory
+      // Uvolni zaseknuté hovory (calling/ringing/in_progress bez ukončení)
       const staleBefore = new Date(Date.now() - STALE_MIN * 60 * 1000);
       await prisma.voiceCampaignTarget
         .updateMany({
-          where: { campaign_id: camp.id, status: 'calling', updated_at: { lt: staleBefore } },
+          where: {
+            campaign_id: camp.id,
+            status: { in: ['calling', 'ringing', 'in_progress'] },
+            updated_at: { lt: staleBefore },
+          },
           data: { status: 'no_answer', result_summary: 'Bez odpovědi / nespojeno' },
         })
         .catch(() => {});
@@ -43,7 +47,7 @@ async function tick() {
       if (!withinHours(camp)) continue;
 
       const calling = await prisma.voiceCampaignTarget.count({
-        where: { campaign_id: camp.id, status: 'calling' },
+        where: { campaign_id: camp.id, status: { in: ['calling', 'ringing', 'in_progress'] } },
       });
       const slots = Math.max(0, MAX_CONCURRENT - calling);
 
@@ -56,7 +60,7 @@ async function tick() {
 
       if (!pend.length) {
         const remaining = await prisma.voiceCampaignTarget.count({
-          where: { campaign_id: camp.id, status: { in: ['pending', 'calling'] } },
+          where: { campaign_id: camp.id, status: { in: ['pending', 'calling', 'ringing', 'in_progress'] } },
         });
         if (remaining === 0) {
           await prisma.voiceCampaign

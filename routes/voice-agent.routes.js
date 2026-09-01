@@ -75,7 +75,34 @@ router.post('/outgoing', form, (req, res) => {
 // POST /api/voice/status — status callback po skončení hovoru.
 // Shrnutí + uložení + push řeší WS close v services/voice/relay-ws.js
 // (tam máme kompletní přepis). Tady jen potvrdíme příjem.
-router.post('/status', form, (req, res) => {
+// POST /api/voice/status — průběžné stavy hovoru z Twilia (ringing/in-progress/…).
+// Aktualizuje cíl kampaně v reálném čase (živý stav v UI). Nikdy nepřepíše 'done'.
+router.post('/status', form, async (req, res) => {
+  try {
+    const b = req.body || {};
+    const sid = b.CallSid;
+    const cs = (b.CallStatus || '').toLowerCase();
+    if (sid && cs && prisma.voiceCampaignTarget) {
+      const t = await prisma.voiceCampaignTarget.findFirst({ where: { last_call_sid: sid } });
+      if (t && t.status !== 'done') {
+        let next = null;
+        if (cs === 'ringing') next = 'ringing';
+        else if (cs === 'in-progress') next = 'in_progress';
+        else if (cs === 'busy' || cs === 'no-answer') next = 'no_answer';
+        else if (cs === 'failed' || cs === 'canceled') next = 'failed';
+        else if (cs === 'completed') {
+          // Hovor skončil. Přijatý (prošel in_progress) → WS to zpravidla už označil
+          // jako done; pokud ne, done. Jinak (jen vyzvánělo) → bez odpovědi.
+          next = t.status === 'in_progress' ? 'done' : t.status === 'ringing' || t.status === 'calling' ? 'no_answer' : null;
+        }
+        if (next && next !== t.status) {
+          await prisma.voiceCampaignTarget.update({ where: { id: t.id }, data: { status: next } });
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('[voice] status callback:', e.message);
+  }
   res.sendStatus(204);
 });
 

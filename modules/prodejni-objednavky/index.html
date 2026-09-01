@@ -4774,7 +4774,7 @@
     }
     function aiFmtDur(s){ s=Number(s)||0; var m=Math.floor(s/60), ss=s%60; return m+':'+(ss<10?'0':'')+ss; }
     function aiFmtDate(iso){ if(!iso) return ''; var d=new Date(iso); return d.toLocaleString('cs-CZ',{day:'numeric',month:'numeric',hour:'2-digit',minute:'2-digit'}); }
-    var AI_STATUS = { draft:'Koncept', running:'Běží', paused:'Pozastaveno', done:'Hotovo', pending:'Čeká', calling:'Volá se', failed:'Chyba', no_answer:'Bez odpovědi' };
+    var AI_STATUS = { draft:'Koncept', running:'Běží', paused:'Pozastaveno', done:'Hotovo', pending:'Čeká', calling:'Volá se', ringing:'Vyzvání', in_progress:'Hovor probíhá', failed:'Chyba', no_answer:'Bez odpovědi' };
 
     function loadAiAssistant(){ aiSub(aiState.sub || 'calls'); }
     function aiSub(name){
@@ -4892,7 +4892,7 @@
       h+='<button class="btn" onclick="aiDeleteCampaign(\''+c.id+'\')" style="background:#ef444422;color:#ef4444;">🗑 Smazat</button>';
       return h;
     }
-    var AI_TSTATUS_COLOR={ pending:'#9aa0ad', calling:'#3b82f6', done:'#10b981', failed:'#ef4444', no_answer:'#f59e0b' };
+    var AI_TSTATUS_COLOR={ pending:'#9aa0ad', calling:'#3b82f6', ringing:'#3b82f6', in_progress:'#22c55e', done:'#10b981', failed:'#ef4444', no_answer:'#f59e0b' };
     function aiRenderTargets(c){
       var tg=c.targets||[];
       if(!tg.length) return '<div style="color:var(--text2);">Zatím žádné leady.</div>';
