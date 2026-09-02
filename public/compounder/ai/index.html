@@ -55,8 +55,18 @@
   var token = new URLSearchParams(location.search).get('t') || '';
   var busy = false;
   function el(id){ return document.getElementById(id); }
+  function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  // Lehké vykreslení: **tučně** → <strong>, odrážky "- "/"* " → •, zbytek zůstává (pre-wrap zachová řádky).
+  function mdLite(t){
+    var s = esc(t);
+    s = s.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
+    s = s.replace(/(^|\n)\s*[-*]\s+/g, '$1• ');
+    s = s.replace(/(^|\n)#{1,6}\s*/g, '$1');
+    return s;
+  }
   function addMsg(role, text){
-    var d = document.createElement('div'); d.className = 'm ' + (role==='user'?'user':'ai'); d.textContent = text;
+    var d = document.createElement('div'); d.className = 'm ' + (role==='user'?'user':'ai');
+    if(role==='user') d.textContent = text; else d.innerHTML = mdLite(text);
     el('msgs').appendChild(d); el('msgs').scrollTop = el('msgs').scrollHeight; return d;
   }
   function autoGrow(){

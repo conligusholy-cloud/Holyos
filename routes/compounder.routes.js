@@ -431,6 +431,14 @@ const AI_SPECIALIST_DEFAULT =
   'Odpovědi drž stručné a konkrétní (2–6 vět), ať se dobře poslouchají i čtou. ' +
   'NIKDY neslibuj garantované výnosy, nevymýšlej si čísla ani fakta; když něco nevíš jistě, nabídni spojení s lidským obchodníkem. Neuváděj interní/citlivé údaje.';
 
+// Pravidlo formátování — platí vždy (i pro vlastní scénář). Píše se do chatu na mobilu,
+// takže žádný markdown (hvězdičky/mřížky), krátké odstavce, občas decentní emoji.
+const AI_SPECIALIST_STYLE =
+  'FORMÁT ODPOVĚDI: Piš čistý text bez jakéhokoli markdownu — NIKDY nepoužívej hvězdičky (** nebo *), mřížky (#) ani odrážky se znakem "-". ' +
+  'Nezvýrazňuj tučně. Místo nadpisů typu „**Jak to funguje:**" napiš normální větu. ' +
+  'Odpověď rozděl do krátkých odstavců oddělených prázdným řádkem, ať se to na telefonu dobře čte. ' +
+  'Můžeš střídmě použít 1–2 vhodné emoji za celou odpověď (ne v každém odstavci). Odpovědi drž krátké (2–6 vět).';
+
 router.post('/portal/ai-specialist', async (req, res) => {
   try {
     const b = req.body || {};
@@ -468,7 +476,7 @@ router.post('/portal/ai-specialist', async (req, res) => {
 
     const agent = require('../services/voice/agent');
     const { text } = await agent.runTurn({
-      system: sys + '\n\n' + ctx,
+      system: sys + '\n\n' + AI_SPECIALIST_STYLE + '\n\n' + ctx,
       history,
       userText: message,
       maxTokens: 600,
