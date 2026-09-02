@@ -576,10 +576,37 @@ router.post('/leads/:id/send-ai-specialist-sms', requireAuth, async (req, res) =
       : ('Dobrý den, náš AI specialista na prádlomaty vám rád zodpoví dotazy zde: ' + link + ' — Best Series');
     const sms = require('../services/voice/sms');
     const sid = await sms.sendSms(lead.phone, body);
-    res.json({ ok: true, sid, link });
+    const sentAt = new Date();
+    await prisma.compounderLead.update({
+      where: { id },
+      data: { ai_specialist_sms_sent_at: sentAt, ai_specialist_sms_id: String(sid || ''), ai_specialist_sms_status: 'odesláno' },
+    }).catch(() => {});
+    res.json({ ok: true, sid, link, sentAt, status: 'odesláno' });
   } catch (err) {
     res.status(400).json({ ok: false, error: err.message });
   }
+});
+
+// GET /api/compounder/leads/:id/ai-specialist-sms-status — zjistí stav doručení SMS (GoSMS)
+router.get('/leads/:id/ai-specialist-sms-status', requireAuth, async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const lead = await prisma.compounderLead.findUnique({
+      where: { id },
+      select: { ai_specialist_sms_id: true, ai_specialist_sms_sent_at: true, ai_specialist_sms_status: true },
+    });
+    if (!lead || !lead.ai_specialist_sms_id) {
+      return res.json({ ok: true, status: (lead && lead.ai_specialist_sms_status) || null, sentAt: (lead && lead.ai_specialist_sms_sent_at) || null });
+    }
+    let label = lead.ai_specialist_sms_status || 'odesláno';
+    try {
+      const sms = require('../services/voice/sms');
+      const st = await sms.getGoSmsStatus(lead.ai_specialist_sms_id);
+      label = st.label;
+      await prisma.compounderLead.update({ where: { id }, data: { ai_specialist_sms_status: label } }).catch(() => {});
+    } catch (e) { /* ponecháme poslední známý stav */ }
+    res.json({ ok: true, status: label, sentAt: lead.ai_specialist_sms_sent_at });
+  } catch (err) { next(err); }
 });
 
 // GET /api/compounder/portal/template/:type?t=TOKEN — VZOR (mustr) smlouvy ke čtení.

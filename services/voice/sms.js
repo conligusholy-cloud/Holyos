@@ -85,6 +85,36 @@ async function sendSms(to, body) {
   return sendViaTwilio(to, body);
 }
 
+// Zjistí stav doručení GoSMS zprávy podle id → { raw, label }.
+async function getGoSmsStatus(id) {
+  const cid = process.env.GOSMS_CLIENT_ID;
+  const secret = process.env.GOSMS_CLIENT_SECRET;
+  if (!cid || !secret) throw new Error('GoSMS není nakonfigurováno');
+  const base = (process.env.GOSMS_BASE || 'https://app.gosms.eu').replace(/\/+$/, '');
+  const tokRes = await fetch(
+    base + '/oauth/v2/token?grant_type=client_credentials&client_id=' + encodeURIComponent(cid) + '&client_secret=' + encodeURIComponent(secret)
+  );
+  if (!tokRes.ok) throw new Error('GoSMS token HTTP ' + tokRes.status);
+  const at = (await tokRes.json()).access_token;
+  const r = await fetch(base + '/api/v1/messages/' + encodeURIComponent(id), { headers: { Authorization: 'Bearer ' + at } });
+  if (!r.ok) {
+    const t = await r.text().catch(() => '');
+    throw new Error('GoSMS status HTTP ' + r.status + ' ' + t.slice(0, 150));
+  }
+  const j = await r.json().catch(() => ({}));
+  // GoSMS vrací pole recipients se stavem doručení; sesbíráme nejvýznamnější stav.
+  let label = 'odesláno';
+  try {
+    const recs = Array.isArray(j.recipients) ? j.recipients : (j.data && Array.isArray(j.data.recipients) ? j.data.recipients : []);
+    const states = recs.map((x) => String(x.status || x.state || x.deliveryStatus || '').toLowerCase());
+    const blob = (states.join(',') + ' ' + JSON.stringify(j)).toLowerCase();
+    if (/deliver|doru|3\b/.test(blob)) label = 'doručeno';
+    else if (/(fail|undeliver|expired|reject|nedoru|error)/.test(blob)) label = 'nedoručeno';
+    else if (/(sent|sending|queue|pending|accepted|odesl)/.test(blob)) label = 'odesláno';
+  } catch (_) { /* fallback */ }
+  return { raw: j, label };
+}
+
 // Pošle follow-up SMS leadovi po nedovolání (pokud je zapnuto a ještě neodešla).
 async function maybeSendNoAnswerSms(target) {
   try {
@@ -112,4 +142,4 @@ async function maybeSendNoAnswerSms(target) {
   }
 }
 
-module.exports = { sendSms, maybeSendNoAnswerSms, DEFAULT_TEXT };
+module.exports = { sendSms, maybeSendNoAnswerSms, getGoSmsStatus, DEFAULT_TEXT };

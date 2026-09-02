@@ -5637,6 +5637,10 @@ model CompounderLead {
   show_ai_specialist Boolean @default(false)
   // AI shrnutí toho, co lead z chatu s AI specialistou chce (generuje se na vyžádání).
   ai_specialist_summary String? @db.Text
+  // Záznam odeslané SMS s odkazem na AI specialistu (kdy, GoSMS id, stav doručení).
+  ai_specialist_sms_sent_at DateTime?
+  ai_specialist_sms_id      String?
+  ai_specialist_sms_status  String?
 
   // Heslo pro prihlaseni (bcrypt hash). Null = uzivatel heslo nenastavil (jen magic link).
   password_hash String? @db.Text
