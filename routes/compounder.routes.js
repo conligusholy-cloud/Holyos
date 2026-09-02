@@ -569,11 +569,13 @@ router.post('/leads/:id/send-ai-specialist-sms', requireAuth, async (req, res) =
     if (!lead.show_ai_specialist) {
       await prisma.compounderLead.update({ where: { id }, data: { show_ai_specialist: true } }).catch(() => {});
     }
-    const link = portalBase() + '/ai?t=' + makePortalToken(id);
+    // Odkaz bez „www." → kratší SMS. Text bez diakritiky, aby se vešel do 1 SMS
+    // (s diakritikou je limit 70 znaků/SMS; bez diakritiky 160 znaků GSM-7).
+    const link = portalBase().replace('://www.', '://') + '/ai?t=' + makePortalToken(id);
     const custom = (req.body && req.body.text) ? String(req.body.text) : '';
     const body = (custom && custom.indexOf('{link}') !== -1)
       ? custom.replace('{link}', link)
-      : ('Dobrý den, náš AI specialista na prádlomaty vám rád zodpoví dotazy zde: ' + link + ' — Best Series');
+      : ('AI specialista Best Series na pradlomaty vam rad poradi zde: ' + link);
     const sms = require('../services/voice/sms');
     const sid = await sms.sendSms(lead.phone, body);
     const sentAt = new Date();
