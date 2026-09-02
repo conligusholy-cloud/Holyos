@@ -446,7 +446,13 @@ router.post('/portal/ai-specialist', async (req, res) => {
 
     const message = String(b.message || '').slice(0, 2000).trim();
     if (!message) return res.status(400).json({ ok: false, error: 'Prázdná zpráva' });
-    const history = Array.isArray(b.history) ? b.history.slice(-16) : [];
+
+    // Historie z DB (posledních 16 tahů) → kontinuita + záznam u leada
+    let history = [];
+    try {
+      const rows = await prisma.aiSpecialistMessage.findMany({ where: { lead_id: leadId }, orderBy: { created_at: 'asc' }, take: 40 });
+      history = rows.slice(-16).map((r) => ({ role: r.role === 'user' ? 'user' : 'assistant', content: r.text }));
+    } catch (_) { history = []; }
 
     let sys = null;
     try {
@@ -461,16 +467,118 @@ router.post('/portal/ai-specialist', async (req, res) => {
       '. Uvažovaná verze prádlomatu ' + (lead.pradlomat_version || 'V3') + '.';
 
     const agent = require('../services/voice/agent');
-    const { text, messages } = await agent.runTurn({
+    const { text } = await agent.runTurn({
       system: sys + '\n\n' + ctx,
       history,
       userText: message,
       maxTokens: 600,
     });
-    res.json({ ok: true, reply: text, history: messages });
+
+    // Ulož oba tahy (záznam chatu u leada)
+    try {
+      await prisma.aiSpecialistMessage.create({ data: { lead_id: leadId, role: 'user', text: message } });
+      await prisma.aiSpecialistMessage.create({ data: { lead_id: leadId, role: 'assistant', text: text || '' } });
+    } catch (e) { console.warn('[ai-specialist] uložení zprávy selhalo:', e.message); }
+
+    res.json({ ok: true, reply: text });
   } catch (err) {
     console.error('[ai-specialist]', err.message);
     res.status(500).json({ ok: false, error: 'AI se teď nepodařilo odpovědět, zkuste to prosím znovu.' });
+  }
+});
+
+// GET /api/compounder/portal/ai-specialist/info?t= — info pro stránku (jméno, úvod, historie)
+router.get('/portal/ai-specialist/info', async (req, res) => {
+  try {
+    const leadId = verifyPortalToken(String(req.query.t || ''));
+    if (!leadId) return res.status(401).json({ ok: false, error: 'Neplatný přístup' });
+    const lead = await prisma.compounderLead.findUnique({
+      where: { id: leadId },
+      select: { id: true, show_ai_specialist: true, name: true, access_approved_at: true, source: true },
+    });
+    if (!lead) return res.status(404).json({ ok: false, error: 'Nenalezeno' });
+    if (!leadAccessAllowed(lead) || !lead.show_ai_specialist) return res.status(403).json({ ok: false, error: 'Nedostupné' });
+    let greeting = null;
+    try { greeting = await getSetting('compounder.ai_specialist_greeting', { type: 'string', defaultValue: null }); } catch (_) {}
+    if (!greeting || !String(greeting).trim()) greeting = 'Dobrý den! Jsem AI specialista na prádlomaty Compounder. Zeptejte se mě na cokoli — jak to celé funguje, ekonomiku provozu, návratnost, výběr lokality. 🙂';
+    let messages = [];
+    try {
+      const rows = await prisma.aiSpecialistMessage.findMany({ where: { lead_id: leadId }, orderBy: { created_at: 'asc' }, take: 200 });
+      messages = rows.map((r) => ({ role: r.role, text: r.text }));
+    } catch (_) { messages = []; }
+    res.json({ ok: true, name: lead.name || '', greeting, messages });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: 'Chyba' });
+  }
+});
+
+// GET /api/compounder/leads/:id/ai-specialist-chat — chat + shrnutí pro detail leada (admin)
+router.get('/leads/:id/ai-specialist-chat', requireAuth, async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const lead = await prisma.compounderLead.findUnique({ where: { id }, select: { ai_specialist_summary: true } });
+    const rows = await prisma.aiSpecialistMessage.findMany({ where: { lead_id: id }, orderBy: { created_at: 'asc' }, take: 500 });
+    res.json({ ok: true, summary: (lead && lead.ai_specialist_summary) || null, messages: rows.map((r) => ({ role: r.role, text: r.text, at: r.created_at })) });
+  } catch (err) { next(err); }
+});
+
+// POST /api/compounder/leads/:id/ai-specialist-summary — AI shrnutí „co lead chce" (admin)
+router.post('/leads/:id/ai-specialist-summary', requireAuth, async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const rows = await prisma.aiSpecialistMessage.findMany({ where: { lead_id: id }, orderBy: { created_at: 'asc' }, take: 200 });
+    if (!rows.length) return res.json({ ok: true, summary: 'Zatím žádný chat s AI specialistou.' });
+    const transcript = rows.map((r) => (r.role === 'user' ? 'Zájemce: ' : 'AI: ') + r.text).join('\n');
+    const agent = require('../services/voice/agent');
+    const { text } = await agent.runTurn({
+      system: 'Shrň česky ve 3–6 bodech, CO tento zájemce o prádlomaty/Compounder chce a jaký je jeho stav a zájem, na základě jeho chatu s AI specialistou. Buď věcný a konkrétní, ať to obchodník rychle pochopí. Zmiň lokalitu, rozpočet, roli (provozovatel/investor) a další krok, pokud zazněly.',
+      history: [],
+      userText: transcript,
+      maxTokens: 400,
+    });
+    await prisma.compounderLead.update({ where: { id }, data: { ai_specialist_summary: text || null } }).catch(() => {});
+    res.json({ ok: true, summary: text });
+  } catch (err) { next(err); }
+});
+
+// GET/PUT /api/compounder/ai-specialist-config — scénář (prompt) + úvodní věta AI specialisty
+router.get('/ai-specialist-config', requireAuth, async (req, res, next) => {
+  try {
+    const prompt = await getSetting('compounder.ai_specialist_prompt', { type: 'string', defaultValue: '' });
+    const greeting = await getSetting('compounder.ai_specialist_greeting', { type: 'string', defaultValue: '' });
+    res.json({ ok: true, prompt: prompt || '', greeting: greeting || '', defaultPrompt: AI_SPECIALIST_DEFAULT });
+  } catch (err) { next(err); }
+});
+router.put('/ai-specialist-config', requireAuth, async (req, res, next) => {
+  try {
+    const b = req.body || {};
+    const uid = req.user && req.user.id;
+    if (b.prompt !== undefined) await setSetting('compounder.ai_specialist_prompt', String(b.prompt || ''), { type: 'string', userId: uid });
+    if (b.greeting !== undefined) await setSetting('compounder.ai_specialist_greeting', String(b.greeting || ''), { type: 'string', userId: uid });
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
+// POST /api/compounder/leads/:id/send-ai-specialist-sms — pošle leadovi SMS s odkazem na AI specialistu
+router.post('/leads/:id/send-ai-specialist-sms', requireAuth, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const lead = await prisma.compounderLead.findUnique({ where: { id }, select: { id: true, phone: true, name: true, show_ai_specialist: true } });
+    if (!lead) return res.status(404).json({ ok: false, error: 'Lead nenalezen' });
+    if (!lead.phone) return res.status(400).json({ ok: false, error: 'Lead nemá telefonní číslo' });
+    if (!lead.show_ai_specialist) {
+      await prisma.compounderLead.update({ where: { id }, data: { show_ai_specialist: true } }).catch(() => {});
+    }
+    const link = portalBase() + '/ai?t=' + makePortalToken(id);
+    const custom = (req.body && req.body.text) ? String(req.body.text) : '';
+    const body = (custom && custom.indexOf('{link}') !== -1)
+      ? custom.replace('{link}', link)
+      : ('Dobrý den, náš AI specialista na prádlomaty vám rád zodpoví dotazy zde: ' + link + ' — Best Series');
+    const sms = require('../services/voice/sms');
+    const sid = await sms.sendSms(lead.phone, body);
+    res.json({ ok: true, sid, link });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err.message });
   }
 });
 

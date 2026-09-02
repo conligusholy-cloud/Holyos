@@ -5635,6 +5635,8 @@ model CompounderLead {
   // Záložka „AI Specialista" na portálu (chat s AI prodejcem). Výchozí vypnuto,
   // zapíná obchodník/admin u konkrétního leada.
   show_ai_specialist Boolean @default(false)
+  // AI shrnutí toho, co lead z chatu s AI specialistou chce (generuje se na vyžádání).
+  ai_specialist_summary String? @db.Text
 
   // Heslo pro prihlaseni (bcrypt hash). Null = uzivatel heslo nenastavil (jen magic link).
   password_hash String? @db.Text
@@ -6062,6 +6064,18 @@ model WithdrawalRequest {
   @@index([email])
   @@index([status])
   @@map("withdrawal_request")
+}
+
+// Chat s AI specialistou na portálu Compounder — historie zpráv per lead
+model AiSpecialistMessage {
+  id         String   @id @default(uuid())
+  lead_id    Int
+  role       String   // 'user' | 'assistant'
+  text       String   @db.Text
+  created_at DateTime @default(now())
+
+  @@index([lead_id])
+  @@map("ai_specialist_messages")
 }
 
 // =============================================================================

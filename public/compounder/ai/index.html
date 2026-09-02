@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>AI specialista · Compounder</title>
+<style>
+  :root { --bg:#0b0e13; --panel:#0e1116; --line:#2a2a2e; --gold:#eab308; --muted:#7a7a85; --text:#e8e8ea; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif; }
+  .wrap { max-width:720px; margin:0 auto; min-height:100vh; display:flex; flex-direction:column; padding:16px; }
+  .head { padding:8px 2px 14px; }
+  .brand { font-weight:800; letter-spacing:3px; font-size:14px; color:#fff; }
+  .brand span { color:var(--gold); }
+  h1 { font-size:22px; margin:12px 0 4px; }
+  .sub { color:var(--muted); font-size:14px; margin:0 0 4px; }
+  #msgs { flex:1; overflow-y:auto; border:1px solid var(--line); border-radius:14px; padding:14px; background:var(--panel); display:flex; flex-direction:column; gap:10px; min-height:240px; }
+  .m { max-width:88%; padding:9px 12px; border-radius:12px; font-size:15px; line-height:1.5; white-space:pre-wrap; }
+  .m.user { align-self:flex-end; background:#26303c; color:#fff; }
+  .m.ai { align-self:flex-start; background:#171b22; color:var(--text); border:1px solid var(--line); }
+  .bar { display:flex; gap:8px; margin-top:10px; align-items:flex-end; }
+  #input { flex:1; resize:none; background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:12px; color:#fff; font-size:16px; font-family:inherit; }
+  button { flex:0 0 auto; border:none; border-radius:12px; cursor:pointer; }
+  #mic { background:#1a1e26; border:1px solid var(--line); width:48px; height:48px; font-size:19px; }
+  #send { background:var(--gold); color:#1a1408; padding:0 18px; height:48px; font-weight:700; font-size:15px; }
+  .opts { margin-top:8px; color:var(--muted); font-size:12px; display:flex; align-items:center; gap:6px; }
+  #gate { text-align:center; color:var(--muted); padding:60px 16px; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="head">
+      <div class="brand">COMPO<span>U</span>NDER</div>
+      <h1>AI specialista na prádlomaty</h1>
+      <p class="sub">Zeptejte se na cokoli — jak to funguje, ekonomika, návratnost, lokality. Můžete psát i mluvit.</p>
+    </div>
+    <div id="gate">Načítám…</div>
+    <div id="chat" style="display:none;flex:1;flex-direction:column;">
+      <div id="msgs"></div>
+      <div class="bar">
+        <textarea id="input" rows="1" placeholder="Napište dotaz…"></textarea>
+        <button id="mic" title="Mluvit">🎤</button>
+        <button id="send">Odeslat</button>
+      </div>
+      <label class="opts"><input type="checkbox" id="tts" checked> Číst odpovědi nahlas</label>
+    </div>
+  </div>
+<script>
+(function(){
+  var token = new URLSearchParams(location.search).get('t') || '';
+  var busy = false;
+  function el(id){ return document.getElementById(id); }
+  function addMsg(role, text){
+    var d = document.createElement('div'); d.className = 'm ' + (role==='user'?'user':'ai'); d.textContent = text;
+    el('msgs').appendChild(d); el('msgs').scrollTop = el('msgs').scrollHeight; return d;
+  }
+  function speak(text){
+    try{ if(!el('tts').checked || !window.speechSynthesis || !text) return; window.speechSynthesis.cancel();
+      var u = new SpeechSynthesisUtterance(text); u.lang='cs-CZ'; u.rate=1.03; window.speechSynthesis.speak(u); }catch(e){}
+  }
+  async function send(){
+    var msg = (el('input').value||'').trim(); if(!msg || busy) return;
+    el('input').value=''; busy=true; addMsg('user', msg);
+    var ph = addMsg('ai','…');
+    try{
+      var r = await fetch('/api/compounder/portal/ai-specialist', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ t: token, message: msg }) });
+      var j = await r.json().catch(function(){ return {}; });
+      if(ph && ph.parentNode) ph.parentNode.removeChild(ph);
+      if(r.ok && j.ok){ addMsg('ai', j.reply||'…'); speak(j.reply||''); }
+      else addMsg('ai', 'Omlouvám se, '+(j.error||'nepodařilo se odpovědět')+'.');
+    }catch(e){ if(ph && ph.parentNode) ph.parentNode.removeChild(ph); addMsg('ai','Chyba spojení.'); }
+    busy=false;
+  }
+  function initMic(){
+    var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if(!SR){ el('mic').style.display='none'; return; }
+    var rec = new SR(); rec.lang='cs-CZ'; rec.interimResults=false; rec.maxAlternatives=1; var listening=false;
+    rec.onresult=function(e){ var t=e.results[0][0].transcript; el('input').value=(el('input').value?el('input').value+' ':'')+t; };
+    rec.onend=function(){ listening=false; el('mic').style.background='#1a1e26'; };
+    rec.onerror=function(){ listening=false; el('mic').style.background='#1a1e26'; };
+    el('mic').addEventListener('click', function(){ if(listening){ try{rec.stop();}catch(e){} return;} try{ rec.start(); listening=true; el('mic').style.background='#b91c1c'; }catch(e){} });
+  }
+  async function boot(){
+    if(!token){ el('gate').textContent='Neplatný odkaz.'; return; }
+    try{
+      var r = await fetch('/api/compounder/portal/ai-specialist/info?t='+encodeURIComponent(token));
+      var j = await r.json().catch(function(){ return {}; });
+      if(!r.ok || !j.ok){ el('gate').textContent = (j && j.error) ? j.error : 'Odkaz je neplatný nebo nedostupný.'; return; }
+      el('gate').style.display='none'; el('chat').style.display='flex';
+      (j.messages||[]).forEach(function(m){ addMsg(m.role==='user'?'user':'ai', m.text); });
+      if(!(j.messages||[]).length && j.greeting) addMsg('ai', j.greeting);
+      el('send').addEventListener('click', send);
+      el('input').addEventListener('keydown', function(e){ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); send(); } });
+      initMic();
+    }catch(e){ el('gate').textContent='Chyba načtení.'; }
+  }
+  boot();
+})();
+</script>
+</body>
+</html>

@@ -687,6 +687,10 @@ function serveCompounderPortal(req, res) {
   res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
   res.sendFile(path.join(COMPOUNDER_DIR, 'portal', 'index.html'));
 }
+function serveAiSpecialist(req, res) {
+  res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.sendFile(path.join(COMPOUNDER_DIR, 'ai', 'index.html'));
+}
 
 // (1) Vlastní doména compounder.world → web na rootu domény (+ /portal gated stránka).
 app.use((req, res, next) => {
@@ -698,6 +702,7 @@ app.use((req, res, next) => {
       req.path.startsWith('/css/') || req.path.startsWith('/js/') ||
       req.path.startsWith('/dist/')) return next();
   if (req.path === '/portal' || req.path === '/portal/') return serveCompounderPortal(req, res);
+  if (req.path === '/ai' || req.path === '/ai/') return serveAiSpecialist(req, res);
   compounderStatic(req, res, () => serveCompounderHtml(req, res));
 });
 
@@ -711,6 +716,8 @@ app.get('/compounder', (req, res, next) => {
 app.get('/compounder/', serveCompounderHtml);
 app.get('/compounder/portal', serveCompounderPortal);
 app.get('/compounder/portal/', serveCompounderPortal);
+app.get('/compounder/ai', serveAiSpecialist);
+app.get('/compounder/ai/', serveAiSpecialist);
 app.use('/compounder', compounderStatic);
 
 // ─── Lokality — veřejný web bestseries.global (nabídka místa pro prádlomat) ──
