@@ -320,6 +320,23 @@ router.post('/campaigns', requireAuth, express.json(), async (req, res, next) =>
   }
 });
 
+// Úprava kampaně (scénář, název, číslo, časové okno)
+router.put('/campaigns/:id', requireAuth, express.json(), async (req, res, next) => {
+  try {
+    const b = req.body || {};
+    const data = {};
+    if (b.name !== undefined) data.name = String(b.name);
+    if (b.script !== undefined) data.script = b.script ? String(b.script) : null;
+    if (b.from_number !== undefined) data.from_number = b.from_number ? String(b.from_number).replace(/[\s\-()]/g, '') : null;
+    if (b.call_from !== undefined) data.call_from = b.call_from || null;
+    if (b.call_to !== undefined) data.call_to = b.call_to || null;
+    const camp = await prisma.voiceCampaign.update({ where: { id: req.params.id }, data });
+    res.json(camp);
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.get('/campaigns/:id', requireAuth, async (req, res, next) => {
   try {
     const camp = await prisma.voiceCampaign.findUnique({
