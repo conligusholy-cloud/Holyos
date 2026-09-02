@@ -451,11 +451,35 @@
       <!-- Sub: SMS -->
       <div id="ai-sms" style="display:none;max-width:760px;">
         <h3 style="margin:0 0 12px;font-size:16px;">SMS</h3>
+
+        <!-- Brána SMS: provider + kanál/odesílatel -->
+        <div style="border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:16px;">
+          <h4 style="margin:0 0 8px;font-size:14px;">📡 Brána SMS (přes co se posílá)</h4>
+          <div style="font-size:12px;color:var(--text2);margin-bottom:10px;">Přepni bránu a odesílatele bez redeploye. Tajné klíče (Twilio token, GoSMS secret) zůstávají v Railway. <b>Odkaz doručí jen schválený/registrovaný odesílatel</b> — u obecného odesílatele operátor SMS s odkazem filtruje.</div>
+          <label style="font-size:13px;display:block;margin-bottom:4px;">Poskytovatel</label>
+          <select id="ai-sms-provider" onchange="aiSmsProviderToggle()" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:9px;color:var(--text);font-size:13px;margin-bottom:10px;">
+            <option value="gosms">GoSMS.cz (český)</option>
+            <option value="twilio">Twilio</option>
+          </select>
+          <div id="ai-sms-gosms-box" style="margin-bottom:10px;">
+            <label style="font-size:13px;display:block;margin-bottom:4px;">GoSMS kanál (ID) <span id="ai-sms-gosms-ready" style="font-size:11px;color:var(--text2);"></span></label>
+            <input id="ai-sms-gosms-channel" placeholder="např. 506810" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:9px;color:var(--text);font-size:13px;">
+            <div style="font-size:11px;color:var(--text2);margin-top:4px;">ID kanálu z GoSMS portálu. Odesílatele (obecný/vlastní) řeš přímo v GoSMS u daného kanálu.</div>
+          </div>
+          <div id="ai-sms-twilio-box" style="margin-bottom:10px;display:none;">
+            <label style="font-size:13px;display:block;margin-bottom:4px;">Twilio odesílatel <span id="ai-sms-twilio-ready" style="font-size:11px;color:var(--text2);"></span></label>
+            <input id="ai-sms-twilio-from" placeholder="+420… / MGxxxx (Messaging Service) / Pradlomat" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:9px;color:var(--text);font-size:13px;">
+            <div style="font-size:11px;color:var(--text2);margin-top:4px;">Číslo, Messaging Service SID (MG…), nebo registrovaný alfanumerický název (pro ČR nutná registrace).</div>
+          </div>
+          <button class="btn" onclick="aiSaveSmsGateway()" style="background:#eab308;color:#0e1a22;font-weight:700;">💾 Uložit bránu</button>
+          <span id="ai-sms-gw-msg" style="margin-left:10px;font-size:13px;color:var(--text2);"></span>
+        </div>
+
         <div style="border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:16px;">
           <h4 style="margin:0 0 8px;font-size:14px;">📩 SMS při nedovolání (odchozí kampaně)</h4>
           <label style="font-size:13px;cursor:pointer;display:inline-flex;align-items:center;gap:8px;"><input type="checkbox" id="ai-sms-on"> Poslat leadovi SMS, když hovor nezvedne (nebo spadne do schránky)</label>
           <textarea id="ai-sms-text" rows="3" style="width:100%;margin-top:8px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text);font-size:13px;" placeholder="Dobrý den, volali jsme Vám ohledně prádelen Prádlomat (Best Series). Zkusíme to ještě jednou."></textarea>
-          <div style="font-size:11px;color:var(--text2);margin-top:4px;">Odesílatel se nastavuje v Railway (VOICE_SMS_FROM — např. „Pradlomaty", musí být zaregistrovaný pro ČR). SMS se pošle jednou na lead. Posílej jen kontaktům se souhlasem.</div>
+          <div style="font-size:11px;color:var(--text2);margin-top:4px;">Bránu a odesílatele nastavíš výše (📡 Brána SMS). SMS se pošle jednou na lead. Posílej jen kontaktům se souhlasem.</div>
           <div style="margin-top:10px;"><button class="btn" onclick="aiSaveSmsConfig()" style="background:#eab308;color:#0e1a22;font-weight:700;">💾 Uložit SMS nastavení</button> <span id="ai-sms-msg" style="margin-left:10px;font-size:13px;color:var(--text2);"></span></div>
         </div>
 
@@ -5021,8 +5045,33 @@
         var c=await aiApi('/config');
         document.getElementById('ai-sms-on').checked=!!c.sms_on_no_answer;
         document.getElementById('ai-sms-text').value=c.sms_text||'';
+        var g=c.sms_gateway||{};
+        document.getElementById('ai-sms-provider').value=(g.provider==='gosms'?'gosms':'twilio');
+        document.getElementById('ai-sms-gosms-channel').value=g.gosms_channel||'';
+        document.getElementById('ai-sms-twilio-from').value=g.twilio_sms_from||'';
+        document.getElementById('ai-sms-gosms-ready').textContent = g.gosms_ready?'· klíče OK':'· chybí klíče v Railway';
+        document.getElementById('ai-sms-twilio-ready').textContent = g.twilio_ready?'· klíče OK':'· chybí klíče v Railway';
+        aiSmsProviderToggle();
       }catch(e){ var m=document.getElementById('ai-sms-msg'); if(m) m.textContent='Chyba načtení: '+e.message; }
     }
+    function aiSmsProviderToggle(){
+      var p=document.getElementById('ai-sms-provider').value;
+      document.getElementById('ai-sms-gosms-box').style.display = (p==='gosms')?'':'none';
+      document.getElementById('ai-sms-twilio-box').style.display = (p==='twilio')?'':'none';
+    }
+    window.aiSmsProviderToggle=aiSmsProviderToggle;
+    async function aiSaveSmsGateway(){
+      var msg=document.getElementById('ai-sms-gw-msg'); msg.textContent='Ukládám…';
+      try{
+        await aiApi('/config',{ method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({
+          sms_provider: document.getElementById('ai-sms-provider').value,
+          gosms_channel: document.getElementById('ai-sms-gosms-channel').value,
+          twilio_sms_from: document.getElementById('ai-sms-twilio-from').value
+        })});
+        msg.textContent='✅ Uloženo';
+      }catch(e){ msg.textContent='Chyba: '+e.message; }
+    }
+    window.aiSaveSmsGateway=aiSaveSmsGateway;
     async function aiSaveSmsConfig(){
       var msg=document.getElementById('ai-sms-msg'); msg.textContent='Ukládám…';
       try{

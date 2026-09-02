@@ -230,7 +230,10 @@ router.get('/config', requireAuth, async (req, res, next) => {
     const smsRaw = get ? await get('voice.sms_on_no_answer') : false;
     const sms_on_no_answer = smsRaw === true || smsRaw === 'true' || smsRaw === 1 || smsRaw === '1';
     const sms_text = get ? (await get('voice.sms_text')) || '' : '';
-    res.json({ inbound_prompt, inbound_greeting, notify_person_ids: notify_person_ids || [], default_from, sms_on_no_answer, sms_text });
+    // Brána SMS (provider + kanál/odesílatel), včetně readiness klíčů (bez tajných hodnot)
+    let sms_gateway = { provider: 'twilio', gosms_channel: '', twilio_sms_from: '', gosms_ready: false, twilio_ready: false };
+    try { sms_gateway = await require('../services/voice/sms').getSmsConfigView(); } catch (_) { /* fallback */ }
+    res.json({ inbound_prompt, inbound_greeting, notify_person_ids: notify_person_ids || [], default_from, sms_on_no_answer, sms_text, sms_gateway });
   } catch (err) {
     next(err);
   }
@@ -258,6 +261,16 @@ router.put('/config', requireAuth, express.json(), async (req, res, next) => {
       await settings.setSetting('voice.sms_on_no_answer', !!sms_on_no_answer, { type: 'boolean', userId: uid });
     if (sms_text !== undefined)
       await settings.setSetting('voice.sms_text', String(sms_text || ''), { type: 'string', userId: uid });
+    // Brána SMS — jen NEtajné hodnoty (provider, kanál, odesílatel). Klíče zůstávají v env.
+    const { sms_provider, gosms_channel, twilio_sms_from } = req.body || {};
+    if (sms_provider !== undefined) {
+      const p = String(sms_provider || '').toLowerCase() === 'gosms' ? 'gosms' : 'twilio';
+      await settings.setSetting('voice.sms_provider', p, { type: 'string', userId: uid });
+    }
+    if (gosms_channel !== undefined)
+      await settings.setSetting('voice.gosms_channel', String(gosms_channel || '').trim(), { type: 'string', userId: uid });
+    if (twilio_sms_from !== undefined)
+      await settings.setSetting('voice.twilio_sms_from', String(twilio_sms_from || '').trim(), { type: 'string', userId: uid });
     res.json({ ok: true });
   } catch (err) {
     next(err);

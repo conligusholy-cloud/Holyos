@@ -19,23 +19,49 @@ const DEFAULT_TEXT =
   'Dobrý den, volali jsme Vám ohledně prádelen Prádlomat (Best Series). ' +
   'Nedovolali jsme se, zkusíme to ještě jednou. Děkujeme, Best Series.';
 
-// Poskytovatel SMS: 'gosms' (český GoSMS.cz) nebo 'twilio' (default).
-function smsProvider() {
-  return (process.env.SMS_PROVIDER || 'twilio').toLowerCase();
+// Nastavení lze měnit za běhu přes AppSetting (voice.sms_provider / voice.gosms_channel /
+// voice.twilio_sms_from) — nadřazené env. Když v nastavení nic není, použije se env.
+// TAJNÉ klíče (GOSMS_CLIENT_SECRET, TWILIO_AUTH_TOKEN) zůstávají VŽDY jen v env, ne v UI/DB.
+async function setting(key) {
+  if (!getSetting) return null;
+  try {
+    const v = await getSetting(key);
+    return v === undefined || v === null || v === '' ? null : v;
+  } catch (_) {
+    return null;
+  }
 }
 
-function smsConfigured() {
-  if (smsProvider() === 'gosms') {
-    return !!(process.env.GOSMS_CLIENT_ID && process.env.GOSMS_CLIENT_SECRET && process.env.GOSMS_CHANNEL);
-  }
-  return !!process.env.VOICE_SMS_FROM;
+// Poskytovatel SMS: 'gosms' (český GoSMS.cz) nebo 'twilio' (default).
+async function smsProvider() {
+  const s = await setting('voice.sms_provider');
+  return String(s || process.env.SMS_PROVIDER || 'twilio').toLowerCase();
+}
+async function gosmsChannel() {
+  const s = await setting('voice.gosms_channel');
+  return String(s || process.env.GOSMS_CHANNEL || '').trim();
+}
+async function twilioFrom() {
+  const s = await setting('voice.twilio_sms_from');
+  return String(s || process.env.VOICE_SMS_FROM || '').trim();
+}
+
+// Přehled nastavení brány pro UI (bez tajných hodnot — jen zda jsou klíče přítomné).
+async function getSmsConfigView() {
+  return {
+    provider: await smsProvider(),
+    gosms_channel: await gosmsChannel(),
+    twilio_sms_from: await twilioFrom(),
+    gosms_ready: !!(process.env.GOSMS_CLIENT_ID && process.env.GOSMS_CLIENT_SECRET),
+    twilio_ready: !!(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN),
+  };
 }
 
 async function sendViaTwilio(to, body) {
   const c = outbound.client();
   if (!c) throw new Error('Twilio není nakonfigurováno');
-  const from = process.env.VOICE_SMS_FROM;
-  if (!from) throw new Error('Není nastavený odesílatel SMS (VOICE_SMS_FROM)');
+  const from = await twilioFrom();
+  if (!from) throw new Error('Není nastavený odesílatel SMS (Twilio odesílatel / VOICE_SMS_FROM)');
   const params = { to: outbound.toE164(to), body };
   if (from.startsWith('MG')) params.messagingServiceSid = from;
   else params.from = from;
@@ -48,9 +74,9 @@ async function sendViaTwilio(to, body) {
 async function sendViaGoSms(to, body) {
   const id = process.env.GOSMS_CLIENT_ID;
   const secret = process.env.GOSMS_CLIENT_SECRET;
-  const channel = process.env.GOSMS_CHANNEL;
+  const channel = await gosmsChannel();
   if (!id || !secret || !channel) {
-    throw new Error('GoSMS není nakonfigurováno (GOSMS_CLIENT_ID / GOSMS_CLIENT_SECRET / GOSMS_CHANNEL)');
+    throw new Error('GoSMS není nakonfigurováno (GOSMS_CLIENT_ID / GOSMS_CLIENT_SECRET v env, kanál v nastavení / GOSMS_CHANNEL)');
   }
   const base = (process.env.GOSMS_BASE || 'https://app.gosms.eu').replace(/\/+$/, '');
   const tokUrl =
@@ -124,7 +150,8 @@ function extractGoSmsId(j) {
 }
 
 async function sendSms(to, body) {
-  if (smsProvider() === 'gosms') return sendViaGoSms(to, body);
+  const p = await smsProvider();
+  if (p === 'gosms') return sendViaGoSms(to, body);
   return sendViaTwilio(to, body);
 }
 
@@ -167,8 +194,13 @@ async function maybeSendNoAnswerSms(target) {
     const on = await getSetting('voice.sms_on_no_answer');
     const enabled = on === true || on === 'true' || on === 1 || on === '1';
     if (!enabled) return;
-    if (!process.env.VOICE_SMS_FROM) {
-      console.log('[voice] SMS přeskočena — chybí VOICE_SMS_FROM');
+    const provider = await smsProvider();
+    if (provider === 'gosms' && !(await gosmsChannel())) {
+      console.log('[voice] SMS přeskočena — chybí GoSMS kanál');
+      return;
+    }
+    if (provider !== 'gosms' && !(await twilioFrom())) {
+      console.log('[voice] SMS přeskočena — chybí Twilio odesílatel (VOICE_SMS_FROM)');
       return;
     }
 
@@ -185,4 +217,4 @@ async function maybeSendNoAnswerSms(target) {
   }
 }
 
-module.exports = { sendSms, maybeSendNoAnswerSms, getGoSmsStatus, DEFAULT_TEXT };
+module.exports = { sendSms, maybeSendNoAnswerSms, getGoSmsStatus, getSmsConfigView, DEFAULT_TEXT };
