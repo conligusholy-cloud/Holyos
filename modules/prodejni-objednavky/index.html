@@ -4566,11 +4566,16 @@
     }
     async function cmpAiSpecSmsStatus(id){
       var line=document.getElementById('aispec-sms-'+id);
+      var out=document.getElementById('aispec-out-'+id); if(out) out.innerHTML='<span style="color:var(--text2);font-size:12px;">Zjišťuji stav u GoSMS…</span>';
       try{
         var r=await fetch('/api/compounder/leads/'+id+'/ai-specialist-sms-status',{ credentials:'include' });
         var j=await r.json().catch(function(){return{};});
-        if(r.ok && j.ok){ if(line) line.outerHTML=cmpAiSpecSmsLine(id, j.sentAt, j.status); var rowEl=document.querySelector('tr[data-lead="'+id+'"]'); if(rowEl && j.status) rowEl.setAttribute('data-aispecsmsstat', j.status); }
-      }catch(e){}
+        if(r.ok && j.ok){
+          if(line) line.outerHTML=cmpAiSpecSmsLine(id, j.sentAt, j.status);
+          var rowEl=document.querySelector('tr[data-lead="'+id+'"]'); if(rowEl && j.status) rowEl.setAttribute('data-aispecsmsstat', j.status);
+          if(out) out.innerHTML='<span style="font-size:12px;color:var(--text2);">Stav: <b>'+cmpEsc(j.status||'?')+'</b>'+(j.detail?(' · '+cmpEsc(j.detail)):'')+'</span>';
+        } else { if(out) out.innerHTML='<span style="color:#ef4444;font-size:12px;">Chyba: '+cmpEsc(j.error||('HTTP '+r.status))+'</span>'; }
+      }catch(e){ if(out) out.innerHTML='<span style="color:#ef4444;font-size:12px;">Chyba spojení: '+cmpEsc(e.message)+'</span>'; }
     }
     window.cmpAiSpecSmsStatus = cmpAiSpecSmsStatus;
     async function cmpAiSpecSms(id){

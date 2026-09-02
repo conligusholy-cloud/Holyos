@@ -599,13 +599,15 @@ router.get('/leads/:id/ai-specialist-sms-status', requireAuth, async (req, res, 
       return res.json({ ok: true, status: (lead && lead.ai_specialist_sms_status) || null, sentAt: (lead && lead.ai_specialist_sms_sent_at) || null });
     }
     let label = lead.ai_specialist_sms_status || 'odesláno';
+    let detail = null;
     try {
       const sms = require('../services/voice/sms');
       const st = await sms.getGoSmsStatus(lead.ai_specialist_sms_id);
       label = st.label;
+      try { detail = JSON.stringify(st.raw).slice(0, 300); } catch (_) {}
       await prisma.compounderLead.update({ where: { id }, data: { ai_specialist_sms_status: label } }).catch(() => {});
-    } catch (e) { /* ponecháme poslední známý stav */ }
-    res.json({ ok: true, status: label, sentAt: lead.ai_specialist_sms_sent_at });
+    } catch (e) { detail = 'Nelze zjistit u GoSMS: ' + e.message; }
+    res.json({ ok: true, status: label, sentAt: lead.ai_specialist_sms_sent_at, detail });
   } catch (err) { next(err); }
 });
 
