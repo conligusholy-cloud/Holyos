@@ -217,6 +217,7 @@ router.get('/config', requireAuth, async (req, res, next) => {
   try {
     const get = settings ? settings.getSetting : null;
     const inbound_prompt = get ? (await get('voice.inbound_prompt')) || '' : '';
+    const inbound_greeting = get ? (await get('voice.inbound_greeting')) || '' : '';
     let notify_person_ids = get ? await get('voice.notify_person_ids') : [];
     if (typeof notify_person_ids === 'string') {
       try {
@@ -229,7 +230,7 @@ router.get('/config', requireAuth, async (req, res, next) => {
     const smsRaw = get ? await get('voice.sms_on_no_answer') : false;
     const sms_on_no_answer = smsRaw === true || smsRaw === 'true' || smsRaw === 1 || smsRaw === '1';
     const sms_text = get ? (await get('voice.sms_text')) || '' : '';
-    res.json({ inbound_prompt, notify_person_ids: notify_person_ids || [], default_from, sms_on_no_answer, sms_text });
+    res.json({ inbound_prompt, inbound_greeting, notify_person_ids: notify_person_ids || [], default_from, sms_on_no_answer, sms_text });
   } catch (err) {
     next(err);
   }
@@ -242,6 +243,8 @@ router.put('/config', requireAuth, express.json(), async (req, res, next) => {
     const uid = req.user && req.user.id;
     if (inbound_prompt !== undefined)
       await settings.setSetting('voice.inbound_prompt', String(inbound_prompt || ''), { type: 'string', userId: uid });
+    if (req.body.inbound_greeting !== undefined)
+      await settings.setSetting('voice.inbound_greeting', String(req.body.inbound_greeting || ''), { type: 'string', userId: uid });
     if (notify_person_ids !== undefined) {
       const arr = (Array.isArray(notify_person_ids) ? notify_person_ids : [])
         .map((x) => parseInt(x, 10))
@@ -327,6 +330,7 @@ router.put('/campaigns/:id', requireAuth, express.json(), async (req, res, next)
     const data = {};
     if (b.name !== undefined) data.name = String(b.name);
     if (b.script !== undefined) data.script = b.script ? String(b.script) : null;
+    if (b.greeting !== undefined) data.greeting = b.greeting ? String(b.greeting) : null;
     if (b.from_number !== undefined) data.from_number = b.from_number ? String(b.from_number).replace(/[\s\-()]/g, '') : null;
     if (b.call_from !== undefined) data.call_from = b.call_from || null;
     if (b.call_to !== undefined) data.call_to = b.call_to || null;

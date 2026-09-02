@@ -88,6 +88,8 @@ function attach(server) {
       target: null,
       campaign: null,
       system: mode === 'outbound' ? outboundSystem(null) : personalSystem(),
+      greeting:
+        'Dobrý den, dovolali jste se na asistenta. Hovor obsluhuje AI a je nahráván. Jak vám můžu pomoct?',
     };
 
     // Outbound: načti cíl + kampaň a nastav scénář
@@ -107,11 +109,13 @@ function attach(server) {
       }
     }
 
-    // Inbound: scénář recepční z nastavení (voice.inbound_prompt), jinak default
+    // Inbound: scénář + úvodní věta z nastavení, jinak default
     if (mode === 'inbound' && getSetting) {
       try {
         const p = await getSetting('voice.inbound_prompt');
         if (p && String(p).trim()) state.system = String(p);
+        const g = await getSetting('voice.inbound_greeting');
+        if (g && String(g).trim()) state.greeting = String(g);
       } catch (_) {
         /* default */
       }
@@ -132,31 +136,35 @@ function attach(server) {
         if (state.callSid) calls.set(state.callSid, state);
 
         if (mode === 'outbound') {
-          // AI zahájí hovor sama (volaný právě zvedl)
-          try {
-            const { text, messages } = await agent.runTurn({
-              system: state.system,
-              history: [],
-              userText: '(Hovor byl spojen, druhá strana zvedla. Zahaj rozhovor krátkým pozdravem a představením podle scénáře.)',
-              maxTokens: 200,
-            });
-            state.history = messages;
-            state.transcript.push({ role: 'agent', text, ts: Date.now() });
-            send(ws, { type: 'text', token: text, last: true });
-          } catch (e) {
-            send(ws, {
-              type: 'text',
-              token: 'Dobrý den, volám z firmy Best Series. Máte chviličku?',
-              last: true,
-            });
+          const fixedGreeting =
+            state.campaign && state.campaign.greeting && String(state.campaign.greeting).trim();
+          if (fixedGreeting) {
+            // Pevná úvodní věta z kampaně (AI ji řekne přesně takto)
+            state.history = [{ role: 'assistant', content: fixedGreeting }];
+            state.transcript.push({ role: 'agent', text: fixedGreeting, ts: Date.now() });
+            send(ws, { type: 'text', token: fixedGreeting, last: true });
+          } else {
+            // AI zahájí hovor sama podle scénáře
+            try {
+              const { text, messages } = await agent.runTurn({
+                system: state.system,
+                history: [],
+                userText: '(Hovor byl spojen, druhá strana zvedla. Zahaj rozhovor krátkým pozdravem a představením podle scénáře.)',
+                maxTokens: 200,
+              });
+              state.history = messages;
+              state.transcript.push({ role: 'agent', text, ts: Date.now() });
+              send(ws, { type: 'text', token: text, last: true });
+            } catch (e) {
+              send(ws, {
+                type: 'text',
+                token: 'Dobrý den, volám z firmy Best Series. Máte chviličku?',
+                last: true,
+              });
+            }
           }
         } else {
-          send(ws, {
-            type: 'text',
-            token:
-              'Dobrý den, dovolali jste se na asistenta. Hovor obsluhuje AI a je nahráván. Jak vám můžu pomoct?',
-            last: true,
-          });
+          send(ws, { type: 'text', token: state.greeting, last: true });
         }
         return;
       }

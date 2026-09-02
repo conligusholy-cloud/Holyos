@@ -6100,6 +6100,7 @@ model VoiceCampaign {
   name               String   @db.VarChar(255)
   status             String   @default("draft") // draft | running | paused | done
   script             String?  @db.Text          // systémový scénář pro AI
+  greeting           String?  @db.Text          // úvodní věta (co AI řekne první); prázdné = vygeneruje ze scénáře
   from_number        String?  @db.VarChar(32)    // odchozí caller ID (Twilio číslo)
   max_attempts       Int      @default(1)
   call_from          String?  @db.VarChar(5)     // pracovní okno HH:MM

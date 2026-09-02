@@ -419,6 +419,9 @@
         <h3 style="margin:0 0 12px;font-size:16px;">Nastavení příchozí recepční</h3>
         <label style="display:block;font-size:12px;color:var(--text2);margin-bottom:4px;">Scénář / instrukce pro AI (co má zjistit, jak se chovat)</label>
         <textarea id="ai-inbound-prompt" rows="6" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text);font-size:13px;" placeholder="Např. Jsi asistentka Best Series, zjisti kdo volá a co potřebuje…"></textarea>
+        <label style="display:block;font-size:12px;color:var(--text2);margin:12px 0 4px;">Úvodní věta (co AI řekne jako první při zvednutí)</label>
+        <textarea id="ai-inbound-greeting" rows="2" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text);font-size:13px;" placeholder="Dobrý den, dovolali jste se na asistenta. Hovor obsluhuje AI a je nahráván. Jak vám můžu pomoct?"></textarea>
+        <div style="margin-top:8px;"><button class="btn" onclick="aiSaveConfig()" style="background:#eab308;color:#0e1a22;font-weight:700;">💾 Uložit scénář a úvod</button> <span id="ai-inbound-msg-top" style="margin-left:8px;font-size:13px;color:var(--text2);"></span></div>
         <label style="display:block;font-size:12px;color:var(--text2);margin:12px 0 4px;">Komu chodí notifikace do Velína (Person ID, oddělené čárkou)</label>
         <input id="ai-inbound-notify" type="text" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text);font-size:13px;" placeholder="např. 1">
         <label style="display:block;font-size:12px;color:var(--text2);margin:12px 0 4px;">Výchozí odchozí číslo (Twilio, pro kampaně)</label>
@@ -4845,21 +4848,24 @@
       try{
         var c=await aiApi('/config');
         document.getElementById('ai-inbound-prompt').value=c.inbound_prompt||'';
+        document.getElementById('ai-inbound-greeting').value=c.inbound_greeting||'';
         document.getElementById('ai-inbound-notify').value=(c.notify_person_ids||[]).join(',');
         document.getElementById('ai-inbound-from').value=c.default_from||'';
       }catch(e){ document.getElementById('ai-inbound-msg').textContent='Chyba načtení: '+e.message; }
     }
     async function aiSaveConfig(){
-      var msg=document.getElementById('ai-inbound-msg'); msg.textContent='Ukládám…';
+      var msg=document.getElementById('ai-inbound-msg'); var msg2=document.getElementById('ai-inbound-msg-top');
+      if(msg) msg.textContent='Ukládám…'; if(msg2) msg2.textContent='Ukládám…';
       var notify=(document.getElementById('ai-inbound-notify').value||'').split(',').map(function(x){return parseInt(x,10);}).filter(Boolean);
       try{
         await aiApi('/config',{ method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({
           inbound_prompt: document.getElementById('ai-inbound-prompt').value,
+          inbound_greeting: document.getElementById('ai-inbound-greeting').value,
           notify_person_ids: notify,
           default_from: document.getElementById('ai-inbound-from').value.trim()
         })});
-        msg.textContent='✅ Uloženo';
-      }catch(e){ msg.textContent='Chyba: '+e.message; }
+        if(msg) msg.textContent='✅ Uloženo'; if(msg2) msg2.textContent='✅ Uloženo';
+      }catch(e){ if(msg) msg.textContent='Chyba: '+e.message; if(msg2) msg2.textContent='Chyba: '+e.message; }
     }
     async function aiLoadSmsConfig(){
       try{
@@ -4972,9 +4978,11 @@
         html+='<h3 style="margin:12px 0 6px;font-size:16px;">'+aiEsc(c.name)+' <span id="ai-camp-status" style="font-size:13px;color:var(--text2);">'+aiCampStatusHtml(c)+'</span> <span style="font-size:12px;color:#10b981;margin-left:8px;">● živě</span></h3>';
         html+='<div id="ai-camp-actions" style="margin-bottom:10px;">'+aiCampActionsHtml(c)+'</div>';
         html+='<div style="margin-bottom:14px;">';
-        html+='<div style="font-size:13px;font-weight:600;margin-bottom:4px;">Scénář hovoru (co má AI říkat a zjistit)</div>';
+        html+='<div style="font-size:13px;font-weight:600;margin-bottom:4px;">Úvodní věta (co AI řekne jako první, když volaný zvedne)</div>';
+        html+='<textarea id="ai-camp-greeting" rows="2" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text);font-size:13px;font-family:inherit;" placeholder="Prázdné = AI zahájí sama podle scénáře. Např.: Dobrý den, jmenuji se Klára z Best Series, volám ohledně samoobslužných prádelen…">'+aiEsc(c.greeting||'')+'</textarea>';
+        html+='<div style="font-size:13px;font-weight:600;margin:10px 0 4px;">Scénář hovoru (co má AI říkat a zjistit)</div>';
         html+='<textarea id="ai-camp-script" rows="10" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text);font-size:13px;line-height:1.5;font-family:inherit;">'+aiEsc(c.script||'')+'</textarea>';
-        html+='<div style="margin-top:6px;"><button class="btn" onclick="aiSaveScript(\''+c.id+'\')" style="background:#eab308;color:#0e1a22;font-weight:700;">💾 Uložit scénář</button> <span id="ai-camp-script-msg" style="margin-left:8px;font-size:13px;color:var(--text2);"></span></div>';
+        html+='<div style="margin-top:6px;"><button class="btn" onclick="aiSaveScript(\''+c.id+'\')" style="background:#eab308;color:#0e1a22;font-weight:700;">💾 Uložit scénář a úvod</button> <span id="ai-camp-script-msg" style="margin-left:8px;font-size:13px;color:var(--text2);"></span></div>';
         html+='</div>';
         html+='<div style="border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:14px;">';
         html+='<div style="font-size:13px;margin-bottom:6px;">Přidat leady (každý na řádek, formát <code>Jméno; +420…</code> nebo jen číslo):</div>';
@@ -5014,7 +5022,10 @@
     async function aiSaveScript(id){
       var m=document.getElementById('ai-camp-script-msg'); m.textContent='Ukládám…';
       try{
-        await aiApi('/campaigns/'+id,{ method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ script: document.getElementById('ai-camp-script').value })});
+        await aiApi('/campaigns/'+id,{ method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({
+          script: document.getElementById('ai-camp-script').value,
+          greeting: document.getElementById('ai-camp-greeting').value
+        })});
         m.textContent='✅ Uloženo';
       }catch(e){ m.textContent='Chyba: '+e.message; }
     }
