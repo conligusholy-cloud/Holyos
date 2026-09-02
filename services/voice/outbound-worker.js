@@ -31,18 +31,27 @@ async function tick() {
 
     const running = await prisma.voiceCampaign.findMany({ where: { status: 'running' } });
     for (const camp of running) {
-      // Uvolni zaseknuté hovory (calling/ringing/in_progress bez ukončení)
+      // Uvolni zaseknuté hovory (calling/ringing/in_progress bez ukončení) + SMS
       const staleBefore = new Date(Date.now() - STALE_MIN * 60 * 1000);
-      await prisma.voiceCampaignTarget
-        .updateMany({
+      const stale = await prisma.voiceCampaignTarget
+        .findMany({
           where: {
             campaign_id: camp.id,
             status: { in: ['calling', 'ringing', 'in_progress'] },
             updated_at: { lt: staleBefore },
           },
-          data: { status: 'no_answer', result_summary: 'Bez odpovědi / nespojeno' },
         })
-        .catch(() => {});
+        .catch(() => []);
+      for (const st of stale) {
+        await prisma.voiceCampaignTarget
+          .update({ where: { id: st.id }, data: { status: 'no_answer', result_summary: 'Bez odpovědi / nespojeno' } })
+          .catch(() => {});
+        try {
+          require('./sms').maybeSendNoAnswerSms(st);
+        } catch (_) {
+          /* noop */
+        }
+      }
 
       if (!withinHours(camp)) continue;
 

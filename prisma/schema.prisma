@@ -6124,6 +6124,7 @@ model VoiceCampaignTarget {
   last_call_sid  String?  @db.VarChar(64)
   result_summary String?  @db.Text
   voice_call_id  String?
+  sms_sent       Boolean  @default(false)
   created_at     DateTime @default(now())
   updated_at     DateTime @updatedAt
 

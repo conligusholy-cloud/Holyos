@@ -97,6 +97,13 @@ router.post('/status', form, async (req, res) => {
         }
         if (next && next !== t.status) {
           await prisma.voiceCampaignTarget.update({ where: { id: t.id }, data: { status: next } });
+          if (next === 'no_answer' || next === 'failed') {
+            try {
+              require('../services/voice/sms').maybeSendNoAnswerSms(t);
+            } catch (e) {
+              console.warn('[voice] SMS trigger:', e.message);
+            }
+          }
         }
       }
     }
@@ -193,7 +200,10 @@ router.get('/config', requireAuth, async (req, res, next) => {
       }
     }
     const default_from = get ? (await get('voice.default_from')) || '' : '';
-    res.json({ inbound_prompt, notify_person_ids: notify_person_ids || [], default_from });
+    const smsRaw = get ? await get('voice.sms_on_no_answer') : false;
+    const sms_on_no_answer = smsRaw === true || smsRaw === 'true' || smsRaw === 1 || smsRaw === '1';
+    const sms_text = get ? (await get('voice.sms_text')) || '' : '';
+    res.json({ inbound_prompt, notify_person_ids: notify_person_ids || [], default_from, sms_on_no_answer, sms_text });
   } catch (err) {
     next(err);
   }
@@ -214,6 +224,11 @@ router.put('/config', requireAuth, express.json(), async (req, res, next) => {
     }
     if (default_from !== undefined)
       await settings.setSetting('voice.default_from', String(default_from || ''), { type: 'string', userId: uid });
+    const { sms_on_no_answer, sms_text } = req.body || {};
+    if (sms_on_no_answer !== undefined)
+      await settings.setSetting('voice.sms_on_no_answer', !!sms_on_no_answer, { type: 'boolean', userId: uid });
+    if (sms_text !== undefined)
+      await settings.setSetting('voice.sms_text', String(sms_text || ''), { type: 'string', userId: uid });
     res.json({ ok: true });
   } catch (err) {
     next(err);
