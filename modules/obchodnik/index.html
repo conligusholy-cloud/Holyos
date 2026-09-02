@@ -1384,7 +1384,7 @@
       if (!r.ok || !j.link){ if(msg) msg.innerHTML = '<span style="color:#fca5a5">'+esc((j&&j.error)||'Chyba')+'</span>'; return; }
       var lead = state.leads.find(function(x){return x.id===id;});
       var num = lead ? String(lead.phone||'').replace(/[^0-9+]/g,'') : '';
-      var text = 'Dobry den, specialista na pradlomaty vam rad poradi zde: ' + j.link + ' - Best Series';
+      var text = 'Dobry den, specialista na pradlomaty vam rad poradi zde: ' + j.link;
       var body = encodeURIComponent(text);
       var iOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
       window.location.href = 'sms:'+num+(iOS?'&':'?')+'body='+body;
