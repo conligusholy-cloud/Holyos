@@ -18,7 +18,7 @@
   h1 { font-size:19px; margin:8px 0 4px; }
   .sub { color:var(--muted); font-size:13px; margin:0; line-height:1.4; }
   #chat { flex:1; min-height:0; display:flex; flex-direction:column; }
-  #msgs { flex:1; min-height:0; overflow-y:auto; -webkit-overflow-scrolling:touch;
+  #msgs { position:relative; flex:1; min-height:0; overflow-y:auto; -webkit-overflow-scrolling:touch;
           border:1px solid var(--line); border-radius:14px; padding:14px; background:var(--panel);
           display:flex; flex-direction:column; gap:10px; }
   .m { max-width:88%; padding:9px 12px; border-radius:12px; font-size:15px; line-height:1.5; white-space:pre-wrap; }
@@ -161,9 +161,15 @@
   function autoGrow(){
     var t = el('input'); t.style.height='auto'; t.style.height=Math.min(t.scrollHeight,120)+'px';
   }
+  // Po odpovědi nascrolluj tak, aby MOJE otázka byla nahoře → dlouhou odpověď čteš odshora dolů.
+  function snapToQuestion(uEl){
+    if(!uEl) return;
+    requestAnimationFrame(function(){ try{ el('msgs').scrollTop = Math.max(0, uEl.offsetTop - 8); }catch(e){} });
+  }
   async function send(){
     var msg = (el('input').value||'').trim(); if(!msg || busy) return;
-    el('input').value=''; autoGrow(); busy=true; addMsg('user', msg);
+    el('input').value=''; autoGrow(); busy=true;
+    var uEl = addMsg('user', msg);
     var ph = addMsg('ai','…');
     try{
       var r = await fetch('/api/compounder/portal/ai-specialist', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ t: token, message: msg }) });
@@ -171,7 +177,8 @@
       if(ph && ph.parentNode) ph.parentNode.removeChild(ph);
       if(r.ok && j.ok){ addMsg('ai', j.reply||'…'); }
       else addMsg('ai', 'Omlouvám se, '+(j.error||'nepodařilo se odpovědět')+'.');
-    }catch(e){ if(ph && ph.parentNode) ph.parentNode.removeChild(ph); addMsg('ai','Chyba spojení.'); }
+      snapToQuestion(uEl);
+    }catch(e){ if(ph && ph.parentNode) ph.parentNode.removeChild(ph); addMsg('ai','Chyba spojení.'); snapToQuestion(uEl); }
     busy=false;
   }
   async function boot(){
