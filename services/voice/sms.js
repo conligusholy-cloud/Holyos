@@ -77,7 +77,50 @@ async function sendViaGoSms(to, body) {
     throw new Error('GoSMS send HTTP ' + res.status + ' ' + t.slice(0, 200));
   }
   const j = await res.json().catch(() => ({}));
-  return (j && (j.id || (j.data && j.data.id))) || 'gosms';
+  let msgId = extractGoSmsId(j);
+  // Fallback: API Platform vrací nový záznam i v hlavičce Location: /api/v1/messages/123
+  if (!msgId) {
+    const loc = res.headers && res.headers.get && res.headers.get('location');
+    const m = loc && String(loc).match(/(\d+)\/?$/);
+    if (m) msgId = m[1];
+  }
+  if (!msgId) {
+    console.warn('[gosms] id zprávy nenalezeno v odpovědi, tvar:', JSON.stringify(j).slice(0, 400));
+    msgId = 'gosms';
+  }
+  return msgId;
+}
+
+// Robustně vytáhne id GoSMS zprávy z různých tvarů odpovědi
+// (API Platform JSON-LD @id, pole, hydra:member, data.id, prosté id).
+function extractGoSmsId(j) {
+  if (j == null) return null;
+  if (Array.isArray(j)) {
+    for (const it of j) {
+      const r = extractGoSmsId(it);
+      if (r) return r;
+    }
+    return null;
+  }
+  if (typeof j !== 'object') return null;
+  if (j.id != null && String(j.id).trim()) return String(j.id);
+  if (j['@id']) {
+    const m = String(j['@id']).match(/(\d+)\/?$/);
+    if (m) return m[1];
+  }
+  if (Array.isArray(j['hydra:member'])) {
+    const r = extractGoSmsId(j['hydra:member']);
+    if (r) return r;
+  }
+  if (j.data) {
+    const r = extractGoSmsId(j.data);
+    if (r) return r;
+  }
+  if (Array.isArray(j.messages)) {
+    const r = extractGoSmsId(j.messages);
+    if (r) return r;
+  }
+  return null;
 }
 
 async function sendSms(to, body) {
