@@ -579,7 +579,8 @@ router.post('/leads/:id/send-ai-specialist-sms', requireAuth, async (req, res) =
     }
     // Odkaz bez „www." → kratší SMS. Text bez diakritiky, aby se vešel do 1 SMS
     // (s diakritikou je limit 70 znaků/SMS; bez diakritiky 160 znaků GSM-7).
-    const link = portalBase().replace('://www.', '://') + '/ai?t=' + makePortalToken(id);
+    // Použij plnou doménu z portalBase (má platný TLS certifikát). Apex bez „www" cert nemá → ERR_CERT_COMMON_NAME_INVALID.
+    const link = portalBase() + '/ai?t=' + makePortalToken(id);
     const custom = (req.body && req.body.text) ? String(req.body.text) : '';
     const body = (custom && custom.indexOf('{link}') !== -1)
       ? custom.replace('{link}', link)
@@ -603,7 +604,8 @@ router.get('/leads/:id/ai-specialist-link', requireAuth, async (req, res) => {
     const id = parseInt(req.params.id, 10);
     const lead = await prisma.compounderLead.findUnique({ where: { id }, select: { id: true } });
     if (!lead) return res.status(404).json({ ok: false, error: 'Lead nenalezen' });
-    const link = portalBase().replace('://www.', '://') + '/ai?t=' + makePortalToken(id);
+    // Použij plnou doménu z portalBase (má platný TLS certifikát). Apex bez „www" cert nemá → ERR_CERT_COMMON_NAME_INVALID.
+    const link = portalBase() + '/ai?t=' + makePortalToken(id);
     res.json({ ok: true, link });
   } catch (err) {
     res.status(400).json({ ok: false, error: err.message });
