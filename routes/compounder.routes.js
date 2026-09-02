@@ -453,7 +453,12 @@ const AI_SPECIALIST_GUARDRAILS =
   'Neuváděj ani „obecné" varianty nebo příklady, které scénář výslovně neobsahuje (nevymýšlej kategorie typu „menší lokality / větší frekvence" apod.). ' +
   'Když se zájemce zeptá na něco, co ve scénáři není, NEIMPROVIZUJ: krátce a přirozeně řekni, že přesné údaje potvrdí kolega, ' +
   'a nabídni konkrétní další krok (schůzka nebo telefonát). Radši polož jednu upřesňující otázku, než abys cokoli tipoval. ' +
-  'Nikdy netvrď nic, o čem si nejsi jistý ze scénáře. Když scénář a dotaz nedávají jasnou odpověď, přiznej to a předej to kolegovi.';
+  'Nikdy netvrď nic, o čem si nejsi jistý ze scénáře. Když scénář a dotaz nedávají jasnou odpověď, přiznej to a předej to kolegovi. ' +
+  'ZAKÁZANÉ VYMÝŠLENÍ (nejčastější chyba): NIKDY nevyjmenovávej ani nepopisuj technické parametry strojů (kapacity v kg, rozměry, počet praček/sušiček), ' +
+  'konkrétní verze, konfigurace, modely ani ceny, pokud je NENAJDEŠ doslova v podkladech nebo scénáři. ' +
+  'Nepoužívej interní kódy (V2, V3, BOTH, „oboji") a netvař se, že „BOTH" je název modelu. ' +
+  'Když se zájemce ptá „jaké prádlomaty/verze máte", a v podkladech to není, NEVYPISUJ domnělé varianty — ' +
+  'řekni, že přesnou nabídku a parametry mu ukáže/pošle kolega, a zeptej se, co potřebuje (kapacita, lokalita, rozpočet), ať to umíš předat.';
 
 router.post('/portal/ai-specialist', async (req, res) => {
   try {
@@ -487,8 +492,10 @@ router.post('/portal/ai-specialist', async (req, res) => {
     const who = (lead.name || '').trim();
     const ctx =
       'Kontext hovoru: mluvíš se zájemcem' + (who ? ' jménem ' + who : '') +
-      (lead.city ? ', město ' + lead.city : '') + (lead.role ? ', typ ' + lead.role : '') +
-      '. Uvažovaná verze prádlomatu ' + (lead.pradlomat_version || 'V3') + '.';
+      (lead.city ? ', město ' + lead.city : '') + (lead.role ? ', typ ' + lead.role : '') + '. ' +
+      '(INTERNÍ, NEZMIŇUJ: ekonomický profil leada je „' + (lead.pradlomat_version || 'V3') + '". ' +
+      'Tenhle kód je jen interní přepínač ekonomiky — NIKDY ho v chatu nevyslovuj, neoznačuj ho za „verzi", ' +
+      'a hlavně si k němu NEVYMÝŠLEJ žádné technické parametry, kapacity ani konfigurace.)';
 
     // Znalostní báze — nahrané podklady (ceníky, parametry, ekonomika) = ZÁVAZNÝ zdroj dat.
     let knowledgeBlock = '';
