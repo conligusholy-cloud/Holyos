@@ -546,6 +546,17 @@ router.get('/leads/:id/ai-specialist-chat', requireAuth, async (req, res, next) 
   } catch (err) { next(err); }
 });
 
+// POST /api/compounder/leads/:id/ai-specialist-reset — smaže chat, aby AI začala od začátku
+router.post('/leads/:id/ai-specialist-reset', requireAuth, async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const del = await prisma.aiSpecialistMessage.deleteMany({ where: { lead_id: id } });
+    // Vynuluj i uložené shrnutí — patřilo ke smazanému chatu.
+    await prisma.compounderLead.update({ where: { id }, data: { ai_specialist_summary: null } }).catch(() => {});
+    res.json({ ok: true, deleted: del.count || 0 });
+  } catch (err) { next(err); }
+});
+
 // POST /api/compounder/leads/:id/ai-specialist-summary — AI shrnutí „co lead chce" (admin)
 router.post('/leads/:id/ai-specialist-summary', requireAuth, async (req, res, next) => {
   try {

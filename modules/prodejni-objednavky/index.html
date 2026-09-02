@@ -4586,6 +4586,7 @@
         + '<button class="btn" onclick="cmpAiSpecLink('+id+')" style="font-size:12px;padding:5px 10px;">🔗 Odkaz ke zkopírování</button>'
         + '<button class="btn" onclick="cmpAiSpecChat('+id+')" style="font-size:12px;padding:5px 10px;">💬 Zobrazit chat</button>'
         + '<button class="btn" onclick="cmpAiSpecSummary('+id+')" style="font-size:12px;padding:5px 10px;">🧠 Shrnout co lead chce</button>'
+        + '<button class="btn" onclick="cmpAiSpecReset('+id+')" style="font-size:12px;padding:5px 10px;">🗑 Smazat chat</button>'
         + '</div>'
         + '<div id="aispec-out-'+id+'" style="margin-top:10px;"></div>'
         + '</div>';
@@ -4666,6 +4667,17 @@
       var b=event&&event.target; if(b){ var t=b.textContent; b.textContent='✅ Zkopírováno'; setTimeout(function(){ b.textContent=t; },1500); }
     }
     window.cmpAiSpecLink = cmpAiSpecLink; window.cmpAiSpecCopy = cmpAiSpecCopy;
+    async function cmpAiSpecReset(id){
+      if(!confirm('Opravdu smazat celý chat s tímto leadem? AI začne od začátku a nebude navazovat na předchozí komunikaci. Smaže se i uložené shrnutí.')) return;
+      var out=document.getElementById('aispec-out-'+id); if(out) out.innerHTML='<span style="color:var(--text2);font-size:12px;">Mažu chat…</span>';
+      try{
+        var r=await fetch('/api/compounder/leads/'+id+'/ai-specialist-reset',{ method:'POST', credentials:'include' });
+        var j=await r.json().catch(function(){return{};});
+        if(r.ok && j.ok){ if(out) out.innerHTML='<span style="color:#10b981;font-size:12px;">✅ Chat smazán ('+(j.deleted||0)+' zpráv). AI začne od začátku.</span>'; }
+        else { if(out) out.innerHTML='<span style="color:#ef4444;font-size:12px;">Chyba: '+cmpEsc(j.error||('HTTP '+r.status))+'</span>'; }
+      }catch(e){ if(out) out.innerHTML='<span style="color:#ef4444;font-size:12px;">Chyba spojení: '+cmpEsc(e.message)+'</span>'; }
+    }
+    window.cmpAiSpecReset = cmpAiSpecReset;
     window.cmpAiSpecSms = cmpAiSpecSms; window.cmpAiSpecChat = cmpAiSpecChat; window.cmpAiSpecSummary = cmpAiSpecSummary;
     async function cmpSetAiSpecialist(id, checked){
       var msg = document.querySelector('[data-aispecmsg="'+id+'"]'); if(msg){ msg.style.color='#10b981'; msg.textContent='Ukládám…'; }
