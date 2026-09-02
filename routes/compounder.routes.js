@@ -589,6 +589,19 @@ router.post('/leads/:id/send-ai-specialist-sms', requireAuth, async (req, res) =
   }
 });
 
+// GET /api/compounder/leads/:id/ai-specialist-link — vrátí odkaz na AI specialistu (ke zkopírování)
+router.get('/leads/:id/ai-specialist-link', requireAuth, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const lead = await prisma.compounderLead.findUnique({ where: { id }, select: { id: true } });
+    if (!lead) return res.status(404).json({ ok: false, error: 'Lead nenalezen' });
+    const link = portalBase().replace('://www.', '://') + '/ai?t=' + makePortalToken(id);
+    res.json({ ok: true, link });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err.message });
+  }
+});
+
 // GET /api/compounder/leads/:id/ai-specialist-sms-status — zjistí stav doručení SMS (GoSMS)
 router.get('/leads/:id/ai-specialist-sms-status', requireAuth, async (req, res, next) => {
   try {

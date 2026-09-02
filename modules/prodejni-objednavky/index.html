@@ -4558,6 +4558,7 @@
         + cmpAiSpecSmsLine(id, smsSentAt, smsStatus)
         + '<div style="display:flex;gap:8px;flex-wrap:wrap;">'
         + '<button class="btn" onclick="cmpAiSpecSms('+id+')" style="font-size:12px;padding:5px 10px;">📩 Poslat AI specialistu SMSkou</button>'
+        + '<button class="btn" onclick="cmpAiSpecLink('+id+')" style="font-size:12px;padding:5px 10px;">🔗 Odkaz ke zkopírování</button>'
         + '<button class="btn" onclick="cmpAiSpecChat('+id+')" style="font-size:12px;padding:5px 10px;">💬 Zobrazit chat</button>'
         + '<button class="btn" onclick="cmpAiSpecSummary('+id+')" style="font-size:12px;padding:5px 10px;">🧠 Shrnout co lead chce</button>'
         + '</div>'
@@ -4618,6 +4619,28 @@
         else { if(out) out.innerHTML='<span style="color:#ef4444;font-size:12px;">Chyba: '+cmpEsc(j.error||'')+'</span>'; }
       }catch(e){ if(out) out.innerHTML='<span style="color:#ef4444;font-size:12px;">Chyba spojení</span>'; }
     }
+    async function cmpAiSpecLink(id){
+      var out = document.getElementById('aispec-out-'+id); if(out) out.innerHTML='<span style="color:var(--text2);font-size:12px;">Načítám odkaz…</span>';
+      try{
+        var r = await fetch('/api/compounder/leads/'+id+'/ai-specialist-link', { credentials:'include' });
+        var j = await r.json().catch(function(){return{};});
+        if(r.ok && j.ok && j.link){
+          if(out) out.innerHTML =
+            '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">'
+            + '<input id="aispec-link-'+id+'" type="text" readonly value="'+cmpEsc(j.link)+'" onclick="this.select()" style="flex:1;min-width:220px;font-size:12px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);">'
+            + '<button class="btn" onclick="cmpAiSpecCopy('+id+')" style="font-size:12px;padding:5px 10px;">📋 Kopírovat</button>'
+            + '<a href="'+cmpEsc(j.link)+'" target="_blank" rel="noopener" class="btn" style="font-size:12px;padding:5px 10px;text-decoration:none;">↗ Otevřít</a>'
+            + '</div>';
+        } else { if(out) out.innerHTML='<span style="color:#ef4444;font-size:12px;">Chyba: '+cmpEsc(j.error||('HTTP '+r.status))+'</span>'; }
+      }catch(e){ if(out) out.innerHTML='<span style="color:#ef4444;font-size:12px;">Chyba spojení: '+cmpEsc(e.message)+'</span>'; }
+    }
+    function cmpAiSpecCopy(id){
+      var el=document.getElementById('aispec-link-'+id); if(!el) return;
+      el.select();
+      try{ navigator.clipboard.writeText(el.value); }catch(e){ try{ document.execCommand('copy'); }catch(_){} }
+      var b=event&&event.target; if(b){ var t=b.textContent; b.textContent='✅ Zkopírováno'; setTimeout(function(){ b.textContent=t; },1500); }
+    }
+    window.cmpAiSpecLink = cmpAiSpecLink; window.cmpAiSpecCopy = cmpAiSpecCopy;
     window.cmpAiSpecSms = cmpAiSpecSms; window.cmpAiSpecChat = cmpAiSpecChat; window.cmpAiSpecSummary = cmpAiSpecSummary;
     async function cmpSetAiSpecialist(id, checked){
       var msg = document.querySelector('[data-aispecmsg="'+id+'"]'); if(msg){ msg.style.color='#10b981'; msg.textContent='Ukládám…'; }
