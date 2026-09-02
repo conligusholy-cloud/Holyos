@@ -19,7 +19,19 @@ const DEFAULT_TEXT =
   'Dobrý den, volali jsme Vám ohledně prádelen Prádlomat (Best Series). ' +
   'Nedovolali jsme se, zkusíme to ještě jednou. Děkujeme, Best Series.';
 
-async function sendSms(to, body) {
+// Poskytovatel SMS: 'gosms' (český GoSMS.cz) nebo 'twilio' (default).
+function smsProvider() {
+  return (process.env.SMS_PROVIDER || 'twilio').toLowerCase();
+}
+
+function smsConfigured() {
+  if (smsProvider() === 'gosms') {
+    return !!(process.env.GOSMS_CLIENT_ID && process.env.GOSMS_CLIENT_SECRET && process.env.GOSMS_CHANNEL);
+  }
+  return !!process.env.VOICE_SMS_FROM;
+}
+
+async function sendViaTwilio(to, body) {
   const c = outbound.client();
   if (!c) throw new Error('Twilio není nakonfigurováno');
   const from = process.env.VOICE_SMS_FROM;
@@ -29,6 +41,48 @@ async function sendSms(to, body) {
   else params.from = from;
   const msg = await c.messages.create(params);
   return msg.sid;
+}
+
+// GoSMS.cz — OAuth2 (client_credentials) → POST /api/v1/messages. Odesílatel
+// ("Pradlomaty") se nastaví jako KANÁL v GoSMS portálu → GOSMS_CHANNEL = jeho ID.
+async function sendViaGoSms(to, body) {
+  const id = process.env.GOSMS_CLIENT_ID;
+  const secret = process.env.GOSMS_CLIENT_SECRET;
+  const channel = process.env.GOSMS_CHANNEL;
+  if (!id || !secret || !channel) {
+    throw new Error('GoSMS není nakonfigurováno (GOSMS_CLIENT_ID / GOSMS_CLIENT_SECRET / GOSMS_CHANNEL)');
+  }
+  const base = (process.env.GOSMS_BASE || 'https://app.gosms.eu').replace(/\/+$/, '');
+  const tokUrl =
+    base + '/oauth/v2/token?grant_type=client_credentials' +
+    '&client_id=' + encodeURIComponent(id) +
+    '&client_secret=' + encodeURIComponent(secret);
+  const tokRes = await fetch(tokUrl);
+  if (!tokRes.ok) throw new Error('GoSMS token HTTP ' + tokRes.status);
+  const tokJson = await tokRes.json();
+  const accessToken = tokJson.access_token;
+  if (!accessToken) throw new Error('GoSMS nevrátil access_token');
+
+  const res = await fetch(base + '/api/v1/messages', {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      message: body,
+      recipients: [outbound.toE164(to)],
+      channel: Number(channel),
+    }),
+  });
+  if (!res.ok) {
+    const t = await res.text().catch(() => '');
+    throw new Error('GoSMS send HTTP ' + res.status + ' ' + t.slice(0, 200));
+  }
+  const j = await res.json().catch(() => ({}));
+  return (j && (j.id || (j.data && j.data.id))) || 'gosms';
+}
+
+async function sendSms(to, body) {
+  if (smsProvider() === 'gosms') return sendViaGoSms(to, body);
+  return sendViaTwilio(to, body);
 }
 
 // Pošle follow-up SMS leadovi po nedovolání (pokud je zapnuto a ještě neodešla).
