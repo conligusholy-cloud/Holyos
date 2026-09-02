@@ -316,6 +316,8 @@
       var p = me.user.person;
       window.__perm = { canGiveDiscount: !!(p && p.canGiveDiscount), canAddIndividualOffers: !!(p && p.canAddIndividualOffers), admin: !!(me.user.isSuperAdmin || me.user.role === 'admin') };
       document.getElementById('who').textContent = p ? ((p.firstName||'')+' '+(p.lastName||'')).trim() : (me.user.displayName||'');
+      window.__meFull = (p ? ((p.firstName||'')+' '+(p.lastName||'')).trim() : (me.user.displayName||'')).trim();
+      window.__meEmail = String((me.user && me.user.email) || '').toLowerCase();
       try { var _dt = localStorage.getItem('ob.defaultType'); if (_dt && ['all','lokality','compounder'].indexOf(_dt) !== -1) state.typeFilter = _dt; } catch(e){}
       renderChips();
       buildLangOptions();
@@ -1225,6 +1227,7 @@
           (l.phone ? '<button class="btn" style="width:100%;margin-top:6px;background:#25D366;color:#0a2e17;font-weight:700" onclick="sendAccessWA('+l.id+')">🟢 Poslat přístup na WhatsApp</button>' : '<div style="color:var(--muted2);font-size:12px;margin-top:4px">WhatsApp: kontakt nemá telefon.</div>') +
           (l.phone ? '<button class="btn btn-g" style="width:100%;margin-top:6px" onclick="sendAccessSMS('+l.id+')">📩 Poslat přístup SMS</button>' : '') +
           '<button class="btn btn-g" style="width:100%;margin-top:6px" onclick="copyAccessLink('+l.id+')">🔗 Kopírovat odkaz na portál</button>' +
+          ((l.phone && obAiSpecAllowed()) ? '<button class="btn" style="width:100%;margin-top:6px;background:#8b5cf6;color:#fff;font-weight:700" onclick="sendAiSpecSMS('+l.id+')">💬 Odeslat SMS s odkazem na specialistu</button>' : '') +
           (l.email ? '' : '<div style="color:var(--muted2);font-size:12px;margin-top:4px">Kontakt nemá e-mail — e-mailem nelze odeslat.</div>') +
           '<div id="access-info-'+l.id+'" style="font-size:12px;color:var(--muted);margin-top:6px">'+accInfo+'</div>' +
           '<div id="access-msg-'+l.id+'" style="font-size:12px;margin-top:4px"></div>' +
@@ -1358,6 +1361,33 @@
       _bumpAccess(id, j);
     } catch(e){ if(msg) msg.innerHTML = '<span style="color:#fca5a5">Nepodařilo se připravit SMS.</span>'; }
   }
+  // Dočasně jen pro Tomáše Holého a Jana Holého (testovací fáze).
+  function obAiSpecAllowed(){
+    var n = String(window.__meFull||'').toLowerCase().replace(/\s+/g,' ').trim();
+    var e = String(window.__meEmail||'').toLowerCase().trim();
+    var names = ['tomáš holý','tomas holy','jan holý','jan holy'];
+    var emails = ['tomas.holy@bestseries.cz','jan.holy@bestseries.cz'];
+    return names.indexOf(n) !== -1 || emails.indexOf(e) !== -1;
+  }
+  window.obAiSpecAllowed = obAiSpecAllowed;
+  // Otevře nativní SMS (z čísla obchodníka) s odkazem na specialistu pro daného leada.
+  async function sendAiSpecSMS(id){
+    var msg = document.getElementById('access-msg-'+id); if (msg) msg.innerHTML = '<span style="color:var(--muted)">Připravuji SMS…</span>';
+    try {
+      var r = await api('/leads/'+id+'/ai-specialist-link');
+      var j = await r.json().catch(function(){return {};});
+      if (!r.ok || !j.link){ if(msg) msg.innerHTML = '<span style="color:#fca5a5">'+esc((j&&j.error)||'Chyba')+'</span>'; return; }
+      var lead = state.leads.find(function(x){return x.id===id;});
+      var num = lead ? String(lead.phone||'').replace(/[^0-9+]/g,'') : '';
+      var text = 'Dobry den, specialista na pradlomaty vam rad poradi zde: ' + j.link + ' - Best Series';
+      var body = encodeURIComponent(text);
+      var iOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+      window.location.href = 'sms:'+num+(iOS?'&':'?')+'body='+body;
+      if (msg) msg.innerHTML = '<span style="color:var(--converted)">✓ Otevírám SMS — odešli zprávu.</span>';
+      try { obLogAction(id,'send_aispec','💬 Odeslán odkaz na specialistu (SMS)'); } catch(e){}
+    } catch(e){ if(msg) msg.innerHTML = '<span style="color:#fca5a5">Nepodařilo se připravit SMS.</span>'; }
+  }
+  window.sendAiSpecSMS = sendAiSpecSMS;
   // Zkopírovat odkaz na portál do schránky (vloží se do jakékoli zprávy).
   async function copyAccessLink(id){
     var msg = document.getElementById('access-msg-'+id); if (msg) msg.innerHTML = '<span style="color:var(--muted)">Připravuji odkaz…</span>';
