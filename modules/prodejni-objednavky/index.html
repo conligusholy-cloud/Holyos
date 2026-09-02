@@ -453,6 +453,14 @@
         <div style="margin-top:18px;border:1px solid var(--border);border-radius:10px;padding:14px;">
           <h4 style="margin:0 0 6px;font-size:14px;">📎 Znalostní podklady (závazný zdroj dat)</h4>
           <div style="font-size:12px;color:var(--text2);margin-bottom:10px;">Nahraj ceníky, parametry, ekonomiku (PDF, DOCX, XLSX, CSV, TXT). AI z nich bere čísla a fakta jako <b>nejvyšší zdroj pravdy</b> — mají přednost i před scénářem. Platí pro všechny leady.</div>
+          <div style="font-size:11px;color:var(--text2);background:rgba(234,179,8,0.06);border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-bottom:10px;line-height:1.5;">
+            <b>ℹ️ Aby to fungovalo spolehlivě (limity):</b><br>
+            • Na jeden soubor se přečte max <b>40 000 znaků</b> (≈ 6 000 slov, cca 10–15 stran) — co je nad, se ořízne.<br>
+            • Všechny soubory dohromady: do AI se vloží max <b>90 000 znaků</b> (≈ 15 000 slov).<br>
+            • Max <b>20 MB</b> na soubor, max <b>8 souborů</b>. Rozhoduje množství textu, ne velikost v MB.<br>
+            • Nejdůležitější fakta dej <b>nahoru</b> v dokumentu.<br>
+            • ⚠️ Naskenované PDF (jen obrázky bez textu) se nepřečte — potřebuje textovou vrstvu.
+          </div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
             <input type="file" id="ai-aispec-files" multiple accept=".pdf,.docx,.xlsx,.xls,.csv,.txt" style="font-size:12px;color:var(--text2);">
             <button class="btn" onclick="aiUploadKnowledge()" style="background:#eab308;color:#0e1a22;font-weight:700;font-size:12px;">⬆ Nahrát podklady</button>
@@ -5085,14 +5093,22 @@
         var r=await fetch('/api/compounder/ai-specialist-knowledge',{ credentials:'include' });
         var j=await r.json().catch(function(){return{};});
         var files=(j&&j.files)||[];
+        var perMax=j.perDocMax||40000, totalMax=j.totalMax||90000, total=j.totalChars||0;
         if(!files.length){ box.innerHTML='<span style="color:var(--text2);">Zatím žádné podklady.</span>'; return; }
         var h='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;"><b style="color:var(--text);">Nahrané podklady ('+files.length+')</b><button class="btn" onclick="aiClearKnowledge()" style="font-size:11px;padding:3px 8px;">🗑 Smazat vše</button></div>';
         files.forEach(function(f){
+          var c=f.chars||0;
+          var stav = f.truncated
+            ? '<span style="color:#ef4444;">⚠️ oříznuto (nad '+perMax+' znaků — část se nepoužije)</span>'
+            : '<span style="color:#10b981;">✅ v limitu</span>';
           h+='<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 8px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;">'
-            +'<span style="color:var(--text);word-break:break-all;">📄 '+cmpEscA(f.name)+' <span style="color:var(--text2);">· '+aiKnFmt(f.chars||0)+'</span></span>'
+            +'<span style="color:var(--text);word-break:break-all;">📄 '+cmpEscA(f.name)+' <span style="color:var(--text2);">· '+aiKnFmt(c)+'</span> · '+stav+'</span>'
             +'<button class="btn" onclick="aiDeleteKnowledge('+JSON.stringify(f.name).replace(/"/g,"&quot;")+')" style="font-size:11px;padding:3px 8px;flex:0 0 auto;">✕</button>'
             +'</div>';
         });
+        var tcol = total>totalMax?'#ef4444':(total>totalMax*0.8?'#eab308':'#10b981');
+        var tnote = total>totalMax?' · ⚠️ PŘEKROČENO — část podkladů se do AI nevejde!':(total>totalMax*0.8?' · ⚠️ blížíš se stropu':' · ✅ OK');
+        h+='<div style="margin-top:4px;font-size:11px;color:'+tcol+';">Celkem do AI: '+total+' / max '+totalMax+' znaků'+tnote+'</div>';
         box.innerHTML=h;
       }catch(e){ box.innerHTML='<span style="color:#ef4444;">Chyba načtení: '+e.message+'</span>'; }
     }

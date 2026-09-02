@@ -636,15 +636,21 @@ async function saveAiSpecDocs(docs, uid) {
   await setSetting('compounder.ai_specialist_docs', docs, { type: 'json', userId: uid });
 }
 function docsMeta(docs) {
-  return (docs || []).map((d) => ({ name: d.name, chars: (d.text || '').length, at: d.at || null }));
+  return (docs || []).map((d) => ({
+    name: d.name,
+    chars: (d.text || '').length,
+    at: d.at || null,
+    truncated: (d.text || '').includes('…[zkráceno]'),
+  }));
 }
 
 // GET — seznam nahraných podkladů
 router.get('/ai-specialist-knowledge', requireAuth, async (req, res, next) => {
   try {
+    const kn = require('../services/compounder/knowledge');
     const docs = await loadAiSpecDocs();
     const total = docs.reduce((s, d) => s + (d.text || '').length, 0);
-    res.json({ ok: true, files: docsMeta(docs), totalChars: total });
+    res.json({ ok: true, files: docsMeta(docs), totalChars: total, perDocMax: kn.PER_DOC_MAX, totalMax: kn.TOTAL_MAX });
   } catch (err) { next(err); }
 });
 
