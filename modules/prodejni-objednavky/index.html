@@ -447,6 +447,17 @@
         <textarea id="ai-aispec-prompt" rows="12" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text);font-size:13px;line-height:1.5;font-family:inherit;" placeholder="(prázdné = použije se výchozí prádlomatový prodejní scénář)"></textarea>
         <div style="margin-top:10px;"><button class="btn" onclick="aiSaveAiSpecConfig()" style="background:#eab308;color:#0e1a22;font-weight:700;">💾 Uložit nastavení</button> <span id="ai-aispec-msg" style="margin-left:10px;font-size:13px;color:var(--text2);"></span></div>
         <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;"><button class="btn" onclick="aiFillAiSpecDefault()" style="font-size:12px;">↩ Vložit výchozí scénář</button><button class="btn" onclick="aiCopyAiSpecPrompt()" style="font-size:12px;">📋 Kopírovat scénář</button><span id="ai-aispec-copymsg" style="font-size:12px;color:var(--text2);"></span></div>
+
+        <div style="margin-top:18px;border:1px solid var(--border);border-radius:10px;padding:14px;">
+          <h4 style="margin:0 0 6px;font-size:14px;">📎 Znalostní podklady (závazný zdroj dat)</h4>
+          <div style="font-size:12px;color:var(--text2);margin-bottom:10px;">Nahraj ceníky, parametry, ekonomiku (PDF, DOCX, XLSX, CSV, TXT). AI z nich bere čísla a fakta jako <b>nejvyšší zdroj pravdy</b> — mají přednost i před scénářem. Platí pro všechny leady.</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+            <input type="file" id="ai-aispec-files" multiple accept=".pdf,.docx,.xlsx,.xls,.csv,.txt" style="font-size:12px;color:var(--text2);">
+            <button class="btn" onclick="aiUploadKnowledge()" style="background:#eab308;color:#0e1a22;font-weight:700;font-size:12px;">⬆ Nahrát podklady</button>
+            <span id="ai-aispec-kn-msg" style="font-size:12px;color:var(--text2);"></span>
+          </div>
+          <div id="ai-aispec-kn-list" style="margin-top:12px;font-size:12px;color:var(--text2);">Načítám…</div>
+        </div>
       </div>
 
       <!-- Sub: SMS -->
@@ -5037,8 +5048,51 @@
         document.getElementById('ai-aispec-prompt').value = j.prompt||'';
         document.getElementById('ai-aispec-greeting').value = j.greeting||'';
         AISPEC_DEFAULT_PROMPT = j.defaultPrompt||'';
+        aiLoadKnowledge();
       }catch(e){ if(msg) msg.textContent='Chyba načtení: '+e.message; }
     }
+    function aiKnFmt(n){ return n>=1000 ? Math.round(n/1000)+' tis. znaků' : n+' znaků'; }
+    async function aiLoadKnowledge(){
+      var box=document.getElementById('ai-aispec-kn-list'); if(!box) return;
+      try{
+        var r=await fetch('/api/compounder/ai-specialist-knowledge',{ credentials:'include' });
+        var j=await r.json().catch(function(){return{};});
+        var files=(j&&j.files)||[];
+        if(!files.length){ box.innerHTML='<span style="color:var(--text2);">Zatím žádné podklady.</span>'; return; }
+        var h='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;"><b style="color:var(--text);">Nahrané podklady ('+files.length+')</b><button class="btn" onclick="aiClearKnowledge()" style="font-size:11px;padding:3px 8px;">🗑 Smazat vše</button></div>';
+        files.forEach(function(f){
+          h+='<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 8px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;">'
+            +'<span style="color:var(--text);word-break:break-all;">📄 '+cmpEscA(f.name)+' <span style="color:var(--text2);">· '+aiKnFmt(f.chars||0)+'</span></span>'
+            +'<button class="btn" onclick="aiDeleteKnowledge('+JSON.stringify(f.name).replace(/"/g,"&quot;")+')" style="font-size:11px;padding:3px 8px;flex:0 0 auto;">✕</button>'
+            +'</div>';
+        });
+        box.innerHTML=h;
+      }catch(e){ box.innerHTML='<span style="color:#ef4444;">Chyba načtení: '+e.message+'</span>'; }
+    }
+    function cmpEscA(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+    async function aiUploadKnowledge(){
+      var inp=document.getElementById('ai-aispec-files'); var msg=document.getElementById('ai-aispec-kn-msg');
+      if(!inp.files||!inp.files.length){ if(msg) msg.textContent='Vyber soubor(y).'; return; }
+      var fd=new FormData(); for(var i=0;i<inp.files.length;i++) fd.append('files', inp.files[i]);
+      if(msg) msg.textContent='Nahrávám a čtu…';
+      try{
+        var r=await fetch('/api/compounder/ai-specialist-knowledge',{ method:'POST', credentials:'include', body:fd });
+        var j=await r.json().catch(function(){return{};});
+        if(r.ok && j.ok){
+          var t='✅ Přidáno: '+((j.added&&j.added.length)?j.added.join(', '):'0');
+          if(j.errors&&j.errors.length) t+=' · ⚠️ '+j.errors.join(' | ');
+          if(msg) msg.textContent=t; inp.value=''; aiLoadKnowledge();
+        } else { if(msg) msg.textContent='Chyba: '+(j.error||('HTTP '+r.status)); }
+      }catch(e){ if(msg) msg.textContent='Chyba spojení: '+e.message; }
+    }
+    async function aiDeleteKnowledge(name){
+      try{ await fetch('/api/compounder/ai-specialist-knowledge/delete',{ method:'POST', credentials:'include', headers:{'Content-Type':'application/json'}, body:JSON.stringify({name:name}) }); aiLoadKnowledge(); }catch(e){}
+    }
+    async function aiClearKnowledge(){
+      if(!confirm('Smazat všechny nahrané podklady?')) return;
+      try{ await fetch('/api/compounder/ai-specialist-knowledge/clear',{ method:'POST', credentials:'include' }); aiLoadKnowledge(); }catch(e){}
+    }
+    window.aiUploadKnowledge=aiUploadKnowledge; window.aiDeleteKnowledge=aiDeleteKnowledge; window.aiClearKnowledge=aiClearKnowledge;
     async function aiSaveAiSpecConfig(){
       var msg=document.getElementById('ai-aispec-msg'); if(msg) msg.textContent='Ukládám…';
       try{

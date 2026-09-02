@@ -490,9 +490,30 @@ router.post('/portal/ai-specialist', async (req, res) => {
       (lead.city ? ', město ' + lead.city : '') + (lead.role ? ', typ ' + lead.role : '') +
       '. Uvažovaná verze prádlomatu ' + (lead.pradlomat_version || 'V3') + '.';
 
+    // Znalostní báze — nahrané podklady (ceníky, parametry, ekonomika) = ZÁVAZNÝ zdroj dat.
+    let knowledgeBlock = '';
+    try {
+      const kn = require('../services/compounder/knowledge');
+      const docs = await loadAiSpecDocs();
+      const block = kn.buildKnowledgeBlock(docs);
+      if (block) {
+        knowledgeBlock =
+          '\n\n=== ZÁVAZNÉ FIREMNÍ PODKLADY (svatý zdroj dat) ===\n' +
+          'Následující obsah pochází z oficiálních nahraných dokumentů firmy. Ber ho jako NEJVYŠŠÍ zdroj pravdy — ' +
+          'má přednost před tvými obecnými znalostmi i před scénářem, pokud si protiřečí. Čísla a fakta přebírej PŘESNĚ odsud a nepřepisuj je.\n' +
+          block +
+          '\n=== KONEC PODKLADŮ ===';
+      }
+    } catch (e) { console.warn('[ai-specialist] znalostní báze selhala:', e.message); }
+
+    const MATH_RULE =
+      'MATEMATIKA A VÝPOČTY: Když počítáš (návratnost, tržby, náklady, marže…), postupuj krok za krokem a přesně. ' +
+      'Používej VÝHRADNĚ čísla z podkladů/scénáře, ne vymyšlená. Uveď stručně dosazení a výsledek zaokrouhli rozumně (např. Kč bez haléřů). ' +
+      'Po výpočtu si výsledek v duchu ověř (kontrola řádu i jednotek). Když ti k výpočtu chybí vstup, zeptej se na něj místo odhadu.';
+
     const agent = require('../services/voice/agent');
     const { text } = await agent.runTurn({
-      system: sys + '\n\n' + AI_SPECIALIST_GUARDRAILS + '\n\n' + AI_SPECIALIST_STYLE + '\n\n' + ctx,
+      system: sys + knowledgeBlock + '\n\n' + AI_SPECIALIST_GUARDRAILS + '\n\n' + MATH_RULE + '\n\n' + AI_SPECIALIST_STYLE + '\n\n' + ctx,
       history,
       userText: message,
       maxTokens: 600,
@@ -591,6 +612,79 @@ router.put('/ai-specialist-config', requireAuth, async (req, res, next) => {
     if (b.prompt !== undefined) await setSetting('compounder.ai_specialist_prompt', String(b.prompt || ''), { type: 'string', userId: uid });
     if (b.greeting !== undefined) await setSetting('compounder.ai_specialist_greeting', String(b.greeting || ''), { type: 'string', userId: uid });
     res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
+// ─── Znalostní báze AI specialisty (nahrané podklady = závazný zdroj dat) ──────
+const knowledgeUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024, files: 8 } });
+
+async function loadAiSpecDocs() {
+  try {
+    const raw = await getSetting('compounder.ai_specialist_docs', { type: 'json', defaultValue: [] });
+    return Array.isArray(raw) ? raw : [];
+  } catch (_) { return []; }
+}
+async function saveAiSpecDocs(docs, uid) {
+  await setSetting('compounder.ai_specialist_docs', docs, { type: 'json', userId: uid });
+}
+function docsMeta(docs) {
+  return (docs || []).map((d) => ({ name: d.name, chars: (d.text || '').length, at: d.at || null }));
+}
+
+// GET — seznam nahraných podkladů
+router.get('/ai-specialist-knowledge', requireAuth, async (req, res, next) => {
+  try {
+    const docs = await loadAiSpecDocs();
+    const total = docs.reduce((s, d) => s + (d.text || '').length, 0);
+    res.json({ ok: true, files: docsMeta(docs), totalChars: total });
+  } catch (err) { next(err); }
+});
+
+// POST — nahrání jednoho či více podkladů (extrahuje text a přidá do báze)
+router.post('/ai-specialist-knowledge', requireAuth, knowledgeUpload.array('files'), async (req, res) => {
+  try {
+    const kn = require('../services/compounder/knowledge');
+    const uid = req.user && req.user.id;
+    const files = req.files || [];
+    if (!files.length) return res.status(400).json({ ok: false, error: 'Žádný soubor' });
+    let docs = await loadAiSpecDocs();
+    const added = [];
+    const errors = [];
+    for (const f of files) {
+      try {
+        const text = kn.clean(await kn.extractText(f.buffer, f.originalname), kn.PER_DOC_MAX);
+        if (!text.trim()) { errors.push(f.originalname + ': nepodařilo se přečíst text'); continue; }
+        // stejný název přepíše starší verzi
+        docs = docs.filter((d) => d.name !== f.originalname);
+        docs.push({ name: f.originalname, at: new Date().toISOString(), text });
+        added.push(f.originalname);
+      } catch (e) {
+        errors.push((f.originalname || 'soubor') + ': ' + e.message);
+      }
+    }
+    await saveAiSpecDocs(docs, uid);
+    res.json({ ok: true, added, errors, files: docsMeta(docs) });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err.message });
+  }
+});
+
+// POST /delete — smaže jeden podklad podle názvu
+router.post('/ai-specialist-knowledge/delete', requireAuth, async (req, res, next) => {
+  try {
+    const name = String((req.body && req.body.name) || '');
+    let docs = await loadAiSpecDocs();
+    docs = docs.filter((d) => d.name !== name);
+    await saveAiSpecDocs(docs, req.user && req.user.id);
+    res.json({ ok: true, files: docsMeta(docs) });
+  } catch (err) { next(err); }
+});
+
+// POST /clear — smaže všechny podklady
+router.post('/ai-specialist-knowledge/clear', requireAuth, async (req, res, next) => {
+  try {
+    await saveAiSpecDocs([], req.user && req.user.id);
+    res.json({ ok: true, files: [] });
   } catch (err) { next(err); }
 });
 
