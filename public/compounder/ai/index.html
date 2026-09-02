@@ -32,6 +32,26 @@
   button { flex:0 0 auto; border:none; border-radius:12px; cursor:pointer; }
   #send { background:var(--gold); color:#1a1408; padding:0 20px; height:48px; font-weight:700; font-size:15px; }
   #gate { text-align:center; color:var(--muted); padding:60px 16px; }
+  /* Leták se základními informacemi — nahoře, rozbalovací. */
+  #intro { flex:0 0 auto; border:1px solid var(--line); border-radius:14px; background:linear-gradient(180deg,#111722,#0e1116); margin-bottom:10px; overflow:hidden; }
+  #intro .ihead { display:flex; align-items:center; gap:10px; padding:11px 13px; cursor:pointer; }
+  #intro .ihead .t { flex:1; min-width:0; }
+  #intro .ihead .tt { font-weight:800; font-size:14px; color:#fff; }
+  #intro .ihead .ts { font-size:12px; color:var(--muted); }
+  #intro .ichev { color:var(--gold); font-size:13px; transition:transform .2s; }
+  #intro.collapsed .ichev { transform:rotate(-90deg); }
+  #intro .ibody { padding:0 13px 12px; max-height:46vh; overflow-y:auto; }
+  #intro.collapsed .ibody { display:none; }
+  #intro .badges { display:flex; flex-wrap:wrap; gap:6px; margin:2px 0 10px; }
+  #intro .badge { font-size:11.5px; color:#cdd3db; background:#1a2130; border:1px solid var(--line); border-radius:999px; padding:3px 9px; }
+  #intro .sec { font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--gold); margin:10px 0 5px; font-weight:700; }
+  #intro .flow { font-size:12.5px; color:#cdd3db; line-height:1.6; }
+  #intro .roi { display:flex; flex-wrap:wrap; gap:6px; }
+  #intro .roi span { font-size:12px; color:#cdd3db; background:#141a26; border:1px solid var(--line); border-radius:8px; padding:4px 8px; }
+  #intro .roi b { color:#fff; }
+  #intro .qs { display:flex; flex-wrap:wrap; gap:7px; margin-top:4px; }
+  #intro .q { font-size:12.5px; color:var(--gold); background:rgba(234,179,8,.10); border:1px solid rgba(234,179,8,.45); border-radius:999px; padding:6px 11px; cursor:pointer; text-align:left; }
+  #intro .q:hover { background:rgba(234,179,8,.2); }
 </style>
 </head>
 <body>
@@ -43,6 +63,43 @@
     </div>
     <div id="gate">Načítám…</div>
     <div id="chat" style="display:none;">
+      <div id="intro">
+        <div class="ihead" id="introHead">
+          <div class="t">
+            <div class="tt">🧺 Prádlomat na prodej — váš finanční důchod</div>
+            <div class="ts">Jeden dobře umístěný prádlomat = pravidelný příjem 24/7. Rozklikni a zeptej se na cokoli.</div>
+          </div>
+          <div class="ichev">▼</div>
+        </div>
+        <div class="ibody">
+          <div class="badges">
+            <span class="badge">🌍 130+ poboček</span>
+            <span class="badge">🇨🇿 70 v ČR</span>
+            <span class="badge">🏭 vlastní výroba</span>
+            <span class="badge">📅 od 2019</span>
+            <span class="badge">⭐ 7+ let zkušeností</span>
+          </div>
+          <div class="sec">Jak vznikne váš Prádlomat</div>
+          <div class="flow">1) Vybereme a prověříme lokalitu → 2) Vyrobíme a dodáme (ČR) → 3) Instalace a spuštění (do 1 dne) → 4) Servis 24/7, monitoring a podpora</div>
+          <div class="sec">Modelová návratnost investice</div>
+          <div class="roi">
+            <span>1 zák./den · <b>~3,6 roku</b></span>
+            <span>3 zák./den · <b>~2 roky</b></span>
+            <span>5 zák./den · <b>~1,5 roku</b></span>
+            <span>10 zák./den · <b>~9 měsíců</b></span>
+          </div>
+          <div class="sec">Zeptejte se AI specialisty</div>
+          <div class="qs" id="introQs">
+            <button class="q" data-q="Kolik může prádelna vydělávat?">💰 Kolik může prádelna vydělávat?</button>
+            <button class="q" data-q="Spočítej mi návratnost investice do prádlomatu.">📈 Spočítej návratnost investice</button>
+            <button class="q" data-q="Jak vybrat a zjistit vhodnou lokalitu?">📍 Jak vybrat lokalitu?</button>
+            <button class="q" data-q="Co zahrnuje servis a podpora?">🔧 Servis a podpora</button>
+            <button class="q" data-q="Jak probíhá financování prádlomatu?">🏦 Jak probíhá financování?</button>
+            <button class="q" data-q="Jaké jsou náklady na provoz prádlomatu?">📊 Náklady na provoz</button>
+            <button class="q" data-q="Chci nezávaznou konzultaci — jak dál?">💬 Chci nezávaznou konzultaci</button>
+          </div>
+        </div>
+      </div>
       <div id="msgs"></div>
       <div class="bar">
         <textarea id="input" rows="1" placeholder="Napište dotaz…"></textarea>
@@ -97,6 +154,15 @@
       el('send').addEventListener('click', send);
       el('input').addEventListener('input', autoGrow);
       el('input').addEventListener('keydown', function(e){ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); send(); } });
+      // Leták: rozbalování + rychlé dotazy (kliknutí položí dotaz chatu).
+      var ih = el('introHead'); if(ih) ih.addEventListener('click', function(){ el('intro').classList.toggle('collapsed'); });
+      var iq = el('introQs');
+      if(iq) iq.addEventListener('click', function(e){
+        var b = e.target.closest('.q'); if(!b) return;
+        var q = b.getAttribute('data-q'); if(!q) return;
+        el('input').value = q; autoGrow(); send();
+        el('intro').classList.add('collapsed'); // po dotazu leták sbal, ať je vidět odpověď
+      });
     }catch(e){ el('gate').textContent='Chyba načtení.'; }
   }
   boot();
