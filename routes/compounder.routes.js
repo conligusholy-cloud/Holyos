@@ -434,10 +434,14 @@ const AI_SPECIALIST_DEFAULT =
 // Pravidlo formátování — platí vždy (i pro vlastní scénář). Píše se do chatu na mobilu,
 // takže žádný markdown (hvězdičky/mřížky), krátké odstavce, občas decentní emoji.
 const AI_SPECIALIST_STYLE =
-  'FORMÁT ODPOVĚDI: Piš čistý text bez jakéhokoli markdownu — NIKDY nepoužívej hvězdičky (** nebo *), mřížky (#) ani odrážky se znakem "-". ' +
-  'Nezvýrazňuj tučně. Místo nadpisů typu „**Jak to funguje:**" napiš normální větu. ' +
-  'Odpověď rozděl do krátkých odstavců oddělených prázdným řádkem, ať se to na telefonu dobře čte. ' +
-  'Můžeš střídmě použít 1–2 vhodné emoji za celou odpověď (ne v každém odstavci). Odpovědi drž krátké (2–6 vět).';
+  'FORMÁT ODPOVĚDI (chat na mobilu — musí být přehledný a srozumitelný na první pohled): ' +
+  'Začni jednou krátkou větou, která přímo odpoví na dotaz. ' +
+  'Pak hlavní body vypiš jako odrážky, každá na svém řádku začínající "- " (jedna myšlenka = jedna odrážka, krátce). ' +
+  'Každou odrážku uveď jedním vhodným emoji jako vizuální kotvou (např. 💰 📈 📍 ⚙️ ✅ 🏦 🧺 🕒), ať se odpověď dá rychle proskenovat. ' +
+  'Klíčová slova a hlavně ČÍSLA zvýrazni tučně pomocí **dvou hvězdiček** (např. **návratnost cca 2 roky**). ' +
+  'Odrážky odděluj jednoduchým zalomením řádku, delší bloky prázdným řádkem. Nepiš dlouhé odstavce. ' +
+  'Drž se konkrétně u dotazu a na konci polož jednu krátkou navazující otázku, ať konverzace pokračuje. ' +
+  'Emoji používej střídmě a smysluplně (kotva u bodu), ne do každé věty.';
 
 router.post('/portal/ai-specialist', async (req, res) => {
   try {
