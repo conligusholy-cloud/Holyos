@@ -428,6 +428,16 @@
           <label style="font-size:13px;cursor:pointer;display:inline-flex;align-items:center;gap:8px;"><input type="checkbox" id="ai-sms-on"> Poslat leadovi SMS, když hovor nezvedne</label>
           <textarea id="ai-sms-text" rows="3" style="width:100%;margin-top:8px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text);font-size:13px;" placeholder="Dobrý den, volali jsme Vám ohledně prádelen Prádlomat (Best Series). Zkusíme to ještě jednou."></textarea>
           <div style="font-size:11px;color:var(--text2);margin-top:4px;">Odesílatel se nastavuje v Railway (VOICE_SMS_FROM — např. „Pradlomaty"). SMS se pošle jednou na lead. Posílej jen kontaktům se souhlasem.</div>
+
+          <div style="margin-top:12px;border-top:1px dashed var(--border);padding-top:10px;">
+            <div style="font-size:13px;margin-bottom:6px;font-weight:600;">🧪 Test / ruční odeslání SMS</div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+              <input id="ai-sms-to" placeholder="+420…" style="width:170px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:9px;color:var(--text);font-size:13px;">
+              <input id="ai-sms-testtext" placeholder="Text zprávy (jinak se vezme text výše)" style="flex:1;min-width:220px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:9px;color:var(--text);font-size:13px;">
+              <button class="btn" onclick="aiSendTestSms()">📩 Odeslat SMS</button>
+            </div>
+            <span id="ai-sms-testmsg" style="font-size:13px;color:var(--text2);"></span>
+          </div>
         </div>
 
         <div style="margin-top:14px;"><button class="btn" onclick="aiSaveConfig()" style="background:#eab308;color:#0e1a22;font-weight:700;">💾 Uložit nastavení</button> <span id="ai-inbound-msg" style="margin-left:10px;font-size:13px;color:var(--text2);"></span></div>
@@ -4848,6 +4858,17 @@
         })});
         msg.textContent='✅ Uloženo';
       }catch(e){ msg.textContent='Chyba: '+e.message; }
+    }
+
+    async function aiSendTestSms(){
+      var m=document.getElementById('ai-sms-testmsg'); m.textContent='Odesílám…';
+      var to=document.getElementById('ai-sms-to').value.trim();
+      var body=document.getElementById('ai-sms-testtext').value.trim() || document.getElementById('ai-sms-text').value.trim() || 'Test SMS z HolyOS.';
+      if(!to){ m.textContent='Zadej telefonní číslo.'; return; }
+      try{
+        var r=await aiApi('/sms',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ to:to, body:body })});
+        m.textContent='✅ Odesláno'+(r.sid?(' (SID '+r.sid+')'):'');
+      }catch(e){ m.textContent='Chyba: '+e.message; }
     }
 
     // ── Odchozí kampaně ──

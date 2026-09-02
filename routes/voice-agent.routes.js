@@ -66,8 +66,34 @@ router.post('/incoming', form, (req, res) => {
 
 // POST /api/voice/outgoing — TwiML pro odchozí hovor (kampaň). Twilio ho volá
 // při spojení; ?target=<id> předáme do WS, aby AI vedla rozhovor podle scénáře.
-router.post('/outgoing', form, (req, res) => {
+router.post('/outgoing', form, async (req, res) => {
   const target = req.query.target || (req.body && req.body.target) || '';
+  const answeredBy = ((req.body && req.body.AnsweredBy) || '').toLowerCase();
+  const isMachine = answeredBy.startsWith('machine') || answeredBy === 'fax';
+
+  // Záznamník / hlasová schránka → ber jako nedovolané: zavěs, no_answer, SMS
+  if (isMachine && target && prisma.voiceCampaignTarget) {
+    try {
+      const t = await prisma.voiceCampaignTarget.findUnique({ where: { id: target } });
+      if (t && t.status !== 'done') {
+        await prisma.voiceCampaignTarget.update({
+          where: { id: t.id },
+          data: { status: 'no_answer', result_summary: 'Hlasová schránka / záznamník' },
+        });
+        try {
+          require('../services/voice/sms').maybeSendNoAnswerSms(t);
+        } catch (e) {
+          console.warn('[voice] SMS (schránka):', e.message);
+        }
+      }
+    } catch (e) {
+      console.warn('[voice] AMD handling:', e.message);
+    }
+    return res
+      .type('text/xml')
+      .send('<?xml version="1.0" encoding="UTF-8"?>\n<Response><Hangup/></Response>');
+  }
+
   const extra = target ? 'target=' + encodeURIComponent(target) : '';
   res.type('text/xml').send(twimlConnect(relayUrl(extra)));
 });
@@ -232,6 +258,20 @@ router.put('/config', requireAuth, express.json(), async (req, res, next) => {
     res.json({ ok: true });
   } catch (err) {
     next(err);
+  }
+});
+
+// POST /api/voice/sms — ruční / testovací odeslání SMS (přes VOICE_SMS_FROM)
+router.post('/sms', requireAuth, express.json(), async (req, res) => {
+  try {
+    const { to, body } = req.body || {};
+    if (!to || !String(to).trim()) return res.status(400).json({ error: 'Chybí telefonní číslo' });
+    if (!body || !String(body).trim()) return res.status(400).json({ error: 'Chybí text zprávy' });
+    const sms = require('../services/voice/sms');
+    const sid = await sms.sendSms(String(to).trim(), String(body));
+    res.json({ ok: true, sid });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
   }
 });
 

@@ -52,6 +52,10 @@ async function placeCall(target, campaign) {
     method: 'POST',
     statusCallback: `${PUBLIC_BASE}/api/voice/status`,
     statusCallbackEvent: ['initiated', 'ringing', 'answered', 'completed'],
+    // Detekce záznamníku/schránky — AnsweredBy dorazí do /api/voice/outgoing,
+    // kde záznamník vyhodnotíme jako nedovolané (hang up + SMS).
+    machineDetection: 'Enable',
+    machineDetectionTimeout: 15,
     // Nahrávání hovoru → po skončení Twilio pošle URL na /api/voice/recording
     record: true,
     recordingStatusCallback: `${PUBLIC_BASE}/api/voice/recording`,
