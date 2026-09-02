@@ -32,26 +32,47 @@
   button { flex:0 0 auto; border:none; border-radius:12px; cursor:pointer; }
   #send { background:var(--gold); color:#1a1408; padding:0 20px; height:48px; font-weight:700; font-size:15px; }
   #gate { text-align:center; color:var(--muted); padding:60px 16px; }
-  /* Leták se základními informacemi — nahoře, rozbalovací. */
-  #intro { flex:0 0 auto; border:1px solid var(--line); border-radius:14px; background:linear-gradient(180deg,#111722,#0e1116); margin-bottom:10px; overflow:hidden; }
-  #intro .ihead { display:flex; align-items:center; gap:10px; padding:11px 13px; cursor:pointer; }
+  /* Leták — vzhled jako tištěný leták (tmavě modrý, modrý akcent). Nahoře, rozbalovací. */
+  #intro { --blue:#2ba6dd; --blue2:#1b7fb0; flex:0 0 auto; border:1px solid #1e3a52;
+           border-radius:16px; background:linear-gradient(160deg,#0d2033 0%,#0a1826 60%,#081420 100%);
+           margin-bottom:10px; overflow:hidden; box-shadow:0 6px 24px rgba(0,0,0,.35); }
+  #intro .ihead { display:flex; align-items:center; gap:10px; padding:12px 14px; cursor:pointer;
+                  background:linear-gradient(180deg,rgba(43,166,221,.14),transparent); border-bottom:1px solid rgba(43,166,221,.18); }
+  #intro .ihead .logo { font-weight:900; letter-spacing:1px; font-size:14px; color:#fff; display:flex; align-items:center; gap:7px; }
+  #intro .ihead .logo .drop { color:var(--blue); font-size:17px; }
   #intro .ihead .t { flex:1; min-width:0; }
-  #intro .ihead .tt { font-weight:800; font-size:14px; color:#fff; }
-  #intro .ihead .ts { font-size:12px; color:var(--muted); }
-  #intro .ichev { color:var(--gold); font-size:13px; transition:transform .2s; }
+  #intro .ihead .ts { font-size:11.5px; color:#9fb6c9; margin-top:1px; }
+  #intro .ichev { color:var(--blue); font-size:13px; transition:transform .2s; }
   #intro.collapsed .ichev { transform:rotate(-90deg); }
-  #intro .ibody { padding:0 13px 12px; max-height:46vh; overflow-y:auto; }
+  #intro .ibody { padding:14px; max-height:52vh; overflow-y:auto; }
   #intro.collapsed .ibody { display:none; }
-  #intro .badges { display:flex; flex-wrap:wrap; gap:6px; margin:2px 0 10px; }
-  #intro .badge { font-size:11.5px; color:#cdd3db; background:#1a2130; border:1px solid var(--line); border-radius:999px; padding:3px 9px; }
-  #intro .sec { font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--gold); margin:10px 0 5px; font-weight:700; }
-  #intro .flow { font-size:12.5px; color:#cdd3db; line-height:1.6; }
-  #intro .roi { display:flex; flex-wrap:wrap; gap:6px; }
-  #intro .roi span { font-size:12px; color:#cdd3db; background:#141a26; border:1px solid var(--line); border-radius:8px; padding:4px 8px; }
-  #intro .roi b { color:#fff; }
+  #intro .hero { font-size:20px; line-height:1.15; font-weight:900; color:#fff; letter-spacing:.5px; margin:0 0 6px; }
+  #intro .hero b { color:var(--blue); }
+  #intro .lead { font-size:12.5px; color:#b9cbd9; margin:0 0 12px; line-height:1.5; }
+  #intro .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(90px,1fr)); gap:8px; margin:0 0 6px; }
+  #intro .stat { background:rgba(43,166,221,.07); border:1px solid rgba(43,166,221,.25); border-radius:10px; padding:9px 8px; text-align:center; }
+  #intro .stat .n { font-size:17px; font-weight:900; color:var(--blue); }
+  #intro .stat .l { font-size:10px; color:#9fb6c9; text-transform:uppercase; letter-spacing:.03em; margin-top:2px; line-height:1.2; }
+  #intro .sec { font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:var(--blue); margin:16px 0 7px; font-weight:800; text-align:center; }
+  #intro .steps { display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:8px; }
+  #intro .step { background:#0e2233; border:1px solid #1e3a52; border-radius:10px; padding:9px 10px; }
+  #intro .step .num { color:var(--blue); font-weight:900; font-size:15px; }
+  #intro .step .tx { font-size:11.5px; color:#c3d2de; line-height:1.35; margin-top:2px; }
+  #intro .scen { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:8px; }
+  #intro .card { background:#0e2233; border:1px solid #1e3a52; border-radius:12px; padding:11px; text-align:center; }
+  #intro .card.hot { border-color:var(--blue); background:linear-gradient(180deg,rgba(43,166,221,.16),#0e2233); box-shadow:0 0 0 1px rgba(43,166,221,.35) inset; }
+  #intro .card .who { font-size:12px; color:#c3d2de; font-weight:700; }
+  #intro .card .ret { font-size:11px; color:#8ea6b8; margin:4px 0 1px; }
+  #intro .card .val { font-size:18px; font-weight:900; color:#fff; }
+  #intro .card.hot .val { color:var(--blue); }
+  #intro .solve { display:flex; flex-wrap:wrap; gap:6px; justify-content:center; }
+  #intro .solve span { font-size:11.5px; color:#c3d2de; background:#0e2233; border:1px solid #1e3a52; border-radius:999px; padding:4px 10px; }
   #intro .qs { display:flex; flex-wrap:wrap; gap:7px; margin-top:4px; }
-  #intro .q { font-size:12.5px; color:var(--gold); background:rgba(234,179,8,.10); border:1px solid rgba(234,179,8,.45); border-radius:999px; padding:6px 11px; cursor:pointer; text-align:left; }
-  #intro .q:hover { background:rgba(234,179,8,.2); }
+  #intro .q { font-size:12.5px; color:#fff; background:linear-gradient(180deg,var(--blue),var(--blue2)); border:none;
+              border-radius:999px; padding:8px 13px; cursor:pointer; text-align:left; font-weight:600; box-shadow:0 2px 8px rgba(43,166,221,.25); }
+  #intro .q:hover { filter:brightness(1.08); }
+  #intro .cta { display:block; width:100%; margin-top:10px; text-align:center; font-weight:800; font-size:13.5px; color:#06131e;
+                background:linear-gradient(180deg,#37b6ee,var(--blue)); border:none; border-radius:12px; padding:12px; cursor:pointer; }
 </style>
 </head>
 <body>
@@ -66,27 +87,38 @@
       <div id="intro">
         <div class="ihead" id="introHead">
           <div class="t">
-            <div class="tt">🧺 Prádlomat na prodej — váš finanční důchod</div>
-            <div class="ts">Jeden dobře umístěný prádlomat = pravidelný příjem 24/7. Rozklikni a zeptej se na cokoli.</div>
+            <div class="logo"><span class="drop">💧</span> PRÁDLOMAT NA PRODEJ</div>
+            <div class="ts">Rozklikni leták a zeptej se AI specialisty na cokoli.</div>
           </div>
           <div class="ichev">▼</div>
         </div>
         <div class="ibody">
-          <div class="badges">
-            <span class="badge">🌍 130+ poboček</span>
-            <span class="badge">🇨🇿 70 v ČR</span>
-            <span class="badge">🏭 vlastní výroba</span>
-            <span class="badge">📅 od 2019</span>
-            <span class="badge">⭐ 7+ let zkušeností</span>
+          <div class="hero">JEDEN PRÁDLOMAT.<br><b>VÁŠ FINANČNÍ DŮCHOD.</b></div>
+          <div class="lead">Už jedna dobře umístěná prádelna může vytvářet dlouhodobý příjem 24/7. Naším cílem je vytvořit co nejvíce finančních důchodců.</div>
+          <div class="stats">
+            <div class="stat"><div class="n">130+</div><div class="l">poboček po světě</div></div>
+            <div class="stat"><div class="n">70</div><div class="l">poboček v ČR</div></div>
+            <div class="stat"><div class="n">4 500 m²</div><div class="l">výrobních hal</div></div>
+            <div class="stat"><div class="n">7+ let</div><div class="l">zkušeností</div></div>
+            <div class="stat"><div class="n">🇨🇿</div><div class="l">česká výroba</div></div>
           </div>
           <div class="sec">Jak vznikne váš Prádlomat</div>
-          <div class="flow">1) Vybereme a prověříme lokalitu → 2) Vyrobíme a dodáme (ČR) → 3) Instalace a spuštění (do 1 dne) → 4) Servis 24/7, monitoring a podpora</div>
-          <div class="sec">Modelová návratnost investice</div>
-          <div class="roi">
-            <span>1 zák./den · <b>~3,6 roku</b></span>
-            <span>3 zák./den · <b>~2 roky</b></span>
-            <span>5 zák./den · <b>~1,5 roku</b></span>
-            <span>10 zák./den · <b>~9 měsíců</b></span>
+          <div class="steps">
+            <div class="step"><span class="num">1</span><div class="tx">Vybereme a prověříme lokalitu</div></div>
+            <div class="step"><span class="num">2</span><div class="tx">Vyrobíme a dodáme (ČR)</div></div>
+            <div class="step"><span class="num">3</span><div class="tx">Instalace a spuštění do 1 dne</div></div>
+            <div class="step"><span class="num">4</span><div class="tx">Servis 24/7, monitoring, podpora</div></div>
+          </div>
+          <div class="sec">Kolik zákazníků denně stačí?</div>
+          <div class="scen">
+            <div class="card"><div class="who">1 zákazník / den</div><div class="ret">návratnost cca</div><div class="val">3,6 roku</div></div>
+            <div class="card"><div class="who">3 zákazníci / den</div><div class="ret">návratnost cca</div><div class="val">2 roky</div></div>
+            <div class="card hot"><div class="who">5 zákazníků / den</div><div class="ret">návratnost cca</div><div class="val">1,5 roku</div></div>
+            <div class="card"><div class="who">10 zákazníků / den</div><div class="ret">návratnost cca</div><div class="val">9 měsíců</div></div>
+          </div>
+          <div class="sec">Co za vás vyřešíme</div>
+          <div class="solve">
+            <span>📍 Lokalita</span><span>🏭 Výroba (ČR)</span><span>🚚 Doprava a instalace</span><span>🎧 Servis 24/7</span><span>🛡️ Software a monitoring</span>
           </div>
           <div class="sec">Zeptejte se AI specialisty</div>
           <div class="qs" id="introQs">
@@ -96,8 +128,8 @@
             <button class="q" data-q="Co zahrnuje servis a podpora?">🔧 Servis a podpora</button>
             <button class="q" data-q="Jak probíhá financování prádlomatu?">🏦 Jak probíhá financování?</button>
             <button class="q" data-q="Jaké jsou náklady na provoz prádlomatu?">📊 Náklady na provoz</button>
-            <button class="q" data-q="Chci nezávaznou konzultaci — jak dál?">💬 Chci nezávaznou konzultaci</button>
           </div>
+          <button class="cta" data-q="Chci nezávaznou konzultaci — spočítejte mi finanční důchod na míru.">🤖 Spočítat můj finanční důchod s AI</button>
         </div>
       </div>
       <div id="msgs"></div>
@@ -156,12 +188,12 @@
       el('input').addEventListener('keydown', function(e){ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); send(); } });
       // Leták: rozbalování + rychlé dotazy (kliknutí položí dotaz chatu).
       var ih = el('introHead'); if(ih) ih.addEventListener('click', function(){ el('intro').classList.toggle('collapsed'); });
-      var iq = el('introQs');
-      if(iq) iq.addEventListener('click', function(e){
-        var b = e.target.closest('.q'); if(!b) return;
+      var ib = el('intro');
+      if(ib) ib.addEventListener('click', function(e){
+        var b = e.target.closest('[data-q]'); if(!b) return;
         var q = b.getAttribute('data-q'); if(!q) return;
         el('input').value = q; autoGrow(); send();
-        el('intro').classList.add('collapsed'); // po dotazu leták sbal, ať je vidět odpověď
+        ib.classList.add('collapsed'); // po dotazu leták sbal, ať je vidět odpověď
       });
     }catch(e){ el('gate').textContent='Chyba načtení.'; }
   }
