@@ -316,7 +316,9 @@
       var p = me.user.person;
       window.__perm = { canGiveDiscount: !!(p && p.canGiveDiscount), canAddIndividualOffers: !!(p && p.canAddIndividualOffers), admin: !!(me.user.isSuperAdmin || me.user.role === 'admin') };
       document.getElementById('who').textContent = p ? ((p.firstName||'')+' '+(p.lastName||'')).trim() : (me.user.displayName||'');
-      window.__meFull = (p ? ((p.firstName||'')+' '+(p.lastName||'')).trim() : (me.user.displayName||'')).trim();
+      window.__meFull = (p ? ((p.firstName||'')+' '+(p.lastName||'')).trim() : (me.user.display_name||me.user.displayName||'')).trim();
+      window.__meDisplay = String((me.user && (me.user.display_name||me.user.displayName)) || '');
+      window.__meUser = String((me.user && me.user.username) || '');
       window.__meEmail = String((me.user && me.user.email) || '').toLowerCase();
       try { var _dt = localStorage.getItem('ob.defaultType'); if (_dt && ['all','lokality','compounder'].indexOf(_dt) !== -1) state.typeFilter = _dt; } catch(e){}
       renderChips();
@@ -1363,11 +1365,14 @@
   }
   // Dočasně jen pro Tomáše Holého a Jana Holého (testovací fáze).
   function obAiSpecAllowed(){
-    var n = String(window.__meFull||'').toLowerCase().replace(/\s+/g,' ').trim();
-    var e = String(window.__meEmail||'').toLowerCase().trim();
-    var names = ['tomáš holý','tomas holy','jan holý','jan holy'];
-    var emails = ['tomas.holy@bestseries.cz','jan.holy@bestseries.cz'];
-    return names.indexOf(n) !== -1 || emails.indexOf(e) !== -1;
+    function nrm(s){ return String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[._@]/g,' ').replace(/\s+/g,' ').trim(); }
+    var cands = [window.__meFull, window.__meDisplay, window.__meUser, window.__meEmail].map(nrm);
+    for (var i=0;i<cands.length;i++){
+      var c = cands[i]; if(!c) continue;
+      if (c === 'tomas holy' || c === 'jan holy') return true;
+      if (/\bholy\b/.test(c) && /\b(tomas|jan)\b/.test(c)) return true; // pokryje i tomas.holy@…
+    }
+    return false;
   }
   window.obAiSpecAllowed = obAiSpecAllowed;
   // Otevře nativní SMS (z čísla obchodníka) s odkazem na specialistu pro daného leada.
