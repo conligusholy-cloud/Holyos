@@ -442,9 +442,11 @@
         <h3 style="margin:0 0 6px;font-size:16px;">💬 AI specialista (chat na portálu Compounder)</h3>
         <p style="color:var(--text2);font-size:13px;margin:0 0 12px;">Chatovací AI prodejce pro leady na compounder.world. Tady nastavíš, jak má komunikovat. Zapíná se u konkrétního leada (Compounder → detail leadu), odkaz mu pošleš SMSkou, a celý chat + shrnutí uvidíš u leada.</p>
         <label style="display:block;font-size:12px;color:var(--text2);margin-bottom:4px;">Úvodní věta (co AI napíše jako první)</label>
-        <textarea id="ai-aispec-greeting" rows="2" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text);font-size:13px;font-family:inherit;" placeholder="Dobrý den! Jsem AI specialista na prádlomaty…"></textarea>
+        <textarea id="ai-aispec-greeting" rows="2" oninput="aiAispecCount()" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text);font-size:13px;font-family:inherit;" placeholder="Dobrý den! Jsem specialista na prádlomaty…"></textarea>
+        <div id="ai-aispec-greeting-cnt" style="font-size:11px;color:var(--text2);margin-top:3px;"></div>
         <label style="display:block;font-size:12px;color:var(--text2);margin:12px 0 4px;">Scénář / instrukce pro AI (jak se chovat, co zjišťovat, jak prodávat)</label>
-        <textarea id="ai-aispec-prompt" rows="12" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text);font-size:13px;line-height:1.5;font-family:inherit;" placeholder="(prázdné = použije se výchozí prádlomatový prodejní scénář)"></textarea>
+        <textarea id="ai-aispec-prompt" rows="12" oninput="aiAispecCount()" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text);font-size:13px;line-height:1.5;font-family:inherit;" placeholder="(prázdné = použije se výchozí prádlomatový prodejní scénář)"></textarea>
+        <div id="ai-aispec-prompt-cnt" style="font-size:11px;color:var(--text2);margin-top:4px;"></div>
         <div style="margin-top:10px;"><button class="btn" onclick="aiSaveAiSpecConfig()" style="background:#eab308;color:#0e1a22;font-weight:700;">💾 Uložit nastavení</button> <span id="ai-aispec-msg" style="margin-left:10px;font-size:13px;color:var(--text2);"></span></div>
         <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;"><button class="btn" onclick="aiFillAiSpecDefault()" style="font-size:12px;">↩ Vložit výchozí scénář</button><button class="btn" onclick="aiCopyAiSpecPrompt()" style="font-size:12px;">📋 Kopírovat scénář</button><span id="ai-aispec-copymsg" style="font-size:12px;color:var(--text2);"></span></div>
 
@@ -5048,9 +5050,29 @@
         document.getElementById('ai-aispec-prompt').value = j.prompt||'';
         document.getElementById('ai-aispec-greeting').value = j.greeting||'';
         AISPEC_DEFAULT_PROMPT = j.defaultPrompt||'';
+        aiAispecCount();
         aiLoadKnowledge();
       }catch(e){ if(msg) msg.textContent='Chyba načtení: '+e.message; }
     }
+    // Doporučené rozsahy pro spolehlivé dodržování scénáře
+    var AISPEC_PROMPT_WARN = 9000, AISPEC_PROMPT_MAX = 14000, AISPEC_GREETING_WARN = 200;
+    function aiAispecCount(){
+      var ta=document.getElementById('ai-aispec-prompt'), c=document.getElementById('ai-aispec-prompt-cnt');
+      if(ta&&c){
+        var t=ta.value||'', chars=t.length, words=(t.trim().match(/\S+/g)||[]).length, w;
+        if(chars>AISPEC_PROMPT_MAX) w={col:'#ef4444',msg:'⚠️ Překročeno! Velmi dlouhé — AI pravděpodobně nedodrží všechna pravidla. Přesuň čísla/ceník do Znalostních podkladů.'};
+        else if(chars>AISPEC_PROMPT_WARN) w={col:'#eab308',msg:'⚠️ Nad doporučením — spolehlivost dodržování klesá. Zvaž přesun faktů do Znalostních podkladů.'};
+        else w={col:'var(--text2)',msg:'✅ V doporučeném rozsahu (do '+AISPEC_PROMPT_WARN+' znaků).'};
+        c.style.color=w.col; c.textContent=chars+' znaků · ~'+words+' slov · '+w.msg;
+      }
+      var g=document.getElementById('ai-aispec-greeting'), gc=document.getElementById('ai-aispec-greeting-cnt');
+      if(g&&gc){
+        var gl=(g.value||'').length;
+        gc.style.color = gl>AISPEC_GREETING_WARN?'#eab308':'var(--text2)';
+        gc.textContent = gl+' znaků'+(gl>AISPEC_GREETING_WARN?' · ⚠️ úvodní věta je dlouhá — ideál 1–2 věty':'');
+      }
+    }
+    window.aiAispecCount=aiAispecCount;
     function aiKnFmt(n){ return n>=1000 ? Math.round(n/1000)+' tis. znaků' : n+' znaků'; }
     async function aiLoadKnowledge(){
       var box=document.getElementById('ai-aispec-kn-list'); if(!box) return;
