@@ -267,7 +267,7 @@
   <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/locales-all.global.min.js"></script>
 <script>
   var API = '/api/compounder';
-  var STATUS = { new:{l:'Nový',c:'var(--new)'}, nedovolano:{l:'Nedovoláno',c:'#f59e0b'}, volat_pristi:{l:'Volat příště',c:'#eab308'}, contacted:{l:'Kontaktován',c:'var(--contacted)'}, access_sent:{l:'Odeslán přístup',c:'#3b82f6'}, schuzka:{l:'Domluvena schůzka',c:'#22c55e'}, schuzka_online:{l:'Domluvena schůzka online',c:'#10b981'}, qualified:{l:'Kvalifikován',c:'var(--qualified)'}, dosledovani:{l:'Dosledování',c:'#06b6d4'}, slibeny_krok:{l:'Slíbený krok',c:'#eab308'}, smlouva_odeslat:{l:'Odeslat dokumentaci',c:'#f97316'}, smlouva_odeslana:{l:'Dokumentace odeslána',c:'#8b5cf6'}, converted:{l:'Převeden',c:'var(--converted)'}, nezajem:{l:'Nemá zájem',c:'#ef4444'}, nelze_pouzit:{l:'Nelze použít',c:'#6b7280'}, rejected:{l:'Zamítnut',c:'var(--rejected)'} };
+  var STATUS = { new:{l:'Nový',c:'var(--new)'}, nedovolano:{l:'Nedovoláno',c:'#f59e0b'}, volat_pristi:{l:'Volat příště',c:'#eab308'}, contacted:{l:'Kontaktován',c:'var(--contacted)'}, access_sent:{l:'Odeslán přístup',c:'#3b82f6'}, odeslan_specialista:{l:'Odeslán odkaz na specialistu',c:'#8b5cf6'}, schuzka:{l:'Domluvena schůzka',c:'#22c55e'}, schuzka_online:{l:'Domluvena schůzka online',c:'#10b981'}, qualified:{l:'Kvalifikován',c:'var(--qualified)'}, dosledovani:{l:'Dosledování',c:'#06b6d4'}, slibeny_krok:{l:'Slíbený krok',c:'#eab308'}, smlouva_odeslat:{l:'Odeslat dokumentaci',c:'#f97316'}, smlouva_odeslana:{l:'Dokumentace odeslána',c:'#8b5cf6'}, converted:{l:'Převeden',c:'var(--converted)'}, nezajem:{l:'Nemá zájem',c:'#ef4444'}, nelze_pouzit:{l:'Nelze použít',c:'#6b7280'}, rejected:{l:'Zamítnut',c:'var(--rejected)'} };
   var LANGS = { '':'—', en:'English', bg:'Български', cs:'Čeština', da:'Dansk', de:'Deutsch', el:'Ελληνικά', es:'Español', et:'Eesti', fi:'Suomi', fr:'Français', ga:'Gaeilge', hr:'Hrvatski', hu:'Magyar', it:'Italiano', lt:'Lietuvių', lv:'Latviešu', mt:'Malti', nl:'Nederlands', pl:'Polski', pt:'Português', ro:'Română', sk:'Slovenčina', sl:'Slovenščina', sv:'Svenska' };
   var COUNTRIES = [
     {c:'CZ',f:'🇨🇿',d:'+420'},{c:'SK',f:'🇸🇰',d:'+421'},{c:'DE',f:'🇩🇪',d:'+49'},{c:'AT',f:'🇦🇹',d:'+43'},
@@ -1124,7 +1124,7 @@
       ? ('<div class="list">' + filtered.map(cardHtml).join('') + '</div>')
       : '<div class="empty">'+(searching?'Nic nenalezeno.':'Žádný kontakt v tomto stavu.')+'</div>';
     box.innerHTML = head + listHtml;
-    if (state.openId){ loadActivity(state.openId); loadReservations(state.openId); }
+    if (state.openId){ loadActivity(state.openId); loadReservations(state.openId); try { if (typeof loadAiSpecStatus==='function') loadAiSpecStatus(state.openId); } catch(e){} }
   }
   function obClearSearch(){ var s=document.getElementById('search'); if(s) s.value=''; state.search=''; load(); try{ renderLokalitySec(); }catch(e){} }
   window.obClearSearch = obClearSearch;
@@ -1216,6 +1216,13 @@
           (l.phone ? '<a href="sms:'+esc(telClean)+'">📩 SMS</a>' : '') +
           (l.email ? '<a href="mailto:'+esc(l.email)+'">✉️ E-mail</a>' : '') +
         '</div>' +
+        ((l.phone && obAiSpecAllowed()) ?
+          ('<div class="field" style="margin-top:10px;background:rgba(139,92,246,0.10);border:1px solid rgba(139,92,246,0.55);border-radius:12px;padding:12px">' +
+             '<button class="btn" style="width:100%;background:#8b5cf6;color:#fff;font-weight:800;font-size:15px" onclick="sendAiSpecSMS('+l.id+')">💬 Odeslat SMS s odkazem na specialistu</button>' +
+             '<div id="aispec-status-'+l.id+'" style="font-size:12px;color:var(--muted);margin-top:8px">Otevření odkazu i vyhodnocení chatu se načtou po rozkliknutí…</div>' +
+             '<div id="aispec-summary-'+l.id+'" style="font-size:13px;color:var(--text);margin-top:8px;white-space:pre-wrap"></div>' +
+             '<button class="btn btn-g" style="width:100%;margin-top:8px;font-size:13px" onclick="obAiSpecEvaluate('+l.id+')">🧠 Vyhodnotit chat (co lead chce)</button>' +
+           '</div>') : '') +
         '<div class="field" style="margin-top:8px"><button class="btn" id="hot-'+l.id+'" style="width:100%;font-size:15px;'+(l.is_hot?'background:#eab308;color:#1a1a1a;font-weight:800':'background:transparent;border:1px solid #eab308;color:#eab308;font-weight:700')+'" onclick="obToggleHot('+l.id+',this)">'+(l.is_hot?'⭐ Zajímavý kontakt ✓':'⭐ Označit jako zajímavý kontakt')+'</button></div>' +
         '<div class="field" style="margin-top:8px"><button class="btn btn-g" style="width:100%" onclick="meetingFromLead('+l.id+')">📅 Naplánovat schůzku</button></div>' +
         '<div class="field" style="margin-top:6px"><button class="btn btn-g" style="width:100%" onclick="callFromLead('+l.id+')">📞 Naplánovat hovor</button></div>' +
@@ -1229,7 +1236,6 @@
           (l.phone ? '<button class="btn" style="width:100%;margin-top:6px;background:#25D366;color:#0a2e17;font-weight:700" onclick="sendAccessWA('+l.id+')">🟢 Poslat přístup na WhatsApp</button>' : '<div style="color:var(--muted2);font-size:12px;margin-top:4px">WhatsApp: kontakt nemá telefon.</div>') +
           (l.phone ? '<button class="btn btn-g" style="width:100%;margin-top:6px" onclick="sendAccessSMS('+l.id+')">📩 Poslat přístup SMS</button>' : '') +
           '<button class="btn btn-g" style="width:100%;margin-top:6px" onclick="copyAccessLink('+l.id+')">🔗 Kopírovat odkaz na portál</button>' +
-          ((l.phone && obAiSpecAllowed()) ? '<button class="btn" style="width:100%;margin-top:6px;background:#8b5cf6;color:#fff;font-weight:700" onclick="sendAiSpecSMS('+l.id+')">💬 Odeslat SMS s odkazem na specialistu</button>' : '') +
           (l.email ? '' : '<div style="color:var(--muted2);font-size:12px;margin-top:4px">Kontakt nemá e-mail — e-mailem nelze odeslat.</div>') +
           '<div id="access-info-'+l.id+'" style="font-size:12px;color:var(--muted);margin-top:6px">'+accInfo+'</div>' +
           '<div id="access-msg-'+l.id+'" style="font-size:12px;margin-top:4px"></div>' +
@@ -1375,24 +1381,54 @@
     return false;
   }
   window.obAiSpecAllowed = obAiSpecAllowed;
-  // Otevře nativní SMS (z čísla obchodníka) s odkazem na specialistu pro daného leada.
+  // Otevře nativní SMS (z čísla obchodníka) s odkazem na specialistu; nejdřív nabídne uložení
+  // kontaktu do telefonu a automaticky přepne stav na „Odeslán odkaz na specialistu".
   async function sendAiSpecSMS(id){
-    var msg = document.getElementById('access-msg-'+id); if (msg) msg.innerHTML = '<span style="color:var(--muted)">Připravuji SMS…</span>';
+    var st = document.getElementById('aispec-status-'+id); if (st) st.innerHTML = '<span style="color:var(--muted)">Připravuji SMS…</span>';
     try {
       var r = await api('/leads/'+id+'/ai-specialist-link');
       var j = await r.json().catch(function(){return {};});
-      if (!r.ok || !j.link){ if(msg) msg.innerHTML = '<span style="color:#fca5a5">'+esc((j&&j.error)||'Chyba')+'</span>'; return; }
+      if (!r.ok || !j.link){ if(st) st.innerHTML = '<span style="color:#fca5a5">'+esc((j&&j.error)||'Chyba')+'</span>'; return; }
       var lead = state.leads.find(function(x){return x.id===id;});
       var num = lead ? String(lead.phone||'').replace(/[^0-9+]/g,'') : '';
-      var text = 'Dobry den, specialista na pradlomaty vam rad poradi zde: ' + j.link;
-      var body = encodeURIComponent(text);
-      var iOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-      window.location.href = 'sms:'+num+(iOS?'&':'?')+'body='+body;
-      if (msg) msg.innerHTML = '<span style="color:var(--converted)">✓ Otevírám SMS — odešli zprávu.</span>';
+      // Dotaz na uložení kontaktu do telefonu PŘED odesláním
+      if (window.confirm('Uložit kontakt do telefonu před odesláním SMS?')) { try { saveContact(id); } catch(e){} }
+      // Auto-přepnutí stavu leada na „Odeslán odkaz na specialistu"
+      try { await setField(id,'status','odeslan_specialista'); } catch(e){}
       try { obLogAction(id,'send_aispec','💬 Odeslán odkaz na specialistu (SMS)'); } catch(e){}
-    } catch(e){ if(msg) msg.innerHTML = '<span style="color:#fca5a5">Nepodařilo se připravit SMS.</span>'; }
+      var text = 'Dobry den, specialista na pradlomaty vam rad poradi zde: ' + j.link;
+      var iOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+      window.location.href = 'sms:'+num+(iOS?'&':'?')+'body='+encodeURIComponent(text);
+      if (st) st.innerHTML = '<span style="color:var(--converted)">✓ Otevírám SMS — odešli zprávu. Stav: „Odeslán odkaz na specialistu".</span>';
+    } catch(e){ if(st) st.innerHTML = '<span style="color:#fca5a5">Nepodařilo se připravit SMS.</span>'; }
   }
   window.sendAiSpecSMS = sendAiSpecSMS;
+  // Načte stav specialisty pro daného leada (zda otevřel odkaz + počet zpráv + uložené shrnutí).
+  async function loadAiSpecStatus(id){
+    var st = document.getElementById('aispec-status-'+id); var sm = document.getElementById('aispec-summary-'+id);
+    if (!st) return;
+    try {
+      var r = await api('/leads/'+id+'/ai-specialist-chat');
+      var j = await r.json().catch(function(){return {};});
+      if (!r.ok || !j.ok){ st.innerHTML = '<span style="color:var(--muted2)">Stav se nepodařilo načíst.</span>'; return; }
+      var opened = j.openedAt ? ('<span style="color:var(--converted)">✓ otevřel odkaz ('+fmtDate(j.openedAt)+')</span>') : '<span style="color:var(--muted2)">zatím neotevřel odkaz</span>';
+      var chat = (j.userMsgCount>0) ? (' · 💬 '+j.userMsgCount+' zpráv v chatu') : ' · zatím nechatoval';
+      st.innerHTML = opened + chat;
+      if (sm) sm.innerHTML = j.summary ? ('<b>🧠 Co lead chce:</b>\n'+esc(j.summary)) : '';
+    } catch(e){ st.innerHTML = '<span style="color:var(--muted2)">Stav se nepodařilo načíst.</span>'; }
+  }
+  window.loadAiSpecStatus = loadAiSpecStatus;
+  // Vygeneruje/aktualizuje AI vyhodnocení chatu (co lead chce).
+  async function obAiSpecEvaluate(id){
+    var sm = document.getElementById('aispec-summary-'+id); if (sm) sm.innerHTML = '<span style="color:var(--muted)">Vyhodnocuji chat…</span>';
+    try {
+      var r = await api('/leads/'+id+'/ai-specialist-summary', { method:'POST' });
+      var j = await r.json().catch(function(){return {};});
+      if (r.ok && j.ok){ if(sm) sm.innerHTML = j.summary ? ('<b>🧠 Co lead chce:</b>\n'+esc(j.summary)) : '<span style="color:var(--muted2)">Zatím není z čeho vyhodnocovat (žádný chat).</span>'; }
+      else { if(sm) sm.innerHTML = '<span style="color:#fca5a5">'+esc((j&&j.error)||'Chyba')+'</span>'; }
+    } catch(e){ if(sm) sm.innerHTML = '<span style="color:#fca5a5">Nepodařilo se vyhodnotit.</span>'; }
+  }
+  window.obAiSpecEvaluate = obAiSpecEvaluate;
   // Zkopírovat odkaz na portál do schránky (vloží se do jakékoli zprávy).
   async function copyAccessLink(id){
     var msg = document.getElementById('access-msg-'+id); if (msg) msg.innerHTML = '<span style="color:var(--muted)">Připravuji odkaz…</span>';

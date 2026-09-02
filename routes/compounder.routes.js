@@ -559,6 +559,8 @@ router.get('/portal/ai-specialist/info', async (req, res) => {
       const rows = await prisma.aiSpecialistMessage.findMany({ where: { lead_id: leadId }, orderBy: { created_at: 'asc' }, take: 200 });
       messages = rows.map((r) => ({ role: r.role, text: r.text }));
     } catch (_) { messages = []; }
+    // Zaznamenej první otevření odkazu na specialistu (pro obchodníka: „otevřel odkaz").
+    prisma.compounderLead.updateMany({ where: { id: leadId, ai_specialist_opened_at: null }, data: { ai_specialist_opened_at: new Date() } }).catch(() => {});
     res.json({ ok: true, name: lead.name || '', greeting, messages });
   } catch (err) {
     res.status(500).json({ ok: false, error: 'Chyba' });
@@ -569,9 +571,16 @@ router.get('/portal/ai-specialist/info', async (req, res) => {
 router.get('/leads/:id/ai-specialist-chat', requireAuth, async (req, res, next) => {
   try {
     const id = parseInt(req.params.id, 10);
-    const lead = await prisma.compounderLead.findUnique({ where: { id }, select: { ai_specialist_summary: true } });
+    const lead = await prisma.compounderLead.findUnique({ where: { id }, select: { ai_specialist_summary: true, ai_specialist_opened_at: true } });
     const rows = await prisma.aiSpecialistMessage.findMany({ where: { lead_id: id }, orderBy: { created_at: 'asc' }, take: 500 });
-    res.json({ ok: true, summary: (lead && lead.ai_specialist_summary) || null, messages: rows.map((r) => ({ role: r.role, text: r.text, at: r.created_at })) });
+    const userMsgs = rows.filter((r) => r.role === 'user').length;
+    res.json({
+      ok: true,
+      summary: (lead && lead.ai_specialist_summary) || null,
+      openedAt: (lead && lead.ai_specialist_opened_at) || null,
+      userMsgCount: userMsgs,
+      messages: rows.map((r) => ({ role: r.role, text: r.text, at: r.created_at })),
+    });
   } catch (err) { next(err); }
 });
 
@@ -2568,7 +2577,7 @@ router.get('/leads', requireAuth, async (req, res, next) => {
 
 // PATCH /api/compounder/leads/:id — změna stavu / poznámky
 const patchSchema = z.object({
-  status: z.enum(['new', 'nedovolano', 'volat_pristi', 'contacted', 'access_sent', 'schuzka', 'schuzka_online', 'qualified', 'dosledovani', 'slibeny_krok', 'smlouva_odeslat', 'smlouva_odeslana', 'converted', 'nezajem', 'nelze_pouzit', 'rejected']).optional(),
+  status: z.enum(['new', 'nedovolano', 'volat_pristi', 'contacted', 'access_sent', 'odeslan_specialista', 'schuzka', 'schuzka_online', 'qualified', 'dosledovani', 'slibeny_krok', 'smlouva_odeslat', 'smlouva_odeslana', 'converted', 'nezajem', 'nelze_pouzit', 'rejected']).optional(),
   notes: z.string().max(5000).optional().nullable(),
   lang: z.string().trim().max(10).optional().nullable(),
   owner_person_id: z.number().int().positive().optional().nullable(),
