@@ -169,6 +169,7 @@
   async function send(){
     var msg = (el('input').value||'').trim(); if(!msg || busy) return;
     el('input').value=''; autoGrow(); busy=true;
+    var _in = el('intro'); if(_in) _in.classList.add('collapsed'); // jakmile začne chat, leták se sbalí
     var uEl = addMsg('user', msg);
     var ph = addMsg('ai','…');
     try{
