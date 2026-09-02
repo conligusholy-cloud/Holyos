@@ -2,321 +2,199 @@
 <html lang="cs">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Prádlomat na prodej · Specialista</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<title>AI specialista · Compounder</title>
 <style>
-  :root{
-    --navy:#0a1b2e; --navy2:#0e2438; --panel:#102a40; --line:#1e3d57;
-    --cyan:#2bb4dd; --cyan2:#1c85ad; --teal:#19c9cf; --white:#eef4f9; --muted:#9db3c6;
-    --light:#eef3f8; --lpanel:#ffffff; --lline:#dce6ee; --ink:#122333; --inkmut:#5c6f80;
-  }
-  *{box-sizing:border-box;}
-  html,body{margin:0;}
-  body{background:var(--navy);color:var(--white);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;line-height:1.5;-webkit-font-smoothing:antialiased;}
-  .band{width:100%;}
-  .band.dark{background:radial-gradient(900px 500px at 20% -80px,#123049,var(--navy) 60%);}
-  .band.light{background:var(--light);color:var(--ink);}
-  .band.bottom{background:linear-gradient(180deg,#0b1f31,#081521);}
-  .inner{max-width:1040px;margin:0 auto;padding:26px 18px;}
-  .cyan{color:var(--cyan);}
-  /* Topbar */
-  .top{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;padding-top:6px;}
-  .logo{display:flex;align-items:center;gap:10px;font-weight:900;letter-spacing:1px;line-height:1;}
-  .logo .drop{color:var(--cyan);font-size:30px;}
-  .logo .lt{font-size:20px;}
-  .logo .lt small{display:block;font-size:12px;letter-spacing:3px;color:var(--muted);font-weight:800;}
-  .tbadges{display:flex;gap:8px;flex-wrap:wrap;}
-  .tbadge{border:1px solid var(--line);border-radius:8px;padding:6px 10px;font-size:11px;color:#cfe0ec;text-align:center;line-height:1.2;}
-  .tbadge b{display:block;color:#fff;font-size:12px;}
-  /* Hero grid */
-  .herogrid{display:grid;grid-template-columns:1.05fr .95fr;gap:22px;align-items:start;margin-top:16px;}
-  @media(max-width:840px){ .herogrid{grid-template-columns:1fr;} }
-  .hero h1{font-size:34px;line-height:1.05;font-weight:900;margin:2px 0 12px;letter-spacing:.3px;}
-  .hero h1 .b{color:var(--cyan);}
-  .hero .sub{color:#c3d4e2;font-size:15px;margin:0 0 6px;max-width:520px;}
-  .hero .sub b{color:#fff;}
-  /* Flow box */
-  .flowbox{display:flex;align-items:center;gap:6px;background:var(--navy2);border:1px solid var(--line);border-radius:16px;padding:14px 12px;margin:18px 0;flex-wrap:wrap;justify-content:center;}
-  .flowbox .fi{flex:1;min-width:74px;text-align:center;}
-  .flowbox .ic{font-size:24px;}
-  .flowbox .ft{font-size:11px;font-weight:800;color:#fff;margin-top:4px;letter-spacing:.02em;}
-  .flowbox .fs{font-size:10px;color:var(--muted);line-height:1.25;margin-top:2px;}
-  .flowbox .ar{color:var(--cyan);font-size:18px;flex:0 0 auto;}
-  /* CTA */
-  .cta{display:flex;align-items:center;justify-content:space-between;gap:12px;cursor:pointer;border:none;width:100%;
-       background:linear-gradient(180deg,#2fbfe8,var(--cyan2));color:#04121c;font-weight:900;border-radius:14px;
-       padding:16px 20px;box-shadow:0 10px 30px rgba(43,180,221,.35);text-align:left;}
-  .cta:hover{filter:brightness(1.06);}
-  .cta .ct{display:flex;flex-direction:column;}
-  .cta .ct .cta-t{font-size:16px;}
-  .cta .ct .cta-s{font-size:11.5px;font-weight:600;color:#0a2233;opacity:.85;}
-  .cta .arw{font-size:22px;}
-  .note{color:var(--cyan);font-size:13px;font-style:italic;margin:12px 0 6px;text-align:center;}
-  .disc{color:#7f95a8;font-size:11.5px;margin-top:6px;}
-  /* AI panel (functional chat) */
-  #gate{color:var(--muted);text-align:center;padding:30px 12px;}
-  #chatWrap{background:linear-gradient(180deg,#0f2a41,#0b2032);border:1px solid var(--line);border-radius:18px;overflow:hidden;box-shadow:0 20px 55px rgba(0,0,0,.5);}
-  .chead{display:flex;align-items:center;gap:10px;padding:14px;background:linear-gradient(180deg,rgba(43,180,221,.18),transparent);border-bottom:1px solid rgba(43,180,221,.22);}
-  .chead .bot{width:38px;height:38px;border-radius:10px;background:linear-gradient(180deg,#2fbfe8,var(--cyan2));display:flex;align-items:center;justify-content:center;font-size:20px;}
-  .chead .ct{flex:1;min-width:0;}
-  .chead .ctt{font-weight:900;font-size:15px;color:#fff;letter-spacing:.02em;}
-  .chead .cts{font-size:11px;color:var(--muted);}
-  .chead .on{font-size:11px;color:#31d06d;font-weight:700;white-space:nowrap;}
-  #msgs{max-height:40vh;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:14px;display:flex;flex-direction:column;gap:9px;}
-  #msgs:empty{display:none;}
-  .m{max-width:92%;padding:10px 12px;border-radius:12px;font-size:14.5px;line-height:1.5;white-space:pre-wrap;}
-  .m.user{align-self:flex-end;background:#274357;color:#fff;}
-  .m.ai{align-self:flex-start;background:#0e2233;color:var(--white);border:1px solid var(--line);}
-  .qa{display:flex;flex-direction:column;gap:8px;padding:12px 14px;}
-  .qa .q{display:flex;align-items:center;gap:10px;width:100%;text-align:left;cursor:pointer;
-         background:#0e2233;border:1px solid var(--line);border-radius:12px;padding:11px 13px;color:#dfeaf3;font-size:13.5px;font-weight:600;}
-  .qa .q:hover{border-color:var(--cyan);background:#123049;}
-  .qa .q .qi{font-size:16px;}
-  .qa .q .qx{flex:1;}
-  .qa .q .qc{color:var(--cyan);font-weight:900;}
-  .bar{display:flex;gap:8px;align-items:flex-end;padding:12px 14px calc(14px + env(safe-area-inset-bottom));border-top:1px solid var(--line);}
-  #input{flex:1;resize:none;max-height:120px;background:#0e2233;border:1px solid var(--line);border-radius:12px;padding:12px;color:#fff;font-size:16px;font-family:inherit;line-height:1.4;}
-  #send{flex:0 0 auto;border:none;border-radius:12px;cursor:pointer;background:linear-gradient(180deg,#2fbfe8,var(--cyan2));color:#04121c;padding:0 18px;height:48px;font-weight:900;font-size:15px;}
-  .panelnote{color:var(--muted);font-size:11px;text-align:center;padding:0 14px 12px;}
-  /* Light sections */
-  .sec-h{text-align:center;font-size:22px;font-weight:900;margin:0 0 4px;color:var(--ink);letter-spacing:.02em;}
-  .sec-h .b{color:var(--cyan2);}
-  .sec-s{text-align:center;color:var(--inkmut);font-size:13px;margin:0 0 18px;}
-  .stats{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;}
-  @media(max-width:840px){ .stats{grid-template-columns:repeat(2,1fr);} }
-  .stat{text-align:center;}
-  .stat .ic{font-size:26px;}
-  .stat .n{font-size:26px;font-weight:900;color:var(--ink);line-height:1;margin-top:4px;}
-  .stat .l{font-size:11px;font-weight:800;color:var(--ink);text-transform:uppercase;letter-spacing:.03em;margin-top:6px;}
-  .stat .d{font-size:11.5px;color:var(--inkmut);margin-top:4px;line-height:1.35;}
-  .steps{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;}
-  @media(max-width:840px){ .steps{grid-template-columns:repeat(2,1fr);} }
-  .step{text-align:center;}
-  .step .num{width:44px;height:44px;border-radius:50%;background:var(--navy);color:#fff;font-weight:900;font-size:18px;display:flex;align-items:center;justify-content:center;margin:0 auto 8px;}
-  .step .st{font-size:12.5px;font-weight:800;color:var(--ink);text-transform:uppercase;letter-spacing:.02em;}
-  .step .sd{font-size:11.5px;color:var(--inkmut);margin-top:4px;line-height:1.35;}
-  .scen{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;}
-  @media(max-width:840px){ .scen{grid-template-columns:repeat(2,1fr);} }
-  .lcard{background:var(--lpanel);border:1px solid var(--lline);border-radius:16px;padding:16px 12px;text-align:center;position:relative;box-shadow:0 6px 16px rgba(18,35,51,.06);}
-  .lcard.zero{border-color:var(--teal);}
-  .lcard.hot{border:2px solid var(--cyan);box-shadow:0 10px 24px rgba(43,180,221,.2);}
-  .lcard .who{font-size:15px;font-weight:900;color:var(--ink);}
-  .lcard .who .big{font-size:22px;color:var(--cyan2);}
-  .lcard .ret{font-size:11.5px;color:var(--inkmut);margin:8px 0 2px;}
-  .lcard .val{font-size:22px;font-weight:900;color:var(--ink);}
-  .lcard.zero .val{font-size:15px;color:var(--cyan2);}
-  .lcard.hot .val{color:var(--cyan2);}
-  .lcard .rib{position:absolute;top:8px;right:-2px;background:var(--cyan);color:#04121c;font-size:9px;font-weight:900;padding:3px 8px;border-radius:6px;text-transform:uppercase;}
-  .lcard .foot{font-size:10.5px;color:var(--inkmut);margin-top:8px;}
-  .solve{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;}
-  @media(max-width:840px){ .solve{grid-template-columns:repeat(2,1fr);} }
-  .sv{text-align:center;}
-  .sv .ic{font-size:24px;}
-  .sv .t{font-size:12px;font-weight:900;color:var(--ink);text-transform:uppercase;margin-top:4px;}
-  .sv .d{font-size:11.5px;color:var(--inkmut);margin-top:4px;line-height:1.35;}
-  .lcta{display:inline-flex;align-items:center;gap:8px;cursor:pointer;border:none;background:linear-gradient(180deg,#2fbfe8,var(--cyan2));color:#04121c;font-weight:900;border-radius:12px;padding:13px 20px;font-size:14px;box-shadow:0 8px 22px rgba(43,180,221,.3);}
-  .lcta:hover{filter:brightness(1.06);}
-  .center{text-align:center;}
-  .ldisc{color:var(--inkmut);font-size:11.5px;text-align:center;margin-top:12px;line-height:1.5;}
-  /* Photos */
-  .photos{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;}
-  @media(max-width:840px){ .photos{grid-template-columns:1fr;} }
-  .ph{aspect-ratio:4/3;border:2px dashed var(--lline);border-radius:14px;display:flex;align-items:center;justify-content:center;color:var(--inkmut);font-size:12px;text-align:center;background:#fff;padding:10px;}
-  /* Bottom */
-  .final{text-align:center;}
-  .final h2{font-size:24px;font-weight:900;margin:0 0 8px;line-height:1.15;}
-  .final p{color:#a9c0d2;font-size:14px;max-width:560px;margin:0 auto 18px;}
-  .subclaim{text-align:center;font-weight:900;font-size:16px;color:#fff;margin:16px 0 6px;}
-  .subclaim small{display:block;color:var(--muted);font-weight:500;font-size:12.5px;margin-top:4px;}
+  :root { --bg:#0b0e13; --panel:#0e1116; --line:#2a2a2e; --gold:#eab308; --muted:#7a7a85; --text:#e8e8ea; }
+  * { box-sizing:border-box; }
+  html, body { height:100%; }
+  body { margin:0; background:var(--bg); color:var(--text); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif; overflow:hidden; }
+  /* Celá stránka na výšku okna (dvh kvůli mobilním lištám prohlížeče) → spodní lišta ukotvená. */
+  .wrap { max-width:720px; margin:0 auto; height:100dvh; display:flex; flex-direction:column;
+          padding:12px 12px 0; }
+  .head { flex:0 0 auto; padding:6px 2px 10px; }
+  .brand { font-weight:800; letter-spacing:3px; font-size:13px; color:#fff; }
+  .brand span { color:var(--gold); }
+  h1 { font-size:19px; margin:8px 0 4px; }
+  .sub { color:var(--muted); font-size:13px; margin:0; line-height:1.4; }
+  #chat { flex:1; min-height:0; display:flex; flex-direction:column; }
+  #msgs { flex:1; min-height:0; overflow-y:auto; -webkit-overflow-scrolling:touch;
+          border:1px solid var(--line); border-radius:14px; padding:14px; background:var(--panel);
+          display:flex; flex-direction:column; gap:10px; }
+  .m { max-width:88%; padding:9px 12px; border-radius:12px; font-size:15px; line-height:1.5; white-space:pre-wrap; }
+  .m.user { align-self:flex-end; background:#26303c; color:#fff; }
+  .m.ai { align-self:flex-start; background:#171b22; color:var(--text); border:1px solid var(--line); }
+  /* Ukotvená spodní lišta s odsazením pro home indicator na iPhonu. */
+  .bar { flex:0 0 auto; display:flex; gap:8px; align-items:flex-end;
+         padding:10px 0 calc(10px + env(safe-area-inset-bottom)); background:var(--bg); }
+  #input { flex:1; resize:none; max-height:120px; background:var(--panel); border:1px solid var(--line);
+           border-radius:12px; padding:12px; color:#fff; font-size:16px; font-family:inherit; line-height:1.4; }
+  button { flex:0 0 auto; border:none; border-radius:12px; cursor:pointer; }
+  #send { background:linear-gradient(180deg,#37b6ee,#2ba6dd); color:#06131e; padding:0 20px; height:48px; font-weight:800; font-size:15px; }
+  #gate { text-align:center; color:var(--muted); padding:60px 16px; }
+  /* Leták — vzhled jako tištěný leták (tmavě modrý, modrý akcent). Nahoře, rozbalovací. */
+  #intro { --blue:#2ba6dd; --blue2:#1b7fb0; flex:0 0 auto; border:1px solid #1e3a52;
+           border-radius:16px; background:linear-gradient(160deg,#0d2033 0%,#0a1826 60%,#081420 100%);
+           margin-bottom:10px; overflow:hidden; box-shadow:0 6px 24px rgba(0,0,0,.35); }
+  #intro .ihead { display:flex; align-items:center; gap:10px; padding:12px 14px; cursor:pointer;
+                  background:linear-gradient(180deg,rgba(43,166,221,.14),transparent); border-bottom:1px solid rgba(43,166,221,.18); }
+  #intro .ihead .logo { font-weight:900; letter-spacing:1px; font-size:14px; color:#fff; display:flex; align-items:center; gap:7px; }
+  #intro .ihead .logo .drop { color:var(--blue); font-size:17px; }
+  #intro .ihead .t { flex:1; min-width:0; }
+  #intro .ihead .ts { font-size:11.5px; color:#9fb6c9; margin-top:1px; }
+  #intro .ichev { color:var(--blue); font-size:13px; transition:transform .2s; }
+  #intro.collapsed .ichev { transform:rotate(-90deg); }
+  #intro .ibody { padding:14px; max-height:52vh; overflow-y:auto; }
+  #intro.collapsed .ibody { display:none; }
+  #intro .hero { font-size:20px; line-height:1.15; font-weight:900; color:#fff; letter-spacing:.5px; margin:0 0 6px; }
+  #intro .hero b { color:var(--blue); }
+  #intro .lead { font-size:12.5px; color:#b9cbd9; margin:0 0 12px; line-height:1.5; }
+  #intro .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(90px,1fr)); gap:8px; margin:0 0 6px; }
+  #intro .stat { background:rgba(43,166,221,.07); border:1px solid rgba(43,166,221,.25); border-radius:10px; padding:9px 8px; text-align:center; }
+  #intro .stat .n { font-size:17px; font-weight:900; color:var(--blue); }
+  #intro .stat .l { font-size:10px; color:#9fb6c9; text-transform:uppercase; letter-spacing:.03em; margin-top:2px; line-height:1.2; }
+  #intro .sec { font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:var(--blue); margin:16px 0 7px; font-weight:800; text-align:center; }
+  #intro .steps { display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:8px; }
+  #intro .step { background:#0e2233; border:1px solid #1e3a52; border-radius:10px; padding:9px 10px; }
+  #intro .step .num { color:var(--blue); font-weight:900; font-size:15px; }
+  #intro .step .tx { font-size:11.5px; color:#c3d2de; line-height:1.35; margin-top:2px; }
+  #intro .scen { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:8px; }
+  #intro .card { background:#0e2233; border:1px solid #1e3a52; border-radius:12px; padding:11px; text-align:center; }
+  #intro .card.hot { border-color:var(--blue); background:linear-gradient(180deg,rgba(43,166,221,.16),#0e2233); box-shadow:0 0 0 1px rgba(43,166,221,.35) inset; }
+  #intro .card .who { font-size:12px; color:#c3d2de; font-weight:700; }
+  #intro .card .ret { font-size:11px; color:#8ea6b8; margin:4px 0 1px; }
+  #intro .card .val { font-size:18px; font-weight:900; color:#fff; }
+  #intro .card.hot .val { color:var(--blue); }
+  #intro .solve { display:flex; flex-wrap:wrap; gap:6px; justify-content:center; }
+  #intro .solve span { font-size:11.5px; color:#c3d2de; background:#0e2233; border:1px solid #1e3a52; border-radius:999px; padding:4px 10px; }
+  #intro .qs { display:flex; flex-wrap:wrap; gap:7px; margin-top:4px; }
+  #intro .q { font-size:12.5px; color:#fff; background:linear-gradient(180deg,var(--blue),var(--blue2)); border:none;
+              border-radius:999px; padding:8px 13px; cursor:pointer; text-align:left; font-weight:600; box-shadow:0 2px 8px rgba(43,166,221,.25); }
+  #intro .q:hover { filter:brightness(1.08); }
+  #intro .cta { display:block; width:100%; margin-top:10px; text-align:center; font-weight:800; font-size:13.5px; color:#06131e;
+                background:linear-gradient(180deg,#37b6ee,var(--blue)); border:none; border-radius:12px; padding:12px; cursor:pointer; }
 </style>
 </head>
 <body>
-
-  <!-- HERO -->
-  <div class="band dark">
-    <div class="inner">
-      <div class="top">
-        <div class="logo"><span class="drop">💧</span><span class="lt">PRÁDLOMAT<small>NA PRODEJ</small></span></div>
-        <div class="tbadges">
-          <div class="tbadge">🇨🇿<b>Česká výroba</b></div>
-          <div class="tbadge">od roku<b>2019</b></div>
-          <div class="tbadge">7+ let<b>zkušeností</b></div>
-        </div>
-      </div>
-
-      <div class="herogrid">
-        <div class="hero">
-          <h1>JEDEN PRÁDLOMAT.<br><span class="b">VÁŠ PRVNÍ KROK K FINANČNÍMU DŮCHODU.</span></h1>
-          <p class="sub">Už jedna dobře umístěná prádelna může vytvářet dlouhodobý příjem 24/7. Naším cílem je vytvořit <b>co nejvíce finančních důchodců</b>.</p>
-          <div class="flowbox">
-            <div class="fi"><div class="ic">🧺</div><div class="ft">PRÁDLOMAT</div><div class="fs">Jednoduchý model</div></div>
-            <div class="ar">→</div>
-            <div class="fi"><div class="ic">⚙️</div><div class="ft">PROVOZ 24/7</div><div class="fs">Bez zaměstnanců</div></div>
-            <div class="ar">→</div>
-            <div class="fi"><div class="ic">💶</div><div class="ft">PRAVIDELNÝ PŘÍJEM</div><div class="fs">Měsíc za měsícem</div></div>
-            <div class="ar">→</div>
-            <div class="fi"><div class="ic">🏖️</div><div class="ft">FINANČNÍ DŮCHOD</div><div class="fs">Svoboda a čas</div></div>
+  <div class="wrap">
+    <div class="head">
+      <div class="brand">COMPO<span>U</span>NDER</div>
+      <h1>Specialista na prádlomaty</h1>
+      <p class="sub">Zeptejte se na cokoli — jak to funguje, ekonomika, návratnost, lokality.</p>
+    </div>
+    <div id="gate">Načítám…</div>
+    <div id="chat" style="display:none;">
+      <div id="intro">
+        <div class="ihead" id="introHead">
+          <div class="t">
+            <div class="logo"><span class="drop">💧</span> PRÁDLOMAT NA PRODEJ</div>
+            <div class="ts">Rozklikni leták a zeptej se AI specialisty na cokoli.</div>
           </div>
-          <button class="cta cta-chat" data-scroll="1">
-            <span class="ct"><span class="cta-t">SPOČÍTAT MŮJ FINANČNÍ DŮCHOD S AI</span><span class="cta-s">AI vám během pár minut připraví model na míru</span></span>
-            <span class="arw">→</span>
-          </button>
-          <p class="note">↳ Než se vám ozveme, AI vám během pár minut ukáže, jak by mohl Prádlomat fungovat právě pro vás.</p>
-          <p class="disc">Výsledky závisí na lokalitě, návštěvnosti, investici a provozních nákladech.</p>
+          <div class="ichev">▼</div>
         </div>
-
-        <div>
-          <div id="gate">Načítám…</div>
-          <div id="chat" style="display:none;">
-            <div id="chatWrap">
-              <div class="chead">
-                <div class="bot">🤖</div>
-                <div class="ct"><div class="ctt">AI ASISTENT</div><div class="cts">Váš chytrý průvodce</div></div>
-                <div class="on">● Online</div>
-              </div>
-              <div id="msgs"></div>
-              <div class="qa" id="qa">
-                <button class="q" data-q="Kolik může Prádlomat vydělávat?"><span class="qi">💰</span><span class="qx">Kolik může prádelna vydělávat?</span><span class="qc">›</span></button>
-                <button class="q" data-q="Spočítejte mi orientační návratnost investice do Prádlomatu."><span class="qi">📈</span><span class="qx">Spočítej mi návratnost investice</span><span class="qc">›</span></button>
-                <button class="q" data-q="Jak vybrat a prověřit vhodnou lokalitu pro Prádlomat?"><span class="qi">📍</span><span class="qx">Jak vybrat a zjistit lokalitu?</span><span class="qc">›</span></button>
-                <button class="q" data-q="Co zahrnuje servis a podpora?"><span class="qi">🔧</span><span class="qx">Co zahrnuje servis a podpora?</span><span class="qc">›</span></button>
-                <button class="q" data-q="Jak probíhá financování Prádlomatu?"><span class="qi">🏦</span><span class="qx">Jak probíhá financování?</span><span class="qc">›</span></button>
-                <button class="q" data-q="Jaké jsou náklady na provoz Prádlomatu?"><span class="qi">📊</span><span class="qx">Jaké jsou náklady na provoz?</span><span class="qc">›</span></button>
-                <button class="q" data-q="Chci nezávaznou konzultaci — jak dál?"><span class="qi">💬</span><span class="qx">Chci nezávaznou konzultaci</span><span class="qc">›</span></button>
-              </div>
-              <div class="bar">
-                <textarea id="input" rows="1" placeholder="Napište svou otázku…"></textarea>
-                <button id="send">→</button>
-              </div>
-              <div class="panelnote">AI odpovědi jsou nezávazné a zdarma.</div>
-            </div>
+        <div class="ibody">
+          <div class="hero">JEDEN PRÁDLOMAT.<br><b>VÁŠ FINANČNÍ DŮCHOD.</b></div>
+          <div class="lead">Už jedna dobře umístěná prádelna může vytvářet dlouhodobý příjem 24/7. Naším cílem je vytvořit co nejvíce finančních důchodců.</div>
+          <div class="stats">
+            <div class="stat"><div class="n">130+</div><div class="l">poboček po světě</div></div>
+            <div class="stat"><div class="n">70</div><div class="l">poboček v ČR</div></div>
+            <div class="stat"><div class="n">4 500 m²</div><div class="l">výrobních hal</div></div>
+            <div class="stat"><div class="n">7+ let</div><div class="l">zkušeností</div></div>
+            <div class="stat"><div class="n">🇨🇿</div><div class="l">česká výroba</div></div>
           </div>
+          <div class="sec">Jak vznikne váš Prádlomat</div>
+          <div class="steps">
+            <div class="step"><span class="num">1</span><div class="tx">Vybereme a prověříme lokalitu</div></div>
+            <div class="step"><span class="num">2</span><div class="tx">Vyrobíme a dodáme (ČR)</div></div>
+            <div class="step"><span class="num">3</span><div class="tx">Instalace a spuštění do 1 dne</div></div>
+            <div class="step"><span class="num">4</span><div class="tx">Servis 24/7, monitoring, podpora</div></div>
+          </div>
+          <div class="sec">Kolik zákazníků denně stačí?</div>
+          <div class="scen">
+            <div class="card"><div class="who">1 zákazník / den</div><div class="ret">návratnost cca</div><div class="val">3,6 roku</div></div>
+            <div class="card"><div class="who">3 zákazníci / den</div><div class="ret">návratnost cca</div><div class="val">2 roky</div></div>
+            <div class="card hot"><div class="who">5 zákazníků / den</div><div class="ret">návratnost cca</div><div class="val">1,5 roku</div></div>
+            <div class="card"><div class="who">10 zákazníků / den</div><div class="ret">návratnost cca</div><div class="val">9 měsíců</div></div>
+          </div>
+          <div class="sec">Co za vás vyřešíme</div>
+          <div class="solve">
+            <span>📍 Lokalita</span><span>🏭 Výroba (ČR)</span><span>🚚 Doprava a instalace</span><span>🎧 Servis 24/7</span><span>🛡️ Software a monitoring</span>
+          </div>
+          <div class="sec">Zeptejte se AI specialisty</div>
+          <div class="qs" id="introQs">
+            <button class="q" data-q="Kolik může prádelna vydělávat?">💰 Kolik může prádelna vydělávat?</button>
+            <button class="q" data-q="Spočítej mi návratnost investice do prádlomatu.">📈 Spočítej návratnost investice</button>
+            <button class="q" data-q="Jak vybrat a zjistit vhodnou lokalitu?">📍 Jak vybrat lokalitu?</button>
+            <button class="q" data-q="Co zahrnuje servis a podpora?">🔧 Servis a podpora</button>
+            <button class="q" data-q="Jak probíhá financování prádlomatu?">🏦 Jak probíhá financování?</button>
+            <button class="q" data-q="Jaké jsou náklady na provoz prádlomatu?">📊 Náklady na provoz</button>
+          </div>
+          <button class="cta" data-q="Chci nezávaznou konzultaci — spočítejte mi finanční důchod na míru.">🤖 Spočítat můj finanční důchod s AI</button>
         </div>
       </div>
-    </div>
-  </div>
-
-  <!-- DŮVĚRA / STATY -->
-  <div class="band light">
-    <div class="inner">
-      <div class="stats">
-        <div class="stat"><div class="ic">🌍</div><div class="n">130+</div><div class="l">poboček po světě</div><div class="d">Působíme ve více zemích a stále rosteme.</div></div>
-        <div class="stat"><div class="ic">🇨🇿</div><div class="n">70</div><div class="l">poboček v ČR</div><div class="d">Provozujeme přímo my. Známe trh, máme výsledky.</div></div>
-        <div class="stat"><div class="ic">🏭</div><div class="n">4 500 m²</div><div class="l">výrobních hal</div><div class="d">Vlastní výroba v ČR s nejnovější technologií.</div></div>
-        <div class="stat"><div class="ic">🏅</div><div class="n">7+ let</div><div class="l">zkušeností</div><div class="d">Od roku 2019 vyvíjíme, vyrábíme a provozujeme.</div></div>
-        <div class="stat"><div class="ic">🛡️</div><div class="n">ČR</div><div class="l">česká výroba</div><div class="d">Kvalita, spolehlivost a férový přístup.</div></div>
-      </div>
-      <div class="subclaim" style="color:var(--ink);margin-top:22px">„Neprodáváme koncept na papíře. Sami ho každý den provozujeme."<small style="color:var(--inkmut)">70 poboček v ČR provozujeme přímo my — nejsilnější důkaz, že model funguje.</small></div>
-    </div>
-  </div>
-
-  <!-- FOTKY -->
-  <div class="band light" style="padding-top:0">
-    <div class="inner" style="padding-top:0">
-      <div class="photos">
-        <div class="ph">📷 Fotografie Prádlomatu<br>(doplníme)</div>
-        <div class="ph">📷 Fotografie Prádlomatu<br>(doplníme)</div>
-        <div class="ph">📷 Fotografie Prádlomatu<br>(doplníme)</div>
+      <div id="msgs"></div>
+      <div class="bar">
+        <textarea id="input" rows="1" placeholder="Napište dotaz…"></textarea>
+        <button id="send">Odeslat</button>
       </div>
     </div>
   </div>
-
-  <!-- JAK VZNIKNE -->
-  <div class="band light" style="background:#e6edf3">
-    <div class="inner">
-      <div class="sec-h">JAK VZNIKNE <span class="b">VÁŠ PRÁDLOMAT?</span></div>
-      <div class="sec-s">Nemusíte rozumět prádelnám. My ano — provedeme vás celým procesem.</div>
-      <div class="steps">
-        <div class="step"><div class="num">1</div><div class="st">Vybereme lokalitu</div><div class="sd">Najdeme a prověříme nejlepší místo s vysokým potenciálem.</div></div>
-        <div class="step"><div class="num">2</div><div class="st">Vyrobíme a dodáme</div><div class="sd">Vyrobíme Prádlomat v ČR z kvalitních komponent a dopravíme ho.</div></div>
-        <div class="step"><div class="num">3</div><div class="st">Instalace a spuštění</div><div class="sd">Rychlá instalace a připojení — během 1 dne vše připraveno k provozu.</div></div>
-        <div class="step"><div class="num">4</div><div class="st">Staráme se</div><div class="sd">Servis 24/7, monitoring, software, technická podpora a aktualizace.</div></div>
-      </div>
-    </div>
-  </div>
-
-  <!-- EKONOMIKA -->
-  <div class="band light">
-    <div class="inner">
-      <div class="sec-h">KOLIK ZÁKAZNÍKŮ DENNĚ <span class="b">STAČÍ?</span></div>
-      <div class="sec-s">Modelový výpočet návratnosti investice.</div>
-      <div class="scen">
-        <div class="lcard zero"><div class="who"><span class="big">1</span> zákazník / den</div><div class="ret">to znamená</div><div class="val">ekonomická provozní nula</div><div class="foot">Provoz se zaplatí sám.</div></div>
-        <div class="lcard"><div class="who"><span class="big">3</span> zákazníci / den</div><div class="ret">návratnost cca</div><div class="val">3,6 roku</div><div class="foot">Stabilní příjem každý měsíc.</div></div>
-        <div class="lcard hot"><div class="rib">Nejčastější</div><div class="who"><span class="big">5</span> zákazníků / den</div><div class="ret">návratnost cca</div><div class="val">2 roky</div><div class="foot">Skvělý základ finanční svobody.</div></div>
-        <div class="lcard"><div class="who"><span class="big">10</span> zákazníků / den</div><div class="ret">návratnost cca</div><div class="val">9 měsíců</div><div class="foot">Rychlejší návratnost, větší klid.</div></div>
-      </div>
-      <div class="center" style="margin-top:18px"><button class="lcta cta-chat" data-q="Spočítejte mi můj scénář — kolik zákazníků denně bych potřeboval a jaká by byla návratnost?">📈 Spočítat můj scénář s AI →</button></div>
-      <div class="ldisc">Jde o modelové scénáře. Skutečné výsledky závisejí na lokalitě, návštěvnosti, cenách, investici a provozních nákladech. Návratnost ani příjem nejsou garantované.</div>
-    </div>
-  </div>
-
-  <!-- CO ZA VÁS VYŘEŠÍME -->
-  <div class="band light" style="background:#e6edf3">
-    <div class="inner">
-      <div class="sec-h">CO ZA VÁS <span class="b">VYŘEŠÍME</span></div>
-      <div class="solve">
-        <div class="sv"><div class="ic">📍</div><div class="t">Lokalita</div><div class="d">Najdeme, prověříme a zajistíme nejlepší lokalitu.</div></div>
-        <div class="sv"><div class="ic">🏭</div><div class="t">Výroba</div><div class="d">Česká výroba z kvalitních materiálů a komponent.</div></div>
-        <div class="sv"><div class="ic">🚚</div><div class="t">Doprava a instalace</div><div class="d">Doprava po celé ČR a rychlá instalace během 1 dne.</div></div>
-        <div class="sv"><div class="ic">🎧</div><div class="t">Servis 24/7</div><div class="d">Technická podpora, servisní tým a monitoring.</div></div>
-        <div class="sv"><div class="ic">🛡️</div><div class="t">Software a monitoring</div><div class="d">Vzdálený dohled, reporting a statistiky v reálném čase.</div></div>
-      </div>
-    </div>
-  </div>
-
-  <!-- FINÁLE -->
-  <div class="band bottom">
-    <div class="inner final">
-      <h2>VAŠE BUDOUCNOST MŮŽE ZAČÍT<br><span class="cyan">UŽ JEDNÍM PRÁDLOMATEM.</span></h2>
-      <p>Než se vám ozveme, připravte si s AI váš vlastní model. Díky tomu můžeme při hovoru řešit konkrétně vaše město, investici a cíle.</p>
-      <div class="center"><button class="cta cta-chat" style="max-width:460px;margin:0 auto" data-scroll="1">
-        <span class="ct"><span class="cta-t">PŘIPRAVIT MŮJ MODEL S AI</span><span class="cta-s">Váš první krok k finanční svobodě</span></span>
-        <span class="arw">→</span>
-      </button></div>
-      <div class="subclaim" style="margin-top:22px">„Jedna dobře umístěná prádelna může být začátkem vašeho finančního důchodu."<small>Naším cílem je vytvořit co nejvíce finančních důchodců.</small></div>
-    </div>
-  </div>
-
 <script>
 (function(){
   var token = new URLSearchParams(location.search).get('t') || '';
   var busy = false;
-  var GREETING = 'Dobrý den 👋\nJsem AI specialista na Prádlomaty. Během pár minut vám můžu vysvětlit celý model a připravit orientační scénář právě pro vás.\nCo vás zajímá nejvíce?';
   function el(id){ return document.getElementById(id); }
   function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-  function mdLite(t){ var s=esc(t); s=s.replace(/\*\*([^*\n]+)\*\*/g,'<strong>$1</strong>'); s=s.replace(/(^|\n)\s*[-*]\s+/g,'$1• '); s=s.replace(/(^|\n)#{1,6}\s*/g,'$1'); return s; }
-  function addMsg(role, text){ var d=document.createElement('div'); d.className='m '+(role==='user'?'user':'ai'); if(role==='user') d.textContent=text; else d.innerHTML=mdLite(text); el('msgs').appendChild(d); el('msgs').scrollTop=el('msgs').scrollHeight; return d; }
-  function autoGrow(){ var t=el('input'); t.style.height='auto'; t.style.height=Math.min(t.scrollHeight,120)+'px'; }
-  function scrollToChat(focus){ var w=el('chatWrap'); if(w) w.scrollIntoView({behavior:'smooth',block:'center'}); if(focus){ setTimeout(function(){ try{ el('input').focus(); }catch(e){} },350); } }
+  // Lehké vykreslení: **tučně** → <strong>, odrážky "- "/"* " → •, zbytek zůstává (pre-wrap zachová řádky).
+  function mdLite(t){
+    var s = esc(t);
+    s = s.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
+    s = s.replace(/(^|\n)\s*[-*]\s+/g, '$1• ');
+    s = s.replace(/(^|\n)#{1,6}\s*/g, '$1');
+    return s;
+  }
+  function addMsg(role, text){
+    var d = document.createElement('div'); d.className = 'm ' + (role==='user'?'user':'ai');
+    if(role==='user') d.textContent = text; else d.innerHTML = mdLite(text);
+    el('msgs').appendChild(d); el('msgs').scrollTop = el('msgs').scrollHeight; return d;
+  }
+  function autoGrow(){
+    var t = el('input'); t.style.height='auto'; t.style.height=Math.min(t.scrollHeight,120)+'px';
+  }
   async function send(){
-    var msg=(el('input').value||'').trim(); if(!msg||busy) return;
-    el('input').value=''; autoGrow(); busy=true; addMsg('user',msg);
-    var ph=addMsg('ai','…');
+    var msg = (el('input').value||'').trim(); if(!msg || busy) return;
+    el('input').value=''; autoGrow(); busy=true; addMsg('user', msg);
+    var ph = addMsg('ai','…');
     try{
-      var r=await fetch('/api/compounder/portal/ai-specialist',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({t:token,message:msg})});
-      var j=await r.json().catch(function(){return {};});
-      if(ph&&ph.parentNode) ph.parentNode.removeChild(ph);
-      if(r.ok&&j.ok){ addMsg('ai',j.reply||'…'); } else addMsg('ai','Omlouvám se, '+(j.error||'nepodařilo se odpovědět')+'.');
-    }catch(e){ if(ph&&ph.parentNode) ph.parentNode.removeChild(ph); addMsg('ai','Chyba spojení.'); }
+      var r = await fetch('/api/compounder/portal/ai-specialist', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ t: token, message: msg }) });
+      var j = await r.json().catch(function(){ return {}; });
+      if(ph && ph.parentNode) ph.parentNode.removeChild(ph);
+      if(r.ok && j.ok){ addMsg('ai', j.reply||'…'); }
+      else addMsg('ai', 'Omlouvám se, '+(j.error||'nepodařilo se odpovědět')+'.');
+    }catch(e){ if(ph && ph.parentNode) ph.parentNode.removeChild(ph); addMsg('ai','Chyba spojení.'); }
     busy=false;
   }
-  function askPreset(q){ scrollToChat(false); el('input').value=q; autoGrow(); send(); }
   async function boot(){
     if(!token){ el('gate').textContent='Neplatný odkaz.'; return; }
     try{
-      var r=await fetch('/api/compounder/portal/ai-specialist/info?t='+encodeURIComponent(token));
-      var j=await r.json().catch(function(){return {};});
-      if(!r.ok||!j.ok){ el('gate').textContent=(j&&j.error)?j.error:'Odkaz je neplatný nebo nedostupný.'; return; }
-      el('gate').style.display='none'; el('chat').style.display='block';
-      var hist=j.messages||[];
-      if(hist.length){ hist.forEach(function(m){ addMsg(m.role==='user'?'user':'ai', m.text); }); }
-      else { addMsg('ai', GREETING); }
+      var r = await fetch('/api/compounder/portal/ai-specialist/info?t='+encodeURIComponent(token));
+      var j = await r.json().catch(function(){ return {}; });
+      if(!r.ok || !j.ok){ el('gate').textContent = (j && j.error) ? j.error : 'Odkaz je neplatný nebo nedostupný.'; return; }
+      el('gate').style.display='none'; el('chat').style.display='flex';
+      (j.messages||[]).forEach(function(m){ addMsg(m.role==='user'?'user':'ai', m.text); });
+      if(!(j.messages||[]).length && j.greeting) addMsg('ai', j.greeting);
       el('send').addEventListener('click', send);
       el('input').addEventListener('input', autoGrow);
-      el('input').addEventListener('keydown', function(e){ if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); send(); } });
-      var qa=el('qa'); if(qa) qa.addEventListener('click', function(e){ var b=e.target.closest('.q'); if(!b) return; askPreset(b.getAttribute('data-q')); });
-      document.querySelectorAll('.cta-chat').forEach(function(b){ b.addEventListener('click', function(){ var q=b.getAttribute('data-q'); if(q) askPreset(q); else scrollToChat(true); }); });
+      el('input').addEventListener('keydown', function(e){ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); send(); } });
+      // Leták: rozbalování + rychlé dotazy (kliknutí položí dotaz chatu).
+      var ih = el('introHead'); if(ih) ih.addEventListener('click', function(){ el('intro').classList.toggle('collapsed'); });
+      var ib = el('intro');
+      if(ib) ib.addEventListener('click', function(e){
+        var b = e.target.closest('[data-q]'); if(!b) return;
+        var q = b.getAttribute('data-q'); if(!q) return;
+        el('input').value = q; autoGrow(); send();
+        ib.classList.add('collapsed'); // po dotazu leták sbal, ať je vidět odpověď
+      });
     }catch(e){ el('gate').textContent='Chyba načtení.'; }
   }
   boot();
