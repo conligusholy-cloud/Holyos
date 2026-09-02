@@ -424,7 +424,7 @@ router.get('/portal/session', async (req, res, next) => {
 
 // POST /api/compounder/portal/ai-specialist?t / body.t — chat s AI prádlomatovým prodejcem
 const AI_SPECIALIST_DEFAULT =
-  'Jsi AI specialista a nejlepší obchodník na samoobslužné prádelny Prádlomat a investiční koncept Compounder od firmy Best Series. ' +
+  'Jsi specialista a nejlepší obchodník na samoobslužné prádelny Prádlomat a investiční koncept Compounder od firmy Best Series. ' +
   'Bavíš se česky s potenciálním zákazníkem/investorem přímo na portálu. Mluvíš přirozeně, lidsky, sebevědomě a srozumitelně — jako zkušený obchodník, ne jako chatbot. ' +
   'Umíš vysvětlit princip Compounding (hodnota roste krok za krokem, vstup do zavedené lokality), ekonomiku a návratnost provozu, výběr lokality, rozdíl verzí prádlomatu a možnosti pro provozovatele i investora. ' +
   'Kladeš doplňující otázky, zjišťuješ zájem a motivaci, reaguješ na námitky a snažíš se posunout k dalšímu kroku (schůzka, zaslání informací, rezervace lokality). ' +
@@ -441,7 +441,8 @@ const AI_SPECIALIST_STYLE =
   'Klíčová slova a hlavně ČÍSLA zvýrazni tučně pomocí **dvou hvězdiček** (např. **návratnost cca 2 roky**). ' +
   'Odrážky odděluj jednoduchým zalomením řádku, delší bloky prázdným řádkem. Nepiš dlouhé odstavce. ' +
   'Drž se konkrétně u dotazu a na konci polož jednu krátkou navazující otázku, ať konverzace pokračuje. ' +
-  'Emoji používej střídmě a smysluplně (kotva u bodu), ne do každé věty.';
+  'Emoji používej střídmě a smysluplně (kotva u bodu), ne do každé věty. ' +
+  'IDENTITA: Nikdy se neoznačuj jako „AI", „chatbot" ani „umělá inteligence". Mluv o sobě jen jako o „specialistovi na prádlomaty" (Best Series / Compounder).';
 
 // Pojistka proti vymýšlení — platí VŽDY (i pro vlastní scénář). Zabraňuje tomu, aby si AI
 // domýšlela fakta, ceny, verze, lokality apod., která nejsou ve scénáři.
@@ -552,7 +553,7 @@ router.get('/portal/ai-specialist/info', async (req, res) => {
     if (!leadAccessAllowed(lead) || !lead.show_ai_specialist) return res.status(403).json({ ok: false, error: 'Nedostupné' });
     let greeting = null;
     try { greeting = await getSetting('compounder.ai_specialist_greeting', { type: 'string', defaultValue: null }); } catch (_) {}
-    if (!greeting || !String(greeting).trim()) greeting = 'Dobrý den! Jsem AI specialista na prádlomaty Compounder. Zeptejte se mě na cokoli — jak to celé funguje, ekonomiku provozu, návratnost, výběr lokality. 🙂';
+    if (!greeting || !String(greeting).trim()) greeting = 'Dobrý den! Jsem specialista na prádlomaty Compounder. Zeptejte se mě na cokoli — jak to celé funguje, ekonomiku provozu, návratnost, výběr lokality. 🙂';
     let messages = [];
     try {
       const rows = await prisma.aiSpecialistMessage.findMany({ where: { lead_id: leadId }, orderBy: { created_at: 'asc' }, take: 200 });
