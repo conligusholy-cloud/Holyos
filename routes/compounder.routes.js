@@ -602,8 +602,12 @@ router.post('/leads/:id/send-ai-specialist-sms', requireAuth, async (req, res) =
 router.get('/leads/:id/ai-specialist-link', requireAuth, async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
-    const lead = await prisma.compounderLead.findUnique({ where: { id }, select: { id: true } });
+    const lead = await prisma.compounderLead.findUnique({ where: { id }, select: { id: true, show_ai_specialist: true } });
     if (!lead) return res.status(404).json({ ok: false, error: 'Lead nenalezen' });
+    // Vygenerování odkazu rovnou zpřístupní AI specialistu (jinak by stránka hlásila „Nedostupné").
+    if (!lead.show_ai_specialist) {
+      await prisma.compounderLead.update({ where: { id }, data: { show_ai_specialist: true } }).catch(() => {});
+    }
     // Použij plnou doménu z portalBase (má platný TLS certifikát). Apex bez „www" cert nemá → ERR_CERT_COMMON_NAME_INVALID.
     const link = portalBase() + '/ai?t=' + makePortalToken(id);
     res.json({ ok: true, link });
