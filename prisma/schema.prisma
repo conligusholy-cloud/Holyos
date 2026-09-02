@@ -5632,6 +5632,10 @@ model CompounderLead {
   // Uložený model zákazníka (JSON): { codes:[kiosk kódy], savedAt, ... }.
   example_model String? @db.Text
 
+  // Záložka „AI Specialista" na portálu (chat s AI prodejcem). Výchozí vypnuto,
+  // zapíná obchodník/admin u konkrétního leada.
+  show_ai_specialist Boolean @default(false)
+
   // Heslo pro prihlaseni (bcrypt hash). Null = uzivatel heslo nenastavil (jen magic link).
   password_hash String? @db.Text
 

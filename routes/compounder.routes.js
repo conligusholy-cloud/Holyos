@@ -389,7 +389,7 @@ router.get('/portal/session', async (req, res, next) => {
     if (!id) return res.status(401).json({ ok: false, error: 'Neplatný nebo chybějící přístupový odkaz.' });
     const lead = await prisma.compounderLead.findUnique({
       where: { id },
-      select: { id: true, name: true, email: true, phone: true, role: true, lang: true, visible_sections: true, visible_templates: true, show_revenue_stats: true, show_example: true, hide_live_loss: true, created_at: true, owner_person_id: true, external_rep_id: true, password_hash: true, source: true, access_approved_at: true, pradlomat_version: true, eco_no_price: true },
+      select: { id: true, name: true, email: true, phone: true, role: true, lang: true, visible_sections: true, visible_templates: true, show_revenue_stats: true, show_example: true, hide_live_loss: true, show_ai_specialist: true, created_at: true, owner_person_id: true, external_rep_id: true, password_hash: true, source: true, access_approved_at: true, pradlomat_version: true, eco_no_price: true },
     });
     if (!lead) return res.status(404).json({ ok: false, error: 'Registrace nenalezena.' });
     if (!leadAccessAllowed(lead)) {
@@ -416,9 +416,61 @@ router.get('/portal/session', async (req, res, next) => {
         if (p) consultant = { name: ((p.first_name || '') + ' ' + (p.last_name || '')).trim(), phone: p.phone || '', email: p.email || '' };
       } catch (e) { /* fallback na majitele */ }
     }
-    return res.json({ ok: true, id: lead.id, name: lead.name, email: lead.email || '', phone: lead.phone || '', role: lead.role, lang: lead.lang, sections: resolveSections(lead.visible_sections), templates: templates, showRevenueStats: !!lead.show_revenue_stats, showExample: !!lead.show_example, hideLiveLoss: !!lead.hide_live_loss, pradlomatVersion: lead.pradlomat_version || 'V3', ecoNoPrice: !!lead.eco_no_price, accountCreatedAt: lead.created_at, consultant: consultant, consultantExternal: consultantExternal, has_password: !!lead.password_hash });
+    return res.json({ ok: true, id: lead.id, name: lead.name, email: lead.email || '', phone: lead.phone || '', role: lead.role, lang: lead.lang, sections: resolveSections(lead.visible_sections), templates: templates, showRevenueStats: !!lead.show_revenue_stats, showExample: !!lead.show_example, hideLiveLoss: !!lead.hide_live_loss, showAiSpecialist: !!lead.show_ai_specialist, pradlomatVersion: lead.pradlomat_version || 'V3', ecoNoPrice: !!lead.eco_no_price, accountCreatedAt: lead.created_at, consultant: consultant, consultantExternal: consultantExternal, has_password: !!lead.password_hash });
   } catch (err) {
     next(err);
+  }
+});
+
+// POST /api/compounder/portal/ai-specialist?t / body.t — chat s AI prádlomatovým prodejcem
+const AI_SPECIALIST_DEFAULT =
+  'Jsi AI specialista a nejlepší obchodník na samoobslužné prádelny Prádlomat a investiční koncept Compounder od firmy Best Series. ' +
+  'Bavíš se česky s potenciálním zákazníkem/investorem přímo na portálu. Mluvíš přirozeně, lidsky, sebevědomě a srozumitelně — jako zkušený obchodník, ne jako chatbot. ' +
+  'Umíš vysvětlit princip Compounding (hodnota roste krok za krokem, vstup do zavedené lokality), ekonomiku a návratnost provozu, výběr lokality, rozdíl verzí prádlomatu a možnosti pro provozovatele i investora. ' +
+  'Kladeš doplňující otázky, zjišťuješ zájem a motivaci, reaguješ na námitky a snažíš se posunout k dalšímu kroku (schůzka, zaslání informací, rezervace lokality). ' +
+  'Odpovědi drž stručné a konkrétní (2–6 vět), ať se dobře poslouchají i čtou. ' +
+  'NIKDY neslibuj garantované výnosy, nevymýšlej si čísla ani fakta; když něco nevíš jistě, nabídni spojení s lidským obchodníkem. Neuváděj interní/citlivé údaje.';
+
+router.post('/portal/ai-specialist', async (req, res) => {
+  try {
+    const b = req.body || {};
+    const leadId = verifyPortalToken(String(b.t || req.query.t || ''));
+    if (!leadId) return res.status(401).json({ ok: false, error: 'Neplatný přístup' });
+    const lead = await prisma.compounderLead.findUnique({
+      where: { id: leadId },
+      select: { id: true, show_ai_specialist: true, name: true, city: true, role: true, pradlomat_version: true, access_approved_at: true, source: true },
+    });
+    if (!lead) return res.status(404).json({ ok: false, error: 'Nenalezeno' });
+    if (!leadAccessAllowed(lead)) return res.status(403).json({ ok: false, error: 'Přístup nepovolen' });
+    if (!lead.show_ai_specialist) return res.status(403).json({ ok: false, error: 'AI specialista není povolen' });
+
+    const message = String(b.message || '').slice(0, 2000).trim();
+    if (!message) return res.status(400).json({ ok: false, error: 'Prázdná zpráva' });
+    const history = Array.isArray(b.history) ? b.history.slice(-16) : [];
+
+    let sys = null;
+    try {
+      sys = await getSetting('compounder.ai_specialist_prompt', { type: 'string', defaultValue: null });
+    } catch (_) { /* default */ }
+    if (!sys || !String(sys).trim()) sys = AI_SPECIALIST_DEFAULT;
+
+    const who = (lead.name || '').trim();
+    const ctx =
+      'Kontext hovoru: mluvíš se zájemcem' + (who ? ' jménem ' + who : '') +
+      (lead.city ? ', město ' + lead.city : '') + (lead.role ? ', typ ' + lead.role : '') +
+      '. Uvažovaná verze prádlomatu ' + (lead.pradlomat_version || 'V3') + '.';
+
+    const agent = require('../services/voice/agent');
+    const { text, messages } = await agent.runTurn({
+      system: sys + '\n\n' + ctx,
+      history,
+      userText: message,
+      maxTokens: 600,
+    });
+    res.json({ ok: true, reply: text, history: messages });
+  } catch (err) {
+    console.error('[ai-specialist]', err.message);
+    res.status(500).json({ ok: false, error: 'AI se teď nepodařilo odpovědět, zkuste to prosím znovu.' });
   }
 });
 
@@ -2240,6 +2292,8 @@ const patchSchema = z.object({
   isTest: z.boolean().optional(),
   // Zpřístupnění sekce „Příklad" (skládačka portfolia) v portálu jen tomuto leadu.
   showExample: z.boolean().optional(),
+  // Zpřístupnění záložky „AI Specialista" (chat s AI prodejcem) v portálu.
+  showAiSpecialist: z.boolean().optional(),
   // Schovat živou ztrátu v portálu (časomíra + „přišli jste o…" + karta Cena váhání).
   hideLiveLoss: z.boolean().optional(),
   // Varianta prádlomatu pro ekonomiku Provozovatele: V2, V3, nebo BOTH (obojí → přepínač).
@@ -2319,6 +2373,7 @@ router.patch('/leads/:id', requireAuth, async (req, res, next) => {
     if (parsed.data.hideLiveLoss !== undefined) data.hide_live_loss = !!parsed.data.hideLiveLoss;
     if (parsed.data.isTest !== undefined) data.is_test = !!parsed.data.isTest;
     if (parsed.data.showExample !== undefined) data.show_example = !!parsed.data.showExample;
+    if (parsed.data.showAiSpecialist !== undefined) data.show_ai_specialist = !!parsed.data.showAiSpecialist;
     if (parsed.data.pradlomatVersion !== undefined) data.pradlomat_version = parsed.data.pradlomatVersion;
     if (parsed.data.ecoNoPrice !== undefined) data.eco_no_price = !!parsed.data.ecoNoPrice;
     // Předchozí stav (kvůli automatice při přechodu na „Dokumentace odeslána").

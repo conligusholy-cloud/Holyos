@@ -222,6 +222,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
     <a href="#nabidka" data-i18n="p.subnav.inv">Investor</a>
     <a href="#navratnost" data-i18n="p.subnav.distrib">Distributor</a>
     <a href="#priklad" id="nav-priklad" style="display:none" data-i18n="p.subnav.example">Příklad</a>
+    <a href="#aispecialista" id="nav-aispecialista" style="display:none">🤖 AI specialista</a>
   </nav>
 
   <div class="wrap">
@@ -505,6 +506,24 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
         <div id="ex-list" style="margin-top:10px"></div>
         <div id="ex-disc" style="margin-top:18px;padding-top:14px;border-top:1px solid var(--line,#2a2a2e);color:var(--muted-2,#7a7a85);font-size:12px;line-height:1.6">Uvedená čísla jsou <b>orientační</b> — jde o modelový příklad pro lepší představu, spočítaný z aktuálních tržeb vybraných lokalit. Skutečný výnos se může lišit podle provozu, sezóny a nákladů; nejde o závaznou nabídku ani investiční poradenství.</div>
         </div>
+      </div>
+    </section>
+
+    <section class="blk" id="aispecialista" style="display:none">
+      <div class="eyebrow">AI SPECIALISTA</div>
+      <h2>Zeptejte se AI specialisty na prádlomaty</h2>
+      <p class="lead">Napište nebo řekněte svůj dotaz — okamžitě vám odpoví náš AI obchodní specialista na Compounding a samoobslužné prádelny.</p>
+
+      <div id="ais-avatar" style="width:100%;max-width:560px;margin:0 auto 16px;aspect-ratio:16/9;background:#0e1116;border:1px solid var(--line,#2a2a2e);border-radius:14px;display:flex;align-items:center;justify-content:center;color:var(--muted-2,#7a7a85);font-size:14px;text-align:center;padding:12px;">🤖 AI specialista<br><span style="font-size:12px;">(mluvící video-avatar připravujeme)</span></div>
+
+      <div style="max-width:660px;margin:0 auto;">
+        <div id="ais-msgs" style="min-height:200px;max-height:440px;overflow-y:auto;border:1px solid var(--line,#2a2a2e);border-radius:14px;padding:14px;background:#0e1116;display:flex;flex-direction:column;gap:10px;"></div>
+        <div style="display:flex;gap:8px;margin-top:10px;align-items:flex-end;">
+          <textarea id="ais-input" rows="1" placeholder="Napište dotaz…" style="flex:1;resize:none;background:#0e1116;border:1px solid var(--line,#2a2a2e);border-radius:12px;padding:11px 12px;color:#fff;font-size:15px;font-family:inherit;"></textarea>
+          <button id="ais-mic" type="button" title="Mluvit" style="flex:0 0 auto;background:#1a1e26;border:1px solid var(--line,#2a2a2e);border-radius:12px;width:46px;height:46px;font-size:18px;cursor:pointer;">🎤</button>
+          <button id="ais-send" type="button" style="flex:0 0 auto;background:var(--gold,#eab308);color:#1a1408;border:none;border-radius:12px;padding:0 18px;height:46px;font-weight:700;cursor:pointer;">Odeslat</button>
+        </div>
+        <label style="display:flex;align-items:center;gap:6px;margin-top:8px;color:var(--muted-2,#7a7a85);font-size:12px;cursor:pointer;"><input type="checkbox" id="ais-tts" checked> Číst odpovědi nahlas</label>
       </div>
     </section>
 
@@ -1090,7 +1109,7 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
         if (link) link.style.display = (ALLOWED.indexOf(NAV_GROUP[href]) !== -1) ? '' : 'none';
       });
       // Výchozí stránka po přihlášení: Filozofie (taby přepínají jednotlivé stránky)
-      var _pgOk = { filozofie: 1, provozovatel: 1, investor: 1, distributor: 1, priklad: 1 };
+      var _pgOk = { filozofie: 1, provozovatel: 1, investor: 1, distributor: 1, priklad: 1, aispecialista: 1 };
       pShowPage(_pgOk[INIT_PAGE] ? INIT_PAGE : 'filozofie');
       // Výchozí jazyk = jazyk nastavený u leadu (pokud si uživatel na tomto zařízení sám nevybral jiný).
       var _stored = null; try { _stored = localStorage.getItem("compounder.lang2"); } catch(_){}
@@ -1110,6 +1129,8 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
       loadEkoDetailLink(token);
       loadOffers(token);
       if (window._portalShowExample) { var _pl=document.getElementById('nav-priklad'); if(_pl) _pl.style.display=''; try{ initExample(token); }catch(e){} }
+      window._portalShowAiSpecialist = !!res.j.showAiSpecialist;
+      if (window._portalShowAiSpecialist) { var _na=document.getElementById('nav-aispecialista'); if(_na) _na.style.display=''; try{ initAiSpecialist(token); }catch(e){} }
       loadPortalContracts(token);
       loadSignedDocs(token);
       renderPortalTemplates(token);
@@ -2666,6 +2687,64 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
     if (send) send.addEventListener("click", submit);
     if (phone) phone.addEventListener("keydown", function(e){ if (e.key === "Enter"){ e.preventDefault(); submit(); } });
   }
+  // ── AI Specialista (chat s AI prádlomatovým prodejcem) ──
+  var AIS_HISTORY = [];
+  var aisBusy = false, _aisInited = false;
+  function aisAddMsg(role, text){
+    var box = document.getElementById('ais-msgs'); if(!box) return null;
+    var me = (role === 'user');
+    var d = document.createElement('div');
+    d.style.cssText = 'max-width:85%;padding:9px 12px;border-radius:12px;font-size:15px;line-height:1.5;white-space:pre-wrap;' + (me ? 'align-self:flex-end;background:#26303c;color:#fff;' : 'align-self:flex-start;background:#171b22;color:#e8e8ea;border:1px solid var(--line,#2a2a2e);');
+    d.textContent = text;
+    box.appendChild(d); box.scrollTop = box.scrollHeight;
+    return d;
+  }
+  function aisSpeak(text){
+    try{
+      var cb = document.getElementById('ais-tts');
+      if(!cb || !cb.checked || !window.speechSynthesis || !text) return;
+      window.speechSynthesis.cancel();
+      var u = new SpeechSynthesisUtterance(text); u.lang = 'cs-CZ'; u.rate = 1.03;
+      window.speechSynthesis.speak(u);
+    }catch(e){}
+  }
+  async function aisSend(){
+    var inp = document.getElementById('ais-input'); if(!inp) return;
+    var msg = (inp.value || '').trim(); if(!msg || aisBusy) return;
+    inp.value = ''; aisBusy = true;
+    aisAddMsg('user', msg);
+    var placeholder = aisAddMsg('ai', '…');
+    try{
+      var r = await fetch('/api/compounder/portal/ai-specialist', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ t: window._portalToken, message: msg, history: AIS_HISTORY }) });
+      var j = await r.json().catch(function(){ return {}; });
+      if(placeholder && placeholder.parentNode) placeholder.parentNode.removeChild(placeholder);
+      if(r.ok && j.ok){ AIS_HISTORY = j.history || AIS_HISTORY; aisAddMsg('ai', j.reply || '…'); aisSpeak(j.reply || ''); if(window.__portalTrack) window.__portalTrack('ai_specialist_msg', {}); }
+      else { aisAddMsg('ai', 'Omlouvám se, ' + (j.error || 'teď se nepodařilo odpovědět') + '.'); }
+    }catch(e){
+      if(placeholder && placeholder.parentNode) placeholder.parentNode.removeChild(placeholder);
+      aisAddMsg('ai', 'Chyba spojení, zkuste to prosím znovu.');
+    }
+    aisBusy = false;
+  }
+  function aisInitMic(){
+    var micBtn = document.getElementById('ais-mic'); if(!micBtn) return;
+    var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if(!SR){ micBtn.style.display = 'none'; return; }
+    var rec = new SR(); rec.lang = 'cs-CZ'; rec.interimResults = false; rec.maxAlternatives = 1;
+    var listening = false;
+    rec.onresult = function(e){ var t = e.results[0][0].transcript; var inp = document.getElementById('ais-input'); if(inp){ inp.value = (inp.value ? inp.value + ' ' : '') + t; } };
+    rec.onend = function(){ listening = false; micBtn.style.background = '#1a1e26'; };
+    rec.onerror = function(){ listening = false; micBtn.style.background = '#1a1e26'; };
+    micBtn.addEventListener('click', function(){ if(listening){ try{ rec.stop(); }catch(e){} return; } try{ rec.start(); listening = true; micBtn.style.background = '#b91c1c'; }catch(e){} });
+  }
+  function initAiSpecialist(token){
+    if(_aisInited) return; _aisInited = true;
+    var send = document.getElementById('ais-send'); if(send) send.addEventListener('click', aisSend);
+    var inp = document.getElementById('ais-input'); if(inp) inp.addEventListener('keydown', function(e){ if(e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); aisSend(); } });
+    aisInitMic();
+    aisAddMsg('ai', 'Dobrý den! Jsem AI specialista na prádlomaty Compounder. Zeptejte se mě na cokoli — jak to celé funguje, ekonomiku provozu, návratnost, výběr lokality. 🙂');
+  }
+
   // Stránky (taby): každý nav odkaz = samostatná stránka, zobrazí se jen jedna.
   var PAGE_OF = {
     filozofie:'filozofie',
@@ -2674,9 +2753,10 @@ footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;colo
     navratnost:'distributor', milniky:'distributor', parametry:'distributor',
     galerie:'distributor', pripojky:'distributor', pudorysy:'distributor',
     distribuce:'distributor', lokalita:'distributor',
-    priklad:'priklad'
+    priklad:'priklad',
+    aispecialista:'aispecialista'
   };
-  var NAVHREF_PAGE = { filozofie:'filozofie', ekonomika:'provozovatel', nabidka:'investor', navratnost:'distributor', priklad:'priklad' };
+  var NAVHREF_PAGE = { filozofie:'filozofie', ekonomika:'provozovatel', nabidka:'investor', navratnost:'distributor', priklad:'priklad', aispecialista:'aispecialista' };
   function pShowPage(page){
     Object.keys(PAGE_OF).forEach(function(id){
       var el = document.getElementById(id);
