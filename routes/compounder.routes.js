@@ -443,6 +443,18 @@ const AI_SPECIALIST_STYLE =
   'Drž se konkrétně u dotazu a na konci polož jednu krátkou navazující otázku, ať konverzace pokračuje. ' +
   'Emoji používej střídmě a smysluplně (kotva u bodu), ne do každé věty.';
 
+// Pojistka proti vymýšlení — platí VŽDY (i pro vlastní scénář). Zabraňuje tomu, aby si AI
+// domýšlela fakta, ceny, verze, lokality apod., která nejsou ve scénáři.
+const AI_SPECIALIST_GUARDRAILS =
+  'PŘÍSNÉ DODRŽENÍ SCÉNÁŘE — NEJDŮLEŽITĚJŠÍ PRAVIDLO: ' +
+  'Odpovídej VÝHRADNĚ na základě informací, které jsou výše ve scénáři a v kontextu. ' +
+  'NIKDY si nevymýšlej ani neodhaduj údaje, které ve scénáři nejsou — konkrétní ceny, čísla, návratnost, ' +
+  'názvy a parametry verzí prádlomatu, dostupnost, technické specifikace, názvy poboček/lokalit, termíny. ' +
+  'Neuváděj ani „obecné" varianty nebo příklady, které scénář výslovně neobsahuje (nevymýšlej kategorie typu „menší lokality / větší frekvence" apod.). ' +
+  'Když se zájemce zeptá na něco, co ve scénáři není, NEIMPROVIZUJ: krátce a přirozeně řekni, že přesné údaje potvrdí kolega, ' +
+  'a nabídni konkrétní další krok (schůzka nebo telefonát). Radši polož jednu upřesňující otázku, než abys cokoli tipoval. ' +
+  'Nikdy netvrď nic, o čem si nejsi jistý ze scénáře. Když scénář a dotaz nedávají jasnou odpověď, přiznej to a předej to kolegovi.';
+
 router.post('/portal/ai-specialist', async (req, res) => {
   try {
     const b = req.body || {};
@@ -480,7 +492,7 @@ router.post('/portal/ai-specialist', async (req, res) => {
 
     const agent = require('../services/voice/agent');
     const { text } = await agent.runTurn({
-      system: sys + '\n\n' + AI_SPECIALIST_STYLE + '\n\n' + ctx,
+      system: sys + '\n\n' + AI_SPECIALIST_GUARDRAILS + '\n\n' + AI_SPECIALIST_STYLE + '\n\n' + ctx,
       history,
       userText: message,
       maxTokens: 600,
